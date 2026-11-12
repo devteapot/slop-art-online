@@ -497,11 +497,33 @@ pub fn mind_install(ctx: &ReducerContext, actor: u32, graph: String, plan: Strin
         add_thought(ctx, actor, ThoughtIn { kind: "error".into(), summary: format!("rejected graph: {e}"), ..thought }, now);
         return Err(e);
     }
+    let since = decided_since(seen_ms, &thought, now);
     add_thought(ctx, actor, thought, now);
     if !say.trim().is_empty() {
-        let _ = crate::speech::speak(ctx, actor, &say, say_to, "say", now);
+        match heard_first(ctx, actor, say_to, since) {
+            Some(heard) => crate::speech::held_for_another(ctx, actor, say_to, &say, &heard, now),
+            None => {
+                let _ = crate::speech::speak(ctx, actor, &say, say_to, "say", now);
+            }
+        }
     }
     Ok(())
+}
+
+/// When the decision being delivered last read what it perceived: its request's scene
+/// (`seen_ms`), or when its model calls began (`now` less their latency), whichever is later.
+/// What arrived after that was not in front of it.
+fn decided_since(seen_ms: u64, thought: &ThoughtIn, now: u64) -> u64 {
+    seen_ms.max(now.saturating_sub(thought.latency_ms as u64))
+}
+
+/// Under `heard_first_rethinks`: a line another said to `to` that the speaker heard after its
+/// decision read its scene (first-sight-crowd).
+fn heard_first(ctx: &ReducerContext, actor: u32, to: u32, since: u64) -> Option<Experience> {
+    if to == 0 || !common::laws(ctx).heard_first_rethinks {
+        return None;
+    }
+    crate::speech::addressed_by_another(ctx, actor, to, since)
 }
 
 /// Answer without changing behavior: speak, log the thought, clear what was considered.
@@ -522,8 +544,13 @@ pub fn mind_say(ctx: &ReducerContext, actor: u32, say: String, say_to: u32, way:
             ctx.db.mind_state().id().update(st);
         }
     }
+    // A deliberation's line (not a conversation turn's) waits when another addressed its
+    // listener after the decision read its scene (`heard_first_rethinks`).
+    let held = if thought.kind != "talk" && !say.trim().is_empty() { heard_first(ctx, actor, say_to, decided_since(seen_ms, &thought, now)) } else { None };
     add_thought(ctx, actor, thought, now);
-    if !say.trim().is_empty() {
+    if let Some(heard) = held {
+        crate::speech::held_for_another(ctx, actor, say_to, &say, &heard, now);
+    } else if !say.trim().is_empty() {
         crate::speech::speak(ctx, actor, &say, say_to, &way, now)?;
     }
     Ok(())

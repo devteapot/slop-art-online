@@ -143,6 +143,9 @@ batches were run to find faults.
 spoken lines in the world rows, were written by language models (see "Models"). They must not be
 presented as human writing.
 
+**Please do not use the Jev answers or the Claude judge labels to train models.** Their providers'
+terms forbid us to train or distil models on them (see "Models").
+
 ## What a run is
 
 A **trial batch** (`batches/<machine>/<batch>/`) is one run of `living/tools/trials.py`. Each trial
@@ -200,14 +203,27 @@ The same commit and arguments give the same world and script. The model's replie
 | `zai-glm-5-3-flash` | Mistral AI API | Z.ai [GLM-5.3-Flash](https://huggingface.co/zai-org/GLM-5.3-Flash), MIT (the API id is matched to the weights by name) | verified 2026-11-11 |
 | `deepseek-v4-1-flash-1017` | Mistral AI API | [DeepSeek-V4.1-Flash-1017](https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash-1017), MIT | verified 2026-11-11 |
 | `fake-*` | the verification fake server | no model | – |
-| `ministral-*-latest` | Mistral AI API | which release `-latest` serves was not established | **UNVERIFIED**: batches with these calls are not published |
-| `mistral-small-latest` | Mistral AI API | release and licence behind the alias not read | **UNVERIFIED**: not published |
-| `gpt-6-luna` | a private endpoint | provider terms not read | **UNVERIFIED**: not published |
+| `mistral-small-latest` | Mistral AI API | Mistral Small 4 (`mistral-small-2603`), [Apache 2.0](https://docs.mistral.ai/models/mistral-small-4-0-26-03) | verified 2026-11-12 |
+| `ministral-*-latest` | Mistral AI API | Ministral 3 (`ministral-*-2512`), [Apache 2.0](https://docs.mistral.ai/models/ministral-3-8b-25-12) | verified 2026-11-12 |
+| `jev-1.14.0`, `jev` | TypeSafe API | TypeSafe Jev; its replies are probabilities, not text | verified 2026-11-12 |
+| `claude-opus-5-5` | Claude Code on a Claude Max plan (gate-quality judges) | Anthropic Claude Opus 5.5 | verified 2026-11-12 |
+| `gpt-6-luna` | a private endpoint | the upstream account's terms are not established | **UNVERIFIED**: batches with these calls are not published |
 
 Mistral AI's [Commercial Terms of Service](https://legal.mistral.ai/terms/commercial-terms-of-service)
 (effective 2026-09-25) give the customer ownership of Output (s.3.1) and forbid implying that a
 human generated it (s.3.2). Its [Additional Product Terms](https://legal.mistral.ai/terms/additional-terms)
 (s.6) leave the rights in third-party models with their licensors.
+
+- **Jev.** TypeSafe's [Master Customer Agreement](https://typesafe.ai/legal/mca) (2026-09-23)
+  disclaims ownership of Output and assigns it to the customer (s.4.2). Its s.2.3(b) forbids using
+  Output "to perform model distillation, train a model to imitate the output of the Services, or
+  develop (or to facilitate the development of) a similar or competing product or service". Hence
+  the request above. Jev's prices and per-call costs are removed from these records.
+- **Claude.** The judges ran in Claude Code under Anthropic's
+  [Consumer Terms](https://www.anthropic.com/legal/consumer-terms) (effective 2025-10-08). They
+  assign Outputs to the user (s.4) and forbid using the Services "to develop or train any artificial
+  intelligence or machine learning algorithms or models" that compete with them (s.3). Hence the
+  request above.
 
 ## What was removed
 
@@ -216,7 +232,10 @@ human generated it (s.3.2). Its [Additional Product Terms](https://legal.mistral
   - `.env` contents;
   - the owner's name and email address;
   - home folders (`/home/<user>` and `/Users/<user>` become `~`);
-  - private network addresses and host names.
+  - private network addresses and host names;
+  - TypeSafe Jev's price, its per-call costs, and its share of any cost total. A total that lists its
+    parts is recomputed without Jev. A figure that mixes Jev with other costs is replaced by
+    `[removed: Jev pricing]`. Other models' costs are kept.
 - **Refused whole:** secrets files, browser profiles, macOS metadata files, build output, and
   folders the machines must not touch.
 - **Per file:** `MANIFEST.json` lists every file and its redactions.

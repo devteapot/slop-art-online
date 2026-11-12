@@ -565,6 +565,15 @@ impl<'a> Ev<'a> {
                         self.status = format!("let go of {} (the talk moved on)", graph::describe(n));
                         return St::Ok;
                     }
+                    // Someone else addressed them since this plan was installed (or since this
+                    // node last spoke), and I heard it: under `heard_first_rethinks` the line waits
+                    // while my mind thinks again with that line in front of it. Only a mind's plan.
+                    if let Some(heard) = self.heard_first(id, to) {
+                        self.set_mark(id);
+                        crate::speech::held_for_another(self.ctx, self.me.id, to, &s.text, &heard, self.now);
+                        self.status = format!("held {} (another spoke to them first)", graph::describe(n));
+                        return St::Ok;
+                    }
                     let sc = common::scripts(self.ctx);
                     if let Some(w) = sc.way(way).filter(|w| w.reach <= 0.0) {
                         if !crate::speech::within_reach(self.ctx, w, self.at, to, self.now) {
@@ -620,6 +629,17 @@ impl<'a> Ev<'a> {
             (e.kind == "said" && e.object == to && !own.contains(&e.at_ms))
                 || (e.subject == to && words.contains(&e.kind.as_str()) && (e.object == self.me.id || e.object == 0 && e.salience >= 0.8))
         })
+    }
+
+    /// Under `heard_first_rethinks`: a line another said to `to` that I heard since this mind's
+    /// plan was installed, or since say node `id` last spoke (first-sight-crowd).
+    fn heard_first(&self, id: u16, to: u32) -> Option<Experience> {
+        if !common::laws(self.ctx).heard_first_rethinks {
+            return None;
+        }
+        let brain = self.ctx.db.brain().id().find(self.me.id).filter(|b| b.source == "mind")?;
+        let own_mark = self.st.marks.iter().find(|m| m.node == id).map_or(0, |m| m.at_ms);
+        crate::speech::addressed_by_another(self.ctx, self.me.id, to, brain.installed_ms.max(own_mark))
     }
 
     /// A say that cannot be spoken is a failure the body is told about, like a refused leaf
@@ -1692,7 +1712,8 @@ impl<'a> Ev<'a> {
             }
             let nearest = *part.iter().min_by(|a, b| structures[**a].4.total_cmp(&structures[**b].4)).unwrap_or(&i);
             let (_, _, _, pos, dist) = structures[nearest];
-            let by = if *owner != 0 && kind != "remains" { common::owner_label(self.ctx, &self.me, *owner, kind).map(|w| format!(" built by {w}")).unwrap_or_default() } else if kind == "remains" { format!(" — the remains of {}", common::label_for(self.ctx, &self.me, *owner)) } else { String::new() };
+            let whose = if *owner != 0 && kind != "remains" { common::owner_label(self.ctx, &self.me, *owner, kind) } else { None };
+            let by = if let Some(w) = &whose { format!(" built by {w}") } else if kind == "remains" { format!(" — the remains of {}", common::label_for(self.ctx, &self.me, *owner)) } else { String::new() };
             // Its extent as it lies on the ground (a town gate is a block of gate tiles).
             let wide = if part.len() > 1 {
                 let (xs, ys): (Vec<f32>, Vec<f32>) = part.iter().map(|k| structures[*k].3).unzip();
@@ -1702,7 +1723,12 @@ impl<'a> Ev<'a> {
                 String::new()
             };
             let text = format!("You notice a {kind}{wide}{by}, {dist:.0} tiles {}.", direction(at, pos));
-            percept(self.ctx, &self.me, now, "saw", *owner, 0, pos, text, if kind == "remains" { 0.8 } else { 0.35 });
+            if kind == "remains" {
+                percept(self.ctx, &self.me, now, "saw", *owner, 0, pos, text, 0.8);
+            } else {
+                // Whose it is, only as the line names them (house-owner-label).
+                crate::perceive::percept_owned(self.ctx, &self.me, now, "saw", if whose.is_some() { *owner } else { 0 }, 0, pos, text, 0.35);
+            }
         }
     }
 

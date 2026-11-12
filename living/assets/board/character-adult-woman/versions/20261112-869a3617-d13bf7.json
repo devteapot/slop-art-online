@@ -1,0 +1,475 @@
+{
+ "schema": 1,
+ "family": "character:adult-woman",
+ "id": "20261112-869a3617-d13bf7",
+ "published": "2026-11-12T16:55:40+01:00",
+ "track": "char-4",
+ "maker": "Claude Fable 5.2",
+ "note": "Pass 3, the hair pass: fringes above the brows, rounder fronts, thick fringe locks, lifting strands, no back seam, ropes held off the back. Clips baked again with main's animate.py; marker_check passed.",
+ "source": {
+  "commit": "869a3617ed40f4ef158f4c990da8c675aee6b4f2",
+  "branch": "char-4",
+  "dirty": false,
+  "generator": "living/tools/blender/person.py",
+  "generator_sha256": "11e9ec5f97816f332bd5bcfc7c371e74a97ebee1655462b61285138f0722b3b1",
+  "generator_state": "committed",
+  "params": {
+   "variant": "woman"
+  }
+ },
+ "renderer": {
+  "method": "asset-view",
+  "commit": "869a3617ed40f4ef158f4c990da8c675aee6b4f2",
+  "dirty": false,
+  "key": "869a3617",
+  "env": "",
+  "hours": {
+   "day": 15.0
+  },
+  "weather": "clear",
+  "day_curve": false,
+  "preset": "d0e43de0",
+  "repo": "/home/carlid/.t3/worktrees/slop-art-online/t3-05f9f777-df1cdb09f45efb80"
+ },
+ "preset": "character",
+ "media": "media/character-adult-woman/20261112-869a3617-d13bf7",
+ "members": [
+  {
+   "name": "woman",
+   "role": "subject",
+   "token_kind": "recipe",
+   "token": "recipe:cullet-woman",
+   "recipe": {
+    "name": "cullet-woman",
+    "base": "lookdev/own-woman.glb",
+    "height": 1.66,
+    "proportions": {
+     "shoulders": 0.895,
+     "build": 0.973,
+     "hands": 0.88,
+     "feet": 0.9
+    }
+   },
+   "sha256": "82391616a87149e75d815576259b48b8bd5ca9fcdd070b920eb2e7d9638db0ac",
+   "stats": {
+    "file": "own-woman.glb",
+    "sha256": "82391616a87149e75d815576259b48b8bd5ca9fcdd070b920eb2e7d9638db0ac",
+    "bytes": 5214612,
+    "triangles": 29668,
+    "vertices": 18043,
+    "parts": {
+     "Cloth": 11144,
+     "Face": 6284,
+     "Hair": 7624,
+     "Skin": 4616
+    },
+    "nodes": 103,
+    "bones": 98,
+    "spring_bones": 17,
+    "materials": [
+     "M00_001_01_Cloth_01_CLOTH",
+     "M00_000_00_Face_00_SKIN",
+     "M00_000_00_Eye_00_EYE",
+     "M00_000_00_EyeIris_00_EYE",
+     "M00_000_00_FaceEyeline_00_FACE",
+     "M00_000_00_FaceBrow_00_FACE",
+     "M00_000_00_Body_00_SKIN",
+     "M00_000_00_FaceTint_00_FACE",
+     "M00_000_Hair_00_HAIR"
+    ],
+    "textures": 4,
+    "texture_bytes": 141421,
+    "morph_targets": 15,
+    "spring_groups": 2,
+    "vertex_colours": true,
+    "clips": [
+     "idle",
+     "idle_look",
+     "walk",
+     "walk_brisk",
+     "run",
+     "run_fast",
+     "sneak",
+     "talk",
+     "talk_explain",
+     "listen",
+     "wave",
+     "point",
+     "nod",
+     "shake_head",
+     "sit_down",
+     "sit_idle",
+     "stand_up",
+     "gather",
+     "eat",
+     "sword_slash",
+     "sword_overhead",
+     "sword_thrust",
+     "block",
+     "dodge",
+     "hit",
+     "death",
+     "cast",
+     "attack",
+     "bow_shoot"
+    ],
+    "glow": false,
+    "glow_triangles": 0,
+    "palette": [
+     {
+      "hex": "#5d6c7d",
+      "share": 0.2489
+     },
+     {
+      "hex": "#302016",
+      "share": 0.1926
+     },
+     {
+      "hex": "#2b2c32",
+      "share": 0.1397
+     },
+     {
+      "hex": "#663f28",
+      "share": 0.0594
+     },
+     {
+      "hex": "#525a58",
+      "share": 0.0591
+     },
+     {
+      "hex": "#bcb9ab",
+      "share": 0.0414
+     },
+     {
+      "hex": "#45362b",
+      "share": 0.0392
+     },
+     {
+      "hex": "#27160c",
+      "share": 0.0369
+     },
+     {
+      "hex": "#e6bca4",
+      "share": 0.0257
+     },
+     {
+      "hex": "#ffffff",
+      "share": 0.0247
+     },
+     {
+      "hex": "#8c877c",
+      "share": 0.0236
+     },
+     {
+      "hex": "#4a2a19",
+      "share": 0.0224
+     },
+     {
+      "hex": "#9f9b8f",
+      "share": 0.0175
+     },
+     {
+      "hex": "#0e0d0b",
+      "share": 0.012
+     },
+     {
+      "hex": "other",
+      "share": 0.0571
+     }
+    ]
+   },
+   "shots": [
+    "front",
+    "three-quarter",
+    "side",
+    "back",
+    "face",
+    "face-three-quarter",
+    "face-side",
+    "hands",
+    "sit-three-quarter",
+    "sit-side",
+    "game",
+    "game-walk",
+    "elbow",
+    "knee",
+    "shoulder",
+    "hip"
+   ],
+   "clips": [
+    {
+     "name": "idle-tq",
+     "file": "clips/idle-tq.mp4",
+     "frames": 48,
+     "fps": 12,
+     "loop": 1
+    },
+    {
+     "name": "walk-tq",
+     "file": "clips/walk-tq.mp4",
+     "frames": 15,
+     "fps": 15,
+     "loop": 4
+    },
+    {
+     "name": "walk-side",
+     "file": "clips/walk-side.mp4",
+     "frames": 15,
+     "fps": 15,
+     "loop": 4
+    },
+    {
+     "name": "run-tq",
+     "file": "clips/run-tq.mp4",
+     "frames": 14,
+     "fps": 24,
+     "loop": 6
+    },
+    {
+     "name": "run-side",
+     "file": "clips/run-side.mp4",
+     "frames": 14,
+     "fps": 24,
+     "loop": 6
+    },
+    {
+     "name": "sword_slash-tq",
+     "file": "clips/sword_slash-tq.mp4",
+     "frames": 37,
+     "fps": 15,
+     "loop": 1
+    },
+    {
+     "name": "sit_down-tq",
+     "file": "clips/sit_down-tq.mp4",
+     "frames": 45,
+     "fps": 15,
+     "loop": 1
+    },
+    {
+     "name": "sit_idle-tq",
+     "file": "clips/sit_idle-tq.mp4",
+     "frames": 24,
+     "fps": 12,
+     "loop": 1
+    }
+   ],
+   "view": {
+    "size_m": [
+     1.7351624965667725,
+     1.659999966621399,
+     0.3472343385219574
+    ],
+    "triangles": 29668,
+    "vertices": 18043,
+    "meshes": 10,
+    "materials": [
+     "M00_001_01_Cloth_01_CLOTH",
+     "M00_000_00_Face_00_SKIN",
+     "M00_000_00_Eye_00_EYE",
+     "M00_000_00_EyeIris_00_EYE",
+     "M00_000_00_FaceEyeline_00_FACE",
+     "M00_000_00_FaceBrow_00_FACE",
+     "M00_000_00_Body_00_SKIN",
+     "M00_000_00_FaceTint_00_FACE",
+     "M00_000_Hair_00_HAIR"
+    ],
+    "glow": false,
+    "vertex_colours": true
+   }
+  },
+  {
+   "name": "vroid",
+   "role": "control",
+   "token_kind": "recipe",
+   "token": "recipe:shino",
+   "recipe": {
+    "name": "shino",
+    "base": "lookdev/vroid-Sendagaya_Shino.glb",
+    "height": 1.75
+   },
+   "sha256": "bf747dec1fcd83588ea3cabadf246ea1b92b3c53f31a990cd916f2cf2f42e579",
+   "stats": {
+    "file": "vroid-Sendagaya_Shino.glb",
+    "sha256": "bf747dec1fcd83588ea3cabadf246ea1b92b3c53f31a990cd916f2cf2f42e579",
+    "bytes": 20163628,
+    "triangles": 31211,
+    "vertices": 43595,
+    "parts": {
+     "Face": 3150,
+     "Body": 11645,
+     "Hair001": 16416
+    },
+    "nodes": 153,
+    "bones": 148,
+    "spring_bones": 16,
+    "materials": [
+     "F00_000_00_FaceMouth_00_FACE",
+     "F00_000_00_EyeWhite_00_EYE",
+     "F00_000_00_FaceEyeline_00_FACE",
+     "F00_000_00_FaceEyelash_00_FACE",
+     "F00_000_00_FaceBrow_00_FACE",
+     "F00_000_00_EyeIris_00_EYE",
+     "F00_000_00_EyeHighlight_00_EYE",
+     "F00_000_00_Face_00_SKIN",
+     "F00_000_00_EyeExtra_01_EYE",
+     "F00_001_01_Body_00_SKIN",
+     "F00_001_01_Tops_01_CLOTH",
+     "F00_001_01_AccessoryNeck_01_CLOTH",
+     "F00_001_01_Bottoms_01_CLOTH",
+     "F00_001_01_Shoes_01_CLOTH",
+     "F00_000_HairBack_00_HAIR",
+     "F00_000_Hair_00_HAIR_01",
+     "F00_000_Hair_00_HAIR_02"
+    ],
+    "textures": 30,
+    "texture_bytes": 10950015,
+    "morph_targets": 41,
+    "spring_groups": 17,
+    "vertex_colours": false,
+    "clips": [
+     "idle",
+     "idle_look",
+     "walk",
+     "walk_brisk",
+     "run",
+     "run_fast",
+     "sneak",
+     "talk",
+     "talk_explain",
+     "listen",
+     "wave",
+     "point",
+     "nod",
+     "shake_head",
+     "sit_down",
+     "sit_idle",
+     "stand_up",
+     "gather",
+     "eat",
+     "sword_slash",
+     "sword_overhead",
+     "sword_thrust",
+     "block",
+     "dodge",
+     "hit",
+     "death",
+     "cast",
+     "attack",
+     "bow_shoot"
+    ],
+    "glow": true,
+    "glow_triangles": 16610,
+    "palette": null
+   },
+   "shots": [
+    "front",
+    "three-quarter",
+    "side",
+    "back",
+    "face",
+    "face-three-quarter",
+    "face-side",
+    "hands",
+    "sit-three-quarter",
+    "sit-side",
+    "game",
+    "game-walk",
+    "elbow",
+    "knee",
+    "shoulder",
+    "hip"
+   ],
+   "clips": [
+    {
+     "name": "idle-tq",
+     "file": "clips/idle-tq.mp4",
+     "frames": 48,
+     "fps": 12,
+     "loop": 1
+    },
+    {
+     "name": "walk-tq",
+     "file": "clips/walk-tq.mp4",
+     "frames": 16,
+     "fps": 15,
+     "loop": 4
+    },
+    {
+     "name": "walk-side",
+     "file": "clips/walk-side.mp4",
+     "frames": 16,
+     "fps": 15,
+     "loop": 4
+    },
+    {
+     "name": "run-tq",
+     "file": "clips/run-tq.mp4",
+     "frames": 15,
+     "fps": 24,
+     "loop": 6
+    },
+    {
+     "name": "run-side",
+     "file": "clips/run-side.mp4",
+     "frames": 15,
+     "fps": 24,
+     "loop": 6
+    },
+    {
+     "name": "sword_slash-tq",
+     "file": "clips/sword_slash-tq.mp4",
+     "frames": 37,
+     "fps": 15,
+     "loop": 1
+    },
+    {
+     "name": "sit_down-tq",
+     "file": "clips/sit_down-tq.mp4",
+     "frames": 45,
+     "fps": 15,
+     "loop": 1
+    },
+    {
+     "name": "sit_idle-tq",
+     "file": "clips/sit_idle-tq.mp4",
+     "frames": 24,
+     "fps": 12,
+     "loop": 1
+    }
+   ],
+   "view": {
+    "size_m": [
+     1.4721405506134033,
+     1.75,
+     0.36202746629714966
+    ],
+    "triangles": 31211,
+    "vertices": 95830,
+    "meshes": 18,
+    "materials": [
+     "F00_000_00_FaceMouth_00_FACE",
+     "F00_000_00_EyeWhite_00_EYE",
+     "F00_000_00_FaceEyeline_00_FACE",
+     "F00_000_00_FaceEyelash_00_FACE",
+     "F00_000_00_FaceBrow_00_FACE",
+     "F00_000_00_EyeIris_00_EYE",
+     "F00_000_00_EyeHighlight_00_EYE",
+     "F00_000_00_Face_00_SKIN",
+     "F00_000_00_EyeExtra_01_EYE",
+     "F00_001_01_Body_00_SKIN",
+     "F00_001_01_Tops_01_CLOTH",
+     "F00_001_01_AccessoryNeck_01_CLOTH",
+     "F00_001_01_Bottoms_01_CLOTH",
+     "F00_001_01_Shoes_01_CLOTH",
+     "F00_000_HairBack_00_HAIR",
+     "F00_000_Hair_00_HAIR_01",
+     "F00_000_Hair_00_HAIR_02"
+    ],
+    "glow": false,
+    "vertex_colours": false
+   }
+  }
+ ],
+ "delivered": []
+}

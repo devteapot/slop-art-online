@@ -11,7 +11,7 @@ Status: **published** (2026-11-11, branch `tool-store-2`, from the Spark).
 - **Fetch-backs.** `l9` came back byte-identical to the local pack. Unpacked, all 170 files equal the scrubbed source byte for byte. Play-test 2 came back byte-identical to its scrubbed tree (38 of 38 files). The motion library, as first published on 2026-11-11, came back with every sha256 matching: 626 takes byte-identical, and `batch_stats.json` equal as JSON (one trailing newline added by the scrubber).
 - **Viewer.** It converted all six tables (`instances` 527, `calls` 212,758, `rows` 935,249, `prompts` 1,192, `session_calls` 133, `session_prompts` 5): row counts equal to the packs' manifests, nothing failed, and the previews, search and filter are on (checked 22:03). The first conversion of `calls` had failed ("Couldn't cast array of type string to null") because `hm1`'s `error` column is null throughout. The card now declares every column's type (`dataset_info`). The assets dataset has the viewer off, since its takes are binary.
 - **Held.**
-  - `b1`–`b3`: calls from `mistral-small-latest` and `gpt-6-luna`, whose terms are not read.
+  - `b2`, `b3`: calls from `gpt-6-luna`, held until the owner says which account the proxy uses. `b1` has no Luna call: see [Model terms](#model-terms-who-may-publish-whose-words-read-2026-11-12), Decisions.
   - `aborted` in `~/dev/slop-trials-cb`: no `batch.json`.
   - Play-test 2's 22 non-record files (rule A, listed in its `MANIFEST.json`).
   - Play-tests 3 and 4 are on the laptop.
@@ -123,6 +123,11 @@ README.md                    the card; configs: instances, calls, rows, prompts,
   - `calls` has one row per model call, with `purpose`, `model`, `tokens`, `latency_ms` and `error` as columns, and the whole journal line as `entry`.
   - `rows` has one row per recorded row (`samples`, `thoughts`, `experiences`, `chronicle`, `graphs`, `mind_rows`, `events`, `census`), with `stream`, `at_ms` and the row as JSON text.
   - `prompts` holds each distinct system prompt once, as the mind's journal does.
+- **Analysis records** (since `trials-gate-live`, 2026-11-12). Some records are made from other batches' evidence, such as gate replays and judge items and labels, and have no instances of their own. Such a record is a batch folder whose `batch.json` says `"kind": "analysis"`. It lists its files (with sha256) and declares `models_in_outputs`, the models whose words it carries.
+  - `check_batch_complete` accepts it without instances.
+  - The declared models go into its manifest's `models`, so the same model gate holds it.
+  - Its files sit under `analysis/…` and pack into `files.tar.gz`; the four tables stay empty.
+  - First use: `gq1`, the rethink gate's quality test (docs/GATE_QUALITY.md). Its models are verified since 2026-11-12, and its Jev pricing is scrubbed. It is prepared for upload but not uploaded ("Model terms", Decisions).
 - **Round trip.** `store.py fetch batch <name> --unpack` rebuilds the `trials.py` evidence layout, scrubbed (the self-test checks it file by file). Running `trial_evidence.py` or `trials.py report` on a fetched batch has not been tried yet.
 - **Format.** JSON Lines with gzip is used because it needs no dependencies. Parquet, the Hub's recommended format, can replace it later without changing the layout.
 
@@ -199,6 +204,23 @@ board/<family>/<version>/       asset board photographs and pages (from the lapt
 | `private-ip` | 10/8, 172.16/12, 192.168/16, Tailscale 100.64/10 (octets checked; 127.0.0.1 and public addresses stay) | `[private-ip]` |
 | `hostname` | This machine's name, `~/.ssh/config` hosts, `STORE_HOSTNAMES`, `*.ts.net`, `*.local`/`*.lan`, Mac default names | `[host]` |
 
+**Jev's pricing** (`jev-pricing`; decision `jev_pricing`, anything but `include` applies it; `jev_strip` and `jev_text` in `store.py`). TypeSafe's Master Customer Agreement s.14.1 counts "all pricing information" as its Confidential Information.
+- **JSON and JSON Lines.** In a Jev object, every key naming cost, usd, price or spend is dropped, at any depth. A Jev object is one whose `model`, `profile`, `arm`, `gate`, `url` or `provider` names Jev or `typesafe.ai`, or that sits under a key naming Jev. So these go:
+  - a Jev journal entry's `cost_usd`;
+  - `input_usd_per_m` in `rethink.json` and `judgments.json` copies;
+  - `points.jsonl`'s `jev.cost_usd`;
+  - the Jev replay's `judged.cost_usd`;
+  - a Jev gate's `usd_per_trigger` and `cost_vs_off` in `curve.json`;
+  - `by_model`/`by_purpose_model` Jev cost fields in a summary.
+- **Totals.** Under a cost key, a part named for Jev is dropped and a sibling `total` is recomputed without it (`gq1`'s `spend_usd`: 0.765 becomes 0.685).
+- **Text.** These become `[removed: Jev pricing]`:
+  - in a table row naming Jev, the cells of cost columns;
+  - in a line about Jev (it names Jev, or sits under a list item or lead-in paragraph that does), dollar amounts and the percentages of clauses about cost or savings;
+  - elsewhere, a cost clause that repeats a percentage removed from a Jev row;
+  - in a text naming Jev, the dollar amounts of spend and total lines.
+- **Kept.** Other models' costs: GLM gate calls, think and compile calls, `deliberation_cost_usd`, the gate-off and GLM-gate rows.
+- **Over-removal.** A cost clause that also carries a harm figure loses it too. "9.2%" in "Jev 0.3 with GLM is 9.2%" stays only because a comma separates it from the cost.
+
 **Refused whole:**
 - files in never-touch folders, or with `sao-living` in the path;
 - **credential files, never opened** (`is_secret_path`, fbc37c32 review A4):
@@ -216,7 +238,7 @@ Known binaries (`.npz`, images, video, `.glb`) are scanned as bytes for literal 
 
 No identity is in the repository: the scrubber reads it at run time, and the tests plant fake values. The owner's identifiers are not hard-coded either.
 
-**Self-test** (`just living-store-selftest`, 19 tests, about 0.1 s):
+**Self-test** (`just living-store-selftest`, 62 tests on 2026-11-12, under a second):
 
 - planted secrets in every format above, including a bare Mistral-style key, `LIVING_TOKEN` in shell and JSON form, `NEO4J_AUTH`, a SpacetimeDB-style JWT and URL credentials;
 - the owner's email, name, first name and login;
@@ -228,7 +250,8 @@ No identity is in the repository: the scrubber reads it at run time, and the tes
 - batch pack → local publish → fetch → unpack, equal to the scrubbed source;
 - the motion round trip with sha256 checks;
 - the manifest on a fake home;
-- the publish gate.
+- the publish gate;
+- Jev's pricing (`JevPricing`): each kind of record `gq1` holds, with distinctive planted figures. Each Jev figure is gone from every packed file, the manifest included. Other models' costs stay, `spend_usd`'s total is recomputed, the report shows no figure, and `jev_pricing: include` keeps everything.
 
 ### Dry runs (2026-11-11; reports in `~/store-dryrun-2026-11-11/` on the Spark, not in git)
 
@@ -254,6 +277,7 @@ The owner agreed to publish, publicly, under the personal namespace `carlid`, on
 | `owner_first_name` | **redact** | Replaced by `Player` (`player`, `PLAYER` to match the case), in file names too. |
 | `owner_notes` | **hold** | Not published; the rest of the unit still is. |
 | `session_media` | **hold** | Not published. |
+| `jev_pricing` (2026-11-12, general coordinator) | **exclude** | TypeSafe Jev's price, per-call costs and share of totals are removed (below), until the owner confirms they may be shown. |
 | Models' words in world rows | **kept** | – |
 | Licence of both cards | **MIT** | – |
 
@@ -405,12 +429,118 @@ Trial batches follow the same steps with `publish batch <batch folder>`, or `pub
 | --- | --- | --- | --- |
 | Kimodo motion takes (`motion/raw`) | NVIDIA Kimodo-SOMA-RP-v1.2 (NVIDIA Open Model License), trained on the proprietary Bones Rigplay dataset; prompts encoded by Meta Llama 3 8B Instruct through LLM2Vec | Yes, as far as read. "NVIDIA does not claim ownership to any outputs"; "An output is not a Derivative Model"; "You are responsible for outputs and their subsequent uses" (ss. 1.1, 2.4). Redistribution terms bind copies of the model, not outputs. Model use must follow NVIDIA's Trustworthy AI terms. Llama 3: "Built with Meta Llama 3", and s.1.b.v forbids using its "output or results" to improve another LLM; the card asks users not to train language models on the takes. | `~/kimodo-test/kimodo/README.md` (code Apache-2.0; checkpoints licensed separately); the model's `LICENSE` and `README.md` in the local HF cache (read only); [model page](https://huggingface.co/nvidia/Kimodo-SOMA-RP-v1.2); [licence page](https://www.nvidia.com/en-us/agreements/enterprise-software/nvidia-open-model-license/) (version of 2025-10-24); the Llama 3 `LICENSE` in the local HF cache |
 | VRoid sample characters (`vroid-Sendagaya_Shino`, `vroid-Vivi`) | VRoid beta samples, downloaded by `living/tools/lookdev_assets.sh` from the `madjin/vrm-samples` mirror | CC0 with commercial use allowed: each file's VRM metadata reads `licenseName: CC0`, `commercialUssageName: Allow`, `allowedUserName: Everyone`. They are not in the proposed repositories; our generated characters contain none of their content. | [`living/tools/blender/THIRD_PARTY.md`](../living/tools/blender/THIRD_PARTY.md) (read from the files 2026-11-11); [OpenGameArt "VRoid Studio CC0 models"](https://opengameart.org/content/vroid-studio-cc0-models). VRoid's own help and Hub pages refused automated reads (HTTP 403). A [Booth listing](https://booth.pm/en/items/3094418) says VRoid has ended distribution of the CC0 samples. |
-| Model replies (journals, thoughts, spoken lines) | Mistral AI's API serving `zai-glm-5-3-flash`, `deepseek-v4-1-flash-1017` and `ministral-*` | Probably yes, labelled AI-generated. Mistral's [Commercial Terms](https://legal.mistral.ai/terms/commercial-terms-of-service) (effective 2026-09-25): the customer "owns all Output" (s.3.1). It may not be presented as human-made (s.3.2) or used to reverse engineer Mistral's products (s.2.2(e)). [Additional terms](https://legal.mistral.ai/terms/additional-terms) s.6 leave third-party models' rights with their licensors. [GLM-4.5](https://huggingface.co/zai-org/GLM-4.5) is MIT. [DeepSeek's model licence](https://github.com/deepseek-ai/DeepSeek-V3/blob/main/LICENSE-MODEL) s.6: "DeepSeek claims no rights in the Output". DeepSeek's own [platform terms](https://cdn.deepseek.com/policies/en-US/deepseek-terms-of-use.html) ask that published output be marked as AI-generated (s.3.1), which the card does. | **Not verified:** the licences of the exact GLM 5.3 and DeepSeek V4.1 versions, and whether `ministral-*-latest` maps to Ministral 3 (Apache-2.0 on its [8B card](https://huggingface.co/mistralai/Ministral-3-8B-Instruct-2512)) or the 2410 models ([Mistral Research License](https://huggingface.co/mistralai/Ministral-8B-Instruct-2410)). `l9` used only GLM and DeepSeek. |
+| Model replies (journals, thoughts, spoken lines) | Mistral AI's API serving `zai-glm-5-3-flash`, `deepseek-v4-1-flash-1017` and `ministral-*` | Probably yes, labelled AI-generated. Mistral's [Commercial Terms](https://legal.mistral.ai/terms/commercial-terms-of-service) (effective 2026-09-25): the customer "owns all Output" (s.3.1). It may not be presented as human-made (s.3.2) or used to reverse engineer Mistral's products (s.2.2(e)). [Additional terms](https://legal.mistral.ai/terms/additional-terms) s.6 leave third-party models' rights with their licensors. [GLM-4.5](https://huggingface.co/zai-org/GLM-4.5) is MIT. [DeepSeek's model licence](https://github.com/deepseek-ai/DeepSeek-V3/blob/main/LICENSE-MODEL) s.6: "DeepSeek claims no rights in the Output". DeepSeek's own [platform terms](https://cdn.deepseek.com/policies/en-US/deepseek-terms-of-use.html) ask that published output be marked as AI-generated (s.3.1), which the card does. | Superseded by [Model terms](#model-terms-who-may-publish-whose-words-read-2026-11-12) (2026-11-12), which settles the versions and `-latest` aliases below. Earlier note: **not verified:** the licences of the exact GLM 5.3 and DeepSeek V4.1 versions, and whether `ministral-*-latest` maps to Ministral 3 (Apache-2.0 on its [8B card](https://huggingface.co/mistralai/Ministral-3-8B-Instruct-2512)) or the 2410 models ([Mistral Research License](https://huggingface.co/mistralai/Ministral-8B-Instruct-2410)). `l9` used only GLM and DeepSeek. |
 | Prompts and world rows | Our mind service and the authority's rules | Ours, MIT | this repository |
 | Blender-generated models, textures, board photographs | Our scripts and the game's renderer | Ours, MIT. The tools (Blender GPL, ffmpeg LGPL/GPL) put no terms on what they produce. | `living/tools/blender/THIRD_PARTY.md` |
 | SpacetimeDB exports, Neo4j data | Data written by our module and minds | Yes. [SpacetimeDB](https://github.com/clockworklabs/SpacetimeDB/blob/master/LICENSE.txt) is BSL 1.1 (changing to AGPL-3.0 with a linking exception) and [Neo4j](https://github.com/neo4j/neo4j/blob/dev/LICENSE.txt) Community is GPLv3; both cover the programs. Neither says anything about exported data; the GPL family covers output only when the output is itself a covered work. Replicas and stores are not published anyway. | the linked licence files |
 
 The proposed licence of both cards is MIT, matching the code. That is the owner's choice; the cards are marked draft.
+
+### Model terms: who may publish whose words (read 2026-11-12)
+
+The owner allowed model exchanges in published runs (`model_exchanges: include`). This section checks only that no provider forbids publishing outputs. It is a reading of the terms, not legal advice. It changes neither the gate (`store_config.json` `models`, `check_models`) nor any batch's publish state.
+
+**Models in our run records.** All journals under `~/dev/*/.local/living/trials` on the Spark, by the `model` field: `zai-glm-5-3-flash` 421,187 calls, `deepseek-v4-1-flash-1017` 102,558, `mistral-small-latest` 2,204, `jev-1.14.0` 556 plus `jev` 341, `gpt-6-luna` 474, and the fake server's `fake-*` names. `ministral-*-latest` appears only as `fake-ministral-*`. The `gq1` analysis record also declares `claude-opus-5-5`, 768 judge labels, in `models_in_outputs`. Laptop sessions were not scanned.
+
+**Routes, from the configs.**
+
+| Name in records | Model | Route | Source |
+| --- | --- | --- | --- |
+| `zai-glm-5-3-flash` | Z.ai GLM 5.3 Flash | Mistral API, `https://api.mistral.ai/v1`, `MISTRAL_API_KEY` (profile `glm-flash`) | `living/configs/models.json` |
+| `deepseek-v4-1-flash-1017` | DeepSeek V4.1 Flash 1017 | Mistral API, same key (profile `deepseek-flash`) | same |
+| `mistral-small-latest` | Mistral Small 4 (`mistral-small-2603`), see below | Mistral API (profile `mistral-small`, `b1`–`b3`) | `models.json` at `af8332d`; each `b2` instance's `models.json` |
+| `jev-1.14.0`, `jev` | TypeSafe Jev | TypeSafe API, `https://api.typesafe.ai/v1/systemone`, `TYPESAFE_API_KEY` | `living/configs/rethink.json`, `judgments.json` |
+| `gpt-6-luna` | an OpenAI model, as the proxy reports it | the owner's proxy `https://codex.carlid.dev/v1` (`CARLID_NPC_API_KEY`), the `codex-cursor-proxy` translating Chat Completions to an upstream Responses API | `models.json` at `af8332d`; `PROXY_TOKEN_LIMIT_FINDING.md` and `CARLID_ENDPOINT_SETUP.md` at `legacy-baseline` |
+| `claude-opus-5-5` | Claude Opus 5.5 | Claude Code subagents on the owner's Claude Max subscription (OAuth sign-in, no API key; "cost nothing in API money") | `gq1/batch.json` (`judges`); [GATE_QUALITY.md](GATE_QUALITY.md); the Spark's Claude Code account type `claude_max` |
+
+#### Mistral API: GLM 5.3 Flash, DeepSeek V4.1 Flash, Mistral Small 4 (and Ministral 3)
+
+- **Terms.** [Commercial Terms of Service](https://legal.mistral.ai/terms/commercial-terms-of-service), effective 2026-09-25; [Additional Terms](https://legal.mistral.ai/terms/additional-terms), effective 2026-09-25; [Usage Policy](https://legal.mistral.ai/terms/usage-policy), effective 2026-06-11; [models list](https://docs.mistral.ai/models). Read 2026-11-12.
+- **Ownership (s.3.1).** "To the extent permitted by applicable law, Customer (i) retains all ownership rights in Customer Data and (ii) owns all Output. Mistral AI hereby assigns to Customer all right, title, and interest, if any, in and to Output that Mistral AI may have."
+- **Third-party models (Additional Terms s.6).** "All right, title, and interest in and to each Third-Party Technology remains with its respective licensors. Third-Party Technologies are provided "as is" … under their respective licenses". And: "With respect to any Output generated using a Third-Party Technology, Mistral AI assigns to Customer all right, title, and interest, if any, that Mistral AI may have in and to such Output."
+- **Sharing.** No clause forbids publishing text Output. The conditions are:
+  - s.3.2: "Customer may not represent or imply that the Output was generated by a human when it was generated by the Mistral AI Products."
+  - s.3.5: "always verify the reliability, accuracy, and completeness of the Output before relying on it for any purpose or otherwise making it available to third parties." That is advice; it states no ban.
+- **Attribution.** None asked, beyond not presenting Output as human-made.
+- **Training and redistribution.**
+  - s.3.3 limits only images: "Customer may not use image Outputs to develop or train any image generation product that competes with a Mistral AI Product."
+  - s.2.2(d), (e): no using Output "to reverse engineer the Mistral AI Products".
+  - No limit on redistributing text Output.
+- **The models' own licences (Mistral's models list and model pages).**
+  - `zai-glm-5-3-flash`: "Z.ai GLM 5.3 Flash", MIT. The [HF LICENSE](https://huggingface.co/zai-org/GLM-5.3-Flash/raw/main/LICENSE) is MIT, "Copyright (c) 2026 Z.AI Co., Ltd".
+  - `deepseek-v4-1-flash-1017`: "DeepSeek V4.1 Flash 1017", MIT. The [HF LICENSE](https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash-1017/raw/main/LICENSE) is MIT, "Copyright (c) 2023 DeepSeek".
+  - `mistral-small-latest`: an alias of `mistral-small-2603`, Mistral Small 4 (v26.03), Apache 2.0 ([model page](https://docs.mistral.ai/models/mistral-small-4-0-26-03)). Every older Small is deprecated or retired, with Mistral Small 4 as the replacement.
+  - `ministral-{3b,8b,14b}-latest`: aliases of `ministral-*-2512`, Ministral 3, Apache 2.0 ([8B page](https://docs.mistral.ai/models/ministral-3-8b-25-12)). The 2410 models have their own names (`ministral-8b-2410`). Only fake calls carry these names in our records.
+  - MIT and Apache 2.0 cover the weights. Neither puts terms on outputs.
+- **Route.** We call Mistral directly, so there is no reseller. Z.ai's and DeepSeek's own platform terms do not apply: we never called their APIs.
+- **Unclear or assumed.**
+  - That the owner's Mistral account is under the Commercial Terms, not Mistral's consumer terms. API keys are a commercial product; the account type was not checked.
+  - Which release `mistral-small-latest` served on 2026-11-09: the journals record only the requested name. Today the alias is Mistral Small 4. Mistral's deprecation table retires the last older Small (3.2, `mistral-small-2506`) on 2026-07-31, so on 2026-11-09 the alias can only have served Small 4. That is inferred from the table, not recorded.
+
+#### TypeSafe Jev (`jev-1.14.0`)
+
+- **Terms.** [Master Customer Agreement](https://typesafe.ai/legal/mca), last updated 2026-09-23; [Acceptable Use Policy](https://typesafe.ai/legal/acceptable-use-policy), last updated 2026-09-23; [docs legal index](https://docs.typesafe.ai/legal.md). The site's [Terms of Use](https://typesafe.ai/legal/terms), 2026-09-19, cover only the website. Read 2026-11-12.
+- **What is in our records.** Jev's replies are numbers, not words, for example `{"answers":{"plan_broken":{"noul":0.18,…}},"model":"jev-1.14.0",…}`. The questions sent to it are ours.
+- **Ownership (s.4.2).** "TypeSafe does not claim ownership of Input and TypeSafe disclaims ownership of Output. TypeSafe hereby assigns to Customer all of its right, title, and interest, if any, in the Output."
+- **Sharing.** Nothing forbids publishing Output. AUP 1.4: do not "mislead others about whether content, including Output, was generated by AI".
+- **Attribution.** None asked.
+- **Training and redistribution (s.2.3(b)).** Customer will not "use the Services or any Output … to perform model distillation, train a model to imitate the output of the Services, or develop (or to facilitate the development of) a similar or competing product or service". This binds us, the customer. Publishing is not training. "Facilitate" is the open word: a public dataset of Jev's answers could help someone else distil Jev.
+- **Unclear.**
+  - s.14.1 lists "Customer's Fees and all pricing information" among TypeSafe's Confidential Information. The repository and records carry Jev's input price (`input_usd_per_m: 0.042`) and per-call `cost_usd`. TypeSafe's own home page discusses its prices publicly; that the published price equals ours was not checked.
+  - It is assumed that the owner's key was bought through the console checkout, so this MCA governs, not a separate order.
+
+#### GPT-6 Luna (`gpt-6-luna`), through the owner's proxy
+
+- **Route.** `codex.carlid.dev` runs the owner's `codex-cursor-proxy`. Its source, inspected on 2026-09-05, forwards to an upstream Responses API. Which upstream and which OpenAI account it uses is **not recorded** in this repository. Two cases give different terms:
+  - an OpenAI API key falls under the OpenAI Services Agreement;
+  - a ChatGPT/Codex sign-in falls under the consumer Terms of Use.
+- **Services Agreement**, [PDF](https://cdn.openai.com/osa/openai-services-agreement.pdf) "ONLINE v.010126", read 2026-11-12.
+  - s.4.1: "Customer: (a) retains all ownership rights in Input; and (b) owns all Output. OpenAI hereby assigns to Customer all OpenAI's right, title, and interest, if any, in and to Output."
+  - s.3.3(e): Customer will not, "except for a Permitted Exception, use Output to develop artificial intelligence models that compete with OpenAI's products and services".
+  - No clause forbids publishing Output, and no attribution is asked.
+- **Terms of Use** ([page](https://openai.com/policies/row-terms-of-use/)). The page refused automated reads (HTTP 403). The wording below is from search-result excerpts of it, not from a full read:
+  - "you (a) retain your ownership rights in Input and (b) own the Output. We hereby assign to you all our right, title, and interest, if any, in and to Output."
+  - Among the prohibited uses: "Automatically or programmatically extract data or Output", representing Output as human-generated, and using Output to develop competing models.
+- **Unclear, for a human.** If the upstream is a ChatGPT subscription, our calls were programmatic access to Output through a consumer plan. The Terms of Use excerpt forbids that, whatever happens to the Output afterwards. Publishing would not breach anything further, but it would put that use on record. Luna has been withdrawn from our configs.
+
+#### Claude Opus 5.5 (`claude-opus-5-5`), the gate-quality judges
+
+- **Route and terms.** The judges were Claude Code subagents on a Claude Max plan. Claude Code's [legal page](https://code.claude.com/docs/en/legal-and-compliance) says the "[Consumer Terms of Service](https://www.anthropic.com/legal/consumer-terms) — for Free, Pro, Max, and Ultra users" apply.
+  - [Consumer Terms PDF](https://assets.claude.com/43c13f51a6d9755341433f79cf63c966ed9200ea.pdf), Anthropic PBC, effective 2025-10-08. The page served to the Spark is the EEA version (Anthropic Ireland): same date, the same clauses in slightly different wording.
+  - [Usage Policy](https://www.anthropic.com/legal/aup), effective 2026-11-12.
+  - Read 2026-11-12.
+- **What is in our records.** The judges' labels (`useful`/`marginal`/`wasted`, `better`/`same`, flaws) and their short reasons, in `gq1/analysis/judge/labels/`.
+- **Ownership (s.4).** "Subject to your compliance with our Terms, we assign to you all of our right, title, and interest—if any—in Outputs."
+- **Sharing.** Nothing forbids publishing Outputs. s.4 makes the user responsible for "sharing them with others". The Usage Policy forbids misleading people about "whether they are interacting with a human" and content falsely attributed. The card's AI labelling covers both.
+- **Attribution.** None asked.
+- **Training and redistribution (s.3, item 2).** You may not use the Services "To develop any products or services that compete with our Services, including to develop or train any artificial intelligence or machine learning algorithms or models or resell the Services". This binds the user. Publishing is not training. There is no clause on redistributing Outputs.
+- **Route condition (s.3, item 7).** No automated access "Except when you are accessing our Services via an Anthropic API Key or where we otherwise explicitly permit it". Claude Code is Anthropic's own product, which its docs permit on these plans for "ordinary, individual usage". Whether nine parallel judging subagents count as ordinary use is the owner's call; it bears on the subscription, not on publishing.
+
+#### Summary
+
+| Model | Publishing outputs | Condition |
+| --- | --- | --- |
+| GLM 5.3 Flash (Mistral) | allowed | label as AI-generated (Mistral s.3.2); MIT weights |
+| DeepSeek V4.1 Flash 1017 (Mistral) | allowed | same; MIT weights |
+| Mistral Small 4 (`mistral-small-latest`) | allowed | same; Apache 2.0 |
+| Ministral 3 (`ministral-*-latest`) | allowed | same; Apache 2.0; only fake calls in records |
+| Jev (TypeSafe) | allowed | label as AI-generated; we may not distil from it; its pricing is "Confidential Information" |
+| Claude Opus 5.5 (Claude Code, Max) | allowed | label as AI-generated; we may not train competing models on it |
+| GPT-6 Luna (owner's proxy) | allowed under either OpenAI terms | **depends on the upstream account**; a ChatGPT sign-in makes the calls themselves out of terms |
+
+#### Decisions (2026-11-12, general coordinator; branch `store-gate-2`)
+
+1. **Jev's pricing is scrubbed until the owner confirms.** Its price, every Jev per-call `cost_usd` and Jev's share of any total are removed from published records. Totals are recomputed without Jev, or dropped where Jev is mixed in and cannot be separated. Other models' costs are kept. This is decision `jev_pricing: exclude` and the scrubber rule above, applied to every unit. No published unit carried Jev calls: of the 62 published batches none has one; only `gq1` and the fake `glf2` do. The code repository is public and still carries Jev's price (`living/configs/rethink.json`, `judgments.json`: `input_usd_per_m`) and Jev-mixed costs (`docs/GATE_QUALITY.md`). This decision does not cover those.
+2. **Card note.** The runs card asks readers not to train models on the Jev answers or the Claude judge labels, as the assets card does for the Kimodo takes.
+3. **Gate.**
+   - Now `verified` in `store_config.json`: `mistral-small-latest`, `ministral-*-latest` and `ministral-*-2512` (Ministral 3), `jev*` and `claude-opus-5-5`, each with the card note.
+   - The older `ministral-*-2410` releases (Mistral Research License, not read) stay unverified, so the pattern is not a bare `ministral-*`.
+4. **Luna is held.** `gpt-6-luna` stays unverified while the coordinator asks the owner which account the proxy uses.
+   - Batches with Luna calls: `b2` (472 calls, variant `luna`) and `b3` (2 calls, overflow), in `~/dev/slop-trials/.local/living/trials` on the Spark. Neither is published.
+   - `b1` has no Luna call. Its instances' `models.json` lists `luna` as an overflow profile that was never used. The gate counts calls, so `b1` now passes it. The coordinator should decide whether a config mention counts as carrying Luna.
+   - `gq1` does not contain the string `gpt-6-luna`.
+   - No other trial root on the Spark has Luna calls. Laptop sessions were not scanned.
+5. **`gq1`** is prepared, not uploaded (below).
 
 ## Fetch and publish
 
