@@ -21,7 +21,7 @@ at the play camera, where whole-person files made 20). Here each class is given 
   picture is one file for all, so its mean is one already. A style's tie is left as it is: it has
   no tag and keeps its own colour.
 - **overlay** (a grey picture with an alpha, a file): the picture's mean over what it covers is
-  scaled to `OVERLAY`. An overlay still has a picture of its own (and lines and freckles their
+  scaled to `OVERLAY` (a light grey, so that tinting it to a person's colour only darkens it). An overlay still has a picture of its own (and lines and freckles their
   type's shadow map), so it stays a material a file; equal means only make one tint come out the
   same on every type.
 
@@ -41,7 +41,7 @@ from merge_primitives import read_accessor, read_glb, write_glb  # noqa: E402
 
 CLOTH = 0.30    # an outfit piece's mean lightness, linear
 HAIR = 0.78     # the mean vertex colour of a hair mesh's outer surfaces (its lighter half), as stored
-OVERLAY = 0.50  # an overlay picture's mean grey over what it covers, as stored (sRGB)
+OVERLAY = 0.90  # an overlay picture's mean grey over what it covers, as stored (sRGB): high, so a tint is a darkening
 LUM = np.array([0.2126, 0.7152, 0.0722])
 TOL = 0.004
 

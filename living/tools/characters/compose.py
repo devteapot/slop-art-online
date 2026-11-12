@@ -188,7 +188,20 @@ def attach_hair(j, binary, style_path, out_path, colour=None, far=False, node=No
     mats = {}
     prims = []
     for p in h["meshes"][hnode["mesh"]]["primitives"]:
-        q = dict(attributes={k: copy(a, scale=colour if k == "COLOR_0" and colour is not None else None) for k, a in p["attributes"].items()}, mode=p.get("mode", 4))
+        tone = colour
+        if colour is not None and "material" in p:
+            # An overlay's own picture: the client moves the picture's mean (linear, over what it
+            # covers) to the person's colour, so the tint here is the colour over that mean.
+            hm = h["materials"][p["material"]]
+            tex = (hm.get("pbrMetallicRoughness") or {}).get("baseColorTexture")
+            if tex is not None and hm.get("alphaMode") == "BLEND" and "bufferView" in h["images"][h["textures"][tex["index"]]["source"]]:
+                import shade_mean
+
+                pic = shade_mean._load(h, hbin, h["textures"][tex["index"]]["source"])
+                g = pic[..., :3].mean(axis=2)
+                g = np.where(g > 0.04045, ((g + 0.055) / 1.055) ** 2.4, g / 12.92)
+                tone = np.array(colour) / max(float((g * pic[..., 3]).sum() / max(pic[..., 3].sum(), 1e-9)), 1e-3)
+        q = dict(attributes={k: copy(a, scale=tone if k == "COLOR_0" and colour is not None else None) for k, a in p["attributes"].items()}, mode=p.get("mode", 4))
         if "indices" in p:
             q["indices"] = copy(p["indices"])
         mi = p.get("material")
