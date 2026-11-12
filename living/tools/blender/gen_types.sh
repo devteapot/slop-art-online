@@ -6,7 +6,8 @@
 # the game drives; its neck and hands; the far head, neck and hands as the FarSkin mesh on the
 # same skeleton; the designed face normals and shadow map (face_normals.py) and the outline
 # normals (outline_normals.py). Its far head's picture and its lip layer are tiles of two pages
-# every type shares (lookdev/pages/types-far.png, types-tint.png; share.py types). It holds no
+# every type shares (lookdev/pages/types-far.png, types-tint.png; share.py types), and its iris is
+# one picture every type names (lookdev/pages/types-iris.png). It holds no
 # hair, no clothes and no clips: clips live once in
 # lookdev/anim/own-clips.glb (share.py clips), and a person is this file with its identity bones
 # moved (compose.py shows the rule).
@@ -46,3 +47,6 @@ rm -f "$out/strands.png"
 files=()
 for t in "${types[@]}"; do files+=("$out/$t.glb"); done
 python3 living/tools/characters/share.py types --dir "$(dirname "$out")/pages" "${files[@]}"
+# Every type's iris is the one shared picture, with the source colour that the lines' eye
+# colours are worked out from (person_params.eye_line_colour).
+python3 living/tools/characters/eye_colours.py "$out" --check | tail -1

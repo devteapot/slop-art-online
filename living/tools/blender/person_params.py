@@ -50,6 +50,19 @@ EYE_COLOURS = dict(
     blue=(0.30, 0.47, 0.62), grey=(0.42, 0.50, 0.54), green=(0.33, 0.48, 0.33), hazel=(0.47, 0.40, 0.20), amber=(0.60, 0.40, 0.14),
     brown=(0.36, 0.23, 0.13), dark_brown=(0.21, 0.14, 0.10),
 )
+# The iris every face type shares is painted in this colour (face_paint.shared_iris), and the
+# client recolours it to a person by moving its source colour to the line's eye colour. An amber
+# as light as the lightest eye colour above and as strong as the strongest, so the client only
+# ever turns its hue and darkens it: a colour above the source's is pushed toward white instead,
+# which greys the pupil.
+SHARED_IRIS = (0.66, 0.551, 0.165)
+# That picture's source colour as the client learns it (linear light): the mean of the texels
+# the iris's vertices lie on. It is about a third as light as the colour the iris is painted
+# with, since the vertices crowd the dark rim and the pupil. `eye_colours.py --check` holds
+# every type's iris to it.
+SHARED_IRIS_SOURCE = (0.13680, 0.09073, 0.02767)
+# How much of a picture's spread of hue the client keeps when it recolours (characters.rs).
+HUE_SPREAD = 0.4
 # How drawn the whole town's faces are (docs/CHARACTERS.md, "Style"): 0 keeps the proportions of
 # life that pass 1 had, 1 is the VRoid control's drawing (eyes low on the head and tall, a short
 # fine lower face, a small nose and mouth, a larger head). Grown men and the old take less of it.
@@ -473,7 +486,10 @@ def person_line(spec, recipe, male):
             cloth_[name] = hexed(tone)
     colours["outfit"] = cloth_
     if isinstance(look.get("iris"), (tuple, list)):
-        colours["eyes"] = hexed(look["iris"])
+        # `eyes` is what the client moves the shared iris's source colour to; `eyes_natural` is
+        # the eye colour itself, which the iris's body then has.
+        colours["eyes"] = hexed(eye_line_colour(look["iris"]))
+        colours["eyes_natural"] = hexed(look["iris"])
     # The details worn as overlay styles, by the same thresholds a glance would use.
     over = []
     if spec["beard"] in BEARD_FORMS:
@@ -643,6 +659,30 @@ def from_variant(name):
     if name not in PRESETS:
         raise SystemExit(f"variant {name!r}: not one of {sorted(PRESETS)} or <seed>:<kind> with kind in {sorted(KINDS)}")
     return copy.deepcopy(PRESETS[name])
+
+
+def eye_line_colour(colour):
+    """The colour a person's line carries for eyes of this colour (sRGB 0..1, both).
+
+    The client moves the shared iris's source colour to the line's. The source is not the
+    colour the iris is painted with (`SHARED_IRIS_SOURCE` against `SHARED_IRIS`), so with the
+    eye colour itself in the line the client made the iris's body about three times lighter
+    than it, and greyed the pupil of any eye lighter than the source. This is the colour to
+    move the source to for the body to come out the eye colour: the step in hue, saturation and
+    value that takes `SHARED_IRIS` to its source, taken from the eye colour, as the client's
+    rule undoes it (toon.wesl `recolor`: value and saturation by ratio, hue by the distance from
+    the source's, kept at `HUE_SPREAD`)."""
+    import colorsys
+
+    lin = lambda c: [((x + 0.055) / 1.055) ** 2.4 if x > 0.04045 else x / 12.92 for x in c]
+    sto = lambda c: [1.055 * x ** (1 / 2.4) - 0.055 if x > 0.0031308 else 12.92 * x for x in c]
+    bh, bs, bv = colorsys.rgb_to_hsv(*lin(SHARED_IRIS))
+    mh, ms, mv = colorsys.rgb_to_hsv(*SHARED_IRIS_SOURCE)
+    th, ts, tv = colorsys.rgb_to_hsv(*lin(colour[:3]))
+    d = bh - mh
+    d -= round(d)
+    # Never above the source's own: there the client lightens instead of scaling.
+    return tuple(sto(colorsys.hsv_to_rgb((th - HUE_SPREAD * d) % 1.0, min(ts * ms / bs, ms), min(tv * mv / bv, mv))))
 
 
 def set_path(p, text):
