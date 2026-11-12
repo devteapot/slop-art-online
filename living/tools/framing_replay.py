@@ -56,10 +56,26 @@ def why_of(text):
     return text.split(WHY, 1)[1].split("\n\n", 1)[0]
 
 
+# Arm C of the temperament replay (docs/TRIALS.md, fs1n): one general line, added to the system
+# prompt right after the framing sentence (today's or the neutral one), naming no situation.
+TEMPERAMENT = "Act from your own temperament and habits as they are written, including any reserve: keep to your nature unless something gives you reason not to."
+
+
 def rewrite(messages, arm):
     """The recorded messages as arm `arm` would have sent them."""
-    if arm in ("R", "T"):
+    if arm in ("R", "T", "A", "B"):
         return messages
+    if arm == "C":
+        out = []
+        for m in messages:
+            c = m["content"]
+            if m["role"] == "system":
+                anchor = NEUTRAL_SYS if NEUTRAL_SYS in c else OLD_SYS
+                if anchor not in c:
+                    raise ValueError("no framing sentence in the system prompt")
+                c = c.replace(anchor, anchor + " " + TEMPERAMENT, 1)
+            out.append({"role": m["role"], "content": c})
+        return out
     out = []
     for m in messages:
         c = m["content"]
@@ -162,6 +178,27 @@ def cmd_collect_ordinary(a):
             f.write(json.dumps(r) + "\n")
 
 
+def cmd_collect_firsts(a):
+    """Each in-range resident's first think whose reason holds a first-sight line naming a
+    stranger, in one run (the residents from an arrive_spread --strangers JSON)."""
+    inr = [r["name"] for r in json.load(open(a.spread))[0]["strangers"]["residents"]]
+    out, seen = [], set()
+    for e, msgs, why in think_entries(a.run):
+        u = next((m["content"] for m in msgs if m["role"] == "user"), "")
+        if not why and JUST in u:
+            why = u.split(JUST, 1)[1].split("\n\n", 1)[0]
+        if e["actor"] in inr and e["actor"] not in seen and FS in why and "a stranger" in why:
+            seen.add(e["actor"])
+            out.append(record(a.run, e, msgs, why, "first_sight"))
+    with open(a.out, "w") as f:
+        for r in out:
+            f.write(json.dumps(r) + "\n")
+    print(f"{len(out)} of {len(inr)} in range had a first-sight think; none: {[n for n in inr if n not in seen]}")
+
+
+SWAP = {"glm-flash": "deepseek-flash", "deepseek-flash": "glm-flash"}
+
+
 def cmd_ask(a):
     env = gq.load_env(a.root)
     done = {r["id"]: r for r in gq.rows(a.out)} if Path(a.out).exists() else {}
@@ -176,12 +213,22 @@ def cmd_ask(a):
                 break
             if p["run"] not in profiles:
                 profiles[p["run"]] = json.loads(Path(p["run"], "models.json").read_text())["profiles"]
-            prof = profiles[p["run"]][p["profile"]]
+            pname = SWAP[p["profile"]] if a.arm == "B" else p["profile"]
+            prof = profiles[p["run"]][pname]
             key = os.environ.get(prof["key_env"]) or env.get(prof["key_env"])
             if not key:
                 sys.exit(f"no key in {prof['key_env']}")
             body = dict(p["body"])
             body["messages"] = rewrite(p["messages"], a.arm)
+            if a.arm == "B":
+                # The other model of the mix, with its own think settings from the same config.
+                body["model"] = prof["model"]
+                eff = (prof.get("reasoning_effort") or {}).get("think")
+                body.pop("reasoning_effort", None)
+                if eff:
+                    body["reasoning_effort"] = eff
+                if body.get("prompt_cache_key"):
+                    body["prompt_cache_key"] = f"sao:{len(pname)}:{pname}:think"
             url = prof["base_url"].rstrip("/") + "/chat/completions"
             req = urllib.request.Request(url, data=json.dumps(body).encode(), headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"})
             rec = {"id": p["id"], "arm": a.arm, "model": body.get("model")}
@@ -348,7 +395,8 @@ def main():
     p = sub.add_parser("collect"); p.add_argument("out"); p.add_argument("--fs1e"); p.add_argument("--urgent", nargs="*"); p.add_argument("--slept", nargs="*")
     p.add_argument("--seed", type=int, default=1); p.add_argument("--n", type=int, default=15); p.add_argument("--n-addressed", type=int, default=12); p.set_defaults(f=cmd_collect)
     p = sub.add_parser("collect-ordinary"); p.add_argument("out"); p.add_argument("roots", nargs="+"); p.add_argument("--seed", type=int, default=1); p.add_argument("--n", type=int, default=20); p.set_defaults(f=cmd_collect_ordinary)
-    p = sub.add_parser("ask"); p.add_argument("set"); p.add_argument("out"); p.add_argument("--arm", required=True, choices=["T", "N1", "N2"])
+    p = sub.add_parser("collect-firsts"); p.add_argument("out"); p.add_argument("run"); p.add_argument("spread"); p.set_defaults(f=cmd_collect_firsts)
+    p = sub.add_parser("ask"); p.add_argument("set"); p.add_argument("out"); p.add_argument("--arm", required=True, choices=["T", "N1", "N2", "A", "B", "C"])
     p.add_argument("--cap", type=float, required=True); p.add_argument("--root", default="."); p.set_defaults(f=cmd_ask)
     p = sub.add_parser("asks"); p.add_argument("set"); p.add_argument("asked", nargs="*"); p.add_argument("--json"); p.set_defaults(f=cmd_asks)
     p = sub.add_parser("items"); p.add_argument("set"); p.add_argument("asked", nargs="*"); p.add_argument("out_dir"); p.add_argument("--seed", type=int, default=1)

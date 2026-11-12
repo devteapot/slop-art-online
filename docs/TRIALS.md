@@ -296,6 +296,46 @@ Against fs1e (manners 13, curiosity 10, duty 4, others 3, else 3 of 22): fewer a
   - The nearest phrase is Amara's value "a neighbour is owed what you can carry", and she did not ask.
 - **Reading:** manners, 7 of 12, is the model's own politeness more than the residents' personality. The sheets carry no greeting norm, and the asking leans only weakly toward the outgoing sheets. The same words recur across unlike sheets ("a civil word", "worth a greeting", "I'd not let a new face stand silent in my town"), and fs1e's thoughts said "costs nothing" 8 times. This is one run's 25 residents, read by hand.
 
+**Is the politeness the model's? A replay of fs1n's first-sight thoughts** (2026-11-12, approved at a $2 cap, $0.095 spent; nothing ships).
+- **The inputs:** `framing_replay.py collect-firsts`. Each in-range resident's first think whose reason holds the first-sight line naming the newcomer, from its recorded fs1n prompt: 22 of the 25 (Magda, Eamon and Rafe had none). All were recorded on GLM 5.3 Flash (`glm-flash`, think effort `low`).
+- **Arms:**
+  - **R:** the recorded reply.
+  - **A:** the same prompt and model, sent again.
+  - **B:** the same prompt on the people mix's other think model, DeepSeek V4.1 Flash (`deepseek-flash`, think effort `low`, from the run's own `models.json`).
+  - **C:** the same as A, with one general line added to the system prompt, right after the framing sentence:
+
+    > "Act from your own temperament and habits as they are written, including any reserve: keep to your nature unless something gives you reason not to."
+
+    It names no situation, stranger, greeting or speech.
+- **Switches,** as recorded in fs1n: `first_sight_thinks` on, `think_framing` on (so the framing sentence is N2's), `heard_first_rethinks` and `earshot` off.
+- **Judging:** three fresh Claude subagents, blind ([FIRST_SIGHT_CODE.md](../living/tools/framing_judge/FIRST_SIGHT_CODE.md)). Each saw only the first-sight line and the reply (thought, intent, speech), not the arm, model or sheet. Each item was coded *speak*, *mean to*, *notice inwardly* or *unaware*, plus *false claim* (claims to know something about the stranger the moment does not show). Agreement on 14 doubly judged items: code 14, false claim 14.
+- **Sheet classes:** from the count above. Of the 22: 11 outgoing, 3 both, 4 reserved, 4 none.
+
+| arm | outgoing (11) | both (3) | reserved (4) | none (4) | all (22): speak / mean to / inward / unaware | false claims |
+|---|---:|---:|---:|---:|---|---:|
+| R recorded (GLM) | 8 (73%) | 3 | 2 | 2 | 13 / 2 / 5 / 2: 15 (68%) speak or mean to | 1 |
+| A again (GLM) | 7 (64%) | 3 | 2 | 2 | 12 / 2 / 6 / 2: 14 (64%) | 1 |
+| B DeepSeek | 7 (64%) | 3 | 2 | 2 | 7 / 7 / 6 / 2: 14 (64%) | 1 |
+| C temperament line (GLM) | 7 (64%) | 2 | 2 | 3 | 13 / 1 / 7 / 1: 14 (64%) | 1 |
+
+(cells: residents who speak or mean to speak to the newcomer)
+
+- **The model is not the source.** DeepSeek speaks or means to as often as GLM (14 of 22 against 14–15). It speaks outright less (7 against 12–13) and means to more (7 against 1–2).
+- **The temperament line changes nothing measurable.** The reserved still speak 2 of 4, the outgoing 7 of 11. One "both" resident (Amara) moved to noticing inwardly, and one "none" (Joss) to speaking.
+- **Reserved sheets do not hold back as a class, under any arm.** Which reserved residents speak depends on the model, not the sheet:
+  - under GLM (R, A, C), Hana and Suri speak, and Davin and Petra notice inwardly;
+  - under DeepSeek, the reverse: Hana unaware, Suri inward, Davin and Petra speak.
+- **Outgoing sheets speak a little more:** 64–73% against 50% for the reserved. That is the same weak lean the count found.
+- **False claims:** one per arm, the same resident each time (Gwil: "claims it already hailed them and that they are at its elbow"). Both models write it, so it comes from his prompt, not the model.
+- **Reading:**
+  - Given a thought whose only reason is the first sight, both models speak or mean to speak to the stranger in about two of three cases, whatever the sheet says.
+  - A general line about temperament does not move that.
+  - The politeness belongs to the situation, a thought about a stranger with nothing else in it, more than to one model or to the residents.
+- **Evidence:** `~/slop-evidence/temperament-20261112/`: `set.jsonl`, `asked-A.jsonl`, `asked-B.jsonl`, `asked-C.jsonl`, `judge/` with the labels, `key.jsonl`, `score.json`.
+- **Tools:** `framing_replay.py` (`collect-firsts`, arms A, B and C), `temperament_score.py`.
+- **Cost:** $0.095 (A $0.023, B $0.046, C $0.026; 66 calls, no errors); the judges are Claude subagents.
+- **Key:** 9 fragments of the 3 key values searched in the evidence, the branch and the logs. Count: 0. The `.env` copy was deleted.
+
 **Measurement note.** The fs1 tools read the reason under "# Why you are thinking now". N2 renames it "# What just happened", so they now read either (`fs1_measures.py`, `fs1_held.py`, `fs1_cluster.py`). A first pass had counted 0 first-sight thoughts.
 
 **Evidence:** `~/slop-trials-fs1/.local/living/trials/fs1n` and `fs1ns` and the journals `verify-trial-fs1n*`, archived in `~/archive/trials/fs1n-20261112.tar.gz` (14 MB). The archive also holds `fs1n-spread.md`, `fs1n-m.json`, `fs1n-asks.json`, the metrics and spend logs and the tools.
