@@ -280,6 +280,16 @@ pub(crate) fn unnamed_label(kind: &str, stage: u8) -> String {
     format!("{article} {kind}")
 }
 
+/// The joins a batch of experiences asks for: each `made_out` experience (subject the person,
+/// object the handle of the figure they were) folds `person:<handle>` into `person:<id>`.
+pub(crate) fn made_out_merges(batch: &[Experience]) -> Vec<(String, String)> {
+    batch
+        .iter()
+        .filter(|e| e.kind == "made_out" && e.object >= living_rules::script::FAR_HANDLE_BASE && e.subject != 0 && e.subject < living_rules::script::FAR_HANDLE_BASE)
+        .map(|e| (format!("person:{}", e.object), format!("person:{}", e.subject)))
+        .collect()
+}
+
 fn belonging(community: &str, others: usize, known: &[String]) -> String {
     const NAMED: usize = 12;
     let mut line = format!("\nYou belong to {community}");
@@ -453,6 +463,9 @@ impl Minds {
     /// developer records keep names. What goes into a character's own memory is
     /// [`Minds::remembered_as`].
     pub(super) fn known_as(&self, me: u32, other: u32) -> String {
+        if other >= living_rules::script::FAR_HANDLE_BASE {
+            return living_rules::script::FAR_PERSON.into();
+        }
         let Some(o) = self.conn.db.character().id().find(&other) else { return "someone".into() };
         if self.knows_name(me, &o) {
             o.name
@@ -507,6 +520,8 @@ impl Minds {
             Some(o) if o.kind == "person" && self.only_far(me, other) => format!("{} #{other}", living_rules::script::FAR_PERSON),
             Some(o) if self.knows_name(me, &o) => o.name,
             Some(o) => format!("{} #{other}", unnamed_label(&o.kind, o.stage)),
+            // A figure seen too far away to make out, by its sighting's handle (far-handle).
+            None if other >= living_rules::script::FAR_HANDLE_BASE => format!("{} #{other}", living_rules::script::FAR_PERSON),
             None => format!("someone #{other}"),
         }
     }
@@ -802,6 +817,12 @@ impl Minds {
     fn exp_line(&self, e: &Experience, fmt: &dyn Fn(u64) -> String, with_id: bool) -> String {
         let mut who = Vec::new();
         for id in [e.subject, e.object] {
+            // A figure too far away to make out has a handle of its sighting, no character row
+            // (far-handle): tagged so the mind can name it in what it decides.
+            if id >= living_rules::script::FAR_HANDLE_BASE && !who.iter().any(|w: &String| w.ends_with(&format!("#{id}"))) {
+                who.push(format!("{}=#{id}", living_rules::script::FAR_PERSON));
+                continue;
+            }
             if id != 0 && id != e.observer {
                 if let Some(c) = self.conn.db.character().id().find(&id) {
                     if c.kind == "person" && !who.iter().any(|w: &String| w.ends_with(&format!("#{id}"))) {
@@ -1104,7 +1125,7 @@ impl Minds {
         let relations = relations.iter().filter_map(|r| Some(RelationIn { other: id_of(r)?, trust: num(&r["trust"]), affinity: num(&r["affinity"]), label: r["label"].as_str().unwrap_or_default().into(), note: r["note"].as_str().unwrap_or_default().into() })).collect();
         let judgments = judgments.iter().filter_map(|j| Some(JudgmentIn { key: memory::key(j["key"].as_str()?.trim_start_matches("stance:"))?.replace(':', "_"), value: num(&j["value"]), why: j["why"].as_str().unwrap_or_default().into() })).collect();
         let places = places.iter().map(|p| PlaceIn { name: p["name"].as_str().unwrap_or_default().into(), x: num(&p["x"]), y: num(&p["y"]) }).collect();
-        self.update(c.id, MindUpdate { persona: Some(persona), relations, beliefs: None, judgments, places, thought: Some(t), replace: false }).await
+        self.update(c.id, MindUpdate { persona: Some(persona), relations, beliefs: None, judgments, places, thought: Some(t), replace: false, cues: None }).await
     }
 
     /// Where a character's first identity comes from (see [`Origin::of`]).
@@ -1181,7 +1202,7 @@ impl Minds {
     /// observer's belief summary) and publish it with an optional identity and thought.
     async fn project(&self, actor: u32, persona: Option<PersonaIn>, thought: Option<ThoughtIn>) -> Result<()> {
         let Some(store) = &self.store else {
-            return self.update(actor, MindUpdate { persona, relations: Vec::new(), beliefs: None, judgments: Vec::new(), places: Vec::new(), thought, replace: false }).await;
+            return self.update(actor, MindUpdate { persona, relations: Vec::new(), beliefs: None, judgments: Vec::new(), places: Vec::new(), thought, replace: false, cues: None }).await;
         };
         let fmt = self.fmt_time();
         let p = store.projection(actor).await?;
@@ -1195,7 +1216,11 @@ impl Minds {
         let judgments = p.judgments.into_iter().map(|(key, value, why)| JudgmentIn { key, value: value as f32, why }).collect();
         let places = p.places.into_iter().map(|(name, x, y)| PlaceIn { name, x: x as f32, y: y as f32 }).collect();
         let beliefs = Some(facts.iter().map(|f| BeliefIn { about: format!("{} → {}", f.a, f.b), text: memory::render(f, &fmt), confidence: f.confidence as f32 }).collect());
-        self.update(actor, MindUpdate { persona, relations, beliefs, judgments, places, thought, replace: true }).await
+        // A goal's cues hold while the persona still has that goal.
+        let goals: Vec<String> = persona.as_ref().map(|p| p.goals.clone()).or_else(|| self.conn.db.persona().id().find(&actor).map(|p| p.goals)).unwrap_or_default();
+        let goal_keys: Vec<String> = goals.iter().filter_map(|g| memory::key(&g.chars().take(80).collect::<String>())).map(|k| k.replace(':', "_")).collect();
+        let cues = p.cues.into_iter().filter(|(f, ..)| f.strip_prefix("goal:").map_or(true, |k| goal_keys.iter().any(|g| memory::same_goal(g, k)))).map(|(f, c, source)| cue_in(f, &c, source)).collect();
+        self.update(actor, MindUpdate { persona, relations, beliefs, judgments, places, thought, replace: true, cues: Some(cues) }).await
     }
 
     // ---- reducer calls -----------------------------------------------------------
@@ -1417,7 +1442,7 @@ impl Minds {
                         log::warn!("deliberation for {} could not reach its model ({failures}x); the request waits {:.0} s: {e:#}", self.name(actor), wait.as_secs_f64());
                         if failures == 1 {
                             let t = ThoughtIn { kind: "error".into(), summary: format!("could not reach the model; the request waits: {e:#}").chars().take(600).collect(), detail: String::new(), latency_ms: 0, tokens: 0, model: String::new(), reference: reference(actor, "deliberate") };
-                            if let Err(e) = self.update(actor, MindUpdate { persona: None, relations: Vec::new(), beliefs: None, judgments: Vec::new(), places: Vec::new(), thought: Some(t), replace: false }).await {
+                            if let Err(e) = self.update(actor, MindUpdate { persona: None, relations: Vec::new(), beliefs: None, judgments: Vec::new(), places: Vec::new(), thought: Some(t), replace: false, cues: None }).await {
                                 log::warn!("{}: the failure was not recorded: {e:#}", self.name(actor));
                             }
                         }
@@ -1634,7 +1659,8 @@ impl Minds {
     /// the graph or carries on.
     async fn decided_stances(&self, actor: u32, v: &Value, thought_ref: &str) -> Result<()> {
         let mut patch = memory::Patch::default();
-        memory::sugar_into(&json!({"judgments": v["judgments"], "places": v["places"]}), &mut patch, &[]);
+        let notice = if prompts::cues_on() { v["notice"].clone() } else { Value::Null };
+        memory::sugar_into(&json!({"judgments": v["judgments"], "places": v["places"], "notice": notice}), &mut patch, &[]);
         if patch.nodes.is_empty() && patch.edges.is_empty() {
             return Ok(());
         }
@@ -1651,6 +1677,19 @@ impl Minds {
     fn own_timings(&self, actor: u32) -> String {
         let knows: std::collections::HashSet<String> = self.conn.db.know_how().iter().filter(|k| k.actor == actor).map(|k| k.technique).collect();
         prompts::own_timings(None, |t| knows.contains(t))
+    }
+
+    /// What this character watches for, as the authority keeps it (its `cue` rows): each cue,
+    /// how often it brought the person to think, or why it is not watched (docs/ATTENTION.md).
+    /// `None` while the `cues_on` law is off.
+    fn cue_lines(&self, actor: u32) -> Option<Vec<String>> {
+        if !prompts::cues_on() {
+            return None;
+        }
+        let now = llm::now_ms();
+        let mut rows: Vec<Cue> = self.conn.db.cue().iter().filter(|c| c.actor == actor).collect();
+        rows.sort_by_key(|c| c.id);
+        Some(rows.iter().map(|c| prompts::cue_line(c, &|id| self.known_as(actor, id), now)).collect())
     }
 
     fn persona_text(&self, actor: u32) -> String {
@@ -1826,6 +1865,7 @@ impl Minds {
             places: self.places(actor),
             experiences,
             dealings: self.dealings(actor),
+            cues: self.cue_lines(actor),
         };
         let repertoire = self.repertoire_text(actor);
         // Think first, as the person and without the grammar; then compile the decision.
@@ -1871,12 +1911,12 @@ impl Minds {
         let mut total_latency = think_latency;
         let mut total_tokens = think_tokens;
         let thought_ref = reference(actor, "deliberate");
-        // The decision's own words (thought, speech, stances, places) are kept whatever the compiler says.
+        // The decision's own words (thought, speech, stances, places, cues) are kept whatever the compiler says.
         let keep = |raw: &str| -> String {
             match llm::parse_json(raw) {
                 Ok(mut v) => {
                     if decision.is_object() {
-                        for k in ["thought", "say", "judgments", "places", "serves"] {
+                        for k in ["thought", "say", "judgments", "places", "notice", "serves"] {
                             if k != "serves" || !decision[k].is_null() {
                                 v[k] = decision[k].clone();
                             }
@@ -2192,6 +2232,7 @@ impl Minds {
             places: self.places(actor),
             experiences: meaningful.iter().map(|e| self.exp_line(e, &fmt, true)).collect(),
             dealings: self.dealings(actor),
+            cues: self.cue_lines(actor),
         };
         let animal = c.kind != "person";
         let system = match self.species.get(&c.kind).filter(|_| animal) {
@@ -2231,7 +2272,7 @@ impl Minds {
         let known: Vec<u64> = meaningful.iter().map(|e| e.id).collect();
         let lookup = |id: u64| batch.iter().find(|e| e.id == id).map(|e| (e.at_ms, e.salience as f64, self.anchors(e)));
         let (mut patch, mut notes) = memory::patch_from(&v, &known, &lookup);
-        memory::sugar_into(&v, &mut patch, &known);
+        memory::sugar_into(&memory::without_notice(&v, prompts::cues_on()), &mut patch, &known);
         if open.is_some() {
             memory::projects_into(&v, &mut patch, &known, &mut notes);
         }
@@ -2244,6 +2285,9 @@ impl Minds {
                 m.childhood = true;
             }
         }
+        // Someone made out who was a figure too far away to make out: the figure's node joins the
+        // person's (far-handle); later far sightings get new handles, so it is never undone.
+        patch.merges.extend(made_out_merges(&batch));
         self.name_people(actor, &mut patch);
         // Lived under the minds (a character's history shows both kinds: docs/PLAYER_MEMORY.md).
         patch.lived_under = Some("ai".into());
@@ -2518,9 +2562,39 @@ fn label_node(node: Value, label: &str) -> Value {
     json!({"first": {"label": label, "children": [node]}})
 }
 
+
+/// A stored attention cue (`memory::cue_entry`'s form) as the authority takes it.
+fn cue_in(for_key: String, c: &Value, source: String) -> CueIn {
+    let s = |k: &str| c[k].as_str().unwrap_or_default().to_string();
+    let f = |k: &str| c[k].as_f64().unwrap_or(0.0) as f32;
+    CueIn {
+        for_key,
+        why: s("why"),
+        who_id: c["who_id"].as_u64().filter(|n| *n <= u32::MAX as u64).unwrap_or(0) as u32,
+        who: s("who"),
+        doing: s("doing"),
+        phase: s("phase"),
+        thing: s("thing"),
+        at: s("at"),
+        within: f("within"),
+        near_me: f("near_me"),
+        source,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A figure made out joins the person: `person:<handle>` folds into `person:<id>`; nothing
+    /// else asks for a join (far-handle).
+    #[test]
+    fn a_figure_made_out_joins_the_person() {
+        let h = living_rules::script::FAR_HANDLE_BASE + 3;
+        let e = |kind: &str, subject: u32, object: u32| Experience { id: 1, observer: 1, controller: spacetimedb_sdk::Identity::ZERO, at_ms: 0, kind: kind.into(), subject, object, x: 0.0, y: 0.0, text: String::new(), salience: 0.3 };
+        let batch = [e("made_out", 15, h), e("saw", 15, 0), e("made_out", 15, 0), e("speech", h, 1)];
+        assert_eq!(made_out_merges(&batch), vec![(format!("person:{h}"), "person:15".to_string())]);
+    }
 
     /// Someone one does not know by name is labelled as the authority's projection labels them
     /// (`perception::stranger`).

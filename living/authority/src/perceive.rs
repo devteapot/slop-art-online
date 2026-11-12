@@ -17,6 +17,19 @@ pub fn percept(ctx: &ReducerContext, observer: &Character, now: u64, kind: &str,
     if !observer.alive || observer.stage == 0 || common::instinct_only(ctx, observer) {
         return None;
     }
+    // A mind's character names a person it cannot make out by the sighting's handle, not their
+    // id (far-handle); a player's client draws by id and keeps it.
+    let (subject, object) = if crate::combat::human(ctx, observer.id).is_none() {
+        let map = |id: u32| match (id, ctx.db.character().id().find(id)) {
+            (0, _) => 0,
+            (id, _) if id == observer.id || crate::far::is_handle(id) => id,
+            (_, Some(t)) => crate::far::id_for(ctx, observer, &t, now),
+            (id, None) => id,
+        };
+        (map(subject), map(object))
+    } else {
+        (subject, object)
+    };
     let row = ctx.db.experience().insert(Experience {
         id: 0,
         observer: observer.id,
@@ -331,6 +344,12 @@ pub fn request_deliberation(ctx: &ReducerContext, id: u32, reason: &str, now: u6
     request(ctx, id, reason, now, false);
 }
 
+/// As `request_deliberation`, saying whether the request was taken (false: no mind, or a mind
+/// asked again within its species' `think_min_s` of its last thought with nothing pending).
+pub fn ask_to_think(ctx: &ReducerContext, id: u32, reason: &str, now: u64) -> bool {
+    request(ctx, id, reason, now, false)
+}
+
 fn request(ctx: &ReducerContext, id: u32, reason: &str, now: u64, urgent: bool) -> bool {
     let Some(c) = ctx.db.character().id().find(id) else { return false };
     // Infants run on their instincts; they get a mind when they become children.
@@ -502,7 +521,15 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
         // Too far away to make out: neither who they are nor whose community (far-label).
         let far = ch.kind == "person" && seen.name.is_empty() && seen.label == living_rules::script::FAR_PERSON;
         let mut o = JMap::new();
-        o.insert("id".into(), json!(c.id));
+        // A figure too far away to make out is named by its sighting's handle, never its id
+        // (far-handle); a person made out joins any handle the mind had for them.
+        let shown = if far { crate::far::handle_for(ctx, me.id, c.id, now) } else {
+            if ch.kind == "person" && ch.id != me.id {
+                crate::far::made_out(ctx, &me, c.id, now);
+            }
+            c.id
+        };
+        o.insert("id".into(), json!(shown));
         if !seen.name.is_empty() {
             o.insert("name".into(), json!(seen.name));
         } else if ch.kind == "person" {

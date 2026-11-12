@@ -15,6 +15,7 @@ A player's character uses the skills on the bar (the script's `skill_bar()`, `sk
 - A guard facing the blow blocks it (`BLOCKED`, reduced); facing away, the blow lands in full; letting go ends it.
 - A dodge dashes about 2.6 m and the blow winding up misses or is dodged.
 - A jump (the bar's seventh place, Space in the game) hops about 1.6 m like a dash but does not evade (`jump_combat()`'s `evades: false`): a blow winding up as you jump toward its striker lands or misses by reach, never `DODGED` (scene `jump`).
+- **Committed moves** (since `committed-moves`, 2026-11-12, docs/COMBAT.md "Committed moves"; scene `committed`): a guard pressed in the middle of a dodge is refused ("refused: in the middle of a dodge") and the dodge covers its whole 2.6 m (`made way`); on main before it, the guard broke the dodge off 0.07 m in (`player-cmain-062029`). A dodge pressed during a strike's windup still cuts in: the strike is `broken off` unreleased, the dodge `made way`. Movement keys during a committed move wait for its end, as before; since the throw is committed too, keys pressed in a throw's 800 ms windup (`human_act`, it is not on the bar; the admin `grant_items` a spear) wait and the spear lands, then the body walks. In a world whose laws make the dodge uncommitted (the scene installs an overlay through `install_script` as the admin and the shipped script again after), a guard pressed mid-dodge breaks it off.
 - Heal mends yourself.
 - Breath (since `stamina-1`, docs/STAMINA.md; scene `breath`), read through the player's own `my_vitals`:
   - **A run.** `human_move` with run goes the `run_share` law times the walk and drains 4 breath a second. The row's rate comes from its anchor, and a held run writes no further row. Letting go writes the refill from a second later at 25 a second. Standing, breath comes back with no row written.
@@ -30,7 +31,7 @@ A player's character uses the skills on the bar (the script's `skill_bar()`, `sk
 V=.agents/skills/verify/scripts/verify.py; R=player-combat-$(date +%m%d-%H%M%S)
 $V launch --run $R --seed island && $V doctor --run $R
 $V player --run $R join Tester
-.agents/skills/verify-player/scripts/combat.py --run $R [--scene strike,kill,bow,shot] [--fresh]
+.agents/skills/verify-player/scripts/combat.py --run $R [--scene strike,kill,bow,shot,committed] [--fresh]
 $V cleanup --run $R
 ```
 

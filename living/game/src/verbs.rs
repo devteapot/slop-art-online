@@ -814,16 +814,23 @@ fn things(conn: &DbConnection, now_ms: f64) -> Vec<(&'static str, String, Vec2, 
 
 /// What `id` is called, as I perceive it.
 /// A list's title for what it acts on (a person's is `looks.rs`'s).
-fn label_of_aim(conn: &DbConnection, aim: &Aim) -> String {
+/// A target's title: a person or creature as `Looks` names them (the one way the client names
+/// anyone), a structure as my character may call it ([`thing_title`]), anything else by its kind.
+fn label_of_aim(looks: &crate::looks::Looks, conn: &DbConnection, me: u32, aim: &Aim) -> String {
     match aim {
         Aim::Me => "Yourself".into(),
-        Aim::Thing { kind, .. } => crate::ui::label(&pretty(kind)),
-        Aim::Creature { id } => crate::ui::label(&label_of(conn, *id)),
+        Aim::Thing { class, kind, id, .. } => crate::ui::label(&thing_title(conn, me, class, kind, *id)),
+        Aim::Creature { id } => looks.cap(*id),
     }
 }
 
-fn label_of(conn: &DbConnection, id: u32) -> String {
-    conn.db.seen_characters().id().find(&id).map_or_else(|| "someone".into(), |c| c.label)
+/// A thing's title: a structure through `looks::structure_name` (its owner only as my character
+/// knows them: the authority's `owner_shown` law), anything else by its kind.
+fn thing_title(conn: &DbConnection, me: u32, class: &str, kind: &str, id: u64) -> String {
+    match conn.db.structure().id().find(&id).filter(|_| class == "structure") {
+        Some(s) => crate::looks::structure_name(conn, me, kind, s.owner),
+        None => pretty(kind),
+    }
 }
 
 /// What the choices toward an aim are worked out from: its title, the target as I perceive it,
@@ -836,17 +843,24 @@ struct Toward {
     requests: bool,
 }
 
+/// A creature's title is left empty here: whoever shows one names them through `Looks`
+/// (`label_of_aim`, the hint's `aim_name`).
+///
+/// Houses, stores and workplaces: "your house", "Bram's house" only when my character knows the
+/// owner by name (`my_known_names`, the authority's `owner_shown` law), else the kind alone
+/// (`looks::structure_name`). Never from `land.params` (no names since owner-known) or the seed,
+/// which name owners and buildings the player's character may not know.
 fn toward(conn: &DbConnection, rules: &Scripts, me: &Me, my_at: Vec2, aim: &Aim) -> Toward {
     match aim {
         Aim::Me => Toward { title: "Yourself".into(), target: None, open: true, requests: false },
         Aim::Thing { class, kind, at, id, amount, .. } => {
             let mut t = thing_facts(class, kind, *id, *amount, at.distance(my_at));
             fire_facts(conn, rules, &mut t, me);
-            Toward { title: pretty(kind), target: Some(t), open: true, requests: false }
+            Toward { title: thing_title(conn, me.actor.id, class, kind, *id), target: Some(t), open: true, requests: false }
         }
         Aim::Creature { id } => match creature_facts(conn, rules, *id, 0.0) {
-            Some(t) => Toward { title: label_of(conn, *id), requests: t.kind == me.actor.kind && t.kind == "person", target: Some(t), open: true },
-            None => Toward { title: label_of(conn, *id), target: None, open: false, requests: false },
+            Some(t) => Toward { title: String::new(), requests: t.kind == me.actor.kind && t.kind == "person", target: Some(t), open: true },
+            None => Toward { title: String::new(), target: None, open: false, requests: false },
         },
     }
 }
@@ -1064,7 +1078,7 @@ fn aim(
     weather: Res<crate::weather::Weather>,
     time: Res<Time>,
     mut v: ResMut<Verbs>,
-    (clock, live): (Res<crate::daylight::Clock>, Res<crate::live::Live>),
+    (clock, live, looks): (Res<crate::daylight::Clock>, Res<crate::live::Live>, Res<crate::looks::Looks>),
 ) {
     let Some(conn) = net.conn.as_ref() else {
         v.aim = None;
@@ -1094,7 +1108,10 @@ fn aim(
         let key = a.key(|id| conn.db.seen_characters().id().find(&id).map_or_else(String::new, |c| c.kind));
         v.likely = likely(sc, &a, &out, v.last.get(&key)).cloned();
         v.has_options = !out.is_empty();
-        v.aim_name = toward.title;
+        v.aim_name = match &a {
+            Aim::Creature { id } => looks.of(*id).unwrap_or("someone").to_string(),
+            _ => toward.title,
+        };
         v.aim = Some(a);
         return;
     }
@@ -1208,20 +1225,14 @@ pub fn input(
     let is_person = |aim: &Aim| matches!(aim, Aim::Creature { id } if conn.db.seen_characters().id().find(id).is_some_and(|c| c.kind == "person"));
     let open = |v: &mut Verbs, aim: Aim, item: Option<String>| {
         let (_, choices) = options(conn, sc, &rules.skills, &facts(&aim), my_at, &aim);
-        let title = match &aim {
-            Aim::Creature { id } => looks.cap(*id),
-            _ => label_of_aim(conn, &aim),
-        };
+        let title = label_of_aim(&looks, conn, me, &aim);
         let person = is_person(&aim);
         let at = v.place_next.take();
         v.menu = Some(Menu { aim, title, choices, group: None, item, person, at, more: false });
     };
     // A wheel where the world's `menus()` gives the target's place one, else the list.
     let wheel_or_list = |v: &mut Verbs, aim: Aim, held: bool, at: Vec2| {
-        let title = match &aim {
-            Aim::Creature { id } => looks.cap(*id),
-            _ => label_of_aim(conn, &aim),
-        };
+        let title = label_of_aim(&looks, conn, me, &aim);
         match wheel_toward(conn, sc, &rules.skills, &facts(&aim), my_at, &aim, is_person(&aim), title, at) {
             Some(mut w) => {
                 w.held = held;

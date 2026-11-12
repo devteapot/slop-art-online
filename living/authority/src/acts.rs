@@ -34,7 +34,8 @@ pub fn submit(ctx: &ReducerContext, actor: u32, acts: &[String], source: &str, r
     let sp = common::species(&kind);
     if replace {
         ctx.db.act_queue().actor().delete(actor);
-        if let Some(a) = ctx.db.activity().id().find(actor).filter(|a| a.node == ACT) {
+        // A committed move under way runs its course (`combat::committed`).
+        if let Some(a) = ctx.db.activity().id().find(actor).filter(|a| a.node == ACT && !crate::combat::committed(&common::scripts(ctx), a)) {
             act::cancel(ctx, a, now, None);
         }
     }

@@ -25,6 +25,7 @@ mod tables;
 mod tick;
 mod town;
 mod common;
+mod far;
 
 use spacetimedb::{ReducerContext, ScheduleAt, Table, ViewContext};
 use std::time::Duration;

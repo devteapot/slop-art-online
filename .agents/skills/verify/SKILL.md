@@ -1,6 +1,6 @@
 ---
 name: verify
-description: Entry point for verifying Slop Art Online's living core. Picks the surface skill for a change or a symptom (core, generation, client, player, minds, llm, knowledge), and owns the shared harness (launch, doctor, scratch databases, SQL, player identity, observer, cleanup, evidence). Use before claiming living-core behavior works, when a change touches a surface, or to find which layer an error comes from.
+description: "Entry point for verifying Slop Art Online's living core. Picks the surface skill for a change or a symptom (core, generation, client, player, ui, minds, llm, knowledge) and owns the shared harness: launch, doctor, scratch verify-* databases, SQL, the player identity, the observer, cleanup, evidence and validation records, and the scene gate. Use before claiming living-core behavior works, when a change touches a surface, or to find which layer an error comes from."
 ---
 
 # Verify the living core
@@ -15,11 +15,10 @@ The living core (`living/`, see `docs/LIVING_CORE.md`) is verified surface by su
 | World generation | `verify-generation` | worlds built from seeds, compiled in or given to a floor module at runtime (`create_floor`, staged `genesis`): map, settlements, people, animals, resources; authored-world compilation | publishes and compiles | model drafting of authored worlds |
 | Client protocol | `verify-client` | what a connecting client sees and may do: subscriptions, table and view visibility, reducer permissions per identity | WebSocket probe client | – |
 | Human player | `verify-player` | a person's character: join, move, act, speak, fight (the skill bar), refusals, death and rejoin | player identity over HTTP | – |
-| Game interface | `verify-ui` | the game client's interface D: windows, talking, items on people, themes, the cursor while the view turns or zooms | the real client headless through its live script | – |
+| Game interface | `verify-ui` | the game client's interface D: windows, talking, names on screen, items on people, the skill bar, offers, the wheel, the recipe grid, facing sight, themes, the cursor while the view turns or zooms, a crowd's drawing | the real client headless through its live script on `verify-ui-*` worlds, `check.py` scenarios | – |
 | Internal agents (minds) | `verify-minds` | the mind service turns requests into installed behavior, speech and consolidated memory; trials (one mind in a scripted or open-ended world, `living/tools/trials.py`) | real mind service against a fake model server; `trials.py run --fake` | real models: a short smoke check, and trial batches |
 | LLM integration | `verify-llm` | model routing, overflow, outage gate, JSON repair, journaling | fake provider scenarios | one live check per provider |
 | Knowledge | `verify-knowledge` | know-how, tablets, teaching, learning; the personal memory graph, recall and fading | scripted scenes, scratch Neo4j runs | – |
-| Game interface | `verify-ui` | the game client's interface D: windows (anchors, drag and snap, close, the Esc order, Menu), talking (whom you address, the person window, the log and people), items on people (the pack, dragging onto someone, hold F › Give ›) | the real client headless on `verify-ui-*` worlds, `check.py` scenarios | – |
 
 The browser observer (`living/viewer`) has no verification skill: it is a simple developer client that the game's interface replaces. Until then, `verify-core` covers the viewer's display sync (`living/viewer/src/sync.rs` tests), and `$V observer shot` takes a screenshot of a scratch world.
 
@@ -146,4 +145,11 @@ Proof standards:
 - Say what was not covered.
 - These skills do not establish performance or scale. Those claims follow `AGENTS.md` and `docs/PERFORMANCE_CONTRACT.md`.
 
-Each surface skill has `features/README.md` (its map) and `references/validation.md` (the last real run). `references/validation.md` in this directory records the first harness run.
+Each surface skill has `features/README.md` (its map) and `references/validation/` (its records). This directory's `references/validation/` records the harness's own runs.
+
+### Validation records
+
+- Write one new file per validated run, `references/validation/<YYYY-MM-DD>-<HHMM>-<branch-or-run>.md` (UTC), in each surface skill the run covered. Never edit an existing record: a rerun, a pass after merging main or a correction gets its own file that names the record it follows. Two branches then never edit the same lines.
+- The newest files are the last validated runs. `python3 .agents/skills/verify/scripts/latest_validation.py` lists the newest record of every surface (`--surface core -n 5` for more).
+- `history.md` beside them is the single record kept until 2026-11-12, and it is closed.
+- A branch that still edits `references/validation.md`: merge main, then run `latest_validation.py --split`. It moves the sections main lacks into a new `<stamp>-<branch>.md` per skill and restores `history.md`. `latest_validation.py --check` fails while a `validation.md`, a misnamed record or an edited `history.md` remains.

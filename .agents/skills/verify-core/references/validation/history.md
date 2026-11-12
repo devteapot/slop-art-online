@@ -1,5 +1,13 @@
 # Core validation record
 
+## 2026-11-12 committed-moves, second pass: throw committed, a world switches it per skill (Spark)
+
+Branch `committed-moves` with origin/main `a07f5919` (move-intents) merged, the trial service. `core-commit5-070457` (default seed): `committed` 8/8, its new part: a routine dodging while it stands (`{"moving": false}`) runs its course (`made way`, 515 ms); with the world's overlay `fn dodge_combat() { let s = base_dodge_combat(); s.committed = false; s }` installed, the same routine's dodge is `broken off` (484 ms) and a jump still `made way`; the shipped script reinstalled. `doing_seen` 11/11, `refusal` 4/4. Island `core-commitk5-070835`: `skirmish` 8/8. Cargo: `script::tests::a_world_switches_committed_per_skill_in_its_own_laws`, `combat::committed_tests` (2). `just living-check` passes on this head.
+
+## 2026-11-12 committed-moves: a started committed move runs its course (Spark)
+
+Branch `committed-moves` from origin/main `2ff786aa` (doing-percept in), the trial service `slop-trials-stdb`, private `CARGO_TARGET_DIR`. Default seed `core-commit-060917`: `committed` (new) 4/4 (a dodge the open way 2.6 m in 516 ms; toward a wall 0.78 m in 166 ms; W killed inside its attack's windup: never released, no blow on Y); `doing_seen` 11/11, its former XFAIL now a pass (field on: the dodge `made way`, the blow missed); `tick` 6/6, `refusal` 4/4, `fov` 18/18; `stamina` failed once (the first walk-speed sample after the run caught a slowdown with 30 breath left: a goto run, untouched here) and passed 26/26 on rerun. Island `core-commitk-062220`: `skirmish` 8/8, `outcomes` 11/11. Cargo: `combat::committed_tests`, `script::tests` (the committed set). `just living-check` passes. After merging main `a07f5919`: `committed` 4/4 and `doing_seen` 11/11 (`core-commitm-065648`); `just living-check` passes on the merged head.
+
 ## 2026-11-12 move-intents: movement intents (Spark)
 
 Branch `move-intents` from origin/main `ee8790f4`, the trial service `slop-trials-stdb` (2.14.1, port 3320), default seed, `scoped`, private `CARGO_TARGET_DIR`. Run `core-intents-053759` (evidence `.local/living/verify/core-intents-053759/`).
@@ -10,6 +18,9 @@ Branch `move-intents` from origin/main `ee8790f4`, the trial service `slop-trial
 - Scene gate on `1e39e8a7` (`gate-1112063910`, trial service): passed, all 11 cases (core tick, sight, senses, refusal, skirmish; minds roundtrip, acts, dealings, conversation; player combat; mind-unit), none red on main.
 - Not run: the rest of the baseline scenes (speech, town, rhythm, lives, goods).
 
+## 2026-11-12 fix-far-silence (Spark)
+
+Branch `fix-far-silence` (`b9413029`), the trial service `slop-trials-stdb`, default seed. `core-fixfar-ch`: speech `channels` 31/31, with two new checks under an overlay making everyone past 8 m `far`. A line to e (seen, beyond the voice) reads "They are too far away: they could not have heard you." The player's line to d reads "They are out of earshot: they could not have heard you.", in its silence row and its `act_outcome` `why`. Unit test `speech::tests::a_far_figure_is_they_not_the_label_twice`. `just living-check` passed.
 
 ## 2026-11-12 doing-percept: what someone is visibly doing (Spark)
 
@@ -21,10 +32,14 @@ Branch `doing-percept` from origin/main `ee8790f4`, the trial service `slop-tria
 - Cargo: `doing::tests` (5), `normalize::tests::doing_reads_what_someone_visibly_does`, `perception::doing_tests` (3); authority lib 23, mind 105; `just living-check` passes.
 - Not run: the other baseline scenes (`fov`, `sight` and `doing` read `perception.rs` too; their paths are unchanged), speech, town, rhythm, lives.
 
+## 2026-11-12 far-handle (Spark)
+
+Branch `far-handle`, `core-farhandle`. Results: `stranger_filter` 9/9 (the far check now expects a handle ≥ 1000000000 and no entry with F's id), `crowd_sight` 8/8, `sight` 6/6, `senses` 7/7; speech `channels` 29/29 (`core-farhandle-ch`).
 
 ## 2026-11-12 fix-missile-told: a missile is told as a shot (Spark)
 
 Branch `fix-missile-told` from `ee8790f4`, the trial service `slop-trials-stdb`. `scenes.py outcomes` on `core-missile-052008` (default seed): 16/16, and 16/16 again after merging main `dd2c8569` (`core-missile2-054023`), its new `missiles_told` 4/4: the target "A stranger shot you with an arrow: hit for 8" (subject the archer), the witness "A stranger shot a stranger with an arrow", the far target 19 m off "An arrow struck you from somewhere you could not see: hit for 8" (subject 0), no line saying "attacked" or a name. Cargo `a_missile_is_called_what_its_skill_says`.
+
 ## 2026-11-12 owner-known: whose a thing is, and the public land row (Spark)
 
 Branch `owner-known` from `deb96e94`, the trial service `slop-trials-stdb`. `scenes.py owners` on a plan-test run, `core-owner4-050536`: 9/9 (the public land row carries none of the seed's 4 lot, 7 spot or street names and is no bigger than `land_plan`'s; a newcomer at a household's house is told "house" with no `by`/`home_of` and never the owner's name; the owner is told it is its own; a community member is told "Bryn Wren"). Cargo: `land::tests::public_params_build_the_same_land` (equal digests, lots and props for Cullet and plan-test; size bound on floor-megacity too). `just living-check` exit 0. In place: main's module published fresh on `verify-client-ownmig-044011`, then owner-known over it with `--keep-data`: `Creating table land_plan`, the scrub at `install_script`, characters, structures and land digests unchanged.
@@ -33,9 +48,11 @@ Branch `owner-known` from `deb96e94`, the trial service `slop-trials-stdb`. `sce
 
 Branch `fix-kill-name` from origin/main `c4e6b04d` (far-label in), the trial service (port 3320), private `CARGO_TARGET_DIR`. `core-kill2-034840-skirmish`: `outcomes` 11 of 11, its new `names_told` part driving every audited path among four strangers: a gift ("A stranger gave you 1 stone"), an offer and its acceptance ("A stranger and a stranger traded 1 stone for 1 berries"), a demand, teaching ("taught a stranger fire"), a bow shot ("struck a stranger: hit for 7"), a melee kill ("You finished: strike → person. killed a stranger (9)", before: "killed Agnes Fenner (9)") and the witness's "A stranger was killed by a stranger"; no told line or own `skill_use` outcome named one not introduced (`outcomes-names.json`). A first run (`core-kill-034622-skirmish`) passed with teaching broken off by the next step; the scene now waits for its outcome. verify-player `player-kill-035011`: `combat.py` 39 of 39 (the player's own kill record "killed an old stranger (6)"; the chronicle keeps "Tester killed Aldric Marrow"). `just living-check` passes.
 
-## 2026-11-12 far-label: someone too far away to make out (Spark) After merging main with speech-truth (`03d32e09`, `core-farlabel-c`, `core-farlabel-ch`): `stranger_filter` 9/9, `crowd_sight` 8/8, `sight` 6/6, `senses` 7/7, speech `channels` 29/29.
+## 2026-11-12 far-label: someone too far away to make out (Spark)
 
 Branch `far-label` (`2095a272`, on strangers-1 `9b4fd9d2`), the trial service `slop-trials-stdb`, default seed, `scoped`. `core-farlabel-b`: `stranger_filter` 9/9 (law off and on as before; with an overlay making everyone past 4 m `far`: F, known, at 5 m is "someone too far away to make out" with its id and no name or community; A keeps name and community; N is "a stranger"; law on and N gone: F not waved at; a "stranger" relation about F is not written, about N it is; U gets no first sight at 5 m and "For the first time you see a stranger, 2 tiles northeast" at 2 m), `crowd_sight` 8/8, `sight` 6/6, `senses` 7/7. The first attempt (`core-farlabel-a`, `6e42c0b5`) failed the last check: a far figure's look was meant to be retried in 5 s by back-dating its `recently_seen` mark, but that mark is refreshed while someone stays in sight, so the first sight never came; fixed with a mark of its own (`FAR_MARK`, `far_wait`). Strangers-1's merge with main (`9b4fd9d2`, `core-strangers1m`): `crowd_sight` 8/8, `stranger_filter` 3/3.
+
+After merging main with speech-truth (`03d32e09`, `core-farlabel-c`, `core-farlabel-ch`): `stranger_filter` 9/9, `crowd_sight` 8/8, `sight` 6/6, `senses` 7/7, speech `channels` 29/29.
 
 ## 2026-11-12 strangers-1: first sights in a crowd, a graph's "stranger" under a law (Spark)
 
@@ -173,6 +190,7 @@ Branch `rules-senses-outcomes` on the Spark, the trial server `slop-trials-stdb`
 - Cargo: `living-rules` 235 passed, 10 ignored (`script::body` 7, `ui::` 30 with `appraise_is_offered_toward_creatures_not_things` and `a_target_class_must_be_a_class_and_needs_a_target`, `outcome` 2); `living-mind` 93.
 - Cost: `living/tools/bench.py` on `verify-bench-status` (264 characters): `brain.status` 124 a second, p50 0.007 ms, p99 0.14 ms, 2.27 ms a second (`bench-status/rest.json`; docs/WORLD_RULES.md "The body: meters and statuses").
 - Not run: `needs` (waits for a real night), `fov`, `skirmish`, the island and Cullet scenes.
+
 ## 2026-11-11 layout-2: Cullet's trades at the places of the plan's open lots (dev-box)
 
 Branch `layout-2` merged with main (`e301aa9f`, kit-2 and rules-3 in), own container `layout2-stdb` (2.14.1, port 3329, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), `--target-dir` the branch's private build folder, `scoped`, no minds, no model calls. Both scratch databases answered 404 after cleanup. Only the `rhythm` scene was run; the plan's walls now block (`plans[].fixtures`), so every walk in it went round walls and through gates.
@@ -328,6 +346,7 @@ Branch `drop-1` (from `6a905c31`, origin/main `fd2030c3` merged), own container 
 - First `drop` (plan-test) and `low` (island) runs in `core-drop1-20261111-153740-drop`/`-island`: sight across both passed; the walk check failed on a harness defect, not a rule: it compared CLI samples about 2 s apart (a 2.8 m "jump" was a walk round the drop's end), and the geometry picked the obstacle's very end. The check now walks the route the authority keeps (`body.path`) and the geometry keeps away from the ends.
 - `core-drop1b-20261111-154703-drop` (plan-test): `drop` 5 of 5. `core-drop1b-20261111-154703-island`: `low` 5 of 5 (a cart's tiles; the watcher across it waves and witnesses; the walker's route never crosses it).
 - Not run on this change: tick, needs, food, refusal, seize, skirmish, dealings, town, lives, laws, infant; mechanics.
+
 ## 2026-11-11 the laws of starting a family and of the longing for a child (exp-hamlet-births, Spark)
 
 Branch `exp-hamlet-births` from main `4df9a89`, worktree, the trial service `slop-trials-stdb` (2.14.1, `LIVING_STDB_URL=http://127.0.0.1:3320`), private `CARGO_TARGET_DIR`. New scene `family_laws` (`core-family-20261111-142152`, stage1-acts): 9 of 9. Its first attempt (`core-hamlet-20261111-141837-family-laws`) passed the conceive checks and then failed for two scene bugs. One was a `str.format` on the script. The other came after it was fixed (`core-family-20261111-141949`): the empty-handed adult dropped its food only after the law was installed, so it had felt the longing for a moment with food in hand. The scene now empties hands first. `lifecycle` 6 of 6 (`core-hamlet-20261111-141837-lifecycle`). Baseline `core-hamlet-20261111-141837`: tick, needs, food, refusal, seize, sight, senses and moves pass (42 checks). `cargo_checks.py`: rules (the new `laws_with` longing values, `longing_wait_ms` equal to the old `20 − nurture/6`, and the `deathline` values `births_report.py` ports), authority 12, mind 82 and viewer sync 5 pass. `just living-check` exits 0. Not run: skirmish, dealings, town, lives, infant (about 2 h; cry routing is untouched), mechanics, steering, wildlife.
@@ -348,6 +367,7 @@ Branch `fix-death-labels` (rebased on main `6a905c3`, then on `a8d95fc`), the tr
 - `just living-check` exit 0.
 - On `a8d95fc` + this change (`core-deathnames-head`, `core-deathnames-head-laws`): `cargo_checks.py` pass (rules 145, authority 15, mind 82, viewer-sync 5); death-names 8/8 with the same texts; doing, tick, needs, food, refusal, seize, sight, senses, moves pass; `laws` pass (the same SKIP); `just living-check` exit 0. `remains` and `skirmish` were not rerun on this base (last run on `6a905c3`).
 - Not run: town, lives, infant, lifecycle, wildlife, mechanics, steering, dealings.
+
 ## 2026-11-11, branch fix-graph-say-id (a graph's say: the speaking limit, feedback)
 
 Spark, the trial stack's server (`slop-trials-stdb`, v2.14.1, :3320, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), worktree on `origin/main` 7a75f6b, private `CARGO_TARGET_DIR`, no minds. Report checked: "a resident's `say` to `{"id": N}` silently fails while `strike` to the same id works".
@@ -414,7 +434,7 @@ Branch `rules-2` (`eaee6b0`, from main `bbf7271`) in a worktree, the worker's ow
 
 ## 2026-11-10 island food: berries and store places, a food round (Mac)
 
-Branch `hunger-1` (main `7e5de53` merged in) in a worktree, the worker's own container `hunger-verify` (Docker Desktop, 2.14.1, port 3382) through `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`: `town_life.places` gains `berries` and `store`, `town_life.spread` shares `berries` out like work, and the island's own "find food and eat" walks a round when nothing edible is in sight ([D2](../../../../docs/SOAK.md#d2-the-islands-residents-starve-in-the-first-hours)). Free tier only.
+Branch `hunger-1` (main `7e5de53` merged in) in a worktree, the worker's own container `hunger-verify` (Docker Desktop, 2.14.1, port 3382) through `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`: `town_life.places` gains `berries` and `store`, `town_life.spread` shares `berries` out like work, and the island's own "find food and eat" walks a round when nothing edible is in sight ([D2](../../../../../docs/SOAK.md#d2-the-islands-residents-starve-in-the-first-hours)). Free tier only.
 
 - `cargo_checks.py` (`core-hunger-101946`): rules, authority, mind and viewer sync pass. `tick` 6 of 6, `needs`, `seize` and `sight` pass.
 - `town.py` (`core-hunger-101946-town`) 20 of 21: the step-aside scene's three approaches got no step (its recorded flake, above). Rerun of that scene alone (`core-hunger-101946-aside`) 1 of 1: made way on the second approach.
@@ -471,7 +491,7 @@ Own scratch container `slop-townlife-stdb` (image `v2.14.1`, own volume, `/wasm`
 
 - **Cargo** (`core-town-cargo2`): rules 87 (adds `island_ways_are_valid` and two `social` tests), authority 10, mind 47, viewer sync 3. A first run (`core-town-cargo`) did not compile the authority tests: one still read `Seed::habits`, which moved to the seed's ways; fixed.
 - **Baseline** (`core-town-base`, default seed): `tick`, `needs` and `seize` passed; `skirmish` passed 8 of 8 on an island run. `verify_mechanics.py`: 21 of 23 (`-mechanics-1`, failing the documented conception and expecting-parent pair) and 23 of 23 (`-mechanics-2`). `verify_steering.py`: 5 of 5. These ran before the climate moved from the script's laws into the seed (until then a default-seed world could rain); on the final code `core-town-final-mechanics` passed 23 of 23. Both drivers were given the default-seed module explicitly (`--wasm living_authority_verify_core_town_base.wasm`): this container's `/wasm` mount is the island build directory, so its `living_authority.wasm` is the island's.
-- **Town life** ([features/town.md](../features/town.md), `scripts/town.py`): `core-town-4` 18 of 19 (the first step-aside scene found no guard at a gate; rewritten to find any narrow spot), `core-town-5` 21 of 21, `core-town-6` 20 of 21 on the final rules (the approach scene placed the player on unwalkable ground behind the resident; the driver now picks a walkable lane from behind and walks until close). `core-town-7` re-ran greet, approach, speak and aside on the final code: the first three passed, step-aside did not get a response (residents look once a second; the walker can pass the 2.5 tiles between two looks), so the scene now makes up to three approaches; `core-town-8` passed on the first. Making way was seen on 3 of 4 single approaches across runs, and the step itself was "broken off" after 0.4 s until `aside` skills latched like finishing work (`brain.rs`).
+- **Town life** ([features/town.md](../../features/town.md), `scripts/town.py`): `core-town-4` 18 of 19 (the first step-aside scene found no guard at a gate; rewritten to find any narrow spot), `core-town-5` 21 of 21, `core-town-6` 20 of 21 on the final rules (the approach scene placed the player on unwalkable ground behind the resident; the driver now picks a walkable lane from behind and walks until close). `core-town-7` re-ran greet, approach, speak and aside on the final code: the first three passed, step-aside did not get a response (residents look once a second; the walker can pass the 2.5 tiles between two looks), so the scene now makes up to three approaches; `core-town-8` passed on the first. Making way was seen on 3 of 4 single approaches across runs, and the step itself was "broken off" after 0.4 s until `aside` skills latched like finishing work (`brain.rs`).
 - **Census** (`core-town-census`, `--scene census`): the hour-by-hour table in docs/TOWN_LIFE.md.
 - **Not run here:** the infant, lifecycle and wildlife scenes (30 minutes or more each); this change does not touch those rules, and with no `weather` in their seeds those worlds never rain.
 
@@ -559,7 +579,7 @@ Two driver predicates can report PASS without the named outcome. The gift predic
 
 The conception predicate at `living/tools/verify_mechanics.py:141` accepts any pregnancy. In fresh attempt 1 it returned animal rows before either walker had conceived. The next scene replaced their graphs at `living/tools/verify_mechanics.py:147,148`. Its final death check selected no expecting walker, so the failure does not by itself establish broken inheritance retention. Attempt 2 drove a real expecting walker and passed retention.
 
-[mechanics.md](../features/mechanics.md) tells readers how to recognize the intermittent failures, preserve dependencies and distinguish them from a possible regression under controlled preconditions. These findings are recorded here; the product driver and authority were not patched.
+[mechanics.md](../../features/mechanics.md) tells readers how to recognize the intermittent failures, preserve dependencies and distinguish them from a possible regression under controlled preconditions. These findings are recorded here; the product driver and authority were not patched.
 
 ## Changes made in this round
 

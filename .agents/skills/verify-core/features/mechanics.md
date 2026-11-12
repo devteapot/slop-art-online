@@ -50,7 +50,7 @@ The net check gives Walker4 a net, then a fishing spot. Residents fish too, and 
 
 ### Recognize and investigate intermittent failures
 
-The preserved `core-1004-proof-mechanics` run passed 16/23 on unchanged product code. It failed tablet transfer, reading, spear crafting, trade, teaching, deliberate conception and expecting-parent retention. Its tablet stayed with Walker1. Walker2 later reported "You failed to accept → Walker1: they moved away". The fresh fix-round runs also retain blocked-path refusals between walkers. Read [the validation record](../references/validation.md) for the exact failed keys, outputs and fresh-run counts.
+The preserved `core-1004-proof-mechanics` run passed 16/23 on unchanged product code. It failed tablet transfer, reading, spear crafting, trade, teaching, deliberate conception and expecting-parent retention. Its tablet stayed with Walker1. Walker2 later reported "You failed to accept → Walker1: they moved away". The fresh fix-round runs also retain blocked-path refusals between walkers. Read [the validation record](../references/validation/history.md) for the exact failed keys, outputs and fresh-run counts.
 
 Keep `mechanics.json`, `mechanics.txt` and `stdb-actions.jsonl` for every attempt. A mixed pass count on fresh databases is evidence of intermittent behavior, not permission to waive a failure. Check whether the first failed operation explains later missing rows. Compare actor feedback, positions, inventory, installed graphs and pregnancies before blaming each dependent skill.
 

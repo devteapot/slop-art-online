@@ -182,5 +182,14 @@
   "world_laws": {
    "stranger_by_name": true
   }
+ },
+ "strangers-filter-cues": {
+  "about": "Stage 2b's fourth arm, LS + cues: `stranger_by_name` on and the attention-cue law `cues_on` on (docs/ATTENTION.md, branch attention-cues; set by set_world_law). A STUB until attention-cues is on main: before then the world has no `cues_on` law, set_world_law refuses it, and the instance does not start.",
+  "models": {},
+  "env": {},
+  "world_laws": {
+   "stranger_by_name": true,
+   "cues_on": true
+  }
  }
 }
