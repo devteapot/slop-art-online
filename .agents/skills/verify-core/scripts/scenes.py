@@ -3469,10 +3469,11 @@ def missiles_told(s):
     arrows says "attacked", and the unseen shot names no one."""
     a, b, w, f = s.people(4)
     here = body_at(s, a)
-    # 4.5 m: within sight by night too (6 m); the far target stays past day sight (11 m).
+    # 4.5 m: within sight by night too (6 m); the far target stays past day sight (11 m), and
+    # the line to it passes 1.4 m clear of the near target and the witness.
     s.call("place_at", b, here[0] + 4.5, here[1])
     s.call("place_at", w, here[0] + 4.5, here[1] + 1.5)
-    s.call("place_at", f, here[0] + 19.0, here[1] - 3.0)
+    s.call("place_at", f, here[0] + 19.0, here[1] - 6.0)
     s.call("grant_items", a, "bow", 1)
     s.call("grant_items", a, "arrow", 20)
     time.sleep(1.0)
@@ -3492,7 +3493,7 @@ def missiles_told(s):
     s.expect("a witness who sees the shooter is told it shot the one struck with an arrow",
              any(re.search(r"shot .* with an arrow", r["text"]) for r in seen), [r["text"] for r in seen])
 
-    s.graph(a, {"seq": [{"do": {"skill": "bowshot", "target": {"at": [here[0] + 19.0, here[1] - 3.0]}}}, {"wait": 60}]})
+    s.graph(a, {"seq": [{"do": {"skill": "bowshot", "target": {"at": [here[0] + 19.0, here[1] - 6.0]}}}, {"wait": 60}]})
     far = s.wait(lambda: [r for r in lines(f) if r["kind"] == "attacked"], seconds=20)
     s.rows(f"SELECT * FROM experience WHERE observer = {f}", "unseen-victim-told")
     s.rows(f"SELECT * FROM skill_use WHERE actor = {a}", "archer-uses")

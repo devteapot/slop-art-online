@@ -2,7 +2,7 @@
 
 ## 2026-11-12 fix-dodge-told (Spark)
 
-Branch `fix-dodge-told` (merged with origin/main `c67bb6e1`), the trial service `slop-trials-stdb`. `dodge-told` on `minds-dodge3-074610`: pass. The eye was told "You failed to dodge: it was over before the blow came"; 4 "not ready yet" lines for 5 dodges; the asked thought's prompt carried the line, and 5 "not ready yet" lines (no more than dodges + 1). `doing`: pass on `minds-doing4-074902` (the grammar's example now `"is": "hostile"`). In `minds-dodge3-074610` it failed once in its setup ("the eye turned to the other" not within 20 s, before any `doing`). Mind unit tests 106 pass, `the_doing_example_uses_a_kind_word` among them.
+Branch `fix-dodge-told` (merged with origin/main `c67bb6e1`), the trial service `slop-trials-stdb`. `dodge-told` on `minds-dodge3-074610`: pass. The eye was told "You failed to dodge: it was over before the blow came"; 4 "not ready yet" lines for 5 dodges; the asked thought's prompt carried the line, and 5 "not ready yet" lines (no more than dodges + 1). `doing`: pass on `minds-doing4-074902` (the grammar's example now `"is": "hostile"`). In `minds-dodge3-074610` it failed once in its setup ("the eye turned to the other" not within 20 s, before any `doing`). Mind unit tests 106 pass, `the_doing_example_uses_a_kind_word` among them. After merging origin/main `41d40f50` (far-handle): `dodge-told` pass (`minds-dodge5-080615`), mind unit tests 107 pass.
 ## 2026-11-12 far-handle (Spark)
 
 Branch `far-handle` (from main `b657a344`), the trial service `slop-trials-stdb`, the fake model. New case `far-figure` (`minds-farhandle2-*`): 8/8. F, in M's relations as "Walker2 (#266)", stood 5 m off under an overlay making everyone past 4 m far:
