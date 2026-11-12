@@ -1172,7 +1172,7 @@ Pass 3, step 6 (2026-11-12). The eyes were the first thing that separated a clos
 - **Judged across Cullet's skin tones** on the board's `lips-blush-sweep`: the woman preset with her skin set by a recipe colour, through the client's own recolouring, at six tones from the town's lightest (`#f4d5c3`) to its darkest (`#ac7e62`) and one darker than anyone in it (`#7a573f`). Before, the lips are close to skin-coloured at every tone and the blush is faint or gone. After, both hold at all six. On the tone beyond Cullet the lips come out lighter than the skin and the blush redder than it should: a fixed pigment has that limit, and a tag of their own for lips and blush is what would lift it.
 - **The far head** still has lips and blush in its skin picture. They are two or three texels there.
 
-**What it costs.** A type's file goes from 1.07 to 1.14 MB (the 21 types from 22.2 to 23.7 MB): 144 more triangles in the lines, 812 in the layer, and its picture. A near face is seven primitives where it was six, so one more draw.
+**What it costs.** A type's file goes from 1.06 to 1.15 MB on average (the 21 types from 22.2 to 24.1 MB): 144 more triangles in the lines, 812 in the layer, and its picture. A near face is seven primitives where it was six, so one more draw.
 
 **What the client needs:** nothing. For the laptop coordinator to know: a type's `Face` has a seventh primitive (`…FaceTint_00_FACE`, blended); a composed person's beard overlay lies over it as it lies over the skin.
 
@@ -1206,7 +1206,7 @@ Pass 3, during step 6 (2026-11-12), at the laptop's measurement of composed peop
 - **Every piece worn has a colour in the person's line.** The line named a colour for the jersey, the coat or smock and headwear. It now names one for the **apron** (`#b4b1a3`), the **trousers** (`#353840`) and the **boots** (`#332820`) too: the cloth every resident's were built in (`person_params.PIECE_COLOURS`).
 - **A smock's sleeve bands are a piece of their own,** `smock_bands-m` and `-f` (320 triangles, 0.04 MB), with their own colour in the line, as the apron is. The bands were faces of the smock in another cloth, and would have taken the smock's hue. A piece needs nothing new from the client; a second tag inside one file would have needed a second mesh and a new key. A person in a smock wears the bands, so wears one more piece.
 
-**Cullet's 64 after this:** 97 shared files worn (17 types, 30 hair, 22 outfit, 28 overlay). On the client's count that is 2 materials for all hair and outfit pieces where there were 50, and the 28 overlays as before.
+**Cullet's 64 after this:** 97 shared files worn, 35.3 MB (17 types 19.4, 30 hair 8.6, 22 outfit 4.3, 28 overlay 3.0). Everything on disk: 171 files, 50.9 MB. On the client's count that is 2 materials for all hair and outfit pieces where there were 50, and the 28 overlays as before.
 
 ### Type files
 
