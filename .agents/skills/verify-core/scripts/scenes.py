@@ -67,6 +67,20 @@ class Scene:
             raise RuntimeError(f"{reducer} over HTTP failed: {code} {body[-500:]}")
         return subprocess.CompletedProcess([reducer], 0 if code == 200 else 1, body, "")
 
+    def http_rows(self, query):
+        """Rows over HTTP as the world admin (no CLI process per call: tens of ms, for polling a
+        moment such as a windup starting)."""
+        if not getattr(self, "token", None):
+            out = self.command("login", "show", "--token").stdout
+            self.token = next(line.rsplit(" is ", 1)[1].strip() for line in out.splitlines() if "auth token" in line and " is " in line)
+        url = os.environ.get("LIVING_STDB_URL", "http://127.0.0.1:3300").rstrip("/")
+        req = urllib.request.Request(f"{url}/v1/database/{self.db}/sql", data=query.encode(), method="POST")
+        req.add_header("Authorization", f"Bearer {self.token}")
+        with urllib.request.urlopen(req, timeout=30) as r:
+            table = json.loads(r.read().decode())[-1]
+        names = [e["name"]["some"] for e in table["schema"]["elements"]]
+        return [dict(zip(names, row)) for row in table["rows"]]
+
     def rows(self, query, label=None):
         r = self.command("sql", "--format", "json", "-s", "local", self.db, query)
         response = json.loads(next(line for line in r.stdout.splitlines() if line.startswith("[")))
@@ -3521,11 +3535,19 @@ def committed(s):
     the same dodge the open way covers its whole length. Then W winds up an attack on Y and is
     killed (admin `kill`) inside its 650 ms windup: the attack never releases, Y takes no blow.
     (No rule staggers on a hit today, so a blow does not end a committed move.) Last, a routine
-    that dodges while it stands (`{"moving": false}`, a condition the dash itself ends): the dodge
+    that dodges while it stands (`{"moving": false}`, a condition the dash itself ends), in a
+    fight (a threat engages it, so its graph is looked at about 15 times a second): the dodge
     runs its course; then the world's own laws make the dodge uncommitted (an overlay through
     `floors::compose`, `install_script.py`'s `compose_laws`, installed by the admin), and the same
     routine's dodge is broken off as its condition stops holding, while a jump stays committed.
-    The shipped script is installed again at the end."""
+
+    Staging (fix-committed-staging): every check has characters of its own, spawned for it and
+    set to wait; the spots it uses are first cleared of every other body (an earlier run's actors
+    stay where they were left, and `place_at` would put the next one beside them), and each body
+    is read back where it was put, standing, with its breath full, before the check starts. The
+    shipped script is installed first when the world runs another (an interrupted run's overlay)
+    and again at the end. The kill is timed off W's windup as the authority shows it (its
+    `fighter` row, read over HTTP), not a fixed sleep."""
     geo = wall_geometry(s)
     (s.out / f"{s.name}-geometry.json").write_text(json.dumps(geo) + "\n")
     eye, hidden, opened = geo["eye"], geo["hidden"], geo["open"]
@@ -3533,82 +3555,137 @@ def committed(s):
     n = math.hypot(ax, ay)
     ux, uy = ax / n, ay / n
     back = (eye[0] - ux, eye[1] - uy)
-    p, w, y = s.people(3)
     now = lambda: s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
     rounds = iter(range(1000))
-    def at_of(c):
-        b = s.rows(f"SELECT x, y FROM body WHERE id = {c}")[0]
-        return (b["x"], b["y"])
-
-    def dash(label, toward):
-        s.call("place_at", p, *back)
-        s.graph(p, {"wait": 30 + next(rounds)})
-        time.sleep(1.0)
-        start = at_of(p)
-        t0 = now()
-        s.graph(p, {"seq": [{"do": {"skill": "dodge", "target": {"at": [toward[0], toward[1]]}}}, {"wait": 30 + next(rounds)}]})
-        u = s.wait(lambda: [x for x in s.rows("SELECT * FROM skill_use") if x["at_ms"] >= t0 and x["actor"] == p and x["skill"] == "dodge" and x["outcome"]] or None, 15)[0]
-        time.sleep(0.5)
-        end = at_of(p)
-        out = {"start": start, "end": end, "moved": round(math.dist(start, end), 2), "ms": u["outcome_ms"] - u["accepted_ms"], "outcome": u["outcome"]}
-        (s.out / f"{s.name}-dash-{label}.json").write_text(json.dumps({"use": u, **out}, indent=2) + "\n")
-        return out
-
-    full = dash("open", (back[0] - 4 * ux, back[1] - 4 * uy))
-    s.expect("a dodge the open way covers its whole length (2.6 m) in about 0.5 s", full["outcome"] == "made way" and full["moved"] > 2.2 and 400 <= full["ms"] <= 650, full)
-    walled = dash("wall", hidden)
-    s.expect("a dodge toward a wall ends early, at the wall (shorter and sooner than the open one)",
-             walled["outcome"] == "made way" and walled["moved"] < full["moved"] - 0.8 and walled["ms"] < full["ms"] - 100, {"wall": walled, "open": full})
-
-    # Death inside a committed windup: the attack never releases.
-    s.call("place_at", w, *opened)
-    s.call("place_near", y, w)
-    s.graph(y, {"wait": 60})
-    tries = []
-    for k in range(3):
-        if not s.rows(f"SELECT alive FROM character WHERE id = {w}")[0]["alive"]:
-            break
-        s.graph(w, {"wait": 30 + next(rounds)})
-        time.sleep(1.0)
-        hp0 = s.vitals(y)["hp"]
-        t0 = now()
-        s.http_call("set_behavior", [w, json.dumps({"seq": [{"do": {"skill": "attack", "target": {"id": y}}}, {"wait": 30 + next(rounds)}]})])
-        time.sleep(0.3 + 0.1 * k)
-        s.http_call("kill", [w, "verify: killed inside a windup"])
-        time.sleep(1.5)
-        use = next((x for x in s.rows("SELECT * FROM skill_use", f"death-uses-{k}") if x["at_ms"] >= t0 and x["actor"] == w and x["skill"] == "attack"), None)
-        tries.append(use)
-        if use and use["accepted_ms"]:
-            break
-    use = tries[-1]
-    dead = s.rows(f"SELECT alive, cause FROM character WHERE id = {w}")[0]
-    hit = [r for r in s.rows(f"SELECT * FROM experience WHERE observer = {y}") if r["at_ms"] >= t0 and r["subject"] == w and "attacked you" in r["text"]]
-    s.expect("death inside a committed windup ends it: the attack never releases and lands nothing",
-             use and use["accepted_ms"] > 0 and use["released_ms"] == 0 and not dead["alive"] and not hit and s.vitals(y)["hp"] >= hp0 - 0.01,
-             {"use": use, "dead": dead, "hit": hit, "tries": len(tries)})
-
-    # A condition the dash ends: shipped, the dodge runs on; uncommitted by the world's laws, it is
-    # broken off; the jump, still committed there, runs on.
+    spots = [back, opened, eye, hidden, (back[0] - 4 * ux, back[1] - 4 * uy)]
     tool = importlib.util.spec_from_file_location("install_script", ROOT / "living/tools/install_script.py")
     inst = importlib.util.module_from_spec(tool)
     tool.loader.exec_module(inst)
     shipped = (ROOT / "living/scripts/skills.rhai").read_text()
+    cast = []
+
+    def at_of(c):
+        b = s.rows(f"SELECT x, y FROM body WHERE id = {c}")[0]
+        return (b["x"], b["y"])
+
+    def fresh(k):
+        made = s.people(k)
+        cast.extend(made)
+        return made
+
+    def clear(keep):
+        """Every body within 7 m of the scene's spots but `keep` goes 60 m off (earlier runs' actors
+        and residents who wandered in)."""
+        bodies = s.rows("SELECT id, x, y FROM body")
+        alive = {c["id"] for c in s.rows("SELECT id, alive FROM character") if c["alive"]}
+        for k, b in enumerate(x for x in bodies if x["id"] in alive and x["id"] not in keep and any(math.dist((x["x"], x["y"]), q) < 7 for q in spots)):
+            s.graph(b["id"], {"wait": 120})
+            s.call("place_at", b["id"], opened[0] + 60 + 2 * (k % 10), opened[1] + 50 + 2 * (k // 10), check=False)
+
+    def stage(who, at, label):
+        """`who` waits at `at` (exactly: read back), standing, breath full."""
+        s.graph(who, {"wait": 30 + next(rounds)})
+        s.call("place_at", who, *at)
+        def settled():
+            b = s.rows(f"SELECT x, y, vx, vy FROM body WHERE id = {who}")[0]
+            v = s.vitals(who)
+            full = breath_now(v, now())[0] >= v["stamina_max"] - 0.5
+            return math.dist((b["x"], b["y"]), at) < 0.3 and b["vx"] == 0 and b["vy"] == 0 and full
+        s.wait(settled, 10, every=0.5)
+        (s.out / f"{s.name}-staged-{label}-{who}.json").write_text(json.dumps({"at": at_of(who), "vitals": s.vitals(who)}, indent=2) + "\n")
+
+    def use_of(t0, who, skill, seconds=15):
+        return s.wait(lambda: [x for x in s.rows("SELECT * FROM skill_use") if x["at_ms"] >= t0 and x["actor"] == who and x["skill"] == skill and x["outcome"]] or None, seconds)[0]
+
+    def dash(label, toward):
+        p = fresh(1)[0]
+        clear(set(cast))
+        stage(p, back, label)
+        start = at_of(p)
+        t0 = now()
+        s.graph(p, {"seq": [{"do": {"skill": "dodge", "target": {"at": [toward[0], toward[1]]}}}, {"wait": 30 + next(rounds)}]})
+        u = use_of(t0, p, "dodge")
+        time.sleep(0.5)
+        end = at_of(p)
+        out = {"actor": p, "start": start, "end": end, "moved": round(math.dist(start, end), 2), "ms": u["outcome_ms"] - u["accepted_ms"], "outcome": u["outcome"]}
+        (s.out / f"{s.name}-dash-{label}.json").write_text(json.dumps({"use": u, **out}, indent=2) + "\n")
+        return out
+
+    def engaged(who):
+        st = s.rows(f"SELECT fast_until FROM mind_state WHERE id = {who}")
+        return st and st[0]["fast_until"] > now() + 1500
 
     def standing(label, skill):
-        s.call("place_at", p, *opened)
-        s.graph(p, {"wait": 30 + next(rounds)})
-        time.sleep(1.0)
+        """A fresh P in a fight (a fresh Z threatens it), its routine doing `skill` while it stands."""
+        p, z = fresh(2)
+        clear(set(cast))
+        stage(p, opened, label)
+        s.call("place_near", z, p)
+        s.graph(z, {"seq": [{"do": {"skill": "threaten", "target": {"id": p}}}, {"wait": 30 + next(rounds)}]})
+        s.wait(lambda: engaged(p), 10, every=0.3)
+        s.graph(z, {"wait": 30 + next(rounds)})
+        stage(p, opened, label + "-again")
+        s.expect(f"{label}: P is in a fight (its graph is looked at at fight cadence)", engaged(p), s.rows(f"SELECT fast_until FROM mind_state WHERE id = {p}"))
         t0 = now()
         s.graph(p, {"first": {"label": f"standing-{label}", "children": [
             {"if": {"cond": {"moving": False}, "then": {"do": skill}}}, {"wait": 0.2 + 0.001 * next(rounds)}]}})
-        u = s.wait(lambda: [x for x in s.rows("SELECT * FROM skill_use") if x["at_ms"] >= t0 and x["actor"] == p and x["skill"] == skill and x["outcome"]] or None, 15)[0]
+        u = use_of(t0, p, skill)
         s.graph(p, {"wait": 30 + next(rounds)})
         (s.out / f"{s.name}-standing-{label}.json").write_text(json.dumps(u, indent=2) + "\n")
         return u
 
-    u = standing("shipped", "dodge")
-    s.expect("shipped: a routine's dodge runs its course though the condition that started it (standing) stops holding", u["outcome"] == "made way", u)
+    def script_is(src):
+        return s.rows("SELECT source FROM script WHERE name = 'skills'")[0]["source"].strip() == src.strip()
+
     try:
+        if not script_is(shipped):
+            s.call("install_script", shipped)
+            time.sleep(1.5)
+        full = dash("open", (back[0] - 4 * ux, back[1] - 4 * uy))
+        s.expect("a dodge the open way covers its whole length (2.6 m) in about 0.5 s", full["outcome"] == "made way" and full["moved"] > 2.2 and 400 <= full["ms"] <= 650, full)
+        walled = dash("wall", hidden)
+        s.expect("a dodge toward a wall ends early, at the wall (shorter and sooner than the open one)",
+                 walled["outcome"] == "made way" and walled["moved"] < full["moved"] - 0.8 and walled["ms"] < full["ms"] - 100, {"wall": walled, "open": full})
+
+        # Death inside a committed windup: the attack never releases. A fresh pair each try; the
+        # kill goes as soon as W's windup shows (its `fighter` row), well inside 650 ms.
+        code = next(c["code"] for c in s.rows("SELECT skill, code FROM skill_card") if c["skill"] == "attack")
+        tries = []
+        for k in range(3):
+            w, y = fresh(2)
+            clear(set(cast))
+            stage(w, opened, f"death-{k}")
+            s.call("place_near", y, w)
+            s.graph(y, {"wait": 60})
+            time.sleep(0.5)
+            hp0 = s.vitals(y)["hp"]
+            t0 = now()
+            s.http_call("set_behavior", [w, json.dumps({"seq": [{"do": {"skill": "attack", "target": {"id": y}}}, {"wait": 30 + next(rounds)}]})])
+            end = time.monotonic() + 5
+            seen = None
+            while time.monotonic() < end and not seen:
+                f = s.http_rows(f"SELECT act, act_ms, release_ms FROM fighter WHERE id = {w}")
+                seen = next((r for r in f if r["act"] == code and r["act_ms"] >= t0), None)
+            if seen:
+                s.http_call("kill", [w, "verify: killed inside a windup"])
+                killed_ms = now()
+            time.sleep(1.5)
+            use = next((x for x in s.rows("SELECT * FROM skill_use", f"death-uses-{k}") if x["at_ms"] >= t0 and x["actor"] == w and x["skill"] == "attack"), None)
+            dead = s.rows(f"SELECT alive, cause FROM character WHERE id = {w}")[0]
+            hit = [r for r in s.rows(f"SELECT * FROM experience WHERE observer = {y}") if r["at_ms"] >= t0 and r["subject"] == w and "attacked you" in r["text"]]
+            tries.append({"windup": seen, "use": use, "dead": dead, "hit": hit, "y_hp": [hp0, s.vitals(y)["hp"]]})
+            if seen and use:
+                break
+        last = tries[-1]
+        use = last["use"]
+        s.expect("death inside a committed windup ends it: the attack never releases and lands nothing",
+                 last["windup"] and use and use["accepted_ms"] > 0 and use["released_ms"] == 0 and not last["dead"]["alive"] and not last["hit"] and last["y_hp"][1] >= last["y_hp"][0] - 0.01,
+                 {"tries": tries})
+
+        # A condition the dash ends: shipped, the dodge runs on; uncommitted by the world's laws,
+        # it is broken off; the jump, still committed there, runs on.
+        u = standing("shipped", "dodge")
+        s.expect("shipped: a routine's dodge runs its course though the condition that started it (standing) stops holding", u["outcome"] == "made way", u)
         s.call("install_script", inst.compose_laws(shipped, "fn dodge_combat() { let s = base_dodge_combat(); s.committed = false; s }"))
         src = s.rows("SELECT source FROM script WHERE name = 'skills'")[0]["source"]
         s.expect("the world's laws make the dodge uncommitted (an overlay over the shipped script)", "base_dodge_combat" in src and "s.committed = false" in src, len(src))
@@ -3619,6 +3696,10 @@ def committed(s):
         s.expect("the jump, still committed in that world, runs its course", j["outcome"] == "made way", j)
     finally:
         s.call("install_script", shipped, check=False)
+        # Off the spots, so the next run on this world finds them clear.
+        for k, c in enumerate(cast):
+            s.call("set_behavior", c, json.dumps({"wait": 120}), check=False)
+            s.call("place_at", c, opened[0] + 60 + 2 * (k % 10), opened[1] - 50 - 2 * (k // 10), check=False)
 
 
 def doing_cost(s):
