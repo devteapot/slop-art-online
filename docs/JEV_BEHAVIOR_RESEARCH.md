@@ -4,7 +4,7 @@ Research dated 2026-09-25. **Proposal, not an accepted architecture or implement
 
 The likely match for the described Doom video is **Jev by TypeSafe AI**. The exact video was not supplied, so its particular attack/dodge wiring remains unverified. The proposed fit is strong: retain the general LLM for interpretation and policy revision, add parallel contextual judgments to the controller, and keep physical execution under the existing authority.
 
-**What the sources establish.** TypeSafe's [launch post](https://typesafe.ai/blog/introducing-system-one-models-and-jev) describes a Doom demo using structured textual game state, approximately 10 queries/second and about $7/hour. It reports 70–500 ms end-to-end latency, with published evaluations generally run from West Coast laptops near its service. The authors acknowledge that a conventional Doom bot could play better. These are vendor reports, not measurements for our workload. The demo demonstrates responsive instruction-conditioned control, not superior combat skill or population-scale capacity.
+**What the sources establish.** TypeSafe's [launch post](https://typesafe.ai/blog/introducing-system-one-models-and-jev) describes a Doom demo using structured textual game state, approximately 10 queries/second and a stated hourly cost. It reports 70–500 ms end-to-end latency, with published evaluations generally run from West Coast laptops near its service. The authors acknowledge that a conventional Doom bot could play better. These are vendor reports, not measurements for our workload. The demo demonstrates responsive instruction-conditioned control, not superior combat skill or population-scale capacity.
 
 The [API introduction](https://docs.typesafe.ai/introduction) describes one shared state and several independently evaluated questions in one call. The [primitive contract](https://docs.typesafe.ai/primitives) offers Noul for a yes/no probability, Choice for a distribution over alternatives, and Score for ordered levels. Questions do not see one another's answers. A genuine answer dependency requires another stage; merely needing several factors does not. For us, a single actor observation could support several tactical judgments without generating a new tree each time.
 
@@ -79,16 +79,7 @@ In particular, **parallel judgment and simultaneous action are different changes
 
 Start with event-triggered refresh plus a measured maximum cadence. Sweep 1, 2, 5 and 10 batches/second in experiments where useful, rather than adopting 10 Hz for every character. A one-request-at-a-time loop cannot sustain 10 Hz when responses take 500 ms. Pipelining does not make each answer fresher. The useful control horizon must exceed observation delivery, queueing, inference, dispatch and action-start latency together.
 
-The current [published input price](https://typesafe.ai/) is $42/billion tokens ($0.042/million). The following is arithmetic assuming **1,000 total billed input tokens per batched request**, including state and questions. It is not a quote, capacity guarantee or measured token count; general LLM usage and infrastructure are additional.
-
-| Actors using Jev | Batches per actor per second | Requests/second | Estimated inference cost/hour |
-| ---: | ---: | ---: | ---: |
-| 216 | 2 | 432 | $65.32 |
-| 200 | 10 | 2,000 | $302.40 |
-| 2,000 | 2 | 4,000 | $604.80 |
-| 2,000 | 10 | 20,000 | $3,024.00 |
-
-Formula: actors × batches/second × input tokens × 3,600 × $0.042 / 1,000,000. Costs change proportionally with token count and duty cycle. Verify access, rate limits, deployment geography, tail latency and concurrency with the provider before any large run. More conditions per batch still add tokens and local work. The approximately $7/hour Doom report uses its own payload/workload and is not a per-character price for SAO.
+TypeSafe publishes an input price on [its site](https://typesafe.ai/). Jev's price is not committed to this repository (TypeSafe's customer agreement counts pricing as its confidential information; docs/STORE.md, "Model terms"). The cost of a configuration is: actors × batches/second × input tokens per batched request × 3,600 × the price per input token. It grows in proportion to token count and duty cycle, which is why the cadence matters. The table this section held (216 to 2,000 actors at 2 and 10 batches a second, assuming 1,000 input tokens a request) is in git history. Verify access, rate limits, deployment geography, tail latency and concurrency with the provider before any large run. More conditions per batch still add tokens and local work. The Doom demo's hourly cost uses its own payload and workload and is not a per-character price for SAO.
 
 At 2,000 actors and 2 Hz, even one journal record per response produces 14.4 million response records/hour. Keep the active cache bounded, store immutable request context once with references, and archive exact exchanges durably. Do not copy the same response into every 60 Hz guard trace. Distinguish service RSS, active controller state, archive backlog, retained WAL and total audit storage.
 

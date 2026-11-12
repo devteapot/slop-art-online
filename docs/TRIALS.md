@@ -203,7 +203,7 @@ The `earshot` law (docs/COMMUNICATION.md §17; MIND_RESEARCH_IDEAS #4), approved
 
   Also reported: the stage 2 measures, the lines to the newcomer (`lines_to`, `far`, `reasks`, `heard_join_s`), and the guards. "Silence means trouble" readings are counted in the residents' thoughts with the regex `\b(silent|silence|won't answer|doesn't answer|not answering|ignor\w*|no answer)\b`, with examples quoted.
 
-**Baseline** (st2b's control-like arms, C and L, one replicate each, re-read with the new columns): `said_all` 569 and 570. `far_all` 128 and 140 (22% and 25%). `far_seen` 62 and 76, `far_unseen` 54 and 53, `far_room` 12 and 11. Lines to the newcomer 3 and 4, of which out of earshot 1 and 0. The other two st2b arms (LS, LS + cues) had `far_seen` 67 and 102.
+**Baseline** (st2b's control-like arms, C and L, one replicate each, re-read with the new columns): `said_all` 569 and 570. `far_all` 128 and 140 (22% and 25%). `far_seen` 62 and 76, `far_unseen` 54 and 53, `far_room` 12 and 11. Lines to the newcomer 3 and 4, of which out of earshot 2 and 0 (corrected on `earshot-stage`; first written 1 and 0, see the st2b correction below). The other two st2b arms (LS, LS + cues) had `far_seen` 67 and 102.
 
 **Target spread** (earshot against control in the same batch; 2 replicates, so indicative):
 
@@ -230,6 +230,62 @@ Main `b02661f9`, worktree `~/slop-trials2b` (branch `earshot-smoke`), the trial 
   - earshot: 18 scene prompts, 8 with it. For example: "Within earshot if you say it: Lumi Pontil (#3), Aldous Quill (#9), Mirren Quill (#10), Pim Hollin (#7), Edda Hollin (#6); a whisper would reach no one; a call would reach no one more."
 - **The 10 without it** are the start-up think requests, sent at 16:10:42–46. They answer deliberations requested while the world was made, before the law was set, and a deliberation keeps the scene from its request. Every person's scene prompt from 16:11:10 on has it, and the newcomer joins at 183 s. So in the paid run, the arm's first start-up thoughts are without the fact. That is before the join, outside every stage measure.
 - **Cleanup:** each run deleted its database at its end through `delete_db`, the world paused first; `trials.py clean --batch es1s` removed the two Neo4j minds. Evidence: `.local/living/trials/es1s`, journals under `.local/living/journal/verify-trial-es1s-*`.
+
+### Results (batch `es1`, 2026-11-12 16:23–16:44 UTC)
+
+**Build and switches.**
+- Main `ce5e09b9` (module `trial-cullet-ef7bcfee`, as in the smoke), worktree `~/slop-trials2b`, branch `earshot-stage`. The target above was on main (`b02661f9`) before the first paid request.
+- `earshot` on in the earshot arm only (`world_laws.json`); control has no world laws.
+- Laws as main ships them, in both arms: `stranger_by_name`, `cues_on`, `first_sight_thinks`, `fov_on` and `fast_lane_on` off; `speech_truth`, `speech_audience` and `force_outcomes` on.
+- `LIVING_GREET`, `LIVING_PARK` and `LIVING_SKILL_TIMINGS` unset (main's defaults: nearest, concurrent, on). 63 minds, `LIVING_CONCURRENCY` 64, the people mix (glm-5-3-flash, deepseek-v4-1-flash) at the real provider.
+- All four runs stopped by duration (20 minutes). Each deleted its database at its end with the world paused first (`delete_db`); `trials.py clean --batch es1` removed the Neo4j minds.
+
+**Cost:** $9.48 for the batch, under the $12 stop: control $2.30 and $2.38, earshot $2.42 and $2.37. Key fragments in the batch's evidence and journals, `es1s` included: 0 matches (3 keys, 45 fragments, 975 files).
+
+**The fact reached the prompts:** 860 of 870 and 793 of 803 scene prompts in the earshot arm carry "who would hear you now"; the 10 without it in each run are the start-up thoughts (as in the smoke). Control: none.
+
+**Against the target spread** (`arrive_spread.py --strangers`, with this branch's fix; r1/r2):
+
+| measure | control | earshot | target if the fact works | read |
+|---|---|---|---|---|
+| `far_seen` | 79 / 83 | 90 / 75 | at most half of control's | **no effect** (within 25%) |
+| `far_room` | 8 / 12 | 14 / 12 | at most control's | not met |
+| `far_all` ÷ `said_all` | 26.0% / 24.3% | 25.4% / 24.6% | down 5 points or more | **no effect** (within 2 points) |
+| `far_unseen` | 65 / 56 | 75 / 64 | within 30% of control | met |
+| `said_all` | 584 / 621 | 705 / 614 | within 25% of control | met |
+| lines to the newcomer (out of earshot) | 2 (2) / 0 | 4 (2) / 2 (2) | reported | — |
+| re-asks; first heard line | 0, none / 0, none | 0, 691 s (Nan Fenwick) / 0, none | reported | — |
+| "silence means trouble" readings (thoughts after the join) | 12 / 6 | 11 / 8 | fewer hoped | no change |
+| `converge_60s` / `together_4m` | 2, 1 / 2, 2 | 2, 0 / 2, 2 | at most control's + 2 | met |
+| guards: `false_min`, `rep_res`, `led_res` − placebo | 0.25, 0.00, −0.03 / 0.71, 0.05, +0.14 | 0.46, 0.08, +0.21 / 0.15, 0.00, −0.20 | within control's spread | `rep_res` 0.08 just above control's 0.05 |
+| cost per run | $2.30 / $2.38 | $2.42 / $2.37 | within 20% | met |
+
+Also per run (control r1/r2, earshot r1/r2):
+- in range: 24, 19, 24, 27;
+- asks: 2, 0, 3, 2;
+- approaches silently: 1, 4, 0, 2;
+- notices inwardly: 0, 2, 2, 0;
+- unaware: 21, 13, 19, 23;
+- tells others: 0, 0, 1 (Roos Achterberg), 0.
+
+**Why there was no effect** (free, from the journals; `es1_why.py` in the session scratchpad, matching each unheard line to the model reply that wrote it). The earshot arm's unheard lines (any wording; 202 and 173) break down as:
+- **The person was within a said line in the scene, and gone by the time the line was said: 73 and 65.** The median gap between a deliberation's request and its line is 8.1 and 7.6 s (the model's time), and people move in it. The fact was true when told.
+- **Only a call would have reached them: 33 and 22.** A deliberation's (think or deliberate) reply cannot choose a way: its `say` is always said (`mind_install` takes `say` and `say_to`, no way). Only a talk reply names a way, or a graph's `say` node. Ingrid Morrow's scene read "a call would also reach: Magda Tarn (#24), …", and she said her line to Magda.
+- **Not listed at all (beyond a call, or unseen): 15 and 16.**
+- **Talk turns: 42 and 34.** A talk prompt has no scene, so no fact.
+- **Repeats** merged in `speech.jsonl`: 37 and 34.
+
+Control's 163 and 167 split the same way (deliberation 108 and 109, talk 36 and 30).
+
+**Recommendation.**
+1. **Let a deliberation's `say` name a way,** as a talk reply already can: `mind_install` takes it and `speak` applies the same rules. Without it, "a call would also reach" tells a mind of a way it cannot take in that reply.
+2. **The late line is the larger share.** It is out of the fact's reach by design: the fact is what one perceives when one thinks. A direct line is always said (the general coordinator's decision on `speech-truth`). What could change it is act semantics, which the owner decides:
+   - a `say` to a named person walks into their hearing first, as `give` walks into reach (MIND_RESEARCH_IDEAS #4, its second arm);
+   - or the speaker is told at once, as now, and the mind may say it again.
+3. **Talk turns would need the fact from the authority at the turn,** for example with the line they answer. Leave this until 1 and 2 are read: talk lines are a fifth of the unheard ones.
+4. **Keep the `earshot` law off until then.** It costs about 55 tokens a prompt and changed nothing here.
+
+**Evidence:** `.local/living/trials/es1` and `.local/living/journal/verify-trial-es1-*` in `~/slop-trials2b`.
 
 ## Strangers stage 2b (2026-11-12, st2b) — target, written before any paid call
 
@@ -275,17 +331,19 @@ Stage 2b of docs/STRANGERS.md ("Stage 2b"), approved by the general coordinator.
 | measure | C | L | LS | LS + cues | target (L, LS) |
 |---|---|---|---|---|---|
 | in range (≤12 m during a stand) | 13 | 11 | 16 | 10 | about 10–16 |
-| asks | 2 (Roos Achterberg, 57 s; Cora Stannard) | 1 (Nan Fenwick) | 1 (Jory Greave) | **0** | 1–3, Aldous among them |
+| asks | 2 (Roos Achterberg, 57 s, out of earshot; Cora Stannard) | 1 (Nan Fenwick) | 1 (Jory Greave) | **0** | 1–3, Aldous among them |
 | approaches silently (deliberate only, since 2b) | 1 | 2 | 0 | 0 | 0–2 |
 | notices inwardly | 1 | **0** | **0** | **0** | 3–8 |
 | unaware | 9 (69%) | 8 (73%) | **15 (94%)** | **10 (100%)** | ≤6, ≤40% |
 | passed by on their own way (not counted as approaches) | 4 | 1 | 8 | 6 | — |
 | tells others (all residents) | 1 (Oswin Greave) | 1 (Nan Fenwick) | 3 (Tobiah Dunmore, Magda Tarn, Eilidh Roon) | **0** | 1–4, Ingrid in 2 of 4 runs |
-| first heard line after the join | 57 s (Roos) | 692 s (Nan) | 550 s (Jory) | none | within 5 minutes |
+| first heard line after the join | 892 s (Cora), corrected; first read 57 s (Roos) | 692 s (Nan) | 550 s (Jory) | none | within 5 minutes |
 | `converge_60s` / `together_4m` | 2 / 1 | 1 / 0 | 1 / 1 | 1 / 0 | ≤3 / ≤2 |
 | re-asks | 0 | 2 (Nan asked three more times) | 0 | 0 | — |
 | guards: false replies a min, repeated lines, `led_res` − placebo | 0.10, 0.07, −0.03 | 0.46, 0.00, +0.22 | 0.80, 0.00, −0.26 | 1.06, 0.03, +0.28 | within C's spread |
 | deliberations per resident-hour | 18.2 | 18.5 | 19.3 | 23.1 | (ar2: 24) |
+
+**Correction (2026-11-12, branch `earshot-stage`).** `arrive_spread.py` counted a line to the newcomer as out of earshot only when the speaker's `silence` row had the newcomer as its subject. When the newcomer is too far away to make out (past 24 m in Cullet), that row names them by the speaker's far handle instead (far-handle), so those lines counted as heard. Re-read with the fix: in C, Roos Achterberg's line at 57 s was out of earshot. C's lines to the newcomer out of earshot are 2, not 1, and its first heard line came at 892 s (Cora Stannard), not 57 s. L, LS and LS + cues are unchanged. The table above shows both figures. The same re-reading leaves stage 2 (`st2`) and fs1c unchanged.
 
 - **Not in shape.** No arm reaches the inward band or the unaware band, Aldous asked in no arm, and the cue arm has no asker.
 - **Aldous.** He was in range only in LS, classed unaware. He thought 4–6 times after the join in each arm, and stranger or arrival words came up only about other things ("me with a blank arrivals line waiting on names", LS + cues).
@@ -1492,6 +1550,60 @@ Switches in the fake proofs, to record again with the paid batch: greeting `near
 
 **SpacetimeDB.** Nothing here adds or changes a table, reducer, view or subscription. The census is the same SQL read of four small tables every 30 s as in the hamlet, for a developer's audit truth. The [HTTP database API](https://spacetimedb.com/docs/http/database/) (checked 2026-11-11) calls that endpoint intended for management and debugging, not a game data path. At 24–45 characters the reads stay small.
 
+
+### The plan, with the identity fix and the sleep fixes in the build (2026-11-12)
+
+Branch `self-body`. This supersedes the cost above. Nothing paid has run.
+
+**What the build now carries.** The batch measures choice: a run-born adult's prompts no longer describe a body the person does not have.
+
+- **The identity fix** (`self-body`).
+  - Every prompt's `# Who you are` ends with one perceived line, e.g. "Your body: 15 years old, an adult for a few hours." It goes into think, deliberate, consolidate, talk, reorganize, fast, and a player's lived consolidation, so players' characters under AI get it too. It comes from the character row and the life table under the world's `life_years` law, as the scene's `you.age` does. It sits beside the persona and never edits it.
+  - A stage change stays a lived experience (the authority's "You have grown up" percept, unchanged).
+  - A run-born mind that first starts when grown gets a first identity from facts, with no model call: "I am Faye, child of Brisk Marrow and Edda Marrow. Nell, Kit and Tobin Marrow are my parents' children too." It has its inborn temperament, no values, goals, pastimes or mood, and `CHILD_OF` edges and `parent` relations to both parents. In bi1, 14 run-born began with "(no persona yet)" and no parents.
+  - Proof: verify-minds `body` (features/self-body.md), with Neo4j.
+- **The sleep fixes**, on main since `0203fe60` (`fix-sleep-thinking`) and `6fedfa5f` (`fix-sleep-talk`). A sleeper's mind is asked to think only when something wakes it. A line that does not wake it waits for the sleeper to wake, with no talk turn.
+
+**Cadence on the current build** (`b4f`, 2026-11-12 15:44–16:33). Fake model with model-like latencies (`fake/latency.json`), 48 minutes (one game day, night included), one run of `hamlet-6` and one of `hamlet`, against bi1's real control. The table lists calls per resident-hour (census thinkers), and in brackets the share whose caller was asleep at the nearest census.
+
+| | `hamlet-6`, this build, fake | `hamlet`, this build, fake | bi1 control (`hamlet`, real, 6 h) |
+| --- | ---: | ---: | ---: |
+| Deliberations | 27.5 (0.06) | 20.7 (0.11) | 24.6 (0.30) |
+| Think steps | 27.5 (0.07) | 21.1 (0.14) | 24.6 (0.32) |
+| Consolidations | 27.2 (0.12) | 25.3 (0.19) | 23.1 (0.31) |
+| Talk turns | 20.8 (0.01) | 14.2 (0.02) | 7.7 (0.23) |
+| All calls | 103 | 81.3 | 81.1 |
+| Prompt characters per resident-hour | 2.81 M | 2.15 M | 2.52 M |
+
+Reading it:
+
+- **Sleepers think far less.** Deliberations from sleepers fell from 30% in bi1 to 6–11%, and talk turns by sleepers to 1–2%. That is the sleep fixes. The merges' own fake measures were 26.7 → 23.5 deliberations per resident-hour, and sleepers' talk calls 8 of 163 → 0 of 167.
+- **Fake talk runs long.** The latency script's talk replies do not end the exchange, so talk turns are high in both fake runs. Talk is the smallest prompt (5.6k characters against 59k for a deliberation), about 4% of prompt volume.
+- **More people, more calls each.** `hamlet-6` makes 1.27 times the calls per resident-hour of `hamlet` on the same build, and 1.30 times the prompt volume: more people in each scene, more conversations.
+
+**The body line's cost, measured.** All 1,960 `hamlet-6` prompts carried it, at 47 characters on average (about 12–14 tokens). That is 0.17% of prompt volume: about 1.4 M input tokens over a 2-replicate batch, **about $0.21** at glm-flash's uncached input price ($0.42 if all on deepseek-flash). The line changes once per year of age (6.9 real minutes), in 159 of 1,960 prompts. Each time, the rest of the character segment after it cannot come from the provider's prompt cache. The shared prefix before it (system prompt and rules) still can. That cache effect was not measured; it needs a paid run.
+
+**Cost per resident-hour, re-estimated.** From bi1's $0.13, on two routes:
+
+1. **Build, then seed.** The sleep fixes cut deliberations and think steps by 12% and talk by 5%. Weighted by bi1's prompt volume per purpose (deliberate 1.32 M, think 0.53 M, consolidate 0.57 M, talk 0.06 M, reorganize 0.04 M characters per resident-hour), that is ×0.91. Then `hamlet-6`'s density on this build is ×1.30: **$0.154**.
+2. **Direct.** `hamlet-6`'s fake prompt volume against bi1's real one, 2.81 M / 2.52 M = ×1.11: **$0.145**. Fake consolidations write no memories, so fake prompts stay shorter than real ones over hours, and this route is low.
+
+Take **$0.15 per resident-hour**, against bi1's $0.13 on the hamlet. Neither route is measured with real models.
+
+**Arms.** Control `hamlet-6` and `hamlet-6-longing`, 10 hours each, `minds.max` 48 (expected peak 34, high case 45), commands as above. Resident-hours per run from the projection above: control about 300, longing about 225, so 525 a replicate pair; the range is 450–742.
+
+| Replicates | Runs | Resident-hours | Estimate at $0.15 | Range ($0.145–0.154, 450–742 a pair) |
+| ---: | ---: | ---: | ---: | ---: |
+| 2 | 4 | 1,050 | **≈ $158** | $131–229 |
+| 3 | 6 | 1,575 | **≈ $236** | $196–343 |
+
+Recommendation unchanged: 2 replicates first, about $158 (up to about $230), and a third pair only if the two disagree on whether the run-born have children.
+
+**Still to settle with the batch.**
+
+- Provider capacity: about 120–140 minds on the service at once. Expect more overflow to deepseek-flash, whose input costs twice glm-flash's.
+- The switches to record: those above, plus the identity fix (body line on, `Origin::Grown`) and both sleep fixes.
+
 ### Not covered
 
 - Fake minds do not choose to conceive, so nothing here says whether the larger seed changes whom minds choose. `b2g`'s attempts are scripted.
@@ -1605,7 +1717,9 @@ Branch `births-identity`. Free: reading of code and of bi1's journals, nothing b
 
 Whether this holds back pairing is **not shown**. Dell and Ada did not try. Uma, who rewrote herself as grown, was the only run-born to try, but Teal and Hollis also rewrote and did not.
 
-**The fix's shape (not built).** It must come only from what the mind already has: the body it perceives, and what it lived, consolidated as usual. There is no rewritten persona, no instruction to change voice, and no want.
+**Built since (2026-11-12, `self-body`):** shapes 1 and 3 below, and shape 2 as an unchanged percept, without the `Self` node's `stage`. The body line is in every prompt, and a grown mind's first identity comes from facts. See [the plan with the identity fix](#the-plan-with-the-identity-fix-and-the-sleep-fixes-in-the-build-2026-11-12) and verify-minds `body`.
+
+**The fix's shape (as designed).** It must come only from what the mind already has: the body it perceives, and what it lived, consolidated as usual. There is no rewritten persona, no instruction to change voice, and no want.
 
 1. **The body's age and stage as a perceived fact, in every prompt's `# Who you are`.** The line would read, for example, "Your body: 15 years old, an adult since about a day." It comes from the same character row and life table that the scene's `you.age` already uses: `stage` and age from `born_ms`/`birth_age_days` at the world's pace and `life_years` law (the mind already reads `stage` in `body_now`, mind.rs:584), and how long ago the stage began from the same life table.
    - It sits beside the persona, not inside it. The authored or lived narrative stays as written.

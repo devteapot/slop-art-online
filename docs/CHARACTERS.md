@@ -140,6 +140,10 @@ python3 living/tools/characters/share.py pages --name set living/game/assets/loo
 # every type's iris still has the source colour the lines' eye colours are worked out from.
 python3 living/tools/characters/eye_colours.py living/game/assets/lookdev/types --check
 
+# Whether every type's brows are there and stay before the skin when a person's values move the face:
+# at rest, at every value's ends, and on every line of a look book.
+python3 living/tools/characters/brow_check.py living/game/assets/lookdev/types --book living/game/assets/characters/looks.json
+
 # Whether two people's baked clips are the same motion.
 python3 living/tools/characters/clips_compare.py living/game/assets/lookdev/anim/own-{man,woman}.glb
 
@@ -1587,11 +1591,44 @@ Every type's brow sat about 0.041 H above the eye, whatever the eye's size: on t
 - **Each type has a brow lift** (`types.json` `brow.lift`, in H; `face_types.brow_lift`): what brings its brow's lower edge to 0.72 openings above the eye (`BROW_GAP`, between the reference's two faces), and never below the head's brow line. It is 0.055 to 0.058 H (14 to 15 mm) on the large-eyed types (`adult-f-a`, `youth-f-a`, `child-u-a`), 0.033 to 0.037 and 0.020 to 0.022 on their `b` and `c` lines, 0.043 to 0.005 on the boys' and men's, 0.033 and 0.011 on `elder-f-a` and `-b`, and nothing on `elder-m-b`, `elder-m-c` and `elder-f-c`, whose narrow eyes already had their brows that far above in the eye's own measure.
 - **The arch, the tilt, the length and the thickness are unchanged.** The whole stroke moves up.
 - **The head's form is unchanged:** `above_eye` is still the form's brow line. Hair's fringe and the forehead's lines are still set by it.
-- **A brow rides its own bone whole, and the skin under it does not follow.** `J_Id_Brow_L` and `_R` sit at the drawn brow (`cage_head.rig_pivots`), a brow's vertices are theirs alone (`person.py`), and the skin has no share of them (`cage_head.identity_weights`). Before, the skin round the brow line followed the brow's bone, so `brow_thickness` and `brow_length` scaled a patch of forehead with the brow, and a brow lifted off its bone would have slid when either changed. The reference's brows are cards that move alone too. On the far head, whose brows are painted on its skin, that skin still follows.
+- **A brow rides its own bone whole, and the skin under it does not follow** (undone the same day: on people this put brows behind the skin, see [the brows on a person's face](#the-brows-on-a-persons-face))**.** `J_Id_Brow_L` and `_R` sit at the drawn brow (`cage_head.rig_pivots`), a brow's vertices are theirs alone (`person.py`), and the skin has no share of them (`cage_head.identity_weights`). Before, the skin round the brow line followed the brow's bone, so `brow_thickness` and `brow_length` scaled a patch of forehead with the brow, and a brow lifted off its bone would have slid when either changed. The reference's brows are cards that move alone too. On the far head, whose brows are painted on its skin, that skin still follows.
 - **`brow_height` now moves the drawn brow only,** in a head built from landmarks as on the bones (`face_types.apply`). `rig_check.py` for the four brow values: the skin moves 0.00 mm either way. `face_types.py check`: every type valid, 60,648 of 60,648 value ends valid.
 - **Hair is not changed.** A fringe still ends at the head's brow line by its `fringe` value, so on the lifted types a long fringe now covers the brows. Whether fringes should follow the brows up is for the hair pass.
 
 **What the client needs:** nothing in code. Take the bundle: the types (their brows, the brow bones' places and the skin's weights), and every hair, outfit and overlay file (what hangs on a head no longer follows the brow bones). Lines are unchanged.
+
+
+### The brows on a person's face
+
+A fix (2026-11-12, branch `char-4`), after the laptop's live check found `child-u-a` people with no brows.
+
+**What was wrong.** It was not `child-u-a`'s file and not one type: on **198 of the look book's 887 lines, on every type, some of a brow was behind the skin**, and on 54 more than half of it (21 and 6 of `child-u-a`'s 96 lines; 32 and 12 of `child-u-c`'s 107).
+
+- Every type's file had its brow primitive (`…FaceBrow_00_FACE`, 80 triangles), weighted to `J_Id_Brow_L` and `_R`, 1.0 to 1.2 mm before the skin at rest. A bare type showed its brows.
+- [The brows' place](#the-brows-place) had set that a brow rides its own bone whole and the skin under it does not follow. A person's values then moved the two apart: `forehead`, `brow_ridge` and `cranium_depth` push the forehead's skin forward by up to 4 mm and `brow_height` slides the brow up a forehead that curves, against 1.1 mm of clearance. With those at their ends a brow was up to 6.6 mm inside the head.
+- The step's own check looked at types at rest and at people in photographs, and the cast's brows that showed thin were read as thin brows.
+
+**What changed** (`cage_head.identity_weights`, `person.make_face`, `head_mesh.BROW_OFF`):
+
+- **The skin round a brow follows the brow's bone again,** on the face's own skin as on the far head's: one field round the brow's bone, 1.5 eye half-widths by 0.045 H, falling to nothing at 1.8 times that. What hangs on the head (hair, headwear) still does not, so no shared style file changes.
+- **A brow's vertices take the weights of the skin under them:** for each, the skin's triangle on the line of sight, its three corners' weights by how near each is, the four largest kept. Whatever a person's values do to the forehead they do to the brow. The skin's mesh is coarse there (edges of 7 to 19 mm), so giving the skin to the brow's bone alone would not have been enough.
+- **A brow stands 1.6 mm off the skin** (it was 1.1): where a man's brow crosses the crease over a small eye, the skin between the strip's own points left 0.5 mm at rest.
+- **The brow's own values still move it, a little less:** `brow_height` at its ends moves the brow 3.0 to 3.8 mm up and 1.8 to 2.3 mm down (4.1 and 2.4 before, when it rode its bone whole), `brow_thickness` makes it 0.76 to 1.32 as thick (0.7 to 1.4), `brow_length` 0.90 to 1.12 as long. The skin round it moves with it: `rig_check.py` on `child-u-a` gives 0.06 mm at most (root mean square, along the surface) for height, tilt and thickness, and 0.15 mm for `brow_length` at its end, 3.5 mm at the one worst point beside the temple.
+
+**The check** (`living/tools/characters/brow_check.py TYPES_DIR [--book looks.json]`): for every type, that the brow primitive is there and weighted, and how far each of its vertices and its triangles' middles stands before the skin's front on the line of sight, with the file posed the client's way: at rest, with each of the 38 values alone at each end, with `forehead`, `brow_ridge`, `cranium_depth`, `brow_height` and `socket_depth` together at their ends (8 poses), and on every line of a look book. It fails under 0.3 mm. `gen_types.sh` runs it after a full build, and the bundle runs it with the book.
+
+| | before | after |
+|---|---|---|
+| At rest, least on any type | 0.51 mm | 1.05 mm |
+| At rest, median | 1.15 to 1.24 mm | 1.71 to 1.81 mm |
+| Lines of the book with some of a brow behind the skin | 198 of 887 | 0 |
+| Least in any pose (values' ends, the eight together, the book's lines) | -6.6 mm | 0.64 mm (`elder-m-b`) |
+
+**Files:** the 21 types (weights and the brow's distance), and the 72 overlay files, which carry the face's weights. Hair, outfit pieces and the pages' layout are unchanged. **Lines and look keys are unchanged** (generation `c4-aa393793`).
+
+**What the client needs:** nothing in code. Take the bundle's types and overlay files together: an overlay from the earlier bundle on a new type would not follow the skin round the brows.
+
+**What it does not cover.** The check looks from the front, at the brows. Lashes and lash lines ride the orbit's bone with the skin round the eye and were not measured the same way. The brows' expressions (`Fcl_BRW_…`, not driven by the client) still move a brow over skin that does not follow.
 
 
 ### The neck's and the head's joints

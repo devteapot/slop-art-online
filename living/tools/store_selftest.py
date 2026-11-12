@@ -464,6 +464,21 @@ class Gate(unittest.TestCase):
             be.publish("assets", os.path.join(t, "many"), "motion/raw", "m")
             self.assertEqual(api.calls, ["create_repo", "create_commit", "create_commit", "create_commit"])
 
+    def test_missing_library_refuses_before_packing(self):
+        # gate open, no injected api, no huggingface_hub for this Python: refused by gate(), which
+        # publish calls before reading or packing anything, with the venv to use named
+        real = store.importlib.util.find_spec
+        store.importlib.util.find_spec = lambda name, *a: None if name == "huggingface_hub" else real(name, *a)
+        try:
+            be = store.HFBackend(self.cfg(True), yes_publish=True)
+            with self.assertRaises(store.Refused) as e:
+                be.gate()
+            self.assertIn(".slop-store-venv", str(e.exception))
+            with self.assertRaises(store.Refused):
+                be.api()
+        finally:
+            store.importlib.util.find_spec = real
+
     def test_cli_refuses_without_importing(self):
         poison = types.ModuleType("huggingface_hub")
 
@@ -812,7 +827,7 @@ class ManyBatches(unittest.TestCase):
 class JevPricing(unittest.TestCase):
     """TypeSafe Jev's price, per-call costs and share of totals leave every record (decision
     jev_pricing); other models' costs stay. Planted Jev figures are distinctive numbers."""
-    PRICE, CALL, SHARE = 0.0427, 7.31e-05, 0.0813
+    PRICE, CALL, SHARE = 0.0313, 7.31e-05, 0.0813
 
     def records(self):
         P, C, S = self.PRICE, self.CALL, self.SHARE
@@ -870,7 +885,7 @@ class JevPricing(unittest.TestCase):
         "| Jev p ≥ 0.3 | 27% | 3.3% | 77% |",
         "| GLM p ≥ 0.7 | 40% | 11.2% | 71% |",
         "",
-        "- **Both gates.** Jev is cheaper ($0.00006 against $0.00019 a question) and faster.",
+        "- **Both gates.** Jev is cheaper ($0.00071 against $0.00093 a question) and faster.",
         "  - Jev 0.3 with GLM is 9.2%, as with no gate, at 74% of the cost.",
         "- **DeepSeek alone** lowers harm (4.2%) at 29% more cost.",
         "  - Halving it holds 8% of the harmful, at a cost of 77% against 64%.",
@@ -883,7 +898,7 @@ class JevPricing(unittest.TestCase):
     def test_text(self):
         acc = store.Findings()
         out = store.jev_text(self.MD, acc)
-        for gone in ("$0.88", "$0.083", "77%", "$0.00006", "74%", "24%", "37–50%"):
+        for gone in ("$0.88", "$0.083", "77%", "$0.00071", "74%", "24%", "37–50%"):
             self.assertNotIn(gone, out)
         for kept in ("$0.231", "71%", "11.2%", "27%", "3.3%", "is 9.2%", "8% of the harmful", "64%",
                      "29% more cost", "4.2%", "37% of the waste"):
@@ -920,7 +935,7 @@ class JevPricing(unittest.TestCase):
                             blob += f.read()
                 with open(os.path.join(out, "MANIFEST.json"), "rb") as f:
                     blob += f.read()
-                for v in (repr(self.PRICE), repr(self.CALL), repr(self.SHARE), "$0.083", "$0.00006"):
+                for v in (repr(self.PRICE), repr(self.CALL), repr(self.SHARE), "$0.083", "$0.00071"):
                     self.assertEqual(v.encode() in blob, present, (decision, v))
                 self.assertIn(b"0.000191", blob)
                 self.assertIn(b"$0.231", blob)
