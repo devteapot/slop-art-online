@@ -1954,6 +1954,21 @@ def jsonl(path):
     return out
 
 
+SPOKEN_ID = re.compile(r"#\d+")
+
+
+def spoken_ids(speech):
+    """Lines said aloud whose words hold a `#<digits>` id (`record.speech`): an id is for acts and
+    memory ("a stranger #77" is a memory handle), never for speech, so this should be 0. Per
+    speaker id; the words are the quoted part of the chronicle line ("A to B: “...”")."""
+    by = Counter()
+    for r in speech:
+        m = re.search(r"“(.*)”", r.get("text") or "", re.S)
+        if SPOKEN_ID.search(m[1] if m else (r.get("text") or "").split(": ", 1)[-1]):
+            by[str(r.get("a"))] += 1
+    return {"lines": sum(by.values()), "by_speaker": dict(by), "of": len(speech)} if speech else None
+
+
 def summarize(d, trial, extra):
     samples = jsonl(d / "samples.jsonl")
     thoughts = jsonl(d / "thoughts.jsonl")
@@ -2124,6 +2139,7 @@ def summarize(d, trial, extra):
                 per_day[day]["tokens"] += r.get("tokens") or 0
         s["by_game_day"] = {k: dict(v) for k, v in sorted(per_day.items())}
     s["memories_remembered"] = remembered
+    s["spoken_ids"] = spoken_ids(jsonl(d / "speech.jsonl"))
     frame_probes(s, S, chron, j)
     s["exchanges"] = [{"ref": r["_ref"], "purpose": r.get("purpose"), "model": r.get("model"), "tokens": r.get("tokens"),
                        "reply": excerpt(r.get("reply"))} for r in j if r.get("purpose") in ("deliberate", "think", "talk")][:40]

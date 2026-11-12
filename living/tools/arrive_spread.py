@@ -65,6 +65,10 @@ resident thought for and in range (within 12 m of the newcomer during a stand):
   infancy within 12 m of the newcomer at some sample after the join who got a first-sight line
   naming it, of all such persons (the crowd fix: everyone in sight is perceived); `routines`,
   compile replies whose graph uses `"relation": "stranger"`.
+
+**Spoken ids** (every run): `id_lines`, lines said aloud (speech.jsonl, the quoted words) holding
+`#<digits>`, and per speaker (`id_by`, in --json and the strangers section). An id is for acts and
+memory ("a stranger #77" is a memory handle, fix-stranger-merge), never for speech: 0 expected.
 """
 import argparse
 import importlib.util
@@ -174,6 +178,11 @@ def extra(d, sid, names, minds):
     chron = jl(d / "chronicle.jsonl")
     gave = {r["a"] for r in chron if r.get("b") == sid and r.get("kind") in GIVE_KINDS}
     threat = {r["a"] for r in chron if r.get("b") == sid and r.get("kind") in HOSTILE_KINDS}
+    # Spoken ids: lines whose words hold `#<digits>` (an id is for acts and memory, never speech).
+    hashed = defaultdict(int)
+    for s in speech:
+        if re.search(r"#\d+", quoted(s.get("text", ""))):
+            hashed[names.get(s["a"], f"#{s['a']}")] += 1
     delibs = sum(1 for r in jl(d / "thoughts_all.jsonl") if r.get("kind") == "deliberate" and r.get("actor") in minds)
     turns = sum(1 for r in jl(d / "talk.jsonl") if r.get("actor") in minds)
     res_h = len(minds) * minutes / 60 if minutes else None
@@ -183,7 +192,7 @@ def extra(d, sid, names, minds):
             "lines_to": len(heard) + n_far, "far": n_far, "heard": len(heard), "heard_res": len({s["a"] for s in heard}),
             "intro": len(intro), "invite": len(invite), "gave": len(gave), "threat": len(threat), "reasks": reasks,
             "delib_ph": round(delibs / res_h, 1) if res_h else None, "talk_ph": round(turns / res_h, 1) if res_h else None,
-            "res_h": res_h, "join_ms": join_ms, "to_new_ms": {(s["a"], s["at_ms"]) for s in to_new}}
+            "res_h": res_h, "join_ms": join_ms, "id_lines": sum(hashed.values()), "id_by": dict(hashed), "to_new_ms": {(s["a"], s["at_ms"]) for s in to_new}}
 
 
 def guards(lives, to_new_ms, sid):
@@ -223,7 +232,7 @@ def proxy_score(lives, model):
     return round(statistics.mean(scores), 2) if scores else None
 
 
-COLS = ["in_range", "acted_share", "heard_res", "contact_join_s", "heard_join_s", "lines_to", "far", "c_line", "c_watch", "c_pass",
+COLS = ["id_lines", "in_range", "acted_share", "heard_res", "contact_join_s", "heard_join_s", "lines_to", "far", "c_line", "c_watch", "c_pass",
         "intro", "invite", "gave", "threat", "told", "reasks", "converge_60s", "together_4m", "false_min", "rep_res", "rep_new",
         "led_res", "plc_res", "led_new", "score", "delib_ph", "talk_ph", "reused", "reused_ev", "carried_again", "usd", "usd_rh"]
 # Which direction is a cost: +1 when more is worse (for the "worse" marks of the guards).
@@ -431,7 +440,7 @@ def main():
                 print(f"### {arm} r{r['rep']}\n")
                 print(f"classes {st['classes']}; tells {st['tells']} ({st['tells_out']} beyond 12 m at the join); first heard line {st['first_heard']}; "
                       f"first-sight lines naming the newcomer {st['fs_cover']} persons within 12 m after the join (without one: {st['fs_missing']}); "
-                      f"routines with relation stranger {st['routines']}; converge_60s {st['converge_60s']}; together_4m {st['together_4m']}; re-asks {st['reasks']}\n")
+                      f"routines with relation stranger {st['routines']}; spoken ids {r.get('id_lines')} {r.get('id_by') or ''}; converge_60s {st['converge_60s']}; together_4m {st['together_4m']}; re-asks {st['reasks']}\n")
                 if st["residents"]:
                     print("| resident | duty | curiosity | sociability | caution | first sight | class | thought |")
                     print("|---|---|---:|---:|---:|---|---|---|")
