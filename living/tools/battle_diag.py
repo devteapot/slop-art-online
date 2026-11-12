@@ -80,6 +80,16 @@ def count(run, table):
     return int(nums[-1]) if nums else None
 
 
+def database_identity(db):
+    """A database's identity by its name (`GET /v1/database/<name>`); "" when it is gone. The
+    server's `spacetime list` drops a database once deleted and is not a sampler's source."""
+    try:
+        with urllib.request.urlopen(f"{URL}/v1/database/{db}", timeout=30) as r:
+            return json.loads(r.read())["database_identity"]["__identity__"].removeprefix("0x")
+    except Exception:  # noqa: BLE001
+        return ""
+
+
 def metrics(ident):
     want = ("spacetime_worker_wasm_memory_bytes", "spacetime_message_log_size_bytes", "spacetime_worker_instance_operation_queue_length", "spacetime_module_log_file_size_bytes")
     out = {}
@@ -124,8 +134,8 @@ def main():
     try:
         run.harness("launch", "--seed", "island")
         run.harness("doctor")
-        listing = subprocess.run([STDB, "list", "-s", "local"], capture_output=True, text=True).stdout
-        ident = next((l.split("|")[1].strip() for l in listing.splitlines() if l.split("|")[0].strip() == run.db), "")
+        # The database's identity by its name (`GET /v1/database/<name>`), not from `spacetime list`.
+        ident = database_identity(run.db)
         before = {c["id"] for c in run.sql("SELECT id FROM character", "chars-0")}
         run.admin("spawn_battle", 1)
         probe = [c for c in run.sql("SELECT id FROM character", "chars-probe") if c["id"] not in before]
