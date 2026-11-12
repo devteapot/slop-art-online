@@ -241,7 +241,8 @@ pub const NOBODY_HEARD: &str = "Nobody was near enough to hear you.";
 /// `speech_truth` law, on by default) the fact alone: "<Who> is too far away: they could not
 /// have heard you." when the speaker sees them, "<Who> is out of earshot: they could not have
 /// heard you." when it does not (out of sight, absent or dead alike, so ids cannot be probed).
-/// No advice: what to do about it is the speaker's choice. Without it, `speech-2`'s words.
+/// Someone too far away to make out is "They are …" (`unheard_subject`). No advice: what to do
+/// about it is the speaker's choice. Without it, `speech-2`'s words.
 #[allow(clippy::too_many_arguments)]
 fn unheard_text(ctx: &ReducerContext, sc: &living_rules::script::Scripts, w: &WaySpec, me: &Character, to: u32, at: (f32, f32), facing: f32, truth: bool, now: u64) -> String {
     let world = common::world(ctx);
@@ -249,16 +250,26 @@ fn unheard_text(ctx: &ReducerContext, sc: &living_rules::script::Scripts, w: &Wa
         let p = pos(&tb, now);
         crate::perception::in_sight(ctx, &common::map(ctx), me.id, at, facing, to, p, common::dist(at, p), &world, now, false)
     });
-    let who = common::label_cap(ctx, me, to);
+    let who = unheard_subject(&common::label_cap(ctx, me, to));
     match (truth, seen) {
-        (true, true) => format!("{who} is too far away: they could not have heard you."),
-        (true, false) => format!("{who} is out of earshot: they could not have heard you."),
+        (true, true) => format!("{who} too far away: they could not have heard you."),
+        (true, false) => format!("{who} out of earshot: they could not have heard you."),
         (false, true) => {
             let louder = sc.ways().iter().filter(|o| o.public() && o.carry_for(1.0) > w.carry_for(1.0) && o.needs.is_empty()).max_by(|a, b| a.carry_for(1.0).total_cmp(&b.carry_for(1.0)));
             let how = louder.map_or("go closer".to_string(), |o| format!("{} or go closer", o.label.to_lowercase()));
-            format!("{who} is too far to hear you; {how}.")
+            format!("{who} too far to hear you; {how}.")
         }
         (false, false) => format!("No answer from {}; they don't seem to be within earshot.", common::label_for(ctx, me, to)),
+    }
+}
+
+/// The subject of an unheard line's words: "Bram is", "A stranger is"; for someone too far away
+/// to make out "They are", so the label is not followed by "is too far away" (fix-far-silence).
+fn unheard_subject(label: &str) -> String {
+    if label.eq_ignore_ascii_case(living_rules::script::FAR_PERSON) {
+        "They are".into()
+    } else {
+        format!("{label} is")
     }
 }
 
@@ -330,6 +341,13 @@ fn mentions(text: &str, name: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::mentions;
+
+    #[test]
+    fn a_far_figure_is_they_not_the_label_twice() {
+        assert_eq!(super::unheard_subject("Someone too far away to make out"), "They are");
+        assert_eq!(super::unheard_subject("Bram"), "Bram is");
+        assert_eq!(super::unheard_subject("A stranger"), "A stranger is");
+    }
 
     #[test]
     fn a_name_is_mentioned_by_its_given_name_or_in_full() {
