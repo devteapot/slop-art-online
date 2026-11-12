@@ -414,7 +414,12 @@ The proposed licence of both cards is MIT, matching the code. That is the owner'
 
 ## Fetch and publish
 
-- **Asset packs name no machine** (`store-no-machine`): the motion library's `MANIFEST.json` has no `machine` field, its paths and commit message ("motion library") carry no machine label or host name, and the assets card says the takes were made "on our own hardware". The self-test `AssetPacksNameNoMachine` packs and publishes (local backend) with `STORE_MACHINE` set and searches every file, path, the commit log and the card for the label, the host name, `spark`, `laptop` and `dev-box`. The runs dataset still uses role labels in its layout; see the open question in the coordinator's thread.
+- **Asset packs name no machine** (`store-no-machine`): the motion library's `MANIFEST.json` has no `machine` field, its paths and commit message ("motion library") carry no machine label or host name, and the assets card says the takes were made "on our own hardware". The self-test `AssetPacksNameNoMachine` packs and publishes (local backend) with `STORE_MACHINE` set and searches every file, path, the commit log and the card for the label, the host name, `spark`, `laptop` and `dev-box`.
+
+**Machine names: the rule for both datasets** (general coordinator, 2026-11-12):
+- Role labels (`spark`, `laptop`, `dev-box`, the three roles the project's docs name) are allowed where they say where a run happened: the runs dataset's `batches/<role>/…` and `sessions/<role>/…` paths, its manifests' `machine` field and its commit messages. They help readers compare runs; nothing already published moves.
+- Real host names, IP addresses, user names and home paths are never allowed, in either dataset (the scrubber redacts them; the publish checks refuse them).
+- The assets dataset carries no machine label at all (above).
 - **`fetch motion-library`** copies `motion/raw/*.npz` from the assets repository into `.local/kimodo/outputs/library/`, the folder `gen_anim.sh` and `gen_person.sh` read. This replaces the `rsync` from the Spark in `spark.sh`.
   - Every take is checked against `motion/MANIFEST.json`'s sha256.
   - A take already there with the same content is kept.
