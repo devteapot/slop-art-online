@@ -61,7 +61,8 @@ def classify(o):
         return "guarded"
     if "dodged" in o:
         return "dodged"
-    if "missed" in o or "out of reach" in o or "hit nothing" in o or "struck a wall" in o:
+    # Out of reach: missed at the release, or refused at it because the target had moved away.
+    if "missed" in o or "out of reach" in o or "moved away" in o or "hit nothing" in o or "struck a wall" in o:
         return "evaded"
     if "broken off" in o:
         return "broken"

@@ -1762,6 +1762,327 @@ def flee(s):
     s.expect("the flight ends about flee_clear farther than it began", track and track[-1] >= start + 7.0, {"start": start, "end": track[-1] if track else None})
 
 
+
+def open_patch(s, size=14, avoid=()):
+    """The centre of a `size` × `size` square of walkable tiles (nothing that blocks sight or the
+    foot in it), for movement that needs room on every side; with `avoid`, more than 12 m from
+    each of those points."""
+    W, H, walk = tile_grid(s)
+    half = size // 2
+    for y in range(half + 4, H - half - 4, 4):
+        for x in range(half + 4, W - half - 4, 4):
+            if any(math.dist((x, y), q) <= 12 + half for q in avoid):
+                continue
+            if all(walk(x + i, y + j) for i in range(-half, half + 1) for j in range(-half, half + 1)):
+                return (x + 0.5, y + 0.5)
+    raise RuntimeError(f"no open {size} m square on this map")
+
+
+def facing_now(b, now):
+    """Which way a body faces at `now` (`living_rules::steer::facing`): its heading along its
+    segment's turn, plus its facing offset along its own turn."""
+    dt = max(0, min(now, b["next_ms"]) - b["t_ms"]) / 1000
+    h = b["heading"] + b["turn"] * min(dt, b["turn_s"])
+    off = b["face_off"] + b["face_turn"] * min(max(dt, 0), b["face_turn_s"])
+    return h + off
+
+
+def angle_off(a, b):
+    """The angle between two directions, 0..π."""
+    return abs((a - b + math.pi) % (2 * math.pi) - math.pi)
+
+
+def intents(s):
+    """Movement intents (docs/COMBAT_MIND.md §3.3, features/steering.md "Movement intents"):
+    graph leaves for any controller, on the same steering as a player's keys. On an open line:
+    `keep_distance` (3–6 m) holds its band against a walker coming at it, then re-aims when the
+    walker turns away; `close_in` with `run: true` catches a walker at the run's speed, draining
+    breath, and ends within its distance; `back_off` reaches its distance and stands facing what
+    it backed from; `follow` (3 m) trails a walker out and back. In an open square: `circle`
+    (4 m, left, then right) keeps its radius and its side, and re-aims when the centre moves.
+    Then a target taken out of sight ends a keep_distance after the `lost_after_s` law with "lost
+    sight of them", and an unseen target, oneself and a band upside down are refused."""
+    line = open_line(s, length=44)
+    a, b = s.people(2)
+    now = lambda: s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+    # People walk at their own pace (their genes): a body cannot keep away from, or keep up
+    # with, a faster one at a walk, as a player cannot. The faster of the two holds and follows.
+    pace = {}
+    for i, k in ((a, 1), (b, 2)):
+        s.call("place_at", i, line[0][0], line[0][1] + (-1) ** k)
+        s.graph(i, {"do": {"skill": "goto", "target": {"at": [line[30][0], line[0][1] + (-1) ** k]}}})
+    time.sleep(1.2)
+    for i in (a, b):
+        pace[i] = s.rows(f"SELECT speed FROM body WHERE id = {i}")[0]["speed"]
+    if pace[b] > pace[a]:
+        a, b = b, a
+    (s.out / f"{s.name}-paces.json").write_text(json.dumps({"holder": a, "walker": b, "walk": pace}, indent=1) + "\n")
+    y0 = line[0][1]
+    lost = law_value(s, "lost_after_s")
+
+    def rowsof(*ids):
+        return {r["id"]: r for r in s.rows("SELECT * FROM body WHERE " + " OR ".join(f"id = {i}" for i in ids))}
+
+    def sample():
+        t = now()
+        r = rowsof(a, b)
+        pa, pb = body_at(s, a, t, r[a]), body_at(s, b, t, r[b])
+        act = s.rows(f"SELECT skill FROM activity WHERE id = {a}")
+        return {"t": t, "a": [round(pa[0], 2), round(pa[1], 2)], "b": [round(pb[0], 2), round(pb[1], 2)],
+                "gap": round(math.dist(pa, pb), 2), "speed_a": round(math.hypot(r[a]["vx"], r[a]["vy"]), 2), "cruise_a": round(r[a]["speed"], 3),
+                "running": r[a]["running"], "facing_off": round(angle_off(facing_now(r[a], t), math.atan2(pb[1] - pa[1], pb[0] - pa[0])), 3),
+                "act": act[0]["skill"] if act else None}
+
+    def watch(label, seconds, until=None):
+        out, end = [], time.monotonic() + seconds
+        while time.monotonic() < end:
+            out.append(sample())
+            if until and until(out[-1]):
+                break
+            time.sleep(0.1)
+        (s.out / f"{s.name}-{label}.json").write_text(json.dumps(out, indent=1) + "\n")
+        return out
+
+    def still(*ids):
+        for i in ids:
+            s.graph(i, {"wait": 300})
+
+    def settled(seconds=8):
+        """The holder's state once it has stood for two looks running (or after `seconds`)."""
+        last, end = None, time.monotonic() + seconds
+        while time.monotonic() < end:
+            x = sample()
+            if x["speed_a"] == 0 and last is not None and last["speed_a"] == 0:
+                return x
+            last = x
+            time.sleep(0.3)
+        return sample()
+
+    def put(i, x, y):
+        s.call("place_at", i, x, y)
+
+    # 1. keep_distance against a walker coming at it.
+    still(a, b)
+    put(b, *line[2])
+    put(a, line[6][0] + 0.5, y0)
+    time.sleep(1.0)
+    s.graph(a, {"seq": [{"do": {"skill": "keep_distance", "target": {"id": b}, "min": 3, "max": 6, "qty": 60}}, {"wait": 300}]})
+    time.sleep(1.0)
+    st = s.rows(f"SELECT goal, target, keep, far, flags FROM steer WHERE id = {a}", "keep-steer")[0]
+    s.expect("keep_distance is a band goal held to the walker by sight", st["goal"] == 5 and st["target"] == b and abs(st["keep"] - 3) < 1e-3 and abs(st["far"] - 6) < 1e-3 and st["flags"] & 128, st)
+    start_a = body_at(s, a)
+    s.graph(b, {"do": {"skill": "goto", "target": {"at": list(line[36])}}})
+    track = watch("keep-approach", 16, until=lambda x: x["b"][0] >= line[36][0] - 0.3 and x["speed_a"] == 0)
+    end = settled()
+    moving = [x for x in track if x["b"][0] > line[3][0]]
+    s.expect("held its band against the walker: never nearer than 2 m (the band's 3 m less a look's reaction)", moving and min(x["gap"] for x in moving) >= 2.0,
+             {"min_gap": min((x["gap"] for x in moving), default=None), "samples": len(moving)})
+    s.expect("it backed off: walked over 10 m away along the line", end["a"][0] - start_a[0] > 10, {"start": start_a, "end": end["a"]})
+    s.expect("the walker stopped: it stands in the band facing it", 2.8 <= end["gap"] <= 6.2 and end["speed_a"] == 0 and end["facing_off"] < 0.45, end)
+    # Re-aims as the target moves: the walker turns and goes back down the line; the holder
+    # follows it there (both put back on the open line, a band well within night sight).
+    still(a, b)
+    put(a, *line[40])
+    put(b, *line[37])
+    time.sleep(1.5)
+    s.graph(a, {"seq": [{"do": {"skill": "keep_distance", "target": {"id": b}, "min": 2.5, "max": 4.5, "qty": 60}}, {"wait": 300}]})
+    time.sleep(1.0)
+    end = sample()
+    s.graph(b, {"do": {"skill": "goto", "target": {"at": list(line[16])}}})
+    track = watch("keep-reaim", 14, until=lambda x: x["b"][0] <= line[16][0] + 0.3 and x["speed_a"] == 0)
+    end2 = settled()
+    s.expect("re-aims at the walker as it goes back: follows it down the line and stands in the band", end2["a"][0] < end["a"][0] - 15 and 2.3 <= end2["gap"] <= 4.7,
+             {"before": end["a"], "after": end2["a"], "gap": end2["gap"]})
+
+    # 2. close_in at a run on a walker going away: the run's speed, breath drains, ends within 2 m.
+    still(a, b)
+    put(a, *line[1])
+    put(b, *line[6])
+    time.sleep(1.5)
+    # 5 m apart (within sight by night too), the walker going away at a walk.
+    s.graph(a, {"seq": [{"do": {"skill": "close_in", "target": {"id": b}, "distance": 1, "run": True}}, {"wait": 300}]})
+    s.graph(b, {"do": {"skill": "goto", "target": {"at": list(line[43])}}})
+    time.sleep(0.6)
+    v = s.vitals(a, "close-vitals-running")
+    track = watch("close-in", 14, until=lambda x: x["act"] == "wait")
+    # The cruising speed on the row (what steering moves it at; the velocity is lower while it
+    # slows in near its distance, and a catch from 5 m lasts about a second).
+    runs = [x["cruise_a"] for x in track if x["act"] == "close_in" and x["running"]]
+    share = law_value(s, "run_share")
+    s.expect("close_in with run: true runs at run_share times its own walk", runs and abs(max(runs) / pace[a] - share) < 0.1,
+             {"run_speed": max(runs, default=None), "own_walk": pace[a], "run_share": share})
+    s.expect("the run drains breath (the vitals row's rate, as for anyone's run)", v["stamina_rate"] < 0, {"stamina_rate": v["stamina_rate"], "stamina": v["stamina"]})
+    done = track[-1]
+    s.expect("close_in ends within its distance of the walker, re-aimed at it all the way", done["act"] == "wait" and done["gap"] <= 1.6, done)
+    time.sleep(1.5)
+    v2 = s.vitals(a, "close-vitals-after")
+    s.expect("standing again, breath comes back", v2["stamina_rate"] >= 0, {"stamina_rate": v2["stamina_rate"]})
+
+    # 3. back_off to 7 m, then stand facing it.
+    still(a, b)
+    put(b, *line[22])
+    put(a, *line[20])
+    time.sleep(1.5)
+    s.graph(a, {"seq": [{"do": {"skill": "back_off", "target": {"id": b}, "distance": 7}}, {"wait": 300}]})
+    time.sleep(0.6)
+    st = s.rows(f"SELECT goal, target, keep, flags FROM steer WHERE id = {a}", "back-steer")[0]
+    track = watch("back-off", 8, until=lambda x: x["act"] == "wait")
+    time.sleep(1.0)
+    end = settled()
+    s.expect("back_off steers away from the creature, held by sight", st["goal"] in (4, 0) and st["flags"] & 128 and abs(st["keep"] - 7) < 1e-3, st)
+    s.expect("back_off reaches its distance and is done", track[-1]["act"] == "wait" and end["gap"] >= 6.9, {"end": end, "last": track[-1]})
+    s.expect("it stands facing what it backed from", end["speed_a"] == 0 and end["facing_off"] < 0.3, end)
+
+    # 4. follow at 3 m: trails a walker out, then back the other way.
+    still(a, b)
+    put(a, *line[1])
+    put(b, *line[4])
+    time.sleep(1.5)
+    s.graph(a, {"seq": [{"do": {"skill": "follow", "target": {"id": b}, "distance": 3, "qty": 40}}, {"wait": 300}]})
+    s.graph(b, {"seq": [{"do": {"skill": "goto", "target": {"at": list(line[34])}}}, {"wait": 1}, {"do": {"skill": "goto", "target": {"at": list(line[8])}}}, {"wait": 300}]})
+    went = []
+    out = watch("follow", 34, until=lambda x: went.append(x["b"][0] > line[30][0]) or (any(went) and x["b"][0] <= line[8][0] + 0.3 and x["speed_a"] == 0))
+    outward = [x for x in out if line[10][0] < x["b"][0] < line[32][0] and x["b"][0] > x["a"][0]]
+    gaps = sorted(x["gap"] for x in outward)
+    turn = max(out, key=lambda x: x["a"][0])
+    # The follower sets off up to a look (1 s for a still target) after the walker and gains
+    # only what its own walk has over the walker's (`intents-paces.json`): it trails a little
+    # beyond its 3 m, never falling back.
+    s.expect("follow trails the walker out near its distance (median 2.5–5.5 m, never over 6.5)", gaps and 2.5 <= gaps[len(gaps) // 2] <= 5.5 and gaps[-1] <= 6.5,
+             {"median": gaps[len(gaps) // 2] if gaps else None, "max": gaps[-1] if gaps else None, "n": len(gaps)})
+    s.expect("follow re-aims when the walker turns back: it comes back down the line after it", out[-1]["a"][0] < turn["a"][0] - 10, {"farthest": turn["a"], "end": out[-1]["a"]})
+
+    # 5. circle at 4 m in an open square, left then right; the centre moves and it re-aims.
+    still(a, b)
+    c = open_patch(s, 16)
+    put(b, *c)
+    put(a, c[0] + 4, c[1])
+    time.sleep(1.5)
+    s.graph(a, {"seq": [{"do": {"skill": "circle", "target": {"id": b}, "radius": 4, "side": "left", "qty": 60}}, {"wait": 300}]})
+
+    def orbit(label, seconds):
+        out = watch(label, seconds)
+        swept, last = 0.0, None
+        for x in out:
+            ang = math.atan2(x["a"][1] - x["b"][1], x["a"][0] - x["b"][0])
+            if last is not None:
+                swept += (ang - last + math.pi) % (2 * math.pi) - math.pi
+            last = ang
+        settled = out[len(out) // 4:]
+        return out, swept, max((abs(x["gap"] - 4) for x in settled), default=None)
+
+    out, swept, worst = orbit("circle-left", 12)
+    s.expect("circle keeps its radius: within 0.8 m of 4 m once going", worst is not None and worst <= 0.8, {"worst": worst})
+    s.expect("circle goes round to the left (facing it; the angle about it falling): over half a turn", swept < -math.pi, {"swept_rad": round(swept, 2)})
+    s.expect("circling, it faces the centre as far as walking allows (look_walk_deg)", max(x["facing_off"] for x in out[len(out) // 2:]) < math.radians(law_value(s, "look_walk_deg") - 60) + 0.35,
+             {"worst_facing_off": max(x["facing_off"] for x in out[len(out) // 2:])})
+    s.graph(b, {"do": {"skill": "goto", "target": {"at": [c[0] - 3, c[1]]}}})
+    out, _, _ = orbit("circle-moved", 9)
+    late = out[len(out) // 2:]
+    s.expect("the centre moved 3 m: the circle follows it (within 1 m of 4 m from where it is now)", late and max(abs(x["gap"] - 4) for x in late) <= 1.0, {"gaps": [x["gap"] for x in late]})
+    s.graph(a, {"seq": [{"do": {"skill": "circle", "target": {"id": b}, "radius": 4, "side": "right", "qty": 60}}, {"wait": 300}]})
+    out, swept, _ = orbit("circle-right", 8)
+    s.expect("circle to the right goes the other way round", swept > math.pi / 2, {"swept_rad": round(swept, 2)})
+
+    # 6. Out of sight: the target taken 40 m off ends a keep_distance after lost_after_s.
+    s.graph(a, {"seq": [{"do": {"skill": "keep_distance", "target": {"id": b}, "min": 3, "max": 6, "qty": 60}}, {"wait": 300}]})
+    time.sleep(1.0)
+    still(b)
+    gone = open_patch(s, 6, avoid=[c, body_at(s, a)])
+    t0 = now()
+    put(b, *gone)
+    told = s.wait(lambda: [r for r in s.rows(f"SELECT kind, text, at_ms FROM experience WHERE observer = {a}") if r["kind"] == "own" and "lost sight of them" in r["text"] and r["at_ms"] >= t0], seconds=lost + 8, every=0.25)
+    ended = (told[0]["at_ms"] - t0) / 1000
+    s.expect(f"a target out of sight ends it after lost_after_s ({lost} s): 'lost sight of them'", lost - 0.3 <= ended <= lost + 1.5,
+             {"after_s": round(ended, 2), "gone_m": round(math.dist(gone, c), 1), "told": told[0]["text"]})
+
+    # 7. Refusals, told truthfully: an unseen target (a mind's one-off close_in), oneself, a
+    # band upside down (refused by the grammar, naming the fix).
+    s.graph(a, {"wait": 300})
+    s.act(a, {"do": "close_in", "target": {"id": b}, "distance": 2})
+    unseen = s.wait(lambda: s.told(a, "in sight", kind="act"), seconds=10)
+    s.expect("a one-off close_in toward someone out of sight is refused: not in sight", unseen, [t["text"] for t in unseen][-1:])
+    put(b, c[0] + 2, c[1])
+    put(a, *c)
+    time.sleep(1.0)
+    s.graph(a, {"seq": [{"do": {"skill": "circle", "target": "self", "radius": 3}}, {"wait": 300}]})
+    time.sleep(1.5)
+    selfish = s.told(a, "not yourself", kind="own")
+    s.expect("refused toward oneself", selfish, [t["text"] for t in s.rows(f"SELECT kind, text FROM experience WHERE observer = {a}")][-3:])
+    r = s.call("set_behavior", a, json.dumps({"do": {"skill": "keep_distance", "target": {"id": b}, "min": 6, "max": 3}}), check=False)
+    s.expect("a band upside down is refused by the grammar, naming the fix", r.returncode != 0 and "beyond" in (r.stdout + r.stderr), (r.stdout + r.stderr)[-300:])
+    still(a, b)
+
+
+def intents_cost(s):
+    """What movement intents cost the tick (features/steering.md "Movement intents"): `N`
+    (default 16) people stand still, then each circles (4 m) or keeps a 3–6 m band from a
+    partner who walks back and forth, for `SECONDS` (default 20) each. With the module's
+    profiling on, the `tick.motion` span (the steering updates) and the `stats.motions` count
+    give the steering updates a second and the time per update; `intents_cost-cost.json`."""
+    from datetime import datetime, timezone
+    n = int(os.environ.get("N", "16"))
+    secs = float(os.environ.get("SECONDS", "20"))
+    people = s.people(2 * n)
+    holders, partners = people[:n], people[n:]
+    centre = open_patch(s, 10)
+    spots = []
+    taken = [centre]
+    for k in range(n):
+        p = open_patch(s, 10, avoid=taken)
+        taken.append(p)
+        spots.append(p)
+
+    def stats():
+        return s.rows("SELECT motions, ticks FROM stats")[0]
+
+    def window(label):
+        s.call("set_profile", True)
+        t0, k0 = time.time(), stats()
+        time.sleep(secs)
+        t1, k1 = time.time(), stats()
+        s.call("set_profile", False)
+        logs = s.command("logs", "-s", "local", s.db, "-n", str(int(secs * 60 * 12 + 4000))).stdout
+        spent = 0.0
+        for m in re.finditer(r'^(\S+Z)\s.*Timing span "tick\.motion": ([\d.]+)(µs|ms|s)\b', logs, re.M):
+            stamp = m.group(1)[:26].rstrip("Z")
+            at = datetime.strptime(stamp, "%Y-%m-%dT%H:%M:%S.%f" if "." in stamp else "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc).timestamp()
+            if t0 <= at <= t1:
+                spent += float(m.group(2)) * {"µs": 1e-3, "ms": 1.0, "s": 1e3}[m.group(3)]
+        dt = t1 - t0
+        out = {"label": label, "seconds": round(dt, 1), "motions_per_s": round((k1["motions"] - k0["motions"]) / dt, 1), "motion_ms_per_s": round(spent / dt, 3)}
+        print(json.dumps(out), flush=True)
+        return out
+
+    for h, p, at in zip(holders, partners, spots):
+        s.graph(h, {"wait": 300})
+        s.graph(p, {"wait": 300})
+        s.call("place_at", p, *at)
+        s.call("place_at", h, at[0] + 4, at[1])
+    time.sleep(2)
+    base = window("standing")
+    for k, (h, p, at) in enumerate(zip(holders, partners, spots)):
+        if k % 2:
+            s.graph(p, {"seq": [{"do": {"skill": "goto", "target": {"at": [at[0] - 3, at[1]]}}}, {"do": {"skill": "goto", "target": {"at": [at[0] + 3, at[1]]}}}]})
+            s.graph(h, {"do": {"skill": "keep_distance", "target": {"id": p}, "min": 3, "max": 6, "qty": 600}})
+        else:
+            s.graph(h, {"do": {"skill": "circle", "target": {"id": p}, "radius": 4, "qty": 600}})
+    time.sleep(2)
+    held = window("intents")
+    walkers = n // 2
+    extra_updates = held["motions_per_s"] - base["motions_per_s"]
+    extra_ms = held["motion_ms_per_s"] - base["motion_ms_per_s"]
+    res = {"n_holders": n, "walking_partners": walkers, "standing": base, "intents": held,
+           "updates_per_s_per_intent": round(extra_updates / n, 2),
+           "us_per_update": round(1000 * extra_ms / max(extra_updates, 1), 1),
+           "motion_ms_per_s_per_intent": round(extra_ms / n, 4)}
+    (s.out / f"{s.name}-cost.json").write_text(json.dumps(res, indent=1) + "\n")
+    print(json.dumps(res), flush=True)
+    for x in people:
+        s.graph(x, {"wait": 300})
+    s.expect("the intents ran and were measured", held["motions_per_s"] > base["motions_per_s"], res)
+
+
 def food(s):
     """\"food\" is anything the rules give nutrition: a person carrying only smoked fish has
     food, and eats and gives it as \"food\" (before 2026-11-10 `best_food` listed five foods and
@@ -3789,6 +4110,8 @@ SCENES["chase"] = chase
 SCENES["doing_seen"] = doing_seen
 SCENES["doing_cost"] = doing_cost
 SCENES["owners"] = owners
+SCENES["intents"] = intents
+SCENES["intents_cost"] = intents_cost
 
 
 def main():
