@@ -48,6 +48,10 @@ pub mod connection_table;
 pub mod connection_type;
 pub mod create_floor_reducer;
 pub mod cry_prompt_type;
+pub mod cue_fire_type;
+pub mod cue_in_type;
+pub mod cue_table;
+pub mod cue_type;
 pub mod cursor_type;
 pub mod deliberation_table;
 pub mod deliberation_type;
@@ -329,6 +333,10 @@ pub use connection_table::*;
 pub use connection_type::Connection;
 pub use create_floor_reducer::create_floor;
 pub use cry_prompt_type::CryPrompt;
+pub use cue_fire_type::CueFire;
+pub use cue_in_type::CueIn;
+pub use cue_table::*;
+pub use cue_type::Cue;
 pub use cursor_type::Cursor;
 pub use deliberation_table::*;
 pub use deliberation_type::Deliberation;
@@ -1096,6 +1104,7 @@ pub struct DbUpdate {
     combat_seen: __sdk::TableUpdate<CombatSeen>,
     community: __sdk::TableUpdate<Community>,
     connection: __sdk::TableUpdate<Connection>,
+    cue: __sdk::TableUpdate<Cue>,
     deliberation: __sdk::TableUpdate<Deliberation>,
     doing: __sdk::TableUpdate<Doing>,
     doing_seen: __sdk::TableUpdate<DoingSeen>,
@@ -1258,6 +1267,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "connection" => db_update
                     .connection
                     .append(connection_table::parse_table_update(table_update)?),
+                "cue" => db_update
+                    .cue
+                    .append(cue_table::parse_table_update(table_update)?),
                 "deliberation" => db_update
                     .deliberation
                     .append(deliberation_table::parse_table_update(table_update)?),
@@ -1632,6 +1644,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.connection = cache
             .apply_diff_to_table::<Connection>("connection", &self.connection)
             .with_updates_by_pk(|row| &row.id);
+        diff.cue = cache
+            .apply_diff_to_table::<Cue>("cue", &self.cue)
+            .with_updates_by_pk(|row| &row.id);
         diff.deliberation = cache
             .apply_diff_to_table::<Deliberation>("deliberation", &self.deliberation)
             .with_updates_by_pk(|row| &row.actor);
@@ -1979,6 +1994,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "connection" => db_update
                     .connection
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "cue" => db_update
+                    .cue
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "deliberation" => db_update
                     .deliberation
@@ -2341,6 +2359,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "connection" => db_update
                     .connection
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "cue" => db_update
+                    .cue
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "deliberation" => db_update
                     .deliberation
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -2666,6 +2687,7 @@ pub struct AppliedDiff<'r> {
     combat_seen: __sdk::TableAppliedDiff<'r, CombatSeen>,
     community: __sdk::TableAppliedDiff<'r, Community>,
     connection: __sdk::TableAppliedDiff<'r, Connection>,
+    cue: __sdk::TableAppliedDiff<'r, Cue>,
     deliberation: __sdk::TableAppliedDiff<'r, Deliberation>,
     doing: __sdk::TableAppliedDiff<'r, Doing>,
     doing_seen: __sdk::TableAppliedDiff<'r, DoingSeen>,
@@ -2803,6 +2825,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         callbacks.invoke_table_row_callbacks::<CombatSeen>("combat_seen", &self.combat_seen, event);
         callbacks.invoke_table_row_callbacks::<Community>("community", &self.community, event);
         callbacks.invoke_table_row_callbacks::<Connection>("connection", &self.connection, event);
+        callbacks.invoke_table_row_callbacks::<Cue>("cue", &self.cue, event);
         callbacks.invoke_table_row_callbacks::<Deliberation>(
             "deliberation",
             &self.deliberation,
@@ -3663,6 +3686,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         combat_seen_table::register_table(client_cache);
         community_table::register_table(client_cache);
         connection_table::register_table(client_cache);
+        cue_table::register_table(client_cache);
         deliberation_table::register_table(client_cache);
         doing_table::register_table(client_cache);
         doing_seen_table::register_table(client_cache);
@@ -3781,6 +3805,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "combat_seen",
         "community",
         "connection",
+        "cue",
         "deliberation",
         "doing",
         "doing_seen",

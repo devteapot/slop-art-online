@@ -2,10 +2,9 @@
 
 | Feature | Cases | File |
 | --- | --- | --- |
-| Think, compile, install, act, speak; the world's rules told from the laws' descriptions (SENSES, MOVING, FOOD, SETTLEMENTS sections in every think and deliberate prompt) | `roundtrip`, `acts` | [deliberation.md](deliberation.md) |
-| Running for minds (docs/STAMINA.md): the prompt documents `"run": true` and the `stamina` condition, the scene carries `you.stamina`, and an act with `"run": true` runs at the `run_share` law times the walk and drains breath on the vitals row | `run` | [deliberation.md](deliberation.md#running) |
-
 | Think, compile, install, act, speak; the world's rules told from the laws' descriptions (SENSES, MOVING, FOOD, SETTLEMENTS sections in every think and deliberate prompt); the timing of the fighting moves one's character knows, and of none it does not (`LIVING_SKILL_TIMINGS`) | `roundtrip`, `acts`, `timings` | [deliberation.md](deliberation.md) |
+| Running for minds (docs/STAMINA.md): the prompt documents `"run": true` and the `stamina` condition, the scene carries `you.stamina`, and an act with `"run": true` runs at the `run_share` law times the walk and drains breath on the vitals row | `run` | [deliberation.md](deliberation.md#running) |
+| Attention cues (docs/ATTENTION.md, `cues_on`): a reply's `notice` kept on its stance in memory and projected through `mind_update`; a match's `noticed` line quoting the mind's `why` becomes the reason of its next think; `# What you watch for` | `cues_mind.py` (Neo4j); `prompts::` and `memory::` tests | [cues.md](cues.md) |
 | A deliberation consumes the reasons its prompt contained: plan-finished churn during model calls keeps no older reason pending, a reason arriving mid-call waits for the next deliberation only; each thought's `detail.reasons` with `carried_before` | `reasons` | [deliberation.md](deliberation.md) |
 | Answer speech and close an exchange; a line parked while a deliberation runs; `LIVING_PARK=concurrent` turns alongside; `LIVING_GREET` modes over the `audience` table | `conversation`, `parked`, `alongside`, `greet` | [conversations.md](conversations.md) |
 | Speech through a mind: a talk reply's `way` reaches `mind_say` (one the world lacks is said aloud), an `introduced` row reaches consolidation tagged with the person, the mind's own line reads as heard by those it saw (`heard`) | `speech` | [conversations.md](conversations.md#ways-and-who-heard) |

@@ -339,6 +339,7 @@ impl Minds {
             places: self.places(actor),
             experiences: meaningful.iter().map(|e| format!("{}{}", self.exp_line(e, &fmt, true), self.lived_where(e))).collect(),
             dealings: self.dealings(actor),
+            cues: None,
         };
         let msgs = vec![Msg { role: "system", content: prompts::internalize_system() }, Msg { role: "user", content: prompts::consolidate_user(&ctx, "") }];
         let known = meaningful.iter().map(|e| e.id).collect();
@@ -366,7 +367,8 @@ impl Minds {
         let batch = &prep.batch;
         let lookup = |id: u64| batch.iter().find(|e| e.id == id).map(|e| (e.at_ms, e.salience as f64, self.anchors(e)));
         let (mut patch, mut notes) = memory::patch_from(&v, &prep.known, &lookup);
-        memory::sugar_into(&v, &mut patch, &prep.known);
+        // A player's character keeps no attention cues: its eyes are the player's.
+        memory::sugar_into(&memory::without_notice(&v, false), &mut patch, &prep.known);
         notes.extend(self.canonical_people(actor, &mut patch));
         self.keep_refused_merges(actor, &notes);
         notes.extend(self.perceived_people_only(actor, batch, &mut patch));

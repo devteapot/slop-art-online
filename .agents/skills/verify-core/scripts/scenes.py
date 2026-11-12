@@ -572,7 +572,7 @@ def infant(s):
     # The caring witness would have been eligible alongside parents before this change.
     s.call("mind_update", witness, {"persona": None, "relations": [{"other": baby["id"],
         "trust": 50, "affinity": 50, "label": "care", "note": "verification fixture"}],
-        "beliefs": None, "judgments": [], "places": [], "thought": None, "replace": True})
+        "beliefs": None, "judgments": [], "places": [], "thought": None, "replace": True, "cues": None})
     for actor in (b, witness):
         s.call("place_near", actor, a)
     s.call("place_near", baby["id"], a)
@@ -2788,7 +2788,7 @@ def stranger_filter(s):
         s.act(o, {"do": "welcome", "target": {"id": m}})
         s.wait(lambda m=m: s.rows(f"SELECT * FROM membership WHERE member = {m}"))
     s.call("mind_update", o, {"persona": None, "relations": [{"other": n, "trust": -10, "affinity": -5, "label": "wary", "note": "verification fixture: seen, never named"}],
-                              "beliefs": None, "judgments": [], "places": [], "thought": None, "replace": False})
+                              "beliefs": None, "judgments": [], "places": [], "thought": None, "replace": False, "cues": None})
     s.rows(f"SELECT * FROM relation WHERE actor = {o}", "relations")
     for who, k in ((o, 0), (a, 2), (n, 3), (f, 5)):
         s.call("place_at", who, *line[k])
@@ -2844,7 +2844,7 @@ def stranger_filter(s):
         # No "stranger" relation about someone whose name one knows, however they were seen.
         s.call("mind_update", o, {"persona": None, "relations": [{"other": f, "trust": 0, "affinity": 0, "label": "stranger", "note": "verification fixture: a figure far off"},
                                                                   {"other": n, "trust": 0, "affinity": 0, "label": "stranger", "note": "verification fixture: never named"}],
-                                  "beliefs": None, "judgments": [], "places": [], "thought": None, "replace": False})
+                                  "beliefs": None, "judgments": [], "places": [], "thought": None, "replace": False, "cues": None})
         rel = {r["other"]: r["label"] for r in s.rows(f"SELECT * FROM relation WHERE actor = {o}", "relations-after")}
         s.expect("a relation \"stranger\" to F (known by name) is not written; to N (unknown) it is", "stranger" not in rel.get(f, "") and rel.get(n) == "stranger", rel)
         # A first sight waits until someone can be made out.
@@ -2864,6 +2864,124 @@ def stranger_filter(s):
         set_law(s, "stranger_by_name", False, check=False)
         off_the_line(s, line, [o, a, n, f] + extra, dy=50)
 
+
+
+WHY = "verify-core fixture: the words of O's own mind, quoted as written"
+
+
+def cue(for_key, **kw):
+    """A `CueIn` as the mind service projects it (docs/ATTENTION.md)."""
+    c = {"for_key": for_key, "why": WHY, "who_id": 0, "who": "", "doing": "", "phase": "", "thing": "", "at": "", "within": 0.0, "near_me": 0.0, "source": "verify-core"}
+    c.update(kw)
+    return c
+
+
+def fired_subject(f):
+    """A `CueFire` as SQL's JSON gives it: `[subject, at_ms]`."""
+    return f[0] if isinstance(f, list) else f["subject"]
+
+
+def set_cues(s, actor, cues, places=()):
+    s.call("mind_update", actor, {"persona": None, "relations": [], "beliefs": None, "judgments": [], "places": list(places),
+                                  "thought": None, "replace": False, "cues": {"some": cues}})
+
+
+def cues(s):
+    """Attention cues (docs/ATTENTION.md; `brain.rs` `Ev::cues`, `mind.rs` `set_cues`). O's mind
+    writes (through `mind_update`, as the mind service does) a cue on "a person whose name I do not
+    know, within 20 m of my place verify yard". With the `cues_on` law off nothing is matched.
+    On: N (unknown to O) coming within 3 m gives exactly one `noticed` experience, quoting the
+    mind's own `why` verbatim, and one deliberation request with that line; N leaving and coming
+    back within `cue_cooldown_s` gives nothing; U (another unknown) coming in within `cue_gap_s`
+    of that fire is told only once the gap has passed. Under a `perceived_of` overlay that makes
+    anyone beyond 4 m too far away to make out, V (unknown) at 6 m and K (O's community, cued by
+    id) at 6 m match nothing; V at 2 m does. Cues the world cannot watch for are kept with their
+    reason in `refused`. The laws, the script and O's cues are restored at the end."""
+    line = clear_line(s)
+    o, k, n, u, v = s.people(5)
+    s.act(o, {"do": "found", "text": f"Verify Watch {o}"})
+    s.wait(lambda: s.rows(f"SELECT * FROM membership WHERE member = {o}"))
+    s.call("place_near", k, o)
+    s.act(k, {"do": "join", "target": {"id": o}})
+    s.wait(lambda: s.rows(f"SELECT * FROM join_request WHERE asker = {k}"))
+    s.act(o, {"do": "welcome", "target": {"id": k}})
+    s.wait(lambda: s.rows(f"SELECT * FROM membership WHERE member = {k}"))
+    away = lambda who, j=0: s.call("place_at", who, line[0][0] + 80 + 2 * j, line[0][1] + 60)
+    for j, who in enumerate((k, n, u, v)):
+        away(who, j)
+        s.graph(who, {"wait": 300})
+    s.call("place_at", o, *line[0])
+    s.graph(o, {"wait": 300})
+    shipped = (ROOT / "living/scripts/skills.rhai").read_text()
+    now = lambda: s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+    noticed = lambda since: [r for r in s.rows(f"SELECT id, at_ms, kind, subject, object, text, salience FROM experience WHERE observer = {o}") if r["kind"] == "noticed" and r["at_ms"] >= since]
+    rows = lambda: s.rows(f"SELECT * FROM cue WHERE actor = {o}")
+    yard = {"name": "verify yard", "x": line[0][0], "y": line[0][1]}
+    try:
+        set_law(s, "cues_on", False)
+        set_cues(s, o, [cue("stance:verify_watch", who="unknown", at="verify yard", within=20.0)], [yard])
+        r = rows()
+        s.expect("the cue is kept, watched (no refusal)", len(r) == 1 and r[0]["refused"] == "" and r[0]["who"] == "unknown", r)
+        t0 = now()
+        s.call("place_at", n, line[2][0], line[2][1] + 1.0)
+        time.sleep(6)
+        s.expect("law off: nothing is matched", not noticed(t0) and rows()[0]["fires"] == 0, noticed(t0))
+        away(n, 1)
+        time.sleep(2)
+        set_law(s, "cues_on", True)
+        set_law(s, "cue_gap_s", 15)
+        s.wait(lambda: any(w["name"] == "cues_on" and w["value"] == "true" for w in s.rows("SELECT * FROM world_law")), 10)
+        t1 = now()
+        s.call("place_at", n, line[2][0], line[2][1] + 1.0)
+        got = s.wait(lambda: noticed(t1), 10)
+        time.sleep(4)
+        got = noticed(t1)
+        s.expect("law on: N coming in gives exactly one noticed line, about N", len(got) == 1 and got[0]["subject"] == n, got)
+        s.expect("the line quotes the mind's own words verbatim", f'"{WHY}"' in got[0]["text"] and abs(got[0]["salience"] - 0.65) < 1e-6, got[0]["text"])
+        d = s.rows(f"SELECT * FROM deliberation WHERE actor = {o}", "deliberation-after-fire")
+        s.expect("and asks O to think, with that line as the reason", d and WHY in d[0]["reason"], d)
+        s.expect("the cue counts its fire", rows()[0]["fires"] == 1 and [fired_subject(f) for f in rows()[0]["fired"]] == [n], rows())
+        fire1 = got[0]["at_ms"]
+        # Cooldown: N leaves and comes back; U (unknown too) comes in while the gap holds.
+        away(n, 1)
+        time.sleep(2.5)
+        s.call("place_at", n, line[2][0], line[2][1] + 1.0)
+        s.call("place_at", u, line[3][0], line[3][1] - 1.0)
+        late = s.wait(lambda: [x for x in noticed(t1) if x["at_ms"] > fire1], 25)
+        s.expect("N back within the cooldown is not told again", late and n not in (late[0]["subject"], late[0]["object"]), late)
+        s.expect("U is told only once the gap (15 s) since the last fire has passed", late and late[0]["subject"] == u and late[0]["at_ms"] - fire1 >= 15_000, {"fire1": fire1, "late": late})
+        time.sleep(3)
+        s.expect("one line per fire: two in all", len(noticed(t1)) == 2, noticed(t1))
+        # Far figures: who someone is only within 4 m.
+        for who in (n, u):
+            away(who, 2)
+        set_law(s, "cue_gap_s", 0)
+        far_law = 'fn perceived_of(p) { let r = base_perceived_of(p); if !p.self && p.dist > 4.0 { r.name = false; r.health = "none"; r.far = true; } r }'
+        s.call("install_script", compose(shipped, {"perceived_of": far_law}))
+        set_cues(s, o, [cue("stance:verify_watch", who="unknown"), cue("goal:verify_kin", who_id=k)])
+        time.sleep(2)
+        t2 = now()
+        s.call("place_at", v, line[6][0], line[6][1])
+        s.call("place_at", k, line[6][0], line[6][1] - 1.5)
+        time.sleep(6)
+        s.expect("far: V (unknown) and K (cued by id) 6 m away, too far to make out, match nothing", not noticed(t2), noticed(t2))
+        s.call("place_at", v, line[2][0], line[2][1] - 1.0)
+        near = s.wait(lambda: noticed(t2), 10)
+        s.expect("V within 4 m is told", near and near[0]["subject"] == v, near)
+        # What the world cannot watch for is kept, refused, with its reason.
+        set_cues(s, o, [cue("stance:x", at="no such place"), cue("stance:x", who="wolf", phase="winding up"), cue("stance:x", who="dragon"),
+                        cue("stance:x", thing="no_such_kind"), cue("stance:x", doing="strike"), cue("x", who="wolf")])
+        ref = [c["refused"] for c in sorted(rows(), key=lambda c: c["id"])]
+        s.expect("refusals: unknown place, a move's phase, no such creature, no such thing, a deed with no doer, serving nothing",
+                 len(ref) == 6 and all(ref) and "no place" in ref[0] and "phase" in ref[1] and "dragon" in ref[2] and "no_such_kind" in ref[3], ref)
+        set_cues(s, o, [])
+        s.expect("an empty set clears the cues", not rows(), rows())
+    finally:
+        s.call("install_script", shipped, check=False)
+        set_law(s, "cues_on", False, check=False)
+        set_law(s, "cue_gap_s", 60, check=False)
+        set_cues(s, o, [])
+        off_the_line(s, line, [o, k, n, u, v], dy=56)
 
 
 def outcomes(s):
@@ -3032,7 +3150,7 @@ def owners(s):
         s.expect("someone of the owner's community is told whose it is, by name", entry is not None and owner_name in (entry.get("home_of"), entry.get("by")), {"entry": entry, "owner": owner_name})
 
 
-SCENES = {"say": say, "skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight, "dealings": dealings, "answers": answers, "flee": flee, "food": food, "refusal": refusal, "teach": teach, "senses": senses, "moves": moves, "remains": remains, "laws": laws, "doing": doing, "death-names": death_names, "drop": drop, "low": drop, "family_laws": family_laws, "fov": fov, "placement": placement, "alarms": alarms, "health_seen": health_seen, "audience": audience, "outcomes": outcomes, "crowd_sight": crowd_sight, "stranger_filter": stranger_filter}
+SCENES = {"say": say, "skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight, "dealings": dealings, "answers": answers, "flee": flee, "food": food, "refusal": refusal, "teach": teach, "senses": senses, "moves": moves, "remains": remains, "laws": laws, "doing": doing, "death-names": death_names, "drop": drop, "low": drop, "family_laws": family_laws, "fov": fov, "placement": placement, "alarms": alarms, "health_seen": health_seen, "audience": audience, "outcomes": outcomes, "crowd_sight": crowd_sight, "stranger_filter": stranger_filter, "cues": cues}
 
 
 def goods(s):
