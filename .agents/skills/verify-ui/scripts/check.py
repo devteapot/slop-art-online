@@ -174,6 +174,32 @@ def windows(run, c):
     c.check(s, "Esc again opens Menu (and frees the cursor)", d["12"] and d["12"]["menu"] and "Esc with nothing open: Menu, cursor freed" in log(out))
 
 
+@scenario("bubble-once")
+def bubble_once(run, c):
+    """A line is shown once per speech row (play-test 6: Sissly's long reply came back as a bubble
+    7.6 s after it was said, once her short line said 2.1 s later had gone; no new row behind it).
+    A resident beside a fresh player says a long line (a 10 s bubble), then a short one 2.1 s
+    later (about 5 s), both admin `mind_say` to the player. The dumps follow A's bubble: the long
+    line, then the short one, then nothing at 8.5 s, while the long line's own life (10 s) would
+    still run."""
+    s = "bubble-once"
+    a = residents(run, 1)[0]
+    long = "It's just past the berry bushes! Come on, but walk slow, my legs are little. I like crust too, we can share the crusty edges."
+    short = "You never said! Crust or filling?"
+    thought = json.dumps({"kind": "talk", "summary": "", "detail": "", "latency_ms": 0, "tokens": 0, "model": "verify-ui scene", "reference": ""})
+    syncs = [f'one=mind_say|{a}|"{long}"|{{me}}|""|0|{thought}', f'two=mind_say|{a}|"{short}"|{{me}}|""|0|{thought}']
+    plan = ("ready;sync:scene;wait:2.5;sync:one;wait:1.0;dump:b1;wait:1.1;sync:two;wait:0.9;dump:b2;wait:3.2;dump:b3;wait:2.2;shot:01_after;dump:b4;wait:1.5;dump:b5;quit")
+    tok = os.path.join(ROOT, ".local/living/verify", run, "ui", f"bubble-once-{int(time.time())}.token")
+    out, code, text = drive(run, s, plan, places=[f"{a}:2:0"], syncs=syncs, extra=["--token", tok, "--player", "Listener"])
+    c.check(s, "client ran and joined (a fresh player)", code == 0, text[-300:])
+    over = lambda k: [x.get("text") for x in (dump(out, k) or {}).get("bubbles") or [] if x.get("speaker") == a]
+    seq = {k: over(k) for k in ("b1", "b2", "b3", "b4", "b5")}
+    c.check(s, "the long line shows, then the short one in its place", seq["b1"] == [long] and seq["b2"] == [short], str(seq))
+    c.check(s, "once the short line's bubble ends, the long line does not show again", seq["b4"] == [] and seq["b5"] == [] and long not in (seq["b3"] + seq["b4"] + seq["b5"]), str(seq))
+    rows = [r for r in sql(run, f"SELECT id, kind, subject, text FROM experience WHERE kind = 'speech' AND subject = {a}") if long in r.get("text", "")]
+    c.check(s, "one speech row behind the long line for the player", len([r for r in rows]) >= 1, f"{len(rows)} rows")
+
+
 @scenario("room-detail")
 def room_detail(run, c):
     """speech-address in the client: how a line to the room was said ("to the room, naming you
