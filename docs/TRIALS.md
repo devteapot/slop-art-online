@@ -267,6 +267,35 @@ Approved by the general coordinator at about $2.7, after the ordinary-think repl
 
 Against fs1e (manners 13, curiosity 10, duty 4, others 3, else 3 of 22): fewer askers in all, and manners still first. None was pulled by others asking.
 
+**Manners: the residents' or the model's?** (A free count from fs1n's records, 2026-11-12, for the owner's question whether 1–3 asks is the right bar.)
+- **The sheets read:** each of the 25 residents in range (12 askers; 13 who saw the newcomer and did not ask: 1 approached, 7 inward, 5 unaware), as its mind was given it. That is the "# Who you are" section of its own fs1n think prompts: the C world, with the Quill, Morrow and Sato households' sheets from before the lives change.
+- **Each resident classed as:**
+  - *outgoing*: social, curious or duty-bound by a phrase or a trait of 65 or more;
+  - *reserved*: reserved or private by a phrase or sociability of 40 or less;
+  - *both*;
+  - *none*.
+
+| sheet | asked | did not ask |
+|---|---:|---:|
+| outgoing only | 6: Bram ("Values: … exploration"), Ife (curiosity 70, sociability 65), Lark ("I want to be the one who goes and looks"), Oswin ("someone must say what goes where" on the Ladder), Ren (sociability 70), Roos ("I serve at the Marver"; sociability 75) | 5: Greta ("there is not a thing said at that wall I have not heard"), Nell (sociability 72), Neve ("Values: … adventure"), Wick (curiosity 70), Lorcan (sociability 72) |
+| both outgoing and reserved | 2: Aldous ("the ledger is the true history of Cullet" / "I say less about them than she does"), Benedikt (curiosity 95 / "Values: … solitude"; "I have lived alone … the tablets are my company") | 2: Amara (curiosity 70 / "Walking the Wrack Strand at low tide, alone"), Eamon (curiosity 78 / "Values: … keeping my own counsel") |
+| reserved only | 2: Hana ("I keep my peace and gather my kelp"), Suri ("I want a door I can shut") | 3: Davin ("Values: keeping quiet"), Petra ("Values: … not being a bother"), Rafe ("the night's quiet"; "he's the only man I talk to most nights"; sociability 35) |
+| none of these | 2: Gwil ("I keep out of that"; traits 40–60), Ingrid ("keep to what you can see"; curiosity 30) | 3: Joss ("I do not argue with her count, not in front of anyone"), Chidi, Magda |
+| total | 12 | 13 |
+
+- **Shares who asked, by sheet:** outgoing only 6 of 11 (55%), both 2 of 4, reserved only 2 of 5 (40%), none 2 of 5. The sheets lean the asking only a little.
+- **Askers whose sheets suggest reserve, with their own reasons:**
+  - **Benedikt:** "curiosity bids me at least offer a word; caution bids me not close the distance alone at once".
+  - **Aldous:** "a tally keeper does well to know every face and every newcomer's business, courteously".
+  - **Hana:** "I'll note it, keep my distance and my work, and give a civil word across the road".
+  - **Suri:** "A stranger waits south of the road — not mine to mind this afternoon", and spoke to it anyway.
+- **The 7 askers who gave manners as their reason** were 3 outgoing (Oswin, Roos, Ren), 1 both (Aldous), 1 reserved (Hana) and 2 none (Gwil, Ingrid). Manners came from every kind of sheet, including two with no social or curious trait and one written as keeping her peace.
+- **No greeting or hospitality norm was in any sheet, the bible or the seed fs1n ran.**
+  - The only one in Cullet's seed is Aldous's tie in `cast.json`, added with the lives change: "keeps the custom that whoever comes in is asked their name and business at the Counting House". It is not in the C world's seed `trial-cullet-d2a2f187` (0 matches) or in any of Aldous's fs1n prompts.
+  - The bible's customs are about houses, apprentices and the colours of a melt.
+  - The nearest phrase is Amara's value "a neighbour is owed what you can carry", and she did not ask.
+- **Reading:** manners, 7 of 12, is the model's own politeness more than the residents' personality. The sheets carry no greeting norm, and the asking leans only weakly toward the outgoing sheets. The same words recur across unlike sheets ("a civil word", "worth a greeting", "I'd not let a new face stand silent in my town"), and fs1e's thoughts said "costs nothing" 8 times. This is one run's 25 residents, read by hand.
+
 **Measurement note.** The fs1 tools read the reason under "# Why you are thinking now". N2 renames it "# What just happened", so they now read either (`fs1_measures.py`, `fs1_held.py`, `fs1_cluster.py`). A first pass had counted 0 first-sight thoughts.
 
 **Evidence:** `~/slop-trials-fs1/.local/living/trials/fs1n` and `fs1ns` and the journals `verify-trial-fs1n*`, archived in `~/archive/trials/fs1n-20261112.tar.gz` (14 MB). The archive also holds `fs1n-spread.md`, `fs1n-m.json`, `fs1n-asks.json`, the metrics and spend logs and the tools.
