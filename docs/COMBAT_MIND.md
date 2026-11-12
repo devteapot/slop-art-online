@@ -169,6 +169,7 @@ Each change is general: it serves any time-critical thing a character does, with
 - **General use:** a child reaching the edge of a terrace, a seller packing up a stall, someone reaching for what you hold.
 - **Data path:** the condition is one primary-key read of a row the tick already reads in the chunk cache; percepts are bounded per move and witness and folded; no new table. Players already receive the same rows through `seen_fighters`.
 - **Built** (`doing-percept`, 2026-11-12; [perception](PERCEPTION.md#what-someone-is-visibly-doing)): the condition as `{"doing": {"who", "is", "phase", "at_me", "within"}}` and each seen creature's `visibly` in a mind's scene. Changes from the text above: `is` takes a skill's name, its label or a kind word (`hostile`, `melee`, `missile`, `guard`, `dash`, an act card's look); the windup is split into `winding up` and `about to release` (its halves, as the clip's run-up and its approach to the peak), plus `under way` for an act card; no `left_ms` (the drawing shows a phase, not milliseconds). The folded experience percept above is not built yet.
+- **Committed moves** (`committed-moves`, 2026-11-12, [combat](COMBAT.md#committed-moves)): a routine's dodge started on `doing` (or `threatened`) runs its course when the dash turns its back on the attacker, as a player's does; a started windup or dash is never ended by its condition going.
 
 ### 3.3 Movement as intent the body carries out (steering, rules)
 
