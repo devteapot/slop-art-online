@@ -438,6 +438,63 @@ Tick time per arm: `spacetime_reducer_plus_query_duration_sec`, reducer `tick` (
 - `~/slop-trials2b/.local/living/trials/st2b`, `st2bs`, and the journals under `.local/living/journal/verify-trial-st2b-*`;
 - the archive at `~/archive/trials/st2b-20261112.tar.gz` (51 MB, 1,356 files), which includes the metrics samples, the analyses (`st2b-spread.md`, `st2b-cues.md`, `st2b-cue-fires.md`, `st2b-ticks.md`) and the spend log.
 
+### False replies under one definition (2026-11-12, branch `strangers-measures`; free)
+
+The general coordinator approved a new definition. It is in `greet_report.py` `reply_kind`, with the self-test `python3 living/tools/greet_report_selftest.py`:
+- a **false reply** is a conversation turn answering a line that names someone else, either addressed by id to another person or saying another's name;
+- a line that names the answerer, or is addressed to them, is never false;
+- a remark to the room that names no one, when answered, is **`group_talk`**, counted apart;
+- only the player is left out: the joined newcomer where a trial has one, else the subject (the greeting and arrival trials' player). Aldous, the strangers trials' subject, is now counted.
+
+**Tool versions:**
+- **Old:** `greet_report.py` at main `ef9c3ae5`, the rule every earlier record used. A room line said within 60 s of its speaker's exchange with another was false. A line naming the answerer could be false. The trial's subject was always skipped.
+- **New:** this branch.
+- **Check:** recomputed here, the old tool gives the recorded numbers exactly (ar2's pooled 3/2/3/0/0/3/0, stage 2's 0.20/1.05/0.35, st2b's 0.10/0.46/0.80/1.06).
+
+Per run: `~/slop-strangers-logs/rescore.md`, from ar2 (`~/dev/slop-runs-arrive`, read-only), st2 (`~/slop-stage2`) and st2b (`~/slop-trials2b`).
+
+
+#### ar2
+
+| arm | runs | false replies, old (per min) | false replies, new (per min) | group talk, new (per min) |
+|---|---:|---|---|---|
+| arrive-answer-arrive-all | 4 | 0 (0.00) | 1 (0.02) | 0 (0.00) |
+| arrive-answer-arrive-control | 4 | 3 (0.05) | 0 (0.00) | 2 (0.04) |
+| arrive-arrive-all | 4 | 0 (0.00) | 1 (0.02) | 0 (0.00) |
+| arrive-arrive-control | 4 | 3 (0.05) | 3 (0.05) | 3 (0.05) |
+| arrive-arrive-known | 4 | 2 (0.04) | 1 (0.02) | 1 (0.02) |
+| arrive-arrive-notice | 4 | 3 (0.05) | 3 (0.05) | 0 (0.00) |
+| arrive-arrive-wonder | 4 | 0 (0.00) | 0 (0.00) | 2 (0.04) |
+
+#### st2
+
+| arm | runs | false replies, old (per min) | false replies, new (per min) | group talk, new (per min) |
+|---|---:|---|---|---|
+| C | 1 | 4 (0.20) | 8 (0.40) | 1 (0.05) |
+| L | 1 | 21 (1.06) | 11 (0.55) | 1 (0.05) |
+| LS | 1 | 7 (0.35) | 12 (0.60) | 1 (0.05) |
+
+#### st2b
+
+| arm | runs | false replies, old (per min) | false replies, new (per min) | group talk, new (per min) |
+|---|---:|---|---|---|
+| C | 1 | 2 (0.10) | 2 (0.10) | 0 (0.00) |
+| L | 1 | 9 (0.45) | 9 (0.45) | 0 (0.00) |
+| LS + cues | 1 | 21 (1.06) | 14 (0.70) | 3 (0.15) |
+| LS | 1 | 16 (0.80) | 13 (0.65) | 3 (0.15) |
+
+
+**Reading it:**
+- **ar2** barely moves: 0–3 false replies an arm either way.
+- **st2:** stage 2's L falls from 1.06 to 0.55 a minute. C and LS rise (0.20 → 0.40 and 0.35 → 0.60), because the old rule missed room lines naming someone else when they fell outside its 60 s exchange window.
+- **st2b:** the rise is smaller, 0.10 → 0.45 → 0.65 → 0.70 against the old 0.10 → 0.45 → 0.80 → 1.06.
+- **What every new false reply is:** in both strangers batches, a room line calling other people by name, answered by a bystander. Examples: Lumi, “Edda! Ife! Wait for me — I'm coming to the yard!”, answered by Pim; Chidi, “Neve — the whole shore's fished thin…”, answered by Joss Tarn. None is a line addressed by id to someone else.
+- **Aldous is now counted:** one false reply in stage 2's LS.
+- **Group talk** is 0–3 a run.
+- **The guards** in stage 2 and st2b ("within C's spread") are re-read with these numbers. Stage 2's L is no longer the outlier. st2b's LS and LS + cues stay above C (0.65 and 0.70 against 0.10), with one replicate each.
+
+**In range:** the band is restated in STRANGERS.md ("Target spread"). It is now about 18–24, with the walk along the Strand counted; it was about 10–16 for the stands only. The change and its reason are recorded beside it. The outcome bands are unchanged.
+
 ### Analysis of st2b (2026-11-12, branch `st2b-analysis`; free, no model calls)
 
 #### (a) Why false replies rise by arm (0.10 → 0.46 → 0.80 → 1.06 a minute)
@@ -1663,6 +1720,46 @@ The two r2b heavy fights with no fight in them (r2: 0 exposures, the subject 11�
 - **The fixture fix:** the foe approached in both fights (no fight lost to distance). It outlasted the subject in r2c r2, not in r2c r1, where the subject countered with three blows a pause, about 30 damage against a 22-point heal.
 - **Spoken ids:** 0 of 19 spoken lines.
 - **Cost and latency:** $0.108 ($0.041 and $0.067; 28 and 46 calls); think and compile p50 6.0 and 5.8 s.
+
+### R2 again with what a character is told fixed (`r2d`, 10 fights, $0.30)
+
+R2 at r2b's scale (5 fights per arena) once the told lines R2 and r2c found wanting were fixed: does a mind told that its dodge was over before the blow came move its `doing` condition from "winding up" toward "about to release"?
+
+**Build and switches.** Trial module and `living-mind` built from origin/main `3c2ad599`, branch `trials-r2d` (private `CARGO_TARGET_DIR`, the trial service `slop-trials-stdb`, island seed). In force: `fov_on` off (the shipped default), the `default` variant (glm-flash, overflow deepseek-flash), `LIVING_SKILL_TIMINGS` on, `force_outcomes` on, greeting `nearest` (`LIVING_GREET` unset), `cues_on` off (attention cues not in use). Ran 2026-11-12, 09:02–09:12, 5 replicates of `arena-heavy` and `arena-kiter`. The key loaded from a copied `.env`, deleted after; a scan of the batch for every key, whole and by its first and last 12 characters, found 0 matches in 241 files. Evidence: `.local/living/trials/r2d/` (`arena_report.json`, `report.md`) in the `trials-r2d` checkout on the Spark.
+
+**What differs from r2b and r2c.** r2b (`07a1de10`) had the old heavy fixture (no approach, no heal) and no 3.2. r2c (`49dfc2cd`) added the fixed fixture (`561ba7a7`), fix-missile-told and doing-percept (3.2), with `doing`'s grammar example `is: "strike"`. r2d adds fix-unseen-killer-id, fix-dodge-told (`191f24c0`: a dodge over before the blow is told so; a cooldown's refusals told once; the example `is: "hostile"`), move-intents (3.3: `keep_distance`, `close_in`, `circle`, `back_off`), committed-moves (a windup or a dash runs its course), fix-pursuit-speed, far-handle, and attention cues (off).
+
+**Main measure:**
+
+| | Heavy blow (5) | Kiter (5) |
+|---|---|---|
+| Exposures per fight | 5, 5, 5, 4, 13 (32) | 29, 13, 23, 10, 57 (132) |
+| Answered | **1 of 32**: 0 of 15 in the first three | **17 of 132**: 0 of 15 in the first three; 15 of them in one fight |
+| K (three answered in a row) | never | 13 in one fight (r1), never in four |
+| End | the subject killed the foe in 4 (after 4–5 heavies, through its heals); the foe killed the subject in 1 (after 13) | all survived (lowest health 29–80) |
+| r2b for comparison | 0 of 12 (2 of 5 fights had no fight), K never | 5 of 48, K never |
+| r2c for comparison | 7 of 25 in 2 fights, K = 8 in one | not run |
+
+- **The heavy blow: no change that fits, in any of five fights.** As in r2b, the subject traded blows in the pause from the first exposure (its seeded reflex) and won four. Its dodges (2–6 a fight) were not timed to the windups: none overlapped one of the foe's 32 windups at it (the nearest began 0.67 s before one, and another 0.97 s after one released), so no dodge was over too early and the new line was never due in these fights.
+- **The kiter: one fight changed, after twelve arrows, by the mind's decision.** In r1, at exposure 12 ("A stranger (#9) has hit me twice with arrows and is drawing again … I'll dodge the shot"), the plan turned to dodging; from exposure 13, 15 of the next 17 arrows were dodged or missed it (K = 13), and at exposure 25 it decided "break line of sight first" and reached the hall. The other four kiter fights stayed near zero.
+
+**The question: from "winding up" toward "about to release"?** No. Every `doing` condition that led to a dodge (`arena_report.py`, from the routine rows):
+
+| Fight | Installs (time, exposure then): `is`, `phase` |
+|---|---|
+| heavy r1 | 91 s (2), 141 s (4), 174 s (5): `hostile`, winding up |
+| heavy r2 | 131 s (4), 185 s (5): `hostile`, winding up |
+| heavy r4 | 80 s (1): `hostile`, winding up |
+| heavy r5 | 130 s (5), 183 s (7), 203 s (7): `attack`, winding up; 234 s (10): `attack`, under way |
+| kiter r1 | 110 s (21): `bowshot`; 130, 204, 254, 324 s (25–29): `missile` (and from 204 s `melee`), all winding up |
+| kiter r3 | 110 s (23): `hostile`, winding up |
+| kiter r5 | 174 s (57): `hostile`, winding up |
+
+The minds now wrote the grammar's new example word (`hostile`, 8 of 17 installs) where r2c's wrote `strike`; it matches any hostile move, so these conditions could fire on the right windup. No install named "about to release". One moved off "winding up", to "under way" (heavy r5 at 234 s), a phase for gestures and work that a blow does not show. The too-early line was told once in the batch (kiter r1 at 91 s, "You failed to dodge: it was over before the arrow came"); that mind's next five installs all kept "winding up". "Not ready yet" was told 0–3 times a fight, 21 in kiter r1 for its 26 dodges, against 22 lines in r2c r2's one fight before fix-dodge-told.
+
+**Move intents (3.3).** Written, barely used: `back_off` in 14 routine installs and `circle` in 1 (6 of 10 fights), no `keep_distance` or `close_in`. Bodies ran them in 2 of the subjects' samples (one each in heavy r2 and r3), a deliberate `back_off` was done once (kiter r2, "You did what you had decided: back_off → person"), and twice refused as "cornered" (heavy r3).
+
+**Timings, ids, cost.** No reply cited a timing. 0 of 63 spoken lines carried an id. $0.30 for the batch ($0.15 heavy, $0.15 kiter; 165 calls in fights, 1.75 M tokens in the ledger); per 10-minute fight $0.026–0.036; think and compile p50 5.7–11.5 s per fight.
 
 ### What the told outcome lines cost in a battle
 

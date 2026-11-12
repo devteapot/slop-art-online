@@ -2407,9 +2407,8 @@ pub fn damage(ctx: &ReducerContext, attacker: u32, victim: u32, amount: f32, ski
             Some((seen, unseen)) => perceive::witnessed_shot(ctx, now, at, "fight", attacker, victim, &seen, &unseen, 0.95, &[attacker, victim]),
             None => witnessed(ctx, now, at, "fight", attacker, victim, "{a} struck {b}, though {b} had yielded", 0.95, &[attacker, victim]),
         }
-        if vc.ai {
-            perceive::request_deliberation(ctx, victim, &format!("{pleading}, though you yielded!"), now);
-        }
+        // Wakes a sleeping victim whoever plays it; a mind thinks on it.
+        perceive::request_waking(ctx, victim, &format!("{pleading}, though you yielded!"), now, perceive::Wake::Attack);
     } else if first_blow {
         if vc.kind == "person" || by_person {
             let line = match missile {
@@ -2422,9 +2421,8 @@ pub fn damage(ctx: &ReducerContext, attacker: u32, victim: u32, amount: f32, ski
             Some((seen, unseen)) => perceive::witnessed_shot(ctx, now, at, "fight", attacker, victim, &seen, &unseen, 0.7, &[attacker, victim]),
             None => witnessed(ctx, now, at, "fight", attacker, victim, "{a} attacked {b}", 0.7, &[attacker, victim]),
         }
-        if vc.ai {
-            perceive::request_deliberation(ctx, victim, &format!("{pleading}!"), now);
-        }
+        // Wakes a sleeping victim whoever plays it; a mind thinks on it.
+        perceive::request_waking(ctx, victim, &format!("{pleading}!"), now, perceive::Wake::Attack);
     } else if !dead {
         fight_report(ctx, victim, hurt_by, now);
         fight_report(ctx, attacker, victim, now);
@@ -2672,6 +2670,7 @@ pub fn die_unseen(ctx: &ReducerContext, id: u32, cause: &str, now: u64, killer: 
     ctx.db.vitals().id().delete(id);
     ctx.db.wake().id().delete(id);
     ctx.db.deliberation().actor().delete(id);
+    ctx.db.slumber().actor().delete(id);
     forget_dead(ctx, id);
     retire(ctx, id);
     crate::combat::died(ctx, id, killer, at, now, unseen.is_some());

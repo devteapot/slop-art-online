@@ -73,7 +73,12 @@ The game's people are made by our own tool: a set of parameters goes in, a rigge
   - **The eyes are drawn as the reference draws its own:** a broad dark lash band over the whole lid with an ink line along the lid's edge, flicks along its top and a fan of them at the outer corner; an iris with a thin dark rim, a darker upper half, a glow rising from the bottom and one large highlight; a lower line on the outer part only. The depths of step 3 and the `EyeIris` primitive are as they were.
   - **Lips and blush are a layer of their own over the skin,** in a fixed colour the client neither shades nor recolours. Painted into the skin, the skin's recolouring washed them out at every tone; as a layer they hold across Cullet's skin tones.
   - **One shading mean a class** ([one shading mean a class](#one-shading-mean-a-class)): outfit pieces, hair and far beards can each share one material; every piece a person wears has a colour in their line.
-- **Not yet at the bar:** see [what still separates ours from the reference](#what-still-separates-ours-from-the-reference). In short: hair's shading (one colour with a soft band, where the reference paints a hard highlight and a dark edge) and long hair standing off the back, the brows' drawing, the face's painted softness, clothes and silhouette, hands.
+- **Pass 3, long hair, short hair and the hair's shading** ([long hair, short hair and the hair's shading](#long-hair-short-hair-and-the-hairs-shading)).
+  - **Long hair falls close to the back:** combed over the garment's own measured collar and back, gathered behind the shoulders, the front hair ending at the jaw. Styles that hang past the collar have a `.collar` file for a coat.
+  - **Short hair is one sheet** from the whorl to the hairline, where it was rings of tiles.
+  - **The highlight is one hard ring and the shadow one edge:** both are the client's, and every sheet's normals now come from one smooth shape so they are not broken into patches. The client needs nothing new.
+- **Pass 3, the types' pictures on shared pages** ([the types' pictures on shared pages](#the-types-pictures-on-shared-pages)). Every type's far-head picture and its lip-and-blush layer are tiles of two pages all types share, so they are one material each where each type brought its own; nothing shows. The iris stays a type's own: shared, the client's recolouring gave some types another eye colour.
+- **Not yet at the bar:** see [what still separates ours from the reference](#what-still-separates-ours-from-the-reference). In short: the brows' drawing, the face's painted softness, clothes and silhouette, hands.
 - The models are not yet used by the running game's residents. That is phase 5 of the small city's build plan.
 
 ## Commands
@@ -161,6 +166,12 @@ A pass is also published through the asset board, the record of which version th
 - Hair as sheets is `character:face-types` `20261112-789ee65c-…`: eight type and style pairs as locks and as sheets from the front, three-quarter and side and at the game camera; every style as sheets from four sides; the three cuts of six styles; six presets whole under the client's own shading. Eyes are held open by the photo tool from this version on. The six presets and `cast-64` were not published again: their clips could not be baked on this machine ([hair as sheets](#hair-as-sheets)).
 
 - Step 6 is `character:face-types` `20261112-d11b32d5-…` (the eyes close up, faces before and after, lips and blush across Cullet's skin tones), the six preset families' `20261112-3213cdc8-…` (rebaked with clips from the completed library, `marker_check` passed) and `cast-64` `20261112-d11b32d5-…` (the 64 built again whole).
+
+- The nose wedge, the pale band and the fold are `character:face-types` `20261112-5c02f721-…` (`faces-close`: six types at three angles to the light, before and after) and `cast-64` `20261112-5c02f721-…` (the 64 built again, with `faces-before-after`). The six presets were rebaked and not published again.
+
+- Long hair, short hair and the hair's shading are `character:face-types` `20261112-33584a11-…` (`hair-short` and `hair-long`: every style before and after from five sides and at the game camera; `hair-people`: four whole people before and after from four sides and at the game camera; `hair-close`: four people close up; `hair-motion`: long hair on idle and walk frames; `hair-grey`: a greying man's own file beside the same man composed with the grey mix and with one tint; each with the reference's row), the six preset families' `20261112-33584a11-…` (rebaked with clips, `marker_check` passed) and `cast-64` `20261112-33584a11-…` (the 64 built again whole, with `faces-before-after`). The `20261112-c68bbe63-…` versions of the same families are this step before the back's spheres (on them long hair passes into the back on an idle frame), and the `20261112-bc4317ce-…` versions before greying by the mask. These sheets are photographed under the client's own hair light; the type sheets before them turned hair normals to the camera.
+
+- The types' pictures on shared pages are `character:face-types` `20261112-3f0805f7-…` (`types-pages`: four residents composed from the type files and coloured by the client, the full head close and at the game camera and the far head at the game camera, before and after).
 
 `just living-town .local/town` runs `town.py`; `just living-people` runs `gen_person.sh`. A pass's own report page is written by `living/tools/characters/report.py` from the board's media and a notes file.
 
@@ -551,6 +562,8 @@ For the laptop coordinator. The type files exist since step 3 ([type files](#typ
 
 - `styles.hair` is a file under `lookdev/styles/hair/`, and `styles.outfit` a list of files under `lookdev/styles/outfit/`, as the generator writes them into `<name>.params.json` (`person`) since the outfit step.
 - `type`: an id from `types.json`. `identity`: values from -1 to 1 by name; one left out is 0. `proportions` and `height` are as today. `colors` and `styles` replace what pass 2 paints and builds into each person's file.
+- `colors.outfit[<piece>]` is the colour the piece is painted in the person's own file (the mean of its vertex colours as built and shaded), not the cloth it is cut from: the client moves a shared piece's mean to it ([one shading mean a class](#one-shading-mean-a-class)).
+- `grey` (left out when none) with `colors.hair_natural` and `colors.hair_silver`: how grey the person is, for a client that greys hair lock by lock from the hair file's `_GREY` ([the mix](#long-hair-short-hair-and-the-hairs-shading)). `colors.hair` is the one tint for a client that does not.
 - Sixty-four residents are 64 such lines. No file is made for a person.
 
 **What the client loads:**
@@ -691,11 +704,11 @@ python3 living/tools/characters/face_shadow.py FILE.glb [OUT.glb] [--png OUT.fac
 - **18 angles** from 55° to 180°, light from the face's right; the left is the mirror. Each drawing is the one before plus more, so a texel goes dark once.
 - **The face is flat until about 55°,** as the reference's is. Step 4 drew a nose wedge from 30° and a lit triangle inside the shaded cheek; close up they read as hard patches, not form, and step 4b (2026-11-12) moved every onset later and took the islands out.
 - **Drawn in the face's front view** at half a millimetre a pixel, from the landmarks. The onsets are named numbers at the top of `face_shadow.py`:
-  1. the nose's wedge on the far cheek from 56° (`WEDGE_ON`), small, taken in by the far side's shade soon after;
+  1. the nose's wedge on the far cheek from 65° (`WEDGE_ON`), a small blunt shape beside the tip that grows slowly to 95° (`WEDGE_FULL`), so it is drawn soft, and is taken in by the far side's shade before it is full ([the wedge, the band and the fold](#the-nose-wedge-the-pale-band-and-the-fold));
   2. the far side plane, from the silhouette in to the cheek's corner line (60° to 72°, `SIDE_ON`, `SIDE_FULL`);
   3. the edge crossing the front as the corner line scaled toward the middle, so it follows the cheek's own contour; it reaches the middle at 96° (`MIDDLE`, `CROSS`);
-  4. between the brow and the nose's base the edge runs half the way ahead toward the bridge (72° to 86°, `SOCKET_ON`, `SOCKET`): the socket's shade;
-  5. below the nose the far half waits 20° (`WAIT`), so the mouth and chin keep their light and the edge leaves the nose's wing and runs out to the jaw;
+  4. between the brow and the nose's base the edge runs a third of the way ahead toward the bridge (72° to 86°, `SOCKET_ON`, `SOCKET`): the socket's shade, fading out over the 5 cm below the nose's base;
+  5. below the nose the far half waits, by nothing at the nose's base and 8° at the chin (`WAIT`), so the edge leans as it comes down and is not one line down the middle of the face;
   6. a band along the far jaw from 60° (`JAW_ON`), and the near jaw's later.
 - **Nothing holds its light inside the shade:** no cheek triangle, no bright near side of the nose.
 - **Interpolated** between each pair of drawings by their distance fields, then blurred by 1.4 mm (`SOFT_MM`), so every edge is a pixel or two soft at close range.
@@ -714,6 +727,22 @@ python3 living/tools/characters/face_shadow.py FILE.glb [OUT.glb] [--png OUT.fac
 - The sweep's heads are copies without clips, held straight: the idle clip turns the head, and with it the angle of the light, so the later shapes did not show.
 - **At the game camera a face is about a dozen pixels across.** The shapes do not read there; only which half is darker does. They are a close-up matter.
 - **Turned from the light** the camera sees the lit side, so the edge past the middle is mostly out of view; the sheets of the drawings show it.
+
+### The nose wedge, the pale band and the fold
+
+Pass 3, after step 6 (2026-11-12). Two faults showed on almost everyone in the `cast-64` sheet: a large hard triangle from the nose to the cheek, and on many men a pale band across the lower face with a hard upper edge. Both were in the drawn shadow map, and the band's edge was sharpened by a fold in the head's mesh.
+
+**The light.** The type sheets and the cast sheet are lit the same: the asset view's default hour, 15, which puts the sun 64° to the side of straight ahead and 47° up. The type sheets photograph the bind pose, facing the camera: the face is 64° from the light. The cast sheet photographs a frame of the idle clip, in which the head is turned about 14° away from the light: 78°. That is past every onset the map had (the wedge at 56°, the far side plane from 60°, the socket's lead from 72°), so the cast showed all of them at once where the type sheets showed the wedge alone. Neither angle is unusual for the game: people stand at every angle to the sun, and 78° is as common as 64°.
+
+| Fault | Cause | Change |
+|---|---|---|
+| The wedge: a hard triangle from the nose to the cheek | A polygon from 56° whose point reached up to 2.2 nose widths out and half way up to the eye, full within 10° | From 65° (`WEDGE_ON`), a blunt shape beside the tip at most 1.1 nose widths out and a third of the way up, growing over 30° (`WEDGE_FULL` 95°). Its threshold changes gently across it, so the shader draws it soft. At the cast's 78° it is a hint |
+| The pale band: the lower face lit with a hard upper edge at the nose's base | Two terms of the map met there within a centimetre, 33° apart: above the base the far half filled sooner by half the way to the bridge (`SOCKET`), below it 20° later (`WAIT`). On `adult-m-a` the far cheek's threshold stepped from 83° to 100° in 6 mm. Between those angles the cheek was dark and the mouth and jaw lit | `SOCKET` is 0.35 and fades over 5 cm below the nose's base; `WAIT` is 8° at the chin and grows from nothing at the base. The same column now runs 83° to 89° |
+| A hairline at the nose's base from cheek to cheek, and a ragged patch on the nose | A fold in the cage head. The tip's row is held to 0.90 of the way up to the cheek's row; on a face whose nose base is higher than that (the men's types and `child-u-a`: nine of the 21) the base's row came out above the tip's away from the nose, and the strip between them was inside out across both cheeks (88 triangles on `adult-m-a`). On the nose's ridge the tip stood above the cheek's row, folding that too | `cage_head.py` keeps each row below the one before it on every column, and on the ridge keeps the cheek's row (and on a short nose the row under the eyes) above the tip. No front face looks backward on any type now. `cage_accept.py`: 21 of 21 types within 0.03 H |
+
+- **What the fold changed downstream.** Nine types' heads moved by a few millimetres at the cheeks beside the nose, so the overlay files (which are faces of a type's own skin), the six presets and the 64 were built again.
+- **Which of the brief's guesses it was:** the threshold map (its socket and wait terms, not its jaw band), with the mesh's fold as the hard line. It was not a seam between face and jaw, not the lips and blush layer, and not the stubble or line overlays.
+- **Judged** on the board's `faces-close` (six types at 64°, 78° and 94°, before and after, with the reference under the same light) and `cast-64` (`faces-before-after`).
 
 ### Lines where the form turns
 
@@ -909,6 +938,7 @@ python3 living/tools/characters/person_check.py OUT.glb NAME.params.json [--own 
 - **A type's file holds the skin that shows:** the head, the neck and the hands. There is no torso, arm or leg skin in any file: the clothes are the body, as they were, so no hidden skin is drawn.
 - **A piece holds only what shows of it in the outfit it belongs to.** A jersey is three files: whole (worn alone), as worn under a coat (its front, collar and cuffs) and as worn under a smock (its collar and cuffs). Trousers and boots are whole in every outfit.
 - **Hair under a cap** is the style's `.cap` file, cut where the cap covers it. Under a kerchief it is the style `kerchief`.
+- **Long hair over a coat** is the style's `.collar` file (`long`, `tail` and `braid`, each cut), combed over the coat's collar ([long hair](#long-hair-short-hair-and-the-hairs-shading)).
 - **A tie** (a braid's, a tail's) is a second mesh in its hair style's file, in cloth, and attaches with it.
 
 **The files.** Every piece is built once (`person.py --variant piece:<name> --parts keep`), on the standard head and at the standard build (weight and muscle 0). It holds the `Cloth` mesh and its far mesh `FarCloth`, skinned to the `J_Bip_*` bones every generated file shares, with outline normals and widths, and no clips.
@@ -1109,7 +1139,7 @@ Pass 3, after the hair's finish (2026-11-12). The reference draws hair as broad 
 | Styles | Sheets |
 |---|---|
 | `bob`, `bob_parted`, `long`, `shag` | One curtain round the sides and back from the ear's front; a sheet a side from the parting over the top; one from the crown down the back; the fringe; a small sheet at each temple. A `bob`'s ends turn under; `long` ends in a few long points; `shag` in more, deeper ones |
-| `crop`, `short`, `tousled`, `swept`, `sides`, `balding` | Rings of short sheets round the head, one over the next as tiles lie, each cut into points; the rings wander up and down so they do not read as rows. `tousled` splays its points and turns them out |
+| `crop`, `short`, `tousled`, `swept`, `sides`, `balding` | (Since replaced by one sheet: [short hair is one sheet](#long-hair-short-hair-and-the-hairs-shading).) Rings of short sheets round the head, one over the next as tiles lie, each cut into points; the rings wander up and down so they do not read as rows. `tousled` splays its points and turns them out |
 | `tail`, `bun`, `braid`, `braids`, `kerchief` | The scalp's hair as two sheets drawn to the tie (from the hairline all round, and from the top); the tail a sheet rolled into a tube that ends in three points; the fringe |
 | Single locks | The locks at the ears' front, sideburns, a bun's coils and a braid's leaves stay locks |
 
@@ -1206,7 +1236,92 @@ Pass 3, during step 6 (2026-11-12), at the laptop's measurement of composed peop
 - **Every piece worn has a colour in the person's line.** The line named a colour for the jersey, the coat or smock and headwear. It now names one for the **apron** (`#b4b1a3`), the **trousers** (`#353840`) and the **boots** (`#332820`) too: the cloth every resident's were built in (`person_params.PIECE_COLOURS`).
 - **A smock's sleeve bands are a piece of their own,** `smock_bands-m` and `-f` (320 triangles, 0.04 MB), with their own colour in the line, as the apron is. The bands were faces of the smock in another cloth, and would have taken the smock's hue. A piece needs nothing new from the client; a second tag inside one file would have needed a second mesh and a new key. A person in a smock wears the bands, so wears one more piece.
 
+**The line's colour is the painted colour** (2026-11-12, after the laptop's check of composed people against their own files). The line named the cloth each piece is cut from. A person's own file paints that cloth paler and darker (the weave, the wear, the painted shade under a coat or a smock), and the client moves a shared piece's mean to the line's colour, so composed clothes came out stronger: a red jersey redder than its own file's.
+
+- **Measured, not looked up.** `person.py painted_pieces` measures each piece in the person's own build, after the painted shade: the mean of its vertex colours, by area, in linear light. That goes into `colors.outfit[<piece>]`, in `<name>.params.json` beside the person's file.
+- **How far the lines moved,** over Cullet's 64 (293 pieces), as CIE76 ΔE between the old line colour and the new: 2.7 at the median, 12.2 at the 90th percentile, 20.2 at most. By piece, at the median: jerseys 11.9 (they lie in a coat's or a smock's painted shade), coats 6.1, trousers 4.1, caps 2.8, boots 0.8, smocks 0.7, aprons 0.0.
+- **What that is.** It is the error the old lines put on a piece's mean colour. With the new lines a composed piece's mean is its own file's by construction. What is left between a composed person and their own file is how the shade is spread inside a piece; the laptop's rendered check measures that, and this machine has not run it.
+- **A line with painted colours needs the person built.** `person_params.py` alone still prints the cloth each piece is cut from. The lines of Cullet's 64 are in the pass page's `cullet-people.json`.
+
 **Cullet's 64 after this:** 97 shared files worn, 35.3 MB (17 types 19.4, 30 hair 8.6, 22 outfit 4.3, 28 overlay 3.0). Everything on disk: 171 files, 50.9 MB. On the client's count that is 2 materials for all hair and outfit pieces where there were 50, and the 28 overlays as before.
+
+### Long hair, short hair and the hair's shading
+
+Pass 3, after the nose wedge (2026-11-12). Three things the board showed: long styles flared out behind the shoulders as one flat plane, like a cape; short and tousled styles read as clumps or tiles close up and from behind; and where the reference has a hard highlight band and a dark edge, ours was one colour with a soft band. The file names, `hair_fit`, the far mesh, the spring chains and the outline data are as they were.
+
+**Long hair falls close to the back.**
+
+- **Why it was a cape.** Hair was combed over a rough body: a capsule for the shoulders, 3.5 cm larger than the figure all round. Long hair hung straight down from the head's widest point and stopped on that capsule, so it lay on a plane the head's width, 3 to 5 cm behind the back.
+- **It now lies on the garment itself.** The collar and the back are measured on the pieces at the standard build: the collar as a cone about the neck's axis by height, the back as an ellipse by height (`person.py make_hair`: `cone`, `back`). A smock's collar ends at 1.530 m, 9.6 cm from the axis; a coat's at 1.570 m, 12.4 cm.
+- **It is gathered behind the shoulders.** Below the collar's top each column is drawn toward the middle of the back and in to its surface as it hangs (`Hair.sheet(gather=…)`, `_walk`). A hanging sheet's own volume and its standing off the sheet under it now end at the nape.
+- **The hair in front of the ears ends at the jaw** (`front_end`). Hanging on to the chest it could not go behind the shoulder with the rest: it lay in front of it as a thin tail, and that tail's end was the hook that kicked forward at the collar.
+- **The two sides meet down the middle of the back** (`over(back_th=88)`), as parted hair does. They were fanned apart and a third sheet from the crown covered the gap; drawn in with the rest that sheet hung the hair's whole length as a narrow panel. It is gone, from `long`, `bob`, `bob_parted` and `shag`.
+- **It stays on the back when the body moves.** Hair hangs from the head. Combed 3 to 5 cm off the back it never met it; combed a few millimetres off, it passed into the smock as soon as the head tipped back (14° on a frame of the idle clip put its ends 5 cm inside). The file's spring block now holds it out:
+  - **Spheres whose backs are the garment's back** (`person.py back_spheres`): rows of four at six heights on `J_Bip_C_UpperChest`, `J_Bip_C_Chest` and `J_Bip_C_Spine`, 25 cm in radius, each through a point 7 mm behind the cloth, and each made no larger than leaves every hair joint clear at rest, so they do not move the hair as it was combed.
+  - **A second group of chains,** `HairBack`, for the chains behind the body, which collides with them. The chains beside the neck stay in `Hair` with the head, neck and shoulder spheres they had: they hang in front of the back's plane, inside any sphere large enough to be the back.
+  - **A joint of such a chain is one of the hair's own columns,** where it was the mean of the chain's columns: the mean of an arc lies inside the arc, in the body.
+  - **A joint's radius is 2 mm** (`hitRadius`, was 10), less than the hair's distance off the cloth; the older spheres are 8 mm larger to reach as far.
+  - The ends turn in 5 mm where they turned in 14.
+- **Over a coat: `.collar` files.** A shared style is combed over a smock. A coat's collar stands 4 cm higher and 3 cm wider, so hair that lies close on a smock cuts through it. The styles that hang past the collar (`long`, `tail`, `braid`; `person_params.COLLARED`) are also written as combed over a coat, each cut: `long.collar`, `long.2.collar` and so on, nine files. A person in a coat with one of those styles is given the `.collar` file in their line (`worn()`), as a person in a cap is given the `.cap` file. Over a jersey alone the plain file is used and stands about a centimetre off the back.
+
+**Short hair is one sheet.**
+
+- **`crop`, `short`, `tousled`:** one sheet from a small ring round the whorl out over the whole scalp to the hairline all round, its hem cut into points (`Hair.cap`), closed over the whorl by a low cone. `short` and `tousled` have a second, shorter one over the top for the cut's volume. Rings of short sheets laid like tiles read as tiles, each ring with its own edge and outline; one sheet has one hem.
+- **`sides`, `balding`:** one sheet from a line round the head down to the hairline (`Hair.skirt`), left out where the crown is bald or a cap covers it.
+- **`swept`:** the cap, and one sheet from the front hairline combed back over it. Its two rows of loose sheets stood up at the crown as flaps.
+- **Sideburns** are a small sheet a side where they were six short locks, which read as a clump in front of the ear.
+- **Greying** goes by the column, in streaks, where a whole point of a sheet went grey at once and read as a grey tile beside a coloured one. See below.
+
+**Greying lock by lock, for shared styles too.** A person's own file greyed lock by lock; a shared style took one tint, so a composed elder's hair was one flat colour. Hair files now carry the order in which their locks go grey, and a person's line how grey they are.
+
+- **The attribute: `_GREY`,** one float a vertex (glTF `SCALAR`, float), on `Hair` and `FarHair` in every hair style's file. It is 1 / a, where the vertex's lock is wholly grey once the person's `grey` reaches a. a is spread evenly from 0.15 to 0.90 over a head's locks (a sheet's columns, a single lock, a braid's leaf), so `_GREY` runs from 1.11 to 6.67. The scalp's cap carries the middle value, 1.90.
+- **The line:** `grey`, a number from 0 to 0.9, left out when the person has none; and, with it, `colors.hair_natural` and `colors.hair_silver`.
+- **The exact mix,** for each hair vertex: `t = clamp(grey × _GREY, 0, 1)`; `tint = mix(colors.hair_natural, colors.hair_silver, t)`, the two colours mixed as written (sRGB values); the vertex is then tinted with `tint` as it would be with `colors.hair`. A lock with a large `_GREY` is wholly silver early; the rest grey by degrees; at `grey` 0.9 every lock is silver.
+- **`colors.hair` stays** the one colour for a client that does not mix: the natural colour gone as grey as the head is on the whole. It is now the mean of the mix above over a head's locks. Before, it was mixed by the look's raw amount, which was less grey than the person's own file showed (0.50 where the file's locks came to 0.66).
+- **`grey` is not the look's `hair_grey`.** It is the amount at which the mix is as grey on the whole as the person's own file was (`person_params.grey_amount`): a look of 0.3 is a `grey` of 0.128, 0.5 is 0.312, 0.7 is 0.586.
+- **A person's own file is painted by the same mix** (`hair.py _lock_colour`), so the two agree. `compose.py --person` makes it too.
+- **What the client needs:** read `_GREY` on hair meshes (a custom vertex attribute, as `_OUTLINE_WIDTH` is), and tint hair by vertex as above. Until it does, `colors.hair` gives one tint as before.
+
+**The shading.**
+
+- **What the reference's highlight is in our renderer.** The asset board shows the reference through the client, and the client draws one highlight on anything tagged as hair: a ring round the head where the surface's normal leans up by a set angle, broken into comb teeth along the strands, and a hard edge where the surface turns from the sun (`hair_light` and the bands in `living/game/src/toon.wesl`). The reference's hard band and dark edge on the board are those two, on its smooth normals. Ours has had the same shader since `hair-rim-1`.
+- **Why ours did not show them.** A sheet's normal was half its own facing, so the ring and the shadow's edge broke at every sheet's edge into patches. Over that lay a soft lighter band in the vertex colours, added when the client's rim washed hair out. And the board's type sheets were photographed with every hair normal turned to the camera (`compose.py --hair-toward`, a stand-in from before `hair-rim-1`), which removes both the ring and the edge from the picture. That option is no longer used for the board.
+- **Now: one smooth shape.** Every sheet's normals are those of one smooth shape round the head, with a fifth of the sheet's own facing over the head and half where the hair hangs (`hair.py`: `RING_TILT`, `RING_FROM`; `face_normals.py` then draws them 0.35 toward the head's capsule, as before). The client's ring is one hard toothed band about 5 cm below the top of the head, and its shadow one edge across the whole head of hair. The soft band is gone.
+- **The dark edge in the file:** a sheet's ends are drawn 22% darker over its last fifth (`HEM_DARK`), so the hem reads as a line; inner surfaces are 0.55 of the outer, as before.
+- **One shading mean, as before.** The strand picture is unchanged (its whole mean 0.55), and every hair mesh's outer surfaces have mean 0.78 (`shade_mean.py --check`: 159 files, 0 off).
+
+**What the client needs:** nothing for the ring, the shadow's edge or the back's spheres on a whole-person file; three things for composed people.
+
+- The ring's strength, width and height are its own settings (`hair_ring` 0.7, `hair_ring_width` 0.05, `hair_ring_shift` 0.35 in `style.rs`), and the files are made for those values.
+- Greying lock by lock needs the client to read `_GREY` and mix by it ([above](#long-hair-short-hair-and-the-hairs-shading)); without that a composed head has one tint, as before.
+- A `.collar` file is loaded by the name in the person's line, like a `.cap` file. A composer that builds the hair's path from `styles.hair` needs no change; one that lists the hair files it knows needs the nine names.
+- **A composer must take a hair file's whole spring block:** every bone group (`long` has two, `Hair` and `HairBack`) and every collider group they name, on `J_Bip_C_Head`, `J_Bip_C_Neck`, `J_Bip_C_UpperChest`, `J_Bip_C_Chest` and `J_Bip_C_Spine` (found by name on the person, as the head's were). `compose.py` does this already. Without the back's spheres long hair passes into the back when the head tips. The game's own reader (`characters.rs rig_springs`) takes any number of groups and spheres as it is: a whole-person file needs nothing.
+- If the ring is wanted nearer the reference's, that is client work and two numbers: the teeth are 2.4 mm wide on our hair (`uv.x * 90` on a picture that repeats every 22 cm round the head) where the reference's strands make them about three times as wide, and the ring is drawn full strength all the way round where the reference's breaks at its strands.
+
+**What it costs.**
+
+| | Before | After |
+|---|---|---|
+| Hair files on disk | 50, 13.4 MB | 59, 16.9 MB (nine are `.collar` files, 3.1 MB) |
+| `crop` | 3,272 triangles near and 1,168 far, 0.23 MB | 4,404 near and 1,298 far, 0.29 MB |
+| `short` | 3,760 near and 1,254 far, 0.26 MB | 5,648 near and 1,520 far, 0.36 MB |
+| `tousled` | 3,796 near and 1,298 far, 0.26 MB | 4,796 near and 1,402 far, 0.31 MB |
+| `long` | 9,572 near and 2,464 far, 0.57 MB | 8,472 near and 2,080 far, 0.51 MB |
+| `bob` | 5,304 near and 1,436 far, 0.33 MB | 5,148 near and 1,404 far, 0.32 MB |
+| Hair files Cullet's 64 wear | 30, 8.6 MB | 33, 10.2 MB (four people wear a `.collar` file) |
+| All shared files the 64 wear | 97, 35.3 MB | 100, 36.9 MB |
+| Everything on disk | 171 files, 50.9 MB | 180 files, 54.4 MB |
+
+A short style costs more than its rings did: a sheet over the whole scalp has faces under its upper layer that the rings did not have.
+
+**What is left** (judged on the board's `hair-short`, `hair-long` and `hair-people` sheets, under the client's own hair light):
+
+- **The ring is a whole circle on a short round head** seen from behind or above, where the reference's long hair shows it as an arc. It is the client's ring on a dome; see the client's two numbers above.
+- **`tousled` is calmer than it was.** One sheet with its points turned out is tidier than rings of splayed tiles; the reference's loose hair has single strands lifting off, which ours has none of.
+- **A seam runs down the middle of the back** on parted styles, where the two sides meet. Close up one side can sit a millimetre or two over the other.
+- **`long` over a coat is fuller at the collar** than over a smock: it has to clear a collar 12 cm from the neck's axis.
+- **Held by joints, not by its surface.** A chain has a joint every 9 cm and the game holds those out of the back; between them, and at the sides of the back, an end can still dip a few millimetres into the cloth on a strong pose. `tail` and `braid` hang as tubes on one chain and have no back spheres.
+- **`long` on a bare type head** lies on a smock that is not there; on a person it lies on theirs.
 
 ### Type files
 
@@ -1217,7 +1332,7 @@ Pass 3, during step 6 (2026-11-12), at the laptop's measurement of composed peop
 | Skeleton | the 52 `J_Bip_*` bones and the root, as every generated person; the 25 `J_Id_*` bones and the two eye bones at rest: 80 joints |
 | `Face` | the whole head (the scalp too, since every hair style shares it): skin, eyes, lashes and lines, and the skin under the jaw; 5,840 triangles; two morph targets, `Fcl_EYE_Close` and `Fcl_MTH_A` |
 | `Skin` | the neck and hands, 4,536 triangles |
-| `FarSkin` | the far head, neck and hands on the same skeleton, 1,964 triangles, with its own small picture |
+| `FarSkin` | the far head, neck and hands on the same skeleton, 1,964 triangles; its small picture is a tile of a page every type shares ([the types' pictures on shared pages](#the-types-pictures-on-shared-pages)) |
 | Normals | the designed face normals (`face_normals.py`) and `_OUTLINE_NORMAL` |
 | Not in it | hair, clothes, clips, hair's spring bones |
 
@@ -1228,6 +1343,34 @@ Pass 3, during step 6 (2026-11-12), at the laptop's measurement of composed peop
 - **`gen_person.sh` switches:** `CLIPS=none` bakes no clips into a file; `MORPHS=client`; `IDENTITY=bake` builds the identity into the vertices where the default moves the bones.
 
 **The standard figure for the shared clips.** `lookdev/anim/own-clips.glb` (`share.py clips`, from the client's `crowd-1`) is baked on the `man` preset, and the client measures a person's stride against that file's figure, so nothing else depends on which figure it is. With the cage head the `man` preset stands 1.803 m in the file; it stood 1.837 m when `crowd-1` chose it, because the head changed. The clip file is to be made again from the current preset when the type files go into use, and is not to move to a type's own figure.
+
+### The types' pictures on shared pages
+
+Pass 3, 2026-11-12, from the laptop's cost table: with people composed from shared files, most of what was left at the play camera was the types' own far-head pictures, each a material of its own. A type's file held four pictures: the full head's atlas, the iris, the lip-and-blush layer and the far head's picture. Two of them now lie on pages every type shares (`share.py types`, run at the end of `gen_types.sh`).
+
+| Picture | Before | Now |
+|---|---|---|
+| The far head's (`FarSkin`, `M00_000_00_Body_01_SKIN`) | 256² in each type's file | a tile of `lookdev/pages/types-far.png`, 1280 × 1280 |
+| Lips and blush (`M00_000_00_FaceTint_00_FACE`) | 512² with alpha in each type's file | a tile of `lookdev/pages/types-tint.png`, 1600 × 720 |
+| The iris (`M00_000_00_EyeIris_00_EYE`) | 192² in each type's file | the same: it does not belong on a page as it is, see below |
+| The full head's atlas and its shadow map | 1024² in each type's file, `<type>.face.png` beside it | the same |
+
+- **A type's tile is fixed** by its place in `types.json` (a 5 × 5 grid for the 21), recorded in `lookdev/pages/types.json`. One type built again goes back into its own tile and changes no other texel.
+- **The lip layer's tile is the band its mesh uses,** not the whole picture: u 0.19 to 0.81 and v 0.59 to 0.88 on every type, 320 × 144 texels at the picture's own scale. Whole tiles would make a 2560² page that is nearly all empty.
+- **One mean for every far head.** The client recolours skin by moving a material's mean colour to the person's, and a material learns its mean once, from the first mesh that wears it. So each far tile's colours are moved the way the client moves colours (one turn of hue, one ratio of saturation and of value, in linear light) until its mean over the texels its mesh uses is one value, `FAR_MEAN` (linear 0.777, 0.4985, 0.369). The types' own means were within 1% of it. The page's empty tiles are that colour.
+- **Nothing shows.** Four residents composed from the type files and coloured by the client, photographed before and after: where the pose is the same the pictures differ by 0.0 to 0.4 of 255 a channel, the far head at the game camera included.
+- **What it saves.** For every type on screen, two materials fewer: far heads and lip layers are one material each for all types. In memory (RGBA, no mips): 26.3 MiB for the 21 types' far pictures and lip layers before (21.3 for the 17 that Cullet wears), 10.6 MiB for the two pages. On disk the 21 type files are 23 MB where they were 24, and the pages 0.6 MB.
+
+**Why the iris stays a type's own.** The types' irises are painted in different colours, so that a type shown by itself has eyes: brown, blue and grey, with mean values from 0.06 to 0.12 and saturations from 0.15 to 0.80. The client's move from a mean to a person's colour multiplies below the mean and lightens above it, and two such moves in a row are not one. Moved to one mean and shared, the same eye colour came out as another on some types: photographed, a grey-blue eye turned teal; simulated with the client's own formula over the 21 types and Cullet's seven eye colours, up to 40 of 255 a texel. One iris picture for every type would share with no such step. That changes how every composed person's eyes are coloured, so it is a look to judge on the board first, and it was not done here.
+
+**The full head's atlas** can go on pages by the existing `share.py pages --which near`, shadow map and `face_map` and all, as a town's faces do. It was not asked for and was not done: a full head is drawn for the few people near the camera.
+
+**What the client needs:**
+
+- **To ship the two pages** with the type files: `lookdev/pages/types-far.png` and `types-tint.png`. A type's file names them by path (`../pages/…`), and the asset server loads each once, as it does `strands.png` and a town's pages.
+- **To share the materials.** The game's own path (`lookdev.rs convert`) makes one material for each distinct content, so far heads and lip layers become one each with no change. A composer that keys a type's materials by its file must key these two by content instead, as it does a style file's: `M00_000_00_Body_01_SKIN` and `M00_000_00_FaceTint_00_FACE`.
+- **Nothing for the colour.** Every far tile has the one mean, so whichever type's mesh teaches the material its mean, it is right for all.
+- **UVs stay inside a tile,** half a texel in from its edge. Nothing wraps.
 
 ### What the client needs for types
 
@@ -1661,12 +1804,20 @@ What pass 2 proposed, in order of gain, and what became of it:
 
 ## What still separates ours from the reference
 
+**After long hair, short hair and the hair's shading**, judged on the board's `hair-short`, `hair-long` and `hair-people` sheets with the reference beside ours, ordered by how much it shows:
+
+1. **The brows** are strands where the reference draws one tapered stroke.
+2. **Hair, what is left.** The shapes and the shading are now the reference's kind: broad sheets, one hard ring, one shadow edge, long hair on the back. The reference's hair still has single strands lifting off at the ends and a fringe in a few thick locks; ours is smoother and plainer, most on `tousled`. The ring is a whole circle on a short round head. A seam runs down the back of parted styles.
+3. **The eyes, close up:** the reference's band is a little heavier still and spiked along its whole top, its glow hotter.
+4. **The jaw's line does not hold at a distance** (unchanged; a line in screen pixels is the client's).
+5. **Clothes and silhouette, hands** (unchanged). Long hair now shows how plain the smock's back and collar are.
+
 **After step 6**, judged on the board's `eyes-close`, `faces-close` and `lips-blush-sweep` sheets with the reference beside ours, ordered by how much it shows:
 
 1. **Hair.** Long hair stands off the back as one flat plane where the reference's falls close to it; the shading is one colour with a soft band where the reference paints a hard highlight and a dark edge; short styles read as clumps from behind. Next.
 2. **The brows** are strands where the reference draws one tapered stroke.
 3. **The eyes, close up:** the reference's band is a little heavier still and spiked along its whole top, its glow hotter. At the game camera an eye is two or three pixels and the difference does not show.
-4. **The nose's wedge** reads as a hard triangle in three-quarter view (unchanged; the owner's answer on step 4b is awaited).
+4. **The nose's wedge** read as a hard triangle. Mended after this step ([the wedge, the band and the fold](#the-nose-wedge-the-pale-band-and-the-fold)): it is a hint from 65°.
 5. **The jaw's line does not hold at a distance** (unchanged; a line in screen pixels is the client's).
 6. **Clothes and silhouette, hands** (unchanged).
 
@@ -1771,7 +1922,7 @@ The order was set by the dev-box coordinator on 2026-11-11, after the owner's ve
 7. **Hair finish.** Done ([hair finish and cuts](#hair-finish-and-cuts)): the fringe, the ends, the temple; three cuts of every style; far beards.
 8. **Hair as sheets.** Done ([hair as sheets](#hair-as-sheets)).
 9. **The eyes' drawing, lips and blush.** Done ([the eyes, lips and blush](#the-eyes-lips-and-blush)).
-10. **Long hair close to the back,** then **hair's shading** (the reference's hard highlight and dark edge) with the short styles' clumps. Next.
+10. **Long hair close to the back, short hair as one sheet, hair's shading.** Done ([long hair, short hair and the hair's shading](#long-hair-short-hair-and-the-hairs-shading)).
 11. **Later:** the brows as one stroke; the game turning the eyes, clothes that swing, women's silhouettes, children's own garments, hands.
 
 Each pass page sets two references beside ours: the VRoid control, and a still from Blue Protocol's published character material (one of the owner's named art references), for comparison only. The stills are kept outside the repository, in `~/archive/asset-board/references/blue-protocol/`, with their sources.
