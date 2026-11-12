@@ -11,7 +11,7 @@ import bevy_pbr::render::{
     mesh_functions,
 };
 import living_game::toon_light::{
-    toon, is_kind, noise3, rgb_to_hsv, hsv_to_rgb, scene, wetted, view_depth, sun_shadow, sun_color,
+    toon, is_kind, hash3, noise3, rgb_to_hsv, hsv_to_rgb, scene, wetted, view_depth, sun_shadow, sun_color,
     bands, banded, puddles, wet_sheen, fresnel, rim_light, point_lights, emission, has_sun, sun_direction, eye,
 };
 
@@ -193,23 +193,54 @@ fn hair_light(albedo: vec3<f32>, N: vec3<f32>, V: vec3<f32>, L: vec3<f32>, lit: 
     let T = normalize(along * select(1.0, 0.0, length(along) < 1e-3) + N * toon.hair.z + vec3<f32>(0.0, 1e-4, 0.0));
     // Mostly the view: the ring is a drawn shape that stays in sight, nudged by the light.
     let H = normalize(V * 0.75 + L * 0.25);
-    let d = abs(dot(T, H));
-    let w = toon.hair.y;
+    // The lock this point is on: its `_GREY` (the second UVs' x; one number per lock, 1.1 to 6.7
+    // on composed hair) and char-4's `_RING` (their y, stored as 1 + _RING; 0 without one).
+    var lock = 0.0;
+    var mask = -1.0;
+@if(VERTEX_UVS_B) {
+    lock = in.uv_b.x;
+    mask = in.uv_b.y - 1.0;
+}
+    let has_lock = lock > 1e-3;
+    // `_GREY` is one number a lock along it, but neighbouring locks' numbers blend across the
+    // triangles between them (smoothly round a head), so the lock is the bin its number falls in
+    // (`hair_place.z` bins a unit, about a lock wide): breaks and shifts change in clean steps
+    // there, not pixel by pixel.
+    let bin = floor(lock * toon.hair_place.z);
+    let lh = hash3(vec3<f32>(bin * 1.731, bin * 0.377, 11.0));
+    let lh2 = hash3(vec3<f32>(bin * 0.533, 7.0, bin * 1.199));
+    // Placed by the view (the band slides with the camera), or at a height: where N·up is
+    // `hair_lock.w`, moved up or down a little lock by lock.
+    let at = toon.hair_lock.w + select(0.0, (lh2 - 0.5) * 2.0 * toon.hair_lock.y, has_lock);
+    // At a height only on char-4's hair, whose normals lean up with height and whose locks carry
+    // `_GREY`; other hair (VRoid bases) keeps the view-placed ring at its own width.
+    let level = select(0.0, toon.hair_lock.z, has_lock);
+    let d = mix(abs(dot(T, H)), abs(N.y - at), level);
+    let w = select(toon.hair.y, toon.hair_place.w, toon.hair_lock.z > 0.5 && !has_lock);
     // The band's edge: hard (softness 0) or fading from the band's middle (1). On hair shaded as
     // one smooth shape a hard band reads as a seam across the fringe.
     var ring = 1.0 - smoothstep(w * 0.55 * (1.0 - toon.hair_sheen.x), w, d);
     // Comb teeth: the band's edge breaks along the strands (across the hair's UVs).
 @if(VERTEX_UVS_A) {
-    let teeth = noise3(vec3<f32>(in.uv.x * 90.0, in.uv.y * 9.0, 0.0));
+    let teeth = noise3(vec3<f32>(in.uv.x * toon.hair_sheen.w, in.uv.y * 9.0, 0.0));
     ring = ring * mix(1.0, smoothstep(0.25, 0.5, teeth + (1.0 - d / w) * 0.35), toon.hair_sheen.y);
 }
     // The strand picture breaks it: light strands carry the sheen, dark ones lose it.
     ring = ring * mix(1.0, clamp((strand - 0.85) * 2.5, 0.0, 1.5), toon.hair_sheen.z);
-    // Only on the upper, outward side of the hair (from `hair_sheen.w` up: high enough keeps it to
-    // the crown and off a fringe, which faces forward), and fainter in shadow.
-    ring = ring * smoothstep(toon.hair_place.x, toon.hair_place.x + 0.25, N.y) * mix(0.25, 1.0, lit);
-    // Off surfaces that face the character's forward (a fringe), kept on the crown, sides and back.
-    ring = ring * (1.0 - smoothstep(toon.hair_place.y, toon.hair_place.y + 0.3, dot(N, forward)));
+    // Where locks part: a share `hair_lock.x` of locks goes without it (0.25: one in four).
+    ring = ring * select(1.0, step(toon.hair_lock.x, lh), has_lock);
+    // Fainter in shadow.
+    ring = ring * mix(0.25, 1.0, lit);
+    // Where it may lie: char-4's `_RING` when the file has one (1 over the crown band, 0 on
+    // fringes, tips, inner surfaces and under caps); else on the upper, outward side of the hair
+    // (from `hair_place.x` up)
+    if (mask > -0.5) {
+        ring = ring * clamp(mask, 0.0, 1.0);
+    } else {
+        ring = ring * smoothstep(toon.hair_place.x, toon.hair_place.x + 0.25, N.y);
+        // and off surfaces that face the character's forward (a fringe).
+        ring = ring * (1.0 - smoothstep(toon.hair_place.y, toon.hair_place.y + 0.3, dot(N, forward)));
+    }
     // Lighter in the hair's own hue; the lift keeps that hue, so dark hair shows a coloured ring
     // rather than a grey one.
     let lifted = albedo * 1.3 + 0.08 * albedo / max(max(albedo.r, max(albedo.g, albedo.b)), 1e-3);
