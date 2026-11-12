@@ -151,7 +151,7 @@
     "signals": {
       "howl": {
         "sound": "a long howl",
-        "range": 18,
+        "loudness": 2,
         "salience": 0.5
       },
       "growl": {

@@ -17,7 +17,7 @@ base={
  "record":{"bodies":{"hz":5},"uses":True},
  "variants":["instinct"],
 }
-def arm(name, wolves, people, start, night=False, wolf_graph="instinct:wolf_bold", deer=False, about=None, minds=None, people_graph="instinct:person"):
+def arm(name, wolves, people, start, night=False, wolf_graph="instinct:wolf_bold", deer=False, about=None, minds=None, people_graph="instinct:person", species=None):
     t=json.loads(json.dumps(base))
     if minds:
         # Both sides think (docs/PACK_MIND.md §6 steps 5-6): every person and wolf of the arena.
@@ -36,6 +36,9 @@ def arm(name, wolves, people, start, night=False, wolf_graph="instinct:wolf_bold
         steps+=[{"do":"graph","who":"deer","graph":{"wait":900}},
                 {"do":"place","who":"deer","to":{"farthest_town":{"who":"pack"},"offset":[0,6]}}]
     if night: t["world"]={"seed":"island","start_hour":21}
+    if species:
+        # Merged over species.json for this world only (the seed's `species`, build.rs).
+        t["world"].setdefault("overrides", {})["species"] = species
     wolf_off = close if start=="close" else spread[wolves]
     steps+=[
         {"do":"graph","who":"subject","graph":people_graph},
@@ -112,6 +115,16 @@ if __name__=="__main__":
     for start in ("close","spread"):
         arm(f"pack-minds-{start}-6v6", 6, 6, start, minds=["subject","pack"],
             about="Both sides with minds (wolves LIVING_ANIMAL_MINDS=salient,choose; people the default mix), starting from their instinct graphs; nothing in any prompt names a tactic (docs/PACK_MIND.md §5.5 guards).")
+    # The paid step's one-sided arms (docs/PACK_MIND.md §8): P1 people think, wolves on the
+    # shipped bold instinct; P2 wolves think, people on their instinct.
+    arm("pack-minds-people-spread-6v6", 6, 6, "spread", minds=["subject"],
+        about="P1: the people with minds, the wolves on the shipped bold instinct (docs/PACK_MIND.md §8).")
+    arm("pack-minds-wolves-spread-6v6", 6, 6, "spread", minds=["pack"],
+        about="P2: the wolves with minds starting from the shipped bold instinct, the people on their instinct (docs/PACK_MIND.md §8).")
+    # The howl's reach as its loudness (decision 2): 16.7 times the island's 9 m hearing is
+    # 150 m, the wolves' scent radius; the shipped howl is loudness 2 (18 m).
+    arm("pack-minds-howl150-spread-6v6", 6, 6, "spread", minds=["subject","pack"], species={"wolf": {"signals": {"howl": {"loudness": 16.7}}}},
+        about="Both sides with minds, the wolves' howl as loud as 16.7 times a voice (it carries 150 m on the island's 9 m hearing; shipped: 2, 18 m). The arena of decision 2: what the howl's reach changes.")
     arm("pack-minds-mixed-6v6", 6, 6, "spread", deer=True, minds=["subject","pack"],
         about="Both sides with minds, the island's deer left where they live (the mixed arm).")
     REFLEX_ABOUT = ("The spacing reflex as a candidate for the wolves' starting instinct (docs/PACK_MIND.md §5.7, decision 1): "
