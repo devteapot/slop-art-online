@@ -978,8 +978,8 @@ def scene_breath(st):
     try:
         call(st, "set_world_law", ["cost_dodge", "90"], "admin")
         for attempt in range(3):
+            p = open_ground(st, cid, east=2.0, south=4.0)
             full_breath(st)
-            p = body(st, cid)
             ready(st, "dodge")
             first_sent = time.time()
             call(st, "use_skill", ["dodge", 0, p[0], p[1] + 3.0])
@@ -992,6 +992,8 @@ def scene_breath(st):
                 if code != 200 and ("not ready" in said or "still recovering" in said):
                     first_sent = time.time() - 0.85
                     continue
+                # Told first: a REFUSED row stays 4 s, and a request can stall that long.
+                told = [e["note"] for e in seen(st) if "out of breath" in (e.get("note") or "")] or told
                 v = wait_outcome(st, "dodge", 0.8)
                 if v and ("not ready" in v["outcome"] or "still recovering" in v["outcome"]):
                     first_sent = time.time() - 0.85
@@ -999,7 +1001,6 @@ def scene_breath(st):
                 break
             gaps.append(round(second_sent - first_sent, 2))
             trail.append(v and v["outcome"])
-            # Read at once: a REFUSED row stays 4 s, and a request can stall that long.
             told = [e["note"] for e in seen(st) if "out of breath" in (e.get("note") or "")] or told
             if trail[-1] and "out of breath" in trail[-1]:
                 break
