@@ -10,6 +10,11 @@ fn laws() {
         gestation_days: 1.0, bond_window_s: 120.0,
         crowd: 6, danger_near: 8.0, danger_far: 12.0,
         repeat_failure_s: 120.0,
+        // Whoever strikes, shoots or casts is told how it came out (an `own` experience): a blow's
+        // hit, guard or kill when it lands, a missile's when it strikes, is dodged, hits a wall or
+        // nothing, or flies out of the shooter's sight (docs/COMBAT_MIND.md §3.1). Off: only
+        // notable skills (attack) and failures are told, as before 2026-11-11.
+        force_outcomes: true,
         road_speed: 1.4,
         // Steering: where bodies slow down and cut corners, and how often they look again
         // (how each creature turns and keeps apart is its `motion` law).
@@ -2843,6 +2848,7 @@ fn laws_about(l) {
         speech_audience: if l.speech_audience { "who heard each line, and how they stood toward the speaker, is kept for a minute" } else { "who heard a line is not kept" },
         longing_after_min: `a grown person longs for a child ${short(l.longing_after_min)} minutes after its own birth or its youngest child's (the most nurturing sooner)`,
         longing_food: if l.longing_food > 0.0 { `and only while carrying at least ${short(l.longing_food)} food` } else { "whatever food it carries" },
+        force_outcomes: if l.force_outcomes { "whoever strikes, shoots or casts learns how it came out, as far as they see" } else { "a blow, shot or bolt tells its maker how it came out only when it fails, or for a few skills" },
         fov_on: if l.fov_on { "one sees fully only the way one faces" } else { "one sees as far in every direction" },
         fov_focal_deg: `full sight within ${short(l.fov_focal_deg)} degrees of facing (when sight depends on facing)`,
         fov_side_deg: `side vision out to ${short(l.fov_side_deg)} degrees`,

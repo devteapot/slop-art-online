@@ -476,6 +476,7 @@ pub fn missiles(ctx: &ReducerContext, now: u64) {
                 ctx.db.missile().id().delete(m.id);
                 show(ctx, now, Seen { kind: seen::IMPACT, actor: m.owner, skill: sc.shapes().code(&m.skill), at, dir: (m.dx, m.dy), ..Default::default() });
                 outcome_of(ctx, m.use_id, "struck a wall", now);
+                act::missile_told(ctx, m.owner, &m.skill, 0, act::Far::Wall, at, now);
             }
             _ => {
                 m.left -= step;
@@ -483,6 +484,7 @@ pub fn missiles(ctx: &ReducerContext, now: u64) {
                     ctx.db.missile().id().delete(m.id);
                     show(ctx, now, Seen { kind: seen::IMPACT, actor: m.owner, skill: sc.shapes().code(&m.skill), at: b, dir: (m.dx, m.dy), ..Default::default() });
                     outcome_of(ctx, m.use_id, "hit nothing", now);
+                    act::missile_told(ctx, m.owner, &m.skill, 0, act::Far::Nothing, b, now);
                 } else {
                     m.x = b.0;
                     m.y = b.1;
@@ -515,6 +517,7 @@ fn strike(ctx: &ReducerContext, m: &Missile, victim: u32, at: (f32, f32), now: u
         show(ctx, now, Seen { kind: seen::DODGED, actor: m.owner, target: victim, skill: code, at, dir: (m.dx, m.dy), ..Default::default() });
         show(ctx, now, Seen { kind: seen::IMPACT, actor: m.owner, target: 0, skill: code, at, dir: (m.dx, m.dy), ..Default::default() });
         outcome_of(ctx, m.use_id, "dodged", now);
+        act::missile_told(ctx, m.owner, &m.skill, victim, act::Far::Dodged, at, now);
         return;
     }
     let effects = match act::missile_effects(ctx, m.owner, &m.skill, victim, now) {
@@ -522,6 +525,7 @@ fn strike(ctx: &ReducerContext, m: &Missile, victim: u32, at: (f32, f32), now: u
         Err(why) => {
             show(ctx, now, Seen { kind: seen::IMPACT, actor: m.owner, target: victim, skill: code, at, dir: (m.dx, m.dy), ..Default::default() });
             outcome_of(ctx, m.use_id, &why, now);
+            act::missile_told(ctx, m.owner, &m.skill, victim, act::Far::Refused(&why), at, now);
             return;
         }
     };
@@ -535,6 +539,8 @@ fn strike(ctx: &ReducerContext, m: &Missile, victim: u32, at: (f32, f32), now: u
         }
     }
     outcome_of(ctx, m.use_id, &format!("struck {}: {dealt}", common::display(ctx, victim)), now);
+    let killed = ctx.db.character().id().find(victim).is_some_and(|v| !v.alive);
+    act::missile_told(ctx, m.owner, &m.skill, victim, if killed { act::Far::Killed } else if dealt.is_empty() { act::Far::Struck("it did no harm") } else { act::Far::Struck(&dealt) }, at, now);
 }
 
 /// A death: everyone who could see it is told, and the one who died learns who saw it.

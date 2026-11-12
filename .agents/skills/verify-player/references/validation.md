@@ -15,6 +15,10 @@ Branch `stamina-1` with look-2 merged, trial service `slop-trials-stdb`. `player
 - **`player-st1a` (before the fixes): 24 of 35.** The strike scenes were refused "out of reach" (main's `fix-place-free` placement), and the breath scene dodged where there was no room. Both were fixed or noted.
 
 
+## 2026-11-11 force_outcomes: a player is told its own strike and shot as a mind is (mind-act-outcome-far, Spark)
+
+Branch `mind-act-outcome-far` at 3328c7bb, the trial service (port 3320), island seed. `player-far2-233156`: `combat.py --fresh`, 31 of 31, with the new checks: the strike's line "You finished: strike → person. hit for 9" and its `my_act_outcomes` row (`own`, `strike`, ok, `done`), the arrow's "You finished: bowshot → a stranger. struck a stranger: hit for 12" and its row (`own`, `bowshot`, `done`, `other` the one struck); every such line in `experience` and row in `act_outcome` the player's character's only. `player-far2-233156-outcomes`: `outcomes.py` 14 of 14 (the 64-row bound, scoping), `told.py` 12 of 12.
+
 ## 2026-11-11 speech with the `speech_audience` law off (exp-greet, Spark)
 
 Branch `exp-greet`, the trial service `slop-trials-stdb` (port 3320). `player-1111-152137`, the speech part of `player-character.md`, passed. An addressed and an unaddressed `human_say` gave the same chronicle lines and listener experiences as before ("A stranger said to you: …", salience 0.9; the unaddressed line was also 0.9, because the listener was the only one close by). No `audience` row was written. `set_paused` and `install_script` were refused to the player ("admin only"), and the player's SQL on `audience` was refused (a private table). The other recipes were not rerun.
