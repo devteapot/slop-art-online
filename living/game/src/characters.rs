@@ -952,6 +952,12 @@ fn hsv(c: Vec3) -> Vec3 {
 }
 
 /// How much of a texture's own hue variation a recoloured material keeps.
+///
+/// The generator mirrors this rule: `living/tools/blender/person_params.py` `HUE_SPREAD` (this value) and
+/// `SHARED_IRIS_SOURCE` (the shared iris picture's mean as [`mean_color`] takes it, over the
+/// texels its mesh uses) set each person's `colors.eyes` so that the moved iris lands on their eye
+/// colour. Change either here, or how a material's source colour is taken, and those must follow;
+/// `living/tools/characters/eye_colours.py --check` catches a changed source.
 const HUE_SPREAD: f32 = 0.4;
 
 /// A greying person's hair tag (`toon.wesl` `recolor`): their natural colour's and their
