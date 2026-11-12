@@ -89,6 +89,11 @@ fn laws() {
         // labelled "stranger". On: anyone whose name one does not know, the rule that names
         // people in scenes, percepts and memory (`perception::knows_name`).
         stranger_by_name: false,
+        // Attention cues (docs/ATTENTION.md): a mind may write what in what it perceives should
+        // bring it to think about one of its stances, goals or projects. Off: none is matched.
+        // A cue fires once per thing it matched within `cue_cooldown_s`, and a character is
+        // brought to think by its cues at most once within `cue_gap_s`.
+        cues_on: false, cue_cooldown_s: 600.0, cue_gap_s: 60.0,
         fov_focal_deg: 70.0, fov_side_deg: 110.0, fov_side_share: 0.3333,
         fov_near_m: 3.0, fov_near_dark_m: 2.0, fov_margin_deg: 10.0,
         // What is heard but not seen (only while the field is on) is told by its distance:
@@ -1603,6 +1608,12 @@ fn winded(a) {
 //              `<skill>_missile`), "facing" (a held guard), "dash" (a dodge), "none"
 //   timed      the combat timing above (one windup at a time, recovery, cooldown)
 //   rooted     a player's movement waits while it winds up
+//   committed  once started it runs its whole course (a windup to its release, a dash to its
+//              end), whoever controls the body: no movement key, new plan, condition that stops
+//              holding or target leaving sight ends it; its timing or something physical
+//              (death, a wall in a dash's way) does. Only a dash may cut in on a windup.
+//              A world may switch it per skill in its own laws (an overlay through
+//              `floors::compose`): `fn dodge_combat() { let s = base_dodge_combat(); s.committed = false; s }`.
 //   hostile    aimed at a creature, that creature is its victim and sees it coming
 //   reflex     it takes the body back from a deliberate act
 //   real_time  behavior of the moment: a graph's, not a one-off act's
@@ -1618,17 +1629,17 @@ fn winded(a) {
 //   needs      items the skill bar shows as missing (the check stays the rule)
 //   knows      techniques the skill bar shows as unknown
 // A dash moves `<skill>_dist(kind)` tiles at `<skill>_speed(kind)` tiles/s.
-fn strike_combat() { #{ aim: "creature", timed: true, rooted: true, hostile: true, reflex: true, real_time: true, melee: true, closes_in: true, force: true, dares: true, knack: "attack" } }
-fn bowshot_combat() { #{ aim: "point", timed: true, rooted: true, hostile: true, reflex: true, real_time: true, force: true, knack: "shoot", needs: ["bow", "arrow"] } }
-fn firebolt_combat() { #{ aim: "point", timed: true, rooted: true, hostile: true, reflex: true, real_time: true, force: true, knack: "throw", knows: ["fire_bolt"] } }
+fn strike_combat() { #{ aim: "creature", timed: true, committed: true, rooted: true, hostile: true, reflex: true, real_time: true, melee: true, closes_in: true, force: true, dares: true, knack: "attack" } }
+fn bowshot_combat() { #{ aim: "point", timed: true, committed: true, rooted: true, hostile: true, reflex: true, real_time: true, force: true, knack: "shoot", needs: ["bow", "arrow"] } }
+fn firebolt_combat() { #{ aim: "point", timed: true, committed: true, rooted: true, hostile: true, reflex: true, real_time: true, force: true, knack: "throw", knows: ["fire_bolt"] } }
 fn block_combat() { #{ aim: "facing", timed: true, reflex: true, real_time: true, hold_ms: 8000, arc: 75.0, takes: 0.25 } }
-fn heal_combat() { #{ aim: "self_or_ally", timed: true, rooted: true, reflex: true, knack: "tend", knows: ["wound_tending"] } }
-fn dodge_combat() { #{ aim: "dash", timed: true, reflex: true, real_time: true } }
+fn heal_combat() { #{ aim: "self_or_ally", timed: true, committed: true, rooted: true, reflex: true, knack: "tend", knows: ["wound_tending"] } }
+fn dodge_combat() { #{ aim: "dash", timed: true, committed: true, reflex: true, real_time: true } }
 // A jump is a dash that does not evade: blows and missiles still land while you are in the air.
-fn jump_combat() { #{ aim: "dash", timed: true, reflex: true, real_time: true, evades: false } }
-fn attack_combat() { #{ aim: "creature", timed: true, rooted: true, hostile: true, reflex: true, real_time: true, melee: true, closes_in: true, force: true, dares: true } }
-fn shoot_combat() { #{ aim: "creature", timed: true, rooted: true, hostile: true, reflex: true, real_time: true, force: true } }
-fn throw_combat() { #{ aim: "creature", timed: true, hostile: true, reflex: true, real_time: true, force: true } }
+fn jump_combat() { #{ aim: "dash", timed: true, committed: true, reflex: true, real_time: true, evades: false } }
+fn attack_combat() { #{ aim: "creature", timed: true, committed: true, rooted: true, hostile: true, reflex: true, real_time: true, melee: true, closes_in: true, force: true, dares: true } }
+fn shoot_combat() { #{ aim: "creature", timed: true, committed: true, rooted: true, hostile: true, reflex: true, real_time: true, force: true } }
+fn throw_combat() { #{ aim: "creature", timed: true, committed: true, hostile: true, reflex: true, real_time: true, force: true } }
 fn threaten_combat() { #{ aim: "creature", hostile: true, closes_in: true, menace: true } }
 fn yield_combat() { #{ reflex: true, force: true } }
 fn seize_combat() { #{ aim: "creature", dares: true } }
@@ -2925,6 +2936,9 @@ fn laws_about(l) {
         longing_after_min: `a grown person longs for a child ${short(l.longing_after_min)} minutes after its own birth or its youngest child's (the most nurturing sooner)`,
         longing_food: if l.longing_food > 0.0 { `and only while carrying at least ${short(l.longing_food)} food` } else { "whatever food it carries" },
         stranger_by_name: if l.stranger_by_name { "in a routine, a stranger is someone whose name one does not know" } else { "in a routine, a stranger is someone one has no feelings about yet" },
+        cues_on: if l.cues_on { "what one wrote one would watch for brings one to think when one perceives it" } else { "one thinks when something happens to one, not because one watches for it" },
+        cue_cooldown_s: `the same thing seen again brings no new thought from what one watches for within ${short(l.cue_cooldown_s)} s`,
+        cue_gap_s: `what one watches for brings one to think at most once in ${short(l.cue_gap_s)} s`,
         force_outcomes: if l.force_outcomes { "whoever strikes, shoots or casts learns how it came out, as far as they see" } else { "a blow, shot or bolt tells its maker how it came out only when it fails, or for a few skills" },
         fov_on: if l.fov_on { "one sees fully only the way one faces" } else { "one sees as far in every direction" },
         fov_focal_deg: `full sight within ${short(l.fov_focal_deg)} degrees of facing (when sight depends on facing)`,

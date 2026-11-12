@@ -66,6 +66,12 @@ pub struct Shape {
     pub timed: bool,
     /// A player's movement waits while its windup runs.
     pub rooted: bool,
+    /// Once started it runs its whole course, for every controller: its windup to the release
+    /// (a dash: to its end). Only its own timing or something physical ends it (death, a wall
+    /// in a dash's way); never its controller's reason going (a graph's condition that stops
+    /// holding, its target leaving sight, a new plan, a player's movement keys). A dash may
+    /// still cut in on a committed windup (`living_authority::combat::gate`).
+    pub committed: bool,
     /// Aimed against a creature: that creature is its victim, and sees it coming.
     pub hostile: bool,
     /// Takes the body back from a deliberate act.
