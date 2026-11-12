@@ -15,15 +15,14 @@ replaces two things face_normals.py derives from an ellipsoid:
   section 3): a shadow shape is drawn for each of N light angles, each drawing becomes a signed
   distance field, and the fields are interpolated into one threshold map. The shapes are drawn
   by this script from the same landmarks, in the face's front view:
+    - the face is flat until the light is well round (about 55 degrees), as the reference's is;
     - the far side plane goes dark first, up to the cheek's corner line;
     - the edge then crosses the front following the cheek's own contour, not a vertical line,
       and below the nose it waits, so the mouth and chin keep their light longer;
-    - the cheek triangle under the far eye holds its light while the shade closes round it;
-    - the nose throws a wedge onto the far cheek that lengthens with the angle, and keeps its
-      near side lit late;
-    - between the brow and the nose's base the far half fills sooner, the edge running ahead
-      to the bridge: the socket's shade;
+    - between the brow and the nose's base the edge runs a little ahead: the socket's shade;
+    - the nose throws a small wedge onto the far cheek, which the far side's shade soon takes in;
     - a band along the far jaw rises as the light goes round.
+  Nothing stays lit inside the shade, and every edge is blurred by about a millimetre.
 
 The map's format is unchanged (face_normals.py; `face_lit` in living/game/src/toon.wesl): an RG
 picture in the face texture's UV space, R the light's horizontal angle from the face's front
@@ -47,7 +46,16 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 from merge_primitives import append_accessor, read_accessor, read_glb, write_glb  # noqa: E402
 
 H = 0.2564  # a type's head in the file, chin to crown (types.json, file.head_height_m)
-ANGLES = [24.0, 32.0, 40.0, 48.0, 56.0, 64.0, 72.0, 80.0, 90.0, 100.0, 112.0, 125.0, 140.0, 155.0, 168.0, 180.0]
+ANGLES = [55.0, 58.0, 61.0, 64.0, 68.0, 72.0, 76.0, 80.0, 85.0, 90.0, 96.0, 104.0, 114.0, 126.0, 140.0, 155.0, 168.0, 180.0]
+# When each shape comes in, degrees of the light from the face's front. The face is flat until the
+# first of them, as the reference's is; these are the numbers to move if a shape reads too early.
+WEDGE_ON = 56.0  # the nose's wedge on the far cheek (nothing is drawn at the first angle, 55, so it fades in from there)
+SIDE_ON, SIDE_FULL = 60.0, 72.0  # the far side plane: from the silhouette in to the cheek's corner line
+MIDDLE, CROSS = 96.0, 26.0  # the edge reaches the middle of the face at MIDDLE, having left the far corner CROSS degrees before
+SOCKET_ON, SOCKET_FULL, SOCKET = 72.0, 86.0, 0.5  # between brow and nose base the edge runs ahead by this share of the way to the bridge
+JAW_ON = 60.0  # the band along the far jaw
+WAIT = 20.0  # how many degrees later the far half fills below the nose
+SOFT_MM = 1.4  # the blur that softens every edge, millimetres
 FLOOR = 0.14  # the face is fully lit while the light is within this (of 180 degrees) of its front
 PX = 0.0005  # the front view's drawing grid, metres a pixel
 MAP = 512
@@ -231,54 +239,45 @@ def draw_masks(h):
             masks.append(np.ones((ht, w), bool))
             continue
         # 1. The far side plane, from the silhouette in to the cheek's corner line.
-        t = smooth(24.0, 42.0, a)
-        m |= gx < -(sil + (cor - sil) * t) + 0.0005
+        if a >= SIDE_ON:
+            t = smooth(SIDE_ON, SIDE_FULL, a)
+            m |= gx < -(sil + (cor - sil) * t) + 0.0005
         # 2. Across the front, following the cheek's own contour: the edge is the corner line
         # scaled toward the midline, leaning so it reaches the forehead a little later than the
-        # mouth (a rounded brow keeps its light) and passing the midline at 90 degrees.
+        # mouth (a rounded brow keeps its light).
         # Below the nose the far half waits: the mouth and chin keep their light while the cheek
         # beside them is already dark, so the edge leaves the nose's wing and runs out and down
-        # to the jaw, and is not one line down the middle of the face. It catches up past 90.
+        # to the jaw, and is not one line down the middle of the face. It catches up past MIDDLE.
         lean = 7.0 * (up - 0.5)
-        wait = 24.0 * float(smooth(118.0, 84.0, a)) * smooth(h.base_y + 0.002, h.base_y - 0.022, gy)
-        f = np.clip((90.0 + lean + wait - a) / 48.0, -1.0, 1.0)  # 1 at the far corner, 0 the midline, -1 the near corner
-        # Between the brow and the nose's base the far half fills sooner: the socket is set back
-        # and the nose stands in the light's way, so there the edge runs ahead to the bridge
-        # while the forehead and the mouth still wait. That bulge is the socket's shade.
-        ahead = float(smooth(50.0, 66.0, a)) * smooth(h.brow_y + 0.022, h.brow_y - 0.004, gy) * smooth(h.base_y - 0.012, h.base_y - 0.001, gy)
+        wait = WAIT * float(smooth(MIDDLE + 30.0, MIDDLE - 4.0, a)) * smooth(h.base_y + 0.002, h.base_y - 0.022, gy)
+        f = np.clip((MIDDLE + lean + wait - a) / CROSS, -1.0, 1.0)  # 1 at the far corner, 0 the midline, -1 the near corner
+        # Between the brow and the nose's base the far half fills a little sooner: the socket is
+        # set back and the nose stands in the light's way, so there the edge runs ahead toward
+        # the bridge. It stays one edge: nothing is left lit behind it.
+        ahead = SOCKET * float(smooth(SOCKET_ON, SOCKET_FULL, a)) * smooth(h.brow_y + 0.022, h.brow_y - 0.004, gy) * smooth(h.base_y - 0.012, h.base_y - 0.001, gy)
         f = np.where(f > 0, f * (1 - ahead), f)
-        if a >= 42.0:
+        if a >= MIDDLE - CROSS:
             m |= gx < -cor * f
         # 3. The near side plane, from the near corner out to the silhouette.
         if a >= 138.0:
             t = smooth(138.0, 172.0, a)
             m |= gx < cor + (sil - cor) * t
         # 4. The nose's wedge on the far cheek: from the bridge's far edge down to the wing,
-        # its point reaching further out and a little lower as the light goes round.
-        if a >= 30.0:
-            reach = min(math.tan(math.radians(min(a, 75.0))) * 0.55 * (h.bridge_z - h.tip_z + 0.006), 1.7 * h.nose_w) * float(smooth(30.0, 40.0, a))
-            top = h.tip_y + 0.55 * (ey - h.tip_y)
+        # its point reaching a little further out and lower as the light goes round. It is small,
+        # and the far side's shade takes it in soon after.
+        if a >= WEDGE_ON:
+            reach = min(math.tan(math.radians(min(a, 75.0))) * 0.4 * (h.bridge_z - h.tip_z + 0.006), 1.2 * h.nose_w) * float(smooth(WEDGE_ON, WEDGE_ON + 10.0, a))
+            top = h.tip_y + 0.5 * (ey - h.tip_y)
             m |= poly([(-0.0012, top), (-h.nose_w - reach, h.base_y + 0.25 * (h.tip_y - h.base_y) - 0.15 * reach), (-0.5 * h.nose_w, h.base_y - 0.003), (0.0, h.base_y + 0.001)])
-        # 5. A band along the far jaw, rising as the light goes round; the near jaw's after 100.
-        band = 0.050 * H * smooth(30.0, 80.0, a) * smooth(0.0, 0.012, -gx)
-        m |= (gy < jaw + band) & (gx < 0)
-        if a >= 100.0:
-            band = 0.050 * H * smooth(100.0, 150.0, a) * smooth(0.0, 0.012, gx)
+        # 5. A band along the far jaw, rising as the light goes round; the near jaw's later.
+        if a >= JAW_ON:
+            band = 0.050 * H * smooth(JAW_ON, JAW_ON + 40.0, a) * smooth(0.0, 0.012, -gx)
+            m |= (gy < jaw + band) & (gx < 0)
+        if a >= MIDDLE + 8.0:
+            band = 0.050 * H * smooth(MIDDLE + 8.0, MIDDLE + 50.0, a) * smooth(0.0, 0.012, gx)
             m |= (gy < jaw + band) & (gx > 0)
-        # Holds: what keeps its light while the shade closes round it.
-        # The cheek triangle under the far eye, shrinking toward its top edge until it closes.
-        if a < 92.0:
-            k = float(smooth(92.0, 56.0, a))  # 1 whole, 0 closed
-            a1, a2 = (-(ex - 0.55 * ew), ey - 1.55 * eh), (-(ex + 0.95 * ew), ey - 1.45 * eh)
-            apex = (-(ex + 0.05 * ew), ey - 1.5 * eh - k * 0.80 * (ey - 1.5 * eh - h.base_y + 0.012))
-            hold = poly([a1, a2, apex]) if k > 0.02 else np.zeros((ht, w), bool)
-            m &= ~hold
-        # The nose's near side, lit until the light is well behind.
-        if 90.0 <= a < 150.0:
-            k = float(smooth(150.0, 112.0, a))
-            top = h.tip_y + 0.75 * (ey - h.tip_y)
-            hold = poly([(0.0008, top), (0.0008 + 0.25 * h.nose_w * k, top), (h.nose_w * k, h.base_y + 0.004), (0.0008, h.base_y + 0.002)]) if k > 0.02 else np.zeros((ht, w), bool)
-            m &= ~hold
+        # Nothing holds its light inside the shade: a lit island under the eye, or the nose's
+        # near side left bright, read as patches, not as form.
         if masks:
             m |= masks[-1]
         masks.append(m)
@@ -305,14 +304,17 @@ def thresholds(masks):
             t = np.clip(d0 / np.maximum(d0 - d1, 1e-6), 0.0, 1.0)
         out[new] = ((a0 + (a1 - a0) * t) / 180.0)[new]
         done |= masks[i]
-    # The drawings are pixels: a light blur (about a millimetre) takes their steps out of the
-    # field, so the edge the shader cuts from it is a clean line.
+    # Every edge is softened: a blur of SOFT_MM takes the drawings' pixel steps out of the field
+    # and gives an edge that stands still between drawings a slope, so the shader cuts it a pixel
+    # or two soft at close range and not as a knife line.
     k = np.array([1, 4, 6, 4, 1], float)
     k /= k.sum()
-    for axis in (0, 1):
-        pad = [(2, 2) if a == axis else (0, 0) for a in (0, 1)]
-        padded = np.pad(out, pad, mode="edge")
-        out = sum(k[i] * np.take(padded, np.arange(i, i + out.shape[axis]), axis=axis) for i in range(5))
+    passes = max(1, int(round((SOFT_MM / 1000.0 / PX) ** 2)))  # a pass of this kernel is one pixel of spread
+    for _ in range(passes):
+        for axis in (0, 1):
+            pad = [(2, 2) if a == axis else (0, 0) for a in (0, 1)]
+            padded = np.pad(out, pad, mode="edge")
+            out = sum(k[i] * np.take(padded, np.arange(i, i + out.shape[axis]), axis=axis) for i in range(5))
     return np.clip(out, FLOOR, 1.0)
 
 
@@ -495,7 +497,7 @@ def sheet(path, h, masks, th, frame):
     grey = (np.clip(th, 0, 1) * 255).astype(np.uint8)
     img.paste(Image.fromarray(grey, "L").convert("RGB"), (0, oy))
     d.text((4, oy + ht + 3), "the threshold map (dark goes into shade first)", fill=(40, 40, 40))
-    for k, a in enumerate((36.0, 52.0, 68.0, 85.0, 106.0, 132.0, 160.0)):
+    for k, a in enumerate((60.0, 68.0, 76.0, 84.0, 94.0, 110.0, 135.0)):
         img.paste(face(th < a / 180.0), ((k + 1) * w, oy))
         d.text(((k + 1) * w + 4, oy + ht + 3), f"from the map at {a:.0f} degrees", fill=(40, 40, 40))
     img.save(path, quality=90)
