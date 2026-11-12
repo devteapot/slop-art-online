@@ -36,6 +36,10 @@ var face_sampler: sampler;
 var detail_layers: texture_2d_array<f32>;
 @group(constants::MATERIAL_BIND_GROUP) @binding(104)
 var detail_sampler: sampler;
+// The hair's greying palette (style.rs `ToonExt::tints`, characters/compose.rs `HairTints`):
+// row 0 the natural colours, row 1 the silvers, as sRGB values; a fallback elsewhere.
+@group(constants::MATERIAL_BIND_GROUP) @binding(105)
+var hair_tints: texture_2d<f32>;
 
 // The surface that a vertex colour's alpha names (living/tools/textures/surfaces.py: surface k
 // is (k + 0.5) / 32), or -1 for none (alpha 1).
@@ -129,7 +133,12 @@ fn srgb_to_linear(c: vec3<f32>) -> vec3<f32> {
 // A character's own colours on a shared texture: the mean texture colour moves to the recipe's,
 // keeping the texture's detail. Characters share their base's materials (so they batch); each
 // mesh's tag carries its recipe colour as sRGB bytes with bit 24 set (characters.rs `recolor`).
-fn recolor(c: vec3<f32>, tag: u32) -> vec3<f32> {
+// Hair that greys lock by lock (bit 26 too, bit 25 clear so it never sways) carries instead its
+// natural colour's and its silver's places on the palette (bits 0-7, 8-15) and how grey the
+// person is (bits 16-23, 0 to 1); `grey_v` is the vertex's `_GREY` (its second UVs' x). The
+// colour is then mix(natural, silver, clamp(grey x _GREY, 0, 1)) in sRGB values
+// (docs/CHARACTERS.md, "Long hair, short hair and the hair's shading").
+fn recolor(c: vec3<f32>, tag: u32, grey_v: f32) -> vec3<f32> {
     var mode = toon.recolor.w;
     var goal = toon.recolor.xyz;
     var mean_hue = toon.recolor_from.xy;
@@ -137,7 +146,13 @@ fn recolor(c: vec3<f32>, tag: u32) -> vec3<f32> {
         if ((tag & (1u << 24u)) == 0u) {
             return c;
         }
-        let target_srgb = vec3<f32>(f32(tag & 255u), f32((tag >> 8u) & 255u), f32((tag >> 16u) & 255u)) / 255.0;
+        var target_srgb = vec3<f32>(f32(tag & 255u), f32((tag >> 8u) & 255u), f32((tag >> 16u) & 255u)) / 255.0;
+        if ((tag & (1u << 26u)) != 0u && (tag & (1u << 25u)) == 0u) {
+            let natural = textureLoad(hair_tints, vec2<i32>(i32(tag & 255u), 0), 0).rgb;
+            let silver = textureLoad(hair_tints, vec2<i32>(i32((tag >> 8u) & 255u), 1), 0).rgb;
+            let t = clamp(f32((tag >> 16u) & 255u) / 255.0 * grey_v, 0.0, 1.0);
+            target_srgb = mix(natural, silver, t);
+        }
         let t = rgb_to_hsv(srgb_to_linear(target_srgb));
         let m = vec3(toon.recolor_from.x, toon.recolor_from.z, toon.recolor_from.w);
         // Grey textures are tinted; coloured ones have their hues moved.
@@ -218,7 +233,10 @@ fn fragment(
     out = deferred_output(in, pbr_input);
 } @else {
     let tag = mesh_functions::get_tag(in.instance_index);
-    var albedo = vec4<f32>(recolor(pbr_input.material.base_color.rgb, tag), pbr_input.material.base_color.a);
+    var grey_v = 0.0;
+@if(VERTEX_UVS_B)
+    grey_v = in.uv_b.x;
+    var albedo = vec4<f32>(recolor(pbr_input.material.base_color.rgb, tag, grey_v), pbr_input.material.base_color.a);
     let N = normalize(pbr_input.N);
     let p = pbr_input.world_position;
     // In uniform control flow: the gradients that painted detail samples with.
