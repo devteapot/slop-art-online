@@ -1,5 +1,16 @@
 # Core validation record
 
+## 2026-11-12 move-intents: movement intents (Spark)
+
+Branch `move-intents` from origin/main `ee8790f4`, the trial service `slop-trials-stdb` (2.14.1, port 3320), default seed, `scoped`, private `CARGO_TARGET_DIR`. Run `core-intents-053759` (evidence `.local/living/verify/core-intents-053759/`).
+
+- `intents` (new): 24 of 24, three times running on the final module (`intents.txt`, `intents-3.txt`, `intents-4.txt`). Earlier attempts found and fixed, in order: a holder slower than its walker cannot hold a band at a walk (the scene now picks the faster of two); a `close_in` from 10 m at night refused truthfully ("no #N in sight", started at 5 m now); a sight-held approach trailing a walker forever just beyond its distance (it now keeps at least the speed the target draws away at); `back_off` overshooting 7 m to 11 m (a still threat was looked at every 2 s; it now looks again when due at its distance); a `seq` stuck after a `back_off` that left its target out of sight (`brain.rs` now reads a finished leaf first); a graph cancelling an intent at its next evaluation when the target left sight (it now stays under steering's last-seen rule); the lost-sight grace starting from a throttled sighting (now `steer.unseen_ms`, when steering first found it out of sight).
+- `intents_cost` (new): 16 holders (8 circling a still partner, 8 holding a 3–6 m band from a partner walking back and forth) against everyone standing, 20 s each. Load average 49: +118 steering updates/s, +2.2 ms/s of `tick.motion` (7.4 updates/s per intent, 18.8 µs per update, 0.14 ms/s per intent); load 17: +76 updates/s, +1.1 ms/s (4.7, 14.8 µs, 0.07 ms/s). Partners' own walks are included. Not a scale claim (`intents_cost*.txt`, `intents_cost-cost.json`).
+- Cargo: rules `steer` (band, circle, `going`, `Spacing`), `normalize::movement_intents_take_their_distances`, `acts`; `just living-check` passes.
+- Scene gate on `1e39e8a7` (`gate-1112063910`, trial service): passed, all 11 cases (core tick, sight, senses, refusal, skirmish; minds roundtrip, acts, dealings, conversation; player combat; mind-unit), none red on main.
+- Not run: the rest of the baseline scenes (speech, town, rhythm, lives, goods).
+
+
 
 ## 2026-11-12 fix-kill-name: told lines name others as the teller perceives them (Spark)
 

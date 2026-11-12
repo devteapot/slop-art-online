@@ -1,5 +1,10 @@
 # Validation record (player)
 
+## 2026-11-12 move-intents (Spark)
+
+`intents.py` (new; `player-intents-060823`, the trial service, default seed): 8 of 8. The player's keys walk at 2.43 m/s and run at 4.01 (breath −4/s); the same body's `back_off` through `human_act` walks at 2.43 and its `close_in` with `run: true` runs at 4.01, draining breath; a resident's graph `back_off`/`close_in` run 4.54/2.75 = 1.65 of its own walk, the player's keys 4.01/2.43 = 1.65. Two earlier attempts failed on the scene: a `close_in` from 9 m at night refused ("no #152 in sight"), and samples arriving after a short run under machine load. It now starts within 5 m and reads the row's cruising `speed`.
+
+
 ## 2026-11-12 speech-truth (Spark)
 
 `speak.py` (`player-struth-speak`, trial service): 16 of 16. New: a `human_say` to the resident 30 m away is said. The player's `my_experience` then holds one `silence` row ending "they could not have heard you." (not "No answer"), and `my_act_outcomes` holds its row: kind `act`, code `reach`, not ok, `why` the same words, `other` the resident.

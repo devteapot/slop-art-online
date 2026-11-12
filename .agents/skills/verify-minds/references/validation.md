@@ -1,5 +1,10 @@
 # Internal mind validation
 
+## 2026-11-12 move-intents (Spark)
+
+Branch `move-intents`, the trial service, the fake model, `--no-unit-tests` (the check ran the mind's build). `minds-intents-061748`: `intents` (new) passes. The prompt documents the five intents with their arguments, m/s and "lost sight of them". The plan `keep_distance` 3–6 m is kept as the `current plan` routine `{"do":{"skill":"keep_distance","target":{"id":7},"qty":120,"min":3.0,"max":6.0}}`, and `steer` is goal 5 (keep 3, far 6, flag 128). The character backs off at its walk (3.37 m/s) when the other walks at it. Earlier attempts placed the two in town at night, where a wall hid one ("no #7 in sight"); the case now uses an open row. Not run: the other cases (the scene gate runs roundtrip, acts, dealings, conversation).
+
+
 ## 2026-11-12 far-label (Spark) After merging main with speech-truth (`03d32e09`, `minds-farlabel3-031420`): `roundtrip`, `queued` and `conversation` pass.
 
 Branch `far-label` (`18b7754b`), the trial service `slop-trials-stdb`, the fake model. `minds-farlabel-024238`: `roundtrip` and `conversation` pass (the release mind's non-ignored tests, 104, pass too). Not run: the other cases.
