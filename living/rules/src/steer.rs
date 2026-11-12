@@ -61,8 +61,10 @@ pub fn wrap(a: f32) -> f32 {
 // A body's facing (where its head and chest point: what facing sight, a guard's default and
 // "you face" read) is its travel heading plus an offset that turns on a segment of its own:
 // `off` at the segment's start, changing at `turn` rad/s for the first `turn_s` seconds, then
-// held. The offset is not wrapped; the authority keeps it within the `look_walk_deg` law while
-// the body moves. A body with no held look has offset 0 and faces its heading. The authority
+// held. The offset is not wrapped (wrap the sum). The facing never jumps and turns at most the
+// body's turn rate in the world ([`walk_facing`], [`stand_facing`]); settled, the offset is within
+// the `look_walk_deg` law while the body moves, and after a sudden change of the travel it may
+// stand past it until it has turned back. A body with no held look has offset 0 and faces its heading. The authority
 // and the clients evaluate it with these functions on the same `body` fields
 // (`face_off`, `face_turn`, `face_turn_s`, from `t_ms`), so there is one definition.
 
@@ -116,6 +118,70 @@ pub fn walk_face(way: f32, look: f32, limit: f32, current: f32) -> f32 {
 pub fn stand_turn(heading: f32, off: f32, want: f32) -> f32 {
     let d_face = wrap(want - wrap(heading + off));
     d_face + off
+}
+
+/// A facing segment (`body.face_*`): the offset from the travel heading at the segment's start,
+/// its turn (rad/s) and for how long it turns; `due_s`, when set, asks steering to look again
+/// that many seconds into the segment (the facing has more turning to do than this segment
+/// carries).
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct FaceSeg {
+    pub off: f32,
+    pub turn: f32,
+    pub turn_s: f32,
+    pub due_s: Option<f32>,
+}
+
+/// The facing segment after a steering update, from where the body faced at the update
+/// (`before`, world radians) over a travel segment that starts at `heading` and turns at
+/// `turn` rad/s for `turn_s` seconds. It settles toward the held `look` within `limit` of the
+/// travel's heading at the end of that turn (`walk_face`, on the side of that heading the
+/// facing is on now), or on the travel with no look.
+///
+/// The facing never jumps and, in the world, never turns faster than `rate` rad/s: it goes
+/// on from `before` (the offset is re-based on the new heading, not clamped, so after a sudden
+/// change of the travel it may stand past `limit` until it has turned back within it), the
+/// shorter way round to where it settles. Over the travel's own turn, the offset is set so that
+/// the facing turns at an even rate across that turn (it stays put when the look holds it);
+/// when it has further to go than `rate` allows in that time, it turns at `rate` and `due_s`
+/// asks steering to look again at the end of the travel's turn to finish.
+pub fn walk_facing(before: f32, heading: f32, turn: f32, turn_s: f32, look: Option<f32>, limit: f32, rate: f32) -> FaceSeg {
+    let off = wrap(before - heading);
+    let arc = if turn_s > 0.0 && turn != 0.0 { turn * turn_s } else { 0.0 };
+    let end = heading + arc;
+    let to = look.map_or(0.0, |l| walk_face(end, l, limit, wrap(before - end)));
+    // How far the facing turns in the world, the shorter way.
+    let world = wrap(end + to - before);
+    if arc == 0.0 {
+        let (turn, turn_s) = face_turn(off, off + world, rate);
+        return FaceSeg { off, turn, turn_s, due_s: None };
+    }
+    let w = world.signum() * (world.abs() / turn_s).min(rate);
+    let due_s = (world.abs() > rate * turn_s + 1e-4).then_some(turn_s);
+    let rel = w - turn;
+    if rel.abs() < 1e-6 {
+        return FaceSeg { off, turn: 0.0, turn_s: 0.0, due_s };
+    }
+    FaceSeg { off, turn: rel, turn_s, due_s }
+}
+
+/// A standing body's turn to face `want` from travel heading `heading` with facing offset `off`
+/// (`stand_turn`): the legs' turn (rad/s, seconds; 0 when they stay) and the facing segment.
+/// The legs and the facing arrive together, neither turning faster than `rate` (the legs
+/// slower when the facing has further to go). Within `slack` of it the legs stay and only the
+/// facing finishes. None: nothing to do.
+pub fn stand_facing(heading: f32, off: f32, want: f32, rate: f32, slack: f32) -> Option<((f32, f32), FaceSeg)> {
+    let d = stand_turn(heading, off, want);
+    if d.abs() > slack {
+        let dur = d.abs().max((d - off).abs()) / rate;
+        let face = if off != 0.0 { FaceSeg { off, turn: -off / dur, turn_s: dur, due_s: None } } else { FaceSeg::default() };
+        Some(((d / dur, dur), face))
+    } else if off != 0.0 {
+        let (turn, turn_s) = face_turn(off, d, rate);
+        Some(((0.0, 0.0), FaceSeg { off, turn, turn_s, due_s: None }))
+    } else {
+        None
+    }
 }
 
 /// Steering constants (world laws; see `Laws`).
@@ -1009,5 +1075,144 @@ mod apart_tests {
         assert!(c4 >= 170.0, "{c4}");
         let c6 = spread_round(6.0);
         assert!(c6 >= 240.0 && c6 > c4, "{c6} {c4}");
+    }
+}
+
+#[cfg(test)]
+mod reversal_tests {
+    use super::*;
+
+    mod drive {
+        pub use crate::map::Map;
+        pub use crate::steer as geo;
+        include!("steer_drive.rs");
+    }
+    use drive::{jumps, replay, Input, Laws};
+
+    const RATE: f32 = 6.0;
+
+    /// Three moments of a play-test (2026-11-12, 22:00:44, 22:04:12 and 22:05:51) where the walk
+    /// keys reversed and turned sharply with the look held far aside: only the movement keys
+    /// and the looks, as (ms from the first, `M` walk / `R` run / `L` look, direction in degrees
+    /// with +y south, None to stop or let go).
+    const PLAYTEST: [&[(u64, u8, Option<f32>)]; 3] = [
+        &[(0, b'M', Some(112.5)), (1759, b'M', None), (1767, b'M', Some(22.5)), (2260, b'L', Some(-79.5)), (2758, b'M', None), (3258, b'M', Some(-157.5)), (3336, b'L', Some(-75.4)), (3460, b'M', None), (3525, b'M', Some(22.5)), (4259, b'L', Some(-79.4)), (4317, b'M', None), (4633, b'M', Some(-157.5)), (4759, b'L', Some(-75.1)), (4951, b'M', Some(-112.5)), (5576, b'L', Some(-80.1)), (5683, b'L', Some(-101.2)), (5927, b'M', Some(-157.5)), (5975, b'M', None), (6117, b'L', Some(-105.5)), (6259, b'L', Some(-109.7)), (6542, b'L', Some(-113.8)), (6643, b'L', Some(-124.3))],
+        &[(0, b'M', Some(157.5)), (343, b'M', None), (468, b'L', Some(146.9)), (574, b'L', Some(137.5)), (675, b'L', Some(129.2)), (701, b'M', Some(-22.5)), (774, b'L', Some(121.5)), (892, b'L', Some(90.6)), (993, b'L', Some(20.8)), (1099, b'L', Some(8.8)), (1725, b'M', Some(22.5)), (1799, b'L', Some(4.5)), (1849, b'M', Some(-22.5)), (1899, b'L', Some(-8.2)), (2018, b'L', Some(-2.0)), (2117, b'M', None), (2124, b'L', Some(3.8)), (2458, b'L', Some(-0.6)), (2683, b'L', Some(-4.6)), (2751, b'M', Some(67.5)), (2792, b'L', Some(-10.1)), (2866, b'M', None), (2891, b'L', Some(-21.4)), (3076, b'L', Some(-26.2)), (3150, b'L', None), (3250, b'L', Some(140.6)), (3366, b'L', Some(112.3)), (3483, b'L', Some(95.4)), (3584, b'L', Some(86.3)), (3690, b'L', Some(80.0)), (3800, b'L', Some(75.7)), (3923, b'M', Some(-112.5)), (3957, b'M', Some(-67.5)), (4017, b'L', Some(80.9)), (4118, b'L', Some(101.2)), (4249, b'L', Some(108.0)), (4317, b'M', None), (4350, b'L', Some(114.7)), (4516, b'L', Some(120.8)), (4634, b'L', Some(129.8)), (4734, b'L', Some(134.2)), (4940, b'L', Some(139.0)), (5040, b'L', Some(153.8)), (5142, b'L', Some(167.5))],
+        &[(0, b'M', Some(180.0)), (42, b'L', Some(107.4)), (192, b'L', Some(103.0)), (299, b'L', Some(90.9)), (400, b'L', Some(86.1)), (475, b'M', Some(157.5)), (699, b'L', Some(81.6)), (816, b'L', Some(73.0)), (924, b'L', Some(67.9)), (949, b'M', Some(135.0)), (1400, b'L', Some(63.1)), (1500, b'L', Some(56.7)), (1608, b'L', Some(51.7)), (1625, b'M', Some(112.5)), (2266, b'L', Some(47.7)), (2549, b'L', Some(43.4)), (2625, b'M', None), (3115, b'L', Some(47.4)), (3175, b'M', Some(-90.0)), (3257, b'L', Some(51.4)), (3449, b'M', None), (4083, b'M', Some(90.0)), (4124, b'L', Some(47.3)), (4240, b'L', Some(43.2)), (4299, b'M', None), (4749, b'L', Some(47.2)), (4807, b'M', Some(-90.0)), (4899, b'L', Some(51.7)), (5132, b'M', Some(-45.0)), (5265, b'L', Some(55.9)), (5686, b'L', Some(60.2)), (5783, b'M', Some(0.0)), (5982, b'R', Some(0.0)), (6015, b'L', Some(64.4)), (6115, b'L', Some(70.6)), (6191, b'R', Some(-45.0)), (6215, b'L', Some(76.4)), (6332, b'L', Some(82.0)), (6619, b'L', Some(87.2))],
+    ];
+
+    fn inputs(seq: &[(u64, u8, Option<f32>)]) -> Vec<(u64, Input)> {
+        let dir = |a: Option<f32>| a.map(|d: f32| (d.to_radians().cos(), d.to_radians().sin()));
+        seq.iter()
+            .map(|(t, k, a)| {
+                let i = match k {
+                    b'L' => Input::Look { dir: dir(*a) },
+                    _ => Input::Move { dir: dir(*a), run: *k == b'R' },
+                };
+                (10_000 + t, i)
+            })
+            .collect()
+    }
+
+    /// The walk keys reversing and turning sharply with the look held aside (a play-test's
+    /// worst moments, replayed through steering as the authority drives it): the facing never
+    /// turns faster than the turn rate in the world, so it never jumps, and once the facing has
+    /// had time to come round it is within the `look_walk_deg` law of the travel while the body
+    /// moves.
+    #[test]
+    fn the_facing_never_jumps_when_the_walk_reverses() {
+        let laws = Laws::default();
+        for (k, seq) in PLAYTEST.iter().enumerate() {
+            let inp = inputs(seq);
+            let heading = seq[0].2.unwrap().to_radians();
+            let (from, to) = (inp[0].0, inp.last().unwrap().0 + 2000);
+            let (track, d) = replay(laws, heading, &inp, from, to, 10);
+            if std::env::var("FACE_DEBUG").is_ok() {
+                for (t, r) in &d.rows {
+                    eprintln!("row {} {:?}", t - from, r);
+                }
+            }
+            // A steering update runs at the first tick after it falls due and starts where the
+            // last segment ended (`motion::resume_at`), so a sample may take in one tick (1/60 s)
+            // of turning it had not seen yet.
+            for w in track.windows(2) {
+                let d = wrap(w[1].1 - w[0].1).abs();
+                assert!(d <= RATE * (0.010 + 1.0 / 60.0) + 1e-3, "moment {k}: the facing turned {:.1} degrees in 10 ms at {} ms", d.to_degrees(), w[1].0 - from);
+            }
+            let (worst, n) = jumps(&track, 250, 90f32.to_radians());
+            assert!(n == 0 && worst <= RATE * 0.25 + 0.01, "moment {k}: {:.0} degrees in 0.25 s, {n} jumps over 90", worst.to_degrees());
+            // Settled: from π / rate after each change of the keys (the longest the facing and
+            // the travel's own turn take) until the next, within the law of the travel.
+            let settle = (PI / RATE * 1000.0) as u64 + 50;
+            for (i, (t, input)) in inp.iter().enumerate() {
+                if !matches!(input, Input::Move { dir: Some(_), .. }) {
+                    continue;
+                }
+                let next = inp[i + 1..].iter().find(|(_, j)| matches!(j, Input::Move { .. })).map_or(to, |x| x.0);
+                for s in track.iter().filter(|s| s.0 >= t + settle && s.0 < next) {
+                    if let Some(tr) = s.2 {
+                        let off = wrap(s.1 - tr).abs();
+                        assert!(off <= laws.limit + 0.01, "moment {k}: {:.0} degrees off the travel {} ms after the keys changed", off.to_degrees(), s.0 - t);
+                    }
+                }
+            }
+        }
+    }
+
+    fn world(heading: f32, turn: f32, turn_s: f32, f: FaceSeg, t: f32) -> f32 {
+        let (_, _, h) = pose(0.0, 0.0, heading, 0.0, turn, turn_s, t);
+        facing(h, f.off, f.turn, f.turn_s, t)
+    }
+
+    /// The facing segment itself: from where the body faces, on at the turn rate at most, the
+    /// short way, toward the look's side; over a travel's own turn, evenly across it.
+    #[test]
+    fn a_reversal_turns_the_facing_on_from_where_it_was() {
+        let (limit, look) = (75f32.to_radians(), 47f32.to_radians());
+        let settled = (-15f32).to_radians();
+        // From rest: the travel is set to -90 at once (from +90), the facing at the look.
+        let f = walk_facing(look, -PI / 2.0, 0.0, 0.0, Some(look), limit, RATE);
+        assert!((world(-PI / 2.0, 0.0, 0.0, f, 0.0) - look).abs() < 1e-5, "no jump: {f:?}");
+        assert!((f.turn + RATE).abs() < 1e-5 && f.due_s.is_none(), "{f:?}");
+        assert!((world(-PI / 2.0, 0.0, 0.0, f, 1.0) - settled).abs() < 1e-4);
+        // Moving: the travel turns from +90 through 180 to -90 (away from the look); the facing
+        // goes the short way through the look's side, evenly over that turn, and arrives with it.
+        let th = PI / RATE;
+        let f = walk_facing(look, PI / 2.0, RATE, th, Some(look), limit, RATE);
+        assert!(f.due_s.is_none(), "{f:?}");
+        let mut last = look;
+        for i in 1..=100 {
+            let t = th * i as f32 / 100.0;
+            let w = world(PI / 2.0, RATE, th, f, t);
+            assert!(wrap(w - last).abs() <= RATE * th / 100.0 + 1e-4, "at {t}: {last} -> {w}");
+            assert!(wrap(w - look).abs() <= 62f32.to_radians() + 1e-3, "it stays on the look's side: {}", w.to_degrees());
+            last = w;
+        }
+        assert!(wrap(last - settled).abs() < 1e-3, "{}", last.to_degrees());
+        assert!((world(PI / 2.0, RATE, th, f, 2.0) - settled).abs() < 1e-3, "then held");
+        // A bend the facing has further to go than: it turns with the travel at the turn rate
+        // and asks steering to look again at the end of the bend.
+        let bend = 45f32.to_radians();
+        let f = walk_facing(-60f32.to_radians(), 0.0, RATE, bend / RATE, None, limit, RATE);
+        assert_eq!((f.turn, f.due_s), (0.0, Some(bend / RATE)), "{f:?}");
+        // The look held still through a bend: the facing stays put as the travel turns under it.
+        let f = walk_facing(0.3, 0.0, RATE, bend / RATE, Some(0.3), limit, RATE);
+        assert!((f.turn + RATE).abs() < 1e-5 && (world(0.0, RATE, bend / RATE, f, bend / RATE) - 0.3).abs() < 1e-4, "{f:?}");
+    }
+
+    /// Standing, the legs and the facing arrive together and the facing never turns faster than
+    /// the turn rate, even when it has further to go than the legs.
+    #[test]
+    fn a_standing_turn_keeps_the_facing_within_the_rate() {
+        let off = 75f32.to_radians();
+        let want = (-25f32).to_radians();
+        let ((legs, legs_s), f) = stand_facing(0.0, off, want, RATE, 0.05).unwrap();
+        assert!((legs_s - 100f32.to_radians() / RATE).abs() < 1e-4 && legs.abs() <= RATE, "{legs} for {legs_s}");
+        let at = |t: f32| facing(legs * t.min(legs_s), f.off, f.turn, f.turn_s, t);
+        for i in 1..=50 {
+            let t = legs_s * i as f32 / 50.0;
+            assert!(wrap(at(t) - at(t - legs_s / 50.0)).abs() <= RATE * legs_s / 50.0 + 1e-4);
+        }
+        assert!(wrap(at(legs_s) - want).abs() < 1e-4);
     }
 }
