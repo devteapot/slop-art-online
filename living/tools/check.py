@@ -119,7 +119,7 @@ STEPS = [
 
 # Game tests that need a display, a GPU or the generated assets: skipped by game-tests only (name ->
 # reason), run by hand on the laptop (`cargo test --release -p living-game -- --exact NAME`), and
-# listed in .agents/skills/verify-ui/SKILL.md. None today: all 96 run headless (2026-11-12, the
+# listed in .agents/skills/verify-ui/SKILL.md. None today: all 103 run headless (2026-11-12, the
 # Spark, no assets). `ik::spots::uneven_ground_spots` is #[ignore]d in the source: a tool that
 # lists photo spots (`-- --ignored uneven_ground_spots --nocapture`), not a check.
 GAME_TEST_SKIPS = {}

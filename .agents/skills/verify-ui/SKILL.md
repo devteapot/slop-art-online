@@ -98,7 +98,7 @@ It deletes `verify-<run>`; the evidence stays in `.local/living/verify/<run>/`. 
 
 ## The client's unit tests
 
-`just living-check` runs `cargo test --release -p living-game` (its `game-tests` step), headless: no display, GPU or generated assets. A test that needs any of them goes in `GAME_TEST_SKIPS` in `living/tools/check.py`, with its reason, and in this list, so it is run here by hand on the laptop (`cargo test --release -p living-game -- --exact NAME`). The list is empty: all 96 ran headless on the Spark without assets (2026-11-12). `ik::spots::uneven_ground_spots` is `#[ignore]`d in the source: a tool that lists photo spots (`-- --ignored uneven_ground_spots --nocapture`), not a check.
+`just living-check` runs `cargo test --release -p living-game` (its `game-tests` step), headless: no display, GPU or generated assets. A test that needs any of them goes in `GAME_TEST_SKIPS` in `living/tools/check.py`, with its reason, and in this list, so it is run here by hand on the laptop (`cargo test --release -p living-game -- --exact NAME`). The list is empty: all 103 ran headless on the Spark without assets (2026-11-12). `ik::spots::uneven_ground_spots` is `#[ignore]`d in the source: a tool that lists photo spots (`-- --ignored uneven_ground_spots --nocapture`), not a check.
 
 ## What this skill does not prove
 
