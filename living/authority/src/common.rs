@@ -998,6 +998,7 @@ pub fn learn(ctx: &ReducerContext, id: u32, technique: &str, source: &str, now: 
         return false;
     }
     ctx.db.know_how().insert(KnowHow { id: 0, actor: id, technique: technique.into(), source: source.into(), since_ms: now });
+    crate::perception::answers_changed();
     true
 }
 

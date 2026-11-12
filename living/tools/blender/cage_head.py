@@ -39,6 +39,10 @@ import numpy as np
 import head_form
 from head_form import ORIGIN, lerp
 
+UNDER_IN, UNDER_DOWN = 0.74, 0.30  # the row under the jaw: how far in toward the neck's column, how far down toward its ring
+NECK_Y = -0.006  # the neck's axis, in metres behind the body's: the reference's neck has its middle 0.51 of the head's height behind the face's front, and ours stood a centimetre further back
+NECK_RING_Z = 1.519  # where the head's skin ends and the neck's column begins, in metres with the chin at 1.535: 0.06 of the head's height under the chin (it was 0.175, at 1.490)
+
 H_FILE = 0.2564  # the head's height in a character file, m: the rest figure (1.795 m) is 7 heads
 ZC = 0.53  # the head's centre above the chin, in H
 YB = 0.36  # how far the bridge of the nose stands ahead of the head's axis, in H
@@ -249,6 +253,14 @@ def subdivision(n_verts, faces, sharp=None, corners=()):
     return S, quads, what, parent
 
 
+def neck_radius_of(t):
+    """A type's neck radius under the jaw, in metres (head_form.neck_radius): a man's is thicker,
+    a youth's part of the way there, a child's a little thinner."""
+    male = t.get("sex") == "male"
+    band = t.get("band")
+    return head_form.neck_radius(masc=(1.0 if band in ("adult", "elder") else 0.6) if male and band != "child" else 0.0, child=1.0 if band == "child" else 0.0)
+
+
 class Cage:
     """A type's head as a grid of quads. `v` are positions in head_form's frame; `faces` the
     quads (and the two poles' triangles); `sharp` the creases; `eye` and `mouth` name the
@@ -318,15 +330,23 @@ class Cage:
                 x, y = p.at(z, col, self.eye_f)
                 grid[R[name], col] = (x, y, z)
         # Under the jaw and the neck's ring.
-        # The neck's ring meets the neck's own tube (person.py make_neck: 5.35 cm round at 1.49 m, the chin at 1.535 m).
-        neck_y, neck_r, neck_z = -0.018 / self.H - YB + 0.004 / self.H, 0.0545 / self.H, (1.490 - 1.535) / self.H
+        # The neck's ring meets the neck's own tube (person.py make_neck, at NECK_RING_Z; the chin
+        # at 1.535 m). The neck is a narrow column set well in under the jaw (head_form.neck_radius:
+        # the reference's is 0.30 of the head's width). So the row under the jaw runs most of
+        # the way in to the column while dropping little: the jaw's underside is nearly level
+        # and overhangs the neck, and the column goes down from there. Half way in and half way
+        # down, as it was, made a funnel from the whole jaw to a ring 11 cm across.
+        neck_y, neck_r, neck_z = NECK_Y / self.H - YB, neck_radius_of(t) / self.H, (NECK_RING_Z - 1.535) / self.H
         for col in range(HALF):
             x, y, z = grid[R["cheek"], col]
             th = math.atan2(x, y - neck_y)
             nk = np.array([neck_r * math.sin(th), neck_y + neck_r * math.cos(th), neck_z])
             j = grid[R["jaw"], col]
-            u = lerp(j, nk, 0.5)
-            u[2] = lerp(j[2], neck_z, 0.42) - 0.012 * (col < C_WIDE)
+            # A little wider than the column where the underside meets it, so the column's top
+            # is a soft turn and not a crease.
+            top = np.array([1.22 * neck_r * math.sin(th), neck_y + 1.22 * neck_r * math.cos(th), neck_z])
+            u = lerp(j, top, UNDER_IN)
+            u[2] = lerp(j[2], neck_z, UNDER_DOWN) - 0.006 * (col < C_WIDE)
             grid[R["under_jaw"], col] = u
             grid[R["neck"], col] = nk
         # The socket: the eye's edge sits behind the brow and the cheek; the rows round it lead in.

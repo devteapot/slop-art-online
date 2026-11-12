@@ -141,7 +141,7 @@ TYPED = False  # the head is a face type's cage, with the identity bones in it
 # living/tools/characters/share.py puts on files that people share. `far` is the far model's
 # skin (head, neck and hands), textured with the far picture.
 MAT = dict(
-    face="M00_000_00_Face_00_SKIN", skin="M00_000_00_Body_00_SKIN", eye="M00_000_00_Eye_00_EYE", iris="M00_000_00_EyeIris_00_EYE", overlay_hair="M00_000_00_Overlay_00_HAIR", far_overlay="M00_000_00_FarOverlay_00_HAIR", overlay_skin="M00_000_00_FaceOverlay_00_SKIN", line="M00_000_00_FaceEyeline_00_FACE", tint="M00_000_00_FaceTint_00_FACE",
+    face="M00_000_00_Face_00_SKIN", skin="M00_000_00_Body_00_SKIN", eye="M00_000_00_Eye_00_EYE", iris="M00_000_00_EyeIris_00_EYE", overlay_hair="M00_000_00_Overlay_00_HAIR", far_overlay="M00_000_00_FarOverlay_00_HAIR", overlay_skin="M00_000_00_FaceOverlay_00_SKIN", overlay_face="M00_000_00_FaceOverlay_00_FACE", line="M00_000_00_FaceEyeline_00_FACE", tint="M00_000_00_FaceTint_00_FACE",
     hair="M00_000_Hair_00_HAIR", cloth="M00_001_01_Cloth_01_CLOTH", far="M00_000_00_Body_01_SKIN",
 )
 FAR = False  # building the far model (--lod): coarse cages, a head without openings, thin locks
@@ -455,7 +455,7 @@ def arm_w(x):
     return blend(("J_Bip_L_Shoulder", sh), ("J_Bip_L_UpperArm", (1 - sh) * (1 - lower)), ("J_Bip_L_LowerArm", lower * (1 - hand)), ("J_Bip_L_Hand", lower * hand))
 
 
-def upper_garment(part, d, zs, hem, cuff, collar, front=None, skirt=0.0, tag_fn=None, cols=None):
+def upper_garment(part, d, zs, hem, cuff, collar, front=None, skirt=0.0, tag_fn=None, cols=None, neck_d=None):
     """The left half of a torso-and-arms garment at offset d from the body.
 
     zs: ring heights from the hem up to the armpit ring (exclusive of it); hem / cuff / collar
@@ -523,12 +523,17 @@ def upper_garment(part, d, zs, hem, cuff, collar, front=None, skirt=0.0, tag_fn=
             part.f(q, ((k / NT, r), ((k + 1) / NT, r), ((k + 1) / NT, r + 1), (k / NT, r + 1)), tag_fn("torso", k, r))
     # Yoke: from the yoke line up to the neck base.
     def neck_point(k, dz=0.0, dr=0.0):
+        # The neck hole lies NECK_EASE off the neck itself (it was 6.6 cm from the axis whatever
+        # the neck: round a neck 3.2 cm in radius that is a collar twice the neck's width).
+        # `neck_d`: the garment's distance off the body at its neck hole, where a thick coat or
+        # a loose smock closes in on the neck.
+        base = NECK_R + NECK_EASE + (d if neck_d is None else neck_d)
         phi = 2 * PI * k / NT
         if front and k == 1:
-            phi = math.asin(min(front(1.5) / (0.066 + d + dr), 1.0))
+            phi = math.asin(min(front(1.5) / (base + dr), 1.0))
         s, c = math.sin(phi), math.cos(phi)
         z = 1.488 + 0.016 * smooth(k / 5.0) + dz
-        return Vector((-(0.066 + d + dr) * s, -0.018 + (0.072 + d + dr) * c, z))
+        return Vector((-(base + dr) * s, cage_head.NECK_Y - 0.002 + (base * 1.08 + dr) * c, z))
 
     prev = rowT
     for step in (1, 2, 3):
@@ -1079,23 +1084,45 @@ OVERLAY_OUT = 0.0003  # how far an overlay lies off the skin, metres
 def make_overlay(arm, spec, face, m, world, weights, atlas_path):
     """A detail a person has and a type does not, as a thin layer over the type's own face skin:
     a beard (the skin under it already stands out by the beard's thickness), stubble, age lines
-    or freckles. Its picture is what the face's paint adds for that detail, as grey with an
-    alpha: the client tints grey pictures by the tag, so the layer takes the person's hair
-    colour (a beard, stubble) or skin colour (lines, freckles) and blends over the type's face.
+    or freckles. Its picture is what the face's paint adds for that detail, with an alpha.
+
+    - A beard and stubble are grey: the client tints a grey picture by the tag, moving its mean
+      to the person's beard colour.
+    - Age lines and freckles are one fixed colour, in a material the client neither shades nor
+      tints (`…FaceOverlay_00_FACE`, as lips and blush are). Tinted by the skin's tag they came
+      out at the skin's own colour: the client moves a picture's mean to the tag's colour, and
+      the mean of a picture of lines is the lines.
+
     It has the face's weights and expressions, so it rides the identity bones and the morphs."""
     look = spec["look"]
     rng = lambda: np.random.default_rng(int(look.get("seed", 0)) + 77)
     plain = dict(look, lines=0.0, stubble=0.0, freckles=0.0, beard=None)
-    with_, _ = face_paint.paint_skin(HF, look, rng())
+    # The one detail, on plain skin. An old type's own figure has age lines whatever is asked for:
+    # painted from its whole look, its freckles and its beard carried the lines as well, and a
+    # person wearing both wore the lines twice.
+    key = "beard" if OVERLAY.startswith("beard") else OVERLAY
+    strong = dict(lines=face_paint.LINE_OVERLAY, freckles=face_paint.FRECKLE_OVERLAY).get(OVERLAY, (1.0, 1.0, 1.0))
+    with_, _ = face_paint.paint_skin(HF, dict(plain, detail_size=strong[2], **{key: look[key]}), rng())
     without, _ = face_paint.paint_skin(HF, plain, rng())
     hairy = OVERLAY.startswith("beard") or OVERLAY == "stubble"
     diff = np.abs(with_ - without).max(axis=2)
     alpha = np.clip(diff / (0.10 if OVERLAY.startswith("beard") else 0.16), 0.0, 1.0)
     tint = np.array(look["beard_colour"] if OVERLAY.startswith("beard") else (look["stubble_colour"] if OVERLAY == "stubble" else look["skin"]))
     grey = np.clip((with_ @ np.array([0.3, 0.59, 0.11])) / max(float(tint @ np.array([0.3, 0.59, 0.11])), 1e-3), 0.0, 1.0)
+    fixed = OVERLAY in ("lines", "freckles")
     rows = head_mesh.ATLAS - head_mesh.EYE_ROWS
     pic = np.zeros((head_mesh.ATLAS, head_mesh.ATLAS, 4))
-    pic[head_mesh.EYE_ROWS :, :, :3] = grey[..., None]
+    if fixed:
+        # How much of the pigment, as the client draws it, takes the type's skin to what was painted.
+        pigment = np.array(face_paint.LINE_PIGMENT if OVERLAY == "lines" else face_paint.FRECKLE_PIGMENT)
+        toward = without - np.clip(pigment * face_paint.PART_GAIN, 0.0, 1.0)
+        alpha = np.clip(((without - with_) * toward).sum(axis=2) / np.maximum((toward * toward).sum(axis=2), 1e-6), 0.0, 1.0) * (diff > 0.004)
+        # Drawn for the screen (face_paint.FRECKLE_OVERLAY, LINE_OVERLAY): stronger than the
+        # paint's own strength, up to nearly the whole pigment at a core.
+        alpha = np.clip(alpha * strong[0], 0.0, strong[1])
+        pic[..., :3] = pigment
+    else:
+        pic[head_mesh.EYE_ROWS :, :, :3] = grey[..., None]
     pic[head_mesh.EYE_ROWS :, :, 3] = alpha
     small = (np.clip(pic.reshape(head_mesh.ATLAS // 2, 2, head_mesh.ATLAS // 2, 2, 4).mean(axis=(1, 3)), 0, 1) * 255 + 0.5).astype(np.uint8)
     path = atlas_path.replace(".atlas.png", ".overlay.png")
@@ -1112,12 +1139,27 @@ def make_overlay(arm, spec, face, m, world, weights, atlas_path):
     n = face.skin_n + len(face._extra)
     px = np.clip((uv[:n, 0] % 1.0) * head_mesh.ATLAS, 0, head_mesh.ATLAS - 1).astype(int)
     py = np.clip((1.0 - uv[:n, 1]) * head_mesh.ATLAS - head_mesh.EYE_ROWS, 0, rows - 1).astype(int)
-    touched = alpha[py, px] > 0.02
+    # A freckle or a line is finer than the mesh: the paint is spread a few millimetres before it
+    # is sampled at the vertices, so every face that has any of it is taken. Sampled as painted,
+    # a freckle between two vertices was left out, and a type could come out with none.
+    near = alpha.copy()
+    for axis in (0, 1):
+        grown = near.copy()
+        for shift in range(1, 15):
+            for sgn in (1, -1):
+                moved = np.roll(near, sgn * shift, axis=axis)
+                if axis == 0:
+                    moved[(slice(0, shift) if sgn > 0 else slice(-shift, None)), :] = 0
+                else:
+                    moved[:, (slice(0, shift) if sgn > 0 else slice(-shift, None))] = 0
+                grown = np.maximum(grown, moved)
+        near = grown
+    touched = near[py, px] > 0.02
     faces = [f for f in face.skin_faces if any(touched[v] for v in f)]
     used = sorted({v for f in faces for v in f})
     index = {v: i for i, v in enumerate(used)}
     out = np.array(face.skin_normals)[used] * OVERLAY_OUT * HEAD_SCALE
-    name = MAT["overlay_hair" if hairy else "overlay_skin"]
+    name = MAT["overlay_hair" if hairy else "overlay_face"]
     ob = raw_object("Overlay", world[used] + out, [tuple(index[v] for v in f) for f in faces], [weights[v] for v in used], [(1.0, 1.0, 1.0)] * len(used), name, arm, uvs=[tuple(uv[v]) for v in used])
     ob.shape_key_add(name="Basis", from_mix=False)
     for key_name, delta in face.morphs.items():
@@ -1176,18 +1218,25 @@ def far_beard(arm, m, look):
     return raw_object("Overlay", world, [tuple(index[i] for i in f) for f in faces], [{"J_Bip_C_Head": 1.0}] * len(used), [(0.86, 0.86, 0.86)] * len(used), MAT["far_overlay"], arm)
 
 
+NECK_R = 0.0316  # the neck's radius (head_form.neck_radius), set for the person in configure
+NECK_EASE = 0.004  # how far off the neck a garment's neck hole lies, before the garment's own distance off the body
+
+
 def make_neck(arm):
     part = Part("Neck")
+    # A column of the neck's own radius (head_form.neck_radius), a little wider at its foot.
+    n, y = NECK_R, cage_head.NECK_Y
     stations = [
-        (1.440, -0.024, 0.060, blend(("J_Bip_C_UpperChest", 0.7), ("J_Bip_C_Neck", 0.3))),
-        (1.490, -0.022, 0.054, {"J_Bip_C_Neck": 1.0}),
-        (1.540, -0.019, 0.051, blend(("J_Bip_C_Neck", 0.75), ("J_Bip_C_Head", 0.25))),
-        (1.590, -0.016, 0.050, blend(("J_Bip_C_Neck", 0.2), ("J_Bip_C_Head", 0.8))),
-        (1.630, -0.012, 0.046, {"J_Bip_C_Head": 1.0}),
+        (1.440, y - 0.006, n * 1.14, blend(("J_Bip_C_UpperChest", 0.7), ("J_Bip_C_Neck", 0.3))),
+        (1.490, y - 0.003, n * 1.02, {"J_Bip_C_Neck": 1.0}),
+        (cage_head.NECK_RING_Z, y, n, blend(("J_Bip_C_Neck", 0.85), ("J_Bip_C_Head", 0.15))),
+        (1.540, y + 0.001, n * 0.95, blend(("J_Bip_C_Neck", 0.75), ("J_Bip_C_Head", 0.25))),
+        (1.590, y + 0.004, n * 0.93, blend(("J_Bip_C_Neck", 0.2), ("J_Bip_C_Head", 0.8))),
+        (1.630, y + 0.008, n * 0.86, {"J_Bip_C_Head": 1.0}),
     ]
     if TYPED:
         # A typed head brings the neck's top with it: the tube ends where the head's ring begins.
-        stations = stations[:2]
+        stations = stations[:3]
     prev = None
     for i, (z, cy, r, w) in enumerate(stations):
         cur = ring(part, (0, cy, z), (1, 0, 0), (0, 1, 0), r, r * 1.04, 10, w)
@@ -1341,11 +1390,13 @@ def make_hair(arm, spec, pos, quads, covered=None, bones=None):
     # behind the body's, by height, plus 4 mm). A person's own hair is combed over what they wear;
     # a shared style's figure wears a smock, or a coat for the style's `.collar` file.
     wears = spec["coat"]  # a shared style's figure wears a smock, or a coat for its `.collar` file
-    collar = dict(coat=0.090, smock=0.068).get(wears, 0.064)
-    cone = dict(coat=((1.47, 1.50, 1.54, 1.570), (0.104, 0.106, 0.118, 0.124)), smock=((1.47, 1.50, 1.530), (0.094, 0.096, 0.096))).get(wears, ((1.47, 1.50, 1.565), (0.081, 0.081, 0.079)))
-    back = ((0.95, 1.10, 1.20, 1.30, 1.35, 1.40, 1.44, 1.47, 1.50, 1.53), (0.123, 0.110, 0.110, 0.120, 0.125, 0.126, 0.119, 0.115, 0.103, 0.085))
+    # Measured again after the neck was made the reference's width (2026-11-12): the collars
+    # stand 5 to 8 cm from the neck's axis where they stood 8 to 12, and end below the chin.
+    collar = dict(coat=0.076, smock=0.064).get(wears, 0.056)
+    cone = dict(coat=((1.47, 1.50, 1.53, 1.550), (0.082, 0.076, 0.077, 0.079)), smock=((1.47, 1.50, 1.528), (0.076, 0.066, 0.064))).get(wears, ((1.47, 1.50, 1.530), (0.068, 0.060, 0.056)))
+    back = ((0.95, 1.10, 1.20, 1.30, 1.35, 1.40, 1.44, 1.47, 1.50, 1.53), (0.123, 0.110, 0.110, 0.120, 0.125, 0.126, 0.119, 0.115, 0.062, 0.052))
     thick = dict(coat=0.015, smock=0.014).get(wears, 0.0)
-    body = dict(neck_r=collar / HEAD_SCALE, neck_y=(-0.018 - HEAD.y) / HEAD_SCALE, neck_top=HF.chin_z + 0.022, shoulder_z=hd(1.468 + (0.030 if wears else 0.014)),
+    body = dict(neck_r=collar / HEAD_SCALE, neck_y=(cage_head.NECK_Y - HEAD.y) / HEAD_SCALE, neck_top=HF.chin_z + 0.022, shoulder_z=hd(1.468 + (0.030 if wears else 0.014)),
                 half_w=(0.182 * GIRTH + 0.035) / HEAD_SCALE, half_d=(0.108 * GIRTH + 0.035) / HEAD_SCALE, torso_y=(0.0 - HEAD.y) / HEAD_SCALE, round=0.05 / HEAD_SCALE,
                 collar=(np.array([hd(z) for z in cone[0]]), np.array(cone[1]) / HEAD_SCALE), back=(np.array([hd(z) for z in back[0]]), (np.array(back[1]) + thick) * GIRTH / HEAD_SCALE))
     h = hair.Hair(HF, hs, hairline, covered=covered, bald=bald_depth, body=body, detail=0.4 if FAR else 1.0)
@@ -1780,16 +1831,44 @@ def jersey_colour(base):
     return colour
 
 
-def coat_colour(base, patches):
+# The tones inside a coat or a smock, as lightness against its own cloth (linear light): the hem,
+# the shoulders, the three patches (elbows, the skirt's front, the back) and the collar's lining.
+# A shared piece is grey shading that the client tints to the wearer's colour, so it can carry a
+# darker hem only as a tone, the same for every wearer. A person's own file is painted with the
+# same tones, so the two agree: mixed toward a fixed colour, as they were, a hem came out 0.58
+# to 1.37 times its cloth's lightness by the cloth (lighter on dark cloth), the shoulders 1.09
+# to 2.17, and a patch anything from 0.12 to 7.4.
+HEM_TONE, SHOULDER_TONE = 0.66, 1.15
+PATCH_TONES = (1.45, 0.78, 0.60)
+LINING_TONE = 0.45
+
+
+def lightness(c):
+    r, g, b = lin(c)
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
+def relit(c, level):
+    """The colour c at a given lightness (linear light): its hue kept, its channels scaled."""
+    k = level / max(lightness(c), 1e-5)
+    return tuple(min(max(1.055 * (x * k) ** (1 / 2.4) - 0.055 if x * k > 0.0031308 else 12.92 * x * k, 0.0), 1.0) for x in lin(c))
+
+
+def coat_colour(base, patches, bands=False):
+    """A coat's or a smock's paint. `bands`: a smock's sleeve bands alone, which are a piece of
+    their own in their own cloth (the first patch's), not a tone of the smock's."""
+    level = lightness(base)
+
     def colour(tag, u, v, co, n):
-        c = base
-        # Wet and tarred toward the hem; salt-faded on the shoulders.
-        c = mix(c, PAL["kelp"], 0.40 * smooth((0.86 - co.z) / 0.2))
-        c = mix(c, PAL["old_lime"], 0.16 * smooth((co.z - 1.40) / 0.08))
-        if tag in (4, 5, 6):  # patches: other cloth, never matching
-            c = patches[tag - 4]
+        # Wet and tarred toward the hem; salt-faded on the shoulders: the hue leans as it did,
+        # the lightness is the cloth's own times a tone.
+        low, high = smooth((0.86 - co.z) / 0.2), smooth((co.z - 1.40) / 0.08)
+        c = mix(mix(base, PAL["kelp"], 0.40 * low), PAL["old_lime"], 0.16 * high)
+        c = relit(c, level * lerp(1.0, HEM_TONE, low) * lerp(1.0, SHOULDER_TONE, high))
+        if tag in (4, 5, 6):  # patches: other cloth, never matching, at a set tone of this one
+            c = patches[tag - 4] if bands else relit(patches[tag - 4], level * PATCH_TONES[tag - 4])
         elif tag == 7:  # collar lining
-            c = mix(PAL["kelp"], PAL["tar"], 0.3)
+            c = relit(mix(PAL["kelp"], PAL["tar"], 0.3), level * LINING_TONE)
         elif tag == 8:  # an apron
             c = mix(PAL["old_lime"], PAL["driftwood"], 0.15 + 0.25 * smooth((0.75 - co.z) / 0.3))
         elif tag == 9:  # its band
@@ -1835,6 +1914,14 @@ def configure(spec):
         HAIR=look["hair"], HAIR_TIP=look["hair_tip"], RECEDE=spec["recede"], BALD=spec["bald"], LIMB_K=spec["limb"], GIRTH=spec["girth"], BELLY=spec["belly"], CHEST=spec["chest"], LONG=spec["hair_length"],
         TORSO=WOMAN_TORSO if spec["woman_torso"] else MAN_TORSO,
     )
+    # The neck's radius: the type's own, so the head's ring and the neck's tube meet. An outfit
+    # piece is built for a man's or a woman's neck, whatever head its figure stands under.
+    if spec.get("piece"):
+        g["NECK_R"] = head_form.neck_radius(0.0 if spec["woman_torso"] else 1.0)
+    elif typed:
+        g["NECK_R"] = cage_head.neck_radius_of(face_types.load()["types"][spec["type"]])
+    else:
+        g["NECK_R"] = head_form.neck_radius(spec["masc"], spec["child"])
     # The chin stays where the neck expects it, whatever the face's length.
     g["HEAD"] = Vector((0, -0.004, 1.535 - HF.chin_z * HEAD_SCALE))
 
@@ -1872,7 +1959,7 @@ def build_person(arm, spec, atlas_path, body=False, bones=None):
         p = upper_garment(
             Part("Jersey"), 0.008, [0.975, 1.01, 1.08, 1.16, 1.24, 1.32],
             hem=[(-0.030, 0.003), (-0.034, -0.006)], cuff=(-0.700, [(-0.012, 0.003), (-0.026, 0.003), (-0.028, -0.004)]),
-            collar=[(0.022, -0.004, blend(("J_Bip_C_Neck", 0.8), ("J_Bip_C_UpperChest", 0.2))), (0.050, -0.002, neck), (0.058, -0.006, neck), (0.050, -0.012, neck)], tag_fn=jtag,
+            collar=[(0.011, -0.002, blend(("J_Bip_C_Neck", 0.8), ("J_Bip_C_UpperChest", 0.2))), (0.022, -0.002, neck), (0.026, -0.005, neck), (0.020, -0.009, neck)], tag_fn=jtag,
         ).mirrored()
         obs.append(build(p, arm, MAT["cloth"], jersey_colour(spec["jersey"])))
         chest = blend(("J_Bip_C_UpperChest", 0.75), ("J_Bip_C_Neck", 0.25))
@@ -1890,8 +1977,8 @@ def build_person(arm, spec, atlas_path, body=False, bones=None):
 
             p = upper_garment(
                 Part("Coat"), 0.024, [0.70, 0.79, 0.88, 0.97, 1.06, 1.15, 1.24, 1.32],
-                hem=[], cuff=(-0.640, [(-0.030, 0.006)]), collar=[(0.028, 0.012, chest), (0.060, 0.026, chest)],
-                front=lambda z: lerp(0.058, 0.026, smooth((z - 0.70) / 0.75)), skirt=1.0, tag_fn=ctag,
+                hem=[], cuff=(-0.640, [(-0.030, 0.006)]), collar=[(0.020, 0.004, chest), (0.042, 0.009, chest)],
+                front=lambda z: lerp(0.058, 0.026, smooth((z - 0.70) / 0.75)), skirt=1.0, tag_fn=ctag, neck_d=0.019,
             ).mirrored()
             obs.append(build(p, arm, MAT["cloth"], coat_colour(spec["coat_colour"], spec["patches"]), solid=0.006))
             if not FAR:
@@ -1916,15 +2003,15 @@ def build_person(arm, spec, atlas_path, body=False, bones=None):
 
             p = upper_garment(
                 Part("Smock"), 0.018, zs, hem=[(-0.004, -0.008)], cuff=(-0.655, [(-0.022, 0.004), (-0.024, -0.004)]),
-                collar=[(0.020, 0.006, chest), (0.022, -0.002, chest)], skirt=1.0,
+                collar=[(0.020, 0.006, chest), (0.022, -0.002, chest)], skirt=1.0, neck_d=0.014,
             ).mirrored()
             obs.append(build(p, arm, MAT["cloth"], coat_colour(spec["coat_colour"], spec["patches"])))
             # The bands round the sleeves, in another cloth: over the smock's own sleeve, a hair's
             # width out. Its own part, so a shared smock's bands are a piece with its own colour.
-            p = upper_garment(Part("SmockBands"), 0.0188, zs, hem=[], cuff=(-0.655, []), collar=[], skirt=1.0, tag_fn=btag).mirrored()
-            obs.append(build(p, arm, MAT["cloth"], coat_colour(spec["coat_colour"], spec["patches"])))
+            p = upper_garment(Part("SmockBands"), 0.0188, zs, hem=[], cuff=(-0.655, []), collar=[], skirt=1.0, tag_fn=btag, neck_d=0.0148).mirrored()
+            obs.append(build(p, arm, MAT["cloth"], coat_colour(spec["coat_colour"], spec["patches"], bands=True)))
             if apron:
-                p = upper_garment(Part("Apron"), 0.0198, zs, hem=[], cuff=(-0.655, []), collar=[], skirt=1.0, tag_fn=atag).mirrored()
+                p = upper_garment(Part("Apron"), 0.0198, zs, hem=[], cuff=(-0.655, []), collar=[], skirt=1.0, tag_fn=atag, neck_d=0.0158).mirrored()
                 obs.append(build(p, arm, MAT["cloth"], coat_colour(spec["coat_colour"], spec["patches"])))
         # Trousers, tucked into the boots.
         p = trousers(Part("Trousers"), 0.012).mirrored()
@@ -2232,7 +2319,7 @@ def secondary(nodes, springs):
     k = 0.010 - HIT  # these were sized for a joint radius of 10 mm, and reach as far with the smaller one
     colliders = [
         {"node": nodes["J_Bip_C_Head"], "colliders": [sphere("J_Bip_C_Head", hc, 0.074 * HEAD_SCALE + k), sphere("J_Bip_C_Head", hc + Vector((0, 0.014, -0.070)) * HEAD_SCALE, 0.046 * HEAD_SCALE + k)]},
-        {"node": nodes["J_Bip_C_Neck"], "colliders": [sphere("J_Bip_C_Neck", (0, -0.018, 1.52), 0.040 + k)]},
+        {"node": nodes["J_Bip_C_Neck"], "colliders": [sphere("J_Bip_C_Neck", (0, cage_head.NECK_Y, 1.50), NECK_R + 0.004 + k)]},
         {"node": nodes["J_Bip_C_UpperChest"], "colliders": [sphere("J_Bip_C_UpperChest", (0, -0.005, 1.32), 0.105 * GIRTH + k), sphere("J_Bip_C_UpperChest", (-0.12, -0.012, 1.385), 0.055 + k),
                                                              sphere("J_Bip_C_UpperChest", (0.12, -0.012, 1.385), 0.055 + k)]},
     ]
@@ -2353,6 +2440,7 @@ def main():
         # A shared style is coloured by the client, through the mesh tag: its own shades are
         # neutral, a little darker at the root than the tip, with no grey of its own.
         spec["look"].update(hair=(0.86, 0.86, 0.86), hair_tip=(1.0, 1.0, 1.0), hair_natural=(0.86, 0.86, 0.86), hair_natural_tip=(1.0, 1.0, 1.0), hair_grey=0.0)
+    spec["piece"] = a.parts == "keep"  # an outfit piece's file: its neck hole is a man's or a woman's
     configure(spec)
     out = os.path.abspath(a.out)
     os.makedirs(os.path.dirname(out), exist_ok=True)
@@ -2375,6 +2463,13 @@ def main():
             continue
         g["FAR"] = far
         parts = build_person(arm, spec, stem + (".far.png" if far else ".atlas.png"), body=a.body, bones=spec.get("spring_bones") if far else None)
+        shaded = False
+        if a.parts == "keep" and not a.no_shade:
+            # An outfit piece is shaded as it is worn, with the rest of the outfit and the body
+            # round it (a jersey's collar under a smock's, a smock under its apron), and then
+            # the rest is taken away. Shaded alone, the tones inside it were not its wearer's.
+            bake_shade(parts)
+            shaded = True
         if a.parts != "all":
             wanted = dict(head=TYPE_PARTS, hair=("Hair", "HairTie"), face=("Face", "Neck"), keep=tuple(x for x in a.keep.split(",") if x), overlay=("Overlay",))[a.parts]
             keep = [ob for ob in parts if ob.name.split(".")[0] in wanted]
@@ -2392,7 +2487,7 @@ def main():
             spread_head_weights(parts)
             if spec.get("baked") and spec.get("identity"):
                 bake_identity(parts, spec["identity"])
-        if not a.no_shade:
+        if not a.no_shade and not shaded:
             bake_shade(parts)
         if not far and a.parts == "all" and spec.get("person"):
             painted_pieces(parts, spec["person"])
