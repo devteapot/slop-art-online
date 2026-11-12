@@ -935,7 +935,7 @@ python3 living/tools/characters/person_check.py OUT.glb NAME.params.json [--own 
 - Everything on disk, worn or not: 69 files, 34.2 MB.
 - **A person is more mesh entities than before** (a coat, a jersey, trousers and boots are four where the own file joined all cloth into one), and what that costs depends on whether the client batches the shared meshes. **The draw counts could not be measured:** the crowd tool measures files the client can spawn, and it cannot spawn a person from styles yet.
 
-**What the client needs for outfits** (for the laptop coordinator; nothing in `living/game` was edited):
+**What the client needs for outfits** (for the laptop coordinator; nothing in `living/game` was edited in this step; 1 to 5 are done in the client since compose-1, behind a switch, [below](#the-client-since-compose-1-2026-11-12)):
 
 1. **Pieces attach as outfit pieces do today** (`characters/outfit.rs`): each primitive under the person's root with a `SkinnedMesh` on the person's own bones by name, the piece's own inverse bind matrices. The files are named in the person's line (`styles.outfit`), not in `outfits.json`.
 2. **`cap` and `kerchief` attach as hair does,** with `hair_fit` ([hair styles](#hair-styles)).
@@ -972,7 +972,7 @@ python3 living/tools/characters/person_check.py OUT.glb NAME.params.json [--own 
 
 ### What the client needs for types
 
-Nothing in `living/game` was edited in step 3, and every file loads in today's client. For the laptop coordinator, in the order they unlock things. 1 to 3 are done in the client since types-1 ([below](#the-client-since-types-1-2026-11-12)); 4 waits for the style files.
+Nothing in `living/game` was edited in step 3, and every file loads in today's client. For the laptop coordinator, in the order they unlock things. 1 to 3 are done in the client since types-1 ([below](#the-client-since-types-1-2026-11-12)); 4 since compose-1, behind `LIVING_GAME_COMPOSE=1` ([below](#the-client-since-compose-1-2026-11-12)).
 
 **1. Outline normals from the file** (`lookdev.rs`, `convert` and the scenery path). Small.
 
@@ -1034,6 +1034,88 @@ Nothing in `living/game` was edited in step 3, and every file loads in today's c
 - **Morphs:** the client drives `Fcl_EYE_Close` (the blink) and `Fcl_MTH_A` (the mouth, only for look-dev's `talk`) and no other, so `--morphs client` loses nothing.
 - **Not done here:** step 4's optional shading (the shadow lookup along the head's forward vector, the face and neck shade blended at the jaw, the sun's height in the map's blue channel) and the far head's own round normals; type files as characters with styles (4).
 - **Evidence:** `.local/living/types-1/` (`view/identity-held`, `view/outline-*`, `mem/`, `identity-transforms.json`).
+
+### The client since compose-1 (2026-11-12)
+
+**What the client does now** (`characters/compose.rs`):
+
+- **The switch.** `LIVING_GAME_COMPOSE=1` composes every recipe that carries a person line (`person` in a recipe: the generator's `<name>.params.json` line). Off, the default, the same recipe is its whole `base` file, as before. The town switches when char-4's next step (beards, stubble, lines, the apron, eye colour by tag, bellies) is in.
+- **A recipe's `person`** is read as the generator writes it: type, height, proportions (with the line's `build`), identity, colours (`outfit` by piece name) and styles. A composed character is spawned from `lookdev/types/<type>.glb` with the line's numbers; identity, proportions, height, recolouring, the far switch, springs and the shared clips then run as for any generated person.
+- **Attaching**, when the type's scene comes in and before the person is first fitted (the height is measured over the styles), by `compose.py`'s rule for every file worn:
+  - every mesh node of the file comes across, its `Far*` meshes too, each primitive an entity under the person's root;
+  - joints by name; a joint's inverse bind matrix is the type's own times `hair_fit` for hair, `cap` and `kerchief`, times nothing for body pieces;
+  - a hair style's spring bones go under `J_Id_Cranium` at `hair_fit` × their rest; its spring groups and colliders join the person's. The spring simulation now keeps a bone's own rest scale (the fit's), where it wrote 1;
+  - a hair style's tie comes with it and keeps its own colour.
+- **Shared, not copied.** A style file is loaded once for the session; everyone wearing it uses its mesh assets. Its materials become one toon material a file and material name, and the bind matrices one asset a type and file. A person's style meshes are let go of and attached again when the scene is spawned again (`Rebuilt`).
+- **Colours** through the mesh tag, as recipes recolour today: hair by `_HAIR`, skin by `_SKIN`, an outfit piece by its own name in `colors.outfit`.
+- **Stride:** a composed figure is the type's meshes and every worn file's (fitted ones through `hair_fit`), `Far*` left out (`compose::figure_height`), where a whole file's is its own.
+- **A look-dev crowd of named people:** the recipe book's `crowd` lists recipes by name for `LIVING_GAME_CROWD`, in spawn order, in place of random ones. `crowd.py`'s `town` and `composed` runs use it to stand a town's people as they are.
+- **Measuring:** `LIVING_GAME_VIEW_JOINTS=<file>` writes every bone at each photograph of the asset view; `LIVING_GAME_PERF=diag` adds the render world's batches (`batches:`, by phase), the GPU's texture bytes and the people's mesh-material pairs; `LIVING_GAME_PERF=frames` adds the people's mesh entities and when everyone was ready. `living/tools/characters/compose_check.py` runs the fidelity check below; verify-ui's `crowd.md` (`compose`) is the recipe.
+
+**Fidelity** (`compose_check.py`, the asset view, the shared clips): five of Cullet's people with the files above, each three ways: their whole file (their own recipe), composed (their person line), and composed with the whole recipe's proportions and height (the control). The shots: idle held at 1 s from the front and at the face, the walk at 0.25 s and 0.5 s. 79 bones each, the hair's spring bones left out.
+
+| Person | Type, hair, pieces | Control against whole, file units | Control, metres (height fit) | Composed against whole, metres | `build`: recipe → line |
+|---|---|---|---|---|---|
+| Tamsin Hollin | `adult-f-a`, `braid` (5 spring bones, the tie), smock with apron | 0.000 mm | 0.56 mm (×1.00035) | 5.8 mm | 0.974 → 0.939 |
+| Fenn Brandt | `adult-m-b`, `sides.cap`, `cap`, jersey | 0.000 mm | 2.3 mm (×1.00136) | 3.7 mm | 0.992 → 0.978 |
+| Joss Tarn | `adult-m-b`, `tousled`, coat | 0.000 mm | 2.2 mm (×0.99875) | 22.8 mm | 1.069 → 1.177 |
+| Vessa Pontil | `elder-f-b`, `kerchief` hair and piece, smock with apron | 0.000 mm | 0.26 mm (×0.99983) | 7.7 mm | 0.966 → 0.917 |
+| Wick Marl | `child-u-b`, `tousled`, jersey | 0.000 mm | 3.0 mm (×0.99682) | 8.1 mm | 0.929 → 0.850 |
+
+- Every row holds at all four shots, idle and walk alike, to within 0.2 mm of the figures shown.
+- **The control is the rule:** with the same numbers every bone is where the whole file puts it, 0.000 mm in the file's units. In metres it differs only by the height fit: a recipe's height is sole to crown with hair, and the style's hair (or cap) is not the person's own, so the scale differs by up to 0.3%.
+- **Composed differs by `build`, by design:** the line carries the girth a whole file built into its meshes, and the bones widen the shoulders and limbs with it. The largest is at the upper arms, about 2 cm on Joss Tarn.
+- **Stills:** `.local/living/compose-1/fidelity/stills/<name>.jpg` (whole, composed, control, four shots each). Hair, braid and tie, cap, kerchief, coat and every piece sit and move with the body; the braid swings on its springs.
+
+**Gaps, expected until char-4's next step** (none fixed in the client):
+
+- no beards, stubble or lines (`beard` is read and logged, not drawn): Fenn Brandt's stubble, the elders' beards;
+- the apron is part of its smock, so one tag colours both. The recolour's hue gathering then carries the apron's hue difference to the new colour: Tamsin Hollin's apron and cuffs come out pink, Vessa Pontil's magenta, where their whole files paint them cream;
+- the eyes are the type's colour (no tag on `EyeIris` from a line);
+- no lip tint or blush (they leave the skin texture), no freckles;
+- no bellies or strong chests.
+
+**Cost** (`crowd.py`, Cullet's 64 as they are, at the game camera 22 m away and 28° down, 1600×900, uncapped, 30 s a run, `LIVING_GAME_PERF=frames,diag`). The same recipes both ways; `town` is each person's whole both-file, `composed` the switch on. Two sets, interleaved: at the game camera (everyone shows the far model) eight runs of the whole files and seven composed; with `LIVING_GAME_FAR=1000` (everyone on the full model) six and three. Runs that died at start (below) are left out, as is the first set's full-model round, most of which died. Laptop, M4 Pro, load average 10 to 32 from other workers, and two other clients on the GPU for part of it.
+
+| Cullet's 64 | Whole files, game camera | Composed, game camera | Whole, full model | Composed, full model |
+|---|---|---|---|---|
+| Mesh entities on people: shown (all) | 210 (658) | 406 (1,050) | 466 (658) | 662 (1,050) |
+| Mesh-material pairs in view (instanced draws) | 210 | **71** | 466 | **139** |
+| Materials on people in view | 20 | 70 | 29 | 89 |
+| Opaque batch sets (draw calls), main pass; the prepass the same | 10 | 60 | 20 | 80 |
+| Unbatchable meshes | 0 | 0 | 0 | 0 |
+| Triangles in view, people | 394k | 414k | 1,686k | 1,756k |
+| Frame interval, median of runs: p50 (range) | 7.7 ms (6.2–10.1) | 8.4 ms (6.5–11.3) | 10.9 ms (8.5–11.7) | 9.7 ms (8.8–12.5) |
+| Frame interval p99, median of runs | 12.6 ms | 12.0 ms | 13.5 ms | 13.0 ms |
+| Mesh data in the main world, people (morph targets) | 267 MiB (150) | **31 MiB (8)** | same | same |
+| Textures on the GPU, people | 345 MiB | **166 MiB** | same | same |
+| glTF files loaded | 65 | 52 | same | same |
+| Ready (every person shaped and dressed), median | 0.97 s | 1.06 s | 1.06 s | 0.98 s |
+
+- **Firm: the counts and the asset memory.** They do not move with load. People are the run's figures less the empty scene's (107 MiB of meshes, 239 MiB of textures).
+- **Runs that died:** with two other workers' clients on the GPU, some runs of both modes quit about a second in with Metal's `Cannot allocate sample buffer` and `DeviceLost` (the `diag` flag's GPU counters); not a composing fault.
+- **Not firm: the frame time.** The modes' ranges overlap in both views; the machine's load moved runs by more than any difference between them. Process memory (RSS, `footprint`) moved by gigabytes with the other workers and is not reported.
+- The GPU runs Bevy's culling mode: every mesh is in a multi-draw batch set (no bins, no lone meshes), one set a material and pass. Each mesh-material pair is one indirect draw within its set, which Metal issues one by one.
+
+**Do the draws blow up? No; the materials do.** The shared meshes batch: a style's mesh is one instanced draw for everyone wearing it, so the people's draws fall from 210 to 71 (466 to 139 on the full model) though each person is more meshes. What rises is materials, and with them batch sets: one toon material a style file (about 37 among the 51 files worn) and each type's own pictures (17 types). Every distinct material is a batch set in every view and pass, with its own buffers written every frame (the per-batch cost `perf.rs` describes).
+
+- **Measured:** `LIVING_GAME_PERF=sharestyles` shares a toon material between style files whose materials are the same (every cloth piece is one white vertex-coloured material, every hair one strand material). People's materials fall from 70 to 36 at the game camera and from 89 to 55 on the full model; opaque batch sets from 60 to 27 and from 80 to 47. The frame time did not resolve under the load. It is a measurement only: each piece then recolours from the first piece's mean, so colours are wrong.
+- **The fix, proposed:**
+  1. **Pieces and hair on one material each, recoloured correctly.** The recolour keeps its source's mean colour on the material (mode 3), which is why each file has its own. If every style file's shades were built around one mean (hair already is: "neutral shades for the client's tag"), one material would be right for all of them. That is the generator's to write (`gen_styles.sh`), with the apron as its own piece; the client then keys style toons by content (what `sharestyles` does now). Style materials go from about 37 to about 3.
+  2. **The types' pictures on shared pages,** as a town's faces were (`share.py pages`): 17 types' skin, far and iris pictures on one or two pages, with the face shadow maps paged the same way, so a type is not a material of its own. About 17 a kind to one or two.
+  Together these bring a composed crowd to about the whole files' 20 materials while keeping its 71 draws.
+
+**Not covered:**
+
+- a connected world: the live town still spawns random recipes; nothing gives its residents person lines yet;
+- the face close-up's look against the whole file beyond the gaps above (no paint comparison);
+- the hair's spring motion against the whole file's (only the count of spring bones is compared);
+- foot slide on composed people (their stride comes from the composed figure; `LIVING_GAME_FEET` was not run);
+- a scene spawned again (`LIVING_GAME_PERF=rebuild`) with composed people: the code lets go of and re-attaches the styles, but no run checked it;
+- shadows' cost per cascade (everyone was beyond the 26 m shadow distance at the game camera);
+- the dev-box's GPU, a quiet machine.
+
+**Evidence:** `.local/living/compose-1/` in the laptop's main checkout: `fidelity/` (`fidelity.json`, `stills/`, each arm's shots, `joints.jsonl` and log), `cost/` and `cost2/` (`crowd*.json`, the logs and per-frame records of each set's last run), `logs/` (the bakes and builds).
 
 ## Motions on generated people
 

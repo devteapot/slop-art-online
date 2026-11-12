@@ -681,15 +681,24 @@ pub fn rig(
     }
 }
 
-/// A character file's figure height (file units, cached): the vertical span of its meshes'
-/// bounds at rest (glTF accessor `min`/`max` through the node transforms), the far model's
-/// (`Far*` nodes) left out. What `animate.py` measures the figure by; None without meshes.
+/// A character file's figure height (file units): the vertical span of its meshes' bounds at
+/// rest (glTF accessor `min`/`max` through the node transforms), the far model's (`Far*` nodes)
+/// left out. What `animate.py` measures the figure by; None without meshes.
 pub fn figure_height(file: &str) -> Option<f32> {
-    use std::sync::{Mutex, OnceLock};
-    static CACHE: OnceLock<Mutex<HashMap<String, Option<f32>>>> = OnceLock::new();
+    let corners = figure_corners(file);
+    let (lo, hi) = corners.iter().fold((f32::MAX, f32::MIN), |(lo, hi), c| (lo.min(c.y), hi.max(c.y)));
+    (hi > lo).then_some(hi - lo)
+}
+
+/// The corners of each near mesh's bounds at rest in a character file (file units, cached):
+/// what [`figure_height`] spans, and what a composed person's figure is put together from
+/// (`characters::compose::figure_height`, a style file's through its type's `hair_fit`).
+pub fn figure_corners(file: &str) -> std::sync::Arc<Vec<Vec3>> {
+    use std::sync::{Arc, Mutex, OnceLock};
+    static CACHE: OnceLock<Mutex<HashMap<String, Arc<Vec<Vec3>>>>> = OnceLock::new();
     let cache = CACHE.get_or_init(Default::default);
     if let Some(v) = cache.lock().unwrap().get(file) {
-        return *v;
+        return v.clone();
     }
     let v = (|| {
         let j = glb_json(file)?;
@@ -705,7 +714,7 @@ pub fn figure_height(file: &str) -> Option<f32> {
                 parent.insert(c as usize, i);
             }
         }
-        let (mut lo, mut hi) = (f32::MAX, f32::MIN);
+        let mut out = Vec::new();
         for (i, n) in nodes.iter().enumerate() {
             let Some(mesh) = n["mesh"].as_u64() else { continue };
             if n["name"].as_str().is_some_and(|s| s.starts_with("Far")) {
@@ -722,15 +731,15 @@ pub fn figure_height(file: &str) -> Option<f32> {
                 let (amin, amax) = (&a["min"], &a["max"]);
                 for k in 0..8 {
                     let pick = |axis: usize| if k >> axis & 1 == 0 { f(amin, axis, 0.0) } else { f(amax, axis, 0.0) };
-                    let y = m.transform_point3(Vec3::new(pick(0), pick(1), pick(2))).y;
-                    lo = lo.min(y);
-                    hi = hi.max(y);
+                    out.push(m.transform_point3(Vec3::new(pick(0), pick(1), pick(2))));
                 }
             }
         }
-        (hi > lo).then_some(hi - lo)
-    })();
-    cache.lock().unwrap().insert(file.to_string(), v);
+        Some(out)
+    })()
+    .unwrap_or_default();
+    let v = Arc::new(v);
+    cache.lock().unwrap().insert(file.to_string(), v.clone());
     v
 }
 
