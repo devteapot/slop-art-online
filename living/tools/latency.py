@@ -32,6 +32,8 @@ import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import world_delete  # noqa: E402  (pause a world before deleting it)
 
 ROOT = Path(__file__).resolve().parents[2]
 CONTAINER = os.environ.get("LAT_STDB_CONTAINER", "lat-stdb")
@@ -61,6 +63,13 @@ class Server:
         if self.ssh:
             cmd = ["ssh", self.ssh, " ".join(map(str, cmd))]
         return sh(*cmd, **kw)
+
+    def stdb_run(self, *args):
+        """The CLI as `stdb`, returning the completed process without raising (world_delete)."""
+        if self.ssh:
+            quoted = " ".join("'" + str(a).replace("'", "'\\''") + "'" for a in args)
+            return subprocess.run(["ssh", self.ssh, f"docker exec -i {self.container} spacetime {quoted}"], capture_output=True, text=True, timeout=600)
+        return subprocess.run(["docker", "exec", "-i", self.container, "spacetime", *args], capture_output=True, text=True, timeout=600)
 
     def stdb(self, *args, **kw):
         if self.ssh:
@@ -128,7 +137,8 @@ def down(_a):
     for f in sorted(OUT.glob("*/manifest.json")):
         m = json.loads(f.read_text())
         if m.get("container") == CONTAINER and m.get("url") == s.url:
-            s.stdb("delete", "-s", "local", m["db"], "-y", check=False)
+            # Paused and read back as paused first (world_delete.py), on the server it runs on.
+            print(m["db"], world_delete.cli_pause_and_delete(s.stdb_run, m["db"])[1])
     r = subprocess.run(["docker", "stop", "-t", "30", CONTAINER], capture_output=True, text=True)
     print("stop:", r.returncode, r.stderr.strip())
     subprocess.run(["docker", "rm", "-f", CONTAINER], capture_output=True)

@@ -822,7 +822,7 @@ A planned line whose addressee has left is like any planned act whose target is 
 
 - The node counts as done, so the plan goes on.
 - A way with a reach of its own (a whisper) still refuses in its check's words ("too far to whisper: step closer").
-- Lines a mind says directly (a talk turn's `mind_say`, a deliberation's `say`) and a player's lines are always said, and told truthfully. Only a queued line is not said into the air.
+- Lines a mind says directly (a talk turn's `mind_say`, a deliberation's `say`) and a player's lines are always said, and told truthfully. Only a queued line is not said into the air. One exception, off by default: under `heard_first_rethinks` a deliberation's line waits when its speaker heard another address the same person after the decision read its scene (docs/FIRST_SIGHT.md, "Decisions on the crowd fixes").
 - The ar2 case in the inspector (Ilsa, `all` r2) was a 20 s deliberation: her prompt had the newcomer at 5.3 m, and her line came from 27 m. That is a direct line, said and now told truthfully. The ar2 journals were not re-read here (the run checkout is off limits), so the share of each kind of late line is not counted.
 
 ### Each way's reach in metres (point 2)

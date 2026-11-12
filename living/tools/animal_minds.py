@@ -3,7 +3,7 @@
 (docs/MIND_HARNESS.md, item 3), on scratch databases through the shared verify harness.
 
   living/tools/animal_minds.py run --tag T [--seed stage1-wolves] [--minutes 20]
-                                   [--variants today salient choose pack all] [--real PROFILE]
+                                   [--variants today salient choose all] [--real PROFILE]
   living/tools/animal_minds.py report --tag T
 
 Each variant gets its own `verify-animals-<tag>-<variant>` database from the same seed, its own
@@ -36,7 +36,9 @@ FAKE = ROOT / ".agents/skills/verify-llm/scripts/fake_llm.py"
 STDB = ROOT / "living/tools/stdb"
 MIND = Path(os.environ.get("LIVING_MIND_BIN") or Path(os.environ.get("CARGO_TARGET_DIR") or ROOT / "living/target") / "release/living-mind")
 OUT = ROOT / ".local/living/animal-minds"
-SWITCHES = {"today": "", "salient": "salient", "choose": "choose", "pack": "pack,choose", "all": "salient,choose,pack"}
+# `pack` (one animal's decision copied to the others it saw) was retired on 2026-11-12 as shared
+# hidden state (docs/PACK_MIND.md); "all" is the two switches left.
+SWITCHES = {"today": "", "salient": "salient", "choose": "choose", "all": "salient,choose"}
 STDB_URL = os.environ.get("LIVING_STDB_URL", "http://127.0.0.1:3300")
 
 
