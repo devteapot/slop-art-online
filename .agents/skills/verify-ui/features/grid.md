@@ -1,6 +1,6 @@
 # The recipe grid
 
-A way of making whose `_ui()` says `choose: "grid"` from `products` (make, craft, cook, smoke; recipes-1) opens a grid in place of its sub-list: from the wheel's section (a fuel fire's Make) or the list's group. One cell per product, in the recipes' order (`Scripts::products_of`), each with its look (`recipe_look`) and, greyed, the rules' own refusal for that cell's item (`<skill>_check` with `making_item`). The hovered cell (else the first) shows its detail (`made_how`) and its recipe as rows from `recipe_parts`: Takes (an item, or a trait with the items that satisfy it), Holds (tools, goods-3), Where (a structure kind, any fire, burning, fuel from it), Knowing, Time. A click on a cell, or its number, sends the way's act with `making_item` toward the target; a greyed cell is sent all the same (the authority decides; its note says why). Esc closes it without sending.
+A way of making whose `_ui()` says `choose: "grid"` from `products` (make, craft, cook, smoke; recipes-1) opens a grid in place of its sub-list: from the wheel's section (a fuel fire's Make) or the list's group. One cell per product, in the recipes' order (`Scripts::products_of`), at most 12 in 4 columns (`ui/grid.rs` `CELLS`, `COLS`; a world with more shows the first, the list keeps every one), each with its look (`recipe_look`) and, greyed, the rules' own refusal for that cell's item (`<skill>_check` with `making_item`). The hovered cell (else the first) shows its detail (`made_how`) and its recipe as rows from `recipe_parts`: Takes (an item, or a trait with the items that satisfy it), Holds (tools, goods-3), Where (a structure kind, any fire, burning, fuel from it), Knowing, Time. A click on a cell, or its number (digits 1–9), sends the way's act with `making_item` toward the target; a greyed cell is sent all the same (the authority decides; its note says why). Esc closes it without sending (`ui: grid closed (Esc): nothing sent`), and so does a click elsewhere.
 
 ## Sub-features
 
@@ -8,6 +8,7 @@ A way of making whose `_ui()` says `choose: "grid"` from `products` (make, craft
 - `cells`: one per product; greyed exactly when the rules refuse it, with their words.
 - `rows`: takes, holds, where, knowing, time; the detail.
 - `send`: a cell sends `{"do": skill, "item": making_item, "target": …}`.
+- `close`: Esc (first of everything Esc closes) or a click outside the grid; nothing is sent.
 
 ## How to get to it (user POV)
 
@@ -19,7 +20,7 @@ Preconditions: a Cullet world (`--seed cullet`), the kit linked; a hearth with n
 
 - **Open.** `pointat:X,Y:0.8;key:KeyF:down;wait:0.5;nudge:0,-50;key:KeyF:up` → the dump's `grid`: `skill`, `title`, `cells` (product, item, label, allowed, reason, detail, rows).
 - **Choose.** `key:Digit1:tap` or `click:@grid:cell:0` → log `ui: grid make chose ash` and `verbs: … → {"do":"make","item":"ash",…}`; owner SQL `inventory` for the made item.
-- Scenario: `check.py --run $R grid` (Cullet, 9 checks).
+- Scenario: `check.py --run $R grid` (Cullet, 10 checks).
 
 ## Gotchas
 

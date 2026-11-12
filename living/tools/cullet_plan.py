@@ -2289,13 +2289,17 @@ def main():
     p = plan()
     s = seed(p)
     # The residents and their homes are `author_world.py cullet --compile-only`'s (from the cast
-    # and the drafted sheets, merged into this seed): keep them when rewriting the rest.
+    # and the drafted sheets, merged into this seed), and so is the world's look data that goes
+    # with them (`looks`, from worlds/cullet/looks.json; docs/LOOK.md): keep them when rewriting the rest.
     if SEED_OUT.exists():
-        old = {t["name"]: t for t in json.loads(SEED_OUT.read_text()).get("towns", [])}
+        prev = json.loads(SEED_OUT.read_text())
+        old = {t["name"]: t for t in prev.get("towns", [])}
         for t in s["towns"]:
             for k in ("residents", "homes"):
                 if k in old.get(t["name"], {}):
                     t[k] = old[t["name"]][k]
+        if "looks" in prev:
+            s["looks"] = prev["looks"]
     out = {PLAN_OUT: dump(p), SEED_OUT: dump(s), ENV_OUT: env_text()}
     if a.check:
         bad = [str(k) for k, v in out.items() if not k.exists() or k.read_text() != v]
