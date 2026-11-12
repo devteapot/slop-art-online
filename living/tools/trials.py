@@ -1406,7 +1406,9 @@ class Instance:
     def triggers(self, new_chron, positions, hour):
         for k, e in enumerate(self.trial.get("timeline", [])):
             w = e.get("when")
-            if not w or self.fired[k] >= e.get("max", 1) or self.t() < e.get("after_min", 0) * 60:
+            # `after_min` and `before_min` bound when a trigger may fire (a fixture that meets the
+            # subject in windows: docs/COMBAT_MIND.md §5.4).
+            if not w or self.fired[k] >= e.get("max", 1) or self.t() < e.get("after_min", 0) * 60 or ("before_min" in e and self.t() > e["before_min"] * 60):
                 continue
             if "said" in w:
                 spec = w["said"]

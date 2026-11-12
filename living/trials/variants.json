@@ -273,5 +273,11 @@
     "models": {},
     "env": {},
     "world_laws": {"fast_lane_on": true}
+  },
+  "fast-lane-fov": {
+    "about": "`fast-lane` with facing sight: the world laws `fast_lane_on` and `fov_on` true (docs/COMBAT_MIND.md §5.4: R2-fov and R3).",
+    "models": {},
+    "env": {},
+    "world_laws": {"fast_lane_on": true, "fov_on": true}
   }
 }

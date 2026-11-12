@@ -371,26 +371,33 @@ R3 asks Measure 2 (§4.3): is the next fight much easier? Now that the fast lane
 
 | Arm | What | Runs | Minutes |
 |---|---|---:|---:|
-| **R2-fov** (first) | r2e's `arena-heavy` and `arena-kiter` under `fast-lane-fov` | 5 + 5 | 10 |
-| **V-same** | A (the heavy fixture, one identity) meets the subject four times over two world days, then a fifth time on day 3 | 5 | 32 |
-| **V-new** | as V-same, but the fifth encounter is B: a different person with the same pattern | 5 | 32 |
-| **Fresh** | the same file and the same 32 minutes of life without A's four encounters, then B | 5 | 32 |
+| **R2-fov** (first) | r2e's `arena-heavy` and `arena-kiter` under `fast-lane-fov` (`arena-heavy-r2fov`, `arena-kiter-r2fov`: the same files with 5 Hz facing samples) | 5 + 5 | 10 |
+| **V-same** (`arena-veteran-same`) | A (the heavy fixture, one identity) meets the subject four times over two world days, then a fifth time on day 3 | 5 | 30 |
+| **V-new** (`arena-veteran-new`) | as V-same, but the fifth encounter is B: a different person with the same pattern | 5 | 30 |
+| **Fresh** (`arena-fresh`) | the same file and the same 30 minutes of life without A's four encounters, then B | 5 | 30 |
 
-- **The timeline.** A world hour is 30 s. A meets the subject at 10:00 and 15:00 on days 1 and 2, all by day: r2e heavy r4 showed a night fight is a fight against sleep. B comes at 10:00 on day 3. Two nights of sleep fall between, so consolidation and generalization run as in life.
-- **Encounters are bounded** by timeline steps so the veteran reaches B. A is placed near, given the fixture graph, then sent away and set to wait after 3 minutes, whatever the health. Mending between encounters is the ordinary one.
+- **The timeline** (corrected while writing the files, 2026-11-12). A world hour is 30 s and day is 06:00–20:00, 7 real minutes, so the plan's 3-minute meetings at 10:00 and 15:00 (6 world hours each) could not both fall by day. As written:
+  - A meets the subject at day 1 12:00, day 2 08:00 and 14:00, and day 3 08:00, 2 minutes (4 world hours) each, all by day: r2e heavy r4 showed a night fight is a fight against sleep. r2e's heavy first answers came 95–110 s into the fight, inside 2 minutes.
+  - The fifth meeting (A again, or B) is at day 3 14:00 for 3 minutes. A run is 30 minutes.
+  - Two nights of sleep fall between, so consolidation and generalization run as in life.
+- **Encounters are bounded** by timeline steps so the veteran reaches the last meeting. A is placed 6 m off, given arena-heavy's fixture graph, and walks back to the subject while the meeting lasts: arena-heavy's own re-approach trigger, bounded by the runner's new `before_min`. At the meeting's end it is set to wait and placed 60 m off, whatever the health. Between meetings the fixtures stand still. Mending between encounters is the ordinary one.
+- **The files are generated.** `living/tools/arena_veteran.py` writes all five from `arena-heavy.json` and `arena-kiter.json`, so the fixture stays the one R2 measured; `--check` fails when they differ.
 - **Not in this pass:**
   - **the lookalike arm** (§4.3: A's kind with another pattern): it needs a second fixture (the guard), not written;
   - **a kiter veteran:** the kiter's answer (leaving the line) does not read cleanly across fights.
 
-**Files to write** (free; fixtures and timeline only, nothing installed):
-- `arena-veteran-same.json`, `arena-veteran-new.json`, `arena-fresh.json`.
+**Files** (free; fixtures and timeline only, nothing installed; written on `r3-prep`):
+- `arena-veteran-same.json`, `arena-veteran-new.json`, `arena-fresh.json`, `arena-heavy-r2fov.json`, `arena-kiter-r2fov.json` (`arena_veteran.py`).
 - The variant `fast-lane-fov`.
-- `arena_report.py`: encounters by foe identity.
-- `fight_timeline.py` brought into `living/tools`; its plan-in-force reading is the readiness measure.
-- A seen-at-windup estimate from `positions.jsonl` headings, with `--sample-s 1` and the `fov_*` laws.
+- `arena_report.py`: exposures from every fixture the trial's `arena.foes` lists, each with its meeting. Per meeting: exposures, answered, first answer, K, damage, ready at its first windup, and the seen share.
+- `living/tools/fight_timeline.py`: the timelines, and the readings the report builds on (`Fight`: plan in force, `ready`, `seen`).
+- **The seen estimate.** From 5 Hz facing samples (`record.bodies`, `bodies.jsonl`: the facing with any held look, as `common::facing_at`), not the 2 s headings first planned. It uses the shipped sight laws and ignores walls, the 10° margin and torches.
 
 **Measures, decided before the run:**
-1. **Ready at B's first windup.** Does the plan in force (top level and routines) hold an answer on a windup: a dodge, guard or leaving on `doing` "winding up", or `threatened`? Report what wrote it: a fast patch, a slow decision, or a routine the mind kept. Fresh is 0 by construction unless it writes one before B.
+1. **Ready at B's first windup.** Does the plan in force (top level and routines) hold an answer on a windup: a dodge, guard or leaving on `doing` "winding up", or `threatened`?
+   - Report what wrote it: a fast patch, a slow decision, or a routine the mind kept.
+   - Report whether the answer is in the `combat` branch. One elsewhere can be pre-empted by a combat branch that runs first: r2e heavy r1's fifth heavy landed so.
+   - Fresh is 0 by construction unless it writes one before B.
 2. **Exposures to the first answer against B** (k), K, damage taken in B's first 3 minutes, and survived or won.
 3. **Within the veteran.** k for each of A's four encounters (does it fall from A1 to A4?), and whether the answering condition survives the nights: routine, top-level branch, or rewritten each time.
 4. **What carried.** The first thought that connects B (or A again) with the earlier fights or the pattern. Beliefs and stances about `person:<A>` or the pattern at day 3's start.
@@ -398,7 +405,7 @@ R3 asks Measure 2 (§4.3): is the next fight much easier? Now that the fast lane
    - the prompt audit for the fixture's pattern or tactic text outside the subject's own experiences;
    - `skills.sha256` equal to main's;
    - 0 spoken ids;
-   - the share of exposures the subject saw at the windup, from headings.
+   - the share of exposures the subject saw at the windup (the estimate above).
 
 **Targets.**
 - **R2-fov holds r2e:** heavy first answer by exposure 3 in at least 3 of 5. If none of 5 fights answers, stop and report before R3.
@@ -408,7 +415,7 @@ R3 asks Measure 2 (§4.3): is the next fight much easier? Now that the fast lane
 - **Reported either way.** V-same against V-new (does the same identity cue more than the same pattern?) and the A1→A4 curve. They are read either way, not targets.
 
 **Stop rule.**
-- **A free `--fake` run first.** One replicate of each R3 file, 32 minutes, must show:
+- **A free `--fake` run first.** One replicate of each R3 file, 30 minutes, must show:
   - A placed and sent away four times, the nights slept, B placed;
   - fast calls going out;
   - `fov_on` and `fast_lane_on` in the world's laws, and the switches recorded.
@@ -423,8 +430,8 @@ R3 asks Measure 2 (§4.3): is the next fight much easier? Now that the fast lane
 | Arm | Runs | Each | Total |
 |---|---:|---:|---:|
 | R2-fov | 10 × 10 min | $0.034 | $0.34 |
-| V-same, V-new | 10 × 32 min | ≈ $0.23 (life ≈ $0.004 a minute, plus five encounters' calls) | $2.30 |
-| Fresh | 5 × 32 min | ≈ $0.15 | $0.75 |
+| V-same, V-new | 10 × 30 min | ≈ $0.23 (life ≈ $0.004 a minute, plus five encounters' calls) | $2.30 |
+| Fresh | 5 × 30 min | ≈ $0.15 | $0.75 |
 | **Total** | | | **≈ $3.40, stop at $4.00** |
 
 This is above §5's earlier $1.20 (8 runs at $0.15): three arms of 5 instead of two of 4, the facing-sight check, and r2e's measured costs. At 4 replicates and no R2-fov kiter it is about $2.60.
