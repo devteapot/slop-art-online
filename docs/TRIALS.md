@@ -331,7 +331,7 @@ The 60 s window behind `converge_60s` 6 holds five lines to the newcomer (Lorcan
 
 **Does a thought started at first sight go stale? Yes.** Three of the six lines said to the newcomer in the cluster came after another resident had just addressed it, within the speaker's hearing, and after the speaker's decision had been made without that fact:
 - **Ingrid** decided at 317.9 s. Lorcan spoke at 320.7 s, 3.3 m from her, and her line followed 0.2 s later.
-- **Davin** decided at 322.3 s, on a prompt built at 317.4 s, before either had spoken. His line came 6 s after both, from within 4 m of the newcomer.
+- **Davin** decided at 322.3 s, on a prompt built at 317.4 s, before either had spoken. He stood 3.3 m from the newcomer when both hailed it, and his own line came 6 s after theirs.
 - **Oswin's** line came 1.4 s after Hobb's.
 
 The gap from a reply to its line was 2.4–5.3 s, because a think reply's `say` is spoken at install, after the compile. `speech_truth`'s `line_overtaken` drops a queued line only when the speaker's own exchange with the addressee has moved on. Someone else addressing the same person is not counted.
