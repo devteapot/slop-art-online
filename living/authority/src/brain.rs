@@ -593,6 +593,15 @@ impl<'a> Ev<'a> {
 
     #[allow(clippy::too_many_arguments)]
     fn leaf(&mut self, id: u16, skill: &str, target: Resolved, item: &str, qty: u32, text: &str, topic: &str, desc: String) -> St {
+        // A committed move under way holds the body until it has run its course (a dash may cut
+        // in on a windup): the graph waits on it, as a player's keys do (`combat::held_by`).
+        if let Some(a) = self.ctx.db.activity().id().find(self.me.id) {
+            let own = a.node == id && a.revision == self.st.revision;
+            if !own && crate::combat::held_by(&common::scripts(self.ctx), &a, skill).is_err() {
+                self.status = a.label;
+                return St::Run;
+            }
+        }
         if self.acting {
             // A deliberate act holds the body: the graph's work waits for it, but a reflex
             // (flee, dodge, block, attack, throw) takes the body back at once.
@@ -1431,7 +1440,9 @@ impl<'a> Ev<'a> {
                 self.running = Some(a.node);
                 self.status = format!("{} (decided)", a.label);
                 self.path.clear();
-            } else if self.running != Some(a.node) || a.revision != self.st.revision {
+            } else if (self.running != Some(a.node) || a.revision != self.st.revision) && !crate::combat::committed(&common::scripts(ctx), &a) {
+                // A committed move (a dodge, a windup) runs its course though the branch that
+                // started it no longer holds (combat minds §3.2, committed-moves).
                 act::cancel(ctx, a, self.now, None);
             }
         }

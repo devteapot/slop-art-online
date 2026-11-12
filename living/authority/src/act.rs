@@ -995,9 +995,9 @@ pub fn cancel(ctx: &ReducerContext, a: Activity, now: u64, why: Option<&str>) {
     }
     if timed {
         crate::combat::act_until(ctx, id, now);
-        if a.node == PLAYER {
-            crate::combat::resume_move(ctx, id, now);
-        }
+        // A movement a player asked for while the move held the body (whoever started it:
+        // a committed move holds a player's keys too, `combat::rooted_now`).
+        crate::combat::resume_move(ctx, id, now);
     }
     if a.phase == 1 && aim_of(&sc, &a.skill) == Aim::Facing {
         crate::breath::ease(ctx, id, now);
@@ -1208,9 +1208,9 @@ fn finish_as(ctx: &ReducerContext, a: Activity, ok: bool, why: &str, now: u64, c
             let until = crate::combat::recovering(ctx, a.id, &a.skill, now);
             crate::combat::act_until(ctx, a.id, until);
         }
-        if a.node == PLAYER {
-            crate::combat::resume_move(ctx, a.id, now);
-        }
+        // A movement a player asked for while the move held the body (whoever started it:
+        // a committed move holds a player's keys too, `combat::rooted_now`).
+        crate::combat::resume_move(ctx, a.id, now);
     }
     if ok {
         common::practise(ctx, a.id, &a.skill);

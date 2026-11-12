@@ -6,7 +6,7 @@ with admin test reducers (`place_at`, `set_behavior`, `grant_items`; named in th
 checks the outcome in the authority's rows: `my_skill_uses`, `my_combat` and `my_readiness`
 (the player's views), and `vitals`, `fighter`, `character` (public).
 
-    combat.py --run RUN [--scene all|refusals|strike|kill|bow|bolt|block|dodge|jump|breath|heal|wolves|death]
+    combat.py --run RUN [--scene all|refusals|strike|kill|bow|bolt|block|dodge|jump|committed|breath|heal|wolves|death]
 
 Needs `verify.py launch --run RUN --seed island` and `verify.py player --run RUN join NAME`
 first (the death scene rejoins with the same identity). Writes `RUN/combat.json`.
@@ -526,6 +526,40 @@ def scene_jump(st):
     call(st, "set_behavior", [a, '{"wait":60}'], "admin")
 
 
+def scene_committed(st):
+    """A committed move runs its course for a player as for a graph (committed-moves, the
+    `committed` trait of `<skill>_combat()`): a guard pressed in the middle of a dodge is refused
+    ("in the middle of a dodge") and the dodge covers its whole length, where before the guard
+    broke the dash off; a dash still cuts in on a committed windup (a strike), as before."""
+    cid = me(st)
+    p = body(st, cid)
+    ready(st, "dodge")
+    ready(st, "block")
+    call(st, "use_skill", ["dodge", 0, p[0], p[1] + 3.0])
+    call(st, "use_skill", ["block", 0, p[0] + 1.0, p[1]])
+    time.sleep(1.0)
+    p2 = body(st, cid)
+    moved = p2 and math.dist(p, p2)
+    d, b = last_use(st, "dodge"), last_use(st, "block")
+    check(st, "a guard pressed mid-dodge is refused and the dodge runs its course",
+          d and d["outcome"] == "made way" and moved and moved > 2.2 and b and b["outcome"].startswith("refused: in the middle of a dodge"),
+          {"dodge": d and d["outcome"], "block": b and b["outcome"], "moved": moved and round(moved, 2)})
+    call(st, "place_at", [cid, p[0], p[1]], "admin")
+    time.sleep(0.3)
+    p = body(st, cid)
+    t = dummy(st, p, 1.2, 0.0)
+    time.sleep(0.4)
+    ready(st, "strike")
+    ready(st, "dodge")
+    call(st, "use_skill", ["strike", t, p[0] + 1.2, p[1]])
+    call(st, "use_skill", ["dodge", 0, p[0], p[1] + 3.0])
+    time.sleep(1.0)
+    s_, d = last_use(st, "strike"), last_use(st, "dodge")
+    check(st, "a dodge still cuts in on a committed windup (the strike is broken off)",
+          s_ and s_["accepted_ms"] > 0 and s_["released_ms"] == 0 and s_["outcome"].startswith("broken off") and d and d["outcome"] == "made way",
+          {"strike": s_ and s_["outcome"], "dodge": d and d["outcome"]})
+
+
 def my_vitals(st):
     r = sql(st, "SELECT * FROM my_vitals", "player")
     return r[0] if r else None
@@ -672,7 +706,7 @@ def scene_death(st):
     check(st, "rejoining makes a new identity with only the newcomer's kit", code == 200 and new and new != cid and {r["item"] for r in inv} <= {"bow", "arrow", "berries"}, f"{cid} -> {new}; {inv}; {[k['technique'] for k in know]}")
 
 
-SCENES = {"refusals": scene_refusals, "strike": scene_strike, "kill": scene_kill, "bow": scene_bow, "bolt": scene_bolt, "block": scene_block, "dodge": scene_dodge, "jump": scene_jump, "breath": scene_breath, "heal": scene_heal, "wolves": scene_wolves, "death": scene_death}
+SCENES = {"refusals": scene_refusals, "strike": scene_strike, "kill": scene_kill, "bow": scene_bow, "bolt": scene_bolt, "block": scene_block, "dodge": scene_dodge, "jump": scene_jump, "committed": scene_committed, "breath": scene_breath, "heal": scene_heal, "wolves": scene_wolves, "death": scene_death}
 
 
 def main():

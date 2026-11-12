@@ -1,5 +1,9 @@
 # Validation record (player)
 
+## 2026-11-12 committed-moves (Spark)
+
+Branch `committed-moves` from origin/main `2ff786aa`, an island run on the trial service. `player-commit-061743`: `combat.py` (all scenes) 39 of 39, then the new `committed` scene 2/2: a guard pressed mid-dodge refused "in the middle of a dodge" and the dodge whole (`made way`); a dodge pressed in a strike's windup still cuts in (the strike `broken off`, unreleased). The same scene on main `2ff786aa` (`player-cmain-062029`, a temporary worktree): 1 of 2, the guard broke the dodge off 0.07 m in: the one player-path change, recorded in docs/COMBAT.md "Committed moves".
+
 ## 2026-11-12 speech-truth (Spark)
 
 `speak.py` (`player-struth-speak`, trial service): 16 of 16. New: a `human_say` to the resident 30 m away is said. The player's `my_experience` then holds one `silence` row ending "they could not have heard you." (not "No answer"), and `my_act_outcomes` holds its row: kind `act`, code `reach`, not ok, `why` the same words, `other` the resident.

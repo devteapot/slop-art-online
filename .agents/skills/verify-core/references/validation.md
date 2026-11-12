@@ -1,5 +1,9 @@
 # Core validation record
 
+## 2026-11-12 committed-moves: a started committed move runs its course (Spark)
+
+Branch `committed-moves` from origin/main `2ff786aa` (doing-percept in), the trial service `slop-trials-stdb`, private `CARGO_TARGET_DIR`. Default seed `core-commit-060917`: `committed` (new) 4/4 (a dodge the open way 2.6 m in 516 ms; toward a wall 0.78 m in 166 ms; W killed inside its attack's windup: never released, no blow on Y); `doing_seen` 11/11, its former XFAIL now a pass (field on: the dodge `made way`, the blow missed); `tick` 6/6, `refusal` 4/4, `fov` 18/18; `stamina` failed once (the first walk-speed sample after the run caught a slowdown with 30 breath left: a goto run, untouched here) and passed 26/26 on rerun. Island `core-commitk-062220`: `skirmish` 8/8, `outcomes` 11/11. Cargo: `combat::committed_tests`, `script::tests` (the committed set). `just living-check` passes.
+
 ## 2026-11-12 doing-percept: what someone is visibly doing (Spark)
 
 Branch `doing-percept` from origin/main `ee8790f4`, the trial service `slop-trials-stdb` (2.14.1, port 3320), default seed, `scoped`, private `CARGO_TARGET_DIR`. Run `core-doing-052655`.

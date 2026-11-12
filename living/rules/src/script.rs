@@ -1338,7 +1338,7 @@ impl Scripts {
                 continue;
             }
             let m = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, f, ()).map_err(|e| format!("{f}: {e}"))?.try_cast::<Map>().ok_or_else(|| format!("{f} must return a map"))?;
-            const KNOWN: &[&str] = &["aim", "timed", "rooted", "hostile", "reflex", "evades", "real_time", "melee", "closes_in", "menace", "force", "dares", "hold_ms", "arc", "takes", "knack", "needs", "knows"];
+            const KNOWN: &[&str] = &["aim", "timed", "rooted", "committed", "hostile", "reflex", "evades", "real_time", "melee", "closes_in", "menace", "force", "dares", "hold_ms", "arc", "takes", "knack", "needs", "knows"];
             if let Some(k) = m.keys().find(|k| !KNOWN.contains(&k.as_str())) {
                 return Err(format!("{f}: unknown trait `{k}` (traits are {})", KNOWN.join(", ")));
             }
@@ -1360,6 +1360,7 @@ impl Scripts {
                 aim,
                 timed: flag("timed")?,
                 rooted: flag("rooted")?,
+                committed: flag("committed")?,
                 hostile: flag("hostile")?,
                 reflex: flag("reflex")?,
                 // A dash evades unless it says otherwise; nothing else does.
@@ -3750,6 +3751,9 @@ mod tests {
         assert_eq!(with(|x| x.missile), sorted(vec!["bowshot", "firebolt"]));
         assert_eq!(with(|x| x.aim == Aim::Point), sorted(vec!["bowshot", "firebolt"]));
         assert_eq!(with(|x| x.rooted), sorted(vec!["strike", "bowshot", "firebolt", "heal", "attack", "shoot"]));
+        // Committed (combat minds §3.2, committed-moves): what a player cannot break off by
+        // moving (the rooted windups and the dashes), the same for every controller.
+        assert_eq!(with(|x| x.committed), sorted(vec!["strike", "bowshot", "firebolt", "heal", "attack", "shoot", "dodge", "jump"]));
         assert_eq!(with(|x| x.hostile), sorted(vec!["attack", "throw", "shoot", "threaten", "strike", "bowshot", "firebolt"]));
         assert_eq!(with(|x| x.force), sorted(vec!["attack", "throw", "shoot", "yield", "strike", "bowshot", "firebolt"]));
         assert_eq!(with(|x| x.dares), sorted(vec!["attack", "seize", "strike"]));
