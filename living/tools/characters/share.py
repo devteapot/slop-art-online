@@ -326,6 +326,7 @@ def types(files, out_dir):
         else:
             sheets[kind] = Image.new("RGB", whole, tuple(int(round(float(x) * 255)) for x in _stored(np.array(mean))))
     done = 0
+    iris = None
     for f in files:
         t = os.path.splitext(os.path.basename(f))[0]
         if t not in order:
@@ -370,6 +371,25 @@ def types(files, out_dir):
             move_uvs(j, binary, set(mats), col, row, n, min(size[kind]), window)
             point_at(j, ii, os.path.join(out_dir, f"types-{kind}.png"), f)
             moved.append(kind)
+        # The iris: one picture for every type (person_params.SHARED_IRIS), named by path. No tile
+        # and no move of the UVs: every type's is the same picture.
+        mats = [mi for mi in range(len(j.get("materials", []))) if material_image(j, mi) is not None and j["images"][material_image(j, mi)].get("name", "").endswith(".iris")
+                and "bufferView" in j["images"][material_image(j, mi)]]
+        if mats:
+            ii = material_image(j, mats[0])
+            pic = np.asarray(Image.open(io.BytesIO(image_bytes(j, binary, ii))).convert("RGB"))
+            path = os.path.join(out_dir, "types-iris.png")
+            # Types paged before and not in this call keep the picture they point at; when every
+            # one of them is paged again here, the picture is this call's.
+            if iris is None and os.path.exists(path) and set(record["types"]) - {os.path.splitext(os.path.basename(x))[0] for x in files}:
+                iris = np.asarray(Image.open(path).convert("RGB"))
+            if iris is None:
+                iris = pic
+                Image.fromarray(pic, "RGB").save(path)
+            elif iris.shape != pic.shape or np.abs(iris.astype(int) - pic.astype(int)).max() > 1:
+                raise SystemExit(f"share: {f}: its iris is not the picture the other types share ({path}); build the types with the shared iris")
+            point_at(j, ii, path, f)
+            moved.append("iris")
         if moved:
             write_glb(f, j, compact(j, binary))
             record["types"][t] = dict(col=col, row=row, pages=sorted(set(record["types"].get(t, {}).get("pages", [])) | set(moved)))
