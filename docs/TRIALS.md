@@ -214,6 +214,76 @@ Approved by the general coordinator at about $2.7. It runs after the earshot sta
 
 **Switches:** as fs1h, plus `earshot` on.
 
+### Results (fs1e, 2026-11-12 17:55–18:16): the stop rule tripped on both counts (`converge_60s` 10, `together_4m` 3)
+
+**What ran.**
+- **Commit:** main as of 17:40 with `earshot-stage` merged (its `arrive_spread` fix: a line out of earshot is matched to its `silence` row by speaker and moment), in `~/slop-trials-fs1` at `f5398116`.
+- **Smoke:** a free fake run first (`fs1es`, 6 minutes). It ran to duration and read the three laws back. Its prompts carried "who would hear you now" (180 entries).
+- **The paid arm:** ran to duration (20.0 minutes) with no runaways, no outages and one mind start. The three laws were read back from `world_law`.
+- **Cleanup:** the world was paused before deletion; no database is left.
+
+**Cost:** $2.69 (glm-5-3-flash 1,359 calls $1.94; deepseek-v4-1-flash 467 calls $0.75).
+
+**Switches:** `first_sight_thinks` on (gap 300 s), `heard_first_rethinks` on, `earshot` on, and the naming fix. Otherwise as fs1h: far-handle on, `fov_on` off, `regard_cache` on; `LIVING_GREET=nearest`, `LIVING_PARK=concurrent`; `LIVING_SKILL_TIMINGS` on and `force_outcomes` true; the sleeper fix in; no arrival laws; `LIVING_CONCURRENCY` 64; the people mix.
+
+All four runs re-measured with the fixed `arrive_spread`:
+
+| measure | fs1 C | fs1f | fs1h | **fs1e** | target |
+|---|---|---|---|---|---|
+| in range | 18 | 22 | 22 | **35** | about 18–24 |
+| asks | 1 | 11 | 12 | **22** | 1–3, Aldous among them |
+| approaches silently | 3 | 0 | 0 | 3 | 0–2 |
+| notices inwardly | 2 | 8 | 8 | 8 | 3–8 |
+| unaware | 12 | 3 | 2 | 2 (6%) | ≤6, ≤40% |
+| tells others | 0 | 6 | 2 | 5 | 1–4 |
+| first heard line after the join | 91.6 s, Bram Calloway | 320.7 s, Lorcan Vane | 307.8 s, Neve Calloway | 96.0 s, Edda Hollin | within 5 minutes |
+| `converge_60s` (old definition) | 2 | 6 | 10 | **10** | ≤3 |
+| of it: heard / unheard (the halves overlap) | 2 / 0 | 6 / 2 | 5 / 6 | 8 / 7 | — |
+| `together_4m` | 2 | 2 | 2 | **3** | ≤2 |
+| raw 4 m convergence | 5 | 7 | 10 | 10 | — |
+| lines to the newcomer / out of earshot / residents heard by it | 1 / 0 / 1 | 21 / 7 / 5 | 21 / 12 / 3 | 31 / 16 / 10 | — |
+| re-asks | 0 | 7 | 6 | 1 | — |
+| first sights → think requests carrying the line | 22 → 0 | 24 → 20 | 26 → 24 | 39 → 36 | — |
+| false replies / group talk, a minute | 0.45 / 0.05 | 0.55 / 0.10 | 0.35 / 0.30 | 0.45 / 0.65 | within C's spread |
+| repeated lines; `led_res` − placebo | 0.00; −0.04 | 0.00; −0.11 | 0.12; +0.07 | 0.07; +0.28 | within C's spread |
+| deliberations / talk turns per resident-hour | 18.9 / 11.3 | 20.4 / 13.5 | 22.1 / 12.2 | 22.4 / 13.5 | — |
+| spoken `#id` lines | 0 | 0 | 0 | 0 | 0 |
+| cost | $2.48 | $2.66 | $2.73 | $2.69 | — |
+
+- **Crowding.** In range rose to 35. The newcomer's second stand put it at the Marver's door at midday, among the Achterbergs, Aldous, Eamon and Anselm. `together_4m` reached 3 there.
+- **Earshot changed little, as expected.** 16 of 31 lines to the newcomer were out of earshot (52%; fs1h 57%, fs1f 33%). A thought started at first sight says its line about 8 s later, and a think or deliberate reply cannot call.
+- **Tick time was not captured.** The sampler found no database: the trial databases no longer appear in the server CLI's `spacetime list` (another owner's identity). This needs fixing before the next batch; the authority's own clock rows were not read.
+
+**The asks: 22 residents, each with the reason its own thought gave** (`fs1_asks.py`; the groups read and set by hand; a thought giving two reasons is in both):
+
+| reason | askers | in their words |
+|---|---|---|
+| **manners** (13) | Imre, Rafe, Joss, Aldous, Lorcan, Cora, Elke, Gwil, Dolly, Otto, Pieter, Jory, Eamon | Imre: "A word costs nothing"; Rafe: "a nod and a name costs nothing"; Joss: "no harm in being the first friendly face"; Aldous: "a new face in Cullet is worth a civil word"; Lorcan: "close enough for a civil word"; Cora: "it costs nothing and Cullet was built on neighbourliness"; Elke: "I'll give them the time of day the way you do"; Gwil: "I'll hail them civil"; Dolly: "I'll greet them proper"; Otto: "a nod and a word costs nothing; strangers are just neighbours I've not met yet"; Pieter: "a nod to the quiet stranger on the way costs nothing"; Jory: "a man should see who stands in his street"; Eamon: "a greeting costs nothing" |
+| **curiosity** (10) | Lark, Roos, Imre, Edda, Rafe, Lumi, Gwil, Mirren, Anselm, Eamon | Lark: "I have never seen anyone who wasn't of Cullet … curiosity like this doesn't come twice"; Roos: "I'll give a good morning and see who answers"; Imre: "I want a look at who comes to Cullet"; Edda: "I know everyone in Cullet by sight … go see who it is"; Rafe: "learns who's new in town"; Lumi: "I've never seen them before"; Gwil: "not one of ours as far as I can see"; Mirren: "folk who wait outside a town usually want something"; Anselm: "I'd rather know who they are than walk past"; Eamon: "maybe the stranger has news" |
+| **duty or role** (4) | Aldous, Dolly, Mirren, Edda | Aldous: "everyone who trades at the Store ends up in my book"; Dolly: "that's what the Marver is for"; Mirren: "or need tending" (the healer); Edda: "I lead, so I go first" (the children's leader) |
+| **others asking or approaching** (3) | Imre, Pieter, Eamon | Imre: "Roos Achterberg walking straight at them" (the naming fix's fact); Pieter: "Dolly's feeding the stranger at the door"; Eamon: "Aldous Quill and the Achterbergs gathered round it" |
+| **greeted first** (0) | — | the newcomer never speaks |
+| **something else** (3) | Ren, Nell, Ife | Ren greets "honestly" in passing, minding his fished-out spot. Nell asks whether it has seen her lost brother. Ife's thought is about Lumi, and its line went to the newcomer. |
+
+**Where the asking comes from.**
+1. **The first-sight thought is the pull.** 20 of the 22 askers spoke from a think whose only reason was the first-sight line ("For the first time you see a stranger, 16 tiles south, wait."). The think prompt says "Start from why you are thinking now: that is what this moment of thought is about" (`prompts.rs`). With the stranger as the only reason, the stranger is what the thought is about, and most answer it with a greeting.
+2. **Manners is the models' own norm, not the prompt's.** "costs nothing" appears in 8 thoughts. Neither the shared prompts nor any resident's sheet holds a greeting norm; the nearest is Amara's value "a neighbour is owed what you can carry", and she is not an asker.
+3. **Personality shows only as a lean.** The curious askers have curiosity 55–88 (Lark 88, Lumi 80, Edda 75), the manners askers 35–78.
+4. **Duty or role came in four lives.** Aldous asked in this run, the first time in any arm. His first line, at 320 s from 22.8 m, went unheard. He asked again at the Marver after Pieter, Eamon and Anselm.
+
+**Held lines** (`heard_first_rethinks`): **33 held, 6 of them to the newcomer.**
+- **After the re-think:** 11 said the same words again, 15 another line to the same person, 7 spoke to someone else, 0 fell silent.
+- **The 6 to the newcomer all still spoke to it**, now knowing who had asked:
+  - **Anselm:** "Eamon Tarn has already opened the welcome for me — no matter, the question is still mine to ask plainly". He then said "Eamon's asked it already, but I'll ask it too — your name, and your business?".
+  - **Aldous:** "Pieter has already welcomed him — a tally keeper should not be beaten to a name twice in one day", and later "Anselm and Eamon have both had their go; my turn, as tally keeper, is owed".
+  - **Roos:** "Edda's already hailed them, so I'll add a proper call of welcome and close the gap myself".
+  - **Dolly** said her welcome again.
+- **The other 27** were in residents' group talk, as in fs1h.
+
+**Evidence:** `~/slop-trials-fs1/.local/living/trials/fs1e` and `fs1es` and the journals `verify-trial-fs1e*`, archived in `~/archive/trials/fs1e-20261112.tar.gz` (15 MB, 370 files). The archive also holds the fixed-tool re-measures of all four runs (`fs1c-`, `fs1f-`, `fs1h-` and `fs1e-spread2.md`), `fs1e-asks.json` (every asker's line, distance, thought and group), `fs1e-held.json`, `fs1e-m.json`, the spend logs and the tools.
+
+**Security check:** 9 fragments of the 3 API keys searched in the batch directories, journals and logs. Count: 0.
+
 ## First sight fs1h (2026-11-12) — the one-arm re-run with the crowd fixes; target, written before any paid call
 
 The re-run of C + first sight after first-sight-crowd (docs/FIRST_SIGHT.md, "Crowds" and "Decisions on the crowd fixes"), approved by the general coordinator at about $2.7.
@@ -256,7 +326,7 @@ The re-run of C + first sight after first-sight-crowd (docs/FIRST_SIGHT.md, "Cro
 | notices inwardly | 2 | 8 | 8 | 3–8 |
 | unaware | 12 (67%) | 3 (14%) | 2 (9%) | ≤6, ≤40% |
 | tells others | 0 | 6 | 2 (Amara Okoro, Oswin Greave) | 1–4 |
-| first heard line after the join | 91.6 s | 42.5 s | 88.9 s (Ren Sato) | within 5 minutes |
+| first heard line after the join (corrected; old tool in brackets) | 91.6 s | 320.7 s (42.5 s) | **307.8 s, Neve Calloway** (88.9 s, Ren Sato) | within 5 minutes |
 | `converge_60s` / `together_4m` | 2 / 2 | 6 / 2 | **10** / 2 | ≤3 / ≤2 |
 | raw 4 m convergence | 5 | 7 | 10 | — |
 | lines to the newcomer / out of earshot (the authority's `silence` verdict) / reached it | 1 / 0 / 1 | 21 / 7 / 14 | 21 / **12** / 9 | — |
@@ -387,11 +457,11 @@ Beside them, each arm records the raw count: the most residents who came within 
 | notices inwardly | 2 | 8 (Aldous among them) | 3–8 |
 | unaware | 12 (67%) | 3 (14%) | ≤6, ≤40% |
 | tells others (all residents) | 0 | 6 (Neve Calloway, Magda Tarn, Ingrid Morrow, Hana Sato, Ren Sato, Nan Fenwick) | 1–4, Ingrid in 2 of 4 runs |
-| first heard line after the join | 91.6 s | 42.5 s (Lark Morrow) | within 5 minutes |
+| first heard line after the join (corrected; old tool in brackets) | 91.6 s (91.6 s) | **320.7 s, Lorcan Vane** (42.5 s, Lark Morrow) | within 5 minutes |
 | `converge_60s` / `together_4m` | 2 / 2 | **6** / 2 | ≤3 / ≤2 |
 | raw 4 m convergence (any reason, within 60 s) | 5 | 7 | — |
 | lines to the newcomer / out of earshot | 1 / 0 | 21 / 2 | — |
-| residents heard by it / re-asks | 1 / 0 | 9 / 7 | — |
+| residents heard by it (corrected; old tool in brackets) / re-asks | 1 (1) / 0 | **5** (9) / 7 | — |
 | first sights of it → think requests carrying the line | 22 → 0 | 24 → 20 (19 alone, 1 merged) | — |
 | false replies a min / group talk a min (main's rule) | 0.45 / 0.05 | 0.55 / 0.10 | within C's spread |
 | repeated lines; `led_res` − placebo | 0.00; −0.04 | 0.00; −0.11 | within C's spread |
@@ -400,7 +470,7 @@ Beside them, each arm records the raw count: the most residents who came within 
 | tick mean / p99 / > 10 ms / > 25 ms / > 50 ms | 0.88 ms / ≤ 5 ms / 28 / 2 / 0 | 0.82 ms / ≤ 5 ms / 14 / 1 / 0 | — |
 
 - **Out of shape:** asks (11, past the "5 or more" mark) and `converge_60s` (6, the stop rule).
-- **In shape:** inward, unaware and the first heard line. Tells are over the band (6 against 1–4).
+- **In shape:** inward and unaware. Tells are over the band (6 against 1–4). The first heard line was first recorded as in shape (42.5 s); the corrected figure, 320.7 s, is past the 5-minute band (correction below the table, fs1e).
 - **Aldous** thought about the newcomer 7 s after its join: "new faces are rare enough in Cullet that a tally keeper notices. Not my business to challenge…". He said nothing, so he is classed inward.
 - **Ingrid** asked, and told others.
 - **First-sight thoughts** came 0.4–27 s after the first sight. The median was 0.5 s to the request and 4–15 s to the reply.
