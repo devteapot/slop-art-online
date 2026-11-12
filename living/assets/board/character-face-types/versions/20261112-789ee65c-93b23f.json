@@ -1,0 +1,70 @@
+{
+ "schema": 1,
+ "family": "character:face-types",
+ "id": "20261112-789ee65c-93b23f",
+ "published": "2026-11-12T03:58:43+01:00",
+ "imported": "2026-11-12T03:58:43+01:00",
+ "track": "char-4",
+ "maker": "Claude Fable 5.2",
+ "note": "Pass 3, hair as sheets: a few broad sheets that end in points where there were about fifty locks; the face shows from the side; the skin beside a straight fringe is closed; long is long and balding is bald (a style file's length and receding were drawn for another style); 50 hair files 13.4 MB (17.0 before). Photographs hold the eyes open as a rule of the photo tools.",
+ "source": {
+  "commit": "789ee65cdf0e295538360b35356d194d1f7f3a98",
+  "branch": "char-4",
+  "dirty": false,
+  "generator": "living/tools/blender/hair.py",
+  "generator_sha256": "6c2258f61f2b8e9224a6438c9fcb76ec732dd0aa1aea05a72a889213d3e43908",
+  "generator_state": "committed",
+  "params": {}
+ },
+ "renderer": {
+  "method": "asset-view (the game)",
+  "commit": "",
+  "key": "asset-view (the game)",
+  "preset": "",
+  "note": "hair-sheets: eight type and style pairs before (locks) and after (sheets) from the front, three-quarter and side and at the game camera, each a type's file with the style's file attached, hair normals turned to the camera for that view (compose.py --hair-toward), a stand-in for a client without the rim light on hair; hair-sheets-styles: every style as sheets from four sides and at the game camera; hair-sheets-cuts: the three cuts of six styles; hair-sheets-people: six presets whole, before and after, under the client's own shading and rim light (after, in the bind pose: clips could not be baked on this machine). Eyes are held open by the photo tool. The vroid member is the reference with its own normals; the blue-protocol member is published CEDEC slides, for comparison only"
+ },
+ "preset": "",
+ "media": "media/character-face-types/20261112-789ee65c-93b23f",
+ "members": [
+  {
+   "name": "types",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "0485b111c9e1204d71cd2467d96808d8c07c7698c6fd1b8c978ef02bd1c07b42",
+   "shots": [
+    "hair-sheets",
+    "hair-sheets-cuts",
+    "hair-sheets-people",
+    "hair-sheets-styles"
+   ],
+   "clips": []
+  },
+  {
+   "name": "vroid",
+   "role": "control",
+   "token_kind": "import",
+   "sha256": "dc76b21e0e7c2f7e04167d5d47caadfc033823666df4e77c587880aabf74d96d",
+   "shots": [
+    "hair-sheets",
+    "hair-sheets-cuts",
+    "hair-sheets-people",
+    "hair-sheets-styles"
+   ],
+   "clips": []
+  },
+  {
+   "name": "blue-protocol",
+   "role": "control",
+   "token_kind": "import",
+   "sha256": "d8d8660751a7c09b0ffb694cd8f29235d3be301810d321865efc83385f27533d",
+   "shots": [
+    "hair-sheets",
+    "hair-sheets-cuts",
+    "hair-sheets-people",
+    "hair-sheets-styles"
+   ],
+   "clips": []
+  }
+ ],
+ "delivered": []
+}
