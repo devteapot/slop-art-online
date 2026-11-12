@@ -12,7 +12,8 @@ closed record from before 2026-11-12. Run from anywhere in the repository:
   latest_validation.py --split [--base origin/main]
       for a branch that edited the old references/validation.md: after merging main, git has
       carried those edits into history.md (or left validation.md behind). Every section the base
-      lacks moves into a new <stamp>-<branch>.md, and history.md is restored to the base's.
+      lacks moves into a new <stamp>-<branch>.md (one per branch the sections name), and
+      history.md is restored to the base's. The moved files are staged.
 """
 import argparse
 import datetime
@@ -67,8 +68,10 @@ def listing(args):
 
 
 def added_at(path):
-    """The commit that added history.md (the layout change), or None before it is committed."""
-    out = git('log', '--no-renames', '--diff-filter=A', '--format=%H', '--', str(path.relative_to(ROOT)), check=False).split()
+    """The commit that added history.md (the layout change), or None before it is committed.
+    During a merge, the side being merged in counts too (main, when a branch merges it)."""
+    heads = ['HEAD'] + (['MERGE_HEAD'] if git('rev-parse', '-q', '--verify', 'MERGE_HEAD', check=False).strip() else [])
+    out = git('log', '--no-renames', '--diff-filter=A', '--format=%H', *heads, '--', str(path.relative_to(ROOT)), check=False).split()
     return out[-1] if out else None
 
 
@@ -106,8 +109,14 @@ def sections(text):
     return out
 
 
+def owner(section, fallback):
+    """The branch a section records: its first `Branch `X`` (or `branch `X``), else FALLBACK."""
+    found = re.search(r'[Bb]ranch `([A-Za-z0-9._/-]+)`', section)
+    return re.sub(r'[^A-Za-z0-9._-]', '-', found.group(1)) if found else fallback
+
+
 def split(args):
-    branch = args.name or git('rev-parse', '--abbrev-ref', 'HEAD').strip()
+    branch = args.name or git('rev-parse', '--abbrev-ref', 'HEAD').strip().replace('/', '-')
     stamp = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%d-%H%M')
     moved = 0
     for skill in surfaces():
@@ -124,19 +133,24 @@ def split(args):
         new = [s for s in sections(mine)[1:] if s not in have]   # [0] is the title line
         if not new:
             print(f'{skill.name}: {source.relative_to(ROOT)} differs from {args.base} but adds no section; restored')
-        else:
-            target = skill / f'references/validation/{stamp}-{branch}.md'
+        groups = {}
+        for section in new:   # one record per branch the sections name, in their order
+            groups.setdefault(owner(section, branch), []).append(section)
+        for name, parts in groups.items():
+            target = skill / f'references/validation/{stamp}-{name}.md'
             if target.exists():
                 sys.exit(f'{target.relative_to(ROOT)} exists already')
-            head = f'# {skill.name}: {branch}\n\nMoved from `references/validation.md` by `latest_validation.py --split`.\n\n'
-            target.write_text(head + '\n\n'.join(new) + '\n')
-            moved += len(new)
-            print(f'{skill.name}: {len(new)} section(s) -> {target.relative_to(ROOT)}')
+            head = f'# {skill.name}: {name}\n\nMoved from `references/validation.md` by `latest_validation.py --split`.\n\n'
+            target.write_text(head + '\n\n'.join(parts) + '\n')
+            git('add', str(target.relative_to(ROOT)))
+            moved += len(parts)
+            print(f'{skill.name}: {len(parts)} section(s) -> {target.relative_to(ROOT)}')
         (ROOT / rel).write_text(base)
+        git('add', str(rel))
         if old.exists():
             git('rm', '-q', '--cached', '--ignore-unmatch', str(old.relative_to(ROOT)), check=False)
             old.unlink()
-    print(f'{moved} section(s) moved; review with git status and git diff, then commit')
+    print(f'{moved} section(s) moved and staged; review with git status and git diff, then commit')
     return 0
 
 
