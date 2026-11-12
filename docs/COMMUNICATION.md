@@ -836,3 +836,37 @@ There is no schema change: no table, column, reducer, view or subscription was a
 ### Tools
 
 `inspector.py`, `social_report.py`, `feel_excerpts.py` and `arrive_spread.py` found unheard lines by the "No answer from" (or "earshot") text. They now match every wording (`UNHEARD`: "No answer from", "could not have heard you", "Nobody was near enough to hear you", "is too far to hear you"). `arrive_spread.py` counts every `silence` row to the newcomer as a line said out of earshot. It reads only rows whose subject is the newcomer, so room lines are not counted. It also leaves out a planned line that was not said ("You did not say your planned line"): that has no chronicle line and is no line said. `life_feel.py` counts by the `silence` kind and needed no change. exp-arrive's `arrive_report.py`, on its own branch, is not changed here.
+
+## 16. How a line to the room was said (branch `speech-address`)
+
+Approved 2026-11-12 as a talk-prompt detail. When a line is said to the room (`to` = 0), every hearer's speech row says how it was said:
+
+- **whom it calls:** "A stranger said to the room, calling Edda Hollin and a stranger: “Edda! Ife! Come and look at this.”" A person is called when the line says their given name or whole name (`mention_at`, the same word match as `mentions`), and they are among the creatures near enough to hear the line (`near` in `speak`). They are listed in the order the line names them; the speaker is never listed. A name of someone who is not there is not a call.
+- **whom its speaker is talking with:** "Bram said to the room while talking with Lorcan Vane: “Has anyone seen the cart?”" This is the other side of the speaker's latest speech line to or from another person in the last 60 s (`talking_with`, read from the chronicle). It is left out when that person is also called. A line in a way whose words are for the addressee alone (a whisper, `only_to`) does not count, so the detail never tells a hearer about a private exchange. The first scene run caught this: a hearer 20 m away read "while talking with a stranger" after the speaker's whisper to someone they never noticed.
+- **both:** "…, calling you, while talking with someone too far away to make out: …"
+- **neither:** the row is unchanged ("Bram said: “…”"). A line to someone has no detail, since its row already names the addressee.
+- **where it goes:** after the way's `heard` template, or at its `{how}` placeholder when the template places one. The shipped `call` way's template is now "{a} calls out{how} from about {d} m", so a call reads "A stranger calls out to the room, calling Edda Hollin, from about 20 m: “…”", parallel to its "calls out to {b} from about {d} m". Without a detail, `{how}` is removed and the line reads as before.
+
+It is a fact of what was heard, the same for every hearer, with no advice.
+
+**Names follow each hearer's knowledge.** Each label is the hearer's own (`common::label_for`, the regard rule every other row uses):
+
+- a name only when the hearer knows the person and is near enough to make them out;
+- otherwise "a stranger" or "someone too far away to make out";
+- "you" for the hearer themself.
+
+A label said twice reads "another" the second time ("calling a stranger and another stranger"). No name reaches a hearer who does not know it. A mind's percepts carry the text as it is, and far persons keep their far handles, since the detail is words, not ids.
+
+**One place for both controllers.** The detail is part of the hearer's `experience` row text, before the quoted words. A mind reads that row in its prompt. A player reads the same row in `my_experience`.
+
+**No new column.** An `address` column on `experience` was tried and dropped. `line_seen.line` holds an `Experience` as a nested field, so a new column would change that field's type in a stored table, and automatic migration does not promise to handle that. The text already carries the detail, so a client gets it by reading the text between the speaker's verb and the quote.
+
+**What the game client needs (laptop, `living/game`).** Today `ui/live.rs` builds log lines and bubbles from `quoted(&e.text)`, the words only, beside `name_of(e.subject)`. That drops the detail. The minimal change: when the text before `: “` contains " to the room", show that part from " to the room" onward next to the speaker. For example: "Edda (to the room, calling Ife and a stranger): Come and look." `talk.rs` and `people.rs` read the same text and may want the same. No bindings change.
+
+### Data paths and SpacetimeDB
+
+There is no schema change: no table, column, reducer, view or subscription was added or changed, and the bindings are unchanged.
+
+- `talking_with` runs once per line to the room. It reads the `chronicle` rows of the last 60 s through the `chronicle.at_ms` btree index. A range scan on an index reads only the rows in range ([indexes](https://spacetimedb.com/docs/tables/indexes/)).
+- The calls are matched against `near`, which `speak` already holds.
+- The labels are one `label_for` per called person and hearer: the cached regard lookup.

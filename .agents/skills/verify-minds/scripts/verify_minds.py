@@ -1266,6 +1266,70 @@ def far_figure_case(run):
     return {'status': 'pass', **result}
 
 
+
+TALK_THOUGHT = {'kind': 'talk', 'summary': 'verify room-address line', 'detail': '', 'latency_ms': 0, 'tokens': 0, 'model': '', 'reference': ''}
+
+
+@case('room-address')
+def room_address_case(run):
+    """How a line to the room was said reaches a mind in its own labels (speech-address,
+    `speech::room_address`). H (thought for) founds a community and welcomes K; S and U are
+    strangers to H. All four stand within a few metres. S says to the room a line calling K and U
+    by name: H's experience reads "A stranger said to the room, calling <K> and a stranger: …"
+    (K known, U not; no name H does not know). Then S says a line to K, and a line to the room:
+    H's experience reads "… said to the room while talking with <K>: …". H's next prompt carries
+    both lines as they were heard."""
+    run.harness('launch')
+    run.harness('doctor')
+    before = {c['id'] for c in run.sql('SELECT id FROM character', 'ids-before')}
+    run.admin('spawn_crowd', 4, True)
+    h, k, u, sp = sorted(c['id'] for c in run.sql('SELECT id FROM character', 'ids-after') if c['id'] not in before)
+    names = {c['id']: c['name'] for c in run.sql('SELECT id, name FROM character', 'names')}
+    for who in (h, k, u, sp):
+        run.admin('set_behavior', who, json.dumps({'wait': 300}))
+    act = lambda who, node: run.admin('mind_act', who, [json.dumps(node)], 'verify-minds')
+    run.admin('place_near', k, h)
+    act(h, {'do': 'found', 'text': f'Verify Row {h}'})
+    run.wait(lambda: run.sql(f'SELECT * FROM membership WHERE member = {h}', 'h-membership'), 'community founded', 20)
+    act(k, {'do': 'join', 'target': {'id': h}})
+    run.wait(lambda: run.sql(f'SELECT * FROM join_request WHERE asker = {k}', 'join-request'), 'join request', 20)
+    act(h, {'do': 'welcome', 'target': {'id': k}})
+    run.wait(lambda: run.sql(f'SELECT * FROM membership WHERE member = {k}', 'k-membership'), 'K welcomed', 20)
+    body = run.sql(f'SELECT * FROM body WHERE id = {h}', 'h-body')[0]
+    for who, dx in ((k, 1.5), (u, -1.5), (sp, 2.5)):
+        run.admin('place_at', who, body['x'] + dx, body['y'] + 1.0)
+    time.sleep(1.5)
+    script = {'replies': {'think': {'thought': 'I listen.', 'intend': ['wait'], 'say': None}, 'deliberate': basic_reply(),
+                          'talk': {'thought': 'I listen.', 'say': '', 'to': 0, 'acts': [], 'end': True, 'settled': None}}}
+    run.start(model(run, script), [h])
+    kn, un = names[k], names[u]
+    say = lambda who, text, to: run.admin('mind_say', who, text, to, 'say', 0, TALK_THOUGHT)
+    say(sp, f'{kn.split()[0]}! {un.split()[0]}! Come and look at this.', 0)
+    time.sleep(2.6)
+    say(sp, f'Good morning to you, {kn.split()[0]}.', k)
+    time.sleep(2.6)
+    say(sp, 'Has anyone seen the cart?', 0)
+    time.sleep(1.5)
+    heard = [e['text'] for e in run.private(f'SELECT * FROM experience WHERE observer = {h}', 'experiences-h') if e['kind'] == 'speech' and e['subject'] == sp]
+    calling = next((t for t in heard if 'Come and look' in t), '')
+    talking = next((t for t in heard if 'seen the cart' in t), '')
+    requests = lambda: [e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] in ('think', 'deliberate')]
+    sent_text = lambda e: '\n'.join(str(x.get('content', '')) for x in e['body'].get('messages', []))
+    run.admin('set_behavior', h, json.dumps({'think': 'I finished my plan. verify address'}))
+    prompt = run.wait(lambda: [sent_text(e) for e in requests() if 'verify address' in sent_text(e)], 'prompt after the lines', 60)[0]
+    (run.directory / 'prompt-address.txt').write_text(prompt)
+    checks = {
+        'calling_reads_known_then_stranger': calling.startswith(f'A stranger said to the room, calling {kn} and a stranger:'),
+        'no_unknown_name_in_the_detail': un not in calling.split('“')[0],
+        'talking_with_reads_the_partner': talking.startswith(f'A stranger said to the room while talking with {kn}:'),
+        'prompt_carries_both': f'calling {kn} and a stranger' in prompt and f'while talking with {kn}' in prompt,
+        'addressed_line_has_no_room_detail': not any('to the room' in t for t in heard if 'Good morning' in t),
+    }
+    result = {'h': h, 'k': kn, 'u': un, 'heard': heard, 'checks': checks}
+    (run.directory / 'room-address.json').write_text(json.dumps(result, indent=2, ensure_ascii=False))
+    assert all(checks.values()), checks
+    return {'status': 'pass', **result}
+
 @case('health-seen')
 def health_seen_case(run):
     """A mind in a fight is told its opponent's health as the band everyone sees, never as a
