@@ -322,7 +322,23 @@ mod tests {
         let stranger = |dist: u16| crate::script::RegardIn { known: false, ..p(dist) };
         assert!(s.perceived_of(&stranger(40)).far && !s.perceived_of(&stranger(10)).far && !s.perceived_of(&stranger(10)).name);
         assert!(!island().perceived_of(&p(40)).far);
+        // The look (docs/LOOK.md §3): the key goes to whoever sees; a mind is told the far words
+        // past knowing distance, all of them within it.
+        use crate::look::LookSeen;
+        assert_eq!((s.perceived_of(&p(24)).look, s.perceived_of(&p(25)).look, s.perceived_of(&stranger(40)).look), (LookSeen::Full, LookSeen::Far, LookSeen::Far));
+        assert_eq!(island().perceived_of(&p(40)).look, LookSeen::Full);
         assert!(s.structure("lamp").lights > 0.0 && s.structure("campfire").lights > 0.0 && island().widest_light() == 0.0);
+    }
+
+    /// Cullet's and the island's composed laws keep the shipped look bands and scene rule
+    /// (docs/LOOK.md §4): their overlays do not override them.
+    #[test]
+    fn composed_worlds_keep_the_shipped_look_bands() {
+        for s in [cullet(), island()] {
+            assert_eq!(s.look_bands_law(), Ok(crate::look::LookBands { youth: 12.0, adult: 18.0 }));
+            assert_eq!(s.appearance_in_scene_law(), Ok(crate::look::AppearanceInScene::Unnamed));
+            assert!(s.law_specs()["look_bands"].about.contains("until 12 years old, like youths until 18"), "{}", s.law_specs()["look_bands"].about);
+        }
     }
 
     /// The island's rates did not change in real time: they are the old per-minute numbers.

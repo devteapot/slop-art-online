@@ -91,6 +91,8 @@ pub mod guest_table;
 pub mod guest_type;
 pub mod hear_salt_table;
 pub mod hear_salt_type;
+pub mod heard_asleep_table;
+pub mod heard_asleep_type;
 pub mod heard_sound_type;
 pub mod heard_sounds_table;
 pub mod heard_table;
@@ -132,6 +134,11 @@ pub mod line_heard_table;
 pub mod line_heard_type;
 pub mod line_seen_table;
 pub mod line_seen_type;
+pub mod look_line_table;
+pub mod look_line_type;
+pub mod look_table;
+pub mod look_type;
+pub mod look_words_type;
 pub mod lot_table;
 pub mod lot_type;
 pub mod mark_type;
@@ -219,6 +226,7 @@ pub mod relation_in_type;
 pub mod relation_table;
 pub mod relation_type;
 pub mod release_skill_reducer;
+pub mod relook_reducer;
 pub mod resource_node_table;
 pub mod resource_node_type;
 pub mod resume_genesis_reducer;
@@ -384,6 +392,8 @@ pub use guest_table::*;
 pub use guest_type::Guest;
 pub use hear_salt_table::*;
 pub use hear_salt_type::HearSalt;
+pub use heard_asleep_table::*;
+pub use heard_asleep_type::HeardAsleep;
 pub use heard_sound_type::HeardSound;
 pub use heard_sounds_table::*;
 pub use heard_table::*;
@@ -425,6 +435,11 @@ pub use line_heard_table::*;
 pub use line_heard_type::LineHeard;
 pub use line_seen_table::*;
 pub use line_seen_type::LineSeen;
+pub use look_line_table::*;
+pub use look_line_type::LookLine;
+pub use look_table::*;
+pub use look_type::Look;
+pub use look_words_type::LookWords;
 pub use lot_table::*;
 pub use lot_type::Lot;
 pub use mark_type::Mark;
@@ -512,6 +527,7 @@ pub use relation_in_type::RelationIn;
 pub use relation_table::*;
 pub use relation_type::Relation;
 pub use release_skill_reducer::release_skill;
+pub use relook_reducer::relook;
 pub use resource_node_table::*;
 pub use resource_node_type::ResourceNode;
 pub use resume_genesis_reducer::resume_genesis;
@@ -733,6 +749,9 @@ pub enum Reducer {
     ReleaseSkill {
         skill: String,
     },
+    Relook {
+        generation: String,
+    },
     ResumeGenesis,
     SeedCommunities,
     SetBackground {
@@ -823,6 +842,7 @@ impl __sdk::Reducer for Reducer {
             Reducer::PlaceStructure { .. } => "place_structure",
             Reducer::PurgeDead => "purge_dead",
             Reducer::ReleaseSkill { .. } => "release_skill",
+            Reducer::Relook { .. } => "relook",
             Reducer::ResumeGenesis => "resume_genesis",
             Reducer::SeedCommunities => "seed_communities",
             Reducer::SetBackground { .. } => "set_background",
@@ -1055,6 +1075,9 @@ impl __sdk::Reducer for Reducer {
                     skill: skill.clone(),
                 })
             }
+            Reducer::Relook { generation } => __sats::bsatn::to_vec(&relook_reducer::RelookArgs {
+                generation: generation.clone(),
+            }),
             Reducer::ResumeGenesis => {
                 __sats::bsatn::to_vec(&resume_genesis_reducer::ResumeGenesisArgs {})
             }
@@ -1175,6 +1198,7 @@ pub struct DbUpdate {
     guest: __sdk::TableUpdate<Guest>,
     hear_salt: __sdk::TableUpdate<HearSalt>,
     heard: __sdk::TableUpdate<Heard>,
+    heard_asleep: __sdk::TableUpdate<HeardAsleep>,
     heard_sounds: __sdk::TableUpdate<HeardSound>,
     infant_cry: __sdk::TableUpdate<InfantCry>,
     inventory: __sdk::TableUpdate<Inventory>,
@@ -1187,6 +1211,8 @@ pub struct DbUpdate {
     law_change: __sdk::TableUpdate<LawChange>,
     line_heard: __sdk::TableUpdate<LineHeard>,
     line_seen: __sdk::TableUpdate<LineSeen>,
+    look: __sdk::TableUpdate<Look>,
+    look_line: __sdk::TableUpdate<LookLine>,
     lot: __sdk::TableUpdate<Lot>,
     membership: __sdk::TableUpdate<Membership>,
     mind_cursor: __sdk::TableUpdate<MindCursor>,
@@ -1379,6 +1405,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "heard" => db_update
                     .heard
                     .append(heard_table::parse_table_update(table_update)?),
+                "heard_asleep" => db_update
+                    .heard_asleep
+                    .append(heard_asleep_table::parse_table_update(table_update)?),
                 "heard_sounds" => db_update
                     .heard_sounds
                     .append(heard_sounds_table::parse_table_update(table_update)?),
@@ -1415,6 +1444,12 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "line_seen" => db_update
                     .line_seen
                     .append(line_seen_table::parse_table_update(table_update)?),
+                "look" => db_update
+                    .look
+                    .append(look_table::parse_table_update(table_update)?),
+                "look_line" => db_update
+                    .look_line
+                    .append(look_line_table::parse_table_update(table_update)?),
                 "lot" => db_update
                     .lot
                     .append(lot_table::parse_table_update(table_update)?),
@@ -1765,6 +1800,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.heard = cache
             .apply_diff_to_table::<Heard>("heard", &self.heard)
             .with_updates_by_pk(|row| &row.key);
+        diff.heard_asleep = cache
+            .apply_diff_to_table::<HeardAsleep>("heard_asleep", &self.heard_asleep)
+            .with_updates_by_pk(|row| &row.id);
         diff.infant_cry = cache
             .apply_diff_to_table::<InfantCry>("infant_cry", &self.infant_cry)
             .with_updates_by_pk(|row| &row.infant);
@@ -1797,6 +1835,12 @@ impl __sdk::DbUpdate for DbUpdate {
             .with_updates_by_pk(|row| &row.line);
         diff.line_seen = cache
             .apply_diff_to_table::<LineSeen>("line_seen", &self.line_seen)
+            .with_updates_by_pk(|row| &row.id);
+        diff.look = cache
+            .apply_diff_to_table::<Look>("look", &self.look)
+            .with_updates_by_pk(|row| &row.id);
+        diff.look_line = cache
+            .apply_diff_to_table::<LookLine>("look_line", &self.look_line)
             .with_updates_by_pk(|row| &row.id);
         diff.lot = cache
             .apply_diff_to_table::<Lot>("lot", &self.lot)
@@ -2125,6 +2169,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "heard" => db_update
                     .heard
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "heard_asleep" => db_update
+                    .heard_asleep
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "heard_sounds" => db_update
                     .heard_sounds
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
@@ -2160,6 +2207,12 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "line_seen" => db_update
                     .line_seen
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "look" => db_update
+                    .look
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "look_line" => db_update
+                    .look_line
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "lot" => db_update
                     .lot
@@ -2498,6 +2551,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "heard" => db_update
                     .heard
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "heard_asleep" => db_update
+                    .heard_asleep
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "heard_sounds" => db_update
                     .heard_sounds
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -2533,6 +2589,12 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "line_seen" => db_update
                     .line_seen
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "look" => db_update
+                    .look
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "look_line" => db_update
+                    .look_line
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "lot" => db_update
                     .lot
@@ -2797,6 +2859,7 @@ pub struct AppliedDiff<'r> {
     guest: __sdk::TableAppliedDiff<'r, Guest>,
     hear_salt: __sdk::TableAppliedDiff<'r, HearSalt>,
     heard: __sdk::TableAppliedDiff<'r, Heard>,
+    heard_asleep: __sdk::TableAppliedDiff<'r, HeardAsleep>,
     heard_sounds: __sdk::TableAppliedDiff<'r, HeardSound>,
     infant_cry: __sdk::TableAppliedDiff<'r, InfantCry>,
     inventory: __sdk::TableAppliedDiff<'r, Inventory>,
@@ -2809,6 +2872,8 @@ pub struct AppliedDiff<'r> {
     law_change: __sdk::TableAppliedDiff<'r, LawChange>,
     line_heard: __sdk::TableAppliedDiff<'r, LineHeard>,
     line_seen: __sdk::TableAppliedDiff<'r, LineSeen>,
+    look: __sdk::TableAppliedDiff<'r, Look>,
+    look_line: __sdk::TableAppliedDiff<'r, LookLine>,
     lot: __sdk::TableAppliedDiff<'r, Lot>,
     membership: __sdk::TableAppliedDiff<'r, Membership>,
     mind_cursor: __sdk::TableAppliedDiff<'r, MindCursor>,
@@ -2950,6 +3015,11 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         callbacks.invoke_table_row_callbacks::<Guest>("guest", &self.guest, event);
         callbacks.invoke_table_row_callbacks::<HearSalt>("hear_salt", &self.hear_salt, event);
         callbacks.invoke_table_row_callbacks::<Heard>("heard", &self.heard, event);
+        callbacks.invoke_table_row_callbacks::<HeardAsleep>(
+            "heard_asleep",
+            &self.heard_asleep,
+            event,
+        );
         callbacks.invoke_table_row_callbacks::<HeardSound>(
             "heard_sounds",
             &self.heard_sounds,
@@ -2970,6 +3040,8 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         callbacks.invoke_table_row_callbacks::<LawChange>("law_change", &self.law_change, event);
         callbacks.invoke_table_row_callbacks::<LineHeard>("line_heard", &self.line_heard, event);
         callbacks.invoke_table_row_callbacks::<LineSeen>("line_seen", &self.line_seen, event);
+        callbacks.invoke_table_row_callbacks::<Look>("look", &self.look, event);
+        callbacks.invoke_table_row_callbacks::<LookLine>("look_line", &self.look_line, event);
         callbacks.invoke_table_row_callbacks::<Lot>("lot", &self.lot, event);
         callbacks.invoke_table_row_callbacks::<Membership>("membership", &self.membership, event);
         callbacks.invoke_table_row_callbacks::<MindCursor>("mind_cursor", &self.mind_cursor, event);
@@ -3802,6 +3874,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         guest_table::register_table(client_cache);
         hear_salt_table::register_table(client_cache);
         heard_table::register_table(client_cache);
+        heard_asleep_table::register_table(client_cache);
         heard_sounds_table::register_table(client_cache);
         infant_cry_table::register_table(client_cache);
         inventory_table::register_table(client_cache);
@@ -3814,6 +3887,8 @@ impl __sdk::SpacetimeModule for RemoteModule {
         law_change_table::register_table(client_cache);
         line_heard_table::register_table(client_cache);
         line_seen_table::register_table(client_cache);
+        look_table::register_table(client_cache);
+        look_line_table::register_table(client_cache);
         lot_table::register_table(client_cache);
         membership_table::register_table(client_cache);
         mind_cursor_table::register_table(client_cache);
@@ -3924,6 +3999,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "guest",
         "hear_salt",
         "heard",
+        "heard_asleep",
         "heard_sounds",
         "infant_cry",
         "inventory",
@@ -3936,6 +4012,8 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "law_change",
         "line_heard",
         "line_seen",
+        "look",
+        "look_line",
         "lot",
         "membership",
         "mind_cursor",

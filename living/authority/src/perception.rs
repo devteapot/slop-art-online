@@ -149,6 +149,10 @@ pub struct SeenCharacter {
     pub band: u8,
     pub hp: f32,
     pub max_hp: f32,
+    /// The line key of the person's look (`lk_` and 16 hex digits) for anyone the viewer sees,
+    /// near or far, its own character included: the client draws the line its book holds under
+    /// it. "" for animals and for a person with no look (a world from before looks).
+    pub look: String,
 }
 
 /// A standing trade offer my living character is a party to (`my_offers`). `from` gives
@@ -274,6 +278,9 @@ pub struct Projection {
     pub band: u8,
     pub hp: f32,
     pub max_hp: f32,
+    /// The line key of the target's look (`lk_…`; docs/LOOK.md): for anyone who sees a person,
+    /// at any distance; "" for animals and people without a look.
+    pub look: String,
 }
 
 thread_local! {
@@ -589,7 +596,22 @@ pub fn project(ctx: &ReducerContext, observer: &Character, target: &Character, n
         Some(HealthSeen { band, exact: Some((hp, max)) }) => (band, hp.max(0.0).round(), max.round()),
     };
     let label = if r.name { target.name.clone() } else { unnamed(target, r.far) };
-    Projection { name: if r.name { target.name.clone() } else { String::new() }, label, kind: target.kind.clone(), stage: target.stage, folk, style, band, hp, max_hp }
+    // The look's key goes to whoever sees the person, made out or far (no stand-in); how much a
+    // mind is told of it is `r.look` (`appearance`).
+    let look = if target.kind == "person" { crate::look::line_of(ctx, target.id) } else { String::new() };
+    Projection { name: if r.name { target.name.clone() } else { String::new() }, label, kind: target.kind.clone(), stage: target.stage, folk, style, band, hp, max_hp, look }
+}
+
+/// What `observer` can say of `target`'s look now (docs/LOOK.md §3): the line's words through
+/// `living_rules::look::phrase`, as much as the `perceived_of` law's `look` grants (all of it
+/// once made out; no sex, hair or beard beyond). "" for an animal or a person without a look.
+/// For minds' scenes (the Spark's `appearance`); a player's client calls `phrase` on the same
+/// words from its book.
+#[allow(dead_code)] // the Spark's scene reads it (docs/LOOK.md §5)
+pub fn appearance(ctx: &ReducerContext, observer: &Character, target: &Character, now: u64) -> String {
+    let Some(l) = ctx.db.look().id().find(target.id) else { return String::new() };
+    let Some(band) = living_rules::look::LookBand::from_code(l.band) else { return String::new() };
+    living_rules::look::phrase(&(&l.words).into(), regard(ctx, observer, target, now).look, band)
 }
 
 /// How `observer` perceives `target`'s health now, as the `perceived_of` law grants it: the
@@ -635,11 +657,11 @@ pub fn labels(ctx: &ReducerContext, observer: &Character, ids: &[u32], now: u64)
 
 impl Projection {
     fn into_row(self, viewer: Identity, body: u32, own: bool, id: u64) -> Projected {
-        Projected { id, viewer, body, own, name: self.name, label: self.label, kind: self.kind, stage: self.stage, folk: self.folk, style: self.style, band: self.band, hp: self.hp, max_hp: self.max_hp }
+        Projected { id, viewer, body, own, name: self.name, label: self.label, kind: self.kind, stage: self.stage, folk: self.folk, style: self.style, band: self.band, hp: self.hp, max_hp: self.max_hp, look: self.look }
     }
 
     fn same_as(&self, p: &Projected) -> bool {
-        self.name == p.name && self.label == p.label && self.kind == p.kind && self.stage == p.stage && self.folk == p.folk && self.style == p.style && self.band == p.band && self.hp == p.hp && self.max_hp == p.max_hp
+        self.name == p.name && self.label == p.label && self.kind == p.kind && self.stage == p.stage && self.folk == p.folk && self.style == p.style && self.band == p.band && self.hp == p.hp && self.max_hp == p.max_hp && self.look == p.look
     }
 }
 
@@ -1076,6 +1098,8 @@ pub fn forget(ctx: &ReducerContext, id: u32, viewer: Identity) {
 /// A character is no longer seen by anyone (it died): its rows in others' sets go, its motion
 /// in the same update (a body leaves `seen_bodies` with its death's feed row).
 pub fn gone(ctx: &ReducerContext, id: u32) {
+    // Their look goes with them (docs/LOOK.md §4).
+    ctx.db.look().id().delete(id);
     let rows: Vec<Projected> = ctx.db.projected().body().filter(id).collect();
     if rows.is_empty() {
         return;
@@ -1246,7 +1270,7 @@ pub fn my_body(ctx: &ViewContext) -> Vec<Moving> {
 #[spacetimedb::view(accessor = seen_characters, public, primary_key = id)]
 pub fn seen_characters(ctx: &ViewContext) -> Vec<SeenCharacter> {
     projections(ctx)
-        .map(|p| SeenCharacter { id: p.body, name: p.name, label: p.label, kind: p.kind, stage: p.stage, folk: p.folk, style: p.style, own: p.own, band: p.band, hp: p.hp, max_hp: p.max_hp })
+        .map(|p| SeenCharacter { id: p.body, name: p.name, label: p.label, kind: p.kind, stage: p.stage, folk: p.folk, style: p.style, own: p.own, band: p.band, hp: p.hp, max_hp: p.max_hp, look: p.look })
         .collect()
 }
 
