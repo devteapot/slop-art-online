@@ -548,6 +548,9 @@ class Face:
         uv = [((IRIS_COL0 + IRIS_PX / 2 + side * -a * half * IRIS_WIDE * 0 + a * half * IRIS_WIDE) / ATLAS, 1 - (IRIS_PX / 2 - b * half) / ATLAS) for a, b in disc_]
         faces = [(0, 1 + i, 1 + (i + 1) % seg) for i in range(seg)] + [(1 + i, 1 + seg + i, 1 + seg + (i + 1) % seg, 1 + (i + 1) % seg) for i in range(seg)]
         m.add(turn(on_ball(ball, xs, zs, 0.0006), ball, yaw, pitch), white, uv, faces, "iris", facing=FORWARD, eye=(side, 1.0))
+        # The iris's lights: the same disc a quarter of a millimetre before it, in the lips' and
+        # blush's layer (face_paint.iris_lights), which the client does not recolour.
+        m.add(turn(on_ball(ball, xs, zs, 0.00085), ball, yaw, pitch), white, uv, faces, "lights", facing=FORWARD, eye=(side, 1.0))
         # Highlights: both eyes are lit from the same side. They follow the eye half way,
         # as a reflection does.
         hs = look.get("light_side", 1.0)

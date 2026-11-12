@@ -80,8 +80,9 @@ The game's people are made by our own tool: a set of parameters goes in, a rigge
 - **Pass 3, the types' pictures on shared pages** ([the types' pictures on shared pages](#the-types-pictures-on-shared-pages)). Every type's far-head picture and its lip-and-blush layer are tiles of two pages all types share, so they are one material each where each type brought its own; nothing shows. The iris was left a type's own then, and is one picture for every type since [one iris for every type](#one-iris-for-every-type).
 - **Pass 3, one iris for every type** ([one iris for every type](#one-iris-for-every-type)). Every type's file names one iris picture, and a person's line carries the colour that brings its body to the person's eye colour. Composed eyes had come out about three times too light, with grey pupils on the lighter colours and stray hues from the type's own iris; the iris's body is now within 3 CIE76 of the eye colour on every type. A whole file's warm glow in a dark or a blue eye is what a composed eye still lacks.
 - **Pass 3, the neck** ([the neck](#the-neck)). Measured against the reference, ours was twice as wide and twice as deep under the jaw, a funnel from the whole jaw line. It is now a column of the reference's width set just under the jaw, with the collars close round it and ending below the chin. The grey patches at the neck (a collar inside the old funnel showing through) and the faint lit patch on the lower face are gone with it.
+- **Pass 3, the iris's lights** ([the iris's lights](#the-iriss-lights)). The glow, the streaks and the arc of sky in an eye are a layer of their own in fixed colours, on a disc before the iris in the lips' and blush's material, so the client's recolouring leaves them be. A composed eye is now within about 3 CIE76 of a whole file's in every eye colour; it was 10 to 14.
 - **Pass 3, the brows** ([the brows](#the-brows)). A brow is one tapered stroke, as the reference draws its own, in a material of its own under the reference's name for it, so the client's hair colour reaches it. Composed people had their type's brow colour whatever their hair.
-- **Not yet at the bar:** see [what still separates ours from the reference](#what-still-separates-ours-from-the-reference). In short: the eye's glow on composed people, hair's lifting strands and fringe, the face's painted softness, clothes and silhouette, hands.
+- **Not yet at the bar:** see [what still separates ours from the reference](#what-still-separates-ours-from-the-reference). In short: hair's lifting strands and fringe, the brows' place, the face's painted softness, clothes and silhouette, hands.
 - The models are not yet used by the running game's residents. That is phase 5 of the small city's build plan.
 
 ## Commands
@@ -148,6 +149,8 @@ blender -b -P living/tools/blender/clip_check.py -- --in living/game/assets/look
 python3 living/tools/characters/media.py .local/cap .local/page .local/town .local/sheets
 python3 living/tools/characters/page.py .local/page
 ```
+
+**Photograph a person through a recipe, not the raw file.** `lookdev/own-<name>.glb` is the builder's own output; the game draws the copy under `lookdev/anim/`, which `gen_person.sh` gives the clips, the face's designed normals and its shadow map. The raw file shown by itself shades with a straight split down the face, and the animated copy shown as a plain file (no `recipe:`) is drawn without its hair and face shading. `town.py` and the board go through recipes.
 
 A pass is also published through the asset board, the record of which version the owner accepted (`docs/ASSET_BOARD.md` and `living/tools/board/board.py`). Its records are in `living/assets/board/`.
 
@@ -1464,7 +1467,7 @@ Pass 3, 2026-11-12. Every face type's file now names one iris picture, `lookdev/
 **What it is now:**
 
 - **One picture, painted in a light strong amber** (`person_params.SHARED_IRIS`, sRGB 0.66, 0.551, 0.165): as light as the lightest eye colour and as saturated as the most saturated, so the client only turns its hue and darkens it. Its glow and its body are one hue, so nothing strays. One seed for its streaks.
-- **The line's `colors.eyes` is not the eye colour itself** but the colour to move the source to so that the iris's body comes out the eye colour (`person_params.eye_line_colour`): the eye colour taken down by the step from the picture's painted colour to its source colour (`SHARED_IRIS_SOURCE`, linear 0.1368, 0.0907, 0.0277), in hue, saturation and value as the client's rule undoes it. Blue `#4c789e` is carried as `#384e61`. The eye colour itself is beside it, in `colors.eyes_natural`.
+- **The line's `colors.eyes` is not the eye colour itself** but the colour to move the source to so that the iris's body comes out the eye colour (`person_params.eye_line_colour`): the eye colour taken down by the step from the picture's painted colour to its source colour (`SHARED_IRIS_SOURCE`), in hue, saturation and value as the client's rule undoes it. At this step the source was linear 0.1368, 0.0907, 0.0277 and blue `#4c789e` was carried as `#384e61`; since [the iris's lights](#the-iriss-lights) left the picture it is 0.0988, 0.0698, 0.0152 and blue is `#2c4053`. The eye colour itself is beside it, in `colors.eyes_natural`.
 - **A whole person's file is unchanged:** its iris is painted in its own eye colour and takes no tag.
 - **`eye_colours.py TYPES_DIR --check`** holds every type's iris to the shared source colour, and prints the measures below. `--nominal` gives the line the eye colour itself, as before. `person.py --parts head --own-iris` builds a type's head with an iris of its own, to compare.
 
@@ -1480,7 +1483,7 @@ Pass 3, 2026-11-12. Every face type's file now names one iris picture, `lookdev/
 
 By eye colour, the body is nearer in all seven (0.4 to 2.9 against medians of 9.9 to 23.5). The picture as a whole is nearer in six; in dark brown it is 13.8 against a median of 10.5 (worst 19.4), and the disc's mean is further in brown (12.3 against 10.6) and dark brown (19.0 against 9.1). That is the glow, below: the old irises were too light all over, which put their mean nearer a whole file's bright glow by accident.
 
-**What still separates a composed eye from a whole file's:** the glow. A whole file paints a warm glow in every eye, mostly a fixed orange, so in a dark brown eye it is some fifteen times lighter than the body and in a blue eye it is another hue. The client's recolouring scales every texel by one ratio and turns every hue to the eye's, so a composed eye's glow is a lighter tone of the eye's own colour, at most 2.5 times its body. No line colour changes that: for a brown or dark brown eye, a line 1.5 to 2 times lighter buys 2 to 3 CIE76 of likeness for 6 to 8 of error in the body. Keeping the glow needs it as a layer of its own in a fixed colour over the iris, as the lights in the eye are. Not done; it changes how eyes are drawn.
+**What still separates a composed eye from a whole file's:** the glow. A whole file paints a warm glow in every eye, mostly a fixed orange, so in a dark brown eye it is some fifteen times lighter than the body and in a blue eye it is another hue. The client's recolouring scales every texel by one ratio and turns every hue to the eye's, so a composed eye's glow is a lighter tone of the eye's own colour, at most 2.5 times its body. No line colour changes that: for a brown or dark brown eye, a line 1.5 to 2 times lighter buys 2 to 3 CIE76 of likeness for 6 to 8 of error in the body. Keeping the glow needs it as a layer of its own in a fixed colour over the iris. That came next: [the iris's lights](#the-iriss-lights).
 
 **What the client needs:**
 
@@ -1489,6 +1492,43 @@ By eye colour, the body is nearer in all seven (0.4 to 2.9 against medians of 9.
 - **A composer that keys a type's materials by its file** can key `M00_000_00_EyeIris_00_EYE` by content, as the far head's and the lip layer's: it is one material for all types now, with one source colour.
 - **No code change.** The rule that learns the source colour and the shader's recolouring are used as they are. If either changes (how the source is taken, or the 0.4), `SHARED_IRIS_SOURCE` and `HUE_SPREAD` in `person_params.py` must follow, and `eye_colours.py --check` says so for the first.
 - **An old line with the eye colour itself** on the new type files gives eyes about three times too light, as before; a new line on old type files gives eyes too dark. They go together.
+
+### The iris's lights
+
+Pass 3, 2026-11-12. What a composed eye still lacked after [one iris for every type](#one-iris-for-every-type) was the glow: a whole file painted it into the iris, mostly in a fixed orange, and the client's recolouring turned it into a lighter tone of the eye's own colour. The lights are now a layer of their own that the client does not recolour, in whole files and types alike.
+
+**What moved out of the iris's picture** (`face_paint.py` `iris_lights`): the glow that rises from the bottom toward the pupil and its hot core, the two pale streaks beside it, and the cool arc of sky under the lid. Each has one colour for every eye (`IRIS_GLOW`, `IRIS_HOT`, `IRIS_STREAK`, `IRIS_SKY`) and a cover. They were painted with a share of the eye's own colour (a quarter of the glow, a third of the arc); that share is gone, and the cover is set so that over an iris of the eye's colour the result is what the paint was.
+
+**What stays in the iris's picture** (`paint_iris`): the body, the darker upper half, the lid's shade, the rim, the pupil and the rays. Every tone is the eye's colour or a darker one, which one ratio carries to any eye colour.
+
+**Where the lights are:**
+
+- **A disc on each eye's bone,** the iris's own disc again 0.3 mm in front of it and 0.3 mm behind the highlights (`cage_head.py`, `head_mesh.py`). It turns with the eye.
+- **In the lips' and blush's material,** `M00_000_00_FaceTint_00_FACE`: unshaded, not recoloured, blended by its picture's alpha. No new material and no new draw: the two discs are 144 more triangles in that primitive.
+- **In that material's picture where the atlas has the iris** (a whole file's `.tint.png`: the atlas's layout at half size, so the lights are 96 × 96 texels).
+- **On the types' tint page once,** in the corner of its last tile, which no type has (`share.py` `TYPE_LIGHTS`; the page is 5 × 5 tiles for 21 types). Every type's lights are the same picture; `share.py types` stops if one differs. `lookdev/pages/types.json` records nothing new: the UVs in each type's file point there.
+- **The alpha is the cover raised to 1.6** (`LIGHTS_GAMMA`). The client blends in linear light, where a light colour over a dark one shows more than the same cover does in a picture's own values. With 1.6 a whole eye is within 2.8 CIE76 of the same eye as it was painted in one picture, for every eye colour (1.9 at the mean, in 8 × 8 blocks).
+- **The far head** has no layers: its eyes are painted with the lights mixed in, as before.
+
+**Measured** with `eye_colours.py`, which now lays the lights over both irises as the client does. 21 types, CIE76, the composed eye against a whole file's (median over the types; they all share one iris, so the worst is the same):
+
+| Eye colour | The picture, in 8 × 8 blocks: before, now | The disc's mean: before, now |
+|---|---|---|
+| brown | 10.0, 2.5 | 12.3, 1.5 |
+| dark brown | 13.8, 3.0 | 19.0, 1.8 |
+| blue | 13.6, 3.1 | 12.8, 2.1 |
+| grey | 11.7, 3.3 | 10.3, 2.5 |
+| all seven | 10.0, 3.0 (worst 13.8, 3.3) | 10.3, 1.8 (worst 19.0, 2.5) |
+
+What is left, about 3, is the iris's own darks: the upper half and the rim are mixed toward a fixed near-black in a whole file, which a ratio does not reproduce exactly.
+
+**The line's eye colour changed again,** because the shared picture's source colour did when the lights left it (`SHARED_IRIS_SOURCE`, linear 0.0988, 0.0698, 0.0152): blue `#4c789e` is carried as `#2c4053`.
+
+**What the client needs:**
+
+- **Nothing in code,** if it draws `…FaceTint_00_FACE` as it does today: skinned, unshaded, untinted, alpha-blended after the opaque parts, with the depth test on. The discs are skinned to the eye bones (`J_Adj_L_FaceEye`, `J_Adj_R_FaceEye`) where the rest of that primitive follows the face's bones; nothing else is new. Photographed through the client on three types (the board's `iris-lights`).
+- **Types, the tint page and the lines go together,** from one bundle. Old lines on these types give eyes too light; these lines on old types give eyes too dark and without a glow.
+- **A whole person's file changed too:** its iris picture lost the lights and its `.tint.png` gained them.
 
 ### The brows
 
@@ -1994,7 +2034,7 @@ What pass 2 proposed, in order of gain, and what became of it:
 **After the shared iris and the brows**, judged on the board's `shared-iris`, `brows` and `cast-64` sheets with the reference beside ours, ordered by how much it shows:
 
 1. **Hair.** Short styles' hairlines cut straight across the forehead in a box. The reference's hair has single strands lifting off at the ends and a fringe in a few thick locks; ours is smoother and plainer. A seam runs down the back of parted styles.
-2. **The eye's glow on composed people** ([one iris for every type](#one-iris-for-every-type)): a whole file's warm glow becomes a lighter tone of the eye's own colour. Next.
+2. **The eye's glow on composed people** was a lighter tone of the eye's own colour. Mended after this ([the iris's lights](#the-iriss-lights)).
 3. **The brows' place:** the reference's sit higher above the eye ([the brows](#the-brows)).
 4. **The eyes, close up:** the reference's band is a little heavier still and spiked along its whole top.
 5. **The jaw's line does not hold at a distance** (unchanged; a line in screen pixels is the client's).

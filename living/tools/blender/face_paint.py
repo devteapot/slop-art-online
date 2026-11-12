@@ -323,27 +323,35 @@ def paint_white(hf, look, side):
     return c.img
 
 
-def paint_iris(hf, look, rng):
-    """The iris, drawn as the reference draws its own (studied, not copied): a tall ellipse with
-    a thin dark rim; a darker, greyer upper half under the lid with a cool arc of sky along its
-    edge; a glow rising from the bottom toward the pupil, hottest low down; a soft tall pupil.
-    One picture for both eyes; the highlights are a layer of their own (head_mesh.py)."""
+def _iris_grid():
+    """Where each texel of the iris's square lies on the iris: across and up in radii (the
+    ellipse is taller than wide), and how far out."""
     n = IRIS_PX
-    half = n * IRIS_FILL
-    g = (np.arange(n) + 0.5 - n / 2) / half
+    g = (np.arange(n) + 0.5 - n / 2) / (n * IRIS_FILL)
     dx, dz = np.meshgrid(g / IRIS_WIDE, -g)
-    rr = np.hypot(dx, dz)
+    return dx, dz, np.hypot(dx, dz)
+
+
+def _pupil(dx, dz):
+    """The pupil's cover (tall, soft-edged) and its faint dark halo."""
+    return smooth((1.0 - np.hypot(dx / 0.27, (dz - 0.04) / 0.36)) / 0.22 + 0.5), np.exp(-((np.hypot(dx / 0.42, (dz - 0.04) / 0.52)) ** 2))
+
+
+def paint_iris(hf, look, rng):
+    """The iris's own colours, drawn as the reference draws its own (studied, not copied): a
+    tall ellipse with a thin dark rim; a darker, greyer upper half under the lid; a soft tall
+    pupil; faint rays. Every tone here is the iris's colour or a darker one, so the client's
+    recolouring, which scales by one ratio, carries it to any eye colour. The lights (the glow,
+    the streaks, the arc of sky) are a layer of their own in colours that do not change
+    (`iris_lights`); the highlights are geometry (head_mesh.py). One picture for both eyes."""
+    dx, dz, rr = _iris_grid()
     ang = np.arctan2(dz, dx)
     iris = np.array(look["iris"])
     grey = float(iris @ np.array([0.3, 0.59, 0.11]))
     deep = np.array(mix(look["iris"], (0.02, 0.02, 0.06), 0.84))
     # Above, the iris's colour darkened and a little greyed.
     dark = np.array(mix(mix(look["iris"], (grey, grey, grey * 1.08), 0.30), (0.04, 0.04, 0.10), 0.52))
-    # The glow leans warm whatever the iris's colour: it is what makes an eye look lit.
-    warm = np.array(mix(mix(look["iris"], (1.0, 0.60, 0.22), 0.70), (1.0, 0.92, 0.76), 0.12))
-    hot = np.array(mix(tuple(warm), (1.0, 0.93, 0.62), 0.60))
-    cool = np.array(mix(look["iris"], (0.55, 0.74, 1.0), 0.65))
-    img = np.empty((n, n, 3))
+    img = np.empty((IRIS_PX, IRIS_PX, 3))
     # Outside the ellipse the square is the dark rim's colour, so the mesh's edge never shows pale.
     img[:] = deep
     # Body: dark above, the iris's own colour from the middle down.
@@ -353,29 +361,75 @@ def paint_iris(hf, look, rng):
     rays = value_noise((1, 512), 3, rng)[0] * 0.6 + value_noise((1, 512), 9, rng)[0] * 0.4
     ray = rays[((ang / (2 * math.pi) + 0.5) * 511).astype(int) % 512]
     body = body * (1 + 0.14 * (ray - 0.5) * smooth((rr - 0.36) / 0.2))[..., None]
-    # The glow: a flame from the bottom toward the pupil, wide at the rim and narrowing as it rises.
-    low = np.clip(-dz, 0.0, 1.0)
-    glow = smooth((low - 0.02) / 0.62) * np.exp(-((dx / (0.26 + 0.62 * low)) ** 2)) * smooth((0.95 - rr) / 0.10)
-    body += (warm - body) * (0.94 * glow)[..., None]
-    core = np.exp(-((dx / 0.34) ** 2 + ((dz + 0.66) / 0.24) ** 2)) * smooth((0.95 - rr) / 0.10)
-    body += (hot - body) * (0.80 * core)[..., None]
-    # Two pale streaks beside the glow, where light crosses the iris.
-    for sgn in (-1.0, 1.0):
-        st = np.exp(-(((dx - sgn * (0.50 + 0.22 * dz)) / 0.045) ** 2)) * smooth((-dz + 0.05) / 0.25) * smooth((0.88 - rr) / 0.12)
-        body += (np.array(mix(tuple(cool), (1, 1, 1), 0.45)) - body) * (0.38 * st)[..., None]
-    # The lid's shadow over the top, and a cool arc of sky along the rim under it, on the lit side.
+    # The lid's shadow over the top.
     body += (deep - body) * (0.55 * smooth((dz - 0.30) / 0.50))[..., None]
-    hs = look.get("light_side", 1.0)
-    arc = np.exp(-(((rr - 0.80) / 0.075) ** 2)) * smooth((dz - 0.10) / 0.25) * smooth((0.86 - dz) / 0.2) * smooth((dx * hs + 0.55) / 0.5)
-    body += (cool - body) * (0.70 * arc)[..., None]
     # The dark rim, thin.
     body += (deep - body) * (0.97 * smooth((rr - 0.86) / 0.09))[..., None]
     # The pupil: tall, soft-edged, with a faint dark halo.
-    body += (deep - body) * (0.40 * np.exp(-((np.hypot(dx / 0.42, (dz - 0.04) / 0.52)) ** 2)))[..., None]
-    pup = smooth((1.0 - np.hypot(dx / 0.27, (dz - 0.04) / 0.36)) / 0.22 + 0.5)
+    pup, halo = _pupil(dx, dz)
+    body += (deep - body) * (0.40 * halo)[..., None]
     body += (np.array((0.035, 0.03, 0.05)) - body) * pup[..., None]
     disc = smooth((1.0 - rr) / 0.03 + 0.5)[..., None]
     return img + (np.clip(body, 0, 1) - img) * disc
+
+
+# The lights in an iris, in colours of their own whatever the eye's: the glow that rises from
+# the bottom toward the pupil (what makes an eye look lit) and its hot core, the two pale
+# streaks beside it, and the cool arc of sky under the lid. Each: its colour, and how much of it
+# covers the iris where it is strongest.
+IRIS_GLOW = ((1.0, 0.652, 0.308), 0.69)
+IRIS_HOT = ((1.0, 0.839, 0.517), 0.715)
+IRIS_STREAK = ((0.801, 0.885, 1.0), 0.307)
+IRIS_SKY = ((0.55, 0.74, 1.0), 0.455)
+# The client lays the layer over the iris in linear light, where a light colour over a dark one
+# shows more than the same cover does in a picture's own values. The layer's alpha is the cover
+# raised to this, which brings a whole eye to within 3 CIE76 of the same eye painted in one
+# picture, for every eye colour.
+LIGHTS_GAMMA = 1.6
+
+
+def iris_lights(light_side=1.0, layer=True):
+    """The iris's lights as a layer over it: colour and alpha (RGBA, 0..1), the iris's square.
+    `layer=False` gives the plain cover in place of the alpha, to mix into a picture.
+
+    They were painted into the iris, mostly in these fixed colours with a share of the eye's.
+    The client recolours an iris by one ratio and one turn of hue, which took the glow with it:
+    a composed brown eye's was a little lighter brown where a whole file's was orange and
+    fifteen times lighter than the body. As a layer the client does not recolour (person.py puts
+    it in the lips' and blush's material, on a disc before the iris), they are the same in
+    every eye. Under the rim and the pupil, and outside the ellipse, there is none."""
+    dx, dz, rr = _iris_grid()
+    low = np.clip(-dz, 0.0, 1.0)
+    inside = smooth((0.95 - rr) / 0.10)
+    lid = 1.0 - 0.55 * smooth((dz - 0.30) / 0.50)
+    parts = [
+        # The glow: a flame from the bottom toward the pupil, wide at the rim and narrowing as it rises.
+        (IRIS_GLOW, smooth((low - 0.02) / 0.62) * np.exp(-((dx / (0.26 + 0.62 * low)) ** 2)) * inside * lid),
+        (IRIS_HOT, np.exp(-((dx / 0.34) ** 2 + ((dz + 0.66) / 0.24) ** 2)) * inside * lid),
+    ]
+    # Two pale streaks beside the glow, where light crosses the iris.
+    for sgn in (-1.0, 1.0):
+        parts.append((IRIS_STREAK, np.exp(-(((dx - sgn * (0.50 + 0.22 * dz)) / 0.045) ** 2)) * smooth((-dz + 0.05) / 0.25) * smooth((0.88 - rr) / 0.12) * lid))
+    # A cool arc of sky along the rim under the lid, on the lit side.
+    parts.append((IRIS_SKY, np.exp(-(((rr - 0.80) / 0.075) ** 2)) * smooth((dz - 0.10) / 0.25) * smooth((0.86 - dz) / 0.2) * smooth((dx * light_side + 0.55) / 0.5)))
+    rgb, cover = np.zeros(dx.shape + (3,)), np.zeros(dx.shape)
+    for (colour, most), shape in parts:
+        a = most * shape
+        rgb = rgb * (1 - a)[..., None] + np.array(colour) * a[..., None]
+        cover = 1 - (1 - cover) * (1 - a)
+    pup, halo = _pupil(dx, dz)
+    keep = (1 - 0.97 * smooth((rr - 0.86) / 0.09)) * (1 - 0.40 * halo) * (1 - pup) * smooth((1.0 - rr) / 0.03 + 0.5)
+    out = np.empty(dx.shape + (4,))
+    out[..., :3] = np.where(cover[..., None] > 1e-6, rgb / np.maximum(cover, 1e-6)[..., None], np.array(IRIS_GLOW[0]))
+    out[..., 3] = (cover * keep) ** (LIGHTS_GAMMA if layer else 1.0)
+    return out
+
+
+def lit_iris(iris, light_side=1.0):
+    """An iris's picture with its lights laid over it: what an eye shows, for a picture that
+    has no layers (the far head's)."""
+    lights = iris_lights(light_side, layer=False)
+    return iris + (lights[..., :3] - iris) * lights[..., 3:]
 
 
 def shared_iris(colour, hf=None):
@@ -385,7 +439,9 @@ def shared_iris(colour, hf=None):
 
 def paint(hf, look, layer=None):
     """The face's atlas. With `layer` (a dict to fill), lips and blush are left out of the skin
-    and come back as their own layer (see `paint_skin`)."""
+    and come back as their own layer (see `paint_skin`), and the iris's lights with them
+    (`lights`: RGBA, the iris's square; see `iris_lights`). Without, the lights are painted
+    into the iris."""
     rng = np.random.default_rng(int(look.get("seed", 0)) + 77)
     out = np.empty((ATLAS, ATLAS, 3))
     out[:] = look["skin"]
@@ -399,6 +455,12 @@ def paint(hf, look, layer=None):
         # A face type's iris: the one picture every type shares, in the colour given. Painted
         # after the type's own, so the rest of the face's paint draws the numbers it always drew.
         out[:EYE_ROWS, IRIS_COL0 : IRIS_COL0 + IRIS_PX] = shared_iris(look["iris_shared"], hf)
+    if layer is not None:
+        # The iris's lights go with the layer, over the iris's block of the atlas.
+        layer["lights"] = iris_lights(look.get("light_side", 1.0))
+    else:
+        block = out[:EYE_ROWS, IRIS_COL0 : IRIS_COL0 + IRIS_PX]
+        out[:EYE_ROWS, IRIS_COL0 : IRIS_COL0 + IRIS_PX] = lit_iris(block, look.get("light_side", 1.0))
     return (np.clip(out, 0, 1) * 255 + 0.5).astype(np.uint8)
 
 
@@ -414,7 +476,7 @@ def paint_far(hf, look, size=FAR):
     out[:] = look["skin"]
     skin, where = paint_skin(hf, look, rng)
     x, y, z = where["x"], where["y"], where["z"]
-    iris = paint_iris(hf, look, rng)
+    iris = lit_iris(paint_iris(hf, look, rng), look.get("light_side", 1.0))
     mid, scale = eye_frame(hf)
     half = IRIS_PX * IRIS_FILL
     c = Canvas(x, z, (y > 0.01).astype(float), look["skin"])
