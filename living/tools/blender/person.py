@@ -420,9 +420,13 @@ def torso_w(z, x, skirt=False, front=False):
                 t = smooth((z - za) / (zb - za))
                 w = [(na, 1 - t), (nb, t)]
                 break
-    if skirt and z < 0.93:
+    if skirt and z < 0.95:
         # A skirt's panels follow the legs' stride: up to half the same side's upper leg at the hem.
-        t = (0.85 if front else 0.55) * smooth((0.93 - z) / 0.25)
+        # They start to at the hip joint and have most of it a hand below: a thigh that lifts
+        # carries its trouser leg whole, and a skirt that waited until mid-thigh to follow let the
+        # thigh's top come through its front at every step (cloth_check.py: by 2 to 5 mm in the
+        # walk, and by 13 on a woman's form, whose skirt lies closer).
+        t = (0.85 if front else 0.55) * smooth((0.95 - z) / 0.20)
         side = min(abs(x) / 0.07, 1.0)
         left = t * (0.5 + 0.5 * side if x <= 0 else 0.5 - 0.5 * side)
         right = t - left
@@ -678,7 +682,7 @@ def trousers(part, d, top=1.075, bottom=0.40, tag_fn=None):
     prev = loop
     r = len(rows)
     for z in [0.80 + 0.8 * up, 0.72, 0.62, 0.555, 0.50, 0.455, bottom]:
-        w = blend(*leg_w(z).items(), ("J_Bip_C_Hips", 0.12 if z > 0.79 else 0.0))
+        w = blend(*leg_w(z).items(), ("J_Bip_C_Hips", 0.25 if z > 0.79 else 0.0))  # the leg's top turns less than the thigh: the crease is the hip's
         cur = leg_ring(part, z, d * (1.0 if z > 0.5 else 0.7), w, n)
         part.band(prev, cur, r, r + 1, tag=tag_fn("leg", 0, r))
         prev = cur
@@ -2034,6 +2038,7 @@ class Stance:
             at[child] = at[parent] + (z(child) - z(parent)) * self.scale[parent][1]
         self.at = at
         self.hip_joint = hip
+        self.legs = get("legs")
         size = person_params.face_types.load()["file"]  # the chin's height and the head's, in every file
         self.height = at["J_Bip_C_Head"] + (size["chin_m"] + size["head_height_m"] - z("J_Bip_C_Head")) * get("head")
 
@@ -2052,6 +2057,44 @@ class Stance:
         total = sum(w.values())
         hips = "J_Bip_C_Hips"
         return sum(v * (self.at.get(n, self.at[hips]) + self.scale.get(n, (1.0, 1.0, 1.0))[1] * (z - JOINTS[n if n in self.at else hips][2])) for n, v in w.items()) / total
+
+    def maps(self):
+        """Each bone's place and scale as the client poses it, for the bones that carry the clothes
+        over the belly and the hips: {bone: (scale, where it stands, where it is at rest)}, each
+        (across, forward, up). `J_Fit_Belly` has no scale of its own in the client (it hangs from
+        the spine, whose scale moves it), so its vertices keep their size where the spine's are
+        scaled."""
+        if getattr(self, "_maps", None):
+            return self._maps
+        out = {}
+        fwd = {"J_Bip_C_Hips": JOINTS["J_Bip_C_Hips"][1]}
+        chain = ("J_Bip_C_Hips", "J_Bip_C_Spine", "J_Bip_C_Chest", "J_Bip_C_UpperChest")
+        for parent, child in zip(chain, chain[1:]):
+            fwd[child] = fwd[parent] + (JOINTS[child][1] - JOINTS[parent][1]) * self.scale[parent][2]
+        for b in chain:
+            sc = self.scale[b]
+            out[b] = ((sc[0], sc[2], sc[1]), (0.0, fwd[b], self.at[b]), JOINTS[b])
+        sp, r = self.scale["J_Bip_C_Spine"], JOINTS["J_Fit_Belly"]
+        out["J_Fit_Belly"] = ((1.0, 1.0, 1.0), (0.0, fwd["J_Bip_C_Spine"] + (r[1] - JOINTS["J_Bip_C_Spine"][1]) * sp[2], self.at["J_Bip_C_Spine"] + (r[2] - JOINTS["J_Bip_C_Spine"][2]) * sp[1]), r)
+        hips, leg = self.scale["J_Bip_C_Hips"], JOINTS["J_Bip_L_UpperLeg"]
+        for side, name in ((1.0, "J_Bip_L_UpperLeg"), (-1.0, "J_Bip_R_UpperLeg")):
+            out[name] = ((1.0, 1.0, self.legs), (side * leg[0] * hips[0], leg[1] * hips[2], self.hip_joint), (side * leg[0], leg[1], leg[2]))
+        self._maps = out
+        return out
+
+    def stands(self, weights, point):
+        """Where a point at rest stands, carried by `weights`; None if a bone of them is not in `maps`."""
+        m = self.maps()
+        if any(n not in m for n in weights):
+            return None
+        total = sum(weights.values())
+        return tuple(sum(w * (m[n][1][k] + m[n][0][k] * (point[k] - m[n][2][k])) for n, w in weights.items()) / total for k in range(3))
+
+    def written(self, weights, stand):
+        """The rest place of a point that is to stand at `stand`, carried by `weights` (the inverse of `stands`)."""
+        m = self.maps()
+        total = sum(weights.values())
+        return tuple((stand[k] - sum(w * (m[n][1][k] - m[n][0][k] * m[n][2][k]) for n, w in weights.items()) / total) / (sum(w * m[n][0][k] for n, w in weights.items()) / total) for k in range(3))
 
     def beside_head(self, z):
         """The height above the floor of what hangs from the head at rest height z: hair is not
@@ -2372,13 +2415,24 @@ def belly_weights(obs):
         if ob.name.split(".")[0] not in BELLY_PARTS:
             continue
         g = ob.vertex_groups.get("J_Fit_Belly") or ob.vertex_groups.new(name="J_Fit_Belly")
+        names = {vg.index: vg.name for vg in ob.vertex_groups}
         for v in ob.data.vertices:
             w = math.exp(-(((v.co.z - 1.07) / 0.13) ** 2)) * smooth((v.co.y - 0.01) / 0.07) * smooth((0.24 - abs(v.co.x)) / 0.06)
             if w < 0.01:
                 continue
+            # On a woman's form the piece was written for the scales of the bones that carried
+            # it. The belly's bone has none, so a vertex it now shares is written again for the
+            # weights it ends with: it stands where it was meant to (a jersey's front otherwise
+            # came through the trousers it is tucked into, by 3 to 5 mm).
+            before = {names[x.group]: x.weight for x in v.groups if x.weight > 0} if STANCE else None
+            stand = STANCE.stands(before, tuple(v.co)) if before else None
             for x in v.groups:
                 x.weight *= 1.0 - w
             g.add([v.index], w, "REPLACE")
+            if stand is not None:
+                after = {n: x * (1.0 - w) for n, x in before.items() if n != "J_Fit_Belly"}
+                after["J_Fit_Belly"] = w
+                v.co = STANCE.written(after, stand)
 
 
 def spread_head_weights(obs):

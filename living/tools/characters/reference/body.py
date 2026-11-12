@@ -154,8 +154,9 @@ def top_at(x):
     s = s[(s[:, 1] < chin - 0.03 * H) & (s[:, 1] > armpit)]
     return float(s[:, 1].max()) if len(s) else None
 
-neck_cut = torso(chin - 0.10 * H, SP, SI)
-neck_w = neck_cut[3] if neck_cut else 0.0
+# The neck: the narrowest cut under the chin (a child's short neck has no cut a set way down).
+neck_cuts = [c[3] for c in (torso(chin - f * H, SP, SI) for f in np.linspace(0.02, 0.20, 10)) if c]
+neck_w = min(neck_cuts) if neck_cuts else 0.0
 x0 = neck_w / 2 + 0.25 * (xj - neck_w / 2)
 profile = [(x, top_at(x)) for x in np.linspace(neck_w / 2 * 1.05, xj, 14)]
 profile = [(float(x), y) for x, y in profile if y is not None]

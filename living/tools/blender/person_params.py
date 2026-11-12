@@ -385,11 +385,17 @@ def resolve(p):
         neck=table([(1, 0.60), (4, 0.70), (15, 0.95), (18, 1.0)], t), head=table([(1, 1.60), (4, 1.42), (15, 1.08), (18, 1.0)], t), shoulders=table([(1, 0.78), (4, 0.82), (15, 0.94), (18, 1.0)], t),
         build=table([(1, 1.02), (4, 0.96), (15, 0.92), (18, 1.0)], t),
     )
+    table_age = dict(prop)
     prop["shoulders"] *= (1 + 0.035 * mus + 0.015 * w) * (1 - 0.04 * elder)
     prop["build"] *= 1 + 0.07 * w + 0.04 * mus
     prop["neck"] *= 1 - 0.05 * elder
     # A woman's form is the standard woman's proportions on the one skeleton (WOMAN), from 12.
     fem = womanly(age, male)
+    # A girl's shoulders and girth are a woman's share of her height already (the reference's
+    # younger figure has the woman's shares throughout), so the growing years' narrowing, which
+    # is a boy's, goes as she becomes one.
+    for k in ("shoulders", "build"):
+        prop[k] += (1.0 - table_age[k]) * prop[k] / table_age[k] * fem
     for k, v in WOMAN.items():
         prop[k] = prop.get(k, 1.0) * (1.0 + (v - 1.0) * fem)
     recipe = dict(height=b["height"], proportions={k: round(v, 3) for k, v in prop.items() if abs(v - 1) > 0.004})
