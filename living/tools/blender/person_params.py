@@ -175,6 +175,21 @@ def deep_update(base, extra):
     return base
 
 
+# The standard woman: scales on the bones of the one rest skeleton every file shares, set so that
+# her joints stand where the reference's do as shares of her height (reference/body.py on the
+# reference: the hip joint at 55.4%, the neck's at 83.1%, 13.4% between the shoulder joints, 9.5%
+# between the hips', the arm 26.8% from shoulder to wrist, the hand 0.65 of a head long). With
+# them a woman stands 6.93 heads tall, as the reference does. person.py writes a woman's pieces
+# for these scales (`Stance`), so the two are one design: change them together.
+WOMAN = dict(legs=1.075, torso=0.84, arms=0.90, shoulders=0.60, hips=0.92, hands=0.75, feet=0.90)
+
+
+def womanly(age, male):
+    """How far a person's proportions are the standard woman's: 0 for men and for children under
+    12, who are built alike; 0.7 at 12, when a girl's type and pieces become a woman's; 1 from 15."""
+    return 0.0 if male or age < 12 else 0.7 + 0.3 * smooth((age - 12) / 3.0)
+
+
 def child_height(age, male):
     rows = [(1, 0.76), (2, 0.87), (4, 1.03), (6, 1.16), (8, 1.28), (10, 1.39), (12, 1.50), (14, 1.62 if male else 1.59), (16, 1.72 if male else 1.63), (18, 1.77 if male else 1.64)]
     return table(rows, age)
@@ -370,11 +385,13 @@ def resolve(p):
         neck=table([(1, 0.60), (4, 0.70), (15, 0.95), (18, 1.0)], t), head=table([(1, 1.60), (4, 1.42), (15, 1.08), (18, 1.0)], t), shoulders=table([(1, 0.78), (4, 0.82), (15, 0.94), (18, 1.0)], t),
         build=table([(1, 1.02), (4, 0.96), (15, 0.92), (18, 1.0)], t),
     )
-    prop["shoulders"] *= (1.0 if male else 1.0 - 0.10 * teen) * (1 + 0.035 * mus + 0.015 * w) * (1 - 0.04 * elder)
+    prop["shoulders"] *= (1 + 0.035 * mus + 0.015 * w) * (1 - 0.04 * elder)
     prop["build"] *= 1 + 0.07 * w + 0.04 * mus
     prop["neck"] *= 1 - 0.05 * elder
-    if not male and age >= 12:
-        prop.update(hands=0.88, feet=0.90)
+    # A woman's form is the standard woman's proportions on the one skeleton (WOMAN), from 12.
+    fem = womanly(age, male)
+    for k, v in WOMAN.items():
+        prop[k] = prop.get(k, 1.0) * (1.0 + (v - 1.0) * fem)
     recipe = dict(height=b["height"], proportions={k: round(v, 3) for k, v in prop.items() if abs(v - 1) > 0.004})
     for name, options in (("hair.style", HAIR_STYLES), ("outfit.coat", COATS), ("outfit.headwear", HEADWEAR)):
         a, k = name.split(".")
@@ -387,7 +404,7 @@ def resolve(p):
         recipe["proportions"]["head"] = round(recipe["proportions"].get("head", 1.0) * face_types.head_scale(body, b["height"]) / face_types.head_scale(body, child_height(age, male) if age < 18 else body["height_m"][1]), 3)
     spec = dict(
         type=p["type"] if typed else None, identity=dict(p.get("identity") or {}),
-        seed=seed, masc=masc, child=child, elder=elder, face=face, look=look, style=drawn, head_scale=1.08 * (1 + STYLE["head"] * drawn), girth=girth, limb=limb, belly=belly, chest=chest, woman_torso=bool(not male and age >= 13),
+        seed=seed, masc=masc, child=child, elder=elder, face=face, look=look, style=drawn, head_scale=1.08 * (1 + STYLE["head"] * drawn), girth=girth, limb=limb, belly=belly, chest=chest, woman_torso=fem > 0 and p.get("form") != "m",
         hair_style=hair_p["style"], hair_length=hair_p.get("length", 0.07), recede=0.024 * clip(hair_p.get("recede", 0.0), 0, 1),
         hair=dict(style=hair_p["style"], length=float(hair_p.get("length", 0.07)), parting=float(hair_p.get("parting", 0.0)), fringe=float(hair_p.get("fringe", 0.7)), volume=float(hair_p.get("volume", 0.5)),
                   curl=float(hair_p.get("curl", 0.0)), fringe_style=hair_p.get("fringe_style", "auto")),
@@ -532,6 +549,10 @@ CAPPED = ("tousled", "short", "crop", "shag", "swept", "sides", "balding")  # th
 # cut): a shared style is combed over a smock's low collar and back, and a coat's collar stands
 # 4 cm higher and 3 cm wider, so hair that lies close on the one cuts through the other.
 COLLARED = ("long", "tail", "braid")
+# The styles that lie on the back and that men or children also wear are written a second time,
+# `<style>[.N][.collar].m`, combed over a man's back: a woman's back lies up to 5 cm further
+# forward under the same head, so one file cannot lie on both (docs/CHARACTERS.md, "The body").
+MAN_BACKED = ("long", "tail", "braids")
 CUTS = 3  # how many cuts of each style are written: `<style>`, `<style>.2`, `<style>.3`, each with its own length, parting, fringe and volume
 STYLE_HEAD = "adult-f-b"  # the head every shared hair style is built on; a type's file carries its fit onto that type (hair_fit.py)
 
@@ -540,10 +561,12 @@ def from_style(style):
     """The figure a shared hair style's file is built on (`style:<name>`): the standard head with
     every identity value at 0, and the style at the lengths and parting its own seed draws."""
     parts = style.split(".")
+    man = parts[-1] == "m"  # as it lies on a man's or a child's back
+    parts = parts[:-1] if man else parts
     style, under, cut = parts[0], ("cap" if parts[-1] == "cap" else ""), next((int(x) for x in parts[1:] if x.isdigit()), 1)
     collar = parts[-1] == "collar"
-    if style not in STYLES or (under and style not in CAPPED) or (collar and style not in COLLARED) or not 1 <= cut <= CUTS or len(parts) > 1 + bool(under) + collar + (cut > 1):
-        raise SystemExit(f"style {'.'.join(parts)!r}: one of {STYLES}, with `.2` to `.{CUTS}` for another cut, `.cap` for {CAPPED} under a cap and `.collar` for {COLLARED} over a coat")
+    if style not in STYLES or (under and style not in CAPPED) or (collar and style not in COLLARED) or (man and style not in MAN_BACKED) or not 1 <= cut <= CUTS or len(parts) > 1 + bool(under) + collar + (cut > 1):
+        raise SystemExit(f"style {'.'.join(parts)!r}: one of {STYLES}, with `.2` to `.{CUTS}` for another cut, `.cap` for {CAPPED} under a cap, `.collar` for {COLLARED} over a coat and a last `.m` for {MAN_BACKED} on a man's back")
     male = style in ("short", "crop", "swept", "sides", "shag", "tousled", "balding")
     # Another cut is the same style from another seed: the generator draws its length, parting,
     # fringe, volume and curl from it, as it did for each person.
@@ -553,7 +576,7 @@ def from_style(style):
         # a seed draws almost none: until the sheets step this style's file had a full head of hair.
         hair["recede"] = (0.85, 1.0, 0.74)[cut - 1]
     return dict(type=STYLE_HEAD, identity=dict(), seed=2000 + STYLES.index(style) + 100 * (cut - 1), sex="male" if male else "female", age=30, hair=hair, beard=dict(style="none", stubble=0.0),
-                build=dict(weight=0.0, muscle=0.0), outfit=dict(headwear="kerchief" if style == "kerchief" else (under or "none"), coat="coat" if collar else "smock"))
+                build=dict(weight=0.0, muscle=0.0), outfit=dict(headwear="kerchief" if style == "kerchief" else (under or "none"), coat="coat" if collar else "smock"), **(dict(form="m") if man else {}))
 
 
 # Outfit pieces as shared style files (gen_styles.sh): the outfit that makes each, and the parts of
@@ -659,6 +682,8 @@ def worn(spec):
     hair = "kerchief" if head == "kerchief" else (f"{style}.cap" if head == "cap" and style in CAPPED else (style if cut == 1 or style == "kerchief" else f"{style}.{cut}"))
     if coat == "coat" and style in COLLARED and head != "kerchief":
         hair += ".collar"  # the cut as combed over a coat's collar
+    if form == "m" and style in MAN_BACKED and head != "kerchief" and not hair.endswith(".cap"):
+        hair += ".m"  # as it lies on a man's or a child's back
     return hair, top + [f"trousers-{form}", f"boots-{form}"], [head] if head else []
 
 

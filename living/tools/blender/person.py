@@ -432,8 +432,18 @@ def torso_w(z, x, skirt=False, front=False):
 
 def torso_point(z, k, d=0.0, skirt=0.0, n=NT, edge=None):
     """Column k (0 front, n/4 the left side, n/2 back) of the torso's ring at height z, offset d."""
-    a, b, cy = table(TORSO, z)
-    a, b = a * lerp(1.0, GIRTH, smooth((1.40 - z) / 0.08)), b * GIRTH
+    sx = sz = 1.0
+    girth = GIRTH
+    if STANCE:
+        # A woman's form is given as she stands: looked up at the height this ring will stand
+        # at, and written wider by what the bones will take off it.
+        w = torso_w(z, 0.0)
+        sx, sz = STANCE.across(w), STANCE.deep(w)
+        a, b, cy = (v * STANCE.height / 100.0 for v in table(WOMAN_FORM, 100.0 * STANCE.up(z, w) / STANCE.height))
+        girth = GIRTH / WOMAN_GIRTH
+    else:
+        a, b, cy = table(TORSO, z)
+    a, b = a * lerp(1.0, girth, smooth((1.40 - z) / 0.08)), b * girth
     # A strong chest is wider and deeper; a heavy person carries a belly in front and at the sides.
     chest = CHEST * math.exp(-(((z - 1.30) / 0.09) ** 2))
     belly = BELLY * math.exp(-(((z - 1.07) / 0.13) ** 2))
@@ -449,7 +459,7 @@ def torso_point(z, k, d=0.0, skirt=0.0, n=NT, edge=None):
     s, c = math.sin(phi), math.cos(phi)
     p = 0.85
     front = 1 + belly if c > 0 else 1.0
-    return Vector((-a * math.copysign(abs(s) ** p, s), cy + b * front * math.copysign(abs(c) ** p, c), z))
+    return Vector((-a * math.copysign(abs(s) ** p, s) / sx, (cy + b * front * math.copysign(abs(c) ** p, c)) / sz, z))
 
 
 def arm_w(x):
@@ -541,12 +551,14 @@ def upper_garment(part, d, zs, hem, cuff, collar, front=None, skirt=0.0, tag_fn=
         return Vector((-(base + dr) * s, cage_head.NECK_Y - 0.002 + (base * 1.08 + dr) * c, z))
 
     prev = rowT
+    neck_x = across(blend(("J_Bip_C_UpperChest", 0.6), ("J_Bip_C_Neck", 0.4)))  # the weights of the last step below
     for step in (1, 2, 3):
         t = step / 3
         cur = []
         for i, k in enumerate(ks):
             a = part.co[rowT[i]]
             b = neck_point(k)
+            b.x /= neck_x  # the neck hole stays round where the shoulders' bones are scaled across
             pos = a.lerp(b, t) + Vector((0, 0, -0.006 * math.sin(PI * t)))
             neck = 0.4 * smooth((t - 0.3) / 0.7)
             cur.append(part.v(pos, shoulder_w(pos, blend(("J_Bip_C_UpperChest", 1 - neck), ("J_Bip_C_Neck", neck)))))
@@ -558,7 +570,11 @@ def upper_garment(part, d, zs, hem, cuff, collar, front=None, skirt=0.0, tag_fn=
     # Collar rings above the neck base: (height above it, radius change, weights).
     r = len(rows) + 2
     for dz, dr, w in collar:
-        cur = [part.v(neck_point(k, dz, dr), w) for k in ks]
+        cur = []
+        for k in ks:
+            pos = neck_point(k, dz, dr)
+            pos.x /= across(w)
+            cur.append(part.v(pos, w))
         for i in range(len(ks) - 1):
             k = ks[i]
             part.f((prev[i], prev[i + 1], cur[i + 1], cur[i]), ((k / NT, r), ((k + 1) / NT, r), ((k + 1) / NT, r + 1), (k / NT, r + 1)), tag_fn("collar", k, r))
@@ -602,8 +618,19 @@ def upper_garment(part, d, zs, hem, cuff, collar, front=None, skirt=0.0, tag_fn=
 ARM_X = sorted(ARM)
 
 
+# A woman's leg against a man's at the same girth (across, front to back), by rest height: a
+# fuller thigh and calf, a narrower knee and ankle, and deeper than wide all the way down, as
+# the reference's are (reference/body.py: thigh 8.9% by 9.6% of the height, knee 4.6 by 6.0,
+# calf 5.3 by 6.4, ankle 2.8 by 4.0).
+WOMAN_LEG = [(0.10, 0.90, 1.10), (0.16, 0.90, 1.10), (0.28, 1.08, 1.18), (0.38, 1.10, 1.20), (0.455, 0.96, 1.12), (0.50, 0.90, 1.10), (0.54, 0.92, 1.10), (0.62, 1.02, 1.10), (0.74, 1.05, 1.07), (0.84, 1.05, 1.05)]
+CROTCH_UP = 0.035  # how far a woman's crotch stands above a man's at rest: the reference's is 52.4% of the height up
+
+
 def leg_ring(part, z, d, w, n=13, floor=None):
     cx, cy, rx, ry = table(LEG_UP, z)
+    if STANCE:
+        kx, ky = table(WOMAN_LEG, z)
+        rx, ry = rx * kx, ry * ky
     out = []
     for j in range(n):
         th = math.radians(45) + 2 * PI * j / n
@@ -624,16 +651,17 @@ def trousers(part, d, top=1.075, bottom=0.40, tag_fn=None):
     half = NT // 2
     ks = list(range(half + 1))
     rows = []
-    zs = [top, 1.01, 0.94, 0.875]
+    up = CROTCH_UP if STANCE else 0.0
+    zs = [top, 1.01, 0.94 + 0.3 * up, 0.875 + up]
     for z in zs:
         row = []
         for k in ks:
             pos = torso_point(z, k, d)
-            if z < 0.9:
+            if z < 0.9 + up:
                 # The seat narrows into the legs' tops.
                 pos.x *= 0.99
             side = smooth(abs(pos.x) / 0.09)
-            leg = (0.18 if z > 0.9 else 0.62) * side if z < 0.98 else 0.0
+            leg = (0.18 if z > 0.9 + up else 0.62) * side if z < 0.98 else 0.0
             row.append(part.v(pos, blend(*torso_w(z, pos.x).items(), ("J_Bip_L_UpperLeg", leg / max(1 - leg, 1e-3)))))
         rows.append(row)
     for r in range(len(rows) - 1):
@@ -643,19 +671,22 @@ def trousers(part, d, top=1.075, bottom=0.40, tag_fn=None):
     part.band(lip, rows[0], -1, 0, closed=False, tag=tag_fn("waist", 0, -1), u0=0.0, u1=0.5)
     # The crotch: two vertices on the centre plane join front to back between the legs.
     hips = {"J_Bip_C_Hips": 1.0}
-    s1 = part.v((0, 0.040, 0.842), hips)
-    s2 = part.v((0, -0.045, 0.846), hips)
+    s1 = part.v((0, 0.040, 0.842 + up), hips)
+    s2 = part.v((0, -0.045, 0.846 + up), hips)
     loop = rows[-1] + [s2, s1]
     n = len(loop)
     prev = loop
     r = len(rows)
-    for z in [0.80, 0.72, 0.62, 0.555, 0.50, 0.455, bottom]:
+    for z in [0.80 + 0.8 * up, 0.72, 0.62, 0.555, 0.50, 0.455, bottom]:
         w = blend(*leg_w(z).items(), ("J_Bip_C_Hips", 0.12 if z > 0.79 else 0.0))
         cur = leg_ring(part, z, d * (1.0 if z > 0.5 else 0.7), w, n)
         part.band(prev, cur, r, r + 1, tag=tag_fn("leg", 0, r))
         prev = cur
         r += 1
     return part
+
+
+WOMAN_BOOT = 0.90  # a woman's boot against a man's, across the shaft and the foot
 
 
 def boot(part, d=0.0, tag_fn=None):
@@ -684,8 +715,10 @@ def boot(part, d=0.0, tag_fn=None):
         shin = max(smooth((pos.z - 0.10) / 0.10) * (1 - smooth((pos.y - 0.03) / 0.05)), smooth((pos.z - 0.13) / 0.08))
         return blend(("J_Bip_L_LowerLeg", shin), ("J_Bip_L_Foot", (1 - shin) * (1 - toe)), ("J_Bip_L_ToeBase", (1 - shin) * toe))
 
+    slim = WOMAN_BOOT if STANCE else 1.0
     made = []
     for (cy, cz), tilt, rx, rf, rb in rings:
+        rx, rf, rb = rx * slim, rf * (slim if cz > 0.1 else 1.0), rb * (slim if cz > 0.1 else 1.0)
         a = math.radians(tilt)
         e2 = Vector((0, math.cos(a), math.sin(a)))
         idx = ring(part, (x0, cy, cz), (1, 0, 0), e2, rx + d, rf + d, n, {}, p=0.9, r2b=rb + d)
@@ -702,7 +735,7 @@ def boot(part, d=0.0, tag_fn=None):
     shin = {"J_Bip_L_LowerLeg": 1.0}
     prev = None
     for j, (cz, dr) in enumerate([(0.398, 0.003), (0.400, 0.015), (0.470, 0.019), (0.490, 0.014), (0.492, 0.004), (0.488, -0.004), (0.440, -0.007)]):
-        cur = ring(part, (x0, -0.004, cz), (1, 0, 0), (0, 1, 0), 0.068 + dr + d, 0.074 + dr + d, n, shin, p=0.9, r2b=0.072 + dr + d)
+        cur = ring(part, (x0, -0.004, cz), (1, 0, 0), (0, 1, 0), 0.068 * slim + dr + d, 0.074 * slim + dr + d, n, shin, p=0.9, r2b=0.072 * slim + dr + d)
         if prev:
             part.band(prev, cur, j - 1, j, tag=tag_fn("fold", 0, j))
         prev = cur
@@ -1256,7 +1289,7 @@ def make_neck(arm):
         stations = stations[:3]
     prev = None
     for i, (z, cy, r, w) in enumerate(stations):
-        cur = ring(part, (0, cy, z), (1, 0, 0), (0, 1, 0), r, r * 1.04, 10, w)
+        cur = ring(part, (0, cy, z), (1, 0, 0), (0, 1, 0), r / across(w), r * 1.04, 10, w)
         if prev:
             part.band(prev, cur, i - 1, i)
         prev = cur
@@ -1411,11 +1444,12 @@ def make_hair(arm, spec, pos, quads, covered=None, bones=None):
     # stand 5 to 8 cm from the neck's axis where they stood 8 to 12, and end below the chin.
     collar = dict(coat=0.076, smock=0.064).get(wears, 0.056)
     cone = dict(coat=((1.47, 1.50, 1.53, 1.550), (0.082, 0.076, 0.077, 0.079)), smock=((1.47, 1.50, 1.528), (0.076, 0.066, 0.064))).get(wears, ((1.47, 1.50, 1.530), (0.068, 0.060, 0.056)))
-    back = ((0.95, 1.10, 1.20, 1.30, 1.35, 1.40, 1.44, 1.47, 1.50, 1.53), (0.123, 0.110, 0.110, 0.120, 0.125, 0.126, 0.119, 0.115, 0.062, 0.052))
+    back = back_table()
     thick = dict(coat=0.015, smock=0.014).get(wears, 0.0)
+    half_w, half_d = shoulder_half()
     body = dict(neck_r=collar / HEAD_SCALE, neck_y=(cage_head.NECK_Y - HEAD.y) / HEAD_SCALE, neck_top=HF.chin_z + 0.022, shoulder_z=hd(1.468 + (0.030 if wears else 0.014)),
-                half_w=(0.182 * GIRTH + 0.035) / HEAD_SCALE, half_d=(0.108 * GIRTH + 0.035) / HEAD_SCALE, torso_y=(0.0 - HEAD.y) / HEAD_SCALE, round=0.05 / HEAD_SCALE,
-                collar=(np.array([hd(z) for z in cone[0]]), np.array(cone[1]) / HEAD_SCALE), back=(np.array([hd(z) for z in back[0]]), (np.array(back[1]) + thick) * GIRTH / HEAD_SCALE))
+                half_w=(half_w + 0.035) / HEAD_SCALE, half_d=(half_d + 0.035) / HEAD_SCALE, torso_y=(0.0 - HEAD.y) / HEAD_SCALE, round=0.05 / HEAD_SCALE,
+                collar=(np.array([hd(z) for z in cone[0]]), np.array(cone[1]) / HEAD_SCALE), back=(np.array([hd(z) for z in back[0]]), (np.array(back[1]) + thick * GIRTH) / HEAD_SCALE))
     h = hair.Hair(HF, hs, hairline, covered=covered, bald=bald_depth, body=body, detail=0.4 if FAR else 1.0)
     base = len(verts)
     # The far model's hair follows the bones the full model's hair added, when both are built.
@@ -1546,11 +1580,14 @@ def back_spheres(h, back, thick, names):
         return
     hits = np.array(hits)
     pts = np.array(pts)
-    half_w, R = 0.182 * GIRTH + 0.035, 0.25
+    half_w, R = shoulder_half()[0] + 0.035, 0.25
     for z in (1.50, 1.44, 1.37, 1.29, 1.21, 1.13):
-        bone = "J_Bip_C_UpperChest" if z >= 1.31 else ("J_Bip_C_Chest" if z >= 1.18 else "J_Bip_C_Spine")
-        deep = (float(np.interp(z, back[0], back[1])) + thick) * GIRTH
-        for x in (-0.11, -0.04, 0.04, 0.11):
+        # The bone that carries the back at this height; on a woman's form the heights here are
+        # where the hair hangs (beside the head), and the back there is lower in the file.
+        zr = STANCE.rest(STANCE.beside_head(z)) if STANCE else z
+        bone = "J_Bip_C_UpperChest" if zr >= 1.31 else ("J_Bip_C_Chest" if zr >= 1.18 else "J_Bip_C_Spine")
+        deep = float(np.interp(z, back[0], back[1])) + thick * GIRTH
+        for x in ((-0.6 * half_w, -0.22 * half_w, 0.22 * half_w, 0.6 * half_w) if STANCE else (-0.11, -0.04, 0.04, 0.11)):
             # The sphere's back point is OFF_CLOTH behind the cloth. Its radius is the largest that leaves every
             # joint clear at rest: a smaller sphere through the same point clears a joint above
             # or beside it (at the nape, the hair is nearer than the back below is).
@@ -1563,7 +1600,14 @@ def back_spheres(h, back, thick, names):
                     lo, hi = (mid, hi) if clear(mid) >= 0 else (lo, mid)
                 hi = lo
             if hi > 0.03:
-                BACK_SPHERES.append((bone, tuple(b + np.array([0.0, hi, 0.0])), hi))
+                centre = b + np.array([0.0, hi, 0.0])
+                if STANCE:
+                    # Written so that the client's scales on the bone put it there: the offset
+                    # from the bone and the radius are scaled with the bone's own vertices.
+                    sc = STANCE.scale[bone]
+                    centre = np.array(STANCE.to_rest(bone, (centre[0], centre[1], STANCE.beside_head(centre[2]))))
+                    hi = hi / (0.5 * (sc[0] + sc[2]))
+                BACK_SPHERES.append((bone, tuple(centre), hi))
     if not BACK_SPHERES:
         return
     print(f"PERSON hair: {len(BACK_SPHERES)} spheres on the back for {len(BACK_ROOTS)} chains and {len(ROPE_ROOTS)} ropes, radius {min(s[2] for s in BACK_SPHERES):.3f} to {max(s[2] for s in BACK_SPHERES):.3f} of {R}: " + " ".join(f"{s[2]:.3f}" for s in BACK_SPHERES) if BACK_SPHERES else "PERSON hair: no back spheres")
@@ -1904,21 +1948,136 @@ def coat_colour(base, patches, bands=False):
     return colour
 
 
-# A woman's torso (a man's is TORSO): a narrower waist and shoulders, fuller hips and chest.
-MAN_TORSO = TORSO
-WOMAN_TORSO = [
-    (0.70, 0.150, 0.105, 0.000),
-    (0.86, 0.156, 0.108, 0.000),
-    (0.93, 0.172, 0.116, -0.006),
-    (1.00, 0.160, 0.110, -0.004),
-    (1.08, 0.132, 0.093, 0.002),
-    (1.16, 0.130, 0.093, 0.008),
-    (1.24, 0.140, 0.106, 0.014),
-    (1.32, 0.150, 0.122, 0.018),
-    (1.375, 0.158, 0.112, 0.004),
-    (1.42, 0.162, 0.102, -0.006),
-    (1.465, 0.164, 0.090, -0.008),
+# A woman's form, as she stands in the game: at a height (percent of her height), the torso's
+# half width, half depth and how far its middle stands before the hips' joint, each a percent of
+# her height. Measured on the reference with reference/body.py (docs/CHARACTERS.md, "The body");
+# only these proportions are taken from it. Below the crotch (52%) it is what a skirt hangs from:
+# as deep as the seat behind and the thighs in front, so a stride does not come through it.
+WOMAN_FORM = [
+    (40.0, 9.60, 6.00, 0.00),
+    (49.0, 9.60, 6.00, 0.00),
+    (51.5, 9.50, 5.60, -0.20),
+    (53.2, 9.44, 5.10, -0.33),
+    (55.6, 9.13, 5.25, -0.43),
+    (57.2, 8.64, 5.47, -0.35),
+    (58.8, 8.13, 5.61, 0.00),
+    (60.4, 7.71, 5.51, 0.68),
+    (62.0, 7.00, 4.95, 1.43),
+    (63.6, 6.45, 4.54, 1.85),
+    (65.2, 5.80, 4.38, 2.33),
+    (66.8, 5.43, 4.16, 2.56),
+    (68.4, 5.55, 4.17, 2.44),
+    (70.0, 5.81, 4.49, 2.19),
+    (71.6, 6.06, 4.75, 2.02),
+    (73.2, 6.30, 5.50, 2.25),
+    (74.4, 6.55, 5.80, 2.10),
+    (75.6, 6.90, 5.60, 1.65),
+    (76.4, 7.10, 5.20, 1.10),
+    (77.2, 7.00, 4.79, 0.56),
+    (78.0, 6.60, 4.57, 0.32),
+    (79.6, 6.50, 4.15, -0.13),
+    (81.2, 6.40, 3.38, -0.32),
+    (82.4, 6.30, 2.60, -1.00),
 ]
+WOMAN_GIRTH = 1.02  # the girth the form above is drawn at: a woman of weight and muscle 0
+
+
+class Stance:
+    """How a figure with a recipe's proportions stands in the game: the client's scale on each of
+    the torso's bones (characters.rs `bone_scale`, at build 1) and each joint's height above
+    the floor. Every file has the one rest skeleton, so a woman's narrow shoulders, short torso
+    and long legs are these scales, and her pieces are written so that they come out as
+    WOMAN_FORM once the client has applied them: a width is divided by the scale across of the
+    bones that carry it, and looked up at the height the point will stand at."""
+
+    def __init__(self, p):
+        get = lambda k: p.get(k, 1.0)
+        sh, hips, torso = get("shoulders"), get("hips"), get("torso")
+        # (across, up, deep)
+        self.scale = {
+            "J_Bip_C_Hips": (hips, 1.0, hips ** 0.5), "J_Bip_C_Spine": (lerp(1.0, hips, 0.5), torso, 1.0), "J_Bip_C_Chest": (lerp(1.0, sh, 0.5), torso, 1.0),
+            "J_Bip_C_UpperChest": (sh, torso, 1.0), "J_Bip_C_Neck": (1.0, get("neck"), 1.0), "J_Bip_L_Shoulder": (sh, 1.0, 1.0), "J_Bip_R_Shoulder": (sh, 1.0, 1.0),
+        }
+        z = lambda n: JOINTS[n][2]
+        ankle = z("J_Bip_L_Foot") * get("feet")
+        hip = ankle + (z("J_Bip_L_UpperLeg") - z("J_Bip_L_Foot")) * get("legs")
+        at = {"J_Bip_C_Hips": hip + z("J_Bip_C_Hips") - z("J_Bip_L_UpperLeg")}
+        for parent, child in (("J_Bip_C_Hips", "J_Bip_C_Spine"), ("J_Bip_C_Spine", "J_Bip_C_Chest"), ("J_Bip_C_Chest", "J_Bip_C_UpperChest"), ("J_Bip_C_UpperChest", "J_Bip_C_Neck"), ("J_Bip_C_Neck", "J_Bip_C_Head")):
+            at[child] = at[parent] + (z(child) - z(parent)) * self.scale[parent][1]
+        self.at = at
+        self.hip_joint = hip
+        size = person_params.face_types.load()["file"]  # the chin's height and the head's, in every file
+        self.height = at["J_Bip_C_Head"] + (size["chin_m"] + size["head_height_m"] - z("J_Bip_C_Head")) * get("head")
+
+    def _of(self, w, i):
+        total = sum(w.values())
+        return sum(v * self.scale.get(n, (1.0, 1.0, 1.0))[i] for n, v in w.items()) / total
+
+    def across(self, w):
+        return self._of(w, 0)
+
+    def deep(self, w):
+        return self._of(w, 2)
+
+    def up(self, z, w):
+        """The height above the floor a point at rest height z stands at, carried by weights w."""
+        total = sum(w.values())
+        hips = "J_Bip_C_Hips"
+        return sum(v * (self.at.get(n, self.at[hips]) + self.scale.get(n, (1.0, 1.0, 1.0))[1] * (z - JOINTS[n if n in self.at else hips][2])) for n, v in w.items()) / total
+
+    def beside_head(self, z):
+        """The height above the floor of what hangs from the head at rest height z: hair is not
+        scaled with the torso, so a lock that ends at z in the file ends this high on her."""
+        return z - JOINTS["J_Bip_C_Head"][2] + self.at["J_Bip_C_Head"]
+
+    def form(self, height):
+        """The form at a height above the floor, in metres: (half width, half depth, middle forward)."""
+        return tuple(v * self.height / 100.0 for v in table(WOMAN_FORM, 100.0 * height / self.height))
+
+    def to_rest(self, bone, point):
+        """Where to write a point (x, forward, height above the floor) that is to stand there,
+        carried by one bone: the client scales its offset from the bone."""
+        s, r = self.scale[bone], JOINTS[bone]
+        return (point[0] / s[0], r[1] + (point[1] - r[1]) / s[2], r[2] + (point[2] - self.at[bone]) / s[1])
+
+    def rest(self, height):
+        """The rest height of the torso's point that stands at a height above the floor."""
+        lo, hi = 0.5, 1.6
+        for _ in range(40):
+            mid = 0.5 * (lo + hi)
+            lo, hi = (mid, hi) if self.up(mid, torso_w(mid, 0.0)) < height else (lo, mid)
+        return 0.5 * (lo + hi)
+
+
+STANCE = None  # a woman's form: the standard woman's stance (configure)
+
+
+def shoulder_half():
+    """The proxy hair is combed over: the shoulders' half width and half depth, without ease."""
+    if STANCE:
+        return abs(SHOULDER.x) * STANCE.scale["J_Bip_C_UpperChest"][0] * GIRTH / WOMAN_GIRTH, STANCE.form(STANCE.beside_head(1.44))[1] * GIRTH / WOMAN_GIRTH
+    return 0.182 * GIRTH, 0.108 * GIRTH
+
+
+def back_table():
+    """How far behind the body's axis the back of a jersey lies, by height, plus 4 mm: (heights,
+    depths), for the hair that hangs down it. Measured on the pieces at the standard build for a
+    man. A woman's is her form's own back at the height each point of the hair hangs beside (her
+    torso is shorter under the same head), with the jersey's 8 mm; from the collar up it is the
+    neck's, which no bone scales."""
+    if not STANCE:
+        return ((0.95, 1.10, 1.20, 1.30, 1.35, 1.40, 1.44, 1.47, 1.50, 1.53), tuple(v * GIRTH for v in (0.123, 0.110, 0.110, 0.120, 0.125, 0.126, 0.119, 0.115, 0.062, 0.052)))
+    zs = (0.95, 1.00, 1.05, 1.10, 1.15, 1.20, 1.25, 1.30, 1.35, 1.40, 1.44, 1.47)
+    deep = []
+    for z in zs:
+        _, b, c = STANCE.form(STANCE.beside_head(z))
+        deep.append((b - c) * GIRTH / WOMAN_GIRTH + 0.012)
+    return (zs + (1.50, 1.53), tuple(deep) + (0.062, 0.052))
+
+
+def across(w):
+    """The scale across that the standard figure's bones give a point with weights w (1 for a man)."""
+    return STANCE.across(w) if STANCE else 1.0
 
 
 def configure(spec):
@@ -1938,7 +2097,7 @@ def configure(spec):
     g.update(
         HF=head, TYPED=typed, HEAD_SCALE=1.0 if typed else spec["head_scale"], SKIN=look["skin"], SKIN_SHADE=look["skin_shade"], SKIN_WARM=look["skin_warm"],
         HAIR=look["hair"], HAIR_TIP=look["hair_tip"], RECEDE=spec["recede"], BALD=spec["bald"], LIMB_K=spec["limb"], GIRTH=spec["girth"], BELLY=spec["belly"], CHEST=spec["chest"], LONG=spec["hair_length"],
-        TORSO=WOMAN_TORSO if spec["woman_torso"] else MAN_TORSO,
+        STANCE=Stance(person_params.WOMAN) if spec["woman_torso"] else None,
     )
     # The neck's radius: the type's own, so the head's ring and the neck's tube meet. An outfit
     # piece is built for a man's or a woman's neck, whatever head its figure stands under.
@@ -2012,7 +2171,7 @@ def build_person(arm, spec, atlas_path, body=False, bones=None):
         elif coat == "smock":
             # A pull-over smock to the knee, an apron tied over it.
             zs = [z for z in (0.50, 0.58, 0.66, 0.74, 0.82, 0.90, 0.98, 1.06, 1.13, 1.20, 1.26, 1.32) if z >= hem - 1e-6]
-            band = zs.index(1.06)
+            band = zs.index(1.13 if STANCE else 1.06)  # the apron's tie: at the waist, which a woman's form has higher
             apron = spec["apron"]
 
             def btag(kind, k, r):  # the sleeve bands alone: a part of their own, so they take a colour of their own
