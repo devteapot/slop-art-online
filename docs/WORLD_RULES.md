@@ -268,7 +268,7 @@ Rules read what a thing is, declared in the script, instead of lists of names in
 
 The arms differ by less than main's own two runs differ (8–21 ms/s of tick work); no tick passed 16.7 ms. The first pair's run 4 overlapped a build of mine. Graph evaluations (`tick.slots`, where scenes ask a creature's sight) and steering (`tick.motion`) are flat.
 
-**Verification:** `verify-core` (cargo checks; tick, needs, food, refusal, seize, sight, senses, moves, skirmish, dealings, town, infant, lives, mechanics, steering), `verify-player` (deal, new_skill, told, appraise, combat, gesture), `verify-client` (30 of 30), `verify-generation` (island and the 4 km floor, with the seed rules kept as world laws), `verify-minds` with the fake model (17 cases); details and the failed attempts in each skill's `references/validation.md`. One rules bug was found by them and fixed (a new body's need rates). Not covered: a real model reading the new world text; the game client drawn and driven; `verify-knowledge` and `verify-llm` (not touched).
+**Verification:** `verify-core` (cargo checks; tick, needs, food, refusal, seize, sight, senses, moves, skirmish, dealings, town, infant, lives, mechanics, steering), `verify-player` (deal, new_skill, told, appraise, combat, gesture), `verify-client` (30 of 30), `verify-generation` (island and the 4 km floor, with the seed rules kept as world laws), `verify-minds` with the fake model (17 cases); details and the failed attempts in each skill's `references/validation/history.md`. One rules bug was found by them and fixed (a new body's need rates). Not covered: a real model reading the new world text; the game client drawn and driven; `verify-knowledge` and `verify-llm` (not touched).
 
 ## Primitives
 
@@ -529,7 +529,7 @@ Migration proven on the trial server (`slop-trials-stdb`, v2.14.1). Main's modul
 - verify-player `answers.py` 9 of 9, `offers.py` 17 of 17, `deal.py` 13 of 13;
 - verify-minds `answers` and `acts` pass. `dealings` failed 2 of 11 runs (cause not established; see verify-minds' validation record).
 
-Records are in each skill's `references/validation.md`. Not covered:
+Records are in each skill's `references/validation/history.md`. Not covered:
 
 - the game client drawing and sending these acts;
 - a real model choosing to decline;
