@@ -181,9 +181,10 @@ enum Part {
     Lower,
 }
 
-/// An outfit style's part and layer (higher is worn over lower): the look book's (`outfit`:
-/// `slot`, `layer`), else the style file's scene extras (the same two), else by its name. None
-/// for what gives no chip (boots, caps, an apron or a smock's bands over the clothes).
+/// An outfit style's part and layer (higher is worn over lower): `slot` and `layer` from the style
+/// file's glTF extras (char-4 writes them; the scene's, else the first node's or the asset's that
+/// carries a `slot`), else by its name until they are written. None for what gives no chip (boots,
+/// caps, an apron or a smock's bands over the clothes).
 fn place(piece: &str) -> Option<(Part, i32)> {
     static CACHE: std::sync::OnceLock<std::sync::Mutex<HashMap<String, Option<(Part, i32)>>>> = std::sync::OnceLock::new();
     let cache = CACHE.get_or_init(Default::default);
@@ -195,13 +196,15 @@ fn place(piece: &str) -> Option<(Part, i32)> {
         "lower" | "bottom" | "legs" => Some(Part::Lower),
         _ => None,
     };
-    let from_book = crate::characters::book::book().and_then(|b| b.outfit.get(piece)).map(|p| part(&p.slot).map(|x| (x, p.layer)));
     let from_file = || {
         let file = format!("{}/outfit/{piece}.glb", crate::characters::compose::STYLES);
-        let x = crate::lookdev::glb_json(&file).map(|j| j["scenes"][j["scene"].as_u64().unwrap_or(0) as usize]["extras"].clone())?;
+        let j = crate::lookdev::glb_json(&file)?;
+        let scene = &j["scenes"][j["scene"].as_u64().unwrap_or(0) as usize]["extras"];
+        let nodes = j["nodes"].as_array().into_iter().flatten().map(|n| &n["extras"]);
+        let x = std::iter::once(scene).chain(nodes).chain(std::iter::once(&j["asset"]["extras"])).find(|x| x["slot"].is_string())?;
         Some(part(x["slot"].as_str()?).map(|p| (p, x["layer"].as_i64().unwrap_or(0) as i32)))
     };
-    let p = from_book.or_else(from_file).unwrap_or_else(|| place_by_name(piece));
+    let p = from_file().unwrap_or_else(|| place_by_name(piece));
     cache.lock().unwrap().insert(piece.to_string(), p);
     p
 }

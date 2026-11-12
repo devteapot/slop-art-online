@@ -110,9 +110,8 @@ mod tests {
 
     #[test]
     fn a_world_from_another_generation_warns_once_at_connect() {
-        let b = LookBook::parse(r#"{"generation": "c4-b", "generations": ["c4-a"]}"#).unwrap();
+        let b = LookBook::parse(r#"{"generation": "c4-b"}"#).unwrap();
         assert!(generation_warning("c4-b", Some(&b)).is_none());
-        assert!(generation_warning("c4-a", Some(&b)).is_none());
         assert!(generation_warning("", Some(&b)).is_none());
         assert!(generation_warning("c4-c", Some(&b)).is_some_and(|w| w.contains("c4-c")));
         assert!(generation_warning("c4-c", None).is_none());

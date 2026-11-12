@@ -1977,6 +1977,25 @@ def outer_piece(line, upper, outfit=None):
 BANDS = {"child": 1, "youth": 2, "adult": 3, "elder": 4}
 
 
+def style_places(line):
+    """Each outfit piece's `slot` and `layer` from its style file's glTF extras (the scene's, else
+    the first node's or the asset's with a `slot`), where char-4 has written them."""
+    import struct
+    out = {}
+    for piece in line.get("styles", {}).get("outfit", []):
+        path = os.path.join(ROOT, "living/game/assets/lookdev/styles/outfit", f"{piece}.glb")
+        try:
+            raw = open(path, "rb").read()
+            j = json.loads(raw[20:20 + struct.unpack("<I", raw[12:16])[0]])
+        except (OSError, ValueError):
+            continue
+        cands = [(j.get("scenes") or [{}])[j.get("scene", 0)].get("extras") or {}] + [n.get("extras") or {} for n in j.get("nodes", [])] + [(j.get("asset") or {}).get("extras") or {}]
+        x = next((c for c in cands if isinstance(c.get("slot"), str)), None)
+        if x:
+            out[piece] = {"slot": x["slot"], "layer": int(x.get("layer", 0))}
+    return out
+
+
 def shim_key(book, cid, band):
     """The test shim's key for a person (`characters/seen.rs`): a line characters wear (not
     decor) of the band's type, by id."""
@@ -2024,7 +2043,7 @@ def looks(run, c):
     c.check(s, "one warning line each for no key and for a key the book lacks",
             L.count("looks: people without a look key in a world with looks") == 1 and L.count("looks: lk_ffffffffffffffff is not in the look book") == 1,
             f"{L.count('people without a look key')} and {L.count('lk_ffffffffffffffff is not in')}")
-    chips = lambda key: [outer_piece(book["lines"][key]["person"], True, book.get("outfit")), outer_piece(book["lines"][key]["person"], False, book.get("outfit"))]
+    chips = lambda key: [outer_piece(book["lines"][key]["person"], True, style_places(book["lines"][key]["person"])), outer_piece(book["lines"][key]["person"], False, style_places(book["lines"][key]["person"]))]
     wrong = [(x["id"], x.get("chips"), chips(x["look"])) for x in composed if (x.get("chips") or [None, None]) != chips(x["look"])]
     c.check(s, "chips by piece: a composed person's chips are its line's outermost upper and lower pieces' colours", composed and not wrong, f"{wrong[:3]}")
     sc = json.load(open(os.path.join(out, "scene.json"))) if os.path.exists(os.path.join(out, "scene.json")) else {}

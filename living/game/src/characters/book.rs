@@ -49,34 +49,18 @@ pub struct Line {
     pub words: serde_json::Value,
 }
 
-/// The client book (docs/LOOK.md §5, as settled with dev-box 2026-11-12): its generations, the
-/// lines under their keys, the colour words' swatches, each outfit style's slot and layer, and
-/// the decor lines. No names, no person entries, no pool: a client cannot tell from a key who
-/// someone is, who else they are at another age, or whether they were seeded.
+/// The client book (docs/LOOK.md §5, main `acfe1be4`; dev-box's final interface): its
+/// generation, the lines under their keys, and the decor lines. No names, no person entries, no
+/// pool, no swatches: a client cannot tell from a key who someone is, who else they are at
+/// another age, or whether they were seeded.
 #[derive(Deserialize, Default, Debug)]
 #[serde(default)]
 pub struct LookBook {
-    /// The generation this book was written in, and the generations it holds every key of
-    /// (the book is append-only while a released world uses a key).
+    /// The generation this book was written in (`world.look_book` names a world's).
     pub generation: String,
-    pub generations: Vec<String>,
     pub lines: HashMap<String, Line>,
-    /// A colour word's swatch (`"green"` → `#5d7f4a`).
-    pub swatches: HashMap<String, String>,
-    /// Each outfit style's part of the body and layer (`"smock_58-f"` → upper, 2), for the
-    /// chips (`looks.rs`).
-    pub outfit: HashMap<String, Piece>,
     /// Lines for background people only (`lk_…`), apart from every line a character can wear.
     pub decor: Vec<String>,
-}
-
-/// Where an outfit style is worn: `slot` (`upper`, `lower`, or another a chip does not show)
-/// and `layer` (higher is worn over lower).
-#[derive(Deserialize, Clone, Debug, PartialEq)]
-pub struct Piece {
-    pub slot: String,
-    #[serde(default)]
-    pub layer: i32,
 }
 
 /// Why a person is not drawn from the book.
@@ -109,9 +93,9 @@ impl LookBook {
         serde_json::from_str(text).map_err(|e| e.to_string())
     }
 
-    /// Whether the book holds every key of a world made with `generation`.
+    /// Whether the book is the one a world made with `generation` names.
     pub fn knows(&self, generation: &str) -> bool {
-        generation == self.generation || self.generations.iter().any(|g| g == generation)
+        generation == self.generation
     }
 
     /// The recipe a key draws: the line composed from its type and style files, checked on disk
@@ -266,15 +250,12 @@ mod tests {
     fn sample() -> LookBook {
         let text = serde_json::json!({
             "generation": "c4-test",
-            "generations": ["c4-old"],
             "lines": {
                 "lk_00000000000000a1": line("adult-f-a", "bob", &["jersey-f", "trousers-f"]),
                 "lk_00000000000000a2": line("adult-f-a", "long", &["jersey-f"]),
                 "lk_00000000000000c1": line("child-u-a", "bob", &["smock_50-f"]),
             },
             "decor": ["lk_00000000000000a2", "lk_00000000000000c1"],
-            "swatches": { "green": "#5d7f4a" },
-            "outfit": { "jersey-f": { "slot": "upper", "layer": 1 }, "trousers-f": { "slot": "lower", "layer": 1 } },
         });
         LookBook::parse(&text.to_string()).unwrap()
     }
@@ -283,10 +264,8 @@ mod tests {
     fn a_book_reads_its_lines_and_generations() {
         let b = sample();
         assert_eq!(b.lines.len(), 3);
-        assert!(b.knows("c4-test") && b.knows("c4-old") && !b.knows("c4-new"));
+        assert!(b.knows("c4-test") && !b.knows("c4-new"));
         assert_eq!(b.lines["lk_00000000000000c1"].person.kind, "child-u-a");
-        assert_eq!(b.swatches["green"], "#5d7f4a");
-        assert_eq!(b.outfit["trousers-f"], Piece { slot: "lower".into(), layer: 1 });
     }
 
     #[test]
@@ -294,8 +273,10 @@ mod tests {
         let b = sample();
         assert_eq!(b.recipe("").unwrap_err(), Miss::NoKey);
         assert_eq!(b.recipe("lk_ffffffffffffffff").unwrap_err(), Miss::Unknown("lk_ffffffffffffffff".into()));
-        // The test has no asset folder, so every line's type file is missing.
-        assert!(matches!(b.recipe("lk_00000000000000a1").unwrap_err(), Miss::NoFile(_, f) if f == "lookdev/types/adult-f-a.glb"));
+        // A line whose type file is not on disk.
+        let mut b = b;
+        b.lines.insert("lk_00000000000000e1".into(), serde_json::from_value(line("no-such-type", "bob", &[])).unwrap());
+        assert!(matches!(b.recipe("lk_00000000000000e1").unwrap_err(), Miss::NoFile(_, f) if f == "lookdev/types/no-such-type.glb"));
     }
 
     #[test]
