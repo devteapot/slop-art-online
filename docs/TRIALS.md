@@ -1721,6 +1721,46 @@ The two r2b heavy fights with no fight in them (r2: 0 exposures, the subject 11�
 - **Spoken ids:** 0 of 19 spoken lines.
 - **Cost and latency:** $0.108 ($0.041 and $0.067; 28 and 46 calls); think and compile p50 6.0 and 5.8 s.
 
+### R2 again with what a character is told fixed (`r2d`, 10 fights, $0.30)
+
+R2 at r2b's scale (5 fights per arena) once the told lines R2 and r2c found wanting were fixed: does a mind told that its dodge was over before the blow came move its `doing` condition from "winding up" toward "about to release"?
+
+**Build and switches.** Trial module and `living-mind` built from origin/main `3c2ad599`, branch `trials-r2d` (private `CARGO_TARGET_DIR`, the trial service `slop-trials-stdb`, island seed). In force: `fov_on` off (the shipped default), the `default` variant (glm-flash, overflow deepseek-flash), `LIVING_SKILL_TIMINGS` on, `force_outcomes` on, greeting `nearest` (`LIVING_GREET` unset), `cues_on` off (attention cues not in use). Ran 2026-11-12, 09:02–09:12, 5 replicates of `arena-heavy` and `arena-kiter`. The key loaded from a copied `.env`, deleted after; a scan of the batch for every key, whole and by its first and last 12 characters, found 0 matches in 241 files. Evidence: `.local/living/trials/r2d/` (`arena_report.json`, `report.md`) in the `trials-r2d` checkout on the Spark.
+
+**What differs from r2b and r2c.** r2b (`07a1de10`) had the old heavy fixture (no approach, no heal) and no 3.2. r2c (`49dfc2cd`) added the fixed fixture (`561ba7a7`), fix-missile-told and doing-percept (3.2), with `doing`'s grammar example `is: "strike"`. r2d adds fix-unseen-killer-id, fix-dodge-told (`191f24c0`: a dodge over before the blow is told so; a cooldown's refusals told once; the example `is: "hostile"`), move-intents (3.3: `keep_distance`, `close_in`, `circle`, `back_off`), committed-moves (a windup or a dash runs its course), fix-pursuit-speed, far-handle, and attention cues (off).
+
+**Main measure:**
+
+| | Heavy blow (5) | Kiter (5) |
+|---|---|---|
+| Exposures per fight | 5, 5, 5, 4, 13 (32) | 29, 13, 23, 10, 57 (132) |
+| Answered | **1 of 32**: 0 of 15 in the first three | **17 of 132**: 0 of 15 in the first three; 15 of them in one fight |
+| K (three answered in a row) | never | 13 in one fight (r1), never in four |
+| End | the subject killed the foe in 4 (after 4–5 heavies, through its heals); the foe killed the subject in 1 (after 13) | all survived (lowest health 29–80) |
+| r2b for comparison | 0 of 12 (2 of 5 fights had no fight), K never | 5 of 48, K never |
+| r2c for comparison | 7 of 25 in 2 fights, K = 8 in one | not run |
+
+- **The heavy blow: no change that fits, in any of five fights.** As in r2b, the subject traded blows in the pause from the first exposure (its seeded reflex) and won four. Its dodges (2–6 a fight) were not timed to the windups: none overlapped one of the foe's 32 windups at it (the nearest began 0.67 s before one, and another 0.97 s after one released), so no dodge was over too early and the new line was never due in these fights.
+- **The kiter: one fight changed, after twelve arrows, by the mind's decision.** In r1, at exposure 12 ("A stranger (#9) has hit me twice with arrows and is drawing again … I'll dodge the shot"), the plan turned to dodging; from exposure 13, 15 of the next 17 arrows were dodged or missed it (K = 13), and at exposure 25 it decided "break line of sight first" and reached the hall. The other four kiter fights stayed near zero.
+
+**The question: from "winding up" toward "about to release"?** No. Every `doing` condition that led to a dodge (`arena_report.py`, from the routine rows):
+
+| Fight | Installs (time, exposure then): `is`, `phase` |
+|---|---|
+| heavy r1 | 91 s (2), 141 s (4), 174 s (5): `hostile`, winding up |
+| heavy r2 | 131 s (4), 185 s (5): `hostile`, winding up |
+| heavy r4 | 80 s (1): `hostile`, winding up |
+| heavy r5 | 130 s (5), 183 s (7), 203 s (7): `attack`, winding up; 234 s (10): `attack`, under way |
+| kiter r1 | 110 s (21): `bowshot`; 130, 204, 254, 324 s (25–29): `missile` (and from 204 s `melee`), all winding up |
+| kiter r3 | 110 s (23): `hostile`, winding up |
+| kiter r5 | 174 s (57): `hostile`, winding up |
+
+The minds now wrote the grammar's new example word (`hostile`, 8 of 17 installs) where r2c's wrote `strike`; it matches any hostile move, so these conditions could fire on the right windup. No install named "about to release". One moved off "winding up", to "under way" (heavy r5 at 234 s), a phase for gestures and work that a blow does not show. The too-early line was told once in the batch (kiter r1 at 91 s, "You failed to dodge: it was over before the arrow came"); that mind's next five installs all kept "winding up". "Not ready yet" was told 0–3 times a fight, 21 in kiter r1 for its 26 dodges, against 22 lines in r2c r2's one fight before fix-dodge-told.
+
+**Move intents (3.3).** Written, barely used: `back_off` in 14 routine installs and `circle` in 1 (6 of 10 fights), no `keep_distance` or `close_in`. Bodies ran them in 2 of the subjects' samples (one each in heavy r2 and r3), a deliberate `back_off` was done once (kiter r2, "You did what you had decided: back_off → person"), and twice refused as "cornered" (heavy r3).
+
+**Timings, ids, cost.** No reply cited a timing. 0 of 63 spoken lines carried an id. $0.30 for the batch ($0.15 heavy, $0.15 kiter; 165 calls in fights, 1.75 M tokens in the ledger); per 10-minute fight $0.026–0.036; think and compile p50 5.7–11.5 s per fight.
+
 ### What the told outcome lines cost in a battle
 
 [`outcome_cost.py`](../living/tools/outcome_cost.py) on a scratch `verify-core` world (`core-r2cost-025725`, default seed, 186–188 people alive): 20 minded spear fighters (`spawn_crowd(20, true)`: held like a mind's, so their outcomes are told), packed 1.5 m apart, striking the nearest person, timed by `bench.py` (profiled tick spans, no subscribers) over a 22 s window per arm, each arm a fresh battle; the fighters' new experience rows were read during the window, so the lines of those who died count.
