@@ -57,10 +57,10 @@ EYE_COLOURS = dict(
 # which greys the pupil.
 SHARED_IRIS = (0.66, 0.551, 0.165)
 # That picture's source colour as the client learns it (linear light): the mean of the texels
-# the iris's vertices lie on. It is about a third as light as the colour the iris is painted
+# the iris's vertices lie on. It is about a quarter as light as the colour the iris is painted
 # with, since the vertices crowd the dark rim and the pupil. `eye_colours.py --check` holds
 # every type's iris to it.
-SHARED_IRIS_SOURCE = (0.13680, 0.09073, 0.02767)
+SHARED_IRIS_SOURCE = (0.09883, 0.06980, 0.01522)
 # How much of a picture's spread of hue the client keeps when it recolours (characters.rs).
 HUE_SPREAD = 0.4
 # How drawn the whole town's faces are (docs/CHARACTERS.md, "Style"): 0 keeps the proportions of
