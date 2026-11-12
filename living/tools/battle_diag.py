@@ -140,13 +140,18 @@ def main():
         def spawn(n):
             have = {c["id"] for c in run.sql("SELECT id FROM character", "chars")}
             run.admin("spawn_crowd", n, True)
-            return sorted(c["id"] for c in run.sql("SELECT id FROM character", "chars") if c["id"] not in have)
+            # Only the ones spawned (a resident's child born meanwhile is new too).
+            return sorted(c["id"] for c in run.sql("SELECT id, name, alive FROM character", "chars") if c["id"] not in have and c["name"].startswith("Walker") and c["alive"])
 
         def fighter(id):
-            run.admin("place_at", id, site[0] + random.uniform(-7, 7), site[1] + random.uniform(-7, 7))
-            run.admin("grant_items", id, "spear", 1)
-            run.admin("grant_know_how", id, "wound_tending")
-            run.admin("set_behavior", id, json.dumps(graph(id)))
+            try:
+                run.admin("place_at", id, site[0] + random.uniform(-7, 7), site[1] + random.uniform(-7, 7))
+                run.admin("grant_items", id, "spear", 1)
+                run.admin("grant_know_how", id, "wound_tending")
+                run.admin("set_behavior", id, json.dumps(graph(id)))
+            except RuntimeError:
+                # Gone before it was set up (killed at once in the press): the keeper replaces it.
+                pass
 
         made = spawn(a.battle + a.walkers)
         fighters = made[: a.battle]
@@ -155,10 +160,18 @@ def main():
         state["fighters"] = list(fighters)
         if not a.no_mind:
             replies = {"think": {"thought": "diag fixture: I keep fighting.", "intend": [], "say": None, "judgments": []},
+                       # The compile reinstalls the fight (a compile that kept "the current plan"
+                       # replaced the fighters' graphs in the first run, and the battle stopped).
                        "deliberate": {"graph": "keep", "plan": "diag fixture"}, "talk": {"thought": "diag fixture", "say": None, "end": True},
                        "consolidate": {"summary": "diag fixture", "remember": [], "nodes": [], "edges": [], "retract": [], "merge": [], "identity": None,
                                        "relations": [], "judgments": [], "places": []}}
-            script = {"replies": replies, "rules": [{"purpose": p, "delay_s": d, "times": -1, "reply": replies[p]} for p, d in (("think", 5.0), ("deliberate", 4.0), ("consolidate", 4.0), ("talk", 2.0))]}
+            # A fighter's compile reinstalls its fight; anyone else's keeps its plan. (In the first run a compile that kept "the current plan"
+            # replaced the fighters' graphs and the battle stopped.)
+            # Fighters are the first spawned (Walker1..Walker<battle>; a refill's names start at 1
+            # again), and a prompt opens "# Who you are (<name>)".
+            fight = [{"purpose": "deliberate", "contains": f"# Who you are (Walker{n})", "delay_s": 4.0, "times": -1,
+                      "reply": {"graph": graph(0), "plan": "diag fixture: keep fighting", "weight": 1.5}} for n in range(1, a.battle + 1)]
+            script = {"replies": replies, "rules": fight + [{"purpose": p, "delay_s": d, "times": -1, "reply": replies[p]} for p, d in (("think", 5.0), ("deliberate", 4.0), ("consolidate", 4.0), ("talk", 2.0))]}
             # The minds of everyone spawned, and of the fighters spawned later to refill the battle:
             # ids are handed out in order, so the next few thousand are theirs (an empty
             # LIVING_ONLY would mean no one).
@@ -216,6 +229,14 @@ def main():
         head["status"] = f"fail: {type(error).__name__}: {error}"
     finally:
         state["stop"] = True
+        # Pause the world and let its queue drain before it is deleted: SpacetimeDB 2.14.1
+        # panicked deleting a database still running 35-54 ms ticks ("local durability: actor
+        # vanished", 2026-11-12), which took down the whole trial server.
+        try:
+            run.admin("set_paused", True)
+            time.sleep(10)
+        except Exception:
+            pass
         run.finish_cleanup()
         (run.directory / "diag-result.json").write_text(json.dumps(head, indent=1))
         print(json.dumps(head), flush=True)
