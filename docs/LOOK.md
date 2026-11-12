@@ -418,6 +418,9 @@ Built on the laptop on look-1-auth (`e15557cd`) and main. The book is char-4's (
 | Pictures kept on the CPU | 28.9 MiB | 28.9 MiB | 28.9 MiB | 28.9 MiB |
 | glTF files (the two runs) | 26, 26 | 98, 83 | 192, 192 | 94, 90 |
 
+- Composed residents cost about 140 MiB resident and 280 MiB footprint over VRoid bases, most of it the shared types' and styles' pictures on the GPU. Their pictures keep no CPU copy (`thumb_pictures`, as crowd-1's).
+- **What grows with a crowd:** every type and style file anyone in sight wears stays loaded for the session. The whole-book prewarm is what a view showing nearly every file costs: about 480 MiB resident over VRoid. Two changes would bound it, neither small: free a file's assets when no one wears it (count `kept`'s users), and drop composed meshes' main-world copies once their summaries (recolour means, bounds, outline directions) are kept.
+
 ### Cost before and after (bundle `26d705b5`; `live_crowd.py`, uncapped, three runs an arm)
 
 Before: main `9fa0d254`'s client on a fresh world of main's module (VRoid residents); after: this branch's on a fresh world of its own, each pair launched back to back and measured at once. Load average 7.3 to 11.7. The verify-ui record `2026-11-12-1825-look-1-client.md` has the full table.
@@ -434,6 +437,3 @@ Before: main `9fa0d254`'s client on a fresh world of main's module (VRoid reside
 - Composed residents draw faster than VRoid bases (1.1 ms at the game camera, 0.3 ms on the full model) and hold about 100 MiB more resident memory, 250 MiB more footprint: the shared pictures on the GPU.
 - **The prewarm does not reduce the first-sight hitches** here: six while walking in every arm, the longest 200 to 350 ms in all of them, main's too (the walk's own arrivals, not composed people). It costs about 33 MiB resident. It is kept for now; whether to drop it is open.
 - Brackenford's people have no looks (the island seed carries none): VRoid both ways, equal within noise.
-
-- Composed residents cost about 140 MiB resident and 280 MiB footprint over VRoid bases, most of it the shared types' and styles' pictures on the GPU. Their pictures keep no CPU copy (`thumb_pictures`, as crowd-1's).
-- **What grows with a crowd:** every type and style file anyone in sight wears stays loaded for the session. The whole-book prewarm is what a view showing nearly every file costs: about 480 MiB resident over VRoid. Two changes would bound it, neither small: free a file's assets when no one wears it (count `kept`'s users), and drop composed meshes' main-world copies once their summaries (recolour means, bounds, outline directions) are kept.
