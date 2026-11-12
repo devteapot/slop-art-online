@@ -56,8 +56,11 @@ pub struct Line {
 #[derive(Deserialize, Default, Debug)]
 #[serde(default)]
 pub struct LookBook {
-    /// The generation this book was written in (`world.look_book` names a world's).
+    /// The generation this book was written in (`world.look_book` names a world's), and, where
+    /// the book lists them, every generation whose keys it holds (the field's name is to be
+    /// confirmed with dev-box; a book without it holds only its own).
     pub generation: String,
+    pub generations: Vec<String>,
     pub lines: HashMap<String, Line>,
     /// Lines for background people only (`lk_…`), apart from every line a character can wear.
     pub decor: Vec<String>,
@@ -93,9 +96,9 @@ impl LookBook {
         serde_json::from_str(text).map_err(|e| e.to_string())
     }
 
-    /// Whether the book is the one a world made with `generation` names.
+    /// Whether the book holds the keys of a world made with `generation`.
     pub fn knows(&self, generation: &str) -> bool {
-        generation == self.generation
+        generation == self.generation || self.generations.iter().any(|g| g == generation)
     }
 
     /// The recipe a key draws: the line composed from its type and style files, checked on disk
@@ -250,6 +253,7 @@ mod tests {
     fn sample() -> LookBook {
         let text = serde_json::json!({
             "generation": "c4-test",
+            "generations": ["c4-old", "c4-test"],
             "lines": {
                 "lk_00000000000000a1": line("adult-f-a", "bob", &["jersey-f", "trousers-f"]),
                 "lk_00000000000000a2": line("adult-f-a", "long", &["jersey-f"]),
@@ -264,7 +268,8 @@ mod tests {
     fn a_book_reads_its_lines_and_generations() {
         let b = sample();
         assert_eq!(b.lines.len(), 3);
-        assert!(b.knows("c4-test") && !b.knows("c4-new"));
+        assert!(b.knows("c4-test") && b.knows("c4-old") && !b.knows("c4-new"));
+        assert!(LookBook::parse(r#"{"generation": "c4-b"}"#).unwrap().knows("c4-b"));
         assert_eq!(b.lines["lk_00000000000000c1"].person.kind, "child-u-a");
     }
 
