@@ -1659,62 +1659,104 @@ def fights(s):
 
 
 def chase(s):
-    """A bold wolf charges a person 5 m away who goes straight off along an open line, running
-    (`goto` with `run: true`, while breath lasts) or walking: the time until the gap is down to
-    the wolf's catch distance (its attack's reach and its lunge, 3.2 m), or the gap at 30 s
-    (`CHASE_S`) if never. Timed on the distance, not on a blow landing, so the time of day (a
-    wolf losing its prey beyond its night sight) does not decide it. `CHASES` (4) of each;
-    `chase-results.json`. The runner and the wolf go at their `motion` laws (`run_share`,
-    `wolf_run`): set them with `set_world_law` to measure another pairing."""
+    """A pursuer goes for a person 5 m away who goes off along an open 64 m line, running (`goto`
+    with `run: true`, while breath lasts, then walking) or walking; a chase ends when the prey
+    reaches the line's end (`prey_away_s`: it never turns back into the pursuer) or at `CHASE_S`:
+    a bold wolf (`attack`, charging at a run by its `motion` law) and, with `PURSUERS` naming it,
+    a person (`attack` with `run: true`). Per chase: `caught_s`, when the gap is first down to the
+    pursuer's catch distance (its attack's reach and its lunge: a wolf 3.2 m, a person 2 m), and
+    `blow_s`, when its first blow starts (its `skill_use` row: within reach of a moving target),
+    with whether the prey was still moving then; or neither before the line's end. `CHASES` (4) of
+    each, `PURSUERS` (`wolf`; `wolf,person` for both), `MODES` (`run,walk`); a wolf is used once
+    (a world has about a dozen grown); `chase-chases.json`. The runner and the
+    wolf go at their `motion` laws (`run_share`, `wolf_run`): set them with `set_world_law` to
+    measure another pairing."""
     import statistics
     n = int(os.environ.get("CHASES", "4"))
     limit = float(os.environ.get("CHASE_S", "30"))
-    catch = 3.2
+    pursuers = [x.strip() for x in os.environ.get("PURSUERS", "wolf").split(",") if x.strip()]
+    modes = [x.strip() for x in os.environ.get("MODES", "run,walk").split(",") if x.strip()]
     line = open_line(s, length=64)
     wolves = [c["id"] for c in s.rows("SELECT id, stage FROM character WHERE kind = 'wolf' AND alive = true") if c["stage"] >= 2]
+    clock = lambda: s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
     out = []
-    for mode in ("run", "walk"):
-        for k in range(min(n, len(wolves))):
-            alive = {c["id"] for c in s.rows("SELECT id FROM character WHERE kind = 'wolf' AND alive = true")}
-            if wolves[k] not in alive:
+    used = set()
+
+    def fresh_wolf():
+        """A grown wolf not used yet in this scene, unhurt and with full breath (a wolf that has
+        just chased is winded and tired: `fights`' "wolves are reused")."""
+        alive = {c["id"] for c in s.rows("SELECT id FROM character WHERE kind = 'wolf' AND alive = true")}
+        for w in wolves:
+            if w in used or w not in alive:
                 continue
-            p, = s.people(1)
-            w = wolves[k]
-            s.call("set_background", w, json.dumps({"pack": "verify chase", "bold": True}, separators=(",", ":")))
-            s.graph(w, {"wait": 300})
-            s.call("place_at", p, *line[8])
-            s.call("place_at", w, *line[3])
-            time.sleep(1.0)
-            s.graph(p, {"do": {"skill": "goto", "target": {"at": list(line[63])}, "run": mode == "run"}})
-            s.graph(w, {"do": {"skill": "attack", "target": {"id": p}}})
-            t0 = s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
-            caught, d, speeds, gaps = None, None, [], []
-            while True:
-                now = s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
-                b = {r["id"]: r for r in s.rows(f"SELECT id, vx, vy FROM body WHERE id = {p} OR id = {w}")}
-                speeds.append({x: round(math.hypot(b[x]["vx"], b[x]["vy"]), 2) for x in b})
-                d = apart(s, p, w)
-                gaps.append((now - t0, d))
-                if d <= catch:
-                    caught = round((now - t0) / 1000, 1)
-                    break
-                if now - t0 > limit * 1000:
-                    break
-                time.sleep(0.15)
-            s.graph(p, {"wait": 300})
-            s.graph(w, {"wait": 300})
-            moving = lambda x: [sp[x] for sp in speeds if sp.get(x, 0) > 0.3]
-            med = lambda v: round(statistics.median(v), 2) if v else 0
-            r = {"mode": mode, "person": p, "wolf": w, "caught_s": caught, "gap_end": d, "gap_max": max(g for _, g in gaps),
-                 "person_speed_med": med(moving(p)), "wolf_speed_med": med(moving(w))}
-            print(json.dumps(r), flush=True)
-            out.append(r)
-            time.sleep(3)
-    (s.out / f"{s.name}-results.json").write_text(json.dumps(out, indent=1) + "\n")
-    for mode in ("run", "walk"):
-        c = [r["caught_s"] for r in out if r["mode"] == mode]
-        got = sorted(x for x in c if x is not None)
-        print(f"{mode}: caught {len(got)} of {len(c)}, median {statistics.median(got) if got else None} s, range {got[:1] + got[-1:]}", flush=True)
+            v = s.vitals(w)
+            if v["hp"] >= v["max_hp"] - 1e-3 and v["stamina"] >= v["stamina_max"] - 1e-3:
+                used.add(w)
+                return w
+        return None
+
+    for who in pursuers:
+        catch = 3.2 if who == "wolf" else 2.0
+        for mode in modes:
+            for k in range(n):
+                if who == "wolf":
+                    w = fresh_wolf()
+                    if w is None:
+                        print(f"no fresh wolf left for {who} vs {mode} #{k}", flush=True)
+                        continue
+                    s.call("set_background", w, json.dumps({"pack": "verify chase", "bold": True}, separators=(",", ":")))
+                    p, = s.people(1)
+                else:
+                    w, p = s.people(2)
+                s.graph(w, {"wait": 300})
+                s.call("place_at", p, *line[8])
+                s.call("place_at", w, *line[3])
+                time.sleep(1.0)
+                # The pursuer first: at night (6 m sight) prey already off would be out of sight.
+                s.graph(w, {"do": {"skill": "attack", "target": {"id": p}, **({"run": True} if who == "person" else {})}})
+                s.graph(p, {"seq": [{"do": {"skill": "goto", "target": {"at": list(line[63])}, "run": mode == "run"}}, {"wait": 300}]})
+                t0 = clock()
+                hour = round(world_hour(s)[0], 1)
+                caught, blow, d, speeds, gaps, prey_moving, away = None, None, None, [], [], None, None
+                while True:
+                    now = clock()
+                    b = {r["id"]: r for r in s.rows(f"SELECT id, vx, vy FROM body WHERE id = {p} OR id = {w}")}
+                    speeds.append({x: round(math.hypot(b[x]["vx"], b[x]["vy"]), 2) for x in b})
+                    d = apart(s, p, w)
+                    gaps.append((now - t0, d))
+                    if caught is None and d <= catch:
+                        caught = round((now - t0) / 1000, 1)
+                    uses = [u for u in s.rows(f"SELECT skill, at_ms FROM skill_use WHERE actor = {w}") if u["skill"] == "attack" and u["at_ms"] >= t0]
+                    if uses:
+                        blow = round((min(u["at_ms"] for u in uses) - t0) / 1000, 1)
+                        prey_moving = speeds[-1].get(p, 0) > 0.3
+                        break
+                    if body_at(s, p, now)[0] >= line[62][0]:
+                        away = round((now - t0) / 1000, 1)
+                        break
+                    if now - t0 > limit * 1000:
+                        break
+                    time.sleep(0.15)
+                s.graph(p, {"wait": 300})
+                s.graph(w, {"wait": 300})
+                s.call("place_at", w, *line[0])
+                s.call("place_at", p, line[20][0], line[20][1] + 1)
+                moving = lambda x: [sp[x] for sp in speeds if sp.get(x, 0) > 0.3]
+                med = lambda v: round(statistics.median(v), 2) if v else 0
+                late = [g for t, g in gaps if t > 3000]
+                r = {"pursuer": who, "mode": mode, "person": p, "chaser": w, "caught_s": caught, "blow_s": blow, "prey_moving_at_blow": prey_moving, "prey_away_s": away, "hour": hour,
+                     "gap_end": d, "gap_min_after_3s": min(late) if late else None,
+                     "person_speed_med": med(moving(p)), "chaser_speed_med": med(moving(w))}
+                print(json.dumps(r), flush=True)
+                out.append(r)
+                time.sleep(3)
+    (s.out / f"{s.name}-chases.json").write_text(json.dumps(out, indent=1) + "\n")
+    for who in pursuers:
+        for mode in modes:
+            rs = [r for r in out if r["pursuer"] == who and r["mode"] == mode]
+            for key in ("caught_s", "blow_s"):
+                got = sorted(r[key] for r in rs if r[key] is not None)
+                print(f"{who} vs {mode}: {key} {len(got)} of {len(rs)}, median {round(statistics.median(got), 1) if got else None} s, range {got[:1] + got[-1:]}", flush=True)
     s.expect("the chases happened", out, len(out))
 
 def flee(s):

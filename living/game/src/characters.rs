@@ -46,6 +46,7 @@
 //! `LIVING_GAME_PERF=frames` logs frame times every 2 s outside the island (whose own
 //! `island perf` line does it), with the number of characters and outfit meshes.
 
+pub mod compose;
 pub mod identity;
 pub mod outfit;
 
@@ -96,6 +97,9 @@ pub struct Colors {
     pub bottom: Option<String>,
     pub shoes: Option<String>,
     pub accent: Option<String>,
+    /// A composed person's beard and stubble (an overlay's `…Overlay_00_HAIR`); the hair's
+    /// without one.
+    pub beard: Option<String>,
     /// Outfit pieces' colours by slot (a missing one keeps the piece's own).
     pub outfit: BTreeMap<String, String>,
 }
@@ -118,6 +122,11 @@ pub struct Recipe {
     /// in `shape`. A file whose bones already carry them (`gen_person.sh`'s people) needs none.
     #[serde(default)]
     pub identity: BTreeMap<String, f32>,
+    /// The person as shared files compose it (`compose.rs`): a type, style files, colours and
+    /// the line's own numbers. With `LIVING_GAME_COMPOSE=1` it replaces `base` and the numbers
+    /// above; off, it is ignored.
+    #[serde(default)]
+    pub person: Option<compose::Person>,
 }
 
 #[derive(Deserialize, Default)]
@@ -152,6 +161,9 @@ struct Book {
     styles: BTreeMap<String, Preset>,
     /// Pieces that hide the base clothes they cover.
     hides: Vec<String>,
+    /// Recipes by name that a look-dev crowd (`LIVING_GAME_CROWD`) is made of, in its spawn
+    /// order, in place of random ones: a town's people as they are (`crowd.py`).
+    crowd: Vec<String>,
 }
 
 /// The style random recipes take when none is given or the given one is unknown.
@@ -227,7 +239,7 @@ impl Recipe {
     }
 
     pub fn default_for(base: &str) -> Recipe {
-        let plain = Recipe { name: String::new(), base: base.to_string(), height: 1.75, proportions: Proportions::default(), colors: Colors::default(), outfit: BTreeMap::new(), identity: BTreeMap::new() };
+        let plain = Recipe { name: String::new(), base: base.to_string(), height: 1.75, proportions: Proportions::default(), colors: Colors::default(), outfit: BTreeMap::new(), identity: BTreeMap::new(), person: None };
         book().recipes.iter().find(|r| r.base == base && r.proportions == plain.proportions && r.colors == plain.colors && r.outfit.is_empty()).cloned().unwrap_or_else(|| Recipe {
             name: std::path::Path::new(base).file_stem().unwrap_or_default().to_string_lossy().to_string(),
             ..plain
@@ -275,6 +287,7 @@ impl Recipe {
             bottom: outfit(&mut r),
             shoes: outfit(&mut r),
             accent: outfit(&mut r),
+            beard: None,
             outfit: BTreeMap::new(),
         };
         let base = r.pick(&b.bases).cloned().unwrap_or_else(|| "lookdev/vroid-Vivi.glb".into());
@@ -295,7 +308,7 @@ impl Recipe {
             }
         }
         let name = if style == DEFAULT_STYLE { format!("{folk}-{seed}") } else { format!("{folk}:{seed}:{style}") };
-        Recipe { name, base, height: at("height", tall), proportions, colors, outfit: pieces, identity: BTreeMap::new() }
+        Recipe { name, base, height: at("height", tall), proportions, colors, outfit: pieces, identity: BTreeMap::new(), person: None }
     }
 
     /// A random recipe of exactly this height, its folk chosen by it, in a style.
@@ -367,21 +380,25 @@ pub struct Character {
 /// Spawn a character at `at` (its sole on `at.y`), facing `yaw` (0 = +Z, the camera's default
 /// side; turning counter-clockwise seen from above). Callers add their own markers.
 pub fn spawn(commands: &mut Commands, assets: &AssetServer, recipe: &Recipe, at: Vec3, yaw: f32) -> Entity {
+    // A person line composes the person from shared files when the switch is on (compose.rs).
+    let (recipe, styled) = compose::prepare(recipe, assets);
     let file = crate::lookdev::animated(&recipe.base);
     // VRM 0.x models face −Z.
     let model = Model { vrm: true, file: file.clone(), height: recipe.height, ground_y: at.y, glow: None };
     let root = kept(assets, &file);
-    commands
-        .spawn((
-            model,
-            Character { recipe: recipe.clone(), stride: 1.0 },
-            crate::lookdev::CastsShadow::default(),
-            SceneOf(root.clone()),
-            FileHandle(root),
-            Transform::from_translation(at).with_rotation(Quat::from_rotation_y(yaw + PI)),
-            Visibility::Hidden,
-        ))
-        .id()
+    let mut e = commands.spawn((
+        model,
+        Character { recipe, stride: 1.0 },
+        crate::lookdev::CastsShadow::default(),
+        SceneOf(root.clone()),
+        FileHandle(root),
+        Transform::from_translation(at).with_rotation(Quat::from_rotation_y(yaw + PI)),
+        Visibility::Hidden,
+    ));
+    if let Some(s) = styled {
+        e.insert(s);
+    }
+    e.id()
 }
 
 /// Holds a character file's root glTF from the start. A scene loaded by its label alone lets the
@@ -424,9 +441,13 @@ pub fn kept(assets: &AssetServer, file: &str) -> Handle<bevy::gltf::Gltf> {
 #[derive(Component)]
 pub struct SceneOf(pub Handle<bevy::gltf::Gltf>);
 
-/// Give each [`SceneOf`] model its scene once its file is in.
-pub fn place_scenes(mut commands: Commands, gltfs: Res<Assets<bevy::gltf::Gltf>>, assets: Res<AssetServer>, q: Query<(Entity, &SceneOf), Without<WorldAssetRoot>>) {
-    for (e, s) in &q {
+/// Give each [`SceneOf`] model its scene once its file is in (and, for a composed person, every
+/// style file it wears, so its scene and its styles come in together).
+pub fn place_scenes(mut commands: Commands, gltfs: Res<Assets<bevy::gltf::Gltf>>, assets: Res<AssetServer>, q: Query<(Entity, &SceneOf, Option<&compose::Styled>), Without<WorldAssetRoot>>) {
+    for (e, s, styled) in &q {
+        if styled.is_some_and(|st| !st.loaded(&assets)) {
+            continue;
+        }
         if let Some(g) = gltfs.get(&s.0) {
             match g.scenes.first() {
                 Some(scene) => {
@@ -462,7 +483,7 @@ pub struct Rebuilt {
 
 /// Count each character's scene spawns; on a second one, let go of what was built on the old
 /// scene, so it is built again on the new one.
-#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments, clippy::type_complexity)]
 fn on_ready(
     ev: On<bevy::world_serialization::WorldInstanceReady>,
     mut commands: Commands,
@@ -470,7 +491,7 @@ fn on_ready(
     children: Query<&Children>,
     names: Query<&Name>,
     mut transforms: Query<&mut Transform, Without<Character>>,
-    pieces: Query<(), With<outfit::Piece>>,
+    pieces: Query<(), Or<(With<outfit::Piece>, With<compose::Worn>)>>,
     mut rebuilt: MessageWriter<Rebuilt>,
 ) {
     let e = ev.entity;
@@ -537,7 +558,8 @@ fn force_rebuild(loading: Option<Res<crate::loading::Loading>>, time: Res<Time>,
 }
 
 /// Let go of what was built on a character's old scene (it is built again on the new one), and
-/// hide it until it is fitted again; its outfit pieces (skinned to the old bones) go.
+/// hide it until it is fitted again; its outfit pieces and composed styles (skinned to the old
+/// bones, [`compose::Worn`]) go, and `compose::on_ready` puts the styles on the new one.
 pub fn forget_scene(commands: &mut Commands, e: Entity, pieces: impl IntoIterator<Item = Entity>) {
     commands
         .entity(e)
@@ -574,7 +596,9 @@ pub fn spawn_crowd(commands: &mut Commands, assets: &AssetServer, n: usize, seed
             let in_row = (count - row * per_row).min(per_row);
             let x = centre.x + (col as f32 - (in_row as f32 - 1.0) / 2.0) * gap + if row % 2 == 1 { gap * 0.5 } else { 0.0 };
             let s = seed.wrapping_mul(1000).wrapping_add(out.len() as u64);
-            let recipe = Recipe::random_in(s, folk, style);
+            // A crowd the recipe book names (a town's people), else seeded random ones.
+            let named = &book().crowd;
+            let recipe = (!named.is_empty()).then(|| Recipe::named(&named[out.len() % named.len()])).flatten().unwrap_or_else(|| Recipe::random_in(s, folk, style));
             let yaw = ((s % 7) as f32 - 3.0) * 0.08;
             let z = z - row as f32 * depth;
             out.push(spawn(commands, assets, &recipe, Vec3::new(x, ground(x, z), z), yaw));
@@ -590,6 +614,8 @@ impl Plugin for CharactersPlugin {
     fn build(&self, app: &mut App) {
         app.add_message::<Rebuilt>()
             .add_observer(on_ready)
+            .add_observer(compose::on_ready)
+            .init_resource::<compose::Plans>()
             .init_resource::<Thumbs>()
             .add_systems(PreUpdate, (place_scenes, force_rebuild, thumb_pictures))
             .insert_resource(SpringSettings::from_env())
@@ -623,6 +649,12 @@ struct GroupDef {
 struct ColliderDef {
     node: String,
     spheres: Vec<(Vec3, f32)>,
+}
+
+/// A node's rest translation in a character file (its own record of it, else its node's).
+pub fn rest_of(file: &str, node: &str) -> Vec3 {
+    let info = file_info(file);
+    info.rest_extras.get(node).or_else(|| info.rest.get(node)).copied().unwrap_or(Vec3::ZERO)
 }
 
 fn file_info(file: &str) -> Arc<FileInfo> {
@@ -738,13 +770,13 @@ impl Shaped {
 #[allow(clippy::type_complexity)]
 pub fn shape(
     mut commands: Commands,
-    mut chars: Query<(Entity, &mut Character, &Model, &mut Transform, &mut Fitted), Without<Shaped>>,
+    mut chars: Query<(Entity, &mut Character, &Model, &mut Transform, &mut Fitted, Option<&compose::Styled>), Without<Shaped>>,
     children: Query<&Children>,
     names: Query<&Name>,
     mut bones: Query<&mut Transform, Without<Character>>,
     mut skins: Query<&mut SkinnedMesh>,
 ) {
-    for (e, mut ch, model, mut root, mut fit) in &mut chars {
+    for (e, mut ch, model, mut root, mut fit, styled) in &mut chars {
         let info = file_info(&model.file);
         let mut by_name: HashMap<&str, Entity> = HashMap::new();
         for d in children.iter_descendants(e) {
@@ -780,11 +812,13 @@ pub fn shape(
                     // bone's frame, its children don't.
                     let h = commands.spawn((Name::new("scale"), Transform::from_scale(v), ChildOf(bone))).id();
                     helpers.insert(bone, h);
-                    // Children's offsets move with the bone's length and width.
+                    // Children's offsets move with the bone's length and width. A composed person's
+                    // belly bone stands forward of its rest (compose.rs) and keeps that, widened.
                     for c in children.get(bone).into_iter().flatten() {
                         if let (Ok(cn), Ok(mut tf)) = (names.get(*c), bones.get_mut(*c)) {
                             if cn.as_str() != "J_Bip_C_Hips" {
-                                tf.translation = info.rest.get(cn.as_str()).copied().unwrap_or(tf.translation) * v;
+                                let belly = if cn.as_str() == "J_Fit_Belly" { compose::belly_offset(&ch.recipe, styled.is_some()) } else { Vec3::ZERO };
+                                tf.translation = info.rest.get(cn.as_str()).map_or(tf.translation, |r| *r + belly) * v;
                             }
                         }
                     }
@@ -838,7 +872,9 @@ pub fn shape(
         // or, for clips from a shared clip file, that file's: same skeleton, other meshes (hair
         // and clothes make it a few centimetres taller or shorter), so its height stands in.
         let clips = crate::anim::clip_file(&model.file);
-        let figure = match (clips != model.file).then(|| (crate::lookdev::figure_height(&clips), crate::lookdev::figure_height(&model.file))) {
+        // A composed person's figure is its type's and its styles' together.
+        let own = styled.map_or_else(|| crate::lookdev::figure_height(&model.file), |s| compose::figure_height(&model.file, s));
+        let figure = match (clips != model.file).then(|| (crate::lookdev::figure_height(&clips), own)) {
             Some((Some(theirs), Some(ours))) if ours > 0.01 => (top0 - lo) * theirs / ours,
             _ => top0 - lo,
         };
@@ -869,7 +905,9 @@ pub struct Recolored;
 /// What a VRoid material is, by name.
 fn slot<'a>(material: &str, c: &'a Colors) -> Option<&'a String> {
     let m = material;
-    if m.contains("_HAIR") || m.contains("FaceBrow") {
+    if m.contains("Overlay") && m.contains("_HAIR") {
+        c.beard.as_ref().or(c.hair.as_ref())
+    } else if m.contains("_HAIR") || m.contains("FaceBrow") {
         c.hair.as_ref()
     } else if m.contains("_SKIN") {
         c.skin.as_ref()
@@ -932,6 +970,45 @@ fn mean_color(toon: &Toon, mesh: &Mesh, thumbs: &Thumbs) -> Option<Vec3> {
         wsum += c.w;
     }
     (wsum > 0.0).then(|| sum / wsum * base)
+}
+
+/// A shared style material's recolour source colour (linear), for `compose.rs`: its whole
+/// picture's mean (from its summary, or from its pixels while they are still on the CPU), else
+/// its meshes' vertex colours by area, times its base colour. A picture is shared by files
+/// whose meshes use different parts of it (every hair cut has the one strand picture, whose
+/// texels a short cut uses differ from a long one's), so its whole mean is the one value they
+/// agree on (docs/CHARACTERS.md, "One shading mean a class"). None while the picture is neither
+/// summarised nor readable.
+pub(crate) fn source_mean(base: &StandardMaterial, meshes: &[&Mesh], thumbs: &Thumbs, images: &Assets<Image>) -> Option<Vec3> {
+    let b = base.base_color.to_linear();
+    let b = Vec3::new(b.red, b.green, b.blue);
+    let Some(tex) = base.base_color_texture.as_ref() else {
+        let (mut sum, mut w) = (Vec3::ZERO, 0.0);
+        for m in meshes {
+            if let Some((s, a)) = vertex_sum(m) {
+                sum += s;
+                w += a;
+            }
+        }
+        return Some(if w > 0.0 { sum / w * b } else { b });
+    };
+    let own;
+    let thumb = match thumbs.0.get(&tex.id()) {
+        Some(t) => t,
+        None => {
+            own = Thumb::of(images.get(tex)?)?;
+            &own
+        }
+    };
+    let (sum, wsum) = thumb.cells.iter().fold((Vec3::ZERO, 0.0), |(s, w), c| (s + c.truncate(), w + c.w));
+    Some(if wsum > 0.0 { sum / wsum * b } else { b })
+}
+
+/// The recolour's material values for a source colour: mode 3 and `recolor_from`, as `recolor`
+/// sets them from a mesh.
+pub(crate) fn recolor_source(mean: Vec3) -> (Vec4, Vec4) {
+    let m = hsv(mean);
+    (Vec4::new(0.0, 0.0, 0.0, 3.0), Vec4::new(m.x, HUE_SPREAD, m.y, m.z))
 }
 
 /// Cells a side of a texture's summary.
@@ -1001,9 +1078,9 @@ fn thumb_pictures(mut events: MessageReader<AssetEvent<Image>>, mut images: ResM
     }
 }
 
-/// A mesh's mean vertex colour (linear), weighted by area: the outfit pieces' colours are per
-/// vertex, and a brass button's many small triangles shouldn't outweigh a coat's panels.
-fn vertex_mean(mesh: &Mesh) -> Option<Vec3> {
+/// A mesh's vertex colours summed by area, and the area: [`vertex_mean`]'s parts, to pool
+/// several meshes.
+fn vertex_sum(mesh: &Mesh) -> Option<(Vec3, f32)> {
     use bevy::mesh::VertexAttributeValues as V;
     let colours: Vec<Vec3> = match mesh.attribute(Mesh::ATTRIBUTE_COLOR)? {
         V::Float32x4(c) => c.iter().map(|c| Vec3::new(c[0], c[1], c[2])).collect(),
@@ -1019,7 +1096,14 @@ fn vertex_mean(mesh: &Mesh) -> Option<Vec3> {
         sum += (colours[t[0]] + colours[t[1]] + colours[t[2]]) / 3.0 * area;
         wsum += area;
     }
-    (wsum > 0.0).then(|| sum / wsum)
+    Some((sum, wsum))
+}
+
+/// A mesh's mean vertex colour (linear), weighted by area: the outfit pieces' colours are per
+/// vertex, and a brass button's many small triangles shouldn't outweigh a coat's panels.
+fn vertex_mean(mesh: &Mesh) -> Option<Vec3> {
+    let (sum, w) = vertex_sum(mesh)?;
+    (w > 0.0).then(|| sum / w)
 }
 
 /// Give each character's meshes their recipe's colours. Characters share their base file's toon
@@ -1064,6 +1148,13 @@ pub fn recolor(
         };
         if !ready.contains(&mat.0.id()) {
             let Some(toon) = toons.get(&mat.0) else { continue };
+            // A material given its source colour when it was made (a composed person's style
+            // materials, `compose.rs`) keeps it: it may be shared by meshes of several files.
+            if toon.extension.params.recolor.w > 2.5 {
+                ready.insert(mat.0.id());
+                commands.entity(e).insert((bevy::mesh::MeshTag::new(tag_color(srgb)), Recolored));
+                continue;
+            }
             let Some(mean) = meshes.get(&mesh.0).and_then(|m| mean_color(toon, m, &thumbs)) else { continue };
             let m = hsv(mean);
             if let Some(mut t) = toons.get_mut(&mat.0) {
@@ -1077,16 +1168,27 @@ pub fn recolor(
 }
 
 /// `LIVING_GAME_PERF=frames`: frame times every 2 s outside the island, with the number of
-/// characters and outfit meshes.
+/// characters, outfit meshes and the characters' mesh entities (those drawn now and all); and
+/// once, how long after the start every character was first shaped and dressed (`people ready`).
+#[allow(clippy::too_many_arguments, clippy::type_complexity)]
 pub fn frames(
     time: Res<Time>,
+    real: Res<Time<Real>>,
     island: Option<Res<crate::island::Island>>,
-    chars: Query<Option<&crate::lookdev::Lod>, With<Character>>,
+    chars: Query<(Entity, Option<&crate::lookdev::Lod>, Has<Shaped>, Has<outfit::Dressed>, Has<compose::Styled>), With<Character>>,
     pieces: Query<(), With<outfit::Piece>>,
+    children: Query<&Children>,
+    meshes: Query<&Visibility, With<Mesh3d>>,
     mut acc: Local<(f32, f32, u32)>,
+    mut ready: Local<bool>,
 ) {
     if island.is_some() || !crate::perf::has("frames") {
         return;
+    }
+    if !*ready && !chars.is_empty() && chars.iter().all(|(_, _, shaped, dressed, _)| shaped && dressed) {
+        *ready = true;
+        let composed = chars.iter().filter(|c| c.4).count();
+        info!("people ready: {} characters ({composed} composed) shaped and dressed {:.2} s after the start", chars.iter().count(), real.elapsed_secs());
     }
     let dt = time.delta_secs();
     acc.0 += dt;
@@ -1096,9 +1198,20 @@ pub fn frames(
         return;
     }
     // People with a far model (`lookdev::far_models`): how many show it now.
-    let (lods, far) = chars.iter().flatten().filter(|l| l.has_far()).fold((0, 0), |(n, f), l| (n + 1, f + usize::from(l.far_now == Some(true))));
+    let (lods, far) = chars.iter().filter_map(|c| c.1).filter(|l| l.has_far()).fold((0, 0), |(n, f), l| (n + 1, f + usize::from(l.far_now == Some(true))));
+    // Mesh entities under characters: all of them, and those not hidden (the far switch hides
+    // one model's set).
+    let (mut all, mut shown) = (0, 0);
+    for (e, ..) in &chars {
+        for d in children.iter_descendants(e) {
+            if let Ok(v) = meshes.get(d) {
+                all += 1;
+                shown += usize::from(*v != Visibility::Hidden);
+            }
+        }
+    }
     info!(
-        "people perf: mean {:.2} ms ({:.0} fps), worst {:.1} ms; {} characters, {} outfit meshes, {far} of {lods} with a far model show it",
+        "people perf: mean {:.2} ms ({:.0} fps), worst {:.1} ms; {} characters, {} outfit meshes, {far} of {lods} with a far model show it; {shown} mesh entities shown of {all}",
         acc.0 / acc.2 as f32 * 1000.0,
         acc.2 as f32 / acc.0,
         acc.1 * 1000.0,
@@ -1159,9 +1272,11 @@ enum Up {
 struct Joint {
     e: Entity,
     parent: Up,
-    /// Local offset from the parent, initial local rotation, tail direction and length (local).
+    /// Local offset from the parent, initial local rotation and scale (a composed hair style's
+    /// chain root carries the type's `hair_fit`), tail direction and length (local).
     t: Vec3,
     r0: Quat,
+    s0: Vec3,
     axis: Vec3,
     len: f32,
     group: usize,
@@ -1204,14 +1319,16 @@ pub struct Springs {
 #[allow(clippy::type_complexity)]
 pub fn rig_springs(
     mut commands: Commands,
-    chars: Query<(Entity, &Model, &Shaped), (With<Character>, Without<Springs>)>,
+    chars: Query<(Entity, &Model, &Shaped, Option<&compose::Styled>), (With<Character>, Without<Springs>)>,
     children: Query<&Children>,
     parents: Query<&ChildOf>,
     names: Query<&Name>,
     transforms: Query<&Transform>,
 ) {
-    for (e, model, shaped) in &chars {
-        let info = file_info(&model.file);
+    for (e, model, shaped, styled) in &chars {
+        // A composed person's spring chains and colliders come with its styles (a hair style's
+        // VRM block), after its type's own.
+        let infos: Vec<Arc<FileInfo>> = std::iter::once(file_info(&model.file)).chain(styled.into_iter().flat_map(|s| s.worn.iter().map(|w| file_info(&w.file)))).collect();
         let mut by_name: HashMap<&str, Entity> = HashMap::new();
         for d in children.iter_descendants(e) {
             if let Ok(n) = names.get(d) {
@@ -1219,44 +1336,47 @@ pub fn rig_springs(
             }
         }
         let mut spheres = Vec::new();
-        let mut collider_spheres: Vec<Vec<usize>> = Vec::new();
-        for c in &info.colliders {
-            let mut ids = Vec::new();
-            if let Some(&bone) = by_name.get(c.node.as_str()) {
-                // A bone scaled in its own frame widens its spheres too.
-                let s = shaped.scales.get(&bone).copied().unwrap_or(Vec3::ONE);
-                let along_x = c.node.contains("Arm") || c.node.contains("Shoulder") || c.node.contains("Hand");
-                let girth = if along_x { (s.y + s.z) * 0.5 } else { (s.x + s.z) * 0.5 };
-                for (off, r) in &c.spheres {
-                    ids.push(spheres.len());
-                    spheres.push(Sphere { bone, offset: *off * s, radius: r * girth });
-                }
-            }
-            collider_spheres.push(ids);
-        }
         let mut joints: Vec<Joint> = Vec::new();
         let mut index: HashMap<Entity, usize> = HashMap::new();
         let mut groups = Vec::new();
-        for (gi, g) in info.springs.iter().enumerate() {
-            groups.push(Group { stiffness: g.stiffness, gravity: g.gravity, drag: g.drag.clamp(0.0, 1.0), radius: g.radius, spheres: g.colliders.iter().filter_map(|c| collider_spheres.get(*c)).flatten().copied().collect() });
-            for root in &g.bones {
-                let Some(&r) = by_name.get(root.as_str()) else { continue };
-                // Depth first: parents before children.
-                let mut stack = vec![r];
-                while let Some(j) = stack.pop() {
-                    if index.contains_key(&j) {
-                        continue;
+        for info in &infos {
+            let mut collider_spheres: Vec<Vec<usize>> = Vec::new();
+            for c in &info.colliders {
+                let mut ids = Vec::new();
+                if let Some(&bone) = by_name.get(c.node.as_str()) {
+                    // A bone scaled in its own frame widens its spheres too.
+                    let s = shaped.scales.get(&bone).copied().unwrap_or(Vec3::ONE);
+                    let along_x = c.node.contains("Arm") || c.node.contains("Shoulder") || c.node.contains("Hand");
+                    let girth = if along_x { (s.y + s.z) * 0.5 } else { (s.x + s.z) * 0.5 };
+                    for (off, r) in &c.spheres {
+                        ids.push(spheres.len());
+                        spheres.push(Sphere { bone, offset: *off * s, radius: r * girth });
                     }
-                    let Ok(tf) = transforms.get(j) else { continue };
-                    let kids: Vec<Entity> = children.get(j).map(|c| c.iter().filter(|k| transforms.contains(*k)).collect()).unwrap_or_default();
-                    let child = kids.first().and_then(|k| transforms.get(*k).ok()).map(|t| t.translation).filter(|t| t.length() > 1e-5);
-                    // A leaf's tail lies 7 cm on along its own offset (UniVRM).
-                    let local_tail = child.unwrap_or_else(|| tf.translation.try_normalize().unwrap_or(Vec3::NEG_Y) * 0.07);
-                    let Ok(p) = parents.get(j).map(|p| p.parent()) else { continue };
-                    let parent = index.get(&p).map_or(Up::Bone(p), |i| Up::Joint(*i));
-                    index.insert(j, joints.len());
-                    joints.push(Joint { e: j, parent, t: tf.translation, r0: tf.rotation, axis: local_tail.normalize(), len: local_tail.length(), group: gi, tail: Vec3::ZERO, prev: Vec3::ZERO });
-                    stack.extend(kids.iter().rev());
+                }
+                collider_spheres.push(ids);
+            }
+            for g in info.springs.iter() {
+                let gi = groups.len();
+                groups.push(Group { stiffness: g.stiffness, gravity: g.gravity, drag: g.drag.clamp(0.0, 1.0), radius: g.radius, spheres: g.colliders.iter().filter_map(|c| collider_spheres.get(*c)).flatten().copied().collect() });
+                for root in &g.bones {
+                    let Some(&r) = by_name.get(root.as_str()) else { continue };
+                    // Depth first: parents before children.
+                    let mut stack = vec![r];
+                    while let Some(j) = stack.pop() {
+                        if index.contains_key(&j) {
+                            continue;
+                        }
+                        let Ok(tf) = transforms.get(j) else { continue };
+                        let kids: Vec<Entity> = children.get(j).map(|c| c.iter().filter(|k| transforms.contains(*k)).collect()).unwrap_or_default();
+                        let child = kids.first().and_then(|k| transforms.get(*k).ok()).map(|t| t.translation).filter(|t| t.length() > 1e-5);
+                        // A leaf's tail lies 7 cm on along its own offset (UniVRM).
+                        let local_tail = child.unwrap_or_else(|| tf.translation.try_normalize().unwrap_or(Vec3::NEG_Y) * 0.07);
+                        let Ok(p) = parents.get(j).map(|p| p.parent()) else { continue };
+                        let parent = index.get(&p).map_or(Up::Bone(p), |i| Up::Joint(*i));
+                        index.insert(j, joints.len());
+                        joints.push(Joint { e: j, parent, t: tf.translation, r0: tf.rotation, s0: tf.scale, axis: local_tail.normalize(), len: local_tail.length(), group: gi, tail: Vec3::ZERO, prev: Vec3::ZERO });
+                        stack.extend(kids.iter().rev());
+                    }
                 }
             }
         }
@@ -1322,7 +1442,7 @@ impl Springs {
                 let to = (j.tail - pos).try_normalize().unwrap_or(rest_dir);
                 let world = Quat::from_rotation_arc(rest_dir.normalize(), to) * rest;
                 let local = (pr.inverse() * world).normalize();
-                self.out[i] = (local, parent.mul_transform(Transform { translation: j.t, rotation: local, scale: Vec3::ONE }));
+                self.out[i] = (local, parent.mul_transform(Transform { translation: j.t, rotation: local, scale: j.s0 }));
             }
         }
     }
@@ -1446,7 +1566,7 @@ mod tests {
     fn a_second_spawn_of_a_characters_scene_lets_go_of_what_was_built_on_the_old_one() {
         let mut app = App::new();
         app.add_message::<Rebuilt>().add_observer(on_ready);
-        let recipe = Recipe { name: "test".into(), base: "lookdev/own-test.glb".into(), height: 1.2, proportions: Proportions::default(), colors: Colors::default(), outfit: BTreeMap::new(), identity: BTreeMap::new() };
+        let recipe = Recipe { name: "test".into(), base: "lookdev/own-test.glb".into(), height: 1.2, proportions: Proportions::default(), colors: Colors::default(), outfit: BTreeMap::new(), identity: BTreeMap::new(), person: None };
         let shaped = Shaped { hips: None, hips_k: 1.0, written: Vec3::NAN, scales: HashMap::new(), helpers: HashMap::new() };
         let fitted = Fitted { y_off: 0.0, size: Vec3::ONE, center: Vec3::ZERO };
         let e = app.world_mut().spawn((Character { recipe, stride: 0.6 }, fitted, shaped, outfit::Dressed, crate::anim::Bound, Visibility::Inherited)).id();

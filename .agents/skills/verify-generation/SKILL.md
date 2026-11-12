@@ -1,6 +1,6 @@
 ---
 name: verify-generation
-description: Verify how the Slop Art Online living core generates worlds from seeds, compiled in or given at runtime to a floor module (create_floor, staged genesis). Use for changes to seed parsing, terrain, land generation steps, cities, settlements, bands, authored sheets, resources, animals, or cached authored-world compilation.
+description: "Verify how the living core builds worlds from seeds, compiled into the module or given at runtime to a floor module (create_floor, staged genesis). Use when changing the seed format or its parsing, terrain and land generation, settlement plans, towns and cities, people, bands and authored sheets, resources and animals, a seed's own day and laws, or cached authored-world compilation."
 ---
 
 # Verify world generation
@@ -55,7 +55,7 @@ Use the interrupted child run's name for `<child-run>`. Do not clean unrelated `
 
 ## Feature map
 
-[features/README.md](features/README.md) lists every generation feature. [references/validation.md](references/validation.md) records actual runs. Use `maintain-verification-skill` when these entry points or tables change.
+[features/README.md](features/README.md) lists every generation feature. [references/validation/](references/validation/README.md) holds one record per actual run; the newest files are the last validated runs. Use `maintain-verification-skill` when these entry points or tables change.
 
 ## What this skill does not prove
 
