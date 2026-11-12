@@ -193,7 +193,7 @@ def run_client(a, db, out, client, env, places, syncs, free_places=()):
     p = subprocess.Popen([client], env=env, stdout=log, stderr=subprocess.STDOUT, cwd=ROOT)
     print(f"client pid {p.pid}; evidence {out}", flush=True)
     scene = {"world": db, "plan": a.plan, "places": places, "calls": [], "snaps": {}, "client": client, "admin_link": a.admin_link}
-    me, placed, t0, ident = None, False, time.time(), None
+    me, placed, t0, ident, last_at = None, False, time.time(), None, None
     while p.poll() is None:
         if time.time() - t0 > a.timeout:
             print(f"timeout after {a.timeout} s: stopping the client (pid {p.pid})", flush=True)
@@ -226,7 +226,9 @@ def run_client(a, db, out, client, env, places, syncs, free_places=()):
             placed = True
         for name, calls in list(syncs.items()):
             if me is not None and f"{name}.go" in text and "waiting for" in text:
-                at = body(db, me)
+                # The player's position now, else where it last was (a body gone at death).
+                at = body(db, me) or last_at
+                last_at = at
                 # `refree`: put the free-placed residents back on their own tiles (town life may
                 # have walked them off).
                 if calls == [["refree"]]:

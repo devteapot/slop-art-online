@@ -86,6 +86,14 @@ pub fn structure_name(conn: &DbConnection, me: u32, kind: &str, owner: u32) -> S
     }
 }
 
+/// Whom I perceive now (`seen_characters` ids), for the UI dump.
+pub fn perceived_ids(net: &Net) -> Vec<u32> {
+    let Some(c) = net.conn.as_ref() else { return Vec::new() };
+    let mut v: Vec<u32> = c.db.seen_characters().iter().map(|x| x.id).collect();
+    v.sort_unstable();
+    v
+}
+
 /// The places the rules say my character knows (`my_places`), by name.
 pub fn given_places(net: &Net) -> Vec<String> {
     let Some(c) = net.conn.as_ref() else { return Vec::new() };

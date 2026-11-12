@@ -345,6 +345,7 @@ fn dump(
         "naming": naming(&model, &verbs, talk.as_deref(), &ws, &extra),
         "known_names": crate::looks::known_names(&extra.net),
         "given_places": crate::looks::given_places(&extra.net),
+        "perceived": crate::looks::perceived_ids(&extra.net),
         // Where the notes and the F prompt are drawn (UI px: x, y, w, h), those showing.
         "rects": {
             "notes": notes.iter().filter(|(n, c, _)| n.display != Display::None && c.size().x > 0.0).map(|(_, c, t)| { let tl = (t.affine().translation - c.size() / 2.0) / k; [tl.x, tl.y, c.size().x / k, c.size().y / k] }).collect::<Vec<_>>(),

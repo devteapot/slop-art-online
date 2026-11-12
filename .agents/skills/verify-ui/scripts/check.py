@@ -1736,10 +1736,11 @@ def death(run, c):
     striker = next((r["id"] for r in me2 if r.get("alive")), None)
     sname = next((r.get("name") for r in me2 if r.get("id") == striker), "Striker")
     c.check(s, "the stranger who strikes is a living player character", striker is not None, str(me2)[:200])
-    hits = "".join("sync:hit;wait:0.9;" for _ in range(8))
+    # A sync runs once per name (drive.py waits for NAME.go): one name per strike.
+    hits = "".join(f"sync:hit{i};wait:0.9;" for i in range(8))
     plan = "ready;wait:3;sync:sharp;sync:near;wait:1.5;dump:00;" + hits + "wait:2;shot:02_killed;dump:02;sync:blunt;quit"
     syncs = ['sharp=set_world_law|"dmg_strike"|"40";set_world_law|"cost_strike"|"0"', f"near=place_at|{striker}|(mx+0.9)|(my)",
-             f'hit=player|use_skill|strike|{{me}}|(mx)|(my)', 'blunt=set_world_law|"dmg_strike"|"5";set_world_law|"cost_strike"|"20"']
+             *[f'hit{i}=player|use_skill|strike|{{me}}|(mx)|(my)' for i in range(8)], 'blunt=set_world_law|"dmg_strike"|"5";set_world_law|"cost_strike"|"20"']
     try:
         out, code, text = drive(run, "death-struck", plan, syncs=syncs, extra=["--token", tok("struck"), "--player", "Struck"])
     finally:
@@ -1761,23 +1762,30 @@ def houses(run, c):
     s = "houses"
     b = residents(run, 1)[0]
     bname = (sql(run, f"SELECT id, name FROM character WHERE id = {b}") or [{}])[0].get("name", "")
-    arrive = (sql(run, "SELECT arrive_x, arrive_y FROM land") or [{}])[0]
-    ax, ay = arrive.get("arrive_x", 0.0), arrive.get("arrive_y", 0.0)
+    # On open grass, cleared (anyone within 25 m put 40 m east): the cursor's aim takes a body
+    # before a thing, so neither the owner nor I stand by a house when it is pointed at.
+    ax, ay = UNHEARD_SPOT
+    people = {r["id"]: r.get("name") for r in sql(run, "SELECT id, name, kind FROM character WHERE kind = 'person'")}
+    for i, r in enumerate(x for x in sql(run, "SELECT id, x, y FROM body") if x["id"] in people and x["id"] != b and people[x["id"]] != "Verifier" and ((x["x"] - ax) ** 2 + (x["y"] - ay) ** 2) ** 0.5 < 25):
+        call_admin(run, "place_at", [r["id"], ax + 40, ay + 3 * i])
     call_admin(run, "set_behavior", [b, json.dumps({"wait": 600})])
-    call_admin(run, "place_at", [b, ax + 3.0, ay + 3.0])
+    call_admin(run, "place_at", [b, ax + 4.0, ay + 4.0])
     time.sleep(1.0)
     before = {r["id"] for r in sql(run, "SELECT id FROM structure")}
     call_admin(run, "place_structure", [b, "house"])
     theirs = [r for r in sql(run, f"SELECT id, kind, owner, x, y FROM structure WHERE owner = {b}") if r["id"] not in before]
-    c.check(s, "a house of the resident's beside the arrival", len(theirs) == 1, str(theirs))
+    c.check(s, "a house of the resident's on the cleared spot", len(theirs) == 1, str(theirs))
     if not theirs:
         return
+    # Off the house, within the 9 m speech carries to where I will stand (their name must reach me).
+    call_admin(run, "place_at", [b, ax + 5.0, ay - 3.0])
     h = theirs[0]
     thought = json.dumps({"kind": "talk", "summary": "", "detail": "", "latency_ms": 0, "tokens": 0, "model": "verify-ui scene", "reference": ""})
-    syncs = [f"spot=place_at|{{me}}|{ax}|{ay - 2.0}", f'intro=mind_say|{b}|"I\'m {bname}."|{{me}}|""|0|{thought}', 'mine=place_structure|{me}|"house"']
-    plan = (f"ready;wait:2;sync:spot;wait:2;pointat:{h['x']},{h['y']};wait:1.2;shot:01_house;dump:01;"
+    syncs = ["noon=sql|UPDATE world SET epoch_ms = {epoch_at:12} WHERE id = 0", f"spot=place_at|{{me}}|{ax}|{ay}", f'intro=mind_say|{b}|"I\'m {bname}."|{{me}}|""|0|{thought}',
+             'mine=place_structure|{me}|"house"', f"off=place_at|{{me}}|{ax - 3.0}|{ay}"]
+    plan = (f"ready;sync:noon;wait:1;sync:spot;wait:2;pointat:{h['x']},{h['y']};wait:1.2;shot:01_house;dump:01;"
             f"sync:intro;wait:3;pointat:{h['x']},{h['y']};wait:1.2;shot:02_theirs;dump:02;"
-            f"sync:mine;wait:2;pointat:{ax + 0.8},{ay - 2.0};wait:1.2;shot:03_mine;dump:03;quit")
+            f"sync:mine;wait:1;sync:off;wait:2;pointat:{ax + 0.8},{ay};wait:1.2;shot:03_mine;dump:03;quit")
     tok = os.path.join(ROOT, ".local/living/verify", run, "ui", f"houses-{int(time.time())}.token")
     out, code, text = drive(run, s, plan, syncs=syncs, extra=["--token", tok, "--player", "Lodger"])
     c.check(s, "client ran and joined (a fresh player)", code == 0, text[-300:])
@@ -1810,14 +1818,15 @@ def shot(run, c):
         call_admin(run, "grant_items", [striker, item, n])
     call_admin(run, "set_behavior", [striker, json.dumps({"wait": 600})])
     syncs = ["noon=sql|UPDATE world SET epoch_ms = {epoch_at:12} WHERE id = 0", f"spot=place_at|{{me}}|{UNHEARD_SPOT[0]}|{UNHEARD_SPOT[1]}",
-             f"near=place_at|{striker}|(mx+6.0)|(my)", f"far=place_at|{striker}|(mx+16.0)|(my)", "shoot=player|use_skill|bowshot|{me}|(mx)|(my)"]
-    plan = ("ready;sync:noon;sync:spot;wait:2;sync:near;wait:2;dump:00;sync:shoot;wait:2.2;shot:01_seen;dump:01;"
-            "weapon:sheathe;wait:0.6;sync:far;wait:2.5;dump:02;sync:shoot;wait:2.5;shot:02_unseen;dump:03;quit")
+             f"near=place_at|{striker}|(mx+6.0)|(my)", f"far=place_at|{striker}|(mx+16.0)|(my)", "shoot1=player|use_skill|bowshot|{me}|(mx)|(my)", "shoot2=player|use_skill|bowshot|{me}|(mx)|(my)",
+             "hurt1=sql|SELECT id, hurt_by, hurt_ms FROM vitals WHERE id = {me}", "hurt2=sql|SELECT id, hurt_by, hurt_ms FROM vitals WHERE id = {me}"]
+    plan = ("ready;sync:noon;sync:spot;wait:2;sync:near;wait:2;dump:00;sync:shoot1;wait:2.2;sync:hurt1;shot:01_seen;dump:01;"
+            "weapon:sheathe;wait:0.6;sync:far;wait:2.5;dump:02;sync:shoot2;wait:2.5;sync:hurt2;shot:02_unseen;dump:03;quit")
     tok = os.path.join(ROOT, ".local/living/verify", run, "ui", f"shot-{int(time.time())}.token")
     out, code, text = drive(run, s, plan, syncs=syncs, extra=["--token", tok, "--player", "Target"])
     c.check(s, "client ran and joined (a fresh player)", code == 0, text[-300:])
     d = {k: dump(out, k) or {} for k in ("00", "01", "02", "03")}
-    seen = lambda k: {x.get("id") for x in d[k].get("seen") or []}
+    seen = lambda k: set(d[k].get("perceived") or [])
     sc = json.load(open(os.path.join(out, "scene.json"))) if os.path.exists(os.path.join(out, "scene.json")) else {}
     me = sc.get("me")
     lines = sorted(sql(run, f"SELECT id, kind, subject, text, at_ms FROM experience WHERE observer = {me} AND kind = 'attacked'") if me else [], key=lambda r: r["at_ms"])
@@ -1826,6 +1835,10 @@ def shot(run, c):
     c.check(s, "in sight: the shooter is seen, and the note is the authority's shot, the weapon drawn", striker in seen("00") and any("shot you with" in n and "Your weapon is drawn" in n for n in n1) and not any("attacked you" in n for n in n1) and (d["01"].get("extra") or {}).get("drawn") is True, f"{n1}; seen {sorted(seen('00'))}")
     n3 = d["03"].get("notes") or []
     c.check(s, "out of sight: the shooter is not seen, and the note says the arrow came from somewhere unseen", striker not in seen("02") and any("could not see" in n for n in n3) and (d["03"].get("extra") or {}).get("drawn") is True, f"{n3}; seen {sorted(seen('02'))}")
+    # fix-unseen-killer-id: `my_vitals.hurt_by` names the shooter only when my character sees them.
+    hurt = lambda k: ((((sc.get("snaps") or {}).get(k) or [{}])[0].get("rows") or [{}])[0])
+    h1, h2 = hurt("hurt1"), hurt("hurt2")
+    c.check(s, "hurt_by: the shooter in sight, 0 once unseen (a newer hurt)", h1.get("hurt_by") == striker and h2.get("hurt_by") == 0 and h2.get("hurt_ms", 0) > h1.get("hurt_ms", 0), f"{h1}; {h2}")
     c.check(s, "nothing targets or hovers the hidden shooter, and the target plate is not theirs", d["03"].get("targeted") != striker and not any(h.get("id") == striker for h in d["03"].get("hovered") or []), f"targeted {d['03'].get('targeted')}; hovered {d['03'].get('hovered')}")
     c.check(s, "the shooter's name is nowhere", not any(sname in t for k in d for _, t in d[k].get("naming") or []), sname)
 
