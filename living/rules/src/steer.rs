@@ -277,6 +277,124 @@ pub fn sweep(map: &Map, p: (f32, f32), seg: &Segment, clearance: f32) -> (f32, b
     (dur, false)
 }
 
+// ---- flight --------------------------------------------------------------------------------
+//
+// A body running from something looks for open ground, as a person does. Straight away when that
+// way is open as far as it still has to go; else it weighs the ground it can reach within sight
+// (a small Dijkstra "flee map", as roguelikes' safety maps do) and makes for the spot that puts
+// the most distance between it and the threat soonest, without running past the threat. It is
+// the same for every flight (`flee`, `back_off`, a band backing off, an animal's flight) and
+// reads only the ground within the body's sight.
+
+/// The least room (m) a way out must gain: with no reachable spot within sight that much farther
+/// from the threat, a flight is cornered.
+pub const ROOM_M: f32 = 1.0;
+/// The farthest (m) a flight weighs the ground round it, however far it sees.
+pub const FLEE_REACH_M: f32 = 16.0;
+
+/// How far a body can go straight along `h` from `p`, up to `max` metres (0.25 m steps, kept
+/// `clearance` from obstacles as steering keeps it).
+pub fn free_run(map: &Map, p: (f32, f32), h: f32, max: f32, clearance: f32) -> f32 {
+    let (c, s) = (h.cos(), h.sin());
+    let n = (max / 0.25).ceil().max(1.0) as u32;
+    let mut ok = 0.0f32;
+    for k in 1..=n {
+        let d = (k as f32 * 0.25).min(max);
+        if !passable(map, (p.0 + c * d, p.1 + s * d), h, clearance) {
+            return ok;
+        }
+        ok = d;
+    }
+    max
+}
+
+/// The way a flight takes from `p`, running from `threat`, with `look` metres still to go and
+/// `reach` the ground it sees (its sight). `heading` is the way it goes now.
+///
+/// Straight away when that is open for `look`. Otherwise every tile reachable within `reach`
+/// (path length up to 1.5 × `reach`, steps between walkable tiles, a diagonal only past two open
+/// sides as the route search takes it) is scored: its distance from the threat (counted only up to
+/// `look` farther than now), less a quarter of the way there, less twice how much nearer the way
+/// passes to the threat than the body is now; a little for keeping the way it goes. The body heads
+/// for the farthest point of the way to the best tile that it can see in a straight line. `None`:
+/// no reachable tile is [`ROOM_M`] farther from the threat (cornered).
+pub fn flee_way(map: &Map, p: (f32, f32), threat: (f32, f32), heading: f32, look: f32, reach: f32, clearance: f32) -> Option<f32> {
+    let d0 = (p.0 - threat.0).hypot(p.1 - threat.1);
+    let away = if d0 < 1e-3 { heading } else { (p.1 - threat.1).atan2(p.0 - threat.0) };
+    let look = look.max(ROOM_M * 2.0);
+    if free_run(map, p, away, look, clearance) >= look {
+        return Some(away);
+    }
+    let r = reach.clamp(2.0, FLEE_REACH_M).ceil() as i32;
+    let side = 2 * r + 1;
+    let (ox, oy) = (p.0.floor() as i32 - r, p.1.floor() as i32 - r);
+    let idx = |x: i32, y: i32| -> Option<usize> {
+        let (i, j) = (x - ox, y - oy);
+        (i >= 0 && j >= 0 && i < side && j < side).then(|| (j * side + i) as usize)
+    };
+    let open = |x: i32, y: i32| map.free(x as f32 + 0.5, y as f32 + 0.5);
+    let n = (side * side) as usize;
+    // Cost so far in centimetres (integers, so the order is exact), parent, nearest approach.
+    let mut g = vec![u32::MAX; n];
+    let mut parent = vec![usize::MAX; n];
+    let mut near = vec![f32::INFINITY; n];
+    let (sx, sy) = (p.0.floor() as i32, p.1.floor() as i32);
+    let start = idx(sx, sy)?;
+    g[start] = 0;
+    near[start] = d0;
+    let limit = (reach.min(FLEE_REACH_M) * 150.0) as u32;
+    let mut heap = std::collections::BinaryHeap::new();
+    heap.push(std::cmp::Reverse((0u32, start)));
+    let centre = |k: usize| ((ox + (k as i32 % side)) as f32 + 0.5, (oy + (k as i32 / side)) as f32 + 0.5);
+    let mut best: Option<(f32, usize)> = None;
+    while let Some(std::cmp::Reverse((cost, k))) = heap.pop() {
+        if cost > g[k] {
+            continue;
+        }
+        let (cx, cy) = centre(k);
+        if k != start {
+            let dt = (cx - threat.0).hypot(cy - threat.1);
+            let gain = dt.min(d0 + look);
+            let toward = (cy - p.1).atan2(cx - p.0);
+            let score = gain - 0.25 * cost as f32 / 100.0 + 2.0 * (near[k] - d0).min(0.0) + 0.3 * wrap(toward - heading).cos();
+            if dt >= d0 + ROOM_M && best.map_or(true, |(b, _)| score > b) {
+                best = Some((score, k));
+            }
+        }
+        let (x, y) = (cx.floor() as i32, cy.floor() as i32);
+        for (dx, dy, step) in [(1, 0, 100u32), (-1, 0, 100), (0, 1, 100), (0, -1, 100), (1, 1, 141), (1, -1, 141), (-1, 1, 141), (-1, -1, 141)] {
+            let (nx, ny) = (x + dx, y + dy);
+            let Some(j) = idx(nx, ny) else { continue };
+            if !open(nx, ny) || (dx != 0 && dy != 0 && !(open(x + dx, y) && open(x, y + dy))) {
+                continue;
+            }
+            let c = cost + step;
+            if c > limit || c >= g[j] {
+                continue;
+            }
+            g[j] = c;
+            parent[j] = k;
+            let (jx, jy) = centre(j);
+            near[j] = near[k].min((jx - threat.0).hypot(jy - threat.1));
+            heap.push(std::cmp::Reverse((c, j)));
+        }
+    }
+    let (_, goal) = best?;
+    // The farthest point along the way that the body sees straight from where it stands.
+    let mut k = goal;
+    let mut aim = centre(goal);
+    while k != start {
+        let c = centre(k);
+        if map.line_clear(p, c) {
+            aim = c;
+            break;
+        }
+        k = parent[k];
+        aim = c;
+    }
+    Some((aim.1 - p.1).atan2(aim.0 - p.0))
+}
+
 // ---- movement intents ---------------------------------------------------------------------
 //
 // Ways for any controller to move relative to a creature it perceives: hold a range band from
@@ -661,5 +779,80 @@ mod tests {
         assert!(Spacing { distance: Some(0.0), ..Default::default() }.check("back_off").is_err());
         assert!(Spacing { distance: Some(60.0), ..Default::default() }.check("follow").is_err());
         assert_eq!((side_of("Left"), side_of("clockwise"), side_of("up")), (Some(1.0), Some(-1.0), None));
+    }
+
+    fn walled(w: u32, h: u32, walls: &[((u32, u32), (u32, u32))]) -> Map {
+        let mut m = open(w, h);
+        for &((x0, y0), (x1, y1)) in walls {
+            for y in y0..=y1 {
+                for x in x0..=x1 {
+                    m.set(x as i32, y as i32, Terrain::Wall);
+                }
+            }
+        }
+        m
+    }
+
+    /// Runs a flight from `threat` with the body's own steering (`flee_way` then `plan`, a
+    /// look every quarter second) until it is 9 m farther than it began; returns the distances.
+    fn flight(m: &Map, from: (f32, f32), threat: (f32, f32)) -> Result<(f32, f32), String> {
+        let c = Tuning::default().clearance;
+        let t = Tuning::default();
+        let (mut p, mut heading, mut speed) = (from, 0.0f32, 0.0f32);
+        let start = (p.0 - threat.0).hypot(p.1 - threat.1);
+        let mut last = start;
+        for _ in 0..120 {
+            let left = start + 9.0 - (p.0 - threat.0).hypot(p.1 - threat.1);
+            if left <= 0.0 {
+                break;
+            }
+            let dir = flee_way(m, p, threat, heading, left, 11.0, c).ok_or(format!("cornered at {p:?}"))?;
+            let seg = plan(m, p, heading, speed, Want { dir, speed: 3.0, agile: false, max_dt: 0.25 }, &t);
+            if seg.blocked && seg.speed == 0.0 {
+                return Err(format!("stuck at {p:?}"));
+            }
+            let (x, y, h) = seg.at(p, seg.dur.min(0.25));
+            (p, heading, speed) = ((x, y), h, seg.speed);
+            let d = (p.0 - threat.0).hypot(p.1 - threat.1);
+            if d < last - 0.8 {
+                return Err(format!("closed on the threat: {last} -> {d} at {p:?}"));
+            }
+            last = last.max(d);
+        }
+        Ok((start, last))
+    }
+
+    /// In the open a flight runs straight away; against a wall it turns along it; out of an
+    /// inside corner and past a dead-end pocket it takes the open side; boxed in it is cornered.
+    #[test]
+    fn a_flight_looks_for_open_ground() {
+        let c = Tuning::default().clearance;
+        let m = open(64, 64);
+        let h = flee_way(&m, (32.0, 32.0), (32.0 - 5.0 * 0.3f32.cos(), 32.0 - 5.0 * 0.3f32.sin()), 0.3, 9.0, 11.0, c).unwrap();
+        assert!((h - 0.3).abs() < 1e-4, "{h}");
+        // A wall 3 m east across the whole way, the threat west: along the wall, and clear.
+        let m = walled(64, 64, &[((35, 0), (35, 63))]);
+        let h = flee_way(&m, (32.0, 32.0), (27.0, 32.0), 0.0, 9.0, 11.0, c).unwrap();
+        assert!(h.abs() > 0.5, "turns along the wall: {h}");
+        let (a, b) = flight(&m, (32.0, 32.0), (27.0, 32.0)).unwrap();
+        assert!(b >= a + 8.0, "{a} -> {b}");
+        // An inside corner (walls east and south, y grows south) with the threat west: out by the
+        // open north side.
+        let m = walled(64, 64, &[((36, 10), (36, 40)), ((10, 36), (36, 36))]);
+        let (a, b) = flight(&m, (32.5, 33.0), (26.0, 33.0)).unwrap();
+        assert!(b >= a + 8.0, "{a} -> {b}");
+        // A dead-end pocket straight away (a channel 6 m deep, closed at its end), open ground
+        // north and south of its mouth: the flight goes round it, not into it.
+        let m = walled(64, 64, &[((31, 29), (38, 29)), ((31, 35), (38, 35)), ((38, 29), (38, 35))]);
+        let (a, b) = flight(&m, (30.5, 32.5), (25.5, 32.5)).unwrap();
+        assert!(b >= a + 8.0, "{a} -> {b}");
+        // Keeps the way it goes when two are as good (a straight wall: north or south).
+        let m = walled(64, 64, &[((35, 0), (35, 63))]);
+        let north = flee_way(&m, (32.5, 32.5), (27.5, 32.5), -PI / 2.0, 9.0, 11.0, c).unwrap();
+        let south = flee_way(&m, (32.5, 32.5), (27.5, 32.5), PI / 2.0, 9.0, 11.0, c).unwrap();
+        assert!(north < 0.0 && south > 0.0, "{north} {south}");
+        // Boxed in: nowhere farther from the threat.
+        let m = walled(64, 64, &[((31, 31), (33, 31)), ((31, 33), (33, 33)), ((31, 31), (31, 33)), ((33, 31), (33, 33))]);
+        assert_eq!(flee_way(&m, (32.5, 32.5), (30.0, 32.5), 0.0, 9.0, 11.0, c), None);
     }
 }
