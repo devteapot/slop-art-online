@@ -1629,6 +1629,25 @@ For composed people (`LIVING_GAME_COMPOSE=1`) on char-4's files at `06be6921`; w
 - **`.collar` cuts** come by the name in the line (`styles.hair` → `lookdev/styles/hair/<name>.glb`): four of Cullet's 64 wear one. Nothing in the client lists hair files.
 - **The types' shared pages:** a type's far head and lip layer are drawn by `lookdev::convert`, which already makes one material for each distinct content, so with the pages every type's `…Body_01_SKIN` and `…FaceTint_00_FACE` are one material each. Nothing changed in the code.
 
+**Cost** (`cost7.sh`: `crowd.py`, Cullet's 64 as they are, the game camera 22 m away and 28° down, 1600×900, uncapped, 30 s a run, interleaved, four runs a mode at the game camera and six on the full model), on char-4's files at `06be6921` before the neck step (the neck changes no material, mesh count or picture). Every run with no other game client and no build or play session holding a slot; load average 5.6 to 9.9; each set's runs within 0.3 ms.
+
+| Cullet's 64 | Whole, game camera | Composed, game camera | Whole, full model | Composed, full model |
+|---|---|---|---|---|
+| Mesh entities on people: shown (all) | 210 (786) | 460 (1,342) | 594 (786) | 900 (1,342) |
+| Mesh-material pairs in view (instanced draws) | 210 | **104** | 594 | **227** |
+| Materials on people in view (17 the look-dev player's) | 20 | 26 | 157 | **106** |
+| Opaque batch sets, main pass | 10 | 17 | 84 | **69** |
+| Frame interval p50, median of runs | 4.56 ms | 4.87 ms | 7.84 ms | **7.33 ms** |
+| Frame interval p99, median of runs | 5.36 ms | 5.65 ms | 8.97 ms | **8.36 ms** |
+| Mesh data in the main world, people (morph targets) | 296 MiB (174) | **41 MiB (10)** | same | same |
+| Textures on the GPU, people | 419 MiB | **221 MiB** | same | same |
+| Ready, median | 0.98 s | 0.88 s | 0.95 s | 0.95 s |
+
+- **The types' pages took most of what was left:** at the game camera composed people now cost 0.3 ms more than whole files (0.7 before the pages), with 9 materials of their own against the whole files' 3 and 17 batch sets against 10. Up close they are 0.5 ms faster, with 106 materials against 157.
+- **Greying costs nothing measurable:** the hair is still one material; a greying person's hair is one more palette texel at most.
+- **Textures:** people's GPU textures 221 MiB against 231 before the pages (the far heads' and lip layers' pictures, 26.3 MiB for 21 types in the files, are now two pages).
+
+
 ## Motions on generated people
 
 `animate.py` retargets the clip library onto a generated person unchanged, since the skeleton is VRoid's. Limb lengths are our own, so a take can behave differently on our people than on a VRoid base: our man's arms are longer, and a hand that clears the floor on Shino goes 8 cm into it on him.
