@@ -217,5 +217,29 @@
   "world_laws": {
    "earshot": true
   }
+ },
+ "gate-off-ds": {
+  "about": "The live gate check's control (docs/GATE_LIVE.md): the strangers C arm (`strangers-control`: main's laws) with the `people` mix as trials run it, except that think goes to deepseek-flash (deepseek-v4-1-flash-1017, effort low for think) instead of glm-flash. The rethink gate is off (no LIVING_RETHINK).",
+  "models": {
+   "mixes": {
+    "people": {
+     "think": "deepseek-flash"
+    }
+   }
+  },
+  "env": {}
+ },
+ "gate-jev-ds": {
+  "about": "The live gate check's gated arm (docs/GATE_LIVE.md): as `gate-off-ds`, with the rethink gate on (LIVING_RETHINK=jev; living/configs/rethink.json as shipped: Jev jev-1.14.0, proceed_above 0.3, max_hold_s 600). Nothing else differs.",
+  "models": {
+   "mixes": {
+    "people": {
+     "think": "deepseek-flash"
+    }
+   }
+  },
+  "env": {
+   "LIVING_RETHINK": "jev"
+  }
  }
 }

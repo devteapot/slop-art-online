@@ -695,6 +695,26 @@ class Gates(unittest.TestCase):
             with self.assertRaises(store.Refused):
                 store.check_batch_complete(t)
 
+    def test_analysis_record(self):
+        cfg = store.load_config(local_config="/nonexistent/config.json")
+        with tempfile.TemporaryDirectory() as t:
+            write(t, "analysis/out/curve.json", "{}")
+            b = {"batch": "gq0", "kind": "analysis", "files": [{"path": "analysis/out/curve.json"}],
+                 "models_in_outputs": {"zai-glm-5-3-flash": 2}}
+            write(t, "batch.json", json.dumps(b))
+            self.assertEqual(store.check_batch_complete(t), [])
+            # the models whose words it carries go through the same gate as a batch's calls
+            b["models_in_outputs"]["mistral-small-latest"] = 1
+            write(t, "batch.json", json.dumps(b))
+            man = store.pack_batch(t, os.path.join(t, "packed"), scrubber(), name="gq0")
+            self.assertIn("mistral-small-latest", man["models"])
+            with self.assertRaises(store.Refused):
+                store.check_models(man, cfg)
+            b.pop("models_in_outputs")
+            write(t, "batch.json", json.dumps(b))
+            with self.assertRaises(store.Refused):
+                store.check_batch_complete(t)
+
     def test_sessions_held(self):
         old = os.environ.get("STORE_CONFIG")
         with tempfile.TemporaryDirectory() as t:
