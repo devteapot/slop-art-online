@@ -1322,11 +1322,16 @@ def look_walk_others(run, c):
     client draws that body's legs on its travel and its upper body twisted toward the facing
     (the look target from the row, `live.rs` `authority_facing`), logged as `LIVING_GAME_FEET_ID`."""
     s = "look-walk:others"
-    if "token" not in json.load(open(os.path.join(ROOT, ".local/living/verify", run, "state.json"))):
+    def body():
+        r = subprocess.run([sys.executable, V, "sql", "--run", run, "SELECT id FROM my_body", "--as-player"], capture_output=True, text=True)
+        rows = json.loads(r.stdout[r.stdout.find("["):]) if "[" in r.stdout else []
+        return (rows[0]["id"] if rows else None), r.stdout
+    other, t = body()
+    # The run's player identity has a token from the start (`state.json`) but no character until
+    # it joins: join it when it has no body.
+    if other is None:
         subprocess.run([sys.executable, V, "player", "--run", run, "join", "Bender"], capture_output=True, text=True)
-    r = subprocess.run([sys.executable, V, "sql", "--run", run, "SELECT id FROM my_body", "--as-player"], capture_output=True, text=True)
-    t = r.stdout
-    other = json.loads(t[t.find("["):])[0]["id"] if "[" in t else None
+        other, t = body()
     c.check(s, "a second player to walk beside me", other is not None, t[-200:])
     if other is None:
         return
