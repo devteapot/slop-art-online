@@ -680,6 +680,8 @@ The owner's working target is an experiment, not a change to the defaults: over 
 
 ### The arithmetic
 
+**Correction (2026-11-12, `bi1`).** The table below is for `species.json`'s 70-year life. The hamlet runs Cullet's laws, whose `life_years` law gives a person 90 years: a child until 15, deaths of old age from 75. The hamlet's real figures are in [births batch bi1](#births-batch-bi1-2026-11-12): a life of 10.3 h, 6 deaths of old age in 6 hours rather than 9, and 7.6 births needed rather than 9.6.
+
 The person life table (`species.json`): `years` 70; infant until 0.03 of a lifespan, child until 0.23, elder from 0.85; death of old age at each person's own point between `old_age` 0.87 and 1.0, spread evenly by id; `gestation` 0.011; `interbirth` 0.03 (after a birth both parents are raising the child, `rearing`, and neither can conceive); `litter` 1. Only adults (0.23 to 0.85) may conceive (`conceive_check`). A game day is 48 real minutes in the hamlet (`day_minutes`) and 12 on the island.
 
 A lifespan in game days is L = years × `year_days` × `life_pace`.
@@ -748,6 +750,170 @@ These are upper bounds. Fewer think when deaths outrun births, and only the cap 
 - Cullet's laws were written for Cullet's town (lamplight, hearths, coats). The hamlet's houses and campfires are what the authored-test layout gives: no lamps and no coats in the stores.
 - The arms' values are derived from the arithmetic, not tuned. How often a pair actually carries 8 food, so whether the provided arm's gate binds, is not known until real minds run.
 - The `family_laws` scene proves each law's gate on a scratch world. It does not prove what minds do with them.
+
+## Births batch bi1 (2026-11-12)
+
+The first paid run of [the birth arms](#rule-arms): `hamlet`, `hamlet-spaced`, `hamlet-provided` and `hamlet-longing`, **one replicate each**, 6 hours (2026-11-11 23:28 to 2026-11-12 05:30), on the DGX Spark. At most 12 minds per world (`minds.max`). The worlds ran on Cullet's day and laws, and the laws guard passed on each.
+
+- **Run checkout** `/home/gooning/dev/slop-runs-arrive` at **461c63cd**. That is exp-arrive 1e63a30 (main 6caebe20), plus the laws guard (fix-verify-laws) and the consolidation capacity fallback (fix-consolidation-429, e301aa9f). Evidence is in `.local/living/trials/bi1/` in that checkout.
+- **Models.** glm-flash (`zai-glm-5-3-flash`), overflowing to deepseek-flash. Consolidation could overflow on capacity (`capacity_overflow`).
+- **Switches.** Greeting (`LIVING_GREET`) off: it is on by default only after exp-greet. Not in this build: `meters()` alarm levels, skill timings, act outcomes, stamina-1 and speech-truth. The newcomer laws were present at 0 and no trial used them.
+- **The arms**, as [planned](#rule-arms):
+  - control: shipped values;
+  - spaced: `interbirth` 0.15, 72 real minutes of raising after a birth;
+  - provided: `conceive_food` 8 and `conceive_roof` true;
+  - longing: `longing_after_min` 120 and `longing_food` 4.
+
+```bash
+# read-only against the run checkout; no model calls
+python3 living/tools/births_report.py --root /home/gooning/dev/slop-runs-arrive/.local/living/trials --stores bi1
+```
+
+### What the life table really is in the hamlet
+
+`births_report.py` used to read the seed against this checkout's `living/seeds`. It now reads it against the run checkout (`LIVING_ROOT` in `mind-env.json`). A trial's derived seed lives under that checkout's `.local`. Before this fix the report fell back to the island's pace.
+
+The report also missed the seed laws' `life_years` law. Cullet's laws set a person's life to 90 years, childhood to 15 and the first deaths of old age to 75 (`person_years()` in `worlds/cullet/laws.rhai`). The report now applies a `person_years()` of that shape. Its due times matched every death of old age in the batch within 0.2 minutes: Teodor 111.6, Cal 207.7, Oren 256.6, Ilsa 257.1, Edda 352.4 and Brisk 359.7.
+
+The hamlet's numbers on that life table:
+
+| | Under Cullet's laws |
+| --- | --- |
+| A life | 90 × 4 × 0.0357 = 12.85 game days = **617 real minutes (10.3 h)**. A year of age is still 6.9 real minutes. |
+| Adult | from 15 years: 103 real minutes after birth |
+| Elder (no more children) | from 59.5 years: 408 minutes after birth, as before |
+| Gestation, raising, infancy | unchanged in real time: about 5, 14 (72 when spaced) and 14 minutes |
+| Death of old age | from 75 years (514 minutes of age) up to 90 years. The mean age at death is 565 minutes. |
+| Seeded deaths | 6 in the 6 hours, at 112, 208, 257, 257, 352 and 360 minutes. The other 6 come after the run: Wenna 363, Mara 443, Sefa 466, Lio 492, Pim 531 and Tobin 573. By about 9.6 h every seeded person is dead. |
+| Births a stationary 12 needs | 12 × 360 / 565 = **7.6 in 6 hours**. Over the 9.6 h that all twelve seeded people take to die: 12. |
+
+### Population
+
+The table gives the census every 30 s, the chronicle's births and deaths, and the journals' conceive acts and refusals. The "refused" row counts what each mind was told after a refusal, one per actor and game minute.
+
+| | `hamlet` (control) | `hamlet-spaced` | `hamlet-provided` | `hamlet-longing` |
+| --- | --- | --- | --- | --- |
+| Births / deaths (all of old age, all on time) | **9** / 6 | 4 / 6 | **1** / 6 | 5 / 6 |
+| Alive at 0, 60, 120, 180, 240, 300, 360 min | 12, 16, 16, 18, 18, 17, **15** | 12, 15, 14, 15, 14, 12, **10** | 12, 13, 12, 12, 11, 9, **7** | 12, 12, 14, 15, 14, 13, **11** |
+| At the end, by stage | 10 adults, 5 elders | 5 adults, 5 elders | 2 adults, 5 elders | 6 adults, 5 elders |
+| Births and their time (min) | Dell 13, Lark 52, Vale 58, Pia 60, Nia 102, Hana 148, Sol 157, Bee 198, Jory 251 | Teal 19, Juno 51, Rook 52, Bee 149 | Uma 30 | Hollis 63, Teal 100, Vesper 104, Ada 176, Rook 245 |
+| Couples with a birth | 5: Brisk+Edda 3, Pim+Mara 2, Sefa+Lio 2, Cal+Wenna 1, Oren+Ilsa 1 | 3: Brisk+Edda 2, Cal+Wenna 1, Oren+Ilsa 1 | 1: Brisk+Edda | 3: Brisk+Edda 3, Oren+Ilsa 1, Sefa+Lio 1 |
+| Births to a brother and sister (`kin_births`) | 2 | 0 | 0 | 1 |
+| Births to someone born in the run (`gen2_births`) | **0** | **0** | **0** | **0** |
+| Conceive acts decided | 63, all by seeded people | 29 | 19 (Uma 2) | **12** |
+| Refused, by reason | partner moved away 23, child already on the way 12, no partner 10, partner not adult 6, not adult 3, too hungry 1 | partner not adult 7, no partner 5, moved away 4, on the way 3, not adult 3, **still raising 1** | **not under a roof 17**, moved away 2, no partner 2, partner not adult 2, **not enough food 1**, on the way 1 | on the way 4, moved away 2, no partner 1 |
+| Adult-minutes with no mind (the cap of 12) | 19% | 5% | 0 | 2% |
+
+**Where each world is heading.** In every arm the six remaining seeded people die between 363 and 573 minutes. The run-born then begin to die of old age from about 527 minutes, starting with Dell. If no one born in the run has a child, each world falls to its run-born people by 9.6 h: 9, 4, 1 and 5. None of the four is stable.
+
+- **Control.** It grew from 12 to 18 by 3 hours, then fell as the seeded died. It had 9 births against 6 deaths, and the stationary 7.6, in 6 hours. It is the only arm on the target's pace so far. But its births all came from seeded couples, and the last came at 251 minutes. With 10 adults alive from 4 to 6 hours, no one conceived.
+- **Spaced and longing.** They peaked at 15 and are falling: 10 and 11 at 6 hours, heading to 4 and 5.
+- **Provided.** It is collapsing: 7 at 6 hours, of whom 5 are elders, heading to 1.
+
+**What the arms' differences show.** The four worlds differ in one law each. Seed, cast, map and models are the same. With one replicate:
+
+- **Provided: the roof gate is what held births down.** After the one early birth, the body refused conceive acts 17 times for "not under a roof". The food gate refused once: two people carried 2 food, against the 8 needed. The stores held 190–750 food all run. Minds mostly decide to conceive where they stand, outdoors.
+
+  Brisk and Edda learned from it. Refused at the western fire at 14–23 minutes, they planned to "walk Edda home under our own roof, start our family there". They conceived Uma at home at 24 minutes. Later Brisk gathered berries "toward the eight a family needs". But he asked Edda again away from home, at 94 minutes. By 209–223 minutes both were elders, and he told her "no fault is hers".
+
+  This rests on direct refusals and the journals, so it is the strongest result in the batch. How much the gate holds births down is a single run's number.
+- **Spaced held births down mostly through fewer attempts, not refusals.** The body refused only once for "you are still raising your young". The arm decided 29 conceive acts against the control's 63. The likely reason is in the code: the longing alert is felt only when one is not `rearing` (`broody` in `authority/src/brain.rs`). A longer raising time is therefore also 72 minutes without "You long for…". This arm tests the drive as well as the body.
+- **Later longing gave the fewest attempts** (12) and the first birth later (63 minutes against 13).
+- Spaced (4 births) and longing (5) cannot be told apart, nor can either be ranked against the control's 9 with confidence.
+
+**What cannot be concluded from one replicate.**
+
+- How large the spread between replicates is. Birth counts this small can differ by several from chance alone (whom the minds meet, and when).
+- Whether any arm keeps 12 over a full generation. That turns on the run-born having children, which no world showed in 6 hours.
+- Anything about Cullet's town, its lamps or its coats.
+- Whether the models' mix matters. About a quarter of calls went to deepseek on capacity, differently in each world.
+
+### Life in the four worlds
+
+| | control | spaced | provided | longing |
+| --- | --- | --- | --- | --- |
+| Starving (hunger ≥ 100) | never | never | never | never |
+| Hungry (over 50), share of census rows: children / adults / elders | **0.47** / 0.16 / 0.02 | 0.25 / 0.04 / 0 | 0.24 / 0.06 / 0.04 | 0.36 / 0.05 / 0.05 |
+| Highest hunger: children / infants | 90 / 37 | 89 / 36 | 83 / 36 | 89 / 36 |
+| Food in the two stores (#9 Reedmouth + #5 Millbrook), from scenes, at 0 / 180 / 360 min | 204 / 390 / 519 | 186 / 491 / 750 | 191 / 488 / 601 | 227 / 579 / 749 |
+| Grown people asleep, share of rows | 0.47 | 0.48 | 0.48 | 0.47 |
+| Awake grown people: work / idle / walking | 0.38 / 0.44 / 0.17 | 0.36 / 0.44 / 0.19 | 0.33 / 0.46 / 0.20 | 0.34 / 0.43 / 0.23 |
+| Lines said (chronicle) / talk turns | 2,019 / 556 | 1,880 / 566 | 1,763 / 532 | 1,977 / 629 |
+| Plans about food / about children | 0.74 / 0.17 | 0.57 / 0.06 | 0.58 / 0.08 | 0.58 / 0.08 |
+| Infant time with a grown person within 4 m (`infant_cover`) | 0.68 | 0.66 | 0.78 | 0.64 |
+| Grown people's time near an infant | 3.4% (150 adult-min) | 1.7% (75) | 2.3% (82) | 1.6% (68) |
+
+In the activity row, work is gather, cook, store, take, give, teach, build, plant and keep. Idle is wait, wander, follow, rest and no activity.
+
+- **No one went hungry for want of food.** The stores grew in every world. The hungry were children: in the control nearly half of children's census rows were over 50, and one child reached 90. They think for themselves and fed themselves late. Most food comes from fishing: cooked fish piled up at Reedmouth and berries at Millbrook. The control, with the most mouths, had the most plans about food. That is a correlation, not a cause.
+- **Care of infants.** Infancy lasts only about 14 minutes here. Parents were the nearest grown people most of the time; older siblings, themselves children, often came next. The least-covered infants:
+  - Lark (control): a grown person was near for 0.19 of her infancy, but she was given food 28 times.
+  - Juno (spaced): 0.40.
+  - Hollis and Vesper (longing): 0.42 and 0.44. Edda and Brisk had three infants in 2 hours.
+  - No infant's hunger passed 37 and no infant died. No neglect shows.
+- **Work and talk.** Awake grown people worked 33–38% of the time and idled 43–46%. That is 26–28 lines said per resident-hour and 7.7–8.8 talk turns.
+
+### Mind cost
+
+| | control | spaced | provided | longing | batch |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Cost (journal at `trials.py` prices) | $9.88 | $9.10 | $8.75 | $9.31 | **$37.04** (glm $22.42, deepseek $14.62) |
+| Resident-hours thinking (census `thinkers`) | 71.8 | 71.7 | 65.8 | 71.8 | 281 |
+| $ per resident-hour | **0.137** | 0.127 | 0.133 | 0.130 | 0.132 |
+| Deliberations per resident-hour, whole run (authority's count) | 24.6 (22.4) | 22.4 (21.1) | 22.5 (20.6) | 22.2 (20.7) | |
+| Same, by day / by night | 28.6 / 18.4 | 24.8 / 18.5 | 25.3 / 18.0 | 25.1 / 17.7 | |
+| Consolidations: attempted / on the primary / on the fallback / retried / lost | 1,655 / 1,215 / 435 / 5 / 0 | 1,572 / 1,179 / 384 / 8 / 1 | 1,489 / 1,101 / 384 / 4 / 0 | 1,661 / 1,197 / 454 / 10 / 0 | 6,377 / 4,692 / 1,657 / 27 / 1 |
+
+- **The capacity fallback did its job.** glm-flash failed 5,048 of its 19,619 calls (26%), 5,045 of them with a capacity 429, in think, deliberate and consolidate alike. Each of those went to deepseek-flash. One consolidation was lost (Rook, spaced), and none was trimmed. Before the fallback, these would have been lost consolidations.
+- **Cost against the plan.** $0.13 per resident-hour against the plan's $0.10, about $1.5 per world-hour for 11–12 thinkers. `summary.json`'s `cost_per_resident_hour` (0.090–0.112) divides by everyone who ever thought times the whole run, so it counts hours for the run-born before they thought. Use the census figure.
+- **Deliberations.** 22–25 per resident-hour over whole days and nights. Compare ar2's 24 (14 minutes, daylight, 11 thinkers) and strangers stage 2's 18.4, on other builds. By day the rate here is 25–29, at or above ar2's.
+- **Asleep, still deliberating.** At night 89% of thinkers were asleep, yet they deliberated 18 times an hour. Over the whole run, 30–34% of deliberations came from someone whose activity at the nearest census was sleep: 529 of 1,766 in the control. In the control's night hours alone it was about 360. The reasons given at night:
+
+  | Reason | Deliberations |
+  | --- | ---: |
+  | "A quiet moment to take stock of how things are going" | 177 |
+  | "I finished my plan" | 86 |
+  | Lonely | 33 |
+  | Restless | 21 |
+  | Freezing | 8 |
+
+  So about a third of deliberation cost goes to sleepers. That is for the mind service to weigh, not the birth arms.
+
+### What the journals showed beyond the tables
+
+These were read from journals, without the inspector and without a paid judge.
+
+- **A brother and sister became a couple.** Sefa and Lio Reed are Wenna's children: seeded as sister and brother, with Wenna as a parent of both. They became partners in two worlds and had three children: Sol and Jory in the control, Rook in longing. Their mother's mind spoke of it warmly: "Sefa has said her heart to Lio plain". Two other attempts:
+  - In spaced, Lio asked Wenna, his mother, to start a family. She was refused because she was an elder.
+  - In provided, Cal, Sefa's uncle, asked Sefa.
+
+  `conceive_check` has no condition on kinship. In a world of twelve people in four related households there are few unrelated partners. Whether to add a kin rule is the owner's decision. It would also lower the hamlet's births.
+- **The run-born felt the longing but did not act on it.** Grown run-born people did get "You long for a child of your own." with no partner named. Dell, Lark, Vale and Pia did from 142–258 minutes, but planned instead to learn fire, cooking or fishing, which the newborn do not know. Only Uma (provided) decided to conceive. In the control, the cap of 12 also left Nia, Hana, Sol, Bee and others on their graphs for 6–149 minutes each, and graph adults do not conceive.
+- Wenna's prompt names most neighbours "a stranger (#6)", including her family-to-be. Names are not carried across in these worlds (`stranger_by_name`). This is not a births matter.
+
+### Recommendation
+
+The question that decides a stable population was not reached: **do people born in the run pair up and have children?** Every seeded person is gone by about 9.6 h.
+
+The next births batch:
+
+- run 10 h or more;
+- set `minds.max` at least 20, so that no adult lives on a graph;
+- run control and longing, 2–3 replicates each. Longing gave the fewest attempts per birth, and the control was closest to replacement.
+- measure `gen2_births`, couples and the run-born's longing against their conceive acts.
+
+Rough estimate: 2 arms × 3 × 10 h × about 15 thinkers × $0.13 ≈ **$120**, or about $80 with 2 replicates. Two things to settle first:
+
+- whether provided's roof condition stays: as written it refuses where minds actually decide;
+- the owner's decision on kin.
+
+### What this batch does not show
+
+- The spread between replicates. Every number above is one run.
+- Anything after 6 hours, when the run-born would have to replace the seeded.
+- A causal account of why the run-born did not conceive. Their prompts and plans suggest craft-learning and having no partner came first. That is a reading of the journals, and the models' stated plans are not proof of cause.
+- Whether the food gate would bind in a leaner world. Here it refused once.
+- Performance. The trial service carried four worlds. Tick timings were not examined.
 
 ## The greeting trial (2026-11-11)
 
