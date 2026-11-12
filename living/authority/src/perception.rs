@@ -334,6 +334,8 @@ thread_local! {
     /// Bumped by every write that can change who knows whose name, what anyone knows how to do
     /// or what a skill use reveals: acquaintance, membership, know-how, reveal, a new character.
     static ANSWERS_GEN: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+    /// Generation bumps since the last report (`report_answers`).
+    static ANSWERS_BUMPS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
 }
 
 #[derive(Default)]
@@ -354,6 +356,7 @@ struct Answers {
 /// A write changed what some observer may make of some target (see `ANSWERS_GEN`).
 pub fn answers_changed() {
     ANSWERS_GEN.with(|g| g.set(g.get() + 1));
+    ANSWERS_BUMPS.with(|b| b.set(b.get() + 1));
 }
 
 /// The transaction's answers, cleared when the transaction or the generation changed; `None`
@@ -390,8 +393,9 @@ pub fn report_answers(ctx: &ReducerContext) {
         (a.hits, a.computed, a.compared, a.differed) = (0, 0, 0, 0);
         v
     });
+    let bumps = ANSWERS_BUMPS.with(|b| b.replace(0));
     if h + c > 0 {
-        log::info!("regard answers: hits={h} computed={c} compared={n} differed={d}");
+        log::info!("regard answers: hits={h} computed={c} compared={n} differed={d} bumps={bumps}");
     }
 }
 
