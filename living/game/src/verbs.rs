@@ -72,7 +72,7 @@ pub struct Rules {
     pub skills: Vec<Skill>,
     /// How items look by the rules' `item_look` (icon id, label), kept for the revision they were
     /// read under (a Rhai call each, so never per frame).
-    looks: std::cell::RefCell<(u32, HashMap<String, (String, String)>)>,
+    looks: std::cell::RefCell<(u32, HashMap<String, (String, String, String)>)>,
 }
 
 /// A skill as the world's script declares it (`<skill>_spec()`): whether it takes a target or an
@@ -96,16 +96,29 @@ impl Rules {
     /// How an item looks: its icon id and its label, from the world's `item_look` (goods-2: an
     /// item's `icon`, `label` traits), else its name and the name with spaces.
     pub fn item_look(&self, item: &str) -> (String, String) {
+        let (icon, label, _) = self.item_look_full(item);
+        (icon, label)
+    }
+
+    /// The same with the item's `group` (food, tool, glass…; empty: none).
+    pub fn item_look_full(&self, item: &str) -> (String, String, String) {
         let mut c = self.looks.borrow_mut();
         if c.0 != self.revision {
             *c = (self.revision, HashMap::new());
         }
         c.1.entry(item.to_string())
             .or_insert_with(|| match self.scripts.as_ref().and_then(|sc| sc.item_look_of("item_look", item)) {
-                Some(l) if !l.icon.is_empty() => (l.icon, if l.label.is_empty() { item.replace('_', " ") } else { l.label }),
-                _ => (item.to_string(), item.replace('_', " ")),
+                Some(l) if !l.icon.is_empty() => (l.icon, if l.label.is_empty() { item.replace('_', " ") } else { l.label }, l.group),
+                _ => (item.to_string(), item.replace('_', " "), String::new()),
             })
             .clone()
+    }
+
+    /// The pack's drawing for an item: its icon id's, else its group's (an item a world adds
+    /// draws as its kind of thing until it has its own).
+    pub fn item_glyph(&self, item: &str) -> crate::ui::icons::ItemMark {
+        let (icon, _, group) = self.item_look_full(item);
+        crate::ui::icons::item_or_group(&icon, &group)
     }
 
     /// Recompile when the `script` row changes (an install).
@@ -1761,12 +1774,12 @@ mod tests {
 
     #[test]
     fn make_is_offered_at_a_furnace_only_while_it_burns_with_fuel() {
-        // Cullet's glass: at a furnace, lit, 1 fuel, 2 sand and an alkali (ash), glassmaking.
+        // Cullet's glass: at a furnace, lit, 1 fuel, 2 sand and an alkali (ash), a crucible held, glassmaking.
         let src = living_rules::floors::compose(SKILLS, include_str!("../../seeds/worlds/cullet/laws.rhai")).unwrap();
         let day = 2_880_000;
         let sc = Scripts::with_day(&src, day).unwrap();
         let aim = Aim::Thing { class: "structure", kind: "furnace".into(), at: Vec2::ZERO, id: 5, amount: 0.0, nearest: true };
-        let m = me(&[("sand", 2), ("ash", 1)], &["glassmaking"]);
+        let m = me(&[("sand", 2), ("ash", 1), ("crucible", 1)], &["glassmaking"]);
         let glass = |lit_until: u64| {
             let mut t = thing_facts("structure", "furnace", 5, 0.0, 1.0);
             workplace(&sc, &mut t, lit_until, 1_000_000, day);

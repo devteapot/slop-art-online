@@ -19,7 +19,7 @@ mod death;
 mod facing;
 mod frame;
 pub mod hit;
-mod icons;
+pub mod icons;
 pub mod kit;
 mod link;
 mod live;
