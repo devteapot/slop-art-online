@@ -339,6 +339,52 @@ Old people tire sooner and heal slower. Two adults who both choose to start a fa
     )
 }
 
+/// The one line of "# Who you are" that says what the body is now: its age and life stage, and
+/// for how long it has been in that stage, as the character row and the world's life table give
+/// them (the same age and stage the scene's `you.age` carries, perceive.rs). It is a perceived
+/// fact beside the persona, never part of it: a run-born adult whose identity still speaks as a
+/// small child reads, every prompt, that the body is grown (docs/TRIALS.md, "Does a run-born
+/// adult's identity still describe a child?"). `base` is the species' table; the world's
+/// `life_years` law (Cullet's 90-year lives) is applied over it as the authority applies it.
+pub fn body_line(kind: &str, stage: u8, age_days: f32, base: living_rules::life::Life, pace: living_rules::life::Pace) -> String {
+    let life = compiled().map(|s| s.life(kind, base)).unwrap_or(base);
+    body_line_of(kind, stage, age_days, life, pace)
+}
+
+fn body_line_of(kind: &str, stage: u8, age_days: f32, life: living_rules::life::Life, pace: living_rules::life::Pace) -> String {
+    let person = kind == "person";
+    let what = match (person, stage) {
+        (true, 0) => "a baby",
+        (true, 1) => "a child",
+        (true, 3) => "old",
+        (true, _) => "an adult",
+        (false, 0) => "newborn",
+        (false, 1) => "young",
+        (false, 3) => "old",
+        (false, _) => "grown",
+    };
+    // Where this stage began, as a fraction of the lifespan.
+    let from = match stage {
+        0 => 0.0,
+        1 => life.infant,
+        3 => life.elder,
+        _ => life.child,
+    };
+    let year = (pace.year_days * pace.pace.max(0.0001)).max(0.0001);
+    let since = (age_days - from * life.span(pace.year_days, pace.pace)).max(0.0);
+    let years = (age_days / year + 1e-4).floor();
+    let old = if years < 1.0 { "less than a year old".to_string() } else if years == 1.0 { "1 year old".to_string() } else { format!("{years:.0} years old") };
+    // The time in a stage: in days while under a year of them, else in years.
+    let how_long = if since < year {
+        living_rules::describe_days(since)
+    } else if since < 2.0 * year {
+        "a year".to_string()
+    } else {
+        format!("{:.0} years", (since / year + 1e-4).floor())
+    };
+    format!("Your body: {old}, {what} for {how_long}.")
+}
+
 /// The world's rules as every mind is told them: the world's line, then the rule script's
 /// world text with the world's seasons and life table. Built once per rules revision, so the
 /// static prefix of every prompt that holds it changes only when the rules do.
@@ -1499,6 +1545,21 @@ mod tests {
     fn reorganize_shares_prefix() {
         assert_prefix("reorganize", "person");
     }
+    #[test]
+    fn body_line_says_age_stage_and_how_long() {
+        // Cullet's lives on the hamlet's pace: 90 years, a year of 4 days at pace 0.0357 (0.143
+        // world days), adult from 15 years, old from 59.5.
+        let life = living_rules::life::Life { years: 90.0, infant: 2.0 / 90.0, child: 15.0 / 90.0, elder: 59.5 / 90.0, ..Default::default() };
+        let pace = living_rules::life::Pace { year_days: 4.0, pace: 0.0357 };
+        let year = 4.0 * 0.0357;
+        assert_eq!(body_line_of("person", 2, 15.05 * year, life, pace), "Your body: 15 years old, an adult for a few hours.");
+        assert_eq!(body_line_of("person", 1, 14.9 * year, life, pace), "Your body: 14 years old, a child for 12 years.");
+        assert_eq!(body_line_of("person", 2, 41.0 * year, life, pace), "Your body: 41 years old, an adult for 26 years.");
+        assert_eq!(body_line_of("person", 3, 60.0 * year, life, pace), "Your body: 60 years old, old for a few hours.");
+        assert_eq!(body_line_of("person", 0, 0.01, life, pace), "Your body: less than a year old, a baby for a few hours.");
+        assert_eq!(body_line_of("wolf", 2, 15.5 * year, life, pace), "Your body: 15 years old, grown for a few hours.");
+    }
+
     #[test]
     fn identity_shares_prefix() {
         assert_prefix("identity", "person");

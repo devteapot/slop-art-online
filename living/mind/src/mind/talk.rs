@@ -1241,6 +1241,9 @@ impl Minds {
             Some(p) => format!("{}\nValues: {}\nGoals: {}", p.narrative, p.values.join("; "), p.goals.join("; ")),
             None => format!("You are {}.", c.name),
         };
+        // What the body is now, as every prompt's "# Who you are" says it (`body_line`).
+        let body = self.body_line(me);
+        let identity = if body.is_empty() { identity } else { format!("{identity}\n{body}") };
         let feeling = self
             .conn
             .db
