@@ -84,6 +84,9 @@ PRIVATE = ['fast_ask', 'far_handle', 'slumber', 'land_plan', 'clock', 'steer', '
            # Heard, not seen (fov-1): who each player hears, its secret salt, and every change of a
            # world law on a running world (`set_world_law`).
            'heard', 'hear_salt', 'law_change',
+           # When what each character can make of others last changed (cullet-sweep,
+           # docs/PERCEPTION.md "Module memory and rollback"): the perception sweep's only.
+           'knowledge_epoch',
            # Who heard each line (docs/COMMUNICATION.md §6); a speaker's person reads its own through my_heard.
            'line_heard',
            # What each player's character senses (the `senses` law), read through my_senses.
@@ -694,7 +697,9 @@ class Run:
         admin_identity = (lambda v: (v[0] if isinstance(v, list) else v).lower().removeprefix('0x'))(self.sql_admin('SELECT admin FROM world')[0]['admin'])
         own = {}
         for label, token, _ in identities:
-            own[label] = self.probe('own-' + label, ['SELECT * FROM ' + v for v in OWN], token, seconds=1)
+            # With seen_characters: my_earshot's hearers are held to it (the `earshot` law is on as
+            # shipped since earshot-on; while it was off the row was empty and the check vacuous).
+            own[label] = self.probe('own-' + label, ['SELECT * FROM ' + v for v in OWN + ['seen_characters']], token, seconds=1)
         own['anonymous'] = self.probe('own-anonymous', ['SELECT * FROM ' + v for v in OWN + SEEN])
 
         def scoped_to_self(label, v):

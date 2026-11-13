@@ -855,6 +855,22 @@ There is no schema change: no table, column, reducer, view or subscription was a
 - `within_reach` is two point lookups (`character`, `body`) and the hearing law.
 - The [performance](https://spacetimedb.com/docs/tables/performance/) page has no guidance on reads within a reducer beyond this.
 
+### Said once (branch `say-once`)
+
+From ew2 (docs/TRIALS.md, "Ways stage"): of its 49 repeated lines, 22 were one plan's first line said twice, 2–3 s apart. The mind service delivers a plan in two calls:
+1. The routine edit (`apply_routines`) makes it the "current plan" routine. The old top level already weighs that routine, so the body runs it and its first `say` node speaks.
+2. The install (`mind_install_way`) clears the node's mark (`set_graph`). The decision's own line is refused ("speaking too fast", told as `unsaid`), and once the 2 s gap passes, the node says its line again.
+
+es1 had the same pattern (9–24 a run), so it predates the ways.
+
+**The rule:** a mind plan's `say` node (the graph a mind installed, `brain.source = "mind"`) addressed to a person does not say a line nearly the same as one its speaker said to that person in the last 45 s. "Nearly the same" is the repeat match (`speech::nearly_same`, word Jaccard ≥ 0.6, as `said_recently`). It is read from the chronicle (`speech::said_to_recently`), so it holds across the install, unlike the node's mark. The node counts as done ("already said"). **Scope (decided 2026-11-13): only that.** It is what Mirren's double needed. Never held back:
+- a line to the room: its hearers are whoever is near when it is said, so saying it again may reach others (a crier's "Fresh bread!", "Is anyone there?" after walking on);
+- a player's lines (`human_say`, `human_speak`): a player who says the same thing twice means to;
+- a deliberation's own line (`mind_install_way`, `mind_say`) and talk turns;
+- a graph the admin or a scene installed (`set_behavior`, battle and test graphs), and a player's commands.
+
+The repeat guard still tells any speaker it said nearly the same thing. The first version held back room lines and scene graphs too, and the merge scene gate caught it: verify-core `senses` has one speaker say "Can you hear me? (shipped)" and, after the hearing law changes, "Can you hear me? (hear12)" to the room within 45 s, from a scene graph (`set_behavior`). Those match at exactly 0.6, so the second line was dropped and no one heard it (gate run `gate-1113022657-b-senses-core`). A plan's room line can still be said twice across an install, as in es1 and ew2; the repeat measure counts it.
+
 ### Tools
 
 `inspector.py`, `social_report.py`, `feel_excerpts.py` and `arrive_spread.py` found unheard lines by the "No answer from" (or "earshot") text. They now match every wording (`UNHEARD`: "No answer from", "could not have heard you", "Nobody was near enough to hear you", "is too far to hear you"). `arrive_spread.py` counts every `silence` row to the newcomer as a line said out of earshot. It reads only rows whose subject is the newcomer, so room lines are not counted. It also leaves out a planned line that was not said ("You did not say your planned line"): that has no chronicle line and is no line said. `life_feel.py` counts by the `silence` kind and needed no change. exp-arrive's `arrive_report.py`, on its own branch, is not changed here.
@@ -906,7 +922,25 @@ Approved 2026-11-12 by the general coordinator as a perception fact. It is #4 in
 - **Words.** Each person is named in the speaker's own labels (`label_for`). That is a name only when known and near enough to make out, otherwise "a stranger" or "someone too far away to make out". A mind also gets the id the scene shows them under, a far figure's handle (far-handle). A way that reaches everyone a said line does says only whom it adds ("a call would also reach: …", or "a call would reach no one more"); one that reaches fewer lists its own ("a whisper would reach: …", or "no one"). At most 8 are named per way; the rest are counted ("…, 3 more"). Ways come in the rules' order and are named by their script name ("a call", "a whisper"), so a world's own way reads "a <name>".
 - **No advice.** The fact says nothing about whether anyone is listening, and nothing about what to do. It adds no rule about when to speak, and no line is held back or delivered differently.
 
-**The law: `earshot`, off as shipped.** `laws().earshot` (`Laws::earshot`), set with `set_world_law earshot true` or a seed's `rules`. Turning a behaviour on by default in the game is the owner's call, so it stays off until the stage below has been read. Off, neither controller is told anything, and the world is as before.
+**The law: `earshot`, on as shipped since `earshot-on` (2026-11-13).** `laws().earshot` (`Laws::earshot`), settable per world with `set_world_law earshot false` (or `true`) or a seed's `rules`. Off, neither controller is told anything, and speech is as it was before earshot.
+
+**On by default (branch `earshot-on`, approved 2026-11-13).** The stages read before the switch:
+- **es1** (earshot alone, $9.48): no effect on unheard lines. The diagnosis (`unheard_why.py`): late lines, decisions with no way to call, talk turns without the fact.
+- **ew1 and ew2** (with `mind-say-way`, $2.55 and $2.59): decisions now call. In ew2, 62 decided calls were named, 58 said, and 30 of the 43 to someone reached them; "only a call" unheard fell to 9. False replies stayed within es1's range; the room-call kind is fixed by `talk-named-room`.
+- **fs1w** (fs1n with earshot): lines to the newcomer out of earshot 5 of 16, against 11 of 18 in fs1n.
+
+**Cost per prompt**, measured on the stages' think and deliberate requests (the key and its words):
+
+| batch | requests with the fact | fact, characters (median / p90) | share of the prompt's characters (median) |
+|---|---|---|---|
+| es1 (earshot arm) | 1653 of 1673 | 216 / 360 | 1.41% |
+| ew1 | 844 of 854 | 221 / 342 | 1.44% |
+| ew2 | 854 of 864 | 216 / 348 | 1.36% |
+| fs1w | 888 of 898 | 226 / 342 | 1.41% |
+
+That is about 55 tokens at four characters a token, and up to about 125 at the think prompts' own measured ratio (1.76 characters a token on glm-flash: the scene's JSON tokenizes densely). The journals' deliberate `prompt_tokens` count more than the one request they keep, so tokens are not taken from them. Talk turns and players' prompts are unchanged: a talk turn has no scene, and a player's row is written only when it changes.
+
+**Trial arms** that ran with the law off as recorded (`strangers-control`, `strangers-filter`, `strangers-filter-cues`, `strangers-first-sight`, `strangers-filter-cues-fs`, `strangers-first-sight-hf`, `strangers-first-sight-n2`, `gate-off-ds`, `gate-jev-ds`) now pin `earshot: false` in `living/trials/variants.json`, so they run as recorded. Variants described as "the models file (or main) as it stands" take the new default.
 
 **Both controllers, from one place.**
 - **A mind:** its deliberation scene (`perceive::scene_json`) has the key "who would hear you now" (`living_rules::script::speech::EARSHOT`), read in its think and deliberate prompts.

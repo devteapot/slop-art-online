@@ -6,7 +6,7 @@ use living_rules::map::{chunks_around, Map};
 use living_rules::script::Scripts;
 use spacetimedb::{ReducerContext, Table};
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
 thread_local! {
@@ -41,6 +41,7 @@ pub fn practice_of(ctx: &ReducerContext, id: u32) -> std::collections::BTreeMap<
 
 /// One more successful use of a skill.
 pub fn practise(ctx: &ReducerContext, id: u32, skill: &str) {
+    let _detail = detail_span("common.practise");
     if !living_rules::genes::is_skilled(skill) {
         return;
     }
@@ -113,7 +114,15 @@ pub fn diag<K: Into<std::borrow::Cow<'static, str>>>(key: impl FnOnce() -> K, n:
 
 /// One line a second while profiling: the counts since the last report.
 pub fn report_diag() {
+    // The rules' script call counts (`living_rules::script::calls`), taken every second so a
+    // window's first report holds only that second's calls.
+    let calls = living_rules::script::calls::take();
     if PROFILE.with(|p| p.get()) {
+        for (k, n) in [("eval:script_calls", calls[0]), ("eval:status_calls", calls[1]), ("eval:status_memo", calls[2]), ("eval:status_run", calls[3])] {
+            if n > 0 {
+                diag(|| k, n);
+            }
+        }
         let m = DIAG.with(|d| std::mem::take(&mut *d.borrow_mut()));
         if !m.is_empty() {
             log::info!("diag: {}", serde_json::to_string(&m).unwrap_or_default());
@@ -266,9 +275,14 @@ pub fn scripts_rev(ctx: &ReducerContext) -> u32 {
     rev
 }
 
-/// Call after writing the clock's `scripts_rev`.
+/// Call after writing the clock's `scripts_rev`. The compiled scripts and laws go too: they are
+/// kept by revision, and a transaction that wrote a revision and then failed leaves its
+/// compilation in module memory under a number the next install takes again (docs/PERCEPTION.md,
+/// "Module memory and rollback").
 pub fn invalidate_scripts_rev() {
     SCRIPTS_REV.with(|c| c.set(None));
+    SCRIPTS.with(|s| *s.borrow_mut() = None);
+    LAWS.with(|l| l.set(None));
 }
 
 #[derive(Clone, Copy, Default)]
@@ -1057,7 +1071,7 @@ pub fn learn(ctx: &ReducerContext, id: u32, technique: &str, source: &str, now: 
         return false;
     }
     ctx.db.know_how().insert(KnowHow { id: 0, actor: id, technique: technique.into(), source: source.into(), since_ms: now });
-    crate::perception::answers_changed();
+    crate::perception::knowledge_changed(ctx, Some(id));
     true
 }
 
@@ -1081,6 +1095,12 @@ thread_local! {
     static CHUNK_BODIES: RefCell<((u64, u64), HashMap<u32, Rc<Vec<CachedBody>>>)> = RefCell::new(((0, 0), HashMap::new()));
 }
 
+thread_local! {
+    /// Bodies written (`body_written`) since the chunk cache's instant began: their cached
+    /// position may be older than their row, so [`cached_body_current`] says no for them.
+    static WRITTEN: RefCell<HashSet<u32>> = RefCell::new(HashSet::new());
+}
+
 fn chunk_bodies(ctx: &ReducerContext, chunk: u32, now: u64) -> Rc<Vec<CachedBody>> {
     CHUNK_BODIES.with(|c| {
         let mut c = c.borrow_mut();
@@ -1088,6 +1108,7 @@ fn chunk_bodies(ctx: &ReducerContext, chunk: u32, now: u64) -> Rc<Vec<CachedBody
         if c.0 != key {
             c.0 = key;
             c.1.clear();
+            WRITTEN.with(|w| w.borrow_mut().clear());
         }
         if let Some(v) = c.1.get(&chunk) {
             return v.clone();
@@ -1101,6 +1122,18 @@ fn chunk_bodies(ctx: &ReducerContext, chunk: u32, now: u64) -> Rc<Vec<CachedBody
 /// Forget cached bodies (after a body is removed or moved to another chunk this instant).
 pub fn invalidate_bodies() {
     CHUNK_BODIES.with(|c| c.borrow_mut().0 = (0, 0));
+}
+
+/// A body row was written: a position the chunk cache already holds for it may be older.
+pub fn body_written(id: u32) {
+    WRITTEN.with(|w| w.borrow_mut().insert(id));
+}
+
+/// Whether the position [`creatures_near`] gave for body `id` at `now` in this transaction is
+/// exactly `pos(row, now)` of its row as it is now: true unless the row was written since the
+/// cache's instant began (it then holds the same row it read).
+pub fn cached_body_current(id: u32, now: u64) -> bool {
+    CHUNK_BODIES.with(|c| c.borrow().0 == (tx_seq(), now)) && !WRITTEN.with(|w| w.borrow().contains(&id))
 }
 
 pub fn creatures_near(ctx: &ReducerContext, at: (f32, f32), r: f32, now: u64) -> Vec<NearCreature> {
@@ -1418,6 +1451,7 @@ pub fn scent_of(kind: &str) -> Option<living_rules::species::Scent> {
 }
 
 pub fn chronicle(ctx: &ReducerContext, now: u64, kind: &str, a: u32, b: u32, at: (f32, f32), text: String) {
+    let _detail = detail_span("common.chronicle");
     // The same event repeated within two minutes becomes one entry with a count.
     let recent: Vec<Chronicle> = ctx.db.chronicle().at_ms().filter(now.saturating_sub(120_000)..).collect();
     for mut c in recent.into_iter().rev().take(40) {
@@ -1442,6 +1476,7 @@ thread_local! {
 /// Wake `id`, a bystander of what it just saw (not party to it): at once unless it was woken by
 /// what it saw within `witness_wake_ms`, else when that window ends (`due_bystander_wakes`). A
 /// party to the event is woken by `wake`, at once.
+#[track_caller]
 pub fn wake_bystander(ctx: &ReducerContext, id: u32, now: u64) {
     let ms = laws(ctx).witness_wake_ms as u64;
     if ms == 0 {
@@ -1487,8 +1522,12 @@ pub fn due_bystander_wakes(ctx: &ReducerContext, now: u64) {
     }
 }
 
+/// While profiling, each wake is counted under where it was asked from (`wake@act.rs:1540`).
+#[track_caller]
 pub fn wake(ctx: &ReducerContext, id: u32) {
     diag(|| "wake", 1);
+    let at = std::panic::Location::caller();
+    diag(|| format!("wake@{}:{}", at.file().rsplit('/').next().unwrap_or(""), at.line()), 1);
     if ctx.db.wake().id().find(id).is_none() {
         ctx.db.wake().insert(Wake { id });
     }

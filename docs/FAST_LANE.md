@@ -298,6 +298,32 @@ An estimate only. No paid battle runs until the 100-fighter collapse is understo
 - **verify-player `fast_lane`:** a played body struck by four heavy blows gets no `fast_ask` row, and its rows carry no count or "again".
 - **Unit tests:** `mind::fast::tests` (what a reply may change; no count or tactic text in the prompt); the rules' install check covers the six laws.
 
+## The battle run (plan approved 2026-11-13; not run)
+
+The run that decides whether `fast_lane_on` becomes default-on. The general coordinator approved it at about $3.6, with a $6 stop, in a quiet window.
+
+**Arms.** All on `battle_diag.py --keep-plans`, the mind service on, its slow purposes on the fake model:
+- **A:** the lane off.
+- **B:** the lane on at the shipped caps (2 a second, 4 in flight).
+- **C:** the lane on at half caps (`--law fast_lane_rate=1 --law fast_lane_inflight=2`).
+
+B and C run with `--fast-lane --fast-real`: only the fast route, `deepseek-flash` (DeepSeek V4.1 Flash, thinking off, 6 s timeout, no overflow), calls a real model. Its key comes from the checkout's `.env`, never printed.
+
+**Size and order.** 200 fighters: A, B, C, B, C, A. 100 fighters: A, B. 15 minutes each, refills on. A 5-minute B pilot at 200 comes first.
+
+**The prep** (branch `fast-lane-battle-prep`, free):
+- **The lane's profiling counters**, `fast:*` in the `diag:` lines; verify-core `fast_diag`.
+- **The battle tool's flags:**
+  - `--fast-real`;
+  - `--arm` (a label in every sample);
+  - `--keep-plans`: the fight is the fighter's one desire, its `combat` branch inside, and a fighter's compile answers "keep". A fast patch then stays until the fighter's own mind replaces it. With a bare fight graph, "keep" was rebuilt around the body's needs and the fight stopped.
+  - `--fake-fast-patch`, to prove patches install for free.
+- **Each sample's `defence`:** the blows aimed at fighters, and the share met by the target's dodge, block or jump begun during the windup, also for patched targets alone.
+
+Free test `minds-flbt2-040645` (20 fighters, 4 minutes, `--fake-fast-patch`): patches installed about once a second, refused rarely, and the fight held with refills. The timed-defence share was 33–58% a window.
+
+**Measures and readings** are the plan's. A default-on recommendation goes to the owner.
+
 ## What this design does not do
 
 - **It does not answer a windup.** Graphs do, with conditions the minds write (r2d: every condition still said "winding up"; whether minds move it is the arm's question, not something the fast lane is told to do).

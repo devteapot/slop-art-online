@@ -44,7 +44,9 @@ fn served(ctx: &ReducerContext, c: &Character) -> bool {
 
 /// A blow, shot or bolt reached `vc`: `felt` is its own line for it.
 pub fn struck(ctx: &ReducerContext, vc: &Character, felt: &str, now: u64) {
+    let _detail = common::detail_span("fast.struck");
     if common::laws(ctx).fast_lane_on && served(ctx, vc) {
+        common::diag(|| "fast:trigger_struck", 1);
         trigger(ctx, vc.id, felt, now);
     }
 }
@@ -78,6 +80,7 @@ pub fn move_started(ctx: &ReducerContext, a: &Activity, now: u64) {
         e.0
     });
     if count % n == 0 {
+        common::diag(|| "fast:trigger_seen", 1);
         let who = common::label_cap(ctx, &vc, a.id);
         let article = if a.skill.starts_with(['a', 'e', 'i', 'o', 'u']) { "an" } else { "a" };
         trigger(ctx, vc.id, &format!("{who} winds up {article} {} at you", a.skill), now);
@@ -90,6 +93,9 @@ fn trigger(ctx: &ReducerContext, actor: u32, reason: &str, now: u64) {
         Some(mut r) => {
             if r.issued_ms == 0 && r.first_ms == 0 {
                 r.first_ms = now;
+            } else {
+                // A trigger while one waits or is being served: merged into that row.
+                common::diag(|| "fast:merged", 1);
             }
             r.reason = reason;
             r.trigger_ms = now;
@@ -133,6 +139,7 @@ pub fn pump(ctx: &ReducerContext, now: u64) {
     for r in rows {
         if r.issued_ms != 0 {
             if now.saturating_sub(r.issued_ms) > stale * ISSUED_WINDOWS {
+                common::diag(|| "fast:expired", 1);
                 idle(ctx, r);
             } else {
                 inflight += 1;
@@ -142,6 +149,7 @@ pub fn pump(ctx: &ReducerContext, now: u64) {
                 ctx.db.fast_ask().actor().delete(r.actor);
             }
         } else if now.saturating_sub(r.first_ms) > stale || !laws.fast_lane_on {
+            common::diag(|| "fast:stale", 1);
             idle(ctx, r);
         } else {
             waiting.push(r);
@@ -158,10 +166,17 @@ pub fn pump(ctx: &ReducerContext, now: u64) {
     let cap = laws.fast_lane_inflight.max(0.0) as usize;
     waiting.sort_by(|a, b| b.trigger_ms.cmp(&a.trigger_ms));
     for mut r in waiting {
-        if inflight >= cap || tokens < 1.0 {
+        // A pass that stops with rows still waiting: which cap stopped it.
+        if inflight >= cap {
+            common::diag(|| "fast:cap_inflight", 1);
+            break;
+        }
+        if tokens < 1.0 {
+            common::diag(|| "fast:cap_rate", 1);
             break;
         }
         if r.last_issued_ms != 0 && now.saturating_sub(r.last_issued_ms) < gap {
+            common::diag(|| "fast:gap_skip", 1);
             continue;
         }
         let Some(c) = ctx.db.character().id().find(r.actor).filter(|c| served(ctx, c)) else {
@@ -172,6 +187,7 @@ pub fn pump(ctx: &ReducerContext, now: u64) {
         r.last_issued_ms = now;
         r.base_ms = ctx.db.brain().id().find(c.id).map_or(0, |b| b.installed_ms);
         ctx.db.fast_ask().actor().update(r);
+        common::diag(|| "fast:issued", 1);
         inflight += 1;
         tokens -= 1.0;
     }

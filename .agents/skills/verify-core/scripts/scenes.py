@@ -6042,6 +6042,85 @@ def heard_first(s):
 SCENES["heard_first"] = heard_first
 
 
+def sweep_kept(s):
+    """A player's rows under a law that reads distance are each what projecting it afresh gives
+    (docs/PERCEPTION.md, "The perceived set"; `perception::kept_sweep`). On a world whose
+    `perceived_of` reads `p.dist` (Cullet's `known_within`, 24 m), the sweep keeps what each row
+    was projected from and projects it again only when that changed. With the
+    `regard_cache_check` law on, every kept sweep compares every row of the player with a fresh
+    projection and counts differences (`sweep kept: kept=… projected=… full=… compared=…
+    differed=…`, one line a second). On an open ray a player watches, for about 50 s: two walkers
+    going back and forth across the cut (20 m and 28 m), a pair fighting at 6 m (bands, the
+    frames' and blows' writes to rows), one of them appraised by the player (a reveal, exact
+    health), a stranger telling the player its name, the player learning a technique, and a
+    death in sight (admin `kill`). Passes when rows were kept, many compared, and none differed.
+    Needs a seed whose law reads distance (`--seed cullet`); the law is restored at the end."""
+    src = s.rows("SELECT source FROM script")[0]["source"]
+    known = law_number(src, "known_within") if "fn known_within()" in src else None
+    s.expect("the world's perceived_of reads distance (a seed like Cullet's)", known is not None, None)
+    st = json.loads((s.out / "state.json").read_text())
+    verify = [str(ROOT / ".agents/skills/verify/scripts/verify.py")]
+    subprocess.run(["python3", *verify, "player", "--run", st["run"], "join", "Sweeper"], check=False, capture_output=True)
+    st = json.loads((s.out / "state.json").read_text())
+    viewer = st["identity"]
+    present = lambda: subprocess.run(["python3", *verify, "player", "--run", st["run"], "move", "0", "0"], check=False, capture_output=True)
+    present()
+    me = s.wait(lambda: next(iter(s.rows(f"SELECT id FROM character WHERE controller = 0x{viewer}")), None))["id"]
+    ray = open_ray(s, int(known) + 8)
+    (s.out / f"{s.name}-ray.json").write_text(json.dumps(ray) + "\n")
+    walk_a, walk_b, fight_a, fight_b, talker, dying = s.people(6)
+    set_law(s, "regard_cache_check", True)
+    t0 = time.time()
+    try:
+        s.call("place_at", me, *ray[0])
+        s.call("place_at", walk_a, *ray[int(known) - 4])
+        s.call("place_at", walk_b, *ray[int(known) + 4])
+        s.call("place_at", fight_a, *ray[6])
+        s.call("place_at", fight_b, *ray[7])
+        s.call("place_at", talker, *ray[3])
+        s.call("place_at", dying, *ray[10])
+        name = s.rows(f"SELECT name FROM character WHERE id = {talker}")[0]["name"]
+        for k in range(6):
+            present()
+            near, far = ray[int(known) - 4], ray[int(known) + 4]
+            s.graph(walk_a, {"seq": [{"do": {"skill": "goto", "target": {"at": list(far if k % 2 == 0 else near)}}}, {"wait": 60}]})
+            s.graph(walk_b, {"seq": [{"do": {"skill": "goto", "target": {"at": list(near if k % 2 == 0 else far)}}}, {"wait": 60}]})
+            if k == 0:
+                s.graph(fight_a, {"first": [{"do": {"skill": "attack", "target": {"id": fight_b}}}, {"wait": 1}]})
+                s.graph(fight_b, {"first": [{"do": {"skill": "attack", "target": {"id": fight_a}}}, {"wait": 1}]})
+            if k == 1:
+                subprocess.run(["python3", *verify, "player", "--run", st["run"], "act", json.dumps({"do": {"skill": "appraise", "target": {"id": fight_a}}})], check=False, capture_output=True)
+                s.graph(talker, {"seq": [{"say": f"I am {name}."}, {"wait": 300}]})
+            if k == 2:
+                s.call("grant_know_how", me, "wound_tending")
+            if k == 3:
+                s.call("kill", dying, "verify sweep_kept")
+                for f in (fight_a, fight_b):
+                    s.graph(f, {"wait": 120})
+            time.sleep(8)
+    finally:
+        set_law(s, "regard_cache_check", False, check=False)
+        for who in (walk_a, walk_b, fight_a, fight_b, talker):
+            s.graph(who, {"wait": 120})
+        off_the_line(s, ray, [me, walk_a, walk_b, fight_a, fight_b, talker], dy=50)
+    logs = s.command("logs", "-s", "local", s.db, "-n", "400000").stdout
+    kept = [tuple(int(x) for x in m.groups()) for m in re.finditer(r"sweep kept: kept=(\d+) projected=(\d+) full=(\d+) compared=(\d+) differed=(\d+)", logs)]
+    total = dict(zip(("kept", "projected", "full", "compared", "differed"), [sum(k[i] for k in kept) for i in range(5)]))
+    errors = [l for l in logs.splitlines() if "sweep kept: #" in l][:10]
+    told = s.rows(f"SELECT * FROM acquaintance WHERE observer = {me} AND known = {talker}")
+    revealed = s.rows(f"SELECT * FROM chronicle WHERE kind = 'attack' AND a = {fight_a}")
+    (s.out / f"{s.name}-sweep-kept.json").write_text(json.dumps({**total, "errors": errors, "told": told, "seconds": round(time.time() - t0)}, indent=1) + "\n")
+    print(f"MEASURE sweep kept: {total}", flush=True)
+    s.expect("the talker told the player its name mid-run", bool(told), told, fatal=False)
+    s.expect("the pair fought in sight", bool(revealed), None, fatal=False)
+    s.expect("rows were kept across sweeps (the kept path ran)", total["kept"] > 0 and total["projected"] > 0, total)
+    s.expect("many rows were compared with fresh projections", total["compared"] >= 1000, total)
+    s.expect("no row differed from a fresh projection", total["differed"] == 0 and not errors, errors)
+
+
+SCENES["sweep_kept"] = sweep_kept
+
+
 def battle_cheap(s):
     """The fighters' cheaper paths change nothing a fighter perceives or does (docs/BATTLE_SCALE.md,
     battle-cheap). A battle of 12 minded people on an open line, a campfire and a shelter among
@@ -6112,6 +6191,198 @@ SCENES["cheap_alarms"] = battle_cheap
 SCENES["cheap_warmth"] = battle_cheap
 
 
+def _sweep_player(s, name):
+    """The run's player, joined and present, and its character id (as `sweep_kept`)."""
+    st = json.loads((s.out / "state.json").read_text())
+    verify = [str(ROOT / ".agents/skills/verify/scripts/verify.py")]
+    subprocess.run(["python3", *verify, "player", "--run", st["run"], "join", name], check=False, capture_output=True)
+    st = json.loads((s.out / "state.json").read_text())
+    viewer = st["identity"]
+    present = lambda: subprocess.run(["python3", *verify, "player", "--run", st["run"], "move", "0", "0"], check=False, capture_output=True)
+    present()
+    me = s.wait(lambda: next(iter(s.rows(f"SELECT id FROM character WHERE controller = 0x{viewer}")), None))["id"]
+    return me, viewer, present
+
+
+def _sweep_counts(s, since_line=0):
+    """The `sweep kept` report lines of the world's log from line `since_line` on: totals, the
+    instances that reported, and error lines naming a differing row."""
+    lines = s.command("logs", "-s", "local", s.db, "-n", "400000").stdout.splitlines()
+    kept = [m.groups() for m in (re.search(r"sweep kept: kept=(\d+) projected=(\d+) full=(\d+) compared=(\d+) differed=(\d+)(?: instance=(-?\d+))?", l) for l in lines[since_line:]) if m]
+    total = dict(zip(("kept", "projected", "full", "compared", "differed"), [sum(int(k[i]) for k in kept) for i in range(5)]))
+    instances = sorted({k[5] for k in kept if k[5]})
+    errors = [l for l in lines[since_line:] if "sweep kept: #" in l][:10]
+    return total, instances, errors, lines[since_line:]
+
+
+def _http(path, body, token=None):
+    url = os.environ.get("LIVING_STDB_URL", "http://127.0.0.1:3300").rstrip("/")
+    req = urllib.request.Request(url + path, data=json.dumps(body).encode(), method="POST")
+    req.add_header("Content-Type", "application/json")
+    if token:
+        req.add_header("Authorization", f"Bearer {token}")
+    try:
+        with urllib.request.urlopen(req, timeout=60) as r:
+            return r.status, r.read().decode()
+    except urllib.error.HTTPError as e:
+        return e.code, e.read().decode()
+
+
+def sweep_rollback(s):
+    """Nothing the perception sweep keeps in module memory outlives a transaction that rolled back
+    (docs/PERCEPTION.md, "Module memory and rollback"). SpacetimeDB 2.14.1 rolls back a failed
+    reducer's rows and keeps its instance's memory when it returns an error, and replaces the
+    instance when it traps. On a world whose law reads distance (Cullet), a player watches
+    strangers on an open ray with `regard_cache_check` on, while the `memory_test` law makes one
+    step fail after it has written: (1) every tick fails after its sweep while two strangers are
+    moved across the 24 m cut (the sweeps that saw them cross roll back); (2) every tick panics
+    after its sweep while they cross back (the instance is replaced); (3) `place_at` fails after
+    moving a stranger across the cut; (4) `kill` fails after the death; (5) a newcomer's `join`
+    fails after its sweep, then joins. After each, later sweeps compare every row with a fresh
+    projection. Passes when each failure happened and was rolled back, the kept state was cleared
+    after the failed ticks, a trap gave a new instance, and no row differed. A sweep that kept
+    what a rolled-back tick saw (the guard on the committed tick removed) fails it. Needs a seed
+    whose law reads distance (`--seed cullet`)."""
+    src = s.rows("SELECT source FROM script")[0]["source"]
+    known = law_number(src, "known_within") if "fn known_within()" in src else None
+    s.expect("the world's perceived_of reads distance (a seed like Cullet's)", known is not None, None)
+    near, far = int(known) - 4, int(known) + 4
+    me, viewer, present = _sweep_player(s, "Rollback")
+    ray = open_ray(s, far + 2)
+    a, b, c, d = s.people(4)
+    since = len(s.command("logs", "-s", "local", s.db, "-n", "400000").stdout.splitlines())
+    body = lambda who: s.rows(f"SELECT x, y FROM body WHERE id = {who}")[0]
+    alive = lambda who: s.rows(f"SELECT alive FROM character WHERE id = {who}")[0]["alive"]
+    set_law(s, "regard_cache_check", True)
+    done = {}
+    try:
+        s.call("place_at", me, *ray[0])
+        s.call("place_at", a, *ray[near])
+        s.call("place_at", b, *ray[far])
+        s.call("place_at", c, *ray[6])
+        s.call("place_at", d, *ray[3])
+        present()
+        time.sleep(3)
+        # (1) Ticks fail after their sweep while a and b cross the cut.
+        set_law(s, "memory_test", 1)
+        time.sleep(0.4)
+        s.call("place_at", a, *ray[far])
+        s.call("place_at", b, *ray[near])
+        time.sleep(1.5)
+        set_law(s, "memory_test", 0)
+        present()
+        time.sleep(3)
+        # (2) Ticks panic after their sweep while they cross back.
+        set_law(s, "memory_test", 2)
+        time.sleep(0.4)
+        s.call("place_at", a, *ray[near])
+        s.call("place_at", b, *ray[far])
+        time.sleep(1.5)
+        set_law(s, "memory_test", 0)
+        present()
+        time.sleep(4)
+        # (3) place_at fails after moving a across the cut: it stays where it was.
+        set_law(s, "memory_test", 3)
+        before = body(a)
+        r = s.call("place_at", a, *ray[far], check=False)
+        after = body(a)
+        done["place"] = r.returncode != 0 and abs(after["x"] - before["x"]) < 0.01 and abs(after["y"] - before["y"]) < 0.01
+        set_law(s, "memory_test", 0)
+        present()
+        time.sleep(2)
+        # (4) kill fails after the death: c lives.
+        set_law(s, "memory_test", 4)
+        r = s.call("kill", c, "verify sweep_rollback", check=False)
+        done["kill"] = r.returncode != 0 and alive(c)
+        set_law(s, "memory_test", 0)
+        present()
+        time.sleep(2)
+        # (5) A newcomer's join fails after its sweep, then succeeds.
+        token = json.loads(_http("/v1/identity", {})[1])["token"]
+        set_law(s, "memory_test", 5)
+        code1, _ = _http(f"/v1/database/{s.db}/call/join", ["Latecomer"], token)
+        set_law(s, "memory_test", 0)
+        code2, _ = _http(f"/v1/database/{s.db}/call/join", ["Latecomer"], token)
+        done["join"] = code1 != 200 and code2 == 200
+        present()
+        time.sleep(3)
+    finally:
+        set_law(s, "memory_test", 0, check=False)
+        set_law(s, "regard_cache_check", False, check=False)
+        off_the_line(s, ray, [me, a, b, c, d], dy=54)
+    total, instances, errors, lines = _sweep_counts(s, since)
+    failed = {n: sum(f"memory_test {n}:" in l for l in lines) for n in (1, 2, 3, 4, 5)}
+    cleared = sum("sweep kept: cleared at tick" in l for l in lines)
+    (s.out / f"{s.name}-sweep-rollback.json").write_text(json.dumps({**total, "instances": instances, "failed": failed, "cleared": cleared, "done": done, "errors": errors}, indent=1) + "\n")
+    print(f"MEASURE sweep rollback: {total}, failures {failed}, kept state cleared {cleared} times, instances {len(instances)}", flush=True)
+    s.expect("(1) ticks failed after their sweep, and the kept state was cleared after them", failed[1] >= 3 and cleared >= 1, {"failed": failed, "cleared": cleared})
+    s.expect("(2) ticks panicked after their sweep, and a new instance reported", failed[2] >= 1 and len(instances) >= 2, {"failed": failed, "instances": instances})
+    s.expect("(3) place_at failed after moving, and the body did not move", done.get("place") and failed[3] >= 1, done)
+    s.expect("(4) kill failed after the death, and the character lives", done.get("kill") and failed[4] >= 1, done)
+    s.expect("(5) join failed after its sweep, then joined", done.get("join") and failed[5] >= 1, done)
+    s.expect("many rows were compared with fresh projections", total["compared"] >= 500, total)
+    s.expect("no row differed from a fresh projection", total["differed"] == 0 and not errors, errors)
+
+
+SCENES["sweep_rollback"] = sweep_rollback
+
+
+def sweep_marks(s):
+    """A change made by a reducer outside the tick reaches a player's kept rows through committed
+    data, not module memory (docs/PERCEPTION.md, "Module memory and rollback"): an introduction
+    writes the hearer's `knowledge_epoch` row, which the sweep reads by primary key. On a world
+    whose law reads distance (Cullet), with `regard_cache_check` on and the `memory_test` law at 6
+    (the marks kept in module memory are dropped, as if the reducer had run in another instance),
+    a held stranger 3 m from a player says its name to the player through `mind_say` (a reducer,
+    not the tick). Passes when the player's row of the stranger carries the name within a second
+    (five sweeps; one sweep is 200 ms), the stranger was a stranger before, and no row differed.
+    A sweep that learnt of the introduction only from a mark in memory fails it: the row keeps "a
+    stranger" until the next full re-projection, about 30 s later."""
+    src = s.rows("SELECT source FROM script")[0]["source"]
+    s.expect("the world's perceived_of reads distance (a seed like Cullet's)", "fn known_within()" in src, None)
+    me, viewer, present = _sweep_player(s, "Marks")
+    line = clear_line(s)
+    (stranger,) = s.people(1)
+    name = s.rows(f"SELECT name FROM character WHERE id = {stranger}")[0]["name"]
+    since = len(s.command("logs", "-s", "local", s.db, "-n", "400000").stdout.splitlines())
+    row = lambda: next(iter(s.http_rows(f"SELECT name, label FROM projected WHERE viewer = 0x{viewer} AND body = {stranger}")), {})
+    set_law(s, "regard_cache_check", True)
+    try:
+        s.call("place_at", me, *line[0])
+        s.call("place_at", stranger, *line[3])
+        present()
+        time.sleep(3)
+        before = row()
+        set_law(s, "memory_test", 6)
+        time.sleep(0.5)
+        now = s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+        t0 = time.monotonic()
+        s.call("mind_say", stranger, f"I am {name}.", me, "", now, hf_decided(0))
+        named_after = None
+        while time.monotonic() - t0 < 5.0:
+            if row().get("name") == name:
+                named_after = round(time.monotonic() - t0, 2)
+                break
+            time.sleep(0.05)
+        told = s.rows(f"SELECT * FROM acquaintance WHERE observer = {me} AND known = {stranger}")
+        epoch = s.rows(f"SELECT * FROM knowledge_epoch WHERE id = {me}")
+        time.sleep(1)
+    finally:
+        set_law(s, "memory_test", 0, check=False)
+        set_law(s, "regard_cache_check", False, check=False)
+        off_the_line(s, line, [me, stranger], dy=58)
+    total, instances, errors, _ = _sweep_counts(s, since)
+    (s.out / f"{s.name}-sweep-marks.json").write_text(json.dumps({"before": before, "named_after_s": named_after, "told": told, "epoch": epoch, **total, "errors": errors}, indent=1) + "\n")
+    print(f"MEASURE sweep marks: named after {named_after} s, {total}", flush=True)
+    s.expect("before: the stranger is a stranger to the player", before.get("label") == "a stranger" and not before.get("name"), before)
+    s.expect("the introduction happened (an acquaintance row) and moved the player's knowledge_epoch row", bool(told) and bool(epoch), {"told": told, "epoch": epoch})
+    s.expect("the player's row carries the name within a second, memory marks dropped", named_after is not None and named_after <= 1.0, {"named_after_s": named_after})
+    s.expect("no row differed from a fresh projection", total["differed"] == 0 and not errors, errors)
+
+
+SCENES["sweep_marks"] = sweep_marks
+
+
 def admin_vitals(s):
     """`admin_set_vitals(id, hp)` (admin only): sets a living body's health, more than its maximum
     being its maximum, and chronicles each use as an `admin` line; a health of 0 or less, or a dead
@@ -6141,6 +6412,200 @@ def admin_vitals(s):
 
 
 SCENES["admin_vitals"] = admin_vitals
+
+
+def scene_lazy(s):
+    """A body's scene worked out only as far as each reader asks (docs/BATTLE_SCALE.md,
+    scene-lazy; the `scene_lazy` law) gives the answers of the whole scene. 12 fighters on an open
+    line strike the nearest person, guard when threatened and heal when hurt, with
+    `scene_lazy_check` on: every nearest pick and every creature looked up by id is also worked
+    out from the whole scene, and a difference counted (`diag:` `scene_lazy:differed`). 40 s with
+    sight all round, then 40 s with sight by facing (`fov_on`: the threat is seen only from in
+    front, and the heard list counts), then 20 s with `scene_lazy` off: the whole scene is
+    worked out at once again and the battle goes on."""
+    line = clear_line(s)
+    fighters = s.people(12)
+    for k, who in enumerate(fighters):
+        s.call("place_at", who, line[2 + k % 6][0], line[2 + k % 6][1] + (k // 6) * 1.4)
+    for who in fighters:
+        s.call("grant_know_how", who, "wound_tending")
+        s.graph(who, {"first": [
+            {"if": {"cond": {"health": {"below": 50}}, "then": {"do": {"skill": "heal", "target": "self"}}}},
+            {"if": {"cond": {"threatened": True}, "then": {"do": {"skill": "dodge" if who % 2 == 0 else "block"}}}},
+            {"do": {"skill": "strike", "target": {"nearest": "person"}}}]})
+    # The world's own fov_on, else the shipped script's (off).
+    fov0 = any(r["name"] == "fov_on" and str(r["value"]).lower() == "true" for r in s.rows("SELECT * FROM world_law"))
+
+    def window(secs):
+        # Counts gathered while profiling stopped are reported when it starts again, in the
+        # first `diag:` line: the window counts from 2 s after it starts.
+        s.call("set_profile", True)
+        time.sleep(2)
+        since = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+        t0 = s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+        try:
+            time.sleep(secs)
+        finally:
+            s.call("set_profile", False)
+        logs = "\n".join(l for l in s.command("logs", "-s", "local", s.db, "-n", "200000").stdout.splitlines() if l[:19] >= since and "diag:" in l)
+        count = lambda key: sum(int(x) for x in re.findall(rf'"{re.escape(key)}":(\d+)', logs))
+        m = {k: count(k) for k in ("scene_lazy:checked", "scene_lazy:differed", "scene:first", "scene:by_id", "scene:all", "scene:sight_tests")}
+        uses = [u for u in s.rows("SELECT actor, skill, outcome, at_ms FROM skill_use") if u["at_ms"] >= t0 and u["actor"] in fighters]
+        m["strikes_landed"] = sum(1 for u in uses if u["skill"] == "strike" and (u["outcome"] or "").startswith(("hit", "blocked", "killed")))
+        return m
+
+    set_law(s, "scene_lazy_check", True)
+    try:
+        round_ = window(40)
+        set_law(s, "fov_on", True)
+        facing = window(40)
+        set_law(s, "fov_on", fov0)
+        set_law(s, "scene_lazy", False)
+        off = window(20)
+    finally:
+        set_law(s, "scene_lazy", True)
+        set_law(s, "scene_lazy_check", False)
+        set_law(s, "fov_on", fov0)
+    m = {"all_round": round_, "facing": facing, "off": off}
+    (s.out / f"{s.name}-scene-lazy.json").write_text(json.dumps(m, indent=1) + "\n")
+    print("MEASURE", json.dumps(m), flush=True)
+    try:
+        for name, w in (("sight all round", round_), ("sight by facing", facing)):
+            s.expect(f"{name}: a battle went on (strikes landed)", w["strikes_landed"] >= 5, w)
+            s.expect(f"{name}: every lazy answer was the whole scene's (compared many times, none differed)", w["scene_lazy:checked"] >= 200 and w["scene_lazy:differed"] == 0, w)
+        s.expect("by facing, creatures were looked up by id (the threat seen from in front)", facing["scene:by_id"] > 0, facing)
+        s.expect("with scene_lazy off, no lazy answer, and the battle goes on", off["scene:first"] == 0 and off["scene:by_id"] == 0 and off["strikes_landed"] >= 2, off)
+    finally:
+        for who in fighters:
+            s.graph(who, {"wait": 300})
+        off_the_line(s, line, fighters, dy=78)
+
+
+SCENES["scene_lazy"] = scene_lazy
+
+
+def diag_totals(s, t0):
+    """The authority's `diag:` counts (`common::diag`) summed over the lines logged since `t0`."""
+    logs = s.command("logs", "-s", "local", s.db, "-n", "200000").stdout
+    total = {}
+    for m in re.finditer(r"^(\S+)Z?\s.*diag: (\{.*\})\s*$", logs, re.M):
+        try:
+            at = time.mktime(time.strptime(m.group(1).rstrip("Z")[:19], "%Y-%m-%dT%H:%M:%S")) - time.timezone
+        except ValueError:
+            continue
+        if at + 1 >= t0:
+            for k, v in json.loads(m.group(2)).items():
+                total[k] = total.get(k, 0) + v
+    return total
+
+
+def fast_diag(s):
+    """The fast lane's profiling counters (`fast:*` in the `diag:` lines; docs/FAST_LANE.md, the
+    battle run's plan). No mind service: the scene answers as the minds' controller does. Two
+    victims struck over and over by two spearmen, under laws that make each counter fire:
+    - in flight 1, rate 10: one victim's row is issued, the other's waits behind the cap
+      (`cap_inflight`) and goes stale after 3 s (`stale`); an issued row nobody answers expires
+      after two stale windows (`expired`); blows on a row already waiting or served are merged
+      (`merged`); a struck line is a trigger (`trigger_struck`), each issue `issued`;
+    - rate 0.2, in flight 5: waiting rows stop on an empty bucket (`cap_rate`);
+    - answers: `mind_fast_done` (`kept`), `mind_patch` on an unchanged plan (`installed`) and after
+      the plan changed (`refused`).
+    Nothing is counted while profiling is off (a window after it shows no `fast:` keys)."""
+    set_law(s, "fast_lane_on", True)
+    set_law(s, "fast_lane_inflight", 1)
+    set_law(s, "fast_lane_rate", 10)
+    set_law(s, "fast_lane_stale_s", 3)
+    set_law(s, "fast_lane_gap_s", 2)
+    people = {c["id"] for c in s.rows("SELECT id, kind FROM character WHERE alive = true") if c["kind"] == "person"}
+    line = open_line(s, length=16, avoid=[(b["x"], b["y"]) for b in s.rows("SELECT id, x, y FROM body") if b["id"] in people])
+    a1, b1, a2, b2 = s.people(4)
+    for a, b, at in ((a1, b1, line[3]), (a2, b2, line[11])):
+        s.call("place_at", a, at[0], at[1])
+        s.call("place_at", b, at[0] + 1.2, at[1])
+        s.call("grant_items", b, "spear", 1)
+        s.call("admin_set_vitals", a, 1000.0)
+    time.sleep(1.0)
+    row = lambda a: (s.rows(f"SELECT * FROM fast_ask WHERE actor = {a}") or [None])[0]
+
+    def issued_after(a, after, seconds=20):
+        end = time.monotonic() + seconds
+        while time.monotonic() < end:
+            r = row(a)
+            if r and r["issued_ms"] and r["issued_ms"] > after:
+                return r
+            time.sleep(0.1)
+        return None
+
+    def topped(seconds):
+        """Wait, keeping both victims alive under the blows (an admin set, not care)."""
+        end = time.monotonic() + seconds
+        while True:
+            for a in (a1, a2):
+                s.call("admin_set_vitals", a, 1000.0, check=False)
+            if time.monotonic() >= end:
+                return
+            time.sleep(min(4.0, max(0.0, end - time.monotonic())))
+
+    t0 = time.time()
+    s.call("set_profile", True)
+    try:
+        for a, b in ((a1, b1), (a2, b2)):
+            s.graph(a, {"wait": 300})
+            s.graph(b, {"first": [{"do": {"skill": "strike", "target": {"id": a}}}, {"wait": 2.0}]})
+        topped(18)
+        set_law(s, "fast_lane_rate", 0.2)
+        set_law(s, "fast_lane_inflight", 5)
+        topped(10)
+        set_law(s, "fast_lane_rate", 10)
+        set_law(s, "fast_lane_stale_s", 600)
+        # The answers, as a mind would give them.
+        topped(0)
+        r = issued_after(a1, 0)
+        kept = s.call("mind_fast_done", a1, r["issued_ms"], {**THOUGHT, "kind": "fast", "summary": "kept: verify"}, check=False) if r else None
+        r2 = issued_after(a1, r["issued_ms"] if r else 0)
+        patch = {"first": [{"if": {"cond": {"threatened": True}, "then": {"do": "dodge"}}}, {"wait": 0.5}]}
+        installed = s.call("mind_patch", a1, "combat", json.dumps(patch), r2["issued_ms"], {**THOUGHT, "kind": "fast", "summary": "verify patch"}, check=False) if r2 else None
+        topped(0)
+        r3 = issued_after(a1, r2["issued_ms"] if r2 else 0)
+        if r3:
+            s.call("mind_install", a1, json.dumps({"wait": 300}), "verify changed plan", "", 0, 0, THOUGHT)
+            refused = s.call("mind_patch", a1, "combat", json.dumps(patch), r3["issued_ms"], {**THOUGHT, "kind": "fast", "summary": "verify patch"}, check=False)
+        else:
+            refused = None
+        time.sleep(2.5)
+    finally:
+        for b in (b1, b2):
+            s.graph(b, {"wait": 60})
+        s.call("set_profile", False)
+        for name, v in (("fast_lane_inflight", 4), ("fast_lane_rate", 2), ("fast_lane_stale_s", 8), ("fast_lane_gap_s", 6)):
+            set_law(s, name, v)
+    total = diag_totals(s, t0)
+    fast = {k: v for k, v in total.items() if k.startswith("fast:")}
+    (s.out / f"{s.name}-fast-diag.json").write_text(json.dumps({"fast": fast, "answers": {"kept": bool(kept and kept.returncode == 0), "installed": bool(installed and installed.returncode == 0), "refused": bool(refused and refused.returncode == 0)}}, indent=1) + "\n")
+    s.expect("blows taken are counted as triggers", fast.get("fast:trigger_struck", 0) > 0, fast)
+    s.expect("blows on a row already waiting or served are merged", fast.get("fast:merged", 0) > 0, fast)
+    s.expect("rows are issued and counted", fast.get("fast:issued", 0) >= 3, fast)
+    s.expect("with one in flight, the other victim waits behind the cap", fast.get("fast:cap_inflight", 0) > 0, fast)
+    s.expect("a row left waiting past the stale window is dropped and counted", fast.get("fast:stale", 0) > 0, fast)
+    s.expect("an issued row nobody answers expires and is counted", fast.get("fast:expired", 0) > 0, fast)
+    s.expect("at 0.2 a second, waiting rows stop on an empty bucket", fast.get("fast:cap_rate", 0) > 0, fast)
+    s.expect("an answer with no change is counted as kept", fast.get("fast:kept", 0) >= 1, fast)
+    s.expect("a patch on an unchanged plan is counted as installed", fast.get("fast:installed", 0) >= 1, fast)
+    s.expect("a patch after the plan changed is counted as refused", fast.get("fast:refused", 0) >= 1, fast)
+    topped(3)
+    t1 = time.time()
+    s.graph(b1, {"first": [{"do": {"skill": "strike", "target": {"id": a1}}}, {"wait": 2.0}]})
+    time.sleep(5)
+    s.graph(b1, {"wait": 60})
+    after = {k: v for k, v in diag_totals(s, t1).items() if k.startswith("fast:")}
+    s.expect("nothing is counted while profiling is off", not after, after)
+    set_law(s, "fast_lane_on", False)
+    for a, b in ((a1, b1), (a2, b2)):
+        s.graph(a, {"wait": 60})
+    off_the_line(s, line, [a1, b1, a2, b2], dy=62)
+
+
+SCENES["fast_diag"] = fast_diag
 
 
 if __name__ == "__main__":

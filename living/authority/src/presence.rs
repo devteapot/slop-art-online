@@ -141,7 +141,7 @@ fn take_over(ctx: &ReducerContext, p: &mut Presence, now: u64) {
     ctx.db.character().id().update(c);
     p.ai = true;
     p.control_ms = now;
-    crate::combat::invalidate_humans();
+    crate::combat::invalidate_humans(ctx);
     // Its person sees nothing while away; a fresh set is made on return.
     crate::perception::forget(ctx, p.id, p.player);
     // Asked first: reinstalling a mind's graph counts as having just thought (`think_min_s`).
@@ -185,7 +185,7 @@ fn hand_back(ctx: &ReducerContext, p: &mut Presence, now: u64) {
     if let Err(e) = crate::mind::set_graph(ctx, p.id, crate::WAITING_GRAPH, crate::WAITING, "human", now) {
         log::warn!("handback of {}: {e}", p.id);
     }
-    crate::combat::invalidate_humans();
+    crate::combat::invalidate_humans(ctx);
     crate::perception::sweep_now(ctx, p.id, p.player, now);
     log::info!("character {} is its person's again", p.id);
 }

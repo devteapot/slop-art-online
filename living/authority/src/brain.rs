@@ -106,10 +106,15 @@ const IMPULSE_MS: f32 = 60_000.0;
 const HAILED_MS: u64 = 6_000;
 
 struct Scene {
-    creatures: Vec<NearCreature>,
+    /// What the body senses, tested as far as asked (`scene_lazy`; docs/BATTLE_SCALE.md
+    /// scene-lazy): a fighter's nearest pick tests a few creatures, not all in sight.
+    sensing: crate::perception::Sensing,
+    /// The seen, nearest first: every candidate tested (`Ev::creatures`).
+    creatures: Option<Vec<NearCreature>>,
     /// Heard and not seen (only while sight depends on facing), nearest first.
-    heard: Vec<NearCreature>,
-    resources: Vec<(ResourceNode, f32)>,
+    heard: Option<Vec<NearCreature>>,
+    /// Gathered when first asked for (`Ev::resources`).
+    resources: Option<Vec<(ResourceNode, f32)>>,
     /// Built when first asked for (`Ev::structures`): an evaluation that reads no structure (a
     /// fighter's at combat cadence) does not gather every remains in sight. The same set either way.
     structures: Option<Vec<(Structure, f32)>>,
@@ -191,6 +196,8 @@ pub fn evaluate(ctx: &ReducerContext, id: u32, now: u64) {
         let _span = common::span("brain.graph");
         ev.run(&root.root, 0)
     };
+    common::diag(|| "eval:all", 1);
+    common::diag(|| "do:visits", ev.visits as u64);
     let _span = common::span("brain.after");
     ev.after(result, &root.root);
     drop(_span);
@@ -297,27 +304,113 @@ fn settle_needs(ctx: &ReducerContext, me: &Character, mut v: Vitals, at: (f32, f
 }
 
 impl<'a> Ev<'a> {
-    fn scene(&mut self) -> &Scene {
+    /// The scene, begun: what the body senses (`Sensing`), worked out as far as each reader asks.
+    /// With the `scene_lazy` law off, everything is worked out at once, as before.
+    fn scene(&mut self) -> &mut Scene {
         if self.scene.is_none() {
             let _span = common::span("brain.scene");
             let r = common::sight_for(self.ctx, self.me.id, &self.w, self.now);
             // What the body sees: within its sight and with a clear sight line (the rule every
             // observer perceives by, `perception::in_sight`).
-            let (creatures, heard) = crate::perception::sensed(self.ctx, self.me.id, self.at, r, self.now);
-            common::note_scene(creatures.len());
-            let resources = common::resources_near(self.ctx, self.at, r);
-            self.scene = Some(Scene { creatures, heard, resources, structures: None });
+            let sensing = crate::perception::Sensing::new(self.ctx, self.me.id, self.at, r, self.now);
+            self.scene = Some(Scene { sensing, creatures: None, heard: None, resources: None, structures: None });
+            if !common::laws(self.ctx).scene_lazy {
+                self.creatures();
+                self.resources();
+            }
         }
-        self.scene.as_ref().unwrap()
+        self.scene.as_mut().unwrap()
+    }
+
+    /// The creatures seen, nearest first: every one in sight range tested.
+    fn creatures(&mut self) -> &[NearCreature] {
+        let (ctx, now) = (self.ctx, self.now);
+        let s = self.scene();
+        if s.creatures.is_none() {
+            let _span = common::detail_span("scene.sensed");
+            let (seen, heard) = s.sensing.all(ctx, now);
+            common::note_scene(seen.len());
+            common::diag(|| "scene:all", 1);
+            s.creatures = Some(seen);
+            s.heard = Some(heard);
+        }
+        s.creatures.as_deref().unwrap()
+    }
+
+    /// Heard and not seen, nearest first.
+    fn heard_list(&mut self) -> &[NearCreature] {
+        self.creatures();
+        self.scene.as_ref().and_then(|s| s.heard.as_deref()).unwrap_or(&[])
+    }
+
+    /// The resources in sight, nearest first (gathered when first asked for).
+    fn resources(&mut self) -> &[(ResourceNode, f32)] {
+        let (ctx, me, at, now) = (self.ctx, self.me.id, self.at, self.now);
+        let w = self.w.clone();
+        let s = self.scene();
+        if s.resources.is_none() {
+            let _span = common::detail_span("scene.resources");
+            let r = common::sight_for(ctx, me, &w, now);
+            s.resources = Some(common::resources_near(ctx, at, r));
+        }
+        s.resources.as_deref().unwrap()
+    }
+
+    /// The nearest creature seen that `pred` accepts: `creatures().iter().find(pred)`, testing sight
+    /// only as far as it needs (`scene_lazy`). `scene_lazy_check` compares it with the full list.
+    fn first_seen(&mut self, mut pred: impl FnMut(&NearCreature) -> bool) -> Option<NearCreature> {
+        let (ctx, now) = (self.ctx, self.now);
+        let laws = common::laws(ctx);
+        if !laws.scene_lazy || self.scene().creatures.is_some() {
+            return self.creatures().iter().find(|c| pred(c)).cloned();
+        }
+        let got = self.scene().sensing.first(ctx, now, &mut pred);
+        common::diag(|| "scene:first", 1);
+        if laws.scene_lazy_check {
+            let full = crate::perception::sensed(ctx, self.me.id, self.at, common::sight_for(ctx, self.me.id, &self.w, now), now).0.into_iter().find(|c| pred(c));
+            common::diag(|| "scene_lazy:checked", 1);
+            if full.as_ref().map(|c| c.id) != got.as_ref().map(|c| c.id) {
+                common::diag(|| "scene_lazy:differed", 1);
+                log::error!("scene lazy: #{}'s first seen {:?} differs from the full scene's {:?}", self.me.id, got.map(|c| c.id), full.as_ref().map(|c| c.id));
+                return full;
+            }
+        }
+        got
+    }
+
+    /// Creature `id` as seen, if it is: `creatures()` holds it, testing only it (`scene_lazy`).
+    fn seen_by_id(&mut self, id: u32) -> Option<NearCreature> {
+        let (ctx, now) = (self.ctx, self.now);
+        let laws = common::laws(ctx);
+        if !laws.scene_lazy || self.scene().creatures.is_some() {
+            return self.creatures().iter().find(|c| c.id == id).cloned();
+        }
+        let got = self.scene().sensing.by_id(ctx, now, id);
+        common::diag(|| "scene:by_id", 1);
+        if laws.scene_lazy_check {
+            let full = crate::perception::sensed(ctx, self.me.id, self.at, common::sight_for(ctx, self.me.id, &self.w, now), now).0.into_iter().find(|c| c.id == id);
+            common::diag(|| "scene_lazy:checked", 1);
+            if full.as_ref().map(|c| c.id) != got.as_ref().map(|c| c.id) {
+                common::diag(|| "scene_lazy:differed", 1);
+                log::error!("scene lazy: #{} sees #{id} {} but the full scene {}", self.me.id, got.is_some(), full.is_some());
+                return full;
+            }
+        }
+        got
     }
 
     /// The structures in sight, nearest first (the scene's, gathered when first asked for).
+    #[track_caller]
     fn structures(&mut self) -> &[(Structure, f32)] {
         self.scene();
         if self.scene.as_ref().is_some_and(|s| s.structures.is_none()) {
             let _span = common::detail_span("brain.scene.structures");
+            // While profiling: which reader built the list, and how long it was.
+            let by = std::panic::Location::caller();
+            common::diag(|| format!("structures@{}", by.line()), 1);
             let r = common::sight_for(self.ctx, self.me.id, &self.w, self.now);
             let v = common::structures_near(self.ctx, self.at, r);
+            common::diag(|| "scene:structures_n", v.len() as u64);
             self.scene.as_mut().unwrap().structures = Some(v);
         }
         self.scene.as_ref().and_then(|s| s.structures.as_deref()).unwrap_or(&[])
@@ -376,7 +469,7 @@ impl<'a> Ev<'a> {
         let threatened = if self.ctx.db.activity().victim().filter(me).any(|a| a.phase == 1 && a.ends_ms > now) { 1.0 } else { 0.0 };
         // Company is one's own kind (people for a person, the herd or pack for an animal).
         let kind = self.me.kind.clone();
-        let people = self.scene().creatures.iter().filter(|c| *c.kind == *kind).count() as f32;
+        let people = self.creatures().iter().filter(|c| *c.kind == *kind).count() as f32;
         let alone = if people == 0.0 { 1.0 } else { 0.0 };
         let company = (people / 5.0).min(1.0);
         let winter = if common::season(self.ctx, now) == "winter" { 1.0 } else { 0.0 };
@@ -603,6 +696,18 @@ impl<'a> Ev<'a> {
                     },
                     None => 0,
                 };
+                // Said already (say-once): a mind's plan does not say again nearly the line it said
+                // to the same person within 45 s. A plan's install clears the node's own mark, so a
+                // plan whose routine already spoke its first line before the install would say it
+                // twice (ew2: Mirren Quill, 2.9 s apart); the chronicle keeps what was said across
+                // the install. Only that: a line to the room (its hearers are whoever is near when
+                // it is said: a crier's "Fresh bread!"), a graph the admin or a scene installed,
+                // a player's lines, a deliberation's own line and talk turns are never held back.
+                if to != 0 && self.from_mind() && crate::speech::said_to_recently(self.ctx, self.me.id, to, &s.text, self.now) {
+                    self.set_mark(id);
+                    self.status = format!("already said: {}", graph::describe(n));
+                    return St::Ok;
+                }
                 // Within the speaking limit the line waits its turn (a second line right after
                 // the first, or a graph installed just after one spoke) instead of being lost.
                 let way = s.way.as_deref().unwrap_or("say");
@@ -680,6 +785,12 @@ impl<'a> Ev<'a> {
             .unwrap_or(brain.installed_ms)
     }
 
+    /// Whether the graph running is a mind's plan (`brain.source = "mind"`), not one the admin,
+    /// a scene, a player's command or the battle harness installed.
+    fn from_mind(&self) -> bool {
+        self.ctx.db.brain().id().find(self.me.id).is_some_and(|b| b.source == "mind")
+    }
+
     /// Whether a mind's plan's queued line to `to` (say node `id`) has been overtaken by the
     /// conversation (`speech_truth`): since the decision that installed the plan perceived its
     /// scene (`decided_ms`), or since this node last
@@ -738,6 +849,7 @@ impl<'a> Ev<'a> {
     /// The outcome of leaf `id`'s activity that has ended since it was last visited (read once),
     /// unless that activity is still under way.
     fn finished(&mut self, id: u16) -> Option<St> {
+        let _span = common::detail_span("brain.finished");
         let rev = self.st.revision;
         let l = self.st.last.clone().filter(|l| l.node == id && l.revision == rev)?;
         if self.ctx.db.activity().id().find(self.me.id).is_some_and(|a| a.node == id && a.revision == rev) {
@@ -753,6 +865,7 @@ impl<'a> Ev<'a> {
 
     #[allow(clippy::too_many_arguments)]
     fn leaf(&mut self, id: u16, skill: &str, target: Resolved, item: &str, qty: u32, text: &str, topic: &str, desc: String) -> St {
+        let _span = common::detail_span("brain.leaf");
         // A committed move under way holds the body until it has run its course (a dash may cut
         // in on a windup): the graph waits on it, as a player's keys do (`combat::held_by`).
         if let Some(a) = self.ctx.db.activity().id().find(self.me.id) {
@@ -822,7 +935,7 @@ impl<'a> Ev<'a> {
     }
 
     fn visible_creature(&mut self, id: u32) -> Option<Resolved> {
-        let c = self.scene().creatures.iter().find(|c| c.id == id)?.clone();
+        let c = self.seen_by_id(id)?;
         let ch = self.ctx.db.character().id().find(id)?;
         Some(Resolved { class: 3, id: id as u64, at: c.pos, kind: c.kind.to_string(), name: ch.name })
     }
@@ -832,7 +945,7 @@ impl<'a> Ev<'a> {
         if let Some((s, _)) = self.structures().iter().find(|(s, _)| s.id == id) {
             return Some(Resolved { class: 2, id: s.id, at: (s.x, s.y), kind: s.kind.clone(), name: String::new() });
         }
-        self.scene().resources.iter().find(|(n, _)| n.id == id).map(|(n, _)| Resolved { class: 1, id: n.id, at: (n.x, n.y), kind: n.kind.clone(), name: String::new() })
+        self.resources().iter().find(|(n, _)| n.id == id).map(|(n, _)| Resolved { class: 1, id: n.id, at: (n.x, n.y), kind: n.kind.clone(), name: String::new() })
     }
 
     fn smelled_creature(&mut self, id: u32) -> Option<Resolved> {
@@ -872,7 +985,7 @@ impl<'a> Ev<'a> {
                         if !self.smell {
                             return None;
                         }
-                        self.scene().heard.iter().find(|c| c.id == sp).map(|c| Resolved::point(c.pos))
+                        self.heard_list().iter().find(|c| c.id == sp).map(|c| Resolved::point(c.pos))
                     })
                 } else {
                     None
@@ -910,7 +1023,7 @@ impl<'a> Ev<'a> {
                 }
             }
             // Toward the nearest thing heard and not seen (a point: the body does not know who).
-            Target::Sound => self.scene().heard.first().map(|c| Resolved::point(c.pos)),
+            Target::Sound => self.heard_list().first().map(|c| Resolved::point(c.pos)),
             Target::Commotion => {
                 let sight = common::sight_for(self.ctx, self.me.id, &self.w, now);
                 crate::town::commotion(self.ctx, self.at, sight, now).map(Resolved::point)
@@ -933,7 +1046,7 @@ impl<'a> Ev<'a> {
                 self.visible_creature(*id).or_else(|| if self.smell { self.smelled_creature(*id) } else { None }).or_else(|| self.visible_thing(*id as u64))
             }
             Target::Named(name) => {
-                let ids: Vec<u32> = self.scene().creatures.iter().filter(|c| &*c.kind == "person").map(|c| c.id).collect();
+                let ids: Vec<u32> = self.creatures().iter().filter(|c| &*c.kind == "person").map(|c| c.id).collect();
                 // Only someone whose name this character perceives now: a figure too far away to
                 // make out is not found by a name (it would tell who they are; far-handle).
                 let (ctx, me, now) = (self.ctx, &self.me, self.now);
@@ -955,24 +1068,31 @@ impl<'a> Ev<'a> {
     }
 
     fn nearest(&mut self, f: &Filter) -> Option<Resolved> {
+        let _span = common::detail_span("brain.nearest");
+        common::diag(|| "nearest:calls", 1);
         match living_rules::catalog::kind_class(&f.kind)? {
             living_rules::catalog::KindClass::Creature => {
                 // Seen first; a creature smelled farther away only for a target the body acts on.
-                let seen: Vec<(u32, Rc<str>, f32)> = self.scene().creatures.iter().map(|c| (c.id, c.kind.clone(), c.dist)).collect();
-                let scent = if self.smell { common::scent_of(&self.me.kind) } else { None };
+                // The nearest seen of the kind the filter accepts (`species::pick_nearest`'s rule),
+                // read in place and tested for sight only as far as needed (`first_seen`); else a
+                // creature smelled farther away, for a target the body acts on.
                 let (ctx, me) = (self.ctx, self.me.id);
+                let kind = f.kind.clone();
+                let matches = |k: &str| kind == "creature" || k == kind;
                 let ok = |id: u32| f.relation.as_deref().map_or(true, |rel| relation_ok(ctx, me, id, rel)) && ctx.db.character().id().find(id).is_some();
-                let smelled = || self.smelled().iter().map(|c| (c.id, c.kind.clone(), c.dist)).collect();
-                match living_rules::species::pick_nearest(&f.kind, &seen, scent.as_ref(), smelled, ok)? {
-                    (id, false) => self.visible_creature(id),
-                    (id, true) => self.smelled_creature(id),
+                if let Some(c) = self.first_seen(|c| matches(&c.kind) && ok(c.id)) {
+                    let ch = ctx.db.character().id().find(c.id)?;
+                    return Some(Resolved { class: 3, id: c.id as u64, at: c.pos, kind: c.kind.to_string(), name: ch.name });
                 }
+                let scent = if self.smell { common::scent_of(&self.me.kind) } else { None };
+                let scent = scent.filter(|s| s.reaches(&kind, s.radius))?;
+                let id = self.smelled().iter().find(|c| matches(&c.kind) && scent.reaches(&c.kind, c.dist) && ok(c.id)).map(|c| c.id)?;
+                self.smelled_creature(id)
             }
             living_rules::catalog::KindClass::Resource => {
                 let now = self.now;
                 let ctx = self.ctx;
-                self.scene()
-                    .resources
+                self.resources()
                     .iter()
                     .find(|(n, _)| n.kind == f.kind && common::amount_now(ctx, n, now) >= 1.0)
                     .map(|(n, _)| Resolved { class: 1, id: n.id, at: (n.x, n.y), kind: n.kind.clone(), name: String::new() })
@@ -1046,10 +1166,10 @@ impl<'a> Ev<'a> {
             }
             Cond::Count(c) => {
                 let at = self.at;
-                self.scene();
-                let scene = self.scene.as_ref().expect("scene built");
+                self.creatures();
+                let creatures = self.scene.as_ref().and_then(|s| s.creatures.as_deref()).unwrap_or(&[]);
                 let mut n = 0u32;
-                for x in &scene.creatures {
+                for x in creatures {
                     if c.within.is_some_and(|w| dist(at, x.pos) > w) || (c.of.kind != "creature" && *x.kind != *c.of.kind) {
                         continue;
                     }
@@ -1070,9 +1190,9 @@ impl<'a> Ev<'a> {
                 let (me, at, now) = (self.me.id, self.at, self.now);
                 let sc = common::scripts(self.ctx);
                 let want = d.phase.as_deref().and_then(living_rules::doing::Phase::parse);
-                self.scene();
-                let scene = self.scene.as_ref().expect("scene built");
-                for x in &scene.creatures {
+                self.creatures();
+                let creatures = self.scene.as_ref().and_then(|s| s.creatures.as_deref()).unwrap_or(&[]);
+                for x in creatures {
                     if d.within.is_some_and(|w| dist(at, x.pos) > w) {
                         continue;
                     }
@@ -1120,8 +1240,14 @@ impl<'a> Ev<'a> {
                 // its maker is seen: one from behind is not seen coming (docs/COMBAT.md). Without a
                 // field, as before: any windup aimed at me.
                 let seen = coming.is_empty() || common::senses_of(self.ctx, me, &self.w, now).field.is_none() || {
-                    let sc = self.scene();
-                    coming.iter().any(|id| sc.creatures.iter().any(|c| c.id == *id))
+                    let mut any = false;
+                    for id in &coming {
+                        if self.seen_by_id(*id).is_some() {
+                            any = true;
+                            break;
+                        }
+                    }
+                    any
                 };
                 (!coming.is_empty() && seen) == *b
             }
@@ -1349,9 +1475,9 @@ impl<'a> Ev<'a> {
         let at = self.at;
         let places: Vec<Place> = if cues.iter().any(|c| !c.at.is_empty()) { ctx.db.place().actor().filter(me).collect() } else { Vec::new() };
         let place_of = |name: &str| places.iter().find(|p| p.name.eq_ignore_ascii_case(name)).map(|p| (p.id, (p.x, p.y)));
-        let creatures: Vec<NearCreature> = self.scene().creatures.clone();
+        let creatures: Vec<NearCreature> = self.creatures().to_vec();
         let things: Vec<(u64, String, (f32, f32), f32)> = {
-            let mut v: Vec<(u64, String, (f32, f32), f32)> = self.scene().resources.iter().map(|(r, d)| (CUE_RESOURCE | r.id, r.kind.clone(), (r.x, r.y), *d)).collect();
+            let mut v: Vec<(u64, String, (f32, f32), f32)> = self.resources().iter().map(|(r, d)| (CUE_RESOURCE | r.id, r.kind.clone(), (r.x, r.y), *d)).collect();
             v.extend(self.structures().iter().map(|(s, d)| (CUE_STRUCTURE | s.id, s.kind.clone(), (s.x, s.y), *d)));
             v
         };
@@ -1491,9 +1617,13 @@ impl<'a> Ev<'a> {
     fn prune_familiar(&mut self) {
         let (me, now) = (self.me.id, self.now);
         let mut all: Vec<(u64, u64, u64)> = self.ctx.db.familiar().actor().filter(me).map(|f| (f.last_ms, f.id, f.thing)).collect();
+        common::diag(|| "familiar:prune_checks", 1);
         if all.len() <= FAMILIAR_LIMIT {
             return;
         }
+        // While profiling: how often a character is over the limit, and by how much.
+        common::diag(|| "familiar:over_limit", 1);
+        common::diag(|| "familiar:over_by", (all.len() - FAMILIAR_LIMIT) as u64);
         all.sort_unstable();
         let mut over = all.len() - FAMILIAR_LIMIT;
         for (last, id, thing) in all {
@@ -1712,15 +1842,19 @@ impl<'a> Ev<'a> {
         let day = self.w.day_ms.max(1);
 
         // Regions.
+        let part = common::detail_span("noticed.regions");
         let chunk = living_rules::map::chunk_of(at.0, at.1);
         if !self.recently_seen(0x8000_0000 | chunk) && self.familiarity(FAM_REGION | chunk as u64).is_none() {
             let text = self.region_summary();
             percept(self.ctx, &self.me, now, "discovered", 0, 0, at, text, 0.5);
         }
 
+        drop(part);
         // Creatures.
+        let part = common::detail_span("noticed.creatures");
         let me_kind = self.me.kind.clone();
-        let cands: Vec<NearCreature> = self.scene().creatures.iter().filter(|c| &*c.kind != "deer" || me_kind != "person").cloned().collect();
+        common::diag(|| "noticed:creatures", self.creatures().len() as u64);
+        let cands: Vec<NearCreature> = self.creatures().iter().filter(|c| &*c.kind != "deer" || me_kind != "person").cloned().collect();
         let people = cands.iter().filter(|c| &*c.kind == "person").count();
         let laws = common::laws(self.ctx);
         let crowded = people as f32 > laws.crowd;
@@ -1828,7 +1962,9 @@ impl<'a> Ev<'a> {
         // near is noticed when it begins, as a person would ("You hear a person near, behind
         // you, to the south-west."), never who it is. Its percept names no one and is placed
         // where the listener stands.
-        let near = self.scene().heard.iter().find(|c| c.dist <= laws.heard_near_m).cloned();
+        drop(part);
+        let part = common::detail_span("noticed.sounds");
+        let near = self.heard_list().iter().find(|c| c.dist <= laws.heard_near_m).cloned();
         if let Some(c) = near.as_ref().filter(|_| self.st.alerts & SOUND_NEAR == 0) {
             let heading = self.ctx.db.body().id().find(self.me.id).map_or(0.0, |b| common::facing_at(&b, now));
             let (what, wh, far) = living_rules::sight::heard_words(&crate::perception::heard_kind(self.ctx, &c.kind), at, heading, c.pos, 0);
@@ -1842,13 +1978,17 @@ impl<'a> Ev<'a> {
         // Remains and every other structure lie still: one looked at lately is in the seen set,
         // so a look costs one check of its id, and their details are copied only when something
         // in sight is new.
+        drop(part);
+        let _part = common::detail_span("noticed.structures");
         let ids: Vec<u64> = self.structures().iter().map(|(s, _)| s.id).collect();
+        common::diag(|| "noticed:structures", ids.len() as u64);
         let mut new: Vec<usize> = Vec::new();
         for (i, id) in ids.iter().enumerate() {
             if !self.recently_seen(0x4000_0000 | (*id as u32 & 0x3fff_ffff)) && self.familiarity(FAM_STRUCTURE | id).is_none() {
                 new.push(i);
             }
         }
+        common::diag(|| "noticed:structures_new", new.len() as u64);
         if new.is_empty() {
             return;
         }
@@ -1896,7 +2036,7 @@ impl<'a> Ev<'a> {
         let now = self.now;
         let mut kinds: Vec<(String, u32)> = Vec::new();
         let ctx = self.ctx;
-        for (n, _) in &self.scene().resources {
+        for (n, _) in self.resources() {
             if common::amount_now(ctx, n, now) < 0.0 {
                 continue;
             }
@@ -1952,6 +2092,7 @@ impl<'a> Ev<'a> {
     fn after(mut self, result: St, root: &Node) {
         let ctx = self.ctx;
         let id = self.me.id;
+        let cancel = common::detail_span("after.cancel");
         // Interrupt an activity no running leaf owns anymore (the branch lost priority);
         // a deliberate act is not the graph's to interrupt (only a reflex does, in `leaf`).
         if let Some(a) = ctx.db.activity().id().find(id) {
@@ -1965,6 +2106,8 @@ impl<'a> Ev<'a> {
                 act::cancel(ctx, a, self.now, None);
             }
         }
+        drop(cancel);
+        let mind = common::detail_span("after.mind");
         if self.me.ai {
             match result {
                 // A plan with nothing applicable backs off longer than one that hit a concrete
@@ -2001,6 +2144,8 @@ impl<'a> Ev<'a> {
                 self.noticed();
             }
         }
+        drop(mind);
+        let _write = common::detail_span("after.write");
         if result != St::Run && !self.running.is_some_and(act::held) {
             self.status = match result {
                 St::Ok => "done".into(),
@@ -2054,7 +2199,6 @@ const FAR_MARK: u32 = 0x2000_0000;
 /// First sights of one look that share one line (`noticed`).
 const FIRST_SIGHTS_PER_LINE: usize = 8;
 
-/// "a" or "an" before a kind's words.
 thread_local! {
     /// Each character's last `status_of` answer and until when it stands (docs/BATTLE_SCALE.md,
     /// battle-cheap path 2): the script revision, its body row, stage and night it was asked for,
@@ -2103,6 +2247,9 @@ fn alarm_statuses(ctx: &ReducerContext, sc: &living_rules::script::Scripts, me: 
         return s;
     }
     common::diag(|| "alarm:asked", 1);
+    if common::profiling() {
+        status_inputs_changed(sc, me, vit, night, now);
+    }
     let statuses = ask();
     let reads = sc.status_reads();
     let until = living_rules::script::BodyFacts::next_change_ms(&vit.fields(), sc.meters(), now, reads.as_deref());
@@ -2116,6 +2263,39 @@ fn alarm_statuses(ctx: &ReducerContext, sc: &living_rules::script::Scripts, me: 
     statuses
 }
 
+thread_local! {
+    /// While profiling: each body's facts at its last ask of the `status_of` law
+    /// (`status_inputs_changed`). A diagnostic only; nothing reads it otherwise.
+    static STATUS_PREV: std::cell::RefCell<std::collections::HashMap<u32, Vec<(String, f64)>>> = std::cell::RefCell::new(std::collections::HashMap::new());
+}
+
+/// While profiling, at each ask of the `status_of` law that its cell did not answer: which of the
+/// body's facts changed since its last ask (`status:changed:<fact>`), and how many at once
+/// (`status:changed_n:<n>`). The measure of how often a per-meter part of the law would be asked
+/// (docs/BATTLE_SCALE.md, note B).
+fn status_inputs_changed(sc: &living_rules::script::Scripts, me: &Character, vit: &Vitals, night: bool, now: u64) {
+    let _span = common::detail_span("status.diag");
+    let facts = living_rules::script::BodyFacts::of(&me.kind, crate::common::stage_name(me.stage), night, &vit.fields(), sc.meters(), now);
+    let mut cur: Vec<(String, f64)> = facts.fields.clone();
+    cur.extend(facts.share.iter().map(|(n, v)| (format!("share.{n}"), *v)));
+    cur.push(("night".into(), night as u8 as f64));
+    cur.push(("stage".into(), me.stage as f64));
+    let prev = STATUS_PREV.with(|p| p.borrow_mut().insert(me.id, cur.clone()));
+    let Some(prev) = prev else {
+        common::diag(|| "status:first", 1);
+        return;
+    };
+    let mut n = 0;
+    for (k, v) in &cur {
+        if prev.iter().find(|(pk, _)| pk == k).map_or(true, |(_, pv)| pv != v) {
+            n += 1;
+            common::diag(|| format!("status:changed:{k}"), 1);
+        }
+    }
+    common::diag(|| format!("status:changed_n:{n}"), 1);
+}
+
+/// "a" or "an" before a kind's words.
 fn article(kind: &str) -> &'static str {
     if kind.starts_with(['a', 'e', 'i', 'o', 'u']) { "an" } else { "a" }
 }

@@ -418,6 +418,186 @@ The island seed: its about 310 residents, all AI, and no mind service. Fighters 
   - A 3-minute test with 40 fighters (`minds-loadgen-*`): 43 refills arrived one by one as fighters fell, 1–5 walking in at any moment, 33–40 fighting throughout.
 - **An offset between worlds, not builds: the measurement.** Idle, the `battle-scale` world measured 61.5 ticks a second and the other two 59.5, with no tick over budget. `bench.py` took its counts from the `stats` row, which housekeeping writes once a second with its stamp, but divided them by the wall time around two SQL calls. So a window could gain or lose one second's ticks, about ±2 a second over 30 s. Windows every 60 s keep one phase to housekeeping, so a world kept its offset for the whole run; `battle-cheap` alone, in another run, measured 62.3. Since `battle-cheap`, `bench.py` divides the counts by the stamps' interval. The acceptance tables above carry that error: each run's ticks per second within about ±3% (±1 at 30, ±2 at 60). Ticks over 16.7 ms and p99 come from the tick log and do not.
 
+## The lazy scene (`scene-lazy`)
+
+The profile after battle-cheap (2026-11-13; 200 fighters sustained with the fixed load generator, `profile_detail` on, host load 25–42, so per-call costs and shares only) put the graph run at 25% of the tick, about 88 µs an evaluation:
+- starting acts, 60 µs (the move's check 54 µs, mostly refusals for want of breath);
+- the body's alarms, 41 µs;
+- the scene, 21 µs, of which the sight test of every creature in range was 16 µs;
+- the nearest pick, 4.3 µs, scanning 2.5 of about 64 creatures in sight.
+
+The rest of the tick: combat resolution 30%, woken evaluations 24%, the fold's lines 12%, noticing 10%.
+
+**What is built** (the `scene_lazy` law, on; `scene_lazy_check` a diagnostic):
+- **Lazy sight.** A graph's scene is what the body senses (`perception::Sensing`): every creature within gathering range, nearest first, each tested for sight only when a reader comes to it. The nearest pick (`Ev::first_seen`) and a creature looked up by id (`Ev::seen_by_id`: `visible_creature`, and the `threatened` condition while sight has a field) test only as far as their answer needs: a fighter tests two or three creatures, not all in sight.
+- **Whole-list readers** (`Ev::creatures`: desires, `count`, `doing`, cues, noticing, the stranger filter) test every one. Resources and the heard list are gathered when first asked for.
+- **No copy.** The nearest pick reads the list in place, not a copy of the scene.
+- **Exact.** Same candidates, same order (`creatures_near`'s, by distance, ties in a fixed order), same sight test. `perception::sensed` is now `Sensing::all`, so both paths share one implementation. No state outlives an evaluation, so rollback and module memory do not arise.
+- **The proof** (verify-core `scene_lazy`): 12 fighters with `scene_lazy_check` on compared 10,195 lazy answers with sight all round and 9,152 by facing (1,561 by id). None differed. With the law off, no lazy answer was made and the battle went on.
+- **Expected saving** from the profile: about 11–13 ms/s of the sight tests and 3 ms/s of the copy at 200 fighters. That is about 3% of the tick, about +1.5 ticks a second at the 45.8 of the second window. To be measured in the next acceptance.
+- **One profiling count changed meaning.** `graph_scenes.seen_mean` (`note_scene`) counts only scenes whose whole list was built (noticing, desires, cues), not every graph evaluation's.
+
+## Profile: combat resolution and woken evaluations (`battle-profile`, 2026-11-13)
+
+**The run:**
+- `minds-prof200c-034627`, on main with scene-lazy (`battle-profile` 99a574a3).
+- `battle_diag.py --battle 200 --walkers 16 --minutes 8 --refill-gap 0.25 --no-mind --law profile_detail=true`, on :3320 after the R3 batch had ended.
+- 161–177 fighters held at the site, about 500 alive in all. Host load 5–13.
+- Figures are the mean of windows 3–9: 48.9 ticks/s, tick 243.9 ms/s. Shares are of the tick.
+- With `profile_detail` on, spans and counters add their own cost, so per-call costs are upper bounds.
+- **Evidence:** `.local/living/verify/minds-prof200c-034627` in the `battle-profile` checkout, archived in `~/slop-evidence/battle-profile-20261113.tar.zst`.
+- **Instrumentation:** committed on `battle-profile`, gated by `profile_detail`. Also archived as a diff: `~/slop-evidence/battle-profile-instrumentation-20261113.diff`.
+
+| Part | ms/s | Share | Calls/s | Per call |
+|---|---|---|---|---|
+| Fighters' 15 Hz evaluations (`tick.combat`) | 93.7 | 38% | 474 | 198 µs |
+| **Combat resolution (`tick.activity`)** | 59.4 | 24% | 55 completions | 1.07 ms |
+| … a blow's effects (`act.damage`) | 46.1 | 19% | 28.9 | 1.6 ms |
+| … … the chronicle's repeat check (`common::chronicle`) | 17.7 | 7% | 18.7 | 0.95 ms |
+| … … what onlookers saw (`fold::blow`, about 62 onlookers a blow) | 11.6 | 5% | 29.7 | 0.39 ms |
+| … … the victim's request to think (`request_waking`; nearly all its `scene_json`) | 9.5 | 4% | 18.8 | 0.51 ms |
+| … … percepts, noise, deaths | about 9 | 4% | | |
+| … the skill's context, check, script and finish | about 12 | 5% | | |
+| **Woken evaluations (`tick.wakes`)** | 42.8 | 18% | 154 | |
+| … fighters (on the combat cadence) | 32.1 | 13% | 132 | 138 µs |
+| … everyone else | 9.6 | 4% | 22 | 246 µs |
+| Onlookers' folded lines (`tick.fold`; naming, `fold.labels`, 16.8) | 28.2 | 12% | 39 lines | 0.73 ms |
+| Slot evaluations (`tick.slots`) | 16.1 | 7% | 82 | |
+
+- **The chronicle's repeat check is the largest single item in combat resolution.**
+  - Each first blow and each killing writes a chronicle line (`common::chronicle`).
+  - To fold repeats ("(×3)"), it reads every chronicle row of the last two minutes, then compares the newest 40.
+  - At about 19 lines a second, that is about 2,300 rows read for 40 compared. Its cost does not grow with the battle's length, only with its rate.
+  - **An exact fix (E):** read only the newest rows. Read the last second; widen the window (4 s, 16 s, then the full 120 s) until it holds 40 rows or more.
+    - The 40 newest rows are the same, in the same order: the same index range scan, cut later.
+    - A `chronicle_recent_check` law would compare it with the full read.
+    - Saves about 15–17 ms/s, about 7% of the tick.
+- **Fold's per-blow sight tests** (`fold::blow`) cost about 6 µs per onlooker. That is the cost of the rule (every onlooker who could see it, by `witnessed`'s test); nothing exact is left to remove.
+- **The victim's request to think** builds its `scene_json` (0.46 ms) at every first blow, whether or not a mind service is connected. Building it when the mind service takes the request would see a later scene, so that would not be exact.
+- **What wakes whom** (wakes a second, by caller):
+  - a bystander's held-back wake coming due: 52.5;
+  - an act ending, which wakes its actor: 36.8;
+  - a fight's first blow, waking its onlookers: 31.3;
+  - a percept with salience 0.6 or more: 20.7;
+  - a windup's target: 17.4;
+  - a struck victim: 14.7;
+  - others: 4.
+  - Of 154 woken evaluations a second, 132 are fighters already on the 15 Hz combat cadence. A wake that comes in the tick of the fighter's own cadence slot costs nothing extra (one evaluation a tick).
+  - **Not exact:** skipping bystander wakes for those on the cadence would delay their response by up to three ticks (50 ms). It would save up to about 10 ms/s. It is a timing change, so it is listed here, not proposed.
+- **Profile counts:**
+  - 709 evaluations a second, with 5.8 graph-node visits each.
+  - 560 skill-script calls a second.
+  - The `status_of` law asked 298 times a second (its cells answered 411 more), of which its memo answered 30 and 268 ran (note B).
+- **Remains grew linearly:** 120 to 845 at the site over 8 minutes (about 1.6 a second). A look's structures went from 19 to 112, and noticing them from 3.3 to 16.6 ms/s (note C).
+
+## Design note C: noticing structures (not built)
+
+**What a look does now** (`Ev::noticed`, about once a second for each character a mind runs, fighters included):
+1. It gathers every structure within sight radius (`Ev::structures` → `common::structures_near`). Each one is copied, with its `kind` string, and the list is sorted by distance.
+2. For each structure, it checks the id against the seen set (`recently_seen`, a hash lookup in module memory). A hit whose mark is older than 45 s is re-marked.
+3. Only a structure missing from the seen set goes to `familiarity`. That reads its `familiar` row by index, inserts one at first sight, and otherwise refreshes `last_ms` and `times` at most every 30 s.
+4. Only when something is new are the details copied and tiles joined (`joined_tiles`), and the "You notice …" line written.
+
+Structures are noticed by radius alone: no facing, no walls. In a battle the remains are structures. They last `remains_h` (an hour of real time for a person on the default day), so a site holds about an hour of its dead.
+
+**What it costs** (the profile above):
+- **Per look:** 65 structures on average, rising from 19 to 112 as the remains grew from 120 to 845. Of these, 1.4% were new (169 a second, over 183 looks a second).
+- **Noticing structures** (`noticed.structures`): 62 µs a look, 11.4 ms/s, 4.7% of the tick. It rose from 3.3 to 16.6 ms/s over the run.
+- **Gathering and sorting the list** (`brain.scene.structures`): 12.7 µs, built by noticing in 103 of 109 builds a second. The rest is the per-structure checks and the new ones' rows and lines.
+- **Projected to an hour of remains:** about 5,800 at the site, about 7 times the end of this run. That puts noticing structures near 115 ms/s, about half of today's tick.
+- So C matters for the 8-hour target, not for 30-minute runs.
+
+**What decides the lines.** `familiar` is private. For structures, the authority reads it in two places only: newness (whether a row exists) and `prune_familiar`.
+- **Newness.** Every structure that is looked at gets a row at its first look. So "new to me" is "I have no row for it". The seen set is a fast path in front of that row.
+- **Pruning.** Over 2,048 rows a character, the oldest by `last_ms` go first. A row touched in the last 60 s is spared, and so is a thing in the seen set within 90 s.
+- **`times`** is never read.
+- So the lines can differ only if the same rows do not exist at the same looks, which depends on what pruning takes.
+
+**How often a battle crosses 2,048 rows:**
+- **Never in this run.** 3.9 prune checks a second (one per 64 new rows of a character) found no character over 2,048.
+- **Fighters never get near it.** They live about 95 s (about 1.8 deaths a second at 170 fighters), gaining about 1.5–2.5 rows a second: a few hundred rows a life.
+- **Long-lived onlookers can.** Walkers, townsfolk and survivors who stay in sight of the site gain rows at about the rate of deaths and arrivals in view. An onlooker who sees every death and every arriving fighter (about 3.5 new things a second at this rate) would cross 2,048 in about 10 minutes. One who sees a sixth of them, as a look sees a sixth of the remains here, would cross in about an hour.
+- **Not measured:** per-character counts at the end. The run's database was deleted at cleanup, and the counters give rates only. A 30-minute run reading `familiar` counts per actor before cleanup would settle it.
+
+### C1: noticing reads in place (exact, no new state)
+
+- **Change.** Noticing walks each chunk's cached structure list in place (`chunk_structures`). It tests distance and checks the seen set by id. It does not build the copied and sorted list.
+- **When something is new.** Only then does it build the full list as now and redo the pass in its order. The lines, the joined tiles and the order of the `familiar` inserts are therefore the same.
+- **Exact because:** the same structures (distance ≤ radius), the same seen-set calls per id (their effect does not depend on order), and the same `familiarity` calls in the same order.
+- **Saves:** the copy and the sort, about 12.7 µs of the 62 µs a look (about 2 ms/s now). It grows with the remains as the rest does.
+- **Keeps:** one hash lookup per structure in sight per look, which is most of the cost.
+- **Other readers unchanged.** Cues, structure targets and region summaries still build the list when they read it.
+- **Proof:** a `notice_inplace_check` law that runs both and compares the set of new ids and the lines, as `scene_lazy_check` does.
+
+### C2: a look checks only what changed (incremental; needs a row and a decision)
+
+**State.** One row per character a mind runs, `look`: where its last look stood, its radius, the highest structure id then, and when.
+
+**A look:**
+- No row, or the row is older than 45 s: a full look as now.
+- Otherwise it walks the chunk lists of its sight disc in place. A structure gets the full check only if it is newer than the row's id, or was outside the last look's disc. That covers structures that came into view by moving, by the radius growing (light), or by being built.
+- Every other structure in sight was handled at the last look and is skipped: no hash lookup, no row read.
+- Each structure costs one or two float tests. When something is new, the full list is built as in C1.
+- The row is then rewritten.
+
+**Why a row, not module memory:**
+- A tick that fails rolls back its `familiar` inserts. A cache in module memory would still say those structures were looked at.
+- SpacetimeDB does not keep a module's memory between reducer calls ([reducers](https://spacetimedb.com/docs/functions/reducers/), "Global and Static Variables Are Undefined Behavior").
+- Rewriting one small row per look is about 180–260 writes a second at 200 fighters, about 1–2 ms/s. That is the same order as `mind_state`'s rewrite (6 µs each).
+- The table is private, indexed by its primary key only, and holds one row per character. Its row goes with the character (`forget_dead`).
+- It is a new table, not a column on `mind_state`: a column append rewrites the table and disconnects every client on 2.14.1.
+
+**Saves:** most of the stayers' checks.
+- At this run's end, that is perhaps 8–10 ms/s of the 16.6.
+- At an hour of remains, most of a projected ~115 ms/s.
+- What is left is the new structures' rows and lines, which follow the death rate, not the pile.
+
+**What it changes (not exact):**
+- Skipped structures are not re-marked in the seen set every 45 s. A structure in view keeps an old mark, so after it leaves view and comes back its row is refreshed earlier than now. Pruning would also no longer spare it as "in the seen set".
+- To keep "never forget what is in view", pruning would spare a structure within the last look's disc as well. That needs a lookup of the structure's position for each candidate, and pruning is rare: every 64 inserts.
+- **Effect on the lines:** the same lines while a character holds fewer than 2,048 rows, which fighters never reach. Above that (long-lived onlookers of a long battle, above), which out-of-view row goes first can differ: the ordering of `last_ms` changes, while the rule "the oldest out-of-view first, never one in view" holds.
+- That ordering is a memory bound, not a rule a player sees. **Whether it is acceptable is the general coordinator's call.**
+
+**Proof:**
+- A `notice_delta_check` law that runs the full pass next to the incremental one. It compares the set of structures each would send to the full check, and the lines.
+- A verify-core case with a battle among remains, a walker crossing the site, and a fire built in view.
+
+**Recommendation:**
+- C1 is exact, but small today; it is worth building with E as one small exact branch.
+- C2 is what an 8-hour battle needs, and waits on the decision above.
+
+## Design note B: the `status_of` law in per-meter parts (not built; for the general coordinator)
+
+**What it costs** (the profile above):
+- The body's alarms (`brain.status`): 29.2 ms/s, 12% of the tick, over 633 calls a second.
+- The character's cell answered 411 of these; 298 asked the law. Of those, the rules' memo answered 30 and 268 ran the script.
+- About 6 ms/s of the 29 is this profile's own diagnostic (`status.diag`), so an ask costs about 75 µs.
+
+**Why the memo misses:**
+- Its key is every fact the law reads: `hunger`, `energy`, `share.health`, `hp_rate`, `night`, `kind`, `hurt_ago_s`, `stamina`. Any one changing makes a new key.
+- Facts changed at an ask (`status:changed:*`): `stamina` at 74% of asks, `hurt_ago_s` 14% (it counts seconds up to 120 after a blow), health 6%, energy 4%, hunger 1%.
+- 57% of asks changed exactly two facts: a meter and its share. Stamina is the usual one. Focus is the other; it changed at 17% of asks, but the law does not read it.
+- Most asks therefore change the inputs of one part only. The counts do not say exactly how many; the check law's run would.
+
+**The change** (a script-contract change):
+- `skills.rhai` declares the law's parts: `fn status_parts() { ["hunger_status_of", "energy_status_of", …] }`. Each part takes the body (`a`) and returns its statuses: hunger, energy, health, freezing, in combat, out of breath, slowed, wasting or recovering, as `status_of` already builds them.
+- The engine works out each part's read plan, as it does for skill checks, and memoizes each part on its own reads. The body's statuses are the parts' answers joined in the declared order.
+- A change of stamina alone then re-asks one small part: out of breath, which reads `stamina`. Its context map holds that one fact, not the whole body.
+- `status_of` stays as the reference: it calls the same parts in the same order. A `status_parts_check` law compares the joined parts with it at every ask, as `alarm_cells_check` does.
+- **Exact when** the parts joined are `status_of`. The check law proves it for the script as written; a script whose parts differ from its `status_of` is caught by the check, not silently accepted.
+
+**Saves:** an estimate, to be measured.
+- If a one-part ask costs about 10–15 µs against the whole law's 75 µs, and most of the 268 runs a second (stamina alone is in 74% of them) become one part, they save about 60 µs each: about 10–16 ms/s, 4–6% of the tick.
+- The cells' 411 answers are unchanged.
+
+**What it costs to build:**
+- A script API (`status_parts`) and its documentation in the script contract.
+- Per-part plans and memo in `living_rules::script::body`, and the check law.
+- A verify-core case covering each status, in and out of a fight.
+- Every world script that defines `status_of` without parts keeps working as now.
+
+**Decision for the general coordinator:** whether to extend the script contract for this; A waits.
+
 ## Verification it would need
 
 - **Unit tests:**
