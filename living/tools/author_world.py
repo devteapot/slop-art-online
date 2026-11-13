@@ -1481,7 +1481,9 @@ def main():
         residents = []
         for h in s["households"]:
             for m in h["members"]:
-                r = {"name": m["name"], "age": m["age"], "household": h["key"], "occupation": m["occupation"], "knows": m["knows"], "parents": m.get("parents", []), "sheet": sheets[m["name"]]}
+                if m.get("sex") not in ("f", "m"):
+                    sys.exit(f"{m['name']}: the cast gives no sex (\"f\" or \"m\")")
+                r = {"name": m["name"], "age": m["age"], "sex": m["sex"], "household": h["key"], "occupation": m["occupation"], "knows": m["knows"], "parents": m.get("parents", []), "sheet": sheets[m["name"]]}
                 if m.get("inventory"):
                     r["inventory"] = m["inventory"]
                 residents.append(r)

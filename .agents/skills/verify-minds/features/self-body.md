@@ -32,3 +32,23 @@ Checks (`body.json`):
 - The case takes 10–12 minutes: the child needs about 5 real minutes from birth to adulthood at this pace.
 - Seeded people die of old age from 75 years: at this pace Teodor Vane (70) dies within two minutes. Nothing in the case depends on him.
 - The case restarts the mind once (`shared.stop`, `launch_mind`); the second `world subscribed:` line marks the restart.
+
+## Body sex
+
+Since `sex-1` (2026-11-13; docs/LIVING_CORE.md "Body sex"). The `body-sex` case runs on the hamlet at a fast pace (`body_seed`, every resident giving `sex`), with the fake model, Oren Hale's and Ilsa Hale's minds, and a newcomer from `spawn_crowd`. It asserts:
+
+- **The self line.** Oren's prompts carry "You are a man." after the body line (`Minds::body_line`, the rules' `sex_words()`).
+- **Remembered.** His relations list his wife, placed out of sight 30–60 m off, as "Ilsa Hale (#id, a woman)" (`known_person`: what the mind knows of her).
+- **The scene, near.** The newcomer 3 m off is an entry with `"form"`, the newcomer's word, and `"who": "a stranger"`. No label in the scene carries a sex word.
+- **The scene, far.** Under an overlay that makes everyone past 4 m `far`, the newcomer at 6 m is a figure under a handle (≥ 1000000000), with the far label and the same `form`. No entry carries the newcomer's id.
+- **The talk header.**
+  - The newcomer says a line to Oren 1.5 m away: his talk prompt heads "# You and a stranger (#id, a woman|a man)", face to face because `line_heard` lists Oren among the hearers its speaker saw.
+  - Then Ilsa does: "# You and Ilsa Hale (#id, a woman)".
+- **Kin words.** Pim (their child) says "Mother, …" to the room beside both, and Ilsa is told she was named while Oren is not. "Father, …" the other way round.
+- **The newborn.** Brisk and Edda Marrow (graph-only) start a family. Once the child is born it has a `sex` row, and the mind, restarted with the child in `LIVING_ONLY`, makes its birth identity call: "Newborn: Name (#id, <its body by stage: a baby girl, a boy…>)." with "(#id, a man)" and "(#id, a woman)" for its parents.
+
+Prompts in `prompt-near.txt`, `prompt-far.txt`, `prompt-talk-stranger.txt`, `prompt-talk-wife.txt` and `prompt-birth.txt`, and checks in `body-sex.json`.
+
+```bash
+.agents/skills/verify-minds/scripts/verify_minds.py --run "$R" --case body-sex
+```

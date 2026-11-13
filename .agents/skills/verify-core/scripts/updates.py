@@ -16,6 +16,7 @@ seconds and reads, as the owner:
 - the scheduled rows `tick_timer` and `slow_timer` (the clocks are kept);
 - with `--relook GEN`, after a chain's last update: the admin's `relook(GEN)`, then the same reads
   (a world from before looks takes its seed's looks and goes on ticking);
+- with `--crowd N`, after a chain's first step: N people made by the old module (`spawn_crowd`);
 - with `--backfill SEED` (sex-1, docs/LIVING_CORE.md "Body sex"), after a chain's last update and
   before any relook: the `sex` row count (none on a world from before sex), the admin's
   `backfill_sex()` twice (the second gives no one a row: idempotent), then every person has one,
@@ -116,6 +117,7 @@ def main():
     ap.add_argument("--chain", action="append", required=True)
     ap.add_argument("--settle", type=float, default=8.0)
     ap.add_argument("--relook", help="after each chain's last step, the admin's relook(GEN) (a world from before looks takes its seed's)")
+    ap.add_argument("--crowd", type=int, default=0, help="after each chain's first step, the admin's spawn_crowd(N): people made by the old module (pool looks where it has them)")
     ap.add_argument("--backfill", help="after each chain's last step (before any relook), the admin's backfill_sex() twice, checked against living/seeds/SEED.json")
     a = ap.parse_args()
     out = ROOT / ".local/living/verify" / a.run
@@ -130,6 +132,9 @@ def main():
             for i, m in enumerate(mods):
                 stdb("publish", "-s", "local", "-b", f"/wasm/{m}.wasm", db, *(["--delete-data"] if i == 0 else []), "-y")
                 time.sleep(a.settle)
+                if a.crowd and i == 0:
+                    stdb("call", "-s", "local", db, "spawn_crowd", str(a.crowd), "true")
+                    time.sleep(1)
                 log = stdb("logs", "-s", "local", db, "-n", "100000", check=False)
                 lines = log.splitlines()
                 new = lines[seen:]

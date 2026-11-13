@@ -191,9 +191,11 @@ mod tests {
         // A seed without looks whose residents give no sex is not an authored cast: its people
         // take the world's pick.
         let mut h: serde_json::Value = serde_json::from_str(include_str!("../../seeds/hamlet.json")).unwrap();
-        for t in h["towns"].as_array_mut().unwrap().iter_mut().chain(h["villages"].as_array_mut().unwrap().iter_mut()) {
-            for r in t["residents"].as_array_mut().unwrap() {
-                r.as_object_mut().unwrap().remove("sex");
+        for key in ["towns", "villages"] {
+            for t in h[key].as_array_mut().unwrap() {
+                for r in t["residents"].as_array_mut().unwrap() {
+                    r.as_object_mut().unwrap().remove("sex");
+                }
             }
         }
         assert_eq!(crate::look::check_sex(&serde_json::from_value(h).unwrap()), Ok(()));

@@ -3520,14 +3520,16 @@ def body_sex_case(run):
     talks = lambda: [sent_text(e) for e in requests() if e['purpose'] == 'talk' and f'# Who you are\nOren Hale' in sent_text(e)]
     run.admin('place_at', newcomer, *off(1.5))
     time.sleep(2.0)
-    run.admin('mind_say', newcomer, 'Good day to you. verify sex talk stranger', oren, 'say', 0, thought('verify sex talk'))
+    run.admin('mind_say', newcomer, 'Good day to you, where is the mill? verify sex talk stranger', oren, 'say', 0, thought('verify sex talk'))
     stranger_talk = run.wait(lambda: [t for t in talks() if 'verify sex talk stranger' in t], 'Oren\'s talk prompt for the stranger', 90)[0]
     (run.directory / 'prompt-talk-stranger.txt').write_text(stranger_talk)
     checks['talk header: the stranger face to face, with its body'] = f'# You and a stranger (#{newcomer}, {a_word(word(newcomer))})' in stranger_talk
     run.admin('place_at', newcomer, *away)
     run.admin('place_at', ilsa, *off(1.5))
-    time.sleep(3.0)
-    run.admin('mind_say', ilsa, 'Supper is ready. verify sex talk wife', oren, 'say', 0, thought('verify sex talk'))
+    # Lines that ask something (a remark that asks nothing is answered only by temperament's
+    # draw, talk.rs), and the stranger's exchange left a moment to end.
+    time.sleep(5.0)
+    run.admin('mind_say', ilsa, 'Will you come in to supper? verify sex talk wife', oren, 'say', 0, thought('verify sex talk'))
     wife_talk = run.wait(lambda: [t for t in talks() if 'verify sex talk wife' in t], 'Oren\'s talk prompt for his wife', 90)[0]
     (run.directory / 'prompt-talk-wife.txt').write_text(wife_talk)
     checks['talk header: his wife, with her body'] = f'# You and Ilsa Hale (#{ilsa}, {a_word(word(ilsa))})' in wife_talk
@@ -3535,7 +3537,8 @@ def body_sex_case(run):
     run.admin('place_at', pim, *off(2.5))
     time.sleep(3.0)
     def named(who, marker):
-        return [e for e in run.private(f'SELECT kind, text FROM experience WHERE observer = {who}', f'exp-{who}') if marker in e['text'] and 'naming you' in e['text']]
+        # "naming you", or "naming Edda and you" when two are named.
+        return [e for e in run.private(f'SELECT kind, text FROM experience WHERE observer = {who}', f'exp-{who}') if marker in e['text'] and re.search(r'naming [^:“]*\byou\b', e['text'])]
     for words_said, marker, yes, no in (('Mother, look at the stone.', 'verify sex kin mother', ilsa, oren), ('Father, look at the stone.', 'verify sex kin father', oren, ilsa)):
         run.admin('mind_say', pim, f'{words_said} {marker}', 0, 'say', 0, thought('verify sex kin'))
         time.sleep(2.5)

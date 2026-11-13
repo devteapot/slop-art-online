@@ -5209,7 +5209,6 @@ SCENES["howl_reach"] = howl_reach
 SCENES["pack_reflex"] = pack_reflex
 SCENES["intents_cost"] = intents_cost
 SCENES["sleeper"] = sleeper
-SCENES["sex"] = body_sex
 
 
 
@@ -5367,7 +5366,8 @@ def body_sex(s):
             s.call("place_at", who, *line[at])
             s.graph(who, {"wait": 120})
         def named(who, marker):
-            return [e for e in s.rows(f"SELECT kind, text FROM experience WHERE observer = {who}") if marker in e["text"] and "naming you" in e["text"]]
+            # "naming you", or "naming Edda and you" when two are named.
+            return [e for e in s.rows(f"SELECT kind, text FROM experience WHERE observer = {who}") if marker in e["text"] and re.search(r"naming [^:“]*\byou\b", e["text"])]
         for words, marker, yes, no in (("Mother, come and see.", "verify kin mother", [mother], [father]), ("Father, come and see.", "verify kin father", [father], [mother]), ("Ask a parent.", "verify kin parent", [mother, father], [])):
             s.call("mind_say", child["id"], f"{words} {marker}", 0, "", 0, THOUGHT)
             time.sleep(2.5)
@@ -6540,6 +6540,8 @@ def admin_vitals(s):
 
 SCENES["admin_vitals"] = admin_vitals
 
+
+SCENES["sex"] = body_sex
 
 if __name__ == "__main__":
     raise SystemExit(main())
