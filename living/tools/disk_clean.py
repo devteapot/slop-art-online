@@ -32,16 +32,41 @@ checks and the idle and pressure rules apply, never the merged rule; protection 
 A removal renames the folder aside while holding its Cargo locks, checks again that nothing
 uses it, then deletes it. Prints a report and keeps it in ~/.local/state/slop-disk/.
 
+Containers (docs/TOOLING.md, "Disk": SpacetimeDB servers, the quiet restart, Docker's VM disk):
+  - every machine: each running SpacetimeDB server's deleted files still held open, its live
+    databases (db.lock or module log open), the directories of deleted databases left on disk
+    (SpacetimeDB 2.14.1 never removes them) and its connected clients, by container and pid.
+    Linux reads /proc (rootless podman's through `podman unshare`); macOS runs this file's probe
+    inside Docker Desktop's VM. Report only: the timer never restarts, stops or signals anything.
+  - --apply --restart-stdb NAME (never automatic): SIGINT to that container, removal of its
+    deleted databases' directories while it is stopped, start, then every known database must
+    answer SQL with the same paused state. Refused, before anything is stopped, for the
+    reference worlds' server, a held gate or merge lock, a connected client, a host process
+    naming its port, an unlisted or unanswering database, an evidence server without
+    --keep-dirs, or anything it cannot read.
+  - macOS Docker Desktop only: Docker.raw's allocated size and the VM's /var/lib; with --apply,
+    one `fstrim /var/lib` in the VM when free space is under floor + --trim-margin-gb (10) and
+    Docker Desktop runs, or after a restart; none for an hour after a trim that freed under
+    1 GB (state in vm-trim.json beside the reports).
+
 Usage: disk_clean.py [--apply] [--repo PATH] [--floor-gb 40] [--target-gb N] [--idle 24]
                      [--merged-idle 2] [--pressure-idle 2] [--protect PATH]...
                      [--protect-file PATH] [--targets-file PATH] [--list-protected] [--json]
-  Without --apply it is a dry run: the same report, nothing removed.
+                     [--docker-raw PATH] [--trim-margin-gb 10] [--containers-only]
+                     [--restart-stdb NAME [--stdb-db DB]... [--keep-dirs]]
+  Without --apply it is a dry run: the same report, nothing removed, no trim.
+  --docker-raw PATH  Docker Desktop's VM disk, when it is not found by itself
+  --containers-only  print only the container section (read-only: no trim, no restart), then stop
+  --restart-stdb N   with --apply, the quiet restart of container N (without it, its checks and plan)
+  --stdb-db DB       a database N hosts that its CLI identity does not list (repeatable)
+  --keep-dirs        restart without removing the deleted databases' directories
   --protect PATH     protect PATH and everything under it (repeatable), besides the file
   --protect-file P   read the machine's protected paths from P (~/.config/slop-disk/protect.txt)
   --targets-file P   read the outside target folders from P (~/.config/slop-disk/targets.txt)
   --list-protected   print every protected path and where it comes from, then stop
 Exit status: 0, 2 for a bad argument or an unreadable or invalid protect or targets file (nothing is
-removed), or 3 when free space is still under the floor afterwards.
+removed), 3 when free space is still under the floor afterwards, or 4 when --restart-stdb was
+refused or did not complete.
 """
 import fcntl
 import glob
@@ -650,9 +675,745 @@ def remove_row(r, now, mpoints):
     return max(freed, 0)
 
 
+# ---- Containers: SpacetimeDB servers (every machine) and Docker Desktop's VM disk (macOS) ----
+# Report only by default. Two actions, each only with --apply: the VM trim (macOS, near the
+# floor or after a restart) and the quiet restart of one SpacetimeDB container named with
+# --restart-stdb, which refuses whenever the server may be in use. No container is otherwise
+# restarted, stopped, signalled, pruned or exec'd into: that would cut live worlds.
+
+PROC = "/proc"  # the self-test points this at a fake tree
+STATE_HOME = os.environ.get("XDG_STATE_HOME") or os.path.join(HOME, ".local/state")
+DOCKER_RAW = os.path.join(HOME, "Library/Containers/com.docker.docker/Data/vms/0/data/Docker.raw")
+DOCKER_SETTINGS = [os.path.join(HOME, "Library/Group Containers/group.com.docker", f) for f in ("settings-store.json", "settings.json")]
+# A privileged throwaway container in the VM's pid namespace: it reads the VM's /proc, and
+# nsenter into pid 1's namespaces reaches the VM's own filesystem.
+VM_RUN = ["run", "--rm", "--privileged", "--pid=host"]
+ALPINE = "alpine"
+PROBE_IMAGE = "python:3.12-alpine"  # runs this file's probe inside Docker Desktop's VM
+TRIM = VM_RUN + [ALPINE, "nsenter", "-t", "1", "-m", "-u", "-i", "-n", "fstrim", "/var/lib"]
+TRIM_MARGIN_GB = 10.0      # trim when free space is under floor + this
+TRIM_BACKOFF_S = 3600      # a trim within this long that freed under TRIM_BACKOFF_MIN blocks the next
+TRIM_BACKOFF_MIN = GB
+TRIM_SETTLE_S = 5          # wait after fstrim before measuring (the VM returns blocks to the host file)
+TRIM_STATE = os.path.join(STATE, "vm-trim.json")
+DEFAULT_DATA_DIR = "/home/spacetime/.local/share/spacetime/data"
+RECENT_S = 15 * 60         # a replica directory written this recently counts as live (a world starting)
+# Never restarted: the reference worlds' server (both compose spellings), and the machine's list.
+NEVER_RESTART = ("sao-living_spacetimedb_1", "sao-living-spacetimedb-1")
+NEVER_RESTART_FILE = os.path.join(HOME, ".config", "slop-disk", "never-restart.txt")
+# Restarted only with --keep-dirs: deleted databases' directories there hold run evidence
+# (the trial server's paid and no-model commitlogs; docs/TRIAL_DISK.md).
+KEEP_DIRS = ("slop-trials-stdb",)
+KEEP_DIRS_FILE = os.path.join(HOME, ".config", "slop-disk", "stdb-keep-dirs.txt")
+REFERENCE_WORLDS = re.compile(r"^(aske-coast|stage)")
+GATE_LOCK = os.path.join(STATE_HOME, "slop-build", "gate.lock")
+MERGE_LOCKS = os.path.join(STATE_HOME, "slop-merge", "*.lock")
+# Port forwarders and container plumbing name the published port without using the server.
+FORWARDERS = ("pasta", "pasta.avx2", "rootlessport", "rootlessport-child", "slirp4netns", "conmon", "docker-proxy", "vpnkit",
+              "gvproxy", "com.docker.backend", "com.docker.vpnkit", "com.docker.build", "podman")
+STOP_WAIT_S = 180
+SQL_WAIT_S = 600
+POLL_S = 5
+
+
+def human(b):
+    return f"{b / GB:.1f} GB" if abs(b) >= GB else f"{b / 1024 ** 2:.0f} MB"
+
+
+def run_tool(cmd, timeout=60, input=None):
+    """(exit code, stdout, stderr); exit -1 with the reason when it could not run or timed out."""
+    try:
+        r = subprocess.run(cmd, input=input, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=timeout)
+        return r.returncode, r.stdout, r.stderr
+    except FileNotFoundError:
+        return -1, "", f"{cmd[0]} not found"
+    except subprocess.TimeoutExpired:
+        return -1, "", f"no answer in {timeout} s"
+    except OSError as e:
+        return -1, "", str(e)
+
+
+def first_line(s):
+    return (s or "").strip().splitlines()[0][:160] if (s or "").strip() else ""
+
+
+def plural(n, word, many=None):
+    return f"{n} {word if n == 1 else many or word + 's'}"
+
+
+def is_server(argv):
+    """A SpacetimeDB server: spacetimedb-standalone, or the `spacetime start` that runs it."""
+    if not argv:
+        return False
+    base = os.path.basename(argv[0])
+    return base.startswith("spacetimedb-standalone") or (base == "spacetime" and "start" in argv[1:])
+
+
+def proc_table(root):
+    """{pid: (ppid, argv)} of every process under a /proc tree (stat and cmdline, readable by all)."""
+    t = {}
+    try:
+        names = os.listdir(root)
+    except OSError:
+        return t
+    for name in names:
+        if not name.isdigit():
+            continue
+        try:
+            with open(os.path.join(root, name, "stat"), errors="replace") as f:
+                ppid = int(f.read().rsplit(")", 1)[1].split()[1])
+            with open(os.path.join(root, name, "cmdline"), "rb") as f:
+                argv = [a.decode(errors="replace") for a in f.read().split(b"\0") if a]
+        except (OSError, ValueError, IndexError):
+            continue
+        t[int(name)] = (ppid, argv)
+    return t
+
+
+def tcp_peer(hexaddr):
+    ip, port = hexaddr.rsplit(":", 1)
+    if len(ip) == 8:
+        ip = ".".join(str(int(ip[i:i + 2], 16)) for i in (6, 4, 2, 0))
+    return f"{ip}:{int(port, 16)}"
+
+
+def sockets(root, pid, inodes):
+    """(listening ports, established peers) of the process's own TCP sockets: the rows of its
+    network namespace's tcp and tcp6 tables whose inode is one of its fds. OSError if unreadable."""
+    rows, seen = [], 0
+    for name in ("tcp", "tcp6"):
+        try:
+            with open(os.path.join(root, str(pid), "net", name)) as f:
+                rows += [r.split() for r in f.read().splitlines()[1:]]
+            seen += 1
+        except FileNotFoundError:
+            continue
+    if not seen:
+        raise OSError(f"no {root}/{pid}/net/tcp")
+    mine = [r for r in rows if len(r) > 9 and r[9] in inodes]
+    listen = {int(r[1].rsplit(":", 1)[1], 16) for r in mine if r[3] == "0A"}
+    peers = [tcp_peer(r[2]) for r in mine if r[3] == "01" and int(r[1].rsplit(":", 1)[1], 16) in listen]
+    return sorted(listen), peers
+
+
+def server_info(root, pid, argv):
+    """One SpacetimeDB server process: its deleted files held open, its replica directories
+    (live: it holds their db.lock or module log open; the others are deleted databases'), and
+    its clients. Raises PermissionError when its fd folder cannot be read."""
+    import stat as st_
+    d = os.path.join(root, str(pid), "fd")
+    deleted, paths, inodes = [], [], set()
+    for fd in os.listdir(d):
+        try:
+            link = os.readlink(os.path.join(d, fd))
+        except OSError:
+            continue
+        if link.startswith("socket:["):
+            inodes.add(link[8:-1])
+        elif not link.startswith("/") or link.startswith("/memfd:"):
+            continue
+        elif link.endswith(" (deleted)"):
+            try:
+                s = os.stat(os.path.join(d, fd))
+            except OSError:
+                continue
+            if st_.S_ISREG(s.st_mode):
+                deleted.append((link[:-len(" (deleted)")], s.st_blocks * 512, f"{s.st_dev}:{s.st_ino}"))
+        else:
+            paths.append(link)
+    data = next((argv[i + 1] for i, a in enumerate(argv[:-1]) if a == "--data-dir"), None) or \
+        next((a.split("=", 1)[1] for a in argv if a.startswith("--data-dir=")), None) or DEFAULT_DATA_DIR
+    reps = data.rstrip("/") + "/replicas/"
+    live = sorted({p[len(reps):].split("/")[0] for p in paths if p.startswith(reps) and (p.endswith("/db.lock") or "/module_logs/" in p)})
+    segments = sorted({p[len(reps):].split("/")[0] for p in paths if p.startswith(reps) and "/clog/" in p})
+    info = {"data_dir": data, "deleted": deleted, "live": live, "segments_open": segments, "replicas": {}}
+    try:
+        for e in os.scandir(os.path.join(root, str(pid), "root") + reps.rstrip("/")):
+            if e.is_dir(follow_symlinks=False):
+                size, newest, _, _ = scan(e.path)
+                info["replicas"][e.name] = [size, newest]
+    except OSError as e:
+        info["replicas_error"] = f"{type(e).__name__}: {e.strerror or e}"
+    try:
+        info["listen"], info["clients"] = sockets(root, pid, inodes)
+    except OSError as e:
+        info["sockets_error"] = f"{type(e).__name__}: {e.strerror or e}"
+    return info
+
+
+def probe(root, pids=None, vm=False):
+    """--probe: every SpacetimeDB server under a /proc tree (or the given pids) as JSON-ready data;
+    run in this process, under `podman unshare`, or inside Docker Desktop's VM."""
+    procs = proc_table(root)
+    out = {"servers": {}}
+    if pids is None:
+        out["procs"] = {str(p): v for p, v in procs.items()}
+        pids = [p for p, (_, a) in procs.items() if is_server(a)]
+    for p in pids:
+        try:
+            out["servers"][str(p)] = server_info(root, p, procs.get(p, (0, []))[1])
+        except PermissionError as e:
+            out["servers"][str(p)] = {"denied": f"permission denied ({e.strerror or e})"}
+        except OSError as e:
+            out["servers"][str(p)] = {"error": f"{type(e).__name__}: {e.strerror or e}"}
+    if vm:
+        try:
+            s = os.statvfs(os.path.join(root, "1", "root", "var", "lib"))
+            out["vm_df"] = {"total": s.f_blocks * s.f_frsize, "free": s.f_bavail * s.f_frsize, "used": (s.f_blocks - s.f_bfree) * s.f_frsize}
+        except OSError as e:
+            out["vm_df"] = {"error": str(e)}
+    return out
+
+
+def running_containers(tools=("podman", "docker")):
+    """([(tool, name, pid)] of running containers, [problems]). A tool that is a link to
+    another (docker -> podman) is asked once. Read-only: ps and inspect."""
+    out, problems, seen_tools, seen_pids = [], [], set(), set()
+    for tool in tools:
+        exe = shutil.which(tool)
+        if not exe or real(exe) in seen_tools:
+            continue
+        seen_tools.add(real(exe))
+        code, so, se = run_tool([tool, "ps", "-q"], 30)
+        if code:
+            problems.append(f"{tool} ps failed (exit {code}): {first_line(se) or 'no message'}")
+            continue
+        ids = so.split()
+        if not ids:
+            continue
+        code, so, se = run_tool([tool, "inspect", "--format", "{{.Name}}\t{{.State.Pid}}", *ids], 30)
+        if code:
+            problems.append(f"{tool} inspect failed (exit {code}): {first_line(se) or 'no message'}")
+            continue
+        for line in so.splitlines():
+            name, _, pid = line.strip().partition("\t")
+            if pid.strip().isdigit() and int(pid) > 0 and int(pid) not in seen_pids:
+                seen_pids.add(int(pid))
+                out.append((tool, name.lstrip("/"), int(pid)))
+    return out, problems
+
+
+def collect():
+    """{containers, problems, procs, servers, vm_df?} for this machine's SpacetimeDB servers.
+    Linux reads the host's /proc; a rootless container's server runs as a sub-uid whose fd
+    folder the user cannot list, so those are probed again under `podman unshare` (the user
+    namespace's root; it joins no container). macOS probes inside Docker Desktop's VM."""
+    if platform.system() == "Darwin":
+        containers, problems = running_containers(("docker",))
+        code, so, se = run_tool(["docker", *VM_RUN, "-i", PROBE_IMAGE, "python3", "-", "--probe", PROC, "--vm"], 300,
+                                input=open(os.path.abspath(__file__)).read())
+        try:
+            got = json.loads(so.strip().splitlines()[-1]) if code == 0 else None
+        except (ValueError, IndexError):
+            got = None
+        if got is None:
+            return {"containers": containers, "problems": problems, "procs": {}, "servers": {},
+                    "error": f"the probe inside Docker Desktop's VM failed (exit {code}): {first_line(se) or first_line(so) or 'no output'}"}
+        return {"containers": containers, "problems": problems, "procs": {int(k): tuple(v) for k, v in got["procs"].items()},
+                "servers": {int(k): v for k, v in got["servers"].items()}, "vm_df": got.get("vm_df")}
+    containers, problems = running_containers()
+    got = probe(PROC)
+    procs = {int(k): tuple(v) for k, v in got["procs"].items()}
+    servers = {int(k): v for k, v in got["servers"].items()}
+    denied = [p for p, v in servers.items() if "denied" in v]
+    if denied and shutil.which("podman"):
+        code, so, se = run_tool(["podman", "unshare", sys.executable, "-I", os.path.abspath(__file__), "--probe", PROC, *map(str, denied)], 300)
+        try:
+            again = json.loads(so.strip().splitlines()[-1])["servers"] if code == 0 else None
+        except (ValueError, IndexError, KeyError):
+            again = None
+        for p in denied:
+            v = (again or {}).get(str(p))
+            servers[p] = v if v else {"denied": f"permission denied, and podman unshare failed (exit {code}): {first_line(se) or first_line(so) or 'no output'}"}
+    for p in denied:
+        if "denied" in servers[p] and not shutil.which("podman"):
+            servers[p]["denied"] += "; run the report as root to see it"
+    return {"containers": containers, "problems": problems, "procs": procs, "servers": servers}
+
+
+def group_servers(procs, containers):
+    """{(tool, name, container pid) or ('host', None, pid): [server pids]}: each SpacetimeDB
+    server process under the container whose init it descends from."""
+    by_pid = {pid: (tool, name, pid) for tool, name, pid in containers}
+    groups = {}
+    for pid, (_, argv) in sorted(procs.items()):
+        if not is_server(argv):
+            continue
+        p, owner = pid, None
+        for _ in range(64):
+            if p in by_pid:
+                owner = by_pid[p]
+                break
+            if p not in procs or procs[p][0] in (0, p):
+                break
+            p = procs[p][0]
+        groups.setdefault(owner or ("host", None, pid), []).append(pid)
+    return groups
+
+
+def summarize(key, pids, servers, now):
+    """One server group's view: deleted files held open, live and deleted databases' replica
+    directories, clients, and what could not be read."""
+    tool, name, cpid = key
+    s = {"server": f"spacetimedb in {name} ({tool}, pid {cpid})" if tool != "host" else f"spacetimedb on the host (pid {cpid})",
+         "tool": tool, "container": name, "pid": cpid, "pids": pids, "errors": []}
+    files, live, reps, clients, listen, data = {}, set(), {}, [], set(), None
+    for p in pids:
+        v = servers.get(p, {"error": "not probed"})
+        if "denied" in v or "error" in v:
+            s["errors"].append(v.get("denied") or v.get("error"))
+            continue
+        for path, size, k in v.get("deleted", []):
+            files[k] = (path, size)
+        live |= set(v.get("live", []))
+        reps.update(v.get("replicas", {}))
+        clients += v.get("clients", [])
+        listen |= set(v.get("listen", []))
+        data = data or (v["data_dir"] if v.get("replicas") or v.get("live") else None)
+        for e in ("replicas_error", "sockets_error"):
+            if v.get(e) and (e != "replicas_error" or v.get("live")):
+                s["errors"].append(f"{e.split('_')[0]}: {v[e]}")
+    dead = {r: sz for r, (sz, newest) in reps.items() if r not in live and now - newest >= RECENT_S}
+    s.update(files=len(files), bytes=sum(x for _, x in files.values()), top=sorted(files.values(), key=lambda f: -f[1])[:3],
+             replicas_of_files=len({m.group(1) for p, _ in files.values() for m in [re.search(r"/replicas/([^/]+)/", p)] if m}),
+             live=sorted(live), dead=sorted(dead), dead_bytes=sum(dead.values()),
+             recent=sorted(r for r, (sz, newest) in reps.items() if r not in live and r not in dead),
+             clients=clients, listen=sorted(listen), data_dir=data)
+    return s
+
+
+def held_lines(summaries):
+    lines, quiet = [], []
+    for s in summaries:
+        if s["errors"] and not (s["files"] or s["live"] or s["dead"]):
+            lines.append(f"  {s['server']}: cannot see its files ({s['errors'][0]})")
+            continue
+        if not (s["files"] or s["dead"]):
+            quiet.append(s["container"] or f"host pid {s['pid']}")
+            continue
+        lines.append(f"  {s['server']}: {plural(len(s['live']), 'live database')}, {plural(len(s['clients']), 'client')} connected"
+                     + (f"; unreadable: {s['errors'][0]}" if s["errors"] else ""))
+        if s["files"]:
+            lines.append(f"    holds {plural(s['files'], 'deleted file')} ({human(s['bytes'])})"
+                         + (f" of {plural(s['replicas_of_files'], 'replica')}" if s["replicas_of_files"] else "")
+                         + "; a restart at a quiet moment frees them")
+            lines += [f"      {human(size):>8}  {path}" for path, size in s["top"]]
+        if s["dead"]:
+            lines.append(f"    {plural(len(s['dead']), 'directory', 'directories')} of deleted databases still on disk ({human(s['dead_bytes'])}); "
+                         "only a stop, their removal and a start frees them")
+        if s["tool"] != "host":
+            lines.append(f"    to free: disk_clean.py --apply --restart-stdb {s['container']} (refused while in use; docs/TOOLING.md)")
+    if quiet:
+        lines.append(f"  no deleted files or deleted databases' directories: {', '.join(quiet)}")
+    if not summaries:
+        lines.append("  no SpacetimeDB server running")
+    return lines
+
+
+def find_docker_raw(given=None):
+    """Docker Desktop's VM disk: --docker-raw, the usual place, another VM number, or a custom
+    disk image location named in Docker Desktop's settings. None when there is none."""
+    if given:
+        return given if os.path.isfile(given) else None
+    cands = [DOCKER_RAW] + sorted(glob.glob(os.path.join(HOME, "Library/Containers/com.docker.docker/Data/vms/*/data/Docker.raw")))
+    for s in DOCKER_SETTINGS:
+        try:
+            settings = json.load(open(s))
+        except (OSError, ValueError):
+            continue
+        for k, v in (settings.items() if isinstance(settings, dict) else []):
+            if isinstance(v, str) and v.startswith("/") and re.search(r"data.?folder|disk.?image", k, re.I):
+                cands += [v] if v.endswith(".raw") else sorted(glob.glob(os.path.join(v, "Docker.raw")) + glob.glob(os.path.join(v, "vms/*/data/Docker.raw")))
+    return next((c for c in cands if os.path.isfile(c)), None)
+
+
+def allocated(path):
+    """(bytes allocated on disk, as du -k counts them; apparent size)."""
+    s = os.stat(path)
+    return s.st_blocks * 512, s.st_size
+
+
+def trim_state():
+    try:
+        v = json.load(open(TRIM_STATE))
+        return v if isinstance(v, list) else []
+    except (OSError, ValueError):
+        return []
+
+
+def docker_running():
+    code, so, se = run_tool(["docker", "info", "--format", "{{.OperatingSystem}}"], 30)
+    return code == 0 and "Docker Desktop" in so, first_line(se) or first_line(so) or f"docker info exit {code}"
+
+
+def docker_vm(opts, now, col, force_trim=False):
+    """macOS Docker Desktop: report Docker.raw and the VM's /var/lib, and trim /var/lib when free
+    space is near the floor (only with --apply, at most once a run, backing off after a trim
+    that freed little), or after a restart of a SpacetimeDB container (force_trim)."""
+    lines, data = [], {"platform": "Darwin"}
+    raw = find_docker_raw(opts.get("docker_raw"))
+    running, why = docker_running()
+    data["running"] = running
+    if not raw:
+        lines.append(f"  docker desktop vm: no Docker.raw found ({short(opts.get('docker_raw') or DOCKER_RAW)} and Docker Desktop's settings); "
+                     "give --docker-raw PATH. Nothing to trim")
+        return lines, data
+    alloc, apparent = allocated(raw)
+    data.update(raw=raw, raw_allocated=alloc, raw_apparent=apparent)
+    lines.append(f"  docker desktop vm: {short(raw)} allocated {human(alloc)} (apparent size {human(apparent)})")
+    if not running:
+        lines.append(f"  docker desktop vm: Docker Desktop is not running ({why}); no trim, no look inside the VM")
+    elif col is not None:
+        df = col.get("vm_df") or {}
+        data["vm_df"] = df
+        lines.append(f"  docker desktop vm: /var/lib in the VM: " + (f"{human(df['used'])} used of {human(df['total'])}, {human(df['free'])} free"
+                                                                     if "total" in df else f"unknown ({df.get('error') or col.get('error')})"))
+    free_now = free_bytes(os.path.dirname(raw))
+    limit = (opts["floor"] + opts["trim_margin"]) * GB
+    where = f"free {human(free_now)} on the volume holding Docker.raw"
+    recent = [t for t in trim_state() if now - t.get("at", 0) < TRIM_BACKOFF_S]
+    weak = recent and recent[-1].get("freed", 0) < TRIM_BACKOFF_MIN
+    if not running:
+        data["trim"] = "docker not running"
+    elif free_now >= limit and not force_trim:
+        data["trim"] = "not needed"
+        lines.append(f"  docker desktop vm: no trim: {where}, at or over floor + margin ({opts['floor']:g} + {opts['trim_margin']:g} GB)")
+    elif weak and not force_trim:
+        t = recent[-1]
+        data["trim"] = "backing off"
+        lines.append(f"  docker desktop vm: no trim, backing off: the trim at {time.strftime('%H:%M', time.localtime(t['at']))} "
+                     f"{'failed' if not t.get('ok') else 'freed ' + human(t.get('freed', 0))} (under {human(TRIM_BACKOFF_MIN)}); "
+                     f"next try after {time.strftime('%H:%M', time.localtime(t['at'] + TRIM_BACKOFF_S))}; {where}")
+    elif not opts["apply"]:
+        data["trim"] = "would trim"
+        lines.append(f"  docker desktop vm: would trim /var/lib (dry run): {where}, under floor + margin "
+                     f"({opts['floor']:g} + {opts['trim_margin']:g} GB): docker {' '.join(TRIM)}")
+    else:
+        raw0 = allocated(raw)[0]
+        code, so, se = run_tool(["docker", *TRIM], 900)
+        if TRIM_SETTLE_S:
+            time.sleep(TRIM_SETTLE_S)
+        free1 = free_bytes(os.path.dirname(raw))
+        raw1 = allocated(raw)[0] if os.path.isfile(raw) else 0
+        rec = {"at": now, "ok": code == 0, "freed": free1 - free_now, "free_before": free_now, "free_after": free1, "after_restart": force_trim,
+               "raw_before": raw0, "raw_after": raw1, "output": first_line(so) if code == 0 else first_line(se) or first_line(so)}
+        try:
+            with open(TRIM_STATE, "w") as f:
+                json.dump((trim_state() + [rec])[-50:], f)
+        except OSError as e:
+            WARNINGS.append(f"could not record the trim in {short(TRIM_STATE)}: {e}")
+        data["trim"] = rec
+        why = "after the restart" if force_trim else f"{where}, under floor + margin"
+        if code:
+            lines.append(f"  docker desktop vm: TRIM FAILED (exit {code}, {why}): {rec['output'] or 'no message'}; no retry for {TRIM_BACKOFF_S // 60} min")
+        else:
+            lines.append(f"  docker desktop vm: trimmed /var/lib ({why}; {rec['output'] or 'fstrim said nothing'}): free {human(free_now)} -> {human(free1)} "
+                         f"({'+' if free1 >= free_now else ''}{human(free1 - free_now)}), Docker.raw {human(raw0)} -> {human(raw1)}")
+    return lines, data
+
+
+def container_section(opts, now, restarted=False):
+    """The report's container lines and data: the SpacetimeDB servers (every machine) and the
+    Docker Desktop VM (macOS)."""
+    lines, data = ["containers (report only, except a trim or a named restart with --apply):"], {}
+    try:
+        darwin = platform.system() == "Darwin"
+        col = None
+        if not darwin or docker_running()[0]:
+            col = collect()
+        if darwin:
+            vm_lines, data["vm"] = docker_vm(opts, now, col, force_trim=restarted)
+            lines += vm_lines
+        else:
+            lines.append(f"  docker desktop vm: skipped ({platform.system()}, not macOS: there is no VM disk between the containers and this disk)")
+        if col is None:
+            lines.append("  spacetimedb servers: not looked at (Docker Desktop is not running)")
+        elif col.get("error"):
+            lines.append(f"  spacetimedb servers: not looked at ({col['error']})")
+        else:
+            sums = [summarize(k, p, col["servers"], now) for k, p in sorted(group_servers(col["procs"], col["containers"]).items(),
+                                                                           key=lambda g: (g[0][0] == "host", g[0][1] or "", g[0][2]))]
+            data["held"] = [{k: v for k, v in s.items() if k != "top"} | {"top": [list(t) for t in s["top"]]} for s in sums]
+            lines += [f"  note: {p}" for p in col["problems"]] + held_lines(sums)
+    except Exception as e:  # the report and the build-folder cleanup must not depend on this
+        lines.append(f"  stopped: {type(e).__name__}: {e}")
+        data["error"] = f"{type(e).__name__}: {e}"
+    return lines, data
+
+
+# ---- The quiet restart of one SpacetimeDB container (--apply --restart-stdb NAME) ----
+
+def name_file(path):
+    try:
+        return [l.split("#")[0].strip() for l in open(path) if l.split("#")[0].strip()]
+    except OSError:
+        return []
+
+
+def locks_held():
+    """Held locks of the merge queue and the scene gate (a non-blocking flock on each)."""
+    held = []
+    for p in [GATE_LOCK] + sorted(glob.glob(MERGE_LOCKS)):
+        if not os.path.exists(p):
+            continue
+        try:
+            fd = os.open(p, os.O_RDONLY)
+        except OSError as e:
+            held.append(f"{short(p)} (unreadable: {e.strerror}; counted as held)")
+            continue
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            fcntl.flock(fd, fcntl.LOCK_UN)
+        except OSError:
+            held.append(short(p))
+        finally:
+            os.close(fd)
+    return held
+
+
+def port_users(ports, procs, skip):
+    """Processes outside the container that name one of its published host ports (a mind
+    service, a trial runner, a play session, an observer: in their command line or, for this
+    user's processes, their environment), and on macOS those with a connection to it."""
+    if not ports:
+        return []
+    pat = re.compile(r"(?::|--port[= ])(?:%s)(?!\d)" % "|".join(map(str, ports)))
+    found = []
+    if platform.system() == "Darwin":
+        code, so, _ = run_tool([system_tool("ps"), "-axww", "-o", "pid=,command="], 30)
+        if code:
+            return [f"ps failed (exit {code}): the port's users are unknown"]
+        rows = [(int(l.split(None, 1)[0]), l.split(None, 1)[1] if len(l.split(None, 1)) > 1 else "") for l in so.splitlines() if l.strip()]
+        for pid, cmd in rows:
+            base = os.path.basename(cmd.split()[0]) if cmd.split() else ""
+            if pid not in skip and base not in FORWARDERS and pat.search(cmd):
+                found.append(f"pid {pid} ({cmd[:80]})")
+        for port in ports:
+            code, so, _ = run_tool([system_tool("lsof"), "-nP", f"-iTCP:{port}", "-sTCP:ESTABLISHED", "-Fpc"], 30)
+            if code not in (0, 1):
+                return found + [f"lsof failed (exit {code}): connections to port {port} are unknown"]
+            pid = None
+            for l in so.splitlines():
+                if l.startswith("p"):
+                    pid = int(l[1:])
+                elif l.startswith("c") and pid not in skip and l[1:] not in FORWARDERS:
+                    found.append(f"pid {pid} ({l[1:]}) is connected to port {port}")
+        return found
+    for pid, (_, argv) in procs.items():
+        if pid in skip or not argv or os.path.basename(argv[0]) in FORWARDERS:
+            continue
+        cmd = " ".join(argv)
+        hit = pat.search(cmd)
+        if not hit:
+            try:
+                with open(os.path.join(PROC, str(pid), "environ"), "rb") as f:
+                    hit = pat.search(f.read().decode(errors="replace").replace("\0", " "))
+            except OSError:
+                pass
+        if hit:
+            found.append(f"pid {pid} ({cmd[:80]})")
+    return found
+
+
+def list_databases(tool, name):
+    """Database names the container's CLI identity lists, or raise RuntimeError (an empty or
+    failed list is never taken as "none": SpacetimeDB 2.14.1 fails it on a 64-character name)."""
+    code, so, se = run_tool([tool, "exec", name, "spacetime", "list"], 60)
+    if code or "error" in (so + se).lower():
+        raise RuntimeError(f"spacetime list failed (exit {code}): {first_line(se) or first_line(so)}")
+    out = []
+    for l in so.splitlines():
+        if "|" not in l:
+            continue
+        n = l.split("|")[0].strip()
+        if re.fullmatch(r"[a-z0-9][a-z0-9_-]*", n) and n not in ("name", "database", "db_name", "identity") and not re.fullmatch(r"(0x)?[0-9a-f]{64}", n):
+            out.append(n)
+    return out
+
+
+def sql_paused(tool, name, db):
+    code, so, se = run_tool([tool, "exec", name, "spacetime", "sql", "-s", "local", db, "SELECT paused FROM world"], 60)
+    if code or "error" in (so + se).lower():
+        return {"ok": False, "error": first_line(se) or first_line(so) or f"exit {code}"}
+    vals = re.findall(r"\b(true|false)\b", so)
+    return {"ok": True, "paused": (vals[0] == "true") if vals else None}
+
+
+def descendants(procs, root_pid):
+    kids = {}
+    for p, (pp, _) in procs.items():
+        kids.setdefault(pp, []).append(p)
+    out, stack = set(), [root_pid]
+    while stack:
+        p = stack.pop()
+        if p not in out:
+            out.add(p)
+            stack += kids.get(p, [])
+    return out
+
+
+def restart_stdb(opts, now):
+    """Stop one SpacetimeDB container with SIGINT, remove its deleted databases' directories,
+    start it, and confirm every kept database. Refuses when it may be in use or when anything
+    cannot be checked. Returns (lines, data); data["restarted"] when it was stopped and started."""
+    name = opts["restart_stdb"]
+    lines, data = [f"restart of {name} (--restart-stdb{'' if opts['apply'] else ', dry run'}):"], {"container": name, "restarted": False}
+
+    def refuse(why):
+        lines.append(f"  REFUSED: {why}. Nothing was stopped or removed")
+        data["refused"] = why
+        return lines, data
+
+    never = [n for n in NEVER_RESTART + tuple(name_file(NEVER_RESTART_FILE)) if n == name]
+    if never:
+        return refuse(f"{name} is never restarted (built in, or {short(NEVER_RESTART_FILE)})")
+    darwin = platform.system() == "Darwin"
+    if darwin and not docker_running()[0]:
+        return refuse("Docker Desktop is not running")
+    col = collect()
+    if col.get("error"):
+        return refuse(col["error"])
+    match = [c for c in col["containers"] if c[1] == name]
+    if not match:
+        return refuse(f"no running container is named {name}" + (f" ({'; '.join(col['problems'])})" if col["problems"] else ""))
+    tool, _, cpid = match[0]
+    code, so, se = run_tool([tool, "inspect", "--format", "{{json .Mounts}}\t{{json .HostConfig.PortBindings}}", name], 30)
+    try:
+        mounts_j, ports_j = so.strip().split("\t", 1)
+        mounts, bindings = json.loads(mounts_j) or [], json.loads(ports_j) or {}
+    except ValueError:
+        return refuse(f"{tool} inspect failed (exit {code}): {first_line(se) or first_line(so)}")
+    for m in mounts:
+        guard = protected_by(m.get("Source") or "/nonexistent-source", opts.get("protected", []))
+        if guard:
+            return refuse(f"it mounts {short(m['Source'])}, protected by {short(guard[0])} ({guard[1]})")
+    held = locks_held()
+    if held:
+        return refuse(f"a merge or the scene gate holds {', '.join(held)}")
+    groups = group_servers(col["procs"], col["containers"])
+    key = next((k for k in groups if k[:2] == (tool, name)), None)
+    if not key:
+        return refuse("no SpacetimeDB server runs in it")
+    s = summarize(key, groups[key], col["servers"], now)
+    data["before"] = {k: s[k] for k in ("files", "bytes", "live", "dead", "dead_bytes", "recent", "clients")}
+    if s["errors"]:
+        return refuse(f"its files or connections cannot be read ({s['errors'][0]})")
+    if not s["listen"]:
+        return refuse("it listens on no port it could be seen on, so its clients are unknown")
+    if s["clients"]:
+        return refuse(f"{plural(len(s['clients']), 'client')} connected to it ({', '.join(s['clients'][:3])})")
+    host_ports = sorted({int(b["HostPort"]) for v in bindings.values() for b in (v or []) if str(b.get("HostPort", "")).isdigit()})
+    me, skip = os.getpid(), descendants(col["procs"], cpid) if not darwin else set()
+    p = me
+    while p and p not in skip:  # this run and the shell that started it
+        skip.add(p)
+        p = col["procs"].get(p, (0, []))[0] if not darwin else 0
+    skip.add(os.getppid())
+    users = port_users(host_ports, col["procs"] if not darwin else {}, skip)
+    if users:
+        return refuse(f"in use through port {', '.join(map(str, host_ports))}: {'; '.join(users[:3])}")
+    try:
+        listed = list_databases(tool, name)
+    except RuntimeError as e:
+        return refuse(f"{e}, so its databases cannot be checked")
+    refs = [n for n in listed if REFERENCE_WORLDS.match(n)]
+    if refs:
+        return refuse(f"it hosts reference worlds ({', '.join(refs)})")
+    names = sorted(set(listed) | set(opts.get("stdb_db", [])))
+    if len(names) < len(s["live"]):
+        return refuse(f"it hosts {plural(len(s['live']), 'database')} but {len(names)} are known by name (its CLI identity lists {len(listed)}); "
+                      "name the others with --stdb-db NAME so each can be checked after the restart")
+    before = {n: sql_paused(tool, name, n) for n in names}
+    bad = [n for n, v in before.items() if not v["ok"]]
+    if bad:
+        return refuse(f"{bad[0]} does not answer SQL before the restart ({before[bad[0]]['error']}), so it could not be confirmed after")
+    data["databases"] = before
+    dirs = [] if opts.get("keep_dirs") else s["dead"]
+    if dirs and (name in KEEP_DIRS or name in name_file(KEEP_DIRS_FILE)):
+        return refuse(f"its deleted databases' directories hold run evidence (docs/TRIAL_DISK.md: archive the commitlogs first); "
+                      "restart without removing them with --keep-dirs")
+    if any(not re.fullmatch(r"[0-9A-Za-z_-]+", r) for r in dirs):
+        return refuse("a replica directory has an unexpected name")
+    mount = None
+    if dirs:
+        cands = [m for m in mounts if s["data_dir"] == m.get("Destination") or s["data_dir"].startswith(m.get("Destination", "").rstrip("/") + "/")]
+        mount = max(cands, key=lambda m: len(m["Destination"]), default=None)
+        if not mount:
+            return refuse(f"its data directory {s['data_dir']} is on no volume or bind mount, so its directories cannot be removed while it is stopped")
+    plan = (f"stop ({tool} kill -s INT), remove {plural(len(dirs), 'directory', 'directories')} of deleted databases ({human(s['dead_bytes'] if dirs else 0)}), start; "
+            f"frees {plural(s['files'], 'deleted file')} held open ({human(s['bytes'])}); keeps {plural(len(s['live']), 'live database')}"
+            + (f" and {plural(len(s['recent']), 'directory', 'directories')} written in the last {RECENT_S // 60} min" if s["recent"] else "")
+            + (f"; {plural(len(s['dead']), 'directory', 'directories')} kept (--keep-dirs)" if opts.get("keep_dirs") and s["dead"] else ""))
+    if not opts["apply"]:
+        lines.append(f"  would: {plan}")
+        data["would"] = plan
+        return lines, data
+    lines.append(f"  plan: {plan}")
+    free0 = free_bytes(HOME)
+    code, so, se = run_tool([tool, "kill", "-s", "INT", name], 60)
+    if code:
+        return refuse(f"{tool} kill -s INT failed (exit {code}): {first_line(se)}")
+    t0, stopped = time.time(), False
+    while time.time() - t0 < STOP_WAIT_S:
+        code, so, _ = run_tool([tool, "inspect", "--format", "{{.State.Running}}", name], 30)
+        if code == 0 and so.strip() == "false":
+            stopped = True
+            break
+        time.sleep(POLL_S)
+    if not stopped:
+        lines.append(f"  NOT STOPPED {STOP_WAIT_S} s after SIGINT; not forced, nothing removed, not started: look at {name} now")
+        data["error"] = "did not stop"
+        return lines, data
+    lines.append(f"  stopped after {time.time() - t0:.0f} s")
+    if dirs:
+        dest = mount["Destination"].rstrip("/")
+        rel = s["data_dir"][len(dest):].strip("/")
+        src = mount["Name"] if mount.get("Type") == "volume" and mount.get("Name") else mount["Source"]
+        paths = [os.path.join("/data", rel, "replicas", r) for r in dirs]
+        removed = 0
+        for i in range(0, len(paths), 200):
+            code, so, se = run_tool([tool, "run", "--rm", "-v", f"{src}:/data", ALPINE, "rm", "-rf", "--", *paths[i:i + 200]], 1800)
+            if code:
+                lines.append(f"  REMOVAL FAILED (exit {code}): {first_line(se) or first_line(so)}; starting it again anyway")
+                data["error"] = "removal failed"
+                break
+            removed += len(paths[i:i + 200])
+        lines.append(f"  removed {removed} of {plural(len(dirs), 'directory', 'directories')} of deleted databases")
+        data["removed"] = dirs[:removed]
+    code, so, se = run_tool([tool, "start", name], 120)
+    if code:
+        lines.append(f"  START FAILED (exit {code}): {first_line(se) or first_line(so)}; {name} is stopped: start it by hand")
+        data["error"] = "start failed"
+        return lines, data
+    data["restarted"] = True
+    after, t0 = {}, time.time()
+    for n in names:
+        while True:
+            after[n] = sql_paused(tool, name, n)
+            if after[n]["ok"] or time.time() - t0 > SQL_WAIT_S:
+                break
+            time.sleep(POLL_S)
+    data["after"] = after
+    wrong = [n for n in names if not after[n]["ok"] or after[n]["paused"] != before[n]["paused"]]
+    free1 = free_bytes(HOME)
+    lines.append(f"  started; {len(names) - len(wrong)} of {plural(len(names), 'database')} answer SQL with the same paused state"
+                 + (f"; paused: {', '.join(n for n in names if after[n].get('paused'))}" if any(after[n].get("paused") for n in names) else ""))
+    if wrong:
+        lines.append(f"  CHECK THESE: " + "; ".join(f"{n}: before {before[n]}, after {after[n]}" for n in wrong))
+        data["error"] = "databases differ after the restart"
+    lines.append(f"  free space {human(free0)} -> {human(free1)} ({'+' if free1 >= free0 else ''}{human(free1 - free0)})"
+                 + ("; Docker Desktop's VM is trimmed next" if darwin else ""))
+    return lines, data
+
+
 def main(argv):
+    if argv[:1] == ["--probe"]:  # internal: run under `podman unshare` or inside Docker Desktop's VM
+        rest = [a for a in argv[2:] if a != "--vm"]
+        print(json.dumps(probe(argv[1], [int(p) for p in rest] or None, vm="--vm" in argv)))
+        return 0
     opts = {"apply": False, "repo": None, "floor": 40.0, "target": None, "idle": 24.0, "merged_idle": 2.0, "pressure_idle": 2.0, "json": False,
-            "protect": [], "protect_file": PROTECT_FILE, "targets_file": TARGETS_FILE, "list": False}
+            "protect": [], "protect_file": PROTECT_FILE, "targets_file": TARGETS_FILE, "list": False,
+            "docker_raw": None, "trim_margin": TRIM_MARGIN_GB, "containers_only": False, "restart_stdb": None, "stdb_db": [], "keep_dirs": False}
     args = list(argv)
     try:
         while args:
@@ -669,6 +1430,18 @@ def main(argv):
                 opts["protect_file"] = os.path.expanduser(args.pop(0))
             elif a == "--targets-file":
                 opts["targets_file"] = os.path.expanduser(args.pop(0))
+            elif a == "--docker-raw":
+                opts["docker_raw"] = os.path.expanduser(args.pop(0))
+            elif a == "--trim-margin-gb":
+                opts["trim_margin"] = float(args.pop(0))
+            elif a == "--containers-only":
+                opts["containers_only"] = True
+            elif a == "--restart-stdb":
+                opts["restart_stdb"] = args.pop(0)
+            elif a == "--stdb-db":
+                opts["stdb_db"].append(args.pop(0))
+            elif a == "--keep-dirs":
+                opts["keep_dirs"] = True
             elif a in ("--repo", "--floor-gb", "--target-gb", "--idle", "--merged-idle", "--pressure-idle"):
                 v = args.pop(0)
                 key = {"--repo": "repo", "--floor-gb": "floor", "--target-gb": "target", "--idle": "idle", "--merged-idle": "merged_idle", "--pressure-idle": "pressure_idle"}[a]
@@ -697,6 +1470,12 @@ def main(argv):
         return 2
     plist = [f"  {short(p)}  ({src}{'' if os.path.lexists(p) else '; does not exist now'})" for p, src in protected] + \
             [f"  {short(n)}  (built in: container storage)" for n in NEVER]
+    opts["protected"] = protected
+    if opts["containers_only"]:  # read-only: never trims, restarts or removes anything, takes no lock
+        ro = {**opts, "apply": False}
+        lines = restart_stdb(ro, time.time())[0] + [""] if opts["restart_stdb"] else []
+        print("\n".join(lines + container_section(ro, time.time())[0]))
+        return 0
     if opts["list"]:
         print("protected (never removed, nor anything under them, nor a build folder holding them):")
         print("\n".join(plist))
@@ -881,6 +1660,10 @@ def main(argv):
             continue
         r.update(decision="remove", why=r["why"].replace("; removed only under pressure", f"; under pressure (free measured at {free_now / GB:.1f} GB, under {opts['target']:.0f} GB)"))
         remove(r)
+    restart_lines, restart = restart_stdb(opts, now) if opts["restart_stdb"] else ([], {})
+    cont_lines, cont = container_section(opts, now, restarted=restart.get("restarted", False))
+    if restart:
+        cont["restart"] = restart
     free1 = free_bytes(repo)
     host = platform.node()
     stamp = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(now))
@@ -912,9 +1695,12 @@ def main(argv):
         lines.append(f"removed {sum(1 for r in rows if r.get('result') in ('removed', 'partly removed'))} folders, freed {removed_bytes / GB:.1f} GB; free after: {free1 / GB:.1f} GB")
     else:
         lines.append(f"would remove {sum(1 for r in rows if r['decision'] == 'remove')} folders, {would / GB:.1f} GB; free would be about {(free0 + would) / GB:.1f} GB")
+    lines += [""] + restart_lines + ([""] if restart_lines else []) + cont_lines
     low = (free1 if opts["apply"] else free0 + would) < opts["floor"] * GB
     if low:
-        lines.append(f"BELOW THE FLOOR ({opts['floor']:.0f} GB): the rest is in use, active or protected; see the list above")
+        held = sum(r.get("bytes", 0) for r in cont.get("held", []))
+        lines.append(f"BELOW THE FLOOR ({opts['floor']:.0f} GB): the rest is in use, active or protected; see the list above"
+                     + (f"; SpacetimeDB holds {human(held)} of deleted files open (above)" if held >= GB else ""))
     report = "\n".join(lines)
     print(report)
     name = time.strftime("%Y%m%d-%H%M%S", time.localtime(now)) + ("-apply" if opts["apply"] else "-dry") + ".txt"
@@ -922,13 +1708,15 @@ def main(argv):
         f.write(report + "\n")
     with open(os.path.join(STATE, "log.jsonl"), "a") as f:
         f.write(json.dumps({"at": stamp, "host": host, "apply": opts["apply"], "free0": free0, "free1": free1, "removed": removed_bytes,
-                            "protected": [[p, src] for p, src in protected], "sized": sized, "notes": NOTES, "warnings": WARNINGS,
+                            "protected": [[p, src] for p, src in protected], "sized": sized, "notes": NOTES, "warnings": WARNINGS, "containers": cont,
                             "rows": [{k: r.get(k) for k in ("path", "size", "decision", "why", "result", "freed")} for r in rows]}) + "\n")
     reports = sorted(os.listdir(os.path.join(STATE, "reports")))
     for old in reports[:-300]:
         os.remove(os.path.join(STATE, "reports", old))
     if opts["json"]:
         print(json.dumps(rows, default=str))
+    if restart and (restart.get("refused") or restart.get("error")):
+        return 4
     return 3 if low else 0
 
 
