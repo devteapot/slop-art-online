@@ -187,6 +187,8 @@ Two 30-minute runs of `battle_diag.py --no-mind` on `battle-scale` `a7485376`, i
 | 200, before | 10.0 | 84.4% | 273 ms (467) |
 | **200, after (30 min)** | **26.8**: 37.7 in the first 5 min, 16.1 in the last 5 | **60.6%** (14,777 of 24,401) | **83 ms** (243) |
 
+*Correction (2026-11-13):* the ticks per second in this table come from `bench.py`, which then divided the `stats` row's count (written once a second) by the wall time around two SQL calls. Each carries up to about ±3% from that division; ticks over 16.7 ms and p99 come from the tick log and are unaffected. `bench.py` was fixed in `battle-cheap`; see "An offset between worlds, not builds" below.
+
 **Reading:**
 
 - **The runaway is gone.** Nothing in view is forgotten and noticed again: `familiar` evictions are 0–4 a second at 100 and at most 150 at 200 (against 15k–30k before), and every `saw` percept is a first sight with its new `familiar` row. Woken evaluations stay flat, at 370–440 a second at 100 and 490–680 at 200. 100 fighters hold near 60 Hz for 30 minutes.
@@ -246,6 +248,8 @@ The coordinator's conditions (2026-11-12): every blow an onlooker saw kept, in o
 | Experience rows written a second | 3,367 | 1,070 |
 | Onlookers' fight lines a second | 1,404 (first blows only) | 74, holding 2,315 blows |
 | `tick.activity` + `tick.fold` (ms/s) | 238 + 0 | 174 + 52 |
+
+*Correction (2026-11-13):* the ticks per second here carry the same `bench.py` error, up to about ±3%; the rows and span costs do not.
 
 - **Rows.** Experience rows fall by two thirds, so does what they write to the commitlog, and so do the lines a mind's prompt and consolidation read, while every blow is now told.
 - **CPU.** Almost none is saved, about 12 ms/s. The writes saved (about 64 ms/s) go into the flush. The flush is mostly naming: `fold.labels`, 43–51 ms/s, is each onlooker's labels for everyone in its line. That is about as many label lookups as the per-start lines needed, since a line names everyone the onlooker saw fighting.

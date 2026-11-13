@@ -206,20 +206,26 @@ def room_detail(run, c):
     and a stranger") shows beside the speaker in the Log and their window, in the player's own
     labels; the bubble keeps the words only; a line to someone gets no detail. A fresh player
     ("Listener") with two residents held beside it; A says to the room a line naming B (by B's
-    given name) and the player (admin `mind_say`, the speech minds use), then a line to the player."""
+    given name) and the player (admin `mind_say`, the speech minds use), then a line to the player.
+    talk-turns: then A says to B a line that names the player ("Ask Listener …"): the authority's
+    row says ", naming you" after the addressee, and the Log and A's window show "A (to B, naming
+    you)" with B in the player's own label; the bubble keeps the words only."""
     s = "room-detail"
     a, b = residents(run)
     names = {r["id"]: r.get("name", "") for r in sql(run, "SELECT id, name FROM character WHERE kind = 'person'")}
     first = (names.get(b) or "").split(" ")[0]
     words = f"Come and look, {first} and Listener!"
     thought = json.dumps({"kind": "talk", "summary": "", "detail": "", "latency_ms": 0, "tokens": 0, "model": "verify-ui scene", "reference": ""})
-    syncs = [f'room=mind_say|{a}|"{words}"|0|""|0|{thought}', f'tome=mind_say|{a}|"Just you, now."|{{me}}|""|0|{thought}']
+    other = "Ask Listener, she will know."
+    syncs = [f'room=mind_say|{a}|"{words}"|0|""|0|{thought}', f'tome=mind_say|{a}|"Just you, now."|{{me}}|""|0|{thought}',
+             f'toother=mind_say|{a}|"{other}"|{b}|""|0|{thought}']
     plan = ("ready;sync:scene;wait:2.5;sync:room;wait:1.2;shot:01_bubble;dump:01;key:KeyL:tap;wait:0.6;shot:02_log;dump:02;key:KeyL:tap;wait:0.3;"
-            f"menu:f@id:{a};wait:0.5;click:@acts:0:window;wait:0.6;shot:03_window;dump:03;sync:tome;wait:1.5;shot:04_to_me;dump:04;quit")
+            f"menu:f@id:{a};wait:0.5;click:@acts:0:window;wait:0.6;shot:03_window;dump:03;sync:tome;wait:1.5;shot:04_to_me;dump:04;"
+            "sync:toother;wait:1.2;shot:05_to_other;dump:05;key:KeyL:tap;wait:0.6;shot:06_log;dump:06;key:KeyL:tap;wait:0.3;quit")
     tok = os.path.join(ROOT, ".local/living/verify", run, "ui", f"room-detail-{int(time.time())}.token")
     out, code, text = drive(run, s, plan, places=[f"{a}:2:0", f"{b}:-2:0"], syncs=syncs, extra=["--token", tok, "--player", "Listener"])
     c.check(s, "client ran and joined (a fresh player)", code == 0, text[-300:])
-    d = {k: dump(out, k) or {} for k in ("01", "02", "03", "04")}
+    d = {k: dump(out, k) or {} for k in ("01", "02", "03", "04", "05", "06")}
     lines = lambda k: (d[k].get("extra") or {}).get("lines") or []
     room = next((l for l in lines("02") if l.get("speaker") == a and l.get("to") == 0 and l.get("text") == words), None)
     how = (room or {}).get("how") or ""
@@ -230,6 +236,65 @@ def room_detail(run, c):
     c.check(s, "their window is open on the same lines", f"Person{a}" in [w for w, _ in wins(d["03"])], str(wins(d["03"])))
     tome = next((l for l in lines("04") if l.get("speaker") == a and l.get("text") == "Just you, now."), None)
     c.check(s, "a line to me carries no detail", tome is not None and not tome.get("how"), str(tome))
+    # talk-turns: a line to B that names me (and any earlier run's "Listener", an offline player
+    # character still standing here: "naming a stranger and you").
+    sc = json.load(open(os.path.join(out, "scene.json"))) if os.path.exists(os.path.join(out, "scene.json")) else {}
+    me = sc.get("me")
+    row = next((r for r in sql(run, f"SELECT id, text FROM experience WHERE observer = {me} AND kind = 'speech' AND subject = {a} AND object = {b}") if other in r.get("text", "")), None) if me else None
+    c.check(s, "to B naming me: the authority's row says so after the addressee", row is not None and ", naming " in row.get("text", "") and "you: “" in row.get("text", "") and first not in row.get("text", ""), str(row))
+    named = next((l for l in lines("06") if l.get("speaker") == a and l.get("to") == b and l.get("text") == other), None)
+    c.check(s, "to B naming me: the line keeps the detail, the words alone", named is not None and (named.get("how") or "").startswith(", naming ") and named["how"].endswith("you"), str(named))
+    # The head as the window and the Log show it (`people::line_head`), B as the window labels them.
+    head_w = next((l.get("head_window") for l in lines("05") if l.get("speaker") == a and l.get("text") == other), None) or ""
+    head_l = (named or {}).get("head") or ""
+    c.check(s, "to B naming me: A's window shows it beside them, B in my own label", ", naming " in head_w and head_w.endswith("you)") and " (to " in head_w and first not in head_w, f"{head_w!r}; window names {[t for w, t in d['05'].get('naming') or [] if w == 'window']}")
+    c.check(s, "to B naming me: the Log shows it too", ", naming " in head_l and head_l.endswith("you)") and " (to " in head_l and first not in head_l, repr(head_l))
+    bub = [x.get("text") for x in d["05"].get("bubbles") or [] if x.get("speaker") == a]
+    c.check(s, "to B naming me: the bubble shows the words only", bub == [other], str(bub))
+
+
+@scenario("move-off")
+def move_off(run, c):
+    """talk-turns' `moved` code and `on_the_move` in the client. At noon on open grass, cleared, a
+    fresh player ("Mover") beside a resident held 2.5 m off: it looks them over (`appraise`, 1.5 s)
+    and walks off 0.4 s later: the authority breaks it off with code `moved` and the rules'
+    sentence ("The look stopped: you moved off before it was done."), which shows once, as a quiet
+    note (not a failure). Then it waves at them and walks on 0.4 s later, the play-test 6 case: the
+    wave (`on_the_move`) is not broken off, and the client keeps drawing it while the body walks."""
+    s = "move-off"
+    (a,) = residents(run, 1)
+    people = {r["id"] for r in sql(run, "SELECT id, kind FROM character WHERE kind = 'person'")}
+    ax, ay = UNHEARD_SPOT
+    for i, r in enumerate(x for x in sql(run, "SELECT id, x, y FROM body") if x["id"] in people and x["id"] != a and ((x["x"] - ax) ** 2 + (x["y"] - ay) ** 2) ** 0.5 < 25):
+        call_admin(run, "place_at", [r["id"], ax + 40, ay + 3 * i])
+    tok = os.path.join(ROOT, ".local/living/verify", run, "ui", f"move-off-{int(time.time())}.token")
+    syncs = ["noon=sql|UPDATE world SET epoch_ms = {epoch_at:12} WHERE id = 0", f"spot=place_at|{{me}}|{ax}|{ay}"]
+    plan = ("ready;sync:noon;sync:spot;wait:2;sync:scene;wait:2.5;dump:m0;"
+            f"gesture:appraise:{a};wait:0.4;key:KeyW:down;wait:0.8;key:KeyW:up;wait:0.6;shot:01_moved;dump:m1;wait:2.5;dump:m2;"
+            f"wait:1.5;dump:w0;gesture:wave:{a};wait:0.4;key:KeyW:down;wait:0.4;dump:w1;wait:0.5;shot:02_waving;dump:w2;wait:0.3;key:KeyW:up;wait:1.5;dump:w3;quit")
+    out, code, text = drive(run, s, plan, places=[f"{a}:2.5:0"], syncs=syncs, extra=["--token", tok, "--player", "Mover"])
+    c.check(s, "client ran and joined (a fresh player)", code == 0, text[-300:])
+    sc = json.load(open(os.path.join(out, "scene.json"))) if os.path.exists(os.path.join(out, "scene.json")) else {}
+    me = sc.get("me")
+    d = {k: dump(out, k) or {} for k in ("m0", "m1", "m2", "w0", "w1", "w2", "w3")}
+    rows = sql(run, f"SELECT id, ok, skill, code, why, at_ms FROM act_outcome WHERE observer = {me} AND kind = 'act'") if me else []
+    moved = [r for r in rows if r.get("code") == "moved"]
+    c.check(s, "the look broken off by my move: one act_outcome, code moved, in the rules' words", len(moved) == 1 and moved[0].get("skill") == "appraise" and "moved off before it was done" in moved[0].get("why", ""), str(rows)[:600])
+    said = "moved off before it was done"
+    notes = lambda k: list(zip(d[k].get("notes") or [], d[k].get("note_ok") or []))
+    n1 = [(t, ok) for t, ok in notes("m1") if said in t]
+    c.check(s, "its words show once, as a quiet note (not a failure, not unknown)", len(n1) == 1 and n1[0][1] is None and n1[0][0].lower().startswith("the look stopped"), str(notes("m1")))
+    c.check(s, "and not again", all(len([t for t, _ in notes(k) if said in t]) <= 1 for k in ("m2", "w0", "w1", "w2", "w3")), str([notes(k) for k in ("m2", "w3")]))
+    ev = [e for e in ((d["m2"].get("extra") or {}).get("events") or []) if said in e]
+    c.check(s, "the Log's events tell it once", len(ev) == 1, str((d["m2"].get("extra") or {}).get("events")))
+    waves = [r for r in rows if r.get("skill") == "wave"]
+    c.check(s, "the wave, walked on from, is not broken off (on_the_move)", bool(waves) and all(r.get("code") != "moved" for r in waves) and any(r.get("ok") for r in waves), str(waves))
+    at = lambda k: (d[k].get("me_at") or {}).get("drawn")
+    dist = lambda k: ((at(k)[0] - at("w0")[0]) ** 2 + (at(k)[1] - at("w0")[1]) ** 2) ** 0.5 if at(k) and at("w0") else 0.0
+    once = lambda k: ((d[k].get("extra") or {}).get("onces") or {}).get(str(me))
+    c.check(s, "the client keeps drawing the wave while the body walks on", once("w1") == "wave" and once("w2") == "wave" and dist("w2") > 0.5, f"onces {once('w1')!r} {once('w2')!r}; walked {dist('w1'):.2f} m, {dist('w2'):.2f} m")
+    bad = [(t, ok) for k in ("w1", "w2", "w3") for t, ok in notes(k) if ok is False]
+    c.check(s, "no failure note for the wave", not bad, str(bad))
 
 
 @scenario("earshot")
