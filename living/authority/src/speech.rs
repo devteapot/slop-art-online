@@ -184,24 +184,32 @@ pub fn speak(ctx: &ReducerContext, speaker: u32, text: &str, to: u32, way: &str,
     // speaker was talking with (the conversation state the 60 s rule reads: a line between the
     // speaker and another within the last minute). The same fact for every hearer, in each
     // hearer's own labels (`room_address`); none for a line to someone.
-    let (naming, partner) = if to == 0 {
-        let mut naming: Vec<(usize, u32)> = near
+    // Whom the line names among those near: by name, or by a kin word for what they are to the
+    // speaker ("Mother" said by her child; the world's `kin_terms()`, talk-turns), in the line's
+    // order, the speaker left out, and for a line to someone the addressee too (named already).
+    let naming: Vec<u32> = {
+        let mut n: Vec<(usize, u32)> = near
             .iter()
-            .filter(|(c, _, _)| &*c.kind == "person" && c.id != speaker)
-            .filter_map(|(c, _, _)| mention_at(&text, &c.name).map(|i| (i, c.id)))
+            .filter(|(c, _, _)| &*c.kind == "person" && c.id != speaker && c.id != to)
+            .filter_map(|(c, _, _)| named_at(ctx, &sc, &me, &text, c).map(|i| (i, c.id)))
             .collect();
-        naming.sort_unstable();
-        let naming: Vec<u32> = naming.into_iter().map(|(_, id)| id).collect();
-        (naming.clone(), talking_with(ctx, &sc, speaker, now).filter(|p| !naming.contains(p)))
-    } else {
-        (Vec::new(), None)
+        n.sort_unstable();
+        n.into_iter().map(|(_, id)| id).collect()
     };
+    let partner = if to == 0 { talking_with(ctx, &sc, speaker, now).filter(|p| !naming.contains(p)) } else { None };
     // The words for listener `c` at `d` metres, in its terms, with how a line to the room was
     // said in its own labels: as heard awake, as told on waking, and as what woke a sleeper.
     let heard_text = |c: &Character, d: f32| {
         let template = if to == c.id { &w.heard_to_you } else if to != 0 { &w.heard_to } else { &w.heard };
-        let how = if to == 0 { room_address(ctx, c, &naming, partner) } else { String::new() };
-        format!("{}: “{}”", place_how(&fill(ctx, template, c, speaker, to, d), &how), text)
+        let filled = fill(ctx, template, c, speaker, to, d);
+        if to == 0 {
+            format!("{}: “{}”", place_how(&filled, &room_address(ctx, c, &naming, partner)), text)
+        } else if naming.is_empty() {
+            format!("{}: “{}”", place_how(&filled, ""), text)
+        } else {
+            // A line to someone that names others: "Sissly Fenner said to a stranger, naming you".
+            format!("{}, naming {}: “{}”", place_how(&filled, ""), named_words(ctx, c, &naming), text)
+        }
     };
     // A sleeper the words reach wakes if the line is loud and near enough (the way's
     // `loudness`, `perceive::wakes`), and hears it awake; any other keeps it for its waking
@@ -247,12 +255,12 @@ pub fn speak(ctx: &ReducerContext, speaker: u32, text: &str, to: u32, way: &str,
     };
     for (c, d, p) in hearers.iter().copied() {
         if asleep.contains(&c.id) {
-            let addressed = to == c.id || (to == 0 && (close == 1 && *d <= address || mentions(&text, &c.name)));
+            let addressed = to == c.id || (to == 0 && (close == 1 && *d <= address || naming.contains(&c.id)));
             crate::perceive::heard_asleep(ctx, c, speaker, to, at, &heard_text(c, *d), if addressed { w.addressed } else { w.overheard }, now);
             continue;
         }
         let news = introduces && crate::perception::introduce(ctx, c.id, speaker, now);
-        let addressed = to == c.id || (to == 0 && (close == 1 && *d <= address || mentions(&text, &c.name)));
+        let addressed = to == c.id || (to == 0 && (close == 1 && *d <= address || naming.contains(&c.id)));
         let heard = heard_text(c, *d);
         percept(ctx, c, now, &w.kind, speaker, to, at, heard, if addressed { w.addressed } else { w.overheard });
         // A name that is news is a moment of its own (below the 0.6 that wakes a body's graph, so
@@ -502,6 +510,74 @@ fn place_how(filled: &str, how: &str) -> String {
     }
 }
 
+/// What `other` is to `speaker` among the relations a kin term can name (`KIN_RELATIONS`):
+/// parent, child, sibling (a parent shared), grandparent, grandchild, partner (a child together).
+fn kin_relations(ctx: &ReducerContext, speaker: &Character, other: &Character) -> Vec<&'static str> {
+    let parents = |c: &Character| [c.parent_a, c.parent_b].into_iter().filter(|p| *p != 0).collect::<Vec<u32>>();
+    let (sp, op) = (parents(speaker), parents(other));
+    let grand = |c: &Character| parents(c).into_iter().filter_map(|p| ctx.db.character().id().find(p)).flat_map(|p| parents(&p)).collect::<Vec<u32>>();
+    let mut out = Vec::new();
+    if sp.contains(&other.id) {
+        out.push("parent");
+    }
+    if op.contains(&speaker.id) {
+        out.push("child");
+    }
+    if other.id != speaker.id && sp.iter().any(|p| op.contains(p)) {
+        out.push("sibling");
+    }
+    if grand(speaker).contains(&other.id) {
+        out.push("grandparent");
+    }
+    if grand(other).contains(&speaker.id) {
+        out.push("grandchild");
+    }
+    let together = |a: u32, b: u32| ctx.db.character().parent_a().filter(a).any(|c| c.parent_b == b);
+    if together(speaker.id, other.id) || together(other.id, speaker.id) {
+        out.push("partner");
+    }
+    out
+}
+
+/// Where `speaker`'s line names `other`: by name (`mention_at`) or by a kin word for what they
+/// are to the speaker (the world's `kin_terms()`), the earlier of the two.
+fn named_at(ctx: &ReducerContext, sc: &living_rules::script::Scripts, speaker: &Character, text: &str, other: &Character) -> Option<usize> {
+    let by_name = mention_at(text, &other.name);
+    let rel = kin_relations(ctx, speaker, other);
+    let by_kin = if rel.is_empty() { None } else { sc.kin().named_at(text, &rel) };
+    match (by_name, by_kin) {
+        (Some(a), Some(b)) => Some(a.min(b)),
+        (a, b) => a.or(b),
+    }
+}
+
+/// Those a line names, in `hearer`'s labels ("you" for the hearer): "Agnes Fenner and you".
+fn named_words(ctx: &ReducerContext, hearer: &Character, naming: &[u32]) -> String {
+    let labels: Vec<String> = naming.iter().map(|id| if *id == hearer.id { "you".to_string() } else { common::label_for(ctx, hearer, *id) }).collect();
+    list_words(&labels)
+}
+
+/// "A, B and C", a label said again reading "another" ("a stranger and another stranger").
+fn list_words(labels: &[String]) -> String {
+    let mut seen: Vec<&str> = Vec::new();
+    let named: Vec<String> = labels
+        .iter()
+        .map(|l| {
+            let again = seen.contains(&l.as_str());
+            seen.push(l);
+            match (again, l.strip_prefix("a ").or_else(|| l.strip_prefix("an "))) {
+                (true, Some(rest)) => format!("another {rest}"),
+                _ => l.clone(),
+            }
+        })
+        .collect();
+    match named.as_slice() {
+        [] => String::new(),
+        [one] => one.clone(),
+        [init @ .., last] => format!("{} and {last}", init.join(", ")),
+    }
+}
+
 /// How `hearer` heard a line to the room: "to the room, naming Edda and a stranger", "to the
 /// room while talking with Lorcan", both, or nothing. Everyone is named as `hearer` knows them
 /// (`label_for`: a name only where known and near enough to make out; "you" for the hearer).
@@ -513,23 +589,7 @@ fn room_address(ctx: &ReducerContext, hearer: &Character, naming: &[u32], partne
 /// The words of [`room_address`] from labels: a label said twice reads "another" the second time
 /// ("a stranger and another stranger").
 fn address_words(naming: &[String], partner: Option<&str>) -> String {
-    let mut seen: Vec<&str> = Vec::new();
-    let named: Vec<String> = naming
-        .iter()
-        .map(|l| {
-            let again = seen.contains(&l.as_str());
-            seen.push(l);
-            match (again, l.strip_prefix("a ").or_else(|| l.strip_prefix("an "))) {
-                (true, Some(rest)) => format!("another {rest}"),
-                _ => l.clone(),
-            }
-        })
-        .collect();
-    let list = match named.as_slice() {
-        [] => String::new(),
-        [one] => one.clone(),
-        [init @ .., last] => format!("{} and {last}", init.join(", ")),
-    };
+    let list = list_words(naming);
     match (list.is_empty(), partner) {
         (true, None) => String::new(),
         (true, Some(p)) => format!("to the room while talking with {p}"),
@@ -581,6 +641,14 @@ mod tests {
         assert!(!super::nearly_same(a, "Has anyone seen the cart?"));
         assert!(super::nearly_same("Hi!", "hi!"), "no long words: the same text");
         assert!(!super::nearly_same("Hi!", "Yo!"));
+    }
+
+    #[test]
+    fn a_list_of_named_reads_another_for_a_label_said_twice() {
+        let s = |v: &[&str]| v.iter().map(|x| x.to_string()).collect::<Vec<_>>();
+        assert_eq!(super::list_words(&s(&["Agnes Fenner"])), "Agnes Fenner");
+        assert_eq!(super::list_words(&s(&["a stranger", "a stranger", "you"])), "a stranger, another stranger and you");
+        assert_eq!(super::place_how("Sissly Fenner said to a stranger", ""), "Sissly Fenner said to a stranger");
     }
 
     #[test]

@@ -1002,6 +1002,8 @@ pub struct Scripts {
     skills: std::sync::Arc<crate::catalog::Skills>,
     /// The ways of speaking (`<way>_speech()`), in their order.
     ways: Vec<speech::WaySpec>,
+    /// The words a speaker uses for someone by their relation to them (`kin_terms()`), by relation.
+    kin: speech::KinTerms,
     /// Functions of no parameter.
     nullary: HashSet<String>,
     /// What each function reads of its parameters.
@@ -1385,7 +1387,7 @@ impl Scripts {
         let nullary = ast.iter_functions().filter(|f| own(f.name) && f.params.is_empty()).map(|f| f.name.to_string()).collect();
         let fields = fields.unwrap_or_else(|| fields::Fields::analyze(&ast));
         let reach = Reach { day: 0.0, night: 0.0, hearing: 0.0, glow: 0.0 };
-        let mut s = Self { engine, ast, fns, unary, nullary, shapes: Default::default(), shows: Default::default(), skills: Default::default(), ways: Vec::new(), fields, plans: Default::default(), names: Default::default(), lists: Default::default(), needs: Default::default(), senses: Default::default(), moves: Default::default(), pools: Default::default(), glows: Default::default(), lives: Default::default(), hour_ms, daylight: Default::default(), laws: Default::default(), reach, borrowed, structures: Default::default(), seasons: Default::default(), tables, source: source.to_string(), law_errors: Default::default(), about: Ok(Vec::new()), ui: Default::default(), body: Default::default(), makings: Default::default() };
+        let mut s = Self { engine, ast, fns, unary, nullary, shapes: Default::default(), shows: Default::default(), skills: Default::default(), ways: Vec::new(), kin: Default::default(), fields, plans: Default::default(), names: Default::default(), lists: Default::default(), needs: Default::default(), senses: Default::default(), moves: Default::default(), pools: Default::default(), glows: Default::default(), lives: Default::default(), hour_ms, daylight: Default::default(), laws: Default::default(), reach, borrowed, structures: Default::default(), seasons: Default::default(), tables, source: source.to_string(), law_errors: Default::default(), about: Ok(Vec::new()), ui: Default::default(), body: Default::default(), makings: Default::default() };
         // Skills in the order the source declares them (the last declaration of a name counts).
         let declared = |name: &str| source.rfind(&format!("fn {name}_spec(")).unwrap_or(usize::MAX);
         // Required entry points.
@@ -1411,6 +1413,7 @@ impl Scripts {
         s.skills = std::sync::Arc::new(skills);
         s.makings = s.read_makings()?;
         s.ways = s.read_ways()?;
+        s.kin = s.read_kin()?;
         s.structures = s.read_structures()?;
         s.seasons = s.read_seasons()?;
         s.laws = s.read_laws()?;
@@ -1566,6 +1569,21 @@ impl Scripts {
     /// The ways of speaking (`<way>_speech()`), read once here, in their `order` (then the
     /// source's). A script that declares none speaks by the shipped `say` (today's speech), so a
     /// world installed before ways were declared keeps speaking until its next install.
+    /// The world's kin terms (`kin_terms()`, a map of relation to words), or the defaults when
+    /// the script has none (`speech::KinTerms::default`).
+    fn read_kin(&self) -> Result<speech::KinTerms, String> {
+        if !self.has("kin_terms") {
+            return Ok(speech::KinTerms::default());
+        }
+        let m = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "kin_terms", ()).map_err(|e| format!("kin_terms: {e}"))?.try_cast::<Map>().ok_or("kin_terms must return a map of relation to a list of words")?;
+        speech::KinTerms::of(&m)
+    }
+
+    /// The words a speaker uses for someone by their relation to them (`kin_terms()`).
+    pub fn kin(&self) -> &speech::KinTerms {
+        &self.kin
+    }
+
     fn read_ways(&self) -> Result<Vec<speech::WaySpec>, String> {
         let mut ways = Vec::new();
         for f in self.nullary.iter().filter(|f| f.ends_with("_speech")) {
@@ -2995,7 +3013,7 @@ fn number(d: &Dynamic) -> Option<f64> {
 }
 
 /// The traits a skill's spec may have.
-pub const SPEC_TRAITS: &[&str] = &["target", "item", "args", "reach", "about", "takes", "gives", "listed", "talk", "items", "latch", "notable", "moving", "moment", "reflex", "target_class", "loudness"];
+pub const SPEC_TRAITS: &[&str] = &["target", "item", "args", "reach", "about", "takes", "gives", "listed", "talk", "items", "latch", "notable", "moving", "moment", "reflex", "target_class", "loudness", "on_the_move"];
 
 /// A skill's spec from what `<skill>_spec()` returned.
 /// A kind's `burns` trait: `#{ fuel: "<item trait>", rate: <units a game hour>, warmth: <m>,
@@ -3066,7 +3084,8 @@ fn spec_of(skill: &str, m: &Map) -> Result<crate::catalog::SkillSpec, String> {
         items: list("items")?,
         latch: flag("latch", false)?,
         notable: flag("notable", false)?,
-        moving: flag("moving", false)?,
+        moving: flag("moving", false)? || flag("on_the_move", false)?,
+        on_the_move: flag("on_the_move", false)?,
         moment: flag("moment", false)?,
         loudness: m.get("loudness").map_or(Ok(0.0), |v| number(v).ok_or_else(|| format!("{f}: `loudness` must be a number")))?.clamp(0.0, 100.0) as f32,
         reflex: flag("reflex", false)?,
@@ -3479,7 +3498,9 @@ mod tests {
         // `feed` and `make` (2026-11-11) are there for a world with fires that burn fuel and recipes.
         assert_eq!(with(|k| k.latch), "build cook craft eat experiment feed gather give make plant read rest sleep store take teach write");
         assert_eq!(with(|k| k.notable), "attack build conceive cook craft feed give make store take threaten yield");
-        assert_eq!(with(|k| k.moving), "eat signal wait");
+        // `wave` and `nod` are done on the move (talk-turns, `on_the_move`, which implies `moving`).
+        assert_eq!(with(|k| k.moving), "eat nod signal wait wave");
+        assert_eq!(with(|k| k.on_the_move), "nod wave");
         assert_eq!(with(|k| k.moment), "circle flee follow graze keep_distance rest sleep wait wander");
         assert_eq!(with(|k| k.reflex), "flee");
         assert_eq!((s.structure("house"), s.structure("campfire"), s.structure("workshop"), s.structure("storage")), (&StructureTraits { warms: true, roof: true, ..Default::default() }, &StructureTraits { warms: true, ..Default::default() }, &StructureTraits { roof: true, ..Default::default() }, &StructureTraits { holds: Some(120.0), ..Default::default() }));
@@ -3648,6 +3669,23 @@ mod tests {
 
     /// First sights that ask for a thought (docs/FIRST_SIGHT.md): off by default, with the gap a
     /// world may set, clamped to 0..3600 s.
+    #[test]
+    fn kin_terms_name_a_relation_and_are_the_world_s() {
+        let src = include_str!("../../scripts/skills.rhai");
+        let sc = Scripts::new(src).unwrap();
+        let k = sc.kin();
+        assert_eq!(k, &speech::KinTerms::default(), "the shipped script's kin terms are the defaults");
+        assert_eq!(k.named_at("But you have to ask Mother first for the crust", &["parent"]), Some(5));
+        assert_eq!(k.named_at("ask Mother first", &["child", "sibling"]), None, "a parent word names a parent only");
+        assert_eq!(k.named_at("Gran! Come see", &["grandparent"]), Some(0));
+        assert_eq!(k.named_at("my motherland", &["parent"]), None, "whole words only");
+        let base = src.replace("fn kin_terms()", "fn shipped_kin_terms()");
+        let own = Scripts::new(&format!("{base}\nfn kin_terms() {{ #{{ parent: [\"Amma\"] }} }}\n")).unwrap();
+        assert_eq!(own.kin().named_at("Amma, look", &["parent"]), Some(0));
+        assert_eq!(own.kin().named_at("Mother, look", &["parent"]), None, "a world's own terms replace the defaults");
+        assert!(Scripts::new(&format!("{base}\nfn kin_terms() {{ #{{ cousin: [\"coz\"] }} }}\n")).is_err(), "an unknown relation is refused");
+    }
+
     #[test]
     fn earshot_is_the_world_s_law_and_off_as_shipped() {
         let src = include_str!("../../scripts/skills.rhai");

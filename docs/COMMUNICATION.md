@@ -998,3 +998,43 @@ Approved 2026-11-12 by the general coordinator. The earshot stage (`es1`, docs/T
 **`mind_install` is to be retired.** The mind service no longer calls it. It is kept, its signature and behaviour unchanged (its line is always said, and a refused line dropped without a word), for a module update that leaves an older mind service connected, and for the admin harness: verify-core `scenes.py`, the say-by-id and `heard_first` scenes. Once those move to `mind_install_way` and no older service runs, it can go.
 
 **Both controllers now have the same choices.** Minds choose the way in a talk reply, a decision's line and a graph's `say` node. Players have `human_speak`, which the game's talk box is moving to (the laptop). Both go through `speech::speak`.
+
+## 19. Talk turns from play-test 6 (branch `talk-turns`)
+
+The owner's play-test 6, 2026-11-12: four lines to Sissly Fenner, a child, who led the owner to the inn. Hearing, addressing and speed were right. What felt off, and the general coordinator's decisions, are below. Each change applies to every controller unless it says otherwise. verify-minds `sissly-scene` replays the scene on the island seed with paraphrased markers, and `named-turn` covers the general case.
+
+**1. A plan's queued line after the conversation moved on.**
+- **What happened:** her deliberation began 1.7 s before the owner's "crust, can you bring me there ?". Its plan's first graph node said "You never said! Crust or filling?" 27 ms after the install, 2 s after her own talk turn had answered "I like crust too". The deliberation's own immediate line was dropped as it should be (`talk.rs` `unanswered_say`). The plan's `say` node passed `line_overtaken`, whose window began at the plan's install. Everything between the decision reading its scene and the install, the model's time, was not "since".
+- **Now:** `line_overtaken` and `heard_first` count from when the decision perceived what it decided on (`Brain::decided_ms`: the install's thought row, its time less its latency, as `mind::decided_since` measures it). The install's own line, said in its transaction, still does not overtake the plan's later lines.
+- **Who:** minds (a plan's `say` node). There is no schema change.
+
+**2a. A hearer named in a line said to someone else takes one turn.**
+- **What happened:** Sissly said to the owner "…you have to ask Mother first…". Agnes, her mother, 9.1 m away, received it, but a line addressed to another never gave an overhearer a turn (`talk.rs`: only room lines free one).
+- **The words:** a line said to someone that names others now says so in every hearer's row, in their own labels: "Sissly Fenner said to a stranger, naming you: “…”" (Agnes); "Sissly Fenner said to a stranger, naming Agnes Fenner: “…”" (another hearer). After a way's template: "… calls out to Bram from about 20 m, naming you".
+- **The turn:** the hearers a line names wait 300 ms for every named hearer's row (one transaction). Then the nearest of them by the line's `audience` row takes one turn, as if addressed, if free. As for an addressed line, a remark that asks nothing is answered only by temperament (`answers_remarks`), so the named hearer may stay quiet even before the model is asked. Free means not in another exchange still going; one settled with someone else does not count (Agnes had settled with Baldwin). Under the answered line, the turn's prompt says how it was said ("Sissly Fenner said to a stranger, naming you."), and the mind may stay silent.
+- **Who:** the same for every speaker: a player's line to someone that names a mind gives that mind the turn. A named player simply sees the row.
+
+**Kin words name.** A word a speaker uses for someone by their relation to them names that person when they stand in that relation to the speaker: "Mother" said by Sissly names Agnes. It is a perception fact (she would understand it).
+- **The words** are the world's `kin_terms()` in the rules (Rhai): relation → words, for parent, child, sibling (a parent shared), grandparent, grandchild and partner (a child together). The shipped defaults are "mother", "father", "mum", "ma", "dad", "gran", "grandma", "son", "brother", "wife", and others. A world's own terms replace them. An unknown relation is refused at install.
+- **They count** in a room line's naming detail and addressing too.
+- **No sex in the rules:** each word names anyone in that relation. "Mother" names a speaker's parent, and both parents when both hear (a look's `form` is appearance only, and no rule reads it).
+
+**2b. The turn budget does not close an exchange with something still open.**
+- **What happened:** her turn-3 prompt said "make this your last word (end: true)", the same call as her answer to the owner's question.
+- **Now:** the budget (`Temper::stamina`, 1–6 turns by temperament) closes an exchange only when nothing is open between the two (`Conversation::open`). Open means the line being answered asks something; or a plan or promise was made in the last two turns (a reply that settled something, or an act toward the other); or the exchange was reopened on something settled and has had under two turns. When open, the prompt states the fact ("You have said about as much as you usually do."), and `end` is the mind's. `MAX_TURNS` 12 stays.
+- **Who:** minds' talk turns. Nothing is specific to children or players.
+
+**3. The newest line once.** The talk prompt's "The conversation so far" now ends before the line being answered, which "What you are answering" gives once (`inspector.py`, `play_report.py` and the store self-test read that heading). Lines after it, if any, are not shown.
+
+**4b. A gesture done on the move.**
+- **What happened:** the owner asked for a wave, then pressed a direction 1.1 s later, before the 1.2 s gesture was done. `human_move` broke it off, told as "wave → person: you moved".
+- **`on_the_move`:** a skill spec flag, set on `wave` and `nod`. Such a skill starts without stopping the body (it implies `moving`), and moving does not break it off, for any controller.
+- **The words:** a skill still broken off by moving is told in the rules' words (`moved_off(skill)`): "The look stopped: you moved off before it was done." Its `act_outcome` code is the new `moved`.
+- **Schema:** it is a rules field only. No table or column changed, and the bindings are unchanged, so `schema-guard` does not apply.
+
+**4a. The directions** ("just past the berry bushes", said where she remembered bushes that had since been gathered, the inn the other way) are the branch `talk-places`: places with direction and distance in talk prompts, and when a remembered resource was seen.
+
+### What the game client needs (laptop)
+
+- `my_experience` rows of lines said to someone may now carry ", naming …" before the quote ("A stranger said to Sissly Fenner, naming you: “…”"). Show it as the room detail is shown.
+- `act_outcome` has a new act code, `moved` (its `why` is the rules' sentence). A client without it falls back to the words.

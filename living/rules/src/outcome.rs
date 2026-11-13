@@ -41,6 +41,9 @@ pub mod act {
     pub const FAILED: &str = "failed";
     /// It was broken off: a reflex took the body back, a new command replaced it.
     pub const BROKEN_OFF: &str = "broken_off";
+    /// It was broken off because its maker moved before it was done (a player's move; a skill
+    /// whose spec says `on_the_move` is not). Its words are the rules' `moved_off(skill)`.
+    pub const MOVED: &str = "moved";
     /// Acts still waiting were dropped when a reflex took the body back (no skill).
     pub const SET_ASIDE: &str = "set_aside";
 }
@@ -60,7 +63,7 @@ pub mod death {
     pub const OTHER: &str = "other";
 }
 
-pub const ACT_CODES: &[&str] = &[act::DONE, act::UNREADABLE, act::BUSY, act::EXPIRED, act::UNSEEN, act::CHECK, act::TIMING, act::REACH, act::REFUSED, act::FAILED, act::BROKEN_OFF, act::SET_ASIDE];
+pub const ACT_CODES: &[&str] = &[act::DONE, act::UNREADABLE, act::BUSY, act::EXPIRED, act::UNSEEN, act::CHECK, act::TIMING, act::REACH, act::REFUSED, act::FAILED, act::BROKEN_OFF, act::SET_ASIDE, act::MOVED];
 pub const DEATH_CODES: &[&str] = &[death::STARVED, death::COLD, death::EXHAUSTED, death::OLD_AGE, death::KILLED, death::KILLED_YIELDING, death::OTHER];
 
 /// A death's words for the one who died, by its code: `by` is how they knew their killer (a
