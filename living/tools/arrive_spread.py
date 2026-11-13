@@ -36,7 +36,10 @@ control is `<trial>:arrive-control`. Per run:
   resident to it (give, teach, host, trade; threaten, attack); `told`, residents who spoke of it to
   others (arrive_report's `about_them`); `reasks`, lines to it that ask its name or business again
   after the same resident had asked once (a silent newcomer is asked again and again; a cost).
-- **Crowding** (arrive_report): `converge_60s`, `together_4m`.
+- **Crowding** (arrive_report), since 2026-11-13 voices and bodies: `voices_60s`, "speakers to the newcomer
+  within a minute" (the old `converge_60s`, from any distance); `crowd_4m`, "residents within 4 m at
+  once" (the stop rule's measure); `together_4m`, those within 4 m at once who had addressed the
+  newcomer in the minute before.
 - **Guards** (feel_tune.py's definitions over the residents' lives, split by addressee):
   `false_min`, false replies per minute and `group_talk_min` answered room remarks per minute
   (greet_report.py `reply_kind`, since strangers-measures: turns that answered a resident's line
@@ -278,10 +281,10 @@ def proxy_score(lives, model):
 
 
 COLS = ["id_lines", "in_range", "acted_share", "heard_res", "contact_join_s", "heard_join_s", "lines_to", "far", "said_all", "far_all", "far_seen", "far_unseen", "far_room", "c_line", "c_watch", "c_pass",
-        "intro", "invite", "gave", "threat", "told", "reasks", "converge_60s", "together_4m", "false_min", "group_talk_min", "rep_res", "rep_new",
+        "intro", "invite", "gave", "threat", "told", "reasks", "voices_60s", "crowd_4m", "together_4m", "false_min", "group_talk_min", "rep_res", "rep_new",
         "led_res", "plc_res", "led_new", "score", "delib_ph", "talk_ph", "reused", "reused_ev", "carried_again", "usd", "usd_rh"]
 # Which direction is a cost: +1 when more is worse (for the "worse" marks of the guards).
-WORSE = {"false_min": 1, "rep_res": 1, "rep_new": 1, "led_res": -1, "converge_60s": 1, "together_4m": 1, "reasks": 1, "far": 1, "far_all": 1, "far_seen": 1, "far_room": 1}
+WORSE = {"false_min": 1, "rep_res": 1, "rep_new": 1, "led_res": -1, "voices_60s": 1, "crowd_4m": 1, "converge_60s": 1, "together_4m": 1, "reasks": 1, "far": 1, "far_all": 1, "far_seen": 1, "far_room": 1}
 
 
 FAR_PERSON = "someone too far away to make out"
@@ -531,7 +534,7 @@ def strangers(d, r, sid, names, minds, x):
             "cue_fires": sum(len(v) for v in fired.values()), "cue_firers": len(fired),
             "first_heard": f"{x['heard_join_s']} s, {names.get(heard_by, heard_by)}" if x.get("heard_join_s") is not None else None,
             "fs_cover": f"{len(near_ever & cover)} of {len(near_ever)}", "fs_missing": sorted(names.get(i, f"#{i}") for i in near_ever - cover),
-            "routines": routines, "converge_60s": r["converge_60s"], "together_4m": r["together_4m"], "reasks": x["reasks"]}
+            "routines": routines, "voices_60s": r.get("voices_60s", r["converge_60s"]), "crowd_4m": r.get("crowd_4m"), "converge_60s": r["converge_60s"], "together_4m": r["together_4m"], "reasks": x["reasks"]}
 
 
 def fmt(v):
@@ -597,6 +600,7 @@ def main():
                    "c_line": sum(cl[k] for k in ("greeting", "question", "offer", "warning/hostility", "other line")),
                    "c_watch": cl["watching"], "c_pass": cl["approach, no line"],
                    "told": sum(1 for z in r["residents"] if z.get("about_them")),
+                   "voices_60s": r.get("voices_60s", r["converge_60s"]), "crowd_4m": r.get("crowd_4m"),
                    "converge_60s": r["converge_60s"], "together_4m": r["together_4m"],
                    "false_min": round(fr["false_replies"] / fr["minutes"], 3) if fr and fr.get("minutes") else None,
                    "false": fr["false_replies"] if fr else None,
@@ -652,7 +656,7 @@ def main():
                       f"first-sight lines naming the newcomer {st['fs_cover']} persons within 12 m after the join (without one: {st['fs_missing']}); "
                       f"routines with relation stranger {st['routines']}; passed by on their own way {st.get('passed_by')}; far label in think prompts {st['far_prompts']}, in replies {st['far_replies']}; "
                       f"room lines nobody heard {st['room_unheard']} (by {st['room_speakers']}); first-sight lines {st['first_sight_lines']} ({st['first_sight_batched']} naming several, "
-                      f"{st['first_sight_people']} people, at most {st['first_sight_most']} in one); delib/res-h {r.get('delib_ph')}; spoken ids {r.get('id_lines')} {r.get('id_by') or ''}; converge_60s {st['converge_60s']}; together_4m {st['together_4m']}; re-asks {st['reasks']}\n")
+                      f"{st['first_sight_people']} people, at most {st['first_sight_most']} in one); delib/res-h {r.get('delib_ph')}; spoken ids {r.get('id_lines')} {r.get('id_by') or ''}; speakers to the newcomer within a minute (voices_60s) {st['voices_60s']}; residents within 4 m at once (crowd_4m) {st['crowd_4m']}; together_4m {st['together_4m']}; re-asks {st['reasks']}\n")
                 for ex in st.get("far_examples") or []:
                     print(f"- far label in a thought: {ex}")
                 cue_txt = lambda c: "-" if not c else f"{'; '.join(str(v) for v in c['serves'])}: \"{' / '.join(c['why'])}\" ({c['s_before']} s before)".replace("|", "/")
