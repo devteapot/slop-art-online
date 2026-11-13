@@ -2563,6 +2563,55 @@ def looks_band(run, c):
                 f"{old} → {new} (row {after.get(pid)}); composed {[x.get('composed') for x in looks_w].count(True)}/{len(looks_w)}; in view {sum(1 for f in feet if f)}/{len(feet)}; largest step {max(steps) if steps else None} px")
 
 
+@scenario("skirt-scale")
+def skirt_scale(run, c):
+    """A spring skirt on a scaled body (`characters::shape`: a `J_Sec_` bone under a bone with its
+    own scale takes that scale, compose-skirt-scale). No world: the asset view poses VRoid bases
+    from the tracked recipes on one fixed frame (`idle@0.5`, front) and writes every bone's place
+    (`LIVING_GAME_VIEW_JOINTS`). The skirt chains' `_end` joints sit at the hem: its height as a
+    share of the thigh, (upper leg - hem) / (upper leg - knee), and its width as a share of the upper
+    legs' span. Shino at legs 1.05 and girth 1.05 (`ranger`) keeps Shino's share and width at
+    scale 1 (`shino`); Vivi at legs 0.66, hips 1.15 and girth 1.35 (`small`) keeps Vivi's width
+    (`vivi`; her side chains hang from the hips, whose own scale leaves height at 1, so her share is
+    not asserted). On main's client before the change `ranger`'s hem stood 0.012 of the thigh too
+    high and `small`'s skirt 13% too narrow."""
+    s = "skirt-scale"
+    client = os.path.join(os.environ.get("CARGO_TARGET_DIR", os.path.join(ROOT, ".local/target")), "release/living-game")
+    out = os.path.join(ROOT, ".local/living/verify", run, "ui", s)
+    os.makedirs(out, exist_ok=True)
+    joints = os.path.join(out, "joints.jsonl")
+    if os.path.exists(joints):
+        os.remove(joints)
+    env = dict(os.environ, LIVING_GAME_VIEW="recipe:shino,recipe:ranger,recipe:vivi,recipe:small", LIVING_GAME_VIEW_OUT=out, LIVING_GAME_VIEW_SHOTS="idle@0.5/front", LIVING_GAME_VIEW_CLIP="idle", LIVING_GAME_VIEW_JOINTS=joints)
+    r = subprocess.run([client], capture_output=True, text=True, env=env, timeout=300)
+    open(os.path.join(out, "view.log"), "w").write(r.stdout + r.stderr)
+    by = {}
+    if os.path.exists(joints):
+        for line in open(joints):
+            d = json.loads(line)
+            by[d["file"]] = d["joints"]
+    c.check(s, "the asset view posed the four", r.returncode == 0 and all(f"recipe:{n}" in by for n in ("shino", "ranger", "vivi", "small")), f"rc {r.returncode}; {sorted(by)}")
+
+    def hem(j):
+        ends = [v for k, v in j.items() if "Skirt" in k and k.endswith("_end")]
+        if not ends or "J_Bip_L_UpperLeg" not in j:
+            return None
+        up = (j["J_Bip_L_UpperLeg"][1] + j["J_Bip_R_UpperLeg"][1]) / 2
+        knee = (j["J_Bip_L_LowerLeg"][1] + j["J_Bip_R_LowerLeg"][1]) / 2
+        y = sum(v[1] for v in ends) / len(ends)
+        span = abs(j["J_Bip_L_UpperLeg"][0] - j["J_Bip_R_UpperLeg"][0])
+        return (up - y) / (up - knee), (max(v[0] for v in ends) - min(v[0] for v in ends)) / span
+
+    h = {n: hem(by.get(f"recipe:{n}", {})) for n in ("shino", "ranger", "vivi", "small")}
+    ok = all(h.values())
+    c.check(s, "each wears a spring skirt (its chains' ends found)", ok, f"{h}")
+    if not ok:
+        return
+    c.check(s, "Shino scaled keeps her hem's place on the thigh", abs(h["ranger"][0] - h["shino"][0]) < 0.003, f"ranger {h['ranger'][0]:.4f}, shino {h['shino'][0]:.4f}")
+    c.check(s, "Shino scaled keeps her hem's width", abs(h["ranger"][1] - h["shino"][1]) < 0.01, f"ranger {h['ranger'][1]:.4f}, shino {h['shino'][1]:.4f}")
+    c.check(s, "Vivi scaled keeps her hem's width", abs(h["small"][1] - h["vivi"][1]) < 0.01, f"small {h['small'][1]:.4f}, vivi {h['vivi'][1]:.4f}")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--run")
