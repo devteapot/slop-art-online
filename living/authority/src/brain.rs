@@ -400,12 +400,17 @@ impl<'a> Ev<'a> {
     }
 
     /// The structures in sight, nearest first (the scene's, gathered when first asked for).
+    #[track_caller]
     fn structures(&mut self) -> &[(Structure, f32)] {
         self.scene();
         if self.scene.as_ref().is_some_and(|s| s.structures.is_none()) {
             let _span = common::detail_span("brain.scene.structures");
+            // While profiling: which reader built the list, and how long it was.
+            let by = std::panic::Location::caller();
+            common::diag(|| format!("structures@{}", by.line()), 1);
             let r = common::sight_for(self.ctx, self.me.id, &self.w, self.now);
             let v = common::structures_near(self.ctx, self.at, r);
+            common::diag(|| "scene:structures_n", v.len() as u64);
             self.scene.as_mut().unwrap().structures = Some(v);
         }
         self.scene.as_ref().and_then(|s| s.structures.as_deref()).unwrap_or(&[])
