@@ -338,44 +338,36 @@ fn anchor(b: &mut Body, now: u64) {
     b.face_turn_s = if b.face_turn != 0.0 { face_left } else { 0.0 };
 }
 
-/// Set the facing segment: offset `off` from the heading at `t_ms`, turning to `to` at `rate`.
-fn set_face(b: &mut Body, off: f32, to: f32, rate: f32) {
-    let (turn, turn_s) = geo::face_turn(off, to, rate);
-    b.face_off = off;
-    b.face_turn = turn;
-    b.face_turn_s = turn_s;
-}
-
 /// A standing body turns to face `want` (`steer::stand_turn`): its legs turn at `rate` the way
 /// its upper body already leans, and any facing offset comes back to 0 over the same turn, so
 /// the whole body ends facing it. Within `slack` of it, the legs stay and only the facing
 /// finishes. False when there is nothing to do. With no offset this is the plain standing turn.
 fn turn_to(b: &mut Body, want: f32, rate: f32, slack: f32) -> bool {
     let off = geo::face_off(b.face_off, b.face_turn, b.face_turn_s, 0.0);
-    let d = geo::stand_turn(b.heading, off, want);
-    if d.abs() > slack {
-        let dur = d.abs() / rate;
+    let Some(((legs, legs_s), face)) = geo::stand_facing(b.heading, off, want, rate, slack) else { return false };
+    if legs_s > 0.0 {
         let h = b.heading;
-        set_motion(b, h, 0.0, rate * d.signum(), dur);
-        b.face_off = off;
-        b.face_turn = if off != 0.0 { -off / dur } else { 0.0 };
-        b.face_turn_s = if off != 0.0 { dur } else { 0.0 };
-        true
-    } else if off != 0.0 {
-        set_face(b, off, d, rate);
-        true
-    } else {
-        false
+        set_motion(b, h, 0.0, legs, legs_s);
     }
+    put_face(b, face);
+    true
+}
+
+/// Write a facing segment (`steer::FaceSeg`) into the body.
+fn put_face(b: &mut Body, f: geo::FaceSeg) {
+    b.face_off = f.off;
+    b.face_turn = if f.turn_s > 0.0 { f.turn } else { 0.0 };
+    b.face_turn_s = if b.face_turn != 0.0 { f.turn_s } else { 0.0 };
 }
 
 /// After a steering update: the facing segment from where the body faced at the update
 /// (`before`, so the facing never jumps when the heading does) toward what it wants. With a
 /// held look, standing with no walk under way, the whole body turns to the look (`turn_to`);
 /// otherwise the facing turns toward the look within the `look_walk_deg` law of the travel's
-/// heading at the end of the segment's turn (`steer::walk_face`), or back to the heading with no
-/// look. Moving, the offset is kept within the law from the start. A body with no look and no
-/// offset faces its heading and has no facing segment.
+/// heading at the end of the segment's turn, or back to the heading with no look
+/// (`steer::walk_facing`: from where it faces, never faster than `rate` in the world; when the
+/// travel's turn is too short for it, steering looks again at that turn's end). A body with no
+/// look and no offset faces its heading and has no facing segment.
 fn settle_face(b: &mut Body, st: &Steer, before: f32, had_off: bool, laws: &living_rules::script::Laws, rate: f32) {
     if !st.look_on && !had_off {
         b.face_off = 0.0;
@@ -385,18 +377,36 @@ fn settle_face(b: &mut Body, st: &Steer, before: f32, had_off: bool, laws: &livi
     }
     let limit = laws.look_walk_deg.to_radians();
     let moving = b.vx != 0.0 || b.vy != 0.0;
-    let off = geo::wrap(before - b.heading);
     if !moving && st.look_on && st.goal != GOAL_DIRECTION {
-        b.face_off = off;
+        b.face_off = geo::wrap(before - b.heading);
         b.face_turn = 0.0;
         b.face_turn_s = 0.0;
         turn_to(b, st.look, rate, laws.look_slack_deg.to_radians());
         return;
     }
-    let off = if moving { off.clamp(-limit, limit) } else { off };
-    let end = b.heading + if b.turn_s > 0.0 { b.turn * b.turn_s } else { 0.0 };
-    let to = if st.look_on { geo::walk_face(end, st.look, limit, off) } else { 0.0 };
-    set_face(b, off, to, rate);
+    let look = st.look_on.then_some(st.look);
+    let f = geo::walk_facing(before, b.heading, b.turn, b.turn_s, look, limit, rate);
+    put_face(b, f);
+    if let Some(s) = f.due_s {
+        // The facing has more turning to do than this segment carries: steering looks again
+        // where it can go on (the end of the travel's turn).
+        b.next_ms = b.next_ms.min(due(b.t_ms, s, MIN_STEP_MS));
+    }
+}
+
+/// The travel's turn was cut short where the body was anchored (a stop, a glide to a stand): a
+/// facing that was turning over it goes on from where it faces now toward where it settles over
+/// the travel as it now is (`steer::walk_facing`, at the turn rate), rather than carrying on a
+/// turn worked out against the travel's (which, the travel no longer turning, would swing it
+/// away and back). Written with the row the stop writes anyway.
+fn turn_cut(ctx: &ReducerContext, b: &mut Body, cut: bool, look: Option<f32>) {
+    if !cut || b.face_turn == 0.0 {
+        return;
+    }
+    let laws = common::laws(ctx);
+    let rate = common::moves_of(ctx, b.id, b.t_ms).turn_rate.max(0.5);
+    let facing = geo::wrap(b.heading + b.face_off);
+    put_face(b, geo::walk_facing(facing, b.heading, 0.0, 0.0, look, laws.look_walk_deg.to_radians(), rate));
 }
 
 fn set_motion(b: &mut Body, heading: f32, speed: f32, turn: f32, turn_s: f32) {
@@ -1107,6 +1117,7 @@ pub fn start(ctx: &ReducerContext, id: u32, goal: Goal, now: u64) -> Result<Opti
 pub fn stop(ctx: &ReducerContext, id: u32, now: u64) {
     let Some(mut b) = ctx.db.body().id().find(id) else { return };
     let (mut st, exists) = load_steer(ctx, id);
+    let look = st.look_on.then_some(st.look);
     if exists && (st.goal != GOAL_NONE || st.flags & FLAG_DRAIN != 0) {
         st.goal = GOAL_NONE;
         st.reported = false;
@@ -1120,7 +1131,9 @@ pub fn stop(ctx: &ReducerContext, id: u32, now: u64) {
     let t0 = resume_at(&b, now);
     anchor(&mut b, t0);
     resumed(b.id, t0, now);
+    let cut = b.turn_s > 0.0;
     halt(&mut b);
+    turn_cut(ctx, &mut b, cut, look);
     b.path.clear();
     b.next_ms = IDLE;
     b.chunk = chunk_of(b.x, b.y);
@@ -1153,6 +1166,7 @@ pub fn face(ctx: &ReducerContext, id: u32, toward: (f32, f32), now: u64) {
 /// the same transaction takes over with the body's momentum.
 pub fn brake(ctx: &ReducerContext, id: u32, now: u64) {
     let (mut st, exists) = load_steer(ctx, id);
+    let look = st.look_on.then_some(st.look);
     if exists && (st.goal != GOAL_NONE || st.flags & FLAG_DRAIN != 0) {
         st.goal = GOAL_NONE;
         st.reported = false;
@@ -1168,7 +1182,9 @@ pub fn brake(ctx: &ReducerContext, id: u32, now: u64) {
     anchor(&mut b, t0);
     resumed(b.id, t0, now);
     b.path.clear();
+    let cut = b.turn_s > 0.0;
     glide_stop(&common::map(ctx), &mut b, t0, 0.3);
+    turn_cut(ctx, &mut b, cut, look);
     b.chunk = chunk_of(b.x, b.y);
     put(ctx, b, before);
 }

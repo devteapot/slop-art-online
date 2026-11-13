@@ -386,7 +386,11 @@ Found while building step 0, from two pipeline probes (`pk0`, `pk1`, 4 minutes e
 - **People.** The people are adults of Brackenford, with items and routines cleared, on `instinct:person`. That instinct never strikes back (§1.2), so under instincts the people's blows, and with them M4's assist rate, are empty.
 - **ΔG on close starts.** The wolves are in sight from the first sample. "Before" is then G at the first sample.
 - **Not run in step 1: ordinary wolves at night.** No admin reducer sets a wolf's hunger. Ordinary wolves dare a person only when desperate (hunger 85) or, by the instinct's branch, at night with hunger 88. The bold night arm stays.
-- **A harness bug, fixed.** The trial runner wrote a background as `"bold": true`, and the authority reads `"bold":true` from the text (`act.rs`). So no trial before this one ever had a bold pack: the island pack trial `pack-mind` included. Its wolves were seeded bold, and their seed backgrounds were intact. `trials.py` now writes backgrounds compact. The authority's text match is fragile, but it is left as it is (a rules change, not needed here).
+- **A harness bug, fixed.** The trial runner's `background` step wrote `"bold": true`, and the authority reads `"bold":true` from the text (`act.rs`). So a pack made bold *through that step* never was bold. `trials.py` now writes backgrounds compact. The authority's text match is fragile, but it is left as it is (a rules change, not needed here).
+  - **Corrected 2026-11-12:** this note first said that no trial before it ever had a bold pack, "`pack-mind` included". That was wrong. `pack-mind` picks the island's seeded bold pack and never uses the step.
+  - **Every pack made bold by a seed is unaffected.** `seed.rs` writes its background as compact JSON, which the authority reads. That covers the island's bold pack, `life-pressure`'s packs, and the hamlet + bold pack overlays of `ecology-pursuit` and `pursue-last-seen`.
+  - **The two ecology checks were bold.** Read from their samples: in all 8 `ecology-pursuit` hamlet runs and all 4 `pursue-last-seen` runs, the pack's first attack on a person came within 0.7–3.6 game hours, on an adult at full health, awake, by day. Each run had 47–95 such attack starts, which no dare exception allows a wolf that is not bold. Their figures (STAMINA's "deaths rise by about 1.6×" included) stand.
+  - **The only trials affected** were this branch's own arena files, fixed before any measured run (the `pk0` probe was discarded).
 - **Sampling.** `record.bodies` reads five tables per sample, concurrently (2.14.1's SQL endpoint takes one statement a request). The rate actually reached is reported per run.
 - **The calibration fixtures (step 2).** Both live in their trial files only.
   - **C1, "sides".** Each wolf circles the nearest person at 4 m on an assigned side, alternating left and right, and bites, with chance 0.3 a check, when within 3.5 m. The sides are assigned by us, so this shows only whether steering and the bite let wolves on different sides form a ring.
@@ -397,6 +401,10 @@ Found while building step 0, from two pipeline probes (`pk0`, `pk1`, 4 minutes e
 
 1. **The spacing reflex** is allowed in the wolves' starting instinct, but only if calibration (step 2) shows it is needed. It takes the form of a weighted desire ("keep apart from mates") in the starting graph. The wolf's own mind must be able to revise it, and it names no target and no role. The rule it was made under: the starting instinct holds individual drives, as it already holds "attack the nearest deer". It never holds a group plan.
 2. **The howl's reach** becomes the howl's loudness in its sound spec, under the same loudness rule that wakes sleepers (`fix-sleep-talk`). The 150 m arm measures the difference. The result goes to the owner before the shipped value changes.
+   - **Built on `packs-2`.** A species signal with no `range` carries its `loudness` times each listener's hearing (`Signal::reach`), as a way of speaking does. The shipped howl is now `loudness: 2` with no range: 18 m on the island's 9 m hearing, its old reach, and 24 m where people hear 12 m (Cullet, which has no wolves).
+   - **One consequence.** As loud as a shout, a howl now wakes a sleeper within `wake_reach` (8 m); before, with loudness 0, it woke no one.
+   - **Unchanged.** The other signals keep their ranges.
+   - **The 150 m arm** is `pack-minds-howl150-spread-6v6`, a world override of the howl to loudness 16.7. It runs in the paid step.
 3. **`carry`** is on hold.
 4. **The hidden `pack` copying** is retired in this work (`LIVING_ANIMAL_MINDS=pack` is ignored with a warning). verify-minds `animals` checks that each animal of a herd makes its own decision.
 5. **The paid step** is approved up to $10, but only after battle-scale's fixes 1–3 are on main. The thresholds are committed before the first paid call, and the owner is asked before it starts.
@@ -522,8 +530,6 @@ Each waits for a paid arm, or for a mind's plan that cannot be written without i
   - verify-minds `intents`, `minds-packs3-181702`: the reference documents `apart`;
   - not run: verify-player (no player reducer changed) and the 216-character gate.
 
-## Sources
-
 ### The spacing reflex, as a candidate (`pkr1`, 24 runs; decision 1)
 
 This is `instinct:wolf_bold` with one weighted desire beside each hunt (`pack_arena_trials.py` `with_reflex`): "keep apart from mates" (weight 1.2), which acts while a mate is within 3 m and the prey within 6 m, holding 3–5 m from the nearest prey at a run with `apart: 4`. Otherwise the hunt (weight 1) acts as before. It names a kind, as the instinct already does, never a creature or a role. It lives in the wolf's own graph, which its mind may rewrite. It is in the trial files only.
@@ -541,6 +547,25 @@ This is `instinct:wolf_bold` with one weighted desire beside each hunt (`pack_ar
 - **Standing prey.** Wolves living only by their starting instinct plus this reflex ring a target that holds its ground: median coverage 201°, the first arm to reach §5.5's 180°, and the pack kills in about a minute. Rear blows are 57%, about the random null: they come from all round, not from behind a fleeing back.
 - **Fleeing prey.** The wolves hold back at 3–5 m whenever crowded, so they bite and kill less: health lost 123 → 14 at 6v6.
 - **It meets decision 1's condition.** Without it nothing rings. But it is not shipped. It changes how dangerous wolves are, which is the owner's call. And deer flee too: on the island, under instincts, wolves have starved before (`la2`), and the reflex could slow their hunts. A free ecology check (as `stamina-1`'s: wolves and deer over two game days, with and without the reflex) should come before it goes into `instincts.json`.
+
+### The reflex's ecology check (island, 2026-11-12)
+
+The island as shipped (277 people, 24 deer, 9 wolves: the bold pack of 4 and the ordinary pack of 5), 48 game hours from 07:00, 3 worlds per arm, no minds. Driver `living/tools/pack_ecology.py` on `packs-2` (`7810dd1b`); sampled every 2 s by `living/tools/wolf_ecology.py`.
+- **On.** Every grown wolf alive at the start got its own instinct with the reflex beside each hunt: `wolf_bold` with the reflex for the 4 bold, `wolf` with the reflex for the 5 ordinary. Wolves born or grown up during the run lived by the shipped instincts.
+- **Off.** Nothing changed.
+- **Evidence.** `.local/living/pack-ecology/` (Spark, git-ignored): `report-off.json` and `report-on.json`. The worlds were deleted after pausing.
+
+| Arm | Deer killed per run | Deer killed per 100 wolf-hours | Hunting attempts on deer | Attacks on people | People killed | Wolves starved (or died) |
+|---|---|---|---|---|---|---|
+| reflex off | 1, 0, 1 | 0.23 (0–0.23) | 95, 301, 167 | 5, 4, 0 | 0 | 0 (0) |
+| reflex on | 1, 2, 4 | 0.47 (0.23–0.93) | 173, 116, 82 | 2, 2, 7 | 0 | 0 (0) |
+
+**Reading.**
+- **Hunts are not slowed.** Deer kills rose: 7 against 2 over three runs each. By §5.5's rule this differs: the median of 2 lies outside off's 0–1, as do 2 of the 3 runs. Counts this small are only a direction.
+- **No wolf starved or died in either arm.**
+- **People.** None were killed in either arm, and attacks on them stayed rare (0–7 in 48 hours among 277 people).
+- **The risk that prompted the check did not appear.** The reflex did not slow deer hunts or starve the wolves on the island.
+- **Not covered.** Two game days is not a life. The ecology over many days, and the hamlet with a bold pack beside its people, were not run. The shipping decision goes to the coordinator.
 
 ### Step 4: the hidden `pack` copying, retired
 
@@ -574,7 +599,7 @@ Both sides with minds (`minds.roles`): 6 people on the default mix and 6 wolves 
 - wolves on GLM Flash through the species map, with `LIVING_ANIMAL_MINDS=salient` (the impulse-then-compile path). `choose` is left off because its menu cannot express spacing (§7, step 5);
 - no `pack`.
 
-**Arms.** 6v6, spread start, bold wolves, 10 minutes, 4 replicates each, about 16 runs:
+**Arms.** 6v6, spread start, bold wolves, 10 minutes, 4 replicates each, 20 runs:
 
 | Arm | People | Wolves | What it asks |
 |---|---|---|---|
@@ -582,6 +607,7 @@ Both sides with minds (`minds.roles`): 6 people on the default mix and 6 wolves 
 | P2 | instinct | minds, starting from the shipped instinct | Does any wolf's own mind write spacing (`apart`, `circle`, waiting for mates), and does a ring follow (M1–M3)? |
 | P3 | minds | minds | Both sides together: the owner's "bunch of wolves against a bunch of people" |
 | P4 | minds | minds | As P3, with the island's deer left in place (the mixed arm) |
+| P5 | minds | minds | As P3, the howl as loud as 16.7 voices (150 m; shipped 2, 18 m): decision 2's arm. Measured: howls made, by whom and when; wolves that came toward a howl they heard (within 30 s, closing at least 10 m); M1–M3 against P3 |
 
 **Thresholds** (§5.5's rule: an arm differs from its control when its median lies outside the control's replicate range and at least ⅔ of its replicates do). Controls are the instinct arms already run: `pkb3` spread 6v6. People's arms also compare against P2's instinct people.
 
@@ -593,8 +619,78 @@ Both sides with minds (`minds.roles`): 6 people on the default mix and 6 wolves 
 **Cost estimate.**
 - **People.** Trials and R2 put people on stage at about $0.14–0.24 a person-hour. Six people for 10 minutes is $0.15–0.25 a run; the fake arm's call counts (about 150 people's calls a run) fit that.
 - **Wolves.** On the two-call path, about $0.005 a wolf-hour, so under $0.01 a run.
-- **Total.** 12 arms with people's minds plus 4 without: about **$3–4**.
+- **Total.** 16 runs with people's minds plus 4 without (P2): about **$3–5**.
 - **Bound.** The batch is stopped if the ledger passes $8.
+
+## 9. The paid step's results (`pkp1`, 2026-11-12)
+
+**Run.**
+- 20 runs: P1–P5 × 4, 6v6, spread start, bold wolves, 10 minutes.
+- `packs-2` at `14b103aa`.
+- Variant `pack-minds`: people on the default mix; wolves on GLM Flash with `LIVING_ANIMAL_MINDS=salient`, the impulse-then-compile path.
+- `fast_lane_on` off, `fov_on` off. The howl at loudness 2 (18 m), or 16.7 (150 m) in P5.
+- 5 worlds at a time on `slop-trials-stdb` beside other agents' batches.
+
+**Spend: $2.34** (1,921 calls) of the $8 stop, read from the live journals at `trials.PRICES` by `pack_spend.py`. Evidence: `.local/living/trials/pkp1/` and `pack-paid.json`/`.txt` (Spark, git-ignored). The worlds were deleted after pausing.
+
+**Against §8's thresholds.** The control is `pkb3` spread 6v6, instinct.
+
+| Arm | Coverage ° | Encircled | I | ΔG | Standing together | Assists | People killed | Wolves killed | People's blows on wolves |
+|---|---|---|---|---|---|---|---|---|---|
+| control (instinct) | 114* | – | 1.15 | −0.42 | 0 | – | 0.5 (0–2) | 0 | 0 |
+| P1 people think | 7 | – | 1.15 | −0.61 | 0 (0–0.04) | 0 | 0 | 0 | 2–9 |
+| P2 wolves think | 12 | 0.04 (1 run) | 1.13 | −0.56 | 0 | – | 0 | 0 | 0 |
+| P3 both | 18 (15–100) | 0.5 (1 run) | 1.11 | −0.56 | 0 (0–0.05) | 0 | 0 | 0 | 4–17 |
+| P4 both, with deer | 116 (71–161, 2 runs) | – | 0.99 | −0.22 | **0.09** (0–0.25) | 0 | 0 | 0 (0–1) | 5–36 |
+| P5 both, howl 150 m | 44 (25–58) | 0.03 | 0.81 | −0.28 | **0.12** (0–0.65) | 0 | 0 (0–1) | 0 | 2–20 |
+
+\*The control's coverage is from the 3 runs whose fights began in the wolves' start sector (§7).
+
+**Reading, by the committed thresholds.**
+- **People (P1, P3).**
+  - They do not close up when the wolves appear (ΔG stays negative in every arm).
+  - No person ever struck a wolf that was on someone else (assist rate 0 in all 16 runs with people's minds).
+  - Standing together rose above the control's 0 only in P4 and P5. That is 2 of the 3 people-side thresholds unmet: **no cooperation from people by §8's rule.**
+  - What minds did change: they fight back. They landed 2–36 blows a run, where instinct people landed none, and the wolves lost 8–95 health.
+- **Wolves (P2, P3).**
+  - Coverage stayed far under 180° (12–18° median), encircled stayed about 0 apart from single runs, and I is about 1.1: **no cooperation from wolves.**
+  - Their plans (17–20 per arm, about 4–5 per run, since a wolf thinks at most every 240 s) were mostly attack, flee and a call.
+  - Some plans used the new means: `circle` in 2–3 plans per arm, `count` in 2–3, `apart` once (P4), `keep_distance` 1–2.
+  - Some named mates: "press in with teeth while Frost and Ember close in", "move toward Rook and the pack".
+  - None of these ran long enough, at the thinking pace wolves have, to show in the measures.
+- **The howl (P5, decision 2): unanswered.** In P5's 4 runs no wolf howled. Their minds chose growls and yips (13 growls heard by wolves, 4 yips). P3, on the shipped 18 m howl, had 8 howls heard by wolves and 15 by people. So the 150 m arm measured nothing about the howl's reach. **The shipped value stays at loudness 2.** A howl-reach measure needs wolves that howl: a fixture that howls on a timer, against minds and graphs that can answer it.
+- **Casualties.** Fewer than under instincts: no person died in 16 of the 20 runs, and one wolf died (P4). Wolves with minds attack less doggedly than the bold instinct: P2's people lost 0–15 health against the control's 0–190.
+- **Guards.**
+  - No pack-tactic word appeared in any system prompt. The only phrase hit was "from behind", in the `block` skill's spec ("blows from the front do a quarter of their damage; from behind it does not help"), which is a rule of the body, not a tactic.
+  - Every run's `skills.sha256` is the branch's. Nothing went into a seed.
+  - User prompts carry the characters' own experiences, which were not audited word by word.
+
+**What this says.**
+- **The arena works, and the world now allows a ring.** The spacing reflex, an instinct-level desire, rings prey that stands. The minds, in ten minutes and at a wolf's thinking pace, do not get there.
+- **The open questions are pace and learning, not perception.**
+  - A wolf mind thinks every 240 s.
+  - It has no memory of earlier hunts in a fresh arena.
+  - Whether a pack that keeps hunting together over days, with the reflex in its starting instinct, learns to wait, circle and come in together is the next question. It needs longer life runs, not more arenas.
+- **People.** Whether minds learn to stand together needs the same: days with wolves near, not ten minutes.
+
+## 10. Shipped, and what is next (2026-11-12)
+
+- **The spacing reflex is shipped, on by default (branch `pack-reflex-on`).** It is the world law `pack_reflex` (`true`).
+  - **What it does.** While it is on, every hunt in a wolf's starting graph sits beside the desire "keep apart from mates" (`graph::with_pack_reflex`). A hunt is an attack on the nearest person or deer, guarded or bare.
+  - **The three install paths:**
+    - a seed pack's named instinct (`wolf_bold`);
+    - a spawned or born wolf's species instinct (`wolf`), once past infancy;
+    - a grown animal's species ways (repertoire.json): the wolf's `hunt` routine.
+  - **Not given to** a newborn's `wolf_young`.
+  - **When it is read.** Only at those installs: world creation and birth. It reaches every world with wolves, bold packs included. A wolf's mind may rewrite it like any instinct.
+  - **To turn it off.** `"rules": {"pack_reflex": false}` in a seed (the seed's own law values). Wolves already placed keep the graph they were given.
+  - **The shipped reflex is broader than the arena's.** The arena and first ecology runs (`pkr1`, `eco-reflex-*`) built the reflex in Python (`pack_arena_trials.with_reflex`) and gave it only to guarded hunts in `instincts.json` graphs. The shipped one also covers bare hunts (the ordinary wolf's deer hunt) and the repertoire's `hunt` routine, which grown founding wolves actually live by.
+  - **The first ecology check was confounded.** Its "on" arm replaced the ordinary wolves' repertoire ways with `instincts.json` graphs. So the shipped path was checked again: law on (`island`) against off (the island with `rules` off), 3 worlds each, 48 game hours, on `slop-packs-stdb`.
+    - Deer killed: on 1, 2, 3 (0.47 per 100 wolf-hours, range 0.23–0.70); off 1, 1, 2 (0.23, range 0.23–0.47).
+    - No wolf died or starved in either arm, and no person was killed.
+    - Attacks on people: on 2–3, off 2–5.
+    - By §5.5's rule nothing differs: on's median, 2, lies within off's range, 1–2. The first check's 7 against 2 is kept in §7 as history.
+- **Track P's paid work is parked.** Whether minds cooperate is not a 10-minute question: a wolf thinks about every 240 s, and neither side remembers earlier encounters in a fresh arena. The cooperation question folds into a multi-day life run with wolves beside people, when one exists. Measure it there with this note's M1–M4, from the same `record.bodies` samples, over days rather than minutes.
 
 ## Sources
 

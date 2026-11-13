@@ -501,6 +501,15 @@ impl Vitals {
     ];
 
     /// The row's numeric fields by name, in [`Vitals::FIELDS`]'s order.
+    /// The row's fields as bits, in `FIELDS` order: equal bits, the same row.
+    pub fn bits(&self) -> [u64; 20] {
+        [
+            self.id as u64, self.hp.to_bits() as u64, self.max_hp.to_bits() as u64, self.hunger.to_bits() as u64, self.energy.to_bits() as u64, self.at_ms, self.hp_rate.to_bits() as u64,
+            self.hunger_rate.to_bits() as u64, self.energy_rate.to_bits() as u64, self.rate_key as u64, self.hurt_ms, self.hurt_by as u64, self.stamina.to_bits() as u64, self.stamina_max.to_bits() as u64,
+            self.stamina_rate.to_bits() as u64, self.stamina_from_ms, self.focus.to_bits() as u64, self.focus_max.to_bits() as u64, self.focus_rate.to_bits() as u64, self.focus_from_ms,
+        ]
+    }
+
     pub fn fields(&self) -> Vec<(String, f64)> {
         let v = [
             self.id as f64, self.hp as f64, self.max_hp as f64, self.hunger as f64, self.energy as f64, self.at_ms as f64, self.hp_rate as f64, self.hunger_rate as f64, self.energy_rate as f64, self.rate_key as f64, self.hurt_ms as f64, self.hurt_by as f64,
@@ -1489,6 +1498,36 @@ pub struct CombatSeen {
     pub ms: u32,
     /// Why an attempt was refused (for the actor only).
     pub note: String,
+}
+
+/// One blow of a fight as its onlookers saw it (private; docs/BATTLE_SCALE.md, fix 4): who
+/// struck whom, how it ended, and everyone who could see it under the sight rule at that instant
+/// (`perceive::witnessed`'s test), the two in it excepted. Each onlooker is told what it saw as
+/// one folded line per `witness_fold_ms` (`fold::flush`); a row is gone once every onlooker's
+/// window holding it has been told, so the table holds at most one window of fights.
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = fight_seen)]
+pub struct FightSeen {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    #[index(btree)]
+    pub at_ms: u64,
+    pub attacker: u32,
+    pub victim: u32,
+    /// `living_rules::combat::seen`: `HIT`, `BLOCKED`, `DODGED` or `MISS`.
+    pub outcome: u8,
+    /// The first blow of a fight (`act::damage`'s `first_blow`).
+    pub start: bool,
+    /// The blow killed its victim.
+    pub fell: bool,
+    /// The missile's words ("an arrow"); empty for a blow in reach.
+    pub missile: String,
+    pub x: f32,
+    pub y: f32,
+    /// Who saw it; `fold::UNSEEN_SHOOTER` set on one who saw where a missile struck but not who
+    /// shot it.
+    pub onlookers: Vec<u32>,
 }
 
 /// A missile in flight (private: clients draw it from its `LAUNCH` and `IMPACT` events).

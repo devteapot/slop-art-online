@@ -25,7 +25,7 @@
 use super::Scripts;
 use rhai::{Array, Dynamic, Map, Scope};
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::rc::Rc;
 
 /// How a status reads (append-only).
@@ -172,6 +172,63 @@ impl BodyFacts {
         self.fields.iter().find(|(n, _)| n == k).map(|(_, v)| *v)
     }
 
+    /// The first time after `now_ms`, the row `raw` unchanged, at which a fact `reads` names may
+    /// read differently from now (docs/BATTLE_SCALE.md, battle-cheap path 2): a rounded level
+    /// crossing its next half, a whole second more since a `_ms` stamp. Never later than the
+    /// change, sometimes a millisecond early; `u64::MAX` when none can change. `reads`: the facts
+    /// `status_of` reads (`Scripts::status_reads`), every fact when `None`.
+    pub fn next_change_ms(raw: &[(String, f64)], meters: &[Meter], now_ms: u64, reads: Option<&BTreeSet<String>>) -> u64 {
+        let get = |k: &str| raw.iter().find(|(n, _)| n == k).map(|(_, v)| *v);
+        let at = get("at_ms").unwrap_or(now_ms as f64);
+        let now = now_ms as f64;
+        let read = |name: &str| reads.is_none_or(|r| r.contains(name));
+        let mut next = f64::INFINITY;
+        for (k, v) in raw {
+            if NOT_FACTS.contains(&k.as_str()) || k.ends_with("_by") || k.ends_with("_rate") {
+                continue;
+            }
+            if let Some(t) = k.strip_suffix("_ms") {
+                if !read(&format!("{t}_ago_s")) || *v <= 0.0 {
+                    continue;
+                }
+                // floor((now - v) / 1000), clamped to [0, AGO_MAX_S]: the next whole second.
+                let ago = ((now - v) / 1000.0).floor();
+                if ago < AGO_MAX_S {
+                    next = next.min(v + (ago.max(0.0) + 1.0) * 1000.0);
+                }
+                continue;
+            }
+            if !read(k) {
+                continue;
+            }
+            let rate = get(&format!("{k}_rate")).unwrap_or(0.0);
+            if rate == 0.0 {
+                continue;
+            }
+            // The level as `of` projects it: per second from a pool's start, else per minute.
+            let (start, per_ms) = match get(&format!("{k}_from_ms")) {
+                Some(from) => (from.max(at), rate / 1000.0),
+                None => (at, rate / 60_000.0),
+            };
+            let x_at = |t: f64| v + per_ms * (t - start).max(0.0);
+            let max = meters.iter().find(|m| m.value == *k).and_then(|m| m.max_of(raw)).unwrap_or(f64::MAX);
+            let x = x_at(now).max(0.0).min(max);
+            let r = x.round();
+            // The level at which the rounded value changes, in the direction it moves.
+            let edge = if per_ms > 0.0 { r + 0.5 } else { r - 0.5 };
+            if (per_ms > 0.0 && edge > max) || (per_ms < 0.0 && edge < 0.0) {
+                continue;
+            }
+            let t = start.max(now) + (edge - x_at(start.max(now))) / per_ms;
+            next = next.min(t.max(now));
+        }
+        if !next.is_finite() {
+            return u64::MAX;
+        }
+        // A millisecond early, never late.
+        ((next - 1.0).floor().max(now + 1.0)) as u64
+    }
+
     pub(super) fn map_for_check(&self) -> Map {
         self.map()
     }
@@ -190,6 +247,27 @@ impl BodyFacts {
         m.insert("stage".into(), self.stage.clone().into());
         m.insert("night".into(), self.night.into());
         m
+    }
+
+    /// `key`, of the facts and shares `reads` names alone (`Scripts::status_reads`): the law is a
+    /// function of what it reads, so two bodies that agree on those get the same statuses.
+    fn key_reading(&self, reads: &BTreeSet<String>) -> Vec<u8> {
+        let mut k = Vec::with_capacity(16 + reads.len() * 8);
+        k.extend(self.kind.as_bytes());
+        k.push(0);
+        k.extend(self.stage.as_bytes());
+        k.push(self.night as u8);
+        for (n, v) in self.fields.iter().filter(|(n, _)| reads.contains(n)) {
+            k.extend(n.as_bytes());
+            k.extend(v.to_le_bytes());
+        }
+        for (n, v) in &self.share {
+            if reads.contains(&format!("share.{n}")) {
+                k.extend(n.as_bytes());
+                k.extend(v.to_le_bytes());
+            }
+        }
+        k
     }
 
     fn key(&self) -> Vec<u8> {
@@ -211,6 +289,8 @@ pub(super) struct Body {
     pub meters: Vec<Meter>,
     pub errors: Vec<String>,
     memo: RefCell<HashMap<Vec<u8>, Rc<Vec<Status>>>>,
+    /// What `status_of` reads, worked out once (`Scripts::status_reads`).
+    reads: RefCell<Option<Option<Rc<BTreeSet<String>>>>>,
 }
 
 /// The meters when the script declares none: health and energy, as the client drew them.
@@ -329,7 +409,7 @@ impl Scripts {
         } else {
             (default_meters(), Vec::new())
         };
-        Body { meters, errors, memo: Default::default() }
+        Body { meters, errors, memo: Default::default(), reads: Default::default() }
     }
 
     /// The body's meters (`meters()`, else health and energy), in their order.
@@ -364,7 +444,10 @@ impl Scripts {
         if !self.unary.contains("status_of") {
             return Ok(Rc::new(Vec::new()));
         }
-        let key = b.key();
+        let key = match self.status_reads() {
+            Some(r) => b.key_reading(&r),
+            None => b.key(),
+        };
         if let Some(s) = self.body.memo.borrow().get(&key) {
             return Ok(s.clone());
         }
@@ -376,6 +459,45 @@ impl Scripts {
         }
         memo.insert(key, s.clone());
         Ok(s)
+    }
+
+    /// The facts `status_of` reads from a body (`BodyFacts` field names, and `share.<meter>` for
+    /// each share), with the fields each share is made of; `None` when it reads the body whole or
+    /// by computed names (docs/BATTLE_SCALE.md, battle-cheap path 2).
+    pub fn status_reads(&self) -> Option<Rc<BTreeSet<String>>> {
+        if let Some(r) = self.body.reads.borrow().as_ref() {
+            return r.clone();
+        }
+        let r = (|| {
+            if !self.unary.contains("status_of") {
+                return None;
+            }
+            let u = self.fields.of("status_of", 1)?.first()?;
+            if u.all || !u.by_param.is_empty() {
+                return None;
+            }
+            let mut out = BTreeSet::new();
+            for (k, sub) in &u.keys {
+                if k != "share" {
+                    out.insert(k.clone());
+                    continue;
+                }
+                if sub.all || !sub.by_param.is_empty() {
+                    return None;
+                }
+                for name in sub.keys.keys() {
+                    let m = self.body.meters.iter().find(|m| m.name == *name)?;
+                    out.insert(format!("share.{name}"));
+                    out.insert(m.value.clone());
+                    if let MeterMax::Field(f) = &m.max {
+                        out.insert(f.clone());
+                    }
+                }
+            }
+            Some(Rc::new(out))
+        })();
+        *self.body.reads.borrow_mut() = Some(r.clone());
+        r
     }
 
     /// A mind's words for how its body feels: the `felt` words of its statuses in their order,
@@ -596,6 +718,48 @@ fn status_of(a) {
         assert!(bad(r#"think: "no_food""#, r#"think: "maybe""#).contains("think 'maybe'"));
         let sc = Scripts::new(&SHIPPED.replace(r#"value: "energy", max: 100.0"#, r#"value: "thirst", max: 100.0"#)).unwrap();
         assert!(sc.meters_unknown(&SHIPPED_VITALS)[0].contains("'thirst', which is not a my_vitals field"));
+    }
+
+    #[test]
+    fn alarm_cells_give_the_law_s_answer_at_every_moment() {
+        // battle-cheap path 2: a body's statuses kept until the first moment a fact the law reads
+        // can change (`next_change_ms`) are the law's at every millisecond in between. Rows of a
+        // fighter: breath refilling, health mending or draining, hunger rising, a blow just taken,
+        // starting below, at and above the law's levels; replayed millisecond by millisecond.
+        let sc = Scripts::new(SHIPPED).unwrap();
+        let reads = sc.status_reads().expect("status_of reads named facts");
+        for f in ["hunger", "energy", "stamina", "hurt_ago_s", "hp_rate", "share.health", "hp", "max_hp"] {
+            assert!(reads.contains(f), "status_of reads {f}: {reads:?}");
+        }
+        assert!(!reads.contains("focus"), "{reads:?}");
+        let meters = sc.meters().to_vec();
+        let mut checked = 0u64;
+        let mut asked = 0u64;
+        for (hp, hp_rate, stamina, stamina_rate, hurt_ms, hunger) in
+            [(58.0, 2.0, 3.0, 8.0, 9_500.0, 40.0), (14.6, -3.0, 19.2, 12.0, 9_990.0, 99.95), (89.5, 0.6, 0.0, 25.0, 0.0, 10.0), (35.2, 0.0, 99.7, 5.0, 4_000.0, 60.0), (60.0, -60.0, 50.0, -4.0, 9_000.0, 0.0)]
+        {
+            let mut raw = row(hp, hunger, 70.0, hp_rate);
+            let set = |raw: &mut Vec<(String, f64)>, k: &str, v: f64| raw.iter_mut().find(|(n, _)| n == k).unwrap().1 = v;
+            set(&mut raw, "at_ms", 10_000.0);
+            set(&mut raw, "hunger_rate", 0.4);
+            set(&mut raw, "stamina", stamina);
+            set(&mut raw, "stamina_rate", stamina_rate);
+            set(&mut raw, "stamina_from_ms", 10_000.0);
+            set(&mut raw, "hurt_ms", hurt_ms);
+            let law = |t: u64| sc.status_of(&BodyFacts::of("person", "adult", false, &raw, &meters, t)).unwrap();
+            let (mut until, mut kept) = (0u64, law(10_000));
+            for t in 10_000..25_000u64 {
+                if t >= until {
+                    kept = law(t);
+                    until = BodyFacts::next_change_ms(&raw, &meters, t, Some(&reads));
+                    assert!(until > t, "a cell lasts at least to the next millisecond");
+                    asked += 1;
+                }
+                assert_eq!(kept, law(t), "at {t} ms (row hp {hp}, stamina {stamina}): the kept answer is the law's");
+                checked += 1;
+            }
+        }
+        assert!(asked * 10 < checked, "asked {asked} times in {checked} moments");
     }
 
     #[test]

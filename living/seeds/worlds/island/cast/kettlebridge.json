@@ -122,7 +122,7 @@
      "occupation": "child",
      "role": "Silas and Ruth's son; rides the cart's tail and is learning the road's ruts and tolls",
      "knows": [
-      "mending",
+      "wound_tending",
       "fire"
      ],
      "parents": [
@@ -261,7 +261,7 @@
      "role": "Dele and Ife's daughter; quick with numbers and quick with her tongue, and minds the stall when her mother is out",
      "knows": [
       "cooking",
-      "mending"
+      "wound_tending"
      ],
      "parents": [
       "Dele Oyelaran",
@@ -390,7 +390,7 @@
      "role": "Gideon's wife; keeps a stall in the square selling ironware and works' seconds",
      "knows": [
       "storage",
-      "mending",
+      "wound_tending",
       "fire",
       "writing"
      ],
@@ -409,7 +409,7 @@
      "occupation": "child",
      "role": "Gideon and Mabel's daughter; minds the stall and has a good eye for a cracked pot",
      "knows": [
-      "mending",
+      "wound_tending",
       "storage"
      ],
      "parents": [
@@ -453,7 +453,7 @@
       "planting",
       "storage",
       "fire",
-      "mending"
+      "wound_tending"
      ],
      "parents": [],
      "ties": [
@@ -536,7 +536,7 @@
      "role": "clockkeeper and town scribe; winds the clock tower and writes the Council's contracts and indentures",
      "knows": [
       "writing",
-      "mending",
+      "wound_tending",
       "fire",
       "toolmaking"
      ],
@@ -563,7 +563,7 @@
       "carpentry",
       "toolmaking",
       "fire",
-      "mending"
+      "wound_tending"
      ],
      "parents": [],
      "ties": [
@@ -581,7 +581,7 @@
      "role": "Tobiah's wife; buys and sells worked iron and clay at the square, and keeps the household's marks in a locked box",
      "knows": [
       "storage",
-      "mending",
+      "wound_tending",
       "writing",
       "fire"
      ],
@@ -600,7 +600,7 @@
      "occupation": "child",
      "role": "Tobiah and Sabina's daughter; counts the crates and is proud of knowing her letters",
      "knows": [
-      "mending"
+      "wound_tending"
      ],
      "parents": [
       "Tobiah Marsh",

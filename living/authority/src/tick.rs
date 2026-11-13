@@ -23,6 +23,7 @@ pub fn tick(ctx: &ReducerContext, _t: TickTimer) -> Result<(), String> {
     }
     let now = common::now_ms(ctx);
     let mut k = common::clock(ctx);
+    let prev_ms = if k.last_ms != 0 { k.last_ms } else { now };
     if k.last_ms != 0 {
         k.max_gap_ms = k.max_gap_ms.max(now.saturating_sub(k.last_ms) as u32);
     }
@@ -31,6 +32,7 @@ pub fn tick(ctx: &ReducerContext, _t: TickTimer) -> Result<(), String> {
     let slot = (k.tick % 60) as u8;
     let k_tick = k.tick;
     common::set_profiling(k.profile);
+    common::set_profile_detail(k.profile && common::laws(ctx).profile_detail);
     let _timer = common::span("tick");
 
     // 1. Steering updates that are due (events and cadence of moving bodies).
@@ -66,6 +68,11 @@ pub fn tick(ctx: &ReducerContext, _t: TickTimer) -> Result<(), String> {
     crate::combat::missiles(ctx, now);
     crate::fast::tick(ctx, now);
     drop(phase);
+    // What onlookers saw of fights since their last line, for those whose window ended
+    // (`witness_fold_ms`, docs/BATTLE_SCALE.md fix 4).
+    let phase = common::span("tick.fold");
+    crate::fold::flush(ctx, prev_ms, now);
+    drop(phase);
     // 3. Wakes and this slot's evaluations.
     let phase = common::span("tick.wakes");
     // Bystanders' wakes held back by `witness_wake_ms` whose window has ended.
@@ -79,7 +86,7 @@ pub fn tick(ctx: &ReducerContext, _t: TickTimer) -> Result<(), String> {
         for id in wakes {
             ctx.db.wake().id().delete(id);
             if done.insert(id) {
-                common::diag(|| "eval:wake".into(), 1);
+                common::diag(|| "eval:wake", 1);
                 brain::evaluate(ctx, id, now);
             }
         }
@@ -91,7 +98,7 @@ pub fn tick(ctx: &ReducerContext, _t: TickTimer) -> Result<(), String> {
     let fighting: Vec<u32> = ctx.db.mind_state().fast_until().filter(now..).map(|m| m.id).filter(|id| (*id as u64 + k_tick) % 4 == 0).collect();
     for id in fighting {
         if done.insert(id) {
-            common::diag(|| "eval:combat".into(), 1);
+            common::diag(|| "eval:combat", 1);
             brain::evaluate(ctx, id, now);
         }
     }
@@ -108,7 +115,7 @@ pub fn tick(ctx: &ReducerContext, _t: TickTimer) -> Result<(), String> {
     let slot_ids: Vec<u32> = ctx.db.mind_state().slot().filter(slot).map(|m| m.id).collect();
     for id in slot_ids {
         if done.insert(id) {
-            common::diag(|| "eval:slot".into(), 1);
+            common::diag(|| "eval:slot", 1);
             brain::evaluate(ctx, id, now);
         }
     }

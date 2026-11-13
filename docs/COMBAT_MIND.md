@@ -380,6 +380,7 @@ R3 asks Measure 2 (§4.3): is the next fight much easier? Now that the fast lane
   - A meets the subject at day 1 12:00, day 2 08:00 and 14:00, and day 3 08:00, 2 minutes (4 world hours) each, all by day: r2e heavy r4 showed a night fight is a fight against sleep. r2e's heavy first answers came 95–110 s into the fight, inside 2 minutes.
   - The fifth meeting (A again, or B) is at day 3 14:00 for 3 minutes. A run is 30 minutes.
   - Two nights of sleep fall between, so consolidation and generalization run as in life.
+- **Every meeting starts at full health** (decided 2026-11-13, after R3's fake run lost its subject in meeting 2: mending is about 1 health a minute, and r2e's subjects killed A in 3 of 5 heavy fights). A `vitals` step sets the subject and its fixture to full health through the admin reducer `admin_set_vitals`. Each use is an `admin` chronicle line, and summary.json `admin_vitals` lists it. R3's report notes whether a subject's mind remarks on finding itself whole again without having healed: an odd thing to perceive, and a sign the reset coloured what it learned.
 - **Encounters are bounded** by timeline steps so the veteran reaches the last meeting. A is placed 6 m off, given arena-heavy's fixture graph, and walks back to the subject while the meeting lasts: arena-heavy's own re-approach trigger, bounded by the runner's new `before_min`. At the meeting's end it is set to wait and placed 60 m off, whatever the health. Between meetings the fixtures stand still. Mending between encounters is the ordinary one.
 - **The files are generated.** `living/tools/arena_veteran.py` writes all five from `arena-heavy.json` and `arena-kiter.json`, so the fixture stays the one R2 measured; `--check` fails when they differ.
 - **Not in this pass:**
@@ -435,6 +436,14 @@ R3 asks Measure 2 (§4.3): is the next fight much easier? Now that the fast lane
 | **Total** | | | **≈ $3.40, stop at $4.00** |
 
 This is above §5's earlier $1.20 (8 runs at $0.15): three arms of 5 instead of two of 4, the facing-sight check, and r2e's measured costs. At 4 replicates and no R2-fov kiter it is about $2.60.
+
+### 5.5 Open items (kept on the list, not scheduled)
+
+- **A night-start arena variant**, for when a sleeper shows up in play again.
+  - In r2e heavy r4, the last ten blows landed on a subject that kept falling asleep between them; the fast lane serves no sleeper.
+  - alert-after-hit (`sleep_check`: no sleep within `alert_after_hit_s` of a blow or with the attacker near; every blow wakes its victim) is proven by the verify-core and verify-player scenes.
+  - Its arena rerun (`alertr4`, $0.04) never had a night blow. No more spend goes on it until play shows a sleeper again.
+- **The kiter under facing sight barely fights.** In R2-fov (2026-11-13), 0–2 arrows reached the subject in each of five kiter fights: the fixture shoots only someone it sees. A kiter arm under `fov_on` needs a fixture that faces its mark first, written with the shared skills only.
 
 ## 6. What stays the same for players and AI, and what must never become a guard
 

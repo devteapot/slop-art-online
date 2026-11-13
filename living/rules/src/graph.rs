@@ -1324,3 +1324,87 @@ mod seed_repertoire_tests {
         }
     }
 }
+
+/// The wolves' spacing reflex (docs/PACK_MIND.md, decision 1; the `pack_reflex` law): a graph
+/// (an instinct, or a routine of the species' ways) in which every attack on the nearest person
+/// or deer, guarded or not, in either form (`{"do": {"skill": "attack", ...}}` or `{"do":
+/// "attack", ...}`), becomes two weighted desires: "keep apart from mates" (1.2), which acts while
+/// another wolf is within [`REFLEX_MATE_M`] and the prey within [`REFLEX_PREY_M`], holding
+/// [`REFLEX_BAND`] from the nearest prey at a run and [`REFLEX_APART_M`] from other wolves one
+/// sees; and the hunt as it was (1). It names a kind, as the hunt already does, never one
+/// creature or a role, and it is an ordinary part of the graph, which the wolf's mind may change.
+pub fn with_pack_reflex(graph: &serde_json::Value) -> serde_json::Value {
+    use serde_json::{json, Value};
+    fn keep_apart(prey: &str) -> Value {
+        json!({"want": "keep apart from mates", "weight": {"base": 1.2}, "do": {"if": {
+            "cond": {"all": [{"near": {"target": {"nearest": "wolf"}, "within": REFLEX_MATE_M}}, {"near": {"target": {"nearest": prey}, "within": REFLEX_PREY_M}}]},
+            "then": {"do": {"skill": "keep_distance", "target": {"nearest": prey}, "min": REFLEX_BAND.0, "max": REFLEX_BAND.1, "run": true, "apart": REFLEX_APART_M}}}}})
+    }
+    /// The prey of a hunt step: `{"do": {"skill": "attack", "target": {"nearest": K}}}` or
+    /// `{"do": "attack", "target": {"nearest": K}}`, K a person or a deer.
+    fn hunt(o: &serde_json::Map<String, Value>) -> Option<String> {
+        let d = o.get("do")?;
+        let (skill, target) = match d {
+            Value::Object(a) => (a.get("skill")?.as_str()?, a.get("target")?),
+            Value::String(k) => (k.as_str(), o.get("target")?),
+            _ => return None,
+        };
+        let prey = target.get("nearest")?.as_str()?;
+        (skill == "attack" && matches!(prey, "person" | "deer")).then(|| prey.to_string())
+    }
+    fn walk(n: &Value) -> Value {
+        match n {
+            Value::Object(o) => match hunt(o) {
+                Some(prey) => json!({"desires": [keep_apart(&prey), {"want": "hunt", "weight": {"base": 1.0}, "do": n}]}),
+                None => Value::Object(o.iter().map(|(k, v)| (k.clone(), walk(v))).collect()),
+            },
+            Value::Array(a) => Value::Array(a.iter().map(walk).collect()),
+            v => v.clone(),
+        }
+    }
+    walk(graph)
+}
+
+/// How near another wolf must be for the reflex to act (m).
+pub const REFLEX_MATE_M: f32 = 3.0;
+/// How near the prey must be (m).
+pub const REFLEX_PREY_M: f32 = 6.0;
+/// The band held from the prey (m).
+pub const REFLEX_BAND: (f32, f32) = (3.0, 5.0);
+/// How far it keeps from other wolves it sees (`apart`, m).
+pub const REFLEX_APART_M: f32 = 4.0;
+
+/// Whether a starting instinct named `name` (instincts.json) is a grown wolf's, which the
+/// reflex applies to (`wolf`, `wolf_bold`; not a pup's `wolf_young`).
+pub fn reflex_applies(name: &str) -> bool {
+    name == "wolf" || (name.starts_with("wolf_") && name != "wolf_young")
+}
+
+#[cfg(test)]
+mod pack_reflex_tests {
+    use super::*;
+
+    #[test]
+    fn the_reflex_sits_beside_every_hunt_and_the_graph_still_parses() {
+        let all: serde_json::Value = serde_json::from_str(include_str!("../../seeds/instincts.json")).unwrap();
+        for name in ["wolf", "wolf_bold"] {
+            let g = with_pack_reflex(&all[name]);
+            let text = g.to_string();
+            parse(&text).unwrap_or_else(|e| panic!("{name}: {e}"));
+            // One reflex per hunt, guarded or bare: two each (people and deer).
+            assert_eq!(text.matches("keep apart from mates").count(), 2, "{name}");
+            assert!(text.contains("\"apart\":4.0") || text.contains("\"apart\":4"), "{text}");
+        }
+        // A pup's instinct and a person's are left as they are.
+        assert!(!reflex_applies("wolf_young") && !reflex_applies("person") && reflex_applies("wolf") && reflex_applies("wolf_bold"));
+        assert_eq!(with_pack_reflex(&all["person"]).to_string().matches("keep apart").count(), 0);
+        // The species' ways (repertoire.json): the shorthand form, in the `hunt` routine.
+        let rep: serde_json::Value = serde_json::from_str(include_str!("../../seeds/repertoire.json")).unwrap();
+        let hunt = with_pack_reflex(&rep["species"]["wolf"]["routines"]["hunt"]);
+        assert_eq!(hunt.to_string().matches("keep apart from mates").count(), 2, "{hunt}");
+        parse(&hunt.to_string()).unwrap();
+        // An attack on whoever hurt it is not a hunt: left as it is.
+        let safe = with_pack_reflex(&rep["species"]["wolf"]["routines"]["stay safe"]);
+        assert_eq!(safe, rep["species"]["wolf"]["routines"]["stay safe"]);
+    }
+}

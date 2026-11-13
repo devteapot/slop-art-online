@@ -15,6 +15,7 @@ pub mod act_outcome_type;
 pub mod act_queue_table;
 pub mod activity_table;
 pub mod activity_type;
+pub mod admin_set_vitals_reducer;
 pub mod artifact_table;
 pub mod artifact_type;
 pub mod audience_table;
@@ -72,6 +73,8 @@ pub mod far_handle_table;
 pub mod far_handle_type;
 pub mod fast_ask_table;
 pub mod fast_ask_type;
+pub mod fight_seen_table;
+pub mod fight_seen_type;
 pub mod fighter_seen_table;
 pub mod fighter_seen_type;
 pub mod fighter_table;
@@ -321,6 +324,7 @@ pub use act_outcome_type::ActOutcome;
 pub use act_queue_table::*;
 pub use activity_table::*;
 pub use activity_type::Activity;
+pub use admin_set_vitals_reducer::admin_set_vitals;
 pub use artifact_table::*;
 pub use artifact_type::Artifact;
 pub use audience_table::*;
@@ -378,6 +382,8 @@ pub use far_handle_table::*;
 pub use far_handle_type::FarHandle;
 pub use fast_ask_table::*;
 pub use fast_ask_type::FastAsk;
+pub use fight_seen_table::*;
+pub use fight_seen_type::FightSeen;
 pub use fighter_seen_table::*;
 pub use fighter_seen_type::FighterSeen;
 pub use fighter_table::*;
@@ -626,6 +632,10 @@ pub use world_type::World;
 /// to indicate which reducer caused the event.
 
 pub enum Reducer {
+    AdminSetVitals {
+        id: u32,
+        hp: f32,
+    },
     ClientConnected,
     ClientDisconnected,
     CreateFloor {
@@ -829,6 +839,7 @@ impl __sdk::InModule for Reducer {
 impl __sdk::Reducer for Reducer {
     fn reducer_name(&self) -> &'static str {
         match self {
+            Reducer::AdminSetVitals { .. } => "admin_set_vitals",
             Reducer::ClientConnected => "client_connected",
             Reducer::ClientDisconnected => "client_disconnected",
             Reducer::CreateFloor { .. } => "create_floor",
@@ -885,6 +896,12 @@ impl __sdk::Reducer for Reducer {
     #[allow(clippy::clone_on_copy)]
     fn args_bsatn(&self) -> Result<Vec<u8>, __sats::bsatn::EncodeError> {
         match self {
+            Reducer::AdminSetVitals { id, hp } => {
+                __sats::bsatn::to_vec(&admin_set_vitals_reducer::AdminSetVitalsArgs {
+                    id: id.clone(),
+                    hp: hp.clone(),
+                })
+            }
             Reducer::ClientConnected => {
                 __sats::bsatn::to_vec(&client_connected_reducer::ClientConnectedArgs {})
             }
@@ -1229,6 +1246,7 @@ pub struct DbUpdate {
     familiar: __sdk::TableUpdate<Familiar>,
     far_handle: __sdk::TableUpdate<FarHandle>,
     fast_ask: __sdk::TableUpdate<FastAsk>,
+    fight_seen: __sdk::TableUpdate<FightSeen>,
     fighter: __sdk::TableUpdate<Fighter>,
     fighter_seen: __sdk::TableUpdate<FighterSeen>,
     floor_seed: __sdk::TableUpdate<FloorSeed>,
@@ -1420,6 +1438,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "fast_ask" => db_update
                     .fast_ask
                     .append(fast_ask_table::parse_table_update(table_update)?),
+                "fight_seen" => db_update
+                    .fight_seen
+                    .append(fight_seen_table::parse_table_update(table_update)?),
                 "fighter" => db_update
                     .fighter
                     .append(fighter_table::parse_table_update(table_update)?),
@@ -1821,6 +1842,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.fast_ask = cache
             .apply_diff_to_table::<FastAsk>("fast_ask", &self.fast_ask)
             .with_updates_by_pk(|row| &row.actor);
+        diff.fight_seen = cache
+            .apply_diff_to_table::<FightSeen>("fight_seen", &self.fight_seen)
+            .with_updates_by_pk(|row| &row.id);
         diff.fighter = cache
             .apply_diff_to_table::<Fighter>("fighter", &self.fighter)
             .with_updates_by_pk(|row| &row.id);
@@ -2195,6 +2219,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "fast_ask" => db_update
                     .fast_ask
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "fight_seen" => db_update
+                    .fight_seen
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "fighter" => db_update
                     .fighter
@@ -2584,6 +2611,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "fast_ask" => db_update
                     .fast_ask
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "fight_seen" => db_update
+                    .fight_seen
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "fighter" => db_update
                     .fighter
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -2916,6 +2946,7 @@ pub struct AppliedDiff<'r> {
     familiar: __sdk::TableAppliedDiff<'r, Familiar>,
     far_handle: __sdk::TableAppliedDiff<'r, FarHandle>,
     fast_ask: __sdk::TableAppliedDiff<'r, FastAsk>,
+    fight_seen: __sdk::TableAppliedDiff<'r, FightSeen>,
     fighter: __sdk::TableAppliedDiff<'r, Fighter>,
     fighter_seen: __sdk::TableAppliedDiff<'r, FighterSeen>,
     floor_seed: __sdk::TableAppliedDiff<'r, FloorSeed>,
@@ -3070,6 +3101,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         callbacks.invoke_table_row_callbacks::<Familiar>("familiar", &self.familiar, event);
         callbacks.invoke_table_row_callbacks::<FarHandle>("far_handle", &self.far_handle, event);
         callbacks.invoke_table_row_callbacks::<FastAsk>("fast_ask", &self.fast_ask, event);
+        callbacks.invoke_table_row_callbacks::<FightSeen>("fight_seen", &self.fight_seen, event);
         callbacks.invoke_table_row_callbacks::<Fighter>("fighter", &self.fighter, event);
         callbacks.invoke_table_row_callbacks::<FighterSeen>(
             "fighter_seen",
@@ -3943,6 +3975,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         familiar_table::register_table(client_cache);
         far_handle_table::register_table(client_cache);
         fast_ask_table::register_table(client_cache);
+        fight_seen_table::register_table(client_cache);
         fighter_table::register_table(client_cache);
         fighter_seen_table::register_table(client_cache);
         floor_seed_table::register_table(client_cache);
@@ -4070,6 +4103,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "familiar",
         "far_handle",
         "fast_ask",
+        "fight_seen",
         "fighter",
         "fighter_seen",
         "floor_seed",

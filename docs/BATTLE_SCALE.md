@@ -1,6 +1,6 @@
 # Battle scale: why a battle of minded fighters collapses (diagnosis and fix design, 2026-11-12)
 
-Status: **fixes 1–3 built on branch `battle-scale` and accepted as a step (2026-11-12): the collapse is gone, but 60 Hz is not reached at 200 fighters (see [Acceptance runs](#acceptance-runs-fixes-13-quiet-box-2026-11-12)). Fix 4 (folding) is approved, on `battle-fold`.** The diagnosis below was measured on `battle-diagnosis` (from main `b36a938c`). Its only code change was diagnostics: profiling-only counters (`common::diag`, one `diag:` log line a second while `set_profile` is on, nothing otherwise), spans on `brain.noticed`, `brain.graph`, `brain.after` and `perceive.scene_json`, and the measurement tool `living/tools/battle_diag.py`. The target is the performance contract's 200-character local battle (docs/PERFORMANCE_CONTRACT.md) under the owner's rule: **no attention cap; everything within vision at full detail.**
+Status: **fixes 1–3 built on `battle-scale` and accepted as a step (2026-11-12): the collapse is gone, but 60 Hz is not reached at 200 fighters (see [Acceptance runs](#acceptance-runs-fixes-13-quiet-box-2026-11-12)). Fix 4 (folding) and the remains' caching built on `battle-fold`; the fighters' cheaper paths 1–3 on `battle-cheap`. Measured in the second quiet window with a sustained 200-fighter battle: 45.8 ticks/s with all of them, against 36.0 with the fold and 30.0 with fixes 1–3; 17.7% of ticks over 16.7 ms against 40.6% and 59.4%. The contract's 60 Hz is not reached.** The diagnosis below was measured on `battle-diagnosis` (from main `b36a938c`). Its only code change was diagnostics: profiling-only counters (`common::diag`, one `diag:` log line a second while `set_profile` is on, nothing otherwise), spans on `brain.noticed`, `brain.graph`, `brain.after` and `perceive.scene_json`, and the measurement tool `living/tools/battle_diag.py`. The target is the performance contract's 200-character local battle (docs/PERFORMANCE_CONTRACT.md) under the owner's rule: **no attention cap; everything within vision at full detail.**
 
 ## Workload
 
@@ -94,7 +94,7 @@ Status: **fixes 1–3 built on branch `battle-scale` and accepted as a step (202
 4. **Writing what was seen is not the cause.** `tick.activity`, the blows and the witnessed percepts' rendering and inserts, stays at 90–100 ms/s (150 at 200 fighters) until the runaway. The rows (1,700–3,300 fight percepts a second) and the commitlog volume matter for an 8-hour run, not for the collapse.
 5. **At 200 fighters, waking alone breaks the tick:** 983 woken evaluations a second at 0.7 ms each (200 in sight) is 692 ms/s, before any runaway.
 
-## Fix design (fixes 1–3 now built, fix 4 held)
+## Fix design (fixes 1–3 built on `battle-scale`, fix 4 on `battle-fold`)
 
 Sized for the contract's 200-character battle:
 - 200 fighters packed (each seeing about 200 creatures);
@@ -205,9 +205,214 @@ Two 30-minute runs of `battle_diag.py --no-mind` on `battle-scale` `a7485376`, i
 | `brain.noticed` | 33 | 217 |
 | `brain.scene` | 55 | 120 |
 
-- **What the fight costs from the start.** Writing what onlookers see (4,700–6,100 fight percepts a second, every one written in full) and the fighters' own evaluations at 15 Hz cost about 230 ms/s each. That is what fix 4 (folding) and the 15 Hz analysis address.
+- **What the fight costs from the start.** `tick.activity` (about 230 ms/s) and the fighters' own evaluations at 15 Hz (`tick.combat`, about 230) are the two largest. `tick.activity` holds all of a blow's resolution, not only the 4,700–6,100 fight percepts a second written to onlookers. The paired runs on `battle-fold` put those lines at about 70–100 ms/s of it; see [Fix 4 as built](#fix-4-as-built-battle-fold).
 - **What grows.** Noticing (33 → 217 ms/s) and scene building (55 → 120) grow as remains pile up at the site: 3,830 structures by the end, each refill a new character that has seen none of them. Remains are static, so these costs are what caching them by their `familiar` row addresses. Part of the growth comes from the refills themselves, so the next acceptance runs keep deaths permanent.
 - **At 100 the same costs, smaller.** `tick.combat` goes from 165 to 306 ms/s, `brain.scene` from 37 to 113 and `brain.noticed` from 11 to 57, with 2,207 structures by the end.
+
+## Fix 4 as built (`battle-fold`)
+
+The coordinator's conditions (2026-11-12): every blow an onlooker saw kept, in order, with who struck whom, counts and the outcomes it could see; a blow at or by the onlooker never folded; players fold the same way in their experience lines, their per-blow feed unchanged; a verify-minds case showing a watcher can still tell who is winning and who fell; the saving measured at 200 fighters.
+
+- **One row per blow** (`fold::blow`, from `act::damage`, the dodge and the miss):
+  - Each blow that lands, is blocked, dodged or missed is written once to the private `fight_seen` table.
+  - The row holds the attacker, the victim, the outcome, whether it began the fight, whether it killed, the missile, the place, and everyone who could see it under `witnessed`'s own test (`minds_near`, `in_sight`: walls and facing). The two in it are excepted.
+  - A missile's onlooker who saw where it struck but not who shot is marked so.
+- **One line per onlooker per window** (`fold::flush`, each tick; the `witness_fold_ms` law, default 2,000 ms; 0 restores the old lines):
+  - Each onlooker's windows end at its own phase (spread by id), so a crowd's lines are spread over the window's ticks.
+  - A blow falls in exactly one window of each onlooker (unit test). A row is deleted once every onlooker's window holding it has been told, so the table holds at most one window of fights.
+  - The line, `living_rules::fold::line`, has one sentence a pair, in the order each pair was first seen: "A stranger (#271) attacked a stranger (#272): 3 blows (2 landed, 1 blocked), and a stranger (#272) fell."
+- **Names.** Each one is named as the onlooker perceives them when its line is written (`perception::labels`).
+  - A mind's line anchors everyone it cannot name by the id its scene knows them by (`far::id_for`, a far figure's handle), because one line can hold many strangers' fights. A line's own `subject` and `object` anchor only one pair.
+  - A player's line reads as its screen shows it, without ids.
+  - The dead are named as if near, because their body is gone when the line is written.
+- **Unchanged:**
+  - A blow at or by someone is told to them at once, as before (`attacked`, `combat`).
+  - A death is still told at once on its own line, as well as in the fold.
+  - A fight's first landed blow wakes its onlookers as bystanders when it lands, as its own line did (fix 3). The folded line wakes no one.
+  - Players' `combat_seen` feed is untouched.
+- **Module memory.** The pending blows are rows, not module memory. The [reducers docs](https://spacetimedb.com/docs/functions/reducers/) call relying on global or static state across reducer calls undefined behaviour: SpacetimeDB "may run each reducer in a fresh WASM or JS instance", and state changed in a rolled-back transaction "may remain". The module's thread-locals stay caches of rows (a lost one is recomputed), or wakes whose loss only delays an evaluation.
+- **Updating a running world in place** (2026-11-12, `core-mig-162455`, asked after dev-box's look-1 update panicked with "No such index"):
+  - Main's module `9d62be70` was published to a scratch world, then `battle-scale` `cbbb5eb8` over it with its data kept, then `battle-fold` over that.
+  - Each first tick and the ticks after ran at about 60 a second, with no panic in the log.
+  - `battle-scale` adds no table or index: the seen set is module memory backed by `familiar`, and the cap is a constant. `battle-fold`'s update logged "Creating table `fight_seen`". Its `at_ms` index was read by every tick's flush, and a staged fight's blows were then written through it and folded.
+  - So it did not reproduce here; dev-box traces its own cause.
+- **More than before.** Onlookers' minds get every blow they could see, with counts and outcomes. Before, they got only each fight's first blow, yields and deaths.
+
+**What it saves at 200 fighters** (two runs at the same time on the same build, so both see the same host load, 40–70; 7 minutes each, 200 fighters and 16 walkers, refills on, `--no-mind`, `profile_detail`; `minds-fon-155257` with folding at 1,000 ms against `minds-foff-155257` with `witness_fold_ms` 0):
+
+| | Fold off | Fold on (1,000 ms) |
+|---|---|---|
+| Ticks/s (both loaded) | 31.3 | 32.5 |
+| Experience rows written a second | 3,367 | 1,070 |
+| Onlookers' fight lines a second | 1,404 (first blows only) | 74, holding 2,315 blows |
+| `tick.activity` + `tick.fold` (ms/s) | 238 + 0 | 174 + 52 |
+
+- **Rows.** Experience rows fall by two thirds, so does what they write to the commitlog, and so do the lines a mind's prompt and consolidation read, while every blow is now told.
+- **CPU.** Almost none is saved, about 12 ms/s. The writes saved (about 64 ms/s) go into the flush. The flush is mostly naming: `fold.labels`, 43–51 ms/s, is each onlooker's labels for everyone in its line. That is about as many label lookups as the per-start lines needed, since a line names everyone the onlooker saw fighting.
+- **The 2,000 ms window.** At 2,000 ms (`minds-fwhy-161344`), lines fall to 32 a second, holding 2,725 blows, and the flush to 61 ms/s. The saving is small, because a longer window names more people a line.
+- **What is left.** The fold's CPU is the cost of naming everyone in view, which the owner's rule requires (no attention cap). A cheaper label would need answers shared across ticks (`regard` is cached per transaction). That is not built.
+
+## Remains (`battle-fold`)
+
+- **Not merged into a pile.** Who lies where stays: each person's remains are their own structure.
+- **Scene building.** An evaluation's structures are gathered only when it reads one (`Ev::structures`: a structure target, a cue, noticing, a region summary). A fighter's 15 Hz evaluation no longer copies and sorts every remains in sight.
+  - At 200, `brain.scene` is 26–28 ms/s, against 55–120 on `battle-scale`.
+  - The structures, gathered by about 300 evaluations a second, cost 3–5 ms/s (`brain.scene.structures`).
+- **Noticing.** It checks each structure's id against the seen set. It copies their details only when something in sight is new, so a remains seen lately costs one check of its id at a look, once a second. Those checks still grow with the remains in sight: a look is a pass over everything in view, which the owner's rule keeps.
+- **Expiry: the law exists.** `remains_h`, per kind in `skills.rhai`, is game hours before remains are gone (`rot` rows, `tick::expire_remains`): a person's 120 game hours, a deer's or a wolf's 60. On the default day that is an hour of real time for a person and 30 minutes for an animal. Remains holding a tablet or sign stay. Measured on the island (`minds-fwhy-161344`, `battle_diag.py`'s new `remains` sample): every person's remains lasted exactly 3,600,000 ms. So 30-minute runs never see one expire, and an 8-hour battle holds about an hour of the dead.
+- **Still to measure.** The remains' cost over a whole battle, with deaths permanent, in the acceptance runs.
+
+## The fighters' 15 Hz evaluations (analysis; nothing built)
+
+Measured on `minds-fdet-160348` and `minds-fwhy-161344`: 200 fighters, `profile_detail` on (the parts of each evaluation timed), host load 30–50. Rates are what the loaded host ran, 26–40 ticks a second, so at 60 Hz the counts would be about 1.5–2 times higher.
+
+**Where an evaluation's time goes** (µs a call, about 1,900 evaluations a second, of which 440–550 are the fighters' 15 Hz evaluations):
+
+| Part | µs a call | ms/s |
+|---|---|---|
+| Graph run (`brain.graph`) | 84 | 162–193 |
+| … of which starting an act (`brain.begin`) | 60 | 109–134 |
+| … … of which the skill's rules check (`begin.check`) | about 41 | 75–84 |
+| … of which resolving targets (`brain.target`: the nearest person among 100–200 in sight) | 19 | 26–29 |
+| The body's alarms (`brain.alerts`) | 31 | 61–81 |
+| … of which the `status_of` law (`brain.status`) | 27 | 52–68 |
+| After the run (`brain.after`) | 23 | 45–55 |
+| Loading and needs (`brain.load`: rows, `settle_needs`, `act::warmth`) | 20 | 39–54 |
+| The scene (`brain.scene`, creatures only) | 17 | 26–28 |
+
+**What the acts it starts come to** (`begin:` counts, `minds-fwhy-161344`, per second):
+- refused "out of breath" (strike): 307;
+- heal not ready: 93;
+- strike still recovering: 82;
+- face refused (already facing): 29;
+- dodge out of breath: 29;
+- step aside refused (no one coming): 28;
+- heal still recovering: 25;
+- heal not enough mana: 16;
+- strikes started: 28.
+
+So most of the cost is a fighter asking, many times a second, for a strike its breath does not allow. Each ask runs the skill's whole rules script (`sc.check`) to be told so.
+
+**Cheaper paths that change nothing a fighter perceives** (not built; for the coordinator):
+
+1. **Remember a check's refusal while nothing it reads has changed.** A strike refused "out of breath" stays refused until the pool reaches the cost. That is a time known from the pool's level and rate, unless the pool row changes first (a blow, a heal). Keyed by actor, skill and the pool row's state, a refusal answered from memory is the same answer the script would give.
+   - Saves most of `begin.check`: about 75 of 84 ms/s.
+   - The refusal is still recorded as now.
+2. **The body's alarms from their bands, not every evaluation.** `status_of` is asked at every evaluation (27 µs). Its answers change only when a field crosses one of the law's levels: the pattern `settle_needs` already uses for the rates (`NEED_CUTS`).
+   - Asking the law for its cut points and keeping the answer per band saves most of `brain.status`: about 50 ms/s.
+   - The alarms are the same, at the same tick.
+3. **Warmth without copying.** `settle_needs` calls `act::warmth` at every evaluation, which copies and sorts every structure within warmth reach. At the battle site that is every remains under the fighters. Visiting the chunk's structures in place, and skipping kinds that neither shelter nor warm (remains), gives the same answer.
+   - Part of `brain.load`; it grows with the remains at the site.
+4. **The psychological drives at most once a second.** Restless, lonely, longing and the secret kept weigh minutes of state, and are recomputed in `alerts` 15 times a second.
+   - Computing them on the noticing cadence (once a second) changes when a drive is first felt by at most a second. That is a timing change, so it is listed last, for the owner.
+
+Paths 1–3 together would remove an estimated 130–150 ms/s of about 190 in `tick.combat` at 200 fighters, on this host. To be measured, not claimed.
+
+## Notes for Cullet's perception sweep (from `battle-fold`, for dev-box)
+
+Dev-box owns the sweep (300–440 ms/s at 216 players on Cullet). Nothing here changes it. What the fold's measurements and code reading show about the same paths:
+
+- **The law's answer is not the cost.** `perception::regard_of` already keeps the `perceived_of` law's answers by their whole input, across transactions (`REGARDS`). That input includes `dist` in whole metres when the law reads it (`regard_dist`; Cullet's does, the island's does not). Cullet's law only asks whether `dist` exceeds `known_within` (24 m), so whole metres give about 24 to 200 keys a pair of kinds where two would do. But each key is computed once and then kept.
+- **The cost is gathering the input, per observer and target, per transaction.** The per-transaction cache (`with_answers`, keyed by observer, target, dist and `now`) is empty at each tick. So every tick, for every pair asked, `regard` does:
+  - two body reads for the distance;
+  - `knows_name` (acquaintance, community and family lookups);
+  - `revealed`;
+  - the observer's techniques, once per observer.
+- **The fold's measurement of that cost.**
+  - The fold names everyone in an onlooker's line through `perception::labels`, then `far::id_for`, whose `made_out` reads `far_handle` by observer and target.
+  - On the island, whose law reads no distance, that cost about 15 µs a name at host load 30–70: `fold.labels`, 43–51 ms/s for about 3,000 names a second.
+  - A sweep re-projecting every row every time pays the same per pair.
+- **The lever both share.** Keep the gathered input per observer and target across ticks, not per transaction:
+  - the distance only as the law's bands (its cut points, as `settle_needs` asks the rates law for its levels in `NEED_CUTS`);
+  - the name knowledge and reveals invalidated by the writes that change them (acquaintance, membership, reveal rows).
+  - A thread-local may hold this only as a cache of rows: it must give the same answers when it is empty. The SpacetimeDB reducers docs make module memory across calls undefined.
+  - Not built here: it is the sweep's design, and the fold would use it too.
+- **Familiarity.** Nothing in fixes 1–4 is on the sweep's path. The seen set, `familiar` and noticing serve minds' graphs, not players' perceived sets.
+
+## The cheaper paths as built (`battle-cheap`)
+
+The coordinator approved paths 1–3 of [the 15 Hz analysis](#the-fighters-15-hz-evaluations-analysis-nothing-built) (2026-11-12), each to be proven to change nothing a fighter perceives or does. Each is a law, on by default, with a diagnostic `_check` law that also works its answer out the old way and counts any difference (`diag:` `…:differed`).
+
+1. **A move's check on the fields it reads** (`check_ctx_plan`; `act::checked`).
+   - **Why not a remembered refusal.** The approved design was to remember a refusal while nothing the check reads has changed and the pool is short of the cost. It is exact, but it would almost never hit for a person. The strike check reads, through the predators' `dares()` branch, the fighter's hunger, the time since its last blow and its target's health. The script layer's plan of what a check reads cannot tell that branch runs only for animals, and all three change at every look (a probe of the key). So it was not built.
+   - **What is built.** The check before a move starts is given a context of the fields its plan reads alone (`Scripts::check_plan`, `Reads`). The fighter's warmth, its kin near (a scan of the crowd), practice, community and home, inventory, know-how, genes and terrain are left out when unread. So are the target's community, home, owner and hosting, and its bearing and closing.
+   - **Exact by construction.** The script is given every field it reads. The random roll is drawn once either way, so the world's later draws are the same. Its refusals, and the lines told from them, are the check's own.
+2. **The body's alarms from their cell** (`alarm_cells`; `brain::alarm_statuses`, `BodyFacts::next_change_ms`).
+   - **Why not cut points.** `status_of` states no levels of its own, so they cannot be read from it.
+   - **The cell.** Each character's last answer is kept until the first moment any fact the law reads can change: a rounded level crossing its next half, a whole second more since a blow. That moment comes from the body row's levels and rates. The cell also ends on any change to that row, the stage, night or the script.
+   - **The memo key.** `status_of`'s shared memo is now keyed by the facts it reads alone (`Scripts::status_reads`, from the field analysis), so focus and the rates it never reads no longer split its answers.
+   - **Exact.** The law's input is the same throughout a cell, so its answer is too. The rules test `alarm_cells_give_the_law_s_answer_at_every_moment` replays five fighters' rows millisecond by millisecond over 15 s, 75,000 moments; the kept answer is the law's at every one, while the law is asked under a tenth as often.
+3. **Warmth without copying** (`act::warmth`, `common::chunk_warming`).
+   - Only the structures that can warm or shelter are visited, in place. They come from a per-chunk list drawn from the chunk's cached structures, and drawn again whenever that list is.
+   - Remains are never in it, so the answer, an OR over those structures, is the same. `warmth_check` compares it with the full copy.
+
+**Proofs** (verify-core, `scenes.py cheap_check_ctx`, `cheap_alarms`, `cheap_warmth`): 12 fighters on an open line, a campfire, a shelter and three dead among them, with every diagnostic law on for 60 s of strikes, blocks, heals and refusals.
+- Checks on a plan's fields: about 9,400, none differing from the whole context.
+- Alarm answers kept: about 20,000–23,000, against about 10,700 asked, none differing from the law.
+- Warmth: about 60,000 comparisons, none differing.
+- verify-player combat and `just living-check` pass.
+
+**A hazard found on the way.** The shipped `laws_about` is close to the engine's 2,000-operation limit. Five more descriptions with an `if … else` pushed it over, and it then returned nothing: the install refused the script for want of a description of its first law (`address_m`), and every Cullet test failed. The new laws' descriptions are plain words. The next law with a conditional description may hit it again, so the limit, or the descriptions' shape, wants a look.
+
+**Measured** in the second quiet window: see [Acceptance](#acceptance-second-quiet-window-2026-11-12-18341956-utc).
+
+## The fourth path: the drives once a second (not built)
+
+What it is: `brain::alerts` works out, at every evaluation, the psychological drives (restless, lonely, longing for a child, a secret kept) besides the body's alarms. A fighter's 15 Hz evaluations recompute them 15 times a second. Computed at most once a second per character instead (on the noticing cadence), they would cost a fifteenth.
+
+**What it buys at 200.**
+- **The measure.** With `profile_detail` (`minds-fdet-160348`), `brain.alerts` cost 61–81 ms/s, of which the alarm law (`brain.status`) was 52–68. The drives are the rest: about 9–13 ms/s at 26–40 ticks a second.
+- **At the sustained run's rate.** 1,711 combat evaluations a second with `battle-cheap` scales that to about 15–25 ms/s. Once a second it would be about 2.
+- **The gain.** About 15–20 ms/s of about 580 in the tick: some 3%, about 1–2 ticks a second at the sustained run's 45.8. Not enough to reach the contract.
+
+**What it changes in timing.** A drive would be felt up to a second later than now (up to 900 ms, as noticing). The drives weigh minutes of state: 12 minutes uneventful for restlessness, 14 alone for loneliness, the longing's wait. So the lag is small against them, but it is a change in when a mind is told, and in when a request to think is made. A sleeper's waking or an alarm of the body would not move (path 2 keeps those exact).
+
+**Recommendation:** not worth building for scale. The 15 Hz evaluations' remaining cost is the graph run itself (`brain.graph`, 160 ms/s with `battle-cheap`) and resolving targets among about 100 in sight.
+
+## Acceptance, second quiet window (2026-11-12, 18:34–19:56 UTC)
+
+Three worlds ran at once on the same box, each with the same `battle_diag.py`:
+- `battle-scale` `109690de` (fixes 1–3, the before arm);
+- `battle-fold` (fix 4);
+- `battle-cheap` (the cheaper paths on top).
+
+The island seed: its about 310 residents, all AI, and no mind service. Fighters are packed within 7 m of the site, walkers forage, and profiling is on. The four other worlds on the service were paused, none ticking. Host load over the window, one sample every 10 s (487 samples): 1.7 to 12.5, median 4.4. Evidence: `.local/living/verify/minds-a100*-193501`, `minds-a200*-200652` and `minds-r200*-203858`, with `acceptance-2/` (the load log and summaries).
+
+**As approved: deaths permanent, 30 minutes each** (`--no-refill`).
+- At 100 fighters (116 walkers) the battle is over in about 2 minutes: about 40 fighters are left at minute 1 and 15 at minute 2.
+- At 200 (16 walkers) it also lasts about 2 minutes: 160 at the first sample, 33 at minute 2. Then 2–6 fighters remain, among the dead.
+- Population starts at about 500 and ends at 286–386.
+- During the battle a fighter's scene held about 50 others at 100 (max 98), and 91–106 at 200 (max 158–170). Skill uses were 10–18 a second in the first minute.
+
+| | Arm | Whole run: ticks/s, over 16.7 ms, p99 median | The battle's first minutes |
+|---|---|---|---|
+| 100 | `battle-scale` | 60.8, 0.2% (110 of 53,961), 4.7 ms | 56.8 then 58.5 ticks/s; 91 then 17 ticks over |
+| 100 | `battle-fold` | 59.3, 0.2% (114 of 53,909), 4.3 ms | 52.8 then 58.8; 107 then 7 |
+| 100 | `battle-cheap` | 59.3, 0.2% (102 of 53,944), 4.7 ms | 53.1 then 59.3; 100 then 2 |
+| 200 | `battle-scale` | 59.8, 0.4%, 3.9 ms | first 2 min: 54.9 ticks/s, 5.0% over, p99 median 24 ms |
+| 200 | `battle-fold` | 59.9, 0.2%, 3.6 ms | 57.8, 3.0%, 17 ms |
+| 200 | `battle-cheap` | 59.8, 0.3%, 3.7 ms | 58.7, 3.4%, 20 ms |
+
+- **The battle is too short** to separate the arms with deaths permanent. Its first sample is often only one or two of the 30.
+- **The aftermath** is the rest of each run: about 60 Hz with all the remains lying at the site (129 at 100, 217–225 at 200). Remains at rest cost almost nothing.
+- **Remains** lasted their law in every arm: a person's 3,600,000 ms (an hour of real time), an animal's 1,800,000 ms. No 30-minute run sees one expire.
+
+**Added within the window: the sustained battle**, 200 fighters and 16 walkers with refills on, 15 minutes (`minds-r200*`). It is the workload the first window measured alone at 26.8 ticks/s. About 520 alive; about 93–96 others in a fighter's scene (max 187–192); 47–48 skill uses a second; about 1,700 refills.
+
+| Arm | Ticks/s | First 5 min → last 5 | Over 16.7 ms | p99 median (worst) | Experiences/s |
+|---|---|---|---|---|---|
+| `battle-scale` | 30.0 | 36.0 → 19.1 | 59.4% (9,621 of 16,206) | 49 ms (262) | 6,932 |
+| `battle-fold` | 36.0 | 41.4 → 25.4 | 40.6% (7,992 of 19,695) | 35 ms (181) | 2,401 |
+| `battle-cheap` | 45.8 | 48.6 → 34.3 | 17.7% (4,443 of 25,099) | 28 ms (84) | 2,356 |
+
+- **What the fold saves.** Writing what onlookers see (`tick.activity`) falls from 223 to 138 ms/s; the fold's own flush takes 58–63 back. Experience rows fall by two thirds.
+- **What the cheaper paths save.** A fighter's evaluation at combat cadence costs 0.13 ms with them, against 0.18 with the fold alone and 0.23 before it (`tick.combat` over its evaluations: 224 ms/s for 1,711 a second, 244 for 1,320, 243 for 1,042). The faster world runs more evaluations in the same time.
+- **The drift** comes with the refills, about 1,700 in 15 minutes, and the about 1,750 remains at the site. The load generator dropped every refill into the battle, all the dead at once every 3 s.
+- **The load generator is fixed** (`battle-cheap`, `battle_diag.py`).
+  - A refill now appears 30 m off (`--refill-from`) at a random bearing, one at a time, at most one every 0.5 s (`--refill-gap`).
+  - It walks in, and is given the fight within 9 m of the site.
+  - A 3-minute test with 40 fighters (`minds-loadgen-*`): 43 refills arrived one by one as fighters fell, 1–5 walking in at any moment, 33–40 fighting throughout.
+- **An offset between worlds, not builds: the measurement.** Idle, the `battle-scale` world measured 61.5 ticks a second and the other two 59.5, with no tick over budget. `bench.py` took its counts from the `stats` row, which housekeeping writes once a second with its stamp, but divided them by the wall time around two SQL calls. So a window could gain or lose one second's ticks, about ±2 a second over 30 s. Windows every 60 s keep one phase to housekeeping, so a world kept its offset for the whole run; `battle-cheap` alone, in another run, measured 62.3. Since `battle-cheap`, `bench.py` divides the counts by the stamps' interval. The acceptance tables above carry that error: each run's ticks per second within about ±3% (±1 at 30, ±2 at 60). Ticks over 16.7 ms and p99 come from the tick log and do not.
 
 ## Verification it would need
 
@@ -250,4 +455,9 @@ Deleting the scratch database of `minds-bdat-124436` while its world still ran 3
   - Each lookup is cheap. The cost is their number: up to 200k a second.
 - [Tables](https://spacetimedb.com/docs/tables/) and [access permissions](https://spacetimedb.com/docs/tables/access-permissions/): a private `fight_seen` table is readable by reducers and the owner only.
   - It is a new table, a safe automatic migration.
+- [Reducers](https://spacetimedb.com/docs/functions/reducers/), "Global and Static Variables Are Undefined Behavior" (read for fix 4):
+  - Relying on module memory across reducer calls is undefined: an instance may be fresh, replaced on publish, run concurrently or restarted, and memory changed in a rolled-back transaction may remain.
+  - So the fold's pending blows are `fight_seen` rows. Thread-locals stay caches of rows.
+  - The same page says "If a reducer throws an exception or returns an error, all of its changes are automatically rolled back."
+- [Event tables](https://spacetimedb.com/docs/tables/event-tables/) were considered for `fight_seen` and not used: their rows exist "only for the duration of the transaction that created them", and the fold must hold blows across ticks.
 - Versioned source: `crates/durability/src/imp/local.rs:358`, where the delete-time panic is.

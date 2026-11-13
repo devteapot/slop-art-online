@@ -1,0 +1,56 @@
+{
+ "schema": 1,
+ "family": "character:cast-64",
+ "id": "20261112-1da896e3-0a4726",
+ "published": "2026-11-12T19:45:51+01:00",
+ "imported": "2026-11-12T19:45:51+01:00",
+ "track": "char-4",
+ "maker": "Claude Fable 5.2",
+ "note": "Cullet's cast built again whole with women's silhouettes: 25 women and girls from 12 on the new form; men, boys and children unchanged in form.",
+ "source": {
+  "commit": "1da896e3ca272536f2b7b8f1fb0d93cb1745410d",
+  "branch": "char-4-body",
+  "dirty": false,
+  "generator": "living/tools/blender/person.py",
+  "generator_sha256": "478bbd975bb0668ebe0c1aabe7674091d9a4ee4fd15d7765710fd0237c9e8e3a",
+  "generator_state": "committed",
+  "seed": "cullet",
+  "params": {
+   "cast": "living/seeds/cullet.json",
+   "people": 64
+  }
+ },
+ "renderer": {
+  "method": "asset-view",
+  "commit": "",
+  "key": "asset-view",
+  "preset": "",
+  "note": "town.py: each person alone through the asset view, through a recipe; lineup from the front at 28 degrees down at one scale; faces close; game: the game camera, enlarged; lineup-before-after and game-before-after against the hair pass's cast"
+ },
+ "preset": "",
+ "media": "media/character-cast-64/20261112-1da896e3-0a4726",
+ "members": [
+  {
+   "name": "cast",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "36d37d5784da03ab648ecf4612fc6c5aec31820bb925debec2c4ca7ce25be952",
+   "shots": [
+    "faces",
+    "faces-24",
+    "game",
+    "game-before-after",
+    "lineup",
+    "lineup-before-after"
+   ],
+   "clips": []
+  }
+ ],
+ "delivered": [
+  {
+   "title": "town",
+   "path": "delivered/index.html",
+   "from": ".local/town21/index.html"
+  }
+ ]
+}

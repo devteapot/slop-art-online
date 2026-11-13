@@ -1,0 +1,100 @@
+{
+ "schema": 1,
+ "family": "character:body-cloth",
+ "id": "20261112-ea143344-e8c75a",
+ "published": "2026-11-12T21:33:47+01:00",
+ "imported": "2026-11-12T21:33:47+01:00",
+ "track": "char-4",
+ "maker": "Claude Fable 5.2",
+ "note": "Trousers' waist on the belly's bone, the jersey tucked, skirts riding the thighs and hanging in folds. cloth_check: at rest, idle, walk, talk, wave nothing through on 87 people; brisk walk 17 of 87 at 5 mm (was 49 of 64 at 17).",
+ "source": {
+  "commit": "ea14334420b4e03fdb8a4f6333e36d442bdd8de7",
+  "branch": "char-4-body",
+  "dirty": false,
+  "generator": "living/tools/blender/person.py",
+  "generator_sha256": "8601d6af217b07c25bd14d13cf1b1c6a917fcd3582045719386429ae809ae8e2",
+  "generator_state": "committed",
+  "params": {}
+ },
+ "renderer": {
+  "method": "asset-view",
+  "commit": "",
+  "key": "asset-view",
+  "preset": "",
+  "note": "composed people from lines through recipes; per outfit: six close views at rest above five frames of the walk and idle; outfits, builds, ages, others: eight full-figure views each; gaits: walk, brisk walk, run, sitting and idle frames"
+ },
+ "preset": "",
+ "media": "media/character-body-cloth/20261112-ea143344-e8c75a",
+ "members": [
+  {
+   "name": "after",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "dfad1230f5e09402d60681a8782c26600180ad860636f2415f89ff29013aadd9",
+   "shots": [
+    "ages",
+    "builds",
+    "coat-man",
+    "coat-woman",
+    "gaits",
+    "heavy-coat-man",
+    "heavy-coat-woman",
+    "jersey-man",
+    "jersey-woman",
+    "others",
+    "outfits",
+    "smock-child",
+    "smock-woman"
+   ],
+   "clips": []
+  },
+  {
+   "name": "before",
+   "role": "control",
+   "token_kind": "import",
+   "sha256": "2b35b9652fbb72a9ad04eb68b49b825c2aa07b14628489fc2c945caf51b0cf57",
+   "shots": [
+    "ages",
+    "builds",
+    "coat-man",
+    "coat-woman",
+    "heavy-coat-man",
+    "heavy-coat-woman",
+    "jersey-man",
+    "jersey-woman",
+    "others",
+    "outfits",
+    "smock-child",
+    "smock-woman"
+   ],
+   "clips": []
+  },
+  {
+   "name": "vroid",
+   "role": "control",
+   "token_kind": "import",
+   "sha256": "57e3b28add5fdc06f505467fedfb94532cc4248e34d5485abc65ad5e730e0365",
+   "shots": [
+    "full-back",
+    "full-front",
+    "full-side",
+    "full-three-quarter",
+    "idle-front",
+    "walk-front",
+    "walk-side"
+   ],
+   "clips": []
+  },
+  {
+   "name": "blue-protocol",
+   "role": "control",
+   "token_kind": "import",
+   "sha256": "40bd9109446f43e0e789200cb241875bdb9f6f292bd745c624dffe5ecb9a6721",
+   "shots": [
+    "full-front"
+   ],
+   "clips": []
+  }
+ ],
+ "delivered": []
+}
