@@ -50,6 +50,9 @@ pub struct SkillSpec {
     /// Done while the body keeps whatever motion it has (waiting, eating, a call); every other
     /// skill stands still to be done.
     pub moving: bool,
+    /// Done on the move (`on_the_move`: a wave, a nod): moving does not break it off, for any
+    /// controller, and it starts without stopping the body (it implies `moving`).
+    pub on_the_move: bool,
     /// Behaviour of the moment (walking about, resting, grazing): it belongs in a graph, not in
     /// a one-off act.
     pub moment: bool,

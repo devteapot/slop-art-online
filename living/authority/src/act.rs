@@ -1193,6 +1193,18 @@ pub fn refresh_rates(ctx: &ReducerContext, id: u32) {
 
 /// Cancel an activity; `why` reports an interruption to the owning node.
 pub fn cancel(ctx: &ReducerContext, a: Activity, now: u64, why: Option<&str>) {
+    cancel_as(ctx, a, now, why, living_rules::outcome::act::BROKEN_OFF);
+}
+
+/// Break off what `a`'s maker was doing because they moved before it was done (a player's move;
+/// a skill whose spec says `on_the_move` is never broken off this way). Told in the rules' words
+/// (`moved_off(skill)`: "the wave stopped: you moved off before it was done"), code `moved`.
+pub fn cancel_moved(ctx: &ReducerContext, a: Activity, now: u64) {
+    let why = common::scripts(ctx).text_of("moved_off", &a.skill).unwrap_or_else(|| "you moved".into());
+    cancel_as(ctx, a, now, Some(&why), living_rules::outcome::act::MOVED);
+}
+
+fn cancel_as(ctx: &ReducerContext, a: Activity, now: u64, why: Option<&str>, code: &'static str) {
     let id = a.id;
     ctx.db.activity().id().delete(id);
     let sc = common::scripts(ctx);
@@ -1219,7 +1231,7 @@ pub fn cancel(ctx: &ReducerContext, a: Activity, now: u64, why: Option<&str>) {
         refresh_rates(ctx, id);
     }
     if let Some(why) = why {
-        report(ctx, &a, false, why, now, living_rules::outcome::act::BROKEN_OFF);
+        report(ctx, &a, false, why, now, code);
     }
 }
 

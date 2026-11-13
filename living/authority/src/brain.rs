@@ -661,8 +661,26 @@ impl<'a> Ev<'a> {
         }
     }
 
+    /// When the decision that installed this mind's plan perceived what it decided on: its install
+    /// thought's time less the model's time (`mind::decided_since`, from the thought row the
+    /// install wrote at `installed_ms`). Before talk-turns the windows below began at the install,
+    /// so what happened while the model thought (a reply already given in conversation) was not
+    /// "since" and the plan's line was said anyway (play-test 6).
+    fn decided_ms(&self, brain: &Brain) -> u64 {
+        self.ctx
+            .db
+            .thought()
+            .actor()
+            .filter(self.me.id)
+            .filter(|t| t.at_ms == brain.installed_ms && t.kind != "error")
+            .map(|t| brain.installed_ms.saturating_sub(t.latency_ms as u64))
+            .min()
+            .unwrap_or(brain.installed_ms)
+    }
+
     /// Whether a mind's plan's queued line to `to` (say node `id`) has been overtaken by the
-    /// conversation (`speech_truth`): since the plan was installed, or since this node last
+    /// conversation (`speech_truth`): since the decision that installed the plan perceived its
+    /// scene (`decided_ms`), or since this node last
     /// spoke, `to` spoke to me (a line to me, or to no one in particular that the authority
     /// marked as for me, salience 0.8 and above), or I spoke to them other than by this plan's
     /// own say nodes (a conversation turn's reply). The plan's line was meant for a
@@ -672,27 +690,30 @@ impl<'a> Ev<'a> {
     fn line_overtaken(&self, id: u16, to: u32) -> bool {
         let Some(brain) = self.ctx.db.brain().id().find(self.me.id).filter(|b| b.source == "mind") else { return false };
         let own_mark = self.st.marks.iter().find(|m| m.node == id).map_or(0, |m| m.at_ms);
-        let since = brain.installed_ms.max(own_mark);
+        let since = self.decided_ms(&brain).max(own_mark);
         // The times this plan's own say nodes spoke (their marks; a line is written at the
         // moment its node is marked).
         let own: Vec<u64> = self.st.marks.iter().filter(|m| m.node < DESIRE_MARK).map(|m| m.at_ms).collect();
         let sc = common::scripts(self.ctx);
         let words: Vec<&str> = sc.ways().iter().map(|w| w.kind.as_str()).collect();
+        // The install's own line (said in its transaction, at `installed_ms`) is the plan's first
+        // words, not a reply that overtook them.
         self.ctx.db.experience().observer().filter(self.me.id).filter(|e| e.at_ms > since).any(|e| {
-            (e.kind == "said" && e.object == to && !own.contains(&e.at_ms))
+            (e.kind == "said" && e.object == to && !own.contains(&e.at_ms) && e.at_ms != brain.installed_ms)
                 || (e.subject == to && words.contains(&e.kind.as_str()) && (e.object == self.me.id || e.object == 0 && e.salience >= 0.8))
         })
     }
 
     /// Under `heard_first_rethinks`: a line another said to `to` that I heard since this mind's
-    /// plan was installed, or since say node `id` last spoke (first-sight-crowd).
+    /// plan's decision perceived its scene (`decided_ms`), or since say node `id` last spoke
+    /// (first-sight-crowd).
     fn heard_first(&self, id: u16, to: u32) -> Option<Experience> {
         if !common::laws(self.ctx).heard_first_rethinks {
             return None;
         }
         let brain = self.ctx.db.brain().id().find(self.me.id).filter(|b| b.source == "mind")?;
         let own_mark = self.st.marks.iter().find(|m| m.node == id).map_or(0, |m| m.at_ms);
-        crate::speech::addressed_by_another(self.ctx, self.me.id, to, brain.installed_ms.max(own_mark))
+        crate::speech::addressed_by_another(self.ctx, self.me.id, to, self.decided_ms(&brain).max(own_mark))
     }
 
     /// A say that cannot be spoken is a failure the body is told about, like a refused leaf
