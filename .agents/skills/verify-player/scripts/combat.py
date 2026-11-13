@@ -929,7 +929,12 @@ def scene_breath(st):
     time.sleep(0.6)
     v2 = my_vitals(st)
     spent = v0["stamina_max"] - v2["stamina"]
-    check(st, "letting go of the run: its breath back from a second later, at 25 a second", abs(v2["stamina_rate"] - 25.0) < 1e-3 and 0 < v2["stamina_from_ms"] - v2["at_ms"] <= 1000 and 6.0 < spent < 14.0, {"spent": spent, "row": v2})
+    # What the run spent, by the rows' own clock: 4 a second from the run's row to the release's
+    # within a tenth (the run's start and stop each take a moment), not a wall-clock window: on a
+    # loaded host the calls between them take longer.
+    ran_s = (v2["at_ms"] - v1["at_ms"]) / 1000
+    drained = v1["stamina"] - v2["stamina"]
+    check(st, "letting go of the run: its breath back from a second later, at 25 a second", abs(v2["stamina_rate"] - 25.0) < 1e-3 and 0 < v2["stamina_from_ms"] - v2["at_ms"] <= 1000 and ran_s > 1.0 and abs(drained - 4.0 * ran_s) < max(1.0, 0.4 * ran_s), {"spent": spent, "ran_s": ran_s, "drained": drained, "row": v2})
     time.sleep(2.0)
     v3 = my_vitals(st)
     check(st, "standing, breath comes back with no row written (the client projects it)", v3 == v2 and breath_of(v3, int(time.time() * 1000)) > v2["stamina"] + 5, {"row": v3, "now": breath_of(v3, int(time.time() * 1000))})
@@ -938,11 +943,20 @@ def scene_breath(st):
     call(st, "place_at", [cid, home[0], home[1]], "admin")
     time.sleep(0.5)
     p = body(st, cid)
-    full = breath_of(my_vitals(st), int(time.time() * 1000))
-    ready(st, "dodge")
-    call(st, "use_skill", ["dodge", 0, p[0], p[1] + 3.0])
-    wait_outcome(st, "dodge", 3)
-    vd = my_vitals(st)
+    # Read back within the refill's second, or again: a row already back at full (a request
+    # stalled past the refill) no longer says what the dodge took.
+    for _ in range(3):
+        full_breath(st)
+        p = body(st, cid)
+        full = breath_of(my_vitals(st), int(time.time() * 1000))
+        ready(st, "dodge")
+        call(st, "use_skill", ["dodge", 0, p[0], p[1] + 3.0])
+        wait_outcome(st, "dodge", 3)
+        vd = my_vitals(st)
+        if vd["stamina"] < vd["stamina_max"] - 0.01:
+            break
+        p = body(st, cid)
+        p = (p[0], p[1] - 3.0)
     check(st, "a dodge takes 20 breath", abs(full - at_rest(vd) - 20.0) < 0.6, {"before": full, "row": vd})
     time.sleep(1.5)
     p = body(st, cid)
@@ -952,19 +966,51 @@ def scene_breath(st):
     wait_outcome(st, "jump", 3)
     vj = my_vitals(st)
     check(st, "a jump takes 10 breath", abs(before - at_rest(vj) - 10.0) < 0.6, {"before": before, "row": vj})
-    # Dodging on with no pause to get it back (cooldown 0.9 s, the refill starts 1 s after):
-    # the sixth or so is refused.
-    trail = []
-    for k in range(9):
-        p = body(st, cid)
-        ready(st, "dodge")
-        call(st, "use_skill", ["dodge", 0, p[0], p[1] + (3.0 if k % 2 else -3.0)])
-        u = wait_outcome(st, "dodge", 2)
-        trail.append(u and u["outcome"])
-        if u and "out of breath" in u["outcome"]:
-            break
-    told = [e["note"] for e in seen(st) if "out of breath" in (e.get("note") or "")]
-    check(st, "dodging on without a pause is refused out of breath, and told (my_combat REFUSED)", trail and trail[-1] and "out of breath" in trail[-1] and len(trail) >= 3 and told, {"outcomes": trail, "told": told[-1:]})
+    # Dodging on with less breath than a dodge costs is refused "out of breath". Tested on the
+    # rule, not on the scene's pace: with the world's `cost_dodge` at 90 for this check, a dodge
+    # from full breath leaves 10, and the next, sent 0.95 s after it by the clock (its cooldown is
+    # 0.9 s; the refill starts 1 s after an effort, 25 a second), finds 10 and is refused, unless
+    # more than about 4 s passed between them, which is measured and retried. With the shipped 20
+    # the check counted on the scene sending nine dodges faster than about one every 1.8 s; on a
+    # loaded host, or after `committed` in the same world, its loop ran slower (requests stalled
+    # 4-6 s at times) and nine never ran out, on main as on the branch (pursue-last-seen's gate).
+    # The shipped cost is checked above ("a dodge takes 20 breath").
+    trail, gaps, told = [], [], []
+    try:
+        call(st, "set_world_law", ["cost_dodge", "90"], "admin")
+        for attempt in range(3):
+            p = open_ground(st, cid, east=2.0, south=4.0)
+            full_breath(st)
+            ready(st, "dodge")
+            first_sent = time.time()
+            call(st, "use_skill", ["dodge", 0, p[0], p[1] + 3.0])
+            u = wait_outcome(st, "dodge", 0.8)
+            trail.append(u and u["outcome"])
+            for _ in range(10):
+                time.sleep(max(0.0, first_sent + 0.95 - time.time()))
+                second_sent = time.time()
+                code, said = call(st, "use_skill", ["dodge", 0, p[0], p[1]])
+                if code != 200 and ("not ready" in said or "still recovering" in said):
+                    first_sent = time.time() - 0.85
+                    continue
+                # Told first: a REFUSED row stays 4 s, and a request can stall that long.
+                told = [e["note"] for e in seen(st) if "out of breath" in (e.get("note") or "")] or told
+                v = wait_outcome(st, "dodge", 0.8)
+                if v and ("not ready" in v["outcome"] or "still recovering" in v["outcome"]):
+                    first_sent = time.time() - 0.85
+                    continue
+                break
+            gaps.append(round(second_sent - first_sent, 2))
+            trail.append(v and v["outcome"])
+            told = [e["note"] for e in seen(st) if "out of breath" in (e.get("note") or "")] or told
+            if trail[-1] and "out of breath" in trail[-1]:
+                break
+            if gaps[-1] < 3.5:
+                break
+    finally:
+        call(st, "set_world_law", ["cost_dodge", "20"], "admin")
+    told = told or [e["note"] for e in seen(st) if "out of breath" in (e.get("note") or "")]
+    check(st, "dodging on without a pause is refused out of breath, and told (my_combat REFUSED)", len(trail) >= 2 and trail[-2] == "made way" and trail[-1] and "out of breath" in trail[-1] and told, {"outcomes": trail, "seconds between": gaps, "told": told[-1:]})
 
 
 def scene_heal(st):

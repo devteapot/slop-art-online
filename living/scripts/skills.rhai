@@ -51,9 +51,9 @@ fn laws() {
         // A sound at least this loud (its spec's `loudness`: a voice 1, a call 2.5, a baby's
         // cry 2.5, the blows of a fight 2) wakes a sleeper within this many metres who hears it.
         wake_loudness: 2.0, wake_reach: 8.0,
-        // A creature in a player's sight stays seen until this far beyond it (metres); a chase
-        // is lost beyond this share of the chaser's sight.
-        keep_seen_m: 1.0, chase_lost_share: 1.4,
+        // A creature in a player's sight stays seen until this far beyond it (metres). A chase
+        // has no reach of its own: out of sight, the chaser goes to where it last saw them.
+        keep_seen_m: 1.0,
         // A body that comes into the world: its hunger and energy.
         spawn_hunger: 25.0, spawn_energy: 85.0,
         // Grazing each grassy or forest tile holds.
@@ -3030,7 +3030,6 @@ fn laws_about(l) {
         wake_loudness: "a sleeper wakes for a sound as loud as a shout, a baby crying or a fight (not for talk or a whisper)",
         wake_reach: `when it is within ${short(l.wake_reach)} m`,
         keep_seen_m: `a creature in a player's sight stays seen until ${short(l.keep_seen_m)} m beyond it`,
-        chase_lost_share: `a chase is lost beyond ${short(l.chase_lost_share)} times the chaser's sight`,
         spawn_hunger: `a body comes into the world with hunger ${short(l.spawn_hunger)}`,
         spawn_energy: `and energy ${short(l.spawn_energy)}`,
         pasture_per_tile: `each grassy tile holds ${l.pasture_per_tile} grazing units`,

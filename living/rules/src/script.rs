@@ -472,8 +472,6 @@ pub struct Laws {
     pub wake_reach: f32,
     /// A creature already in a player's sight stays seen until this many metres beyond the player's sight.
     pub keep_seen_m: f32,
-    /// A chased creature is lost from sight beyond this share of the chaser's sight (or its scent, if farther).
-    pub chase_lost_share: f32,
     /// Hunger of a body that comes into the world.
     pub spawn_hunger: f32,
     /// Energy of a body that comes into the world.
@@ -649,7 +647,6 @@ impl Default for Laws {
             wake_loudness: 2.0,
             wake_reach: 8.0,
             keep_seen_m: 1.0,
-            chase_lost_share: 1.4,
             spawn_hunger: 25.0,
             spawn_energy: 85.0,
             pasture_per_tile: 0.02,
@@ -2717,7 +2714,6 @@ impl Scripts {
             wake_loudness: g("wake_loudness", l.wake_loudness).clamp(0.0, 100.0),
             wake_reach: g("wake_reach", l.wake_reach).clamp(0.0, 64.0),
             keep_seen_m: g("keep_seen_m", l.keep_seen_m).clamp(0.0, 8.0),
-            chase_lost_share: g("chase_lost_share", l.chase_lost_share).clamp(1.0, 8.0),
             spawn_hunger: g("spawn_hunger", l.spawn_hunger).clamp(0.0, 100.0),
             spawn_energy: g("spawn_energy", l.spawn_energy).clamp(0.0, 100.0),
             pasture_per_tile: g("pasture_per_tile", l.pasture_per_tile).clamp(0.0, 10.0),
@@ -3933,7 +3929,7 @@ mod tests {
         // Rule numbers that were Rust constants, with their values.
         let l = sc.laws();
         assert_eq!((l.follow_s, l.read_sign_m, l.kin_near_m, l.trade_window_s, l.join_window_s, l.address_m), (12.0, 8.0, 4.0, 180.0, 300.0, 6.0));
-        assert_eq!((l.keep_seen_m, l.chase_lost_share, l.spawn_hunger, l.spawn_energy, l.pasture_per_tile), (1.0, 1.4, 25.0, 85.0, 0.02));
+        assert_eq!((l.keep_seen_m, l.spawn_hunger, l.spawn_energy, l.pasture_per_tile), (1.0, 25.0, 85.0, 0.02));
         // The longing for a child: shipped values keep the old wait (20 − nurture/6 minutes, any food).
         assert_eq!((l.longing_after_min, l.longing_food), (20.0, 0.0));
         for n in [0.0, 30.0, 60.0, 100.0] {

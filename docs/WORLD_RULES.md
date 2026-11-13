@@ -145,7 +145,7 @@ A declaration without `about` or `cadence` is refused when the script compiles.
 | `join_window_s` | 300 s | two literals | a request to join a community |
 | `address_m` | 6 m | two literals (`perceive.rs`) | speech to no one in particular is for the only listener this close |
 | `keep_seen_m` | 1 m | `KEEP_MARGIN` (`perception.rs`) | a player's perceived set keeps a creature this far past sight |
-| `chase_lost_share` | 1.4 | literal (`motion.rs`) | a chase is lost beyond this share of the chaser's sight |
+| `chase_lost_share` | 1.4 | literal (`motion.rs`) | a chase is lost beyond this share of the chaser's sight. **Removed 2026-11-12** (`pursue-last-seen`, [movement mind](MOVEMENT_MIND.md)): it held a chase through walls; a chase is now held by the sight rule, and out of sight goes to where its target was last seen |
 | `spawn_hunger`, `spawn_energy` | 25, 85 | literals (`seed.rs`) | a body that comes into the world |
 | `pasture_per_tile` | 0.02 | `PASTURE_PER_TILE` (`common.rs`) | grazing a grassy tile holds |
 
