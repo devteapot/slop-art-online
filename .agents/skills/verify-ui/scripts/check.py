@@ -358,6 +358,64 @@ def ways(run, c):
     c.check(s, "Settings › Controls offers the Way key", any(t.startswith("bind:Way:") for t in (d["k0"].get("tags") or {})), str([t for t in (d["k0"].get("tags") or {}) if t.startswith("bind:")][:20]))
 
 
+@scenario("reversal")
+def reversal(run, c):
+    """look-4 in the client: when another's walk reverses with their look held aside, their drawn
+    legs decide walking backwards from where the authority's facing settles, not from the facing
+    still coming round (for about 0.3 s it can stand 75°-180° off the new travel), so no brief
+    backwards gait starts. verify.py's player identity walks east with its look held north, then
+    the walk reverses to the west; my client logs their feet (`LIVING_GAME_FEET_ID`): no frame drawn
+    backwards (`reverse`) in the second after the reversal, while the authority's settled offset is
+    within `look_walk_deg` (so backwards would be wrong)."""
+    s = "reversal"
+    def body():
+        r = subprocess.run([sys.executable, V, "sql", "--run", run, "SELECT * FROM my_body", "--as-player"], capture_output=True, text=True)
+        rows = json.loads(r.stdout[r.stdout.find("["):]) if "[" in r.stdout else []
+        return (rows[0]["id"] if rows else None), r.stdout + r.stderr
+    other, t = body()
+    if other is None:
+        subprocess.run([sys.executable, V, "player", "--run", run, "join", "Turner"], capture_output=True, text=True)
+        other, t = body()
+    c.check(s, "a second player to walk beside me", other is not None, t[-200:])
+    if other is None:
+        return
+    snap = f"sql|SELECT id, x, y, heading, turn, turn_s, t_ms, next_ms, vx, vy, speed, face_off, face_turn, face_turn_s FROM body WHERE id = {other}"
+    plan = ("ready;click:@tip:ok;sync:noon;sync:spot;wait:4;frame:0;view:30:9;wait:1;sync:other;wait:2;sync:go;wait:3;sync:walking;"
+            "sync:rev;wait:0.3;sync:turning;wait:1.5;sync:settled;shot:01_reversed;wait:1;sync:halt;wait:1.5;quit")
+    syncs = ["noon=sql|UPDATE world SET epoch_ms = {epoch_at:12} WHERE id = 0", f"spot=place_at|{{me}}|{LOOK_WALK_SPOT[0]}|{LOOK_WALK_SPOT[1]}", f"other=place_at|{other}|(mx-4)|(my+3)",
+             "go=player|human_move|1|0|false;player|human_face|0|-1", f"walking={snap}", "rev=player|human_move|-1|0|false", f"turning={snap}", f"settled={snap}",
+             "halt=player|human_move|0|0|false;player|human_face|0|0"]
+    name = "reversal"
+    out_dir = os.path.join(ROOT, ".local/living/verify", run, "ui", name)
+    os.makedirs(out_dir, exist_ok=True)
+    keep = {k: os.environ.get(k) for k in ["LIVING_GAME_FEET", "LIVING_GAME_FEET_ID", "LIVING_GAME_CONTROL"]}
+    os.environ.update({"LIVING_GAME_FEET": os.path.join(out_dir, "feet.jsonl"), "LIVING_GAME_FEET_ID": str(other), "LIVING_GAME_CONTROL": "cursor"})
+    try:
+        out, code, text = drive(run, name, plan, syncs=syncs)
+    finally:
+        for k, v in keep.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+    c.check(s, "client ran and joined", code == 0, text[-300:])
+    scene = json.load(open(os.path.join(out, "scene.json"))) if os.path.exists(os.path.join(out, "scene.json")) else {}
+    snapped = lambda k: (((scene.get("snaps") or {}).get(k) or [{}])[0])
+    st = snapped("settled")
+    row = (st.get("rows") or [None])[0]
+    settled = None
+    if row:
+        settled = wrapd(math.degrees(facing_at(row, st["wall_ms"]) - heading_at(row, st["wall_ms"])))
+    c.check(s, "the authority: the walk reversed west, the facing settled within look_walk_deg of it", row is not None and abs(wrapd(math.degrees(heading_at(row, st["wall_ms"])) - 180.0)) < 5 and settled is not None and abs(settled) <= 80.0, f"settled offset {settled}")
+    lines = [x for x in feet_log(out) if x.get("id") == other and x.get("heading") is not None]
+    t_rev = next((x["t"] for x in lines if abs(wrapd(x["heading"] - 180.0)) < 30), None)
+    after = [x for x in lines if t_rev is not None and t_rev - 0.3 <= x["t"] <= t_rev + 1.0]
+    back = [round(x["t"] - t_rev, 2) for x in after if x.get("reverse")]
+    c.check(s, "my client logged their body through the reversal", len(after) > 20, f"{len(after)} frames")
+    c.check(s, "drawn: no brief backwards gait at the reversal", not back, f"backwards at {back[:10]} s")
+    json.dump({"other": other, "settled_offset_deg": settled, "frames": len(after), "backwards_at_s": back}, open(os.path.join(out, "reversal.json"), "w"), indent=1)
+
+
 @scenario("talk")
 def talk(run, c):
     s = "talk"

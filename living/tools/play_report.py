@@ -1337,6 +1337,21 @@ def body_at(b, now):
     return round(b["x"] + (b.get("vx") or 0) * dt, 2), round(b["y"] + (b.get("vy") or 0) * dt, 2)
 
 
+def body_facing(b, now):
+    """A body row's travel heading and facing at `now` (radians, wrapped): the travel segment's
+    turn followed, and the facing offset's (`steer::facing`), as the client draws them."""
+    import math
+    end = b.get("next_ms")
+    t = now if end in (None, U64_MAX) else min(now, end)
+    dt = max(0.0, (t - b["t_ms"]) / 1000)
+    wrap = lambda a: (a + math.pi) % (2 * math.pi) - math.pi
+    h, turn, turn_s = b.get("heading") or 0.0, b.get("turn") or 0.0, b.get("turn_s") or 0.0
+    travel = h + (turn * min(dt, turn_s) if turn_s > 0 else 0.0)
+    off, ft, fts = b.get("face_off") or 0.0, b.get("face_turn") or 0.0, b.get("face_turn_s") or 0.0
+    facing = travel + off + (ft * min(dt, fts) if fts > 0 else 0.0)
+    return round(wrap(travel), 4), round(wrap(facing), 4)
+
+
 def jpeg_size(path):
     """A JPEG's width and height from its frame header (no imaging library)."""
     try:
@@ -1422,12 +1437,15 @@ def record_loop(a, cap, meta, note, stop):
                         out.write(json.dumps({"t": now, "table": t, "row": flat_row(x)}) + "\n")
                         last[t] = max(last[t], x["id"])
                 t_q = time.time()
-                bodies = sql.rows("SELECT id, x, y, t_ms, vx, vy, next_ms, heading FROM body")
+                bodies = sql.rows("SELECT id, x, y, t_ms, vx, vy, next_ms, heading, turn, turn_s, face_off, face_turn, face_turn_s FROM body")
                 lat_ms.append((time.time() - t_q) * 1000)
                 rows = []
                 for b in map(flat_row, bodies):
                     x, y = body_at(b, now)
-                    rows.append({"id": b["id"], "x": x, "y": y, "h": b.get("heading")})
+                    travel, facing = body_facing(b, now)
+                    # `h` is the travel's heading at the segment's start (kept for older reads);
+                    # `travel` and `facing` are now's, apart (look-4: a facing aside is not the travel).
+                    rows.append({"id": b["id"], "x": x, "y": y, "h": b.get("heading"), "travel": travel, "facing": facing})
                 out.write(json.dumps({"t": now, "table": "body", "rows": rows}) + "\n")
                 out.flush()
             except Exception as e:  # noqa: BLE001 - keep recording through a bad response
