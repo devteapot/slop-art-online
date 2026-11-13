@@ -2183,7 +2183,9 @@ def main():
     ap.add_argument("--height", type=float, default=1.75, help="height the game fits the character to, m")
     ap.add_argument("--kimodo", action="append", default=[], metavar="NAME=NPZ", help="add a clip retargeted from a Kimodo SOMA-RP NPZ as generated (repeatable)")
     ap.add_argument("--library", help="clip library (clips.json): write its clips, made game-ready")
-    ap.add_argument("--kimodo-dir", default=os.path.join(REPO, ".local", "kimodo", "outputs", "library"), help="the library's generated NPZs")
+    # The library's home, and only where there is none the older copy under `outputs/` (gen_person.sh has the same rule).
+    home = os.path.join(REPO, ".local", "kimodo", "library")
+    ap.add_argument("--kimodo-dir", default=home if os.path.isdir(home) else os.path.join(REPO, ".local", "kimodo", "outputs", "library"), help="the library's generated NPZs (default: .local/kimodo/library, else .local/kimodo/outputs/library)")
     ap.add_argument("--only", default="", help="comma-separated library entries")
     ap.add_argument("--seeds", choices=["pick", "all"], default="pick", help="all: write every seed as <name>_s<seed>, for review")
     ap.add_argument("--summary", help="write each clip's length, speed and source as JSON")
