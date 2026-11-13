@@ -71,7 +71,7 @@ The last check matters for worlds composed from floors (`floors::compose`). A wo
 - **The shipped `skills.rhai`:** `status_of`'s body is split into the eight parts above, and `status_of` becomes their join. Each existing `*_status` helper stays. The statuses, their order, their words and the alarms are unchanged; the check law and the install check prove it.
 - **Tables, reducers, bindings:** none change. No column, no migration of stored data.
 - **Clients:** the mind service's body words and the game client's pills go through the same `Scripts::status_of`, so they get the same answers, kept the same way.
-- **Docs:** the script contract's `status_of` entry (docs/WORLD_RULES.md, "Meters and statuses"; `script/body.rs` module docs) gains `status_parts` and its rule (parts joined = `status_of`).
+- **Docs:** the script contract's `status_of` entry (docs/WORLD_RULES.md, "The body: meters and statuses"; docs/INTERFACE.md, "Meters and statuses"; `script/body.rs` module docs) gains `status_parts` and its rule (parts joined = `status_of`).
 
 ## What it would take to build
 
