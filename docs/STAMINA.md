@@ -75,7 +75,7 @@ Every law this branch adds or changes, with the value on main before it (or "new
 
 ## Every number is a world law
 
-`laws()` holds these, so `set_world_law` changes them on a running world (each has its words in `laws_about`):
+`laws()` holds these, so `set_world_law` changes them on a running world (each has its words in `law_about`):
 
 | Group | Laws (shipped value) |
 |---|---|

@@ -2,6 +2,7 @@
 //! Rhai skill runtime. Used by the authority module, the mind service and the viewer.
 
 pub mod acts;
+pub mod bearing;
 pub mod catalog;
 pub mod combat;
 pub mod det;
@@ -57,6 +58,13 @@ pub fn hour_of(now_ms: u64, epoch_ms: u64, day_ms: u64) -> f32 {
 
 pub fn day_of(now_ms: u64, epoch_ms: u64, day_ms: u64) -> u64 {
     (now_ms.saturating_sub(epoch_ms) + day_ms * 7 / 24) / day_ms + 1
+}
+
+/// A moment as the world's people say it: "day 1 15:03" (the mind's times, and what the
+/// authority tells of a remembered sight).
+pub fn day_clock(t: u64, epoch_ms: u64, day_ms: u64) -> String {
+    let h = hour_of(t, epoch_ms, day_ms);
+    format!("day {} {:02}:{:02}", day_of(t, epoch_ms, day_ms), h as u32, (h.fract() * 60.0) as u32)
 }
 
 /// Night as the shipped `daylight` law has it (20:00 to 06:00), for a client that does not

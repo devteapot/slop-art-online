@@ -155,6 +155,12 @@ def rule(style_path, node, tid, values, fitted, belly=0.0):
         F = hair_fit.fit(tid)[0] if fitted is True else np.eye(4)
         off = np.array([0.0, -0.004, 1.535 - hf.chin_z])
         P = hair_fit.FILE_FROM_FORM
+        if fitted is True:
+            # The fringe's bone: under the forehead's, stood by the type's file where the type's
+            # own fringe ends (hair_fit.fringe), so what hangs from it is moved by that first.
+            T = np.eye(4)
+            T[:3, 3] = hair_fit.fringe(tid, F) @ P
+            mats = dict(mats, J_Hair_Fringe=mats["J_Id_Forehead"] @ T)
     for p in h["meshes"][n["mesh"]]["primitives"]:
         pos = np.array(read_accessor(h, hb, p["attributes"]["POSITION"])[0]).reshape(-1, 3)
         jt = np.array(read_accessor(h, hb, p["attributes"]["JOINTS_0"])[0]).reshape(-1, 4)

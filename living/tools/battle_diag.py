@@ -3,7 +3,8 @@
 Free: the fake model; scratch `verify-minds-*` databases on the trial stack.
 
   battle_diag.py --run minds-bd-<stamp> [--battle 100] [--walkers 116] [--minutes 30]
-                 [--window 30] [--period 60] [--no-mind] [--fast-lane] [--no-refill] [--refill-from 30]
+                 [--window 30] [--period 60] [--no-mind] [--fast-lane [--fast-real] [--fake-fast-patch]]
+                 [--keep-plans] [--law NAME=VALUE] [--arm LABEL] [--no-refill] [--refill-from 30]
                  [--refill-gap 0.5] [--law NAME=VALUE ...]
 
 Seed `island` (its residents and animals on their own rules). `--battle` minded people
@@ -86,6 +87,42 @@ def diag_counts(run, since, until):
     return {k: round(v / span, 1) for k, v in sorted(total.items())}, seconds
 
 
+def patched(run):
+    """Each character's first installed fast patch (ms): `thought` rows of kind `fast` that are
+    neither kept nor refused."""
+    first = {}
+    for r in run.private("SELECT actor, kind, summary, at_ms FROM thought WHERE kind = 'fast'", "fast-patched"):
+        if not str(r.get("summary", "")).startswith(("kept", "refused")):
+            first[r["actor"]] = min(first.get(r["actor"], r["at_ms"]), r["at_ms"])
+    return first
+
+
+def defences(run, fighters, w0, w1, first_patch):
+    """Blows and shots aimed at fighters whose windup began in [w0, w1), and the share met by the
+    target's dodge, block or jump accepted between the windup's start and its release (+50 ms)."""
+    uses = run.private(f"SELECT id, actor, skill, target, accepted_ms, released_ms FROM skill_use WHERE accepted_ms >= {int(w0) - 5000}", "skill-uses")
+    by_actor = {}
+    for u in uses:
+        if u.get("accepted_ms"):
+            by_actor.setdefault(u["actor"], []).append(u)
+    out = {"blows": 0, "met": 0, "patched_blows": 0, "patched_met": 0}
+    for u in uses:
+        if u["skill"] not in ("strike", "attack", "bowshot", "shoot", "throw") or u.get("target") not in fighters or not u.get("accepted_ms"):
+            continue
+        if not (w0 <= u["accepted_ms"] < w1):
+            continue
+        end = (u.get("released_ms") or u["accepted_ms"] + 750) + 50
+        met = any(d["skill"] in ("dodge", "block", "jump") and u["accepted_ms"] <= d["accepted_ms"] <= end for d in by_actor.get(u["target"], []))
+        p = u["target"] in first_patch and first_patch[u["target"]] <= u["accepted_ms"]
+        out["blows"] += 1
+        out["met"] += met
+        out["patched_blows"] += p
+        out["patched_met"] += p and met
+    out["share"] = round(out["met"] / out["blows"], 3) if out["blows"] else None
+    out["patched_share"] = round(out["patched_met"] / out["patched_blows"], 3) if out["patched_blows"] else None
+    return out
+
+
 def count(run, table):
     out = subprocess.run([STDB, "sql", "-s", "local", run.db, f"SELECT COUNT(*) AS n FROM {table}"], capture_output=True, text=True).stdout
     nums = [l.strip() for l in out.splitlines() if l.strip().isdigit()]
@@ -140,6 +177,13 @@ def main():
     ap.add_argument("--period", type=int, default=60)
     ap.add_argument("--no-mind", action="store_true")
     ap.add_argument("--fast-lane", action="store_true", help="the world law fast_lane_on true; fast calls answered `keep` after 1.0 s")
+    ap.add_argument("--fast-real", action="store_true",
+                    help="with --fast-lane: fast calls go to the real `deepseek-flash` profile (living/configs/models.json, no overflow), every other purpose stays on the fake model; needs MISTRAL_API_KEY in the checkout's .env (read, never printed)")
+    ap.add_argument("--keep-plans", action="store_true",
+                    help="the fight is the fighter's one desire (its `combat` branch inside), and a fighter's compile answers \"keep\": a fast patch stays until the fighter's mind replaces it (all arms of a fast-lane comparison use it)")
+    ap.add_argument("--fake-fast-patch", action="store_true",
+                    help="with --fast-lane and the fake model: a fast call is answered with a `combat` patch (a dodge on a seen windup, then the fight) instead of keep, to prove patches install and persist for free")
+    ap.add_argument("--arm", default="", help="a label for this run's arm, written into diag-head.json and every sample")
     ap.add_argument("--no-refill", action="store_true", help="deaths are permanent: the dead are not replaced, and the battle runs down")
     ap.add_argument("--refill-from", type=float, default=30.0,
                     help="a refill appears this far from the site (m), at a random bearing, and walks in before it fights")
@@ -167,10 +211,16 @@ def main():
         site = next(b for b in run.private("SELECT id, x, y FROM body", "bodies-probe") if b["id"] == probe[0]["id"])
         run.admin("kill", probe[0]["id"], "diag probe")
         site = (site["x"], site["y"])
-        graph = lambda id: {"first": [
+        fight_of = lambda id: [
             {"if": {"cond": {"health": {"below": 50}}, "then": {"do": {"skill": "heal", "target": "self"}}}},
             {"if": {"cond": {"threatened": True}, "then": {"do": {"skill": "dodge" if id % 2 == 0 else "block"}}}},
-            {"do": {"skill": "strike", "target": {"nearest": "person"}}}]}
+            {"do": {"skill": "strike", "target": {"nearest": "person"}}}]
+        # --keep-plans: the fight is the fighter's one desire, its `combat` branch inside (the label
+        # a fast patch replaces: rules graph.rs `patch_branch`). A person's top level is desires
+        # (the mind keeps the body's needs among them), so a compile that answers "keep" leaves
+        # it running; a bare fight graph would be rebuilt around the needs and the fight would stop.
+        graph = (lambda id: {"desires": [{"want": "fight", "weight": {"base": 5.0}, "do": {"first": {"label": "combat", "children": fight_of(id)}}}]}) \
+            if a.keep_plans else (lambda id: {"first": fight_of(id)})
 
         def spawn(n):
             have = {c["id"] for c in run.sql("SELECT id FROM character", "chars")}
@@ -216,15 +266,34 @@ def main():
             # replaced the fighters' graphs and the battle stopped.)
             # Fighters are the first spawned (Walker1..Walker<battle>; a refill's names start at 1
             # again), and a prompt opens "# Who you are (<name>)".
+            # A fighter's compile reinstalls its fight; with --keep-plans it keeps the plan instead
+            # ("graph": "keep", the mind's "carries on"), so an installed fast patch is not undone by
+            # the next compile. A fixture of the fake model's script only.
+            fight_reply = {"graph": "keep"} if a.keep_plans else {"graph": graph(0), "plan": "diag fixture: keep fighting", "weight": 1.5}
             fight = [{"purpose": "deliberate", "contains": f"# Who you are (Walker{n})", "delay_s": 4.0, "times": -1,
-                      "reply": {"graph": graph(0), "plan": "diag fixture: keep fighting", "weight": 1.5}} for n in range(1, a.battle + 1)]
+                      "reply": fight_reply} for n in range(1, a.battle + 1)]
             replies["fast"] = {"keep": True, "thought": "diag fixture: as it is."}
+            if a.fake_fast_patch:
+                replies["fast"] = {"patch": {"label": "combat", "graph": {"first": [
+                    {"if": {"cond": {"doing": {"is": "hostile", "phase": "winding up", "at_me": True, "within": 3}}, "then": {"do": {"skill": "dodge"}}}}, *fight_of(0)]}},
+                    "thought": "diag fixture: dodge their windup."}
             script = {"replies": replies, "rules": fight + [{"purpose": p, "delay_s": d, "times": -1, "reply": replies[p]} for p, d in (("think", 5.0), ("deliberate", 4.0), ("consolidate", 4.0), ("talk", 2.0), ("fast", 1.0))]}
             # The minds of everyone spawned, and of the fighters spawned later to refill the battle:
             # ids are handed out in order, so the next few thousand are theirs (an empty
             # LIVING_ONLY would mean no one).
             ids = list(made) + list(range(max(made) + 1, max(made) + 4001))
-            run.start(vm.model(run, script), ids, seed="island", extra_env={"LIVING_CONCURRENCY": "64"})
+            models, env = vm.model(run, script), {"LIVING_CONCURRENCY": "64"}
+            if a.fast_real:
+                # Only the fast route is real: rethink.json `fast.route` names `deepseek-flash`.
+                real = json.loads((ROOT / "living/configs/models.json").read_text())["profiles"]["deepseek-flash"]
+                real = {k: v for k, v in real.items() if k != "overflow"}
+                key = next((l.split("=", 1)[1].strip().strip('"').strip("'") for l in (ROOT / ".env").read_text().splitlines()
+                            if l.strip().startswith(real["key_env"] + "=")), "") if (ROOT / ".env").exists() else ""
+                if not key:
+                    raise RuntimeError(f"--fast-real needs {real['key_env']} in the checkout's .env")
+                models["profiles"]["deepseek-flash"] = real
+                env[real["key_env"]] = key
+            run.start(models, ids, seed="island", extra_env=env)
 
         def keep_battle():
             # Refills arrive one at a time, at most one each `--refill-gap` seconds, from
@@ -267,7 +336,7 @@ def main():
 
         keeper = threading.Thread(target=keep_battle, daemon=True)
         keeper.start()
-        head = {"battle": a.battle, "walkers": a.walkers, "refill": not a.no_refill, "refill_from": a.refill_from, "refill_gap": a.refill_gap, "laws": a.law, "site": site, "ambient_at_publish": len(before), "mind": not a.no_mind, "fast_lane": a.fast_lane,
+        head = {"arm": a.arm, "fast_real": a.fast_real, "keep_plans": a.keep_plans, "fake_fast_patch": a.fake_fast_patch, "battle": a.battle, "walkers": a.walkers, "refill": not a.no_refill, "refill_from": a.refill_from, "refill_gap": a.refill_gap, "laws": a.law, "site": site, "ambient_at_publish": len(before), "mind": not a.no_mind, "fast_lane": a.fast_lane,
                 "nproc": os.cpu_count(), "db_identity": ident}
         (run.directory / "diag-head.json").write_text(json.dumps(head, indent=1))
         print(json.dumps(head), flush=True)
@@ -279,7 +348,7 @@ def main():
             t1 = t0 + 1.2 + a.window
             d, secs = diag_counts(run, t0, t1 + 1)
             t, sp = b["tick_ms"], b["spans_ms"]
-            sample = {"k": k, "t_min": round((t0 - t_start) / 60, 1), "ticks_per_s": b["ticks_per_s"], "tick_p50": t["p50"], "tick_p99": t["p99"], "tick_max": t["max"],
+            sample = {"arm": a.arm, "k": k, "t_min": round((t0 - t_start) / 60, 1), "ticks_per_s": b["ticks_per_s"], "tick_p50": t["p50"], "tick_p99": t["p99"], "tick_max": t["max"],
                       "over_16_7": t["over_16_7ms"], "tick_samples": t["samples"], "spans_ms_s": {n: v["ms_per_s"] for n, v in sp.items() if v["ms_per_s"] >= 1.0},
                       "spans_n": {n: v["n"] for n, v in sp.items() if n.startswith(("perceive.", "brain."))}, "stats": {x: b.get(x) for x in ("evals_per_s", "experiences_per_s", "deliberation_requests_per_s", "motions_per_s")},
                       "diag_per_s": d, "diag_seconds": secs, "load_1m": [round(load0, 1), round(os.getloadavg()[0], 1)], "respawns": state["respawns"], "fighters_alive": len(state["fighters"]), "arriving": len(state["arriving"]), "fighter_deaths": state.get("deaths", 0)}
@@ -297,6 +366,10 @@ def main():
                 w0, w1 = t0 * 1000, t1 * 1000
                 sample["fast"] = {"calls_in_window": sum(1 for x in fast if w0 <= x < w1), "per_s": round(sum(1 for x in fast if w0 <= x < w1) / a.window, 3),
                                   "total": len(fast), "fast_ask_rows": count(run, "fast_ask")}
+            # Timed defences (R2's test, docs/COMBAT_MIND.md §4.2): each blow aimed at a fighter in
+            # this window, and whether its target's dodge, block or jump began during the windup;
+            # split by whether the target had a fast patch installed before the blow.
+            sample["defence"] = defences(run, set(state["fighters"]), t0 * 1000, t1 * 1000, patched(run) if a.fast_lane else {})
             sample["metrics"] = metrics(ident) if ident else {}
             # How long remains lie (`rot` rows: when each is due, against when it was made) and how
             # many are left at the site; a death is permanent with --no-refill.

@@ -129,6 +129,7 @@ fn insert(ctx: &ReducerContext, id: u32, viewer: Identity, now: u64, ev: &Seen, 
 /// onlookers see that it happened, not the numbers, at their next frame (`frame.rs`), except
 /// a death, which leaves with the body in the same update so the client keeps the corpse.
 pub fn show(ctx: &ReducerContext, now: u64, ev: Seen) {
+    let _detail = common::detail_span("combat.show");
     if !any_humans(ctx) {
         return;
     }
@@ -283,6 +284,7 @@ pub fn started(ctx: &ReducerContext, id: u32, skill: &str, now: u64) {
 
 /// A move released: the recovery after it. Returns when it ends.
 pub fn recovering(ctx: &ReducerContext, id: u32, skill: &str, now: u64) -> u64 {
+    let _detail = common::detail_span("combat.recovering");
     let rec = common::scripts(ctx).num_of("combat_recover", skill, 0.0).max(0.0) as u64;
     let until = now + rec;
     if rec > 0 {
@@ -378,6 +380,7 @@ pub fn act_until(ctx: &ReducerContext, id: u32, until: u64) {
 /// Health changed (a blow, a heal): the band others see follows, written only when it moves;
 /// a first blow gives the character its `fighter` row.
 pub fn refresh_band(ctx: &ReducerContext, id: u32, now: u64) {
+    let _detail = common::detail_span("combat.band");
     crate::perception::health_moved(ctx, id, now);
     let b = band_now(ctx, id, now);
     match ctx.db.fighter().id().find(id) {
@@ -452,6 +455,7 @@ pub fn accepted(ctx: &ReducerContext, a: &Activity, now: u64) {
 }
 
 pub fn released(ctx: &ReducerContext, actor: u32, skill: &str, now: u64) {
+    let _detail = common::detail_span("combat.released");
     if let Some(mut u) = open_use(ctx, actor, skill) {
         u.released_ms = now;
         ctx.db.skill_use().id().update(u);
@@ -460,6 +464,7 @@ pub fn released(ctx: &ReducerContext, actor: u32, skill: &str, now: u64) {
 
 /// What happened (or why it was refused or broken off).
 pub fn outcome(ctx: &ReducerContext, actor: u32, skill: &str, text: &str, now: u64) {
+    let _detail = common::detail_span("combat.outcome");
     if let Some(mut u) = open_use(ctx, actor, skill) {
         u.outcome = if text.is_empty() { "done".into() } else { text.chars().take(200).collect() };
         u.outcome_ms = now;

@@ -83,7 +83,7 @@ Every field present must hold for the same perceived thing.
 
 The first-sight laws (`first_sight_thinks`, `first_sight_gap_s`) are a separate attention law: a first sight of someone one cannot place asks one thought ([First sight](FIRST_SIGHT.md)). A cue and a first sight of the same person in one look are one request.
 
-All are script laws (`skills.rhai`, `script.rs` `Laws`), switched at runtime by `set_world_law`, and described by `laws_about`.
+All are script laws (`skills.rhai`, `script.rs` `Laws`), switched at runtime by `set_world_law`, and described by `law_about`.
 
 ## What the prompt says
 

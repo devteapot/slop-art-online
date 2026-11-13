@@ -41,6 +41,7 @@ pub fn practice_of(ctx: &ReducerContext, id: u32) -> std::collections::BTreeMap<
 
 /// One more successful use of a skill.
 pub fn practise(ctx: &ReducerContext, id: u32, skill: &str) {
+    let _detail = detail_span("common.practise");
     if !living_rules::genes::is_skilled(skill) {
         return;
     }
@@ -113,7 +114,15 @@ pub fn diag<K: Into<std::borrow::Cow<'static, str>>>(key: impl FnOnce() -> K, n:
 
 /// One line a second while profiling: the counts since the last report.
 pub fn report_diag() {
+    // The rules' script call counts (`living_rules::script::calls`), taken every second so a
+    // window's first report holds only that second's calls.
+    let calls = living_rules::script::calls::take();
     if PROFILE.with(|p| p.get()) {
+        for (k, n) in [("eval:script_calls", calls[0]), ("eval:status_calls", calls[1]), ("eval:status_memo", calls[2]), ("eval:status_run", calls[3])] {
+            if n > 0 {
+                diag(|| k, n);
+            }
+        }
         let m = DIAG.with(|d| std::mem::take(&mut *d.borrow_mut()));
         if !m.is_empty() {
             log::info!("diag: {}", serde_json::to_string(&m).unwrap_or_default());
@@ -722,25 +731,8 @@ pub fn dist(a: (f32, f32), b: (f32, f32)) -> f32 {
     ((a.0 - b.0).powi(2) + (a.1 - b.1).powi(2)).sqrt()
 }
 
-pub fn direction(from: (f32, f32), to: (f32, f32)) -> &'static str {
-    let dx = to.0 - from.0;
-    let dy = to.1 - from.1;
-    if dx.abs() < 0.5 && dy.abs() < 0.5 {
-        return "here";
-    }
-    let a = dy.atan2(dx).to_degrees();
-    // Screen coordinates: +y is south.
-    match a {
-        a if (-22.5..22.5).contains(&a) => "east",
-        a if (22.5..67.5).contains(&a) => "southeast",
-        a if (67.5..112.5).contains(&a) => "south",
-        a if (112.5..157.5).contains(&a) => "southwest",
-        a if (-67.5..-22.5).contains(&a) => "northeast",
-        a if (-112.5..-67.5).contains(&a) => "north",
-        a if (-157.5..-112.5).contains(&a) => "northwest",
-        _ => "west",
-    }
-}
+/// The scene's compass word (one source with the mind's place lists: `living_rules::bearing`).
+pub use living_rules::bearing::direction;
 
 // ---- needs ---------------------------------------------------------------------
 
@@ -1442,6 +1434,7 @@ pub fn scent_of(kind: &str) -> Option<living_rules::species::Scent> {
 }
 
 pub fn chronicle(ctx: &ReducerContext, now: u64, kind: &str, a: u32, b: u32, at: (f32, f32), text: String) {
+    let _detail = detail_span("common.chronicle");
     // The same event repeated within two minutes becomes one entry with a count.
     let recent: Vec<Chronicle> = ctx.db.chronicle().at_ms().filter(now.saturating_sub(120_000)..).collect();
     for mut c in recent.into_iter().rev().take(40) {
@@ -1466,6 +1459,7 @@ thread_local! {
 /// Wake `id`, a bystander of what it just saw (not party to it): at once unless it was woken by
 /// what it saw within `witness_wake_ms`, else when that window ends (`due_bystander_wakes`). A
 /// party to the event is woken by `wake`, at once.
+#[track_caller]
 pub fn wake_bystander(ctx: &ReducerContext, id: u32, now: u64) {
     let ms = laws(ctx).witness_wake_ms as u64;
     if ms == 0 {
@@ -1511,8 +1505,12 @@ pub fn due_bystander_wakes(ctx: &ReducerContext, now: u64) {
     }
 }
 
+/// While profiling, each wake is counted under where it was asked from (`wake@act.rs:1540`).
+#[track_caller]
 pub fn wake(ctx: &ReducerContext, id: u32) {
     diag(|| "wake", 1);
+    let at = std::panic::Location::caller();
+    diag(|| format!("wake@{}:{}", at.file().rsplit('/').next().unwrap_or(""), at.line()), 1);
     if ctx.db.wake().id().find(id).is_none() {
         ctx.db.wake().insert(Wake { id });
     }
