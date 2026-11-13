@@ -159,6 +159,16 @@
    "at": 1.0,
    "steps": [
     {
+     "do": "vitals",
+     "who": "subject",
+     "hp": "max"
+    },
+    {
+     "do": "vitals",
+     "who": "foe",
+     "hp": "max"
+    },
+    {
      "do": "place",
      "who": "foe",
      "to": {
@@ -416,6 +426,16 @@
   {
    "at": 11.0,
    "steps": [
+    {
+     "do": "vitals",
+     "who": "subject",
+     "hp": "max"
+    },
+    {
+     "do": "vitals",
+     "who": "foe",
+     "hp": "max"
+    },
     {
      "do": "place",
      "who": "foe",
@@ -675,6 +695,16 @@
    "at": 14.0,
    "steps": [
     {
+     "do": "vitals",
+     "who": "subject",
+     "hp": "max"
+    },
+    {
+     "do": "vitals",
+     "who": "foe",
+     "hp": "max"
+    },
+    {
      "do": "place",
      "who": "foe",
      "to": {
@@ -933,6 +963,16 @@
    "at": 23.0,
    "steps": [
     {
+     "do": "vitals",
+     "who": "subject",
+     "hp": "max"
+    },
+    {
+     "do": "vitals",
+     "who": "foe",
+     "hp": "max"
+    },
+    {
      "do": "place",
      "who": "foe",
      "to": {
@@ -1190,6 +1230,16 @@
   {
    "at": 26.0,
    "steps": [
+    {
+     "do": "vitals",
+     "who": "subject",
+     "hp": "max"
+    },
+    {
+     "do": "vitals",
+     "who": "foe",
+     "hp": "max"
+    },
     {
      "do": "place",
      "who": "foe",
