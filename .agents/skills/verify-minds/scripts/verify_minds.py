@@ -2021,7 +2021,12 @@ def sissly_scene_case(run):
     rows_a = [r['text'] for r in run.private(f'SELECT * FROM experience WHERE observer = {agnes}', 'experiences-agnes') if 'Verify Agnes line' in r['text']]
     agnes_turn = next((sent_text(e) for e in requests() if e['purpose'] == 'talk' and 'naming you' in sent_text(e)), '')
     (run.directory / 'prompt-agnes.txt').write_text(agnes_turn)
-    time.sleep(3.0)
+    # A reply waits until the line it answers has had time to be said (`saying_ms`).
+    if agnes_turn:
+        try:
+            run.wait(lambda: said_by(agnes, 'Verify Agnes: yes'), "Agnes's line", 20)
+        except Exception:
+            pass  # checked below
     checks = {
         'stale_plan_line_not_said': not stale_said,
         'turn3_not_forced_last_word': bool(user3) and 'make this your last word' not in user3,
@@ -2132,6 +2137,74 @@ def spoken_ids_case(run):
     }
     result = {'actor': actor, 'other': other, 'said': said, 'spoken_as': spoken_as['text'], 'journaled': journaled[0], 'checks': checks}
     (run.directory / 'spoken-ids.json').write_text(json.dumps(result, indent=2, ensure_ascii=False))
+    assert all(checks.values()), checks
+    return {'status': 'pass', **result}
+
+
+@case('named-room-call')
+def named_room_call_case(run):
+    """A room line or call naming exactly one hearer is theirs to answer (talk-named-room, after
+    ew2's Petra case). P (not thought for) calls to the room; N (thought for) stands 5 m away and
+    D (thought for) 19 m away, within a call's carry and beyond a said line's. D is in a
+    conversation with P (P's line to D, D's reply), so a room line would give D a turn.
+
+    1. Control: P calls to the room naming no one; D, talking with P, takes a turn.
+    2. P calls to the room naming N by given name ("Verify call: <N>! Come to the smokehouse.").
+       N's row reads "…, naming you, from about 5 m"; D's names N. N takes the turn; D, though
+       still talking with P, takes none."""
+    run.harness('launch')
+    run.harness('doctor')
+    before = {c['id'] for c in run.sql('SELECT id FROM character', 'ids-before')}
+    run.admin('spawn_crowd', 3, True)
+    p, n, d = sorted(x['id'] for x in run.sql('SELECT id FROM character', 'ids-after') if x['id'] not in before)
+    names = {x['id']: x['name'] for x in run.sql('SELECT id, name FROM character', 'names')}
+    for who in (p, n, d):
+        run.admin('set_behavior', who, json.dumps({'wait': 300}))
+    line = open_line(run, 28)
+    run.admin('place_at', p, *line[2])
+    run.admin('place_at', n, *line[7])
+    run.admin('place_at', d, *line[21])
+    time.sleep(1.5)
+    talk = lambda marker, reply: {'purpose': 'talk', 'contains': marker, 'times': 1, 'reply': {'thought': 'verify talk', 'acts': [], **reply}}
+    script = {'replies': {'think': {'thought': 'I look around.', 'intend': ['wait'], 'say': None}, 'deliberate': basic_reply(),
+                          'talk': {'thought': 'I listen.', 'say': '', 'to': 0, 'acts': [], 'end': True, 'settled': None}},
+              # The first matching rule wins: any turn on the named call answers it; D's own turns
+              # (its name is in its prompt only: the three do not know each other) answer the chat,
+              # then the unnamed call; N's turn on the unnamed call (the only one within 6 m) is silent.
+              'rules': [talk('smokehouse', {'say': 'Verify answer to the named call.', 'to': p, 'end': False, 'settled': None}),
+                        talk(names[d], {'say': 'Verify D: yes, what is it?', 'to': p, 'end': False, 'settled': None}),
+                        talk(names[d], {'say': 'Verify D: I am here.', 'to': p, 'end': False, 'settled': None})]}
+    run.start(model(run, script), [n, d])
+    say = lambda text, to, way='say': run.admin('mind_say', p, text, to, way, 0, TALK_THOUGHT)
+    chron = lambda: run.private("SELECT * FROM chronicle WHERE kind = 'speech'", 'chronicle-speech')
+    said_by = lambda who, words: any(x['a'] == who and words in x['text'] for x in chron())
+    dist = round(math.dist(line[2], line[21]), 1)
+    # D and P talk (P walks to D to say it, then back: a said line carries 9 m).
+    run.admin('place_at', p, *line[19])
+    time.sleep(1.0)
+    say('verify chat: a word, D?', d)
+    run.wait(lambda: said_by(d, 'Verify D: yes'), 'D answers P', 40)
+    run.admin('place_at', p, *line[2])
+    time.sleep(2.6)
+    say('Verify call: anyone about?', 0, 'call')
+    control = bool(run.wait(lambda: said_by(d, 'Verify D: I am here'), 'D answers the unnamed call', 30))
+    time.sleep(7.0)
+    first = names[n].split()[0]
+    say(f'Verify call: {first}! Come to the smokehouse.', 0, 'call')
+    n_turn = bool(run.wait(lambda: said_by(n, 'Verify answer to the named call'), 'N answers the named call', 30))
+    time.sleep(6.0)
+    d_turn = said_by(d, 'Verify answer to the named call')
+    rows = {who: [r['text'] for r in run.private(f'SELECT * FROM experience WHERE observer = {who}', f'experiences-{who}') if 'smokehouse' in r['text']] for who in (n, d)}
+    checks = {
+        'd_is_within_a_call_beyond_a_said_line': 9.0 < dist <= 22.5,
+        'control_d_answers_an_unnamed_room_call': control,
+        'n_row_names_n': any(', naming you' in t for t in rows[n]),
+        'd_row_names_one_other': any('to the room, naming ' in t and ', naming you' not in t for t in rows[d]),
+        'n_takes_the_turn': n_turn,
+        'd_takes_none': not d_turn,
+    }
+    result = {'p': p, 'n': n, 'd': d, 'dist_d': dist, 'rows': rows, 'checks': checks}
+    (run.directory / 'named-room-call.json').write_text(json.dumps(result, indent=2, ensure_ascii=False))
     assert all(checks.values()), checks
     return {'status': 'pass', **result}
 
