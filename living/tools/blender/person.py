@@ -265,6 +265,12 @@ def make_armature():
         for n, pos in cage_head.rig_pivots(HF).items():
             JOINTS[n] = tuple(hw(pos))
             PARENT[n] = cage_head.RIG_PARENT[n]
+        # The fringe's bone (hair.py, fringe_line): a style's fringe hangs from it, and a type's
+        # file stands it where that type's own fringe ends (hair_fit.py). Under the forehead's
+        # bone, so a person's fuller or flatter forehead carries it. No clip and no identity
+        # value moves it.
+        JOINTS[hair.FRINGE_BONE] = tuple(hw(hair.fringe_point(HF)))
+        PARENT[hair.FRINGE_BONE] = "J_Id_Forehead"
     for n in [n for n in JOINTS if n.startswith("J_Bip_L_")]:
         x, y, z = JOINTS[n]
         JOINTS[mirror_name(n)] = (-x, y, z)
@@ -1527,11 +1533,20 @@ def make_hair(arm, spec, pos, quads, covered=None, bones=None):
     names = add_spring_bones(arm, h.chains) if bones is None else {i: bones.get(i) for i, c in enumerate(h.chains) if bones.get(i)}
     if bones is None:
         back_spheres(h, back, thick, names)
-    for p_, c_, uv_, ch, al in zip(h.v, h.col, h.uv, h.chain, h.along):
+    # On a face type's head a fringe hangs from its own bone by how far below the hairline it is
+    # (hair.fringe_share); the rest of each vertex stays the head's, shared out over the identity
+    # bones afterwards (spread_head_weights).
+    fringe = hair.fringe_share(HF, hairline, h.v) if TYPED and len(h.v) else np.zeros(len(h.v))
+    for p_, c_, uv_, ch, al, fr in zip(h.v, h.col, h.uv, h.chain, h.along, fringe):
         verts.append(hw(p_))
         cols.append(tuple(c_))
         uvs.append(tuple(uv_))
-        weights.append(chain_weights(names[ch], h.chains[ch]["step"] * HEAD_SCALE, al * HEAD_SCALE) if ch >= 0 and names.get(ch) else {"J_Bip_C_Head": 1.0})
+        if ch >= 0 and names.get(ch):
+            weights.append(chain_weights(names[ch], h.chains[ch]["step"] * HEAD_SCALE, al * HEAD_SCALE))
+        elif fr > 0.004:
+            weights.append({"J_Bip_C_Head": 1.0 - float(fr), hair.FRINGE_BONE: float(fr)} if fr < 0.996 else {hair.FRINGE_BONE: 1.0})
+        else:
+            weights.append({"J_Bip_C_Head": 1.0})
     lock_faces = [tuple(base + i for i in f) for f in h.f]
     ob = raw_object("Hair", verts, faces + lock_faces, weights, cols, MAT["hair"], arm, uvs=uvs)
     orient_islands(ob, skip=len(faces))
@@ -1539,6 +1554,10 @@ def make_hair(arm, spec, pos, quads, covered=None, bones=None):
     # shared style's tint toward the person's silver by it. The scalp's cap is a middling lock.
     mask = ob.data.attributes.new("_GREY", "FLOAT", "POINT")
     mask.data.foreach_set("value", np.concatenate([np.full(base, person_params.grey_mask(0.5)), np.asarray(h.grey, float)]).astype(np.float32))
+    # How much of the head's light ring each vertex takes (`_RING`, hair.ring_mask): none on a
+    # fringe, at a lock's tip or on the sides that face the head. The scalp's cap takes it whole.
+    ring = ob.data.attributes.new("_RING", "FLOAT", "POINT")
+    ring.data.foreach_set("value", np.concatenate([np.ones(base), hair.ring_mask(HF, hairline, h.v, h.nrm, 1.0 - h.uv[:, 1], h.along) if len(h.v) else np.zeros(0)]).astype(np.float32))
     # Shading normals: the cap's are the head's, the locks' their own (hair.py).
     normals = [tuple(head_normal(np.array(p_)[None, :])[0]) for p_ in cp] + [None] * len(extra)
     for i, k in extra.items():
@@ -2512,6 +2531,20 @@ def spread_head_weights(obs):
                 vg = groups.get(n) or ob.vertex_groups.get(n) or ob.vertex_groups.new(name=n)
                 groups[n] = vg
                 vg.add([i], w * x, "ADD")
+        # A file keeps four bones a vertex. A fringe's vertex has its own bone as well as the
+        # identity bones': the smallest shares go, and the rest are made whole again.
+        fb = ob.vertex_groups.get(hair.FRINGE_BONE)
+        if fb is not None:
+            for i in idx:
+                gs = sorted(((x.weight, x.group) for x in me.vertices[i].groups if x.weight > 0), reverse=True)
+                if len(gs) > 4 and any(g_ == fb.index for _, g_ in gs):
+                    keep = [(w_, g_) for w_, g_ in gs if g_ == fb.index] + [(w_, g_) for w_, g_ in gs if g_ != fb.index][:3]
+                    total = sum(w_ for w_, _ in gs)
+                    kept = sum(w_ for w_, _ in keep)
+                    for w_, g_ in gs:
+                        ob.vertex_groups[g_].remove([i])
+                    for w_, g_ in keep:
+                        ob.vertex_groups[g_].add([i], w_ * total / kept, "REPLACE")
 
 
 def bake_identity(obs, values):

@@ -253,7 +253,7 @@ A person is a small JSON object. Every value is optional.
 | `hair.grey` | 0 to 1; hair greys lock by lock before it greys all over | rises from about 36 |
 | `hair.length` | metres the hair hangs below the hairline over the ear (`shag`, `bob`, `bob_parted`, `long`, `tail`, `braid`, `braids`), or a bun's size. For the short styles it scales the hairs' own length round 0.07 | by style: a bob 0.05 to 0.11, long hair 0.20 to 0.36, a tail 0.10 to 0.28 |
 | `hair.parting` | -1 to 1: where the hair parts, from the character's right to the left, 0 the middle. A swept fringe falls away from it | normal round 0 |
-| `hair.fringe` | 0 none to 1 at the brows (up to 1.3, over the eyes) | 0.5 to 1.05; grown men 0.3 to 0.9 |
+| `hair.fringe` | 0 none; otherwise how full a fringe: it ends 0.86 of the way from the hairline to the brows at the least, and just above the brows at 1 ([the fringe per type](#the-fringe-per-type)) | 0.5 to 1.05; grown men 0.3 to 0.9 |
 | `hair.fringe_style` | `auto` (the style's own), `straight`, `swept`, `curtain` | `auto` |
 | `hair.volume` | 0 flat to 1 full: how far locks stand off the head and how thick they are | 0.25 to 0.85 |
 | `hair.curl` | 0 straight to 1 curly: waves along each lock | mostly straight (mean about 0.2) |
@@ -1677,7 +1677,7 @@ Pass 3, 2026-11-12. Six things, in the order they were asked for.
 
 **1. No fringe covers a brow** (`hair.py` `fringe_line`). A fringe ended at the head's own brow line, and since [the brows' place](#the-brows-place) the brows are drawn above that: on a third of the cast's faces the fringe covered them.
 
-- **A full fringe now ends 4 mm above the top of the highest brow any face type has.** A shared style is one mesh for every type, and the types' brows sit at different heights (the highest brow's top is 1.2 cm above the lowest's), so the line is the highest's. On a type with lower brows a full fringe ends up to 1.2 cm above them.
+- **A full fringe now ends 4 mm above the top of the highest brow any face type has** (until 2026-11-13: [the fringe per type](#the-fringe-per-type) gives each type its own line). A shared style is one mesh for every type, and the types' brows sit at different heights (the highest brow's top is 1.2 cm above the lowest's), so the line is the highest's. On a type with lower brows a full fringe ends up to 1.2 cm above them.
 - **A person's own hair takes the same line,** so their own file and the composed person agree.
 - **`hair.fringe` above 1 no longer goes over the eyes:** it is held at 1.
 
@@ -2072,7 +2072,7 @@ python3 living/tools/characters/reference/hand.py living/game/assets/lookdev/typ
 
 - **The hand is a table of shares of its own length,** read from the reference: each finger's first joint, its three bones, its radius and its splay; the thumb's root, bones, splay and slope; the palm's stations. `make_hand` and `finger_joints` build from it. The far model's mitten follows the same lengths.
 - **The hand's size is left as it was:** a man's 22.2 cm (`HAND_LEN`; 0.88 of a head as measured now, 0.87 before), a woman's the line's `hands`, 0.75 of that: 0.66 of a head. A size is a proportion, and a woman's is in her line; a smaller hand for men or women would change every line's key and need another generation and another relook. I built it once at 20 cm for a man (0.79 of a head) and took it back for that reason. **It is a decision for the owner:** if men's hands are to be a living man's, it is `HAND_LEN` 0.195 and `hands` 0.86 for women, with a new generation.
-- **No line changes with this part,** so the book stays at `c4-e61b01c0` and no world needs a relook for it. A line's outfit colour was measured on the built person, shading included, and the new hands shade a cuff a little differently: the 64 residents built again measure one level of 255 off in one outfit colour (the jersey under a smock or a coat, mostly) on 82 of their 151 lines, and through the paint rule 507 of the book's 791 worn lines come out a level off. Nothing else differs. The book is not made again for a level nobody can see; the bundle's check now makes the book again into a scratch file and fails on anything but an outfit colour one level off. The next generation takes the new measures with whatever else it carries.
+- **No line changes with this part,** so the book stays at `c4-e61b01c0` and no world needs a relook for it. A line's outfit colour was measured on the built person, shading included, and the new hands shade a cuff a little differently: the 64 residents built again measure one level of 255 off in one outfit colour (the jersey under a smock or a coat, mostly) on 82 of their 151 lines, and through the paint rule 507 of the book's 791 worn lines come out a level off. Nothing else differs. The book is not made again for a level nobody can see. **The rule for a rebuild against the committed book** (`living/tools/characters/book_drift.py`, run by the bundle step): the book is made again from the built residents into a scratch file, never in place, and each worn line may differ from the committed one in an outfit colour by one level of 255 at most; every other field, the words and the decor lines but for their outfit colours must be exact, or the bundle is not built. The next generation takes the new measures with whatever else it carries.
 - **Another size, to look at:** `PERSON_HAND_LEN=0.200 living/tools/blender/gen_person.sh man20=man` builds a man with a 20 cm hand (0.79 of a head) for a board. It moves the finger joints, so such a file is never a shared one: `skeleton_check.py` fails on it, and it is deleted after its photographs. `character:body-hands` shows a man at 22.2 cm and at 20 cm beside the reference.
 - **Pose.** At rest the fingers fan and slope as the reference's do. The clips already curl the fingers (`animate.py`: 18° in the relaxed poses, more on a grip) and are not changed; on the new rest they give the reference's relaxed hand, where on flat parallel pegs they gave a bent paddle.
 - **This changes the rest skeleton:** the 30 finger joints of the two hands, and nothing else. So every file is built again on it (the 21 types, 74 hair files, 28 outfit pieces, 72 overlays), and the clips are baked again: the dev-box's clip file for this part has 84 clips, from `~/archive/clip-library`. `skeleton_check.py` passes on the set (267 files), `cloth_check.py` on the 64 residents and 23 test lines at rest, in idle and in the walk, and `brow_check.py` on the 21 types and the book.
@@ -2092,6 +2092,79 @@ python3 living/tools/characters/reference/hand.py living/game/assets/lookdev/typ
 6. **The far model's hand** is still a mitten with a stub of a thumb.
 
 The board: `character:body-hands` (before and after close up and full figure, the outline over the reference's, a man's hand at two sizes), `character:cast-64` and the six preset families.
+
+### The fringe per type
+
+2026-11-13, branch `char-4-fringe`, on top of [the hands](#the-body-hands). On many of the cast's faces the fringe ended well above the brows and left a large bare forehead; the reference's fringe ends at or just over the brows.
+
+**What was measured** (`living/tools/characters/fringe_check.py`: each style put on each type the client's way, and where its hair ends over the middle of the forehead against that type's brows' top):
+
+1. **One line for every type.** Since [the hair pass](#the-hair-pass) a full fringe ended 4 mm above the highest brow any type has. The types' brows' tops are 1.2 cm apart, so the fullest fringe (`bob.2`) ended from 1.3 mm below the brows' top (`elder-m-c`) to 11.2 mm above it (`child-u-b`).
+2. **Most fringes stopped in the middle of the forehead.** A fringe came `hair.fringe` of the way from the hairline to the line, and people draw 0.3 to 1.05: on the standard head only the three `bob` files ended within 13 mm of the brows. The cast's commonest styles ended far above: `tousled` 49 to 64 mm, `short` 50 to 62, `braid` 33 to 51, with a forehead 77 mm high from the brows' top to the hairline. This was the larger part of what showed.
+
+**What changed.**
+
+- **The line is each head's own** (`hair.py` `fringe_line`): `FRINGE_OVER`, 3 mm, above the top of that head's brows. A fringe's points end a little under their line, so the fullest ends 1.2 mm above the brows' top.
+- **A fringe hangs from a bone, `J_Hair_Fringe`** (`hair.FRINGE_BONE`), a child of `J_Id_Forehead` in every type's and every person's skeleton. A hair vertex follows it by how far below the hairline it is (`hair.fringe_share`): nothing at the hairline, all of it at the line and below, over the forehead only (in full to 48° round from the front, none past 78°). The rest of the vertex's weight stays on the identity bones as before, four bones a vertex.
+- **A type's file stands that bone where its own line is** (`hair_fit.py`, `fringe` and `stand_fringe`). The bone's node is moved from where it is bound and its inverse bind matrix is left alone, by the move that takes the standard head's fringe point, laid on by the fit, to the type's own (`hair.fringe_point`: the forehead's front at the line). The move is also written as `extras.hair_fit.fringe.move` (the file's space, metres). It is 4.0 mm down (`child-u-b`) to 8.4 mm up (`elder-m-c`), and up to 3 mm forward or back.
+- **A style's fringe comes down to the line or there is none to speak of** (`Hair.fringe_reach`). `bob`, `shag`, `long`, `tail`, `bun`, `braid`, `braids` and `kerchief` take their fringe 0.86 to 1 of the way by the person's `hair.fringe`; `tousled` the same; `short` 0.74 to 0.92. `crop`, `swept`, `sides`, `balding` and a parted (curtain) fringe leave the middle of the forehead bare as before: that is the style.
+- **A person's own hair** is built to their own head's line directly, so their own file and the composed person agree.
+- **`_RING`,** one float a vertex on `Hair` and `FarHair` (`hair.ring_mask`), 0 to 1: how much of the head's light ring a vertex takes. 1 over the top and round the crown and on the scalp's cap; 0 on a fringe from where it leaves the hairline, on the last 3 cm of a lock before its tip, and on the sides of a lock or sheet that face the head. The client already reads it (`compose.rs` `ATTRIBUTE_RING`).
+
+**Why a bone in the type's file.** The three ways considered:
+
+- **A fringe cut per type** is 74 files for each of 21 types, or new style names in every line (new keys, a new generation).
+- **The line in the `hair_fit` matrix** cannot lower a fringe without tilting or shearing the whole head of hair.
+- **A bone** keeps one mesh a style, 74 files and every line's key. Standing it in the type's file, off its bind, needs nothing new from a client that attaches a style by bone name and binds it to the type's bind matrices: the client's `type_rest` is read from the type's inverse bind matrices, the scene's node is where the file puts it, and the difference is the move. `set_identity` moves only the rig's bones, so it leaves this one alone.
+
+**The numbers.** Heights are of the fringe's end above the type's brows' top; the middle style is the middle one of the 39 files whose hair comes within 4.5 cm of the brows.
+
+| Type | Brows' top above the head's origin | The bone's move: up, forward | Fullest fringe above the brows: before | after | Middle fringed style: before | after |
+|---|---|---|---|---|---|---|
+| `child-u-a` | 4.5 mm | -0.5, -0.5 mm | 7.7 mm | 1.2 mm | 36.2 mm | 17.8 mm |
+| `child-u-b` | 1.2 mm | -4.0, -2.1 mm | 11.2 mm | 1.2 mm | 36.8 mm | 18.5 mm |
+| `child-u-c` | 3.9 mm | -1.6, -1.0 mm | 8.8 mm | 1.2 mm | 34.5 mm | 18.1 mm |
+| `youth-f-a` | 8.7 mm | +3.4, +1.1 mm | 3.7 mm | 1.2 mm | 38.9 mm | 16.9 mm |
+| `youth-f-b` | 5.1 mm | -0.3, -0.1 mm | 7.4 mm | 1.2 mm | 42.7 mm | 17.6 mm |
+| `youth-f-c` | 8.1 mm | +2.7, -0.6 mm | 4.5 mm | 1.2 mm | 39.9 mm | 17.1 mm |
+| `youth-m-a` | 11.0 mm | +6.2, +1.5 mm | 0.9 mm | 1.3 mm | 36.5 mm | 16.1 mm |
+| `youth-m-b` | 7.8 mm | +2.9, +0.5 mm | 4.2 mm | 1.3 mm | 39.1 mm | 16.8 mm |
+| `youth-m-c` | 11.7 mm | +6.9, +0.3 mm | 0.3 mm | 1.3 mm | 36.0 mm | 16.1 mm |
+| `adult-f-a` | 8.9 mm | +3.7, +0.9 mm | 3.5 mm | 1.2 mm | 38.6 mm | 16.8 mm |
+| `adult-f-b` | 5.4 mm | +0.0, -0.0 mm | 7.2 mm | 1.2 mm | 42.4 mm | 17.6 mm |
+| `adult-f-c` | 8.3 mm | +2.9, -0.6 mm | 4.2 mm | 1.2 mm | 39.6 mm | 17.0 mm |
+| `adult-m-a` | 11.7 mm | +7.0, +2.5 mm | 0.1 mm | 1.3 mm | 35.6 mm | 15.9 mm |
+| `adult-m-b` | 8.1 mm | +3.4, +1.2 mm | 3.7 mm | 1.3 mm | 38.4 mm | 16.7 mm |
+| `adult-m-c` | 12.3 mm | +7.7, +1.0 mm | -0.6 mm | 1.3 mm | 35.3 mm | 15.9 mm |
+| `elder-f-a` | 5.4 mm | +0.3, +0.7 mm | 6.9 mm | 1.2 mm | 42.2 mm | 17.5 mm |
+| `elder-f-b` | 1.8 mm | -3.4, -0.3 mm | 10.5 mm | 1.2 mm | 35.9 mm | 18.3 mm |
+| `elder-f-c` | 5.0 mm | -0.0, -0.9 mm | 7.2 mm | 1.2 mm | 42.7 mm | 17.7 mm |
+| `elder-m-a` | 10.3 mm | +5.6, +3.0 mm | 1.5 mm | 1.3 mm | 37.0 mm | 16.2 mm |
+| `elder-m-b` | 6.7 mm | +2.0, +1.3 mm | 5.1 mm | 1.3 mm | 39.7 mm | 16.9 mm |
+| `elder-m-c` | 13.0 mm | +8.4, +1.7 mm | -1.3 mm | 1.3 mm | 34.5 mm | 15.7 mm |
+
+- On every type the fullest fringe ends 1.2 to 1.3 mm above the brows' top, and a style ends within 2.4 mm of where it ends on the standard head (it was 9.0): a fringe that stops short of the line follows the bone by its share.
+- The least a fringe stands before the face's skin, looking from the front, is 8.1 mm.
+
+**The cost.**
+
+| | Before | After |
+|---|---|---|
+| Bones in a type's file, and so a composed person's | 81 joints | 82 |
+| Joints in a hair file's skin | 81 (`long`: 102) | 82 (103) |
+| Vertices in the 74 hair files | 234,655 | 238,039 (+1.4%: the longer fringes) |
+| Triangles | 438,238 | 444,910 (+1.5%) |
+| Bones a vertex | 4 | 4 |
+| The 74 hair files | 23.30 MB | 24.59 MB (`_RING` is 0.94 MB of it) |
+| The 21 types' files | 22.27 MB | 22.27 MB (+0.3 kB each) |
+
+No line and no key changes: a line names its style, and the styles keep their names. Outfit pieces, overlays and the clip file are not built again (the body's bones are as they were; `skeleton_check.py` passes).
+
+**What the client needs:** nothing in code. Take the types and the hair files together: a new hair file on an old type's file adds the bone as one of its own, at the fit's place, and draws the fringe at the standard head's line.
+
+**The check.** `fringe_check.py LOOKDEV` fails if a type's file or a style lacks the bone, if a type's fullest fringe ends below its brows' top or more than 6 mm above, if a style ends more than 3 mm from where it ends on the standard head, or if a fringe's vertex is behind the face's skin. `--table` prints the measures for files from before the bone. `person_check.py` knows the bone's rule.
+
+**What still separates ours from the reference's fringe:** its locks are even triangles where the reference's are curved and of several lengths; `tousled` and `short` end 14 to 20 mm above the brows in the middle, where a notch of the hem falls, with their points lower at the sides; a person's own `brow_height` (2.4 mm down to 4.1 mm up) is not followed, so a full fringe can lie over the tops of high brows; from above, as the game's camera looks, a full fringe covers the brows' upper edge.
 
 ### The neck
 
@@ -2785,7 +2858,7 @@ What pass 2 proposed, in order of gain, and what became of it:
 
 **After the hair pass**, judged on the board's `hair-pass-short`, `hair-pass-long`, `hair-pass-motion` and `cast-64` sheets with the reference beside ours, ordered by how much it shows:
 
-1. **Hair, what is left.** The fringe's locks are even triangles where the reference's are curved and of several lengths. A full fringe ends well above the brows on the types whose brows are low. Long hair's ends still dip into the back in places on the idle clip.
+1. **Hair, what is left.** The fringe's locks are even triangles where the reference's are curved and of several lengths. (A fringe now ends just above the brows on every type: [the fringe per type](#the-fringe-per-type).) Long hair's ends still dip into the back in places on the idle clip.
 2. **The brows' edge and the glow's edge:** the reference's brow has a soft edge and notches at its inner end, and its glow is a hard-edged flame; ours are cut geometry and soft.
 3. **The eyes, close up:** the reference's band is a little heavier still and spiked along its whole top.
 4. **The jaw's line does not hold at a distance** (unchanged; a line in screen pixels is the client's).
