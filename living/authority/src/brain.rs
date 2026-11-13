@@ -2097,7 +2097,7 @@ impl<'a> Ev<'a> {
             top = top.max(s.id);
             if let Some(l) = &last {
                 if s.id <= l.max_structure && common::dist((l.x, l.y), (s.x, s.y)) <= l.r {
-                    if delta_check {
+                    if delta_check || check {
                         passed.push(s.id);
                     }
                     common::diag(|| "notice_delta:passed", 1);
@@ -2121,7 +2121,7 @@ impl<'a> Ev<'a> {
         }
         if delta_check && !passed.is_empty() {
             common::diag(|| "notice_delta:checked", passed.len() as u64);
-            let missing: Vec<u64> = passed.into_iter().filter(|id| ctx.db.familiar().by_actor_thing().filter((me, FAM_STRUCTURE | id)).next().is_none()).collect();
+            let missing: Vec<u64> = passed.iter().copied().filter(|id| ctx.db.familiar().by_actor_thing().filter((me, FAM_STRUCTURE | id)).next().is_none()).collect();
             if !missing.is_empty() {
                 common::diag(|| "notice_delta:differed", missing.len() as u64);
                 log::error!("notice_delta of {me}: passed over {missing:?}, which have no familiar row (they would have been new)");
@@ -2129,8 +2129,9 @@ impl<'a> Ev<'a> {
         }
         other.sort_by(|a, b| a.1.total_cmp(&b.1));
         if check {
-            let full: Vec<u64> = self.structures().iter().filter(|(s, _)| !lately(structure_key(s.id))).map(|(s, _)| s.id).collect();
-            let seen_n = self.structures().len() - full.len();
+            // The full list's split, less what the last look lets this one pass over (`delta`).
+            let full: Vec<u64> = self.structures().iter().filter(|(s, _)| !passed.contains(&s.id) && !lately(structure_key(s.id))).map(|(s, _)| s.id).collect();
+            let seen_n = self.structures().iter().filter(|(s, _)| !passed.contains(&s.id)).count() - full.len();
             common::diag(|| "notice_inplace:checked", 1);
             if full.iter().ne(other.iter().map(|(id, _)| id)) || seen_n != recent.len() {
                 common::diag(|| "notice_inplace:differed", 1);

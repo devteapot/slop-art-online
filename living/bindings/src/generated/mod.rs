@@ -135,6 +135,8 @@ pub mod land_info_type;
 pub mod land_plan_table;
 pub mod land_plan_type;
 pub mod land_table;
+pub mod last_look_table;
+pub mod last_look_type;
 pub mod law_change_table;
 pub mod law_change_type;
 pub mod leaf_result_type;
@@ -451,6 +453,8 @@ pub use land_info_type::LandInfo;
 pub use land_plan_table::*;
 pub use land_plan_type::LandPlan;
 pub use land_table::*;
+pub use last_look_table::*;
+pub use last_look_type::LastLook;
 pub use law_change_table::*;
 pub use law_change_type::LawChange;
 pub use leaf_result_type::LeafResult;
@@ -1291,6 +1295,7 @@ pub struct DbUpdate {
     knowledge_epoch: __sdk::TableUpdate<KnowledgeEpoch>,
     land: __sdk::TableUpdate<LandInfo>,
     land_plan: __sdk::TableUpdate<LandPlan>,
+    last_look: __sdk::TableUpdate<LastLook>,
     law_change: __sdk::TableUpdate<LawChange>,
     line_heard: __sdk::TableUpdate<LineHeard>,
     line_seen: __sdk::TableUpdate<LineSeen>,
@@ -1530,6 +1535,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "land_plan" => db_update
                     .land_plan
                     .append(land_plan_table::parse_table_update(table_update)?),
+                "last_look" => db_update
+                    .last_look
+                    .append(last_look_table::parse_table_update(table_update)?),
                 "law_change" => db_update
                     .law_change
                     .append(law_change_table::parse_table_update(table_update)?),
@@ -1940,6 +1948,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.land_plan = cache
             .apply_diff_to_table::<LandPlan>("land_plan", &self.land_plan)
             .with_updates_by_pk(|row| &row.id);
+        diff.last_look = cache
+            .apply_diff_to_table::<LastLook>("last_look", &self.last_look)
+            .with_updates_by_pk(|row| &row.id);
         diff.law_change = cache
             .apply_diff_to_table::<LawChange>("law_change", &self.law_change)
             .with_updates_by_pk(|row| &row.id);
@@ -2329,6 +2340,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "land_plan" => db_update
                     .land_plan
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "last_look" => db_update
+                    .last_look
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "law_change" => db_update
                     .law_change
@@ -2730,6 +2744,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "land_plan" => db_update
                     .land_plan
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "last_look" => db_update
+                    .last_look
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "law_change" => db_update
                     .law_change
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -3030,6 +3047,7 @@ pub struct AppliedDiff<'r> {
     knowledge_epoch: __sdk::TableAppliedDiff<'r, KnowledgeEpoch>,
     land: __sdk::TableAppliedDiff<'r, LandInfo>,
     land_plan: __sdk::TableAppliedDiff<'r, LandPlan>,
+    last_look: __sdk::TableAppliedDiff<'r, LastLook>,
     law_change: __sdk::TableAppliedDiff<'r, LawChange>,
     line_heard: __sdk::TableAppliedDiff<'r, LineHeard>,
     line_seen: __sdk::TableAppliedDiff<'r, LineSeen>,
@@ -3212,6 +3230,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         );
         callbacks.invoke_table_row_callbacks::<LandInfo>("land", &self.land, event);
         callbacks.invoke_table_row_callbacks::<LandPlan>("land_plan", &self.land_plan, event);
+        callbacks.invoke_table_row_callbacks::<LastLook>("last_look", &self.last_look, event);
         callbacks.invoke_table_row_callbacks::<LawChange>("law_change", &self.law_change, event);
         callbacks.invoke_table_row_callbacks::<LineHeard>("line_heard", &self.line_heard, event);
         callbacks.invoke_table_row_callbacks::<LineSeen>("line_seen", &self.line_seen, event);
@@ -4069,6 +4088,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         knowledge_epoch_table::register_table(client_cache);
         land_table::register_table(client_cache);
         land_plan_table::register_table(client_cache);
+        last_look_table::register_table(client_cache);
         law_change_table::register_table(client_cache);
         line_heard_table::register_table(client_cache);
         line_seen_table::register_table(client_cache);
@@ -4200,6 +4220,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "knowledge_epoch",
         "land",
         "land_plan",
+        "last_look",
         "law_change",
         "line_heard",
         "line_seen",
