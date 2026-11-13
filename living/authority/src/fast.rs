@@ -44,6 +44,7 @@ fn served(ctx: &ReducerContext, c: &Character) -> bool {
 
 /// A blow, shot or bolt reached `vc`: `felt` is its own line for it.
 pub fn struck(ctx: &ReducerContext, vc: &Character, felt: &str, now: u64) {
+    let _detail = common::detail_span("fast.struck");
     if common::laws(ctx).fast_lane_on && served(ctx, vc) {
         trigger(ctx, vc.id, felt, now);
     }

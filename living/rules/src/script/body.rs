@@ -444,13 +444,16 @@ impl Scripts {
         if !self.unary.contains("status_of") {
             return Ok(Rc::new(Vec::new()));
         }
+        super::calls::note(super::calls::STATUS_ASKED);
         let key = match self.status_reads() {
             Some(r) => b.key_reading(&r),
             None => b.key(),
         };
         if let Some(s) = self.body.memo.borrow().get(&key) {
+            super::calls::note(super::calls::STATUS_MEMO);
             return Ok(s.clone());
         }
+        super::calls::note(super::calls::STATUS_RUN);
         let d = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "status_of", (b.map(),)).map_err(|e| format!("status_of: {e}"))?;
         let s = Rc::new(read_status(d)?);
         let mut memo = self.body.memo.borrow_mut();
