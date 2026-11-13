@@ -1960,24 +1960,78 @@ def animals_case(run):
     herd decides on its own, in its own `choose` call, and the graph built from its own pick is
     installed; `pack` in the switch list (retired 2026-11-12, docs/PACK_MIND.md: one animal's
     decision copied to the others it saw was shared hidden state) changes nothing; asked again
-    with nothing new, the lead lives by instinct without a call (salient)."""
+    with nothing new, the lead lives by instinct without a call (salient).
+
+    Staging (fix-animals-race, 2026-11-12): the case's three deer are chosen among adults with no
+    request to think pending, every other deer is held still and moved off the herd's ground, the
+    three graze twice before the mind starts, and a call counts as a deer's only when its prompt's
+    scene is that deer's own (`you.id`). Races made it flaky on main: a deer outside the three
+    courted one of them ("asked to start a family"); the three already had requests pending from
+    their own instincts ("My actions keep failing (a child is already on the way)"); a deer's own
+    later re-think (its one-step flight over, "Nothing in my current plan works") landed as the
+    lead was asked again and was counted as the lead's; the lead's flight ended at the edge of its
+    sight of the person, so at 240 s the person was gone from its scene, which is news; and a lead
+    that started near hunger 30 crossed 50 in the four minutes, news too. Before the lead's
+    throttle ends the three stand still and the person stands 4 m from the lead again."""
     run.harness('launch')
     run.harness('doctor')
     person = next(p for p in sorted(run.sql("SELECT * FROM character WHERE kind = 'person'", 'people'), key=lambda p: p['id']) if p['alive'] and p['stage'] == 2)
-    deer = [d['id'] for d in sorted(run.sql("SELECT * FROM character WHERE kind = 'deer'", 'deer'), key=lambda d: d['id']) if d['alive'] and d['stage'] == 2][:3]
-    assert len(deer) == 3
+    every = [d for d in sorted(run.sql("SELECT * FROM character WHERE kind = 'deer'", 'deer'), key=lambda d: d['id']) if d['alive']]
+    # Every deer stands still first, so none courts another or wanders in while the scene is set.
+    for d in every:
+        run.admin('set_behavior', d['id'], json.dumps({'wait': 300}))
+    time.sleep(2.0)
+    pending = {r['actor'] for r in run.sql('SELECT actor FROM deliberation', 'pending-before')}
+    deer = [d['id'] for d in every if d['stage'] == 2 and d['id'] not in pending][:3]
+    assert len(deer) == 3, ('three adult deer with nothing pending', [d['id'] for d in every], sorted(pending))
     # The herd stays where the lead deer grazes (in the open); the person comes to them.
     at = run.sql(f"SELECT x, y FROM body WHERE id = {deer[0]}", 'lead-at')[0]
     run.admin('set_behavior', person['id'], json.dumps({'wait': 300}))
     run.admin('place_at', person['id'], at['x'] + 3, at['y'])
     for i, d in enumerate(deer):
-        run.admin('set_behavior', d, json.dumps({'wait': 300}))
         run.admin('place_at', d, at['x'] + (i % 2), at['y'] + (i // 2))
+    # The other deer off the herd's ground (out of its sight), as the wolves are kept away below.
+    for d in every:
+        if d['id'] in deer:
+            continue
+        b = run.sql(f"SELECT x, y FROM body WHERE id = {d['id']}", f"deer-{d['id']}")
+        if not b or math.hypot(b[0]['x'] - at['x'], b[0]['y'] - at['y']) >= 40:
+            continue
+        for k in range(8):
+            v = k * math.pi / 4
+            run.admin('place_at', d['id'], at['x'] + 60 * math.cos(v), at['y'] + 60 * math.sin(v))
+            b = run.sql(f"SELECT x, y FROM body WHERE id = {d['id']}", f"deer-{d['id']}")
+            if b and math.hypot(b[0]['x'] - at['x'], b[0]['y'] - at['y']) >= 40:
+                break
+        else:
+            run.admin('kill', d['id'], 'verify: kept off the herd')
+    # Fed first: hunger rises about 22 over the case's four minutes, and a lead that starts near
+    # 30 crosses 50 meanwhile, which is news to the salience check. Two grazings take off 28.
+    for d in deer:
+        run.admin('set_behavior', d, json.dumps({'seq': [{'do': {'skill': 'graze'}}, {'do': {'skill': 'graze'}}, {'wait': 300}]}))
+    time.sleep(10.0)
+    for d in deer:
+        run.admin('set_behavior', d, json.dumps({'wait': 300}))
+    fed = {v['id']: round(v['hunger'], 1) for v in run.sql('SELECT id, hunger FROM vitals', 'fed') if v['id'] in deer}
+    assert fed.get(deer[0], 99) < 25, ('the lead fed below hunger 25 before the mind starts', fed)
     time.sleep(1.0)
+    still = sorted(r['actor'] for r in run.sql('SELECT actor FROM deliberation', 'pending-at-start') if r['actor'] in deer)
+    assert not still, ('nothing pending for the three when the mind starts', still)
     models = model(run, {})
     # `pack` is passed on purpose: it is retired and must not make one deer decide for another.
     run.start(models, deer, extra_env={'LIVING_ANIMAL_MINDS': 'salient,choose,pack', 'LIVING_ANIMAL_PACK_S': '120'})
     detail = lambda t: json.loads(t['detail']) if t['detail'] else {}
+
+    def caller(e):
+        """Whose call this is: the `you` of the scene in its prompt (`# Around you now`)."""
+        text = '\n'.join(str(m.get('content', '')) for m in (e.get('body') or {}).get('messages', []))
+        i = text.find('# Around you now\n')
+        try:
+            return json.loads(text[i:].split('\n')[1])['you']['id'] if i >= 0 else None
+        except (ValueError, KeyError, IndexError):
+            return None
+
+    calls = lambda purpose, who: [e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] == purpose and caller(e) == who]
     # A mind's install counts as having just thought: within its species' think_min_s (240 s)
     # the authority asks an animal only for urgent reasons, and every urgent reason is news to
     # its salience check. A fresh deer has not thought, so the first asks go through.
@@ -1997,8 +2051,8 @@ def animals_case(run):
         copied = [t for t in run.thoughts(d, f'copied-{d}') if detail(t).get('mode') == 'pack' or detail(t).get('by') not in (None, d)]
         assert not copied, (d, copied)
     chosen = [e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] == 'choose']
-    compiled = [e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] == 'deliberate']
-    assert len(chosen) == 3 and not compiled, (len(chosen), len(compiled))
+    counts = {d: (len(calls('choose', d)), len(calls('deliberate', d))) for d in deer}
+    assert all(counts[d] == (1, 0) for d in deer), ('one call each, its own', counts)
     # No prompt tells an animal that others will do what it picks.
     assert not any('Your pack' in json.dumps(e) for e in chosen), 'a choose prompt still speaks for a pack'
     # The lead asked again with nothing new, once its thinking throttle (240 s after its chosen
@@ -2009,12 +2063,25 @@ def animals_case(run):
         b = run.sql(f'SELECT x, y FROM body WHERE id = {w}', f'wolf-{w}')
         if b and math.hypot(b[0]['x'] - at['x'], b[0]['y'] - at['y']) < 120:
             run.admin('kill', w, 'verify: kept away from the herd')
+    # Nothing new for the lead when its throttle ends: what it saw when it chose (the person 3 m
+    # off). Its picked plan, a flight, is over by now and has stopped working ("Nothing in my
+    # current plan works"), and the flight left it at the edge of its sight of the person (11 m,
+    # 12 kept), in or out by inches: a person out of sight is news to the salience check. So
+    # the three stand still and the person stands 4 m from the lead again, before the lead's own
+    # held request comes due at 240 s.
+    time.sleep(max(0.0, (first['at_ms'] + 228_000) / 1000 - time.time()))
+    for d in deer:
+        run.admin('set_behavior', d, json.dumps({'wait': 300}))
+    here = run.sql(f"SELECT x, y FROM body WHERE id = {lead}", 'lead-again-at')[0]
+    run.admin('place_at', person['id'], here['x'] + 4, here['y'])
     time.sleep(max(0.0, (first['at_ms'] + 245_000) / 1000 - time.time()))
     ask(lead, 'animal-again')
     run.wait(lambda: any(t['kind'] == 'instinct' for t in run.thoughts(lead, 'lead-again')), 'a request answered by instinct', 60)
-    assert len([e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] == 'choose']) == 3, 'nothing new: no call'
+    # The lead's own calls only: another deer may think again on its own by now (its plan over).
+    assert len(calls('choose', lead)) == 1, ('nothing new: no call by the lead', {d: len(calls('choose', d)) for d in deer})
     return {'status': 'pass', 'lead': lead, 'pick': d0['options'][d0['pick']], 'weight': d0.get('weight'), 'members': rest,
-            'own_decisions': {d: detail(t).get('pick') for d, t in own.items()}, 'model_calls_for_three_deer': 3}
+            'own_decisions': {d: detail(t).get('pick') for d, t in own.items()}, 'model_calls_for_three_deer': 3,
+            'later_calls': {d: len(calls('choose', d)) - 1 for d in deer}}
 
 
 @case('night')
