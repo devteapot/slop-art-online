@@ -21,6 +21,7 @@ use crate::common;
 use crate::seed::{self, Seed};
 use crate::tables::*;
 use living_rules::look::{self as rules, LookBand, LookBands};
+use living_rules::sex::Sex;
 use serde::Deserialize;
 use spacetimedb::{ReducerContext, Table};
 use std::cell::RefCell;
@@ -51,6 +52,35 @@ impl SeedLooks {
 
     fn has(&self, person: &str, band: LookBand) -> bool {
         self.people.get(person).is_some_and(|m| m.keys().any(|b| LookBand::parse(b) == Some(band)))
+    }
+
+    /// The body sex person entry `person`'s lines show (their words' `form`; "baby" shows none):
+    /// `Ok(None)` when none shows one, `Err` when two of its lines disagree.
+    pub fn entry_sex(&self, person: &str) -> Result<Option<Sex>, String> {
+        let mut found: Option<Sex> = None;
+        for k in self.people.get(person).into_iter().flat_map(|m| m.values()) {
+            let Some(s) = self.words.get(k).and_then(|w| living_rules::sex::of_form(&w.form)) else { continue };
+            match found {
+                Some(f) if f != s => return Err(format!("seed looks: {person}'s lines disagree on its sex (a {} line and a {} line)", f.name(), s.name())),
+                _ => found = Some(s),
+            }
+        }
+        Ok(found)
+    }
+
+    /// The pool entries a person of sex `sex` may wear (body-sex): those whose lines show that
+    /// sex, sorted; with no sex known (a world from before sex), the whole pool as it stands.
+    /// An entry whose lines show no sex is worn by no one who has one.
+    pub fn pool_for(&self, sex: Option<Sex>) -> Vec<&str> {
+        match sex {
+            None => self.pool.iter().map(|p| p.as_str()).collect(),
+            Some(x) => {
+                let mut v: Vec<&str> = self.pool.iter().map(|p| p.as_str()).filter(|p| self.entry_sex(p).ok().flatten() == Some(x)).collect();
+                v.sort_unstable();
+                v.dedup();
+                v
+            }
+        }
     }
 }
 
@@ -101,6 +131,7 @@ fn laws(ctx: &ReducerContext) -> (living_rules::life::Life, LookBands) {
 /// without `look` wears a pool entry. A resident naming a look in a seed without looks is
 /// refused.
 pub fn check(s: &Seed, sc: &living_rules::script::Scripts) -> Result<(), String> {
+    check_sex(s)?;
     let residents = s.towns.iter().chain(s.villages.iter()).flat_map(|t| t.residents.iter());
     let Some(l) = &s.looks else {
         if let Some(r) = residents.into_iter().find(|r| !r.look.is_empty()) {
@@ -132,6 +163,9 @@ pub fn check(s: &Seed, sc: &living_rules::script::Scripts) -> Result<(), String>
             }
         }
     }
+    for p in l.people.keys() {
+        l.entry_sex(p)?;
+    }
     for p in &l.pool {
         let Some(missing) = LookBand::ALL.iter().find(|b| !l.has(p, **b)) else { continue };
         if !l.people.contains_key(p) {
@@ -148,9 +182,39 @@ pub fn check(s: &Seed, sc: &living_rules::script::Scripts) -> Result<(), String>
         if !l.people.contains_key(&r.look) {
             return Err(format!("seed looks: {} wears {}, which is not among `people`", r.name, r.look));
         }
+        // A resident's own entry shows their sex (body-sex): no bearded woman, no old woman drawn
+        // for a man.
+        if let (Some(want), Ok(Some(shows))) = (Sex::parse(&r.sex), l.entry_sex(&r.look)) {
+            if want != shows {
+                return Err(format!("seed looks: {} is {} but wears {}, whose lines are {}", r.name, want.name(), r.look, shows.name()));
+            }
+        }
         let from = rules::band_at(&life, r.age, &bands);
         if let Some(b) = LookBand::ALL.iter().filter(|b| **b >= from).find(|b| !l.has(&r.look, **b)) {
             return Err(format!("seed looks: {} ({} years, {}) wears {}, which has no {} line", r.name, r.age, from.name(), r.look, b.name()));
+        }
+    }
+    Ok(())
+}
+
+/// A seed's body sexes (docs/LIVING_CORE.md, "Body sex"): a resident's or band member's `sex` is
+/// "f" or "m" when given; every resident gives it in an authored cast, which is a seed with
+/// `looks` or one where any resident gives it (the island, Cullet, aske-coast and plan-test).
+/// Other seeds' people take the world's pick.
+pub fn check_sex(s: &Seed) -> Result<(), String> {
+    let residents: Vec<&seed::SeedResident> = s.towns.iter().chain(s.villages.iter()).flat_map(|t| t.residents.iter()).collect();
+    if let Some(r) = residents.iter().find(|r| !r.sex.is_empty() && Sex::parse(&r.sex).is_none()) {
+        return Err(format!("seed sex: {} has sex `{}` (\"f\" or \"m\")", r.name, r.sex));
+    }
+    for b in &s.bands {
+        if let Some(m) = b.family.iter().find(|m| !m.sex.is_empty() && Sex::parse(&m.sex).is_none()) {
+            return Err(format!("seed sex: a member of band {} has sex `{}` (\"f\" or \"m\")", b.name, m.sex));
+        }
+    }
+    let authored = s.looks.is_some() || residents.iter().any(|r| !r.sex.is_empty());
+    if authored {
+        if let Some(r) = residents.iter().find(|r| r.sex.is_empty()) {
+            return Err(format!("seed sex: {} has no `sex` (\"f\" or \"m\"); every resident of an authored cast gives it", r.name));
         }
     }
     Ok(())
@@ -175,9 +239,10 @@ pub fn genesis(ctx: &ReducerContext, looks: Option<&SeedLooks>) {
     log::info!("looks: generation {}, {} person entries, {} lines, a pool of {}", l.generation, l.people.len(), ctx.db.look_line().count(), l.pool.len());
 }
 
-/// Give person `id` a look: `person` (a seeded resident's entry), else the pool's
-/// (`pool_pick(world seed, id, pool length)`). Nothing is written in a world without looks, for
-/// an animal, or when the entry has no line for the person's band now.
+/// Give person `id` a look: `person` (a seeded resident's entry), else the pool's: among the
+/// pool entries of their sex (`SeedLooks::pool_for`, sorted; body-sex), `pool_pick(world seed,
+/// id, that many)`. Nothing is written in a world without looks, for an animal, when no pool entry
+/// shows their sex, or when the entry has no line for the person's band now.
 pub fn assign(ctx: &ReducerContext, id: u32, person: Option<&str>, now: u64) {
     let Some(c) = ctx.db.character().id().find(id).filter(|c| c.alive && c.kind == "person") else { return };
     let person = match person {
@@ -185,8 +250,14 @@ pub fn assign(ctx: &ReducerContext, id: u32, person: Option<&str>, now: u64) {
         None => {
             let Some(l) = world_looks(ctx) else { return };
             let w = common::world(ctx);
-            let Some(i) = rules::pool_pick(w.seed, id, l.pool.len()) else { return };
-            l.pool[i].clone()
+            // Among the pool entries of the person's sex (body-sex), sorted: the same pick for
+            // the same world, id and sex.
+            let pool = l.pool_for(crate::sex::of(ctx, id));
+            let Some(i) = rules::pool_pick(w.seed, id, pool.len()) else {
+                log::warn!("look: {} (#{id}) has no pool entry of their sex: no look", c.name);
+                return;
+            };
+            pool[i].to_string()
         }
     };
     let (life, bands) = laws(ctx);

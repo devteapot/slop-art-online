@@ -305,7 +305,7 @@ mod tests {
         let (w, band) = b.words("lk_00000000000000a1").unwrap();
         assert_eq!(band, living_rules::look::LookBand::Adult);
         assert_eq!(living_rules::look::phrase(&w, living_rules::look::LookSeen::Full, band), "a woman in a green smock and dark trousers, dark-haired, heavy-set");
-        assert_eq!(living_rules::look::phrase(&w, living_rules::look::LookSeen::Far, band), "a figure in a green smock and dark trousers, heavy-set");
+        assert_eq!(living_rules::look::phrase(&w, living_rules::look::LookSeen::Far, band), "a woman in a green smock and dark trousers, heavy-set");
         assert!(b.words("lk_ffffffffffffffff").is_none());
     }
 

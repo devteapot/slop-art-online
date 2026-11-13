@@ -5069,6 +5069,7 @@ SCENES["howl_reach"] = howl_reach
 SCENES["pack_reflex"] = pack_reflex
 SCENES["intents_cost"] = intents_cost
 SCENES["sleeper"] = sleeper
+SCENES["sex"] = body_sex
 
 
 
@@ -5148,7 +5149,133 @@ def alert_after_hit(s):
 SCENES["alert_after_hit"] = alert_after_hit
 
 
+
+# ---- body sex (sex-1, docs/LIVING_CORE.md "Body sex") ------------------------------------------
+SEX_SALT = 0x5E70F00D0B0D1E55
+SEX_SEED = ROOT / ".local/living/verify/sex-family.json"
+
+
+def sex_pick(seed, i, share=0.5):
+    """`living_rules::sex::pick`, recomputed: female when splitmix64((seed ^ SALT) ^ id * 0x9E37…)
+    >> 11, over 2^53, is below the share."""
+    M = (1 << 64) - 1
+    z = (((int(seed) ^ SEX_SALT) ^ ((i * 0x9E3779B97F4A7C15) & M)) + 0x9E3779B97F4A7C15) & M
+    z = ((z ^ (z >> 30)) * 0xBF58476D1CE4E5B9) & M
+    z = ((z ^ (z >> 27)) * 0x94D049BB133111EB) & M
+    z ^= z >> 31
+    return 1 if (z >> 11) / float(1 << 53) < share else 2
+
+
+def sex_family_seed():
+    """stage1-acts (one family at a compressed pace: a child is carried about 2.6 real minutes)
+    with the band members' sexes given for the grown and left to the world for the young
+    (`SeedMember.sex`). Launch the scene's run with `--seed <this path without .json>`."""
+    seed = json.loads((ROOT / "living/seeds/stage1-acts.json").read_text())
+    seed["run"] = "sex-family"
+    for m, x in zip(seed["bands"][0]["family"], ["f", "m", "f", "f", "m"]):
+        m["sex"] = x
+    SEX_SEED.parent.mkdir(parents=True, exist_ok=True)
+    SEX_SEED.write_text(json.dumps(seed, indent=1) + "\n")
+    return seed
+
+
+def body_sex(s):
+    """Body sex as a world fact (sex-1). On the family seed (`sex_family_seed`; `scenes.py
+    sex-seed` writes it): every person has one `sex` row and no animal has one; the grown band
+    members have the seed's sexes and the young the world's pick (recomputed here); newcomers
+    (`spawn_crowd`) take the pick under `female_share()` 1.0, 0.0 and the shipped 0.5. Kin words
+    by sex: a child's "Mother" names its female parent and not its male one, "Father" the other way,
+    "parent" both. `conceive_needs_pair()`: on, two women are refused ("a family is started by a
+    woman and a man") and a woman and a man start one; off (shipped), two women start one. Each
+    child born has the world's pick for its id. The shipped script is installed again at the end."""
+    shipped = (ROOT / "living/scripts/skills.rhai").read_text()
+    w = s.rows("SELECT seed, run FROM world", "world")[0]
+    s.expect("the family seed is in force", w["run"] == "sex-family", w)
+    seed = int(w["seed"])
+    sex_of = lambda: {r["id"]: r["sex"] for r in s.rows("SELECT * FROM sex", "sex-rows")}
+    people = s.rows("SELECT id, name, kind, stage, parent_a, parent_b, alive, born_ms FROM character", "characters")
+    persons = [c for c in people if c["kind"] == "person"]
+    sexes = sex_of()
+    s.expect("every person has a sex row (1 or 2) and no animal has one", all(sexes.get(c["id"]) in (1, 2) for c in persons) and set(sexes) <= {c["id"] for c in persons},
+             {"people": len(persons), "rows": len(sexes)})
+    family = sorted(persons, key=lambda c: c["id"])
+    grown = [c for c in family if c["stage"] >= 2][:5]
+    young = [c for c in family if c["stage"] < 2]
+    s.expect("the grown band members have the seed's sexes (f, m, f, f, m)", [sexes[c["id"]] for c in grown] == [1, 2, 1, 1, 2], [(c["id"], sexes[c["id"]]) for c in grown])
+    s.expect("the young (no sex in the seed) have the world's pick", all(sexes[c["id"]] == sex_pick(seed, c["id"]) for c in young), [(c["id"], sexes[c["id"]], sex_pick(seed, c["id"])) for c in young])
+    try:
+        # female_share: newcomers by the law in force.
+        made = {}
+        for share in (1.0, 0.0):
+            s.call("install_script", compose(shipped, {"female_share": f"fn female_share() {{ {share} }}"}))
+            made[share] = s.people(4)
+        s.call("install_script", shipped)
+        made[0.5] = s.people(6)
+        sexes = sex_of()
+        for share, ids in made.items():
+            want = [sex_pick(seed, i, share) for i in ids]
+            s.expect(f"female_share {share}: each newcomer has the world's pick for its id", [sexes.get(i) for i in ids] == want, {"ids": ids, "got": [sexes.get(i) for i in ids], "want": want})
+        s.expect("female_share 1.0 makes women and 0.0 men", all(sexes[i] == 1 for i in made[1.0]) and all(sexes[i] == 2 for i in made[0.0]))
+
+        # Kin words by sex: the band's children are the first two non-elder adults' (a man and a woman).
+        child = next((c for c in young if c["stage"] == 1 and c["parent_a"] and c["parent_b"]), None)
+        s.expect("the family has a child with both parents", child is not None, young)
+        mother, father = sorted((child["parent_a"], child["parent_b"]), key=lambda i: sexes[i])
+        s.expect("its parents are a woman and a man", (sexes[mother], sexes[father]) == (1, 2))
+        line = open_line(s)
+        for who, at in ((child["id"], 4), (mother, 5), (father, 6)):
+            s.call("place_at", who, *line[at])
+            s.graph(who, {"wait": 120})
+        def named(who, marker):
+            return [e for e in s.rows(f"SELECT kind, text FROM experience WHERE observer = {who}") if marker in e["text"] and "naming you" in e["text"]]
+        for words, marker, yes, no in (("Mother, come and see.", "verify kin mother", [mother], [father]), ("Father, come and see.", "verify kin father", [father], [mother]), ("Ask a parent.", "verify kin parent", [mother, father], [])):
+            s.call("mind_say", child["id"], f"{words} {marker}", 0, "", 0, THOUGHT)
+            time.sleep(2.5)
+            got = {i: bool(named(i, marker)) for i in yes + no}
+            s.expect(f"kin words by sex: {words!r} names {['the mother' if i == mother else 'the father' for i in yes]} and not {['the mother' if i == mother else 'the father' for i in no]}",
+                     all(got[i] for i in yes) and not any(got[i] for i in no), got)
+
+        # conceive_needs_pair: two women from the share-1.0 newcomers, the family's mother and father.
+        w1, w2 = made[1.0][:2]
+        for who, at in ((w1, 9), (w2, 10)):
+            s.call("place_at", who, *line[at])
+        for who in (w1, w2, mother, father):
+            s.call("grant_items", who, "cooked_meat", 2)
+            s.graph(who, {"seq": [{"do": "eat", "item": "cooked_meat"}, {"wait": 120}]})
+        for who in (w1, w2, mother, father):
+            s.wait(lambda who=who: s.needs(who, f"fed-{who}")["hunger"] < 60, seconds=60)
+        s.call("install_script", compose(shipped, {"conceive_needs_pair": "fn conceive_needs_pair() { true }"}))
+        s.act(w1, {"do": "conceive", "target": {"id": w2}})
+        refused = s.wait(lambda: s.told(w1, "a family is started by a woman and a man"), seconds=20)
+        s.expect("conceive_needs_pair on: two women are refused, told why", bool(refused), refused)
+        s.act(mother, {"do": "conceive", "target": {"id": father}})
+        time.sleep(3)
+        s.act(father, {"do": "conceive", "target": {"id": mother}})
+        pair = s.wait(lambda: s.rows(f"SELECT * FROM expecting WHERE a = {mother} OR b = {mother}", "expecting-pair"), seconds=30)
+        s.expect("conceive_needs_pair on: a woman and a man start a family", bool(pair), pair)
+        s.call("install_script", shipped)
+        s.act(w1, {"do": "conceive", "target": {"id": w2}})
+        time.sleep(3)
+        s.act(w2, {"do": "conceive", "target": {"id": w1}})
+        same = s.wait(lambda: s.rows(f"SELECT * FROM expecting WHERE a = {w1} OR b = {w1}", "expecting-same"), seconds=30)
+        s.expect("conceive_needs_pair off (shipped): two women start a family", bool(same), same)
+        before = {c["id"] for c in s.rows("SELECT id FROM character")}
+        due = max(r["due_ms"] for r in pair + same)
+        wait_s = max(10, (due - time.time_ns() // 1_000_000) / 1000 + 20)
+        born = s.wait(lambda: [c for c in s.rows("SELECT id, parent_a, parent_b FROM character") if c["id"] not in before and {c["parent_a"], c["parent_b"]} & {mother, w1}] if len([c for c in s.rows("SELECT id, parent_a, parent_b FROM character") if c["id"] not in before and {c["parent_a"], c["parent_b"]} & {mother, w1}]) >= 2 else None, seconds=wait_s, every=3)
+        sexes = sex_of()
+        s.expect("each child born has a sex row, the world's pick for its id", all(sexes.get(c["id"]) == sex_pick(seed, c["id"]) for c in born), [(c["id"], sexes.get(c["id"]), sex_pick(seed, c["id"])) for c in born])
+        s.rows("SELECT * FROM sex", "sex-after")
+    finally:
+        s.call("install_script", shipped)
+
 def main():
+    import sys
+    if sys.argv[1:2] == ["sex-seed"]:
+        # The `sex` scene's seed (sex-1): writes it and says how to launch with it.
+        sex_family_seed()
+        print(f"wrote {SEX_SEED}; launch with --seed {SEX_SEED.with_suffix('')}")
+        return 0
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("scene", choices=SCENES)
     ap.add_argument("--run", required=True)

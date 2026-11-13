@@ -2364,6 +2364,9 @@ def look_phrase(words, seen, band):
     book line is labelled by: `seen` "full" (made out) or "far"; `band` 1 child .. 4 elder."""
     if seen == "full":
         noun = (words.get("form") or "").strip() or "person"
+    elif (words.get("form") or "").strip().split(" ")[-1:] in (["woman"], ["man"], ["girl"], ["boy"]):
+        # A far figure's form says its sex (sex-1): it is drawn in full on the screen.
+        noun = words["form"].strip()
     else:
         noun = "child" if band <= 1 else ("old figure" if band == 4 else "figure")
     head = {0: "short ", 2: "tall "}.get(words.get("height", 1), "") + noun

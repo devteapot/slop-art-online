@@ -472,6 +472,67 @@ The wolves hunted on their ways: 8 kills in the first 33 minutes, one per wolf, 
 
 The floor, on a second scratch world (`wildlife-floor`: the same map with 4 deer and 1 wolf, deleted afterwards). At 20.2 minutes "A small herd of deer came in from the south": 5 adults on grass 2–5 tiles from the south edge. At 30.0 minutes "A few wolves came in from the west": 3 adults on their ways, in forest at the west edge. With deer still at 7, a second herd came at 41.0 minutes, 21 minutes after the first. With 4 wolves (the floor is 3), no more wolves came.
 
+### Body sex (`sex-1`, 2026-11-13)
+
+Every person's body is female or male, a world fact set once when they come into the world and never changed. Before this, the authority had no sex: a seed's `sex` was dropped, `look::pool_pick` was blind to it, and 7 of the island's Brackenford 17 were drawn as the other sex (bearded women, a man of 61 as an old woman, a boy of 9 as a girl). Animals have none ("any two adults can pair", above).
+
+**Storage.** A private table `sex { id (primary key), sex: u8 }`, 1 female and 2 male (`living_rules::sex::Sex`). One row per person, written in the transaction that makes them and kept after death, so kin words still name the dead. "Unknown" means only that there is no row: every rule then behaves as before sex existed.
+- A new table rather than a column on `character`. In 2.14.1, adding a column rewrites the whole table and disconnects every client (`crates/schema/src/auto_migrate.rs` at `v2.14.1`: `columns_added` → `ensure_disconnect_all_users` and `AddColumns`, "we'll rewrite the whole table"). Adding a table is `AddTable`, with no disconnect, and so is adding a view (`AddView`). The [automatic migrations](https://spacetimedb.com/docs/databases/automatic-migrations/) page (selector 2.0.0, read 2026-11-13) lists "Adding new tables" and "Adding new reducers" as always safe, and new columns as potentially breaking.
+- Always private, in every build, `LIVING_PERCEPTION=open` included ([access permissions](https://spacetimedb.com/docs/tables/access-permissions/): "Private tables can only be accessed by reducers and views running on the server"). A client learns another body's sex only as it perceives it (the look it draws, its words), and a player learns its own through the view `my_sex` (`{ id, sex: "female" | "male" }`). The mind service reads the table as the owner.
+
+**Where it comes from.**
+- **A seeded resident:** its `sex` ("f" or "m"; `SeedResident.sex`). Every resident of an authored cast must give it, and the seed check (`look::check_sex`, run by `floor::check` before anything is written) refuses one without it. An authored cast is a seed with `looks`, or one where any resident gives a sex. The island, Cullet, aske-coast (and its variants), plan-test, the hamlets and authored-test give one for every resident. `living/tools/cast_sex.py` carries the casts' `sex` into the compiled seeds (`--check` fails when they differ), and `author_world.py` writes it when a world is compiled.
+- **A band member** (`SeedMember.sex`): optional. When it is absent, the world picks.
+- **The world's pick** (births, newcomers, crowds, a player who does not choose, band members left open): `living_rules::sex::pick(world seed, id, female_share)`. It is female when `splitmix64((seed ^ SALT) ^ id × 0x9E37_79B9_7F4A_7C15) >> 11`, as a fraction of 2^53, falls below the `female_share()` law (shipped 0.5; an install refuses a value outside 0..1). The pick is deterministic per world and id, and independent of the look's pool pick.
+- **A player:** `join(name)` is unchanged and the world picks. `join_as(name, sex)` is a new reducer beside it. It takes "f" or "m" ("female", "male", any case) and refuses anything else with `sex must be "f" or "m"`, making nothing. `join` keeps its signature because changing an existing reducer's arguments is not a safe module update ("Clients attempting to call the old version of a changed reducer … will receive runtime errors"). The bindings change only by addition.
+- The row is written right after the character is inserted (`seed::spawn_sexed`), before the look's pool pick and before anything else in that transaction. So a newborn's first identity call already reads it.
+
+**What reads it** (always by primary key, never a scan per tick):
+
+| Path | Rows read | Rows written | How often |
+|---|---|---|---|
+| Creation (`spawn_sexed`) | `sex` (point), `world`, the script | one `sex` insert | per person made |
+| Look's pool pick (`look::assign`) | `sex` (point) | – | per person made, per `relook` |
+| A mind's scene (`perceive::scene_json`) | `sex` (point) per person in the scene, at most 14, plus oneself | – | per deliberation request |
+| First sight (`brain.rs`) | `sex` (point) per person first seen | – | per first sight |
+| Kin words (`speech::named_at`) | `sex` (point) per kin hearer near | – | per line with a kin relation near |
+| Conception (`act::facts`, `target_facts`) | `sex` (point), only for a law that reads `sex` | – | per act check |
+| `my_sex` (view) | `player`, `character`, `sex` (points) | – | re-run when one's character changes |
+| Mind service | `sex`, subscribed whole as the owner (one row per person, written once) | – | initial rows, then one insert per person made |
+| `backfill_sex` | every person, `relation` once, the seed | one `sex` per person without one, a chronicle line | admin only |
+
+Growth: one row of 9 bytes (`u32`, `u8`, row overhead aside) per person ever made, never deleted, like `character`. No subscription reaches a player.
+
+**The rules' words.**
+- `sex_words()` gives the words by sex and life stage. The shipped words are "baby girl", "girl", "woman", "old woman" and "baby boy", "boy", "man", "old man".
+- They serve one's own body line ("Your body: 41 years old, an adult for 26 years. You are a man."), a person's scene entry (`"form": "woman"`, near and far alike) and the mind's facts.
+- Labels stay neutral: "a stranger" and the far handle's label carry no sex.
+- Kin words (`kin_terms()`) come by sex: see [communication](COMMUNICATION.md#19-talk-turns-from-play-test-6-branch-talk-turns).
+- `conceive_needs_pair()` (shipped `false`): on, two bodies of one sex are refused "a family is started by a woman and a man". The owner has not decided, and the Spark's births trials compare across it. A body with no sex row is never refused for it.
+
+**Minds.**
+- The scene entry and the talk header carry the perceived word. The talk header reads "# You and Ilsa Hale (#5, a woman)", shown for someone the mind knows or someone face to face: the line reached it and its speaker saw it (`line_heard`).
+- What a mind knows of a person carries their sex too:
+  - its relations and the people it knows in its community, "Edda (#12, a woman)";
+  - its facts (its own `sex`, and its parents' and children's);
+  - a newborn's birth identity call ("Newborn: Tobin (#40, a baby boy)", with each parent's body);
+  - a first sight's line ("For the first time you see a stranger (a woman), 9 tiles west"), so memory keeps it.
+- Older memories that guessed otherwise stay as the mind's beliefs. The fact shown beside them is what the world says.
+- The seed check warns, without refusing, when the residents' sheets speak of someone as the other sex (`sex::sheet_warnings`: other sheets' relation labels and notes, logged at genesis). The shipped casts give none.
+
+**An existing world** (made before this change: no `sex` rows), in this order:
+1. **Update the module in place** (a guarded module, see [look](LOOK.md#the-update-panic-traced-2026-11-12)). Adding the `sex` table and the `my_sex` view disconnects no one, and the world ticks on. Until step 2, nobody has a row and everything behaves as before.
+2. **`backfill_sex()`** (admin, idempotent; never called by the mind service) gives a row to everyone without one:
+   - a seeded resident (a minded person named in the seed) the seed's `sex`;
+   - anyone with a look the sex their look's lines show, so nobody changes appearance;
+   - anyone else what others' minds say of them (the `relation` labels and notes about them), where at least two words do and twice as many say one sex as the other;
+   - the rest the world's pick.
+
+   It writes one chronicle line with the counts.
+3. **In a world with looks, `relook(<generation>)`** (admin). Pool picks are now made within each person's sex. So seeded residents whose earlier pool look showed the other sex (Brackenford's 7) get one of theirs, and everyone else's pool pick is made again. The paused reference worlds are not touched unless the owner asks.
+
+Verified by the record files `2026-11-13-*-sex-1.md` of verify-generation, verify-player, verify-client, verify-core and verify-minds.
+
 ## Measured authority load
 
 Benchmark database `living-bench` on the same Docker SpacetimeDB 2.10.1 service (Apple Silicon laptop), instinct-driven people (no LLM), 96×96 map, tick duration from the module's `LogStopwatch` over a 60 s window ([bench.py](../living/tools/bench.py)); 2026-09-25:

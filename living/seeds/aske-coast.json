@@ -64,6 +64,7 @@
         {
           "name": "Hekka",
           "age": 59,
+          "sex": "f",
           "household": "hekka",
           "occupation": "keeper",
           "knows": [
@@ -223,6 +224,7 @@
         {
           "name": "Sigrun",
           "age": 38,
+          "sex": "f",
           "household": "hekka",
           "occupation": "tanner",
           "knows": [
@@ -418,6 +420,7 @@
         {
           "name": "Arne",
           "age": 40,
+          "sex": "m",
           "household": "hekka",
           "occupation": "carpenter",
           "knows": [
@@ -570,6 +573,7 @@
         {
           "name": "Liv",
           "age": 12,
+          "sex": "f",
           "household": "hekka",
           "occupation": "child",
           "knows": [
@@ -694,6 +698,7 @@
         {
           "name": "Bo",
           "age": 6,
+          "sex": "m",
           "household": "hekka",
           "occupation": "child",
           "knows": [],
@@ -769,6 +774,7 @@
         {
           "name": "Brann",
           "age": 44,
+          "sex": "m",
           "household": "brann",
           "occupation": "hunter",
           "knows": [
@@ -937,6 +943,7 @@
         {
           "name": "Thora",
           "age": 41,
+          "sex": "f",
           "household": "brann",
           "occupation": "trapper",
           "knows": [
@@ -1073,6 +1080,7 @@
         {
           "name": "Eskil",
           "age": 19,
+          "sex": "m",
           "household": "brann",
           "occupation": "hunter",
           "knows": [
@@ -1205,6 +1213,7 @@
         {
           "name": "Runa",
           "age": 17,
+          "sex": "f",
           "household": "brann",
           "occupation": "trapper",
           "knows": [
@@ -1343,6 +1352,7 @@
         {
           "name": "Ragna",
           "age": 60,
+          "sex": "f",
           "household": "gudrun",
           "occupation": "keeper",
           "knows": [
@@ -1490,6 +1500,7 @@
         {
           "name": "Gudrun",
           "age": 42,
+          "sex": "f",
           "household": "gudrun",
           "occupation": "tanner",
           "knows": [
@@ -1653,6 +1664,7 @@
         {
           "name": "Vidar",
           "age": 24,
+          "sex": "m",
           "household": "gudrun",
           "occupation": "tanner",
           "knows": [
@@ -1799,6 +1811,7 @@
         {
           "name": "Kari",
           "age": 24,
+          "sex": "f",
           "household": "gudrun",
           "occupation": "cook",
           "knows": [
@@ -1942,6 +1955,7 @@
         {
           "name": "Ylva",
           "age": 1,
+          "sex": "f",
           "household": "gudrun",
           "occupation": "child",
           "knows": [],
@@ -2018,6 +2032,7 @@
         {
           "name": "Halvard",
           "age": 58,
+          "sex": "m",
           "household": "halvard",
           "occupation": "carpenter",
           "knows": [
@@ -2206,6 +2221,7 @@
         {
           "name": "Astrid",
           "age": 55,
+          "sex": "f",
           "household": "halvard",
           "occupation": "forager",
           "knows": [
@@ -2372,6 +2388,7 @@
         {
           "name": "Pell",
           "age": 18,
+          "sex": "m",
           "household": "halvard",
           "occupation": "carpenter",
           "knows": [
@@ -2543,6 +2560,7 @@
         {
           "name": "Ulf",
           "age": 35,
+          "sex": "m",
           "household": "ulf",
           "occupation": "hunter",
           "knows": [
@@ -2677,6 +2695,7 @@
         {
           "name": "Maren",
           "age": 33,
+          "sex": "f",
           "household": "ulf",
           "occupation": "tanner",
           "knows": [
@@ -2826,6 +2845,7 @@
         {
           "name": "Sten",
           "age": 9,
+          "sex": "m",
           "household": "ulf",
           "occupation": "child",
           "knows": [
@@ -2916,6 +2936,7 @@
         {
           "name": "Frida",
           "age": 5,
+          "sex": "f",
           "household": "ulf",
           "occupation": "child",
           "knows": [],
@@ -2989,6 +3010,7 @@
         {
           "name": "Egil",
           "age": 47,
+          "sex": "m",
           "household": "egil",
           "occupation": "toolmaker",
           "knows": [
@@ -3133,6 +3155,7 @@
         {
           "name": "Solveig",
           "age": 45,
+          "sex": "f",
           "household": "egil",
           "occupation": "trapper",
           "knows": [
@@ -3270,6 +3293,7 @@
         {
           "name": "Jorund",
           "age": 22,
+          "sex": "m",
           "household": "egil",
           "occupation": "guard",
           "knows": [
@@ -3409,6 +3433,7 @@
         {
           "name": "Kjell",
           "age": 26,
+          "sex": "m",
           "household": "kjell",
           "occupation": "hunter",
           "knows": [
@@ -3552,6 +3577,7 @@
         {
           "name": "Inga",
           "age": 24,
+          "sex": "f",
           "household": "kjell",
           "occupation": "forager",
           "knows": [
@@ -3693,6 +3719,7 @@
         {
           "name": "Tove",
           "age": 0.5,
+          "sex": "f",
           "household": "kjell",
           "occupation": "child",
           "knows": [],
@@ -3746,6 +3773,7 @@
         {
           "name": "Grim",
           "age": 50,
+          "sex": "m",
           "household": "grim",
           "occupation": "trapper",
           "knows": [
@@ -3885,6 +3913,7 @@
         {
           "name": "Siv",
           "age": 20,
+          "sex": "f",
           "household": "grim",
           "occupation": "hunter",
           "knows": [
@@ -4029,6 +4058,7 @@
         {
           "name": "Ake",
           "age": 14,
+          "sex": "m",
           "household": "grim",
           "occupation": "child",
           "knows": [
@@ -4164,6 +4194,7 @@
         {
           "name": "Maelis",
           "age": 49,
+          "sex": "f",
           "household": "maelis",
           "occupation": "scribe",
           "knows": [
@@ -4340,6 +4371,7 @@
         {
           "name": "Corin",
           "age": 51,
+          "sex": "m",
           "household": "maelis",
           "occupation": "steward",
           "knows": [
@@ -4480,6 +4512,7 @@
         {
           "name": "Wenna",
           "age": 18,
+          "sex": "f",
           "household": "maelis",
           "occupation": "netmaker",
           "knows": [
@@ -4637,6 +4670,7 @@
         {
           "name": "Pim",
           "age": 11,
+          "sex": "m",
           "household": "maelis",
           "occupation": "child",
           "knows": [
@@ -4729,6 +4763,7 @@
         {
           "name": "Ilse",
           "age": 46,
+          "sex": "f",
           "household": "ilse",
           "occupation": "netmaker",
           "knows": [
@@ -4880,6 +4915,7 @@
         {
           "name": "Tobin",
           "age": 24,
+          "sex": "m",
           "household": "ilse",
           "occupation": "watchman",
           "knows": [
@@ -5034,6 +5070,7 @@
         {
           "name": "Nell",
           "age": 22,
+          "sex": "f",
           "household": "ilse",
           "occupation": "forager",
           "knows": [
@@ -5172,6 +5209,7 @@
         {
           "name": "Mira",
           "age": 1,
+          "sex": "f",
           "household": "ilse",
           "occupation": "child",
           "knows": [],
@@ -5239,6 +5277,7 @@
         {
           "name": "Ness",
           "age": 15,
+          "sex": "f",
           "household": "ilse",
           "occupation": "child",
           "knows": [
@@ -5359,6 +5398,7 @@
         {
           "name": "Orrin",
           "age": 39,
+          "sex": "m",
           "household": "orrin",
           "occupation": "watchman",
           "knows": [
@@ -5535,6 +5575,7 @@
         {
           "name": "Bea",
           "age": 37,
+          "sex": "f",
           "household": "orrin",
           "occupation": "smoker",
           "knows": [
@@ -5695,6 +5736,7 @@
         {
           "name": "Dag",
           "age": 13,
+          "sex": "m",
           "household": "orrin",
           "occupation": "child",
           "knows": [
@@ -5811,6 +5853,7 @@
         {
           "name": "Lotte",
           "age": 7,
+          "sex": "f",
           "household": "orrin",
           "occupation": "child",
           "knows": [],
@@ -5887,6 +5930,7 @@
         {
           "name": "Sabeth",
           "age": 60,
+          "sex": "f",
           "household": "sabeth",
           "occupation": "keeper",
           "knows": [
@@ -6036,6 +6080,7 @@
         {
           "name": "Jory",
           "age": 20,
+          "sex": "m",
           "household": "sabeth",
           "occupation": "watchman",
           "knows": [
@@ -6189,6 +6234,7 @@
         {
           "name": "Elin",
           "age": 17,
+          "sex": "f",
           "household": "sabeth",
           "occupation": "cook",
           "knows": [
@@ -6326,6 +6372,7 @@
         {
           "name": "Fen",
           "age": 43,
+          "sex": "m",
           "household": "fen",
           "occupation": "healer",
           "knows": [
@@ -6467,6 +6514,7 @@
         {
           "name": "Oriel",
           "age": 40,
+          "sex": "f",
           "household": "fen",
           "occupation": "smoker",
           "knows": [
@@ -6608,6 +6656,7 @@
         {
           "name": "Kit",
           "age": 8,
+          "sex": "f",
           "household": "fen",
           "occupation": "child",
           "knows": [],
@@ -6690,6 +6739,7 @@
         {
           "name": "Dunstan",
           "age": 48,
+          "sex": "m",
           "household": "dunstan",
           "occupation": "trader",
           "knows": [
@@ -6851,6 +6901,7 @@
         {
           "name": "Hild",
           "age": 46,
+          "sex": "f",
           "household": "dunstan",
           "occupation": "forager",
           "knows": [
@@ -6988,6 +7039,7 @@
         {
           "name": "Rafe",
           "age": 21,
+          "sex": "m",
           "household": "dunstan",
           "occupation": "fisher",
           "knows": [
@@ -7121,6 +7173,7 @@
         {
           "name": "Posy",
           "age": 4,
+          "sex": "f",
           "household": "dunstan",
           "occupation": "child",
           "knows": [],
@@ -7203,6 +7256,7 @@
         {
           "name": "Anselm",
           "age": 35,
+          "sex": "m",
           "household": "anselm",
           "occupation": "fisher",
           "knows": [
@@ -7353,6 +7407,7 @@
         {
           "name": "Gwen",
           "age": 34,
+          "sex": "f",
           "household": "anselm",
           "occupation": "netmaker",
           "knows": [
@@ -7493,6 +7548,7 @@
         {
           "name": "Robin",
           "age": 10,
+          "sex": "m",
           "household": "anselm",
           "occupation": "child",
           "knows": [
@@ -7604,6 +7660,7 @@
         {
           "name": "Rook",
           "age": 10,
+          "sex": "f",
           "household": "anselm",
           "occupation": "child",
           "knows": [
@@ -7714,6 +7771,7 @@
         {
           "name": "Mara",
           "age": 55,
+          "sex": "f",
           "household": "mara",
           "occupation": "laborer",
           "knows": [
@@ -7861,6 +7919,7 @@
         {
           "name": "Cade",
           "age": 29,
+          "sex": "m",
           "household": "mara",
           "occupation": "laborer",
           "knows": [
@@ -8013,6 +8072,7 @@
         {
           "name": "Lark",
           "age": 27,
+          "sex": "f",
           "household": "mara",
           "occupation": "laborer",
           "knows": [
@@ -8199,6 +8259,7 @@
         {
           "name": "Aud",
           "age": 60,
+          "sex": "f",
           "household": "aud",
           "occupation": "keeper",
           "knows": [
@@ -8340,6 +8401,7 @@
         {
           "name": "Tamsin",
           "age": 30,
+          "sex": "f",
           "household": "aud",
           "occupation": "mason",
           "knows": [
@@ -8472,6 +8534,7 @@
         {
           "name": "Hakon",
           "age": 36,
+          "sex": "m",
           "household": "hakon",
           "occupation": "farmer",
           "knows": [
@@ -8634,6 +8697,7 @@
         {
           "name": "Rose",
           "age": 34,
+          "sex": "f",
           "household": "hakon",
           "occupation": "healer",
           "knows": [
@@ -8804,6 +8868,7 @@
         {
           "name": "Wynn",
           "age": 11,
+          "sex": "m",
           "household": "hakon",
           "occupation": "child",
           "knows": [
@@ -8925,6 +8990,7 @@
         {
           "name": "Asa",
           "age": 6,
+          "sex": "f",
           "household": "hakon",
           "occupation": "child",
           "knows": [],
@@ -9020,6 +9086,7 @@
         {
           "name": "Linnet",
           "age": 1,
+          "sex": "f",
           "household": "hakon",
           "occupation": "child",
           "knows": [],
@@ -9098,6 +9165,7 @@
         {
           "name": "Edda",
           "age": 50,
+          "sex": "f",
           "household": "edda",
           "occupation": "farmer",
           "knows": [
@@ -9248,6 +9316,7 @@
         {
           "name": "Colm",
           "age": 25,
+          "sex": "m",
           "household": "edda",
           "occupation": "farmer",
           "knows": [
@@ -9399,6 +9468,7 @@
         {
           "name": "Briar",
           "age": 19,
+          "sex": "f",
           "household": "edda",
           "occupation": "forager",
           "knows": [
@@ -9531,6 +9601,7 @@
         {
           "name": "Ansgar",
           "age": 44,
+          "sex": "m",
           "household": "inn",
           "occupation": "innkeeper",
           "knows": [
@@ -9683,6 +9754,7 @@
         {
           "name": "Bryn",
           "age": 40,
+          "sex": "f",
           "household": "inn",
           "occupation": "innkeeper",
           "knows": [

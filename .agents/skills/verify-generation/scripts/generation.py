@@ -36,7 +36,7 @@ LAWS_FLOORS = {"cullet-laws-floor": "cullet-laws"}
 LOOKS_FLOORS = {"plan-test-floor": "plan-test"}
 TABLES = ("world", "terrain_chunk", "character", "background", "community",
           "membership", "structure", "artifact", "resource_node", "genome", "body", "inventory",
-          "place", "routine", "relation", "acquaintance", "world_law", "script", "rhythm", "look", "look_line")
+          "place", "routine", "relation", "acquaintance", "world_law", "script", "rhythm", "look", "look_line", "sex")
 HARNESS = ROOT / ".agents/skills/verify/scripts/verify.py"
 # The server verify.py uses: the shared container, or a worker's own (see verify/SKILL.md).
 CONTAINER = os.environ.get("LIVING_STDB_CONTAINER", "sao-living_spacetimedb_1")
@@ -181,6 +181,57 @@ def create_floor_looks(run, d, seed):
     return checks
 
 
+def entry_sex_of(looks, person):
+    """The sex a look entry's lines show ("f", "m"; None for none): the last word of its forms
+    (`living_rules::sex::of_form`; "baby" shows none)."""
+    found = {{"woman": "f", "girl": "f", "man": "m", "boy": "m"}.get((looks["words"].get(k, {}).get("form") or "").strip().split(" ")[-1]) for k in looks["people"].get(person, {}).values()} - {None}
+    return found.pop() if len(found) == 1 else None
+
+
+# The world's pick of a body sex (`living_rules::sex::pick`), recomputed: female when
+# splitmix64((seed ^ SALT) ^ (id * 0x9E3779B97F4A7C15)) >> 11, over 2^53, is below the share.
+SEX_SALT = 0x5E70F00D0B0D1E55
+
+
+def sex_pick(seed, i, share=0.5):
+    M = (1 << 64) - 1
+    z = (((int(seed) ^ SEX_SALT) ^ ((i * 0x9E3779B97F4A7C15) & M)) + 0x9E3779B97F4A7C15) & M
+    z = ((z ^ (z >> 30)) * 0xBF58476D1CE4E5B9) & M
+    z = ((z ^ (z >> 27)) * 0x94D049BB133111EB) & M
+    z ^= z >> 31
+    return 1 if (z >> 11) / float(1 << 53) < share else 2
+
+
+def check_sex(seed, rows):
+    """Body sex (sex-1, docs/LIVING_CORE.md "Body sex"): one `sex` row (1 female, 2 male) for every
+    person and none for an animal; a seeded resident's is the seed's `sex`; everyone else's is the
+    world's pick, recomputed here (the shipped `female_share()` 0.5; a seed's laws may change it)."""
+    checks = []
+
+    def present(name, condition, detail=None):
+        checks.append({"check": name, "pass": bool(condition), "detail": detail})
+
+    sex = {r["id"]: r["sex"] for r in rows.get("sex", [])}
+    chars = {c["id"]: c for c in rows["character"]}
+    persons = [c for c in chars.values() if c["kind"] == "person"]
+    present("every person has a sex row (1 or 2), no animal has one", all(sex.get(c["id"]) in (1, 2) for c in persons) and set(sex) <= {c["id"] for c in persons},
+            {"people": len(persons), "rows": len(sex), "female": sum(1 for v in sex.values() if v == 1)})
+    given = {r["name"]: {"f": 1, "m": 2}[r["sex"]] for t in seed.get("towns", []) + seed.get("villages", []) for r in t.get("residents", []) if r.get("sex") in ("f", "m")}
+    seeded = [c for c in persons if c["name"] in given and c["ai"]]
+    wrong = [(c["name"], sex.get(c["id"]), given[c["name"]]) for c in seeded if sex.get(c["id"]) != given[c["name"]]]
+    present("each seeded resident's sex is the seed's" + ("" if seeded else " (the seed gives none)"), not wrong, {"residents": len(seeded), "wrong": wrong[:10]})
+    laws = str(seed.get("laws") or "")
+    share = 0.5
+    m = re.search(r"fn female_share\(\)\s*\{\s*([0-9.]+)\s*\}", laws)
+    if m:
+        share = float(m[1])
+    seed_value = rows["world"][0]["seed"]
+    rest = [c for c in persons if c["name"] not in given]
+    wrong_pick = [c["id"] for c in rest if sex.get(c["id"]) != sex_pick(seed_value, c["id"], share)]
+    present(f"everyone else's sex is the world's pick for its seed and id (female_share {share})" + ("" if rest else " (none)"), not wrong_pick, {"picked": len(rest), "wrong": wrong_pick[:10]})
+    return checks
+
+
 def check_looks(seed, rows):
     """A world's looks (docs/LOOK.md): with a seed's `looks`, the world wears its generation,
     `look_line` holds each (person, band) line with its words, every seeded resident wears its
@@ -228,9 +279,18 @@ def check_looks(seed, rows):
         z = ((z ^ (z >> 30)) * 0xBF58476D1CE4E5B9) & M
         z = ((z ^ (z >> 27)) * 0x94D049BB133111EB) & M
         return z ^ (z >> 31)
+    # Since sex-1 the pick is among the pool entries of the person's body sex (an entry's sex is its
+    # lines' forms), sorted: pool_pick(world seed, id, that many).
+    sex_of = {r["id"]: r["sex"] for r in rows.get("sex", [])}
+    entry_sex = {p: entry_sex_of(looks, p) for p in looks.get("pool", [])}
+    def candidates(i):
+        x = {1: "f", 2: "m"}.get(sex_of.get(i))
+        return sorted({p for p in looks["pool"] if x is None or entry_sex[p] == x}) if x else list(looks["pool"])
     picked = [(c["id"], by_id[c["id"]]["person"]) for c in persons if c["name"] not in named and c["id"] in by_id and looks.get("pool")]
-    wrong_pick = [i for i, p in picked if p != looks["pool"][mix(int(w["seed"]) ^ ((i * 0xD1B54A32D192ED03) & M)) % len(looks["pool"])]]
-    present("each pool entry is the one pool_pick names for the world seed and id" + ("" if picked else " (none)"), not wrong_pick, {"picked": len(picked), "wrong": wrong_pick[:10]})
+    wrong_pick = [i for i, p in picked if p != candidates(i)[mix(int(w["seed"]) ^ ((i * 0xD1B54A32D192ED03) & M)) % len(candidates(i))]]
+    present("each pool entry is the one pool_pick names for the world seed and id, among the entries of the person's sex" + ("" if picked else " (none)"), not wrong_pick, {"picked": len(picked), "wrong": wrong_pick[:10]})
+    wrong_sex = [(c["name"], sex_of.get(c["id"]), entry_sex_of(looks, by_id[c["id"]]["person"])) for c in persons if c["id"] in by_id and sex_of.get(c["id"]) and entry_sex_of(looks, by_id[c["id"]]["person"]) not in (None, {1: "f", 2: "m"}[sex_of[c["id"]]])]
+    present("every person's look shows their body sex (sex-1)", not wrong_sex, {"wrong": wrong_sex[:10]})
     present("every line key is lk_ and 16 hex digits", all(re.fullmatch(r"lk_[0-9a-f]{16}", k) for k in keyed))
     # The client's book (git-ignored; char-4's bundles carry it): `LIVING_LOOK_BOOK`, else the game's assets.
     book_path = Path(os.environ.get("LIVING_LOOK_BOOK") or ROOT / "living/game/assets/characters/looks.json")
@@ -466,6 +526,7 @@ def check_seed(seed, rows):
     if m.get("kind") == "land":
         checks.extend(check_land(seed, rows, size[0], tiles))
     checks.extend(check_looks(seed, rows))
+    checks.extend(check_sex(seed, rows))
     return checks
 
 

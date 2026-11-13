@@ -22,6 +22,7 @@ mod perception;
 mod presence;
 mod records;
 mod seed;
+mod sex;
 mod tables;
 mod tick;
 mod town;
@@ -604,6 +605,22 @@ pub fn my_deliberations(ctx: &ViewContext) -> Vec<Deliberation> {
 
 #[spacetimedb::reducer]
 pub fn join(ctx: &ReducerContext, name: String) -> Result<(), String> {
+    join_with(ctx, name, None)
+}
+
+/// `join` with the body's sex chosen (docs/LIVING_CORE.md, "Body sex"): `sex` is "f" or "m"
+/// (also "female", "male", any case); anything else is refused and nothing is made. A reducer
+/// beside `join`, not a new argument to it, so existing clients and bindings keep working
+/// (changing an existing reducer's arguments is not a safe module update).
+#[spacetimedb::reducer]
+pub fn join_as(ctx: &ReducerContext, name: String, sex: String) -> Result<(), String> {
+    let Some(s) = living_rules::sex::Sex::parse(&sex) else {
+        return Err(format!("sex must be \"f\" or \"m\", not {sex:?}"));
+    };
+    join_with(ctx, name, Some(s))
+}
+
+fn join_with(ctx: &ReducerContext, name: String, sex: Option<living_rules::sex::Sex>) -> Result<(), String> {
     let name = name.trim().to_string();
     if name.is_empty() || name.len() > 24 {
         return Err("name must be 1..=24 bytes".into());
@@ -615,7 +632,8 @@ pub fn join(ctx: &ReducerContext, name: String) -> Result<(), String> {
     let map = common::map(ctx);
     let arrive = island::arrival(ctx);
     let at = map.nearest_walkable(arrive.0, arrive.1).ok_or("no room")?;
-    let id = seed::spawn_creature(ctx, &name, "person", ctx.sender(), false, at, now);
+    let age = common::life_of(ctx, "person").age_at(0.25, common::pace(&common::world(ctx)));
+    let id = seed::spawn_sexed(ctx, &name, "person", ctx.sender(), false, at, now, age, (0, 0), sex);
     perception::set_player(ctx, ctx.sender(), id);
     mind::set_graph(ctx, id, WAITING_GRAPH, WAITING, "human", now)?;
     // What the world gives every newcomer (the seed's `newcomer`): nothing of anyone before.
