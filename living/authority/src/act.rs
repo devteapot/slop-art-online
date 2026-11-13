@@ -2424,6 +2424,8 @@ pub fn forget_dead(ctx: &ReducerContext, id: u32) {
     ctx.db.experience().observer().delete(id);
     ctx.db.line_heard().speaker().delete(id);
     ctx.db.place().actor().delete(id);
+    ctx.db.seen_stock().actor().delete(id);
+    ctx.db.standing().actor().delete(id);
     ctx.db.judgment().actor().delete(id);
     ctx.db.cue().actor().delete(id);
     ctx.db.judged().actor().delete(id);
