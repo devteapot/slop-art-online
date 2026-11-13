@@ -243,116 +243,17 @@
      "graph": {
       "first": [
        {
-        "seq": [
-         {
-          "do": {
-           "skill": "attack",
-           "target": "$subject"
+        "if": {
+         "cond": {
+          "health": {
+           "below": 35
           }
          },
-         {
-          "if": {
-           "cond": {
-            "health": {
-             "below": 70
-            }
-           },
-           "then": {
-            "first": [
-             {
-              "seq": [
-               {
-                "do": {
-                 "skill": "heal",
-                 "target": "self"
-                }
-               },
-               {
-                "first": [
-                 {
-                  "if": {
-                   "cond": {
-                    "chance": 0.5
-                   },
-                   "then": {
-                    "wait": 1.5
-                   }
-                  }
-                 },
-                 {
-                  "wait": 2.5
-                 }
-                ]
-               }
-              ]
-             },
-             {
-              "first": [
-               {
-                "if": {
-                 "cond": {
-                  "chance": 0.5
-                 },
-                 "then": {
-                  "wait": 2
-                 }
-                }
-               },
-               {
-                "wait": 3
-               }
-              ]
-             }
-            ]
-           },
-           "else": {
-            "first": [
-             {
-              "if": {
-               "cond": {
-                "chance": 0.5
-               },
-               "then": {
-                "wait": 2
-               }
-              }
-             },
-             {
-              "wait": 3
-             }
-            ]
-           }
+         "then": {
+          "do": {
+           "skill": "flee",
+           "target": "$subject"
           }
-         }
-        ]
-       }
-      ]
-     }
-    }
-   ]
-  },
-  {
-   "when": {
-    "near": {
-     "who": "foe",
-     "of": "subject",
-     "beyond": 5,
-     "for_s": 4
-    }
-   },
-   "after_min": 1.05,
-   "max": 400,
-   "steps": [
-    {
-     "do": "graph",
-     "who": "foe",
-     "graph": {
-      "seq": [
-       {
-        "do": {
-         "skill": "goto",
-         "target": {
-          "at": "$subject_xy"
          }
         }
        },
@@ -439,6 +340,143 @@
               ]
              }
             }
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "when": {
+    "near": {
+     "who": "foe",
+     "of": "subject",
+     "beyond": 5,
+     "for_s": 4
+    }
+   },
+   "after_min": 1.05,
+   "max": 400,
+   "steps": [
+    {
+     "do": "graph",
+     "who": "foe",
+     "graph": {
+      "first": [
+       {
+        "if": {
+         "cond": {
+          "health": {
+           "below": 35
+          }
+         },
+         "then": {
+          "do": {
+           "skill": "flee",
+           "target": "$subject"
+          }
+         }
+        }
+       },
+       {
+        "seq": [
+         {
+          "do": {
+           "skill": "goto",
+           "target": {
+            "at": "$subject_xy"
+           }
+          }
+         },
+         {
+          "first": [
+           {
+            "seq": [
+             {
+              "do": {
+               "skill": "attack",
+               "target": "$subject"
+              }
+             },
+             {
+              "if": {
+               "cond": {
+                "health": {
+                 "below": 70
+                }
+               },
+               "then": {
+                "first": [
+                 {
+                  "seq": [
+                   {
+                    "do": {
+                     "skill": "heal",
+                     "target": "self"
+                    }
+                   },
+                   {
+                    "first": [
+                     {
+                      "if": {
+                       "cond": {
+                        "chance": 0.5
+                       },
+                       "then": {
+                        "wait": 1.5
+                       }
+                      }
+                     },
+                     {
+                      "wait": 2.5
+                     }
+                    ]
+                   }
+                  ]
+                 },
+                 {
+                  "first": [
+                   {
+                    "if": {
+                     "cond": {
+                      "chance": 0.5
+                     },
+                     "then": {
+                      "wait": 2
+                     }
+                    }
+                   },
+                   {
+                    "wait": 3
+                   }
+                  ]
+                 }
+                ]
+               },
+               "else": {
+                "first": [
+                 {
+                  "if": {
+                   "cond": {
+                    "chance": 0.5
+                   },
+                   "then": {
+                    "wait": 2
+                   }
+                  }
+                 },
+                 {
+                  "wait": 3
+                 }
+                ]
+               }
+              }
+             }
+            ]
            }
           ]
          }
@@ -511,116 +549,17 @@
      "graph": {
       "first": [
        {
-        "seq": [
-         {
-          "do": {
-           "skill": "attack",
-           "target": "$subject"
+        "if": {
+         "cond": {
+          "health": {
+           "below": 35
           }
          },
-         {
-          "if": {
-           "cond": {
-            "health": {
-             "below": 70
-            }
-           },
-           "then": {
-            "first": [
-             {
-              "seq": [
-               {
-                "do": {
-                 "skill": "heal",
-                 "target": "self"
-                }
-               },
-               {
-                "first": [
-                 {
-                  "if": {
-                   "cond": {
-                    "chance": 0.5
-                   },
-                   "then": {
-                    "wait": 1.5
-                   }
-                  }
-                 },
-                 {
-                  "wait": 2.5
-                 }
-                ]
-               }
-              ]
-             },
-             {
-              "first": [
-               {
-                "if": {
-                 "cond": {
-                  "chance": 0.5
-                 },
-                 "then": {
-                  "wait": 2
-                 }
-                }
-               },
-               {
-                "wait": 3
-               }
-              ]
-             }
-            ]
-           },
-           "else": {
-            "first": [
-             {
-              "if": {
-               "cond": {
-                "chance": 0.5
-               },
-               "then": {
-                "wait": 2
-               }
-              }
-             },
-             {
-              "wait": 3
-             }
-            ]
-           }
+         "then": {
+          "do": {
+           "skill": "flee",
+           "target": "$subject"
           }
-         }
-        ]
-       }
-      ]
-     }
-    }
-   ]
-  },
-  {
-   "when": {
-    "near": {
-     "who": "foe",
-     "of": "subject",
-     "beyond": 5,
-     "for_s": 4
-    }
-   },
-   "after_min": 11.05,
-   "max": 400,
-   "steps": [
-    {
-     "do": "graph",
-     "who": "foe",
-     "graph": {
-      "seq": [
-       {
-        "do": {
-         "skill": "goto",
-         "target": {
-          "at": "$subject_xy"
          }
         }
        },
@@ -707,6 +646,143 @@
               ]
              }
             }
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "when": {
+    "near": {
+     "who": "foe",
+     "of": "subject",
+     "beyond": 5,
+     "for_s": 4
+    }
+   },
+   "after_min": 11.05,
+   "max": 400,
+   "steps": [
+    {
+     "do": "graph",
+     "who": "foe",
+     "graph": {
+      "first": [
+       {
+        "if": {
+         "cond": {
+          "health": {
+           "below": 35
+          }
+         },
+         "then": {
+          "do": {
+           "skill": "flee",
+           "target": "$subject"
+          }
+         }
+        }
+       },
+       {
+        "seq": [
+         {
+          "do": {
+           "skill": "goto",
+           "target": {
+            "at": "$subject_xy"
+           }
+          }
+         },
+         {
+          "first": [
+           {
+            "seq": [
+             {
+              "do": {
+               "skill": "attack",
+               "target": "$subject"
+              }
+             },
+             {
+              "if": {
+               "cond": {
+                "health": {
+                 "below": 70
+                }
+               },
+               "then": {
+                "first": [
+                 {
+                  "seq": [
+                   {
+                    "do": {
+                     "skill": "heal",
+                     "target": "self"
+                    }
+                   },
+                   {
+                    "first": [
+                     {
+                      "if": {
+                       "cond": {
+                        "chance": 0.5
+                       },
+                       "then": {
+                        "wait": 1.5
+                       }
+                      }
+                     },
+                     {
+                      "wait": 2.5
+                     }
+                    ]
+                   }
+                  ]
+                 },
+                 {
+                  "first": [
+                   {
+                    "if": {
+                     "cond": {
+                      "chance": 0.5
+                     },
+                     "then": {
+                      "wait": 2
+                     }
+                    }
+                   },
+                   {
+                    "wait": 3
+                   }
+                  ]
+                 }
+                ]
+               },
+               "else": {
+                "first": [
+                 {
+                  "if": {
+                   "cond": {
+                    "chance": 0.5
+                   },
+                   "then": {
+                    "wait": 2
+                   }
+                  }
+                 },
+                 {
+                  "wait": 3
+                 }
+                ]
+               }
+              }
+             }
+            ]
            }
           ]
          }
@@ -779,116 +855,17 @@
      "graph": {
       "first": [
        {
-        "seq": [
-         {
-          "do": {
-           "skill": "attack",
-           "target": "$subject"
+        "if": {
+         "cond": {
+          "health": {
+           "below": 35
           }
          },
-         {
-          "if": {
-           "cond": {
-            "health": {
-             "below": 70
-            }
-           },
-           "then": {
-            "first": [
-             {
-              "seq": [
-               {
-                "do": {
-                 "skill": "heal",
-                 "target": "self"
-                }
-               },
-               {
-                "first": [
-                 {
-                  "if": {
-                   "cond": {
-                    "chance": 0.5
-                   },
-                   "then": {
-                    "wait": 1.5
-                   }
-                  }
-                 },
-                 {
-                  "wait": 2.5
-                 }
-                ]
-               }
-              ]
-             },
-             {
-              "first": [
-               {
-                "if": {
-                 "cond": {
-                  "chance": 0.5
-                 },
-                 "then": {
-                  "wait": 2
-                 }
-                }
-               },
-               {
-                "wait": 3
-               }
-              ]
-             }
-            ]
-           },
-           "else": {
-            "first": [
-             {
-              "if": {
-               "cond": {
-                "chance": 0.5
-               },
-               "then": {
-                "wait": 2
-               }
-              }
-             },
-             {
-              "wait": 3
-             }
-            ]
-           }
+         "then": {
+          "do": {
+           "skill": "flee",
+           "target": "$subject"
           }
-         }
-        ]
-       }
-      ]
-     }
-    }
-   ]
-  },
-  {
-   "when": {
-    "near": {
-     "who": "foe",
-     "of": "subject",
-     "beyond": 5,
-     "for_s": 4
-    }
-   },
-   "after_min": 14.05,
-   "max": 400,
-   "steps": [
-    {
-     "do": "graph",
-     "who": "foe",
-     "graph": {
-      "seq": [
-       {
-        "do": {
-         "skill": "goto",
-         "target": {
-          "at": "$subject_xy"
          }
         }
        },
@@ -975,6 +952,143 @@
               ]
              }
             }
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "when": {
+    "near": {
+     "who": "foe",
+     "of": "subject",
+     "beyond": 5,
+     "for_s": 4
+    }
+   },
+   "after_min": 14.05,
+   "max": 400,
+   "steps": [
+    {
+     "do": "graph",
+     "who": "foe",
+     "graph": {
+      "first": [
+       {
+        "if": {
+         "cond": {
+          "health": {
+           "below": 35
+          }
+         },
+         "then": {
+          "do": {
+           "skill": "flee",
+           "target": "$subject"
+          }
+         }
+        }
+       },
+       {
+        "seq": [
+         {
+          "do": {
+           "skill": "goto",
+           "target": {
+            "at": "$subject_xy"
+           }
+          }
+         },
+         {
+          "first": [
+           {
+            "seq": [
+             {
+              "do": {
+               "skill": "attack",
+               "target": "$subject"
+              }
+             },
+             {
+              "if": {
+               "cond": {
+                "health": {
+                 "below": 70
+                }
+               },
+               "then": {
+                "first": [
+                 {
+                  "seq": [
+                   {
+                    "do": {
+                     "skill": "heal",
+                     "target": "self"
+                    }
+                   },
+                   {
+                    "first": [
+                     {
+                      "if": {
+                       "cond": {
+                        "chance": 0.5
+                       },
+                       "then": {
+                        "wait": 1.5
+                       }
+                      }
+                     },
+                     {
+                      "wait": 2.5
+                     }
+                    ]
+                   }
+                  ]
+                 },
+                 {
+                  "first": [
+                   {
+                    "if": {
+                     "cond": {
+                      "chance": 0.5
+                     },
+                     "then": {
+                      "wait": 2
+                     }
+                    }
+                   },
+                   {
+                    "wait": 3
+                   }
+                  ]
+                 }
+                ]
+               },
+               "else": {
+                "first": [
+                 {
+                  "if": {
+                   "cond": {
+                    "chance": 0.5
+                   },
+                   "then": {
+                    "wait": 2
+                   }
+                  }
+                 },
+                 {
+                  "wait": 3
+                 }
+                ]
+               }
+              }
+             }
+            ]
            }
           ]
          }
@@ -1047,116 +1161,17 @@
      "graph": {
       "first": [
        {
-        "seq": [
-         {
-          "do": {
-           "skill": "attack",
-           "target": "$subject"
+        "if": {
+         "cond": {
+          "health": {
+           "below": 35
           }
          },
-         {
-          "if": {
-           "cond": {
-            "health": {
-             "below": 70
-            }
-           },
-           "then": {
-            "first": [
-             {
-              "seq": [
-               {
-                "do": {
-                 "skill": "heal",
-                 "target": "self"
-                }
-               },
-               {
-                "first": [
-                 {
-                  "if": {
-                   "cond": {
-                    "chance": 0.5
-                   },
-                   "then": {
-                    "wait": 1.5
-                   }
-                  }
-                 },
-                 {
-                  "wait": 2.5
-                 }
-                ]
-               }
-              ]
-             },
-             {
-              "first": [
-               {
-                "if": {
-                 "cond": {
-                  "chance": 0.5
-                 },
-                 "then": {
-                  "wait": 2
-                 }
-                }
-               },
-               {
-                "wait": 3
-               }
-              ]
-             }
-            ]
-           },
-           "else": {
-            "first": [
-             {
-              "if": {
-               "cond": {
-                "chance": 0.5
-               },
-               "then": {
-                "wait": 2
-               }
-              }
-             },
-             {
-              "wait": 3
-             }
-            ]
-           }
+         "then": {
+          "do": {
+           "skill": "flee",
+           "target": "$subject"
           }
-         }
-        ]
-       }
-      ]
-     }
-    }
-   ]
-  },
-  {
-   "when": {
-    "near": {
-     "who": "foe",
-     "of": "subject",
-     "beyond": 5,
-     "for_s": 4
-    }
-   },
-   "after_min": 23.05,
-   "max": 400,
-   "steps": [
-    {
-     "do": "graph",
-     "who": "foe",
-     "graph": {
-      "seq": [
-       {
-        "do": {
-         "skill": "goto",
-         "target": {
-          "at": "$subject_xy"
          }
         }
        },
@@ -1251,6 +1266,143 @@
       ]
      }
     }
+   ]
+  },
+  {
+   "when": {
+    "near": {
+     "who": "foe",
+     "of": "subject",
+     "beyond": 5,
+     "for_s": 4
+    }
+   },
+   "after_min": 23.05,
+   "max": 400,
+   "steps": [
+    {
+     "do": "graph",
+     "who": "foe",
+     "graph": {
+      "first": [
+       {
+        "if": {
+         "cond": {
+          "health": {
+           "below": 35
+          }
+         },
+         "then": {
+          "do": {
+           "skill": "flee",
+           "target": "$subject"
+          }
+         }
+        }
+       },
+       {
+        "seq": [
+         {
+          "do": {
+           "skill": "goto",
+           "target": {
+            "at": "$subject_xy"
+           }
+          }
+         },
+         {
+          "first": [
+           {
+            "seq": [
+             {
+              "do": {
+               "skill": "attack",
+               "target": "$subject"
+              }
+             },
+             {
+              "if": {
+               "cond": {
+                "health": {
+                 "below": 70
+                }
+               },
+               "then": {
+                "first": [
+                 {
+                  "seq": [
+                   {
+                    "do": {
+                     "skill": "heal",
+                     "target": "self"
+                    }
+                   },
+                   {
+                    "first": [
+                     {
+                      "if": {
+                       "cond": {
+                        "chance": 0.5
+                       },
+                       "then": {
+                        "wait": 1.5
+                       }
+                      }
+                     },
+                     {
+                      "wait": 2.5
+                     }
+                    ]
+                   }
+                  ]
+                 },
+                 {
+                  "first": [
+                   {
+                    "if": {
+                     "cond": {
+                      "chance": 0.5
+                     },
+                     "then": {
+                      "wait": 2
+                     }
+                    }
+                   },
+                   {
+                    "wait": 3
+                   }
+                  ]
+                 }
+                ]
+               },
+               "else": {
+                "first": [
+                 {
+                  "if": {
+                   "cond": {
+                    "chance": 0.5
+                   },
+                   "then": {
+                    "wait": 2
+                   }
+                  }
+                 },
+                 {
+                  "wait": 3
+                 }
+                ]
+               }
+              }
+             }
+            ]
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    }
    ],
    "before_min": 25.0
   },
@@ -1315,116 +1467,17 @@
      "graph": {
       "first": [
        {
-        "seq": [
-         {
-          "do": {
-           "skill": "attack",
-           "target": "$subject"
+        "if": {
+         "cond": {
+          "health": {
+           "below": 35
           }
          },
-         {
-          "if": {
-           "cond": {
-            "health": {
-             "below": 70
-            }
-           },
-           "then": {
-            "first": [
-             {
-              "seq": [
-               {
-                "do": {
-                 "skill": "heal",
-                 "target": "self"
-                }
-               },
-               {
-                "first": [
-                 {
-                  "if": {
-                   "cond": {
-                    "chance": 0.5
-                   },
-                   "then": {
-                    "wait": 1.5
-                   }
-                  }
-                 },
-                 {
-                  "wait": 2.5
-                 }
-                ]
-               }
-              ]
-             },
-             {
-              "first": [
-               {
-                "if": {
-                 "cond": {
-                  "chance": 0.5
-                 },
-                 "then": {
-                  "wait": 2
-                 }
-                }
-               },
-               {
-                "wait": 3
-               }
-              ]
-             }
-            ]
-           },
-           "else": {
-            "first": [
-             {
-              "if": {
-               "cond": {
-                "chance": 0.5
-               },
-               "then": {
-                "wait": 2
-               }
-              }
-             },
-             {
-              "wait": 3
-             }
-            ]
-           }
+         "then": {
+          "do": {
+           "skill": "flee",
+           "target": "$subject"
           }
-         }
-        ]
-       }
-      ]
-     }
-    }
-   ]
-  },
-  {
-   "when": {
-    "near": {
-     "who": "foe_b",
-     "of": "subject",
-     "beyond": 5,
-     "for_s": 4
-    }
-   },
-   "after_min": 26.05,
-   "max": 400,
-   "steps": [
-    {
-     "do": "graph",
-     "who": "foe_b",
-     "graph": {
-      "seq": [
-       {
-        "do": {
-         "skill": "goto",
-         "target": {
-          "at": "$subject_xy"
          }
         }
        },
@@ -1511,6 +1564,143 @@
               ]
              }
             }
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "when": {
+    "near": {
+     "who": "foe_b",
+     "of": "subject",
+     "beyond": 5,
+     "for_s": 4
+    }
+   },
+   "after_min": 26.05,
+   "max": 400,
+   "steps": [
+    {
+     "do": "graph",
+     "who": "foe_b",
+     "graph": {
+      "first": [
+       {
+        "if": {
+         "cond": {
+          "health": {
+           "below": 35
+          }
+         },
+         "then": {
+          "do": {
+           "skill": "flee",
+           "target": "$subject"
+          }
+         }
+        }
+       },
+       {
+        "seq": [
+         {
+          "do": {
+           "skill": "goto",
+           "target": {
+            "at": "$subject_xy"
+           }
+          }
+         },
+         {
+          "first": [
+           {
+            "seq": [
+             {
+              "do": {
+               "skill": "attack",
+               "target": "$subject"
+              }
+             },
+             {
+              "if": {
+               "cond": {
+                "health": {
+                 "below": 70
+                }
+               },
+               "then": {
+                "first": [
+                 {
+                  "seq": [
+                   {
+                    "do": {
+                     "skill": "heal",
+                     "target": "self"
+                    }
+                   },
+                   {
+                    "first": [
+                     {
+                      "if": {
+                       "cond": {
+                        "chance": 0.5
+                       },
+                       "then": {
+                        "wait": 1.5
+                       }
+                      }
+                     },
+                     {
+                      "wait": 2.5
+                     }
+                    ]
+                   }
+                  ]
+                 },
+                 {
+                  "first": [
+                   {
+                    "if": {
+                     "cond": {
+                      "chance": 0.5
+                     },
+                     "then": {
+                      "wait": 2
+                     }
+                    }
+                   },
+                   {
+                    "wait": 3
+                   }
+                  ]
+                 }
+                ]
+               },
+               "else": {
+                "first": [
+                 {
+                  "if": {
+                   "cond": {
+                    "chance": 0.5
+                   },
+                   "then": {
+                    "wait": 2
+                   }
+                  }
+                 },
+                 {
+                  "wait": 3
+                 }
+                ]
+               }
+              }
+             }
+            ]
            }
           ]
          }
