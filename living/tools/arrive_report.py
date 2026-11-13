@@ -75,11 +75,13 @@ Then, per batch x arm (an arm is the variant, or `trial:variant` for another tri
     gestured or aimed an activity at the newcomer within one 60 s window, from any distance.
     It is the old `converge_60s`, still written under that name too for older records.
   - `crowd_4m`, "residents within 4 m at once": the most distinct residents within 4 m of the
-    newcomer at one position sample, whatever brought them (`crowd_4m_s`: when). The stop rule
-    reads it (`stop`, `STOP_CROWD_4M`). `together_4m` differs in counting only those within 4 m
-    who had spoken, gestured or aimed an act at the newcomer in the minute before.
-  - `runs_3plus`: runs with `crowd_4m` of 3 or more (before 2026-11-13: `converge_60s` of 3 or
-    more). `converge_any_60s` and
+    newcomer at one position sample, whatever brought them (`crowd_4m_s`: when). Reported
+    beside the stop rule's measure.
+  - `together_4m`: those within 4 m at once who had spoken, gestured or aimed an act at the
+    newcomer in the minute before. The stop rule reads it since 2026-11-13 (`stop`,
+    `STOP_TOGETHER_4M`).
+  - `runs_3plus`: runs with `together_4m` of 3 or more (before 2026-11-13: `converge_60s` of
+    3 or more). `converge_any_60s` and
   `together_any_4m` also count approaches and arrivals from beyond 8 m, which residents'
   routines make in every arm (the baseline to read the others against).
 - **Cost**: dollars per hour and per run, calls and tokens per minute; `reused_share`, the share
@@ -127,9 +129,11 @@ CLASSES = ["greeting", "question", "offer", "warning/hostility", "other line", "
 GAZE_STILL_M, GAZE_TURN, GAZE_AT, GAZE_NEAR, GAZE_FAR = 0.3, 0.5, 0.35, 4.0, 25.0
 CONVERGE_S = 60
 # The strangers stop rule since 2026-11-13: this many residents within 4 m of the newcomer at once
-# (`crowd_4m`). Before, `converge_60s` (now `voices_60s`) >= 4 or `together_4m` >= 3: fs1w had
-# 8 voices within a minute from 13-32 m and one body within 4 m (docs/TRIALS.md, "The stop rule").
-STOP_CROWD_4M = 3
+# who had spoken, gestured or aimed an act at it in the minute before (`together_4m`). Earlier
+# rules (docs/TRIALS.md, "The stop rule: voices and bodies"): until 2026-11-12 `converge_60s` (now
+# `voices_60s`) >= 4 or `together_4m` >= 3; for one day, 2026-11-13, `crowd_4m` >= 3, dropped
+# because the plain count measures where the newcomer stands, not whom it draws.
+STOP_TOGETHER_4M = 3
 QUIET_S = 90
 
 
@@ -561,7 +565,7 @@ def run_report(d):
         "usd_h": round(usd / run_min * 60, 2) if run_min else None,
         "usd": round(usd, 2),
         "voices_60s": most, "crowd_4m": crowd, "crowd_4m_s": round((crowd_at - t_arrive) / 1000, 1) if crowd_at else None,
-        "stop": {"crowd_4m": crowd >= STOP_CROWD_4M, "old_converge_or_together": most >= 4 or together >= 3},
+        "stop": {"together_4m": together >= STOP_TOGETHER_4M, "interim_crowd_4m": crowd >= 3, "old_converge_or_together": most >= 4 or together >= 3},
         "converge_60s": most, "converge_60s_heard": most_heard, "converge_60s_unheard": most_unheard, "together_4m": together, "converge_any_60s": most_any, "together_any_4m": together_any,
         "reasons": reasons["reasons"], "reused": reasons["reused"], "reused_events": reasons["reused_events"],
         "reused_share": round(reasons["reused"] / reasons["reasons"], 2) if reasons["reasons"] else None,
@@ -668,7 +672,7 @@ def main():
         for c in ["voices_60s", "crowd_4m", "converge_60s", "together_4m", "converge_any_60s", "together_any_4m", "usd_h", "usd", "calls_min", "tok_min", "reused_share", "reused_events", "carried", "carried_again"]:
             xs = [r[c] for r in rs if r.get(c) is not None]
             row[c] = f"{statistics.mean(xs):.2f} ({min(xs)}–{max(xs)})" if xs else None
-        row["runs_3plus"] = f"{sum(1 for r in rs if r.get('crowd_4m', 0) >= STOP_CROWD_4M)} of {len(rs)}"
+        row["runs_3plus"] = f"{sum(1 for r in rs if r.get('together_4m', 0) >= STOP_TOGETHER_4M)} of {len(rs)}"
         krows.append(row)
     print(table(krows, ["batch", "arm", "n", "voices_60s", "crowd_4m", "together_4m", "runs_3plus", "converge_any_60s", "together_any_4m", "usd_h", "usd", "calls_min", "tok_min", "reused_share", "reused_events", "carried", "carried_again"]))
     print("\n## Residents in range\n")

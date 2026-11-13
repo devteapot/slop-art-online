@@ -38,8 +38,8 @@ control is `<trial>:arrive-control`. Per run:
   after the same resident had asked once (a silent newcomer is asked again and again; a cost).
 - **Crowding** (arrive_report), since 2026-11-13 voices and bodies: `voices_60s`, "speakers to the newcomer
   within a minute" (the old `converge_60s`, from any distance); `crowd_4m`, "residents within 4 m at
-  once" (the stop rule's measure); `together_4m`, those within 4 m at once who had addressed the
-  newcomer in the minute before.
+  once"; `together_4m`, those within 4 m at once who had addressed the newcomer in the minute
+  before (the stop rule's measure since 2026-11-13).
 - **Guards** (feel_tune.py's definitions over the residents' lives, split by addressee):
   `false_min`, false replies per minute and `group_talk_min` answered room remarks per minute
   (greet_report.py `reply_kind`, since strangers-measures: turns that answered a resident's line
