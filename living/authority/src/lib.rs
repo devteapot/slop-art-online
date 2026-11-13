@@ -368,6 +368,33 @@ pub fn kill(ctx: &ReducerContext, id: u32, cause: String) -> Result<(), String> 
     Ok(())
 }
 
+/// Admin support: set a living body's health to `hp` (above 0; more than its maximum is its
+/// maximum). Nothing perceives it as care: the body just has that health. Every use is a
+/// chronicle line of kind `admin` ("admin set <name>'s health 41 -> 100"). Trial timelines are its
+/// only user (an arena's meetings start at full health: docs/COMBAT_MIND.md §5.4); refused for
+/// players and minds like every admin reducer.
+#[spacetimedb::reducer]
+pub fn admin_set_vitals(ctx: &ReducerContext, id: u32, hp: f32) -> Result<(), String> {
+    require_admin(ctx)?;
+    if !hp.is_finite() || hp <= 0.0 {
+        return Err("health must be above 0 (a death is `kill`)".into());
+    }
+    let now = common::now_ms(ctx);
+    let c = ctx.db.character().id().find(id).filter(|c| c.alive).ok_or("no living character with that id")?;
+    let mut v = ctx.db.vitals().id().find(id).ok_or("no vitals for that character")?;
+    common::settle(ctx, &mut v, now);
+    let before = v.hp;
+    v.hp = hp.min(v.max_hp);
+    v.rate_key = 0;
+    let after = v.hp;
+    ctx.db.vitals().id().update(v);
+    combat::refresh_band(ctx, id, now);
+    perception::health_moved(ctx, id, now);
+    let at = ctx.db.body().id().find(id).map(|b| common::pos(&b, now)).unwrap_or((0.0, 0.0));
+    common::chronicle(ctx, now, "admin", id, 0, at, format!("admin set {}'s health {before:.0} -> {after:.0}", c.name));
+    Ok(())
+}
+
 /// Test support: set a character's background (read by its mind when it first forms an identity).
 #[spacetimedb::reducer]
 pub fn set_background(ctx: &ReducerContext, id: u32, text: String) -> Result<(), String> {

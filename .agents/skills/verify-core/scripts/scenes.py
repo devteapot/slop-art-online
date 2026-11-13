@@ -5901,5 +5901,36 @@ def heard_first(s):
 SCENES["heard_first"] = heard_first
 
 
+def admin_vitals(s):
+    """`admin_set_vitals(id, hp)` (admin only): sets a living body's health, more than its maximum
+    being its maximum, and chronicles each use as an `admin` line; a health of 0 or less, or a dead
+    character, is refused and writes nothing. Trial timelines use it to start an arena's meetings at
+    full health (docs/COMBAT_MIND.md §5.4); verify-client checks that no other identity may call it."""
+    a = s.people(1)[0]
+    hp = lambda label: s.rows(f"SELECT * FROM vitals WHERE id = {a}", label)[0]
+    admin_lines = lambda label: [c for c in s.rows(f"SELECT * FROM chronicle WHERE a = {a}", label) if c["kind"] == "admin"]
+    s.call("admin_set_vitals", a, 40.0)
+    v = hp("vitals-40")
+    s.expect("health set to 40", abs(v["hp"] - 40.0) < 0.5, v["hp"])
+    s.call("admin_set_vitals", a, 1000.0)
+    v = hp("vitals-max")
+    s.expect("more than the maximum is the maximum", abs(v["hp"] - v["max_hp"]) < 0.01, [v["hp"], v["max_hp"]])
+    lines = admin_lines("admin-lines")
+    s.expect("each use is an admin chronicle line", len(lines) == 2 and "health 40 ->" not in lines[0]["text"] and "-> 40" in lines[0]["text"] and f"-> {v['max_hp']:.0f}" in lines[1]["text"], [c["text"] for c in lines])
+    # (a negative value cannot be passed through the admin CLI, which reads "-5" as a flag)
+    for bad in (0.0,):
+        r = s.call("admin_set_vitals", a, bad, check=False)
+        out = (r.stdout or "") + (r.stderr or "")
+        s.expect(f"a health of {bad:g} is refused", r.returncode != 0 and "health must be above 0" in out, out[-200:])
+    s.expect("a refused call writes nothing", len(admin_lines("admin-lines-after")) == 2 and abs(hp("vitals-after")["hp"] - v["max_hp"]) < 0.5)
+    s.call("kill", a, "verify admin_vitals")
+    r = s.call("admin_set_vitals", a, 50.0, check=False)
+    out = (r.stdout or "") + (r.stderr or "")
+    s.expect("a dead character is refused", r.returncode != 0 and "no living character" in out, out[-200:])
+
+
+SCENES["admin_vitals"] = admin_vitals
+
+
 if __name__ == "__main__":
     raise SystemExit(main())
