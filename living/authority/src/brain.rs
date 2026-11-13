@@ -2026,16 +2026,26 @@ impl<'a> Ev<'a> {
         }
         let structures: Vec<(u64, String, u32, (f32, f32), f32)> = self.structures().iter().map(|(s, d)| (s.id, s.kind.clone(), s.owner, (s.x, s.y), *d)).collect();
         let mut told = vec![false; structures.len()];
+        // Which are new, by index (a look among many new remains asks it of each part).
+        let mut is_new = vec![false; structures.len()];
+        for &i in &new {
+            is_new[i] = true;
+        }
+        // Tiles by kind and owner, each in list order, for `joined_tiles`.
+        let mut groups: std::collections::HashMap<(&str, u32), Vec<usize>> = std::collections::HashMap::new();
+        for (j, (_, kind, owner, _, _)) in structures.iter().enumerate() {
+            groups.entry((kind.as_str(), *owner)).or_default().push(j);
+        }
         for &i in &new {
             if told[i] {
                 continue;
             }
-            let part = joined_tiles(&structures, i);
+            let part = joined_tiles(&structures, &groups[&(structures[i].1.as_str(), structures[i].2)], i);
             for &k in &part {
                 told[k] = true;
             }
             let (_, kind, owner, _, _) = &structures[i];
-            if *owner == self.me.id || part.iter().any(|k| !new.contains(k)) {
+            if *owner == self.me.id || part.iter().any(|k| !is_new[*k]) {
                 continue;
             }
             let nearest = *part.iter().min_by(|a, b| structures[**a].4.total_cmp(&structures[**b].4)).unwrap_or(&i);
@@ -2486,14 +2496,18 @@ fn stance_fits(ctx: &ReducerContext, me: u32, other: u32, want: &str) -> bool {
 
 /// The tiles of one structure in a scene list (id, kind, owner, position, distance): those
 /// reached from `start` through neighbours (within 1.5 tiles) of the same kind and owner.
-fn joined_tiles(all: &[(u64, String, u32, (f32, f32), f32)], start: usize) -> Vec<usize> {
-    let (_, kind, owner, _, _) = &all[start];
+/// The tiles joined to `start`: of its kind and owner, each within 1.5 tiles of another, found
+/// in the order of the list. `same` is the list's indices of that kind and owner, in order: the
+/// only ones that can join, so a look among many new remains (each its own owner's) does not
+/// scan the whole list for each.
+fn joined_tiles(all: &[(u64, String, u32, (f32, f32), f32)], same: &[usize], start: usize) -> Vec<usize> {
     let mut part = vec![start];
     let mut k = 0;
     while k < part.len() {
         let p = all[part[k]].3;
-        for (j, (_, kd, ow, q, _)) in all.iter().enumerate() {
-            if kd == kind && ow == owner && !part.contains(&j) && (q.0 - p.0).powi(2) + (q.1 - p.1).powi(2) <= 2.25 {
+        for &j in same {
+            let q = all[j].3;
+            if !part.contains(&j) && (q.0 - p.0).powi(2) + (q.1 - p.1).powi(2) <= 2.25 {
                 part.push(j);
             }
         }
@@ -2535,14 +2549,62 @@ mod tests {
         // A town gate three tiles wide, a second gate further along the wall, two campfires
         // side by side by different builders.
         let all = vec![t(1, "gate", 0, 10.5, 4.5), t(2, "gate", 0, 11.5, 4.5), t(3, "gate", 0, 12.5, 4.5), t(4, "gate", 0, 30.5, 4.5), t(5, "campfire", 7, 2.5, 2.5), t(6, "campfire", 8, 3.5, 2.5)];
-        let mut first = super::joined_tiles(&all, 0);
+        let mut first = joined(&all, 0);
         first.sort();
         assert_eq!(first, vec![0, 1, 2]);
-        assert_eq!(super::joined_tiles(&all, 3), vec![3]);
-        assert_eq!(super::joined_tiles(&all, 4), vec![4]);
+        assert_eq!(joined(&all, 3), vec![3]);
+        assert_eq!(joined(&all, 4), vec![4]);
         // The island's first gate (verify-trial-fbbase, 24 tiles in a block about 7 by 8).
         let block: Vec<(f32, f32)> = vec![(503.5, 177.5), (504.5, 178.5), (505.5, 177.5), (505.5, 178.5), (505.5, 179.5), (505.5, 180.5), (506.5, 175.5), (506.5, 176.5), (506.5, 177.5), (506.5, 178.5), (506.5, 179.5), (506.5, 180.5), (506.5, 181.5), (507.5, 177.5), (507.5, 178.5), (507.5, 179.5), (507.5, 180.5), (507.5, 181.5), (507.5, 182.5), (508.5, 178.5), (508.5, 179.5), (508.5, 180.5), (509.5, 179.5), (509.5, 180.5)];
         let gate: Vec<_> = block.iter().enumerate().map(|(i, p)| t(100 + i as u64, "gate", 0, p.0, p.1)).collect();
-        assert_eq!(super::joined_tiles(&gate, 7).len(), 24);
+        assert_eq!(joined(&gate, 7).len(), 24);
+    }
+
+    type Tile = (u64, String, u32, (f32, f32), f32);
+
+    /// `joined_tiles` given its kind-and-owner group, as `noticed` gives it.
+    fn joined(all: &[Tile], i: usize) -> Vec<usize> {
+        let same: Vec<usize> = (0..all.len()).filter(|&j| all[j].1 == all[i].1 && all[j].2 == all[i].2).collect();
+        super::joined_tiles(all, &same, i)
+    }
+
+    /// The tiles joined to `start` as they were found before the groups: the whole list scanned
+    /// for each member.
+    fn joined_by_scan(all: &[Tile], start: usize) -> Vec<usize> {
+        let (_, kind, owner, _, _) = &all[start];
+        let mut part = vec![start];
+        let mut k = 0;
+        while k < part.len() {
+            let p = all[part[k]].3;
+            for (j, (_, kd, ow, q, _)) in all.iter().enumerate() {
+                if kd == kind && ow == owner && !part.contains(&j) && (q.0 - p.0).powi(2) + (q.1 - p.1).powi(2) <= 2.25 {
+                    part.push(j);
+                }
+            }
+            k += 1;
+        }
+        part
+    }
+
+    #[test]
+    fn joining_within_groups_finds_the_scan_s_tiles_in_its_order() {
+        // Remains of many owners, a few houses and gates of shared owners, on a small field so
+        // that many touch: every start gives the same tiles in the same order as the whole scan.
+        let mut seed = 12345u64;
+        let mut next = || {
+            seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            (seed >> 33) as u32
+        };
+        let kinds = ["remains", "gate", "shelter"];
+        let all: Vec<Tile> = (0..400u64)
+            .map(|id| {
+                let kind = kinds[(next() % 3) as usize];
+                let owner = if kind == "remains" { 1000 + id as u32 } else { next() % 3 };
+                (id, kind.to_string(), owner, ((next() % 20) as f32 + 0.5, (next() % 20) as f32 + 0.5), 0.0)
+            })
+            .collect();
+        for i in 0..all.len() {
+            assert_eq!(joined(&all, i), joined_by_scan(&all, i), "start {i}");
+        }
     }
 }

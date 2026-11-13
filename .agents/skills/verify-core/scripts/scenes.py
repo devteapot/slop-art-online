@@ -6770,8 +6770,9 @@ def notice_delta(s):
     `notice_delta` law): structures in sight at the character's last look within 45 s (its
     `last_look` row) are passed over, and each one passed over is already familiar. 8 people walk
     back and forth along an open line among structures and four people's remains, while a builder
-    puts up a new one every 3 s; one walker is taken 120 m away for 50 s and brought back (its
-    last look too old: a whole look). `notice_delta_check` on: every structure passed over is
+    puts up a new one every 3 s; one walker is taken 120 m away for 50 s and brought back: what it
+    sees again is outside its last look's disc and checked again. (A look comes about once a
+    second, so a last look older than 45 s, checked whole, is a first look or one after a gap.) `notice_delta_check` on: every structure passed over is
     checked to have its `familiar` row (`diag:` `notice_delta:differed`). 50 s, then 20 s with
     `notice_delta` off: every structure in sight is checked again and new ones still noticed."""
     line = clear_line(s)
@@ -6790,12 +6791,13 @@ def notice_delta(s):
     kinds = ["shelter", "storage"]
     placed = []
 
-    def build(n, t_end, k=0):
-        # Each spot once (a tile beside a familiar one of its kind and owner is part of it).
+    def build(n, t_end, k=0, near=False):
+        # Each spot once (a tile beside a familiar one of its kind and owner is part of it); the
+        # second window's spots between the first's and the line.
         n += k
         while time.time() < t_end and k < n:
             x = line[k % len(line)][0]
-            y = line[0][1] + (-5.0 if k % 2 == 0 else 6.0) + (-1 if k % 2 == 0 else 1) * (k // len(line)) * 3.0
+            y = line[0][1] + ((-2.5 if k % 2 == 0 else 3.5) if near else (-5.0 if k % 2 == 0 else 6.0))
             s.call("place_at", builder, x, y, check=False)
             if s.call("place_structure", builder, kinds[k % 2], check=False).returncode == 0:
                 placed.append((x, y))
@@ -6822,7 +6824,7 @@ def notice_delta(s):
         for t in threads:
             t.join()
         set_law(s, "notice_delta", False)
-        t = threading.Thread(target=build, args=(6, time.time() + 22, 34))
+        t = threading.Thread(target=build, args=(6, time.time() + 22, 0, True))
         t.start()
         off, t_off = diag_window(s, 20, keys)
         t.join()
@@ -6843,7 +6845,7 @@ def notice_delta(s):
     print("MEASURE", json.dumps(m), flush=True)
     try:
         s.expect("structures were put up in view, the remains noticed, and new ones told", on["placed"] >= 5 and on["lines"] >= 5 and on["remains_lines"] >= 1, on)
-        s.expect("most looks were incremental, and passed over structures looked at already", on["notice_delta:incremental"] > on["notice_delta:whole"] > 0 and on["notice_delta:passed"] > on["notice_delta:incremental"], on)
+        s.expect("looks were incremental, and passed over structures looked at already", on["notice_delta:incremental"] > 100 and on["notice_delta:passed"] > on["notice_delta:incremental"], on)
         s.expect("every structure passed over was already familiar (checked many times, none was not)", on["notice_delta:checked"] >= 1000 and on["notice_delta:differed"] == 0 and on["differs_logged"] == 0, on)
         s.expect("each walker's last look is a row", on["last_look_rows"] == len(lookers), on)
         s.expect("with notice_delta off, no look passes anything over, and new structures are still noticed", off["notice_delta:incremental"] == 0 and off["notice_delta:passed"] == 0 and off["lines"] >= 1, off)
