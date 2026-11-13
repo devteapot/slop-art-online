@@ -5,7 +5,7 @@ Status: **design, being built step by step** (designed on branch `research-movem
 - `pursue-last-seen` (main `3e58c025`): nothing is followed out of sight; a pursuit goes to the last-seen place, a flight runs from it; `chase_lost_share` removed.
 - `known-ground` (step 3; this branch): every character records the ground it sees (`known_ground`, `remembered`, `ground_edit`; `ground_sight_m` 24 m by day), and with the `nav_belief` law (off by default until the arenas pass) walks are planned over it; a mind's scene lists its remembered places with bearings ([LIVING_CORE](LIVING_CORE.md#steering-locomotion)). Built as the step-3 design note approved on 2026-11-13: three new private tables, no column added to an existing table (appending one rewrites the table and disconnects every client in 2.14.1); remembered gates in their own table rather than on `familiar`.
 
-Next: `nav-arenas` (§4). The rest of this paragraph is the design as written. Nothing else is built. No module was built and no model was called. The evidence below comes from reading the code on main and from scanning existing trial evidence under `~/dev/*/.local/living/trials/`. The target spread in [§4](#4-measures-the-navigation-arenas) is committed here before any arena runs.
+Next: `nav-arenas` (§4; how the arenas are built, committed before any run, in §4.1). The rest of this paragraph is the design as written. Nothing else is built. No module was built and no model was called. The evidence below comes from reading the code on main and from scanning existing trial evidence under `~/dev/*/.local/living/trials/`. The target spread in [§4](#4-measures-the-navigation-arenas) is committed here before any arena runs.
 
 The owner's ask: *"general movement, how they get where they want to go. pathfinding based on memory and what they can see. real time input like a real player, low latency."*
 
@@ -441,6 +441,58 @@ A **leak check** goes with every on-arm. Two subjects with the same start and go
 | Cost guards | `tick.motion` ≤ 2 × today's at the same population; leg fuel ≤ 20 M at most; ≤ 1 `known_ground` write per 5 s per exploring character | same | 200 walkers: tick p99 ≤ 16.7 ms, no tick over budget attributable to motion | same |
 
 A miss is reported with its evidence. No target moves after a run.
+
+### 4.1 How the arenas are built (branch `nav-arenas`, committed before any run, 2026-11-13)
+
+The targets above are unchanged. This note fixes how they are measured, before the first run. It is written after steps 1–3 (`flee-open`, `pursue-last-seen`, `known-ground`). Told places as told (`place.source`), the `known` and `last_seen` targets and the hands' event triggers (plan steps 3–5) are not built. So the on arm here is `nav_belief` over recorded ground, and latencies are those of today's cadence.
+
+**Where.** The `island` seed, on scratch `verify-nav-*` databases on the Spark's scratch server (`slop-move-stdb`, :3361). Never the trial server while the merge gate runs, and never a paused reference world.
+- N1: Brackenford (walled; its square, its inn, its north gate) and Kettlebridge (terraces joined by stairs and ramps).
+- N2: Brackenford's gates. A town member is the gate-keeper fixture, since only the town may shut them.
+- N3: Brackenford's square.
+- N4: a town edge with a house row, a fence or wall, and open field, found on the map by the driver (the nearest that fits).
+
+**Driver: `living/tools/nav_arena.py`.** It launches through `verify.py` and uses only existing reducers: `spawn_newcomer`, `spawn_crowd`, `place_at`, `set_behavior`, `set_world_law`, `grant_items`, and for players `join` and `human_act`. Fixtures act through the rules as any character does: the gate-keeper shuts a gate with the gate skill, a builder builds a wall with the build skill, a chaser chases with its graph. Nothing is installed in the subject, and no rule is bypassed for it.
+- **Fresh subjects.** Each walk's subject is a fresh character (a newcomer for N1, otherwise a spawned adult placed at the start), so it begins with no known ground except what a warm-up gives it.
+- **Off and on.** Each phase is run once with `nav_belief` off and once on, each with its own fresh subjects in the same world (the law is world-wide, and changing it between phases changes no character's knowledge).
+- **Replicates.** Five per variant, subject and law: five subjects at a time, started 2 s apart from starts at least 6 m apart.
+- **Recording.**
+  - A body subscription for the arena's characters (every segment, `bodies.jsonl`).
+  - The driver's own log of what it did and when (`stimuli.jsonl`, in the authority's time). The clock is sampled before and after each call, and the spread is kept.
+  - The gate rows (`changed_ms`), the subjects' `act` experiences, and `known_ground` row counts and bytes.
+  - The tick profile (`set_profile`) for `tick.motion` and for ticks over budget.
+
+**Subjects.**
+- **Body only:** a fixed graph per walk (a `goto` to the goal's coordinates; a told route is a `seq` of `goto`s).
+- **Click-to-move:** a player identity per walker, `human_act` `goto` to the same coordinates. The click goes through the same planner as a mind's `goto`.
+- **Minded, fake model (free):** `trials.py` configurations `living/trials/nav-n1-*.json` for N1 only. The newcomer's background sheet holds the three places as its own places, since a told place cannot yet be marked as told. The fake model's replies walk to them by name. This checks that names resolve and the walk completes, not what a mind would choose.
+- **Minded, real model (paid):** the same configurations on the trial models, asked for separately (below).
+
+**Variants as run.**
+- **N1:** (a) the three places in turn as coordinates; (b) a told route, the same goals through two waypoints; (c) Kettlebridge, three places on different terraces; (d) as (a), with the second goal's coordinates 6 m off. In (d), arrival counts at the told point or the nearest reachable point to it, and the distance to the true place is reported.
+- **N2:** warm-up from the start to the goal and back through the gate, then the gate shut (or a wall built on the route) out of the subject's sight, then the walk again. Variants: (a) an alternative way known (a second warm-up walk took it); (b) unknown; (c) the gate shut and then reopened before the subject comes within sight of it.
+- **N3:** 50 and 200 walkers in two opposing streams across the square at a run (2.6 m/s), each with a `seq` of `goto`s between the square's two sides. The subject crosses at right angles. Variants: one stream stopping in the subject's way (its walkers' graphs end in `wait`), and the subject running.
+- **N4 flight:** a chaser (a wolf from `spawn_crowd`'s animals where a wolf can be had, else a person at run speed with a chasing graph) starts 12 m from a subject whose graph flees it, by day and by night. **N4 pursuit:** the subject chases a fixture that walks a fixed route round a house corner, breaking line of sight. Each is run with the subject knowing the ground (a warm-up walk round the block) and not.
+
+**Report: `living/tools/nav_report.py`.** It computes the five measures of §4 and the cost guards from an arm's folder, by the definitions above, plus a self-test on hand-made rows.
+- **Optimal times.** A small Rust example, `living/rules/examples/nav_optimal.rs`, uses the same planner (`living_rules::known` over belief, `nav` over the true map) with no fuel limit. It reads the map's terrain chunks, the subject's `known_ground` and remembered gates at the moment of the order (read by the driver at that moment), the start and the goal. It gives the path's cost in metres at walking pace. The optimal time is that cost ÷ the subject's own pace for the gait (the median speed of its moving segments on open ground).
+- **Stimuli** come from authority rows only:
+  - N1: the order (the driver's call time). A belief arm also counts as stimuli the moments a replan follows a seen contradiction (the body's `path` changing).
+  - N2: the first moment the shut gate or new wall is within the subject's ground sight with a clear line (the map's line test over the tile grid).
+  - N3: a walker's body entering a 4 m cone ahead of the subject (±30°).
+  - N4: the chaser's or fixture's heading changing more than 30° while within the subject's sight.
+- **Latency** is the time from a stimulus to the first subject segment at or after it that turns more than 15° or slows more than 30%, by §4's rule. A stimulus with no such segment within 2 s is counted as "no response", separately.
+- **The leak check:** two subjects, the same start and goal, one with the shortcut walked in warm-up and one without. Their first legs must differ on the on arm. A gate shut out of a subject's sight must leave its `path` unchanged until it is seen.
+
+**Outputs.** `.local/living/nav/<run>/<arena>-<variant>-<law>-<subject>/`. A run summary is added to this section with each arm's measures beside its target. A miss stays a miss.
+
+**The paid arm, proposed, not run** (the owner decides; asked before any call):
+- N1 with a minded newcomer on the trial models: 2 arms (`nav_belief` off and on) × 5 repeats × 20 minutes. That is 10 × ⅓ h × $0.17 ≈ $0.57.
+- A hamlet arm: 11 thinkers × 1 world-hour × 2 arms ≈ $3.8.
+- Together about $4.4, stopped at $6, ceiling $8 with reruns.
+- The design's third arm (belief + known/told targets) is dropped until those targets exist.
+
+**Free cost.** One scratch world at a time on :3361, through the build slot. About 25 runs of 5–15 minutes. No model calls.
 
 ## 5. Plan and cost
 
