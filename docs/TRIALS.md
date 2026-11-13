@@ -810,7 +810,7 @@ Control's 163 and 167 split the same way (deliberation 108 and 109, talk 36 and 
 
 **Evidence:** `.local/living/trials/es1` and `.local/living/journal/verify-trial-es1-*` in `~/slop-trials2b`.
 
-## Ways stage (run as `ew1`) — target, written before any paid call
+## Ways stage (run as `ew1` and `ew2`) — target, written before any paid call
 
 Approved by the general coordinator at about $2.5: one Cullet arm, once `mind-say-way` (a decision's line names its way, docs/COMMUNICATION.md §18) and the laptop's talk box on `human_speak` are both on main. The talk box does not enter the trial (the newcomer is scripted), so this measures the minds' side alone. Nothing below has been run.
 
@@ -913,6 +913,77 @@ Examples:
 Lines to the newcomer: 2, 1 out of earshot. First heard line at 463 s (Petra Tarn). No re-asks.
 
 **Read.** A decision now calls across a distance instead of walking over or saying a line that cannot reach. 19 called outright, and 11 called and walked, out of 42 decisions toward someone only a call could reach. Lines said where only a call would reach fell from 22–33 to 13, and the unheard share of all lines from about 25% to 20%. Lines to someone seen but too far (`far_seen`) did not fall: they include talk turns and late lines, which this change does not touch. One run on a loaded machine, so indicative only.
+
+### Results (batch `ew2`, 2026-11-12 23:26–23:47 UTC), beside ew1
+
+The same arm, trial, stop rule and measures as ew1, on a later main.
+
+**Build and switches.**
+- Main `6b7c198d`, module `trial-cullet-9f8a2eb8`, branch `ways-stage-2`.
+- Since ew1's `da3ff142`, main brought two changes that touch speaking:
+  - `fix-spoken-ids`: a `#id` in a line is said as the speaker refers to that person, and every speaking prompt carries one sentence saying ids are not words;
+  - `alert-after-hit`: a body does not fall asleep in a fight, and two new laws, `alert_after_hit_s` 15 and `alert_while_attacker_near` on.
+- Every other law and switch as for ew1: `earshot` on in this arm only; `speech_truth`, `speech_audience` and `force_outcomes` on; the rest off.
+- Load at the start: 20 on 20 cores, the trial server at 142% (ew1: 50 and 200%).
+- Fake smoke `ew2s` first: it ran its 3 minutes, the law on, the think format with `"way"`, the fact in the scene prompts.
+- Stopped by duration; the database was deleted with its world paused first; the Neo4j mind removed.
+
+**Cost:** $2.59 (stop at $3.50). Key fragments: 0 matches (3 keys, 45 fragments, 328 files).
+
+**The lines that named a way** (`ways_report.py`):
+
+| | ew1 | ew2 |
+|---|---|---|
+| decisions' lines by way | say 272, call 56, whisper 13 | say 273, call 62, whisper 6 |
+| talk replies' lines by way | say 246, call 27, whisper 12 | say 257, call 64, whisper 3 |
+| lines said in a call: decided / other | 50 / 26 | 58 / 58 |
+| decided calls to someone that reached them | 32 of 47 | 30 of 43 |
+| decided calls to the room that someone received | 3 of 3 | 15 of 15 |
+| talk or graph calls to someone that reached them | 24 of 26 | 50 of 58 |
+| decided lines refused and told | 30 ("speaking too fast" 21) | 30 ("speaking too fast" 25, "too soon to call out again" 3, "too far to whisper" 2) |
+
+**Called or walked over** (decisions whose scene listed someone only under what a call reaches, and that acted toward them):
+
+| | es1 earshot r1 / r2 | ew1 | ew2 |
+|---|---|---|---|
+| called | — | 19 | 12 |
+| called and walked | — | 11 | 7 |
+| walked over (no line) | 4 / 5 | 6 | 3 |
+| said a line (cannot reach) and walked | 24 / 13 | 5 | 6 |
+| said a line only | 18 / 12 | 1 | 3 |
+
+In ew2, 19 of the 31 such decisions called. Walking over without a word stayed rare (3).
+
+**`unheard_why`:**
+
+| class | es1 earshot r1 / r2 | ew1 | ew2 |
+|---|---|---|---|
+| deliberation: only a call | 33 / 22 | 13 | **9** |
+| deliberation: in reach then (late) | 73 / 65 | 58 | 62 |
+| talk turn | 42 / 34 | 42 | 50 |
+| deliberation: not listed | 15 / 16 | 12 | 13 |
+| room | 14 / 12 | 7 | 9 |
+| all unheard | 179 / 151 | 135 | 146 |
+| lag, request to line (median) | 8.1 / 7.6 s | 5.3 s | 4.5 s |
+
+**Against the target spread:** `far_all` ÷ `said_all` 19.8% (146 / 737; ew1 20.3%, es1 earshot 25.4 / 24.6%). `far_seen` 79 (ew1 77; es1 earshot 90 / 75; target not met, as in ew1). `said_all` 737. `converge_60s` / `together_4m` 2 / 2. Lines to the newcomer 0; asks 0. Animals that heard a shout: 0.
+
+**False replies by kind** (`ways_report.py`, greet_report's `reply_kind`, the definition `false_min` counts; the general coordinator asked after ew1's 0.56 against es1's 0.46):
+
+| | es1 (4 runs) | ew1 | ew2 |
+|---|---|---|---|
+| false replies (per minute) | 5 / 14 / 9 / 3 (0.15–0.71) | 11 (0.56) | 7 (0.35) |
+| answering a said line to the room naming another, from a decision | 5 / 9 / 5 / 3 | 8 | 2 |
+| … from a graph's say node | 0 / 5 / 4 / 0 | 3 | 0 |
+| answering a decided call to the room naming another | — | 0 | **5** |
+| … of them, the answerer beyond a said line's reach (heard only because it was called) | — | — | 3 |
+| answering a line addressed to someone else | 0 | 0 | 0 |
+
+- **ew1's 0.56 was not the ways.** None of its false replies answered a call, a whisper or a line addressed to anyone; all answered said lines to the room naming someone else, as in es1. Its rate is within es1's spread.
+- **In ew2 the new decided calls do cause some.** A decision called a line to the room naming one person ("Nell! When you're done at the house, come to the smokehouse …", Petra Tarn), and others who heard the call answered it. In 3 of the 5 the answerer stood beyond a said line's reach (Davin Vane at 19 m), so they heard it only because it was called. The rate stayed within es1's spread (0.35).
+- **The guards:** `false_min` 0.35, within es1's spread. `rep_res` 0.13 is above es1's 0–0.08 and ew1's 0.06, so repeated lines rose in ew2. `led_res` − placebo +0.09.
+
+**Read.** The ways change holds on a second run. Decisions call (62 named, 58 said), and "only a call would reach" falls further (9). The unheard share stays near 20%, against about 25% before the ways. Late lines and talk turns remain the bulk (62 and 50). The one new cost is false replies to decided calls to the room that name someone. A call to the room reaches everyone within 30 m (Cullet), not only the person it names. Making that a call *to* the person (`to`) would limit who it names to the addressee; that is the mind's choice today. Two runs, so still indicative.
 
 ## Strangers stage 2b (2026-11-12, st2b) — target, written before any paid call
 
