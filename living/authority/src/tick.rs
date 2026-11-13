@@ -107,6 +107,12 @@ pub fn tick(ctx: &ReducerContext, _t: TickTimer) -> Result<(), String> {
     let phase = common::span("tick.perception");
     crate::perception::sweep(ctx, now, k_tick);
     drop(phase);
+    // The `memory_test` law (a diagnostic, 0 in play): the tick fails, or panics, after its sweep.
+    match crate::perception::memory_test(ctx) {
+        1 => crate::perception::fail_for_test(ctx, 1, &format!("tick {k_tick}"))?,
+        2 => panic!("memory_test 2: tick {k_tick} panics on purpose after its sweep (the instance is replaced)"),
+        _ => {}
+    }
     // What each player is shown of the others in its scene, at its frame (frame.rs).
     let phase = common::span("tick.frames");
     crate::frame::deliver(ctx, now);
@@ -341,8 +347,8 @@ fn birth(ctx: &ReducerContext, a: u32, b: u32, now: u64) {
         names.push((id, common::name_of(ctx, id)));
     }
     // The parents know their children (and each other, through them).
-    crate::perception::knowledge_changed(Some(pa.id));
-    crate::perception::knowledge_changed(Some(pb.id));
+    crate::perception::knowledge_changed(ctx, Some(pa.id));
+    crate::perception::knowledge_changed(ctx, Some(pb.id));
     // A parent who died before the birth kept what the child inherits until now.
     for p in [&pa, &pb].into_iter().filter(|p| !p.alive) {
         crate::act::retire(ctx, p.id);

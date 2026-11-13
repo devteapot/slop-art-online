@@ -294,29 +294,32 @@ thread_local! {
     /// they came from: a handful of distinct inputs cover a world, so the law runs a few times
     /// per script revision, not per observer and target.
     static REGARDS: RefCell<Option<(Rc<Scripts>, HashMap<RegardIn, Regard>)>> = const { RefCell::new(None) };
-    /// Knowledge epochs: a character's (bumped when whom it knows changes) and the world's
-    /// (communities change). The sweep re-projects a viewer's rows when either moved.
-    static KNOWLEDGE: RefCell<(u32, HashMap<u32, u32>)> = RefCell::new((0, HashMap::new()));
     /// Build and dress by home position (settlements are static).
     static DRESS: RefCell<HashMap<(u32, u32), (String, String)>> = RefCell::new(HashMap::new());
 }
 
-/// Whom `id` knows changed (`None`: anyone's may have, e.g. a community's members).
-pub fn knowledge_changed(id: Option<u32>) {
-    KNOWLEDGE.with(|k| {
-        let mut k = k.borrow_mut();
-        match id {
-            Some(id) => *k.1.entry(id).or_default() += 1,
-            None => k.0 += 1,
+/// Whose name `id` knows, or what it knows how to do, changed in this transaction (`None`:
+/// anyone's may have: a community's members). Written to the `knowledge_epoch` row, so it holds
+/// exactly when the change commits, whichever module instance ran it (docs/PERCEPTION.md,
+/// "Module memory and rollback"); also bumps the transaction's shared answers.
+pub fn knowledge_changed(ctx: &ReducerContext, id: Option<u32>) {
+    answers_changed();
+    let key = id.unwrap_or(0);
+    match ctx.db.knowledge_epoch().id().find(key) {
+        Some(mut r) => {
+            r.epoch += 1;
+            ctx.db.knowledge_epoch().id().update(r);
         }
-    });
+        None => {
+            ctx.db.knowledge_epoch().insert(KnowledgeEpoch { id: key, epoch: 1 });
+        }
+    }
 }
 
-fn knowledge_epoch(id: u32) -> (u32, u32) {
-    KNOWLEDGE.with(|k| {
-        let k = k.borrow();
-        (k.0, k.1.get(&id).copied().unwrap_or(0))
-    })
+/// The knowledge epochs a viewer's rows depend on, as committed: everyone's (row 0) and its own.
+fn knowledge_epoch(ctx: &ReducerContext, id: u32) -> (u64, u64) {
+    let of = |k: u32| ctx.db.knowledge_epoch().id().find(k).map_or(0, |r| r.epoch);
+    (of(0), of(id))
 }
 
 fn regard_of(sc: &Rc<Scripts>, input: RegardIn) -> Regard {
@@ -368,6 +371,9 @@ struct Answers {
 
 /// A write changed what some observer may make of some target (see `ANSWERS_GEN`).
 pub fn answers_changed() {
+    if marks_dropped() {
+        return;
+    }
     ANSWERS_GEN.with(|g| g.set(g.get() + 1));
     ANSWERS_BUMPS.with(|b| b.set(b.get() + 1));
 }
@@ -861,17 +867,30 @@ thread_local! {
     static LAST: RefCell<HashMap<u32, u64>> = RefCell::new(HashMap::new());
     /// The knowledge epochs each player's rows were last projected at, and the targets a
     /// reveal held for it then.
-    static PROJECTED: RefCell<HashMap<u32, ((u32, u32), HashSet<u32>)>> = RefCell::new(HashMap::new());
+    static PROJECTED: RefCell<HashMap<u32, ((u64, u64), HashSet<u32>)>> = RefCell::new(HashMap::new());
 }
 
 /// Sweep the players whose turn it is (every tick, numbered `tick`; each player every
 /// [`SWEEP_MS`]).
 pub fn sweep(ctx: &ReducerContext, now: u64, tick: u64) {
-    // What the sweep keeps across ticks (`KEPT`) was worked out from rows as this instance saw
-    // them. A tick it did not run (another instance's, or one rolled back, whose number comes
-    // again) may have changed them: it starts again.
-    if SWEPT_TICK.with(|t| t.replace(tick)).wrapping_add(1) != tick {
+    // What the sweep keeps across ticks was worked out from rows as this instance saw them in
+    // its last tick. `tick` is the committed clock's tick plus one, so it follows that tick only
+    // if that tick committed and no other ran since. A tick rolled back (its number comes again)
+    // or run by another instance (a gap) leaves memory that committed rows may contradict: it
+    // goes, and every viewer is projected afresh (docs/PERCEPTION.md, "Module memory and
+    // rollback"). The old path's epochs go with it, and frames compare whole scenes.
+    let last = SWEPT_TICK.with(|t| t.replace(tick));
+    if last.wrapping_add(1) != tick {
         KEPT.with(|k| k.borrow_mut().clear());
+        PROJECTED.with(|p| p.borrow_mut().clear());
+        crate::frame::all_full();
+        if last != 0 {
+            log::info!("sweep kept: cleared at tick {tick} (this instance's last sweep was at tick {last})");
+        }
+    }
+    // Stage marks of those no longer alive go (rarely: once a second).
+    if tick % 60 == 0 {
+        CHANGED.with(|c| c.borrow_mut().retain(|id, _| ctx.db.character().id().find(*id).is_some_and(|c| c.alive)));
     }
     let humans = crate::combat::humans(ctx);
     if humans.is_empty() {
@@ -995,7 +1014,7 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
     // viewer knows (its knowledge epoch, or this instance has not projected it yet), a reveal
     // that holds or has just stopped holding, and its own row (exact health). Band changes
     // reach the rows through `health_moved`.
-    let epoch = knowledge_epoch(id);
+    let epoch = knowledge_epoch(ctx, id);
     let revealing: HashSet<u32> = ctx.db.reveal().observer().filter(id).filter(|r| r.until_ms > now).map(|r| r.target).collect();
     let (all, mut again) = PROJECTED.with(|p| {
         let mut p = p.borrow_mut();
@@ -1067,6 +1086,37 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
     }
 }
 
+// ---- the `memory_test` law: proving that nothing kept in memory outlives a failed step ----
+
+thread_local! {
+    /// The `memory_test` law's value as the last tick read it (`set_memory_test`).
+    static MEMORY_TEST: std::cell::Cell<u8> = const { std::cell::Cell::new(0) };
+}
+
+/// What the `memory_test` law asks (a diagnostic, 0 in play; docs/PERCEPTION.md, "Module memory
+/// and rollback"): 1 the tick fails after its sweep, 2 it panics there, 3 `place_at` fails after
+/// moving the body, 4 `kill` fails after the death, 5 `join` fails after its sweep, 6 the marks
+/// kept in module memory (`answers_changed`, a row touched, a stage) are dropped, as if their
+/// reducer had run in another instance.
+pub fn memory_test(ctx: &ReducerContext) -> u8 {
+    let v = common::laws(ctx).memory_test.round().clamp(0.0, 9.0) as u8;
+    MEMORY_TEST.with(|m| m.set(v));
+    v
+}
+
+fn marks_dropped() -> bool {
+    MEMORY_TEST.with(|m| m.get()) == 6
+}
+
+/// The reducer fails here when the `memory_test` law names `step`, after what it did so far.
+pub fn fail_for_test(ctx: &ReducerContext, step: u8, what: &str) -> Result<(), String> {
+    if memory_test(ctx) == step {
+        log::warn!("memory_test {step}: {what} fails on purpose (its writes roll back; module memory does not)");
+        return Err(format!("memory_test {step}: {what} fails on purpose"));
+    }
+    Ok(())
+}
+
 // ---- what a sweep keeps across ticks, for a law that reads distance ------------------------
 //
 // A row is the projection of its target as of the viewer's last sweep. Under a `perceived_of`
@@ -1116,12 +1166,19 @@ struct Viewing {
     who: Identity,
     script: Rc<Scripts>,
     night: bool,
-    generation: u64,
-    epoch: (u32, u32),
+    /// The committed knowledge epochs (`knowledge_epoch`: everyone's, its own) it was projected at.
+    epoch: (u64, u64),
     knows: Rc<Vec<String>>,
     revealing: HashSet<u32>,
     rows: HashMap<u32, Kept>,
+    /// Sweeps since every row was projected afresh: at [`KEPT_REFRESH_SWEEPS`] it is again.
+    sweeps: u32,
 }
+
+/// Every this many sweeps (about 30 s at [`SWEEP_MS`]) a viewer's rows are all projected afresh
+/// whatever was kept, staggered by id: a bound on how long anything a mark should have told the
+/// sweep, and did not reach it, can stand (a mark in another instance's memory).
+const KEPT_REFRESH_SWEEPS: u32 = 150;
 
 /// What one row was projected from.
 #[derive(Clone, Copy)]
@@ -1148,6 +1205,9 @@ struct Sight<'a> {
 
 /// Character `id`'s projected record changed (its stage): rows of it are projected again.
 pub fn character_changed(id: u32) {
+    if marks_dropped() {
+        return;
+    }
     let n = MARKS.with(|m| {
         m.set(m.get() + 1);
         m.get()
@@ -1157,6 +1217,9 @@ pub fn character_changed(id: u32) {
 
 /// `viewer`'s row of `body` was written outside the sweep.
 fn row_touched(viewer: Identity, body: u32) {
+    if marks_dropped() {
+        return;
+    }
     TOUCHED.with(|t| t.borrow_mut().entry(viewer).or_default().insert(body));
 }
 
@@ -1179,9 +1242,16 @@ pub fn report_kept(ctx: &ReducerContext) {
     if !common::laws(ctx).regard_cache_check && !common::profiling() {
         return;
     }
+    // Which module instance this is: the stamp of the first report it made (a trap replaces the
+    // instance, and its memory, in 2.14.1).
+    let born = INSTANCE_BORN.with(|b| *b.get_or_init(|| common::stamp(ctx)));
     if kept + again > 0 {
-        log::info!("sweep kept: kept={kept} projected={again} full={full} compared={compared} differed={differed}");
+        log::info!("sweep kept: kept={kept} projected={again} full={full} compared={compared} differed={differed} instance={born}");
     }
+}
+
+thread_local! {
+    static INSTANCE_BORN: std::cell::OnceCell<i64> = const { std::cell::OnceCell::new() };
 }
 
 /// The law's answer for `input` (its `dist` ignored) at `d` whole metres, and its band round `d`.
@@ -1257,14 +1327,18 @@ fn kept_sweep(ctx: &ReducerContext, me: &Character, viewer: Identity, w: &World,
     let id = me.id;
     let sc = common::scripts(ctx);
     let night = common::night(ctx, w, now);
-    let generation = ANSWERS_GEN.with(|g| g.get());
-    let epoch = knowledge_epoch(id);
-    let mut kept = KEPT.with(|k| k.borrow_mut().remove(&id)).filter(|v| v.who == viewer && Rc::ptr_eq(&v.script, &sc) && v.night == night);
-    // After a write that can change whom it knows or what it knows how to do: its know-how
-    // again, and whether it knows each target's name.
+    let epoch = knowledge_epoch(ctx, id);
+    let had = KEPT.with(|k| k.borrow_mut().remove(&id));
+    // Due for its periodic full projection: its count starts again from 0. A viewer kept for the
+    // first time starts at an offset by id, so a crowd's refreshes spread over the period.
+    let refresh = had.as_ref().is_some_and(|v| v.sweeps >= KEPT_REFRESH_SWEEPS);
+    let mut kept = had.filter(|v| v.who == viewer && Rc::ptr_eq(&v.script, &sc) && v.night == night && !refresh);
+    // After a committed write that can change whom it knows or what it knows how to do (its
+    // `knowledge_epoch` row, or row 0 for a community's members): its know-how again, and
+    // whether it knows each target's name.
     let mut ask_known = false;
     if let Some(v) = kept.as_mut() {
-        if v.generation != generation || v.epoch != epoch {
+        if v.epoch != epoch {
             let knows = known_techniques(ctx, id);
             if *knows != *v.knows {
                 kept = None;
@@ -1274,8 +1348,9 @@ fn kept_sweep(ctx: &ReducerContext, me: &Character, viewer: Identity, w: &World,
         }
     }
     let full = kept.is_none();
-    let mut v = kept.unwrap_or_else(|| Viewing { who: viewer, script: sc.clone(), night, generation, epoch, knows: known_techniques(ctx, id), revealing: HashSet::new(), rows: HashMap::new() });
-    v.generation = generation;
+    let start = if refresh { 0 } else { id % KEPT_REFRESH_SWEEPS };
+    let mut v = kept.unwrap_or_else(|| Viewing { who: viewer, script: sc.clone(), night, epoch, knows: known_techniques(ctx, id), revealing: HashSet::new(), rows: HashMap::new(), sweeps: start });
+    v.sweeps += 1;
     v.epoch = epoch;
     let dist = |body: u32| if body == id { 0 } else { dist_for_law(ctx, s.here, body, s.near.get(&body).copied(), now) };
     let mut again: Vec<u32> = Vec::new();
@@ -1508,7 +1583,6 @@ pub fn forget(ctx: &ReducerContext, id: u32, viewer: Identity) {
 pub fn gone(ctx: &ReducerContext, id: u32) {
     // Their look goes with them (docs/LOOK.md §4).
     ctx.db.look().id().delete(id);
-    CHANGED.with(|c| c.borrow_mut().remove(&id));
     let rows: Vec<Projected> = ctx.db.projected().body().filter(id).collect();
     if rows.is_empty() {
         return;
@@ -1539,8 +1613,7 @@ pub fn introduce(ctx: &ReducerContext, observer: u32, known: u32, now: u64) -> b
         return false;
     }
     ctx.db.acquaintance().insert(Acquaintance { id: 0, observer, known, since_ms: now });
-    answers_changed();
-    knowledge_changed(Some(observer));
+    knowledge_changed(ctx, Some(observer));
     true
 }
 

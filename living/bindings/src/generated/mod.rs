@@ -72,6 +72,8 @@ pub mod far_handle_table;
 pub mod far_handle_type;
 pub mod fast_ask_table;
 pub mod fast_ask_type;
+pub mod fight_seen_table;
+pub mod fight_seen_type;
 pub mod fighter_seen_table;
 pub mod fighter_seen_type;
 pub mod fighter_table;
@@ -125,6 +127,8 @@ pub mod judgment_type;
 pub mod kill_reducer;
 pub mod know_how_table;
 pub mod know_how_type;
+pub mod knowledge_epoch_table;
+pub mod knowledge_epoch_type;
 pub mod known_name_type;
 pub mod land_info_type;
 pub mod land_plan_table;
@@ -378,6 +382,8 @@ pub use far_handle_table::*;
 pub use far_handle_type::FarHandle;
 pub use fast_ask_table::*;
 pub use fast_ask_type::FastAsk;
+pub use fight_seen_table::*;
+pub use fight_seen_type::FightSeen;
 pub use fighter_seen_table::*;
 pub use fighter_seen_type::FighterSeen;
 pub use fighter_table::*;
@@ -431,6 +437,8 @@ pub use judgment_type::Judgment;
 pub use kill_reducer::kill;
 pub use know_how_table::*;
 pub use know_how_type::KnowHow;
+pub use knowledge_epoch_table::*;
+pub use knowledge_epoch_type::KnowledgeEpoch;
 pub use known_name_type::KnownName;
 pub use land_info_type::LandInfo;
 pub use land_plan_table::*;
@@ -1229,6 +1237,7 @@ pub struct DbUpdate {
     familiar: __sdk::TableUpdate<Familiar>,
     far_handle: __sdk::TableUpdate<FarHandle>,
     fast_ask: __sdk::TableUpdate<FastAsk>,
+    fight_seen: __sdk::TableUpdate<FightSeen>,
     fighter: __sdk::TableUpdate<Fighter>,
     fighter_seen: __sdk::TableUpdate<FighterSeen>,
     floor_seed: __sdk::TableUpdate<FloorSeed>,
@@ -1247,6 +1256,7 @@ pub struct DbUpdate {
     judged: __sdk::TableUpdate<Judged>,
     judgment: __sdk::TableUpdate<Judgment>,
     know_how: __sdk::TableUpdate<KnowHow>,
+    knowledge_epoch: __sdk::TableUpdate<KnowledgeEpoch>,
     land: __sdk::TableUpdate<LandInfo>,
     land_plan: __sdk::TableUpdate<LandPlan>,
     law_change: __sdk::TableUpdate<LawChange>,
@@ -1420,6 +1430,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "fast_ask" => db_update
                     .fast_ask
                     .append(fast_ask_table::parse_table_update(table_update)?),
+                "fight_seen" => db_update
+                    .fight_seen
+                    .append(fight_seen_table::parse_table_update(table_update)?),
                 "fighter" => db_update
                     .fighter
                     .append(fighter_table::parse_table_update(table_update)?),
@@ -1474,6 +1487,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "know_how" => db_update
                     .know_how
                     .append(know_how_table::parse_table_update(table_update)?),
+                "knowledge_epoch" => db_update
+                    .knowledge_epoch
+                    .append(knowledge_epoch_table::parse_table_update(table_update)?),
                 "land" => db_update
                     .land
                     .append(land_table::parse_table_update(table_update)?),
@@ -1821,6 +1837,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.fast_ask = cache
             .apply_diff_to_table::<FastAsk>("fast_ask", &self.fast_ask)
             .with_updates_by_pk(|row| &row.actor);
+        diff.fight_seen = cache
+            .apply_diff_to_table::<FightSeen>("fight_seen", &self.fight_seen)
+            .with_updates_by_pk(|row| &row.id);
         diff.fighter = cache
             .apply_diff_to_table::<Fighter>("fighter", &self.fighter)
             .with_updates_by_pk(|row| &row.id);
@@ -1871,6 +1890,9 @@ impl __sdk::DbUpdate for DbUpdate {
             .with_updates_by_pk(|row| &row.id);
         diff.know_how = cache
             .apply_diff_to_table::<KnowHow>("know_how", &self.know_how)
+            .with_updates_by_pk(|row| &row.id);
+        diff.knowledge_epoch = cache
+            .apply_diff_to_table::<KnowledgeEpoch>("knowledge_epoch", &self.knowledge_epoch)
             .with_updates_by_pk(|row| &row.id);
         diff.land = cache
             .apply_diff_to_table::<LandInfo>("land", &self.land)
@@ -2196,6 +2218,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "fast_ask" => db_update
                     .fast_ask
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "fight_seen" => db_update
+                    .fight_seen
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "fighter" => db_update
                     .fighter
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
@@ -2249,6 +2274,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "know_how" => db_update
                     .know_how
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "knowledge_epoch" => db_update
+                    .knowledge_epoch
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "land" => db_update
                     .land
@@ -2584,6 +2612,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "fast_ask" => db_update
                     .fast_ask
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "fight_seen" => db_update
+                    .fight_seen
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "fighter" => db_update
                     .fighter
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -2637,6 +2668,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "know_how" => db_update
                     .know_how
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "knowledge_epoch" => db_update
+                    .knowledge_epoch
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "land" => db_update
                     .land
@@ -2916,6 +2950,7 @@ pub struct AppliedDiff<'r> {
     familiar: __sdk::TableAppliedDiff<'r, Familiar>,
     far_handle: __sdk::TableAppliedDiff<'r, FarHandle>,
     fast_ask: __sdk::TableAppliedDiff<'r, FastAsk>,
+    fight_seen: __sdk::TableAppliedDiff<'r, FightSeen>,
     fighter: __sdk::TableAppliedDiff<'r, Fighter>,
     fighter_seen: __sdk::TableAppliedDiff<'r, FighterSeen>,
     floor_seed: __sdk::TableAppliedDiff<'r, FloorSeed>,
@@ -2934,6 +2969,7 @@ pub struct AppliedDiff<'r> {
     judged: __sdk::TableAppliedDiff<'r, Judged>,
     judgment: __sdk::TableAppliedDiff<'r, Judgment>,
     know_how: __sdk::TableAppliedDiff<'r, KnowHow>,
+    knowledge_epoch: __sdk::TableAppliedDiff<'r, KnowledgeEpoch>,
     land: __sdk::TableAppliedDiff<'r, LandInfo>,
     land_plan: __sdk::TableAppliedDiff<'r, LandPlan>,
     law_change: __sdk::TableAppliedDiff<'r, LawChange>,
@@ -3070,6 +3106,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         callbacks.invoke_table_row_callbacks::<Familiar>("familiar", &self.familiar, event);
         callbacks.invoke_table_row_callbacks::<FarHandle>("far_handle", &self.far_handle, event);
         callbacks.invoke_table_row_callbacks::<FastAsk>("fast_ask", &self.fast_ask, event);
+        callbacks.invoke_table_row_callbacks::<FightSeen>("fight_seen", &self.fight_seen, event);
         callbacks.invoke_table_row_callbacks::<Fighter>("fighter", &self.fighter, event);
         callbacks.invoke_table_row_callbacks::<FighterSeen>(
             "fighter_seen",
@@ -3108,6 +3145,11 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         callbacks.invoke_table_row_callbacks::<Judged>("judged", &self.judged, event);
         callbacks.invoke_table_row_callbacks::<Judgment>("judgment", &self.judgment, event);
         callbacks.invoke_table_row_callbacks::<KnowHow>("know_how", &self.know_how, event);
+        callbacks.invoke_table_row_callbacks::<KnowledgeEpoch>(
+            "knowledge_epoch",
+            &self.knowledge_epoch,
+            event,
+        );
         callbacks.invoke_table_row_callbacks::<LandInfo>("land", &self.land, event);
         callbacks.invoke_table_row_callbacks::<LandPlan>("land_plan", &self.land_plan, event);
         callbacks.invoke_table_row_callbacks::<LawChange>("law_change", &self.law_change, event);
@@ -3943,6 +3985,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         familiar_table::register_table(client_cache);
         far_handle_table::register_table(client_cache);
         fast_ask_table::register_table(client_cache);
+        fight_seen_table::register_table(client_cache);
         fighter_table::register_table(client_cache);
         fighter_seen_table::register_table(client_cache);
         floor_seed_table::register_table(client_cache);
@@ -3961,6 +4004,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         judged_table::register_table(client_cache);
         judgment_table::register_table(client_cache);
         know_how_table::register_table(client_cache);
+        knowledge_epoch_table::register_table(client_cache);
         land_table::register_table(client_cache);
         land_plan_table::register_table(client_cache);
         law_change_table::register_table(client_cache);
@@ -4070,6 +4114,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "familiar",
         "far_handle",
         "fast_ask",
+        "fight_seen",
         "fighter",
         "fighter_seen",
         "floor_seed",
@@ -4088,6 +4133,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "judged",
         "judgment",
         "know_how",
+        "knowledge_epoch",
         "land",
         "land_plan",
         "law_change",

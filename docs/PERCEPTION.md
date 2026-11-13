@@ -249,7 +249,7 @@ Of 11,840 re-projections a second, 68 changed a row (0.6%). The law's answer was
 **The fix** (`perception::kept_sweep`). In the tick, with the `regard_cache` law on (as shipped), a viewer under such a law keeps, per target, what its row was projected from, and the row is projected again only when one of these has changed:
 
 - **The distance, as the law's band round it.** For each input without the distance (`RegardIn` with `dist` 0) the law's answers are kept by whole metre from 0, filled through `regard_of` 16 m past the farthest asked (`law_band_of`). A row keeps the run of metres round its distance over which the answer is the same (`living_rules::sight::law_band`). Under Cullet's law that is 0–24 m and 25 m onward, so walking within a cluster changes nothing. The distance is taken as `regard_dist` takes it: from the chunk cache's position, which is the body row's at `now` unless that row was written since the cache read it (`common::cached_body_current`, `body_written` at every `body` update), else from the row.
-- **Whether the viewer knows the target's name.** Kept while neither `answers_changed` (every write that can change it: acquaintance, membership, know-how, reveal, a new character) nor the viewer's knowledge epoch moved. After either, the viewer's know-how is read again (a change projects every row) and each row's `knows_name` is asked again.
+- **Whether the viewer knows the target's name.** Kept while the viewer's `knowledge_epoch` row and row 0 (a private table, read by primary key at each sweep) are where they were. Every write that can change it moves one of them in the same transaction: an introduction (the hearer's), a child of one's own (both parents'), new know-how (the learner's), any community's members (row 0). After either moves, the viewer's know-how is read again (a change projects every row) and each row's `knows_name` is asked again. Since the module-memory review (2026-11-13) these epochs are durable, not module memory ([Module memory and rollback](#module-memory-and-rollback)).
 - **A reveal.** Not kept: a target with a reveal held now or at the last sweep is projected again at every sweep, as on every world.
 - **The viewer's own input:** the script, the night, its know-how. A change projects every row.
 - **The target.** Its health as the row shows it, read again at every sweep (once per creature per tick for all viewers) and compared under the row's precision. Its stage, through `perception::character_changed` (`tick::grew`). Name, kind and home are fixed at creation. A look change rewrites every row in place (`look::reproject`).
@@ -257,7 +257,7 @@ Of 11,840 re-projections a second, 68 changed a row (0.6%). The law's answer was
 
 Rows that come into sight are projected, those that leave are deleted by point lookups (`projected.by_viewer_body`), and the full pass (load every row, delete strays, project all) runs only when nothing is kept for the viewer.
 
-**What it may not do.** The memory is module memory, which the [reducer docs](https://spacetimedb.com/docs/functions/reducers/) call undefined across calls ("SpacetimeDB may run each reducer in a fresh WASM or JS instance"; a rolled-back transaction's changes to module state "may remain"). So it only spares work, never decides alone. It is empty in a fresh instance. It is cleared when the tick's number is not the one after this instance's last sweep (a rolled-back tick's number comes again; another instance's ticks leave a gap), when `sweep_now` sweeps a player outside the tick, and when the full path ran for that player. Empty, the next sweep projects every row afresh. Writes in another instance between two ticks of this one would not reach its marks. That is the same exposure the sweep's knowledge epochs (`KNOWLEDGE`, `PROJECTED`) have always had.
+**What it may not do.** The memory only spares work, never decides alone: [Module memory and rollback](#module-memory-and-rollback) says what is durable, what is memory and why each is safe. Every `KEPT_REFRESH_SWEEPS` (150) sweeps, about 30 s, staggered by id, a viewer's rows are all projected afresh whatever was kept: a bound on anything a mark in memory should have told the sweep and did not. Its cost at 216 players on Cullet (`look_cost.py`, one 60 s window each, load 17–35, provisional): 7.2 full projections a second, 1,034 rows projected again a second against 731 without the net, and `tick.perception` 106.0 ms/s against 108.0 without: below what this host resolves; about 2 ms/s by the per-sweep costs above.
 
 **Exact.** Every row is what projecting it afresh gives at every sweep, as before. With the `regard_cache_check` law on, each kept sweep compares every row of the viewer with `project` (the law asked afresh, distances from the body rows), checks that there is exactly one row for each creature seen and one for the viewer, and logs `sweep kept: kept=… projected=… full=… compared=… differed=…` once a second, with an error line for each difference.
 
@@ -283,9 +283,74 @@ Why four and not one per tick: players swept in one tick share the tick's chunk-
 - **Not the sweep:** the sampled tick rate on Cullet stayed at 40 a second with the branch, and 21–32 on main, while plan-test reached 60. The tick's own work on Cullet is now 15% of the wall clock, so the missing ticks are elsewhere: most likely the server's re-evaluation of 216 players' views. This change does not establish 60 Hz on Cullet at 216.
 - **Not measured:** fights, minds, a game client, a crowd that grows, and runs longer than 2 minutes.
 
-**Data paths.** No table, index, view or reducer changed. The kept sweep reads `body` (only for a target written since the chunk cache read it), `vitals` (once per creature per tick), `character` (only for rows projected again, or after a knowledge change), `projected.by_viewer_body` (for rows written), `reveal.observer` (once per sweep, as before) and `know_how.actor` (after a knowledge change). It writes `projected` only when a row changes, as before, so subscription traffic is unchanged. Module memory: per player, about 40 bytes per row in sight. The law's bands take one `Regard` per metre per distinct input, about 32–64 metres for each of a handful of inputs.
+**Data paths.** One table was added: `knowledge_epoch` (private, `id` primary key, `epoch` u64; [Module memory and rollback](#module-memory-and-rollback)). No index, view or reducer changed. The kept sweep reads `knowledge_epoch` twice per viewer per sweep (its row and row 0, primary key), `body` (only for a target written since the chunk cache read it), `vitals` (once per creature per tick), `character` (only for rows projected again, or after a knowledge change), `projected.by_viewer_body` (for rows written), `reveal.observer` (once per sweep, as before) and `know_how.actor` (after a knowledge change). It writes `projected` only when a row changes, as before, so subscription traffic is unchanged. Module memory: per player, about 40 bytes per row in sight. The law's bands take one `Regard` per metre per distinct input, about 32–64 metres for each of a handful of inputs.
 
 **SpacetimeDB documentation consulted** (2026-11-12, docs 2.0.0, pinned 2.14.1): [reducers](https://spacetimedb.com/docs/functions/reducers/) (global and static state across calls is undefined; reducers may run in separate instances), [schedule tables](https://spacetimedb.com/docs/tables/schedule-tables) ("Missed interval ticks are skipped": a late tick runs once at the next boundary, so the sweep's due set must not be pulled onto it), [performance](https://spacetimedb.com/docs/tables/performance/) (indexed lookups over scans; fewer rows touched).
+
+### Module memory and rollback
+
+Since the module-memory review of cullet-sweep (2026-11-13). The sweep keeps state in module memory to spare work. This section says what is durable, what is memory, and why each is safe when a transaction fails or the module runs in a new instance.
+
+**What SpacetimeDB says, and what 2.14.1 does.**
+- **Docs** (2.0.0, the live site; the same text in the `v2.14.1` tag's docs tree):
+  - The [reducers page](https://spacetimedb.com/docs/functions/reducers/), "Global and Static Variables Are Undefined Behavior": "Relying on global variables, static variables, or module-level state to persist across reducer calls is undefined behavior". "SpacetimeDB may run each reducer in a fresh WASM or JS instance". It "reserves the right to execute multiple reducers concurrently in separate execution environments". "If you modify global state and then roll back the transaction, the modified value may remain for subsequent transactions". "Instance memory is not persisted across restarts". A reducer may be re-executed after a serializability anomaly.
+  - [Schedule tables](https://spacetimedb.com/docs/tables/schedule-tables/): "Missed interval ticks are skipped"; "Interval schedules are never deleted automatically".
+  - [Tables](https://spacetimedb.com/docs/tables/) and [access permissions](https://spacetimedb.com/docs/tables/access-permissions/): tables are private by default, readable by reducers and the owner. [Automatic migrations](https://spacetimedb.com/docs/databases/automatic-migrations): "Adding new tables" is always allowed. [Indexes](https://spacetimedb.com/docs/tables/indexes/): a primary key creates an index. [Performance](https://spacetimedb.com/docs/tables/performance/): small focused tables, private where clients need nothing.
+- **Verified in the 2.14.1 source** (tag `v2.14.1`, commit `a0bf6be1`, `crates/core/src/host/`). Read, not tested against the running image:
+  - **One instance.** One main instance runs every reducer, scheduled reducer, view, subscription and SQL call of a database, one at a time on one thread (`module_host.rs:496-503`: "Reducers are not executed concurrently"; `WasmtimeModuleState` holds one `instance`). Views are re-evaluated in the same instance (`module_host_actor.rs:1296`).
+  - **Procedures and HTTP handlers** use a separate pool (`call_pooled_instance!`). This module has none.
+  - **A reducer that returns `Err`** has its transaction rolled back. Its instance and memory carry on (`wasmtime_module.rs:196`).
+  - **A trap is a new instance.** A trap (a Rust panic, running out of fuel) marks the instance for replacement, and the next call gets a fresh one with empty memory (`module_host_actor.rs:1236-1239`, `module_host.rs:486-489`).
+  - **Publish or restart** makes a new host and instance (`host_controller.rs:1607`, `:1110-1133`).
+  - **Failed ticks.** A failed interval reducer keeps its schedule (`scheduler.rs:770-786`). A late tick runs once; the next is anchored to the intended time (`:807`, `:837`).
+- **Assumed:** that a later version may run reducers in other instances or replay them, as the docs reserve. The design below does not depend on 2.14.1's single instance for correctness, only for timeliness of marks that force extra work.
+
+**What is durable, and read from committed rows.**
+- **Whose name a viewer knows, and its know-how:** the `knowledge_epoch` table (private; `id` u32 primary key, a character or 0 for everyone; `epoch` u64).
+  - **Writes:** one row update (or insert) in the transaction that makes the change, so it commits or rolls back with it:
+    - an introduction (`perception::introduce`, the hearer);
+    - a child (`seed::spawn_with`, both parents);
+    - new know-how (`common::learn`, the learner);
+    - a renamed technique (`install_script`, row 0);
+    - any community's members (`act.rs` founding, joining, leaving and a member's death, the skirmish and seeding: row 0).
+
+    That is one write per introduction, birth, technique learnt or membership change: a few a minute in a living town.
+  - **Reads:** two primary-key lookups per viewer per sweep (its row and row 0), about 2,200 a second at 216 players.
+  - **Growth:** one row per character whose knowledge ever changed, deleted at its death (`act::retire`), plus row 0.
+  - The old path (a law that does not read distance) reads the same epochs; its memory-only epochs are gone.
+- **Reveals:** read each sweep (`reveal.observer`, as before). A target with a reveal held now or at the viewer's last sweep is projected again at every sweep.
+- **Health:** read each sweep from `vitals`, once per creature per tick, and compared with what the row was projected with.
+- **Distance:** worked out each sweep from the body rows at `now`. The chunk cache's position is used only when the body row was not written in this transaction since the cache read it (`body_written`, keyed to the transaction). Otherwise the row is read.
+- **Who is swept:** the players are read from `character` (`combat::humans`). Its cache is rebuilt after any join, death or hand-over, and a map read in the transaction that changed it holds for that transaction alone. A join or death that failed leaves no player out, or in.
+- **The compiled script and laws** are kept by the committed `scripts_rev`. Writing a new revision clears them, so a failed install's compilation is never served under the number the next install takes.
+
+**What is memory, and why each is safe.**
+- **The kept rows (`KEPT`: bands, name known, health shown, marks seen, reveals last seen) are written only by the tick's sweep.** At each tick the sweep compares the committed clock's tick with the tick its instance last swept. `tick` is the committed `clock.tick` + 1, so it follows only a tick that committed in this instance.
+  - A tick that returned an error (rolled back; same instance, memory intact) is followed by a tick with the same number.
+  - A tick another instance ran leaves a gap.
+  - A new instance starts at 0.
+
+  Each case clears the kept rows and the old path's epochs (`PROJECTED`), marks every frame `full`, and logs `sweep kept: cleared at tick N`. The next sweep then projects every row afresh from committed rows.
+- **The law's bands (`BANDS`) and answers (`REGARDS`)** are pure functions of the compiled script, kept per script. They hold whatever happened.
+- **Marks that only force work:**
+  - a row written outside the sweep (`row_touched`: `health_moved`, a frame's band, a death's deletion);
+  - a stage changed (`character_changed` at `grew`, tick only);
+  - a body written (`body_written`, per transaction);
+  - `answers_changed` (the transaction's shared answers, `with_answers`, kept per transaction stamp).
+
+  A mark from a transaction that rolled back costs one extra projection. A mark set in another instance's memory (not in 2.14.1; reserved by the docs) would not reach the sweep. Stage marks are set in the tick, and a tick in another instance clears the kept state anyway. Only the row marks set by reducers outside the tick could then leave a row stale, and the full re-projection every 150 sweeps (about 30 s) bounds that. Name knowledge, the case that matters most, is durable and needs no mark.
+- **Removals:**
+  - `sweep_now` (a join, a return) and `forget` (a death) drop the viewer's kept state. Removal only forces work.
+  - The stage marks of the dead are pruned in the tick, not at the death, since a failed death would otherwise take a pending mark with it.
+- **The phases (`LAST`)** decide only when a player is swept. Each player's next turn is computed from its id (`turn_before`), so an empty map (a new instance) or a failed tick changes at most one sweep's timing, by less than 200 ms.
+
+**Tests** (verify-core, `memory_test` law, Cullet):
+- **`sweep_rollback`:** each injected failure happened and was rolled back, and later sweeps compared every row with a fresh projection, none differing. The failures: ticks failing (`Err`) or panicking (a new instance) after their sweep while strangers crossed the 24 m cut; `place_at`, `kill` and `join` failing after their writes. A mutant that keeps the kept rows of a rolled-back tick fails it (18 rows differed).
+- **`sweep_marks`:** with the marks kept in memory dropped, as if made in another instance, an introduction through `mind_say` (a reducer, not the tick) reached the player's row in 0.4 s. A mutant that learns of it from memory only fails it: the row kept "a stranger" and 32 rows differed.
+
+**Pre-existing hazards found on the way:**
+- **Frames:** the frames' per-viewer state (`frame.rs` `VIEWERS`: what each frame showed, an onlooker's queued events) is module memory written in the tick. On a gap every viewer's next frame now compares its whole scene. An onlooker's queued events from a rolled-back tick may still be told once.
+- **The clock:** `common::now_ms`'s latest time (`TX`) moves forward with a rolled-back transaction's time. That is harmless: time never runs backwards.
 
 ### A missile is told as a shot (fix-missile-told, 2026-11-12)
 

@@ -239,6 +239,8 @@ fn rename_techniques(ctx: &ReducerContext) {
         n += 1;
     }
     if n > 0 {
+        // What anyone knows how to do may read otherwise to the `perceived_of` law.
+        crate::perception::knowledge_changed(ctx, None);
         log::info!("install_script: {n} know-how rows and writings took a renamed technique's new name");
     }
 }
@@ -365,7 +367,7 @@ pub fn purge_dead(ctx: &ReducerContext) -> Result<(), String> {
 pub fn kill(ctx: &ReducerContext, id: u32, cause: String) -> Result<(), String> {
     require_admin(ctx)?;
     act::die(ctx, id, &cause, common::now_ms(ctx), 0, living_rules::outcome::death::OTHER);
-    Ok(())
+    perception::fail_for_test(ctx, 4, "kill")
 }
 
 /// Test support: set a character's background (read by its mind when it first forms an identity).
@@ -468,7 +470,8 @@ pub fn place_at(ctx: &ReducerContext, id: u32, x: f32, y: f32) -> Result<(), Str
     require_admin(ctx)?;
     let now = common::now_ms(ctx);
     let at = free_spot(ctx, id, (x, y), false, None, now)?;
-    motion::place(ctx, id, at, now)
+    motion::place(ctx, id, at, now)?;
+    perception::fail_for_test(ctx, 3, "place_at")
 }
 
 /// Create the seed's communities (if missing) and their members, on a running world.
@@ -546,7 +549,7 @@ pub fn spawn_skirmish(ctx: &ReducerContext, n: u32, spacing: f32) -> Result<(), 
         common::inv_add(ctx, id as u64, "arrow", 40);
         common::learn(ctx, id, "wound_tending", "skirmish", now);
         ctx.db.membership().insert(Membership { id: 0, community: sides[side], member: id, since_ms: now });
-        crate::perception::answers_changed();
+        crate::perception::knowledge_changed(ctx, None);
         let graph = format!(
             r#"{{"first":{{"label":"combat","children":[
               {{"if":{{"cond":{{"threatened":true}},"then":{{"do":{{"skill":"{defend}"}}}}}}}},
@@ -594,10 +597,10 @@ pub fn join(ctx: &ReducerContext, name: String) -> Result<(), String> {
     // What the world gives every newcomer (the seed's `newcomer`): nothing of anyone before.
     seed::newcomer_kit(ctx, id, now);
     presence::start(ctx, id, ctx.sender(), now);
-    combat::invalidate_humans();
+    combat::invalidate_humans(ctx);
     // What the newcomer perceives is there from the first frame, not after a sweep.
     perception::sweep_now(ctx, id, ctx.sender(), now);
-    Ok(())
+    perception::fail_for_test(ctx, 5, "join")
 }
 
 /// Test support (trials, docs/TRIALS.md): a newcomer as `join` makes one — the same arrival

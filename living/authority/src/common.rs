@@ -266,9 +266,14 @@ pub fn scripts_rev(ctx: &ReducerContext) -> u32 {
     rev
 }
 
-/// Call after writing the clock's `scripts_rev`.
+/// Call after writing the clock's `scripts_rev`. The compiled scripts and laws go too: they are
+/// kept by revision, and a transaction that wrote a revision and then failed leaves its
+/// compilation in module memory under a number the next install takes again (docs/PERCEPTION.md,
+/// "Module memory and rollback").
 pub fn invalidate_scripts_rev() {
     SCRIPTS_REV.with(|c| c.set(None));
+    SCRIPTS.with(|s| *s.borrow_mut() = None);
+    LAWS.with(|l| l.set(None));
 }
 
 #[derive(Clone, Copy, Default)]
@@ -1057,7 +1062,7 @@ pub fn learn(ctx: &ReducerContext, id: u32, technique: &str, source: &str, now: 
         return false;
     }
     ctx.db.know_how().insert(KnowHow { id: 0, actor: id, technique: technique.into(), source: source.into(), since_ms: now });
-    crate::perception::answers_changed();
+    crate::perception::knowledge_changed(ctx, Some(id));
     true
 }
 
