@@ -142,8 +142,15 @@ def main():
         scene[0] += int(m.group(2))
         scene[1] += int(m.group(3))
         scene[2] = max(scene[2], int(m.group(4)))
+    # The counts are those of the `stats` row, which housekeeping writes once a second with its
+    # stamp (`at_ms`): over the stamps' interval, not the wall clock's around two SQL calls. With
+    # the wall clock a window could gain or lose one second's ticks (about +-2 a second over 30 s),
+    # and a run whose windows keep one phase to housekeeping kept that offset throughout (the
+    # 61.5 against 59.5 idle ticks a second of docs/BATTLE_SCALE.md's second window).
+    # Spans and scenes come from the log lines between t0 and t1 and keep the wall clock's dt.
     dt = t1 - t0
-    rate = lambda k: round((s1[k] - s0[k]) / dt, 1)
+    dt_stats = (s1["at_ms"] - s0["at_ms"]) / 1000 if s1.get("at_ms", 0) > s0.get("at_ms", 0) else dt
+    rate = lambda k: round((s1[k] - s0[k]) / dt_stats, 1)
     report = {
         "db": a.db,
         "seconds": round(dt, 1),

@@ -501,6 +501,15 @@ impl Vitals {
     ];
 
     /// The row's numeric fields by name, in [`Vitals::FIELDS`]'s order.
+    /// The row's fields as bits, in `FIELDS` order: equal bits, the same row.
+    pub fn bits(&self) -> [u64; 20] {
+        [
+            self.id as u64, self.hp.to_bits() as u64, self.max_hp.to_bits() as u64, self.hunger.to_bits() as u64, self.energy.to_bits() as u64, self.at_ms, self.hp_rate.to_bits() as u64,
+            self.hunger_rate.to_bits() as u64, self.energy_rate.to_bits() as u64, self.rate_key as u64, self.hurt_ms, self.hurt_by as u64, self.stamina.to_bits() as u64, self.stamina_max.to_bits() as u64,
+            self.stamina_rate.to_bits() as u64, self.stamina_from_ms, self.focus.to_bits() as u64, self.focus_max.to_bits() as u64, self.focus_rate.to_bits() as u64, self.focus_from_ms,
+        ]
+    }
+
     pub fn fields(&self) -> Vec<(String, f64)> {
         let v = [
             self.id as f64, self.hp as f64, self.max_hp as f64, self.hunger as f64, self.energy as f64, self.at_ms as f64, self.hp_rate as f64, self.hunger_rate as f64, self.energy_rate as f64, self.rate_key as f64, self.hurt_ms as f64, self.hurt_by as f64,

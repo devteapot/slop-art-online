@@ -2,6 +2,7 @@
 """Assert core behavior through the authority on a shared-harness scratch run."""
 import argparse
 import importlib.util
+import datetime
 import json
 import math
 import re
@@ -5899,6 +5900,76 @@ def heard_first(s):
 
 
 SCENES["heard_first"] = heard_first
+
+
+def battle_cheap(s):
+    """The fighters' cheaper paths change nothing a fighter perceives or does (docs/BATTLE_SCALE.md,
+    battle-cheap). A battle of 12 minded people on an open line, a campfire and a shelter among
+    them and three dead lying there (remains), with each path's diagnostic law on: every move's
+    check before it starts is also asked with the whole context (`check_ctx_check`), every alarm
+    answer kept is also asked of the law (`alarm_cells_check`), and warmth is also worked out from
+    a full copy (`warmth_check`). For 60 s of strikes, blocks, heals and refusals ("out of breath")
+    each diagnostic counts how often it compared and how often the two differed. The case named
+    asserts its path: compared many times, never differed (and, for the alarms, most answers
+    kept)."""
+    which = s.name
+    line = clear_line(s)
+    ppl = s.people(15)
+    fighters, dead = ppl[:12], ppl[12:]
+    for k, who in enumerate(fighters):
+        s.call("place_at", who, line[2 + k % 6][0], line[2 + k % 6][1] + (k // 6) * 1.4)
+    for k, who in enumerate(dead):
+        s.call("place_at", who, line[3 + k][0], line[3 + k][1] + 2.6)
+    s.call("place_structure", fighters[0], "campfire")
+    s.call("place_structure", fighters[6], "shelter")
+    for who in dead:
+        s.call("kill", who, "verify-core battle_cheap: remains to lie among the fighters")
+    for who in fighters:
+        s.call("grant_know_how", who, "wound_tending")
+        s.graph(who, {"first": [
+            {"if": {"cond": {"health": {"below": 50}}, "then": {"do": {"skill": "heal", "target": "self"}}}},
+            {"if": {"cond": {"threatened": True}, "then": {"do": {"skill": "dodge" if who % 2 == 0 else "block"}}}},
+            {"do": {"skill": "strike", "target": {"nearest": "person"}}}]})
+    for law in ("check_ctx_check", "alarm_cells_check", "warmth_check"):
+        set_law(s, law, True)
+    s.call("set_profile", True)
+    t0 = s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+    # The server log's own stamps (UTC) bound this case's `diag:` lines: earlier cases on the
+    # same world left theirs.
+    since = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+    try:
+        time.sleep(60)
+    finally:
+        s.call("set_profile", False)
+        for law in ("check_ctx_check", "alarm_cells_check", "warmth_check"):
+            set_law(s, law, False)
+    logs = "\n".join(l for l in s.command("logs", "-s", "local", s.db, "-n", "200000").stdout.splitlines() if l[:19] >= since and "diag:" in l)
+    count = lambda key: sum(int(x) for x in re.findall(rf'"{re.escape(key)}":(\d+)', logs))
+    uses = [u for u in s.rows("SELECT actor, skill, outcome, at_ms FROM skill_use") if u["at_ms"] >= t0 and u["actor"] in fighters]
+    m = {k: count(k) for k in ("check_ctx:checked", "check_ctx:differed", "alarm:kept", "alarm:checked", "alarm:asked", "alarm:differed", "warmth:checked", "warmth:differed")}
+    m["uses"] = len(uses)
+    m["strikes_landed"] = sum(1 for u in uses if u["skill"] == "strike" and (u["outcome"] or "").startswith(("hit", "blocked", "killed")))
+    m["out_of_breath"] = sum(1 for u in uses if "out of breath" in (u["outcome"] or ""))
+    m["remains"] = len([r for r in s.rows("SELECT id, kind FROM structure") if r["kind"] == "remains"])
+    (s.out / f"{s.name}-battle-cheap.json").write_text(json.dumps(m, indent=1) + "\n")
+    print("MEASURE", json.dumps(m), flush=True)
+    try:
+        s.expect("a battle went on: strikes landed, and some were refused for want of breath or tried again", m["strikes_landed"] >= 10, m)
+        if which == "cheap_check_ctx":
+            s.expect("every move's check on its plan's fields gave the whole context's answer", m["check_ctx:checked"] >= 100 and m["check_ctx:differed"] == 0, m)
+        elif which == "cheap_alarms":
+            s.expect("every kept alarm answer was the law's, and most answers were kept", m["alarm:checked"] == m["alarm:kept"] and m["alarm:kept"] > m["alarm:asked"] and m["alarm:differed"] == 0, m)
+        elif which == "cheap_warmth":
+            s.expect("warmth among remains, a fire and a shelter came out the same both ways", m["warmth:checked"] >= 100 and m["warmth:differed"] == 0 and m["remains"] >= 3, m)
+    finally:
+        for who in fighters:
+            s.graph(who, {"wait": 300})
+        off_the_line(s, line, fighters, dy=76)
+
+
+SCENES["cheap_check_ctx"] = battle_cheap
+SCENES["cheap_alarms"] = battle_cheap
+SCENES["cheap_warmth"] = battle_cheap
 
 
 if __name__ == "__main__":

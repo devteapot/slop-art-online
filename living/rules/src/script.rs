@@ -561,6 +561,23 @@ pub struct Laws {
     /// evaluation (its conditions, targets, act starts, alerts), docs/BATTLE_SCALE.md. Off by
     /// default: those spans are many and would weigh on what an ordinary profile measures.
     pub profile_detail: bool,
+    /// A move's check before it starts is given a context of the fields the check reads alone
+    /// (its plan; docs/BATTLE_SCALE.md, battle-cheap path 1): the same answer, without gathering
+    /// what it never reads (kin near, practice, community and home, warmth). Off: the whole context.
+    pub check_ctx_plan: bool,
+    /// Diagnostic: every such check is also asked with the whole context, and a difference logged
+    /// and counted (`diag:` `check_ctx:differed`).
+    pub check_ctx_check: bool,
+    /// The body's alarms (`status_of`) are answered from the last answer while no field it reads
+    /// has crossed one of its levels (battle-cheap path 2). Off: asked at every evaluation.
+    pub alarm_cells: bool,
+    /// Diagnostic: every alarm answer from a cell is also asked afresh, and a difference logged
+    /// and counted (`alarm:differed`).
+    pub alarm_cells_check: bool,
+    /// Diagnostic: warmth (battle-cheap path 3: only what warms or shelters, visited in place)
+    /// is also worked out from a full copy, and a difference logged and counted
+    /// (`warmth:differed`).
+    pub warmth_check: bool,
     /// The fast lane (docs/FAST_LANE.md): a mind-run character's re-plan between blows, asked
     /// of its mind on a blow taken or a move it sees repeated. Off: none is asked.
     pub fast_lane_on: bool,
@@ -660,6 +677,11 @@ impl Default for Laws {
             regard_cache: true,
             regard_cache_check: false,
             profile_detail: false,
+            check_ctx_plan: true,
+            check_ctx_check: false,
+            alarm_cells: true,
+            alarm_cells_check: false,
+            warmth_check: false,
             fast_lane_on: false,
             seen_again_n: 3.0,
             fast_lane_rate: 2.0,
@@ -2375,6 +2397,13 @@ impl Scripts {
         self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, f, (m,)).map_err(|e| format!("{f}: {e}"))
     }
 
+    /// The fields `<skill>_check` reads (its plan), for a context built with those alone
+    /// (docs/BATTLE_SCALE.md, battle-cheap path 1). `None` when the skill has no check.
+    pub fn check_plan(&self, skill: &str) -> Option<Rc<context::Plan>> {
+        let f = format!("{skill}_check");
+        self.has(&f).then(|| self.plan(&f))
+    }
+
     pub fn check(&self, skill: &str, ctx: &SkillCtx) -> Result<(), String> {
         let f = format!("{skill}_check");
         if !self.has(&f) {
@@ -2698,6 +2727,11 @@ impl Scripts {
             regard_cache: flag("regard_cache", l.regard_cache),
             regard_cache_check: flag("regard_cache_check", l.regard_cache_check),
             profile_detail: flag("profile_detail", l.profile_detail),
+            check_ctx_plan: flag("check_ctx_plan", l.check_ctx_plan),
+            check_ctx_check: flag("check_ctx_check", l.check_ctx_check),
+            alarm_cells: flag("alarm_cells", l.alarm_cells),
+            alarm_cells_check: flag("alarm_cells_check", l.alarm_cells_check),
+            warmth_check: flag("warmth_check", l.warmth_check),
             fast_lane_on: flag("fast_lane_on", l.fast_lane_on),
             seen_again_n: g("seen_again_n", l.seen_again_n).round().clamp(1.0, 100.0),
             fast_lane_rate: g("fast_lane_rate", l.fast_lane_rate).clamp(0.0, 100.0),
