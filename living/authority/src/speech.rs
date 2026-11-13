@@ -431,9 +431,10 @@ fn said_recently(ctx: &ReducerContext, speaker: u32, text: &str, now: u64) -> Op
 /// same person (say-once).
 pub const SAY_ONCE_MS: u64 = 45_000;
 
-/// Whether `speaker` said nearly this line (the repeat match) to `to` (0: the room) within
-/// `SAY_ONCE_MS` (say-once). Read from the chronicle, so it holds across a plan's install, which
-/// clears a say node's own mark. Asked only by a graph's `say` node, never for a player's line.
+/// Whether `speaker` said nearly this line (the repeat match) to `to` within `SAY_ONCE_MS`
+/// (say-once). Read from the chronicle, so it holds across a plan's install, which clears a say
+/// node's own mark. Asked only by a mind plan's say node with an addressee: never for a line to
+/// the room, a scene's or the admin's graph, a player's line, a deliberation's own or a talk turn's.
 pub fn said_to_recently(ctx: &ReducerContext, speaker: u32, to: u32, text: &str, now: u64) -> bool {
     said_like(ctx, speaker, Some(to), text, now, SAY_ONCE_MS).is_some()
 }

@@ -2155,7 +2155,11 @@ def say_once_case(run):
        ("speaking too fast", told as `unsaid`), and the install clears the say node's mark.
 
     Before say-once, the node then said its line again 2–3 s later (`repeat`). Now it is said
-    once: one chronicle line, no "(×2)", 7 s later."""
+    once: one chronicle line, no "(×2)", 7 s later.
+
+    Then what the rule leaves alone (scope decided 2026-11-13): the same steps with a line to
+    the room (`current plan` says it to no one; a second install clears the mark) say it again,
+    and a scene's graph (`set_behavior`, installed twice) says its line to A again."""
     run.harness('launch')
     run.harness('doctor')
     before = {c['id'] for c in run.sql('SELECT id FROM character', 'ids-before')}
@@ -2168,23 +2172,52 @@ def say_once_case(run):
     thought = lambda marker: {'kind': 'deliberate', 'summary': f'verify {marker}', 'detail': '', 'latency_ms': 0, 'tokens': 0, 'model': '', 'reference': ''}
     top = json.dumps({'desires': [{'want': 'the plan', 'weight': {'base': 3.5}, 'do': {'routine': 'current plan'}}]})
     routine = lambda graph: run.admin('mind_routines', m, [{'name': 'current plan', 'graph': json.dumps(graph)}])
-    routine({'wait': 30})
+    # A short wait: a routine edit does not wake the body, which takes the new routine when its
+    # running leaf ends (a 30 s wait here let the line come after the 15 s window).
+    routine({'wait': 2})
     run.admin('mind_install_way', m, top, 'verify first plan', '', 0, '', 0, thought('first'))
     time.sleep(3.0)
     words = 'Verify once: stay a moment, close, where I can see your face.'
     routine({'seq': [{'say': words, 'to': {'id': a}}, {'wait': 30}]})
     chron = lambda: [c for c in run.private("SELECT * FROM chronicle WHERE kind = 'speech'", 'chronicle-speech') if c['a'] == m and 'Verify once' in c['text']]
-    run.wait(lambda: chron(), 'the routine speaks its first line', 15)
+    run.wait(lambda: chron(), 'the routine speaks its first line', 20)
     run.admin('mind_install_way', m, top, 'verify second plan', 'Verify decision line: hear me.', a, 'say', 0, thought('second'))
     time.sleep(7.0)
     rows = chron()
     told = [r['text'] for r in run.private(f'SELECT * FROM experience WHERE observer = {m}', 'experiences-m') if r['kind'] in ('unsaid', 'repeat')]
+
+    def said(marker, label):
+        """How many times M's lines holding `marker` were said (chronicle rows, "(×n)" counted)."""
+        n = 0
+        for c in run.private("SELECT * FROM chronicle WHERE kind = 'speech'", label):
+            if c['a'] == m and marker in c['text']:
+                times = re.search(r'\(×(\d+)\)\s*$', c['text'])
+                n += int(times.group(1)) if times else 1
+        return n
+
+    # A line to the room, through the same plan steps: not held back.
+    room = 'Verify crier: fresh bread at the oven, warm loaves.'
+    routine({'seq': [{'say': room}, {'wait': 30}]})
+    run.wait(lambda: said('Verify crier', 'chronicle-room'), 'the plan says its room line', 40)
+    run.admin('mind_install_way', m, top, 'verify third plan', '', 0, '', 0, thought('third'))
+    time.sleep(7.0)
+    room_said = said('Verify crier', 'chronicle-room-after')
+    # A scene's graph (the admin's), to A, installed twice: not held back.
+    scene = json.dumps({'seq': [{'say': 'Verify scene: hold still there, by the post.', 'to': {'id': a}}, {'wait': 30}]})
+    run.admin('set_behavior', m, scene)
+    run.wait(lambda: said('Verify scene', 'chronicle-scene'), 'the scene graph says its line', 20)
+    time.sleep(3.0)
+    run.admin('set_behavior', m, scene)
+    time.sleep(6.0)
+    scene_said = said('Verify scene', 'chronicle-scene-after')
     checks = {
         'line_said_once': len(rows) == 1 and '(×' not in rows[0]['text'],
         'no_repeat_row': not any(t.startswith('You said almost the same thing') for t in told),
         'decision_line_refused_and_told': any('Verify decision line' in t and 'speaking too fast' in t for t in told),
+        'a_room_line_is_said_again': room_said >= 2,
+        'a_scene_line_is_said_again': scene_said >= 2,
     }
-    result = {'m': m, 'a': a, 'rows': [r['text'] for r in rows], 'told': told, 'checks': checks}
+    result = {'m': m, 'a': a, 'rows': [r['text'] for r in rows], 'told': told, 'room_said': room_said, 'scene_said': scene_said, 'checks': checks}
     (run.directory / 'say-once.json').write_text(json.dumps(result, indent=2, ensure_ascii=False))
     assert all(checks.values()), checks
     return {'status': 'pass', **result}

@@ -162,7 +162,7 @@ Evidence: `named-room-call.json`.
 
 ## Said once
 
-Since `say-once` (2026-11-13, docs/COMMUNICATION.md §15 "Said once"): a graph's `say` node does not say a line nearly the same as one its speaker said to the same person within 45 s. The check reads the chronicle (`speech::said_to_recently`), so a plan's install, which clears the node's own mark, cannot make it speak twice.
+Since `say-once` (2026-11-13, docs/COMMUNICATION.md §15 "Said once"): a mind plan's `say` node addressed to a person does not say a line nearly the same as one its speaker said to that person within 45 s. Nothing else is held back: lines to the room, scene and admin graphs, players' lines, a deliberation's own line, talk turns (scope decided 2026-11-13). The check reads the chronicle (`speech::said_to_recently`), so a plan's install, which clears the node's own mark, cannot make it speak twice.
 
 The `say-once` case (`verify_minds.py --case say-once`) replays ew2's Mirren Quill double with the two reducer calls a deliberation makes, as the admin, in the mind service's order:
 
@@ -170,4 +170,4 @@ The `say-once` case (`verify_minds.py --case say-once`) replays ew2's Mirren Qui
 2. The `current plan` routine edited to say a line to A; the body speaks it.
 3. Within 2 s, `mind_install_way` with the decision's own line, which is refused ("speaking too fast").
 
-Checks, 7 s later: the line is said once (one chronicle row, no "(×2)"); there is no `repeat` row; the decision's line was refused and told. Before `say-once`, on main `80e75932`, the line came out "(×2)" with the repeat row. Evidence: `say-once.json`.
+Checks, 7 s later: the line is said once (one chronicle row, no "(×2)"); there is no `repeat` row; the decision's line was refused and told. Then what the rule leaves alone: the same plan steps with a line to the room say it again (`a_room_line_is_said_again`), and a scene graph (`set_behavior`) installed twice says its line to A again (`a_scene_line_is_said_again`). Before `say-once`, on main `80e75932`, the line came out "(×2)" with the repeat row. Evidence: `say-once.json`.

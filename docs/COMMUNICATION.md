@@ -863,7 +863,13 @@ From ew2 (docs/TRIALS.md, "Ways stage"): of its 49 repeated lines, 22 were one p
 
 es1 had the same pattern (9–24 a run), so it predates the ways.
 
-**The rule:** a graph's `say` node does not say a line nearly the same as one its speaker said to the same person (or to the room) in the last 45 s. "Nearly the same" is the repeat match (`speech::nearly_same`, word Jaccard ≥ 0.6, as `said_recently`). It is read from the chronicle (`speech::said_to_recently`), so it holds across the install, unlike the node's mark. The node counts as done ("already said"). It covers every mind's graph. A player's typed lines go through `human_say`/`human_speak`, which never ask it.
+**The rule:** a mind plan's `say` node (the graph a mind installed, `brain.source = "mind"`) addressed to a person does not say a line nearly the same as one its speaker said to that person in the last 45 s. "Nearly the same" is the repeat match (`speech::nearly_same`, word Jaccard ≥ 0.6, as `said_recently`). It is read from the chronicle (`speech::said_to_recently`), so it holds across the install, unlike the node's mark. The node counts as done ("already said"). **Scope (decided 2026-11-13): only that.** It is what Mirren's double needed. Never held back:
+- a line to the room: its hearers are whoever is near when it is said, so saying it again may reach others (a crier's "Fresh bread!", "Is anyone there?" after walking on);
+- a player's lines (`human_say`, `human_speak`): a player who says the same thing twice means to;
+- a deliberation's own line (`mind_install_way`, `mind_say`) and talk turns;
+- a graph the admin or a scene installed (`set_behavior`, battle and test graphs), and a player's commands.
+
+The repeat guard still tells any speaker it said nearly the same thing. The first version held back room lines and scene graphs too, and the merge scene gate caught it: verify-core `senses` has one speaker say "Can you hear me? (shipped)" and, after the hearing law changes, "Can you hear me? (hear12)" to the room within 45 s, from a scene graph (`set_behavior`). Those match at exactly 0.6, so the second line was dropped and no one heard it (gate run `gate-1113022657-b-senses-core`). A plan's room line can still be said twice across an install, as in es1 and ew2; the repeat measure counts it.
 
 ### Tools
 
