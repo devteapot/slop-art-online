@@ -2225,6 +2225,9 @@ fn alarm_statuses(ctx: &ReducerContext, sc: &living_rules::script::Scripts, me: 
         return s;
     }
     common::diag(|| "alarm:asked", 1);
+    if common::profiling() {
+        status_inputs_changed(sc, me, vit, night, now);
+    }
     let statuses = ask();
     let reads = sc.status_reads();
     let until = living_rules::script::BodyFacts::next_change_ms(&vit.fields(), sc.meters(), now, reads.as_deref());
@@ -2236,6 +2239,38 @@ fn alarm_statuses(ctx: &ReducerContext, sc: &living_rules::script::Scripts, me: 
         c.insert(me.id, AlarmCell { rev, row, stage: me.stage, night, until, statuses: statuses.clone() });
     });
     statuses
+}
+
+thread_local! {
+    /// While profiling: each body's facts at its last ask of the `status_of` law
+    /// (`status_inputs_changed`). A diagnostic only; nothing reads it otherwise.
+    static STATUS_PREV: std::cell::RefCell<std::collections::HashMap<u32, Vec<(String, f64)>>> = std::cell::RefCell::new(std::collections::HashMap::new());
+}
+
+/// While profiling, at each ask of the `status_of` law that its cell did not answer: which of the
+/// body's facts changed since its last ask (`status:changed:<fact>`), and how many at once
+/// (`status:changed_n:<n>`). The measure of how often a per-meter part of the law would be asked
+/// (docs/BATTLE_SCALE.md, note B).
+fn status_inputs_changed(sc: &living_rules::script::Scripts, me: &Character, vit: &Vitals, night: bool, now: u64) {
+    let _span = common::detail_span("status.diag");
+    let facts = living_rules::script::BodyFacts::of(&me.kind, crate::common::stage_name(me.stage), night, &vit.fields(), sc.meters(), now);
+    let mut cur: Vec<(String, f64)> = facts.fields.clone();
+    cur.extend(facts.share.iter().map(|(n, v)| (format!("share.{n}"), *v)));
+    cur.push(("night".into(), night as u8 as f64));
+    cur.push(("stage".into(), me.stage as f64));
+    let prev = STATUS_PREV.with(|p| p.borrow_mut().insert(me.id, cur.clone()));
+    let Some(prev) = prev else {
+        common::diag(|| "status:first", 1);
+        return;
+    };
+    let mut n = 0;
+    for (k, v) in &cur {
+        if prev.iter().find(|(pk, _)| pk == k).map_or(true, |(_, pv)| pv != v) {
+            n += 1;
+            common::diag(|| format!("status:changed:{k}"), 1);
+        }
+    }
+    common::diag(|| format!("status:changed_n:{n}"), 1);
 }
 
 /// "a" or "an" before a kind's words.
