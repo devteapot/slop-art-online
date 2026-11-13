@@ -1815,14 +1815,18 @@ impl<'a> Ev<'a> {
         let day = self.w.day_ms.max(1);
 
         // Regions.
+        let part = common::detail_span("noticed.regions");
         let chunk = living_rules::map::chunk_of(at.0, at.1);
         if !self.recently_seen(0x8000_0000 | chunk) && self.familiarity(FAM_REGION | chunk as u64).is_none() {
             let text = self.region_summary();
             percept(self.ctx, &self.me, now, "discovered", 0, 0, at, text, 0.5);
         }
 
+        drop(part);
         // Creatures.
+        let part = common::detail_span("noticed.creatures");
         let me_kind = self.me.kind.clone();
+        common::diag(|| "noticed:creatures", self.creatures().len() as u64);
         let cands: Vec<NearCreature> = self.creatures().iter().filter(|c| &*c.kind != "deer" || me_kind != "person").cloned().collect();
         let people = cands.iter().filter(|c| &*c.kind == "person").count();
         let laws = common::laws(self.ctx);
@@ -1931,6 +1935,8 @@ impl<'a> Ev<'a> {
         // near is noticed when it begins, as a person would ("You hear a person near, behind
         // you, to the south-west."), never who it is. Its percept names no one and is placed
         // where the listener stands.
+        drop(part);
+        let part = common::detail_span("noticed.sounds");
         let near = self.heard_list().iter().find(|c| c.dist <= laws.heard_near_m).cloned();
         if let Some(c) = near.as_ref().filter(|_| self.st.alerts & SOUND_NEAR == 0) {
             let heading = self.ctx.db.body().id().find(self.me.id).map_or(0.0, |b| common::facing_at(&b, now));
@@ -1945,13 +1951,17 @@ impl<'a> Ev<'a> {
         // Remains and every other structure lie still: one looked at lately is in the seen set,
         // so a look costs one check of its id, and their details are copied only when something
         // in sight is new.
+        drop(part);
+        let _part = common::detail_span("noticed.structures");
         let ids: Vec<u64> = self.structures().iter().map(|(s, _)| s.id).collect();
+        common::diag(|| "noticed:structures", ids.len() as u64);
         let mut new: Vec<usize> = Vec::new();
         for (i, id) in ids.iter().enumerate() {
             if !self.recently_seen(0x4000_0000 | (*id as u32 & 0x3fff_ffff)) && self.familiarity(FAM_STRUCTURE | id).is_none() {
                 new.push(i);
             }
         }
+        common::diag(|| "noticed:structures_new", new.len() as u64);
         if new.is_empty() {
             return;
         }
