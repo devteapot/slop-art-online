@@ -356,7 +356,18 @@ What it means for §3: the minds see the pattern and write plans that answer it,
 
 R3 needs its trial files written (fixtures only). R2 was planned before any of §3 was built: if minds already prepare and use routines for a pattern, §3.5 is not needed yet, and §3.2–3.4 are judged by how much they add.
 
-### 5.4 R3 plan: across fights, with facing sight and the fast lane on (written 2026-11-12, not run)
+### 5.4 R3 plan: across fights, with facing sight and the fast lane on (written 2026-11-12, run 2026-11-13)
+
+**Results** ([TRIALS.md](TRIALS.md#r3-across-fights-with-facing-sight-and-the-fast-lane-on-r3-15-runs-147); $1.82 with R2-fov). Each item is a target as declared above:
+- **R2-fov holds r2e:** the heavy blow answered by exposure 3 in 3 of 5.
+- **Ready:** met. At B's first windup, 4 of 5 veterans held a dodge or block on a windup in their `current plan` routine (written by slow deliberations), against 0 of 5 fresh subjects.
+- **Sooner:** not met. The median first answer was exposure 2 in both arms.
+- **What changed instead.** Veterans answered 76% of B's blows and reached three in a row in 4 of 5 runs, against 27% and never for the fresh subjects.
+- **Not cued by identity.** A met again was answered no better than B.
+- **No subject remarked on the health resets.**
+- **A's flight** (a fixture rule added after the fake runs) gave three subjects a judgment about A, but none about the heavy blow's timing.
+
+Read: across fights the minds carry an evasive way of meeting the pattern in a routine. That routine sits behind the combat branch, so the first windup still goes unanswered.
 
 R3 asks Measure 2 (§4.3): is the next fight much easier? Now that the fast lane answers within one fight, the question is concrete. Does a character that has met the heavy blow four times come to a fifth heavy-blow fight **ready**, and answer sooner than a fresh one?
 
