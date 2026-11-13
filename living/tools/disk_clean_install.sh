@@ -7,17 +7,19 @@
 # ~ expanded); every run reads it, so an edit applies from the next run. The installer writes a
 # commented template when there is none, checks the file and prints the protected paths; an
 # invalid file stops the installation.
-# Usage: living/tools/disk_clean_install.sh [--floor-gb 40] [--target-gb N] [--every-min 30] [--repo PATH] [--uninstall]
+# Usage: living/tools/disk_clean_install.sh [--floor-gb 40] [--target-gb N] [--every-min 30] [--repo PATH]
+#          [--trim-margin-gb 10] [--docker-raw PATH] [--uninstall]
 set -eu
-FLOOR=40 TARGET="" EVERY=30 REPO="" UNINSTALL=""
+FLOOR=40 TARGET="" EVERY=30 REPO="" UNINSTALL="" EXTRA=""
 while [ $# -gt 0 ]; do
   case $1 in
     --floor-gb) FLOOR=$2; shift 2 ;;
     --target-gb) TARGET=$2; shift 2 ;;
     --every-min) EVERY=$2; shift 2 ;;
     --repo) REPO=$2; shift 2 ;;
+    --trim-margin-gb|--docker-raw) EXTRA="$EXTRA $1 $2"; shift 2 ;;  # the Docker Desktop VM trim (macOS)
     --uninstall) UNINSTALL=1; shift ;;
-    *) sed -n '2,6p' "$0"; exit 2 ;;
+    *) sed -n '2,11p' "$0"; exit 2 ;;
   esac
 done
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -25,7 +27,7 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 [ -n "$TARGET" ] || TARGET=$((FLOOR + 30))
 DEST="$HOME/.local/share/slop-tools"
 PY=$(command -v python3)
-ARGS="--apply --repo $REPO --floor-gb $FLOOR --target-gb $TARGET"
+ARGS="--apply --repo $REPO --floor-gb $FLOOR --target-gb $TARGET$EXTRA"
 NAME=slop-disk-clean
 PROTECT="$HOME/.config/slop-disk/protect.txt"
 
