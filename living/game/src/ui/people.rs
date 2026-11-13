@@ -116,7 +116,9 @@ pub fn ingest(net: NonSend<Net>, scene: NonSend<crate::world::Scene>, looks: Res
         } else if let Some((who, to)) = heard::heard(&e) {
             let text = heard::words(&e.text).to_string();
             t.met.entry(who).or_default().last_line = Some(text.clone());
-            let how = if to == 0 { heard::how(&e.text).map(String::from) } else { None };
+            // The room's detail whole; a line to someone's from its comma (the window names the
+            // addressee itself, in my labels).
+            let how = if to == 0 { heard::how(&e.text) } else { heard::detail_to(&e.text) }.map(String::from);
             t.lines.insert(e.id, Line { at_ms: e.at_ms, speaker: who, to, text, mine: false, heard_by: None, unheard: false, how });
         } else if let Some(to) = heard::unheard(&e) {
             // The authority's words show once, as a note (`talk.rs`); here only my line's mark
@@ -505,7 +507,6 @@ pub fn update(
 ) {
     let me = net.my_id;
     let now = scene.now_ms;
-    let name = |id: u32| if Some(id) == me { "You".to_string() } else { looks.cap(id) };
     let lower = |id: u32| if Some(id) == me { "you".to_string() } else { looks.of(id).unwrap_or("someone").to_string() };
     let perceived = |id: u32| net.conn.as_ref().is_some_and(|c| c.db.seen_characters().id().find(&id).is_some());
     // Each open window's lines (the log: everything heard and said).
@@ -554,16 +555,7 @@ pub fn update(
         let mut q = texts.p2();
         for (m, mut t, mut c) in &mut q {
             if let Some(l) = line_of(&m.0, m.1) {
-                let s = match (m.0, l.mine) {
-                    (Win::Person(_), true) => "You, to them".to_string(),
-                    // A room line said with more ("to the room, naming you and Ife"): beside them.
-                    (_, false) if l.how.is_some() => format!("{} ({})", name(l.speaker), l.how.as_deref().unwrap_or_default()),
-                    (Win::Person(_), false) => {
-                        let to = if Some(l.to) == me { ", to you".to_string() } else if l.to != 0 { format!(", to {}", lower(l.to)) } else { String::new() };
-                        format!("{}{to}", name(l.speaker))
-                    }
-                    (_, _) => format!("{} › {}", name(l.speaker), if l.to == 0 { "the room".to_string() } else { lower(l.to) }),
-                };
+                let s = line_head(l, matches!(m.0, Win::Person(_)), me, &looks);
                 let times = times_of(&m.0, m.1);
                 let s = if times > 1 { format!("{s}  ×{times}") } else { s };
                 set_text(&mut t, &s);
@@ -894,6 +886,26 @@ pub fn offers(mut talks: ResMut<Talks>, looks: Res<Looks>, mut ws: ResMut<Window
         if let Some((_, label)) = skills.get(a.2) {
             set_text(&mut t, label);
         }
+    }
+}
+
+/// A line's head as a window shows it (`person`: the speaker's own window; else the Log): who
+/// said it, to whom, and how when the authority told more (a room line's detail, "to the room,
+/// naming you and Ife"; a line to someone's, "to a stranger, naming you"), in my own labels.
+pub fn line_head(l: &Line, person: bool, me: Option<u32>, looks: &crate::looks::Looks) -> String {
+    let name = |id: u32| if Some(id) == me { "You".to_string() } else { looks.cap(id) };
+    let lower = |id: u32| if Some(id) == me { "you".to_string() } else { looks.of(id).unwrap_or("someone").to_string() };
+    match (person, l.mine) {
+        (true, true) => "You, to them".to_string(),
+        (_, false) if l.how.is_some() => {
+            let how = l.how.as_deref().unwrap_or_default();
+            if l.to == 0 { format!("{} ({how})", name(l.speaker)) } else { format!("{} (to {}{how})", name(l.speaker), lower(l.to)) }
+        }
+        (true, false) => {
+            let to = if Some(l.to) == me { ", to you".to_string() } else if l.to != 0 { format!(", to {}", lower(l.to)) } else { String::new() };
+            format!("{}{to}", name(l.speaker))
+        }
+        (false, _) => format!("{} › {}", name(l.speaker), if l.to == 0 { "the room".to_string() } else { lower(l.to) }),
     }
 }
 

@@ -1657,6 +1657,8 @@ pub fn input(
 pub fn outcome_of(conn: &DbConnection, e: &Experience) -> (Option<bool>, String) {
     match conn.db.my_act_outcomes().id().find(&e.id) {
         Some(o) if o.ok => (Some(true), outcome_text(&e.text).1),
+        // Broken off by my own move (talk-turns): the rules' sentence, a quiet note, not a failure.
+        Some(o) if o.code == living_rules::outcome::act::MOVED && !o.why.trim().is_empty() => (None, crate::ui::label(o.why.trim().trim_end_matches('.'))),
         Some(o) if !o.why.trim().is_empty() => (Some(false), crate::ui::label(o.why.trim().trim_end_matches('.'))),
         Some(o) => (Some(false), crate::ui::label(&o.what)),
         None => outcome_text(&e.text),
@@ -1686,8 +1688,12 @@ fn outcomes(net: NonSend<Net>, scene: NonSend<Scene>, time: Res<Time>, mut v: Re
     fresh.sort_by_key(|e| e.at_ms);
     for e in fresh {
         v.seen.insert(e.id);
-        // Only outcomes of what I sent from here (minds' and earlier rows stay out).
-        if (e.at_ms as f64) + 1_000.0 < oldest || v.pending.is_empty() {
+        // Only outcomes of what I sent from here (minds' and earlier rows stay out). One broken
+        // off by my own move (`moved`) is mine whichever way I sent it (a gesture key too): it is
+        // told once, as it comes.
+        let moved = conn.db.my_act_outcomes().id().find(&e.id).is_some_and(|o| o.code == living_rules::outcome::act::MOVED);
+        let sent_here = !v.pending.is_empty() && (e.at_ms as f64) + 1_000.0 >= oldest;
+        if !sent_here && !(moved && (e.at_ms as f64) + 5_000.0 >= now_ms) {
             continue;
         }
         let (ok, text) = outcome_of(conn, &e);
