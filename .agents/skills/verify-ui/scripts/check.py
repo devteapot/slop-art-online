@@ -299,7 +299,7 @@ def move_off(run, c):
 
 @scenario("earshot")
 def earshot(run, c):
-    """The authority's earshot in the client (the `earshot` law, off by default): with it on, the
+    """The authority's earshot in the client (the `earshot` law, on as shipped since earshot-on): with it on, the
     talk box takes whom Tab goes to, and their order, from `my_earshot`'s `say` list, and shows its
     sentence (in my own labels) in the box's hint line; someone who steps out of a say's reach
     drops from it while a call still reaches them. With it off: no row, the client's own reckoning,
@@ -324,7 +324,8 @@ def earshot(run, c):
     try:
         out, code, text = drive(run, s, plan, places=[f"{a}:2:0", f"{b}:-6:0"], syncs=syncs, extra=["--token", tok, "--player", "Hearer"])
     finally:
-        call_admin(run, "set_world_law", ["earshot", "false"])
+        # Back to the shipped law (on).
+        call_admin(run, "set_world_law", ["earshot", "true"])
     c.check(s, "client ran and joined (a fresh player)", code == 0, text[-300:])
     d = {k: dump(out, k) or {} for k in ("e1", "t1", "t2", "t3", "e2", "t4", "t5", "e3", "t6")}
     ty = lambda k: d[k].get("typing") or {}

@@ -152,8 +152,9 @@ fn laws() {
         // about whatever matters to it now (the neutral framing, replayed as N2).
         think_framing: false,
         // Earshot (docs/COMMUNICATION.md §17): a person's scene says whom a line said now would
-        // reach, at each way, among the people they perceive. Off: it is not told.
-        earshot: false,
+        // reach, at each way, among the people they perceive, and a player's `my_earshot` the
+        // same. On as shipped since earshot-on (2026-11-13); off, neither is told.
+        earshot: true,
         fov_focal_deg: 70.0, fov_side_deg: 110.0, fov_side_share: 0.3333,
         fov_near_m: 3.0, fov_near_dark_m: 2.0, fov_margin_deg: 10.0,
         // What is heard but not seen (only while the field is on) is told by its distance:

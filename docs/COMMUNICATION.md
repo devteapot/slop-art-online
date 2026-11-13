@@ -922,7 +922,25 @@ Approved 2026-11-12 by the general coordinator as a perception fact. It is #4 in
 - **Words.** Each person is named in the speaker's own labels (`label_for`). That is a name only when known and near enough to make out, otherwise "a stranger" or "someone too far away to make out". A mind also gets the id the scene shows them under, a far figure's handle (far-handle). A way that reaches everyone a said line does says only whom it adds ("a call would also reach: …", or "a call would reach no one more"); one that reaches fewer lists its own ("a whisper would reach: …", or "no one"). At most 8 are named per way; the rest are counted ("…, 3 more"). Ways come in the rules' order and are named by their script name ("a call", "a whisper"), so a world's own way reads "a <name>".
 - **No advice.** The fact says nothing about whether anyone is listening, and nothing about what to do. It adds no rule about when to speak, and no line is held back or delivered differently.
 
-**The law: `earshot`, off as shipped.** `laws().earshot` (`Laws::earshot`), set with `set_world_law earshot true` or a seed's `rules`. Turning a behaviour on by default in the game is the owner's call, so it stays off until the stage below has been read. Off, neither controller is told anything, and the world is as before.
+**The law: `earshot`, on as shipped since `earshot-on` (2026-11-13).** `laws().earshot` (`Laws::earshot`), settable per world with `set_world_law earshot false` (or `true`) or a seed's `rules`. Off, neither controller is told anything, and speech is as it was before earshot.
+
+**On by default (branch `earshot-on`, approved 2026-11-13).** The stages read before the switch:
+- **es1** (earshot alone, $9.48): no effect on unheard lines. The diagnosis (`unheard_why.py`): late lines, decisions with no way to call, talk turns without the fact.
+- **ew1 and ew2** (with `mind-say-way`, $2.55 and $2.59): decisions now call. In ew2, 62 decided calls were named, 58 said, and 30 of the 43 to someone reached them; "only a call" unheard fell to 9. False replies stayed within es1's range; the room-call kind is fixed by `talk-named-room`.
+- **fs1w** (fs1n with earshot): lines to the newcomer out of earshot 5 of 16, against 11 of 18 in fs1n.
+
+**Cost per prompt**, measured on the stages' think and deliberate requests (the key and its words):
+
+| batch | requests with the fact | fact, characters (median / p90) | share of the prompt's characters (median) |
+|---|---|---|---|
+| es1 (earshot arm) | 1653 of 1673 | 216 / 360 | 1.41% |
+| ew1 | 844 of 854 | 221 / 342 | 1.44% |
+| ew2 | 854 of 864 | 216 / 348 | 1.36% |
+| fs1w | 888 of 898 | 226 / 342 | 1.41% |
+
+That is about 55 tokens at four characters a token, and up to about 125 at the think prompts' own measured ratio (1.76 characters a token on glm-flash: the scene's JSON tokenizes densely). The journals' deliberate `prompt_tokens` count more than the one request they keep, so tokens are not taken from them. Talk turns and players' prompts are unchanged: a talk turn has no scene, and a player's row is written only when it changes.
+
+**Trial arms** that ran with the law off as recorded (`strangers-control`, `strangers-filter`, `strangers-filter-cues`, `strangers-first-sight`, `strangers-filter-cues-fs`, `strangers-first-sight-hf`, `strangers-first-sight-n2`, `gate-off-ds`, `gate-jev-ds`) now pin `earshot: false` in `living/trials/variants.json`, so they run as recorded. Variants described as "the models file (or main) as it stands" take the new default.
 
 **Both controllers, from one place.**
 - **A mind:** its deliberation scene (`perceive::scene_json`) has the key "who would hear you now" (`living_rules::script::speech::EARSHOT`), read in its think and deliberate prompts.

@@ -7,14 +7,14 @@ The player joins (its own identity). The admin spawns three minded strangers, A,
 them still, and puts the player on a quiet open line with A and C beside it. A and C tell their
 names ("I'm …", admin `mind_say`). Then A stands 3 m east (seen, within a said line), B 10 m east
 (seen by day, beyond a said line, within a call) and C 15 m west (beyond sight, within a call).
-With the `earshot` law off (as shipped) the player has no `my_earshot` row; the admin turns it
-on (`set_world_law`). The player's `my_earshot` row, read through the Rust SDK probe (`drive.py --query --as-player`),
+With the `earshot` law on (as shipped since earshot-on) the player's `my_earshot` row, read
+through the Rust SDK probe (`drive.py --query --as-player`),
 must list A at `say`, add B at `call` by day, never list C, and say it in the player's short form:
 "Within earshot: <A>; a call would also reach 1 more" (by night "Within earshot: <A>"), with no
 word of C's name. The player then says a line to the room
 (`human_say`) and calls one (`human_speak … "call"`): the people who receive each, among the
-three, are the row's list at that way, and C, unseen, receives the call. Turned off again, the row
-goes. Admin calls
+three, are the row's list at that way, and C, unseen, receives the call. Turned off
+(`set_world_law`), the row goes; turned on again, it comes back. Admin calls
 (`spawn_crowd`, `set_behavior`, `place_at`, `mind_say`, `set_world_law`) set the scene; they are not something a
 player can do. Writes `RUN/earshot-seen.jsonl` and `RUN/earshot.json`. Python standard library
 only.
@@ -116,9 +116,6 @@ def main():
     bodies = {x["id"]: (x["x"], x["y"]) for x in sql(rid, "SELECT id, x, y FROM body") if x["id"] in (me, a, b, c)}
     dist = {x: round(math.dist(bodies[me], bodies[x]), 1) for x in (a, b, c)}
     sight = (sql(rid, "SELECT * FROM my_senses", "--as-player") or [{"sight": 11.0}])[0]["sight"]
-    off = earshot_row(rid, "earshot-off")
-    call(rid, "set_world_law", ["earshot", "true"])
-    time.sleep(1.0)
     row = earshot_row(rid, "earshot-seen")
     ways = {w["way"]: set(w["hearers"]) for w in row.get("ways", [])}
     text = row.get("text", "")
@@ -134,12 +131,16 @@ def main():
     rows = sql(rid, f"SELECT * FROM experience WHERE subject = {me}")
     call(rid, "set_world_law", ["earshot", "false"])
     time.sleep(1.0)
-    off_again = earshot_row(rid, "earshot-off-again")
+    off = earshot_row(rid, "earshot-off")
+    call(rid, "set_world_law", ["earshot", "true"])
+    time.sleep(1.0)
+    on_again = earshot_row(rid, "earshot-on-again")
     got = lambda words: {r["observer"] for r in rows if r["kind"] == "speech" and words in r["text"]} & ours
     heard_say, heard_call = got("near enough to hear me"), got("Hello out there")
     checks = {
-        "off as shipped: no my_earshot row": not off,
-        "turned off again: the row goes": not off_again,
+        "on as shipped: the player has its my_earshot row": bool(row),
+        "turned off: the row goes": not off,
+        "turned on again: the row comes back": on_again.get("id") == me,
         "placed as planned (A within a said line, B beyond it, C beyond sight)": dist[a] <= 6.0 and 9.0 < dist[b] <= 11.0 and 11.0 < dist[c] <= 22.5,
         "my_earshot is my character's one row": row.get("id") == me,
         "say lists A": ways.get("say", set()) & ours == {a},
