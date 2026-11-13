@@ -212,6 +212,119 @@ The general coordinator approved this run at about $2.5, with a stop at $3.50 sp
 - `LIVING_CONCURRENCY` 64;
 - the people mix.
 
+### Results (fs1w, 2026-11-13 00:38–00:58 local): the stop rule tripped (`converge_60s` 8)
+
+**The answer to the owner's question, from one replicate.**
+- **Residents could greet without walking over, and most did:** 10 of the 13 who spoke to the newcomer stayed off, at 13–32 m.
+- **Calling did not end the rush:** it changed its shape. Eight residents turned to the newcomer within a minute, 296–364 s after the join, against fs1n's five. Most of those were lines from 13–32 m: at most one resident who had addressed the newcomer stood within 4 m at a time (`together_4m` 1, as in fs1n).
+- **The stop rule tripped:** it counts contacts within a minute (lines, gestures, aimed acts) wherever the speaker stands, so lines from a distance count in it as walking up does. Since 2026-11-13 the rule reads `together_4m` 3 or more, and by it fs1w does not trip (1). The plain count of residents within 4 m at once was 4 at 391 s: children on their way to lessons and one who had not noticed the newcomer ([The stop rule: voices and bodies](#the-stop-rule-voices-and-bodies-2026-11-13)).
+
+**What ran.**
+- **Code:** `trials-fs1` `31fd5daf`, which was main with mind-say-way (`da3ff142`) and ways-stage (`e6e0c0dc`), in `~/slop-trials-fs1`. The module and the mind were built through a build slot.
+- **Smoke:** a free fake run first (`fs1ws`, 6 minutes). It ran to duration and read the three laws back. All 105 think requests carried "# What just happened", none "# Why you are thinking now", and 100 carried the earshot fact.
+- **The paid arm:** ran to duration (20 minutes) with no runaways, no outages and one mind start. `first_sight_thinks`, `think_framing` and `earshot` were read back from `world_law`.
+- **Keys:** copied from `~/dev/slop-runs-arrive/.env` (3 key fragments) and deleted after the run.
+- **Cleanup:** the runner paused each world before deleting it; no database is left.
+
+**Cost:** $2.66 (glm-5-3-flash 1,410 calls $2.04; deepseek-v4-1-flash 424 calls $0.62). The spend guard was set at $3.50 and read $2.56 at its last sample.
+
+**Switches:** as fs1n, plus `earshot` on:
+- `first_sight_thinks` on (gap 300 s), `think_framing` on (N2), the naming fix; `heard_first_rethinks` off;
+- far-handle on, `fov_on` off, `regard_cache` on;
+- `LIVING_GREET=nearest`, `LIVING_PARK=concurrent`;
+- `LIVING_SKILL_TIMINGS` on and `force_outcomes` true;
+- no arrival laws;
+- `LIVING_CONCURRENCY` 64;
+- the people mix;
+- minds name a line's way (mind-say-way).
+
+| measure | fs1n | **fs1w** (earshot) | target |
+|---|---|---|---|
+| in range | 25 | 27 | about 18–24 |
+| asks | 12 | **13** | 1–3, Aldous among them |
+| approaches silently | 1 | 0 | 0–2 |
+| notices inwardly | 7 | 9 | 3–8 |
+| unaware | 5 (20%) | 5 (19%) | ≤6, ≤40% |
+| tells others | 1 | 4 (Neve Calloway, Amara Okoro, Lark Morrow, Ren Sato) | 1–4 |
+| first heard line after the join | 14.3 s, Benedikt Orme | 34.9 s, Livia Faro | within 5 minutes |
+| `converge_60s` (old definition) | 5 | **8** | ≤3 |
+| of it: heard / unheard | 3 / 3 | 7 / 3 | — |
+| `together_4m` | 1 | 1 | ≤2 |
+| raw 4 m convergence | 8 | 7 | — |
+| lines to the newcomer / out of earshot / residents heard by it | 18 / 11 / 5 | 16 / **5** / 9 | — |
+| re-asks | 3 | 0 | — |
+| first sights → think requests carrying the line | 26 → 24 | 27 → 26 | — |
+| first-sight-only thoughts that speak to the newcomer / speak or mean to | 12 / 15 of 24 (50% / 62%) | 13 / 18 of 26 (50% / 69%) | — |
+| false replies / group talk, a minute | 0.20 / 0.05 | 0.50 / 0.15 | within C's spread |
+| repeated lines; `led_res` − placebo | 0.04; 0.00 | 0.03; 0.00 | within C's spread |
+| deliberations / talk turns per resident-hour | 18.9 / 10.7 | 21.2 / 13.8 | — |
+| tick mean / > 10 ms / > 25 ms / > 50 ms | 1.12 ms / 132 / 17 / 6 | not captured (the sampler listed no databases, as in fs1e) | — |
+| spoken `#id` lines | 0 | 0 | 0 |
+| cost | $2.45 | $2.66 | — |
+
+**Lines to the newcomer by way** (speech, audience and positions; `ways_report.py` for the decisions):
+
+| | fs1n | fs1w |
+|---|---|---|
+| lines to the newcomer | 18, all said | 16: 10 said, 6 called |
+| heard by it | said 7 of 18 | called 6 of 6; said 5 of 10 |
+| first line per speaker: called, and stayed off | — | 4 (Lark Morrow 22.7 m, Neve Calloway 13.3 m, Aldous Quill 25.2 m, Oswin Greave 24.9 m) |
+| first line per speaker: called, then came within 4 m in 60 s | — | 2 (Hana Sato from 24.8 m; Fenn Brandt, already 3.1 m off) |
+| first line per speaker: said, and stayed off | 8 | 6 (Thessaly Marl, Suri Greave, Petra Tarn, Cora Stannard, Jory Greave, Sabine Quill, at 15–32 m; 2 of them heard) |
+| first line per speaker: said, then came within 4 m in 60 s | 4 | 1 (Livia Faro, from 11.8 m) |
+
+- **The whole run, by `ways_report.py`:** decisions named `say` 269, `call` 55, `whisper` 23. Of the decided calls to someone, 30 reached their listener and 17 did not.
+- **Decisions whose scene put someone in a call's reach but not a said line's** acted toward them by: calling 18, calling and walking 15, walking 6, saying and walking 6, saying 2.
+- **Toward the newcomer** (7): called 2 (Neve, Oswin), called and walked 3 (Fenn, Hana, Lark), said and walked 1 (Livia), said 1 (Petra).
+
+**Reading** (one replicate, so indicative):
+- **The call was used, and it was heard.** All six calls to the newcomer reached it. Of the said lines, 5 of 10 did not, against 11 of 18 in fs1n. Residents heard by the newcomer went from 5 to 9.
+- **Few walked over to greet.** 10 of the 13 speakers stayed where they were (fs1n: 8 of 12). Three came within 4 m within a minute: Livia, Hana, and Fenn, who was already near.
+- **Asking did not fall.** 13 residents spoke to the newcomer (fs1n 12), and the first-sight thoughts that speak to it stayed at 50%. The call lets them reach it, so more of them were heard.
+- **The minute's rush grew:** `converge_60s` 8, from 296 s. Its eight were Aldous, Cora, Hana, Ingrid, Neve, Oswin, Petra and Suri. Seven of them spoke first from 13–32 m, four of those by calling; Ingrid's contact was not a line. This is the count the stop rule read until 2026-11-13. Of those who had addressed the newcomer, at most one stood within 4 m at a time.
+- **Aldous asked:** a call from 25.2 m at 324 s, heard ("I keep the book open at nine, and I like knowing who…").
+- **False replies and group talk rose:** 0.50 and 0.15 a minute, against 0.20 and 0.05. That is above fs1n, within the range of the other first-sight arms (0.20–0.55).
+
+**The asks** (`fs1_asks.py`, grouped by its own keywords, not by hand as fs1n's were): curiosity 5 (Livia, Lark, Thessaly, Suri, Sabine), manners 3 (Hana, Cora, Jory), duty or role 1 (Aldous), something else 4 (Neve, Petra, Oswin, Fenn).
+
+**Evidence:**
+- `~/slop-trials-fs1/.local/living/trials/fs1w` and `fs1ws`, and the journals `verify-trial-fs1w*`.
+- All archived in `~/archive/trials/fs1w-20261113.tar.gz` (15 MB), with:
+  - the measure outputs: `fs1w-spread.md`, `fs1w-m.json`, `fs1w-asks.json`, `fs1w-ways*.json`, `fs1w-firstlines.txt`;
+  - the spend and runner logs;
+  - the tools.
+
+## The stop rule: voices and bodies (2026-11-13)
+
+The general coordinator read fs1w and agreed that `converge_60s` counts voices, not bodies. From now on the strangers measures (arrive_report, arrive_spread) report voices and bodies:
+- **"Speakers to the newcomer within a minute"** (`voices_60s`): the old `converge_60s`, renamed in the report and still written under the old name for older records. It counts the most residents who spoke, gestured or aimed an act at the newcomer within 60 s, from any distance.
+- **"Residents within 4 m at once"** (`crowd_4m`): the peak count of distinct residents within 4 m of the newcomer at one position sample, whatever brought them, with `crowd_4m_s` saying when.
+  - It is new. `together_4m` counts only those within 4 m who had spoken, gestured or aimed an act at the newcomer in the minute before. `together_any_4m` counts those who had come from beyond 8 m in the minute before.
+  - `crowd_4m` counts everyone, so residents passing on their own way count too.
+
+**The stop rule since 2026-11-13, the general coordinator's decision: `together_4m` 3 or more.** That is, 3 or more residents within 4 m of the newcomer at once who had spoken, gestured or aimed an act at it in the minute before (`STOP_TOGETHER_4M`; `runs_3plus` counts it). `crowd_4m` and `voices_60s` are reported beside it. The earlier rules, kept for the records made under them:
+- **Until 2026-11-12:** `converge_60s` 4 or more, or `together_4m` 3 or more. Dropped because `converge_60s` counts voices, not bodies: fs1w's 8 voices from 13–32 m tripped it while at most one resident who had addressed the newcomer stood within 4 m.
+- **Interim, 2026-11-13:** `crowd_4m` 3 or more. Dropped the same day because the plain count measures where the newcomer stands, not whom it draws. Every first-sight arm tripped it, mostly on residents passing by (below).
+
+**Both measures, recomputed from the records** (arrive_report on each run's own files; fs1c is the control world, C, without first sight):
+
+| run | voices within a minute (`voices_60s`) | heard / unheard | residents within 4 m at once (`crowd_4m`), and when | `together_4m` | `together_any_4m` | stops: `together_4m` ≥ 3 (the rule) / interim `crowd_4m` ≥ 3 / until 2026-11-12 |
+|---|---|---|---|---|---|---|
+| fs1c (C) | 2 | — | 2, at 91 s | 2 | 2 | no / no / no |
+| fs1f | 6 | 6 / 2 | 3, at 345 s | 2 | 3 | no / yes / yes |
+| fs1h | 10 | 5 / 6 | 3, at 370 s | 2 | 3 | no / yes / yes |
+| fs1e | 10 | 8 / 7 | 8, at 630 s | 3 | 6 | **yes** / yes / yes |
+| fs1n | 5 | 3 / 3 | 3, at 338 s | 1 | 3 | no / yes / yes |
+| fs1w | 8 | 7 / 3 | 4, at 391 s | 1 | 3 | no / yes / yes |
+
+**What the body count shows:**
+- **Under the rule, only fs1e trips** (`together_4m` 3). Under the interim plain count every first-sight arm tripped, at 3–8 residents within 4 m against C's 2. These are single replicates.
+- **Many of those bodies were passing by, not greeting.**
+  - fs1w's 4 at 391 s: Edda Hollin, Pim Hollin and Zeke Okoro, children on their way to lessons, and Juno Brandt, who never noticed the newcomer. None had spoken to it.
+  - fs1n's 3 at 338 s: Ren Sato, who had spoken to it, and Davin Vane and Joss Tarn, who had not.
+  - fs1e's 8 at 630 s: 5 had spoken to it (Dolly and Roos Achterberg, Cora and Gwil Stannard, Aldous Quill), and 3 had not (Pieter Achterberg, Posy Fenwick, Tilly Dunlin). That was the one real crowd.
+- **So the plain count reads where the newcomer stands as much as whom it draws**, which is why the rule reads `together_4m`: fs1n and fs1w 1, against C's 2.
+
 ## First sight fs1n (2026-11-12) — first sight with the neutral think framing (N2); target, written before any paid call
 
 Approved by the general coordinator at about $2.7, after the ordinary-think replay (docs/FRAMING.md). It runs only once `think-framing` is on main and the trial server is free, and only when the general coordinator says so.
@@ -579,13 +692,19 @@ The laws are set by `set_world_law` and read back from `world_law`.
 | unaware | ≤6, ≤40% |
 | tells others (all residents) | 1–4, Ingrid in 2 of 4 runs |
 | first heard line after the join | within 5 minutes |
-| `converge_60s` / `together_4m` | ≤3 / ≤2 |
+| `converge_60s` / `together_4m` | ≤3 / ≤2 (since 2026-11-13 reported as `voices_60s` / `together_4m`, with `crowd_4m` beside them: see the stop rule below) |
 | out of shape, any arm | 5 or more askers; unaware above 60%; 3 or more residents within 4 m at once |
 | guards: false replies a min (main's rule since strangers-measures: an answer to a line that names someone else; group talk apart), repeated lines, `led_res` − placebo | within C's spread |
 
-**The stop rule, fixed before running.** It is checked after each arm, before the next starts. The batch stops, and nothing else is reported first, if a first-sight arm crowds like ar2's `notice` arm (2–6 residents converging within a minute):
-- its `converge_60s` is 4 or more, above every arm without a newcomer law in st2 and st2b (at most 3); or
-- its `together_4m` is 3 or more.
+**The stop rule since 2026-11-13: `together_4m` 3 or more** (the general coordinator's decision). It is checked after each arm, before the next starts. The batch stops, and nothing else is reported first, if 3 or more residents stand within 4 m of the newcomer at once having spoken, gestured or aimed an act at it in the minute before (`together_4m`; `stop` in arrive_report's output). `crowd_4m` and `voices_60s` are reported beside it. The measures and the change are in [The stop rule: voices and bodies](#the-stop-rule-voices-and-bodies-2026-11-13).
+
+**The interim rule, 2026-11-13 only:** `crowd_4m` 3 or more, the plain count of residents within 4 m at once, whatever brought them. Dropped because the plain count measures where the newcomer stands, not whom it draws.
+
+**The stop rule as fixed before running fs1, used until 2026-11-12** (kept for the records before it). The batch stopped if a first-sight arm crowded like ar2's `notice` arm (2–6 residents converging within a minute):
+- its `converge_60s` was 4 or more, above every arm without a newcomer law in st2 and st2b (at most 3); or
+- its `together_4m` was 3 or more.
+
+It was changed because `converge_60s` counts voices, not bodies. It counts residents who spoke, gestured or aimed an act at the newcomer within a minute, from any distance, so fs1w's 8 voices from 13–32 m tripped it while one resident who had addressed the newcomer stood within 4 m.
 
 Beside them, each arm records the raw count: the most residents who came within 4 m of the newcomer within 60 s of one another, whatever their reason. The Strand walk passes many residents, so C gives that count's baseline.
 
