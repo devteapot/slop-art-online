@@ -184,6 +184,17 @@ pub fn relative(off: f32) -> &'static str {
     }
 }
 
+/// The band of whole metres round `d` over which a law's answers by distance (`answers[m]`, the
+/// answer at `m` metres, as `perceived_of` reads `p.dist`) equal the answer at `d`: the first and
+/// last metre of the run of equal answers that holds `d`, inclusive. The last is at most the last
+/// metre `answers` covers, which says nothing of farther metres. `d` must be within `answers`.
+pub fn law_band<T: PartialEq>(answers: &[T], d: usize) -> (usize, usize) {
+    let at = &answers[d];
+    let lo = answers[..d].iter().rposition(|a| a != at).map_or(0, |i| i + 1);
+    let hi = answers[d..].iter().position(|a| a != at).map_or(answers.len() - 1, |i| d + i - 1);
+    (lo, hi)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -310,5 +321,29 @@ mod tests {
         // Facing east: south (+y) is to the right.
         assert_eq!(relative(off_facing(o, 0.0, (10.0, 20.0))), "to your right");
         assert_eq!(relative(off_facing(o, 0.0, (0.0, 10.0))), "behind you");
+    }
+
+    #[test]
+    fn a_law_band_is_the_run_of_equal_answers_round_a_distance() {
+        // Cullet's shape: made out within 24 m, too far away to make out beyond.
+        let far: Vec<bool> = (0..64).map(|m| m > 24).collect();
+        assert_eq!(law_band(&far, 0), (0, 24));
+        assert_eq!(law_band(&far, 3), (0, 24));
+        assert_eq!(law_band(&far, 24), (0, 24));
+        assert_eq!(law_band(&far, 25), (25, 63), "the last covered metre, nothing beyond");
+        assert_eq!(law_band(&far, 63), (25, 63));
+        // Several cuts, and an answer that comes back: each run is its own band.
+        let a = [1, 1, 2, 2, 2, 1, 3];
+        assert_eq!(law_band(&a, 1), (0, 1));
+        assert_eq!(law_band(&a, 2), (2, 4));
+        assert_eq!(law_band(&a, 4), (2, 4));
+        assert_eq!(law_band(&a, 5), (5, 5));
+        assert_eq!(law_band(&a, 6), (6, 6));
+        assert_eq!(law_band(&[7], 0), (0, 0));
+        // Every metre in a band has the answer at the metre asked about.
+        for d in 0..a.len() {
+            let (lo, hi) = law_band(&a, d);
+            assert!((lo..=hi).all(|m| a[m] == a[d]) && (lo == 0 || a[lo - 1] != a[d]) && (hi == a.len() - 1 || a[hi + 1] != a[d]));
+        }
     }
 }

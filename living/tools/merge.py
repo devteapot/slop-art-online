@@ -6,6 +6,11 @@ In the current worktree, which must be clean and have no commits that main lacks
   2. git merge --no-ff the branch, pinned to the commit it had when this started;
   3. run the check (`living/tools/check.py`: `just living-check` with step stamps), and
      stop without pushing if it fails or leaves the worktree dirty;
+  3a. when the merge touches the module's shape (authority, rules, bindings, the workspace
+     manifests): `just living-generate` on the checked tree (the check's own wasm; cargo
+     rebuilds nothing when it is current), and stop without pushing when living/bindings
+     changes ("bindings not regenerated: <files>") or the generator fails ("bindings check
+     could not run"). Docs, client and tool merges skip it;
   3b. with --scenes (or LIVING_MERGE_SCENES=1): the scene gate (living/tools/scene_gate.py),
      real scenes on scratch verify-gate-* databases when the merge touches behaviour; it
      stops without pushing when a case fails twice on the branch and passes on main;
@@ -23,10 +28,16 @@ Usage: merge.py <branch> [-m MESSAGE] [--retries N] [--no-push] [--scenes] [--re
   --scenes     run the scene gate after the check (also LIVING_MERGE_SCENES=1); its own
                settings (server, red-on-main list) come from LIVING_GATE_* (scene_gate.py)
 Environment: LIVING_MERGE_CHECK replaces the check command (a shell command; for tests);
-LIVING_MERGE_SCENES_CMD replaces the scene gate command (for tests).
+LIVING_MERGE_SCENES_CMD replaces the scene gate command (for tests); LIVING_MERGE_BINDINGS_CMD
+replaces `just living-generate` in the bindings check (for tests). The generator itself is
+LIVING_GENERATE_CMD (generate_bindings.sh); when unset and a container named
+LIVING_GENERATE_CONTAINER (default slop-trials-stdb, the Spark's) is running, the bindings check
+generates inside it (living/tools/generate_in_container.sh), else the Justfile's compose run.
+LIVING_MERGE_BINDINGS=always runs the bindings check whatever the merge touches (=off skips it).
 Exit codes: 0 merged and pushed (or nothing to merge), 2 usage, 3 refused (worktree), 4 merge
 conflict, 5 check failed, 6 check left the worktree dirty, 7 main kept moving, 8 push failed,
-9 another git command failed, 10 the scene gate failed (or could not run).
+9 another git command failed, 10 the scene gate failed (or could not run), 11 the bindings
+were not regenerated (or the bindings check could not run).
 
 The push is a compare-and-swap (--force-with-lease on the main it merged onto): it lands only
 when main is still exactly the commit that was merged and checked, never over a main that
@@ -123,6 +134,51 @@ def reset_to(sha, why):
         done.append(f"could not move HEAD back to {sha[:10]} ({why}); HEAD is {out('rev-parse', 'HEAD')[:10]}")
         return False
     return True
+
+
+# What makes the module's shape (its tables, reducers and views, and the types they carry): a
+# merge touching none of these cannot change the generated bindings.
+MODULE_SHAPE = ("living/authority/", "living/rules/", "living/bindings/", "living/Cargo.toml", "living/Cargo.lock")
+BINDINGS = "living/bindings"
+
+
+def bindings_check(merge_sha, base, log_path, start_head, attempt):
+    """Regenerate the bindings from the checked merge's module; None when they are unchanged
+    (or the merge cannot change them), else the exit code after restoring the worktree and HEAD."""
+    touched = [p for p in out("diff", "--name-only", base, merge_sha).splitlines() if p.startswith(MODULE_SHAPE)]
+    if os.environ.get("LIVING_MERGE_BINDINGS") == "always":
+        touched = touched or ["(LIVING_MERGE_BINDINGS=always)"]
+    elif os.environ.get("LIVING_MERGE_BINDINGS") == "off":
+        touched = []
+    if not touched:
+        done.append(f"attempt {attempt}: bindings check skipped (the merge touches no module shape)")
+        return None
+    cmd = os.environ.get("LIVING_MERGE_BINDINGS_CMD") or "just living-generate"
+    env_note = ""
+    if not os.environ.get("LIVING_MERGE_BINDINGS_CMD") and not os.environ.get("LIVING_GENERATE_CMD"):
+        c = os.environ.get("LIVING_GENERATE_CONTAINER", "slop-trials-stdb")
+        r = subprocess.run(["docker", "inspect", c, "--format", "{{.State.Running}}"], capture_output=True, text=True)
+        if r.returncode == 0 and r.stdout.strip() == "true":
+            os.environ["LIVING_GENERATE_CMD"] = f"sh living/tools/generate_in_container.sh {shlex.quote(c)}"
+            env_note = f" (generated in {c})"
+    code, secs = run_check(cmd, log_path, "bindings")
+    changed = git("status", "--porcelain", "--untracked-files=all", "--", BINDINGS, quiet=True).stdout.splitlines()
+    files = [l[3:] for l in changed if l.strip()]
+    if code == 0 and not files:
+        done.append(f"attempt {attempt}: bindings regenerated from the merge{env_note}: no change ({secs:.0f} s)")
+        return None
+    # put the tree back as the merge left it before moving HEAD
+    git("checkout", "--", BINDINGS, check=False, quiet=True)
+    git("clean", "-fdq", "--", BINDINGS, check=False, quiet=True)
+    restored = reset_to(start_head, "after the bindings check")
+    tail = "" if restored else " (HEAD NOT restored, see above)"
+    if code != 0:
+        done.append(f"attempt {attempt}: merge {merge_sha[:10]}; bindings check could not run: `{cmd}` exited {code}{env_note} (log {log_path})")
+        summary(f"bindings check could not run; nothing pushed{tail}")
+        return 11
+    done.append(f"attempt {attempt}: merge {merge_sha[:10]}; bindings not regenerated: {', '.join(files)}")
+    summary(f"bindings not regenerated: {', '.join(files)}; nothing pushed{tail}. Run `just living-generate` on the branch and commit living/bindings")
+    return 11
 
 
 def scene_gate(merge_sha, base, gate_base, gate_json, log_path, start_head, attempt):
@@ -326,6 +382,9 @@ def run(argv):
             summary("the check changed tracked or untracked files; nothing pushed; HEAD left at the merge for a look")
             return 6
         done.append(f"attempt {attempt}: merge {merge_sha[:10]} onto {base[:10]}; check passed in {secs:.0f} s")
+        bind = bindings_check(merge_sha, base, log_path, start_head, attempt)
+        if bind is not None:
+            return bind
         if scenes:
             gate = scene_gate(merge_sha, base, gate_base, gate_json, log_path, start_head, attempt)
             if gate is not None:

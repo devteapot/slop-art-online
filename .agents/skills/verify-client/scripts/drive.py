@@ -85,6 +85,9 @@ PRIVATE = ['fast_ask', 'far_handle', 'slumber', 'land_plan', 'clock', 'steer', '
            # Heard, not seen (fov-1): who each player hears, its secret salt, and every change of a
            # world law on a running world (`set_world_law`).
            'heard', 'hear_salt', 'law_change',
+           # When what each character can make of others last changed (cullet-sweep,
+           # docs/PERCEPTION.md "Module memory and rollback"): the perception sweep's only.
+           'knowledge_epoch',
            # Who heard each line (docs/COMMUNICATION.md §6); a speaker's person reads its own through my_heard.
            'line_heard',
            # What each player's character senses (the `senses` law), read through my_senses.

@@ -130,6 +130,8 @@ pub mod judgment_type;
 pub mod kill_reducer;
 pub mod know_how_table;
 pub mod know_how_type;
+pub mod knowledge_epoch_table;
+pub mod knowledge_epoch_type;
 pub mod known_ground_table;
 pub mod known_ground_type;
 pub mod known_name_type;
@@ -445,6 +447,8 @@ pub use judgment_type::Judgment;
 pub use kill_reducer::kill;
 pub use know_how_table::*;
 pub use know_how_type::KnowHow;
+pub use knowledge_epoch_table::*;
+pub use knowledge_epoch_type::KnowledgeEpoch;
 pub use known_ground_table::*;
 pub use known_ground_type::KnownGround;
 pub use known_name_type::KnownName;
@@ -1278,6 +1282,7 @@ pub struct DbUpdate {
     judged: __sdk::TableUpdate<Judged>,
     judgment: __sdk::TableUpdate<Judgment>,
     know_how: __sdk::TableUpdate<KnowHow>,
+    knowledge_epoch: __sdk::TableUpdate<KnowledgeEpoch>,
     known_ground: __sdk::TableUpdate<KnownGround>,
     land: __sdk::TableUpdate<LandInfo>,
     land_plan: __sdk::TableUpdate<LandPlan>,
@@ -1513,6 +1518,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "know_how" => db_update
                     .know_how
                     .append(know_how_table::parse_table_update(table_update)?),
+                "knowledge_epoch" => db_update
+                    .knowledge_epoch
+                    .append(knowledge_epoch_table::parse_table_update(table_update)?),
                 "known_ground" => db_update
                     .known_ground
                     .append(known_ground_table::parse_table_update(table_update)?),
@@ -1923,6 +1931,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.know_how = cache
             .apply_diff_to_table::<KnowHow>("know_how", &self.know_how)
             .with_updates_by_pk(|row| &row.id);
+        diff.knowledge_epoch = cache
+            .apply_diff_to_table::<KnowledgeEpoch>("knowledge_epoch", &self.knowledge_epoch)
+            .with_updates_by_pk(|row| &row.id);
         diff.known_ground = cache
             .apply_diff_to_table::<KnownGround>("known_ground", &self.known_ground)
             .with_updates_by_pk(|row| &row.id);
@@ -2312,6 +2323,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "know_how" => db_update
                     .know_how
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "knowledge_epoch" => db_update
+                    .knowledge_epoch
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "known_ground" => db_update
                     .known_ground
@@ -2713,6 +2727,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "know_how" => db_update
                     .know_how
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "knowledge_epoch" => db_update
+                    .knowledge_epoch
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "known_ground" => db_update
                     .known_ground
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -3017,6 +3034,7 @@ pub struct AppliedDiff<'r> {
     judged: __sdk::TableAppliedDiff<'r, Judged>,
     judgment: __sdk::TableAppliedDiff<'r, Judgment>,
     know_how: __sdk::TableAppliedDiff<'r, KnowHow>,
+    knowledge_epoch: __sdk::TableAppliedDiff<'r, KnowledgeEpoch>,
     known_ground: __sdk::TableAppliedDiff<'r, KnownGround>,
     land: __sdk::TableAppliedDiff<'r, LandInfo>,
     land_plan: __sdk::TableAppliedDiff<'r, LandPlan>,
@@ -3195,6 +3213,11 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         callbacks.invoke_table_row_callbacks::<Judged>("judged", &self.judged, event);
         callbacks.invoke_table_row_callbacks::<Judgment>("judgment", &self.judgment, event);
         callbacks.invoke_table_row_callbacks::<KnowHow>("know_how", &self.know_how, event);
+        callbacks.invoke_table_row_callbacks::<KnowledgeEpoch>(
+            "knowledge_epoch",
+            &self.knowledge_epoch,
+            event,
+        );
         callbacks.invoke_table_row_callbacks::<KnownGround>(
             "known_ground",
             &self.known_ground,
@@ -4056,6 +4079,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         judged_table::register_table(client_cache);
         judgment_table::register_table(client_cache);
         know_how_table::register_table(client_cache);
+        knowledge_epoch_table::register_table(client_cache);
         known_ground_table::register_table(client_cache);
         land_table::register_table(client_cache);
         land_plan_table::register_table(client_cache);
@@ -4187,6 +4211,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "judged",
         "judgment",
         "know_how",
+        "knowledge_epoch",
         "known_ground",
         "land",
         "land_plan",

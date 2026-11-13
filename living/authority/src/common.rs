@@ -6,7 +6,7 @@ use living_rules::map::{chunks_around, Map};
 use living_rules::script::Scripts;
 use spacetimedb::{ReducerContext, Table};
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
 thread_local! {
@@ -266,9 +266,14 @@ pub fn scripts_rev(ctx: &ReducerContext) -> u32 {
     rev
 }
 
-/// Call after writing the clock's `scripts_rev`.
+/// Call after writing the clock's `scripts_rev`. The compiled scripts and laws go too: they are
+/// kept by revision, and a transaction that wrote a revision and then failed leaves its
+/// compilation in module memory under a number the next install takes again (docs/PERCEPTION.md,
+/// "Module memory and rollback").
 pub fn invalidate_scripts_rev() {
     SCRIPTS_REV.with(|c| c.set(None));
+    SCRIPTS.with(|s| *s.borrow_mut() = None);
+    LAWS.with(|l| l.set(None));
 }
 
 #[derive(Clone, Copy, Default)]
@@ -1048,7 +1053,7 @@ pub fn learn(ctx: &ReducerContext, id: u32, technique: &str, source: &str, now: 
         return false;
     }
     ctx.db.know_how().insert(KnowHow { id: 0, actor: id, technique: technique.into(), source: source.into(), since_ms: now });
-    crate::perception::answers_changed();
+    crate::perception::knowledge_changed(ctx, Some(id));
     true
 }
 
@@ -1072,6 +1077,12 @@ thread_local! {
     static CHUNK_BODIES: RefCell<((u64, u64), HashMap<u32, Rc<Vec<CachedBody>>>)> = RefCell::new(((0, 0), HashMap::new()));
 }
 
+thread_local! {
+    /// Bodies written (`body_written`) since the chunk cache's instant began: their cached
+    /// position may be older than their row, so [`cached_body_current`] says no for them.
+    static WRITTEN: RefCell<HashSet<u32>> = RefCell::new(HashSet::new());
+}
+
 fn chunk_bodies(ctx: &ReducerContext, chunk: u32, now: u64) -> Rc<Vec<CachedBody>> {
     CHUNK_BODIES.with(|c| {
         let mut c = c.borrow_mut();
@@ -1079,6 +1090,7 @@ fn chunk_bodies(ctx: &ReducerContext, chunk: u32, now: u64) -> Rc<Vec<CachedBody
         if c.0 != key {
             c.0 = key;
             c.1.clear();
+            WRITTEN.with(|w| w.borrow_mut().clear());
         }
         if let Some(v) = c.1.get(&chunk) {
             return v.clone();
@@ -1092,6 +1104,18 @@ fn chunk_bodies(ctx: &ReducerContext, chunk: u32, now: u64) -> Rc<Vec<CachedBody
 /// Forget cached bodies (after a body is removed or moved to another chunk this instant).
 pub fn invalidate_bodies() {
     CHUNK_BODIES.with(|c| c.borrow_mut().0 = (0, 0));
+}
+
+/// A body row was written: a position the chunk cache already holds for it may be older.
+pub fn body_written(id: u32) {
+    WRITTEN.with(|w| w.borrow_mut().insert(id));
+}
+
+/// Whether the position [`creatures_near`] gave for body `id` at `now` in this transaction is
+/// exactly `pos(row, now)` of its row as it is now: true unless the row was written since the
+/// cache's instant began (it then holds the same row it read).
+pub fn cached_body_current(id: u32, now: u64) -> bool {
+    CHUNK_BODIES.with(|c| c.borrow().0 == (tx_seq(), now)) && !WRITTEN.with(|w| w.borrow().contains(&id))
 }
 
 pub fn creatures_near(ctx: &ReducerContext, at: (f32, f32), r: f32, now: u64) -> Vec<NearCreature> {

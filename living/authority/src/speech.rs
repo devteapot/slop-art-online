@@ -424,26 +424,45 @@ pub fn held_for_another(ctx: &ReducerContext, speaker: u32, to: u32, text: &str,
 /// The most similar line this speaker said within the last 90 s, when nearly the same
 /// (word-set Jaccard >= 0.6): seconds ago and the words.
 fn said_recently(ctx: &ReducerContext, speaker: u32, text: &str, now: u64) -> Option<(u64, String)> {
-    let words = |t: &str| -> std::collections::HashSet<String> {
-        t.to_lowercase().split(|c: char| !c.is_alphanumeric()).filter(|w| w.len() > 2).map(String::from).collect()
-    };
-    let mine = words(text);
+    said_like(ctx, speaker, None, text, now, 90_000).map(|(at, said)| (now.saturating_sub(at) / 1000, said))
+}
+
+/// How long a graph's `say` node keeps from saying again a line its speaker already said to the
+/// same person (say-once).
+pub const SAY_ONCE_MS: u64 = 45_000;
+
+/// Whether `speaker` said nearly this line (the repeat match) to `to` within `SAY_ONCE_MS`
+/// (say-once). Read from the chronicle, so it holds across a plan's install, which clears a say
+/// node's own mark. Asked only by a mind plan's say node with an addressee: never for a line to
+/// the room, a scene's or the admin's graph, a player's line, a deliberation's own or a talk turn's.
+pub fn said_to_recently(ctx: &ReducerContext, speaker: u32, to: u32, text: &str, now: u64) -> bool {
+    said_like(ctx, speaker, Some(to), text, now, SAY_ONCE_MS).is_some()
+}
+
+/// The latest line `speaker` said (to `to`, when given) within `within_ms` that is nearly
+/// `text`: when it was said and its words.
+fn said_like(ctx: &ReducerContext, speaker: u32, to: Option<u32>, text: &str, now: u64, within_ms: u64) -> Option<(u64, String)> {
     let mut latest: Option<(u64, String)> = None;
-    for c in ctx.db.chronicle().at_ms().filter(now.saturating_sub(90_000)..).filter(|c| c.kind == "speech" && c.a == speaker) {
+    for c in ctx.db.chronicle().at_ms().filter(now.saturating_sub(within_ms)..).filter(|c| c.kind == "speech" && c.a == speaker && to.map_or(true, |t| c.b == t)) {
         // Chronicle rows count exact repeats as "… (×n)".
         let base = c.text.rsplit_once(" (×").map_or(c.text.as_str(), |(b, _)| b);
         let said = base.split_once('“').map(|(_, t)| t.trim_end_matches('”')).unwrap_or(base);
-        let theirs = words(said);
-        let same = if mine.is_empty() || theirs.is_empty() {
-            said.trim().eq_ignore_ascii_case(text.trim())
-        } else {
-            mine.intersection(&theirs).count() as f32 / mine.union(&theirs).count() as f32 >= 0.6
-        };
-        if same && latest.as_ref().map_or(true, |l| c.at_ms >= l.0) {
+        if nearly_same(said, text) && latest.as_ref().map_or(true, |l| c.at_ms >= l.0) {
             latest = Some((c.at_ms, said.to_string()));
         }
     }
-    latest.map(|(at, said)| (now.saturating_sub(at) / 1000, said))
+    latest
+}
+
+/// The repeat match: word sets (words of three letters or more) with Jaccard >= 0.6, or the
+/// same text when either has no such word.
+fn nearly_same(a: &str, b: &str) -> bool {
+    let words = |t: &str| -> std::collections::HashSet<String> { t.to_lowercase().split(|c: char| !c.is_alphanumeric()).filter(|w| w.len() > 2).map(String::from).collect() };
+    let (x, y) = (words(a), words(b));
+    if x.is_empty() || y.is_empty() {
+        return a.trim().eq_ignore_ascii_case(b.trim());
+    }
+    x.intersection(&y).count() as f32 / x.union(&y).count() as f32 >= 0.6
 }
 
 /// Where in `text` a person's given name (or whole name) is said: the index of its first word, as
@@ -613,6 +632,16 @@ mod tests {
         assert_eq!(super::chronicle_way("Ilsa to Bram: “a (b) c”"), None);
         assert_eq!(super::mention_at("Lumi! I heard you. And Ife, you're on my side", "Ife Okoro"), Some(5));
         assert_eq!(super::mention_at("Nothing here", "Ife Okoro"), None);
+    }
+
+    #[test]
+    fn the_repeat_match_is_nearly_the_same_words() {
+        let a = "Aldous — stay a moment, close, where I can see your face. I've tried three times to say this.";
+        assert!(super::nearly_same(a, a));
+        assert!(super::nearly_same(a, "Aldous, stay a moment close, where I can see your face. I have tried three times to say this."));
+        assert!(!super::nearly_same(a, "Has anyone seen the cart?"));
+        assert!(super::nearly_same("Hi!", "hi!"), "no long words: the same text");
+        assert!(!super::nearly_same("Hi!", "Yo!"));
     }
 
     #[test]
