@@ -615,6 +615,85 @@ From the profile of combat resolution and woken evaluations (`battle-profile`, 2
   - **Proof:** verify-core `notice_inplace` 6/6: 13,427 looks compared, none differed; the full list built for 159 of them; off, no in-place look, and new structures still noticed.
 - **Their words** are `law_about(l, name)` entries (laws-about-list, aba5c876). The old `laws_about` map would have passed the engine's 6,144-byte string limit with these four, since the engine counts all the strings of a returned map together; laws-about-list reads one law's words at a time.
 
+## C2 as built (`battle-notice-delta`)
+
+Accepted by the general coordinator with its documented difference (note C, C2). A look checks only the structures built since the character's last look or come into its sight; the rest were looked at then.
+
+- **State:** one private `last_look` row a character a mind runs (its place, sight radius, the highest structure id in sight, when), rewritten at each look. A new table, a safe automatic migration ([automatic migrations](https://spacetimedb.com/docs/databases/automatic-migrations), "Adding new tables": clients stay connected); a row, not module memory, so a tick that fails takes its look back with its `familiar` rows ([reducers](https://spacetimedb.com/docs/functions/reducers/), "Global and Static Variables Are Undefined Behavior"). Gone with the character (`forget_dead`). Bindings regenerated.
+- **A look:** with a row from the last 45 s, a structure in sight that is no newer than the row's highest id and lay within the row's disc is passed over: no seen-set lookup, no `familiar` read. Every other is checked as C1 checks it, in C1's order. Without a row, or with an older one (a first look, or one after a gap), the whole look as before.
+- **Pruning** spares a structure within the last look's disc, as one in the seen set is (a structure passed over is not re-marked). This is the documented difference: past 2,048 rows, which out-of-view row goes first can change.
+- **Laws:** `notice_delta` (on) and `notice_delta_check`, which checks every structure passed over has its `familiar` row (it would not have been new).
+- **Also on this branch, exact:** a look among many new remains made linear. Tiles are joined within their kind-and-owner group, in list order, as the whole scan found them (`joined_tiles`; a test compares both on 400 random starts); "new" is tested by index; C1's new ids are a set. Each was quadratic in a look's new structures: about 7 million comparisons for a newcomer's first look at 2,700 bodies.
+- **`FAMILIAR_LIMIT`'s comment** now says what the battle measured: a site exceeds 2,048 (634 characters passed it in 30 minutes, the most 2,984), because what is in view is never pruned.
+- **Proof:** verify-core `notice_delta` 8/8 (27,888 structures passed over, all familiar; 14,070 incremental looks); `notice_inplace` 6/6 with `notice_delta` on; `familiar_dense` 4/4, `notice_rate` 4/4, `first_sight` 22/22. See the validation record.
+
+## Familiarity of remains (design note, not built)
+
+*For the general coordinator, 2026-11-13. This note is about how a body's memory of having seen remains is kept. It is not about the remains themselves: they stay individual in the world, each lying where its person fell (the general coordinator's earlier ruling against merging them into a pile stands).*
+
+**What must be kept:**
+- **Exact perception.** Every body is in the scene, each as the observer knows who it was: its name if known, "a stranger" if not.
+- **The first sight of someone one knew, lying there.** "You notice a remains — the remains of Bram": its own line, as now.
+- **Newness.** A body seen once is not news again while it lies there.
+
+**What it costs now.** From the 30-minute 200-fighter run with refills (`minds-fam30-041631`, on battle-exact-2: E and C1 on, C2 not yet).
+- **Remains at the site:** grew about 1.6 a second, from 126 to 2,689 at 27 minutes.
+- **`familiar` rows:** most bodies in view get one per observer. A surviving fighter held up to 2,984, about 90% remains; 634 characters passed 2,048. The table held 465,000 rows at 27 minutes.
+- **Arrivals.** A fighter arriving at the site looks once and finds every body in sight new. That one look writes a `familiar` row and a "You notice …" line for each, about 2,700 of each at 27 minutes. At 1.6 arrivals a second, that was about 5,000 new rows and 4,700 lines a second (experiences 5,800 a second in all).
+- **Noticing** (`brain.noticed`) took 275 ms/s at 27 minutes, about 40% of a tick that ran at 33 a second. This run predates the exact fixes on `battle-notice-delta`:
+  - C2: structures still in sight since the last look are passed over;
+  - tiles are joined within their kind-and-owner group;
+  - "new" is tested by index;
+  - the new ids are held as a set. Three loops were quadratic in a look's new structures: about 7 million comparisons for a newcomer's first look at 2,700 bodies.
+
+  How the 275 ms/s splits between the passes those fixes remove and the first sights that remain is for the next profile.
+- **At death,** `forget_dead` deletes the dead fighter's rows: about 2,500 a death at 27 minutes.
+
+**Projected to an 8-hour battle at this rate.** Remains last an hour, so the site levels off after the first hour.
+- **Bodies:** about 5,800 at the site (1.6 deaths a second × 3,600 s).
+- **Rows per fighter:** about 5,400 for the median fighter (it saw 93% of the remains at 27 minutes), and about 6,000 for the most, plus about 300 creatures.
+- **Table size:** about 1.1–1.2 million rows of `familiar`, about 170 MB at about 150 bytes a row with its two indexes.
+- **Writes:** each arrival's first look adds about 5,400 rows and 5,400 lines, so about 8,600 inserts and 8,600 lines a second. Deaths delete about 8,600 rows a second. At about 80 bytes a change, that is on the order of 1.5 MB/s of commit log, about 5 GB an hour and 40 GB over 8 hours.
+- **ms/s:** about 25 µs per first sight (a `familiar` insert, about 5 µs, and a percept, 19.6 µs as profiled), about 215 ms/s. That is more than the whole of an 8-minute run's tick at 200 (244 ms/s). It is after C2 and the linear loops, so it is the floor of what newcomers' first sights cost as they are kept now.
+- These are projections from a 30-minute run, not measurements. An 8-hour run would settle them.
+
+### R1: what one has seen of structures as id ranges per chunk (exact newness; a pruning decision)
+
+- **Change:** structures' familiarity moves out of `familiar` into one private row per observer and chunk: `seen_structures { actor, chunk, ranges: Vec<(u64, u64)> }`. The ranges hold the structure ids it has seen there.
+  - A body is new when its id is in no range.
+  - A look that finds new ones adds them and rewrites that chunk's row once.
+  - A battle's remains take nearly consecutive ids (most structures made there are remains), so an observer's ranges for a chunk stay few.
+  - Ids of structures that no longer exist are dropped from a row when it is rewritten.
+  - Creatures and regions stay in `familiar` as now.
+- **Rows:** about 200 fighters × about 9 chunks ≈ 2,000 rows, against 1.1 million. A newcomer's first look writes about 9 rows, not 5,400. A death deletes about 9.
+- **Exact:** the same structures are new at the same looks, wherever `familiar` would have its row.
+- **What differs:** pruning.
+  - Today, past 2,048 rows, the oldest out-of-view `familiar` rows go. A structure whose row went is told again when it is next seen.
+  - With R1 a structure stays seen while it exists, and its range goes when it does: the remains' own hour bounds it.
+  - So with R1 nothing is ever told twice. Today, past the limit, something out of view can be told a second time.
+  - `times` and `last_ms` for structures (read by nothing but pruning) go.
+- **Check law:** `seen_ranges_check` keeps the `familiar` rows as well and compares newness at every look.
+- **Tables:** a new private table (a safe automatic migration: [automatic migrations](https://spacetimedb.com/docs/databases/automatic-migrations), "Adding new tables"); no column added; bindings regenerated.
+
+### R2: one line for many first sights of remains (a change to what is told; a decision)
+
+- **Change:** a look that finds several new remains tells them in one line, as fold lines do fights.
+  - Each body whose person the observer knew keeps its own line, as now: "You notice the remains of Bram, 3 tiles north."
+  - The rest are counted in one line: "You notice the remains of 2,693 others around you, strangers to you, the nearest 2 tiles east."
+  - Every body is counted and none is dropped, as fix 4 keeps every blow.
+  - The scene still lists each body with who it was if known.
+  - A remains' first sight wakes as now: once per `witness_wake_ms` for a bystander.
+- **Saves:** about 8,600 percepts a second at 8 hours, down to one or two a look that finds new ones (about 1.6 a second from arrivals, plus deaths seen). That is about 170 ms/s of the 215. It also spares minds a feed of thousands of near-identical lines.
+- **Not exact:** what a mind is told changes from one experience a body to one a look, for strangers' remains.
+- **Proof it would need:** a verify-minds case. A newcomer arrives at a field of known and unknown dead. It gets one line per known person and one counted line for the rest, its scene lists every body, and the counts add up.
+
+### Recommendation
+
+- **R1** removes the table's growth and most of its writes, with exact newness. Its one difference is past the limit, where it stops a structure from being told twice. It needs the general coordinator's yes on that difference.
+- **R2** removes the line cost and the minds' noise. It changes what is told, as fix 4 did for fights, and needs the owner's or the general coordinator's decision.
+- **Together** they bring a newcomer's first look at a battlefield from about 5,400 rows and lines to about 9 rows and a few lines.
+- **Neither touches the remains in the world.**
+
 ## Verification it would need
 
 - **Unit tests:**

@@ -74,6 +74,8 @@ python3 "$C/scenes.py" scene_lazy --run "$R" > "$E/scene_lazy.txt" 2>&1
 # The chronicle's repeat check read newest first, and noticing read in place, give the full reads' answers; off, the old paths (features/battle.md, about 2 min each).
 python3 "$C/scenes.py" chronicle_recent --run "$R" > "$E/chronicle_recent.txt" 2>&1
 python3 "$C/scenes.py" notice_inplace --run "$R" > "$E/notice_inplace.txt" 2>&1
+# A look checks only what is new since the last; everything passed over is familiar (features/battle.md, about 2 min).
+python3 "$C/scenes.py" notice_delta --run "$R" > "$E/notice_delta.txt" 2>&1
 # A mind's line waits when another spoke to its listener first, under heard_first_rethinks (features/speech.md, about 1.5 min).
 python3 "$C/scenes.py" heard_first --run "$R" > "$E/heard_first.txt" 2>&1
 # The shared answers equal fresh ones (regard_cache_check; features/cues.md#shared-answers, about 4 min;
