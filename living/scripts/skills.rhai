@@ -118,10 +118,16 @@ fn laws() {
         // levels. The `_check` laws (diagnostics) also work each out the whole way and count any
         // difference; `warmth_check` likewise for warmth.
         check_ctx_plan: true, check_ctx_check: false, alarm_cells: true, alarm_cells_check: false, warmth_check: false,
+        // A body's scene worked out as far as each reader asks; `scene_lazy_check` (a diagnostic)
+        // also works each answer out from the whole scene and counts any difference.
+        scene_lazy: true, scene_lazy_check: false,
         // A bystander (one who sees an event it is not party to) is woken by what it sees at most
         // once per `witness_wake_ms` (docs/BATTLE_SCALE.md); what it sees is still told at once,
         // in full. 0: woken by each sight, as before.
         witness_wake_ms: 500.0,
+        // A test switch (docs/PERCEPTION.md, "Module memory and rollback"), 0 in play: a step the
+        // world fails on purpose, to prove nothing kept in module memory outlives a failed one.
+        memory_test: 0.0,
         // What an onlooker sees of fights it is not party to is told as one line per
         // `witness_fold_ms` (docs/BATTLE_SCALE.md, fix 4): every blow it could see, by who struck
         // whom, with counts and outcomes, and who fell. A blow at it or by it is told at once.
@@ -3049,6 +3055,7 @@ fn laws_about(l) {
         heard_first_rethinks: if l.heard_first_rethinks { "a line you decided to say to someone, when you hear another address them before you speak, waits while you think again" } else { "a line you decided to say is said when it comes due, whoever spoke to them meanwhile" },
         cue_check_s: `what one watches for is looked for every ${short(l.cue_check_s)} s`,
         witness_fold_ms: if l.witness_fold_ms > 0.0 { `what one watches of others' fights is told together every ${short(l.witness_fold_ms)} ms: every blow seen, who struck whom, how many landed, and who fell` } else { "of others' fights one is told each fight's first blow, at once" },
+        memory_test: "A test switch that makes one step of the world fail on purpose; it is off in play.",
         witness_wake_ms: if l.witness_wake_ms > 0.0 { `a bystander turns to what it sees at most every ${short(l.witness_wake_ms)} ms` } else { "a bystander turns to each thing it sees at once" },
         regard_cache: if l.regard_cache { "what each one makes of another is worked out once a moment and shared" } else { "what each one makes of another is worked out afresh each time it is asked" },
         // How the work is done, not what anyone perceives: plain words (no condition), so the
@@ -3058,6 +3065,8 @@ fn laws_about(l) {
         alarm_cells: "the body's alarms are worked out again only when something they read can change",
         alarm_cells_check: "a diagnostic: each kept alarm answer is worked out afresh and compared",
         warmth_check: "a diagnostic: warmth is worked out both ways and compared",
+        scene_lazy: "what is in sight is worked out as far as what one looks for needs",
+        scene_lazy_check: "a diagnostic: each look is also worked out from all that is in sight and compared",
         profile_detail: if l.profile_detail { "while profiling, the parts of each behaviour's evaluation are timed" } else { "profiling times each behaviour's evaluation whole" },
         regard_cache_check: if l.regard_cache_check { "every shared answer about another is checked against a fresh one" } else { "shared answers about another are not checked" },
         fast_lane_on: if l.fast_lane_on { "a mind may revise its fighting quickly between blows" } else { "a mind revises its fighting only when it thinks" },

@@ -544,6 +544,11 @@ pub struct Laws {
     /// once per this many ms (docs/BATTLE_SCALE.md, fix 3); the percept is written at once and in
     /// full. 0: woken by each, as before.
     pub witness_wake_ms: f32,
+    /// A diagnostic, 0 in play (docs/PERCEPTION.md, "Module memory and rollback"): a step the
+    /// world fails on purpose, to prove that nothing kept in module memory outlives a
+    /// transaction that rolled back (1 the tick after its sweep, 2 the tick by a panic, 3
+    /// `place_at`, 4 `kill`, 5 `join`; 6 drops the marks kept in memory, as if made elsewhere).
+    pub memory_test: f32,
     /// What an onlooker sees of fights it is not party to is told as one line per this many ms
     /// (docs/BATTLE_SCALE.md, fix 4): every blow it could see, with counts and outcomes. A blow
     /// at it or by it is told at once. 0: each fight's first blow told at once, as before.
@@ -576,6 +581,14 @@ pub struct Laws {
     /// is also worked out from a full copy, and a difference logged and counted
     /// (`warmth:differed`).
     pub warmth_check: bool,
+    /// A body's scene is worked out as far as each reader asks (docs/BATTLE_SCALE.md,
+    /// scene-lazy): the nearest seen of a kind tests sight only for the nearest candidates, a
+    /// creature asked about by id only for it. The same answers as the whole scene. Off: every
+    /// creature in sight range is tested and the resources gathered when the scene is begun.
+    pub scene_lazy: bool,
+    /// Diagnostic: every lazy answer is also worked out from the whole scene, and a difference
+    /// logged and counted (`diag:` `scene_lazy:differed`).
+    pub scene_lazy_check: bool,
     /// The fast lane (docs/FAST_LANE.md): a mind-run character's re-plan between blows, asked
     /// of its mind on a blow taken or a move it sees repeated. Off: none is asked.
     pub fast_lane_on: bool,
@@ -670,6 +683,7 @@ impl Default for Laws {
             think_framing: false,
             cue_check_s: 1.0,
             witness_wake_ms: 500.0,
+            memory_test: 0.0,
             witness_fold_ms: 2000.0,
             regard_cache: true,
             regard_cache_check: false,
@@ -679,6 +693,8 @@ impl Default for Laws {
             alarm_cells: true,
             alarm_cells_check: false,
             warmth_check: false,
+            scene_lazy: true,
+            scene_lazy_check: false,
             fast_lane_on: false,
             seen_again_n: 3.0,
             fast_lane_rate: 2.0,
@@ -2737,6 +2753,7 @@ impl Scripts {
             think_framing: flag("think_framing", l.think_framing),
             cue_check_s: g("cue_check_s", l.cue_check_s).clamp(0.1, 60.0),
             witness_wake_ms: g("witness_wake_ms", l.witness_wake_ms).clamp(0.0, 10_000.0),
+            memory_test: g("memory_test", l.memory_test).round().clamp(0.0, 9.0),
             witness_fold_ms: g("witness_fold_ms", l.witness_fold_ms).clamp(0.0, 10_000.0),
             regard_cache: flag("regard_cache", l.regard_cache),
             regard_cache_check: flag("regard_cache_check", l.regard_cache_check),
@@ -2746,6 +2763,8 @@ impl Scripts {
             alarm_cells: flag("alarm_cells", l.alarm_cells),
             alarm_cells_check: flag("alarm_cells_check", l.alarm_cells_check),
             warmth_check: flag("warmth_check", l.warmth_check),
+            scene_lazy: flag("scene_lazy", l.scene_lazy),
+            scene_lazy_check: flag("scene_lazy_check", l.scene_lazy_check),
             fast_lane_on: flag("fast_lane_on", l.fast_lane_on),
             seen_again_n: g("seen_again_n", l.seen_again_n).round().clamp(1.0, 100.0),
             fast_lane_rate: g("fast_lane_rate", l.fast_lane_rate).clamp(0.0, 100.0),
@@ -3651,6 +3670,7 @@ mod tests {
         assert!(l.regard_cache && !l.regard_cache_check, "answers are shared by default, unchecked");
         assert_eq!(l.witness_wake_ms, 500.0, "a bystander is woken at most twice a second (docs/BATTLE_SCALE.md)");
         assert_eq!(l.witness_fold_ms, 2000.0, "what an onlooker sees of fights is told every two seconds (docs/BATTLE_SCALE.md)");
+        assert!(l.scene_lazy && !l.scene_lazy_check, "the scene worked out as far as asked; its check off");
         let about: std::collections::HashMap<String, String> = shipped.laws_about().into_iter().collect();
         assert!(about["cue_cooldown_s"].contains("600 s") && about["cue_gap_s"].contains("60 s"), "{about:?}");
         let on = Scripts::new(&with_world_laws(src, &[("cues_on".into(), serde_json::json!(true)), ("cue_cooldown_s".into(), serde_json::json!(30)), ("cue_gap_s".into(), serde_json::json!(-5)), ("cue_check_s".into(), serde_json::json!(0.01)), ("regard_cache".into(), serde_json::json!(false))])).unwrap();
@@ -3661,6 +3681,10 @@ mod tests {
         assert!(about["cue_check_s"].contains("1 s"), "{about:?}");
         assert!(about["witness_wake_ms"].contains("500 ms"), "{about:?}");
         assert!(about["witness_fold_ms"].contains("2000 ms") && about["witness_fold_ms"].contains("who fell"), "{about:?}");
+        assert_eq!(l.memory_test, 0.0, "no step fails on purpose in play");
+        assert!(about["memory_test"].starts_with("A test switch"), "{about:?}");
+        let t = Scripts::new(&with_world_laws(src, &[("memory_test".into(), serde_json::json!(3.4))])).unwrap();
+        assert_eq!(t.laws().memory_test, 3.0);
     }
 
     /// First sights that ask for a thought (docs/FIRST_SIGHT.md): off by default, with the gap a

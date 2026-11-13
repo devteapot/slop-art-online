@@ -69,11 +69,22 @@ python3 "$C/scenes.py" witness_fold --run "$R" > "$E/witness_fold.txt" 2>&1
 python3 "$C/scenes.py" cheap_check_ctx --run "$R" > "$E/cheap_check_ctx.txt" 2>&1
 python3 "$C/scenes.py" cheap_alarms --run "$R" > "$E/cheap_alarms.txt" 2>&1
 python3 "$C/scenes.py" cheap_warmth --run "$R" > "$E/cheap_warmth.txt" 2>&1
+# The lazy scene gives the whole scene's answers, all round and by facing; off, the old path (features/battle.md, about 2.5 min).
+python3 "$C/scenes.py" scene_lazy --run "$R" > "$E/scene_lazy.txt" 2>&1
 # A mind's line waits when another spoke to its listener first, under heard_first_rethinks (features/speech.md, about 1.5 min).
 python3 "$C/scenes.py" heard_first --run "$R" > "$E/heard_first.txt" 2>&1
 # The shared answers equal fresh ones (regard_cache_check; features/cues.md#shared-answers, about 4 min;
 # on an island run it also drives the told lines of `outcomes`).
 python3 "$C/scenes.py" regard_check --run "$R" > "$E/regard_check.txt" 2>&1
+# A player's rows kept across sweeps under a law that reads distance, each equal to a fresh projection
+# (regard_cache_check; features/sight.md, about 1.5 min). Only on a run launched with --seed cullet.
+python3 "$C/scenes.py" sweep_kept --run "$R" > "$E/sweep_kept.txt" 2>&1
+# Nothing kept in module memory outlives a rolled-back transaction (the memory_test law: failing
+# ticks, a panicking tick, place_at, kill and join failing after their writes), and an introduction
+# outside the tick reaches the kept rows through committed data (features/sight.md, about 1 min each;
+# --seed cullet).
+python3 "$C/scenes.py" sweep_rollback --run "$R" > "$E/sweep_rollback.txt" 2>&1
+python3 "$C/scenes.py" sweep_marks --run "$R" > "$E/sweep_marks.txt" 2>&1
 python3 "$C/scenes.py" moves --run "$R" > "$E/moves.txt" 2>&1
 # A flight out of inside corners by open ground, from a threat standing and one walking after it, never cornered (features/steering.md#flight, about 3 min).
 python3 "$C/scenes.py" flee_wall --run "$R" > "$E/flee_wall.txt" 2>&1
