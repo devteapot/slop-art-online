@@ -3,6 +3,7 @@
 
     python3 living/tools/characters/cloth_check.py LINE.json [--styles DIR] [--types DIR]
         [--clips CLIPS.glb] [--clip idle,walk] [--frames 16] [--least 2.0] [--json OUT] [--quiet]
+        [--springs] [--spring STIFFNESS,DRAG[,GRAVITY]] [--no-spring-scale]
 
 LINE.json is a person's line (`{"type", "proportions", "styles": {"outfit": [...]}, "belly"}`),
 or a `NAME.params.json` whose `person` is one. The person is posed the client's way: the type's
@@ -23,6 +24,15 @@ counted. It prints the
 worst of each pair in each clip and fails (exit 1) if anything stands out by more than `--least`
 millimetres (default 2). Sleeves are left out: an arm swings through a skirt in any clip that
 swings it, and that is the clip's, not the clothes'.
+
+A piece's own bones (a skirt's spring chains) ride the nearest bone above them that the person
+has, as the client leaves them where it simulates nothing. `--springs` simulates them instead,
+with the client's own step (characters.rs `Springs::simulate`: VRM 0.x's rule, a sixtieth of a
+second a step) through each clip from its start, a loop once round first and measured on its
+second turn, and also says how far the springs carry the cloth from where it rides at rest.
+`--spring STIFFNESS,DRAG[,GRAVITY]` tries other values than the files'. `--no-spring-scale` poses
+as a client from before the skirts' change does (a spring bone under a scaled bone without that
+scale).
 
 Plain Python and numpy.
 """
@@ -96,7 +106,125 @@ class Skeleton:
 
         for i in self.index.values():
             world(i)
+        # Each bone's own frame, without a scale of its own: what a spring bone hangs in.
+        self.frames = {name: frame[i] for name, i in self.index.items()}
         return {name: skin[i] for name, i in self.index.items()}, {name: frame[i][:3, 3] for name, i in self.index.items()}
+
+    def own_scale(self, name):
+        """A bone's own scale (x, y, z), 1 where it has none."""
+        s = self.scale.get(self.index.get(name))
+        return np.array(s[1], float) if s and s[0] == "own" else np.ones(3)
+
+
+STEP = 1.0 / 60.0  # characters.rs: the springs' fixed step
+
+
+def arc(a, b):
+    """The rotation (3x3) that turns unit vector a onto unit vector b by the shortest way."""
+    v, c = np.cross(a, b), float(a @ b)
+    if c < -1 + 1e-9:
+        o = np.cross(a, [1.0, 0.0, 0.0])
+        o = o / np.linalg.norm(o) if np.linalg.norm(o) > 1e-6 else np.array([0.0, 1.0, 0.0])
+        return 2 * np.outer(o, o) - np.eye(3)
+    k = np.array([[0, -v[2], v[1]], [v[2], 0, -v[0]], [-v[1], v[0], 0]])
+    return np.eye(3) + k + k @ k / (1 + c)
+
+
+class Springs:
+    """The spring bones a person's pieces bring (a skirt's chains), simulated as the client
+    simulates them: characters.rs `rig_springs` and `Springs::simulate`, VRM 0.x's rule. Verlet
+    with drag, a pull toward the rest direction, gravity, a fixed length, and the group's
+    spheres; fixed steps of a sixtieth of a second.
+
+    `scaled`: a spring bone under a bone with a scale of its own takes that scale, as the
+    client does with the change this needs (characters.rs `shape`); without it only the bone's
+    offset is scaled, as the client did before, and the cloth on it keeps the file's size."""
+
+    def __init__(self, paths, scaled=True):
+        self.scaled = scaled
+        self.joints, self.groups, self.spheres, self.at = [], [], [], {}
+        for path in paths:
+            j, _ = read_glb(path)
+            nodes = j["nodes"]
+            up = {c: i for i, n in enumerate(nodes) for c in n.get("children", [])}
+            block = ((j.get("extensions") or {}).get("VRM") or {}).get("secondaryAnimation") or {}
+            ids = []
+            for cg in block.get("colliderGroups", []):
+                ids.append([])
+                for c in cg["colliders"]:
+                    ids[-1].append(len(self.spheres))
+                    self.spheres.append((nodes[cg["node"]]["name"], np.array([c["offset"]["x"], c["offset"]["y"], c["offset"]["z"]]), float(c["radius"])))
+            for g in block.get("boneGroups", []):
+                gi = len(self.groups)
+                gd = g.get("gravityDir", {})
+                self.groups.append(dict(stiffness=float(g.get("stiffiness", 0)), gravity=np.array([gd.get("x", 0), gd.get("y", -1), gd.get("z", 0)], float) * float(g.get("gravityPower", 0)),
+                                        drag=min(max(float(g.get("dragForce", 0)), 0.0), 1.0), radius=float(g.get("hitRadius", 0)), spheres=[k for c in g.get("colliderGroups", []) for k in ids[c]]))
+                stack = list(reversed(g["bones"]))
+                while stack:
+                    i = stack.pop()
+                    n = nodes[i]
+                    if n["name"] in self.at:
+                        continue
+                    kids = n.get("children", [])
+                    t = np.array(n.get("translation", [0, 0, 0]), float)
+                    child = np.array(nodes[kids[0]].get("translation", [0, 0, 0]), float) if kids else None
+                    # A leaf's tail lies 7 cm on along its own offset (UniVRM).
+                    tail = child if child is not None and np.linalg.norm(child) > 1e-5 else t / max(np.linalg.norm(t), 1e-9) * 0.07
+                    self.at[n["name"]] = len(self.joints)
+                    self.joints.append(dict(name=n["name"], up=nodes[up[i]]["name"], t=t, r0=quat(n.get("rotation", [0, 0, 0, 1])), axis=tail / np.linalg.norm(tail), len=float(np.linalg.norm(tail)), group=gi, tail=None, prev=None))
+                    stack.extend(reversed(kids))
+        self.out = {}
+
+    def step(self, sk, steps=1, fresh=False):
+        """`steps` fixed steps against the skeleton's pose now (`sk.frames`); each joint's frame goes to `self.out`."""
+        centres = []
+        for bone, off, r in self.spheres:
+            s = sk.own_scale(bone)
+            g = sk.frames.get(bone)
+            centres.append((None, 0.0) if g is None else ((g @ np.append(off * s, 1.0))[:3], r * (s[0] + s[2]) * 0.5))
+        for step in range(max(steps, 1)):
+            for j in self.joints:
+                if j["up"] in self.at:
+                    parent, own = self.out[j["up"]], np.ones(3)
+                    t = j["t"]
+                else:
+                    parent, own = sk.frames[j["up"]], sk.own_scale(j["up"])
+                    t = j["t"] * own  # `shape` scales a scaled bone's children's offsets
+                ps = np.linalg.norm(parent[:3, :3], axis=0)
+                pr = parent[:3, :3] / ps
+                sc = max(abs(ps[0]), 1e-6)
+                g = self.groups[j["group"]]
+                pos = (parent @ np.append(t, 1.0))[:3]
+                rest = pr @ j["r0"]
+                rest_dir = rest @ j["axis"]
+                length = j["len"] * sc
+                if fresh and step == 0 or j["tail"] is None:
+                    j["tail"] = pos + rest_dir * length
+                    j["prev"] = j["tail"].copy()
+                if steps > 0:
+                    nxt = j["tail"] + (j["tail"] - j["prev"]) * (1.0 - g["drag"]) + rest_dir * (g["stiffness"] * STEP * sc) + g["gravity"] * (STEP * sc)
+                    d = nxt - pos
+                    nxt = pos + (d / np.linalg.norm(d) if np.linalg.norm(d) > 1e-9 else rest_dir) * length
+                    for si in g["spheres"]:
+                        c, r = centres[si]
+                        if c is None:
+                            continue
+                        r = r + g["radius"] * sc
+                        d = nxt - c
+                        if d @ d < r * r:
+                            pushed = c + (d / np.linalg.norm(d) if np.linalg.norm(d) > 1e-9 else rest_dir) * r
+                            e = pushed - pos
+                            nxt = pos + (e / np.linalg.norm(e) if np.linalg.norm(e) > 1e-9 else rest_dir) * length
+                    j["prev"], j["tail"] = j["tail"], nxt
+                to = j["tail"] - pos
+                to = to / np.linalg.norm(to) if np.linalg.norm(to) > 1e-9 else rest_dir
+                world = arc(rest_dir / np.linalg.norm(rest_dir), to) @ rest
+                local = pr.T @ world
+                m = np.eye(4)
+                m[:3, :3] = local * (own if self.scaled else np.ones(3))[None, :]
+                m[:3, 3] = t
+                self.out[j["name"]] = parent @ m
+        return self.out
 
 
 class Piece:
@@ -108,6 +236,10 @@ class Piece:
         node = next(n for n in j["nodes"] if n.get("name") == "Cloth" and "mesh" in n)
         skin = j["skins"][node.get("skin", 0)]
         self.joints = [j["nodes"][k].get("name") for k in skin["joints"]]
+        # Each bone's parent in the piece's own file: a bone only the piece has (a skirt's spring
+        # bones) rides the nearest bone above it that the person has, as the client leaves it
+        # where no spring is simulated.
+        self.up = {c.get("name"): n.get("name") for n in j["nodes"] for c in (j["nodes"][i] for i in n.get("children", []))}
         self.ibm = np.array(read_accessor(j, binary, skin["inverseBindMatrices"])[0]).reshape(-1, 4, 4).transpose(0, 2, 1)
         pos, jt, wt, tris, count = [], [], [], [], 0
         for p in j["meshes"][node["mesh"]]["primitives"]:
@@ -139,8 +271,19 @@ class Piece:
         # The bone that carries most of each vertex, for saying where a fault is.
         self.main = [self.joints[k] for k in self.jt[np.arange(len(self.jt)), self.wt.argmax(axis=1)]]
 
-    def posed(self, mats):
-        m = np.array([mats.get(n, np.eye(4)) @ self.ibm[k] for k, n in enumerate(self.joints)])
+    def posed(self, mats, springs=None):
+        at = {n: k for k, n in enumerate(self.joints)}
+
+        def frame(n):
+            if springs is not None and n in springs and n in at:
+                return springs[n] @ self.ibm[at[n]]
+            # The person's own bone; else the piece's bone as a rigid child of the nearest bone
+            # above it that the person has (that bone's frame times its own bind's inverse here).
+            while n not in mats and n in self.up and self.up[n] in at:
+                n = self.up[n]
+            return mats.get(n, np.eye(4)) @ self.ibm[at[n]] if n in at else np.eye(4)
+
+        m = np.array([frame(n) for n in self.joints])
         ph = np.concatenate([self.pos, np.ones((len(self.pos), 1))], axis=1)
         out = np.zeros((len(ph), 3))
         for k in range(4):
@@ -213,6 +356,17 @@ def through(inner, pi, outer, po, no, axis, reach=0.04, beside=0.015):
     return depth
 
 
+def springs_rest(springs, sk):
+    """The spring bones' frames at rest on the skeleton's pose now, leaving the simulation's state alone."""
+    keep = [(j["tail"], j["prev"]) for j in springs.joints]
+    out_keep = dict(springs.out)
+    rest = dict(springs.step(sk, 0, fresh=True))
+    for j, (tail, prev) in zip(springs.joints, keep):
+        j["tail"], j["prev"] = tail, prev
+    springs.out = out_keep
+    return rest
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("line")
@@ -225,6 +379,9 @@ def main():
     ap.add_argument("--json")
     ap.add_argument("--quiet", action="store_true")
     ap.add_argument("--old-belly", action="store_true", help="pose as a client from before the body pass does: `J_Fit_Belly` without the spine's scale")
+    ap.add_argument("--springs", action="store_true", help="simulate the pieces' spring bones (a skirt's chains) through each clip as the client does, a sixtieth of a second a step; without it they rest, as on a character the client does not simulate")
+    ap.add_argument("--spring", default="", metavar="STIFFNESS,DRAG[,GRAVITY]", help="with --springs: try these values in place of the files' own, to tune them")
+    ap.add_argument("--no-spring-scale", action="store_true", help="pose as a client from before the skirts' change does: a spring bone under a scaled bone does not take its scale")
     a = ap.parse_args()
     doc = json.load(open(a.line))
     line = doc.get("person", doc)
@@ -232,21 +389,54 @@ def main():
     pieces = [Piece(os.path.join(a.styles, "outfit", n + ".glb")) for n in line["styles"]["outfit"]]
     pairs = [(i, o) for i in pieces for o in pieces if over(i, o)]
     library = clips_compare.clips(a.clips)[0] if a.clip and os.path.exists(a.clips) else {}
-    poses = [("rest", 0.0, {})]
-    for name in [c for c in a.clip.split(",") if c]:
-        tracks = library.get(name)
-        if tracks is None:
-            print(f"cloth_check: no clip {name!r} in {a.clips}")
-            continue
-        length = max(t[0][-1] for t in tracks.values())
-        for f in range(a.frames):
-            t = length * f / a.frames
-            poses.append((name, t, {node: clips_compare.at(times, values, 4, t) for (node, path), (times, values) in tracks.items() if path == "rotation"}))
-    worst = {}
-    for clip, t, rot in poses:
-        mats, joints = sk.pose(rot)
+    springs = Springs([os.path.join(a.styles, "outfit", n + ".glb") for n in line["styles"]["outfit"]], scaled=not a.no_spring_scale)
+    if not springs.joints:
+        springs = None
+    elif a.spring:
+        v = [float(x) for x in a.spring.split(",")]
+        for g in springs.groups:
+            g.update(stiffness=v[0], drag=v[1], gravity=np.array([0.0, -1.0, 0.0]) * (v[2] if len(v) > 2 else 0.0))
+    loops = {c["name"]: c.get("kind") == "loop" for c in json.load(open(os.path.join(HERE, "..", "blender", "clips.json")))["clips"]}
+    at_time = lambda tracks, t: {node: clips_compare.at(times, values, 4, t) for (node, path), (times, values) in tracks.items() if path == "rotation"}
+
+    def poses():
+        """(clip, time, the bones' frames, the bones' places, the spring bones' frames or None), pose by pose."""
+        mats, joints = sk.pose({})
+        yield "rest", 0.0, mats, joints, (dict(springs.step(sk, 0, fresh=True)) if springs else None)
+        for name in [c for c in a.clip.split(",") if c]:
+            tracks = library.get(name)
+            if tracks is None:
+                print(f"cloth_check: no clip {name!r} in {a.clips}")
+                continue
+            length = max(t[0][-1] for t in tracks.values())
+            if springs and a.springs:
+                # The clip played from its start a sixtieth of a second a step, the springs
+                # following; a loop is played once round first, and measured on its second turn.
+                steps = max(int(round(length / STEP)), 1)
+                first = steps if loops.get(name) else 0
+                want = {first + int(round(f * steps / a.frames)) for f in range(a.frames)}
+                for n in range(first + steps):
+                    t = (n % steps) * STEP
+                    mats, joints = sk.pose(at_time(tracks, t))
+                    out = springs.step(sk, 1, fresh=n == 0)
+                    if n in want:
+                        yield name, t, mats, joints, dict(out)
+            else:
+                for f in range(a.frames):
+                    t = length * f / a.frames
+                    mats, joints = sk.pose(at_time(tracks, t))
+                    yield name, t, mats, joints, (dict(springs.step(sk, 0, fresh=True)) if springs else None)
+
+    worst, swing, count = {}, {}, 0
+    for clip, t, mats, joints, sprung in poses():
+        count += 1
         axis = axis_points(joints)
-        posed = {p.name: p.posed(mats) for p in pieces}
+        posed = {p.name: p.posed(mats, sprung) for p in pieces}
+        if sprung is not None and a.springs:
+            # How far the springs carry the cloth from where it rides unsimulated.
+            for p in pieces:
+                d = float(np.linalg.norm(posed[p.name] - p.posed(mats, dict(springs_rest(springs, sk))), axis=1).max()) * 1000
+                swing[clip] = max(swing.get(clip, 0.0), d)
         normal = {p.name: p.normals(posed[p.name]) for p in pieces}
         for i, o in pairs:
             d = through(i, posed[i.name], o, posed[o.name], normal[o.name], axis)
@@ -268,7 +458,9 @@ def main():
             print(f"{i:16s} under {o:16s} {clip:6s} {'THROUGH' if fault else 'clear  '} by {r['most']:6.1f} mm at most (t {r.get('at', 0):.2f} s, on {r.get('bone', '-')}, {r.get('out', 0)} vertices); in {r['frames']} of {r['of']} poses")
     if a.json:
         json.dump({f"{i}|{o}|{clip}": r for (i, o, clip), r in worst.items()}, open(a.json, "w"), indent=1)
-    print(f"cloth_check: {len(pairs)} pairs of pieces over {len(poses)} poses: " + (f"{bad} come through by more than {a.least} mm" if bad else f"none comes through by more than {a.least} mm"))
+    if swing:
+        print("cloth_check: springs simulated; the cloth is carried at most " + ", ".join(f"{v:.0f} mm in {c}" for c, v in swing.items()) + " from where it rides at rest")
+    print(f"cloth_check: {len(pairs)} pairs of pieces over {count} poses: " + (f"{bad} come through by more than {a.least} mm" if bad else f"none comes through by more than {a.least} mm"))
     return 1 if bad else 0
 
 
