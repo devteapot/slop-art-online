@@ -855,6 +855,22 @@ There is no schema change: no table, column, reducer, view or subscription was a
 - `within_reach` is two point lookups (`character`, `body`) and the hearing law.
 - The [performance](https://spacetimedb.com/docs/tables/performance/) page has no guidance on reads within a reducer beyond this.
 
+### Said once (branch `say-once`)
+
+From ew2 (docs/TRIALS.md, "Ways stage"): of its 49 repeated lines, 22 were one plan's first line said twice, 2–3 s apart. The mind service delivers a plan in two calls:
+1. The routine edit (`apply_routines`) makes it the "current plan" routine. The old top level already weighs that routine, so the body runs it and its first `say` node speaks.
+2. The install (`mind_install_way`) clears the node's mark (`set_graph`). The decision's own line is refused ("speaking too fast", told as `unsaid`), and once the 2 s gap passes, the node says its line again.
+
+es1 had the same pattern (9–24 a run), so it predates the ways.
+
+**The rule:** a mind plan's `say` node (the graph a mind installed, `brain.source = "mind"`) addressed to a person does not say a line nearly the same as one its speaker said to that person in the last 45 s. "Nearly the same" is the repeat match (`speech::nearly_same`, word Jaccard ≥ 0.6, as `said_recently`). It is read from the chronicle (`speech::said_to_recently`), so it holds across the install, unlike the node's mark. The node counts as done ("already said"). **Scope (decided 2026-11-13): only that.** It is what Mirren's double needed. Never held back:
+- a line to the room: its hearers are whoever is near when it is said, so saying it again may reach others (a crier's "Fresh bread!", "Is anyone there?" after walking on);
+- a player's lines (`human_say`, `human_speak`): a player who says the same thing twice means to;
+- a deliberation's own line (`mind_install_way`, `mind_say`) and talk turns;
+- a graph the admin or a scene installed (`set_behavior`, battle and test graphs), and a player's commands.
+
+The repeat guard still tells any speaker it said nearly the same thing. The first version held back room lines and scene graphs too, and the merge scene gate caught it: verify-core `senses` has one speaker say "Can you hear me? (shipped)" and, after the hearing law changes, "Can you hear me? (hear12)" to the room within 45 s, from a scene graph (`set_behavior`). Those match at exactly 0.6, so the second line was dropped and no one heard it (gate run `gate-1113022657-b-senses-core`). A plan's room line can still be said twice across an install, as in es1 and ew2; the repeat measure counts it.
+
 ### Tools
 
 `inspector.py`, `social_report.py`, `feel_excerpts.py` and `arrive_spread.py` found unheard lines by the "No answer from" (or "earshot") text. They now match every wording (`UNHEARD`: "No answer from", "could not have heard you", "Nobody was near enough to hear you", "is too far to hear you"). `arrive_spread.py` counts every `silence` row to the newcomer as a line said out of earshot. It reads only rows whose subject is the newcomer, so room lines are not counted. It also leaves out a planned line that was not said ("You did not say your planned line"): that has no chronicle line and is no line said. `life_feel.py` counts by the `silence` kind and needed no change. exp-arrive's `arrive_report.py`, on its own branch, is not changed here.

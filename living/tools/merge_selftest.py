@@ -4,7 +4,9 @@
 Builds a bare "origin" and clones under a temporary directory, then drives merge.py through:
 a dirty worktree (refused), local commits main lacks (refused), a conflict (nothing pushed),
 a failing check (nothing pushed), a check that dirties the tree (nothing pushed), main moving
-during the check (re-fetch, re-merge, re-check, push) and a clean merge (--no-ff, pushed).
+during the check (re-fetch, re-merge, re-check, push), a clean merge (--no-ff, pushed), and the
+bindings check with a fake generator (changed bindings fail and are named, a failing generator
+fails, unchanged bindings pass, a docs-only merge skips it).
 Touches nothing outside the temporary directory. Usage: merge_selftest.py
 """
 import os
@@ -170,6 +172,38 @@ def main():
         # 12. a branch that is on neither the remote nor here
         code, o = merge(coord, ["no-such-branch"])
         expect("unknown branch refused (exit 2)", code == 2, o)
+
+        # 13. the bindings check (a fake generator, LIVING_MERGE_BINDINGS_CMD): main holds
+        # bindings; a branch touching the authority is regenerated, a docs branch is not
+        gen = "living/bindings/src/generated"
+        sh(f"git fetch -q origin && git switch -qc withbindings origin/main && mkdir -p {gen} living/authority/src docs", seed)
+        commit(seed, f"{gen}/mod.rs", "// generated\n", "bindings on main")
+        sh("git push -q origin HEAD:main", seed)
+        sh("git switch -qc shape", seed)
+        commit(seed, "living/authority/src/lib.rs", "// a new table\n", "shape work")
+        sh("git push -q origin shape", seed)
+        sh("git switch -q withbindings && git switch -qc docsonly", seed)
+        commit(seed, "docs/NOTE.md", "a note\n", "docs work")
+        sh("git push -q origin docsonly", seed)
+
+        def main_tip():
+            return sh(f"git --git-dir={origin} rev-parse main", t).strip()
+
+        before = main_tip()
+        code, o = merge(coord, ["shape"], env_extra={"LIVING_MERGE_BINDINGS_CMD": f"echo pub struct FightSeen; > {gen}/fight_seen.rs && echo // changed >> {gen}/mod.rs"})
+        clean = not sh("git status --porcelain --untracked-files=all", coord).strip()
+        expect("bindings that change fail the merge (exit 11), name the files, nothing pushed, worktree restored",
+               code == 11 and "bindings not regenerated:" in o and f"{gen}/fight_seen.rs" in o and f"{gen}/mod.rs" in o
+               and main_tip() == before and clean, o)
+        code, o = merge(coord, ["shape"], env_extra={"LIVING_MERGE_BINDINGS_CMD": "echo living-generate: FAILED: container down >&2; exit 1"})
+        expect("a failing generator fails the merge (exit 11: could not run), nothing pushed",
+               code == 11 and "bindings check could not run" in o and main_tip() == before, o)
+        code, o = merge(coord, ["shape"], env_extra={"LIVING_MERGE_BINDINGS_CMD": "true"})
+        expect("unchanged bindings pass and push (exit 0)", code == 0 and "bindings regenerated from the merge" in o and main_tip() != before, o)
+        before = main_tip()
+        code, o = merge(coord, ["docsonly"], env_extra={"LIVING_MERGE_BINDINGS_CMD": "echo should not run; exit 1"})
+        expect("a docs-only merge skips the bindings check and pushes", code == 0 and "bindings check skipped" in o
+               and "should not run" not in o and main_tip() != before, o)
     print("merge_selftest:", "FAILED " + ", ".join(failures) if failures else "all passed")
     return 1 if failures else 0
 

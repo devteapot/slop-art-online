@@ -125,6 +125,9 @@ fn laws() {
         // once per `witness_wake_ms` (docs/BATTLE_SCALE.md); what it sees is still told at once,
         // in full. 0: woken by each sight, as before.
         witness_wake_ms: 500.0,
+        // A test switch (docs/PERCEPTION.md, "Module memory and rollback"), 0 in play: a step the
+        // world fails on purpose, to prove nothing kept in module memory outlives a failed one.
+        memory_test: 0.0,
         // What an onlooker sees of fights it is not party to is told as one line per
         // `witness_fold_ms` (docs/BATTLE_SCALE.md, fix 4): every blow it could see, by who struck
         // whom, with counts and outcomes, and who fell. A blow at it or by it is told at once.
@@ -3052,6 +3055,7 @@ fn laws_about(l) {
         heard_first_rethinks: if l.heard_first_rethinks { "a line you decided to say to someone, when you hear another address them before you speak, waits while you think again" } else { "a line you decided to say is said when it comes due, whoever spoke to them meanwhile" },
         cue_check_s: `what one watches for is looked for every ${short(l.cue_check_s)} s`,
         witness_fold_ms: if l.witness_fold_ms > 0.0 { `what one watches of others' fights is told together every ${short(l.witness_fold_ms)} ms: every blow seen, who struck whom, how many landed, and who fell` } else { "of others' fights one is told each fight's first blow, at once" },
+        memory_test: "A test switch that makes one step of the world fail on purpose; it is off in play.",
         witness_wake_ms: if l.witness_wake_ms > 0.0 { `a bystander turns to what it sees at most every ${short(l.witness_wake_ms)} ms` } else { "a bystander turns to each thing it sees at once" },
         regard_cache: if l.regard_cache { "what each one makes of another is worked out once a moment and shared" } else { "what each one makes of another is worked out afresh each time it is asked" },
         // How the work is done, not what anyone perceives: plain words (no condition), so the

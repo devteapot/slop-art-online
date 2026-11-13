@@ -2,7 +2,7 @@
 
 Design: docs/COMMUNICATION.md §6 and §7 ("Names"). A name is learned only from something that happened to the learner. Standing near someone never teaches one.
 
-- **Self-introduction** (built): a line whose words hold the speaker's own name gives every receiver of the words an `acquaintance` row (`perception::introduce`). From then on, every projection, percept and prompt names the speaker: `knows_name` on the authority, `known_as` in the mind service.
+- **Self-introduction** (built): a line whose words hold the speaker's own name gives every receiver of the words an `acquaintance` row (`perception::introduce`), and moves that receiver's private `knowledge_epoch` row in the same transaction (since cullet-sweep: the perception sweep reads it to ask again whom a player knows; verify-core `sweep_marks`). From then on, every projection, percept and prompt names the speaker: `knows_name` on the authority, `known_as` in the mind service.
 - **The moment is a row** (since `speech-1`). When the name is news, the receiver gets an `introduced` experience (subject the speaker, salience 0.55): "Mercy told you their name." A name already known writes nothing. A receiver of a line out of earshot gets neither row.
 - **Into memory.** The mind's consolidation sees the line tagged `{Mercy=#id}`, the anchor `person:<id>`. The graph's node for the person, named "a stranger #<id>" before (`name_people` uses `remembered_as`, since `fix-stranger-merge`), is named "Mercy" at the next consolidation after it: by the reply's own node, or, when the reply mentions no one, by `Store::rename_people` for every person the integrated experiences involve ([strangers.md](strangers.md)).
 

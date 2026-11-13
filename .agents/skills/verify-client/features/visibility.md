@@ -12,6 +12,7 @@
 - The fast lane's requests (`fast_ask`, docs/FAST_LANE.md, since `fast-lane`) are private in every build; so are `far_handle` (far-handle) and `slumber` (a sleeper's waiting reasons), now listed in `drive.py` `PRIVATE`, which main had left off.
 - The world's records (`record`, `record_party`, `record_clock`, since `rules-2`, docs/WORLD_RULES.md) are private in every build: a player reads its own characters' records through the `my_records` view, and verify-player `deal.py` proves the view's rows; this driver proves the tables are refused.
 - Attention cues (`cue`, since `attention-cues`, docs/ATTENTION.md): what each mind wrote it watches for, private in every build and refused to anonymous and player identities; only reducers and the owner (the mind service, the observer) read it. The probe's owner snapshot carries it (`cues`).
+- Knowledge epochs (`knowledge_epoch`, since `cullet-sweep`, docs/PERCEPTION.md "Module memory and rollback"): one row per character whose name knowledge or know-how changed (row 0: anyone's community), read by the perception sweep by primary key; private in every build and refused to anonymous and player identities, listed in `drive.py` `PRIVATE`.
 - Far handles (`far_handle`, since `far-handle`, docs/STRANGERS.md §1): the authority's record of which sighting handle stands for whom, private in every build and refused to anonymous and player identities.
 - Record the exact transport-specific refusal for each table.
 
