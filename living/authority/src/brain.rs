@@ -603,6 +603,18 @@ impl<'a> Ev<'a> {
                     },
                     None => 0,
                 };
+                // Said already (say-once): a mind's plan does not say again nearly the line it said
+                // to the same person within 45 s. A plan's install clears the node's own mark, so a
+                // plan whose routine already spoke its first line before the install would say it
+                // twice (ew2: Mirren Quill, 2.9 s apart); the chronicle keeps what was said across
+                // the install. Only that: a line to the room (its hearers are whoever is near when
+                // it is said: a crier's "Fresh bread!"), a graph the admin or a scene installed,
+                // a player's lines, a deliberation's own line and talk turns are never held back.
+                if to != 0 && self.from_mind() && crate::speech::said_to_recently(self.ctx, self.me.id, to, &s.text, self.now) {
+                    self.set_mark(id);
+                    self.status = format!("already said: {}", graph::describe(n));
+                    return St::Ok;
+                }
                 // Within the speaking limit the line waits its turn (a second line right after
                 // the first, or a graph installed just after one spoke) instead of being lost.
                 let way = s.way.as_deref().unwrap_or("say");
@@ -678,6 +690,12 @@ impl<'a> Ev<'a> {
             .map(|t| brain.installed_ms.saturating_sub(t.latency_ms as u64))
             .min()
             .unwrap_or(brain.installed_ms)
+    }
+
+    /// Whether the graph running is a mind's plan (`brain.source = "mind"`), not one the admin,
+    /// a scene, a player's command or the battle harness installed.
+    fn from_mind(&self) -> bool {
+        self.ctx.db.brain().id().find(self.me.id).is_some_and(|b| b.source == "mind")
     }
 
     /// Whether a mind's plan's queued line to `to` (say node `id`) has been overtaken by the
