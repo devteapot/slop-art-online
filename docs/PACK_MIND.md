@@ -673,6 +673,25 @@ Both sides with minds (`minds.roles`): 6 people on the default mix and 6 wolves 
   - Whether a pack that keeps hunting together over days, with the reflex in its starting instinct, learns to wait, circle and come in together is the next question. It needs longer life runs, not more arenas.
 - **People.** Whether minds learn to stand together needs the same: days with wolves near, not ten minutes.
 
+## 10. Shipped, and what is next (2026-11-12)
+
+- **The spacing reflex is shipped, on by default (branch `pack-reflex-on`).** It is the world law `pack_reflex` (`true`).
+  - **What it does.** While it is on, every hunt in a wolf's starting graph sits beside the desire "keep apart from mates" (`graph::with_pack_reflex`). A hunt is an attack on the nearest person or deer, guarded or bare.
+  - **The three install paths:**
+    - a seed pack's named instinct (`wolf_bold`);
+    - a spawned or born wolf's species instinct (`wolf`), once past infancy;
+    - a grown animal's species ways (repertoire.json): the wolf's `hunt` routine.
+  - **Not given to** a newborn's `wolf_young`.
+  - **When it is read.** Only at those installs: world creation and birth. It reaches every world with wolves, bold packs included. A wolf's mind may rewrite it like any instinct.
+  - **To turn it off.** `"rules": {"pack_reflex": false}` in a seed (the seed's own law values). Wolves already placed keep the graph they were given.
+  - **The shipped reflex is broader than the arena's.** The arena and first ecology runs (`pkr1`, `eco-reflex-*`) built the reflex in Python (`pack_arena_trials.with_reflex`) and gave it only to guarded hunts in `instincts.json` graphs. The shipped one also covers bare hunts (the ordinary wolf's deer hunt) and the repertoire's `hunt` routine, which grown founding wolves actually live by.
+  - **The first ecology check was confounded.** Its "on" arm replaced the ordinary wolves' repertoire ways with `instincts.json` graphs. So the shipped path was checked again: law on (`island`) against off (the island with `rules` off), 3 worlds each, 48 game hours, on `slop-packs-stdb`.
+    - Deer killed: on 1, 2, 3 (0.47 per 100 wolf-hours, range 0.23–0.70); off 1, 1, 2 (0.23, range 0.23–0.47).
+    - No wolf died or starved in either arm, and no person was killed.
+    - Attacks on people: on 2–3, off 2–5.
+    - By §5.5's rule nothing differs: on's median, 2, lies within off's range, 1–2. The first check's 7 against 2 is kept in §7 as history.
+- **Track P's paid work is parked.** Whether minds cooperate is not a 10-minute question: a wolf thinks about every 240 s, and neither side remembers earlier encounters in a fresh arena. The cooperation question folds into a multi-day life run with wolves beside people, when one exists. Measure it there with this note's M1–M4, from the same `record.bodies` samples, over days rather than minutes.
+
 ## Sources
 
 - MacNulty, Mech & Smith (2007), [*J. Mammal.* 88:595–605](https://pubs.usgs.gov/publication/70030114).

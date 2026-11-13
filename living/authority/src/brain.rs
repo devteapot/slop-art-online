@@ -1153,11 +1153,7 @@ impl<'a> Ev<'a> {
         // screens and the minds' body words).
         let sc = common::scripts(self.ctx);
         let span = common::span("brain.status");
-        let facts = living_rules::script::BodyFacts::of(&self.me.kind, crate::common::stage_name(self.me.stage), night, &self.vit.fields(), sc.meters(), self.now);
-        let statuses = sc.status_of(&facts).unwrap_or_else(|e| {
-            log::warn!("status_of for {}: {e}", self.me.id);
-            std::rc::Rc::new(Vec::new())
-        });
+        let statuses = alarm_statuses(self.ctx, &sc, &self.me, &self.vit, night, self.now);
         let checks: Vec<living_rules::script::Alarm> = statuses.iter().filter_map(|s| s.alarm.clone()).collect();
         drop(span);
         // Psychological drives: an uneventful stretch makes curious people restless; time without
@@ -2040,6 +2036,67 @@ const FAR_MARK: u32 = 0x2000_0000;
 const FIRST_SIGHTS_PER_LINE: usize = 8;
 
 /// "a" or "an" before a kind's words.
+thread_local! {
+    /// Each character's last `status_of` answer and until when it stands (docs/BATTLE_SCALE.md,
+    /// battle-cheap path 2): the script revision, its body row, stage and night it was asked for,
+    /// and the first moment a fact the law reads can change with that row. A cache of the law's
+    /// answer: lost, the law is asked again.
+    static ALARM_CELLS: std::cell::RefCell<std::collections::HashMap<u32, AlarmCell>> = std::cell::RefCell::new(std::collections::HashMap::new());
+}
+
+struct AlarmCell {
+    rev: u32,
+    row: [u64; 20],
+    stage: u8,
+    night: bool,
+    until: u64,
+    statuses: Rc<Vec<living_rules::script::Status>>,
+}
+
+/// The body's statuses by the `status_of` law: from the character's cell while its row, stage
+/// and night are unchanged and no fact the law reads has moved (the `alarm_cells` law), else
+/// asked. The same statuses at the same moments: `alarm_cells_check` compares each.
+fn alarm_statuses(ctx: &ReducerContext, sc: &living_rules::script::Scripts, me: &Character, vit: &Vitals, night: bool, now: u64) -> Rc<Vec<living_rules::script::Status>> {
+    let laws = common::laws(ctx);
+    let ask = || {
+        let facts = living_rules::script::BodyFacts::of(&me.kind, crate::common::stage_name(me.stage), night, &vit.fields(), sc.meters(), now);
+        sc.status_of(&facts).unwrap_or_else(|e| {
+            log::warn!("status_of for {}: {e}", me.id);
+            Rc::new(Vec::new())
+        })
+    };
+    if !laws.alarm_cells {
+        return ask();
+    }
+    let (rev, row) = (common::scripts_rev(ctx), vit.bits());
+    let kept = ALARM_CELLS.with(|c| c.borrow().get(&me.id).filter(|e| e.rev == rev && e.row == row && e.stage == me.stage && e.night == night && now < e.until).map(|e| e.statuses.clone()));
+    if let Some(s) = kept {
+        common::diag(|| "alarm:kept", 1);
+        if laws.alarm_cells_check {
+            let fresh = ask();
+            common::diag(|| "alarm:checked", 1);
+            if fresh != s {
+                common::diag(|| "alarm:differed", 1);
+                log::error!("alarm cell of {}: kept {:?} differs from the law's {:?}", me.id, s.iter().map(|x| &x.name).collect::<Vec<_>>(), fresh.iter().map(|x| &x.name).collect::<Vec<_>>());
+                return fresh;
+            }
+        }
+        return s;
+    }
+    common::diag(|| "alarm:asked", 1);
+    let statuses = ask();
+    let reads = sc.status_reads();
+    let until = living_rules::script::BodyFacts::next_change_ms(&vit.fields(), sc.meters(), now, reads.as_deref());
+    ALARM_CELLS.with(|c| {
+        let mut c = c.borrow_mut();
+        if c.len() > 8192 {
+            c.clear();
+        }
+        c.insert(me.id, AlarmCell { rev, row, stage: me.stage, night, until, statuses: statuses.clone() });
+    });
+    statuses
+}
+
 fn article(kind: &str) -> &'static str {
     if kind.starts_with(['a', 'e', 'i', 'o', 'u']) { "an" } else { "a" }
 }

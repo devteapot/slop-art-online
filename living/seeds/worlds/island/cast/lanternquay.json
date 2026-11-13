@@ -28,7 +28,7 @@
      "knows": [
       "fishing",
       "fire",
-      "mending",
+      "wound_tending",
       "shelter"
      ],
      "parents": [
@@ -91,7 +91,7 @@
       "fishing",
       "smoking",
       "fire",
-      "mending",
+      "wound_tending",
       "cooking"
      ],
      "parents": [
@@ -163,7 +163,7 @@
      "knows": [
       "medicine",
       "fire",
-      "mending",
+      "wound_tending",
       "cooking"
      ],
      "parents": [
@@ -187,7 +187,7 @@
       "spear",
       "fire",
       "shelter",
-      "mending"
+      "wound_tending"
      ],
      "parents": [
       "Maren Vane"
@@ -213,7 +213,7 @@
      "knows": [
       "cooking",
       "fire",
-      "mending",
+      "wound_tending",
       "storage",
       "toolmaking"
      ],
@@ -259,7 +259,7 @@
      "role": "Bramwell and Perrin's daughter; minds the stall when her mother is cooking and wants to run the fish road",
      "knows": [
       "cooking",
-      "mending"
+      "wound_tending"
      ],
      "parents": [
       "Bramwell Tallow",
@@ -287,7 +287,7 @@
       "smoking",
       "fire",
       "shelter",
-      "mending"
+      "wound_tending"
      ],
      "parents": [
       "Cormorant the elder",
@@ -310,7 +310,7 @@
       "cooking",
       "fire",
       "storage",
-      "mending"
+      "wound_tending"
      ],
      "parents": [
       "Tamsin the elder",
@@ -331,7 +331,7 @@
      "role": "Ostrander and Tamsin's son; fishes with his father and wants a boat of his own",
      "knows": [
       "fishing",
-      "mending",
+      "wound_tending",
       "fire"
      ],
      "parents": [
@@ -426,7 +426,7 @@
       "writing",
       "fire",
       "storage",
-      "mending"
+      "wound_tending"
      ],
      "parents": [
       "Sallow the elder",
@@ -449,7 +449,7 @@
       "medicine",
       "cooking",
       "fire",
-      "mending"
+      "wound_tending"
      ],
      "parents": [
       "Mira the elder",
@@ -477,7 +477,7 @@
       "spear",
       "fire",
       "shelter",
-      "mending",
+      "wound_tending",
       "trapping"
      ],
      "parents": [
@@ -501,7 +501,7 @@
       "cooking",
       "storage",
       "fire",
-      "mending"
+      "wound_tending"
      ],
      "parents": [
       "Nia the elder",
@@ -543,7 +543,7 @@
      "role": "a young fisher who crews on Ostrander Cormorant's boat and wants to save for his own net",
      "knows": [
       "fishing",
-      "mending",
+      "wound_tending",
       "fire",
       "shelter"
      ],
@@ -597,7 +597,7 @@
       "smoking",
       "fire",
       "shelter",
-      "mending"
+      "wound_tending"
      ],
      "parents": [
       "Fenner the elder",
@@ -641,7 +641,7 @@
      "occupation": "child",
      "role": "Rook and Lyss's son; mends nets on the quay and is quick with a knot",
      "knows": [
-      "mending",
+      "wound_tending",
       "fishing"
      ],
      "parents": [
@@ -667,7 +667,7 @@
      "role": "keeps a stall of lamp oil, wicks and salt at the night market; a sharp-eyed woman who trades with everyone and trusts no one",
      "knows": [
       "storage",
-      "mending",
+      "wound_tending",
       "fire",
       "cooking"
      ],
@@ -689,7 +689,7 @@
      "occupation": "child",
      "role": "Sable's son; carries loads for the stalls and listens to the night crews' talk",
      "knows": [
-      "mending",
+      "wound_tending",
       "storage"
      ],
      "parents": [
@@ -739,7 +739,7 @@
      "role": "Marrow's wife; keeps a room of salves and sets the builders' bones after a fall",
      "knows": [
       "medicine",
-      "mending",
+      "wound_tending",
       "fire",
       "cooking"
      ],
@@ -790,7 +790,7 @@
      "role": "fishes the harbour from a borrowed boat; a cheerful man who owes everyone a little and pays most of it",
      "knows": [
       "fishing",
-      "mending",
+      "wound_tending",
       "fire",
       "shelter",
       "smoking"
@@ -817,7 +817,7 @@
       "smoking",
       "fire",
       "storage",
-      "mending"
+      "wound_tending"
      ],
      "parents": [
       "Sella the elder",
@@ -843,7 +843,7 @@
      "role": "buys and sells fish at the morning market and runs a cart of salt and dried goods along the shore",
      "knows": [
       "storage",
-      "mending",
+      "wound_tending",
       "fire",
       "cooking",
       "fishing"
@@ -913,7 +913,7 @@
      "role": "an old fisher who no longer goes out but mends nets on the quay and remembers every boat the Surge took",
      "knows": [
       "fishing",
-      "mending",
+      "wound_tending",
       "fire",
       "shelter",
       "smoking"

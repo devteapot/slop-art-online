@@ -2370,11 +2370,13 @@ def looks(run, c):
 
 @scenario("looks-old")
 def looks_old(run, c):
-    """look-1 on a world made without looks (the island seed: no `looks`, so no look rows and an
-    empty `world.look_book`): everyone drawn as a VRoid base, quietly, with one line at connect."""
+    """look-1 on a world made without looks (no look rows and an empty `world.look_book`):
+    everyone drawn as a VRoid base, quietly, with one line at connect. Every shipped seed carries
+    looks since look-1-island, so the world is the island's seed without them (`looks_seed.py RUN
+    --old`, then launch with it fresh)."""
     s = "looks-old"
     world = (sql(run, "SELECT look_book FROM world") or [{}])[0].get("look_book", "")
-    c.check(s, "the world has no looks", world == "" and not look_rows(run), f"look_book {world!r}")
+    c.check(s, "the world has no looks", world == "" and not look_rows(run), f"look_book {world!r}; make it with looks_seed.py {run} --old")
     out, code, text = drive(run, s, "ready;cursor:0.5,0.5;wait:5;dump:00;quit")
     L = log(out)
     by = {x["id"]: x for x in (dump(out, "00") or {}).get("looks") or []}

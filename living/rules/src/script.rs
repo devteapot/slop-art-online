@@ -501,6 +501,10 @@ pub struct Laws {
     /// Sight depends on facing (the `field` of `senses(a)`; the geometry is the `fov_*` laws,
     /// read by the script).
     pub fov_on: bool,
+    /// Wolves' starting instincts carry the spacing reflex (docs/PACK_MIND.md, decision 1):
+    /// beside each hunt, a weighted desire to keep apart from mates while closing on the prey
+    /// (`graph::with_pack_reflex`). Read where an instinct is installed; a world turns it off.
+    pub pack_reflex: bool,
     /// A body struck this many seconds ago cannot fall asleep (the script's `sleep_check`, the
     /// same for every controller).
     pub alert_after_hit_s: f32,
@@ -557,6 +561,23 @@ pub struct Laws {
     /// evaluation (its conditions, targets, act starts, alerts), docs/BATTLE_SCALE.md. Off by
     /// default: those spans are many and would weigh on what an ordinary profile measures.
     pub profile_detail: bool,
+    /// A move's check before it starts is given a context of the fields the check reads alone
+    /// (its plan; docs/BATTLE_SCALE.md, battle-cheap path 1): the same answer, without gathering
+    /// what it never reads (kin near, practice, community and home, warmth). Off: the whole context.
+    pub check_ctx_plan: bool,
+    /// Diagnostic: every such check is also asked with the whole context, and a difference logged
+    /// and counted (`diag:` `check_ctx:differed`).
+    pub check_ctx_check: bool,
+    /// The body's alarms (`status_of`) are answered from the last answer while no field it reads
+    /// has crossed one of its levels (battle-cheap path 2). Off: asked at every evaluation.
+    pub alarm_cells: bool,
+    /// Diagnostic: every alarm answer from a cell is also asked afresh, and a difference logged
+    /// and counted (`alarm:differed`).
+    pub alarm_cells_check: bool,
+    /// Diagnostic: warmth (battle-cheap path 3: only what warms or shelters, visited in place)
+    /// is also worked out from a full copy, and a difference logged and counted
+    /// (`warmth:differed`).
+    pub warmth_check: bool,
     /// The fast lane (docs/FAST_LANE.md): a mind-run character's re-plan between blows, asked
     /// of its mind on a blow taken or a move it sees repeated. Off: none is asked.
     pub fast_lane_on: bool,
@@ -638,6 +659,7 @@ impl Default for Laws {
             longing_after_min: 20.0,
             longing_food: 0.0,
             fov_on: false,
+            pack_reflex: true,
             alert_after_hit_s: 15.0,
             alert_while_attacker_near: true,
             stranger_by_name: false,
@@ -655,6 +677,11 @@ impl Default for Laws {
             regard_cache: true,
             regard_cache_check: false,
             profile_detail: false,
+            check_ctx_plan: true,
+            check_ctx_check: false,
+            alarm_cells: true,
+            alarm_cells_check: false,
+            warmth_check: false,
             fast_lane_on: false,
             seen_again_n: 3.0,
             fast_lane_rate: 2.0,
@@ -2370,6 +2397,13 @@ impl Scripts {
         self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, f, (m,)).map_err(|e| format!("{f}: {e}"))
     }
 
+    /// The fields `<skill>_check` reads (its plan), for a context built with those alone
+    /// (docs/BATTLE_SCALE.md, battle-cheap path 1). `None` when the skill has no check.
+    pub fn check_plan(&self, skill: &str) -> Option<Rc<context::Plan>> {
+        let f = format!("{skill}_check");
+        self.has(&f).then(|| self.plan(&f))
+    }
+
     pub fn check(&self, skill: &str, ctx: &SkillCtx) -> Result<(), String> {
         let f = format!("{skill}_check");
         if !self.has(&f) {
@@ -2675,6 +2709,7 @@ impl Scripts {
             longing_after_min: g("longing_after_min", l.longing_after_min).clamp(0.0, 100_000.0),
             longing_food: g("longing_food", l.longing_food).clamp(0.0, 1_000.0),
             fov_on: flag("fov_on", l.fov_on),
+            pack_reflex: flag("pack_reflex", l.pack_reflex),
             alert_after_hit_s: g("alert_after_hit_s", l.alert_after_hit_s).clamp(0.0, 3_600.0),
             alert_while_attacker_near: flag("alert_while_attacker_near", l.alert_while_attacker_near),
             stranger_by_name: flag("stranger_by_name", l.stranger_by_name),
@@ -2692,6 +2727,11 @@ impl Scripts {
             regard_cache: flag("regard_cache", l.regard_cache),
             regard_cache_check: flag("regard_cache_check", l.regard_cache_check),
             profile_detail: flag("profile_detail", l.profile_detail),
+            check_ctx_plan: flag("check_ctx_plan", l.check_ctx_plan),
+            check_ctx_check: flag("check_ctx_check", l.check_ctx_check),
+            alarm_cells: flag("alarm_cells", l.alarm_cells),
+            alarm_cells_check: flag("alarm_cells_check", l.alarm_cells_check),
+            warmth_check: flag("warmth_check", l.warmth_check),
             fast_lane_on: flag("fast_lane_on", l.fast_lane_on),
             seen_again_n: g("seen_again_n", l.seen_again_n).round().clamp(1.0, 100.0),
             fast_lane_rate: g("fast_lane_rate", l.fast_lane_rate).clamp(0.0, 100.0),
@@ -3504,6 +3544,20 @@ mod tests {
     /// Sight and hearing are a law per creature in the script, with the values the engine had
     /// as constants (11 m by day, 6 at night, 9 with a torch; hearing 9), shared by every
     /// creature in the same state and held to the law's reach.
+    #[test]
+    fn the_pack_reflex_is_on_by_default_and_a_world_turns_it_off() {
+        let src = include_str!("../../scripts/skills.rhai");
+        let shipped = Scripts::new(src).unwrap();
+        assert!(shipped.laws().pack_reflex, "on in every world unless it says otherwise");
+        assert_eq!(shipped.law_value("pack_reflex"), Some(serde_json::json!(true)));
+        let off_src = with_world_laws(src, &[("pack_reflex".into(), serde_json::json!(false))]);
+        let off = Scripts::new(&off_src).unwrap();
+        off.validate().unwrap();
+        assert!(!off.laws().pack_reflex);
+        // A script that does not name the law keeps the reflex on (the Rust default).
+        assert!(Laws::default().pack_reflex);
+    }
+
     #[test]
     fn sight_depends_on_facing_only_when_the_world_s_law_says() {
         let src = include_str!("../../scripts/skills.rhai");

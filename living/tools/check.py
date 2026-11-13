@@ -37,7 +37,7 @@ Usage: check.py [--full] [--plan] [--serial] [--steps a,b] [--no-sccache] [--jso
   --no-sccache  do not wrap rustc (also LIVING_SCCACHE=0)
   --json PATH   write the run record (per-step times, skips, digests) to PATH
 Environment: LIVING_CHECK_FULL=1 is --full; LIVING_CHECK_STORE overrides the stamp store;
-SLOP_SCCACHE_DIR, SLOP_SCCACHE_SIZE (default 20G) and SLOP_SCCACHE_PORT (default 4237) set
+SLOP_SCCACHE_DIR, SLOP_SCCACHE_SIZE (default 10G) and SLOP_SCCACHE_PORT (default 4237) set
 the compile cache.
 """
 import fcntl
@@ -735,7 +735,7 @@ def sccache_env(root):
                           + ("; the pre-set wrapper falls back to an sccache on PATH" if preset else "; compiling without a cache"))
     ours = {
         "SCCACHE_DIR": os.environ.get("SLOP_SCCACHE_DIR") or os.path.join(CACHE, "slop-sccache"),
-        "SCCACHE_CACHE_SIZE": os.environ.get("SLOP_SCCACHE_SIZE", "20G"),
+        "SCCACHE_CACHE_SIZE": os.environ.get("SLOP_SCCACHE_SIZE", "10G"),
         "SCCACHE_SERVER_PORT": os.environ.get("SLOP_SCCACHE_PORT", "4237"),
         "SCCACHE_IGNORE_SERVER_IO_ERROR": "1",  # a cache failure compiles locally, never fails the build
     }
