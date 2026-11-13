@@ -477,8 +477,6 @@ pub struct Laws {
     pub wake_reach: f32,
     /// A creature already in a player's sight stays seen until this many metres beyond the player's sight.
     pub keep_seen_m: f32,
-    /// A chased creature is lost from sight beyond this share of the chaser's sight (or its scent, if farther).
-    pub chase_lost_share: f32,
     /// Hunger of a body that comes into the world.
     pub spawn_hunger: f32,
     /// Energy of a body that comes into the world.
@@ -551,6 +549,11 @@ pub struct Laws {
     /// once per this many ms (docs/BATTLE_SCALE.md, fix 3); the percept is written at once and in
     /// full. 0: woken by each, as before.
     pub witness_wake_ms: f32,
+    /// A diagnostic, 0 in play (docs/PERCEPTION.md, "Module memory and rollback"): a step the
+    /// world fails on purpose, to prove that nothing kept in module memory outlives a
+    /// transaction that rolled back (1 the tick after its sweep, 2 the tick by a panic, 3
+    /// `place_at`, 4 `kill`, 5 `join`; 6 drops the marks kept in memory, as if made elsewhere).
+    pub memory_test: f32,
     /// What an onlooker sees of fights it is not party to is told as one line per this many ms
     /// (docs/BATTLE_SCALE.md, fix 4): every blow it could see, with counts and outcomes. A blow
     /// at it or by it is told at once. 0: each fight's first blow told at once, as before.
@@ -654,7 +657,6 @@ impl Default for Laws {
             wake_loudness: 2.0,
             wake_reach: 8.0,
             keep_seen_m: 1.0,
-            chase_lost_share: 1.4,
             spawn_hunger: 25.0,
             spawn_energy: 85.0,
             pasture_per_tile: 0.02,
@@ -678,6 +680,7 @@ impl Default for Laws {
             think_framing: false,
             cue_check_s: 1.0,
             witness_wake_ms: 500.0,
+            memory_test: 0.0,
             witness_fold_ms: 2000.0,
             regard_cache: true,
             regard_cache_check: false,
@@ -2770,7 +2773,6 @@ impl Scripts {
             wake_loudness: g("wake_loudness", l.wake_loudness).clamp(0.0, 100.0),
             wake_reach: g("wake_reach", l.wake_reach).clamp(0.0, 64.0),
             keep_seen_m: g("keep_seen_m", l.keep_seen_m).clamp(0.0, 8.0),
-            chase_lost_share: g("chase_lost_share", l.chase_lost_share).clamp(1.0, 8.0),
             spawn_hunger: g("spawn_hunger", l.spawn_hunger).clamp(0.0, 100.0),
             spawn_energy: g("spawn_energy", l.spawn_energy).clamp(0.0, 100.0),
             pasture_per_tile: g("pasture_per_tile", l.pasture_per_tile).clamp(0.0, 10.0),
@@ -2794,6 +2796,7 @@ impl Scripts {
             think_framing: flag("think_framing", l.think_framing),
             cue_check_s: g("cue_check_s", l.cue_check_s).clamp(0.1, 60.0),
             witness_wake_ms: g("witness_wake_ms", l.witness_wake_ms).clamp(0.0, 10_000.0),
+            memory_test: g("memory_test", l.memory_test).round().clamp(0.0, 9.0),
             witness_fold_ms: g("witness_fold_ms", l.witness_fold_ms).clamp(0.0, 10_000.0),
             regard_cache: flag("regard_cache", l.regard_cache),
             regard_cache_check: flag("regard_cache_check", l.regard_cache_check),
@@ -3718,6 +3721,10 @@ mod tests {
         assert!(about["cue_check_s"].contains("1 s"), "{about:?}");
         assert!(about["witness_wake_ms"].contains("500 ms"), "{about:?}");
         assert!(about["witness_fold_ms"].contains("2000 ms") && about["witness_fold_ms"].contains("who fell"), "{about:?}");
+        assert_eq!(l.memory_test, 0.0, "no step fails on purpose in play");
+        assert!(about["memory_test"].starts_with("A test switch"), "{about:?}");
+        let t = Scripts::new(&with_world_laws(src, &[("memory_test".into(), serde_json::json!(3.4))])).unwrap();
+        assert_eq!(t.laws().memory_test, 3.0);
     }
 
     /// First sights that ask for a thought (docs/FIRST_SIGHT.md): off by default, with the gap a
@@ -4000,7 +4007,7 @@ mod tests {
         // Rule numbers that were Rust constants, with their values.
         let l = sc.laws();
         assert_eq!((l.follow_s, l.read_sign_m, l.kin_near_m, l.trade_window_s, l.join_window_s, l.address_m), (12.0, 8.0, 4.0, 180.0, 300.0, 6.0));
-        assert_eq!((l.keep_seen_m, l.chase_lost_share, l.spawn_hunger, l.spawn_energy, l.pasture_per_tile), (1.0, 1.4, 25.0, 85.0, 0.02));
+        assert_eq!((l.keep_seen_m, l.spawn_hunger, l.spawn_energy, l.pasture_per_tile), (1.0, 25.0, 85.0, 0.02));
         // The longing for a child: shipped values keep the old wait (20 − nurture/6 minutes, any food).
         assert_eq!((l.longing_after_min, l.longing_food), (20.0, 0.0));
         for n in [0.0, 30.0, 60.0, 100.0] {

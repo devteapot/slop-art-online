@@ -294,6 +294,9 @@ pub enum Verdict {
     /// The judge said carry on: the request stays pending and gathers.
     Hold,
     Urgent,
+    /// Never held: someone is waiting on this character (a line to it not yet answered) or its
+    /// body keeps failing the same act ([`waits_on`]; docs/GATE_LIVE.md, gl1).
+    Waits,
     /// No thought yet since the service started.
     First,
     MaxHold,
@@ -315,6 +318,57 @@ pub struct Exp {
     pub subject: u32,
     pub object: u32,
     pub text: String,
+}
+
+/// How far back an unanswered line to the character counts (as the state's asking window).
+const WAITS_LINE_MS: u64 = 10 * 60_000;
+/// Failures of the same act, since the last deliberation, that make a request never held.
+const WAITS_FAILURES: usize = 2;
+
+/// Why a request must not be held, from the character's own percepts (rows the authority wrote):
+/// - a line someone said or whispered *to* it in the last 10 minutes, with no line of its own to
+///   that person since (`speech`/`whisper` with `object` = the character, against its own
+///   `said`/`whisper`/`whispered` with `object` = the speaker);
+/// - the same deliberate act failing twice since its last deliberation ("What you had decided did
+///   not work out: <act>: …"), or the authority's own line that it keeps turning back and forth.
+///
+/// In gl1 these were the six holds judged harmful (docs/GATE_LIVE.md): people asking and left
+/// unanswered for 2–6 minutes, and bodies pacing on a failing goto while held.
+pub fn waits_on<'a>(exps: impl IntoIterator<Item = &'a Exp>, me: u32, now_ms: u64, since_ms: u64) -> Option<&'static str> {
+    let mut asked: BTreeMap<u32, u64> = BTreeMap::new();
+    let mut answered: BTreeMap<u32, u64> = BTreeMap::new();
+    let mut failed: BTreeMap<String, usize> = BTreeMap::new();
+    let mut pacing = false;
+    for e in exps {
+        if e.at_ms > now_ms {
+            continue;
+        }
+        match e.kind.as_str() {
+            "speech" | "whisper" if e.object == me && e.subject != 0 && e.subject != me => {
+                asked.insert(e.subject, e.at_ms);
+            }
+            "said" | "whisper" | "whispered" if e.subject == me && e.object != 0 => {
+                answered.insert(e.object, e.at_ms);
+            }
+            _ => {}
+        }
+        if e.at_ms >= since_ms {
+            if e.kind == "act" {
+                if let Some(rest) = e.text.split_once("did not work out:").map(|(_, r)| r) {
+                    *failed.entry(rest.split(':').next().unwrap_or("").trim().to_string()).or_default() += 1;
+                }
+            } else if e.kind == "self" && e.text.contains("turning back and forth") {
+                pacing = true;
+            }
+        }
+    }
+    if asked.iter().any(|(who, at)| now_ms.saturating_sub(*at) <= WAITS_LINE_MS && answered.get(who).is_none_or(|a| a < at)) {
+        return Some("a line to this character is unanswered");
+    }
+    if pacing || failed.values().any(|n| *n >= WAITS_FAILURES) {
+        return Some("the same act keeps failing");
+    }
+    None
 }
 
 const RING: usize = 128;
@@ -361,6 +415,8 @@ pub struct Stats {
     /// Re-raised triggers on a held request with nothing new: held without asking.
     pub unchanged: u64,
     pub urgent: u64,
+    /// Never held because someone waits on the character or the same act keeps failing.
+    pub waits: u64,
     pub first: u64,
     pub max_hold: u64,
     pub fallback: u64,
@@ -377,6 +433,7 @@ impl Stats {
             Verdict::Rethink => self.rethink += 1,
             Verdict::Hold => self.hold += 1,
             Verdict::Urgent => self.urgent += 1,
+            Verdict::Waits => self.waits += 1,
             Verdict::First => self.first += 1,
             Verdict::MaxHold => self.max_hold += 1,
             Verdict::Fallback => self.fallback += 1,
@@ -554,11 +611,13 @@ impl Minds {
         if !c.alive || !gate.file.kinds.iter().any(|k| *k == c.kind) {
             return true;
         }
-        let (seen, held_for, holds, unchanged) = {
+        let (seen, held_for, holds, unchanged, waits) = {
             let t = self.rethink_track.lock().unwrap();
             let tr = t.get(&d.actor);
             let unchanged = tr.is_some_and(|t| t.unchanged(&d.reason));
-            (tr.and_then(|t| t.seen_ms), tr.and_then(|t| t.held_since).map(|h| h.elapsed()), tr.map_or(0, |t| t.holds), unchanged)
+            let seen = tr.and_then(|t| t.seen_ms);
+            let waits = tr.and_then(|t| waits_on(t.ring.iter(), d.actor, llm::now_ms(), seen.unwrap_or(0)));
+            (seen, tr.and_then(|t| t.held_since).map(|h| h.elapsed()), tr.map_or(0, |t| t.holds), unchanged, waits)
         };
         let lane = self.deliberation_lane(d);
         let mut judged: Option<Judged> = None;
@@ -568,6 +627,8 @@ impl Minds {
             Verdict::Urgent
         } else if seen.is_none() {
             Verdict::First
+        } else if waits.is_some() {
+            Verdict::Waits
         } else if held_for.is_some_and(|h| h >= Duration::from_secs(gate.file.max_hold_s)) {
             Verdict::MaxHold
         } else if unchanged {
@@ -611,7 +672,7 @@ impl Minds {
                 "latency_ms": judged.as_ref().map_or(0, |j| j.latency_ms), "tokens": 0, "verdict": verdict,
                 "p": judged.as_ref().map(|j| j.p), "answers": judged.as_ref().map(|j| &j.answers), "threshold": gate.threshold(),
                 "reason": d.reason, "requested_ms": d.requested_ms, "updated_ms": d.updated_ms, "lane": lane,
-                "held_s": held_for.map(|h| h.as_secs()), "holds_before": holds, "state": st, "error": error,
+                "held_s": held_for.map(|h| h.as_secs()), "holds_before": holds, "waits_on": waits, "state": st, "error": error,
             }))
             .await;
         verdict.proceeds()
@@ -733,6 +794,8 @@ fn points(dir: &Path, gate: &Gate) -> Result<(String, Vec<Point>)> {
             Some(Verdict::Urgent)
         } else if seen.is_none() {
             Some(Verdict::First)
+        } else if waits_on(exps.iter(), me, req_ms, seen.unwrap_or(0)).is_some() {
+            Some(Verdict::Waits)
         } else {
             None
         };
@@ -890,6 +953,31 @@ mod tests {
         assert_eq!(t.holds, 2);
         t.judged(Verdict::Rethink, "I finished my plan.");
         assert!(!t.unchanged("I finished my plan.") && t.held_since.is_none() && t.holds == 0);
+    }
+
+    #[test]
+    fn someone_waiting_or_a_failing_act_is_never_held() {
+        let m = 60_000;
+        let line = |at, from, to, text: &str| Exp { at_ms: at, kind: "speech".into(), subject: from, object: to, text: text.into() };
+        let said = |at, me, to| Exp { at_ms: at, kind: "said".into(), subject: me, object: to, text: "You said to them: “Yes.”".into() };
+        // Posy (#4) asked Edda (#7); Edda has not answered: never held.
+        let asked = vec![line(2 * m, 4, 7, "Posy said to you: “Will you come?”")];
+        assert_eq!(waits_on(&asked, 7, 3 * m, 0), Some("a line to this character is unanswered"));
+        // Answered since: held as before.
+        let answered = vec![line(2 * m, 4, 7, "Posy said to you: “Will you come?”"), said(2 * m + 5_000, 7, 4)];
+        assert_eq!(waits_on(&answered, 7, 3 * m, 0), None);
+        // A line between two others, or one older than ten minutes, does not count.
+        assert_eq!(waits_on(&[line(2 * m, 4, 9, "Posy said to Ivo: “Hi.”")], 7, 3 * m, 0), None);
+        assert_eq!(waits_on(&asked, 7, 13 * m, 0), None);
+        // The same act failing twice since the last deliberation; once is not enough.
+        let fail = |at| Exp { at_ms: at, kind: "act".into(), subject: 7, object: 0, text: "What you had decided did not work out: goto → (534,628): no path".into() };
+        assert_eq!(waits_on(&[fail(m)], 7, 3 * m, 0), None);
+        assert_eq!(waits_on(&[fail(m), fail(2 * m)], 7, 3 * m, 0), Some("the same act keeps failing"));
+        // Failures before the last deliberation were already seen by it.
+        assert_eq!(waits_on(&[fail(m), fail(2 * m)], 7, 3 * m, 2 * m + 1), None);
+        // The authority's own line about pacing.
+        let pace = Exp { at_ms: 2 * m, kind: "self".into(), subject: 7, object: 0, text: "You keep turning back and forth (goto → (534,628), then goto → (566,688), over and over) without getting anywhere.".into() };
+        assert_eq!(waits_on(&[pace], 7, 3 * m, 0), Some("the same act keeps failing"));
     }
 
     #[test]

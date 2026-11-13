@@ -2733,6 +2733,10 @@ def run(a):
             sys.exit(f"unknown variant {v}; see living/trials/variants.json")
     # A trial may name the only variants it runs with (`variants`): others are skipped for it.
     plan = [(t, v, r) for t in trials for v in names if not t.get("variants") or v in t["variants"] for r in range(1, a.replicates + 1)]
+    if getattr(a, "interleave", False):
+        # Replicate by replicate, the arms side by side (r1 of every variant, then r2, …): with
+        # --parallel equal to the number of variants, the arms share each window of provider load.
+        plan.sort(key=lambda p: (p[2], names.index(p[1])))
     # Instance names follow Instance.__init__ (`<trial>-<variant>-r<rep>`).
     long = [n for n in (f"{PREFIX}{a.batch}-{t['name']}-{v}-r{r}" for t, v, r in plan) if len(n) > MAX_DB_NAME]
     if long:
@@ -3281,6 +3285,7 @@ def main():
     p.add_argument("trials", nargs="*")
     p.set_defaults(f=build)
     p = sub.add_parser("run")
+    p.add_argument("--interleave", action="store_true", help="order instances replicate by replicate, the variants side by side")
     p.add_argument("--batch", required=True)
     p.add_argument("trials", nargs="+")
     p.add_argument("--variants", default="default")

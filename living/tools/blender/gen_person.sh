@@ -32,26 +32,65 @@
 #   ANIMATE=<file>      the animate.py that bakes the clips (default: this folder's), to bake a
 #                       set with an earlier one for a comparison (docs/CHARACTERS.md, "Motions on
 #                       generated people")
-#   KIMODO_DIR=<dir>    the library's generated NPZs (default .local/kimodo/outputs/library)
+#   KIMODO_DIR=<dir>    the library's generated NPZs (default .local/kimodo/library, the
+#                       library's home; .local/kimodo/outputs/library only where there is no
+#                       home). The log says which was used, and names every take the bake
+#                       reads that it lacks
 #   ONLY=<clips>        comma-separated library entries (default: the whole library, clips.json);
-#                       `present` takes every entry whose takes are all in KIMODO_DIR, for a
+#                       `present` takes every entry whose picked take is in KIMODO_DIR, for a
 #                       machine whose copy of the library is behind clips.json
 set -euo pipefail
 cd "$(dirname "$0")/../../.."
 src=living/game/assets/lookdev
 blender=${BLENDER:-blender}
 animate=${ANIMATE:-living/tools/blender/animate.py}
-kimodo=${KIMODO_DIR:-.local/kimodo/outputs/library}
+# The clip library: its home, `.local/kimodo/library`, and only where there is none the older
+# copy under `outputs/` (a stale copy there once gave a clip file with a third of the clips and
+# none for backing, strafing or turning). KIMODO_DIR names another.
+if [ -n "${KIMODO_DIR:-}" ]; then kimodo=$KIMODO_DIR
+elif [ -d .local/kimodo/library ]; then kimodo=.local/kimodo/library
+else kimodo=.local/kimodo/outputs/library; fi
 only=${ONLY:-}
+clips_baked=1
+[ "${CLIPS:-library}" = none ] && clips_baked=0
+if [ "$clips_baked" = 1 ]; then
+  echo "gen_person: the clip library is $kimodo" >&2
+  # The takes the bake reads and the library does not hold, by name. A warning: a machine may
+  # hold a part of the library. The bake reads one take an entry, the picked one (`pick`, a
+  # seed), and the neutral pose's; an entry's other seeds are the candidates it was picked
+  # from, kept for review, and a library may hold only the picks. They are counted, not named.
+  python3 - "$kimodo" "$only" >&2 <<'PY'
+import json, os, sys
+d, only = sys.argv[1], sys.argv[2]
+have = set(os.listdir(d)) if os.path.isdir(d) else set()
+lib = json.load(open("living/tools/blender/clips.json"))
+clips = [c for c in lib["clips"] if c.get("kind") != "pose"]
+wanted = None if only in ("", "present") else set(only.split(","))
+if lib.get("neutral"):
+    name, seed = lib["neutral"].split("@")[0].split("#")
+    if f"{name}_s{int(seed)}.npz" not in have:
+        print(f"gen_person: warning: the neutral pose's take {name}_s{int(seed)}.npz is missing from {d}: no clip can be baked")
+lost, spare = [], 0
+for c in clips:
+    if (wanted is not None and c["name"] not in wanted) or "keyed" in c or "overlay" in c:
+        continue
+    if f"{c['name']}_s{c['pick']}.npz" not in have:
+        lost.append(c["name"])
+        print(f"gen_person: warning: {c['name']}: its take {c['name']}_s{c['pick']}.npz is missing from {d}" + ("; the entry is not baked (ONLY=present)" if only == "present" else ""))
+    spare += sum(f"{c['name']}_s{s}.npz" not in have for s in c.get("seeds", []) if s != c["pick"])
+n = len(clips) if wanted is None else sum(c["name"] in wanted for c in clips)
+print(f"gen_person: {len(lost)} of {n} entries have their take missing from {d}" + (": " + ", ".join(lost) if lost else "") + f"; {spare} candidate takes that were not picked are not there either (the bake does not read them)")
+PY
+fi
 if [ "$only" = present ]; then
   only=$(python3 - "$kimodo" <<'PY'
 import json, os, sys
 have = set(os.listdir(sys.argv[1]))
 clips = json.load(open("living/tools/blender/clips.json"))["clips"]
-print(",".join(c["name"] for c in clips if all(f"{c['name']}_s{s}.npz" in have for s in c.get("seeds", []))))
+print(",".join(c["name"] for c in clips if c.get("kind") != "pose" and ("keyed" in c or "overlay" in c or f"{c['name']}_s{c['pick']}.npz" in have)))
 PY
 )
-  echo "gen_person: baking the $(echo "$only" | tr ',' '\n' | wc -l) library entries present in $kimodo" >&2
+  echo "gen_person: baking the $(echo "$only" | tr ',' '\n' | wc -l) library entries whose take is in $kimodo" >&2
 fi
 people=("$@")
 [ ${#people[@]} -gt 0 ] || people=(man woman elder youth boy girl heavy)

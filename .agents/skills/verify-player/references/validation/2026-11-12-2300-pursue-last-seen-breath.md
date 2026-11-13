@@ -1,0 +1,10 @@
+# verify-player: pursue-last-seen's gate, the breath scene
+
+## 2026-11-12/13 (Spark, scratch server `slop-move-stdb`, 127.0.0.1:3361)
+
+The gate (`20261112-213301-pursue-last-seen.log`) failed `combat` twice: breath's "dodging on without a pause is refused out of breath" (nine dodges, all "made way") and, in the full gate run, dodge/jump/early_dodge (no blow seen). Not the branch's rules: pursue-last-seen does not touch breath, dodges or a player's moves, and the facing law is off, so an attacker's approach is held by the same 360° sight as its target resolution.
+
+- **Full combat, alternating** (`cb/`, island seed): branch 50, 49 (`strike`), 50; main 49 (`early_dodge`), 50. Breath passed in all five.
+- **Isolation** (`cb3/`, shipped scene): breath alone 3/3 on each build; `committed,breath` main 2/2 (refused at the 5th and the 9th dodge, the 9th the loop's last), branch 1/2 (nine "made way"). The loop's pace decided: dodges 1 s apart in passing runs, 1.5–2 s in failing ones (the gate's: 1.56 and 1.67 s), and the refill (25 a second from 1 s after an effort) covers most of a dodge's 20 at that pace. Requests stalled 4–6 s at times.
+- **Scene fixed** (`combat.py`): the check sets the world's `cost_dodge` to 90 (`set_world_law`, restored to 20), stands on its own ground (`open_ground`, 4 m south), dodges from full, sends the next 0.95 s later by the clock (a cooldown refusal, by the call or in the tick, is sent again; a gap over 3.5 s is tried again), and reads the told REFUSED row first. "Letting go of the run" checks the drain by the rows' own times (4 a second, within a tenth). "A dodge takes 20 breath" measures again from a row already back at full.
+- **After** (`cb5/`, branch on main `db4c1e35`): breath alone 3/3, `committed,breath` 2/2 (one after a 5.2 s stall, retried), full combat 50/50, 48/50 (`kill`, `heal`: their rows read late, the outcomes right), 49/50 (`kill`), reused world 49/50 ("letting go" drained 21.0 against 22.3, before the tolerance became a tenth). The dodge refusal passed in all eight.

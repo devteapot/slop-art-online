@@ -217,6 +217,12 @@ pub fn fed(id: u32, who: Identity, expires_ms: u64, row: u64) {
 
 /// A player's character died: its frames stop, and its last staged lines are released (its
 /// window stays readable, the dead included).
+/// Every viewer's next frame compares its whole scene (after a tick this instance did not see
+/// commit: what earlier frames wrote may have been rolled back).
+pub fn all_full() {
+    VIEWERS.with(|v| v.borrow_mut().values_mut().for_each(|e| e.full = true));
+}
+
 pub fn forget(ctx: &ReducerContext, id: u32) {
     VIEWERS.with(|v| v.borrow_mut().remove(&id));
     release_lines(ctx, id);
@@ -456,6 +462,7 @@ fn show_band(ctx: &ReducerContext, who: Identity, body: u32, now: u64) {
         q.hp = hp.max(0.0).round();
     }
     if q != p {
+        crate::perception::row_written(who, body);
         ctx.db.projected().id().update(q);
     }
 }

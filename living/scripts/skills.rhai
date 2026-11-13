@@ -51,9 +51,9 @@ fn laws() {
         // A sound at least this loud (its spec's `loudness`: a voice 1, a call 2.5, a baby's
         // cry 2.5, the blows of a fight 2) wakes a sleeper within this many metres who hears it.
         wake_loudness: 2.0, wake_reach: 8.0,
-        // A creature in a player's sight stays seen until this far beyond it (metres); a chase
-        // is lost beyond this share of the chaser's sight.
-        keep_seen_m: 1.0, chase_lost_share: 1.4,
+        // A creature in a player's sight stays seen until this far beyond it (metres). A chase
+        // has no reach of its own: out of sight, the chaser goes to where it last saw them.
+        keep_seen_m: 1.0,
         // A body that comes into the world: its hunger and energy.
         spawn_hunger: 25.0, spawn_energy: 85.0,
         // Grazing each grassy or forest tile holds.
@@ -122,6 +122,9 @@ fn laws() {
         // once per `witness_wake_ms` (docs/BATTLE_SCALE.md); what it sees is still told at once,
         // in full. 0: woken by each sight, as before.
         witness_wake_ms: 500.0,
+        // A test switch (docs/PERCEPTION.md, "Module memory and rollback"), 0 in play: a step the
+        // world fails on purpose, to prove nothing kept in module memory outlives a failed one.
+        memory_test: 0.0,
         // What an onlooker sees of fights it is not party to is told as one line per
         // `witness_fold_ms` (docs/BATTLE_SCALE.md, fix 4): every blow it could see, by who struck
         // whom, with counts and outcomes, and who fell. A blow at it or by it is told at once.
@@ -3059,7 +3062,6 @@ fn laws_about(l) {
         wake_loudness: "a sleeper wakes for a sound as loud as a shout, a baby crying or a fight (not for talk or a whisper)",
         wake_reach: `when it is within ${short(l.wake_reach)} m`,
         keep_seen_m: `a creature in a player's sight stays seen until ${short(l.keep_seen_m)} m beyond it`,
-        chase_lost_share: `a chase is lost beyond ${short(l.chase_lost_share)} times the chaser's sight`,
         spawn_hunger: `a body comes into the world with hunger ${short(l.spawn_hunger)}`,
         spawn_energy: `and energy ${short(l.spawn_energy)}`,
         pasture_per_tile: `each grassy tile holds ${l.pasture_per_tile} grazing units`,
@@ -3079,6 +3081,7 @@ fn laws_about(l) {
         heard_first_rethinks: if l.heard_first_rethinks { "a line you decided to say to someone, when you hear another address them before you speak, waits while you think again" } else { "a line you decided to say is said when it comes due, whoever spoke to them meanwhile" },
         cue_check_s: `what one watches for is looked for every ${short(l.cue_check_s)} s`,
         witness_fold_ms: if l.witness_fold_ms > 0.0 { `what one watches of others' fights is told together every ${short(l.witness_fold_ms)} ms: every blow seen, who struck whom, how many landed, and who fell` } else { "of others' fights one is told each fight's first blow, at once" },
+        memory_test: "A test switch that makes one step of the world fail on purpose; it is off in play.",
         witness_wake_ms: if l.witness_wake_ms > 0.0 { `a bystander turns to what it sees at most every ${short(l.witness_wake_ms)} ms` } else { "a bystander turns to each thing it sees at once" },
         regard_cache: if l.regard_cache { "what each one makes of another is worked out once a moment and shared" } else { "what each one makes of another is worked out afresh each time it is asked" },
         // How the work is done, not what anyone perceives: plain words (no condition), so the

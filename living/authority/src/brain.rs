@@ -565,10 +565,12 @@ impl<'a> Ev<'a> {
                     Some(t) => match sensed.flatten() {
                         Some(r) => r,
                         None => {
-                            // A movement intent under way goes by where its target was last seen
-                            // until steering loses it (`motion::FLAG_SIGHT`, the `lost_after_s`
-                            // law): one rule for a graph's and an act's, not the next evaluation.
-                            if living_rules::steer::INTENTS.contains(&a.skill.as_str()) {
+                            // Movement under way toward or away from a creature (an intent, a
+                            // flight, a `goto` to someone, an approach to act on them) goes by where
+                            // it was last seen until steering loses it (`motion::held`: a pursuit
+                            // goes to the last-seen place, a flight runs from it): one rule for a
+                            // graph's and an act's, not the next evaluation.
+                            if living_rules::steer::INTENTS.contains(&a.skill.as_str()) || matches!(a.skill.as_str(), "flee" | "goto") || self.approaching(id) {
                                 if let Some(act) = self.ctx.db.activity().id().find(self.me.id).filter(|x| x.node == id && x.revision == self.st.revision) {
                                     self.running = Some(id);
                                     self.status = act.label;
@@ -1476,6 +1478,11 @@ impl<'a> Ev<'a> {
             }
         }
         CUE_HELD.with(|m| m.borrow_mut().insert(me, (now, held)));
+    }
+
+    /// Whether this node's act is under way and still approaching its target (phase 0).
+    fn approaching(&self, id: u16) -> bool {
+        self.ctx.db.activity().id().find(self.me.id).is_some_and(|x| x.node == id && x.revision == self.st.revision && x.phase == 0)
     }
 
     /// Over `FAMILIAR_LIMIT`, forget the oldest familiarity by age only (fix 1): never a row

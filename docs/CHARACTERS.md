@@ -205,7 +205,7 @@ A pass is also published through the asset board, the record of which version th
 
 `just living-town .local/town` runs `town.py`; `just living-people` runs `gen_person.sh`. A pass's own report page is written by `living/tools/characters/report.py` from the board's media and a notes file.
 
-`gen_person.sh` needs Blender and, for clips, the Kimodo library's takes (`KIMODO_DIR`, default `.local/kimodo/outputs/library`); it bakes the whole library unless `ONLY` names clips. `ONLY=present` bakes the entries whose takes are all there, for a machine whose copy of the library is behind `clips.json` (on 2026-11-11 the dev-box had 30 of 67: the takes of the re-made town motions and of the new locomotion clips had not reached it). The photographs need the game's release build; `view_assets.sh` honours a private `CARGO_TARGET_DIR`. A person takes about 6 s to generate; adding two clips takes about 6 s more and 30 clips about 15 s. 64 people with `idle` and `walk` and their photographs took 5 minutes with six jobs on a loaded dev-box (pass 2, 2026-11-11; hair adds under a second a person). With the far models as well (pass 3), the 64 took 6 minutes to build and page, and their photographs 7 more.
+`gen_person.sh` needs Blender and, for clips, the Kimodo library's takes. The library is `KIMODO_DIR` when set, else its home `.local/kimodo/library`, else `.local/kimodo/outputs/library` (a machine's own renders, which may be behind); the batch log says which was used ("gen_person: the clip library is …"). It bakes the whole library unless `ONLY` names clips. `ONLY=present` bakes every entry whose take is there, for a machine whose copy of the library is behind `clips.json`. The bake reads one take an entry, the picked one (`pick`, a seed) and the neutral pose's; an entry's other seeds are the candidates it was picked from. The log names every entry whose picked take is missing, with a count, and counts the candidates that are not there without naming them: a warning, not a failure. Until 2026-11-13 `present` asked for every seed of an entry, so a library holding only the picks lost entries without an error: the dev-box's two copies hold the picked take of every entry, and every candidate of only 30 of the 86 entries (`outputs/library`) or 67 (`~/archive/clip-library`), and its clip file had 29 clips, with none for backing, strafing, the diagonals or turning. With the rule as it is now the same libraries give 84. The photographs need the game's release build; `view_assets.sh` honours a private `CARGO_TARGET_DIR`. A person takes about 6 s to generate; adding two clips takes about 6 s more and 30 clips about 15 s. 64 people with `idle` and `walk` and their photographs took 5 minutes with six jobs on a loaded dev-box (pass 2, 2026-11-11; hair adds under a second a person). With the far models as well (pass 3), the 64 took 6 minutes to build and page, and their photographs 7 more.
 
 ## A person's parameters
 
@@ -2028,6 +2028,70 @@ The silhouettes and the cloth land together (2026-11-12, branch `char-4-body`, a
 - **The laptop bakes its own** from its full library, as before; the same command now writes the stripped file. It is not in the bundle.
 
 **The bundle is published twice,** `char-4-composed-<sha>.tar.gz` with PNG pictures and `char-4-composed-<sha>-ktx2.tar.gz` (`pictures.py bundle … --pictures ktx2`, [pictures as KTX2](#pictures-as-ktx2)), with `pictures.py check` on the second.
+### The body: hands
+
+The body pass, third part (2026-11-13, branch `char-4-hands`, on top of [the landing](#the-body-the-landing)). Measured first (`living/tools/characters/reference/hand.py`), then built again from the measured shares.
+
+```bash
+python3 living/tools/characters/reference/hand.py living/game/assets/lookdev/vroid-Sendagaya_Shino.glb --json shino.json --mask shino.png
+python3 living/tools/characters/reference/hand.py living/game/assets/lookdev/types/adult-f-b.glb --params NAME.params.json --head 0.2564
+```
+
+- The left hand at rest, ours posed by its proportions as the client poses it, in its own frame: along (the wrist's joint to the middle finger's first joint), across (toward the thumb) and up.
+- Lengths are between joints, a finger's tip being the furthest of its last bone's own vertices; a thickness is twice the middle distance of a bone's own vertices from its line. Everything is a share of the hand's own length (wrist to the middle finger's tip), so a man's and the reference's compare.
+
+**What it found.** Our hand was a paddle with four pegs, ordered by how much it shows:
+
+1. **The fingers lay parallel and flat.** The reference's fan 9° from index to little finger and slope 9° below the palm at rest.
+2. **They did not taper:** 0.088 of the hand thick at the first bone and 0.075 at the last, where the reference's go from 0.118 to 0.048.
+3. **The palm was half the hand** (0.51) and the fingers short: the middle 0.50 for 0.57, the little finger 0.37 for 0.46.
+4. **The thumb was short and set high:** 0.50 of the hand from a first joint 0.13 up the palm; the reference's is 0.65 from beside the wrist (0.02), with its first bone inside the ball of the thumb.
+5. **The palm was thin and narrow:** 0.13 thick and 0.41 across for 0.20 and 0.47.
+6. **A man's hand is 0.87 of a head** ("large working hands", since the spike). The reference's is a woman's, 0.64; a living man's is about 0.75. This part does not change it: see below.
+
+| Shares of the hand's own length, unless said | Shino | Vivi | woman before | woman | man before | man |
+|---|---|---|---|---|---|---|
+| The hand, in heads | 0.64 | 0.57 | 0.65 | 0.66 | 0.87 | 0.88 |
+| The hand, mm | 150 | 121 | 167 | 169 | 222 | 226 |
+| Palm (wrist to the middle finger's first joint) | 0.45 | 0.45 | 0.51 | 0.44 | 0.51 | 0.44 |
+| Across the knuckles | 0.47 | 0.50 | 0.41 | 0.45 | 0.41 | 0.45 |
+| Thick at the knuckles | 0.20 | 0.21 | 0.13 | 0.18 | 0.13 | 0.18 |
+| Index finger | 0.52 | 0.52 | 0.46 | 0.51 | 0.46 | 0.51 |
+| Middle finger | 0.57 | 0.57 | 0.50 | 0.56 | 0.50 | 0.56 |
+| Ring finger | 0.50 | 0.50 | 0.46 | 0.50 | 0.46 | 0.50 |
+| Little finger | 0.46 | 0.46 | 0.37 | 0.45 | 0.37 | 0.45 |
+| Thumb, its three bones | 0.65 | 0.67 | 0.50 | 0.64 | 0.50 | 0.64 |
+| Thumb's first joint, along the hand from the wrist | 0.02 | 0.02 | 0.13 | 0.03 | 0.13 | 0.03 |
+| Middle finger thick: first bone, second, last | 0.118, 0.109, 0.048 | 0.125, 0.115, 0.051 | 0.088, 0.083, 0.075 | 0.110, 0.099, 0.072 | 0.088, 0.083, 0.075 | 0.110, 0.099, 0.072 |
+| Thumb thick at its first bone | 0.179 | 0.186 | 0.102 | 0.140 | 0.102 | 0.140 |
+| Fingers' fan: index to little, degrees | 9.0 | 9.5 | 0.0 | 11.0 | 0.0 | 11.0 |
+| Fingers' slope below the palm, degrees | 9.3 | 9.7 | 0.0 | 7.0 | 0.0 | 7.0 |
+| Thumb: splay, slope, degrees | 43, 9 | 44, 9 | 51, 5 | 42, 9 | 51, 5 | 42, 9 |
+
+**What changed** (`person.py`: `HAND_LEN`, `HAND_FINGERS`, `HAND_THUMB`, `HAND_PALM`, `FINGER_TAPER`, `FINGER_DROP`):
+
+- **The hand is a table of shares of its own length,** read from the reference: each finger's first joint, its three bones, its radius and its splay; the thumb's root, bones, splay and slope; the palm's stations. `make_hand` and `finger_joints` build from it. The far model's mitten follows the same lengths.
+- **The hand's size is left as it was:** a man's 22.2 cm (`HAND_LEN`; 0.88 of a head as measured now, 0.87 before), a woman's the line's `hands`, 0.75 of that: 0.66 of a head. A size is a proportion, and a woman's is in her line; a smaller hand for men or women would change every line's key and need another generation and another relook. I built it once at 20 cm for a man (0.79 of a head) and took it back for that reason. **It is a decision for the owner:** if men's hands are to be a living man's, it is `HAND_LEN` 0.195 and `hands` 0.86 for women, with a new generation.
+- **No line changes with this part,** so the book stays at `c4-e61b01c0` and no world needs a relook for it. A line's outfit colour was measured on the built person, shading included, and the new hands shade a cuff a little differently: the 64 residents built again measure one level of 255 off in one outfit colour (the jersey under a smock or a coat, mostly) on 82 of their 151 lines, and through the paint rule 507 of the book's 791 worn lines come out a level off. Nothing else differs. The book is not made again for a level nobody can see; the bundle's check now makes the book again into a scratch file and fails on anything but an outfit colour one level off. The next generation takes the new measures with whatever else it carries.
+- **Another size, to look at:** `PERSON_HAND_LEN=0.200 living/tools/blender/gen_person.sh man20=man` builds a man with a 20 cm hand (0.79 of a head) for a board. It moves the finger joints, so such a file is never a shared one: `skeleton_check.py` fails on it, and it is deleted after its photographs. `character:body-hands` shows a man at 22.2 cm and at 20 cm beside the reference.
+- **Pose.** At rest the fingers fan and slope as the reference's do. The clips already curl the fingers (`animate.py`: 18° in the relaxed poses, more on a grip) and are not changed; on the new rest they give the reference's relaxed hand, where on flat parallel pegs they gave a bent paddle.
+- **This changes the rest skeleton:** the 30 finger joints of the two hands, and nothing else. So every file is built again on it (the 21 types, 74 hair files, 28 outfit pieces, 72 overlays), and the clips are baked again: the dev-box's clip file for this part has 84 clips, from `~/archive/clip-library`. `skeleton_check.py` passes on the set (267 files), `cloth_check.py` on the 64 residents and 23 test lines at rest, in idle and in the walk, and `brow_check.py` on the 21 types and the book.
+
+**What the client needs:** nothing in code. Two things in the files:
+
+1. Take the bundle whole: a file from before has the old finger joints.
+2. **Bake `lookdev/anim/own-clips.glb` again** from this generator with the full clip library (it is not in the bundle; the bundle's `MANIFEST.txt` says so), as after [the neck's and the head's joints](#the-necks-and-the-heads-joints): `ONLY=present LOD=near living/tools/blender/gen_person.sh clips=man`, then `skeleton_check.py living/game/assets/lookdev` must print 0. A finger's curl is turned about an axis worked out from the rest skeleton, so the keys change a little with the fan; an old clip file would still play, on fingers a few degrees off.
+
+**What still separates our hands from the reference's,** ordered by how much it shows:
+
+1. **No nails and no knuckles.** The reference draws nails and a line at each joint; ours are smooth, with a warmer tip.
+2. **Fingers are six-sided tubes** before smoothing; close up their sides show as soft edges, and the web between the fingers is a flat cap.
+3. **The fingertip is thick:** the middle finger's last bone is 0.072 of the hand for the reference's 0.048.
+4. **The palm is 0.18 thick and 0.45 across** for 0.20 and 0.47, and the ball of the thumb is the thumb's own tube through the palm's edge, not a modelled pad.
+5. **A man's hand is large,** 0.88 of a head: the owner's decision, above.
+6. **The far model's hand** is still a mitten with a stub of a thumb.
+
+The board: `character:body-hands` (before and after close up and full figure, the outline over the reference's, a man's hand at two sizes), `character:cast-64` and the six preset families.
 
 ### The neck
 

@@ -33,6 +33,7 @@ two windows in a row run below 2 ticks a second (collapse). Evidence:
 `.local/living/verify/<run>/diag.jsonl` (one line per sample) and `bench-*.json`.
 """
 import argparse
+import concurrent.futures
 import importlib.util
 import json
 import math
@@ -247,11 +248,19 @@ def main():
                                 del state["arriving"][f]
                                 state["fighters"].append(f)
                     short = a.battle - len(state["fighters"]) - len(state["arriving"])
-                    if short > 0 and not a.no_refill and time.time() - last >= a.refill_gap:
-                        for id in spawn(1):
-                            fighter(id, arriving=True)
-                            state["respawns"] += 1
-                        last = time.time()
+                    # As many as the time since the last refill allows, at most one each
+                    # `--refill-gap` seconds: a loop of the keeper can take longer than the gap
+                    # (its SQL under load), and one a loop then fell behind the deaths.
+                    allowed = int((time.time() - last) / a.refill_gap) if last else 1
+                    n = min(short, max(allowed, 0))
+                    if n > 0 and not a.no_refill:
+                        # Each refill's setup is four admin calls: in parallel, or they cap the
+                        # refills below the deaths of a large battle.
+                        ids = spawn(n)
+                        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+                            list(pool.map(lambda i: fighter(i, arriving=True), ids))
+                        state["respawns"] += len(ids)
+                        last = time.time() if allowed <= n else last + n * a.refill_gap
                 except Exception as e:
                     (run.directory / "keeper-error.txt").write_text(str(e))
                 time.sleep(min(0.5, a.refill_gap))

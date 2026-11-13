@@ -96,6 +96,12 @@ class FakeDb:
             self.installs.append(body[0])
             self.script = self.write(body[0]) if self.write else body[0]
             return 200, ""
+        # The run's record of its database (trials-records): its identity by name, and its module
+        # log for the replica (none here, so no replica is recorded).
+        if path == "/v1/database/verify-trial-selftest-none":
+            return 200, '{"database_identity": {"__identity__": "0xc200selftest"}}'
+        if path.startswith("/v1/database/verify-trial-selftest-none/logs"):
+            return 404, ""
         raise AssertionError(path)
 
     def rows(self, query):

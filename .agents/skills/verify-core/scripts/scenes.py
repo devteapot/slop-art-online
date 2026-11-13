@@ -1879,7 +1879,8 @@ def wall_spots(s, n=4):
 
 def flee_wall(s):
     """A person flees another into an inside corner (the way straight away blocked within
-    3.5 m, the way 45° round it too) with an open side: the flight takes the open side
+    3.5 m, the way 45° round it too) with an open side, first from a threat standing still, then
+    from one walking after it (`goto` the fleer): the flight takes the open side
     (`steer::flee_way`) and gets clear, never "cornered" and never closing on the
     threat by more than a stride. Default seed (the map's edge, water and town walls)."""
     for c in s.rows("SELECT id, alive FROM character"):
@@ -1899,42 +1900,181 @@ def flee_wall(s):
         n = max(1, int(math.dist(a, b) * 4))
         return math.dist(a, b) <= 11.0 and not any((int(a[0] + (b[0] - a[0]) * i / n), int(a[1] + (b[1] - a[1]) * i / n)) in opaque for i in range(n + 1))
     s.expect("the map has inside corners with an open side", len(spots) >= 2, {"spots": spots})
+    s.expect("two people for each corner", len(people) >= 2 * len(spots), {"people": len(people)})
     results = []
-    for i, ((px, py), d) in enumerate(spots):
+    flights = [(i, spot, mode) for mode in ("still", "chasing") for i, spot in enumerate(spots)]
+    for i, ((px, py), d), mode in flights:
         f, t = people[2 * i], people[2 * i + 1]
+        s.graph(t, {"wait": 300})
         s.call("place_at", f, px, py)
         s.call("place_at", t, px - 5.0 * math.cos(d), py - 5.0 * math.sin(d))
         time.sleep(0.6)
         start = apart(s, f, t)
+        began = body_at(s, t)
         since = max([r["id"] for r in s.rows(f"SELECT id FROM experience WHERE observer = {f}")] or [0])
         s.graph(f, {"seq": [{"do": {"skill": "flee", "target": {"id": t}}}, {"wait": 300}]})
+        if mode == "chasing":
+            # The threat walks after the fleer (held by sight: out of sight, to where it saw it).
+            s.graph(t, {"seq": [{"do": {"skill": "goto", "target": {"id": f}}}, {"wait": 300}]})
         t0 = time.monotonic()
         track, seen, goal = [], False, None
+        # Distances while the flight is under way (a chaser closes in again once it stops).
         while time.monotonic() - t0 < 15:
-            track.append(apart(s, f, t))
+            gap = apart(s, f, t)
             fleeing = any(r["skill"] == "flee" for r in s.rows(f"SELECT skill FROM activity WHERE id = {f}"))
             if fleeing and goal is None:
                 goal = s.rows(f"SELECT goal, target, gx, gy, keep FROM steer WHERE id = {f}", "steer")[0]
             seen = seen or fleeing
             if seen and not fleeing:
                 break
+            track.append(gap)
             time.sleep(0.3)
-        track.append(apart(s, f, t))
+        track = track or [apart(s, f, t)]
         # A plan step's failure is told at the graph's next evaluation.
         time.sleep(1.5)
         told = [r["text"] for r in s.rows(f"SELECT id, text FROM experience WHERE observer = {f}") if r["id"] > since]
         cornered = any("cornered" in x for x in told)
         seen_at_end = in_sight(body_at(s, f), body_at(s, t))
+        # Where the flight took it, from where the threat stood when it began (the samples are
+        # sparse on a loaded server, and a chaser closes in again once the flight stops).
+        got = round(math.dist(body_at(s, f), began), 2)
         falls = [(a, b) for a, b in zip(track, track[1:]) if b < a - 1.0]
-        results.append({"spot": [px, py], "way": round(d, 3), "fleer": f, "threat": t, "start": start, "end": track[-1], "cornered": cornered, "seen_at_end": seen_at_end, "falls": falls, "goal": goal, "told": told[-4:], "track": track})
+        results.append({"mode": mode, "spot": [px, py], "way": round(d, 3), "fleer": f, "threat": t, "start": start, "end": max(track), "got": got, "cornered": cornered, "seen_at_end": seen_at_end, "falls": falls, "goal": goal, "told": told[-4:], "track": track})
         s.graph(f, {"wait": 300})
+        s.graph(t, {"wait": 300})
     (s.out / f"{s.name}-flights.json").write_text(json.dumps(results, indent=2) + "\n")
-    s.expect("no flight is cornered", all(not r["cornered"] for r in results), [(r["spot"], r["told"]) for r in results if r["cornered"]])
-    # A flight ends `flee_clear` farther, or sooner once the threat is out of the fleer's sight
-    # (a graph's flee step ends when what it fled is no longer perceived: beyond day sight, 11 m,
-    # or behind a wall or rock).
-    s.expect("every flight gets clear: 6 m farther than it began, or out of the threat's sight", all(r["end"] >= r["start"] + 6.0 or not r["seen_at_end"] for r in results), [(r["spot"], r["start"], r["end"], r["seen_at_end"]) for r in results])
+    for mode in ("still", "chasing"):
+        print(f"{mode}: " + "; ".join(f"{r['spot']} {r['start']} -> {r['got']}{' cornered' if r['cornered'] else ''}" for r in results if r["mode"] == mode))
+    s.expect("no flight is cornered, from a threat standing or walking after it", all(not r["cornered"] for r in results), [(r["mode"], r["spot"], r["told"]) for r in results if r["cornered"]])
+    # A flight ends `flee_clear` (9 m) farther from the threat, or from where it last saw it.
+    s.expect("every flight gets clear: it stops at least 6 m farther from where the threat began", all(r["got"] >= r["start"] + 6.0 for r in results), [(r["mode"], r["spot"], r["start"], r["got"]) for r in results])
     s.expect("no flight closes on the threat by more than a stride", all(not r["falls"] for r in results), [(r["spot"], r["falls"]) for r in results if r["falls"]])
+
+
+def opaque_tiles(s):
+    """The tiles that hide what is behind them (rock and walls, `Terrain::opaque`)."""
+    out = set()
+    for row in s.rows("SELECT * FROM terrain_chunk"):
+        data = row["tiles"]
+        data = bytes.fromhex(data.removeprefix("0x")) if isinstance(data, str) else bytes(data)
+        cx, cy = row["id"] & 0xFFFF, row["id"] >> 16
+        out.update((cx * 16 + k % 16, cy * 16 + k // 16) for k, t in enumerate(data) if t in (4, 7))
+    return out
+
+
+def hidden_spots(s, n=2):
+    """Setups for a pursuit that loses its target behind a wall: `a` (the pursuer) and `b` 6 m
+    off with a clear line between them, and `c` 9–13 m from `a`, walkable, with a wall or rock on
+    the lines from both `a` and `b` (so the target, moved there, is out of sight from where it was
+    last seen too) and at least 6 m from `b`. Up to `n`, 40 m apart."""
+    W, H, walk = tile_grid(s)
+    op = opaque_tiles(s)
+
+    def clear(p, q):
+        k = max(1, int(math.dist(p, q) * 4))
+        return not any((int(p[0] + (q[0] - p[0]) * i / k), int(p[1] + (q[1] - p[1]) * i / k)) in op for i in range(k + 1))
+
+    def walk_line(p, q):
+        k = max(1, int(math.dist(p, q) * 4))
+        return all(walk(p[0] + (q[0] - p[0]) * i / k, p[1] + (q[1] - p[1]) * i / k) for i in range(k + 1))
+
+    out = []
+    for y in range(16, H - 16, 3):
+        for x in range(16, W - 16, 3):
+            a = (x + 0.5, y + 0.5)
+            if not walk(*a) or any(math.dist(a, q[0]) < 40 for q in out):
+                continue
+            for k in range(8):
+                u = k * math.pi / 4
+                b = (a[0] + 6 * math.cos(u), a[1] + 6 * math.sin(u))
+                if not walk_line(a, b) or not clear(a, b):
+                    continue
+                c = None
+                for r in (10.0, 12.0, 9.0, 13.0):
+                    for j in range(24):
+                        v = j * math.pi / 12
+                        q = (int(a[0] + r * math.cos(v)) + 0.5, int(a[1] + r * math.sin(v)) + 0.5)
+                        if walk(*q) and math.dist(q, b) >= 6 and not clear(a, q) and not clear(b, q):
+                            c = q
+                            break
+                    if c:
+                        break
+                if c:
+                    out.append((a, b, c))
+                    break
+            if len(out) >= n:
+                return out
+    return out
+
+
+def pursue_last_seen(s):
+    """Nothing is tracked out of sight (docs/MOVEMENT_MIND.md, `pursue-last-seen`).
+    A pursuit: a person walks after another (`goto` them) who is then moved behind a wall 9–13 m
+    away, out of sight from the pursuer and from where it was last seen. The pursuer goes to the
+    last-seen place, does not find them, and is told "lost sight of them"; it never goes for where
+    they really are. A flight: a person flees another who is then moved 40 m off, out of sight; the
+    flight runs on from where the threat was last seen until it is `flee_clear` (9 m) farther from
+    there. Default seed."""
+    for c in s.rows("SELECT id, alive FROM character"):
+        if c["alive"]:
+            s.graph(c["id"], {"wait": 300})
+    people = [c["id"] for c in s.rows("SELECT id FROM character WHERE kind = 'person' AND alive = true")]
+    setups = hidden_spots(s)
+    s.expect("the map has a wall to hide behind", len(setups) >= 1, {"setups": setups})
+    chases = []
+    for i, (a, b, c) in enumerate(setups):
+        p, t = people[2 * i], people[2 * i + 1]
+        s.call("place_at", p, *a)
+        s.call("place_at", t, *b)
+        time.sleep(0.6)
+        since = max([r["id"] for r in s.rows(f"SELECT id FROM experience WHERE observer = {p}")] or [0])
+        s.graph(p, {"seq": [{"do": {"skill": "goto", "target": {"id": t}}}, {"wait": 300}]})
+        time.sleep(0.5)
+        last = body_at(s, t)
+        s.call("place_at", t, *c)
+        hid = body_at(s, t)
+        t0 = time.monotonic()
+        track, goals, nearest_c = [], [], 99.0
+        while time.monotonic() - t0 < 14:
+            me = body_at(s, p)
+            track.append([round(me[0], 2), round(me[1], 2)])
+            nearest_c = min(nearest_c, math.dist(me, hid))
+            g = s.rows(f"SELECT goal, gx, gy FROM steer WHERE id = {p}")
+            goals.append(g[0] if g else None)
+            if not any(r["skill"] == "goto" for r in s.rows(f"SELECT skill FROM activity WHERE id = {p}")):
+                break
+            time.sleep(0.4)
+        time.sleep(1.5)
+        told = [r["text"] for r in s.rows(f"SELECT id, text FROM experience WHERE observer = {p}") if r["id"] > since]
+        end = body_at(s, p)
+        chases.append({"pursuer": p, "target": t, "a": a, "b": b, "c": c, "last_seen": last, "hidden_at": hid, "end": end, "end_to_last_seen": round(math.dist(end, last), 2), "nearest_to_hidden": round(nearest_c, 2), "told": told[-3:], "goals": goals, "track": track})
+        s.graph(p, {"wait": 300})
+    (s.out / f"{s.name}-chases.json").write_text(json.dumps(chases, indent=2) + "\n")
+    s.expect("the pursuer goes to where it last saw them (ends within 3 m of it)", all(r["end_to_last_seen"] <= 3.0 for r in chases), [(r["last_seen"], r["end"], r["end_to_last_seen"]) for r in chases])
+    s.expect("it never goes for where they are behind the wall (stays over 4 m from them)", all(r["nearest_to_hidden"] > 4.0 for r in chases), [(r["hidden_at"], r["nearest_to_hidden"]) for r in chases])
+    s.expect("its steering aims only at the last-seen place", all(all(g is None or g["goal"] != 2 or math.dist((g["gx"], g["gy"]), r["last_seen"]) <= 1.5 for g in r["goals"]) for r in chases), [r["goals"] for r in chases])
+    s.expect("it is told it lost sight of them", all(any("lost sight of them" in x for x in r["told"]) for r in chases), [r["told"] for r in chases])
+    # A flight from a threat that goes out of sight.
+    f, t = people[-1], people[-2]
+    spot = open_patch(s, size=24)
+    s.call("place_at", f, *spot)
+    s.call("place_at", t, spot[0] - 5.0, spot[1])
+    time.sleep(0.6)
+    start = apart(s, f, t)
+    s.graph(f, {"seq": [{"do": {"skill": "flee", "target": {"id": t}}}, {"wait": 300}]})
+    time.sleep(0.8)
+    last = body_at(s, t)
+    far = (spot[0] - 40.0, spot[1]) if spot[0] > 50 else (spot[0] + 40.0, spot[1])
+    s.call("place_at", t, *far)
+    t0 = time.monotonic()
+    while time.monotonic() - t0 < 12:
+        if not any(r["skill"] == "flee" for r in s.rows(f"SELECT skill FROM activity WHERE id = {f}")):
+            break
+        time.sleep(0.4)
+    end = body_at(s, f)
+    flight = {"fleer": f, "threat": t, "start": start, "last_seen": last, "moved_to": far, "end": end, "from_last_seen": round(math.dist(end, last), 2)}
+    (s.out / f"{s.name}-flight.json").write_text(json.dumps(flight, indent=2) + "\n")
+    s.expect("the flight runs on from where the threat was last seen until clear of it", flight["from_last_seen"] >= start + 7.0, flight)
 
 
 def open_patch(s, size=14, avoid=()):
@@ -4552,7 +4692,7 @@ def pack_reflex(s):
         s.expect("law off: no wolf's starting graph or hunt routine carries the reflex", all(x["reflexes"] == 0 for x in checked), seen)
     s.expect("a newborn's instinct (wolf_young) never carries it", all(x["reflexes"] == 0 for x in seen["newborns"]), seen["newborns"])
 
-SCENES = {"say": say, "skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight, "dealings": dealings, "answers": answers, "flee": flee, "flee_wall": flee_wall, "food": food, "refusal": refusal, "teach": teach, "senses": senses, "moves": moves, "remains": remains, "laws": laws, "doing": doing, "death-names": death_names, "drop": drop, "low": drop, "family_laws": family_laws, "fov": fov, "placement": placement, "alarms": alarms, "health_seen": health_seen, "audience": audience, "outcomes": outcomes, "crowd_sight": crowd_sight, "stranger_filter": stranger_filter, "cues": cues, "regard_check": regard_check}
+SCENES = {"say": say, "skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight, "dealings": dealings, "answers": answers, "flee": flee, "flee_wall": flee_wall, "food": food, "refusal": refusal, "teach": teach, "senses": senses, "moves": moves, "remains": remains, "laws": laws, "doing": doing, "death-names": death_names, "drop": drop, "low": drop, "family_laws": family_laws, "fov": fov, "placement": placement, "alarms": alarms, "health_seen": health_seen, "audience": audience, "outcomes": outcomes, "crowd_sight": crowd_sight, "stranger_filter": stranger_filter, "cues": cues, "regard_check": regard_check, "pursue_last_seen": pursue_last_seen}
 
 
 def goods(s):
@@ -6029,6 +6169,85 @@ def heard_first(s):
 SCENES["heard_first"] = heard_first
 
 
+def sweep_kept(s):
+    """A player's rows under a law that reads distance are each what projecting it afresh gives
+    (docs/PERCEPTION.md, "The perceived set"; `perception::kept_sweep`). On a world whose
+    `perceived_of` reads `p.dist` (Cullet's `known_within`, 24 m), the sweep keeps what each row
+    was projected from and projects it again only when that changed. With the
+    `regard_cache_check` law on, every kept sweep compares every row of the player with a fresh
+    projection and counts differences (`sweep kept: kept=… projected=… full=… compared=…
+    differed=…`, one line a second). On an open ray a player watches, for about 50 s: two walkers
+    going back and forth across the cut (20 m and 28 m), a pair fighting at 6 m (bands, the
+    frames' and blows' writes to rows), one of them appraised by the player (a reveal, exact
+    health), a stranger telling the player its name, the player learning a technique, and a
+    death in sight (admin `kill`). Passes when rows were kept, many compared, and none differed.
+    Needs a seed whose law reads distance (`--seed cullet`); the law is restored at the end."""
+    src = s.rows("SELECT source FROM script")[0]["source"]
+    known = law_number(src, "known_within") if "fn known_within()" in src else None
+    s.expect("the world's perceived_of reads distance (a seed like Cullet's)", known is not None, None)
+    st = json.loads((s.out / "state.json").read_text())
+    verify = [str(ROOT / ".agents/skills/verify/scripts/verify.py")]
+    subprocess.run(["python3", *verify, "player", "--run", st["run"], "join", "Sweeper"], check=False, capture_output=True)
+    st = json.loads((s.out / "state.json").read_text())
+    viewer = st["identity"]
+    present = lambda: subprocess.run(["python3", *verify, "player", "--run", st["run"], "move", "0", "0"], check=False, capture_output=True)
+    present()
+    me = s.wait(lambda: next(iter(s.rows(f"SELECT id FROM character WHERE controller = 0x{viewer}")), None))["id"]
+    ray = open_ray(s, int(known) + 8)
+    (s.out / f"{s.name}-ray.json").write_text(json.dumps(ray) + "\n")
+    walk_a, walk_b, fight_a, fight_b, talker, dying = s.people(6)
+    set_law(s, "regard_cache_check", True)
+    t0 = time.time()
+    try:
+        s.call("place_at", me, *ray[0])
+        s.call("place_at", walk_a, *ray[int(known) - 4])
+        s.call("place_at", walk_b, *ray[int(known) + 4])
+        s.call("place_at", fight_a, *ray[6])
+        s.call("place_at", fight_b, *ray[7])
+        s.call("place_at", talker, *ray[3])
+        s.call("place_at", dying, *ray[10])
+        name = s.rows(f"SELECT name FROM character WHERE id = {talker}")[0]["name"]
+        for k in range(6):
+            present()
+            near, far = ray[int(known) - 4], ray[int(known) + 4]
+            s.graph(walk_a, {"seq": [{"do": {"skill": "goto", "target": {"at": list(far if k % 2 == 0 else near)}}}, {"wait": 60}]})
+            s.graph(walk_b, {"seq": [{"do": {"skill": "goto", "target": {"at": list(near if k % 2 == 0 else far)}}}, {"wait": 60}]})
+            if k == 0:
+                s.graph(fight_a, {"first": [{"do": {"skill": "attack", "target": {"id": fight_b}}}, {"wait": 1}]})
+                s.graph(fight_b, {"first": [{"do": {"skill": "attack", "target": {"id": fight_a}}}, {"wait": 1}]})
+            if k == 1:
+                subprocess.run(["python3", *verify, "player", "--run", st["run"], "act", json.dumps({"do": {"skill": "appraise", "target": {"id": fight_a}}})], check=False, capture_output=True)
+                s.graph(talker, {"seq": [{"say": f"I am {name}."}, {"wait": 300}]})
+            if k == 2:
+                s.call("grant_know_how", me, "wound_tending")
+            if k == 3:
+                s.call("kill", dying, "verify sweep_kept")
+                for f in (fight_a, fight_b):
+                    s.graph(f, {"wait": 120})
+            time.sleep(8)
+    finally:
+        set_law(s, "regard_cache_check", False, check=False)
+        for who in (walk_a, walk_b, fight_a, fight_b, talker):
+            s.graph(who, {"wait": 120})
+        off_the_line(s, ray, [me, walk_a, walk_b, fight_a, fight_b, talker], dy=50)
+    logs = s.command("logs", "-s", "local", s.db, "-n", "400000").stdout
+    kept = [tuple(int(x) for x in m.groups()) for m in re.finditer(r"sweep kept: kept=(\d+) projected=(\d+) full=(\d+) compared=(\d+) differed=(\d+)", logs)]
+    total = dict(zip(("kept", "projected", "full", "compared", "differed"), [sum(k[i] for k in kept) for i in range(5)]))
+    errors = [l for l in logs.splitlines() if "sweep kept: #" in l][:10]
+    told = s.rows(f"SELECT * FROM acquaintance WHERE observer = {me} AND known = {talker}")
+    revealed = s.rows(f"SELECT * FROM chronicle WHERE kind = 'attack' AND a = {fight_a}")
+    (s.out / f"{s.name}-sweep-kept.json").write_text(json.dumps({**total, "errors": errors, "told": told, "seconds": round(time.time() - t0)}, indent=1) + "\n")
+    print(f"MEASURE sweep kept: {total}", flush=True)
+    s.expect("the talker told the player its name mid-run", bool(told), told, fatal=False)
+    s.expect("the pair fought in sight", bool(revealed), None, fatal=False)
+    s.expect("rows were kept across sweeps (the kept path ran)", total["kept"] > 0 and total["projected"] > 0, total)
+    s.expect("many rows were compared with fresh projections", total["compared"] >= 1000, total)
+    s.expect("no row differed from a fresh projection", total["differed"] == 0 and not errors, errors)
+
+
+SCENES["sweep_kept"] = sweep_kept
+
+
 def battle_cheap(s):
     """The fighters' cheaper paths change nothing a fighter perceives or does (docs/BATTLE_SCALE.md,
     battle-cheap). A battle of 12 minded people on an open line, a campfire and a shelter among
@@ -6097,6 +6316,198 @@ def battle_cheap(s):
 SCENES["cheap_check_ctx"] = battle_cheap
 SCENES["cheap_alarms"] = battle_cheap
 SCENES["cheap_warmth"] = battle_cheap
+
+
+def _sweep_player(s, name):
+    """The run's player, joined and present, and its character id (as `sweep_kept`)."""
+    st = json.loads((s.out / "state.json").read_text())
+    verify = [str(ROOT / ".agents/skills/verify/scripts/verify.py")]
+    subprocess.run(["python3", *verify, "player", "--run", st["run"], "join", name], check=False, capture_output=True)
+    st = json.loads((s.out / "state.json").read_text())
+    viewer = st["identity"]
+    present = lambda: subprocess.run(["python3", *verify, "player", "--run", st["run"], "move", "0", "0"], check=False, capture_output=True)
+    present()
+    me = s.wait(lambda: next(iter(s.rows(f"SELECT id FROM character WHERE controller = 0x{viewer}")), None))["id"]
+    return me, viewer, present
+
+
+def _sweep_counts(s, since_line=0):
+    """The `sweep kept` report lines of the world's log from line `since_line` on: totals, the
+    instances that reported, and error lines naming a differing row."""
+    lines = s.command("logs", "-s", "local", s.db, "-n", "400000").stdout.splitlines()
+    kept = [m.groups() for m in (re.search(r"sweep kept: kept=(\d+) projected=(\d+) full=(\d+) compared=(\d+) differed=(\d+)(?: instance=(-?\d+))?", l) for l in lines[since_line:]) if m]
+    total = dict(zip(("kept", "projected", "full", "compared", "differed"), [sum(int(k[i]) for k in kept) for i in range(5)]))
+    instances = sorted({k[5] for k in kept if k[5]})
+    errors = [l for l in lines[since_line:] if "sweep kept: #" in l][:10]
+    return total, instances, errors, lines[since_line:]
+
+
+def _http(path, body, token=None):
+    url = os.environ.get("LIVING_STDB_URL", "http://127.0.0.1:3300").rstrip("/")
+    req = urllib.request.Request(url + path, data=json.dumps(body).encode(), method="POST")
+    req.add_header("Content-Type", "application/json")
+    if token:
+        req.add_header("Authorization", f"Bearer {token}")
+    try:
+        with urllib.request.urlopen(req, timeout=60) as r:
+            return r.status, r.read().decode()
+    except urllib.error.HTTPError as e:
+        return e.code, e.read().decode()
+
+
+def sweep_rollback(s):
+    """Nothing the perception sweep keeps in module memory outlives a transaction that rolled back
+    (docs/PERCEPTION.md, "Module memory and rollback"). SpacetimeDB 2.14.1 rolls back a failed
+    reducer's rows and keeps its instance's memory when it returns an error, and replaces the
+    instance when it traps. On a world whose law reads distance (Cullet), a player watches
+    strangers on an open ray with `regard_cache_check` on, while the `memory_test` law makes one
+    step fail after it has written: (1) every tick fails after its sweep while two strangers are
+    moved across the 24 m cut (the sweeps that saw them cross roll back); (2) every tick panics
+    after its sweep while they cross back (the instance is replaced); (3) `place_at` fails after
+    moving a stranger across the cut; (4) `kill` fails after the death; (5) a newcomer's `join`
+    fails after its sweep, then joins. After each, later sweeps compare every row with a fresh
+    projection. Passes when each failure happened and was rolled back, the kept state was cleared
+    after the failed ticks, a trap gave a new instance, and no row differed. A sweep that kept
+    what a rolled-back tick saw (the guard on the committed tick removed) fails it. Needs a seed
+    whose law reads distance (`--seed cullet`)."""
+    src = s.rows("SELECT source FROM script")[0]["source"]
+    known = law_number(src, "known_within") if "fn known_within()" in src else None
+    s.expect("the world's perceived_of reads distance (a seed like Cullet's)", known is not None, None)
+    near, far = int(known) - 4, int(known) + 4
+    me, viewer, present = _sweep_player(s, "Rollback")
+    ray = open_ray(s, far + 2)
+    a, b, c, d = s.people(4)
+    since = len(s.command("logs", "-s", "local", s.db, "-n", "400000").stdout.splitlines())
+    body = lambda who: s.rows(f"SELECT x, y FROM body WHERE id = {who}")[0]
+    alive = lambda who: s.rows(f"SELECT alive FROM character WHERE id = {who}")[0]["alive"]
+    set_law(s, "regard_cache_check", True)
+    done = {}
+    try:
+        s.call("place_at", me, *ray[0])
+        s.call("place_at", a, *ray[near])
+        s.call("place_at", b, *ray[far])
+        s.call("place_at", c, *ray[6])
+        s.call("place_at", d, *ray[3])
+        present()
+        time.sleep(3)
+        # (1) Ticks fail after their sweep while a and b cross the cut.
+        set_law(s, "memory_test", 1)
+        time.sleep(0.4)
+        s.call("place_at", a, *ray[far])
+        s.call("place_at", b, *ray[near])
+        time.sleep(1.5)
+        set_law(s, "memory_test", 0)
+        present()
+        time.sleep(3)
+        # (2) Ticks panic after their sweep while they cross back.
+        set_law(s, "memory_test", 2)
+        time.sleep(0.4)
+        s.call("place_at", a, *ray[near])
+        s.call("place_at", b, *ray[far])
+        time.sleep(1.5)
+        set_law(s, "memory_test", 0)
+        present()
+        time.sleep(4)
+        # (3) place_at fails after moving a across the cut: it stays where it was.
+        set_law(s, "memory_test", 3)
+        before = body(a)
+        r = s.call("place_at", a, *ray[far], check=False)
+        after = body(a)
+        done["place"] = r.returncode != 0 and abs(after["x"] - before["x"]) < 0.01 and abs(after["y"] - before["y"]) < 0.01
+        set_law(s, "memory_test", 0)
+        present()
+        time.sleep(2)
+        # (4) kill fails after the death: c lives.
+        set_law(s, "memory_test", 4)
+        r = s.call("kill", c, "verify sweep_rollback", check=False)
+        done["kill"] = r.returncode != 0 and alive(c)
+        set_law(s, "memory_test", 0)
+        present()
+        time.sleep(2)
+        # (5) A newcomer's join fails after its sweep, then succeeds.
+        token = json.loads(_http("/v1/identity", {})[1])["token"]
+        set_law(s, "memory_test", 5)
+        code1, _ = _http(f"/v1/database/{s.db}/call/join", ["Latecomer"], token)
+        set_law(s, "memory_test", 0)
+        code2, _ = _http(f"/v1/database/{s.db}/call/join", ["Latecomer"], token)
+        done["join"] = code1 != 200 and code2 == 200
+        present()
+        time.sleep(3)
+    finally:
+        set_law(s, "memory_test", 0, check=False)
+        set_law(s, "regard_cache_check", False, check=False)
+        off_the_line(s, ray, [me, a, b, c, d], dy=54)
+    total, instances, errors, lines = _sweep_counts(s, since)
+    failed = {n: sum(f"memory_test {n}:" in l for l in lines) for n in (1, 2, 3, 4, 5)}
+    cleared = sum("sweep kept: cleared at tick" in l for l in lines)
+    (s.out / f"{s.name}-sweep-rollback.json").write_text(json.dumps({**total, "instances": instances, "failed": failed, "cleared": cleared, "done": done, "errors": errors}, indent=1) + "\n")
+    print(f"MEASURE sweep rollback: {total}, failures {failed}, kept state cleared {cleared} times, instances {len(instances)}", flush=True)
+    s.expect("(1) ticks failed after their sweep, and the kept state was cleared after them", failed[1] >= 3 and cleared >= 1, {"failed": failed, "cleared": cleared})
+    s.expect("(2) ticks panicked after their sweep, and a new instance reported", failed[2] >= 1 and len(instances) >= 2, {"failed": failed, "instances": instances})
+    s.expect("(3) place_at failed after moving, and the body did not move", done.get("place") and failed[3] >= 1, done)
+    s.expect("(4) kill failed after the death, and the character lives", done.get("kill") and failed[4] >= 1, done)
+    s.expect("(5) join failed after its sweep, then joined", done.get("join") and failed[5] >= 1, done)
+    s.expect("many rows were compared with fresh projections", total["compared"] >= 500, total)
+    s.expect("no row differed from a fresh projection", total["differed"] == 0 and not errors, errors)
+
+
+SCENES["sweep_rollback"] = sweep_rollback
+
+
+def sweep_marks(s):
+    """A change made by a reducer outside the tick reaches a player's kept rows through committed
+    data, not module memory (docs/PERCEPTION.md, "Module memory and rollback"): an introduction
+    writes the hearer's `knowledge_epoch` row, which the sweep reads by primary key. On a world
+    whose law reads distance (Cullet), with `regard_cache_check` on and the `memory_test` law at 6
+    (the marks kept in module memory are dropped, as if the reducer had run in another instance),
+    a held stranger 3 m from a player says its name to the player through `mind_say` (a reducer,
+    not the tick). Passes when the player's row of the stranger carries the name within a second
+    (five sweeps; one sweep is 200 ms), the stranger was a stranger before, and no row differed.
+    A sweep that learnt of the introduction only from a mark in memory fails it: the row keeps "a
+    stranger" until the next full re-projection, about 30 s later."""
+    src = s.rows("SELECT source FROM script")[0]["source"]
+    s.expect("the world's perceived_of reads distance (a seed like Cullet's)", "fn known_within()" in src, None)
+    me, viewer, present = _sweep_player(s, "Marks")
+    line = clear_line(s)
+    (stranger,) = s.people(1)
+    name = s.rows(f"SELECT name FROM character WHERE id = {stranger}")[0]["name"]
+    since = len(s.command("logs", "-s", "local", s.db, "-n", "400000").stdout.splitlines())
+    row = lambda: next(iter(s.http_rows(f"SELECT name, label FROM projected WHERE viewer = 0x{viewer} AND body = {stranger}")), {})
+    set_law(s, "regard_cache_check", True)
+    try:
+        s.call("place_at", me, *line[0])
+        s.call("place_at", stranger, *line[3])
+        present()
+        time.sleep(3)
+        before = row()
+        set_law(s, "memory_test", 6)
+        time.sleep(0.5)
+        now = s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+        t0 = time.monotonic()
+        s.call("mind_say", stranger, f"I am {name}.", me, "", now, hf_decided(0))
+        named_after = None
+        while time.monotonic() - t0 < 5.0:
+            if row().get("name") == name:
+                named_after = round(time.monotonic() - t0, 2)
+                break
+            time.sleep(0.05)
+        told = s.rows(f"SELECT * FROM acquaintance WHERE observer = {me} AND known = {stranger}")
+        epoch = s.rows(f"SELECT * FROM knowledge_epoch WHERE id = {me}")
+        time.sleep(1)
+    finally:
+        set_law(s, "memory_test", 0, check=False)
+        set_law(s, "regard_cache_check", False, check=False)
+        off_the_line(s, line, [me, stranger], dy=58)
+    total, instances, errors, _ = _sweep_counts(s, since)
+    (s.out / f"{s.name}-sweep-marks.json").write_text(json.dumps({"before": before, "named_after_s": named_after, "told": told, "epoch": epoch, **total, "errors": errors}, indent=1) + "\n")
+    print(f"MEASURE sweep marks: named after {named_after} s, {total}", flush=True)
+    s.expect("before: the stranger is a stranger to the player", before.get("label") == "a stranger" and not before.get("name"), before)
+    s.expect("the introduction happened (an acquaintance row) and moved the player's knowledge_epoch row", bool(told) and bool(epoch), {"told": told, "epoch": epoch})
+    s.expect("the player's row carries the name within a second, memory marks dropped", named_after is not None and named_after <= 1.0, {"named_after_s": named_after})
+    s.expect("no row differed from a fresh projection", total["differed"] == 0 and not errors, errors)
+
+
+SCENES["sweep_marks"] = sweep_marks
 
 
 def admin_vitals(s):

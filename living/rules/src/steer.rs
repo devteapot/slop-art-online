@@ -357,6 +357,8 @@ pub fn sweep(map: &Map, p: (f32, f32), seg: &Segment, clearance: f32) -> (f32, b
 pub const ROOM_M: f32 = 1.0;
 /// The farthest (m) a flight weighs the ground round it, however far it sees.
 pub const FLEE_REACH_M: f32 = 16.0;
+/// How far on (m) a flight looks from a spot it might make for, to tell open ground from a dead end.
+pub const FLEE_ON_M: f32 = 6.0;
 
 /// How far a body can go straight along `h` from `p`, up to `max` metres (0.25 m steps, kept
 /// `clearance` from obstacles as steering keeps it).
@@ -380,8 +382,9 @@ pub fn free_run(map: &Map, p: (f32, f32), h: f32, max: f32, clearance: f32) -> f
 /// Straight away when that is open for `look`. Otherwise every tile reachable within `reach`
 /// (path length up to 1.5 × `reach`, steps between walkable tiles, a diagonal only past two open
 /// sides as the route search takes it) is scored: its distance from the threat (counted only up to
-/// `look` farther than now), less a quarter of the way there, less twice how much nearer the way
-/// passes to the threat than the body is now; a little for keeping the way it goes. The body heads
+/// `look` farther than now) plus how far it could keep running straight away from there (up to
+/// [`FLEE_ON_M`]), less a quarter of the way there, less twice how much nearer the way passes to
+/// the threat than the body is now; a little for keeping the way it goes. The body heads
 /// for the farthest point of the way to the best tile that it can see in a straight line. `None`:
 /// no reachable tile is [`ROOM_M`] farther from the threat (cornered).
 pub fn flee_way(map: &Map, p: (f32, f32), threat: (f32, f32), heading: f32, look: f32, reach: f32, clearance: f32) -> Option<f32> {
@@ -420,7 +423,10 @@ pub fn flee_way(map: &Map, p: (f32, f32), threat: (f32, f32), heading: f32, look
         let (cx, cy) = centre(k);
         if k != start {
             let dt = (cx - threat.0).hypot(cy - threat.1);
-            let gain = dt.min(d0 + look);
+            // How far it could keep running straight away from there: a slot or a notch that
+            // gains a few metres and then traps the body loses to open ground.
+            let on = if dt >= d0 + ROOM_M { free_run(map, (cx, cy), (cy - threat.1).atan2(cx - threat.0), FLEE_ON_M, clearance) } else { 0.0 };
+            let gain = (dt + on).min(d0 + look + FLEE_ON_M);
             let toward = (cy - p.1).atan2(cx - p.0);
             let score = gain - 0.25 * cost as f32 / 100.0 + 2.0 * (near[k] - d0).min(0.0) + 0.3 * wrap(toward - heading).cos();
             if dt >= d0 + ROOM_M && best.map_or(true, |(b, _)| score > b) {
@@ -944,6 +950,10 @@ mod tests {
     /// Runs a flight from `threat` with the body's own steering (`flee_way` then `plan`, a
     /// look every quarter second) until it is 9 m farther than it began; returns the distances.
     fn flight(m: &Map, from: (f32, f32), threat: (f32, f32)) -> Result<(f32, f32), String> {
+        flight_seeing(m, from, threat, 11.0)
+    }
+
+    fn flight_seeing(m: &Map, from: (f32, f32), threat: (f32, f32), sight: f32) -> Result<(f32, f32), String> {
         let c = Tuning::default().clearance;
         let t = Tuning::default();
         let (mut p, mut heading, mut speed) = (from, 0.0f32, 0.0f32);
@@ -954,7 +964,7 @@ mod tests {
             if left <= 0.0 {
                 break;
             }
-            let dir = flee_way(m, p, threat, heading, left, 11.0, c).ok_or(format!("cornered at {p:?}"))?;
+            let dir = flee_way(m, p, threat, heading, left.min(sight), sight, c).ok_or(format!("cornered at {p:?}"))?;
             let seg = plan(m, p, heading, speed, Want { dir, speed: 3.0, agile: false, max_dt: 0.25 }, &t);
             if seg.blocked && seg.speed == 0.0 {
                 return Err(format!("stuck at {p:?}"));
@@ -993,6 +1003,48 @@ mod tests {
         // north and south of its mouth: the flight goes round it, not into it.
         let m = walled(64, 64, &[((31, 29), (38, 29)), ((31, 35), (38, 35)), ((38, 29), (38, 35))]);
         let (a, b) = flight(&m, (30.5, 32.5), (25.5, 32.5)).unwrap();
+        assert!(b >= a + 8.0, "{a} -> {b}");
+        // At night (6 m sight) by the water's edge of the default seed (verify-core flee_wall's
+        // (92.5, 12.5), its ground here as it is there): a one-tile notch gains a few metres and
+        // traps the body, as it did a fleer there; open ground is taken instead.
+        let ground = [
+            "..................................",
+            "..................................",
+            "..................................",
+            "..................................",
+            "..................................",
+            "..................................",
+            "..................................",
+            "..................................",
+            "..................................",
+            "..................................",
+            "..................................",
+            "....................###...........",
+            "....................###...........",
+            "..................########........",
+            "..................##########......",
+            ".................###..#..###......",
+            ".............##..##.......###.....",
+            "...........#####.##........###..##",
+            "..........######.##.........###.##",
+            "..........##..####...........#####",
+            "........###....##.............####",
+            ".......###...................#####",
+            ".....###.....................#####",
+            "#...###......................#####",
+            "#####........................###..",
+            "####.........................##...",
+            "..#...............................",
+        ];
+        let mut m = open(ground[0].len() as u32, ground.len() as u32);
+        for (y, row) in ground.iter().enumerate() {
+            for (x, ch) in row.chars().enumerate() {
+                if ch == '#' {
+                    m.set(x as i32, y as i32, Terrain::Wall);
+                }
+            }
+        }
+        let (a, b) = flight_seeing(&m, (14.5, 12.5), (10.5, 8.5), 6.0).unwrap();
         assert!(b >= a + 8.0, "{a} -> {b}");
         // Keeps the way it goes when two are as good (a straight wall: north or south).
         let m = walled(64, 64, &[((35, 0), (35, 63))]);

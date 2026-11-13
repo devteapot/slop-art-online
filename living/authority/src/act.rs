@@ -1057,11 +1057,11 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
             }
             "back_off" if creature => Goal::held(motion::GOAL_FLEE, target.id as u32, target.at, spacing.distance.unwrap_or(BACK_OFF_M), 0.0, sp, 0),
             "back_off" => Goal { kind: motion::GOAL_FLEE, target: 0, at: target.at, keep: spacing.distance.unwrap_or(BACK_OFF_M), speed: sp, flags: 0, pace: sp, far: 0.0, apart: 0.0 },
-            "goto" if creature => Goal::creature(target.id as u32, r, sp, motion::FLAG_EARLY),
+            "goto" if creature => Goal::creature(target.id as u32, target.at, r, sp, motion::FLAG_EARLY),
             "goto" | "wander" | "follow" => Goal::point(target.at, sp, motion::FLAG_EARLY),
             _ if aside => Goal::point(target.at, sp * common::moves_of(ctx, id, now).aside, 0),
             // Closing in on a creature: every look checks whether it is within reach.
-            _ if creature => Goal::creature(target.id as u32, (r - 0.25).max(0.4), sp, motion::FLAG_EACH),
+            _ if creature => Goal::creature(target.id as u32, target.at, (r - 0.25).max(0.4), sp, motion::FLAG_EACH),
             _ => {
                 // Aimed work (building beside, gathering from, reading a sign) stops at the
                 // edge of reach instead of walking onto the spot.
@@ -1964,7 +1964,7 @@ fn apply(ctx: &ReducerContext, a: &Activity, sctx: &SkillCtx, effects: Vec<Effec
                 let c = ctx.db.community().insert(Community { id: 0, name: name.clone(), founder: me, founded_ms: now, home_x: at.0, home_y: at.1 });
                 ctx.db.membership().insert(Membership { id: 0, community: c.id, member: me, since_ms: now });
                 crate::perception::answers_changed();
-                crate::perception::knowledge_changed(None);
+                crate::perception::knowledge_changed(ctx, None);
                 common::chronicle(ctx, now, "community", me, 0, at, format!("{my_name} founded {name}"));
                 witnessed(ctx, now, at, "community", me, 0, &format!("{{a}} founded a community called {name}"), 0.6, &[me]);
                 notes.push(format!("founded {name}"));
@@ -2005,7 +2005,7 @@ fn apply(ctx: &ReducerContext, a: &Activity, sctx: &SkillCtx, effects: Vec<Effec
                 }
                 ctx.db.membership().insert(Membership { id: 0, community: mine.community, member: asker, since_ms: now });
                 crate::perception::answers_changed();
-                crate::perception::knowledge_changed(None);
+                crate::perception::knowledge_changed(ctx, None);
                 let cname = ctx.db.community().id().find(mine.community).map(|c| c.name).unwrap_or_default();
                 let an = common::name_of(ctx, asker);
                 common::chronicle(ctx, now, "community", asker, me, at, format!("{an} joined {cname}, welcomed by {my_name}"));
@@ -2021,7 +2021,7 @@ fn apply(ctx: &ReducerContext, a: &Activity, sctx: &SkillCtx, effects: Vec<Effec
                 ctx.db.membership().id().delete(m.id);
         crate::perception::answers_changed();
                 crate::perception::answers_changed();
-                crate::perception::knowledge_changed(None);
+                crate::perception::knowledge_changed(ctx, None);
                 common::chronicle(ctx, now, "community", me, 0, at, format!("{my_name} left {cname}"));
                 witnessed(ctx, now, at, "community", me, 0, &format!("{{a}} left {cname}"), 0.6, &[me]);
                 notes.push(format!("left {cname}"));
@@ -2417,6 +2417,7 @@ pub fn forget_dead(ctx: &ReducerContext, id: u32) {
         ctx.db.acquaintance().id().delete(a);
         crate::perception::answers_changed();
     }
+    ctx.db.knowledge_epoch().id().delete(id);
     for r in ctx.db.reveal().observer().filter(id).map(|r| r.id).collect::<Vec<_>>() {
         ctx.db.reveal().id().delete(r);
         crate::perception::answers_changed();
@@ -2801,7 +2802,7 @@ pub fn die_unseen(ctx: &ReducerContext, id: u32, cause: &str, now: u64, killer: 
         crate::perception::remember_member(ctx, id, m.community, now);
         ctx.db.membership().id().delete(m.id);
         crate::perception::answers_changed();
-        crate::perception::knowledge_changed(None);
+        crate::perception::knowledge_changed(ctx, None);
     }
     // What only this person knew how to do is gone unless they taught or wrote it down.
     for k in ctx.db.know_how().actor().filter(id).map(|k| k.id).collect::<Vec<_>>() {
