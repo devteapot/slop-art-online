@@ -418,6 +418,25 @@ The island seed: its about 310 residents, all AI, and no mind service. Fighters 
   - A 3-minute test with 40 fighters (`minds-loadgen-*`): 43 refills arrived one by one as fighters fell, 1–5 walking in at any moment, 33–40 fighting throughout.
 - **An offset between worlds, not builds: the measurement.** Idle, the `battle-scale` world measured 61.5 ticks a second and the other two 59.5, with no tick over budget. `bench.py` took its counts from the `stats` row, which housekeeping writes once a second with its stamp, but divided them by the wall time around two SQL calls. So a window could gain or lose one second's ticks, about ±2 a second over 30 s. Windows every 60 s keep one phase to housekeeping, so a world kept its offset for the whole run; `battle-cheap` alone, in another run, measured 62.3. Since `battle-cheap`, `bench.py` divides the counts by the stamps' interval. The acceptance tables above carry that error: each run's ticks per second within about ±3% (±1 at 30, ±2 at 60). Ticks over 16.7 ms and p99 come from the tick log and do not.
 
+## The lazy scene (`scene-lazy`)
+
+The profile after battle-cheap (2026-11-13; 200 fighters sustained with the fixed load generator, `profile_detail` on, host load 25–42, so per-call costs and shares only) put the graph run at 25% of the tick, about 88 µs an evaluation:
+- starting acts, 60 µs (the move's check 54 µs, mostly refusals for want of breath);
+- the body's alarms, 41 µs;
+- the scene, 21 µs, of which the sight test of every creature in range was 16 µs;
+- the nearest pick, 4.3 µs, scanning 2.5 of about 64 creatures in sight.
+
+The rest of the tick: combat resolution 30%, woken evaluations 24%, the fold's lines 12%, noticing 10%.
+
+**What is built** (the `scene_lazy` law, on; `scene_lazy_check` a diagnostic):
+- **Lazy sight.** A graph's scene is what the body senses (`perception::Sensing`): every creature within gathering range, nearest first, each tested for sight only when a reader comes to it. The nearest pick (`Ev::first_seen`) and a creature looked up by id (`Ev::seen_by_id`: `visible_creature`, and the `threatened` condition while sight has a field) test only as far as their answer needs: a fighter tests two or three creatures, not all in sight.
+- **Whole-list readers** (`Ev::creatures`: desires, `count`, `doing`, cues, noticing, the stranger filter) test every one. Resources and the heard list are gathered when first asked for.
+- **No copy.** The nearest pick reads the list in place, not a copy of the scene.
+- **Exact.** Same candidates, same order (`creatures_near`'s, by distance, ties in a fixed order), same sight test. `perception::sensed` is now `Sensing::all`, so both paths share one implementation. No state outlives an evaluation, so rollback and module memory do not arise.
+- **The proof** (verify-core `scene_lazy`): 12 fighters with `scene_lazy_check` on compared 10,195 lazy answers with sight all round and 9,152 by facing (1,561 by id). None differed. With the law off, no lazy answer was made and the battle went on.
+- **Expected saving** from the profile: about 11–13 ms/s of the sight tests and 3 ms/s of the copy at 200 fighters. That is about 3% of the tick, about +1.5 ticks a second at the 45.8 of the second window. To be measured in the next acceptance.
+- **One profiling count changed meaning.** `graph_scenes.seen_mean` (`note_scene`) counts only scenes whose whole list was built (noticing, desires, cues), not every graph evaluation's.
+
 ## Verification it would need
 
 - **Unit tests:**

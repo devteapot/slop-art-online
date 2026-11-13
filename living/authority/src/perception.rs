@@ -216,27 +216,85 @@ pub fn sees(ctx: &ReducerContext, id: u32, eye: &Body, at: (f32, f32), w: &World
 /// field when the world's law turns it on, with a clear line. Heard: only while it has a field,
 /// within its hearing and not seen ([`heard`] for one that has no scene to share).
 pub fn sensed(ctx: &ReducerContext, id: u32, at: (f32, f32), sight: f32, now: u64) -> (Vec<NearCreature>, Vec<NearCreature>) {
-    let map = common::map(ctx);
-    let w = common::world(ctx);
-    let senses = common::senses_of(ctx, id, &w, now);
-    let gather = common::gather_radius(ctx, sight);
-    let lit = gather > sight;
-    // Facing matters only with a field (one body lookup then), and only then is anything heard.
-    let field = senses.field.is_some();
-    let heading = if field { ctx.db.body().id().find(id).map_or(0.0, |b| common::facing_at(&b, now)) } else { 0.0 };
-    let hearing = if field { senses.hearing } else { 0.0 };
-    let (mut seen, mut heard) = (Vec::new(), Vec::new());
-    for c in common::creatures_near(ctx, at, gather.max(hearing), now) {
-        if c.id == id {
-            continue;
-        }
-        if c.dist <= gather && living_rules::sight::sees(&map, at, heading, c.pos, c.dist, &senses, if lit { common::glow_of(ctx, c.id, &w, now) } else { 0.0 }, None) {
-            seen.push(c);
-        } else if c.dist <= hearing {
-            heard.push(c);
-        }
+    Sensing::new(ctx, id, at, sight, now).all(ctx, now)
+}
+
+/// What a body senses, worked out as far as it is asked (docs/BATTLE_SCALE.md, scene-lazy): every
+/// creature within its gathering radius (or its hearing, while sight has a field), nearest first,
+/// each tested by the sight rule only when a reader comes to it. `all` tests every one and gives
+/// `sensed`'s lists; `first` and `by_id` test only as far as their answer needs, in the same
+/// order and by the same test, so they give what `all`'s seen list would.
+pub struct Sensing {
+    cands: Vec<NearCreature>,
+    /// Per candidate: 0 not yet tested, 1 seen, 2 not seen.
+    seen: Vec<u8>,
+    at: (f32, f32),
+    heading: f32,
+    gather: f32,
+    hearing: f32,
+    lit: bool,
+    senses: living_rules::script::Senses,
+    map: Rc<Map>,
+    w: World,
+}
+
+impl Sensing {
+    pub fn new(ctx: &ReducerContext, id: u32, at: (f32, f32), sight: f32, now: u64) -> Sensing {
+        let map = common::map(ctx);
+        let w = common::world(ctx);
+        let senses = common::senses_of(ctx, id, &w, now);
+        let gather = common::gather_radius(ctx, sight);
+        let lit = gather > sight;
+        // Facing matters only with a field (one body lookup then), and only then is anything heard.
+        let field = senses.field.is_some();
+        let heading = if field { ctx.db.body().id().find(id).map_or(0.0, |b| common::facing_at(&b, now)) } else { 0.0 };
+        let hearing = if field { senses.hearing } else { 0.0 };
+        let cands: Vec<NearCreature> = common::creatures_near(ctx, at, gather.max(hearing), now).into_iter().filter(|c| c.id != id).collect();
+        let seen = vec![0; cands.len()];
+        Sensing { cands, seen, at, heading, gather, hearing, lit, senses, map, w }
     }
-    (seen, heard)
+
+    /// Whether candidate `i` is seen, tested once.
+    fn sees(&mut self, ctx: &ReducerContext, i: usize, now: u64) -> bool {
+        if self.seen[i] == 0 {
+            let c = &self.cands[i];
+            let glow = if self.lit { common::glow_of(ctx, c.id, &self.w, now) } else { 0.0 };
+            let s = c.dist <= self.gather && living_rules::sight::sees(&self.map, self.at, self.heading, c.pos, c.dist, &self.senses, glow, None);
+            common::diag(|| "scene:sight_tests", 1);
+            self.seen[i] = if s { 1 } else { 2 };
+        }
+        self.seen[i] == 1
+    }
+
+    /// Everything sensed: the seen, nearest first, and the heard and not seen (within hearing).
+    pub fn all(&mut self, ctx: &ReducerContext, now: u64) -> (Vec<NearCreature>, Vec<NearCreature>) {
+        let (mut seen, mut heard) = (Vec::new(), Vec::new());
+        for i in 0..self.cands.len() {
+            if self.sees(ctx, i, now) {
+                seen.push(self.cands[i].clone());
+            } else if self.cands[i].dist <= self.hearing {
+                heard.push(self.cands[i].clone());
+            }
+        }
+        (seen, heard)
+    }
+
+    /// The nearest seen creature `pred` accepts: `all().0.into_iter().find(pred)`, testing sight
+    /// only for those `pred` accepts, nearest first, until one is seen.
+    pub fn first(&mut self, ctx: &ReducerContext, now: u64, mut pred: impl FnMut(&NearCreature) -> bool) -> Option<NearCreature> {
+        for i in 0..self.cands.len() {
+            if pred(&self.cands[i]) && self.sees(ctx, i, now) {
+                return Some(self.cands[i].clone());
+            }
+        }
+        None
+    }
+
+    /// Creature `id` as seen, if it is: `all().0` holds it.
+    pub fn by_id(&mut self, ctx: &ReducerContext, now: u64, id: u32) -> Option<NearCreature> {
+        let i = self.cands.iter().position(|c| c.id == id)?;
+        self.sees(ctx, i, now).then(|| self.cands[i].clone())
+    }
 }
 
 /// What `id` at `at`, facing `heading`, hears but does not see now, when its senses have a

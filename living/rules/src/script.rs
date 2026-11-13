@@ -576,6 +576,14 @@ pub struct Laws {
     /// is also worked out from a full copy, and a difference logged and counted
     /// (`warmth:differed`).
     pub warmth_check: bool,
+    /// A body's scene is worked out as far as each reader asks (docs/BATTLE_SCALE.md,
+    /// scene-lazy): the nearest seen of a kind tests sight only for the nearest candidates, a
+    /// creature asked about by id only for it. The same answers as the whole scene. Off: every
+    /// creature in sight range is tested and the resources gathered when the scene is begun.
+    pub scene_lazy: bool,
+    /// Diagnostic: every lazy answer is also worked out from the whole scene, and a difference
+    /// logged and counted (`diag:` `scene_lazy:differed`).
+    pub scene_lazy_check: bool,
     /// The fast lane (docs/FAST_LANE.md): a mind-run character's re-plan between blows, asked
     /// of its mind on a blow taken or a move it sees repeated. Off: none is asked.
     pub fast_lane_on: bool,
@@ -679,6 +687,8 @@ impl Default for Laws {
             alarm_cells: true,
             alarm_cells_check: false,
             warmth_check: false,
+            scene_lazy: true,
+            scene_lazy_check: false,
             fast_lane_on: false,
             seen_again_n: 3.0,
             fast_lane_rate: 2.0,
@@ -2746,6 +2756,8 @@ impl Scripts {
             alarm_cells: flag("alarm_cells", l.alarm_cells),
             alarm_cells_check: flag("alarm_cells_check", l.alarm_cells_check),
             warmth_check: flag("warmth_check", l.warmth_check),
+            scene_lazy: flag("scene_lazy", l.scene_lazy),
+            scene_lazy_check: flag("scene_lazy_check", l.scene_lazy_check),
             fast_lane_on: flag("fast_lane_on", l.fast_lane_on),
             seen_again_n: g("seen_again_n", l.seen_again_n).round().clamp(1.0, 100.0),
             fast_lane_rate: g("fast_lane_rate", l.fast_lane_rate).clamp(0.0, 100.0),
@@ -3651,6 +3663,7 @@ mod tests {
         assert!(l.regard_cache && !l.regard_cache_check, "answers are shared by default, unchecked");
         assert_eq!(l.witness_wake_ms, 500.0, "a bystander is woken at most twice a second (docs/BATTLE_SCALE.md)");
         assert_eq!(l.witness_fold_ms, 2000.0, "what an onlooker sees of fights is told every two seconds (docs/BATTLE_SCALE.md)");
+        assert!(l.scene_lazy && !l.scene_lazy_check, "the scene worked out as far as asked; its check off");
         let about: std::collections::HashMap<String, String> = shipped.laws_about().into_iter().collect();
         assert!(about["cue_cooldown_s"].contains("600 s") && about["cue_gap_s"].contains("60 s"), "{about:?}");
         let on = Scripts::new(&with_world_laws(src, &[("cues_on".into(), serde_json::json!(true)), ("cue_cooldown_s".into(), serde_json::json!(30)), ("cue_gap_s".into(), serde_json::json!(-5)), ("cue_check_s".into(), serde_json::json!(0.01)), ("regard_cache".into(), serde_json::json!(false))])).unwrap();
