@@ -437,6 +437,62 @@ The rest of the tick: combat resolution 30%, woken evaluations 24%, the fold's l
 - **Expected saving** from the profile: about 11–13 ms/s of the sight tests and 3 ms/s of the copy at 200 fighters. That is about 3% of the tick, about +1.5 ticks a second at the 45.8 of the second window. To be measured in the next acceptance.
 - **One profiling count changed meaning.** `graph_scenes.seen_mean` (`note_scene`) counts only scenes whose whole list was built (noticing, desires, cues), not every graph evaluation's.
 
+## Design note C: noticing structures (DRAFT, not built)
+
+*Draft, 2026-11-13, on `battle-profile`. To be finished with the numbers of the combat-and-wakes profile (each part of a look, and how often a character crosses 2,048 `familiar` rows); then C2's inexactness goes to the general coordinator.*
+
+**What a look does now** (`Ev::noticed`, about once a second for each character a mind runs, fighters included):
+1. It gathers every structure within sight radius (`Ev::structures` → `common::structures_near`). Each one is copied, with its `kind` string, and the list is sorted by distance.
+2. For each structure, it checks the id against the seen set (`recently_seen`, a hash lookup in module memory). A hit whose mark is older than 45 s is re-marked.
+3. Only a structure missing from the seen set goes to `familiarity`. That reads its `familiar` row by index, inserts one at first sight, and otherwise refreshes `last_ms` and `times` at most every 30 s.
+4. Only when something is new are the details copied and tiles joined (`joined_tiles`), and the "You notice …" line written.
+
+Structures are noticed by radius alone: no facing, no walls. In a battle the remains are structures. They last `remains_h` (an hour of real time for a person on the default day), so a site holds about an hour of its dead: steps 1 and 2 grow with them, and step 3 is rare.
+
+**What decides the lines.** `familiar` is private. For structures, the authority reads it in two places only: newness (whether a row exists) and `prune_familiar`.
+- **Newness.** Every structure that is looked at gets a row at its first look. So "new to me" is "I have no row for it". The seen set is a fast path in front of that row.
+- **Pruning.** Over 2,048 rows a character, the oldest by `last_ms` go first. A row touched in the last 60 s is spared, and so is a thing in the seen set within 90 s.
+- **`times`** is never read.
+- So the lines can differ only if the same rows do not exist at the same looks. That depends on which rows pruning takes. It applies only over 2,048 rows a character, which a long battle reaches: an hour of remains plus every fighter met.
+
+### C1: noticing reads in place (exact, no new state)
+
+- **Change.** Noticing walks each chunk's cached structure list in place (`chunk_structures`). It tests distance and checks the seen set by id. It does not build the copied and sorted list.
+- **When something is new.** Only then does it build the full list as now and redo the pass in its order. The lines, the joined tiles and the order of the `familiar` inserts are therefore the same.
+- **Exact because:** the same structures (distance ≤ radius), the same seen-set calls per id (their effect does not depend on order), and the same `familiarity` calls in the same order.
+- **Saves:** the copy and the sort, and their allocations, at every look.
+- **Keeps:** one hash lookup per structure in sight per look.
+- **Other readers unchanged.** Cues, structure targets and region summaries still build the list when they read it.
+- **Proof:** a `notice_inplace_check` law that runs both and compares the set of new ids and the lines, as `scene_lazy_check` does.
+
+### C2: a look checks only what changed (incremental; needs a row and a decision)
+
+**State.** One row per character a mind runs, `look`: where its last look stood, its radius, the highest structure id then, and when.
+
+**A look:**
+- No row, or the row is older than 45 s: a full look as now.
+- Otherwise it walks the chunk lists of its sight disc in place. A structure gets the full check only if it is newer than the row's id, or was outside the last look's disc. That covers structures that came into view by moving, by the radius growing (light), or by being built.
+- Every other structure in sight was handled at the last look and is skipped: no hash lookup, no row read.
+- Each structure costs one or two float tests. When something is new, the full list is built as in C1.
+- The row is then rewritten.
+
+**Why a row, not module memory:**
+- A tick that fails rolls back its `familiar` inserts. A cache in module memory would still say those structures were looked at.
+- SpacetimeDB does not keep a module's memory between reducer calls ([reducers](https://spacetimedb.com/docs/functions/reducers/), "Global and Static Variables Are Undefined Behavior").
+- Rewriting one small row per look is about 260 writes a second at 200 fighters, about 1–2 ms/s. That is the same order as `mind_state`'s rewrite (6 µs each).
+- The table is private, indexed by its primary key only, and holds one row per character. Its row goes with the character (`forget_dead`).
+- It is a new table, not a column on `mind_state`: a column append rewrites the table and disconnects every client on 2.14.1.
+
+**What it changes (not exact):**
+- Skipped structures are not re-marked in the seen set every 45 s. A structure in view keeps an old mark, so after it leaves view and comes back its row is refreshed earlier than now. Pruning would also no longer spare it as "in the seen set".
+- To keep "never forget what is in view", pruning would spare a structure within the last look's disc as well. That needs a lookup of the structure's position for each candidate, and pruning is rare: every 64 inserts.
+- **Effect on the lines:** the same lines while a character holds fewer than 2,048 rows. Above that, which out-of-view row goes first can differ: the ordering of `last_ms` changes, while the rule "the oldest out-of-view first, never one in view" holds.
+- That ordering is a memory bound, not a rule a player sees. Whether that is acceptable is the general coordinator's call.
+
+**Proof:**
+- A `notice_delta_check` law that runs the full pass next to the incremental one. It compares the set of structures each would send to the full check, and the lines.
+- A verify-core case with a battle among remains, a walker crossing the site, and a fire built in view.
+
 ## Verification it would need
 
 - **Unit tests:**

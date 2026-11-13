@@ -1599,9 +1599,13 @@ impl<'a> Ev<'a> {
     fn prune_familiar(&mut self) {
         let (me, now) = (self.me.id, self.now);
         let mut all: Vec<(u64, u64, u64)> = self.ctx.db.familiar().actor().filter(me).map(|f| (f.last_ms, f.id, f.thing)).collect();
+        common::diag(|| "familiar:prune_checks", 1);
         if all.len() <= FAMILIAR_LIMIT {
             return;
         }
+        // While profiling: how often a character is over the limit, and by how much.
+        common::diag(|| "familiar:over_limit", 1);
+        common::diag(|| "familiar:over_by", (all.len() - FAMILIAR_LIMIT) as u64);
         all.sort_unstable();
         let mut over = all.len() - FAMILIAR_LIMIT;
         for (last, id, thing) in all {
