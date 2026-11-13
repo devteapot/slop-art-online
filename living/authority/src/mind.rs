@@ -422,6 +422,7 @@ pub fn mind_patch(ctx: &ReducerContext, actor: u32, target: String, graph: Strin
         return Err("no fast re-plan was asked of this character".into());
     };
     let refuse = |why: String| {
+        common::diag(|| "fast:refused", 1);
         add_thought(ctx, actor, ThoughtIn { kind: "fast".into(), summary: format!("refused: {why}"), ..thought.clone() }, now);
         crate::fast::answered(ctx, actor, asked_ms, now);
         Ok(())
@@ -470,6 +471,7 @@ pub fn mind_patch(ctx: &ReducerContext, actor: u32, target: String, graph: Strin
         st.marks.push(crate::tables::Mark { node: FAST_MARK, at_ms: now });
         ctx.db.mind_state().id().update(st);
     }
+    common::diag(|| "fast:installed", 1);
     add_thought(ctx, actor, ThoughtIn { kind: "fast".into(), ..thought }, now);
     crate::fast::answered(ctx, actor, asked_ms, now);
     Ok(())
@@ -485,6 +487,7 @@ pub fn mind_fast_done(ctx: &ReducerContext, actor: u32, asked_ms: u64, thought: 
         return Err("no fast re-plan was asked of this character".into());
     }
     let now = common::now_ms(ctx);
+    common::diag(|| "fast:kept", 1);
     if !thought.kind.is_empty() {
         add_thought(ctx, actor, thought, now);
     }
