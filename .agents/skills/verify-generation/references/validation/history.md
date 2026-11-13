@@ -2,6 +2,19 @@
 
 **2026-11-12, branch `arrival-open`.** `generation.py --run generation-arrival-235935 --feature worlds --seeds island,plan-test,floor-megacity-2k,cullet`: all four pass, each land row matching its native regeneration (`floor_preview`). The island's layout digest is now `e798f6a9f302d538` (arrival (406.5, 257.5), open ground) and megacity-2k's `fce494ea2cf1e408`; tiles and heights are unchanged, and Cullet's arrival does not move.
 
+## 2026-11-13 island-pack-check: the animals' own draws (Spark)
+
+Branch `island-pack-check` from origin/main `ec80c341`, the worker's own server `slop-packs-stdb` (127.0.0.1:3363), the suite's own target folder, through `~/slop-mq/build-slot`.
+- **Before the fix, on `ec80c341` (`generation-ipk-main-041721`, `--feature worlds --seeds island`).** 989/990, failing `pack the wolves of the low hills starts near deer`: wolves 307–310 816–822 m from the nearest deer; the deer 915–1,230 m from the arrival point.
+- **The bisect.** First parents between `30380b2e` (pass: deer from 732 m, the pack 40–44 m from one) and `93c30714` (fail) found `a07f5919`, Merge move-intents. A founder's knack draws per skill shifted the deer.
+- **With the fix (`STEP_ANIMALS`), `generation-ipk-fix-043308`, `--feature all`.** Every world passes:
+  - realm 31 (twice); valley 43; authored-test 45; aske-coast 287; stage3-village 27;
+  - **island 990/990**; plan-test 97; cullet 346; floor-megacity-2k 78 and 4k 93;
+  - cullet-laws 44; cullet-laws-floor 49; plan-test-floor 101;
+  - repeatability, authored, seed tests, the malformed seed and "original seeds unchanged" pass; every cleanup is proved.
+  - That run also carried an overlap scan in `seed::packs` (a deterministic search before "placed by the band alone"). It found no spot on main's layout, so it was reverted.
+- **Decoupling.** The fix applied on `9a062fc6` (before move-intents) gives the same deer layout: nearest 434 m from arrival.
+
 ## 2026-11-12 goods-3: Cullet's tools in the cast (laptop host)
 
 `generation-g3-004430`, own container `goods3-stdb` (2.14.1, port 3333), `--feature worlds --seeds island,cullet`: island 979 of 979, cullet 332 of 332, original seeds unchanged. The Cullet seed carries the Cone's tools in six residents' packs (blowpipes, crucibles, the mould, a pot; compiled from the cast with `author_world.py cullet --compile-only`). Its laws add the items, recipes and build recipes, so `floor::check` accepts the seed's items. The run's build tree was deleted after it passed.

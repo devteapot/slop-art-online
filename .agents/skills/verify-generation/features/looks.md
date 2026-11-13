@@ -23,6 +23,6 @@ Cullet's data is char-4's (`living/seeds/worlds/cullet/looks.json`, written by `
 
 ## Gotchas
 
-- The island's `pack the wolves of the low hills starts near deer` fails on main too (the same wolves at the same spots, about 816 m from the nearest deer): it is not a look check.
+- The island's `pack the wolves of the low hills starts near deer` failed on main from `a07f5919` (move-intents) until `island-pack-check`. It is not a look check; see [seeded-world.md](seeded-world.md) for the cause and the fix.
 - The suite's last check, "original seeds unchanged", compares `living/seeds` before and after: merging main during a run fails it.
 - SQL's JSON gives the `words` struct column as its fields in order; `check_looks` reads it so.
