@@ -209,7 +209,7 @@ The question: in the scene a fleeing mind was given, are the attacker's bearing 
 ## Built behind a law (think-framing, 2026-11-12)
 
 The general coordinator decided to build N2 behind a world law, off by default.
-- **The law:** `think_framing` (`skills.rhai` `laws()`, `script.rs` `Laws`, `laws_about`), switched at runtime by `set_world_law`.
+- **The law:** `think_framing` (`skills.rhai` `laws()`, `script.rs` `Laws`, `law_about`), switched at runtime by `set_world_law`.
   - **Off:** a mind starts from why it is thinking now, today's wording.
   - **On:** N2, word for word as replayed.
 - **Where:** `living/mind/src/prompts.rs` `think_system` and `think_user`. With the law on, the finished text gets exactly one replacement each (`framed_system`, `framed_user`):
