@@ -1038,3 +1038,13 @@ The owner's play-test 6, 2026-11-12: four lines to Sissly Fenner, a child, who l
 
 - `my_experience` rows of lines said to someone may now carry ", naming …" before the quote ("A stranger said to Sissly Fenner, naming you: “…”"). Show it as the room detail is shown.
 - `act_outcome` has a new act code, `moved` (its `why` is the rules' sentence). A client without it falls back to the words.
+
+### A room line naming one person is theirs to answer (branch `talk-named-room`)
+
+From ew2 (docs/TRIALS.md, "Ways stage"): 5 of its 7 false replies answered a decided call to the room naming one person. Petra Tarn called "Nell! When you're done at the house, come to the smokehouse …", and Davin Vane answered from 19 m. A call carries to everyone within 30 m (Cullet), not only to the one it names. The general coordinator's rule:
+
+- **The rule:** a line said to the room, by any way (a said line or a call), that names exactly one hearer is that hearer's to answer. Naming means by name or by a kin word, the same naming as §19.
+- **The named hearer:** the authority already marks them addressed, and they take the turn.
+- **Everyone else:** they still hear it and keep it in what they perceive, but take no turn on it. That holds whether they would be drawn in, would greet, or are already talking with the speaker (`talk.rs` `room_names_one_other`, read from each hearer's own row: "… to the room, naming Nell Tarn, from about 19 m").
+- **Lines it does not cover:** a room line naming two or more people, or no one, is as before.
+- **Who:** the same for every speaker. A player's room line naming one mind gives that mind the turn, and the other minds stay out of it.

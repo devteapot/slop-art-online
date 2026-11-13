@@ -155,10 +155,13 @@ impl LookWalk {
     }
 
     /// Where the legs aim walking along `travel` while looking `look` (sim radians), and whether
-    /// that is walking backwards (`back`: last frame's, for the hysteresis). `turns`: the file can
-    /// step the diagonal there (else the legs keep to the travel or its reverse).
-    pub fn legs_goal(&self, travel: f32, look: f32, back: bool, turns: impl Fn(f32) -> bool) -> (f32, bool) {
-        let off = wrap(look - travel).abs().to_degrees();
+    /// that is walking backwards (`back`: last frame's, for the hysteresis). `settled`: the look's
+    /// offset from the travel where it settles (the authority's facing, look-4), which decides
+    /// backwards when given, so a facing still coming round after a sudden change of the travel
+    /// starts no brief backwards gait. `turns`: the file can step the diagonal there (else the
+    /// legs keep to the travel or its reverse).
+    pub fn legs_goal(&self, travel: f32, look: f32, settled: Option<f32>, back: bool, turns: impl Fn(f32) -> bool) -> (f32, bool) {
+        let off = settled.map_or_else(|| wrap(look - travel), wrap).abs().to_degrees();
         let back = if back { off > self.back_deg - BACK_HYSTERESIS } else { off > self.back_deg };
         let base = if back { wrap(travel + PI) } else { travel };
         let rest = wrap(look - base);
@@ -307,24 +310,28 @@ mod tests {
         let lw = LookWalk::preset("chest").unwrap();
         let yes = |_| true;
         for look in [0.0f32, 45.0, -45.0, 90.0, -90.0] {
-            let (g, b) = lw.legs_goal(0.3, 0.3 + look.to_radians(), false, yes);
+            let (g, b) = lw.legs_goal(0.3, 0.3 + look.to_radians(), None, false, yes);
             assert!(!b && (g - 0.3).abs() < 1e-5, "{look}: {}", deg(g));
         }
-        let (g, b) = lw.legs_goal(0.0, 120f32.to_radians(), false, yes);
+        let (g, b) = lw.legs_goal(0.0, 120f32.to_radians(), None, false, yes);
         assert!(!b && (deg(g) - 30.0).abs() < 1e-3, "120° leaves 30° for the body: {}", deg(g));
-        let (g, b) = lw.legs_goal(0.0, 134f32.to_radians(), false, yes);
+        let (g, b) = lw.legs_goal(0.0, 134f32.to_radians(), None, false, yes);
         assert!(!b && (deg(g) - 44.0).abs() < 1e-3);
         // Past the back limit: backwards, the upper body taking the rest; forward again 25° under.
-        let (g, b) = lw.legs_goal(0.0, 150f32.to_radians(), false, yes);
+        let (g, b) = lw.legs_goal(0.0, 150f32.to_radians(), None, false, yes);
         assert!(b && (deg(wrap(g)).abs() - 180.0).abs() < 1e-3);
         // Backwards past the head and chest, the legs turn toward the look on the back diagonal.
         let lw2 = LookWalk::parse("head,back=95").unwrap();
-        let (g, b) = lw2.legs_goal(0.0, 100f32.to_radians(), false, yes);
+        let (g, b) = lw2.legs_goal(0.0, 100f32.to_radians(), None, false, yes);
         assert!(b && (deg(g) - 160.0).abs() < 1e-3, "{}", deg(g));
-        assert!(lw.legs_goal(0.0, 115f32.to_radians(), true, yes).1);
-        assert!(!lw.legs_goal(0.0, 105f32.to_radians(), true, yes).1);
+        assert!(lw.legs_goal(0.0, 115f32.to_radians(), None, true, yes).1);
+        assert!(!lw.legs_goal(0.0, 105f32.to_radians(), None, true, yes).1);
         // A file without the diagonal keeps the legs on the travel.
-        let (g, _) = lw.legs_goal(0.0, 120f32.to_radians(), false, |_| false);
+        let (g, _) = lw.legs_goal(0.0, 120f32.to_radians(), None, false, |_| false);
+        // look-4: a facing still coming round from a sudden reversal (150° off now) that settles
+        // 20° off starts no backwards gait; one that settles 150° off does.
+        assert!(!lw.legs_goal(0.0, 150f32.to_radians(), Some(20f32.to_radians()), false, yes).1);
+        assert!(lw.legs_goal(0.0, 150f32.to_radians(), Some(150f32.to_radians()), false, yes).1);
         assert!(g.abs() < 1e-6);
     }
 
