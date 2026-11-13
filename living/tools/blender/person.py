@@ -194,7 +194,7 @@ PARENT = {
 # hands part changed the hand's form and left its size: a size is a proportion, a person's line
 # carries it for a woman (`hands`), and changing it would change every line's key for a matter
 # of taste. A living man's is about 0.75 of a head (0.195 m here).
-HAND_LEN = 0.2224
+HAND_LEN = float(os.environ.get("PERSON_HAND_LEN", 0.2224))  # PERSON_HAND_LEN: another size, to look at one beside this (a board's variant; never for shared files: it moves the finger joints)
 HAND_K = 1.0  # a hand against that; a woman's is the line's `hands`
 HAND_FINGERS = {
     "Index": ((0.440, 0.110, 0.000), (0.221, 0.137, 0.159), 0.0700, 5.0),
