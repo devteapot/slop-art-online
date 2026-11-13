@@ -283,6 +283,16 @@ python3 "$V" doctor --run "$F" > ".local/living/verify/$F/doctor.txt" 2>&1
 python3 "$C/scenes.py" family_laws --run "$F" > ".local/living/verify/$F/family_laws.txt" 2>&1
 python3 "$V" cleanup --run "$F"
 
+# The wolves' spacing reflex (the pack_reflex law, on by default): every wolf's starting
+# graph with the law on, none with it off (features/wildlife.md; about 2 min each).
+for P in pack-reflex-on pack-reflex-off; do
+  K=$R-$P; mkdir -p ".local/living/verify/$K"
+  python3 "$V" launch --run "$K" --seed "$P" > ".local/living/verify/$K/launch.txt" 2>&1
+  python3 "$V" doctor --run "$K" > ".local/living/verify/$K/doctor.txt" 2>&1
+  python3 "$C/scenes.py" pack_reflex --run "$K" > ".local/living/verify/$K/pack_reflex.txt" 2>&1
+  python3 "$V" cleanup --run "$K"
+done
+
 W=$R-wildlife
 mkdir -p ".local/living/verify/$W"
 python3 "$V" launch --run "$W" --seed stage1-acts > ".local/living/verify/$W/launch.txt" 2>&1

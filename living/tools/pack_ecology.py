@@ -3,6 +3,7 @@
 people over two game days on the island as shipped, with the reflex on against off.
 
   living/tools/pack_ecology.py start --run eco-reflex-on-1 --arm on
+  living/tools/pack_ecology.py start --run eco-law-off-1 --arm none --seed ../../.local/living/pack-ecology/seeds/island-noreflex
   living/tools/pack_ecology.py sample --run eco-reflex-on-1 --out DIR      (wolf_ecology.py sample)
   living/tools/wolf_ecology.py report DIR...                                  (the numbers)
 
@@ -11,7 +12,9 @@ island`). With `--arm on`, every grown wolf alive then gets its own starting ins
 (`wolf_bold` for a wolf whose background is bold, else `wolf`) with the reflex desire beside each
 hunt (`pack_arena_trials.with_reflex`), through `set_behavior`, as an arena installs a graph; the
 ids and graphs go to `DIR/arm.json`. Wolves born or grown up during the run live by the shipped
-instincts. With `--arm off` nothing is changed. No mind service, no model calls.
+instincts. With `--arm off` or `--arm none` nothing is changed: since `pack-reflex-on`, the world's
+own `pack_reflex` law decides what its wolves are given at creation (`none`, with `--seed` naming a
+seed whose `rules` turn it off for the off arm). No mind service, no model calls.
 """
 import argparse
 import json
@@ -38,7 +41,7 @@ def start(a):
     out = Path(a.out or ROOT / ".local/living/pack-ecology" / a.run)
     out.mkdir(parents=True, exist_ok=True)
     with open(out / "launch.txt", "w") as f:
-        r = subprocess.run([sys.executable, str(ROOT / ".agents/skills/verify/scripts/verify.py"), "launch", "--run", a.run, "--seed", "island"],
+        r = subprocess.run([sys.executable, str(ROOT / ".agents/skills/verify/scripts/verify.py"), "launch", "--run", a.run, "--seed", a.seed] + (["--target-dir", a.target_dir] if a.target_dir else []),
                            cwd=ROOT, stdout=f, stderr=subprocess.STDOUT)
     if r.returncode != 0:
         sys.exit(f"launch failed: see {out / 'launch.txt'}")
@@ -68,7 +71,9 @@ def main():
     sub = p.add_subparsers(dest="cmd", required=True)
     s = sub.add_parser("start")
     s.add_argument("--run", required=True)
-    s.add_argument("--arm", choices=["on", "off"], required=True)
+    s.add_argument("--arm", choices=["on", "off", "none"], required=True)
+    s.add_argument("--seed", default="island")
+    s.add_argument("--target-dir")
     s.add_argument("--out")
     s.set_defaults(f=start)
     a = p.parse_args()

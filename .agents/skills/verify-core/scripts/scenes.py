@@ -1374,11 +1374,16 @@ def moves(s):
 def law_value(s, name):
     """A world law in force: the world's own value (`world_law`, set with `set_world_law`), else
     the installed script's `laws()` number."""
+    def val(v):
+        v = str(v).strip().strip('"')
+        return {"true": True, "false": False}[v] if v in ("true", "false") else float(v)
     own = [r for r in s.rows("SELECT * FROM world_law") if r["name"] == name]
     if own:
-        return float(own[0]["value"])
+        return val(own[0]["value"])
     src = s.rows("SELECT source FROM script WHERE name = 'skills'")[0]["source"]
-    return float(re.search(r"\b" + name + r": ([0-9.]+)", src).group(1))
+    # A world's own values block (`world_law_values`, a seed's `laws`) comes before laws().
+    m = re.search(r"\b" + name + r": (true|false|[0-9.]+)", src)
+    return val(m.group(1))
 
 
 def body_at(s, actor, now=None, row=None):
@@ -4509,6 +4514,43 @@ def howl_reach(s):
     woke = [t for t in s.told(near, "You woke up: ", "body") if "a long howl" in t["text"]]
     s.expect("a sleeper 6 m off wakes, told of the howl", bool(woke), s.told(near, "You woke up", "body"))
 
+
+def pack_reflex(s):
+    """The wolves' spacing reflex, a world law (`pack_reflex`, docs/PACK_MIND.md): while it is
+    on (the shipped value), every hunt in a wolf's starting graph (an attack on the nearest
+    person or deer) sits beside the desire "keep apart from mates" (`keep_distance` 3-5 m from
+    the prey with `apart` 4); with the law off, none does. Three install paths: a seed's pack
+    (`packs[].instinct`, `wolf_bold`: the brain), a grown founding wolf's ways (`give_ways`,
+    repertoire.json: its `hunt` routine), a young founding wolf's instinct (`wolf`: the brain).
+    A newborn's `wolf_young` is never given it. Run it on `--seed pack-reflex-on` (expects the
+    reflex) and `--seed pack-reflex-off` (expects none): it reads the law's value from the world."""
+    on = law_value(s, "pack_reflex")
+    bg = {r["id"]: r["text"] for r in s.rows("SELECT id, text FROM background")}
+    wolves = s.rows("SELECT id, stage FROM character WHERE kind = 'wolf' AND alive = true")
+    brains = {r["id"]: r for r in s.rows("SELECT id, graph, plan FROM brain")}
+    hunts = {r["actor"]: r["graph"] for r in s.rows("SELECT actor, name, graph FROM routine") if r["name"] == "hunt"}
+    seen = {"pack": [], "grown founders (hunt routine)": [], "young founders": [], "newborns": []}
+    for w in wolves:
+        b = brains.get(w["id"], {})
+        if '"bold":true' in bg.get(w["id"], ""):
+            key, g = "pack", b.get("graph", "")
+        elif w["stage"] == 0:
+            key, g = "newborns", b.get("graph", "")
+        elif w["id"] in hunts:
+            key, g = "grown founders (hunt routine)", hunts[w["id"]]
+        else:
+            key, g = "young founders", b.get("graph", "")
+        seen[key].append({"id": w["id"], "stage": w["stage"], "reflexes": g.count("keep apart from mates"), "apart": '"apart"' in g, "plan": b.get("plan", "")[:40]})
+    (s.out / f"{s.name}-wolves.json").write_text(json.dumps({"law": on, "wolves": seen}, indent=1) + "\n")
+    s.expect("the world has a bold pack and grown founding wolves to check", bool(seen["pack"]) and bool(seen["grown founders (hunt routine)"]), {k: len(v) for k, v in seen.items()})
+    checked = [x for k in ("pack", "grown founders (hunt routine)", "young founders") for x in seen[k]]
+    if on:
+        for k in ("pack", "grown founders (hunt routine)", "young founders"):
+            s.expect(f"law on: {k}: the reflex beside both hunts (people and deer)", all(x["reflexes"] == 2 and x["apart"] for x in seen[k]), seen[k])
+    else:
+        s.expect("law off: no wolf's starting graph or hunt routine carries the reflex", all(x["reflexes"] == 0 for x in checked), seen)
+    s.expect("a newborn's instinct (wolf_young) never carries it", all(x["reflexes"] == 0 for x in seen["newborns"]), seen["newborns"])
+
 SCENES = {"say": say, "skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight, "dealings": dealings, "answers": answers, "flee": flee, "flee_wall": flee_wall, "food": food, "refusal": refusal, "teach": teach, "senses": senses, "moves": moves, "remains": remains, "laws": laws, "doing": doing, "death-names": death_names, "drop": drop, "low": drop, "family_laws": family_laws, "fov": fov, "placement": placement, "alarms": alarms, "health_seen": health_seen, "audience": audience, "outcomes": outcomes, "crowd_sight": crowd_sight, "stranger_filter": stranger_filter, "cues": cues, "regard_check": regard_check}
 
 
@@ -5023,6 +5065,7 @@ SCENES["owners"] = owners
 SCENES["intents"] = intents
 SCENES["apart"] = apart_intent
 SCENES["howl_reach"] = howl_reach
+SCENES["pack_reflex"] = pack_reflex
 SCENES["intents_cost"] = intents_cost
 SCENES["sleeper"] = sleeper
 

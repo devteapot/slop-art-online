@@ -1,0 +1,32 @@
+{
+ "run": "pack-reflex-off",
+ "seed": 3,
+ "map": {
+  "kind": "realm",
+  "w": 256,
+  "h": 256
+ },
+ "year_days": 8,
+ "life_pace": 1.5,
+ "setting": "Pack reflex check (docs/PACK_MIND.md; verify-core scenes.py pack_reflex): the wildlife lab with a bold pack of 3 placed by the deer, and the pack_reflex law off.",
+ "bands": [],
+ "animals": {
+  "deer": 60,
+  "wolf": 8
+ },
+ "packs": [
+  {
+   "kind": "wolf",
+   "count": 3,
+   "near": "deer",
+   "from_m": 20,
+   "to_m": 60,
+   "bold": true,
+   "instinct": "wolf_bold",
+   "name": "the check's pack"
+  }
+ ],
+ "rules": {
+  "pack_reflex": false
+ }
+}

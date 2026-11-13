@@ -84,6 +84,12 @@ fn laws() {
         // `fov_margin_deg` past an edge. A light on someone (`glow`) shows them only within the
         // field. Hearing stays all round.
         fov_on: false,
+        // The wolves' spacing reflex (docs/PACK_MIND.md): their starting instincts carry,
+        // beside each hunt, a weighted desire to keep apart from mates while closing on the
+        // prey (hold 3-5 m from it, 4 m from other wolves one sees). An instinct, so a wolf's
+        // own mind may change it. Read when a wolf's starting graph is installed; a world turns
+        // it off with false.
+        pack_reflex: true,
         // A body struck this many seconds ago cannot fall asleep; nor while the one who last
         // struck it, in a fight still on, is within `wake_reach` (`sleep_check`, every
         // controller alike).
@@ -3030,6 +3036,7 @@ fn laws_about(l) {
         alert_after_hit_s: `a body struck within the last ${short(l.alert_after_hit_s)} s cannot fall asleep`,
         alert_while_attacker_near: if l.alert_while_attacker_near { "nor while the one who struck it is close and the fight is on" } else { "even with the one who struck it close by" },
         fov_on: if l.fov_on { "one sees fully only the way one faces" } else { "one sees as far in every direction" },
+        pack_reflex: if l.pack_reflex { "wolves are born keeping apart from their pack mates as they close on prey" } else { "wolves close on prey with no thought for where their pack mates are" },
         fov_focal_deg: `full sight within ${short(l.fov_focal_deg)} degrees of facing (when sight depends on facing)`,
         fov_side_deg: `side vision out to ${short(l.fov_side_deg)} degrees`,
         fov_side_share: `side vision reaches ${short(l.fov_side_share)} of one's sight`,
