@@ -59,7 +59,10 @@ Usage: disk_clean.py [--apply] [--repo PATH] [--floor-gb 40] [--target-gb N] [--
   --containers-only  print only the container section (read-only: no trim, no restart), then stop
   --restart-stdb N   with --apply, the quiet restart of container N (without it, its checks and plan)
   --stdb-db DB       a database N hosts that its CLI identity does not list (repeatable)
-  --keep-dirs        restart without removing the deleted databases' directories
+  --keep-dirs        restart without removing the deleted databases' directories. Required on
+                     slop-trials-stdb: the Spark archived paid runs' commitlogs up to 2026-11-12
+                     (~/slop-evidence/commitlogs-20261112/ on the Spark), but later runs are not
+                     archived, so its directories may still hold the only copy
   --protect PATH     protect PATH and everything under it (repeatable), besides the file
   --protect-file P   read the machine's protected paths from P (~/.config/slop-disk/protect.txt)
   --targets-file P   read the outside target folders from P (~/.config/slop-disk/targets.txt)
@@ -702,7 +705,8 @@ RECENT_S = 15 * 60         # a replica directory written this recently counts as
 NEVER_RESTART = ("sao-living_spacetimedb_1", "sao-living-spacetimedb-1")
 NEVER_RESTART_FILE = os.path.join(HOME, ".config", "slop-disk", "never-restart.txt")
 # Restarted only with --keep-dirs: deleted databases' directories there hold run evidence
-# (the trial server's paid and no-model commitlogs; docs/TRIAL_DISK.md).
+# (the trial server's paid and no-model commitlogs; docs/TRIAL_DISK.md). Runs up to 2026-11-12
+# are archived on the Spark (~/slop-evidence/commitlogs-20261112/); later ones are not, so this stays.
 KEEP_DIRS = ("slop-trials-stdb",)
 KEEP_DIRS_FILE = os.path.join(HOME, ".config", "slop-disk", "stdb-keep-dirs.txt")
 REFERENCE_WORLDS = re.compile(r"^(aske-coast|stage)")
