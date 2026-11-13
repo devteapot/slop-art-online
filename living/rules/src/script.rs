@@ -17,6 +17,32 @@ use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::rc::Rc;
 
+/// Counts of script calls for the authority's profiling (docs/BATTLE_SCALE.md): skill calls
+/// (`<skill>_check`, `_done` and the rest, through `call`), and `status_of` asked, answered from
+/// its memo, and run. Plain counters in this instance's memory, read and cleared by
+/// `calls::take`; they decide nothing.
+pub mod calls {
+    use std::cell::Cell;
+    pub const SKILL: usize = 0;
+    pub const STATUS_ASKED: usize = 1;
+    pub const STATUS_MEMO: usize = 2;
+    pub const STATUS_RUN: usize = 3;
+    thread_local! {
+        static CALLS: Cell<[u64; 4]> = const { Cell::new([0; 4]) };
+    }
+    pub fn note(i: usize) {
+        CALLS.with(|c| {
+            let mut v = c.get();
+            v[i] += 1;
+            c.set(v);
+        });
+    }
+    /// The counts since the last take, cleared.
+    pub fn take() -> [u64; 4] {
+        CALLS.with(|c| c.replace([0; 4]))
+    }
+}
+
 pub mod body;
 mod check;
 #[cfg(test)]
@@ -2418,6 +2444,7 @@ impl Scripts {
     }
 
     fn call(&self, f: &str, ctx: &SkillCtx) -> Result<Dynamic, String> {
+        calls::note(calls::SKILL);
         let m = context::map(ctx, self.shapes.knack(&ctx.skill), &self.plan(f));
         self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, f, (m,)).map_err(|e| format!("{f}: {e}"))
     }

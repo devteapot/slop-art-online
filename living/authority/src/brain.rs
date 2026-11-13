@@ -196,6 +196,8 @@ pub fn evaluate(ctx: &ReducerContext, id: u32, now: u64) {
         let _span = common::span("brain.graph");
         ev.run(&root.root, 0)
     };
+    common::diag(|| "eval:all", 1);
+    common::diag(|| "do:visits", ev.visits as u64);
     let _span = common::span("brain.after");
     ev.after(result, &root.root);
     drop(_span);
@@ -824,6 +826,7 @@ impl<'a> Ev<'a> {
     /// The outcome of leaf `id`'s activity that has ended since it was last visited (read once),
     /// unless that activity is still under way.
     fn finished(&mut self, id: u16) -> Option<St> {
+        let _span = common::detail_span("brain.finished");
         let rev = self.st.revision;
         let l = self.st.last.clone().filter(|l| l.node == id && l.revision == rev)?;
         if self.ctx.db.activity().id().find(self.me.id).is_some_and(|a| a.node == id && a.revision == rev) {
@@ -839,6 +842,7 @@ impl<'a> Ev<'a> {
 
     #[allow(clippy::too_many_arguments)]
     fn leaf(&mut self, id: u16, skill: &str, target: Resolved, item: &str, qty: u32, text: &str, topic: &str, desc: String) -> St {
+        let _span = common::detail_span("brain.leaf");
         // A committed move under way holds the body until it has run its course (a dash may cut
         // in on a windup): the graph waits on it, as a player's keys do (`combat::held_by`).
         if let Some(a) = self.ctx.db.activity().id().find(self.me.id) {
@@ -1041,6 +1045,8 @@ impl<'a> Ev<'a> {
     }
 
     fn nearest(&mut self, f: &Filter) -> Option<Resolved> {
+        let _span = common::detail_span("brain.nearest");
+        common::diag(|| "nearest:calls", 1);
         match living_rules::catalog::kind_class(&f.kind)? {
             living_rules::catalog::KindClass::Creature => {
                 // Seen first; a creature smelled farther away only for a target the body acts on.
@@ -2049,6 +2055,7 @@ impl<'a> Ev<'a> {
     fn after(mut self, result: St, root: &Node) {
         let ctx = self.ctx;
         let id = self.me.id;
+        let cancel = common::detail_span("after.cancel");
         // Interrupt an activity no running leaf owns anymore (the branch lost priority);
         // a deliberate act is not the graph's to interrupt (only a reflex does, in `leaf`).
         if let Some(a) = ctx.db.activity().id().find(id) {
@@ -2062,6 +2069,8 @@ impl<'a> Ev<'a> {
                 act::cancel(ctx, a, self.now, None);
             }
         }
+        drop(cancel);
+        let mind = common::detail_span("after.mind");
         if self.me.ai {
             match result {
                 // A plan with nothing applicable backs off longer than one that hit a concrete
@@ -2098,6 +2107,8 @@ impl<'a> Ev<'a> {
                 self.noticed();
             }
         }
+        drop(mind);
+        let _write = common::detail_span("after.write");
         if result != St::Run && !self.running.is_some_and(act::held) {
             self.status = match result {
                 St::Ok => "done".into(),
