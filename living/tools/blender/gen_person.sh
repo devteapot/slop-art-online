@@ -32,7 +32,10 @@
 #   ANIMATE=<file>      the animate.py that bakes the clips (default: this folder's), to bake a
 #                       set with an earlier one for a comparison (docs/CHARACTERS.md, "Motions on
 #                       generated people")
-#   KIMODO_DIR=<dir>    the library's generated NPZs (default .local/kimodo/outputs/library)
+#   KIMODO_DIR=<dir>    the library's generated NPZs (default .local/kimodo/library, the
+#                       library's home; .local/kimodo/outputs/library only where there is no
+#                       home). The log says which was used, and names every take clips.json
+#                       wants that it lacks
 #   ONLY=<clips>        comma-separated library entries (default: the whole library, clips.json);
 #                       `present` takes every entry whose takes are all in KIMODO_DIR, for a
 #                       machine whose copy of the library is behind clips.json
@@ -41,8 +44,38 @@ cd "$(dirname "$0")/../../.."
 src=living/game/assets/lookdev
 blender=${BLENDER:-blender}
 animate=${ANIMATE:-living/tools/blender/animate.py}
-kimodo=${KIMODO_DIR:-.local/kimodo/outputs/library}
+# The clip library: its home, `.local/kimodo/library`, and only where there is none the older
+# copy under `outputs/` (a stale copy there once gave a clip file with a third of the clips and
+# none for backing, strafing or turning). KIMODO_DIR names another.
+if [ -n "${KIMODO_DIR:-}" ]; then kimodo=$KIMODO_DIR
+elif [ -d .local/kimodo/library ]; then kimodo=.local/kimodo/library
+else kimodo=.local/kimodo/outputs/library; fi
 only=${ONLY:-}
+clips_baked=1
+[ "${CLIPS:-library}" = none ] && clips_baked=0
+if [ "$clips_baked" = 1 ]; then
+  echo "gen_person: the clip library is $kimodo" >&2
+  # Every take clips.json names and the library does not hold, by name. A warning: a machine
+  # may hold a part of the library. With ONLY=present an entry with a take missing is left out
+  # whole, so one missing take of eight drops the clip.
+  python3 - "$kimodo" "$only" >&2 <<'PY'
+import json, os, sys
+d, only = sys.argv[1], sys.argv[2]
+have = set(os.listdir(d)) if os.path.isdir(d) else set()
+clips = json.load(open("living/tools/blender/clips.json"))["clips"]
+wanted = None if only in ("", "present") else set(only.split(","))
+takes = entries = 0
+for c in clips:
+    if wanted is not None and c["name"] not in wanted:
+        continue
+    missing = [s for s in c.get("seeds", []) if f"{c['name']}_s{s}.npz" not in have]
+    if missing:
+        takes += len(missing)
+        entries += 1
+        print(f"gen_person: warning: {c['name']}: {len(missing)} of {len(c.get('seeds', []))} takes missing from {d}: " + ", ".join(f"{c['name']}_s{s}.npz" for s in missing) + ("; the entry is not baked (ONLY=present)" if only == "present" else ""))
+print(f"gen_person: {takes} takes of {entries} entries that clips.json names are missing from {d}" + (f"; {len(clips) - entries} of {len(clips)} entries are whole" if wanted is None else ""))
+PY
+fi
 if [ "$only" = present ]; then
   only=$(python3 - "$kimodo" <<'PY'
 import json, os, sys
