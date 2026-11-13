@@ -251,15 +251,15 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
         Some(TargetInfo { name, doing, hp: band(id), stance: a.stance, distance: a.distance })
     });
 
-    // Bubbles: lines heard within their lifetime, and my own last line.
+    // Bubbles: each speaker's newest line within its lifetime, and my own last line. An older
+    // line never comes back when a newer one's bubble ends (play-test 6: a long reply re-showed
+    // after a short line said 2 s later had gone).
     let mut bubbles = Vec::new();
-    for e in heard.iter().rev() {
+    let picks = bubble_picks(&heard.iter().map(|e| (e.subject, e.at_ms as f64, bubble_life(quoted(&e.text)))).collect::<Vec<_>>(), now_ms);
+    for e in picks.into_iter().map(|i| &heard[i]) {
         let text = quoted(&e.text).to_string();
         let age = ((now_ms - e.at_ms as f64) / 1000.0) as f32;
         let life = bubble_life(&text);
-        if age > life || bubbles.iter().any(|b: &Bubble| b.speaker == e.subject as u64) {
-            continue;
-        }
         let Some((p, _)) = scene.shown.get(&e.subject) else { continue };
         let kind = chars.get(&e.subject).map_or("person", |c| c.kind.as_str());
         // Over their head, as their plate names them (someone too far: by the colours drawn).
@@ -442,6 +442,23 @@ fn death_words(code: Option<&str>, killer: Option<&str>) -> String {
     }
 }
 
+/// Which heard lines get a bubble now, as indices into `lines` ((speaker, said at ms, life s),
+/// oldest first): each speaker's newest line only, and only within its life. Once a speaker has
+/// said something newer, their older lines are done, whatever life they had left.
+fn bubble_picks(lines: &[(u32, f64, f32)], now_ms: f64) -> Vec<usize> {
+    let mut spoke = std::collections::HashSet::new();
+    let mut out = Vec::new();
+    for (i, (speaker, at, life)) in lines.iter().enumerate().rev() {
+        if !spoke.insert(*speaker) {
+            continue;
+        }
+        if ((now_ms - at) / 1000.0) as f32 <= *life {
+            out.push(i);
+        }
+    }
+    out
+}
+
 /// How recently my character must have seen its killer to name them on the death screen (ms):
 /// the death takes my perceived rows away in the same update.
 const KILLER_SEEN_MS: f64 = 2_000.0;
@@ -468,7 +485,21 @@ fn quoted(text: &str) -> &str {
 
 #[cfg(test)]
 mod tests {
-    use super::{cause_kind, death_words};
+    use super::{bubble_picks, cause_kind, death_words};
+
+    #[test]
+    fn an_older_line_never_comes_back_when_a_newer_one_ends() {
+        // Play-test 6: a long reply (life 10 s) at 0, then a short line from the same speaker
+        // (life 5.6 s) 2.1 s later, and another speaker's line at 1 s.
+        let lines = [(12, 0.0, 10.0), (7, 1_000.0, 6.0), (12, 2_100.0, 5.6)];
+        // Before the short line (only the first two have been said): the reply shows.
+        assert_eq!(bubble_picks(&lines[..2], 1_500.0), vec![1, 0]);
+        // The short line shows; the reply does not.
+        assert_eq!(bubble_picks(&lines, 3_000.0), vec![2, 1]);
+        // At 8 s the short line's life (to 7.7 s) is over and the reply's (to 10 s) is not: the
+        // reply does not show again (it did before: the play-test's repeat).
+        assert_eq!(bubble_picks(&lines, 8_000.0), Vec::<usize>::new());
+    }
     use living_rules::outcome::death;
 
     #[test]

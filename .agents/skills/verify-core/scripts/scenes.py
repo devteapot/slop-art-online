@@ -2,6 +2,7 @@
 """Assert core behavior through the authority on a shared-harness scratch run."""
 import argparse
 import importlib.util
+import datetime
 import json
 import math
 import re
@@ -1374,11 +1375,16 @@ def moves(s):
 def law_value(s, name):
     """A world law in force: the world's own value (`world_law`, set with `set_world_law`), else
     the installed script's `laws()` number."""
+    def val(v):
+        v = str(v).strip().strip('"')
+        return {"true": True, "false": False}[v] if v in ("true", "false") else float(v)
     own = [r for r in s.rows("SELECT * FROM world_law") if r["name"] == name]
     if own:
-        return float(own[0]["value"])
+        return val(own[0]["value"])
     src = s.rows("SELECT source FROM script WHERE name = 'skills'")[0]["source"]
-    return float(re.search(r"\b" + name + r": ([0-9.]+)", src).group(1))
+    # A world's own values block (`world_law_values`, a seed's `laws`) comes before laws().
+    m = re.search(r"\b" + name + r": (true|false|[0-9.]+)", src)
+    return val(m.group(1))
 
 
 def body_at(s, actor, now=None, row=None):
@@ -4477,6 +4483,75 @@ def apart_intent(s):
         said = (r.stdout or "") + (r.stderr or "")
         s.expect(f"refused: {words}", r.returncode != 0 and words in said, (r.returncode, said[-300:]))
 
+
+def howl_reach(s):
+    """A howl carries by its loudness (docs/PACK_MIND.md, decision 2): the shipped howl has no
+    range of its own but loudness 2, so it reaches twice each listener's hearing (18 m on a world
+    whose people hear 9 m), and, as loud as a shout, it wakes a sleeper within `wake_reach`
+    (`wake_loudness` 2). On an open line: a wolf howls; a person asleep 6 m off wakes, told the
+    howl; one awake 15 m off hears it; one 25 m off does not."""
+    line = open_line(s, length=30)
+    hearing = law_value(s, "wake_reach")
+    sleeping = {r["actor"] for r in s.rows("SELECT actor FROM slumber")} | {r["id"] for r in s.rows("SELECT id, skill FROM activity") if r["skill"] == "sleep"}
+    wolf = next(w["id"] for w in s.rows("SELECT id, stage FROM character WHERE kind = 'wolf' AND alive = true") if w["stage"] >= 2 and w["id"] not in sleeping)
+    near, mid, far = s.people(3)
+    s.graph(wolf, {"wait": 300})
+    s.call("place_at", wolf, *line[0])
+    s.call("place_at", near, *line[6])
+    s.call("place_at", mid, *line[15])
+    s.call("place_at", far, *line[25])
+    s.graph(near, {"seq": [{"do": "sleep"}, {"wait": 300}]})
+    # (`hearing` above is the wake reach: a loud sound wakes a sleeper within it)
+    s.wait(lambda: s.rows(f"SELECT * FROM slumber WHERE actor = {near}"), seconds=30)
+    s.graph(wolf, {"seq": [{"do": {"skill": "signal", "item": "howl"}}, {"wait": 300}]})
+    s.wait(lambda: s.told(mid, "a long howl", "signal"), seconds=20)
+    time.sleep(3)
+    heard = {who: [r["text"] for r in s.told(i, "a long howl", "signal")] for who, i in (("6 m, asleep", near), ("15 m", mid), ("25 m", far))}
+    (s.out / f"{s.name}-heard.json").write_text(json.dumps({"heard": heard, "wake_reach": hearing}, indent=1) + "\n")
+    s.expect("a person 15 m off hears the howl (within twice the island's 9 m)", bool(heard["15 m"]), heard)
+    s.expect("a person 25 m off does not (beyond 18 m)", not heard["25 m"], heard)
+    # (its graph, a sleep then a wait, may lay it down again once woken: what shows the waking
+    # is the line it is told, naming the howl)
+    woke = [t for t in s.told(near, "You woke up: ", "body") if "a long howl" in t["text"]]
+    s.expect("a sleeper 6 m off wakes, told of the howl", bool(woke), s.told(near, "You woke up", "body"))
+
+
+def pack_reflex(s):
+    """The wolves' spacing reflex, a world law (`pack_reflex`, docs/PACK_MIND.md): while it is
+    on (the shipped value), every hunt in a wolf's starting graph (an attack on the nearest
+    person or deer) sits beside the desire "keep apart from mates" (`keep_distance` 3-5 m from
+    the prey with `apart` 4); with the law off, none does. Three install paths: a seed's pack
+    (`packs[].instinct`, `wolf_bold`: the brain), a grown founding wolf's ways (`give_ways`,
+    repertoire.json: its `hunt` routine), a young founding wolf's instinct (`wolf`: the brain).
+    A newborn's `wolf_young` is never given it. Run it on `--seed pack-reflex-on` (expects the
+    reflex) and `--seed pack-reflex-off` (expects none): it reads the law's value from the world."""
+    on = law_value(s, "pack_reflex")
+    bg = {r["id"]: r["text"] for r in s.rows("SELECT id, text FROM background")}
+    wolves = s.rows("SELECT id, stage FROM character WHERE kind = 'wolf' AND alive = true")
+    brains = {r["id"]: r for r in s.rows("SELECT id, graph, plan FROM brain")}
+    hunts = {r["actor"]: r["graph"] for r in s.rows("SELECT actor, name, graph FROM routine") if r["name"] == "hunt"}
+    seen = {"pack": [], "grown founders (hunt routine)": [], "young founders": [], "newborns": []}
+    for w in wolves:
+        b = brains.get(w["id"], {})
+        if '"bold":true' in bg.get(w["id"], ""):
+            key, g = "pack", b.get("graph", "")
+        elif w["stage"] == 0:
+            key, g = "newborns", b.get("graph", "")
+        elif w["id"] in hunts:
+            key, g = "grown founders (hunt routine)", hunts[w["id"]]
+        else:
+            key, g = "young founders", b.get("graph", "")
+        seen[key].append({"id": w["id"], "stage": w["stage"], "reflexes": g.count("keep apart from mates"), "apart": '"apart"' in g, "plan": b.get("plan", "")[:40]})
+    (s.out / f"{s.name}-wolves.json").write_text(json.dumps({"law": on, "wolves": seen}, indent=1) + "\n")
+    s.expect("the world has a bold pack and grown founding wolves to check", bool(seen["pack"]) and bool(seen["grown founders (hunt routine)"]), {k: len(v) for k, v in seen.items()})
+    checked = [x for k in ("pack", "grown founders (hunt routine)", "young founders") for x in seen[k]]
+    if on:
+        for k in ("pack", "grown founders (hunt routine)", "young founders"):
+            s.expect(f"law on: {k}: the reflex beside both hunts (people and deer)", all(x["reflexes"] == 2 and x["apart"] for x in seen[k]), seen[k])
+    else:
+        s.expect("law off: no wolf's starting graph or hunt routine carries the reflex", all(x["reflexes"] == 0 for x in checked), seen)
+    s.expect("a newborn's instinct (wolf_young) never carries it", all(x["reflexes"] == 0 for x in seen["newborns"]), seen["newborns"])
+
 SCENES = {"say": say, "skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight, "dealings": dealings, "answers": answers, "flee": flee, "flee_wall": flee_wall, "food": food, "refusal": refusal, "teach": teach, "senses": senses, "moves": moves, "remains": remains, "laws": laws, "doing": doing, "death-names": death_names, "drop": drop, "low": drop, "family_laws": family_laws, "fov": fov, "placement": placement, "alarms": alarms, "health_seen": health_seen, "audience": audience, "outcomes": outcomes, "crowd_sight": crowd_sight, "stranger_filter": stranger_filter, "cues": cues, "regard_check": regard_check}
 
 
@@ -4990,6 +5065,8 @@ SCENES["doing_cost"] = doing_cost
 SCENES["owners"] = owners
 SCENES["intents"] = intents
 SCENES["apart"] = apart_intent
+SCENES["howl_reach"] = howl_reach
+SCENES["pack_reflex"] = pack_reflex
 SCENES["intents_cost"] = intents_cost
 SCENES["sleeper"] = sleeper
 
@@ -5902,6 +5979,76 @@ def sweep_kept(s):
 
 
 SCENES["sweep_kept"] = sweep_kept
+
+
+def battle_cheap(s):
+    """The fighters' cheaper paths change nothing a fighter perceives or does (docs/BATTLE_SCALE.md,
+    battle-cheap). A battle of 12 minded people on an open line, a campfire and a shelter among
+    them and three dead lying there (remains), with each path's diagnostic law on: every move's
+    check before it starts is also asked with the whole context (`check_ctx_check`), every alarm
+    answer kept is also asked of the law (`alarm_cells_check`), and warmth is also worked out from
+    a full copy (`warmth_check`). For 60 s of strikes, blocks, heals and refusals ("out of breath")
+    each diagnostic counts how often it compared and how often the two differed. The case named
+    asserts its path: compared many times, never differed (and, for the alarms, most answers
+    kept)."""
+    which = s.name
+    line = clear_line(s)
+    ppl = s.people(15)
+    fighters, dead = ppl[:12], ppl[12:]
+    for k, who in enumerate(fighters):
+        s.call("place_at", who, line[2 + k % 6][0], line[2 + k % 6][1] + (k // 6) * 1.4)
+    for k, who in enumerate(dead):
+        s.call("place_at", who, line[3 + k][0], line[3 + k][1] + 2.6)
+    s.call("place_structure", fighters[0], "campfire")
+    s.call("place_structure", fighters[6], "shelter")
+    for who in dead:
+        s.call("kill", who, "verify-core battle_cheap: remains to lie among the fighters")
+    for who in fighters:
+        s.call("grant_know_how", who, "wound_tending")
+        s.graph(who, {"first": [
+            {"if": {"cond": {"health": {"below": 50}}, "then": {"do": {"skill": "heal", "target": "self"}}}},
+            {"if": {"cond": {"threatened": True}, "then": {"do": {"skill": "dodge" if who % 2 == 0 else "block"}}}},
+            {"do": {"skill": "strike", "target": {"nearest": "person"}}}]})
+    for law in ("check_ctx_check", "alarm_cells_check", "warmth_check"):
+        set_law(s, law, True)
+    s.call("set_profile", True)
+    t0 = s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+    # The server log's own stamps (UTC) bound this case's `diag:` lines: earlier cases on the
+    # same world left theirs.
+    since = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+    try:
+        time.sleep(60)
+    finally:
+        s.call("set_profile", False)
+        for law in ("check_ctx_check", "alarm_cells_check", "warmth_check"):
+            set_law(s, law, False)
+    logs = "\n".join(l for l in s.command("logs", "-s", "local", s.db, "-n", "200000").stdout.splitlines() if l[:19] >= since and "diag:" in l)
+    count = lambda key: sum(int(x) for x in re.findall(rf'"{re.escape(key)}":(\d+)', logs))
+    uses = [u for u in s.rows("SELECT actor, skill, outcome, at_ms FROM skill_use") if u["at_ms"] >= t0 and u["actor"] in fighters]
+    m = {k: count(k) for k in ("check_ctx:checked", "check_ctx:differed", "alarm:kept", "alarm:checked", "alarm:asked", "alarm:differed", "warmth:checked", "warmth:differed")}
+    m["uses"] = len(uses)
+    m["strikes_landed"] = sum(1 for u in uses if u["skill"] == "strike" and (u["outcome"] or "").startswith(("hit", "blocked", "killed")))
+    m["out_of_breath"] = sum(1 for u in uses if "out of breath" in (u["outcome"] or ""))
+    m["remains"] = len([r for r in s.rows("SELECT id, kind FROM structure") if r["kind"] == "remains"])
+    (s.out / f"{s.name}-battle-cheap.json").write_text(json.dumps(m, indent=1) + "\n")
+    print("MEASURE", json.dumps(m), flush=True)
+    try:
+        s.expect("a battle went on: strikes landed, and some were refused for want of breath or tried again", m["strikes_landed"] >= 10, m)
+        if which == "cheap_check_ctx":
+            s.expect("every move's check on its plan's fields gave the whole context's answer", m["check_ctx:checked"] >= 100 and m["check_ctx:differed"] == 0, m)
+        elif which == "cheap_alarms":
+            s.expect("every kept alarm answer was the law's, and most answers were kept", m["alarm:checked"] == m["alarm:kept"] and m["alarm:kept"] > m["alarm:asked"] and m["alarm:differed"] == 0, m)
+        elif which == "cheap_warmth":
+            s.expect("warmth among remains, a fire and a shelter came out the same both ways", m["warmth:checked"] >= 100 and m["warmth:differed"] == 0 and m["remains"] >= 3, m)
+    finally:
+        for who in fighters:
+            s.graph(who, {"wait": 300})
+        off_the_line(s, line, fighters, dy=76)
+
+
+SCENES["cheap_check_ctx"] = battle_cheap
+SCENES["cheap_alarms"] = battle_cheap
+SCENES["cheap_warmth"] = battle_cheap
 
 
 if __name__ == "__main__":

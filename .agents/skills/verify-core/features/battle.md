@@ -21,6 +21,11 @@ What lets a dense battle of minded characters keep its tick (docs/BATTLE_SCALE.m
   - A blow at or by the onlooker is not folded: its own lines come at once, as before. A death is still told at once on its own line too.
   - A fight's first landed blow wakes its onlookers as bystanders when it lands (as its line did); the folded line wakes no one.
   - Pending blows are rows, not module memory (SpacetimeDB keeps no module state between calls); a row goes once every onlooker's window holding it is told.
+- **The fighters' cheaper paths** (battle-cheap; docs/BATTLE_SCALE.md "The cheaper paths as built"):
+  - **A move's check before it starts** is given only the fields its plan reads (`check_ctx_plan`; `act::checked`, `Reads`). The roll is drawn either way.
+  - **The body's alarms** are kept per character until a fact `status_of` reads can change (`alarm_cells`; `brain::alarm_statuses`, `BodyFacts::next_change_ms`). The law's shared memo is keyed by those facts alone (`Scripts::status_reads`).
+  - **Warmth** visits only what warms or shelters, in place (`common::chunk_warming`).
+  - Each has a diagnostic `_check` law that also works the answer out the old way and counts differences.
 - **Remains in sight** (`brain.rs`): a scene's structures are gathered only when an evaluation reads one (`Ev::structures`), so a fighter's 15 Hz evaluation does not copy every remains in sight; noticing checks each structure's id against the seen set and copies their details only when one is new.
 
 ## Driving it
@@ -51,8 +56,12 @@ On a launched default-seed run (`scenes.py <case> --run "$R"`):
     - O is among most rows' onlookers, and neither of the two in a blow is;
     - D's own lines come at each blow, not folded;
     - with `witness_fold_ms` 0, O is told a first blow at once on its own line.
+- **`cheap_check_ctx`, `cheap_alarms`, `cheap_warmth`** (about 1.5 minutes each; battle-cheap, the `check_ctx_plan` and `alarm_cells` laws, warmth in place):
+  - 12 fighters on an open line, a campfire, a shelter and three dead among them, for 60 s, with the diagnostic laws `check_ctx_check`, `alarm_cells_check` and `warmth_check` on.
+  - Each case asserts its own path from the `diag:` counts of its own window: many comparisons, none different. For the alarms, more answers kept than asked.
+  - The counts are read from the server log's lines stamped after the case began.
 - `witness_wake` checks B's folded line holding the blow on V within `witness_fold_ms`; the `sight`, `fov` and facing duel scenes check who is told a fight (walls, facing) through the folded lines.
 
-The rules tests `attention_cues_are_the_world_s_laws` (the laws' defaults and descriptions) and `fold::tests` (the line's words, counts and order) and the authority's `fold::tests` (each blow in exactly one window per onlooker) cover the rest offline. `profile_detail` (a diagnostic law) times the parts of each evaluation while profiling. The scale evidence is `living/tools/battle_diag.py` (docs/BATTLE_SCALE.md).
+The rules tests `attention_cues_are_the_world_s_laws` (the laws' defaults and descriptions), `alarm_cells_give_the_law_s_answer_at_every_moment` (a cell's answer is the law's at every millisecond of five fighters' rows) and `fold::tests` (the line's words, counts and order) and the authority's `fold::tests` (each blow in exactly one window per onlooker) cover the rest offline. `profile_detail` (a diagnostic law) times the parts of each evaluation while profiling. The scale evidence is `living/tools/battle_diag.py` (docs/BATTLE_SCALE.md).
 
 Not covered here: a missile's folded line (unit test only), a held-back wake delivered late in the scene (B's window may be free when A strikes; the bound holds either way), remains noticed once each in a long battle (`battle_diag.py`), and players' views (unchanged; verify-player `combat.py`).

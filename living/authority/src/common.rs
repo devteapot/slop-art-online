@@ -256,7 +256,7 @@ pub fn clock(ctx: &ReducerContext) -> Clock {
 }
 
 /// Revision of the installed skill script (cached for the transaction).
-fn scripts_rev(ctx: &ReducerContext) -> u32 {
+pub fn scripts_rev(ctx: &ReducerContext) -> u32 {
     let t = stamp(ctx);
     if let Some((_, rev)) = SCRIPTS_REV.with(|c| c.get()).filter(|(s, _)| *s == t) {
         return rev;
@@ -1266,6 +1266,39 @@ fn chunk_resources(ctx: &ReducerContext, chunk: u32) -> Rc<Vec<ResourceNode>> {
 fn chunk_structures(ctx: &ReducerContext, chunk: u32) -> Rc<Vec<Structure>> {
     let t = stamp(ctx);
     CHUNK_STRUCTURES.with(|c| c.borrow_mut().get(t, chunk, || Rc::new(ctx.db.structure().chunk().filter(chunk).collect())))
+}
+
+thread_local! {
+    /// Per chunk, its structures that can warm or shelter (a roof, `warms`, a fire that `burns`):
+    /// drawn from the chunk's cached list, and drawn again whenever that list is (the same `Rc`
+    /// or a new one), so it is never staler than the list itself (docs/BATTLE_SCALE.md,
+    /// battle-cheap path 3). Remains and the like are not in it.
+    static CHUNK_WARMING: RefCell<std::collections::HashMap<u32, (Rc<Vec<Structure>>, Rc<Vec<Structure>>)>> = RefCell::new(std::collections::HashMap::new());
+}
+
+/// The structures of `chunk` that can warm or shelter, by the installed script's traits.
+pub fn chunk_warming(ctx: &ReducerContext, chunk: u32) -> Rc<Vec<Structure>> {
+    let all = chunk_structures(ctx, chunk);
+    let rev = scripts_rev(ctx);
+    if let Some(w) = CHUNK_WARMING.with(|c| c.borrow().get(&chunk).filter(|(src, _)| Rc::ptr_eq(src, &all)).map(|(_, w)| w.clone())).filter(|_| WARMING_REV.with(|r| r.get()) == rev) {
+        return w;
+    }
+    let sc = scripts(ctx);
+    let w: Rc<Vec<Structure>> = Rc::new(all.iter().filter(|s| { let t = sc.structure(&s.kind); t.roof || t.warms || t.burns.is_some() }).cloned().collect());
+    CHUNK_WARMING.with(|c| {
+        let mut c = c.borrow_mut();
+        if WARMING_REV.with(|r| r.get()) != rev {
+            c.clear();
+            WARMING_REV.with(|r| r.set(rev));
+        }
+        c.insert(chunk, (all, w.clone()));
+    });
+    w
+}
+
+thread_local! {
+    /// The script revision `CHUNK_WARMING` was drawn under (a kind's traits are the script's).
+    static WARMING_REV: std::cell::Cell<u32> = const { std::cell::Cell::new(u32::MAX) };
 }
 
 /// Call before inserting (`None`: any chunk) or updating (`Some(chunk)`) a resource node.
