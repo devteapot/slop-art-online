@@ -12,7 +12,7 @@
 //! [`Scripts::validate`] runs every function on sample inputs before an install is accepted.
 
 use rhai::packages::Package;
-use rhai::{Array, Dynamic, Engine, Map, Scope, AST};
+use rhai::{Array, Dynamic, Engine, ImmutableString, Map, Scope, AST};
 use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::rc::Rc;
@@ -1053,7 +1053,7 @@ pub struct Scripts {
     source: String,
     /// Law declarations that failed when read (an install refuses them).
     law_errors: RefCell<Vec<String>>,
-    /// `laws_about(laws())`, read once when the script compiles, under [`COMPILE_OPERATIONS`]
+    /// `law_about(laws(), name)` for each constant, read once when the script compiles, under [`COMPILE_OPERATIONS`]
     /// like the laws' other descriptions: what each world constant is, or why it could not be read.
     about: Result<Vec<(String, String)>, String>,
     /// What each kind of structure does for those near it (its traits in `structures()`).
@@ -1234,7 +1234,9 @@ pub struct Limits {
 /// 2026-11-11) and 2,373 after. `stamina-1` (2026-11-11) added 38 constants for breath, focus,
 /// costs, health and blows: their words bring it past 4,096 (about 4,200 with the numbers), so the
 /// string limit is 6,144; their numbers are written as they are (`${l.x}`, not `short`), since a
-/// call each took `laws_about` past its operations.
+/// call each took `laws_about` past its operations. Since `laws-about-list` (2026-11-13), when the
+/// words of 126 constants reached 6,144, they are asked one constant at a time
+/// (`law_about(l, name)`) and joined in Rust, so they no longer count against this limit.
 pub const LIMITS: Limits = Limits { operations: MAX_OPERATIONS, call_levels: 8, expr_depth: (40, 40), string: 6_144, array: 256, map: 512 };
 
 /// Rhai's hashing keys, the same in every build of every program that runs the laws: the
@@ -2060,7 +2062,7 @@ impl Scripts {
         &self.laws
     }
 
-    /// What each world constant is (`laws_about(laws())`), by name: the script's words for the
+    /// What each world constant is (`law_about(laws(), name)`), by name: the script's words for the
     /// values in force. Empty when the script does not say.
     pub fn laws_about(&self) -> Vec<(String, String)> {
         self.about.clone().unwrap_or_default()
@@ -2071,12 +2073,31 @@ impl Scripts {
         self.about.as_ref().err().map(|e| e.as_str())
     }
 
-    /// `laws_about(laws())` as the compile reads it (under [`COMPILE_OPERATIONS`]).
+    /// The world constants' words as the compile reads them: `law_about(laws(), name)` for each
+    /// constant, one call and one string at a time (each under [`COMPILE_OPERATIONS`]), joined
+    /// here, so no value the script builds holds them all and no engine limit grows with the
+    /// number of laws (Rhai counts every string inside one value against its string limit). A
+    /// script that has only the old `laws_about(l)`, one map of them all (a world's script
+    /// installed before 2026-11-13), is read that way.
     fn read_laws_about(&self) -> Result<Vec<(String, String)>, String> {
+        let m = self.laws_map();
+        if self.has("law_about") {
+            let mut keys: Vec<String> = m.keys().map(|k| k.to_string()).collect();
+            keys.sort();
+            let mut out = Vec::with_capacity(keys.len());
+            for k in keys {
+                let d = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "law_about", (m.clone(), ImmutableString::from(k.as_str()))).map_err(|e| format!("law_about({k}): {e}"))?;
+                if d.is_unit() {
+                    continue;
+                }
+                let text = d.into_string().map_err(|t| format!("law_about({k}): words must be a string, not {t}"))?;
+                out.push((k, text));
+            }
+            return Ok(out);
+        }
         if !self.has("laws_about") {
             return Ok(Vec::new());
         }
-        let m = self.laws_map();
         let d = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "laws_about", (m,)).map_err(|e| format!("laws_about: {e}"))?;
         Ok(d.try_cast::<Map>().unwrap_or_default().into_iter().map(|(k, v)| (k.to_string(), v.into_string().unwrap_or_default())).collect())
     }
@@ -3489,7 +3510,7 @@ mod tests {
         // Undescribed laws are refused.
         let bare = Scripts::new(&src.replace("fn theft_law()", "fn theft_old_law()")).unwrap();
         assert!(bare.validate().unwrap_err().contains("the law `theft` has no description"));
-        let mute = Scripts::new(&src.replace("        follow_s: `one follow lasts", "        follow_z: `one follow lasts")).unwrap();
+        let mute = Scripts::new(&src.replace("        \"follow_s\" => `one follow lasts", "        \"follow_z\" => `one follow lasts")).unwrap();
         assert!(mute.validate().unwrap_err().contains("the world constant `follow_s` has no description"));
         assert!(s.validate().is_ok());
     }
@@ -3637,16 +3658,15 @@ mod tests {
     /// a world may set (`set_world_law`), clamped to sane bounds.
     #[test]
     fn the_constants_words_are_read_with_the_compile_s_budget() {
-        // `laws_about` is read once per install, like the laws' other descriptions: a world whose
-        // words take more than the running world's MAX_OPERATIONS still installs, and a failure
-        // to read them is refused with its own reason, not as a constant without words.
+        // `law_about` is read once per install, a call per constant: a world whose words for one
+        // constant take more than the running world's MAX_OPERATIONS still installs, and a
+        // failure to read them is refused with its own reason, not as a constant without words.
         let src = include_str!("../../scripts/skills.rhai");
-        let long = r#"fn laws_about(l) {
-            let m = base_laws_about(l);
+        let long = r#"fn law_about(l, name) {
+            if name != "address_m" { return base_law_about(l, name); }
             let extra = "";
             for i in 0..600 { if i % 300 == 0 { extra += " (and so on)"; } else if i < 0 { extra += "never"; } }
-            m.address_m = m.address_m + extra;
-            m
+            base_law_about(l, name) + extra
         }"#;
         let sc = Scripts::new(&crate::floors::compose(src, long).unwrap()).unwrap();
         assert!(sc.laws_about_error().is_none(), "{:?}", sc.laws_about_error());
@@ -3654,11 +3674,43 @@ mod tests {
         assert!(about["address_m"].ends_with(" (and so on) (and so on)"), "{:?}", about.get("address_m"));
         sc.validate().expect("installs: its words were read within the compile's budget");
         // The same words asked under the running world's cap (the engine after the compile) are not read.
-        assert!(sc.engine.call_fn::<Dynamic>(&mut Scope::new(), &sc.ast, "laws_about", (sc.laws_map(),)).is_err(), "the test's words take more than {MAX_OPERATIONS} operations");
+        assert!(sc.engine.call_fn::<Dynamic>(&mut Scope::new(), &sc.ast, "law_about", (sc.laws_map(), ImmutableString::from("address_m"))).is_err(), "the test's words take more than {MAX_OPERATIONS} operations");
         // Words that cannot be read at all are refused as such.
-        let broken = Scripts::new(&crate::floors::compose(src, "fn laws_about(l) { let m = base_laws_about(l); m.address_m = l.no_such_law.len(); m }").unwrap()).unwrap();
+        let broken = Scripts::new(&crate::floors::compose(src, "fn law_about(l, name) { if name == \"address_m\" { l.no_such_law.len() } else { base_law_about(l, name) } }").unwrap()).unwrap();
         assert!(broken.laws_about_error().is_some());
-        assert!(broken.validate().unwrap_err().contains("laws_about"), "{:?}", broken.validate());
+        assert!(broken.validate().unwrap_err().contains("law_about"), "{:?}", broken.validate());
+    }
+
+    /// The constants' words are asked one constant at a time and joined in Rust, so their total
+    /// has no ceiling: Rhai counts every string inside one value against its string limit
+    /// (`LIMITS.string`, 6,144), which the old `laws_about(l)`, one map of them all, reached on
+    /// 2026-11-13 (`known-ground`). Here a world with 150 more constants and long words for every
+    /// one (about 50,000 characters, about 8 times the limit and today's total) installs, and
+    /// each constant reads back its own words.
+    #[test]
+    fn many_long_words_for_the_constants_install() {
+        let src = include_str!("../../scripts/skills.rhai");
+        let shipped = Scripts::new(src).unwrap();
+        let today: usize = shipped.laws_about().iter().map(|(_, t)| t.len()).sum();
+        let pad = "and so on, at some length, as a world's own description of a constant may well run on ".repeat(2);
+        let extra_laws: String = (0..150).map(|i| format!("m.extra_law_{i} = {i}.0; ")).collect();
+        let overlay = format!(
+            r#"fn laws() {{ let m = base_laws(); {extra_laws} m }}
+            fn law_about(l, name) {{
+                let base = base_law_about(l, name);
+                let head = if type_of(base) == "string" {{ base }} else if name.starts_with("extra_law_") {{ "an extra constant " + name }} else {{ return (); }};
+                head + ": {pad}"
+            }}"#
+        );
+        let sc = Scripts::new(&crate::floors::compose(src, &overlay).unwrap()).unwrap();
+        assert!(sc.laws_about_error().is_none(), "{:?}", sc.laws_about_error());
+        sc.validate().expect("a world with many long words installs");
+        let about: std::collections::HashMap<String, String> = sc.laws_about().into_iter().collect();
+        let total: usize = about.values().map(|t| t.len()).sum();
+        assert!(about.len() >= shipped.laws_about().len() + 150, "{} words", about.len());
+        assert!(total > 3 * LIMITS.string && total > 3 * today, "{total} characters against today's {today} and the limit {}", LIMITS.string);
+        assert!(about["extra_law_149"].starts_with("an extra constant extra_law_149: and so on"), "{}", about["extra_law_149"]);
+        assert!(about["fire_warmth"].starts_with("a campfire warms those within"), "{}", about["fire_warmth"]);
     }
 
     #[test]
