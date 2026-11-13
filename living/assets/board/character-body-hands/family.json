@@ -1,0 +1,8 @@
+{
+ "schema": 1,
+ "family": "character:body-hands",
+ "kind": "character",
+ "title": "Hands on the corrected bodies",
+ "description": "The hand's form before and after the body pass's hands part, on a composed woman and man beside the reference: close up hanging, talking, waving, pointing, walking and gathering; full figure; the hand's outline over the reference's; and a man's hand at two sizes beside the reference.",
+ "target": "A hand built from the reference's measured shares: fingers that fan, slope and taper, a thumb from beside the wrist, at no more triangles or bones than before (docs/CHARACTERS.md, The body: hands). The hand's size is as it was; man-hand-size shows it beside a 20 cm variant for the owner to choose."
+}

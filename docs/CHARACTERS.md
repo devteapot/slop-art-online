@@ -2086,8 +2086,12 @@ python3 living/tools/characters/reference/hand.py living/game/assets/lookdev/typ
 
 1. **No nails and no knuckles.** The reference draws nails and a line at each joint; ours are smooth, with a warmer tip.
 2. **Fingers are six-sided tubes** before smoothing; close up their sides show as soft edges, and the web between the fingers is a flat cap.
-3. **The palm is 0.18 thick and 0.45 across** for 0.20 and 0.47, and the ball of the thumb is the thumb's own tube through the palm's edge, not a modelled pad.
-4. **The far model's hand** is still a mitten with a stub of a thumb.
+3. **The fingertip is thick:** the middle finger's last bone is 0.072 of the hand for the reference's 0.048.
+4. **The palm is 0.18 thick and 0.45 across** for 0.20 and 0.47, and the ball of the thumb is the thumb's own tube through the palm's edge, not a modelled pad.
+5. **A man's hand is large,** 0.88 of a head: the owner's decision, above.
+6. **The far model's hand** is still a mitten with a stub of a thumb.
+
+The board: `character:body-hands` (before and after close up and full figure, the outline over the reference's, a man's hand at two sizes), `character:cast-64` and the six preset families.
 
 ### The neck
 
