@@ -70,3 +70,17 @@ A body does not fall asleep in a fight. The script's `sleep_check(a)` (`living/s
 A refused sleep fails its routine, so a graph's next desire takes over; a mind is told the refusal as any failed act. Every blow that lands wakes a sleeping victim, whoever plays it (`perceive::wake_struck` in `act::damage`): before, only a fight's first blow did (through its deliberation request), and later blows went to the AI-only, throttled fight report, so a body could sleep through a fight (r2e heavy r4: 8 of 10 night blows landed on a sleeper). The first blow's deliberation is unchanged.
 
 `scenes.py alert_after_hit` (any seed, about 2 min): struck once, a sleep is refused for 15 s and then taken; struck with the attacker left 2 m off, refused as "someone who struck you is close" past 15 s and taken once they walk away (within the 30 s fight); with both laws off (so a struck body sleeps again at once), the fight's second blow (within 30 s, not a first) wakes the sleeper with "You woke up: … is attacking you!". It sets and restores both laws.
+
+
+## An admin sets a body's health
+
+`admin_set_vitals(id, hp)` (`living/authority/src/lib.rs`, admin only) sets a living body's health to `hp`; more than its maximum is its maximum. It re-anchors the vitals row at that moment (`common::settle`), refreshes the fight band (`combat::refresh_band`), and updates what others see of the body's health (`perception::health_moved`). Nothing perceives it as care: no experience is written for anyone. Each use is a chronicle line of kind `admin` ("admin set <name>'s health 41 -> 100"). Trial timelines are its only user: the `vitals` step (docs/TRIALS.md), which R3's arenas use to start each meeting at full health (docs/COMBAT_MIND.md §5.4); summary.json `admin_vitals` lists every use. verify-client checks that every non-admin identity is refused, and that the mind service's sources never call it (it connects as the world's admin).
+
+`scenes.py admin_vitals`:
+- set to 40, then to 1000, read back as 40 and as the maximum;
+- each use an `admin` chronicle line;
+- 0 refused ("health must be above 0"), writing nothing;
+- after `kill`, refused ("no living character with that id").
+
+A negative value cannot be passed through the admin CLI, which reads "-5" as a flag.
+

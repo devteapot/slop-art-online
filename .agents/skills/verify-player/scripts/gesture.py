@@ -3,7 +3,9 @@
 
 The player's own identity gestures through `human_act` (the deliberate-act path every player
 command takes): it waves and nods at a resident and gets an answer, turns to face someone,
-and is refused what the rules refuse. `use_skill` is refused for a gesture (it takes only the
+waves while walking off (`on_the_move`: it completes), is told when moving breaks off a look
+("The look stopped: you moved off before it was done.", code `moved`), and is refused what the
+rules refuse. `use_skill` is refused for a gesture (it takes only the
 skill bar). Admin `place_at` sets the scene (named in the report). Results are read from the
 authority's rows: `skill_use` (intention to outcome), `doing`, `body` and the player's
 `experience` rows.
@@ -168,6 +170,36 @@ def main():
     want = math.atan2(y - b["y"], x - b["x"])
     off = abs((h - want + math.pi) % (2 * math.pi) - math.pi)
     check(p, "human_act face turns the player's body to face the resident", off < 0.4, f"heading {h:.2f}, toward them {want:.2f}, off {off:.2f} rad")
+
+    # 6. A wave on the move (talk-turns, `on_the_move`): the player waves and presses a
+    # direction before the 1.2 s gesture is done; the wave completes, and the body walks.
+    time.sleep(8)
+    p.call("place_at", [me, x - 3.0, y], "admin")
+    time.sleep(1.0)
+    since = now_ms()
+    p.act({"do": "wave", "target": {"id": r["id"]}})
+    time.sleep(0.3)
+    p.call("human_move", [0.0, 1.0, False])
+    walked = wait_for(lambda: [b for b in p.sql(f"SELECT x, y FROM body WHERE id = {me}") if math.dist((b["x"], b["y"]), (x - 3.0, y)) > 0.5], 3)
+    on_move = wait_for(lambda: next((u for u in p.uses(me, since) if u["skill"] == "wave" and u["outcome"]), None))
+    p.call("human_move", [0.0, 0.0, False])
+    check(p, "a wave completes while the player walks (on_the_move)", on_move and on_move["outcome"].startswith("greeted") and walked, f"{on_move}; walked {bool(walked)}")
+
+    # 7. A skill without `on_the_move` is broken off by moving, told in the rules' words. The
+    # player stands 2 m from where the resident is now, and moves once the look has begun.
+    rb = p.sql(f"SELECT x, y FROM body WHERE id = {r['id']}")[0]
+    p.call("place_at", [me, rb["x"] - 2.0, rb["y"]], "admin")
+    time.sleep(1.0)
+    since = now_ms()
+    p.act({"do": "appraise", "target": {"id": r["id"]}})
+    begun = wait_for(lambda: [a for a in p.sql(f"SELECT skill FROM activity WHERE id = {me}") if a["skill"] == "appraise"], 3)
+    p.call("human_move", [0.0, 1.0, False])
+    told = wait_for(lambda: [t for t in p.told(me, since) if "stopped" in t], 4)
+    p.call("human_move", [0.0, 0.0, False])
+    outs = [o for o in p.sql(f"SELECT * FROM act_outcome WHERE observer = {me}") if o.get("at_ms", 0) >= since]
+    moved = [o for o in outs if o.get("code") == "moved" and o.get("skill") == "appraise"]
+    check(p, "moving breaks off a look, told as the rules say it", any(t == "The look stopped: you moved off before it was done." for t in told) and moved,
+          f"{told}; act_outcome code moved: {len(moved)}; the look had begun: {bool(begun)}; told since: {p.told(me, since)}")
 
     # 5. Refusals, told back as experiences.
     since = now_ms()

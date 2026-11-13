@@ -140,6 +140,8 @@ ADMIN = {
     'set_world_law': ['fov_on', 'false'],
     # Move a live world to its seed's looks (look-1, admin only).
     'relook': ['probe'],
+    # Set a living body's health (trial timelines' meeting resets, docs/COMBAT_MIND.md §5.4).
+    'admin_set_vitals': [0, 100.0],
 }
 
 
@@ -399,6 +401,13 @@ class Run:
         expected = set(ADMIN) | set(MIND) | set(FAST) | set(PLAYER) | {'join', 'human_move', 'human_act', 'human_say', 'human_speak', 'tick', 'housekeeping', 'genesis_step'}
         if set(reducers) != expected:
             raise RuntimeError(f'reducer inventory changed: {set(reducers) ^ expected}')
+        # The mind service connects as the world's admin, so `require_admin` cannot refuse it an
+        # admin reducer by identity: the guard is that it never calls these (its sources name none).
+        never_by_minds = ['admin_set_vitals', 'kill', 'relook', 'set_world_law', 'install_script']
+        called = {r for path in (ROOT / 'living/mind/src').rglob('*.rs') for r in never_by_minds
+                  if re.search(rf'reducers\.{r}(_then)?\(', path.read_text())}
+        if called:
+            raise RuntimeError(f'the mind service calls admin reducers it must not: {sorted(called)}')
         write(self.directory / 'source-inventory.json', {'base_queries': exact, 'private': private,
               'scoped': scoped, 'views': sorted(views), 'perception': self.mode,
               'reducers': reducers, 'sdk': '2.14.1', 'server': '2.14.1'})

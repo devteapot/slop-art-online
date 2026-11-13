@@ -15,6 +15,7 @@ pub mod act_outcome_type;
 pub mod act_queue_table;
 pub mod activity_table;
 pub mod activity_type;
+pub mod admin_set_vitals_reducer;
 pub mod artifact_table;
 pub mod artifact_type;
 pub mod audience_table;
@@ -325,6 +326,7 @@ pub use act_outcome_type::ActOutcome;
 pub use act_queue_table::*;
 pub use activity_table::*;
 pub use activity_type::Activity;
+pub use admin_set_vitals_reducer::admin_set_vitals;
 pub use artifact_table::*;
 pub use artifact_type::Artifact;
 pub use audience_table::*;
@@ -634,6 +636,10 @@ pub use world_type::World;
 /// to indicate which reducer caused the event.
 
 pub enum Reducer {
+    AdminSetVitals {
+        id: u32,
+        hp: f32,
+    },
     ClientConnected,
     ClientDisconnected,
     CreateFloor {
@@ -837,6 +843,7 @@ impl __sdk::InModule for Reducer {
 impl __sdk::Reducer for Reducer {
     fn reducer_name(&self) -> &'static str {
         match self {
+            Reducer::AdminSetVitals { .. } => "admin_set_vitals",
             Reducer::ClientConnected => "client_connected",
             Reducer::ClientDisconnected => "client_disconnected",
             Reducer::CreateFloor { .. } => "create_floor",
@@ -893,6 +900,12 @@ impl __sdk::Reducer for Reducer {
     #[allow(clippy::clone_on_copy)]
     fn args_bsatn(&self) -> Result<Vec<u8>, __sats::bsatn::EncodeError> {
         match self {
+            Reducer::AdminSetVitals { id, hp } => {
+                __sats::bsatn::to_vec(&admin_set_vitals_reducer::AdminSetVitalsArgs {
+                    id: id.clone(),
+                    hp: hp.clone(),
+                })
+            }
             Reducer::ClientConnected => {
                 __sats::bsatn::to_vec(&client_connected_reducer::ClientConnectedArgs {})
             }

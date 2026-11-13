@@ -343,6 +343,11 @@ fn sample(
     rec.next_state = now + 0.25;
     let me = net.my_id;
     let (pos, heading) = me.and_then(|id| scene.shown.get(&id)).map(|(p, h)| (Some([p.x, p.y]), *h)).unwrap_or((None, None));
+    // The authority's travel heading and facing for my body, apart (look-4: `heading` above is
+    // the drawn heading from the motion, which a facing turned aside is not).
+    let row = net.conn.as_ref().zip(me).and_then(|(c, id)| crate::net::find_motion(c, id));
+    let travel = row.as_ref().map(|m| crate::live::authority_travel(m, scene.mine_ms));
+    let facing = row.as_ref().map(|m| crate::live::authority_facing(m, scene.mine_ms).unwrap_or_else(|| crate::live::authority_travel(m, scene.mine_ms)));
     let cam = cams.iter().next().map(|g| {
         let t = g.translation();
         let f = g.forward();
@@ -363,7 +368,7 @@ fn sample(
         .collect();
     let chat = if controls.chat_open { Some(format!("typing ({} chars)", controls.chat.chars().count())) } else { None };
     let line = json!({
-        "t": unix_us() / 1000, "me": me, "me_pos": pos, "heading": heading, "cam": cam, "drawn": drawn,
+        "t": unix_us() / 1000, "me": me, "me_pos": pos, "heading": heading, "travel": travel, "facing": facing, "cam": cam, "drawn": drawn,
         "bubbles": bubbles, "mouths": mouths.as_ref().map(|m| m.by_id.iter().map(|(id, w)| (id.to_string(), json!((w * 100.0).round() / 100.0))).collect::<serde_json::Map<_, _>>()), "log": log, "target": hud.target.as_ref().map(|t| t.name.clone()),
         "chat_open": controls.chat_open, "chat": chat, "hp": hud.me.as_ref().map(|m| m.hp),
         "energy": hud.me.as_ref().map(|m| m.energy), "frame_ms": (time.delta_secs_f64() * 10000.0).round() / 10.0,
