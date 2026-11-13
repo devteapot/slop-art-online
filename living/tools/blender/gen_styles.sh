@@ -93,3 +93,9 @@ printf '%s\n' "${items[@]}" | xargs -P "${JOBS:-6}" -I{} bash -c 'one "$@"' _ {}
 # An outfit piece's file says where it is worn and how far out: its slot and layer, in the
 # scene's extras (look_lines.py wear; person_params.PIECE_WEAR).
 if [ -d "$root/outfit" ]; then python3 living/tools/characters/look_lines.py wear "$root" | tail -1; fi
+# Every style's fringe ends at every type's brows as it was drawn on the standard head, and no
+# fringe is behind a face's skin (fringe_check.py): after a build of every hair style, where the
+# types' files are beside the styles' folder.
+if [ "$(printf '%s\n' "${items[@]}" | grep -c '^hair/')" -ge 74 ] && [ -d "$(dirname "$root")/types" ]; then
+  python3 living/tools/characters/fringe_check.py "$(dirname "$root")" | tail -3
+fi
