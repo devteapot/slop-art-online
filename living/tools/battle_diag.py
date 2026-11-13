@@ -140,7 +140,12 @@ def database_identity(db):
 
 
 def metrics(ident):
-    want = ("spacetime_worker_wasm_memory_bytes", "spacetime_message_log_size_bytes", "spacetime_worker_instance_operation_queue_length", "spacetime_module_log_file_size_bytes")
+    # The last group is what this database sends its subscribers (cumulative; a window's rate is
+    # the difference between samples): on a battle world the mind service is its one subscriber.
+    want = ("spacetime_worker_wasm_memory_bytes", "spacetime_message_log_size_bytes", "spacetime_worker_instance_operation_queue_length", "spacetime_module_log_file_size_bytes",
+            "spacetime_num_bytes_sent_to_clients_total", "spacetime_num_delta_queries_evaluated", "spacetime_num_delta_queries_matched", "spacetime_num_duplicate_rows_sent",
+            "spacetime_subscription_query_execution_time_micros_sum", "spacetime_subscription_query_execution_time_micros_count",
+            "spacetime_subscription_lock_wait_time_sec_sum", "spacetime_subscription_send_queue_length", "spacetime_subscription_connections")
     out = {}
     try:
         text = urllib.request.urlopen(f"{URL}/v1/metrics", timeout=30).read().decode()
