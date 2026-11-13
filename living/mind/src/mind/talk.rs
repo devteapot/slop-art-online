@@ -608,6 +608,13 @@ impl Minds {
             return;
         }
         let addressed = addressed || named;
+        // A line to the room that names exactly one person, and not this hearer, is that
+        // person's to answer (talk-named-room, after ew2): others hear it and may overhear it,
+        // but take no turn on it, whether drawn in, greeting, or already talking with the speaker.
+        if to == 0 && !addressed && room_names_one_other(&e.text) {
+            log::debug!("{} hears {}'s line naming someone else — no turn", me.name, self.name(speaker));
+            return;
+        }
         let asks = text.contains('?');
         let temper = self.temper(listener);
         let stamina = temper.stamina(self.affinity(listener, speaker));
@@ -1493,6 +1500,21 @@ fn flat(v: &Value) -> String {
     }
 }
 
+/// Whom a line to the room names, in the hearer's own row ("Petra Tarn calls out to the room,
+/// naming Nell Tarn, from about 19 m: “…”"): the labels, or `None` when it names no one.
+fn room_naming(row: &str) -> Option<Vec<String>> {
+    let head = row.split('“').next().unwrap_or(row);
+    let (_, rest) = head.split_once("to the room, naming ")?;
+    let list = [", while talking with", ", from about"].iter().fold(rest, |r, cut| r.split(cut).next().unwrap_or(r));
+    let list = list.trim_end().trim_end_matches(':').trim_end().trim_end_matches(',');
+    Some(list.split(", ").flat_map(|p| p.split(" and ")).map(|w| w.trim().to_string()).filter(|w| !w.is_empty()).collect())
+}
+
+/// A line to the room that names exactly one person, not this hearer (talk-named-room).
+fn room_names_one_other(row: &str) -> bool {
+    room_naming(row).is_some_and(|n| n.len() == 1 && n[0] != "you")
+}
+
 /// Whether a line's row (the hearer's own words of it, the authority's) names the hearer in a
 /// line said to someone else: "Sissly Fenner said to a stranger, naming you: “…”" (talk-turns).
 fn names_me(row: &str) -> bool {
@@ -1534,6 +1556,17 @@ mod tests {
         assert!(!names_me("Sissly Fenner said to a stranger: “naming you”"));
         assert!(act_toward(r#"{"do":"give","target":{"id":26},"item":"pie"}"#, 26));
         assert!(!act_toward(r#"{"do":"goto","target":{"place":"inn"}}"#, 26));
+    }
+
+    #[test]
+    fn a_room_line_naming_one_other_is_theirs_to_answer() {
+        assert!(room_names_one_other("Petra Tarn calls out to the room, naming Nell Tarn, from about 19 m: “Nell! Come to the smokehouse”"));
+        assert!(room_names_one_other("A stranger said to the room, naming a stranger: “Edda!”"));
+        assert!(room_names_one_other("Bram said to the room, naming Lorcan Vane, while talking with Ife Okoro: “Lorcan, look”"));
+        assert!(!room_names_one_other("Petra Tarn calls out to the room, naming you, from about 5 m: “Nell!”"), "the named hearer answers");
+        assert!(!room_names_one_other("A stranger said to the room, naming Edda Hollin and a stranger: “Edda! Ife!”"), "two named: not one person's");
+        assert!(!room_names_one_other("Bram said to the room while talking with Lorcan Vane: “Has anyone seen the cart?”"), "naming no one");
+        assert!(!room_names_one_other("Sissly Fenner said to a stranger, naming Agnes Fenner: “ask Mother”"), "a line to someone is the other rule");
     }
 
     #[test]
