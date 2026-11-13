@@ -79,6 +79,12 @@ Two strangers stay two people in memory ([features/strangers.md](features/strang
 .agents/skills/verify-knowledge/scripts/strangers.py --run minds-strangers-$(date +%Y%m%d-%H%M%S)
 ```
 
+Resources as last seen ([features/remembered.md](features/remembered.md), since `talk-places`): a player's character remembers berry bushes it saw, keeps believing them while they are stripped out of its sight, and finds them gone when it looks again. Authority only, on any launched run:
+
+```bash
+.agents/skills/verify-knowledge/scripts/remembered.py --run "$R"
+```
+
 ## Doctor
 
 The run records the shared doctor result in `actions.log`, confirms `RETURN 1` against its scratch graph, records the image and mounts in `neo4j-doctor.log`, and checks the fake's `/health`. It requires the real mind's subscription and scratch Neo4j connection log before checking memory effects.

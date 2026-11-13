@@ -1310,6 +1310,10 @@ pub struct TalkUser<'a> {
     pub how: &'a str,
     /// Standing proposals between the two, what one carries and knows (for acts).
     pub between: &'a [String],
+    /// The places one knows and the resources one remembers (`Minds::places`), with the way
+    /// from where one stands when that is known (`placed`); empty: no section (talk-places).
+    pub places: &'a [String],
+    pub placed: bool,
 }
 
 pub fn talk_user(t: &TalkUser) -> String {
@@ -1342,6 +1346,12 @@ pub fn talk_user(t: &TalkUser) -> String {
     }
     for b in t.between {
         out.push(Stability::Dynamic, format!("- {b}\n"));
+    }
+    if !t.places.is_empty() {
+        out.push(Stability::Dynamic, if t.placed { "\n# Places you know, from where you stand\n" } else { "\n# Places you know\n" });
+        for p in t.places {
+            out.push(Stability::Dynamic, format!("- {p}\n"));
+        }
     }
     out.push(Stability::Dynamic, "\n# The conversation so far\n");
     for l in t.conversation {
@@ -1526,6 +1536,9 @@ mod tests {
                     heard: "dynamic-heard",
                     how: "",
                     between: &["dynamic-offer".into()],
+                    // Dynamic: the way to each place depends on where one stands now.
+                    places: &["dynamic-place".into()],
+                    placed: true,
                 }),
             ),
             "animal_impulse" | "animal_compile" | "animal_consolidate" => {

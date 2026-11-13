@@ -171,3 +171,15 @@ The `say-once` case (`verify_minds.py --case say-once`) replays ew2's Mirren Qui
 3. Within 2 s, `mind_install_way` with the decision's own line, which is refused ("speaking too fast").
 
 Checks, 7 s later: the line is said once (one chronicle row, no "(×2)"); there is no `repeat` row; the decision's line was refused and told. Then what the rule leaves alone: the same plan steps with a line to the room say it again (`a_room_line_is_said_again`), and a scene graph (`set_behavior`) installed twice says its line to A again (`a_scene_line_is_said_again`). Before `say-once`, on main `80e75932`, the line came out "(×2)" with the repeat row. Evidence: `say-once.json`.
+
+## Places in a talk turn
+
+Since `talk-places` (2026-11-13, docs/COMMUNICATION.md §20). A talk turn asks the authority where its character stands (`mind_where`, read back from `standing`) and lists, under "# Places you know, from where you stand", the character's places and the resources it remembers (`seen_stock`), each with the way from there (`living_rules::bearing`: "here" within 4 m, else metres and a compass word). The think and deliberate prompts' "# Places you remember" are the same lines from the scene's place (`Minds::places`).
+
+The `talk-places` case (`verify_minds.py --case talk-places`): H (thought for) on an open line with A beside it (its lines are the admin's `mind_say`); three berry bushes holding one berry each by H; H steps 23 m off and back (a look); H knows a place "verify well" 16 m east (`mind_update`). Checks:
+
+1. A asks where to find berries: H's talk prompt has the section, the well as `"verify well" at [x, y], 16 m east` and the bushes as `3 berry bush around [x, y], here: seen day …`; H's `standing` row is where H stands.
+2. H's think prompt's places carry the way.
+3. H steps off; A gathers the three; the row is unchanged while H is away; back, it is gone with its count and seen time kept, and A's next question gets `berry bush around [x, y], here: gone when you were last here, day … (3 seen day …)`.
+
+The fake talk reply says a line and leaves the exchange open: a silent or ended reply settles it, and A's second question gets no turn. Evidence: `talk-places.json`, `prompt-talk-1.txt`, `prompt-think.txt`, `prompt-talk-2.txt`.

@@ -36,6 +36,8 @@ mod fast;
 
 /// How much of a remembered thing's salience and confidence is kept after a step failed at it.
 const MISSED_WEAKEN: f64 = 0.5;
+/// At most this many remembered resources in a place list (`places`), nearest first.
+pub(crate) const STOCK_SHOWN: usize = 8;
 
 pub enum Event {
     /// Speech heard (or unanswered) by one of this service's characters.
@@ -604,8 +606,7 @@ impl Minds {
             if t == 0 {
                 return "long ago".into();
             }
-            let h = living_rules::hour_of(t, epoch, day);
-            format!("day {} {:02}:{:02}", living_rules::day_of(t, epoch, day), h as u32, (h.fract() * 60.0) as u32)
+            living_rules::day_clock(t, epoch, day)
         }
     }
 
@@ -1884,8 +1885,41 @@ impl Minds {
         self.conn.db.judgment().iter().filter(|j| j.actor == actor).map(|j| format!("{} = {:.2} ({})", j.key, j.value, j.why)).collect()
     }
 
-    fn places(&self, actor: u32) -> Vec<String> {
-        self.conn.db.place().iter().filter(|p| p.actor == actor).map(|p| format!("\"{}\" at [{:.0}, {:.0}]", p.name, p.x, p.y)).collect()
+    /// The places a character knows and what it remembers of resources (its `seen_stock`), one
+    /// line each (talk-places, docs/COMMUNICATION.md §20), with how far and which way from `at`
+    /// when that is known (`living_rules::bearing`, the scene's words): "\"inn\" at [404, 285],
+    /// 46 m south", "10 berry bush around [416, 239], 9 m east: seen day 1 15:03", "berry bush
+    /// around [416, 239], here: gone when you were last here, day 1 17:40 (10 seen day 1 15:03)".
+    /// The same lines in a deliberation (from its scene's place), a talk turn (from where it
+    /// stands) and player memory (no place: no way). At most [`STOCK_SHOWN`] remembered
+    /// resources, nearest first (else the latest seen).
+    pub(crate) fn places(&self, actor: u32, at: Option<(f32, f32)>) -> Vec<String> {
+        let way = |x: f32, y: f32| at.map(|a| format!(", {}", living_rules::bearing::from_here(a, (x, y)))).unwrap_or_default();
+        let mut out: Vec<String> = self.conn.db.place().iter().filter(|p| p.actor == actor).map(|p| format!("\"{}\" at [{:.0}, {:.0}]{}", p.name, p.x, p.y, way(p.x, p.y))).collect();
+        let mut stock: Vec<SeenStock> = self.conn.db.seen_stock().iter().filter(|s| s.actor == actor).collect();
+        match at {
+            Some(a) => {
+                let d = |s: &SeenStock| (s.x - a.0).powi(2) + (s.y - a.1).powi(2);
+                stock.sort_by(|p, q| d(p).total_cmp(&d(q)));
+            }
+            None => stock.sort_by_key(|s| std::cmp::Reverse(s.seen_ms.max(s.gone_ms))),
+        }
+        let fmt = self.fmt_time();
+        for s in stock.iter().take(STOCK_SHOWN) {
+            let kind = s.kind.replace('_', " ");
+            out.push(if s.gone_ms == 0 {
+                format!("{} {kind} around [{:.0}, {:.0}]{}: seen {}", s.count, s.x, s.y, way(s.x, s.y), fmt(s.seen_ms))
+            } else {
+                format!("{kind} around [{:.0}, {:.0}]{}: gone when you were last here, {} ({} seen {})", s.x, s.y, way(s.x, s.y), fmt(s.gone_ms), s.count, fmt(s.seen_ms))
+            });
+        }
+        out
+    }
+
+    /// Where a scene puts its character (`you.at`).
+    pub(crate) fn scene_at(scene: &Value) -> Option<(f32, f32)> {
+        let a = scene["you"]["at"].as_array()?;
+        Some((a.first()?.as_f64()? as f32, a.get(1)?.as_f64()? as f32))
     }
 
     /// A person's open projects (strongest first, at most `projects::SHOWN`) and how many are
@@ -1971,7 +2005,7 @@ impl Minds {
             mind,
             memories,
             judgments: recalled.judgments,
-            places: self.places(actor),
+            places: self.places(actor, Self::scene_at(&scene)),
             experiences,
             dealings: self.dealings(actor),
             cues: self.cue_lines(actor),
@@ -2338,7 +2372,7 @@ impl Minds {
             mind,
             memories,
             judgments: recalled.judgments,
-            places: self.places(actor),
+            places: self.places(actor, None),
             experiences: meaningful.iter().map(|e| self.exp_line(e, &fmt, true)).collect(),
             dealings: self.dealings(actor),
             cues: self.cue_lines(actor),

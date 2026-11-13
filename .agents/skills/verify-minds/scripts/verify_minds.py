@@ -2227,6 +2227,127 @@ def say_once_case(run):
     return {'status': 'pass', **result}
 
 
+@case('talk-places')
+def talk_places_case(run):
+    """A talk turn lists the places one knows and the resources one remembers, with the way to
+    each from where one stands (talk-places, docs/COMMUNICATION.md §20). On an open line, H
+    (thought for) stands at tile 4 with A (not thought for: its lines are the admin's) beside it; three berry bushes holding one
+    berry each are placed by H, and H steps 23 m off and back, so it looks (`stock::look`). H
+    knows a place "verify well" at tile 20 (admin `mind_update`, as its mind would write it).
+
+    1. A asks H "Where can I find berries around here?" (admin `mind_say`). H's talk prompt has
+       "# Places you know, from where you stand" with `"verify well" at [x, y], 16 m east` and
+       `3 berry bush around [x, y], <N> m <dir>: seen day …` (H's `seen_stock` row), and H's
+       `standing` row (`mind_where`) is where H stands.
+    2. H's think prompt's "# Places you remember" has the well with its way from the scene's place.
+    3. H steps off again; A gathers the three (admin `mind_act`); H comes back. Its row is gone,
+       and the next talk prompt says "berry bush around [x, y], … gone when you were last here,
+       day … (3 seen day …)"."""
+    run.harness('launch')
+    run.harness('doctor')
+    before = {c['id'] for c in run.sql('SELECT id FROM character', 'ids-before')}
+    run.admin('spawn_crowd', 2, True)
+    h, a = sorted(x['id'] for x in run.sql('SELECT id FROM character', 'ids-after') if x['id'] not in before)
+    for who in (h, a):
+        run.admin('set_behavior', who, json.dumps({'wait': 300}))
+    line = open_line(run, 28)
+    run.admin('place_at', h, *line[4])
+    run.admin('place_at', a, *line[6])
+    time.sleep(1.0)
+    nodes_before = {n['id'] for n in run.sql('SELECT id FROM resource_node', 'nodes-before')}
+    for dx, dy in ((1.0, 2.0), (2.0, 2.0), (1.0, 3.0)):
+        run.admin('place_resource', h, 'berry_bush', dx, dy, 1.0, 0)
+    # The new berry bushes by H (the world may grow other nodes meanwhile).
+    ours = sorted(n['id'] for n in run.sql('SELECT id, kind, x, y FROM resource_node', 'nodes-after') if n['id'] not in nodes_before and n['kind'] == 'berry_bush' and math.dist((n['x'], n['y']), line[4]) < 4.5)
+    # Off the tile centre, so its coordinates do not round on a half.
+    well = (line[20][0] + 0.2, line[20][1] + 0.2)
+    thought = {'kind': 'consolidate', 'summary': 'verify talk-places', 'detail': '', 'latency_ms': 0, 'tokens': 0, 'model': '', 'reference': ''}
+    run.admin('mind_update', h, {'persona': {'none': []}, 'relations': [], 'beliefs': {'none': []}, 'judgments': [],
+                                 'places': [{'name': 'verify well', 'x': well[0], 'y': well[1]}], 'thought': {'some': thought}, 'replace': False, 'cues': {'none': []}})
+
+    def step_off_and_back():
+        run.admin('place_at', h, *line[27])
+        time.sleep(2.5)
+        run.admin('place_at', h, *line[4])
+        time.sleep(2.5)
+
+    step_off_and_back()
+    row = lambda: next((r for r in run.private(f'SELECT * FROM seen_stock WHERE actor = {h}', 'seen-stock-h') if set(ours) <= set(r['nodes'])), None)
+    first = run.wait(lambda: [row()] if row() else [], "H remembers the three bushes", 20)[0]
+    script = {'replies': {'think': {'thought': 'I listen.', 'intend': ['wait'], 'say': None}, 'deliberate': basic_reply(),
+                          # A line, left open: a silent or ended exchange is settled, and A's
+                          # second question would get no turn.
+                          'talk': {'thought': 'I answer.', 'say': 'They grow by the well, I think.', 'to': 0, 'acts': [], 'end': False, 'settled': None}}}
+    run.start(model(run, script), [h])
+    requests = lambda purpose: [e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] == purpose]
+    sent_text = lambda e: '\n'.join(str(x.get('content', '')) for x in e['body'].get('messages', []))
+    say = lambda text: run.admin('mind_say', a, text, h, 'say', 0, TALK_THOUGHT)
+
+    def talk_prompt(marker):
+        say(f'Where can I find berries around here? ({marker})')
+        return run.wait(lambda: [sent_text(e) for e in requests('talk') if f'({marker})' in sent_text(e) and '# Who you are\n' + names[h] in sent_text(e)], f'H talk prompt {marker}', 60)[0]
+
+    names = {x['id']: x['name'] for x in run.sql('SELECT id, name FROM character', 'names')}
+    talk1 = talk_prompt('verify places one')
+    (run.directory / 'prompt-talk-1.txt').write_text(talk1)
+    standing = run.private(f'SELECT * FROM standing WHERE actor = {h}', 'standing-h')
+    body = next(b for b in run.private('SELECT id, x, y FROM body', 'bodies-h') if b['id'] == h)
+    here = (body['x'], body['y'])
+    way = lambda to: way_words(here, to)
+    section = talk1.split('# Places you know, from where you stand\n', 1)[1].split('\n#', 1)[0] if '# Places you know, from where you stand' in talk1 else ''
+    well_line = f'"verify well" at [{well[0]:.0f}, {well[1]:.0f}], {way(well)}'
+    bush_head = f'3 berry bush around [{first["x"]:.0f}, {first["y"]:.0f}], {way((first["x"], first["y"]))}: seen day '
+    run.admin('set_behavior', h, json.dumps({'think': 'I finished my plan. verify talk-places think'}))
+    think = run.wait(lambda: [sent_text(e) for e in requests('think') if 'verify talk-places think' in sent_text(e)], 'H think prompt', 60)[0]
+    (run.directory / 'prompt-think.txt').write_text(think)
+    remember = think.split('# Places you remember\n', 1)[1].split('\n#', 1)[0] if '# Places you remember' in think else ''
+    # 3. Stripped while H is away, then seen bare.
+    run.admin('set_behavior', h, json.dumps({'wait': 300}))
+    run.admin('place_at', h, *line[27])
+    time.sleep(1.0)
+    run.admin('mind_act', a, [json.dumps({'do': 'gather', 'target': {'nearest': 'berry_bush'}})] * 3, 'verify-minds')
+    run.wait(lambda: [1] if all(n['amount'] < 1.0 for n in run.sql('SELECT id, amount FROM resource_node', 'nodes-amounts') if n['id'] in ours) else [], 'A strips the three', 45)
+    run.admin('place_at', a, *line[12])
+    away = row()
+    run.admin('place_at', h, *line[4])
+    gone = run.wait(lambda: [r for r in [row()] if r and r['gone_ms'] > 0], 'H sees them bare', 20)[0]
+    run.admin('place_at', a, *line[6])
+    time.sleep(1.0)
+    talk2 = talk_prompt('verify places two')
+    (run.directory / 'prompt-talk-2.txt').write_text(talk2)
+    section2 = talk2.split('# Places you know, from where you stand\n', 1)[1].split('\n#', 1)[0] if '# Places you know, from where you stand' in talk2 else ''
+    checks = {
+        'three_bushes_placed': len(ours) == 3,
+        'h_remembers_the_three': first['count'] == 3 and first['gone_ms'] == 0,
+        'talk_prompt_lists_places_from_where_h_stands': bool(section),
+        'standing_is_where_h_stands': bool(standing) and math.dist((standing[0]['x'], standing[0]['y']), here) < 1.5,
+        'the_well_with_its_way': any(l.startswith('- ' + well_line) for l in section.splitlines()),
+        'the_bushes_with_their_way_and_when_seen': any(l.startswith('- ' + bush_head) for l in section.splitlines()),
+        'think_prompt_places_carry_the_way': any(l.startswith('- "verify well" at [') and l.endswith(way(well)) for l in remember.splitlines()),
+        'unchanged_while_away': away is not None and away['gone_ms'] == 0 and away['count'] == 3,
+        'gone_once_seen_bare': gone['count'] == 3 and gone['seen_ms'] == first['seen_ms'],
+        'talk_prompt_says_gone_when_last_here': any('berry bush around [' in l and ': gone when you were last here, day ' in l and '(3 seen day ' in l for l in section2.splitlines()),
+    }
+    result = {'h': h, 'a': a, 'ours': ours, 'well': well, 'here': here, 'first': first, 'away': away, 'gone': gone, 'standing': standing,
+              'section': section, 'remember': remember, 'section2': section2, 'checks': checks}
+    (run.directory / 'talk-places.json').write_text(json.dumps(result, indent=2, ensure_ascii=False))
+    assert all(checks.values()), checks
+    return {'status': 'pass', **result}
+
+
+def way_words(frm, to):
+    """`living_rules::bearing::from_here` in Python: "here" within 4 m, else "<m> m <compass>"."""
+    d = math.dist(frm, to)
+    if d <= 4.0:
+        return 'here'
+    dx, dy = to[0] - frm[0], to[1] - frm[1]
+    a = math.degrees(math.atan2(dy, dx))
+    words = [(-22.5, 22.5, 'east'), (22.5, 67.5, 'southeast'), (67.5, 112.5, 'south'), (112.5, 157.5, 'southwest'),
+             (-67.5, -22.5, 'northeast'), (-112.5, -67.5, 'north'), (-157.5, -112.5, 'northwest')]
+    word = next((w for lo, hi, w in words if lo <= a < hi), 'west')
+    return f'{math.floor(d + 0.5)} m {word}'
+
+
 @case('named-room-call')
 def named_room_call_case(run):
     """A room line or call naming exactly one hearer is theirs to answer (talk-named-room, after

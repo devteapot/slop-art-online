@@ -1043,6 +1043,8 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
         }
     }
     hear(ctx, id, viewer, here, &seen, now);
+    // What it remembers of resources here (talk-places): the look a mind takes at its noticing.
+    crate::stock::look(ctx, &me, here, || sight, now);
     for p in &rows {
         if !seen.contains(&p.body) {
             ctx.db.perceived().id().delete(p.id);
