@@ -70,6 +70,8 @@ impl Drop for Creating {
 /// The steps' tags: resources (with their first tile row) and the rest of the population.
 const STEP_RESOURCES: u64 = 1 << 32;
 const STEP_POPULATE: u64 = 2 << 32;
+/// The animals' own draws, after the people's (`populate`).
+const STEP_ANIMALS: u64 = 3 << 32;
 
 /// The world's seed: the runtime seed once given (`create_floor`), else the compiled one. A
 /// floor module without a seed yet has none to give, and says so rather than guessing.
@@ -1165,6 +1167,10 @@ pub fn populate<'a>(ctx: &ReducerContext, s: &'a Seed, map: &living_rules::map::
     communities(ctx, now);
     crate::records::seed(ctx, &s.records, now);
     set_habitats(ctx, s);
+    // The animals draw from a stream of their own: where they start must not depend on how many
+    // draws the people before them made (a founder draws a knack for every skill its body has,
+    // so adding a skill moved every herd: docs/PACK_MIND.md, the island's pack check).
+    let _animal_draws = Creating::start(s.seed, STEP_ANIMALS);
     // Animals start in their species' groups (herds, packs), so a few wolves on a large map
     // are a pack that can breed rather than strangers who never meet.
     for (kind, count) in [("deer", s.animals.deer), ("wolf", s.animals.wolf)] {
