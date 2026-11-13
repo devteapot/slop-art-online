@@ -1813,7 +1813,7 @@ def earshot_case(run):
     a call 22.5 m): H (thought for) stands with A 3 m east (seen, within a said line), B 10 m east
     (seen, beyond a said line, within a call) and C 15 m west (beyond sight, within a call). A and
     C first tell H their names from beside H. H's think prompt then carries "who would hear you
-    now" once the `earshot` law is on (off as shipped, its prompt has no such key): A by name at
+    now" with the `earshot` law on (as shipped since earshot-on; turned off first, its prompt has no such key): A by name at
     say, B as a stranger added by a call, C nowhere (not perceived, so never named). H then says a line to the room and calls one: the people who receive each, among the
     ones H sees, are exactly the scene's list at that way, and C, unseen, receives the call."""
     run.harness('launch')
@@ -1845,7 +1845,8 @@ def earshot_case(run):
     run.start(model(run, script), [h])
     requests = lambda: [e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] in ('think', 'deliberate')]
     sent_text = lambda e: '\n'.join(str(x.get('content', '')) for x in e['body'].get('messages', []))
-    # Off as shipped (the `earshot` law): the scene does not say it.
+    # The `earshot` law turned off (on as shipped): the scene does not say it.
+    run.admin('set_world_law', 'earshot', 'false')
     run.admin('set_behavior', h, json.dumps({'think': 'I finished my plan. verify earshot-off'}))
     off = run.wait(lambda: [sent_text(e) for e in requests() if 'verify earshot-off' in sent_text(e)], 'prompt with the law off', 60)[0]
     (run.directory / 'prompt-earshot-off.txt').write_text(off)
@@ -1875,7 +1876,7 @@ def earshot_case(run):
     checks = {
         'placed_as_planned': dist[a] <= 6.0 and 9.0 < dist[b] <= 11.0 and 11.0 < dist[c] <= 22.5,
         'a_and_c_are_known_by_name': {a, c} <= known,
-        'off_as_shipped_the_scene_does_not_say_it': 'who would hear you now' not in off,
+        'law_off_the_scene_does_not_say_it': 'who would hear you now' not in off,
         'scene_carries_earshot': bool(earshot),
         'said_lists_a_by_name': ids_in(said_part) & ours == {a} and names[a] in said_part,
         'call_adds_b_as_a_stranger_by_day': ('a call would reach no one more' in call_part) if night else ('also reach' in call_part and ids_in(call_part) & ours == {b} and 'a stranger' in call_part),

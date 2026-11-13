@@ -698,7 +698,9 @@ class Run:
         admin_identity = (lambda v: (v[0] if isinstance(v, list) else v).lower().removeprefix('0x'))(self.sql_admin('SELECT admin FROM world')[0]['admin'])
         own = {}
         for label, token, _ in identities:
-            own[label] = self.probe('own-' + label, ['SELECT * FROM ' + v for v in OWN], token, seconds=1)
+            # With seen_characters: my_earshot's hearers are held to it (the `earshot` law is on as
+            # shipped since earshot-on; while it was off the row was empty and the check vacuous).
+            own[label] = self.probe('own-' + label, ['SELECT * FROM ' + v for v in OWN + ['seen_characters']], token, seconds=1)
         own['anonymous'] = self.probe('own-anonymous', ['SELECT * FROM ' + v for v in OWN + SEEN])
 
         def scoped_to_self(label, v):

@@ -26,6 +26,11 @@ What lets a dense battle of minded characters keep its tick (docs/BATTLE_SCALE.m
   - **The body's alarms** are kept per character until a fact `status_of` reads can change (`alarm_cells`; `brain::alarm_statuses`, `BodyFacts::next_change_ms`). The law's shared memo is keyed by those facts alone (`Scripts::status_reads`).
   - **Warmth** visits only what warms or shelters, in place (`common::chunk_warming`).
   - Each has a diagnostic `_check` law that also works the answer out the old way and counts differences.
+- **The lazy scene** (scene-lazy; the `scene_lazy` law, on; `scene_lazy_check` a diagnostic):
+  - A graph's scene is what the body senses (`perception::Sensing`): every creature within gathering range, nearest first, each tested for sight only when a reader comes to it.
+  - The nearest pick (`Ev::first_seen`) and a creature looked up by id (`Ev::seen_by_id`: `visible_creature`, the `threatened` condition by facing) test only as far as their answer needs. Readers of the whole list (`Ev::creatures`: desires, `count`, `doing`, cues, noticing, the stranger filter) test every one.
+  - Resources and the heard list are gathered when first asked for. The nearest pick reads the list in place, not a copy.
+  - `perception::sensed` is `Sensing::all`, one implementation for both.
 - **Remains in sight** (`brain.rs`): a scene's structures are gathered only when an evaluation reads one (`Ev::structures`), so a fighter's 15 Hz evaluation does not copy every remains in sight; noticing checks each structure's id against the seen set and copies their details only when one is new.
 
 ## Driving it
@@ -60,6 +65,13 @@ On a launched default-seed run (`scenes.py <case> --run "$R"`):
   - 12 fighters on an open line, a campfire, a shelter and three dead among them, for 60 s, with the diagnostic laws `check_ctx_check`, `alarm_cells_check` and `warmth_check` on.
   - Each case asserts its own path from the `diag:` counts of its own window: many comparisons, none different. For the alarms, more answers kept than asked.
   - The counts are read from the server log's lines stamped after the case began.
+- **`scene_lazy`** (about 2.5 minutes):
+  - 12 fighters on an open line with `scene_lazy_check` on: 40 s with sight all round, 40 s by facing (`fov_on`), then 20 s with `scene_lazy` off.
+  - Checks:
+    - in both lazy windows a battle went on, and every lazy answer equalled the whole scene's (at least 200 compared, none differed);
+    - by facing, creatures were looked up by id;
+    - with the law off there were no lazy answers, and the battle went on.
+  - Counts come from `diag:` lines stamped 2 s after profiling restarts (counts made while it was off are reported then).
 - `witness_wake` checks B's folded line holding the blow on V within `witness_fold_ms`; the `sight`, `fov` and facing duel scenes check who is told a fight (walls, facing) through the folded lines.
 
 The rules tests `attention_cues_are_the_world_s_laws` (the laws' defaults and descriptions), `alarm_cells_give_the_law_s_answer_at_every_moment` (a cell's answer is the law's at every millisecond of five fighters' rows) and `fold::tests` (the line's words, counts and order) and the authority's `fold::tests` (each blow in exactly one window per onlooker) cover the rest offline. `profile_detail` (a diagnostic law) times the parts of each evaluation while profiling. The scale evidence is `living/tools/battle_diag.py` (docs/BATTLE_SCALE.md).

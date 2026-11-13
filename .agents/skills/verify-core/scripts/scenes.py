@@ -6599,5 +6599,75 @@ def admin_vitals(s):
 SCENES["admin_vitals"] = admin_vitals
 
 
+def scene_lazy(s):
+    """A body's scene worked out only as far as each reader asks (docs/BATTLE_SCALE.md,
+    scene-lazy; the `scene_lazy` law) gives the answers of the whole scene. 12 fighters on an open
+    line strike the nearest person, guard when threatened and heal when hurt, with
+    `scene_lazy_check` on: every nearest pick and every creature looked up by id is also worked
+    out from the whole scene, and a difference counted (`diag:` `scene_lazy:differed`). 40 s with
+    sight all round, then 40 s with sight by facing (`fov_on`: the threat is seen only from in
+    front, and the heard list counts), then 20 s with `scene_lazy` off: the whole scene is
+    worked out at once again and the battle goes on."""
+    line = clear_line(s)
+    fighters = s.people(12)
+    for k, who in enumerate(fighters):
+        s.call("place_at", who, line[2 + k % 6][0], line[2 + k % 6][1] + (k // 6) * 1.4)
+    for who in fighters:
+        s.call("grant_know_how", who, "wound_tending")
+        s.graph(who, {"first": [
+            {"if": {"cond": {"health": {"below": 50}}, "then": {"do": {"skill": "heal", "target": "self"}}}},
+            {"if": {"cond": {"threatened": True}, "then": {"do": {"skill": "dodge" if who % 2 == 0 else "block"}}}},
+            {"do": {"skill": "strike", "target": {"nearest": "person"}}}]})
+    # The world's own fov_on, else the shipped script's (off).
+    fov0 = any(r["name"] == "fov_on" and str(r["value"]).lower() == "true" for r in s.rows("SELECT * FROM world_law"))
+
+    def window(secs):
+        # Counts gathered while profiling stopped are reported when it starts again, in the
+        # first `diag:` line: the window counts from 2 s after it starts.
+        s.call("set_profile", True)
+        time.sleep(2)
+        since = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+        t0 = s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+        try:
+            time.sleep(secs)
+        finally:
+            s.call("set_profile", False)
+        logs = "\n".join(l for l in s.command("logs", "-s", "local", s.db, "-n", "200000").stdout.splitlines() if l[:19] >= since and "diag:" in l)
+        count = lambda key: sum(int(x) for x in re.findall(rf'"{re.escape(key)}":(\d+)', logs))
+        m = {k: count(k) for k in ("scene_lazy:checked", "scene_lazy:differed", "scene:first", "scene:by_id", "scene:all", "scene:sight_tests")}
+        uses = [u for u in s.rows("SELECT actor, skill, outcome, at_ms FROM skill_use") if u["at_ms"] >= t0 and u["actor"] in fighters]
+        m["strikes_landed"] = sum(1 for u in uses if u["skill"] == "strike" and (u["outcome"] or "").startswith(("hit", "blocked", "killed")))
+        return m
+
+    set_law(s, "scene_lazy_check", True)
+    try:
+        round_ = window(40)
+        set_law(s, "fov_on", True)
+        facing = window(40)
+        set_law(s, "fov_on", fov0)
+        set_law(s, "scene_lazy", False)
+        off = window(20)
+    finally:
+        set_law(s, "scene_lazy", True)
+        set_law(s, "scene_lazy_check", False)
+        set_law(s, "fov_on", fov0)
+    m = {"all_round": round_, "facing": facing, "off": off}
+    (s.out / f"{s.name}-scene-lazy.json").write_text(json.dumps(m, indent=1) + "\n")
+    print("MEASURE", json.dumps(m), flush=True)
+    try:
+        for name, w in (("sight all round", round_), ("sight by facing", facing)):
+            s.expect(f"{name}: a battle went on (strikes landed)", w["strikes_landed"] >= 5, w)
+            s.expect(f"{name}: every lazy answer was the whole scene's (compared many times, none differed)", w["scene_lazy:checked"] >= 200 and w["scene_lazy:differed"] == 0, w)
+        s.expect("by facing, creatures were looked up by id (the threat seen from in front)", facing["scene:by_id"] > 0, facing)
+        s.expect("with scene_lazy off, no lazy answer, and the battle goes on", off["scene:first"] == 0 and off["scene:by_id"] == 0 and off["strikes_landed"] >= 2, off)
+    finally:
+        for who in fighters:
+            s.graph(who, {"wait": 300})
+        off_the_line(s, line, fighters, dy=78)
+
+
+SCENES["scene_lazy"] = scene_lazy
+
+
 if __name__ == "__main__":
     raise SystemExit(main())

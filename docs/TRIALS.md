@@ -3063,6 +3063,108 @@ The other two fights with an early answer:
   - 10 heavies in a row landed, until Wren died at 526 s, after yielding.
 - **heavy r2** (answer at 2): one dodge at the windup's tick (79.6 s), under the `stay safe` switch, which holds no windup dodge. It is the one early answer here not traced to a fast patch's condition; it was not repeated.
 
+### R2 under facing sight (`r2fov`, 10 fights, $0.35)
+
+R3's first check (docs/COMBAT_MIND.md §5.4): r2e's fights with facing sight on. Does the heavy blow still get answered early?
+
+**Build and switches.**
+- **Build.** main `6b7c198d` (`trials-r3` checkout; fix-spoken-ids and alert-after-hit in), trial files `arena-heavy-r2fov` and `arena-kiter-r2fov` (r2e's arenas plus 5 Hz facing samples, `record.bodies`).
+- **Switches.** Variant `fast-lane-fov`: `default` with the world laws `fast_lane_on` and `fov_on` true. Everything else as r2e. `--sample-s 1`.
+- **Run.** 2026-11-12, 23:48–00:00 UTC, 5 replicates each.
+  - The server was checked healthy first, with 488 GB free.
+  - Every world was paused, then deleted (all 10 return 404).
+  - The key came from a copied `.env`, deleted after. A scan of the batch, the fakes and the live journals found 0 matches in 474 files.
+- **First, a free fake run** (`r3f`): the facing samples, the seen estimate, both laws and fast calls (9) all worked.
+
+**Results.**
+
+| | Heavy (5) | Kiter (5) |
+|---|---|---|
+| Exposures | 12, 21, 2, 7, 12 | 0, 0, 2, 0, 1 |
+| First answered exposure | **2, 2, –, 2, 4** (r2e: 3, 2, –, 3, –) | –, –, 1, –, – |
+| Answered | 32 of 54 | 1 of 3 |
+| K | 2, 4, –, 2, 6 | – |
+| Seen at the windup (estimate) | 0.95–1.0 | – |
+
+- **The stop rule passed.** The heavy blow was answered by exposure 3 in 3 of 5 fights, and by exposure 4 in a fourth. Facing sight kept r2e's result. At the heavy blow's range everything is seen all round (`fov_near_m` 3 m), and the estimate agrees (0.95–1.0).
+- **The kiter barely fought.** The fixture shoots only someone it sees: 0–2 arrows reached the subject in each fight. That is an open item (COMBAT_MIND §5.5), not a measure.
+- **Other numbers.** 30 fast calls. 1 of 92 spoken lines had its id said as words (`spoken_as`). $0.02–0.06 a fight.
+
+### R3: across fights, with facing sight and the fast lane on (`r3`, 15 runs, $1.47)
+
+docs/COMBAT_MIND.md §5.4. A veteran meets the heavy-blow fixture A four times over two world days, then a fifth opponent: A again (V-same) or B, a different person with the same pattern (V-new). Fresh lives the same 30 minutes and meets only B. Does the veteran come to that last meeting ready, and answer sooner?
+
+**Build and switches.**
+- **Build.** Branch `trials-r3` at `e0c317d8`: main `3e58c025` plus one fixture rule, A's flight (below).
+  - Trial files `arena-veteran-same`, `arena-veteran-new` and `arena-fresh`, written by `living/tools/arena_veteran.py`.
+  - Each meeting starts at full health for the subject and its fixture (`vitals`, the admin reducer `admin_set_vitals`, main `60891e00`). Each use is an `admin` chronicle line, listed in summary.json `admin_vitals`: 55 resets.
+- **Switches** as R2-fov: `fast-lane-fov`, fix-spoken-ids, alert-after-hit, `--sample-s 1`, facing samples.
+- **Run.** 2026-11-13, 02:13–02:46 UTC, 5 replicates of each file, all at once.
+  - 458 GB free.
+  - Every world was paused, then deleted (all 15 return 404).
+  - The key came from a copied `.env`, deleted after. The scan of r3 and its fakes found 0 matches in 727 files.
+- **Spend.** $1.82 with R2-fov, under the $4.00 stop.
+
+**Two fake runs changed the files before any paid run:**
+- **`r3f2`** (main `f748ba9e`): resets, meetings and both nights all worked. But in both veteran arms the subject's counter-blows killed A in meeting 2 (742 s and 766 s), leaving meetings 3–5 without it. A reset at a meeting's start cannot stop a death within it.
+- **The fixture rule.** In R3's files A flees from the subject below 35 health (`SPARE` in `arena_veteran.py`): only its last 35 health behave differently.
+- **`r3f3`** (`e0c317d8`): all five meetings in both veteran arms, and no deaths.
+
+**A's flight is part of what the subjects lived.** The fixture fled 356 times, in 30 of 55 meetings and 14 of 15 runs.
+- **In Fresh, B fled 12–26 times in four runs.** The fresh subjects drove B off by fighting back; B rarely fled from V-new's veterans (one run).
+- **Three subjects kept a judgment about it:**
+  - V-new r4: "attacker_will_return: He came back the very next morning after fleeing" and "finish_him_now: He flees but only to strike again another day";
+  - V-same r3: "finish_wounded_pursuer: … A wounded fleeing enemy is the …".
+- **What these lessons are about.** They concern A's persistence and when to finish a fight, not the heavy blow's timing. No subject's plan answered the windup by waiting for A to flee.
+- **One fixture still died.** In V-same r1, the subject's fire bolt killed A as it fled in meeting 3, so meetings 4 and 5 had no A.
+
+**Main measures** (the last meeting, as declared; first answered exposure, – for none):
+
+| | V-new (B) | Fresh (B) | V-same (A again) |
+|---|---|---|---|
+| Ready at the first windup (an answer on a windup in the plan) | **4 of 5** | **0 of 5** | 2 of 4 |
+| … in the `combat` branch | 0 | 0 | 2 (both a fast patch's) |
+| First answered exposure | 1, –, 3, 2, 2 (median 2) | –, –, 2, 2, 1 (median 2) | 1, 2, 1, 2 (median 2; r1 had no fifth meeting) |
+| Answered | **28 of 37** | 4 of 15 | 17 of 22 |
+| K | 3, –, 3, 2, 2 | never | 4, 4, 1, – |
+| Damage from the pattern | 18, 18, 27, 9, 9 | 36, 9, 18, 18, 18 | 18, 16, 6, 8 |
+| Survived | 5 of 5 | 5 of 5 | 5 of 5 |
+
+- **Ready: target met** (V-new at least 3 of 5, Fresh at most 1).
+  - Every V-new answer that was ready sat in the subject's `current plan` routine, a dodge or a block on a windup that slow deliberations had written and rewritten over the earlier meetings. None was in the combat branch, which runs first.
+  - V-same's two ready subjects, by contrast, held it in a fast patch's combat branch, and both answered the first windup.
+- **Sooner: target not met.** V-new's median first answer is exposure 2, and Fresh's is also 2 (target: V-new at most 1 against Fresh's 2 or more). Readiness in a routine did not make the first windup answered.
+- **What differs instead is the whole meeting.** The veterans answered 28 of B's 37 blows (76%) and reached three answered in a row in 4 of 5 runs. The fresh subjects answered 4 of 15 (27%) and never reached three in a row.
+  - The fresh subjects met fewer blows because they fought back and B fled.
+  - Damage was alike (median 18 in both).
+  - So the veterans had changed how they meet the pattern (they evade), more than how soon they answer it.
+- **Within the veterans, meeting to meeting** (median first answer; answered share):
+
+  | Meeting | Median first answer | Answered |
+  |---|---|---|
+  | 1 | never | 14 of 32 |
+  | 2 | 3 | 20 of 37 |
+  | 3 | 2 | 20 of 35 |
+  | 4 | never (4 of 9 meetings answered) | 18 of 32 |
+  | 5 | 2 | 45 of 59 |
+
+  Readiness grew from 0 of 10 at meeting 1 to 7 of 10 at meeting 3, then 4 of 9 at meeting 4. It is not a steady curve: meeting 4 (day 3 08:00, after a night) answered worst again.
+- **V-same against V-new.** The same identity did not cue more than the same pattern: first answers alike, and the answered shares 77% and 76%.
+- **Seen at the windup.** 0.98 on average (min 0.67), as expected at the heavy blow's range.
+
+**The reset health.** 55 resets. 19 of them followed a meeting that had left the subject below 90 health.
+- **No subject remarked on finding itself whole without having healed.** The pattern scan's matches within 2 minutes of a reset were "the whole crowd", the `heal` skill in plans, and "strange" in other senses.
+- **Two read their health as simply fine:**
+  - V-new r2, 1560 s, after 83 → full: "Breath is full and my wounds are mended";
+  - V-same r4, 840 s, after 85 → full: "badly wounded himself, and I'm fresh".
+- So the reset is noticed, if at all, as an ordinary state of the body, and not as a lesson.
+
+**Ids.** 7 of 372 spoken lines had an id said as words (`spoken_as`: V-new r2 1, r4 3; V-same r2 2, r5 1). The counter shows the prompt sentence works most of the time but not always. 0 spoken lines carried an id.
+
+**Cost.** $1.47: V-same $0.56, V-new $0.57, Fresh $0.33. $0.06–0.12 a 30-minute run. Fast calls 140, 63% cached.
+
+**Evidence.** `.local/living/trials/{r2fov,r3,r3f,r3f2,r3f3}/` in the Spark's `trials-r3` checkout (`arena_report.json`, the timelines' inputs, `report.md`, the journals), archived to `~/slop-evidence/r3-20261113.tar.zst` with its sha256.
+
 ### What the told outcome lines cost in a battle
 
 [`outcome_cost.py`](../living/tools/outcome_cost.py) on a scratch `verify-core` world (`core-r2cost-025725`, default seed, 186–188 people alive): 20 minded spear fighters (`spawn_crowd(20, true)`: held like a mind's, so their outcomes are told), packed 1.5 m apart, striking the nearest person, timed by `bench.py` (profiled tick spans, no subscribers) over a 22 s window per arm, each arm a fresh battle; the fighters' new experience rows were read during the window, so the lines of those who died count.

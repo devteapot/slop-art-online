@@ -69,6 +69,8 @@ python3 "$C/scenes.py" witness_fold --run "$R" > "$E/witness_fold.txt" 2>&1
 python3 "$C/scenes.py" cheap_check_ctx --run "$R" > "$E/cheap_check_ctx.txt" 2>&1
 python3 "$C/scenes.py" cheap_alarms --run "$R" > "$E/cheap_alarms.txt" 2>&1
 python3 "$C/scenes.py" cheap_warmth --run "$R" > "$E/cheap_warmth.txt" 2>&1
+# The lazy scene gives the whole scene's answers, all round and by facing; off, the old path (features/battle.md, about 2.5 min).
+python3 "$C/scenes.py" scene_lazy --run "$R" > "$E/scene_lazy.txt" 2>&1
 # A mind's line waits when another spoke to its listener first, under heard_first_rethinks (features/speech.md, about 1.5 min).
 python3 "$C/scenes.py" heard_first --run "$R" > "$E/heard_first.txt" 2>&1
 # The shared answers equal fresh ones (regard_cache_check; features/cues.md#shared-answers, about 4 min;
