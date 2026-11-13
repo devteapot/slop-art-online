@@ -409,6 +409,7 @@ pub fn way_facts(ctx: &ReducerContext, id: u32, way: &str, to: u32, now: u64) ->
 }
 
 fn skill_ctx(ctx: &ReducerContext, id: u32, a: &Activity, now: u64) -> SkillCtx {
+    let _detail = common::detail_span("act.skill_ctx");
     let roll: f32 = ctx.rng().gen_range(0.0..1.0);
     skill_ctx_with(ctx, id, a, now, roll, &Reads::all())
 }
@@ -1237,6 +1238,7 @@ fn cancel_as(ctx: &ReducerContext, a: Activity, now: u64, why: Option<&str>, cod
 
 /// `code`: at which point the outcome was decided (`living_rules::outcome::act`).
 fn report(ctx: &ReducerContext, a: &Activity, ok: bool, why: &str, now: u64, code: &'static str) {
+    let _detail = common::detail_span("act.report");
     if let Some(mut st) = ctx.db.mind_state().id().find(a.id) {
         if a.node != ORPHAN && !held(a.node) {
             st.last = Some(LeafResult { node: a.node, revision: a.revision, ok, why: why.into() });
@@ -1421,6 +1423,7 @@ fn failure_mark(label: &str, why: &str) -> u16 {
 
 /// Record how a routine's action went (the routine owning the action's node, if any).
 fn routine_outcome(ctx: &ReducerContext, id: u32, revision: u32, node: u16, ok: bool, why: &str, now: u64) {
+    let _detail = common::detail_span("act.routine_outcome");
     let Some(g) = common::compiled(ctx, id, revision) else { return };
     let Some(Some(rid)) = g.routine_of.get(node as usize).copied() else { return };
     let mut s = ctx.db.routine_stat().id().find(rid).unwrap_or(RoutineStat { id: rid, ok: 0, failed: 0, last_fail: String::new(), last_ms: 0 });
@@ -1444,6 +1447,7 @@ fn finish(ctx: &ReducerContext, a: Activity, ok: bool, why: &str, now: u64) {
 
 /// `finish`, with the outcome's code (`living_rules::outcome::act`).
 fn finish_as(ctx: &ReducerContext, a: Activity, ok: bool, why: &str, now: u64, code: &'static str) {
+    let _detail = common::detail_span("act.finish");
     let sc = common::scripts(ctx);
     crate::town::unshown(ctx, &sc, a.id, &a.skill);
     let timed = sc.shapes().timed(&a.skill);
@@ -1487,6 +1491,7 @@ pub fn progress(ctx: &ReducerContext, a: Activity, now: u64) {
     if a.phase == 1 {
         return complete(ctx, a, now);
     }
+    common::diag(|| "act:other", 1);
     match a.skill.as_str() {
         "follow" | "keep_distance" | "circle" => {
             motion::brake(ctx, a.id, now);
@@ -1507,6 +1512,7 @@ pub fn progress(ctx: &ReducerContext, a: Activity, now: u64) {
 /// A timed move goes off: the recovery starts, and those who can see it see the move go off
 /// (a missile shows its own launch instead).
 fn release(ctx: &ReducerContext, sc: &living_rules::script::Scripts, a: &Activity, now: u64) {
+    let _detail = common::detail_span("act.release");
     let shape = shape_of(sc, &a.skill);
     if shape.is_some_and(|s| s.timed && s.aim != Aim::Facing) {
         crate::combat::released(ctx, a.id, &a.skill, now);
@@ -1534,6 +1540,7 @@ fn evaded_since(ctx: &ReducerContext, victim: u32, since: u64) -> bool {
 /// A blow dodged: both sides perceive it, it is shown as DODGED to them and to those who see
 /// it, and the fight stays engaged. Returns what came of it.
 fn dodged(ctx: &ReducerContext, attacker: u32, vc: &Character, skill: &str, from: (f32, f32), at_v: (f32, f32), now: u64) -> String {
+    let _detail = common::detail_span("act.dodged");
     let victim = vc.id;
     percept(ctx, vc, now, "combat", attacker, victim, at_v, format!("You dodged {}'s attack.", common::label_for(ctx, vc, attacker)), 0.6);
     if let Some(ac) = ctx.db.character().id().find(attacker) {
@@ -1557,6 +1564,7 @@ const MADE_WAY: &str = "made way";
 /// dodge: it was over before the blow came". No timing it could not know; a person playing the
 /// character is told the same (`tell`, its `act_outcome` row).
 fn dodge_too_early(ctx: &ReducerContext, vc: &Character, attacker: u32, skill: &str, missile: Option<&str>, now: u64) {
+    let _detail = common::detail_span("act.dodge_too_early");
     let sc = common::scripts(ctx);
     let Some(began) = ctx.db.skill_use().actor().filter(attacker).filter(|u| u.skill == skill && u.accepted_ms != 0 && u.accepted_ms <= now).map(|u| u.accepted_ms).max() else { return };
     let dash = |s: &str| sc.combat(s).is_some_and(|c| c.aim == Aim::Dash && c.evades);
@@ -1620,6 +1628,7 @@ pub fn on_motion(ctx: &ReducerContext, id: u32, ev: Event, now: u64) {
 }
 
 fn complete(ctx: &ReducerContext, a: Activity, now: u64) {
+    let _detail = common::detail_span("act.complete");
     let sc = common::scripts(ctx);
     let sctx = skill_ctx(ctx, a.id, &a, now);
     // Targets can change or leave while the action runs. One that got away by a dash that
@@ -1640,9 +1649,14 @@ fn complete(ctx: &ReducerContext, a: Activity, now: u64) {
         }
         return finish(ctx, a, false, "they moved away", now);
     }
+    common::diag(|| format!("act:complete:{}", a.skill), 1);
+    let check = common::detail_span("act.check");
     if let Err(why) = sc.check(&a.skill, &sctx) {
+        drop(check);
         return finish(ctx, a, false, &why, now);
     }
+    drop(check);
+    let done = common::detail_span("act.done");
     let effects = match sc.done(&a.skill, &sctx) {
         Ok(e) => e,
         Err(e) => {
@@ -1650,11 +1664,14 @@ fn complete(ctx: &ReducerContext, a: Activity, now: u64) {
             return finish(ctx, a, false, "something went wrong", now);
         }
     };
+    drop(done);
     release(ctx, &sc, &a, now);
     match apply(ctx, &a, &sctx, effects, now) {
         Ok(summary) => {
             // What the rules make of it having been done (`on_<skill>`).
+            let after = common::detail_span("act.after_skill");
             crate::records::after_skill(ctx, &sctx, now);
+            drop(after);
             finish(ctx, a, true, &summary, now)
         },
         Err(why) => finish(ctx, a, false, &why, now),
@@ -1662,6 +1679,7 @@ fn complete(ctx: &ReducerContext, a: Activity, now: u64) {
 }
 
 fn apply(ctx: &ReducerContext, a: &Activity, sctx: &SkillCtx, effects: Vec<Effect>, now: u64) -> Result<String, String> {
+    let _detail = common::detail_span("act.apply");
     let me = a.id;
     let at = ctx.db.body().id().find(me).map(|b| pos(&b, now)).unwrap_or((0.0, 0.0));
     let my_name = common::name_of(ctx, me);
@@ -2250,6 +2268,7 @@ fn bond(ctx: &ReducerContext, me: u32, other: u32, at: (f32, f32), now: u64) -> 
 
 /// Put a creature on combat cadence for the next few seconds.
 pub fn engage(ctx: &ReducerContext, id: u32, now: u64) {
+    let _detail = common::detail_span("act.engage");
     if let Some(mut st) = ctx.db.mind_state().id().find(id) {
         if st.fast_until < now + 6_000 {
             st.fast_until = now + 8_000;
@@ -2295,6 +2314,7 @@ const BAND_MARK: u16 = 0xD210;
 /// they take three hits, or their own defense works three times; otherwise after 12 s of
 /// fighting. At least 3 s apart, and never while a thought is already pending.
 pub fn fight_report(ctx: &ReducerContext, id: u32, other: u32, now: u64) {
+    let _detail = common::detail_span("act.fight_report");
     let Some(c) = ctx.db.character().id().find(id) else { return };
     if !c.ai || !c.alive || c.kind != "person" || ctx.db.deliberation().actor().find(id).is_some() {
         return;
@@ -2375,6 +2395,7 @@ pub fn fight_report(ctx: &ReducerContext, id: u32, other: u32, now: u64) {
 
 /// A blow that found only air: both sides perceive it, and the fight stays engaged.
 fn missed(ctx: &ReducerContext, attacker: u32, victim: u32, at_v: (f32, f32), skill: &str, now: u64) {
+    let _detail = common::detail_span("act.missed");
     // Its onlookers see the blow find only air (`fold`); it wakes none of them, as before.
     let start = ctx.db.vitals().id().find(victim).map_or(true, |v| now.saturating_sub(v.hurt_ms) > 30_000 || v.hurt_by != attacker);
     crate::fold::blow(ctx, now, attacker, victim, living_rules::combat::seen::MISS, start, false, false, None, at_v);
@@ -2404,6 +2425,8 @@ pub fn forget_dead(ctx: &ReducerContext, id: u32) {
     ctx.db.experience().observer().delete(id);
     ctx.db.line_heard().speaker().delete(id);
     ctx.db.place().actor().delete(id);
+    ctx.db.seen_stock().actor().delete(id);
+    ctx.db.standing().actor().delete(id);
     ctx.db.judgment().actor().delete(id);
     ctx.db.cue().actor().delete(id);
     ctx.db.judged().actor().delete(id);
@@ -2457,6 +2480,7 @@ pub fn retire(ctx: &ReducerContext, id: u32) {
 /// words.
 #[allow(clippy::too_many_arguments)]
 pub fn damage(ctx: &ReducerContext, attacker: u32, victim: u32, amount: f32, skill: &str, missile: Option<&str>, from: (f32, f32), now: u64) -> String {
+    let _detail = common::detail_span("act.damage");
     let Some(mut v) = ctx.db.vitals().id().find(victim) else { return "they are gone".into() };
     let Some(vc) = ctx.db.character().id().find(victim) else { return "they are gone".into() };
     if !vc.alive {
@@ -2751,6 +2775,7 @@ pub fn die(ctx: &ReducerContext, id: u32, cause: &str, now: u64, killer: u32, co
 /// line, its outcome row's `other`, its combat feed's death) carry no killer, 0. Records (the
 /// chronicle) keep the real killer.
 pub fn die_unseen(ctx: &ReducerContext, id: u32, cause: &str, now: u64, killer: u32, code: &'static str, unseen: Option<&str>) {
+    let _detail = common::detail_span("act.die");
     let Some(mut c) = ctx.db.character().id().find(id) else { return };
     if !c.alive {
         return;

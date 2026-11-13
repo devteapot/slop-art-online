@@ -198,6 +198,8 @@ pub fn evaluate(ctx: &ReducerContext, id: u32, now: u64) {
         let _span = common::span("brain.graph");
         ev.run(&root.root, 0)
     };
+    common::diag(|| "eval:all", 1);
+    common::diag(|| "do:visits", ev.visits as u64);
     let _span = common::span("brain.after");
     ev.after(result, &root.root);
     drop(_span);
@@ -400,12 +402,17 @@ impl<'a> Ev<'a> {
     }
 
     /// The structures in sight, nearest first (the scene's, gathered when first asked for).
+    #[track_caller]
     fn structures(&mut self) -> &[(Structure, f32)] {
         self.scene();
         if self.scene.as_ref().is_some_and(|s| s.structures.is_none()) {
             let _span = common::detail_span("brain.scene.structures");
+            // While profiling: which reader built the list, and how long it was.
+            let by = std::panic::Location::caller();
+            common::diag(|| format!("structures@{}", by.line()), 1);
             let r = common::sight_for(self.ctx, self.me.id, &self.w, self.now);
             let v = common::structures_near(self.ctx, self.at, r);
+            common::diag(|| "scene:structures_n", v.len() as u64);
             self.scene.as_mut().unwrap().structures = Some(v);
         }
         self.scene.as_ref().and_then(|s| s.structures.as_deref()).unwrap_or(&[])
@@ -844,6 +851,7 @@ impl<'a> Ev<'a> {
     /// The outcome of leaf `id`'s activity that has ended since it was last visited (read once),
     /// unless that activity is still under way.
     fn finished(&mut self, id: u16) -> Option<St> {
+        let _span = common::detail_span("brain.finished");
         let rev = self.st.revision;
         let l = self.st.last.clone().filter(|l| l.node == id && l.revision == rev)?;
         if self.ctx.db.activity().id().find(self.me.id).is_some_and(|a| a.node == id && a.revision == rev) {
@@ -859,6 +867,7 @@ impl<'a> Ev<'a> {
 
     #[allow(clippy::too_many_arguments)]
     fn leaf(&mut self, id: u16, skill: &str, target: Resolved, item: &str, qty: u32, text: &str, topic: &str, desc: String) -> St {
+        let _span = common::detail_span("brain.leaf");
         // A committed move under way holds the body until it has run its course (a dash may cut
         // in on a windup): the graph waits on it, as a player's keys do (`combat::held_by`).
         if let Some(a) = self.ctx.db.activity().id().find(self.me.id) {
@@ -1061,6 +1070,8 @@ impl<'a> Ev<'a> {
     }
 
     fn nearest(&mut self, f: &Filter) -> Option<Resolved> {
+        let _span = common::detail_span("brain.nearest");
+        common::diag(|| "nearest:calls", 1);
         match living_rules::catalog::kind_class(&f.kind)? {
             living_rules::catalog::KindClass::Creature => {
                 // Seen first; a creature smelled farther away only for a target the body acts on.
@@ -1608,9 +1619,13 @@ impl<'a> Ev<'a> {
     fn prune_familiar(&mut self) {
         let (me, now) = (self.me.id, self.now);
         let mut all: Vec<(u64, u64, u64)> = self.ctx.db.familiar().actor().filter(me).map(|f| (f.last_ms, f.id, f.thing)).collect();
+        common::diag(|| "familiar:prune_checks", 1);
         if all.len() <= FAMILIAR_LIMIT {
             return;
         }
+        // While profiling: how often a character is over the limit, and by how much.
+        common::diag(|| "familiar:over_limit", 1);
+        common::diag(|| "familiar:over_by", (all.len() - FAMILIAR_LIMIT) as u64);
         all.sort_unstable();
         let mut over = all.len() - FAMILIAR_LIMIT;
         for (last, id, thing) in all {
@@ -1829,14 +1844,21 @@ impl<'a> Ev<'a> {
         let day = self.w.day_ms.max(1);
 
         // Regions.
+        let part = common::detail_span("noticed.regions");
         let chunk = living_rules::map::chunk_of(at.0, at.1);
         if !self.recently_seen(0x8000_0000 | chunk) && self.familiarity(FAM_REGION | chunk as u64).is_none() {
             let text = self.region_summary();
             percept(self.ctx, &self.me, now, "discovered", 0, 0, at, text, 0.5);
         }
+        // What it remembers of resources here (talk-places): a look, if one is due.
+        let (ctx, id, w) = (self.ctx, self.me.id, &self.w);
+        crate::stock::look(ctx, &self.me, at, || common::sight_for(ctx, id, w, now), now);
 
+        drop(part);
         // Creatures.
+        let part = common::detail_span("noticed.creatures");
         let me_kind = self.me.kind.clone();
+        common::diag(|| "noticed:creatures", self.creatures().len() as u64);
         let cands: Vec<NearCreature> = self.creatures().iter().filter(|c| &*c.kind != "deer" || me_kind != "person").cloned().collect();
         let people = cands.iter().filter(|c| &*c.kind == "person").count();
         let laws = common::laws(self.ctx);
@@ -1945,6 +1967,8 @@ impl<'a> Ev<'a> {
         // near is noticed when it begins, as a person would ("You hear a person near, behind
         // you, to the south-west."), never who it is. Its percept names no one and is placed
         // where the listener stands.
+        drop(part);
+        let part = common::detail_span("noticed.sounds");
         let near = self.heard_list().iter().find(|c| c.dist <= laws.heard_near_m).cloned();
         if let Some(c) = near.as_ref().filter(|_| self.st.alerts & SOUND_NEAR == 0) {
             let heading = self.ctx.db.body().id().find(self.me.id).map_or(0.0, |b| common::facing_at(&b, now));
@@ -1959,13 +1983,17 @@ impl<'a> Ev<'a> {
         // Remains and every other structure lie still: one looked at lately is in the seen set,
         // so a look costs one check of its id, and their details are copied only when something
         // in sight is new.
+        drop(part);
+        let _part = common::detail_span("noticed.structures");
         let ids: Vec<u64> = self.structures().iter().map(|(s, _)| s.id).collect();
+        common::diag(|| "noticed:structures", ids.len() as u64);
         let mut new: Vec<usize> = Vec::new();
         for (i, id) in ids.iter().enumerate() {
             if !self.recently_seen(0x4000_0000 | (*id as u32 & 0x3fff_ffff)) && self.familiarity(FAM_STRUCTURE | id).is_none() {
                 new.push(i);
             }
         }
+        common::diag(|| "noticed:structures_new", new.len() as u64);
         if new.is_empty() {
             return;
         }
@@ -2069,6 +2097,7 @@ impl<'a> Ev<'a> {
     fn after(mut self, result: St, root: &Node) {
         let ctx = self.ctx;
         let id = self.me.id;
+        let cancel = common::detail_span("after.cancel");
         // Interrupt an activity no running leaf owns anymore (the branch lost priority);
         // a deliberate act is not the graph's to interrupt (only a reflex does, in `leaf`).
         if let Some(a) = ctx.db.activity().id().find(id) {
@@ -2082,6 +2111,8 @@ impl<'a> Ev<'a> {
                 act::cancel(ctx, a, self.now, None);
             }
         }
+        drop(cancel);
+        let mind = common::detail_span("after.mind");
         if self.me.ai {
             match result {
                 // A plan with nothing applicable backs off longer than one that hit a concrete
@@ -2131,6 +2162,8 @@ impl<'a> Ev<'a> {
                 }
             }
         }
+        drop(mind);
+        let _write = common::detail_span("after.write");
         if result != St::Run && !self.running.is_some_and(act::held) {
             self.status = match result {
                 St::Ok => "done".into(),
@@ -2232,6 +2265,9 @@ fn alarm_statuses(ctx: &ReducerContext, sc: &living_rules::script::Scripts, me: 
         return s;
     }
     common::diag(|| "alarm:asked", 1);
+    if common::profiling() {
+        status_inputs_changed(sc, me, vit, night, now);
+    }
     let statuses = ask();
     let reads = sc.status_reads();
     let until = living_rules::script::BodyFacts::next_change_ms(&vit.fields(), sc.meters(), now, reads.as_deref());
@@ -2243,6 +2279,38 @@ fn alarm_statuses(ctx: &ReducerContext, sc: &living_rules::script::Scripts, me: 
         c.insert(me.id, AlarmCell { rev, row, stage: me.stage, night, until, statuses: statuses.clone() });
     });
     statuses
+}
+
+thread_local! {
+    /// While profiling: each body's facts at its last ask of the `status_of` law
+    /// (`status_inputs_changed`). A diagnostic only; nothing reads it otherwise.
+    static STATUS_PREV: std::cell::RefCell<std::collections::HashMap<u32, Vec<(String, f64)>>> = std::cell::RefCell::new(std::collections::HashMap::new());
+}
+
+/// While profiling, at each ask of the `status_of` law that its cell did not answer: which of the
+/// body's facts changed since its last ask (`status:changed:<fact>`), and how many at once
+/// (`status:changed_n:<n>`). The measure of how often a per-meter part of the law would be asked
+/// (docs/BATTLE_SCALE.md, note B).
+fn status_inputs_changed(sc: &living_rules::script::Scripts, me: &Character, vit: &Vitals, night: bool, now: u64) {
+    let _span = common::detail_span("status.diag");
+    let facts = living_rules::script::BodyFacts::of(&me.kind, crate::common::stage_name(me.stage), night, &vit.fields(), sc.meters(), now);
+    let mut cur: Vec<(String, f64)> = facts.fields.clone();
+    cur.extend(facts.share.iter().map(|(n, v)| (format!("share.{n}"), *v)));
+    cur.push(("night".into(), night as u8 as f64));
+    cur.push(("stage".into(), me.stage as f64));
+    let prev = STATUS_PREV.with(|p| p.borrow_mut().insert(me.id, cur.clone()));
+    let Some(prev) = prev else {
+        common::diag(|| "status:first", 1);
+        return;
+    };
+    let mut n = 0;
+    for (k, v) in &cur {
+        if prev.iter().find(|(pk, _)| pk == k).map_or(true, |(_, pv)| pv != v) {
+            n += 1;
+            common::diag(|| format!("status:changed:{k}"), 1);
+        }
+    }
+    common::diag(|| format!("status:changed_n:{n}"), 1);
 }
 
 /// "a" or "an" before a kind's words.

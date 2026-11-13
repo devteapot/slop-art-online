@@ -117,31 +117,78 @@ RING_TILT, RING_FROM = 1.25, 0.115  # the shape the hair is shaded as: its norma
 HEM_DARK = 0.22  # how much darker a sheet's ends are drawn
 
 
-_FRINGE = None
+FRINGE_OVER = 0.003  # a full fringe ends this far above the top of the head's own brows
+FRINGE_BONE = "J_Hair_Fringe"  # the bone a fringe hangs from on a face type's head; a type's file says where it stands (hair_fit.py)
+RING_END = 0.030  # a lock carries the head's light ring to this far from its tip, metres (`_RING`)
+
+
+def brow_top(hf):
+    """The top of a head's brows (relative to the head's origin, metres), drawn stroke included."""
+    from head_mesh import BROW_STROKE
+
+    return float(hf.eye_z + hf.eye_up + hf.brow_up + getattr(hf, "brow_lift", 0.0) + hf.brow_arch + abs(hf.brow_tilt) + 0.55 * hf.brow_w * BROW_STROKE)
 
 
 def fringe_line(hf):
-    """The height a full fringe ends at (relative to the head's origin, metres): 4 mm above the
-    top of the highest brow any face type has.
+    """The height a full fringe ends at on a head (relative to the head's origin, metres):
+    `FRINGE_OVER` above the top of that head's own brows.
 
-    A shared style is one mesh for every type, and the types' brows sit at different heights
-    (they are drawn above the head's own brow line by each type's lift, and the eyes' heights
-    differ): the highest brow's top is 1.2 cm above the lowest's. A fringe that ended at the
-    head's brow line, as it did, covered the brows on every type whose brows were lifted. A
-    person's own hair takes the same line, so their own file and the composed person agree. A
-    head that is no face type's takes its own brows' top."""
-    global _FRINGE
-    from head_mesh import BROW_STROKE
+    The types' brows sit at different heights: the highest brow's top is 1.2 cm above the
+    lowest's. A shared style is one mesh for every type, built on the standard head to that
+    head's line, and until 2026-11-13 the line was one for all, above the highest brow any type
+    has: after a type's fit the fringe ended 3 to 16 mm above that type's brows, a bare
+    forehead on most. Now the fringe hangs from a bone (`FRINGE_BONE`), and each type's file
+    stands that bone where its own line is (hair_fit.py), so a style's fringe ends at this
+    line on every type. A person's own hair is built to their own head's line directly."""
+    return brow_top(hf) + FRINGE_OVER
 
-    top = lambda h: h.eye_z + h.eye_up + h.brow_up + getattr(h, "brow_lift", 0.0) + h.brow_arch + abs(h.brow_tilt) + 0.55 * h.brow_w * BROW_STROKE
-    if not hasattr(hf, "brow_lift"):
-        return float(top(hf)) + 0.004
-    if _FRINGE is None:
-        import cage_head
-        import face_types
 
-        _FRINGE = max(float(top(cage_head.CageHead(t))) for t in face_types.load()["types"].values()) + 0.004
-    return _FRINGE
+def fringe_point(hf):
+    """The middle of the forehead's front at the fringe's line, in the head's frame: where the
+    fringe's bone stands, and the point a type's fit of the fringe is worked out from."""
+    z = fringe_line(hf)
+    lo, hi = -30.0, 80.0
+    for _ in range(40):  # the elevation whose point on the head's front is at that height
+        el = math.radians((lo + hi) / 2)
+        d = np.array([0.0, math.cos(el), math.sin(el)])
+        p = ORIGIN + d * hf.radius(d[None, :])[0]
+        lo, hi = ((lo + hi) / 2, hi) if p[2] < z else (lo, (lo + hi) / 2)
+    return p
+
+
+def fringe_share(hf, hairline, pts, front_z=None):
+    """How much of the fringe's bone each point of the hair follows: nothing at the hairline and
+    above it, all of it at the fringe's line and below, over the forehead only (in full to 48
+    degrees round from the front, none past 78; behind the head's middle, none). Hair between
+    stretches or closes up evenly when a type's file moves the bone."""
+    pts = np.asarray(pts, float).reshape(-1, 3)
+    line = fringe_line(hf)
+    az = np.degrees(np.arctan2(-pts[:, 0], pts[:, 1]))
+    front = np.abs(az) < 78.0
+    out = np.zeros(len(pts))
+    for i in np.nonzero(front & (pts[:, 1] > 0.0))[0]:
+        z0 = hairline(float(az[i])) - 0.002
+        down = float(np.clip((z0 - pts[i, 2]) / max(z0 - line, 0.004), 0.0, 1.0))
+        out[i] = down * smooth((78.0 - abs(az[i])) / 30.0) * smooth(pts[i, 1] / 0.03)
+    return out
+
+
+def ring_mask(hf, hairline, pts, nrm, share, along):
+    """`_RING` for each point of the hair, 0 to 1: how much of the head's light ring it takes
+    (the client multiplies its ring by it). 1 over the top and round the crown; 0 on a fringe
+    (a ring drawn straight across its sheets reads as a seam), on the last `RING_END` of a lock
+    before its tip, and on the sides of a lock or a sheet that face the head. `share` is each
+    point's share of its lock's length from the root and `along` that in metres."""
+    pts, nrm = np.asarray(pts, float).reshape(-1, 3), np.asarray(nrm, float).reshape(-1, 3)
+    share, along = np.clip(np.asarray(share, float), 0.0, 1.0), np.asarray(along, float)
+    fringe = fringe_share(hf, hairline, pts)
+    # A fringe is off the ring from where it leaves the hairline, sooner than the bone takes it.
+    off_fringe = 1.0 - np.array([smooth(min(f / 0.25, 1.0)) for f in fringe])
+    to_tip = np.where(share > 1e-3, along * (1.0 - share) / np.maximum(share, 1e-3), 1.0)
+    end = np.array([smooth(d / RING_END) for d in to_tip])
+    outward = np.einsum("ij,ij->i", nrm, unit(pts - ORIGIN))
+    inner = np.array([smooth((o + 0.05) / 0.25) for o in outward])
+    return np.clip(off_fringe * end * inner, 0.0, 1.0)
 
 
 class Comb:
@@ -271,7 +318,7 @@ class Hair:
         self.fringe_style = spec.get("fringe_style") or "auto"
         self.brow_z = hf.eye_z + hf.eye_up + hf.brow_up
         self.front_z = float(hairline(0.0))
-        # Where a full fringe ends: above the brows, so no fringe covers a brow.
+        # Where a full fringe ends: just above this head's own brows.
         self.fringe_z = fringe_line(hf)
         self.hairline_soft = lambda az: float(np.mean([hairline(az + d) for d in np.linspace(-18.0, 18.0, 9)]))
         getattr(self, "_" + style)()
@@ -488,13 +535,22 @@ class Hair:
             self.sheet(roots, np.array([0.0, -0.55, -1.0]), length=lambda u: lerp(0.040, 0.028, u), points=2, depth=0.008, lift=0.004, g=30.0, shade=-0.03, edges=(0.6, 0.3), thick=0.003,
                        bulge=0.001, check=True)
 
+    def fringe_reach(self, least):
+        """How far down the forehead a fringe comes: 0 the hairline, 1 the fringe's line, just
+        above the brows. A person's `fringe` takes it from `least` to the line. Until 2026-11-13
+        it was the fringe's share of the way itself, so most people's fringes, and every short
+        style's, ended in the middle of the forehead, 3 to 6 cm above the brows: only the bobs'
+        came within 13 mm. The reference's fringe ends at the brows; a style now has a fringe
+        that comes down to them or none to speak of."""
+        return float(lerp(least, 1.0, min(self.fringe, 1.0)))
+
     def bangs(self, mode="straight", points=6, reach=1.0, depth=0.009, span=60.0, g=38.0, splay=0.0, tip_out=0.0):
         """The fringe, one sheet from the top of the head forward and down over the forehead:
         `straight` to a level line with longer flanks, `swept` to one side, `curtain` parted to
         the temples (a sheet a side)."""
-        f = min(self.fringe * reach, 1.0)
-        if f <= 0.03:
+        if self.fringe * reach <= 0.03:
             return
+        f = self.fringe_reach(0.86) * (0.6 + 0.4 * reach)
         if self.fringe_style in ("straight", "swept", "curtain"):
             mode = self.fringe_style
         px = self.part_x()
@@ -630,7 +686,7 @@ class Hair:
     def _short(self):
         k = self.length / 0.07
         lean = 26.0 if self.part_x() <= 0 else -26.0
-        self.cap(drop=0.010 * k, points=15, depth=0.016, fringe=0.55 * self.fringe, lift=0.006, tip_out=0.002 + 0.004 * self.volume, g=20.0, splay=0.06, swirl=lean)
+        self.cap(drop=0.010 * k, points=15, depth=0.016, fringe=0.92 * self.fringe_reach(0.80), lift=0.006, tip_out=0.002 + 0.004 * self.volume, g=20.0, splay=0.06, swirl=lean)
         # A shorter layer over the top, for the cut's volume.
         self.cap(raise_hem=0.045, points=9, depth=0.022, fringe=0.2 * self.fringe, lift=0.011, tip_out=0.003 + 0.005 * self.volume, g=18.0, splay=0.08, swirl=lean, shade=0.03)
         self.strands(1 + int(self.volume > 0.5))
@@ -640,7 +696,7 @@ class Hair:
         k = self.length / 0.07
         lean = 30.0 if self.part_x() <= 0 else -30.0
         # Longer and looser: deep points turned out, and a second layer whose points stand up.
-        self.cap(drop=0.016 * k, points=13, depth=0.034, fringe=0.8 * self.fringe, lift=0.007, tip_out=0.006 + 0.010 * self.volume, g=16.0, splay=0.16, swirl=lean, uneven=0.45)
+        self.cap(drop=0.016 * k, points=13, depth=0.034, fringe=self.fringe_reach(0.86), lift=0.007, tip_out=0.006 + 0.010 * self.volume, g=16.0, splay=0.16, swirl=lean, uneven=0.45)
         self.cap(raise_hem=0.040, points=8, depth=0.040, fringe=0.3 * self.fringe, lift=0.013, tip_out=0.008 + 0.014 * self.volume, g=14.0, splay=0.13, swirl=lean, shade=0.03, uneven=0.45)
         self.strands(3)
         self.sideburns(0.030)

@@ -96,6 +96,9 @@ PRIVATE = ['fast_ask', 'far_handle', 'slumber', 'land_plan', 'clock', 'steer', '
            'character_earshot',
            # How each player's acts and death came out, in codes; read through my_act_outcomes.
            'act_outcome',
+           # What each character has seen of resources, and where a mind's character stands when
+           # its talk turn asks (talk-places): the mind service's only.
+           'seen_stock', 'standing',
            # A person's look and the world's look lines (docs/LOOK.md): a client gets only the
            # `lk_` key on its seen_characters rows.
            'look', 'look_line']
@@ -118,7 +121,7 @@ PLAYER = {'use_skill': ['strike', 0, 0.0, 0.0], 'release_skill': ['block'],
           # The player's look (fov-1): any living character may send it.
           'human_face': [1.0, 0.0]}
 MIND = ['mind_routines', 'mind_install', 'mind_install_way', 'mind_say', 'mind_act', 'mind_skip',
-        'mind_consolidated', 'mind_update', 'mind_judged']
+        'mind_consolidated', 'mind_update', 'mind_judged', 'mind_where']
 # The fast lane's answers (docs/FAST_LANE.md): for an open request only, which exists only for a
 # body its mind holds, so a player is refused even on its own character.
 FAST = ['mind_patch', 'mind_fast_done']
@@ -165,6 +168,8 @@ def mind_args(name, actor, marker):
         'mind_install_way': [actor, '{"wait":30}', marker, '', 0, 'say', 0, t],
         'mind_say': [actor, '', 0, '', 0, t],
         'mind_act': [actor, ['{"do":"signal","item":"client-probe"}'], 'probe'],
+        # Where the character stands, for a talk turn (talk-places): the same controller rule.
+        'mind_where': [actor],
         'mind_skip': [actor, 0, t], 'mind_consolidated': [actor, 0],
         'mind_patch': [actor, 'combat', '{"wait":30}', 1, t], 'mind_fast_done': [actor, 1, t],
         'mind_judged': [actor, [{'q': 'client probe', 'value': 0.5, 'choice': '', 'ttl_ms': 1000}]],

@@ -76,17 +76,29 @@ pub fn tick(ctx: &ReducerContext, _t: TickTimer) -> Result<(), String> {
     // 3. Wakes and this slot's evaluations.
     let phase = common::span("tick.wakes");
     // Bystanders' wakes held back by `witness_wake_ms` whose window has ended.
+    let due_wakes = common::detail_span("wake.bystanders_due");
     common::due_bystander_wakes(ctx, now);
+    drop(due_wakes);
     let mut done = HashSet::new();
     for _ in 0..3 {
         let wakes: Vec<u32> = ctx.db.wake().iter().map(|w| w.id).collect();
         if wakes.is_empty() {
             break;
         }
+        common::diag(|| "wake:round", 1);
         for id in wakes {
             ctx.db.wake().id().delete(id);
             if done.insert(id) {
                 common::diag(|| "eval:wake", 1);
+                // While profiling with detail: woken evaluations of those in a fight (on the
+                // combat cadence) apart from the rest.
+                let _detail = if common::profiling() {
+                    let fighting = ctx.db.mind_state().id().find(id).is_some_and(|m| m.fast_until >= now);
+                    common::diag(move || if fighting { "eval:wake:fight" } else { "eval:wake:calm" }, 1);
+                    common::detail_span(if fighting { "wake.eval.fight" } else { "wake.eval.calm" })
+                } else {
+                    None
+                };
                 brain::evaluate(ctx, id, now);
             }
         }

@@ -21,7 +21,7 @@ What a mind wrote should bring it to think (docs/ATTENTION.md). The mind service
 4. An overlay of `perceived_of` makes everyone past 4 m `far`; the cues become `who: unknown` and `who_id: K` (O's community). V (unknown) and K at 6 m: nothing. V at 2 m: told.
 5. Six cues the world cannot watch for are kept, each with its reason (an unknown place, phase, creature or thing kind, a deed with no doer, serving nothing); a cue on a wolf visibly winding up a strike is accepted; an empty set clears them.
 
-The shipped script, `cues_on` off and `cue_gap_s` 60 are restored at the end. Evidence: `cues-deliberation-after-fire.json`, the run's `actions.log`. Rules test `script::tests::attention_cues_are_the_world_s_laws` (defaults, `laws_about`, a world's values and clamps).
+The shipped script, `cues_on` off and `cue_gap_s` 60 are restored at the end. Evidence: `cues-deliberation-after-fire.json`, the run's `actions.log`. Rules test `script::tests::attention_cues_are_the_world_s_laws` (defaults, `law_about`, a world's values and clamps).
 
 Not covered here: cues written by a real mind (verify-minds `cues_mind.py`), `thing`, `doing`/`phase` and `near_me` matches (the code only; `visibly` itself is driven by `doing_seen`), the cost at scale (docs/ATTENTION.md, "Cost").
 

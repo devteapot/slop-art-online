@@ -118,7 +118,7 @@ pub fn validate_traced(s: &Scripts, limits: super::Limits) -> Result<(Report, Ve
 pub const ENGINE_LAWS: [&str; 18] = ["look_bands", "appearance_in_scene", "owner_shown", "perceived_of", "record_text", "items", "structures", "resources", "know_how", "recipes", "structure_traits", "occupation_knows", "source_of", "carcass", "daylight", "life_years", "meters", "status_of"];
 
 /// Every law the engine asks is declared with a description for minds (`<law>_law()`, or listed
-/// in another's `covers`), and every world constant has its words in `laws_about`.
+/// in another's `covers`), and every world constant has its words in `law_about(l, name)`.
 fn described(s: &Scripts) -> Result<(), String> {
     let declared: std::collections::BTreeSet<&str> = s.laws.values().flat_map(|l| std::iter::once(l.name.as_str()).chain(l.covers.iter().map(|c| c.as_str()))).collect();
     let mut asked: Vec<String> = s.ctx_laws().into_iter().filter(|f| CTX_LAWS.contains(&f.as_str()) || f.starts_with("on_")).collect();
@@ -142,7 +142,7 @@ fn described(s: &Scripts) -> Result<(), String> {
         let about = s.laws_about();
         for k in s.law_names() {
             if !about.iter().any(|(n, t)| *n == k && !t.trim().is_empty()) {
-                return Err(format!("install refused: the world constant `{k}` has no description (give it words in `laws_about(l)`)"));
+                return Err(format!("install refused: the world constant `{k}` has no description (give it words in `law_about(l, name)`)"));
             }
         }
     }

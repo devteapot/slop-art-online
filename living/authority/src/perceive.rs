@@ -12,6 +12,7 @@ const WINDOW: usize = 400;
 
 /// Write an experience row for `observer`; its id, or `None` when nobody would read it.
 pub fn percept(ctx: &ReducerContext, observer: &Character, now: u64, kind: &str, subject: u32, object: u32, at: (f32, f32), text: String, salience: f32) -> Option<u64> {
+    let _detail = common::detail_span("perceive.percept");
     told(ctx, observer, now, kind, subject, object, at, text, salience, Some(true), true)
 }
 
@@ -27,6 +28,7 @@ pub fn percept_seen(ctx: &ReducerContext, observer: &Character, now: u64, kind: 
 /// first blow woke the onlooker when it landed (`fold`).
 #[allow(clippy::too_many_arguments)]
 pub fn percept_quiet(ctx: &ReducerContext, observer: &Character, now: u64, kind: &str, subject: u32, object: u32, at: (f32, f32), text: String, salience: f32) -> Option<u64> {
+    let _detail = common::detail_span("perceive.percept_quiet");
     told(ctx, observer, now, kind, subject, object, at, text, salience, None, true)
 }
 
@@ -131,6 +133,7 @@ pub fn minds_near(ctx: &ReducerContext, at: (f32, f32), r: f32, now: u64, exclud
 /// `template` become how each observer refers to `subject` and `object` (its projection's
 /// label: the name when it knows it).
 pub fn witnessed(ctx: &ReducerContext, now: u64, at: (f32, f32), kind: &str, subject: u32, object: u32, template: &str, salience: f32, exclude: &[u32]) {
+    let _detail = common::detail_span("perceive.witnessed");
     witnessed_as(ctx, now, at, kind, subject, object, template, salience, exclude, None)
 }
 
@@ -476,6 +479,7 @@ pub fn wakes(ctx: &ReducerContext, d: f32, loudness: f32) -> bool {
 /// heard within `range`: every sleeper it wakes (`wakes`) wakes, whoever plays it, told by
 /// `told` (given the sleeper and the direction of the noise). Not `exclude`.
 pub fn noise(ctx: &ReducerContext, at: (f32, f32), loudness: f32, range: f32, exclude: &[u32], told: impl Fn(&Character, &str) -> String, now: u64) {
+    let _detail = common::detail_span("perceive.noise");
     let l = common::laws(ctx);
     if loudness <= 0.0 || loudness < l.wake_loudness {
         return;
@@ -520,6 +524,7 @@ pub fn heard_on_waking(ctx: &ReducerContext, c: &Character, now: u64) {
 /// Ask the mind to reconsider for a reason that wakes a sleeping body (`Wake`): a sleeper wakes,
 /// is told why, and thinks on it with the reasons that waited while it slept.
 pub fn request_waking(ctx: &ReducerContext, id: u32, reason: &str, now: u64, wake: Wake) {
+    let _detail = common::detail_span("perceive.request_waking");
     request(ctx, id, reason, now, false, Some(wake));
 }
 
@@ -527,6 +532,7 @@ pub fn request_waking(ctx: &ReducerContext, id: u32, reason: &str, now: u64, wak
 /// asked with what waited (as `request_waking` with `Wake::Attack`). Awake, nothing: the first
 /// blow of a fight already asked its mind, and the later ones are the fight report's.
 pub fn wake_struck(ctx: &ReducerContext, id: u32, why: &str, now: u64) {
+    let _detail = common::detail_span("perceive.wake_struck");
     if asleep(ctx, id) {
         request_waking(ctx, id, why, now, Wake::Attack);
     }
@@ -1060,8 +1066,9 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
         scene[living_rules::species::SMELLED] = Value::Array(smelled);
     }
     // Remembered places (docs/MOVEMENT_MIND.md, step 3): each of one's own places, which way and
-    // how far from here, in the words used for what is in sight (`living_rules::sight`), nearest
-    // first. Only one's own: a place one does not know is not listed.
+    // how far from here, in the words used for what is in sight (`living_rules::bearing`, shared
+    // with the mind's talk-turn place lists), nearest first. Only one's own: a place one does not
+    // know is not listed. A deliberation's place list leaves the way to this.
     let mut places: Vec<(f32, Value)> = ctx
         .db
         .place()
@@ -1069,7 +1076,7 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
         .filter(id)
         .map(|p| {
             let d = common::dist(at, (p.x, p.y));
-            (d, json!({"name": p.name, "dir": common::direction(at, (p.x, p.y)), "dist": living_rules::sight::rough_dist(d)}))
+            (d, json!({"name": p.name, "dir": common::direction(at, (p.x, p.y)), "dist": living_rules::bearing::rough_dist(d)}))
         })
         .collect();
     if !places.is_empty() {

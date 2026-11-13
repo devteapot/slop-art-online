@@ -1072,3 +1072,33 @@ From ew2 (docs/TRIALS.md, "Ways stage"): 5 of its 7 false replies answered a dec
 - **Everyone else:** they still hear it and keep it in what they perceive, but take no turn on it. That holds whether they would be drawn in, would greet, or are already talking with the speaker (`talk.rs` `room_names_one_other`, read from each hearer's own row: "… to the room, naming Nell Tarn, from about 19 m").
 - **Lines it does not cover:** a room line naming two or more people, or no one, is as before.
 - **Who:** the same for every speaker. A player's room line naming one mind gives that mind the turn, and the other minds stay out of it.
+
+## 20. Places in a talk turn, and resources as last seen (branch `talk-places`)
+
+Approved 2026-11-12 from play-test 6's item 4a. Sissly gave the owner directions ("It's just past the berry bushes!") with no places in her talk prompt; the bushes she recalled were ones seen at 15:03 and gathered since, and she stood where she remembered them.
+
+**(a) A talk turn lists the places one knows, with the way to each from where one stands.** The talk prompt gains "# Places you know, from where you stand", after "# Now":
+
+> - "verify well" at [43, 9], 16 m east
+> - 3 berry bush around [28, 11], here: seen day 1 08:01
+
+- **One source for every prompt.** `Minds::places(actor, near, say_way)` makes the lines from the character's `place` rows and its remembered resources (b), the resources nearest `near` first, and with `say_way` the way from `near` in `living_rules::bearing` words: "here" within 4 m, else the distance in the scene's words (`bearing::rough_dist`: whole metres up to 30, then to the nearest ten) and the scene's compass word ("50 m south"; `bearing::direction` is the scene's `dir`). A talk turn says the way. The think and deliberate prompts' "# Places you remember" are the same lines, nearest the scene's own place (`you.at`), without the way: the scene's `places` give each place's way already (known-ground), so it is said once. Player memory's internalize prompt has them with no way (no place to stand).
+- **Where one stands.** The mind service does not follow bodies. A talk turn asks the authority: the reducer `mind_where(actor)` (the character's controller only) writes the private one-row-per-character table `standing` (x, y, when), which the service reads back when the call returns (at most `STANDING_WAIT_MS`, 2 s; past it, the places are listed without the way, under "# Places you know"). The talk prompt's "at"/"near" place in "# Now" reads it too (before, where the heard line was said). This follows the docs' advice to prefer a reducer over a procedure: procedures are `unstable` in 2.14.1 ([procedures](https://spacetimedb.com/docs/functions/procedures/)). One write per talk turn.
+- **Size.** All of one's places (24 at most), and the nearest 8 remembered resources (`STOCK_SHOWN`).
+
+**(b) A remembered resource carries when it was seen, and is gone only once the character sees it gone.** The private table `seen_stock`: one row per kind of resource a character saw at a spot (the middle of the ones seen), with how many had something to gather (`count`), the nodes seen (nearest first, at most 12), when last seen bearing (`seen_ms`), and when last seen bare (`gone_ms`, 0 while not).
+
+- **A look** (`stock::look`) is the scene's own rule for resources: every node within sight (`resources_near`, as the scene and the region line "here: 10 berry bush" count them). A mind looks at its noticing (`brain::noticed`), a player's character at its perception sweep: the same rule for every controller. A look runs on coming into another chunk, and otherwise at most every 30 s.
+- **What it changes:** a kind in view with stock that no row holds becomes a row. Any of a row's nodes in view with stock: still there (`seen_ms` refreshed at most every 2 minutes, a gone row comes back). Every one of a row's nodes in view and none with anything left: gone, told once ("Nothing is left to gather on the berry bush around (416, 239): 10 had some when you saw them, day 1 15:03."). Only some in view, all bare: nothing is concluded.
+- **Never from the world's truth.** A patch stripped out of sight stays "seen day 1 15:03" until the character looks again.
+- **Bounds:** 24 rows a character (the longest unseen goes first); gone at death (`forget_dead`).
+- **Players:** their characters' rows are written by the same looks, and reach player memory (its internalize prompt lists them), so a character taken over by the world's minds knows what its person saw.
+
+**Cost.** A look reads the resources in sight (the chunk cache) and the character's rows in the chunks around (the `(actor, chunk)` index), and writes only when something changed or a refresh is due. The mind service subscribes `seen_stock` and `standing` (at most 24 rows and 1 row a character).
+
+**Where this meets navigation step 3 (`known-ground`, which landed second).**
+- **Words.** One set in `living_rules::bearing`: `direction` (the compass word, the same as `known-ground`'s `sight::direction_word`, which it replaces) and `rough_dist` (whole metres up to 30, then tens), which `from_here` uses. The scene's `places` and a talk turn's lines give the same way and the same distance.
+- **The think prompt.** `known-ground`'s scene gains `places` (name, `dir`, `dist`). So "# Places you remember" keeps the coordinates and the remembered resources and drops the way (`say_way` false), and the talk prompt (no scene) keeps it.
+- **Remembered things.** `known-ground`'s `remembered` table holds what a character last saw of one thing (a gate, open or shut). `seen_stock` is a patch: a kind, a count and the nodes. They can stay apart, or become one table with a kind for each.
+
+Checks: verify-knowledge `remembered.py` (a player's character: remembered, unchanged while stripped out of sight, gone once seen bare and told once, a new bush its own row); verify-knowledge `player_memory.py` (the internalize prompt lists the player's remembered resources); verify-minds `talk-places` (the talk prompt's places from where H stands, `standing`, the think prompt's places without the way and its scene's `places` with it, gone once seen bare); verify-client (`mind_where` refused for another's character and for anonymous; `seen_stock` and `standing` private); rules test `a_place_is_here_or_metres_and_a_compass_word` (with `rough_dist`).

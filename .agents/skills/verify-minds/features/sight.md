@@ -89,7 +89,7 @@ Since 2026-11-12 (docs/PERCEPTION.md "Whose a thing is"). `house-owner`: three s
 
 ## Remembered places with bearings
 
-Since `known-ground` (2026-11-13, docs/MOVEMENT_MIND.md) the authority's scene (`perceive::scene_json`) lists the character's own `place` rows under `places`, nearest first (at most 12): each with `name`, `dir` and `dist`, from where it stands, in the words of things in sight (`living_rules::sight::direction_word` and `rough_dist`: whole metres up to 30, then to the nearest ten). A place only another character keeps is not listed. The mind sends the scene as it is ("# What you perceive right now").
+Since `known-ground` (2026-11-13, docs/MOVEMENT_MIND.md) the authority's scene (`perceive::scene_json`) lists the character's own `place` rows under `places`, nearest first (at most 12): each with `name`, `dir` and `dist`, from where it stands, in the words of things in sight (`living_rules::bearing::direction` and `rough_dist`: whole metres up to 30, then to the nearest ten; a talk turn's place list uses the same words). A place only another character keeps is not listed. The think prompt's "# Places you remember" keeps their coordinates without the way, so the way is given once (talk-places, docs/COMMUNICATION.md §20). The mind sends the scene as it is ("# What you perceive right now").
 
 ```bash
 .agents/skills/verify-minds/scripts/verify_minds.py --run minds-$(date +%Y%m%d-%H%M%S) --case place-bearings

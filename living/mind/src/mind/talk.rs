@@ -40,6 +40,8 @@ use tokio::sync::oneshot;
 
 /// Reply turns in one conversation (both sides together); stamina usually ends it sooner.
 const MAX_TURNS: u32 = 12;
+/// How long a talk turn waits for the authority to say where its character stands (talk-places).
+const STANDING_WAIT_MS: u64 = 2_000;
 /// A conversation that has been quiet this long is over; the next line starts a new one.
 const QUIET_MS: u64 = 90_000;
 /// Speech older than this (e.g. replayed when the service starts) gets no turn.
@@ -1287,6 +1289,30 @@ impl Minds {
         result
     }
 
+    /// Where `actor` stands now (talk-places): its `standing` row, written by the authority when
+    /// asked (`mind_where`), since this service does not follow bodies. None if the ask fails or
+    /// takes over [`STANDING_WAIT_MS`]; the turn then lists its places without the way to them.
+    async fn standing_now(&self, actor: u32) -> Option<(f32, f32)> {
+        let (tx, rx) = oneshot::channel();
+        if let Err(e) = self.conn.reducers.mind_where_then(actor, move |_, r| {
+            let _ = tx.send(flatten(r));
+        }) {
+            log::warn!("{}: where it stands not asked: {e:#}", self.name(actor));
+            return None;
+        }
+        match tokio::time::timeout(Duration::from_millis(STANDING_WAIT_MS), rx).await {
+            Ok(Ok(Ok(()))) => self.conn.db.standing().actor().find(&actor).map(|s| (s.x, s.y)),
+            Ok(Ok(Err(e))) => {
+                log::warn!("{}: mind_where: {e}", self.name(actor));
+                None
+            }
+            _ => {
+                log::warn!("{}: mind_where gave no answer within {STANDING_WAIT_MS} ms", self.name(actor));
+                None
+            }
+        }
+    }
+
     async fn say(&self, actor: u32, say: String, to: u32, way: String, t: ThoughtIn) -> Result<()> {
         let (tx, rx) = oneshot::channel();
         self.conn.reducers.mind_say_then(actor, say, to, way, 0, t, move |_, r| {
@@ -1354,13 +1380,17 @@ impl Minds {
             17..=19 => "evening",
             _ => "night",
         };
+        // Where one stands now, asked of the authority (talk-places); else where the line was said.
+        let standing = self.standing_now(me).await;
+        let here = standing.unwrap_or(heard.at);
+        let places = self.places(me, standing, true);
         let near = self
             .conn
             .db
             .place()
             .iter()
             .filter(|p| p.actor == me)
-            .map(|p| (((p.x - heard.at.0).powi(2) + (p.y - heard.at.1).powi(2)).sqrt(), p.name))
+            .map(|p| (((p.x - here.0).powi(2) + (p.y - here.1).powi(2)).sqrt(), p.name))
             .filter(|(d, _)| *d <= 15.0)
             .min_by(|a, b| a.0.total_cmp(&b.0));
         let place = near.as_ref().map(|(d, n)| if *d <= 4.0 { format!("at \"{n}\"") } else { format!("near \"{n}\"") }).unwrap_or_else(|| "away from the places you know".into());
@@ -1466,6 +1496,8 @@ impl Minds {
             heard: &heard.text,
             how: &how,
             between: &between,
+            places: &places,
+            placed: standing.is_some(),
         };
         (prompts::talk_system(), prompts::talk_user(&t))
     }

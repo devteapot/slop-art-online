@@ -97,6 +97,7 @@ import argparse
 import json
 import math
 import os
+import shutil
 import struct
 import sys
 import tempfile
@@ -2262,9 +2263,17 @@ def main():
     if a.blend:
         bpy.ops.wm.save_as_mainfile(filepath=os.path.abspath(a.blend))
     os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True)
-    tmp = a.keep_export or os.path.join(tempfile.mkdtemp(prefix="animate-"), "blender.glb")
-    export(os.path.abspath(tmp))
-    worst = graft(os.path.abspath(a.src), os.path.abspath(tmp), os.path.abspath(a.out), animated, translated, expected)
+    # Blender's own export is only read here: without --keep-export it goes to a folder of its
+    # own, removed when it has been read (or the bake failed). They once stayed, a few MB a bake,
+    # and on a machine whose /tmp is memory that was 8.6 GB of RAM.
+    own = None if a.keep_export else tempfile.mkdtemp(prefix="animate-")
+    tmp = a.keep_export or os.path.join(own, "blender.glb")
+    try:
+        export(os.path.abspath(tmp))
+        worst = graft(os.path.abspath(a.src), os.path.abspath(tmp), os.path.abspath(a.out), animated, translated, expected)
+    finally:
+        if own:
+            shutil.rmtree(own, ignore_errors=True)
     if math.degrees(worst) > 0.05:
         raise SystemExit(f"exported rotations differ from the evaluated pose by {math.degrees(worst):.3f}°")
     if a.summary:

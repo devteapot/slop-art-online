@@ -422,6 +422,7 @@ pub fn mind_patch(ctx: &ReducerContext, actor: u32, target: String, graph: Strin
         return Err("no fast re-plan was asked of this character".into());
     };
     let refuse = |why: String| {
+        common::diag(|| "fast:refused", 1);
         add_thought(ctx, actor, ThoughtIn { kind: "fast".into(), summary: format!("refused: {why}"), ..thought.clone() }, now);
         crate::fast::answered(ctx, actor, asked_ms, now);
         Ok(())
@@ -470,6 +471,7 @@ pub fn mind_patch(ctx: &ReducerContext, actor: u32, target: String, graph: Strin
         st.marks.push(crate::tables::Mark { node: FAST_MARK, at_ms: now });
         ctx.db.mind_state().id().update(st);
     }
+    common::diag(|| "fast:installed", 1);
     add_thought(ctx, actor, ThoughtIn { kind: "fast".into(), ..thought }, now);
     crate::fast::answered(ctx, actor, asked_ms, now);
     Ok(())
@@ -485,6 +487,7 @@ pub fn mind_fast_done(ctx: &ReducerContext, actor: u32, asked_ms: u64, thought: 
         return Err("no fast re-plan was asked of this character".into());
     }
     let now = common::now_ms(ctx);
+    common::diag(|| "fast:kept", 1);
     if !thought.kind.is_empty() {
         add_thought(ctx, actor, thought, now);
     }
@@ -613,6 +616,24 @@ pub fn mind_act(ctx: &ReducerContext, actor: u32, acts: Vec<String>, source: Str
     let now = common::now_ms(ctx);
     let notes = crate::acts::submit(ctx, actor, &acts, &source, false, now);
     log::debug!("{} decides: {}", c.name, notes.join("; "));
+    Ok(())
+}
+
+/// Where the character stands now, for its talk turn's places (talk-places, docs/COMMUNICATION.md
+/// §20): written to its `standing` row, which the mind service reads. Only the character's
+/// controller may ask.
+#[spacetimedb::reducer]
+pub fn mind_where(ctx: &ReducerContext, actor: u32) -> Result<(), String> {
+    authorize(ctx, actor)?;
+    let now = common::now_ms(ctx);
+    let b = ctx.db.body().id().find(actor).ok_or("no body")?;
+    let (x, y) = common::pos(&b, now);
+    let row = Standing { actor, x, y, at_ms: now };
+    if ctx.db.standing().actor().find(actor).is_some() {
+        ctx.db.standing().actor().update(row);
+    } else {
+        ctx.db.standing().insert(row);
+    }
     Ok(())
 }
 

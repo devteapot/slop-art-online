@@ -105,9 +105,9 @@ A sleeper gets no request. Sleeping bodies aren't watching.
 
 ## 2. The switch
 
-A world law beside `cues_on` in `skills.rhai` `laws()`, `script.rs` `Laws`, `laws_about` and the law tables (this page; docs/ATTENTION.md "Laws" gains a row pointing here):
+A world law beside `cues_on` in `skills.rhai` `laws()`, `script.rs` `Laws`, `law_about` and the law tables (this page; docs/ATTENTION.md "Laws" gains a row pointing here):
 
-| Law | Default | Meaning (`laws_about`, written for a mind) |
+| Law | Default | Meaning (`law_about`, written for a mind) |
 |---|---|---|
 | `first_sight_thinks` | `false` | On: "seeing someone you cannot place for the first time brings you to think". Off: "one thinks when something happens to one; a first sight is noticed, not thought over". Off, nothing changes, the sleeper rule of §1 included. |
 | `first_sight_gap_s` | `300` (0–3,600) | "a first sight brings one to think at most once in N s" |
@@ -219,7 +219,7 @@ Both are switched at runtime by `set_world_law` and read back from `world_law`, 
   - a second unknown within `first_sight_gap_s` asks nothing.
 - **Re-arm:** "again after a long time" asks nothing. A `familiar` row deleted (forgetting) asks again.
 - **Sleeper:** with the law on, an observer in a sleep act gives no line, no `familiar` row and no request. After it wakes, its first look gives both.
-- **Laws:** `set_world_law` and read-back for both laws; `laws_about` words.
+- **Laws:** `set_world_law` and read-back for both laws; `law_about` words.
 - **Unit tests:**
   - the reason is `first_sight_text` of the unnamed parts, and holds none of the rejected words (newcomer, visitor, arrival, new to you, near your home, worth);
   - the law defaults are off and 300.
@@ -260,7 +260,7 @@ Built as designed, on main `d80a1373` with fix-sleep-thinking merged, then broug
 So a first sight and a cue on someone unknown in the same look read one answer.
 
 **Where it lives:**
-- the laws `first_sight_thinks` (false) and `first_sight_gap_s` (300, clamped 0–3,600) in `skills.rhai` `laws()` and `laws_about`, and `script.rs` `Laws`;
+- the laws `first_sight_thinks` (false) and `first_sight_gap_s` (300, clamped 0–3,600) in `skills.rhai` `laws()` and `law_about`, and `script.rs` `Laws`;
 - `brain.rs` `Ev::first_sight_asks`, called at the end of each look in `noticed` while the law holds;
 - the thread-local `FIRST_SIGHT`: per character, when a first sight last brought it to think, and what is owed.
 

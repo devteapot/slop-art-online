@@ -172,6 +172,7 @@ pub mod mind_state_table;
 pub mod mind_state_type;
 pub mod mind_update_reducer;
 pub mod mind_update_type;
+pub mod mind_where_reducer;
 pub mod missile_table;
 pub mod missile_type;
 pub mod motion_seen_table;
@@ -265,6 +266,8 @@ pub mod seen_character_type;
 pub mod seen_characters_table;
 pub mod seen_doing_table;
 pub mod seen_fighters_table;
+pub mod seen_stock_table;
+pub mod seen_stock_type;
 pub mod seen_type;
 pub mod set_background_reducer;
 pub mod set_behavior_reducer;
@@ -290,6 +293,8 @@ pub mod spawn_newcomer_reducer;
 pub mod spawn_skirmish_reducer;
 pub mod speech_card_table;
 pub mod speech_card_type;
+pub mod standing_table;
+pub mod standing_type;
 pub mod stats_table;
 pub mod stats_type;
 pub mod steer_table;
@@ -489,6 +494,7 @@ pub use mind_state_table::*;
 pub use mind_state_type::MindState;
 pub use mind_update_reducer::mind_update;
 pub use mind_update_type::MindUpdate;
+pub use mind_where_reducer::mind_where;
 pub use missile_table::*;
 pub use missile_type::Missile;
 pub use motion_seen_table::*;
@@ -582,6 +588,8 @@ pub use seen_character_type::SeenCharacter;
 pub use seen_characters_table::*;
 pub use seen_doing_table::*;
 pub use seen_fighters_table::*;
+pub use seen_stock_table::*;
+pub use seen_stock_type::SeenStock;
 pub use seen_type::Seen;
 pub use set_background_reducer::set_background;
 pub use set_behavior_reducer::set_behavior;
@@ -607,6 +615,8 @@ pub use spawn_newcomer_reducer::spawn_newcomer;
 pub use spawn_skirmish_reducer::spawn_skirmish;
 pub use speech_card_table::*;
 pub use speech_card_type::SpeechCard;
+pub use standing_table::*;
+pub use standing_type::Standing;
 pub use stats_table::*;
 pub use stats_type::Stats;
 pub use steer_table::*;
@@ -769,6 +779,9 @@ pub enum Reducer {
         actor: u32,
         update: MindUpdate,
     },
+    MindWhere {
+        actor: u32,
+    },
     OwnHabits,
     PlaceAt {
         id: u32,
@@ -883,6 +896,7 @@ impl __sdk::Reducer for Reducer {
             Reducer::MindSay { .. } => "mind_say",
             Reducer::MindSkip { .. } => "mind_skip",
             Reducer::MindUpdate { .. } => "mind_update",
+            Reducer::MindWhere { .. } => "mind_where",
             Reducer::OwnHabits => "own_habits",
             Reducer::PlaceAt { .. } => "place_at",
             Reducer::PlaceNear { .. } => "place_near",
@@ -1105,6 +1119,11 @@ impl __sdk::Reducer for Reducer {
                 __sats::bsatn::to_vec(&mind_update_reducer::MindUpdateArgs {
                     actor: actor.clone(),
                     update: update.clone(),
+                })
+            }
+            Reducer::MindWhere { actor } => {
+                __sats::bsatn::to_vec(&mind_where_reducer::MindWhereArgs {
+                    actor: actor.clone(),
                 })
             }
             Reducer::OwnHabits => __sats::bsatn::to_vec(&own_habits_reducer::OwnHabitsArgs {}),
@@ -1343,6 +1362,7 @@ pub struct DbUpdate {
     seen_characters: __sdk::TableUpdate<SeenCharacter>,
     seen_doing: __sdk::TableUpdate<Doing>,
     seen_fighters: __sdk::TableUpdate<Fighter>,
+    seen_stock: __sdk::TableUpdate<SeenStock>,
     settlement: __sdk::TableUpdate<Settlement>,
     skill_card: __sdk::TableUpdate<SkillCard>,
     skill_code: __sdk::TableUpdate<SkillCode>,
@@ -1350,6 +1370,7 @@ pub struct DbUpdate {
     slow_timer: __sdk::TableUpdate<SlowTimer>,
     slumber: __sdk::TableUpdate<Slumber>,
     speech_card: __sdk::TableUpdate<SpeechCard>,
+    standing: __sdk::TableUpdate<Standing>,
     stats: __sdk::TableUpdate<Stats>,
     steer: __sdk::TableUpdate<Steer>,
     structure: __sdk::TableUpdate<Structure>,
@@ -1701,6 +1722,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "seen_fighters" => db_update
                     .seen_fighters
                     .append(seen_fighters_table::parse_table_update(table_update)?),
+                "seen_stock" => db_update
+                    .seen_stock
+                    .append(seen_stock_table::parse_table_update(table_update)?),
                 "settlement" => db_update
                     .settlement
                     .append(settlement_table::parse_table_update(table_update)?),
@@ -1722,6 +1746,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "speech_card" => db_update
                     .speech_card
                     .append(speech_card_table::parse_table_update(table_update)?),
+                "standing" => db_update
+                    .standing
+                    .append(standing_table::parse_table_update(table_update)?),
                 "stats" => db_update
                     .stats
                     .append(stats_table::parse_table_update(table_update)?),
@@ -2042,6 +2069,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.script = cache
             .apply_diff_to_table::<Script>("script", &self.script)
             .with_updates_by_pk(|row| &row.name);
+        diff.seen_stock = cache
+            .apply_diff_to_table::<SeenStock>("seen_stock", &self.seen_stock)
+            .with_updates_by_pk(|row| &row.id);
         diff.settlement = cache
             .apply_diff_to_table::<Settlement>("settlement", &self.settlement)
             .with_updates_by_pk(|row| &row.id);
@@ -2063,6 +2093,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.speech_card = cache
             .apply_diff_to_table::<SpeechCard>("speech_card", &self.speech_card)
             .with_updates_by_pk(|row| &row.name);
+        diff.standing = cache
+            .apply_diff_to_table::<Standing>("standing", &self.standing)
+            .with_updates_by_pk(|row| &row.actor);
         diff.stats = cache
             .apply_diff_to_table::<Stats>("stats", &self.stats)
             .with_updates_by_pk(|row| &row.id);
@@ -2507,6 +2540,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "seen_fighters" => db_update
                     .seen_fighters
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "seen_stock" => db_update
+                    .seen_stock
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "settlement" => db_update
                     .settlement
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
@@ -2527,6 +2563,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "speech_card" => db_update
                     .speech_card
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "standing" => db_update
+                    .standing
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "stats" => db_update
                     .stats
@@ -2910,6 +2949,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "seen_fighters" => db_update
                     .seen_fighters
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "seen_stock" => db_update
+                    .seen_stock
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "settlement" => db_update
                     .settlement
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -2930,6 +2972,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "speech_card" => db_update
                     .speech_card
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "standing" => db_update
+                    .standing
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "stats" => db_update
                     .stats
@@ -3095,6 +3140,7 @@ pub struct AppliedDiff<'r> {
     seen_characters: __sdk::TableAppliedDiff<'r, SeenCharacter>,
     seen_doing: __sdk::TableAppliedDiff<'r, Doing>,
     seen_fighters: __sdk::TableAppliedDiff<'r, Fighter>,
+    seen_stock: __sdk::TableAppliedDiff<'r, SeenStock>,
     settlement: __sdk::TableAppliedDiff<'r, Settlement>,
     skill_card: __sdk::TableAppliedDiff<'r, SkillCard>,
     skill_code: __sdk::TableAppliedDiff<'r, SkillCode>,
@@ -3102,6 +3148,7 @@ pub struct AppliedDiff<'r> {
     slow_timer: __sdk::TableAppliedDiff<'r, SlowTimer>,
     slumber: __sdk::TableAppliedDiff<'r, Slumber>,
     speech_card: __sdk::TableAppliedDiff<'r, SpeechCard>,
+    standing: __sdk::TableAppliedDiff<'r, Standing>,
     stats: __sdk::TableAppliedDiff<'r, Stats>,
     steer: __sdk::TableAppliedDiff<'r, Steer>,
     structure: __sdk::TableAppliedDiff<'r, Structure>,
@@ -3346,6 +3393,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
             &self.seen_fighters,
             event,
         );
+        callbacks.invoke_table_row_callbacks::<SeenStock>("seen_stock", &self.seen_stock, event);
         callbacks.invoke_table_row_callbacks::<Settlement>("settlement", &self.settlement, event);
         callbacks.invoke_table_row_callbacks::<SkillCard>("skill_card", &self.skill_card, event);
         callbacks.invoke_table_row_callbacks::<SkillCode>("skill_code", &self.skill_code, event);
@@ -3353,6 +3401,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         callbacks.invoke_table_row_callbacks::<SlowTimer>("slow_timer", &self.slow_timer, event);
         callbacks.invoke_table_row_callbacks::<Slumber>("slumber", &self.slumber, event);
         callbacks.invoke_table_row_callbacks::<SpeechCard>("speech_card", &self.speech_card, event);
+        callbacks.invoke_table_row_callbacks::<Standing>("standing", &self.standing, event);
         callbacks.invoke_table_row_callbacks::<Stats>("stats", &self.stats, event);
         callbacks.invoke_table_row_callbacks::<Steer>("steer", &self.steer, event);
         callbacks.invoke_table_row_callbacks::<Structure>("structure", &self.structure, event);
@@ -4140,6 +4189,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         seen_characters_table::register_table(client_cache);
         seen_doing_table::register_table(client_cache);
         seen_fighters_table::register_table(client_cache);
+        seen_stock_table::register_table(client_cache);
         settlement_table::register_table(client_cache);
         skill_card_table::register_table(client_cache);
         skill_code_table::register_table(client_cache);
@@ -4147,6 +4197,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         slow_timer_table::register_table(client_cache);
         slumber_table::register_table(client_cache);
         speech_card_table::register_table(client_cache);
+        standing_table::register_table(client_cache);
         stats_table::register_table(client_cache);
         steer_table::register_table(client_cache);
         structure_table::register_table(client_cache);
@@ -4272,6 +4323,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "seen_characters",
         "seen_doing",
         "seen_fighters",
+        "seen_stock",
         "settlement",
         "skill_card",
         "skill_code",
@@ -4279,6 +4331,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "slow_timer",
         "slumber",
         "speech_card",
+        "standing",
         "stats",
         "steer",
         "structure",
