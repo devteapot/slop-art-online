@@ -171,52 +171,60 @@
   "env": {}
  },
  "strangers-control": {
-  "about": "The strangers trial's control: main's defaults, the `stranger_by_name` law off (a graph's \"stranger\" is someone with no relation row).",
-  "models": {},
-  "env": {}
- },
- "strangers-filter": {
-  "about": "The strangers trial's filter arm: `stranger_by_name` on (set_world_law after the laws guard): a graph's \"stranger\" is someone whose name one does not know (docs/STRANGERS.md, section 3).",
+  "about": "The strangers trial's control: main's defaults, the `stranger_by_name` law off (a graph's \"stranger\" is someone with no relation row). `earshot` is pinned off (on as shipped since earshot-on, 2026-11-13), so the arm runs as recorded.",
   "models": {},
   "env": {},
   "world_laws": {
-   "stranger_by_name": true
+   "earshot": false
   }
  },
- "strangers-filter-cues": {
-  "about": "Stage 2b's fourth arm, LS + cues: `stranger_by_name` on and the attention-cue law `cues_on` on (docs/ATTENTION.md; set by set_world_law).",
+ "strangers-filter": {
+  "about": "The strangers trial's filter arm: `stranger_by_name` on (set_world_law after the laws guard): a graph's \"stranger\" is someone whose name one does not know (docs/STRANGERS.md, section 3). `earshot` is pinned off (on as shipped since earshot-on, 2026-11-13), so the arm runs as recorded.",
   "models": {},
   "env": {},
   "world_laws": {
    "stranger_by_name": true,
-   "cues_on": true
+   "earshot": false
   }
  },
- "strangers-first-sight": {
-  "about": "Strangers C + first sight (docs/FIRST_SIGHT.md): the `first_sight_thinks` law on (set_world_law after the laws guard), its gap as shipped (300 s): a first sight of someone one cannot place asks one thought. Everything else as `strangers-control`.",
-  "models": {},
-  "env": {},
-  "world_laws": {
-   "first_sight_thinks": true
-  }
- },
- "strangers-filter-cues-fs": {
-  "about": "LS + cues + first sight (docs/FIRST_SIGHT.md): `stranger_by_name`, `cues_on` and `first_sight_thinks` on (set_world_law after the laws guard).",
+ "strangers-filter-cues": {
+  "about": "Stage 2b's fourth arm, LS + cues: `stranger_by_name` on and the attention-cue law `cues_on` on (docs/ATTENTION.md; set by set_world_law). `earshot` is pinned off (on as shipped since earshot-on, 2026-11-13), so the arm runs as recorded.",
   "models": {},
   "env": {},
   "world_laws": {
    "stranger_by_name": true,
    "cues_on": true,
-   "first_sight_thinks": true
+   "earshot": false
   }
  },
- "strangers-first-sight-hf": {
-  "about": "C + first sight, with the crowd fixes (docs/FIRST_SIGHT.md, \"Crowds\"): `first_sight_thinks` and `heard_first_rethinks` on (set_world_law after the laws guard). Whom someone walks to is named in every arm since first-sight-crowd (no switch).",
+ "strangers-first-sight": {
+  "about": "Strangers C + first sight (docs/FIRST_SIGHT.md): the `first_sight_thinks` law on (set_world_law after the laws guard), its gap as shipped (300 s): a first sight of someone one cannot place asks one thought. Everything else as `strangers-control`. `earshot` is pinned off (on as shipped since earshot-on, 2026-11-13), so the arm runs as recorded.",
   "models": {},
   "env": {},
   "world_laws": {
    "first_sight_thinks": true,
-   "heard_first_rethinks": true
+   "earshot": false
+  }
+ },
+ "strangers-filter-cues-fs": {
+  "about": "LS + cues + first sight (docs/FIRST_SIGHT.md): `stranger_by_name`, `cues_on` and `first_sight_thinks` on (set_world_law after the laws guard). `earshot` is pinned off (on as shipped since earshot-on, 2026-11-13), so the arm runs as recorded.",
+  "models": {},
+  "env": {},
+  "world_laws": {
+   "stranger_by_name": true,
+   "cues_on": true,
+   "first_sight_thinks": true,
+   "earshot": false
+  }
+ },
+ "strangers-first-sight-hf": {
+  "about": "C + first sight, with the crowd fixes (docs/FIRST_SIGHT.md, \"Crowds\"): `first_sight_thinks` and `heard_first_rethinks` on (set_world_law after the laws guard). Whom someone walks to is named in every arm since first-sight-crowd (no switch). `earshot` is pinned off (on as shipped since earshot-on, 2026-11-13), so the arm runs as recorded.",
+  "models": {},
+  "env": {},
+  "world_laws": {
+   "first_sight_thinks": true,
+   "heard_first_rethinks": true,
+   "earshot": false
   }
  },
  "strangers-earshot": {
@@ -228,7 +236,7 @@
   }
  },
  "gate-off-ds": {
-  "about": "The live gate check's control (docs/GATE_LIVE.md): the strangers C arm (`strangers-control`: main's laws) with the `people` mix as trials run it, except that think goes to deepseek-flash (deepseek-v4-1-flash-1017, effort low for think) instead of glm-flash. The rethink gate is off (no LIVING_RETHINK).",
+  "about": "The live gate check's control (docs/GATE_LIVE.md): the strangers C arm (`strangers-control`: main's laws) with the `people` mix as trials run it, except that think goes to deepseek-flash (deepseek-v4-1-flash-1017, effort low for think) instead of glm-flash. The rethink gate is off (no LIVING_RETHINK). `earshot` is pinned off (on as shipped since earshot-on, 2026-11-13), so the arm runs as recorded.",
   "models": {
    "mixes": {
     "people": {
@@ -236,10 +244,13 @@
     }
    }
   },
-  "env": {}
+  "env": {},
+  "world_laws": {
+   "earshot": false
+  }
  },
  "gate-jev-ds": {
-  "about": "The live gate check's gated arm (docs/GATE_LIVE.md): as `gate-off-ds`, with the rethink gate on (LIVING_RETHINK=jev; living/configs/rethink.json as shipped: Jev jev-1.14.0, proceed_above 0.3, max_hold_s 600). Nothing else differs.",
+  "about": "The live gate check's gated arm (docs/GATE_LIVE.md): as `gate-off-ds`, with the rethink gate on (LIVING_RETHINK=jev; living/configs/rethink.json as shipped: Jev jev-1.14.0, proceed_above 0.3, max_hold_s 600). Nothing else differs. `earshot` is pinned off (on as shipped since earshot-on, 2026-11-13), so the arm runs as recorded.",
   "models": {
    "mixes": {
     "people": {
@@ -249,6 +260,9 @@
   },
   "env": {
    "LIVING_RETHINK": "jev"
+  },
+  "world_laws": {
+   "earshot": false
   }
  },
  "strangers-first-sight-hf-earshot": {
@@ -269,12 +283,13 @@
   }
  },
  "strangers-first-sight-n2": {
-  "about": "C + first sight with the think prompt's neutral framing (fs1n, docs/FRAMING.md): `first_sight_thinks` and `think_framing` on (set_world_law after the laws guard); the naming fix is on in every world. `heard_first_rethinks` and `earshot` off.",
+  "about": "C + first sight with the think prompt's neutral framing (fs1n, docs/FRAMING.md): `first_sight_thinks` and `think_framing` on (set_world_law after the laws guard); the naming fix is on in every world. `heard_first_rethinks` and `earshot` off. `earshot` is pinned off (on as shipped since earshot-on, 2026-11-13), so the arm runs as recorded.",
   "models": {},
   "env": {},
   "world_laws": {
    "first_sight_thinks": true,
-   "think_framing": true
+   "think_framing": true,
+   "earshot": false
   }
  },
  "strangers-first-sight-n2-earshot": {
@@ -287,16 +302,21 @@
    "earshot": true
   }
  },
-  "fast-lane": {
-    "about": "The fast lane on (docs/FAST_LANE.md): `default` with the world law `fast_lane_on` true, so a blow taken or a move seen started at the subject `seen_again_n` times asks its mind for a quick re-plan (rethink.json `fast.route`, deepseek-flash). R2 arm r2e.",
-    "models": {},
-    "env": {},
-    "world_laws": {"fast_lane_on": true}
-  },
-  "fast-lane-fov": {
-    "about": "`fast-lane` with facing sight: the world laws `fast_lane_on` and `fov_on` true (docs/COMBAT_MIND.md §5.4: R2-fov and R3).",
-    "models": {},
-    "env": {},
-    "world_laws": {"fast_lane_on": true, "fov_on": true}
+ "fast-lane": {
+  "about": "The fast lane on (docs/FAST_LANE.md): `default` with the world law `fast_lane_on` true, so a blow taken or a move seen started at the subject `seen_again_n` times asks its mind for a quick re-plan (rethink.json `fast.route`, deepseek-flash). R2 arm r2e.",
+  "models": {},
+  "env": {},
+  "world_laws": {
+   "fast_lane_on": true
   }
+ },
+ "fast-lane-fov": {
+  "about": "`fast-lane` with facing sight: the world laws `fast_lane_on` and `fov_on` true (docs/COMBAT_MIND.md §5.4: R2-fov and R3).",
+  "models": {},
+  "env": {},
+  "world_laws": {
+   "fast_lane_on": true,
+   "fov_on": true
+  }
+ }
 }

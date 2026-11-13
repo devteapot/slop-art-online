@@ -48,6 +48,16 @@ def heavy():
     return base, fixture, approach, setup
 
 
+# A fixture near death runs from the subject rather than die in a meeting (R3's second fake run lost
+# A to the subject's counter-blows in meeting 2 in both veteran arms, leaving meetings 3-5 without
+# it): only its last 35 health change; the next meeting starts it at full health again.
+SPARE = {"if": {"cond": {"health": {"below": 35}}, "then": {"do": {"skill": "flee", "target": "$subject"}}}}
+
+
+def spared(graph):
+    return {"first": [copy.deepcopy(SPARE), graph]}
+
+
 def meeting(role, label, start, length, fixture, approach, k):
     """The steps of one meeting of `role` with the subject, and its bounded re-approach."""
     begin = {"at": start, "steps": [
@@ -58,7 +68,7 @@ def meeting(role, label, start, length, fixture, approach, k):
         {"do": "vitals", "who": role, "hp": "max"},
         {"do": "place", "who": role, "to": {"who": "subject", "offset": [6, 0]}},
         {"do": "note", "text": f"meeting {k}: {role} ({label})"},
-        {"do": "graph", "who": role, "graph": copy.deepcopy(fixture)},
+        {"do": "graph", "who": role, "graph": spared(copy.deepcopy(fixture))},
     ]}
     walk = copy.deepcopy(approach)
     walk["when"]["near"]["who"] = role
@@ -66,6 +76,8 @@ def meeting(role, label, start, length, fixture, approach, k):
     walk["before_min"] = start + length
     for s in walk["steps"]:
         s["who"] = role
+        if s.get("do") == "graph":
+            s["graph"] = spared(s["graph"])
     end = {"at": start + length, "steps": [
         {"do": "graph", "who": role, "graph": {"wait": 600}},
         {"do": "place", "who": role, "to": {"who": "subject", "offset": AWAY}},

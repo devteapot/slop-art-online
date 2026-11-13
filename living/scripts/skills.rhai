@@ -118,6 +118,9 @@ fn laws() {
         // levels. The `_check` laws (diagnostics) also work each out the whole way and count any
         // difference; `warmth_check` likewise for warmth.
         check_ctx_plan: true, check_ctx_check: false, alarm_cells: true, alarm_cells_check: false, warmth_check: false,
+        // A body's scene worked out as far as each reader asks; `scene_lazy_check` (a diagnostic)
+        // also works each answer out from the whole scene and counts any difference.
+        scene_lazy: true, scene_lazy_check: false,
         // A bystander (one who sees an event it is not party to) is woken by what it sees at most
         // once per `witness_wake_ms` (docs/BATTLE_SCALE.md); what it sees is still told at once,
         // in full. 0: woken by each sight, as before.
@@ -149,8 +152,9 @@ fn laws() {
         // about whatever matters to it now (the neutral framing, replayed as N2).
         think_framing: false,
         // Earshot (docs/COMMUNICATION.md §17): a person's scene says whom a line said now would
-        // reach, at each way, among the people they perceive. Off: it is not told.
-        earshot: false,
+        // reach, at each way, among the people they perceive, and a player's `my_earshot` the
+        // same. On as shipped since earshot-on (2026-11-13); off, neither is told.
+        earshot: true,
         fov_focal_deg: 70.0, fov_side_deg: 110.0, fov_side_share: 0.3333,
         fov_near_m: 3.0, fov_near_dark_m: 2.0, fov_margin_deg: 10.0,
         // What is heard but not seen (only while the field is on) is told by its distance:
@@ -3091,6 +3095,8 @@ fn laws_about(l) {
         alarm_cells: "the body's alarms are worked out again only when something they read can change",
         alarm_cells_check: "a diagnostic: each kept alarm answer is worked out afresh and compared",
         warmth_check: "a diagnostic: warmth is worked out both ways and compared",
+        scene_lazy: "what is in sight is worked out as far as what one looks for needs",
+        scene_lazy_check: "a diagnostic: each look is also worked out from all that is in sight and compared",
         profile_detail: if l.profile_detail { "while profiling, the parts of each behaviour's evaluation are timed" } else { "profiling times each behaviour's evaluation whole" },
         regard_cache_check: if l.regard_cache_check { "every shared answer about another is checked against a fresh one" } else { "shared answers about another are not checked" },
         fast_lane_on: if l.fast_lane_on { "a mind may revise its fighting quickly between blows" } else { "a mind revises its fighting only when it thinks" },

@@ -1749,7 +1749,7 @@ def earshot_case(run):
     a call 22.5 m): H (thought for) stands with A 3 m east (seen, within a said line), B 10 m east
     (seen, beyond a said line, within a call) and C 15 m west (beyond sight, within a call). A and
     C first tell H their names from beside H. H's think prompt then carries "who would hear you
-    now" once the `earshot` law is on (off as shipped, its prompt has no such key): A by name at
+    now" with the `earshot` law on (as shipped since earshot-on; turned off first, its prompt has no such key): A by name at
     say, B as a stranger added by a call, C nowhere (not perceived, so never named). H then says a line to the room and calls one: the people who receive each, among the
     ones H sees, are exactly the scene's list at that way, and C, unseen, receives the call."""
     run.harness('launch')
@@ -1781,7 +1781,8 @@ def earshot_case(run):
     run.start(model(run, script), [h])
     requests = lambda: [e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] in ('think', 'deliberate')]
     sent_text = lambda e: '\n'.join(str(x.get('content', '')) for x in e['body'].get('messages', []))
-    # Off as shipped (the `earshot` law): the scene does not say it.
+    # The `earshot` law turned off (on as shipped): the scene does not say it.
+    run.admin('set_world_law', 'earshot', 'false')
     run.admin('set_behavior', h, json.dumps({'think': 'I finished my plan. verify earshot-off'}))
     off = run.wait(lambda: [sent_text(e) for e in requests() if 'verify earshot-off' in sent_text(e)], 'prompt with the law off', 60)[0]
     (run.directory / 'prompt-earshot-off.txt').write_text(off)
@@ -1811,7 +1812,7 @@ def earshot_case(run):
     checks = {
         'placed_as_planned': dist[a] <= 6.0 and 9.0 < dist[b] <= 11.0 and 11.0 < dist[c] <= 22.5,
         'a_and_c_are_known_by_name': {a, c} <= known,
-        'off_as_shipped_the_scene_does_not_say_it': 'who would hear you now' not in off,
+        'law_off_the_scene_does_not_say_it': 'who would hear you now' not in off,
         'scene_carries_earshot': bool(earshot),
         'said_lists_a_by_name': ids_in(said_part) & ours == {a} and names[a] in said_part,
         'call_adds_b_as_a_stranger_by_day': ('a call would reach no one more' in call_part) if night else ('also reach' in call_part and ids_in(call_part) & ours == {b} and 'a stranger' in call_part),
@@ -2140,6 +2141,88 @@ def spoken_ids_case(run):
     }
     result = {'actor': actor, 'other': other, 'said': said, 'spoken_as': spoken_as['text'], 'journaled': journaled[0], 'checks': checks}
     (run.directory / 'spoken-ids.json').write_text(json.dumps(result, indent=2, ensure_ascii=False))
+    assert all(checks.values()), checks
+    return {'status': 'pass', **result}
+
+
+@case('say-once')
+def say_once_case(run):
+    """A plan's say node does not say again a line its speaker said to the same person in the
+    last 45 s (say-once; ew2's Mirren Quill double). Replayed with the reducer calls a
+    deliberation makes, in the order the mind service makes them (`apply_routines`, then
+    `mind_install_way`), as the admin, so the order of events is fixed:
+
+    1. M's top level weighs "the plan" (`current plan` routine: wait).
+    2. The routine edit: `current plan` becomes "say a line to A, then wait". The body runs it and
+       speaks the line.
+    3. Within 2 s, the install: the same plan, with the decision's own line to A. It is refused
+       ("speaking too fast", told as `unsaid`), and the install clears the say node's mark.
+
+    Before say-once, the node then said its line again 2–3 s later (`repeat`). Now it is said
+    once: one chronicle line, no "(×2)", 7 s later.
+
+    Then what the rule leaves alone (scope decided 2026-11-13): the same steps with a line to
+    the room (`current plan` says it to no one; a second install clears the mark) say it again,
+    and a scene's graph (`set_behavior`, installed twice) says its line to A again."""
+    run.harness('launch')
+    run.harness('doctor')
+    before = {c['id'] for c in run.sql('SELECT id FROM character', 'ids-before')}
+    run.admin('spawn_crowd', 2, True)
+    m, a = sorted(x['id'] for x in run.sql('SELECT id FROM character', 'ids-after') if x['id'] not in before)
+    line = open_line(run, 20)
+    run.admin('place_at', m, *line[8])
+    run.admin('place_at', a, *line[10])
+    time.sleep(1.0)
+    thought = lambda marker: {'kind': 'deliberate', 'summary': f'verify {marker}', 'detail': '', 'latency_ms': 0, 'tokens': 0, 'model': '', 'reference': ''}
+    top = json.dumps({'desires': [{'want': 'the plan', 'weight': {'base': 3.5}, 'do': {'routine': 'current plan'}}]})
+    routine = lambda graph: run.admin('mind_routines', m, [{'name': 'current plan', 'graph': json.dumps(graph)}])
+    # A short wait: a routine edit does not wake the body, which takes the new routine when its
+    # running leaf ends (a 30 s wait here let the line come after the 15 s window).
+    routine({'wait': 2})
+    run.admin('mind_install_way', m, top, 'verify first plan', '', 0, '', 0, thought('first'))
+    time.sleep(3.0)
+    words = 'Verify once: stay a moment, close, where I can see your face.'
+    routine({'seq': [{'say': words, 'to': {'id': a}}, {'wait': 30}]})
+    chron = lambda: [c for c in run.private("SELECT * FROM chronicle WHERE kind = 'speech'", 'chronicle-speech') if c['a'] == m and 'Verify once' in c['text']]
+    run.wait(lambda: chron(), 'the routine speaks its first line', 20)
+    run.admin('mind_install_way', m, top, 'verify second plan', 'Verify decision line: hear me.', a, 'say', 0, thought('second'))
+    time.sleep(7.0)
+    rows = chron()
+    told = [r['text'] for r in run.private(f'SELECT * FROM experience WHERE observer = {m}', 'experiences-m') if r['kind'] in ('unsaid', 'repeat')]
+
+    def said(marker, label):
+        """How many times M's lines holding `marker` were said (chronicle rows, "(×n)" counted)."""
+        n = 0
+        for c in run.private("SELECT * FROM chronicle WHERE kind = 'speech'", label):
+            if c['a'] == m and marker in c['text']:
+                times = re.search(r'\(×(\d+)\)\s*$', c['text'])
+                n += int(times.group(1)) if times else 1
+        return n
+
+    # A line to the room, through the same plan steps: not held back.
+    room = 'Verify crier: fresh bread at the oven, warm loaves.'
+    routine({'seq': [{'say': room}, {'wait': 30}]})
+    run.wait(lambda: said('Verify crier', 'chronicle-room'), 'the plan says its room line', 40)
+    run.admin('mind_install_way', m, top, 'verify third plan', '', 0, '', 0, thought('third'))
+    time.sleep(7.0)
+    room_said = said('Verify crier', 'chronicle-room-after')
+    # A scene's graph (the admin's), to A, installed twice: not held back.
+    scene = json.dumps({'seq': [{'say': 'Verify scene: hold still there, by the post.', 'to': {'id': a}}, {'wait': 30}]})
+    run.admin('set_behavior', m, scene)
+    run.wait(lambda: said('Verify scene', 'chronicle-scene'), 'the scene graph says its line', 20)
+    time.sleep(3.0)
+    run.admin('set_behavior', m, scene)
+    time.sleep(6.0)
+    scene_said = said('Verify scene', 'chronicle-scene-after')
+    checks = {
+        'line_said_once': len(rows) == 1 and '(×' not in rows[0]['text'],
+        'no_repeat_row': not any(t.startswith('You said almost the same thing') for t in told),
+        'decision_line_refused_and_told': any('Verify decision line' in t and 'speaking too fast' in t for t in told),
+        'a_room_line_is_said_again': room_said >= 2,
+        'a_scene_line_is_said_again': scene_said >= 2,
+    }
+    result = {'m': m, 'a': a, 'rows': [r['text'] for r in rows], 'told': told, 'room_said': room_said, 'scene_said': scene_said, 'checks': checks}
+    (run.directory / 'say-once.json').write_text(json.dumps(result, indent=2, ensure_ascii=False))
     assert all(checks.values()), checks
     return {'status': 'pass', **result}
 
