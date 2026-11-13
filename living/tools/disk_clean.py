@@ -1005,7 +1005,10 @@ def held_lines(summaries):
         if s["dead"]:
             lines.append(f"    {plural(len(s['dead']), 'directory', 'directories')} of deleted databases still on disk ({human(s['dead_bytes'])}); "
                          "only a stop, their removal and a start frees them")
-        if s["tool"] != "host":
+        if s["tool"] != "host" and s["container"] in NEVER_RESTART + tuple(name_file(NEVER_RESTART_FILE)):
+            lines.append(f"    to free: this tool never restarts {s['container']} (built in, or {short(NEVER_RESTART_FILE)}); "
+                         "a manual stop, removal and start at a quiet moment, with the owner's approval (docs/TOOLING.md)")
+        elif s["tool"] != "host":
             lines.append(f"    to free: disk_clean.py --apply --restart-stdb {s['container']} (refused while in use; docs/TOOLING.md)")
     if quiet:
         lines.append(f"  no deleted files or deleted databases' directories: {', '.join(quiet)}")

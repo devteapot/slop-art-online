@@ -414,7 +414,10 @@ def restart_cases(home, ctl, proc, vol):
     cfgdir = os.path.join(home, ".config", "slop-disk")
     os.makedirs(cfgdir, exist_ok=True)
     open(os.path.join(cfgdir, "never-restart.txt"), "w").write("# this machine\ncoord-stdb\n")
-    refused("a container in never-restart.txt", run(), "coord-stdb is never restarted")
+    r = run()
+    refused("a container in never-restart.txt", r, "coord-stdb is never restarted")
+    expect("report: a never-restart server's hint gives the manual route, not a command it refuses",
+           "this tool never restarts coord-stdb" in r["text"] and "--restart-stdb coord-stdb (refused" not in r["text"], r["text"])
     os.remove(os.path.join(cfgdir, "never-restart.txt"))
     refused("a container that is not running", run(restart="gone-stdb"), "no running container is named gone-stdb")
     gate = os.path.join(home, "state", "slop-build", "gate.lock")
