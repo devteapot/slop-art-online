@@ -505,8 +505,8 @@ impl Minds {
     /// when its character made them out at full sight once (the authority's `sex_seen` row,
     /// written then with the sex seen). Never from a name, kinship, a community, a relation or
     /// speech: a prompt states the sex of someone out of sight only when the mind remembers it.
-    /// Someone in sight now is described by the authority's scene (`form`, near or far), and a
-    /// talk partner face to face by the talk header. A model's older guesses stay as its
+    /// Someone in sight now is described by the authority's scene (`form`, near or far); a talk
+    /// partner only as remembered (someone face to face has been made out). A model's older guesses stay as its
     /// beliefs; this fact, shown beside them, is what the world says.
     pub(crate) fn known_sex(&self, me: u32, other: u32) -> Option<String> {
         if other >= living_rules::script::FAR_HANDLE_BASE {

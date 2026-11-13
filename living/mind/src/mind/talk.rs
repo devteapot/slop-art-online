@@ -1295,15 +1295,6 @@ impl Minds {
         rx.await?.map_err(|e| anyhow!("mind_say: {e}"))
     }
 
-    /// Whether `me` and the speaker of `heard` stood face to face: the authority recorded `me`
-    /// among the hearers its speaker saw (`line_heard.hearers`, written with the line). This
-    /// service does not follow bodies; the speaker's sight stands for the pair's (the listener's
-    /// own field of view is not checked).
-    fn face_to_face(&self, me: u32, heard: &Line) -> bool {
-        let Some(e) = self.conn.db.experience().id().find(&heard.exp) else { return false };
-        self.conn.db.line_heard().iter().any(|h| h.speaker == heard.speaker && h.at_ms == e.at_ms && h.hearers.contains(&me))
-    }
-
     /// How the line being answered was said: its way (`whisper`, `call`, `say`), from the
     /// listener's row and the speaker's `heard` row. (How far away the speaker stood is in the
     /// row's own words when the way says it, "calls out to you from about 25 m": this service
@@ -1458,10 +1449,10 @@ impl Minds {
             "call" => format!("{}. An ordinary voice carries {voice:.0} m: if they are farther than that, call back (\"way\": \"call\") or go over to them.", if told.is_empty() { "They called this out".to_string() } else { told }),
             _ => String::new(),
         };
-        // The other's body (body-sex): as one remembers them, or as one sees them face to face (the
-        // line reached one and its speaker saw one: `line_heard`). A voice from out of sight
-        // gives none.
-        let other_body = self.known_sex(me, other).or_else(|| self.face_to_face(me, heard).then(|| self.sex_words_of(other)).flatten()).unwrap_or_default();
+        // The other's body (body-sex), only as one remembers it: made out once at full sight (the
+        // authority's `sex_seen`; someone face to face has been). A voice from someone one has
+        // never made out gives none.
+        let other_body = self.known_sex(me, other).unwrap_or_default();
         let t = prompts::TalkUser {
             name: &c.name,
             identity: &identity,

@@ -42,7 +42,7 @@ Since `sex-1` (2026-11-13; docs/LIVING_CORE.md "Body sex"). The `body-sex` case 
 - **The scene, near.** The newcomer 3 m off is an entry with `"form"`, the newcomer's word, and `"who": "a stranger"`. No label in the scene carries a sex word.
 - **The scene, far.** Under an overlay that makes everyone past 4 m `far`, the newcomer at 6 m is a figure under a handle (≥ 1000000000), with the far label and the same `form`. No entry carries the newcomer's id.
 - **The talk header.**
-  - The newcomer says a line to Oren 1.5 m away: his talk prompt heads "# You and a stranger (#id, a woman|a man)", face to face because `line_heard` lists Oren among the hearers its speaker saw.
+  - The newcomer says a line to Oren 1.5 m away: his talk prompt heads "# You and a stranger (#id, a woman|a man)": made out at 3 m and 1.5 m, he remembers its body (`sex_seen`).
   - Then Ilsa does: "# You and Ilsa Hale (#id, a woman)".
 - **Kin words.** Pim (their child) says "Mother, …" to the room beside both, and Ilsa is told she was named while Oren is not. "Father, …" the other way round.
 - **The newborn.** Brisk and Edda Marrow (graph-only) start a family. Once the child is born it has a `sex` row, and the mind, restarted with the child in `LIVING_ONLY`, makes its birth identity call: "Newborn: Name (#id, <its body by stage: a baby girl, a boy…>)." Each parent's body appears exactly when the newborn has a `sex_seen` row for them.
@@ -55,18 +55,18 @@ Prompts in `prompt-near.txt`, `prompt-far.txt`, `prompt-talk-stranger.txt`, `pro
 
 ## The perception boundary
 
-The Spark's condition, 2026-11-13. A prompt never states the sex of someone the mind has not perceived and does not remember. The mind service reads the whole `sex` table as the owner, and the boundary is drawn where prompts are built: another person's sex comes only from the scene (in sight, Full or Far), from face to face in a talk, or from the authority's `sex_seen` row. That row is written when the mind's character first made the person out at Full.
+The Spark's condition, 2026-11-13. A prompt never states the sex of someone the mind has not perceived and does not remember. The mind service reads the whole `sex` table as the owner, and the boundary is drawn where prompts are built: another person's sex comes only from the scene (in sight, Full or Far) or from the authority's `sex_seen` row (the talk header too; a voice heard from out of sight gives none). That row is written when the mind's character first made the person out at Full.
 
-The `sex-boundary` case runs on `boundary_seed`: the hamlet at the body case's pace, with Lio Reed given no sheet and Brisk Marrow, from the other settlement, as his parent. Oren's and Lio's minds run with the fake model, and a newcomer comes from `spawn_crowd`.
+The `sex-boundary` case runs on `boundary_seed`: the hamlet at the body case's pace, with Lio Reed grown and given no sheet, and Mara Vane, from the other settlement, as his parent. Oren's and Lio's minds run with the fake model, and a newcomer comes from `spawn_crowd`.
 
 - **Allowed:**
   - the newcomer 3 m off: the scene's `form` (Full);
   - the newcomer at 6 m under the far overlay: the figure's `form` (Far);
-  - Ilsa (Oren's row, written when he made her out at home), moved out of sight: in his relations, and in his talk header when she speaks to him from behind a wall (`wall_spots`, not face to face).
+  - Ilsa (Oren's row, written when he made her out at home), moved out of sight: in his relations, and in his talk header when she speaks to him from 5 m behind him under facing sight (`fov_on`: heard, not seen).
 - **Not allowed:**
-  - Wenna Reed: in Oren's relations but never seen (no row). Not stated in his relations and known people, nor in his talk header when she speaks to him from behind a wall, nor when Ilsa names her in a line.
-  - Brisk in Lio's facts (`Background:` identity call): a parent never met.
-  - Brisk in the newborn's birth prompt: sent 90 m off once the couple is expecting. The mother's body appears exactly when the newborn's row for her exists.
+  - Wenna Reed: in Oren's relations but never seen (no row). Not stated in his relations and known people, nor in his talk header when she speaks to him from behind him (heard, not seen), nor when Ilsa names her in a line.
+  - Mara in Lio's facts (`Background:` identity call): a parent never met.
+  - Brisk in the newborn's birth prompt: killed (admin `kill`) as soon as the couple is expecting, before the minds start, so the child, born where its mother stands, never sees him. Moving him off was not enough: in `minds-sex2-c` the child, born beside him, made him out. The mother's body appears exactly when the newborn's row for her exists.
 - **The scan.** Every prompt the three minds were sent, the facts and birth calls included, is scanned (`sex_statements`: "(#id, a word)" and a JSON object with the id and `form` or `is`). Outside the scene, each statement of another's sex must be backed by that mind's `sex_seen` row (`unbacked.json` lists any that are not).
 
 Evidence: `sex-boundary.json`, `prompt-lio-facts.txt`, `prompt-near.txt`, `prompt-far.txt`, `prompt-talk-ilsa.txt`, `prompt-talk-wenna.txt`, `prompt-birth.txt` and `unbacked.json`.
