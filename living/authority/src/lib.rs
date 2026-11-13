@@ -18,6 +18,7 @@ mod motion;
 mod outcomes;
 mod perceive;
 mod speech;
+mod stock;
 mod perception;
 mod presence;
 mod records;

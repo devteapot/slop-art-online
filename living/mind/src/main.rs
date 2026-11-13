@@ -178,6 +178,10 @@ async fn main() -> Result<()> {
                     "SELECT * FROM relation",
                     "SELECT * FROM judgment",
                     "SELECT * FROM place",
+                    // What each character has seen of resources, and where it stands when its
+                    // talk turn asks (private; talk-places).
+                    "SELECT * FROM seen_stock",
+                    "SELECT * FROM standing",
                     "SELECT * FROM know_how",
                     "SELECT * FROM community",
                     "SELECT * FROM membership",

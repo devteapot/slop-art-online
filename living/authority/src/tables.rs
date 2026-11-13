@@ -1158,6 +1158,48 @@ pub struct Judgment {
     pub updated_ms: u64,
 }
 
+/// What a character has seen of one kind of resource at a spot, and when (talk-places,
+/// docs/COMMUNICATION.md §20). Its own perception, never the world's truth: written by the
+/// character's looks (`stock::look`, the same rule for every controller), so a patch stripped
+/// out of sight is still believed until the character sees it again. Private: the mind service
+/// reads it as the owner, for a deliberation's and a talk turn's places and player memory's.
+/// At most `stock::PER_ACTOR` rows a character; gone at death.
+#[derive(Clone, Debug)]
+#[spacetimedb::table(accessor = seen_stock,
+    index(accessor = by_actor_chunk, btree(columns = [actor, chunk])))]
+pub struct SeenStock {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    #[index(btree)]
+    pub actor: u32,
+    /// The chunk of the spot.
+    pub chunk: u32,
+    pub kind: String,
+    /// The spot: the middle of the ones seen.
+    pub x: f32,
+    pub y: f32,
+    /// How many of `nodes` had something to gather when last seen with any.
+    pub count: u32,
+    /// The ones seen, nearest first (at most `stock::NODES`).
+    pub nodes: Vec<u64>,
+    /// When last seen with something to gather.
+    pub seen_ms: u64,
+    /// 0, or when the character last saw every one of `nodes` with nothing left on it.
+    pub gone_ms: u64,
+}
+
+/// Where a character stands, written when its mind asks (`mind_where`) for a talk turn's
+/// places (talk-places). Private: the mind service reads it. One row a character; gone at death.
+#[spacetimedb::table(accessor = standing)]
+pub struct Standing {
+    #[primary_key]
+    pub actor: u32,
+    pub x: f32,
+    pub y: f32,
+    pub at_ms: u64,
+}
+
 #[cfg_attr(open_tables, spacetimedb::table(accessor = place, public))]
 #[cfg_attr(not(open_tables), spacetimedb::table(accessor = place))]
 pub struct Place {

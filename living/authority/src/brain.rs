@@ -1832,6 +1832,9 @@ impl<'a> Ev<'a> {
             let text = self.region_summary();
             percept(self.ctx, &self.me, now, "discovered", 0, 0, at, text, 0.5);
         }
+        // What it remembers of resources here (talk-places): a look, if one is due.
+        let (ctx, id, w) = (self.ctx, self.me.id, &self.w);
+        crate::stock::look(ctx, &self.me, at, || common::sight_for(ctx, id, w, now), now);
 
         // Creatures.
         let me_kind = self.me.kind.clone();

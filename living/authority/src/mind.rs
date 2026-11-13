@@ -616,6 +616,24 @@ pub fn mind_act(ctx: &ReducerContext, actor: u32, acts: Vec<String>, source: Str
     Ok(())
 }
 
+/// Where the character stands now, for its talk turn's places (talk-places, docs/COMMUNICATION.md
+/// §20): written to its `standing` row, which the mind service reads. Only the character's
+/// controller may ask.
+#[spacetimedb::reducer]
+pub fn mind_where(ctx: &ReducerContext, actor: u32) -> Result<(), String> {
+    authorize(ctx, actor)?;
+    let now = common::now_ms(ctx);
+    let b = ctx.db.body().id().find(actor).ok_or("no body")?;
+    let (x, y) = common::pos(&b, now);
+    let row = Standing { actor, x, y, at_ms: now };
+    if ctx.db.standing().actor().find(actor).is_some() {
+        ctx.db.standing().actor().update(row);
+    } else {
+        ctx.db.standing().insert(row);
+    }
+    Ok(())
+}
+
 /// Give up on a pending deliberation (e.g. model failure), logging why.
 #[spacetimedb::reducer]
 pub fn mind_skip(ctx: &ReducerContext, actor: u32, seen_ms: u64, thought: ThoughtIn) -> Result<(), String> {
