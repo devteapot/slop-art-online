@@ -13,7 +13,9 @@ subject's rows, and stops at the trial's duration, its token cap or the batch's 
   trials.py run --batch B TRIAL... [--variants default,...] [--replicates 3] [--minutes M]
                 [--fake] [--parallel N] [--keep-db]
   trials.py report --batch B            per-instance summaries and the comparison table
-  trials.py clean --batch B             delete the batch's databases and Neo4j minds (evidence kept)
+  trials.py clean --batch B             delete the batch's databases (its own records; each paused first) and Neo4j minds (evidence kept)
+  trials.py dbs --batch B [--json]      the batch's databases from its runner's records: name, identity, replica
+  trials.py reclaim [--json FILE]       classify the trial volume's replica directories (live, paid, no-model, fake, verify); removes nothing
   trials.py ledger                      real tokens spent per batch against the total cap
 
 Defaults are the Spark setup: container slop-trials-stdb on 127.0.0.1:3320 and Neo4j
@@ -22,7 +24,9 @@ TRIALS_NEO4J_CONTAINER, TRIALS_NEO4J_PORT). Databases are always `verify-trial-<
 the runner never publishes or deletes anything else. Evidence: .local/living/trials/<batch>/.
 """
 import argparse
+import bisect
 import concurrent.futures
+import datetime
 import hashlib
 import json
 import math
@@ -360,7 +364,11 @@ def up(_a=None):
 
 def down(_a=None):
     guard()
-    live = [d for d in databases() if d.startswith(PREFIX)]
+    try:
+        live = [d for d in databases() if d.startswith(PREFIX)]
+    except RuntimeError as e:
+        live = []
+        print(f"note: {e}")
     if live:
         print(f"note: {len(live)} trial databases are still published; they pause with the server")
     for name in (CONTAINER, NEO4J):
@@ -373,8 +381,72 @@ def down(_a=None):
 
 
 def databases():
+    """The trial databases `spacetime list` shows (the container CLI's identity owns them). A
+    backstop only: deleting a database removes it from the list but not from disk, and a run's
+    own records (`state.json`, `batch_databases`) are what clean, reclaim and samplers use."""
     r = sh("docker", "exec", CONTAINER, "spacetime", "list", check=False)
+    if r.returncode != 0 or "Error" in (r.stderr or "") or "Error" in r.stdout:
+        # One database whose name is 64 characters or more makes the server's `/names` answer
+        # 500 and the whole listing fail (2026-11-12, fs1e): an empty list is not "none".
+        raise RuntimeError(f"spacetime list failed: {(r.stderr or r.stdout).strip()[-300:]}")
     return [l.split("|")[0].strip() for l in r.stdout.splitlines() if l.strip().startswith(PREFIX)]
+
+
+# SpacetimeDB 2.14.1 accepts a longer database name at publish, but its `/names` route then
+# fails ("Domain name parts must be shorter than 64 characters"), and with it `spacetime list`.
+MAX_DB_NAME = 63
+
+
+REPLICAS = "/home/spacetime/.local/share/spacetime/data/replicas"
+
+
+def database_identity(db):
+    """A database's identity by its name (`GET /v1/database/<name>`), or None when it is gone."""
+    code, body = http(f"/v1/database/{db}")
+    if code != 200:
+        return None
+    try:
+        return json.loads(body)["database_identity"]["__identity__"].removeprefix("0x")
+    except (ValueError, KeyError, TypeError):
+        return None
+
+
+def replica_of(db, token, newer_than=None):
+    """The replica directory holding a database, found by its module log: the last line's
+    microsecond timestamp appears in that replica's log file only (SpacetimeDB 2.14.1 gives no
+    API for it). `newer_than` (a `find -newermt` time) limits the search to recent replicas."""
+    code, body = http(f"/v1/database/{db}/logs?num_lines=20", token=token)
+    ts = None
+    for line in reversed(body.strip().splitlines() if code == 200 else []):
+        try:
+            ts = json.loads(line)["ts"]
+            break
+        except (ValueError, KeyError):
+            continue
+    if ts is None:
+        return None
+    where = f"$(find . -mindepth 1 -maxdepth 1 -type d -newermt '{newer_than}')" if newer_than else "*"
+    hit = sh("docker", "exec", CONTAINER, "sh", "-c", f"cd {REPLICAS} && grep -l '\"ts\":{ts},' $(for r in {where}; do echo $r/module_logs/*.log; done) 2>/dev/null", check=False).stdout.split()
+    owners = {h.lstrip("./").split("/")[0] for h in hit}
+    return next(iter(owners)) if len(owners) == 1 else None
+
+
+def batch_databases(batch):
+    """The databases a batch's runner published, from its own records: {name: {"identity",
+    "replica", "instance"}} (state.json, or summary.json's `db` for batches older than these
+    records)."""
+    out = {}
+    for d in sorted((OUT / batch).glob("*/")):
+        rec = {}
+        for f in ("summary.json", "state.json"):
+            try:
+                rec.update(json.loads((d / f).read_text()))
+            except (OSError, ValueError):
+                pass
+        db = rec.get("db") or (f"{PREFIX}{batch}-{d.name}" if (d / "state.json").exists() else None)
+        if db:
+            out[db] = {"identity": rec.get("database_identity"), "replica": rec.get("replica"), "instance": d.name}
+    return out
 
 
 def build(a):
@@ -1048,8 +1120,19 @@ class Instance:
         if tag:
             wasm = f"{wasm}-{tag}"
         wasm = served_name(wasm)
+        started = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime(time.time() - 5))
         sh("docker", "exec", CONTAINER, "spacetime", "publish", "-s", "local", "-b", f"/wasm/{wasm}.wasm", self.db, "--delete-data", "-y", timeout=300)
         self.published = True
+        # Which database and which replica directory this run wrote: deleting a database leaves
+        # its replica on disk (SpacetimeDB 2.14.1, docs/STORE.md), so the record is what tells a
+        # run's commitlog apart from scratch later. The container's clock is UTC.
+        self.database_identity = database_identity(self.db)
+        try:
+            self.replica = replica_of(self.db, self.shared["token"], newer_than=started)
+        except Exception as e:  # noqa: BLE001 - a missing record never stops a run
+            self.replica = None
+            self.log(f"replica not recorded: {e}")
+        self.log(f"database {self.db}: identity {self.database_identity}, replica {self.replica}")
         self.save()
         variant = self.shared["variants"][self.variant]
         # A variant may name another skills file (a rules change under test); the default is the tree's.
@@ -1736,7 +1819,7 @@ class Instance:
             self.log(f"mind stopped (pid {self.mind.pid})")
 
     # -- state kept for `resume`
-    STATE = ("status", "subject", "roles", "t0", "cursor", "jpos", "brain_rev", "done_at", "saved_graphs", "nsample",
+    STATE = ("database_identity", "replica", "status", "subject", "roles", "t0", "cursor", "jpos", "brain_rev", "done_at", "saved_graphs", "nsample",
              "died", "published", "snapshots", "stopped_by", "starts", "runaway_seen", "thinkers", "capped", "census_at", "outages")
 
     def save(self):
@@ -2170,7 +2253,7 @@ class Instance:
                 self.outages.append({"since_t": round(self.outage_since - (self.t0 or 0), 1), "until_t": None, "failed": self.outage_failed,
                                      "kinds": dict(self.outage_kinds)})
             self.save()
-            summary = summarize(self.dir, self.trial, extra={"db": self.db, "variant": self.variant, "replicate": self.rep,
+            summary = summarize(self.dir, self.trial, extra={"db": self.db, "database_identity": getattr(self, "database_identity", None), "replica": getattr(self, "replica", None), "variant": self.variant, "replicate": self.rep,
                                 "stopped_by": self.stopped_by, "fake": bool(self.opts.fake), "minutes_planned": self.opts.minutes or self.trial.get("minutes", 15),
                                 "runaways": self.runaway_seen, "mind_starts": len(self.starts), "outages": self.outages,
                                 "day_ms": (getattr(self, "world", None) or {}).get("day_ms"),
@@ -2650,6 +2733,10 @@ def run(a):
             sys.exit(f"unknown variant {v}; see living/trials/variants.json")
     # A trial may name the only variants it runs with (`variants`): others are skipped for it.
     plan = [(t, v, r) for t in trials for v in names if not t.get("variants") or v in t["variants"] for r in range(1, a.replicates + 1)]
+    # Instance names follow Instance.__init__ (`<trial>-<variant>-r<rep>`).
+    long = [n for n in (f"{PREFIX}{a.batch}-{t['name']}-{v}-r{r}" for t, v, r in plan) if len(n) > MAX_DB_NAME]
+    if long:
+        sys.exit(f"refusing: database names over {MAX_DB_NAME} characters break the server's listing: {long[0]} ({len(long[0])}); use a shorter batch name")
     led = ledger()
     spent = sum(b.get("tokens", 0) for b in led["batches"].values())
     print(f"batch {a.batch}: {len(plan)} instances; real tokens so far {spent:,}{f' of a cap of {TOTAL_CAP:,}' if TOTAL_CAP else ' (no cap)'}{' (fake: not counted)' if a.fake else ''}")
@@ -2989,45 +3076,141 @@ def report(a):
     print(f"\nwritten {bdir / 'report.md'}")
 
 
-def reclaim(a):
-    """Remove the replica directories that deleted databases leave in the trial volume (as
-    living/tools/reclaim_disk.sh does for the lab container). A live world writes every
-    second, so its replica is recently modified. A paused (kept) world does not: its replica
-    is found by its module log, whose last line's microsecond timestamp appears in that
-    replica's log file only. Refuses unless every database maps to exactly one kept replica."""
-    guard()
-    dbs = databases()
-    token = admin_token()
-    base = "/home/spacetime/.local/share/spacetime/data/replicas"
-    listing = sh("docker", "exec", CONTAINER, "sh", "-c", f"cd {base} && for r in *; do if [ -n \"$(find $r -type f -mmin -{a.idle} -print -quit)\" ]; then echo live $r; else echo idle $r; fi; done").stdout.split("\n")
-    live = {l.split()[1] for l in listing if l.startswith("live ")}
-    idle = {l.split()[1] for l in listing if l.startswith("idle ")}
-    keep, unpaused = set(), 0
-    for db in dbs:
-        code, body = http(f"/v1/database/{db}/sql", "SELECT paused FROM world", token, raw=True)
-        if not (code == 200 and json.loads(body)[0]["rows"][0][0]):
-            unpaused += 1
-            continue
-        ts = None
-        for line in reversed(sh("docker", "exec", CONTAINER, "spacetime", "logs", "-s", "local", db, "-n", "20", "--format", "json").stdout.strip().splitlines()):
+def record_roots():
+    """Every checkout's trial and verification records on this machine (as docs/STORE.md's
+    manifest scans them)."""
+    home = Path.home()
+    roots = [p for pat in ("dev/*", ".t3/worktrees/*/*", "slop*") for p in home.glob(pat) if (p / ".local/living").is_dir()]
+    return sorted({p / ".local/living" for p in roots})
+
+
+def recorded_replicas():
+    """{replica: {"batch", "instance", "db", "paid", "root"}} from every checkout's run records
+    (state.json `replica`) and, for runs older than that field, from the publish time in each
+    instance's actions.log matched to a replica's `db.lock` time (within 40 s) by the caller."""
+    rec, pubs = {}, []
+    for root in record_roots():
+        for bj in (root / "trials").glob("*/batch.json"):
             try:
-                ts = json.loads(line)["ts"]
-                break
-            except (ValueError, KeyError):
-                continue  # e.g. a server line after a restart
-        hit = sh("docker", "exec", CONTAINER, "sh", "-c", f"cd {base} && grep -l '\"ts\":{ts},' */module_logs/*.log", check=False).stdout.split()
-        owners = {h.split("/")[0] for h in hit}
-        if ts is None or len(owners) != 1:
-            sys.exit(f"refusing: cannot tell which replica holds the paused database {db}")
-        keep |= owners
-        print(f"keeping replica {next(iter(owners))} of paused {db}")
-    print(f"{len(dbs)} trial databases ({unpaused} live); {len(live)} replicas written in the last {a.idle} min; {len(idle)} idle")
-    if len(live - keep) != unpaused:
-        sys.exit("refusing: recently written replicas do not match the live databases")
-    gone = sorted(idle - keep)
-    for r in gone:
-        sh("docker", "exec", CONTAINER, "rm", "-rf", f"{base}/{r}")
-    print(f"removed {len(gone)} orphaned replicas; volume now {sh('docker', 'exec', CONTAINER, 'du', '-sh', base).stdout.split()[0]}")
+                b = json.loads(bj.read_text())
+            except (OSError, ValueError):
+                continue
+            bdir = bj.parent
+            for inst in bdir.glob("*/"):
+                st = {}
+                for f in ("summary.json", "state.json"):
+                    try:
+                        st.update(json.loads((inst / f).read_text()))
+                    except (OSError, ValueError):
+                        pass
+                paid = any(not str(m).startswith("fake") and m != "jev" and (v or {}).get("tokens") for m, v in (st.get("by_model") or {}).items())
+                info = {"batch": bdir.name, "instance": inst.name, "db": st.get("db"), "paid": paid, "fake": bool(b.get("fake")), "root": str(bdir), "module": None}
+                if st.get("replica"):
+                    rec[str(st["replica"])] = info
+                started = b.get("started")
+                al = inst / "actions.log"
+                if started and al.exists():
+                    day = datetime.datetime.fromisoformat(started)
+                    for line in al.read_text(errors="replace").splitlines():
+                        m = re.match(r"(\d\d):(\d\d):(\d\d) published (\S+) from (\S+?)\.wasm", line) or re.match(r"(\d\d):(\d\d):(\d\d) published (\S+)", line)
+                        if m:
+                            if m.lastindex >= 5:
+                                info = {**info, "module": m[5]}
+                            t = day.replace(hour=int(m[1]), minute=int(m[2]), second=int(m[3]))
+                            if t < day - datetime.timedelta(hours=1):
+                                t += datetime.timedelta(days=1)
+                            pubs.append((t.astimezone(datetime.timezone.utc).timestamp(), info))
+        # Verification runs (verify.py launch): "HH:MM:SS published <db> from …" in each case's
+        # actions.log, dated by the file (a scene runs within a day).
+        for al in (root / "verify").glob("*/actions.log"):
+            try:
+                text = al.read_text(errors="replace")
+                day = datetime.datetime.fromtimestamp(al.stat().st_mtime)
+            except OSError:
+                continue
+            for line in text.splitlines():
+                m = re.match(r"(\d\d):(\d\d):(\d\d) published (\S+)", line)
+                if m:
+                    t = day.replace(hour=int(m[1]), minute=int(m[2]), second=int(m[3]), microsecond=0)
+                    if t > day + datetime.timedelta(minutes=5):
+                        t -= datetime.timedelta(days=1)
+                    pubs.append((t.astimezone(datetime.timezone.utc).timestamp(),
+                                 {"batch": "verify:" + al.parent.name, "instance": "", "db": m[4], "paid": False, "fake": False, "verify": True, "root": str(al.parent)}))
+    return rec, sorted(pubs, key=lambda p: p[0])
+
+
+def reclaim(a):
+    """Classify every replica directory in the trial volume; remove nothing by default.
+
+    SpacetimeDB 2.14.1 does not remove a deleted database's replica directory
+    (`standalone/src/lib.rs` `on_delete_replica`: "will not remove them from disk"; docs/STORE.md).
+    Each directory is one of: `live` (a database the server still hosts, found by its module log),
+    `paid` (a deleted trial run that made real model calls: its commitlog is evidence, archived
+    before anything is removed), `no-model` (a deleted real run without model calls), `fake`,
+    `verify` (scratch), or `unknown`. `--dry-run` (the default) prints the table and totals and
+    writes it as JSON with `--json`. Removal is not implemented here: it is the owner's decision,
+    with the server stopped and the paid commitlogs archived first."""
+    guard()
+    token = admin_token()
+    lines = sh("docker", "exec", CONTAINER, "sh", "-c", f"cd {REPLICAS} && for r in *; do echo \"$r $(du -sk $r | cut -f1) $(du -sk $r/clog 2>/dev/null | cut -f1) $(cut -d';' -f2 $r/db.lock 2>/dev/null | cut -d= -f2) $(find $r -type f -printf '%T@\\n' | sort -n | tail -1 | cut -d. -f1)\"; done", timeout=1800).stdout.splitlines()
+    now_s = time.time()
+    owner = sh("docker", "exec", CONTAINER, "spacetime", "login", "show").stdout.split()[-1]
+    code, body = http(f"/v1/identity/{owner}/databases")
+    live_ids = json.loads(body).get("identities", []) if code == 200 else []
+    live = {}
+    for ident in live_ids:
+        c, b = http(f"/v1/database/{ident}/names")
+        name = (json.loads(b).get("names") or [ident])[0] if c == 200 else ident
+        r = replica_of(name, token)
+        if r:
+            live[r] = name
+        else:
+            sys.exit(f"refusing: the live database {name} ({ident}) cannot be mapped to its replica directory")
+    rec, pubs = recorded_replicas()
+    ptimes = [p[0] for p in pubs]
+    rows = []
+    for line in lines:
+        parts = line.split()
+        if len(parts) < 4:
+            continue
+        r, kb, clog_kb, lock = parts[0], int(parts[1]), int(parts[2] or 0), parts[3]
+        last_write = int(parts[4]) if len(parts) > 4 and parts[4].isdigit() else 0
+        if r in live or now_s - last_write < 15 * 60:
+            # Hosted, or written in the last 15 minutes (a world that may still be running): kept.
+            rows.append({"replica": r, "kb": kb, "clog_kb": clog_kb, "lock": lock, "class": "live",
+                         "what": live.get(r, "written in the last 15 minutes"), "last_write": last_write})
+            continue
+        info = rec.get(r)
+        if info is None:
+            t = datetime.datetime.fromisoformat(lock.replace("Z", "+00:00")).timestamp()
+            k = bisect.bisect_left(ptimes, t)
+            near = sorted((abs(pubs[j][0] - t), j) for j in range(max(0, k - 6), min(len(pubs), k + 6)) if abs(pubs[j][0] - t) <= 40)
+            # Conservative: a real trial run's publish within the window wins (its commitlog is
+            # archived); otherwise the nearest publish.
+            real = [j for _, j in near if not pubs[j][1].get("verify") and not pubs[j][1]["fake"]]
+            info = pubs[real[0]][1] if real else (pubs[near[0][1]][1] if near else None)
+        if info and info.get("verify"):
+            cls, what = "verify", info["batch"]
+        elif info:
+            cls = "paid" if info["paid"] else "fake" if info["fake"] else "no-model"
+            what = f"{info['batch']}/{info['instance']}"
+        else:
+            cls, what = "unknown", ""
+        rows.append({"replica": r, "kb": kb, "clog_kb": clog_kb, "lock": lock, "class": cls, "what": what,
+                     "module": (info or {}).get("module"), "root": (info or {}).get("root")})
+    action = {"live": "keep", "paid": "archive commitlog, then remove", "no-model": "archive commitlog, then remove",
+              "fake": "remove", "verify": "remove", "unknown": "hold"}
+    for x in rows:
+        x["action"] = action[x["class"]]
+    tot = Counter()
+    for x in rows:
+        tot[x["class"]] += x["kb"]
+    for x in sorted(rows, key=lambda x: (x["class"], x["what"], x["replica"])):
+        print(f"{x['class']:9} {x['replica']:>9} {x['kb'] / 1048576:7.2f} GB  clog {x['clog_kb'] / 1048576:6.2f} GB  {x['lock'][:19]}  {x['action']:31} {x['what']}")
+    print("totals: " + ", ".join(f"{k} {v / 1048576:.1f} GB ({sum(1 for x in rows if x['class'] == k)})" for k, v in sorted(tot.items())))
+    print("nothing removed (dry run)")
+    if a.json:
+        Path(a.json).write_text(json.dumps(rows, indent=1))
 
 
 def resummarize(a):
@@ -3046,8 +3229,15 @@ def resummarize(a):
 def clean(a):
     guard()
     bdir = OUT / a.batch
-    dbs = [d for d in databases() if d.startswith(f"{PREFIX}{a.batch}-")]
+    # The batch's own records first (the runner's names), the server's list as a backstop.
+    try:
+        listed = {d for d in databases() if d.startswith(f"{PREFIX}{a.batch}-")}
+    except RuntimeError as e:
+        listed = set()
+        print(f"note: {e}; deleting from the batch's records only")
+    dbs = sorted(set(batch_databases(a.batch)) | listed)
     for db in dbs:
+        # delete_db pauses the world first and treats 404 as already deleted
         print(f"delete {db}: {'ok (SQL 404)' if delete_db(db) else 'STILL ANSWERS'}")
     runs = [json.loads(p.read_text())["db"] for p in bdir.glob("*/summary.json")]
     if runs and docker_state(NEO4J) == "running":
@@ -3058,6 +3248,20 @@ def clean(a):
         if p.stat().st_size > 1 << 30:
             p.unlink()
             print(f"removed {p} (> 1 GB)")
+
+
+def show_dbs(a):
+    """A batch's databases from its own records (for samplers: no `spacetime list`). An identity
+    missing from older records is looked up by name while the database exists."""
+    dbs = batch_databases(a.batch)
+    for name, v in dbs.items():
+        if not v["identity"]:
+            v["identity"] = database_identity(name)
+    if a.json:
+        print(json.dumps(dbs))
+    else:
+        for name, v in dbs.items():
+            print(f"{name} | {v['identity'] or '(gone)'} | replica {v['replica'] or '?'}")
 
 
 def show_ledger(_a):
@@ -3100,9 +3304,14 @@ def main():
     p = sub.add_parser("resume")
     p.add_argument("--batch", required=True)
     p.set_defaults(f=resume)
-    p = sub.add_parser("reclaim")
-    p.add_argument("--idle", type=int, default=5)
+    p = sub.add_parser("reclaim", help="classify the trial volume's replica directories (a dry run; removes nothing)")
+    p.add_argument("--dry-run", action="store_true", default=True, help="the only mode: print and classify, remove nothing")
+    p.add_argument("--json", help="also write the table as JSON")
     p.set_defaults(f=reclaim)
+    p = sub.add_parser("dbs", help="a batch's databases from its runner's records: name, identity, replica")
+    p.add_argument("--batch", required=True)
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(f=show_dbs)
     p = sub.add_parser("resummarize")
     p.add_argument("--batch", required=True)
     p.set_defaults(f=resummarize)
