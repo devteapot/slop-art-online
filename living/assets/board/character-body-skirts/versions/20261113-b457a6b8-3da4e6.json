@@ -1,0 +1,64 @@
+{
+ "schema": 1,
+ "family": "character:body-skirts",
+ "id": "20261113-b457a6b8-3da4e6",
+ "published": "2026-11-13T06:06:31+01:00",
+ "imported": "2026-11-13T06:06:31+01:00",
+ "track": "char-4",
+ "maker": "Claude Fable 5.2",
+ "note": "Six spring chains under the upper legs, 12 bones a skirt, the client's springs 0.13 ms a frame for 64 residents. On today's client the new files' hem is 17 mm high on a standard woman and 77 mm low on a child; with the one-condition change it is the old file's to 0.1 mm.",
+ "source": {
+  "commit": "b457a6b8e80c7b8df6d5602d4fbf69ff279bd5e4",
+  "branch": "char-4-skirts",
+  "dirty": false,
+  "generator": "living/tools/blender/person.py",
+  "generator_sha256": "963852239b18726d92686c0adbba6b0c0f11a355346fe8b2d924a8bf78ea83ab",
+  "generator_state": "committed",
+  "params": {}
+ },
+ "renderer": {
+  "method": "asset-view",
+  "commit": "",
+  "key": "asset-view",
+  "preset": "",
+  "note": "composed people from lines through recipes; each sheet three rows: the files before (no spring bones), the new files on today's client, the new files on the patched client (pending compose-1: ~/archive/deliverables/char-4-skirts-client-spring-scale.patch, built locally on the dev-box, not committed); views: front, side and the skirt close at rest, walk from the side and the front, brisk walk, run, seated from the side and three-quarter; poses are held, so springs are settled"
+ },
+ "preset": "",
+ "media": "media/character-body-skirts/20261113-b457a6b8-3da4e6",
+ "members": [
+  {
+   "name": "after",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "5cc478bca072bba4e617845532447a96836766f537ce674a1d44d67a9dca828d",
+   "shots": [
+    "child",
+    "heavy-man",
+    "vroid-scaled",
+    "woman"
+   ],
+   "clips": []
+  },
+  {
+   "name": "vroid",
+   "role": "control",
+   "token_kind": "import",
+   "sha256": "7a0b32844b4fd7b736fb717df3148170c6b6e0798f7441e407272b48d74524b4",
+   "shots": [
+    "woman"
+   ],
+   "clips": []
+  },
+  {
+   "name": "blue-protocol",
+   "role": "control",
+   "token_kind": "import",
+   "sha256": "a43f50f288d928d40c7040030e4f08644f5c9db7c73c5be9ba673328f44ae375",
+   "shots": [
+    "woman"
+   ],
+   "clips": []
+  }
+ ],
+ "delivered": []
+}
