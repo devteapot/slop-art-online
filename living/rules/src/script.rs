@@ -536,7 +536,8 @@ pub struct Laws {
     pub think_framing: bool,
     /// A person's scene says whom a line said now would reach, at each way of speaking, among
     /// the people they perceive (earshot, docs/COMMUNICATION.md §17): a mind's deliberation scene
-    /// ("who would hear you now") and a player's `my_earshot`. Off: neither is told.
+    /// ("who would hear you now") and a player's `my_earshot`. On as shipped (since earshot-on);
+    /// off, neither is told.
     pub earshot: bool,
     /// How often a character's cues are checked against what it perceives (seconds).
     pub cue_check_s: f32,
@@ -669,7 +670,7 @@ impl Default for Laws {
             cue_cooldown_s: 600.0,
             cue_gap_s: 60.0,
             first_sight_thinks: false,
-            earshot: false,
+            earshot: true,
             first_sight_gap_s: 300.0,
             heard_first_rethinks: false,
             think_framing: false,
@@ -3694,17 +3695,17 @@ mod tests {
     }
 
     #[test]
-    fn earshot_is_the_world_s_law_and_off_as_shipped() {
+    fn earshot_is_the_world_s_law_and_on_as_shipped() {
         let src = include_str!("../../scripts/skills.rhai");
         let shipped = Scripts::new(src).unwrap();
-        assert!(!shipped.laws().earshot);
+        assert!(shipped.laws().earshot);
         let about: std::collections::HashMap<String, String> = shipped.laws_about().into_iter().collect();
-        assert!(about["earshot"].contains("judges for oneself"), "{about:?}");
-        let on = Scripts::new(&with_world_laws(src, &[("earshot".into(), serde_json::json!(true))])).unwrap();
-        on.validate().unwrap();
-        assert!(on.laws().earshot);
-        let about: std::collections::HashMap<String, String> = on.laws_about().into_iter().collect();
         assert!(about["earshot"].contains("would reach if one spoke now"), "{about:?}");
+        let off = Scripts::new(&with_world_laws(src, &[("earshot".into(), serde_json::json!(false))])).unwrap();
+        off.validate().unwrap();
+        assert!(!off.laws().earshot);
+        let about: std::collections::HashMap<String, String> = off.laws_about().into_iter().collect();
+        assert!(about["earshot"].contains("judges for oneself"), "{about:?}");
     }
 
     #[test]
