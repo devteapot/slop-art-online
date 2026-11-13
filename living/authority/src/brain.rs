@@ -1914,6 +1914,7 @@ impl<'a> Ev<'a> {
                     // The body's form by sex goes with a person's first sight (body-sex), so a
                     // mind remembers it with whom it saw: "a stranger (a woman), 9 tiles west".
                     let form = crate::sex::word(self.ctx, &ch).map(|f| format!(" ({} {f})", living_rules::sex::article(&f))).unwrap_or_default();
+                    crate::sex::remember(self.ctx, &self.me, &ch, now);
                     firsts.push((c.id, c.pos, format!("{who}{form}, {place}"), named));
                     continue;
                 }

@@ -99,8 +99,9 @@ PRIVATE = ['fast_ask', 'far_handle', 'slumber', 'land_plan', 'clock', 'steer', '
            # `lk_` key on its seen_characters rows.
            'look', 'look_line',
            # Each person's body sex (sex-1, docs/LIVING_CORE.md "Body sex"): private in every build;
-           # a player reads its own through my_sex and perceives others' only as drawn.
-           'sex']
+           # a player reads its own through my_sex and perceives others' only as drawn. What each mind
+           # remembers of others' bodies (`sex_seen`): the mind service reads it as the owner.
+           'sex', 'sex_seen']
 # Private in the default `scoped` build; public only in a LIVING_PERCEPTION=open build (diagnostics).
 SCOPED = ['body', 'character', 'fighter', 'doing', 'vitals', 'experience', 'place', 'audience',
           'inventory', 'know_how']

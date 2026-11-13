@@ -207,6 +207,9 @@ async fn main() -> Result<()> {
                     // Each person's body sex (private, one row each, written once at birth;
                     // docs/LIVING_CORE.md, "Body sex"): one's own, and that of the people one knows.
                     "SELECT * FROM sex",
+                    // What each mind remembers of others' bodies (private, a row per pair seen at
+                    // full sight, written once): prompts state an absent person's sex only from it.
+                    "SELECT * FROM sex_seen",
                 ].map(String::from)).collect::<Vec<String>>());
         })
         .on_disconnect(|_, e| {

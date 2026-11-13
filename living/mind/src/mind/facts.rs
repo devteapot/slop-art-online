@@ -99,9 +99,10 @@ impl Minds {
                 f.insert("community".into(), json!(k.name));
             }
         }
-        // One's family, with each one's body sex (one knows one's own kin).
+        // One's family, each with their body's sex only where one remembers it (`known_sex`: seen
+        // once at full sight); kinship alone tells no sex.
         let person = |id: u32| {
-            self.conn.db.character().id().find(&id).filter(|p| p.alive).map(|p| match self.sex_words_of(p.id) {
+            self.conn.db.character().id().find(&id).filter(|p| p.alive).map(|p| match self.known_sex(c.id, p.id) {
                 Some(s) => json!({"id": p.id, "name": p.name, "is": s}),
                 None => json!({"id": p.id, "name": p.name}),
             })

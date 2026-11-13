@@ -499,10 +499,11 @@ Every person's body is female or male, a world fact set once when they come into
 | Kin words (`speech::named_at`) | `sex` (point) per kin hearer near | – | per line with a kin relation near |
 | Conception (`act::facts`, `target_facts`) | `sex` (point), only for a law that reads `sex` | – | per act check |
 | `my_sex` (view) | `player`, `character`, `sex` (points) | – | re-run when one's character changes |
-| Mind service | `sex`, subscribed whole as the owner (one row per person, written once) | – | initial rows, then one insert per person made |
+| Mind service | `sex` and `sex_seen`, subscribed whole as the owner (insert-only rows) | – | initial rows, then one insert per person made and per pair first made out |
+| Remembering (`sex::remember`, from `perceive::scene_json` for each person made out, and a first sight) | `sex_seen.by_pair` (point), `sex` (point) | one `sex_seen` insert, the first time a minded character makes someone out | per person made out in a scene (at most 14), per first sight |
 | `backfill_sex` | every person, `relation` once, the seed | one `sex` per person without one, a chronicle line | admin only |
 
-Growth: one row of 9 bytes (`u32`, `u8`, row overhead aside) per person ever made, never deleted, like `character`. No subscription reaches a player.
+Growth: one `sex` row of 9 bytes (`u32`, `u8`, row overhead aside) per person ever made, never deleted, like `character`. One `sex_seen` row (about 25 bytes) per pair of a living minded character and someone it has made out, deleted with the observer at death: bounded by the living minds times the people each has met (2,000 minds meeting 200 people each would be 400,000 rows, about 10 MB). No subscription reaches a player.
 
 **The rules' words.**
 - `sex_words()` gives the words by sex and life stage. The shipped words are "baby girl", "girl", "woman", "old woman" and "baby boy", "boy", "man", "old man".
@@ -511,13 +512,12 @@ Growth: one row of 9 bytes (`u32`, `u8`, row overhead aside) per person ever mad
 - Kin words (`kin_terms()`) come by sex: see [communication](COMMUNICATION.md#19-talk-turns-from-play-test-6-branch-talk-turns).
 - `conceive_needs_pair()` (shipped `false`): on, two bodies of one sex are refused "a family is started by a woman and a man". The owner has not decided, and the Spark's births trials compare across it. A body with no sex row is never refused for it.
 
-**Minds.**
-- The scene entry and the talk header carry the perceived word. The talk header reads "# You and Ilsa Hale (#5, a woman)", shown for someone the mind knows or someone face to face: the line reached it and its speaker saw it (`line_heard`).
-- What a mind knows of a person carries their sex too:
-  - its relations and the people it knows in its community, "Edda (#12, a woman)";
-  - its facts (its own `sex`, and its parents' and children's);
-  - a newborn's birth identity call ("Newborn: Tobin (#40, a baby boy)", with each parent's body);
-  - a first sight's line ("For the first time you see a stranger (a woman), 9 tiles west"), so memory keeps it.
+**Minds.** The perception boundary is drawn where prompts are built (the Spark's condition, 2026-11-13). A prompt states another person's sex only in three cases:
+- **In sight now.** The authority's scene states it (`form`), at Full and at Far, because the body's form shows it at any distance at which the person is seen. So does a first sight's line ("For the first time you see a stranger (a woman), 9 tiles west").
+- **Face to face.** The talk header states it when the line reached the mind and its speaker saw it (`line_heard`): "# You and a stranger (#13, a man)".
+- **Remembered.** The mind's character made the person out at Full once. The authority then wrote a `sex_seen` row (observer, known, sex) in the observer's scene or at a first sight, once per pair, and only for minded observers. From that row the sex appears in the relations and the community's known people ("Ilsa Hale (#2, a woman)"), the talk header, the facts' parents and children, and a newborn's birth identity call ("Newborn: Tobin (#40, a baby boy)", each parent's body only if remembered).
+
+It is never stated from a name, kinship, a community, a relation row, someone else's speech, or a sighting from afar (a far figure has no person to remember it by). The mind's own sex is always stated: "Your body: … You are a man.", and `sex`/`body` in its facts. The relation labels and notes a sheet or a mind wrote ("sister-in-law") are the mind's own beliefs, not statements by the world. verify-minds `sex-boundary` checks this in every prompt section, and a mutant that states a known person's sex without the row fails it.
 - Older memories that guessed otherwise stay as the mind's beliefs. The fact shown beside them is what the world says.
 - The seed check warns, without refusing, when the residents' sheets speak of someone as the other sex (`sex::sheet_warnings`: other sheets' relation labels and notes, logged at genesis). The shipped casts give none.
 
@@ -531,6 +531,8 @@ Growth: one row of 9 bytes (`u32`, `u8`, row overhead aside) per person ever mad
 
    It writes one chronicle line with the counts.
 3. **In a world with looks, `relook(<generation>)`** (admin). Pool picks are now made within each person's sex. So seeded residents whose earlier pool look showed the other sex (Brackenford's 7) get one of theirs, and everyone else's pool pick is made again. The paused reference worlds are not touched unless the owner asks.
+
+An updated world starts with no `sex_seen` rows: a mind states an absent person's sex only once it has made them out again after the update.
 
 Verified by the record files `2026-11-13-*-sex-1.md` of verify-generation, verify-player, verify-client, verify-core and verify-minds.
 

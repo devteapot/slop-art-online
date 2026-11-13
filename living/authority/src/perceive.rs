@@ -844,6 +844,8 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
         let shown = if far { crate::far::handle_for(ctx, me.id, c.id, now) } else {
             if ch.kind == "person" && ch.id != me.id {
                 crate::far::made_out(ctx, &me, c.id, now);
+                // Made out at full sight: the mind remembers their body's sex with them.
+                crate::sex::remember(ctx, &me, &ch, now);
             }
             c.id
         };

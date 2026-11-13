@@ -1641,6 +1641,8 @@ pub fn forget(ctx: &ReducerContext, id: u32, viewer: Identity) {
 pub fn gone(ctx: &ReducerContext, id: u32) {
     // Their look goes with them (docs/LOOK.md §4).
     ctx.db.look().id().delete(id);
+    // What it remembered of others' bodies goes with it (sex-1).
+    crate::sex::forget(ctx, id);
     let rows: Vec<Projected> = ctx.db.projected().body().filter(id).collect();
     if rows.is_empty() {
         return;

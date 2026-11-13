@@ -78,6 +78,25 @@ pub struct SexRow {
     pub sex: u8,
 }
 
+/// What a mind remembers of a person's body (private; sex-1, docs/LIVING_CORE.md "Body sex"):
+/// `observer` (a minded character) made out `known` at full sight, and saw their sex `sex`. Written
+/// once per pair, the first time: in the observer's scene (`perceive::scene_json`, a person made
+/// out) and at a first sight (`brain.rs`); never from afar, by name, kinship, a relation or speech.
+/// The mind service states another's sex only from this row, from what is in sight now, or face
+/// to face. Deleted with the observer at death. Read by the pair index; the mind service reads it
+/// as the owner.
+#[spacetimedb::table(accessor = sex_seen, index(accessor = by_pair, btree(columns = [observer, known])))]
+pub struct SexSeen {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    #[index(btree)]
+    pub observer: u32,
+    pub known: u32,
+    pub sex: u8,
+    pub at_ms: u64,
+}
+
 /// A player's own body sex (`my_sex`): "female" or "male" (`living_rules::sex::Sex::name`).
 #[derive(SpacetimeType, Clone, Debug, PartialEq)]
 pub struct MySex {

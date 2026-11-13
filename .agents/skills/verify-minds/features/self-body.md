@@ -38,17 +38,57 @@ Checks (`body.json`):
 Since `sex-1` (2026-11-13; docs/LIVING_CORE.md "Body sex"). The `body-sex` case runs on the hamlet at a fast pace (`body_seed`, every resident giving `sex`), with the fake model, Oren Hale's and Ilsa Hale's minds, and a newcomer from `spawn_crowd`. It asserts:
 
 - **The self line.** Oren's prompts carry "You are a man." after the body line (`Minds::body_line`, the rules' `sex_words()`).
-- **Remembered.** His relations list his wife, placed out of sight 30–60 m off, as "Ilsa Hale (#id, a woman)" (`known_person`: what the mind knows of her).
+- **Remembered.** His relations list his wife, placed out of sight 30–60 m off, as "Ilsa Hale (#id, a woman)": he made her out at home, so the authority wrote his `sex_seen` row for her.
 - **The scene, near.** The newcomer 3 m off is an entry with `"form"`, the newcomer's word, and `"who": "a stranger"`. No label in the scene carries a sex word.
 - **The scene, far.** Under an overlay that makes everyone past 4 m `far`, the newcomer at 6 m is a figure under a handle (≥ 1000000000), with the far label and the same `form`. No entry carries the newcomer's id.
 - **The talk header.**
   - The newcomer says a line to Oren 1.5 m away: his talk prompt heads "# You and a stranger (#id, a woman|a man)", face to face because `line_heard` lists Oren among the hearers its speaker saw.
   - Then Ilsa does: "# You and Ilsa Hale (#id, a woman)".
 - **Kin words.** Pim (their child) says "Mother, …" to the room beside both, and Ilsa is told she was named while Oren is not. "Father, …" the other way round.
-- **The newborn.** Brisk and Edda Marrow (graph-only) start a family. Once the child is born it has a `sex` row, and the mind, restarted with the child in `LIVING_ONLY`, makes its birth identity call: "Newborn: Name (#id, <its body by stage: a baby girl, a boy…>)." with "(#id, a man)" and "(#id, a woman)" for its parents.
+- **The newborn.** Brisk and Edda Marrow (graph-only) start a family. Once the child is born it has a `sex` row, and the mind, restarted with the child in `LIVING_ONLY`, makes its birth identity call: "Newborn: Name (#id, <its body by stage: a baby girl, a boy…>)." Each parent's body appears exactly when the newborn has a `sex_seen` row for them.
 
 Prompts in `prompt-near.txt`, `prompt-far.txt`, `prompt-talk-stranger.txt`, `prompt-talk-wife.txt` and `prompt-birth.txt`, and checks in `body-sex.json`.
 
 ```bash
 .agents/skills/verify-minds/scripts/verify_minds.py --run "$R" --case body-sex
 ```
+
+## The perception boundary
+
+The Spark's condition, 2026-11-13. A prompt never states the sex of someone the mind has not perceived and does not remember. The mind service reads the whole `sex` table as the owner, and the boundary is drawn where prompts are built: another person's sex comes only from the scene (in sight, Full or Far), from face to face in a talk, or from the authority's `sex_seen` row. That row is written when the mind's character first made the person out at Full.
+
+The `sex-boundary` case runs on `boundary_seed`: the hamlet at the body case's pace, with Lio Reed given no sheet and Brisk Marrow, from the other settlement, as his parent. Oren's and Lio's minds run with the fake model, and a newcomer comes from `spawn_crowd`.
+
+- **Allowed:**
+  - the newcomer 3 m off: the scene's `form` (Full);
+  - the newcomer at 6 m under the far overlay: the figure's `form` (Far);
+  - Ilsa (Oren's row, written when he made her out at home), moved out of sight: in his relations, and in his talk header when she speaks to him from behind a wall (`wall_spots`, not face to face).
+- **Not allowed:**
+  - Wenna Reed: in Oren's relations but never seen (no row). Not stated in his relations and known people, nor in his talk header when she speaks to him from behind a wall, nor when Ilsa names her in a line.
+  - Brisk in Lio's facts (`Background:` identity call): a parent never met.
+  - Brisk in the newborn's birth prompt: sent 90 m off once the couple is expecting. The mother's body appears exactly when the newborn's row for her exists.
+- **The scan.** Every prompt the three minds were sent, the facts and birth calls included, is scanned (`sex_statements`: "(#id, a word)" and a JSON object with the id and `form` or `is`). Outside the scene, each statement of another's sex must be backed by that mind's `sex_seen` row (`unbacked.json` lists any that are not).
+
+Evidence: `sex-boundary.json`, `prompt-lio-facts.txt`, `prompt-near.txt`, `prompt-far.txt`, `prompt-talk-ilsa.txt`, `prompt-talk-wenna.txt`, `prompt-birth.txt` and `unbacked.json`.
+
+```bash
+.agents/skills/verify-minds/scripts/verify_minds.py --run "$R" --case sex-boundary
+```
+
+**The mutant.** `known_sex` (`living/mind/src/mind.rs`) stating a person's sex without the row, as the first sex-1 build did (anyone known by name or relation). Build it into a copy of the binary, run the case with it, and expect failure:
+
+```bash
+cp living/mind/src/mind.rs /tmp/mind.rs.orig
+python3 - <<'PY'
+p = 'living/mind/src/mind.rs'; s = open(p).read()
+s = s.replace("let row = self.conn.db.sex_seen().iter().find(|r| r.observer == me && r.known == other)?;",
+              "return self.sex_words_of(other);\n        #[allow(unreachable_code)]\n        let row = self.conn.db.sex_seen().iter().find(|r| r.observer == me && r.known == other)?;", 1)
+open(p, 'w').write(s)
+PY
+cargo build --release --manifest-path living/Cargo.toml -p living-mind && cp "$CARGO_TARGET_DIR/release/living-mind" .local/living/mind-sex-mutant
+cp /tmp/mind.rs.orig living/mind/src/mind.rs && cargo build --release --manifest-path living/Cargo.toml -p living-mind
+LIVING_VERIFY_MIND_BIN=$PWD/.local/living/mind-sex-mutant .agents/skills/verify-minds/scripts/verify_minds.py --run "$R-mutant" --no-unit-tests --case sex-boundary   # must FAIL
+```
+
+`LIVING_VERIFY_MIND_BIN` (in verify-llm's harness) runs a mind binary built elsewhere. The driver still builds the tree's own.
+

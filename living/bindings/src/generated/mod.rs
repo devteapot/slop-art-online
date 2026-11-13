@@ -273,6 +273,8 @@ pub mod set_world_law_reducer;
 pub mod settlement_table;
 pub mod settlement_type;
 pub mod sex_row_type;
+pub mod sex_seen_table;
+pub mod sex_seen_type;
 pub mod sex_table;
 pub mod skill_card_table;
 pub mod skill_card_type;
@@ -590,6 +592,8 @@ pub use set_world_law_reducer::set_world_law;
 pub use settlement_table::*;
 pub use settlement_type::Settlement;
 pub use sex_row_type::SexRow;
+pub use sex_seen_table::*;
+pub use sex_seen_type::SexSeen;
 pub use sex_table::*;
 pub use skill_card_table::*;
 pub use skill_card_type::SkillCard;
@@ -1357,6 +1361,7 @@ pub struct DbUpdate {
     seen_fighters: __sdk::TableUpdate<Fighter>,
     settlement: __sdk::TableUpdate<Settlement>,
     sex: __sdk::TableUpdate<SexRow>,
+    sex_seen: __sdk::TableUpdate<SexSeen>,
     skill_card: __sdk::TableUpdate<SkillCard>,
     skill_code: __sdk::TableUpdate<SkillCode>,
     skill_use: __sdk::TableUpdate<SkillUse>,
@@ -1714,6 +1719,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "sex" => db_update
                     .sex
                     .append(sex_table::parse_table_update(table_update)?),
+                "sex_seen" => db_update
+                    .sex_seen
+                    .append(sex_seen_table::parse_table_update(table_update)?),
                 "skill_card" => db_update
                     .skill_card
                     .append(skill_card_table::parse_table_update(table_update)?),
@@ -2048,6 +2056,9 @@ impl __sdk::DbUpdate for DbUpdate {
             .with_updates_by_pk(|row| &row.id);
         diff.sex = cache
             .apply_diff_to_table::<SexRow>("sex", &self.sex)
+            .with_updates_by_pk(|row| &row.id);
+        diff.sex_seen = cache
+            .apply_diff_to_table::<SexSeen>("sex_seen", &self.sex_seen)
             .with_updates_by_pk(|row| &row.id);
         diff.skill_card = cache
             .apply_diff_to_table::<SkillCard>("skill_card", &self.skill_card)
@@ -2514,6 +2525,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "sex" => db_update
                     .sex
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "sex_seen" => db_update
+                    .sex_seen
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "skill_card" => db_update
                     .skill_card
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
@@ -2914,6 +2928,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "sex" => db_update
                     .sex
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "sex_seen" => db_update
+                    .sex_seen
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "skill_card" => db_update
                     .skill_card
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -3096,6 +3113,7 @@ pub struct AppliedDiff<'r> {
     seen_fighters: __sdk::TableAppliedDiff<'r, Fighter>,
     settlement: __sdk::TableAppliedDiff<'r, Settlement>,
     sex: __sdk::TableAppliedDiff<'r, SexRow>,
+    sex_seen: __sdk::TableAppliedDiff<'r, SexSeen>,
     skill_card: __sdk::TableAppliedDiff<'r, SkillCard>,
     skill_code: __sdk::TableAppliedDiff<'r, SkillCode>,
     skill_use: __sdk::TableAppliedDiff<'r, SkillUse>,
@@ -3342,6 +3360,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         );
         callbacks.invoke_table_row_callbacks::<Settlement>("settlement", &self.settlement, event);
         callbacks.invoke_table_row_callbacks::<SexRow>("sex", &self.sex, event);
+        callbacks.invoke_table_row_callbacks::<SexSeen>("sex_seen", &self.sex_seen, event);
         callbacks.invoke_table_row_callbacks::<SkillCard>("skill_card", &self.skill_card, event);
         callbacks.invoke_table_row_callbacks::<SkillCode>("skill_code", &self.skill_code, event);
         callbacks.invoke_table_row_callbacks::<SkillUse>("skill_use", &self.skill_use, event);
@@ -4135,6 +4154,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         seen_fighters_table::register_table(client_cache);
         settlement_table::register_table(client_cache);
         sex_table::register_table(client_cache);
+        sex_seen_table::register_table(client_cache);
         skill_card_table::register_table(client_cache);
         skill_code_table::register_table(client_cache);
         skill_use_table::register_table(client_cache);
@@ -4266,6 +4286,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "seen_fighters",
         "settlement",
         "sex",
+        "sex_seen",
         "skill_card",
         "skill_code",
         "skill_use",

@@ -2033,6 +2033,14 @@ def far(run, c):
     said = [x for x in sql(run, f"SELECT id, kind, object, text FROM experience WHERE kind = 'said' AND object = {b}") if line in x.get("text", "")]
     c.check(s, "what I send carries my words and their id, no colour words", re.search(rf'say: "{re.escape(line)}" to #{b}\b', L) is not None and said and not any("someone in" in x.get("text", "") for x in said) and not re.search(r'(say|act)[^\n]*someone in ', L), f"{len(said)} said rows")
     c.check(s, "close again: a stranger in their colours, or the line's words", bool(near5) and (near5.startswith("a stranger") or (ph and near5 == ph[0])), f"{near5!r}")
+    if ph:
+        # Body sex (sex-1): a far figure is drawn in full, so its plate and hover say the form's sex
+        # ("a tall woman in …"), the far phrase's words; the label it is talked to by stays the
+        # far label, with no sex; close up the plate is the full phrase, as before.
+        sexed = re.compile(r"\b(woman|man|girl|boy)\b")
+        c.check(s, "sex-1: far (6 m), plate and hover say the line's far phrase with the body's sex", far2 is not None and far2 == ph[1] and sexed.search(far2) is not None, f"{far2!r}; phrase {ph}")
+        c.check(s, "sex-1: the far label and the talk target stay neutral (no sex word)", (t3.get("label") or "").strip() in (FAR, f"To {FAR}") or (FAR in (t3.get("label") or "") and not sexed.search((t3.get("label") or "").replace(FAR, ""))), json.dumps(t3))
+        c.check(s, "sex-1: near (2 m and back at 2 m), the plate is the line's full phrase, as before", near1 == ph[0] and near5 == ph[0], f"{near1!r}, {near5!r}; phrase {ph}")
     notes_clear(c, s, out)
 
 

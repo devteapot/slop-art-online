@@ -501,23 +501,23 @@ impl Minds {
         self.sex_of(id).map(|s| prompts::a_sex_word(s, c.stage))
     }
 
-    /// What `me` knows of `other`'s body sex: remembered with what it knows of them (body-sex).
-    /// Anyone it knows by the rule of [`Minds::knows_name`] (family, one community, a name it was
-    /// told), or has feelings about (a `relation` row: someone it met), has been seen and their
-    /// sex perceived; a stranger it has never known is not told. A first sight's line carries the
-    /// form too, so memory keeps it; a model's older guesses stay as its beliefs, and this fact,
-    /// shown beside them, is what the world says.
+    /// What `me` remembers of `other`'s body sex (body-sex): its own always; anyone else's only
+    /// when its character made them out at full sight once (the authority's `sex_seen` row,
+    /// written then with the sex seen). Never from a name, kinship, a community, a relation or
+    /// speech: a prompt states the sex of someone out of sight only when the mind remembers it.
+    /// Someone in sight now is described by the authority's scene (`form`, near or far), and a
+    /// talk partner face to face by the talk header. A model's older guesses stay as its
+    /// beliefs; this fact, shown beside them, is what the world says.
     pub(crate) fn known_sex(&self, me: u32, other: u32) -> Option<String> {
         if other >= living_rules::script::FAR_HANDLE_BASE {
             return None;
         }
-        let o = self.conn.db.character().id().find(&other)?;
-        let known = me == other || self.knows_name(me, &o) || self.conn.db.relation().iter().any(|r| r.actor == me && r.other == other);
-        if known {
-            self.sex_words_of(other)
-        } else {
-            None
+        if me == other {
+            return self.sex_words_of(me);
         }
+        let row = self.conn.db.sex_seen().iter().find(|r| r.observer == me && r.known == other)?;
+        let c = self.conn.db.character().id().find(&other)?;
+        living_rules::sex::Sex::from_code(row.sex).map(|s| prompts::a_sex_word(s, c.stage))
     }
 
     /// "Edda Fenner (#12, a woman)": a person as `me` knows them, with their body when known.
@@ -1223,9 +1223,9 @@ impl Minds {
         let profile = self.profile(&c);
         let system = prompts::birth_identity_system();
         let born = self.born_temperament(c.id);
-        // The newborn's body and its parents' (body-sex): the authority wrote the newborn's row
-        // with the character, before this first mind call.
-        let body = |id: u32| self.sex_words_of(id).unwrap_or_default();
+        // The newborn's body (the authority wrote its row with the character, before this first
+        // mind call) and its parents' where it remembers them (`known_sex`: made out once).
+        let body = |id: u32| self.known_sex(c.id, id).unwrap_or_default();
         let user = prompts::birth_identity_user(&c.name, c.id, [(&an, c.parent_a, &ap), (&bn, c.parent_b, &bp)], born.as_ref(), [&body(c.id), &body(c.parent_a), &body(c.parent_b)]);
         let _slow = self.slow.acquire().await?;
         let reply = self.llm.chat(&profile, self.attention(c.id, None), "consolidate", &c.name, &[Msg { role: "system", content: system }, Msg { role: "user", content: user }]).await?;

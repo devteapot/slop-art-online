@@ -49,6 +49,27 @@ pub fn word(ctx: &ReducerContext, c: &Character) -> Option<String> {
     of(ctx, c.id).map(|s| common::scripts(ctx).sex_words().word(s, c.stage).to_string())
 }
 
+/// `observer` made out `target` at full sight now: a minded observer remembers the target's sex
+/// with them, once (`sex_seen`; one pair-index lookup, an insert the first time). Nothing for a
+/// played observer, an animal on either side, or a target with no sex row.
+pub fn remember(ctx: &ReducerContext, observer: &Character, target: &Character, now: u64) {
+    if !observer.ai || observer.kind != "person" || target.kind != "person" || observer.id == target.id {
+        return;
+    }
+    if ctx.db.sex_seen().by_pair().filter((observer.id, target.id)).next().is_some() {
+        return;
+    }
+    let Some(s) = of(ctx, target.id) else { return };
+    ctx.db.sex_seen().insert(SexSeen { id: 0, observer: observer.id, known: target.id, sex: s.code(), at_ms: now });
+}
+
+/// What `id` remembered goes with it at death (`perception::gone`).
+pub fn forget(ctx: &ReducerContext, id: u32) {
+    for r in ctx.db.sex_seen().observer().filter(id).map(|r| r.id).collect::<Vec<_>>() {
+        ctx.db.sex_seen().id().delete(r);
+    }
+}
+
 /// The sex a person's look shows: the `form` of the lines of their look's person entry
 /// (`look_line`, point lookups by band). `None` without a look or when its lines show none.
 fn of_look(ctx: &ReducerContext, id: u32) -> Option<Sex> {
