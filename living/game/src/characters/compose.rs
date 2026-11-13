@@ -455,7 +455,7 @@ impl Composer<'_> {
         // face's skin (an overlay's lines and freckles) as a face, with the shadow map beside its
         // file, else as skin; eyes and lines as face parts; clothes plain.
         let map = format!("{}.face.png", file.trim_end_matches(".glb"));
-        let face_map = wants_face_map(name).then_some(map).filter(|m| exists(m));
+        let face_map = wants_face_map(name).then(|| crate::lookdev::face_map_files(&map).into_iter().find(|m| exists(m))).flatten();
         let face = face_map.clone().map(|m| self.assets.load_builder().with_settings(|s: &mut bevy::image::ImageLoaderSettings| s.is_srgb = false).load(m));
         let kind = kind_of(name, face.is_some());
         // The source colour the recolour moves to a person's: over the file's meshes in this

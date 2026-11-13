@@ -670,7 +670,9 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
         }
     }
     // Combat timing (cooldowns, recovery, one windup at a time) holds for every controller.
+    let gate = common::detail_span("begin.gate");
     crate::combat::gate(ctx, id, skill, cur.as_ref(), now).inspect_err(|_| refuse(living_rules::outcome::act::TIMING))?;
+    drop(gate);
     // Work out whether the new action can start at all before abandoning the current one:
     // a higher-priority option that cannot start (e.g. taking food from an empty store) must
     // not cancel the lower-priority work that is actually happening.
@@ -888,7 +890,10 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
             Some(t) => Activity { target: t.to_ref(), ..act.clone() },
             None => act.clone(),
         };
-        if let Err(why) = sc.check(&act.skill, &skill_ctx(ctx, id, &probe, now)) {
+        let check = common::detail_span("begin.check");
+        let checked = sc.check(&act.skill, &skill_ctx(ctx, id, &probe, now));
+        drop(check);
+        if let Err(why) = checked {
             refuse(living_rules::outcome::act::CHECK);
             if melee {
                 balked(ctx, id, &target, &why, now);
@@ -896,6 +901,7 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
             return Err(why);
         }
     }
+    let _started = common::detail_span("begin.start");
     if let Some(a) = cur {
         if matches!(a.skill.as_str(), "goto" | "follow") && matches!(skill, "goto" | "follow") && now.saturating_sub(a.started_ms) < 3_000 && a.label != act.label {
             turned_back(ctx, id, &a.label, &act.label, now);
@@ -2241,6 +2247,9 @@ pub fn fight_report(ctx: &ReducerContext, id: u32, other: u32, now: u64) {
 
 /// A blow that found only air: both sides perceive it, and the fight stays engaged.
 fn missed(ctx: &ReducerContext, attacker: u32, victim: u32, at_v: (f32, f32), skill: &str, now: u64) {
+    // Its onlookers see the blow find only air (`fold`); it wakes none of them, as before.
+    let start = ctx.db.vitals().id().find(victim).map_or(true, |v| now.saturating_sub(v.hurt_ms) > 30_000 || v.hurt_by != attacker);
+    crate::fold::blow(ctx, now, attacker, victim, living_rules::combat::seen::MISS, start, false, false, None, at_v);
     engage(ctx, attacker, now);
     engage(ctx, victim, now);
     common::count(|k| k.missed += 1);
@@ -2360,6 +2369,10 @@ pub fn damage(ctx: &ReducerContext, attacker: u32, victim: u32, amount: f32, ski
         _ => k.hits += 1,
     });
     if defense == Aim::Dash {
+        // Its onlookers see the dodge (`fold`); a dodged first blow wakes none of them, as before.
+        let hb = if seen_shooter { attacker } else { 0 };
+        let start = now.saturating_sub(v.hurt_ms) > 30_000 || v.hurt_by != hb;
+        crate::fold::blow(ctx, now, attacker, victim, living_rules::combat::seen::DODGED, start, false, false, missile, at_v);
         return dodged(ctx, attacker, &vc, skill, from, at_v, now);
     }
     dodge_too_early(ctx, &vc, attacker, skill, missile, now);
@@ -2401,6 +2414,10 @@ pub fn damage(ctx: &ReducerContext, attacker: u32, victim: u32, amount: f32, ski
     let dead = v.hp <= 0.0;
     ctx.db.vitals().id().update(v);
     shown(if defense == Aim::Facing { living_rules::combat::seen::BLOCKED } else { living_rules::combat::seen::HIT }, amount);
+    // What its onlookers saw (`fold`): every blow. A fight's first blow wakes them, as its own
+    // line did before; a blow at one who yielded keeps its own line below.
+    let woke = first_blow && !(yielded && !struck_since_yield);
+    crate::fold::blow(ctx, now, attacker, victim, if defense == Aim::Facing { living_rules::combat::seen::BLOCKED } else { living_rules::combat::seen::HIT }, first_blow, dead, woke, missile, at_v);
     crate::combat::refresh_band(ctx, victim, now);
     let at = ctx.db.body().id().find(victim).map(|b| pos(&b, now)).unwrap_or((0.0, 0.0));
     let an = common::display(ctx, attacker);
@@ -2447,9 +2464,12 @@ pub fn damage(ctx: &ReducerContext, attacker: u32, victim: u32, amount: f32, ski
             };
             common::chronicle(ctx, now, "attack", attacker, victim, at, line);
         }
-        match shot("{a} shot {b} with {m}", "{M} struck {b}") {
-            Some((seen, unseen)) => perceive::witnessed_shot(ctx, now, at, "fight", attacker, victim, &seen, &unseen, 0.7, &[attacker, victim]),
-            None => witnessed(ctx, now, at, "fight", attacker, victim, "{a} attacked {b}", 0.7, &[attacker, victim]),
+        // Folded (`witness_fold_ms`): its onlookers were told above, in their next line.
+        if !crate::fold::on(ctx) {
+            match shot("{a} shot {b} with {m}", "{M} struck {b}") {
+                Some((seen, unseen)) => perceive::witnessed_shot(ctx, now, at, "fight", attacker, victim, &seen, &unseen, 0.7, &[attacker, victim]),
+                None => witnessed(ctx, now, at, "fight", attacker, victim, "{a} attacked {b}", 0.7, &[attacker, victim]),
+            }
         }
         // Wakes a sleeping victim whoever plays it; a mind thinks on it.
         perceive::request_waking(ctx, victim, &format!("{pleading}!"), now, perceive::Wake::Attack);

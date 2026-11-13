@@ -141,6 +141,10 @@ def one(a, arm, binary, env, k, out, run=None):
              people_meshes=int(people.group(1)) if people else None, people_materials=int(people.group(2)) if people else None, people_ktris=int(people.group(3)) if people else None, people_pairs=int(people.group(4)) if people else None,
              opaque_sets=int(opaque.group(1)) if opaque else None, **memory, assets=assets[-1].split("assets:")[-1].strip()[:200] if assets else None,
              gpu_textures=(re.search(r"textures \d+ on the GPU [\d.]+ MiB", batches[-1]) or [None])[0] if batches else None,
+             gpu_textures_mib=next((float(m.group(1)) for m in [re.search(r"textures \d+ on the GPU ([\d.]+) MiB", batches[-1])] if m), None) if batches else None,
+             # From the client's start: the loading screen's first view, then the live script's ready (residents in).
+             first_view_s=next((float(m.group(1)) for m in [re.search(r"the first view is in after ([\d.]+) s", log)] if m), None),
+             ready_s=next((float(m.group(1)) for m in [re.search(r"live script: ready after ([\d.]+) s", log)] if m), None),
              prewarm=next((l.split("loading: ")[-1] for l in log.splitlines() if "prewarm characters" in l), None),
              composed=len(re.findall(r"compose: .* wears", log)), looks_warnings=sorted(set(re.findall(r"looks: [^\n]*", log)))[:6], evidence=d)
     out.append(r)
@@ -176,7 +180,7 @@ def main():
     for name, _, _, _ in arms:
         rs = [r for r in out if r["arm"] == name and r["rc"] == 0 and r["p50_ms"]]
         med = lambda key: statistics.median([r[key] for r in rs if r[key] is not None]) if any(r[key] is not None for r in rs) else None
-        summary[name] = {key: med(key) for key in ("p50_ms", "p99_ms", "walk_max_ms", "first_sight_hitches", "first_sight_max_ms", "people_meshes", "people_materials", "people_pairs", "opaque_sets", "peak_rss_mib", "peak_footprint_mib", "peak_gpu_mib", "steady_rss_mib", "steady_footprint_mib", "steady_gpu_mib", "composed")}
+        summary[name] = {key: med(key) for key in ("p50_ms", "p99_ms", "walk_max_ms", "first_sight_hitches", "first_sight_max_ms", "people_meshes", "people_materials", "people_pairs", "opaque_sets", "peak_rss_mib", "peak_footprint_mib", "peak_gpu_mib", "steady_rss_mib", "steady_footprint_mib", "steady_gpu_mib", "gpu_textures_mib", "first_view_s", "ready_s", "composed")}
         summary[name]["runs"] = len(rs)
         summary[name]["load"] = [min([r["load_start"] for r in rs] or [0]), max([r["load_end"] for r in rs] or [0])]
     json.dump({"run": a.run, "far": a.far, "still_s": a.still, "fps_cap": a.fps_cap, "arms": [(n, b, e, r or a.run) for n, b, e, r in arms], "runs": out, "summary": summary}, open(os.path.join(a.out, "live_crowd.json"), "w"), indent=1)
