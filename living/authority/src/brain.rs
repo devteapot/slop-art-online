@@ -83,10 +83,19 @@ const IN_CROWD: u32 = 1 << 8;
 const WOLF_NEAR: u32 = 1 << 9;
 /// Something heard near and out of sight (only while sight has a field).
 const SOUND_NEAR: u32 = 1 << 10;
-/// Familiarity rows kept per character (docs/BATTLE_SCALE.md, fix 1): above what can be in sight
-/// in the densest place (a 200-character battle among its remains), so it is never what is in
-/// view that is forgotten. Over it, the oldest unseen rows go: never one seen within
-/// `FAMILIAR_KEEP_MS`, nor one whose thing is in the character's seen set (in view lately).
+/// Familiarity rows a character keeps before pruning (docs/BATTLE_SCALE.md, fix 1). Over it, the
+/// oldest unseen rows go: never one touched within `FAMILIAR_KEEP_MS`, nor one whose thing is in
+/// the character's seen set (in view lately), nor, with `notice_delta`, a structure within its last
+/// look's disc. It is never what is in view that is forgotten, so this is not a bound on a
+/// character's rows: what is in view can exceed it.
+///
+/// A battle site does. Measured at 200 fighters with refills over 30 minutes (`battle_diag.py
+/// --familiar`, run `minds-fam30-041631`, 2026-11-13): the first fighter passed 2,048 rows at 10.5
+/// minutes, 44 by 21 minutes and 634 characters by 30 (633 fighters, 1 resident; walkers foraging
+/// away never passed 21). The most was 2,984, about 90% of them remains in view. A surviving
+/// fighter's rows grew about 190 a minute at first, then about 100 a minute, the rate the remains
+/// at the site grew. Remains last an hour, so a site's hour of dead (about 5,800 at that rate)
+/// would put a fighter near 6,000 rows (docs/BATTLE_SCALE.md, "Familiarity of remains").
 const FAMILIAR_LIMIT: usize = 2_048;
 /// A familiarity row touched this recently is not pruned (twice its 30 s touch period).
 const FAMILIAR_KEEP_MS: u64 = 60_000;
@@ -1626,11 +1635,20 @@ impl<'a> Ev<'a> {
         common::diag(|| "familiar:over_by", (all.len() - FAMILIAR_LIMIT) as u64);
         all.sort_unstable();
         let mut over = all.len() - FAMILIAR_LIMIT;
+        // With `notice_delta`, a structure within the last look's disc is in view (the next look
+        // passes over it without re-marking it), and is spared as one in the seen set is.
+        let look = if common::laws(self.ctx).notice_delta { self.ctx.db.last_look().id().find(me) } else { None };
+        let in_look = |thing: u64| {
+            look.as_ref().is_some_and(|l| {
+                thing & !((1 << 40) - 1) == FAM_STRUCTURE
+                    && self.ctx.db.structure().id().find(thing & ((1 << 40) - 1)).is_some_and(|s| common::dist((l.x, l.y), (s.x, s.y)) <= l.r)
+            })
+        };
         for (last, id, thing) in all {
             if over == 0 {
                 break;
             }
-            if now.saturating_sub(last) < FAMILIAR_KEEP_MS || self.seen_key(thing).and_then(|k| self.seen_at(k)).is_some_and(|t| now.saturating_sub(t) < SEEN_MS) {
+            if now.saturating_sub(last) < FAMILIAR_KEEP_MS || self.seen_key(thing).and_then(|k| self.seen_at(k)).is_some_and(|t| now.saturating_sub(t) < SEEN_MS) || in_look(thing) {
                 continue;
             }
             common::diag(|| "familiar:evict", 1);
@@ -1984,7 +2002,7 @@ impl<'a> Ev<'a> {
         drop(part);
         let _part = common::detail_span("noticed.structures");
         let new: Vec<usize> = if laws.notice_inplace {
-            let ids = self.new_structures_in_place(laws.notice_inplace_check);
+            let ids = self.new_structures_in_place(laws.notice_inplace_check, laws.notice_delta, laws.notice_delta_check);
             if ids.is_empty() {
                 return;
             }
@@ -2056,13 +2074,36 @@ impl<'a> Ev<'a> {
     ///   calls insert rows and may prune, so they keep the full pass's order.
     /// `check` (`notice_inplace_check`) works the split out from the full list as well, before
     /// any mark is set, and counts any difference.
-    fn new_structures_in_place(&mut self, check: bool) -> Vec<u64> {
+    ///
+    /// With `delta` (`notice_delta`, docs/BATTLE_SCALE.md C2), a structure that was in sight at the
+    /// character's last look (`last_look`, within `LOOK_VALID_MS`: in its disc, and no newer than the
+    /// highest id in sight then) is passed over: it was looked at then, and has had its `familiar`
+    /// row since (pruning spares the last look's disc, `prune_familiar`). Only structures built since
+    /// or come into sight are checked. `delta_check` (`notice_delta_check`) checks every one passed
+    /// over has its row. A look that finds no valid row checks everything, as without `delta`.
+    fn new_structures_in_place(&mut self, check: bool, delta: bool, delta_check: bool) -> Vec<u64> {
         let (ctx, me, now, at) = (self.ctx, self.me.id, self.now, self.at);
         let r = common::sight_for(ctx, me, &self.w, now);
         let lately = |k: u32| SEEN.with(|s| s.borrow().get(&me).and_then(|m| m.get(&k).copied())).is_some_and(|t| now.saturating_sub(t) < SEEN_MS);
+        let last = if delta { ctx.db.last_look().id().find(me).filter(|l| now.saturating_sub(l.at_ms) <= LOOK_VALID_MS) } else { None };
+        if delta {
+            common::diag(|| if last.is_some() { "notice_delta:incremental" } else { "notice_delta:whole" }, 1);
+        }
         let mut recent: Vec<u32> = Vec::new();
         let mut other: Vec<(u64, f32)> = Vec::new();
+        let mut passed: Vec<u64> = Vec::new();
+        let mut top = 0u64;
         common::for_structures_near(ctx, at, r, |s, d| {
+            top = top.max(s.id);
+            if let Some(l) = &last {
+                if s.id <= l.max_structure && common::dist((l.x, l.y), (s.x, s.y)) <= l.r {
+                    if delta_check {
+                        passed.push(s.id);
+                    }
+                    common::diag(|| "notice_delta:passed", 1);
+                    return;
+                }
+            }
             let k = structure_key(s.id);
             if lately(k) {
                 recent.push(k);
@@ -2070,6 +2111,22 @@ impl<'a> Ev<'a> {
                 other.push((s.id, d));
             }
         });
+        if delta {
+            let row = LastLook { id: me, x: at.0, y: at.1, r, max_structure: top, at_ms: now };
+            if last.is_some() || ctx.db.last_look().id().find(me).is_some() {
+                ctx.db.last_look().id().update(row);
+            } else {
+                ctx.db.last_look().insert(row);
+            }
+        }
+        if delta_check && !passed.is_empty() {
+            common::diag(|| "notice_delta:checked", passed.len() as u64);
+            let missing: Vec<u64> = passed.into_iter().filter(|id| ctx.db.familiar().by_actor_thing().filter((me, FAM_STRUCTURE | id)).next().is_none()).collect();
+            if !missing.is_empty() {
+                common::diag(|| "notice_delta:differed", missing.len() as u64);
+                log::error!("notice_delta of {me}: passed over {missing:?}, which have no familiar row (they would have been new)");
+            }
+        }
         other.sort_by(|a, b| a.1.total_cmp(&b.1));
         if check {
             let full: Vec<u64> = self.structures().iter().filter(|(s, _)| !lately(structure_key(s.id))).map(|(s, _)| s.id).collect();
@@ -2252,6 +2309,10 @@ impl<'a> Ev<'a> {
         }
     }
 }
+
+/// A character's last look is the base of the next (`notice_delta`) for this long: about the seen
+/// set's horizon halved, so a look that came long after its last checks everything.
+const LOOK_VALID_MS: u64 = SEEN_MS / 2;
 
 /// A structure's key in the seen set (`recently_seen`).
 fn structure_key(id: u64) -> u32 {

@@ -926,6 +926,25 @@ pub struct Familiar {
     pub times: u32,
 }
 
+/// Where a character's last look for what is new stood (docs/BATTLE_SCALE.md, C2; the
+/// `notice_delta` law): its place, its sight radius, and the highest structure id among those in
+/// sight then, so the next look checks only structures newer than that or outside that disc.
+/// One row a character a mind runs, rewritten at each look (about once a second); private;
+/// gone with the character (`act::forget_dead`). A row, not module memory, so a tick that fails
+/// takes its look back with the `familiar` rows it wrote.
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = last_look)]
+pub struct LastLook {
+    #[primary_key]
+    pub id: u32,
+    pub x: f32,
+    pub y: f32,
+    pub r: f32,
+    /// The highest structure id in sight at that look (0: none).
+    pub max_structure: u64,
+    pub at_ms: u64,
+}
+
 pub const FAM_REGION: u64 = 1 << 40;
 pub const FAM_CREATURE: u64 = 2 << 40;
 pub const FAM_STRUCTURE: u64 = 3 << 40;

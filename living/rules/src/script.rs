@@ -630,6 +630,14 @@ pub struct Laws {
     /// Diagnostic: each look also works out what is new from the full list, and a difference
     /// is logged and counted (`diag:` `notice_inplace:differed`).
     pub notice_inplace_check: bool,
+    /// A look for what is new checks only the structures newer than, or outside the disc of, the
+    /// character's last look within 45 s (docs/BATTLE_SCALE.md, C2; the `last_look` row): the rest
+    /// were looked at then. Pruning `familiar` spares structures within that disc. Off: every
+    /// structure in sight is checked at each look.
+    pub notice_delta: bool,
+    /// Diagnostic: every structure a look skips is checked to have its `familiar` row (it would
+    /// not have been new), and one without is logged and counted (`notice_delta:differed`).
+    pub notice_delta_check: bool,
     /// The fast lane (docs/FAST_LANE.md): a mind-run character's re-plan between blows, asked
     /// of its mind on a blow taken or a move it sees repeated. Off: none is asked.
     pub fast_lane_on: bool,
@@ -740,6 +748,8 @@ impl Default for Laws {
             chronicle_recent_check: false,
             notice_inplace: true,
             notice_inplace_check: false,
+            notice_delta: true,
+            notice_delta_check: false,
             fast_lane_on: false,
             seen_again_n: 3.0,
             fast_lane_rate: 2.0,
@@ -2836,6 +2846,8 @@ impl Scripts {
             chronicle_recent_check: flag("chronicle_recent_check", l.chronicle_recent_check),
             notice_inplace: flag("notice_inplace", l.notice_inplace),
             notice_inplace_check: flag("notice_inplace_check", l.notice_inplace_check),
+            notice_delta: flag("notice_delta", l.notice_delta),
+            notice_delta_check: flag("notice_delta_check", l.notice_delta_check),
             fast_lane_on: flag("fast_lane_on", l.fast_lane_on),
             seen_again_n: g("seen_again_n", l.seen_again_n).round().clamp(1.0, 100.0),
             fast_lane_rate: g("fast_lane_rate", l.fast_lane_rate).clamp(0.0, 100.0),
@@ -3775,6 +3787,7 @@ mod tests {
         assert!(l.scene_lazy && !l.scene_lazy_check, "the scene worked out as far as asked; its check off");
         assert!(l.chronicle_recent && !l.chronicle_recent_check, "the chronicle's repeat check reads the newest rows; its check off");
         assert!(l.notice_inplace && !l.notice_inplace_check, "noticing reads structures in place; its check off");
+        assert!(l.notice_delta && !l.notice_delta_check, "a look checks only what is new since the last; its check off");
         let about: std::collections::HashMap<String, String> = shipped.laws_about().into_iter().collect();
         assert!(about["cue_cooldown_s"].contains("600 s") && about["cue_gap_s"].contains("60 s"), "{about:?}");
         let on = Scripts::new(&with_world_laws(src, &[("cues_on".into(), serde_json::json!(true)), ("cue_cooldown_s".into(), serde_json::json!(30)), ("cue_gap_s".into(), serde_json::json!(-5)), ("cue_check_s".into(), serde_json::json!(0.01)), ("regard_cache".into(), serde_json::json!(false))])).unwrap();

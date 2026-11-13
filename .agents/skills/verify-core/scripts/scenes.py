@@ -6765,5 +6765,94 @@ def notice_inplace(s):
 SCENES["notice_inplace"] = notice_inplace
 
 
+def notice_delta(s):
+    """A look checks only what is new since the last look (docs/BATTLE_SCALE.md, C2; the
+    `notice_delta` law): structures in sight at the character's last look within 45 s (its
+    `last_look` row) are passed over, and each one passed over is already familiar. 8 people walk
+    back and forth along an open line among structures and four people's remains, while a builder
+    puts up a new one every 3 s; one walker is taken 120 m away for 50 s and brought back (its
+    last look too old: a whole look). `notice_delta_check` on: every structure passed over is
+    checked to have its `familiar` row (`diag:` `notice_delta:differed`). 50 s, then 20 s with
+    `notice_delta` off: every structure in sight is checked again and new ones still noticed."""
+    line = clear_line(s)
+    lookers = s.people(8)
+    builder = s.people(1)[0]
+    dead = s.people(4)
+    west, east = line[1], line[-2]
+    for k, who in enumerate(dead):
+        s.call("place_at", who, line[3 + 3 * k][0], line[0][1] - 2.0)
+        s.call("kill", who, "scene: notice_delta remains", check=False)
+    for k, who in enumerate(lookers):
+        s.call("place_at", who, line[2 + k][0], line[2 + k][1] + 1.0)
+        a, b = (west, east) if k % 2 == 0 else (east, west)
+        s.graph(who, {"seq": [{"do": {"skill": "goto", "target": {"at": list(a)}}}, {"wait": 0.5}, {"do": {"skill": "goto", "target": {"at": list(b)}}}, {"wait": 0.5}]})
+    s.graph(builder, {"wait": 300})
+    kinds = ["shelter", "storage"]
+    placed = []
+
+    def build(n, t_end, k=0):
+        # Each spot once (a tile beside a familiar one of its kind and owner is part of it).
+        n += k
+        while time.time() < t_end and k < n:
+            x = line[k % len(line)][0]
+            y = line[0][1] + (-5.0 if k % 2 == 0 else 6.0) + (-1 if k % 2 == 0 else 1) * (k // len(line)) * 3.0
+            s.call("place_at", builder, x, y, check=False)
+            if s.call("place_structure", builder, kinds[k % 2], check=False).returncode == 0:
+                placed.append((x, y))
+            k += 1
+            time.sleep(3)
+
+    away = lookers[0]
+
+    def wander_off():
+        # Away past the last look's 45 s, then back among it all.
+        time.sleep(5)
+        s.call("place_at", away, line[0][0] + 120, line[0][1] + 40, check=False)
+        time.sleep(50)
+        s.call("place_at", away, line[4][0], line[4][1] + 1.0, check=False)
+
+    keys = ("notice_delta:incremental", "notice_delta:whole", "notice_delta:passed", "notice_delta:checked", "notice_delta:differed", "noticed")
+    set_law(s, "notice_delta_check", True)
+    import threading
+    try:
+        threads = [threading.Thread(target=build, args=(16, time.time() + 52)), threading.Thread(target=wander_off)]
+        for t in threads:
+            t.start()
+        on, t_on = diag_window(s, 50, keys)
+        for t in threads:
+            t.join()
+        set_law(s, "notice_delta", False)
+        t = threading.Thread(target=build, args=(6, time.time() + 22, 34))
+        t.start()
+        off, t_off = diag_window(s, 20, keys)
+        t.join()
+    finally:
+        set_law(s, "notice_delta", True)
+        set_law(s, "notice_delta_check", False)
+        for who in lookers:
+            s.graph(who, {"wait": 300})
+    seen = [e for e in s.rows("SELECT observer, at_ms, text FROM experience WHERE kind = 'saw'", "noticed") if e["observer"] in lookers and e["text"].startswith("You notice")]
+    on["lines"] = sum(1 for e in seen if t_on <= e["at_ms"] < t_off)
+    on["remains_lines"] = sum(1 for e in seen if "remains" in e["text"])
+    off["lines"] = sum(1 for e in seen if e["at_ms"] >= t_off)
+    on["placed"] = len(placed)
+    looks = {r["id"]: r for r in s.rows("SELECT * FROM last_look", "last-look")}
+    on["last_look_rows"] = sum(1 for x in lookers if x in looks)
+    m = {"on": on, "off": off}
+    (s.out / f"{s.name}-notice-delta.json").write_text(json.dumps(m, indent=1) + "\n")
+    print("MEASURE", json.dumps(m), flush=True)
+    try:
+        s.expect("structures were put up in view, the remains noticed, and new ones told", on["placed"] >= 5 and on["lines"] >= 5 and on["remains_lines"] >= 1, on)
+        s.expect("most looks were incremental, and passed over structures looked at already", on["notice_delta:incremental"] > on["notice_delta:whole"] > 0 and on["notice_delta:passed"] > on["notice_delta:incremental"], on)
+        s.expect("every structure passed over was already familiar (checked many times, none was not)", on["notice_delta:checked"] >= 1000 and on["notice_delta:differed"] == 0 and on["differs_logged"] == 0, on)
+        s.expect("each walker's last look is a row", on["last_look_rows"] == len(lookers), on)
+        s.expect("with notice_delta off, no look passes anything over, and new structures are still noticed", off["notice_delta:incremental"] == 0 and off["notice_delta:passed"] == 0 and off["lines"] >= 1, off)
+    finally:
+        off_the_line(s, line, lookers + [builder], dy=96)
+
+
+SCENES["notice_delta"] = notice_delta
+
+
 if __name__ == "__main__":
     raise SystemExit(main())
