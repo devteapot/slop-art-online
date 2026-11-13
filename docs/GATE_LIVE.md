@@ -226,6 +226,109 @@ That is a change to the gate's urgent rules, not to the world.
   - `trials.py clean` removed the Neo4j minds.
   - `clean` itself lists databases with `spacetime list`, so it would miss a kept trial database now.
 
+## The hold fix and the re-run (batch `gl2`): committed before any paid call
+
+**The fix** (branch `gate-hold-fix`, approved by the general coordinator). The gate never holds a request in two situations, both computed from the character's own percepts, which the authority wrote (`rethink.rs` `waits_on`, verdict `waits`, journaled with the fact that fired):
+- a line someone said or whispered *to* the character in the last 10 minutes, with no line of its own to that person since;
+- the same deliberate act failing twice since its last deliberation, or the authority's own line that it keeps turning back and forth.
+
+**Measured first on gl1's 80 judged holds** (the rule applied at each time the gate looked at a held request):
+
+| Rule | "Needed now" released (of 24) | Harmful released (of 6) | Released though "nothing" or "could wait" (of 36) | All holds released (of 80) |
+|---|---:|---:|---:|---:|
+| **both conditions (as built)** | **22**, all at the first hold | **6** | 11 | 41 |
+| failures only | 18 | 4 | 1 | 20 |
+| unanswered lines only | 12 | 5 | 10 | 30 |
+
+- **The cost of the fix.** It removes the harm the judges found, at the price of about half the holds. In gl1 holds were 16–28% of the judged verdicts and deliberations fell 12%. With the fix, roughly 8–14% and 6% are expected.
+- **The precise half is the failure condition:** 18 of 24 needed-now holds, at 1 false release in 36.
+- **The noisy half is unanswered lines:** in a town most lines to a person need no deliberation, so it adds 10 of the 11 false releases.
+- **A threshold of 3 or 4 failures** gives the same numbers as 2: the pacing line carries most of it.
+
+**The re-run, `gl2`.** The same trial (`gate-live`), arms (`gate-off-ds`, `gate-jev-ds`), measures, target spread and stop rule as gl1 above, with three differences:
+- **The mind binary has the fix.** The control arm is unchanged by it, since its gate is off.
+- **The arms are interleaved in time:** `trials.py run --interleave --parallel 2` runs r1 of both arms side by side, then r2, then r3. Each control run shares its 20 minutes of provider load with a gated run.
+- **Jev is counted by its calls** in the record: Jev calls a run, and calls per resident-hour. The dollar measures are the providers' calls, so the committed cost measure is read without Jev's price.
+
+**Expected, written before the run:**
+- deliberations per resident-hour fall about 4–10%, against the 15–35% band. The fix trades the saving for the harm, so the band is expected to stay unmet;
+- holds judged harmful as delayed: 0–3 of 80 (gl1: 6);
+- holds at moments that needed an answer now: at most 10% (gl1: 30%);
+- the first heard line to the newcomer: within the control's spread in at least 2 of 3 gated runs.
+
+**Cost and stop.** About $16 for the providers (gl1: $15.88). The watchdog stops the batch past $18 of known spend. Runaways stop as in gl1, and so does a gate whose fallbacks pass 20% of its verdicts.
+
+```bash
+python3 living/tools/trials.py build gate-live
+python3 living/tools/trials.py run --batch gl2 gate-live --variants gate-off-ds,gate-jev-ds --replicates 3 --parallel 2 --interleave &
+python3 living/tools/gate_quality.py watch gl2 --root . --stop-usd 18 --pid $!
+```
+
+### Results of gl2 (2026-11-12 21:49–22:51)
+
+**Run:**
+- **Build:** `gate-hold-fix` 17a67d13 (main plus the fix), module and mind rebuilt.
+- **Interleaved:** 3 runs per arm, the two arms side by side in each 20-minute window (`--interleave --parallel 2`). All six stopped by duration, with no runaway and 0 gate fallbacks. Ticks were equal across the arms: 71–72 thousand, largest gap 18 ms in every run. The window confound of gl1 is gone.
+- **Switches:** as gl1 (`LIVING_RETHINK=jev` in the gated arm only; think on `deepseek-flash`; the `people` mix otherwise; concurrency 64).
+- **Spend:** the providers' calls cost **$16.70** (control $8.68, gated $8.02). Jev's questions came to 153, 167 and 159 calls per gated run, 7.3–7.9 calls per resident-hour (gl1: 371–440 a run).
+
+**Against the target spread** (gl1's targets, with the expectations committed for gl2):
+
+| Measure | `gate-off-ds` (r1/r2/r3) | `gate-jev-ds` (r1/r2/r3) | Target / gl2 expectation | Result |
+|---|---|---|---|---|
+| $ per resident-hour, providers' calls | 0.133 / 0.140 / 0.139 | 0.129 / 0.124 / 0.127 | ≥ 8% below the off arm's lowest / not expected | 4.7% below the lowest (7.6% below the mean): **not met, as expected** |
+| deliberations per resident-hour | 20.1 / 20.9 / 20.1 | 18.3 / 18.3 / 18.7 | 15–35% fewer / 4–10% expected | **9.4% fewer**: the band not met; the expectation met |
+| hold episodes judged `harmful` | – | 0–1 of 58 (one judge rated one harmful, the other small) | ≤ 10% / 0–3 expected | **met** (gl1: 6 of 80) |
+| holds where the moment needed `now` | – | 1 of 58 (1.7%), released in 44 s | ≤ 10%, each within 60 s | **met** (gl1: 24 of 80, 10 held over a minute) |
+| reaction to a failed act, p50 (s) | 85.8 / 40.9 / 43.8 | 58.2 / 67.3 / 50.8 | within the off spread or ≤ 30 s longer | **met** |
+| failed acts with no deliberation within 10 min | 11 / 14 / 12 | 15 / 10 / 8 | ≤ the off arm's highest + 5 (19) | **met** |
+| first heard line to the newcomer (s after the join) | 540 / 547 / 463 | none / 168 / 793 | within the off spread in ≥ 2 of 3 | **not met:** none within the spread; one run earlier than any control run (168 s), one later (793 s), one without a heard line (gl1: 2 of 3 without) |
+| strangers classes, `together_4m`, `converge_60s` | asks 2/1/1, approaches 1/0/0, unaware 15/18/24 | asks 1/4/2, approaches 1/6/1, unaware 24/7/16 | within the off spread | **met** by `arrive_spread.py` (within spread on every class). Gated r2 drew more contact than any run. |
+| guards: false replies, repeated lines, talk that led to something | false 0.55/0.55/0.35; rep 0.26/0.05/0.09; led 0.39/0.11/0.72 | false 0.25/0.10/0.40; rep 0.07/0.44/0.07; led 0.32/0.74/0.33 | within the off spread | **met** |
+
+**The gate's behaviour.**
+- **Verdicts (r1/r2/r3):**
+
+  | Verdict | r1 | r2 | r3 |
+  |---|---:|---:|---:|
+  | first | 61 | 62 | 61 |
+  | waits | 184 | 195 | 194 |
+  | rethink | 137 | 128 | 137 |
+  | hold | 16 | 39 | 22 |
+  | urgent | 4 | 2 | 3 |
+
+- **The fix decides most non-urgent requests before Jev is asked.** `waits` fired on about 55% of them (unanswered lines in the town, and repeated failures).
+- **Holds fell to 16–39 a run** (gl1: 64–122), in 58 episodes: held p50 69–128 s, p90 240–470 s.
+
+**The held triggers, judged as delayed** (all 58 episodes, two blind judges, 10 judged by both):
+- **Agreement:** the judges agreed on what waiting cost in 6 of 10, and on what the moment needed in 6 of 10. Every disagreement was one step apart.
+- **What the moment needed:**
+
+  | needed | holds |
+  |---|---:|
+  | nothing | 12 |
+  | could wait | 29 |
+  | soon | 16 |
+  | now | 1 |
+
+- **What waiting cost:**
+
+  | cost of waiting | holds |
+  |---|---:|
+  | none | 39 |
+  | small | 19 |
+  | harmful | 0 (1 by the second judge) |
+
+### Reading of gl2
+
+**The fix removed the harm gl1 found, and with it most of the saving.**
+- **Harm:** harmful holds went from 6 of 80 to 0–1 of 58, and moments that needed an answer now from 30% of holds to 1.7%.
+- **Saving:** deliberations fell 9.4% (gl1: 12.4%) and the providers' cost 7.6% (gl1: 10.2%). Jev's calls fell by about 60%.
+- **Unchanged:** the guards and the strangers classes stay within the control's spread.
+- **The newcomer's first heard line is mixed.** It came sooner in one gated run, later in one, and not at all in one. The control heard one in every run. With three runs a side that is not a measured effect either way.
+
+**Whether the gate goes on by default is the general coordinator's decision.** These numbers say it saves about 8% of the providers' cost with no harm the judges could find.
+
 ## Fake smoke run
 
 Batch `glf2`, 2026-11-12 16:24–16:32:
