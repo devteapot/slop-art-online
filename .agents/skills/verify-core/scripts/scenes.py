@@ -6608,5 +6608,161 @@ def fast_diag(s):
 SCENES["fast_diag"] = fast_diag
 
 
+def diag_window(s, secs, keys):
+    """Profile for `secs` and sum the `diag:` counts of `keys` logged in that time. Counts
+    gathered while profiling was off are reported when it starts again, in the first `diag:`
+    line: the window counts from 2 s after it starts. Returns (counts, clock ms at the start)."""
+    s.call("set_profile", True)
+    time.sleep(2)
+    since = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+    t0 = s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+    try:
+        time.sleep(secs)
+    finally:
+        s.call("set_profile", False)
+    logs = "\n".join(l for l in s.command("logs", "-s", "local", s.db, "-n", "200000").stdout.splitlines() if l[:19] >= since and "diag:" in l)
+    errors = [l for l in s.command("logs", "-s", "local", s.db, "-n", "200000").stdout.splitlines() if l[:19] >= since and "differs from" in l]
+    count = lambda key: sum(int(x) for x in re.findall(rf'"{re.escape(key)}":(\d+)', logs))
+    m = {k: count(k) for k in keys}
+    m["differs_logged"] = len(errors)
+    if errors:
+        with (s.out / f"{s.name}-differs.txt").open("a") as f:
+            f.write("\n".join(errors) + "\n")
+    return m, t0
+
+
+def chronicle_recent(s):
+    """The chronicle's repeat check read from its newest entries (docs/BATTLE_SCALE.md,
+    battle-exact-2 E; the `chronicle_recent` law) finds the newest 40 entries of the last two
+    minutes that reading all of them finds. 12 people on an open line each say six lines in turn,
+    over and over (a line said again within two minutes and among the newest 40 is one entry
+    with a count, "(×n)"), with `chronicle_recent_check` on: each check also reads the whole two
+    minutes and compares (`diag:` `chronicle_recent:differed`). Both of its reads are used: the
+    newest rows when they hold 40, the whole window when they do not. 60 s, then 30 s with
+    `chronicle_recent` off: every row of the two minutes is read again and lines are still
+    written and counted."""
+    line = clear_line(s)
+    talkers = s.people(16)
+    for k, who in enumerate(talkers):
+        s.call("place_at", who, line[2 + k % 8][0], line[2 + k % 8][1] + (k // 8) * 1.4)
+    import threading, concurrent.futures
+    stop = threading.Event()
+
+    def talk():
+        # A say node speaks at most once per 45 s; an install clears its mark, so each talker's
+        # line is installed again every 2 s, one of two in turn.
+        n = 0
+        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+            while not stop.is_set():
+                t = time.time()
+                list(pool.map(lambda kw: s.call("set_behavior", kw[1], json.dumps({"seq": [{"say": f"{'Ho' if (n + kw[0]) % 2 else 'Hey'} {kw[0]}."}, {"wait": 300}]}), check=False), enumerate(talkers)))
+                n += 1
+                time.sleep(max(0.0, 2.0 - (time.time() - t)))
+
+    keys = ("chronicle_recent:checked", "chronicle_recent:differed", "chronicle_recent:narrow", "chronicle_recent:whole")
+    set_law(s, "chronicle_recent_check", True)
+    talking = threading.Thread(target=talk, daemon=True)
+    talking.start()
+    try:
+        on, t_on = diag_window(s, 60, keys)
+        set_law(s, "chronicle_recent", False)
+        off, t_off = diag_window(s, 30, keys)
+    finally:
+        stop.set()
+        talking.join()
+        set_law(s, "chronicle_recent", True)
+        set_law(s, "chronicle_recent_check", False)
+        for who in talkers:
+            s.graph(who, {"wait": 300})
+    rows = [r for r in s.rows("SELECT id, at_ms, kind, a, text FROM chronicle WHERE kind = 'speech'", "speech") if r["a"] in talkers]
+    on["rows"] = sum(1 for r in rows if r["at_ms"] >= t_on and r["at_ms"] < t_off)
+    on["counted"] = sum(1 for r in rows if r["at_ms"] >= t_on and r["at_ms"] < t_off and " (×" in r["text"])
+    off["rows"] = sum(1 for r in rows if r["at_ms"] >= t_off)
+    off["counted"] = sum(1 for r in rows if r["at_ms"] >= t_off and " (×" in r["text"])
+    m = {"on": on, "off": off}
+    (s.out / f"{s.name}-chronicle-recent.json").write_text(json.dumps(m, indent=1) + "\n")
+    print("MEASURE", json.dumps(m), flush=True)
+    try:
+        s.expect("lines were written and repeats counted into one entry", on["rows"] >= 20 and on["counted"] >= 3, on)
+        s.expect("every newest-first read was the whole read's (compared many times, none differed)", on["chronicle_recent:checked"] >= 60 and on["chronicle_recent:differed"] == 0 and on["differs_logged"] == 0, on)
+        s.expect("both reads were used: the newest rows, and the whole window when they held fewer than 40", on["chronicle_recent:narrow"] > 0 and on["chronicle_recent:whole"] > 0, on)
+        s.expect("with chronicle_recent off, the whole two minutes are read and lines still counted", off["chronicle_recent:narrow"] == 0 and off["chronicle_recent:whole"] == 0 and off["chronicle_recent:checked"] == 0 and off["counted"] >= 1, off)
+    finally:
+        off_the_line(s, line, talkers, dy=84)
+
+
+SCENES["chronicle_recent"] = chronicle_recent
+
+
+def notice_inplace(s):
+    """Noticing read in place (docs/BATTLE_SCALE.md, battle-exact-2 C1; the `notice_inplace`
+    law) marks and asks about the same structures, in the same order, as the full list does, and
+    says the same lines. 8 people walk back and forth along an open line among structures, while
+    a builder puts up a new one every 3 s beside them, with `notice_inplace_check` on: each look
+    also splits the structures in sight from the full list and compares (`diag:`
+    `notice_inplace:differed`). 45 s, then 20 s with `notice_inplace` off: the full list is built
+    at every look, and new structures are still noticed."""
+    line = clear_line(s)
+    lookers = s.people(8)
+    builder = s.people(1)[0]
+    west, east = line[1], line[-2]
+    for k, who in enumerate(lookers):
+        s.call("place_at", who, line[2 + k][0], line[2 + k][1] + 1.0)
+        a, b = (west, east) if k % 2 == 0 else (east, west)
+        s.graph(who, {"seq": [{"do": {"skill": "goto", "target": {"at": list(a)}}}, {"wait": 0.5}, {"do": {"skill": "goto", "target": {"at": list(b)}}}, {"wait": 0.5}]})
+    s.graph(builder, {"wait": 300})
+    kinds = ["shelter", "storage"]
+    placed = []
+
+    def build(n, t_end, k=0):
+        # Each spot once: a new tile beside a familiar one of the same kind and owner is part of
+        # it, and is rightly not told again.
+        n += k
+        while time.time() < t_end and k < n:
+            x = line[k % len(line)][0]
+            y = line[0][1] + (-4.0 if k % 2 == 0 else 6.0) + (-1 if k % 2 == 0 else 1) * (k // len(line)) * 3.0
+            s.call("place_at", builder, x, y, check=False)
+            if s.call("place_structure", builder, kinds[k % 2], check=False).returncode == 0:
+                placed.append((x, y))
+            k += 1
+            time.sleep(3)
+
+    keys = ("notice_inplace:checked", "notice_inplace:differed", "notice_inplace:listed", "noticed")
+    set_law(s, "notice_inplace_check", True)
+    import threading
+    try:
+        t = threading.Thread(target=build, args=(14, time.time() + 47))
+        t.start()
+        on, t_on = diag_window(s, 45, keys)
+        t.join()
+        set_law(s, "notice_inplace", False)
+        t = threading.Thread(target=build, args=(6, time.time() + 22, 32))
+        t.start()
+        off, t_off = diag_window(s, 20, keys)
+        t.join()
+    finally:
+        set_law(s, "notice_inplace", True)
+        set_law(s, "notice_inplace_check", False)
+        for who in lookers:
+            s.graph(who, {"wait": 300})
+    seen = [e for e in s.rows("SELECT observer, at_ms, text FROM experience WHERE kind = 'saw'", "noticed") if e["observer"] in lookers and e["text"].startswith("You notice a")]
+    on["lines"] = sum(1 for e in seen if t_on <= e["at_ms"] < t_off)
+    off["lines"] = sum(1 for e in seen if e["at_ms"] >= t_off)
+    on["placed"] = len(placed)
+    m = {"on": on, "off": off}
+    (s.out / f"{s.name}-notice-inplace.json").write_text(json.dumps(m, indent=1) + "\n")
+    print("MEASURE", json.dumps(m), flush=True)
+    try:
+        s.expect("structures were put up in view and noticed", on["placed"] >= 5 and on["lines"] >= 5, on)
+        s.expect("every in-place look was the full list's (compared many times, none differed)", on["notice_inplace:checked"] >= 100 and on["notice_inplace:differed"] == 0 and on["differs_logged"] == 0, on)
+        s.expect("the full list was built only for looks that found something new", 0 < on["notice_inplace:listed"] < on["notice_inplace:checked"], on)
+        s.expect("with notice_inplace off, no in-place look, and new structures are still noticed", off["notice_inplace:checked"] == 0 and off["notice_inplace:listed"] == 0 and off["lines"] >= 1, off)
+    finally:
+        off_the_line(s, line, lookers + [builder], dy=90)
+
+
+SCENES["notice_inplace"] = notice_inplace
+
+
 if __name__ == "__main__":
     raise SystemExit(main())
