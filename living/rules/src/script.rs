@@ -630,6 +630,20 @@ pub struct Laws {
     /// Diagnostic: every lazy answer is also worked out from the whole scene, and a difference
     /// logged and counted (`diag:` `scene_lazy:differed`).
     pub scene_lazy_check: bool,
+    /// The chronicle's repeat check (docs/BATTLE_SCALE.md, battle-exact-2 E) reads the newest
+    /// rows first, widening its window until it holds the 40 it compares: the same 40 rows in
+    /// the same order. Off: every row of the last two minutes is read.
+    pub chronicle_recent: bool,
+    /// Diagnostic: each repeat check also reads every row of the last two minutes, and a
+    /// difference is logged and counted (`diag:` `chronicle_recent:differed`).
+    pub chronicle_recent_check: bool,
+    /// Noticing reads the structures in sight in place (docs/BATTLE_SCALE.md, battle-exact-2
+    /// C1): the copied and sorted list is built only when something in sight is new. Off: the
+    /// list is built at every look.
+    pub notice_inplace: bool,
+    /// Diagnostic: each look also works out what is new from the full list, and a difference
+    /// is logged and counted (`diag:` `notice_inplace:differed`).
+    pub notice_inplace_check: bool,
     /// The fast lane (docs/FAST_LANE.md): a mind-run character's re-plan between blows, asked
     /// of its mind on a blow taken or a move it sees repeated. Off: none is asked.
     pub fast_lane_on: bool,
@@ -740,6 +754,10 @@ impl Default for Laws {
             warmth_check: false,
             scene_lazy: true,
             scene_lazy_check: false,
+            chronicle_recent: true,
+            chronicle_recent_check: false,
+            notice_inplace: true,
+            notice_inplace_check: false,
             fast_lane_on: false,
             seen_again_n: 3.0,
             fast_lane_rate: 2.0,
@@ -2884,6 +2902,10 @@ impl Scripts {
             warmth_check: flag("warmth_check", l.warmth_check),
             scene_lazy: flag("scene_lazy", l.scene_lazy),
             scene_lazy_check: flag("scene_lazy_check", l.scene_lazy_check),
+            chronicle_recent: flag("chronicle_recent", l.chronicle_recent),
+            chronicle_recent_check: flag("chronicle_recent_check", l.chronicle_recent_check),
+            notice_inplace: flag("notice_inplace", l.notice_inplace),
+            notice_inplace_check: flag("notice_inplace_check", l.notice_inplace_check),
             fast_lane_on: flag("fast_lane_on", l.fast_lane_on),
             seen_again_n: g("seen_again_n", l.seen_again_n).round().clamp(1.0, 100.0),
             fast_lane_rate: g("fast_lane_rate", l.fast_lane_rate).clamp(0.0, 100.0),
@@ -3821,6 +3843,8 @@ mod tests {
         assert_eq!(l.witness_wake_ms, 500.0, "a bystander is woken at most twice a second (docs/BATTLE_SCALE.md)");
         assert_eq!(l.witness_fold_ms, 2000.0, "what an onlooker sees of fights is told every two seconds (docs/BATTLE_SCALE.md)");
         assert!(l.scene_lazy && !l.scene_lazy_check, "the scene worked out as far as asked; its check off");
+        assert!(l.chronicle_recent && !l.chronicle_recent_check, "the chronicle's repeat check reads the newest rows; its check off");
+        assert!(l.notice_inplace && !l.notice_inplace_check, "noticing reads structures in place; its check off");
         let about: std::collections::HashMap<String, String> = shipped.laws_about().into_iter().collect();
         assert!(about["cue_cooldown_s"].contains("600 s") && about["cue_gap_s"].contains("60 s"), "{about:?}");
         let on = Scripts::new(&with_world_laws(src, &[("cues_on".into(), serde_json::json!(true)), ("cue_cooldown_s".into(), serde_json::json!(30)), ("cue_gap_s".into(), serde_json::json!(-5)), ("cue_check_s".into(), serde_json::json!(0.01)), ("regard_cache".into(), serde_json::json!(false))])).unwrap();

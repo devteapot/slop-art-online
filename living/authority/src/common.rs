@@ -1331,16 +1331,22 @@ pub fn resources_near(ctx: &ReducerContext, at: (f32, f32), r: f32) -> Vec<(Reso
 
 pub fn structures_near(ctx: &ReducerContext, at: (f32, f32), r: f32) -> Vec<(Structure, f32)> {
     let mut out = Vec::new();
+    for_structures_near(ctx, at, r, |s, d| out.push((s.clone(), d)));
+    out.sort_by(|a, b| a.1.total_cmp(&b.1));
+    out
+}
+
+/// Each structure within `r` of `at`, with its distance, read in place from the chunks' cached
+/// lists, in the order `structures_near` gathers them before its (stable) sort by distance.
+pub fn for_structures_near(ctx: &ReducerContext, at: (f32, f32), r: f32, mut f: impl FnMut(&Structure, f32)) {
     for c in chunks_around(at.0, at.1, r) {
         for s in chunk_structures(ctx, c).iter() {
             let d = dist(at, (s.x, s.y));
             if d <= r {
-                out.push((s.clone(), d));
+                f(s, d);
             }
         }
     }
-    out.sort_by(|a, b| a.1.total_cmp(&b.1));
-    out
 }
 
 pub fn name_of(ctx: &ReducerContext, id: u32) -> String {
@@ -1440,9 +1446,19 @@ pub fn scent_of(kind: &str) -> Option<living_rules::species::Scent> {
 
 pub fn chronicle(ctx: &ReducerContext, now: u64, kind: &str, a: u32, b: u32, at: (f32, f32), text: String) {
     let _detail = detail_span("common.chronicle");
-    // The same event repeated within two minutes becomes one entry with a count.
-    let recent: Vec<Chronicle> = ctx.db.chronicle().at_ms().filter(now.saturating_sub(120_000)..).collect();
-    for mut c in recent.into_iter().rev().take(40) {
+    // The same event repeated within two minutes becomes one entry with a count: it is looked
+    // for among the newest 40 entries of those two minutes.
+    let laws = laws(ctx);
+    let recent = if laws.chronicle_recent { chronicle_newest(ctx, now) } else { chronicle_newest_full(ctx, now) };
+    if laws.chronicle_recent && laws.chronicle_recent_check {
+        let full = chronicle_newest_full(ctx, now);
+        diag(|| "chronicle_recent:checked", 1);
+        if full.iter().map(|c| c.id).ne(recent.iter().map(|c| c.id)) {
+            diag(|| "chronicle_recent:differed", 1);
+            log::error!("chronicle_recent: newest {:?} differs from the full read's {:?}", recent.iter().map(|c| c.id).collect::<Vec<_>>(), full.iter().map(|c| c.id).collect::<Vec<_>>());
+        }
+    }
+    for mut c in recent {
         let base = c.text.rsplit_once(" (×").map(|(b, _)| b.to_string()).unwrap_or_else(|| c.text.clone());
         if c.kind == kind && c.a == a && c.b == b && base == text {
             let n = c.text.rsplit_once(" (×").and_then(|(_, r)| r.trim_end_matches(')').parse::<u32>().ok()).unwrap_or(1) + 1;
@@ -1453,6 +1469,46 @@ pub fn chronicle(ctx: &ReducerContext, now: u64, kind: &str, a: u32, b: u32, at:
         }
     }
     ctx.db.chronicle().insert(Chronicle { id: 0, at_ms: now, kind: kind.into(), a, b, x: at.0, y: at.1, text });
+}
+
+/// The chronicle's repeat check looks at this many of its newest entries.
+const CHRONICLE_MATCHED: usize = 40;
+/// It looks back this far.
+const CHRONICLE_BACK_MS: u64 = 120_000;
+
+/// The newest `CHRONICLE_MATCHED` entries of the last `CHRONICLE_BACK_MS`, newest first, read
+/// whole: every row of the window (`chronicle_recent` off, and its check).
+fn chronicle_newest_full(ctx: &ReducerContext, now: u64) -> Vec<Chronicle> {
+    let all: Vec<Chronicle> = ctx.db.chronicle().at_ms().filter(now.saturating_sub(CHRONICLE_BACK_MS)..).collect();
+    all.into_iter().rev().take(CHRONICLE_MATCHED).collect()
+}
+
+/// The same entries, read from the newest end (docs/BATTLE_SCALE.md, battle-exact-2 E): the last
+/// second first, then 4 s, 16 s and the whole window, until the read holds `CHRONICLE_MATCHED`
+/// entries from before this moment.
+///
+/// "Newest" is the order of the index range read inside this tick's transaction. In SpacetimeDB
+/// 2.14.1 that read gives the rows written in this transaction (this tick's entries and repeats,
+/// all at `now`) apart from the committed ones, not merged by `at_ms`; the full read's last 40
+/// were found to include an older committed row where a narrow read held fewer than 40 committed
+/// rows (verify-core `chronicle_recent`). Rows with `at_ms` before `now` are committed, and the
+/// committed rows of a later start are the tail of the whole window's. So a narrow read holding at
+/// least 40 of them has the whole read's last 40, whichever side this tick's rows come
+/// (`chronicle_recent_check` compares them).
+fn chronicle_newest(ctx: &ReducerContext, now: u64) -> Vec<Chronicle> {
+    for back in [1_000, 4_000, 16_000] {
+        let from = now.saturating_sub(back);
+        if from <= now.saturating_sub(CHRONICLE_BACK_MS) {
+            break;
+        }
+        let rows: Vec<Chronicle> = ctx.db.chronicle().at_ms().filter(from..).collect();
+        if rows.iter().filter(|c| c.at_ms < now).count() >= CHRONICLE_MATCHED {
+            diag(|| "chronicle_recent:narrow", 1);
+            return rows.into_iter().rev().take(CHRONICLE_MATCHED).collect();
+        }
+    }
+    diag(|| "chronicle_recent:whole", 1);
+    chronicle_newest_full(ctx, now)
 }
 
 thread_local! {

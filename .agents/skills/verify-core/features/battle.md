@@ -72,6 +72,18 @@ On a launched default-seed run (`scenes.py <case> --run "$R"`):
     - by facing, creatures were looked up by id;
     - with the law off there were no lazy answers, and the battle went on.
   - Counts come from `diag:` lines stamped 2 s after profiling restarts (counts made while it was off are reported then).
+- **The chronicle's repeat check read newest first** (battle-exact-2 E; the `chronicle_recent` law, on; `chronicle_recent_check` a diagnostic):
+  - `common::chronicle` folds a line said again into its entry ("(×n)") when it is among the newest 40 entries of the last two minutes. It reads the last 1 s, 4 s, 16 s, then the whole two minutes, and stops at the first window holding 40 entries from before this tick.
+  - Only entries before this tick count: a range read inside the tick's transaction gives this tick's rows apart from the committed ones (SpacetimeDB 2.14.1), so a narrow read short of 40 committed rows could pick one of them where the full read picks an older committed row. The first scene runs found exactly that (one of 68, then one of 460).
+- **`chronicle_recent`** (about 2.5 minutes):
+  - 16 people on an open line, each saying one of two short lines in turn; their graphs are reinstalled every 2 s (a say node speaks at most once per 45 s, an install clears it). `chronicle_recent_check` on: 60 s, then 30 s with `chronicle_recent` off.
+  - Checks: lines were written and repeats folded; every newest-first read equalled the full read (at least 60 compared, none differed, no difference logged); both the narrow and the whole read were used; with the law off neither was, and lines were still written.
+  - A difference's log line is saved beside the case's evidence (`<case>-differs.txt`).
+- **Noticing read in place** (battle-exact-2 C1; the `notice_inplace` law, on; `notice_inplace_check` a diagnostic):
+  - A look walks the chunks' structure lists in place (`common::for_structures_near`): those seen lately are re-marked, the rest marked and asked about nearest first, as the full pass does; the copied, sorted list is built only when something is new.
+- **`notice_inplace`** (about 2 minutes):
+  - 8 people walk back and forth along an open line while a builder puts up a shelter or a storage beside it every 3 s (each spot once: a tile beside a familiar one of its kind and owner is part of it and rightly not told). `notice_inplace_check` on: 45 s, then 20 s with `notice_inplace` off.
+  - Checks: structures were put up and noticed; every in-place split equalled the full list's (at least 100 compared, none differed); the full list was built only for looks that found something new; with the law off there was no in-place look and new structures were still noticed.
 - `witness_wake` checks B's folded line holding the blow on V within `witness_fold_ms`; the `sight`, `fov` and facing duel scenes check who is told a fight (walls, facing) through the folded lines.
 
 The rules tests `attention_cues_are_the_world_s_laws` (the laws' defaults and descriptions), `alarm_cells_give_the_law_s_answer_at_every_moment` (a cell's answer is the law's at every millisecond of five fighters' rows) and `fold::tests` (the line's words, counts and order) and the authority's `fold::tests` (each blow in exactly one window per onlooker) cover the rest offline. `profile_detail` (a diagnostic law) times the parts of each evaluation while profiling. The scale evidence is `living/tools/battle_diag.py` (docs/BATTLE_SCALE.md).
