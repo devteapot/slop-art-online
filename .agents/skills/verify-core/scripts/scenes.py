@@ -6674,11 +6674,12 @@ def chronicle_recent(s):
         set_law(s, "chronicle_recent_check", False)
         for who in talkers:
             s.graph(who, {"wait": 300})
+    # A repeat moves its entry to when it was last said, so entries are counted at the end: all
+    # the talkers' entries, those with a count, and the last said while the law was off.
     rows = [r for r in s.rows("SELECT id, at_ms, kind, a, text FROM chronicle WHERE kind = 'speech'", "speech") if r["a"] in talkers]
-    on["rows"] = sum(1 for r in rows if r["at_ms"] >= t_on and r["at_ms"] < t_off)
-    on["counted"] = sum(1 for r in rows if r["at_ms"] >= t_on and r["at_ms"] < t_off and " (×" in r["text"])
-    off["rows"] = sum(1 for r in rows if r["at_ms"] >= t_off)
-    off["counted"] = sum(1 for r in rows if r["at_ms"] >= t_off and " (×" in r["text"])
+    on["rows"] = len(rows)
+    on["counted"] = sum(1 for r in rows if " (×" in r["text"])
+    off["said_while_off"] = sum(1 for r in rows if r["at_ms"] >= t_off)
     m = {"on": on, "off": off}
     (s.out / f"{s.name}-chronicle-recent.json").write_text(json.dumps(m, indent=1) + "\n")
     print("MEASURE", json.dumps(m), flush=True)
@@ -6686,7 +6687,7 @@ def chronicle_recent(s):
         s.expect("lines were written and repeats counted into one entry", on["rows"] >= 20 and on["counted"] >= 3, on)
         s.expect("every newest-first read was the whole read's (compared many times, none differed)", on["chronicle_recent:checked"] >= 60 and on["chronicle_recent:differed"] == 0 and on["differs_logged"] == 0, on)
         s.expect("both reads were used: the newest rows, and the whole window when they held fewer than 40", on["chronicle_recent:narrow"] > 0 and on["chronicle_recent:whole"] > 0, on)
-        s.expect("with chronicle_recent off, the whole two minutes are read and lines still counted", off["chronicle_recent:narrow"] == 0 and off["chronicle_recent:whole"] == 0 and off["chronicle_recent:checked"] == 0 and off["counted"] >= 1, off)
+        s.expect("with chronicle_recent off, the whole two minutes are read and lines still written", off["chronicle_recent:narrow"] == 0 and off["chronicle_recent:whole"] == 0 and off["chronicle_recent:checked"] == 0 and off["said_while_off"] >= 5, off)
     finally:
         off_the_line(s, line, talkers, dy=84)
 

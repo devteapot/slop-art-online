@@ -1479,9 +1479,17 @@ fn chronicle_newest_full(ctx: &ReducerContext, now: u64) -> Vec<Chronicle> {
 }
 
 /// The same entries, read from the newest end (docs/BATTLE_SCALE.md, battle-exact-2 E): the last
-/// second first, then 4 s, 16 s and the whole window, until the read holds `CHRONICLE_MATCHED`.
-/// A later start of the same index range is the tail of the whole range, in the same order, so
-/// its newest entries are the whole window's (`chronicle_recent_check` compares them).
+/// second first, then 4 s, 16 s and the whole window, until the read holds `CHRONICLE_MATCHED`
+/// entries from before this moment.
+///
+/// "Newest" is the order of the index range read inside this tick's transaction. In SpacetimeDB
+/// 2.14.1 that read gives the rows written in this transaction (this tick's entries and repeats,
+/// all at `now`) apart from the committed ones, not merged by `at_ms`; the full read's last 40
+/// were found to include an older committed row where a narrow read held fewer than 40 committed
+/// rows (verify-core `chronicle_recent`). Rows with `at_ms` before `now` are committed, and the
+/// committed rows of a later start are the tail of the whole window's. So a narrow read holding at
+/// least 40 of them has the whole read's last 40, whichever side this tick's rows come
+/// (`chronicle_recent_check` compares them).
 fn chronicle_newest(ctx: &ReducerContext, now: u64) -> Vec<Chronicle> {
     for back in [1_000, 4_000, 16_000] {
         let from = now.saturating_sub(back);
@@ -1489,7 +1497,7 @@ fn chronicle_newest(ctx: &ReducerContext, now: u64) -> Vec<Chronicle> {
             break;
         }
         let rows: Vec<Chronicle> = ctx.db.chronicle().at_ms().filter(from..).collect();
-        if rows.len() >= CHRONICLE_MATCHED {
+        if rows.iter().filter(|c| c.at_ms < now).count() >= CHRONICLE_MATCHED {
             diag(|| "chronicle_recent:narrow", 1);
             return rows.into_iter().rev().take(CHRONICLE_MATCHED).collect();
         }
