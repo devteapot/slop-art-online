@@ -6,7 +6,7 @@
     { "name": "shino", "base": "lookdev/vroid-Sendagaya_Shino.glb", "height": 1.75 },
     { "name": "cullet-man", "base": "lookdev/own-man.glb", "height": 1.8, "proportions": { "shoulders": 1.016, "build": 1.023 } },
     { "name": "cullet-elder", "base": "lookdev/own-elder.glb", "height": 1.72, "proportions": { "neck": 0.951, "shoulders": 1.006, "build": 1.107 } },
-    { "name": "cullet-woman", "base": "lookdev/own-woman.glb", "height": 1.66, "proportions": { "shoulders": 0.895, "build": 0.973, "hands": 0.88, "feet": 0.9 } },
+    { "name": "cullet-woman", "base": "lookdev/own-woman.glb", "height": 1.66, "proportions": { "legs": 1.075, "arms": 0.9, "torso": 0.84, "shoulders": 0.597, "build": 0.973, "hips": 0.92, "hands": 0.75, "feet": 0.9 } },
     { "name": "cullet-lad", "base": "lookdev/own-youth.glb", "height": 1.68, "proportions": { "legs": 0.98, "arms": 0.98, "neck": 0.95, "head": 1.08, "shoulders": 0.958, "build": 0.959 } },
     { "name": "cullet-boy", "base": "lookdev/own-boy.glb", "height": 1.24, "proportions": { "legs": 0.853, "arms": 0.891, "torso": 0.936, "neck": 0.791, "head": 1.296, "shoulders": 0.88, "build": 0.966 } },
     { "name": "cullet-girl", "base": "lookdev/own-girl.glb", "height": 1.12, "proportions": { "legs": 0.816, "arms": 0.865, "torso": 0.918, "neck": 0.745, "head": 1.358, "shoulders": 0.825, "build": 0.903 } },

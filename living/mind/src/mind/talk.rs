@@ -59,6 +59,10 @@ const FACE_CONE: f32 = 0.6;
 /// `LIVING_PARK=concurrent`: a line heard within this long after a deliberation's prompt was
 /// built (so it never saw the line) gets its turn while the deliberation runs.
 const FRESH_MS: u64 = 2_000;
+/// How long a line said to someone else that names hearers waits for every named hearer's row
+/// before the nearest of them takes the one turn (talk-turns; the rows of one line arrive in one
+/// transaction).
+const NAMED_PICK_MS: u64 = 300;
 
 /// What draws a listener into a line said to no one in particular by someone they have not met
 /// or barely know (`LIVING_GREET`; `nearest` by default since 2026-11-11, the owner's choice
@@ -295,9 +299,22 @@ struct Conversation {
     settled: Option<Settled>,
     /// What an exchange reopened after being settled starts from.
     reopened: Option<(Settled, String)>,
+    /// The turn (`turns`) in which a plan or promise between the two was made: a reply that
+    /// settled something, or an act toward the other (talk-turns).
+    promised: Option<u32>,
 }
 
 impl Conversation {
+    /// Something is still open between the two (talk-turns): the line being answered asks
+    /// something, or a plan or promise was made in the last two turns, or the exchange was
+    /// reopened on something settled and has not yet had two turns. The turn budget then does
+    /// not close it (`MAX_TURNS` still does).
+    fn open(&self, heard: &str) -> bool {
+        heard.contains('?')
+            || self.promised.is_some_and(|t| self.turns.saturating_sub(t) < 2)
+            || self.reopened.as_ref().is_some_and(|(s, _)| !s.outcome.is_empty() && self.turns < 2)
+    }
+
     /// Share of the line's words that nothing in this exchange (or what was settled) said.
     fn novelty(&self, text: &str) -> f64 {
         self.novelty_without(text, &[])
@@ -339,6 +356,9 @@ pub struct Talks {
     deliberating: HashMap<u32, Deliberating>,
     /// Whether a missing `audience` row was reported (once).
     no_audience_logged: bool,
+    /// Lines said to someone else that name some of this service's characters, waiting for the
+    /// nearest named hearer to be picked: (speaker, at_ms) → each named hearer's row.
+    named: HashMap<(u32, u64), Vec<Experience>>,
 }
 
 /// Relation labels that are a close bond.
@@ -470,6 +490,12 @@ impl Talks {
         self.pairs.iter().any(|(k, c)| *k != key && (k.0 == listener || k.1 == listener) && !c.ended && now.saturating_sub(c.last_ms) < QUIET_MS)
     }
 
+    /// `in_other`, a conversation settled with someone else not counting (a named hearer's turn,
+    /// talk-turns: Agnes had settled with Baldwin and was free to answer her daughter's line).
+    fn in_other_open(&self, listener: u32, key: (u32, u32), now: u64) -> bool {
+        self.pairs.iter().any(|(k, c)| *k != key && (k.0 == listener || k.1 == listener) && !c.ended && c.settled.is_none() && now.saturating_sub(c.last_ms) < QUIET_MS)
+    }
+
     /// Whether a listener has settled an exchange with a speaker and its time has not come
     /// (a remark to no one does not reopen it).
     fn settled_with(&self, listener: u32, speaker: u32, now: u64) -> bool {
@@ -512,6 +538,38 @@ impl Minds {
 
     /// A speech or silence experience of one of this service's characters.
     pub(super) fn on_speech(self: Arc<Self>, e: Experience) {
+        self.hear(e, false)
+    }
+
+    /// A line said to someone else that names this hearer (its row says ", naming … you …"):
+    /// the hearers it names wait a moment, and the nearest of them (by the line's `audience`
+    /// row) takes one turn on it as if addressed (talk-turns).
+    fn named_pick(self: Arc<Self>, e: Experience) {
+        let key = (e.subject, e.at_ms);
+        let first = {
+            let mut t = self.talk.lock().unwrap();
+            let v = t.named.entry(key).or_default();
+            v.push(e.clone());
+            v.len() == 1
+        };
+        if !first {
+            return;
+        }
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(NAMED_PICK_MS)).await;
+            let rows = self.talk.lock().unwrap().named.remove(&key).unwrap_or_default();
+            let hs = self.audience_of(key.0, key.1);
+            let dist = |id: u32| hs.iter().flatten().find(|h| h.id == id).map_or(f32::MAX, |h| h.d);
+            if let Some(best) = rows.into_iter().min_by(|a, b| dist(a.observer).total_cmp(&dist(b.observer))) {
+                log::info!("{} is named in {}'s line to {} and is the nearest named: a turn", self.name(best.observer), self.name(best.subject), self.name(best.object));
+                self.hear(best, true);
+            }
+        });
+    }
+
+    /// A heard line, and whether this listener takes a turn on it. `named`: picked as the
+    /// nearest hearer a line to someone else names (`named_pick`).
+    fn hear(self: Arc<Self>, e: Experience, named: bool) {
         let now = llm::now_ms();
         if now.saturating_sub(e.at_ms) > STALE_MS || !self.allowed(e.observer) {
             return;
@@ -543,6 +601,13 @@ impl Minds {
         // Addressed by name, by `to`, or as the only person close by (the authority marks these);
         // with `LIVING_GREET=facing`, also as the hearer the speaker faces.
         let addressed = Facts { to_me: to == listener, to_none: to == 0, marked: e.salience >= 0.8, faced: faced_me, ..Default::default() }.addressed();
+        // Named in a line said to someone else (by name or by a kin word, the authority's own
+        // words): the nearest named hearer takes one turn, as if addressed (talk-turns).
+        if !named && !addressed && to != 0 && to != listener && names_me(&e.text) {
+            self.named_pick(e);
+            return;
+        }
+        let addressed = addressed || named;
         let asks = text.contains('?');
         let temper = self.temper(listener);
         let stamina = temper.stamina(self.affinity(listener, speaker));
@@ -613,6 +678,9 @@ impl Minds {
                 t.overheard.insert(listener, now);
                 t.claimed.insert((speaker, e.at_ms), listener);
             }
+            // A named hearer answers only when free: not in another exchange still going (one
+            // settled with someone else does not count).
+            let busy_elsewhere = named && t.in_other_open(listener, key, now);
             let c = t.pairs.entry(key).or_default();
             if now.saturating_sub(c.last_ms) >= QUIET_MS && c.settled.is_none() {
                 *c = Conversation::default();
@@ -668,8 +736,13 @@ impl Minds {
             if c.ended || c.turns >= MAX_TURNS {
                 return;
             }
-            // They have said their piece for this exchange (their last turn wrapped up).
-            if c.own.get(&listener).copied().unwrap_or(0) >= stamina {
+            if busy_elsewhere {
+                log::info!("{} is named but busy in another conversation — no turn", me.name);
+                return;
+            }
+            // They have said their piece for this exchange (their last turn wrapped up), unless
+            // something is still open between them (talk-turns).
+            if c.own.get(&listener).copied().unwrap_or(0) >= stamina && !c.open(&text) {
                 log::debug!("{} has said enough to {} for now", me.name, self.name(speaker));
                 return;
             }
@@ -1003,12 +1076,13 @@ impl Minds {
         let Some(c) = self.conn.db.character().id().find(&me) else { return Ok(()) };
         let temper = self.temper(me);
         let stamina = temper.stamina(self.affinity(me, other));
-        let (lines, own, reopened, lately_said) = {
+        let (lines, own, reopened, lately_said, open) = {
             let mut t = self.talk.lock().unwrap();
             let now = llm::now_ms();
             let lately_said = t.said.get(&me).map_or(0, |v| v.iter().filter(|x| now.saturating_sub(**x) < 5 * 60_000).count());
             let conv = t.pairs.entry(pair(me, other)).or_default();
-            (conv.lines.clone(), conv.own.get(&me).copied().unwrap_or(0), conv.reopened.clone(), lately_said)
+            let heard_text = conv.lines.iter().rev().find(|l| l.speaker == other).map(|l| l.text.clone()).unwrap_or_default();
+            (conv.lines.clone(), conv.own.get(&me).copied().unwrap_or(0), conv.reopened.clone(), lately_said, conv.open(&heard_text))
         };
         let Some(heard) = lines.iter().rev().find(|l| l.speaker == other).cloned() else { return Ok(()) };
         let lane = if self.is_player(me) || self.is_player(other) || lines.iter().any(|l| self.is_player(l.speaker) || self.is_player(l.to)) {
@@ -1016,8 +1090,11 @@ impl Minds {
         } else {
             Lane::Routine
         };
-        let last_word = own + 1 >= stamina;
-        let ctx = TalkCtx { temper: &temper, lately_said, own, last_word, reopened: reopened.as_ref() };
+        // The turn budget closes an exchange only when nothing is open between them: a question
+        // to answer, or a plan or promise just made, leaves `end` to the mind (talk-turns).
+        let last_word = own + 1 >= stamina && !open;
+        let enough = own + 1 >= stamina && open;
+        let ctx = TalkCtx { temper: &temper, lately_said, own, last_word, enough, reopened: reopened.as_ref() };
         let (system, user) = self.talk_prompt(&c, other, &lines, &heard, &ctx).await;
         let mut profile = self.profile(&c);
         let messages = [Msg { role: "system", content: system }, Msg { role: "user", content: user }];
@@ -1123,6 +1200,10 @@ impl Minds {
             let c = tk.pairs.entry(pair(me, other)).or_default();
             c.turns += 1;
             *c.own.entry(me).or_default() += 1;
+            // A plan or promise between them: something settled, or an act toward the other.
+            if !outcome.is_empty() || acts.iter().any(|a| act_toward(a, other)) {
+                c.promised = Some(c.turns);
+            }
             c.ended |= end || (to != other && !say.is_empty());
             c.last_ms = now;
             if let Some(s) = &settled {
@@ -1304,7 +1385,11 @@ impl Minds {
         let recalled = self.recall_for(me, &cues.bounded(), 8, 3, "talk").await;
         let mut mind = recalled.mind;
         mind.extend(recalled.cued_stances.into_iter().take(3).map(|s| format!("you hold: {s}")));
-        let convo: Vec<String> = lines
+        // The conversation up to the line being answered: that line is given once, under "What you
+        // are answering" (talk-turns; before, it ended the transcript too). Lines after it, if
+        // any, are not part of what this turn answers.
+        let upto = lines.iter().rposition(|l| l.speaker == heard.speaker && l.at_ms == heard.at_ms).unwrap_or(lines.len());
+        let convo: Vec<String> = lines[..upto]
             .iter()
             .rev()
             .take(12)
@@ -1324,6 +1409,8 @@ impl Minds {
         );
         if ctx.last_word {
             pacing.push_str(" You have said about as much as you want to for now: make this your last word (end: true), and say what was settled, if anything.");
+        } else if ctx.enough {
+            pacing.push_str(" You have said about as much as you usually do.");
         }
         let earlier = ctx.reopened.map(|(s, why)| format!("Earlier you two settled{} ({}). Now {why}.", if s.outcome.is_empty() { " nothing in particular and parted".to_string() } else { format!(": “{}”", s.outcome) }, fmt(s.at_ms)));
         // What stands between them now: proposals either way (answerable with an act).
@@ -1348,6 +1435,9 @@ impl Minds {
         let voice = prompts::voice_m();
         let (way, told) = self.how_heard_told(heard);
         let how = match way.as_str() {
+            // Said to someone else, naming this hearer (talk-turns): how it reached them, in the
+            // authority's words ("Sissly Fenner said to a stranger, naming you").
+            _ if heard.to != 0 && heard.to != c.id && names_me(&format!("{told}: “")) => format!("{told}."),
             "whisper" => "They whispered this to you; only you heard the words. To keep it between you, whisper back (\"way\": \"whisper\"); a whisper reaches only someone beside you.".to_string(),
             "call" => format!("{}. An ordinary voice carries {voice:.0} m: if they are farther than that, call back (\"way\": \"call\") or go over to them.", if told.is_empty() { "They called this out".to_string() } else { told }),
             _ => String::new(),
@@ -1380,6 +1470,9 @@ struct TalkCtx<'a> {
     lately_said: usize,
     own: u32,
     last_word: bool,
+    /// The turn budget is reached but something is open between them: told as a fact, `end`
+    /// left to the mind (talk-turns).
+    enough: bool,
     reopened: Option<&'a (Settled, String)>,
 }
 
@@ -1400,6 +1493,23 @@ fn flat(v: &Value) -> String {
     }
 }
 
+/// Whether a line's row (the hearer's own words of it, the authority's) names the hearer in a
+/// line said to someone else: "Sissly Fenner said to a stranger, naming you: “…”" (talk-turns).
+fn names_me(row: &str) -> bool {
+    let head = row.split('“').next().unwrap_or(row);
+    head.split_once(", naming ").is_some_and(|(_, list)| {
+        list.trim_end().trim_end_matches(':').split(", ").flat_map(|p| p.split(" and ")).any(|w| w.trim() == "you")
+    })
+}
+
+/// Whether a deliberate act (as JSON) is aimed at `other` (its target's id).
+fn act_toward(act: &str, other: u32) -> bool {
+    serde_json::from_str::<Value>(act).ok().is_some_and(|v| {
+        let t = &v["target"];
+        t["id"].as_u64() == Some(other as u64) || t.as_u64() == Some(other as u64)
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1413,6 +1523,33 @@ mod tests {
         assert_eq!(id_of(&Value::Null), 0);
         assert_eq!(saying_ms("Hi."), 1_500);
         assert_eq!(saying_ms(&"word ".repeat(12)), 3_960);
+    }
+
+    #[test]
+    fn a_line_to_someone_else_names_the_hearer_only_in_its_own_row() {
+        assert!(names_me("Sissly Fenner said to a stranger, naming you: “ask Mother first”"));
+        assert!(names_me("Sissly Fenner said to a stranger, naming Agnes Fenner and you: “…”"));
+        assert!(names_me("A stranger calls out to Bram from about 20 m, naming you: “…”"));
+        assert!(!names_me("Sissly Fenner said to a stranger, naming Agnes Fenner: “you there”"), "a name in the words is not the detail");
+        assert!(!names_me("Sissly Fenner said to a stranger: “naming you”"));
+        assert!(act_toward(r#"{"do":"give","target":{"id":26},"item":"pie"}"#, 26));
+        assert!(!act_toward(r#"{"do":"goto","target":{"place":"inn"}}"#, 26));
+    }
+
+    #[test]
+    fn the_turn_budget_does_not_close_an_open_exchange() {
+        let mut c = Conversation::default();
+        assert!(c.open("crust, can you bring me there ?"), "a question is open");
+        assert!(!c.open("crust"));
+        c.turns = 3;
+        c.promised = Some(3);
+        assert!(c.open("thanks"), "a promise in the last turn is open");
+        c.turns = 5;
+        assert!(!c.open("thanks"), "two turns later it is not");
+        let mut r = Conversation { reopened: Some((Settled { outcome: "I'm bringing the stranger to the inn".into(), until_ms: 1, at_ms: 0 }, "they bring up something new".into())), ..Default::default() };
+        assert!(r.open("is this the place"), "an exchange reopened on a promise is open at first");
+        r.turns = 2;
+        assert!(!r.open("ok"));
     }
 
     #[test]
@@ -1585,7 +1722,7 @@ mod tests {
 
 /// The way of speaking a reply names (`"way"` beside or inside `say`): `None` when it names
 /// none, `say` when it names one the world's rules do not have.
-fn way_of(v: &Value) -> Option<String> {
+pub(crate) fn way_of(v: &Value) -> Option<String> {
     let named = v["way"].as_str().or_else(|| v["say"]["way"].as_str())?.trim().to_lowercase().replace([' ', '-'], "_");
     if named.is_empty() {
         return None;

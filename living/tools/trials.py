@@ -906,6 +906,25 @@ def failure_kind(error):
 CONSOLIDATION_COLUMNS = ("attempted", "primary", "fallback", "retried", "lost", "trimmed", "capacity_429")
 
 
+def spoken_as_table(jdir):
+    """Lines whose `#<id>` handles the world said as words (fix-spoken-ids), from the mind's
+    outcome lines (`<journal>/outcomes/spoken_as.jsonl`, each with what the model wrote and what
+    was said): {total, by_character, examples}. A high count means the prompts' sentence on ids is
+    not doing its work. 0 when the mind wrote none."""
+    path = Path(jdir) / "outcomes" / "spoken_as.jsonl"
+    lines = []
+    if path.exists():
+        for line in path.read_text().splitlines():
+            try:
+                lines.append(json.loads(line))
+            except ValueError:
+                pass
+    by = {}
+    for r in lines:
+        by[r.get("name") or r.get("actor")] = by.get(r.get("name") or r.get("actor"), 0) + 1
+    return {"total": len(lines), "by_character": by, "examples": [r.get("line", "")[:300] for r in lines[:5]]}
+
+
 def consolidation_table(jdir):
     """What each character's consolidations came to, from the mind's outcome lines
     (`<journal>/outcomes/consolidations.jsonl`, one per consolidation that called a model,
@@ -1306,7 +1325,7 @@ class Instance:
         kind = s["do"]
         who = self.ids(s.get("who"))
         self.emit("events", {"t": self.t(), "do": kind, "who": who, **{k: v for k, v in s.items() if k not in ("do", "who", "when", "at", "steps")}})
-        if who and kind in ("place", "graph", "say", "act", "items", "know", "structure"):
+        if who and kind in ("place", "graph", "say", "act", "items", "know", "structure", "vitals"):
             # Members who died (or were removed) since the cast was picked are skipped, and said so.
             have = set(self.bodies(who))
             gone = [x for x in who if x not in have]
@@ -1328,6 +1347,14 @@ class Instance:
                 # differ (docs/PACK_MIND.md §5.6, the calibration "sides").
                 g = s["graphs"][i % len(s["graphs"])] if "graphs" in s else s["graph"]
                 self.call("set_behavior", actor, json.dumps(self.graph_of(g, actor)))
+            elif kind == "vitals":
+                # An admin body-state set (`admin_set_vitals`; its own chronicle line, and every use
+                # listed in summary.json `admin_vitals`): `hp` a number, or "max" for the body's own.
+                hp = s.get("hp", "max")
+                if hp == "max":
+                    v = self.rows(f"SELECT * FROM vitals WHERE id = {actor}")
+                    hp = v[0]["max_hp"] if v else 100.0
+                self.call("admin_set_vitals", actor, float(hp))
             elif kind == "items":
                 for item, qty in s["items"].items():
                     self.call("grant_items", actor, item, qty)
@@ -1387,7 +1414,9 @@ class Instance:
     def triggers(self, new_chron, positions, hour):
         for k, e in enumerate(self.trial.get("timeline", [])):
             w = e.get("when")
-            if not w or self.fired[k] >= e.get("max", 1) or self.t() < e.get("after_min", 0) * 60:
+            # `after_min` and `before_min` bound when a trigger may fire (a fixture that meets the
+            # subject in windows: docs/COMBAT_MIND.md §5.4).
+            if not w or self.fired[k] >= e.get("max", 1) or self.t() < e.get("after_min", 0) * 60 or ("before_min" in e and self.t() > e["before_min"] * 60):
                 continue
             if "said" in w:
                 spec = w["said"]
@@ -2312,6 +2341,9 @@ def summarize(d, trial, extra):
     live = ROOT / ".local/living/journal" / f"{PREFIX}{d.parent.name}-{d.name}"
     jdir = live if live.exists() else d / "journal"
     s["consolidations"] = consolidation_table(jdir)
+    s["spoken_as"] = spoken_as_table(jdir)
+    # Every admin body-state set the timeline made (`vitals` steps): when, whom, to what.
+    s["admin_vitals"] = [{"t": e.get("t"), "who": e.get("who"), "hp": e.get("hp", "max")} for e in jsonl(d / "events.jsonl") if e.get("do") == "vitals"]
     for f in sorted(jdir.glob("*.jsonl")) if jdir.exists() else []:
         for n, line in enumerate(f.read_text().splitlines(), 1):
             try:
@@ -2938,6 +2970,15 @@ def report(a):
             out.append(f"| {k} | {v['calls']} | {v['tokens']:,} | {l50[len(l50) // 2] if l50 else '–'} | {max((y for _, y in lats[k]), default='–')} | {v['errors']} | {v['empty']} | {v['repaired']} | {v['invalid']} |")
         out.append("")
     out += consolidation_report(sums)
+    # Lines whose ids were said as words (fix-spoken-ids): per instance, with the batch's total.
+    sa = [(f"{x.get('trial')}/{x.get('variant')}/r{x.get('replicate')}", x["spoken_as"]) for x in sums if x.get("spoken_as") is not None]
+    if sa:
+        out.append(f"## Ids said as words\n\nLines whose `#id` handles the world said as words (`spoken_as`, the mind's outcome lines): **{sum(t['total'] for _, t in sa)}** in the batch.\n")
+        out.append("| Instance | Lines | By character | First example |\n| --- | ---: | --- | --- |")
+        for n, t in sa:
+            ex = (t["examples"][0] if t["examples"] else "").replace("|", "/")
+            out.append(f"| {n} | {t['total']} | {', '.join(f'{k} {v}' for k, v in t['by_character'].items()) or '–'} | {ex} |")
+        out.append("")
     for (trial, variant), ss in sorted(groups.items()):
         ss.sort(key=lambda s: s["replicate"])
         out.append(f"## {trial} / {variant}\n")

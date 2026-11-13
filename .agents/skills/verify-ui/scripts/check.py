@@ -70,7 +70,7 @@ def residents(run, n=2):
 THEME = os.environ.get("LIVING_GAME_THEME", "")
 
 
-def drive(run, name, plan, places=(), syncs=(), extra=(), free=()):
+def drive(run, name, plan, places=(), syncs=(), extra=(), free=(), env=None):
     # A run per theme keeps its own evidence (`LIVING_GAME_THEME=night check.py …`).
     name = f"{name}-{THEME}" if THEME else name
     cmd = [sys.executable, os.path.join(HERE, "drive.py"), "--run", run, "--name", name, "--plan", plan, "--timeout", "420"]
@@ -81,7 +81,7 @@ def drive(run, name, plan, places=(), syncs=(), extra=(), free=()):
     for p in free:
         cmd += ["--place-free", p]
     cmd += list(extra)
-    r = subprocess.run(cmd, capture_output=True, text=True)
+    r = subprocess.run(cmd, capture_output=True, text=True, env=dict(os.environ, **env) if env else None)
     out = os.path.join(ROOT, ".local/living/verify", run, "ui", name)
     return out, r.returncode, r.stdout + r.stderr
 
@@ -172,6 +172,32 @@ def windows(run, c):
     c.check(s, "Esc with nothing open opens Menu", d["10"] and d["10"]["menu"])
     c.check(s, "Esc closes the Menu list first", d["11"] and not d["11"]["menu"])
     c.check(s, "Esc again opens Menu (and frees the cursor)", d["12"] and d["12"]["menu"] and "Esc with nothing open: Menu, cursor freed" in log(out))
+
+
+@scenario("bubble-once")
+def bubble_once(run, c):
+    """A line is shown once per speech row (play-test 6: Sissly's long reply came back as a bubble
+    7.6 s after it was said, once her short line said 2.1 s later had gone; no new row behind it).
+    A resident beside a fresh player says a long line (a 10 s bubble), then a short one 2.1 s
+    later (about 5 s), both admin `mind_say` to the player. The dumps follow A's bubble: the long
+    line, then the short one, then nothing at 8.5 s, while the long line's own life (10 s) would
+    still run."""
+    s = "bubble-once"
+    a = residents(run, 1)[0]
+    long = "It's just past the berry bushes! Come on, but walk slow, my legs are little. I like crust too, we can share the crusty edges."
+    short = "You never said! Crust or filling?"
+    thought = json.dumps({"kind": "talk", "summary": "", "detail": "", "latency_ms": 0, "tokens": 0, "model": "verify-ui scene", "reference": ""})
+    syncs = [f'one=mind_say|{a}|"{long}"|{{me}}|""|0|{thought}', f'two=mind_say|{a}|"{short}"|{{me}}|""|0|{thought}']
+    plan = ("ready;sync:scene;wait:2.5;sync:one;wait:1.0;dump:b1;wait:1.1;sync:two;wait:0.9;dump:b2;wait:3.2;dump:b3;wait:2.2;shot:01_after;dump:b4;wait:1.5;dump:b5;quit")
+    tok = os.path.join(ROOT, ".local/living/verify", run, "ui", f"bubble-once-{int(time.time())}.token")
+    out, code, text = drive(run, s, plan, places=[f"{a}:2:0"], syncs=syncs, extra=["--token", tok, "--player", "Listener"])
+    c.check(s, "client ran and joined (a fresh player)", code == 0, text[-300:])
+    over = lambda k: [x.get("text") for x in (dump(out, k) or {}).get("bubbles") or [] if x.get("speaker") == a]
+    seq = {k: over(k) for k in ("b1", "b2", "b3", "b4", "b5")}
+    c.check(s, "the long line shows, then the short one in its place", seq["b1"] == [long] and seq["b2"] == [short], str(seq))
+    c.check(s, "once the short line's bubble ends, the long line does not show again", seq["b4"] == [] and seq["b5"] == [] and long not in (seq["b3"] + seq["b4"] + seq["b5"]), str(seq))
+    rows = [r for r in sql(run, f"SELECT id, kind, subject, text FROM experience WHERE kind = 'speech' AND subject = {a}") if long in r.get("text", "")]
+    c.check(s, "one speech row behind the long line for the player", len([r for r in rows]) >= 1, f"{len(rows)} rows")
 
 
 @scenario("room-detail")
@@ -271,6 +297,123 @@ def earshot(run, c):
     c.check(s, "law off: no row, the client's own reckoning (A within it)", not ty("e3").get("told") and a in (ty("e3").get("earshot") or []), f"told {ty('e3').get('told')}; earshot {ty('e3').get('earshot')}")
     t6 = ty("t6").get("tab") or {}
     c.check(s, "law off: Tab as before, by the client's own reckoning", t6.get("authority") is False and t6.get("chose") == nxt(t6.get("prev"), t6.get("earshot") or []), str(t6))
+
+
+@scenario("ways")
+def ways(run, c):
+    """The world's ways of speaking in the talk box (`speech_card`; `human_speak`): the chip shows
+    the box's way, the Way key (Up) moves to the next in the cards' order; a line goes in that
+    way; Tab follows its reach; its `max_chars` cuts the box; what the rules refuse comes back in
+    their words, once. At noon on open grass, cleared, a fresh player with residents A 2 m off, C
+    10 m off (beyond a say's 9 m, within sight: 11 m by day) and B 20 m off (beyond sight, within a
+    call's reach): a say reaches A (Tab: A, not C); a whisper with no one within its reach is
+    refused ("a whisper needs someone to whisper to"); a call's Tab holds A and C, and B, unseen,
+    hears it. Then Settings › Controls offers the Way key."""
+    s = "ways"
+    cards = sorted(sql(run, "SELECT * FROM speech_card"), key=lambda r: (r.get("order", 0), r.get("name", "")))
+    names = [r["name"] for r in cards]
+    by = {r["name"]: r for r in cards}
+    # The rules' whisper and call, by what they are (a way that needs someone within a reach; the
+    # one that carries farthest), not by name.
+    near = next((r for r in cards if r.get("needs_to") and r.get("reach_m", 0) > 0), None)
+    far = max(cards, key=lambda r: r.get("carry_m", 0)) if cards else None
+    c.check(s, "the world has ways of speaking: a close one that needs someone, and a far one", len(cards) >= 3 and near is not None and far is not None and far is not cards[0], str([(r["name"], r.get("order"), r.get("needs_to"), r.get("reach_m"), r.get("carry_m"), r.get("max_chars")) for r in cards]))
+    if not (near and far):
+        return
+    a, b, cc = residents(run, 3)
+    people = {r["id"] for r in sql(run, "SELECT id, kind FROM character WHERE kind = 'person'")}
+    ax, ay = UNHEARD_SPOT
+    for i, r in enumerate(x for x in sql(run, "SELECT id, x, y FROM body") if x["id"] in people and x["id"] not in (a, b, cc) and ((x["x"] - ax) ** 2 + (x["y"] - ay) ** 2) ** 0.5 < 30):
+        call_admin(run, "place_at", [r["id"], ax - 45, ay + 3 * i])
+    up = lambda n: "".join("key:ArrowUp:tap;wait:0.3;" for _ in range(n))
+    to_near = names.index(near["name"])
+    to_far = (names.index(far["name"]) - to_near) % len(names)
+    long = ("Over here! " + "x" * 120)
+    plan = ("ready;sync:noon;sync:spot;wait:2;sync:scene;wait:3;"
+            "key:Enter:tap;wait:0.8;dump:s0;tab;wait:0.4;dump:s1;type:Good day to you.;enter;wait:2.5;"
+            f"key:Enter:tap;wait:0.5;{up(to_near)}wait:0.6;shot:01_near;dump:w0;tab;wait:0.4;dump:w1;type:Psst.;enter;wait:2.5;dump:w2;"
+            f"key:Enter:tap;wait:0.5;{up(to_far)}wait:0.6;dump:c0;type:{long};wait:0.4;shot:02_far;dump:c1;enter;wait:3;dump:c2;"
+            "click:@menu;wait:0.4;click:@menu:Settings;wait:0.8;click:@settings:page:controls;wait:0.6;dump:k0;key:Escape:tap;wait:0.3;quit")
+    tok = os.path.join(ROOT, ".local/living/verify", run, "ui", f"ways-{int(time.time())}.token")
+    syncs = ["noon=sql|UPDATE world SET epoch_ms = {epoch_at:12} WHERE id = 0", f"spot=place_at|{{me}}|{ax}|{ay}"]
+    out, code, text = drive(run, s, plan, places=[f"{a}:2:0", f"{cc}:0:10", f"{b}:20:0"], syncs=syncs, extra=["--token", tok, "--player", "Speaker"])
+    c.check(s, "client ran and joined (a fresh player)", code == 0, text[-300:])
+    d = {k: dump(out, k) or {} for k in ("s0", "s1", "w0", "w1", "w2", "c0", "c1", "c2", "k0")}
+    ty = lambda k: d[k].get("typing") or {}
+    way = lambda k: (ty(k).get("way") or {}).get("name")
+    ear = lambda k: ty(k).get("earshot") or []
+    c.check(s, "the box opens in the world's first way; its reach holds A, not C 10 m off nor B 20 m off", way("s0") == names[0] and a in ear("s0") and cc not in ear("s0") and b not in ear("s0"), f"way {way('s0')}; earshot {ear('s0')}")
+    c.check(s, "Tab goes by that way's list", (ty("s1").get("tab") or {}).get("earshot") == ear("s1") and ty("s1").get("to") in ear("s1"), str(ty("s1").get("tab")))
+    heard = lambda who, words: [r for r in sql(run, f"SELECT id, kind, text FROM experience WHERE observer = {who} AND kind = 'speech'") if words in r.get("text", "")]
+    c.check(s, "the say reaches A as before", bool(heard(a, "Good day to you.")), "A's speech rows")
+    c.check(s, "the Way key moves to the close way: no one within its reach, Tab has no one", way("w0") == near["name"] and ear("w0") == [] and ear("w1") == [], f"way {way('w0')}; earshot {ear('w0')}, {ear('w1')}")
+    refusal = [n for n in d["w2"].get("notes") or [] if "whisper" in n.lower() or "needs someone" in n.lower()]
+    c.check(s, "the close way to no one: refused in the rules' words, once", len(refusal) == 1, str(d["w2"].get("notes")))
+    c.check(s, "the far way's Tab holds A and C 10 m off (seen, beyond a say), not B unseen at 20 m", way("c0") == far["name"] and a in ear("c0") and cc in ear("c0") and b not in ear("c0"), f"way {way('c0')}; earshot {ear('c0')}")
+    mx = far.get("max_chars") or 0
+    c.check(s, "the box takes no more than the far way's max_chars", mx > 0 and len(ty("c1").get("words") or "") == mx, f"{len(ty('c1').get('words') or '')} of {mx}")
+    c.check(s, "B 20 m off, unseen, hears the call", bool(heard(b, "Over here!")), "B's speech rows")
+    L = log(out)
+    c.check(s, "lines went by human_speak in their ways", f"({far['name']})" in L and f"({names[0]})" in L, "client.log say lines")
+    c.check(s, "Settings › Controls offers the Way key", any(t.startswith("bind:Way:") for t in (d["k0"].get("tags") or {})), str([t for t in (d["k0"].get("tags") or {}) if t.startswith("bind:")][:20]))
+
+
+@scenario("reversal")
+def reversal(run, c):
+    """look-4 in the client: when another's walk reverses with their look held aside, their drawn
+    legs decide walking backwards from where the authority's facing settles, not from the facing
+    still coming round (for about 0.3 s it can stand 75°-180° off the new travel), so no brief
+    backwards gait starts. verify.py's player identity walks east with its look held north, then
+    the walk reverses to the west; my client logs their feet (`LIVING_GAME_FEET_ID`): no frame drawn
+    backwards (`reverse`) in the second after the reversal, while the authority's settled offset is
+    within `look_walk_deg` (so backwards would be wrong)."""
+    s = "reversal"
+    def body():
+        r = subprocess.run([sys.executable, V, "sql", "--run", run, "SELECT * FROM my_body", "--as-player"], capture_output=True, text=True)
+        rows = json.loads(r.stdout[r.stdout.find("["):]) if "[" in r.stdout else []
+        return (rows[0]["id"] if rows else None), r.stdout + r.stderr
+    other, t = body()
+    if other is None:
+        subprocess.run([sys.executable, V, "player", "--run", run, "join", "Turner"], capture_output=True, text=True)
+        other, t = body()
+    c.check(s, "a second player to walk beside me", other is not None, t[-200:])
+    if other is None:
+        return
+    snap = f"sql|SELECT id, x, y, heading, turn, turn_s, t_ms, next_ms, vx, vy, speed, face_off, face_turn, face_turn_s FROM body WHERE id = {other}"
+    plan = ("ready;click:@tip:ok;sync:noon;sync:spot;wait:4;frame:0;view:30:9;wait:1;sync:other;wait:2;sync:go;wait:3;sync:walking;"
+            "sync:rev;wait:0.3;sync:turning;wait:1.5;sync:settled;shot:01_reversed;wait:1;sync:halt;wait:1.5;quit")
+    syncs = ["noon=sql|UPDATE world SET epoch_ms = {epoch_at:12} WHERE id = 0", f"spot=place_at|{{me}}|{LOOK_WALK_SPOT[0]}|{LOOK_WALK_SPOT[1]}", f"other=place_at|{other}|(mx-4)|(my+3)",
+             "go=player|human_move|1|0|false;player|human_face|0|-1", f"walking={snap}", "rev=player|human_move|-1|0|false", f"turning={snap}", f"settled={snap}",
+             "halt=player|human_move|0|0|false;player|human_face|0|0"]
+    name = "reversal"
+    out_dir = os.path.join(ROOT, ".local/living/verify", run, "ui", name)
+    os.makedirs(out_dir, exist_ok=True)
+    keep = {k: os.environ.get(k) for k in ["LIVING_GAME_FEET", "LIVING_GAME_FEET_ID", "LIVING_GAME_CONTROL"]}
+    os.environ.update({"LIVING_GAME_FEET": os.path.join(out_dir, "feet.jsonl"), "LIVING_GAME_FEET_ID": str(other), "LIVING_GAME_CONTROL": "cursor"})
+    try:
+        out, code, text = drive(run, name, plan, syncs=syncs)
+    finally:
+        for k, v in keep.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+    c.check(s, "client ran and joined", code == 0, text[-300:])
+    scene = json.load(open(os.path.join(out, "scene.json"))) if os.path.exists(os.path.join(out, "scene.json")) else {}
+    snapped = lambda k: (((scene.get("snaps") or {}).get(k) or [{}])[0])
+    st = snapped("settled")
+    row = (st.get("rows") or [None])[0]
+    settled = None
+    if row:
+        settled = wrapd(math.degrees(facing_at(row, st["wall_ms"]) - heading_at(row, st["wall_ms"])))
+    c.check(s, "the authority: the walk reversed west, the facing settled within look_walk_deg of it", row is not None and abs(wrapd(math.degrees(heading_at(row, st["wall_ms"])) - 180.0)) < 5 and settled is not None and abs(settled) <= 80.0, f"settled offset {settled}")
+    lines = [x for x in feet_log(out) if x.get("id") == other and x.get("heading") is not None]
+    t_rev = next((x["t"] for x in lines if abs(wrapd(x["heading"] - 180.0)) < 30), None)
+    after = [x for x in lines if t_rev is not None and t_rev - 0.3 <= x["t"] <= t_rev + 1.0]
+    back = [round(x["t"] - t_rev, 2) for x in after if x.get("reverse")]
+    c.check(s, "my client logged their body through the reversal", len(after) > 20, f"{len(after)} frames")
+    c.check(s, "drawn: no brief backwards gait at the reversal", not back, f"backwards at {back[:10]} s")
+    json.dump({"other": other, "settled_offset_deg": settled, "frames": len(after), "backwards_at_s": back}, open(os.path.join(out, "reversal.json"), "w"), indent=1)
 
 
 @scenario("talk")
@@ -477,7 +620,8 @@ def film(run, c):
     if os.environ.get("LIVING_GAME_FILM"):
         c.check(s, "LIVING_GAME_FILM is unset (it overrides the settings file)", False, os.environ["LIVING_GAME_FILM"])
         return
-    out0 = os.path.join(ROOT, ".local/living/verify", run, "ui", "film")
+    # drive() keeps a themed run's evidence apart (`film-<theme>`): its settings file is there.
+    out0 = os.path.join(ROOT, ".local/living/verify", run, "ui", f"film-{THEME}" if THEME else "film")
     st = os.path.join(out0, "settings.json")
     if os.path.exists(st):
         os.remove(st)
@@ -775,10 +919,10 @@ def bar(run, c):
     # `status_of` (a plain status is the body's words when all is well: no pill).
     me = (d["01"] or {}).get("me") or {}
     ms = me.get("meters") or []
-    # The shipped script (stamina-1): health and stamina shown; focus ("Mana") only while short;
+    # The shipped script: health, stamina and focus ("Mana") shown, always (meters-always);
     # energy and hunger feed the statuses off the screen.
     names = [m["name"] for m in ms]
-    c.check(s, "the bars are the world's shown meters (health, stamina; mana only while short), each within its max", names[:2] == ["health", "stamina"] and not ({"energy", "hunger"} & set(names)) and all(0 <= m["value"] <= m["max"] + 1e-3 and m["label"] for m in ms) and all(m["value"] < m["max"] for m in ms if m["name"] == "focus"), str(ms))
+    c.check(s, "the bars are the world's shown meters (health, stamina, mana; always), each within its max", names[:3] == ["health", "stamina", "focus"] and not ({"energy", "hunger"} & set(names)) and all(0 <= m["value"] <= m["max"] + 1e-3 and m["label"] for m in ms), str(ms))
     c.check(s, "the pills are the rules' statuses, none plain", all(x["tone"] != "Plain" for x in me.get("statuses") or []), str(me.get("statuses")))
 
 
@@ -1397,11 +1541,16 @@ def look_walk_others(run, c):
     client draws that body's legs on its travel and its upper body twisted toward the facing
     (the look target from the row, `live.rs` `authority_facing`), logged as `LIVING_GAME_FEET_ID`."""
     s = "look-walk:others"
-    if "token" not in json.load(open(os.path.join(ROOT, ".local/living/verify", run, "state.json"))):
+    def body():
+        r = subprocess.run([sys.executable, V, "sql", "--run", run, "SELECT id FROM my_body", "--as-player"], capture_output=True, text=True)
+        rows = json.loads(r.stdout[r.stdout.find("["):]) if "[" in r.stdout else []
+        return (rows[0]["id"] if rows else None), r.stdout
+    other, t = body()
+    # The run's player identity has a token from the start (`state.json`) but no character until
+    # it joins: join it when it has no body.
+    if other is None:
         subprocess.run([sys.executable, V, "player", "--run", run, "join", "Bender"], capture_output=True, text=True)
-    r = subprocess.run([sys.executable, V, "sql", "--run", run, "SELECT id FROM my_body", "--as-player"], capture_output=True, text=True)
-    t = r.stdout
-    other = json.loads(t[t.find("["):])[0]["id"] if "[" in t else None
+        other, t = body()
     c.check(s, "a second player to walk beside me", other is not None, t[-200:])
     if other is None:
         return
@@ -1644,7 +1793,7 @@ def walk_law(run, c):
 
 @scenario("pools")
 def pools(run, c):
-    """stamina-1's pools on the bar: the focus bar ("Mana", `while_short`) shows only while short;
+    """stamina-1's pools on the bar: the focus bar ("Mana") shows always, full or short;
     a slot whose pool is short of its cost greys in the rules' own words (`short_of`: "not enough
     mana"). The scene lowers `focus_max` to 40 (admin `set_world_law`) so one fire bolt leaves too
     little for a heal (35) or another bolt (30), and restores it after."""
@@ -1659,15 +1808,15 @@ def pools(run, c):
     d = {k: dump(out, k) for k in ["00", "01", "01b", "02"]}
     ms = lambda k: {m["name"]: m for m in (((d[k] or {}).get("me") or {}).get("meters") or [])}
     slot = lambda k, n: (((d[k] or {}).get("extra") or {}).get("slots") or {}).get(f"bar:{n}") or {}
-    c.check(s, "full, the mana bar is not shown (while_short)", "focus" not in ms("00"), str(list(ms("00"))))
+    c.check(s, "before any cast, the mana bar is shown (always shown)", "focus" in ms("00"), str(list(ms("00"))))
     f = ms("01").get("focus")
-    c.check(s, "after a fire bolt it shows, short", f is not None and f["value"] < f["max"], str(f))
+    c.check(s, "after a fire bolt it shows short", f is not None and f["value"] < f["max"], str(f))
     # The bolt's own slot cools down first (a cooldown shows before a pool), then greys too.
     heal, bolt = slot("01", "Skill2"), slot("01b", "Skill3")
     fb = ms("01b").get("focus") or {}
     c.check(s, "a slot whose pool is short of its cost greys in the rules' words (heal; the bolt once cooled down: not enough mana)", "mana" in (heal.get("off") or "").lower() and "mana" in (bolt.get("off") or "").lower() and fb.get("value", 99) < 30, str((heal.get("off"), bolt.get("off"), fb.get("value"))))
     c.check(s, "a slot of another pool is not greyed by it (strike: stamina)", "mana" not in (slot("01", "Primary").get("off") or "").lower(), str(slot("01", "Primary").get("off")))
-    c.check(s, "refilled to its max again, the mana bar goes", "focus" not in ms("02"), str(list(ms("02"))))
+    c.check(s, "with its max restored, the mana bar is still shown", "focus" in ms("02"), str(list(ms("02"))))
 
 
 @scenario("own")
@@ -1806,14 +1955,18 @@ def far(run, c):
     d = {k: dump(out, k) or {} for k in ["01", "02", "03", "04", "05"]}
     hov = lambda k: next((h.get("label") for h in d[k].get("hovered") or [] if h.get("id") == b), None)
     near1, far2, near5 = hov("01"), hov("02"), hov("05")
-    c.check(s, "close up (2 m): the plate says a stranger in their colours", bool(near1) and near1.startswith("a stranger") and "too far" not in near1, f"{near1!r}")
-    c.check(s, "beyond the range (6 m): the plate says someone in their colours, or there is none", far2 is None or re.fullmatch(r"someone in [a-z]+( [a-z]+)?( and [a-z]+( [a-z]+)?)?", far2) is not None, f"{far2!r}; hovered {d['02'].get('hovered')}")
+    # Someone drawn from a look book line is named by its words (`phrase`), made out and from
+    # afar; a VRoid base (a world without looks, the island) by the projection's label and colours.
+    bl = next((x.get("look") for k in d for x in (d[k] or {}).get("looks") or [] if x.get("id") == b), None)
+    ph = line_phrases(bl)
+    c.check(s, "close up (2 m): the plate says a stranger in their colours, or the line's words", bool(near1) and (near1.startswith("a stranger") or (ph and near1 == ph[0])) and "too far" not in near1, f"{near1!r}; phrase {ph}")
+    c.check(s, "beyond the range (6 m): the plate says someone in their colours (or the line's far words), or there is none", far2 is None or re.fullmatch(r"someone in [a-z]+( [a-z]+)?( and [a-z]+( [a-z]+)?)?", far2) is not None or bool(ph and far2 == ph[1]), f"{far2!r}; hovered {d['02'].get('hovered')}; phrase {ph}")
     t3 = d["03"].get("typing") or {}
     c.check(s, "the talk target carries the authority's words", t3.get("to") == b and FAR in (t3.get("label") or "") and " in " not in (t3.get("label") or "").replace(FAR, ""), json.dumps(t3))
     L = log(out)
     said = [x for x in sql(run, f"SELECT id, kind, object, text FROM experience WHERE kind = 'said' AND object = {b}") if line in x.get("text", "")]
     c.check(s, "what I send carries my words and their id, no colour words", re.search(rf'say: "{re.escape(line)}" to #{b}\b', L) is not None and said and not any("someone in" in x.get("text", "") for x in said) and not re.search(r'(say|act)[^\n]*someone in ', L), f"{len(said)} said rows")
-    c.check(s, "close again: a stranger in their colours", bool(near5) and near5.startswith("a stranger"), f"{near5!r}")
+    c.check(s, "close again: a stranger in their colours, or the line's words", bool(near5) and (near5.startswith("a stranger") or (ph and near5 == ph[0])), f"{near5!r}")
     notes_clear(c, s, out)
 
 
@@ -1997,7 +2150,12 @@ def death(run, c):
     c.check(s, "client ran and joined (struck)", code == 0, text[-300:])
     dt = (dump(out, "02") or {})
     words = [t for k, t in dt.get("naming") or [] if k == "death"]
-    c.check(s, "killed by a stranger: named as perceived, never by their name", bool(words) and words[0].startswith("Killed by a stranger") and not any(sname and sname in t for _, t in dt.get("naming") or []), f"{words}; striker {sname!r}")
+    # As perceived: "a stranger in …" on a world without looks, the striker's line's words where they
+    # have a look (`phrase`; a player gets a pool look on a world with looks).
+    sl = (look_rows(run) or {}).get(striker)
+    ph = line_phrases(sl)
+    seen_as = ["Killed by a stranger"] + ([f"Killed by {ph[0]}", f"Killed by {ph[1]}"] if ph else [])
+    c.check(s, "killed by a stranger: named as perceived, never by their name", bool(words) and any(words[0].startswith(x) for x in seen_as) and not any(sname and sname in t for _, t in dt.get("naming") or []), f"{words}; striker {sname!r}; as perceived {seen_as}")
 
 
 @scenario("houses")
@@ -2091,6 +2249,241 @@ def shot(run, c):
     c.check(s, "hurt_by: the shooter in sight, 0 once unseen (a newer hurt)", h1.get("hurt_by") == striker and h2.get("hurt_by") == 0 and h2.get("hurt_ms", 0) > h1.get("hurt_ms", 0), f"{h1}; {h2}")
     c.check(s, "nothing targets or hovers the hidden shooter, and the target plate is not theirs", d["03"].get("targeted") != striker and not any(h.get("id") == striker for h in d["03"].get("hovered") or []), f"targeted {d['03'].get('targeted')}; hovered {d['03'].get('hovered')}")
     c.check(s, "the shooter's name is nowhere", not any(sname in t for k in d for _, t in d[k].get("naming") or []), sname)
+
+
+LOOK_BOOK = os.path.join(ROOT, "living/game/assets/characters/looks.json")
+
+
+def outer_piece(line, upper, outfit=None):
+    """The chip `looks.rs` reads from a line: its outermost upper (or lower) piece's colour, by
+    each outfit style's slot and layer (`style_places`), else the pieces' names with char-4's
+    values. Trim, feet and head pieces give no chip."""
+    import re as _re
+    ranks = {"jersey": 0, "jersey_smock": 0, "jersey_coat": 0, "smock": 1, "coat": 1, "apron": 3} if upper else {"trousers": 0, "skirt": 0}
+    want = "upper" if upper else "lower"
+    best = None
+    for piece in line.get("styles", {}).get("outfit", []):
+        if outfit and piece in outfit:
+            o = outfit[piece]
+            rank = o["layer"] if o["slot"] == want and not o.get("trim") else None
+        else:
+            rank = ranks.get(_re.sub(r"_\d+$", "", piece.removesuffix("-f").removesuffix("-m")))
+        if rank is not None and (best is None or rank > best[0]):
+            best = (rank, piece)
+    return line.get("colors", {}).get("outfit", {}).get(best[1]) if best else None
+
+
+BANDS = {"child": 1, "youth": 2, "adult": 3, "elder": 4}
+
+
+def style_places(line):
+    """Each outfit piece's place from its style file's scene extras, `outfit: {piece, slot,
+    layer, trim}` (char-4's)."""
+    import struct
+    out = {}
+    for piece in line.get("styles", {}).get("outfit", []):
+        path = os.path.join(ROOT, "living/game/assets/lookdev/styles/outfit", f"{piece}.glb")
+        try:
+            raw = open(path, "rb").read()
+            j = json.loads(raw[20:20 + struct.unpack("<I", raw[12:16])[0]])
+        except (OSError, ValueError):
+            continue
+        o = ((j.get("scenes") or [{}])[j.get("scene", 0)].get("extras") or {}).get("outfit")
+        if isinstance(o, dict) and isinstance(o.get("slot"), str):
+            out[piece] = {"slot": o["slot"], "layer": int(o.get("layer", 0)), "trim": bool(o.get("trim"))}
+    return out
+
+
+def look_phrase(words, seen, band):
+    """`living_rules::look::phrase` (living/rules/src/look.rs), the words a person drawn from a look
+    book line is labelled by: `seen` "full" (made out) or "far"; `band` 1 child .. 4 elder."""
+    if seen == "full":
+        noun = (words.get("form") or "").strip() or "person"
+    else:
+        noun = "child" if band <= 1 else ("old figure" if band == 4 else "figure")
+    head = {0: "short ", 2: "tall "}.get(words.get("height", 1), "") + noun
+    out = f"{'an' if head[0] in 'aeiou' else 'a'} {head}"
+    clothes = [x for x in ((words.get("top") or "").strip(), (words.get("bottom") or "").strip()) if x]
+    if clothes:
+        out += " in " + " and ".join(clothes)
+    if seen == "full" and (words.get("hair") or "").strip():
+        out += ", " + words["hair"].strip()
+    out += {0: ", slight", 2: ", heavy-set"}.get(words.get("girth", 1), "")
+    if (words.get("head") or "").strip():
+        out += ", in " + words["head"].strip()
+    if seen == "full" and (words.get("beard") or "").strip():
+        out += ", with " + words["beard"].strip()
+    return out
+
+
+def line_phrases(key):
+    """What the client calls someone drawn from `key`'s line, made out and from afar; None for no
+    key or a key the book lacks (a VRoid base: colour words)."""
+    if not key or not os.path.exists(LOOK_BOOK):
+        return None
+    line = json.load(open(LOOK_BOOK))["lines"].get(key)
+    if not line:
+        return None
+    band = BANDS.get(line["person"]["type"].split("-")[0], 3)
+    return look_phrase(line.get("words") or {}, "full", band), look_phrase(line.get("words") or {}, "far", band)
+
+
+def look_rows(run):
+    """The authority's truth (owner SQL on the private `look` table): each person's line key."""
+    return {r["id"]: r["line"] for r in sql(run, "SELECT id, line FROM look")}
+
+
+def book_copy(out, book, name, drop=(), generation=None):
+    """A test's copy of the look book (`LIVING_GAME_LOOK_BOOK`): lines left out, another generation."""
+    b = json.loads(json.dumps(book))
+    for k in drop:
+        b["lines"].pop(k, None)
+    b["decor"] = [k for k in b.get("decor", []) if k not in drop]
+    if generation:
+        b["generation"], b["generations"] = generation, [generation]
+    os.makedirs(out, exist_ok=True)
+    path = os.path.join(out, f"{name}.looks.json")
+    json.dump(b, open(path, "w"))
+    return path
+
+
+@scenario("looks", cullet=True)
+def looks(run, c):
+    """look-1 (docs/LOOK.md §5, §7) on a Cullet world, whose genesis gives every resident a look
+    row: everyone drawn from their projected key, each key the authority's own (`look.line`), and
+    my own character from my own row. Two residents beside me (`sync:scene`): A drawn from its
+    line, B's line left out of the client's book (a test copy, `LIVING_GAME_LOOK_BOOK`), so B is
+    a VRoid base with one warning line. Chips by the style files' slot and layer. A second drive
+    with a book of another generation (one warning at connect), and a look-dev island tour whose
+    background people wear decor lines only."""
+    s = "looks"
+    if not os.path.exists(LOOK_BOOK):
+        c.check(s, "a look book is on disk", False, LOOK_BOOK)
+        return
+    book = json.load(open(LOOK_BOOK))
+    world = (sql(run, "SELECT look_book FROM world") or [{}])[0].get("look_book", "")
+    rows = look_rows(run)
+    c.check(s, "the world has looks the book holds", world and (world == book["generation"] or world in book.get("generations", [])) and rows and all(k in book["lines"] for k in rows.values()),
+            f"world {world!r}, book {book['generation']!r}; {len(rows)} look rows, {sum(1 for k in rows.values() if k not in book['lines'])} not in the book")
+    a, b = residents(run, 2)
+    ev = os.path.join(ROOT, ".local/living/verify", run, "ui")
+    test_book = book_copy(ev, book, "looks-without-b", drop=[rows.get(b, "")])
+    plan = "ready;sync:scene;cursor:0.5,0.5;wait:5;dump:00;shot:00_drawn;sync:hold;wait:0.6;point:{A};wait:0.5;dump:01;quit".replace("{A}", str(a))
+    out, code, text = drive(run, s, plan, free=[f"{a}:-2.5:1.0", f"{b}:2.0:-1.0"], syncs=["hold=refree"], env={"LIVING_GAME_LOOK_BOOK": test_book})
+    c.check(s, "client ran and joined", code == 0, text[-300:])
+    L = log(out)
+    d0 = dump(out, "00") or {}
+    seen0 = {x["id"] for x in d0.get("seen") or []}
+    c.check(s, "scene: both residents are in view", {a, b} <= seen0, f"{a}, {b} in view {sorted(seen0)}")
+    rows = look_rows(run)
+    by = {x["id"]: x for x in d0.get("looks") or []}
+    held = json.load(open(test_book))["lines"]
+    la, lb = by.get(a, {}), by.get(b, {})
+    c.check(s, "a resident is drawn from the line its row names", la.get("composed") is True and la.get("look") == rows.get(a), f"{json.dumps(la)}; row {rows.get(a)}")
+    wrong = [(x["id"], x.get("look"), rows.get(x["id"])) for x in by.values() if x.get("look") != rows.get(x["id"], "")]
+    c.check(s, "every person drawn carries the key the authority holds for them", by and not wrong, f"{len(by)} drawn; differing {wrong[:3]}")
+    c.check(s, "every key the book holds is drawn composed, every other as a VRoid base", all(x.get("composed") == (x.get("look") in held) for x in by.values()), json.dumps([x for x in by.values() if x.get("composed") != (x.get("look") in held)][:3]))
+    c.check(s, "a key the book lacks: a VRoid base, one warning line", lb.get("composed") is False and lb.get("look") == rows.get(b) and L.count(f"looks: {rows.get(b)} is not in the look book") == 1, f"{json.dumps(lb)}; {L.count('is not in the look book')} warnings")
+    c.check(s, "no warning for people without a key, nor for the generation", "people without a look key" not in L and "was made with look generation" not in L)
+    composed = [x for x in by.values() if x.get("composed")]
+    sc = json.load(open(os.path.join(out, "scene.json"))) if os.path.exists(os.path.join(out, "scene.json")) else {}
+    me_id = sc.get("me")
+    chips = lambda key: [outer_piece(book["lines"][key]["person"], True, style_places(book["lines"][key]["person"])), outer_piece(book["lines"][key]["person"], False, style_places(book["lines"][key]["person"]))]
+    # My own chips are not kept (the labels are for others).
+    off = [(x["id"], x.get("chips"), chips(x["look"])) for x in composed if x["id"] != me_id and (x.get("chips") or [None, None]) != chips(x["look"])]
+    c.check(s, "chips by piece: a composed person's chips are its line's outermost upper and lower pieces' colours", composed and not off, f"{off[:3]}")
+    files = book.get("files") or {}
+    worn = {p for x in composed for p in book["lines"][x["look"]]["person"].get("styles", {}).get("outfit", [])}
+    places = {p: v for x in composed for p, v in style_places(book["lines"][x["look"]]["person"]).items()}
+    differ = [(p, places.get(p), files.get(f"styles/outfit/{p}")) for p in sorted(worn) if f"styles/outfit/{p}" in files and (files[f"styles/outfit/{p}"].get("slot"), files[f"styles/outfit/{p}"].get("layer")) != ((places.get(p) or {}).get("slot"), (places.get(p) or {}).get("layer"))]
+    c.check(s, "every worn outfit style carries its slot and layer, as the book's files list them", worn and set(places) == worn and not differ, f"{len(places)} of {len(worn)} with extras; differing {differ[:3]}")
+    mine = by.get(me_id, {})
+    c.check(s, "my own look comes from my own row", mine.get("composed") is True and mine.get("look") == rows.get(me_id), f"me {me_id}: {json.dumps(mine)}; row {rows.get(me_id)}")
+    # Labels by the line's words (`phrase`): A, pointed at, is named as a mind is told; no plate
+    # on screen carries a seed name.
+    d1 = dump(out, "01") or {}
+    hov = next((h.get("label") for h in d1.get("hovered") or [] if h.get("id") == a), None)
+    want = (line_phrases(rows.get(a)) or (None,))[0]
+    plates = [t for k, t in (d0.get("naming") or []) + (d1.get("naming") or []) if k == "plate"]
+    c.check(s, "labels by the line's words (phrase), no name", hov is not None and hov == want and plates and not any(n and n in " ".join(plates) for n in seed_names(run)), f"hovered {hov!r}, phrase {want!r}; {len(plates)} plates {plates[:3]}")
+    # 2. A book of another generation.
+    other = book_copy(ev, book, "looks-other-generation", generation="c4-not-this-book")
+    out2, code2, text2 = drive(run, "looks-generation", "ready;wait:4;dump:00;quit", env={"LIVING_GAME_LOOK_BOOK": other})
+    L2 = log(out2)
+    c.check(s, "a world generation the book does not hold: one warning at connect", code2 == 0 and L2.count(f"looks: the world was made with look generation {world}") == 1, text2[-200:])
+    # 3. Background people on the look-dev island: from the decor lines only.
+    decor_lines = set(book.get("decor", []))
+    wearable = set(book["lines"]) - decor_lines
+    tour = os.path.join(ROOT, ".local/living/verify", run, "ui", "looks-decor")
+    os.makedirs(tour, exist_ok=True)
+    client = os.path.join(os.environ.get("CARGO_TARGET_DIR", os.path.join(ROOT, ".local/target")), "release/living-game")
+    e3 = dict(os.environ, LIVING_GAME_LOOKDEV="1", LIVING_GAME_TOUR=tour, LIVING_GAME_TOUR_ONLY="island", LIVING_GAME_TOUR_SHOTS="default", LIVING_GAME_SIZE="1280x720",
+              RUST_LOG="info,wgpu=warn,naga=warn,living_game::island=debug")
+    with open(os.path.join(tour, "client.log"), "w") as f:
+        r3 = subprocess.run([client], env=e3, stdout=f, stderr=subprocess.STDOUT, cwd=ROOT, timeout=600)
+    drawn = re.findall(r"looks: background person \S+ drawn from decor (lk_[0-9a-f]{16})", log(tour))
+    c.check(s, "background people are drawn from the decor lines, never a line a character wears", r3.returncode == 0 and drawn and set(drawn) <= decor_lines and not set(drawn) & wearable,
+            f"{len(drawn)} drawn, {len(set(drawn))} lines; outside decor {sorted(set(drawn) - decor_lines)[:3]}")
+
+
+@scenario("looks-old")
+def looks_old(run, c):
+    """look-1 on a world made without looks (no look rows and an empty `world.look_book`):
+    everyone drawn as a VRoid base, quietly, with one line at connect. Every shipped seed carries
+    looks since look-1-island, so the world is the island's seed without them (`looks_seed.py RUN
+    --old`, then launch with it fresh)."""
+    s = "looks-old"
+    world = (sql(run, "SELECT look_book FROM world") or [{}])[0].get("look_book", "")
+    c.check(s, "the world has no looks", world == "" and not look_rows(run), f"look_book {world!r}; make it with looks_seed.py {run} --old")
+    out, code, text = drive(run, s, "ready;cursor:0.5,0.5;wait:5;dump:00;quit")
+    L = log(out)
+    by = {x["id"]: x for x in (dump(out, "00") or {}).get("looks") or []}
+    warned = [l for l in L.splitlines() if "looks:" in l and "WARN" in l]
+    c.check(s, "everyone a VRoid base without a key, one line at connect, no warning", code == 0 and by and not any(x.get("composed") or x.get("look") for x in by.values()) and L.count("looks: this world was made before looks") == 1 and not warned,
+            f"{len(by)} drawn; {L.count('made before looks')} connect lines; warnings {warned[:2]}")
+
+
+@scenario("looks-band", cullet=True)
+def looks_band(run, c):
+    """A band change redrawn in place, on a Cullet world at a lab pace (`looks_seed.py RUN`, then
+    launch with its seed: a year every 20 s). Three residents whose bands change in the first
+    minute are held beside me; a burst of dumps 0.2 s apart for 70 s. Each key change seen is
+    the authority's new line, composed before and after, drawn in every dump through it and
+    never jumping on screen."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("looks_seed", os.path.join(HERE, "looks_seed.py"))
+    ls = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(ls)
+    s = "looks-band"
+    w = (sql(run, "SELECT life_pace, year_days, look_book FROM world") or [{}])[0]
+    c.check(s, "the world runs at the lab pace", abs(w.get("life_pace", 0) - ls.PACE) < 1e-6 and w.get("year_days") == 1, f"{w}; make it with looks_seed.py {run}")
+    if abs(w.get("life_pace", 0) - ls.PACE) >= 1e-6:
+        return
+    people = {r["name"]: r["id"] for r in sql(run, "SELECT id, name, alive FROM character WHERE kind = 'person'") if r.get("alive")}
+    ids = [people[n] for n in ls.CHANGERS if n in people][1:4]
+    before = look_rows(run)
+    burst = "".join(f"dump:b{i:03d};wait:0.2;" + (f"shot:b{i:03d};" if i % 10 == 0 else "") for i in range(350))
+    plan = f"ready;sync:scene;cursor:0.5,0.5;wait:1;{burst}quit"
+    out, code, text = drive(run, s, plan, free=[f"{ids[0]}:-2.5:1.0", f"{ids[1]}:2.0:-1.0", f"{ids[2]}:0.5:2.2"])
+    c.check(s, "client ran and joined", code == 0, text[-300:])
+    after = look_rows(run)
+    L = log(out)
+    dumps = [dump(out, f"b{i:03d}") or {} for i in range(350)]
+    changes = []
+    for pid in ids:
+        keys = [next((x for x in d.get("looks") or [] if x["id"] == pid), None) for d in dumps]
+        for i in range(1, len(keys)):
+            if keys[i] and keys[i - 1] and keys[i]["look"] != keys[i - 1]["look"]:
+                changes.append((pid, i, keys[i - 1]["look"], keys[i]["look"]))
+    c.check(s, "a band change seen: a resident beside me took a new key", changes, f"{len(changes)} changes among {ids}; rows changed {[k for k in ids if before.get(k) != after.get(k)]}")
+    for pid, i, old, new in changes:
+        lo, hi = max(0, i - 10), min(len(dumps), i + 15)
+        win = dumps[lo:hi]
+        looks_w = [next((x for x in d.get("looks") or [] if x["id"] == pid), {}) for d in win]
+        feet = [next((x["feet"] for x in d.get("seen") or [] if x["id"] == pid), None) for d in win]
+        steps = [round(((p[0] - q[0]) ** 2 + (p[1] - q[1]) ** 2) ** 0.5) for p, q in zip(feet, feet[1:]) if p and q]
+        c.check(s, f"#{pid} redrawn in place for its new line", new == after.get(pid) and all(x.get("composed") for x in looks_w) and all(feet) and steps and max(steps) <= 60 and f"looks: #{pid} redrawn for a new look ({old} → {new})" in L,
+                f"{old} → {new} (row {after.get(pid)}); composed {[x.get('composed') for x in looks_w].count(True)}/{len(looks_w)}; in view {sum(1 for f in feet if f)}/{len(feet)}; largest step {max(steps) if steps else None} px")
 
 
 def main():

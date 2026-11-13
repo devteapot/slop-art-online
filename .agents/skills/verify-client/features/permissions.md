@@ -21,11 +21,11 @@ A client invokes reducers with its own identity. `require_admin` (`living/author
 .agents/skills/verify-client/scripts/drive.py --run "$R"
 ```
 
-`reducers.md` records every identity, reducer, HTTP status, response, and verdict. `reducers.json` also records arguments and expected text. The copied admin and mind inventories must match the source before any calls run.
+`reducers.md` records every identity, reducer, HTTP status, response, and verdict. The mind service connects as the world's admin, so `require_admin` cannot refuse it an admin reducer by identity: before any call, `drive.py` fails if `living/mind/src` calls `admin_set_vitals`, `kill`, `relook`, `set_world_law` or `install_script` (`never_by_minds`). `reducers.json` also records arguments and expected text. The copied admin and mind inventories must match the source before any calls run.
 
 | Caller and target | Expected result |
 | --- | --- |
-| Non-admin calls to every admin reducer | HTTP 530, `admin only` |
+| Non-admin calls to every admin reducer (`ADMIN` in `drive.py`, `admin_set_vitals` among them since 2026-11-13) | HTTP 530, `admin only` |
 | `mind_*` on an AI or another player's actor | HTTP 530, `not your character` |
 | `mind_*` on the caller's own joined actor | HTTP 200 |
 | External `tick` or `housekeeping` | HTTP 404, `No such procedure` |
@@ -38,7 +38,7 @@ A client invokes reducers with its own identity. `require_admin` (`living/author
 | Tokenless HTTP `human_*` without a character | HTTP 530, `you have no living character` |
 | Tokenless HTTP `join` | HTTP 200 for that request's new identity |
 
-Own-character `mind_routines`, `mind_install`, `mind_say`, `mind_act`, `mind_skip`, `mind_consolidated`, `mind_update` and `mind_judged` are currently allowed for non-AI players. Since `attention-cues` the fixture's `mind_update` carries a cue (`MindUpdate.cues`): refused like the rest for another's character and for anonymous; for one's own played character it succeeds and keeps no cue (`mind.rs` `mind_update`: a played character sees with its player's eyes). The driver checks the owner's `cue` snapshot holds no row for the three identities' characters (`cues-owner.json`). Authorization does not require `ai = true`. The fixtures install a routine and plan, project a persona, append scripted thoughts, submit a signal act, and set an integration cursor. This is current controller authority, not an inference about intended product policy.
+Own-character `mind_routines`, `mind_install`, `mind_install_way` (since `mind-say-way`), `mind_say`, `mind_act`, `mind_skip`, `mind_consolidated`, `mind_update` and `mind_judged` are currently allowed for non-AI players. Since `attention-cues` the fixture's `mind_update` carries a cue (`MindUpdate.cues`): refused like the rest for another's character and for anonymous; for one's own played character it succeeds and keeps no cue (`mind.rs` `mind_update`: a played character sees with its player's eyes). The driver checks the owner's `cue` snapshot holds no row for the three identities' characters (`cues-owner.json`). Authorization does not require `ai = true`. The fixtures install a routine and plan, project a persona, append scripted thoughts, submit a signal act, and set an integration cursor. This is current controller authority, not an inference about intended product policy.
 
 `reducer-effects.json` must contain each actor's routine, scripted thought references, the later `your command` plan, and speech chronicle line. A HTTP 200 proves acceptance; the subscription rows prove these effects.
 

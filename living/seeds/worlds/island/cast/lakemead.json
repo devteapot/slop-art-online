@@ -30,7 +30,7 @@
       "fire",
       "basketry",
       "storage",
-      "mending"
+      "wound_tending"
      ],
      "parents": [],
      "ties": [
@@ -56,7 +56,7 @@
       "fishing",
       "smoking",
       "fire",
-      "mending",
+      "wound_tending",
       "basketry",
       "shelter"
      ],
@@ -76,7 +76,7 @@
      "occupation": "child",
      "role": "Rill's son; mends the punt and knows the shallow pools of the lake",
      "knows": [
-      "mending",
+      "wound_tending",
       "fishing"
      ],
      "parents": [

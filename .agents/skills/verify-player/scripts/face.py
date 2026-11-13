@@ -21,13 +21,22 @@ of the player, who faces east (the `face` act).
    behind and north of the walker (beyond side vision of the travel) is in view while it walks
    east looking north, out of view when it lets the look go. Looking north again and stopping
    (`human_move(0, 0)`), the body finishes the turn north once it stands.
+3b. The walk reversing with the look held aside (look-4): a play-test's moment of walk keys
+   reversing and turning sharply while the look swings and is held far aside (only its keys and
+   looks, at their own timing), from a stand on open ground facing the first walk's way. Four
+   threads read `my_body` throughout. No row turns the facing faster than the turn rate (the
+   travel's turn and the offset's together, row by row); at every row seen, the facing goes on
+   from where the row before left it, within what one row written and replaced between two
+   reads could explain (twice the turn rate over the time between reads, its 99th percentile,
+   plus one 60 Hz tick); and the facing rebuilt every 10 ms has no stretch over 90 degrees in 0.25 s.
+   `--scene reversal` runs only this.
 4. The input bucket (`input_hz`/`input_burst`, shared with `human_move`), narrowed by the admin's
    `set_world_law` to one a second (the laws' least) and three in a burst: of eight looks 90 degrees
    apart, three (or four, with a refill meanwhile) are taken and the rest refused ("too many movement inputs"), and a `human_move` right
    after is refused too. The laws are put back to 30 and 15.
 5. Anonymous: refused ("you have no living character").
 
-    face.py --run RUN
+    face.py --run RUN [--scene all|reversal]
 
 Needs `verify.py launch --run RUN` (any seed; scoped build). Admin `place_at`, `set_behavior`
 and `set_world_law` set the scene. Writes `RUN/face.json`. Python standard library only.
@@ -38,6 +47,7 @@ import importlib.util
 import json
 import math
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -197,13 +207,134 @@ def walk_look(p, me, at, deg, release=False, pre=None):
     }
 
 
+# A play-test's moment (2026-11-12 22:04:12, look-4): the walk keys reversing and turning sharply
+# while the look swings and is held far aside, as (ms from the first, M walk / L look, degrees
+# with +y south, None to stop or let go). Only the movement keys and the looks.
+REVERSAL = [(0, 'M', 157.5), (343, 'M', None), (468, 'L', 146.9), (574, 'L', 137.5), (675, 'L', 129.2), (701, 'M', -22.5), (774, 'L', 121.5), (892, 'L', 90.6), (993, 'L', 20.8), (1099, 'L', 8.8), (1725, 'M', 22.5), (1799, 'L', 4.5), (1849, 'M', -22.5), (1899, 'L', -8.2), (2018, 'L', -2.0), (2117, 'M', None), (2124, 'L', 3.8), (2458, 'L', -0.6), (2683, 'L', -4.6), (2751, 'M', 67.5), (2792, 'L', -10.1), (2866, 'M', None), (2891, 'L', -21.4), (3076, 'L', -26.2), (3150, 'L', None), (3250, 'L', 140.6), (3366, 'L', 112.3), (3483, 'L', 95.4), (3584, 'L', 86.3), (3690, 'L', 80.0), (3800, 'L', 75.7), (3923, 'M', -112.5), (3957, 'M', -67.5), (4017, 'L', 80.9), (4118, 'L', 101.2), (4249, 'L', 108.0), (4317, 'M', None), (4350, 'L', 114.7), (4516, 'L', 120.8), (4634, 'L', 129.8), (4734, 'L', 134.2), (4940, 'L', 139.0), (5040, 'L', 153.8), (5142, 'L', 167.5)]
+
+
+def row_rate(b):
+    """The fastest the facing turns in the world on one `my_body` row (rad/s): the travel's turn
+    plus the facing offset's while both turn, each alone after."""
+    both = min(b["turn_s"], b["face_turn_s"]) if b["turn"] and b["face_turn"] else 0.0
+    rates = [abs(b["turn"] + b["face_turn"])] if both > 0 else []
+    if b["turn"] and b["turn_s"] > both:
+        rates.append(abs(b["turn"]))
+    if b["face_turn"] and b["face_turn_s"] > both:
+        rates.append(abs(b["face_turn"]))
+    return max(rates, default=0.0)
+
+
+READERS = 4
+
+
+def reversal(p, me, at):
+    """Replay `REVERSAL` from a stand at `at`, facing the first walk's way with no look held (as
+    the play-test's body stood), through `human_move` and `human_face` at its own timing, while
+    `READERS` threads read `my_body` without pause. The facing is rebuilt every 10 ms from the rows
+    seen (each from its `t_ms`, the latest row that had begun). Returns:
+    - `max_row_rate`: the fastest any seen row turns the facing (exact, row by row);
+    - `steps`: at each seen row, how far its facing at its `t_ms` is from the row before it then.
+      A jump shows there; so does a row written and replaced between two reads, by at most
+      twice the turn rate over the time between reads (`read_gap_ms`, the 99th percentile);
+    - the track's largest change within 0.25 s and its stretches over 90 degrees."""
+    first = math.radians(REVERSAL[0][2])
+    p.call("human_face", [0.0, 0.0])
+    p.call("human_move", [0.0, 0.0, False])
+    p.call("place_at", [me, at[0], at[1]], "admin")
+    time.sleep(0.8)
+    p.call("human_face", [math.cos(first), math.sin(first)])
+    time.sleep(1.0)
+    p.call("human_face", [0.0, 0.0])
+    time.sleep(0.5)
+    rows, reads, done, lock = {}, [], threading.Event(), threading.Lock()
+
+    def watch():
+        while not done.is_set():
+            b = body(p)
+            with lock:
+                reads.append(time.monotonic())
+                if b:
+                    rows[b["t_ms"]] = b
+
+    ws = [threading.Thread(target=watch, daemon=True) for _ in range(READERS)]
+    for i, w in enumerate(ws):
+        w.start()
+        time.sleep(0.007)
+    time.sleep(0.3)
+    t0 = time.monotonic()
+    for at_ms, kind, deg in REVERSAL:
+        wait = at_ms / 1000.0 - (time.monotonic() - t0)
+        if wait > 0:
+            time.sleep(wait)
+        v = [0.0, 0.0] if deg is None else [math.cos(math.radians(deg)), math.sin(math.radians(deg))]
+        if kind == 'M':
+            p.call("human_move", v + [False])
+        else:
+            p.call("human_face", v)
+    time.sleep(1.5)
+    done.set()
+    for w in ws:
+        w.join()
+    reads.sort()
+    gaps = sorted(b - a for a, b in zip(reads, reads[1:]))
+    gap = gaps[int(0.99 * (len(gaps) - 1))]
+    order = sorted(rows)
+    steps = [[t - order[0], round(math.degrees(math.remainder(facing_at(rows[t], t) - facing_at(rows[order[i - 1]], t), math.tau)), 2)] for i, t in enumerate(order[1:], 1)]
+    track = []
+    t, j = order[0], 0
+    while t <= order[-1] + 1000:
+        while j + 1 < len(order) and order[j + 1] <= t:
+            j += 1
+        track.append((t, facing_at(rows[order[j]], t)))
+        t += 10
+    unwrapped, acc = [], None
+    for i, (t, f) in enumerate(track):
+        acc = f if acc is None else acc + math.remainder(f - track[i - 1][1], math.tau)
+        unwrapped.append((t, acc))
+    worst, jumps, inside = 0.0, 0, False
+    for i, (t, f) in enumerate(unwrapped):
+        win = [g for u, g in unwrapped[i:i + 26] if u <= t + 250]
+        span = max(win) - min(win)
+        worst = max(worst, span)
+        if span > math.radians(90) and not inside:
+            jumps += 1
+        inside = span > math.radians(90)
+    return {"rows_seen": len(order), "reads": len(reads), "read_gap_ms": round(gap * 1000.0, 1), "max_row_rate": round(max(row_rate(rows[t]) for t in order), 3),
+            "steps": [s for s in steps if abs(s[1]) > 0.05], "max_step_deg": max((abs(s[1]) for s in steps), default=0.0), "max_change_deg_0_25s": round(math.degrees(worst), 1), "jumps_over_90": jumps,
+            "track_20hz": [[t, round(math.degrees(f), 1)] for t, f in track[::5]], "rows": [rows[t] for t in order]}
+
+
 def near(a, b, tol):
     return abs(math.remainder(a - b, math.tau)) <= tol
+
+
+def reversal_check(p, me, around):
+    """3b. The walk reversing with the look held aside (look-4): the facing turns on from where it
+    was, never faster than the turn rate, so it never jumps."""
+    spot = open_ground(p, around, box=(-12, 12, -12, 12))
+    A.check(p, "open ground to reverse on", spot is not None, f"{spot}")
+    if spot is None:
+        return None
+    rev = reversal(p, me, spot)
+    EVIDENCE["reversal"] = rev
+    # A steering update runs at the first tick after it falls due and starts where the last
+    # segment ended (`motion::resume_at`): a sample may take in one tick of turning at once.
+    tick = 1.0 / 60.0
+    A.check(p, "walk reversing with the look held aside: no row turns the facing faster than the turn rate", rev["max_row_rate"] <= RATE + 1e-3, f"{rev['rows_seen']} rows seen, fastest {rev['max_row_rate']} rad/s")
+    bound = math.degrees(2 * RATE * rev["read_gap_ms"] / 1000.0 + RATE * tick) + 0.5
+    A.check(p, "and the facing goes on where the last row left it (any step within what a row missed between reads explains)", rev["max_step_deg"] <= bound, f"largest step at a row {rev['max_step_deg']} deg (bound {bound:.1f} deg from {rev['read_gap_ms']} ms between reads at the 99th percentile, {rev['reads']} reads); steps {rev['steps']}")
+    A.check(p, "and over any 0.25 s it changes at most the turn rate allows: no stretch over 90 degrees", rev["jumps_over_90"] == 0 and rev["max_change_deg_0_25s"] <= math.degrees(RATE * (0.25 + tick)) + rev["max_step_deg"] + 0.5, f"largest change in 0.25 s {rev['max_change_deg_0_25s']} deg, {rev['jumps_over_90']} stretches over 90")
+    p.call("human_move", [0.0, 0.0, False])
+    p.call("human_face", [0.0, 0.0])
+    time.sleep(1.0)
+    return rev
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--run", required=True)
+    ap.add_argument("--scene", choices=["all", "reversal"], default="all", help="reversal: only the walk reversing with the look held aside")
     a = ap.parse_args()
     p = A.P(a.run)
     me = p.me("player", "Looker")
@@ -234,6 +365,9 @@ def main():
         return code, out
 
     try:
+        if a.scene == "reversal":
+            reversal_check(p, me, (px, py))
+            return finish(p)
         p.call("set_world_law", ["fov_on", "true"], "admin")
         # Face east with the `face` act: R is behind.
         p.call("human_act", [json.dumps({"do": "face", "target": {"at": [px + 4.0, py]}})])
@@ -333,6 +467,8 @@ def main():
         EVIDENCE["stopped"] = bs
         A.check(p, "stopping with the look held: the body stands and finishes the turn north", bs["vx"] == 0 and bs["vy"] == 0 and near(facing_end(bs), -math.pi / 2, 0.05) and near(heading_end(bs), -math.pi / 2, 0.05), f"facing {round(facing_end(bs), 2)} heading {round(heading_end(bs), 2)} v {bs['vx']},{bs['vy']}")
         face(0.0, 0.0, 0.3)
+
+        reversal_check(p, me, (px, py))
 
         # 4. The input bucket, narrowed for the check by the laws (`set_world_law`): one input a
         #    second (the least the laws take: `input_hz` is clamped to 1..120), three in a burst.

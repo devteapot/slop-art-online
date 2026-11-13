@@ -15,7 +15,7 @@
 //!   hidden state, so every animal now decides on its own; the word is ignored with a warning.
 //!
 //! The rules are not touched: what the animal can do is what its species' skills allow, and
-//! every graph goes through the same `mind_install` as before.
+//! every graph goes through the same `mind_install_way` (with no line) as a person's.
 
 use living_bindings::*;
 use serde_json::{json, Value};
@@ -221,11 +221,7 @@ impl super::Minds {
         let recalled = self.recall_for(actor, &self.scene_cues(actor, &scene, &d.reason), 10, 0, "animal").await;
         let mut mind = recalled.mind;
         mind.extend(recalled.judgments.into_iter().filter(|j| !j.starts_with('(')).map(|j| format!("feels sure: {j}")));
-        let experiences: Vec<String> = {
-            let all = self.experiences(actor);
-            let n = all.len();
-            all.iter().skip(n.saturating_sub(8)).map(|e| self.exp_line(e, &fmt, false)).collect()
-        };
+        let experiences: Vec<String> = self.experiences_upto(actor, d.updated_ms, 8).iter().map(|e| self.exp_line(e, &fmt, false)).collect();
         let temperament = self.conn.db.persona().id().find(&actor).map(|p| format!("{} (mood: {})", p.traits, p.mood)).unwrap_or_default();
         let skills = sp.skills.clone().unwrap_or_default();
         let signals: Vec<String> = sp.signals.keys().cloned().collect();
@@ -268,7 +264,7 @@ impl super::Minds {
         let (g, pruned) = living_rules::graph::from_value_for(v["graph"].clone(), sp).map_err(|e| anyhow::anyhow!(e))?;
         detail["pruned"] = json!(pruned);
         log::info!("{} the {} feels: {feeling} → {impulse} ({strength}, weight {w})", c.name, c.kind);
-        self.install(actor, g.to_json(), impulse.to_string(), String::new(), 0, d.updated_ms, t(format!("{feeling} → {impulse}"), detail)).await
+        self.install(actor, g.to_json(), impulse.to_string(), String::new(), 0, String::new(), d.updated_ms, t(format!("{feeling} → {impulse}"), detail)).await
     }
 }
 

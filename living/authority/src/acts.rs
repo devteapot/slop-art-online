@@ -119,6 +119,11 @@ pub fn outcome(ctx: &ReducerContext, a: &Activity, ok: bool, why: &str, now: u64
     let text = if ok {
         let why = why.trim();
         format!("You did what you had decided: {}{}", a.label, if why.is_empty() { ".".to_string() } else { format!(" ({why}).") })
+    } else if code == living_rules::outcome::act::MOVED {
+        // Broken off by moving: the rules' sentence says it whole ("The wave stopped: you moved
+        // off before it was done.").
+        let mut c = why.trim().trim_end_matches('.').chars();
+        c.next().map_or(String::new(), |f| f.to_uppercase().collect::<String>() + c.as_str() + ".")
     } else {
         format!("What you had decided did not work out: {}: {why}.", a.label)
     };

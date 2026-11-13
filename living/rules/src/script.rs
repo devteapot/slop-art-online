@@ -62,6 +62,9 @@ pub struct ActorFacts {
     /// Who last hurt the actor, and how long ago (ms; none when never).
     pub hurt_by: u32,
     pub hurt_ago: Option<f32>,
+    /// The one who last hurt the actor is alive and within the `wake_reach` law of it, and the
+    /// fight is still on (struck within the authority's fight window, `act::FIGHT_MS`).
+    pub hurt_by_near: bool,
     /// How long ago the actor yielded (ms; none when it has not).
     pub yielded_ago: Option<f32>,
     /// Creatures the actor senses (in sight, or smelled for a species with a scent) by kind;
@@ -279,7 +282,14 @@ pub struct Regard {
     /// is, and whose community they belong to, cannot be told. A person is then "someone too far
     /// away to make out", known or not (docs/STRANGERS.md, far-label).
     pub far: bool,
+    /// How much of the target's look a mind is told (docs/LOOK.md §3): `Full` for oneself and
+    /// whoever is made out, `Far` for someone too far away to make out (a law's `far`), as a
+    /// law's `look` ("full", "far", "none") says otherwise. The look's key reaches a player's
+    /// client whenever the target is seen, whatever this is.
+    pub look: LookSeen,
 }
+
+pub use crate::look::LookSeen;
 
 impl Regard {
     /// The rule without a `perceived_of` law: names when known (animals know their own kind's),
@@ -287,7 +297,7 @@ impl Regard {
     pub fn default_for(p: &RegardIn) -> Self {
         let name = p.own || p.known || (p.observer_kind != "person" && p.observer_kind == p.target_kind);
         let health = if p.own || p.revealed.iter().any(|r| r == "health") { Precision::Exact } else { Precision::Band };
-        Self { name, health, far: false }
+        Self { name, health, far: false, look: LookSeen::Full }
     }
 }
 
@@ -491,6 +501,16 @@ pub struct Laws {
     /// Sight depends on facing (the `field` of `senses(a)`; the geometry is the `fov_*` laws,
     /// read by the script).
     pub fov_on: bool,
+    /// Wolves' starting instincts carry the spacing reflex (docs/PACK_MIND.md, decision 1):
+    /// beside each hunt, a weighted desire to keep apart from mates while closing on the prey
+    /// (`graph::with_pack_reflex`). Read where an instinct is installed; a world turns it off.
+    pub pack_reflex: bool,
+    /// A body struck this many seconds ago cannot fall asleep (the script's `sleep_check`, the
+    /// same for every controller).
+    pub alert_after_hit_s: f32,
+    /// A body cannot fall asleep while the one who last struck it, in a fight still on, is within
+    /// `wake_reach` (the fact `hurt_by_near`).
+    pub alert_while_attacker_near: bool,
     /// What a graph's `relation: "stranger"` filter means (docs/STRANGERS.md): off, no
     /// relation row (or one labelled "stranger"); on, someone whose name one does not know
     /// (`perception::knows_name`, the rule scenes and percepts name people by).
@@ -526,6 +546,10 @@ pub struct Laws {
     /// once per this many ms (docs/BATTLE_SCALE.md, fix 3); the percept is written at once and in
     /// full. 0: woken by each, as before.
     pub witness_wake_ms: f32,
+    /// What an onlooker sees of fights it is not party to is told as one line per this many ms
+    /// (docs/BATTLE_SCALE.md, fix 4): every blow it could see, with counts and outcomes. A blow
+    /// at it or by it is told at once. 0: each fight's first blow told at once, as before.
+    pub witness_fold_ms: f32,
     /// What each observer makes of each target (name known, the `perceived_of` answer) is
     /// computed once per transaction and shared (`perception::with_answers`). Off: every
     /// asker computes it afresh (the same answers; for measuring the cache).
@@ -533,6 +557,27 @@ pub struct Laws {
     /// Diagnostic: every shared answer is also computed afresh and compared; differences are
     /// logged and counted (`perception::report_answers`). Costs both.
     pub regard_cache_check: bool,
+    /// A diagnostic: while profiling (`set_profile`), also time the parts of a behaviour graph's
+    /// evaluation (its conditions, targets, act starts, alerts), docs/BATTLE_SCALE.md. Off by
+    /// default: those spans are many and would weigh on what an ordinary profile measures.
+    pub profile_detail: bool,
+    /// A move's check before it starts is given a context of the fields the check reads alone
+    /// (its plan; docs/BATTLE_SCALE.md, battle-cheap path 1): the same answer, without gathering
+    /// what it never reads (kin near, practice, community and home, warmth). Off: the whole context.
+    pub check_ctx_plan: bool,
+    /// Diagnostic: every such check is also asked with the whole context, and a difference logged
+    /// and counted (`diag:` `check_ctx:differed`).
+    pub check_ctx_check: bool,
+    /// The body's alarms (`status_of`) are answered from the last answer while no field it reads
+    /// has crossed one of its levels (battle-cheap path 2). Off: asked at every evaluation.
+    pub alarm_cells: bool,
+    /// Diagnostic: every alarm answer from a cell is also asked afresh, and a difference logged
+    /// and counted (`alarm:differed`).
+    pub alarm_cells_check: bool,
+    /// Diagnostic: warmth (battle-cheap path 3: only what warms or shelters, visited in place)
+    /// is also worked out from a full copy, and a difference logged and counted
+    /// (`warmth:differed`).
+    pub warmth_check: bool,
     /// The fast lane (docs/FAST_LANE.md): a mind-run character's re-plan between blows, asked
     /// of its mind on a blow taken or a move it sees repeated. Off: none is asked.
     pub fast_lane_on: bool,
@@ -614,6 +659,9 @@ impl Default for Laws {
             longing_after_min: 20.0,
             longing_food: 0.0,
             fov_on: false,
+            pack_reflex: true,
+            alert_after_hit_s: 15.0,
+            alert_while_attacker_near: true,
             stranger_by_name: false,
             cues_on: false,
             cue_cooldown_s: 600.0,
@@ -625,8 +673,15 @@ impl Default for Laws {
             think_framing: false,
             cue_check_s: 1.0,
             witness_wake_ms: 500.0,
+            witness_fold_ms: 2000.0,
             regard_cache: true,
             regard_cache_check: false,
+            profile_detail: false,
+            check_ctx_plan: true,
+            check_ctx_check: false,
+            alarm_cells: true,
+            alarm_cells_check: false,
+            warmth_check: false,
             fast_lane_on: false,
             seen_again_n: 3.0,
             fast_lane_rate: 2.0,
@@ -947,6 +1002,8 @@ pub struct Scripts {
     skills: std::sync::Arc<crate::catalog::Skills>,
     /// The ways of speaking (`<way>_speech()`), in their order.
     ways: Vec<speech::WaySpec>,
+    /// The words a speaker uses for someone by their relation to them (`kin_terms()`), by relation.
+    kin: speech::KinTerms,
     /// Functions of no parameter.
     nullary: HashSet<String>,
     /// What each function reads of its parameters.
@@ -1330,7 +1387,7 @@ impl Scripts {
         let nullary = ast.iter_functions().filter(|f| own(f.name) && f.params.is_empty()).map(|f| f.name.to_string()).collect();
         let fields = fields.unwrap_or_else(|| fields::Fields::analyze(&ast));
         let reach = Reach { day: 0.0, night: 0.0, hearing: 0.0, glow: 0.0 };
-        let mut s = Self { engine, ast, fns, unary, nullary, shapes: Default::default(), shows: Default::default(), skills: Default::default(), ways: Vec::new(), fields, plans: Default::default(), names: Default::default(), lists: Default::default(), needs: Default::default(), senses: Default::default(), moves: Default::default(), pools: Default::default(), glows: Default::default(), lives: Default::default(), hour_ms, daylight: Default::default(), laws: Default::default(), reach, borrowed, structures: Default::default(), seasons: Default::default(), tables, source: source.to_string(), law_errors: Default::default(), about: Ok(Vec::new()), ui: Default::default(), body: Default::default(), makings: Default::default() };
+        let mut s = Self { engine, ast, fns, unary, nullary, shapes: Default::default(), shows: Default::default(), skills: Default::default(), ways: Vec::new(), kin: Default::default(), fields, plans: Default::default(), names: Default::default(), lists: Default::default(), needs: Default::default(), senses: Default::default(), moves: Default::default(), pools: Default::default(), glows: Default::default(), lives: Default::default(), hour_ms, daylight: Default::default(), laws: Default::default(), reach, borrowed, structures: Default::default(), seasons: Default::default(), tables, source: source.to_string(), law_errors: Default::default(), about: Ok(Vec::new()), ui: Default::default(), body: Default::default(), makings: Default::default() };
         // Skills in the order the source declares them (the last declaration of a name counts).
         let declared = |name: &str| source.rfind(&format!("fn {name}_spec(")).unwrap_or(usize::MAX);
         // Required entry points.
@@ -1356,6 +1413,7 @@ impl Scripts {
         s.skills = std::sync::Arc::new(skills);
         s.makings = s.read_makings()?;
         s.ways = s.read_ways()?;
+        s.kin = s.read_kin()?;
         s.structures = s.read_structures()?;
         s.seasons = s.read_seasons()?;
         s.laws = s.read_laws()?;
@@ -1511,6 +1569,21 @@ impl Scripts {
     /// The ways of speaking (`<way>_speech()`), read once here, in their `order` (then the
     /// source's). A script that declares none speaks by the shipped `say` (today's speech), so a
     /// world installed before ways were declared keeps speaking until its next install.
+    /// The world's kin terms (`kin_terms()`, a map of relation to words), or the defaults when
+    /// the script has none (`speech::KinTerms::default`).
+    fn read_kin(&self) -> Result<speech::KinTerms, String> {
+        if !self.has("kin_terms") {
+            return Ok(speech::KinTerms::default());
+        }
+        let m = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "kin_terms", ()).map_err(|e| format!("kin_terms: {e}"))?.try_cast::<Map>().ok_or("kin_terms must return a map of relation to a list of words")?;
+        speech::KinTerms::of(&m)
+    }
+
+    /// The words a speaker uses for someone by their relation to them (`kin_terms()`).
+    pub fn kin(&self) -> &speech::KinTerms {
+        &self.kin
+    }
+
     fn read_ways(&self) -> Result<Vec<speech::WaySpec>, String> {
         let mut ways = Vec::new();
         for f in self.nullary.iter().filter(|f| f.ends_with("_speech")) {
@@ -1895,7 +1968,7 @@ impl Scripts {
         let Some(i) = context::ACTOR.iter().position(|f| *f == field) else { return false };
         ["_check", "_duration", "_done"].iter().any(|p| {
             let f = format!("{skill}{p}");
-            self.has(&f) && self.plan(&f).actor & (1 << i) != 0
+            self.has(&f) && self.plan(&f).actor & (1u64 << i) != 0
         })
     }
 
@@ -2221,6 +2294,49 @@ impl Scripts {
         Ok(l)
     }
 
+    /// The world's look bands (docs/LOOK.md §4): the `look_bands()` law's `youth` and `adult`
+    /// ages in years (shipped `#{ youth: 12.0, adult: 18.0 }`); without the law, or with one that
+    /// fails (an install refuses it: `look_bands_law`), those defaults.
+    pub fn look_bands(&self) -> crate::look::LookBands {
+        self.look_bands_law().unwrap_or_default()
+    }
+
+    /// The `look_bands()` law's thresholds, or what is wrong with them: numbers of years, with
+    /// youth no later than adulthood.
+    pub fn look_bands_law(&self) -> Result<crate::look::LookBands, String> {
+        let d = crate::look::LookBands::default();
+        if !self.has("look_bands") {
+            return Ok(d);
+        }
+        let out = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "look_bands", ()).map_err(|e| format!("look_bands: {e}"))?;
+        let out = out.try_cast::<rhai::Map>().ok_or("look_bands must return a map: #{ youth: 12.0, adult: 18.0 }")?;
+        if let Some(k) = out.keys().find(|k| !["youth", "adult"].contains(&k.as_str())) {
+            return Err(format!("look_bands: unknown key `{k}` (the keys are youth and adult)"));
+        }
+        let get = |k: &str, v: f32| -> Result<f32, String> { out.get(k).map_or(Ok(v), |d| number(d).map(|x| x as f32).ok_or(format!("look_bands: {k} must be a number of years"))) };
+        let b = crate::look::LookBands { youth: get("youth", d.youth)?, adult: get("adult", d.adult)? };
+        if !(b.youth >= 0.0 && b.adult >= b.youth) {
+            return Err(format!("look_bands: youth ({}) and adult ({}) must be ages in years, youth no later than adult", b.youth, b.adult));
+        }
+        Ok(b)
+    }
+
+    /// Whom a mind's scene describes by look (docs/LOOK.md §3): the `appearance_in_scene()` law,
+    /// "unnamed" (shipped and without the law: strangers and far figures), "all" or "none".
+    pub fn appearance_in_scene(&self) -> crate::look::AppearanceInScene {
+        self.appearance_in_scene_law().unwrap_or_default()
+    }
+
+    /// The `appearance_in_scene()` law's value, or what is wrong with it.
+    pub fn appearance_in_scene_law(&self) -> Result<crate::look::AppearanceInScene, String> {
+        if !self.has("appearance_in_scene") {
+            return Ok(Default::default());
+        }
+        let out = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "appearance_in_scene", ()).map_err(|e| format!("appearance_in_scene: {e}"))?;
+        let v = out.into_string().map_err(|_| "appearance_in_scene must return \"unnamed\", \"all\" or \"none\"".to_string())?;
+        crate::look::AppearanceInScene::parse(&v).ok_or_else(|| format!("appearance_in_scene must return \"unnamed\", \"all\" or \"none\", not \"{v}\""))
+    }
+
     /// How dark it is at `hour`, in the steps laws see it (`SkillCtx::dark`).
     pub fn dark(&self, hour: f32) -> f32 {
         ((1.0 - self.daylight(hour)) * 20.0).round() / 20.0
@@ -2297,6 +2413,13 @@ impl Scripts {
     fn call(&self, f: &str, ctx: &SkillCtx) -> Result<Dynamic, String> {
         let m = context::map(ctx, self.shapes.knack(&ctx.skill), &self.plan(f));
         self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, f, (m,)).map_err(|e| format!("{f}: {e}"))
+    }
+
+    /// The fields `<skill>_check` reads (its plan), for a context built with those alone
+    /// (docs/BATTLE_SCALE.md, battle-cheap path 1). `None` when the skill has no check.
+    pub fn check_plan(&self, skill: &str) -> Option<Rc<context::Plan>> {
+        let f = format!("{skill}_check");
+        self.has(&f).then(|| self.plan(&f))
     }
 
     pub fn check(&self, skill: &str, ctx: &SkillCtx) -> Result<(), String> {
@@ -2604,6 +2727,9 @@ impl Scripts {
             longing_after_min: g("longing_after_min", l.longing_after_min).clamp(0.0, 100_000.0),
             longing_food: g("longing_food", l.longing_food).clamp(0.0, 1_000.0),
             fov_on: flag("fov_on", l.fov_on),
+            pack_reflex: flag("pack_reflex", l.pack_reflex),
+            alert_after_hit_s: g("alert_after_hit_s", l.alert_after_hit_s).clamp(0.0, 3_600.0),
+            alert_while_attacker_near: flag("alert_while_attacker_near", l.alert_while_attacker_near),
             stranger_by_name: flag("stranger_by_name", l.stranger_by_name),
             cues_on: flag("cues_on", l.cues_on),
             cue_cooldown_s: g("cue_cooldown_s", l.cue_cooldown_s).clamp(0.0, 86_400.0),
@@ -2615,8 +2741,15 @@ impl Scripts {
             think_framing: flag("think_framing", l.think_framing),
             cue_check_s: g("cue_check_s", l.cue_check_s).clamp(0.1, 60.0),
             witness_wake_ms: g("witness_wake_ms", l.witness_wake_ms).clamp(0.0, 10_000.0),
+            witness_fold_ms: g("witness_fold_ms", l.witness_fold_ms).clamp(0.0, 10_000.0),
             regard_cache: flag("regard_cache", l.regard_cache),
             regard_cache_check: flag("regard_cache_check", l.regard_cache_check),
+            profile_detail: flag("profile_detail", l.profile_detail),
+            check_ctx_plan: flag("check_ctx_plan", l.check_ctx_plan),
+            check_ctx_check: flag("check_ctx_check", l.check_ctx_check),
+            alarm_cells: flag("alarm_cells", l.alarm_cells),
+            alarm_cells_check: flag("alarm_cells_check", l.alarm_cells_check),
+            warmth_check: flag("warmth_check", l.warmth_check),
             fast_lane_on: flag("fast_lane_on", l.fast_lane_on),
             seen_again_n: g("seen_again_n", l.seen_again_n).round().clamp(1.0, 100.0),
             fast_lane_rate: g("fast_lane_rate", l.fast_lane_rate).clamp(0.0, 100.0),
@@ -2880,7 +3013,7 @@ fn number(d: &Dynamic) -> Option<f64> {
 }
 
 /// The traits a skill's spec may have.
-pub const SPEC_TRAITS: &[&str] = &["target", "item", "args", "reach", "about", "takes", "gives", "listed", "talk", "items", "latch", "notable", "moving", "moment", "reflex", "target_class", "loudness"];
+pub const SPEC_TRAITS: &[&str] = &["target", "item", "args", "reach", "about", "takes", "gives", "listed", "talk", "items", "latch", "notable", "moving", "moment", "reflex", "target_class", "loudness", "on_the_move"];
 
 /// A skill's spec from what `<skill>_spec()` returned.
 /// A kind's `burns` trait: `#{ fuel: "<item trait>", rate: <units a game hour>, warmth: <m>,
@@ -2951,7 +3084,8 @@ fn spec_of(skill: &str, m: &Map) -> Result<crate::catalog::SkillSpec, String> {
         items: list("items")?,
         latch: flag("latch", false)?,
         notable: flag("notable", false)?,
-        moving: flag("moving", false)?,
+        moving: flag("moving", false)? || flag("on_the_move", false)?,
+        on_the_move: flag("on_the_move", false)?,
         moment: flag("moment", false)?,
         loudness: m.get("loudness").map_or(Ok(0.0), |v| number(v).ok_or_else(|| format!("{f}: `loudness` must be a number")))?.clamp(0.0, 100.0) as f32,
         reflex: flag("reflex", false)?,
@@ -3068,8 +3202,16 @@ fn decode_regard(r: Dynamic, p: &RegardIn) -> Result<Regard, String> {
         None => false,
         Some(v) => v.as_bool().map_err(|_| "perceived_of: `far` must be true or false")?,
     };
+    let look = match r.get("look").map(|v| v.clone().into_string()) {
+        None if far && !p.own => LookSeen::Far,
+        None => LookSeen::Full,
+        Some(Ok(l)) if l == "full" => LookSeen::Full,
+        Some(Ok(l)) if l == "far" => LookSeen::Far,
+        Some(Ok(l)) if l == "none" => LookSeen::None,
+        Some(_) => return Err("perceived_of: `look` is \"full\", \"far\" or \"none\"".into()),
+    };
     // Someone too far to make out is never named.
-    Ok(Regard { name: name && !far, health, far })
+    Ok(Regard { name: name && !far, health, far, look })
 }
 
 /// A record's parties: a map of role → character id (or community party).
@@ -3356,7 +3498,9 @@ mod tests {
         // `feed` and `make` (2026-11-11) are there for a world with fires that burn fuel and recipes.
         assert_eq!(with(|k| k.latch), "build cook craft eat experiment feed gather give make plant read rest sleep store take teach write");
         assert_eq!(with(|k| k.notable), "attack build conceive cook craft feed give make store take threaten yield");
-        assert_eq!(with(|k| k.moving), "eat signal wait");
+        // `wave` and `nod` are done on the move (talk-turns, `on_the_move`, which implies `moving`).
+        assert_eq!(with(|k| k.moving), "eat nod signal wait wave");
+        assert_eq!(with(|k| k.on_the_move), "nod wave");
         assert_eq!(with(|k| k.moment), "circle flee follow graze keep_distance rest sleep wait wander");
         assert_eq!(with(|k| k.reflex), "flee");
         assert_eq!((s.structure("house"), s.structure("campfire"), s.structure("workshop"), s.structure("storage")), (&StructureTraits { warms: true, roof: true, ..Default::default() }, &StructureTraits { warms: true, ..Default::default() }, &StructureTraits { roof: true, ..Default::default() }, &StructureTraits { holds: Some(120.0), ..Default::default() }));
@@ -3421,6 +3565,20 @@ mod tests {
     /// Sight and hearing are a law per creature in the script, with the values the engine had
     /// as constants (11 m by day, 6 at night, 9 with a torch; hearing 9), shared by every
     /// creature in the same state and held to the law's reach.
+    #[test]
+    fn the_pack_reflex_is_on_by_default_and_a_world_turns_it_off() {
+        let src = include_str!("../../scripts/skills.rhai");
+        let shipped = Scripts::new(src).unwrap();
+        assert!(shipped.laws().pack_reflex, "on in every world unless it says otherwise");
+        assert_eq!(shipped.law_value("pack_reflex"), Some(serde_json::json!(true)));
+        let off_src = with_world_laws(src, &[("pack_reflex".into(), serde_json::json!(false))]);
+        let off = Scripts::new(&off_src).unwrap();
+        off.validate().unwrap();
+        assert!(!off.laws().pack_reflex);
+        // A script that does not name the law keeps the reflex on (the Rust default).
+        assert!(Laws::default().pack_reflex);
+    }
+
     #[test]
     fn sight_depends_on_facing_only_when_the_world_s_law_says() {
         let src = include_str!("../../scripts/skills.rhai");
@@ -3496,6 +3654,7 @@ mod tests {
         assert_eq!((l.cue_cooldown_s, l.cue_gap_s, l.cue_check_s), (600.0, 60.0, 1.0));
         assert!(l.regard_cache && !l.regard_cache_check, "answers are shared by default, unchecked");
         assert_eq!(l.witness_wake_ms, 500.0, "a bystander is woken at most twice a second (docs/BATTLE_SCALE.md)");
+        assert_eq!(l.witness_fold_ms, 2000.0, "what an onlooker sees of fights is told every two seconds (docs/BATTLE_SCALE.md)");
         let about: std::collections::HashMap<String, String> = shipped.laws_about().into_iter().collect();
         assert!(about["cue_cooldown_s"].contains("600 s") && about["cue_gap_s"].contains("60 s"), "{about:?}");
         let on = Scripts::new(&with_world_laws(src, &[("cues_on".into(), serde_json::json!(true)), ("cue_cooldown_s".into(), serde_json::json!(30)), ("cue_gap_s".into(), serde_json::json!(-5)), ("cue_check_s".into(), serde_json::json!(0.01)), ("regard_cache".into(), serde_json::json!(false))])).unwrap();
@@ -3505,10 +3664,28 @@ mod tests {
         assert_eq!((l.cue_cooldown_s, l.cue_gap_s, l.cue_check_s), (30.0, 0.0, 0.1));
         assert!(about["cue_check_s"].contains("1 s"), "{about:?}");
         assert!(about["witness_wake_ms"].contains("500 ms"), "{about:?}");
+        assert!(about["witness_fold_ms"].contains("2000 ms") && about["witness_fold_ms"].contains("who fell"), "{about:?}");
     }
 
     /// First sights that ask for a thought (docs/FIRST_SIGHT.md): off by default, with the gap a
     /// world may set, clamped to 0..3600 s.
+    #[test]
+    fn kin_terms_name_a_relation_and_are_the_world_s() {
+        let src = include_str!("../../scripts/skills.rhai");
+        let sc = Scripts::new(src).unwrap();
+        let k = sc.kin();
+        assert_eq!(k, &speech::KinTerms::default(), "the shipped script's kin terms are the defaults");
+        assert_eq!(k.named_at("But you have to ask Mother first for the crust", &["parent"]), Some(5));
+        assert_eq!(k.named_at("ask Mother first", &["child", "sibling"]), None, "a parent word names a parent only");
+        assert_eq!(k.named_at("Gran! Come see", &["grandparent"]), Some(0));
+        assert_eq!(k.named_at("my motherland", &["parent"]), None, "whole words only");
+        let base = src.replace("fn kin_terms()", "fn shipped_kin_terms()");
+        let own = Scripts::new(&format!("{base}\nfn kin_terms() {{ #{{ parent: [\"Amma\"] }} }}\n")).unwrap();
+        assert_eq!(own.kin().named_at("Amma, look", &["parent"]), Some(0));
+        assert_eq!(own.kin().named_at("Mother, look", &["parent"]), None, "a world's own terms replace the defaults");
+        assert!(Scripts::new(&format!("{base}\nfn kin_terms() {{ #{{ cousin: [\"coz\"] }} }}\n")).is_err(), "an unknown relation is refused");
+    }
+
     #[test]
     fn earshot_is_the_world_s_law_and_off_as_shipped() {
         let src = include_str!("../../scripts/skills.rhai");
@@ -3673,12 +3850,12 @@ mod tests {
         let sc = scripts();
         let base = RegardIn { observer_kind: "person".into(), target_kind: "person".into(), ..Default::default() };
         // A stranger: a label, and health only as a band.
-        assert_eq!(sc.perceived_of(&base), Regard { name: false, health: Precision::Band, far: false });
+        assert_eq!(sc.perceived_of(&base), Regard { name: false, health: Precision::Band, far: false, look: LookSeen::Full });
         // Known by name; an appraisal shows exact health while it holds.
-        assert_eq!(sc.perceived_of(&RegardIn { known: true, ..base.clone() }), Regard { name: true, health: Precision::Band, far: false });
-        assert_eq!(sc.perceived_of(&RegardIn { revealed: vec!["health".into()], ..base.clone() }), Regard { name: false, health: Precision::Exact, far: false });
+        assert_eq!(sc.perceived_of(&RegardIn { known: true, ..base.clone() }), Regard { name: true, health: Precision::Band, far: false, look: LookSeen::Full });
+        assert_eq!(sc.perceived_of(&RegardIn { revealed: vec!["health".into()], ..base.clone() }), Regard { name: false, health: Precision::Exact, far: false, look: LookSeen::Full });
         // Oneself: everything. Animals know their own kind by name, and not people's.
-        assert_eq!(sc.perceived_of(&RegardIn { own: true, ..base.clone() }), Regard { name: true, health: Precision::Exact, far: false });
+        assert_eq!(sc.perceived_of(&RegardIn { own: true, ..base.clone() }), Regard { name: true, health: Precision::Exact, far: false, look: LookSeen::Full });
         let wolf = RegardIn { observer_kind: "wolf".into(), target_kind: "wolf".into(), ..Default::default() };
         assert!(sc.perceived_of(&wolf).name);
         assert!(!sc.perceived_of(&RegardIn { target_kind: "person".into(), ..wolf }).name);
@@ -3687,12 +3864,41 @@ mod tests {
             assert_eq!(sc.perceived_of(&p), Regard::default_for(&p));
         }
         let blind = Scripts::new(&format!("{}\nfn perceived_of(p) {{ #{{ name: true, health: \"none\" }} }}", include_str!("../../scripts/skills.rhai").replace("fn perceived_of(p)", "fn perceived_of_old(p)"))).unwrap();
-        assert_eq!(blind.perceived_of(&base), Regard { name: true, health: Precision::None, far: false });
+        assert_eq!(blind.perceived_of(&base), Regard { name: true, health: Precision::None, far: false, look: LookSeen::Full });
         // A law may say someone is too far away to make out: never named then, known or not.
         let far = Scripts::new(&format!("{}\nfn perceived_of(p) {{ #{{ name: p.target.known, far: p.dist > 20.0 }} }}", include_str!("../../scripts/skills.rhai").replace("fn perceived_of(p)", "fn perceived_of_old(p)"))).unwrap();
         let known_at = |dist: u16| RegardIn { known: true, dist, ..base.clone() };
         assert_eq!((far.perceived_of(&known_at(30)).name, far.perceived_of(&known_at(30)).far), (false, true));
         assert_eq!((far.perceived_of(&known_at(10)).name, far.perceived_of(&known_at(10)).far), (true, false));
+        // The look (docs/LOOK.md §3): made out, in full; too far away to make out, the far words;
+        // a law may say otherwise (a foggy world).
+        assert_eq!(far.perceived_of(&known_at(10)).look, LookSeen::Full);
+        assert_eq!(far.perceived_of(&known_at(30)).look, LookSeen::Far);
+        let fog = Scripts::new(&format!("{}\nfn perceived_of(p) {{ #{{ far: p.dist > 20.0, look: if p.dist > 10.0 {{ \"none\" }} else {{ \"full\" }} }} }}", include_str!("../../scripts/skills.rhai").replace("fn perceived_of(p)", "fn perceived_of_old(p)"))).unwrap();
+        assert_eq!(fog.perceived_of(&known_at(15)).look, LookSeen::None);
+        assert_eq!(fog.perceived_of(&known_at(5)).look, LookSeen::Full);
+        let bad = Scripts::new(&format!("{}\nfn perceived_of(p) {{ #{{ look: \"shade\" }} }}", include_str!("../../scripts/skills.rhai").replace("fn perceived_of(p)", "fn perceived_of_old(p)"))).unwrap();
+        assert!(bad.validate().unwrap_err().contains("`look` is"), "a look the engine does not know is refused at install");
+    }
+
+    #[test]
+    fn look_laws_are_read_and_checked() {
+        let sc = scripts();
+        assert_eq!(sc.look_bands(), crate::look::LookBands { youth: 12.0, adult: 18.0 });
+        assert_eq!(sc.appearance_in_scene(), crate::look::AppearanceInScene::Unnamed);
+        let with = |extra: &str| Scripts::new(&format!("{}\n{extra}", include_str!("../../scripts/skills.rhai").replace("fn look_bands()", "fn look_bands_old()").replace("fn appearance_in_scene()", "fn appearance_in_scene_old()")));
+        let late = with("fn look_bands() { #{ youth: 14.0, adult: 21.0 } }\nfn appearance_in_scene() { \"all\" }").unwrap();
+        assert_eq!(late.look_bands(), crate::look::LookBands { youth: 14.0, adult: 21.0 });
+        assert_eq!(late.appearance_in_scene(), crate::look::AppearanceInScene::All);
+        assert!(late.validate().is_ok());
+        for (bad, says) in [
+            ("fn look_bands() { #{ youth: 20.0, adult: 18.0 } }\nfn appearance_in_scene() { \"none\" }", "youth no later than adult"),
+            ("fn look_bands() { #{ youth: 12.0, adult: 18.0, elder: 60.0 } }\nfn appearance_in_scene() { \"none\" }", "unknown key `elder`"),
+            ("fn look_bands() { #{ youth: 12.0, adult: 18.0 } }\nfn appearance_in_scene() { \"strangers\" }", "not \"strangers\""),
+        ] {
+            let e = with(bad).unwrap().validate().unwrap_err();
+            assert!(e.contains(says), "{e}");
+        }
     }
 
     #[test]

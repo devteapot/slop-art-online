@@ -22,7 +22,14 @@ the mind's revisions and words between exposures (thoughts naming the pattern, o
 outcome lines used), lines it spoke that carry an internal id (`#123`), and model calls, latency
 and estimated cost per fight; and, per routine install (`mind_rows.jsonl`'s `routine` rows; not
 `graphs.jsonl`, which holds only the desires wrapper), each `doing` condition that leads to a
-dodge, with its `is`, `phase`, `at_me` and `within`, the install time and the exposure index then. The word lists are shown with their matches; they are a reader's
+dodge, with its `is`, `phase`, `at_me` and `within`, the install time and the exposure index then.
+
+Exposures come from every fixture the trial file's `arena.foes` lists (`foe` by default), read by
+`fight_timeline.Fight`. Per meeting (R3: the trial's "meeting k" notes, `arena_veteran.py`; else
+the one fight): its fixture, exposures, answered, the first answered exposure, K, damage taken,
+whether the subject was ready at the meeting's first windup (an answer on a windup in its plan,
+in the `combat` branch or not, and who wrote it) and the share of windups it could see (an
+estimate from `bodies.jsonl`; `None` without those samples). The word lists are shown with their matches; they are a reader's
 aid, not a classifier the mind depends on.
 """
 import argparse
@@ -34,6 +41,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from trials import PRICES  # noqa: E402
+import fight_timeline as ft  # noqa: E402
 
 PATTERN_WORDS = {
     "arena-heavy": re.compile(r"\b(heavy|slow|windup|wind(?:s|ing)? up|telegraph\w*|swing\w*|lunge\w*|thrust\w*|step(?:ping)? back|out of (?:its |her |his |their )?reach|pause\w*|between (?:blows|swings)|after (?:it|she|he|they) (?:swing|strike)s?|every time|each time|rhythm|spear)\b", re.I),
@@ -145,25 +153,50 @@ def k_of(answered, run=3):
     return None
 
 
+def damage_of(outcome):
+    m = re.search(r"hit for (\d+)|(\d+) got through|killed [^(]*\((\d+)\)", outcome or "")
+    return int(next(g for g in m.groups() if g)) if m else 0
+
+
+def meetings_of(exposures, fight):
+    """Per meeting (R3: the trial's "meeting k" notes; else the one fight): its fixture, the
+    exposures, answered, the first answered exposure (k), K, damage taken from the pattern,
+    whether the subject was ready at the meeting's first windup (`fight_timeline.Fight.ready`)
+    and the share of windups it could see (an estimate)."""
+    out = []
+    for m in sorted({e["meeting"] for e in exposures}):
+        es = [e for e in exposures if e["meeting"] == m]
+        ans = [e["answered"] for e in es]
+        r = fight.ready(es[0]["at_ms"])
+        seen = [e["seen"] for e in es if e["seen"] is not None]
+        out.append({"meeting": m, "role": es[0]["role"], "foe": es[0]["foe"], "t": round(fight.T(es[0]["at_ms"]), 1),
+                    "exposures": len(es), "answered": sum(ans), "first_answer": next((e["k"] for e in es if e["answered"]), None), "K": k_of(ans),
+                    "damage": sum(damage_of(e["outcome"]) for e in es),
+                    "ready": bool(r["answers"]), "ready_in_combat_branch": bool(r["in_combat_branch"]), "ready_combat_by_fast": r["combat_by_fast"],
+                    "ready_plan_source": r["source"], "ready_answers": [f"{s}{' (routine ' + rt + ')' if rt else ''}" for _, s, rt in r["answers"]][:6],
+                    "kept_answer_routines": r["kept_routines"],
+                    "seen_share": round(sum(seen) / len(seen), 2) if seen else None})
+    return out
+
+
 def instance(d: Path):
-    s = json.loads((d / "summary.json").read_text()) if (d / "summary.json").exists() else {}
-    trial = s.get("trial") or d.name.rsplit("-", 2)[0]
-    cast = json.loads((d / "cast.json").read_text())["roles"]
-    S = cast["subject"][0]["id"]
-    F = cast["foe"][0]["id"]
+    fight = ft.Fight(d)
+    s = fight.summary
+    trial, heavy, S = fight.trial, fight.heavy, fight.S
+    # The first fixture (`foe`): distance and return fire are read against it.
+    F = fight.foes.get("foe") or next(iter(fight.foes.values()))
     uses = last_uses(d)
-    heavy = trial == "arena-heavy"
-    pattern = "attack" if heavy else "bowshot"
-    ex = [u for u in uses if u["actor"] == F and u["skill"] == pattern and u.get("target") == S and (u.get("released_ms") if not heavy else u.get("accepted_ms"))]
     mine = [u for u in uses if u["actor"] == S and u.get("accepted_ms")]
     exposures = []
-    for k, u in enumerate(ex, 1):
+    for n, x in enumerate(fight.exposures(), 1):
+        u = x["use"]
         acc, rel = u["accepted_ms"], u.get("released_ms") or (u["accepted_ms"] + 750)
         cls = classify(u.get("outcome"))
         defence = [m["skill"] for m in mine if m["skill"] in ("dodge", "block", "jump") and acc <= m["accepted_ms"] <= rel + 50]
         counter = [m["skill"] for m in mine if m["skill"] in ("strike", "attack", "bowshot", "firebolt", "throw", "shoot") and rel <= m["accepted_ms"] <= rel + 2500]
         ans = cls in ("guarded", "dodged", "evaded") if heavy else cls not in ("hit",)
-        exposures.append({"k": k, "at_ms": acc, "outcome": u.get("outcome"), "class": cls, "answered": ans, "defence": defence, "counter": counter})
+        exposures.append({"k": n, "meeting": x["meeting"], "k_in_meeting": x["k"], "role": x["role"], "foe": x["foe"], "at_ms": acc, "outcome": u.get("outcome"), "class": cls,
+                          "answered": ans, "defence": defence, "counter": counter, "seen": fight.seen(acc, x["foe"])})
     first_ms = exposures[0]["at_ms"] if exposures else None
     # The subject's responses before and after its first exposure (all its accepted uses).
     def mix(us):
@@ -197,7 +230,7 @@ def instance(d: Path):
         return sum(1 for e in exposures if e["at_ms"] <= ms)
     delib = [x for x in thoughts if x["kind"] == "deliberate" and first_ms and x["at_ms"] >= first_ms - 5000]
     revisions = [{"k": k_at(t0_ms + g["t"] * 1000), "t": g["t"]} for g in graphs if t0_ms and first_ms and t0_ms + g["t"] * 1000 >= first_ms]
-    words = PATTERN_WORDS[trial]
+    words = PATTERN_WORDS["arena-heavy" if heavy else "arena-kiter"]
     noticed = [{"k": k_at(x["at_ms"]), "words": sorted({m.group(0).lower() for m in words.finditer(x["summary"])}), "thought": x["summary"][:260]}
                for x in delib if words.search(x["summary"])]
     journal = []
@@ -230,6 +263,8 @@ def instance(d: Path):
         "calls": len(calls), "latency_s_p50": round(statistics.median(lat), 1) if lat else None, "latency_s_max": round(max(lat), 1) if lat else None,
         "cost_usd": round(cost, 4),
         "dodge_conditions": dodge_conditions(d, k_at, t0_ms),
+        "meetings": [dict(m, first_answer=m["first_answer"]) for m in meetings_of([dict(e, k=e["k_in_meeting"]) for e in exposures], fight)],
+        "seen_at_windup": [e["seen"] for e in exposures],
     }
 
 
@@ -246,6 +281,10 @@ def main():
         print(f"{r['run']}: survived {r['survived']} hp_min {r['hp_min']} exposures {r['exposures']} answered {r['answered']} (first3 {r['answered_first3']}, after {r['answered_after3']}) K {r['K']} "
               f"delib {r['deliberations_in_fight']} revs {r['revision_ks']} noticed {len(r['noticed'])} timing {r['timing_words_in_replies'][:6]} own_lines {r['own_outcome_lines']} "
               f"ret_fire {r['return_fire']}/{r['return_fire_hits']} closing {r['closing_within_6m']} ids {len(r['spoken_with_id'])}/{r['spoken']} calls {r['calls']} lat {r['latency_s_p50']} ${r['cost_usd']}")
+        if len(r["meetings"]) > 1 or any(m["seen_share"] is not None for m in r["meetings"]):
+            for m in r["meetings"]:
+                print(f"  meeting {m['meeting']} ({m['role']}, {m['t']} s): exposures {m['exposures']} answered {m['answered']} first {m['first_answer']} K {m['K']} damage {m['damage']} "
+                      f"ready {m['ready']} (combat branch {m['ready_in_combat_branch']}, by fast {m['ready_combat_by_fast']}) seen {m['seen_share']}")
         for c in r["dodge_conditions"]:
             print(f"  doing -> dodge at {c['t']:.0f} s (exposure {c['k']}), {c['routine']}: " + "; ".join(", ".join(f"{k} {v}" for k, v in x.items()) for x in c["conds"]))
 

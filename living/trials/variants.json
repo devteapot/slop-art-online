@@ -262,10 +262,41 @@
   }
  },
  "pack-minds": {
-  "about": "Pack arena with minds on both sides (docs/PACK_MIND.md): people on the models file's default, wolves routed by its species map, LIVING_ANIMAL_MINDS=salient,choose (no pack: retired). fast_lane_on stays off (the world law's default).",
+  "about": "Pack arena with minds on both sides (docs/PACK_MIND.md §8): people on the models file's default, wolves routed by its species map on the impulse-then-compile path, LIVING_ANIMAL_MINDS=salient (no choose: its menu cannot express spacing; no pack: retired). fast_lane_on stays off (the world law's default).",
   "models": {},
   "env": {
-   "LIVING_ANIMAL_MINDS": "salient,choose"
+   "LIVING_ANIMAL_MINDS": "salient"
   }
- }
+ },
+ "strangers-first-sight-n2": {
+  "about": "C + first sight with the think prompt's neutral framing (fs1n, docs/FRAMING.md): `first_sight_thinks` and `think_framing` on (set_world_law after the laws guard); the naming fix is on in every world. `heard_first_rethinks` and `earshot` off.",
+  "models": {},
+  "env": {},
+  "world_laws": {
+   "first_sight_thinks": true,
+   "think_framing": true
+  }
+ },
+ "strangers-first-sight-n2-earshot": {
+  "about": "fs1n with earshot (fs1w, docs/TRIALS.md): `first_sight_thinks`, `think_framing` and `earshot` on (set_world_law after the laws guard); the naming fix is on in every world; `heard_first_rethinks` off; first_sight_gap_s at its default (300 s). Minds decide a line's way (mind-say-way, on main since da3ff142).",
+  "models": {},
+  "env": {},
+  "world_laws": {
+   "first_sight_thinks": true,
+   "think_framing": true,
+   "earshot": true
+  }
+ },
+  "fast-lane": {
+    "about": "The fast lane on (docs/FAST_LANE.md): `default` with the world law `fast_lane_on` true, so a blow taken or a move seen started at the subject `seen_again_n` times asks its mind for a quick re-plan (rethink.json `fast.route`, deepseek-flash). R2 arm r2e.",
+    "models": {},
+    "env": {},
+    "world_laws": {"fast_lane_on": true}
+  },
+  "fast-lane-fov": {
+    "about": "`fast-lane` with facing sight: the world laws `fast_lane_on` and `fov_on` true (docs/COMBAT_MIND.md §5.4: R2-fov and R3).",
+    "models": {},
+    "env": {},
+    "world_laws": {"fast_lane_on": true, "fov_on": true}
+  }
 }

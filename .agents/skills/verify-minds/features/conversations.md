@@ -101,3 +101,53 @@ The `room-address` case (`verify_minds.py --case room-address`) spawns four peop
 5. `addressed_line_has_no_room_detail`: the line to K, as H overheard it, has no "to the room".
 
 Evidence: `room-address.json`, `prompt-address.txt`.
+
+## A decision's line names its way
+
+Since `mind-say-way` (2026-11-12, docs/COMMUNICATION.md §18), a think reply's `say` takes an optional `"way"`. The mind service reads it as a talk reply's (`talk::way_of`) and installs through `mind_install_way`, or passes it to `mind_say` when the decision carries on. The line goes to `speech::speak` in that way. A refused line is told to the speaker as an `unsaid` row in the rules' words, and the decision stands.
+
+The `say-way` case (`verify_minds.py --case say-way`) puts H (thought for) on a quiet open line (`open_line`), A 15 m east and B 1 m west. The fake model answers four think requests, each by its marker (`rules` with `contains`), with a line:
+
+1. **A call to A.** A's row reads "A stranger calls out to you from about 15 m: …". The chronicle keeps "<H> (call) to <A>". H's own row may already be integrated by its mind.
+2. **A whisper to no one.** H gets "You did not say “Verify whisper to no one.”: a whisper needs someone to whisper to." No one receives the words, and the decision's thought stands.
+3. **A whisper to B.** B gets a `whisper` row, and A nothing.
+4. **A line in "shout",** a way the world lacks. It is said aloud: B reads "A stranger said to you: …".
+
+It also checks that the think prompt names `"way": "say" or "whisper" or "call" (optional; default "say")`. Evidence: `say-way.json`, `prompt-say-way.txt`.
+
+## Talk turns (play-test 6)
+
+Since `talk-turns` (2026-11-12, docs/COMMUNICATION.md §19).
+
+- **A named hearer's turn.** A line said to someone else whose hearer's row reads ", naming … you" (the authority's words: by name or by a kin word) is collected for 300 ms (`NAMED_PICK_MS`, `talk.rs` `named_pick`). The nearest named hearer by the line's `audience` row then takes one turn as if addressed (`hear(e, true)`), when free (`in_other_open`: an exchange settled with someone else does not count). Like an addressed line, a named line that asks nothing is answered only by temperament (`answers_remarks`, a draw seeded by the line's time), so the turn "may" come; `sissly-scene`'s line also asks. The turn's prompt says how the line came under the answered line ("… said to …, naming you.").
+- **The turn budget and open matters.** `Conversation::open`: the line asks something, a plan or promise was made in the last two turns (`promised`: a settled outcome, or an act toward the other, `act_toward`), or the exchange was reopened on something settled and has had under two turns. Then the stamina gate lets the turn through, and the prompt says "You have said about as much as you usually do." instead of "make this your last word".
+- **The transcript ends before the answered line.** It is given once, under "What you are answering".
+
+`named-turn` (`verify_minds.py --case named-turn`): three spawned people A, B and C, thought for, and a player. B first settles an exchange with A. The player then says to A a line naming B and C by their given names. B stands 2 m from the player and C 5 m. Checks:
+
+- B's and C's rows name them;
+- only B takes a turn;
+- the turn's prompt reads "A stranger said to a stranger, naming you and a stranger." (B does not know C's name).
+
+`sissly-scene` (`verify_minds.py --case sissly-scene`): the play-test scene on the island seed. Sissly Fenner and Agnes Fenner are thought for; S, a spawned stranger, stands in for the owner, and the lines are paraphrased markers. It checks:
+
+- the plan's queued line ("Verify stale …", from a deliberate step the fake model holds 7 s while S asks and Sissly answers alongside) is not said;
+- turn 3, a question, is not told to be the last word, and states the plain fact;
+- the answered line appears once in that prompt;
+- Agnes's row of Sissly's "… ask Mother first." reads ", naming you", and Agnes takes a turn.
+
+Evidence: `sissly-scene.json`, `prompt-turn3.txt`, `prompt-agnes.txt`, `named-turn.json`, `prompt-named.txt`.
+
+## Ids are not words
+
+A mind is shown people by `#id` handles. Every speaking mind's system prompt (think, deliberate, fast, talk) carries one sentence, word for word the same (`prompts::IDS_NOT_SPOKEN`): the handles are for acts and memory and are never spoken; when it speaks, it names people by name or description. The `prompts::` test `every_speaking_mind_is_told_ids_are_never_spoken` checks the four prompts. Since fix-spoken-ids (2026-11-12): in r2e, 3 of 68 lines said by deliberations carried an id.
+
+A line that names someone by `#id` anyway is said without it by the speech primitive (docs/COMMUNICATION.md, "Ids are not words"). The speaker then gets a `spoken_as` experience: "Your line was said as “…”: you wrote “…”, and #ids are not words anyone hears.". The mind journals each one in `<journal>/outcomes/spoken_as.jsonl` (`actor`, `name`, `to`, `line`). trials.py counts them: `summary.json` `spoken_as` (total, by character, examples), and `report.md` "Ids said as words" with the batch's total. A high count means the prompt's sentence is not doing its work.
+
+`--case spoken-ids`: two adults side by side. The think reply says "Watch out, #<other> is here." (the decision speaks; a compile's `say` is dropped by design).
+1. `think_prompt_has_the_sentence_once` and `deliberate_prompt_has_the_sentence_once`: each system prompt sent holds it once.
+2. `spoken_without_the_id`: the chronicle line names the other without the id (by name, when the speaker knows it).
+3. `spoken_as_keeps_both`: the speaker's `spoken_as` row holds what it wrote and what was said.
+4. `journaled_with_both`: `outcomes/spoken_as.jsonl` has the line, with the speaker's name.
+
+Evidence: `spoken-ids.json`, `fake-requests.jsonl`, `journal/outcomes/spoken_as.jsonl`.

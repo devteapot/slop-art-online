@@ -1,6 +1,6 @@
 # Look: one appearance for players and minds (design, 2026-11-12)
 
-Status: **design agreed 2026-11-12, with the [decisions](#decisions-2026-11-12) below; not built.** Read from main `42ca0b67`. Nothing here has been built, measured or run, and the sizes are estimates from the row layouts. dev-box builds the authority half first. The Spark's minds half starts after it lands.
+Status: **design agreed 2026-11-12, with the [decisions](#decisions-2026-11-12) below. The authority half is built on branch `look-1-auth` ([§7](#7-the-authority-half-as-built-look-1-auth-2026-11-12)); the minds' and the client's halves are not.** §1–§6 are the design as agreed; Read from main `42ca0b67`. Nothing here has been built, measured or run, and the sizes are estimates from the row layouts. dev-box builds the authority half first. The Spark's minds half starts after it lands.
 
 **The gaps.**
 - **The live game draws no generated people.** Every resident, and the player, is a VRoid base that `live::recipe_for` (`living/game/src/live.rs:466`) picks from the land seed and the id. `recipes.json` holds no person lines, so all the character work so far ([characters](CHARACTERS.md), compose-1) shows only in look-dev.
@@ -269,3 +269,215 @@ A clothes change is not modelled. When it is, it is one more writer.
 | verify-knowledge | — | Not touched: memory names are unchanged | no |
 
 Each surface's skill gets `maintain-verification-skill` in the change that alters it. None of these runs establishes cost at 2,000 characters; that claim needs the measurement in §4.
+
+## 7. The authority half as built (`look-1-auth`, 2026-11-12)
+
+Built on dev-box from main `e704ec0d` (char-4's look data merged). This is the authority half only: the Spark's `appearance` in scenes and the laptop's drawing are not built.
+
+### SpacetimeDB documentation, checked again for the build
+
+The pages of §1 were read again on 2026-11-12 (version selector 2.0.0; all loaded), against the pinned `spacetimedb = "=2.14.1"`, SDK 2.14.1 and the `v2.14.1` server image:
+- [Indexes](https://spacetimedb.com/docs/tables/indexes/): "For multi-column indexes, pass a tuple of values"; String and integer keys; ranges on a B-tree (`filter(18..=65)`). `look_line.by_person_band().filter((person, band))` compiles against 2.14.1 as a point lookup on both columns, and `look.due().filter(..=now)` as a range on the one `u64` column.
+- [Automatic migrations](https://spacetimedb.com/docs/databases/automatic-migrations/): adding tables and indexes is safe; a column may be added "to the end of a table with a default value" (listed as potentially breaking: clients need new bindings); changing a column's type, or adding a unique or primary-key constraint to an existing table, is forbidden. Both new tables are new, so their keys are free; `projected.look` and `world.look_book` are appended last with `#[default("")]`.
+- [Default values](https://spacetimedb.com/docs/tables/default-values/): `#[default("")]` on a `String` is the page's own example; it cannot be combined with a primary key, `unique` or `auto_inc`.
+- [Auto-increment](https://spacetimedb.com/docs/tables/auto-increment/): ids come from a sequence allocated in batches, with gaps after a restart. `look_line.id` is only a row id; nothing reads meaning into it.
+- [Views](https://spacetimedb.com/docs/functions/views/): a view is re-evaluated when something in its read set changes, separately for each subscriber, and reads only through indexed lookups. `seen_characters` keeps its read set (`projected.viewer`); a look change writes only the `projected` rows of the person's observers (`projected.body`), so only their views re-run.
+- [Tables](https://spacetimedb.com/docs/tables/), [access permissions](https://spacetimedb.com/docs/tables/access-permissions/), [performance](https://spacetimedb.com/docs/tables/performance/), [subscriptions](https://spacetimedb.com/docs/clients/subscriptions/): as §1. Private tables "can only be accessed by reducers and views"; no table or subscription is added for clients.
+- Not re-tested: changing a view's row type in place on a world with clients connected (§1). The migration of an older world was tried on a scratch database (below).
+
+### What was built
+
+- **Rules (`living_rules::look`, pure, unit-tested):** `LookBand` (0 infant … 4 elder), `LookBands` (the `look_bands()` law, default 12 and 18), `look_band(stage, age_years, &LookBands)`, `band_at(&Life, age_years, &LookBands)`, `next_change(&Life, age_years, &LookBands) -> Option<f32>` (the age in years of the next band change, `None` for an elder), `splitmix64`, `pool_pick(world_seed, id, pool_len) -> Option<usize>` (`splitmix64(world_seed ^ id × 0xD1B5_4A32_D192_ED03) mod pool_len`), `LookSeen` (`Full | Far | None`), `LookWords` (§2's fields, serde, unknown fields refused), `phrase(&LookWords, LookSeen, LookBand)`, `AppearanceInScene` (`Unnamed | All | None`), `is_line_key`, `is_person_key`.
+- **Script:** `Regard.look: LookSeen` (re-exported as `living_rules::script::LookSeen`): `Far` when the law marks the target `far` (never for oneself), else `Full`; a `perceived_of` law may return `look: "full" | "far" | "none"`, anything else is refused at install. `Scripts::look_bands()` and `appearance_in_scene()` read the two laws, checked at install. `skills.rhai` ships `look_bands()` (`#{ youth: 12.0, adult: 18.0 }`) and `appearance_in_scene()` (`"unnamed"`), each with a `_law()` whose `topic` is "", so the minds' world text is unchanged until the Spark writes their words. Cullet's overlay overrides neither.
+- **Tables** (private): `look` and `look_line` as §2, `LookWords` as §2; `projected.look` and `SeenCharacter.look` appended with "", `world.look_book` appended with "".
+- **Writes:** genesis writes `look_line` and `world.look_book` before people are made (`seed::populate`, so `init`, `create_floor` and the staged people step); `seed::spawn_with` gives every person a pool look (births, joins, newcomers, crowds), and an authored resident is then given its own entry; `grew` rewrites the look in the stage change's transaction; housekeeping's `look::due` reads `look.due().filter(..=now)` after the second's stage changes; `install_source` retimes every row once (`retime_all`); `perception::gone` deletes the row at death; `relook(generation)` (admin, chronicled).
+- **Projection:** `project()` adds one point lookup, `look.id().find(target)`, for a person; the key goes on every perceived person row, made out or far (decision 1). A look change rewrites the observers' rows through `projected.body` (`look::reproject`). `perception::appearance(ctx, observer, target, now)` gives a mind's words through `phrase` and the regard's `look`; nothing calls it yet (the Spark's scene).
+- **Seed tools:** `author_world.py cullet --compile-only` writes each resident's `look` and the seed's `looks` from `worlds/cullet/looks.json`; `cullet_plan.py` keeps them when it rewrites the rest. `plan-test.json` carries a small fixture (`fixture-1`).
+
+### Where this departs from §1–§6
+
+1. **`look_line`'s key.** §2 makes `key` the primary key. Two people with the same line share its key (§2, "What the key can tell"), so a primary key on `key` would refuse the second person's row. The row has an `auto_inc` `id` as its primary key, `key` is an ordinary column, and lookups go through `by_person_band` only.
+2. **Where the pool lives.** §4 says a birth or join picks "over the world's pool" without naming a store. The pool is read from the world's seed (`seed::active()`: the compiled seed, or a floor's `floor_seed`), parsed once per instance, and used only while the seed's `looks.generation` equals `world.look_book`. No table is added for it.
+3. **`relook(generation)`'s data.** It reads the module's (or floor's) seed: the generation given must be the seed's, else it is refused. Residents are matched by name among minded characters (a player of the same name keeps a pool look); everyone else gets a pool look. It is one pass over the living people and is rare and explicit.
+4. **A resident without `look`** in a seed with looks wears a pool entry rather than being refused.
+5. **Two people may draw the same pool entry** and look alike; nothing keeps picks apart.
+6. **Bands at odd ages.** §4 does not say what a grown person (stage 2) under `youth` years or a child (stage 1) at or past `adult` years is: both are youths.
+7. **`next_change` in years.** It returns the age in years, not world ms; the authority turns it into `next_ms` (a millisecond past the threshold, and at least a second ahead, so one read a hair early looks again a second later).
+8. **Retiming** happens at every script install, which covers a changed life law (`year_days` is fixed at genesis).
+9. **The `appearance_in_scene` law** ships with placeholder words and no topic, for the Spark to write; `appearance()` is provided but not called.
+
+The general coordinator's brief for this branch asked for `look_band`, `girth`, `height` and `colour` columns on the rows; main's §2 drops them (no stand-in, no night rule), and the coordinator confirmed main's version. They are not built.
+
+### Rows written, how often, and what grows
+
+| Path | Rows read | Rows written | How often |
+|---|---|---|---|
+| Genesis | the seed | `look_line`: one per (person entry, band) in the data (Cullet 791, plan-test 27); `world` once; `look`: one per person (authored residents twice: the pool pick, then their own) | once |
+| Birth, join, newcomer | `world`, the seed (parsed once per instance), `look_line` (point) | one `look` insert | per person made |
+| Band change | `look.due` range (only the due rows), `character`, `look_line` (point), `projected.body` | the `look` row; each observer's `projected` row (+ the views of those observers) | at most 4 a life |
+| Script install | every `look` row | rows whose band or time moved | per install (admin) |
+| `relook` | every living person, `look_line` | `look_line` rewritten, one `look` per person, a chronicle line | admin only |
+| Death | – | the `look` row deleted | per death |
+| Projection | `look.id` (point) per projected person | – | per projection write, as before |
+
+Growth: `look` is bounded by the living people (deleted at death); `look_line` is static world data (Cullet about 791 rows); `projected` gains 4 B per row plus the key (24 B for an `lk_` key, 4 B for ""). The pool's parsed copy lives in module memory (Cullet's seed is about 1 MB of text; parsed once).
+
+### Verification and cost
+
+**Projection cost before and after** (dev-box, 2026-11-12, `living/tools/look_cost.py`; evidence in the worktree's `.local/look1/cost/`, git-ignored). Each run publishes one module fresh on the worker's own `v2.14.1` server, joins **216 real players** over their own WebSocket connections (`gate-load players`, the gate's client query set), places them in **7 clusters of 31 within 3 m** of lot doors at least 40 m apart, and lets them walk small circles (a new direction every 1.5 s, the gate's walkers: people come into and go out of each other's sight at the edges). After a 30 s warm-up, it profiles a **120 s window**: the module's `Timing span` lines (ms of span per second) and the server's `spacetime_num_bytes_sent_to_clients_total` for the database. At the end, 24 sampled players each read their own `seen_characters`, and their BSATN size is computed. "Before" is main `acfe1be4`'s module on the same seed text without looks (plan-test) or main's Cullet seed; "after" is this branch with plan-test's fixture and with Cullet's char-4 data. No minds, no game client, no observer. The host is shared with other workers: its load average was 9–45 on 32 cores during the runs (recorded per run).
+
+| World (in sight at placement) | Build | `tick.perception` ms/s | `tick` ms/s | perception per tick p50 / p99 ms | bytes sent/s (Update) | `seen_characters` per player: rows, BSATN B | of which `look` |
+|---|---|---|---|---|---|---|---|
+| plan-test (27) | main | 37.0, 35.4 | 87.8, 82.4 | 0.035 / 8.4, 0.031 / 8.0 | 608 k, 582 k | 14.8, 846; 13.5, 772 | 0 |
+| plan-test (27) | look-1-auth | 34.7, 41.7 | 80.1, 91.0 | 0.030 / 7.8, 0.040 / 11.0 | 621 k, 599 k | 14.3, 1,146; 12.8, 1,026 | 23.0 B a row |
+| Cullet (43) | main | 347.5, 296.8 | 411.6, 363.5 | 0.035 / 81.7, 0.033 / 64.8 | 1,474 k, 1,532 k | 43.8, 2,809; 46.6, 3,003 | 0 |
+| Cullet (43) | look-1-auth | 341.2, 441.1 | 403.0, 495.3 | 0.032 / 81.0, 0.040 / 143.9 | 1,503 k, 1,411 k | 43.8, 3,787; 44.8, 3,901 | 23.0 B a row |
+
+What this shows:
+- **The bytes per row are exact:** every perceived person row is 23 B larger (the 4-byte length and the 19-character key; an animal's or an old world's row 4 B). A plan-test row grows from about 57 to 80 B and a Cullet row from about 64 to 87 B. For the 216 gate with 30 in sight that is about 150 KB held across all clients, as §4 estimated.
+- **The Update stream** to clients moved by less than its run-to-run spread (plan-test +2.5% between the means, Cullet −3%): most of what a client receives is bodies and frames, not `seen_characters`.
+- **`tick.perception` shows no difference this host can resolve.** The two runs of one build differ by up to 17% (Cullet main: 297 and 347 ms/s). Plan-test's means are 36.2 and 38.2 ms/s; Cullet's are 322 and 391, and the high branch run (441) ended with the host's load at 45. The branch adds one point lookup (`look.id().find`) to each projection. Cullet re-projects every row at every sweep, because its `perceived_of` reads the distance (`Scripts::regard_reads_dist`, `perception::sweep_one`), so that is about 216 × 44 × 5 ≈ 48,000 lookups a second. Acceptance should repeat this on a quiet host.
+- **Not from this change:** Cullet's sweep costs 300–440 ms of every second at 216 players, ten times plan-test's. Its distance-reading law re-projects every row at every sweep, which is the next perception cost to look at.
+
+**Migration** (a scratch `verify-lookmig-*` world made by main's module on plan-test, then this branch published over it with its data kept): the update is accepted, the old world has no `look` rows, no lines and `look_book` "". `relook("fixture-2")` is refused ("carries looks of generation `fixture-1`"); `relook("fixture-1")` writes 27 lines and the 5 residents' looks and chronicles it.
+
+### The update panic, traced (2026-11-12)
+
+**What was seen.** Publishing this branch over a ticking world made by main's module logged one `PANIC: tick ... datastore_index_scan_point_bsatn: No such index (error 5)` right after "Database updated" (3 of 3 updates; none from main to main). The ticks went on at 60 Hz after it.
+
+**Documentation** (read 2026-11-12, selector 2.0.0): [automatic migrations](https://spacetimedb.com/docs/databases/automatic-migrations/) lists adding tables and indexes as always allowed and says "Clients may witness brief interruptions in scheduled reducers (such as game loops)". It says nothing of the order of the schema change against scheduled reducers. [Schedule tables](https://spacetimedb.com/docs/tables/schedule-tables/) are silent on updates. [Reducers](https://spacetimedb.com/docs/functions/reducers/): "Global and Static Variables Are Undefined Behavior … Publishing a new module creates a fresh execution environment". No page mentions index ids or "No such index". The server source at `v2.14.1` (`host_controller.rs`, `module_host_actor.rs`): an update builds a new module host and applies the schema steps in one transaction (`update_database`), then swaps the new host in. Appending a column with an incompatible row layout drops the table and creates it again with a new table id and new index ids (`mut_tx.rs`, "ADDING TABLE COLUMN (incompatible layout)").
+
+**Mechanism, shown on the worker's server** (`.local/look1/panic/`):
+1. The server log of the update: `ADDING TABLE COLUMN (incompatible layout): projected`, the same for `world`, then `Creating table look`, `Creating table look_line`, "Database update complete", "Database updated". `st_index` before and after: `world_id_idx_btree` 4268 → 4319, `world` table 4192 → 4220.
+2. The backtrace: `tick::tick` → `common::world` → `spacetimedb::table::datastore_index_scan_point_bsatn`, the point lookup `world.id().find(0)`.
+3. **It is the old module.** Main's module, built with a panic hook that names itself, logged "EXPERIMENT panic in the OLD module (main)" on that panic, 20 ms after "Database updated". The new module's own first tick (a fresh instance) resolved `world_id_idx_btree` to 4319 and ran normally. The bindings keep each table's and index's id in a `static OnceLock` resolved once per instance (`spacetimedb-bindings-macro-2.14.1/src/table.rs`, `index_id()`). So the outgoing host's instance fires one more scheduled `tick` after the update commits, with the id of an index the update dropped. It traps, its transaction rolls back, and the new host carries on.
+4. Ruled out: the new module's `init` on the planning database (an `init` that returned at once there changed nothing); `look.due()` (the panic is in `world`, and in main's code); a stale schedule (the timers are the same rows before and after).
+
+**What it costs.** One scheduled call of the old module, rolled back, after an update that rewrites a table that call reads first (`world`, read by every tick and by housekeeping). Nothing is written, no row is lost, the clocks are kept, and the new module ticks from its first call (`updates.json`: ticks, `world`, characters, timers before and after each step). It cannot be fixed in the new module, and pausing does not avoid it: the old tick reads `world` before it checks `paused`. Nor can the clocks be stopped before an update, because SQL DML is refused (HTTP 400) and main's module has no reducer for it.
+
+**The fix, for every update after the guard is in place.** `common::schema_moved(reducer)`, called first in every scheduled reducer (`tick`, `housekeeping`, `genesis_step`): it fingerprints the database's table list (`st_table`, about 150 short rows, scanned through the host's uncached calls) at the instance's first scheduled call. On a later call whose fingerprint differs, the module has been replaced under this instance. The call then returns at once, touching no table, and logs once "the database's tables changed under this module instance (a module update was published); this call does nothing, and the new module carries on". The new module's instances take the fingerprint afresh. Cost: about 11 µs a call (6,000 calls in 65–81 ms), so about 0.7 ms a second at 60 ticks and one housekeeping.
+
+**Shown** (`.agents/skills/verify-core/scripts/updates.py --run core-updates-1112-164613 --relook fixture-1`; record `verify-core/references/validation/`):
+
+| Chain (each step published over the last with its data kept) | Updates | Panics | Guard lines |
+|---|---|---|---|
+| main → look-1-auth | 1 | **1–2** (main's `tick`, and its `housekeeping` when its once-a-second call falls in the window) | 0 |
+| main → main + guard → look-1-auth, three times | 6 | **0** | 1 each, on the step to look-1-auth |
+| main + guard → look-1-auth → look-1-auth + a column on `world` | 2 | **0** | 1 each |
+| look-1-auth → look-1-auth + a column on `world` | 1 | **0** | 1 |
+
+After every step the world ticked, kept its `world` row, its 9 characters and both timers. The chains ran twice: `core-updates-1112-164613` on look-1-auth `53aa7d02` and main `9d62be70`, and `core-updates-1112-170308` on look-1-auth `68f585e8` (main merged) and main `7a2633b1`, with the same counts (the second unguarded control panicked in `tick` and `housekeeping`). After each chain, `relook("fixture-1")` gave the 5 residents their looks with no panic.
+
+**The safe update path.** The guard must be in the module being *replaced*. A world running main's module today will log the one harmless panic when it is updated straight to look-1-auth. To have none:
+1. Update it first to main plus the guard alone (commit "update guard", three files, no schema change). That update rewrites no table, so main's module never trips.
+2. Then update it to look-1-auth.
+
+Every update after that is guarded. The paused reference worlds follow the same path whenever the owner updates them; nothing here touched them.
+
+**Verification** (dev-box, own server `look1-stdb`; records in each skill's `references/validation/2026-11-12-1454-look-1-auth.md`):
+- **Rules:** `look::tests::` (bands, `next_change` walking a life through every band, `pool_pick` vectors and spread, `phrase` near and far, keys and words), `script::tests::look_laws_are_read_and_checked`, the `look` of `perceived_of` in `what_one_perceives_of_another_is_the_law_s` and Cullet's `names_only_within_knowing_distance`, and `cullet_check::tests::{composed_worlds_keep_the_shipped_look_bands, cullet_s_band_cases_hold}`. The last runs char-4's 11 band cases through Cullet's composed life law.
+- **verify-client:** the fixed suite passes 43/43 (scoped) and 43 + the known XFAIL (open). `look_rows.py` passes 15/15 on plan-test and 14/14 on Cullet. It checks that `look` and `look_line` are refused to a stranger, an `lk_` key on every seen person row equal to `look.line` and to no name slug, the far row's key with no name, no hex anywhere, an animal's "", no row for the unseen, and the same keys after a reconnect.
+- **verify-player:** `look.py` passes 8/8 on plan-test and on Cullet: a pool pick (recomputed in Python), stable across reconnects, unchanged by every player reducer.
+- **verify-generation:** Cullet 344/344 (its 791 lines, 64 looks, char-4's 3 key-hash and 11 band cases), the runtime floor 99/99, plan-test 95/95.
+- **verify-core:** `look_bands.py` passes 9/9: a child crosses 12 and 18 (one due rewrite each), an adult's elder change comes from `grew`, a death deletes the row, and no per-second scan is added.
+
+### The interface for the Spark and the laptop
+
+- **`seen_characters` (`SeenCharacter`)** gains one last field, `look: String`: the `lk_` key (`lk_` + 16 lowercase hex digits) of the line the person wears now, for anyone the viewer sees at any distance, its own character included; "" for animals and for a person without a look row (a world from before looks, or a seed without `looks`). It changes only when the person's band changes (about 4 times a life) or at `relook`, and the client respawns the person then. Regenerate bindings with `just living-generate`; the game client compiles unchanged (it reads fields by name).
+- **`world.look_book: String`** (public, last field): the generation the world wears ("" without looks); Cullet `c4-aa393793`.
+- **`living_rules::look`** (pure; any build of `living-rules`, no `scripting` feature needed): `LookBand { Infant, Child, Youth, Adult, Elder }` with `code()`, `from_code(u8)`, `name()`, `parse(&str)`; `LookBands { youth: f32, adult: f32 }` (`Default` 12, 18); `look_band(stage: u8, age_years: f32, &LookBands) -> LookBand`; `band_at(&Life, age_years, &LookBands) -> LookBand`; `next_change(&Life, age_years, &LookBands) -> Option<f32>`; `stage_code(Stage) -> u8`; `splitmix64(u64) -> u64`; `pool_pick(world_seed: u64, id: u32, pool_len: usize) -> Option<usize>`; `LookSeen { Full, Far, None }` (`Default` `Full`); `LookWords { form, girth: u8, height: u8, hair, top, bottom, head, beard }` (serde; `girth` and `height` default 1; unknown fields refused); `phrase(&LookWords, LookSeen, LookBand) -> String`; `AppearanceInScene { Unnamed, All, None }` with `parse` and `name`; `is_line_key(&str)`, `is_person_key(&str)`.
+- **`living_rules::script`:** `Regard.look: LookSeen` (`pub use crate::look::LookSeen`); `Scripts::look_bands() -> LookBands`, `Scripts::appearance_in_scene() -> AppearanceInScene` (and `_law()` forms returning what is wrong).
+- **Authority, for the Spark's scene:** `perception::Projection.look` (the key), `perception::appearance(ctx, observer, target, now) -> String` (the phrase as the regard grants it), and the `look` row's `words` and `band` (point lookup `look.id()`).
+- **Laws:** `look_bands()` returns `#{ youth: 12.0, adult: 18.0 }`; `appearance_in_scene()` returns `"unnamed"`, `"all"` or `"none"`. Both `_law()` texts are placeholders with no topic, so the world text is unchanged. A world's `perceived_of` may return `look: "full" | "far" | "none"`.
+
+## 8. The client half as built (`look-1-client`, 2026-11-12)
+
+Built on the laptop on look-1-auth (`e15557cd`) and main. The book is char-4's (`living/game/assets/characters/looks.json`, git-ignored; bundle `f81d8a47`, generation `c4-aa393793`, 887 lines, 96 of them decor).
+
+### What was built
+
+- **The book** (`characters/book.rs`): `generation`, `generations` (a book without it holds its own generation only), `lines` (`person`, `words`) and `decor`; read once on first use; `LIVING_GAME_LOOK_BOOK=<path>` reads a test's copy. A key's line is composed on its type at the line's own height, its files checked on disk once a key.
+- **The row** (`characters/seen.rs`): `SeenCharacter.look` and `world.look_book`, read in one place.
+- **`live::recipe_for(book, land_seed, c)`:** the line under `c.look`; else (no key, a key the book lacks, a file not on disk, no book, `LIVING_GAME_COMPOSE=0`) the VRoid recipe from the land seed and the id, as before looks, `stage_scale` applied to it alone. In a world with looks each such case is one warning line a session; a world made before looks (`look_book` "") falls back quietly with one line at connect; a generation the book does not hold is one warning at connect. My own character comes from my own row; `LIVING_GAME_PLAYER` is look-dev only.
+- **A new key** (a band change, a `relook`) redraws the person where and as they are (`live::swap_look`): a new body with the old one's transform and motion; the old drawn and moving with it until the new is fitted (`Live::swaps`; `drawn()` gives the old meanwhile), then the two cross-fade. On real keys the redraw takes one dump of 0.2 s or less, and the person is never off the screen.
+- **Labels** (`looks.rs`): someone drawn from a line is named by `living_rules::look::phrase` over the line's words, the words a mind is told: made out, "a woman in a black smock with an apron and dark trousers, grey-haired"; too far to make out, the Log keeps the projection's far words and plates and hover say "a tall figure in a yellow coat and dark trousers, heavy-set". The band is the line's type's (a child type for an infant: the far phrase says "child" for both). A VRoid base keeps its colour words.
+- **Chips by piece:** the outermost upper and lower pieces' own colours, the pieces' places from each outfit style file's scene extras `outfit: {piece, slot, layer, trim}` (`upper` and `lower` give a chip, the higher layer worn over the lower; `feet`, `head` and trim pieces none), else their names with the same values.
+- **Background people** on an offline or look-dev island take a grown decor line by their own seed (`living_rules::look::pool_pick(seed, 0, n)`), one recipe for their preload and their spawn (`island::person_recipe`).
+- **The prewarm** (`loading.rs`): under the loading cover, the fewest lines that wear every type and style file of the looks perceived when the cover is up (connected: `seen_characters`, waiting up to 5 s for the rows; offline and look-dev: the decor). A first version covered the whole book: 64 people whose 101 files stayed resident for the session (`characters::kept`), +345 MiB resident and +470 MiB footprint, steady, on Cullet; the perceived looks need 17 people and cost what no prewarm does.
+- **The asset view** shows a line: `LIVING_GAME_VIEW=look:<lk_…>`.
+
+### Memory (bundle `f81d8a47`; Cullet, the play camera; `live_crowd.py`, uncapped, two runs an arm; worlds fresh from each module)
+
+| | main (VRoid) | look-1, prewarm of the looks in sight | look-1, whole-book prewarm (the first version) | look-1, no prewarm |
+|---|---|---|---|---|
+| Resident, steady (peak) | 846 (849) MiB | 983 (994) MiB | 1,328 (1,430) MiB | 958 (968) MiB |
+| Physical footprint, steady (peak) | 1,671 (1,700) MiB | 1,947 (2,037) MiB | 2,416 (2,470) MiB | 1,927 (1,977) MiB |
+| Graphics (IOAccelerator), steady | 96 MiB | 99 MiB | 97 MiB | 100 MiB |
+| Textures on the GPU (`batches:`) | 260 MiB (147) | 402 MiB (206) | 526 MiB (276) | 400 MiB (204) |
+| Main-world meshes (morph targets) | 176 (88) MiB | 207 (96) MiB | 231 (101) MiB | 205 (96) MiB |
+| Pictures kept on the CPU | 28.9 MiB | 28.9 MiB | 28.9 MiB | 28.9 MiB |
+| glTF files (the two runs) | 26, 26 | 98, 83 | 192, 192 | 94, 90 |
+
+- Composed residents cost about 140 MiB resident and 280 MiB footprint over VRoid bases, most of it the shared types' and styles' pictures on the GPU. Their pictures keep no CPU copy (`thumb_pictures`, as crowd-1's).
+- **What grows with a crowd:** every type and style file anyone in sight wears stays loaded for the session. The whole-book prewarm is what a view showing nearly every file costs: about 480 MiB resident over VRoid. Two changes would bound it, neither small: free a file's assets when no one wears it (count `kept`'s users), and drop composed meshes' main-world copies once their summaries (recolour means, bounds, outline directions) are kept.
+
+### Cost before and after (bundle `26d705b5`; `live_crowd.py`, uncapped, three runs an arm)
+
+Before: main `9fa0d254`'s client on a fresh world of main's module (VRoid residents); after: this branch's on a fresh world of its own, each pair launched back to back and measured at once. Load average 7.3 to 11.7. The verify-ui record `2026-11-12-1825-look-1-client.md` has the full table.
+
+| Cullet | main (VRoid) | look-1 (composed) | look-1, no prewarm |
+|---|---|---|---|
+| Play camera: frame p50 / p99 | 6.31 / 7.13 ms | 5.21 / 6.11 ms | 4.97 / 5.77 ms |
+| Materials, mesh-material pairs on people | 33, 35 | 6, 37 | 5, 37 |
+| Resident, steady; footprint, steady | 837; 1,654 MiB | 938; 1,904 MiB | 905; 1,832 MiB |
+| GPU textures | 260 MiB | 402 MiB | 388 MiB |
+| First-sight hitches walking (longest) | 6 (350 ms) | 6 (261 ms) | 6 (196 ms) |
+| Full model: frame p50 / p99; resident steady | 6.19 / 7.03 ms; 834 MiB | 5.85 / 6.79 ms; 897 MiB | – |
+
+- Composed residents draw faster than VRoid bases (1.1 ms at the game camera, 0.3 ms on the full model) and hold about 100 MiB more resident memory, 250 MiB more footprint: the shared pictures on the GPU.
+- **The prewarm does not reduce the first-sight hitches** here: six while walking in every arm, the longest 200 to 350 ms in all of them, main's too (the walk's own arrivals, not composed people). It costs about 33 MiB resident. It is kept for now; whether to drop it is open.
+- Brackenford's people have no looks (the island seed carries none): VRoid both ways, equal within noise.
+
+### Bounding memory after look-1 (2026-11-12)
+
+- **Freeing unworn files** (`looks-mem-1`, pushed, not merged): files no one wears are freed after a grace period, past an LRU of 16. That bounds the files held but not process memory, and a walk re-read the same files on a loop. The memory is capped by the book anyway: about +480 MiB resident over VRoid bases for the whole book.
+- **Composed meshes' CPU copies** (`looks-mesh-1`, pushed, not merged): blocked on bevy_mod_outline 0.14 reading morph targets in `compute_outline_key`. It calls `mesh.morph_targets()` in the main world for every outlined entity spawned, which panics once Bevy has taken the data, and every composed mesh is outlined.
+  - Option: a local `[patch.crates-io]` fork that reads the morph flag from the render world's mesh.
+  - The branch caches what the client's own readers need (`characters/mesh_facts.rs`) and drops the copies only with `LIVING_GAME_PERF=dropmeshes`.
+  - The gain would be small: composed meshes are 23.8 MiB of Cullet's 204.5 MiB of CPU mesh data.
+- **Prewarm only what someone wears** (`prewarm-worn-1`): the loading cover prewarms the VRoid bases, which wear every outfit piece, only when someone will be drawn on one:
+  - a world without looks;
+  - offline or look-dev;
+  - no book, or composing off;
+  - a person perceived with no look or a key the book lacks.
+
+  On a composed Cullet those two base files had held 102 MiB of CPU meshes (88 MiB of it morph targets) and their pictures, for no one. A VRoid person who comes later loads the base then, a first-sight hitch. `LIVING_GAME_PERF=prewarmall` prewarms the bases as before, and `LIVING_GAME_PERF=meshfiles` logs CPU mesh bytes by file.
+
+  Measured with bundle `643ac265` (PNG), one binary, `live_crowd.py` uncapped, three runs an arm on fresh Cullet worlds (one an arm). Ranges in brackets.
+
+  | Cullet | Before (`prewarmall`) | After |
+  |---|---|---|
+  | Play camera: resident steady | 922 (913–927) MiB | **753** (704–754) |
+  | Play camera: footprint steady / peak | 1,870 / 1,892 MiB | **1,510** / 1,664 |
+  | Play camera: GPU textures | 362 (348–370) MiB | **197** (192–220) |
+  | Play camera: frame p50 / p99 | 4.55 / 5.59 ms | 4.43 / 5.56 ms |
+  | Play camera: first-sight hitches (longest) | 5 (259 ms) | 3 (244 ms) |
+  | Full model: resident steady | 963 (934–991) MiB | **749** (749–750) |
+  | Full model: footprint steady / peak | 1,902 / 1,923 MiB | **1,495** / 1,635 |
+  | Full model: GPU textures | 340 (340–394) MiB | **179** (167–196) |
+  | Full model: frame p50 / p99 | 5.60 / 6.46 ms | 5.28 / 6.11 ms |
+  | Full model: first-sight hitches (longest) | 5 (279 ms) | 4 (296 ms) |
+  | CPU meshes (`assets:`); of them the VRoid bases | 195.7; 102.2 MiB | **88.1**; 0 |
+  | The cover's first view | 2.0 s | 1.7 s |
+
+  A world without looks (an island launched before `look-1-island`, whose seed then carried none): both arms prewarm the six base characters ("a world without looks"), with 102 MiB of VRoid meshes each.
+
+## 9. The island wears the pool (`look-1-island`, 2026-11-12)
+
+The island's seed (`living/seeds/island.json`, Brackenford's play-tests) carries `looks` at generation `c4-aa393793`: the 128-person pool alone (`people` for the pool, the 640 lines' `words`, `pool`). No resident has a `look`, so all 277 seeded residents wear a pool entry by `pool_pick(world seed, id, 128)`, as newcomers and players do (departure 4 of §7). Nothing is assigned by hand.
+
+- **Where it comes from.** `living/tools/pool_looks.py island --into island` copies the pool from the generator's world data of the same generation (Cullet's `living/seeds/worlds/cullet/looks.json`, written by `look_lines.py book`) into `living/seeds/worlds/island/looks.json`, and sets the seed's `looks`, changing no other key. `--check` fails when either file is not what it would write. `author_world.py island --compile-only` also writes `looks` from that file whenever the island is compiled.
+- **The island compile no longer reproduces its seed** (found here, not changed): the cast's `knows` lists still say `mending` where the seed was renamed to `wound_tending` (78 residents). So the seed's `looks` is set by `pool_looks.py --into`, not by recompiling, and a later compile will revert that rename until the cast is renamed too.
+- **The book.** Every one of the pool's 640 lines is in the client's book of `c4-aa393793` (char-4's bundle `643ac265`), and none is a `decor` line. The island's background people are the client's (`living/game/src/island.rs`, from the book's `decor`); nothing on the authority.
+- **Counts.** A fresh island world has 277 `look` rows, one for each resident (78 in Brackenford), and 640 `look_line` rows. Every pick equals `pool_pick` recomputed in Python, and every line resolves in the book (verify-generation `generation-island-1112-222634`). A player's character and any person born later also take pool looks.
+- **Updating an island world in place** keeps VRoid: a world made before its seed carried `looks` has no `look` rows and `look_book` "", and its people project `look` "". After `relook("c4-aa393793")` (admin) all 277 wear pool looks, the same picks a fresh world gives. Shown on a scratch world: main's island module, then this branch with its data kept, gave 0 looks, then `relook` gave 277, with no panic (main already has the look schema). For a play scene: `just living-play <scene> --fresh` for a new world, or keep the world and run `spacetime call -s local <db> relook '"c4-aa393793"'` as the admin. The paused reference worlds were not touched.

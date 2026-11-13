@@ -56,7 +56,7 @@ BASE_QUERIES = [
 # (docs/PERCEPTION.md). The observer and the mind service read them as the database owner.
 PRIVATE = ['fast_ask', 'far_handle', 'slumber', 'land_plan', 'clock', 'steer', 'walk_route', 'rot', 'wake', 'familiar', 'deliberation', 'rearing',
            'act_queue', 'pasture', 'tick_timer', 'slow_timer', 'infant_cry',
-           'combat_seen', 'missile', 'skill_use', 'readiness', 'skill_code',
+           'combat_seen', 'fight_seen', 'missile', 'skill_use', 'readiness', 'skill_code',
            'routine', 'routine_stat', 'background', 'brain', 'mind_state', 'mind_cursor',
            'persona', 'relation', 'belief', 'judgment', 'thought', 'chronicle', 'stats',
            'bond_offer', 'community', 'membership', 'join_request', 'trade_offer',
@@ -91,7 +91,10 @@ PRIVATE = ['fast_ask', 'far_handle', 'slumber', 'land_plan', 'clock', 'steer', '
            # Whom each player's line said now would reach, per way (earshot); read through my_earshot.
            'character_earshot',
            # How each player's acts and death came out, in codes; read through my_act_outcomes.
-           'act_outcome']
+           'act_outcome',
+           # A person's look and the world's look lines (docs/LOOK.md): a client gets only the
+           # `lk_` key on its seen_characters rows.
+           'look', 'look_line']
 # Private in the default `scoped` build; public only in a LIVING_PERCEPTION=open build (diagnostics).
 SCOPED = ['body', 'character', 'fighter', 'doing', 'vitals', 'experience', 'place', 'audience',
           'inventory', 'know_how']
@@ -110,7 +113,7 @@ UNWALKABLE = {2, 4, 7, 8, 9}  # water, rock, wall, drop, low
 PLAYER = {'use_skill': ['strike', 0, 0.0, 0.0], 'release_skill': ['block'],
           # The player's look (fov-1): any living character may send it.
           'human_face': [1.0, 0.0]}
-MIND = ['mind_routines', 'mind_install', 'mind_say', 'mind_act', 'mind_skip',
+MIND = ['mind_routines', 'mind_install', 'mind_install_way', 'mind_say', 'mind_act', 'mind_skip',
         'mind_consolidated', 'mind_update', 'mind_judged']
 # The fast lane's answers (docs/FAST_LANE.md): for an open request only, which exists only for a
 # body its mind holds, so a player is refused even on its own character.
@@ -132,6 +135,10 @@ ADMIN = {
     'stop_genesis': [], 'resume_genesis': [],
     # Change a law on a running world (fov-1, admin only).
     'set_world_law': ['fov_on', 'false'],
+    # Move a live world to its seed's looks (look-1, admin only).
+    'relook': ['probe'],
+    # Set a living body's health (trial timelines' meeting resets, docs/COMBAT_MIND.md §5.4).
+    'admin_set_vitals': [0, 100.0],
 }
 
 
@@ -150,6 +157,8 @@ def mind_args(name, actor, marker):
     return {
         'mind_routines': [actor, [{'name': 'client probe', 'graph': '{"wait":30}'}]],
         'mind_install': [actor, '{"wait":30}', marker, '', 0, 0, t],
+        # A decision whose line names its way (mind-say-way); the same controller rule.
+        'mind_install_way': [actor, '{"wait":30}', marker, '', 0, 'say', 0, t],
         'mind_say': [actor, '', 0, '', 0, t],
         'mind_act': [actor, ['{"do":"signal","item":"client-probe"}'], 'probe'],
         'mind_skip': [actor, 0, t], 'mind_consolidated': [actor, 0],
@@ -389,6 +398,13 @@ class Run:
         expected = set(ADMIN) | set(MIND) | set(FAST) | set(PLAYER) | {'join', 'human_move', 'human_act', 'human_say', 'human_speak', 'tick', 'housekeeping', 'genesis_step'}
         if set(reducers) != expected:
             raise RuntimeError(f'reducer inventory changed: {set(reducers) ^ expected}')
+        # The mind service connects as the world's admin, so `require_admin` cannot refuse it an
+        # admin reducer by identity: the guard is that it never calls these (its sources name none).
+        never_by_minds = ['admin_set_vitals', 'kill', 'relook', 'set_world_law', 'install_script']
+        called = {r for path in (ROOT / 'living/mind/src').rglob('*.rs') for r in never_by_minds
+                  if re.search(rf'reducers\.{r}(_then)?\(', path.read_text())}
+        if called:
+            raise RuntimeError(f'the mind service calls admin reducers it must not: {sorted(called)}')
         write(self.directory / 'source-inventory.json', {'base_queries': exact, 'private': private,
               'scoped': scoped, 'views': sorted(views), 'perception': self.mode,
               'reducers': reducers, 'sdk': '2.14.1', 'server': '2.14.1'})

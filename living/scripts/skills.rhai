@@ -84,6 +84,16 @@ fn laws() {
         // `fov_margin_deg` past an edge. A light on someone (`glow`) shows them only within the
         // field. Hearing stays all round.
         fov_on: false,
+        // The wolves' spacing reflex (docs/PACK_MIND.md): their starting instincts carry,
+        // beside each hunt, a weighted desire to keep apart from mates while closing on the
+        // prey (hold 3-5 m from it, 4 m from other wolves one sees). An instinct, so a wolf's
+        // own mind may change it. Read when a wolf's starting graph is installed; a world turns
+        // it off with false.
+        pack_reflex: true,
+        // A body struck this many seconds ago cannot fall asleep; nor while the one who last
+        // struck it, in a fight still on, is within `wake_reach` (`sleep_check`, every
+        // controller alike).
+        alert_after_hit_s: 15.0, alert_while_attacker_near: true,
         // Who a behaviour graph's `relation: "stranger"` filter matches (docs/STRANGERS.md).
         // Off: anyone one has no relation row about (feelings the mind wrote), or a relation
         // labelled "stranger". On: anyone whose name one does not know, the rule that names
@@ -100,10 +110,23 @@ fn laws() {
         // asker works it out afresh, giving the same answers. `regard_cache_check` (a diagnostic)
         // compares every shared answer with a fresh one and logs any difference.
         regard_cache: true, regard_cache_check: false,
+        // A diagnostic: while profiling, also time the parts of a graph's evaluation.
+        profile_detail: false,
+        // How a fighter's work is done (docs/BATTLE_SCALE.md, battle-cheap), none of it changing what
+        // anyone perceives or does: a move's check before it starts given only the fields it reads;
+        // the body's alarms answered from the last answer while no field crosses one of their
+        // levels. The `_check` laws (diagnostics) also work each out the whole way and count any
+        // difference; `warmth_check` likewise for warmth.
+        check_ctx_plan: true, check_ctx_check: false, alarm_cells: true, alarm_cells_check: false, warmth_check: false,
         // A bystander (one who sees an event it is not party to) is woken by what it sees at most
         // once per `witness_wake_ms` (docs/BATTLE_SCALE.md); what it sees is still told at once,
         // in full. 0: woken by each sight, as before.
         witness_wake_ms: 500.0,
+        // What an onlooker sees of fights it is not party to is told as one line per
+        // `witness_fold_ms` (docs/BATTLE_SCALE.md, fix 4): every blow it could see, by who struck
+        // whom, with counts and outcomes, and who fell. A blow at it or by it is told at once.
+        // 0: each fight's first blow told at once on its own line, as before.
+        witness_fold_ms: 2000.0,
         // The fast lane (docs/FAST_LANE.md): a mind-run character's re-plan between blows, asked
         // on a blow taken or when the same creature is seen to start the same move at it
         // `seen_again_n` times in a fight (counted for the trigger only, never told). Across the
@@ -219,6 +242,22 @@ fn senses_law() {
         // within these before testing each one's own senses, and holds every answer to them.
         reach: #{ day: sight_in("day"), night: night_most, hearing: hearing_of_people() },
         about: `How far a creature sees and hears, in metres (one tile is one metre). By day one sees ${short(sight_in("day"))} m; at night ${short(sight_in("night"))} m, or ${short(sight_in("torch"))} m carrying a torch. Rock, walls and shut gates block the line of sight. Speech carries ${short(hearing_of_people())} m.${field_about()}`,
+    }
+}
+
+// The words a speaker uses for someone by their relation to them (docs/COMMUNICATION.md §19):
+// "Mother" said by a child names that child's parent, and a line said to someone else that uses it
+// names the parent for every hearer (the naming detail, and a named hearer's turn). What the one
+// named is to the speaker: parent, child, sibling, grandparent, grandchild or partner (the father
+// or mother of one's child). The rules have no sex, so each word names anyone in that relation.
+fn kin_terms() {
+    #{
+        parent: ["mother", "father", "mum", "mam", "mama", "mummy", "ma", "dad", "da", "papa", "daddy", "pa"],
+        child: ["son", "daughter"],
+        sibling: ["brother", "sister"],
+        grandparent: ["gran", "granny", "grandmother", "grandma", "grandfather", "grandpa", "grandad", "granddad", "nan", "nana"],
+        grandchild: ["grandson", "granddaughter"],
+        partner: ["husband", "wife"],
     }
 }
 
@@ -2346,6 +2385,14 @@ fn smoke_spec() {
 }
 fn clear_spec() { #{ about: "Turn the forest where you stand into open ground. For making room to build; gathering at a tree is the quicker way to get wood.", takes: "forest where you stand, room in your pack, some energy (faster with an axe)", gives: "open ground where the forest was, and 2 wood" } }
 fn graze_spec() { #{ moment: true, listed: false, about: "Eat grass where you stand (grazing animals).", takes: "grass where you stand, not grazed bare", gives: "hunger down by 14" } }
+// A body does not fall asleep in a fight: struck moments ago (`alert_after_hit_s`), or with the
+// one who struck it close while the fight is on (`alert_while_attacker_near`; the fact
+// `hurt_by_near`). The words are the body fact alone.
+fn sleep_check(a) {
+    if within(a.actor.hurt_ago, law("alert_after_hit_s") * 1000.0) { return "you cannot sleep: you were struck moments ago"; }
+    if law("alert_while_attacker_near") && a.actor.hurt_by_near { return "you cannot sleep: someone who struck you is close"; }
+    ""
+}
 fn sleep_spec() { #{ latch: true, moment: true, about: "Sleep until rested. Night is the time for it; beside a shelter or house it is much faster and the night cold can't hurt you. A short break is rest.", takes: "time, until rested", gives: "energy back quickly (much faster beside a shelter or house); hunger grows slower meanwhile" } }
 fn rest_spec() { #{ latch: true, moment: true, about: "Sit a few seconds and recover a little energy. Sleep restores far more.", takes: "8 seconds", gives: "a little energy" } }
 fn wait_spec() { #{ moving: true, moment: true, args: ["qty"], about: "Pause where you are (qty: seconds, at most 120).", takes: "time", gives: "nothing: time passes" } }
@@ -2559,8 +2606,8 @@ fn rework_spec() {
        gives: "that way replaced by your new version (or dropped); how it goes starts counting afresh" }
 }
 
-fn wave_spec() { #{ target: true, reach: 12.0, about: "Wave to someone you can see: a greeting, a farewell or an answer to one. They see it and may answer.", takes: "someone in sight within 12 tiles, 1.2 s", gives: "they see you wave at them" } }
-fn nod_spec() { #{ target: true, reach: 6.0, about: "Nod to someone near you: a quiet greeting or a yes. They see it and may answer.", takes: "someone within 6 tiles, 0.7 s", gives: "they see you nod at them" } }
+fn wave_spec() { #{ target: true, on_the_move: true, reach: 12.0, about: "Wave to someone you can see: a greeting, a farewell or an answer to one. They see it and may answer.", takes: "someone in sight within 12 tiles, 1.2 s", gives: "they see you wave at them" } }
+fn nod_spec() { #{ target: true, on_the_move: true, reach: 6.0, about: "Nod to someone near you: a quiet greeting or a yes. They see it and may answer.", takes: "someone within 6 tiles, 0.7 s", gives: "they see you nod at them" } }
 fn appraise_spec() { #{ target: true, target_class: "creature", reach: 6.0, about: "Look someone (a person or an animal) over closely: for a while you see exactly how hurt they are.", takes: "someone within 6 tiles, 1.5 s", gives: "for 20 s you see exactly how hurt they are" } }
 fn face_spec() { #{ target: true, reach: 15.0, about: "Turn where you stand to face someone or something you can see (a person coming up to you or speaking, a fight, a sound).", takes: "something or someone in sight", gives: "you turn to face it" } }
 fn step_aside_spec() { #{ target: true, reach: 3.0, about: "Step a pace aside to let someone coming toward you pass, in a narrow street or a doorway.", takes: "someone coming at you where there is little room", gives: "a pace to the side, out of their way" } }
@@ -2568,6 +2615,12 @@ fn keep_spec() { #{ about: "Keep your post a while (a stall, a workshop, a gate,
 fn play_spec() { #{ about: "Play a little while where you are (run about, skip, make up a game).", takes: "4 seconds, not a baby", gives: "a little fun; tires a little" } }
 
 // ---- gestures and town life (docs/TOWN_LIFE.md) ---------------------------------------
+// What one is told when moving broke off something one was doing before it was done (a skill
+// without `on_the_move`, for every controller): the act by its noun.
+fn moved_off(skill) {
+    let noun = switch skill { "appraise" => "look", "step_aside" => "step aside", _ => { let n = skill; n.replace("_", " "); n } };
+    `the ${noun} stopped: you moved off before it was done`
+}
 // A gesture is seen, not heard: its target must be in sight within the gesture's reach.
 // `hail` lets the one it is made at see that it was made at them (they may answer).
 fn gesture_check(a, reach) {
@@ -2707,14 +2760,14 @@ fn rates_awake() {
 // `meters()`: the bars a body has, each naming fields of its `my_vitals` row: `value`, and `max`
 // a field or a number; `shown: false` keeps a meter off the screen while it still bounds its
 // value and feeds the statuses. A world that adds a vital adds its column and a row here.
-// Breath is a bar under health, always; focus a bar under the world's word for it, while it is
-// not full; tiredness (`energy`) is no bar: its statuses are pills (docs/STAMINA.md).
+// Breath is a bar under health, always; focus a bar under the world's word for it, always too
+// (the owner, play-test 6: "why not always visible ?"); tiredness (`energy`) is no bar: its statuses are pills (docs/STAMINA.md).
 fn meters() {
     let w = pool_word("focus");
     [
         #{ name: "health", value: "hp", max: "max_hp", order: 0 },
         #{ name: "stamina", value: "stamina", max: "stamina_max", order: 1 },
-        #{ name: "focus", value: "focus", max: "focus_max", order: 2, label: w.sub_string(0, 1).to_upper() + w.sub_string(1), while_short: true },
+        #{ name: "focus", value: "focus", max: "focus_max", order: 2, label: w.sub_string(0, 1).to_upper() + w.sub_string(1) },
         #{ name: "energy", value: "energy", max: 100.0, order: 3, shown: false },
         #{ name: "hunger", value: "hunger", max: 100.0, order: 4, shown: false },
     ]
@@ -2912,6 +2965,26 @@ fn perceived_of_law() {
        about: "You cannot read minds; what others say may be false. You only know what you perceived or were told. You know someone's name once they say it, or you are family, of one community, or close; until then they are a stranger to you." }
 }
 
+// ---- a person's look (docs/LOOK.md) ---------------------------------------------------------
+// Which of their lines a person wears: an infant's, a child's until `youth` years, a youth's until
+// `adult` years (a child or a grown person), an adult's, an elder's (life stages 0 and 3). Read
+// when a look is written (at a birth, a stage change, a band's due time); a world whose people
+// look grown sooner or later changes the ages.
+fn look_bands() { #{ youth: 12.0, adult: 18.0 } }
+fn look_bands_law() {
+    let b = look_bands();
+    #{ cadence: "event", topic: "",
+       about: `People look like children until ${short(b.youth)} years old, like youths until ${short(b.adult)}, then like adults until they grow old.` }
+}
+
+// Whom a mind's scene describes by look: "unnamed" (strangers and figures too far away to make
+// out), "all" (everyone in the scene) or "none".
+fn appearance_in_scene() { "unnamed" }
+fn appearance_in_scene_law() {
+    #{ cadence: "event", topic: "",
+       about: "You see how people look: their build, their clothes and, close enough, their hair; at a distance only a figure's height, build and clothes." }
+}
+
 fn dealings_law() {
     #{ cadence: "event", covers: ["record_text", "on_give", "on_store", "on_host", "on_expire", "due_by_dark"],
        about: "Agreements and demands are kept by the world: it counts what each side hands over, stores or hosts for the other, and tells both sides when an agreement is kept, broken or lapses at its dusk, and when a demand is met or goes unpaid." }
@@ -2976,8 +3049,17 @@ fn laws_about(l) {
         think_framing: if l.think_framing { "a mind is shown what just happened and thinks about whatever matters to it now" } else { "a mind starts from why one is thinking now" },
         heard_first_rethinks: if l.heard_first_rethinks { "a line you decided to say to someone, when you hear another address them before you speak, waits while you think again" } else { "a line you decided to say is said when it comes due, whoever spoke to them meanwhile" },
         cue_check_s: `what one watches for is looked for every ${short(l.cue_check_s)} s`,
+        witness_fold_ms: if l.witness_fold_ms > 0.0 { `what one watches of others' fights is told together every ${short(l.witness_fold_ms)} ms: every blow seen, who struck whom, how many landed, and who fell` } else { "of others' fights one is told each fight's first blow, at once" },
         witness_wake_ms: if l.witness_wake_ms > 0.0 { `a bystander turns to what it sees at most every ${short(l.witness_wake_ms)} ms` } else { "a bystander turns to each thing it sees at once" },
         regard_cache: if l.regard_cache { "what each one makes of another is worked out once a moment and shared" } else { "what each one makes of another is worked out afresh each time it is asked" },
+        // How the work is done, not what anyone perceives: plain words (no condition), so the
+        // descriptions stay within the engine's operations.
+        check_ctx_plan: "a move is weighed on what its rules read",
+        check_ctx_check: "a diagnostic: each move is weighed both ways and compared",
+        alarm_cells: "the body's alarms are worked out again only when something they read can change",
+        alarm_cells_check: "a diagnostic: each kept alarm answer is worked out afresh and compared",
+        warmth_check: "a diagnostic: warmth is worked out both ways and compared",
+        profile_detail: if l.profile_detail { "while profiling, the parts of each behaviour's evaluation are timed" } else { "profiling times each behaviour's evaluation whole" },
         regard_cache_check: if l.regard_cache_check { "every shared answer about another is checked against a fresh one" } else { "shared answers about another are not checked" },
         fast_lane_on: if l.fast_lane_on { "a mind may revise its fighting quickly between blows" } else { "a mind revises its fighting only when it thinks" },
         seen_again_n: `seeing the same move started at one ${short(l.seen_again_n)} times in a fight is reason for a quick revision`,
@@ -2986,7 +3068,10 @@ fn laws_about(l) {
         fast_lane_gap_s: `one's quick revisions begin at least ${short(l.fast_lane_gap_s)} s apart`,
         fast_lane_stale_s: `a reason for one that waits ${short(l.fast_lane_stale_s)} s is let go`,
         force_outcomes: if l.force_outcomes { "whoever strikes, shoots or casts learns how it came out, as far as they see" } else { "a blow, shot or bolt tells its maker how it came out only when it fails, or for a few skills" },
+        alert_after_hit_s: `a body struck within the last ${short(l.alert_after_hit_s)} s cannot fall asleep`,
+        alert_while_attacker_near: if l.alert_while_attacker_near { "nor while the one who struck it is close and the fight is on" } else { "even with the one who struck it close by" },
         fov_on: if l.fov_on { "one sees fully only the way one faces" } else { "one sees as far in every direction" },
+        pack_reflex: if l.pack_reflex { "wolves are born keeping apart from their pack mates as they close on prey" } else { "wolves close on prey with no thought for where their pack mates are" },
         fov_focal_deg: `full sight within ${short(l.fov_focal_deg)} degrees of facing (when sight depends on facing)`,
         fov_side_deg: `side vision out to ${short(l.fov_side_deg)} degrees`,
         fov_side_share: `side vision reaches ${short(l.fov_side_share)} of one's sight`,

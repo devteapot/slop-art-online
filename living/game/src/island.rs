@@ -87,7 +87,7 @@ struct Item {
     /// Where the model's origin stands (a lot's levelled floor), else the ground.
     floor: Option<f32>,
     native: bool,
-    /// A person: recipe seed, folk and style preset (`characters::Recipe::random_in`).
+    /// A person: recipe seed, folk and style preset ([`person_recipe`]).
     person: Option<(u64, &'static str, String)>,
     /// A plain box (width, height, depth) instead of a model: a lot or a planned settlement's
     /// stair tread or retaining wall whose model is not on disk ([`GreyBox`]).
@@ -1033,13 +1033,25 @@ fn face_share(land: &Land, x: f32, z: f32, step: f32) -> f32 {
     t * t * (3.0 - 2.0 * t)
 }
 
+/// A background person's recipe, for both their preload ([`scene_of`]) and their spawn
+/// ([`spawn_item`]), so the two never disagree: a grown person's line from the look book's
+/// `decor` pool by their own seed (a pool apart from newcomers', so an extra is never a real
+/// newcomer's twin), else, and for giants and small folk, a random recipe dressed in their
+/// settlement's style (fantasy where it has no preset).
+fn person_recipe(it: &Item) -> Option<crate::characters::Recipe> {
+    let (seed, folk, style) = it.person.as_ref()?;
+    let book = crate::characters::book::book().filter(|_| *folk == "adult" && crate::characters::compose::enabled());
+    let decor = book.and_then(|b| b.decor(*seed, true).and_then(|(key, _)| b.recipe(key).ok()));
+    Some(decor.unwrap_or_else(|| crate::characters::Recipe::random_in(*seed, folk, style)))
+}
+
 /// The scene file a thing spawns from (a person's: its recipe's animated base).
 fn scene_of(assets: &AssetServer, it: &Item) -> Handle<WorldAsset> {
     if it.size.is_some() {
         return Handle::default();
     }
-    let file = match &it.person {
-        Some((seed, folk, style)) => crate::lookdev::animated(&crate::characters::Recipe::random_in(*seed, folk, style).base),
+    let file = match person_recipe(it) {
+        Some(r) => crate::lookdev::animated(&r.base),
         None => it.file.clone(),
     };
     assets.load(GltfAssetLabel::Scene(0).from_asset(file))
@@ -1099,9 +1111,10 @@ fn lot_item(envs: &HashMap<String, EnvDef>, land: &Land, lot: &LotRow) -> Option
 fn spawn_item(commands: &mut Commands, assets: &AssetServer, land: &Land, it: &Item) -> Vec<Entity> {
     let y = it.floor.unwrap_or_else(|| land.height(it.at.x, it.at.y));
     let at = Vec3::new(it.at.x, y, it.at.y);
-    if let Some((seed, folk, style)) = &it.person {
-        // Settlements dress their people in their style (fantasy where it has no preset).
-        let recipe = crate::characters::Recipe::random_in(*seed, folk, style);
+    if let Some(recipe) = person_recipe(it) {
+        if recipe.person.is_some() {
+            debug!("looks: background person {:?} drawn from decor {}", it.person.as_ref().map(|p| p.0), recipe.name);
+        }
         let e = crate::characters::spawn(commands, assets, &recipe, at, it.yaw);
         commands.entity(e).insert(EnvPart);
         return vec![e];

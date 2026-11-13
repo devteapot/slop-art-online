@@ -229,6 +229,19 @@ struct Shown {
     /// How far the body's gaits are the running family's (0–1), eased toward its row's
     /// `running` ([`family`]).
     run_w: f32,
+    /// The look key it was drawn from (`characters::seen`; empty for none). A new key (a band
+    /// change, a `relook`) redraws the person in place ([`swap_look`]).
+    look: String,
+    /// Drawn from the look's line (else a VRoid recipe).
+    composed: bool,
+}
+
+/// A person drawn, as the UI dump reports them (`ui::DumpExtra::looks_json`).
+pub struct DrawnLook<'a> {
+    pub id: u32,
+    pub look: &'a str,
+    pub composed: bool,
+    pub swapping: bool,
 }
 
 /// A sitter whose rest ends gets up where it sat before walking off (`stand_up_ground`, 2.47 s,
@@ -269,14 +282,34 @@ const STAND_TURN_OFF: f32 = 6.0 * PI / 180.0;
 /// segment turned by its facing offset at `now_ms` (authority ms), as `steer::facing` evaluates
 /// it with `dt = (min(now, next_ms) − t_ms) / 1000`. None when the row holds no offset (the body
 /// faces its travel).
-fn authority_facing(m: &living_bindings::Moving, now_ms: f64) -> Option<f32> {
+///
+/// look-4: the offset is not wrapped (at a segment's start it may be ±180°, past it after a
+/// counter-turn), so the sum is; and while the travel turns, the offset's own rate can be up to
+/// twice the turn rate, but the facing in the world (what is drawn) stays continuous and within
+/// it: nothing here eases or scales the offset by itself.
+pub(crate) fn authority_facing(m: &living_bindings::Moving, now_ms: f64) -> Option<f32> {
     if m.face_off == 0.0 && (m.face_turn == 0.0 || m.face_turn_s <= 0.0) {
         return None;
     }
     let dt = ((now_ms.min(m.next_ms as f64) - m.t_ms as f64) / 1000.0).max(0.0) as f32;
-    let travel = m.heading + if m.turn_s > 0.0 { m.turn * dt.min(m.turn_s) } else { 0.0 };
     let off = living_rules::steer::face_off(m.face_off, m.face_turn, m.face_turn_s, dt);
-    (off.abs() > 1e-3).then(|| living_rules::steer::facing(travel, m.face_off, m.face_turn, m.face_turn_s, dt))
+    (living_rules::steer::wrap(off).abs() > 1e-3).then(|| living_rules::steer::wrap(living_rules::steer::facing(authority_travel(m, now_ms), m.face_off, m.face_turn, m.face_turn_s, dt)))
+}
+
+/// The row's travel heading at `now_ms` (the travel segment's turn followed), wrapped.
+pub(crate) fn authority_travel(m: &living_bindings::Moving, now_ms: f64) -> f32 {
+    let dt = ((now_ms.min(m.next_ms as f64) - m.t_ms as f64) / 1000.0).max(0.0) as f32;
+    living_rules::steer::wrap(m.heading + if m.turn_s > 0.0 { m.turn * dt.min(m.turn_s) } else { 0.0 })
+}
+
+/// Where the row's facing settles from its travel (look-4): the offset at the facing segment's
+/// end, against the travel at the end of its own turn (`face_turn_s` is the travel's `turn_s`
+/// while it turns), wrapped. After a sudden change of the travel the offset can pass 75° (up to
+/// 180°) for about 0.3 s while the facing comes round; deciding "walking backwards" from it then
+/// would start a brief backwards gait, so the legs decide from where it settles.
+fn settled_offset(m: &living_bindings::Moving) -> f32 {
+    let turned = if m.face_turn_s > 0.0 { m.face_turn * m.face_turn_s } else { 0.0 };
+    living_rules::steer::wrap(m.face_off + turned)
 }
 
 #[derive(Resource, Default)]
@@ -296,6 +329,11 @@ pub struct Live {
     /// they have been fading (s), whose they were, and whether they stay a moment as a faint
     /// figure first (the memory look under trial, `sightedge::Look`).
     leaving: Vec<(Entity, f32, u32, bool)>,
+    /// People redrawn in place for a new look ([`swap_look`]): the old body, kept drawn and
+    /// moving with the new until the new is fitted, then faded out as the new fades in.
+    swaps: Vec<(Entity, Entity, u32)>,
+    /// The world's look generation has been checked against the book (one warning at connect).
+    looks_checked: bool,
 }
 
 impl Live {
@@ -305,9 +343,16 @@ impl Live {
         self.hosted.clone()
     }
 
-    /// The bodies drawn now and their entities (those leaving sight are not among them).
+    /// Each person drawn and the look they were drawn from.
+    pub fn looks(&self) -> impl Iterator<Item = DrawnLook<'_>> + '_ {
+        self.shown.iter().filter(|(_, s)| s.person).map(|(id, s)| DrawnLook { id: *id, look: &s.look, composed: s.composed, swapping: self.swaps.iter().any(|w| w.2 == *id) })
+    }
+
+    /// The bodies drawn now and their entities (those leaving sight are not among them). While a
+    /// person is redrawn for a new look, the body still on screen (the old one) until the new
+    /// one is fitted.
     pub fn drawn(&self) -> impl Iterator<Item = (u32, Entity)> + '_ {
-        self.shown.iter().map(|(id, s)| (*id, s.entity))
+        self.shown.iter().map(|(id, s)| (*id, self.swaps.iter().find(|w| w.2 == *id && w.1 == s.entity).map_or(s.entity, |w| w.0)))
     }
 }
 
@@ -461,13 +506,65 @@ fn lots(mut commands: Commands, net: NonSend<Net>, island: Option<Res<Island>>, 
 }
 
 
-/// The recipe a person is drawn from: seeded by the land and their id, in the folk and dress
-/// of the projection (`ui/looks.rs` names strangers by it). Mine is `LIVING_GAME_PLAYER` if set.
-pub fn recipe_for(land_seed: u64, c: &SeenCharacter, mine: bool) -> crate::characters::Recipe {
-    let seed = land_seed.wrapping_mul(0x9E37_79B9).wrapping_add(c.id as u64);
-    if mine {
-        return std::env::var("LIVING_GAME_PLAYER").ok().and_then(|r| crate::characters::Recipe::parse(&r)).unwrap_or_else(|| crate::characters::Recipe::random(seed, "adult"));
+/// The recipe a person is drawn from (docs/LOOK.md §5), mine as anyone's (my own row's look):
+/// the line their projected look names in the look book, composed from shared files, at the
+/// line's own height. Without one (no key, a key the book lacks, a file not on disk, no book, or
+/// composing turned off) a VRoid recipe seeded by the land and their id, in the folk and dress of
+/// the projection, as before looks; each such case is one warning line a session.
+pub fn recipe_for(book: Option<&crate::characters::book::LookBook>, land_seed: u64, c: &SeenCharacter) -> crate::characters::Recipe {
+    use crate::characters::book::{warn_once, Miss};
+    let seen = crate::characters::seen::of(c);
+    let drawn = match book {
+        _ if !crate::characters::compose::enabled() => None,
+        None => Some(Err(Miss::NoBook)),
+        Some(b) => Some(b.recipe(&seen.look)),
+    };
+    // A world made before looks (no `look_book`) has no keys: its people fall back quietly (one
+    // line at connect, `sight`).
+    let quiet = crate::characters::book::world().is_none_or(|g| g.is_empty());
+    match drawn {
+        Some(Ok(r)) => r,
+        Some(Err(m)) => {
+            if !(quiet && matches!(m, Miss::NoKey | Miss::NoBook)) {
+                warn_once(&m);
+            }
+            vroid_for(land_seed, c)
+        }
+        None => vroid_for(land_seed, c),
     }
+}
+
+/// Redraw a shown person for a new look where and as they are: a new body from the new recipe
+/// with the old one's transform and motion, fading in once it is fitted (`fade.rs` holds a fade
+/// until then). The old body stays drawn and moving with it until then (`Live::swaps`), and then
+/// fades out, so the person never leaves the screen.
+#[allow(clippy::too_many_arguments)]
+fn swap_look(commands: &mut Commands, assets: &AssetServer, live: &mut Live, q: &mut Query<Drawn>, (id, mine): (u32, bool), c: &SeenCharacter, land_seed: u64, now: crate::characters::seen::Seen) {
+    let Some(old) = live.shown.get(&id).map(|s| s.entity) else { return };
+    let Ok((tf, _, _, _, motion, _)) = q.get(old) else { return };
+    let (tf, motion) = (*tf, motion.clone());
+    let mut recipe = recipe_for(crate::characters::book::book(), land_seed, c);
+    if recipe.person.is_none() {
+        recipe.height *= stage_scale(c.stage);
+    }
+    let new = crate::characters::spawn(commands, assets, &recipe, tf.translation, 0.0);
+    commands.entity(new).insert((tf, motion, crate::fade::Fade::appearing()));
+    if mine {
+        commands.entity(new).insert((crate::gait::Feet, crate::gait::Logged(id)));
+    } else if crate::gait::logged_other() == Some(id) {
+        commands.entity(new).insert(crate::gait::Logged(id));
+    }
+    let s = live.shown.get_mut(&id).unwrap();
+    info!("looks: #{id} redrawn for a new look ({} → {})", if s.look.is_empty() { "none" } else { &s.look }, if now.look.is_empty() { "none" } else { &now.look });
+    (s.entity, s.look, s.composed) = (new, now.look, recipe.person.is_some());
+    live.heights.insert(id, recipe.height);
+    live.swaps.push((old, new, id));
+}
+
+/// A person's VRoid recipe: seeded by the land and their id, in the folk and dress of the
+/// projection (drawn at their life stage's scale, [`stage_scale`]).
+pub fn vroid_for(land_seed: u64, c: &SeenCharacter) -> crate::characters::Recipe {
+    let seed = land_seed.wrapping_mul(0x9E37_79B9).wrapping_add(c.id as u64);
     match folk_of(c) {
         (folk, Some(style)) => crate::characters::Recipe::random_in(seed, folk, &style),
         (folk, None) => crate::characters::Recipe::random(seed, folk),
@@ -522,9 +619,28 @@ fn bodies(
         for (e, ..) in live.leaving.drain(..) {
             commands.entity(e).despawn();
         }
+        for (old, ..) in live.swaps.drain(..) {
+            commands.entity(old).despawn();
+        }
         live.heights.clear();
+        live.looks_checked = false;
+        crate::characters::book::set_world(None);
         return;
     };
+    // The world's look generation against the book's, once a connection: one line either way
+    // when it is not the book's, and one when the world has no looks.
+    if !live.looks_checked && conn.db.world().iter().next().is_some() {
+        live.looks_checked = true;
+        let generation = crate::characters::seen::world_generation(conn);
+        crate::characters::book::set_world(Some(generation.clone()));
+        if generation.is_empty() {
+            info!("looks: this world was made before looks; its people are drawn as VRoid bases");
+        } else if let Some(w) = crate::characters::seen::generation_warning(&generation, crate::characters::book::book()) {
+            warn!("{w}");
+        } else if crate::characters::book::book().is_none() {
+            crate::characters::book::warn_once(&crate::characters::book::Miss::NoBook);
+        }
+    }
     let dt = time.delta_secs().max(1e-4);
     let me = net.my_id;
     // Walking or running clips: the laws' split, read again when the installed script changes.
@@ -554,6 +670,26 @@ fn bodies(
         }
         keep
     });
+    // People redrawn for a new look: the old body moves with the new until the new is fitted,
+    // then fades out as the new fades in (a crossfade in place, never a gap).
+    for (old, new, id) in std::mem::take(&mut live.swaps) {
+        let current = live.shown.get(&id).is_some_and(|s| s.entity == new);
+        if !current || q.get(new).is_ok_and(|d| d.1.is_some()) {
+            match fades.get_mut(old) {
+                Ok(mut f) => {
+                    f.target = 1.0;
+                    live.leaving.push((old, 0.0, id, false));
+                }
+                Err(_) => commands.entity(old).despawn(),
+            }
+            continue;
+        }
+        if let Ok([from, mut to]) = q.get_many_mut([new, old]) {
+            *to.0 = *from.0;
+            *to.4 = from.4.clone();
+        }
+        live.swaps.push((old, new, id));
+    }
     // Who is speaking: lines I heard (the authority decides earshot), and my own last line.
     let mut talking: HashSet<u32> = me
         .map(|id| conn.db.my_experience().iter().filter(|e| e.observer == id && e.kind == "speech" && scene.now_ms - (e.at_ms as f64) < TALKING_S * 1000.0).map(|e| e.subject).collect())
@@ -631,10 +767,15 @@ fn bodies(
             }
             let h = h.unwrap_or(body.heading);
             let size = character.as_ref().map_or(1.0, |c| stage_scale(c.stage));
+            let mut composed = false;
             let (entity, height, person, beast) = if body.kind == "person" {
                 let c = character.as_ref().unwrap();
-                let mut recipe = recipe_for(island.land.seed, c, mine);
-                recipe.height *= stage_scale(c.stage);
+                let mut recipe = recipe_for(crate::characters::book::book(), island.land.seed, c);
+                // A line carries its own height; a VRoid recipe is scaled by life stage.
+                if recipe.person.is_none() {
+                    recipe.height *= stage_scale(c.stage);
+                }
+                composed = recipe.person.is_some();
                 let e = crate::characters::spawn(&mut commands, &assets, &recipe, at, yaw_of(Vec2::new(h.cos(), h.sin())));
                 (e, recipe.height, true, false)
             } else if let Some(e) = crate::bodies::spawn_beast(&mut commands, &assets, &body.kind, at, yaw_of(Vec2::new(h.cos(), h.sin())), size) {
@@ -652,9 +793,19 @@ fn bodies(
             } else if crate::gait::logged_other() == Some(id) {
                 commands.entity(entity).insert(crate::gait::Logged(id));
             }
-            live.shown.insert(id, Shown { entity, last: p, speed: 0.0, person, beast, yaw: h, drawn: p, sitting: false, rising: None, startles, still: 0.0, startle: None, tilt: Quat::IDENTITY, kind: body.kind.clone(), face: h, back: false, turning: false, turn: None, jump: None, jump_key: -1.0, jump_took: false, walked: false, along: false, stop: None, stop_at: p, rest_at: None, calm_speed: 0.0, run_w: if row.as_ref().is_some_and(|r| r.running) { 1.0 } else { 0.0 } });
+            let look = character.as_ref().filter(|_| person).map(crate::characters::seen::of).unwrap_or_default();
+            live.shown.insert(id, Shown { entity, last: p, speed: 0.0, person, beast, yaw: h, drawn: p, sitting: false, rising: None, startles, still: 0.0, startle: None, tilt: Quat::IDENTITY, kind: body.kind.clone(), face: h, back: false, turning: false, turn: None, jump: None, jump_key: -1.0, jump_took: false, walked: false, along: false, stop: None, stop_at: p, rest_at: None, calm_speed: 0.0, run_w: if row.as_ref().is_some_and(|r| r.running) { 1.0 } else { 0.0 }, look: look.look, composed });
             live.heights.insert(id, height);
             continue;
+        }
+        // A new look key for someone drawn (a band change, a `relook`): redrawn in place.
+        if live.shown.get(&id).is_some_and(|s| s.person) {
+            if let Some(c) = conn.db.seen_characters().id().find(&id) {
+                let now = crate::characters::seen::of(&c);
+                if live.shown.get(&id).is_some_and(|s| s.look != now.look) {
+                    swap_look(&mut commands, &assets, &mut live, &mut q, (id, mine), &c, island.land.seed, now);
+                }
+            }
         }
         let s = live.shown.get_mut(&id).unwrap();
         let family = family(row.as_ref().map(|r| r.running), &mut s.run_w, dt, split);
@@ -772,6 +923,8 @@ fn bodies(
         // look leads it, drawn ahead of the row (`docs/PERCEPTION.md`, "Drawing it").
         let faced = row.as_ref().and_then(|m| authority_facing(m, if mine { scene.mine_ms } else { scene.now_ms }));
         let look_at = aimed.or(look).or(faced);
+        // Backwards from where the authority's facing settles, when that is what the legs follow.
+        let settled = if aimed.is_none() && look.is_none() && faced.is_some() { row.as_ref().map(settled_offset) } else { None };
         let walking = s.person && s.speed > MOVING;
         let takes = |t: f32, legs: f32| gaits.as_ref().is_some_and(|g| g.blend_toward(s.speed / pace.max(0.5), stride, family, living_rules::steer::wrap(t - legs), |_| 1.0).is_some());
         // The travel from the legs for the directional takes, when they play.
@@ -822,7 +975,7 @@ fn bodies(
             // play; where the file has none there, the forward gaits along the travel (reversed
             // backwards), the legs taken round at the old rate.
             (true, Some(l), Some(t)) => {
-                let (goal, b) = lw.legs_goal(t, l, s.back, |legs| takes(t, legs));
+                let (goal, b) = lw.legs_goal(t, l, settled, s.back, |legs| takes(t, legs));
                 back = b;
                 // Always eased (a snap at the old rate turned the legs 25–39° a frame setting off
                 // from a standing turn); without a take there, the forward gaits play meanwhile.
@@ -1629,6 +1782,34 @@ fn script(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn row(heading: f32, turn: f32, turn_s: f32, face_off: f32, face_turn: f32, face_turn_s: f32) -> living_bindings::Moving {
+        living_bindings::Moving { id: 1, x: 0.0, y: 0.0, t_ms: 0, vx: 1.0, vy: 0.0, heading, turn, turn_s, next_ms: u64::MAX, speed: 1.0, face_off, face_turn, face_turn_s, running: false }
+    }
+
+    #[test]
+    fn a_reversal_is_drawn_continuous_and_decided_where_it_settles() {
+        use std::f32::consts::PI;
+        // look-4: the travel reverses (a half-turn over 0.3 s); the facing was 10° off the old
+        // travel, so its offset starts near 170° and its relative turn is near twice the travel's.
+        let (turn_s, turn) = (0.3, PI / 0.3);
+        let m = row(0.0, turn, turn_s, PI - 0.17, -(PI - 0.17 - 0.2) / turn_s, turn_s);
+        // The world facing is continuous, wrapped, and turns no faster than the relative turn and
+        // the travel's together allow (nothing here amplifies the relative value).
+        let mut prev = authority_facing(&m, 0.0).unwrap();
+        for k in 1..=30 {
+            let f = authority_facing(&m, k as f64 * 10.0).unwrap_or(authority_travel(&m, k as f64 * 10.0));
+            assert!(f.abs() <= PI + 1e-4, "wrapped: {f}");
+            let step = living_rules::steer::wrap(f - prev).abs();
+            assert!(step <= 0.2, "a 10 ms step of {step} rad");
+            prev = f;
+        }
+        // Where it settles (0.2 rad off the travel at the end of its turn), not the 170° now,
+        // decides walking backwards.
+        assert!((settled_offset(&m) - 0.2).abs() < 1e-4, "{}", settled_offset(&m));
+        // An offset past ±180° at a segment's start is wrapped.
+        assert!(settled_offset(&row(0.0, 0.0, 0.0, 3.5, 0.0, 0.0)).abs() < PI);
+    }
 
     /// A structure inside a house is hidden while the house is drawn closed, or not drawn, and
     /// shown while the cutaway has it open; a kit model waits for its fit.

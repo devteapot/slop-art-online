@@ -236,7 +236,7 @@ The meters law from `rules-senses-outcomes` describes the bars, and `status_of` 
 - `meters()`:
   - health;
   - `stamina` (bar, always);
-  - `focus`, labelled with the world's `pool_word("focus")` ("Mana") and `while_short: true` (shown only while not full; a new meter key);
+  - `focus`, labelled with the world's `pool_word("focus")` ("Mana") and shown always (it had `while_short: true`, shown only while not full, until meters-always on 2026-11-12, after the owner's play-test 6 asked "why not always visible ?"; the `while_short` meter key stays for worlds that want it);
   - `energy` and `hunger` as `shown: false`. Tiredness is now pills ("Tired", "Exhausted", "Spent", from `energy_status`), not a bar.
 - `status_of` adds two statuses:
   - `out_of_breath` ("Out of breath", felt "out of breath") below 20 breath;

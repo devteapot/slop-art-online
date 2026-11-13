@@ -15,6 +15,7 @@ pub mod act_outcome_type;
 pub mod act_queue_table;
 pub mod activity_table;
 pub mod activity_type;
+pub mod admin_set_vitals_reducer;
 pub mod artifact_table;
 pub mod artifact_type;
 pub mod audience_table;
@@ -72,6 +73,8 @@ pub mod far_handle_table;
 pub mod far_handle_type;
 pub mod fast_ask_table;
 pub mod fast_ask_type;
+pub mod fight_seen_table;
+pub mod fight_seen_type;
 pub mod fighter_seen_table;
 pub mod fighter_seen_type;
 pub mod fighter_table;
@@ -137,6 +140,11 @@ pub mod line_heard_table;
 pub mod line_heard_type;
 pub mod line_seen_table;
 pub mod line_seen_type;
+pub mod look_line_table;
+pub mod look_line_type;
+pub mod look_table;
+pub mod look_type;
+pub mod look_words_type;
 pub mod lot_table;
 pub mod lot_type;
 pub mod mark_type;
@@ -148,6 +156,7 @@ pub mod mind_cursor_table;
 pub mod mind_cursor_type;
 pub mod mind_fast_done_reducer;
 pub mod mind_install_reducer;
+pub mod mind_install_way_reducer;
 pub mod mind_judged_reducer;
 pub mod mind_patch_reducer;
 pub mod mind_routines_reducer;
@@ -225,6 +234,7 @@ pub mod relation_in_type;
 pub mod relation_table;
 pub mod relation_type;
 pub mod release_skill_reducer;
+pub mod relook_reducer;
 pub mod resource_node_table;
 pub mod resource_node_type;
 pub mod resume_genesis_reducer;
@@ -314,6 +324,7 @@ pub use act_outcome_type::ActOutcome;
 pub use act_queue_table::*;
 pub use activity_table::*;
 pub use activity_type::Activity;
+pub use admin_set_vitals_reducer::admin_set_vitals;
 pub use artifact_table::*;
 pub use artifact_type::Artifact;
 pub use audience_table::*;
@@ -371,6 +382,8 @@ pub use far_handle_table::*;
 pub use far_handle_type::FarHandle;
 pub use fast_ask_table::*;
 pub use fast_ask_type::FastAsk;
+pub use fight_seen_table::*;
+pub use fight_seen_type::FightSeen;
 pub use fighter_seen_table::*;
 pub use fighter_seen_type::FighterSeen;
 pub use fighter_table::*;
@@ -436,6 +449,11 @@ pub use line_heard_table::*;
 pub use line_heard_type::LineHeard;
 pub use line_seen_table::*;
 pub use line_seen_type::LineSeen;
+pub use look_line_table::*;
+pub use look_line_type::LookLine;
+pub use look_table::*;
+pub use look_type::Look;
+pub use look_words_type::LookWords;
 pub use lot_table::*;
 pub use lot_type::Lot;
 pub use mark_type::Mark;
@@ -447,6 +465,7 @@ pub use mind_cursor_table::*;
 pub use mind_cursor_type::MindCursor;
 pub use mind_fast_done_reducer::mind_fast_done;
 pub use mind_install_reducer::mind_install;
+pub use mind_install_way_reducer::mind_install_way;
 pub use mind_judged_reducer::mind_judged;
 pub use mind_patch_reducer::mind_patch;
 pub use mind_routines_reducer::mind_routines;
@@ -524,6 +543,7 @@ pub use relation_in_type::RelationIn;
 pub use relation_table::*;
 pub use relation_type::Relation;
 pub use release_skill_reducer::release_skill;
+pub use relook_reducer::relook;
 pub use resource_node_table::*;
 pub use resource_node_type::ResourceNode;
 pub use resume_genesis_reducer::resume_genesis;
@@ -612,6 +632,10 @@ pub use world_type::World;
 /// to indicate which reducer caused the event.
 
 pub enum Reducer {
+    AdminSetVitals {
+        id: u32,
+        hp: f32,
+    },
     ClientConnected,
     ClientDisconnected,
     CreateFloor {
@@ -687,6 +711,16 @@ pub enum Reducer {
         seen_ms: u64,
         thought: ThoughtIn,
     },
+    MindInstallWay {
+        actor: u32,
+        graph: String,
+        plan: String,
+        say: String,
+        say_to: u32,
+        way: String,
+        seen_ms: u64,
+        thought: ThoughtIn,
+    },
     MindJudged {
         actor: u32,
         items: Vec<JudgedIn>,
@@ -745,6 +779,9 @@ pub enum Reducer {
     ReleaseSkill {
         skill: String,
     },
+    Relook {
+        generation: String,
+    },
     ResumeGenesis,
     SeedCommunities,
     SetBackground {
@@ -802,6 +839,7 @@ impl __sdk::InModule for Reducer {
 impl __sdk::Reducer for Reducer {
     fn reducer_name(&self) -> &'static str {
         match self {
+            Reducer::AdminSetVitals { .. } => "admin_set_vitals",
             Reducer::ClientConnected => "client_connected",
             Reducer::ClientDisconnected => "client_disconnected",
             Reducer::CreateFloor { .. } => "create_floor",
@@ -822,6 +860,7 @@ impl __sdk::Reducer for Reducer {
             Reducer::MindConsolidated { .. } => "mind_consolidated",
             Reducer::MindFastDone { .. } => "mind_fast_done",
             Reducer::MindInstall { .. } => "mind_install",
+            Reducer::MindInstallWay { .. } => "mind_install_way",
             Reducer::MindJudged { .. } => "mind_judged",
             Reducer::MindPatch { .. } => "mind_patch",
             Reducer::MindRoutines { .. } => "mind_routines",
@@ -835,6 +874,7 @@ impl __sdk::Reducer for Reducer {
             Reducer::PlaceStructure { .. } => "place_structure",
             Reducer::PurgeDead => "purge_dead",
             Reducer::ReleaseSkill { .. } => "release_skill",
+            Reducer::Relook { .. } => "relook",
             Reducer::ResumeGenesis => "resume_genesis",
             Reducer::SeedCommunities => "seed_communities",
             Reducer::SetBackground { .. } => "set_background",
@@ -856,6 +896,12 @@ impl __sdk::Reducer for Reducer {
     #[allow(clippy::clone_on_copy)]
     fn args_bsatn(&self) -> Result<Vec<u8>, __sats::bsatn::EncodeError> {
         match self {
+            Reducer::AdminSetVitals { id, hp } => {
+                __sats::bsatn::to_vec(&admin_set_vitals_reducer::AdminSetVitalsArgs {
+                    id: id.clone(),
+                    hp: hp.clone(),
+                })
+            }
             Reducer::ClientConnected => {
                 __sats::bsatn::to_vec(&client_connected_reducer::ClientConnectedArgs {})
             }
@@ -971,6 +1017,25 @@ impl __sdk::Reducer for Reducer {
                 seen_ms: seen_ms.clone(),
                 thought: thought.clone(),
             }),
+            Reducer::MindInstallWay {
+                actor,
+                graph,
+                plan,
+                say,
+                say_to,
+                way,
+                seen_ms,
+                thought,
+            } => __sats::bsatn::to_vec(&mind_install_way_reducer::MindInstallWayArgs {
+                actor: actor.clone(),
+                graph: graph.clone(),
+                plan: plan.clone(),
+                say: say.clone(),
+                say_to: say_to.clone(),
+                way: way.clone(),
+                seen_ms: seen_ms.clone(),
+                thought: thought.clone(),
+            }),
             Reducer::MindJudged { actor, items } => {
                 __sats::bsatn::to_vec(&mind_judged_reducer::MindJudgedArgs {
                     actor: actor.clone(),
@@ -1067,6 +1132,9 @@ impl __sdk::Reducer for Reducer {
                     skill: skill.clone(),
                 })
             }
+            Reducer::Relook { generation } => __sats::bsatn::to_vec(&relook_reducer::RelookArgs {
+                generation: generation.clone(),
+            }),
             Reducer::ResumeGenesis => {
                 __sats::bsatn::to_vec(&resume_genesis_reducer::ResumeGenesisArgs {})
             }
@@ -1178,6 +1246,7 @@ pub struct DbUpdate {
     familiar: __sdk::TableUpdate<Familiar>,
     far_handle: __sdk::TableUpdate<FarHandle>,
     fast_ask: __sdk::TableUpdate<FastAsk>,
+    fight_seen: __sdk::TableUpdate<FightSeen>,
     fighter: __sdk::TableUpdate<Fighter>,
     fighter_seen: __sdk::TableUpdate<FighterSeen>,
     floor_seed: __sdk::TableUpdate<FloorSeed>,
@@ -1201,6 +1270,8 @@ pub struct DbUpdate {
     law_change: __sdk::TableUpdate<LawChange>,
     line_heard: __sdk::TableUpdate<LineHeard>,
     line_seen: __sdk::TableUpdate<LineSeen>,
+    look: __sdk::TableUpdate<Look>,
+    look_line: __sdk::TableUpdate<LookLine>,
     lot: __sdk::TableUpdate<Lot>,
     membership: __sdk::TableUpdate<Membership>,
     mind_cursor: __sdk::TableUpdate<MindCursor>,
@@ -1367,6 +1438,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "fast_ask" => db_update
                     .fast_ask
                     .append(fast_ask_table::parse_table_update(table_update)?),
+                "fight_seen" => db_update
+                    .fight_seen
+                    .append(fight_seen_table::parse_table_update(table_update)?),
                 "fighter" => db_update
                     .fighter
                     .append(fighter_table::parse_table_update(table_update)?),
@@ -1436,6 +1510,12 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "line_seen" => db_update
                     .line_seen
                     .append(line_seen_table::parse_table_update(table_update)?),
+                "look" => db_update
+                    .look
+                    .append(look_table::parse_table_update(table_update)?),
+                "look_line" => db_update
+                    .look_line
+                    .append(look_line_table::parse_table_update(table_update)?),
                 "lot" => db_update
                     .lot
                     .append(lot_table::parse_table_update(table_update)?),
@@ -1762,6 +1842,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.fast_ask = cache
             .apply_diff_to_table::<FastAsk>("fast_ask", &self.fast_ask)
             .with_updates_by_pk(|row| &row.actor);
+        diff.fight_seen = cache
+            .apply_diff_to_table::<FightSeen>("fight_seen", &self.fight_seen)
+            .with_updates_by_pk(|row| &row.id);
         diff.fighter = cache
             .apply_diff_to_table::<Fighter>("fighter", &self.fighter)
             .with_updates_by_pk(|row| &row.id);
@@ -1827,6 +1910,12 @@ impl __sdk::DbUpdate for DbUpdate {
             .with_updates_by_pk(|row| &row.line);
         diff.line_seen = cache
             .apply_diff_to_table::<LineSeen>("line_seen", &self.line_seen)
+            .with_updates_by_pk(|row| &row.id);
+        diff.look = cache
+            .apply_diff_to_table::<Look>("look", &self.look)
+            .with_updates_by_pk(|row| &row.id);
+        diff.look_line = cache
+            .apply_diff_to_table::<LookLine>("look_line", &self.look_line)
             .with_updates_by_pk(|row| &row.id);
         diff.lot = cache
             .apply_diff_to_table::<Lot>("lot", &self.lot)
@@ -2131,6 +2220,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "fast_ask" => db_update
                     .fast_ask
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "fight_seen" => db_update
+                    .fight_seen
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "fighter" => db_update
                     .fighter
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
@@ -2199,6 +2291,12 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "line_seen" => db_update
                     .line_seen
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "look" => db_update
+                    .look
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "look_line" => db_update
+                    .look_line
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "lot" => db_update
                     .lot
@@ -2513,6 +2611,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "fast_ask" => db_update
                     .fast_ask
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "fight_seen" => db_update
+                    .fight_seen
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "fighter" => db_update
                     .fighter
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -2581,6 +2682,12 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "line_seen" => db_update
                     .line_seen
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "look" => db_update
+                    .look
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "look_line" => db_update
+                    .look_line
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "lot" => db_update
                     .lot
@@ -2839,6 +2946,7 @@ pub struct AppliedDiff<'r> {
     familiar: __sdk::TableAppliedDiff<'r, Familiar>,
     far_handle: __sdk::TableAppliedDiff<'r, FarHandle>,
     fast_ask: __sdk::TableAppliedDiff<'r, FastAsk>,
+    fight_seen: __sdk::TableAppliedDiff<'r, FightSeen>,
     fighter: __sdk::TableAppliedDiff<'r, Fighter>,
     fighter_seen: __sdk::TableAppliedDiff<'r, FighterSeen>,
     floor_seed: __sdk::TableAppliedDiff<'r, FloorSeed>,
@@ -2862,6 +2970,8 @@ pub struct AppliedDiff<'r> {
     law_change: __sdk::TableAppliedDiff<'r, LawChange>,
     line_heard: __sdk::TableAppliedDiff<'r, LineHeard>,
     line_seen: __sdk::TableAppliedDiff<'r, LineSeen>,
+    look: __sdk::TableAppliedDiff<'r, Look>,
+    look_line: __sdk::TableAppliedDiff<'r, LookLine>,
     lot: __sdk::TableAppliedDiff<'r, Lot>,
     membership: __sdk::TableAppliedDiff<'r, Membership>,
     mind_cursor: __sdk::TableAppliedDiff<'r, MindCursor>,
@@ -2991,6 +3101,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         callbacks.invoke_table_row_callbacks::<Familiar>("familiar", &self.familiar, event);
         callbacks.invoke_table_row_callbacks::<FarHandle>("far_handle", &self.far_handle, event);
         callbacks.invoke_table_row_callbacks::<FastAsk>("fast_ask", &self.fast_ask, event);
+        callbacks.invoke_table_row_callbacks::<FightSeen>("fight_seen", &self.fight_seen, event);
         callbacks.invoke_table_row_callbacks::<Fighter>("fighter", &self.fighter, event);
         callbacks.invoke_table_row_callbacks::<FighterSeen>(
             "fighter_seen",
@@ -3034,6 +3145,8 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         callbacks.invoke_table_row_callbacks::<LawChange>("law_change", &self.law_change, event);
         callbacks.invoke_table_row_callbacks::<LineHeard>("line_heard", &self.line_heard, event);
         callbacks.invoke_table_row_callbacks::<LineSeen>("line_seen", &self.line_seen, event);
+        callbacks.invoke_table_row_callbacks::<Look>("look", &self.look, event);
+        callbacks.invoke_table_row_callbacks::<LookLine>("look_line", &self.look_line, event);
         callbacks.invoke_table_row_callbacks::<Lot>("lot", &self.lot, event);
         callbacks.invoke_table_row_callbacks::<Membership>("membership", &self.membership, event);
         callbacks.invoke_table_row_callbacks::<MindCursor>("mind_cursor", &self.mind_cursor, event);
@@ -3862,6 +3975,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         familiar_table::register_table(client_cache);
         far_handle_table::register_table(client_cache);
         fast_ask_table::register_table(client_cache);
+        fight_seen_table::register_table(client_cache);
         fighter_table::register_table(client_cache);
         fighter_seen_table::register_table(client_cache);
         floor_seed_table::register_table(client_cache);
@@ -3885,6 +3999,8 @@ impl __sdk::SpacetimeModule for RemoteModule {
         law_change_table::register_table(client_cache);
         line_heard_table::register_table(client_cache);
         line_seen_table::register_table(client_cache);
+        look_table::register_table(client_cache);
+        look_line_table::register_table(client_cache);
         lot_table::register_table(client_cache);
         membership_table::register_table(client_cache);
         mind_cursor_table::register_table(client_cache);
@@ -3987,6 +4103,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "familiar",
         "far_handle",
         "fast_ask",
+        "fight_seen",
         "fighter",
         "fighter_seen",
         "floor_seed",
@@ -4010,6 +4127,8 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "law_change",
         "line_heard",
         "line_seen",
+        "look",
+        "look_line",
         "lot",
         "membership",
         "mind_cursor",

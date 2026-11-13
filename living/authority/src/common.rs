@@ -65,6 +65,21 @@ pub fn set_profiling(on: bool) {
 }
 
 thread_local! {
+    /// While profiling with the `profile_detail` law: the parts of an evaluation are timed too.
+    static DETAIL: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Set at each tick from `set_profile` and the `profile_detail` law.
+pub fn set_profile_detail(on: bool) {
+    DETAIL.with(|p| p.set(on));
+}
+
+/// A span for a part of an evaluation: timed only while profiling with `profile_detail`.
+pub fn detail_span(name: &str) -> Option<spacetimedb::log_stopwatch::LogStopwatch> {
+    (DETAIL.with(|p| p.get()) && PROFILE.with(|p| p.get())).then(|| spacetimedb::log_stopwatch::LogStopwatch::new(name))
+}
+
+thread_local! {
     /// While profiling: graph scenes built since the last report, the creatures they saw in
     /// all, and the most one saw.
     static SCENES: std::cell::Cell<(u64, u64, u64)> = const { std::cell::Cell::new((0, 0, 0)) };
@@ -85,13 +100,14 @@ thread_local! {
     /// Diagnostic counts while profiling (docs/BATTLE_SCALE.md): percepts by kind and how many
     /// woke their observer, onlookers per witnessed event, requests to think by reason, graph
     /// evaluations by trigger, wakes. Logged once a second by `report_diag`, then cleared.
-    static DIAG: RefCell<std::collections::BTreeMap<String, u64>> = const { RefCell::new(std::collections::BTreeMap::new()) };
+    static DIAG: RefCell<std::collections::BTreeMap<std::borrow::Cow<'static, str>, u64>> = const { RefCell::new(std::collections::BTreeMap::new()) };
 }
 
-/// Count `n` under the key `key()` while profiling (no work otherwise).
-pub fn diag(key: impl FnOnce() -> String, n: u64) {
+/// Count `n` under the key `key()` while profiling (no work otherwise). A fixed key (`|| "wake"`)
+/// costs no allocation, so counting in hot loops does not weigh on what is measured.
+pub fn diag<K: Into<std::borrow::Cow<'static, str>>>(key: impl FnOnce() -> K, n: u64) {
     if PROFILE.with(|p| p.get()) {
-        DIAG.with(|d| *d.borrow_mut().entry(key()).or_default() += n);
+        DIAG.with(|d| *d.borrow_mut().entry(key().into()).or_default() += n);
     }
 }
 
@@ -240,7 +256,7 @@ pub fn clock(ctx: &ReducerContext) -> Clock {
 }
 
 /// Revision of the installed skill script (cached for the transaction).
-fn scripts_rev(ctx: &ReducerContext) -> u32 {
+pub fn scripts_rev(ctx: &ReducerContext) -> u32 {
     let t = stamp(ctx);
     if let Some((_, rev)) = SCRIPTS_REV.with(|c| c.get()).filter(|(s, _)| *s == t) {
         return rev;
@@ -1233,6 +1249,39 @@ fn chunk_structures(ctx: &ReducerContext, chunk: u32) -> Rc<Vec<Structure>> {
     CHUNK_STRUCTURES.with(|c| c.borrow_mut().get(t, chunk, || Rc::new(ctx.db.structure().chunk().filter(chunk).collect())))
 }
 
+thread_local! {
+    /// Per chunk, its structures that can warm or shelter (a roof, `warms`, a fire that `burns`):
+    /// drawn from the chunk's cached list, and drawn again whenever that list is (the same `Rc`
+    /// or a new one), so it is never staler than the list itself (docs/BATTLE_SCALE.md,
+    /// battle-cheap path 3). Remains and the like are not in it.
+    static CHUNK_WARMING: RefCell<std::collections::HashMap<u32, (Rc<Vec<Structure>>, Rc<Vec<Structure>>)>> = RefCell::new(std::collections::HashMap::new());
+}
+
+/// The structures of `chunk` that can warm or shelter, by the installed script's traits.
+pub fn chunk_warming(ctx: &ReducerContext, chunk: u32) -> Rc<Vec<Structure>> {
+    let all = chunk_structures(ctx, chunk);
+    let rev = scripts_rev(ctx);
+    if let Some(w) = CHUNK_WARMING.with(|c| c.borrow().get(&chunk).filter(|(src, _)| Rc::ptr_eq(src, &all)).map(|(_, w)| w.clone())).filter(|_| WARMING_REV.with(|r| r.get()) == rev) {
+        return w;
+    }
+    let sc = scripts(ctx);
+    let w: Rc<Vec<Structure>> = Rc::new(all.iter().filter(|s| { let t = sc.structure(&s.kind); t.roof || t.warms || t.burns.is_some() }).cloned().collect());
+    CHUNK_WARMING.with(|c| {
+        let mut c = c.borrow_mut();
+        if WARMING_REV.with(|r| r.get()) != rev {
+            c.clear();
+            WARMING_REV.with(|r| r.set(rev));
+        }
+        c.insert(chunk, (all, w.clone()));
+    });
+    w
+}
+
+thread_local! {
+    /// The script revision `CHUNK_WARMING` was drawn under (a kind's traits are the script's).
+    static WARMING_REV: std::cell::Cell<u32> = const { std::cell::Cell::new(u32::MAX) };
+}
+
 /// Call before inserting (`None`: any chunk) or updating (`Some(chunk)`) a resource node.
 pub fn invalidate_resources(ctx: &ReducerContext, chunk: Option<u32>) {
     let t = stamp(ctx);
@@ -1413,7 +1462,7 @@ pub fn wake_bystander(ctx: &ReducerContext, id: u32, now: u64) {
     if now_wake {
         wake(ctx, id);
     } else {
-        diag(|| "wake:deferred".into(), 1);
+        diag(|| "wake:deferred", 1);
     }
 }
 
@@ -1433,13 +1482,13 @@ pub fn due_bystander_wakes(ctx: &ReducerContext, now: u64) {
         out
     });
     for id in due {
-        diag(|| "wake:due".into(), 1);
+        diag(|| "wake:due", 1);
         wake(ctx, id);
     }
 }
 
 pub fn wake(ctx: &ReducerContext, id: u32) {
-    diag(|| "wake".into(), 1);
+    diag(|| "wake", 1);
     if ctx.db.wake().id().find(id).is_none() {
         ctx.db.wake().insert(Wake { id });
     }

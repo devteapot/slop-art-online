@@ -201,6 +201,18 @@ pub fn give_ways(ctx: &ReducerContext, id: u32, kind: &str, now: u64) {
     let r: serde_json::Value = serde_json::from_str(REPERTOIRE).expect("repertoire json");
     let Some(ways) = r["species"].get(kind) else { return };
     let routines: Vec<crate::mind::RoutineIn> = ways["routines"].as_object().map(|m| m.iter().map(|(k, g)| crate::mind::RoutineIn { name: k.clone(), graph: g.to_string() }).collect()).unwrap_or_default();
+    // Wolves' ways carry the spacing reflex beside each hunt while the `pack_reflex` law is on.
+    let reflex = living_rules::graph::reflex_applies(kind) && common::laws(ctx).pack_reflex;
+    let routines: Vec<crate::mind::RoutineIn> = routines
+        .into_iter()
+        .map(|r| {
+            if !reflex {
+                return r;
+            }
+            let g = serde_json::from_str::<serde_json::Value>(&r.graph).map(|v| living_rules::graph::with_pack_reflex(&v).to_string()).unwrap_or(r.graph);
+            crate::mind::RoutineIn { name: r.name, graph: g }
+        })
+        .collect();
     let _ = crate::mind::set_routines(ctx, id, &routines, &format!("{kind} instinct"), now);
     if let Ok(g) = living_rules::graph::parse(&ways["top"].to_string()) {
         let _ = crate::mind::set_graph(ctx, id, &g.to_json(), &format!("the ways of a {kind}"), "instinct", now);
@@ -324,6 +336,9 @@ pub struct SeedResident {
     /// Their daily rhythm (docs/SEEDED_LIVES.md); whatever it leaves out is drawn.
     #[serde(default)]
     pub rhythm: Option<SeedRhythm>,
+    /// Their person entry in the seed's `looks` (`lp_…`, docs/LOOK.md); none: a pool entry.
+    #[serde(default)]
+    pub look: String,
 }
 
 /// When a person rises and goes to bed (hours of the day, any hour; past 24 for after
@@ -574,6 +589,10 @@ pub struct Seed {
     /// `create_floor`); a seed that names a file without its text is refused.
     #[serde(default)]
     pub laws_file: String,
+    /// The world's look data (docs/LOOK.md §5): person entries, their lines' words and the pool;
+    /// residents name their entry (`look`). Never sent to clients.
+    #[serde(default)]
+    pub looks: Option<crate::look::SeedLooks>,
 }
 
 impl Seed {
@@ -802,7 +821,7 @@ fn packs(ctx: &ReducerContext, map: &living_rules::map::Map, packs: &[SeedPack],
                 let all: serde_json::Value = serde_json::from_str(INSTINCTS).expect("instincts json");
                 match all.get(p.instinct.as_str()) {
                     Some(g) => {
-                        if let Err(e) = crate::mind::set_graph(ctx, id, &g.to_string(), "instinct", "seed", now) {
+                        if let Err(e) = crate::mind::set_graph(ctx, id, &as_installed(ctx, &p.instinct, g), "instinct", "seed", now) {
                             log::warn!("pack instinct {}: {e}", p.instinct);
                         }
                     }
@@ -940,6 +959,17 @@ pub fn instinct(kind: &str) -> String {
     all.get(kind).or_else(|| all.get("person")).map(|v| v.to_string()).unwrap_or_default()
 }
 
+/// A starting instinct as this world installs it: `graph` (instincts.json's `name`) with the
+/// wolves' spacing reflex beside each hunt while the `pack_reflex` law is on and `name` is a
+/// grown wolf's (`graph::with_pack_reflex`, docs/PACK_MIND.md).
+pub fn as_installed(ctx: &ReducerContext, name: &str, graph: &serde_json::Value) -> String {
+    if living_rules::graph::reflex_applies(name) && common::laws(ctx).pack_reflex {
+        living_rules::graph::with_pack_reflex(graph).to_string()
+    } else {
+        graph.to_string()
+    }
+}
+
 /// Create the world from its seed in this one call: terrain, resources, people and animals.
 /// A land too big for one reducer's budget is created in steps instead (`floor`).
 pub fn seed(ctx: &ReducerContext, now: u64) {
@@ -1006,6 +1036,8 @@ pub fn world_row(ctx: &ReducerContext, s: &Seed, map: &living_rules::map::Map) {
 /// households and communities, structures, artifacts, bands and animals.
 pub fn populate<'a>(ctx: &ReducerContext, s: &'a Seed, map: &living_rules::map::Map, hosted: Option<&crate::island::Hosted>, realm: Option<&living_rules::realm::Realm>, mut settlements: Vec<(&'a SeedTown, living_rules::city::Layout)>, now: u64) {
     let _draws = Creating::start(s.seed, STEP_POPULATE);
+    // The look data first: everyone made from here on is given a look as they are.
+    crate::look::genesis(ctx, s.looks.as_ref());
     // A land world's settlements are already laid out; seeded ones get residents.
     let seeded: Vec<Option<&SeedTown>> = hosted.map(|h| crate::island::match_seed(h, &s.towns, &s.villages)).unwrap_or_default();
     if let Some(h) = hosted {
@@ -1331,7 +1363,15 @@ pub fn spawn_with(ctx: &ReducerContext, name: &str, kind: &str, controller: Iden
         ctx.db.vitals().id().update(v);
     }
     // The young start from their species' young instinct (a baby cries and follows a parent).
-    let graph = if c.stage == 0 { young_instinct(kind) } else { instinct(kind) };
+    let graph = if c.stage == 0 {
+        young_instinct(kind)
+    } else {
+        let all: serde_json::Value = serde_json::from_str(INSTINCTS).expect("instincts json");
+        match all.get(kind) {
+            Some(g) => as_installed(ctx, kind, g),
+            None => instinct(kind),
+        }
+    };
     ctx.db.brain().insert(Brain { id, graph, revision: 1, plan: "instinct".into(), source: "instinct".into(), installed_ms: now });
     // Its starting graph is not a mind's thought: its first deliberation request is not held
     // back by `think_min_s` (the reflection and drive timers still count from its birth).
@@ -1358,6 +1398,10 @@ pub fn spawn_with(ctx: &ReducerContext, name: &str, kind: &str, controller: Iden
     });
     if kind == "person" && parents.0 == 0 {
         common::chronicle(ctx, now, "arrival", id, 0, at, format!("{name} arrived"));
+    }
+    // A look from the world's pool (an authored resident is given its own after: `town`).
+    if kind == "person" {
+        crate::look::assign(ctx, id, None, now);
     }
     if kind != "person" && c.stage >= 2 {
         give_ways(ctx, id, kind, now);
@@ -2034,6 +2078,9 @@ fn authored_households(ctx: &ReducerContext, map: &living_rules::map::Map, t: &S
             log::warn!("{}: {} years is past the first deaths of old age; seeded just short of them", r.name, r.age);
         }
         let id = spawn_with(ctx, &r.name, "person", admin, minded, at, now, life.seeded_age(r.age, pace), (parents.first().copied().unwrap_or(0), parents.get(1).copied().unwrap_or(0)));
+        if !r.look.is_empty() {
+            crate::look::assign(ctx, id, Some(&r.look), now);
+        }
         author_temperament(ctx, id, &r.sheet);
         let stage = ctx.db.character().id().find(id).map(|c| c.stage).unwrap_or(2);
         // The young live a child's day whatever the sheet calls them.

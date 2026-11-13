@@ -361,6 +361,13 @@ pub fn set_graph(ctx: &ReducerContext, actor: u32, graph: &str, plan: &str, sour
 /// thinking at once, every few seconds). A reason the prompt contained never stays: before
 /// 2026-11-11 it did whenever anything arrived during the call, and plan-finished churn kept
 /// one feeling the reason of dozens of thoughts.
+///
+/// What stays is handed on now, so its scene is taken now: the next prompt shows what the
+/// character perceives when the mind can next think, beside the experiences up to then. Before
+/// 2026-11-12 it kept the scene of when its last reason arrived, which can be a whole model call
+/// old: Gwil in fs1n was told "right now" that a stranger stood 1.2 m away, beside his own later
+/// hail of that stranger as a far figure 28 m off, and thought the stranger had come up to him
+/// (docs/PERCEPTION.md, "One moment per prompt").
 fn clear_deliberation(ctx: &ReducerContext, actor: u32, seen_ms: u64, new_plan: bool) {
     if let Some(mut d) = ctx.db.deliberation().actor().find(actor) {
         let rest = if d.updated_ms <= seen_ms { None } else { living_rules::reasons::consume(&d.reason, &d.arrived, seen_ms, new_plan) };
@@ -369,8 +376,11 @@ fn clear_deliberation(ctx: &ReducerContext, actor: u32, seen_ms: u64, new_plan: 
                 ctx.db.deliberation().actor().delete(actor);
             }
             Some((reason, arrived)) => {
+                let now = common::now_ms(ctx);
                 d.reason = reason;
                 d.arrived = arrived;
+                d.scene = perceive::scene_json(ctx, actor, now);
+                d.updated_ms = d.updated_ms.max(now);
                 ctx.db.deliberation().actor().update(d);
             }
         }
@@ -485,6 +495,29 @@ pub fn mind_fast_done(ctx: &ReducerContext, actor: u32, asked_ms: u64, thought: 
 /// Deliver a deliberation result: a new behavior graph, optional speech and a thought log entry.
 #[spacetimedb::reducer]
 pub fn mind_install(ctx: &ReducerContext, actor: u32, graph: String, plan: String, say: String, say_to: u32, seen_ms: u64, thought: ThoughtIn) -> Result<(), String> {
+    // To retire (mind-say-way, 2026-11-12): the mind service installs through
+    // `mind_install_way`. Kept, signature unchanged, for a module update that leaves an older
+    // mind service connected, and for the admin harness. Its line is always said, and a refused
+    // line is dropped without a word, as it always was.
+    install(ctx, actor, graph, plan, say, say_to, "say", seen_ms, thought, false)
+}
+
+/// `mind_install` whose line names its way of speaking (`speech_card.name`; "" is `say`), as a
+/// talk turn's `mind_say` does (mind-say-way, docs/COMMUNICATION.md §18). The line goes to
+/// `speech::speak` with that way: the same reach, gaps and refusals as every way, for every
+/// controller. A refused line ("a whisper needs someone to whisper to", "too soon to call out
+/// again: wait a few seconds") is not said and is told to the speaker in the rules' words; the
+/// decision's graph, plan and thought stand.
+#[allow(clippy::too_many_arguments)]
+#[spacetimedb::reducer]
+pub fn mind_install_way(ctx: &ReducerContext, actor: u32, graph: String, plan: String, say: String, say_to: u32, way: String, seen_ms: u64, thought: ThoughtIn) -> Result<(), String> {
+    install(ctx, actor, graph, plan, say, say_to, &way, seen_ms, thought, true)
+}
+
+/// A decision delivered: its graph and plan installed, its thought kept, its line said in
+/// `way` (or held, `heard_first_rethinks`). `tell`: a refused line is told to the speaker.
+#[allow(clippy::too_many_arguments)]
+fn install(ctx: &ReducerContext, actor: u32, graph: String, plan: String, say: String, say_to: u32, way: &str, seen_ms: u64, thought: ThoughtIn, tell: bool) -> Result<(), String> {
     let c = authorize(ctx, actor)?;
     if !c.alive {
         ctx.db.deliberation().actor().delete(actor);
@@ -503,7 +536,11 @@ pub fn mind_install(ctx: &ReducerContext, actor: u32, graph: String, plan: Strin
         match heard_first(ctx, actor, say_to, since) {
             Some(heard) => crate::speech::held_for_another(ctx, actor, say_to, &say, &heard, now),
             None => {
-                let _ = crate::speech::speak(ctx, actor, &say, say_to, "say", now);
+                if let Err(why) = crate::speech::speak(ctx, actor, &say, say_to, way, now) {
+                    if tell {
+                        crate::speech::unsaid_refused(ctx, actor, say_to, &say, &why, now);
+                    }
+                }
             }
         }
     }
@@ -537,6 +574,7 @@ pub fn mind_say(ctx: &ReducerContext, actor: u32, say: String, say_to: u32, way:
         return Err("character is dead".into());
     }
     let now = common::now_ms(ctx);
+    let talk = thought.kind == "talk";
     if thought.kind != "talk" {
         clear_deliberation(ctx, actor, seen_ms, true);
         if let Some(mut st) = ctx.db.mind_state().id().find(actor) {
@@ -551,7 +589,13 @@ pub fn mind_say(ctx: &ReducerContext, actor: u32, say: String, say_to: u32, way:
     if let Some(heard) = held {
         crate::speech::held_for_another(ctx, actor, say_to, &say, &heard, now);
     } else if !say.trim().is_empty() {
-        crate::speech::speak(ctx, actor, &say, say_to, &way, now)?;
+        // A conversation turn's refused line is the reducer's error, as before. A deliberation's
+        // (since mind-say-way, when it may name a way) is told to the speaker, and the decision's
+        // thought stands, as `mind_install_way` does.
+        match crate::speech::speak(ctx, actor, &say, say_to, &way, now) {
+            Err(why) if !talk => crate::speech::unsaid_refused(ctx, actor, say_to, &say, &why, now),
+            r => r?,
+        }
     }
     Ok(())
 }

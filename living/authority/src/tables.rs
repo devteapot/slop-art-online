@@ -36,6 +36,71 @@ pub struct World {
     /// Days in the calendar year (four equal seasons; lifespans are counted in years).
     #[default(8u32)]
     pub year_days: u32,
+    /// The look generation the world's people wear (`looks.generation` of its seed, docs/LOOK.md):
+    /// a client warns when its book does not hold it. Empty for a world without looks.
+    #[default("")]
+    pub look_book: String,
+}
+
+/// A person's look (private; docs/LOOK.md): which person entry of the world data they are
+/// (`person`, `lp_…`, never sent) and the line of it they wear now (`line`, `lk_…`: the key every
+/// observer who sees them gets on its `projected` row), with the line's words copied for minds.
+/// One row per living person who has a look; written at creation, when the look band changes
+/// (`next_ms`, read through the `due` index by housekeeping, and `grew`) and at `relook`; deleted
+/// at death. Animals, and people of a world from before looks, have none.
+#[spacetimedb::table(accessor = look, index(accessor = due, btree(columns = [next_ms])))]
+pub struct Look {
+    #[primary_key]
+    pub id: u32,
+    pub person: String,
+    pub line: String,
+    /// `living_rules::look::LookBand`: 0 infant, 1 child, 2 youth, 3 adult, 4 elder.
+    pub band: u8,
+    /// World ms at which the band next changes (`u64::MAX` when none is left: an elder).
+    pub next_ms: u64,
+    pub words: LookWords,
+}
+
+/// One line of a person entry (private; static world data, written at genesis and at `relook`):
+/// the line `key` that person `person` wears in band `band`, and its words. Read by point lookup
+/// on (`person`, `band`). Two people with the same line share its key, so the key is not unique.
+#[spacetimedb::table(accessor = look_line, index(accessor = by_person_band, btree(columns = [person, band])))]
+pub struct LookLine {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u32,
+    pub key: String,
+    pub person: String,
+    pub band: u8,
+    pub words: LookWords,
+}
+
+/// The words the generator wrote for a line (docs/LOOK.md §2; `living_rules::look::LookWords`):
+/// what a glance can say. `form` is appearance only: no rule reads it.
+#[derive(SpacetimeType, Clone, Debug, PartialEq, Default)]
+pub struct LookWords {
+    pub form: String,
+    /// 0 slight, 1 medium, 2 heavy-set.
+    pub girth: u8,
+    /// 0 short, 1 middling, 2 tall (for the band).
+    pub height: u8,
+    pub hair: String,
+    pub top: String,
+    pub bottom: String,
+    pub head: String,
+    pub beard: String,
+}
+
+impl From<&living_rules::look::LookWords> for LookWords {
+    fn from(w: &living_rules::look::LookWords) -> Self {
+        Self { form: w.form.clone(), girth: w.girth, height: w.height, hair: w.hair.clone(), top: w.top.clone(), bottom: w.bottom.clone(), head: w.head.clone(), beard: w.beard.clone() }
+    }
+}
+
+impl From<&LookWords> for living_rules::look::LookWords {
+    fn from(w: &LookWords) -> Self {
+        Self { form: w.form.clone(), girth: w.girth, height: w.height, hair: w.hair.clone(), top: w.top.clone(), bottom: w.bottom.clone(), head: w.head.clone(), beard: w.beard.clone() }
+    }
 }
 
 /// A gate's state, apart from its structure row (which rarely changes): open or shut, and the
@@ -436,6 +501,15 @@ impl Vitals {
     ];
 
     /// The row's numeric fields by name, in [`Vitals::FIELDS`]'s order.
+    /// The row's fields as bits, in `FIELDS` order: equal bits, the same row.
+    pub fn bits(&self) -> [u64; 20] {
+        [
+            self.id as u64, self.hp.to_bits() as u64, self.max_hp.to_bits() as u64, self.hunger.to_bits() as u64, self.energy.to_bits() as u64, self.at_ms, self.hp_rate.to_bits() as u64,
+            self.hunger_rate.to_bits() as u64, self.energy_rate.to_bits() as u64, self.rate_key as u64, self.hurt_ms, self.hurt_by as u64, self.stamina.to_bits() as u64, self.stamina_max.to_bits() as u64,
+            self.stamina_rate.to_bits() as u64, self.stamina_from_ms, self.focus.to_bits() as u64, self.focus_max.to_bits() as u64, self.focus_rate.to_bits() as u64, self.focus_from_ms,
+        ]
+    }
+
     pub fn fields(&self) -> Vec<(String, f64)> {
         let v = [
             self.id as f64, self.hp as f64, self.max_hp as f64, self.hunger as f64, self.energy as f64, self.at_ms as f64, self.hp_rate as f64, self.hunger_rate as f64, self.energy_rate as f64, self.rate_key as f64, self.hurt_ms as f64, self.hurt_by as f64,
@@ -1426,6 +1500,36 @@ pub struct CombatSeen {
     pub note: String,
 }
 
+/// One blow of a fight as its onlookers saw it (private; docs/BATTLE_SCALE.md, fix 4): who
+/// struck whom, how it ended, and everyone who could see it under the sight rule at that instant
+/// (`perceive::witnessed`'s test), the two in it excepted. Each onlooker is told what it saw as
+/// one folded line per `witness_fold_ms` (`fold::flush`); a row is gone once every onlooker's
+/// window holding it has been told, so the table holds at most one window of fights.
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = fight_seen)]
+pub struct FightSeen {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    #[index(btree)]
+    pub at_ms: u64,
+    pub attacker: u32,
+    pub victim: u32,
+    /// `living_rules::combat::seen`: `HIT`, `BLOCKED`, `DODGED` or `MISS`.
+    pub outcome: u8,
+    /// The first blow of a fight (`act::damage`'s `first_blow`).
+    pub start: bool,
+    /// The blow killed its victim.
+    pub fell: bool,
+    /// The missile's words ("an arrow"); empty for a blow in reach.
+    pub missile: String,
+    pub x: f32,
+    pub y: f32,
+    /// Who saw it; `fold::UNSEEN_SHOOTER` set on one who saw where a missile struck but not who
+    /// shot it.
+    pub onlookers: Vec<u32>,
+}
+
 /// A missile in flight (private: clients draw it from its `LAUNCH` and `IMPACT` events).
 /// Swept along its path every tick (`next_ms`) against bodies and walls.
 #[derive(Clone, Debug)]
@@ -1776,6 +1880,10 @@ pub struct Projected {
     /// Exact health when the law grants it (oneself, or revealed), else -1.
     pub hp: f32,
     pub max_hp: f32,
+    /// The line key of the person's look (`look.line`, `lk_…`), whoever sees them at whatever
+    /// distance; empty for animals and for a person with no look row (docs/LOOK.md §2).
+    #[default("")]
+    pub look: String,
 }
 
 /// What a player's client was last shown of a perceived creature's `fighter` row (private;

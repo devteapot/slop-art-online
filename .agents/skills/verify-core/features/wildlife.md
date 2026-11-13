@@ -37,3 +37,17 @@ Since 2026-11-11 every death leaves a `remains` structure at the body (`act::die
 
 `scenes.py remains` on a fresh `stage1-acts` world installs the shipped script with `remains_h` 3 game hours for every kind (90 s on its 12-minute day), holds everyone on `wait`, then checks: an admin `kill` of a deer leaves remains with exactly the shipped `carcass("deer")` items and a `rot` row due `remains_h` times the world's game hour after `built_ms`; a wolf's real kill leaves the same and leaves the killer's pack unchanged; the killer and a second wolf each take a meat from that kill (the remains hold two fewer); a wolf on `wander`/`wait 3` turns by at most 1.6 rad between legs at least 80% of the time (uniform headings would about half the time); after its due time plus a housekeeping minute the first remains, their inventory and their `rot` row are gone. It reinstalls the shipped script at the end. It does not cover a person's remains expiring (3600 s) or remains kept by an artifact.
 
+## The wolves' spacing reflex (`pack_reflex`, since `pack-reflex-on`, 2026-11-12)
+
+A world law, on by default (`pack_reflex: true` in `skills.rhai`'s `laws()`). While it is on, every hunt in a wolf's starting graph sits beside a weighted desire, "keep apart from mates" (`living_rules::graph::with_pack_reflex`). A hunt is an attack on the nearest person or deer, guarded or bare, in the instinct form or the repertoire's shorthand. The desire weighs 1.2 against the hunt's 1. It acts while another wolf is within 3 m and the prey within 6 m: `keep_distance` 3–5 m from the nearest prey, at a run, with `apart` 4.
+
+Three install paths read the law:
+- `seed::as_installed` for a seed pack's named instinct (`wolf_bold`);
+- the same for a spawned or born wolf's species instinct (`wolf`) once past infancy;
+- `seed::give_ways` for a grown animal's species ways (repertoire.json): the wolf's `hunt` routine.
+
+A newborn's `wolf_young` is never given it (`graph::reflex_applies`). It is read only at those installs, so a world turns it off before its wolves are placed: a seed's `"rules": {"pack_reflex": false}`. Graphs already given are kept. It is an ordinary part of the graph, which a wolf's mind may change.
+
+`scenes.py pack_reflex` reads the world's law value and checks every wolf by path: the bold pack's brain, a grown founder's `hunt` routine, a young founder's brain, a newborn's brain. Run it on `--seed pack-reflex-on`: law on, each path carries 2 reflexes, the people hunt and the deer hunt. Run it on `--seed pack-reflex-off` (`rules` off): none carries any. Both seeds are the wildlife lab with a bold pack of 3. Cargo: `graph::pack_reflex_tests`, `script::tests::the_pack_reflex_is_on_by_default_and_a_world_turns_it_off`. Evidence: `pack_reflex-wolves.json`.
+
+Gotcha: grown founding animals live by their species' ways (`give_ways`, plan "the ways of a wolf"), not by `instincts.json`. A check that reads only the brain misses them: the hunt is in the `hunt` routine.

@@ -12,6 +12,7 @@ mod combat;
 mod floor;
 mod frame;
 mod island;
+mod look;
 mod mind;
 mod motion;
 mod outcomes;
@@ -27,6 +28,7 @@ mod town;
 mod common;
 mod far;
 mod earshot;
+mod fold;
 mod fast;
 
 use spacetimedb::{ReducerContext, ScheduleAt, Table, ViewContext};
@@ -49,6 +51,7 @@ pub fn init(ctx: &ReducerContext) -> Result<(), String> {
         height: living_rules::map::MAP_H,
         life_pace: 1.0,
         year_days: living_rules::YEAR_DAYS as u32,
+        look_book: String::new(),
     });
     ctx.db.clock().insert(Clock {
         id: 0,
@@ -164,6 +167,8 @@ pub(crate) fn install_source(ctx: &ReducerContext, source: String) -> Result<(),
     common::invalidate_scripts_rev();
     // Takeovers already pending follow the new `takeover_s` law.
     presence::reschedule(ctx, sc.laws().takeover_s);
+    // Looks change band by the life table and the `look_bands` law: their times follow.
+    look::retime_all(ctx, now);
     Ok(())
 }
 
@@ -360,6 +365,33 @@ pub fn purge_dead(ctx: &ReducerContext) -> Result<(), String> {
 pub fn kill(ctx: &ReducerContext, id: u32, cause: String) -> Result<(), String> {
     require_admin(ctx)?;
     act::die(ctx, id, &cause, common::now_ms(ctx), 0, living_rules::outcome::death::OTHER);
+    Ok(())
+}
+
+/// Admin support: set a living body's health to `hp` (above 0; more than its maximum is its
+/// maximum). Nothing perceives it as care: the body just has that health. Every use is a
+/// chronicle line of kind `admin` ("admin set <name>'s health 41 -> 100"). Trial timelines are its
+/// only user (an arena's meetings start at full health: docs/COMBAT_MIND.md §5.4); refused for
+/// players and minds like every admin reducer.
+#[spacetimedb::reducer]
+pub fn admin_set_vitals(ctx: &ReducerContext, id: u32, hp: f32) -> Result<(), String> {
+    require_admin(ctx)?;
+    if !hp.is_finite() || hp <= 0.0 {
+        return Err("health must be above 0 (a death is `kill`)".into());
+    }
+    let now = common::now_ms(ctx);
+    let c = ctx.db.character().id().find(id).filter(|c| c.alive).ok_or("no living character with that id")?;
+    let mut v = ctx.db.vitals().id().find(id).ok_or("no vitals for that character")?;
+    common::settle(ctx, &mut v, now);
+    let before = v.hp;
+    v.hp = hp.min(v.max_hp);
+    v.rate_key = 0;
+    let after = v.hp;
+    ctx.db.vitals().id().update(v);
+    combat::refresh_band(ctx, id, now);
+    perception::health_moved(ctx, id, now);
+    let at = ctx.db.body().id().find(id).map(|b| common::pos(&b, now)).unwrap_or((0.0, 0.0));
+    common::chronicle(ctx, now, "admin", id, 0, at, format!("admin set {}'s health {before:.0} -> {after:.0}", c.name));
     Ok(())
 }
 
@@ -701,8 +733,10 @@ pub fn human_move(ctx: &ReducerContext, dx: f32, dy: f32, run: bool) -> Result<(
     if dir.is_some() {
         // Taking the controls: what was going on stops (a raised guard walks along), and the
         // plan becomes "wait".
-        if let Some(a) = ctx.db.activity().id().find(me.id).filter(|a| a.skill != "wait" && !(guard(a) && a.node == act::PLAYER)) {
-            act::cancel(ctx, a, now, Some("you moved"));
+        // A skill done on the move (`on_the_move`: a wave, a nod) carries on as one walks.
+        let on_the_move = |a: &Activity| living_rules::catalog::skill(&a.skill).is_some_and(|k| k.on_the_move);
+        if let Some(a) = ctx.db.activity().id().find(me.id).filter(|a| a.skill != "wait" && !(guard(a) && a.node == act::PLAYER) && !on_the_move(a)) {
+            act::cancel_moved(ctx, a, now);
         }
         player_controls(ctx, me.id, now)?;
     }

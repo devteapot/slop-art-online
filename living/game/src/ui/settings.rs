@@ -79,6 +79,7 @@ fn act_label(a: Act, names: &SkillNames) -> String {
         Act::Interact => "Act on what you point at".into(),
         Act::Talk => "Talk".into(),
         Act::Address => "Change whom you speak to".into(),
+        Act::Way => "Change how you speak".into(),
         Act::Wave => "Wave".into(),
         Act::Nod => "Nod".into(),
         Act::LookOver => "Look someone over".into(),
@@ -140,7 +141,7 @@ pub fn spawn(mut commands: Commands, bodies: Query<(Entity, &WinBody), Added<Win
                     let groups: [(&str, Vec<Act>); 3] = [
                         ("Moving", vec![Act::Forward, Act::Back, Act::Left, Act::Right, Act::Run, Act::Jump, Act::Dodge, Act::Glance]),
                         ("Fighting", { let mut v = vec![Act::Weapon, Act::Primary, Act::Secondary, Act::Skill1, Act::Skill2, Act::Skill3]; v.extend((0..crate::keys::EXTRA).map(Act::Extra)); v }),
-                        ("People and things", vec![Act::Interact, Act::Talk, Act::Address, Act::Wave, Act::Nod, Act::LookOver, Act::Pack, Act::Character, Act::Skills, Act::Log]),
+                        ("People and things", vec![Act::Interact, Act::Talk, Act::Address, Act::Way, Act::Wave, Act::Nod, Act::LookOver, Act::Pack, Act::Character, Act::Skills, Act::Log]),
                     ];
                     for (head, acts) in groups {
                         grid.spawn((Node { grid_column: GridPlacement::span(2), margin: UiRect::new(Val::Px(0.0), Val::Px(0.0), Val::Px(8.0), Val::Px(2.0)), ..default() }, Text::new(head), wood::tface(&f, 16.0), TextColor(wood::heading()), Pickable::IGNORE));

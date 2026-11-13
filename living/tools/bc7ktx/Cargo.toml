@@ -1,0 +1,28 @@
+# The pictures' BC7 KTX2 encoder (docs/CHARACTERS.md, "Pictures as KTX2"). Standalone: not a
+# member of living/Cargo.toml. living/tools/characters/pictures.py runs it on a bundle's copies.
+[package]
+name = "bc7ktx"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[dependencies]
+intel_tex_2 = "=0.5.0"
+zstd = { version = "=0.13.3", default-features = false }
+image = { version = "=0.25.10", default-features = false, features = ["png"] }
+serde_json = "1"
+bcdec_rs = "=0.2.0"
+
+[dev-dependencies]
+# The client's own loader and colour code, to check the summaries against Thumb::of.
+bevy_image = { version = "=0.20.1", default-features = false, features = ["png", "ktx2", "zstd_rust"] }
+bevy_color = "=0.20.1"
+bevy_math = "=0.20.1"
+bevy_asset = { version = "=0.20.1", default-features = false }
+ktx2 = "=0.5.0"
+wgpu-types = "=30.0.1"
+
+[profile.release]
+opt-level = 3

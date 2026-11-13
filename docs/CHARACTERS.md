@@ -1775,6 +1775,260 @@ look-1, 2026-11-12 ([look](LOOK.md) is the design; this is the generator's part 
 
 **In the bundle:** the book at `living/game/assets/characters/looks.json`, and the world's data and its cases at `living/seeds/worlds/cullet/`, with `cullet-people.json` as before.
 
+### The body: women's silhouettes
+
+The body pass, first part (2026-11-12, branch `char-4-body`). Measured first, as the neck and the brows were; then a woman's form set where the reference's is.
+
+**The measure** (`living/tools/characters/reference/body.py`, ref-1's method on the whole figure; `body_table.py` lays figures side by side):
+
+```bash
+python3 living/tools/characters/reference/body.py living/game/assets/lookdev/vroid-Sendagaya_Shino.glb --json shino.json --mask shino.png
+blender -b --python living/tools/blender/person.py -- --variant type:adult-f-b --body --no-shade --out woman.glb     # ours, unclothed
+python3 living/tools/characters/reference/body.py woman.glb --params woman.params.json --floor 0.085 --head 0.2564 --json woman.json
+python3 living/tools/characters/reference/body_table.py Shino=shino.json woman=woman.json [--markdown]
+```
+
+- The figure stands at rest with the arms out. Ours is first posed as the client poses it, by its recipe's proportions (the bones' scales), so what is measured is the person in the game and not the file.
+- Horizontal cuts of the skin every 0.4% of the height give the torso's own section (the piece across the midline; between the shoulder joints where a cut runs out along the arms): its width, its front and its back. From them: the crotch, the hips' widest, the waist's narrowest, the bust's foremost, the armpit.
+- Vertical cuts from the neck's side to the shoulder joint give the shoulder's top and its slope. The limbs' thicknesses are cuts across them; lengths are between joints.
+- Ours has no skin under its clothes: the clothes are the body. `person.py --body` writes the unclothed form the garments are offsets of, and that is what is cut.
+- Everything is a share of the figure's height (percent) or of H, the head's height.
+
+**What it found.** Our women were built as slighter men: one skeleton and one torso table a little narrower. Against the reference, ordered by how much of the silhouette each is:
+
+1. **Shoulders:** 24.7% of the height across the hanging arms against 17.8 (20.1 between the joints against 13.4), and squarer: 11.6° of slope against 17.9.
+2. **Waist:** 14.4% wide against 10.9, at 0.75 of the hips against 0.57; 10.8 deep against 8.3.
+3. **Legs:** the inseam 46.4% against 52.4, the hip joint 51.7 against 55.4; legs 1.26 torsos long against 1.71.
+4. **Chest:** 18.4% under the arms against 14.0; the bust 13.2 deep against 10.8.
+5. **Arms and hands:** the arm 29.7% against 26.8; the hand 0.76 of a head against 0.65.
+6. **The back:** the seat stood 1.9% behind the small of the back against 4.2. Ours was a column.
+7. The hips' width was already the reference's (19.2 against 18.9); their depth was not (13.0 against 9.6).
+
+Lengths in percent of the figure's height unless a row says H:
+
+| | Shino | Vivi | woman before | woman | old woman | girl of 15 before | girl of 15 | lean woman | heavy woman |
+|---|---|---|---|---|---|---|---|---|---|
+| heads tall | 6.93 | 6.49 | 6.95 | 6.93 | 6.92 | 6.41 | 6.38 | 6.93 | 6.93 |
+| shoulders, between the joints | 13.4 | 13.4 | 20.1 | 13.4 | 13.0 | 18.2 | 13.5 | 12.5 | 14.5 |
+| shoulders, arms hanging | 17.8 | 17.9 | 24.7 | 18.1 | 17.6 | 22.4 | 18.1 | 16.6 | 19.8 |
+| the same in head widths | 1.33 | 1.27 | 2.16 | 1.58 | 1.49 | 1.81 | 1.45 | 1.45 | 1.73 |
+| shoulder slope, degrees | 17.9 | 16.8 | 11.6 | 15.0 | 15.7 | 13.7 | 14.9 | 18.1 | 11.9 |
+| shoulder top below the chin, H | 0.22 | 0.20 | 0.25 | 0.23 | 0.21 | 0.22 | 0.19 | 0.24 | 0.22 |
+| under the arms: width | 14.0 | 14.0 | 18.4 | 12.9 | 12.4 | 16.6 | 13.0 | 11.7 | 14.7 |
+| bust: width | 12.9 | 12.4 | 15.7 | 12.7 | 12.4 | 14.2 | 12.7 | 10.8 | 15.2 |
+| bust: depth | 10.8 | 9.5 | 13.2 | 10.2 | 10.2 | 12.2 | 10.2 | 8.7 | 12.1 |
+| bust before the waist's front | 0.7 | 0.0 | 1.6 | 0.4 | 0.3 | 1.5 | 0.4 | 0.3 | 0.1 |
+| waist: width | 10.9 | 11.0 | 14.4 | 11.3 | 11.4 | 13.2 | 11.4 | 9.7 | 14.2 |
+| waist: depth | 8.3 | 8.4 | 10.8 | 8.5 | 8.6 | 9.9 | 8.6 | 7.3 | 10.9 |
+| waist: height | 66.4 | 65.6 | 64.8 | 67.6 | 67.6 | 64.0 | 66.8 | 67.6 | 69.2 |
+| hips: width | 18.9 | 19.4 | 19.2 | 18.7 | 18.8 | 17.6 | 18.7 | 16.8 | 22.1 |
+| hips: depth | 9.6 | 9.8 | 13.0 | 9.6 | 9.7 | 11.9 | 9.7 | 8.6 | 12.0 |
+| hips: height of the widest | 52.8 | 51.2 | 52.4 | 51.6 | 52.0 | 51.6 | 50.8 | 51.6 | 54.0 |
+| seat behind the waist's back | 4.2 | 4.4 | 1.9 | 3.7 | 3.6 | 1.7 | 3.7 | 3.4 | 3.8 |
+| waist / hips | 0.57 | 0.57 | 0.75 | 0.61 | 0.61 | 0.75 | 0.61 | 0.58 | 0.64 |
+| shoulders hanging / hips | 0.94 | 0.93 | 1.29 | 0.97 | 0.94 | 1.27 | 0.97 | 0.99 | 0.90 |
+| leg: hip joint above the floor | 55.4 | 54.0 | 51.7 | 55.4 | 55.5 | 50.8 | 54.5 | 55.4 | 55.4 |
+| leg: inseam (the crotch) | 52.4 | 51.2 | 46.4 | 51.6 | 52.0 | 45.2 | 50.8 | 51.6 | 51.6 |
+| knee joint | 32.8 | 32.4 | 27.6 | 29.4 | 29.5 | 27.1 | 29.0 | 29.4 | 29.4 |
+| torso: crotch to the neck joint | 30.7 | 30.9 | 36.8 | 31.6 | 31.3 | 37.2 | 31.5 | 31.6 | 31.6 |
+| leg / torso | 1.71 | 1.66 | 1.26 | 1.64 | 1.66 | 1.22 | 1.61 | 1.64 | 1.64 |
+| arm: shoulder joint to wrist | 26.8 | 26.6 | 29.7 | 26.8 | 26.9 | 29.2 | 26.4 | 26.8 | 26.8 |
+| arm to the fingertip | 36.1 | 35.4 | 40.7 | 36.2 | 36.3 | 40.2 | 35.8 | 36.2 | 36.2 |
+| hand: length, H | 0.65 | 0.58 | 0.76 | 0.65 | 0.65 | 0.70 | 0.60 | 0.65 | 0.65 |
+| hand: length | 9.3 | 8.9 | 11.0 | 9.4 | 9.4 | 11.0 | 9.4 | 9.4 | 9.4 |
+| hand: palm / length | 0.44 | 0.44 | 0.50 | 0.50 | 0.50 | 0.50 | 0.50 | 0.50 | 0.50 |
+| hand: breadth, H | 0.46 | 0.44 | 0.54 | 0.46 | 0.46 | 0.50 | 0.43 | 0.46 | 0.46 |
+| upper arm: thickness | 3.9 | 3.9 | 4.2 | 4.2 | 4.2 | 3.8 | 4.2 | 3.7 | 4.8 |
+| thigh: width | 8.9 | 9.2 | 7.9 | 8.9 | 9.0 | 7.1 | 8.9 | 8.1 | 9.9 |
+| calf: width | 5.3 | 5.3 | 4.7 | 4.4 | 4.4 | 4.4 | 4.4 | 3.9 | 5.0 |
+| ankle: width | 2.8 | 2.8 | 3.1 | 2.8 | 2.8 | 3.0 | 2.8 | 2.5 | 3.1 |
+| neck: width | 4.1 | 4.1 | 3.6 | 3.7 | 3.7 | 3.5 | 3.8 | 3.5 | 3.8 |
+
+- **The reference's younger figure has the woman's shares throughout** (Vivi, 1.38 m: every width within 0.5 of Shino's). So a girl of the youth band takes the woman's form, with a youth's larger head and shorter legs.
+- **Men, elders, boys and children were measured and not changed.** They have no reference here. What the measure says of them goes to the parts of the pass still to come: hands 0.87 of a head on a man (the reference's 0.65 is a woman's, and a living man's is about 0.75), and arms 29.6% of the height.
+
+| | Shino | man | old man | boy of 15 | child of 8 (a) | child of 8 (b) |
+|---|---|---|---|---|---|---|
+| heads tall | 6.93 | 6.99 | 6.97 | 6.44 | 4.92 | 4.96 |
+| shoulders, between the joints | 13.4 | 22.2 | 21.4 | 19.2 | 19.1 | 19.1 |
+| shoulders, arms hanging | 17.8 | 27.6 | 26.8 | 24.2 | 23.5 | 24.3 |
+| the same in head widths | 1.33 | 2.51 | 2.43 | 1.99 | 1.39 | 1.45 |
+| shoulder slope, degrees | 17.9 | 9.1 | 9.5 | 11.3 | 11.6 | 9.8 |
+| shoulder top below the chin, H | 0.22 | 0.24 | 0.23 | 0.20 | 0.10 | 0.10 |
+| under the arms: width | 14.0 | 20.3 | 19.9 | 18.0 | 17.7 | 17.6 |
+| bust: width | 12.9 | 18.9 | 18.4 | 16.4 | 16.0 | 16.1 |
+| bust: depth | 10.8 | 13.1 | 13.2 | 12.1 | 12.8 | 12.8 |
+| bust before the waist's front | 0.7 | 0.9 | 0.7 | 0.9 | 0.6 | 0.6 |
+| waist: width | 10.9 | 16.1 | 16.3 | 14.7 | 15.4 | 15.4 |
+| waist: depth | 8.3 | 11.4 | 11.6 | 10.5 | 11.4 | 11.4 |
+| waist: height | 66.4 | 62.4 | 62.8 | 61.6 | 60.4 | 60.8 |
+| hips: width | 18.9 | 18.4 | 18.3 | 16.9 | 17.7 | 18.3 |
+| hips: depth | 9.6 | 10.1 | 10.2 | 9.2 | 12.2 | 9.5 |
+| hips: height of the widest | 52.8 | 46.4 | 46.8 | 45.6 | 48.0 | 41.6 |
+| seat behind the waist's back | 4.2 | 1.1 | 1.1 | 1.0 | 1.1 | 1.0 |
+| waist / hips | 0.57 | 0.88 | 0.89 | 0.87 | 0.87 | 0.84 |
+| shoulders hanging / hips | 0.94 | 1.50 | 1.46 | 1.43 | 1.33 | 1.33 |
+| leg: hip joint above the floor | 55.4 | 51.9 | 52.0 | 51.0 | 47.4 | 47.5 |
+| leg: inseam (the crotch) | 52.4 | 46.4 | 46.8 | 45.6 | 41.6 | 41.6 |
+| knee joint | 32.8 | 27.9 | 28.0 | 27.5 | 25.8 | 25.9 |
+| torso: crotch to the neck joint | 30.7 | 36.9 | 36.7 | 36.9 | 37.2 | 37.4 |
+| leg / torso | 1.71 | 1.26 | 1.28 | 1.24 | 1.12 | 1.11 |
+| arm: shoulder joint to wrist | 26.8 | 29.6 | 29.6 | 29.0 | 27.8 | 27.8 |
+| arm to the fingertip | 36.1 | 42.0 | 42.1 | 41.5 | 40.9 | 40.9 |
+| hand: length, H | 0.65 | 0.87 | 0.87 | 0.80 | 0.64 | 0.65 |
+| hand: length | 9.3 | 12.4 | 12.4 | 12.4 | 13.1 | 13.1 |
+| hand: palm / length | 0.44 | 0.50 | 0.50 | 0.50 | 0.50 | 0.50 |
+| hand: breadth, H | 0.46 | 0.62 | 0.62 | 0.57 | 0.46 | 0.46 |
+| upper arm: thickness | 3.9 | 4.8 | 4.8 | 4.4 | 4.0 | 4.6 |
+| thigh: width | 8.9 | 8.6 | 8.7 | 7.9 | 7.2 | 8.1 |
+| calf: width | 5.3 | 5.5 | 5.5 | 5.1 | 4.5 | 5.2 |
+| ankle: width | 2.8 | 3.7 | 3.7 | 3.6 | 3.2 | 3.7 |
+| neck: width | 4.1 | 4.1 | 4.1 | 3.8 | 5.3 | 5.2 |
+
+**How a woman's form is built.** Every file keeps the one rest skeleton, so clips, pieces and types still share it. A woman's form is two things that are one design:
+
+- **The standard woman's proportions** (`person_params.WOMAN`): `legs` 1.075, `torso` 0.84, `arms` 0.90, `shoulders` 0.60, `hips` 0.92, `hands` 0.75, `feet` 0.90. They are scales on bones, which the client already applies from a person's line. With them her joints stand where the reference's do: the hip joint at 55.4% of her height, the neck's at 83.1, 13.4 between the shoulder joints, the arm 26.8 from shoulder to wrist, the hand 0.65 of a head, and she is 6.93 heads tall.
+- **Her pieces are written for those scales** (`person.py`, `Stance` and `WOMAN_FORM`). The form is given as she stands in the game: at each height, as a percent of her height, the torso's half width, half depth and how far its middle stands before the hips' joint, 24 rows read from the reference's cuts. A ring of a garment is looked up at the height it will stand at and written wider by what the bones will take off it. So a jersey's waist is 12.5 cm from the axis in the file and 10.9 on her, and its chest at the armholes 20 cm in the file and 12 on her.
+- **Only proportions are taken from the reference,** as for the face's anchors: numbers measured on its cuts, nothing of its mesh.
+- **The neck hole stays round.** The upper chest's bone is scaled 0.60 across and the neck's is not, so the yoke's last rings, the collars and the neck's foot are written wider by their own weights' scale (`across`). Women's type files change for this: the neck's foot, 14 mm at most.
+- **Legs:** a woman's own profile on the shared leg (`WOMAN_LEG`: a fuller thigh, a narrower knee and ankle, deeper than wide), the crotch 3.5 cm higher at rest (`CROTCH_UP`; the reference's inseam is 52.4% of the height and ours comes to 51.6), boots 0.90 as wide (`WOMAN_BOOT`).
+- **The apron's tie** is at the waist's ring (rest height 1.13 in a woman's file), where it was at the hips' on the old form.
+- **Build and belly work as before:** `build.weight` scales the form (`GIRTH` against the form's own 1.02) and the line's `build`; a lean woman's waist is 9.7% of her height and a heavy one's 14.2, the hips 16.8 and 22.1. The belly is the same bell and the same bone.
+- **From 12, and by degrees** (`person_params.womanly`): 0 for men and for children under 12, who are built alike and wear the `-m` pieces; 0.7 at 12, when a girl's type and pieces become a woman's (`woman_torso`, which was from 13); 1 from 15. The narrowing of shoulders and girth in the growing years, which is a boy's, goes as she becomes a woman.
+
+**What follows from a woman's back lying further forward** (up to 5 cm at the shoulder blades, under the same head):
+
+- **Hair that lies on the back is combed over her back** (`person.back_table`, `shoulder_half`): the form's own back at the height each point of the hair hangs beside. Until this the one table was a man's.
+- **The back's spheres** (the game holds hair out of them) are written so that the client's scales on the chest's bones put them at her back: the offset from the bone and the radius are scaled with the bone.
+- **`.m` hair files:** the styles that lie on the back and that men or children also wear (`long`, `tail`, `braids`; `person_params.MAN_BACKED`) are written a second time, `<style>[.N][.collar].m`, combed over a man's back. A person in `-m` pieces wears those. 15 files more: 74 hair files.
+
+**A fault this showed, in every skirt** (`living/tools/characters/cloth_check.py`, new):
+
+```bash
+python3 living/tools/characters/cloth_check.py NAME.params.json [--clip idle,walk] [--frames 16] [--quiet]
+```
+
+- It poses a person's line the client's way (proportions, belly, each piece on the bones by name) at rest and through a clip's frames, and measures how far each piece stands out through the piece worn over it. It fails over 2 mm.
+- **A thigh came through its skirt at every step:** by 2.4 to 5.2 mm in 1 to 3 of 16 frames of the walk on the last bundle's women, by 5.6 mm through a man's coat, and by 13 mm in 10 of 16 on the new form, whose skirt lies closer. It showed as a dark patch on an apron's front.
+- A skirt's panels now start to follow the thigh at the hip joint and have most of it a hand below (`torso_w`: from rest height 0.95 over 0.20, where it was from 0.93 over 0.25), and the trouser leg's top ring turns a quarter with the hips (it was an eighth). After: nothing through any smock, on either form, lean, heavy or child, at rest, in `idle` or in `walk`.
+- This changes the weights of the `-m` smocks, aprons, coats and trousers too. Their rest shape is the same.
+- **A vertex the belly's bone shares is written again** for the weights it ends with (`belly_weights`, `Stance.written`): the belly's bone has no scale in the client, so on the scaled form a jersey's front stood 3 to 5 mm out of the trousers it is tucked into.
+- **Left for the cloth part, as measured:** the jersey's front through the trousers' waist on a lean or a strong build of either form (6 to 7 mm), because the belly's bone is not scaled with `build`. (A jersey's collar "through a coat's" by 3 to 5 mm, reported with this part, was the check's mistake: see [the body: cloth](#the-body-cloth).)
+
+**What did not change:** the rest skeleton, the clips, every `-m` piece's rest shape, the men's, boys' and children's types, their hair, the faces, the pages' layout (`same.py`-style comparison against the last bundle: 144 of 216 shared files the same to a micrometre before the skirt's weights).
+
+**What the client needs:** nothing in code. Proportions are in the lines, the `.m` hair files are named by the lines that wear them, and the back's spheres are in the hair files.
+
+- **One thing the client does with the landing** ([the client's half](#the-body-the-landing)): `J_Fit_Belly` takes the spine's own scale. When this part was written it had none, and the `-f` pieces were written for that; they are written for the scaled bone since the landing.
+
+**Look keys change for nearly everyone,** which I first reported as women alone: every woman and girl from 12 by her line's proportions; girls under 12 and men who wear `long`, `tail` or `braids` by their hair file's name; and most men and children by one or two levels in a jersey's colour, because a line's colour for a piece is measured on the built person and the jersey's shape changed with the cloth part. The change lands with a new book generation: [the body: the landing](#the-body-the-landing).
+
+**What still separates a woman's body from the reference's,** ordered by how much it shows:
+
+1. **The clothes.** A smock is a bell from the waist and a coat a tube; the reference's are cut to the figure. Boots are a man's sea boots made narrower.
+2. **The knee** stands at 29.4% of the height against 32.8: the one skeleton's shin is shorter against its thigh than the reference's, and `legs` scales both.
+3. **Hands:** the palm is half the hand's length against 0.44; fingers are short for the palm. The hands part.
+4. **The bust** stands 0.4% of the height before the waist's front against 0.7, and the chest under the arms is 12.9 wide against 14.0: the cage has one ring between the bust and the armhole.
+5. **The neck** is 3.7% of the height at its narrowest against 4.1.
+6. **The calf,** under the boot: 4.4 against 5.3.
+
+### The body: cloth
+
+The body pass, second part (2026-11-12, branch `char-4-body`): how the jersey, smock, coat and trousers sit on the corrected bodies, at rest and on the `idle` and `walk` clips, with `cloth_check.py`'s numbers before and after.
+
+**One of the two faults handed over was not one.**
+
+- **"A jersey's collar through a coat's" was the check's mistake.** The vertices it named are the jersey's middle front, showing in the coat's open front, 25 mm to the side of the coat's edge. A coat is a solid with no open edge, so the check did not see that they lie beside it and not under it. `cloth_check.py` now counts a vertex only if the nearest of the outer piece's vertices is nearly straight above it (within 15 mm to the side). With that the pair is clear on both forms, at rest and in both clips.
+
+**What was wrong, measured on Cullet's 64 residents and 23 test lines** (every outfit on both forms, lean, heavy, strong, a girl of 12 and of 15, an old woman, two children). People with anything through by more than 2 mm, the median of their worst, and the most:
+
+| Clip | before | after |
+|---|---|---|
+| at rest, `idle`, `talk`, `wave`, `bow_shoot` | 34 of 87 (the jersey out of the trousers' waist: 4.0 to 7.5 mm, 37 mm on a heavy man) | none |
+| `walk` | the same 34; on main also a thigh through a skirt, 2.4 to 5.6 mm | none |
+| `walk_brisk` | 49 of 64 residents, 17.1 mm, 26.6 | 17 of 87, 5.1 mm, 7.6 |
+| `run` | 36 of 64, 8.0 mm, 18.9 | 2 of 87, 2.5 mm, 3.0 |
+| `sneak` | 49 of 64, 13.7 mm, 22.8 | 7 of 87, 5.4 mm, 26.7 |
+| `sit_idle` | 51 of 64, 12.7 mm, 16.6 | 7 of 87, 3.9 mm, 37.3 |
+| `sword_slash` | 51 of 64, 12.3 mm, 21.5 | 48 of 87, 4.2 mm, 38.3 |
+| `gather` | 60 of 64, 18.6 mm, 39.0 | 82 of 87, 8.7 mm, 35.2 |
+| `sit_down` | 64 of 64, 30.4 mm, 39.4 | 85 of 87, 27.6 mm, 39.4 |
+
+- The clips past `walk` were first measured part way through (after the folds, before the skirt rode the thighs, and with the check before its last correction), on the residents alone. They are a fair before for the skirts and no more.
+- **What is left in a brisk walk** is the inside of the lifted thigh, near the knee, through the panel between the legs: 3 to 9 vertices in 2 of 16 frames, where the thigh is 53° up. A panel between the legs takes half of each and cannot follow both.
+- **Sitting down, gathering and a sword's slash are not solved.** A hip bent 90° is past what weights alone do for a skirt or a coat; `sit_idle`, once seated, is mostly clear.
+
+**What changed:**
+
+- **The trousers' waist follows the belly's bone** (`BELLY_PARTS`), with the same weights by place as the jersey tucked into it. Before, the bone carried the jersey's front and not the waistband: the two parted on any build but the standard one, because the bone is not scaled with `build`, and a belly stood out over the waistband as a shelf (31 to 37 mm on the heavy). Now a belly rounds the waistband out with it.
+- **The jersey is tucked in** (`upper_garment`'s `tuck`): below the trousers' top it lies 3 mm off the body where it lay 8, and its ribbed hem 6 where it lay 11, a millimetre inside the waistband. That millimetre showed as slivers of jersey through the back of the waistband on both forms. The check's 2 mm did not catch it; the photographs did.
+- **A skirt lies on the thighs** (`torso_w`): its panels ride the same side's upper leg, 0.97 of it in front and 0.80 behind, from just under the hip joint (rest height 0.97, whole 14 cm below). With the silhouettes it was 0.85 and 0.55 from 0.95 over 20 cm, which was enough for the walk and not for a thigh 45° up. Seated, a skirt now lies on the lap.
+- **A smock's skirt hangs in folds** (`FOLDS`, `FOLD_DEEP`): five soft flutes round it, nothing at the hips and 2.6 cm in and out at the hem, the middle of the front on a crest. The apron lies on the same folds. The hem is a scalloped line where it was a circle. A coat's skirt is left smooth.
+- **Collars** were looked at close up at rest and on `idle_look`, `nod`, `shake_head` and `walk` (the roll neck, a coat's stand collar, a smock's low one, on a woman, a girl, a man and a child): no neck through a collar and no gap opening. Nothing was changed.
+- **The check** learnt two things on the way: a vertex counts only if the outer piece's nearest vertex is nearly straight above it, and a solid piece's rim is where its outward faces meet its lining. Both stop it reading what shows in a coat's open front as through the coat.
+
+**Files:** every outfit piece of both forms (the trousers' and jerseys' weights and the jersey's tucked part; the smocks' and aprons' skirts). Types and hair are not changed by this part.
+
+**What the client needs:** nothing.
+
+**What still separates our clothes from the reference's,** ordered by how much it shows:
+
+1. **Nothing moves by itself.** A skirt follows the thighs and the hips by weights; it does not swing, lag or settle. The reference's skirt is on spring bones. Ours could be: the hair's spring groups and the back's spheres are the same machinery.
+2. **The cut.** A smock is still one bell from the waist and a coat a fitted tube; there is no seam, pleat, pocket or lapel that is modelled, only painted bands and patches.
+3. **Sleeves** are smooth tubes with no fold at the elbow, and on a woman's form the sleeve's head stands a little proud of the narrow shoulder.
+4. **Boots** are a man's sea boots made narrower.
+
+### The body: the landing
+
+The silhouettes and the cloth land together (2026-11-12, branch `char-4-body`, after the look-1 pair and looks-tex-1 were on main), as a pair with the client's half. The hands are parked on `char-4-hands` and land later.
+
+**The book's new generation: `c4-e61b01c0`.**
+
+- `look_lines.py book --town living/seeds/cullet.json` appended it: `generations` is `["c4-aa393793", "c4-e61b01c0"]`, and the book holds 1,655 lines, the 887 of the first generation, every one kept, and the 768 the new one adds. 119 lines are the same in both.
+- **Who changes:** 62 of the 64 residents' person entries, all 128 pool entries (548 of their 640 lines), and so everyone a world draws from the pool. See the silhouettes part above for why men's lines change too.
+- **Cullet's world data** (`living/seeds/worlds/cullet/looks.json`, `look-cases.json`) is at the new generation.
+- **The seed** was written by the seed tools, not by hand: `python3 living/tools/author_world.py cullet --compile-only`, then `python3 living/tools/cullet_plan.py`. `cullet_plan.py --check` passes, and `living/seeds/cullet.json` differs from before in its `looks` and its residents' `look` alone.
+- **The island's world data** was copied from Cullet's pool at the new generation: `python3 living/tools/pool_looks.py island --into island` writes `living/seeds/worlds/island/looks.json` (a pool of 128 people, 640 lines) and the `looks` of `living/seeds/island.json`; `--check` passes; the seed differs from before in its `looks` alone. It was not compiled again with `author_world.py`. Checked on the authority the same way (`--seeds island`, run `generation-worlds-20261112-233133`): 989 of 990 checks; the one that fails is `pack the wolves of the low hills starts near deer`, which fails on main too and is not a look check (verify-generation, `features/looks.md`). The world wears `c4-e61b01c0`; 277 people have 277 look rows, every one resolving in the 640 `look_line` rows and in the client's book.
+- **Checked on the authority** (verify-generation, `generation.py --feature worlds --seeds cullet`, run `generation-worlds-20261112-230748`, on a scratch database): 344 checks, none failed. The world wears `c4-e61b01c0`, `look_line` holds 791 lines, the 64 residents have a look row each, every row resolves, and every one of the 791 keys is in the new book.
+
+**Moving a live world to the new generation (relook).** A world made before this landing wears `c4-aa393793`. Its keys are still in the book, so its people still draw, but a woman's old line has the old proportions and the new `-f` pieces are written for the new ones: she draws wrong (the upper body wide, the torso long) until the world is relooked. Men and children draw as before, a level or two off in a jersey's colour.
+
+1. Publish the world's module built from this landing's seed over the world, with its data kept (`living/tools/stdb publish …` without `--delete-data`, as any update; a world whose module is from before the update guard takes the guard first, [LOOK.md](LOOK.md), "The safe update path"). The seed compiled into the module now carries `looks` of generation `c4-e61b01c0`.
+2. As the world's admin: `living/tools/stdb call -s local <database> relook '"c4-e61b01c0"'`.
+3. What it does ([LOOK.md](LOOK.md) §4): it rewrites `look_line` with the seed's 791 lines and gives every living person one look row. A resident is matched by name and takes their own entry; everyone else (players, newcomers, anyone born since) takes a pool entry by their id. It writes `world.look_book` and one line in the chronicle. It is refused for any generation but the seed's.
+4. **What changes for whom:** every resident keeps their face, hair, colours and clothes, with the new form if a woman. **A person on a pool look keeps their pool entry's number, and that entry is a newly drawn person of the same seed:** the same type and colours, the new form. Clients redraw each person once, with a fade, when their key changes.
+5. **A floor world** reads its looks from the seed it was created with (`floor_seed`), not from the module. `relook` is refused there for any generation but that seed's, and how a floor is given a new seed is not written in [LOOK.md](LOOK.md); it was not tried here.
+6. **The island follows.** Its people all wear pool entries, and every pool entry changed, so its seed's `looks` were written again at the new generation with this landing (below). A live island world, Brackenford included, takes the same two steps: the module built from this landing's island seed published over it with its data kept, then `relook("c4-e61b01c0")` as its admin. A fresh world made from the seed needs neither. Until one or the other, its women draw wrong, as Cullet's would.
+7. **Any other world** whose seed was written against `c4-aa393793` names lines of the old generation: they still resolve in the book and still draw wrong for women. Write its world data again against the new generation (`pool_looks.py <world> --into <seed>` for a world on the pool alone) and relook it the same way.
+
+**The client's half: `J_Fit_Belly` takes the spine's scale** (for the laptop; nothing in `living/game` was edited here).
+
+- **The change:** in `characters.rs` `bone_scale`, `J_Fit_Belly` gets the vector `J_Bip_C_Spine` gets, `Own(Vec3::new(g * lerp(1.0, p.hips, 0.5), p.torso, g))`. Nothing else: the bone's place already follows the spine (`tf.translation = (rest + belly) * v`).
+- **Why:** the bone carries the front of every jersey, coat, smock, apron and trousers' waist. Without a scale, what it carries does not follow a person's `build`, `torso` or `hips` while the cloth round it does.
+- **The files are written for it since this landing** (`person.py` `Stance.maps`; `person_check.py` and `cloth_check.py` pose the same way): on a client with the change, a belly's own vertices stand where the form puts them on every build.
+- **Until the client has it,** they stand off by this much (the piece's worst vertex, and the middle of the belly's own vertices; `cloth_check.py --old-belly` poses as the old client does):
+
+| Person | Off at most | At the median |
+|---|---|---|
+| a woman, standard build | 10.2 mm | 5.2 mm |
+| a lean woman (build 0.87), coat | 23.6 | 14.2 |
+| a heavy woman (build 1.16), smock | 16.2 | 10.1 |
+| a girl of 12 | 9.6 | 6.5 |
+| a man, standard build | 0 | 0 |
+| a lean man, coat | 19.6 | 9.3 |
+| a heavy man, coat | 23.7 | 11.3 |
+| a child of 8, coat | 12.8 | 6.5 |
+
+- Nothing comes through anything on either client (`cloth_check.py` with and without `--old-belly`, at rest, in `idle` and `walk`): the jersey and the trousers ride the bone together. What the old client shows is a front that is a centimetre or two too flat on the lean and too full on the heavy.
+
+**The clip file carries the skeleton and the clips, and no pictures** (`share.py clipfile`, run by `gen_person.sh` for `clips=<preset>`).
+
+- The shared clip file was the `man` preset whole, with the clips: 5.28 MB here with 29 clips, with his meshes, 15 morph targets and his atlas, which a client decoded and held for nothing.
+- It is now 2.61 MB: the skeleton's 82 nodes, the clips, and one mesh `Figure` of four points and no material, whose bounds are the figure's. The client measures a person's stride against the clip file's figure from its meshes' bounds (`lookdev::figure_height`), so the file still says how tall the figure stood (1.810 m), and the scene's `extras.clip_file.figure_height` says it too. The 29 clips are key for key what they were.
+- **The laptop bakes its own** from its full library, as before; the same command now writes the stripped file. It is not in the bundle.
+
+**The bundle is published twice,** `char-4-composed-<sha>.tar.gz` with PNG pictures and `char-4-composed-<sha>-ktx2.tar.gz` (`pictures.py bundle … --pictures ktx2`, [pictures as KTX2](#pictures-as-ktx2)), with `pictures.py check` on the second.
+
 ### The neck
 
 Pass 3, 2026-11-12, from the owner on the cast's faces: "the neck is still off, seems too big? maybe the issue are the attachment point to the head". Measured against the reference with a new tool beside ref-1's (`living/tools/characters/reference/neck.py`): horizontal cuts of the skin from the jaw down, the pivots and the seam, on any character file.
@@ -2038,6 +2292,158 @@ For composed people on char-4's bundle `9207d6a8` (main `42ca0b67`: the shared i
   - **Hair:** a whole file's hair is drawn from the person's own numbers, a composed person's is the shared cut (by design, [what a shared style gives up](#hair-as-shared-style-files)).
 
 
+## Pictures as KTX2
+
+looks-tex-1 (2026-11-12, from the laptop's proposal `~/archive/looks-tex-1-proposal.md` as the general coordinator agreed it). A composed person's pictures go into a character bundle as KTX2: BC7, a full mip chain and zstd supercompression, converted at bundle time from the generator's PNGs. The generator is unchanged. Its PNGs stay its intermediates (`shade_mean.py`, `eye_colours.py` and the boards read them), and the conversion is a separate step on the bundle's copies, which char-4's bundle builder calls.
+
+**Why:** on the GPU every picture is RGBA8 today (wgpu has no RGB8) with no mips (Bevy makes none for a PNG). BC7 is 1 byte a texel against 4, and a full chain adds a third, so about a third of the memory: Cullet's residents' set falls from 168 to 56 MiB and the whole book from 188 to 63 MiB. A PNG without mips also aliases at distance; a mip chain filters it.
+
+**Versions checked** (the client's pins, from source in the cargo registry): Bevy 0.20.1's `3d` feature brings `ktx2` and `zstd_rust`. `bevy_gltf` hands an image named by URI to the asset server, whose `ImageLoader` picks KTX2 by the `.ktx2` extension, while `gltf-json` 1.4.1 refuses an embedded `mimeType` other than PNG or JPEG: so KTX2 pictures are separate files named by `uri` with no `mimeType`. `bevy_image::ktx2` decides sRGB or linear from the loader's `is_srgb` (the glTF loader's per-texture choice, or `ImageLoaderSettings`), not from the file's `vkFormat`; the files still carry the right one. It fails on a block format the device lacks (`CompressedImageFormats::from_features`). Spec: [KTX 2.0](https://registry.khronos.org/KTX/specs/2.0/ktxspec.v2.html), [Khronos Data Format 1.3](https://registry.khronos.org/DataFormat/specs/1.3/dataformat.1.3.html) (BC7's descriptor).
+
+### The files
+
+| Class | In the bundle | Format | Size (as the PNG) | Mips |
+|---|---|---|---|---|
+| Type atlas (head skin, eyes, ears) | `types/<type>.atlas.ktx2`, moved out of `types/<type>.glb` | BC7 sRGB | 1024² | box |
+| Shadow map | `types/<type>.face.ktx2` (for `.face.png`) | BC7 UNORM (linear data) | 512² | box |
+| Overlays (beards, stubble, lines, freckles) | `styles/overlay/<type>/<name>.ktx2`, moved out of `<name>.glb` | BC7 sRGB, alpha | 512² | coverage (stubble: box) |
+| Far page | `pages/types-far.ktx2` | BC7 sRGB | 1280² | box |
+| Tint page (lips, blush, the iris lights) | `pages/types-tint.ktx2` | BC7 sRGB, alpha | 1600×720 | box |
+| Iris page | `pages/types-iris.ktx2` | BC7 sRGB | 192² | box |
+| Hair strands | `strands.ktx2` | BC7 sRGB | 256×512 | box |
+
+- **Beside each `.ktx2`, its summary** `<name>.thumb.png`: 64×64, RGBA 16-bit, the client's `Thumb` cells (each cell's mean linear colour times alpha, and its mean alpha), so a KTX2 person's recolour source colours are the PNG person's. 16 bits, because 8-bit sRGB would round them by up to about 0.004 linear, the client's `SAME_SOURCE`, and split materials.
+- **The GLBs** name their pictures by `uri` (`<type>.atlas.ktx2`, `../pages/types-far.ktx2`, `../../strands.ktx2`, `<name>.ktx2`), with no `mimeType` or `bufferView`. Their binary chunk is repacked without the PNG: the other buffer views keep their order, on 4-byte boundaries, and every `bufferView` index is renumbered.
+- **Removed:** the PNGs the GLBs named by path (the three pages, `strands.png`) and the shadow maps. `pages/types.json` names the pages' `.ktx2`.
+- **`MANIFEST.txt`** gains a `pictures: ktx2-bc7` line under the builder's header (`pictures: ktx2-bc7 (png: overlay)` when a class is kept as PNG, `pictures: png` for an unconverted bundle). It lists every file with its sha256, in the builder's order, each new file after the one it was made from.
+- **Per-class switch:** `living/tools/characters/pictures.json` (`"format": "png"` keeps a class as the generator wrote it) or `--png CLASS`.
+
+### The tools
+
+```bash
+# The bundle step: unpack, convert, check, pack (KTX2, or the same bundle with `pictures: png`).
+python3 living/tools/characters/pictures.py bundle char-4-composed-<sha>.tar.gz OUT.tar.gz --pictures ktx2   # or: just living-pictures bundle …
+python3 living/tools/characters/pictures.py bundle IN.tar.gz OUT.tar.gz --pictures ktx2 --png tint            # keep a class as PNG
+python3 living/tools/characters/pictures.py convert DIR --pictures ktx2   # an unpacked bundle in place (refuses a folder without MANIFEST.txt)
+python3 living/tools/characters/pictures.py check OUT.tar.gz              # the post-conversion check (exit 1 on any failure)
+python3 living/tools/characters/pictures.py memory OUT.tar.gz             # GPU bytes per class, KTX2 against RGBA8 without mips
+
+# The test from one bundle: KTX2 twice and PNG once, compared; the check against broken bundles.
+python3 living/tools/characters/pictures_selftest.py char-4-composed-643ac265.tar.gz .local/tex1/out
+# The encoder's own tests: summaries against the client's Thumb::of and Bevy's loader, Bevy loading the files.
+cargo test --release --offline --manifest-path living/tools/bc7ktx/Cargo.toml   # BC7KTX_PICTURES=DIR adds a bundle's PNGs
+# PNG against KTX2 drawn by the client (composed people, the asset view), with a 4×-supersampled reference.
+python3 living/tools/characters/pictures_stills.py BINARY OUT png=A.tar.gz ktx2=B.tar.gz ref=A.tar.gz@4
+```
+
+**The encoder, `living/tools/bc7ktx`** (Rust, outside the `living` workspace, built by `pictures.py` with `cargo build --release --offline --locked` into `$CARGO_TARGET_DIR` or `.local/bc7ktx-target`; a cold build is under a minute from the cargo cache):
+
+- **BC7** from `intel_tex_2` 0.5.0 (Intel's ISPC texture compressor, prebuilt kernels in the crate: no ISPC compiler needed), its `slow` settings, the opaque modes for a picture with no alpha below 255 and the alpha modes otherwise. On x86_64 the kernel is called on ISPC's AVX2 target directly: the crate's own entry point picks SSE2 to AVX-512 by the CPU at run time, and the targets need not round alike. bc7ktx then needs AVX2 and refuses to run without it.
+- **Bundles are built on dev-box only.** Byte-identical output holds only on the same kernel: dev-box's x86_64 AVX2 target. An ARM machine (the laptop's Apple silicon, the Spark) runs a different ISPC kernel and would write different blocks and different sha256 for the same pictures, with no error. So `pictures.py bundle` is run on dev-box, and a bundle's `MANIFEST.txt` sha256 values are dev-box's. Elsewhere, read bundles; don't rebuild them. A rebuild on another x86_64 machine with AVX2 should match, but that hasn't been tested.
+- **KTX2 written by the tool:**
+  - `vkFormat` 146 (`BC7_SRGB_BLOCK`) or 145 (`BC7_UNORM_BLOCK`), `typeSize` 1, one layer, one face, every level down to 1×1;
+  - `supercompressionScheme` 2 (Zstandard), each level its own zstd frame at level 19 (libzstd 1.5.7 through `zstd` 0.13.3, one thread), stored smallest first;
+  - a basic DFD (colour model BC7, BT.709 primaries, sRGB or linear transfer, straight alpha, `bytesPlane0` 0 as the spec asks of a supercompressed file);
+  - one `KTXwriter` key (the tool and its version, no time).
+  - Levels whose sides are not a multiple of 4 (1600×720's 25×11 and below) are padded by repeating the edge.
+- **Mips**, all from level 0, in linear light (sRGB decoded with the client's own function and encoded again after), colour weighted by alpha so transparent texels do not bleed into a mark's edge. Each level is an area average of the level above, by exact integer texel overlap, so odd sides are averaged exactly. Level 0 is the source's own bytes.
+- **Thin marks.** Freckles and lines are one or two texels wide, and a box halves a one-texel line's alpha each level down until it is gone. The overlays' mips are made with **alpha-coverage preservation** (Castaño 2010, NVIDIA Texture Tools' `scaleAlphaToCoverage`), applied to the marks alone:
+  - level 0's texels above alpha 0.5 are the marks; the rest is the soft part (the shading round a line, stubble's haze, blush);
+  - both are averaged down; the soft part stays as averaged;
+  - the marks' alpha is scaled so that the share of texels above 0.5 stays level 0's, so a line holds at about half its ink over its wider footprint instead of fading out (`tests/client.rs` `coverage_keeps_thin_marks`).
+  - Stubble is a haze and keeps the box: its look at distance is its mean.
+  - The other way the brief allowed, starting the mips one level down, was not built.
+- **Deterministic:** a file depends only on its picture and its job: no time, path or thread count goes in, the kernel is pinned, the mips are integer-weighted f32 sums in a fixed order. `pictures_selftest.py` builds the bundle twice and compares the sha256 of every file. The same bytes on another x86_64 machine with AVX2 is expected, not tested. An ARM machine (the laptop, the Spark) runs ISPC's Neon target and may differ: bundles are built on the dev-box.
+- **The summaries** are `Thumb::of` exactly: the same sample positions, the same f32 arithmetic in the same order, Bevy's `gamma_function` for sRGB and a byte over 255 for data. `cargo test` checks it, bit for bit, against a verbatim copy of `Thumb::of` run on Bevy 0.20.1's own loaded `Image`, for pictures of its own and, with `BC7KTX_PICTURES`, every PNG of a bundle (122 pictures, sRGB and linear: identical). It also fails when the client's `Thumb::of` no longer matches the copy. `bevy_loads_the_files` loads the files with Bevy's KTX2 loader: BC7 sRGB or UNORM, the full chain, the levels' bytes; and refused on a device without BC.
+
+**The check** (`pictures.py check`, run by `bundle` before it writes) fails a bundle when:
+
+- a GLB's image URI does not resolve;
+- a `.ktx2` has no `.thumb.png`, or the thumb is not 64×64 RGBA 16-bit;
+- a KTX2's level count is not the full chain, its format class (`BC7_SRGB_BLOCK` sRGB for colour, `BC7_UNORM_BLOCK` linear for the shadow maps) is wrong, or its levels do not decompress to their sizes;
+- a GLB still embeds a picture, or names a PNG, of a class the manifest calls KTX2;
+- a converted PNG is left behind, a KTX2 or a thumb is unnamed, `types.json` names a missing page, or a manifest line's sha256 is wrong.
+
+The self-test breaks a KTX2 bundle each of those ways (a thumb removed, a URI to nowhere, an sRGB picture as a shadow map, a header a level short, the generator's own type GLB put back), and the check catches every one, each for its own reason.
+
+### From char-4-composed-643ac265
+
+`pictures_selftest.py`, dev-box, 12 threads: about 18 s a KTX2 bundle; evidence in `.local/tex1/out/selftest.json`.
+
+- **The PNG bundle** is the input file for file; its `MANIFEST.txt` differs only by `pictures: png`.
+- **The KTX2 bundle twice:** every file the same, all 118 `.ktx2` included (21 atlases, 21 shadow maps, 72 overlays, 3 pages, strands).
+- **Both pass the check.**
+- **Encoding error** at level 0 (`bc7ktx error`): the atlas RMS 0.11 to 0.13 of 255 a channel, the worst texel 4; the tint page 0.15 to 0.32, worst 16; a shadow map 0.08 to 0.24, worst 6. PSNR 62 to 69 dB.
+
+| Class | Pictures | Size | RGBA8, no mips (today) | BC7, every level | KTX2 files |
+|---|---|---|---|---|---|
+| Type atlas | 21 | 1024² | 84.00 MiB | 28.00 MiB | 2,782 KiB |
+| Shadow map | 21 | 512² | 21.00 MiB | 7.00 MiB | 2,117 KiB |
+| Overlays | 72 | 512² | 72.00 MiB | 24.00 MiB | 1,639 KiB |
+| Far page | 1 | 1280² | 6.25 MiB | 2.08 MiB | 250 KiB |
+| Tint page | 1 | 1600×720 | 4.39 MiB | 1.47 MiB | 241 KiB |
+| Iris page | 1 | 192² | 0.14 MiB | 0.05 MiB | 26 KiB |
+| Strands | 1 | 256×512 | 0.50 MiB | 0.17 MiB | 112 KiB |
+| **Whole book** | 118 | | **188.3 MiB** | **62.8 MiB** | |
+| **Cullet's residents' set** (21 types, 52 overlays, the pages, strands) | | | **168.3 MiB** | **56.1 MiB** | |
+
+GPU arithmetic: a picture's bytes on the GPU, without the driver's own padding or alignment, so the ratio is 3.00 for every class. The thumbs are 0.7 MiB on disk and 64 KiB each on the CPU, as the client's own summaries are.
+
+**Bundle size:** 25.93 MB as built, 29.06 MB as KTX2, +12% (the proposal estimated +20 to 30 MB): zstd takes the flat pictures' BC7 blocks down to 10 to 30% of their size. Unpacked 56.0 → 59.1 MB.
+
+### Stills
+
+`pictures_stills.py` draws five Cullet look lines composed by the client's asset view, from the PNG bundle and the KTX2 bundle. The people are light skin with blue eyes and lines (`lk_b23bcf72f485a061`), light skin with brown eyes, lines and freckles (`lk_97e70f4184cd645d`), dark skin with brown eyes and lines (`lk_3a24378c7d67ec75`), darker skin with grey-blue eyes, a beard, lines and freckles (`lk_c10f255e70477c0c`), and a child with freckles and green eyes (`lk_785d5fa2c550b36c`); every type has brows. The shots:
+
+- the game camera at 22 m with the far model, as the game draws it there;
+- the same with the full model (`LIVING_GAME_FAR=1000`);
+- the size the close camera gives at 7.5 m;
+- the face close up from the front and at 35°.
+
+A third arm draws the PNG bundle 4× larger and averages it down in linear light: the screen with ideal filtering. The dev-box GPU (RADV, Vulkan) reports `CompressedImageFormats(BC)`, and every KTX2 loaded.
+
+The client side below was applied to the dev-box worktree as a temporary patch for these runs only, both arms on the same binary, and never committed. The patch is kept as evidence for the laptop. The sheets (a row a person: PNG, KTX2, reference; crops enlarged by nearest neighbour), `stills.json` with each shot's differences, and the patch are in `~/archive/looks-tex-1-stills-20261112/` on the dev-box.
+
+- **Close up**, PNG and KTX2 differ by less than two PNG runs differ from each other (mean 0.06 to 1.7 of 255 against 0.13 to 1.9: eyes and timing move between runs). Skin, lips and blush, irises, brows, lines and freckles match, and no shadow edge bands.
+- **At distance**, the arm nearer the reference is the better drawing. Over the 15 distant shots the mean error against the reference was:
+
+  | Arm | Mean error, of 255 |
+  |---|---|
+  | PNG (no mips: aliased, marks kept by aliasing) | 4.96 |
+  | KTX2 with coverage on the overlays and the tint page | 4.94 |
+  | KTX2 with box mips everywhere | **4.77** |
+  | KTX2 as shipped (coverage on the overlays, box elsewhere), a later run | 5.07, PNG 5.03 in the same run |
+
+  The differences are within run-to-run variation. Both arms are about 4 to 6 off the reference everywhere, mostly at the outline, which is screen-width and so thinner in the 4× drawing.
+- **The iris lights take the box.** With coverage on the tint page (lights above alpha 0.7, the lips below it), the lights grew into bright yellow specks in the eyes at 7.5 m, where the reference keeps the eyes dark. The box draws them as the reference does.
+- **The overlays keep coverage.** It holds freckles and lines a little stronger than the reference at distance, which is what the brief asked for. The box draws them fainter, as the reference does. Switching the overlays to `"mips": "box"` is one line in `pictures.json`, if the coordinator prefers the reference.
+- **The atlas and the far page take the box.** A face at 22 m is about 10 pixels wide; the PNG shows the eyes as aliased dots and the KTX2 as their filtered mean, nearer the reference in the far model's shots.
+- **No class blurs or bands**, so none is kept as PNG.
+- **Seen in passing, not a picture fault:** at 22 m the child's black hair is sometimes green-grey, in either arm by turns from run to run. It is for the laptop.
+
+### What the client needs (for the laptop)
+
+Nothing in `living/game` was changed. A KTX2 bundle needs these three changes; a PNG bundle (`pictures: png`, or any bundle before this step) loads exactly as today. The patch the stills ran on is `~/archive/looks-tex-1-stills-20261112/client-proto.patch` on the dev-box.
+
+**1. Summaries from the thumbs** (`characters.rs`, `thumb_pictures`). A BC7 picture's blocks cannot be read on the CPU: `Image::get_color_at` fails on them, `Thumb::of` gives zero cells, and the recolour's source colour falls back to the material's base colour, so composed people lose their colours.
+
+- For an image under `lookdev/` whose path ends in `.ktx2`, read `<asset root>/<path with .ktx2 replaced by .thumb.png>` once (`std::fs`), not the image's pixels.
+- It is a 64×64 PNG, RGBA 16-bit. Each cell is `[r·a, g·a, b·a, a]` in linear light, `value / 65535`, row-major from the top: the cells `Thumb::of` makes from the PNG, to 1/65535.
+- Read through Bevy (`Image::from_buffer(…, ImageType::Extension("png"), CompressedImageFormats::NONE, false, …)` gives `Rgba16Unorm`, little-endian u16 in `data`) or the `image` crate (`into_rgba16`).
+- Keep `Thumb::of` for PNG pictures; nothing else in the recolour changes. `bc7ktx`'s test compares its summaries with a verbatim copy of `Thumb::of` and fails when the client's changes, so a change there needs the copy updated.
+- Insert the thumb under the image's id as now. The image's `asset_usage` may still become `RENDER_WORLD`: a KTX2's CPU copy is its blocks, which nothing on the CPU reads.
+
+**2. The shadow map as `.face.ktx2`.** Look for `<file>.face.ktx2`, else `<file>.face.png`, as now, in both places that name it:
+
+- `lookdev.rs` `convert` (`own = <file>.face.png`, line 473 at `c13a31df`);
+- `characters/compose.rs` `toon` (`map = <file>.face.png`, line 439).
+
+Keep `is_srgb = false` on its load. Bevy's KTX2 loader takes sRGB or linear from that setting, not from the file, so a shadow map loaded with the default (`true`) would be read as sRGB.
+
+**3. A warning without BC.** At start, one `warn!` when `CompressedImageFormatSupport` (a main-world resource from `RenderPlugin`) lacks `CompressedImageFormats::BC`: the KTX2 pictures would not load on that device and it needs a PNG bundle (`pictures.py bundle … --pictures png`). The dev-box reports `BC` (RADV); the laptop (Metal on Apple silicon) and the Spark (NVIDIA) should, to be confirmed by this line at the first start. Nothing else changes: no image is converted on load, and BC7 levels upload as they are.
+
+**Not covered:** the client's own measurement (resident and footprint memory, GPU textures, frame times and ready time over PNG and KTX2 on fresh Cullet worlds), which the proposal's prototype step owns on the laptop; ASTC (the laptop could draw it, the dev-box and the Spark cannot); cutting any class's size (judged first by stills: the far page at 640² is the proposal's first candidate); the bundle builder's call to `pictures.py`, which is char-4's.
+
 ## Motions on generated people
 
 `animate.py` retargets the clip library onto a generated person unchanged, since the skeleton is VRoid's. Limb lengths are our own, so a take can behave differently on our people than on a VRoid base: our man's arms are longer, and a hand that clears the floor on Shino goes 8 cm into it on him.
@@ -2080,6 +2486,21 @@ What happened since (2026-11-11):
   - `death` on Shino is still skipped by the floor guard (its hand jerks 93°).
 - **Hair on spring bones** changes nothing for `animate.py`: the chains hang under the head and the clips do not key them.
 - **Since pass 3 generated people are baked with main's `animate.py` again** (floor-guard-4, `25c1fb92`, which replaced the second and third guards: wrists and ankles are kept above the floor on every clip and body). The board's seven presets and the control were baked with it on the 29 entries this machine holds, and `living/tools/marker_check.py` on that bake reports no errors. On each of our people the guard changed 16 clips; the largest jerk rose by 0.4° at most (`run`, 17.8° to 18.2°, 6° allowed), and one warning stands (`sneak`: the right foot slides 4.5 cm while planted, 4 allowed). The 64 residents used for pass 3's crowd measurement were baked earlier with the first guard, as pass 2's were (`ANIMATE=<a copy from 93a4f3d6>`), so the two sets compared carry the same clips.
+
+## KTX2 pictures in the client (looks-tex-1-client, 2026-11-12)
+
+The client half of [Pictures as KTX2](#pictures-as-ktx2) (that section's "What the client needs" is the spec; the bundle side is dev-box's `looks-tex-1`). A PNG bundle (`pictures: png`, or any bundle before it) loads exactly as before.
+
+- **Summaries from the thumbs** (`characters.rs`, `thumb_pictures`, `Thumb::from_image`): for a `lookdev/` picture whose path ends in `.ktx2`, the `<name>.thumb.png` beside it is read from disk once, when the picture arrives, in place of its pixels. Its 64×64 RGBA 16-bit cells are `Thumb::of`'s, premultiplied linear colour and coverage, `v / 65535`; anything else is no summary. Read in the same frame as the picture, the summary is there when `compose` makes its materials, so KTX2 people share materials as PNG people do. A KTX2 picture without a readable thumb warns once and takes its material's base colour. `Thumb::of` gives no summary for a block-compressed image (it used to give zero cells). The test `a_shipped_summary_reads_back_as_its_pictures_cells` holds the format to `Thumb::of` within 1/65535.
+- **The shadow map** (`lookdev.rs` `convert`, `characters/compose.rs` `toon`, through `lookdev::face_map_files`): `<file>.face.ktx2` first, then `<file>.face.png`, and the same for a page's `face_map` extras; still loaded with `is_srgb = false`.
+- **The GPU's formats at start** (`characters.rs` `gpu_formats`), one line to grep, and a warning when BC is missing (KTX2 pictures would not load; install a PNG bundle):
+
+  ```
+  gpu formats: bc=true astc=true etc2=true (CompressedImageFormats(ASTC_LDR | ASTC_HDR | BC | ETC2))
+  ```
+
+  That is the laptop (Apple M4 Pro, Metal). dev-box (RADV, Vulkan) reports `BC`.
+- **Known leftover: `strands.png` stays installed beside a KTX2 bundle.** The shared clip file `lookdev/anim/own-clips.glb`, which an install makes locally with `gen_person.sh clips=man`, names `../strands.png` by URI, as do the older `lod/anim/own-*` town files. A KTX2 bundle has `strands.ktx2` instead. Bevy 0.20's glTF loader loads every texture a file names whatever its `load_materials` setting, so the client cannot load the clip file for its animations alone. Until gen_person's clips mode exports the skeleton and animations only (asked of char-4), keep the PNG bundle's `strands.png` in `lookdev/` beside a KTX2 bundle; without it the client logs `Path not found: …/lookdev/strands.png` once and draws nothing differently.
 
 ## What was learnt from VRoid
 

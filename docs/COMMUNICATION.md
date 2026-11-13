@@ -46,7 +46,7 @@ Distances below are Cullet's laws, where the owner plays (`hearing_of_people()` 
 | **Mindspeech** (`mindspeech`, an example of a skill-granted channel) | proposed, as content | X only | Nobody | 200 m, through walls | The speaker knows the technique `mindspeech` and knows X's name (an acquaintance); 2 energy a line; 10 s between lines. X can answer in kind only if X knows it too. |
 | **Signing** (`sign`, a sight channel) | proposed, later | Those who see the signer within sight and know the technique `signing` | Others who see it: "Ilsa signs to Bram." | Sight with a clear line | Both sides know `signing`. Silent: no listener hears anything. |
 | **Writing** (tablets and signs) | built | Whoever later reads it with `read` (a sign within 8 m, a tablet one carries) | Onlookers see "Ilsa put up a sign" (built) | Wherever the artifact is, for as long as it lasts | The technique `writing`, 1 wood, 12 s (built). Slow and durable. A tablet can be given; a sign is public. |
-| **Signals** (species calls: howl, snort, a baby's cry) | built | Same species: the named call. Others: "a long howl from a wolf" | — | The signal's own range in `species.json` | A species vocabulary; the `signal` skill (0.8 s). |
+| **Signals** (species calls: howl, snort, a baby's cry) | built | Same species: the named call. Others: "a long howl from a wolf" | — | The signal's own range in `species.json`, or, with none, its `loudness` times each listener's hearing, as a way of speaking carries (since `packs-2`: the howl is loudness 2, 18 m on the island's 9 m hearing, and wakes a sleeper within `wake_reach`) | A species vocabulary; the `signal` skill (0.8 s). |
 | **Gestures** (`wave` 12 m, `nod` 6 m, `face` 15 m) | built | The target and onlookers see it | — | In sight | Skills with specs in `skills.rhai`. |
 
 What a listener learns, by reception:
@@ -504,6 +504,19 @@ Built 2026-11-11 on `speech-1` from `a107fdf`. Source: `living/authority/src/spe
 - "you can't see whom to `<way>` to";
 - the check's own words.
 
+**Ids are not words** (fix-spoken-ids, 2026-11-12). A mind is shown people by their ids (`{someone=#3}`), and in r2e three lines its deliberations said carried them ("That one, #9, set on me twice…"; [TRIALS.md](TRIALS.md), r2e "Ids"). The primitive says each `#<id>` as the speaker refers to that one, before the way's checks and its length limit (`normalize::spoken_without_ids`, with `common::label_for` and a far figure's handle resolved):
+- `Maud (#3)`: the aside goes;
+- `the archer #9`: the noun already refers, and the id goes;
+- anything else is said pointing: `#9 strikes me` → "that stranger strikes me" ("That stranger" to begin a sentence), or by a name the speaker knows.
+
+An id that names no one ("my #1 customer") is left as written. It applies to every speaker: the chronicle, the speaker's `said` row and every hearer get the same words.
+
+This is a safety net. The prompt is where the fix belongs: every speaking mind's system prompt (think, deliberate, fast, talk) carries one sentence, the same for all (`prompts::IDS_NOT_SPOKEN`), that the handles are for acts and memory and never spoken, and that people are named by name or description when speaking.
+
+**The original is kept as evidence.** When the rewrite changes a line, the speaker gets a `spoken_as` experience (salience 0.2) with what it wrote beside what was said; hearers get only the words said. A mind journals each one in `<journal>/outcomes/spoken_as.jsonl`, and trials.py counts them per instance and per batch (`summary.json` `spoken_as`, report.md "Ids said as words"). A high count means the prompt's sentence is not working.
+
+Tests: `living-rules` `spoken_lines_carry_no_ids` (r2e's three lines); `living-mind` `every_speaking_mind_is_told_ids_are_never_spoken`; verify-core `say`; verify-player `speak.py`; verify-minds `spoken-ids`.
+
 Listeners are gathered once within the way's widest carry (`WaySpec::widest`). Today two gathers of the same radius ran, one for animals and one for people.
 
 **Entry points.**
@@ -511,7 +524,7 @@ Listeners are gathered once within the way's widest carry (`WaySpec::widest`). T
 - `human_say(text, to)`: unchanged signature; the `say` way.
 - `human_speak(text: String, to: u32, way: String)`: new; `""` is `say`.
 - `mind_say(actor, say, say_to, way: String, seen_ms, thought)`: `way` is the new fourth argument.
-- `mind_install`'s say: `say`.
+- `mind_install`'s say: `say` (since `mind-say-way` a decision's line names its way through `mind_install_way`, §18).
 - The graph's `say` node takes an optional `"way"` (`SayNode.way`; the normalizer accepts it in every written form). It waits out the way's limits (`speech::too_soon_to_speak`), and an unknown way fails as a refused leaf the speaker is told about.
 - The mind's talk reply may name `"way"` (beside or inside `say`). A way the world lacks is said aloud. The talk prompt does not list ways yet: with `say` the only way, it is unchanged (item 6 adds them).
 
@@ -954,3 +967,64 @@ The ways change comes first: a deliberation's line naming a way, which addresses
 | **What it fixes** | The late line and some "not listed" ones: the speaker goes to the listener. | The late line: the mind sees it is late and chooses again. | Nothing. |
 
 The owner decides (a), which is act semantics, and whether (b) is turned on by default.
+
+## 18. A decision's line names its way (branch `mind-say-way`)
+
+Approved 2026-11-12 by the general coordinator. The earshot stage (`es1`, docs/TRIALS.md) found 22–33 unheard lines a run whose scene had said "a call would also reach" the addressee: a think or deliberate reply could not choose a way, so its line was always said. A talk reply and a graph's `say` node could already name a way, and so could a player through `human_speak`. Now a decision's line can too, under the same rules.
+
+**The reply.** The think reply's `say` takes an optional `"way"`: `{"text": "...", "to": id or null, "way": "say" or "whisper" or "call"}`.
+- The format names the field and the world's ways (`prompts::say_way_field`, only when the world has more than `say`). It says nothing about when to use one; the world text's SPEAKING section says what each way is and how far it carries.
+- The mind service reads the way as a talk reply's is read (`talk::way_of`). A way the world lacks is said aloud (`say`), as in talk turns.
+- It sends the way with the decision: through the new reducer `mind_install_way` when the reply installs a plan, through `mind_say`'s existing `way` argument when it carries on.
+
+**The reducer.** `mind_install_way(actor, graph, plan, say, say_to, way, seen_ms, thought)` is `mind_install` with the line's way. Adding a reducer is a safe module update; changing `mind_install`'s signature would not be (docs/FAST_LANE.md).
+- The line goes to `speech::speak` with that way: the same reach, gaps (2 s across ways, a call's 6 s) and refusals as every way, for every controller.
+- A refused line is not said and is told to the speaker in the rules' words, in an `unsaid` row (the kind a held line uses): "You did not say “Verify whisper to no one.”: a whisper needs someone to whisper to." The decision's graph, plan and thought stand: rolling the install back would undo the decision for its line's sake.
+- `mind_say` for a deliberation (a thought not of kind `talk`) now tells a refused line the same way, instead of failing the call. A talk turn's refused line is the reducer's error, as before.
+- It is authorised as every mind reducer is: only the character's controller may call it (verify-client's permission matrix).
+
+**No column is appended to any table.** The bindings gain the reducer. The regeneration also brought `heard_asleep`, a private table main had added without regenerating its bindings.
+
+**`mind_install` is to be retired.** The mind service no longer calls it. It is kept, its signature and behaviour unchanged (its line is always said, and a refused line dropped without a word), for a module update that leaves an older mind service connected, and for the admin harness: verify-core `scenes.py`, the say-by-id and `heard_first` scenes. Once those move to `mind_install_way` and no older service runs, it can go.
+
+**Both controllers now have the same choices.** Minds choose the way in a talk reply, a decision's line and a graph's `say` node. Players have `human_speak`, which the game's talk box is moving to (the laptop). Both go through `speech::speak`.
+
+## 19. Talk turns from play-test 6 (branch `talk-turns`)
+
+The owner's play-test 6, 2026-11-12: four lines to Sissly Fenner, a child, who led the owner to the inn. Hearing, addressing and speed were right. What felt off, and the general coordinator's decisions, are below. Each change applies to every controller unless it says otherwise. verify-minds `sissly-scene` replays the scene on the island seed with paraphrased markers, and `named-turn` covers the general case.
+
+**1. A plan's queued line after the conversation moved on.**
+- **What happened:** her deliberation began 1.7 s before the owner's "crust, can you bring me there ?". Its plan's first graph node said "You never said! Crust or filling?" 27 ms after the install, 2 s after her own talk turn had answered "I like crust too". The deliberation's own immediate line was dropped as it should be (`talk.rs` `unanswered_say`). The plan's `say` node passed `line_overtaken`, whose window began at the plan's install. Everything between the decision reading its scene and the install, the model's time, was not "since".
+- **Now:** `line_overtaken` and `heard_first` count from when the decision perceived what it decided on (`Brain::decided_ms`: the install's thought row, its time less its latency, as `mind::decided_since` measures it). The install's own line, said in its transaction, still does not overtake the plan's later lines.
+- **Who:** minds (a plan's `say` node). There is no schema change.
+
+**2a. A hearer named in a line said to someone else takes one turn.**
+- **What happened:** Sissly said to the owner "…you have to ask Mother first…". Agnes, her mother, 9.1 m away, received it, but a line addressed to another never gave an overhearer a turn (`talk.rs`: only room lines free one).
+- **The words:** a line said to someone that names others now says so in every hearer's row, in their own labels: "Sissly Fenner said to a stranger, naming you: “…”" (Agnes); "Sissly Fenner said to a stranger, naming Agnes Fenner: “…”" (another hearer). After a way's template: "… calls out to Bram from about 20 m, naming you".
+- **The turn:** the hearers a line names wait 300 ms for every named hearer's row (one transaction). Then the nearest of them by the line's `audience` row takes one turn, as if addressed, if free. As for an addressed line, a remark that asks nothing is answered only by temperament (`answers_remarks`), so the named hearer may stay quiet even before the model is asked. Free means not in another exchange still going; one settled with someone else does not count (Agnes had settled with Baldwin). Under the answered line, the turn's prompt says how it was said ("Sissly Fenner said to a stranger, naming you."), and the mind may stay silent.
+- **Who:** the same for every speaker: a player's line to someone that names a mind gives that mind the turn. A named player simply sees the row.
+
+**Kin words name.** A word a speaker uses for someone by their relation to them names that person when they stand in that relation to the speaker: "Mother" said by Sissly names Agnes. It is a perception fact (she would understand it).
+- **The words** are the world's `kin_terms()` in the rules (Rhai): relation → words, for parent, child, sibling (a parent shared), grandparent, grandchild and partner (a child together). The shipped defaults are "mother", "father", "mum", "ma", "dad", "gran", "grandma", "son", "brother", "wife", and others. A world's own terms replace them. An unknown relation is refused at install.
+- **They count** in a room line's naming detail and addressing too.
+- **No sex in the rules:** each word names anyone in that relation. "Mother" names a speaker's parent, and both parents when both hear (a look's `form` is appearance only, and no rule reads it).
+
+**2b. The turn budget does not close an exchange with something still open.**
+- **What happened:** her turn-3 prompt said "make this your last word (end: true)", the same call as her answer to the owner's question.
+- **Now:** the budget (`Temper::stamina`, 1–6 turns by temperament) closes an exchange only when nothing is open between the two (`Conversation::open`). Open means the line being answered asks something; or a plan or promise was made in the last two turns (a reply that settled something, or an act toward the other); or the exchange was reopened on something settled and has had under two turns. When open, the prompt states the fact ("You have said about as much as you usually do."), and `end` is the mind's. `MAX_TURNS` 12 stays.
+- **Who:** minds' talk turns. Nothing is specific to children or players.
+
+**3. The newest line once.** The talk prompt's "The conversation so far" now ends before the line being answered, which "What you are answering" gives once (`inspector.py`, `play_report.py` and the store self-test read that heading). Lines after it, if any, are not shown.
+
+**4b. A gesture done on the move.**
+- **What happened:** the owner asked for a wave, then pressed a direction 1.1 s later, before the 1.2 s gesture was done. `human_move` broke it off, told as "wave → person: you moved".
+- **`on_the_move`:** a skill spec flag, set on `wave` and `nod`. Such a skill starts without stopping the body (it implies `moving`), and moving does not break it off, for any controller.
+- **The words:** a skill still broken off by moving is told in the rules' words (`moved_off(skill)`): "The look stopped: you moved off before it was done." Its `act_outcome` code is the new `moved`.
+- **Schema:** it is a rules field only. No table or column changed, and the bindings are unchanged, so `schema-guard` does not apply.
+
+**4a. The directions** ("just past the berry bushes", said where she remembered bushes that had since been gathered, the inn the other way) are the branch `talk-places`: places with direction and distance in talk prompts, and when a remembered resource was seen.
+
+### What the game client needs (laptop)
+
+- `my_experience` rows of lines said to someone may now carry ", naming …" before the quote ("A stranger said to Sissly Fenner, naming you: “…”"). Show it as the room detail is shown.
+- `act_outcome` has a new act code, `moved` (its `why` is the rules' sentence). A client without it falls back to the words.

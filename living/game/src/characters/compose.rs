@@ -144,6 +144,18 @@ impl HairTints {
 /// under one 8-bit step, so sharing moves no colour the screen shows.
 pub const SAME_SOURCE: f32 = 0.004;
 
+impl Person {
+    /// Every file the person is composed from, under the asset folder: the type's, then hair,
+    /// outfit pieces and overlays, as [`prepare`] wears them.
+    pub fn files(&self) -> Vec<String> {
+        let mut out = vec![format!("{TYPES}/{}.glb", self.kind)];
+        out.extend(self.styles.hair.iter().map(|h| format!("{STYLES}/hair/{h}.glb")));
+        out.extend(self.styles.outfit.iter().map(|o| format!("{STYLES}/outfit/{o}.glb")));
+        out.extend(self.styles.overlays.iter().map(|o| format!("{STYLES}/overlay/{}/{o}.glb", self.kind)));
+        out
+    }
+}
+
 /// Outfit pieces worn on the head: attached with the type's `hair_fit`, as hair is.
 const HEAD_PIECES: [&str; 2] = ["cap", "kerchief"];
 
@@ -443,7 +455,7 @@ impl Composer<'_> {
         // face's skin (an overlay's lines and freckles) as a face, with the shadow map beside its
         // file, else as skin; eyes and lines as face parts; clothes plain.
         let map = format!("{}.face.png", file.trim_end_matches(".glb"));
-        let face_map = wants_face_map(name).then_some(map).filter(|m| exists(m));
+        let face_map = wants_face_map(name).then(|| crate::lookdev::face_map_files(&map).into_iter().find(|m| exists(m))).flatten();
         let face = face_map.clone().map(|m| self.assets.load_builder().with_settings(|s: &mut bevy::image::ImageLoaderSettings| s.is_srgb = false).load(m));
         let kind = kind_of(name, face.is_some());
         // The source colour the recolour moves to a person's: over the file's meshes in this

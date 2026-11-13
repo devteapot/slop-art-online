@@ -53,6 +53,9 @@ pub enum Event {
     Percept(Experience),
     /// A fast-lane request issued for one of this service's characters (mind/fast.rs).
     Fast(FastAsk),
+    /// A line of one of this service's characters whose `#<id>` handles the world said as words
+    /// (`spoken_as`, speech.rs): journaled in `outcomes/spoken_as.jsonl`.
+    SpokenAs(Experience),
 }
 
 pub use lived::enabled as player_memory;
@@ -825,6 +828,13 @@ impl Minds {
         v
     }
 
+    /// The last `n` experiences a deliberation's prompt lists beside its scene: none later than
+    /// the scene (`scene_ms`, the request's `updated_ms`), so "what you perceive right now" and
+    /// what one has lived describe one moment (`scene_upto`).
+    fn experiences_upto(&self, actor: u32, scene_ms: u64, n: usize) -> Vec<Experience> {
+        scene_upto(self.experiences(actor), scene_ms, n)
+    }
+
     /// Experience text with the ids of the people involved, so the mind anchors correctly.
     fn exp_line(&self, e: &Experience, fmt: &dyn Fn(u64) -> String, with_id: bool) -> String {
         let mut who = Vec::new();
@@ -1254,13 +1264,14 @@ impl Minds {
         rx.await?.map_err(|e| anyhow!("mind_consolidated: {e}"))
     }
 
+    /// Install a decision, its line said in `way` (`mind_install_way`; "" is `say`).
     #[allow(clippy::too_many_arguments)]
-    async fn install(&self, actor: u32, graph: String, plan: String, say: String, to: u32, seen: u64, t: ThoughtIn) -> Result<()> {
+    async fn install(&self, actor: u32, graph: String, plan: String, say: String, to: u32, way: String, seen: u64, t: ThoughtIn) -> Result<()> {
         let (tx, rx) = oneshot::channel();
-        self.conn.reducers.mind_install_then(actor, graph, plan, say, to, seen, t, move |_, r| {
+        self.conn.reducers.mind_install_way_then(actor, graph, plan, say, to, way, seen, t, move |_, r| {
             let _ = tx.send(flatten(r));
         })?;
-        rx.await?.map_err(|e| anyhow!("mind_install: {e}"))
+        rx.await?.map_err(|e| anyhow!("mind_install_way: {e}"))
     }
 
     /// Hand deliberate acts to the authority (carried out once each, in order).
@@ -1349,6 +1360,15 @@ impl Minds {
                     Some(Event::Lived(e)) => self.lived_add(e),
                     Some(Event::Percept(e)) => self.rethink_percept(&e),
                     Some(Event::Fast(a)) => self.clone().fast_issued(a),
+                    Some(Event::SpokenAs(e)) => {
+                        // What the model wrote and what was said, beside the actor's calls: if
+                        // these are many, the prompt's sentence on ids is not doing its work.
+                        let me = self.clone();
+                        tokio::spawn(async move {
+                            let name = me.conn.db.character().id().find(&e.observer).map(|c| c.name).unwrap_or_default();
+                            me.llm.outcome("spoken_as", &json!({"at_ms": e.at_ms, "actor": e.observer, "name": name, "to": e.object, "line": e.text})).await;
+                        });
+                    }
                     None => return Err(anyhow!("event channel closed")),
                 },
                 _ = tick.tick() => {
@@ -1885,11 +1905,7 @@ impl Minds {
         let outline = brain.as_ref().and_then(|b| living_rules::graph::parse(&b.graph).ok()).map(|g| living_rules::graph::outline(&g.root)).unwrap_or_default();
         let plan = brain.as_ref().map(|b| b.plan.clone()).unwrap_or_default();
         let fmt = self.fmt_time();
-        let experiences: Vec<String> = {
-            let all = self.experiences(actor);
-            let n = all.len();
-            all.iter().skip(n.saturating_sub(16)).map(|e| self.exp_line(e, &fmt, false)).collect()
-        };
+        let experiences: Vec<String> = self.experiences_upto(actor, d.updated_ms, 16).iter().map(|e| self.exp_line(e, &fmt, false)).collect();
         // Lines heard from now on are not in this prompt (`LIVING_PARK=concurrent`).
         self.deliberation_prompt(actor);
         let pruned = self.actors.lock().unwrap().entry(actor).or_default().pruned.clone();
@@ -2037,8 +2053,11 @@ impl Minds {
                     };
                     log::info!("{} carries on{}", c.name, if say.is_empty() { String::new() } else { format!(" — says “{say}”") });
                     self.deliberation_says(actor, &say, to);
+                    // The line's way, as a talk reply names it (mind-say-way); one the world
+                    // lacks is said aloud.
+                    let way = talk::way_of(&v).unwrap_or_default();
                     let (tx, rx) = oneshot::channel();
-                    self.conn.reducers.mind_say_then(actor, say, to, String::new(), d.updated_ms, t, move |_, r| {
+                    self.conn.reducers.mind_say_then(actor, say, to, way, d.updated_ms, t, move |_, r| {
                         let _ = tx.send(flatten(r));
                     })?;
                     rx.await?.map_err(|e| anyhow!("mind_say: {e}"))?;
@@ -2081,9 +2100,10 @@ impl Minds {
                         model: reply.model.clone(),
                         reference: thought_ref.clone(),
                     };
-                    log::info!("{} decided: {plan}{}", c.name, if say.is_empty() { String::new() } else { format!(" — says “{say}”") });
+                    let way = talk::way_of(&v).unwrap_or_default();
+                    log::info!("{} decided: {plan}{}", c.name, if say.is_empty() { String::new() } else if way.is_empty() || way == "say" { format!(" — says “{say}”") } else { format!(" — says ({way}) “{say}”") });
                     self.deliberation_says(actor, &say, to);
-                    self.install(actor, g.to_json(), plan.clone(), say, to, d.updated_ms, t).await?;
+                    self.install(actor, g.to_json(), plan.clone(), say, to, way, d.updated_ms, t).await?;
                     self.served_project(actor, served.as_deref(), &plan, &thought_ref).await;
                     return self.act(actor, acts, "deliberate").await;
                 }
@@ -2135,11 +2155,7 @@ impl Minds {
         let recalled = self.recall_for(actor, &self.scene_cues(actor, &scene, &d.reason), 10, 0, "animal").await;
         let mut mind = recalled.mind;
         mind.extend(recalled.judgments.into_iter().filter(|j| !j.starts_with('(')).map(|j| format!("feels sure: {j}")));
-        let experiences: Vec<String> = {
-            let all = self.experiences(actor);
-            let n = all.len();
-            all.iter().skip(n.saturating_sub(8)).map(|e| self.exp_line(e, &fmt, false)).collect()
-        };
+        let experiences: Vec<String> = self.experiences_upto(actor, d.updated_ms, 8).iter().map(|e| self.exp_line(e, &fmt, false)).collect();
         let temperament = self.conn.db.persona().id().find(&actor).map(|p| format!("{} (mood: {})", p.traits, p.mood)).unwrap_or_default();
         let thought_ref = reference(actor, "deliberate");
         let felt = self
@@ -2216,7 +2232,7 @@ impl Minds {
                         reference: thought_ref.clone(),
                     };
                     log::info!("{} the {} feels: {feeling} → {impulse}", c.name, c.kind);
-                    return self.install(actor, g.to_json(), impulse.clone(), String::new(), 0, d.updated_ms, t).await;
+                    return self.install(actor, g.to_json(), impulse.clone(), String::new(), 0, String::new(), d.updated_ms, t).await;
                 }
                 Err(e) => {
                     last_err = format!("{e:#}");
@@ -2540,6 +2556,18 @@ impl Minds {
 }
 
 /// A model's string field, tolerating small models that nest objects where text was asked.
+/// The last `n` of `all` (an observer's experiences, by id) that happened no later than
+/// `scene_ms`. A request's scene is taken when its last reason arrives, or when what is left of it
+/// is handed on (`clear_deliberation`), and the mind reads it a little later still (recall, a
+/// held request): an experience that happened since would sit under a "right now" that predates
+/// it. Later experiences are in the next prompt, with a scene of their own time.
+fn scene_upto(all: Vec<Experience>, scene_ms: u64, n: usize) -> Vec<Experience> {
+    let mut v: Vec<Experience> = all.into_iter().filter(|e| e.at_ms <= scene_ms).collect();
+    let skip = v.len().saturating_sub(n);
+    v.drain(..skip);
+    v
+}
+
 fn flat(v: &Value) -> String {
     match v {
         Value::String(s) => s.clone(),
@@ -2573,6 +2601,32 @@ fn cue_in(for_key: String, c: &Value, source: String) -> CueIn {
 
 #[cfg(test)]
 mod tests {
+
+    /// Gwil in fs1n (docs/PERCEPTION.md, "One moment per prompt"): his first-sight prompt's scene
+    /// was taken about 125 s after the join with the stranger 1.2 m south, and listed his hail at 134.0 s of a far
+    /// figure 28 m off, which nobody heard. Read together they said the stranger had come up
+    /// after the hail, and he greeted them as "There you are at last". A prompt lists nothing
+    /// after its scene, and still the last `n` before it.
+    #[test]
+    fn a_prompt_lists_no_experience_after_its_scene() {
+        let e = |id: u64, at_ms: u64, kind: &str, object: u32, text: &str| Experience { id, observer: 62, controller: spacetimedb_sdk::Identity::ZERO, at_ms, kind: kind.into(), subject: 62, object, x: 0.0, y: 0.0, text: text.into(), salience: 0.5 };
+        let all = vec![
+            e(1, 100_000, "act", 0, "You walked to the square."),
+            e(2, 119_500, "sight", 65, "For the first time you see a stranger, 16 tiles south, wait."),
+            e(3, 124_900, "act", 0, "You walked to 541, 767."),
+            e(4, 125_000, "act", 4, "teach masonry \u{2192} #4: no #4 in sight."),
+            e(5, 134_000, "speech", 1_000_000_397, "You said to someone too far away to make out: \u{201c}Morning to you. Gwil Stannard, mason \u{2014} new to Cullet, are you?\u{201d} (no one you saw heard it)"),
+            e(6, 134_000, "act", 1_000_000_397, "They are too far away: they could not have heard you."),
+        ];
+        let listed = scene_upto(all.clone(), 125_000, 16);
+        assert_eq!(listed.iter().map(|x| x.id).collect::<Vec<_>>(), vec![1, 2, 3, 4], "the scene's own moment is in, nothing later");
+        assert!(!listed.iter().any(|x| x.text.contains("too far away")), "the later hail sat under a scene that predates it");
+        // The next prompt, with a scene taken when the rest was handed on (134.0 s), has it.
+        assert_eq!(scene_upto(all.clone(), 134_000, 16).len(), 6);
+        // Still the last n of those.
+        assert_eq!(scene_upto(all, 125_000, 2).iter().map(|x| x.id).collect::<Vec<_>>(), vec![3, 4]);
+    }
+
     use super::*;
 
     /// A figure made out joins the person: `person:<handle>` folds into `person:<id>`; nothing

@@ -78,7 +78,7 @@ pub fn run(
             let end = net.my_body().map(|b| (b.x, b.y));
             info!("demo: after walking east 3 s, authority position {end:?} (from {:?})", d.start);
             input.scripted = None;
-            if controls::say(&net, line, 0) {
+            if controls::say(&net, line, 0, None) {
                 input.said.push((crate::clock::now_ms(), (*line).into()));
             }
         }
