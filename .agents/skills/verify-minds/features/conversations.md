@@ -128,3 +128,15 @@ A line that names someone by `#id` anyway is said without it by the speech primi
 4. `journaled_with_both`: `outcomes/spoken_as.jsonl` has the line, with the speaker's name.
 
 Evidence: `spoken-ids.json`, `fake-requests.jsonl`, `journal/outcomes/spoken_as.jsonl`.
+
+## Said once
+
+Since `say-once` (2026-11-13, docs/COMMUNICATION.md §15 "Said once"): a graph's `say` node does not say a line nearly the same as one its speaker said to the same person within 45 s. The check reads the chronicle (`speech::said_to_recently`), so a plan's install, which clears the node's own mark, cannot make it speak twice.
+
+The `say-once` case (`verify_minds.py --case say-once`) replays ew2's Mirren Quill double with the two reducer calls a deliberation makes, as the admin, in the mind service's order:
+
+1. A top level weighing "the plan".
+2. The `current plan` routine edited to say a line to A; the body speaks it.
+3. Within 2 s, `mind_install_way` with the decision's own line, which is refused ("speaking too fast").
+
+Checks, 7 s later: the line is said once (one chronicle row, no "(×2)"); there is no `repeat` row; the decision's line was refused and told. Before `say-once`, on main `80e75932`, the line came out "(×2)" with the repeat row. Evidence: `say-once.json`.

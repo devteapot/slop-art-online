@@ -855,6 +855,16 @@ There is no schema change: no table, column, reducer, view or subscription was a
 - `within_reach` is two point lookups (`character`, `body`) and the hearing law.
 - The [performance](https://spacetimedb.com/docs/tables/performance/) page has no guidance on reads within a reducer beyond this.
 
+### Said once (branch `say-once`)
+
+From ew2 (docs/TRIALS.md, "Ways stage"): of its 49 repeated lines, 22 were one plan's first line said twice, 2–3 s apart. The mind service delivers a plan in two calls:
+1. The routine edit (`apply_routines`) makes it the "current plan" routine. The old top level already weighs that routine, so the body runs it and its first `say` node speaks.
+2. The install (`mind_install_way`) clears the node's mark (`set_graph`). The decision's own line is refused ("speaking too fast", told as `unsaid`), and once the 2 s gap passes, the node says its line again.
+
+es1 had the same pattern (9–24 a run), so it predates the ways.
+
+**The rule:** a graph's `say` node does not say a line nearly the same as one its speaker said to the same person (or to the room) in the last 45 s. "Nearly the same" is the repeat match (`speech::nearly_same`, word Jaccard ≥ 0.6, as `said_recently`). It is read from the chronicle (`speech::said_to_recently`), so it holds across the install, unlike the node's mark. The node counts as done ("already said"). It covers every mind's graph. A player's typed lines go through `human_say`/`human_speak`, which never ask it.
+
 ### Tools
 
 `inspector.py`, `social_report.py`, `feel_excerpts.py` and `arrive_spread.py` found unheard lines by the "No answer from" (or "earshot") text. They now match every wording (`UNHEARD`: "No answer from", "could not have heard you", "Nobody was near enough to hear you", "is too far to hear you"). `arrive_spread.py` counts every `silence` row to the newcomer as a line said out of earshot. It reads only rows whose subject is the newcomer, so room lines are not counted. It also leaves out a planned line that was not said ("You did not say your planned line"): that has no chronicle line and is no line said. `life_feel.py` counts by the `silence` kind and needed no change. exp-arrive's `arrive_report.py`, on its own branch, is not changed here.

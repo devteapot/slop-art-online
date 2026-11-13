@@ -601,6 +601,15 @@ impl<'a> Ev<'a> {
                     },
                     None => 0,
                 };
+                // Said already (say-once): nearly this line to the same person within 45 s is not
+                // said again. A plan's install clears the node's own mark, so a plan whose routine
+                // already spoke its first line before the install would say it twice (ew2: Mirren
+                // Quill, 2.9 s apart); the chronicle keeps what was said across the install.
+                if crate::speech::said_to_recently(self.ctx, self.me.id, to, &s.text, self.now) {
+                    self.set_mark(id);
+                    self.status = format!("already said: {}", graph::describe(n));
+                    return St::Ok;
+                }
                 // Within the speaking limit the line waits its turn (a second line right after
                 // the first, or a graph installed just after one spoke) instead of being lost.
                 let way = s.way.as_deref().unwrap_or("say");

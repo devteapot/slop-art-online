@@ -1983,6 +1983,55 @@ def spoken_ids_case(run):
     return {'status': 'pass', **result}
 
 
+@case('say-once')
+def say_once_case(run):
+    """A plan's say node does not say again a line its speaker said to the same person in the
+    last 45 s (say-once; ew2's Mirren Quill double). Replayed with the reducer calls a
+    deliberation makes, in the order the mind service makes them (`apply_routines`, then
+    `mind_install_way`), as the admin, so the order of events is fixed:
+
+    1. M's top level weighs "the plan" (`current plan` routine: wait).
+    2. The routine edit: `current plan` becomes "say a line to A, then wait". The body runs it and
+       speaks the line.
+    3. Within 2 s, the install: the same plan, with the decision's own line to A. It is refused
+       ("speaking too fast", told as `unsaid`), and the install clears the say node's mark.
+
+    Before say-once, the node then said its line again 2–3 s later (`repeat`). Now it is said
+    once: one chronicle line, no "(×2)", 7 s later."""
+    run.harness('launch')
+    run.harness('doctor')
+    before = {c['id'] for c in run.sql('SELECT id FROM character', 'ids-before')}
+    run.admin('spawn_crowd', 2, True)
+    m, a = sorted(x['id'] for x in run.sql('SELECT id FROM character', 'ids-after') if x['id'] not in before)
+    line = open_line(run, 20)
+    run.admin('place_at', m, *line[8])
+    run.admin('place_at', a, *line[10])
+    time.sleep(1.0)
+    thought = lambda marker: {'kind': 'deliberate', 'summary': f'verify {marker}', 'detail': '', 'latency_ms': 0, 'tokens': 0, 'model': '', 'reference': ''}
+    top = json.dumps({'desires': [{'want': 'the plan', 'weight': {'base': 3.5}, 'do': {'routine': 'current plan'}}]})
+    routine = lambda graph: run.admin('mind_routines', m, [{'name': 'current plan', 'graph': json.dumps(graph)}])
+    routine({'wait': 30})
+    run.admin('mind_install_way', m, top, 'verify first plan', '', 0, '', 0, thought('first'))
+    time.sleep(3.0)
+    words = 'Verify once: stay a moment, close, where I can see your face.'
+    routine({'seq': [{'say': words, 'to': {'id': a}}, {'wait': 30}]})
+    chron = lambda: [c for c in run.private("SELECT * FROM chronicle WHERE kind = 'speech'", 'chronicle-speech') if c['a'] == m and 'Verify once' in c['text']]
+    run.wait(lambda: chron(), 'the routine speaks its first line', 15)
+    run.admin('mind_install_way', m, top, 'verify second plan', 'Verify decision line: hear me.', a, 'say', 0, thought('second'))
+    time.sleep(7.0)
+    rows = chron()
+    told = [r['text'] for r in run.private(f'SELECT * FROM experience WHERE observer = {m}', 'experiences-m') if r['kind'] in ('unsaid', 'repeat')]
+    checks = {
+        'line_said_once': len(rows) == 1 and '(×' not in rows[0]['text'],
+        'no_repeat_row': not any(t.startswith('You said almost the same thing') for t in told),
+        'decision_line_refused_and_told': any('Verify decision line' in t and 'speaking too fast' in t for t in told),
+    }
+    result = {'m': m, 'a': a, 'rows': [r['text'] for r in rows], 'told': told, 'checks': checks}
+    (run.directory / 'say-once.json').write_text(json.dumps(result, indent=2, ensure_ascii=False))
+    assert all(checks.values()), checks
+    return {'status': 'pass', **result}
+
+
 @case('health-seen')
 def health_seen_case(run):
     """A mind in a fight is told its opponent's health as the band everyone sees, never as a
