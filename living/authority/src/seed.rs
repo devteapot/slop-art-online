@@ -792,37 +792,6 @@ fn packs(ctx: &ReducerContext, map: &living_rules::map::Map, packs: &[SeedPack],
         };
         let mut found = refs.iter().find_map(|r| pick(*r, p.from_m, p.to_m, tries));
         if found.is_none() {
-            // Random tries miss a narrow overlap of the pack's reach and its band (the prey at
-            // the band's edge, after a world's layout shifted: docs/PACK_MIND.md): scan it before
-            // giving up on `near`. Each reference, nearest the band first; within it, the far
-            // edge of the reach first (toward the band), every 2 m and 3°, the way to the band's
-            // point first. Only points inside the band are tested further.
-            if let Some((at, _)) = band {
-                let mut order: Vec<(f32, f32)> = refs.clone();
-                order.sort_by(|x, y| common::dist(*x, at).total_cmp(&common::dist(*y, at)));
-                found = order.iter().find_map(|r| {
-                    let toward = (at.1 - r.1).atan2(at.0 - r.0);
-                    let lo = p.from_m.max(0.0);
-                    let mut d = p.to_m.max(lo);
-                    while d >= lo {
-                        for k in 0..=60 {
-                            // 0, +3°, -3°, +6°, ... out to ±90° from the way to the band's point.
-                            let off = ((k + 1) / 2) as f32 * 3.0_f32.to_radians() * if k % 2 == 0 { 1.0 } else { -1.0 };
-                            let q = (r.0 + (toward + off).cos() * d, r.1 + (toward + off).sin() * d);
-                            if in_band(q) && map.free(q.0, q.1) && outside(q) && clear_of_roads(map, q, p.road_clear_m) {
-                                return Some((q, *r));
-                            }
-                        }
-                        d -= 2.0;
-                    }
-                    None
-                });
-                if found.is_some() {
-                    log::info!("pack of {}: found by scanning the overlap of its reach of {} and its band", p.kind, p.near);
-                }
-            }
-        }
-        if found.is_none() {
             if let Some((at, b)) = band {
                 // Nothing of `near` within reach of the band: the band alone places the pack.
                 log::warn!("pack of {}: no {} within reach of {}..{} m from {}; placed by the band alone", p.kind, p.near, b.from_m, b.to_m, b.of);
