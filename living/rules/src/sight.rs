@@ -100,6 +100,35 @@ pub fn off_facing(eye: (f32, f32), heading: f32, at: (f32, f32)) -> f32 {
     wrap((at.1 - eye.1).atan2(at.0 - eye.0) - heading)
 }
 
+/// The way `to` lies from `from` in the words a scene uses ("north", "southeast", "here"): one
+/// source for what a character perceives and for its remembered places (`+y` is south).
+pub fn direction_word(from: (f32, f32), to: (f32, f32)) -> &'static str {
+    let (dx, dy) = (to.0 - from.0, to.1 - from.1);
+    if dx.abs() < 0.5 && dy.abs() < 0.5 {
+        return "here";
+    }
+    match dy.atan2(dx).to_degrees() {
+        a if (-22.5..22.5).contains(&a) => "east",
+        a if (22.5..67.5).contains(&a) => "southeast",
+        a if (67.5..112.5).contains(&a) => "south",
+        a if (112.5..157.5).contains(&a) => "southwest",
+        a if (-67.5..-22.5).contains(&a) => "northeast",
+        a if (-112.5..-67.5).contains(&a) => "north",
+        a if (-157.5..-112.5).contains(&a) => "northwest",
+        _ => "west",
+    }
+}
+
+/// A distance in the words a scene uses: whole metres (tiles) up to 30, then rough, to the
+/// nearest ten. Things in sight are always near, so they read as before.
+pub fn rough_dist(d: f32) -> f32 {
+    if d < 30.0 {
+        d.round()
+    } else {
+        (d / 10.0).round() * 10.0
+    }
+}
+
 /// The eight compass ways, clockwise from north (`+y` is south on the world's map).
 pub const COMPASS8: [&str; 8] = ["north", "north-east", "east", "south-east", "south", "south-west", "west", "north-west"];
 
@@ -259,6 +288,15 @@ mod tests {
         assert!(!sees(&m, (32.5, 32.5), 0.0, (40.5, 32.5), 8.0, &day(), 0.0, None));
         // The near ring sees round, not through.
         assert!(!sees(&m, (35.5, 32.5), std::f32::consts::PI, (37.5, 32.5), 2.0, &day(), 0.0, None));
+    }
+
+    #[test]
+    fn direction_and_distance_words() {
+        assert_eq!(direction_word((10.0, 10.0), (10.2, 10.1)), "here");
+        assert_eq!(direction_word((10.0, 10.0), (20.0, 10.0)), "east");
+        assert_eq!(direction_word((10.0, 10.0), (10.0, 0.0)), "north");
+        assert_eq!(direction_word((10.0, 10.0), (0.0, 20.0)), "southwest");
+        assert_eq!((rough_dist(7.4), rough_dist(29.4), rough_dist(34.0), rough_dist(246.0)), (7.0, 29.0, 30.0, 250.0));
     }
 
     #[test]

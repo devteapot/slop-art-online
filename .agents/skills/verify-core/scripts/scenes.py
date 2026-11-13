@@ -2044,10 +2044,14 @@ def pursue_last_seen(s):
             if not any(r["skill"] == "goto" for r in s.rows(f"SELECT skill FROM activity WHERE id = {p}")):
                 break
             time.sleep(0.4)
-        time.sleep(1.5)
-        told = [r["text"] for r in s.rows(f"SELECT id, text FROM experience WHERE observer = {p}") if r["id"] > since]
+        # A plan step's failure is told at the graph's next evaluation: wait for it a little.
+        for _ in range(12):
+            time.sleep(0.5)
+            told = [r["text"] for r in s.rows(f"SELECT id, text FROM experience WHERE observer = {p}") if r["id"] > since]
+            if any("lost sight of them" in x for x in told):
+                break
         end = body_at(s, p)
-        chases.append({"pursuer": p, "target": t, "a": a, "b": b, "c": c, "last_seen": last, "hidden_at": hid, "end": end, "end_to_last_seen": round(math.dist(end, last), 2), "nearest_to_hidden": round(nearest_c, 2), "told": told[-3:], "goals": goals, "track": track})
+        chases.append({"pursuer": p, "target": t, "a": a, "b": b, "c": c, "last_seen": last, "hidden_at": hid, "end": end, "end_to_last_seen": round(math.dist(end, last), 2), "nearest_to_hidden": round(nearest_c, 2), "told": [x for x in told if "lost sight" in x] or told[-3:], "goals": goals, "track": track})
         s.graph(p, {"wait": 300})
     (s.out / f"{s.name}-chases.json").write_text(json.dumps(chases, indent=2) + "\n")
     s.expect("the pursuer goes to where it last saw them (ends within 3 m of it)", all(r["end_to_last_seen"] <= 3.0 for r in chases), [(r["last_seen"], r["end"], r["end_to_last_seen"]) for r in chases])
@@ -2075,6 +2079,185 @@ def pursue_last_seen(s):
     flight = {"fleer": f, "threat": t, "start": start, "last_seen": last, "moved_to": far, "end": end, "from_last_seen": round(math.dist(end, last), 2)}
     (s.out / f"{s.name}-flight.json").write_text(json.dumps(flight, indent=2) + "\n")
     s.expect("the flight runs on from where the threat was last seen until clear of it", flight["from_last_seen"] >= start + 7.0, flight)
+
+
+def known_cells(s, actor):
+    """A character's known ground: the set of (cell x, cell y) it has marked (4 m cells), from its
+    `known_ground` rows (docs/MOVEMENT_MIND.md, step 3)."""
+    out = set()
+    for r in s.rows(f"SELECT block, cells FROM known_ground WHERE actor = {actor}"):
+        data = r["cells"]
+        data = bytes.fromhex(data.removeprefix("0x")) if isinstance(data, str) else bytes(data)
+        bx, by = r["block"] & 0xFFFF, r["block"] >> 16
+        for slot in range(64):
+            mask = int.from_bytes(data[2 * slot:2 * slot + 2], "little")
+            cx, cy = bx * 8 + slot % 8, by * 8 + slot // 8
+            for bit in range(16):
+                if mask >> bit & 1:
+                    out.add((cx * 4 + bit % 4, cy * 4 + bit // 4))
+    return out
+
+
+def cell(p):
+    """The 4 m cell of a point."""
+    return (int(p[0]) // 4, int(p[1]) // 4)
+
+
+def known_ground(s):
+    """Known ground (docs/MOVEMENT_MIND.md, step 3): every character marks the 4 m cells it sees,
+    out to `ground_sight_m` (24 by day) with the one sight rule, at its noticing cadence, written
+    every few seconds: open ground within about 20 m is marked and nothing past about 30 m; a cell
+    behind a wall is not, the wall's side toward it is; a player's character marks too; with
+    `known_cells_pass` set, a look marks at most that many and later looks take the rest (none
+    dropped); the rows go at death. Default seed."""
+    s.expect("ground is seen 24 m off by day (shipped)", law_value(s, "ground_sight_m") == 24, law_value(s, "ground_sight_m"))
+    p, q, r = s.people(3)
+    spot = open_patch(s, size=60)
+    s.call("place_at", p, *spot)
+    time.sleep(7.0)
+    here = body_at(s, p)
+    marked = known_cells(s, p)
+    near = {(x, y) for x in range(cell(here)[0] - 6, cell(here)[0] + 7) for y in range(cell(here)[1] - 6, cell(here)[1] + 7) if math.dist((x * 4 + 2, y * 4 + 2), here) <= 20}
+    # Only around where it stands now: it also marked where it was spawned, before it was placed.
+    far = {c for c in marked if 30 < math.dist((c[0] * 4 + 2, c[1] * 4 + 2), here) <= 40}
+    s.expect("open ground within 20 m is marked", near <= marked, {"missing": sorted(near - marked)[:8], "marked": len(marked)})
+    s.expect("nothing 30-40 m off in the open is marked (ground is seen 24 m off)", not far, sorted(far)[:8])
+    # Behind a wall.
+    setups = hidden_spots(s, n=1)
+    s.expect("the map has a wall to look past", bool(setups), setups)
+    a, b, c = setups[0]
+    s.call("place_at", q, *a)
+    time.sleep(7.0)
+    seen_q = known_cells(s, q)
+    W, H, walk = tile_grid(s)
+    s.expect("the cell in sight is marked, the one behind the wall is not", cell(b) in seen_q and cell(c) not in seen_q, {"a": a, "b": b, "c": c, "b_marked": cell(b) in seen_q, "c_marked": cell(c) in seen_q})
+    # A player's character, by the same rule.
+    st = json.loads((s.out / "state.json").read_text())
+    verify = [str(ROOT / ".agents/skills/verify/scripts/verify.py")]
+    subprocess.run(["python3", *verify, "player", "--run", st["run"], "join", "Groundling"], check=False, capture_output=True)
+    st = json.loads((s.out / "state.json").read_text())
+    me = s.wait(lambda: next(iter(s.rows(f"SELECT id FROM character WHERE controller = 0x{st['identity']}")), None))["id"]
+    spot2 = open_patch(s, size=40, avoid=[spot])
+    s.call("place_at", me, *spot2)
+    time.sleep(7.0)
+    mine = known_cells(s, me)
+    s.expect("a player's character marks the ground it sees too", cell(body_at(s, me)) in mine and len(mine) >= 40, {"cells": len(mine)})
+    # The cap: at most N a look, the rest later, none dropped.
+    set_law(s, "known_cells_pass", 5)
+    spot3 = open_patch(s, size=60, avoid=[spot, spot2])
+    s.call("place_at", r, *spot3)
+    t0 = time.monotonic()
+    counts = []
+    # Only the cells round the new spot: it also marked where it was spawned.
+    round_here = lambda: len({c for c in known_cells(s, r) if math.dist((c[0] * 4 + 2, c[1] * 4 + 2), spot3) <= 30})
+    while time.monotonic() - t0 < 16:
+        time.sleep(2.0)
+        counts.append((round(time.monotonic() - t0, 1), round_here()))
+    capped = counts[-1][1]
+    set_law(s, "known_cells_pass", 0)
+    time.sleep(7.0)
+    full = round_here()
+    (s.out / f"{s.name}-cap.json").write_text(json.dumps({"counts": counts, "full": full}) + "\n")
+    s.expect("capped at 5 a look: the count grows look by look, no faster", counts[-1][1] > 0 and all(n <= 5 * (t / 0.9 + 1) for t, n in counts) and counts[-1][1] > counts[0][1], counts)
+    s.expect("uncapped again, the rest are marked (none dropped)", full > capped and full >= 100, {"capped": capped, "full": full})
+    # Death.
+    s.call("kill", r, "verify known ground at death")
+    time.sleep(1.0)
+    s.expect("its known ground goes at death", not s.rows(f"SELECT id FROM known_ground WHERE actor = {r}"), r)
+
+
+def unseen_obstacle(s):
+    """A walk that meets an obstacle it cannot see from its start: from `a`, the straight line to
+    `g` (60 m off, walkable) is open for its first 26 m (more than ground is seen) and first blocked
+    30-50 m along. Returns (a, g, where blocked) or None."""
+    W, H, walk = tile_grid(s)
+
+    def first_block(p, h, m):
+        k = 0.5
+        while k <= m:
+            x, y = p[0] + math.cos(h) * k, p[1] + math.sin(h) * k
+            if not walk(x, y):
+                return k
+            k += 0.5
+        return None
+
+    for y in range(70, H - 70, 6):
+        for x in range(70, W - 70, 6):
+            a = (x + 0.5, y + 0.5)
+            if not walk(*a):
+                continue
+            for k in range(16):
+                h = k * math.pi / 8
+                fb = first_block(a, h, 60)
+                g = (a[0] + math.cos(h) * 60, a[1] + math.sin(h) * 60)
+                if fb and 30 <= fb <= 50 and walk(*g) and all(walk(a[0] + math.cos(h) * j + math.sin(h) * side, a[1] + math.sin(h) * j - math.cos(h) * side) for j in range(0, 27) for side in (-1, 0, 1)):
+                    return a, (int(g[0]) + 0.5, int(g[1]) + 0.5), fb
+    return None
+
+
+def nav_belief(s):
+    """Walks over what the walker has seen (the `nav_belief` law, docs/MOVEMENT_MIND.md, step 3):
+    from a start whose straight way to a goal 60 m off is blocked 30-50 m along, beyond what it can
+    see, a walker planning over belief sets off straight into the unknown (its first leg's turns
+    stay near the straight line), while one planning on the land as it is turns at once; the
+    believer sees the obstacle on the way, plans again and arrives. The law is off again after."""
+    found = unseen_obstacle(s)
+    s.expect("the map has an obstacle out of sight on a straight way", bool(found), found)
+    a, g, fb = found
+    w_true, w_belief = s.people(2)
+
+    def off_line(pts, upto):
+        """How far the path from `a` through `pts` strays from the straight line to `g`, over its
+        first `upto` metres."""
+        hx, hy = g[0] - a[0], g[1] - a[1]
+        n = math.hypot(hx, hy)
+        worst, walked, prev = 0.0, 0.0, a
+        for q in pts:
+            seg = math.dist(prev, q)
+            for k in range(1, int(seg * 4) + 1):
+                if walked + k / 4 > upto:
+                    return round(worst, 2)
+                t = (k / 4) / seg
+                px, py = prev[0] + (q[0] - prev[0]) * t, prev[1] + (q[1] - prev[1]) * t
+                worst = max(worst, abs((px - a[0]) * hy - (py - a[1]) * hx) / n)
+            walked += seg
+            prev = q
+        return round(worst, 2)
+
+    out = {}
+    for who, law in ((w_true, False), (w_belief, True)):
+        set_law(s, "nav_belief", law)
+        s.call("place_at", who, *a)
+        time.sleep(2.0)
+        s.act(who, {"do": "goto", "target": {"at": [g[0], g[1]]}})
+        time.sleep(0.6)
+        path = s.rows(f"SELECT path FROM body WHERE id = {who}")[0]["path"]
+        pts = [(c["x"], c["y"]) if isinstance(c, dict) else (c[0], c[1]) for c in path]
+        # Only the stretch before the obstacle tells: past it both must go round.
+        out[law] = {"first_leg": pts[:6], "off_line_before_obstacle": off_line(pts, fb - 2) if pts else None, "corners": len(pts)}
+        if not law:
+            s.graph(who, {"wait": 120})
+    t0 = time.monotonic()
+    paths, arrived = [], False
+    while time.monotonic() - t0 < 90:
+        b = s.rows(f"SELECT path FROM body WHERE id = {w_belief}")[0]["path"]
+        key = json.dumps(b)
+        if not paths or paths[-1] != key:
+            paths.append(key)
+        if math.dist(body_at(s, w_belief), g) < 2.5:
+            arrived = True
+            break
+        time.sleep(1.0)
+    set_law(s, "nav_belief", False)
+    out["replans"] = len(paths) - 1
+    out["arrived"] = arrived
+    out["obstacle_at_m"] = fb
+    (s.out / f"{s.name}-walks.json").write_text(json.dumps(out, indent=2) + "\n")
+    s.expect("over belief, the first leg goes straight on into the unseen (within 2 m of the line before the obstacle)",
+             out[True]["off_line_before_obstacle"] is not None and out[True]["off_line_before_obstacle"] <= 2.0, out[True])
+    s.expect("on the land as it is, the first leg turns before the obstacle (over 2 m off the line)",
+             out[False]["off_line_before_obstacle"] is not None and out[False]["off_line_before_obstacle"] > 2.0, out[False])
+    s.expect("the believer plans again on the way and arrives", arrived and out["replans"] >= 1, {"arrived": arrived, "replans": out["replans"]})
 
 
 def open_patch(s, size=14, avoid=()):
@@ -5207,6 +5390,8 @@ SCENES["intents"] = intents
 SCENES["apart"] = apart_intent
 SCENES["howl_reach"] = howl_reach
 SCENES["pack_reflex"] = pack_reflex
+SCENES["known_ground"] = known_ground
+SCENES["nav_belief"] = nav_belief
 SCENES["intents_cost"] = intents_cost
 SCENES["sleeper"] = sleeper
 

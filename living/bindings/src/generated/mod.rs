@@ -93,6 +93,8 @@ pub mod genome_type;
 pub mod grant_items_reducer;
 pub mod grant_know_how_reducer;
 pub mod grant_repertoires_reducer;
+pub mod ground_edit_table;
+pub mod ground_edit_type;
 pub mod guest_table;
 pub mod guest_type;
 pub mod hear_salt_table;
@@ -128,6 +130,8 @@ pub mod judgment_type;
 pub mod kill_reducer;
 pub mod know_how_table;
 pub mod know_how_type;
+pub mod known_ground_table;
+pub mod known_ground_type;
 pub mod known_name_type;
 pub mod land_info_type;
 pub mod land_plan_table;
@@ -235,6 +239,8 @@ pub mod relation_table;
 pub mod relation_type;
 pub mod release_skill_reducer;
 pub mod relook_reducer;
+pub mod remembered_table;
+pub mod remembered_type;
 pub mod resource_node_table;
 pub mod resource_node_type;
 pub mod resume_genesis_reducer;
@@ -402,6 +408,8 @@ pub use genome_type::Genome;
 pub use grant_items_reducer::grant_items;
 pub use grant_know_how_reducer::grant_know_how;
 pub use grant_repertoires_reducer::grant_repertoires;
+pub use ground_edit_table::*;
+pub use ground_edit_type::GroundEdit;
 pub use guest_table::*;
 pub use guest_type::Guest;
 pub use hear_salt_table::*;
@@ -437,6 +445,8 @@ pub use judgment_type::Judgment;
 pub use kill_reducer::kill;
 pub use know_how_table::*;
 pub use know_how_type::KnowHow;
+pub use known_ground_table::*;
+pub use known_ground_type::KnownGround;
 pub use known_name_type::KnownName;
 pub use land_info_type::LandInfo;
 pub use land_plan_table::*;
@@ -544,6 +554,8 @@ pub use relation_table::*;
 pub use relation_type::Relation;
 pub use release_skill_reducer::release_skill;
 pub use relook_reducer::relook;
+pub use remembered_table::*;
+pub use remembered_type::Remembered;
 pub use resource_node_table::*;
 pub use resource_node_type::ResourceNode;
 pub use resume_genesis_reducer::resume_genesis;
@@ -1254,6 +1266,7 @@ pub struct DbUpdate {
     genesis: __sdk::TableUpdate<Genesis>,
     genesis_timer: __sdk::TableUpdate<GenesisTimer>,
     genome: __sdk::TableUpdate<Genome>,
+    ground_edit: __sdk::TableUpdate<GroundEdit>,
     guest: __sdk::TableUpdate<Guest>,
     hear_salt: __sdk::TableUpdate<HearSalt>,
     heard: __sdk::TableUpdate<Heard>,
@@ -1265,6 +1278,7 @@ pub struct DbUpdate {
     judged: __sdk::TableUpdate<Judged>,
     judgment: __sdk::TableUpdate<Judgment>,
     know_how: __sdk::TableUpdate<KnowHow>,
+    known_ground: __sdk::TableUpdate<KnownGround>,
     land: __sdk::TableUpdate<LandInfo>,
     land_plan: __sdk::TableUpdate<LandPlan>,
     law_change: __sdk::TableUpdate<LawChange>,
@@ -1312,6 +1326,7 @@ pub struct DbUpdate {
     record_clock: __sdk::TableUpdate<RecordClock>,
     record_party: __sdk::TableUpdate<RecordParty>,
     relation: __sdk::TableUpdate<Relation>,
+    remembered: __sdk::TableUpdate<Remembered>,
     resource_node: __sdk::TableUpdate<ResourceNode>,
     reveal: __sdk::TableUpdate<Reveal>,
     rhythm: __sdk::TableUpdate<Rhythm>,
@@ -1462,6 +1477,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "genome" => db_update
                     .genome
                     .append(genome_table::parse_table_update(table_update)?),
+                "ground_edit" => db_update
+                    .ground_edit
+                    .append(ground_edit_table::parse_table_update(table_update)?),
                 "guest" => db_update
                     .guest
                     .append(guest_table::parse_table_update(table_update)?),
@@ -1495,6 +1513,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "know_how" => db_update
                     .know_how
                     .append(know_how_table::parse_table_update(table_update)?),
+                "known_ground" => db_update
+                    .known_ground
+                    .append(known_ground_table::parse_table_update(table_update)?),
                 "land" => db_update
                     .land
                     .append(land_table::parse_table_update(table_update)?),
@@ -1636,6 +1657,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "relation" => db_update
                     .relation
                     .append(relation_table::parse_table_update(table_update)?),
+                "remembered" => db_update
+                    .remembered
+                    .append(remembered_table::parse_table_update(table_update)?),
                 "resource_node" => db_update
                     .resource_node
                     .append(resource_node_table::parse_table_update(table_update)?),
@@ -1866,6 +1890,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.genome = cache
             .apply_diff_to_table::<Genome>("genome", &self.genome)
             .with_updates_by_pk(|row| &row.id);
+        diff.ground_edit = cache
+            .apply_diff_to_table::<GroundEdit>("ground_edit", &self.ground_edit)
+            .with_updates_by_pk(|row| &row.id);
         diff.guest = cache
             .apply_diff_to_table::<Guest>("guest", &self.guest)
             .with_updates_by_pk(|row| &row.id);
@@ -1895,6 +1922,9 @@ impl __sdk::DbUpdate for DbUpdate {
             .with_updates_by_pk(|row| &row.id);
         diff.know_how = cache
             .apply_diff_to_table::<KnowHow>("know_how", &self.know_how)
+            .with_updates_by_pk(|row| &row.id);
+        diff.known_ground = cache
+            .apply_diff_to_table::<KnownGround>("known_ground", &self.known_ground)
             .with_updates_by_pk(|row| &row.id);
         diff.land = cache
             .apply_diff_to_table::<LandInfo>("land", &self.land)
@@ -1976,6 +2006,9 @@ impl __sdk::DbUpdate for DbUpdate {
             .with_updates_by_pk(|row| &row.id);
         diff.relation = cache
             .apply_diff_to_table::<Relation>("relation", &self.relation)
+            .with_updates_by_pk(|row| &row.id);
+        diff.remembered = cache
+            .apply_diff_to_table::<Remembered>("remembered", &self.remembered)
             .with_updates_by_pk(|row| &row.id);
         diff.resource_node = cache
             .apply_diff_to_table::<ResourceNode>("resource_node", &self.resource_node)
@@ -2244,6 +2277,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "genome" => db_update
                     .genome
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "ground_edit" => db_update
+                    .ground_edit
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "guest" => db_update
                     .guest
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
@@ -2276,6 +2312,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "know_how" => db_update
                     .know_how
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "known_ground" => db_update
+                    .known_ground
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "land" => db_update
                     .land
@@ -2417,6 +2456,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "relation" => db_update
                     .relation
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "remembered" => db_update
+                    .remembered
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "resource_node" => db_update
                     .resource_node
@@ -2635,6 +2677,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "genome" => db_update
                     .genome
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "ground_edit" => db_update
+                    .ground_edit
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "guest" => db_update
                     .guest
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -2667,6 +2712,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "know_how" => db_update
                     .know_how
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "known_ground" => db_update
+                    .known_ground
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "land" => db_update
                     .land
@@ -2808,6 +2856,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "relation" => db_update
                     .relation
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "remembered" => db_update
+                    .remembered
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "resource_node" => db_update
                     .resource_node
@@ -2954,6 +3005,7 @@ pub struct AppliedDiff<'r> {
     genesis: __sdk::TableAppliedDiff<'r, Genesis>,
     genesis_timer: __sdk::TableAppliedDiff<'r, GenesisTimer>,
     genome: __sdk::TableAppliedDiff<'r, Genome>,
+    ground_edit: __sdk::TableAppliedDiff<'r, GroundEdit>,
     guest: __sdk::TableAppliedDiff<'r, Guest>,
     hear_salt: __sdk::TableAppliedDiff<'r, HearSalt>,
     heard: __sdk::TableAppliedDiff<'r, Heard>,
@@ -2965,6 +3017,7 @@ pub struct AppliedDiff<'r> {
     judged: __sdk::TableAppliedDiff<'r, Judged>,
     judgment: __sdk::TableAppliedDiff<'r, Judgment>,
     know_how: __sdk::TableAppliedDiff<'r, KnowHow>,
+    known_ground: __sdk::TableAppliedDiff<'r, KnownGround>,
     land: __sdk::TableAppliedDiff<'r, LandInfo>,
     land_plan: __sdk::TableAppliedDiff<'r, LandPlan>,
     law_change: __sdk::TableAppliedDiff<'r, LawChange>,
@@ -3012,6 +3065,7 @@ pub struct AppliedDiff<'r> {
     record_clock: __sdk::TableAppliedDiff<'r, RecordClock>,
     record_party: __sdk::TableAppliedDiff<'r, RecordParty>,
     relation: __sdk::TableAppliedDiff<'r, Relation>,
+    remembered: __sdk::TableAppliedDiff<'r, Remembered>,
     resource_node: __sdk::TableAppliedDiff<'r, ResourceNode>,
     reveal: __sdk::TableAppliedDiff<'r, Reveal>,
     rhythm: __sdk::TableAppliedDiff<'r, Rhythm>,
@@ -3117,6 +3171,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
             event,
         );
         callbacks.invoke_table_row_callbacks::<Genome>("genome", &self.genome, event);
+        callbacks.invoke_table_row_callbacks::<GroundEdit>("ground_edit", &self.ground_edit, event);
         callbacks.invoke_table_row_callbacks::<Guest>("guest", &self.guest, event);
         callbacks.invoke_table_row_callbacks::<HearSalt>("hear_salt", &self.hear_salt, event);
         callbacks.invoke_table_row_callbacks::<Heard>("heard", &self.heard, event);
@@ -3140,6 +3195,11 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         callbacks.invoke_table_row_callbacks::<Judged>("judged", &self.judged, event);
         callbacks.invoke_table_row_callbacks::<Judgment>("judgment", &self.judgment, event);
         callbacks.invoke_table_row_callbacks::<KnowHow>("know_how", &self.know_how, event);
+        callbacks.invoke_table_row_callbacks::<KnownGround>(
+            "known_ground",
+            &self.known_ground,
+            event,
+        );
         callbacks.invoke_table_row_callbacks::<LandInfo>("land", &self.land, event);
         callbacks.invoke_table_row_callbacks::<LandPlan>("land_plan", &self.land_plan, event);
         callbacks.invoke_table_row_callbacks::<LawChange>("law_change", &self.law_change, event);
@@ -3235,6 +3295,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
             event,
         );
         callbacks.invoke_table_row_callbacks::<Relation>("relation", &self.relation, event);
+        callbacks.invoke_table_row_callbacks::<Remembered>("remembered", &self.remembered, event);
         callbacks.invoke_table_row_callbacks::<ResourceNode>(
             "resource_node",
             &self.resource_node,
@@ -3983,6 +4044,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         genesis_table::register_table(client_cache);
         genesis_timer_table::register_table(client_cache);
         genome_table::register_table(client_cache);
+        ground_edit_table::register_table(client_cache);
         guest_table::register_table(client_cache);
         hear_salt_table::register_table(client_cache);
         heard_table::register_table(client_cache);
@@ -3994,6 +4056,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         judged_table::register_table(client_cache);
         judgment_table::register_table(client_cache);
         know_how_table::register_table(client_cache);
+        known_ground_table::register_table(client_cache);
         land_table::register_table(client_cache);
         land_plan_table::register_table(client_cache);
         law_change_table::register_table(client_cache);
@@ -4041,6 +4104,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         record_clock_table::register_table(client_cache);
         record_party_table::register_table(client_cache);
         relation_table::register_table(client_cache);
+        remembered_table::register_table(client_cache);
         resource_node_table::register_table(client_cache);
         reveal_table::register_table(client_cache);
         rhythm_table::register_table(client_cache);
@@ -4111,6 +4175,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "genesis",
         "genesis_timer",
         "genome",
+        "ground_edit",
         "guest",
         "hear_salt",
         "heard",
@@ -4122,6 +4187,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "judged",
         "judgment",
         "know_how",
+        "known_ground",
         "land",
         "land_plan",
         "law_change",
@@ -4169,6 +4235,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "record_clock",
         "record_party",
         "relation",
+        "remembered",
         "resource_node",
         "reveal",
         "rhythm",

@@ -89,6 +89,10 @@ fn leg(map: &Map, p: (f32, f32), to: (f32, f32), laws: &living_rules::script::La
 /// The next leg of body `id`'s walk to a place, along the route it keeps in `walk_route`
 /// (searched afresh when it has none: a new walk).
 fn walk_leg(ctx: &ReducerContext, id: u32, map: &Map, p: (f32, f32), to: (f32, f32), laws: &living_rules::script::Laws) -> Result<Vec<Waypoint>, NoLeg> {
+    // Over what the walker has seen (docs/MOVEMENT_MIND.md, step 3), whoever controls it.
+    if laws.nav_belief {
+        return crate::known::leg(ctx, id, map, p, to).map_err(|_| NoLeg::NoPath);
+    }
     let row = ctx.db.walk_route().id().find(id);
     let mut walk = row.as_ref().map(|r| Walk::from_vec(&r.route)).unwrap_or_default();
     let leg = map.route_leg_along(p, to, &route_spec(laws), &mut walk);
@@ -1055,6 +1059,33 @@ pub fn start(ctx: &ReducerContext, id: u32, goal: Goal, now: u64) -> Result<Opti
     walk_over(ctx, id);
     let mut at = goal.at;
     match goal.kind {
+        GOAL_POINT if common::laws(ctx).nav_belief => {
+            // Over belief: a goal on ground believed blocked moves to the nearest ground believed
+            // open within 12 m; unseen ground is tried, and found out by walking.
+            let bel = crate::known::belief(ctx, id, &map);
+            if bel.ground(at.0.floor() as i32, at.1.floor() as i32) == living_rules::known::Ground::Blocked {
+                let mut best: Option<((f32, f32), f32)> = None;
+                for dy in -12i32..=12 {
+                    for dx in -12i32..=12 {
+                        let (x, y) = (at.0.floor() as i32 + dx, at.1.floor() as i32 + dy);
+                        let q = (x as f32 + 0.5, y as f32 + 0.5);
+                        let d = dist(q, at);
+                        if d <= 12.0 && bel.ground(x, y) != living_rules::known::Ground::Blocked && best.map_or(true, |(_, bd)| d < bd) {
+                            best = Some((q, d));
+                        }
+                    }
+                }
+                at = best.ok_or("destination unreachable")?.0;
+            }
+            drop(bel);
+            if dist(p, at) <= 0.06 {
+                return Ok(None);
+            }
+            let Ok(path) = walk_leg(ctx, id, &map, p, at, &common::laws(ctx)) else {
+                return Err("no path there".into());
+            };
+            b.path = path;
+        }
         GOAL_POINT => {
             if !map.free(at.0, at.1) {
                 at = map.nearest_reachable(p, at.0, at.1).ok_or("destination unreachable")?;
@@ -1328,6 +1359,32 @@ pub fn resteer_near(ctx: &ReducerContext, at: (f32, f32), r: f32, now: u64) {
                 ctx.db.body().id().update(b);
             }
         }
+    }
+}
+
+/// A walk to a place planned over belief (`nav_belief`) whose path now crosses ground the walker
+/// has just seen blocked: its leg is planned again from where it is, and steering looks at once.
+pub fn replan_if_blocked(ctx: &ReducerContext, id: u32, now: u64) {
+    let Some(st) = ctx.db.steer().id().find(id) else { return };
+    let Some(mut b) = ctx.db.body().id().find(id) else { return };
+    if st.goal != GOAL_POINT || b.next_ms == IDLE || b.path.is_empty() {
+        return;
+    }
+    let map = common::map(ctx);
+    let p = common::pos(&b, now);
+    if !crate::known::path_blocked(ctx, id, &map, p, &b.path) {
+        return;
+    }
+    common::diag(|| "known:replan", 1);
+    let laws = common::laws(ctx);
+    if let Ok(path) = walk_leg(ctx, id, &map, p, (st.gx, st.gy), &laws) {
+        let t0 = resume_at(&b, now);
+        anchor(&mut b, t0);
+        resumed(b.id, t0, now);
+        b.path = path;
+        b.next_ms = now;
+        crate::frame::moved(b.id);
+        ctx.db.body().id().update(b);
     }
 }
 

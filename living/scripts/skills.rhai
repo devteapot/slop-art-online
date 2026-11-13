@@ -84,6 +84,11 @@ fn laws() {
         // `fov_margin_deg` past an edge. A light on someone (`glow`) shows them only within the
         // field. Hearing stays all round.
         fov_on: false,
+        // Known ground (docs/MOVEMENT_MIND.md): how far ground is seen by day, metres (at night,
+        // one's own sight); the most 4 m cells one look marks (0: no cap; the rest come with
+        // later looks); whether walks are planned over what each walker has seen instead of the
+        // map; and the cost of a metre of unseen ground in such a plan.
+        ground_sight_m: 24.0, known_cells_pass: 0.0, nav_belief: false, unknown_cost: 1.5,
         // The wolves' spacing reflex (docs/PACK_MIND.md): their starting instincts carry,
         // beside each hunt, a weighted desire to keep apart from mates while closing on the
         // prey (hold 3-5 m from it, 4 m from other wolves one sees). An instinct, so a wolf's
@@ -3070,6 +3075,10 @@ fn laws_about(l) {
         alert_after_hit_s: `a body struck within the last ${short(l.alert_after_hit_s)} s cannot fall asleep`,
         alert_while_attacker_near: if l.alert_while_attacker_near { "nor while the one who struck it is close and the fight is on" } else { "even with the one who struck it close by" },
         fov_on: if l.fov_on { "one sees fully only the way one faces" } else { "one sees as far in every direction" },
+        ground_sight_m: `ground is seen ${short(l.ground_sight_m)} m off by day, as far as one sees by night`,
+        known_cells_pass: if l.known_cells_pass > 0.0 { `one look takes in at most ${short(l.known_cells_pass)} patches of ground` } else { "one look takes in all the ground in view" },
+        nav_belief: if l.nav_belief { "one finds one's way over the ground one has seen, guessing at the rest" } else { "one's way is found over the land as it is" },
+        unknown_cost: `unseen ground is reckoned ${short(l.unknown_cost)} times as long to cross as known ground`,
         pack_reflex: if l.pack_reflex { "wolves are born keeping apart from their pack mates as they close on prey" } else { "wolves close on prey with no thought for where their pack mates are" },
         fov_focal_deg: `full sight within ${short(l.fov_focal_deg)} degrees of facing (when sight depends on facing)`,
         fov_side_deg: `side vision out to ${short(l.fov_side_deg)} degrees`,

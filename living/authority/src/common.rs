@@ -420,8 +420,13 @@ pub fn set_tile(ctx: &ReducerContext, x: i32, y: i32, t: living_rules::map::Terr
     if i >= row.tiles.len() {
         return Err("no terrain there".into());
     }
+    let before = row.tiles[i];
     row.tiles[i] = t as u8;
     ctx.db.terrain_chunk().id().update(row);
+    if before != t as u8 {
+        // Known ground: who saw this tile before keeps believing it was `before`.
+        crate::known::record_edit(ctx, x, y, before, now_ms(ctx));
+    }
     // Patch the cached map in place and remember the chunk, so a later transaction re-reads
     // that one row if this one rolls back.
     let st = stamp(ctx);
@@ -717,24 +722,10 @@ pub fn dist(a: (f32, f32), b: (f32, f32)) -> f32 {
     ((a.0 - b.0).powi(2) + (a.1 - b.1).powi(2)).sqrt()
 }
 
+/// The scene's word for which way `to` lies (`living_rules::sight::direction_word`, shared with
+/// remembered places and talk).
 pub fn direction(from: (f32, f32), to: (f32, f32)) -> &'static str {
-    let dx = to.0 - from.0;
-    let dy = to.1 - from.1;
-    if dx.abs() < 0.5 && dy.abs() < 0.5 {
-        return "here";
-    }
-    let a = dy.atan2(dx).to_degrees();
-    // Screen coordinates: +y is south.
-    match a {
-        a if (-22.5..22.5).contains(&a) => "east",
-        a if (22.5..67.5).contains(&a) => "southeast",
-        a if (67.5..112.5).contains(&a) => "south",
-        a if (112.5..157.5).contains(&a) => "southwest",
-        a if (-67.5..-22.5).contains(&a) => "northeast",
-        a if (-112.5..-67.5).contains(&a) => "north",
-        a if (-157.5..-112.5).contains(&a) => "northwest",
-        _ => "west",
-    }
+    living_rules::sight::direction_word(from, to)
 }
 
 // ---- needs ---------------------------------------------------------------------

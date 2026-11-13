@@ -79,6 +79,9 @@ python3 "$C/scenes.py" moves --run "$R" > "$E/moves.txt" 2>&1
 python3 "$C/scenes.py" flee_wall --run "$R" > "$E/flee_wall.txt" 2>&1
 # Nothing followed out of sight: a pursuit to the last-seen place, a flight from it (features/steering.md#out-of-sight-last-seen-places, about 1.5 min).
 python3 "$C/scenes.py" pursue_last_seen --run "$R" > "$E/pursue_last_seen.txt" 2>&1
+# Known ground marked by every character, and walks planned over it under nav_belief (features/steering.md#known-ground-and-walking-over-belief, about 4 min together).
+python3 "$C/scenes.py" known_ground --run "$R" > "$E/known_ground.txt" 2>&1
+python3 "$C/scenes.py" nav_belief --run "$R" > "$E/nav_belief.txt" 2>&1
 # Breath, tiredness and focus (features/breath.md, about 2 min; it changes and restores world laws).
 python3 "$C/scenes.py" stamina --run "$R" > "$E/stamina.txt" 2>&1
 # Fight length and the wolf chase (features/breath.md, about 20 min; set run_share or wolf_run
