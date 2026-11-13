@@ -213,6 +213,7 @@ fn log_assets(
     clips: Res<Assets<AnimationClip>>,
     graphs: Res<Assets<AnimationGraph>>,
     gltfs: Res<Assets<bevy::gltf::Gltf>>,
+    assets: Res<AssetServer>,
 ) {
     *since += time.delta_secs();
     if *since < 10.0 {
@@ -221,14 +222,28 @@ fn log_assets(
     *since = 0.0;
     let mib = |b: usize| b as f32 / (1024.0 * 1024.0);
     let (mut vb, mut ib, mut mb) = (0usize, 0usize, 0usize);
-    for (_, m) in meshes.iter() {
+    // `LIVING_GAME_PERF=meshfiles`: the CPU bytes by file, the largest first (where they are).
+    let mut by_file: std::collections::HashMap<String, (usize, usize, usize)> = Default::default();
+    for (id, m) in meshes.iter() {
         // Meshes whose data went to the render world alone hold none here.
         if m.try_indices_option().is_err() {
             continue;
         }
-        vb += m.get_vertex_buffer_size();
-        ib += m.get_index_buffer_bytes().map_or(0, |b| b.len());
-        mb += m.morph_targets().map_or(0, |t| t.len() * std::mem::size_of::<bevy::mesh::morph::MorphAttributes>());
+        let (v, i, t) = (m.get_vertex_buffer_size(), m.get_index_buffer_bytes().map_or(0, |b| b.len()), m.morph_targets().map_or(0, |t| t.len() * std::mem::size_of::<bevy::mesh::morph::MorphAttributes>()));
+        vb += v;
+        ib += i;
+        mb += t;
+        if has("meshfiles") {
+            let file = assets.get_path(id).map_or_else(|| "(made in the client)".to_string(), |p| p.path().to_string_lossy().to_string());
+            let e = by_file.entry(file).or_default();
+            *e = (e.0 + v + i + t, e.1 + t, e.2 + 1);
+        }
+    }
+    if has("meshfiles") {
+        let mut files: Vec<_> = by_file.into_iter().collect();
+        files.sort_by(|a, b| b.1.0.cmp(&a.1.0));
+        let line: Vec<String> = files.iter().take(16).map(|(f, (b, t, n))| format!("{f} {:.1} MiB ({n} meshes, morph {:.1})", mib(*b), mib(*t))).collect();
+        info!("mesh files: {} files; {}", files.len(), line.join("; "));
     }
     let px: usize = images.iter().map(|(_, i)| i.data.as_ref().map_or(0, |d| d.len())).sum();
     let curves: usize = clips.iter().map(|(_, c)| c.curves().values().map(|v| v.len()).sum::<usize>()).sum();

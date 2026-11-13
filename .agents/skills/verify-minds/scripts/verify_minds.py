@@ -1319,6 +1319,99 @@ def death_names_case(run):
     return {'status': 'pass', **texts}
 
 
+@case('watch-fight')
+def watch_fight_case(run):
+    """A mind watching others fight can still tell who is winning and who fell, from folded lines
+    (docs/BATTLE_SCALE.md, fix 4; `witness_fold_ms`). W, the only mind, stands between two fights
+    it is not party to: A, with a spear, strikes V until V falls; C strikes D, who blocks. The
+    think prompt W's model is sent then carries W's folded lines: each fight's blows counted with
+    their outcomes (A's landed on V, D blocked C), V's fall, and each stranger anchored by the id
+    W's scene knows them by. The blows its lines count are the blows W could see (`fight_seen`
+    rows naming W, read while the fights go on), no more than the strikes the rules resolved."""
+    run.harness('launch')
+    run.harness('doctor')
+    before = {c['id'] for c in run.sql('SELECT id FROM character', 'ids-before')}
+    run.admin('spawn_crowd', 5, True)
+    made = sorted(c['id'] for c in run.sql('SELECT id FROM character', 'ids-after') if c['id'] not in before)
+    assert len(made) == 5, made
+    w, a, v, c, d = made
+    for who in made:
+        run.admin('set_behavior', who, json.dumps({'wait': 120}))
+    for who in (a, v, c, d):
+        run.admin('place_near', who, w)
+    time.sleep(1.0)
+    script = {'replies': {'think': {'thought': 'I watch the fighting.', 'intend': ['wait'], 'say': None}, 'deliberate': basic_reply()}}
+    run.start(model(run, script), [w])
+    requests = lambda: [e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] in ('think', 'deliberate')]
+    sent_text = lambda e: '\n'.join(str(m.get('content', '')) for m in e['body'].get('messages', []))
+    asked = lambda marker: [sent_text(e) for e in requests() if f'verify {marker}' in sent_text(e)]
+    run.admin('set_behavior', w, json.dumps({'think': 'I finished my plan. verify before'}))
+    run.wait(lambda: asked('before'), 'first prompt', 60)
+    accepted(run, w)
+    deliberated = time.monotonic()
+    t0 = run.sql('SELECT last_ms FROM clock', 'clock-0')[0]['last_ms']
+    run.admin('grant_items', a, 'spear', 1)
+    run.admin('set_behavior', d, json.dumps({'first': [{'if': {'cond': {'threatened': True}, 'then': {'do': {'skill': 'block'}}}}, {'wait': 60}]}))
+    run.admin('set_behavior', c, json.dumps({'first': [{'do': {'skill': 'attack', 'target': {'id': d}}}, {'wait': 60}]}))
+    run.admin('set_behavior', a, json.dumps({'first': [{'do': {'skill': 'attack', 'target': {'id': v}}}, {'wait': 60}]}))
+    # The blows W could see (`fight_seen` rows naming W), read while the fights go on: a row goes
+    # once every onlooker has been told it.
+    # W's lines too: its mind consolidates as the fight goes on, and consolidation takes the
+    # integrated rows out of the inbox (`mind_consolidated`).
+    rows, w_lines, start = {}, {}, time.monotonic()
+
+    def gather():
+        for r in run.private('SELECT * FROM fight_seen', 'fight-seen'):
+            rows[r['id']] = r
+        for e in run.private(f'SELECT * FROM experience WHERE observer = {w}', f'experiences-{w}'):
+            if e['kind'] == 'fight' and e['at_ms'] >= t0:
+                w_lines[e['id']] = e
+    while time.monotonic() - start < 90:
+        gather()
+        if not run.sql(f'SELECT alive FROM character WHERE id = {v}', 'v-alive')[0]['alive']:
+            break
+        time.sleep(0.3)
+    for who in (a, c):
+        run.admin('set_behavior', who, json.dumps({'wait': 120}))
+    # The law in force: the world's own value, else the installed script's.
+    own = [r['value'] for r in run.private('SELECT * FROM world_law', 'laws') if r['name'] == 'witness_fold_ms']
+    src = run.private("SELECT source FROM script WHERE name = 'skills'", 'script')[0]['source']
+    fold = float(own[0]) if own else float(re.search(r'\bwitness_fold_ms: ([0-9.]+)', src).group(1))
+    # Blows still in flight land first, then every onlooker's window holding them ends.
+    end = time.monotonic() + 3 + fold / 1000 + 1.5
+    while time.monotonic() < end:
+        gather()
+        time.sleep(0.3)
+    seen_by_w = [r for r in rows.values() if (r['attacker'], r['victim']) in ((a, v), (c, d)) and w in [x & 0x7FFFFFFF for x in r['onlookers']]]
+    exp = lambda who: [e for e in run.private(f'SELECT * FROM experience WHERE observer = {who}', f'experiences-{who}') if e['at_ms'] >= t0]
+    lines = [e['text'] for e in sorted(w_lines.values(), key=lambda e: e['id'])]
+    # The strikes as the rules resolved them (`skill_use` outcomes); V's own lines go with V's death.
+    struck = [u for u in run.sql('SELECT * FROM skill_use', 'skill-uses') if (u['actor'], u['target']) in ((a, v), (c, d)) and u['outcome_ms'] >= t0
+              and re.match(r'(hit for|blocked|killed|dodged|missed)', u['outcome'] or '')]
+    counted = sum(int(n) for n in re.findall(r'(\d+) (?:blow|shot)s? \(', ' '.join(lines)))
+    time.sleep(max(0.0, 21 - (time.monotonic() - deliberated)))
+    run.admin('set_behavior', w, json.dumps({'think': 'I finished my plan. verify watched'}))
+    prompt = run.wait(lambda: asked('watched'), 'prompt after the fights', 60)[0]
+    (run.directory / 'prompt-watched.txt').write_text(prompt)
+    in_prompt = [l for l in prompt.split('\n') if re.search(r'\d+ blows? \(', l)]
+    a_on_v = re.compile(rf'#{a}\) (?:attacked|kept on at) [^:]*#{v}\): \d+ blows? \([^)]*landed')
+    texts = {'fold_ms': fold, 'w_fight_lines': lines[:8], 'w_line_count': len(lines), 'blows_counted': counted, 'struck': len(struck), 'seen_by_w': len(seen_by_w),
+             'prompt_lines': in_prompt[:8]}
+    checks = {
+        # Rows are read by polling (a lower bound); W among every row read saw the fights whole.
+        'folded_lines_count_every_blow_w_saw': 0 < len(seen_by_w) <= counted <= len(struck) and counted > len(lines) > 0
+                                                 and (counted == len(struck) if len(seen_by_w) == len([r for r in rows.values() if (r['attacker'], r['victim']) in ((a, v), (c, d))]) else True),
+        'who_is_winning_a_landed_on_v': any(a_on_v.search(l) for l in lines),
+        'd_blocked_c': any(re.search(rf'#{c}\) (?:attacked|kept on at) [^:]*#{d}\): \d+ blows? \([^)]*blocked', l) for l in lines),
+        'who_fell_v': sum(l.count(f'#{v}) fell.') for l in lines) == 1,
+        'prompt_carries_the_folded_lines': in_prompt and any(a_on_v.search(l) for l in in_prompt) and any(f'#{v}) fell.' in l for l in in_prompt),
+    }
+    texts['checks'] = checks
+    (run.directory / 'watch-fight.json').write_text(json.dumps(texts, indent=2))
+    assert all(checks.values()), checks
+    return {'status': 'pass', **texts}
+
+
 FAR = 'someone too far away to make out'
 FAR_HANDLE_BASE = 1_000_000_000
 
@@ -1844,6 +1937,159 @@ def think_framing_case(run):
     }
     result = {'m': m, 'off_heads': heads(off['user']), 'on_heads': heads(on['user']), 'checks': checks}
     (run.directory / 'think-framing.json').write_text(json.dumps(result, indent=2))
+    assert all(checks.values()), checks
+    return {'status': 'pass', **result}
+
+
+@case('sissly-scene')
+def sissly_scene_case(run):
+    """Play-test 6's scene, replayed on the island seed with the fake model (talk-turns,
+    docs/COMMUNICATION.md §19). The lines are paraphrased markers, not the play-test's words.
+    Sissly Fenner (a child) and her mother Agnes Fenner are thought for; S, a spawned stranger,
+    stands in for the owner, 3 m from Sissly; Agnes stands 5 m from her.
+
+    1. S says two lines to Sissly; she answers each (talk turns 1 and 2).
+    2. Sissly's deliberation is asked for; its think says nothing, and its deliberate step (held
+       7 s by the fake model) installs a plan whose first node says "Verify stale …" to S.
+       Meanwhile S asks "verify crust …?" and Sissly answers in a turn alongside, settling that
+       she will bring S to the inn. That turn is her third with S.
+    3. Sissly says to S "Verify: … ask Mother first. Can they have the crust, Mother?".
+
+    Checks: the plan's line is not said (the conversation moved on since the decision perceived
+    its scene, `line_overtaken`); turn 3's prompt does not tell her to make it her last word (a
+    question is open) and holds the answered line once; Agnes's row of line 3 reads "…, naming
+    you" (a kin word: Agnes is Sissly's parent) and Agnes takes a turn on it."""
+    target = (Path(os.environ['CARGO_TARGET_DIR']) if os.environ.get('CARGO_TARGET_DIR') else ROOT / '.local/living/target-resident-island')
+    run.harness('launch', '--seed', 'island', '--target-dir', str(target))
+    run.harness('doctor')
+    people = run.sql("SELECT * FROM character WHERE kind = 'person'", 'people')
+    byname = {p['name']: p['id'] for p in people}
+    sissly, agnes = byname['Sissly Fenner'], byname['Agnes Fenner']
+    before = {p['id'] for p in run.sql('SELECT id FROM character', 'ids-before')}
+    run.admin('spawn_crowd', 1, True)
+    s = next(x['id'] for x in run.sql('SELECT id FROM character', 'ids-after') if x['id'] not in before)
+    for who in (sissly, agnes, s):
+        run.admin('set_behavior', who, json.dumps({'wait': 300}))
+    line = open_line(run, 20)
+    run.admin('place_at', sissly, *line[10])
+    run.admin('place_at', s, *line[13])
+    run.admin('place_at', agnes, *line[5])
+    time.sleep(1.5)
+    talk = lambda marker, reply: {'purpose': 'talk', 'contains': marker, 'times': 1, 'reply': {'thought': 'verify talk', 'acts': [], **reply}}
+    script = {'replies': {'think': {'thought': 'I look around.', 'intend': ['wait'], 'say': None}, 'deliberate': basic_reply(),
+                          'talk': {'thought': 'I listen.', 'say': '', 'to': 0, 'acts': [], 'end': True, 'settled': None}},
+              'rules': [talk('naming you', {'say': 'Verify Agnes: yes, ask me for it.', 'to': s, 'end': True, 'settled': None}),
+                        talk('verify crust', {'say': 'Verify: I like crust too, come on.', 'to': s, 'end': True, 'settled': 'verify bringing them to the inn'}),
+                        talk('verify yes', {'say': 'Verify: then come to the inn. Crust or filling?', 'to': s, 'end': False, 'settled': None}),
+                        talk('verify hi', {'say': 'Verify hullo: are you here for pie?', 'to': s, 'end': False, 'settled': None}),
+                        {'purpose': 'think', 'contains': 'verify stale', 'times': 1,
+                         'reply': {'thought': 'verify stale: I will ask again and go to the inn', 'intend': ['ask again', 'go to the inn'], 'say': None}},
+                        {'purpose': 'deliberate', 'contains': 'verify stale', 'times': 1, 'delay_s': 7,
+                         'reply': {'plan': 'verify stale plan', 'intent': {'weight': 0.7, 'graph': {'first': [{'say': 'Verify stale: crust or filling?', 'to': {'id': s}}, {'wait': 30}]}}}}]}
+    run.start(model(run, script), [sissly, agnes], seed='island')
+    say = lambda who, text, to: run.admin('mind_say', who, text, to, 'say', 0, TALK_THOUGHT)
+    chron = lambda: run.private("SELECT * FROM chronicle WHERE kind = 'speech'", 'chronicle-speech')
+    said_by = lambda who, words: any(c['a'] == who and words in c['text'] for c in chron())
+    say(s, 'verify hi', sissly)
+    run.wait(lambda: said_by(sissly, 'Verify hullo'), 'turn 1', 40)
+    time.sleep(2.6)
+    say(s, 'verify yes', sissly)
+    run.wait(lambda: said_by(sissly, 'Verify: then come'), 'turn 2', 40)
+    time.sleep(2.6)
+    run.admin('set_behavior', sissly, json.dumps({'think': 'I finished my plan. verify stale'}))
+    requests = lambda: shared.rows(run.directory / 'fake-requests.jsonl')
+    sent_text = lambda e: '\n'.join(str(m.get('content', '')) for m in e['body'].get('messages', []))
+    run.wait(lambda: any(e['purpose'] == 'deliberate' and 'verify stale' in sent_text(e) for e in requests()), 'the deliberate step', 40)
+    time.sleep(1.0)
+    say(s, 'verify crust, can you bring me there?', sissly)
+    run.wait(lambda: said_by(sissly, 'I like crust too'), 'turn 3', 40)
+    # The plan installs when the held deliberate step returns (7 s); its first node comes due.
+    run.wait(lambda: any(t['kind'] == 'deliberate' and 'verify stale plan' in t['summary'] for t in run.thoughts(sissly)), 'the plan installed', 40)
+    time.sleep(4.0)
+    stale_said = said_by(sissly, 'Verify stale')
+    turn3 = next((sent_text(e) for e in requests() if e['purpose'] == 'talk' and 'verify crust' in sent_text(e)), '')
+    (run.directory / 'prompt-turn3.txt').write_text(turn3)
+    user3 = next((str(m.get('content', '')) for e in requests() if e['purpose'] == 'talk' and 'verify crust' in sent_text(e) for m in e['body'].get('messages', []) if m.get('role') == 'user'), '')
+    time.sleep(2.6)
+    # A remark that asks nothing is answered by temperament (`answers_remarks`), for a named
+    # hearer as for an addressed one; the line also asks, so the turn does not hang on a draw.
+    say(sissly, 'Verify Agnes line: you have to ask Mother first. Can they have the crust, Mother?', s)
+    try:
+        run.wait(lambda: any(e['purpose'] == 'talk' and 'naming you' in sent_text(e) for e in requests()), 'a turn for Agnes', 20)
+    except Exception:
+        pass  # checked below (before talk-turns there is none)
+    rows_a = [r['text'] for r in run.private(f'SELECT * FROM experience WHERE observer = {agnes}', 'experiences-agnes') if 'Verify Agnes line' in r['text']]
+    agnes_turn = next((sent_text(e) for e in requests() if e['purpose'] == 'talk' and 'naming you' in sent_text(e)), '')
+    (run.directory / 'prompt-agnes.txt').write_text(agnes_turn)
+    time.sleep(3.0)
+    checks = {
+        'stale_plan_line_not_said': not stale_said,
+        'turn3_not_forced_last_word': bool(user3) and 'make this your last word' not in user3,
+        'turn3_says_the_plain_fact': 'You have said about as much as you usually do' in user3,
+        'answered_line_once': user3.count('verify crust, can you bring me there?') == 1,
+        'agnes_row_names_her': any(', naming you: ' in t for t in rows_a),
+        'agnes_takes_a_turn': bool(agnes_turn) and said_by(agnes, 'Verify Agnes: yes'),
+    }
+    result = {'sissly': sissly, 'agnes': agnes, 's': s, 'stale_said': stale_said, 'agnes_rows': rows_a, 'checks': checks}
+    (run.directory / 'sissly-scene.json').write_text(json.dumps(result, indent=2, ensure_ascii=False))
+    assert all(checks.values()), checks
+    return {'status': 'pass', **result}
+
+
+@case('named-turn')
+def named_turn_case(run):
+    """A hearer named in a line said to someone else takes one turn (talk-turns): a player says
+    to A a line naming B and C, both thought for; B stands nearer the player than C. B's and C's
+    rows read "…, naming you"; only B, the nearest named hearer, takes a turn, and the turn's
+    prompt says how it was said ("A stranger said to a stranger, naming you and a stranger."). B has just settled a conversation
+    with A, which does not count as being busy."""
+    run.harness('launch')
+    run.harness('doctor')
+    before = {c['id'] for c in run.sql('SELECT id FROM character', 'ids-before')}
+    run.admin('spawn_crowd', 3, True)
+    a, b, c = sorted(x['id'] for x in run.sql('SELECT id FROM character', 'ids-after') if x['id'] not in before)
+    names = {x['id']: x['name'] for x in run.sql('SELECT id, name FROM character', 'names')}
+    run.harness('player', 'join', 'MindsNamer')
+    me = next(x['id'] for x in run.sql('SELECT * FROM character', 'chars') if x['name'] == 'MindsNamer')
+    for who in (a, b, c):
+        run.admin('set_behavior', who, json.dumps({'wait': 300}))
+    line = open_line(run, 20)
+    run.admin('place_at', me, *line[10])
+    run.admin('place_at', a, *line[12])
+    run.admin('place_at', b, *line[8])
+    run.admin('place_at', c, *line[5])
+    time.sleep(1.5)
+    talk = lambda marker, reply, times=1: {'purpose': 'talk', 'contains': marker, 'times': times, 'reply': {'thought': 'verify talk', 'acts': [], **reply}}
+    script = {'replies': {'think': {'thought': 'I look around.', 'intend': ['wait'], 'say': None}, 'deliberate': basic_reply(),
+                          'talk': {'thought': 'I listen.', 'say': '', 'to': 0, 'acts': [], 'end': True, 'settled': None}},
+              'rules': [talk('naming you', {'say': 'Verify named: I heard my name.', 'to': me, 'end': True, 'settled': None}, -1),
+                        talk('verify settle', {'say': 'Verify: agreed, see you later.', 'to': a, 'end': True, 'settled': 'verify meet later'})]}
+    run.start(model(run, script), [a, b, c])
+    say = lambda who, text, to: run.admin('mind_say', who, text, to, 'say', 0, TALK_THOUGHT)
+    chron = lambda: run.private("SELECT * FROM chronicle WHERE kind = 'speech'", 'chronicle-speech')
+    said_by = lambda who, words: any(x['a'] == who and words in x['text'] for x in chron())
+    # B settles an exchange with A first.
+    say(a, 'verify settle: shall we meet later?', b)
+    run.wait(lambda: said_by(b, 'agreed, see you later'), 'B settles with A', 40)
+    time.sleep(2.6)
+    first_b, first_c = names[b].split()[0], names[c].split()[0]
+    run.harness('player', 'say', f'Is {first_b} about, and {first_c}?', '--to', str(a))
+    run.wait(lambda: said_by(b, 'Verify named') or said_by(c, 'Verify named'), 'a named turn', 30)
+    time.sleep(4.0)
+    rows = {who: [r['text'] for r in run.private(f'SELECT * FROM experience WHERE observer = {who}', f'experiences-{who}') if f'{first_b} about' in r['text']] for who in (b, c)}
+    requests = shared.rows(run.directory / 'fake-requests.jsonl')
+    sent_text = lambda e: '\n'.join(str(m.get('content', '')) for m in e['body'].get('messages', []))
+    named_prompts = [sent_text(e) for e in requests if e['purpose'] == 'talk' and 'naming you' in sent_text(e)]
+    (run.directory / 'prompt-named.txt').write_text(named_prompts[0] if named_prompts else '')
+    checks = {
+        'b_and_c_rows_name_them': all(any(', naming you' in t or 'and you:' in t for t in rows[w]) for w in (b, c)),
+        'nearest_named_b_takes_the_turn': said_by(b, 'Verify named'),
+        'only_one_turn': not said_by(c, 'Verify named') and len(named_prompts) == 1,
+        # Under the answered line: "A stranger said to a stranger, naming you and a stranger."
+        'turn_says_how_it_was_said': bool(named_prompts) and bool(re.search(r'said to [^\n]*, naming [^\n]*\byou\b[^\n]*\.\n?', named_prompts[0].split('# What you are answering')[-1])),
+    }
+    result = {'a': a, 'b': b, 'c': c, 'player': me, 'rows': rows, 'checks': checks}
+    (run.directory / 'named-turn.json').write_text(json.dumps(result, indent=2, ensure_ascii=False))
     assert all(checks.values()), checks
     return {'status': 'pass', **result}
 
@@ -2563,6 +2809,87 @@ def reasons_case(run):
     # on install and kept the feeling instead, so this count is 0 there).
     assert plan_finished_during_calls >= 2, f'no plan churn to test against: {out}'
     return {'status': 'pass', **out}
+
+
+@case('scene-since')
+def scene_since_case(run):
+    """A prompt's scene and its experiences describe one moment (docs/PERCEPTION.md, "One moment
+    per prompt"). What a deliberation leaves pending is handed on with a scene taken then
+    (`clear_deliberation`): before 2026-11-12 it kept the scene of when the request was last
+    merged into, and the mind (which lists experiences up to when it builds the prompt) told Gwil
+    in fs1n "right now" that a stranger stood 1.2 m away, beside his own later hail of that
+    stranger 28 m off. As in his case, the gap is the compile step: a think reply's routine rework
+    merges into the request (refreshing its scene), and the decision is installed a compile later.
+    Here M's first deliberation has its think held 9 s and its compile 8 s. A player 2 m away
+    offers a trade during the think; during the compile, once the request has its last merge (it
+    still places the player near), the player is moved some 30 m off. The request handed on at
+    the install, and the next prompt, which carries the offer, must not place the player near.
+    A merge between the move and the install would refresh the scene on its own: the case then
+    stops as inconclusive rather than pass."""
+    people = prepare(run)
+    actor = people[0]['id']
+    run.harness('player', 'join', 'SceneSinceTrader')
+    player = run.sql("SELECT id FROM character WHERE name = 'SceneSinceTrader'", 'trader')[0]['id']
+    run.admin('place_near', player, actor)
+    run.admin('grant_items', player, 'stone', 2)
+    script = {'replies': {'think': {'thought': 'I choose to wait for this check.', 'intend': ['wait'], 'say': None},
+                          'deliberate': basic_reply()},
+              'rules': [{'purpose': 'think', 'contains': 'verify scene first', 'delay_s': 9, 'times': 1},
+                        {'purpose': 'deliberate', 'contains': 'verify scene first', 'delay_s': 8, 'times': 1},
+                        {'purpose': 'think', 'contains': 'offers you', 'delay_s': 6, 'times': 1}]}
+    models = model(run, script)
+    run.request(actor, 'scene first')
+    run.start(models, [actor])
+    requests = lambda: list(shared.rows(run.directory / 'fake-requests.jsonl'))
+    sent_text = lambda e: '\n'.join(str(x.get('content', '')) for x in e['body'].get('messages', []))
+    pending = lambda save='pending': run.private(f'SELECT * FROM deliberation WHERE actor = {actor}', save)
+
+    def scene_of(text):
+        head = '# What you perceive right now\n'
+        return json.loads(text.split(head, 1)[1].split('\n', 1)[0]) if head in text else {}
+
+    def entry(scene, who):
+        return next((c for c in scene.get('creatures', []) if c.get('id') == who), None)
+    run.wait(lambda: any(e['purpose'] == 'think' and 'verify scene first' in sent_text(e) for e in requests()), 'the first think call in flight', 90)
+    run.harness('player', 'act', json.dumps({'do': 'offer', 'target': {'id': actor}, 'item': 'stone', 'qty': 1, 'want': 'wood', 'want_qty': 1}))
+    run.wait(lambda: [d for d in pending('pending-offer') if 'offers you' in d['reason']], 'the offer merged into the request in flight', 20)
+    run.wait(lambda: any(e['purpose'] == 'deliberate' and 'verify scene first' in sent_text(e) for e in requests()), 'the compile call in flight', 40)
+    time.sleep(1.5)  # the think reply's own merges (routine rework, plan state) land first
+    before = pending('pending-before-move')
+    assert before and 'offers you' in before[0]['reason'], f'the offer is not pending before the move: {before}'
+    near = entry(json.loads(before[0]['scene'] or '{}'), player)
+    assert near and near['dist'] <= 4.0, f'the request does not place the player near before the move: {near}'
+    body = run.sql(f'SELECT * FROM body WHERE id = {actor}', 'm-body')[0]
+    moved = None
+    for dx, dy in [(30.0, 0.0), (-30.0, 0.0), (0.0, 30.0), (0.0, -30.0), (22.0, 22.0), (-22.0, -22.0), (22.0, -22.0), (-22.0, 22.0)]:
+        try:
+            run.admin('place_at', player, body['x'] + dx, body['y'] + dy)
+            moved = (dx, dy)
+            break
+        except RuntimeError:
+            continue
+    assert moved, 'no free tile 30 m from M'
+    moved_ms = run.sql('SELECT last_ms FROM clock', 'clock-moved')[0]['last_ms']
+    first = run.wait(lambda: [t for t in run.thoughts(actor, 'thoughts-first') if t['kind'] == 'deliberate' and 'verify scene first' in (json.loads(t['detail'] or '{}').get('reason') or '')], 'the first deliberation installed', 60)[0]
+    installed_ms = first['at_ms']
+    # The rest of the request, as handed on (its next call is held 6 s).
+    rest = run.wait(lambda: [d for d in pending('pending-rest') if 'offers you' in d['reason'] and 'verify scene first' not in d['reason']], 'the offer handed on', 20)[0]
+    if moved_ms < rest['updated_ms'] < installed_ms:
+        raise RuntimeError(f"inconclusive: the request was merged into after the move ({rest['updated_ms']}, moved {moved_ms}, installed {installed_ms}), which refreshes its scene on its own")
+    asked = run.wait(lambda: [sent_text(e) for e in requests() if e['purpose'] == 'think' and 'offers you' in sent_text(e) and 'verify scene first' not in sent_text(e)], 'the next prompt, carrying the offer', 40)[0]
+    (run.directory / 'prompt-after.txt').write_text(asked)
+    there = entry(scene_of(asked), player)
+    checks = {
+        'rest_scene_taken_when_handed_on': rest['updated_ms'] >= installed_ms,
+        'rest_row_scene_not_near': (entry(json.loads(rest['scene'] or '{}'), player) or {}).get('dist', 99.0) > 10.0,
+        'next_prompt_scene_not_near': (there or {}).get('dist', 99.0) > 10.0,
+    }
+    result = {'actor': actor, 'player': player, 'moved': moved, 'before_move_ms': before[0]['updated_ms'], 'moved_ms': moved_ms,
+              'installed_ms': installed_ms, 'rest_updated_ms': rest['updated_ms'], 'near_before_move': near,
+              'in_rest_row': entry(json.loads(rest['scene'] or '{}'), player), 'in_next_prompt': there, 'checks': checks}
+    (run.directory / 'scene-since.json').write_text(json.dumps(result, indent=2))
+    assert all(checks.values()), result
+    return {'status': 'pass', **result}
 
 
 @case('sleeper')

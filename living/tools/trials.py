@@ -1408,7 +1408,7 @@ class Instance:
         kind = s["do"]
         who = self.ids(s.get("who"))
         self.emit("events", {"t": self.t(), "do": kind, "who": who, **{k: v for k, v in s.items() if k not in ("do", "who", "when", "at", "steps")}})
-        if who and kind in ("place", "graph", "say", "act", "items", "know", "structure"):
+        if who and kind in ("place", "graph", "say", "act", "items", "know", "structure", "vitals"):
             # Members who died (or were removed) since the cast was picked are skipped, and said so.
             have = set(self.bodies(who))
             gone = [x for x in who if x not in have]
@@ -1430,6 +1430,14 @@ class Instance:
                 # differ (docs/PACK_MIND.md §5.6, the calibration "sides").
                 g = s["graphs"][i % len(s["graphs"])] if "graphs" in s else s["graph"]
                 self.call("set_behavior", actor, json.dumps(self.graph_of(g, actor)))
+            elif kind == "vitals":
+                # An admin body-state set (`admin_set_vitals`; its own chronicle line, and every use
+                # listed in summary.json `admin_vitals`): `hp` a number, or "max" for the body's own.
+                hp = s.get("hp", "max")
+                if hp == "max":
+                    v = self.rows(f"SELECT * FROM vitals WHERE id = {actor}")
+                    hp = v[0]["max_hp"] if v else 100.0
+                self.call("admin_set_vitals", actor, float(hp))
             elif kind == "items":
                 for item, qty in s["items"].items():
                     self.call("grant_items", actor, item, qty)
@@ -2417,6 +2425,8 @@ def summarize(d, trial, extra):
     jdir = live if live.exists() else d / "journal"
     s["consolidations"] = consolidation_table(jdir)
     s["spoken_as"] = spoken_as_table(jdir)
+    # Every admin body-state set the timeline made (`vitals` steps): when, whom, to what.
+    s["admin_vitals"] = [{"t": e.get("t"), "who": e.get("who"), "hp": e.get("hp", "max")} for e in jsonl(d / "events.jsonl") if e.get("do") == "vitals"]
     for f in sorted(jdir.glob("*.jsonl")) if jdir.exists() else []:
         for n, line in enumerate(f.read_text().splitlines(), 1):
             try:

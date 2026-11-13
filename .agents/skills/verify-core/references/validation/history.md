@@ -1,5 +1,22 @@
 # Core validation record
 
+## 2026-11-13 pack-reflex-on: the wolves' spacing reflex, a world law on by default (Spark)
+
+Branch `pack-reflex-on` (on `packs-2`, origin/main merged at `e3d77e69`), the worker's own server `slop-packs-stdb` (127.0.0.1:3363, the trial service being down for the disk cleanup), private target `~/slop-reflex-target`.
+- **Cargo.** `graph::pack_reflex_tests` (the reflex beside every hunt, guarded or bare, in instincts and the repertoire's `hunt` routine; an attack on an attacker left alone) and `script::tests::the_pack_reflex_is_on_by_default_and_a_world_turns_it_off` pass.
+- **First attempt (`core-reflex-*-224755`).**
+  - `pack_reflex` on the on world: 2/3. The grown founding wolves showed no reflex: they live by `give_ways` (repertoire.json, plan "the ways of a wolf"), not by `instincts.json`. The code now gives the reflex to the ways' `hunt` routine too, and the scene reads that routine.
+  - The off world's publish failed with a 500: its seed had `laws` (a Rhai overlay string) where law values go in `rules`.
+- **`core-reflex-*-230202`.** `pack_reflex` on 5/5, off 3/3. `wildlife` 14/14 and `remains` 10/10 (`stage1-acts`). `chase` 9/9 and `apart` 12/12 (default seed).
+- **On the merged head, `core-reflex-*-001317`.** `pack_reflex` on 5/5, off 3/3. `living-check` passes.
+
+## 2026-11-12 packs-2: a signal's reach from its loudness, the howl (Spark)
+
+Branch `packs-2` (on `packs` 10709c89), the trial service, private `CARGO_TARGET_DIR`.
+- Cargo `species::tests` passes 5/5. The new test checks the howl's reach: 18 m at 9 m hearing, 24 m at 12 m.
+- `core-howl-190750` (default seed): `howl_reach` passed 3 of 4 checks. It heard at 15 m, not at 25 m, and the sleeper at 6 m was told "You woke up: You hear a long howl from a wolf, west.". The fourth check failed on the fixture: the sleeper's own graph laid it down again, so its `slumber` row was back. The check now reads the waking line. `sleeper` passed 25/25 in the same world.
+- `core-howl2-191145`: `howl_reach` passes 4/4.
+
 ## 2026-11-12 packs: `apart` on the movement intents, wolves given the intents (Spark)
 
 Branch `packs` (origin/main `ce5e09b9` merged), the trial service `slop-trials-stdb`, private `CARGO_TARGET_DIR`.

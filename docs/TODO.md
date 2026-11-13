@@ -174,6 +174,16 @@ See [verification and reproduction](BEVY_BROWSER_CLIENT.md). This is a local dev
 - [ ] Prove player discovery, authoring and communicated learning of a new technique, with a law change during execution and visible character response. Operator-authored fixtures do not prove this experience.
 - [ ] Measure parsing/evaluation, transactional cloning and persistence cost; design history retention and explicit migration before expanding population or content volume.
 
+## Living core: open items
+
+- [ ] **Decisions act on old scenes.** A deliberation decides on what its character perceived when the request was made. Its acts are carried out a model call later (several to 20 s), and by then people have moved, so a decision can be right for the scene it was given and wrong for the world it lands in. No fix is proposed yet. The three known cases:
+  - **The decision lag behind Gwil's hail (fs1n).** A deliberation asked at about 125 s, with the newcomer at Gwil's elbow, decided to greet them. The line went out at 134.0 s, after a 9 s model call, when the newcomer was 28 m off, a far figure, and nobody heard it. The stale scene in the *next* prompt that turned this into a false claim is fixed (`scene-since`). The lag itself is not.
+    - Evidence: [PERCEPTION.md, "One moment per prompt"](PERCEPTION.md#one-moment-per-prompt-scene-since-2026-11-12), and the fs1n section of docs/TRIALS.md on the `trials-fs1` branch (the run's journals under `~/slop-trials-fs1/.local/living/`).
+  - **Late lines: in reach when decided, gone when said.** In the earshot stage, `es1`, 65–73 of 151–179 unheard lines a 20-minute run at Cullet were addressed to someone within a said line's reach when the mind thought. By the time the line was said they were gone, a median 7.6–8.1 s later. The ar2 case was Ilsa: a 20 s deliberation, the newcomer at 5.3 m in her prompt, her line from 27 m.
+    - Evidence: [TRIALS.md, "Earshot stage" results](TRIALS.md#results-batch-es1-2026-11-12-1623-1644-utc); [COMMUNICATION.md, "Late lines: three options for the owner"](COMMUNICATION.md#late-lines-three-options-for-the-owner-prepared-2026-11-12-to-be-chosen-after-the-ways-change-is-measured), still the owner's to choose after the ways change is measured; and COMMUNICATION.md's `line_overtaken` notes.
+  - **Stale fleeing.** In five real flights traced in r2d, the new plan took effect 10–21 s after the mind's reply. Until then the body kept its old plan: standing while the attacker closed to 1.2 m, or chasing it. The mind's choice of a place on the attacker's side is a separate cause, noted there.
+    - Evidence: [FRAMING.md, "Fled toward the attacker"](FRAMING.md#fled-toward-the-attacker-the-act-or-the-mind-2026-11-12) and [flee_trace.py](../living/tools/flee_trace.py).
+
 ## Later stages
 
 These are staged growth areas after the foundation; richer presentation can develop alongside broader mechanics rather than waiting for all society or scaling work to finish.

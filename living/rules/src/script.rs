@@ -501,6 +501,10 @@ pub struct Laws {
     /// Sight depends on facing (the `field` of `senses(a)`; the geometry is the `fov_*` laws,
     /// read by the script).
     pub fov_on: bool,
+    /// Wolves' starting instincts carry the spacing reflex (docs/PACK_MIND.md, decision 1):
+    /// beside each hunt, a weighted desire to keep apart from mates while closing on the prey
+    /// (`graph::with_pack_reflex`). Read where an instinct is installed; a world turns it off.
+    pub pack_reflex: bool,
     /// A body struck this many seconds ago cannot fall asleep (the script's `sleep_check`, the
     /// same for every controller).
     pub alert_after_hit_s: f32,
@@ -542,6 +546,10 @@ pub struct Laws {
     /// once per this many ms (docs/BATTLE_SCALE.md, fix 3); the percept is written at once and in
     /// full. 0: woken by each, as before.
     pub witness_wake_ms: f32,
+    /// What an onlooker sees of fights it is not party to is told as one line per this many ms
+    /// (docs/BATTLE_SCALE.md, fix 4): every blow it could see, with counts and outcomes. A blow
+    /// at it or by it is told at once. 0: each fight's first blow told at once, as before.
+    pub witness_fold_ms: f32,
     /// What each observer makes of each target (name known, the `perceived_of` answer) is
     /// computed once per transaction and shared (`perception::with_answers`). Off: every
     /// asker computes it afresh (the same answers; for measuring the cache).
@@ -549,6 +557,27 @@ pub struct Laws {
     /// Diagnostic: every shared answer is also computed afresh and compared; differences are
     /// logged and counted (`perception::report_answers`). Costs both.
     pub regard_cache_check: bool,
+    /// A diagnostic: while profiling (`set_profile`), also time the parts of a behaviour graph's
+    /// evaluation (its conditions, targets, act starts, alerts), docs/BATTLE_SCALE.md. Off by
+    /// default: those spans are many and would weigh on what an ordinary profile measures.
+    pub profile_detail: bool,
+    /// A move's check before it starts is given a context of the fields the check reads alone
+    /// (its plan; docs/BATTLE_SCALE.md, battle-cheap path 1): the same answer, without gathering
+    /// what it never reads (kin near, practice, community and home, warmth). Off: the whole context.
+    pub check_ctx_plan: bool,
+    /// Diagnostic: every such check is also asked with the whole context, and a difference logged
+    /// and counted (`diag:` `check_ctx:differed`).
+    pub check_ctx_check: bool,
+    /// The body's alarms (`status_of`) are answered from the last answer while no field it reads
+    /// has crossed one of its levels (battle-cheap path 2). Off: asked at every evaluation.
+    pub alarm_cells: bool,
+    /// Diagnostic: every alarm answer from a cell is also asked afresh, and a difference logged
+    /// and counted (`alarm:differed`).
+    pub alarm_cells_check: bool,
+    /// Diagnostic: warmth (battle-cheap path 3: only what warms or shelters, visited in place)
+    /// is also worked out from a full copy, and a difference logged and counted
+    /// (`warmth:differed`).
+    pub warmth_check: bool,
     /// The fast lane (docs/FAST_LANE.md): a mind-run character's re-plan between blows, asked
     /// of its mind on a blow taken or a move it sees repeated. Off: none is asked.
     pub fast_lane_on: bool,
@@ -630,6 +659,7 @@ impl Default for Laws {
             longing_after_min: 20.0,
             longing_food: 0.0,
             fov_on: false,
+            pack_reflex: true,
             alert_after_hit_s: 15.0,
             alert_while_attacker_near: true,
             stranger_by_name: false,
@@ -643,8 +673,15 @@ impl Default for Laws {
             think_framing: false,
             cue_check_s: 1.0,
             witness_wake_ms: 500.0,
+            witness_fold_ms: 2000.0,
             regard_cache: true,
             regard_cache_check: false,
+            profile_detail: false,
+            check_ctx_plan: true,
+            check_ctx_check: false,
+            alarm_cells: true,
+            alarm_cells_check: false,
+            warmth_check: false,
             fast_lane_on: false,
             seen_again_n: 3.0,
             fast_lane_rate: 2.0,
@@ -965,6 +1002,8 @@ pub struct Scripts {
     skills: std::sync::Arc<crate::catalog::Skills>,
     /// The ways of speaking (`<way>_speech()`), in their order.
     ways: Vec<speech::WaySpec>,
+    /// The words a speaker uses for someone by their relation to them (`kin_terms()`), by relation.
+    kin: speech::KinTerms,
     /// Functions of no parameter.
     nullary: HashSet<String>,
     /// What each function reads of its parameters.
@@ -1348,7 +1387,7 @@ impl Scripts {
         let nullary = ast.iter_functions().filter(|f| own(f.name) && f.params.is_empty()).map(|f| f.name.to_string()).collect();
         let fields = fields.unwrap_or_else(|| fields::Fields::analyze(&ast));
         let reach = Reach { day: 0.0, night: 0.0, hearing: 0.0, glow: 0.0 };
-        let mut s = Self { engine, ast, fns, unary, nullary, shapes: Default::default(), shows: Default::default(), skills: Default::default(), ways: Vec::new(), fields, plans: Default::default(), names: Default::default(), lists: Default::default(), needs: Default::default(), senses: Default::default(), moves: Default::default(), pools: Default::default(), glows: Default::default(), lives: Default::default(), hour_ms, daylight: Default::default(), laws: Default::default(), reach, borrowed, structures: Default::default(), seasons: Default::default(), tables, source: source.to_string(), law_errors: Default::default(), about: Ok(Vec::new()), ui: Default::default(), body: Default::default(), makings: Default::default() };
+        let mut s = Self { engine, ast, fns, unary, nullary, shapes: Default::default(), shows: Default::default(), skills: Default::default(), ways: Vec::new(), kin: Default::default(), fields, plans: Default::default(), names: Default::default(), lists: Default::default(), needs: Default::default(), senses: Default::default(), moves: Default::default(), pools: Default::default(), glows: Default::default(), lives: Default::default(), hour_ms, daylight: Default::default(), laws: Default::default(), reach, borrowed, structures: Default::default(), seasons: Default::default(), tables, source: source.to_string(), law_errors: Default::default(), about: Ok(Vec::new()), ui: Default::default(), body: Default::default(), makings: Default::default() };
         // Skills in the order the source declares them (the last declaration of a name counts).
         let declared = |name: &str| source.rfind(&format!("fn {name}_spec(")).unwrap_or(usize::MAX);
         // Required entry points.
@@ -1374,6 +1413,7 @@ impl Scripts {
         s.skills = std::sync::Arc::new(skills);
         s.makings = s.read_makings()?;
         s.ways = s.read_ways()?;
+        s.kin = s.read_kin()?;
         s.structures = s.read_structures()?;
         s.seasons = s.read_seasons()?;
         s.laws = s.read_laws()?;
@@ -1529,6 +1569,21 @@ impl Scripts {
     /// The ways of speaking (`<way>_speech()`), read once here, in their `order` (then the
     /// source's). A script that declares none speaks by the shipped `say` (today's speech), so a
     /// world installed before ways were declared keeps speaking until its next install.
+    /// The world's kin terms (`kin_terms()`, a map of relation to words), or the defaults when
+    /// the script has none (`speech::KinTerms::default`).
+    fn read_kin(&self) -> Result<speech::KinTerms, String> {
+        if !self.has("kin_terms") {
+            return Ok(speech::KinTerms::default());
+        }
+        let m = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "kin_terms", ()).map_err(|e| format!("kin_terms: {e}"))?.try_cast::<Map>().ok_or("kin_terms must return a map of relation to a list of words")?;
+        speech::KinTerms::of(&m)
+    }
+
+    /// The words a speaker uses for someone by their relation to them (`kin_terms()`).
+    pub fn kin(&self) -> &speech::KinTerms {
+        &self.kin
+    }
+
     fn read_ways(&self) -> Result<Vec<speech::WaySpec>, String> {
         let mut ways = Vec::new();
         for f in self.nullary.iter().filter(|f| f.ends_with("_speech")) {
@@ -2360,6 +2415,13 @@ impl Scripts {
         self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, f, (m,)).map_err(|e| format!("{f}: {e}"))
     }
 
+    /// The fields `<skill>_check` reads (its plan), for a context built with those alone
+    /// (docs/BATTLE_SCALE.md, battle-cheap path 1). `None` when the skill has no check.
+    pub fn check_plan(&self, skill: &str) -> Option<Rc<context::Plan>> {
+        let f = format!("{skill}_check");
+        self.has(&f).then(|| self.plan(&f))
+    }
+
     pub fn check(&self, skill: &str, ctx: &SkillCtx) -> Result<(), String> {
         let f = format!("{skill}_check");
         if !self.has(&f) {
@@ -2665,6 +2727,7 @@ impl Scripts {
             longing_after_min: g("longing_after_min", l.longing_after_min).clamp(0.0, 100_000.0),
             longing_food: g("longing_food", l.longing_food).clamp(0.0, 1_000.0),
             fov_on: flag("fov_on", l.fov_on),
+            pack_reflex: flag("pack_reflex", l.pack_reflex),
             alert_after_hit_s: g("alert_after_hit_s", l.alert_after_hit_s).clamp(0.0, 3_600.0),
             alert_while_attacker_near: flag("alert_while_attacker_near", l.alert_while_attacker_near),
             stranger_by_name: flag("stranger_by_name", l.stranger_by_name),
@@ -2678,8 +2741,15 @@ impl Scripts {
             think_framing: flag("think_framing", l.think_framing),
             cue_check_s: g("cue_check_s", l.cue_check_s).clamp(0.1, 60.0),
             witness_wake_ms: g("witness_wake_ms", l.witness_wake_ms).clamp(0.0, 10_000.0),
+            witness_fold_ms: g("witness_fold_ms", l.witness_fold_ms).clamp(0.0, 10_000.0),
             regard_cache: flag("regard_cache", l.regard_cache),
             regard_cache_check: flag("regard_cache_check", l.regard_cache_check),
+            profile_detail: flag("profile_detail", l.profile_detail),
+            check_ctx_plan: flag("check_ctx_plan", l.check_ctx_plan),
+            check_ctx_check: flag("check_ctx_check", l.check_ctx_check),
+            alarm_cells: flag("alarm_cells", l.alarm_cells),
+            alarm_cells_check: flag("alarm_cells_check", l.alarm_cells_check),
+            warmth_check: flag("warmth_check", l.warmth_check),
             fast_lane_on: flag("fast_lane_on", l.fast_lane_on),
             seen_again_n: g("seen_again_n", l.seen_again_n).round().clamp(1.0, 100.0),
             fast_lane_rate: g("fast_lane_rate", l.fast_lane_rate).clamp(0.0, 100.0),
@@ -2943,7 +3013,7 @@ fn number(d: &Dynamic) -> Option<f64> {
 }
 
 /// The traits a skill's spec may have.
-pub const SPEC_TRAITS: &[&str] = &["target", "item", "args", "reach", "about", "takes", "gives", "listed", "talk", "items", "latch", "notable", "moving", "moment", "reflex", "target_class", "loudness"];
+pub const SPEC_TRAITS: &[&str] = &["target", "item", "args", "reach", "about", "takes", "gives", "listed", "talk", "items", "latch", "notable", "moving", "moment", "reflex", "target_class", "loudness", "on_the_move"];
 
 /// A skill's spec from what `<skill>_spec()` returned.
 /// A kind's `burns` trait: `#{ fuel: "<item trait>", rate: <units a game hour>, warmth: <m>,
@@ -3014,7 +3084,8 @@ fn spec_of(skill: &str, m: &Map) -> Result<crate::catalog::SkillSpec, String> {
         items: list("items")?,
         latch: flag("latch", false)?,
         notable: flag("notable", false)?,
-        moving: flag("moving", false)?,
+        moving: flag("moving", false)? || flag("on_the_move", false)?,
+        on_the_move: flag("on_the_move", false)?,
         moment: flag("moment", false)?,
         loudness: m.get("loudness").map_or(Ok(0.0), |v| number(v).ok_or_else(|| format!("{f}: `loudness` must be a number")))?.clamp(0.0, 100.0) as f32,
         reflex: flag("reflex", false)?,
@@ -3427,7 +3498,9 @@ mod tests {
         // `feed` and `make` (2026-11-11) are there for a world with fires that burn fuel and recipes.
         assert_eq!(with(|k| k.latch), "build cook craft eat experiment feed gather give make plant read rest sleep store take teach write");
         assert_eq!(with(|k| k.notable), "attack build conceive cook craft feed give make store take threaten yield");
-        assert_eq!(with(|k| k.moving), "eat signal wait");
+        // `wave` and `nod` are done on the move (talk-turns, `on_the_move`, which implies `moving`).
+        assert_eq!(with(|k| k.moving), "eat nod signal wait wave");
+        assert_eq!(with(|k| k.on_the_move), "nod wave");
         assert_eq!(with(|k| k.moment), "circle flee follow graze keep_distance rest sleep wait wander");
         assert_eq!(with(|k| k.reflex), "flee");
         assert_eq!((s.structure("house"), s.structure("campfire"), s.structure("workshop"), s.structure("storage")), (&StructureTraits { warms: true, roof: true, ..Default::default() }, &StructureTraits { warms: true, ..Default::default() }, &StructureTraits { roof: true, ..Default::default() }, &StructureTraits { holds: Some(120.0), ..Default::default() }));
@@ -3492,6 +3565,20 @@ mod tests {
     /// Sight and hearing are a law per creature in the script, with the values the engine had
     /// as constants (11 m by day, 6 at night, 9 with a torch; hearing 9), shared by every
     /// creature in the same state and held to the law's reach.
+    #[test]
+    fn the_pack_reflex_is_on_by_default_and_a_world_turns_it_off() {
+        let src = include_str!("../../scripts/skills.rhai");
+        let shipped = Scripts::new(src).unwrap();
+        assert!(shipped.laws().pack_reflex, "on in every world unless it says otherwise");
+        assert_eq!(shipped.law_value("pack_reflex"), Some(serde_json::json!(true)));
+        let off_src = with_world_laws(src, &[("pack_reflex".into(), serde_json::json!(false))]);
+        let off = Scripts::new(&off_src).unwrap();
+        off.validate().unwrap();
+        assert!(!off.laws().pack_reflex);
+        // A script that does not name the law keeps the reflex on (the Rust default).
+        assert!(Laws::default().pack_reflex);
+    }
+
     #[test]
     fn sight_depends_on_facing_only_when_the_world_s_law_says() {
         let src = include_str!("../../scripts/skills.rhai");
@@ -3567,6 +3654,7 @@ mod tests {
         assert_eq!((l.cue_cooldown_s, l.cue_gap_s, l.cue_check_s), (600.0, 60.0, 1.0));
         assert!(l.regard_cache && !l.regard_cache_check, "answers are shared by default, unchecked");
         assert_eq!(l.witness_wake_ms, 500.0, "a bystander is woken at most twice a second (docs/BATTLE_SCALE.md)");
+        assert_eq!(l.witness_fold_ms, 2000.0, "what an onlooker sees of fights is told every two seconds (docs/BATTLE_SCALE.md)");
         let about: std::collections::HashMap<String, String> = shipped.laws_about().into_iter().collect();
         assert!(about["cue_cooldown_s"].contains("600 s") && about["cue_gap_s"].contains("60 s"), "{about:?}");
         let on = Scripts::new(&with_world_laws(src, &[("cues_on".into(), serde_json::json!(true)), ("cue_cooldown_s".into(), serde_json::json!(30)), ("cue_gap_s".into(), serde_json::json!(-5)), ("cue_check_s".into(), serde_json::json!(0.01)), ("regard_cache".into(), serde_json::json!(false))])).unwrap();
@@ -3576,10 +3664,28 @@ mod tests {
         assert_eq!((l.cue_cooldown_s, l.cue_gap_s, l.cue_check_s), (30.0, 0.0, 0.1));
         assert!(about["cue_check_s"].contains("1 s"), "{about:?}");
         assert!(about["witness_wake_ms"].contains("500 ms"), "{about:?}");
+        assert!(about["witness_fold_ms"].contains("2000 ms") && about["witness_fold_ms"].contains("who fell"), "{about:?}");
     }
 
     /// First sights that ask for a thought (docs/FIRST_SIGHT.md): off by default, with the gap a
     /// world may set, clamped to 0..3600 s.
+    #[test]
+    fn kin_terms_name_a_relation_and_are_the_world_s() {
+        let src = include_str!("../../scripts/skills.rhai");
+        let sc = Scripts::new(src).unwrap();
+        let k = sc.kin();
+        assert_eq!(k, &speech::KinTerms::default(), "the shipped script's kin terms are the defaults");
+        assert_eq!(k.named_at("But you have to ask Mother first for the crust", &["parent"]), Some(5));
+        assert_eq!(k.named_at("ask Mother first", &["child", "sibling"]), None, "a parent word names a parent only");
+        assert_eq!(k.named_at("Gran! Come see", &["grandparent"]), Some(0));
+        assert_eq!(k.named_at("my motherland", &["parent"]), None, "whole words only");
+        let base = src.replace("fn kin_terms()", "fn shipped_kin_terms()");
+        let own = Scripts::new(&format!("{base}\nfn kin_terms() {{ #{{ parent: [\"Amma\"] }} }}\n")).unwrap();
+        assert_eq!(own.kin().named_at("Amma, look", &["parent"]), Some(0));
+        assert_eq!(own.kin().named_at("Mother, look", &["parent"]), None, "a world's own terms replace the defaults");
+        assert!(Scripts::new(&format!("{base}\nfn kin_terms() {{ #{{ cousin: [\"coz\"] }} }}\n")).is_err(), "an unknown relation is refused");
+    }
+
     #[test]
     fn earshot_is_the_world_s_law_and_off_as_shipped() {
         let src = include_str!("../../scripts/skills.rhai");

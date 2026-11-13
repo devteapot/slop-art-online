@@ -14,7 +14,9 @@ the heavy-blow fixture stays the one R2 measured, byte for byte:
   (`record.bodies`) for the windup-seen estimate.
 
 A world hour is 30 real seconds and day is 06:00–20:00 (the shipped `night_hours`), so a meeting
-is 2 real minutes (4 world hours) and the last 3. Each meeting places its fixture 6 m from the
+is 2 real minutes (4 world hours) and the last 3. Each meeting sets the subject and its fixture to
+full health (`vitals`, the admin reducer `admin_set_vitals`: R3's fake run lost its subject in the
+second meeting, mending being far slower than a meeting's blows), places its fixture 6 m from the
 subject, gives it the heavy-blow graph and lets it walk back to the subject (arena-heavy's own
 re-approach trigger, bounded by `after_min` and `before_min`). At its end the fixture is set
 to wait and placed 60 m off, whatever anyone's health. Nothing here is installed into any
@@ -49,6 +51,11 @@ def heavy():
 def meeting(role, label, start, length, fixture, approach, k):
     """The steps of one meeting of `role` with the subject, and its bounded re-approach."""
     begin = {"at": start, "steps": [
+        # Every meeting starts at full health, the subject's and the fixture's (`admin_set_vitals`,
+        # an admin event in the run record): mending between meetings is far slower than a
+        # meeting's blows, and a fixture the subject killed would miss its later meetings.
+        {"do": "vitals", "who": "subject", "hp": "max"},
+        {"do": "vitals", "who": role, "hp": "max"},
         {"do": "place", "who": role, "to": {"who": "subject", "offset": [6, 0]}},
         {"do": "note", "text": f"meeting {k}: {role} ({label})"},
         {"do": "graph", "who": role, "graph": copy.deepcopy(fixture)},

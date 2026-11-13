@@ -36,7 +36,7 @@
       "cooking",
       "fire",
       "basketry",
-      "mending"
+      "wound_tending"
      ],
      "parents": [],
      "ties": [
@@ -55,7 +55,7 @@
      "role": "Bramwell and Nesta's daughter; stacks kindling and learns the axe and the charcoal burn.",
      "knows": [
       "fire",
-      "mending"
+      "wound_tending"
      ],
      "parents": [
       "Bramwell Ashdown",

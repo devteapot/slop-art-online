@@ -59,10 +59,16 @@ python3 "$C/scenes.py" cues --run "$R" > "$E/cues.txt" 2>&1
 # First sights that ask for a thought under first_sight_thinks: refused then owed, the gap, never far or named, sleepers, with a cue (features/first-sight.md, about 4 min).
 python3 "$C/scenes.py" first_sight --run "$R" > "$E/first_sight.txt" 2>&1
 # Battle scale: familiarity never forgets what is in view, novelty once a second, bystanders'
-# wakes coalesced by witness_wake_ms (features/battle.md, about 7 min together).
+# wakes coalesced by witness_wake_ms, onlookers' fight lines folded by witness_fold_ms
+# (features/battle.md, about 9 min together).
 python3 "$C/scenes.py" familiar_dense --run "$R" > "$E/familiar_dense.txt" 2>&1
 python3 "$C/scenes.py" notice_rate --run "$R" > "$E/notice_rate.txt" 2>&1
 python3 "$C/scenes.py" witness_wake --run "$R" > "$E/witness_wake.txt" 2>&1
+python3 "$C/scenes.py" witness_fold --run "$R" > "$E/witness_fold.txt" 2>&1
+# The fighters' cheaper paths change nothing: each compared with the old way (features/battle.md, about 5 min together).
+python3 "$C/scenes.py" cheap_check_ctx --run "$R" > "$E/cheap_check_ctx.txt" 2>&1
+python3 "$C/scenes.py" cheap_alarms --run "$R" > "$E/cheap_alarms.txt" 2>&1
+python3 "$C/scenes.py" cheap_warmth --run "$R" > "$E/cheap_warmth.txt" 2>&1
 # A mind's line waits when another spoke to its listener first, under heard_first_rethinks (features/speech.md, about 1.5 min).
 python3 "$C/scenes.py" heard_first --run "$R" > "$E/heard_first.txt" 2>&1
 # The shared answers equal fresh ones (regard_cache_check; features/cues.md#shared-answers, about 4 min;
@@ -280,6 +286,16 @@ python3 "$V" launch --run "$F" --seed stage1-acts > ".local/living/verify/$F/lau
 python3 "$V" doctor --run "$F" > ".local/living/verify/$F/doctor.txt" 2>&1
 python3 "$C/scenes.py" family_laws --run "$F" > ".local/living/verify/$F/family_laws.txt" 2>&1
 python3 "$V" cleanup --run "$F"
+
+# The wolves' spacing reflex (the pack_reflex law, on by default): every wolf's starting
+# graph with the law on, none with it off (features/wildlife.md; about 2 min each).
+for P in pack-reflex-on pack-reflex-off; do
+  K=$R-$P; mkdir -p ".local/living/verify/$K"
+  python3 "$V" launch --run "$K" --seed "$P" > ".local/living/verify/$K/launch.txt" 2>&1
+  python3 "$V" doctor --run "$K" > ".local/living/verify/$K/doctor.txt" 2>&1
+  python3 "$C/scenes.py" pack_reflex --run "$K" > ".local/living/verify/$K/pack_reflex.txt" 2>&1
+  python3 "$V" cleanup --run "$K"
+done
 
 W=$R-wildlife
 mkdir -p ".local/living/verify/$W"

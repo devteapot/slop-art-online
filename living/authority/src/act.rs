@@ -124,6 +124,55 @@ pub struct Warmth {
 /// one within `shelter_warmth`); a fire that burns fuel warms within its `burns.warmth` only
 /// while lit (`lit_until_ms` ahead of now).
 pub fn warmth(ctx: &ReducerContext, at: (f32, f32), now: u64) -> Warmth {
+    let laws = common::laws(ctx);
+    let sc = common::scripts(ctx);
+    // Only what can warm or shelter, visited in place (battle-cheap path 3): remains and other
+    // kinds that neither warm nor shelter add nothing, and the order does not matter. The
+    // `warmth_check` law compares this with the full copy (`warmth_full`).
+    let reach = sc.warmth_reach(&laws);
+    if laws.warmth_check {
+        let full = warmth_full(ctx, at, now);
+        let w = warmth_visited(ctx, &sc, &laws, at, reach, now);
+        common::diag(|| "warmth:checked", 1);
+        if w != full {
+            common::diag(|| "warmth:differed", 1);
+            log::error!("warmth at ({:.1}, {:.1}): visited {w:?} differs from the full copy {full:?}", at.0, at.1);
+        }
+        return full;
+    }
+    warmth_visited(ctx, &sc, &laws, at, reach, now)
+}
+
+fn warmth_visited(ctx: &ReducerContext, sc: &living_rules::script::Scripts, laws: &living_rules::script::Laws, at: (f32, f32), reach: f32, now: u64) -> Warmth {
+    let mut w = Warmth::default();
+    for c in living_rules::map::chunks_around(at.0, at.1, reach) {
+        for s in common::chunk_warming(ctx, c).iter() {
+            let d = common::dist(at, (s.x, s.y));
+            if d > reach {
+                continue;
+            }
+            let t = sc.structure(&s.kind);
+            if t.roof && d <= laws.shelter_warmth {
+                w.shelter = true;
+            }
+            match &t.burns {
+                Some(b) => {
+                    if living_rules::fire::lit(s.lit_until_ms, now) {
+                        w.fire |= d <= b.warmth;
+                    }
+                }
+                None => {
+                    let r = if t.roof { laws.shelter_warmth } else { laws.fire_warmth };
+                    w.fire |= t.warms && d <= r;
+                }
+            }
+        }
+    }
+    w
+}
+
+/// `warmth` as it was before battle-cheap: every structure in reach copied and sorted.
+fn warmth_full(ctx: &ReducerContext, at: (f32, f32), now: u64) -> Warmth {
     let mut w = Warmth::default();
     let laws = common::laws(ctx);
     let sc = common::scripts(ctx);
@@ -172,6 +221,11 @@ fn hurt_by_near(ctx: &ReducerContext, at: (f32, f32), hurt_by: u32, hurt_ago: Op
 }
 
 pub fn facts(ctx: &ReducerContext, id: u32, now: u64) -> ActorFacts {
+    facts_reading(ctx, id, now, &Reads::all())
+}
+
+/// `facts`, the costlier fields only when `reads` asks for them (left at their defaults).
+fn facts_reading(ctx: &ReducerContext, id: u32, now: u64, reads: &Reads) -> ActorFacts {
     let w = common::world(ctx);
     let ch = ctx.db.character().id().find(id);
     let kind = ch.as_ref().map(|c| c.kind.clone()).unwrap_or_default();
@@ -181,7 +235,8 @@ pub fn facts(ctx: &ReducerContext, id: u32, now: u64) -> ActorFacts {
         let n = common::needs(&v, now);
         (n.hp, n.hunger, n.energy, v.hurt_by, (v.hurt_ms != 0).then(|| now.saturating_sub(v.hurt_ms) as f32), crate::breath::levels(&v, now))
     }).unwrap_or((0.0, 0.0, 0.0, 0, None, (0.0, 0.0)));
-    let warm = warmth(ctx, at, now);
+    let warm = if reads.actor("near_fire") || reads.actor("near_shelter") { warmth(ctx, at, now) } else { Warmth::default() };
+    let genes = ["speed", "strength", "endurance", "vitality", "factor"].iter().any(|f| reads.actor(f));
     ActorFacts {
         id,
         kind,
@@ -191,26 +246,26 @@ pub fn facts(ctx: &ReducerContext, id: u32, now: u64) -> ActorFacts {
         energy,
         near_fire: warm.fire,
         near_shelter: warm.shelter,
-        terrain: common::map(ctx).at(at.0, at.1).name().into(),
+        terrain: if reads.actor("terrain") { common::map(ctx).at(at.0, at.1).name().into() } else { String::new() },
         activity: ctx.db.activity().id().find(id).filter(|a| a.phase == 1).map(|a| a.skill).unwrap_or_default(),
-        inv: common::inv_list(ctx, id as u64),
-        knows: common::knows(ctx, id),
+        inv: if reads.actor("inv") { common::inv_list(ctx, id as u64) } else { Vec::new() },
+        knows: if reads.actor("knows") { common::knows(ctx, id) } else { Vec::new() },
         stage: ch.as_ref().map(|c| common::stage_of(ctx, c, &w, now).name().to_string()).unwrap_or_else(|| "adult".into()),
         life: ch.as_ref().map(|c| common::life_of(ctx, &c.kind).fraction(age, common::pace(&w))).unwrap_or(0.3),
-        genes: (*common::genes_of(ctx, id)).clone(),
+        genes: if genes { (*common::genes_of(ctx, id)).clone() } else { Default::default() },
         practice: Default::default(),
         kin_near: 0,
         pasture: 0.0,
         hurt_by,
         hurt_ago,
-        hurt_by_near: hurt_by_near(ctx, at, hurt_by, hurt_ago, now),
+        hurt_by_near: reads.actor("hurt_by_near") && hurt_by_near(ctx, at, hurt_by, hurt_ago, now),
         yielded_ago: None,
         sensed: Vec::new(),
         bold: false,
         room: 0,
         community: 0,
         home: String::new(),
-        lit: common::lit_at(ctx, at),
+        lit: reads.actor("lit") && common::lit_at(ctx, at),
         stamina,
         focus,
     }
@@ -354,23 +409,78 @@ pub fn way_facts(ctx: &ReducerContext, id: u32, way: &str, to: u32, now: u64) ->
 }
 
 fn skill_ctx(ctx: &ReducerContext, id: u32, a: &Activity, now: u64) -> SkillCtx {
+    let roll: f32 = ctx.rng().gen_range(0.0..1.0);
+    skill_ctx_with(ctx, id, a, now, roll, &Reads::all())
+}
+
+/// Which fields of a context a law reads (its plan), for a context built with those alone
+/// (docs/BATTLE_SCALE.md, battle-cheap path 1); `all` for every field.
+pub struct Reads {
+    all: bool,
+    actor: u64,
+    target: u32,
+}
+
+impl Reads {
+    pub fn all() -> Reads {
+        Reads { all: true, actor: 0, target: 0 }
+    }
+
+    pub fn of(p: &living_rules::script::context::Plan) -> Reads {
+        Reads { all: false, actor: if p.top & 1 != 0 { p.actor } else { 0 }, target: if p.top & 2 != 0 { p.target } else { 0 } }
+    }
+
+    fn actor(&self, f: &str) -> bool {
+        self.all || living_rules::script::context::ACTOR.iter().position(|t| *t == f).is_some_and(|i| self.actor & (1u64 << i) != 0)
+    }
+
+    fn target(&self, f: &str) -> bool {
+        self.all || living_rules::script::context::TARGET.iter().position(|t| *t == f).is_some_and(|i| self.target & (1 << i) != 0)
+    }
+}
+
+/// A move's check before it starts, given the fields it reads alone (the `check_ctx_plan` law;
+/// battle-cheap path 1): the same answer as with the whole context, which `check_ctx_check`
+/// compares. One roll is drawn either way, so the world's draws are the same.
+fn checked(ctx: &ReducerContext, sc: &living_rules::script::Scripts, id: u32, a: &Activity, now: u64) -> Result<(), String> {
+    let laws = common::laws(ctx);
+    let roll: f32 = ctx.rng().gen_range(0.0..1.0);
+    let plan = sc.check_plan(&a.skill).filter(|_| laws.check_ctx_plan);
+    let reads = plan.as_ref().map_or_else(Reads::all, |p| Reads::of(p));
+    let r = sc.check(&a.skill, &skill_ctx_with(ctx, id, a, now, roll, &reads));
+    if plan.is_some() && laws.check_ctx_check {
+        let whole = sc.check(&a.skill, &skill_ctx_with(ctx, id, a, now, roll, &Reads::all()));
+        common::diag(|| "check_ctx:checked", 1);
+        if whole != r {
+            common::diag(|| "check_ctx:differed", 1);
+            log::error!("check of {} for {id} on its plan's fields {r:?} differs from the whole context's {whole:?}", a.skill);
+            return whole;
+        }
+    }
+    r
+}
+
+fn skill_ctx_with(ctx: &ReducerContext, id: u32, a: &Activity, now: u64, roll: f32, reads: &Reads) -> SkillCtx {
     let w = common::world(ctx);
-    let mut actor = facts(ctx, id, now);
-    actor.practice = common::practice_of(ctx, id);
+    let mut actor = facts_reading(ctx, id, now, reads);
+    if reads.actor("factor") {
+        actor.practice = common::practice_of(ctx, id);
+    }
     let from = ctx.db.body().id().find(id).map(|b| pos(&b, now)).unwrap_or((0.0, 0.0));
-    actor.kin_near = common::creatures_near(ctx, from, common::laws(ctx).kin_near_m, now).iter().filter(|c| c.id != id && *c.kind == *actor.kind).count() as u32;
+    if reads.actor("kin_near") {
+        actor.kin_near = common::creatures_near(ctx, from, common::laws(ctx).kin_near_m, now).iter().filter(|c| c.id != id && *c.kind == *actor.kind).count() as u32;
+    }
     // The grass where it stands, for skills whose rules read it (grazing).
     if common::scripts(ctx).skill_reads_actor(&a.skill, "pasture") {
         actor.pasture = common::pasture_now(ctx, chunk_of(from.0, from.1), now);
     }
     let hour = common::hour(&w, now);
-    let roll: f32 = ctx.rng().gen_range(0.0..1.0);
     let routine = if a.skill == "rework" { crate::mind::routine_facts(ctx, id, &a.item, now) } else { Default::default() };
     let mut target = target_facts(ctx, &a.target, from, now);
     // Force: whether either side has yielded, and what a predator weighs before daring a person.
     let sc = common::scripts(ctx);
     // Where the target is from where the actor faces, and whether it comes at the actor.
-    if let (Some(b), Some(tp)) = (ctx.db.body().id().find(id), target_pos(ctx, &a.target, now)) {
+    if let (true, Some(b), Some(tp)) = (reads.target("bearing") || reads.target("closing"), ctx.db.body().id().find(id), target_pos(ctx, &a.target, now)) {
         target.bearing = living_rules::social::bearing(from, common::facing_at(&b, now), tp);
         if a.target.class == 3 && a.target.id as u32 != id {
             if let Some(tb) = ctx.db.body().id().find(a.target.id as u32) {
@@ -410,9 +520,15 @@ fn skill_ctx(ctx: &ReducerContext, id: u32, a: &Activity, now: u64) -> SkillCtx 
         }
     }
     // Where each side belongs and lives, for the rules on dealings (docs/WORLD_RULES.md).
-    actor.community = crate::records::community_party(ctx, id);
-    actor.home = crate::records::home_of(ctx, id);
+    if reads.actor("community") {
+        actor.community = crate::records::community_party(ctx, id);
+    }
+    if reads.actor("home") {
+        actor.home = crate::records::home_of(ctx, id);
+    }
+    let whose = ["community", "home", "owner", "hosts"].iter().any(|f| reads.target(f));
     match a.target.class {
+        _ if !whose => {}
         3 => {
             target.community = crate::records::community_party(ctx, a.target.id as u32);
             target.home = crate::records::home_of(ctx, a.target.id as u32);
@@ -670,7 +786,9 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
         }
     }
     // Combat timing (cooldowns, recovery, one windup at a time) holds for every controller.
+    let gate = common::detail_span("begin.gate");
     crate::combat::gate(ctx, id, skill, cur.as_ref(), now).inspect_err(|_| refuse(living_rules::outcome::act::TIMING))?;
+    drop(gate);
     // Work out whether the new action can start at all before abandoning the current one:
     // a higher-priority option that cannot start (e.g. taking food from an empty store) must
     // not cancel the lower-priority work that is actually happening.
@@ -888,7 +1006,10 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
             Some(t) => Activity { target: t.to_ref(), ..act.clone() },
             None => act.clone(),
         };
-        if let Err(why) = sc.check(&act.skill, &skill_ctx(ctx, id, &probe, now)) {
+        let check = common::detail_span("begin.check");
+        let checked = checked(ctx, &sc, id, &probe, now);
+        drop(check);
+        if let Err(why) = checked {
             refuse(living_rules::outcome::act::CHECK);
             if melee {
                 balked(ctx, id, &target, &why, now);
@@ -896,6 +1017,7 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
             return Err(why);
         }
     }
+    let _started = common::detail_span("begin.start");
     if let Some(a) = cur {
         if matches!(a.skill.as_str(), "goto" | "follow") && matches!(skill, "goto" | "follow") && now.saturating_sub(a.started_ms) < 3_000 && a.label != act.label {
             turned_back(ctx, id, &a.label, &act.label, now);
@@ -1071,6 +1193,18 @@ pub fn refresh_rates(ctx: &ReducerContext, id: u32) {
 
 /// Cancel an activity; `why` reports an interruption to the owning node.
 pub fn cancel(ctx: &ReducerContext, a: Activity, now: u64, why: Option<&str>) {
+    cancel_as(ctx, a, now, why, living_rules::outcome::act::BROKEN_OFF);
+}
+
+/// Break off what `a`'s maker was doing because they moved before it was done (a player's move;
+/// a skill whose spec says `on_the_move` is never broken off this way). Told in the rules' words
+/// (`moved_off(skill)`: "the wave stopped: you moved off before it was done"), code `moved`.
+pub fn cancel_moved(ctx: &ReducerContext, a: Activity, now: u64) {
+    let why = common::scripts(ctx).text_of("moved_off", &a.skill).unwrap_or_else(|| "you moved".into());
+    cancel_as(ctx, a, now, Some(&why), living_rules::outcome::act::MOVED);
+}
+
+fn cancel_as(ctx: &ReducerContext, a: Activity, now: u64, why: Option<&str>, code: &'static str) {
     let id = a.id;
     ctx.db.activity().id().delete(id);
     let sc = common::scripts(ctx);
@@ -1097,7 +1231,7 @@ pub fn cancel(ctx: &ReducerContext, a: Activity, now: u64, why: Option<&str>) {
         refresh_rates(ctx, id);
     }
     if let Some(why) = why {
-        report(ctx, &a, false, why, now, living_rules::outcome::act::BROKEN_OFF);
+        report(ctx, &a, false, why, now, code);
     }
 }
 
@@ -2241,6 +2375,9 @@ pub fn fight_report(ctx: &ReducerContext, id: u32, other: u32, now: u64) {
 
 /// A blow that found only air: both sides perceive it, and the fight stays engaged.
 fn missed(ctx: &ReducerContext, attacker: u32, victim: u32, at_v: (f32, f32), skill: &str, now: u64) {
+    // Its onlookers see the blow find only air (`fold`); it wakes none of them, as before.
+    let start = ctx.db.vitals().id().find(victim).map_or(true, |v| now.saturating_sub(v.hurt_ms) > 30_000 || v.hurt_by != attacker);
+    crate::fold::blow(ctx, now, attacker, victim, living_rules::combat::seen::MISS, start, false, false, None, at_v);
     engage(ctx, attacker, now);
     engage(ctx, victim, now);
     common::count(|k| k.missed += 1);
@@ -2360,6 +2497,10 @@ pub fn damage(ctx: &ReducerContext, attacker: u32, victim: u32, amount: f32, ski
         _ => k.hits += 1,
     });
     if defense == Aim::Dash {
+        // Its onlookers see the dodge (`fold`); a dodged first blow wakes none of them, as before.
+        let hb = if seen_shooter { attacker } else { 0 };
+        let start = now.saturating_sub(v.hurt_ms) > 30_000 || v.hurt_by != hb;
+        crate::fold::blow(ctx, now, attacker, victim, living_rules::combat::seen::DODGED, start, false, false, missile, at_v);
         return dodged(ctx, attacker, &vc, skill, from, at_v, now);
     }
     dodge_too_early(ctx, &vc, attacker, skill, missile, now);
@@ -2401,6 +2542,10 @@ pub fn damage(ctx: &ReducerContext, attacker: u32, victim: u32, amount: f32, ski
     let dead = v.hp <= 0.0;
     ctx.db.vitals().id().update(v);
     shown(if defense == Aim::Facing { living_rules::combat::seen::BLOCKED } else { living_rules::combat::seen::HIT }, amount);
+    // What its onlookers saw (`fold`): every blow. A fight's first blow wakes them, as its own
+    // line did before; a blow at one who yielded keeps its own line below.
+    let woke = first_blow && !(yielded && !struck_since_yield);
+    crate::fold::blow(ctx, now, attacker, victim, if defense == Aim::Facing { living_rules::combat::seen::BLOCKED } else { living_rules::combat::seen::HIT }, first_blow, dead, woke, missile, at_v);
     crate::combat::refresh_band(ctx, victim, now);
     let at = ctx.db.body().id().find(victim).map(|b| pos(&b, now)).unwrap_or((0.0, 0.0));
     let an = common::display(ctx, attacker);
@@ -2447,9 +2592,12 @@ pub fn damage(ctx: &ReducerContext, attacker: u32, victim: u32, amount: f32, ski
             };
             common::chronicle(ctx, now, "attack", attacker, victim, at, line);
         }
-        match shot("{a} shot {b} with {m}", "{M} struck {b}") {
-            Some((seen, unseen)) => perceive::witnessed_shot(ctx, now, at, "fight", attacker, victim, &seen, &unseen, 0.7, &[attacker, victim]),
-            None => witnessed(ctx, now, at, "fight", attacker, victim, "{a} attacked {b}", 0.7, &[attacker, victim]),
+        // Folded (`witness_fold_ms`): its onlookers were told above, in their next line.
+        if !crate::fold::on(ctx) {
+            match shot("{a} shot {b} with {m}", "{M} struck {b}") {
+                Some((seen, unseen)) => perceive::witnessed_shot(ctx, now, at, "fight", attacker, victim, &seen, &unseen, 0.7, &[attacker, victim]),
+                None => witnessed(ctx, now, at, "fight", attacker, victim, "{a} attacked {b}", 0.7, &[attacker, victim]),
+            }
         }
         // Wakes a sleeping victim whoever plays it; a mind thinks on it.
         perceive::request_waking(ctx, victim, &format!("{pleading}!"), now, perceive::Wake::Attack);

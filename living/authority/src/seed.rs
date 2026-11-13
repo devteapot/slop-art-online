@@ -201,6 +201,18 @@ pub fn give_ways(ctx: &ReducerContext, id: u32, kind: &str, now: u64) {
     let r: serde_json::Value = serde_json::from_str(REPERTOIRE).expect("repertoire json");
     let Some(ways) = r["species"].get(kind) else { return };
     let routines: Vec<crate::mind::RoutineIn> = ways["routines"].as_object().map(|m| m.iter().map(|(k, g)| crate::mind::RoutineIn { name: k.clone(), graph: g.to_string() }).collect()).unwrap_or_default();
+    // Wolves' ways carry the spacing reflex beside each hunt while the `pack_reflex` law is on.
+    let reflex = living_rules::graph::reflex_applies(kind) && common::laws(ctx).pack_reflex;
+    let routines: Vec<crate::mind::RoutineIn> = routines
+        .into_iter()
+        .map(|r| {
+            if !reflex {
+                return r;
+            }
+            let g = serde_json::from_str::<serde_json::Value>(&r.graph).map(|v| living_rules::graph::with_pack_reflex(&v).to_string()).unwrap_or(r.graph);
+            crate::mind::RoutineIn { name: r.name, graph: g }
+        })
+        .collect();
     let _ = crate::mind::set_routines(ctx, id, &routines, &format!("{kind} instinct"), now);
     if let Ok(g) = living_rules::graph::parse(&ways["top"].to_string()) {
         let _ = crate::mind::set_graph(ctx, id, &g.to_json(), &format!("the ways of a {kind}"), "instinct", now);
@@ -809,7 +821,7 @@ fn packs(ctx: &ReducerContext, map: &living_rules::map::Map, packs: &[SeedPack],
                 let all: serde_json::Value = serde_json::from_str(INSTINCTS).expect("instincts json");
                 match all.get(p.instinct.as_str()) {
                     Some(g) => {
-                        if let Err(e) = crate::mind::set_graph(ctx, id, &g.to_string(), "instinct", "seed", now) {
+                        if let Err(e) = crate::mind::set_graph(ctx, id, &as_installed(ctx, &p.instinct, g), "instinct", "seed", now) {
                             log::warn!("pack instinct {}: {e}", p.instinct);
                         }
                     }
@@ -945,6 +957,17 @@ pub fn young_instinct(kind: &str) -> String {
 pub fn instinct(kind: &str) -> String {
     let all: serde_json::Value = serde_json::from_str(INSTINCTS).expect("instincts json");
     all.get(kind).or_else(|| all.get("person")).map(|v| v.to_string()).unwrap_or_default()
+}
+
+/// A starting instinct as this world installs it: `graph` (instincts.json's `name`) with the
+/// wolves' spacing reflex beside each hunt while the `pack_reflex` law is on and `name` is a
+/// grown wolf's (`graph::with_pack_reflex`, docs/PACK_MIND.md).
+pub fn as_installed(ctx: &ReducerContext, name: &str, graph: &serde_json::Value) -> String {
+    if living_rules::graph::reflex_applies(name) && common::laws(ctx).pack_reflex {
+        living_rules::graph::with_pack_reflex(graph).to_string()
+    } else {
+        graph.to_string()
+    }
 }
 
 /// Create the world from its seed in this one call: terrain, resources, people and animals.
@@ -1340,7 +1363,15 @@ pub fn spawn_with(ctx: &ReducerContext, name: &str, kind: &str, controller: Iden
         ctx.db.vitals().id().update(v);
     }
     // The young start from their species' young instinct (a baby cries and follows a parent).
-    let graph = if c.stage == 0 { young_instinct(kind) } else { instinct(kind) };
+    let graph = if c.stage == 0 {
+        young_instinct(kind)
+    } else {
+        let all: serde_json::Value = serde_json::from_str(INSTINCTS).expect("instincts json");
+        match all.get(kind) {
+            Some(g) => as_installed(ctx, kind, g),
+            None => instinct(kind),
+        }
+    };
     ctx.db.brain().insert(Brain { id, graph, revision: 1, plan: "instinct".into(), source: "instinct".into(), installed_ms: now });
     // Its starting graph is not a mind's thought: its first deliberation request is not held
     // back by `think_min_s` (the reflection and drive timers still count from its birth).

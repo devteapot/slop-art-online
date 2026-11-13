@@ -1,0 +1,113 @@
+{
+ "schema": 1,
+ "family": "character:body-women",
+ "id": "20261112-1da896e3-72546c",
+ "published": "2026-11-12T19:56:58+01:00",
+ "imported": "2026-11-12T19:56:58+01:00",
+ "track": "char-4",
+ "maker": "Claude Fable 5.2",
+ "note": "Women's form set to the reference's measured shares: 18.1% of height across the arms (was 24.7, reference 17.8), waist 11.3 (14.4, 10.9), inseam 51.6 (46.4, 52.4), arm 26.8 (29.7, 26.8), hand 0.65 of a head (0.76, 0.65).",
+ "source": {
+  "commit": "1da896e3ca272536f2b7b8f1fb0d93cb1745410d",
+  "branch": "char-4-body",
+  "dirty": false,
+  "generator": "living/tools/blender/person.py",
+  "generator_sha256": "478bbd975bb0668ebe0c1aabe7674091d9a4ee4fd15d7765710fd0237c9e8e3a",
+  "generator_state": "committed",
+  "params": {}
+ },
+ "renderer": {
+  "method": "asset-view",
+  "commit": "",
+  "key": "asset-view",
+  "preset": "",
+  "note": "the woman preset through recipes at full figure (front, three-quarter, side, back), the game camera (also enlarged), idle and walk frames; silhouette: the unclothed form's outline over the reference's shape at one height; outfits, builds, ages and others: composed people from lines, eight views each"
+ },
+ "preset": "",
+ "media": "media/character-body-women/20261112-1da896e3-72546c",
+ "members": [
+  {
+   "name": "after",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "990ba5079a9688169e4cc8d73a1c7c33aa1feabb3294ebc52e7a25489cf64122",
+   "shots": [
+    "ages",
+    "builds",
+    "full-back",
+    "full-front",
+    "full-side",
+    "full-three-quarter",
+    "game",
+    "game-enlarged",
+    "idle-front",
+    "idle-side",
+    "others",
+    "outfits",
+    "silhouette",
+    "walk-front",
+    "walk-side",
+    "walk-three-quarter"
+   ],
+   "clips": []
+  },
+  {
+   "name": "before",
+   "role": "control",
+   "token_kind": "import",
+   "sha256": "00437cd9fd6e5d0de4e7ec4c51c88d26e47781ab3ae3d3de7091fdd6ac7ea6b0",
+   "shots": [
+    "full-back",
+    "full-front",
+    "full-side",
+    "full-three-quarter",
+    "game",
+    "game-enlarged",
+    "idle-front",
+    "idle-side",
+    "silhouette",
+    "walk-front",
+    "walk-side",
+    "walk-three-quarter"
+   ],
+   "clips": []
+  },
+  {
+   "name": "vroid",
+   "role": "control",
+   "token_kind": "import",
+   "sha256": "9a05c1d88fb9f555b33a408e35a7598605004580e9c17f25b20d0e3d5b6ade4b",
+   "shots": [
+    "full-back",
+    "full-front",
+    "full-side",
+    "full-three-quarter",
+    "game",
+    "game-enlarged",
+    "idle-front",
+    "idle-side",
+    "walk-front",
+    "walk-side",
+    "walk-three-quarter"
+   ],
+   "clips": []
+  },
+  {
+   "name": "blue-protocol",
+   "role": "control",
+   "token_kind": "import",
+   "sha256": "40bd9109446f43e0e789200cb241875bdb9f6f292bd745c624dffe5ecb9a6721",
+   "shots": [
+    "full-front"
+   ],
+   "clips": []
+  }
+ ],
+ "delivered": [
+  {
+   "title": "page",
+   "path": "delivered/index.html",
+   "from": ".local/char-4/index.html"
+  }
+ ]
+}
