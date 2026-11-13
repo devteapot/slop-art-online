@@ -35,6 +35,8 @@ thread_local! {
     static FAMILIAR_NEW: std::cell::RefCell<std::collections::HashMap<u32, u32>> = std::cell::RefCell::new(std::collections::HashMap::new());
     /// When each character last looked for what is new to it (`noticed`, fix 2).
     static NOTICED_AT: std::cell::RefCell<std::collections::HashMap<u32, u64>> = std::cell::RefCell::new(std::collections::HashMap::new());
+    /// When each character last looked at the ground (`known::mark`), at the noticing cadence.
+    static LOOKED_AT: std::cell::RefCell<std::collections::HashMap<u32, u64>> = std::cell::RefCell::new(std::collections::HashMap::new());
     /// Attention cues (`Ev::cues`), per character: when its cues were last checked, and the
     /// (cue, thing) pairs that have fired or were held back by the cooldown and have matched at
     /// every check since, so a cue fires when a thing begins to match, not while it goes on
@@ -1933,7 +1935,11 @@ impl<'a> Ev<'a> {
             let (text, sal) = match prev {
                 None if ch.kind == "person" || ch.kind == self.me.kind => {
                     let named = who == ch.name;
-                    firsts.push((c.id, c.pos, format!("{who}, {place}"), named));
+                    // The body's form by sex goes with a person's first sight (body-sex), so a
+                    // mind remembers it with whom it saw: "a stranger (a woman), 9 tiles west".
+                    let form = crate::sex::word(self.ctx, &ch).map(|f| format!(" ({} {f})", living_rules::sex::article(&f))).unwrap_or_default();
+                    crate::sex::remember(self.ctx, &self.me, &ch, now);
+                    firsts.push((c.id, c.pos, format!("{who}{form}, {place}"), named));
                     continue;
                 }
                 None => (format!("You see {who} {place}."), 0.65),
@@ -2204,6 +2210,19 @@ impl<'a> Ev<'a> {
             if NOTICED_AT.with(|n| n.borrow().get(&me).map_or(true, |t| now.saturating_sub(*t) >= NOTICE_MS)) {
                 NOTICED_AT.with(|n| n.borrow_mut().insert(me, now));
                 self.noticed();
+            }
+        }
+        // Known ground (docs/MOVEMENT_MIND.md, step 3): every character, a person's too, marks
+        // the ground it sees at the noticing cadence; a walk planned over what it had seen is
+        // planned again when it now sees its way blocked.
+        let (me, now) = (self.me.id, self.now);
+        if LOOKED_AT.with(|n| n.borrow().get(&me).map_or(true, |t| now.saturating_sub(*t) >= NOTICE_MS)) {
+            LOOKED_AT.with(|n| n.borrow_mut().insert(me, now));
+            if let Some(b) = ctx.db.body().id().find(me) {
+                let marked = crate::known::mark(ctx, me, self.at, common::facing_at(&b, now), now);
+                if marked > 0 && common::laws(ctx).nav_belief {
+                    crate::motion::replan_if_blocked(ctx, me, now);
+                }
             }
         }
         drop(mind);

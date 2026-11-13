@@ -114,6 +114,9 @@ pub struct ActorFacts {
     /// vitals row give them (docs/STAMINA_PROPOSAL.md).
     pub stamina: f32,
     pub focus: f32,
+    /// The body's sex, "female" or "male" (`living_rules::sex::Sex::name`); "" when the world
+    /// holds none (an animal, or a person of a world from before sex).
+    pub sex: String,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -159,6 +162,8 @@ pub struct TargetFacts {
     /// does), and the fuel a fire that burns fuel still holds (units of its kind's fuel).
     pub lit: bool,
     pub fuel: f32,
+    /// A creature target's sex, as `ActorFacts::sex` ("" when none is held).
+    pub sex: String,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -525,6 +530,15 @@ pub struct Laws {
     /// Sight depends on facing (the `field` of `senses(a)`; the geometry is the `fov_*` laws,
     /// read by the script).
     pub fov_on: bool,
+    /// How far a character sees ground by day (metres): the cells of `known_ground` it marks
+    /// (docs/MOVEMENT_MIND.md, step 3). At night, its own sight.
+    pub ground_sight_m: f32,
+    /// Most ground cells one look marks (0: no cap); the rest are marked by later looks.
+    pub known_cells_pass: f32,
+    /// Walks are planned over what each walker has seen (its `known_ground`), not the map.
+    pub nav_belief: bool,
+    /// The cost of a metre of unseen ground against seen open ground, in a plan over belief.
+    pub unknown_cost: f32,
     /// Wolves' starting instincts carry the spacing reflex (docs/PACK_MIND.md, decision 1):
     /// beside each hunt, a weighted desire to keep apart from mates while closing on the prey
     /// (`graph::with_pack_reflex`). Read where an instinct is installed; a world turns it off.
@@ -710,6 +724,10 @@ impl Default for Laws {
             longing_after_min: 20.0,
             longing_food: 0.0,
             fov_on: false,
+            ground_sight_m: 24.0,
+            known_cells_pass: 0.0,
+            nav_belief: false,
+            unknown_cost: 1.5,
             pack_reflex: true,
             alert_after_hit_s: 15.0,
             alert_while_attacker_near: true,
@@ -2400,6 +2418,54 @@ impl Scripts {
         Ok(b)
     }
 
+    /// The share of people the world makes female when no seed or player says (body-sex): the
+    /// `female_share()` law, 0..1 (shipped and without the law 0.5; an install refuses another
+    /// value: `female_share_law`).
+    pub fn female_share(&self) -> f32 {
+        self.female_share_law().unwrap_or(0.5)
+    }
+
+    /// The `female_share()` law's value, or what is wrong with it.
+    pub fn female_share_law(&self) -> Result<f32, String> {
+        if !self.has("female_share") {
+            return Ok(0.5);
+        }
+        let out = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "female_share", ()).map_err(|e| format!("female_share: {e}"))?;
+        let v = number(&out).ok_or("female_share must return a number from 0 to 1")? as f32;
+        if !(0.0..=1.0).contains(&v) {
+            return Err(format!("female_share must return a number from 0 to 1, not {v}"));
+        }
+        Ok(v)
+    }
+
+    /// The words for a body by sex and life stage (body-sex): the `sex_words()` law (shipped and
+    /// without it `living_rules::sex::SexWords::default`).
+    pub fn sex_words(&self) -> crate::sex::SexWords {
+        self.sex_words_law().unwrap_or_default()
+    }
+
+    /// The `sex_words()` law's words, or what is wrong with them: `#{ female: [4 words], male: [4
+    /// words] }`, one per life stage (infant, child, adult, elder).
+    pub fn sex_words_law(&self) -> Result<crate::sex::SexWords, String> {
+        if !self.has("sex_words") {
+            return Ok(Default::default());
+        }
+        let out = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "sex_words", ()).map_err(|e| format!("sex_words: {e}"))?;
+        let m = out.try_cast::<rhai::Map>().ok_or("sex_words must return #{ female: [4 words], male: [4 words] }")?;
+        if let Some(k) = m.keys().find(|k| !["female", "male"].contains(&k.as_str())) {
+            return Err(format!("sex_words: unknown key `{k}` (the keys are female and male)"));
+        }
+        let four = |k: &str| -> Result<[String; 4], String> {
+            let a = m.get(k).cloned().ok_or(format!("sex_words: `{k}` is missing"))?.try_cast::<rhai::Array>().ok_or(format!("sex_words: `{k}` is a list of 4 words"))?;
+            let ws: Vec<String> = a.into_iter().map(|w| w.into_string().map(|w| w.trim().to_string())).collect::<Result<_, _>>().map_err(|_| format!("sex_words: `{k}` holds words"))?;
+            if ws.len() != 4 || ws.iter().any(|w| w.is_empty()) {
+                return Err(format!("sex_words: `{k}` is 4 words, one per life stage (infant, child, adult, elder)"));
+            }
+            Ok([ws[0].clone(), ws[1].clone(), ws[2].clone(), ws[3].clone()])
+        };
+        Ok(crate::sex::SexWords { female: four("female")?, male: four("male")? })
+    }
+
     /// Whom a mind's scene describes by look (docs/LOOK.md §3): the `appearance_in_scene()` law,
     /// "unnamed" (shipped and without the law: strangers and far figures), "all" or "none".
     pub fn appearance_in_scene(&self) -> crate::look::AppearanceInScene {
@@ -2806,6 +2872,10 @@ impl Scripts {
             longing_after_min: g("longing_after_min", l.longing_after_min).clamp(0.0, 100_000.0),
             longing_food: g("longing_food", l.longing_food).clamp(0.0, 1_000.0),
             fov_on: flag("fov_on", l.fov_on),
+            ground_sight_m: g("ground_sight_m", l.ground_sight_m).clamp(0.0, 256.0),
+            known_cells_pass: g("known_cells_pass", l.known_cells_pass).clamp(0.0, 100_000.0),
+            nav_belief: flag("nav_belief", l.nav_belief),
+            unknown_cost: g("unknown_cost", l.unknown_cost).clamp(1.0, 20.0),
             pack_reflex: flag("pack_reflex", l.pack_reflex),
             alert_after_hit_s: g("alert_after_hit_s", l.alert_after_hit_s).clamp(0.0, 3_600.0),
             alert_while_attacker_near: flag("alert_while_attacker_near", l.alert_while_attacker_near),
@@ -3795,19 +3865,33 @@ mod tests {
     /// world may set, clamped to 0..3600 s.
     #[test]
     fn kin_terms_name_a_relation_and_are_the_world_s() {
+        use crate::sex::Sex;
         let src = include_str!("../../scripts/skills.rhai");
         let sc = Scripts::new(src).unwrap();
         let k = sc.kin();
         assert_eq!(k, &speech::KinTerms::default(), "the shipped script's kin terms are the defaults");
-        assert_eq!(k.named_at("But you have to ask Mother first for the crust", &["parent"]), Some(5));
-        assert_eq!(k.named_at("ask Mother first", &["child", "sibling"]), None, "a parent word names a parent only");
-        assert_eq!(k.named_at("Gran! Come see", &["grandparent"]), Some(0));
-        assert_eq!(k.named_at("my motherland", &["parent"]), None, "whole words only");
+        assert_eq!(k.named_at("But you have to ask Mother first for the crust", &["parent"], None), Some(5));
+        assert_eq!(k.named_at("ask Mother first", &["child", "sibling"], None), None, "a parent word names a parent only");
+        assert_eq!(k.named_at("Gran! Come see", &["grandparent"], None), Some(0));
+        assert_eq!(k.named_at("my motherland", &["parent"], None), None, "whole words only");
+        // By the named one's sex (body-sex): "Mother" names a mother, not a father; "parent" both.
+        assert_eq!(k.named_at("ask Mother first", &["parent"], Some(Sex::Female)), Some(1));
+        assert_eq!(k.named_at("ask Mother first", &["parent"], Some(Sex::Male)), None);
+        assert_eq!(k.named_at("ask Father first", &["parent"], Some(Sex::Male)), Some(1));
+        assert_eq!(k.named_at("ask Father first", &["parent"], Some(Sex::Female)), None);
+        assert_eq!(k.named_at("ask your parent", &["parent"], Some(Sex::Female)), Some(2));
+        assert_eq!(k.named_at("ask your parent", &["parent"], Some(Sex::Male)), Some(2));
+        assert_eq!(k.named_at("my son and my daughter", &["child"], Some(Sex::Female)), Some(4));
+        assert_eq!(k.named_at("my son and my daughter", &["child"], Some(Sex::Male)), Some(1));
         let base = src.replace("fn kin_terms()", "fn shipped_kin_terms()");
         let own = Scripts::new(&format!("{base}\nfn kin_terms() {{ #{{ parent: [\"Amma\"] }} }}\n")).unwrap();
-        assert_eq!(own.kin().named_at("Amma, look", &["parent"]), Some(0));
-        assert_eq!(own.kin().named_at("Mother, look", &["parent"]), None, "a world's own terms replace the defaults");
+        assert_eq!(own.kin().named_at("Amma, look", &["parent"], Some(Sex::Male)), Some(0), "a plain list is words for anyone");
+        assert_eq!(own.kin().named_at("Mother, look", &["parent"], None), None, "a world's own terms replace the defaults");
+        let by = Scripts::new(&format!("{base}\nfn kin_terms() {{ #{{ parent: #{{ female: [\"Amma\"], male: [\"Appa\"] }} }} }}\n")).unwrap();
+        assert_eq!(by.kin().named_at("Appa, look", &["parent"], Some(Sex::Male)), Some(0));
+        assert_eq!(by.kin().named_at("Appa, look", &["parent"], Some(Sex::Female)), None);
         assert!(Scripts::new(&format!("{base}\nfn kin_terms() {{ #{{ cousin: [\"coz\"] }} }}\n")).is_err(), "an unknown relation is refused");
+        assert!(Scripts::new(&format!("{base}\nfn kin_terms() {{ #{{ parent: #{{ mostly: [\"ma\"] }} }} }}\n")).is_err(), "an unknown key is refused");
     }
 
     #[test]

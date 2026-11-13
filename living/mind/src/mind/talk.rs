@@ -1383,7 +1383,7 @@ impl Minds {
         // Where one stands now, asked of the authority (talk-places); else where the line was said.
         let standing = self.standing_now(me).await;
         let here = standing.unwrap_or(heard.at);
-        let places = self.places(me, standing);
+        let places = self.places(me, standing, true);
         let near = self
             .conn
             .db
@@ -1479,12 +1479,17 @@ impl Minds {
             "call" => format!("{}. An ordinary voice carries {voice:.0} m: if they are farther than that, call back (\"way\": \"call\") or go over to them.", if told.is_empty() { "They called this out".to_string() } else { told }),
             _ => String::new(),
         };
+        // The other's body (body-sex), only as one remembers it: made out once at full sight (the
+        // authority's `sex_seen`; someone face to face has been). A voice from someone one has
+        // never made out gives none.
+        let other_body = self.known_sex(me, other).unwrap_or_default();
         let t = prompts::TalkUser {
             name: &c.name,
             identity: &identity,
             pacing: &pacing,
             other: &other_name,
             other_id: other,
+            other_body: &other_body,
             feeling: &feeling,
             mind: &mind,
             memories: &recalled.memories,

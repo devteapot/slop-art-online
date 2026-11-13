@@ -84,6 +84,12 @@ impl Minds {
         // The authored sheet goes in as written (`sheet_persona`), not as a fact.
         f.remove("sheet");
         f.insert("stage".into(), json!(match c.stage { 1 => "child", 3 => "elder", _ => "adult" }));
+        // One's body sex, in the rules' words (body-sex): written before the first mind call (the
+        // authority writes the row with the character), so an identity is never guessed from a name.
+        if let Some(s) = self.sex_of(c.id) {
+            f.insert("sex".into(), json!(s.name()));
+            f.insert("body".into(), json!(prompts::sex_word(s, c.stage)));
+        }
         if let Some(s) = self.settlement_of(c, &layout) {
             let name = self.conn.db.community().id().find(&s.community).map(|k| k.name).unwrap_or_else(|| format!("a {}", s.kind.replace('_', " ")));
             f.insert("settlement".into(), json!({"name": name, "kind": s.kind, "at": [s.x.round(), s.y.round()]}));
@@ -93,9 +99,16 @@ impl Minds {
                 f.insert("community".into(), json!(k.name));
             }
         }
-        let person = |id: u32| self.conn.db.character().id().find(&id).filter(|p| p.alive).map(|p| json!({"id": p.id, "name": p.name}));
+        // One's family, each with their body's sex only where one remembers it (`known_sex`: seen
+        // once at full sight); kinship alone tells no sex.
+        let person = |id: u32| {
+            self.conn.db.character().id().find(&id).filter(|p| p.alive).map(|p| match self.known_sex(c.id, p.id) {
+                Some(s) => json!({"id": p.id, "name": p.name, "is": s}),
+                None => json!({"id": p.id, "name": p.name}),
+            })
+        };
         let parents: Vec<Value> = [c.parent_a, c.parent_b].into_iter().filter(|p| *p != 0).filter_map(person).collect();
-        let children: Vec<Value> = self.conn.db.character().iter().filter(|k| k.alive && (k.parent_a == c.id || k.parent_b == c.id)).map(|k| json!({"id": k.id, "name": k.name})).collect();
+        let children: Vec<Value> = self.conn.db.character().iter().filter(|k| k.alive && (k.parent_a == c.id || k.parent_b == c.id)).filter_map(|k| person(k.id)).collect();
         if !parents.is_empty() {
             f.insert("parents".into(), json!(parents));
         }

@@ -20,6 +20,7 @@ pub mod artifact_table;
 pub mod artifact_type;
 pub mod audience_table;
 pub mod audience_type;
+pub mod backfill_sex_reducer;
 pub mod background_table;
 pub mod background_type;
 pub mod belief_in_type;
@@ -93,6 +94,8 @@ pub mod genome_type;
 pub mod grant_items_reducer;
 pub mod grant_know_how_reducer;
 pub mod grant_repertoires_reducer;
+pub mod ground_edit_table;
+pub mod ground_edit_type;
 pub mod guest_table;
 pub mod guest_type;
 pub mod hear_salt_table;
@@ -116,6 +119,7 @@ pub mod infant_need_type;
 pub mod install_script_reducer;
 pub mod inventory_table;
 pub mod inventory_type;
+pub mod join_as_reducer;
 pub mod join_reducer;
 pub mod join_request_table;
 pub mod join_request_type;
@@ -130,6 +134,8 @@ pub mod know_how_table;
 pub mod know_how_type;
 pub mod knowledge_epoch_table;
 pub mod knowledge_epoch_type;
+pub mod known_ground_table;
+pub mod known_ground_type;
 pub mod known_name_type;
 pub mod land_info_type;
 pub mod land_plan_table;
@@ -195,6 +201,8 @@ pub mod my_readiness_table;
 pub mod my_record_type;
 pub mod my_records_table;
 pub mod my_senses_table;
+pub mod my_sex_table;
+pub mod my_sex_type;
 pub mod my_skill_uses_table;
 pub mod my_vitals_table;
 pub mod own_habits_reducer;
@@ -238,6 +246,8 @@ pub mod relation_table;
 pub mod relation_type;
 pub mod release_skill_reducer;
 pub mod relook_reducer;
+pub mod remembered_table;
+pub mod remembered_type;
 pub mod resource_node_table;
 pub mod resource_node_type;
 pub mod resume_genesis_reducer;
@@ -271,6 +281,10 @@ pub mod set_weather_reducer;
 pub mod set_world_law_reducer;
 pub mod settlement_table;
 pub mod settlement_type;
+pub mod sex_row_type;
+pub mod sex_seen_table;
+pub mod sex_seen_type;
+pub mod sex_table;
 pub mod skill_card_table;
 pub mod skill_card_type;
 pub mod skill_code_table;
@@ -336,6 +350,7 @@ pub use artifact_table::*;
 pub use artifact_type::Artifact;
 pub use audience_table::*;
 pub use audience_type::Audience;
+pub use backfill_sex_reducer::backfill_sex;
 pub use background_table::*;
 pub use background_type::Background;
 pub use belief_in_type::BeliefIn;
@@ -409,6 +424,8 @@ pub use genome_type::Genome;
 pub use grant_items_reducer::grant_items;
 pub use grant_know_how_reducer::grant_know_how;
 pub use grant_repertoires_reducer::grant_repertoires;
+pub use ground_edit_table::*;
+pub use ground_edit_type::GroundEdit;
 pub use guest_table::*;
 pub use guest_type::Guest;
 pub use hear_salt_table::*;
@@ -432,6 +449,7 @@ pub use infant_need_type::InfantNeed;
 pub use install_script_reducer::install_script;
 pub use inventory_table::*;
 pub use inventory_type::Inventory;
+pub use join_as_reducer::join_as;
 pub use join_reducer::join;
 pub use join_request_table::*;
 pub use join_request_type::JoinRequest;
@@ -446,6 +464,8 @@ pub use know_how_table::*;
 pub use know_how_type::KnowHow;
 pub use knowledge_epoch_table::*;
 pub use knowledge_epoch_type::KnowledgeEpoch;
+pub use known_ground_table::*;
+pub use known_ground_type::KnownGround;
 pub use known_name_type::KnownName;
 pub use land_info_type::LandInfo;
 pub use land_plan_table::*;
@@ -511,6 +531,8 @@ pub use my_readiness_table::*;
 pub use my_record_type::MyRecord;
 pub use my_records_table::*;
 pub use my_senses_table::*;
+pub use my_sex_table::*;
+pub use my_sex_type::MySex;
 pub use my_skill_uses_table::*;
 pub use my_vitals_table::*;
 pub use own_habits_reducer::own_habits;
@@ -554,6 +576,8 @@ pub use relation_table::*;
 pub use relation_type::Relation;
 pub use release_skill_reducer::release_skill;
 pub use relook_reducer::relook;
+pub use remembered_table::*;
+pub use remembered_type::Remembered;
 pub use resource_node_table::*;
 pub use resource_node_type::ResourceNode;
 pub use resume_genesis_reducer::resume_genesis;
@@ -587,6 +611,10 @@ pub use set_weather_reducer::set_weather;
 pub use set_world_law_reducer::set_world_law;
 pub use settlement_table::*;
 pub use settlement_type::Settlement;
+pub use sex_row_type::SexRow;
+pub use sex_seen_table::*;
+pub use sex_seen_type::SexSeen;
+pub use sex_table::*;
 pub use skill_card_table::*;
 pub use skill_card_type::SkillCard;
 pub use skill_code_table::*;
@@ -650,6 +678,7 @@ pub enum Reducer {
         id: u32,
         hp: f32,
     },
+    BackfillSex,
     ClientConnected,
     ClientDisconnected,
     CreateFloor {
@@ -697,6 +726,10 @@ pub enum Reducer {
     },
     Join {
         name: String,
+    },
+    JoinAs {
+        name: String,
+        sex: String,
     },
     Kill {
         id: u32,
@@ -857,6 +890,7 @@ impl __sdk::Reducer for Reducer {
     fn reducer_name(&self) -> &'static str {
         match self {
             Reducer::AdminSetVitals { .. } => "admin_set_vitals",
+            Reducer::BackfillSex => "backfill_sex",
             Reducer::ClientConnected => "client_connected",
             Reducer::ClientDisconnected => "client_disconnected",
             Reducer::CreateFloor { .. } => "create_floor",
@@ -872,6 +906,7 @@ impl __sdk::Reducer for Reducer {
             Reducer::HumanSpeak { .. } => "human_speak",
             Reducer::InstallScript { .. } => "install_script",
             Reducer::Join { .. } => "join",
+            Reducer::JoinAs { .. } => "join_as",
             Reducer::Kill { .. } => "kill",
             Reducer::MindAct { .. } => "mind_act",
             Reducer::MindConsolidated { .. } => "mind_consolidated",
@@ -919,6 +954,9 @@ impl __sdk::Reducer for Reducer {
                     id: id.clone(),
                     hp: hp.clone(),
                 })
+            }
+            Reducer::BackfillSex => {
+                __sats::bsatn::to_vec(&backfill_sex_reducer::BackfillSexArgs {})
             }
             Reducer::ClientConnected => {
                 __sats::bsatn::to_vec(&client_connected_reducer::ClientConnectedArgs {})
@@ -990,6 +1028,10 @@ impl __sdk::Reducer for Reducer {
             Reducer::Join { name } => {
                 __sats::bsatn::to_vec(&join_reducer::JoinArgs { name: name.clone() })
             }
+            Reducer::JoinAs { name, sex } => __sats::bsatn::to_vec(&join_as_reducer::JoinAsArgs {
+                name: name.clone(),
+                sex: sex.clone(),
+            }),
             Reducer::Kill { id, cause } => __sats::bsatn::to_vec(&kill_reducer::KillArgs {
                 id: id.clone(),
                 cause: cause.clone(),
@@ -1277,6 +1319,7 @@ pub struct DbUpdate {
     genesis: __sdk::TableUpdate<Genesis>,
     genesis_timer: __sdk::TableUpdate<GenesisTimer>,
     genome: __sdk::TableUpdate<Genome>,
+    ground_edit: __sdk::TableUpdate<GroundEdit>,
     guest: __sdk::TableUpdate<Guest>,
     hear_salt: __sdk::TableUpdate<HearSalt>,
     heard: __sdk::TableUpdate<Heard>,
@@ -1289,6 +1332,7 @@ pub struct DbUpdate {
     judgment: __sdk::TableUpdate<Judgment>,
     know_how: __sdk::TableUpdate<KnowHow>,
     knowledge_epoch: __sdk::TableUpdate<KnowledgeEpoch>,
+    known_ground: __sdk::TableUpdate<KnownGround>,
     land: __sdk::TableUpdate<LandInfo>,
     land_plan: __sdk::TableUpdate<LandPlan>,
     law_change: __sdk::TableUpdate<LawChange>,
@@ -1320,6 +1364,7 @@ pub struct DbUpdate {
     my_readiness: __sdk::TableUpdate<Readiness>,
     my_records: __sdk::TableUpdate<MyRecord>,
     my_senses: __sdk::TableUpdate<CharacterSenses>,
+    my_sex: __sdk::TableUpdate<MySex>,
     my_skill_uses: __sdk::TableUpdate<SkillUse>,
     my_vitals: __sdk::TableUpdate<Vitals>,
     pasture: __sdk::TableUpdate<Pasture>,
@@ -1336,6 +1381,7 @@ pub struct DbUpdate {
     record_clock: __sdk::TableUpdate<RecordClock>,
     record_party: __sdk::TableUpdate<RecordParty>,
     relation: __sdk::TableUpdate<Relation>,
+    remembered: __sdk::TableUpdate<Remembered>,
     resource_node: __sdk::TableUpdate<ResourceNode>,
     reveal: __sdk::TableUpdate<Reveal>,
     rhythm: __sdk::TableUpdate<Rhythm>,
@@ -1349,6 +1395,8 @@ pub struct DbUpdate {
     seen_fighters: __sdk::TableUpdate<Fighter>,
     seen_stock: __sdk::TableUpdate<SeenStock>,
     settlement: __sdk::TableUpdate<Settlement>,
+    sex: __sdk::TableUpdate<SexRow>,
+    sex_seen: __sdk::TableUpdate<SexSeen>,
     skill_card: __sdk::TableUpdate<SkillCard>,
     skill_code: __sdk::TableUpdate<SkillCode>,
     skill_use: __sdk::TableUpdate<SkillUse>,
@@ -1488,6 +1536,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "genome" => db_update
                     .genome
                     .append(genome_table::parse_table_update(table_update)?),
+                "ground_edit" => db_update
+                    .ground_edit
+                    .append(ground_edit_table::parse_table_update(table_update)?),
                 "guest" => db_update
                     .guest
                     .append(guest_table::parse_table_update(table_update)?),
@@ -1524,6 +1575,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "knowledge_epoch" => db_update
                     .knowledge_epoch
                     .append(knowledge_epoch_table::parse_table_update(table_update)?),
+                "known_ground" => db_update
+                    .known_ground
+                    .append(known_ground_table::parse_table_update(table_update)?),
                 "land" => db_update
                     .land
                     .append(land_table::parse_table_update(table_update)?),
@@ -1617,6 +1671,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "my_senses" => db_update
                     .my_senses
                     .append(my_senses_table::parse_table_update(table_update)?),
+                "my_sex" => db_update
+                    .my_sex
+                    .append(my_sex_table::parse_table_update(table_update)?),
                 "my_skill_uses" => db_update
                     .my_skill_uses
                     .append(my_skill_uses_table::parse_table_update(table_update)?),
@@ -1665,6 +1722,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "relation" => db_update
                     .relation
                     .append(relation_table::parse_table_update(table_update)?),
+                "remembered" => db_update
+                    .remembered
+                    .append(remembered_table::parse_table_update(table_update)?),
                 "resource_node" => db_update
                     .resource_node
                     .append(resource_node_table::parse_table_update(table_update)?),
@@ -1704,6 +1764,12 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "settlement" => db_update
                     .settlement
                     .append(settlement_table::parse_table_update(table_update)?),
+                "sex" => db_update
+                    .sex
+                    .append(sex_table::parse_table_update(table_update)?),
+                "sex_seen" => db_update
+                    .sex_seen
+                    .append(sex_seen_table::parse_table_update(table_update)?),
                 "skill_card" => db_update
                     .skill_card
                     .append(skill_card_table::parse_table_update(table_update)?),
@@ -1901,6 +1967,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.genome = cache
             .apply_diff_to_table::<Genome>("genome", &self.genome)
             .with_updates_by_pk(|row| &row.id);
+        diff.ground_edit = cache
+            .apply_diff_to_table::<GroundEdit>("ground_edit", &self.ground_edit)
+            .with_updates_by_pk(|row| &row.id);
         diff.guest = cache
             .apply_diff_to_table::<Guest>("guest", &self.guest)
             .with_updates_by_pk(|row| &row.id);
@@ -1933,6 +2002,9 @@ impl __sdk::DbUpdate for DbUpdate {
             .with_updates_by_pk(|row| &row.id);
         diff.knowledge_epoch = cache
             .apply_diff_to_table::<KnowledgeEpoch>("knowledge_epoch", &self.knowledge_epoch)
+            .with_updates_by_pk(|row| &row.id);
+        diff.known_ground = cache
+            .apply_diff_to_table::<KnownGround>("known_ground", &self.known_ground)
             .with_updates_by_pk(|row| &row.id);
         diff.land = cache
             .apply_diff_to_table::<LandInfo>("land", &self.land)
@@ -2015,6 +2087,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.relation = cache
             .apply_diff_to_table::<Relation>("relation", &self.relation)
             .with_updates_by_pk(|row| &row.id);
+        diff.remembered = cache
+            .apply_diff_to_table::<Remembered>("remembered", &self.remembered)
+            .with_updates_by_pk(|row| &row.id);
         diff.resource_node = cache
             .apply_diff_to_table::<ResourceNode>("resource_node", &self.resource_node)
             .with_updates_by_pk(|row| &row.id);
@@ -2041,6 +2116,12 @@ impl __sdk::DbUpdate for DbUpdate {
             .with_updates_by_pk(|row| &row.id);
         diff.settlement = cache
             .apply_diff_to_table::<Settlement>("settlement", &self.settlement)
+            .with_updates_by_pk(|row| &row.id);
+        diff.sex = cache
+            .apply_diff_to_table::<SexRow>("sex", &self.sex)
+            .with_updates_by_pk(|row| &row.id);
+        diff.sex_seen = cache
+            .apply_diff_to_table::<SexSeen>("sex_seen", &self.sex_seen)
             .with_updates_by_pk(|row| &row.id);
         diff.skill_card = cache
             .apply_diff_to_table::<SkillCard>("skill_card", &self.skill_card)
@@ -2152,6 +2233,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.my_records = cache.apply_diff_to_table::<MyRecord>("my_records", &self.my_records);
         diff.my_senses = cache
             .apply_diff_to_table::<CharacterSenses>("my_senses", &self.my_senses)
+            .with_updates_by_pk(|row| &row.id);
+        diff.my_sex = cache
+            .apply_diff_to_table::<MySex>("my_sex", &self.my_sex)
             .with_updates_by_pk(|row| &row.id);
         diff.my_skill_uses =
             cache.apply_diff_to_table::<SkillUse>("my_skill_uses", &self.my_skill_uses);
@@ -2288,6 +2372,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "genome" => db_update
                     .genome
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "ground_edit" => db_update
+                    .ground_edit
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "guest" => db_update
                     .guest
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
@@ -2323,6 +2410,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "knowledge_epoch" => db_update
                     .knowledge_epoch
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "known_ground" => db_update
+                    .known_ground
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "land" => db_update
                     .land
@@ -2417,6 +2507,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "my_senses" => db_update
                     .my_senses
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "my_sex" => db_update
+                    .my_sex
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "my_skill_uses" => db_update
                     .my_skill_uses
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
@@ -2465,6 +2558,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "relation" => db_update
                     .relation
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "remembered" => db_update
+                    .remembered
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "resource_node" => db_update
                     .resource_node
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
@@ -2503,6 +2599,12 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "settlement" => db_update
                     .settlement
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "sex" => db_update
+                    .sex
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "sex_seen" => db_update
+                    .sex_seen
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "skill_card" => db_update
                     .skill_card
@@ -2688,6 +2790,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "genome" => db_update
                     .genome
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "ground_edit" => db_update
+                    .ground_edit
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "guest" => db_update
                     .guest
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -2723,6 +2828,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "knowledge_epoch" => db_update
                     .knowledge_epoch
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "known_ground" => db_update
+                    .known_ground
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "land" => db_update
                     .land
@@ -2817,6 +2925,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "my_senses" => db_update
                     .my_senses
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "my_sex" => db_update
+                    .my_sex
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "my_skill_uses" => db_update
                     .my_skill_uses
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -2865,6 +2976,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "relation" => db_update
                     .relation
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "remembered" => db_update
+                    .remembered
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "resource_node" => db_update
                     .resource_node
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -2903,6 +3017,12 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "settlement" => db_update
                     .settlement
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "sex" => db_update
+                    .sex
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "sex_seen" => db_update
+                    .sex_seen
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "skill_card" => db_update
                     .skill_card
@@ -3016,6 +3136,7 @@ pub struct AppliedDiff<'r> {
     genesis: __sdk::TableAppliedDiff<'r, Genesis>,
     genesis_timer: __sdk::TableAppliedDiff<'r, GenesisTimer>,
     genome: __sdk::TableAppliedDiff<'r, Genome>,
+    ground_edit: __sdk::TableAppliedDiff<'r, GroundEdit>,
     guest: __sdk::TableAppliedDiff<'r, Guest>,
     hear_salt: __sdk::TableAppliedDiff<'r, HearSalt>,
     heard: __sdk::TableAppliedDiff<'r, Heard>,
@@ -3028,6 +3149,7 @@ pub struct AppliedDiff<'r> {
     judgment: __sdk::TableAppliedDiff<'r, Judgment>,
     know_how: __sdk::TableAppliedDiff<'r, KnowHow>,
     knowledge_epoch: __sdk::TableAppliedDiff<'r, KnowledgeEpoch>,
+    known_ground: __sdk::TableAppliedDiff<'r, KnownGround>,
     land: __sdk::TableAppliedDiff<'r, LandInfo>,
     land_plan: __sdk::TableAppliedDiff<'r, LandPlan>,
     law_change: __sdk::TableAppliedDiff<'r, LawChange>,
@@ -3059,6 +3181,7 @@ pub struct AppliedDiff<'r> {
     my_readiness: __sdk::TableAppliedDiff<'r, Readiness>,
     my_records: __sdk::TableAppliedDiff<'r, MyRecord>,
     my_senses: __sdk::TableAppliedDiff<'r, CharacterSenses>,
+    my_sex: __sdk::TableAppliedDiff<'r, MySex>,
     my_skill_uses: __sdk::TableAppliedDiff<'r, SkillUse>,
     my_vitals: __sdk::TableAppliedDiff<'r, Vitals>,
     pasture: __sdk::TableAppliedDiff<'r, Pasture>,
@@ -3075,6 +3198,7 @@ pub struct AppliedDiff<'r> {
     record_clock: __sdk::TableAppliedDiff<'r, RecordClock>,
     record_party: __sdk::TableAppliedDiff<'r, RecordParty>,
     relation: __sdk::TableAppliedDiff<'r, Relation>,
+    remembered: __sdk::TableAppliedDiff<'r, Remembered>,
     resource_node: __sdk::TableAppliedDiff<'r, ResourceNode>,
     reveal: __sdk::TableAppliedDiff<'r, Reveal>,
     rhythm: __sdk::TableAppliedDiff<'r, Rhythm>,
@@ -3088,6 +3212,8 @@ pub struct AppliedDiff<'r> {
     seen_fighters: __sdk::TableAppliedDiff<'r, Fighter>,
     seen_stock: __sdk::TableAppliedDiff<'r, SeenStock>,
     settlement: __sdk::TableAppliedDiff<'r, Settlement>,
+    sex: __sdk::TableAppliedDiff<'r, SexRow>,
+    sex_seen: __sdk::TableAppliedDiff<'r, SexSeen>,
     skill_card: __sdk::TableAppliedDiff<'r, SkillCard>,
     skill_code: __sdk::TableAppliedDiff<'r, SkillCode>,
     skill_use: __sdk::TableAppliedDiff<'r, SkillUse>,
@@ -3182,6 +3308,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
             event,
         );
         callbacks.invoke_table_row_callbacks::<Genome>("genome", &self.genome, event);
+        callbacks.invoke_table_row_callbacks::<GroundEdit>("ground_edit", &self.ground_edit, event);
         callbacks.invoke_table_row_callbacks::<Guest>("guest", &self.guest, event);
         callbacks.invoke_table_row_callbacks::<HearSalt>("hear_salt", &self.hear_salt, event);
         callbacks.invoke_table_row_callbacks::<Heard>("heard", &self.heard, event);
@@ -3208,6 +3335,11 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         callbacks.invoke_table_row_callbacks::<KnowledgeEpoch>(
             "knowledge_epoch",
             &self.knowledge_epoch,
+            event,
+        );
+        callbacks.invoke_table_row_callbacks::<KnownGround>(
+            "known_ground",
+            &self.known_ground,
             event,
         );
         callbacks.invoke_table_row_callbacks::<LandInfo>("land", &self.land, event);
@@ -3277,6 +3409,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
             &self.my_senses,
             event,
         );
+        callbacks.invoke_table_row_callbacks::<MySex>("my_sex", &self.my_sex, event);
         callbacks.invoke_table_row_callbacks::<SkillUse>(
             "my_skill_uses",
             &self.my_skill_uses,
@@ -3305,6 +3438,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
             event,
         );
         callbacks.invoke_table_row_callbacks::<Relation>("relation", &self.relation, event);
+        callbacks.invoke_table_row_callbacks::<Remembered>("remembered", &self.remembered, event);
         callbacks.invoke_table_row_callbacks::<ResourceNode>(
             "resource_node",
             &self.resource_node,
@@ -3334,6 +3468,8 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         );
         callbacks.invoke_table_row_callbacks::<SeenStock>("seen_stock", &self.seen_stock, event);
         callbacks.invoke_table_row_callbacks::<Settlement>("settlement", &self.settlement, event);
+        callbacks.invoke_table_row_callbacks::<SexRow>("sex", &self.sex, event);
+        callbacks.invoke_table_row_callbacks::<SexSeen>("sex_seen", &self.sex_seen, event);
         callbacks.invoke_table_row_callbacks::<SkillCard>("skill_card", &self.skill_card, event);
         callbacks.invoke_table_row_callbacks::<SkillCode>("skill_code", &self.skill_code, event);
         callbacks.invoke_table_row_callbacks::<SkillUse>("skill_use", &self.skill_use, event);
@@ -4055,6 +4191,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         genesis_table::register_table(client_cache);
         genesis_timer_table::register_table(client_cache);
         genome_table::register_table(client_cache);
+        ground_edit_table::register_table(client_cache);
         guest_table::register_table(client_cache);
         hear_salt_table::register_table(client_cache);
         heard_table::register_table(client_cache);
@@ -4067,6 +4204,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         judgment_table::register_table(client_cache);
         know_how_table::register_table(client_cache);
         knowledge_epoch_table::register_table(client_cache);
+        known_ground_table::register_table(client_cache);
         land_table::register_table(client_cache);
         land_plan_table::register_table(client_cache);
         law_change_table::register_table(client_cache);
@@ -4098,6 +4236,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         my_readiness_table::register_table(client_cache);
         my_records_table::register_table(client_cache);
         my_senses_table::register_table(client_cache);
+        my_sex_table::register_table(client_cache);
         my_skill_uses_table::register_table(client_cache);
         my_vitals_table::register_table(client_cache);
         pasture_table::register_table(client_cache);
@@ -4114,6 +4253,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         record_clock_table::register_table(client_cache);
         record_party_table::register_table(client_cache);
         relation_table::register_table(client_cache);
+        remembered_table::register_table(client_cache);
         resource_node_table::register_table(client_cache);
         reveal_table::register_table(client_cache);
         rhythm_table::register_table(client_cache);
@@ -4127,6 +4267,8 @@ impl __sdk::SpacetimeModule for RemoteModule {
         seen_fighters_table::register_table(client_cache);
         seen_stock_table::register_table(client_cache);
         settlement_table::register_table(client_cache);
+        sex_table::register_table(client_cache);
+        sex_seen_table::register_table(client_cache);
         skill_card_table::register_table(client_cache);
         skill_code_table::register_table(client_cache);
         skill_use_table::register_table(client_cache);
@@ -4186,6 +4328,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "genesis",
         "genesis_timer",
         "genome",
+        "ground_edit",
         "guest",
         "hear_salt",
         "heard",
@@ -4198,6 +4341,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "judgment",
         "know_how",
         "knowledge_epoch",
+        "known_ground",
         "land",
         "land_plan",
         "law_change",
@@ -4229,6 +4373,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "my_readiness",
         "my_records",
         "my_senses",
+        "my_sex",
         "my_skill_uses",
         "my_vitals",
         "pasture",
@@ -4245,6 +4390,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "record_clock",
         "record_party",
         "relation",
+        "remembered",
         "resource_node",
         "reveal",
         "rhythm",
@@ -4258,6 +4404,8 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "seen_fighters",
         "seen_stock",
         "settlement",
+        "sex",
+        "sex_seen",
         "skill_card",
         "skill_code",
         "skill_use",

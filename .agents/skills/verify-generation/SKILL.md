@@ -33,6 +33,8 @@ For a focused rerun:
 
 `--seeds a,b` limits the worlds to those seeds, for example `--feature worlds --seeds island,plan-test,cullet,floor-megacity-2k,floor-megacity-4k` after a land, city or plan change, or after the model table (`living/rules/data/buildings.json`, written by `gen_buildings.sh` and `gen_city.sh`, and for Cullet's lots by `gen_cullet.sh`, which replaces only the `cullet` style's entries) is regenerated: its footprints and eye-height cells decide the hosted tiles. Run `cargo test -p living-rules pinned_digests_hold` then too. It may also name any other tracked seed in `living/seeds/` (a trial world such as `hamlet`), which gets the same generic checks: dimensions, chunks, settlements and their authored residents, sheets, parents, promised resources, animal counts.
 
+Since `sex-1` every world's checks include body sex (`check_sex`: a row per person, the seed's sex for its residents, the world's pick recomputed for the rest) and looks by sex (pool picks among the entries of the person's sex, every look showing its wearer's sex); see [features/sex.md](features/sex.md).
+
 `worlds` includes repeatability. `authored` executes the real `author_world.py aske-coast --compile-only`, then `author_world.py island --compile-only` (a planned world, `world.json`), each in its own copied tree with network calls blocked and recorded. `guards` runs every `seed::tests::` native test (seven since plan-2) and publishes a valid JSON seed missing `animals`. The malformed copy stays in `.local`.
 
 ## Evidence and cleanup

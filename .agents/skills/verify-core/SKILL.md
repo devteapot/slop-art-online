@@ -93,6 +93,9 @@ python3 "$C/scenes.py" moves --run "$R" > "$E/moves.txt" 2>&1
 python3 "$C/scenes.py" flee_wall --run "$R" > "$E/flee_wall.txt" 2>&1
 # Nothing followed out of sight: a pursuit to the last-seen place, a flight from it (features/steering.md#out-of-sight-last-seen-places, about 1.5 min).
 python3 "$C/scenes.py" pursue_last_seen --run "$R" > "$E/pursue_last_seen.txt" 2>&1
+# Known ground marked by every character, and walks planned over it under nav_belief (features/steering.md#known-ground-and-walking-over-belief, about 4 min together).
+python3 "$C/scenes.py" known_ground --run "$R" > "$E/known_ground.txt" 2>&1
+python3 "$C/scenes.py" nav_belief --run "$R" > "$E/nav_belief.txt" 2>&1
 # Breath, tiredness and focus (features/breath.md, about 2 min; it changes and restores world laws).
 python3 "$C/scenes.py" stamina --run "$R" > "$E/stamina.txt" 2>&1
 # Fight length and the wolf chase (features/breath.md, about 20 min; set run_share or wolf_run
@@ -302,6 +305,16 @@ python3 "$V" launch --run "$F" --seed stage1-acts > ".local/living/verify/$F/lau
 python3 "$V" doctor --run "$F" > ".local/living/verify/$F/doctor.txt" 2>&1
 python3 "$C/scenes.py" family_laws --run "$F" > ".local/living/verify/$F/family_laws.txt" 2>&1
 python3 "$V" cleanup --run "$F"
+
+# Body sex (features/sex.md, about 6 min): rows, the seed's and the world's pick, female_share,
+# kin words by sex, conceive_needs_pair on and off, births. Its own seed: stage1-acts with the
+# grown members' sexes given (written by `scenes.py sex-seed`).
+X=$R-sex
+python3 "$C/scenes.py" sex-seed
+python3 "$V" launch --run "$X" --seed "$PWD/.local/living/verify/sex-family" > ".local/living/verify/$X-launch.txt" 2>&1
+python3 "$V" doctor --run "$X" > ".local/living/verify/$X-doctor.txt" 2>&1
+python3 "$C/scenes.py" sex --run "$X" > ".local/living/verify/$X/sex.txt" 2>&1
+python3 "$V" cleanup --run "$X"
 
 # The wolves' spacing reflex (the pack_reflex law, on by default): every wolf's starting
 # graph with the law on, none with it off (features/wildlife.md; about 2 min each).

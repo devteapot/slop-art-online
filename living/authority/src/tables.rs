@@ -61,6 +61,49 @@ pub struct Look {
     pub words: LookWords,
 }
 
+/// A person's body sex (private; docs/LIVING_CORE.md, "Body sex"): 1 female, 2 male
+/// (`living_rules::sex::Sex`). One row per person, written once when they come into the world
+/// (`seed::spawn_sexed`, before anything reads it in that transaction: their look, their first
+/// mind call) and kept after death, so kin words still name the dead; never changed. "Unknown" is
+/// only the absence of a row (a world from before sex, until the admin's `backfill_sex`). Always
+/// private, whatever the build's `LIVING_PERCEPTION`: clients learn a body's sex only as they
+/// perceive it (its look, the far phrase) and a player its own through `my_sex`. Read by primary
+/// key only (look assignment, scenes, talk, kin words, the self line); the mind service reads it
+/// as the owner. A separate table, not a column on `character`: appending a column rewrites the
+/// whole table and disconnects every client (2.14.1 auto-migration `AddColumns`).
+#[spacetimedb::table(accessor = sex)]
+pub struct SexRow {
+    #[primary_key]
+    pub id: u32,
+    pub sex: u8,
+}
+
+/// What a mind remembers of a person's body (private; sex-1, docs/LIVING_CORE.md "Body sex"):
+/// `observer` (a minded character) made out `known` at full sight, and saw their sex `sex`. Written
+/// once per pair, the first time: in the observer's scene (`perceive::scene_json`, a person made
+/// out) and at a first sight (`brain.rs`); never from afar, by name, kinship, a relation or speech.
+/// The mind service states another's sex only from this row, from what is in sight now, or face
+/// to face. Deleted with the observer at death. Read by the pair index; the mind service reads it
+/// as the owner.
+#[spacetimedb::table(accessor = sex_seen, index(accessor = by_pair, btree(columns = [observer, known])))]
+pub struct SexSeen {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    #[index(btree)]
+    pub observer: u32,
+    pub known: u32,
+    pub sex: u8,
+    pub at_ms: u64,
+}
+
+/// A player's own body sex (`my_sex`): "female" or "male" (`living_rules::sex::Sex::name`).
+#[derive(SpacetimeType, Clone, Debug, PartialEq)]
+pub struct MySex {
+    pub id: u32,
+    pub sex: String,
+}
+
 /// One line of a person entry (private; static world data, written at genesis and at `relook`):
 /// the line `key` that person `person` wears in band `band`, and its words. Read by point lookup
 /// on (`person`, `band`). Two people with the same line share its key, so the key is not unique.
@@ -906,6 +949,61 @@ pub struct FarHandle {
     pub first_ms: u64,
     pub last_ms: u64,
     pub made_out_ms: u64,
+}
+
+/// Known ground (docs/MOVEMENT_MIND.md, step 3): which 4 m cells of one 128 m block (8 × 8
+/// chunks) a character has seen, and the map's edit count (`ground_edit.id`) when each chunk was
+/// last seen. `cells`: 64 little-endian u16 masks; `seen_at`: 64 little-endian u32. Private.
+/// Written by the character's own looks (`known::mark`), at most every few seconds; gone at
+/// death.
+#[spacetimedb::table(accessor = known_ground,
+    index(accessor = by_actor_block, btree(columns = [actor, block])))]
+pub struct KnownGround {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    #[index(btree)]
+    pub actor: u32,
+    pub block: u32,
+    pub cells: Vec<u8>,
+    pub seen_at: Vec<u8>,
+    pub last_ms: u64,
+}
+
+/// What a character last saw of a thing that changes (docs/MOVEMENT_MIND.md, step 3): a gate
+/// open or shut (`kind` 1, `target` the gate's id, `state` 1 open). Private; bounded per
+/// observer; gone at death.
+#[spacetimedb::table(accessor = remembered,
+    index(accessor = by_observer_target, btree(columns = [observer, target])))]
+pub struct Remembered {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    #[index(btree)]
+    pub observer: u32,
+    pub target: u64,
+    pub kind: u8,
+    pub x: f32,
+    pub y: f32,
+    pub state: u8,
+    pub seen_ms: u64,
+}
+
+pub const REMEMBER_GATE: u8 = 1;
+
+/// A terrain tile changed after genesis (a wall built, a road laid): its chunk, its index in the
+/// chunk and its byte before. The id is the map's edit count, so a character's view of a chunk
+/// it saw at count `n` is the map now with the edits after `n` undone. Private; rare.
+#[spacetimedb::table(accessor = ground_edit)]
+pub struct GroundEdit {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    #[index(btree)]
+    pub chunk: u32,
+    pub tile: u16,
+    pub before: u8,
+    pub at_ms: u64,
 }
 
 /// Bodily familiarity: regions, creatures and structures a character has encountered.
