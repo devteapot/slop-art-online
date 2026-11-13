@@ -96,4 +96,3 @@ Since `known-ground` (2026-11-13, docs/MOVEMENT_MIND.md) the authority's scene (
 ```
 
 The case (on the island, whose residents have places) asks one resident to think, reads the scene of its pending request and the prompt the fake model is sent: every own place with the bearing worked out in the driver from the body's position (the same rules as the authority's), one out of sight (over 11 m), and none of another resident's place names that it does not share. Evidence: `sent-prompt.txt`, the request's scene.
-
