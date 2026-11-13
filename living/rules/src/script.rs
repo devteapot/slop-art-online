@@ -544,6 +544,11 @@ pub struct Laws {
     /// once per this many ms (docs/BATTLE_SCALE.md, fix 3); the percept is written at once and in
     /// full. 0: woken by each, as before.
     pub witness_wake_ms: f32,
+    /// A diagnostic, 0 in play (docs/PERCEPTION.md, "Module memory and rollback"): a step the
+    /// world fails on purpose, to prove that nothing kept in module memory outlives a
+    /// transaction that rolled back (1 the tick after its sweep, 2 the tick by a panic, 3
+    /// `place_at`, 4 `kill`, 5 `join`; 6 drops the marks kept in memory, as if made elsewhere).
+    pub memory_test: f32,
     /// What an onlooker sees of fights it is not party to is told as one line per this many ms
     /// (docs/BATTLE_SCALE.md, fix 4): every blow it could see, with counts and outcomes. A blow
     /// at it or by it is told at once. 0: each fight's first blow told at once, as before.
@@ -670,6 +675,7 @@ impl Default for Laws {
             think_framing: false,
             cue_check_s: 1.0,
             witness_wake_ms: 500.0,
+            memory_test: 0.0,
             witness_fold_ms: 2000.0,
             regard_cache: true,
             regard_cache_check: false,
@@ -2737,6 +2743,7 @@ impl Scripts {
             think_framing: flag("think_framing", l.think_framing),
             cue_check_s: g("cue_check_s", l.cue_check_s).clamp(0.1, 60.0),
             witness_wake_ms: g("witness_wake_ms", l.witness_wake_ms).clamp(0.0, 10_000.0),
+            memory_test: g("memory_test", l.memory_test).round().clamp(0.0, 9.0),
             witness_fold_ms: g("witness_fold_ms", l.witness_fold_ms).clamp(0.0, 10_000.0),
             regard_cache: flag("regard_cache", l.regard_cache),
             regard_cache_check: flag("regard_cache_check", l.regard_cache_check),
@@ -3661,6 +3668,10 @@ mod tests {
         assert!(about["cue_check_s"].contains("1 s"), "{about:?}");
         assert!(about["witness_wake_ms"].contains("500 ms"), "{about:?}");
         assert!(about["witness_fold_ms"].contains("2000 ms") && about["witness_fold_ms"].contains("who fell"), "{about:?}");
+        assert_eq!(l.memory_test, 0.0, "no step fails on purpose in play");
+        assert!(about["memory_test"].starts_with("A test switch"), "{about:?}");
+        let t = Scripts::new(&with_world_laws(src, &[("memory_test".into(), serde_json::json!(3.4))])).unwrap();
+        assert_eq!(t.laws().memory_test, 3.0);
     }
 
     /// First sights that ask for a thought (docs/FIRST_SIGHT.md): off by default, with the gap a

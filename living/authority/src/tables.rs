@@ -1816,6 +1816,20 @@ pub struct Heard {
     pub since_ms: u64,
 }
 
+/// When what a character can make of others last changed (private; docs/PERCEPTION.md "Module
+/// memory and rollback"): bumped in the transaction that changes whose name it knows (an
+/// introduction, a child of its own) or what it knows how to do; row 0 when anyone's community
+/// changes. The perception sweep reads the viewer's row and row 0 by primary key and asks again
+/// what it kept when either moved. Durable, so a change made in any transaction that commits,
+/// in whichever module instance, reaches the next sweep; one that fails leaves no trace. A
+/// character's row goes at its death.
+#[spacetimedb::table(accessor = knowledge_epoch)]
+pub struct KnowledgeEpoch {
+    #[primary_key]
+    pub id: u32,
+    pub epoch: u64,
+}
+
 /// The secret salt behind heard keys (private; one row, drawn from the module's random source
 /// at the first sound).
 #[spacetimedb::table(accessor = hear_salt)]

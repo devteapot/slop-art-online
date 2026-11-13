@@ -105,8 +105,14 @@ pub fn tick(ctx: &ReducerContext, _t: TickTimer) -> Result<(), String> {
     drop(phase);
     // What each player's character perceives (docs/PERCEPTION.md), each every 200 ms.
     let phase = common::span("tick.perception");
-    crate::perception::sweep(ctx, now);
+    crate::perception::sweep(ctx, now, k_tick);
     drop(phase);
+    // The `memory_test` law (a diagnostic, 0 in play): the tick fails, or panics, after its sweep.
+    match crate::perception::memory_test(ctx) {
+        1 => crate::perception::fail_for_test(ctx, 1, &format!("tick {k_tick}"))?,
+        2 => panic!("memory_test 2: tick {k_tick} panics on purpose after its sweep (the instance is replaced)"),
+        _ => {}
+    }
     // What each player is shown of the others in its scene, at its frame (frame.rs).
     let phase = common::span("tick.frames");
     crate::frame::deliver(ctx, now);
@@ -275,6 +281,8 @@ fn grew(ctx: &ReducerContext, c: &Character, stage: u8, now: u64) {
     let Some(mut row) = ctx.db.character().id().find(c.id) else { return };
     row.stage = stage;
     ctx.db.character().id().update(row);
+    // Players who see them see a new stage ("a child", "an old stranger").
+    crate::perception::character_changed(c.id);
     // The look follows in the same transaction (a new band at a stage change: docs/LOOK.md §4).
     crate::look::refresh(ctx, c.id, now, "grew");
     if stage != 0 {
@@ -339,8 +347,8 @@ fn birth(ctx: &ReducerContext, a: u32, b: u32, now: u64) {
         names.push((id, common::name_of(ctx, id)));
     }
     // The parents know their children (and each other, through them).
-    crate::perception::knowledge_changed(Some(pa.id));
-    crate::perception::knowledge_changed(Some(pb.id));
+    crate::perception::knowledge_changed(ctx, Some(pa.id));
+    crate::perception::knowledge_changed(ctx, Some(pb.id));
     // A parent who died before the birth kept what the child inherits until now.
     for p in [&pa, &pb].into_iter().filter(|p| !p.alive) {
         crate::act::retire(ctx, p.id);
@@ -381,6 +389,7 @@ pub fn housekeeping(ctx: &ReducerContext, _t: SlowTimer) -> Result<(), String> {
     let _timer = common::span("housekeeping");
     common::report_scenes();
     crate::perception::report_answers(ctx);
+    crate::perception::report_kept(ctx);
     common::report_diag();
     crate::town::refresh_weather(ctx, now);
     crate::presence::housekeeping(ctx, now);
