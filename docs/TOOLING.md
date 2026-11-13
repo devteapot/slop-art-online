@@ -90,10 +90,22 @@ set -o pipefail; just living-merge plan-3 -m "Merge plan-3: what it brings"
 2. Fetches `main` and the branch, and pins the branch to the commit it has now. It prefers `origin/<branch>` and otherwise takes a local branch, saying so.
 3. Moves HEAD to `origin/main` (`git reset --keep`) and runs `git merge --no-ff`. On a conflict it aborts the merge, restores HEAD and stops (exit 4).
 4. Runs the check (`check.py`). If the check fails, HEAD is restored and nothing is pushed (exit 5). If the check changes the worktree (a rewritten `Cargo.lock`, say), it stops (exit 6).
+4a. **Checks that the bindings were regenerated.** This runs when the merge touches the module's shape: `living/authority`, `living/rules`, `living/bindings`, or the workspace's `Cargo.toml` or `Cargo.lock`.
+    - **What it does:** runs `just living-generate` on the checked tree and fails the merge when `git status --porcelain living/bindings` then shows a change. The check already built the module, so cargo rebuilds nothing when it is current.
+    - **On a diff:** the summary names the files ("bindings not regenerated: living/bindings/src/generated/fight_seen.rs, …"). The worktree and HEAD are restored and nothing is pushed (exit 11).
+    - **On a generator failure** (its container down, say): "bindings check could not run", also exit 11, never a silent pass.
+    - **Skipped:** docs, client and tool merges skip it. `LIVING_MERGE_BINDINGS=always` forces it, and `=off` skips it.
+    - **Why:** battle-fold added the private table `fight_seen` and merged without regenerating. dev-box's cullet-sweep added it later. **This replaces the laptop's manual "regenerate and see no diff" check before a merge.**
+    - **The generator** is `LIVING_GENERATE_CMD`, as in `generate_bindings.sh`. When it is unset and a container named `LIVING_GENERATE_CONTAINER` (default `slop-trials-stdb`, the Spark's) is running, the module is generated in that container ([`generate_in_container.sh`](../living/tools/generate_in_container.sh): copy the module in, `spacetime generate`, a tar stream out). Otherwise the Justfile's compose run is used.
 5. Pushes the checked merge commit as a compare-and-swap: `git push --force-with-lease=refs/heads/main:<base> origin <merge>:refs/heads/main`. It lands only while `main` is still exactly the commit that was merged onto and checked, so it never lands on a `main` that moved or was rewound meanwhile. When the push is refused and the remote `main` is no longer the base, the tool re-fetches, merges the same branch commit onto the new `main` and checks again; stamps skip the steps whose inputs the new `main` did not change. It tries up to `--retries` times (5; exit 7 after). If the branch was merged by someone else meanwhile, it stops with nothing to push (exit 0). Any other push failure stops (exit 8) with the checked merge left in HEAD, and any other git failure stops with the summary (exit 9).
 6. Prints every git command it ran and a summary. The check's output is also kept in `~/.local/state/slop-merge/<time>-<branch>.log`.
 
-`--no-push` stops after a passing check. `python3 living/tools/merge_selftest.py` drives all of this against a throwaway remote (20 checks): the dirty-worktree, local-commit, conflict, failing-check and dirtying-check refusals, a failing and a passing scene gate (a stand-in command), a `main` that moves during the check, a `main` that is rewound during the check, a branch merged by someone else meanwhile, an unknown branch, and a clean merge.
+`--no-push` stops after a passing check. `python3 living/tools/merge_selftest.py` drives all of this against a throwaway remote (24 checks):
+- the dirty-worktree, local-commit, conflict, failing-check and dirtying-check refusals;
+- a failing and a passing scene gate (a stand-in command);
+- a `main` that moves during the check, and one rewound during the check;
+- a branch merged by someone else meanwhile, an unknown branch, and a clean merge;
+- the bindings check with a stand-in generator: bindings that change fail and are named, a failing generator fails, unchanged bindings pass, and a docs-only merge skips it.
 
 ### The scene gate
 
