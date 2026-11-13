@@ -300,6 +300,16 @@ python3 "$V" doctor --run "$F" > ".local/living/verify/$F/doctor.txt" 2>&1
 python3 "$C/scenes.py" family_laws --run "$F" > ".local/living/verify/$F/family_laws.txt" 2>&1
 python3 "$V" cleanup --run "$F"
 
+# Body sex (features/sex.md, about 6 min): rows, the seed's and the world's pick, female_share,
+# kin words by sex, conceive_needs_pair on and off, births. Its own seed: stage1-acts with the
+# grown members' sexes given (written by `scenes.py sex-seed`).
+X=$R-sex
+python3 "$C/scenes.py" sex-seed
+python3 "$V" launch --run "$X" --seed "$PWD/.local/living/verify/sex-family" > ".local/living/verify/$X-launch.txt" 2>&1
+python3 "$V" doctor --run "$X" > ".local/living/verify/$X-doctor.txt" 2>&1
+python3 "$C/scenes.py" sex --run "$X" > ".local/living/verify/$X/sex.txt" 2>&1
+python3 "$V" cleanup --run "$X"
+
 # The wolves' spacing reflex (the pack_reflex law, on by default): every wolf's starting
 # graph with the law on, none with it off (features/wildlife.md; about 2 min each).
 for P in pack-reflex-on pack-reflex-off; do

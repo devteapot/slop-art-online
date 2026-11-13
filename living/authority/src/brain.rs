@@ -1933,7 +1933,11 @@ impl<'a> Ev<'a> {
             let (text, sal) = match prev {
                 None if ch.kind == "person" || ch.kind == self.me.kind => {
                     let named = who == ch.name;
-                    firsts.push((c.id, c.pos, format!("{who}, {place}"), named));
+                    // The body's form by sex goes with a person's first sight (body-sex), so a
+                    // mind remembers it with whom it saw: "a stranger (a woman), 9 tiles west".
+                    let form = crate::sex::word(self.ctx, &ch).map(|f| format!(" ({} {f})", living_rules::sex::article(&f))).unwrap_or_default();
+                    crate::sex::remember(self.ctx, &self.me, &ch, now);
+                    firsts.push((c.id, c.pos, format!("{who}{form}, {place}"), named));
                     continue;
                 }
                 None => (format!("You see {who} {place}."), 0.65),

@@ -100,18 +100,22 @@ PRIVATE = ['fast_ask', 'far_handle', 'slumber', 'land_plan', 'clock', 'steer', '
            'seen_stock', 'standing',
            # A person's look and the world's look lines (docs/LOOK.md): a client gets only the
            # `lk_` key on its seen_characters rows.
-           'look', 'look_line']
+           'look', 'look_line',
+           # Each person's body sex (sex-1, docs/LIVING_CORE.md "Body sex"): private in every build;
+           # a player reads its own through my_sex and perceives others' only as drawn. What each mind
+           # remembers of others' bodies (`sex_seen`): the mind service reads it as the owner.
+           'sex', 'sex_seen']
 # Private in the default `scoped` build; public only in a LIVING_PERCEPTION=open build (diagnostics).
 SCOPED = ['body', 'character', 'fighter', 'doing', 'vitals', 'experience', 'place', 'audience',
           'inventory', 'know_how']
 # The per-sender views: what a player perceives and its own state.
 VIEWS = ['seen_bodies', 'seen_characters', 'seen_fighters', 'seen_doing', 'my_body', 'my_fighter', 'my_doing', 'my_characters',
          'my_vitals', 'my_experience', 'my_places', 'my_inventory', 'my_know_how',
-         'my_deliberations', 'my_combat', 'my_readiness', 'my_skill_uses', 'my_records', 'my_offers', 'heard_sounds', 'my_heard', 'my_senses', 'my_earshot', 'my_act_outcomes', 'my_known_names']
+         'my_deliberations', 'my_combat', 'my_readiness', 'my_skill_uses', 'my_records', 'my_offers', 'heard_sounds', 'my_heard', 'my_senses', 'my_earshot', 'my_act_outcomes', 'my_known_names', 'my_sex']
 SEEN = ['seen_bodies', 'seen_characters', 'seen_fighters', 'seen_doing']
 # The player's own living character's body, fighter and doing rows (others' come as copies in seen_*).
 BODY = ['my_body', 'my_fighter', 'my_doing']
-OWN = BODY + ['my_characters', 'my_vitals', 'my_experience', 'my_places', 'my_inventory', 'my_know_how', 'my_offers', 'my_heard', 'my_senses', 'my_earshot', 'my_act_outcomes', 'my_known_names']
+OWN = BODY + ['my_characters', 'my_vitals', 'my_experience', 'my_places', 'my_inventory', 'my_know_how', 'my_offers', 'my_heard', 'my_senses', 'my_earshot', 'my_act_outcomes', 'my_known_names', 'my_sex']
 OPAQUE = {4, 7}             # rock, wall (living_rules::map::Terrain); a drop (8) and a low thing (9) are see-through
 UNWALKABLE = {2, 4, 7, 8, 9}  # water, rock, wall, drop, low
 # The player's combat input (docs/COMBAT.md): refusals are recorded and told through
@@ -145,6 +149,8 @@ ADMIN = {
     'relook': ['probe'],
     # Set a living body's health (trial timelines' meeting resets, docs/COMBAT_MIND.md §5.4).
     'admin_set_vitals': [0, 100.0],
+    # Give every person without one a body sex (sex-1, admin only).
+    'backfill_sex': [],
 }
 
 
@@ -403,12 +409,12 @@ class Run:
             text = path.read_text()
             for match in re.finditer(r'#\[spacetimedb::reducer\]\s*pub fn (\w+)\(', text):
                 reducers[match[1]] = f'{path.relative_to(ROOT)}:{text[:match.start()].count(chr(10)) + 2}'
-        expected = set(ADMIN) | set(MIND) | set(FAST) | set(PLAYER) | {'join', 'human_move', 'human_act', 'human_say', 'human_speak', 'tick', 'housekeeping', 'genesis_step'}
+        expected = set(ADMIN) | set(MIND) | set(FAST) | set(PLAYER) | {'join', 'join_as', 'human_move', 'human_act', 'human_say', 'human_speak', 'tick', 'housekeeping', 'genesis_step'}
         if set(reducers) != expected:
             raise RuntimeError(f'reducer inventory changed: {set(reducers) ^ expected}')
         # The mind service connects as the world's admin, so `require_admin` cannot refuse it an
         # admin reducer by identity: the guard is that it never calls these (its sources name none).
-        never_by_minds = ['admin_set_vitals', 'kill', 'relook', 'set_world_law', 'install_script']
+        never_by_minds = ['admin_set_vitals', 'kill', 'relook', 'set_world_law', 'install_script', 'backfill_sex']
         called = {r for path in (ROOT / 'living/mind/src').rglob('*.rs') for r in never_by_minds
                   if re.search(rf'reducers\.{r}(_then)?\(', path.read_text())}
         if called:
@@ -451,6 +457,10 @@ class Run:
                       ('player-2', second['token'], own_ids['ClientSecond'])]
         for label, token, own in identities:
             self.call(label, token, 'join', ['Again'], 'you already have a living character')
+            # join_as (sex-1): a bad sex is refused before anything else; a good one, like join,
+            # makes nothing for someone who already plays.
+            self.call(label, token, 'join_as', ['Again', 'x'], 'sex must be "f" or "m"')
+            self.call(label, token, 'join_as', ['Again', 'f'], 'you already have a living character')
             for reducer, args in ADMIN.items():
                 self.call(label, token, reducer, args, 'admin only')
             other = own_ids['ClientSecond'] if label != 'player-2' else own_ids['ClientPrimary']
@@ -485,6 +495,26 @@ class Run:
         for reducer, args in [('human_move', [0, 0, False]), ('human_act', ['{"wait":30}']), ('human_say', ['probe', 0]), ('human_speak', ['probe', 0, 'say'])] + list(PLAYER.items()):
             self.call('anonymous-http-no-token', None, reducer, args, 'you have no living character')
         self.call('anonymous-http-no-token', None, 'join', ['AnonHttp'])
+        # join_as (sex-1): a fresh identity joins as a woman; its own sex reaches it through my_sex
+        # alone, and the `sex` table stays refused to it (the visibility check below).
+        third_code, third_body = V.http('/v1/identity', {})
+        if third_code != 200:
+            raise RuntimeError('could not mint a third player identity')
+        third = json.loads(third_body)
+        self.secrets.append(third['token'])
+        self.call('player-3', third['token'], 'join_as', ['ClientThird', 'bad'], 'sex must be "f" or "m"')
+        self.check('join_as joins', self.call('player-3', third['token'], 'join_as', ['ClientThird', 'f']), 'reducers.json')
+        try:
+            mine, error = self.sql_rows('SELECT * FROM my_sex', third['token']), ''
+        except RuntimeError as e:
+            mine, error = [], str(e)
+        own_sex = self.probe('player-3-sex-table', ['SELECT * FROM sex'], third['token'])
+        code, refused = V.http(f"/v1/database/{self.state['db']}/sql", 'SELECT * FROM sex', third['token'], raw=True)
+        write(self.directory / 'my-sex.json', {'my_sex': mine, 'error': error, 'sex_table_subscription': own_sex['status'], 'sex_table_http': [code, refused[:200]]})
+        self.check('join_as: my_sex is the player\'s own female body, and the sex table is refused to it',
+                   not error and len(mine) == 1 and mine[0]['sex'] == 'female' and own_sex['status'] == 'rejected'
+                   and 'private' in own_sex.get('error', '').lower() and code != 200,
+                   'my-sex.json', f"my_sex {mine}, sex table {own_sex['status']} / HTTP {code}")
         self.check('reducer permission matrix', all(row['pass'] for row in self.matrix), 'reducers.json',
                    f'{len(self.matrix)} calls, {sum(not row["pass"] for row in self.matrix)} mismatches')
         # Attention cues (docs/ATTENTION.md): `mind_update` with cues was refused above for every
@@ -522,7 +552,7 @@ class Run:
             code, error = V.http(f"/v1/database/{self.state['db']}/sql", 'SELECT * FROM ' + table, raw=True)
             okay = subscription['status'] == 'rejected' and 'private' in subscription['error'].lower() and code != 200 and 'private' in error.lower()
             row = {'table': table, 'subscription': subscription, 'http_status': code, 'http_error': error}
-            if table in SCOPED + ['thought', 'belief', 'persona', 'mind_state', 'perceived', 'projected', 'presence', 'guest', 'rhythm', 'player', 'heard', 'law_change']:
+            if table in SCOPED + ['thought', 'belief', 'persona', 'mind_state', 'perceived', 'projected', 'presence', 'guest', 'rhythm', 'player', 'heard', 'law_change', 'sex', 'look']:
                 as_player = self.probe('private-player-' + table, ['SELECT * FROM ' + table], player_token)
                 code, error = V.http(f"/v1/database/{self.state['db']}/sql", 'SELECT * FROM ' + table, player_token, raw=True)
                 okay = okay and as_player['status'] == 'rejected' and 'private' in as_player['error'].lower() and code != 200
@@ -728,7 +758,9 @@ class Run:
                     # My outcomes: only my character's, each keyed by a line of my_experience.
                     and {o['observer'] for o in p['my_act_outcomes']} <= mine
                     # Whom my character knows by name (owner-known): itself among them, names only.
-                    and mine <= {k['id'] for k in p['my_known_names']} and all(isinstance(k['name'], str) and k['name'] for k in p['my_known_names']))
+                    and mine <= {k['id'] for k in p['my_known_names']} and all(isinstance(k['name'], str) and k['name'] for k in p['my_known_names'])
+                    # My body sex (sex-1): one row, my character's, "female" or "male".
+                    and [r['id'] for r in p['my_sex']] == sorted(mine) and all(r['sex'] in ('female', 'male') for r in p['my_sex']))
         anonymous = own['anonymous']['final']['perception']
         spoke = {l: v['final']['perception']['my_heard'] for l, v in own.items() if l != 'anonymous'}
         # Breath and focus (docs/STAMINA.md): each player's own row carries the pools, rested

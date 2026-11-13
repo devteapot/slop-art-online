@@ -1298,19 +1298,21 @@ def death_names_case(run):
     after_prompt = run.wait(lambda: asked('after-death'), 'prompt after the death', 60)[0]
     (run.directory / 'prompt-after-death.txt').write_text(after_prompt)
     lines = lambda text, words: [l for l in text.split('\n') if words in l]
+    # A person is listed "Name (#id)", or "Name (#id, a woman)" once their body sex is known (sex-1).
+    listed = lambda text, label, i: bool(re.search(re.escape(f'{label} (#{i}') + r'[,)]', text))
     texts = {'victim': vname, 'killer': names[killer], 'cause': dead['cause'],
              'acquaintance_observers': sorted(r['observer'] for r in known),
              'death': {'member': deaths[member], 'killer': deaths[killer], 'bystander': deaths[bystander]},
-             'prompt_alive': {'relation': lines(alive_prompt, f'(#{victim})')},
-             'prompt_after_death': {'relation': lines(after_prompt, f'(#{victim})'), 'death': lines(after_prompt, 'was killed by')}}
+             'prompt_alive': {'relation': [l for l in alive_prompt.split('\n') if listed(l, vname, victim)]},
+             'prompt_after_death': {'relation': [l for l in after_prompt.split('\n') if listed(l, vname, victim)], 'death': lines(after_prompt, 'was killed by')}}
     (run.directory / 'death-names.json').write_text(json.dumps(texts, indent=2))
     checks = {
         'member_keeps_name': sorted(r['observer'] for r in known) == [member],
         'member_death_names_victim': any(t.startswith(f'{vname} was killed by') for t in deaths[member]),
         'killer_reads_you': any('was killed by you' in t for t in deaths[killer]) and not any(names[killer] in t for t in deaths[killer]),
         'bystander_reads_strangers': any(t.startswith('A stranger was killed by a stranger') for t in deaths[bystander]),
-        'prompt_alive_names_relation': f'{vname} (#{victim})' in alive_prompt,
-        'prompt_after_names_relation': f'{vname} (#{victim})' in after_prompt and f'a stranger (#{victim})' not in after_prompt,
+        'prompt_alive_names_relation': listed(alive_prompt, vname, victim),
+        'prompt_after_names_relation': listed(after_prompt, vname, victim) and not listed(after_prompt, 'a stranger', victim),
         'prompt_after_names_death': any(f'{vname} was killed by' in l and f'{vname}=#{victim}' in l for l in lines(after_prompt, 'was killed by')),
     }
     texts['checks'] = checks
@@ -1471,7 +1473,8 @@ def far_figure_case(run):
         checks = {
             'scene_has_a_far_figure_by_handle': bool(handles) and any(FAR in l for l in figure),
             'scene_has_no_entry_with_f_id': not re.search(r'"id": ?%d\b' % f, prompt),
-            'relations_list_names_f': f'{fname} (#{f})' in prompt,
+            # "F (#id)", or "F (#id, a woman)" with F's body sex (sex-1).
+            'relations_list_names_f': bool(re.search(re.escape(f'{fname} (#{f}') + r'[,)]', prompt)),
             'f_line_tagged_by_handle': any('Fine weather' in l and any(f'=#{h}' in l for h in handles) and f'#{f}' not in l and fname not in l for l in prompt.split('\n')),
             'nothing_ties_the_figure_to_f': not tied,
         }
@@ -3592,6 +3595,408 @@ def prompts_of(run, name):
 def body_lines(text):
     return re.findall(r'^Your body: [^\n]*$', text, re.M)
 
+
+
+SEX_WORDS = {1: ['baby girl', 'girl', 'woman', 'old woman'], 2: ['baby boy', 'boy', 'man', 'old man']}
+
+
+def a_word(w):
+    return ('an ' if w[0] in 'aeiou' else 'a ') + w
+
+
+def open_ray(run, at, reach=7):
+    """From `at`, a unit direction along which every tile out to `reach` m is walkable and nothing
+    blocks sight; and a walkable spot 30 to 60 m away (out of sight in the open, out of hearing).
+    For placing people near, far and away on this world's own map."""
+    w, h, tiles = terrain(run)
+    tile = lambda x, y: tiles[int(y) * w + int(x)] if 0 <= x < w and 0 <= y < h else 4
+    walk = lambda x, y: tile(x, y) not in UNWALKABLE
+    ray = None
+    for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1), (.7071, .7071), (-.7071, .7071), (.7071, -.7071), (-.7071, -.7071)):
+        if all(walk(at[0] + dx * d / 2, at[1] + dy * d / 2) for d in range(1, 2 * reach + 1)):
+            ray = (dx, dy)
+            break
+    away = None
+    for r in range(30, 61, 3):
+        for k in range(16):
+            a = k * math.pi / 8
+            x, y = at[0] + r * math.cos(a), at[1] + r * math.sin(a)
+            if walk(x, y) and walk(x + 1, y) and walk(x, y + 1):
+                away = (math.floor(x) + .5, math.floor(y) + .5)
+                break
+        if away:
+            break
+    if not ray or not away:
+        raise RuntimeError(f'no open ground around {at} on this map')
+    return ray, away
+
+
+@case('body-sex')
+def body_sex_case(run):
+    """Minds perceive body sex (sex-1, docs/LIVING_CORE.md "Body sex"). On the hamlet at a fast
+    pace (`body_seed`; every resident gives `sex`), with the fake model:
+    1. the self line: Oren Hale's prompts say "You are a man." after his body line;
+    2. remembered: his relations list Ilsa Hale (his wife, not in sight) as "Ilsa Hale (#id, a
+       woman)", and Ilsa's list him as "(#id, a man)";
+    3. the scene, near: a newcomer 3 m from Oren is an entry with "form" its sex word and a neutral
+       label ("who": "a stranger", no sex word in it);
+    4. the scene, far (an overlay of `perceived_of` makes everyone past 4 m `far`): the newcomer at
+       6 m is a figure under a handle with the far label (neutral) and the same "form";
+    5. the talk header: the newcomer and then Ilsa say a line to Oren; his talk prompts head
+       "# You and a stranger (#id, a woman|a man)" and "# You and Ilsa Hale (#id, a woman)";
+    6. kin words: Pim (Oren and Ilsa's child) says "Mother, ..." to the room beside both; Ilsa is
+       told she was named ("naming you") and Oren is not; "Father, ..." the other way round;
+    7. a newborn's first identity call: Brisk and Edda Marrow (graph-only) start a family; once the
+       child is born the mind restarts with it, and its birth identity prompt says "Newborn: Name
+       (#id, a baby girl|a baby boy)" and each parent's body; its sex row was written at birth.
+    No label anywhere carries a sex word."""
+    rel = body_seed(run)
+    target = Path(os.environ['CARGO_TARGET_DIR']) / 'verify-body' if os.environ.get('CARGO_TARGET_DIR') else ROOT / '.local/living/target-body'
+    run.harness('launch', '--seed', str((ROOT / 'living/seeds' / rel).resolve()), '--target-dir', str(target))
+    run.harness('doctor')
+    people = {p['name']: p for p in run.sql("SELECT * FROM character WHERE kind = 'person'", 'people')}
+    oren, ilsa, pim, brisk, edda = (people[n]['id'] for n in ('Oren Hale', 'Ilsa Hale', 'Pim Hale', 'Brisk Marrow', 'Edda Marrow'))
+    before = {c['id'] for c in run.sql('SELECT id FROM character', 'ids-before')}
+    run.admin('spawn_crowd', 1, True)
+    newcomer = next(c['id'] for c in run.sql('SELECT id FROM character', 'ids-after') if c['id'] not in before)
+    sexes = lambda: {r['id']: r['sex'] for r in run.private('SELECT * FROM sex', 'sex-rows')}
+    sex = sexes()
+    word = lambda i, stage=2: SEX_WORDS[sex[i]][stage]
+    # The couple lives on graphs (no mind) and starts a family.
+    run.admin('place_near', edda, brisk)
+    for a, b in ((brisk, edda), (edda, brisk)):
+        run.admin('grant_items', a, 'berries', 6)
+        run.admin('set_behavior', a, json.dumps({'seq': [{'do': 'conceive', 'target': {'id': b}}, {'wait': 600}]}))
+    for who in (pim, newcomer):
+        run.admin('set_behavior', who, json.dumps({'wait': 600}))
+    script = {'replies': {'think': {'thought': 'I wait.', 'intend': ['wait'], 'say': None},
+                          'deliberate': basic_reply(),
+                          'talk': {'thought': 'I listen.', 'say': '', 'to': 0, 'acts': [], 'end': True, 'settled': None},
+                          'consolidate': {'summary': 'verify sex summary', 'identity': None, 'nodes': [], 'edges': []}},
+              'rules': [{'purpose': 'consolidate', 'delay_s': 1, 'times': -1}]}
+    models = model(run, script)
+    run.start(models, [oren, ilsa], seed=rel)
+    requests = lambda: shared.rows(run.directory / 'fake-requests.jsonl')
+    sent_text = lambda e: '\n'.join(str(x.get('content', '')) for x in e['body'].get('messages', []))
+    asked = lambda marker: [sent_text(e) for e in requests() if e['purpose'] in ('think', 'deliberate') and f'verify {marker}' in sent_text(e)]
+    body = run.sql(f'SELECT * FROM body WHERE id = {oren}', 'oren-body')[0]
+    (dx, dy), away = open_ray(run, (body['x'], body['y']))
+    off = lambda d: (body['x'] + dx * d, body['y'] + dy * d)
+    checks = {}
+    # 1-3: near.
+    run.admin('place_at', newcomer, *off(3.0))
+    run.admin('place_at', ilsa, *away)
+    time.sleep(2.0)
+    run.request(oren, 'sex near')
+    near = run.wait(lambda: asked('sex near'), 'Oren\'s prompt with the newcomer near', 90)[0]
+    (run.directory / 'prompt-near.txt').write_text(near)
+    scene = scene_sent(near) or {}
+    entry = next((c for c in scene.get('creatures', scene.get('you see', [])) if isinstance(c, dict) and c.get('id') == newcomer), None)
+    if entry is None:
+        entry = next((c for v in scene.values() if isinstance(v, list) for c in v if isinstance(c, dict) and c.get('id') == newcomer), None)
+    words = [w for ws in SEX_WORDS.values() for w in ws]
+    labels = re.findall(r'"(?:who|name)": ?"([^"]*)"', near)
+    checks['self line: "You are a man."'] = f'You are {a_word(word(oren))}.' in near and 'Your body:' in near
+    checks['remembered: the absent wife is listed with her body'] = bool(re.search(re.escape(f'Ilsa Hale (#{ilsa}, {a_word(word(ilsa))})'), near))
+    checks['near: the newcomer\'s entry has its form'] = bool(entry) and entry.get('form') == word(newcomer)
+    checks['near: its label is neutral'] = bool(entry) and entry.get('who') == 'a stranger'
+    checks['no label in the scene carries a sex word'] = not any(w in l.split() for l in labels for w in ('woman', 'man', 'girl', 'boy'))
+    # 4: far.
+    shipped = (ROOT / 'living/scripts/skills.rhai').read_text()
+    overlay = shipped.replace('fn perceived_of(p)', 'fn base_perceived_of(p)', 1) + \
+        '\nfn perceived_of(p) { let r = base_perceived_of(p); if !p.self && p.dist > 4.0 { r.name = false; r.health = "none"; r.far = true; } r }\n'
+    (run.directory / 'far-overlay.rhai').write_text(overlay)
+    subprocess.run([sys.executable, str(ROOT / 'living/tools/install_script.py'), run.db, str(run.directory / 'far-overlay.rhai')], check=True, cwd=ROOT, capture_output=True, timeout=120)
+    try:
+        run.admin('place_at', newcomer, *off(6.0))
+        time.sleep(2.0)
+        run.request(oren, 'sex far')
+        far = run.wait(lambda: asked('sex far'), 'Oren\'s prompt with the newcomer far', 90)[0]
+        (run.directory / 'prompt-far.txt').write_text(far)
+        fscene = scene_sent(far) or {}
+        figures = [c for v in fscene.values() if isinstance(v, list) for c in v if isinstance(c, dict) and c.get('who') == FAR]
+        checks['far: a figure under a handle with the far label and its form'] = any(c.get('id', 0) >= FAR_HANDLE_BASE and c.get('form') == word(newcomer) for c in figures)
+        checks['far: no entry carries the newcomer\'s id'] = not re.search(r'"id": ?%d\b' % newcomer, far)
+    finally:
+        subprocess.run([sys.executable, str(ROOT / 'living/tools/install_script.py'), run.db], cwd=ROOT, capture_output=True, timeout=120)
+    # 5: the talk header, a stranger face to face and the wife.
+    thought = lambda m: {'kind': 'talk', 'summary': m, 'detail': '', 'latency_ms': 0, 'tokens': 0, 'model': '', 'reference': ''}
+    talks = lambda: [sent_text(e) for e in requests() if e['purpose'] == 'talk' and f'# Who you are\nOren Hale' in sent_text(e)]
+    run.admin('place_at', newcomer, *off(1.5))
+    time.sleep(2.0)
+    run.admin('mind_say', newcomer, 'Good day to you, where is the mill? verify sex talk stranger', oren, 'say', 0, thought('verify sex talk'))
+    stranger_talk = run.wait(lambda: [t for t in talks() if 'verify sex talk stranger' in t], 'Oren\'s talk prompt for the stranger', 90)[0]
+    (run.directory / 'prompt-talk-stranger.txt').write_text(stranger_talk)
+    # Made out at 3 m and 1.5 m (its `sex_seen` row), so its header gives its body.
+    checks['talk header: the stranger face to face, with its body'] = f'# You and a stranger (#{newcomer}, {a_word(word(newcomer))})' in stranger_talk
+    run.admin('place_at', newcomer, *away)
+    run.admin('place_at', ilsa, *off(1.5))
+    # Lines that ask something (a remark that asks nothing is answered only by temperament's
+    # draw, talk.rs), and the stranger's exchange left a moment to end.
+    time.sleep(5.0)
+    run.admin('mind_say', ilsa, 'Will you come in to supper? verify sex talk wife', oren, 'say', 0, thought('verify sex talk'))
+    wife_talk = run.wait(lambda: [t for t in talks() if 'verify sex talk wife' in t], 'Oren\'s talk prompt for his wife', 90)[0]
+    (run.directory / 'prompt-talk-wife.txt').write_text(wife_talk)
+    checks['talk header: his wife, with her body'] = f'# You and Ilsa Hale (#{ilsa}, {a_word(word(ilsa))})' in wife_talk
+    # 6: kin words by sex, as the minds are told them.
+    run.admin('place_at', pim, *off(2.5))
+    time.sleep(3.0)
+    def named(who, marker):
+        # "naming you", or "naming Edda and you" when two are named.
+        return [e for e in run.private(f'SELECT kind, text FROM experience WHERE observer = {who}', f'exp-{who}') if marker in e['text'] and re.search(r'naming [^:“]*\byou\b', e['text'])]
+    for words_said, marker, yes, no in (('Mother, look at the stone.', 'verify sex kin mother', ilsa, oren), ('Father, look at the stone.', 'verify sex kin father', oren, ilsa)):
+        run.admin('mind_say', pim, f'{words_said} {marker}', 0, 'say', 0, thought('verify sex kin'))
+        time.sleep(2.5)
+        checks[f'kin: {words_said!r} names the {"mother" if yes == ilsa else "father"} and not the other parent'] = bool(named(yes, marker)) and not named(no, marker)
+    # 7: the newborn's first identity call.
+    child = run.wait(lambda: next((c for c in run.sql("SELECT * FROM character WHERE kind = 'person'", 'children')
+                                   if {c['parent_a'], c['parent_b']} == {brisk, edda} and c['id'] not in before), None), 'a child born to Brisk and Edda', 300)
+    cid, cname = child['id'], child['name']
+    sex = sexes()
+    checks['the newborn has a sex row, the world\'s pick being written with it'] = sex.get(cid) in (1, 2)
+    shared.stop(run.mind)
+    subscriptions = run.log().count('world subscribed:')
+    run.env['LIVING_ONLY'] = ','.join(map(str, [oren, ilsa, cid]))
+    run.launch_mind()
+    run.wait(lambda: run.log().count('world subscribed:') > subscriptions, 'the restarted mind subscribed')
+    birth = run.wait(lambda: [sent_text(e) for e in requests() if e['purpose'] == 'consolidate' and f'Newborn: {cname} (#{cid}' in sent_text(e)], f'{cname}\'s birth identity call', 120)[0]
+    (run.directory / 'prompt-birth.txt').write_text(birth)
+    stage = child['stage']
+    checks['birth identity: the newborn\'s body'] = f'Newborn: {cname} (#{cid}, {a_word(SEX_WORDS[sex[cid]][stage])}).' in birth
+    rows = {(r['observer'], r['known']) for r in run.private('SELECT * FROM sex_seen', 'sex-seen-birth')}
+    checks['birth identity: each parent\'s body exactly when the newborn remembers them'] = all(
+        (f'(#{p}, {w})' in birth) == ((cid, p) in rows) for p, w in ((brisk, 'a man'), (edda, 'a woman')))
+    result = {'oren': oren, 'ilsa': ilsa, 'pim': pim, 'newcomer': newcomer, 'child': cid, 'sexes': {k: sex.get(k) for k in (oren, ilsa, pim, newcomer, cid)}, 'entry_near': entry, 'checks': checks}
+    (run.directory / 'body-sex.json').write_text(json.dumps(result, indent=2))
+    assert all(checks.values()), checks
+    return {'status': 'pass', **result}
+
+
+
+def sex_statements(text, pid):
+    """Where a prompt states person `pid`'s body sex: "(#id, a woman)" after a name (relations,
+    known people, a talk header, a birth prompt), and a JSON object for `pid` carrying a sex word
+    (`form` in a scene entry, `is` in the facts). Returns the matching snippets."""
+    out = [m.group(0) for m in re.finditer(r'\(#%d, (?:a|an) (?:baby girl|baby boy|girl|boy|woman|man|old woman|old man)\)' % pid, text)]
+    for m in re.finditer(r'\{[^{}]*\}', text):
+        obj = m.group(0)
+        if re.search(r'"id": ?%d\b' % pid, obj) and re.search(r'"(?:form|is)": ?"', obj):
+            out.append(obj[:160])
+    return out
+
+
+def scene_part(text):
+    """The scene JSON of a think/deliberate prompt (what is in sight now), or ""."""
+    m = re.search(r'# (?:What you perceive right now|Around you now)\n(\{.*\})\n', text)
+    return m.group(1) if m else ''
+
+
+def boundary_seed(run):
+    """The hamlet at the body case's fast pace, with Lio Reed grown (30) and given no sheet (his
+    first identity is written from the world's facts) and Mara Vane, who lives in the other
+    settlement, as his parent: a kin relation Lio's mind has never met."""
+    rel = body_seed(run)
+    path = ROOT / 'living/seeds' / (rel + '.json')
+    seed = json.loads(path.read_text())
+    seed['run'] = 'verify-sex-boundary'
+    for t in seed['towns'] + seed['villages']:
+        for r in t['residents']:
+            if r['name'] == 'Lio Reed':
+                # Grown, with no sheet: his first identity is written from the facts
+                # (`Origin::Background`); a child with a parent would be given a newborn's.
+                r.pop('sheet', None)
+                r['parents'] = ['Mara Vane']
+                r['age'] = 30.0
+    out = run.directory / 'boundary-seed.json'
+    out.write_text(json.dumps(seed, indent=1))
+    return os.path.relpath(out.with_suffix(''), ROOT / 'living/seeds')
+
+
+def walk_far(run, frm, min_d):
+    """A walkable spot at least `min_d` m from `frm` (out of sight and hearing in the hamlet)."""
+    w, h, tiles = terrain(run)
+    tile = lambda x, y: tiles[int(y) * w + int(x)] if 0 <= x < w and 0 <= y < h else 4
+    walk = lambda x, y: tile(x, y) not in UNWALKABLE
+    best = None
+    for y in range(4, h - 4, 3):
+        for x in range(4, w - 4, 3):
+            d = math.dist((x + .5, y + .5), frm)
+            if d >= min_d and walk(x, y) and walk(x + 1, y) and walk(x, y + 1) and (best is None or d < best[0]):
+                best = (d, (x + .5, y + .5))
+    if not best:
+        raise RuntimeError(f'no walkable ground {min_d} m from {frm}')
+    return best[1]
+
+
+@case('sex-boundary')
+def sex_boundary_case(run):
+    """A prompt never states the sex of someone the mind has not perceived and does not remember
+    (sex-1, the Spark's condition). The authority remembers a person's sex for a mind when its
+    character makes them out at full sight (`sex_seen`); the mind service states another's sex
+    only from that row or from the scene (in sight, near or far).
+
+    On `boundary_seed` (the hamlet; Lio has Brisk, in the other settlement, as a parent and no
+    sheet), with Oren's and Lio's minds and the fake model:
+    ALLOWED: a newcomer 3 m from Oren (the scene's `form`, Full); the same at 6 m under an overlay
+    making everyone past 4 m `far` (a figure's `form`, Far); Ilsa, whom Oren made out at home (her
+    `sex_seen` row), out of sight: in his relations, and in his talk header when she speaks to him
+    from behind him (`fov_on`).
+    NOT ALLOWED: Wenna (Reedmouth; in Oren's relations, never seen: no row) in his relations and
+    known people, in his talk header when she speaks to him from behind him under facing sight
+    (heard, not seen), and when Ilsa names her in a line; Mara in Lio's facts (a parent never met); Brisk in the newborn's birth prompt
+    (dead before the birth). Every prompt of the three minds is scanned for a statement of
+    anyone's sex: outside the scene it must be the mind's own or one its `sex_seen` row backs.
+    A mutant mind service that states a known person's sex without the row (its old rule) fails
+    this case (see features/self-body.md)."""
+    rel = boundary_seed(run)
+    target = Path(os.environ['CARGO_TARGET_DIR']) / 'verify-body' if os.environ.get('CARGO_TARGET_DIR') else ROOT / '.local/living/target-body'
+    run.harness('launch', '--seed', str((ROOT / 'living/seeds' / rel).resolve()), '--target-dir', str(target))
+    run.harness('doctor')
+    people = {p['name']: p for p in run.sql("SELECT * FROM character WHERE kind = 'person'", 'people')}
+    oren, ilsa, wenna, lio, brisk, edda, mara = (people[n]['id'] for n in ('Oren Hale', 'Ilsa Hale', 'Wenna Reed', 'Lio Reed', 'Brisk Marrow', 'Edda Marrow', 'Mara Vane'))
+    names = {p['id']: p['name'] for p in people.values()}
+    assert mara in (people['Lio Reed']['parent_a'], people['Lio Reed']['parent_b']), people['Lio Reed']
+    before = {c['id'] for c in run.sql('SELECT id FROM character', 'ids-before')}
+    run.admin('spawn_crowd', 1, True)
+    newcomer = next(c['id'] for c in run.sql('SELECT id FROM character', 'ids-after') if c['id'] not in before)
+    names[newcomer] = 'the newcomer'
+    seen = lambda: {(r['observer'], r['known']) for r in run.private('SELECT * FROM sex_seen', 'sex-seen')}
+    run.admin('place_near', edda, brisk)
+    for a, b in ((brisk, edda), (edda, brisk)):
+        run.admin('grant_items', a, 'berries', 6)
+        run.admin('set_behavior', a, json.dumps({'seq': [{'do': 'conceive', 'target': {'id': b}}, {'wait': 600}]}))
+    run.admin('set_behavior', newcomer, json.dumps({'wait': 600}))
+    # The father dies once the couple is expecting (admin `kill`, scene setup): the child, born
+    # where its mother stands (the first living parent), never sees him. (A father moved off was
+    # still made out, and a wait placed later found the child already born: minds-sex2-c, -d.)
+    run.wait(lambda: run.private(f'SELECT * FROM expecting WHERE a = {edda} OR b = {edda}', 'expecting'), 'Brisk and Edda expecting', 120)
+    assert not [c for c in run.sql("SELECT * FROM character WHERE kind = 'person'", 'children-before') if {c['parent_a'], c['parent_b']} == {brisk, edda} and c['id'] not in before], 'a child born before the kill'
+    run.admin('kill', brisk, 'verify sex-boundary: the father never seen')
+    run.wait(lambda: (oren, ilsa) in seen(), 'Oren makes out Ilsa at home (her sex_seen row)', 60)
+    checks = {'Oren never saw Wenna, Lio never saw Mara (no rows)': (oren, wenna) not in seen() and (lio, mara) not in seen()}
+    script = {'replies': {'think': {'thought': 'I wait.', 'intend': ['wait'], 'say': None},
+                          'deliberate': basic_reply(),
+                          'talk': {'thought': 'I listen.', 'say': '', 'to': 0, 'acts': [], 'end': True, 'settled': None},
+                          'consolidate': {'summary': 'verify boundary summary', 'identity': None, 'nodes': [], 'edges': []}},
+              'rules': [{'purpose': 'consolidate', 'delay_s': 1, 'times': -1}]}
+    run.start(model(run, script), [oren, lio], seed=rel)
+    requests = lambda: shared.rows(run.directory / 'fake-requests.jsonl')
+    sent_text = lambda e: '\n'.join(str(x.get('content', '')) for x in e['body'].get('messages', []))
+    asked = lambda marker: [sent_text(e) for e in requests() if e['purpose'] in ('think', 'deliberate') and f'verify {marker}' in sent_text(e)]
+    thought = lambda m: {'kind': 'talk', 'summary': m, 'detail': '', 'latency_ms': 0, 'tokens': 0, 'model': '', 'reference': ''}
+    body = run.sql(f'SELECT * FROM body WHERE id = {oren}', 'oren-body')[0]
+    (dx, dy), away = open_ray(run, (body['x'], body['y']))
+    off = lambda d: (body['x'] + dx * d, body['y'] + dy * d)
+    # Lio's first identity, written from the world's facts: a parent he never met.
+    lio_facts = run.wait(lambda: [sent_text(e) for e in requests() if e['purpose'] == 'consolidate' and f'Lio Reed (#{lio})' in sent_text(e) and 'Background:' in sent_text(e)], 'Lio\'s identity call from facts', 120)[0]
+    (run.directory / 'prompt-lio-facts.txt').write_text(lio_facts)
+    checks['NOT ALLOWED facts: a parent never met (Mara in Lio\'s facts) has no sex'] = f'"id":{mara}' in lio_facts.replace(' ', '') and not sex_statements(lio_facts, mara)
+    checks['ALLOWED facts: Lio\'s own body'] = '"body":"man"' in lio_facts.replace(' ', '')
+    # Full and Far.
+    run.admin('place_at', ilsa, *away)
+    run.admin('place_at', newcomer, *off(3.0))
+    time.sleep(2.0)
+    run.request(oren, 'bound near')
+    near = run.wait(lambda: asked('bound near'), 'Oren\'s prompt, the newcomer near', 90)[0]
+    (run.directory / 'prompt-near.txt').write_text(near)
+    checks['ALLOWED Full: the newcomer in sight, its form in the scene'] = bool(sex_statements(scene_part(near), newcomer))
+    checks['ALLOWED remembered: Ilsa out of sight, in the relations with her body'] = f'Ilsa Hale (#{ilsa}, a woman)' in near and not sex_statements(scene_part(near), ilsa)
+    checks['NOT ALLOWED: Wenna (in the relations, never seen) has no sex'] = f'(#{wenna})' in near and not sex_statements(near, wenna)
+    shipped = (ROOT / 'living/scripts/skills.rhai').read_text()
+    overlay = shipped.replace('fn perceived_of(p)', 'fn base_perceived_of(p)', 1) + \
+        '\nfn perceived_of(p) { let r = base_perceived_of(p); if !p.self && p.dist > 4.0 { r.name = false; r.health = "none"; r.far = true; } r }\n'
+    (run.directory / 'far-overlay.rhai').write_text(overlay)
+    subprocess.run([sys.executable, str(ROOT / 'living/tools/install_script.py'), run.db, str(run.directory / 'far-overlay.rhai')], check=True, cwd=ROOT, capture_output=True, timeout=120)
+    try:
+        run.admin('place_at', newcomer, *off(6.0))
+        time.sleep(2.0)
+        run.request(oren, 'bound far')
+        far = run.wait(lambda: asked('bound far'), 'Oren\'s prompt, the newcomer far', 90)[0]
+        (run.directory / 'prompt-far.txt').write_text(far)
+        figures = [c for v in (scene_sent(far) or {}).values() if isinstance(v, list) for c in v if isinstance(c, dict) and c.get('who') == FAR]
+        checks['ALLOWED Far: the figure in sight carries its form'] = any(c.get('form') for c in figures)
+    finally:
+        subprocess.run([sys.executable, str(ROOT / 'living/tools/install_script.py'), run.db], cwd=ROOT, capture_output=True, timeout=120)
+    run.admin('place_at', newcomer, *away)
+    # Behind Oren under facing sight (`fov_on`): heard, not seen. He faces along the open ray's
+    # far end, each speaker stands 5 m behind him (past the 3 m near ring), facing him.
+    talks = lambda: [sent_text(e) for e in requests() if e['purpose'] == 'talk' and '# Who you are\nOren Hale' in sent_text(e)]
+    behind = (body['x'] - dx * 5.0, body['y'] - dy * 5.0)
+    run.admin('place_at', oren, *off(0.0))
+    # The face act, again if it did not take (minds-sex2-f, -g). It is instant, and its
+    # `skill_use` row may be gone before a poll: the body's heading (`atan2(dy, dx)`) is read.
+    want = math.atan2(dy, dx)
+    turned = lambda: [b for b in run.private(f'SELECT * FROM body WHERE id = {oren}', 'oren-heading')
+                      if abs((b['heading'] - want + math.pi) % (2 * math.pi) - math.pi) < 0.35]
+    for attempt in range(3):
+        run.admin('set_behavior', oren, json.dumps({'seq': [{'do': {'skill': 'face', 'target': {'at': list(off(6.0))}}}, {'wait': 600}]}))
+        try:
+            run.wait(turned, 'Oren faces along the ray', 20)
+            break
+        except RuntimeError:
+            if attempt == 2:
+                raise
+            run.note(f'face attempt {attempt + 1}: not facing after 20 s; installing it again')
+    run.admin('set_world_law', 'fov_on', 'true')
+    try:
+        for who in (ilsa, wenna):
+            run.admin('set_behavior', who, json.dumps({'wait': 600}))
+        run.admin('place_at', ilsa, *behind)
+        time.sleep(4.0)
+        run.admin('mind_say', ilsa, 'Will you come in? Wenna Reed sent word from Reedmouth. verify bound ilsa', oren, 'say', 0, thought('verify bound'))
+        ilsa_talk = run.wait(lambda: [t for t in talks() if 'verify bound ilsa' in t], 'Oren\'s talk prompt for Ilsa behind him', 90)[0]
+        (run.directory / 'prompt-talk-ilsa.txt').write_text(ilsa_talk)
+        checks['ALLOWED remembered: the talk header for Ilsa, heard behind him'] = f'# You and Ilsa Hale (#{ilsa}, a woman)' in ilsa_talk
+        checks['NOT ALLOWED named in speech: Wenna named in Ilsa\'s line has no sex'] = not sex_statements(ilsa_talk, wenna)
+        run.admin('place_at', ilsa, *away)
+        run.admin('place_at', wenna, *behind)
+        time.sleep(5.0)
+        checks['Oren still never saw Wenna, heard behind him'] = (oren, wenna) not in seen()
+        run.admin('mind_say', wenna, 'Do you remember me, Oren? verify bound wenna', oren, 'say', 0, thought('verify bound'))
+        wenna_talk = run.wait(lambda: [t for t in talks() if 'verify bound wenna' in t], 'Oren\'s talk prompt for Wenna behind him', 120)[0]
+        (run.directory / 'prompt-talk-wenna.txt').write_text(wenna_talk)
+        checks['NOT ALLOWED talk header: Wenna, never seen, heard behind him'] = bool(re.search(r'# You and [^\n(]*\(#%d\)\n' % wenna, wenna_talk)) and not sex_statements(wenna_talk, wenna)
+        run.admin('place_at', wenna, *walk_far(run, off(0.0), 80))
+        checks['Oren never saw Wenna at all'] = (oren, wenna) not in seen()
+    finally:
+        run.admin('set_world_law', 'fov_on', 'false')
+    # The newborn: its father dead before the birth.
+    child = run.wait(lambda: next((c for c in run.sql("SELECT * FROM character WHERE kind = 'person'", 'children')
+                                   if {c['parent_a'], c['parent_b']} == {brisk, edda} and c['id'] not in before), None), 'a child born to Brisk and Edda', 300)
+    cid, cname = child['id'], child['name']
+    names[cid] = cname
+    shared.stop(run.mind)
+    subscriptions = run.log().count('world subscribed:')
+    run.env['LIVING_ONLY'] = ','.join(map(str, [oren, lio, cid]))
+    run.launch_mind()
+    run.wait(lambda: run.log().count('world subscribed:') > subscriptions, 'the restarted mind subscribed')
+    birth = run.wait(lambda: [sent_text(e) for e in requests() if e['purpose'] == 'consolidate' and f'Newborn: {cname} (#{cid}' in sent_text(e)], f'{cname}\'s birth identity call', 120)[0]
+    (run.directory / 'prompt-birth.txt').write_text(birth)
+    rows = seen()
+    checks['NOT ALLOWED birth prompt: the father, dead before the birth and never seen, has no sex'] = (cid, brisk) not in rows and f'(#{brisk})' in birth and not sex_statements(birth, brisk)
+    checks['birth prompt: the mother\'s body only if remembered'] = bool(sex_statements(birth, edda)) == ((cid, edda) in rows)
+    checks['ALLOWED: the newborn\'s own body'] = bool(sex_statements(birth, cid))
+    # Every prompt of the three minds: each statement of someone's sex outside the scene is the
+    # mind's own or backed by its `sex_seen` row.
+    minds = {oren: 'Oren Hale', lio: 'Lio Reed', cid: cname}
+    unbacked = []
+    identity = {lio: [('consolidate', lio_facts)], cid: [('consolidate', birth)]}
+    for observer, name in minds.items():
+        for purpose, text in prompts_of(run, name) + identity.get(observer, []):
+            outside = text.replace(scene_part(text), '') if scene_part(text) else text
+            for pid in names:
+                if pid == observer:
+                    continue
+                for st in sex_statements(outside, pid):
+                    if (observer, pid) not in rows:
+                        unbacked.append({'mind': name, 'purpose': purpose, 'about': names[pid], 'statement': st})
+    (run.directory / 'unbacked.json').write_text(json.dumps(unbacked, indent=1))
+    checks['every prompt: no statement of an unremembered person\'s sex outside the scene'] = not unbacked
+    result = {'oren': oren, 'ilsa': ilsa, 'wenna': wenna, 'lio': lio, 'mara': mara, 'brisk': brisk, 'edda': edda, 'newcomer': newcomer, 'child': cid,
+              'sex_seen': sorted(map(list, rows)), 'unbacked': unbacked[:20], 'checks': checks}
+    (run.directory / 'sex-boundary.json').write_text(json.dumps(result, indent=2))
+    assert all(checks.values()), checks
+    return {'status': 'pass', **result}
 
 @case('body')
 def body_case(run):

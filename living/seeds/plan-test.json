@@ -79,11 +79,11 @@
         {"kind": "hall", "name": "the Tally Hall", "lot": "hall", "about": "where debts are written"}
       ],
       "residents": [
-        {"name": "Ada Hollis", "age": 41, "household": "hollis", "occupation": "fisher", "look": "lp_7628c6735414099f"},
-        {"name": "Tom Hollis", "age": 44, "household": "hollis", "occupation": "fisher", "look": "lp_a187a8d79ee818a1"},
-        {"name": "Nell Hollis", "age": 9, "household": "hollis", "occupation": "child", "parents": ["Ada Hollis", "Tom Hollis"], "look": "lp_1ecacc0f06f6e8c4"},
-        {"name": "Bryn Wren", "age": 35, "household": "wren", "occupation": "cook", "look": "lp_6da22f5cf81a6b8b"},
-        {"name": "Ivo Wren", "age": 37, "household": "wren", "occupation": "builder", "look": "lp_7ba532feef7b2d78"}
+        {"name": "Ada Hollis", "age": 41, "sex": "f", "household": "hollis", "occupation": "fisher", "look": "lp_7628c6735414099f"},
+        {"name": "Tom Hollis", "age": 44, "sex": "m", "household": "hollis", "occupation": "fisher", "look": "lp_a187a8d79ee818a1"},
+        {"name": "Nell Hollis", "age": 9, "sex": "f", "household": "hollis", "occupation": "child", "parents": ["Ada Hollis", "Tom Hollis"], "look": "lp_1ecacc0f06f6e8c4"},
+        {"name": "Bryn Wren", "age": 35, "sex": "f", "household": "wren", "occupation": "cook", "look": "lp_6da22f5cf81a6b8b"},
+        {"name": "Ivo Wren", "age": 37, "sex": "m", "household": "wren", "occupation": "builder", "look": "lp_7ba532feef7b2d78"}
       ]
     }
   ],

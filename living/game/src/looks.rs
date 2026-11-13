@@ -295,7 +295,7 @@ pub fn update(net: NonSend<Net>, island: Option<Res<crate::island::Island>>, mut
     for (i, (id, l, t, b)) in base.iter().enumerate() {
         // Someone drawn from a line is named by its words: "a woman in a green smock and dark
         // trousers, dark-haired" made out; too far to make out, the projection's words, and for
-        // plates and hover "a tall figure in a green smock" (no sex, hair or beard).
+        // plates and hover "a tall woman in a green smock" (no hair or beard).
         if let Some((full, from_afar)) = phrased.get(id) {
             let label = if far(l) { l.clone() } else { full.clone() };
             if far(l) {

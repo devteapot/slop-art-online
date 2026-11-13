@@ -22,6 +22,10 @@ ROOT = Path(__file__).resolve().parents[4]
 # The mind binary the suite builds: in CARGO_TARGET_DIR when set (a private build directory),
 # else living/target. Running another path would test whatever binary another checkout left.
 MIND_BIN = Path(os.environ.get('CARGO_TARGET_DIR') or ROOT / 'living/target') / 'release/living-mind'
+# A mind binary built elsewhere, for a mutant run (verify-minds `sex-boundary`): the driver still
+# builds the tree's own, and runs this one.
+if os.environ.get('LIVING_VERIFY_MIND_BIN'):
+    MIND_BIN = Path(os.environ['LIVING_VERIFY_MIND_BIN'])
 SHARED = ROOT / '.agents/skills/verify/scripts/verify.py'
 # The server verify.py uses: the shared container, or a worker's own (see verify/SKILL.md).
 STDB_URL = os.environ.get('LIVING_STDB_URL', 'http://127.0.0.1:3300').rstrip('/')

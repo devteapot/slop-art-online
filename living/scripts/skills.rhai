@@ -256,15 +256,17 @@ fn senses_law() {
 // "Mother" said by a child names that child's parent, and a line said to someone else that uses it
 // names the parent for every hearer (the naming detail, and a named hearer's turn). What the one
 // named is to the speaker: parent, child, sibling, grandparent, grandchild or partner (the father
-// or mother of one's child). The rules have no sex, so each word names anyone in that relation.
+// or mother of one's child). Each relation's words by the body sex of the one named (body-sex):
+// `female` words name only a woman or girl, `male` words only a man or boy, `any` words anyone in
+// the relation. Someone whose sex the world does not hold is named by every word of the relation.
 fn kin_terms() {
     #{
-        parent: ["mother", "father", "mum", "mam", "mama", "mummy", "ma", "dad", "da", "papa", "daddy", "pa"],
-        child: ["son", "daughter"],
-        sibling: ["brother", "sister"],
-        grandparent: ["gran", "granny", "grandmother", "grandma", "grandfather", "grandpa", "grandad", "granddad", "nan", "nana"],
-        grandchild: ["grandson", "granddaughter"],
-        partner: ["husband", "wife"],
+        parent: #{ female: ["mother", "mum", "mam", "mama", "mummy", "ma"], male: ["father", "dad", "da", "papa", "daddy", "pa"], any: ["parent"] },
+        child: #{ female: ["daughter"], male: ["son"], any: [] },
+        sibling: #{ female: ["sister"], male: ["brother"], any: [] },
+        grandparent: #{ female: ["gran", "granny", "grandmother", "grandma", "nan", "nana"], male: ["grandfather", "grandpa", "grandad", "granddad"], any: ["grandparent"] },
+        grandchild: #{ female: ["granddaughter"], male: ["grandson"], any: [] },
+        partner: #{ female: ["wife"], male: ["husband"], any: [] },
     }
 }
 
@@ -1423,8 +1425,11 @@ fn grown(a) { !young(a) }
 // keep a settlement's numbers"):
 //   conceive_food  food the two partners carry between them, at least (0: none asked)
 //   conceive_roof  whether one must stand under a roof (a shelter or a house) to start a family
+//   conceive_needs_pair  whether a family is started only by a woman and a man (body-sex; off as
+//                        shipped: the owner has not decided, and births trials compare across it)
 fn conceive_food() { 0 }
 fn conceive_roof() { false }
+fn conceive_needs_pair() { false }
 fn food_carried(inv) {
     let n = 0;
     for k in inv.keys() { if nutrition(k) > 0.0 { n += inv[k]; } }
@@ -1434,6 +1439,7 @@ fn conceive_more() {
     let more = "";
     if conceive_roof() { more += ", under a roof"; }
     if conceive_food() > 0 { more += `, with at least ${conceive_food()} food carried between you`; }
+    if conceive_needs_pair() { more += ", a woman with a man"; }
     more
 }
 
@@ -1443,6 +1449,8 @@ fn conceive_check(a) {
     if a.target.id == a.actor.id { return "cannot do that alone"; }
     if a.target.stage != "adult" { return "they are not of an age for it"; }
     if a.actor.hunger > 60.0 { return "too hungry to think of a family"; }
+    // A body whose sex the world does not hold is not refused for it (a world from before sex).
+    if conceive_needs_pair() && a.actor.sex != "" && a.actor.sex == a.target.sex { return "a family is started by a woman and a man"; }
     if conceive_roof() && !a.actor.near_shelter { return "not under a roof: a family is started under a shelter or in a house"; }
     if conceive_food() > 0 {
         let food = food_carried(a.actor.inv) + food_carried(a.target.inv);
@@ -2982,6 +2990,27 @@ fn look_bands_law() {
     let b = look_bands();
     #{ cadence: "event", topic: "",
        about: `People look like children until ${short(b.youth)} years old, like youths until ${short(b.adult)}, then like adults until they grow old.` }
+}
+
+// ---- body sex (body-sex; docs/LIVING_CORE.md, "Body sex") ----
+// A person's body is female or male, a world fact set when they come into the world and never
+// changed. A seed says it for the people it writes; for everyone else (a birth, a newcomer, a
+// player who does not choose, a band member the seed leaves open) the world picks, female with
+// this share.
+fn female_share() { 0.5 }
+fn female_share_law() {
+    #{ cadence: "event", topic: "",
+       about: `A person born or arriving is a girl or woman about ${short(female_share() * 100.0)} times in a hundred, else a boy or man.` }
+}
+// The words for a body by its sex and life stage (infant, child, adult, elder): what one is told
+// of oneself, of others in sight (near or far: build and clothes show it at any distance one sees
+// a person) and of the people one knows.
+fn sex_words() {
+    #{ female: ["baby girl", "girl", "woman", "old woman"], male: ["baby boy", "boy", "man", "old man"] }
+}
+fn sex_words_law() {
+    #{ cadence: "event", topic: "",
+       about: "Everyone is a woman or a man (as a child a girl or a boy), and anyone who sees them can tell which, near or far." }
 }
 
 // Whom a mind's scene describes by look: "unnamed" (strangers and figures too far away to make

@@ -491,6 +491,45 @@ impl Minds {
         }
     }
 
+    /// Person `id`'s body sex, as the world holds it (the private `sex` table, read as the owner).
+    pub(crate) fn sex_of(&self, id: u32) -> Option<living_rules::sex::Sex> {
+        self.conn.db.sex().id().find(&id).and_then(|r| living_rules::sex::Sex::from_code(r.sex))
+    }
+
+    /// "a woman", "an old man": person `id`'s body in the rules' words, by sex and stage (none
+    /// for an animal or a person whose sex the world does not hold).
+    pub(crate) fn sex_words_of(&self, id: u32) -> Option<String> {
+        let c = self.conn.db.character().id().find(&id).filter(|c| c.kind == "person")?;
+        self.sex_of(id).map(|s| prompts::a_sex_word(s, c.stage))
+    }
+
+    /// What `me` remembers of `other`'s body sex (body-sex): its own always; anyone else's only
+    /// when its character made them out at full sight once (the authority's `sex_seen` row,
+    /// written then with the sex seen). Never from a name, kinship, a community, a relation or
+    /// speech: a prompt states the sex of someone out of sight only when the mind remembers it.
+    /// Someone in sight now is described by the authority's scene (`form`, near or far); a talk
+    /// partner only as remembered (someone face to face has been made out). A model's older guesses stay as its
+    /// beliefs; this fact, shown beside them, is what the world says.
+    pub(crate) fn known_sex(&self, me: u32, other: u32) -> Option<String> {
+        if other >= living_rules::script::FAR_HANDLE_BASE {
+            return None;
+        }
+        if me == other {
+            return self.sex_words_of(me);
+        }
+        let row = self.conn.db.sex_seen().iter().find(|r| r.observer == me && r.known == other)?;
+        let c = self.conn.db.character().id().find(&other)?;
+        living_rules::sex::Sex::from_code(row.sex).map(|s| prompts::a_sex_word(s, c.stage))
+    }
+
+    /// "Edda Fenner (#12, a woman)": a person as `me` knows them, with their body when known.
+    pub(crate) fn known_person(&self, me: u32, other: u32) -> String {
+        match self.known_sex(me, other) {
+            Some(s) => format!("{} (#{other}, {s})", self.known_as(me, other)),
+            None => format!("{} (#{other})", self.known_as(me, other)),
+        }
+    }
+
     /// Whether `me` knows `o`'s name (`perception::knows_name`, as [`Minds::known_as`] reads it).
     fn knows_name(&self, me: u32, o: &Character) -> bool {
         let other = o.id;
@@ -1185,7 +1224,10 @@ impl Minds {
         let profile = self.profile(&c);
         let system = prompts::birth_identity_system();
         let born = self.born_temperament(c.id);
-        let user = prompts::birth_identity_user(&c.name, c.id, [(&an, c.parent_a, &ap), (&bn, c.parent_b, &bp)], born.as_ref());
+        // The newborn's body (the authority wrote its row with the character, before this first
+        // mind call) and its parents' where it remembers them (`known_sex`: made out once).
+        let body = |id: u32| self.known_sex(c.id, id).unwrap_or_default();
+        let user = prompts::birth_identity_user(&c.name, c.id, [(&an, c.parent_a, &ap), (&bn, c.parent_b, &bp)], born.as_ref(), [&body(c.id), &body(c.parent_a), &body(c.parent_b)]);
         let _slow = self.slow.acquire().await?;
         let reply = self.llm.chat(&profile, self.attention(c.id, None), "consolidate", &c.name, &[Msg { role: "system", content: system }, Msg { role: "user", content: user }]).await?;
         let v = llm::parse_json(&reply.content)?;
@@ -1733,7 +1775,12 @@ impl Minds {
         let (Some(c), Some(w)) = (self.conn.db.character().id().find(&actor), self.conn.db.world().id().find(&0)) else { return String::new() };
         let Some(base) = self.life_table(&c.kind) else { return String::new() };
         let age = c.birth_age_days + llm::now_ms().saturating_sub(c.born_ms) as f32 / w.day_ms.max(1) as f32;
-        prompts::body_line(&c.kind, c.stage, age, base, living_rules::life::Pace { year_days: w.year_days.max(1) as f32, pace: w.life_pace })
+        let line = prompts::body_line(&c.kind, c.stage, age, base, living_rules::life::Pace { year_days: w.year_days.max(1) as f32, pace: w.life_pace });
+        // One's own body sex, in the rules' words (body-sex): "You are a woman."
+        match self.sex_words_of(actor) {
+            Some(s) => format!("{line} You are {s}."),
+            None => line,
+        }
     }
 
     /// A species' life table as the world was built with it: species.json with the seed's own
@@ -1771,7 +1818,7 @@ impl Minds {
                         let name = self.conn.db.community().id().find(&m.community).map(|c| c.name).unwrap_or_default();
                         let others: Vec<u32> = self.conn.db.membership().iter().filter(|x| x.community == m.community && x.member != actor).map(|x| x.member).collect();
                         let felt: std::collections::HashSet<u32> = self.conn.db.relation().iter().filter(|r| r.actor == actor).map(|r| r.other).collect();
-                        let known: Vec<String> = others.iter().filter(|id| felt.contains(id)).map(|id| format!("{} (#{id})", self.known_as(actor, *id))).collect();
+                        let known: Vec<String> = others.iter().filter(|id| felt.contains(id)).map(|id| self.known_person(actor, *id)).collect();
                         belonging(&name, others.len(), &known)
                     }
                     None => "\nYou belong to no community.".into(),
@@ -1823,9 +1870,8 @@ impl Minds {
             .take(16)
             .map(|r| {
                 format!(
-                    "{} (#{}): {}, trust {:.0}, affinity {:.0}{}",
-                    self.known_as(actor, r.other),
-                    r.other,
+                    "{}: {}, trust {:.0}, affinity {:.0}{}",
+                    self.known_person(actor, r.other),
                     r.label,
                     r.trust,
                     r.affinity,

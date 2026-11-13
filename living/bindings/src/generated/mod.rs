@@ -20,6 +20,7 @@ pub mod artifact_table;
 pub mod artifact_type;
 pub mod audience_table;
 pub mod audience_type;
+pub mod backfill_sex_reducer;
 pub mod background_table;
 pub mod background_type;
 pub mod belief_in_type;
@@ -116,6 +117,7 @@ pub mod infant_need_type;
 pub mod install_script_reducer;
 pub mod inventory_table;
 pub mod inventory_type;
+pub mod join_as_reducer;
 pub mod join_reducer;
 pub mod join_request_table;
 pub mod join_request_type;
@@ -195,6 +197,8 @@ pub mod my_readiness_table;
 pub mod my_record_type;
 pub mod my_records_table;
 pub mod my_senses_table;
+pub mod my_sex_table;
+pub mod my_sex_type;
 pub mod my_skill_uses_table;
 pub mod my_vitals_table;
 pub mod own_habits_reducer;
@@ -271,6 +275,10 @@ pub mod set_weather_reducer;
 pub mod set_world_law_reducer;
 pub mod settlement_table;
 pub mod settlement_type;
+pub mod sex_row_type;
+pub mod sex_seen_table;
+pub mod sex_seen_type;
+pub mod sex_table;
 pub mod skill_card_table;
 pub mod skill_card_type;
 pub mod skill_code_table;
@@ -336,6 +344,7 @@ pub use artifact_table::*;
 pub use artifact_type::Artifact;
 pub use audience_table::*;
 pub use audience_type::Audience;
+pub use backfill_sex_reducer::backfill_sex;
 pub use background_table::*;
 pub use background_type::Background;
 pub use belief_in_type::BeliefIn;
@@ -432,6 +441,7 @@ pub use infant_need_type::InfantNeed;
 pub use install_script_reducer::install_script;
 pub use inventory_table::*;
 pub use inventory_type::Inventory;
+pub use join_as_reducer::join_as;
 pub use join_reducer::join;
 pub use join_request_table::*;
 pub use join_request_type::JoinRequest;
@@ -511,6 +521,8 @@ pub use my_readiness_table::*;
 pub use my_record_type::MyRecord;
 pub use my_records_table::*;
 pub use my_senses_table::*;
+pub use my_sex_table::*;
+pub use my_sex_type::MySex;
 pub use my_skill_uses_table::*;
 pub use my_vitals_table::*;
 pub use own_habits_reducer::own_habits;
@@ -587,6 +599,10 @@ pub use set_weather_reducer::set_weather;
 pub use set_world_law_reducer::set_world_law;
 pub use settlement_table::*;
 pub use settlement_type::Settlement;
+pub use sex_row_type::SexRow;
+pub use sex_seen_table::*;
+pub use sex_seen_type::SexSeen;
+pub use sex_table::*;
 pub use skill_card_table::*;
 pub use skill_card_type::SkillCard;
 pub use skill_code_table::*;
@@ -650,6 +666,7 @@ pub enum Reducer {
         id: u32,
         hp: f32,
     },
+    BackfillSex,
     ClientConnected,
     ClientDisconnected,
     CreateFloor {
@@ -697,6 +714,10 @@ pub enum Reducer {
     },
     Join {
         name: String,
+    },
+    JoinAs {
+        name: String,
+        sex: String,
     },
     Kill {
         id: u32,
@@ -857,6 +878,7 @@ impl __sdk::Reducer for Reducer {
     fn reducer_name(&self) -> &'static str {
         match self {
             Reducer::AdminSetVitals { .. } => "admin_set_vitals",
+            Reducer::BackfillSex => "backfill_sex",
             Reducer::ClientConnected => "client_connected",
             Reducer::ClientDisconnected => "client_disconnected",
             Reducer::CreateFloor { .. } => "create_floor",
@@ -872,6 +894,7 @@ impl __sdk::Reducer for Reducer {
             Reducer::HumanSpeak { .. } => "human_speak",
             Reducer::InstallScript { .. } => "install_script",
             Reducer::Join { .. } => "join",
+            Reducer::JoinAs { .. } => "join_as",
             Reducer::Kill { .. } => "kill",
             Reducer::MindAct { .. } => "mind_act",
             Reducer::MindConsolidated { .. } => "mind_consolidated",
@@ -919,6 +942,9 @@ impl __sdk::Reducer for Reducer {
                     id: id.clone(),
                     hp: hp.clone(),
                 })
+            }
+            Reducer::BackfillSex => {
+                __sats::bsatn::to_vec(&backfill_sex_reducer::BackfillSexArgs {})
             }
             Reducer::ClientConnected => {
                 __sats::bsatn::to_vec(&client_connected_reducer::ClientConnectedArgs {})
@@ -990,6 +1016,10 @@ impl __sdk::Reducer for Reducer {
             Reducer::Join { name } => {
                 __sats::bsatn::to_vec(&join_reducer::JoinArgs { name: name.clone() })
             }
+            Reducer::JoinAs { name, sex } => __sats::bsatn::to_vec(&join_as_reducer::JoinAsArgs {
+                name: name.clone(),
+                sex: sex.clone(),
+            }),
             Reducer::Kill { id, cause } => __sats::bsatn::to_vec(&kill_reducer::KillArgs {
                 id: id.clone(),
                 cause: cause.clone(),
@@ -1320,6 +1350,7 @@ pub struct DbUpdate {
     my_readiness: __sdk::TableUpdate<Readiness>,
     my_records: __sdk::TableUpdate<MyRecord>,
     my_senses: __sdk::TableUpdate<CharacterSenses>,
+    my_sex: __sdk::TableUpdate<MySex>,
     my_skill_uses: __sdk::TableUpdate<SkillUse>,
     my_vitals: __sdk::TableUpdate<Vitals>,
     pasture: __sdk::TableUpdate<Pasture>,
@@ -1349,6 +1380,8 @@ pub struct DbUpdate {
     seen_fighters: __sdk::TableUpdate<Fighter>,
     seen_stock: __sdk::TableUpdate<SeenStock>,
     settlement: __sdk::TableUpdate<Settlement>,
+    sex: __sdk::TableUpdate<SexRow>,
+    sex_seen: __sdk::TableUpdate<SexSeen>,
     skill_card: __sdk::TableUpdate<SkillCard>,
     skill_code: __sdk::TableUpdate<SkillCode>,
     skill_use: __sdk::TableUpdate<SkillUse>,
@@ -1617,6 +1650,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "my_senses" => db_update
                     .my_senses
                     .append(my_senses_table::parse_table_update(table_update)?),
+                "my_sex" => db_update
+                    .my_sex
+                    .append(my_sex_table::parse_table_update(table_update)?),
                 "my_skill_uses" => db_update
                     .my_skill_uses
                     .append(my_skill_uses_table::parse_table_update(table_update)?),
@@ -1704,6 +1740,12 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "settlement" => db_update
                     .settlement
                     .append(settlement_table::parse_table_update(table_update)?),
+                "sex" => db_update
+                    .sex
+                    .append(sex_table::parse_table_update(table_update)?),
+                "sex_seen" => db_update
+                    .sex_seen
+                    .append(sex_seen_table::parse_table_update(table_update)?),
                 "skill_card" => db_update
                     .skill_card
                     .append(skill_card_table::parse_table_update(table_update)?),
@@ -2042,6 +2084,12 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.settlement = cache
             .apply_diff_to_table::<Settlement>("settlement", &self.settlement)
             .with_updates_by_pk(|row| &row.id);
+        diff.sex = cache
+            .apply_diff_to_table::<SexRow>("sex", &self.sex)
+            .with_updates_by_pk(|row| &row.id);
+        diff.sex_seen = cache
+            .apply_diff_to_table::<SexSeen>("sex_seen", &self.sex_seen)
+            .with_updates_by_pk(|row| &row.id);
         diff.skill_card = cache
             .apply_diff_to_table::<SkillCard>("skill_card", &self.skill_card)
             .with_updates_by_pk(|row| &row.skill);
@@ -2152,6 +2200,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.my_records = cache.apply_diff_to_table::<MyRecord>("my_records", &self.my_records);
         diff.my_senses = cache
             .apply_diff_to_table::<CharacterSenses>("my_senses", &self.my_senses)
+            .with_updates_by_pk(|row| &row.id);
+        diff.my_sex = cache
+            .apply_diff_to_table::<MySex>("my_sex", &self.my_sex)
             .with_updates_by_pk(|row| &row.id);
         diff.my_skill_uses =
             cache.apply_diff_to_table::<SkillUse>("my_skill_uses", &self.my_skill_uses);
@@ -2417,6 +2468,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "my_senses" => db_update
                     .my_senses
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "my_sex" => db_update
+                    .my_sex
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "my_skill_uses" => db_update
                     .my_skill_uses
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
@@ -2503,6 +2557,12 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "settlement" => db_update
                     .settlement
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "sex" => db_update
+                    .sex
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "sex_seen" => db_update
+                    .sex_seen
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "skill_card" => db_update
                     .skill_card
@@ -2817,6 +2877,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "my_senses" => db_update
                     .my_senses
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "my_sex" => db_update
+                    .my_sex
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "my_skill_uses" => db_update
                     .my_skill_uses
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -2903,6 +2966,12 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "settlement" => db_update
                     .settlement
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "sex" => db_update
+                    .sex
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "sex_seen" => db_update
+                    .sex_seen
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "skill_card" => db_update
                     .skill_card
@@ -3059,6 +3128,7 @@ pub struct AppliedDiff<'r> {
     my_readiness: __sdk::TableAppliedDiff<'r, Readiness>,
     my_records: __sdk::TableAppliedDiff<'r, MyRecord>,
     my_senses: __sdk::TableAppliedDiff<'r, CharacterSenses>,
+    my_sex: __sdk::TableAppliedDiff<'r, MySex>,
     my_skill_uses: __sdk::TableAppliedDiff<'r, SkillUse>,
     my_vitals: __sdk::TableAppliedDiff<'r, Vitals>,
     pasture: __sdk::TableAppliedDiff<'r, Pasture>,
@@ -3088,6 +3158,8 @@ pub struct AppliedDiff<'r> {
     seen_fighters: __sdk::TableAppliedDiff<'r, Fighter>,
     seen_stock: __sdk::TableAppliedDiff<'r, SeenStock>,
     settlement: __sdk::TableAppliedDiff<'r, Settlement>,
+    sex: __sdk::TableAppliedDiff<'r, SexRow>,
+    sex_seen: __sdk::TableAppliedDiff<'r, SexSeen>,
     skill_card: __sdk::TableAppliedDiff<'r, SkillCard>,
     skill_code: __sdk::TableAppliedDiff<'r, SkillCode>,
     skill_use: __sdk::TableAppliedDiff<'r, SkillUse>,
@@ -3277,6 +3349,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
             &self.my_senses,
             event,
         );
+        callbacks.invoke_table_row_callbacks::<MySex>("my_sex", &self.my_sex, event);
         callbacks.invoke_table_row_callbacks::<SkillUse>(
             "my_skill_uses",
             &self.my_skill_uses,
@@ -3334,6 +3407,8 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         );
         callbacks.invoke_table_row_callbacks::<SeenStock>("seen_stock", &self.seen_stock, event);
         callbacks.invoke_table_row_callbacks::<Settlement>("settlement", &self.settlement, event);
+        callbacks.invoke_table_row_callbacks::<SexRow>("sex", &self.sex, event);
+        callbacks.invoke_table_row_callbacks::<SexSeen>("sex_seen", &self.sex_seen, event);
         callbacks.invoke_table_row_callbacks::<SkillCard>("skill_card", &self.skill_card, event);
         callbacks.invoke_table_row_callbacks::<SkillCode>("skill_code", &self.skill_code, event);
         callbacks.invoke_table_row_callbacks::<SkillUse>("skill_use", &self.skill_use, event);
@@ -4098,6 +4173,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         my_readiness_table::register_table(client_cache);
         my_records_table::register_table(client_cache);
         my_senses_table::register_table(client_cache);
+        my_sex_table::register_table(client_cache);
         my_skill_uses_table::register_table(client_cache);
         my_vitals_table::register_table(client_cache);
         pasture_table::register_table(client_cache);
@@ -4127,6 +4203,8 @@ impl __sdk::SpacetimeModule for RemoteModule {
         seen_fighters_table::register_table(client_cache);
         seen_stock_table::register_table(client_cache);
         settlement_table::register_table(client_cache);
+        sex_table::register_table(client_cache);
+        sex_seen_table::register_table(client_cache);
         skill_card_table::register_table(client_cache);
         skill_code_table::register_table(client_cache);
         skill_use_table::register_table(client_cache);
@@ -4229,6 +4307,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "my_readiness",
         "my_records",
         "my_senses",
+        "my_sex",
         "my_skill_uses",
         "my_vitals",
         "pasture",
@@ -4258,6 +4337,8 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "seen_fighters",
         "seen_stock",
         "settlement",
+        "sex",
+        "sex_seen",
         "skill_card",
         "skill_code",
         "skill_use",

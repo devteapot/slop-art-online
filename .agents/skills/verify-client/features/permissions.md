@@ -21,16 +21,19 @@ A client invokes reducers with its own identity. `require_admin` (`living/author
 .agents/skills/verify-client/scripts/drive.py --run "$R"
 ```
 
-`reducers.md` records every identity, reducer, HTTP status, response, and verdict. The mind service connects as the world's admin, so `require_admin` cannot refuse it an admin reducer by identity: before any call, `drive.py` fails if `living/mind/src` calls `admin_set_vitals`, `kill`, `relook`, `set_world_law` or `install_script` (`never_by_minds`). `reducers.json` also records arguments and expected text. The copied admin and mind inventories must match the source before any calls run.
+`reducers.md` records every identity, reducer, HTTP status, response, and verdict. The mind service connects as the world's admin, so `require_admin` cannot refuse it an admin reducer by identity: before any call, `drive.py` fails if `living/mind/src` calls `admin_set_vitals`, `kill`, `relook`, `set_world_law`, `install_script` or `backfill_sex` (`never_by_minds`). `reducers.json` also records arguments and expected text. The copied admin and mind inventories must match the source before any calls run.
 
 | Caller and target | Expected result |
 | --- | --- |
-| Non-admin calls to every admin reducer (`ADMIN` in `drive.py`, `admin_set_vitals` among them since 2026-11-13) | HTTP 530, `admin only` |
+| Non-admin calls to every admin reducer (`ADMIN` in `drive.py`, `admin_set_vitals` and `backfill_sex` among them since 2026-11-13) | HTTP 530, `admin only` |
 | `mind_*` on an AI or another player's actor | HTTP 530, `not your character` |
 | `mind_*` on the caller's own joined actor | HTTP 200 |
 | External `tick` or `housekeeping` | HTTP 404, `No such procedure` |
 | First `join` for a persistent identity | HTTP 200 |
 | Duplicate `join` while that character lives (or while the person has a `presence` row) | HTTP 530, `you already have a living character` |
+| `join_as(name, sex)` (sex-1) with a sex other than "f" or "m" (also "female", "male", any case), from anyone | HTTP 530, `sex must be "f" or "m"`, nothing made |
+| `join_as(name, "f")` while that character lives | HTTP 530, `you already have a living character` |
+| `join_as` for a fresh identity with "f" | HTTP 200; its `my_sex` row says "female", and SQL on `sex` is refused to it |
 | `use_skill` / `release_skill` as a joined player | HTTP 200 (a refusal is told through `my_combat`) |
 | `use_skill` / `release_skill` without a living character | HTTP 530, `you have no living character` |
 | Joined identity's `human_move`, `human_act`, `human_say`, `human_speak(text, 0, "say")` | HTTP 200 |
