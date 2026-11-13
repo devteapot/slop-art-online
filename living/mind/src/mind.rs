@@ -1392,6 +1392,8 @@ impl Minds {
         if let Some(s) = self.conn.db.script().iter().find(|s| s.name == "skills") {
             prompts::set_rules(s.revision, &s.source);
         }
+        // The fast lane's own slots follow the world's `fast_lane_inflight`.
+        self.llm.set_fast_slots(prompts::fast_slots());
     }
 
     fn schedule(self: Arc<Self>, actor: u32) {

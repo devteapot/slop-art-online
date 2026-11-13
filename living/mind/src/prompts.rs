@@ -607,6 +607,12 @@ pub fn think_framing() -> bool {
     compiled().is_some_and(|s| s.laws().think_framing)
 }
 
+/// The world's `fast_lane_inflight` (the fast lane's reserved slots in the scheduler), or the
+/// shipped value before the rules are read.
+pub fn fast_slots() -> usize {
+    compiled().map_or(crate::llm::FAST_SLOTS_DEFAULT, |s| s.laws().fast_lane_inflight.max(0.0) as usize)
+}
+
 /// Today's framing sentence in the think system prompt, and the neutral one (N2) that replaces it
 /// under `think_framing`, word for word as replayed (docs/FRAMING.md).
 const TODAY_FRAMING: &str = "Start from why you are thinking now: that is what this moment of thought is about. Think about it as that person: what you make of it, and what you mean to do.";
