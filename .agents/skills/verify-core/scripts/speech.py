@@ -587,8 +587,9 @@ def channels(s):
 
 
 def metrics(s):
-    # The database's identity, as the server's metrics name it (`spacetime list`).
-    ident = next(l.split("|")[1].strip() for l in s.command("list").stdout.splitlines() if "|" in l and l.split("|")[0].strip() == s.db)
+    # The database's identity, as the server's metrics name it, looked up by name (not from
+    # `spacetime list`, which a 64-character name elsewhere on the server makes fail).
+    ident = json.loads(http(f"/v1/database/{s.db}")[1])["database_identity"]["__identity__"].removeprefix("0x")
     code, text = http("/v1/metrics")
     out = {}
     for line in text.splitlines():

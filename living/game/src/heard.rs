@@ -60,6 +60,20 @@ pub fn how(text: &str) -> Option<&str> {
     (how.len() > "to the room".len()).then_some(how)
 }
 
+/// How a line to someone was said with more (talk-turns): the authority adds the detail after the
+/// addressee, from the first comma before the words (", naming you", ", naming Agnes Fenner and
+/// you"), whatever the verb or the way's template ("calls out to Bram from about 20 m, naming
+/// you"). Labels carry no comma, so the first one starts the detail. None for a room line (see
+/// [`how`]) or a line to someone said plainly. The window puts the addressee before it in the
+/// player's own label ("to a stranger, naming you").
+pub fn detail_to(text: &str) -> Option<&str> {
+    let head = text[..text.find('“')?].trim_end().trim_end_matches(':').trim_end();
+    if head.contains("to the room") {
+        return None;
+    }
+    head.find(", ").map(|at| &head[at..])
+}
+
 pub fn words(text: &str) -> &str {
     match (text.find('“'), text.rfind('”')) {
         (Some(a), Some(b)) if b > a => &text[a + '“'.len_utf8()..b],
@@ -69,7 +83,7 @@ pub fn words(text: &str) -> &str {
 
 #[cfg(test)]
 mod how_tests {
-    use super::{how, words};
+    use super::{detail_to, how, words};
 
     #[test]
     fn how_a_room_line_was_said_is_read_whatever_its_verb() {
@@ -83,5 +97,19 @@ mod how_tests {
         assert_eq!(how("Edda said to you: “Hello.”"), None);
         assert_eq!(how("Edda said: “Morning.”"), None);
         assert_eq!(how("Bram said to the room: “Morning.”"), None);
+    }
+
+    #[test]
+    fn a_line_to_someone_that_names_others_keeps_its_detail_whatever_its_verb() {
+        let to_other = "Sissly Fenner said to a stranger, naming you: “Ask Mother first.”";
+        assert_eq!(detail_to(to_other), Some(", naming you"));
+        assert_eq!(how(to_other), None);
+        assert_eq!(detail_to("Sissly Fenner said to you, naming Agnes Fenner and a stranger: “Ma knows.”"), Some(", naming Agnes Fenner and a stranger"));
+        assert_eq!(detail_to("Bram calls out to someone too far away to make out from about 20 m, naming you: “Here!”"), Some(", naming you"));
+        // Said plainly, or to the room: none here.
+        assert_eq!(detail_to("Edda said to you: “Hello.”"), None);
+        assert_eq!(detail_to("Bram calls out to Edda from about 20 m: “Here!”"), None);
+        assert_eq!(detail_to("Edda said to the room, naming you: “Come.”"), None);
+        assert_eq!(detail_to("Edda said: “Morning.”"), None);
     }
 }

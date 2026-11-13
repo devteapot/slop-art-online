@@ -340,6 +340,8 @@ fn dump(
         "typing": input.chat_open.then(|| serde_json::json!({"words": input.chat, "window": typing.window.map(|w| w.name()), "to": talk.as_ref().and_then(|t| t.to), "label": talk.as_ref().map(|t| t.label.clone()), "earshot": talk.as_ref().map(|t| t.earshot.clone()), "way": talk.as_ref().and_then(|t| t.card.as_ref()).map(|c| serde_json::json!({"name": c.name, "label": c.label, "max_chars": c.max_chars, "gap_ms": c.gap_ms, "needs_to": c.needs_to})), "told": talk.as_ref().and_then(|t| t.told.as_ref()).map(|t| serde_json::json!({"text": t.text, "ways": t.ways})), "tab": talk.as_ref().and_then(|t| t.tabbed.as_ref().map(|(p, e, c, by)| serde_json::json!({"prev": p, "earshot": e, "chose": c, "authority": by})))})),
         "pointer_over_ui": ui.over_ui,
         "notes": verbs.toasts.iter().map(|t| t.text.clone()).collect::<Vec<_>>(),
+        // Each note's kind, in the same order: true done, false a failure, null a quiet note.
+        "note_ok": verbs.toasts.iter().map(|t| t.ok).collect::<Vec<_>>(),
         // Speech bubbles over heads: whose, and their words only (speech-detail-1).
         "bubbles": model.bubbles.iter().map(|b| serde_json::json!({"speaker": b.speaker, "text": b.text})).collect::<Vec<_>>(),
         // Where my body is drawn (game x, z) and the authority's row for it as this client holds
@@ -461,6 +463,7 @@ pub struct DumpExtra<'w, 's> {
     film: Res<'w, crate::post::Film>,
     live: Option<Res<'w, crate::live::Live>>,
     shine: Res<'w, crate::style::HairShine>,
+    town: Option<Res<'w, crate::town::Town>>,
 }
 
 impl DumpExtra<'_, '_> {
@@ -494,10 +497,13 @@ impl DumpExtra<'_, '_> {
             "drawn": self.weapon.drawn, "slots": slots, "tooltip": tip,
             "events": self.talks.events.iter().rev().take(12).rev().map(|(_, t)| t.clone()).collect::<Vec<_>>(),
             // The Log's last lines as the Log and the person windows show them (speech-detail-1).
-            "lines": self.talks.lines.values().rev().take(12).rev().map(|l| serde_json::json!({"speaker": l.speaker, "to": l.to, "mine": l.mine, "how": l.how, "text": l.text})).collect::<Vec<_>>(),
+            "lines": self.talks.lines.values().rev().take(12).rev().map(|l| serde_json::json!({"speaker": l.speaker, "to": l.to, "mine": l.mine, "how": l.how, "text": l.text, "head": people::line_head(l, false, self.net.my_id, &self.looks), "head_window": people::line_head(l, true, self.net.my_id, &self.looks)})).collect::<Vec<_>>(),
             "cards": self.talks.cards.iter().map(|(who, i, text)| serde_json::json!({"with": who, "card": i, "text": text})).collect::<Vec<_>>(),
             "cursor": cursor, "view": {"yaw": self.cam.shown_yaw, "zoom": self.cam.zoom}, "cursor_ground": ground,
             "facing_sight": fov, "facing_note": self.fov.as_ref().and_then(|f| f.note.clone()).map(|(t, _)| t), "heard": self.heard.as_ref().map(|h| h.json()), "sight_look": self.edge.as_ref().map(|e| e.look.name()), "sight_edge": self.edge.as_ref().map(|e| e.mode.name()), "film": self.film.name(), "film_saved": self.prefs.film, "hair_shine": self.shine.name(), "hair_shine_saved": self.prefs.hair_shine,
+            // The one-shot each body plays now over its walk or stand (a gesture: `town.rs`), by
+            // character id: a wave made while walking on plays on (talk-turns' `on_the_move`).
+            "onces": self.town.as_ref().map(|t| t.shows.iter().filter_map(|(id, s)| s.once.map(|a| (id.to_string(), serde_json::json!(a.clip)))).collect::<serde_json::Map<_, _>>()),
             // Each speaking body's mouth now (`mouth.rs`), by character id.
             "mouths": self.mouths.as_ref().map(|m| m.by_id.iter().map(|(id, w)| (id.to_string(), serde_json::json!(w))).collect::<serde_json::Map<_, _>>())})
     }

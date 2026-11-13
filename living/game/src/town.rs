@@ -18,7 +18,8 @@
 //!   shelter from.
 //!
 //! Gestures last longer on screen than in the rules (a wave is 1.2 s there, its clip about 2 s
-//! here): a gesture plays to its end unless its body moves off or starts something else.
+//! here): a gesture plays to its end unless its body moves off (one the rules say is done on the
+//! move, `on_the_move`, does not end so) or starts something else.
 
 use crate::combat::Action;
 use crate::net::Net;
@@ -93,6 +94,12 @@ const MY_ACTS: [MyAct; 3] = [
 /// Settling down to sit plays this long (s; `sit_ground_down` is 2.97 s).
 const SIT_DOWN_S: f64 = 2.9;
 
+/// Whether the world's rules say this skill is done on the move (`on_the_move`: moving does not
+/// break it off, so moving does not end its gesture here either).
+fn on_the_move(skill: &str) -> bool {
+    living_rules::catalog::skill(skill).is_some_and(|s| s.on_the_move)
+}
+
 /// How a visible skill looks: the skills drawn for by name, any other by its card's `look`.
 pub fn look(card: &ActCard) -> Pose {
     match card.skill.as_str() {
@@ -140,8 +147,11 @@ pub struct Show {
 struct Playing {
     action: Action,
     until_ms: f64,
-    /// Where its body stood when it began; moving off ends it.
+    /// Where its body stood when it began; moving off ends it, unless it is done on the move.
     at: Vec2,
+    /// Its skill is done on the move (the rules' `on_the_move`: a wave, a nod): walking on does
+    /// not end it, on the authority or here.
+    on_move: bool,
     /// The authority's row has confirmed it (mine is predicted until then).
     confirmed: bool,
 }
@@ -153,7 +163,7 @@ pub struct Town {
     /// The `doing.since_ms` of the last gesture row each body started, so a row plays once.
     started: HashMap<u32, u64>,
     /// My gesture awaiting the authority: (clip look, pressed at display ms, facing).
-    predicted: Option<(Pose, f64, Option<Vec2>)>,
+    predicted: Option<(Pose, f64, Option<Vec2>, bool)>,
     /// Whom I last greeted, at display ms (the camera frames us both for a moment).
     pub greeting: Option<(u32, f64)>,
     /// Who answered my greeting, at display ms.
@@ -263,7 +273,7 @@ pub fn input(
     let now = scene.now_ms;
     let (Some(conn), Some(me_id), Some(me3)) = (net.conn.as_ref(), net.my_id, target.0) else { return };
     // Unconfirmed (refused, or lost): my predicted clip stops.
-    if town.predicted.is_some_and(|(_, t, _)| now - t > PREDICT_MS) {
+    if town.predicted.is_some_and(|(_, t, _, _)| now - t > PREDICT_MS) {
         town.predicted = None;
         if town.gestures.get(&me_id).is_some_and(|g| !g.confirmed) {
             town.gestures.remove(&me_id);
@@ -297,7 +307,7 @@ pub fn input(
             // I turn to whom I greet or look over (the authority turns my body too; my look
             // would not).
             let face = scene.shown.get(&t).map(|(p, _)| *p - me).filter(|d| d.length_squared() > 1e-4);
-            town.predicted = Some((act.look, now, face));
+            town.predicted = Some((act.look, now, face, on_the_move(act.skill)));
             if act.people {
                 town.greeting = Some((t, now));
             }
@@ -336,7 +346,7 @@ pub fn shows(net: NonSend<Net>, scene: NonSend<Scene>, acts: Res<Acts>, weather:
         match (row.as_ref(), card.map(look)) {
             (Some(d), Some(pose @ Pose::Once(..))) if town.started.get(&id) != Some(&d.since_ms) => {
                 town.started.insert(id, d.since_ms);
-                let predicted = Some(id) == me && town.predicted.is_some_and(|(_, t, _)| (d.since_ms as f64) >= t - 400.0);
+                let predicted = Some(id) == me && town.predicted.is_some_and(|(_, t, _, _)| (d.since_ms as f64) >= t - 400.0);
                 match town.gestures.get_mut(&id).filter(|_| predicted) {
                     // Mine was predicted at the press: the authority confirms it; no replay.
                     Some(g) => {
@@ -349,7 +359,8 @@ pub fn shows(net: NonSend<Net>, scene: NonSend<Scene>, acts: Res<Acts>, weather:
                         // (its segment's turn); the rest face their spot here.
                         let face = toward.filter(|_| !card.is_some_and(|c| c.faces));
                         if let Some((action, until)) = once(pose, d.since_ms as f64, face) {
-                            town.gestures.insert(id, Playing { action, until_ms: until.max(d.until_ms as f64), at: p, confirmed: true });
+                            let on_move = card.is_some_and(|c| on_the_move(&c.skill));
+                            town.gestures.insert(id, Playing { action, until_ms: until.max(d.until_ms as f64), at: p, on_move, confirmed: true });
                         }
                     }
                 }
@@ -376,18 +387,19 @@ pub fn shows(net: NonSend<Net>, scene: NonSend<Scene>, acts: Res<Acts>, weather:
             _ => {}
         }
         if Some(id) == me {
-            if let Some((pose, t, face)) = town.predicted {
+            if let Some((pose, t, face, on_move)) = town.predicted {
                 if town.gestures.get(&id).is_none_or(|g| g.action.start_ms < t) {
                     if let Some((action, until)) = once(pose, t, face) {
-                        town.gestures.insert(id, Playing { action, until_ms: until, at: p, confirmed: false });
+                        town.gestures.insert(id, Playing { action, until_ms: until, at: p, on_move, confirmed: false });
                     }
                 }
             }
         }
-        // A gesture plays to its end, unless its body moves off or starts another activity.
+        // A gesture plays to its end, unless its body moves off (one done on the move does not
+        // end so) or starts another activity.
         if let Some(g) = town.gestures.get(&id).copied() {
             let other = show.idle.is_some() || show.hidden;
-            if now > g.until_ms || g.at.distance(p) > 0.5 || other {
+            if now > g.until_ms || (!g.on_move && g.at.distance(p) > 0.5) || other {
                 town.gestures.remove(&id);
             } else {
                 show.once = Some(g.action);

@@ -151,3 +151,11 @@ A line that names someone by `#id` anyway is said without it by the speech primi
 4. `journaled_with_both`: `outcomes/spoken_as.jsonl` has the line, with the speaker's name.
 
 Evidence: `spoken-ids.json`, `fake-requests.jsonl`, `journal/outcomes/spoken_as.jsonl`.
+
+`named-room-call` (`verify_minds.py --case named-room-call`, since `talk-named-room`; ew2's Petra case): P, not thought for, calls to the room. N stands 5 m away and D 19 m away, both thought for. D is within a call's carry and beyond a said line's, and in a conversation with P. Checks:
+
+- control: a call naming no one draws D's turn;
+- a call naming N ("Verify call: <N>! Come to the smokehouse.") draws N's turn and none from D;
+- N's row reads ", naming you", and D's names one other.
+
+Evidence: `named-room-call.json`.
