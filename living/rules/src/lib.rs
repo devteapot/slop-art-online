@@ -17,6 +17,7 @@ pub mod settle;
 pub mod outcome;
 pub mod sight;
 pub mod map;
+pub mod known;
 pub mod nav;
 pub mod pools;
 pub mod city;

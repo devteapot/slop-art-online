@@ -86,3 +86,13 @@ Since 2026-11-12 (docs/PERCEPTION.md "Whose a thing is"). `house-owner`: three s
 - Asserted from the think prompt (`prompt-house.txt`): F's house carries `home_of` and `by` with F's name; X's house carries neither; X's storage carries `by` with X's name; no structure entry carries "someone too far away to make out".
 - Asserted from every request the model was sent (the mind integrates its experience rows, so the experience table is empty by then): "You notice a house built by F … {F=#id}" and "You notice a storage built by X … {X=#id}", tagged by id; X's house noticed with no tag; no notice line tagged by a far handle. Before the fix the lines named the owner by the far label, and after the label fix alone, the far handle still tagged a line that named the owner (`percept_owned`).
 - Evidence: `house-owner.json` (entries, noticed lines, checks), `prompt-house.txt`, `fake-requests.jsonl`, `house-overlay.rhai`. The shipped script is installed again at the end.
+
+## Remembered places with bearings
+
+Since `known-ground` (2026-11-13, docs/MOVEMENT_MIND.md) the authority's scene (`perceive::scene_json`) lists the character's own `place` rows under `places`, nearest first (at most 12): each with `name`, `dir` and `dist`, from where it stands, in the words of things in sight (`living_rules::bearing::direction` and `rough_dist`: whole metres up to 30, then to the nearest ten; a talk turn's place list uses the same words). A place only another character keeps is not listed. The think prompt's "# Places you remember" keeps their coordinates without the way, so the way is given once (talk-places, docs/COMMUNICATION.md §20). The mind sends the scene as it is ("# What you perceive right now").
+
+```bash
+.agents/skills/verify-minds/scripts/verify_minds.py --run minds-$(date +%Y%m%d-%H%M%S) --case place-bearings
+```
+
+The case (on the island, whose residents have places) asks one resident to think, reads the scene of its pending request and the prompt the fake model is sent: every own place with the bearing worked out in the driver from the body's position (the same rules as the authority's), one out of sight (over 11 m), and none of another resident's place names that it does not share. Evidence: `sent-prompt.txt`, the request's scene.

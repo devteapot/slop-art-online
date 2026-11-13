@@ -336,7 +336,7 @@ impl Minds {
             mind: recalled.mind,
             memories: recalled.memories,
             judgments: recalled.judgments,
-            places: self.places(actor, None),
+            places: self.places(actor, None, false),
             experiences: meaningful.iter().map(|e| format!("{}{}", self.exp_line(e, &fmt, true), self.lived_where(e))).collect(),
             dealings: self.dealings(actor),
             cues: None,

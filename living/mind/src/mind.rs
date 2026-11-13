@@ -1888,15 +1888,17 @@ impl Minds {
     }
 
     /// The places a character knows and what it remembers of resources (its `seen_stock`), one
-    /// line each (talk-places, docs/COMMUNICATION.md §20), with how far and which way from `at`
-    /// when that is known (`living_rules::bearing`, the scene's words): "\"inn\" at [404, 285],
-    /// 46 m south", "10 berry bush around [416, 239], 9 m east: seen day 1 15:03", "berry bush
-    /// around [416, 239], here: gone when you were last here, day 1 17:40 (10 seen day 1 15:03)".
-    /// The same lines in a deliberation (from its scene's place), a talk turn (from where it
-    /// stands) and player memory (no place: no way). At most [`STOCK_SHOWN`] remembered
-    /// resources, nearest first (else the latest seen).
-    pub(crate) fn places(&self, actor: u32, at: Option<(f32, f32)>) -> Vec<String> {
-        let way = |x: f32, y: f32| at.map(|a| format!(", {}", living_rules::bearing::from_here(a, (x, y)))).unwrap_or_default();
+    /// line each (talk-places, docs/COMMUNICATION.md §20). With `near`, remembered resources are
+    /// the nearest to it, else the latest seen; at most [`STOCK_SHOWN`]. With `say_way` too, each
+    /// line says how far and which way from `near` (`living_rules::bearing`, the scene's words):
+    /// "\"inn\" at [404, 285], 50 m south", "10 berry bush around [416, 239], 9 m east: seen day 1
+    /// 15:03", "berry bush around [416, 239], here: gone when you were last here, day 1 17:40 (10
+    /// seen day 1 15:03)". A talk turn says the way from where one stands; a deliberation does not,
+    /// since its scene's `places` already give each place's way (known-ground, docs/MOVEMENT_MIND.md
+    /// step 3), so the way is not shown twice; player memory has no place and no way.
+    pub(crate) fn places(&self, actor: u32, near: Option<(f32, f32)>, say_way: bool) -> Vec<String> {
+        let at = near;
+        let way = |x: f32, y: f32| at.filter(|_| say_way).map(|a| format!(", {}", living_rules::bearing::from_here(a, (x, y)))).unwrap_or_default();
         let mut out: Vec<String> = self.conn.db.place().iter().filter(|p| p.actor == actor).map(|p| format!("\"{}\" at [{:.0}, {:.0}]{}", p.name, p.x, p.y, way(p.x, p.y))).collect();
         let mut stock: Vec<SeenStock> = self.conn.db.seen_stock().iter().filter(|s| s.actor == actor).collect();
         match at {
@@ -2007,7 +2009,7 @@ impl Minds {
             mind,
             memories,
             judgments: recalled.judgments,
-            places: self.places(actor, Self::scene_at(&scene)),
+            places: self.places(actor, Self::scene_at(&scene), false),
             experiences,
             dealings: self.dealings(actor),
             cues: self.cue_lines(actor),
@@ -2374,7 +2376,7 @@ impl Minds {
             mind,
             memories,
             judgments: recalled.judgments,
-            places: self.places(actor, None),
+            places: self.places(actor, None, false),
             experiences: meaningful.iter().map(|e| self.exp_line(e, &fmt, true)).collect(),
             dealings: self.dealings(actor),
             cues: self.cue_lines(actor),

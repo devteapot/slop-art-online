@@ -434,8 +434,13 @@ pub fn set_tile(ctx: &ReducerContext, x: i32, y: i32, t: living_rules::map::Terr
     if i >= row.tiles.len() {
         return Err("no terrain there".into());
     }
+    let before = row.tiles[i];
     row.tiles[i] = t as u8;
     ctx.db.terrain_chunk().id().update(row);
+    if before != t as u8 {
+        // Known ground: who saw this tile before keeps believing it was `before`.
+        crate::known::record_edit(ctx, x, y, before, now_ms(ctx));
+    }
     // Patch the cached map in place and remember the chunk, so a later transaction re-reads
     // that one row if this one rolls back.
     let st = stamp(ctx);

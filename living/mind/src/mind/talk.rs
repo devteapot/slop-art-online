@@ -1383,7 +1383,7 @@ impl Minds {
         // Where one stands now, asked of the authority (talk-places); else where the line was said.
         let standing = self.standing_now(me).await;
         let here = standing.unwrap_or(heard.at);
-        let places = self.places(me, standing);
+        let places = self.places(me, standing, true);
         let near = self
             .conn
             .db

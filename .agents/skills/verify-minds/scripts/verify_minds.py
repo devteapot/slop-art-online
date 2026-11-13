@@ -857,6 +857,74 @@ def answers_case(run):
             'proposer_told': told[0]['text'], 'outcomes': outcomes[-4:], 'deliberations_with_ids': len(with_ids)}
 
 
+def _direction_word(a, b):
+    """`living_rules::bearing::direction`: which way `b` lies from `a` (+y is south)."""
+    dx, dy = b[0] - a[0], b[1] - a[1]
+    if abs(dx) < 0.5 and abs(dy) < 0.5:
+        return 'here'
+    d = math.degrees(math.atan2(dy, dx))
+    for lo, hi, w in ((-22.5, 22.5, 'east'), (22.5, 67.5, 'southeast'), (67.5, 112.5, 'south'), (112.5, 157.5, 'southwest'),
+                      (-67.5, -22.5, 'northeast'), (-112.5, -67.5, 'north'), (-157.5, -112.5, 'northwest')):
+        if lo <= d < hi:
+            return w
+    return 'west'
+
+
+def _rough_dist(d):
+    """`living_rules::bearing::rough_dist`: whole metres up to 30, then to the nearest ten (halves
+    away from zero, as Rust's `round`)."""
+    return float(math.floor(d + 0.5)) if d < 30 else float(math.floor(d / 10.0 + 0.5) * 10)
+
+
+@case('place-bearings')
+def place_bearings_case(run):
+    """Remembered places in a mind's scene carry a bearing (docs/MOVEMENT_MIND.md, step 3): each of
+    the character's own places, out of sight too, is listed under `places` with the same `dir`
+    and `dist` words as things in sight, from where it stands, nearest first; a place only
+    another character knows is not listed. Checked in the scene the authority wrote and in the
+    prompt the fake model is sent. The island, whose residents have places."""
+    # The island: its residents have places of their own (homes, work, the square).
+    target = (Path(os.environ['CARGO_TARGET_DIR']) if os.environ.get('CARGO_TARGET_DIR') else ROOT / '.local/living/target-resident-island')
+    run.harness('launch', '--seed', 'island', '--target-dir', str(target))
+    run.harness('doctor')
+    # Two adult residents with places of their own.
+    places = run.sql('SELECT * FROM place', 'places')
+    owners = {p['actor'] for p in places}
+    people = sorted((p for p in run.sql("SELECT * FROM character WHERE kind = 'person'", 'people') if p['id'] in owners and p['ai'] and p['alive'] and p['stage'] == 2), key=lambda p: p['id'])
+    assert len(people) >= 2, ('two residents with places', len(people))
+    eye, other = people[0]['id'], people[1]['id']
+    run.admin('set_behavior', eye, json.dumps({'wait': 120}))
+    mine = [p for p in places if p['actor'] == eye]
+    theirs = [p for p in places if p['actor'] == other]
+    names = {p['name'] for p in mine}
+    foreign = [p['name'] for p in theirs if p['name'] not in names]
+    assert mine, ('the character has places of its own', eye)
+    time.sleep(0.5)
+    script = {'replies': {'think': {'thought': 'I think of where things are.', 'intend': ['wait'], 'say': None}, 'deliberate': basic_reply()}}
+    models = model(run, script)
+    pending = run.request(eye, 'place bearings')
+    run.start(models, [eye])
+    request = run.wait(lambda: [e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] in ('think', 'deliberate')], 'scene sent to the model', 40)[0]
+    sent = '\n'.join(str(m.get('content', '')) for m in request['body'].get('messages', []))
+    (run.directory / 'sent-prompt.txt').write_text(sent)
+    scene = json.loads(pending[0]['scene'])
+    listed = scene.get('places', [])
+    assert listed, ('the scene lists its places', list(scene))
+    # Where it stood (it waits, so its body is at rest): the scene's `you.at` is rounded.
+    b = run.sql(f'SELECT x, y, vx, vy FROM body WHERE id = {eye}', 'eye-body')[0]
+    assert b['vx'] == 0 and b['vy'] == 0, ('standing still', b)
+    at = (b['x'], b['y'])
+    expect = sorted(((math.dist(at, (p['x'], p['y'])), p) for p in mine), key=lambda t: t[0])[:12]
+    rows = [{'name': p['name'], 'dir': _direction_word(at, (p['x'], p['y'])), 'dist': _rough_dist(d)} for d, p in expect]
+    got = [{'name': p['name'], 'dir': p['dir'], 'dist': float(p['dist'])} for p in listed]
+    assert got == rows, ('each own place with its bearing from here, nearest first', got, rows)
+    far = [r for r in got if r['dist'] > 11]
+    assert far, ('a place out of sight is listed too', got)
+    assert not any(n in {p['name'] for p in listed} for n in foreign), ('a place only another knows is not listed', foreign)
+    assert '"places"' in sent and all(f'"name":"{r["name"]}"' in sent.replace(' ', '') or r['name'] in sent for r in got), 'the prompt carries the places'
+    return {'status': 'pass', 'at': at, 'places': got, 'not_listed': foreign[:3]}
+
+
 @case('sight')
 def sight_case(run):
     """A mind's scene and what it witnesses follow the sight rule: a creature behind rock or a
@@ -2239,7 +2307,9 @@ def talk_places_case(run):
        "# Places you know, from where you stand" with `"verify well" at [x, y], 16 m east` and
        `3 berry bush around [x, y], <N> m <dir>: seen day …` (H's `seen_stock` row), and H's
        `standing` row (`mind_where`) is where H stands.
-    2. H's think prompt's "# Places you remember" has the well with its way from the scene's place.
+    2. H's think prompt's "# Places you remember" has the well's coordinates without a way, and
+       its scene's `places` has the well with the way (`dir`, `dist`, known-ground's remembered
+       places): the way is given once, by the scene.
     3. H steps off again; A gathers the three (admin `mind_act`); H comes back. Its row is gone,
        and the next talk prompt says "berry bush around [x, y], … gone when you were last here,
        day … (3 seen day …)"."""
@@ -2301,6 +2371,14 @@ def talk_places_case(run):
     think = run.wait(lambda: [sent_text(e) for e in requests('think') if 'verify talk-places think' in sent_text(e)], 'H think prompt', 60)[0]
     (run.directory / 'prompt-think.txt').write_text(think)
     remember = think.split('# Places you remember\n', 1)[1].split('\n#', 1)[0] if '# Places you remember' in think else ''
+    # The scene's own entry for the well (one JSON object in the prompt's scene).
+    scene_well = None
+    for m in re.finditer(r'\{[^{}]*"verify well"[^{}]*\}', think):
+        try:
+            scene_well = json.loads(m.group(0))
+            break
+        except ValueError:
+            pass
     # 3. Stripped while H is away, then seen bare.
     run.admin('set_behavior', h, json.dumps({'wait': 300}))
     run.admin('place_at', h, *line[27])
@@ -2323,20 +2401,23 @@ def talk_places_case(run):
         'standing_is_where_h_stands': bool(standing) and math.dist((standing[0]['x'], standing[0]['y']), here) < 1.5,
         'the_well_with_its_way': any(l.startswith('- ' + well_line) for l in section.splitlines()),
         'the_bushes_with_their_way_and_when_seen': any(l.startswith('- ' + bush_head) for l in section.splitlines()),
-        'think_prompt_places_carry_the_way': any(l.startswith('- "verify well" at [') and l.endswith(way(well)) for l in remember.splitlines()),
+        'think_prompt_places_without_the_way': any(l == f'- "verify well" at [{well[0]:.0f}, {well[1]:.0f}]' for l in remember.splitlines()),
+        'think_scene_gives_the_way_once': scene_well is not None and f'{scene_well.get("dist", -1):.0f} m {scene_well.get("dir")}' == way(well)
+                                          and not any(way(well) in l for l in remember.splitlines()),
         'unchanged_while_away': away is not None and away['gone_ms'] == 0 and away['count'] == 3,
         'gone_once_seen_bare': gone['count'] == 3 and gone['seen_ms'] == first['seen_ms'],
         'talk_prompt_says_gone_when_last_here': any('berry bush around [' in l and ': gone when you were last here, day ' in l and '(3 seen day ' in l for l in section2.splitlines()),
     }
     result = {'h': h, 'a': a, 'ours': ours, 'well': well, 'here': here, 'first': first, 'away': away, 'gone': gone, 'standing': standing,
-              'section': section, 'remember': remember, 'section2': section2, 'checks': checks}
+              'section': section, 'remember': remember, 'scene_well': scene_well, 'section2': section2, 'checks': checks}
     (run.directory / 'talk-places.json').write_text(json.dumps(result, indent=2, ensure_ascii=False))
     assert all(checks.values()), checks
     return {'status': 'pass', **result}
 
 
 def way_words(frm, to):
-    """`living_rules::bearing::from_here` in Python: "here" within 4 m, else "<m> m <compass>"."""
+    """`living_rules::bearing::from_here` in Python: "here" within 4 m, else "<m> m <compass>",
+    the distance in the scene's words (`_rough_dist`)."""
     d = math.dist(frm, to)
     if d <= 4.0:
         return 'here'
@@ -2345,7 +2426,7 @@ def way_words(frm, to):
     words = [(-22.5, 22.5, 'east'), (22.5, 67.5, 'southeast'), (67.5, 112.5, 'south'), (112.5, 157.5, 'southwest'),
              (-67.5, -22.5, 'northeast'), (-112.5, -67.5, 'north'), (-157.5, -112.5, 'northwest')]
     word = next((w for lo, hi, w in words if lo <= a < hi), 'west')
-    return f'{math.floor(d + 0.5)} m {word}'
+    return f'{_rough_dist(d):.0f} m {word}'
 
 
 @case('named-room-call')
