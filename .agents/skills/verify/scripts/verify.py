@@ -139,6 +139,10 @@ def launch(a):
     st = load(a.run)
     if not st["db"].startswith(PREFIX):
         sys.exit(f"refusing to publish {st['db']}: verification databases start with {PREFIX}")
+    if len(st["db"]) > 63:
+        # SpacetimeDB 2.14.1 publishes it, but its `/names` route then fails and with it
+        # `spacetime list` for every database on the server (2026-11-12, docs/TRIAL_DISK.md).
+        sys.exit(f"refusing to publish {st['db']}: database names over 63 characters break the server's listing; use a shorter run name")
     st["seed"] = a.seed
     # Which tables players may read (docs/PERCEPTION.md): the build's LIVING_PERCEPTION.
     st["perception"] = os.environ.get("LIVING_PERCEPTION", "scoped")
@@ -480,7 +484,13 @@ def cleanup(a):
         log(st, f"removed module copy {st['wasm']}")
     if st.get("started_container"):
         # Other runs may share the server. Leave it up while any other verify-* database lives.
-        others = [l.split("|")[0].strip() for l in stdb("list", check=False).stdout.splitlines() if l.strip().startswith(PREFIX)]
+        listing = stdb("list", check=False)
+        if listing.returncode != 0 or "Error" in (listing.stderr or "") + listing.stdout:
+            # A failed listing (a database name of 64 characters or more breaks it on 2.14.1) is
+            # not "no other databases": keep the server up.
+            others = ["(unknown: spacetime list failed)"]
+        else:
+            others = [l.split("|")[0].strip() for l in listing.stdout.splitlines() if l.strip().startswith(PREFIX)]
         others = [d for d in others if d != st["db"]]
         if others:
             log(st, f"left SpacetimeDB running: other verification databases are live ({', '.join(others)})")

@@ -349,3 +349,72 @@ pub fn way_of(name: &str, m: &Map) -> Result<WaySpec, String> {
         overheard,
     })
 }
+
+/// The relations a kin term can name: what the one named is to the speaker.
+pub const KIN_RELATIONS: &[&str] = &["parent", "child", "sibling", "grandparent", "grandchild", "partner"];
+
+/// The words a speaker uses for someone by their relation to them (the world's `kin_terms()`,
+/// docs/COMMUNICATION.md §19): "Mother" said by a child names their parent. A perception fact: the
+/// one named would understand it. Each word names whoever stands in that relation to the speaker;
+/// the rules have no sex (a look's `form` is appearance only), so "Mother" and "Father" both name a
+/// parent, and both parents when both hear.
+#[derive(Clone, Debug, PartialEq)]
+pub struct KinTerms {
+    /// (relation, its words in lowercase), in `KIN_RELATIONS` order.
+    pub words: Vec<(String, Vec<String>)>,
+}
+
+impl Default for KinTerms {
+    fn default() -> Self {
+        let w = |r: &str, ws: &[&str]| (r.to_string(), ws.iter().map(|x| x.to_string()).collect());
+        Self {
+            words: vec![
+                w("parent", &["mother", "father", "mum", "mam", "mama", "mummy", "ma", "dad", "da", "papa", "daddy", "pa"]),
+                w("child", &["son", "daughter"]),
+                w("sibling", &["brother", "sister"]),
+                w("grandparent", &["gran", "granny", "grandmother", "grandma", "grandfather", "grandpa", "grandad", "granddad", "nan", "nana"]),
+                w("grandchild", &["grandson", "granddaughter"]),
+                w("partner", &["husband", "wife"]),
+            ],
+        }
+    }
+}
+
+impl KinTerms {
+    /// From a script's `kin_terms()` map: relation -> list of words (any case). An unknown
+    /// relation or a word that is not one word of letters is refused at install.
+    pub fn of(m: &rhai::Map) -> Result<Self, String> {
+        let mut words = Vec::new();
+        for (k, v) in m {
+            let rel = k.as_str();
+            if !KIN_RELATIONS.contains(&rel) {
+                return Err(format!("kin_terms: `{rel}` is not a relation (one of {})", KIN_RELATIONS.join(", ")));
+            }
+            let list = v.clone().try_cast::<rhai::Array>().ok_or_else(|| format!("kin_terms: `{rel}` is a list of words"))?;
+            let mut ws = Vec::new();
+            for x in list {
+                let w = x.into_string().map_err(|_| format!("kin_terms: `{rel}` holds words (strings)"))?.trim().to_lowercase();
+                if w.is_empty() || !w.chars().all(|c| c.is_alphabetic()) {
+                    return Err(format!("kin_terms: `{w}` in `{rel}` is one word of letters"));
+                }
+                ws.push(w);
+            }
+            words.push((rel.to_string(), ws));
+        }
+        words.sort_by_key(|(r, _)| KIN_RELATIONS.iter().position(|x| x == r));
+        Ok(Self { words })
+    }
+
+    /// The word index in `text` of the first kin word for any of `relations` (what the one named
+    /// is to the speaker), or `None`.
+    pub fn named_at(&self, text: &str, relations: &[&str]) -> Option<usize> {
+        let t = text.to_lowercase();
+        let tokens: Vec<&str> = t.split(|c: char| !c.is_alphanumeric()).filter(|w| !w.is_empty()).collect();
+        self.words
+            .iter()
+            .filter(|(r, _)| relations.contains(&r.as_str()))
+            .flat_map(|(_, ws)| ws.iter())
+            .filter_map(|w| tokens.iter().position(|x| x == w))
+            .min()
+    }
+}

@@ -65,14 +65,20 @@ python3 "$C/scenes.py" familiar_dense --run "$R" > "$E/familiar_dense.txt" 2>&1
 python3 "$C/scenes.py" notice_rate --run "$R" > "$E/notice_rate.txt" 2>&1
 python3 "$C/scenes.py" witness_wake --run "$R" > "$E/witness_wake.txt" 2>&1
 python3 "$C/scenes.py" witness_fold --run "$R" > "$E/witness_fold.txt" 2>&1
+# The fighters' cheaper paths change nothing: each compared with the old way (features/battle.md, about 5 min together).
+python3 "$C/scenes.py" cheap_check_ctx --run "$R" > "$E/cheap_check_ctx.txt" 2>&1
+python3 "$C/scenes.py" cheap_alarms --run "$R" > "$E/cheap_alarms.txt" 2>&1
+python3 "$C/scenes.py" cheap_warmth --run "$R" > "$E/cheap_warmth.txt" 2>&1
 # A mind's line waits when another spoke to its listener first, under heard_first_rethinks (features/speech.md, about 1.5 min).
 python3 "$C/scenes.py" heard_first --run "$R" > "$E/heard_first.txt" 2>&1
 # The shared answers equal fresh ones (regard_cache_check; features/cues.md#shared-answers, about 4 min;
 # on an island run it also drives the told lines of `outcomes`).
 python3 "$C/scenes.py" regard_check --run "$R" > "$E/regard_check.txt" 2>&1
 python3 "$C/scenes.py" moves --run "$R" > "$E/moves.txt" 2>&1
-# A flight out of inside corners by open ground, never cornered (features/steering.md#flight, about 1.5 min).
+# A flight out of inside corners by open ground, from a threat standing and one walking after it, never cornered (features/steering.md#flight, about 3 min).
 python3 "$C/scenes.py" flee_wall --run "$R" > "$E/flee_wall.txt" 2>&1
+# Nothing followed out of sight: a pursuit to the last-seen place, a flight from it (features/steering.md#out-of-sight-last-seen-places, about 1.5 min).
+python3 "$C/scenes.py" pursue_last_seen --run "$R" > "$E/pursue_last_seen.txt" 2>&1
 # Breath, tiredness and focus (features/breath.md, about 2 min; it changes and restores world laws).
 python3 "$C/scenes.py" stamina --run "$R" > "$E/stamina.txt" 2>&1
 # Fight length and the wolf chase (features/breath.md, about 20 min; set run_share or wolf_run
@@ -282,6 +288,16 @@ python3 "$V" launch --run "$F" --seed stage1-acts > ".local/living/verify/$F/lau
 python3 "$V" doctor --run "$F" > ".local/living/verify/$F/doctor.txt" 2>&1
 python3 "$C/scenes.py" family_laws --run "$F" > ".local/living/verify/$F/family_laws.txt" 2>&1
 python3 "$V" cleanup --run "$F"
+
+# The wolves' spacing reflex (the pack_reflex law, on by default): every wolf's starting
+# graph with the law on, none with it off (features/wildlife.md; about 2 min each).
+for P in pack-reflex-on pack-reflex-off; do
+  K=$R-$P; mkdir -p ".local/living/verify/$K"
+  python3 "$V" launch --run "$K" --seed "$P" > ".local/living/verify/$K/launch.txt" 2>&1
+  python3 "$V" doctor --run "$K" > ".local/living/verify/$K/doctor.txt" 2>&1
+  python3 "$C/scenes.py" pack_reflex --run "$K" > ".local/living/verify/$K/pack_reflex.txt" 2>&1
+  python3 "$V" cleanup --run "$K"
+done
 
 W=$R-wildlife
 mkdir -p ".local/living/verify/$W"

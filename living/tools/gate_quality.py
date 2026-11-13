@@ -499,7 +499,7 @@ def cmd_live(a):
         rh = thinkers * minutes / 60 or 1e-9
         gates = [e for e in entries if e.get("purpose") == "rethink-gate"]
         thinks = [e for e in entries if e.get("purpose") == "think"]
-        verdicts = {}
+        verdicts = {}  # includes `waits` since the hold fix
         for g in gates:
             verdicts[g.get("verdict")] = verdicts.get(g.get("verdict"), 0) + 1
         by_actor = {}
@@ -519,6 +519,7 @@ def cmd_live(a):
              "provider_usd_known": round(usd, 3), "calls_cost_unknown": unknown,
              "provider_usd_per_resident_hour": None if unknown else round(usd / rh, 4),
              "deliberations": len(thinks), "deliberations_per_resident_hour": round(len(thinks) / rh, 2),
+             "jev_calls": jev_calls, "jev_calls_per_resident_hour": round(jev_calls / rh, 2),
              "jev": {"calls": jev_calls, "cost_usd": None if gate_unknown else round(gate_usd, 4),
                      "usd_per_resident_hour_with_jev": None if (unknown or gate_unknown) else round((usd + gate_usd) / rh, 4)},
              "verdicts": verdicts,

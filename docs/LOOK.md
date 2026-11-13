@@ -438,6 +438,40 @@ Before: main `9fa0d254`'s client on a fresh world of main's module (VRoid reside
 - **The prewarm does not reduce the first-sight hitches** here: six while walking in every arm, the longest 200 to 350 ms in all of them, main's too (the walk's own arrivals, not composed people). It costs about 33 MiB resident. It is kept for now; whether to drop it is open.
 - Brackenford's people have no looks (the island seed carries none): VRoid both ways, equal within noise.
 
+### Bounding memory after look-1 (2026-11-12)
+
+- **Freeing unworn files** (`looks-mem-1`, pushed, not merged): files no one wears are freed after a grace period, past an LRU of 16. That bounds the files held but not process memory, and a walk re-read the same files on a loop. The memory is capped by the book anyway: about +480 MiB resident over VRoid bases for the whole book.
+- **Composed meshes' CPU copies** (`looks-mesh-1`, pushed, not merged): blocked on bevy_mod_outline 0.14 reading morph targets in `compute_outline_key`. It calls `mesh.morph_targets()` in the main world for every outlined entity spawned, which panics once Bevy has taken the data, and every composed mesh is outlined.
+  - Option: a local `[patch.crates-io]` fork that reads the morph flag from the render world's mesh.
+  - The branch caches what the client's own readers need (`characters/mesh_facts.rs`) and drops the copies only with `LIVING_GAME_PERF=dropmeshes`.
+  - The gain would be small: composed meshes are 23.8 MiB of Cullet's 204.5 MiB of CPU mesh data.
+- **Prewarm only what someone wears** (`prewarm-worn-1`): the loading cover prewarms the VRoid bases, which wear every outfit piece, only when someone will be drawn on one:
+  - a world without looks;
+  - offline or look-dev;
+  - no book, or composing off;
+  - a person perceived with no look or a key the book lacks.
+
+  On a composed Cullet those two base files had held 102 MiB of CPU meshes (88 MiB of it morph targets) and their pictures, for no one. A VRoid person who comes later loads the base then, a first-sight hitch. `LIVING_GAME_PERF=prewarmall` prewarms the bases as before, and `LIVING_GAME_PERF=meshfiles` logs CPU mesh bytes by file.
+
+  Measured with bundle `643ac265` (PNG), one binary, `live_crowd.py` uncapped, three runs an arm on fresh Cullet worlds (one an arm). Ranges in brackets.
+
+  | Cullet | Before (`prewarmall`) | After |
+  |---|---|---|
+  | Play camera: resident steady | 922 (913–927) MiB | **753** (704–754) |
+  | Play camera: footprint steady / peak | 1,870 / 1,892 MiB | **1,510** / 1,664 |
+  | Play camera: GPU textures | 362 (348–370) MiB | **197** (192–220) |
+  | Play camera: frame p50 / p99 | 4.55 / 5.59 ms | 4.43 / 5.56 ms |
+  | Play camera: first-sight hitches (longest) | 5 (259 ms) | 3 (244 ms) |
+  | Full model: resident steady | 963 (934–991) MiB | **749** (749–750) |
+  | Full model: footprint steady / peak | 1,902 / 1,923 MiB | **1,495** / 1,635 |
+  | Full model: GPU textures | 340 (340–394) MiB | **179** (167–196) |
+  | Full model: frame p50 / p99 | 5.60 / 6.46 ms | 5.28 / 6.11 ms |
+  | Full model: first-sight hitches (longest) | 5 (279 ms) | 4 (296 ms) |
+  | CPU meshes (`assets:`); of them the VRoid bases | 195.7; 102.2 MiB | **88.1**; 0 |
+  | The cover's first view | 2.0 s | 1.7 s |
+
+  A world without looks (an island launched before `look-1-island`, whose seed then carried none): both arms prewarm the six base characters ("a world without looks"), with 102 MiB of VRoid meshes each.
+
 ## 9. The island wears the pool (`look-1-island`, 2026-11-12)
 
 The island's seed (`living/seeds/island.json`, Brackenford's play-tests) carries `looks` at generation `c4-aa393793`: the 128-person pool alone (`people` for the pool, the 640 lines' `words`, `pool`). No resident has a `look`, so all 277 seeded residents wear a pool entry by `pool_pick(world seed, id, 128)`, as newcomers and players do (departure 4 of §7). Nothing is assigned by hand.

@@ -2,6 +2,7 @@
 """Assert core behavior through the authority on a shared-harness scratch run."""
 import argparse
 import importlib.util
+import datetime
 import json
 import math
 import re
@@ -1374,11 +1375,16 @@ def moves(s):
 def law_value(s, name):
     """A world law in force: the world's own value (`world_law`, set with `set_world_law`), else
     the installed script's `laws()` number."""
+    def val(v):
+        v = str(v).strip().strip('"')
+        return {"true": True, "false": False}[v] if v in ("true", "false") else float(v)
     own = [r for r in s.rows("SELECT * FROM world_law") if r["name"] == name]
     if own:
-        return float(own[0]["value"])
+        return val(own[0]["value"])
     src = s.rows("SELECT source FROM script WHERE name = 'skills'")[0]["source"]
-    return float(re.search(r"\b" + name + r": ([0-9.]+)", src).group(1))
+    # A world's own values block (`world_law_values`, a seed's `laws`) comes before laws().
+    m = re.search(r"\b" + name + r": (true|false|[0-9.]+)", src)
+    return val(m.group(1))
 
 
 def body_at(s, actor, now=None, row=None):
@@ -1873,7 +1879,8 @@ def wall_spots(s, n=4):
 
 def flee_wall(s):
     """A person flees another into an inside corner (the way straight away blocked within
-    3.5 m, the way 45° round it too) with an open side: the flight takes the open side
+    3.5 m, the way 45° round it too) with an open side, first from a threat standing still, then
+    from one walking after it (`goto` the fleer): the flight takes the open side
     (`steer::flee_way`) and gets clear, never "cornered" and never closing on the
     threat by more than a stride. Default seed (the map's edge, water and town walls)."""
     for c in s.rows("SELECT id, alive FROM character"):
@@ -1893,42 +1900,181 @@ def flee_wall(s):
         n = max(1, int(math.dist(a, b) * 4))
         return math.dist(a, b) <= 11.0 and not any((int(a[0] + (b[0] - a[0]) * i / n), int(a[1] + (b[1] - a[1]) * i / n)) in opaque for i in range(n + 1))
     s.expect("the map has inside corners with an open side", len(spots) >= 2, {"spots": spots})
+    s.expect("two people for each corner", len(people) >= 2 * len(spots), {"people": len(people)})
     results = []
-    for i, ((px, py), d) in enumerate(spots):
+    flights = [(i, spot, mode) for mode in ("still", "chasing") for i, spot in enumerate(spots)]
+    for i, ((px, py), d), mode in flights:
         f, t = people[2 * i], people[2 * i + 1]
+        s.graph(t, {"wait": 300})
         s.call("place_at", f, px, py)
         s.call("place_at", t, px - 5.0 * math.cos(d), py - 5.0 * math.sin(d))
         time.sleep(0.6)
         start = apart(s, f, t)
+        began = body_at(s, t)
         since = max([r["id"] for r in s.rows(f"SELECT id FROM experience WHERE observer = {f}")] or [0])
         s.graph(f, {"seq": [{"do": {"skill": "flee", "target": {"id": t}}}, {"wait": 300}]})
+        if mode == "chasing":
+            # The threat walks after the fleer (held by sight: out of sight, to where it saw it).
+            s.graph(t, {"seq": [{"do": {"skill": "goto", "target": {"id": f}}}, {"wait": 300}]})
         t0 = time.monotonic()
         track, seen, goal = [], False, None
+        # Distances while the flight is under way (a chaser closes in again once it stops).
         while time.monotonic() - t0 < 15:
-            track.append(apart(s, f, t))
+            gap = apart(s, f, t)
             fleeing = any(r["skill"] == "flee" for r in s.rows(f"SELECT skill FROM activity WHERE id = {f}"))
             if fleeing and goal is None:
                 goal = s.rows(f"SELECT goal, target, gx, gy, keep FROM steer WHERE id = {f}", "steer")[0]
             seen = seen or fleeing
             if seen and not fleeing:
                 break
+            track.append(gap)
             time.sleep(0.3)
-        track.append(apart(s, f, t))
+        track = track or [apart(s, f, t)]
         # A plan step's failure is told at the graph's next evaluation.
         time.sleep(1.5)
         told = [r["text"] for r in s.rows(f"SELECT id, text FROM experience WHERE observer = {f}") if r["id"] > since]
         cornered = any("cornered" in x for x in told)
         seen_at_end = in_sight(body_at(s, f), body_at(s, t))
+        # Where the flight took it, from where the threat stood when it began (the samples are
+        # sparse on a loaded server, and a chaser closes in again once the flight stops).
+        got = round(math.dist(body_at(s, f), began), 2)
         falls = [(a, b) for a, b in zip(track, track[1:]) if b < a - 1.0]
-        results.append({"spot": [px, py], "way": round(d, 3), "fleer": f, "threat": t, "start": start, "end": track[-1], "cornered": cornered, "seen_at_end": seen_at_end, "falls": falls, "goal": goal, "told": told[-4:], "track": track})
+        results.append({"mode": mode, "spot": [px, py], "way": round(d, 3), "fleer": f, "threat": t, "start": start, "end": max(track), "got": got, "cornered": cornered, "seen_at_end": seen_at_end, "falls": falls, "goal": goal, "told": told[-4:], "track": track})
         s.graph(f, {"wait": 300})
+        s.graph(t, {"wait": 300})
     (s.out / f"{s.name}-flights.json").write_text(json.dumps(results, indent=2) + "\n")
-    s.expect("no flight is cornered", all(not r["cornered"] for r in results), [(r["spot"], r["told"]) for r in results if r["cornered"]])
-    # A flight ends `flee_clear` farther, or sooner once the threat is out of the fleer's sight
-    # (a graph's flee step ends when what it fled is no longer perceived: beyond day sight, 11 m,
-    # or behind a wall or rock).
-    s.expect("every flight gets clear: 6 m farther than it began, or out of the threat's sight", all(r["end"] >= r["start"] + 6.0 or not r["seen_at_end"] for r in results), [(r["spot"], r["start"], r["end"], r["seen_at_end"]) for r in results])
+    for mode in ("still", "chasing"):
+        print(f"{mode}: " + "; ".join(f"{r['spot']} {r['start']} -> {r['got']}{' cornered' if r['cornered'] else ''}" for r in results if r["mode"] == mode))
+    s.expect("no flight is cornered, from a threat standing or walking after it", all(not r["cornered"] for r in results), [(r["mode"], r["spot"], r["told"]) for r in results if r["cornered"]])
+    # A flight ends `flee_clear` (9 m) farther from the threat, or from where it last saw it.
+    s.expect("every flight gets clear: it stops at least 6 m farther from where the threat began", all(r["got"] >= r["start"] + 6.0 for r in results), [(r["mode"], r["spot"], r["start"], r["got"]) for r in results])
     s.expect("no flight closes on the threat by more than a stride", all(not r["falls"] for r in results), [(r["spot"], r["falls"]) for r in results if r["falls"]])
+
+
+def opaque_tiles(s):
+    """The tiles that hide what is behind them (rock and walls, `Terrain::opaque`)."""
+    out = set()
+    for row in s.rows("SELECT * FROM terrain_chunk"):
+        data = row["tiles"]
+        data = bytes.fromhex(data.removeprefix("0x")) if isinstance(data, str) else bytes(data)
+        cx, cy = row["id"] & 0xFFFF, row["id"] >> 16
+        out.update((cx * 16 + k % 16, cy * 16 + k // 16) for k, t in enumerate(data) if t in (4, 7))
+    return out
+
+
+def hidden_spots(s, n=2):
+    """Setups for a pursuit that loses its target behind a wall: `a` (the pursuer) and `b` 6 m
+    off with a clear line between them, and `c` 9–13 m from `a`, walkable, with a wall or rock on
+    the lines from both `a` and `b` (so the target, moved there, is out of sight from where it was
+    last seen too) and at least 6 m from `b`. Up to `n`, 40 m apart."""
+    W, H, walk = tile_grid(s)
+    op = opaque_tiles(s)
+
+    def clear(p, q):
+        k = max(1, int(math.dist(p, q) * 4))
+        return not any((int(p[0] + (q[0] - p[0]) * i / k), int(p[1] + (q[1] - p[1]) * i / k)) in op for i in range(k + 1))
+
+    def walk_line(p, q):
+        k = max(1, int(math.dist(p, q) * 4))
+        return all(walk(p[0] + (q[0] - p[0]) * i / k, p[1] + (q[1] - p[1]) * i / k) for i in range(k + 1))
+
+    out = []
+    for y in range(16, H - 16, 3):
+        for x in range(16, W - 16, 3):
+            a = (x + 0.5, y + 0.5)
+            if not walk(*a) or any(math.dist(a, q[0]) < 40 for q in out):
+                continue
+            for k in range(8):
+                u = k * math.pi / 4
+                b = (a[0] + 6 * math.cos(u), a[1] + 6 * math.sin(u))
+                if not walk_line(a, b) or not clear(a, b):
+                    continue
+                c = None
+                for r in (10.0, 12.0, 9.0, 13.0):
+                    for j in range(24):
+                        v = j * math.pi / 12
+                        q = (int(a[0] + r * math.cos(v)) + 0.5, int(a[1] + r * math.sin(v)) + 0.5)
+                        if walk(*q) and math.dist(q, b) >= 6 and not clear(a, q) and not clear(b, q):
+                            c = q
+                            break
+                    if c:
+                        break
+                if c:
+                    out.append((a, b, c))
+                    break
+            if len(out) >= n:
+                return out
+    return out
+
+
+def pursue_last_seen(s):
+    """Nothing is tracked out of sight (docs/MOVEMENT_MIND.md, `pursue-last-seen`).
+    A pursuit: a person walks after another (`goto` them) who is then moved behind a wall 9–13 m
+    away, out of sight from the pursuer and from where it was last seen. The pursuer goes to the
+    last-seen place, does not find them, and is told "lost sight of them"; it never goes for where
+    they really are. A flight: a person flees another who is then moved 40 m off, out of sight; the
+    flight runs on from where the threat was last seen until it is `flee_clear` (9 m) farther from
+    there. Default seed."""
+    for c in s.rows("SELECT id, alive FROM character"):
+        if c["alive"]:
+            s.graph(c["id"], {"wait": 300})
+    people = [c["id"] for c in s.rows("SELECT id FROM character WHERE kind = 'person' AND alive = true")]
+    setups = hidden_spots(s)
+    s.expect("the map has a wall to hide behind", len(setups) >= 1, {"setups": setups})
+    chases = []
+    for i, (a, b, c) in enumerate(setups):
+        p, t = people[2 * i], people[2 * i + 1]
+        s.call("place_at", p, *a)
+        s.call("place_at", t, *b)
+        time.sleep(0.6)
+        since = max([r["id"] for r in s.rows(f"SELECT id FROM experience WHERE observer = {p}")] or [0])
+        s.graph(p, {"seq": [{"do": {"skill": "goto", "target": {"id": t}}}, {"wait": 300}]})
+        time.sleep(0.5)
+        last = body_at(s, t)
+        s.call("place_at", t, *c)
+        hid = body_at(s, t)
+        t0 = time.monotonic()
+        track, goals, nearest_c = [], [], 99.0
+        while time.monotonic() - t0 < 14:
+            me = body_at(s, p)
+            track.append([round(me[0], 2), round(me[1], 2)])
+            nearest_c = min(nearest_c, math.dist(me, hid))
+            g = s.rows(f"SELECT goal, gx, gy FROM steer WHERE id = {p}")
+            goals.append(g[0] if g else None)
+            if not any(r["skill"] == "goto" for r in s.rows(f"SELECT skill FROM activity WHERE id = {p}")):
+                break
+            time.sleep(0.4)
+        time.sleep(1.5)
+        told = [r["text"] for r in s.rows(f"SELECT id, text FROM experience WHERE observer = {p}") if r["id"] > since]
+        end = body_at(s, p)
+        chases.append({"pursuer": p, "target": t, "a": a, "b": b, "c": c, "last_seen": last, "hidden_at": hid, "end": end, "end_to_last_seen": round(math.dist(end, last), 2), "nearest_to_hidden": round(nearest_c, 2), "told": told[-3:], "goals": goals, "track": track})
+        s.graph(p, {"wait": 300})
+    (s.out / f"{s.name}-chases.json").write_text(json.dumps(chases, indent=2) + "\n")
+    s.expect("the pursuer goes to where it last saw them (ends within 3 m of it)", all(r["end_to_last_seen"] <= 3.0 for r in chases), [(r["last_seen"], r["end"], r["end_to_last_seen"]) for r in chases])
+    s.expect("it never goes for where they are behind the wall (stays over 4 m from them)", all(r["nearest_to_hidden"] > 4.0 for r in chases), [(r["hidden_at"], r["nearest_to_hidden"]) for r in chases])
+    s.expect("its steering aims only at the last-seen place", all(all(g is None or g["goal"] != 2 or math.dist((g["gx"], g["gy"]), r["last_seen"]) <= 1.5 for g in r["goals"]) for r in chases), [r["goals"] for r in chases])
+    s.expect("it is told it lost sight of them", all(any("lost sight of them" in x for x in r["told"]) for r in chases), [r["told"] for r in chases])
+    # A flight from a threat that goes out of sight.
+    f, t = people[-1], people[-2]
+    spot = open_patch(s, size=24)
+    s.call("place_at", f, *spot)
+    s.call("place_at", t, spot[0] - 5.0, spot[1])
+    time.sleep(0.6)
+    start = apart(s, f, t)
+    s.graph(f, {"seq": [{"do": {"skill": "flee", "target": {"id": t}}}, {"wait": 300}]})
+    time.sleep(0.8)
+    last = body_at(s, t)
+    far = (spot[0] - 40.0, spot[1]) if spot[0] > 50 else (spot[0] + 40.0, spot[1])
+    s.call("place_at", t, *far)
+    t0 = time.monotonic()
+    while time.monotonic() - t0 < 12:
+        if not any(r["skill"] == "flee" for r in s.rows(f"SELECT skill FROM activity WHERE id = {f}")):
+            break
+        time.sleep(0.4)
+    end = body_at(s, f)
+    flight = {"fleer": f, "threat": t, "start": start, "last_seen": last, "moved_to": far, "end": end, "from_last_seen": round(math.dist(end, last), 2)}
+    (s.out / f"{s.name}-flight.json").write_text(json.dumps(flight, indent=2) + "\n")
+    s.expect("the flight runs on from where the threat was last seen until clear of it", flight["from_last_seen"] >= start + 7.0, flight)
 
 
 def open_patch(s, size=14, avoid=()):
@@ -4477,7 +4623,76 @@ def apart_intent(s):
         said = (r.stdout or "") + (r.stderr or "")
         s.expect(f"refused: {words}", r.returncode != 0 and words in said, (r.returncode, said[-300:]))
 
-SCENES = {"say": say, "skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight, "dealings": dealings, "answers": answers, "flee": flee, "flee_wall": flee_wall, "food": food, "refusal": refusal, "teach": teach, "senses": senses, "moves": moves, "remains": remains, "laws": laws, "doing": doing, "death-names": death_names, "drop": drop, "low": drop, "family_laws": family_laws, "fov": fov, "placement": placement, "alarms": alarms, "health_seen": health_seen, "audience": audience, "outcomes": outcomes, "crowd_sight": crowd_sight, "stranger_filter": stranger_filter, "cues": cues, "regard_check": regard_check}
+
+def howl_reach(s):
+    """A howl carries by its loudness (docs/PACK_MIND.md, decision 2): the shipped howl has no
+    range of its own but loudness 2, so it reaches twice each listener's hearing (18 m on a world
+    whose people hear 9 m), and, as loud as a shout, it wakes a sleeper within `wake_reach`
+    (`wake_loudness` 2). On an open line: a wolf howls; a person asleep 6 m off wakes, told the
+    howl; one awake 15 m off hears it; one 25 m off does not."""
+    line = open_line(s, length=30)
+    hearing = law_value(s, "wake_reach")
+    sleeping = {r["actor"] for r in s.rows("SELECT actor FROM slumber")} | {r["id"] for r in s.rows("SELECT id, skill FROM activity") if r["skill"] == "sleep"}
+    wolf = next(w["id"] for w in s.rows("SELECT id, stage FROM character WHERE kind = 'wolf' AND alive = true") if w["stage"] >= 2 and w["id"] not in sleeping)
+    near, mid, far = s.people(3)
+    s.graph(wolf, {"wait": 300})
+    s.call("place_at", wolf, *line[0])
+    s.call("place_at", near, *line[6])
+    s.call("place_at", mid, *line[15])
+    s.call("place_at", far, *line[25])
+    s.graph(near, {"seq": [{"do": "sleep"}, {"wait": 300}]})
+    # (`hearing` above is the wake reach: a loud sound wakes a sleeper within it)
+    s.wait(lambda: s.rows(f"SELECT * FROM slumber WHERE actor = {near}"), seconds=30)
+    s.graph(wolf, {"seq": [{"do": {"skill": "signal", "item": "howl"}}, {"wait": 300}]})
+    s.wait(lambda: s.told(mid, "a long howl", "signal"), seconds=20)
+    time.sleep(3)
+    heard = {who: [r["text"] for r in s.told(i, "a long howl", "signal")] for who, i in (("6 m, asleep", near), ("15 m", mid), ("25 m", far))}
+    (s.out / f"{s.name}-heard.json").write_text(json.dumps({"heard": heard, "wake_reach": hearing}, indent=1) + "\n")
+    s.expect("a person 15 m off hears the howl (within twice the island's 9 m)", bool(heard["15 m"]), heard)
+    s.expect("a person 25 m off does not (beyond 18 m)", not heard["25 m"], heard)
+    # (its graph, a sleep then a wait, may lay it down again once woken: what shows the waking
+    # is the line it is told, naming the howl)
+    woke = [t for t in s.told(near, "You woke up: ", "body") if "a long howl" in t["text"]]
+    s.expect("a sleeper 6 m off wakes, told of the howl", bool(woke), s.told(near, "You woke up", "body"))
+
+
+def pack_reflex(s):
+    """The wolves' spacing reflex, a world law (`pack_reflex`, docs/PACK_MIND.md): while it is
+    on (the shipped value), every hunt in a wolf's starting graph (an attack on the nearest
+    person or deer) sits beside the desire "keep apart from mates" (`keep_distance` 3-5 m from
+    the prey with `apart` 4); with the law off, none does. Three install paths: a seed's pack
+    (`packs[].instinct`, `wolf_bold`: the brain), a grown founding wolf's ways (`give_ways`,
+    repertoire.json: its `hunt` routine), a young founding wolf's instinct (`wolf`: the brain).
+    A newborn's `wolf_young` is never given it. Run it on `--seed pack-reflex-on` (expects the
+    reflex) and `--seed pack-reflex-off` (expects none): it reads the law's value from the world."""
+    on = law_value(s, "pack_reflex")
+    bg = {r["id"]: r["text"] for r in s.rows("SELECT id, text FROM background")}
+    wolves = s.rows("SELECT id, stage FROM character WHERE kind = 'wolf' AND alive = true")
+    brains = {r["id"]: r for r in s.rows("SELECT id, graph, plan FROM brain")}
+    hunts = {r["actor"]: r["graph"] for r in s.rows("SELECT actor, name, graph FROM routine") if r["name"] == "hunt"}
+    seen = {"pack": [], "grown founders (hunt routine)": [], "young founders": [], "newborns": []}
+    for w in wolves:
+        b = brains.get(w["id"], {})
+        if '"bold":true' in bg.get(w["id"], ""):
+            key, g = "pack", b.get("graph", "")
+        elif w["stage"] == 0:
+            key, g = "newborns", b.get("graph", "")
+        elif w["id"] in hunts:
+            key, g = "grown founders (hunt routine)", hunts[w["id"]]
+        else:
+            key, g = "young founders", b.get("graph", "")
+        seen[key].append({"id": w["id"], "stage": w["stage"], "reflexes": g.count("keep apart from mates"), "apart": '"apart"' in g, "plan": b.get("plan", "")[:40]})
+    (s.out / f"{s.name}-wolves.json").write_text(json.dumps({"law": on, "wolves": seen}, indent=1) + "\n")
+    s.expect("the world has a bold pack and grown founding wolves to check", bool(seen["pack"]) and bool(seen["grown founders (hunt routine)"]), {k: len(v) for k, v in seen.items()})
+    checked = [x for k in ("pack", "grown founders (hunt routine)", "young founders") for x in seen[k]]
+    if on:
+        for k in ("pack", "grown founders (hunt routine)", "young founders"):
+            s.expect(f"law on: {k}: the reflex beside both hunts (people and deer)", all(x["reflexes"] == 2 and x["apart"] for x in seen[k]), seen[k])
+    else:
+        s.expect("law off: no wolf's starting graph or hunt routine carries the reflex", all(x["reflexes"] == 0 for x in checked), seen)
+    s.expect("a newborn's instinct (wolf_young) never carries it", all(x["reflexes"] == 0 for x in seen["newborns"]), seen["newborns"])
+
+SCENES = {"say": say, "skirmish": skirmish, "infant": infant, "tick": tick, "needs": needs, "seize": seize, "lifecycle": lifecycle, "wildlife": wildlife, "grazing": grazing, "arrival": arrival, "sight": sight, "dealings": dealings, "answers": answers, "flee": flee, "flee_wall": flee_wall, "food": food, "refusal": refusal, "teach": teach, "senses": senses, "moves": moves, "remains": remains, "laws": laws, "doing": doing, "death-names": death_names, "drop": drop, "low": drop, "family_laws": family_laws, "fov": fov, "placement": placement, "alarms": alarms, "health_seen": health_seen, "audience": audience, "outcomes": outcomes, "crowd_sight": crowd_sight, "stranger_filter": stranger_filter, "cues": cues, "regard_check": regard_check, "pursue_last_seen": pursue_last_seen}
 
 
 def goods(s):
@@ -4990,6 +5205,8 @@ SCENES["doing_cost"] = doing_cost
 SCENES["owners"] = owners
 SCENES["intents"] = intents
 SCENES["apart"] = apart_intent
+SCENES["howl_reach"] = howl_reach
+SCENES["pack_reflex"] = pack_reflex
 SCENES["intents_cost"] = intents_cost
 SCENES["sleeper"] = sleeper
 
@@ -5823,6 +6040,107 @@ def heard_first(s):
 
 
 SCENES["heard_first"] = heard_first
+
+
+def battle_cheap(s):
+    """The fighters' cheaper paths change nothing a fighter perceives or does (docs/BATTLE_SCALE.md,
+    battle-cheap). A battle of 12 minded people on an open line, a campfire and a shelter among
+    them and three dead lying there (remains), with each path's diagnostic law on: every move's
+    check before it starts is also asked with the whole context (`check_ctx_check`), every alarm
+    answer kept is also asked of the law (`alarm_cells_check`), and warmth is also worked out from
+    a full copy (`warmth_check`). For 60 s of strikes, blocks, heals and refusals ("out of breath")
+    each diagnostic counts how often it compared and how often the two differed. The case named
+    asserts its path: compared many times, never differed (and, for the alarms, most answers
+    kept)."""
+    which = s.name
+    line = clear_line(s)
+    ppl = s.people(15)
+    fighters, dead = ppl[:12], ppl[12:]
+    for k, who in enumerate(fighters):
+        s.call("place_at", who, line[2 + k % 6][0], line[2 + k % 6][1] + (k // 6) * 1.4)
+    for k, who in enumerate(dead):
+        s.call("place_at", who, line[3 + k][0], line[3 + k][1] + 2.6)
+    s.call("place_structure", fighters[0], "campfire")
+    s.call("place_structure", fighters[6], "shelter")
+    for who in dead:
+        s.call("kill", who, "verify-core battle_cheap: remains to lie among the fighters")
+    for who in fighters:
+        s.call("grant_know_how", who, "wound_tending")
+        s.graph(who, {"first": [
+            {"if": {"cond": {"health": {"below": 50}}, "then": {"do": {"skill": "heal", "target": "self"}}}},
+            {"if": {"cond": {"threatened": True}, "then": {"do": {"skill": "dodge" if who % 2 == 0 else "block"}}}},
+            {"do": {"skill": "strike", "target": {"nearest": "person"}}}]})
+    for law in ("check_ctx_check", "alarm_cells_check", "warmth_check"):
+        set_law(s, law, True)
+    s.call("set_profile", True)
+    t0 = s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+    # The server log's own stamps (UTC) bound this case's `diag:` lines: earlier cases on the
+    # same world left theirs.
+    since = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+    try:
+        time.sleep(60)
+    finally:
+        s.call("set_profile", False)
+        for law in ("check_ctx_check", "alarm_cells_check", "warmth_check"):
+            set_law(s, law, False)
+    logs = "\n".join(l for l in s.command("logs", "-s", "local", s.db, "-n", "200000").stdout.splitlines() if l[:19] >= since and "diag:" in l)
+    count = lambda key: sum(int(x) for x in re.findall(rf'"{re.escape(key)}":(\d+)', logs))
+    uses = [u for u in s.rows("SELECT actor, skill, outcome, at_ms FROM skill_use") if u["at_ms"] >= t0 and u["actor"] in fighters]
+    m = {k: count(k) for k in ("check_ctx:checked", "check_ctx:differed", "alarm:kept", "alarm:checked", "alarm:asked", "alarm:differed", "warmth:checked", "warmth:differed")}
+    m["uses"] = len(uses)
+    m["strikes_landed"] = sum(1 for u in uses if u["skill"] == "strike" and (u["outcome"] or "").startswith(("hit", "blocked", "killed")))
+    m["out_of_breath"] = sum(1 for u in uses if "out of breath" in (u["outcome"] or ""))
+    m["remains"] = len([r for r in s.rows("SELECT id, kind FROM structure") if r["kind"] == "remains"])
+    (s.out / f"{s.name}-battle-cheap.json").write_text(json.dumps(m, indent=1) + "\n")
+    print("MEASURE", json.dumps(m), flush=True)
+    try:
+        s.expect("a battle went on: strikes landed, and some were refused for want of breath or tried again", m["strikes_landed"] >= 10, m)
+        if which == "cheap_check_ctx":
+            s.expect("every move's check on its plan's fields gave the whole context's answer", m["check_ctx:checked"] >= 100 and m["check_ctx:differed"] == 0, m)
+        elif which == "cheap_alarms":
+            s.expect("every kept alarm answer was the law's, and most answers were kept", m["alarm:checked"] == m["alarm:kept"] and m["alarm:kept"] > m["alarm:asked"] and m["alarm:differed"] == 0, m)
+        elif which == "cheap_warmth":
+            s.expect("warmth among remains, a fire and a shelter came out the same both ways", m["warmth:checked"] >= 100 and m["warmth:differed"] == 0 and m["remains"] >= 3, m)
+    finally:
+        for who in fighters:
+            s.graph(who, {"wait": 300})
+        off_the_line(s, line, fighters, dy=76)
+
+
+SCENES["cheap_check_ctx"] = battle_cheap
+SCENES["cheap_alarms"] = battle_cheap
+SCENES["cheap_warmth"] = battle_cheap
+
+
+def admin_vitals(s):
+    """`admin_set_vitals(id, hp)` (admin only): sets a living body's health, more than its maximum
+    being its maximum, and chronicles each use as an `admin` line; a health of 0 or less, or a dead
+    character, is refused and writes nothing. Trial timelines use it to start an arena's meetings at
+    full health (docs/COMBAT_MIND.md §5.4); verify-client checks that no other identity may call it."""
+    a = s.people(1)[0]
+    hp = lambda label: s.rows(f"SELECT * FROM vitals WHERE id = {a}", label)[0]
+    admin_lines = lambda label: [c for c in s.rows(f"SELECT * FROM chronicle WHERE a = {a}", label) if c["kind"] == "admin"]
+    s.call("admin_set_vitals", a, 40.0)
+    v = hp("vitals-40")
+    s.expect("health set to 40", abs(v["hp"] - 40.0) < 0.5, v["hp"])
+    s.call("admin_set_vitals", a, 1000.0)
+    v = hp("vitals-max")
+    s.expect("more than the maximum is the maximum", abs(v["hp"] - v["max_hp"]) < 0.01, [v["hp"], v["max_hp"]])
+    lines = admin_lines("admin-lines")
+    s.expect("each use is an admin chronicle line", len(lines) == 2 and "health 40 ->" not in lines[0]["text"] and "-> 40" in lines[0]["text"] and f"-> {v['max_hp']:.0f}" in lines[1]["text"], [c["text"] for c in lines])
+    # (a negative value cannot be passed through the admin CLI, which reads "-5" as a flag)
+    for bad in (0.0,):
+        r = s.call("admin_set_vitals", a, bad, check=False)
+        out = (r.stdout or "") + (r.stderr or "")
+        s.expect(f"a health of {bad:g} is refused", r.returncode != 0 and "health must be above 0" in out, out[-200:])
+    s.expect("a refused call writes nothing", len(admin_lines("admin-lines-after")) == 2 and abs(hp("vitals-after")["hp"] - v["max_hp"]) < 0.5)
+    s.call("kill", a, "verify admin_vitals")
+    r = s.call("admin_set_vitals", a, 50.0, check=False)
+    out = (r.stdout or "") + (r.stderr or "")
+    s.expect("a dead character is refused", r.returncode != 0 and "no living character" in out, out[-200:])
+
+
+SCENES["admin_vitals"] = admin_vitals
 
 
 if __name__ == "__main__":

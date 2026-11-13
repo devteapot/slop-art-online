@@ -565,10 +565,12 @@ impl<'a> Ev<'a> {
                     Some(t) => match sensed.flatten() {
                         Some(r) => r,
                         None => {
-                            // A movement intent under way goes by where its target was last seen
-                            // until steering loses it (`motion::FLAG_SIGHT`, the `lost_after_s`
-                            // law): one rule for a graph's and an act's, not the next evaluation.
-                            if living_rules::steer::INTENTS.contains(&a.skill.as_str()) {
+                            // Movement under way toward or away from a creature (an intent, a
+                            // flight, a `goto` to someone, an approach to act on them) goes by where
+                            // it was last seen until steering loses it (`motion::held`: a pursuit
+                            // goes to the last-seen place, a flight runs from it): one rule for a
+                            // graph's and an act's, not the next evaluation.
+                            if living_rules::steer::INTENTS.contains(&a.skill.as_str()) || matches!(a.skill.as_str(), "flee" | "goto") || self.approaching(id) {
                                 if let Some(act) = self.ctx.db.activity().id().find(self.me.id).filter(|x| x.node == id && x.revision == self.st.revision) {
                                     self.running = Some(id);
                                     self.status = act.label;
@@ -661,8 +663,26 @@ impl<'a> Ev<'a> {
         }
     }
 
+    /// When the decision that installed this mind's plan perceived what it decided on: its install
+    /// thought's time less the model's time (`mind::decided_since`, from the thought row the
+    /// install wrote at `installed_ms`). Before talk-turns the windows below began at the install,
+    /// so what happened while the model thought (a reply already given in conversation) was not
+    /// "since" and the plan's line was said anyway (play-test 6).
+    fn decided_ms(&self, brain: &Brain) -> u64 {
+        self.ctx
+            .db
+            .thought()
+            .actor()
+            .filter(self.me.id)
+            .filter(|t| t.at_ms == brain.installed_ms && t.kind != "error")
+            .map(|t| brain.installed_ms.saturating_sub(t.latency_ms as u64))
+            .min()
+            .unwrap_or(brain.installed_ms)
+    }
+
     /// Whether a mind's plan's queued line to `to` (say node `id`) has been overtaken by the
-    /// conversation (`speech_truth`): since the plan was installed, or since this node last
+    /// conversation (`speech_truth`): since the decision that installed the plan perceived its
+    /// scene (`decided_ms`), or since this node last
     /// spoke, `to` spoke to me (a line to me, or to no one in particular that the authority
     /// marked as for me, salience 0.8 and above), or I spoke to them other than by this plan's
     /// own say nodes (a conversation turn's reply). The plan's line was meant for a
@@ -672,27 +692,30 @@ impl<'a> Ev<'a> {
     fn line_overtaken(&self, id: u16, to: u32) -> bool {
         let Some(brain) = self.ctx.db.brain().id().find(self.me.id).filter(|b| b.source == "mind") else { return false };
         let own_mark = self.st.marks.iter().find(|m| m.node == id).map_or(0, |m| m.at_ms);
-        let since = brain.installed_ms.max(own_mark);
+        let since = self.decided_ms(&brain).max(own_mark);
         // The times this plan's own say nodes spoke (their marks; a line is written at the
         // moment its node is marked).
         let own: Vec<u64> = self.st.marks.iter().filter(|m| m.node < DESIRE_MARK).map(|m| m.at_ms).collect();
         let sc = common::scripts(self.ctx);
         let words: Vec<&str> = sc.ways().iter().map(|w| w.kind.as_str()).collect();
+        // The install's own line (said in its transaction, at `installed_ms`) is the plan's first
+        // words, not a reply that overtook them.
         self.ctx.db.experience().observer().filter(self.me.id).filter(|e| e.at_ms > since).any(|e| {
-            (e.kind == "said" && e.object == to && !own.contains(&e.at_ms))
+            (e.kind == "said" && e.object == to && !own.contains(&e.at_ms) && e.at_ms != brain.installed_ms)
                 || (e.subject == to && words.contains(&e.kind.as_str()) && (e.object == self.me.id || e.object == 0 && e.salience >= 0.8))
         })
     }
 
     /// Under `heard_first_rethinks`: a line another said to `to` that I heard since this mind's
-    /// plan was installed, or since say node `id` last spoke (first-sight-crowd).
+    /// plan's decision perceived its scene (`decided_ms`), or since say node `id` last spoke
+    /// (first-sight-crowd).
     fn heard_first(&self, id: u16, to: u32) -> Option<Experience> {
         if !common::laws(self.ctx).heard_first_rethinks {
             return None;
         }
         let brain = self.ctx.db.brain().id().find(self.me.id).filter(|b| b.source == "mind")?;
         let own_mark = self.st.marks.iter().find(|m| m.node == id).map_or(0, |m| m.at_ms);
-        crate::speech::addressed_by_another(self.ctx, self.me.id, to, brain.installed_ms.max(own_mark))
+        crate::speech::addressed_by_another(self.ctx, self.me.id, to, self.decided_ms(&brain).max(own_mark))
     }
 
     /// A say that cannot be spoken is a failure the body is told about, like a refused leaf
@@ -1144,11 +1167,7 @@ impl<'a> Ev<'a> {
         // screens and the minds' body words).
         let sc = common::scripts(self.ctx);
         let span = common::span("brain.status");
-        let facts = living_rules::script::BodyFacts::of(&self.me.kind, crate::common::stage_name(self.me.stage), night, &self.vit.fields(), sc.meters(), self.now);
-        let statuses = sc.status_of(&facts).unwrap_or_else(|e| {
-            log::warn!("status_of for {}: {e}", self.me.id);
-            std::rc::Rc::new(Vec::new())
-        });
+        let statuses = alarm_statuses(self.ctx, &sc, &self.me, &self.vit, night, self.now);
         let checks: Vec<living_rules::script::Alarm> = statuses.iter().filter_map(|s| s.alarm.clone()).collect();
         drop(span);
         // Psychological drives: an uneventful stretch makes curious people restless; time without
@@ -1459,6 +1478,11 @@ impl<'a> Ev<'a> {
             }
         }
         CUE_HELD.with(|m| m.borrow_mut().insert(me, (now, held)));
+    }
+
+    /// Whether this node's act is under way and still approaching its target (phase 0).
+    fn approaching(&self, id: u16) -> bool {
+        self.ctx.db.activity().id().find(self.me.id).is_some_and(|x| x.node == id && x.revision == self.st.revision && x.phase == 0)
     }
 
     /// Over `FAMILIAR_LIMIT`, forget the oldest familiarity by age only (fix 1): never a row
@@ -2031,6 +2055,67 @@ const FAR_MARK: u32 = 0x2000_0000;
 const FIRST_SIGHTS_PER_LINE: usize = 8;
 
 /// "a" or "an" before a kind's words.
+thread_local! {
+    /// Each character's last `status_of` answer and until when it stands (docs/BATTLE_SCALE.md,
+    /// battle-cheap path 2): the script revision, its body row, stage and night it was asked for,
+    /// and the first moment a fact the law reads can change with that row. A cache of the law's
+    /// answer: lost, the law is asked again.
+    static ALARM_CELLS: std::cell::RefCell<std::collections::HashMap<u32, AlarmCell>> = std::cell::RefCell::new(std::collections::HashMap::new());
+}
+
+struct AlarmCell {
+    rev: u32,
+    row: [u64; 20],
+    stage: u8,
+    night: bool,
+    until: u64,
+    statuses: Rc<Vec<living_rules::script::Status>>,
+}
+
+/// The body's statuses by the `status_of` law: from the character's cell while its row, stage
+/// and night are unchanged and no fact the law reads has moved (the `alarm_cells` law), else
+/// asked. The same statuses at the same moments: `alarm_cells_check` compares each.
+fn alarm_statuses(ctx: &ReducerContext, sc: &living_rules::script::Scripts, me: &Character, vit: &Vitals, night: bool, now: u64) -> Rc<Vec<living_rules::script::Status>> {
+    let laws = common::laws(ctx);
+    let ask = || {
+        let facts = living_rules::script::BodyFacts::of(&me.kind, crate::common::stage_name(me.stage), night, &vit.fields(), sc.meters(), now);
+        sc.status_of(&facts).unwrap_or_else(|e| {
+            log::warn!("status_of for {}: {e}", me.id);
+            Rc::new(Vec::new())
+        })
+    };
+    if !laws.alarm_cells {
+        return ask();
+    }
+    let (rev, row) = (common::scripts_rev(ctx), vit.bits());
+    let kept = ALARM_CELLS.with(|c| c.borrow().get(&me.id).filter(|e| e.rev == rev && e.row == row && e.stage == me.stage && e.night == night && now < e.until).map(|e| e.statuses.clone()));
+    if let Some(s) = kept {
+        common::diag(|| "alarm:kept", 1);
+        if laws.alarm_cells_check {
+            let fresh = ask();
+            common::diag(|| "alarm:checked", 1);
+            if fresh != s {
+                common::diag(|| "alarm:differed", 1);
+                log::error!("alarm cell of {}: kept {:?} differs from the law's {:?}", me.id, s.iter().map(|x| &x.name).collect::<Vec<_>>(), fresh.iter().map(|x| &x.name).collect::<Vec<_>>());
+                return fresh;
+            }
+        }
+        return s;
+    }
+    common::diag(|| "alarm:asked", 1);
+    let statuses = ask();
+    let reads = sc.status_reads();
+    let until = living_rules::script::BodyFacts::next_change_ms(&vit.fields(), sc.meters(), now, reads.as_deref());
+    ALARM_CELLS.with(|c| {
+        let mut c = c.borrow_mut();
+        if c.len() > 8192 {
+            c.clear();
+        }
+        c.insert(me.id, AlarmCell { rev, row, stage: me.stage, night, until, statuses: statuses.clone() });
+    });
+    statuses
+}
+
 fn article(kind: &str) -> &'static str {
     if kind.starts_with(['a', 'e', 'i', 'o', 'u']) { "an" } else { "a" }
 }

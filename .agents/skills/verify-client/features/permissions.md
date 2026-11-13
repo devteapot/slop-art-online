@@ -21,11 +21,11 @@ A client invokes reducers with its own identity. `require_admin` (`living/author
 .agents/skills/verify-client/scripts/drive.py --run "$R"
 ```
 
-`reducers.md` records every identity, reducer, HTTP status, response, and verdict. `reducers.json` also records arguments and expected text. The copied admin and mind inventories must match the source before any calls run.
+`reducers.md` records every identity, reducer, HTTP status, response, and verdict. The mind service connects as the world's admin, so `require_admin` cannot refuse it an admin reducer by identity: before any call, `drive.py` fails if `living/mind/src` calls `admin_set_vitals`, `kill`, `relook`, `set_world_law` or `install_script` (`never_by_minds`). `reducers.json` also records arguments and expected text. The copied admin and mind inventories must match the source before any calls run.
 
 | Caller and target | Expected result |
 | --- | --- |
-| Non-admin calls to every admin reducer | HTTP 530, `admin only` |
+| Non-admin calls to every admin reducer (`ADMIN` in `drive.py`, `admin_set_vitals` among them since 2026-11-13) | HTTP 530, `admin only` |
 | `mind_*` on an AI or another player's actor | HTTP 530, `not your character` |
 | `mind_*` on the caller's own joined actor | HTTP 200 |
 | External `tick` or `housekeeping` | HTTP 404, `No such procedure` |

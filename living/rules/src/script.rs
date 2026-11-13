@@ -472,8 +472,6 @@ pub struct Laws {
     pub wake_reach: f32,
     /// A creature already in a player's sight stays seen until this many metres beyond the player's sight.
     pub keep_seen_m: f32,
-    /// A chased creature is lost from sight beyond this share of the chaser's sight (or its scent, if farther).
-    pub chase_lost_share: f32,
     /// Hunger of a body that comes into the world.
     pub spawn_hunger: f32,
     /// Energy of a body that comes into the world.
@@ -501,6 +499,10 @@ pub struct Laws {
     /// Sight depends on facing (the `field` of `senses(a)`; the geometry is the `fov_*` laws,
     /// read by the script).
     pub fov_on: bool,
+    /// Wolves' starting instincts carry the spacing reflex (docs/PACK_MIND.md, decision 1):
+    /// beside each hunt, a weighted desire to keep apart from mates while closing on the prey
+    /// (`graph::with_pack_reflex`). Read where an instinct is installed; a world turns it off.
+    pub pack_reflex: bool,
     /// A body struck this many seconds ago cannot fall asleep (the script's `sleep_check`, the
     /// same for every controller).
     pub alert_after_hit_s: f32,
@@ -557,6 +559,23 @@ pub struct Laws {
     /// evaluation (its conditions, targets, act starts, alerts), docs/BATTLE_SCALE.md. Off by
     /// default: those spans are many and would weigh on what an ordinary profile measures.
     pub profile_detail: bool,
+    /// A move's check before it starts is given a context of the fields the check reads alone
+    /// (its plan; docs/BATTLE_SCALE.md, battle-cheap path 1): the same answer, without gathering
+    /// what it never reads (kin near, practice, community and home, warmth). Off: the whole context.
+    pub check_ctx_plan: bool,
+    /// Diagnostic: every such check is also asked with the whole context, and a difference logged
+    /// and counted (`diag:` `check_ctx:differed`).
+    pub check_ctx_check: bool,
+    /// The body's alarms (`status_of`) are answered from the last answer while no field it reads
+    /// has crossed one of its levels (battle-cheap path 2). Off: asked at every evaluation.
+    pub alarm_cells: bool,
+    /// Diagnostic: every alarm answer from a cell is also asked afresh, and a difference logged
+    /// and counted (`alarm:differed`).
+    pub alarm_cells_check: bool,
+    /// Diagnostic: warmth (battle-cheap path 3: only what warms or shelters, visited in place)
+    /// is also worked out from a full copy, and a difference logged and counted
+    /// (`warmth:differed`).
+    pub warmth_check: bool,
     /// The fast lane (docs/FAST_LANE.md): a mind-run character's re-plan between blows, asked
     /// of its mind on a blow taken or a move it sees repeated. Off: none is asked.
     pub fast_lane_on: bool,
@@ -628,7 +647,6 @@ impl Default for Laws {
             wake_loudness: 2.0,
             wake_reach: 8.0,
             keep_seen_m: 1.0,
-            chase_lost_share: 1.4,
             spawn_hunger: 25.0,
             spawn_energy: 85.0,
             pasture_per_tile: 0.02,
@@ -638,6 +656,7 @@ impl Default for Laws {
             longing_after_min: 20.0,
             longing_food: 0.0,
             fov_on: false,
+            pack_reflex: true,
             alert_after_hit_s: 15.0,
             alert_while_attacker_near: true,
             stranger_by_name: false,
@@ -655,6 +674,11 @@ impl Default for Laws {
             regard_cache: true,
             regard_cache_check: false,
             profile_detail: false,
+            check_ctx_plan: true,
+            check_ctx_check: false,
+            alarm_cells: true,
+            alarm_cells_check: false,
+            warmth_check: false,
             fast_lane_on: false,
             seen_again_n: 3.0,
             fast_lane_rate: 2.0,
@@ -975,6 +999,8 @@ pub struct Scripts {
     skills: std::sync::Arc<crate::catalog::Skills>,
     /// The ways of speaking (`<way>_speech()`), in their order.
     ways: Vec<speech::WaySpec>,
+    /// The words a speaker uses for someone by their relation to them (`kin_terms()`), by relation.
+    kin: speech::KinTerms,
     /// Functions of no parameter.
     nullary: HashSet<String>,
     /// What each function reads of its parameters.
@@ -1358,7 +1384,7 @@ impl Scripts {
         let nullary = ast.iter_functions().filter(|f| own(f.name) && f.params.is_empty()).map(|f| f.name.to_string()).collect();
         let fields = fields.unwrap_or_else(|| fields::Fields::analyze(&ast));
         let reach = Reach { day: 0.0, night: 0.0, hearing: 0.0, glow: 0.0 };
-        let mut s = Self { engine, ast, fns, unary, nullary, shapes: Default::default(), shows: Default::default(), skills: Default::default(), ways: Vec::new(), fields, plans: Default::default(), names: Default::default(), lists: Default::default(), needs: Default::default(), senses: Default::default(), moves: Default::default(), pools: Default::default(), glows: Default::default(), lives: Default::default(), hour_ms, daylight: Default::default(), laws: Default::default(), reach, borrowed, structures: Default::default(), seasons: Default::default(), tables, source: source.to_string(), law_errors: Default::default(), about: Ok(Vec::new()), ui: Default::default(), body: Default::default(), makings: Default::default() };
+        let mut s = Self { engine, ast, fns, unary, nullary, shapes: Default::default(), shows: Default::default(), skills: Default::default(), ways: Vec::new(), kin: Default::default(), fields, plans: Default::default(), names: Default::default(), lists: Default::default(), needs: Default::default(), senses: Default::default(), moves: Default::default(), pools: Default::default(), glows: Default::default(), lives: Default::default(), hour_ms, daylight: Default::default(), laws: Default::default(), reach, borrowed, structures: Default::default(), seasons: Default::default(), tables, source: source.to_string(), law_errors: Default::default(), about: Ok(Vec::new()), ui: Default::default(), body: Default::default(), makings: Default::default() };
         // Skills in the order the source declares them (the last declaration of a name counts).
         let declared = |name: &str| source.rfind(&format!("fn {name}_spec(")).unwrap_or(usize::MAX);
         // Required entry points.
@@ -1384,6 +1410,7 @@ impl Scripts {
         s.skills = std::sync::Arc::new(skills);
         s.makings = s.read_makings()?;
         s.ways = s.read_ways()?;
+        s.kin = s.read_kin()?;
         s.structures = s.read_structures()?;
         s.seasons = s.read_seasons()?;
         s.laws = s.read_laws()?;
@@ -1539,6 +1566,21 @@ impl Scripts {
     /// The ways of speaking (`<way>_speech()`), read once here, in their `order` (then the
     /// source's). A script that declares none speaks by the shipped `say` (today's speech), so a
     /// world installed before ways were declared keeps speaking until its next install.
+    /// The world's kin terms (`kin_terms()`, a map of relation to words), or the defaults when
+    /// the script has none (`speech::KinTerms::default`).
+    fn read_kin(&self) -> Result<speech::KinTerms, String> {
+        if !self.has("kin_terms") {
+            return Ok(speech::KinTerms::default());
+        }
+        let m = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "kin_terms", ()).map_err(|e| format!("kin_terms: {e}"))?.try_cast::<Map>().ok_or("kin_terms must return a map of relation to a list of words")?;
+        speech::KinTerms::of(&m)
+    }
+
+    /// The words a speaker uses for someone by their relation to them (`kin_terms()`).
+    pub fn kin(&self) -> &speech::KinTerms {
+        &self.kin
+    }
+
     fn read_ways(&self) -> Result<Vec<speech::WaySpec>, String> {
         let mut ways = Vec::new();
         for f in self.nullary.iter().filter(|f| f.ends_with("_speech")) {
@@ -2370,6 +2412,13 @@ impl Scripts {
         self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, f, (m,)).map_err(|e| format!("{f}: {e}"))
     }
 
+    /// The fields `<skill>_check` reads (its plan), for a context built with those alone
+    /// (docs/BATTLE_SCALE.md, battle-cheap path 1). `None` when the skill has no check.
+    pub fn check_plan(&self, skill: &str) -> Option<Rc<context::Plan>> {
+        let f = format!("{skill}_check");
+        self.has(&f).then(|| self.plan(&f))
+    }
+
     pub fn check(&self, skill: &str, ctx: &SkillCtx) -> Result<(), String> {
         let f = format!("{skill}_check");
         if !self.has(&f) {
@@ -2665,7 +2714,6 @@ impl Scripts {
             wake_loudness: g("wake_loudness", l.wake_loudness).clamp(0.0, 100.0),
             wake_reach: g("wake_reach", l.wake_reach).clamp(0.0, 64.0),
             keep_seen_m: g("keep_seen_m", l.keep_seen_m).clamp(0.0, 8.0),
-            chase_lost_share: g("chase_lost_share", l.chase_lost_share).clamp(1.0, 8.0),
             spawn_hunger: g("spawn_hunger", l.spawn_hunger).clamp(0.0, 100.0),
             spawn_energy: g("spawn_energy", l.spawn_energy).clamp(0.0, 100.0),
             pasture_per_tile: g("pasture_per_tile", l.pasture_per_tile).clamp(0.0, 10.0),
@@ -2675,6 +2723,7 @@ impl Scripts {
             longing_after_min: g("longing_after_min", l.longing_after_min).clamp(0.0, 100_000.0),
             longing_food: g("longing_food", l.longing_food).clamp(0.0, 1_000.0),
             fov_on: flag("fov_on", l.fov_on),
+            pack_reflex: flag("pack_reflex", l.pack_reflex),
             alert_after_hit_s: g("alert_after_hit_s", l.alert_after_hit_s).clamp(0.0, 3_600.0),
             alert_while_attacker_near: flag("alert_while_attacker_near", l.alert_while_attacker_near),
             stranger_by_name: flag("stranger_by_name", l.stranger_by_name),
@@ -2692,6 +2741,11 @@ impl Scripts {
             regard_cache: flag("regard_cache", l.regard_cache),
             regard_cache_check: flag("regard_cache_check", l.regard_cache_check),
             profile_detail: flag("profile_detail", l.profile_detail),
+            check_ctx_plan: flag("check_ctx_plan", l.check_ctx_plan),
+            check_ctx_check: flag("check_ctx_check", l.check_ctx_check),
+            alarm_cells: flag("alarm_cells", l.alarm_cells),
+            alarm_cells_check: flag("alarm_cells_check", l.alarm_cells_check),
+            warmth_check: flag("warmth_check", l.warmth_check),
             fast_lane_on: flag("fast_lane_on", l.fast_lane_on),
             seen_again_n: g("seen_again_n", l.seen_again_n).round().clamp(1.0, 100.0),
             fast_lane_rate: g("fast_lane_rate", l.fast_lane_rate).clamp(0.0, 100.0),
@@ -2955,7 +3009,7 @@ fn number(d: &Dynamic) -> Option<f64> {
 }
 
 /// The traits a skill's spec may have.
-pub const SPEC_TRAITS: &[&str] = &["target", "item", "args", "reach", "about", "takes", "gives", "listed", "talk", "items", "latch", "notable", "moving", "moment", "reflex", "target_class", "loudness"];
+pub const SPEC_TRAITS: &[&str] = &["target", "item", "args", "reach", "about", "takes", "gives", "listed", "talk", "items", "latch", "notable", "moving", "moment", "reflex", "target_class", "loudness", "on_the_move"];
 
 /// A skill's spec from what `<skill>_spec()` returned.
 /// A kind's `burns` trait: `#{ fuel: "<item trait>", rate: <units a game hour>, warmth: <m>,
@@ -3026,7 +3080,8 @@ fn spec_of(skill: &str, m: &Map) -> Result<crate::catalog::SkillSpec, String> {
         items: list("items")?,
         latch: flag("latch", false)?,
         notable: flag("notable", false)?,
-        moving: flag("moving", false)?,
+        moving: flag("moving", false)? || flag("on_the_move", false)?,
+        on_the_move: flag("on_the_move", false)?,
         moment: flag("moment", false)?,
         loudness: m.get("loudness").map_or(Ok(0.0), |v| number(v).ok_or_else(|| format!("{f}: `loudness` must be a number")))?.clamp(0.0, 100.0) as f32,
         reflex: flag("reflex", false)?,
@@ -3439,7 +3494,9 @@ mod tests {
         // `feed` and `make` (2026-11-11) are there for a world with fires that burn fuel and recipes.
         assert_eq!(with(|k| k.latch), "build cook craft eat experiment feed gather give make plant read rest sleep store take teach write");
         assert_eq!(with(|k| k.notable), "attack build conceive cook craft feed give make store take threaten yield");
-        assert_eq!(with(|k| k.moving), "eat signal wait");
+        // `wave` and `nod` are done on the move (talk-turns, `on_the_move`, which implies `moving`).
+        assert_eq!(with(|k| k.moving), "eat nod signal wait wave");
+        assert_eq!(with(|k| k.on_the_move), "nod wave");
         assert_eq!(with(|k| k.moment), "circle flee follow graze keep_distance rest sleep wait wander");
         assert_eq!(with(|k| k.reflex), "flee");
         assert_eq!((s.structure("house"), s.structure("campfire"), s.structure("workshop"), s.structure("storage")), (&StructureTraits { warms: true, roof: true, ..Default::default() }, &StructureTraits { warms: true, ..Default::default() }, &StructureTraits { roof: true, ..Default::default() }, &StructureTraits { holds: Some(120.0), ..Default::default() }));
@@ -3504,6 +3561,20 @@ mod tests {
     /// Sight and hearing are a law per creature in the script, with the values the engine had
     /// as constants (11 m by day, 6 at night, 9 with a torch; hearing 9), shared by every
     /// creature in the same state and held to the law's reach.
+    #[test]
+    fn the_pack_reflex_is_on_by_default_and_a_world_turns_it_off() {
+        let src = include_str!("../../scripts/skills.rhai");
+        let shipped = Scripts::new(src).unwrap();
+        assert!(shipped.laws().pack_reflex, "on in every world unless it says otherwise");
+        assert_eq!(shipped.law_value("pack_reflex"), Some(serde_json::json!(true)));
+        let off_src = with_world_laws(src, &[("pack_reflex".into(), serde_json::json!(false))]);
+        let off = Scripts::new(&off_src).unwrap();
+        off.validate().unwrap();
+        assert!(!off.laws().pack_reflex);
+        // A script that does not name the law keeps the reflex on (the Rust default).
+        assert!(Laws::default().pack_reflex);
+    }
+
     #[test]
     fn sight_depends_on_facing_only_when_the_world_s_law_says() {
         let src = include_str!("../../scripts/skills.rhai");
@@ -3594,6 +3665,23 @@ mod tests {
 
     /// First sights that ask for a thought (docs/FIRST_SIGHT.md): off by default, with the gap a
     /// world may set, clamped to 0..3600 s.
+    #[test]
+    fn kin_terms_name_a_relation_and_are_the_world_s() {
+        let src = include_str!("../../scripts/skills.rhai");
+        let sc = Scripts::new(src).unwrap();
+        let k = sc.kin();
+        assert_eq!(k, &speech::KinTerms::default(), "the shipped script's kin terms are the defaults");
+        assert_eq!(k.named_at("But you have to ask Mother first for the crust", &["parent"]), Some(5));
+        assert_eq!(k.named_at("ask Mother first", &["child", "sibling"]), None, "a parent word names a parent only");
+        assert_eq!(k.named_at("Gran! Come see", &["grandparent"]), Some(0));
+        assert_eq!(k.named_at("my motherland", &["parent"]), None, "whole words only");
+        let base = src.replace("fn kin_terms()", "fn shipped_kin_terms()");
+        let own = Scripts::new(&format!("{base}\nfn kin_terms() {{ #{{ parent: [\"Amma\"] }} }}\n")).unwrap();
+        assert_eq!(own.kin().named_at("Amma, look", &["parent"]), Some(0));
+        assert_eq!(own.kin().named_at("Mother, look", &["parent"]), None, "a world's own terms replace the defaults");
+        assert!(Scripts::new(&format!("{base}\nfn kin_terms() {{ #{{ cousin: [\"coz\"] }} }}\n")).is_err(), "an unknown relation is refused");
+    }
+
     #[test]
     fn earshot_is_the_world_s_law_and_off_as_shipped() {
         let src = include_str!("../../scripts/skills.rhai");
@@ -3841,7 +3929,7 @@ mod tests {
         // Rule numbers that were Rust constants, with their values.
         let l = sc.laws();
         assert_eq!((l.follow_s, l.read_sign_m, l.kin_near_m, l.trade_window_s, l.join_window_s, l.address_m), (12.0, 8.0, 4.0, 180.0, 300.0, 6.0));
-        assert_eq!((l.keep_seen_m, l.chase_lost_share, l.spawn_hunger, l.spawn_energy, l.pasture_per_tile), (1.0, 1.4, 25.0, 85.0, 0.02));
+        assert_eq!((l.keep_seen_m, l.spawn_hunger, l.spawn_energy, l.pasture_per_tile), (1.0, 25.0, 85.0, 0.02));
         // The longing for a child: shipped values keep the old wait (20 − nurture/6 minutes, any food).
         assert_eq!((l.longing_after_min, l.longing_food), (20.0, 0.0));
         for n in [0.0, 30.0, 60.0, 100.0] {

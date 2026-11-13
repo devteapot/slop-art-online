@@ -213,6 +213,16 @@
    "at": 26.0,
    "steps": [
     {
+     "do": "vitals",
+     "who": "subject",
+     "hp": "max"
+    },
+    {
+     "do": "vitals",
+     "who": "foe_b",
+     "hp": "max"
+    },
+    {
      "do": "place",
      "who": "foe_b",
      "to": {

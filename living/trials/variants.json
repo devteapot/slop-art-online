@@ -262,10 +262,10 @@
   }
  },
  "pack-minds": {
-  "about": "Pack arena with minds on both sides (docs/PACK_MIND.md): people on the models file's default, wolves routed by its species map, LIVING_ANIMAL_MINDS=salient,choose (no pack: retired). fast_lane_on stays off (the world law's default).",
+  "about": "Pack arena with minds on both sides (docs/PACK_MIND.md §8): people on the models file's default, wolves routed by its species map on the impulse-then-compile path, LIVING_ANIMAL_MINDS=salient (no choose: its menu cannot express spacing; no pack: retired). fast_lane_on stays off (the world law's default).",
   "models": {},
   "env": {
-   "LIVING_ANIMAL_MINDS": "salient,choose"
+   "LIVING_ANIMAL_MINDS": "salient"
   }
  },
  "strangers-first-sight-n2": {
