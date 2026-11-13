@@ -6484,5 +6484,129 @@ def scene_lazy(s):
 SCENES["scene_lazy"] = scene_lazy
 
 
+def diag_totals(s, t0):
+    """The authority's `diag:` counts (`common::diag`) summed over the lines logged since `t0`."""
+    logs = s.command("logs", "-s", "local", s.db, "-n", "200000").stdout
+    total = {}
+    for m in re.finditer(r"^(\S+)Z?\s.*diag: (\{.*\})\s*$", logs, re.M):
+        try:
+            at = time.mktime(time.strptime(m.group(1).rstrip("Z")[:19], "%Y-%m-%dT%H:%M:%S")) - time.timezone
+        except ValueError:
+            continue
+        if at + 1 >= t0:
+            for k, v in json.loads(m.group(2)).items():
+                total[k] = total.get(k, 0) + v
+    return total
+
+
+def fast_diag(s):
+    """The fast lane's profiling counters (`fast:*` in the `diag:` lines; docs/FAST_LANE.md, the
+    battle run's plan). No mind service: the scene answers as the minds' controller does. Two
+    victims struck over and over by two spearmen, under laws that make each counter fire:
+    - in flight 1, rate 10: one victim's row is issued, the other's waits behind the cap
+      (`cap_inflight`) and goes stale after 3 s (`stale`); an issued row nobody answers expires
+      after two stale windows (`expired`); blows on a row already waiting or served are merged
+      (`merged`); a struck line is a trigger (`trigger_struck`), each issue `issued`;
+    - rate 0.2, in flight 5: waiting rows stop on an empty bucket (`cap_rate`);
+    - answers: `mind_fast_done` (`kept`), `mind_patch` on an unchanged plan (`installed`) and after
+      the plan changed (`refused`).
+    Nothing is counted while profiling is off (a window after it shows no `fast:` keys)."""
+    set_law(s, "fast_lane_on", True)
+    set_law(s, "fast_lane_inflight", 1)
+    set_law(s, "fast_lane_rate", 10)
+    set_law(s, "fast_lane_stale_s", 3)
+    set_law(s, "fast_lane_gap_s", 2)
+    people = {c["id"] for c in s.rows("SELECT id, kind FROM character WHERE alive = true") if c["kind"] == "person"}
+    line = open_line(s, length=16, avoid=[(b["x"], b["y"]) for b in s.rows("SELECT id, x, y FROM body") if b["id"] in people])
+    a1, b1, a2, b2 = s.people(4)
+    for a, b, at in ((a1, b1, line[3]), (a2, b2, line[11])):
+        s.call("place_at", a, at[0], at[1])
+        s.call("place_at", b, at[0] + 1.2, at[1])
+        s.call("grant_items", b, "spear", 1)
+        s.call("admin_set_vitals", a, 1000.0)
+    time.sleep(1.0)
+    row = lambda a: (s.rows(f"SELECT * FROM fast_ask WHERE actor = {a}") or [None])[0]
+
+    def issued_after(a, after, seconds=20):
+        end = time.monotonic() + seconds
+        while time.monotonic() < end:
+            r = row(a)
+            if r and r["issued_ms"] and r["issued_ms"] > after:
+                return r
+            time.sleep(0.1)
+        return None
+
+    def topped(seconds):
+        """Wait, keeping both victims alive under the blows (an admin set, not care)."""
+        end = time.monotonic() + seconds
+        while True:
+            for a in (a1, a2):
+                s.call("admin_set_vitals", a, 1000.0, check=False)
+            if time.monotonic() >= end:
+                return
+            time.sleep(min(4.0, max(0.0, end - time.monotonic())))
+
+    t0 = time.time()
+    s.call("set_profile", True)
+    try:
+        for a, b in ((a1, b1), (a2, b2)):
+            s.graph(a, {"wait": 300})
+            s.graph(b, {"first": [{"do": {"skill": "strike", "target": {"id": a}}}, {"wait": 2.0}]})
+        topped(18)
+        set_law(s, "fast_lane_rate", 0.2)
+        set_law(s, "fast_lane_inflight", 5)
+        topped(10)
+        set_law(s, "fast_lane_rate", 10)
+        set_law(s, "fast_lane_stale_s", 600)
+        # The answers, as a mind would give them.
+        topped(0)
+        r = issued_after(a1, 0)
+        kept = s.call("mind_fast_done", a1, r["issued_ms"], {**THOUGHT, "kind": "fast", "summary": "kept: verify"}, check=False) if r else None
+        r2 = issued_after(a1, r["issued_ms"] if r else 0)
+        patch = {"first": [{"if": {"cond": {"threatened": True}, "then": {"do": "dodge"}}}, {"wait": 0.5}]}
+        installed = s.call("mind_patch", a1, "combat", json.dumps(patch), r2["issued_ms"], {**THOUGHT, "kind": "fast", "summary": "verify patch"}, check=False) if r2 else None
+        topped(0)
+        r3 = issued_after(a1, r2["issued_ms"] if r2 else 0)
+        if r3:
+            s.call("mind_install", a1, json.dumps({"wait": 300}), "verify changed plan", "", 0, 0, THOUGHT)
+            refused = s.call("mind_patch", a1, "combat", json.dumps(patch), r3["issued_ms"], {**THOUGHT, "kind": "fast", "summary": "verify patch"}, check=False)
+        else:
+            refused = None
+        time.sleep(2.5)
+    finally:
+        for b in (b1, b2):
+            s.graph(b, {"wait": 60})
+        s.call("set_profile", False)
+        for name, v in (("fast_lane_inflight", 4), ("fast_lane_rate", 2), ("fast_lane_stale_s", 8), ("fast_lane_gap_s", 6)):
+            set_law(s, name, v)
+    total = diag_totals(s, t0)
+    fast = {k: v for k, v in total.items() if k.startswith("fast:")}
+    (s.out / f"{s.name}-fast-diag.json").write_text(json.dumps({"fast": fast, "answers": {"kept": bool(kept and kept.returncode == 0), "installed": bool(installed and installed.returncode == 0), "refused": bool(refused and refused.returncode == 0)}}, indent=1) + "\n")
+    s.expect("blows taken are counted as triggers", fast.get("fast:trigger_struck", 0) > 0, fast)
+    s.expect("blows on a row already waiting or served are merged", fast.get("fast:merged", 0) > 0, fast)
+    s.expect("rows are issued and counted", fast.get("fast:issued", 0) >= 3, fast)
+    s.expect("with one in flight, the other victim waits behind the cap", fast.get("fast:cap_inflight", 0) > 0, fast)
+    s.expect("a row left waiting past the stale window is dropped and counted", fast.get("fast:stale", 0) > 0, fast)
+    s.expect("an issued row nobody answers expires and is counted", fast.get("fast:expired", 0) > 0, fast)
+    s.expect("at 0.2 a second, waiting rows stop on an empty bucket", fast.get("fast:cap_rate", 0) > 0, fast)
+    s.expect("an answer with no change is counted as kept", fast.get("fast:kept", 0) >= 1, fast)
+    s.expect("a patch on an unchanged plan is counted as installed", fast.get("fast:installed", 0) >= 1, fast)
+    s.expect("a patch after the plan changed is counted as refused", fast.get("fast:refused", 0) >= 1, fast)
+    topped(3)
+    t1 = time.time()
+    s.graph(b1, {"first": [{"do": {"skill": "strike", "target": {"id": a1}}}, {"wait": 2.0}]})
+    time.sleep(5)
+    s.graph(b1, {"wait": 60})
+    after = {k: v for k, v in diag_totals(s, t1).items() if k.startswith("fast:")}
+    s.expect("nothing is counted while profiling is off", not after, after)
+    set_law(s, "fast_lane_on", False)
+    for a, b in ((a1, b1), (a2, b2)):
+        s.graph(a, {"wait": 60})
+    off_the_line(s, line, [a1, b1, a2, b2], dy=62)
+
+
+SCENES["fast_diag"] = fast_diag
+
+
 if __name__ == "__main__":
     raise SystemExit(main())
