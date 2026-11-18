@@ -81,6 +81,7 @@ fn main() {
         .set(
             bevy::gltf::GltfPlugin::default()
                 .add_custom_vertex_attribute("OUTLINE_NORMAL", bevy_mod_outline::ATTRIBUTE_OUTLINE_NORMAL)
+                .add_custom_vertex_attribute("OUTLINE_WIDTH", characters::compose::ATTRIBUTE_OUTLINE_WIDTH)
                 // Hair's greying lock by lock (`_GREY`, characters/compose.rs).
                 .add_custom_vertex_attribute("GREY", characters::compose::ATTRIBUTE_GREY)
                 // Where hair may carry its ring (`_RING`, characters/compose.rs).
