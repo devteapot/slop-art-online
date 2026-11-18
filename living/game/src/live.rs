@@ -608,7 +608,7 @@ fn bodies(
     mut live: ResMut<Live>,
     mut q: Query<Drawn>,
     (mut fades, anims): (Query<&mut crate::fade::Fade>, Query<&crate::anim::Anim>),
-    (time, edge, lw): (Res<Time>, Option<Res<crate::sightedge::SightEdge>>, Res<crate::twist::LookWalk>),
+    (time, edge, lw, prefs): (Res<Time>, Option<Res<crate::sightedge::SightEdge>>, Res<crate::twist::LookWalk>, Res<crate::keys::Prefs>),
 ) {
     let Some(island) = island else { return };
     let Some(conn) = net.conn.as_ref() else {
@@ -731,12 +731,14 @@ fn bodies(
         live.heights.remove(&id);
     }
     let mut my_face = None;
+    let cursor_facing = prefs.facing() == crate::controls::Facing::Cursor;
     for (&id, &(p, heading)) in &scene.shown {
         let ground = island.height(p.x, p.y);
         let at = Vec3::new(p.x, ground, p.y);
         let mine = Some(id) == me;
-        // My character turns toward where I look (shown locally; the authority has no look): always
-        // facing the cursor, or facing where I walk and only while aiming (`controls::Control`).
+        // Cursor is a local animation prediction. The authority still resolves the held look,
+        // movement, visibility and combat from its own rows and the existing intents.
+        let cursor_mode = mine && cursor_facing;
         let look = input.look.filter(|_| mine && input.faces_cursor(combat.aims)).filter(|l| l.length_squared() > 1e-4).map(|l| l.y.atan2(l.x));
         // During a move a body faces where the move goes; a gesture or settling down plays when
         // no move does.
@@ -923,6 +925,8 @@ fn bodies(
         // look leads it, drawn ahead of the row (`docs/PERCEPTION.md`, "Drawing it").
         let faced = row.as_ref().and_then(|m| authority_facing(m, if mine { scene.mine_ms } else { scene.now_ms }));
         let look_at = aimed.or(look).or(faced);
+        let cursor_turn = look.filter(|_| cursor_mode && aimed.is_none() && s.person && action.is_none());
+        let lw = if cursor_turn.is_some() { &prefs.cursor_facing } else { &*lw };
         // Backwards from where the authority's facing settles, when that is what the legs follow.
         let settled = if aimed.is_none() && look.is_none() && faced.is_some() { row.as_ref().map(settled_offset) } else { None };
         let walking = s.person && s.speed > MOVING;
@@ -933,7 +937,7 @@ fn bodies(
         // it off where it is.
         let mut turn_action = None;
         if let (Some(tp), Some(g)) = (s.turn, gaits.as_ref()) {
-            if walking || action.is_some() {
+            if walking || action.is_some() || cursor_turn.is_some() {
                 s.turn = None;
             } else {
                 let (by, done) = crate::takes::turned(g, &tp, scene.now_ms);
@@ -952,7 +956,7 @@ fn bodies(
         // Standing, legs that would swivel past `takes::TURN_ON` turn by a take instead: toward the
         // look, a standing body's own heading (where its segment's turn ends) or its activity.
         let standing_to = row.as_ref().filter(|b| b.vx == 0.0 && b.vy == 0.0).map(|b| b.heading + if b.turn_s > 0.0 { b.turn } else { 0.0 });
-        let turn_to = look_at.or(busy).or(standing_to.filter(|_| slow));
+        let turn_to = if cursor_turn.is_some() { None } else { look_at.or(busy).or(standing_to.filter(|_| slow)) };
         if let (Some(g), Some(to), None, false, None, None) = (gaits.as_ref(), turn_to, s.turn, walking, action, s.stop) {
             if s.speed < crate::anim::STEP_OFF {
                 if let Some(clip) = crate::takes::turn_for(g, living_rules::steer::wrap(to - s.yaw)) {
@@ -968,13 +972,27 @@ fn bodies(
         // legs already follow the walk's curve then (as standing they turned at the yaw rate,
         // 35° a frame).
         let stepping = walking || (s.person && s.turn.is_none() && scene.speeds.get(&id).is_some_and(|v| *v > MOVING));
-        let legs = match (stepping, look_at, heading) {
+        let legs = match (cursor_turn, stepping, look_at, heading) {
+            (Some(goal), _, _, _) => {
+                s.turning = false;
+                let body_goal = heading.filter(|_| stepping).map_or(goal, |travel| {
+                    let limit = lw.body_deg.to_radians();
+                    travel + living_rules::steer::wrap(goal - travel).clamp(-limit, limit)
+                });
+                s.yaw = lw.ease(s.yaw, body_goal, dt);
+                s.face = goal;
+                toward_t = heading.filter(|&t| stepping && gaits.as_ref().is_some_and(|g| {
+                    g.blend_cursor(s.speed / pace.max(0.5), stride, family, living_rules::steer::wrap(t - s.yaw), |_| 1.0).is_some()
+                }));
+                back = stepping && heading.is_some_and(|t| living_rules::steer::wrap(t - s.yaw).abs().to_degrees() > lw.back_deg);
+                None
+            }
             _ if s.turn.is_some() => None,
             // Walking and looking: the legs ease toward the travel turned by what the head and
             // chest leave (or its reverse, looking back), and the takes for the travel from them
             // play; where the file has none there, the forward gaits along the travel (reversed
             // backwards), the legs taken round at the old rate.
-            (true, Some(l), Some(t)) => {
+            (_, true, Some(l), Some(t)) => {
                 let (goal, b) = lw.legs_goal(t, l, settled, s.back, |legs| takes(t, legs));
                 back = b;
                 // Always eased (a snap at the old rate turned the legs 25–39° a frame setting off
@@ -989,8 +1007,8 @@ fn bodies(
             // aim, as a dodge's roll must): the legs stay until the look is well away, then turn.
             // While a stop take plays the legs hold (the upper body takes the look): no turn take
             // can start then, and they swivelled at the yaw rate, 40° a frame.
-            (false, Some(_), _) if s.person && action.is_none() && s.stop.is_some() => Some(s.yaw),
-            (false, Some(l), _) if s.person && action.is_none() => {
+            (_, false, Some(_), _) if s.person && action.is_none() && s.stop.is_some() => Some(s.yaw),
+            (_, false, Some(l), _) if s.person && action.is_none() => {
                 let off = living_rules::steer::wrap(l - s.yaw).abs();
                 s.turning = if s.turning { off > STAND_TURN_OFF } else { off > STAND_TURN_ON.min(lw.upper()) };
                 Some(if s.turning { l } else { s.yaw })
@@ -1023,7 +1041,12 @@ fn bodies(
         // The travel from where the legs are drawn facing now (the game's sense: + to the right).
         let travel = toward_t.map_or(0.0, |t| living_rules::steer::wrap(t - s.yaw));
         if mine {
-            my_face = Some(Vec2::new(s.face.cos(), s.face.sin()));
+            let face = if cursor_mode {
+                row.as_ref().map_or(s.face, |m| faced.unwrap_or_else(|| authority_travel(m, scene.mine_ms)))
+            } else {
+                s.face
+            };
+            my_face = Some(Vec2::new(face.cos(), face.sin()));
         }
         // Walking backwards on the forward gaits where the file has no take for it.
         let reverse = toward_t.is_none() && stepping && heading.is_some_and(|t| living_rules::steer::wrap(t - s.yaw).abs() > PI / 2.0);
@@ -1085,6 +1108,7 @@ fn bodies(
         motion.eyes = eyes;
         motion.aim = person && look_at.is_some();
         motion.travel = travel;
+        motion.cursor_facing = cursor_turn.is_some();
         motion.family = family;
         motion.freeze = motion.action.is_some_and(|a| a.clip == crate::jump::CLIP) && crate::jump::airborne(&motion) > 0.05;
         // On a road the rules speed a body up (`road_speed`, by the share of road ahead): the

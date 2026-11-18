@@ -99,7 +99,7 @@ impl Plugin for UiPlugin {
                 .add_systems(PostUpdate, wood::shade_text.after(rebuilt).after(sample::fill).before(UiSystems::Prepare));
         } else {
             // Connected play: the game UI's input, its windows and the live source.
-            app.add_systems(Update, ((hit::hit, win::esc, win::keys, win::pointer, top::clicks, settings::update, facing::update, settings::apply_prefs, people::clicks, prompt::clicks, verbs::clicks, grid::clicks, pack::clicks, their_window).chain().in_set(UiInput), say::keys.in_set(crate::phase::Phase::Input).after(UiInput).before(crate::controls::movement)))
+            app.add_systems(Update, ((hit::hit, win::esc, win::keys, win::pointer, top::clicks, settings::camera_controls, settings::update, facing::update, settings::apply_prefs, people::clicks, prompt::clicks, verbs::clicks, grid::clicks, pack::clicks, their_window).chain().in_set(UiInput), say::keys.in_set(crate::phase::Phase::Input).after(UiInput).before(crate::controls::movement)))
                 .add_systems(Update, (people::ingest, say::follow).in_set(crate::phase::Phase::Present))
                 .add_systems(PostUpdate, (win::apply, win::place, settings::spawn, facing::spawn, facing::pill_spawn, people::spawn, pack::spawn, kit::paint).chain().before(UiSystems::Prepare))
                 .add_systems(PostUpdate, dump.after(UiSystems::Layout))
@@ -515,7 +515,7 @@ impl DumpExtra<'_, '_> {
             // The Log's last lines as the Log and the person windows show them (speech-detail-1).
             "lines": self.talks.lines.values().rev().take(12).rev().map(|l| serde_json::json!({"speaker": l.speaker, "to": l.to, "mine": l.mine, "how": l.how, "text": l.text, "head": people::line_head(l, false, self.net.my_id, &self.looks), "head_window": people::line_head(l, true, self.net.my_id, &self.looks)})).collect::<Vec<_>>(),
             "cards": self.talks.cards.iter().map(|(who, i, text)| serde_json::json!({"with": who, "card": i, "text": text})).collect::<Vec<_>>(),
-            "cursor": cursor, "view": {"yaw": self.cam.shown_yaw, "zoom": if self.cam.mode == crate::camera::Mode::TopDown { self.cam.top_zoom.shown } else { self.cam.zoom }, "mode": self.cam.mode.name(), "height": self.cam.eye_height, "pitch": self.cam.shown.pitch, "fov": self.cam.shown.fov}, "cursor_ground": ground, "lod": {"near": lod[0], "far": lod[1], "people": lod_people},
+            "cursor": cursor, "view": {"yaw": self.cam.shown_yaw, "zoom": if self.cam.mode == crate::camera::Mode::TopDown { self.cam.top_zoom.shown } else { self.cam.zoom }, "mode": self.cam.mode.name(), "height": self.cam.eye_height, "ground_clearance": self.cam.ground_clearance, "pitch": self.cam.shown.pitch, "fov": self.cam.shown.fov}, "cursor_ground": ground, "lod": {"near": lod[0], "far": lod[1], "people": lod_people},
             "facing_sight": fov, "facing_note": self.fov.as_ref().and_then(|f| f.note.clone()).map(|(t, _)| t), "heard": self.heard.as_ref().map(|h| h.json()), "sight_look": self.edge.as_ref().map(|e| e.look.name()), "sight_edge": self.edge.as_ref().map(|e| e.mode.name()), "film": self.film.name(), "film_saved": self.prefs.film, "hair_shine": self.shine.name(), "hair_shine_saved": self.prefs.hair_shine,
             // The one-shot each body plays now over its walk or stand (a gesture: `town.rs`), by
             // character id: a wave made while walking on plays on (talk-turns' `on_the_move`).

@@ -11,11 +11,12 @@ use living_bindings::*;
 
 pub const SKY: Color = Color::srgb(0.62, 0.74, 0.86);
 
-#[derive(Clone, Copy, PartialEq, Debug, Default)]
+#[derive(Clone, Copy, PartialEq, Debug, Default, serde::Serialize, serde::Deserialize)]
 pub struct View {
     /// Angle above the ground plane, degrees (90 = straight down).
     pub pitch: f32,
-    /// Distance from the focus, metres (for an ordinary adult).
+    /// Orbit distance from focus, or vertical height in the top-down stops (metres).
+    #[serde(rename = "height")]
     pub distance: f32,
     /// Vertical field of view, degrees.
     pub fov: f32,
@@ -79,37 +80,104 @@ impl Mode {
     }
 }
 
-/// Each knot stores its zoom coordinate and the corresponding vertical height, pitch and FOV.
-struct ZoomCurve {
-    knots: [(f32, View); 3],
-    initial: f32,
-    wheel_step: f32,
-    response: f32,
-    chest_fraction: f32,
+/// The north-up camera's persisted tuning. Distances in the stops are vertical heights.
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
+pub struct Tuning {
+    pub stops: [View; 3],
+    pub wheel_step: f32,
+    pub easing_rate: f32,
+    pub fixed_pitch: Option<f32>,
+    pub late_tilt: Option<LateTilt>,
+    pub keep_fov_curve: bool,
 }
 
-const TOP_DOWN: ZoomCurve = ZoomCurve {
-    knots: [
-        (0.0, View { distance: 19.0, pitch: 65.0, fov: 46.0 }),
-        (0.55, View { distance: 12.0, pitch: 58.0, fov: 44.0 }),
-        (1.0, View { distance: 8.0, pitch: 48.0, fov: 42.0 }),
-    ],
-    initial: 0.55,
-    wheel_step: 0.05,
-    response: 12.0,
-    chest_fraction: 0.60,
-};
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct LateTilt {
+    pub tilt_start: f32,
+    pub near_pitch: f32,
+}
 
-impl ZoomCurve {
-    fn view(&self, zoom: f32) -> View {
-        let [(far, wide), (middle, mid), (near, tight)] = self.knots;
-        let (lo, hi, a, b) = if zoom <= middle {
-            (far, middle, wide, mid)
+const MIDDLE: f32 = 0.55;
+const CHEST_FRACTION: f32 = 0.60;
+
+const fn stop(height: f32, pitch: f32, fov: f32) -> View {
+    View { distance: height, pitch, fov }
+}
+
+fn smooth(t: f32) -> f32 {
+    let t = t.clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
+}
+
+impl Default for Tuning {
+    fn default() -> Self {
+        Self::OURS_FIXED
+    }
+}
+
+impl Tuning {
+    const OURS: Self = Self {
+        stops: [stop(19.0, 65.0, 46.0), stop(12.0, 58.0, 44.0), stop(8.0, 48.0, 42.0)],
+        wheel_step: 0.05,
+        easing_rate: 12.0,
+        fixed_pitch: None,
+        late_tilt: None,
+        keep_fov_curve: false,
+    };
+
+    const OURS_FIXED: Self = Self {
+        stops: [stop(19.0, 58.0, 46.0), stop(12.0, 58.0, 44.0), stop(8.0, 58.0, 42.0)],
+        fixed_pitch: Some(58.0),
+        keep_fov_curve: true,
+        ..Self::OURS
+    };
+
+    // Exact play-test inputs from camera-ref, docs/CAMERA.md §6 (cd53b289).
+    pub const PRESETS: [(&str, &str, Self); 5] = [
+        ("Ours, fixed 58°", "ours-fixed", Self::OURS_FIXED),
+        ("Ours (current)", "ours", Self::OURS),
+        ("SUPERVIVE", "supervive", Self {
+            stops: [stop(28.0, 59.0, 31.0), stop(23.0, 59.0, 31.0), stop(18.0, 59.0, 31.0)],
+            fixed_pitch: Some(59.0),
+            ..Self::OURS
+        }),
+        ("LoL", "lol", Self {
+            stops: [stop(11.2, 56.0, 40.0), stop(11.2, 56.0, 40.0), stop(4.8, 56.0, 40.0)],
+            fixed_pitch: Some(56.0),
+            ..Self::OURS
+        }),
+        ("Corepunk", "corepunk", Self {
+            stops: [stop(15.0, 60.0, 49.0), stop(12.0, 60.0, 49.0), stop(7.0, 54.0, 49.0)],
+            ..Self::OURS
+        }),
+    ];
+
+    pub fn preset(name: &str) -> Option<Self> {
+        Self::PRESETS.iter().find(|(_, key, _)| *key == name).map(|(_, _, tuning)| *tuning)
+    }
+
+    pub fn view(&self, zoom: f32) -> View {
+        let [wide, mid, tight] = self.stops;
+        let (lo, hi, a, b) = if zoom <= MIDDLE {
+            (0.0, MIDDLE, wide, mid)
         } else {
-            (middle, near, mid, tight)
+            (MIDDLE, 1.0, mid, tight)
         };
-        let t = ((zoom - lo) / (hi - lo)).clamp(0.0, 1.0);
-        a.lerp(b, t * t * (3.0 - 2.0 * t))
+        let mut view = a.lerp(b, smooth((zoom - lo) / (hi - lo)));
+        if let Some(pitch) = self.fixed_pitch {
+            view.pitch = if let Some(tilt) = self.late_tilt {
+                let start = tilt.tilt_start.clamp(0.0, 1.0);
+                let blend = if zoom >= 1.0 { 1.0 } else { smooth((zoom - start) / (1.0 - start).max(f32::EPSILON)) };
+                pitch + (tilt.near_pitch - pitch) * blend
+            } else {
+                pitch
+            };
+            if !self.keep_fov_curve {
+                view.fov = mid.fov;
+            }
+        }
+        view
     }
 }
 
@@ -120,7 +188,7 @@ pub struct Zoom {
 
 impl Default for Zoom {
     fn default() -> Self {
-        Self { target: TOP_DOWN.initial, shown: TOP_DOWN.initial }
+        Self { target: MIDDLE, shown: MIDDLE }
     }
 }
 
@@ -130,6 +198,7 @@ pub struct Cam {
     pub mode: Mode,
     pub top_zoom: Zoom,
     pub eye_height: f32,
+    pub ground_clearance: f32,
     pub pose: GlobalTransform,
     pub look_dir: Option<Vec2>,
     look_pointer: Option<Vec2>,
@@ -350,6 +419,7 @@ pub fn follow(
     }
     cam.mode = mode;
     let top_down = mode == Mode::TopDown;
+    let tuning = prefs.as_ref().map_or_else(Tuning::default, |p| p.camera_tuning);
 
     // Where the cursor meets the ground, from the current camera (the game's cursor: `pointer.rs`).
     let window = windows.single().ok();
@@ -449,8 +519,8 @@ pub fn follow(
     } else {
         cam.shown_yaw = 0.0;
         cam.align_request = false;
-        cam.top_zoom.target = (cam.top_zoom.target + TOP_DOWN.wheel_step * pointer.wheel_notches + 1.0 - pointer.pinch_factor).clamp(0.0, 1.0);
-        cam.top_zoom.shown += (cam.top_zoom.target - cam.top_zoom.shown) * ease(TOP_DOWN.response);
+        cam.top_zoom.target = (cam.top_zoom.target + tuning.wheel_step * pointer.wheel_notches + 1.0 - pointer.pinch_factor).clamp(0.0, 1.0);
+        cam.top_zoom.shown += (cam.top_zoom.target - cam.top_zoom.shown) * ease(tuning.easing_rate);
     }
 
     // Context: a fight I am in, else a conversation, else a gesture exchange. Turning the view
@@ -490,10 +560,10 @@ pub fn follow(
     };
     let v;
     if top_down {
-        v = TOP_DOWN.view(cam.top_zoom.shown);
+        v = tuning.view(cam.top_zoom.shown);
         if let Some(me) = target.0 {
             let height = net.my_id.and_then(|id| live.as_ref()?.heights.get(&id).copied()).unwrap_or(1.75 * s);
-            cam.focus = me + Vec3::Y * height * TOP_DOWN.chest_fraction;
+            cam.focus = me + Vec3::Y * height * CHEST_FRACTION;
         }
         let back = v.distance / v.pitch.to_radians().tan();
         tf.translation = cam.focus + Vec3::new(0.0, v.distance, back);
@@ -598,6 +668,7 @@ pub fn follow(
     tf.look_at(focus_point, Vec3::Y);
     cam.pose = GlobalTransform::from(*tf);
     cam.eye_height = eye.y - focus_point.y;
+    cam.ground_clearance = eye.y - ground;
     cam.shown = View { pitch: (-tf.forward().y).asin().to_degrees(), ..v };
     if let Projection::Perspective(p) = &mut *proj {
         p.fov = v.fov.to_radians();
@@ -663,11 +734,46 @@ mod tests {
     #[test]
     fn top_down_curve_hits_the_knots_and_clamps() {
         assert_eq!(Zoom::default().shown, 0.55);
-        for (z, knot) in TOP_DOWN.knots {
-            assert_eq!(TOP_DOWN.view(z), knot);
+        let tuning = Tuning::preset("ours").unwrap();
+        for (z, knot) in [0.0, MIDDLE, 1.0].into_iter().zip(tuning.stops) {
+            assert_eq!(tuning.view(z), knot);
         }
-        assert_eq!(TOP_DOWN.view(-1.0), TOP_DOWN.view(0.0));
-        assert_eq!(TOP_DOWN.view(2.0), TOP_DOWN.view(1.0));
-        assert_eq!(TOP_DOWN.view(0.275).distance, 15.5);
+        assert_eq!(tuning.view(-1.0), tuning.view(0.0));
+        assert_eq!(tuning.view(2.0), tuning.view(1.0));
+        assert_eq!(tuning.view(0.275).distance, 15.5);
     }
+
+    #[test]
+    fn fixed_pitch_only_zooms_by_height() {
+        let tuning = Tuning { fixed_pitch: Some(55.0), ..Tuning::OURS };
+        for (z, stop) in [0.0, MIDDLE, 1.0].into_iter().zip(tuning.stops) {
+            assert_eq!(tuning.view(z), View { pitch: 55.0, fov: 44.0, distance: stop.distance });
+        }
+        let saved = serde_json::to_string(&tuning).unwrap();
+        assert_eq!(serde_json::from_str::<Tuning>(&saved).unwrap(), tuning);
+    }
+
+
+    #[test]
+    fn play_default_holds_pitch_and_keeps_the_lens_curve() {
+        let tuning = Tuning::default();
+        for (z, expected_fov) in [0.0, MIDDLE, 1.0].into_iter().zip([46.0, 44.0, 42.0]) {
+            assert_eq!(tuning.view(z).pitch, 58.0);
+            assert_eq!(tuning.view(z).fov, expected_fov);
+        }
+    }
+
+    #[test]
+    fn late_tilt_stays_flat_until_its_start_then_eases_to_the_near_pitch() {
+        let tuning = Tuning {
+            late_tilt: Some(LateTilt { tilt_start: 0.8, near_pitch: 48.0 }),
+            ..Tuning::default()
+        };
+        for zoom in [0.0, 0.55, 0.8] {
+            assert_eq!(tuning.view(zoom).pitch, 58.0);
+        }
+        assert!((tuning.view(0.9).pitch - 53.0).abs() < 0.001);
+        assert_eq!(tuning.view(1.0).pitch, 48.0);
+    }
+
 }
