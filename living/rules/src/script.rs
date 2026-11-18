@@ -563,6 +563,7 @@ pub struct Laws {
     /// A first sight of someone one cannot place (not known by name, not too far to make out)
     /// asks one's mind for a thought (docs/FIRST_SIGHT.md). Off: a first sight is only noticed.
     pub first_sight_thinks: bool,
+    pub trial_salient_events_think: bool,
     /// First sights bring a character to think at most once within this many seconds.
     pub first_sight_gap_s: f32,
     /// A mind's line to someone, coming due after another was heard addressing them since the
@@ -744,6 +745,7 @@ impl Default for Laws {
             cue_cooldown_s: 600.0,
             cue_gap_s: 60.0,
             first_sight_thinks: false,
+            trial_salient_events_think: false,
             earshot: true,
             first_sight_gap_s: 300.0,
             heard_first_rethinks: false,
@@ -2894,6 +2896,7 @@ impl Scripts {
             cue_cooldown_s: g("cue_cooldown_s", l.cue_cooldown_s).clamp(0.0, 86_400.0),
             cue_gap_s: g("cue_gap_s", l.cue_gap_s).clamp(0.0, 3_600.0),
             first_sight_thinks: flag("first_sight_thinks", l.first_sight_thinks),
+            trial_salient_events_think: flag("trial_salient_events_think", l.trial_salient_events_think),
             earshot: flag("earshot", l.earshot),
             first_sight_gap_s: g("first_sight_gap_s", l.first_sight_gap_s).clamp(0.0, 3_600.0),
             heard_first_rethinks: flag("heard_first_rethinks", l.heard_first_rethinks),

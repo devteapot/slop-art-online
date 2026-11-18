@@ -155,6 +155,7 @@ fn laws() {
         // does not know, and who is near enough to make out) for the first time asks one's mind
         // for a thought, at most once within `first_sight_gap_s`. Off: it is only noticed.
         first_sight_thinks: false, first_sight_gap_s: 300.0,
+        trial_salient_events_think: false,
         // A line one's mind decided to say to someone, coming due after one heard another
         // address them since one decided, is not said yet: one is told and thinks again with
         // that line in front of one (docs/FIRST_SIGHT.md, "Crowds"). Off: it is said.
@@ -3094,6 +3095,7 @@ fn law_about(l, name) {
         "cue_cooldown_s" => `the same thing seen again brings no new thought from what one watches for within ${short(l.cue_cooldown_s)} s`,
         "cue_gap_s" => `what one watches for brings one to think at most once in ${short(l.cue_gap_s)} s`,
         "first_sight_thinks" => if l.first_sight_thinks { "seeing someone you cannot place for the first time brings you to think" } else { "one thinks when something happens to one; a first sight is noticed, not thought over" },
+        "trial_salient_events_think" => "in the attention trial, a salient scene or sound can bring one to think",
         "earshot" => if l.earshot { "one knows whom one's words would reach if one spoke now, among the people one sees" } else { "one judges for oneself whom one's words would reach" },
         "first_sight_gap_s" => `a first sight brings one to think at most once in ${short(l.first_sight_gap_s)} s`,
         "think_framing" => if l.think_framing { "a mind is shown what just happened and thinks about whatever matters to it now" } else { "a mind starts from why one is thinking now" },

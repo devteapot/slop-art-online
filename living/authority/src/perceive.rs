@@ -106,7 +106,32 @@ fn told(ctx: &ReducerContext, observer: &Character, now: u64, kind: &str, subjec
             common::diag(|| format!("woke:{kind}"), 1);
         }
     }
+    if wake != Some(true) && salience >= 0.7 && subject != observer.id && object != observer.id {
+        trial_salient_event(ctx, observer, now, &row.text);
+    }
     Some(row.id)
+}
+
+// Measurement only. Keep the gap separate from graph wakes and use the observer's own line.
+const TRIAL_EVENT_GAP_MS: u64 = 300_000;
+thread_local! {
+    static TRIAL_EVENT_LAST: std::cell::RefCell<std::collections::HashMap<u32, u64>> = Default::default();
+}
+
+pub(crate) fn trial_salient_event(ctx: &ReducerContext, observer: &Character, now: u64, text: &str) {
+    if observer.kind != "person" || !observer.ai || !observer.alive || observer.stage == 0
+        || !common::laws(ctx).trial_salient_events_think || asleep(ctx, observer.id)
+    {
+        return;
+    }
+    let ready = TRIAL_EVENT_LAST.with(|last| {
+        last.borrow().get(&observer.id).is_none_or(|at| now.saturating_sub(*at) >= TRIAL_EVENT_GAP_MS)
+    });
+    if ready && ask_to_think(ctx, observer.id, text, now) {
+        TRIAL_EVENT_LAST.with(|last| {
+            last.borrow_mut().insert(observer.id, now);
+        });
+    }
 }
 
 /// People within `r` of `at` (excluding `exclude`).
@@ -484,10 +509,17 @@ pub fn noise(ctx: &ReducerContext, at: (f32, f32), loudness: f32, range: f32, ex
     if loudness <= 0.0 || loudness < l.wake_loudness {
         return;
     }
-    for (c, _) in minds_near(ctx, at, range.min(l.wake_reach), now, exclude) {
-        if asleep(ctx, c.id) {
-            let dir = ctx.db.body().id().find(c.id).map(|b| direction(pos(&b, now), at)).unwrap_or("nearby");
-            request_waking(ctx, c.id, &told(&c, dir), now, Wake::Sound);
+    let world = l.trial_salient_events_think.then(|| common::world(ctx));
+    for (c, d) in minds_near(ctx, at, range.min(l.wake_reach), now, exclude) {
+        let sleeping = asleep(ctx, c.id);
+        if sleeping || world.as_ref().is_some_and(|w| d <= common::hearing_for(ctx, c.id, w, now)) {
+            let Some(ear) = ctx.db.body().id().find(c.id).map(|b| pos(&b, now)) else { continue };
+            let text = told(&c, direction(ear, at));
+            if sleeping {
+                request_waking(ctx, c.id, &text, now, Wake::Sound);
+            } else {
+                percept_quiet(ctx, &c, now, "heard_event", 0, 0, ear, format!("You hear {text}"), 0.7);
+            }
         }
     }
 }

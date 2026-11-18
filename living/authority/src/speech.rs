@@ -253,6 +253,8 @@ pub fn speak(ctx: &ReducerContext, speaker: u32, text: &str, to: u32, way: &str,
     let sees = |id: u32, eye: (f32, f32), target: u32, p: (f32, f32)| {
         ctx.db.body().id().find(id).is_some_and(|ob| crate::perception::in_sight(ctx, &map, id, eye, common::facing_at(&ob, now), target, p, common::dist(eye, p), &world, now, false))
     };
+    let laws = common::laws(ctx);
+    let salient_event = laws.trial_salient_events_think && w.loudness >= laws.wake_loudness;
     for (c, d, p) in hearers.iter().copied() {
         if asleep.contains(&c.id) {
             let addressed = to == c.id || (to == 0 && (close == 1 && *d <= address || naming.contains(&c.id)));
@@ -262,7 +264,11 @@ pub fn speak(ctx: &ReducerContext, speaker: u32, text: &str, to: u32, way: &str,
         let news = introduces && crate::perception::introduce(ctx, c.id, speaker, now);
         let addressed = to == c.id || (to == 0 && (close == 1 && *d <= address || naming.contains(&c.id)));
         let heard = heard_text(c, *d);
+        let reason = salient_event.then(|| heard.clone());
         percept(ctx, c, now, &w.kind, speaker, to, at, heard, if addressed { w.addressed } else { w.overheard });
+        if let Some(reason) = reason {
+            crate::perceive::trial_salient_event(ctx, c, now, &reason);
+        }
         // A name that is news is a moment of its own (below the 0.6 that wakes a body's graph, so
         // learning a name never re-runs what the listener is doing).
         if news {
