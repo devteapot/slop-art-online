@@ -1,14 +1,1 @@
-{
-  "doing_seen": {
-    "case": "doing_seen",
-    "first_main": "95d11f433",
-    "first_seen": "2026-11-18T21:39:33+01:00",
-    "last_evidence": "dev-box /home/carlid/.t3/worktrees/slop-art-online/t3-af021fce-1cca01ec601be0c5/.local/living/verify/core-tr-doing-main-1118c/ (and core-tr-doing-branch-1118c/); verify-core validation 2026-11-18-1942-tick-rate",
-    "last_main": "95d11f433",
-    "last_seen": "2026-11-18T21:39:33+01:00",
-    "owner": "dev-box",
-    "reason": "far-guard scene assertion: the routine sees and dodges the guard, but the captured mind scene has no row for the guard; nine checks pass, later assertions not reached. Same failure at the same checkpoint on main and on tick-rate (2026-11-18). An AI scene with no player frames.",
-    "skill": "verify-core",
-    "times": 0
-  }
-}
+{}
