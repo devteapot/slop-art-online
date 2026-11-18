@@ -117,7 +117,7 @@ pub fn tick(ctx: &ReducerContext, _t: TickTimer) -> Result<(), String> {
     drop(phase);
     // What each player's character perceives (docs/PERCEPTION.md), each every 200 ms.
     let phase = common::span("tick.perception");
-    crate::perception::sweep(ctx, now, k_tick);
+    let swept = crate::perception::sweep(ctx, now, k_tick);
     drop(phase);
     // The `memory_test` law (a diagnostic, 0 in play): the tick fails, or panics, after its sweep.
     match crate::perception::memory_test(ctx) {
@@ -127,7 +127,7 @@ pub fn tick(ctx: &ReducerContext, _t: TickTimer) -> Result<(), String> {
     }
     // What each player is shown of the others in its scene, at its frame (frame.rs).
     let phase = common::span("tick.frames");
-    crate::frame::deliver(ctx, now);
+    crate::frame::deliver(ctx, now, &swept);
     drop(phase);
     let phase = common::span("tick.slots");
     let slot_ids: Vec<u32> = ctx.db.mind_state().slot().filter(slot).map(|m| m.id).collect();

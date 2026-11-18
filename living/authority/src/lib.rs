@@ -99,7 +99,7 @@ pub fn init(ctx: &ReducerContext) -> Result<(), String> {
 
 /// The world's clocks: the 60 Hz tick and the 1 s housekeeping, once the world exists.
 pub(crate) fn start_ticking(ctx: &ReducerContext) {
-    ctx.db.tick_timer().insert(TickTimer { scheduled_id: 0, scheduled_at: ScheduleAt::Interval(Duration::from_micros(16_667).into()) });
+    ctx.db.tick_timer().insert(TickTimer { scheduled_id: 0, scheduled_at: ScheduleAt::Interval(Duration::from_micros(crate::frame::TICK_US as u64).into()) });
     ctx.db.slow_timer().insert(SlowTimer { scheduled_id: 0, scheduled_at: ScheduleAt::Interval(Duration::from_secs(1).into()) });
 }
 

@@ -26,10 +26,23 @@
 //!
 //! The cadence: a frame re-materializes about one row per creature in the scene per view, so
 //! a viewer's interval grows with its scene ([`interval`]): every other tick for a small scene,
-//! down to [`FRAME_MAX_MS`] in a crowd. A step serves at most [`FRAME_ROWS_PER_TICK`] rows of
-//! scene, stalest viewers first, so the work frames add to one step is bounded: when more is
-//! due than that, frames come less often (the delivery's back-pressure) instead of the tick
-//! running late.
+//! down to [`FRAME_MAX_MS`] in a crowd. A step serves at most its budget of rows of scene,
+//! stalest viewers first, so the work frames add to one step is bounded: when more is due than
+//! that, frames come less often (the delivery's back-pressure) instead of the tick running late.
+//!
+//! Since tick-rate (2026-11-13; docs/TICK_RATE.md) the budget is shared with the step's sweeps
+//! and follows the tick's boundaries. Most of a frame's or a sweep's cost is not in the tick's
+//! body: the views its writes re-run, their read sets and the subscription evaluation are part
+//! of the tick's transaction after the reducer returns, and the scheduler sets the next tick at
+//! the first 60 Hz boundary after that transaction ends (2.14.1 `next_interval_tick_after`). On
+//! Cullet at 216 players every tick that swept a quarter of the players and then served frames
+//! up to the budget ran past the next boundary, and the world stepped at 40 Hz. So:
+//! - **A sweep counts against the step's frames:** each player swept takes its scene's rows
+//!   from the budget, as a frame of it would (a sweep and its views cost about what a frame of
+//!   the same scene costs). A step that sweeps serves fewer frames; the other steps serve more.
+//! - **The budget follows the boundaries** ([`budget`]): a tick that starts a slot or more after
+//!   the previous one shrinks it by an eighth, and each tick on time grows it by
+//!   [`FRAME_ROWS_STEP`] rows, up to [`FRAME_ROWS_PER_TICK`].
 
 use crate::combat::Seen;
 use crate::common;
@@ -51,8 +64,16 @@ pub const SCENE_ROWS_PER_S: u64 = 2_000;
 /// each row once (by id), so a row needs only to reach it; a shorter stay keeps the feed small
 /// in a battle, where a player sees a few hundred events a second.
 pub const ONLOOKER_MS: u64 = 300;
-/// The scene rows (creatures in the scenes of the viewers served) one step's frames may cover.
+/// The most scene rows (creatures in the scenes of the viewers served) one step's frames may
+/// cover; the budget ([`budget`]) starts here and never grows past it.
 pub const FRAME_ROWS_PER_TICK: usize = 2_500;
+/// The least the budget shrinks to; a step that sweeps no one still serves its stalest viewer
+/// whatever the budget (`deliver`).
+pub const FRAME_ROWS_MIN: usize = 250;
+/// How many rows each tick on time adds to the budget.
+pub const FRAME_ROWS_STEP: usize = 2;
+/// The tick's interval (µs), as `init` schedules it (`lib.rs`).
+pub const TICK_US: i64 = 16_667;
 /// How often a viewer's projections follow others' health at most (ms): the band and exact
 /// health `seen_characters` shows (the client draws health bars from `seen_fighters`, which
 /// carries the band at every frame; the exact health an appraisal reveals follows each second).
@@ -118,6 +139,29 @@ thread_local! {
     /// in it (frames run after the tick's writes). `None` outside `deliver`: reads go to the
     /// tables.
     static NOW: RefCell<Option<Sources>> = const { RefCell::new(None) };
+    /// The frames' budget of scene rows per step, and the previous tick's start (µs since the
+    /// epoch, 0 before the first). Timing only: a fresh instance starts at the most, and which
+    /// viewers a step serves never changes what a frame writes.
+    static BUDGET: Cell<(usize, i64)> = const { Cell::new((FRAME_ROWS_PER_TICK, 0)) };
+}
+
+/// The step's budget for the tick that started at `start_us`: an eighth less when it started a
+/// slot or more after the previous tick (a boundary was missed: the previous one's transaction
+/// ran past it, or something queued ahead of this one), [`FRAME_ROWS_STEP`] more otherwise. A
+/// gap of a second or more is a pause or a new instance, not a missed boundary.
+pub fn budget(start_us: i64) -> usize {
+    BUDGET.with(|b| {
+        let (rows, last) = b.get();
+        let gap = start_us - last;
+        let late = last != 0 && (TICK_US * 3 / 2..1_000_000).contains(&gap);
+        let rows = if late { (rows - rows / 8).max(FRAME_ROWS_MIN) } else { (rows + FRAME_ROWS_STEP).min(FRAME_ROWS_PER_TICK) };
+        b.set((rows, start_us));
+        if late {
+            common::diag(|| "frames:late", 1);
+        }
+        common::diag(|| "frames:budget", rows as u64);
+        rows
+    })
 }
 
 #[derive(Default)]
@@ -234,8 +278,9 @@ pub fn interval(n: usize) -> u64 {
 }
 
 /// The players whose frame is due get it (every tick, after the perception sweep), stalest
-/// first, within the step's budget of scene rows.
-pub fn deliver(ctx: &ReducerContext, now: u64) {
+/// first, within the step's budget of scene rows less those of the players `swept` in it.
+pub fn deliver(ctx: &ReducerContext, now: u64, swept: &[u32]) {
+    let budget = budget(ctx.timestamp.to_micros_since_unix_epoch());
     NOW.with(|n| *n.borrow_mut() = Some(Sources::default()));
     let humans = crate::combat::humans(ctx);
     let due: Vec<(u32, Viewer)> = VIEWERS.with(|v| {
@@ -260,15 +305,22 @@ pub fn deliver(ctx: &ReducerContext, now: u64) {
             }
         }
         due.sort_unstable();
-        let mut rows = 0;
+        let due_n = due.len();
+        // Each player swept in this step counts as a frame of its scene (and itself).
+        let mut rows: usize = swept.iter().map(|id| v.get(id).and_then(|e| e.scene.as_ref()).map_or(0, |s| s.len()) + 1).sum();
+        common::diag(|| "frames:swept_rows", rows as u64);
         let mut served = Vec::new();
         for (_, id, n) in due {
-            if rows > 0 && rows + n > FRAME_ROWS_PER_TICK {
+            if rows > 0 && rows + n > budget {
                 break;
             }
             rows += n;
             served.push(id);
         }
+        common::diag(|| "frames:ticks", 1);
+        common::diag(|| "frames:due", due_n as u64);
+        common::diag(|| "frames:served", served.len() as u64);
+        common::diag(|| "frames:rows", rows as u64);
         served.into_iter().filter_map(|id| v.remove(&id).map(|e| (id, e))).collect()
     });
     for (id, mut e) in due {

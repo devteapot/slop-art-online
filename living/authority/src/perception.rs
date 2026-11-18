@@ -929,8 +929,9 @@ thread_local! {
 }
 
 /// Sweep the players whose turn it is (every tick, numbered `tick`; each player every
-/// [`SWEEP_MS`]).
-pub fn sweep(ctx: &ReducerContext, now: u64, tick: u64) {
+/// [`SWEEP_MS`]). Returns the players swept, whose sweeps share the step with frames
+/// (`frame::deliver`).
+pub fn sweep(ctx: &ReducerContext, now: u64, tick: u64) -> Vec<u32> {
     // What the sweep keeps across ticks was worked out from rows as this instance saw them in
     // its last tick. `tick` is the committed clock's tick plus one, so it follows that tick only
     // if that tick committed and no other ran since. A tick rolled back (its number comes again)
@@ -952,7 +953,7 @@ pub fn sweep(ctx: &ReducerContext, now: u64, tick: u64) {
     }
     let humans = crate::combat::humans(ctx);
     if humans.is_empty() {
-        return;
+        return Vec::new();
     }
     let due: Vec<(u32, Identity)> = LAST.with(|l| {
         let mut l = l.borrow_mut();
@@ -980,14 +981,17 @@ pub fn sweep(ctx: &ReducerContext, now: u64, tick: u64) {
             .collect()
     });
     if due.is_empty() {
-        return;
+        return Vec::new();
     }
     let w = common::world(ctx);
     let map = common::map(ctx);
     let mut health = HashMap::new();
+    let mut swept = Vec::with_capacity(due.len());
     for (id, viewer) in due {
         sweep_one(ctx, id, viewer, &w, &map, now, Some(&mut health));
+        swept.push(id);
     }
+    swept
 }
 
 /// The latest moment at or before `now` on character `id`'s phase: each player's turns fall
