@@ -468,11 +468,14 @@ def phase_report(folder):
         out["contacts_under_0_4m"] = sum(r.get("contacts_under_0_4m", 0) for r in rows)
     if ph["arena"] == "n2":
         out["gate_a_shut_at_test_start"] = ph.get("gate_a_shut_at_test_start")
+        out["gate_a_reopened_at_test_start"] = ph.get("gate_a_reopened_at_test_start")
         out["warmup_arrivals"] = [ph.get("warmups_arrived"), ph.get("warmups")]
         out["gate_a_remembered_open"] = sum(1 in states for states in ph["remembered_a_states_at_order"].values())
+        out["gate_a_remembered_shut"] = sum(0 in states for states in ph["remembered_a_states_at_order"].values())
         out["gate_b_remembered_open"] = sum(1 in states for states in ph.get("remembered_b_states_at_order", {}).values())
         out["first_path_by_gate_a"] = sum(r.get("first_path_by_gate_a") is True for r in rows)
         out["passed_gate_b"] = sum(r.get("passed_gate_b") is True for r in rows)
+        out["bench_window"] = ph.get("bench_window", "warmup")
     if ph["arena"] == "n1" and ph["variant"] == "d":
         goal = ph["goals"][1]
         out["offset_goal_error_m"] = [

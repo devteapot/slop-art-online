@@ -33,7 +33,6 @@ import os
 import random
 import subprocess
 import sys
-import threading
 import time
 from pathlib import Path
 
@@ -286,7 +285,7 @@ def spread(world, centre, n, across, step=6.0, shut=()):
     return out
 
 
-def walks_to(world, phase, subs, legs, law, timeout_x=3.0, extra_s=20.0, run=False, box=None, record=None, on_order=None):
+def walks_to(world, phase, subs, legs, law, timeout_x=3.0, extra_s=20.0, run=False, box=None, record=None):
     """Walk every subject through its `legs` (a list per subject of lists of points: one walk's
     waypoints, the last its goal), all at once, each walk ordered when the last ended. Returns
     the walk records."""
@@ -318,8 +317,6 @@ def walks_to(world, phase, subs, legs, law, timeout_x=3.0, extra_s=20.0, run=Fal
                      "waypoints": [[round(p[0], 2), round(p[1], 2)] for p in pts[:-1]], "order_ms": [t0, t1], "true": opt.get("true"), "belief_file": snapf.name,
                      "prior_cells_in_box": world.cells_in_box(sub.id, box) if box else None, "deadline_s": (timeout_x * true_s + extra_s) if true_s else 240.0}
         phase.mark("order", subject=sub.id, walk=st["k"], to=pts[0], goal=goal, kind=sub.kind)
-        if on_order:
-            on_order(st)
 
     pending = iter(state)
     next_subject = next(pending, None)
@@ -525,20 +522,30 @@ def n2(world, out, variant, law, kind, reps):
         world.call("place_at", sub.id, p[0], p[1])
     time.sleep(3.0)
     folder = Path(out) / f"n2-{variant}-{law}-{kind}"
-    phase = Phase(world, folder, [s.id for s in subs] + [keeper], 1800, known_ids=[s.id for s in subs])
+    warmup = Phase(world, folder / "warmup", [s.id for s in subs] + [keeper], 1800, bench=False)
     box = (centre[0] - radius - 80, centre[1] - radius - 80, centre[0] + radius + 80, centre[1] + radius + 80)
     # Warm-up: start → goal → start (through gate A); lead variant A through the second gate too.
     alternative = [[b["centre"], b_out], [b["centre"], goal]] if variant == "a" else []
     warm = [[[goal], [p]] + alternative for p in starts]
-    phase.mark("warmup")
-    warmups = walks_to(world, phase, subs, warm, law, box=box)
+    warmup.mark("warmup")
+    warmups = walks_to(world, warmup, subs, warm, law, box=box)
+    warmup.close()
     # Out of sight of gate A: 75 m out along its road.
     fars = spread(world, far, reps, across)
     for sub, p in zip(subs, fars):
         world.call("place_at", sub.id, p[0], p[1])
     time.sleep(2.0)
     ok = set_gate(world, keeper, a, False)
-    phase.mark("gate shut", gate=a["ids"], tiles=a["tiles"], all_shut=ok)
+    shut_ms = world.now()
+    reopened = None
+    if variant == "c":
+        # Let each subject see the closed gate, then open it out of their sight.
+        for sub, p in zip(subs, starts):
+            world.call("place_at", sub.id, p[0], p[1])
+        time.sleep(3.0)
+        for sub, p in zip(subs, fars):
+            world.call("place_at", sub.id, p[0], p[1])
+        reopened = set_gate(world, keeper, a, True)
     world.call("place_at", keeper, goal[0], goal[1])
     remembered_open, remembered_alternative = {}, {}
     for sub in subs:
@@ -546,18 +553,18 @@ def n2(world, out, variant, law, kind, reps):
         remembered_open[sub.id] = sorted(x["state"] for x in r if x["target"] in a["ids"])
         remembered_alternative[sub.id] = sorted(x["state"] for x in r if x["target"] in b["ids"])
 
-    def reopen(st):
-        if variant == "c" and st["k"] == 0 and not getattr(reopen, "done", False):
-            reopen.done = True
-            threading.Thread(target=lambda: (time.sleep(4.0), phase.mark("gate reopened", ok=set_gate(world, keeper, a, True), gate=a["ids"]))).start()
-
+    phase = Phase(world, folder, [s.id for s in subs] + [keeper], 1800, known_ids=[s.id for s in subs])
+    phase.mark("gate shut", gate=a["ids"], tiles=a["tiles"], all_shut=ok, completed_ms=shut_ms)
+    if variant == "c":
+        phase.mark("gate reopened", gate=a["ids"], ok=reopened)
     (folder / "phase.json").write_text(json.dumps({"arena": "n2", "variant": variant, "law": law, "kind": kind, "gate_a": a, "gate_b": b, "start": start, "far": far, "goal": goal,
                                                    "keeper": keeper, "subjects": [s.id for s in subs], "remembered_a_states_at_order": remembered_open,
-                                                   "remembered_b_states_at_order": remembered_alternative, "gate_a_shut_at_test_start": ok,
+                                                   "remembered_b_states_at_order": remembered_alternative, "gate_a_shut_at_test_start": ok if variant != "c" else None,
+                                                   "gate_a_reopened_at_test_start": reopened, "bench_window": "test",
                                                    "warmups_arrived": sum(w["outcome"] == "arrived" for w in warmups), "warmups": len(warmups), "box": box,
                                                    **world.meta()}, indent=1, default=list))
     phase.mark("test walks")
-    recs = walks_to(world, phase, subs, [[[goal]] for _ in subs], law, box=box, on_order=reopen)
+    recs = walks_to(world, phase, subs, [[[goal]] for _ in subs], law, box=box)
     phase.close()
     set_gate(world, keeper, a, True)
     guards(world, folder, [s.id for s in subs])
@@ -600,7 +607,7 @@ def person_sight(hour):
     return 11.0 if 6.0 <= hour < 20.0 else 6.0
 
 
-def wait_for_light(world, light):
+def wait_for_light(world, light, subs):
     """Start a chase with at least 70 real seconds before the next light change."""
     if not light:
         return
@@ -614,6 +621,8 @@ def wait_for_light(world, light):
         if not logged:
             log(f"  waiting for {light}, world hour {hour:.2f}")
             logged = True
+        for sub in subs:
+            sub.keepalive()
         time.sleep(15)
 
 
@@ -719,7 +728,7 @@ def n4(world, out, variant, law, kind, reps):
         tmp = Phase(world, folder / "warmup", [s.id for s in subs], 600, bench=False)
         walks_to(world, tmp, subs, warm, law)
         tmp.close()
-    wait_for_light(world, world.light)
+    wait_for_light(world, world.light, subs)
     phase = Phase(world, folder, [s.id for s in subs] + fixtures, 600, known_ids=[s.id for s in subs])
     hour = scenes.world_hour(world.s)[0]
     sight = person_sight(hour)
