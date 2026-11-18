@@ -484,7 +484,12 @@ def n1(world, out, variant, law, kind, reps):
 
 
 def keeper_act(world, keeper, gid, tile, skill):
-    p = world.nearest_walkable((tile[0] + 0.5, tile[1] + 0.5))
+    centre = (tile[0] + 0.5, tile[1] + 0.5)
+    shut = {tuple(p) for p in world.shut_tiles()}
+    adjacent = [(centre[0] + dx, centre[1] + dy) for dx, dy in ((1, 0), (0, 1), (-1, 0), (0, -1), (1, 1), (1, -1), (-1, 1), (-1, -1))]
+    p = next((q for q in adjacent if world.walk(*q, shut) and world.line_clear(q, centre)), None)
+    if p is None:
+        p = world.nearest_walkable(centre)
     placement = world.call("place_at", keeper, p[0], p[1], check=False)
     if placement.returncode != 0:
         if placement.returncode != 504:
@@ -504,14 +509,29 @@ def keeper_act(world, keeper, gid, tile, skill):
         raise RuntimeError(f"{skill} gate #{gid} failed: {result.stdout}")
 
 
-def set_gate(world, keeper, group, open_):
-    for gid, tile in zip(group["ids"], group["tiles"]):
-        g = next(iter(world.rows(f"SELECT * FROM gate WHERE id = {gid}")), None)
-        if g and g["open"] != open_:
+def set_gate(world, keeper, group, open_, subjects=()):
+    refresh = time.monotonic()
+    pending = list(zip(group["ids"], group["tiles"]))
+    for _ in range(2):
+        retry = []
+        for gid, tile in pending:
+            if time.monotonic() >= refresh:
+                for sub in subjects:
+                    sub.keepalive()
+                refresh = time.monotonic() + 15
+            if world.rows(f"SELECT open FROM gate WHERE id = {gid}")[0]["open"] == open_:
+                continue
             keeper_act(world, keeper, gid, tile, "open" if open_ else "close")
             end = time.monotonic() + 12
-            while time.monotonic() < end and next(iter(world.rows(f"SELECT open FROM gate WHERE id = {gid}")))["open"] != open_:
+            while time.monotonic() < end:
+                if world.rows(f"SELECT open FROM gate WHERE id = {gid}")[0]["open"] == open_:
+                    break
                 time.sleep(0.3)
+            else:
+                retry.append((gid, tile))
+        if not retry:
+            break
+        pending = retry
     return all(g["open"] == open_ for g in world.rows("SELECT * FROM gate") if g["id"] in group["ids"])
 
 
@@ -549,17 +569,19 @@ def n2(world, out, variant, law, kind, reps):
     for sub, p in zip(subs, fars):
         world.call("place_at", sub.id, p[0], p[1])
     time.sleep(2.0)
-    ok = set_gate(world, keeper, a, False)
+    ok = set_gate(world, keeper, a, False, subs)
     shut_ms = world.now()
     reopened = None
     if variant == "c":
         # Let each subject see the closed gate, then open it out of their sight.
         for sub, p in zip(subs, starts):
+            sub.keepalive()
             world.call("place_at", sub.id, p[0], p[1])
-        time.sleep(3.0)
+            sub.go(p)
+        time.sleep(5.0)
         for sub, p in zip(subs, fars):
             world.call("place_at", sub.id, p[0], p[1])
-        reopened = set_gate(world, keeper, a, True)
+        reopened = set_gate(world, keeper, a, True, subs)
     world.call("place_at", keeper, goal[0], goal[1])
     remembered_open, remembered_alternative = {}, {}
     for sub in subs:
