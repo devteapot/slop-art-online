@@ -491,7 +491,8 @@ pub fn convert(
     assets: Res<AssetServer>,
     q: Query<(Entity, &MeshMaterial3d<StandardMaterial>, &Mesh3d, Option<&bevy::gltf::GltfMaterialName>, Option<&bevy::gltf::GltfMaterialExtras>), Without<Converted>>,
     parents: Query<&ChildOf>,
-    models: Query<(&Model, Has<NoShadow>, Has<crate::bodies::Beast>, Has<NightGlow>, Has<Unlit>)>,
+    names: Query<&Name>,
+    models: Query<(&Model, Has<NoShadow>, Has<crate::bodies::Beast>, Has<NightGlow>, Has<Unlit>, Has<crate::characters::compose::Styled>)>,
     mut glows: ResMut<NightGlows>,
     detail: Option<Res<crate::style::DetailLayers>>,
     palette: Res<Palette>,
@@ -501,14 +502,17 @@ pub fn convert(
         // Only meshes under a look-dev model.
         let mut cur = e;
         let mut owner = None;
+        // The glTF primitive can be a child of the named FarSkin node.
+        let mut far_skin = false;
         while let Ok(p) = parents.get(cur) {
+            far_skin |= names.get(cur).is_ok_and(|name| name.as_str() == "FarSkin");
             cur = p.parent();
             if let Ok(m) = models.get(cur) {
                 owner = Some(m);
                 break;
             }
         }
-        let Some((owner, no_shadow, beast, night, unlit)) = owner else { continue };
+        let Some((owner, no_shadow, beast, night, unlit, composed)) = owner else { continue };
         if no_shadow {
             commands.entity(e).insert(bevy::light::NotShadowCaster);
         }
@@ -625,6 +629,9 @@ pub fn convert(
         ec.remove::<MeshMaterial3d<StandardMaterial>>().insert((MeshMaterial3d(toon), Converted));
         if owner.vrm {
             ec.insert(outline(Outlined::Person, &style));
+            if composed && far_skin {
+                ec.insert(crate::style::GENERATED_FAR_OUTLINE_MODE);
+            }
         } else if owner.file.starts_with("lookdev/") || owner.file.starts_with("view/") {
             ec.insert(outline(Outlined::Thing, &style));
         } else if !crate::perf::has("nostencil") {

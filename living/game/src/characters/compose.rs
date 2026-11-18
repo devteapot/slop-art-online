@@ -687,6 +687,9 @@ pub fn attach(c: &mut Composer, commands: &mut Commands, e: Entity, type_file: &
                     Worn,
                     ChildOf(e),
                 ));
+                if m.node == "FarHair" {
+                    ec.insert(crate::style::GENERATED_FAR_OUTLINE_MODE);
+                }
                 if let Some(slot) = &wear.slot {
                     ec.insert(super::outfit::Piece { slot: slot.clone(), material: material.clone() });
                 }

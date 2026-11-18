@@ -578,7 +578,7 @@ pub fn stencil() -> (OutlineStencil, OutlineMode) {
     (OutlineStencil::default(), OutlineMode::ExtrudeReal)
 }
 
-/// The ground's stencil: flat, as before. Character outlines are flat planes through their feet,
+/// The ground's stencil: flat, as before. Near character outlines are flat planes through their feet,
 /// so a ground stencil at its real depth would cut the line under every sole (the ground just in
 /// front of the feet is nearer than that plane), and the library's plane offset can't lead them
 /// toward the camera for a turned model. So the ground hides no outline; a hill between you and
@@ -586,6 +586,9 @@ pub fn stencil() -> (OutlineStencil, OutlineMode) {
 pub fn ground_stencil() -> OutlineStencil {
     OutlineStencil::default()
 }
+
+/// Keeps the far skin and hair outlines at the depth of the skinned geometry.
+pub const GENERATED_FAR_OUTLINE_MODE: OutlineMode = OutlineMode::ExtrudeReal;
 
 pub fn outline(kind: Outlined, style: &Style) -> (Outlined, OutlineVolume, OutlineStencil) {
     let [r, g, b] = style.outline_color;
