@@ -11,6 +11,7 @@ How the mind service chooses models, schedules sleep, thinks for animals, keeps 
 | 5. Recall budget | token budget on recalled lines; no repeated `rel` property | `LIVING_RECALL_TOKENS` | `decide=800` |
 | 6. Rethink gate | a fast judge (Jev, or a cheap LLM) in front of non-urgent deliberations decides when the slow mind thinks | `LIVING_RETHINK` (`jev`, `llm`) | off |
 | 7. Conversation switches | who answers a stranger's line to the room, and whether a line waits out a running deliberation ([LIVING_CORE.md, Conversations](LIVING_CORE.md#conversations-checkpoint-4-item-6-first-part); [gr1/gr2](TRIALS.md#greeting-batches-gr1gr2-2026-11-11)) | `LIVING_GREET` (`nearest`, `off`, `curious`, `facing`), `LIVING_PARK` (`concurrent`, `wait`); the world's `speech_audience` law | `nearest`, `concurrent`, law on (since 2026-11-11) |
+| 8. Requests read at their turn | a deliberation reads its latest request when the scheduler nominates it to prepare, so the prompt includes reasons merged during the wait and preparation leaves model slots free ([below](#8-requests-read-at-their-turn-urgent-merge-2026-11-13)) | none | always, every mind |
 
 ## 1. Per-purpose model mixes
 
@@ -390,6 +391,105 @@ Claude side, not billed to a provider here: two blind judges (about 120k tokens 
 - **Docs:** this section, the table at the top, and LIVING_CORE.md ("Deliberation hygiene").
 - **Not changed:** authority, rules, bindings, `models.json` and `judgments.json`.
 - **Other branches:** `townlife-2` also edits `mind.rs`, `talk.rs` and `main.rs`. This diff touches `schedule`, `run`, `thinking` and the experience callback only.
+
+## 8. Requests read at their turn (urgent-merge, 2026-11-13)
+
+**The problem.** The authority keeps one pending request per character and merges every new reason into it, retaking its scene at each merge (`perceive::request`). The mind service deliberates one request per character at a time (`Minds::schedule`). But it built the prompt from the request as it stood when the deliberation began, and only then waited for a model slot (`Llm::chat_once`, `Scheduler::admit`). In a 200-fighter battle that wait is about 5–6 s at the median and 16–17 s at p90 for urgent work (docs/FAST_LANE.md, "The fast lane's own slots"). Every blow or alarm that arrived during the wait was left pending for a follow-up deliberation, which then queued again.
+
+**Now.** A deliberation joins the first call's model queue. When its ticket is eligible to prepare (`Llm::turn`), it reads the latest request (`Minds::take_turn`, `living/mind/src/mind/turn.rs`) and builds the prompt from that row. The queue admits other eligible calls during that preparation. The ticket becomes ready with the prompt's estimated cost, then takes a model slot and is sent (`Llm::chat_in_turn`). Retries and overflow queue as before (`Llm::recover`, shared with `chat_in_lane`).
+- **The scene** is the row's, retaken by the authority at its last merge, so the scene and recent experiences share the request’s capture time.
+- **The merged reasons** are in the prompt, under "# Why you are thinking now". The authority deduplicates identical pending lines and caps the reason text, so the journal counts admitted reason lines.
+- **Nothing is lost mid-flight.** What the deliberation consumes is what it read: `seen_ms` for `mind_install` (and the loop's `seen`) is that row's `updated_ms` (`ActorMind::taken_ms`). A reason arriving after the read stays pending (`clear_deliberation`, `reasons::consume`) and is the next deliberation's.
+- **Every mind:** the person path (think), the animal path (feel) and the animal choice.
+- **The lane** is chosen when the work enters the queue. A routine request that gains an urgent reason during the wait keeps its routine queue position. The new reason goes into the prompt when the ticket is nominated to prepare.
+- **Preparation capacity** is bounded at one ticket per sixteen shared slots, with a minimum of one. A preparing ticket retains its order among tickets in its lane and becomes eligible for admission once its prompt is ready.
+- **Model capacity** is charged at admission with the estimated cost of the finished prompt. The rate limiter still settles on the reply's usage.
+
+**Recorded** in the journal's `outcomes/turn.jsonl`, one line per deliberation: `lane`, `purpose`, `queue_wait_ms`, `asked_ms`, `taken_ms`, `asked_lines`, `taken_lines` and `merged` (lines that arrived after the request was first read). The turn journal’s queue wait stops at nomination. The HTTP timing in the fixed-site benchmark measures the full enqueue-to-grant wait and the grant-to-dispatch hold separately.
+
+**SpacetimeDB 2.14.1.** The authority already updates one private `deliberation` row by actor and exposes pending rows to their controller through the controller index in `my_deliberations`. The turn re-reads the SDK's local subscription cache (or the actor's pending entry with LoD on). The generated view binding offers iteration, so the added lookup scans cached pending requests once per preparation turn. The existing install/skip reducers still consume lines by the version the service read. Database writes, subscription recipients and retention follow the existing request lifecycle. The extra retained data is one local journal line per turn. [Subscriptions](https://spacetimedb.com/docs/clients/subscriptions/), [indexes](https://spacetimedb.com/docs/tables/indexes/), [reducers](https://spacetimedb.com/docs/functions/reducers/).
+
+**Verification.**
+- Unit tests: `preparing_a_turn_leaves_the_model_slot_available` (llm.rs) and `blows_merged_while_waiting_are_read_and_a_later_one_is_the_next_deliberations` (mind/turn.rs).
+- verify-minds `urgent-merge` ([deliberation.md](../.agents/skills/verify-minds/features/deliberation.md)): one model slot, held by another mind's 15 s think. Three named attackers strike M within 6.5 s, and one deliberation carries all three blows (`merged` 2, an 11.639 s queue wait). The fourth blow lands during the call and gets its own follow-up. The rebased preparation change passed the same case with an 11.593 s wait to prepare.
+- Main control at `21709545` (`minds-umb-spark-control`): the three blows landed 6.5 s into the held slot. The first prompt carried Walker3 alone. Walker4 and Walker5 turned up in the follow-up alongside Walker6. The case exited 1 on the merge assertions.
+- Measurement: [below](#measurement-urgent-merge).
+
+### Measurement (urgent-merge)
+
+These early measurements used the original implementation, which held the first model slot during prompt preparation.
+
+Free fake-model battles on a private Spark SpacetimeDB 2.14.1 container. Both current runs use `python3 living/tools/battle_diag.py --run <run> --battle 200 --walkers 16 --minutes 5 --keep-plans --fast-lane`. Each island starts with 310 ambient characters. The driver stages 200 fighters within a 14 m square, adds 16 walkers, replaces the dead, keeps the fighters' plans and launches one mind service with 64 shared model slots. It uses one subscription connection and takes five 30 s profiling windows plus SQL censuses. The recorded fighter count varies as replacements travel to the site. The historical run predates the dedicated fast slots and newer authority optimizations. Both current runs use the updated authority and scheduler. Queue percentiles cover journaled think and compile calls for urgent and routine, and consolidation for background. Fast calls are excluded in all columns.
+
+| Metric | Historical before (`minds-umb-before`) | Current main (`minds-umb-spark-main`) | After (`minds-umb-spark-after`) |
+| --- | --- | --- | --- |
+| Urgent deliberations started | — | 1,046 think requests received | 604 slot grants |
+| Journaled urgent think calls | 994 (170 actors) | 1,029 (80 actor names) | 583 (151 actor names) |
+| Reason lines per journaled urgent prompt, mean / p50 / p90 | 1.38 / 1 / 2 | 1.33 / 1 / 2 | 2.77 / 2 / 5 |
+| Reason lines merged into a granted turn | — | — | 454 (380 urgent, 74 routine) |
+| Urgent wait, p50 / p90 | 6.2 / 15.8 s (1,966 calls) | 1.5 / 4.3 s (2,033 calls) | 14.0 / 29.9 s (1,079 calls) |
+| Routine wait, p50 / p90 | 0.6 / 1.9 s (586 calls) | 0.35 / 1.26 s (442 calls) | 1.07 / 14.93 s (246 calls) |
+| Background wait, p50 / p90 | 20.3 / 22.7 s (377 calls) | 4.5 / 16.7 s (380 calls) | 24.1 / 46.9 s (223 calls) |
+| Ticks/s by window (noisy) | 49.8, 36.5, 40.3, 55.7, 48.7 | 46.7, 48.4, 51.7, 52.4, 51.7 | 31.7, 43.2, 43.4, 35.7, 30.2 |
+
+On current main, starts come from the fake provider's receipt log classified with the scheduler's combat words. The after run counts the lane recorded at the slot grant. The journaled-call row counts replies logged before shutdown in both runs. The driver reused some fighter names as it refilled, so name counts are descriptive.
+
+The after run had 93–168 fighters at the site in the sampled windows and host load of 46–70 (one-minute load average). Current main had 63–79 fighters and host load of 21–44. The historical load was 9–26. The after run puts more reasons in each prompt and shows larger waits in all three lanes. This workload and host variation prevents attributing the queue or tick differences to merging alone.
+
+The after run included 45 routine think calls that carried wording that would have qualified for the urgent lane if present at enqueue. Their full queue waits were 1.08 s p50 and 16.89 s p90. The tail can matter for combat. These waits include time before the urgent reason arrived, and the experiment did not test promotion.
+
+### Fixed-site follow-up (2026-11-18)
+
+Both arms are pinned to `04b9ccc21407ea942fcffd21eb2020c0e7b61feb`, which includes C2. They use the same scoped SpacetimeDB 2.14.1 authority and island seed, with the timing instrumentation in both mind binaries. The five-minute command adds `--fixed-site 412.5 237.5` to the fake battle above. It stages 200 fighters with stationary strikes against nearby rivals and zero strike damage, and adds 16 walkers. The fixed cohort lets the driver check the full count within 16 m of the site before, during and after each run. There are no refills. This is a different combat workload from the earlier lethal, refill-driven battle.
+
+The fake endpoint counts starts at HTTP receipt in both arms, over the same 300-second measurement interval, and records each request's lane. Queue wait runs from enqueue to slot grant. Slot hold runs from grant through serialization to HTTP dispatch. Ordinary and urgent wait distributions include think and compile calls. Background covers consolidation. The initial interleaved runs measured the original scheduler implementation.
+
+| Initial run | Urgent starts | Urgent reason lines, mean | Urgent queue p50 / p90 (s) | Routine queue p50 / p90 (s) | Urgent hold p90 (ms) | Routine hold p90 (ms) | Mean ticks/s |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| A1 | 712 | 1.006 | 12.419 / 17.942 | 0.349 / 2.772 | 0.171 | 0.135 | 45.60 |
+| B1, slot held during preparation | 725 | 1.804 | 16.529 / 45.853 | 0.326 / 1.497 | 2,102.086 | 1,183.929 | 31.12 |
+| A2 | 775 | 1.090 | 13.430 / 17.252 | 0.689 / 7.712 | 0.186 | 0.170 | 42.50 |
+| B2, slot held during preparation | 795 | 1.595 | 14.412 / 23.840 | 7.210 / 15.423 | 1,463.073 | 2,744.832 | 43.12 |
+
+The two original treatment runs occupied an average of 2.71 and 2.56 shared slots before dispatch, calculated from the grant-to-dispatch durations. Unrelated Rust builds also ran during this series, so those runs establish that slots were held while preparing but cannot isolate the effect on queues or ticks. The fix keeps one queue ticket and excludes it from dispatch while it prepares. This moves the late request read and prompt work out of model-slot occupancy.
+
+The historical 45 routine calls lack per-line arrival timestamps in the archived evidence. The new sampling records the authority timestamp of the first merged urgent line on a routine ticket, so it can measure from that line's arrival to provider receipt. The original fixed-site series recorded one matching routine call. Its urgent line reached the provider after 11.199 s.
+
+#### Post-fix controlled results
+
+A is pinned to `04b9ccc21407ea942fcffd21eb2020c0e7b61feb` with timing instrumentation only. B is the squashed preparation change on that same base. The sequence was A1, B1, A2, B2. Each run held the shared battle lock and sampled other scene and compiler processes every 10 s. The table includes only runs with at least 25 host samples in the 300 s window and no competing scenes or compilers in those samples. Earlier preparation runs were excluded after an invalid process filter let one overlap verification. Two attempts at the final A1 were excluded after detecting overlapping navigation work. The fixed-site seed and configuration kept 200 fighters at the site at every census in all four runs.
+
+Both arms count urgent think starts at fake-provider receipt. Queue waits below are enqueue to slot grant. Hold is slot grant to HTTP dispatch. All wait pairs are p50 / p90. Ticks/s is the mean across five profiling windows and varies with host and simulation activity. A dash in the merged-lines column means the control has no turn-level merge journal.
+
+| Run | Fighters at site | Urgent starts | Urgent reasons, mean / p50 / p90 | Merged lines | Urgent queue (s) | Routine queue (s) | Background queue (s) | Urgent hold (ms) | Routine hold (ms) | Background hold (ms) | Mean ticks/s |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| A1 (`final-a1-r3`) | 200 | 807 | 1.027 / 1 / 1 | — | 13.908 / 27.887 | 5.984 / 11.367 | 17.473 / 38.962 | 0.098 / 0.193 | 0.117 / 0.187 | 0.066 / 0.203 | 45.78 |
+| B1 (`final-b2`) | 200 | 735 | 1.596 / 2 / 2 | 444 | 13.792 / 25.819 | 3.387 / 60.266 | 16.276 / 17.655 | 0.102 / 0.185 | 0.120 / 0.212 | 0.078 / 0.177 | 47.00 |
+| A2 (`final-a3`) | 200 | 721 | 1.003 / 1 / 1 | — | 13.258 / 18.161 | 0.753 / 3.171 | 16.246 / 21.923 | 0.092 / 0.170 | 0.103 / 0.188 | 0.075 / 0.201 | 46.46 |
+| B2 (`final-b4`) | 200 | 691 | 1.590 / 2 / 2 | 390 | 14.486 / 27.320 | 0.909 / 60.670 | 16.153 / 17.937 | 0.103 / 0.175 | 0.123 / 0.236 | 0.076 / 0.157 | 46.18 |
+
+| Run | Preflight CET | Load avg (1 / 5 / 15 min) | MemAvailable (kB) | Other scenes / compiler jobs at preflight |
+| --- | --- | ---: | ---: | ---: |
+| A1 | 2026-11-19 01:21:39 | 2.09 / 4.87 / 5.88 | 111,119,356 | 0 / 0 |
+| B1 | 2026-11-19 01:50:35 | 3.16 / 7.30 / 9.60 | 109,414,500 | 0 / 0 |
+| A2 | 2026-11-19 02:07:05 | 1.15 / 1.60 / 4.45 | 109,671,792 | 0 / 0 |
+| B2 | 2026-11-19 02:30:12 | 0.61 / 0.96 / 1.98 | 109,713,068 | 0 / 0 |
+
+| Acceptance metric | A max − min | B max − min | Mean worsening | Within A spread |
+| --- | ---: | ---: | ---: | --- |
+| urgent queue p50 | 0.650 | 0.694 | +0.556 | yes |
+| urgent queue p90 | 9.726 | 1.501 | +3.545 | yes |
+| routine queue p50 | 5.231 | 2.478 | -1.220 | yes |
+| routine queue p90 | 8.196 | 0.404 | +53.199 | no |
+| ticks/s mean across windows | 0.680 | 0.820 | -0.470 | yes |
+
+- B1 preparation within enqueue-to-grant, n=796, p50 / p90 276.808 / 774.619 ms.
+- B2 preparation within enqueue-to-grant, n=727, p50 / p90 242.066 / 781.630 ms.
+
+The latency and tick-rate gate **failed**. Neither branch run had a routine receipt with a recorded urgent arrival, so the earlier 11.199 s observation is the only matching sample. For each metric the test uses the difference between the two arm means, with the control's maximum minus minimum as the tolerance for a worsening. Metrics outside that spread were routine queue p90. Urgent starts changed by -6.7% on average, and the mean reasons per urgent prompt moved from 1.015 to 1.593.
+
+B1 had 34 of 58 matched routine think calls queued for at least 30 s. Their median wait to nomination was 43.494 s, prompt preparation took 362.8 ms, and the median ready-to-grant wait was 78.4 ms. B2 had 18 of 35 matched routine think calls queued for at least 30 s. Their median wait to nomination was 58.514 s, prompt preparation took 1150.6 ms, and the median ready-to-grant wait was 78.6 ms. The phase breakdown uses routine think receipts that matched turn journal entries. The earlier slot-hold regression was removed. This phase timing locates long routine waits but does not identify which admission condition caused them.
+
 
 ## Fixes from the rules2-r2 review (2026-11-10)
 

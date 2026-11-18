@@ -33,6 +33,7 @@ mod sleep;
 mod talk;
 mod facts;
 mod fast;
+mod turn;
 
 /// How much of a remembered thing's salience and confidence is kept after a step failed at it.
 const MISSED_WEAKEN: f64 = 0.5;
@@ -102,6 +103,8 @@ struct ActorMind {
     /// A pending deliberation is being held back off stage (it does not keep the character
     /// from conversation turns meanwhile).
     deferring: bool,
+    /// The request's `updated_ms` the running deliberation read at its turn (turn.rs).
+    taken_ms: u64,
     /// Deliberations in a row whose model could not be reached (their request waits).
     model_failures: u32,
     /// How many deliberations each pending reason (its text and arrival time) was already
@@ -1515,11 +1518,7 @@ impl Minds {
             }
             let mut seen = 0u64;
             loop {
-                let pending = if self.lod.on {
-                    self.pending.lock().unwrap().get(&actor).map(|p| &p.row).filter(|d| d.updated_ms > seen).cloned()
-                } else {
-                    self.conn.db.my_deliberations().iter().find(|d| d.actor == actor && d.updated_ms > seen)
-                };
+                let pending = self.request_row(actor).filter(|d| d.updated_ms > seen);
                 let Some(d) = pending else { break };
                 // Off stage, routine reasons wait (and gather) until the mind is due again.
                 let wait = self.lod_wait(&d);
@@ -1551,14 +1550,25 @@ impl Minds {
                     }
                     continue;
                 }
-                self.actors.lock().unwrap().entry(actor).or_default().running = true;
+                {
+                    let mut a = self.actors.lock().unwrap();
+                    let m = a.entry(actor).or_default();
+                    m.running = true;
+                    m.taken_ms = d.updated_ms;
+                }
                 let result = self.deliberate(&d).await;
-                self.actors.lock().unwrap().entry(actor).or_default().running = false;
+                // What it read at its turn is what it consumed (turn.rs); what came after is next.
+                seen = {
+                    let mut a = self.actors.lock().unwrap();
+                    let m = a.entry(actor).or_default();
+                    m.running = false;
+                    m.taken_ms.max(seen)
+                };
                 self.clone().deliberation_ended(actor);
                 match result {
                     Ok(()) => {
                         self.actors.lock().unwrap().entry(actor).or_default().model_failures = 0;
-                        self.rethink_thought(actor, d.updated_ms);
+                        self.rethink_thought(actor, seen);
                     }
                     Err(e) if e.is::<ModelUnavailable>() => {
                         // Its model could not be reached: the request and its reasons stay pending
@@ -2032,8 +2042,12 @@ impl Minds {
             return self.deliberate_animal(d, &c, lane).await;
         }
         let profile = self.profile(&c);
-        let scene: Value = serde_json::from_str(&d.scene).unwrap_or(json!({}));
         let at = self.attention(actor, Some(&d.scene));
+        // Read the request at the start of its preparation turn. Its scene and the reasons
+        // merged while it waited go into the prompt together (turn.rs).
+        let (mut turn, d) = self.take_turn(d, &profile, at, "think", lane).await;
+        let d = &d;
+        let scene: Value = serde_json::from_str(&d.scene).unwrap_or(json!({}));
         self.felt.lock().unwrap().insert(actor, (Instant::now(), scene["you"].clone()));
         let missed = self.weaken_missed(actor).await;
         // What this moment brings to mind (see recall.rs).
@@ -2079,7 +2093,7 @@ impl Minds {
         let mut decision = Value::Null;
         let (mut think_latency, mut think_tokens) = (0u32, 0u32);
         for p in [profile.clone(), self.llm.default_profile()] {
-            if let Ok(r) = self.llm.chat_in_lane(&p, at, "think", &c.name, &think_msgs, lane).await {
+            if let Ok(r) = self.call_on_turn(&mut turn, &p, at, "think", &c.name, &think_msgs, lane).await {
                 think_latency += r.latency_ms;
                 think_tokens += r.tokens;
                 if let Ok(v) = llm::parse_json(&r.content) {
@@ -2294,6 +2308,8 @@ impl Minds {
         let think = self.llm.species_profile(&c.kind, "think").unwrap_or_else(|| self.llm.profile_for(actor, &c.name));
         let compile = self.llm.species_profile(&c.kind, "compile").unwrap_or_else(|| self.llm.profile_for(actor, &c.name));
         let at = self.attention(actor, Some(&d.scene));
+        let (mut turn, d) = self.take_turn(d, &think, at, "deliberate", lane).await;
+        let d = &d;
         let fmt = self.fmt_time();
         let scene: Value = serde_json::from_str(&d.scene).unwrap_or(json!({}));
         let recalled = self.recall_for(actor, &self.scene_cues(actor, &scene, &d.reason), 10, 0, "animal").await;
@@ -2303,8 +2319,7 @@ impl Minds {
         let temperament = self.conn.db.persona().id().find(&actor).map(|p| format!("{} (mood: {})", p.traits, p.mood)).unwrap_or_default();
         let thought_ref = reference(actor, "deliberate");
         let felt = self
-            .llm
-            .chat_in_lane(&think, at, "deliberate", &c.name, &[
+            .call_on_turn(&mut turn, &think, at, "deliberate", &c.name, &[
                 Msg { role: "system", content: prompts::animal_think_system(&c.kind, &sp.nature) },
                 Msg { role: "user", content: prompts::animal_think_user(&c.name, &c.kind, &temperament, &mind, &experiences, &d.scene, &d.reason) },
             ], lane)

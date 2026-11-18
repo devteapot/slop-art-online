@@ -3352,6 +3352,89 @@ def scene_since_case(run):
     return {'status': 'pass', **result}
 
 
+@case('urgent-merge')
+def urgent_merge_case(run):
+    """Repeat urgent triggers merge into the deliberation that waits for its model slot (mind/turn.rs,
+    docs/MIND_HARNESS.md "Requests read at their turn"). The mind service has one model slot
+    (`LIVING_CONCURRENCY=1`); H, another mind, holds it with a think call the fake keeps 15 s. Then
+    A1, A2 and A3 (each of whom first said its name to M) each strike M once, a few seconds apart: M's urgent request is made at the first
+    blow and the other two merge into it while M's call waits behind H's. M's think prompt, built
+    once its turn comes, carries all three ("… is attacking you"), and its thought records them; its
+    `turn` outcome counts two merged. The fake holds that think 8 s, and A4 strikes during it: A4's
+    line is after the read, so it is not in that prompt and is left pending, and a follow-up
+    deliberation carries it, and none of the three it consumed. Before 2026-11-13 the prompt was built
+    before the wait: it carried A1's blow alone, and A2's and A3's were the follow-up's."""
+    run.harness('launch')
+    run.harness('doctor')
+    before = {c['id'] for c in run.sql('SELECT id FROM character', 'ids-before')}
+    run.admin('spawn_crowd', 6, True)
+    made = sorted(c['id'] for c in run.sql('SELECT id FROM character', 'ids-after') if c['id'] not in before)
+    assert len(made) == 6, made
+    m, h, *attackers = made
+    for who in made:
+        run.admin('set_behavior', who, json.dumps({'wait': 300}))
+    for who in attackers:
+        run.admin('place_near', who, m)
+    # Each attacker says its name first, so M tells their blows apart: a line already pending is
+    # not repeated (`reasons::add`), and three strangers' blows would read as one line.
+    names = {c['id']: c['name'] for c in run.sql('SELECT id, name FROM character', 'names')}
+    for who in attackers:
+        run.admin('set_behavior', who, json.dumps({'seq': [{'say': f'I am {names[who]}.'}, {'wait': 300}]}))
+    time.sleep(3.0)
+    script = {'replies': {'think': {'thought': 'I hold my ground.', 'intend': ['wait'], 'say': None}, 'deliberate': basic_reply()},
+              'rules': [{'purpose': 'think', 'contains': 'verify slot holder', 'delay_s': 15, 'times': 1},
+                        {'purpose': 'think', 'contains': 'is attacking you', 'delay_s': 8, 'times': 1}]}
+    run.start(model(run, script), [m, h], extra_env={'LIVING_CONCURRENCY': '1'})
+    requests = lambda: [e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] == 'think']
+    sent_text = lambda e: '\n'.join(str(x.get('content', '')) for x in e['body'].get('messages', []))
+    pending = lambda save: run.private(f'SELECT * FROM deliberation WHERE actor = {m}', save)
+    attack_lines = lambda reason: [l for l in reason.split('\n') if 'is attacking you' in l]
+    # Both minds have thought once (their first identity and plan), so nothing else is queued.
+    for who in (m, h):
+        run.request(who, f'warm {who}')
+        accepted(run, who)
+    run.wait(lambda: not pending('pending-warm') and not run.private(f'SELECT * FROM deliberation WHERE actor = {h}', 'pending-h-warm'), 'no request pending', 60)
+    run.request(h, 'slot holder')
+    run.wait(lambda: any('verify slot holder' in sent_text(e) for e in requests()), 'the slot holder in flight', 60)
+    held_from = time.monotonic()
+    lines = []
+    for i, a in enumerate(attackers[:3]):
+        run.admin('set_behavior', a, json.dumps({'seq': [{'do': {'skill': 'attack', 'target': {'id': m}}}, {'wait': 300}]}))
+        rows = run.wait(lambda: [d for d in pending(f'pending-blow-{i + 1}') if len(attack_lines(d['reason'])) >= i + 1], f'blow {i + 1} pending', 10)
+        lines = attack_lines(rows[0]['reason'])
+        time.sleep(1.0)
+    blows_in_s = time.monotonic() - held_from
+    assert blows_in_s < 14, f'the three blows took {blows_in_s:.1f} s, longer than the slot was held: inconclusive'
+    assert not any('is attacking you' in sent_text(e) for e in requests()), 'M was asked before the slot holder finished: the slot was not held'
+    first = run.wait(lambda: [sent_text(e) for e in requests() if 'is attacking you' in sent_text(e)], "M's urgent think call", 40)[0]
+    (run.directory / 'prompt-urgent.txt').write_text(first)
+    # A blow while M's think call runs (held 8 s): after the read, so for the next deliberation.
+    run.admin('set_behavior', attackers[3], json.dumps({'seq': [{'do': {'skill': 'attack', 'target': {'id': m}}}, {'wait': 300}]}))
+    late = run.wait(lambda: [l for d in pending('pending-late') for l in attack_lines(d['reason']) if l not in lines], 'the mid-flight blow pending', 10)[0]
+    in_flight = not any(t['kind'] == 'deliberate' and 'is attacking you' in (json.loads(t['detail'] or '{}').get('reason') or '') for t in run.thoughts(m, 'thoughts-mid'))
+    assert in_flight, 'the urgent deliberation ended before the mid-flight blow: inconclusive'
+    follow = run.wait(lambda: [sent_text(e) for e in requests() if late in sent_text(e)], 'the follow-up think call', 60)[0]
+    (run.directory / 'prompt-follow-up.txt').write_text(follow)
+    run.wait(lambda: len([t for t in run.thoughts(m, 'thoughts-urgent') if t['kind'] == 'deliberate' and 'is attacking you' in (json.loads(t['detail'] or '{}').get('reason') or '')]) >= 2, 'both deliberations installed', 60)
+    urgent = [json.loads(t['detail'] or '{}') for t in run.thoughts(m, 'thoughts-final') if t['kind'] == 'deliberate' and 'is attacking you' in (json.loads(t['detail'] or '{}').get('reason') or '')]
+    turns = [e for e in shared.rows(run.journal / 'outcomes/turn.jsonl') if e['actor'] == m and e['lane'] == 'urgent']
+    assert all(any(names[a] in l for l in lines) for a in attackers[:3]), f'the blows are not told by name: {lines}'
+    checks = {
+        'all_three_in_the_prompt': all(l in first for l in lines) and len(lines) == 3,
+        'mid_flight_blow_not_in_it': late not in first,
+        'thought_carries_all_three': all(l in urgent[0]['reason'] for l in lines),
+        'turn_counted_two_merged': bool(turns) and turns[0]['merged'] >= 2,
+        'follow_up_carries_the_late_blow': late in urgent[1]['reason'],
+        'follow_up_carries_none_consumed': not any(l in urgent[1]['reason'] for l in lines),
+        'two_urgent_deliberations': len(urgent) == 2,
+    }
+    result = {'m': m, 'slot_holder': h, 'attackers': attackers, 'lines': lines, 'late': late, 'blows_in_s': round(blows_in_s, 1),
+              'turns': turns, 'reasons': [d['reason'] for d in urgent], 'checks': checks}
+    (run.directory / 'urgent-merge.json').write_text(json.dumps(result, indent=2))
+    assert all(checks.values()), result
+    return {'status': 'pass', **{k: v for k, v in result.items() if k != 'reasons'}}
+
+
 @case('sleeper')
 def sleeper_case(run):
     """A sleeping body's mind thinks only on what wakes it (perceive.rs `Wake`, the `slumber`
@@ -4344,7 +4427,8 @@ def main():
             continue
         with (suite / name).open('w') as stream:
             subprocess.run(command, cwd=ROOT, stdout=stream, stderr=subprocess.STDOUT, check=True)
-    paths = ['living/mind/src/main.rs', 'living/mind/src/mind.rs', 'living/mind/src/mind/talk.rs',
+    paths = ['living/mind/src/main.rs', 'living/mind/src/llm.rs', 'living/mind/src/mind.rs',
+             'living/mind/src/mind/turn.rs', 'living/mind/src/mind/talk.rs',
              'living/mind/src/mind/lod.rs', 'living/mind/src/mind/rethink.rs', 'living/configs/rethink.json', 'living/mind/src/prompts.rs', 'living/authority/src/mind.rs',
              'living/rules/src/normalize.rs', str(shared.MIND_BIN),
              '.agents/skills/verify-llm/scripts/fake_llm.py', '.agents/skills/verify-llm/scripts/verify_llm.py',

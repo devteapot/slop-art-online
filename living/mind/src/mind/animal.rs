@@ -217,6 +217,9 @@ impl super::Minds {
         }
         let route = self.llm.species_profile(&c.kind, "think").unwrap_or_else(|| self.llm.profile_for(actor, &c.name));
         let at = self.attention(actor, Some(&d.scene));
+        let (mut turn, d) = self.take_turn(d, &route, at, "deliberate", lane).await;
+        let d = &d;
+        let scene: Value = serde_json::from_str(&d.scene).unwrap_or(json!({}));
         let fmt = self.fmt_time();
         let recalled = self.recall_for(actor, &self.scene_cues(actor, &scene, &d.reason), 10, 0, "animal").await;
         let mut mind = recalled.mind;
@@ -229,7 +232,7 @@ impl super::Minds {
         let labels: Vec<String> = options.iter().map(|o| o.label.clone()).collect();
         let user = prompts::animal_choose_user(prompts::animal_think_user(&c.name, &c.kind, &temperament, &mind, &experiences, &d.scene, &d.reason), &labels);
         let msgs = [Msg { role: "system", content: prompts::animal_choose_system(&c.kind, &sp.nature) }, Msg { role: "user", content: user }];
-        let reply = self.llm.chat_in_lane(&route, at, "deliberate", &c.name, &msgs, lane).await.map_err(super::unavailable)?;
+        let reply = self.call_on_turn(&mut turn, &route, at, "deliberate", &c.name, &msgs, lane).await.map_err(super::unavailable)?;
         let v = llm::parse_json(&reply.content).unwrap_or(json!({}));
         let pick = v["pick"].as_u64().or_else(|| v["pick"].as_str().and_then(|s| s.trim().parse().ok())).map(|p| p as usize).filter(|p| *p < options.len());
         let option = pick.map(|p| options[p].clone()).unwrap_or_else(|| options[0].clone());

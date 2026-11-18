@@ -540,11 +540,19 @@ fn retry_after(headers: &reqwest::header::HeaderMap, now: std::time::SystemTime)
     Some(at.duration_since(now).unwrap_or_default())
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Prompt {
+    NeedsPreparation,
+    Preparing,
+    Ready,
+}
+
 struct Waiting {
     id: u64,
     profile: String,
     lane: Lane,
     cost: u64,
+    prompt: Prompt,
 }
 
 struct Queue {
@@ -564,14 +572,20 @@ struct Queue {
     global_next: Instant,
 }
 
+impl Waiting {
+    fn eligible(&self, can_prepare: bool) -> bool {
+        self.prompt == Prompt::Ready || (self.prompt == Prompt::NeedsPreparation && can_prepare)
+    }
+}
+
 impl Queue {
     /// The first waiting request of `lane` whose profile may send now (rate and outage gates).
-    fn ready_in(&mut self, lane: Lane, now: Instant) -> Option<u64> {
+    fn ready_in(&mut self, lane: Lane, now: Instant, can_prepare: bool) -> Option<u64> {
         // Keep a paced lane's turn so cheaper requests cannot consume its token budget forever.
         let (rates, gates, hosts) = (&mut self.rates, &self.gates, &self.hosts);
         self.waiting
             .iter()
-            .filter(|w| w.lane == lane)
+            .filter(|w| w.lane == lane && w.eligible(can_prepare))
             .find(|w| {
                 let gate = gates.get(&hosts[&w.profile]);
                 gate.is_none_or(|g| g.retry_at.is_none_or(|at| g.probing.is_none() && now >= at)) && rates.get_mut(&w.profile).unwrap().ready_at(w.cost, now) <= now
@@ -583,27 +597,31 @@ impl Queue {
         if now < self.global_next {
             return None;
         }
+        // Bound preparation work without taking any transport slots. Skip work already
+        // preparing so other callers can dispatch while its prompt is built.
+        let preparing = self.waiting.iter().filter(|w| w.prompt == Prompt::Preparing).count();
+        let can_prepare = preparing < (self.concurrency / 16).max(1);
         // The fast lane's own slots: it never waits behind the shared pool, and never takes it.
         if self.fast_in_flight < self.fast_slots && self.waiting.iter().any(|w| w.lane == Lane::Fast) {
-            if let Some(id) = self.ready_in(Lane::Fast, now) {
+            if let Some(id) = self.ready_in(Lane::Fast, now, can_prepare) {
                 return Some(id);
             }
         }
         if self.in_flight >= self.concurrency {
             return None;
         }
-        let lane = if self.waiting.iter().any(|w| w.lane == Lane::Interactive) {
+        let lane = if self.waiting.iter().any(|w| w.lane == Lane::Interactive && w.eligible(can_prepare)) {
             Lane::Interactive
         } else {
             (0..NON_INTERACTIVE_ADMISSIONS.len())
                 .map(|offset| NON_INTERACTIVE_ADMISSIONS[(self.next_lane + offset) % NON_INTERACTIVE_ADMISSIONS.len()])
-                .find(|lane| self.waiting.iter().any(|w| w.lane == *lane))?
+                .find(|lane| self.waiting.iter().any(|w| w.lane == *lane && w.eligible(can_prepare)))?
         };
         let lower_limit = self.concurrency.saturating_sub((self.concurrency / 4).max(1)).max(1);
         if lane != Lane::Interactive && self.lower_in_flight >= lower_limit {
             return None;
         }
-        self.ready_in(lane, now)
+        self.ready_in(lane, now, can_prepare)
     }
 
     fn start(&mut self, id: u64, now: Instant) -> (Lane, Option<String>) {
@@ -654,6 +672,26 @@ struct Admission<'a> {
     id: u64,
     lane: Option<Lane>,
     probe: Option<String>,
+    granted: Option<Instant>,
+    urgent_arrived_ms: Option<u64>,
+    preparation_ms: Option<f64>,
+}
+
+/// An existing queue ticket nominated to prepare its prompt. It keeps its lane and place
+/// while building the prompt. A transport slot is granted only after it becomes ready.
+pub struct Turn<'a> {
+    admission: Admission<'a>,
+    pick: Pick,
+    lane: Lane,
+    queued: Instant,
+    preparation_started: Instant,
+    pub queue_wait_ms: u64,
+}
+
+impl Turn<'_> {
+    pub(crate) fn record_urgent_arrival(&mut self, at_ms: Option<u64>) {
+        self.admission.urgent_arrived_ms = at_ms;
+    }
 }
 
 impl Drop for Admission<'_> {
@@ -702,7 +740,7 @@ impl Scheduler {
         }
     }
 
-    async fn admit(&self, profile: &str, lane: Lane, cost: u64) -> Result<Admission<'_>> {
+    fn enqueue(&self, profile: &str, lane: Lane, cost: u64, prompt: Prompt) -> Admission<'_> {
         let id = {
             let mut q = self.queue.lock().unwrap();
             q.sequence += 1;
@@ -711,24 +749,48 @@ impl Scheduler {
             if let Some(g) = q.gates.get_mut(&host).filter(|g| g.retry_at.is_some()) {
                 g.held += 1;
             }
-            q.waiting.push_back(Waiting { id, profile: profile.into(), lane, cost });
+            q.waiting.push_back(Waiting { id, profile: profile.into(), lane, cost, prompt });
             id
         };
-        let mut admission = Admission { scheduler: self, id, lane: None, probe: None };
+        Admission { scheduler: self, id, lane: None, probe: None, granted: None,
+                    urgent_arrived_ms: None, preparation_ms: None }
+    }
+
+    async fn admit(&self, profile: &str, lane: Lane, cost: u64) -> Result<Admission<'_>> {
+        self.wait_for_turn(self.enqueue(profile, lane, cost, Prompt::Ready)).await
+    }
+
+    fn prompt_ready(&self, admission: &Admission<'_>, cost: u64) {
+        let mut q = self.queue.lock().unwrap();
+        let waiter = q.waiting.iter_mut().find(|w| w.id == admission.id).unwrap();
+        debug_assert!(waiter.prompt == Prompt::Preparing);
+        waiter.prompt = Prompt::Ready;
+        waiter.cost = cost;
+        self.changed.notify_waiters();
+    }
+
+    async fn wait_for_turn<'a>(&self, mut admission: Admission<'a>) -> Result<Admission<'a>> {
         loop {
             let changed = self.changed.notified();
             tokio::pin!(changed);
             changed.as_mut().enable();
             {
                 let mut q = self.queue.lock().unwrap();
-                if q.rates[profile].tpm.is_some_and(|limit| cost > limit) {
-                    return Err(anyhow!("estimated request tokens {cost} exceed {profile} tokens_per_minute"));
+                let waiting = q.waiting.iter().find(|w| w.id == admission.id).unwrap();
+                if q.rates[&waiting.profile].tpm.is_some_and(|limit| waiting.cost > limit) {
+                    return Err(anyhow!("estimated request tokens {} exceed {} tokens_per_minute", waiting.cost, waiting.profile));
                 }
                 let now = Instant::now();
-                if q.candidate(now) == Some(id) {
-                    let (lane, probe) = q.start(id, now);
-                    admission.lane = Some(lane);
-                    admission.probe = probe;
+                if q.candidate(now) == Some(admission.id) {
+                    let waiting = q.waiting.iter_mut().find(|w| w.id == admission.id).unwrap();
+                    if waiting.prompt == Prompt::NeedsPreparation {
+                        waiting.prompt = Prompt::Preparing;
+                    } else {
+                        let (lane, probe) = q.start(admission.id, now);
+                        admission.lane = Some(lane);
+                        admission.probe = probe;
+                        admission.granted = Some(now);
+                    }
                     self.changed.notify_waiters();
                     return Ok(admission);
                 }
@@ -772,6 +834,11 @@ pub struct Reply {
 pub struct Msg {
     pub role: &'static str,
     pub content: String,
+}
+
+fn estimated_cost(profile: &Profile, purpose: &str, messages: &[Msg]) -> u64 {
+    messages.iter().map(|m| (m.content.len() as u64).div_ceil(3) + 8).sum::<u64>()
+        + u64::from(profile.max_tokens_for(purpose).unwrap_or(8000))
 }
 
 impl Llm {
@@ -935,7 +1002,14 @@ impl Llm {
 
     pub async fn chat_in_lane(&self, route: &str, at: Attention, purpose: &str, actor: &str, messages: &[Msg], lane: Lane) -> Result<Reply> {
         let pick = self.pick(route, purpose, at);
-        let mut result = self.chat_once(&pick, purpose, actor, messages, lane).await;
+        let first = self.chat_once(&pick, purpose, actor, messages, lane).await;
+        self.recover(pick, first, at, purpose, actor, messages, lane).await
+    }
+
+    /// After a call's first attempt: the overflow model or one paced retry ([`Llm::chat_in_lane`]).
+    #[allow(clippy::too_many_arguments)]
+    async fn recover(&self, pick: Pick, first: Result<Reply>, at: Attention, purpose: &str, actor: &str, messages: &[Msg], lane: Lane) -> Result<Reply> {
+        let mut result = first;
         let limited = matches!(&result, Err(e) if format!("{e:#}").contains("HTTP 429"));
         if lane == Lane::Background {
             // Memory work is not waited on: it fails here and its caller tries again later with
@@ -980,18 +1054,73 @@ impl Llm {
     async fn chat_once(&self, pick: &Pick, purpose: &str, actor: &str, messages: &[Msg], lane: Lane) -> Result<Reply> {
         let profile = pick.profile.as_str();
         let p = self.models.profiles.get(profile).ok_or_else(|| anyhow!("no profile {profile}"))?;
-        let key = self.keys.get(profile).ok_or_else(|| anyhow!("profile {profile} has no key"))?;
-        let body = request_body(p, profile, purpose, pick.effort.as_deref(), messages);
-        let cost = messages.iter().map(|m| (m.content.len() as u64).div_ceil(3) + 8).sum::<u64>() + u64::from(p.max_tokens_for(purpose).unwrap_or(8000));
-        let host = p.base_url.clone();
+        let cost = estimated_cost(p, purpose, messages);
         let queued = Instant::now();
         let permit = self.scheduler.admit(profile, lane, cost).await?;
         let queue_wait_ms = queued.elapsed().as_millis() as u64;
+        self.chat_admitted(pick, purpose, actor, messages, lane, permit, queue_wait_ms).await
+    }
+
+    /// Join the model queue and wait until this ticket is eligible to prepare its prompt.
+    /// The caller reads the latest request here. Other work can use the slots during preparation.
+    pub async fn turn(&self, route: &str, at: Attention, purpose: &str, lane: Lane) -> Result<Turn<'_>> {
+        let pick = self.pick(route, purpose, at);
+        let p = self.models.profiles.get(&pick.profile).ok_or_else(|| anyhow!("no profile {}", pick.profile))?;
+        let queued = Instant::now();
+        let cost = u64::from(p.max_tokens_for(purpose).unwrap_or(8000));
+        let ticket = self.scheduler.enqueue(&pick.profile, lane, cost, Prompt::NeedsPreparation);
+        let admission = self.scheduler.wait_for_turn(ticket).await?;
+        let preparation_started = Instant::now();
+        let queue_wait_ms = preparation_started.duration_since(queued).as_millis() as u64;
+        Ok(Turn { admission, pick, lane, queued, preparation_started, queue_wait_ms })
+    }
+
+    /// Dispatch a prepared prompt through its original queue ticket, then recover as a regular
+    /// call would. The transport slot and the token/rate budget are charged together at dispatch.
+    pub async fn chat_in_turn(&self, turn: Turn<'_>, at: Attention, purpose: &str, actor: &str, messages: &[Msg]) -> Result<Reply> {
+        let Turn { mut admission, pick, lane, queued, preparation_started, .. } = turn;
+        let p = self.models.profiles.get(&pick.profile).ok_or_else(|| anyhow!("no profile {}", pick.profile))?;
+        let cost = estimated_cost(p, purpose, messages);
+        admission.preparation_ms = Some(preparation_started.elapsed().as_secs_f64() * 1000.0);
+        self.scheduler.prompt_ready(&admission, cost);
+        let first = match self.scheduler.wait_for_turn(admission).await {
+            Ok(permit) => {
+                let queue_wait_ms = permit.granted.unwrap().duration_since(queued).as_millis() as u64;
+                self.chat_admitted(&pick, purpose, actor, messages, lane, permit, queue_wait_ms).await
+            }
+            Err(e) => Err(e),
+        };
+        self.recover(pick, first, at, purpose, actor, messages, lane).await
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    async fn chat_admitted(&self, pick: &Pick, purpose: &str, actor: &str, messages: &[Msg], lane: Lane, permit: Admission<'_>, queue_wait_ms: u64) -> Result<Reply> {
+        let profile = pick.profile.as_str();
+        let p = self.models.profiles.get(profile).ok_or_else(|| anyhow!("no profile {profile}"))?;
+        let key = self.keys.get(profile).ok_or_else(|| anyhow!("profile {profile} has no key"))?;
+        let body = request_body(p, profile, purpose, pick.effort.as_deref(), messages);
+        let host = p.base_url.clone();
         let started = Instant::now();
         let url = format!("{}/chat/completions", p.base_url.trim_end_matches('/'));
         let mut unreachable = false;
         let result = async {
-            let resp = match self.http.post(&url).bearer_auth(key).json(&body).send().await {
+            let mut request = self.http.post(&url).bearer_auth(key).json(&body);
+            // The battle driver enables this only for its loopback fake provider. Record the
+            // timing at dispatch, including request serialization in slot-hold time.
+            if p.key_env == "LIVING_VERIFY_FAKE_KEY"
+                && reqwest::Url::parse(&url).ok().and_then(|url| url.host_str().map(str::to_owned)).as_deref() == Some("127.0.0.1")
+                && std::env::var_os("LIVING_BATTLE_TIMING").is_some()
+            {
+                request = request.header("X-Living-Battle-Timing", json!({
+                    "lane": lane,
+                    "queue_wait_ms": queue_wait_ms,
+                    "slot_hold_ms": permit.granted.unwrap().elapsed().as_secs_f64() * 1000.0,
+                    "sent_ms": now_ms(),
+                    "urgent_arrived_ms": permit.urgent_arrived_ms,
+                    "prompt_preparation_ms": permit.preparation_ms,
+                }).to_string());
+            }
+            let resp = match request.send().await {
                 Ok(r) => r,
                 Err(e) => {
                     // Only a connection that could not be made gates the host. A timeout is one
@@ -1484,7 +1613,7 @@ mod tests {
 
     fn enqueue(q: &mut Queue, lane: Lane, cost: u64) -> u64 {
         q.sequence += 1;
-        q.waiting.push_back(Waiting { id: q.sequence, profile: "p".into(), lane, cost });
+        q.waiting.push_back(Waiting { id: q.sequence, profile: "p".into(), lane, cost, prompt: Prompt::Ready });
         q.sequence
     }
 
@@ -1733,10 +1862,10 @@ mod tests {
         };
         let scheduler = Scheduler::new(&models, 1, 0.0);
         let mut q = scheduler.queue.lock().unwrap();
-        q.waiting.push_back(Waiting { id: 1, profile: "p".into(), lane: Lane::Background, cost: 10 });
+        q.waiting.push_back(Waiting { id: 1, profile: "p".into(), lane: Lane::Background, cost: 10, prompt: Prompt::Ready });
         q.start(1, now);
-        q.waiting.push_back(Waiting { id: 2, profile: "p".into(), lane: Lane::Background, cost: 10 });
-        q.waiting.push_back(Waiting { id: 3, profile: "p".into(), lane: Lane::Interactive, cost: 10 });
+        q.waiting.push_back(Waiting { id: 2, profile: "p".into(), lane: Lane::Background, cost: 10, prompt: Prompt::Ready });
+        q.waiting.push_back(Waiting { id: 3, profile: "p".into(), lane: Lane::Interactive, cost: 10, prompt: Prompt::Ready });
         assert_eq!(q.candidate(now + Duration::from_secs(1)), None);
         q.in_flight -= 1;
         q.lower_in_flight -= 1;
@@ -1760,11 +1889,11 @@ mod tests {
         };
         let scheduler = Scheduler::new(&models, 2, 30.0);
         let mut q = scheduler.queue.lock().unwrap();
-        q.waiting.push_back(Waiting { id: 1, profile: "p".into(), lane: Lane::Background, cost: 10 });
+        q.waiting.push_back(Waiting { id: 1, profile: "p".into(), lane: Lane::Background, cost: 10, prompt: Prompt::Ready });
         q.start(1, now);
-        q.waiting.push_back(Waiting { id: 2, profile: "p".into(), lane: Lane::Routine, cost: 10 });
+        q.waiting.push_back(Waiting { id: 2, profile: "p".into(), lane: Lane::Routine, cost: 10, prompt: Prompt::Ready });
         assert_eq!(q.candidate(now + Duration::from_secs(2)), None);
-        q.waiting.push_back(Waiting { id: 3, profile: "p".into(), lane: Lane::Interactive, cost: 10 });
+        q.waiting.push_back(Waiting { id: 3, profile: "p".into(), lane: Lane::Interactive, cost: 10, prompt: Prompt::Ready });
         assert_eq!(q.candidate(now + Duration::from_secs(1)), None);
         assert_eq!(q.candidate(now + Duration::from_secs(2)), Some(3));
     }
@@ -1790,15 +1919,15 @@ mod tests {
         let scheduler = Scheduler::new(&one_profile(), 1, 0.0);
         scheduler.set_fast_slots(1);
         let mut q = scheduler.queue.lock().unwrap();
-        q.waiting.push_back(Waiting { id: 1, profile: "p".into(), lane: Lane::Urgent, cost: 10 });
+        q.waiting.push_back(Waiting { id: 1, profile: "p".into(), lane: Lane::Urgent, cost: 10, prompt: Prompt::Ready });
         q.start(1, now);
         assert_eq!(q.in_flight, 1, "the shared pool is full");
-        q.waiting.push_back(Waiting { id: 2, profile: "p".into(), lane: Lane::Routine, cost: 10 });
-        q.waiting.push_back(Waiting { id: 3, profile: "p".into(), lane: Lane::Fast, cost: 10 });
+        q.waiting.push_back(Waiting { id: 2, profile: "p".into(), lane: Lane::Routine, cost: 10, prompt: Prompt::Ready });
+        q.waiting.push_back(Waiting { id: 3, profile: "p".into(), lane: Lane::Fast, cost: 10, prompt: Prompt::Ready });
         assert_eq!(q.candidate(now + Duration::from_secs(1)), Some(3), "a fast call goes in its own slot");
         q.start(3, now + Duration::from_secs(1));
         assert_eq!((q.in_flight, q.fast_in_flight), (1, 1));
-        q.waiting.push_back(Waiting { id: 4, profile: "p".into(), lane: Lane::Fast, cost: 10 });
+        q.waiting.push_back(Waiting { id: 4, profile: "p".into(), lane: Lane::Fast, cost: 10, prompt: Prompt::Ready });
         assert_eq!(q.candidate(now + Duration::from_secs(2)), None, "its slots are full, and the shared pool is not its");
         q.in_flight -= 1;
         q.lower_in_flight -= 1;
@@ -1970,6 +2099,36 @@ mod tests {
         assert_eq!(requests[0]["body"]["prompt_cache_key"], requests[2]["body"]["prompt_cache_key"]);
         assert_ne!(requests[2]["body"]["prompt_cache_key"], requests[3]["body"]["prompt_cache_key"]);
         println!("fake transport evidence: {}", directory.display());
+    }
+
+    /// A nominated turn can prepare while other calls use the transport slot.
+    #[tokio::test]
+    async fn preparing_a_turn_leaves_the_model_slot_available() {
+        let directory = std::env::temp_dir().join(format!("living-turn-{}", now_ms()));
+        std::fs::create_dir_all(&directory).unwrap();
+        let fake = fake_llm(&directory.join("requests.jsonl"), None);
+        std::env::set_var("LIVING_TEST_TURN_KEY", "dummy-only");
+        let models: ModelsFile = serde_json::from_value(json!({"default": "p", "profiles": {"p": {
+            "base_url": format!("http://127.0.0.1:{}/v1", fake.port), "model": "m", "key_env": "LIVING_TEST_TURN_KEY",
+            "requests_per_minute": 6000, "max_tokens": 256, "reasoning_effort": {"think": null} }}})).unwrap();
+        let llm = Llm::new(models, directory.join("journal")).unwrap();
+        llm.scheduler.queue.lock().unwrap().concurrency = 1;
+        let messages = [Msg { role: "user", content: "hi".into() }];
+        let turn = llm.turn("p", Attention::OnStage, "think", Lane::Urgent).await.unwrap();
+        assert_eq!(llm.scheduler.queue.lock().unwrap().in_flight, 0);
+        tokio::time::timeout(Duration::from_secs(5),
+            llm.chat_in_lane("p", Attention::OnStage, "think", "alongside", &messages, Lane::Routine)
+        ).await.unwrap().unwrap();
+        llm.chat_in_turn(turn, Attention::OnStage, "think", "turn", &messages).await.unwrap();
+        let entry: Value = serde_json::from_str(std::fs::read_to_string(directory.join("journal/turn.jsonl")).unwrap().trim()).unwrap();
+        assert_eq!(entry["lane"], "urgent");
+        assert!(entry["queue_wait_ms"].is_u64());
+        // Dropping a preparing ticket frees its place in the queue.
+        let unused = llm.turn("p", Attention::OnStage, "think", Lane::Urgent).await.unwrap();
+        drop(unused);
+        let queue = llm.scheduler.queue.lock().unwrap();
+        assert!(queue.waiting.is_empty());
+        assert_eq!(queue.in_flight, 0);
     }
 
     /// A batch whose inline body would pass the provider's limit is uploaded as a file and
