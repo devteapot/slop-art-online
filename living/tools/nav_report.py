@@ -80,27 +80,47 @@ class Track:
         return [r for r in self.rows if t <= r["t_ms"] <= until]
 
 
-def load_bodies(path):
-    tracks = {}
-    if not Path(path).exists():
-        return tracks
-    for line in Path(path).read_text().splitlines():
-        if not line.startswith("{"):
-            continue
-        try:
-            u = json.loads(line)
-        except ValueError:
-            continue
-        for r in (u.get("body") or {}).get("inserts", []):
-            tracks.setdefault(r["id"], []).append(r)
-    return {k: Track(v) for k, v in tracks.items()}
+def load_tracks(path):
+    tracks, ground = {}, {}
+    if path.exists():
+        with path.open() as stream:
+            for line in stream:
+                if not line.startswith("{"):
+                    continue
+                try:
+                    update = json.loads(line)
+                except ValueError:
+                    continue
+                for row in update.get("body", {}).get("inserts", []):
+                    tracks.setdefault(row["id"], []).append(row)
+                for row in update.get("known_ground", {}).get("inserts", []):
+                    ground.setdefault(row["actor"], []).append(row["last_ms"])
+    return {k: Track(v) for k, v in tracks.items()}, ground
+
+
+def ground_write_rate(walks, ground):
+    by_actor = {}
+    for walk in walks:
+        start = walk.get("start_ms") if "start_ms" in walk else walk["order_ms"][1]
+        end = walk.get("end_ms")
+        if start is not None and end is not None and end > start:
+            actor = walk["subject"]
+            counts = by_actor.setdefault(actor, [0, 0])
+            counts[0] += sum(start <= stamp < end for stamp in ground.get(actor, ()))
+            counts[1] += end - start
+    writes = sum(n for n, _ in by_actor.values())
+    actor_ms = sum(ms for _, ms in by_actor.values())
+    max_rate = max((1000 * n / ms for n, ms in by_actor.values()), default=None)
+    return {"writes": writes, "actor_seconds": round(actor_ms / 1000, 2),
+            "writes_per_actor_s": round(1000 * writes / actor_ms, 3) if actor_ms else None,
+            "max_writes_per_actor_s": round(max_rate, 3) if max_rate is not None else None}
 
 
 def changed(v0, v1):
     s0, s1 = math.hypot(*v0), math.hypot(*v1)
     if s0 < 0.05:
         return s1 >= 0.05
-    if s1 < 0.05 or abs(s1 - s0) / s0 > 0.3:
+    if s1 < 0.05 or (s0 - s1) / s0 > 0.3:
         return True
     d = abs((math.atan2(v1[1], v1[0]) - math.atan2(v0[1], v0[0]) + math.pi) % (2 * math.pi) - math.pi)
     return d > math.radians(15)
@@ -163,7 +183,7 @@ def optimal_beliefs(folder, walks, tiles_file, W, H, road, unknown):
     q = []
     for w in walks:
         snap = json.loads((folder / w["belief_file"]).read_text()) if (folder / w["belief_file"]).exists() else {"known": [], "edits": [], "gates_seen": []}
-        q.append({"start": w["start"], "goal": w["goal"], "shut": [], **snap, "road_speed": road, "unknown_cost": unknown})
+        q.append({"start": w["start"], "goal": w["goal"], "shut": w.get("shut_tiles", []), **snap, "road_speed": road, "unknown_cost": unknown})
     f = folder / "report-optimal.json"
     f.write_text(json.dumps(q))
     out = subprocess.run([str(TARGET / "release/examples/nav_optimal"), str(tiles_file), str(W), str(H), str(f)], capture_output=True, text=True, timeout=1800)
@@ -182,11 +202,11 @@ def gate_stimuli(track, t0, t1, tiles, W, shut, sight, line_clear):
                 c = (g[0] + 0.5, g[1] + 0.5)
                 if math.dist(p, c) <= sight and line_clear(p, c):
                     return t
-        t += 100
+        t += 16
     return None
 
 
-def cone_stimuli(sub, others, t0, t1, step=100):
+def cone_stimuli(sub, others, t0, t1, step=16):
     """Moments a body enters a 4 m, ±30° cone ahead of the subject (its direction of travel)."""
     out, inside = [], set()
     t = t0
@@ -211,7 +231,7 @@ def cone_stimuli(sub, others, t0, t1, step=100):
     return out
 
 
-def contacts(sub, others, t0, t1, step=100):
+def contacts(sub, others, t0, t1, step=16):
     n, t, near = 0, t0, set()
     while t <= t1:
         p, _ = sub.where(t)
@@ -227,10 +247,54 @@ def contacts(sub, others, t0, t1, step=100):
     return n
 
 
+def chase_stalls(folder, tracks, walks):
+    path = folder / "intents.jsonl"
+    if not path.exists():
+        return {}
+    windows = {w["subject"]: (w["start_ms"], w["end_ms"]) for w in walks if w["start_ms"] is not None}
+    active_ms, stamps, still, lengths = 0, {}, {}, []
+    for line in path.read_text().splitlines():
+        sample = json.loads(line)
+        stamp = sample["at_ms"]
+        active = set()
+        for row in sample["steer"]:
+            actor, goal = row["id"], row["goal"]
+            start, end = windows.get(actor, (0, 0))
+            track = tracks.get(actor)
+            if goal not in (1, 2, 4) or not track or not start <= stamp <= end:
+                continue
+            at, _ = track.where(stamp)
+            if at is None:
+                continue
+            active.add(actor)
+            prev = stamps.get(actor, stamp)
+            active_ms += stamp - prev
+            stamps[actor] = stamp
+            target = tracks.get(row["target"])
+            if target and not row.get("unseen_ms"):
+                dest, _ = target.where(stamp)
+            else:
+                dest = (row["gx"], row["gy"])
+            before, _ = track.where(stamp - 2000)
+            distance = math.dist(at, dest) if dest else 0
+            left = row["keep"] - distance if goal == 4 else distance - row["keep"]
+            if before and stamp - start >= 2000 and left > 2.5 and math.dist(at, before) < 0.15:
+                still.setdefault(actor, stamp)
+            elif actor in still:
+                lengths.append(max(2000, prev - still.pop(actor) + 2000))
+        for actor in stamps.keys() - active:
+            if actor in still:
+                lengths.append(stamps[actor] - still.pop(actor) + 2000)
+            del stamps[actor]
+    lengths.extend(stamps[actor] - start + 2000 for actor, start in still.items())
+    return {"stuck_per_10min": round(len(lengths) * 600_000 / active_ms, 2) if active_ms else None,
+            "stuck_longest_s": round(max(lengths, default=0) / 1000, 1), "active_s": round(active_ms / 1000, 1)}
+
+
 def chase_report(folder, ph, walks, tracks, line_clear):
     """N4: escapes, cornered flights, the chaser's turns and the subject's answers; for a pursuit,
     sight lost and regained, and capture."""
-    sight = 48.0 if 6.0 <= (ph.get("hour") or 12) < 20.0 else 14.0
+    sight = ph.get("sight_m", 11.0 if 6.0 <= ph["hour"] < 20.0 else 6.0)
     rows, lat, no_resp = [], [], 0
     for w in walks:
         me, him = tracks.get(w["subject"]), tracks.get(w["fixture"])
@@ -238,13 +302,18 @@ def chase_report(folder, ph, walks, tracks, line_clear):
             rows.append({"subject": w["subject"], "missing_track": True})
             continue
         t0, t1 = w["start_ms"], w["end_ms"]
+        if t0 is None:
+            rows.append({"subject": w["subject"], "chase_did_not_start": True})
+            continue
         p0, q0 = me.where(t0)[0], him.where(t0)[0]
         d0 = math.dist(p0, q0) if p0 and q0 else None
         r = {"subject": w["subject"], "start_gap_m": round(d0, 1) if d0 else None, "told": w.get("told")}
         unseen_from, escaped, lost, regained, captured, last_seen = None, None, 0, 0, None, None
-        prev_vis, prev_h = True, None
+        still_near = False
+        eligible = 0
+        prev_vis, prev_h = None, None
         t = t0
-        while t <= t1:
+        while t <= min(t1, t0 + 60_000):
             p, q = me.where(t)[0], him.where(t)[0]
             if p and q:
                 d = math.dist(p, q)
@@ -259,11 +328,16 @@ def chase_report(folder, ph, walks, tracks, line_clear):
                     else:
                         unseen_from = None
                 else:
-                    if prev_vis and not vis:
+                    if prev_vis is True and not vis:
                         lost += 1
-                        last_seen = q
-                    if not prev_vis and vis:
+                        still_near = True
+                    if last_seen is not None and (not vis or prev_vis is False):
+                        still_near &= math.dist(last_seen, q) <= 10
+                    if prev_vis is False and vis and still_near:
+                        eligible += 1
                         regained += 1
+                    if vis:
+                        last_seen = q
                     if captured is None and d <= 1.5:
                         captured = t - t0
                 prev_vis = vis
@@ -283,17 +357,21 @@ def chase_report(folder, ph, walks, tracks, line_clear):
         if ph["variant"] in ("fu", "fk"):
             r.update(escaped=escaped[0] if escaped else None, escape_ms=escaped[1] if escaped else None, cornered="cornered" in told)
         else:
-            r.update(sight_lost=lost, sight_regained=regained, captured_ms=captured)
+            r.update(sight_lost=lost, sight_lost_within_10m=eligible + int(prev_vis is False and still_near),
+                     sight_regained=regained, captured_ms=captured)
         rows.append(r)
     flights = [r for r in rows if "escaped" in r]
     pursuits = [r for r in rows if "sight_lost" in r]
-    out = {"phase": folder.name, "arena": "n4", "variant": ph.get("variant"), "law": ph.get("law"), "kind": ph.get("kind"), "hour": ph.get("hour"), "walks": len(rows),
+    out = {"phase": folder.name, "arena": "n4", "variant": ph.get("variant"), "law": ph.get("law"), "kind": ph.get("kind"), "hour": ph.get("hour"), "light": ph.get("light"), "walks": len(rows),
            "latency_p50_ms": pct(lat, 0.5), "latency_p95_ms": pct(lat, 0.95), "no_response": no_resp, "stimuli": len(lat) + no_resp, "walks_detail": rows}
+    out.update(chase_stalls(folder, tracks, walks))
     if flights:
         out.update(escape_rate=round(sum(r["escaped"] is not None for r in flights) / len(flights), 3), cornered_rate=round(sum(r["cornered"] for r in flights) / len(flights), 3))
     if pursuits:
-        lost = sum(r["sight_lost"] for r in pursuits)
-        out.update(sight_lost=lost, reacquired=sum(min(r["sight_regained"], r["sight_lost"]) for r in pursuits), captured=sum(r["captured_ms"] is not None for r in pursuits))
+        out.update(sight_lost=sum(r["sight_lost"] for r in pursuits),
+                   sight_lost_within_10m=sum(r["sight_lost_within_10m"] for r in pursuits),
+                   reacquired=sum(r["sight_regained"] for r in pursuits), captured=sum(r["captured_ms"] is not None for r in pursuits))
+    out["valid_chases"] = len(flights) + len(pursuits)
     return out
 
 
@@ -301,7 +379,7 @@ def phase_report(folder):
     folder = Path(folder)
     ph = json.loads((folder / "phase.json").read_text())
     walks = [json.loads(l) for l in (folder / "walks.jsonl").read_text().splitlines() if l.strip()] if (folder / "walks.jsonl").exists() else []
-    tracks = load_bodies(folder / "bodies.jsonl")
+    tracks, ground = load_tracks(folder / "bodies.jsonl")
     tiles_file = Path(ph["tiles_file"]) if ph.get("tiles_file") else None
     W, H = ph.get("W"), ph.get("H")
     tiles = tiles_file.read_bytes() if tiles_file and tiles_file.exists() else b""
@@ -319,10 +397,9 @@ def phase_report(folder):
 
     if ph["arena"] == "n4":
         out = chase_report(folder, ph, walks, tracks, line_clear)
-        g = folder / "guards.json"
-        if g.exists():
-            out["guards"] = json.loads(g.read_text())
-        return out
+        if ground or (folder / "subscribe.log").exists():
+            out["known_ground_writes"] = ground_write_rate(walks, ground)
+        return add_guards(out, folder)
     test = walks
     if ph["arena"] == "n2":
         # The test walks are the last walk of each subject (after the warm-up).
@@ -342,8 +419,9 @@ def phase_report(folder):
         bel = (b or {}).get("belief")
         known_s = bel["time_m"] / pace if pace and bel else None
         ok = w.get("outcome") == "arrived" and true_s is not None and walked <= 3 * true_s
-        r = {"subject": w["subject"], "walk": w["walk"], "outcome": w.get("outcome"), "told": w.get("told"), "arrived_in_3x": ok, "belief_blocked_in_truth": bel.get("blocked_in_truth") if bel else None, "walked_s": round(walked, 1), "pace": round(pace, 2) if pace else None,
-             "ratio_known": round(walked / known_s, 3) if known_s else None, "ratio_true": round(walked / true_s, 3) if true_s else None,
+        completed = w.get("outcome") == "arrived"
+        r = {"subject": w["subject"], "walk": w["walk"], "outcome": w.get("outcome"), "told": w.get("told"), "failure": w.get("failure"), "reachable": w.get("true") is not None, "arrived_in_3x": ok, "belief_blocked_in_truth": bel.get("blocked_in_truth") if bel else None, "walked_s": round(walked, 1), "pace": round(pace, 2) if pace else None,
+             "ratio_known": round(walked / known_s, 3) if completed and known_s else None, "ratio_true": round(walked / true_s, 3) if completed and true_s else None,
              "belief_unseen_tiles": bel.get("unseen_tiles") if bel else None, "prior_cells_in_box": w.get("prior_cells_in_box")}
         if tr:
             ev = stuck_events(tr, t_order, t_end, w["goal"])
@@ -377,8 +455,10 @@ def phase_report(folder):
             r["latency_ms"] = [latency(tr, s) for s in stims]
         rows.append(r)
     arrived = sum(r["arrived_in_3x"] for r in rows)
+    reachable = sum(r["reachable"] for r in rows)
     out = {"phase": folder.name, "arena": ph["arena"], "variant": ph.get("variant"), "law": ph.get("law"), "kind": ph.get("kind"), "walks": len(rows),
-           "arrival_rate": round(arrived / len(rows), 3) if rows else None,
+           "reachable": reachable, "arrived_in_3x": arrived, "arrival_rate": round(arrived / reachable, 3) if reachable else None,
+           "could_not_get_there": sum("could not get there" in (r["failure"] or " ".join(r["told"] or ())) for r in rows),
            "ratio_known_p50": pct([r["ratio_known"] for r in rows], 0.5), "ratio_known_p90": pct([r["ratio_known"] for r in rows], 0.9),
            "ratio_true_p50": pct([r["ratio_true"] for r in rows], 0.5), "ratio_true_p90": pct([r["ratio_true"] for r in rows], 0.9),
            "stuck_per_10min": round(len(stuck) / (walk_min / 10), 2) if walk_min else None, "stuck_longest_s": round(max(stuck), 1) if stuck else 0.0,
@@ -386,6 +466,23 @@ def phase_report(folder):
            "replans_per_walk": round(statistics.mean(replans), 2) if replans else None, "walks_detail": rows}
     if ph["arena"] == "n3":
         out["contacts_under_0_4m"] = sum(r.get("contacts_under_0_4m", 0) for r in rows)
+    if ph["arena"] == "n2":
+        out["gate_a_shut_at_test_start"] = ph.get("gate_a_shut_at_test_start")
+        out["warmup_arrivals"] = [ph.get("warmups_arrived"), ph.get("warmups")]
+        out["gate_a_remembered_open"] = sum(1 in states for states in ph["remembered_a_states_at_order"].values())
+        out["gate_b_remembered_open"] = sum(1 in states for states in ph.get("remembered_b_states_at_order", {}).values())
+        out["first_path_by_gate_a"] = sum(r.get("first_path_by_gate_a") is True for r in rows)
+        out["passed_gate_b"] = sum(r.get("passed_gate_b") is True for r in rows)
+    if ph["arena"] == "n1" and ph["variant"] == "d":
+        goal = ph["goals"][1]
+        out["offset_goal_error_m"] = [
+            round(math.dist(w["end"], goal), 2) for w in test if w["walk"] == 1 and w.get("end")]
+    if ground or (folder / "subscribe.log").exists():
+        out["known_ground_writes"] = ground_write_rate(test, ground)
+    return add_guards(out, folder)
+
+
+def add_guards(out, folder):
     g = folder / "guards.json"
     if g.exists():
         out["guards"] = json.loads(g.read_text())
@@ -396,7 +493,16 @@ def phase_report(folder):
             j = json.loads(txt[txt.index("{"):])
             sp = j.get("spans_ms", {}).get("tick.motion") or {}
             out["tick_motion"] = {k: sp.get(k) for k in ("ms_per_s", "p99", "max", "n")}
-            out["tick_ms"] = {k: (j.get("tick_ms") or {}).get(k) for k in ("p99", "max", "over_16_7ms")}
+            out["tick_ms"] = {k: (j.get("tick_ms") or {}).get(k) for k in (
+                "samples", "p99", "max", "over_16_7ms", "over_16_7ms_without_motion_within_budget")}
+            out["population"] = {"people": j.get("people"), "animals": j.get("animals"), "ticks_per_s": j.get("ticks_per_s")}
+            ticks, samples = j["seconds"] * j["ticks_per_s"], out["tick_ms"]["samples"]
+            if ticks > 0 and samples:
+                # The CLI log tail can cover only part of the profile window. Express motion
+                # time per second of sampled ticks at the clock's measured tick rate.
+                out["tick_ms"]["sample_fraction"] = round(samples / ticks, 3)
+                if sp.get("ms_per_s") is not None and abs(sp["n"] - samples) <= 1:
+                    out["tick_motion"]["sample_ms_per_s"] = round(sp["ms_per_s"] * ticks / samples, 2)
             out["body_writes_per_s"] = (j.get("body_writes") or {}).get("row_updates_per_s")
         except (ValueError, AttributeError):
             out["bench"] = "unreadable"
@@ -424,8 +530,11 @@ def selftest():
     assert len(ev) == 1 and 3000 <= ev[0][1] - ev[0][0] <= 3500 and abs(ev[0][0] - 5000) <= 250, ev
     assert changed((1.4, 0), (1.4 * math.cos(0.3), 1.4 * math.sin(0.3)))
     assert not changed((1.4, 0), (1.3, 0.1))
+    assert not changed((1.4, 0), (2.0, 0))
     assert pace_of(tr, b"", 0, 1.4) == 1.4
     assert pct([1, 2, 3, 4], 0.5) == 2.5
+    writes = ground_write_rate([{"subject": 1, "order_ms": [900, 1000], "end_ms": 6000}], {1: [900, 1000, 5000, 6000]})
+    assert writes == {"writes": 2, "actor_seconds": 5.0, "writes_per_actor_s": 0.4, "max_writes_per_actor_s": 0.4}
     print("nav_report selftest: ok")
 
 

@@ -59,6 +59,8 @@ class World:
 
     def __init__(self, run):
         self.s = scenes.Scene(run, "nav")
+        self.owner = walk_times.owner_token()
+        self.s.token = self.owner
         self.run = run
         w = self.s.rows("SELECT width, height FROM world")[0]
         self.W, self.H = w["width"], w["height"]
@@ -73,7 +75,6 @@ class World:
                     self.tiles[y * self.W + x] = t
         self.tiles_file = self.s.out / "nav-tiles.bin"
         self.tiles_file.write_bytes(bytes(self.tiles))
-        self.owner = walk_times.owner_token()
 
     # ---- ground ----
     def tile(self, x, y):
@@ -111,8 +112,8 @@ class World:
     def now(self):
         return self.s.http_rows("SELECT last_ms FROM clock")[0]["last_ms"]
 
-    def call(self, *a, check=True):
-        return self.s.call(*a, check=check)
+    def call(self, reducer, *args, check=True):
+        return self.s.http_call(reducer, list(args), check=check)
 
     def rows(self, q):
         return self.s.http_rows(q)
@@ -202,12 +203,17 @@ class World:
 class Phase:
     """One phase's recording: a body subscription, the stimulus log, bench alongside."""
 
-    def __init__(self, world, folder, ids, seconds, bench=True):
+    def __init__(self, world, folder, ids, seconds, bench=True, known_ids=()):
         self.w, self.dir = world, Path(folder)
         self.dir.mkdir(parents=True, exist_ok=True)
         self.stim = (self.dir / "stimuli.jsonl").open("a")
         q = "SELECT * FROM body WHERE " + " OR ".join(f"id = {i}" for i in ids) if len(ids) <= 60 else "SELECT * FROM body"
-        self.sub = subprocess.Popen([STDB, "subscribe", "-s", "local", world.s.db, q, "-t", str(int(seconds))], stdout=(self.dir / "bodies.jsonl").open("w"), stderr=subprocess.DEVNULL)
+        queries = [q]
+        if known_ids:
+            where = " OR ".join(f"actor = {i}" for i in known_ids)
+            queries.append("SELECT * FROM known_ground WHERE " + where)
+        self.sub = subprocess.Popen([STDB, "subscribe", "-s", "local", world.s.db, *queries, "-t", str(int(seconds)), "--print-initial-update"],
+                                    stdout=(self.dir / "bodies.jsonl").open("w"), stderr=(self.dir / "subscribe.log").open("w"))
         self.bench = None
         if bench:
             # A fixed window from the phase's start (its busiest walking), left to finish.
@@ -308,17 +314,21 @@ def walks_to(world, phase, subs, legs, law, timeout_x=3.0, extra_s=20.0, run=Fal
         sub.go(pts[0], run)
         t1 = world.now()
         true_s = (opt["true"]["time_m"] / 1.3) if opt.get("true") else None
-        st["rec"] = {"subject": sub.id, "kind": sub.kind, "law": law, "walk": st["k"], "start": [round(here[0], 2), round(here[1], 2)], "goal": [round(goal[0], 2), round(goal[1], 2)],
+        st["rec"] = {"subject": sub.id, "kind": sub.kind, "law": law, "walk": st["k"], "start": [round(here[0], 2), round(here[1], 2)], "goal": [round(goal[0], 2), round(goal[1], 2)], "shut_tiles": shut,
                      "waypoints": [[round(p[0], 2), round(p[1], 2)] for p in pts[:-1]], "order_ms": [t0, t1], "true": opt.get("true"), "belief_file": snapf.name,
                      "prior_cells_in_box": world.cells_in_box(sub.id, box) if box else None, "deadline_s": (timeout_x * true_s + extra_s) if true_s else 240.0}
         phase.mark("order", subject=sub.id, walk=st["k"], to=pts[0], goal=goal, kind=sub.kind)
         if on_order:
             on_order(st)
 
-    for st in state:
-        order(st)
-    while any(st["rec"] for st in state):
-        time.sleep(0.4)
+    pending = iter(state)
+    next_subject = next(pending, None)
+    next_start = time.monotonic()
+    while next_subject is not None or any(st["rec"] for st in state):
+        if next_subject is not None and time.monotonic() >= next_start:
+            order(next_subject)
+            next_subject = next(pending, None)
+            next_start = time.monotonic() + 2
         live = [st for st in state if st["rec"]]
         bodies = world.bodies([st["sub"].id for st in live])
         t = time.time() * 1000
@@ -339,9 +349,9 @@ def walks_to(world, phase, subs, legs, law, timeout_x=3.0, extra_s=20.0, run=Fal
             if int(t / 400) % 5 == 0:
                 for e in world.rows(f"SELECT id, at_ms, kind, text FROM experience WHERE observer = {sub.id}"):
                     if e["kind"] == "act" and e["at_ms"] >= rec["order_ms"][0] and "did not work out" in e["text"] and "goto" in e["text"]:
-                        failed = e["text"]
+                        failed = e
             if failed and math.dist(here, pts[-1]) > ARRIVE_M:
-                rec.update(outcome="failed", end_ms=world.now(), end=[round(here[0], 2), round(here[1], 2)], left_m=round(math.dist(here, pts[-1]), 2))
+                rec.update(outcome="failed", end_ms=failed["at_ms"], failure=failed["text"], end=[round(here[0], 2), round(here[1], 2)], left_m=round(math.dist(here, pts[-1]), 2))
             elif math.dist(here, target) <= ARRIVE_M:
                 if st["wp"] + 1 < len(pts):
                     st["wp"] += 1
@@ -359,6 +369,7 @@ def walks_to(world, phase, subs, legs, law, timeout_x=3.0, extra_s=20.0, run=Fal
                 record(rec)
             out.append(rec)
             order(st)
+        time.sleep(0.4)
     with (phase.dir / "walks.jsonl").open("a") as f:
         for r in out:
             f.write(json.dumps(r) + "\n")
@@ -457,7 +468,7 @@ def n1(world, out, variant, law, kind, reps):
         world.call("place_at", sub.id, p[0], p[1])
     time.sleep(3.0)
     folder = Path(out) / f"n1-{variant}-{law}-{kind}"
-    phase = Phase(world, folder, [s.id for s in subs], 1500)
+    phase = Phase(world, folder, [s.id for s in subs], 1500, known_ids=[s.id for s in subs])
     shut = world.shut_tiles()
     legs = []
     for p in starts:
@@ -514,12 +525,13 @@ def n2(world, out, variant, law, kind, reps):
         world.call("place_at", sub.id, p[0], p[1])
     time.sleep(3.0)
     folder = Path(out) / f"n2-{variant}-{law}-{kind}"
-    phase = Phase(world, folder, [s.id for s in subs] + [keeper], 1800)
+    phase = Phase(world, folder, [s.id for s in subs] + [keeper], 1800, known_ids=[s.id for s in subs])
     box = (centre[0] - radius - 80, centre[1] - radius - 80, centre[0] + radius + 80, centre[1] + radius + 80)
-    # Warm-up: start → goal → start (through gate A); with the alternative known, also out by B.
-    warm = [[[goal], [p]] + ([[b_out], [goal], [p]] if variant == "a" else []) for p in starts]
+    # Warm-up: start → goal → start (through gate A); lead variant A through the second gate too.
+    alternative = [[b["centre"], b_out], [b["centre"], goal]] if variant == "a" else []
+    warm = [[[goal], [p]] + alternative for p in starts]
     phase.mark("warmup")
-    walks_to(world, phase, subs, warm, law, box=box)
+    warmups = walks_to(world, phase, subs, warm, law, box=box)
     # Out of sight of gate A: 75 m out along its road.
     fars = spread(world, far, reps, across)
     for sub, p in zip(subs, fars):
@@ -528,10 +540,11 @@ def n2(world, out, variant, law, kind, reps):
     ok = set_gate(world, keeper, a, False)
     phase.mark("gate shut", gate=a["ids"], tiles=a["tiles"], all_shut=ok)
     world.call("place_at", keeper, goal[0], goal[1])
-    remembered_open = {}
+    remembered_open, remembered_alternative = {}, {}
     for sub in subs:
         r = world.rows(f"SELECT * FROM remembered WHERE observer = {sub.id}")
         remembered_open[sub.id] = sorted(x["state"] for x in r if x["target"] in a["ids"])
+        remembered_alternative[sub.id] = sorted(x["state"] for x in r if x["target"] in b["ids"])
 
     def reopen(st):
         if variant == "c" and st["k"] == 0 and not getattr(reopen, "done", False):
@@ -539,7 +552,9 @@ def n2(world, out, variant, law, kind, reps):
             threading.Thread(target=lambda: (time.sleep(4.0), phase.mark("gate reopened", ok=set_gate(world, keeper, a, True), gate=a["ids"]))).start()
 
     (folder / "phase.json").write_text(json.dumps({"arena": "n2", "variant": variant, "law": law, "kind": kind, "gate_a": a, "gate_b": b, "start": start, "far": far, "goal": goal,
-                                                   "keeper": keeper, "subjects": [s.id for s in subs], "remembered_a_states_at_order": remembered_open, "box": box,
+                                                   "keeper": keeper, "subjects": [s.id for s in subs], "remembered_a_states_at_order": remembered_open,
+                                                   "remembered_b_states_at_order": remembered_alternative, "gate_a_shut_at_test_start": ok,
+                                                   "warmups_arrived": sum(w["outcome"] == "arrived" for w in warmups), "warmups": len(warmups), "box": box,
                                                    **world.meta()}, indent=1, default=list))
     phase.mark("test walks")
     recs = walks_to(world, phase, subs, [[[goal]] for _ in subs], law, box=box, on_order=reopen)
@@ -553,12 +568,13 @@ def guards(world, folder, ids):
     rows = world.rows("SELECT * FROM known_ground")
     mine = [r for r in rows if r["actor"] in ids]
 
-    def size(r):
-        c = r["cells"]
-        return (len(c) - 2) // 2 if isinstance(c, str) else len(c)
+    def size(value):
+        return len(value.removeprefix("0x")) // 2 if isinstance(value, str) else len(value)
 
-    g = {"known_ground_rows": len(rows), "known_ground_rows_subjects": len(mine), "subject_cells_bytes": sum(size(r) for r in mine) * 3,
+    g = {"known_ground_rows": len(rows), "known_ground_rows_subjects": len(mine),
          "ground_edits": len(world.rows("SELECT id FROM ground_edit"))}
+    g["known_ground_payload_bytes"] = sum(size(r["cells"]) + size(r["seen_at"]) for r in rows)
+    g["subject_cells_bytes"] = sum(size(r["cells"]) + size(r["seen_at"]) for r in mine)
     (Path(folder) / "guards.json").write_text(json.dumps(g, indent=1))
 
 
@@ -579,8 +595,30 @@ def goto_node(at, run=False):
     return {"do": {"skill": "goto", "target": {"at": [round(at[0], 2), round(at[1], 2)]}, "run": run}}
 
 
+def person_sight(hour):
+    # The shipped senses law for people without torches.
+    return 11.0 if 6.0 <= hour < 20.0 else 6.0
+
+
+def wait_for_light(world, light):
+    """Start a chase with at least 70 real seconds before the next light change."""
+    if not light:
+        return
+    logged = False
+    while True:
+        hour, day_ms = scenes.world_hour(world.s)
+        day = person_sight(hour) == 11
+        change = 20 if day else (30 if hour >= 20 else 6)
+        if light == ("day" if day else "night") and (change - hour) * day_ms / 24 >= 70_000:
+            return
+        if not logged:
+            log(f"  waiting for {light}, world hour {hour:.2f}")
+            logged = True
+        time.sleep(15)
+
+
 def n3(world, out, variant, law, kind, reps):
-    """N3 moving crowd: the subject crosses a square through two opposing streams at a run."""
+    """N3 moving crowd: the subject crosses two opposing streams at adult walk pace."""
     n = 200 if variant == "w200" else 50
     centre, radius = town(world, 1)
     sq = open_square(world, centre, 32, radius) or open_square(world, centre, 32, 600)
@@ -601,9 +639,9 @@ def n3(world, out, variant, law, kind, reps):
         if lane == 1:
             a, b = b, a
         if variant == "stop" and lane == 1:
-            node = {"seq": [goto_node((sq[0] + rng.uniform(-6, 6), y), True), {"wait": 3600}]}
+            node = {"seq": [goto_node((sq[0] + rng.uniform(-6, 6), y)), {"wait": 3600}]}
         else:
-            node = {"seq": [goto_node(b, True), goto_node(a, True)] * 30}
+            node = {"seq": [goto_node(b), goto_node(a)] * 30}
         world.call("set_behavior", wid, json.dumps(node))
     # Idle walkers past n stay out of the square.
     for wid in world.crowd[n:]:
@@ -617,7 +655,7 @@ def n3(world, out, variant, law, kind, reps):
         world.call("place_at", sub.id, p[0], p[1])
     time.sleep(6.0)
     folder = Path(out) / f"n3-{variant}-{law}-{kind}"
-    phase = Phase(world, folder, [s.id for s in subs] + walkers, 900)
+    phase = Phase(world, folder, [s.id for s in subs] + walkers, 900, known_ids=[s.id for s in subs])
     (folder / "phase.json").write_text(json.dumps({"arena": "n3", "variant": variant, "law": law, "kind": kind, "square": sq, "half": half, "walkers": walkers, "lanes": lanes,
                                                    "subjects": [s.id for s in subs], "starts": starts, "goals": goals, **world.meta()}, indent=1))
     recs = []
@@ -666,8 +704,8 @@ def n4(world, out, variant, law, kind, reps):
     world.law("nav_belief", law == "on")
     subs = subjects(world, kind, reps, f"n4{variant}{law}")
     fixtures = world.people(reps)
-    hour = scenes.world_hour(world.s)[0]
-    folder = Path(out) / f"n4-{variant}-{law}-{kind}"
+    suffix = f"-{world.light}" if world.light else ""
+    folder = Path(out) / f"n4-{variant}-{law}-{kind}{suffix}"
     starts = []
     for k, (sub, fx) in enumerate(zip(subs, fixtures)):
         # Each pair along the wall, 40 m apart, so pairs do not meet.
@@ -681,27 +719,28 @@ def n4(world, out, variant, law, kind, reps):
         tmp = Phase(world, folder / "warmup", [s.id for s in subs], 600, bench=False)
         walks_to(world, tmp, subs, warm, law)
         tmp.close()
-    phase = Phase(world, folder, [s.id for s in subs] + fixtures, 600)
-    meta = {"arena": "n4", "variant": variant, "law": law, "kind": kind, "spot": spot, "outward": u, "wall": wall, "hour": round(hour, 2), "subjects": [s.id for s in subs],
-            "fixtures": fixtures, "starts": starts, "flee_clear": world.law_value("flee_clear"), **world.meta()}
+    wait_for_light(world, world.light)
+    phase = Phase(world, folder, [s.id for s in subs] + fixtures, 600, known_ids=[s.id for s in subs])
+    hour = scenes.world_hour(world.s)[0]
+    sight = person_sight(hour)
+    meta = {"arena": "n4", "variant": variant, "law": law, "kind": kind, "spot": spot, "outward": u, "wall": wall, "hour": round(hour, 2), "light": "day" if sight == 11.0 else "night", "subjects": [s.id for s in subs],
+            "fixtures": fixtures, "starts": starts, "sight_m": sight, "flee_clear": world.law_value("flee_clear"), **world.meta()}
     recs = []
     for sub, fx, p in zip(subs, fixtures, starts):
         if variant in ("fu", "fk"):
             c = world.nearest_walkable((p[0] + tang[0] * 12, p[1] + tang[1] * 12))
             world.call("place_at", fx, c[0], c[1])
         else:
-            c = world.nearest_walkable((p[0] + tang[0] * 8, p[1] + tang[1] * 8))
+            gap = min(8, sight - 1.5)
+            c = world.nearest_walkable((p[0] + tang[0] * gap, p[1] + tang[1] * gap))
             world.call("place_at", fx, c[0], c[1])
     time.sleep(2.0)
     t0 = world.now()
+    starts_ms = {}
     for sub, fx, p in zip(subs, fixtures, starts):
         if variant in ("fu", "fk"):
-            world.call("set_behavior", fx, json.dumps({"seq": [{"do": {"skill": "close_in", "target": {"id": sub.id}, "distance": 1, "run": True}}] * 20}))
-            if sub.kind == "click":
-                # A player flees by clicking away from the chaser, 30 m off, each second.
-                pass
-            else:
-                world.call("set_behavior", sub.id, json.dumps({"seq": [{"do": {"skill": "flee", "target": {"id": fx}}}, {"wait": 600}]}))
+            # Close the initial 12 m gap until the subject can see its pursuer.
+            world.call("set_behavior", fx, json.dumps(goto_node(p, True)))
         else:
             # The fixture walks round the town wall's corner away from the subject (out of its
             # sight past the wall), then on; the subject pursues it.
@@ -709,36 +748,54 @@ def n4(world, out, variant, law, kind, reps):
             route = [q for q in route if q]
             world.call("set_behavior", fx, json.dumps({"seq": [goto_node(q, False) for q in route] + [{"wait": 600}]}))
             if sub.kind == "body":
-                world.call("set_behavior", sub.id, json.dumps({"seq": [{"do": {"skill": "close_in", "target": {"id": fx}, "distance": 1.2, "run": True}}, {"wait": 600}]}))
+                chase = {"do": {"skill": "close_in", "target": {"id": fx}, "distance": 1.2, "run": True}}
+                world.call("set_behavior", sub.id, json.dumps({"seq": [chase, {"wait": 600}]}))
+            starts_ms[sub.id] = t0
     phase.mark("start", variant=variant)
     end = time.monotonic() + 60
     clicks = {s.id: 0 for s in subs if s.kind == "click"}
+    id_filter = " OR ".join(f"id = {s.id}" for s in subs)
+    intents = []
     while time.monotonic() < end:
         bodies = world.bodies([s.id for s in subs] + fixtures)
+        steering = world.rows(f"SELECT id, goal, target, gx, gy, keep, unseen_ms FROM steer WHERE {id_filter}")
+        intents.append({"at_ms": world.now(), "steer": steering})
         for sub, fx in zip(subs, fixtures):
             sub.keepalive()
-            if sub.kind == "click" and variant in ("fu", "fk") and time.monotonic() - clicks.get(sub.id, 0) > 1.0 and sub.id in bodies and fx in bodies:
+            if variant in ("fu", "fk") and sub.id not in starts_ms and sub.id in bodies and fx in bodies:
                 me, him = world.pos(bodies[sub.id]), world.pos(bodies[fx])
-                d = math.dist(me, him) or 1.0
-                away = world.nearest_walkable((me[0] + (me[0] - him[0]) / d * 30, me[1] + (me[1] - him[1]) / d * 30), within=6)
-                if away:
+                if math.dist(me, him) <= sight and world.line_clear(me, him):
+                    starts_ms[sub.id] = world.now()
+                    chase = {"do": {"skill": "close_in", "target": {"id": sub.id}, "distance": 1, "run": True}}
+                    world.call("set_behavior", fx, json.dumps(chase))
+                    if sub.kind == "body":
+                        flee = {"do": {"skill": "flee", "target": {"id": fx}}}
+                        world.call("set_behavior", sub.id, json.dumps({"seq": [flee, {"wait": 600}]}))
+                    phase.mark("chase seen", subject=sub.id, fixture=fx)
+            if sub.kind == "click" and variant in ("fu", "fk") and sub.id in starts_ms and time.monotonic() - clicks.get(sub.id, 0) > 1.0 and sub.id in bodies and fx in bodies:
+                me, him = world.pos(bodies[sub.id]), world.pos(bodies[fx])
+                d = math.dist(me, him)
+                if 0 < d <= sight and world.line_clear(me, him):
+                    away = (me[0] + (me[0] - him[0]) / d * 30, me[1] + (me[1] - him[1]) / d * 30)
                     sub.go(away, True)
-                    clicks[sub.id] = time.monotonic()
                     phase.mark("click", subject=sub.id, to=away)
+                clicks[sub.id] = time.monotonic()
             elif sub.kind == "click" and variant in ("pu", "pk") and time.monotonic() - clicks.get(sub.id, 0) > 1.0 and sub.id in bodies and fx in bodies:
                 # A player pursues by clicking where it sees the fixture, else where it last saw it
-                # (a clear line within the day's 48 m or the night's 14 m sight).
+                # (a clear line within the shipped senses range).
                 me, him = world.pos(bodies[sub.id]), world.pos(bodies[fx])
-                sight = 48.0 if 6.0 <= scenes.world_hour(world.s)[0] < 20.0 else 14.0
                 if math.dist(me, him) <= sight and world.line_clear(me, him):
                     sub.go(him, True)
                     phase.mark("click", subject=sub.id, to=him, seen=True)
                 clicks[sub.id] = time.monotonic()
         time.sleep(0.25)
+    with (folder / "intents.jsonl").open("w") as stream:
+        for sample in intents:
+            stream.write(json.dumps(sample) + "\n")
     for sub, fx in zip(subs, fixtures):
         told = world.rows(f"SELECT id, at_ms, kind, text FROM experience WHERE observer = {sub.id}")
-        rec = {"subject": sub.id, "fixture": fx, "kind": sub.kind, "law": law, "walk": 0, "start_ms": t0, "end_ms": world.now(),
-               "told": [e["text"] for e in sorted(told, key=lambda e: e["id"]) if e["at_ms"] >= t0 and e["kind"] == "act"][-6:]}
+        rec = {"subject": sub.id, "fixture": fx, "kind": sub.kind, "law": law, "walk": 0, "start_ms": starts_ms.get(sub.id), "end_ms": world.now(),
+               "told": [e["text"] for e in sorted(told, key=lambda e: e["id"]) if e["at_ms"] >= t0 and e["kind"] in ("act", "own")]}
         recs.append(rec)
         world.call("set_behavior", fx, json.dumps({"wait": 3600}))
         if sub.kind == "body":
@@ -763,10 +820,14 @@ def main():
     ap.add_argument("--law", action="append", choices=["off", "on"])
     ap.add_argument("--subject", action="append", choices=["body", "click"])
     ap.add_argument("--reps", type=int, default=5)
+    ap.add_argument("--light", choices=["day", "night"], help="N4 only: wait for this light before the chase")
     ap.add_argument("--out")
     a = ap.parse_args()
+    if a.light and a.arena != "n4":
+        ap.error("--light is only available for N4")
     fn, variants = ARENAS[a.arena]
     world = World(a.run)
+    world.light = a.light
     world.road = float(world.law_value("road_speed") or 1.4)
     world.unknown = float(world.law_value("unknown_cost") or 1.5)
     out = Path(a.out or ROOT / ".local/living/nav" / a.run)
