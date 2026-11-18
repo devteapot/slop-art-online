@@ -485,9 +485,23 @@ def n1(world, out, variant, law, kind, reps):
 
 def keeper_act(world, keeper, gid, tile, skill):
     p = world.nearest_walkable((tile[0] + 0.5, tile[1] + 0.5))
-    world.call("place_at", keeper, p[0], p[1])
+    placement = world.call("place_at", keeper, p[0], p[1], check=False)
+    if placement.returncode != 0:
+        if placement.returncode != 504:
+            raise RuntimeError(f"placing gate keeper #{keeper} failed: {placement.stdout}")
+        # A durability timeout can still commit. Confirm the position before giving an order.
+        end = time.monotonic() + 5
+        while time.monotonic() < end:
+            body = world.bodies([keeper]).get(keeper)
+            if body and math.dist(world.pos(body), p) < 0.1:
+                break
+            time.sleep(0.25)
+        else:
+            raise RuntimeError(f"gate keeper #{keeper} placement could not be confirmed")
     time.sleep(0.6)
-    world.call("mind_act", keeper, [json.dumps({"do": skill, "target": {"id": gid}})], "nav-arena")
+    result = world.call("mind_act", keeper, [json.dumps({"do": skill, "target": {"id": gid}})], "nav-arena", check=False)
+    if result.returncode not in (0, 504):
+        raise RuntimeError(f"{skill} gate #{gid} failed: {result.stdout}")
 
 
 def set_gate(world, keeper, group, open_):
@@ -566,7 +580,6 @@ def n2(world, out, variant, law, kind, reps):
     phase.mark("test walks")
     recs = walks_to(world, phase, subs, [[[goal]] for _ in subs], law, box=box)
     phase.close()
-    set_gate(world, keeper, a, True)
     guards(world, folder, [s.id for s in subs])
     return recs
 
