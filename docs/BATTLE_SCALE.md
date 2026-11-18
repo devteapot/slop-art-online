@@ -765,3 +765,28 @@ The authority stores recognition in block ranges and emits one counted line for 
 In the matched replay, scene construction rose from 34.31 to 575.37 ms/s and cadence fell. A short unprofiled sample ran at 9.0 ticks/s. The fake-model fight tapered off before its sample.
 
 The eight-hour projection at 5,760–6,200 bodies gives about 200–400 field recognition rows for 200 fighters and 1.7–1.8 MB of range-table pages under linear payload growth. Maintaining the matched request rate under a linear per-body workload would put scene construction alone at 1,140–1,230 ms/s. See [Seen remains](SEEN_REMAINS.md#unbounded-scene-prototype-measurement) for window lengths, sizing and workload assumptions.
+
+## Bounded scene replay against C2
+
+Both arms ran for 30 minutes with no minds. They used the same replay flags, a separate acquisition of the Spark battle lock, and full module logs to recover the profile spans. The archived unbounded prototype is above.
+
+| Nearest sample to minute 27 | C2 only | Bounded R1 + R2 |
+| --- | ---: | ---: |
+| Sample start, minutes | 26.6 | 27.5 |
+| Remains at site | 2,733 | 2,749 |
+| One-minute host load, start–end | 4.6–4.7 | 23.2–22.1 |
+| Noticing ms/s | 204.62 | 167.47 |
+| Structure noticing ms/s | 178.73 | 126.91 |
+| Scene construction ms/s | 38.81 | 60.87 |
+| Familiarity rows | 434,543 | 55,924 |
+| Seen-structure rows | — | 683 |
+| Familiarity pages / index keys, MB | 21.409 / 10.456 | 3.077 / 1.335 |
+| Seen-structure pages / index keys, MB | — | 1.056 / 0.014 |
+| Sight experiences/s | 4,554.6 | 270.4 |
+| All experiences/s | 5,051.3 | 744.2 |
+| Tick work ms/s | 683.08 | 773.31 |
+| Ticks/s | 31.8 | 22.3 |
+
+The fixed run kept the noticing and sight-event gains and missed both tick criteria in the selected windows. The last windows showed 52.0 ticks/s and 535.62 ms/s for the fixed arm, against 47.9 ticks/s and 600.66 ms/s for C2. The host loads differed across the runs, including at the comparison point.
+
+The eight-hour scenario levels off at about 5,620–5,880 bodies and projects 2.2 MB of seen-range data pages with linear payload growth. The bounded scene serializes up to ten entries at either density. A linear cost sensitivity at fixed request rate projects about 125 ms/s for the whole scene span under the fixed arm's sampled conditions. See [Seen remains](SEEN_REMAINS.md#bounded-scene-replay-against-c2) for workload, timing methodology and projection assumptions.

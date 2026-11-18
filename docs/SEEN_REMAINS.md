@@ -155,3 +155,36 @@ At fixed block count and linear payload growth, the measured 0.842 MB of range-t
 Core field 15/15, C2 module upgrade 6/6, mixed remains and tablet 6/6, mind prompt 5/5, player 3/3 and SDK privacy 3/3. The final core check logged 210 comparisons and 4,117 C2 checks with zero differences. The upgrade kept a live subscriber and migrated three legacy IDs. Cargo passed 41 authority, 329 rules, 124 mind and 128 game tests. `just living-check` and the fuel gate passed. Bindings were regenerated with the trial container's 2.14.1 CLI.
 
 The first fake-model attempt was paused by the orphan guard when the build-slot wrapper exited. The completed run applied the slot around Cargo so the guard followed the long-lived driver. The aborted attempt and the full profiling windows are preserved in the evidence. The fake-model benchmark predates the final diagnostic-only correction and ran with the diagnostic off.
+
+## Bounded scene replay against C2
+
+The bounded fix at `cd59fe4c` and C2 at `1cd32ab2` each ran for 30 minutes with no mind process on the same 2.14.1 trial server. Both replays used the island seed, 200 fighter slots, 16 walkers, 310 seeded characters, refills from 30 m at a minimum 0.25 s gap, and 30 s detailed profile windows. Both used the same row and table metrics sampler. Each acquired `battle.lock` separately. The fixed run acquired the lock at 23:14 CET on November 18 and C2 at 00:06 CET on November 19. Both scratch worlds were paused, archived and deleted by 00:40 CET. There was no game observer.
+
+| Nearest sample to minute 27 | C2 only | Bounded R1 + R2 |
+| --- | ---: | ---: |
+| Sample start, minutes | 26.6 | 27.5 |
+| Remains within 30 m of site | 2,733 | 2,749 |
+| Fighters assigned / refilling | 173 / 24 | 154 / 44 |
+| Live characters in world | 493 | 469 |
+| One-minute host load, start–end | 4.6–4.7 | 23.2–22.1 |
+| `brain.noticed` ms/s | 204.62 | 167.47 |
+| `noticed.structures` ms/s | 178.73 | 126.91 |
+| `perceive.scene_json` ms/s | 38.81 | 60.87 |
+| `familiar` rows | 434,543 | 55,924 |
+| `seen_structures` rows | — | 683 |
+| `familiar` pages / index keys, MB | 21.409 / 10.456 | 3.077 / 1.335 |
+| `seen_structures` pages / index keys, MB | — | 1.056 / 0.014 |
+| `percept:saw` /s | 4,554.6 | 270.4 |
+| All experiences /s | 5,051.3 | 744.2 |
+| Tick work ms/s | 683.08 | 773.31 |
+| Ticks/s | 31.8 | 22.3 |
+
+The saved sample closest to minute 27 supplies counts, table gauges and cadence. Complete module logs supply timings and sight rates, using the diagnostic intervals between the first and last reports. The C2 and fixed runs refilled at 1.62/s and 1.55/s from around minute 5 to the selected window. Host load across sampled windows ranged from 3.9 to 6.3 for C2 and from 5.5 to 29.2 for the fixed arm.
+
+The fixed arm cut noticing work by 18% and sight events by 94%. It missed both tick acceptance criteria in the selected samples. The host loads differed substantially. In the last recorded windows at minute 29.6 for C2 and 29.5 for the fixed arm, the fixed run reached 52.0 ticks/s at 535.62 ms/s of tick work with load 11.1–10.5. C2 reached 47.9 ticks/s at 600.66 ms/s with load 4.1–5.2. These are neighboring observations. The strict minute-27 result remains a miss, and this pair does not isolate the effect on tick throughput from host load.
+
+### Updated eight-hour projection
+
+At the measured site accrual rates of 1.63 bodies/s for C2 and 1.56/s for bounded R1/R2, an hour of retention gives roughly 5,880 and 5,620 simultaneous bodies. For 200 fighters at one or two blocks each, the bounded path would use about 200–400 field recognition rows, with separate rows for exploration. At fixed block count and linear range payload growth, 1.056 MB of range-table pages projects to about 2.2 MB. With linear per-body growth across the measured C2 table, 434,543 rows and 21.409 MB of data pages project to roughly 935,000 rows and 46 MB. This storage scenario holds observer load fixed and ignores the effects of C2 pruning and range fragmentation.
+
+The bounded scene continues to serialize up to ten entries. The candidate pass still reads and counts visible bodies. If the full scene span scaled linearly at the fixed arm's sampled request rate and host conditions, 60.87 ms/s at 2,749 bodies would become about 125 ms/s at 5,620. The same sensitivity calculation for structure noticing gives about 260 ms/s. This scales fixed overhead along with body-dependent work and is a scenario, not an eight-hour cadence estimate.
