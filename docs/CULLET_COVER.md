@@ -21,9 +21,11 @@ These are local placements in the Moss, the Hanger and the disused plots documen
 
 Run `living/tools/blender/gen_cullet.sh` to install the meshes and their entries in `fixtures.json`. After that, `--only brush` rebuilds just the eight GLBs. The [fixture generator](../living/tools/cullet_brush.py) reads each polygon from `cover.brush` and uses its bounding-box centre as the fixture anchor. The [Cullet kit](../living/tools/blender/cullet.py) fits the mesh to elevations from the native land dump. Across the western gorse the ground rises by about two metres, so each crown needs its own ground heights.
 
-A deterministic set of centres partitions each polygon into convex cells. Rounded crowns cover the authored fraction of each cell in plan view, and their highest shoots reach the authored height above local ground. Hedge crowns retain their full length along the field margin and use the fill fraction across their width. The gorse carries small ochre flowers, bracken has paired leaflets, and the Hanger and field thickets use the kit's leaf surface and wind-leaning crowns. Each patch uses one mesh primitive with the existing vertex-colour material. This keeps the fixture and its terrain-fitted foliage together in the client's existing placement path.
+The broad patches use a continuous noise field sampled on a jittered triangle grid. The kit clips the grid to the authored polygon, then chooses the contour level that gives the specified area of foliage in plan view. The contour produces irregular clumps and gaps. Their crowns rise to the marked height, with ochre flower tips on the gorse and narrower, grass-tinted blades on the bracken.
 
-The eight patches add 34,282 triangles to 515,212 across the other 469 models (+6.65%), eight placed instances and zero texture bytes. The full kit has 477 models and 549,494 triangles. These are asset counts. Frame times and runtime concealment require separate measurements.
+Each hedge has a single continuous body. Cross-sections trace the margin, taper at its ends and vary in width. The generator scales their widths together to give the exact fill. The ridge undulates above the marked 1.80 m, with the highest leaves at 1.92 m. Connected vertices carry the shading around the shoulders. The sides carry individual leaves over a darker base. All eight meshes use the existing leaf surface and vertex colours.
+
+The brush totals 15,074 triangles. The initial 8,564-triangle pass and the 34,282-triangle first committed version used separate tuft bodies. The other 469 models total 515,212 triangles, making 530,286 across the full kit. Brush adds eight placed instances, one primitive per patch, and zero texture bytes. Frame times and runtime concealment require separate measurements.
 
 ## Quarry
 

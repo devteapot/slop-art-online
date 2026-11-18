@@ -23,86 +23,111 @@ def fixtures(plan):
         )
 
 
-def clip(poly, nx, ny, limit):
-    """Intersect a convex polygon with one half plane."""
-    out = []
+def area(poly):
+    return (
+        abs(sum(a[0] * b[1] - a[1] * b[0] for a, b in zip(poly, poly[1:] + poly[:1])))
+        / 2
+    )
+
+
+def clipped(poly, distance):
+    """Clip vertices (x, y, field value) against one linear half-plane."""
+    result = []
     for a, b in zip(poly[-1:] + poly[:-1], poly):
-        da = a[0] * nx + a[1] * ny - limit
-        db = b[0] * nx + b[1] * ny - limit
+        da, db = distance(a), distance(b)
         if da * db < 0:
             t = da / (da - db)
-            out.append((a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1])))
-        if db <= 0:
-            out.append(b)
-    return out
+            result.append(tuple(u + t * (v - u) for u, v in zip(a, b)))
+        if db >= 0:
+            result.append(b)
+    return result
 
 
-def crowns(patch, rng):
-    """Partition the authored convex area into tuft territories. Scaling their two
-    axes by sqrt(fill) preserves the requested area share even at clipped edges."""
+def thicket(patch, rng, field):
+    """Contour a continuous field across the patch. Solve for the contour
+    level whose projected triangle area gives the authored fill."""
     poly = patch["area"]
     xs, ys = zip(*poly)
     w, d = patch["size"]
-    hedge = patch["id"].endswith("_hedge")
-    nx, ny = (
-        (1, math.ceil(d / 0.8)) if hedge else (math.ceil(w / 1.8), math.ceil(d / 1.8))
-    )
-    centres = [
-        (
-            min(xs) + (i + rng.uniform(0.22, 0.78)) * w / nx
-            if not hedge
-            else patch["at"][0],
-            min(ys) + (j + rng.uniform(0.22, 0.78)) * d / ny,
-        )
-        for j in range(ny)
-        for i in range(nx)
-    ]
-    # Seed crowns on the patch itself. An outside centre can claim a long,
-    # millimetre-wide sliver inside a sloping edge, too thin for a leaf spray.
-    inside = [
-        (x, y)
-        for x, y in centres
-        if all(
-            (b[0] - a[0]) * (y - a[1]) >= (b[1] - a[1]) * (x - a[0])
-            for a, b in zip(poly, poly[1:] + poly[:1])
-        )
-    ]
-    centres = inside or [(sum(xs) / len(xs), sum(ys) / len(ys))]
-    for x, y in centres:
-        cell = poly
-        for u, v in centres:
-            if (x, y) != (u, v):
-                cell = clip(
-                    cell, u - x, v - y, ((u - x) * (u + x) + (v - y) * (v + y)) / 2
-                )
-                if not cell:
-                    break
-        if len(cell) < 3:
-            continue
-        cx, cy = (sum(q[i] for q in cell) / len(cell) for i in range(2))
-        sx, sy = patch["fill"], 1
-        if not hedge:
-            # Round off the corners. The area ratio compensates for the
-            # removed tips and keeps the authored projected cover exactly.
-            def area(points):
-                return (
-                    abs(
-                        sum(
-                            a[0] * b[1] - a[1] * b[0]
-                            for a, b in zip(points, points[1:] + points[:1])
-                        )
+    spacing = 0.88 if w * d > 25 else 0.35
+    nx, ny = math.ceil(w / spacing), math.ceil(d / spacing)
+    grid = []
+    for j in range(ny + 1):
+        row = []
+        for i in range(nx + 1):
+            x = min(xs) + (i + (rng.uniform(-0.25, 0.25) if 0 < i < nx else 0)) * w / nx
+            y = min(ys) + (j + (rng.uniform(-0.25, 0.25) if 0 < j < ny else 0)) * d / ny
+            edge = min(
+                ((b[0] - a[0]) * (y - a[1]) - (b[1] - a[1]) * (x - a[0]))
+                / math.dist(a, b)
+                for a, b in zip(poly, poly[1:] + poly[:1])
+            )
+            row.append((x, y, field(x, y) + min(0, edge / spacing - 0.95) * 0.7))
+        grid.append(row)
+    pieces = []
+    for j in range(ny):
+        for i in range(nx):
+            quad = [grid[j][i], grid[j][i + 1], grid[j + 1][i + 1], grid[j + 1][i]]
+            if rng.random() < 0.5:
+                quad = quad[1:] + quad[:1]
+            for k in (1, 2):
+                face = [quad[0], quad[k], quad[k + 1]]
+                for a, b in zip(poly, poly[1:] + poly[:1]):
+                    face = clipped(
+                        face,
+                        lambda q: (
+                            (b[0] - a[0]) * (q[1] - a[1])
+                            - (b[1] - a[1]) * (q[0] - a[0])
+                        ),
                     )
-                    / 2
-                )
+                if len(face) >= 3 and area(face) > 1e-8:
+                    pieces.append(face)
+    target = area(poly) * patch["fill"]
+    low, high = (
+        min(q[2] for f in pieces for q in f),
+        max(q[2] for f in pieces for q in f),
+    )
+    peak = high
+    for _ in range(24):
+        level = (low + high) / 2
+        regions = [clipped(f, lambda q: q[2] - level) for f in pieces]
+        if sum(map(area, regions)) > target:
+            low = level
+        else:
+            high = level
+    return [f for f in regions if len(f) >= 3 and area(f) > 1e-8], level, peak
 
-            rounded = [
-                (ax + (bx - ax) * t, ay + (by - ay) * t)
-                for (ax, ay), (bx, by) in zip(cell, cell[1:] + cell[:1])
-                for t in (0.2, 0.8)
-            ]
-            sx = sy = math.sqrt(patch["fill"] * area(cell) / area(rounded))
-            cell = rounded
-        yield (cx, cy), [(cx + (u - cx) * sx, cy + (v - cy) * sy) for u, v in cell]
+
+def hedge_sections(patch, rng):
+    """Cross sections through the field margin, with a width profile whose
+    trapezoidal area is exactly the specified fraction of the polygon."""
+    poly = patch["area"]
+    ys = sorted({y for _, y in poly})
+    stations = [ys[0]]
+    for a, b in zip(ys, ys[1:]):
+        count = math.ceil((b - a) / 0.20)
+        stations.extend(a + (b - a) * i / count for i in range(1, count + 1))
+    sections = []
+    for y in stations:
+        xs = []
+        for (ax, ay), (bx, by) in zip(poly, poly[1:] + poly[:1]):
+            if ay == by == y:
+                xs.extend((ax, bx))
+            elif ay != by and min(ay, by) <= y <= max(ay, by):
+                xs.append(ax + (bx - ax) * (y - ay) / (by - ay))
+        width = max(xs) - min(xs)
+        t = (y - ys[0]) / (ys[-1] - ys[0])
+        fullness = 0.92 + 0.045 * math.sin(11 * t) + rng.uniform(-0.035, 0.035)
+        fullness *= 0.52 + 0.48 * min(1, 8 * t, 8 * (1 - t))
+        sections.append((y, min(xs), width, width * fullness))
+    projected = sum(
+        (b[0] - a[0]) * (a[3] + b[3]) / 2 for a, b in zip(sections, sections[1:])
+    )
+    scale = area(poly) * patch["fill"] / projected
+    for y, left, width, rough in sections:
+        span = rough * scale
+        start = left + (width - span) * rng.uniform(0.2, 0.8)
+        yield y, start, start + span
 
 
 def terrain_sampler(plan, height_path=None):
