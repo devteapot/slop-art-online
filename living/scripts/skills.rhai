@@ -178,6 +178,8 @@ fn laws() {
         // is told at full speed, and only its facing (head and chest: what it sees by, where a
         // guard faces) turns toward the look, at most `look_walk_deg` off its way.
         look_slack_deg: 10.0, look_walk_deg: 75.0,
+        // Shipped facing turn rate in rad/s. Worlds can raise it with a laws overlay.
+        turn_rate: 6.0,
         // Moving and breath (docs/STAMINA.md). A grown person's walk (m/s, before age, genes and
         // tiredness: `walk_base()`; a player's Settings offer 3.0 and 3.4), a person's run as a
         // share of its walk, and the fastest a road takes anyone (m/s; a body faster on its own,
@@ -370,7 +372,7 @@ fn call_speech() {
 // run (a wolf 5.1 m/s, a deer 5.55). A road speeds no one past `run_top` (m/s), and a run costs
 // breath (`pools`).
 fn motion(a) {
-    #{ run: switch a.actor.kind { "person" => law("run_share"), "wolf" => law("wolf_run"), "deer" => law("deer_run"), _ => 1.5 }, flee: 1.15, aside: 0.8, turn_rate: 6.0, turn_slow: 0.4, separation: 0.8, separation_weight: 0.9, wander_turn: 1.2, wander_keep_s: 60.0, top: law("run_top"), charge: a.actor.kind == "wolf" }
+    #{ run: switch a.actor.kind { "person" => law("run_share"), "wolf" => law("wolf_run"), "deer" => law("deer_run"), _ => 1.5 }, flee: 1.15, aside: 0.8, turn_rate: law("turn_rate"), turn_slow: 0.4, separation: 0.8, separation_weight: 0.9, wander_turn: 1.2, wander_keep_s: 60.0, top: law("run_top"), charge: a.actor.kind == "wolf" }
 }
 
 // A grown, rested body of a kind at its normal pace (for descriptions).
@@ -3146,6 +3148,7 @@ fn law_about(l, name) {
         "heard_linger_s" => `a sound is kept in mind ${short(l.heard_linger_s)} s after it was last heard`,
         "look_slack_deg" => `a player's look within ${short(l.look_slack_deg)} degrees of the last is the same look`,
         "look_walk_deg" => `walking, one goes where one is going and faces where one looks, at most ${short(l.look_walk_deg)} degrees off one's way`,
+        "turn_rate" => `bodies turn to face at ${short(l.turn_rate)} radians a second`,
         "walk_base" => `a grown person walks ${l.walk_base} m/s`,
         "run_share" => `and runs ${l.run_share} times that`,
         "run_top" => `no road takes anyone past ${l.run_top} m/s`,
