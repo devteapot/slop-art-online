@@ -716,17 +716,55 @@ def edge_spot(world, centre, radius, avoid):
     return None
 
 
+def pursuit_sites(world, centre, radius, reps):
+    """Short routes with a reachable turn behind opaque ground, at day or night sight range."""
+    def clear_walk(a, b):
+        steps = math.ceil(math.dist(a, b) * 3)
+        return all(world.walk(a[0] + (b[0] - a[0]) * i / steps, a[1] + (b[1] - a[1]) * i / steps)
+                   for i in range(steps + 1))
+
+    cx, cy = map(int, centre)
+    edge = math.ceil(radius * 1.25)
+    points = [(x + 0.5, y + 0.5) for y in range(cy - edge, cy + edge, 2) for x in range(cx - edge, cx + edge, 2)]
+    random.Random(41).shuffle(points)
+    sites = []
+    for p in points:
+        if not 0.45 * radius <= math.dist(p, centre) <= edge or not world.walk(*p):
+            continue
+        if any(math.dist(p, other[0]) < 34 for other in sites):
+            continue
+        for k in range(8):
+            angle = k * math.pi / 4
+            dx, dy = math.cos(angle), math.sin(angle)
+            c = (p[0] + 5 * dx, p[1] + 5 * dy)
+            midway = (p[0] + 2.6 * dx, p[1] + 2.6 * dy)
+            if not clear_walk(p, c):
+                continue
+            for side in (-1, 1):
+                q = (c[0] - side * 4 * dy, c[1] + side * 4 * dx)
+                if clear_walk(c, q) and not world.line_clear(p, q) and not world.line_clear(midway, q):
+                    sites.append((p, c, q))
+                    break
+            if sites and sites[-1][0] == p:
+                break
+        if len(sites) == reps:
+            return sites
+    raise RuntimeError(f"found {len(sites)} of {reps} required pursuit corners")
+
+
 def n4(world, out, variant, law, kind, reps):
     """N4 chase and flight at a town edge: `fu`/`fk` flight from a chaser (ground unknown or
     known), `pu`/`pk` the subject pursuing a fixture round a corner. Night is when the world's
     clock says (the hour is recorded); no clock is changed."""
     centre, radius = town(world, 1)
+    flight = variant in ("fu", "fk")
     gates = [g["centre"] for g in gate_groups(world, 1)]
     found = edge_spot(world, centre, radius, gates)
     if not found:
         raise RuntimeError("no town edge with open field away from gates")
     spot, u, wall = found
     tang = (-u[1], u[0])
+    sites = None if flight else pursuit_sites(world, centre, radius, reps)
     world.law("nav_belief", law == "on")
     subs = subjects(world, kind, reps, f"n4{variant}{law}{world.light or ''}")
     fixtures = world.people(reps)
@@ -736,43 +774,43 @@ def n4(world, out, variant, law, kind, reps):
     for k, (sub, fx) in enumerate(zip(subs, fixtures)):
         # Each pair along the wall, 40 m apart, so pairs do not meet.
         base = (spot[0] + tang[0] * (k - (reps - 1) / 2) * 40, spot[1] + tang[1] * (k - (reps - 1) / 2) * 40)
-        p = world.nearest_walkable(base)
+        p = world.nearest_walkable(base) if flight else sites[k][0]
         starts.append(p)
         world.call("place_at", sub.id, p[0], p[1])
     if variant in ("fk", "pk"):
         # Warm-up: a walk out into the field and back, so the ground around is known.
-        warm = [[[world.nearest_walkable((p[0] + u[0] * 25, p[1] + u[1] * 25))], [world.nearest_walkable((p[0] + tang[0] * 18, p[1] + tang[1] * 18))], [p]] for p in starts]
+        if flight:
+            warm = [[[world.nearest_walkable((p[0] + u[0] * 25, p[1] + u[1] * 25))], [world.nearest_walkable((p[0] + tang[0] * 18, p[1] + tang[1] * 18))], [p]] for p in starts]
+        else:
+            warm = [[[c, q], [c, p]] for p, c, q in sites]
         tmp = Phase(world, folder / "warmup", [s.id for s in subs], 600, bench=False)
         walks_to(world, tmp, subs, warm, law)
         tmp.close()
+        for sub, p in zip(subs, starts):
+            world.call("place_at", sub.id, p[0], p[1])
     wait_for_light(world, world.light, subs)
     phase = Phase(world, folder, [s.id for s in subs] + fixtures, 600, known_ids=[s.id for s in subs], bench_seconds=60)
     hour = scenes.world_hour(world.s)[0]
     sight = person_sight(hour)
     meta = {"arena": "n4", "variant": variant, "law": law, "kind": kind, "spot": spot, "outward": u, "wall": wall, "hour": round(hour, 2), "light": "day" if sight == 11.0 else "night", "subjects": [s.id for s in subs],
-            "fixtures": fixtures, "starts": starts, "sight_m": sight, "flee_clear": world.law_value("flee_clear"), **world.meta()}
+            "fixtures": fixtures, "starts": starts, "pursuit_sites": sites, "sight_m": sight, "flee_clear": world.law_value("flee_clear"), **world.meta()}
     recs = []
-    for sub, fx, p in zip(subs, fixtures, starts):
-        if variant in ("fu", "fk"):
+    for k, (sub, fx, p) in enumerate(zip(subs, fixtures, starts)):
+        if flight:
             c = world.nearest_walkable((p[0] + tang[0] * 12, p[1] + tang[1] * 12))
-            world.call("place_at", fx, c[0], c[1])
         else:
-            gap = min(8, sight - 1.5)
-            c = world.nearest_walkable((p[0] + tang[0] * gap, p[1] + tang[1] * gap))
-            world.call("place_at", fx, c[0], c[1])
+            c = sites[k][1]
+        world.call("place_at", fx, c[0], c[1])
     time.sleep(2.0)
     t0 = world.now()
     starts_ms = {}
-    for sub, fx, p in zip(subs, fixtures, starts):
-        if variant in ("fu", "fk"):
+    for k, (sub, fx, p) in enumerate(zip(subs, fixtures, starts)):
+        if flight:
             # Close the initial 12 m gap until the subject can see its pursuer.
             world.call("set_behavior", fx, json.dumps(goto_node(p, True)))
         else:
-            # The fixture walks round the town wall's corner away from the subject (out of its
-            # sight past the wall), then on; the subject pursues it.
-            route = [world.nearest_walkable((p[0] + tang[0] * d - u[0] * i, p[1] + tang[1] * d - u[1] * i)) for d, i in ((20, 0), (30, 10), (34, 30))]
-            route = [q for q in route if q]
-            world.call("set_behavior", fx, json.dumps({"seq": [goto_node(q, False) for q in route] + [{"wait": 600}]}))
+            # The fixture walks just round the corner and waits out of the initial line of sight.
+            world.call("set_behavior", fx, json.dumps({"seq": [goto_node(sites[k][2]), {"wait": 600}]}))
             if sub.kind == "body":
                 chase = {"do": {"skill": "close_in", "target": {"id": fx}, "distance": 1.2, "run": True}}
                 world.call("set_behavior", sub.id, json.dumps({"seq": [chase, {"wait": 600}]}))
@@ -788,7 +826,7 @@ def n4(world, out, variant, law, kind, reps):
         intents.append({"at_ms": world.now(), "steer": steering})
         for sub, fx in zip(subs, fixtures):
             sub.keepalive()
-            if variant in ("fu", "fk") and sub.id not in starts_ms and sub.id in bodies and fx in bodies:
+            if flight and sub.id not in starts_ms and sub.id in bodies and fx in bodies:
                 me, him = world.pos(bodies[sub.id]), world.pos(bodies[fx])
                 if math.dist(me, him) <= sight and world.line_clear(me, him):
                     starts_ms[sub.id] = world.now()
@@ -798,7 +836,7 @@ def n4(world, out, variant, law, kind, reps):
                         flee = {"do": {"skill": "flee", "target": {"id": fx}}}
                         world.call("set_behavior", sub.id, json.dumps({"seq": [flee, {"wait": 600}]}))
                     phase.mark("chase seen", subject=sub.id, fixture=fx)
-            if sub.kind == "click" and variant in ("fu", "fk") and sub.id in starts_ms and time.monotonic() - clicks.get(sub.id, 0) > 1.0 and sub.id in bodies and fx in bodies:
+            if sub.kind == "click" and flight and sub.id in starts_ms and time.monotonic() - clicks.get(sub.id, 0) > 1.0 and sub.id in bodies and fx in bodies:
                 me, him = world.pos(bodies[sub.id]), world.pos(bodies[fx])
                 d = math.dist(me, him)
                 if 0 < d <= sight and world.line_clear(me, him):
@@ -806,7 +844,7 @@ def n4(world, out, variant, law, kind, reps):
                     sub.go(away, True)
                     phase.mark("click", subject=sub.id, to=away)
                 clicks[sub.id] = time.monotonic()
-            elif sub.kind == "click" and variant in ("pu", "pk") and time.monotonic() - clicks.get(sub.id, 0) > 1.0 and sub.id in bodies and fx in bodies:
+            elif sub.kind == "click" and not flight and time.monotonic() - clicks.get(sub.id, 0) > 1.0 and sub.id in bodies and fx in bodies:
                 # A player pursues by clicking where it sees the fixture, else where it last saw it
                 # (a clear line within the shipped senses range).
                 me, him = world.pos(bodies[sub.id]), world.pos(bodies[fx])
