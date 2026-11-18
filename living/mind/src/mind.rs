@@ -491,6 +491,45 @@ impl Minds {
         }
     }
 
+    /// Person `id`'s body sex, as the world holds it (the private `sex` table, read as the owner).
+    pub(crate) fn sex_of(&self, id: u32) -> Option<living_rules::sex::Sex> {
+        self.conn.db.sex().id().find(&id).and_then(|r| living_rules::sex::Sex::from_code(r.sex))
+    }
+
+    /// "a woman", "an old man": person `id`'s body in the rules' words, by sex and stage (none
+    /// for an animal or a person whose sex the world does not hold).
+    pub(crate) fn sex_words_of(&self, id: u32) -> Option<String> {
+        let c = self.conn.db.character().id().find(&id).filter(|c| c.kind == "person")?;
+        self.sex_of(id).map(|s| prompts::a_sex_word(s, c.stage))
+    }
+
+    /// What `me` remembers of `other`'s body sex (body-sex): its own always; anyone else's only
+    /// when its character made them out at full sight once (the authority's `sex_seen` row,
+    /// written then with the sex seen). Never from a name, kinship, a community, a relation or
+    /// speech: a prompt states the sex of someone out of sight only when the mind remembers it.
+    /// Someone in sight now is described by the authority's scene (`form`, near or far); a talk
+    /// partner only as remembered (someone face to face has been made out). A model's older guesses stay as its
+    /// beliefs; this fact, shown beside them, is what the world says.
+    pub(crate) fn known_sex(&self, me: u32, other: u32) -> Option<String> {
+        if other >= living_rules::script::FAR_HANDLE_BASE {
+            return None;
+        }
+        if me == other {
+            return self.sex_words_of(me);
+        }
+        let row = self.conn.db.sex_seen().iter().find(|r| r.observer == me && r.known == other)?;
+        let c = self.conn.db.character().id().find(&other)?;
+        living_rules::sex::Sex::from_code(row.sex).map(|s| prompts::a_sex_word(s, c.stage))
+    }
+
+    /// "Edda Fenner (#12, a woman)": a person as `me` knows them, with their body when known.
+    pub(crate) fn known_person(&self, me: u32, other: u32) -> String {
+        match self.known_sex(me, other) {
+            Some(s) => format!("{} (#{other}, {s})", self.known_as(me, other)),
+            None => format!("{} (#{other})", self.known_as(me, other)),
+        }
+    }
+
     /// Whether `me` knows `o`'s name (`perception::knows_name`, as [`Minds::known_as`] reads it).
     fn knows_name(&self, me: u32, o: &Character) -> bool {
         let other = o.id;
@@ -1185,7 +1224,10 @@ impl Minds {
         let profile = self.profile(&c);
         let system = prompts::birth_identity_system();
         let born = self.born_temperament(c.id);
-        let user = prompts::birth_identity_user(&c.name, c.id, [(&an, c.parent_a, &ap), (&bn, c.parent_b, &bp)], born.as_ref());
+        // The newborn's body (the authority wrote its row with the character, before this first
+        // mind call) and its parents' where it remembers them (`known_sex`: made out once).
+        let body = |id: u32| self.known_sex(c.id, id).unwrap_or_default();
+        let user = prompts::birth_identity_user(&c.name, c.id, [(&an, c.parent_a, &ap), (&bn, c.parent_b, &bp)], born.as_ref(), [&body(c.id), &body(c.parent_a), &body(c.parent_b)]);
         let _slow = self.slow.acquire().await?;
         let reply = self.llm.chat(&profile, self.attention(c.id, None), "consolidate", &c.name, &[Msg { role: "system", content: system }, Msg { role: "user", content: user }]).await?;
         let v = llm::parse_json(&reply.content)?;
@@ -1392,6 +1434,8 @@ impl Minds {
         if let Some(s) = self.conn.db.script().iter().find(|s| s.name == "skills") {
             prompts::set_rules(s.revision, &s.source);
         }
+        // The fast lane's own slots follow the world's `fast_lane_inflight`.
+        self.llm.set_fast_slots(prompts::fast_slots());
     }
 
     fn schedule(self: Arc<Self>, actor: u32) {
@@ -1733,7 +1777,12 @@ impl Minds {
         let (Some(c), Some(w)) = (self.conn.db.character().id().find(&actor), self.conn.db.world().id().find(&0)) else { return String::new() };
         let Some(base) = self.life_table(&c.kind) else { return String::new() };
         let age = c.birth_age_days + llm::now_ms().saturating_sub(c.born_ms) as f32 / w.day_ms.max(1) as f32;
-        prompts::body_line(&c.kind, c.stage, age, base, living_rules::life::Pace { year_days: w.year_days.max(1) as f32, pace: w.life_pace })
+        let line = prompts::body_line(&c.kind, c.stage, age, base, living_rules::life::Pace { year_days: w.year_days.max(1) as f32, pace: w.life_pace });
+        // One's own body sex, in the rules' words (body-sex): "You are a woman."
+        match self.sex_words_of(actor) {
+            Some(s) => format!("{line} You are {s}."),
+            None => line,
+        }
     }
 
     /// A species' life table as the world was built with it: species.json with the seed's own
@@ -1771,7 +1820,7 @@ impl Minds {
                         let name = self.conn.db.community().id().find(&m.community).map(|c| c.name).unwrap_or_default();
                         let others: Vec<u32> = self.conn.db.membership().iter().filter(|x| x.community == m.community && x.member != actor).map(|x| x.member).collect();
                         let felt: std::collections::HashSet<u32> = self.conn.db.relation().iter().filter(|r| r.actor == actor).map(|r| r.other).collect();
-                        let known: Vec<String> = others.iter().filter(|id| felt.contains(id)).map(|id| format!("{} (#{id})", self.known_as(actor, *id))).collect();
+                        let known: Vec<String> = others.iter().filter(|id| felt.contains(id)).map(|id| self.known_person(actor, *id)).collect();
                         belonging(&name, others.len(), &known)
                     }
                     None => "\nYou belong to no community.".into(),
@@ -1823,9 +1872,8 @@ impl Minds {
             .take(16)
             .map(|r| {
                 format!(
-                    "{} (#{}): {}, trust {:.0}, affinity {:.0}{}",
-                    self.known_as(actor, r.other),
-                    r.other,
+                    "{}: {}, trust {:.0}, affinity {:.0}{}",
+                    self.known_person(actor, r.other),
                     r.label,
                     r.trust,
                     r.affinity,
@@ -1840,15 +1888,17 @@ impl Minds {
     }
 
     /// The places a character knows and what it remembers of resources (its `seen_stock`), one
-    /// line each (talk-places, docs/COMMUNICATION.md §20), with how far and which way from `at`
-    /// when that is known (`living_rules::bearing`, the scene's words): "\"inn\" at [404, 285],
-    /// 46 m south", "10 berry bush around [416, 239], 9 m east: seen day 1 15:03", "berry bush
-    /// around [416, 239], here: gone when you were last here, day 1 17:40 (10 seen day 1 15:03)".
-    /// The same lines in a deliberation (from its scene's place), a talk turn (from where it
-    /// stands) and player memory (no place: no way). At most [`STOCK_SHOWN`] remembered
-    /// resources, nearest first (else the latest seen).
-    pub(crate) fn places(&self, actor: u32, at: Option<(f32, f32)>) -> Vec<String> {
-        let way = |x: f32, y: f32| at.map(|a| format!(", {}", living_rules::bearing::from_here(a, (x, y)))).unwrap_or_default();
+    /// line each (talk-places, docs/COMMUNICATION.md §20). With `near`, remembered resources are
+    /// the nearest to it, else the latest seen; at most [`STOCK_SHOWN`]. With `say_way` too, each
+    /// line says how far and which way from `near` (`living_rules::bearing`, the scene's words):
+    /// "\"inn\" at [404, 285], 50 m south", "10 berry bush around [416, 239], 9 m east: seen day 1
+    /// 15:03", "berry bush around [416, 239], here: gone when you were last here, day 1 17:40 (10
+    /// seen day 1 15:03)". A talk turn says the way from where one stands; a deliberation does not,
+    /// since its scene's `places` already give each place's way (known-ground, docs/MOVEMENT_MIND.md
+    /// step 3), so the way is not shown twice; player memory has no place and no way.
+    pub(crate) fn places(&self, actor: u32, near: Option<(f32, f32)>, say_way: bool) -> Vec<String> {
+        let at = near;
+        let way = |x: f32, y: f32| at.filter(|_| say_way).map(|a| format!(", {}", living_rules::bearing::from_here(a, (x, y)))).unwrap_or_default();
         let mut out: Vec<String> = self.conn.db.place().iter().filter(|p| p.actor == actor).map(|p| format!("\"{}\" at [{:.0}, {:.0}]{}", p.name, p.x, p.y, way(p.x, p.y))).collect();
         let mut stock: Vec<SeenStock> = self.conn.db.seen_stock().iter().filter(|s| s.actor == actor).collect();
         match at {
@@ -1959,7 +2009,7 @@ impl Minds {
             mind,
             memories,
             judgments: recalled.judgments,
-            places: self.places(actor, Self::scene_at(&scene)),
+            places: self.places(actor, Self::scene_at(&scene), false),
             experiences,
             dealings: self.dealings(actor),
             cues: self.cue_lines(actor),
@@ -2326,7 +2376,7 @@ impl Minds {
             mind,
             memories,
             judgments: recalled.judgments,
-            places: self.places(actor, None),
+            places: self.places(actor, None, false),
             experiences: meaningful.iter().map(|e| self.exp_line(e, &fmt, true)).collect(),
             dealings: self.dealings(actor),
             cues: self.cue_lines(actor),

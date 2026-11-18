@@ -28,6 +28,7 @@
         {
           "name": "Aldric Marrow",
           "age": 63,
+          "sex": "m",
           "household": "marrow",
           "occupation": "scribe",
           "knows": [
@@ -262,6 +263,7 @@
         {
           "name": "Cuth Marrow",
           "age": 58,
+          "sex": "f",
           "household": "marrow",
           "occupation": "healer",
           "knows": [
@@ -438,6 +440,7 @@
         {
           "name": "Maud Marrow",
           "age": 34,
+          "sex": "f",
           "household": "marrow",
           "occupation": "scribe",
           "knows": [
@@ -602,6 +605,7 @@
         {
           "name": "Wenna Marrow",
           "age": 25,
+          "sex": "f",
           "household": "marrow-young",
           "occupation": "farmer",
           "knows": [
@@ -795,6 +799,7 @@
         {
           "name": "Tobin Marrow",
           "age": 27,
+          "sex": "m",
           "household": "marrow-young",
           "occupation": "guard",
           "knows": [
@@ -1016,6 +1021,7 @@
         {
           "name": "Mercy Abbot",
           "age": 48,
+          "sex": "f",
           "household": "abbot",
           "occupation": "trader",
           "knows": [
@@ -1254,6 +1260,7 @@
         {
           "name": "Osric Abbot",
           "age": 50,
+          "sex": "m",
           "household": "abbot",
           "occupation": "carpenter",
           "knows": [
@@ -1423,6 +1430,7 @@
         {
           "name": "Linnet Abbot",
           "age": 16,
+          "sex": "f",
           "household": "abbot",
           "occupation": "trader",
           "knows": [
@@ -1587,6 +1595,7 @@
         {
           "name": "Agnes Fenner",
           "age": 33,
+          "sex": "f",
           "household": "fenner",
           "occupation": "cook",
           "knows": [
@@ -1776,6 +1785,7 @@
         {
           "name": "Wat Fenner",
           "age": 35,
+          "sex": "m",
           "household": "fenner",
           "occupation": "guard",
           "knows": [
@@ -1967,6 +1977,7 @@
         {
           "name": "Bram Fenner",
           "age": 9,
+          "sex": "m",
           "household": "fenner",
           "occupation": "child",
           "knows": [
@@ -2099,6 +2110,7 @@
         {
           "name": "Sissly Fenner",
           "age": 6,
+          "sex": "f",
           "household": "fenner",
           "occupation": "child",
           "knows": [],
@@ -2191,6 +2203,7 @@
         {
           "name": "Sister Elspeth",
           "age": 57,
+          "sex": "f",
           "household": "chapel",
           "occupation": "healer",
           "knows": [
@@ -2447,6 +2460,7 @@
         {
           "name": "Sister Alys",
           "age": 29,
+          "sex": "f",
           "household": "chapel",
           "occupation": "healer",
           "knows": [
@@ -2642,6 +2656,7 @@
         {
           "name": "Sister Perrin",
           "age": 44,
+          "sex": "f",
           "household": "chapel",
           "occupation": "healer",
           "knows": [
@@ -2796,6 +2811,7 @@
         {
           "name": "Marta Tolley",
           "age": 36,
+          "sex": "f",
           "household": "tolley",
           "occupation": "farmer",
           "knows": [
@@ -2979,6 +2995,7 @@
         {
           "name": "Tib Tolley",
           "age": 12,
+          "sex": "m",
           "household": "tolley",
           "occupation": "child",
           "knows": [
@@ -3118,6 +3135,7 @@
         {
           "name": "Nell Tolley",
           "age": 8,
+          "sex": "f",
           "household": "tolley",
           "occupation": "child",
           "knows": [],
@@ -3236,6 +3254,7 @@
         {
           "name": "Osbert Ashby",
           "age": 52,
+          "sex": "m",
           "household": "ashby",
           "occupation": "farmer",
           "knows": [
@@ -3427,6 +3446,7 @@
         {
           "name": "Edith Ashby",
           "age": 49,
+          "sex": "f",
           "household": "ashby",
           "occupation": "farmer",
           "knows": [
@@ -3601,6 +3621,7 @@
         {
           "name": "Roland Ashby",
           "age": 22,
+          "sex": "m",
           "household": "ashby",
           "occupation": "farmer",
           "knows": [
@@ -3760,6 +3781,7 @@
         {
           "name": "Godric Rowan",
           "age": 45,
+          "sex": "m",
           "household": "rowan",
           "occupation": "farmer",
           "knows": [
@@ -3959,6 +3981,7 @@
         {
           "name": "Elfgifu Rowan",
           "age": 42,
+          "sex": "f",
           "household": "rowan",
           "occupation": "farmer",
           "knows": [
@@ -4118,6 +4141,7 @@
         {
           "name": "Wulf Rowan",
           "age": 18,
+          "sex": "m",
           "household": "rowan",
           "occupation": "farmer",
           "knows": [
@@ -4293,6 +4317,7 @@
         {
           "name": "Leofric Rowan",
           "age": 13,
+          "sex": "m",
           "household": "rowan",
           "occupation": "child",
           "knows": [
@@ -4412,6 +4437,7 @@
         {
           "name": "Edwin Marsh",
           "age": 50,
+          "sex": "m",
           "household": "marsh",
           "occupation": "farmer",
           "knows": [
@@ -4567,6 +4593,7 @@
         {
           "name": "Sigrid Marsh",
           "age": 47,
+          "sex": "f",
           "household": "marsh",
           "occupation": "cook",
           "knows": [
@@ -4710,6 +4737,7 @@
         {
           "name": "Hilda Marsh",
           "age": 19,
+          "sex": "f",
           "household": "marsh",
           "occupation": "farmer",
           "knows": [
@@ -4859,6 +4887,7 @@
         {
           "name": "Aethelred Tanner",
           "age": 54,
+          "sex": "m",
           "household": "tanner",
           "occupation": "trader",
           "knows": [
@@ -5065,6 +5094,7 @@
         {
           "name": "Mildred Tanner",
           "age": 51,
+          "sex": "f",
           "household": "tanner",
           "occupation": "cook",
           "knows": [
@@ -5225,6 +5255,7 @@
         {
           "name": "Cedric Tanner",
           "age": 24,
+          "sex": "m",
           "household": "tanner",
           "occupation": "carpenter",
           "knows": [
@@ -5385,6 +5416,7 @@
         {
           "name": "Baldwin Wade",
           "age": 61,
+          "sex": "m",
           "household": "wade",
           "occupation": "innkeeper",
           "knows": [
@@ -5553,6 +5585,7 @@
         {
           "name": "Petra Wade",
           "age": 58,
+          "sex": "f",
           "household": "wade",
           "occupation": "cook",
           "knows": [
@@ -5726,6 +5759,7 @@
         {
           "name": "Gareth Wade",
           "age": 30,
+          "sex": "m",
           "household": "wade",
           "occupation": "guard",
           "knows": [
@@ -5881,6 +5915,7 @@
         {
           "name": "Reginald Hobson",
           "age": 48,
+          "sex": "m",
           "household": "hobson",
           "occupation": "mason",
           "knows": [
@@ -6073,6 +6108,7 @@
         {
           "name": "Joan Hobson",
           "age": 45,
+          "sex": "f",
           "household": "hobson",
           "occupation": "healer",
           "knows": [
@@ -6260,6 +6296,7 @@
         {
           "name": "Stephen Hobson",
           "age": 20,
+          "sex": "m",
           "household": "hobson",
           "occupation": "mason",
           "knows": [
@@ -6434,6 +6471,7 @@
         {
           "name": "Aldous Fletcher",
           "age": 39,
+          "sex": "m",
           "household": "fletcher",
           "occupation": "carpenter",
           "knows": [
@@ -6603,6 +6641,7 @@
         {
           "name": "Enid Fletcher",
           "age": 37,
+          "sex": "f",
           "household": "fletcher",
           "occupation": "trader",
           "knows": [
@@ -6772,6 +6811,7 @@
         {
           "name": "Robin Fletcher",
           "age": 11,
+          "sex": "m",
           "household": "fletcher",
           "occupation": "child",
           "knows": [
@@ -6874,6 +6914,7 @@
         {
           "name": "Herbert Carter",
           "age": 44,
+          "sex": "m",
           "household": "carter",
           "occupation": "farmer",
           "knows": [
@@ -7037,6 +7078,7 @@
         {
           "name": "Cecily Carter",
           "age": 41,
+          "sex": "f",
           "household": "carter",
           "occupation": "farmer",
           "knows": [
@@ -7186,6 +7228,7 @@
         {
           "name": "Alfred Carter",
           "age": 16,
+          "sex": "m",
           "household": "carter",
           "occupation": "farmer",
           "knows": [
@@ -7332,6 +7375,7 @@
         {
           "name": "Edith Carter",
           "age": 9,
+          "sex": "f",
           "household": "carter",
           "occupation": "child",
           "knows": [],
@@ -7414,6 +7458,7 @@
         {
           "name": "Osgood Baker",
           "age": 52,
+          "sex": "m",
           "household": "baker",
           "occupation": "cook",
           "knows": [
@@ -7574,6 +7619,7 @@
         {
           "name": "Amice Baker",
           "age": 49,
+          "sex": "f",
           "household": "baker",
           "occupation": "cook",
           "knows": [
@@ -7731,6 +7777,7 @@
         {
           "name": "Godfrey Baker",
           "age": 22,
+          "sex": "m",
           "household": "baker",
           "occupation": "cook",
           "knows": [
@@ -7893,6 +7940,7 @@
         {
           "name": "Aldith Weaver",
           "age": 50,
+          "sex": "f",
           "household": "weaver",
           "occupation": "trader",
           "knows": [
@@ -8079,6 +8127,7 @@
         {
           "name": "Leofwine Weaver",
           "age": 53,
+          "sex": "m",
           "household": "weaver",
           "occupation": "carpenter",
           "knows": [
@@ -8250,6 +8299,7 @@
         {
           "name": "Edwin Potter",
           "age": 40,
+          "sex": "m",
           "household": "potter",
           "occupation": "trader",
           "knows": [
@@ -8421,6 +8471,7 @@
         {
           "name": "Alice Potter",
           "age": 38,
+          "sex": "f",
           "household": "potter",
           "occupation": "cook",
           "knows": [
@@ -8566,6 +8617,7 @@
         {
           "name": "Anselm Potter",
           "age": 10,
+          "sex": "m",
           "household": "potter",
           "occupation": "child",
           "knows": [],
@@ -8650,6 +8702,7 @@
         {
           "name": "Wilfred Smith",
           "age": 55,
+          "sex": "m",
           "household": "smith",
           "occupation": "builder",
           "knows": [
@@ -8822,6 +8875,7 @@
         {
           "name": "Hilda Smith",
           "age": 52,
+          "sex": "f",
           "household": "smith",
           "occupation": "healer",
           "knows": [
@@ -8994,6 +9048,7 @@
         {
           "name": "Osbert Smith",
           "age": 26,
+          "sex": "m",
           "household": "smith",
           "occupation": "builder",
           "knows": [
@@ -9161,6 +9216,7 @@
         {
           "name": "Benedict Cooper",
           "age": 47,
+          "sex": "m",
           "household": "cooper",
           "occupation": "carpenter",
           "knows": [
@@ -9317,6 +9373,7 @@
         {
           "name": "Juliana Cooper",
           "age": 44,
+          "sex": "f",
           "household": "cooper",
           "occupation": "trader",
           "knows": [
@@ -9466,6 +9523,7 @@
         {
           "name": "Martin Cooper",
           "age": 17,
+          "sex": "m",
           "household": "cooper",
           "occupation": "carpenter",
           "knows": [
@@ -9612,6 +9670,7 @@
         {
           "name": "Godwin Miller",
           "age": 59,
+          "sex": "m",
           "household": "miller",
           "occupation": "farmer",
           "knows": [
@@ -9770,6 +9829,7 @@
         {
           "name": "Ethel Miller",
           "age": 57,
+          "sex": "f",
           "household": "miller",
           "occupation": "cook",
           "knows": [
@@ -9920,6 +9980,7 @@
         {
           "name": "Hugh Miller",
           "age": 31,
+          "sex": "m",
           "household": "miller",
           "occupation": "farmer",
           "knows": [
@@ -10076,6 +10137,7 @@
         {
           "name": "Beorn Beornson",
           "age": 33,
+          "sex": "m",
           "household": "beorn",
           "occupation": "hunter",
           "knows": [
@@ -10224,6 +10286,7 @@
         {
           "name": "Sigrun Beornson",
           "age": 31,
+          "sex": "f",
           "household": "beorn",
           "occupation": "trader",
           "knows": [
@@ -10370,6 +10433,7 @@
         {
           "name": "Ulf Beornson",
           "age": 8,
+          "sex": "m",
           "household": "beorn",
           "occupation": "child",
           "knows": [
@@ -10464,6 +10528,7 @@
         {
           "name": "Edric Grey",
           "age": 36,
+          "sex": "m",
           "household": "grey",
           "occupation": "guard",
           "knows": [
@@ -10634,6 +10699,7 @@
         {
           "name": "Mildgyth Grey",
           "age": 34,
+          "sex": "f",
           "household": "grey",
           "occupation": "cook",
           "knows": [
@@ -10796,6 +10862,7 @@
         {
           "name": "Aelfric Grey",
           "age": 7,
+          "sex": "m",
           "household": "grey",
           "occupation": "child",
           "knows": [],
@@ -10889,6 +10956,7 @@
         {
           "name": "Walter Stanhope",
           "age": 42,
+          "sex": "m",
           "household": "stanhope",
           "occupation": "guard",
           "knows": [
@@ -11063,6 +11131,7 @@
         {
           "name": "Edith Stanhope",
           "age": 40,
+          "sex": "f",
           "household": "stanhope",
           "occupation": "cook",
           "knows": [
@@ -11215,6 +11284,7 @@
         {
           "name": "Godiva Stanhope",
           "age": 15,
+          "sex": "f",
           "household": "stanhope",
           "occupation": "cook",
           "knows": [
@@ -11363,6 +11433,7 @@
         {
           "name": "Sweyn Holm",
           "age": 28,
+          "sex": "m",
           "household": "holm",
           "occupation": "fisher",
           "knows": [
@@ -11523,6 +11594,7 @@
         {
           "name": "Astrid Holm",
           "age": 26,
+          "sex": "f",
           "household": "holm",
           "occupation": "cook",
           "knows": [
@@ -11675,6 +11747,7 @@
         {
           "name": "Knut Holm",
           "age": 4,
+          "sex": "m",
           "household": "holm",
           "occupation": "child",
           "knows": [],
@@ -11753,6 +11826,7 @@
         {
           "name": "Alwin Wren",
           "age": 63,
+          "sex": "m",
           "household": "wren",
           "occupation": "healer",
           "knows": [
@@ -11923,6 +11997,7 @@
         {
           "name": "Pernel Pip",
           "age": 24,
+          "sex": "f",
           "household": "pip",
           "occupation": "scribe",
           "knows": [
@@ -12102,6 +12177,7 @@
         {
           "name": "Simon Hollis",
           "age": 46,
+          "sex": "m",
           "household": "hollis",
           "occupation": "trader",
           "knows": [
@@ -12309,6 +12385,7 @@
         {
           "name": "Avice Hollis",
           "age": 43,
+          "sex": "f",
           "household": "hollis",
           "occupation": "cook",
           "knows": [
@@ -12479,6 +12556,7 @@
         {
           "name": "Nicholas Hollis",
           "age": 14,
+          "sex": "m",
           "household": "hollis",
           "occupation": "child",
           "knows": [
@@ -12643,6 +12721,7 @@
         {
           "name": "Orrum",
           "age": 44,
+          "sex": "m",
           "household": "hollbrenna",
           "occupation": "mason",
           "knows": [
@@ -12859,6 +12938,7 @@
         {
           "name": "Hollbrenna",
           "age": 66,
+          "sex": "f",
           "household": "hollbrenna",
           "occupation": "mason",
           "knows": [
@@ -13065,6 +13145,7 @@
         {
           "name": "Gaudra",
           "age": 39,
+          "sex": "f",
           "household": "hollbrenna",
           "occupation": "farmer",
           "knows": [
@@ -13259,6 +13340,7 @@
         {
           "name": "Vellmund",
           "age": 15,
+          "sex": "m",
           "household": "hollbrenna",
           "occupation": "child",
           "knows": [
@@ -13407,6 +13489,7 @@
         {
           "name": "Hollvarr",
           "age": 8,
+          "sex": "m",
           "household": "hollbrenna",
           "occupation": "child",
           "knows": [
@@ -13514,6 +13597,7 @@
         {
           "name": "Tavvik",
           "age": 31,
+          "sex": "m",
           "household": "tavvik",
           "occupation": "meat carrier",
           "knows": [
@@ -13687,6 +13771,7 @@
         {
           "name": "Harl",
           "age": 27,
+          "sex": "m",
           "household": "tavvik",
           "occupation": "hunter",
           "knows": [
@@ -13855,6 +13940,7 @@
         {
           "name": "Sunniva",
           "age": 24,
+          "sex": "f",
           "household": "tavvik",
           "occupation": "cook",
           "knows": [
@@ -14026,6 +14112,7 @@
         {
           "name": "Grimhild",
           "age": 5,
+          "sex": "f",
           "household": "tavvik",
           "occupation": "child",
           "knows": [
@@ -14149,6 +14236,7 @@
         {
           "name": "Steinar",
           "age": 58,
+          "sex": "m",
           "household": "steinar",
           "occupation": "builder",
           "knows": [
@@ -14328,6 +14416,7 @@
         {
           "name": "Yrsa",
           "age": 55,
+          "sex": "f",
           "household": "steinar",
           "occupation": "farmer",
           "knows": [
@@ -14502,6 +14591,7 @@
         {
           "name": "Liv",
           "age": 30,
+          "sex": "f",
           "household": "steinar",
           "occupation": "mason",
           "knows": [
@@ -14672,6 +14762,7 @@
         {
           "name": "Eirik",
           "age": 33,
+          "sex": "m",
           "household": "steinar",
           "occupation": "builder",
           "knows": [
@@ -14857,6 +14948,7 @@
         {
           "name": "Steinarr",
           "age": 6,
+          "sex": "m",
           "household": "steinar",
           "occupation": "child",
           "knows": [
@@ -14977,6 +15069,7 @@
         {
           "name": "Pipwort Bramblecap",
           "age": 61,
+          "sex": "f",
           "household": "bramblecap",
           "occupation": "scribe",
           "knows": [
@@ -15211,6 +15304,7 @@
         {
           "name": "Sorrel Underbank",
           "age": 57,
+          "sex": "f",
           "household": "bramblecap",
           "occupation": "farmer",
           "knows": [
@@ -15419,6 +15513,7 @@
         {
           "name": "Mallow Bramblecap",
           "age": 34,
+          "sex": "f",
           "household": "bramblecap",
           "occupation": "cook",
           "knows": [
@@ -15623,6 +15718,7 @@
         {
           "name": "Betony Mossfoot",
           "age": 32,
+          "sex": "f",
           "household": "bramblecap",
           "occupation": "healer",
           "knows": [
@@ -15827,6 +15923,7 @@
         {
           "name": "Thistle Mossfoot",
           "age": 26,
+          "sex": "m",
           "household": "mossfoot",
           "occupation": "pedlar",
           "knows": [
@@ -16099,6 +16196,7 @@
         {
           "name": "Clover Mossfoot",
           "age": 24,
+          "sex": "f",
           "household": "mossfoot",
           "occupation": "farmer",
           "knows": [
@@ -16276,6 +16374,7 @@
         {
           "name": "Tansy Mossfoot",
           "age": 5,
+          "sex": "f",
           "household": "mossfoot",
           "occupation": "child",
           "knows": [
@@ -16369,6 +16468,7 @@
         {
           "name": "Yarrow Underbank",
           "age": 38,
+          "sex": "m",
           "household": "underbank",
           "occupation": "carpenter",
           "knows": [
@@ -16542,6 +16642,7 @@
         {
           "name": "Marjoram Underbank",
           "age": 35,
+          "sex": "f",
           "household": "underbank",
           "occupation": "cook",
           "knows": [
@@ -16707,6 +16808,7 @@
         {
           "name": "Fennel Underbank",
           "age": 9,
+          "sex": "m",
           "household": "underbank",
           "occupation": "child",
           "knows": [
@@ -16828,6 +16930,7 @@
         {
           "name": "Sorrel Fenwick",
           "age": 44,
+          "sex": "f",
           "household": "fenwick-hollow",
           "occupation": "fisher",
           "knows": [
@@ -17024,6 +17127,7 @@
         {
           "name": "Reed Fenwick",
           "age": 16,
+          "sex": "m",
           "household": "fenwick-hollow",
           "occupation": "fisher",
           "knows": [
@@ -17200,6 +17304,7 @@
         {
           "name": "Rush Fenwick",
           "age": 12,
+          "sex": "f",
           "household": "fenwick-hollow",
           "occupation": "child",
           "knows": [
@@ -17339,6 +17444,7 @@
         {
           "name": "Hazel Bramblecap",
           "age": 29,
+          "sex": "f",
           "household": "bramblecap-lower",
           "occupation": "healer",
           "knows": [
@@ -17501,6 +17607,7 @@
         {
           "name": "Sorrel Bramblecap",
           "age": 31,
+          "sex": "m",
           "household": "bramblecap-lower",
           "occupation": "farmer",
           "knows": [
@@ -17659,6 +17766,7 @@
         {
           "name": "Tamarisk Bramblecap",
           "age": 7,
+          "sex": "f",
           "household": "bramblecap-lower",
           "occupation": "child",
           "knows": [
@@ -17755,6 +17863,7 @@
         {
           "name": "Bramble Quill",
           "age": 52,
+          "sex": "m",
           "household": "quill-hollow",
           "occupation": "scribe",
           "knows": [
@@ -17913,6 +18022,7 @@
         {
           "name": "Vetch Quill",
           "age": 49,
+          "sex": "f",
           "household": "quill-hollow",
           "occupation": "farmer",
           "knows": [
@@ -18079,6 +18189,7 @@
         {
           "name": "Sorrel Quill",
           "age": 13,
+          "sex": "f",
           "household": "quill-hollow",
           "occupation": "child",
           "knows": [
@@ -18201,6 +18312,7 @@
         {
           "name": "Alder Rush",
           "age": 41,
+          "sex": "m",
           "household": "rush-hollow",
           "occupation": "trader",
           "knows": [
@@ -18456,6 +18568,7 @@
         {
           "name": "Willow Rush",
           "age": 39,
+          "sex": "f",
           "household": "rush-hollow",
           "occupation": "farmer",
           "knows": [
@@ -18633,6 +18746,7 @@
         {
           "name": "Bracken Rush",
           "age": 10,
+          "sex": "m",
           "household": "rush-hollow",
           "occupation": "child",
           "knows": [
@@ -18752,6 +18866,7 @@
         {
           "name": "Bracken Sedge",
           "age": 36,
+          "sex": "m",
           "household": "sedge-hollow",
           "occupation": "carpenter",
           "knows": [
@@ -18931,6 +19046,7 @@
         {
           "name": "Tansy Sedge",
           "age": 33,
+          "sex": "f",
           "household": "sedge-hollow",
           "occupation": "cook",
           "knows": [
@@ -19116,6 +19232,7 @@
         {
           "name": "Sorrel Sedge",
           "age": 8,
+          "sex": "f",
           "household": "sedge-hollow",
           "occupation": "child",
           "knows": [
@@ -19212,6 +19329,7 @@
         {
           "name": "Osier Willow",
           "age": 47,
+          "sex": "m",
           "household": "willow-hollow",
           "occupation": "fisher",
           "knows": [
@@ -19381,6 +19499,7 @@
         {
           "name": "Rush Willow",
           "age": 45,
+          "sex": "f",
           "household": "willow-hollow",
           "occupation": "farmer",
           "knows": [
@@ -19553,6 +19672,7 @@
         {
           "name": "Reed Willow",
           "age": 14,
+          "sex": "m",
           "household": "willow-hollow",
           "occupation": "child",
           "knows": [
@@ -19680,6 +19800,7 @@
         {
           "name": "Tansy Hazel",
           "age": 28,
+          "sex": "f",
           "household": "hazel-hollow",
           "occupation": "trader",
           "knows": [
@@ -19862,6 +19983,7 @@
         {
           "name": "Clover Hazel",
           "age": 30,
+          "sex": "f",
           "household": "hazel-hollow",
           "occupation": "carpenter",
           "knows": [
@@ -20036,6 +20158,7 @@
         {
           "name": "Sorrel Hazel",
           "age": 4,
+          "sex": "f",
           "household": "hazel-hollow",
           "occupation": "child",
           "knows": [
@@ -20141,6 +20264,7 @@
         {
           "name": "Hester Crane",
           "age": 24,
+          "sex": "f",
           "household": "crane",
           "occupation": "scribe",
           "knows": [
@@ -20402,6 +20526,7 @@
         {
           "name": "Josiah Crane",
           "age": 58,
+          "sex": "m",
           "household": "crane",
           "occupation": "mason",
           "knows": [
@@ -20660,6 +20785,7 @@
         {
           "name": "Prudence Crane",
           "age": 56,
+          "sex": "f",
           "household": "crane",
           "occupation": "cook",
           "knows": [
@@ -20845,6 +20971,7 @@
         {
           "name": "Ambrose Vell",
           "age": 63,
+          "sex": "m",
           "household": "crane",
           "occupation": "mason",
           "knows": [
@@ -21035,6 +21162,7 @@
         {
           "name": "Ruth Pike",
           "age": 39,
+          "sex": "f",
           "household": "pike",
           "occupation": "cook",
           "knows": [
@@ -21211,6 +21339,7 @@
         {
           "name": "Silas Pike",
           "age": 41,
+          "sex": "m",
           "household": "pike",
           "occupation": "stone carter",
           "knows": [
@@ -21451,6 +21580,7 @@
         {
           "name": "Elias Pike",
           "age": 14,
+          "sex": "m",
           "household": "pike",
           "occupation": "child",
           "knows": [
@@ -21575,6 +21705,7 @@
         {
           "name": "Tamsin Pike",
           "age": 8,
+          "sex": "f",
           "household": "pike",
           "occupation": "child",
           "knows": [
@@ -21667,6 +21798,7 @@
         {
           "name": "Ezra Holt",
           "age": 37,
+          "sex": "m",
           "household": "holt",
           "occupation": "quarrier",
           "knows": [
@@ -21875,6 +22007,7 @@
         {
           "name": "Corin Holt",
           "age": 35,
+          "sex": "f",
           "household": "holt",
           "occupation": "mason",
           "knows": [
@@ -22056,6 +22189,7 @@
         {
           "name": "Bramwell Holt",
           "age": 11,
+          "sex": "m",
           "household": "holt",
           "occupation": "child",
           "knows": [
@@ -22177,6 +22311,7 @@
         {
           "name": "Dele Oyelaran",
           "age": 45,
+          "sex": "m",
           "household": "oyelaran",
           "occupation": "builder",
           "knows": [
@@ -22356,6 +22491,7 @@
         {
           "name": "Ife Oyelaran",
           "age": 42,
+          "sex": "f",
           "household": "oyelaran",
           "occupation": "cook",
           "knows": [
@@ -22536,6 +22672,7 @@
         {
           "name": "Bisi Oyelaran",
           "age": 13,
+          "sex": "f",
           "household": "oyelaran",
           "occupation": "child",
           "knows": [
@@ -22685,6 +22822,7 @@
         {
           "name": "Tayo Oyelaran",
           "age": 6,
+          "sex": "m",
           "household": "oyelaran",
           "occupation": "child",
           "knows": [],
@@ -22770,6 +22908,7 @@
         {
           "name": "Silas Vance",
           "age": 49,
+          "sex": "m",
           "household": "vance",
           "occupation": "quarrier",
           "knows": [
@@ -22970,6 +23109,7 @@
         {
           "name": "Odile Vance",
           "age": 47,
+          "sex": "f",
           "household": "vance",
           "occupation": "healer",
           "knows": [
@@ -23175,6 +23315,7 @@
         {
           "name": "Corwin Vance",
           "age": 22,
+          "sex": "m",
           "household": "vance",
           "occupation": "quarrier",
           "knows": [
@@ -23365,6 +23506,7 @@
         {
           "name": "Gideon Fenwick",
           "age": 44,
+          "sex": "m",
           "household": "fenwick",
           "occupation": "builder",
           "knows": [
@@ -23553,6 +23695,7 @@
         {
           "name": "Mabel Fenwick",
           "age": 41,
+          "sex": "f",
           "household": "fenwick",
           "occupation": "trader",
           "knows": [
@@ -23732,6 +23875,7 @@
         {
           "name": "Lottie Fenwick",
           "age": 15,
+          "sex": "f",
           "household": "fenwick",
           "occupation": "child",
           "knows": [
@@ -23894,6 +24038,7 @@
         {
           "name": "Perry Fenwick",
           "age": 9,
+          "sex": "m",
           "household": "fenwick",
           "occupation": "child",
           "knows": [],
@@ -24005,6 +24150,7 @@
         {
           "name": "Hedley Ashcombe",
           "age": 52,
+          "sex": "m",
           "household": "ashcombe",
           "occupation": "farmer",
           "knows": [
@@ -24184,6 +24330,7 @@
         {
           "name": "Verity Ashcombe",
           "age": 50,
+          "sex": "f",
           "household": "ashcombe",
           "occupation": "farmer",
           "knows": [
@@ -24356,6 +24503,7 @@
         {
           "name": "Rosalind Ashcombe",
           "age": 24,
+          "sex": "f",
           "household": "ashcombe",
           "occupation": "farmer",
           "knows": [
@@ -24544,6 +24692,7 @@
         {
           "name": "Ottilie Ashcombe",
           "age": 12,
+          "sex": "f",
           "household": "ashcombe",
           "occupation": "child",
           "knows": [
@@ -24669,6 +24818,7 @@
         {
           "name": "Barnaby Quill",
           "age": 57,
+          "sex": "m",
           "household": "quill",
           "occupation": "scribe",
           "knows": [
@@ -24876,6 +25026,7 @@
         {
           "name": "Tobiah Marsh",
           "age": 38,
+          "sex": "m",
           "household": "marsh-end",
           "occupation": "carpenter",
           "knows": [
@@ -25051,6 +25202,7 @@
         {
           "name": "Sabina Marsh",
           "age": 36,
+          "sex": "f",
           "household": "marsh-end",
           "occupation": "trader",
           "knows": [
@@ -25214,6 +25366,7 @@
         {
           "name": "Nella Marsh",
           "age": 10,
+          "sex": "f",
           "household": "marsh-end",
           "occupation": "child",
           "knows": [
@@ -25338,6 +25491,7 @@
         {
           "name": "Ewan Marsh",
           "age": 4,
+          "sex": "m",
           "household": "marsh-end",
           "occupation": "child",
           "knows": [],
@@ -25439,6 +25593,7 @@
         {
           "name": "Mara Quell",
           "age": 52,
+          "sex": "f",
           "household": "quell",
           "occupation": "trader",
           "knows": [
@@ -25644,6 +25799,7 @@
         {
           "name": "Wick Quell",
           "age": 24,
+          "sex": "m",
           "household": "quell",
           "occupation": "fisher",
           "knows": [
@@ -25818,6 +25974,7 @@
         {
           "name": "Dory Quell",
           "age": 9,
+          "sex": "f",
           "household": "quell",
           "occupation": "child",
           "knows": [
@@ -25933,6 +26090,7 @@
         {
           "name": "Juno Reyes",
           "age": 29,
+          "sex": "f",
           "household": "reyes",
           "occupation": "fish runner",
           "knows": [
@@ -26156,6 +26314,7 @@
         {
           "name": "Tamsin Vane",
           "age": 26,
+          "sex": "f",
           "household": "reyes",
           "occupation": "fisher",
           "knows": [
@@ -26331,6 +26490,7 @@
         {
           "name": "Ostrander Vane",
           "age": 31,
+          "sex": "m",
           "household": "reyes",
           "occupation": "builder",
           "knows": [
@@ -26536,6 +26696,7 @@
         {
           "name": "Ilse Ostrander",
           "age": 58,
+          "sex": "f",
           "household": "ostrander",
           "occupation": "cook",
           "knows": [
@@ -26726,6 +26887,7 @@
         {
           "name": "Maren Vane",
           "age": 55,
+          "sex": "f",
           "household": "vane",
           "occupation": "healer",
           "knows": [
@@ -26916,6 +27078,7 @@
         {
           "name": "Rennick Vane",
           "age": 30,
+          "sex": "m",
           "household": "vane",
           "occupation": "guard",
           "knows": [
@@ -27089,6 +27252,7 @@
         {
           "name": "Bramwell Tallow",
           "age": 46,
+          "sex": "m",
           "household": "tallow",
           "occupation": "trader",
           "knows": [
@@ -27284,6 +27448,7 @@
         {
           "name": "Perrin Tallow",
           "age": 43,
+          "sex": "f",
           "household": "tallow",
           "occupation": "cook",
           "knows": [
@@ -27499,6 +27664,7 @@
         {
           "name": "Sella Tallow",
           "age": 15,
+          "sex": "f",
           "household": "tallow",
           "occupation": "child",
           "knows": [
@@ -27665,6 +27831,7 @@
         {
           "name": "Ostrander Cormorant",
           "age": 49,
+          "sex": "m",
           "household": "cormorant",
           "occupation": "fisher",
           "knows": [
@@ -27829,6 +27996,7 @@
         {
           "name": "Tamsin Cormorant",
           "age": 45,
+          "sex": "f",
           "household": "cormorant",
           "occupation": "trader",
           "knows": [
@@ -27988,6 +28156,7 @@
         {
           "name": "Wick Cormorant",
           "age": 16,
+          "sex": "m",
           "household": "cormorant",
           "occupation": "fisher",
           "knows": [
@@ -28135,6 +28304,7 @@
         {
           "name": "Wick Gull",
           "age": 38,
+          "sex": "m",
           "household": "gull",
           "occupation": "fisher",
           "knows": [
@@ -28348,6 +28518,7 @@
         {
           "name": "Nia Gull",
           "age": 36,
+          "sex": "f",
           "household": "gull",
           "occupation": "cook",
           "knows": [
@@ -28562,6 +28733,7 @@
         {
           "name": "Dory Gull",
           "age": 6,
+          "sex": "f",
           "household": "gull",
           "occupation": "child",
           "knows": [],
@@ -28663,6 +28835,7 @@
         {
           "name": "Ostrander Sallow",
           "age": 61,
+          "sex": "m",
           "household": "sallow",
           "occupation": "scribe",
           "knows": [
@@ -28853,6 +29026,7 @@
         {
           "name": "Mira Sallow",
           "age": 57,
+          "sex": "f",
           "household": "sallow",
           "occupation": "healer",
           "knows": [
@@ -29049,6 +29223,7 @@
         {
           "name": "Wick Brine",
           "age": 33,
+          "sex": "m",
           "household": "brine",
           "occupation": "guard",
           "knows": [
@@ -29246,6 +29421,7 @@
         {
           "name": "Nia Brine",
           "age": 30,
+          "sex": "f",
           "household": "brine",
           "occupation": "trader",
           "knows": [
@@ -29446,6 +29622,7 @@
         {
           "name": "Dory Brine",
           "age": 4,
+          "sex": "f",
           "household": "brine",
           "occupation": "child",
           "knows": [],
@@ -29537,6 +29714,7 @@
         {
           "name": "Ostrander Mackerel",
           "age": 27,
+          "sex": "m",
           "household": "mackerel",
           "occupation": "fisher",
           "knows": [
@@ -29729,6 +29907,7 @@
         {
           "name": "Sella Mackerel",
           "age": 24,
+          "sex": "f",
           "household": "mackerel",
           "occupation": "cook",
           "knows": [
@@ -29931,6 +30110,7 @@
         {
           "name": "Rook Fenner",
           "age": 40,
+          "sex": "m",
           "household": "fenner-quay",
           "occupation": "fisher",
           "knows": [
@@ -30089,6 +30269,7 @@
         {
           "name": "Lyss Fenner",
           "age": 37,
+          "sex": "f",
           "household": "fenner-quay",
           "occupation": "cook",
           "knows": [
@@ -30252,6 +30433,7 @@
         {
           "name": "Rook Fenner the younger",
           "age": 11,
+          "sex": "m",
           "household": "fenner-quay",
           "occupation": "child",
           "knows": [
@@ -30372,6 +30554,7 @@
         {
           "name": "Sable Harrow",
           "age": 34,
+          "sex": "f",
           "household": "harrow",
           "occupation": "trader",
           "knows": [
@@ -30540,6 +30723,7 @@
         {
           "name": "Tam Harrow",
           "age": 14,
+          "sex": "m",
           "household": "harrow",
           "occupation": "child",
           "knows": [
@@ -30673,6 +30857,7 @@
         {
           "name": "Marrow Wrack",
           "age": 51,
+          "sex": "m",
           "household": "wrack",
           "occupation": "builder",
           "knows": [
@@ -30861,6 +31046,7 @@
         {
           "name": "Odile Wrack",
           "age": 48,
+          "sex": "f",
           "household": "wrack",
           "occupation": "healer",
           "knows": [
@@ -31057,6 +31243,7 @@
         {
           "name": "Nia Wrack",
           "age": 17,
+          "sex": "f",
           "household": "wrack",
           "occupation": "cook",
           "knows": [
@@ -31241,6 +31428,7 @@
         {
           "name": "Jory Pike",
           "age": 29,
+          "sex": "m",
           "household": "pike-quay",
           "occupation": "fisher",
           "knows": [
@@ -31422,6 +31610,7 @@
         {
           "name": "Sella Pike",
           "age": 55,
+          "sex": "f",
           "household": "pike-quay",
           "occupation": "cook",
           "knows": [
@@ -31607,6 +31796,7 @@
         {
           "name": "Brannock Sedge",
           "age": 44,
+          "sex": "m",
           "household": "sedge-quay",
           "occupation": "trader",
           "knows": [
@@ -31775,6 +31965,7 @@
         {
           "name": "Dory Sedge",
           "age": 41,
+          "sex": "f",
           "household": "sedge-quay",
           "occupation": "cook",
           "knows": [
@@ -31935,6 +32126,7 @@
         {
           "name": "Tam Sedge",
           "age": 8,
+          "sex": "m",
           "household": "sedge-quay",
           "occupation": "child",
           "knows": [
@@ -32041,6 +32233,7 @@
         {
           "name": "Ostrander Gull",
           "age": 63,
+          "sex": "m",
           "household": "gull-quay",
           "occupation": "fisher",
           "knows": [
@@ -32265,6 +32458,7 @@
         {
           "name": "Hob Garrow",
           "age": 60,
+          "sex": "m",
           "household": "garrow",
           "occupation": "farmer",
           "knows": [
@@ -32485,6 +32679,7 @@
         {
           "name": "Annot Garrow",
           "age": 33,
+          "sex": "f",
           "household": "garrow",
           "occupation": "farmer",
           "knows": [
@@ -32654,6 +32849,7 @@
         {
           "name": "Cerdic Garrow",
           "age": 11,
+          "sex": "m",
           "household": "garrow",
           "occupation": "child",
           "knows": [
@@ -32761,6 +32957,7 @@
         {
           "name": "Leofgifu Garrow",
           "age": 57,
+          "sex": "f",
           "household": "garrow",
           "occupation": "cook",
           "knows": [
@@ -32940,6 +33137,7 @@
         {
           "name": "Oswin Wray",
           "age": 45,
+          "sex": "m",
           "household": "wray-elm",
           "occupation": "hunter",
           "knows": [
@@ -33123,6 +33321,7 @@
         {
           "name": "Rowan Wray",
           "age": 43,
+          "sex": "f",
           "household": "wray-elm",
           "occupation": "fisher",
           "knows": [
@@ -33279,6 +33478,7 @@
         {
           "name": "Thea Wray",
           "age": 9,
+          "sex": "f",
           "household": "wray-elm",
           "occupation": "child",
           "knows": [
@@ -33387,6 +33587,7 @@
         {
           "name": "Aldwyn Bexley",
           "age": 38,
+          "sex": "m",
           "household": "bexley",
           "occupation": "builder",
           "knows": [
@@ -33538,6 +33739,7 @@
         {
           "name": "Nerys Bexley",
           "age": 36,
+          "sex": "f",
           "household": "bexley",
           "occupation": "farmer",
           "knows": [
@@ -33673,6 +33875,7 @@
         {
           "name": "Merek Bexley",
           "age": 7,
+          "sex": "m",
           "household": "bexley",
           "occupation": "child",
           "knows": [
@@ -33775,6 +33978,7 @@
         {
           "name": "Edric Toller",
           "age": 52,
+          "sex": "m",
           "household": "toller",
           "occupation": "farmer",
           "knows": [
@@ -33953,6 +34157,7 @@
         {
           "name": "Sibley Toller",
           "age": 49,
+          "sex": "f",
           "household": "toller",
           "occupation": "farmer",
           "knows": [
@@ -34129,6 +34334,7 @@
         {
           "name": "Goda Toller",
           "age": 22,
+          "sex": "f",
           "household": "toller",
           "occupation": "farmer",
           "knows": [
@@ -34305,6 +34511,7 @@
         {
           "name": "Hreod Toller",
           "age": 14,
+          "sex": "m",
           "household": "toller",
           "occupation": "farmer",
           "knows": [
@@ -34455,6 +34662,7 @@
         {
           "name": "Osric Dunn",
           "age": 55,
+          "sex": "m",
           "household": "dunn",
           "occupation": "fisher",
           "knows": [
@@ -34684,6 +34892,7 @@
         {
           "name": "Rona Dunn",
           "age": 52,
+          "sex": "f",
           "household": "dunn",
           "occupation": "cook",
           "knows": [
@@ -34853,6 +35062,7 @@
         {
           "name": "Perrin Dunn",
           "age": 27,
+          "sex": "m",
           "household": "dunn",
           "occupation": "fisher",
           "knows": [
@@ -35016,6 +35226,7 @@
         {
           "name": "Inga Dunn",
           "age": 24,
+          "sex": "f",
           "household": "dunn",
           "occupation": "fisher",
           "knows": [
@@ -35184,6 +35395,7 @@
         {
           "name": "Hob Dunn",
           "age": 9,
+          "sex": "m",
           "household": "dunn",
           "occupation": "child",
           "knows": [
@@ -35290,6 +35502,7 @@
         {
           "name": "Cuthbert Stave",
           "age": 48,
+          "sex": "m",
           "household": "stave",
           "occupation": "hunter",
           "knows": [
@@ -35486,6 +35699,7 @@
         {
           "name": "Merrow Stave",
           "age": 45,
+          "sex": "f",
           "household": "stave",
           "occupation": "farmer",
           "knows": [
@@ -35668,6 +35882,7 @@
         {
           "name": "Wren Stave",
           "age": 11,
+          "sex": "f",
           "household": "stave",
           "occupation": "child",
           "knows": [
@@ -35782,6 +35997,7 @@
         {
           "name": "Sedge Gannet",
           "age": 38,
+          "sex": "m",
           "household": "gannet",
           "occupation": "fisher",
           "knows": [
@@ -35947,6 +36163,7 @@
         {
           "name": "Tern Gannet",
           "age": 36,
+          "sex": "f",
           "household": "gannet",
           "occupation": "fish runner",
           "knows": [
@@ -36144,6 +36361,7 @@
         {
           "name": "Minnow Gannet",
           "age": 6,
+          "sex": "f",
           "household": "gannet",
           "occupation": "child",
           "knows": [],
@@ -36229,6 +36447,7 @@
         {
           "name": "Rook Tarn",
           "age": 61,
+          "sex": "m",
           "household": "tarn",
           "occupation": "fisher",
           "knows": [
@@ -36409,6 +36628,7 @@
         {
           "name": "Mavis Tarn",
           "age": 58,
+          "sex": "f",
           "household": "tarn",
           "occupation": "farmer",
           "knows": [
@@ -36583,6 +36803,7 @@
         {
           "name": "Pike Tarn",
           "age": 31,
+          "sex": "m",
           "household": "tarn",
           "occupation": "hunter",
           "knows": [
@@ -36783,6 +37004,7 @@
         {
           "name": "Nell Sedge",
           "age": 50,
+          "sex": "f",
           "household": "sedge",
           "occupation": "farmer",
           "knows": [
@@ -37042,6 +37264,7 @@
         {
           "name": "Eadric Sedge",
           "age": 47,
+          "sex": "m",
           "household": "sedge",
           "occupation": "fisher",
           "knows": [
@@ -37234,6 +37457,7 @@
         {
           "name": "Hilda Sedge",
           "age": 43,
+          "sex": "f",
           "household": "sedge",
           "occupation": "cook",
           "knows": [
@@ -37413,6 +37637,7 @@
         {
           "name": "Wyn Sedge",
           "age": 14,
+          "sex": "m",
           "household": "sedge",
           "occupation": "child",
           "knows": [
@@ -37577,6 +37802,7 @@
         {
           "name": "Merewyn Sedge",
           "age": 9,
+          "sex": "f",
           "household": "sedge",
           "occupation": "child",
           "knows": [
@@ -37688,6 +37914,7 @@
         {
           "name": "Morwen Coombe",
           "age": 39,
+          "sex": "f",
           "household": "coombe-reed",
           "occupation": "farmer",
           "knows": [
@@ -37888,6 +38115,7 @@
         {
           "name": "Cedda Coombe",
           "age": 11,
+          "sex": "f",
           "household": "coombe-reed",
           "occupation": "child",
           "knows": [
@@ -38034,6 +38262,7 @@
         {
           "name": "Osric Coombe",
           "age": 6,
+          "sex": "m",
           "household": "coombe-reed",
           "occupation": "child",
           "knows": [],
@@ -38133,6 +38362,7 @@
         {
           "name": "Ethelred Wade",
           "age": 55,
+          "sex": "m",
           "household": "wade-reed",
           "occupation": "fisher",
           "knows": [
@@ -38297,6 +38527,7 @@
         {
           "name": "Leofrun Wade",
           "age": 51,
+          "sex": "f",
           "household": "wade-reed",
           "occupation": "farmer",
           "knows": [
@@ -38470,6 +38701,7 @@
         {
           "name": "Godric Wade",
           "age": 24,
+          "sex": "m",
           "household": "wade-reed",
           "occupation": "fisher",
           "knows": [
@@ -38654,6 +38886,7 @@
         {
           "name": "Robin Hale",
           "age": 11,
+          "sex": "m",
           "household": "hale",
           "occupation": "child",
           "knows": [],
@@ -38796,6 +39029,7 @@
         {
           "name": "Marta Hale",
           "age": 44,
+          "sex": "f",
           "household": "hale",
           "occupation": "outlaw",
           "knows": [
@@ -39042,6 +39276,7 @@
         {
           "name": "Aldwin Hale",
           "age": 70,
+          "sex": "m",
           "household": "hale",
           "occupation": "farmer",
           "knows": [
@@ -39206,6 +39441,7 @@
         {
           "name": "Kai Ostrander",
           "age": 34,
+          "sex": "m",
           "household": "ned-hale",
           "occupation": "outlaw",
           "knows": [
@@ -39399,6 +39635,7 @@
         {
           "name": "Ned Hale",
           "age": 40,
+          "sex": "m",
           "household": "ned-hale",
           "occupation": "outlaw",
           "knows": [
@@ -39630,6 +39867,7 @@
         {
           "name": "Sayer Hale",
           "age": 37,
+          "sex": "f",
           "household": "ned-hale",
           "occupation": "cook",
           "knows": [
@@ -39818,6 +40056,7 @@
         {
           "name": "Pell",
           "age": 19,
+          "sex": "m",
           "household": "pell",
           "occupation": "outlaw",
           "knows": [
@@ -39996,6 +40235,7 @@
         {
           "name": "Hob Ferrier",
           "age": 52,
+          "sex": "m",
           "household": "pell",
           "occupation": "hunter",
           "knows": [
@@ -40219,6 +40459,7 @@
         {
           "name": "Hal Tolley",
           "age": 38,
+          "sex": "m",
           "household": "tolley",
           "occupation": "farmer",
           "knows": [
@@ -40396,6 +40637,7 @@
         {
           "name": "Hedric Ashby",
           "age": 31,
+          "sex": "m",
           "household": "ashby",
           "occupation": "hunter",
           "knows": [
@@ -40580,6 +40822,7 @@
         {
           "name": "Wren Ashby",
           "age": 10,
+          "sex": "f",
           "household": "ashby",
           "occupation": "child",
           "knows": [
@@ -40722,6 +40965,7 @@
         {
           "name": "Rannoch Voss",
           "age": 47,
+          "sex": "m",
           "household": "highfold-hollow",
           "occupation": "hunter",
           "knows": [
@@ -40907,6 +41151,7 @@
         {
           "name": "Elska Voss",
           "age": 44,
+          "sex": "f",
           "household": "highfold-hollow",
           "occupation": "farmer",
           "knows": [
@@ -41082,6 +41327,7 @@
         {
           "name": "Jorunn Voss",
           "age": 19,
+          "sex": "f",
           "household": "highfold-hollow",
           "occupation": "hunter",
           "knows": [
@@ -41269,6 +41515,7 @@
         {
           "name": "Soren Voss",
           "age": 12,
+          "sex": "m",
           "household": "highfold-hollow",
           "occupation": "child",
           "knows": [
@@ -41395,6 +41642,7 @@
         {
           "name": "Torek Voss",
           "age": 72,
+          "sex": "m",
           "household": "highfold-hollow",
           "occupation": "hunter",
           "knows": [
@@ -41582,6 +41830,7 @@
         {
           "name": "Orvin Hollis",
           "age": 47,
+          "sex": "m",
           "household": "sootwood-hollis",
           "occupation": "woodcutter",
           "knows": [
@@ -41773,6 +42022,7 @@
         {
           "name": "Maren Hollis",
           "age": 44,
+          "sex": "f",
           "household": "sootwood-hollis",
           "occupation": "farmer",
           "knows": [
@@ -41953,6 +42203,7 @@
         {
           "name": "Tace Hollis",
           "age": 15,
+          "sex": "f",
           "household": "sootwood-hollis",
           "occupation": "woodcutter",
           "knows": [
@@ -42110,6 +42361,7 @@
         {
           "name": "Durrow Hollis",
           "age": 9,
+          "sex": "m",
           "household": "sootwood-hollis",
           "occupation": "child",
           "knows": [
@@ -42244,6 +42496,7 @@
         {
           "name": "Cael Tarn",
           "age": 51,
+          "sex": "m",
           "household": "sootwood-tarn",
           "occupation": "woodcutter",
           "knows": [
@@ -42425,6 +42678,7 @@
         {
           "name": "Sena Tarn",
           "age": 46,
+          "sex": "f",
           "household": "sootwood-tarn",
           "occupation": "woodcutter",
           "knows": [
@@ -42609,6 +42863,7 @@
         {
           "name": "Pell Tarn",
           "age": 12,
+          "sex": "m",
           "household": "sootwood-tarn",
           "occupation": "child",
           "knows": [
@@ -42753,6 +43008,7 @@
         {
           "name": "Jem Coombe",
           "age": 42,
+          "sex": "m",
           "household": "coombe",
           "occupation": "farmer",
           "knows": [
@@ -42946,6 +43202,7 @@
         {
           "name": "Tibbott Coombe",
           "age": 68,
+          "sex": "m",
           "household": "coombe",
           "occupation": "farmer",
           "knows": [
@@ -43110,6 +43367,7 @@
         {
           "name": "Rill Fenlake",
           "age": 35,
+          "sex": "f",
           "household": "fenlake",
           "occupation": "fisher",
           "knows": [
@@ -43290,6 +43548,7 @@
         {
           "name": "Gristle Fenlake",
           "age": 9,
+          "sex": "m",
           "household": "fenlake",
           "occupation": "child",
           "knows": [
@@ -43415,6 +43674,7 @@
         {
           "name": "Hollis Brine",
           "age": 47,
+          "sex": "m",
           "household": "saltings-brine",
           "occupation": "fisher",
           "knows": [
@@ -43585,6 +43845,7 @@
         {
           "name": "Marra Brine",
           "age": 44,
+          "sex": "f",
           "household": "saltings-brine",
           "occupation": "farmer",
           "knows": [
@@ -43766,6 +44027,7 @@
         {
           "name": "Tarn Brine",
           "age": 19,
+          "sex": "m",
           "household": "saltings-brine",
           "occupation": "fisher",
           "knows": [
@@ -43937,6 +44199,7 @@
         {
           "name": "Sedge Brine",
           "age": 11,
+          "sex": "f",
           "household": "saltings-brine",
           "occupation": "child",
           "knows": [
@@ -44053,6 +44316,7 @@
         {
           "name": "Grim Tarn",
           "age": 52,
+          "sex": "m",
           "household": "saltings-tarn",
           "occupation": "fisher",
           "knows": [
@@ -44221,6 +44485,7 @@
         {
           "name": "Ebba Tarn",
           "age": 49,
+          "sex": "f",
           "household": "saltings-tarn",
           "occupation": "farmer",
           "knows": [
@@ -44384,6 +44649,7 @@
         {
           "name": "Nessa Tarn",
           "age": 15,
+          "sex": "f",
           "household": "saltings-tarn",
           "occupation": "child",
           "knows": [
@@ -44550,6 +44816,7 @@
         {
           "name": "Edda Wray",
           "age": 71,
+          "sex": "f",
           "household": "wray",
           "occupation": "fisher",
           "knows": [
@@ -44703,6 +44970,7 @@
         {
           "name": "Colm Wray",
           "age": 12,
+          "sex": "m",
           "household": "wray",
           "occupation": "child",
           "knows": [
@@ -44857,6 +45125,7 @@
         {
           "name": "Ysolde Fenwick",
           "age": 61,
+          "sex": "f",
           "household": "tanglewood-cottage",
           "occupation": "healer",
           "knows": [
@@ -45039,6 +45308,7 @@
         {
           "name": "Orla Fenwick",
           "age": 34,
+          "sex": "f",
           "household": "tanglewood-cottage",
           "occupation": "farmer",
           "knows": [
@@ -45217,6 +45487,7 @@
         {
           "name": "Hollis Fenwick",
           "age": 9,
+          "sex": "m",
           "household": "tanglewood-cottage",
           "occupation": "child",
           "knows": [
@@ -45345,6 +45616,7 @@
         {
           "name": "Bramwell Ashdown",
           "age": 44,
+          "sex": "m",
           "household": "ferncross-holt",
           "occupation": "woodcutter",
           "knows": [
@@ -45536,6 +45808,7 @@
         {
           "name": "Nesta Ashdown",
           "age": 41,
+          "sex": "f",
           "household": "ferncross-holt",
           "occupation": "cook",
           "knows": [
@@ -45716,6 +45989,7 @@
         {
           "name": "Corliss Ashdown",
           "age": 13,
+          "sex": "f",
           "household": "ferncross-holt",
           "occupation": "child",
           "knows": [
@@ -45841,6 +46115,7 @@
         {
           "name": "Odelia Harrow",
           "age": 36,
+          "sex": "f",
           "household": "ferncross-harrow",
           "occupation": "woodcutter",
           "knows": [
@@ -46022,6 +46297,7 @@
         {
           "name": "Roderick Harrow",
           "age": 39,
+          "sex": "m",
           "household": "ferncross-harrow",
           "occupation": "farmer",
           "knows": [
@@ -46188,6 +46464,7 @@
         {
           "name": "Tamsin Harrow",
           "age": 8,
+          "sex": "f",
           "household": "ferncross-harrow",
           "occupation": "child",
           "knows": [

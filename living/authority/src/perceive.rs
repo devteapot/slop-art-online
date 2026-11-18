@@ -710,6 +710,11 @@ fn round(v: f32) -> f64 {
 }
 
 /// What the character currently perceives, as compact JSON for the mind.
+/// The scene's list of one's remembered places, with bearings.
+pub const PLACES: &str = "places";
+/// How many remembered places a scene lists (nearest first).
+const PLACES_SHOWN: usize = 12;
+
 pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
     let _span = common::span("perceive.scene_json");
     common::diag(|| "scene_json", 1);
@@ -722,6 +727,9 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
     you.insert("id".into(), json!(id));
     you.insert("name".into(), json!(me.name));
     you.insert("kind".into(), json!(me.kind));
+    if let Some(form) = crate::sex::word(ctx, &me) {
+        you.insert("form".into(), json!(form));
+    }
     you.insert("at".into(), json!([round(at.0), round(at.1)]));
     you.insert("terrain".into(), json!(map.at(at.0, at.1).name()));
     if let Some(sp) = common::species(&me.kind).filter(|s| !s.eats.is_empty()) {
@@ -847,6 +855,8 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
         let shown = if far { crate::far::handle_for(ctx, me.id, c.id, now) } else {
             if ch.kind == "person" && ch.id != me.id {
                 crate::far::made_out(ctx, &me, c.id, now);
+                // Made out at full sight: the mind remembers their body's sex with them.
+                crate::sex::remember(ctx, &me, &ch, now);
             }
             c.id
         };
@@ -863,6 +873,11 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
             o.insert("community".into(), json!("yours"));
         }
         o.insert("kind".into(), json!(ch.kind));
+        // Their body's form by sex and stage, the rules' word (`sex_words()`; body-sex): seen
+        // near or far, as a player's screen draws them in full at any distance they are seen.
+        if let Some(form) = crate::sex::word(ctx, &ch) {
+            o.insert("form".into(), json!(form));
+        }
         match ch.stage {
             0 => {
                 o.insert("age".into(), json!(if ch.kind == "person" { "baby" } else { "newborn" }));
@@ -1059,6 +1074,24 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
     }
     if !smelled.is_empty() {
         scene[living_rules::species::SMELLED] = Value::Array(smelled);
+    }
+    // Remembered places (docs/MOVEMENT_MIND.md, step 3): each of one's own places, which way and
+    // how far from here, in the words used for what is in sight (`living_rules::bearing`, shared
+    // with the mind's talk-turn place lists), nearest first. Only one's own: a place one does not
+    // know is not listed. A deliberation's place list leaves the way to this.
+    let mut places: Vec<(f32, Value)> = ctx
+        .db
+        .place()
+        .actor()
+        .filter(id)
+        .map(|p| {
+            let d = common::dist(at, (p.x, p.y));
+            (d, json!({"name": p.name, "dir": common::direction(at, (p.x, p.y)), "dist": living_rules::bearing::rough_dist(d)}))
+        })
+        .collect();
+    if !places.is_empty() {
+        places.sort_by(|a, b| a.0.total_cmp(&b.0));
+        scene[PLACES] = Value::Array(places.into_iter().take(PLACES_SHOWN).map(|(_, v)| v).collect());
     }
     // While sight has a field (the `fov_on` law): which way one faces, and what one hears but
     // cannot see, in a person's words (what it sounds like, where from the way one faces and by

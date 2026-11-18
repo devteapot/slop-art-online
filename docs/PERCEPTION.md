@@ -214,6 +214,17 @@ Second change. Every path by which a mind, or a behaviour graph, learns about an
 | Speech, signals, smell | hearing and scent radii | unchanged: they are not sight |
 | Resources, structures and terrain in a scene | within sight | unchanged: static world data, which a player's client also draws by chunk window ([Open](#open)) |
 
+### A body's sex in a scene (sex-1, 2026-11-13)
+
+- **A person's scene entry** (`perceive::scene_json`) carries `"form"`: the rules' word for their body by sex and life stage (`sex_words()`: "woman", "old man", "girl"…). A mind's own `you` gets its own.
+  - It is given wherever the person is in the scene, made out or a far figure under its handle.
+  - A player's client draws every person in full at any distance it sees them, so their sex shows on the screen at any range too. That is never more than the screen shows, and never less.
+  - It comes from the private `sex` table (one point lookup per person in the scene, at most 14), in worlds with and without looks.
+- **Labels are unchanged.** "a stranger" and the far label carry no sex, and the projection's `label` and `name` columns are what they were.
+- **A first sight's line** names the form after the label: "For the first time you see a stranger (a woman), 9 tiles west".
+- **A player** gets its own sex through `my_sex`, and others' only as drawn (their look line) and in the client's look words.
+- **Design and data paths:** docs/LIVING_CORE.md, "Body sex".
+
 ### One moment per prompt (scene-since, 2026-11-12)
 
 A deliberation's prompt sets "# What you perceive right now" (the request's `scene`) beside the character's recent experiences. Before this change the two could describe different moments, and a mind read them as one story.

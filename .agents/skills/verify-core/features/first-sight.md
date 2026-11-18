@@ -1,6 +1,6 @@
 # First sights that ask for a thought
 
-A first sight of someone one cannot place asks one's mind for one thought (docs/FIRST_SIGHT.md). The law `first_sight_thinks` is off by default; `first_sight_gap_s` is 300 s (0–3,600). Both are script laws (`skills.rhai` `laws()`, `script.rs` `Laws`), switched at runtime by `set_world_law` and described by `laws_about`.
+A first sight of someone one cannot place asks one's mind for one thought (docs/FIRST_SIGHT.md). The law `first_sight_thinks` is off by default; `first_sight_gap_s` is 300 s (0–3,600). Both are script laws (`skills.rhai` `laws()`, `script.rs` `Laws`), switched at runtime by `set_world_law` and described by `law_about`.
 
 ## What it does (user POV)
 

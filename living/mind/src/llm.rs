@@ -340,6 +340,9 @@ const GATE_PAUSE_MAX: Duration = Duration::from_secs(60);
 #[serde(rename_all = "snake_case")]
 pub enum Lane {
     Interactive,
+    /// The fast lane (docs/FAST_LANE.md): its own slots, as many as the world's
+    /// `fast_lane_inflight`, outside the shared pool, so a battle's slow work cannot starve it.
+    Fast,
     Urgent,
     Routine,
     Background,
@@ -351,7 +354,8 @@ impl Lane {
     pub fn for_purpose(purpose: &str) -> Self {
         match purpose {
             "talk" => Self::Interactive,
-            "combat" | "alarm" | "attack" | "fast" => Self::Urgent,
+            "fast" => Self::Fast,
+            "combat" | "alarm" | "attack" => Self::Urgent,
             "consolidate" | "reorganize" | "identity" | "internalize" => Self::Background,
             _ => Self::Routine,
         }
@@ -551,14 +555,40 @@ struct Queue {
     sequence: u64,
     in_flight: usize,
     lower_in_flight: usize,
+    /// The fast lane's reserved slots and its calls in flight in them (outside `in_flight`).
+    fast_slots: usize,
+    fast_in_flight: usize,
     concurrency: usize,
     global_rpm: f64,
     global_next: Instant,
 }
 
 impl Queue {
+    /// The first waiting request of `lane` whose profile may send now (rate and outage gates).
+    fn ready_in(&mut self, lane: Lane, now: Instant) -> Option<u64> {
+        // Keep a paced lane's turn so cheaper requests cannot consume its token budget forever.
+        let (rates, gates, hosts) = (&mut self.rates, &self.gates, &self.hosts);
+        self.waiting
+            .iter()
+            .filter(|w| w.lane == lane)
+            .find(|w| {
+                let gate = gates.get(&hosts[&w.profile]);
+                gate.is_none_or(|g| g.retry_at.is_none_or(|at| g.probing.is_none() && now >= at)) && rates.get_mut(&w.profile).unwrap().ready_at(w.cost, now) <= now
+            })
+            .map(|w| w.id)
+    }
+
     fn candidate(&mut self, now: Instant) -> Option<u64> {
-        if self.in_flight >= self.concurrency || now < self.global_next {
+        if now < self.global_next {
+            return None;
+        }
+        // The fast lane's own slots: it never waits behind the shared pool, and never takes it.
+        if self.fast_in_flight < self.fast_slots && self.waiting.iter().any(|w| w.lane == Lane::Fast) {
+            if let Some(id) = self.ready_in(Lane::Fast, now) {
+                return Some(id);
+            }
+        }
+        if self.in_flight >= self.concurrency {
             return None;
         }
         let lane = if self.waiting.iter().any(|w| w.lane == Lane::Interactive) {
@@ -572,20 +602,25 @@ impl Queue {
         if lane != Lane::Interactive && self.lower_in_flight >= lower_limit {
             return None;
         }
-        // Keep a paced lane's turn so cheaper requests cannot consume its token budget forever.
-        self.waiting
-            .iter()
-            .filter(|w| w.lane == lane)
-            .find(|w| {
-                let gate = self.gates.get(&self.hosts[&w.profile]);
-                gate.is_none_or(|g| g.retry_at.is_none_or(|at| g.probing.is_none() && now >= at)) && self.rates.get_mut(&w.profile).unwrap().ready_at(w.cost, now) <= now
-            })
-            .map(|w| w.id)
+        self.ready_in(lane, now)
     }
 
     fn start(&mut self, id: u64, now: Instant) -> (Lane, Option<String>) {
         let pos = self.waiting.iter().position(|w| w.id == id).unwrap();
         let w = self.waiting.remove(pos).unwrap();
+        if w.lane == Lane::Fast {
+            self.rates.get_mut(&w.profile).unwrap().sent(id, w.cost, now);
+            self.fast_in_flight += 1;
+            if self.global_rpm > 0.0 {
+                self.global_next = now + Duration::from_secs_f64(60.0 / self.global_rpm);
+            }
+            let host = self.hosts[&w.profile].clone();
+            let probe = self.gates.get_mut(&host).filter(|g| g.retry_at.is_some()).map(|g| {
+                g.probing = Some(id);
+                host
+            });
+            return (w.lane, probe);
+        }
         if w.lane != Lane::Interactive {
             let offset = (0..NON_INTERACTIVE_ADMISSIONS.len()).find(|offset| NON_INTERACTIVE_ADMISSIONS[(self.next_lane + offset) % NON_INTERACTIVE_ADMISSIONS.len()] == w.lane).unwrap();
             self.next_lane = (self.next_lane + offset + 1) % NON_INTERACTIVE_ADMISSIONS.len();
@@ -605,6 +640,9 @@ impl Queue {
     }
 }
 
+/// The fast lane's reserved slots until the world's `fast_lane_inflight` is read (its shipped value).
+pub const FAST_SLOTS_DEFAULT: usize = 4;
+
 struct Scheduler {
     queue: std::sync::Mutex<Queue>,
     changed: tokio::sync::Notify,
@@ -621,8 +659,12 @@ impl Drop for Admission<'_> {
     fn drop(&mut self) {
         let mut q = self.scheduler.queue.lock().unwrap();
         if let Some(lane) = self.lane {
-            q.in_flight -= 1;
-            q.lower_in_flight -= usize::from(lane != Lane::Interactive);
+            if lane == Lane::Fast {
+                q.fast_in_flight -= 1;
+            } else {
+                q.in_flight -= 1;
+                q.lower_in_flight -= usize::from(lane != Lane::Interactive);
+            }
         } else {
             q.waiting.retain(|w| w.id != self.id);
         }
@@ -649,6 +691,8 @@ impl Scheduler {
                 sequence: 0,
                 in_flight: 0,
                 lower_in_flight: 0,
+                fast_slots: FAST_SLOTS_DEFAULT,
+                fast_in_flight: 0,
                 concurrency,
                 global_rpm,
                 global_next: now,
@@ -689,6 +733,14 @@ impl Scheduler {
                 }
             }
             tokio::select! { _ = changed => {}, _ = tokio::time::sleep(Duration::from_millis(50)) => {} }
+        }
+    }
+
+    fn set_fast_slots(&self, n: usize) {
+        let mut q = self.queue.lock().unwrap();
+        if q.fast_slots != n {
+            q.fast_slots = n;
+            self.changed.notify_waiters();
         }
     }
 
@@ -872,6 +924,12 @@ impl Llm {
     /// given stage of attention).
     pub async fn chat(&self, route: &str, at: Attention, purpose: &str, actor: &str, messages: &[Msg]) -> Result<Reply> {
         self.chat_in_lane(route, at, purpose, actor, messages, Lane::for_purpose(purpose)).await
+    }
+
+    /// The fast lane's reserved slots: the world's `fast_lane_inflight` (the authority issues no
+    /// more requests than that at once, so the lane never waits on the shared pool).
+    pub fn set_fast_slots(&self, n: usize) {
+        self.scheduler.set_fast_slots(n);
     }
 
     pub async fn chat_in_lane(&self, route: &str, at: Attention, purpose: &str, actor: &str, messages: &[Msg], lane: Lane) -> Result<Reply> {
@@ -1710,6 +1768,45 @@ mod tests {
         assert_eq!(q.candidate(now + Duration::from_secs(2)), Some(3));
     }
 
+    fn one_profile() -> ModelsFile {
+        ModelsFile {
+            default: "p".into(),
+            profiles: HashMap::from([("p".into(), test_profile())]),
+            assign: Default::default(),
+            rotate: vec![],
+            species: Default::default(),
+            stages: Default::default(),
+            groups: Default::default(),
+            mixes: Default::default(),
+        }
+    }
+
+    /// The fast lane has its own slots (the world's `fast_lane_inflight`), outside the shared
+    /// pool: a pool full of slow work does not hold it back, and it never takes a shared slot.
+    #[test]
+    fn the_fast_lane_has_its_own_slots() {
+        let now = Instant::now();
+        let scheduler = Scheduler::new(&one_profile(), 1, 0.0);
+        scheduler.set_fast_slots(1);
+        let mut q = scheduler.queue.lock().unwrap();
+        q.waiting.push_back(Waiting { id: 1, profile: "p".into(), lane: Lane::Urgent, cost: 10 });
+        q.start(1, now);
+        assert_eq!(q.in_flight, 1, "the shared pool is full");
+        q.waiting.push_back(Waiting { id: 2, profile: "p".into(), lane: Lane::Routine, cost: 10 });
+        q.waiting.push_back(Waiting { id: 3, profile: "p".into(), lane: Lane::Fast, cost: 10 });
+        assert_eq!(q.candidate(now + Duration::from_secs(1)), Some(3), "a fast call goes in its own slot");
+        q.start(3, now + Duration::from_secs(1));
+        assert_eq!((q.in_flight, q.fast_in_flight), (1, 1));
+        q.waiting.push_back(Waiting { id: 4, profile: "p".into(), lane: Lane::Fast, cost: 10 });
+        assert_eq!(q.candidate(now + Duration::from_secs(2)), None, "its slots are full, and the shared pool is not its");
+        q.in_flight -= 1;
+        q.lower_in_flight -= 1;
+        assert_eq!(q.candidate(now + Duration::from_secs(2)), Some(2), "a freed shared slot goes to slow work, not to the waiting fast call");
+        q.fast_slots = 2;
+        q.start(2, now + Duration::from_secs(2));
+        assert_eq!(q.candidate(now + Duration::from_secs(3)), Some(4), "more slots, the next fast call goes");
+    }
+
     #[test]
     fn retry_after_accepts_seconds_and_http_dates() {
         let now = std::time::UNIX_EPOCH + Duration::from_secs(1445412480);
@@ -1735,6 +1832,7 @@ mod tests {
             assert_eq!(Lane::for_purpose(purpose), Lane::Background);
         }
         assert_eq!(Lane::for_purpose("talk"), Lane::Interactive);
+        assert_eq!(Lane::for_purpose("fast"), Lane::Fast);
     }
 
     #[tokio::test]

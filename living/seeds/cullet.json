@@ -17455,6 +17455,7 @@
     {
      "name": "Vessa Pontil",
      "age": 61,
+     "sex": "f",
      "household": "pontil",
      "occupation": "glassmaster",
      "knows": [
@@ -17685,6 +17686,7 @@
     {
      "name": "Ode Pontil",
      "age": 66,
+     "sex": "m",
      "household": "pontil",
      "occupation": "cullet_sorter",
      "knows": [
@@ -17905,6 +17907,7 @@
     {
      "name": "Lumi Pontil",
      "age": 9,
+     "sex": "f",
      "household": "pontil",
      "occupation": "child",
      "knows": [],
@@ -18068,6 +18071,7 @@
     {
      "name": "Corvin Hollin",
      "age": 38,
+     "sex": "m",
      "household": "hollin",
      "occupation": "blower",
      "knows": [
@@ -18279,6 +18283,7 @@
     {
      "name": "Tamsin Hollin",
      "age": 35,
+     "sex": "f",
      "household": "hollin",
      "occupation": "glazier",
      "knows": [
@@ -18493,6 +18498,7 @@
     {
      "name": "Edda Hollin",
      "age": 12,
+     "sex": "f",
      "household": "hollin",
      "occupation": "child",
      "knows": [],
@@ -18697,6 +18703,7 @@
     {
      "name": "Pim Hollin",
      "age": 6,
+     "sex": "m",
      "household": "hollin",
      "occupation": "child",
      "knows": [],
@@ -18824,6 +18831,7 @@
     {
      "name": "Imre Sarro",
      "age": 29,
+     "sex": "m",
      "household": "sarro",
      "occupation": "blower",
      "knows": [
@@ -19066,6 +19074,7 @@
     {
      "name": "Runa Sarro",
      "age": 55,
+     "sex": "f",
      "household": "sarro",
      "occupation": "lehr_keeper",
      "knows": [
@@ -19279,6 +19288,7 @@
     {
      "name": "Aldous Quill",
      "age": 52,
+     "sex": "m",
      "household": "quill",
      "occupation": "tally_keeper",
      "knows": [
@@ -19490,6 +19500,7 @@
     {
      "name": "Mirren Quill",
      "age": 49,
+     "sex": "f",
      "household": "quill",
      "occupation": "healer",
      "knows": [
@@ -19704,6 +19715,7 @@
     {
      "name": "Sabine Quill",
      "age": 19,
+     "sex": "f",
      "household": "quill",
      "occupation": "reader",
      "knows": [
@@ -19916,6 +19928,7 @@
     {
      "name": "Otto Brandt",
      "age": 44,
+     "sex": "m",
      "household": "brandt",
      "occupation": "pot_maker",
      "knows": [
@@ -20101,6 +20114,7 @@
     {
      "name": "Fenn Brandt",
      "age": 41,
+     "sex": "m",
      "household": "brandt",
      "occupation": "stoker",
      "knows": [
@@ -20291,6 +20305,7 @@
     {
      "name": "Juno Brandt",
      "age": 8,
+     "sex": "f",
      "household": "brandt",
      "occupation": "child",
      "knows": [],
@@ -20400,6 +20415,7 @@
     {
      "name": "Thessaly Marl",
      "age": 33,
+     "sex": "f",
      "household": "marl",
      "occupation": "stoker",
      "knows": [
@@ -20621,6 +20637,7 @@
     {
      "name": "Wick Marl",
      "age": 5,
+     "sex": "m",
      "household": "marl",
      "occupation": "child",
      "knows": [],
@@ -20754,6 +20771,7 @@
     {
      "name": "Halvard Dunmore",
      "age": 70,
+     "sex": "m",
      "household": "dunmore",
      "occupation": "retired_blower",
      "knows": [
@@ -20968,6 +20986,7 @@
     {
      "name": "Greta Dunmore",
      "age": 68,
+     "sex": "f",
      "household": "dunmore",
      "occupation": "washer",
      "knows": [
@@ -21166,6 +21185,7 @@
     {
      "name": "Tobiah Dunmore",
      "age": 16,
+     "sex": "m",
      "household": "dunmore",
      "occupation": "stoker",
      "knows": [
@@ -21351,6 +21371,7 @@
     {
      "name": "Bram Calloway",
      "age": 47,
+     "sex": "m",
      "household": "calloway",
      "occupation": "boatwright",
      "knows": [
@@ -21552,6 +21573,7 @@
     {
      "name": "Ysolde Calloway",
      "age": 45,
+     "sex": "f",
      "household": "calloway",
      "occupation": "fisher",
      "knows": [
@@ -21743,6 +21765,7 @@
     {
      "name": "Neve Calloway",
      "age": 22,
+     "sex": "f",
      "household": "calloway",
      "occupation": "fisher",
      "knows": [
@@ -21940,6 +21963,7 @@
     {
      "name": "Kit Calloway",
      "age": 14,
+     "sex": "m",
      "household": "calloway",
      "occupation": "boatwright",
      "knows": [
@@ -22131,6 +22155,7 @@
     {
      "name": "Magda Tarn",
      "age": 58,
+     "sex": "f",
      "household": "tarn",
      "occupation": "fisher",
      "knows": [
@@ -22387,6 +22412,7 @@
     {
      "name": "Joss Tarn",
      "age": 31,
+     "sex": "m",
      "household": "tarn",
      "occupation": "fisher",
      "knows": [
@@ -22625,6 +22651,7 @@
     {
      "name": "Eamon Tarn",
      "age": 27,
+     "sex": "m",
      "household": "tarn",
      "occupation": "fisher",
      "knows": [
@@ -22862,6 +22889,7 @@
     {
      "name": "Petra Tarn",
      "age": 30,
+     "sex": "f",
      "household": "tarn",
      "occupation": "smoker",
      "knows": [
@@ -23103,6 +23131,7 @@
     {
      "name": "Nell Tarn",
      "age": 7,
+     "sex": "f",
      "household": "tarn",
      "occupation": "child",
      "knows": [],
@@ -23262,6 +23291,7 @@
     {
      "name": "Ansel Tarn",
      "age": 4,
+     "sex": "m",
      "household": "tarn",
      "occupation": "child",
      "knows": [],
@@ -23386,6 +23416,7 @@
     {
      "name": "Dory Tarn",
      "age": 1,
+     "sex": "f",
      "household": "tarn",
      "occupation": "child",
      "knows": [],
@@ -23493,6 +23524,7 @@
     {
      "name": "Chidi Okoro",
      "age": 40,
+     "sex": "m",
      "household": "okoro",
      "occupation": "line_maker",
      "knows": [
@@ -23698,6 +23730,7 @@
     {
      "name": "Amara Okoro",
      "age": 37,
+     "sex": "f",
      "household": "okoro",
      "occupation": "wrack_gatherer",
      "knows": [
@@ -23906,6 +23939,7 @@
     {
      "name": "Zeke Okoro",
      "age": 11,
+     "sex": "m",
      "household": "okoro",
      "occupation": "child",
      "knows": [],
@@ -24049,6 +24083,7 @@
     {
      "name": "Ife Okoro",
      "age": 9,
+     "sex": "f",
      "household": "okoro",
      "occupation": "child",
      "knows": [],
@@ -24185,6 +24220,7 @@
     {
      "name": "Lorcan Vane",
      "age": 34,
+     "sex": "m",
      "household": "vane",
      "occupation": "fisher",
      "knows": [
@@ -24424,6 +24460,7 @@
     {
      "name": "Davin Vane",
      "age": 26,
+     "sex": "m",
      "household": "vane",
      "occupation": "porter",
      "knows": [
@@ -24650,6 +24687,7 @@
     {
      "name": "Ingrid Morrow",
      "age": 63,
+     "sex": "f",
      "household": "morrow",
      "occupation": "net_mender",
      "knows": [
@@ -24843,6 +24881,7 @@
     {
      "name": "Lark Morrow",
      "age": 17,
+     "sex": "f",
      "household": "morrow",
      "occupation": "wrack_gatherer",
      "knows": [
@@ -25022,6 +25061,7 @@
     {
      "name": "Kenji Sato",
      "age": 50,
+     "sex": "m",
      "household": "sato",
      "occupation": "ash_burner",
      "knows": [
@@ -25219,6 +25259,7 @@
     {
      "name": "Hana Sato",
      "age": 46,
+     "sex": "f",
      "household": "sato",
      "occupation": "wrack_gatherer",
      "knows": [
@@ -25408,6 +25449,7 @@
     {
      "name": "Ren Sato",
      "age": 20,
+     "sex": "m",
      "household": "sato",
      "occupation": "fisher",
      "knows": [
@@ -25613,6 +25655,7 @@
     {
      "name": "Rafe Dunlin",
      "age": 36,
+     "sex": "m",
      "household": "dunlin",
      "occupation": "fisher",
      "knows": [
@@ -25821,6 +25864,7 @@
     {
      "name": "Tilly Dunlin",
      "age": 10,
+     "sex": "f",
      "household": "dunlin",
      "occupation": "child",
      "knows": [],
@@ -25972,6 +26016,7 @@
     {
      "name": "Oswin Greave",
      "age": 57,
+     "sex": "m",
      "household": "greave",
      "occupation": "grower",
      "knows": [
@@ -26191,6 +26236,7 @@
     {
      "name": "Elke Greave",
      "age": 54,
+     "sex": "f",
      "household": "greave",
      "occupation": "grower",
      "knows": [
@@ -26400,6 +26446,7 @@
     {
      "name": "Jory Greave",
      "age": 25,
+     "sex": "m",
      "household": "greave",
      "occupation": "grower",
      "knows": [
@@ -26611,6 +26658,7 @@
     {
      "name": "Suri Greave",
      "age": 24,
+     "sex": "f",
      "household": "greave",
      "occupation": "grower",
      "knows": [
@@ -26824,6 +26872,7 @@
     {
      "name": "Nan Fenwick",
      "age": 42,
+     "sex": "f",
      "household": "fenwick",
      "occupation": "root_grower",
      "knows": [
@@ -27033,6 +27082,7 @@
     {
      "name": "Hobb Fenwick",
      "age": 45,
+     "sex": "m",
      "household": "fenwick",
      "occupation": "root_grower",
      "knows": [
@@ -27232,6 +27282,7 @@
     {
      "name": "Alder Fenwick",
      "age": 13,
+     "sex": "m",
      "household": "fenwick",
      "occupation": "child",
      "knows": [],
@@ -27392,6 +27443,7 @@
     {
      "name": "Posy Fenwick",
      "age": 10,
+     "sex": "f",
      "household": "fenwick",
      "occupation": "child",
      "knows": [],
@@ -27518,6 +27570,7 @@
     {
      "name": "Tam Roon",
      "age": 48,
+     "sex": "m",
      "household": "roon",
      "occupation": "peat_cutter",
      "knows": [
@@ -27711,6 +27764,7 @@
     {
      "name": "Eilidh Roon",
      "age": 44,
+     "sex": "f",
      "household": "roon",
      "occupation": "peat_cutter",
      "knows": [
@@ -27897,6 +27951,7 @@
     {
      "name": "Col Roon",
      "age": 15,
+     "sex": "m",
      "household": "roon",
      "occupation": "peat_cutter",
      "knows": [
@@ -28046,6 +28101,7 @@
     {
      "name": "Marit Sedge",
      "age": 39,
+     "sex": "f",
      "household": "sedge",
      "occupation": "warden",
      "knows": [
@@ -28262,6 +28318,7 @@
     {
      "name": "Anselm Faro",
      "age": 64,
+     "sex": "m",
      "household": "faro",
      "occupation": "lamp_keeper",
      "knows": [
@@ -28471,6 +28528,7 @@
     {
      "name": "Livia Faro",
      "age": 23,
+     "sex": "f",
      "household": "faro",
      "occupation": "oil_renderer",
      "knows": [
@@ -28662,6 +28720,7 @@
     {
      "name": "Dolly Achterberg",
      "age": 51,
+     "sex": "f",
      "household": "achterberg",
      "occupation": "cook",
      "knows": [
@@ -28865,6 +28924,7 @@
     {
      "name": "Pieter Achterberg",
      "age": 53,
+     "sex": "m",
      "household": "achterberg",
      "occupation": "baker",
      "knows": [
@@ -29063,6 +29123,7 @@
     {
      "name": "Roos Achterberg",
      "age": 18,
+     "sex": "f",
      "household": "achterberg",
      "occupation": "server",
      "knows": [
@@ -29262,6 +29323,7 @@
     {
      "name": "Benedikt Orme",
      "age": 59,
+     "sex": "m",
      "household": "orme",
      "occupation": "reader",
      "knows": [
@@ -29455,6 +29517,7 @@
     {
      "name": "Gwil Stannard",
      "age": 43,
+     "sex": "m",
      "household": "stannard",
      "occupation": "mason",
      "knows": [
@@ -29652,6 +29715,7 @@
     {
      "name": "Cora Stannard",
      "age": 40,
+     "sex": "f",
      "household": "stannard",
      "occupation": "grower",
      "knows": [

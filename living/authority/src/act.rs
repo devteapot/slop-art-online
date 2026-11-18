@@ -268,6 +268,9 @@ fn facts_reading(ctx: &ReducerContext, id: u32, now: u64, reads: &Reads) -> Acto
         lit: reads.actor("lit") && common::lit_at(ctx, at),
         stamina,
         focus,
+        // One point lookup, only for a law that reads it (the conception check under
+        // `conceive_needs_pair`).
+        sex: if reads.actor("sex") { crate::sex::of(ctx, id).map(|s| s.name().to_string()).unwrap_or_default() } else { String::new() },
     }
 }
 
@@ -369,6 +372,7 @@ fn target_facts(ctx: &ReducerContext, t: &TargetRef, from: (f32, f32), now: u64)
                 f.alive = c.alive;
                 f.kind = c.kind.clone();
                 f.stage = common::stage_of(ctx, &c, &common::world(ctx), now).name().to_string();
+                f.sex = crate::sex::of(ctx, c.id).map(|s| s.name().to_string()).unwrap_or_default();
                 f.name = c.name;
                 if let Some(b) = ctx.db.body().id().find(c.id) {
                     f.dist = dist(from, pos(&b, now));
@@ -2419,6 +2423,7 @@ fn missed(ctx: &ReducerContext, attacker: u32, victim: u32, at_v: (f32, f32), sk
 /// (bounded per character) for the record; the mind's graph in Neo4j keeps its history.
 pub fn forget_dead(ctx: &ReducerContext, id: u32) {
     ctx.db.familiar().actor().delete(id);
+    crate::known::forget(ctx, id);
     ctx.db.character_senses().id().delete(id);
     ctx.db.character_earshot().id().delete(id);
     ctx.db.experience().observer().delete(id);

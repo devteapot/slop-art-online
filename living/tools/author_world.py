@@ -770,7 +770,11 @@ Write one sheet for each of: {', '.join(m['name'] for m in h['members'])}."""
                     # not know the other by name (docs/SEEDED_LIVES.md).
                     if known_names.get(f"{m['name']}|{rel['name']}") is False:
                         rel["knows_name"] = False
-                r = {"name": m["name"], "age": m["age"], "household": h["key"], "occupation": m["occupation"], "knows": m["knows"], "parents": m.get("parents", []), "sheet": sheet}
+                # Body sex goes with every resident (docs/LIVING_CORE.md, "Body sex"; the authority
+                # refuses an authored cast without it).
+                if m.get("sex") not in ("f", "m"):
+                    sys.exit(f"{m['name']}: the cast gives no sex (\"f\" or \"m\")")
+                r = {"name": m["name"], "age": m["age"], "sex": m["sex"], "household": h["key"], "occupation": m["occupation"], "knows": m["knows"], "parents": m.get("parents", []), "sheet": sheet}
                 inv = dict(ways.get("kit", {}).get(m["occupation"], {"berries": 4}))
                 if m["occupation"] in route_of:
                     ro = route_of[m["occupation"]]
@@ -1040,7 +1044,7 @@ def compile_residents(wd, cast, sheets, notes):
             if h.get("lot"):
                 homes[h["key"]] = h["lot"]
             for m in h["members"]:
-                r = {"name": m["name"], "age": m["age"], "household": h["key"], "occupation": m["occupation"], "knows": m["knows"], "parents": m.get("parents", [])}
+                r = {"name": m["name"], "age": m["age"], "sex": m["sex"], "household": h["key"], "occupation": m["occupation"], "knows": m["knows"], "parents": m.get("parents", [])}
                 r["inventory"] = m.get("inventory", {})
                 if m.get("rhythm"):
                     r["rhythm"] = seed_rhythm(m["rhythm"], notes, m["name"])
@@ -1477,7 +1481,9 @@ def main():
         residents = []
         for h in s["households"]:
             for m in h["members"]:
-                r = {"name": m["name"], "age": m["age"], "household": h["key"], "occupation": m["occupation"], "knows": m["knows"], "parents": m.get("parents", []), "sheet": sheets[m["name"]]}
+                if m.get("sex") not in ("f", "m"):
+                    sys.exit(f"{m['name']}: the cast gives no sex (\"f\" or \"m\")")
+                r = {"name": m["name"], "age": m["age"], "sex": m["sex"], "household": h["key"], "occupation": m["occupation"], "knows": m["knows"], "parents": m.get("parents", []), "sheet": sheets[m["name"]]}
                 if m.get("inventory"):
                     r["inventory"] = m["inventory"]
                 residents.append(r)

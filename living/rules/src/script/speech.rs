@@ -355,42 +355,63 @@ pub const KIN_RELATIONS: &[&str] = &["parent", "child", "sibling", "grandparent"
 
 /// The words a speaker uses for someone by their relation to them (the world's `kin_terms()`,
 /// docs/COMMUNICATION.md §19): "Mother" said by a child names their parent. A perception fact: the
-/// one named would understand it. Each word names whoever stands in that relation to the speaker;
-/// the rules have no sex (a look's `form` is appearance only), so "Mother" and "Father" both name a
-/// parent, and both parents when both hear.
+/// one named would understand it. Each relation's words come in three lists (body-sex,
+/// 2026-11-13): `female` words name only a relative whose body is female ("mother", "daughter"),
+/// `male` words only a male one ("father", "son"), and `any` words anyone in the relation
+/// ("parent"). Words follow the named person's true sex (a speaker knows their own mother); with
+/// no sex known for them (no `sex` row) every word of the relation names them, as before sex
+/// existed. A relation written as a plain list is all `any` words (a world's own terms from before).
 #[derive(Clone, Debug, PartialEq)]
 pub struct KinTerms {
-    /// (relation, its words in lowercase), in `KIN_RELATIONS` order.
-    pub words: Vec<(String, Vec<String>)>,
+    /// Each relation's words in lowercase, in `KIN_RELATIONS` order.
+    pub words: Vec<KinWords>,
+}
+
+/// One relation's kin words by the named relative's sex.
+#[derive(Clone, Debug, PartialEq, Default)]
+pub struct KinWords {
+    pub relation: String,
+    pub female: Vec<String>,
+    pub male: Vec<String>,
+    pub any: Vec<String>,
+}
+
+impl KinWords {
+    /// The words that can name a relative of sex `sex` (`None`: unknown, every word).
+    pub fn for_sex(&self, sex: Option<crate::sex::Sex>) -> impl Iterator<Item = &String> {
+        let (f, m) = match sex {
+            Some(crate::sex::Sex::Female) => (true, false),
+            Some(crate::sex::Sex::Male) => (false, true),
+            None => (true, true),
+        };
+        self.any.iter().chain(self.female.iter().filter(move |_| f)).chain(self.male.iter().filter(move |_| m))
+    }
 }
 
 impl Default for KinTerms {
     fn default() -> Self {
-        let w = |r: &str, ws: &[&str]| (r.to_string(), ws.iter().map(|x| x.to_string()).collect());
+        let v = |ws: &[&str]| ws.iter().map(|x| x.to_string()).collect::<Vec<_>>();
+        let w = |r: &str, f: &[&str], m: &[&str], a: &[&str]| KinWords { relation: r.to_string(), female: v(f), male: v(m), any: v(a) };
         Self {
             words: vec![
-                w("parent", &["mother", "father", "mum", "mam", "mama", "mummy", "ma", "dad", "da", "papa", "daddy", "pa"]),
-                w("child", &["son", "daughter"]),
-                w("sibling", &["brother", "sister"]),
-                w("grandparent", &["gran", "granny", "grandmother", "grandma", "grandfather", "grandpa", "grandad", "granddad", "nan", "nana"]),
-                w("grandchild", &["grandson", "granddaughter"]),
-                w("partner", &["husband", "wife"]),
+                w("parent", &["mother", "mum", "mam", "mama", "mummy", "ma"], &["father", "dad", "da", "papa", "daddy", "pa"], &["parent"]),
+                w("child", &["daughter"], &["son"], &[]),
+                w("sibling", &["sister"], &["brother"], &[]),
+                w("grandparent", &["gran", "granny", "grandmother", "grandma", "nan", "nana"], &["grandfather", "grandpa", "grandad", "granddad"], &["grandparent"]),
+                w("grandchild", &["granddaughter"], &["grandson"], &[]),
+                w("partner", &["wife"], &["husband"], &[]),
             ],
         }
     }
 }
 
 impl KinTerms {
-    /// From a script's `kin_terms()` map: relation -> list of words (any case). An unknown
-    /// relation or a word that is not one word of letters is refused at install.
+    /// From a script's `kin_terms()` map: relation -> `#{ female: [..], male: [..], any: [..] }`
+    /// (each list optional), or relation -> a list of words (all `any`). Words in any case. An
+    /// unknown relation or key, or a word that is not one word of letters, is refused at install.
     pub fn of(m: &rhai::Map) -> Result<Self, String> {
-        let mut words = Vec::new();
-        for (k, v) in m {
-            let rel = k.as_str();
-            if !KIN_RELATIONS.contains(&rel) {
-                return Err(format!("kin_terms: `{rel}` is not a relation (one of {})", KIN_RELATIONS.join(", ")));
-            }
-            let list = v.clone().try_cast::<rhai::Array>().ok_or_else(|| format!("kin_terms: `{rel}` is a list of words"))?;
+        let list = |rel: &str, v: &rhai::Dynamic| -> Result<Vec<String>, String> {
+            let list = v.clone().try_cast::<rhai::Array>().ok_or_else(|| format!("kin_terms: `{rel}` lists words"))?;
             let mut ws = Vec::new();
             for x in list {
                 let w = x.into_string().map_err(|_| format!("kin_terms: `{rel}` holds words (strings)"))?.trim().to_lowercase();
@@ -399,21 +420,43 @@ impl KinTerms {
                 }
                 ws.push(w);
             }
-            words.push((rel.to_string(), ws));
+            Ok(ws)
+        };
+        let mut words = Vec::new();
+        for (k, v) in m {
+            let rel = k.as_str();
+            if !KIN_RELATIONS.contains(&rel) {
+                return Err(format!("kin_terms: `{rel}` is not a relation (one of {})", KIN_RELATIONS.join(", ")));
+            }
+            let mut kw = KinWords { relation: rel.to_string(), ..Default::default() };
+            if let Some(by) = v.clone().try_cast::<rhai::Map>() {
+                for (s, l) in &by {
+                    let ws = list(&format!("{rel}.{s}"), l)?;
+                    match s.as_str() {
+                        "female" => kw.female = ws,
+                        "male" => kw.male = ws,
+                        "any" => kw.any = ws,
+                        other => return Err(format!("kin_terms: `{rel}` has `{other}` (the keys are female, male and any)")),
+                    }
+                }
+            } else {
+                kw.any = list(rel, v)?;
+            }
+            words.push(kw);
         }
-        words.sort_by_key(|(r, _)| KIN_RELATIONS.iter().position(|x| x == r));
+        words.sort_by_key(|k| KIN_RELATIONS.iter().position(|x| *x == k.relation));
         Ok(Self { words })
     }
 
     /// The word index in `text` of the first kin word for any of `relations` (what the one named
-    /// is to the speaker), or `None`.
-    pub fn named_at(&self, text: &str, relations: &[&str]) -> Option<usize> {
+    /// is to the speaker) that can name someone of sex `sex` (`None`: unknown, any word), or `None`.
+    pub fn named_at(&self, text: &str, relations: &[&str], sex: Option<crate::sex::Sex>) -> Option<usize> {
         let t = text.to_lowercase();
         let tokens: Vec<&str> = t.split(|c: char| !c.is_alphanumeric()).filter(|w| !w.is_empty()).collect();
         self.words
             .iter()
-            .filter(|(r, _)| relations.contains(&r.as_str()))
-            .flat_map(|(_, ws)| ws.iter())
+            .filter(|k| relations.contains(&k.relation.as_str()))
+            .flat_map(|k| k.for_sex(sex))
             .filter_map(|w| tokens.iter().position(|x| x == w))
             .min()
     }

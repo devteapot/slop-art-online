@@ -189,6 +189,9 @@ def main():
                     help="a refill appears this far from the site (m), at a random bearing, and walks in before it fights")
     ap.add_argument("--refill-gap", type=float, default=0.5,
                     help="at most one refill every this many seconds: the dead are replaced one at a time, spread over time")
+    ap.add_argument("--familiar", action="store_true",
+                    help="read every character's `familiar` row count at each sample and once more before cleanup, by role "
+                         "(fighter, walker, resident): familiar.json, familiar-<k>.json (docs/BATTLE_SCALE.md, note C2)")
     ap.add_argument("--law", action="append", default=[], metavar="NAME=VALUE",
                     help="set a world law after launch (JSON value), e.g. witness_fold_ms=0 or profile_detail=true")
     a = ap.parse_args()
@@ -252,6 +255,8 @@ def main():
 
         made = spawn(a.battle + a.walkers)
         fighters = made[: a.battle]
+        walkers = set(made[a.battle:])
+        state["ever_fighters"] = set(fighters)
         for id in fighters:
             fighter(id)
         state["fighters"] = list(fighters)
@@ -326,6 +331,7 @@ def main():
                         # Each refill's setup is four admin calls: in parallel, or they cap the
                         # refills below the deaths of a large battle.
                         ids = spawn(n)
+                        state["ever_fighters"].update(ids)
                         with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
                             list(pool.map(lambda i: fighter(i, arriving=True), ids))
                         state["respawns"] += len(ids)
@@ -341,6 +347,37 @@ def main():
         (run.directory / "diag-head.json").write_text(json.dumps(head, indent=1))
         print(json.dumps(head), flush=True)
         t_start, low, k = time.time(), 0, 0
+        first_over = {}
+
+        def familiar_sample(label):
+            """Each character's `familiar` rows by role, and by what they are of (structures,
+            creatures, regions): the limit is 2,048 a character (brain.rs `FAMILIAR_LIMIT`)."""
+            rows = run.private("SELECT actor, thing FROM familiar", f"familiar-{label}")
+            alive = {c["id"]: c["alive"] for c in run.sql("SELECT id, alive FROM character", f"familiar-alive-{label}")}
+            per, kinds = {}, {}
+            for r in rows:
+                per[r["actor"]] = per.get(r["actor"], 0) + 1
+                kind = {1: "region", 2: "creature", 3: "structure"}.get(r["thing"] >> 40, "other")
+                kinds.setdefault(r["actor"], {}).setdefault(kind, 0)
+                kinds[r["actor"]][kind] += 1
+            role = lambda x: "fighter" if x in state["ever_fighters"] else "walker" if x in walkers else "resident"
+            t_min = round((time.time() - t_start) / 60, 2)
+            for x, n in per.items():
+                if n > 2048 and x not in first_over:
+                    first_over[x] = {"t_min": t_min, "role": role(x), "rows": n}
+            out = {"label": label, "t_min": t_min, "rows": len(rows), "first_over": first_over, "roles": {}}
+            for rl in ("fighter", "walker", "resident"):
+                ns = sorted(n for x, n in per.items() if role(x) == rl)
+                live = sorted(n for x, n in per.items() if role(x) == rl and alive.get(x))
+                q = lambda v, f: v[min(len(v) - 1, int(f * len(v)))] if v else 0
+                out["roles"][rl] = {"actors": len(ns), "alive": len(live), "p50": q(ns, 0.5), "p90": q(ns, 0.9), "p99": q(ns, 0.99), "max": ns[-1] if ns else 0,
+                                    "over_2048": sum(1 for n in ns if n > 2048), "max_alive": live[-1] if live else 0}
+            top = sorted(per, key=lambda x: -per[x])[:20]
+            out["top"] = [{"actor": x, "role": role(x), "alive": alive.get(x), "rows": per[x], "of": kinds.get(x, {})} for x in top]
+            (run.directory / f"familiar-{label}.json").write_text(json.dumps({"summary": out, "per_actor": {str(x): [role(x), n] for x, n in per.items()}}) + "\n")
+            with (run.directory / "familiar.json").open("a") as f:
+                f.write(json.dumps(out) + "\n")
+            return out
         while time.time() - t_start < a.minutes * 60:
             k += 1
             load0 = os.getloadavg()[0]
@@ -371,6 +408,12 @@ def main():
             # split by whether the target had a fast patch installed before the blow.
             sample["defence"] = defences(run, set(state["fighters"]), t0 * 1000, t1 * 1000, patched(run) if a.fast_lane else {})
             sample["metrics"] = metrics(ident) if ident else {}
+            if a.familiar:
+                try:
+                    fs = familiar_sample(f"{k:02d}")
+                    sample["familiar"] = {"rows": fs["rows"], "roles": fs["roles"], "over": len(fs["first_over"])}
+                except Exception as e:
+                    sample["familiar"] = {"error": str(e)[:200]}
             # How long remains lie (`rot` rows: when each is due, against when it was made) and how
             # many are left at the site; a death is permanent with --no-refill.
             try:
@@ -395,6 +438,12 @@ def main():
         head["status"] = f"fail: {type(error).__name__}: {error}"
     finally:
         state["stop"] = True
+        # The last read of `familiar`, before cleanup deletes the world.
+        if a.familiar and "familiar_sample" in locals():
+            try:
+                familiar_sample("final")
+            except Exception as e:
+                (run.directory / "familiar-final-error.txt").write_text(str(e))
         # The harness pauses the world and reads it back as paused before deleting it
         # (living/tools/world_delete.py).
         run.finish_cleanup()

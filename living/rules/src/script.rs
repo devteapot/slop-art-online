@@ -12,7 +12,7 @@
 //! [`Scripts::validate`] runs every function on sample inputs before an install is accepted.
 
 use rhai::packages::Package;
-use rhai::{Array, Dynamic, Engine, Map, Scope, AST};
+use rhai::{Array, Dynamic, Engine, ImmutableString, Map, Scope, AST};
 use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::rc::Rc;
@@ -114,6 +114,9 @@ pub struct ActorFacts {
     /// vitals row give them (docs/STAMINA_PROPOSAL.md).
     pub stamina: f32,
     pub focus: f32,
+    /// The body's sex, "female" or "male" (`living_rules::sex::Sex::name`); "" when the world
+    /// holds none (an animal, or a person of a world from before sex).
+    pub sex: String,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -159,6 +162,8 @@ pub struct TargetFacts {
     /// does), and the fuel a fire that burns fuel still holds (units of its kind's fuel).
     pub lit: bool,
     pub fuel: f32,
+    /// A creature target's sex, as `ActorFacts::sex` ("" when none is held).
+    pub sex: String,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -525,6 +530,15 @@ pub struct Laws {
     /// Sight depends on facing (the `field` of `senses(a)`; the geometry is the `fov_*` laws,
     /// read by the script).
     pub fov_on: bool,
+    /// How far a character sees ground by day (metres): the cells of `known_ground` it marks
+    /// (docs/MOVEMENT_MIND.md, step 3). At night, its own sight.
+    pub ground_sight_m: f32,
+    /// Most ground cells one look marks (0: no cap); the rest are marked by later looks.
+    pub known_cells_pass: f32,
+    /// Walks are planned over what each walker has seen (its `known_ground`), not the map.
+    pub nav_belief: bool,
+    /// The cost of a metre of unseen ground against seen open ground, in a plan over belief.
+    pub unknown_cost: f32,
     /// Wolves' starting instincts carry the spacing reflex (docs/PACK_MIND.md, decision 1):
     /// beside each hunt, a weighted desire to keep apart from mates while closing on the prey
     /// (`graph::with_pack_reflex`). Read where an instinct is installed; a world turns it off.
@@ -616,6 +630,20 @@ pub struct Laws {
     /// Diagnostic: every lazy answer is also worked out from the whole scene, and a difference
     /// logged and counted (`diag:` `scene_lazy:differed`).
     pub scene_lazy_check: bool,
+    /// The chronicle's repeat check (docs/BATTLE_SCALE.md, battle-exact-2 E) reads the newest
+    /// rows first, widening its window until it holds the 40 it compares: the same 40 rows in
+    /// the same order. Off: every row of the last two minutes is read.
+    pub chronicle_recent: bool,
+    /// Diagnostic: each repeat check also reads every row of the last two minutes, and a
+    /// difference is logged and counted (`diag:` `chronicle_recent:differed`).
+    pub chronicle_recent_check: bool,
+    /// Noticing reads the structures in sight in place (docs/BATTLE_SCALE.md, battle-exact-2
+    /// C1): the copied and sorted list is built only when something in sight is new. Off: the
+    /// list is built at every look.
+    pub notice_inplace: bool,
+    /// Diagnostic: each look also works out what is new from the full list, and a difference
+    /// is logged and counted (`diag:` `notice_inplace:differed`).
+    pub notice_inplace_check: bool,
     /// The fast lane (docs/FAST_LANE.md): a mind-run character's re-plan between blows, asked
     /// of its mind on a blow taken or a move it sees repeated. Off: none is asked.
     pub fast_lane_on: bool,
@@ -696,6 +724,10 @@ impl Default for Laws {
             longing_after_min: 20.0,
             longing_food: 0.0,
             fov_on: false,
+            ground_sight_m: 24.0,
+            known_cells_pass: 0.0,
+            nav_belief: false,
+            unknown_cost: 1.5,
             pack_reflex: true,
             alert_after_hit_s: 15.0,
             alert_while_attacker_near: true,
@@ -722,6 +754,10 @@ impl Default for Laws {
             warmth_check: false,
             scene_lazy: true,
             scene_lazy_check: false,
+            chronicle_recent: true,
+            chronicle_recent_check: false,
+            notice_inplace: true,
+            notice_inplace_check: false,
             fast_lane_on: false,
             seen_again_n: 3.0,
             fast_lane_rate: 2.0,
@@ -1079,7 +1115,7 @@ pub struct Scripts {
     source: String,
     /// Law declarations that failed when read (an install refuses them).
     law_errors: RefCell<Vec<String>>,
-    /// `laws_about(laws())`, read once when the script compiles, under [`COMPILE_OPERATIONS`]
+    /// `law_about(laws(), name)` for each constant, read once when the script compiles, under [`COMPILE_OPERATIONS`]
     /// like the laws' other descriptions: what each world constant is, or why it could not be read.
     about: Result<Vec<(String, String)>, String>,
     /// What each kind of structure does for those near it (its traits in `structures()`).
@@ -1260,7 +1296,9 @@ pub struct Limits {
 /// 2026-11-11) and 2,373 after. `stamina-1` (2026-11-11) added 38 constants for breath, focus,
 /// costs, health and blows: their words bring it past 4,096 (about 4,200 with the numbers), so the
 /// string limit is 6,144; their numbers are written as they are (`${l.x}`, not `short`), since a
-/// call each took `laws_about` past its operations.
+/// call each took `laws_about` past its operations. Since `laws-about-list` (2026-11-13), when the
+/// words of 126 constants reached 6,144, they are asked one constant at a time
+/// (`law_about(l, name)`) and joined in Rust, so they no longer count against this limit.
 pub const LIMITS: Limits = Limits { operations: MAX_OPERATIONS, call_levels: 8, expr_depth: (40, 40), string: 6_144, array: 256, map: 512 };
 
 /// Rhai's hashing keys, the same in every build of every program that runs the laws: the
@@ -2086,7 +2124,7 @@ impl Scripts {
         &self.laws
     }
 
-    /// What each world constant is (`laws_about(laws())`), by name: the script's words for the
+    /// What each world constant is (`law_about(laws(), name)`), by name: the script's words for the
     /// values in force. Empty when the script does not say.
     pub fn laws_about(&self) -> Vec<(String, String)> {
         self.about.clone().unwrap_or_default()
@@ -2097,12 +2135,31 @@ impl Scripts {
         self.about.as_ref().err().map(|e| e.as_str())
     }
 
-    /// `laws_about(laws())` as the compile reads it (under [`COMPILE_OPERATIONS`]).
+    /// The world constants' words as the compile reads them: `law_about(laws(), name)` for each
+    /// constant, one call and one string at a time (each under [`COMPILE_OPERATIONS`]), joined
+    /// here, so no value the script builds holds them all and no engine limit grows with the
+    /// number of laws (Rhai counts every string inside one value against its string limit). A
+    /// script that has only the old `laws_about(l)`, one map of them all (a world's script
+    /// installed before 2026-11-13), is read that way.
     fn read_laws_about(&self) -> Result<Vec<(String, String)>, String> {
+        let m = self.laws_map();
+        if self.has("law_about") {
+            let mut keys: Vec<String> = m.keys().map(|k| k.to_string()).collect();
+            keys.sort();
+            let mut out = Vec::with_capacity(keys.len());
+            for k in keys {
+                let d = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "law_about", (m.clone(), ImmutableString::from(k.as_str()))).map_err(|e| format!("law_about({k}): {e}"))?;
+                if d.is_unit() {
+                    continue;
+                }
+                let text = d.into_string().map_err(|t| format!("law_about({k}): words must be a string, not {t}"))?;
+                out.push((k, text));
+            }
+            return Ok(out);
+        }
         if !self.has("laws_about") {
             return Ok(Vec::new());
         }
-        let m = self.laws_map();
         let d = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "laws_about", (m,)).map_err(|e| format!("laws_about: {e}"))?;
         Ok(d.try_cast::<Map>().unwrap_or_default().into_iter().map(|(k, v)| (k.to_string(), v.into_string().unwrap_or_default())).collect())
     }
@@ -2359,6 +2416,54 @@ impl Scripts {
             return Err(format!("look_bands: youth ({}) and adult ({}) must be ages in years, youth no later than adult", b.youth, b.adult));
         }
         Ok(b)
+    }
+
+    /// The share of people the world makes female when no seed or player says (body-sex): the
+    /// `female_share()` law, 0..1 (shipped and without the law 0.5; an install refuses another
+    /// value: `female_share_law`).
+    pub fn female_share(&self) -> f32 {
+        self.female_share_law().unwrap_or(0.5)
+    }
+
+    /// The `female_share()` law's value, or what is wrong with it.
+    pub fn female_share_law(&self) -> Result<f32, String> {
+        if !self.has("female_share") {
+            return Ok(0.5);
+        }
+        let out = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "female_share", ()).map_err(|e| format!("female_share: {e}"))?;
+        let v = number(&out).ok_or("female_share must return a number from 0 to 1")? as f32;
+        if !(0.0..=1.0).contains(&v) {
+            return Err(format!("female_share must return a number from 0 to 1, not {v}"));
+        }
+        Ok(v)
+    }
+
+    /// The words for a body by sex and life stage (body-sex): the `sex_words()` law (shipped and
+    /// without it `living_rules::sex::SexWords::default`).
+    pub fn sex_words(&self) -> crate::sex::SexWords {
+        self.sex_words_law().unwrap_or_default()
+    }
+
+    /// The `sex_words()` law's words, or what is wrong with them: `#{ female: [4 words], male: [4
+    /// words] }`, one per life stage (infant, child, adult, elder).
+    pub fn sex_words_law(&self) -> Result<crate::sex::SexWords, String> {
+        if !self.has("sex_words") {
+            return Ok(Default::default());
+        }
+        let out = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "sex_words", ()).map_err(|e| format!("sex_words: {e}"))?;
+        let m = out.try_cast::<rhai::Map>().ok_or("sex_words must return #{ female: [4 words], male: [4 words] }")?;
+        if let Some(k) = m.keys().find(|k| !["female", "male"].contains(&k.as_str())) {
+            return Err(format!("sex_words: unknown key `{k}` (the keys are female and male)"));
+        }
+        let four = |k: &str| -> Result<[String; 4], String> {
+            let a = m.get(k).cloned().ok_or(format!("sex_words: `{k}` is missing"))?.try_cast::<rhai::Array>().ok_or(format!("sex_words: `{k}` is a list of 4 words"))?;
+            let ws: Vec<String> = a.into_iter().map(|w| w.into_string().map(|w| w.trim().to_string())).collect::<Result<_, _>>().map_err(|_| format!("sex_words: `{k}` holds words"))?;
+            if ws.len() != 4 || ws.iter().any(|w| w.is_empty()) {
+                return Err(format!("sex_words: `{k}` is 4 words, one per life stage (infant, child, adult, elder)"));
+            }
+            Ok([ws[0].clone(), ws[1].clone(), ws[2].clone(), ws[3].clone()])
+        };
+        Ok(crate::sex::SexWords { female: four("female")?, male: four("male")? })
     }
 
     /// Whom a mind's scene describes by look (docs/LOOK.md §3): the `appearance_in_scene()` law,
@@ -2767,6 +2872,10 @@ impl Scripts {
             longing_after_min: g("longing_after_min", l.longing_after_min).clamp(0.0, 100_000.0),
             longing_food: g("longing_food", l.longing_food).clamp(0.0, 1_000.0),
             fov_on: flag("fov_on", l.fov_on),
+            ground_sight_m: g("ground_sight_m", l.ground_sight_m).clamp(0.0, 256.0),
+            known_cells_pass: g("known_cells_pass", l.known_cells_pass).clamp(0.0, 100_000.0),
+            nav_belief: flag("nav_belief", l.nav_belief),
+            unknown_cost: g("unknown_cost", l.unknown_cost).clamp(1.0, 20.0),
             pack_reflex: flag("pack_reflex", l.pack_reflex),
             alert_after_hit_s: g("alert_after_hit_s", l.alert_after_hit_s).clamp(0.0, 3_600.0),
             alert_while_attacker_near: flag("alert_while_attacker_near", l.alert_while_attacker_near),
@@ -2793,6 +2902,10 @@ impl Scripts {
             warmth_check: flag("warmth_check", l.warmth_check),
             scene_lazy: flag("scene_lazy", l.scene_lazy),
             scene_lazy_check: flag("scene_lazy_check", l.scene_lazy_check),
+            chronicle_recent: flag("chronicle_recent", l.chronicle_recent),
+            chronicle_recent_check: flag("chronicle_recent_check", l.chronicle_recent_check),
+            notice_inplace: flag("notice_inplace", l.notice_inplace),
+            notice_inplace_check: flag("notice_inplace_check", l.notice_inplace_check),
             fast_lane_on: flag("fast_lane_on", l.fast_lane_on),
             seen_again_n: g("seen_again_n", l.seen_again_n).round().clamp(1.0, 100.0),
             fast_lane_rate: g("fast_lane_rate", l.fast_lane_rate).clamp(0.0, 100.0),
@@ -3516,7 +3629,7 @@ mod tests {
         // Undescribed laws are refused.
         let bare = Scripts::new(&src.replace("fn theft_law()", "fn theft_old_law()")).unwrap();
         assert!(bare.validate().unwrap_err().contains("the law `theft` has no description"));
-        let mute = Scripts::new(&src.replace("        follow_s: `one follow lasts", "        follow_z: `one follow lasts")).unwrap();
+        let mute = Scripts::new(&src.replace("        \"follow_s\" => `one follow lasts", "        \"follow_z\" => `one follow lasts")).unwrap();
         assert!(mute.validate().unwrap_err().contains("the world constant `follow_s` has no description"));
         assert!(s.validate().is_ok());
     }
@@ -3664,16 +3777,15 @@ mod tests {
     /// a world may set (`set_world_law`), clamped to sane bounds.
     #[test]
     fn the_constants_words_are_read_with_the_compile_s_budget() {
-        // `laws_about` is read once per install, like the laws' other descriptions: a world whose
-        // words take more than the running world's MAX_OPERATIONS still installs, and a failure
-        // to read them is refused with its own reason, not as a constant without words.
+        // `law_about` is read once per install, a call per constant: a world whose words for one
+        // constant take more than the running world's MAX_OPERATIONS still installs, and a
+        // failure to read them is refused with its own reason, not as a constant without words.
         let src = include_str!("../../scripts/skills.rhai");
-        let long = r#"fn laws_about(l) {
-            let m = base_laws_about(l);
+        let long = r#"fn law_about(l, name) {
+            if name != "address_m" { return base_law_about(l, name); }
             let extra = "";
             for i in 0..600 { if i % 300 == 0 { extra += " (and so on)"; } else if i < 0 { extra += "never"; } }
-            m.address_m = m.address_m + extra;
-            m
+            base_law_about(l, name) + extra
         }"#;
         let sc = Scripts::new(&crate::floors::compose(src, long).unwrap()).unwrap();
         assert!(sc.laws_about_error().is_none(), "{:?}", sc.laws_about_error());
@@ -3681,11 +3793,43 @@ mod tests {
         assert!(about["address_m"].ends_with(" (and so on) (and so on)"), "{:?}", about.get("address_m"));
         sc.validate().expect("installs: its words were read within the compile's budget");
         // The same words asked under the running world's cap (the engine after the compile) are not read.
-        assert!(sc.engine.call_fn::<Dynamic>(&mut Scope::new(), &sc.ast, "laws_about", (sc.laws_map(),)).is_err(), "the test's words take more than {MAX_OPERATIONS} operations");
+        assert!(sc.engine.call_fn::<Dynamic>(&mut Scope::new(), &sc.ast, "law_about", (sc.laws_map(), ImmutableString::from("address_m"))).is_err(), "the test's words take more than {MAX_OPERATIONS} operations");
         // Words that cannot be read at all are refused as such.
-        let broken = Scripts::new(&crate::floors::compose(src, "fn laws_about(l) { let m = base_laws_about(l); m.address_m = l.no_such_law.len(); m }").unwrap()).unwrap();
+        let broken = Scripts::new(&crate::floors::compose(src, "fn law_about(l, name) { if name == \"address_m\" { l.no_such_law.len() } else { base_law_about(l, name) } }").unwrap()).unwrap();
         assert!(broken.laws_about_error().is_some());
-        assert!(broken.validate().unwrap_err().contains("laws_about"), "{:?}", broken.validate());
+        assert!(broken.validate().unwrap_err().contains("law_about"), "{:?}", broken.validate());
+    }
+
+    /// The constants' words are asked one constant at a time and joined in Rust, so their total
+    /// has no ceiling: Rhai counts every string inside one value against its string limit
+    /// (`LIMITS.string`, 6,144), which the old `laws_about(l)`, one map of them all, reached on
+    /// 2026-11-13 (`known-ground`). Here a world with 150 more constants and long words for every
+    /// one (about 50,000 characters, about 8 times the limit and today's total) installs, and
+    /// each constant reads back its own words.
+    #[test]
+    fn many_long_words_for_the_constants_install() {
+        let src = include_str!("../../scripts/skills.rhai");
+        let shipped = Scripts::new(src).unwrap();
+        let today: usize = shipped.laws_about().iter().map(|(_, t)| t.len()).sum();
+        let pad = "and so on, at some length, as a world's own description of a constant may well run on ".repeat(2);
+        let extra_laws: String = (0..150).map(|i| format!("m.extra_law_{i} = {i}.0; ")).collect();
+        let overlay = format!(
+            r#"fn laws() {{ let m = base_laws(); {extra_laws} m }}
+            fn law_about(l, name) {{
+                let base = base_law_about(l, name);
+                let head = if type_of(base) == "string" {{ base }} else if name.starts_with("extra_law_") {{ "an extra constant " + name }} else {{ return (); }};
+                head + ": {pad}"
+            }}"#
+        );
+        let sc = Scripts::new(&crate::floors::compose(src, &overlay).unwrap()).unwrap();
+        assert!(sc.laws_about_error().is_none(), "{:?}", sc.laws_about_error());
+        sc.validate().expect("a world with many long words installs");
+        let about: std::collections::HashMap<String, String> = sc.laws_about().into_iter().collect();
+        let total: usize = about.values().map(|t| t.len()).sum();
+        assert!(about.len() >= shipped.laws_about().len() + 150, "{} words", about.len());
+        assert!(total > 3 * LIMITS.string && total > 3 * today, "{total} characters against today's {today} and the limit {}", LIMITS.string);
+        assert!(about["extra_law_149"].starts_with("an extra constant extra_law_149: and so on"), "{}", about["extra_law_149"]);
+        assert!(about["fire_warmth"].starts_with("a campfire warms those within"), "{}", about["fire_warmth"]);
     }
 
     #[test]
@@ -3699,6 +3843,8 @@ mod tests {
         assert_eq!(l.witness_wake_ms, 500.0, "a bystander is woken at most twice a second (docs/BATTLE_SCALE.md)");
         assert_eq!(l.witness_fold_ms, 2000.0, "what an onlooker sees of fights is told every two seconds (docs/BATTLE_SCALE.md)");
         assert!(l.scene_lazy && !l.scene_lazy_check, "the scene worked out as far as asked; its check off");
+        assert!(l.chronicle_recent && !l.chronicle_recent_check, "the chronicle's repeat check reads the newest rows; its check off");
+        assert!(l.notice_inplace && !l.notice_inplace_check, "noticing reads structures in place; its check off");
         let about: std::collections::HashMap<String, String> = shipped.laws_about().into_iter().collect();
         assert!(about["cue_cooldown_s"].contains("600 s") && about["cue_gap_s"].contains("60 s"), "{about:?}");
         let on = Scripts::new(&with_world_laws(src, &[("cues_on".into(), serde_json::json!(true)), ("cue_cooldown_s".into(), serde_json::json!(30)), ("cue_gap_s".into(), serde_json::json!(-5)), ("cue_check_s".into(), serde_json::json!(0.01)), ("regard_cache".into(), serde_json::json!(false))])).unwrap();
@@ -3719,19 +3865,33 @@ mod tests {
     /// world may set, clamped to 0..3600 s.
     #[test]
     fn kin_terms_name_a_relation_and_are_the_world_s() {
+        use crate::sex::Sex;
         let src = include_str!("../../scripts/skills.rhai");
         let sc = Scripts::new(src).unwrap();
         let k = sc.kin();
         assert_eq!(k, &speech::KinTerms::default(), "the shipped script's kin terms are the defaults");
-        assert_eq!(k.named_at("But you have to ask Mother first for the crust", &["parent"]), Some(5));
-        assert_eq!(k.named_at("ask Mother first", &["child", "sibling"]), None, "a parent word names a parent only");
-        assert_eq!(k.named_at("Gran! Come see", &["grandparent"]), Some(0));
-        assert_eq!(k.named_at("my motherland", &["parent"]), None, "whole words only");
+        assert_eq!(k.named_at("But you have to ask Mother first for the crust", &["parent"], None), Some(5));
+        assert_eq!(k.named_at("ask Mother first", &["child", "sibling"], None), None, "a parent word names a parent only");
+        assert_eq!(k.named_at("Gran! Come see", &["grandparent"], None), Some(0));
+        assert_eq!(k.named_at("my motherland", &["parent"], None), None, "whole words only");
+        // By the named one's sex (body-sex): "Mother" names a mother, not a father; "parent" both.
+        assert_eq!(k.named_at("ask Mother first", &["parent"], Some(Sex::Female)), Some(1));
+        assert_eq!(k.named_at("ask Mother first", &["parent"], Some(Sex::Male)), None);
+        assert_eq!(k.named_at("ask Father first", &["parent"], Some(Sex::Male)), Some(1));
+        assert_eq!(k.named_at("ask Father first", &["parent"], Some(Sex::Female)), None);
+        assert_eq!(k.named_at("ask your parent", &["parent"], Some(Sex::Female)), Some(2));
+        assert_eq!(k.named_at("ask your parent", &["parent"], Some(Sex::Male)), Some(2));
+        assert_eq!(k.named_at("my son and my daughter", &["child"], Some(Sex::Female)), Some(4));
+        assert_eq!(k.named_at("my son and my daughter", &["child"], Some(Sex::Male)), Some(1));
         let base = src.replace("fn kin_terms()", "fn shipped_kin_terms()");
         let own = Scripts::new(&format!("{base}\nfn kin_terms() {{ #{{ parent: [\"Amma\"] }} }}\n")).unwrap();
-        assert_eq!(own.kin().named_at("Amma, look", &["parent"]), Some(0));
-        assert_eq!(own.kin().named_at("Mother, look", &["parent"]), None, "a world's own terms replace the defaults");
+        assert_eq!(own.kin().named_at("Amma, look", &["parent"], Some(Sex::Male)), Some(0), "a plain list is words for anyone");
+        assert_eq!(own.kin().named_at("Mother, look", &["parent"], None), None, "a world's own terms replace the defaults");
+        let by = Scripts::new(&format!("{base}\nfn kin_terms() {{ #{{ parent: #{{ female: [\"Amma\"], male: [\"Appa\"] }} }} }}\n")).unwrap();
+        assert_eq!(by.kin().named_at("Appa, look", &["parent"], Some(Sex::Male)), Some(0));
+        assert_eq!(by.kin().named_at("Appa, look", &["parent"], Some(Sex::Female)), None);
         assert!(Scripts::new(&format!("{base}\nfn kin_terms() {{ #{{ cousin: [\"coz\"] }} }}\n")).is_err(), "an unknown relation is refused");
+        assert!(Scripts::new(&format!("{base}\nfn kin_terms() {{ #{{ parent: #{{ mostly: [\"ma\"] }} }} }}\n")).is_err(), "an unknown key is refused");
     }
 
     #[test]

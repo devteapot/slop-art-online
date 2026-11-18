@@ -834,6 +834,12 @@ pub fn shape(
                             if cn.as_str() != "J_Bip_C_Hips" {
                                 let belly = if cn.as_str() == "J_Fit_Belly" { compose::belly_offset(&ch.recipe, styled.is_some()) } else { Vec3::ZERO };
                                 tf.translation = info.rest.get(cn.as_str()).map_or(tf.translation, |r| *r + belly) * v;
+                                // A spring bone that carries what lies on this bone (a skirt's chains
+                                // under an upper leg) is scaled as the bone's own vertices are: its
+                                // offset alone would leave the cloth the file's size on a scaled leg.
+                                if cn.as_str().starts_with("J_Sec_") {
+                                    tf.scale = v;
+                                }
                             }
                         }
                     }

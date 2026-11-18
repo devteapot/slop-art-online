@@ -44,3 +44,15 @@ The twelve seeds cover drawn towns and wild bands (`realm`), explicit people, st
 - A land over 2048 m is not created in `init` (one reducer's fuel budget is 120 × 10⁹ instructions; the 4096 m megacity needs about 2.9 of them). It is created in steps after publication; the driver drives that through the floor module ([floors](floors.md)).
 - Explicit structures move to nearest walkable ground. The bounded position assertion allows three tiles in these fixtures.
 - SQL exports are diagnostic snapshots of these small scratch worlds. They are not a routine gameplay data path or a subscription proof.
+
+## The animals' own draws (since `island-pack-check`, 2026-11-13)
+
+`seed::populate` places the animals, then the seed's packs, from a stream of their own: `Creating::start(seed, STEP_ANIMALS)`, after the people.
+
+**Why.** Before, they drew from the population's stream right after every person. A founder draws a knack for every skill its body has (`genes::founder`), so a skill added to the catalog shifted every later draw and moved every herd.
+
+**What it broke.** move-intents (`a07f5919`, five skills) moved the island's deer from 732 m to 915 m from the arrival point at their nearest (later skills moved them again). The low-hills pack must start 370–800 m from the arrival point (its `band`) and within 120 m of a deer, 40 m clear of roads. That had no free spot left. `seed::packs` placed it "by the band alone", 473 m and later 816 m from any deer, so the check failed. A git bisect over main's first parents found the commit: `~/slop-evidence/island-pack-check-20261113.tar.zst`.
+
+**Now.** With their own stream, the island's nearest deer is 434 m from the arrival point, and the pack starts within about 50 m of one. The layout is identical with and without move-intents' skills: on `9a062fc6` with this change, the nearest deer is also 434 m from arrival. A deer's own gene draws still come between placements, so a skill added to the deer's body would move the herds; one added to people's or wolves' would not.
+
+**Gotcha.** A pack with both `near` and `band` can still be infeasible for a seed's layout. When it is, `seed::packs` logs "placed by the band alone" and this check fails. That is a seed-content question (the band or the habitat), not a reason to loosen the check.

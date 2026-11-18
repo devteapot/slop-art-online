@@ -144,6 +144,18 @@ fn compiled() -> Option<Arc<living_rules::script::Scripts>> {
     })
 }
 
+/// The rules' word for a body of sex `sex` at life stage `stage` ("woman", "old man"; the
+/// world's `sex_words()`, docs/LIVING_CORE.md "Body sex").
+pub fn sex_word(sex: living_rules::sex::Sex, stage: u8) -> String {
+    compiled().map(|s| s.sex_words()).unwrap_or_default().word(sex, stage).to_string()
+}
+
+/// "a woman", "an old man": [`sex_word`] with its article.
+pub fn a_sex_word(sex: living_rules::sex::Sex, stage: u8) -> String {
+    let w = sex_word(sex, stage);
+    format!("{} {w}", living_rules::sex::article(&w))
+}
+
 /// How far an ordinary voice (`say`) carries for a person with the world's hearing (metres).
 pub fn voice_m() -> f32 {
     compiled().and_then(|s| s.way("say").map(|w| w.carry_for(s.reach().hearing))).unwrap_or(9.0)
@@ -573,13 +585,17 @@ pub fn identity_user(name: &str, id: u32, knows: &[String], bg: &serde_json::Val
     user.render()
 }
 
-pub fn birth_identity_user(name: &str, id: u32, parents: [(&str, u32, &str); 2], born: Option<&serde_json::Value>) -> String {
+/// `bodies`: the newborn's and each parent's body in the rules' words ("a baby girl", "a woman";
+/// body-sex), "" where the world holds no sex.
+pub fn birth_identity_user(name: &str, id: u32, parents: [(&str, u32, &str); 2], born: Option<&serde_json::Value>, bodies: [&str; 3]) -> String {
     let [(an, aid, ap), (bn, bid, bp)] = parents;
+    let b = |s: &str| if s.is_empty() { String::new() } else { format!(", {s}") };
+    let (me, ab, bb) = (b(bodies[0]), b(bodies[1]), b(bodies[2]));
     let mut user = Segments::default();
     user.push(
         Stability::Character,
         format!(
-            "Newborn: {} (#{}).\nParent {} (#{}): {}\nParent {} (#{}): {}{}",
+            "Newborn: {} (#{}{me}).\nParent {} (#{}{ab}): {}\nParent {} (#{}{bb}): {}{}",
             name,
             id,
             an,
@@ -605,6 +621,12 @@ pub fn think_system() -> String {
 /// framing (N2 in the replay). Off in the bundled rules.
 pub fn think_framing() -> bool {
     compiled().is_some_and(|s| s.laws().think_framing)
+}
+
+/// The world's `fast_lane_inflight` (the fast lane's reserved slots in the scheduler), or the
+/// shipped value before the rules are read.
+pub fn fast_slots() -> usize {
+    compiled().map_or(crate::llm::FAST_SLOTS_DEFAULT, |s| s.laws().fast_lane_inflight.max(0.0) as usize)
 }
 
 /// Today's framing sentence in the think system prompt, and the neutral one (N2) that replaces it
@@ -1278,6 +1300,8 @@ pub struct TalkUser<'a> {
     pub pacing: &'a str,
     pub other: &'a str,
     pub other_id: u32,
+    /// The other's body as the listener perceives or remembers it ("a woman"; body-sex), or "".
+    pub other_body: &'a str,
     pub feeling: &'a str,
     pub mind: &'a [String],
     pub memories: &'a [String],
@@ -1302,7 +1326,8 @@ pub fn talk_user(t: &TalkUser) -> String {
     let (other, other_id) = (t.other, t.other_id);
     let mut out = Segments::default();
     out.push(Stability::Shared, "Your turn. Respond with the JSON object.\n\n");
-    out.push(Stability::Character, format!("# Who you are\n{}\n{}\n\n# How you talk\n{}\n\n# You and {other} (#{other_id})\n{}\n", t.name, t.identity, t.pacing, t.feeling));
+    let body = if t.other_body.is_empty() { String::new() } else { format!(", {}", t.other_body) };
+    out.push(Stability::Character, format!("# Who you are\n{}\n{}\n\n# How you talk\n{}\n\n# You and {other} (#{other_id}{body})\n{}\n", t.name, t.identity, t.pacing, t.feeling));
     if !t.mind.is_empty() || !t.memories.is_empty() {
         out.push(Stability::Dynamic, "\n# What comes to mind\n");
         for b in t.mind {
@@ -1496,7 +1521,7 @@ mod tests {
             "consolidate" => (consolidate_system_in(frame, projects), consolidate_user(&c, project_lines)),
             "reorganize" => (reorganize_system(), reorganize_user(name, &c.persona, &["dynamic-concept".into()], &["dynamic-edge".into()], "")),
             "identity" => (identity_system(), identity_user(name, 42, &["fire".into()], &serde_json::json!({"town": "fixture"}), Some(&serde_json::json!({"caution": 40})))),
-            "birth_identity" => (birth_identity_system(), birth_identity_user(name, 42, [("Parent A", 3, "kind"), ("Parent B", 4, "gentle")], Some(&serde_json::json!({"caution": 40})))),
+            "birth_identity" => (birth_identity_system(), birth_identity_user(name, 42, [("Parent A", 3, "kind"), ("Parent B", 4, "gentle")], Some(&serde_json::json!({"caution": 40})), ["", "", ""])),
             "talk" => (
                 talk_system_in(frame),
                 talk_user(&TalkUser {
@@ -1505,6 +1530,7 @@ mod tests {
                     pacing: "talk slowly",
                     other: if name == "Aria" { "Cora" } else { "Dara" },
                     other_id: if name == "Aria" { 3 } else { 4 },
+                    other_body: "",
                     feeling: "friend, trust 50",
                     mind: &c.mind,
                     memories: &c.memories,
