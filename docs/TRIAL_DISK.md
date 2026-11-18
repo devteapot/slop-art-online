@@ -1,6 +1,42 @@
 # The trial server's disk: deleted databases, their commitlogs, and a plan
 
-Status: **plan for the owner, nothing removed** (2026-11-12, branch `trials-records`). Everything below was read, not changed. The code changes on this branch were tested after the battle quiet window ("Tested", below).
+## Incident and recovery, 2026-11-13 to 2026-11-18
+
+On 2026-11-13 an agent running a 200-fighter battle trial hit a usage limit about three minutes into the run. Its mind service stopped. The world `verify-minds-flb-b-200-2`, launched by `battle_diag.py` on `slop-trials-stdb`, kept ticking unattended for about three days. SpacetimeDB 2.14.1 retained its old snapshots and commitlog segments. The trial Docker volume reached **466 GB**, filling the host disk. At **12:18 UTC on 2026-11-16**, the server panicked with “No space left on device.” The reference container subsequently crash-looped 3,263 times on the full disk.
+
+On 2026-11-18 the owner's agent recovered space manually, reducing the trial volume from **466 GB to 87 GB**. It retained all 496 replicas during the trim, each replica's latest complete snapshot and its covering commitlog segment. It removed older snapshots, older segments and the Wasmtime cache. The B2 replica had a cut-off last segment and was corrupt. The coordinator deleted it.
+
+**Commitlog call history before the latest snapshot is gone from every trial replica on that server.** The 2026-11-12 archive at `~/slop-evidence/commitlogs-20261112/` preserves 497 earlier paid and no-model commitlogs. The affected runs whose call history is unavailable from that archive include:
+
+- ew2 (strangers earshot) and fs1w.
+- R2-fov and R3 (combat), and alert-r4.
+- The fast-lane pilots and A1, B1, C1 and B2 battle runs.
+- The 200-fighter profile (`minds-prof200c`) and the 30-minute familiar run (`minds-fam30`).
+- The four bi1 hamlets, whose kept snapshots preserve their state.
+
+Run-directory evidence for each is archived under `~/slop-evidence/`, including `r3`, `fs1w`, `trials2b-runs` (ew2), `battle-profile`, `battle-exact-2` and `flb-battle-runs-20261118`. No pending analysis requires the lost call history.
+
+## Retention on the trial server
+
+- **Pause orphaned worlds.** A detached guard follows the driver's process incarnation and the mind PID when registered. After either stays missing for 120 seconds, it calls the existing admin `set_paused` reducer and confirms the world's paused flag through SQL. See `world-guard.log` in the run directory for detection, retries and confirmation. The guard uses the run's database identity and recorded world epoch, and coordinates with local publishers of that database. If the server is temporarily unavailable, an orphan guard keeps trying. Successful cleanup releases the guard. Use one distinct run name per concurrent driver.
+- **Archive before logical deletion.** `trials.py run` and `battle_diag.py` stop their processes and preserve their run-directory evidence as part of cleanup. The cleanup pauses the world and confirms the pause, identifies the replica from its module log, streams its `clog/` to a `.tar.zst` under `~/slop-evidence/` and runs `zstd -t` and writes a SHA-256 sidecar. Only after archive success does it delete the database by identity and check that the name is gone. Explicitly kept trial worlds are paused and archived. If archive or cleanup fails, inspect the run's logs and retry the archive before manually deleting the world. A killed driver leaves a paused orphan for that recovery. Plain verification scratch cleanup preserves run-directory evidence and deletes the database without a commitlog archive unless launched with `--archive-commitlog`. The older `trials.py clean` batch command also omits the automatic archive, so archive any remaining trial before using it.
+- **Measure hourly.** The coordinator's alarm timer can invoke `living/tools/trial_volume_size.sh`. It emits one decimal GB value on stdout and exits nonzero on error. It measures allocated blocks in the existing `slop-trials-stdb` volume via a network-disabled SpacetimeDB 2.14.1 image with a read-only mount. Alert on the configured volume budget and monitor host free space separately. The timer and thresholds are configured on the host.
+
+### Offline snapshot and commitlog pruning
+
+The official CLI and standalone configuration expose no supported snapshot or commitlog retention command or size cap. Segment size controls rotation. The documented commitlog stores segment start offsets in filenames. SpacetimeDB 2.14.1 can compress older snapshots, but its recovery code requires a readable snapshot connected to the retained log when the first offset is above zero. Deleting a database drops it from the control database and releases the running module, while replica files remain on disk. [CLI reference](https://spacetimedb.com/docs/reference/cli-reference/), [standalone configuration](https://spacetimedb.com/docs/cli-reference/standalone-config/), [commitlog format](https://spacetimedb.com/docs/reference/internals/commitlog/), [2.14.1 snapshot worker](https://github.com/clockworklabs/SpacetimeDB/blob/v2.14.1/crates/engine/src/snapshot.rs), [2.14.1 snapshot repository](https://github.com/clockworklabs/SpacetimeDB/blob/v2.14.1/crates/snapshot/src/lib.rs), [2.14.1 recovery](https://github.com/clockworklabs/SpacetimeDB/blob/v2.14.1/crates/engine/src/relational_db.rs#L652-L743), [2.14.1 standalone database lifecycle](https://github.com/clockworklabs/SpacetimeDB/blob/v2.14.1/crates/standalone/src/lib.rs).
+
+Manual pruning is a maintenance-window recovery operation for this pinned release:
+
+1. Finish active trials, confirm pause for kept worlds, stop the standalone server cleanly and confirm it has exited. Map databases to replicas before stopping. Take a cold backup of the volume including control metadata, module bytes, snapshots and commitlogs. Preserve full call history off-volume and verify archive checksums and `zstd -t` before making changes.
+2. Validate the latest complete snapshot per retained replica and identify its transaction offset. Keep the snapshot with all objects it references. Keep the commitlog segment covering that offset and **every newer segment** with corresponding indexes. Verify offset continuity and the durable end of the log. If a usable covering segment or snapshot cannot be established, retain the replica unchanged and investigate. Leave unidentified replicas intact.
+3. On a copy, remove only snapshots older than the validated snapshot and log segments wholly before the covering segment. Test recovery with the pinned server on a separate volume and check the expected database identity, paused state and representative rows. Only apply the validated plan to the stopped trial server with the cold backup available for rollback. If recovery reports a corrupt or incomplete tail, restore from the backup or retain the replica for separate recovery.
+
+The guard uses the official database HTTP reducer and SQL routes. The normal path polls process state locally. After the grace period the server performs a singleton `world` read and, if needed, a single admin pause write followed by read-back. It adds no subscriptions or authority tables. [SpacetimeDB database HTTP API](https://spacetimedb.com/docs/http/database/), [2.14.1 HTTP routes](https://github.com/clockworklabs/SpacetimeDB/blob/v2.14.1/crates/client-api/src/routes/database.rs).
+
+The retention self-test is `python3 living/tools/trials_retention_selftest.py /tmp/retention.RUN --port PORT`. Start a dedicated `slop-retention-stdb` container from the 2.14.1 image, bind `PORT` on loopback, log its CLI in with `spacetime login --server-issued-login local`, and copy a compiled living authority to `/tmp/retention.wasm` in that container. The default test uses the production grace for driver loss and a shorter grace for mind loss. It preserves archives and logs in the supplied directory.
+
+The following sections record the 2026-11-12 investigation and its proposed procedure.
 
 ## What is on disk (read 2026-11-12, `slop-trials-stdb`, SpacetimeDB 2.14.1)
 
