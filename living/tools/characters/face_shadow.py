@@ -55,7 +55,7 @@ MIDDLE, CROSS = 96.0, 26.0  # the edge reaches the middle of the face at MIDDLE,
 SOCKET_ON, SOCKET_FULL, SOCKET = 72.0, 86.0, 0.35  # between brow and nose base the edge runs ahead by this share of the way to the bridge
 JAW_ON = 60.0  # the band along the far jaw
 WAIT = 0.0  # how many degrees later the far half fills at the chin. None: at 8 the far cheek was in shade while the jaw under it kept its light, a lighter patch on the lower face with an edge (it was 20 at first, a pale band)
-SOFT_MM = 1.4  # the blur that softens every edge, millimetres
+SOFT_MM = 2.5  # the blur that softens every edge, millimetres
 FLOOR = 0.14  # the face is fully lit while the light is within this (of 180 degrees) of its front
 PX = 0.0005  # the front view's drawing grid, metres a pixel
 MAP = 512
@@ -364,7 +364,14 @@ def bake_map(h, th, frame, size=MAP):
         for c, side in ((0, 1.0), (1, -1.0)):
             drawn = sample(th, frame, side * p[..., 0], p[..., 1])
             plain = np.clip(side * beta / math.pi + 0.5, FLOOR, 1.0)
-            val = drawn * facing + plain * (1 - facing)
+            # Let the broad cheek turn progressively, preserving the drawn socket and jaw.
+            # The nose retains a small mark at its tip even under a strong side light.
+            drawn_weight = facing * 0.56
+            val = drawn * drawn_weight + plain * (1 - drawn_weight)
+            # Compress the angle range on the facial plane and delay its shadow.
+            # Preserve the original edge around the skull and behind the jaw.
+            front = smooth(-0.05, 0.68, -n[..., 2])
+            val = val * (1 - 0.78 * front) + 0.82 * 0.78 * front
             sub = grid[ya:yb, xa:xb, c]
             sub[ok] = val[ok]
     # Grow the covered texels outward so filtering at UV seams never reads empty ones.
@@ -426,16 +433,16 @@ def planar_normals(h):
     wid = h.nose_w * (0.35 + 0.65 * smooth(top, h.tip_y, y))
     inside = smooth(1.15, 0.85, np.abs(x) / wid) * smooth(h.base_y - 0.002, h.base_y + 0.004, y) * smooth(top + 0.006, top - 0.004, y)
     ridge = smooth(0.0030, 0.0012, np.abs(x))
-    wedge = unit(np.stack([sx * math.sin(math.radians(54.0)) * (1 - ridge), np.zeros_like(x), -np.ones_like(x) * (math.cos(math.radians(54.0)) * (1 - ridge) + ridge)], axis=1))
-    lay(inside, wedge)
+    wedge = unit(np.stack([sx * math.sin(math.radians(27.0)) * (1 - ridge), np.zeros_like(x), -np.ones_like(x) * (math.cos(math.radians(27.0)) * (1 - ridge) + ridge)], axis=1))
+    lay(0.66 * inside, wedge)
     # Under the nose, and under the lip.
     under = smooth(1.25, 0.9, np.abs(x) / h.nose_w) * smooth(h.tip_y + 0.001, h.tip_y - 0.004, y) * smooth(h.base_y - 0.006, h.base_y, y) * smooth(-0.15, -0.45, h.geo[:, 1])
-    lay(under, np.tile(unit(np.array([0.0, -0.85, -0.5])), (len(x), 1)))
+    lay(0.38 * under, np.tile(unit(np.array([0.0, -0.85, -0.5])), (len(x), 1)))
     lip = smooth(1.0, 0.6, np.abs(x) / max(h.mouth_w, 1e-4)) * smooth(h.mouth_y - 0.085 * H, h.mouth_y - 0.055 * H, y) * smooth(h.mouth_y - 0.018 * H, h.mouth_y - 0.034 * H, y)
     lay(lip * 0.8, np.tile(unit(np.array([0.0, -0.55, -0.83])), (len(x), 1)))
     # Above the forehead and wherever the skin turns from the front, the head's own round form.
     round_ = np.maximum(smooth(h.brow_y + 0.06 * H, h.brow_y + 0.16 * H, y), smooth(-0.25, 0.05, h.geo[:, 2]))
-    lay(round_, h.geo)
+    lay(round_ * (1 - inside), h.geo)
     return n
 
 

@@ -1074,7 +1074,10 @@ def make_face(arm, spec, atlas_path):
         for v in tint_src:
             m.v.append(tuple(np.array(m.v[v]) + nrm_[v] * OVERLAY_OUT))
             m.col.append((1.0, 1.0, 1.0))
-            m.uv.append(m.uv[v])
+            # The transparent guard faces can extend under the jaw. Keep their
+            # samples on the transparent border of the shared lip/blush tile.
+            u, v_atlas = m.uv[v]
+            m.uv.append((np.clip(u, .1875 + 1/512, .8125 - 1/512), v_atlas))
             m.eye.append(m.eye[v])
         for f in tint_faces:
             m.f.append(tuple(index[v] for v in f))

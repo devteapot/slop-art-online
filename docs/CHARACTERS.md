@@ -2913,6 +2913,9 @@ What pass 2 proposed, in order of gain, and what became of it:
 1. **Hair.** Close up it looks washed out and half transparent in every shot, and its finish is as it was: a blocky fringe, ragged ends, gaps at the temple on the new head. Next.
 2. **The eyes' drawing:** thin lash lines and a plainer iris. Step 6.
 3. **The jaw's line does not hold at a distance.** Close up the shell line marks the jaw, the chin and the ears, lightly; at the game camera it is gone on the near head and a single darker pixel row on the far one, where the reference's whole figure is carried by its outline. A line in screen pixels is the client's ([lines](#lines-where-the-form-turns)).
+
+   **Far crown outline, laptop follow-up (2026-11-18).** Stock flat darkens the crown; real depth adds little and brings interior artefacts. At the Near camera stop with both residents on far LOD, stock flat darkened 55 of 65 sampled crown pixels on the braid and 25 of 65 on tousled hair by at least 20 luma levels against shell-off. Real depth darkened 60 and 41 respectively, with marks inside the hair and hands showing through clothing on turns. The earlier dev-box zero was specific to its crown crop. Moving the flat depth plane introduced chest or face contours, and isolating stencils found no removable crown occluder. Keep stock flat. Gameplay readability work uses the painted far-eye band and the cap of eight near models. A separate far-head mesh awaits owner play-test feedback.
+
 4. **Lips and blush are painted into the skin.** Step 6.
 5. **Clothes and silhouette, hands** (unchanged).
 
