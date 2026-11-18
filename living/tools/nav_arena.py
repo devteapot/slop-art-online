@@ -612,12 +612,16 @@ def wait_for_light(world, light, subs):
     if not light:
         return
     logged = False
+    _, day_ms = scenes.world_hour(world.s)
+    deadline = time.monotonic() + 2 * day_ms / 1000
     while True:
         hour, day_ms = scenes.world_hour(world.s)
         day = person_sight(hour) == 11
         change = 20 if day else (30 if hour >= 20 else 6)
         if light == ("day" if day else "night") and (change - hour) * day_ms / 24 >= 70_000:
             return
+        if time.monotonic() >= deadline:
+            raise RuntimeError(f"world clock did not reach a usable {light} window")
         if not logged:
             log(f"  waiting for {light}, world hour {hour:.2f}")
             logged = True
@@ -711,7 +715,7 @@ def n4(world, out, variant, law, kind, reps):
     spot, u, wall = found
     tang = (-u[1], u[0])
     world.law("nav_belief", law == "on")
-    subs = subjects(world, kind, reps, f"n4{variant}{law}")
+    subs = subjects(world, kind, reps, f"n4{variant}{law}{world.light or ''}")
     fixtures = world.people(reps)
     suffix = f"-{world.light}" if world.light else ""
     folder = Path(out) / f"n4-{variant}-{law}-{kind}{suffix}"
@@ -829,25 +833,31 @@ def main():
     ap.add_argument("--law", action="append", choices=["off", "on"])
     ap.add_argument("--subject", action="append", choices=["body", "click"])
     ap.add_argument("--reps", type=int, default=5)
-    ap.add_argument("--light", choices=["day", "night"], help="N4 only: wait for this light before the chase")
+    ap.add_argument("--light", choices=["day", "night"], help="N4 only: select one light condition (default: both)")
     ap.add_argument("--out")
     a = ap.parse_args()
     if a.light and a.arena != "n4":
         ap.error("--light is only available for N4")
     fn, variants = ARENAS[a.arena]
     world = World(a.run)
-    world.light = a.light
     world.road = float(world.law_value("road_speed") or 1.4)
     world.unknown = float(world.law_value("unknown_cost") or 1.5)
     out = Path(a.out or ROOT / ".local/living/nav" / a.run)
     out.mkdir(parents=True, exist_ok=True)
+    lights = [a.light] if a.light or a.arena != "n4" else ["day", "night"]
     for v in a.variant or list(variants):
-        for law in a.law or ["off", "on"]:
-            for kind in a.subject or ["body", "click"]:
-                log(f"{a.arena} {v} {law} {kind}")
-                recs = fn(world, out, v, law, kind, a.reps)
-                arrived = sum(r.get("outcome") == "arrived" for r in recs)
-                log(f"  {arrived}/{len(recs)} arrived")
+        for light in lights:
+            world.light = light
+            for law in a.law or ["off", "on"]:
+                for kind in a.subject or ["body", "click"]:
+                    log(f"{a.arena} {v} {law} {kind}" + (f" {light}" if light else ""))
+                    recs = fn(world, out, v, law, kind, a.reps)
+                    if a.arena == "n4":
+                        started = sum(r["start_ms"] is not None for r in recs)
+                        log(f"  {started}/{len(recs)} chases started")
+                    else:
+                        arrived = sum(r.get("outcome") == "arrived" for r in recs)
+                        log(f"  {arrived}/{len(recs)} arrived")
     world.law("nav_belief", False)
 
 
