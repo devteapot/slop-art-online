@@ -100,4 +100,28 @@ The comparison uses the archived play8 laws, the island seed, a player-identity 
 
 The watcher admits at most 24 requests total across both paid arms, each at most 64 KiB and 8,192 output tokens, charging a conservative $0.10 reservation per admission before forwarding. It records usage and computes the estimated actual cost with the trial runner's pricing. The admission cap reserves at most $2.40, and the 25th request is refused locally. The checked rates are published by [Mistral](https://docs.mistral.ai/inference/pricing?currency=usd). The provider key stays in memory on the trial host.
 
-The Spark build gate passed after adding the law's required description. The spend watcher's mock check admitted 24 requests, refused the 25th without forwarding, and reserved a maximum of $2.40. Scratch measurement is queued behind the shared battle lock.
+The Spark build gate passed after adding the law's required description. The spend watcher's mock check admitted 24 requests, refused the 25th without forwarding, and reserved a maximum of $2.40. The free scratch arms completed and were paused and deleted. The paid comparison is queued behind the shared battle lock.
+
+
+### Free comparison results
+
+The baseline and event-law arms used identical positions for the six staged characters. An unheld body's occupancy put Aldric on the adjacent south tile in the first-sight arm. Both ordinary strikes were accepted in all three arms, dealt damage and resolved physically. The first one dealt 8–10 damage, Aldric yielded, and the second killed him 5.40–5.48 s after the first in the baseline and candidate. All four monitored residents saw both blows in every arm. Each received a first-blow line at 0.7, a yield at 0.6, a strike after yield at 0.95, a death at 1.0, and a final folded fight line at 0.7. The baseline's first fold arrived 50–1,733 ms after the initial impact.
+
+| Free arm | Four residents' think replies in the 34 s fight window | Trigger | Installed decision and effect |
+| --- | ---: | --- | --- |
+| Play8 baseline | 0 | No witness request from combat | No model-driven reaction in the window |
+| First sight on | 3 | First sight of passing children in all three replies | Fixture kept its plan, with no fight-triggered request |
+| Salient event on | 4 | Two heard the impact and two were prompted by the folded sight | Fixture kept its plan for all four, with no new physical action |
+
+The fight was also visible to unmonitored people in the full island world. The model service was restricted to the named four, so these thought counts and normalized rates apply to those four. The two combat rows include each first-blow witness. Source code shows that the first row's qualifying witnesses enter the graph-wake path. The saved profiling tail is too short to identify each wake execution independently.
+
+| Witness | Baseline fight requests | Candidate request from first hit | Fake think reply from first hit | What its candidate frame held |
+| --- | ---: | ---: | ---: | --- |
+| Cuth #2 | 0 | +0 ms | +1,651 ms | Bearing of the impact. The scene shows a strike releasing at her partner. |
+| Maud #3 | 0 | +0 ms | +1,598 ms | Bearing of the impact. The scene shows a strike releasing at her father. |
+| Agnes #9 | 0 | +117 ms | +1,377 ms | Folded first blow, plus the strike release in her scene. |
+| Bram #11 | 0 | +584 ms | +1,488 ms | Folded first blow. The participants remained in view, with no active windup in the scene. |
+
+Each candidate frame was at both scene caps, 14 creatures and 10 structures. The participants and the event reason reached the prompts. The prompt of each request preceded the yield. Each resident got one eligible request within the event and the death generated no second request under the prototype's cooldown. At this staged encounter rate the normalized model think rates were 0, 78.8 and 106.2 per resident-hour across the three arms. These short-window figures measure the trial workload. One sustained qualifying episode per resident within a five-minute gap would instead be at most 12 fresh requests per resident-hour.
+
+After the baseline window, an unrelated graph request deliberately opened one prompt per resident. All four frames then carried the yield and killing, showing that this evidence survived to a later eligible request. The fake compiler submitted an invalid `go` act for each resident. All four refusals surfaced in subsequent consolidation prompts with `goto` in the skill list. No automatic retry or physical effect followed. The free provider cost was $0.
