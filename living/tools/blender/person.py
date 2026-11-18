@@ -439,8 +439,36 @@ SHOULDER = Vector((-0.170 + ARM_OUT, -0.008, 1.420))  # the armhole's centre
 HOLE_R = 0.058
 
 
-def torso_w(z, x, skirt=False, front=False):
-    """Weights of a torso vertex at height z (and side x, for a coat's skirt)."""
+def hip_share(z, x):
+    """The share of its side's upper leg that the trousers give a vertex round the hips, at height
+    z and side x: nothing from 0.98 m up, a fifth at the seat's upper row and three fifths at
+    its lower, less toward the middle (the seat between the legs stays the hips'), four fifths
+    at the leg's top and all of it from 0.72 m down. `trousers` writes these at its own rows;
+    this is the same rule at any height, for what is worn over and under them.
+
+    Every layer round the hips takes it (`torso_w`: a jersey's tucked hem, a smock's, an apron's
+    and a coat's skirt down to the leg's top): until 2026-11-13 each had a rule of its own, and
+    as the hip bent past 70 degrees, sitting down and standing up, the layers slid past each
+    other, the trousers' seat out through a skirt's back and a jersey out through the trousers'
+    front, on nearly everyone (cloth_check.py)."""
+    up = CROTCH_UP if STANCE else 0.0
+    side = smooth(abs(x) / 0.09)
+    za, zb, zc = 0.94 + 0.3 * up, 0.875 + up, 0.80 + 0.8 * up
+    if z >= 0.98:
+        return 0.0
+    if z >= za:
+        return 0.18 * side * (0.98 - z) / (0.98 - za)
+    if z >= zb:
+        return lerp(0.62, 0.18, (z - zb) / (za - zb)) * side
+    if z >= zc:
+        return lerp(0.80, 0.62 * side, (z - zc) / (zb - zc))
+    return lerp(1.0, 0.80, max(z - 0.72, 0.0) / (zc - 0.72))
+
+
+def torso_w(z, x, skirt=False, front=False, hip=None):
+    """Weights of a torso vertex at height z (and side x, for a coat's skirt). `hip`: the height
+    at which the vertex takes the trousers' share of the upper leg (`hip_share`), for a garment
+    without a skirt that reaches below the waist (a jersey's hem, tucked into the trousers)."""
     k = [(0.99, "J_Bip_C_Hips"), (1.09, "J_Bip_C_Spine"), (1.20, "J_Bip_C_Chest"), (1.31, "J_Bip_C_UpperChest")]
     if z <= k[0][0]:
         w = [(k[0][1], 1.0)]
@@ -463,7 +491,21 @@ def torso_w(z, x, skirt=False, front=False):
         side = min(abs(x) / 0.04, 1.0)
         left = t * (0.5 + 0.5 * side if x <= 0 else 0.5 - 0.5 * side)
         right = t - left
+        # Round the hips, down to the leg's top, a skirt moves as the trousers under it do
+        # (hip_share): its own side's leg alone, and the hips' between the legs. Below that it
+        # keeps its own rule, which the walk and the gaits were tuned with.
+        up = CROTCH_UP if STANCE else 0.0
+        band = smooth((z - (0.80 + 0.8 * up)) / (0.075 + 0.2 * up))
+        own = hip_share(z, x)
+        left, right = lerp(left, own if x <= 0 else 0.0, band), lerp(right, 0.0 if x <= 0 else own, band)
+        t = left + right
         w = [(n, v * (1 - t)) for n, v in w] + [("J_Bip_L_UpperLeg", left), ("J_Bip_R_UpperLeg", right)]
+    elif skirt and z < 0.98:
+        own = hip_share(z, x)
+        w = [(n, v * (1 - own)) for n, v in w] + [("J_Bip_L_UpperLeg" if x <= 0 else "J_Bip_R_UpperLeg", own)]
+    elif hip is not None and hip < 0.98:
+        own = hip_share(hip, x)
+        w = [(n, v * (1 - own)) for n, v in w] + [("J_Bip_L_UpperLeg" if x <= 0 else "J_Bip_R_UpperLeg", own)]
     return blend(*w)
 
 
@@ -538,7 +580,7 @@ def upper_garment(part, d, zs, hem, cuff, collar, front=None, skirt=0.0, tag_fn=
 
     rows = []
     for z in zs:
-        rows.append([part.v(col_point(z, k), torso_w(z, col_point(z, k).x, sk, k <= 4)) for k in ks])
+        rows.append([part.v(col_point(z, k), torso_w(z, col_point(z, k).x, sk, k <= 4, hip=None if sk else z)) for k in ks])
     # The armpit ring (A), the ring through the armhole's middle (M) and the yoke line (T). The
     # armhole takes columns 4..6: its rim is the first ring of the sleeve.
     hole = {}
@@ -636,7 +678,7 @@ def upper_garment(part, d, zs, hem, cuff, collar, front=None, skirt=0.0, tag_fn=
         cur = []
         for k in ks:
             pos = torso_point(z0 + dz, k, off(z0 + dz) + dd, skirt, edge=front(z0 + dz) if front and k == 1 else None, folds=folds)
-            cur.append(part.v(pos, torso_w(z0, pos.x, sk)))
+            cur.append(part.v(pos, torso_w(z0, pos.x, sk, hip=None if sk else z0 + dz)))
         for i in range(len(ks) - 1):
             k = ks[i]
             part.f((cur[i], cur[i + 1], prev[i + 1], prev[i]), ((k / NT, -j - 1), ((k + 1) / NT, -j - 1), ((k + 1) / NT, -j), (k / NT, -j)), tag_fn("hem", k, -j - 1))
