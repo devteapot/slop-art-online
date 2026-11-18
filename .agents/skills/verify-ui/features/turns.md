@@ -23,7 +23,7 @@ Preconditions: baseline; select Orbit under Settings › Play › Camera and clo
 - **Pan.** `pan:300` (a rightward pan through the pointer's own path, ×0.6 as a trackpad's pixels), then `pan:-500`. Dumps mid-pan and after: `extra.cursor` within 1 px of where it was, `extra.view.yaw` turned, `extra.cursor_ground` moved.
 - **Pinch.** `pinch:0.3` (in), then `pinch:-0.4` (out): `extra.view.zoom` down then up, the cursor within 1 px, the ground under it moved.
 - **Drag.** `drag:250`: the view turned, the cursor within 1 px.
-- Scenario: `check.py --run $R turns` (14 checks).
+- Scenario: `check.py --run $R turns` selects and checks both Facing presets.
 
 ## Gotchas
 

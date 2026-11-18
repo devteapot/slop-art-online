@@ -132,6 +132,7 @@ pub struct Motion {
     /// the right, ±π behind). Off the forward, the file's directional takes play when it has
     /// them on both sides ([`gait::Gaits::blend_toward`]; `live.rs` asks only then).
     pub travel: f32,
+    pub cursor_facing: bool,
     /// Walking or running clips ([`gait::Family`]: the authority's word, else the laws' split;
     /// `live.rs` sets it, look-dev leaves the clips' own).
     pub family: crate::gait::Family,
@@ -139,7 +140,7 @@ pub struct Motion {
 
 impl Default for Motion {
     fn default() -> Self {
-        Self { speed: 0.0, stride: 1.0, stand: "idle", action: None, now_ms: 0.0, reverse: false, twist: 0.0, neck: 0.0, eyes: 0.0, aim: false, pace: 1.0, freeze: false, travel: 0.0, family: crate::gait::Family::Clips }
+        Self { speed: 0.0, stride: 1.0, stand: "idle", action: None, now_ms: 0.0, reverse: false, twist: 0.0, neck: 0.0, eyes: 0.0, aim: false, pace: 1.0, freeze: false, travel: 0.0, cursor_facing: false, family: crate::gait::Family::Clips }
     }
 }
 
@@ -690,7 +691,13 @@ fn step(a: &mut Anim, set: &Set, m: &Motion, dt: f32) {
     let moving = if stepping {
         let pace = m.speed / m.pace.max(0.5);
         let len = |i| set.gait_len(i);
-        let b = if m.travel.abs() > 1e-3 { set.gaits.blend_toward(pace, m.stride, m.family, m.travel, len) } else { None }.unwrap_or_else(|| set.gaits.blend(pace, m.stride, m.family, len));
+        let b = if m.travel.abs() <= 1e-3 {
+            None
+        } else if m.cursor_facing {
+            set.gaits.blend_cursor(pace, m.stride, m.family, m.travel, len)
+        } else {
+            set.gaits.blend_toward(pace, m.stride, m.family, m.travel, len)
+        }.unwrap_or_else(|| set.gaits.blend(pace, m.stride, m.family, len));
         let rate = m.speed / (m.stride.max(0.05) * b.cycle_m.max(0.05));
         if a.moving <= 0.0 {
             // From standing: the leading gait's right mid-stance (its pose nearest standing: the

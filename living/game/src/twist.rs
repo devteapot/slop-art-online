@@ -41,7 +41,7 @@ const NECK: [(&str, f32); 2] = [("J_Bip_C_Neck", 0.45), ("J_Bip_C_Head", 0.55)];
 const EYES: [&str; 2] = ["J_Adj_L_FaceEye", "J_Adj_R_FaceEye"];
 
 /// How a body looks aside while it walks: the limits (degrees) and the body's curve.
-#[derive(Resource, Clone, Debug, PartialEq)]
+#[derive(Resource, Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct LookWalk {
     /// The preset this started from (`head`, `chest`, `loose`), with `*` once a value is changed.
     pub name: String,
@@ -51,13 +51,12 @@ pub struct LookWalk {
     pub chest_deg: f32,
     /// The legs turn at most this far off the travel (or its reverse, walking backwards) toward
     /// the look (the files' diagonal takes are at 45° and 135°: further, the steady walk would be
-    /// a crossover).
+    /// a crossover). Cursor defaults to a full 180°.
     pub body_deg: f32,
     /// The legs approach their goal by `1 - exp(-dt / body_s)` a frame (s): about 63% in
     /// `body_s`, 95% in three times it.
     pub body_s: f32,
-    /// …and never faster than this (degrees a second), so a sudden goal (a flip to walking
-    /// backwards) is a turn, not a jump.
+    /// Maximum turn in degrees per second. Zero leaves the rate uncapped.
     pub body_dps: f32,
     /// Looking more than this far from the travel, the legs walk backwards; forward again under
     /// `back_deg - 25`.
@@ -80,6 +79,33 @@ pub const PRESETS: [(&str, &str); 3] = [("Head to 60°", "head"), ("Head and che
 const BACK_HYSTERESIS: f32 = 25.0;
 
 impl LookWalk {
+    /// Local Cursor presentation. Zero follow time and turn cap give an immediate body turn.
+    pub fn cursor() -> Self {
+        Self {
+            name: "cursor".into(),
+            head_deg: 0.0,
+            chest_deg: 0.0,
+            body_deg: 180.0,
+            body_s: 0.0,
+            body_dps: 0.0,
+            back_deg: 90.0,
+            eyes_deg: 0.0,
+        }
+    }
+
+    pub fn from_cursor_settings(value: &serde_json::Value) -> Self {
+        let mut profile: Self = serde_json::from_value(value.clone()).unwrap_or_else(|_| Self::cursor());
+        profile.name = "cursor".into();
+        profile.head_deg = profile.head_deg.clamp(0.0, 90.0);
+        profile.chest_deg = profile.chest_deg.clamp(0.0, 90.0);
+        profile.body_deg = profile.body_deg.clamp(0.0, 180.0);
+        profile.eyes_deg = profile.eyes_deg.clamp(0.0, 30.0);
+        profile.back_deg = profile.back_deg.clamp(90.0, 180.0);
+        profile.body_s = profile.body_s.max(0.0);
+        profile.body_dps = profile.body_dps.max(0.0);
+        profile
+    }
+
     pub fn preset(name: &str) -> Option<Self> {
         let (head_deg, chest_deg, body_deg, body_s, body_dps, back_deg, eyes_deg) = match name {
             // The head alone takes a glance: up to 60°, and the body comes round briskly past it.
@@ -107,6 +133,9 @@ impl LookWalk {
         for kv in rest {
             let (k, v) = kv.split_once('=').ok_or_else(|| format!("{kv}: want key=value"))?;
             let v: f32 = v.trim().parse().map_err(|_| format!("{kv}: not a number"))?;
+            if !v.is_finite() {
+                return Err(format!("{kv}: expected a finite number"));
+            }
             let slot = match k.trim() {
                 "head" => &mut lw.head_deg,
                 "chest" => &mut lw.chest_deg,
@@ -179,8 +208,10 @@ impl LookWalk {
     /// One frame of the legs' approach to `goal` from `yaw` (radians).
     pub fn ease(&self, yaw: f32, goal: f32, dt: f32) -> f32 {
         let d = wrap(goal - yaw);
-        let cap = self.body_dps.to_radians() * dt;
-        wrap(yaw + (d * (1.0 - (-dt / self.body_s).exp())).clamp(-cap, cap))
+        let follow = if self.body_s > 0.0 { 1.0 - (-dt / self.body_s).exp() } else { 1.0 };
+        let step = d * follow;
+        let cap = if self.body_dps > 0.0 { self.body_dps.to_radians() * dt } else { f32::INFINITY };
+        wrap(yaw + step.clamp(-cap, cap))
     }
 
     /// The upper body's turn from the legs toward `off` (radians, sim sense), head first: (all of

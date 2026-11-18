@@ -427,8 +427,28 @@ def ways(run, c):
     c.check(s, "Settings › Controls offers the Way key", any(t.startswith("bind:Way:") for t in (d["k0"].get("tags") or {})), str([t for t in (d["k0"].get("tags") or {}) if t.startswith("bind:")][:20]))
 
 
+def select_facing(preset, *, orbit=False):
+    camera = "click:@settings:camera:orbit;wait:0.4;" if orbit else ""
+    return (
+        "click:@menu;wait:0.4;click:@menu:Settings;wait:0.5;"
+        f"click:@settings:facing:{preset};wait:0.4;{camera}key:Escape:tap;wait:0.5;"
+    )
+
+
+def check_facing(c, scenario, out, preset):
+    path = os.path.join(out, "settings.json")
+    selected = json.load(open(path)).get("facing") if os.path.exists(path) else None
+    c.check(scenario, f"Settings saved {preset} facing", selected == preset, repr(selected))
+
+
 @scenario("reversal")
 def reversal(run, c):
+    """Reversing a remote player's travel keeps its look-4 gait under both local facing presets."""
+    for preset in ("natural", "cursor"):
+        reversal_one(run, c, preset)
+
+
+def reversal_one(run, c, preset):
     """look-4 in the client: when another's walk reverses with their look held aside, their drawn
     legs decide walking backwards from where the authority's facing settles, not from the facing
     still coming round (for about 0.3 s it can stand 75°-180° off the new travel), so no brief
@@ -436,7 +456,7 @@ def reversal(run, c):
     the walk reverses to the west; my client logs their feet (`LIVING_GAME_FEET_ID`): no frame drawn
     backwards (`reverse`) in the second after the reversal, while the authority's settled offset is
     within `look_walk_deg` (so backwards would be wrong)."""
-    s = "reversal"
+    s = f"reversal:{preset}"
     def body():
         r = subprocess.run([sys.executable, V, "sql", "--run", run, "SELECT * FROM my_body", "--as-player"], capture_output=True, text=True)
         rows = json.loads(r.stdout[r.stdout.find("["):]) if "[" in r.stdout else []
@@ -449,12 +469,12 @@ def reversal(run, c):
     if other is None:
         return
     snap = f"sql|SELECT id, x, y, heading, turn, turn_s, t_ms, next_ms, vx, vy, speed, face_off, face_turn, face_turn_s FROM body WHERE id = {other}"
-    plan = ("ready;click:@tip:ok;sync:noon;sync:spot;wait:4;frame:0;view:30:9;wait:1;sync:other;wait:2;sync:go;wait:3;sync:walking;"
+    plan = ("ready;click:@tip:ok;wait:0.5;" + select_facing(preset) + "sync:noon;sync:spot;wait:4;frame:0;view:30:9;wait:1;sync:other;wait:2;sync:go;wait:3;sync:walking;"
             "sync:rev;wait:0.3;sync:turning;wait:1.5;sync:settled;shot:01_reversed;wait:1;sync:halt;wait:1.5;quit")
     syncs = ["noon=sql|UPDATE world SET epoch_ms = {epoch_at:12} WHERE id = 0", f"spot=place_at|{{me}}|{LOOK_WALK_SPOT[0]}|{LOOK_WALK_SPOT[1]}", f"other=place_at|{other}|(mx-4)|(my+3)",
              "go=player|human_move|1|0|false;player|human_face|0|-1", f"walking={snap}", "rev=player|human_move|-1|0|false", f"turning={snap}", f"settled={snap}",
              "halt=player|human_move|0|0|false;player|human_face|0|0"]
-    name = "reversal"
+    name = f"reversal-{preset}"
     out_dir = os.path.join(ROOT, ".local/living/verify", run, "ui", name)
     os.makedirs(out_dir, exist_ok=True)
     keep = {k: os.environ.get(k) for k in ["LIVING_GAME_FEET", "LIVING_GAME_FEET_ID", "LIVING_GAME_CONTROL"]}
@@ -468,6 +488,7 @@ def reversal(run, c):
             else:
                 os.environ[k] = v
     c.check(s, "client ran and joined", code == 0, text[-300:])
+    check_facing(c, s, out, preset)
     scene = json.load(open(os.path.join(out, "scene.json"))) if os.path.exists(os.path.join(out, "scene.json")) else {}
     snapped = lambda k: (((scene.get("snaps") or {}).get(k) or [{}])[0])
     st = snapped("settled")
@@ -1008,6 +1029,13 @@ def ground(d):
     return ((d or {}).get("extra") or {}).get("cursor_ground")
 
 
+def select_camera_preset(preset):
+    return (
+        "click:@menu;wait:0.4;click:@menu:Settings;wait:0.5;click:@settings:page:camera;wait:0.4;"
+        f"click:@settings:camera_preset:{preset};wait:0.4;key:Escape:tap;wait:0.5;"
+    )
+
+
 @scenario("camera", explicit=True)
 def camera(run, c):
     """Drive real line-wheel messages at the three top-down knots, with the field off and on."""
@@ -1031,7 +1059,7 @@ def camera(run, c):
              ("middle", 11, 0.55, 12.0, 58.0, 44.0),
              ("near", 30, 1.0, 8.0, 48.0, 42.0))
     for field in ("off", "on"):
-        plan = f"ready;sync:noon;sync:fov_{field};sync:street;wait:3;sync:scene;look:0;wait:2;cursor:0.70,0.55;wait:0.5;dump:initial;pan:300;drag:250;wait:0.5;dump:fixed;"
+        plan = "ready;" + select_camera_preset("ours") + f"sync:noon;sync:fov_{field};sync:street;wait:3;sync:scene;look:0;wait:2;cursor:0.70,0.55;wait:0.5;dump:initial;pan:300;drag:250;wait:0.5;dump:fixed;"
         for stop, wheel, *_ in knots:
             plan += f"notches:{wheel};wait:1.5;dump:{stop};shot:{stop};"
             plan += f"point:{front}:0;wait:0.6;dump:{stop}_ground;point:{front}:0.8;wait:0.6;dump:{stop}_hover;"
@@ -1054,7 +1082,7 @@ def camera(run, c):
             ]
         out, code, text = drive(run, f"{s}-{field}", plan + "quit",
                                 places=[f"{front}:0:-2.5", f"{back}:2.5:4.5", f"{behind_wall}:1.0:-14.0"], syncs=syncs + roof_syncs,
-                                env={"RUST_LOG": "info,wgpu=warn,naga=warn,living_game::envs=debug"})
+                                env={"LIVING_GAME_DEV": "1", "RUST_LOG": "info,wgpu=warn,naga=warn,living_game::envs=debug"})
         c.check(s, f"field {field}: client joined and finished", code == 0, text[-300:])
         initial = view(dump(out, "initial"))
         c.check(s, f"field {field}: fresh settings start at middle zoom", abs(initial.get("zoom", -1.0) - 0.55) < 0.001, repr(initial))
@@ -1115,22 +1143,164 @@ def camera(run, c):
             c.check(s, "field off: the rear resident is perceived", all(back in rows for rows in perceived), repr(perceived))
 
 
+@scenario("camera-tuning", explicit=True)
+def camera_tuning(run, c):
+    """Change live camera values and export them through the real Settings panel."""
+    s = "camera-tuning"
+    plan = (
+        "ready;click:@tip:ok;wait:0.5;click:@menu;wait:0.4;click:@menu:Settings;wait:0.5;"
+        "click:@settings:camera:top-down;wait:0.4;click:@settings:page:camera;wait:0.5;"
+        "click:@settings:camera_preset:ours;wait:0.5;dump:before;"
+        "click:@settings:camera_slider:height:middle;wait:0.5;dump:live;"
+        "click:@settings:camera_pitch:fixed;wait:0.5;"
+        "dump:fixed;key:Escape:tap;wait:0.5;cursor:0.72,0.62;notches:30;wait:1.5;dump:near;shot:near;"
+        "notches:-9;wait:1.5;click:@menu;wait:0.4;click:@menu:Settings;wait:0.5;"
+        "click:@settings:page:camera;wait:0.4;click:@settings:camera_pitch:late;wait:0.4;"
+        "click:@settings:camera_slider:tilt_start;wait:0.4;click:@settings:camera_slider:near_pitch;wait:0.4;"
+        "click:@settings:camera_copy;wait:0.5;dump:late_middle;shot:panel;"
+        "key:Escape:tap;wait:0.5;cursor:0.72,0.62;notches:30;wait:1.5;dump:late_near;quit"
+    )
+    out, code, detail = drive(run, s, plan, env={"LIVING_GAME_DEV": "1"})
+    c.check(s, "client ran and joined", code == 0, detail[-300:])
+    before, live, fixed, near = [view(dump(out, name)) for name in ("before", "live", "fixed", "near")]
+    c.check(s, "height slider changes the live view with Settings open",
+            live.get("height", 0) > before.get("height", 0) + 5, repr((before, live)))
+    c.check(s, "fixed pitch and FOV stay the same while zoom changes height",
+            fixed and near and abs(fixed["pitch"] - near["pitch"]) < 0.1
+            and abs(fixed["fov"] - near["fov"]) < 0.1 and fixed["height"] > near["height"] + 5,
+            repr((fixed, near)))
+    def read(name):
+        path = os.path.join(out, name)
+        return json.load(open(path)) if os.path.exists(path) else {}
+    exported = read("camera-tuning.json")
+    late = exported.get("late_tilt") or {}
+    c.check(s, "Copy values writes the persisted live tuning, including tilt start and near pitch",
+            bool(late) and exported == read("settings.json").get("camera_tuning")
+            and abs(exported["fixed_pitch"] - fixed.get("pitch", 0)) < 0.1
+            and abs(late["tilt_start"] - 0.5) < 0.01, repr(exported))
+    middle, close = [view(dump(out, name)) for name in ("late_middle", "late_near")]
+    c.check(s, "Tilt near eases between the base and near pitches",
+            bool(late and middle and close) and late["tilt_start"] < middle["zoom"] < 0.6
+            and late["near_pitch"] < middle["pitch"] < exported["fixed_pitch"]
+            and abs(close["pitch"] - late["near_pitch"]) < 0.1, repr((late, middle, close)))
+
+
+@scenario("camera-lol", explicit=True)
+def camera_lol(run, c):
+    """The closest League of Legends stop at ground, person and awning interaction distances."""
+    s = "camera-lol"
+    ids = residents(run, 1)
+    if not ids:
+        c.check(s, "resident available", False)
+        return
+    front = ids[0]
+    name = "camera-lol"
+    folder = os.path.join(ROOT, ".local/living/verify", run, "ui", f"{name}-{THEME}" if THEME else name)
+    plan = (
+        "ready;" + select_camera_preset("lol") +
+        "sync:noon;sync:street;wait:3;sync:scene;look:0;wait:1;cursor:0.72,0.62;notches:30;wait:1.5;"
+        f"dump:near;point:{front}:0;wait:0.6;dump:ground;point:{front}:0.8;wait:0.6;dump:hover;"
+        f"tap;wait:0.7;dump:selected;shot:selected;chat:close;wait:0.4;click:@win:Person{front}:close;wait:0.5;"
+        "sync:roof;wait:3;dump:under_awning;shot:under_awning;"
+        "hold:0;wait:1.4;stop;wait:0.7;dump:after_walk;quit"
+    )
+    syncs = [
+        "noon=sql|UPDATE world SET epoch_ms = {epoch_at:12} WHERE id = 0",
+        'street=set_world_law|"fov_on"|"false";place_at|{me}|420.5|255.5',
+        "roof=place_at|{me}|412.5|256.5",
+    ]
+    out, code, detail = drive(run, name, plan, places=[f"{front}:0:-1.7"], syncs=syncs,
+        env={"LIVING_GAME_DEV": "1", "LIVING_GAME_FEET": os.path.join(folder, "feet.jsonl"),
+             "RUST_LOG": "info,wgpu=warn,naga=warn,living_game::envs=debug"})
+    c.check(s, "client joined and finished", code == 0, detail[-300:])
+    v = view(dump(out, "near"))
+    c.check(s, "the nearest LoL stop is 4.8 m at 56° and 40° FOV",
+        all(abs(v.get(k, -100.0) - target) < 0.1 for k, target in (("height", 4.8), ("pitch", 56), ("fov", 40))), repr(v))
+    position = ((dump(out, "scene") or {}).get("placed") or {}).get(str(front))
+    hit = ground(dump(out, "ground"))
+    c.check(s, "the ground ray reaches the resident's known tile",
+        hit and position and math.hypot(hit[0] - position[0], hit[2] - position[1]) < 0.15, repr((hit, position)))
+    selected = (dump(out, "selected") or {}).get("typing") or {}
+    hover = dump(out, "hover") or {}
+    c.check(s, "the point and tap pick the resident", hover.get("under") == front and selected.get("to") == front,
+        repr((hover.get("under"), selected)))
+    trace = log(out)
+    roof = trace.partition("live script: sync:roof")[2].partition("live script: dump:under_awning")[0]
+    c.check(s, "the market awning enters cutaway", bool(re.search(r"cutaway: .*market_stall.* fades to ", roof)),
+        roof[-300:])
+    metrics = clearance_metrics(out, "hold:0", "dump:after_walk")
+    c.check(s, "the eye clears the ground and stays continuous while walking out from the awning",
+        metrics["frames"] >= 20 and metrics["min_clearance_m"] >= 0.3
+        and metrics["walk_m"] > 1.0 and metrics["max_eye_height_step_m"] < 0.25, repr(metrics))
+
+
+def clearance_metrics(out, first, last):
+    trace = log(out)
+    start = re.search(r"live script: " + re.escape(first) + r" .*?, t ([\d.]+) s\)", trace)
+    end = re.search(r"live script: " + re.escape(last) + r" .*?, t ([\d.]+) s\)", trace)
+    eyes = [row for row in feet_log(out) if start and end and float(start[1]) <= row["t"] <= float(end[1])
+            and row.get("sim") and row.get("eye") and row.get("eye_clearance") is not None]
+    if eyes:
+        height = [r["eye"][1] for r in eyes]
+        clearance = min(r["eye_clearance"] for r in eyes)
+        jump = max((abs(b - a) for a, b in zip(height, height[1:])), default=0.0)
+        walk = math.dist(eyes[0]["sim"], eyes[-1]["sim"])
+        heights = [r["eye_height"] for r in eyes]
+        lifts = [min(heights), max(heights)]
+    else:
+        clearance, jump, walk, lifts = 0.0, math.inf, 0.0, [0.0, 0.0]
+    metrics = {"frames": len(eyes), "walk_m": walk, "min_clearance_m": clearance,
+               "max_eye_height_step_m": jump, "eye_height_range_m": lifts}
+    with open(os.path.join(out, "clearance.json"), "w") as f:
+        json.dump(metrics, f, indent=2)
+    return metrics
+
+
+@scenario("camera-lol-ridge", explicit=True)
+def camera_lol_ridge(run, c):
+    """Cross a ridge where the nominal 4.8 m eye would run below the ground."""
+    s = "camera-lol-ridge"
+    folder = os.path.join(ROOT, ".local/living/verify", run, "ui", f"{s}-{THEME}" if THEME else s)
+    # The shipped island's land_dump shows the ground under the camera rising from
+    # 0.54 to 7.35 m above the player's path along this westbound stretch.
+    plan = ("ready;" + select_camera_preset("lol") +
+            "sync:ridge;wait:4;cursor:0.72,0.62;notches:30;wait:1.5;dump:base;hold:270;"
+            "wait:1.4;stop;wait:0.6;dump:lifted;shot:ridge;quit")
+    out, code, detail = drive(run, s, plan, syncs=["ridge=place_at|{me}|564.5|983.5"],
+        env={"LIVING_GAME_DEV": "1", "LIVING_GAME_FEET": os.path.join(folder, "feet.jsonl")})
+    c.check(s, "client joined and walked at the LoL nearest stop", code == 0, detail[-300:])
+    metrics = clearance_metrics(out, "hold:270", "dump:lifted")
+    base, lifted = metrics["eye_height_range_m"]
+    c.check(s, "the clearance guard lifts the eye when the ridge crosses its nominal position",
+        metrics["frames"] >= 20 and metrics["walk_m"] >= 3.0 and base < 4.9 and lifted > 5.2, repr(metrics))
+    c.check(s, "the eye stays above terrain without a discontinuous lift",
+        metrics["min_clearance_m"] >= 0.299 and metrics["max_eye_height_step_m"] < 0.25, repr(metrics))
+
+
 @scenario("camera-lod", explicit=True)
 def camera_lod(run, c):
-    """Two uncapped runs with the same client, fixtures and framing, changing only the LOD cap."""
+    """Compare the eight-model cap with no cap on the default and the closer LoL preset."""
+    camera_lod_one(run, c, "ours-fixed")
+    camera_lod_one(run, c, "lol")
+
+
+def camera_lod_one(run, c, preset):
     from datetime import datetime
-    s = "camera-lod"
+    s = "camera-lod" if preset == "ours-fixed" else "camera-lod-lol"
     ids = sorted(r["id"] for r in sql(run, "SELECT id, name, alive FROM character WHERE kind = 'person'")
                  if r.get("alive") and r.get("name") != "Verifier")[:17]
     if len(ids) < 12:
         c.check(s, "at least 12 residents available", False, repr(ids))
         return
     offsets = [(x, y) for y in (-4, -2, 0, 2, 4) for x in (-4, -2, 2, 4)]
+    if preset == "lol":
+        # Pack the same residents into the closer view, without placing anyone on the player.
+        offsets = [(x, y) for y in (-2.3, -1.2, -0.1, 1.0) for x in (-1.7, -0.6, 0.6, 1.7)]
     places = [f"{id}:{x}:{y}" for id, (x, y) in zip(ids, offsets)]
     syncs = ['setup=set_world_law|"fov_on"|"false";place_at|{me}|420.5|255.5',
              "noon=sql|UPDATE world SET epoch_ms = {epoch_at:12} WHERE id = 0"]
-    plan = "ready;sync:noon;sync:setup;wait:2;sync:scene;look:180;wait:4;cursor:0.68,0.42;wait:0.5;"
-    knots = (("far", -30), ("middle", 11), ("near", 30))
+    plan = "ready;" + select_camera_preset(preset) + "sync:noon;sync:setup;wait:2;sync:scene;look:180;wait:4;cursor:0.68,0.42;wait:0.5;"
+    knots = (("near", 30),) if preset == "lol" else (("far", -30), ("middle", 11), ("near", 30))
     for stop, notches in knots:
         plan += f"notches:{notches};wait:2;dump:{stop}_start;wait:8;dump:{stop}_end;shot:{stop};"
     metrics = {}
@@ -1139,8 +1309,8 @@ def camera_lod(run, c):
         os.makedirs(ev, exist_ok=True)
         frames = os.path.join(ev, "frames.csv")
         out, code, msg = drive(run, f"{s}-{arm}", plan + "quit", places=places, syncs=syncs,
-                               env={"LIVING_GAME_LOD_CAP": cap, "LIVING_GAME_FRAMES": frames, "LIVING_GAME_FPS_CAP": "0"})
-        c.check(s, f"{arm}: client joined and captured the three stops", code == 0, msg[-300:])
+                               env={"LIVING_GAME_DEV": "1", "LIVING_GAME_LOD_CAP": cap, "LIVING_GAME_FRAMES": frames, "LIVING_GAME_FPS_CAP": "0"})
+        c.check(s, f"{arm}: client joined and captured the zoom stops", code == 0, msg[-300:])
         frame_rows = []
         if os.path.exists(frames):
             with open(frames) as f:
@@ -1168,6 +1338,12 @@ def camera_lod(run, c):
                 near = {p["id"] for p in lod.get("people", []) if not p["far"]}
                 c.check(s, f"{stop}: player and at least one resident have the near model",
                         scene.get("me") in near and len(near & set(ids)) >= 1, repr(near))
+    if preset == "lol":
+        capped = metrics["cap-8"].get("near", {})
+        uncapped = metrics["uncapped"].get("near", {})
+        c.check(s, "LoL near: the crowd exceeds the cap and excess models go far",
+            capped.get("far", 0) >= 1 and uncapped.get("near", 0) > 8 and capped.get("near", 9) <= 8,
+            repr({arm: {k: v for k, v in rows.get("near", {}).items() if k != "people"} for arm, rows in metrics.items()}))
     evidence = os.path.join(ROOT, ".local/living/verify", run, "ui", f"{s}.json")
     with open(evidence, "w") as f:
         json.dump(metrics, f, indent=2)
@@ -1240,20 +1416,27 @@ def camera_narrow(run, c):
 
 @scenario("turns")
 def turns(run, c):
+    """Run the Orbit pointer checks under both local facing presets."""
+    for preset in ("natural", "cursor"):
+        turns_one(run, c, preset)
+
+
+def turns_one(run, c, preset):
     """The cursor while the view turns or zooms (Cullet walk 1, the owner: a pan turned the view
     and carried the cursor off with it). A two-finger pan, a pinch either way and a left drag,
     through the pointer's own paths (`pan:`, `pinch:`, `drag:`), with the cursor off-centre and
     nothing open: the cursor keeps its screen position (within 1 px), the view turns or zooms,
     and the ground under the cursor changes with the view."""
-    s = "turns"
-    plan = ("ready;wait:2;click:@menu;wait:0.4;click:@menu:Settings;wait:0.5;click:@settings:camera:orbit;wait:0.4;key:Escape:tap;wait:0.5;frame:0;cursor:0.72,0.62;wait:1;dump:01;shot:01_start;"
+    s = f"turns:{preset}"
+    plan = ("ready;wait:2;" + select_facing(preset, orbit=True) + "frame:0;cursor:0.72,0.62;wait:1;dump:01;shot:01_start;"
             "pan:300;wait:0.15;dump:02;shot:02_panning;wait:1.5;dump:03;shot:03_panned;"
             "pan:-500;wait:1.5;dump:04;shot:04_panned_back;"
             "pinch:0.3;wait:0.15;dump:05;wait:1.2;dump:06;shot:06_pinched_in;"
             "pinch:-0.4;wait:1.2;dump:07;shot:07_pinched_out;"
             "drag:250;wait:1.5;dump:08;shot:08_dragged;quit")
-    out, code, text = drive(run, s, plan)
+    out, code, text = drive(run, f"turns-{preset}", plan)
     c.check(s, "client ran and joined", code == 0, text[-300:])
+    check_facing(c, s, out, preset)
     d = {k: dump(out, k) for k in ["01", "02", "03", "04", "05", "06", "07", "08"]}
     start = cursor(d["01"])
     c.check(s, "the cursor is off-centre with nothing open", start and abs(start[0] - 0.72 * W) <= 1 and abs(start[1] - 0.62 * H) <= 1 and not (d["01"] or {}).get("pointer_over_ui"), f"{start} over_ui {(d['01'] or {}).get('pointer_over_ui')}")
@@ -1621,7 +1804,7 @@ def look_walk_one(run, c, preset):
     # 10 m either way), placed there by admin `place_at` (scene setup).
     # The drawn body catches up a short teleport at 1.2 m/s: wait it out before walking.
     # A close camera for the photographs and the recording; the first-time tip out of the way.
-    plan = f"ready;click:@tip:ok;sync:spot;wait:5;frame:0;view:28:5.5;lookwalk:{preset};wait:1;"
+    plan = "ready;click:@tip:ok;wait:0.5;" + select_facing("natural") + f"sync:spot;wait:5;frame:0;view:28:5.5;lookwalk:{preset};wait:1;"
     for off, walk, look in steady:
         plan += f"look:{look};wait:0.6;hold:{walk};wait:4;shot:steady{off};wait:2;stop;wait:0.8;"
     plan += ("look:0;wait:0.6;hold:0;wait:3;hold:90;wait:0.35;shot:sudden90;wait:3.6;stop;wait:0.8;"
@@ -1651,13 +1834,16 @@ def look_walk_one(run, c, preset):
             else:
                 os.environ[k] = v
     c.check(s, "client ran and joined", code == 0, text[-300:])
+    if not os.environ.get("LOOK_WALK_REUSE"):
+        check_facing(c, s, out, "natural")
     rows = feet_log(out)
     # Only the scenario's own frames: from its first scripted look (after the spot and the preset
     # are set). Before that the body stands wherever the last drive left it, and the first-time
     # tip's click can strike; since fov-client, `human_face` turns a standing body to the
     # cursor, so those frames turn and twist for reasons this scenario doesn't set up.
-    first = next((i for i, r in enumerate(rows) if r.get("look") is not None), len(rows))
-    rows = rows[first:]
+    first = re.search(r"live script: look:90 .*?, t ([\d.]+) s\)", log(out))
+    start = float(first[1]) if first else float("inf")
+    rows = [row for row in rows if row["t"] >= start and row.get("look") is not None]
     c.check(s, "the feet log recorded the walk", len(rows) > 300, f"{len(rows)} frames")
     if len(rows) < 300:
         return {}
@@ -1900,6 +2086,34 @@ def look_walk_others(run, c):
         json.dump({"other": other, "twist_median": tw, "legs_off_median": legs, "frames": len(walking), "authority": row}, open(os.path.join(out, "others.json"), "w"), indent=1)
 
 
+def look_walk_cursor(run, c):
+    s = "look-walk:cursor"
+    name = "look-walk-cursor"
+    folder = os.path.join(ROOT, ".local/living/verify", run, "ui", f"{name}-{THEME}" if THEME else name)
+    plan = (
+        "ready;click:@tip:ok;wait:0.5;" + select_facing("cursor") +
+        "sync:spot;wait:5;frame:0;look:0;wait:1;hold:90;wait:3;shot:strafe;"
+        "look:270;wait:3;shot:backpedal;stop;wait:0.5;quit"
+    )
+    out, code, detail = drive(
+        run, name, plan, syncs=[f"spot=place_at|{{me}}|{LOOK_WALK_SPOT[0]}|{LOOK_WALK_SPOT[1]}"],
+        env={"LIVING_GAME_FEET": os.path.join(folder, "feet.jsonl")},
+    )
+    c.check(s, "client ran and joined", code == 0, detail[-300:])
+    check_facing(c, s, out, "cursor")
+    rows = [r for r in feet_log(out) if r.get("look") is not None and r.get("heading") is not None
+            and sum(weight for _, weight in (r.get("gaits") or [])) > 0.75]
+    for off, label in [(90, "strafe"), (180, "backpedal")]:
+        frames = [r for r in rows if abs(abs(wrapd(r["look"] - r["heading"])) - off) < 5]
+        sample = frames[-30:]
+        c.check(s, f"{label}: the body points at the cursor on every sampled frame",
+                len(sample) >= 10 and all(abs(wrapd(r["yaw"] - 180.0 - r["look"])) < 2 for r in sample),
+                repr([(r["yaw"], r["look"], r["gaits"]) for r in sample[-3:]]))
+        c.check(s, f"{label}: directional or reverse gait plays",
+                any(any(("strafe" if off == 90 else "back") in gait and weight > 0.1
+                        for gait, weight in r["gaits"]) for r in sample), repr([r["gaits"] for r in sample[-3:]]))
+
+
 @scenario("look-walk")
 def look_walk(run, c):
     """`look-walk` (play-test 5, item 2): every preset, or `LOOK_WALK_PRESETS=chest,head`;
@@ -1910,6 +2124,7 @@ def look_walk(run, c):
         look_walk_one(run, c, p)
     if os.environ.get("LOOK_WALK_REUSE"):
         return
+    look_walk_cursor(run, c)
     look_walk_others(run, c)
     # Settings › Play › Looking aside sets the preset and the settings file keeps it.
     s = "look-walk:settings"
