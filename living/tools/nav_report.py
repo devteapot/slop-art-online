@@ -200,7 +200,7 @@ def gate_stimuli(track, t0, t1, tiles, W, shut, sight, line_clear):
         if p:
             for g in shut:
                 c = (g[0] + 0.5, g[1] + 0.5)
-                if math.dist(p, c) <= sight and line_clear(p, c):
+                if math.dist(p, c) <= sight(t) and line_clear(p, c):
                     return t
         t += 16
     return None
@@ -386,6 +386,15 @@ def phase_report(folder):
     road = ph.get("laws", {}).get("road_speed") or 1.4
     unknown = ph.get("laws", {}).get("unknown_cost") or 1.5
     sight = ph.get("laws", {}).get("ground_sight_m") or 24
+    calendar = ph.get("calendar")
+
+    def sight_at(t):
+        if calendar:
+            day_ms = calendar["day_ms"]
+            hour = ((t - calendar["epoch_ms"] + day_ms * 7 // 24) % day_ms) * 24 / day_ms
+            if not 6 <= hour < 20:
+                return min(sight, 6.0)
+        return sight
 
     def tile(x, y):
         x, y = int(math.floor(x)), int(math.floor(y))
@@ -433,7 +442,7 @@ def phase_report(folder):
             if ph["arena"] in ("n1",):
                 stims = [t_order]
             elif ph["arena"] == "n2":
-                g = gate_stimuli(tr, t_order, t_end, tiles, W, [tuple(x) for x in ph["gate_a"]["tiles"]], sight, line_clear) if ph.get("variant") in ("a", "b") else None
+                g = gate_stimuli(tr, t_order, t_end, tiles, W, [tuple(x) for x in ph["gate_a"]["tiles"]], sight_at, line_clear) if ph.get("variant") in ("a", "b") else None
                 r["gate_seen_ms_after_order"] = (g - t_order) if g else None
                 stims = [g] if g else []
                 # Leak check: before the gate is seen, does the walk head for gate A?

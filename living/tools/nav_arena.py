@@ -574,7 +574,10 @@ def n2(world, out, variant, law, kind, reps):
     reopened = None
     if variant == "c":
         # Let each subject see the closed gate, then open it out of their sight.
-        for sub, p in zip(subs, starts):
+        near, _ = outside(world, centre, a["centre"], 3)
+        closed = {tuple(tile) for tile in world.shut_tiles()}
+        viewpoints = spread(world, near, reps, across, shut=closed)
+        for sub, p in zip(subs, viewpoints):
             sub.keepalive()
             world.call("place_at", sub.id, p[0], p[1])
             sub.go(p)
@@ -597,6 +600,7 @@ def n2(world, out, variant, law, kind, reps):
                                                    "keeper": keeper, "subjects": [s.id for s in subs], "remembered_a_states_at_order": remembered_open,
                                                    "remembered_b_states_at_order": remembered_alternative, "gate_a_shut_at_test_start": ok if variant != "c" else None,
                                                    "gate_a_reopened_at_test_start": reopened, "bench_window": "test",
+                                                   "calendar": world.rows("SELECT epoch_ms, day_ms FROM world")[0],
                                                    "warmups_arrived": sum(w["outcome"] == "arrived" for w in warmups), "warmups": len(warmups), "box": box,
                                                    **world.meta()}, indent=1, default=list))
     phase.mark("test walks")
