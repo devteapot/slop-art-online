@@ -4,7 +4,7 @@
 
 ## Brush
 
-These are local placements in the Moss, the Hanger and the disused plots documented in [Small City](SMALL_CITY.md), [the bible](../living/seeds/worlds/cullet/bible.md), and [the layout](CULLET_LAYOUT.md). The existing kit provides low weed dressing in the tofts and gardens. Exact dense footprints, heights and fills below are authoring choices. A matching visual pass is needed before enabling the law in the game.
+These are local placements in the Moss, the Hanger and the disused plots documented in [Small City](SMALL_CITY.md), [the bible](../living/seeds/worlds/cullet/bible.md), and [the layout](CULLET_LAYOUT.md). The existing kit provides low weed dressing in the tofts and gardens. Exact dense footprints, heights and fills below are authoring choices. The Cullet kit now draws these eight patches as fixtures.
 
 | ID | Polygon area (m²) | Height (m) | Fill | Placement |
 | --- | ---: | ---: | ---: | --- |
@@ -16,6 +16,14 @@ These are local placements in the Moss, the Hanger and the disused plots documen
 | `mid_row_plot_toft_3_hedge` | 4.94 | 1.80 | 0.85 | A narrow overgrown margin inside the old back plot, clear of the back lane and plot entrance. |
 | `high_row_garden_3_brush` | 10.57 | 1.80 | 0.80 | An interior thicket in the garden left locked since the fever winter. |
 | `high_row_plot_garden_3_hedge` | 5.32 | 1.80 | 0.85 | A narrow overgrown margin inside the back plot behind the locked garden, away from the gate. |
+
+### Drawing the brush
+
+Run `living/tools/blender/gen_cullet.sh` to install the meshes and their entries in `fixtures.json`. After that, `--only brush` rebuilds just the eight GLBs. The [fixture generator](../living/tools/cullet_brush.py) reads each polygon from `cover.brush` and uses its bounding-box centre as the fixture anchor. The [Cullet kit](../living/tools/blender/cullet.py) fits the mesh to elevations from the native land dump. Across the western gorse the ground rises by about two metres, so each crown needs its own ground heights.
+
+A deterministic set of centres partitions each polygon into convex cells. Rounded crowns cover the authored fraction of each cell in plan view, and their highest shoots reach the authored height above local ground. Hedge crowns retain their full length along the field margin and use the fill fraction across their width. The gorse carries small ochre flowers, bracken has paired leaflets, and the Hanger and field thickets use the kit's leaf surface and wind-leaning crowns. Each patch uses one mesh primitive with the existing vertex-colour material. This keeps the fixture and its terrain-fitted foliage together in the client's existing placement path.
+
+The eight patches add 34,282 triangles to 515,212 across the other 469 models (+6.65%), eight placed instances and zero texture bytes. The full kit has 477 models and 549,494 triangles. These are asset counts. Frame times and runtime concealment require separate measurements.
 
 ## Quarry
 

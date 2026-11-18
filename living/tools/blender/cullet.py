@@ -6231,6 +6231,94 @@ GEN.update({kind: (gen_enclosure, budget) for kind, budget in ENCLOSURES_2.items
 GEN.update(quarry_face=(gen_quarry_face, 1500), quarry_crane=(gen_quarry_crane, 1500), kelp_kiln=(gen_kelp_kiln, 1500), quarry_bench=(gen_enclosure, 3500))
 
 
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+import cullet_brush
+
+
+def gen_brush(k, rng, patch):
+    # A shaded skirt below faceted shoulders and pointed sprays. All
+    # horizontal vertices are convex combinations inside the clipped crown.
+    cx, cy = patch["at"]
+    ground = patch["ground"]
+    floor = patch["floor_m"]
+    h = patch["height_m"]
+
+    def point(x, y, z):
+        return Vector((x - cx, y - cy, ground(x, y) - floor + z))
+
+    bracken = "bracken" in patch["id"]
+    gorse = "gorse" in patch["id"]
+    hedge = patch["id"].endswith("_hedge")
+    base = mix(P.kelp, P.green, 0.63 if not bracken else 0.36)
+    faces = []
+    for (x, y), ring in cullet_brush.crowns(patch, rng):
+        foliage = jit(mix(base, P.grass, rng.uniform(0.10, 0.32)), rng, 0.016)
+        # Split the perimeter at irregular intervals. It retains the exact
+        # crown area, even where the polygon clips a tuft to a sliver.
+        perimeter = []
+        for i, (u, v) in enumerate(ring):
+            end_x, end_y = ring[(i + 1) % len(ring)]
+            t = rng.uniform(0.32, 0.68)
+            perimeter.append((u, v))
+            if hedge:
+                perimeter.append((u + t * (end_x - u), v + t * (end_y - v)))
+        rim, top, root = [], [], []
+        for u, v in perimeter:
+            # Only hedges share end faces. Keep the foliage touching well up
+            # their sides, with separate irregular sprays along the crest.
+            rim.append(point(u, v, h * rng.uniform(0.76 if hedge else 0.32, 0.89 if hedge else 0.70)))
+            frac = rng.uniform(0.40, 0.73)
+            top.append(
+                point(
+                    x + (u - x) * frac, y + (v - y) * frac, h * rng.uniform(0.86, 0.97)
+                )
+            )
+            root.append(point(x + (u - x) * 0.70, y + (v - y) * 0.70, -0.16))
+        # The prevailing southwesterly pulls the highest shoot northeast.
+        lee = max(ring, key=lambda q: q[0] + q[1])
+        tip = point(x + .28 * (lee[0] - x), y + .28 * (lee[1] - y), h)
+        for i, r in enumerate(rim):
+            j = (i + 1) % len(rim)
+            faces.extend(
+                [
+                    ([root[i], root[j], rim[j], r], jit(base, rng, 0.012)),
+                    ([r, rim[j], top[j], top[i]], jit(foliage, rng, 0.018)),
+                    ([top[i], top[j], tip], jit(foliage, rng, 0.016)),
+                ]
+            )
+            # Each perimeter sector carries a spray running from its inner
+            # crown outwards. Paired, pointed leaflets fork from a common stem.
+            # Their plan positions are barycentric within the sector throughout.
+            start = 0.78 * top[i] + 0.22 * tip
+            end = 0.76 * r + 0.24 * rim[j]
+            end.z += h * rng.uniform(0.07, 0.14)
+            arch = (start + end) * 0.5 + Z * h * 0.07
+            blade = mix(foliage, P.grass, rng.uniform(0.22, 0.50))
+            for t in (0.25, 0.55, 0.8) if bracken else (0.35, 0.72):
+                stem = start.lerp(arch, t * 2) if t < 0.5 else arch.lerp(end, t * 2 - 1)
+                for side in (r, rim[j]):
+                    leaf_tip = stem.lerp(side, 0.42 if bracken else 0.25) + Z * h * (
+                        0.035 if bracken else 0.065
+                    )
+                    foot = stem.lerp(end, 0.22)
+                    faces.append(([foot, leaf_tip, stem], jit(blade, rng, 0.025)))
+            if gorse and rng.random() < 0.44:
+                # A pair of small ochre pea flowers at the end of a spine.
+                for t in (0.25, 0.55):
+                    bud = arch.lerp(end, t)
+                    a = bud.lerp(r, 0.10)
+                    b = bud.lerp(rim[j], 0.10)
+                    faces.append(([a, b, bud + Z * 0.034], on(P.mustard, "leaves")))
+    # Clip raised sprays at the authored height above their own patch of ground.
+    for verts, _ in faces:
+        for v in verts:
+            v.z = min(v.z, ground(cx + v.x, cy + v.y) - floor + h)
+    raw(k, faces)
+
+
+GEN["brush"] = gen_brush, 13000
+
+
 def neighbours(plan):
     """Who stands against whom: a terrace's houses east to west (the plan's `terraces`), and the
     rank of net lofts. Each lot learns the lot on its west (-X) and east (+X) party wall."""
@@ -6247,6 +6335,7 @@ def main():
     argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", required=True)
+    ap.add_argument("--heights", help="native land_dump heights.f32 for terrain-fitted brush")
     ap.add_argument("--plan", default=PLAN)
     ap.add_argument("--only", help="comma-separated ids or folders (default: everything the kit can build)")
     ap.add_argument("--lantern-core", type=float, default=LANTERN["core_m"], help="metres from a glasshouse's lantern within which every pane is lit")
@@ -6262,7 +6351,15 @@ def main():
     os.makedirs(a.out, exist_ok=True)
     only = set(a.only.split(",")) if a.only else None
     near = neighbours(plan)
+    brush = list(cullet_brush.fixtures(plan))
+    if brush and (not only or "brush" in only or any(p["id"] in only for p in brush)):
+        ground = cullet_brush.terrain_sampler(plan, a.heights)
+        for patch in brush:
+            patch.update(ground=ground, floor_m=ground(*patch["at"]))
+    else:
+        brush = []
     items = [dict(l, what="lot") for l in plan["lots"] if l.get("model")] + [dict(f, what="fixture") for f in plan["fixtures"]] + [dict(f, what="structure") for f in plan.get("structure_models", [])]
+    items.extend(brush)
     report, skipped, t_all = {}, [], time.time()
     table = {}
     ox, oy = plan["origin"]
