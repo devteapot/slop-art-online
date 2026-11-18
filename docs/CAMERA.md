@@ -58,9 +58,9 @@ Use a perspective camera. Store these values in client camera settings, with the
 
 | Zoom `z` | Height | Pitch | FOV | Use |
 | ---: | ---: | ---: | ---: | --- |
-| 0.00 | 26 m | 75° | 46° | Far |
-| 0.55 | 17 m | 70° | 44° | Middle, everyday movement, default on first join |
-| 1.00 | 8 m | 50° | 42° | Near, talk and close actions |
+| 0.00 | 19 m | 65° | 46° | Far |
+| 0.55 | 12 m | 58° | 44° | Middle, everyday movement, default on first join |
+| 1.00 | 8 m | 48° | 42° | Near, talk and close actions |
 
 One wheel notch changes target `z` by 0.05, clamped to 0–1. Ease the displayed `z` toward the target at 12/s with a frame-time-independent exponential. On each knot interval remap its fraction `t` by `t² × (3 − 2t)` and interpolate all three settings. Pitch changes little over the wide half, then noticeably on approach. Put the eye south of the focus by `height / tan(pitch)` and above by `height`. Use the same frame's transform, projection and ground intersection for hover, facing, click and skill targeting. While zooming under a stationary pointer, preserve the last look intent until fresh pointer motion or explicit targeting, so the camera change alone cannot turn vision. A click or skill resolves the live projection when issued. Clear stale hits on missing terrain, on focus loss and when a live target disappears.
 
@@ -70,7 +70,7 @@ Use the terrain-clearance guard to keep the eye outside ground, holding bearing 
 
 Use the existing dithered cutaway in [envs](../living/game/src/envs.rs). Test fitted bounds from camera to the player's upper body and feet, retaining hysteresis and the support-surface protection. The current eye-distance cutoff needs to follow that segment so a low roof or a canopy close to the player works at far zoom. Ease the blocking roof or foliage toward a faint visible form and restore it after the player clears it. Preserve large landmarks and floors the player stands on. The cutaway changes mesh rendering only. Sight, collision and access still use the authority's geometry. Prioritize a nearby building edge and one canopy in Part B.
 
-Use compact, screen-space plates with stable text size, keeping the existing recognized name and far-label semantics. At far and middle zoom prioritize the currently hovered, selected, talking or fighting contact when plates overlap. Full resident looks text belongs on hover or in the person window, where it can be read without covering the square. Near zoom lets the character models carry more of their appearance. Remove a lost contact's world plate, hover, hit proxy and wheel target together. Its existing window can retain last-known text under the existing rules.
+Use compact, screen-space plates with stable text size, keeping the existing recognized name and far-label semantics. At far and middle zoom prioritize the currently hovered, selected, talking or fighting contact when plates overlap. The hover line shows a known name or a short description of the person and their main garment. The full description belongs in the top target plate and the Person window, where it can be read without covering the square. Near zoom lets the character models carry more of their appearance. Remove a lost contact's world plate, hover, hit proxy and wheel target together. Its existing window can retain last-known text under the existing rules.
 
 Keep the wheel and floating windows in screen space, recomputing world anchors from the rendered pose and clamping the resulting placements to the viewport. While a wheel gesture holds the cursor, hold its screen anchor, and close on loss of the target. The skill bar stays fixed on screen and keeps its normal pointer and key priority. Test that a dithered roof cannot capture the character's click and that world rays still land correctly on slopes, over stairs and at near zoom.
 

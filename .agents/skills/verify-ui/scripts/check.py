@@ -1027,9 +1027,9 @@ def camera(run, c):
         f"street=place_at|{{me}}|{street[0]}|{street[1]}",
         f"wood=place_at|{{me}}|{wood[0]}|{wood[1]};place_at|{front}|{behind_trees[0]}|{behind_trees[1]}",
     ]
-    knots = (("far", -30, 0.0, 26.0, 75.0, 46.0),
-             ("middle", 11, 0.55, 17.0, 70.0, 44.0),
-             ("near", 30, 1.0, 8.0, 50.0, 42.0))
+    knots = (("far", -30, 0.0, 19.0, 65.0, 46.0),
+             ("middle", 11, 0.55, 12.0, 58.0, 44.0),
+             ("near", 30, 1.0, 8.0, 48.0, 42.0))
     for field in ("off", "on"):
         plan = f"ready;sync:noon;sync:fov_{field};sync:street;wait:3;sync:scene;look:0;wait:2;cursor:0.70,0.55;wait:0.5;dump:initial;pan:300;drag:250;wait:0.5;dump:fixed;"
         for stop, wheel, *_ in knots:
@@ -1093,6 +1093,11 @@ def camera(run, c):
             c.check(s, f"{field} {stop}: point and tap select the resident",
                     hover.get("under") == front and (selected.get("typing") or {}).get("to") == front,
                     repr((hover.get("under"), selected.get("typing"))))
+            if stop == "middle":
+                label = next((a["label"] for a in selected.get("hovered", []) if a["id"] == front), "")
+                top = next((name for kind, name in selected.get("naming", []) if kind == "target"), "")
+                c.check(s, f"{field}: middle hover is short and the top plate keeps the full description",
+                        bool(label) and len(top) > len(label), repr((label, top)))
             c.check(s, f"{field} {stop}: street, woods and roof stills captured",
                     all(os.path.isfile(os.path.join(out, f"{prefix}{stop}.png")) for prefix in ("", "wood_", "roof_")))
             wood_dump = dump(out, f"wood_{stop}") or {}
@@ -2253,22 +2258,21 @@ def far(run, c):
     # afar; a VRoid base (a world without looks, the island) by the projection's label and colours.
     bl = next((x.get("look") for k in d for x in (d[k] or {}).get("looks") or [] if x.get("id") == b), None)
     ph = line_phrases(bl)
-    c.check(s, "close up (2 m): the plate says a stranger in their colours, or the line's words", bool(near1) and (near1.startswith("a stranger") or (ph and near1 == ph[0])) and "too far" not in near1, f"{near1!r}; phrase {ph}")
-    c.check(s, "beyond the range (6 m): the plate says someone in their colours (or the line's far words), or there is none", far2 is None or re.fullmatch(r"someone in [a-z]+( [a-z]+)?( and [a-z]+( [a-z]+)?)?", far2) is not None or bool(ph and far2 == ph[1]), f"{far2!r}; hovered {d['02'].get('hovered')}; phrase {ph}")
+    c.check(s, "close up (2 m): the plate says a stranger in their colours, or the line's words", bool(near1) and (near1.startswith("a stranger") or (ph and near1 == ph[2])) and "too far" not in near1, f"{near1!r}; phrase {ph}")
+    c.check(s, "beyond the range (6 m): the plate says someone in their colours (or the line's far words), or there is none", far2 is None or re.fullmatch(r"someone in [a-z]+( [a-z]+)?( and [a-z]+( [a-z]+)?)?", far2) is not None or bool(ph and far2 == ph[2]), f"{far2!r}; hovered {d['02'].get('hovered')}; phrase {ph}")
     t3 = d["03"].get("typing") or {}
     c.check(s, "the talk target carries the authority's words", t3.get("to") == b and FAR in (t3.get("label") or "") and " in " not in (t3.get("label") or "").replace(FAR, ""), json.dumps(t3))
     L = log(out)
     said = [x for x in sql(run, f"SELECT id, kind, object, text FROM experience WHERE kind = 'said' AND object = {b}") if line in x.get("text", "")]
     c.check(s, "what I send carries my words and their id, no colour words", re.search(rf'say: "{re.escape(line)}" to #{b}\b', L) is not None and said and not any("someone in" in x.get("text", "") for x in said) and not re.search(r'(say|act)[^\n]*someone in ', L), f"{len(said)} said rows")
-    c.check(s, "close again: a stranger in their colours, or the line's words", bool(near5) and (near5.startswith("a stranger") or (ph and near5 == ph[0])), f"{near5!r}")
+    c.check(s, "close again: a stranger in their colours, or the line's words", bool(near5) and (near5.startswith("a stranger") or (ph and near5 == ph[2])), f"{near5!r}")
     if ph:
-        # Body sex (sex-1): a far figure is drawn in full, so its plate and hover say the form's sex
-        # ("a tall woman in …"), the far phrase's words; the label it is talked to by stays the
-        # far label, with no sex; close up the plate is the full phrase, as before.
+        # The short outfit phrase includes the drawn form at both ranges. Talk still uses
+        # the authority's neutral label when the resident is too far to make out.
         sexed = re.compile(r"\b(woman|man|girl|boy)\b")
-        c.check(s, "sex-1: far (6 m), plate and hover say the line's far phrase with the body's sex", far2 is not None and far2 == ph[1] and sexed.search(far2) is not None, f"{far2!r}; phrase {ph}")
+        c.check(s, "sex-1: far (6 m), plate and hover say the short outfit phrase with the body's sex", far2 is not None and far2 == ph[2] and sexed.search(far2) is not None, f"{far2!r}; phrase {ph}")
         c.check(s, "sex-1: the far label and the talk target stay neutral (no sex word)", (t3.get("label") or "").strip() in (FAR, f"To {FAR}") or (FAR in (t3.get("label") or "") and not sexed.search((t3.get("label") or "").replace(FAR, ""))), json.dumps(t3))
-        c.check(s, "sex-1: near (2 m and back at 2 m), the plate is the line's full phrase, as before", near1 == ph[0] and near5 == ph[0], f"{near1!r}, {near5!r}; phrase {ph}")
+        c.check(s, "sex-1: near (2 m and back at 2 m), hover shows the short outfit phrase", near1 == ph[2] and near5 == ph[2], f"{near1!r}, {near5!r}; phrase {ph}")
     notes_clear(c, s, out)
 
 
@@ -2630,7 +2634,9 @@ def line_phrases(key):
     if not line:
         return None
     band = BANDS.get(line["person"]["type"].split("-")[0], 3)
-    return look_phrase(line.get("words") or {}, "full", band), look_phrase(line.get("words") or {}, "far", band)
+    words = line.get("words") or {}
+    short = {"form": words.get("form", ""), "top": words.get("top", "").split(" with ", 1)[0]}
+    return look_phrase(words, "full", band), look_phrase(words, "far", band), look_phrase(short, "far", band)
 
 
 def look_rows(run):
@@ -2708,7 +2714,7 @@ def looks(run, c):
     # on screen carries a seed name.
     d1 = dump(out, "01") or {}
     hov = next((h.get("label") for h in d1.get("hovered") or [] if h.get("id") == a), None)
-    want = (line_phrases(rows.get(a)) or (None,))[0]
+    want = (line_phrases(rows.get(a)) or (None, None, None))[2]
     plates = [t for k, t in (d0.get("naming") or []) + (d1.get("naming") or []) if k == "plate"]
     c.check(s, "labels by the line's words (phrase), no name", hov is not None and hov == want and plates and not any(n and n in " ".join(plates) for n in seed_names(run)), f"hovered {hov!r}, phrase {want!r}; {len(plates)} plates {plates[:3]}")
     # 2. A book of another generation.

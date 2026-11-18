@@ -90,9 +90,9 @@ struct ZoomCurve {
 
 const TOP_DOWN: ZoomCurve = ZoomCurve {
     knots: [
-        (0.0, View { distance: 26.0, pitch: 75.0, fov: 46.0 }),
-        (0.55, View { distance: 17.0, pitch: 70.0, fov: 44.0 }),
-        (1.0, View { distance: 8.0, pitch: 50.0, fov: 42.0 }),
+        (0.0, View { distance: 19.0, pitch: 65.0, fov: 46.0 }),
+        (0.55, View { distance: 12.0, pitch: 58.0, fov: 44.0 }),
+        (1.0, View { distance: 8.0, pitch: 48.0, fov: 42.0 }),
     ],
     initial: 0.55,
     wheel_step: 0.05,
@@ -668,6 +668,6 @@ mod tests {
         }
         assert_eq!(TOP_DOWN.view(-1.0), TOP_DOWN.view(0.0));
         assert_eq!(TOP_DOWN.view(2.0), TOP_DOWN.view(1.0));
-        assert_eq!(TOP_DOWN.view(0.275).distance, 21.5);
+        assert_eq!(TOP_DOWN.view(0.275).distance, 15.5);
     }
 }
