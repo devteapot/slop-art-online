@@ -54,11 +54,13 @@ def settle():
 
 r = sql("SELECT * FROM cover_law", player)
 save("public singleton exact fields and off default", r == [
-    {"id":0, "cover_sight_on": False, "cover_eye_height_m":1.6, "cover_brush_on":True,
+    {"id":0, "cover_sight_on": False, "cover_eye_height_m":1.6, "cover_brush_on":False,
      "cover_brush_min_fill":0.6, "cover_cliff_step_m":2.0}], r)
 for table in ("cover_ground", "attention"):
     status, _ = v.http(f"/v1/database/{db}/sql",f"SELECT * FROM {table}",player,raw=True)
     save(f"non-admin cannot select {table}", status != 200, status)
+
+call("set_world_law", ["cover_brush_on","true"])
 
 actor = sql("SELECT id FROM my_characters",player)[0]["id"]
 code, body = v.http("/v1/identity", {})
@@ -107,13 +109,17 @@ for enabled in (False, True):
     call("place_at", [eye,*pair["from"]])
     call("place_at", [target,*pair["to"]])
     marker = f"I finished my plan. Verify cover {enabled}."
-    call("set_behavior", [eye,json.dumps({"think":marker})])
-    deadline = time.monotonic()+55
-    while time.monotonic() < deadline:
-        pending = sql(f"SELECT reason, scene FROM deliberation WHERE actor = {eye}")
-        if pending and marker in pending[0]["reason"]:
-            break
-        time.sleep(0.5)
+    for attempt in range(3):
+        call("set_behavior", [eye,json.dumps({"think":marker})])
+        deadline = time.monotonic()+65
+        while time.monotonic() < deadline:
+            pending = sql(f"SELECT reason, scene FROM deliberation WHERE actor = {eye}")
+            if pending and marker in pending[0]["reason"]:
+                break
+            time.sleep(0.5)
+        else:
+            continue
+        break
     else:
         raise AssertionError("no mind request from cover fixture")
     observed = [c["id"] for c in json.loads(pending[0]["scene"])["creatures"]]

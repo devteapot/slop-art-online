@@ -7,6 +7,13 @@
 // need rate below is per game hour (`per: "hour"`), so these numbers are the balance per game
 // day whatever the day length; the engine turns them into real time.
 
+// Keep Cullet brush cosmetic until the cover acceptance switch-on.
+fn laws() {
+    let policy = base_laws();
+    policy.cover_brush_on = false;
+    policy
+}
+
 // ---- the day -----------------------------------------------------------------------------
 
 // Dusk and dawn each take about an hour, eased: half light at 20:00 and at 06:00, so night (less

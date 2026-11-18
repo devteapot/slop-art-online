@@ -155,7 +155,7 @@ Authored Cullet live results and module logs are in `.local/cover-sight/cover-c-
 
 ## Phase 2 implementation
 
-Cover ships off in every seed and overlay. The common DDA in
+Cover ships off in every seed and overlay. Cullet also overrides `cover_brush_on` to false. The common DDA in
 [`Map::sight_clear`](../living/rules/src/map.rs) chooses the height-aware path only when it
 has a mask. The authority uses that same map for player, mind and animal sight. Missile
 collision reads the separate solid bit. Existing rocks, walls and gates retain their
@@ -202,11 +202,11 @@ protocol or expose attention. [Tables](https://spacetimedb.com/docs/tables/),
   placement predicate, and the shared coordinate sampler for existing variation.
   The tree positions and camera's mesh cutaway use their existing behavior.
 
-Create a fresh scratch world with the Cullet seed and its normal overlay. For authored
-brush and quarry faces use the Cullet seed at `d0f84a7eb`. Use the scratch verify
-run name in the command below after launch and doctor:
+Launch a fresh scratch world with `--seed cullet` to load the checked-in Cullet seed and its normal overlay. That seed includes the brush and quarry faces. After launch and doctor, use the scratch verify run name in both commands:
 
 ```sh
+python3 .agents/skills/verify/scripts/verify.py call --run core-cover-capture \
+  set_world_law '["cover_brush_on","true"]' --as-admin
 python3 .agents/skills/verify/scripts/verify.py call --run core-cover-capture \
   set_world_law '["cover_sight_on","true"]' --as-admin
 ```
