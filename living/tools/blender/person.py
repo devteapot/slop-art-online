@@ -249,6 +249,10 @@ def mirror_name(n):
         return "J_Bip_R_" + n[8:]
     if n.startswith("J_Bip_R_"):
         return "J_Bip_L_" + n[8:]
+    if n.startswith("J_Sec_L_Skirt"):
+        return "J_Sec_R_" + n[8:]
+    if n.startswith("J_Sec_R_Skirt"):
+        return "J_Sec_L_" + n[8:]
     return n
 
 
@@ -439,8 +443,58 @@ SHOULDER = Vector((-0.170 + ARM_OUT, -0.008, 1.420))  # the armhole's centre
 HOLE_R = 0.058
 
 
-def torso_w(z, x, skirt=False, front=False):
-    """Weights of a torso vertex at height z (and side x, for a coat's skirt)."""
+# A smock's skirt on spring bones (the reference's skirt is: three under each upper leg, front,
+# side and back, in one spring group with spheres on the legs). Below SKIRT_TOP a skirt vertex's
+# share of a thigh passes to that thigh's spring bones, all of it SKIRT_EASE lower, by where
+# round the leg the vertex is. The bones are the thigh's children, so with the springs at rest
+# (a far character, one past the client's budget, cloth_check.py) the skirt is exactly the skirt
+# without them; simulated, it lags, swings and hangs, held off the legs by their spheres. A
+# long skirt's chains have a second joint at SKIRT_KNEE. None: no spring bones (trousers, a
+# coat, a far model alone); else the hem's height.
+SKIRT_SPRING = None
+SKIRT_TOP, SKIRT_EASE, SKIRT_KNEE, SKIRT_BEND = 0.86, 0.10, 0.66, 0.08
+SKIRT_CHAINS = (("Front", 2.0), ("Side", 5.0), ("Back", 8.0))  # a chain and the torso's column it stands on (0 front, NT / 4 the side, NT / 2 back)
+
+
+def skirt_long(hem):
+    """Whether a skirt with its hem at `hem` reaches well below SKIRT_KNEE: its chains then have two joints."""
+    return hem < SKIRT_KNEE - 0.05
+
+
+def skirt_joints(hem):
+    """The heights of a skirt chain's bones. A long skirt's are its two joints: the client gives
+    a chain's last bone a tail 7 cm on along its own offset, which here is on down the skirt. A
+    short skirt's single joint hangs straight from the upper leg, whose offset points sideways,
+    so it has an end bone at the hem to say where its tail is."""
+    return [SKIRT_TOP, SKIRT_KNEE] if skirt_long(hem) else [SKIRT_TOP, hem]
+
+
+def skirt_bone(side, chain, joint, hem):
+    """`J_Sec_L_SkirtFront`, then `…Front2` (a long skirt's second joint) or `…Front_end`: the reference's names."""
+    return f"J_Sec_{side}_Skirt{chain}" + ("" if joint == 0 else ("2" if skirt_long(hem) else "_end"))
+
+
+def skirt_shares(z, k, hem):
+    """A left-side skirt vertex's shares of its own side's spring bones (column k, height z):
+    ({bone: share of the thigh's weight}, the share that stays the thigh's own)."""
+    free = smooth((SKIRT_TOP - z) / SKIRT_EASE)
+    if free <= 1e-4:
+        return {}, 1.0
+    phi = 360.0 * k / NT
+    front, back = 1.0 - smooth((phi - 45.0) / 36.0), smooth((phi - 99.0) / 36.0)
+    round_leg = {"Front": front, "Side": max(1.0 - front - back, 0.0), "Back": back}
+    low = smooth((SKIRT_KNEE + SKIRT_BEND / 2 - z) / SKIRT_BEND) if skirt_long(hem) else 0.0
+    out = {}
+    for chain, a in round_leg.items():
+        for joint, b in ((0, 1.0 - low), (1, low)):
+            if a * b > 1e-4:
+                out[skirt_bone("L", chain, joint, hem)] = free * a * b
+    return out, 1.0 - free
+
+
+def torso_w(z, x, skirt=False, front=False, col=None):
+    """Weights of a torso vertex at height z (and side x, for a coat's skirt; column `col`, for a
+    skirt on spring bones)."""
     k = [(0.99, "J_Bip_C_Hips"), (1.09, "J_Bip_C_Spine"), (1.20, "J_Bip_C_Chest"), (1.31, "J_Bip_C_UpperChest")]
     if z <= k[0][0]:
         w = [(k[0][1], 1.0)]
@@ -463,7 +517,27 @@ def torso_w(z, x, skirt=False, front=False):
         side = min(abs(x) / 0.04, 1.0)
         left = t * (0.5 + 0.5 * side if x <= 0 else 0.5 - 0.5 * side)
         right = t - left
-        w = [(n, v * (1 - t)) for n, v in w] + [("J_Bip_L_UpperLeg", left), ("J_Bip_R_UpperLeg", right)]
+        w = [(n, v * (1 - t)) for n, v in w]
+        if SKIRT_SPRING is not None and col is not None and z < SKIRT_TOP:
+            # The thighs' shares go to their spring bones. A vertex near the middle has a share
+            # of the other thigh too: that goes to the other side's front or back bone alone.
+            own, stay = skirt_shares(z, col, SKIRT_SPRING)
+            joint = 1 if skirt_long(SKIRT_SPRING) and z < SKIRT_KNEE else 0
+            other = skirt_bone("R", "Front" if col <= NT / 4 else "Back", joint, SKIRT_SPRING)
+            legs = [("J_Bip_L_UpperLeg", left * stay), ("J_Bip_R_UpperLeg", right * stay), (other, right * (1 - stay))] + [(n, left * v) for n, v in own.items()]
+            legs = [(n, v) for n, v in legs if v > 1e-4]
+            # Four bones a vertex: the smallest shares join the largest of the same thigh's, which
+            # at rest changes nothing (they are that thigh's children).
+            room = 4 - len([1 for n, v in w if v > 1e-4])
+            while len(legs) > room:
+                n0, v0 = min(legs, key=lambda q: q[1])
+                legs.remove((n0, v0))
+                mine = [q for q in legs if ("_L_" in q[0]) == ("_L_" in n0)] or legs
+                n1, v1 = max(mine, key=lambda q: q[1])
+                legs[legs.index((n1, v1))] = (n1, v1 + v0)
+            w += legs
+        else:
+            w += [("J_Bip_L_UpperLeg", left), ("J_Bip_R_UpperLeg", right)]
     return blend(*w)
 
 
@@ -538,7 +612,7 @@ def upper_garment(part, d, zs, hem, cuff, collar, front=None, skirt=0.0, tag_fn=
 
     rows = []
     for z in zs:
-        rows.append([part.v(col_point(z, k), torso_w(z, col_point(z, k).x, sk, k <= 4)) for k in ks])
+        rows.append([part.v(col_point(z, k), torso_w(z, col_point(z, k).x, sk, k <= 4, col=k)) for k in ks])
     # The armpit ring (A), the ring through the armhole's middle (M) and the yoke line (T). The
     # armhole takes columns 4..6: its rim is the first ring of the sleeve.
     hole = {}
@@ -636,7 +710,7 @@ def upper_garment(part, d, zs, hem, cuff, collar, front=None, skirt=0.0, tag_fn=
         cur = []
         for k in ks:
             pos = torso_point(z0 + dz, k, off(z0 + dz) + dd, skirt, edge=front(z0 + dz) if front and k == 1 else None, folds=folds)
-            cur.append(part.v(pos, torso_w(z0, pos.x, sk)))
+            cur.append(part.v(pos, torso_w(z0, pos.x, sk, col=k)))
         for i in range(len(ks) - 1):
             k = ks[i]
             part.f((cur[i], cur[i + 1], prev[i + 1], prev[i]), ((k / NT, -j - 1), ((k + 1) / NT, -j - 1), ((k + 1) / NT, -j), (k / NT, -j)), tag_fn("hem", k, -j - 1))
@@ -1731,6 +1805,48 @@ def add_spring_bones(arm, chains):
     return names
 
 
+def leg_at(z):
+    """The left leg at height z: its centre (x, y) and its half width and half depth."""
+    cx, cy, rx, ry = table(LEG_UP, z)
+    if STANCE:
+        kx, ky = table(WOMAN_LEG, z)
+        rx, ry = rx * kx, ry * ky
+    return cx, cy, rx, ry
+
+
+SKIRT_OFF = 0.018  # a smock's distance off the body: where its spring bones stand
+SKIRT_HIT = 0.020  # a skirt joint's own radius against the legs' spheres (the reference's)
+SKIRT_SPHERES = (0.88, 0.76, 0.64, 0.52)  # the heights of the spheres on an upper leg
+
+
+def add_skirt_bones(arm, hem):
+    """The spring bones of a smock's skirt (SKIRT_SPRING): three chains under each upper leg,
+    on the skirt's own surface at the front, the side and the back (skirt_joints). Returns the
+    chains, each a list of bone names."""
+    zs = skirt_joints(hem)
+    chains = []
+    bpy.context.view_layer.objects.active = arm
+    bpy.ops.object.mode_set(mode="EDIT")
+    frame = Matrix.Rotation(math.radians(90), 4, "X")
+    for side, sx in (("L", 1.0), ("R", -1.0)):
+        for chain, k in SKIRT_CHAINS:
+            parent = arm.data.edit_bones[f"J_Bip_{side}_UpperLeg"]
+            names = []
+            for joint, z in enumerate(zs):
+                p = torso_point(z, k, SKIRT_OFF, 1.0, folds=1.0)
+                eb = arm.data.edit_bones.new(skirt_bone(side, chain, joint, hem))
+                eb.head = (0, 0, 0)
+                eb.tail = (0, 0.04, 0)
+                eb.matrix = Matrix.Translation((p.x * sx, p.y, p.z)) @ frame
+                eb.parent = parent
+                parent = eb
+                names.append(eb.name)
+                JOINTS[eb.name] = (p.x * sx, p.y, p.z)
+            chains.append(names)
+    bpy.ops.object.mode_set(mode="OBJECT")
+    return chains
+
+
 def chain_weights(bones, step, along):
     """Weights of a vertex `along` metres down a spring chain whose joints are `step` apart:
     each stretch follows its own bone, shared half and half at a joint. Above the first joint
@@ -2654,16 +2770,16 @@ HUMAN = {
 }
 
 
-def secondary(nodes, springs):
+def secondary(nodes, springs, skirts=None):
     """VRM 0.x spring bones for hanging hair, with spheres on the head, neck and shoulders it
     must not pass through. Offsets are in each bone's own frame (the file's axes: Y up, the
     character facing -Z), which is how the game reads them (characters.rs)."""
-    if not springs:
-        return {"boneGroups": [], "colliderGroups": []}
-
     def sphere(bone, at, r):
         j = JOINTS[bone]
         return {"offset": {"x": at[0] - j[0], "y": at[2] - j[2], "z": -(at[1] - j[1])}, "radius": r}
+
+    if not springs:
+        return skirt_block(nodes, skirts, sphere, {"boneGroups": [], "colliderGroups": []})
 
     # Smaller than the head, neck and shoulders themselves: the hair at rest lies on those, and
     # a sphere that reached it would push it off them.
@@ -2690,10 +2806,50 @@ def secondary(nodes, springs):
     groups = [group("Hair", [c for c in springs if c[0] not in BACK_ROOTS and c[0] not in ROPE_ROOTS], range(3))] + ([group("HairBack", on_back, range(len(colliders)))] if on_back else []) \
         + ([group("HairRope", ropes, range(1, len(colliders)), ROPE_HIT)] if ropes else [])
     groups = [g for g in groups if g["bones"]]
-    return {"boneGroups": groups, "colliderGroups": colliders}
+    return skirt_block(nodes, skirts, sphere, {"boneGroups": groups, "colliderGroups": colliders})
 
 
-def add_vrm(path, title, springs=None):
+def skirt_block(nodes, skirts, sphere, block):
+    """A skirt's spring group and the spheres on the upper legs it must not pass into, added to
+    a file's spring block. As the reference's: one group, no gravity (a skirt keeps the place
+    its thigh gives it and lags and swings about that, so a seated person's skirt lies on the
+    thighs as it does unsimulated, and nothing hangs through a seat), and spheres down each
+    upper leg. A sphere is the leg's own size there, less where the skirt at rest lies closer
+    than its joints' radius: a sphere that reached a joint at rest would push the skirt out."""
+    if not skirts:
+        return block
+    first = len(block["colliderGroups"])
+    # Where each joint's tail is at rest: the next bone, or 7 cm on from a chain's last joint.
+    ends = []
+    for chain in skirts:
+        pts = [np.array(JOINTS[n]) for n in chain]
+        ends += pts[1:] + ([] if chain[-1].endswith("_end") else [pts[-1] + (pts[-1] - pts[-2]) / np.linalg.norm(pts[-1] - pts[-2]) * 0.07])
+    least = 1.0
+    for side, sx in (("L", 1.0), ("R", -1.0)):
+        bone = f"J_Bip_{side}_UpperLeg"
+        spheres = []
+        for z in SKIRT_SPHERES:
+            cx, cy, rx, ry = leg_at(z)
+            c = np.array([cx * sx, cy, z])
+            room = min(float(np.linalg.norm(e - c)) for e in ends) - SKIRT_HIT
+            r = min((rx + ry) / 2, room - 0.004)
+            least = min(least, room - r)
+            spheres.append(sphere(bone, tuple(c), r))
+        block["colliderGroups"].append({"node": nodes[bone], "colliders": spheres})
+    block["boneGroups"].append({"comment": "Skirt", "stiffiness": SKIRT_STIFF, "gravityPower": 0.0, "gravityDir": {"x": 0, "y": -1, "z": 0}, "dragForce": SKIRT_DRAG, "center": -1, "hitRadius": SKIRT_HIT,
+                                "bones": [nodes[chain[0]] for chain in skirts], "colliderGroups": [first, first + 1]})
+    print(f"SKIRT springs: {len(skirts)} chains, {sum(len(c) for c in skirts)} bones; at rest a joint's tail is at least {least * 1000:.1f} mm clear of the legs' spheres")
+    return block
+
+
+# Stiff and damped enough that the cloth keeps up with a thigh in a run: cloth_check.py --springs
+# plays the client's step through the gaits. At 0.8 and 0.3 the hem trailed 13 to 24 cm and the
+# thigh came through it by 16 to 27 mm in a brisk walk and a run; at these it swings 3 cm in a
+# walk and 7 in a run, and what comes through is what comes through unsimulated.
+SKIRT_STIFF, SKIRT_DRAG = 8.0, 0.7
+
+
+def add_vrm(path, title, springs=None, skirts=None):
     """Mark the file as a VRM 0.x humanoid (plain JSON in the GLB's extensions), with the
     expressions' groups under VRM's preset names."""
     b = open(path, "rb").read()
@@ -2727,7 +2883,7 @@ def add_vrm(path, title, springs=None):
         "firstPerson": {"firstPersonBone": nodes["J_Bip_C_Head"], "firstPersonBoneOffset": {"x": 0, "y": 0.06, "z": 0}, "meshAnnotations": [], "lookAtTypeName": "Bone",
                         **{k: {"curve": [0, 0, 0, 1, 1, 1, 1, 0], "xRange": 90, "yRange": LOOK_RANGE} for k in ("lookAtHorizontalInner", "lookAtHorizontalOuter", "lookAtVerticalDown", "lookAtVerticalUp")}},
         "blendShapeMaster": {"blendShapeGroups": groups},
-        "secondaryAnimation": secondary(nodes, springs or []),
+        "secondaryAnimation": secondary(nodes, springs or [], skirts),
     }
     js = json.dumps(j, separators=(",", ":")).encode()
     js += b" " * (-len(js) % 4)
@@ -2822,7 +2978,13 @@ def main():
     g["STRANDS_PATH"] = os.path.join(os.path.dirname(out), "strands.png")
     g["WHOLE_HEAD"] = a.parts in ("head", "face", "overlay")
     g["OVERLAY"] = a.overlay if a.parts == "overlay" else None
+    # A smock's skirt hangs from spring bones where the file holds the skirt: a whole person, or
+    # the smock's or the apron's own piece. Not a far model alone, which lists no springs.
+    skirted = spec.get("coat") == "smock" and a.lod != "far" and (a.parts == "all" or (a.parts == "keep" and {"Smock", "Apron"} & set(a.keep.split(","))))
+    g["SKIRT_SPRING"] = max(spec["hem"], 0.50) if skirted else None
     arm = make_armature()
+    if skirted:
+        spec["skirt_springs"] = add_skirt_bones(arm, g["SKIRT_SPRING"])
     obs, tris = [], {}
     for far in (False, True):
         if a.lod == ("far" if not far else "near"):
@@ -2873,7 +3035,7 @@ def main():
         export_attributes=True,  # the hair's `_GREY`
     )
     # The far model alone hangs rigid: it lists no spring bones, so the game simulates none.
-    j = add_vrm(out, f"Cullet resident {params['seed']} ({params['sex']}, {params['age']:.0f})", spec.get("springs") if a.lod != "far" else None)
+    j = add_vrm(out, f"Cullet resident {params['seed']} ({params['sex']}, {params['age']:.0f})", spec.get("springs") if a.lod != "far" else None, spec.get("skirt_springs") if a.lod != "far" else None)
     zs = [v.co.z for ob in obs for v in ob.data.vertices]
     print(f"PERSON {out}: {params['sex']} {params['age']:.0f}y seed {params['seed']}, lod {a.lod}, {sum(tris.values())} triangles, {sum(len(m['primitives']) for m in j['meshes'])} meshes, {len(arm.data.bones)} bones, "
           f"{len(j['materials'])} materials, {len(j.get('images', []))} texture, height {max(zs) - min(zs):.3f} m, floor {min(zs):+.4f}")

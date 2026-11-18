@@ -1,0 +1,8 @@
+{
+ "schema": 1,
+ "family": "character:body-skirts",
+ "kind": "character",
+ "title": "Skirts on spring bones",
+ "description": "A smock's skirt on spring bones, on three composed wearers whose legs are scaled (a woman, a child, a heavy man) and on the reference with scaled legs: the files before, the new files on today's client, and the new files on a locally patched client.",
+ "target": "A skirt that hangs from spring bones under the upper legs as the reference's does, the same at rest as before and moving when simulated, at twelve bones a skirt (docs/CHARACTERS.md, Spring skirts). Needs one condition in the client's shape; the patched rows are from a local build of it."
+}

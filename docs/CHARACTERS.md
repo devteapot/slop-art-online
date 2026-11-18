@@ -1973,7 +1973,7 @@ The body pass, second part (2026-11-12, branch `char-4-body`): how the jersey, s
 
 **What still separates our clothes from the reference's,** ordered by how much it shows:
 
-1. **Nothing moves by itself.** A skirt follows the thighs and the hips by weights; it does not swing, lag or settle. The reference's skirt is on spring bones. Ours could be: the hair's spring groups and the back's spheres are the same machinery.
+1. **Nothing moves by itself.** A skirt follows the thighs and the hips by weights; it does not swing, lag or settle. The reference's skirt is on spring bones. Ours could be: the hair's spring groups and the back's spheres are the same machinery. (Done for smocks and aprons: [spring skirts](#spring-skirts).)
 2. **The cut.** A smock is still one bell from the waist and a coat a fitted tube; there is no seam, pleat, pocket or lapel that is modelled, only painted bands and patches.
 3. **Sleeves** are smooth tubes with no fold at the elbow, and on a woman's form the sleeve's head stands a little proud of the narrow shoulder.
 4. **Boots** are a man's sea boots made narrower.
@@ -2165,6 +2165,70 @@ No line and no key changes: a line names its style, and the styles keep their na
 **The check.** `fringe_check.py LOOKDEV` fails if a type's file or a style lacks the bone, if a type's fullest fringe ends below its brows' top or more than 6 mm above, if a style ends more than 3 mm from where it ends on the standard head, or if a fringe's vertex is behind the face's skin. `--table` prints the measures for files from before the bone. `person_check.py` knows the bone's rule.
 
 **What still separates ours from the reference's fringe:** its locks are even triangles where the reference's are curved and of several lengths; `tousled` and `short` end 14 to 20 mm above the brows in the middle, where a notch of the hem falls, with their points lower at the sides; a person's own `brow_height` (2.4 mm down to 4.1 mm up) is not followed, so a full fringe can lie over the tops of high brows; from above, as the game's camera looks, a full fringe covers the brows' upper edge.
+
+### Spring skirts
+
+2026-11-13, branch `char-4-skirts`, on top of [the fringe per type](#the-fringe-per-type). A skirt followed the thighs and the hips by weights and did not swing, lag or settle; the reference's skirt is on spring bones. **It needs one change in the client before its files can be used** (below): not merged or bundled until that is on main.
+
+**How the reference does it** (read from Shino's file): six spring bones, three under each `J_Bip_*_UpperLeg` (front, side, back), one joint each with an end bone; one spring group (stiffness 0.5, drag 0.05, no gravity, hit radius 2 cm); three spheres of 8.1 cm on each upper leg.
+
+**Ours** (`person.py`: `SKIRT_SPRING`, `skirt_shares`, `add_skirt_bones`, `skirt_block`):
+
+- **The same layout and names** in the files that hold a skirt, the 12 `smock_*` and `apron_*` pieces and a whole person in a smock: `J_Sec_L_SkirtFront`, `…Side`, `…Back` and the right side's, under the upper legs, standing on the skirt's own surface 7 cm below the hip joint. A smock and its apron name the same bones at the same places, so a person wearing both has one set.
+- **A long skirt's chains have two joints** (the second at 0.66 m, `…Front2`: hems at 0.50 and 0.58 m); a short one's (hem 0.74 m) one joint and an end bone. Twelve bones either way, all twelve simulated by the client (it simulates a chain's last bone too).
+- **Weights.** Below 0.86 m a skirt vertex's share of a thigh passes to that thigh's spring bones, all of it 10 cm lower, by where round the leg the vertex is (front to 45°, back from 135°, the side between, blended over 36°). The hips' share stays. Four bones a vertex: a share too many joins the largest of the same thigh's.
+- **At rest it is the skirt as it was.** The bones are the thigh's children, so where the client simulates nothing (a far character, one past the budget) the skirt is exactly the skirt without them. `cloth_check.py` now carries a piece's own bones on their parents, as the client does.
+- **The spring group:** stiffness 8, drag 0.7, no gravity, hit radius 2 cm; four spheres down each upper leg, each the leg's own size there. No gravity, as the reference: a skirt keeps the place its thigh gives it and lags and swings about that, so a seated person's skirt lies on the thighs as it does unsimulated and nothing new hangs through a seat.
+- **Coats are not changed:** a coat's skirt is open in front and still follows by weights.
+
+**Tuned by simulation** (`cloth_check.py --springs`: the client's own spring step, `characters.rs` `Springs::simulate`, played through a clip a sixtieth of a second a step, a loop measured on its second turn; `--spring STIFFNESS,DRAG` tries other values). At the reference's kind of values (0.8 and 0.3) the hem trailed the thigh by 13 to 24 cm and the thigh came through by 16 to 27 mm in a brisk walk and a run. At 8 and 0.7, on Cullet's 64 and 23 test lines:
+
+| People with something through by more than 2 mm, of 87; the most | Unsimulated | Simulated |
+|---|---|---|
+| At rest, idle, walk | 0 | 0 |
+| Brisk walk | 13; 7.6 mm | 15; 9.4 mm |
+| Run | 1; 2.0 mm | 2; 4.0 mm |
+| Sitting down | 86; 39.2 mm | 86; 39.2 mm |
+| Seated | 8; 35.5 mm | 8; 35.5 mm |
+
+- The sitting faults are the ones the cloth part left open (a seated thigh through the skirt's front); the springs neither mend nor worsen them.
+- How far the springs carry the hem from where it rides unsimulated: on a woman in a knee-length smock 30 mm in the walk, 49 in a brisk walk, 69 in a run, 13 sitting down, 2 seated; on a child 18, 29, 41; on a man's short smock 7, 11, 15.
+
+**The cost.**
+
+| | Before | After |
+|---|---|---|
+| Bones in a skirted piece's file | 81 | 94 (12 for the skirt, and the fringe's, which every file built since has) |
+| A composed skirt wearer's joints | 82 | 94 |
+| Vertices and triangles, the 12 files | 20,230; 35,900 | the same |
+| Bones a vertex | 4 | 4 |
+| The 12 files | 2.02 MB | 2.06 MB |
+| Spring joints among Cullet's 64 | 123 (hair) | 471 (348 on 29 skirt wearers) |
+
+- **The springs run in the client every frame**, not baked: its fixed 60 Hz step for the nearest 48 characters within 40 m.
+- **Measured** (`crowd.py`, Cullet's 64 as whole files at the game camera, a loaded machine): 33 characters and 302 joints simulated a frame, **0.13 ms a frame** for all springs, hair and skirts, 2.4 to 2.6 µs of CPU a character-step. Under heavier load, with 1.7 steps a frame, 0.36 ms. Three quarters of the joints are skirts', so the skirts are about 0.1 ms of it. Frame time with springs on and off differed by less than the runs' own noise (12.6 to 13.4 ms on the quiet pair).
+
+**What the client needs: one condition in `characters.rs` `shape`.** For a bone with a scale of its own (an upper leg takes girth, length, girth) the client scales the bone's vertices through a helper joint and multiplies its children's offsets by the scale; a child bone's own vertices get no scale. A spring bone that carries cloth lying on the scaled bone must take that scale as its own:
+
+```rust
+tf.translation = info.rest.get(cn.as_str()).map_or(tf.translation, |r| *r + belly) * v;
+if cn.as_str().starts_with("J_Sec_") {
+    tf.scale = v;
+}
+```
+
+- The spring step already keeps a joint's rest scale, and a second joint takes it through the hierarchy. The patch is `~/archive/deliverables/char-4-skirts-client-spring-scale.patch`, tested on the dev-box in a local build and not committed here.
+- **Without it the new files are wrong at rest too,** simulated or not, on every wearer whose legs are scaled:
+
+| Wearer | Smock | Hem above the floor: file before | new file, client with the change | new file, today's client | Width at the hem: before | with the change | today's client | Trousers through the smock at rest, today's client |
+|---|---|---|---|---|---|---|---|---|
+| a standard woman (legs 1.075): amara-okoro | `smock_58-f` | 555 mm | 555 mm (-0.0) | 572 mm (+17.0) | 548 mm | 548 mm (-0.0) | 544 mm (-3.5) | 0.0 mm (with the change 0.0) |
+| a child (legs 0.66): dory-tarn | `smock_58-m` | 672 mm | 672 mm (-0.0) | 595 mm (-77.2) | 504 mm | 504 mm (-0.0) | 499 mm (-5.0) | 0.0 mm (with the change 0.0) |
+| a heavy man (girth 1.207): benedikt-orme | `smock_74-m` | 736 mm | 736 mm (-0.0) | 736 mm (-0.0) | 501 mm | 501 mm (+0.0) | 493 mm (-7.6) | 0.0 mm (with the change 0.0) |
+
+- With the change the hem and the width are the file's from before to a tenth of a millimetre. The VRoid bases' own spring skirts have the same fault whenever a recipe scales the legs, and the change mends that too (`character:body-skirts`, the `vroid` sheet).
+
+**What still separates our skirts from the reference's:** the skirt is six hinged panels, not cloth: it swings and lags but does not fold or drape; with no gravity it lifts with a raised thigh as it did; sitting is as the cloth part left it; a coat's skirt does not move.
 
 ### The neck
 
