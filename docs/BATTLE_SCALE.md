@@ -744,7 +744,7 @@ Deleting the scratch database of `minds-bdat-124436` while its world still ran 3
 - [Event tables](https://spacetimedb.com/docs/tables/event-tables/) were considered for `fight_seen` and not used: their rows exist "only for the duration of the transaction that created them", and the fold must hold blows across ticks.
 - Versioned source: `crates/durability/src/imp/local.rs:358`, where the delete-time panic is.
 
-## R1 and R2 as built
+## R1 and R2 with the unbounded scene prototype
 
 The authority stores recognition in block ranges and emits one counted line for a look's unnamed remains. The complete mind scene lists each body. The matched replay refilled 1.69 fighters/s against 1.61/s in the archived pre-C2 run.
 
@@ -764,4 +764,4 @@ The authority stores recognition in block ranges and emits one counted line for 
 
 In the matched replay, scene construction rose from 34.31 to 575.37 ms/s and cadence fell. A short unprofiled sample ran at 9.0 ticks/s. The fake-model fight tapered off before its sample.
 
-The eight-hour projection at 5,760–6,200 bodies gives about 200–400 field recognition rows for 200 fighters and 1.7–1.8 MB of range-table pages under linear payload growth. Maintaining the matched request rate under a linear per-body workload would put scene construction alone at 1,140–1,230 ms/s. See [Seen remains](SEEN_REMAINS.md#30-minute-measurement) for window lengths, sizing and workload assumptions.
+The eight-hour projection at 5,760–6,200 bodies gives about 200–400 field recognition rows for 200 fighters and 1.7–1.8 MB of range-table pages under linear payload growth. Maintaining the matched request rate under a linear per-body workload would put scene construction alone at 1,140–1,230 ms/s. See [Seen remains](SEEN_REMAINS.md#unbounded-scene-prototype-measurement) for window lengths, sizing and workload assumptions.

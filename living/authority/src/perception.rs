@@ -1768,6 +1768,37 @@ pub struct KnownName {
     pub name: String,
 }
 
+// Shared by the player view and mind scenes. The two SpacetimeDB contexts expose
+// different database handles, but use the same indexes and name recognition rules.
+macro_rules! known_name_ids {
+    ($ctx:ident, $me:ident, $set:expr) => {{
+        let mut ids = $set;
+        ids.insert($me.id);
+        for p in [$me.parent_a, $me.parent_b] {
+            if p != 0 {
+                ids.insert(p);
+            }
+        }
+        for child in $ctx.db.character().parent_a().filter($me.id).chain($ctx.db.character().parent_b().filter($me.id)) {
+            ids.insert(child.id);
+            for other in [child.parent_a, child.parent_b] {
+                if other != 0 {
+                    ids.insert(other);
+                }
+            }
+        }
+        ids.extend($ctx.db.acquaintance().observer().filter($me.id).map(|a| a.known));
+        if let Some(m) = $ctx.db.membership().member().find($me.id) {
+            ids.extend($ctx.db.membership().community().filter(m.community).map(|x| x.member));
+        }
+        ids
+    }};
+}
+
+pub(crate) fn known_name_ids(ctx: &ReducerContext, me: &Character) -> std::collections::HashSet<u32> {
+    known_name_ids!(ctx, me, std::collections::HashSet::new())
+}
+
 /// Whom my current character knows by name, with the name: itself, its parents, its children and
 /// their other parent, its community, and whoever told it their name (`acquaintance`, which also
 /// keeps the names of its community's dead). The same sources as `knows_name`, read by index. A
@@ -1776,25 +1807,7 @@ pub struct KnownName {
 #[spacetimedb::view(accessor = my_known_names, public, primary_key = id)]
 pub fn my_known_names(ctx: &ViewContext) -> Vec<KnownName> {
     let Some(me) = current(ctx) else { return Vec::new() };
-    let mut ids = std::collections::BTreeSet::new();
-    ids.insert(me.id);
-    for p in [me.parent_a, me.parent_b] {
-        if p != 0 {
-            ids.insert(p);
-        }
-    }
-    for child in ctx.db.character().parent_a().filter(me.id).chain(ctx.db.character().parent_b().filter(me.id)) {
-        ids.insert(child.id);
-        for other in [child.parent_a, child.parent_b] {
-            if other != 0 {
-                ids.insert(other);
-            }
-        }
-    }
-    ids.extend(ctx.db.acquaintance().observer().filter(me.id).map(|a| a.known));
-    if let Some(m) = ctx.db.membership().member().find(me.id) {
-        ids.extend(ctx.db.membership().community().filter(m.community).map(|x| x.member));
-    }
+    let ids = known_name_ids!(ctx, me, std::collections::BTreeSet::new());
     ids.into_iter().filter_map(|i| ctx.db.character().id().find(i).map(|c| KnownName { id: c.id, name: c.name })).collect()
 }
 

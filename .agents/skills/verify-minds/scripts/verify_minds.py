@@ -4212,7 +4212,7 @@ def body_case(run):
 
 @case('seen-remains')
 def seen_remains_case(run):
-    """A real mind gets the count, the named exceptions and the complete field in its prompt."""
+    """A real mind gets the count, the named exceptions and the bounded scene in its prompt."""
     from types import SimpleNamespace
 
     path = ROOT / '.agents/skills/verify-core/scripts/scenes.py'
@@ -4226,19 +4226,28 @@ def seen_remains_case(run):
                               wait=lambda condition, seconds: run.wait(condition, 'introduction', seconds))
     line = core.clear_line(adapter)
     before = {r['id'] for r in rows('SELECT id FROM character')}
-    run.admin('spawn_crowd', 21, True)
-    observer, *dead = sorted(r['id'] for r in rows('SELECT id FROM character') if r['id'] not in before)
-    for who in [observer, *dead]:
+    run.admin('spawn_crowd', 23, True)
+    observer, builder, *dead = sorted(r['id'] for r in rows('SELECT id FROM character') if r['id'] not in before)
+    for who in [observer, builder, *dead]:
         run.admin('set_behavior', who, json.dumps({'wait': 300}))
+    writer = dead[-1]
+    run.admin('grant_know_how', writer, 'writing')
+    run.admin('grant_items', writer, 'wood', 1)
+    run.admin('set_behavior', writer, json.dumps({'do': {'skill': 'write', 'item': 'tablet',
+                                                         'text': 'These are field notes.', 'topic': 'writing'}}))
+    run.wait(lambda: rows(f'SELECT id FROM artifact WHERE holder = {writer}'), 'tablet written')
     at, _, names = core.stage_seen_remains(adapter, (observer,), dead, line)
-    field = {r['id'] for r in run.private("SELECT * FROM structure WHERE kind = 'remains'", 'field')
+    field = {r['owner']: r['id'] for r in run.private("SELECT * FROM structure WHERE kind = 'remains'", 'field')
              if r['owner'] in dead}
-    assert len(field) == 20
+    assert len(field) == 21
+    run.admin('place_at', builder, at[0] + 5, at[1])
+    for _ in range(10):
+        run.admin('place_structure', builder, 'shelter')
     run.admin('place_at', observer, *at)
     prefix = 'You notice the remains of 18 strangers around you, the nearest '
     told = lambda: [r for r in run.private(f'SELECT * FROM experience WHERE observer = {observer}', 'told')
                    if r['text'].startswith('You notice') and 'remains' in r['text']]
-    lines = run.wait(lambda: value if len(value := told()) >= 3 else None, 'three remains lines', 15)
+    lines = run.wait(lambda: value if len(value := told()) >= 4 else None, 'four remains lines', 15)
     run.start(model(run, {'replies': {'think': {'thought': 'I look around.', 'intend': [], 'say': None},
                                      'deliberate': basic_reply()}}), [observer])
     requests = lambda: shared.rows(run.directory / 'fake-requests.jsonl')
@@ -4247,27 +4256,28 @@ def seen_remains_case(run):
     prompt = run.wait(lambda: [sent_text(e) for e in requests() if 'verify seen-remains' in sent_text(e)],
                       'remains prompt', 60)[0]
     (run.directory / 'prompt-seen-remains.txt').write_text(prompt)
-    entries, decoder = {}, json.JSONDecoder()
-    for start in re.finditer(r'\{"at":', prompt):
-        try:
-            row, _ = decoder.raw_decode(prompt, start.start())
-        except ValueError:
-            continue
-        if row.get('kind') == 'remains':
-            entries[row['id']] = row
+    structures = json.loads(scene_part(prompt))['structures']
+    bodies = {r['id']: r for r in structures if r['kind'] == 'remains'}
+    aggregate = [r for r in structures if r['kind'] == 'counted_remains']
+    known = {field[who]: name for who, name in zip(dead[:2], names)}
     sent = '\n'.join(sent_text(e) for e in requests())
     named = [r['text'] for r in lines if r['text'].startswith('You notice a remains') and
              any(name in r['text'] for name in names)]
     checks = {
-        'three experiences include the exact counted line': len(lines) == 3 and sum(r['text'].startswith(prefix) for r in lines) == 1,
+        'four experiences include the exact counted line': len(lines) == 4 and sum(r['text'].startswith(prefix) for r in lines) == 1,
         'the counted line reaches a real mind prompt': prefix in sent,
         'both named exceptions reach the mind': len(named) == 2 and all(text in sent for text in named),
-        'the scene lists all twenty distinct bodies': field <= entries.keys(),
-        'the scene labels known and unknown people as perceived':
-            sorted(entries[id]['of'] for id in field) == sorted([*names, *['a stranger'] * 18]),
+        'scene has one exact aggregate with no body ID':
+            len(aggregate) == 1 and 'id' not in aggregate[0] and
+            aggregate[0]['text'].startswith('the remains of 18 strangers, the nearest '),
+        'scene exposes only the named and readable individual bodies':
+            bodies.keys() == {*known, field[writer]} and all(bodies[id]['of'] == name for id, name in known.items())
+            and bodies[field[writer]]['contents'].get('tablet') == 1,
+        'counted remains use one of ten slots and leave space for shelters':
+            len(structures) == 10 and sum(r['kind'] == 'shelter' for r in structures) == 6,
     }
     return {'status': 'pass' if all(checks.values()) else 'fail', 'checks': checks,
-            'body_ids': sorted(field), 'prompt_body_ids': sorted(entries)}
+            'field_ids': sorted(field.values()), 'scene_structures': structures}
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)

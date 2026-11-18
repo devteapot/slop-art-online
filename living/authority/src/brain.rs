@@ -2048,6 +2048,7 @@ impl<'a> Ev<'a> {
             }
         }
         let mut counted = Vec::new();
+        let mut known = None;
         for &i in &new {
             if told[i] {
                 continue;
@@ -2056,17 +2057,12 @@ impl<'a> Ev<'a> {
             if kind == "remains" {
                 // Each body is an individual, even when several lie on the same tile.
                 if *owner != self.me.id {
-                    let person = self.ctx.db.character().id().find(*owner);
-                    let named = person.as_ref().is_some_and(|p| {
-                        p.kind == "person" && crate::perception::knows_name(self.ctx, &self.me, p)
-                    });
-                    let readable = self.ctx.db.artifact().holder().filter(STRUCTURE_BIT | id)
-                        .any(|a| matches!(a.kind.as_str(), "tablet" | "sign"));
+                    let (species, readable) = common::remains_label(self.ctx, *id, *owner);
+                    let named = &*species == "person" && known.get_or_insert_with(|| crate::perception::known_name_ids(self.ctx, &self.me)).contains(owner);
                     if named || readable {
                         self.notice_remains(*owner, *pos, *dist);
                     } else {
-                        let group = person.filter(|p| p.kind != "person")
-                            .map_or_else(|| "stranger".to_owned(), |p| p.kind);
+                        let group = if &*species == "person" { "stranger".to_owned() } else { species.to_string() };
                         counted.push((*owner, *pos, *dist, group));
                     }
                 }

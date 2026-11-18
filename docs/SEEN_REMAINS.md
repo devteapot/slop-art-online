@@ -5,7 +5,7 @@
 ## What stays as it is
 
 - The world's remains stay individual: each body lies where its person fell, a structure of its own.
-- The scene lists every body in sight, each as the observer knows who it was (a name if known, "a stranger" if not).
+- Main limits the mind scene to the nearest ten structures. The bounded R1/R2 scene keeps that limit and distance order. Named and readable remains can appear individually. Other visible remains share one counted slot. The player still sees every body through the individual structure rows.
 - A known person's remains keep their own first-sight line ("You notice a remains — the remains of Wren, 3 tiles north.").
 - Players are not told noticing lines; they perceive by seeing (the general coordinator, 2026-11-13). The folded words are made in one place (`living_rules`), so a player would be told the same words if that ever changes.
 - **What is new** is a structure id not seen before: a rebuilt structure, a ruin left by one destroyed, a new body. Noticing an absence (a structure gone) or a changed state (a fire out, a gate shut) is a separate, later decision. It belongs with known-ground's `remembered` table (what a character last saw of a thing that changes) and with talk-places' remembered resources that are gone when one was last there, so the two share one rule when it comes.
@@ -91,7 +91,7 @@ It is keyed like `known_ground` (actor and 128 m block), so the two kinds of "I 
   - ranges insert, search and compaction (against a `BTreeSet`);
   - `counted_line`'s words;
   - migration: a legacy `familiar` row is taken into the ranges and deleted.
-- **verify-minds:** a mind arriving at the field gets the counted line in its told experiences and its prompt, the known person's own line, and its scene lists every body.
+- **verify-minds:** a mind arriving at the field gets the counted line in its told experiences and its prompt, the known person's own line, and the ten-entry scene keeps the aggregate, named and readable remains, and other nearby structures.
 - **verify-player:** as above.
 - **Maintenance pass** on verify-core (battle.md, the README row, SKILL.md drive lines), verify-minds and verify-player for the new cases.
 
@@ -115,11 +115,11 @@ Then re-project to 8 hours (about 5,800 bodies at the site).
 
 The authority reads one indexed row for each actor and block touched by a look. It writes one row for each block with new or migrated IDs. Compaction reads the existing structure index for the block's 64 chunks and retains ranges for structures that are still present. The private table stays outside the game and mind subscription sets. The actor index makes death cleanup proportional to the blocks visited by that actor. With the diagnostic law off, a range hit needs no per-structure familiarity lookup. A range miss still checks the legacy index so that existing worlds preserve recognition.
 
-The model scene includes all remains within its existing structure sight radius. Each body keeps its ID, position and contents. The ten-entry limit still applies to other structures. The cost of producing and sending all bodies in a scene is distinct from the cost of writing and storing first-sight lines.
+The mind scene keeps up to ten entries, including one counted entry when unnamed remains are present. It uses the same indexed sight traversal and stable distance order as main. It walks the candidates once, counts by species and keeps only the closest individual candidates for serialization. Body species and readability are cached per structure ID, invalidated when writing moves and retired when a corpse expires. Known names use the same indexed family, acquaintance and membership rules as the player view. The first-sight line and scene entry share the group formatter. There are no schema changes in the bounded revision.
 
 SpacetimeDB's [table](https://spacetimedb.com/docs/tables/), [index](https://spacetimedb.com/docs/tables/indexes/) and [performance](https://spacetimedb.com/docs/tables/performance/) guidance supports the focused private table, actor/block lookup, and grouped writes. The pinned 2.14.1 table API supports tuple B-tree filtering and actor-index deletion. [Automatic migrations](https://spacetimedb.com/docs/databases/automatic-migrations/) permits adding the private table without rewriting an existing one. Legacy migration is an authority transaction when a structure is next checked.
 
-## 30-minute measurement
+## Unbounded scene prototype measurement
 
 Both Spark trial runs used SpacetimeDB 2.14.1 on port 3320, with 200 fighter slots, 16 walkers and 310 seeded characters. Refills started about 30 m away with a 0.25 s minimum gap. The benchmark sampled each minute with `battle_diag.py --familiar --law profile_detail=true`, including SQL row counts, table metrics and per-actor familiarity reads. There was no game observer. `minds-seen-fake2-1118-210724` used one mind-service subscriber with a local fake provider. `minds-seen-match-1118-213921` used no mind service, matching archived `minds-fam30-041631`. Both runs finished before 22:12 CET on November 18. A comparable C2-only run was unavailable.
 
@@ -150,7 +150,7 @@ An hour of retention at 1.6 deaths/s gives about 5,760 simultaneous bodies. The 
 
 At fixed block count and linear payload growth, the measured 0.842 MB of range-table pages would reach about 1.7–1.8 MB. At fixed look and request rates with work growing linearly in the number of bodies, structure noticing would take approximately 160–170 ms/s and scene construction 1,140–1,230 ms/s. That estimate exceeds one second of reducer time per wall second for scene construction alone. Sight radius, queueing, action cadence, range fragmentation and exploration can change those results. An eight-hour run and the performance gate remain outstanding.
 
-## Verification results
+## Unbounded scene prototype verification
 
 Core field 15/15, C2 module upgrade 6/6, mixed remains and tablet 6/6, mind prompt 5/5, player 3/3 and SDK privacy 3/3. The final core check logged 210 comparisons and 4,117 C2 checks with zero differences. The upgrade kept a live subscriber and migrated three legacy IDs. Cargo passed 41 authority, 329 rules, 124 mind and 128 game tests. `just living-check` and the fuel gate passed. Bindings were regenerated with the trial container's 2.14.1 CLI.
 

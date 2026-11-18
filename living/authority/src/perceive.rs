@@ -987,21 +987,50 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
     }
     let resources: Vec<Value> = groups.into_iter().map(|(k, n, near)| json!({"kind": k, "count": n, "nearest": near})).collect();
 
-    let mut structures = Vec::new();
-    let mut other_structures = 0;
-    for (s, d) in common::structures_near(ctx, at, r) {
-        let remains = s.kind == "remains";
-        if !remains {
-            if other_structures >= 10 {
-                continue;
+    const STRUCTURE_LIMIT: usize = 10;
+    let mut individual = Vec::<(Structure, f32)>::with_capacity(STRUCTURE_LIMIT);
+    let mut known = None;
+    // Group in the same stable distance order as the individual structure list.
+    let mut groups = Vec::<(std::rc::Rc<str>, usize, (f32, f32), f32, usize)>::new();
+    let mut ordinal = 0;
+    common::for_structures_near(ctx, at, r, |s, dist| {
+        ordinal += 1;
+        if s.kind == "remains" {
+            let (kind, readable) = common::remains_label(ctx, s.id, s.owner);
+            let named = &*kind == "person" && known.get_or_insert_with(|| crate::perception::known_name_ids(ctx, &me)).contains(&s.owner);
+            if !named && !readable {
+                let label = if &*kind == "person" { "stranger" } else { &kind };
+                if let Some(group) = groups.iter_mut().find(|group| &*group.0 == label) {
+                    group.1 += 1;
+                    if dist < group.3 {
+                        (group.2, group.3, group.4) = ((s.x, s.y), dist, ordinal);
+                    }
+                } else {
+                    groups.push((std::rc::Rc::from(label), 1, (s.x, s.y), dist, ordinal));
+                }
+                return;
             }
-            other_structures += 1;
         }
+        let index = individual.partition_point(|(_, earlier)| *earlier <= dist);
+        if index < STRUCTURE_LIMIT {
+            if individual.len() == STRUCTURE_LIMIT {
+                individual.pop();
+            }
+            individual.insert(index, (s.clone(), dist));
+        }
+    });
+    let mut structures = Vec::with_capacity(STRUCTURE_LIMIT);
+    if !groups.is_empty() {
+        individual.truncate(STRUCTURE_LIMIT - 1);
+    }
+    for (s, d) in &individual {
+        let d = *d;
+        let remains = s.kind == "remains";
         let mut o = json!({"id": s.id, "kind": s.kind, "at": [round(s.x), round(s.y)], "dist": round(d), "dir": direction(at, (s.x, s.y))});
         if remains {
             let label = ctx.db.character().id().find(s.owner).map_or_else(
                 || "a stranger".to_owned(),
-                |dead| if dead.kind == "person" && crate::perception::knows_name(ctx, &me, &dead) {
+                |dead| if dead.kind == "person" && known.as_ref().is_some_and(|ids| ids.contains(&s.owner)) {
                     dead.name
                 } else {
                     crate::perception::unnamed(&dead, false)
@@ -1045,6 +1074,17 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
             o["contents"] = Value::Object(inv);
         }
         structures.push(o);
+    }
+    groups.sort_by(|a, b| a.3.total_cmp(&b.3).then(a.4.cmp(&b.4)));
+    if let Some((_, _, nearest, distance, _)) = groups.first() {
+        let counts: Vec<_> = groups.iter().map(|(label, n, ..)| (&**label, *n)).collect();
+        let dir = direction(at, *nearest);
+        let text = living_rules::remains::counted_scene(&counts, (*distance, dir));
+        let index = individual.partition_point(|(_, earlier)| earlier <= distance);
+        structures.insert(index, json!({
+            "kind": "counted_remains", "at": [round(nearest.0), round(nearest.1)],
+            "dist": round(*distance), "dir": dir, "text": text,
+        }));
     }
 
     // Nearest notable terrain within sight.

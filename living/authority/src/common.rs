@@ -1201,18 +1201,18 @@ pub fn smelled_near(ctx: &ReducerContext, who: u32, kind: &str, at: (f32, f32), 
 /// written nothing are committed state and stay valid until a later write to their key. Like
 /// the map cache, this assumes the database runs its reducers one at a time in this module
 /// instance.
-struct WriteCache<V> {
-    rows: HashMap<u32, (V, i64)>,
+struct WriteCache<V, K = u32> {
+    rows: HashMap<K, (V, i64)>,
     /// Timestamp of the last transaction that wrote.
     wrote: i64,
 }
 
-impl<V: Clone> WriteCache<V> {
+impl<V: Clone, K: Copy + Eq + std::hash::Hash> WriteCache<V, K> {
     fn new() -> Self {
         Self { rows: HashMap::new(), wrote: 0 }
     }
 
-    fn get(&mut self, t: i64, key: u32, load: impl FnOnce() -> V) -> V {
+    fn get(&mut self, t: i64, key: K, load: impl FnOnce() -> V) -> V {
         if let Some((v, tag)) = self.rows.get(&key) {
             if *tag == 0 || *tag == t {
                 return v.clone();
@@ -1224,7 +1224,7 @@ impl<V: Clone> WriteCache<V> {
         v
     }
 
-    fn invalidate(&mut self, t: i64, key: Option<u32>) {
+    fn invalidate(&mut self, t: i64, key: Option<K>) {
         self.wrote = t;
         match key {
             Some(k) => {
@@ -1238,6 +1238,10 @@ impl<V: Clone> WriteCache<V> {
 thread_local! {
     static CHUNK_RESOURCES: RefCell<WriteCache<Rc<Vec<ResourceNode>>>> = RefCell::new(WriteCache::new());
     static CHUNK_STRUCTURES: RefCell<WriteCache<Rc<Vec<Structure>>>> = RefCell::new(WriteCache::new());
+    // A body's kind is fixed. Readability changes when an artifact moves, and these
+    // entries are dropped with expired remains. As in the chunk cache, values read
+    // after a write in this transaction are reloaded in the next transaction.
+    static REMAINS_LABELS: RefCell<WriteCache<(Rc<str>, bool), u64>> = RefCell::new(WriteCache::new());
     /// Temperament a persona states (curiosity, sociability, nurture; 50 when not stated).
     static TRAITS: RefCell<WriteCache<[f32; 3]>> = RefCell::new(WriteCache::new());
 }
@@ -1313,6 +1317,23 @@ pub fn invalidate_resources(ctx: &ReducerContext, chunk: Option<u32>) {
 pub fn invalidate_structures(ctx: &ReducerContext) {
     let t = stamp(ctx);
     CHUNK_STRUCTURES.with(|c| c.borrow_mut().invalidate(t, None));
+}
+
+/// The group label and whether this body holds writing. Only a body's observer-independent
+/// metadata is cached. Name recognition is read from the observer's own indexes.
+pub(crate) fn remains_label(ctx: &ReducerContext, id: u64, owner: u32) -> (Rc<str>, bool) {
+    REMAINS_LABELS.with(|cache| cache.borrow_mut().get(stamp(ctx), id, || {
+        let kind = ctx.db.character().id().find(owner)
+            .map(|c| Rc::from(c.kind))
+            .unwrap_or_else(|| Rc::from("person"));
+        let readable = ctx.db.artifact().holder().filter(STRUCTURE_BIT | id)
+            .any(|artifact| matches!(artifact.kind.as_str(), "tablet" | "sign"));
+        (kind, readable)
+    }))
+}
+
+pub(crate) fn invalidate_remains_label(ctx: &ReducerContext, id: u64) {
+    REMAINS_LABELS.with(|cache| cache.borrow_mut().invalidate(stamp(ctx), Some(id)));
 }
 
 pub fn resources_near(ctx: &ReducerContext, at: (f32, f32), r: f32) -> Vec<(ResourceNode, f32)> {

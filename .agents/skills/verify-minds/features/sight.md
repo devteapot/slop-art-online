@@ -99,4 +99,4 @@ The case (on the island, whose residents have places) asks one resident to think
 
 ## Noticing remains
 
-Run `verify_minds.py --run "$R" --case seen-remains --no-unit-tests`. The fixture introduces two people to the observer, stages 20 bodies while the observer is away, and brings the observer to the field. It reads the three `saw` experiences from the authority and checks the real mind's prompt at the local fake provider. The prompt carries the counted line and both named lines. Its scene has every body ID with the observer's label for that person.
+Run `verify_minds.py --run "$R" --case seen-remains --no-unit-tests`. The fixture introduces two people to the observer, stages 21 bodies and ten shelters while the observer is away, and brings the observer to the field. It reads the four `saw` experiences from the authority and checks the real mind's prompt at the local fake provider. The prompt carries the counted line and both named lines. Its scene has ten entries. One counts 18 strangers, two are the named bodies, one holds a tablet, and six are shelters.

@@ -62,7 +62,7 @@ python3 living/tools/trials.py life --batch dry1 && python3 living/tools/trials.
 
 On a host whose `sao-living_spacetimedb_1` belongs to other work (the DGX Spark), run this skill's suite against the trial container: `LIVING_STDB_CONTAINER=slop-trials-stdb LIVING_STDB_URL=http://127.0.0.1:3320 .agents/skills/verify-minds/scripts/verify_minds.py --run minds-…`.
 
-For a mind arriving among remains, run `verify_minds.py --run "$R" --case seen-remains` with a fresh suite name. The fake provider captures the counted line, both named lines and the 20 individual bodies in the scene.
+For a mind arriving among remains, run `verify_minds.py --run "$R" --case seen-remains` with a fresh suite name. The fake provider captures the counted line, both named lines and the ten-entry scene with a counted summary, the named and readable exceptions, and nearby shelters.
 
 ## Evidence and cleanup
 

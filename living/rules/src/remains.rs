@@ -2,6 +2,17 @@
 
 /// Groups are in the order of their nearest remains, with singular labels.
 pub fn counted_line(groups: &[(&str, usize)], (distance, direction): (f32, &str)) -> String {
+    let names = counted_groups(groups);
+    format!("You notice the remains of {names} around you, the nearest {distance:.0} tiles {direction}.")
+}
+
+/// Counted remains as an entry in a mind's scene.
+pub fn counted_scene(groups: &[(&str, usize)], (distance, direction): (f32, &str)) -> String {
+    let names = counted_groups(groups);
+    format!("the remains of {names}, the nearest {distance:.0} tiles {direction}")
+}
+
+fn counted_groups(groups: &[(&str, usize)]) -> String {
     let parts: Vec<_> = groups
         .iter()
         .map(|&(label, count)| {
@@ -14,22 +25,29 @@ pub fn counted_line(groups: &[(&str, usize)], (distance, direction): (f32, &str)
             format!("{count} {noun}")
         })
         .collect();
-    let names = match parts.split_last() {
+    match parts.split_last() {
         Some((last, rest)) if !rest.is_empty() => format!("{} and {last}", rest.join(", ")),
         _ => parts.join(""),
-    };
-    format!("You notice the remains of {names} around you, the nearest {distance:.0} tiles {direction}.")
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::counted_line;
+    use super::{counted_line, counted_scene};
 
     #[test]
     fn counts_strangers_and_places_the_nearest() {
         assert_eq!(
             counted_line(&[("stranger", 12)], (2.4, "east")),
             "You notice the remains of 12 strangers around you, the nearest 2 tiles east."
+        );
+    }
+
+    #[test]
+    fn uses_the_same_groups_in_a_scene() {
+        assert_eq!(
+            counted_scene(&[("stranger", 18), ("deer", 3)], (2.4, "east")),
+            "the remains of 18 strangers and 3 deer, the nearest 2 tiles east",
         );
     }
 
