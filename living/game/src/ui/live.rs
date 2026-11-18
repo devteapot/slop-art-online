@@ -214,6 +214,8 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
             id: *id as u64,
             // Plates and hover: someone too far to make out by the colours drawn (`Looks::plate`).
             name: looks.plate(*id).map(String::from).unwrap_or_else(|| name_of(*id)),
+            compact_plate: (c.kind == "person" && c.name.trim().is_empty())
+                .then(|| looks.compact_plate(*id).map(String::from)).flatten(),
             head: head(*id, *p, &c.kind),
             distance,
             // The one under the cursor (`pick.rs`): the same pick Enter and combat's target use.
@@ -246,7 +248,7 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
             None
         };
         // Capitalised, as everywhere a label starts a line (talk-1 left the target's lower case).
-        // The target plate names them as their nameplate does (someone too far: by colours drawn).
+        // Keep the detailed description in the top plate.
         let name = super::label(&if c.kind != "person" && !c.name.is_empty() { format!("{} the {}", c.name, c.kind) } else { a.name.clone() });
         Some(TargetInfo { name, doing, hp: band(id), stance: a.stance, distance: a.distance })
     });

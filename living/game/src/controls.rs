@@ -35,10 +35,10 @@ const RETRY_S: f64 = 0.04;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum Control {
     /// Facing the cursor: WASD moves and the body looks where the mouse points.
+    #[default]
     Cursor,
     /// Facing where you walk; the body turns to the cursor while aiming, striking or guarding
     /// (the skill bar's held and aimed moves) and back to its travel after.
-    #[default]
     Travel,
 }
 
@@ -206,8 +206,11 @@ pub fn scheme(
     }
 }
 
-pub fn target(net: NonSend<Net>, scene: NonSend<Scene>, mut target: ResMut<Target>) {
-    target.0 = net.my_id.and_then(|id| scene.shown.get(&id)).map(|(p, _)| scene.at3(p.x, p.y));
+pub fn target(net: NonSend<Net>, scene: NonSend<Scene>, island: Option<Res<crate::island::Island>>, mut target: ResMut<Target>) {
+    target.0 = net.my_id.and_then(|id| scene.shown.get(&id)).map(|(p, _)| {
+        let height = island.as_ref().map_or_else(|| scene.ground(p.x, p.y), |i| i.foot_height(p.x, p.y));
+        Vec3::new(p.x, height, p.y)
+    });
 }
 
 /// Quantize to 16 directions so tiny camera eases don't resend.
@@ -227,7 +230,6 @@ pub fn movement(
     keys: Res<ButtonInput<KeyCode>>,
     mouse: Res<ButtonInput<MouseButton>>,
     mut input: ResMut<Input>,
-    target: Res<Target>,
     ui: Res<crate::hud::UiWants>,
     time: Res<Time>,
     binds: Res<crate::keys::Binds>,
@@ -252,11 +254,7 @@ pub fn movement(
         input.retry_at = None;
         input.sent = Some(RESEND);
     }
-    input.look = input.scripted_look.or_else(|| {
-        let me = target.0?;
-        let c = cam.cursor_ground?;
-        input.mouse_look.then(|| Vec2::new(c.x - me.x, c.z - me.z)).filter(|d| d.length() > 0.3)
-    });
+    input.look = input.scripted_look.or_else(|| input.mouse_look.then_some(cam.look_dir).flatten());
     let (up, right) = cam.control_axes();
     let (dir, run) = if let Some((d, run)) = input.scripted {
         (d, run)

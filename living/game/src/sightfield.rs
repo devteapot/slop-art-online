@@ -415,6 +415,13 @@ pub fn facing_now(edge: &SightEdge, net: &Net, scene: &crate::world::Scene) -> O
     Some(Facing { heading: my_heading(net, scene.mine_ms)?, senses })
 }
 
+/// Shared trace used by the authority through `living_rules::sight::sees`. Ground Shade and
+/// the creature fade depend on this same trace. Pass the effective cover policy here when the
+/// authority publishes it.
+fn clear_line(map: &Map, eye: (f32, f32), at: (f32, f32)) -> bool {
+    map.sight_clear(eye, at)
+}
+
 /// The field round `eye` (sim metres) within `reach`, texel (0, 0) at `origin`: 255 where the
 /// line from `eye` to the texel's centre is clear (`Map::sight_clear`, the authority's test),
 /// then every texel on a blocking tile joined to a seen one (one building, one rock) is seen
@@ -455,7 +462,7 @@ pub fn compute(map: &Map, eye: Vec2, reach: f32, origin: IVec2, seen: &mut [u8],
                 }
             }
             tested += 1;
-            if map.sight_clear(e, c) {
+            if clear_line(map, e, c) {
                 seen[(j * SIZE + i) as usize] = 255;
                 if opaque(i, j) {
                     exposed.push_back((i, j));
@@ -533,7 +540,7 @@ fn people(
                 continue;
             }
             let Some(&(p, _)) = scene.shown.get(&id) else { continue };
-            rows.push((p.distance(me), id, map.sight_clear((me.x, me.y), (p.x, p.y)), field.at(p).unwrap_or(-1.0)));
+            rows.push((p.distance(me), id, clear_line(map, (me.x, me.y), (p.x, p.y)), field.at(p).unwrap_or(-1.0)));
         }
         rows.sort_by(|a, b| a.0.total_cmp(&b.0));
         let off: Vec<String> = rows.iter().filter(|r| !r.2 || (0.0..0.5).contains(&r.3)).map(|r| format!("{}@{:.1}m line {} field {:.2}", r.1, r.0, r.2, r.3)).collect();
@@ -559,7 +566,7 @@ fn people(
             continue;
         }
         let Some(&(p, _)) = scene.shown.get(&id) else { continue };
-        let mut clear = map.sight_clear((me.x, me.y), (p.x, p.y));
+        let mut clear = clear_line(map, (me.x, me.y), (p.x, p.y));
         // With facing sight, the angle too: someone who leaves my field (past its side edge and
         // its margin, outside the near ring and its keep metre) fades as they leave it. The
         // distance stays the authority's (a light on them, which the client can't see, may show

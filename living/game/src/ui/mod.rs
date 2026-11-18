@@ -366,7 +366,7 @@ fn dump(
         "under": pick.as_ref().and_then(|p| p.under),
         // `holds`: the cursor is inside its outline as `pick.rs` draws it (its own test).
         "seen": pick.as_ref().map(|p| p.seen.iter().map(|s| serde_json::json!({"id": s.id, "feet": [s.feet.x, s.feet.y], "head": [s.head.x, s.head.y], "depth": s.depth, "ground": s.ground, "holds": extra.pointer.pos.is_some_and(|c| s.contains(c))})).collect::<Vec<_>>()),
-        "hovered": model.actors.iter().filter(|a| a.hovered).map(|a| serde_json::json!({"id": a.id, "label": a.name})).collect::<Vec<_>>(),
+        "hovered": model.actors.iter().filter(|a| a.hovered).map(|a| serde_json::json!({"id": a.id, "label": a.plate_name()})).collect::<Vec<_>>(),
         "targeted": model.actors.iter().find(|a| a.targeted).map(|a| a.id),
         // The notes on screen now (the facing-sight readout among them).
         "toasts": model.verbs.toasts.iter().map(|(t, _, _)| t.clone()).collect::<Vec<_>>(),
@@ -401,7 +401,7 @@ fn me_at(x: &DumpExtra) -> serde_json::Value {
 /// the compass's place.
 fn naming(model: &model::HudModel, verbs: &crate::verbs::Verbs, talk: Option<&crate::talk::Talk>, ws: &win::Windows, x: &DumpExtra) -> serde_json::Value {
     let mut out: Vec<(&str, String)> = Vec::new();
-    out.extend(model.actors.iter().map(|a| ("plate", a.name.clone())));
+    out.extend(model.actors.iter().map(|a| ("plate", a.plate_name().to_string())));
     out.extend(model.target.as_ref().map(|t| ("target", t.name.clone())));
     out.extend(model.bubbles.iter().map(|b| ("bubble", b.name.clone())));
     for o in &ws.open {
@@ -442,6 +442,8 @@ fn naming(model: &model::HudModel, verbs: &crate::verbs::Verbs, talk: Option<&cr
 /// Further state the dump reports, from the widgets of later steps.
 #[derive(bevy::ecs::system::SystemParam)]
 pub struct DumpExtra<'w, 's> {
+    lod: Query<'w, 's, (&'static crate::lookdev::Lod, &'static crate::lookdev::Model, &'static GlobalTransform, &'static InheritedVisibility)>,
+    lod_camera: Query<'w, 's, &'static Camera, With<Camera3d>>,
     prefs: Res<'w, crate::keys::Prefs>,
     binds: Res<'w, crate::keys::Binds>,
     theme: Res<'w, ThemeState>,
@@ -493,13 +495,27 @@ impl DumpExtra<'_, '_> {
                 "sight": self.edge.as_ref().and_then(|e| e.senses.map(|s| s.sight)), "source": self.edge.as_ref().and_then(|e| e.source.map(|s| format!("{s:?}"))),
                 "field": f.field.map(|v| serde_json::json!({"focal_deg": v.focal_deg, "side_deg": v.side_deg, "side_share": v.side_share, "near_m": v.near_m, "margin_deg": v.margin_deg}))})
         });
+        let mut lod = [0, 0];
+        let mut lod_people = Vec::new();
+        if let (Ok(camera), Some(live)) = (self.lod_camera.single(), self.live.as_ref()) {
+            if let Some(viewport) = camera.logical_viewport_rect() {
+                for (id, entity) in live.drawn() {
+                    let Ok((lod_state, model, transform, visible)) = self.lod.get(entity) else { continue };
+                    if visible.get() && camera.world_to_viewport(&self.cam.pose, transform.translation()).is_ok_and(|p| viewport.contains(p)) {
+                        let far = lod_state.far_now == Some(true);
+                        lod[usize::from(far)] += 1;
+                        lod_people.push(serde_json::json!({"id": id, "far": far, "model": model.file}));
+                    }
+                }
+            }
+        }
         serde_json::json!({"preset": self.binds.preset.name(), "control": format!("{:?}", self.prefs.control), "tips": self.prefs.tips, "auto_draw": self.prefs.auto_draw, "theme": self.theme.name.key(),
             "drawn": self.weapon.drawn, "slots": slots, "tooltip": tip,
             "events": self.talks.events.iter().rev().take(12).rev().map(|(_, t)| t.clone()).collect::<Vec<_>>(),
             // The Log's last lines as the Log and the person windows show them (speech-detail-1).
             "lines": self.talks.lines.values().rev().take(12).rev().map(|l| serde_json::json!({"speaker": l.speaker, "to": l.to, "mine": l.mine, "how": l.how, "text": l.text, "head": people::line_head(l, false, self.net.my_id, &self.looks), "head_window": people::line_head(l, true, self.net.my_id, &self.looks)})).collect::<Vec<_>>(),
             "cards": self.talks.cards.iter().map(|(who, i, text)| serde_json::json!({"with": who, "card": i, "text": text})).collect::<Vec<_>>(),
-            "cursor": cursor, "view": {"yaw": self.cam.shown_yaw, "zoom": self.cam.zoom}, "cursor_ground": ground,
+            "cursor": cursor, "view": {"yaw": self.cam.shown_yaw, "zoom": if self.cam.mode == crate::camera::Mode::TopDown { self.cam.top_zoom.shown } else { self.cam.zoom }, "mode": self.cam.mode.name(), "height": self.cam.eye_height, "pitch": self.cam.shown.pitch, "fov": self.cam.shown.fov}, "cursor_ground": ground, "lod": {"near": lod[0], "far": lod[1], "people": lod_people},
             "facing_sight": fov, "facing_note": self.fov.as_ref().and_then(|f| f.note.clone()).map(|(t, _)| t), "heard": self.heard.as_ref().map(|h| h.json()), "sight_look": self.edge.as_ref().map(|e| e.look.name()), "sight_edge": self.edge.as_ref().map(|e| e.mode.name()), "film": self.film.name(), "film_saved": self.prefs.film, "hair_shine": self.shine.name(), "hair_shine_saved": self.prefs.hair_shine,
             // The one-shot each body plays now over its walk or stand (a gesture: `town.rs`), by
             // character id: a wave made while walking on plays on (talk-turns' `on_the_move`).
