@@ -52,13 +52,97 @@ such as read-set removal and commit.
 
 ## Resumed series
 
-The 216-player series is staged and waiting for the coordinator's quiet
-window. The earlier archived Cullet run on the November 13 baseline
-measured 39.86 ticks/s. The earlier four-phase adaptive attempt measured
-47.58 ticks/s with one-minute host load rising from 2.62 to 10.59.
-Those runs predate the current baseline and twelve-phase candidate.
+The 18 November 2026 series ran from 19:54 to 20:35 UTC. All twelve runs
+started below load 4. The measured candidate was `b5e2f3ef9`. The ready
+sample held about 43 seen character rows on Cullet and 26–27 on plan-test.
+Tables show medians across the three runs per arm, with floor and observed
+tick counts summed across runs.
 
-<!-- MEASUREMENTS -->
+| World | Arm | Runs | Start → end load (1 min, each run) | Ticks/s | Body >16.7 ms % | Body p99 ms | Frame rows/tick p10/p50/p90 | Ticks at floor | Scene rows/s/player | Viewer frame p50/p90 ms |
+|---|---|---:|---|---:|---:|---:|---:|---:|---:|---:|
+| cullet | branch | 3 | 3.52 → 2.49, 3.64 → 3.30, 3.11 → 4.20 | 59.56 | 0.00 | 5.60 | 806/1195/1582 | 0/21,458 | 327.8 | 117.3/167.8 |
+| cullet | main | 3 | 3.68 → 3.52, 2.34 → 3.64, 3.38 → 3.11 | 39.85 | 0.00 | 8.58 | 2458/2478/2496 | 0/14,332 | 457.0 | 99.9/100.6 |
+| plan-test | branch | 3 | 2.36 → 2.34, 2.76 → 3.38, 3.29 → 2.62 | 59.99 | 0.00 | 4.16 | 802/2069/2191 | 0/21,619 | 457.6 | 33.5/49.9 |
+| plan-test | main | 3 | 2.49 → 2.36, 3.30 → 2.76, 3.61 → 3.29 | 59.72 | 0.00 | 4.87 | 583/1922/2494 | 0/21,528 | 467.5 | 33.4/49.8 |
+
+**Cullet reaches 59.50–59.60 ticks/s** at 216 walkers, up from 39.59–39.90.
+The candidate still skipped 48–60 interval boundaries per 120 s window.
+It delivered 129.2 fewer scene rows per player per second (28.3%).
+Viewer frame p50/p90 rose from 99.9/100.6 ms to 117.3/167.8 ms. The slowest
+candidate run's p90 was about 216 ms. On plan-test the branch ran at
+59.99–60.00 ticks/s. It delivered 9.9 fewer scene rows per player per
+second (2.1%), with effectively the same p50 and p90 frame intervals.
+
+### Subscription traffic
+
+| World | Arm | All rows/s ∕ messages/s ∕ kB/s | Player mean rows/s ∕ messages/s ∕ kB/s | Owner rows/s ∕ messages/s ∕ kB/s |
+|---|---|---:|---:|---:|
+| cullet | branch | 23,636.3 ∕ 2,506.3 ∕ 1,570.75 | 109.1 ∕ 11.5 ∕ 7.23 | 76.9 ∕ 24.2 ∕ 8.16 |
+| cullet | main | 24,231.1 ∕ 2,990.1 ∕ 1,609.62 | 111.8 ∕ 13.8 ∕ 7.42 | 72.3 ∕ 20.3 ∕ 7.46 |
+| plan-test | branch | 9,390.5 ∕ 3,268.1 ∕ 618.10 | 43.4 ∕ 15.1 ∕ 2.85 | 19.7 ∕ 8.1 ∕ 2.15 |
+| plan-test | main | 9,386.4 ∕ 3,272.3 ∕ 617.92 | 43.4 ∕ 15.1 ∕ 2.85 | 20.2 ∕ 7.8 ∕ 2.17 |
+
+Cullet's whole tick calls took a median 638 ms per wall second on main
+and 651 on the branch. Tick WASM time rose from 185 to 229 ms/s, including
+sweep time rising from 82 to 109 ms/s. View call and materialization time
+across all reducers fell from 292 to 265 ms/s. Tick subscription evaluation
+CPU moved from 27.7 to 26.8 ms/s. On plan-test the corresponding figures
+were 367 to 374 for tick whole calls, 120 to 128 for tick WASM, 47 to 65 for
+sweeps, 128 to 128 for views and 17.3 to 17.5 for tick subscription
+evaluation. These timers overlap. The Cullet gains came from spreading
+work across more ticks. Total executor work per wall second did not fall.
+
+### Per-run timing
+
+| Run | Ticks/s | Body >16.7 ms % | Body p99 ms | Whole-call >16.7 ms bounds % | Whole-call p99 bucket ms | Scheduled delay mean ms | One / two / three-slot gaps |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| main-cullet-r1 | 39.90 | 0.00 | 8.25 | 1.46–84.87 | 25–50 | 1.428 | 2378/2411/1 |
+| branch-cullet-r1 | 59.60 | 0.00 | 5.60 | 0.00–78.49 | 10–25 | 1.339 | 7108/48/0 |
+| main-plan-test-r1 | 59.72 | 0.00 | 4.87 | 0.00–12.30 | 10–25 | 1.666 | 7136/34/0 |
+| branch-plan-test-r1 | 59.99 | 0.00 | 4.23 | 0.00–3.63 | 10–25 | 1.401 | 7202/1/0 |
+| main-cullet-r2 | 39.59 | 0.00 | 8.72 | 2.98–83.52 | 25–50 | 1.858 | 2314/2429/11 |
+| branch-cullet-r2 | 59.50 | 0.00 | 5.69 | 0.00–67.05 | 10–25 | 1.921 | 7086/60/0 |
+| main-plan-test-r2 | 59.86 | 0.00 | 4.84 | 0.00–12.96 | 10–25 | 1.634 | 7171/17/0 |
+| branch-plan-test-r2 | 59.99 | 0.00 | 4.04 | 0.00–3.53 | 10–25 | 1.712 | 7204/1/0 |
+| main-cullet-r3 | 39.85 | 0.00 | 8.58 | 2.11–84.57 | 25–50 | 1.369 | 2374/2406/6 |
+| branch-cullet-r3 | 59.56 | 0.00 | 5.60 | 0.00–76.44 | 10–25 | 1.399 | 7100/53/0 |
+| main-plan-test-r3 | 59.67 | 0.00 | 4.88 | 0.00–13.45 | 10–25 | 1.803 | 7129/39/0 |
+| branch-plan-test-r3 | 60.00 | 0.00 | 4.16 | 0.00–3.13 | 10–25 | 1.242 | 7208/0/0 |
+
+The server histogram puts at least 99.98% of invocation starts within
+5 ms of their scheduled boundary in all twelve runs. The dominant main
+Cullet gap was a skipped boundary, despite the low invocation delay on
+the boundary the server did schedule. The whole-call histogram gives
+bounds because its buckets straddle the target. It cannot yield an exact
+share above 16.7 ms. The body stopwatch provides the exact observed share
+for its own scope.
+
+Raw evidence is in `.local/tick/evidence/`, with load and run paths in
+`.local/tick/series-resume.log`. The CLI log tail clipped some windows.
+The full retained replica logs were recovered by database identity after
+the series, stored as `full-profile.jsonl` and used to rederive each
+run's ticks and viewer cadence. Original CLI data is retained. The trace
+count agrees with the server's whole-call count within 15 ticks per
+window, with slightly different capture endpoints. `series-report.md`
+and `series-report.json` contain per-run tick gaps, server delay buckets,
+reducer, view and subscription timings, and traffic. `frames.json`
+holds per-viewer timing and counts.
+
+### Verification and coverage
+
+`just living-check` passed and `just living-generate` left zero diff.
+The SDK sweep comparison matched all seven checkpoints and the look
+comparison matched before and after reconnect, apart from the generated
+player health tracked separately by the fixtures. `sweep_kept`,
+`sweep_rollback`, `sweep_marks`, `tick` and `senses` passed. Main and
+the candidate reproduced the same supplemental `doing_seen` far-guard
+scene failure. The validation records retain those scene outputs.
+
+These 120 s walking windows leave the 30-minute 216-character gate,
+combat, rendered client freshness and the 2,000-character target
+unverified. The passive owner probe exercises subscription delivery
+without the live mind service's processing. The frame intervals measure
+when the authority serves a frame.
 
 ## SpacetimeDB documentation and source consulted
 
