@@ -152,3 +152,83 @@ A separate native probe drew observations at the ordinary 5 Hz player sweep cade
 ## Evidence
 
 Authored Cullet live results and module logs are in `.local/cover-sight/cover-c-auth-*`. The battle arm records and per-window samples are in `.local/living/verify/minds-cover-210457-*`. Prototype geometry, data, landmarks and counterfactuals are in `.local/cover-sight/authoring/`. Each scratch run paused its world, read back pause and deleted the database. Full implementation and end-to-end gameplay verification remain separate from these measurements.
+
+## Phase 2 implementation
+
+Cover ships off in every seed and overlay. The common DDA in
+[`Map::sight_clear`](../living/rules/src/map.rs) chooses the height-aware path only when it
+has a mask. The authority uses that same map for player, mind and animal sight. Missile
+collision reads the separate solid bit. Existing rocks, walls and gates retain their
+original rules. Trunks and faces use a signed decimetre top. Brush has its own top and
+patch index so occupants can see one another along rays within a patch. Overlooks are
+parsed and reserved.
+
+The land generator already has the elevation field at genesis. The authority samples
+it once at tile centres and writes quantized bands with the procedural cover candidates.
+This lives privately in `cover_ground`, and the enabled module map compiles the sparse
+chunk mask from these bands once per map cache load. Cover-off map loads read no bands.
+Runtime mask compilation does not generate land. A land made before the new genesis
+data was available needs that data before it can accept the switch. The map uses static
+genesis cover geometry while live terrain edits and gate state apply through the
+existing terrain trace. [Shared cover compiler](../living/rules/src/cover.rs).
+
+### Public `cover_law` singleton
+
+| Field | Type | Shade use |
+| --- | --- | --- |
+| `id` | `u8` | Primary key, always 0 |
+| `cover_sight_on` | `bool` | Selects the enabled cover mask |
+| `cover_eye_height_m` | `f32` | Computes the eye and target ray heights |
+| `cover_brush_on` | `bool` | Selects brush concealment |
+| `cover_brush_min_fill` | `f32` | Qualifies rasterized brush |
+| `cover_cliff_step_m` | `f32` | Qualifies unmarked terrain steps |
+
+This is a new table. The module writes it only on initial creation or an effective
+policy change. Geometry bands remain private. The change does not add a gaze
+protocol or expose attention. [Tables](https://spacetimedb.com/docs/tables/),
+[performance](https://spacetimedb.com/docs/tables/performance/),
+[subscriptions](https://spacetimedb.com/docs/clients/subscriptions/),
+[SpacetimeDB 2.14.1](https://github.com/clockworklabs/SpacetimeDB/tree/v2.14.1).
+
+### Client edits and scratch recipe
+
+- [`net.rs`](../living/game/src/net.rs) subscribes to the effective cover policy once.
+- [`live.rs`](../living/game/src/live.rs) retains the parsed land recipe for Shade.
+- [`sightfield.rs`](../living/game/src/sightfield.rs) builds the shared mask from the
+  regenerated land and policy, caching it across camera and terrain window updates.
+  Shade's existing single `clear_line` entry calls `Map::sight_clear`.
+- [`world.rs`](../living/game/src/world.rs) calls
+  [`living_rules::cover::forest_tree`](../living/rules/src/cover.rs) for its tree
+  placement predicate, and the shared coordinate sampler for existing variation.
+  The tree positions and camera's mesh cutaway use their existing behavior.
+
+Create a fresh scratch world with the Cullet seed and its normal overlay. For authored
+brush and quarry faces use the Cullet seed at `d0f84a7eb`. Use the scratch verify
+run name in the command below after launch and doctor:
+
+```sh
+python3 .agents/skills/verify/scripts/verify.py call --run core-cover-capture \
+  set_world_law '["cover_sight_on","true"]' --as-admin
+```
+
+Read back `SELECT * FROM cover_law` under the player's identity. Clearing the scratch
+test uses `["cover_sight_on","false"]` in the same command. This recipe is for new
+scratch worlds with the genesis cover bands.
+
+The scratch recipe was exercised on `verify-core-cover-222359` from the authored
+Cullet fixture with its normal overlay. Useful positions for the laptop's stills
+are below. Coordinates are land metres.
+
+| Frame | Viewer | Target |
+| --- | --- | --- |
+| Behind a trunk | (781.5, 457.5) | (785.5, 457.5) |
+| In brush | (608.5, 479.5) | (608.5, 472.5) |
+| Across a cliff face | (390.5, 291.5) | (390.5, 286.5) |
+| Overlook | (849.5, 613.5) | (842.5, 613.5) |
+
+The live proof checked those four positions with cover off, on and off again. It
+also checked arrows, player lines and the pending mind-scene target. See
+`.local/living/verify/core-cover-222359/cover-proof.jsonl`. The SDK probe at
+`.local/living/verify/client-cover-222747/` accepted `cover_law` and rejected
+access to `cover_ground` and `attention`. The authored land dump preserved the
+three pinned digests.

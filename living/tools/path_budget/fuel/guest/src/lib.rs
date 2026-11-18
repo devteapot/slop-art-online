@@ -25,7 +25,7 @@ pub extern "C" fn pb_tiles(len: u32) -> u32 {
 #[no_mangle]
 pub extern "C" fn pb_load(w: u32, h: u32) {
     let tiles = TILES.with(|t| t.borrow().clone());
-    let map = Map { w, h, tiles, blocked: Default::default(), opaque: Default::default(), nav: Default::default() };
+    let map = Map { w, h, tiles, blocked: Default::default(), cover: None, opaque: Default::default(), nav: Default::default() };
     MAP.with(|m| *m.borrow_mut() = Some(map));
 }
 

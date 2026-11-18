@@ -1035,6 +1035,7 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
     // clear line. A creature already seen keeps the margins (`keep_seen_m`, the field's angle).
     let gather = common::gather_radius(ctx, sight);
     let lit = gather > sight;
+    let sight_span = common::detail_span("sight.player_candidates");
     for c in common::creatures_near(ctx, here, gather + keep, now) {
         if c.id == id {
             continue;
@@ -1046,6 +1047,7 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
             near.insert(c.id, c.dist);
         }
     }
+    drop(sight_span);
     hear(ctx, id, viewer, here, &seen, now);
     // What it remembers of resources here (talk-places): the look a mind takes at its noticing.
     crate::stock::look(ctx, &me, here, || sight, now);
@@ -1059,6 +1061,8 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
     }
     let entered: Vec<u32> = seen.difference(&had).copied().collect();
     let gone_from_sight: Vec<u32> = had.difference(&seen).copied().collect();
+    common::diag(|| "visible:add", entered.len() as u64);
+    common::diag(|| "visible:drop", gone_from_sight.len() as u64);
     let left = !gone_from_sight.is_empty();
     for body in &entered {
         ctx.db.perceived().insert(Perceived { id: 0, viewer, body: *body, since_ms: now });

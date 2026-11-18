@@ -259,11 +259,7 @@ pub fn terrain(mut commands: Commands, net: NonSend<Net>, mut scene: NonSendMut<
 
 /// Cheap deterministic hash for per-object variation.
 pub fn hash(x: u32, y: u32) -> f32 {
-    let mut h = x.wrapping_mul(0x9E37_79B1) ^ y.wrapping_mul(0x85EB_CA77);
-    h ^= h >> 15;
-    h = h.wrapping_mul(0x2C1B_3C6D);
-    h ^= h >> 12;
-    (h & 0xFFFF) as f32 / 65535.0
+    living_rules::cover::placement_sample(x, y)
 }
 
 /// Vertex-coloured, flat-shaded mesh building.
@@ -500,7 +496,7 @@ fn build_chunk(commands: &mut Commands, meshes: &mut Assets<Mesh>, palette: &Pal
                 Terrain::Water => water = true,
                 // A real forest: a tree on about one forest tile in ten (3–4 m apart, crowns
                 // 4–7 m wide), bushes and undergrowth between.
-                Terrain::Forest if v < 0.1 => {
+                Terrain::Forest if living_rules::cover::forest_tree(tx, ty) => {
                     let p = Vec3::new(px, g(px, py) - 0.1, py);
                     let size = 4.0 + 2.5 * hash(tx + 7, ty + 3);
                     let broad = hash(tx + 1, ty + 9) < 0.3;

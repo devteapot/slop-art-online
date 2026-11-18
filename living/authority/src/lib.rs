@@ -85,6 +85,7 @@ pub fn init(ctx: &ReducerContext) -> Result<(), String> {
     town::cards(ctx, &sc);
     speech::cards(ctx, &sc);
     ctx.db.script().insert(Script { name: "skills".into(), source: seed::SKILLS.into(), revision: 1, updated_ms: now });
+    common::publish_cover_law(ctx, sc.laws());
     for kind in ["person", "deer", "wolf"] {
         living_rules::graph::parse(&seed::instinct(kind)).map_err(|e| format!("{kind} instinct: {e}"))?;
     }
@@ -142,6 +143,10 @@ pub(crate) fn install_source(ctx: &ReducerContext, source: String) -> Result<(),
         let _t = spacetimedb::log_stopwatch::LogStopwatch::new("install.compile");
         living_rules::script::Scripts::with_day(&source, common::world(ctx).day_ms)?
     };
+    if sc.laws().cover_sight_on && !common::world(ctx).run.is_empty()
+        && ctx.db.cover_ground().id().find(0).is_none() {
+        return Err("cover sight requires a land created with quantized cover geometry".into());
+    }
     // Installs are rare: always timed.
     let checked = {
         let _t = spacetimedb::log_stopwatch::LogStopwatch::new("install.validate");
@@ -168,6 +173,7 @@ pub(crate) fn install_source(ctx: &ReducerContext, source: String) -> Result<(),
     k.scripts_rev = rev;
     ctx.db.clock().id().update(k);
     common::invalidate_scripts_rev();
+    common::publish_cover_law(ctx, sc.laws());
     // Takeovers already pending follow the new `takeover_s` law.
     presence::reschedule(ctx, sc.laws().takeover_s);
     // Looks change band by the life table and the `look_bands` law: their times follow.
@@ -204,6 +210,9 @@ pub fn set_world_law(ctx: &ReducerContext, name: String, value: String) -> Resul
     let v: serde_json::Value = serde_json::from_str(value.trim()).map_err(|_| format!("`{value}` is not a value: give a number or true or false"))?;
     let sc = common::scripts(ctx);
     sc.laws_with(&[(name.clone(), v.clone())])?;
+    if name == "cover_sight_on" && v == true && ctx.db.cover_ground().id().find(0).is_none() {
+        return Err("cover sight requires a land created with quantized cover geometry".into());
+    }
     let old = sc.law_value(&name).map(|o| o.to_string()).unwrap_or_default();
     let new = v.to_string();
     ctx.db.world_law().name().delete(name.clone());
@@ -263,6 +272,7 @@ pub fn set_profile(ctx: &ReducerContext, on: bool) -> Result<(), String> {
     require_admin(ctx)?;
     let mut k = common::clock(ctx);
     k.profile = on;
+    brain::reset_sight_profile();
     ctx.db.clock().id().update(k);
     Ok(())
 }

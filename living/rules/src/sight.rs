@@ -172,7 +172,7 @@ mod tests {
     use crate::map::{Map, Terrain};
 
     fn open() -> Map {
-        Map { w: 64, h: 64, tiles: vec![Terrain::Grass as u8; 64 * 64], blocked: Default::default(), opaque: Default::default(), nav: Default::default() }
+        Map { w: 64, h: 64, tiles: vec![Terrain::Grass as u8; 64 * 64], blocked: Default::default(), cover: None, opaque: Default::default(), nav: Default::default() }
     }
 
     /// The shipped starting values (`laws()`'s `fov_*`) by day.
