@@ -110,7 +110,7 @@ impl Minds {
             Msg { role: "system", content: prompts::fast_system() },
             Msg { role: "user", content: prompts::fast_user(&ask.reason, &persona, &experiences, &plan, &outline, &self.repertoire_text(actor)) },
         ];
-        let call = self.llm.chat_in_lane(&self.fast.route, Attention::OnStage, "fast", &c.name, &msgs, Lane::Urgent);
+        let call = self.llm.chat_in_lane(&self.fast.route, Attention::OnStage, "fast", &c.name, &msgs, Lane::Fast);
         let reply = match tokio::time::timeout(Duration::from_millis(self.fast.timeout_ms), call).await {
             Err(_) => {
                 // A reply past the timeout is dropped: journaled as a timeout, nothing changes.

@@ -120,7 +120,7 @@ pub struct LookWords {       // words the generator wrote for the line (one nami
 }
 ```
 
-**`form` is appearance only.** The authority has no sex rule (`Character` has no such field), and no rule may read `form`.
+**`form` is appearance only.** No rule reads `form`. Since `sex-1` (§10) a body's sex is its own fact (the private `sex` table); a look's `form` is how its line is drawn, and a pool entry's sex is read from its forms only to give people lines of their own sex.
 
 **The new column.** `projected` and `SeenCharacter` gain `look: String`, appended with the default "". It holds the `lk_` key for any person the observer sees, and "" for animals and for a person with no look row. `folk` and `style` stay as they are, for VRoid fallback and for giants and small folk.
 
@@ -139,8 +139,8 @@ pub struct LookWords {       // words the generator wrote for the line (one nami
 | Seen but too far away to make out | the same line (the client's far model beyond about 10 m, as for any person) | "a tall figure in a green smock and dark trousers, in a kerchief", under the far handle, with no name and no community, as today |
 | Not perceived | nothing | nothing |
 
-**The far phrase** leaves out what is face-scale on a player's screen at that range: the form's sex, the beard and stubble, and the hair. It keeps:
-- the silhouette, "figure", "child" or "old figure" by band;
+**The far phrase** leaves out what is face-scale on a player's screen at that range: the beard and stubble, and the hair. It keeps (since `sex-1`, §10, the form's sex too: a far figure is drawn in full, and its build and clothes show it):
+- the form by sex where the line's `form` shows one ("woman", "old man"), else the silhouette, "figure", "child" or "old figure" by band;
 - height and girth;
 - the garments and the headwear.
 
@@ -481,3 +481,16 @@ The island's seed (`living/seeds/island.json`, Brackenford's play-tests) carries
 - **The book.** Every one of the pool's 640 lines is in the client's book of `c4-aa393793` (char-4's bundle `643ac265`), and none is a `decor` line. The island's background people are the client's (`living/game/src/island.rs`, from the book's `decor`); nothing on the authority.
 - **Counts.** A fresh island world has 277 `look` rows, one for each resident (78 in Brackenford), and 640 `look_line` rows. Every pick equals `pool_pick` recomputed in Python, and every line resolves in the book (verify-generation `generation-island-1112-222634`). A player's character and any person born later also take pool looks.
 - **Updating an island world in place** keeps VRoid: a world made before its seed carried `looks` has no `look` rows and `look_book` "", and its people project `look` "". After `relook("c4-aa393793")` (admin) all 277 wear pool looks, the same picks a fresh world gives. Shown on a scratch world: main's island module, then this branch with its data kept, gave 0 looks, then `relook` gave 277, with no panic (main already has the look schema). For a play scene: `just living-play <scene> --fresh` for a new world, or keep the world and run `spacetime call -s local <db> relook '"c4-aa393793"'` as the admin. The paused reference worlds were not touched.
+
+## 10. Pool picks by body sex (`sex-1`, 2026-11-13)
+
+A person's body sex is now a world fact (docs/LIVING_CORE.md, "Body sex"). Looks follow it.
+
+- **The pool pick.** `look::assign` picks among the pool entries of the person's sex, sorted: `pool_pick(world seed, id, n)` over those `n` (`SeedLooks::pool_for`). A pool entry's sex is the one its lines' `form` shows (the last word: "woman", "girl", "man", "boy"; "baby" shows none; `living_rules::sex::of_form`). With no `sex` row (an old world before `backfill_sex`), the pick is over the whole pool, as before.
+- **The checks.** The genesis check refuses a look entry whose lines show two sexes, and a seeded resident whose own entry shows the other sex ("is male but wears lp_…, whose lines are female"). The island's and Cullet's pools are 64 female and 64 male entries each, and every entry agrees with itself.
+- **The far phrase says the form's sex.** `phrase(.., LookSeen::Far, ..)` now reads "a tall woman in a green smock …" where it read "a tall figure …" (no hair or beard). The game client's plates and hover use the same function, so a player and a mind are told the same words. A mind's scene entry also carries `form` (the rules' `sex_words()`), near and far, in worlds with and without looks.
+- **Pool people's picks reshuffle.** In a new world, or after `relook`, a pool person's entry changes with this change for the same world seed and id: the index now runs over the entries of their sex. This was accepted with the design. An existing world keeps its look rows until an admin runs `relook`. The order for an updated world is in docs/LIVING_CORE.md, "Body sex".
+- **Fixed on the island.** All 277 residents now wear an entry of their sex. Brackenford's 7 drawn as the other sex before are drawn as their own (verify-generation `generation-sex1-*`: every person's look shows their body sex).
+
+SpacetimeDB documentation for this change is in docs/LIVING_CORE.md, "Body sex". The `sex` table is new and private, and the look tables keep their schema.
+

@@ -28,8 +28,15 @@ if [ -n "${LIVING_GENERATE_CMD:-}" ]; then
   cmd=$LIVING_GENERATE_CMD
 else
   : "${LIVING_COMPOSE:?LIVING_COMPOSE or LIVING_GENERATE_CMD is required}"
+  # The compose file needs LIVING_NEO4J_PASSWORD from the env file even for this one-off run.
+  case "$LIVING_COMPOSE" in
+    *--env-file*.local/living/neo4j.env*)
+      [ -f .local/living/neo4j.env ] || fail ".local/living/neo4j.env is missing (the compose file needs it even to generate): run \`just living-secrets\` once in this worktree" ;;
+  esac
   # spacetime generate's own output goes to stderr: stdout carries only the tar stream.
-  cmd="$LIVING_COMPOSE run --rm --no-deps -T -v \"\$WASM_DIR:/wasm:ro\" --entrypoint sh spacetimedb -c 'spacetime generate -l rust -b /wasm/living_authority.wasm -o /tmp/gen -y --include-private >&2 && tar -C /tmp/gen -cf - .'"
+  # `z` relabels the module folder for SELinux (Fedora with podman; without it the generator gets
+  # "Permission denied"); Docker Desktop and hosts without SELinux ignore it.
+  cmd="$LIVING_COMPOSE run --rm --no-deps -T -v \"\$WASM_DIR:/wasm:ro,z\" --entrypoint sh spacetimedb -c 'spacetime generate -l rust -b /wasm/living_authority.wasm -o /tmp/gen -y --include-private >&2 && tar -C /tmp/gen -cf - .'"
 fi
 code=0
 sh -c "$cmd" > "$tmp.tar" 2> "$tmp.err" || code=$?

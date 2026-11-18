@@ -5473,7 +5473,134 @@ def alert_after_hit(s):
 SCENES["alert_after_hit"] = alert_after_hit
 
 
+
+# ---- body sex (sex-1, docs/LIVING_CORE.md "Body sex") ------------------------------------------
+SEX_SALT = 0x5E70F00D0B0D1E55
+SEX_SEED = ROOT / ".local/living/verify/sex-family.json"
+
+
+def sex_pick(seed, i, share=0.5):
+    """`living_rules::sex::pick`, recomputed: female when splitmix64((seed ^ SALT) ^ id * 0x9E37…)
+    >> 11, over 2^53, is below the share."""
+    M = (1 << 64) - 1
+    z = (((int(seed) ^ SEX_SALT) ^ ((i * 0x9E3779B97F4A7C15) & M)) + 0x9E3779B97F4A7C15) & M
+    z = ((z ^ (z >> 30)) * 0xBF58476D1CE4E5B9) & M
+    z = ((z ^ (z >> 27)) * 0x94D049BB133111EB) & M
+    z ^= z >> 31
+    return 1 if (z >> 11) / float(1 << 53) < share else 2
+
+
+def sex_family_seed():
+    """stage1-acts (one family at a compressed pace: a child is carried about 2.6 real minutes)
+    with the band members' sexes given for the grown and left to the world for the young
+    (`SeedMember.sex`). Launch the scene's run with `--seed <this path without .json>`."""
+    seed = json.loads((ROOT / "living/seeds/stage1-acts.json").read_text())
+    seed["run"] = "sex-family"
+    for m, x in zip(seed["bands"][0]["family"], ["f", "m", "f", "f", "m"]):
+        m["sex"] = x
+    SEX_SEED.parent.mkdir(parents=True, exist_ok=True)
+    SEX_SEED.write_text(json.dumps(seed, indent=1) + "\n")
+    return seed
+
+
+def body_sex(s):
+    """Body sex as a world fact (sex-1). On the family seed (`sex_family_seed`; `scenes.py
+    sex-seed` writes it): every person has one `sex` row and no animal has one; the grown band
+    members have the seed's sexes and the young the world's pick (recomputed here); newcomers
+    (`spawn_crowd`) take the pick under `female_share()` 1.0, 0.0 and the shipped 0.5. Kin words
+    by sex: a child's "Mother" names its female parent and not its male one, "Father" the other way,
+    "parent" both. `conceive_needs_pair()`: on, two women are refused ("a family is started by a
+    woman and a man") and a woman and a man start one; off (shipped), two women start one. Each
+    child born has the world's pick for its id. The shipped script is installed again at the end."""
+    shipped = (ROOT / "living/scripts/skills.rhai").read_text()
+    w = s.rows("SELECT seed, run FROM world", "world")[0]
+    s.expect("the family seed is in force", w["run"] == "sex-family", w)
+    seed = int(w["seed"])
+    sex_of = lambda: {r["id"]: r["sex"] for r in s.rows("SELECT * FROM sex", "sex-rows")}
+    people = s.rows("SELECT id, name, kind, stage, parent_a, parent_b, alive, born_ms FROM character", "characters")
+    persons = [c for c in people if c["kind"] == "person"]
+    sexes = sex_of()
+    s.expect("every person has a sex row (1 or 2) and no animal has one", all(sexes.get(c["id"]) in (1, 2) for c in persons) and set(sexes) <= {c["id"] for c in persons},
+             {"people": len(persons), "rows": len(sexes)})
+    family = sorted(persons, key=lambda c: c["id"])
+    grown = [c for c in family if c["stage"] >= 2][:5]
+    young = [c for c in family if c["stage"] < 2]
+    s.expect("the grown band members have the seed's sexes (f, m, f, f, m)", [sexes[c["id"]] for c in grown] == [1, 2, 1, 1, 2], [(c["id"], sexes[c["id"]]) for c in grown])
+    s.expect("the young (no sex in the seed) have the world's pick", all(sexes[c["id"]] == sex_pick(seed, c["id"]) for c in young), [(c["id"], sexes[c["id"]], sex_pick(seed, c["id"])) for c in young])
+    try:
+        # female_share: newcomers by the law in force.
+        made = {}
+        for share in (1.0, 0.0):
+            s.call("install_script", compose(shipped, {"female_share": f"fn female_share() {{ {share} }}"}))
+            made[share] = s.people(4)
+        s.call("install_script", shipped)
+        made[0.5] = s.people(6)
+        sexes = sex_of()
+        for share, ids in made.items():
+            want = [sex_pick(seed, i, share) for i in ids]
+            s.expect(f"female_share {share}: each newcomer has the world's pick for its id", [sexes.get(i) for i in ids] == want, {"ids": ids, "got": [sexes.get(i) for i in ids], "want": want})
+        s.expect("female_share 1.0 makes women and 0.0 men", all(sexes[i] == 1 for i in made[1.0]) and all(sexes[i] == 2 for i in made[0.0]))
+
+        # Kin words by sex: the band's children are the first two non-elder adults' (a man and a woman).
+        child = next((c for c in young if c["stage"] == 1 and c["parent_a"] and c["parent_b"]), None)
+        s.expect("the family has a child with both parents", child is not None, young)
+        mother, father = sorted((child["parent_a"], child["parent_b"]), key=lambda i: sexes[i])
+        s.expect("its parents are a woman and a man", (sexes[mother], sexes[father]) == (1, 2))
+        line = open_line(s)
+        for who, at in ((child["id"], 4), (mother, 5), (father, 6)):
+            s.call("place_at", who, *line[at])
+            s.graph(who, {"wait": 120})
+        def named(who, marker):
+            # "naming you", or "naming Edda and you" when two are named.
+            return [e for e in s.rows(f"SELECT kind, text FROM experience WHERE observer = {who}") if marker in e["text"] and re.search(r"naming [^:“]*\byou\b", e["text"])]
+        for words, marker, yes, no in (("Mother, come and see.", "verify kin mother", [mother], [father]), ("Father, come and see.", "verify kin father", [father], [mother]), ("Ask a parent.", "verify kin parent", [mother, father], [])):
+            s.call("mind_say", child["id"], f"{words} {marker}", 0, "", 0, THOUGHT)
+            time.sleep(2.5)
+            got = {i: bool(named(i, marker)) for i in yes + no}
+            s.expect(f"kin words by sex: {words!r} names {['the mother' if i == mother else 'the father' for i in yes]} and not {['the mother' if i == mother else 'the father' for i in no]}",
+                     all(got[i] for i in yes) and not any(got[i] for i in no), got)
+
+        # conceive_needs_pair: two women from the share-1.0 newcomers, the family's mother and father.
+        w1, w2 = made[1.0][:2]
+        for who, at in ((w1, 9), (w2, 10)):
+            s.call("place_at", who, *line[at])
+        for who in (w1, w2, mother, father):
+            s.call("grant_items", who, "cooked_meat", 2)
+            s.graph(who, {"seq": [{"do": "eat", "item": "cooked_meat"}, {"wait": 120}]})
+        for who in (w1, w2, mother, father):
+            s.wait(lambda who=who: s.needs(who, f"fed-{who}")["hunger"] < 60, seconds=60)
+        s.call("install_script", compose(shipped, {"conceive_needs_pair": "fn conceive_needs_pair() { true }"}))
+        s.act(w1, {"do": "conceive", "target": {"id": w2}})
+        refused = s.wait(lambda: s.told(w1, "a family is started by a woman and a man"), seconds=20)
+        s.expect("conceive_needs_pair on: two women are refused, told why", bool(refused), refused)
+        s.act(mother, {"do": "conceive", "target": {"id": father}})
+        time.sleep(3)
+        s.act(father, {"do": "conceive", "target": {"id": mother}})
+        pair = s.wait(lambda: s.rows(f"SELECT * FROM expecting WHERE a = {mother} OR b = {mother}", "expecting-pair"), seconds=30)
+        s.expect("conceive_needs_pair on: a woman and a man start a family", bool(pair), pair)
+        s.call("install_script", shipped)
+        s.act(w1, {"do": "conceive", "target": {"id": w2}})
+        time.sleep(3)
+        s.act(w2, {"do": "conceive", "target": {"id": w1}})
+        same = s.wait(lambda: s.rows(f"SELECT * FROM expecting WHERE a = {w1} OR b = {w1}", "expecting-same"), seconds=30)
+        s.expect("conceive_needs_pair off (shipped): two women start a family", bool(same), same)
+        before = {c["id"] for c in s.rows("SELECT id FROM character")}
+        due = max(r["due_ms"] for r in pair + same)
+        wait_s = max(10, (due - time.time_ns() // 1_000_000) / 1000 + 20)
+        born = s.wait(lambda: [c for c in s.rows("SELECT id, parent_a, parent_b FROM character") if c["id"] not in before and {c["parent_a"], c["parent_b"]} & {mother, w1}] if len([c for c in s.rows("SELECT id, parent_a, parent_b FROM character") if c["id"] not in before and {c["parent_a"], c["parent_b"]} & {mother, w1}]) >= 2 else None, seconds=wait_s, every=3)
+        sexes = sex_of()
+        s.expect("each child born has a sex row, the world's pick for its id", all(sexes.get(c["id"]) == sex_pick(seed, c["id"]) for c in born), [(c["id"], sexes.get(c["id"]), sex_pick(seed, c["id"])) for c in born])
+        s.rows("SELECT * FROM sex", "sex-after")
+    finally:
+        s.call("install_script", shipped)
+
 def main():
+    import sys
+    if sys.argv[1:2] == ["sex-seed"]:
+        # The `sex` scene's seed (sex-1): writes it and says how to launch with it.
+        sex_family_seed()
+        print(f"wrote {SEX_SEED}; launch with --seed {SEX_SEED.with_suffix('')}")
+        return 0
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("scene", choices=SCENES)
     ap.add_argument("--run", required=True)
@@ -6667,7 +6794,7 @@ def scene_lazy(s):
 
 
 SCENES["scene_lazy"] = scene_lazy
-
+SCENES["sex"] = body_sex
 
 def diag_totals(s, t0):
     """The authority's `diag:` counts (`common::diag`) summed over the lines logged since `t0`."""
@@ -6791,6 +6918,163 @@ def fast_diag(s):
 
 
 SCENES["fast_diag"] = fast_diag
+
+
+def diag_window(s, secs, keys):
+    """Profile for `secs` and sum the `diag:` counts of `keys` logged in that time. Counts
+    gathered while profiling was off are reported when it starts again, in the first `diag:`
+    line: the window counts from 2 s after it starts. Returns (counts, clock ms at the start)."""
+    s.call("set_profile", True)
+    time.sleep(2)
+    since = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+    t0 = s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+    try:
+        time.sleep(secs)
+    finally:
+        s.call("set_profile", False)
+    logs = "\n".join(l for l in s.command("logs", "-s", "local", s.db, "-n", "200000").stdout.splitlines() if l[:19] >= since and "diag:" in l)
+    errors = [l for l in s.command("logs", "-s", "local", s.db, "-n", "200000").stdout.splitlines() if l[:19] >= since and "differs from" in l]
+    count = lambda key: sum(int(x) for x in re.findall(rf'"{re.escape(key)}":(\d+)', logs))
+    m = {k: count(k) for k in keys}
+    m["differs_logged"] = len(errors)
+    if errors:
+        with (s.out / f"{s.name}-differs.txt").open("a") as f:
+            f.write("\n".join(errors) + "\n")
+    return m, t0
+
+
+def chronicle_recent(s):
+    """The chronicle's repeat check read from its newest entries (docs/BATTLE_SCALE.md,
+    battle-exact-2 E; the `chronicle_recent` law) finds the newest 40 entries of the last two
+    minutes that reading all of them finds. 12 people on an open line each say six lines in turn,
+    over and over (a line said again within two minutes and among the newest 40 is one entry
+    with a count, "(×n)"), with `chronicle_recent_check` on: each check also reads the whole two
+    minutes and compares (`diag:` `chronicle_recent:differed`). Both of its reads are used: the
+    newest rows when they hold 40, the whole window when they do not. 60 s, then 30 s with
+    `chronicle_recent` off: every row of the two minutes is read again and lines are still
+    written and counted."""
+    line = clear_line(s)
+    talkers = s.people(16)
+    for k, who in enumerate(talkers):
+        s.call("place_at", who, line[2 + k % 8][0], line[2 + k % 8][1] + (k // 8) * 1.4)
+    import threading, concurrent.futures
+    stop = threading.Event()
+
+    def talk():
+        # A say node speaks at most once per 45 s; an install clears its mark, so each talker's
+        # line is installed again every 2 s, one of two in turn.
+        n = 0
+        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+            while not stop.is_set():
+                t = time.time()
+                list(pool.map(lambda kw: s.call("set_behavior", kw[1], json.dumps({"seq": [{"say": f"{'Ho' if (n + kw[0]) % 2 else 'Hey'} {kw[0]}."}, {"wait": 300}]}), check=False), enumerate(talkers)))
+                n += 1
+                time.sleep(max(0.0, 2.0 - (time.time() - t)))
+
+    keys = ("chronicle_recent:checked", "chronicle_recent:differed", "chronicle_recent:narrow", "chronicle_recent:whole")
+    set_law(s, "chronicle_recent_check", True)
+    talking = threading.Thread(target=talk, daemon=True)
+    talking.start()
+    try:
+        on, t_on = diag_window(s, 60, keys)
+        set_law(s, "chronicle_recent", False)
+        off, t_off = diag_window(s, 30, keys)
+    finally:
+        stop.set()
+        talking.join()
+        set_law(s, "chronicle_recent", True)
+        set_law(s, "chronicle_recent_check", False)
+        for who in talkers:
+            s.graph(who, {"wait": 300})
+    # A repeat moves its entry to when it was last said, so entries are counted at the end: all
+    # the talkers' entries, those with a count, and the last said while the law was off.
+    rows = [r for r in s.rows("SELECT id, at_ms, kind, a, text FROM chronicle WHERE kind = 'speech'", "speech") if r["a"] in talkers]
+    on["rows"] = len(rows)
+    on["counted"] = sum(1 for r in rows if " (×" in r["text"])
+    off["said_while_off"] = sum(1 for r in rows if r["at_ms"] >= t_off)
+    m = {"on": on, "off": off}
+    (s.out / f"{s.name}-chronicle-recent.json").write_text(json.dumps(m, indent=1) + "\n")
+    print("MEASURE", json.dumps(m), flush=True)
+    try:
+        s.expect("lines were written and repeats counted into one entry", on["rows"] >= 20 and on["counted"] >= 3, on)
+        s.expect("every newest-first read was the whole read's (compared many times, none differed)", on["chronicle_recent:checked"] >= 60 and on["chronicle_recent:differed"] == 0 and on["differs_logged"] == 0, on)
+        s.expect("both reads were used: the newest rows, and the whole window when they held fewer than 40", on["chronicle_recent:narrow"] > 0 and on["chronicle_recent:whole"] > 0, on)
+        s.expect("with chronicle_recent off, the whole two minutes are read and lines still written", off["chronicle_recent:narrow"] == 0 and off["chronicle_recent:whole"] == 0 and off["chronicle_recent:checked"] == 0 and off["said_while_off"] >= 5, off)
+    finally:
+        off_the_line(s, line, talkers, dy=84)
+
+
+SCENES["chronicle_recent"] = chronicle_recent
+
+
+def notice_inplace(s):
+    """Noticing read in place (docs/BATTLE_SCALE.md, battle-exact-2 C1; the `notice_inplace`
+    law) marks and asks about the same structures, in the same order, as the full list does, and
+    says the same lines. 8 people walk back and forth along an open line among structures, while
+    a builder puts up a new one every 3 s beside them, with `notice_inplace_check` on: each look
+    also splits the structures in sight from the full list and compares (`diag:`
+    `notice_inplace:differed`). 45 s, then 20 s with `notice_inplace` off: the full list is built
+    at every look, and new structures are still noticed."""
+    line = clear_line(s)
+    lookers = s.people(8)
+    builder = s.people(1)[0]
+    west, east = line[1], line[-2]
+    for k, who in enumerate(lookers):
+        s.call("place_at", who, line[2 + k][0], line[2 + k][1] + 1.0)
+        a, b = (west, east) if k % 2 == 0 else (east, west)
+        s.graph(who, {"seq": [{"do": {"skill": "goto", "target": {"at": list(a)}}}, {"wait": 0.5}, {"do": {"skill": "goto", "target": {"at": list(b)}}}, {"wait": 0.5}]})
+    s.graph(builder, {"wait": 300})
+    kinds = ["shelter", "storage"]
+    placed = []
+
+    def build(n, t_end, k=0):
+        # Each spot once: a new tile beside a familiar one of the same kind and owner is part of
+        # it, and is rightly not told again.
+        n += k
+        while time.time() < t_end and k < n:
+            x = line[k % len(line)][0]
+            y = line[0][1] + (-4.0 if k % 2 == 0 else 6.0) + (-1 if k % 2 == 0 else 1) * (k // len(line)) * 3.0
+            s.call("place_at", builder, x, y, check=False)
+            if s.call("place_structure", builder, kinds[k % 2], check=False).returncode == 0:
+                placed.append((x, y))
+            k += 1
+            time.sleep(3)
+
+    keys = ("notice_inplace:checked", "notice_inplace:differed", "notice_inplace:listed", "noticed")
+    set_law(s, "notice_inplace_check", True)
+    import threading
+    try:
+        t = threading.Thread(target=build, args=(14, time.time() + 47))
+        t.start()
+        on, t_on = diag_window(s, 45, keys)
+        t.join()
+        set_law(s, "notice_inplace", False)
+        t = threading.Thread(target=build, args=(6, time.time() + 22, 32))
+        t.start()
+        off, t_off = diag_window(s, 20, keys)
+        t.join()
+    finally:
+        set_law(s, "notice_inplace", True)
+        set_law(s, "notice_inplace_check", False)
+        for who in lookers:
+            s.graph(who, {"wait": 300})
+    seen = [e for e in s.rows("SELECT observer, at_ms, text FROM experience WHERE kind = 'saw'", "noticed") if e["observer"] in lookers and e["text"].startswith("You notice a")]
+    on["lines"] = sum(1 for e in seen if t_on <= e["at_ms"] < t_off)
+    off["lines"] = sum(1 for e in seen if e["at_ms"] >= t_off)
+    on["placed"] = len(placed)
+    m = {"on": on, "off": off}
+    (s.out / f"{s.name}-notice-inplace.json").write_text(json.dumps(m, indent=1) + "\n")
+    print("MEASURE", json.dumps(m), flush=True)
+    try:
+        s.expect("structures were put up in view and noticed", on["placed"] >= 5 and on["lines"] >= 5, on)
+        s.expect("every in-place look was the full list's (compared many times, none differed)", on["notice_inplace:checked"] >= 100 and on["notice_inplace:differed"] == 0 and on["differs_logged"] == 0, on)
+        s.expect("the full list was built only for looks that found something new", 0 < on["notice_inplace:listed"] < on["notice_inplace:checked"], on)
+        s.expect("with notice_inplace off, no in-place look, and new structures are still noticed", off["notice_inplace:checked"] == 0 and off["notice_inplace:listed"] == 0 and off["lines"] >= 1, off)
+    finally:
+        off_the_line(s, line, lookers + [builder], dy=90)
+
+
+SCENES["notice_inplace"] = notice_inplace
 
 
 if __name__ == "__main__":

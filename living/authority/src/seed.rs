@@ -97,6 +97,15 @@ pub fn load(ctx: &ReducerContext) {
     }
 }
 
+/// The world's seed, parsed (`None` for a floor without a seed yet, or a seed that does not
+/// parse). For rare, explicit reads (`backfill_sex`); hot paths keep their own parsed parts.
+pub fn active_seed() -> Option<Seed> {
+    if VALLEY.is_empty() && !is_runtime() {
+        return None;
+    }
+    serde_json::from_str(&active()).ok()
+}
+
 pub fn set_active(json: &str) {
     ACTIVE.with(|a| *a.borrow_mut() = Some(std::rc::Rc::from(json)));
 }
@@ -341,6 +350,11 @@ pub struct SeedResident {
     /// Their person entry in the seed's `looks` (`lp_…`, docs/LOOK.md); none: a pool entry.
     #[serde(default)]
     pub look: String,
+    /// Their body's sex, "f" or "m" (docs/LIVING_CORE.md, "Body sex"). Required of every
+    /// resident of a seed with `looks` or with any resident giving it (an authored cast;
+    /// `look::check`); elsewhere none is the world's pick.
+    #[serde(default)]
+    pub sex: String,
 }
 
 /// When a person rises and goes to bed (hours of the day, any hour; past 24 for after
@@ -525,6 +539,9 @@ pub struct SeedMember {
     /// Know-how of this member beyond the band's.
     #[serde(default)]
     pub knows: Vec<String>,
+    /// The member's body sex, "f" or "m"; none: the world's pick (docs/LIVING_CORE.md, "Body sex").
+    #[serde(default)]
+    pub sex: String,
 }
 
 #[derive(Deserialize)]
@@ -1037,6 +1054,9 @@ pub fn world_row(ctx: &ReducerContext, s: &Seed, map: &living_rules::map::Map) {
 /// Everything after the terrain and the wild resources: settlements' stores, people, their
 /// households and communities, structures, artifacts, bands and animals.
 pub fn populate<'a>(ctx: &ReducerContext, s: &'a Seed, map: &living_rules::map::Map, hosted: Option<&crate::island::Hosted>, realm: Option<&living_rules::realm::Realm>, mut settlements: Vec<(&'a SeedTown, living_rules::city::Layout)>, now: u64) {
+    for w in crate::sex::sheet_warnings(s) {
+        log::warn!("seed sex: {w}");
+    }
     let _draws = Creating::start(s.seed, STEP_POPULATE);
     // The look data first: everyone made from here on is given a look as they are.
     crate::look::genesis(ctx, s.looks.as_ref());
@@ -1286,6 +1306,15 @@ pub fn spawn_creature(ctx: &ReducerContext, name: &str, kind: &str, controller: 
 
 #[allow(clippy::too_many_arguments)]
 pub fn spawn_with(ctx: &ReducerContext, name: &str, kind: &str, controller: Identity, ai: bool, at: (f32, f32), now: u64, age: f32, parents: (u32, u32)) -> u32 {
+    spawn_sexed(ctx, name, kind, controller, ai, at, now, age, parents, None)
+}
+
+/// [`spawn_with`] for a person whose body sex is given (`sex`: a seed's, a player's choice);
+/// `None`, and every person made through `spawn_with`, takes the world's pick
+/// (`sex::give`). The row is written right after the character, before anything in this
+/// transaction reads it (the look's pool pick below, a newborn's first mind call later).
+#[allow(clippy::too_many_arguments)]
+pub fn spawn_sexed(ctx: &ReducerContext, name: &str, kind: &str, controller: Identity, ai: bool, at: (f32, f32), now: u64, age: f32, parents: (u32, u32), sex: Option<living_rules::sex::Sex>) -> u32 {
     // A new character can make two people the parents of one child (they then know each
     // other's names), so the shared answers start again, and each parent's knowledge epoch moves.
     crate::perception::answers_changed();
@@ -1313,6 +1342,9 @@ pub fn spawn_with(ctx: &ReducerContext, name: &str, kind: &str, controller: Iden
         },
     });
     let id = c.id;
+    if kind == "person" {
+        crate::sex::give(ctx, id, sex);
+    }
     motion::spawn_body(ctx, id, kind, at, now);
     // Genes: a founder's are drawn for its species, a child's come from its parents.
     let genes = {
@@ -2086,7 +2118,7 @@ fn authored_households(ctx: &ReducerContext, map: &living_rules::map::Map, t: &S
         if r.age >= life.years * life.old_age {
             log::warn!("{}: {} years is past the first deaths of old age; seeded just short of them", r.name, r.age);
         }
-        let id = spawn_with(ctx, &r.name, "person", admin, minded, at, now, life.seeded_age(r.age, pace), (parents.first().copied().unwrap_or(0), parents.get(1).copied().unwrap_or(0)));
+        let id = spawn_sexed(ctx, &r.name, "person", admin, minded, at, now, life.seeded_age(r.age, pace), (parents.first().copied().unwrap_or(0), parents.get(1).copied().unwrap_or(0)), living_rules::sex::Sex::parse(&r.sex));
         if !r.look.is_empty() {
             crate::look::assign(ctx, id, Some(&r.look), now);
         }
@@ -2289,7 +2321,7 @@ fn band(ctx: &ReducerContext, map: &living_rules::map::Map, b: &SeedBand, site: 
             };
             let young = matches!(m.stage.as_str(), "child" | "infant");
             let parents = if young && adults.len() >= 2 { (adults[0], adults[1]) } else { (0, 0) };
-            let id = spawn_with(ctx, &fresh_name(ctx), "person", admin, minded, p, now, life.age_at(f, pace), parents);
+            let id = spawn_sexed(ctx, &fresh_name(ctx), "person", admin, minded, p, now, life.age_at(f, pace), parents, living_rules::sex::Sex::parse(&m.sex));
             common::inv_add(ctx, id as u64, "berries", if young { 1 } else { 3 });
             // A hunter carries a spear.
             if m.occupation == "hunter" && !young {

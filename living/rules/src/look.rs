@@ -148,7 +148,7 @@ pub fn pool_pick(world_seed: u64, id: u32, pool_len: usize) -> Option<usize> {
 
 /// How much of a person's look an observer perceives (the `perceived_of` law's `look`). The
 /// line's key reaches a player's client whenever the person is seen; this decides only how much
-/// a mind is told: everything once made out (`Full`), beyond that (`Far`) no sex, hair or beard.
+/// a mind is told: everything once made out (`Full`), beyond that (`Far`) no hair or beard.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum LookSeen {
     #[default]
@@ -253,15 +253,18 @@ fn article(word: &str) -> &'static str {
 ///
 /// - `Full`: "a woman in a green smock and dark trousers, dark-haired, heavy-set, in a kerchief"
 ///   (a tall or short person is "a tall woman ..."; a beard is "with a white beard").
-/// - `Far`: the silhouette by band ("child" for an infant or a child, "old figure" for an elder,
-///   else "figure"), height and girth, the garments and the headwear: "a tall figure in a green
-///   smock and dark trousers, in a kerchief". No sex, hair or beard.
+/// - `Far`: the body's form by sex when the line's `form` shows one ("woman", "old man": a far
+///   figure is drawn in full on a player's screen, and its build and clothes show its sex; body-sex,
+///   2026-11-13), else the silhouette by band ("child" for an infant or a child, "old figure" for
+///   an elder, else "figure"); height and girth, the garments and the headwear: "a tall woman in a
+///   green smock and dark trousers, in a kerchief". No hair or beard (face-scale at that range).
 /// - `None`: "".
 pub fn phrase(words: &LookWords, seen: LookSeen, band: LookBand) -> String {
     let noun = match seen {
         LookSeen::None => return String::new(),
         LookSeen::Full if !words.form.trim().is_empty() => words.form.trim().to_string(),
         LookSeen::Full => "person".into(),
+        LookSeen::Far if crate::sex::of_form(&words.form).is_some() => words.form.trim().to_string(),
         LookSeen::Far => match band {
             LookBand::Infant | LookBand::Child => "child".into(),
             LookBand::Elder => "old figure".into(),
@@ -402,13 +405,14 @@ mod tests {
         let w = LookWords { form: "woman".into(), girth: 2, height: 1, hair: "dark-haired".into(), top: "a green smock".into(), bottom: "dark trousers".into(), head: "a kerchief".into(), beard: String::new() };
         assert_eq!(phrase(&w, LookSeen::Full, LookBand::Adult), "a woman in a green smock and dark trousers, dark-haired, heavy-set, in a kerchief");
         let tall = LookWords { height: 2, ..w.clone() };
-        assert_eq!(phrase(&tall, LookSeen::Far, LookBand::Adult), "a tall figure in a green smock and dark trousers, heavy-set, in a kerchief");
+        assert_eq!(phrase(&tall, LookSeen::Far, LookBand::Adult), "a tall woman in a green smock and dark trousers, heavy-set, in a kerchief");
         assert_eq!(phrase(&w, LookSeen::None, LookBand::Adult), "");
         let man = LookWords { form: "old man".into(), girth: 0, height: 0, hair: "grey-haired".into(), top: "a brown coat".into(), bottom: String::new(), head: String::new(), beard: "a white beard".into() };
         assert_eq!(phrase(&man, LookSeen::Full, LookBand::Elder), "a short old man in a brown coat, grey-haired, slight, with a white beard");
         let far = phrase(&man, LookSeen::Far, LookBand::Elder);
-        assert_eq!(far, "a short old figure in a brown coat, slight");
-        for hidden in ["man", "grey", "beard"] {
+        // A far figure's form says its sex (body-sex): the screen draws it in full.
+        assert_eq!(far, "a short old man in a brown coat, slight");
+        for hidden in ["grey", "beard"] {
             assert!(!far.contains(hidden), "{far}");
         }
         let baby = LookWords { form: "baby".into(), ..LookWords::default() };

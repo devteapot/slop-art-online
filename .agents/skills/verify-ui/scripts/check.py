@@ -2033,6 +2033,14 @@ def far(run, c):
     said = [x for x in sql(run, f"SELECT id, kind, object, text FROM experience WHERE kind = 'said' AND object = {b}") if line in x.get("text", "")]
     c.check(s, "what I send carries my words and their id, no colour words", re.search(rf'say: "{re.escape(line)}" to #{b}\b', L) is not None and said and not any("someone in" in x.get("text", "") for x in said) and not re.search(r'(say|act)[^\n]*someone in ', L), f"{len(said)} said rows")
     c.check(s, "close again: a stranger in their colours, or the line's words", bool(near5) and (near5.startswith("a stranger") or (ph and near5 == ph[0])), f"{near5!r}")
+    if ph:
+        # Body sex (sex-1): a far figure is drawn in full, so its plate and hover say the form's sex
+        # ("a tall woman in …"), the far phrase's words; the label it is talked to by stays the
+        # far label, with no sex; close up the plate is the full phrase, as before.
+        sexed = re.compile(r"\b(woman|man|girl|boy)\b")
+        c.check(s, "sex-1: far (6 m), plate and hover say the line's far phrase with the body's sex", far2 is not None and far2 == ph[1] and sexed.search(far2) is not None, f"{far2!r}; phrase {ph}")
+        c.check(s, "sex-1: the far label and the talk target stay neutral (no sex word)", (t3.get("label") or "").strip() in (FAR, f"To {FAR}") or (FAR in (t3.get("label") or "") and not sexed.search((t3.get("label") or "").replace(FAR, ""))), json.dumps(t3))
+        c.check(s, "sex-1: near (2 m and back at 2 m), the plate is the line's full phrase, as before", near1 == ph[0] and near5 == ph[0], f"{near1!r}, {near5!r}; phrase {ph}")
     notes_clear(c, s, out)
 
 
@@ -2365,6 +2373,9 @@ def look_phrase(words, seen, band):
     book line is labelled by: `seen` "full" (made out) or "far"; `band` 1 child .. 4 elder."""
     if seen == "full":
         noun = (words.get("form") or "").strip() or "person"
+    elif (words.get("form") or "").strip().split(" ")[-1:] in (["woman"], ["man"], ["girl"], ["boy"]):
+        # A far figure's form says its sex (sex-1): it is drawn in full on the screen.
+        noun = words["form"].strip()
     else:
         noun = "child" if band <= 1 else ("old figure" if band == 4 else "figure")
     head = {0: "short ", 2: "tall "}.get(words.get("height", 1), "") + noun
@@ -2550,6 +2561,55 @@ def looks_band(run, c):
         steps = [round(((p[0] - q[0]) ** 2 + (p[1] - q[1]) ** 2) ** 0.5) for p, q in zip(feet, feet[1:]) if p and q]
         c.check(s, f"#{pid} redrawn in place for its new line", new == after.get(pid) and all(x.get("composed") for x in looks_w) and all(feet) and steps and max(steps) <= 60 and f"looks: #{pid} redrawn for a new look ({old} → {new})" in L,
                 f"{old} → {new} (row {after.get(pid)}); composed {[x.get('composed') for x in looks_w].count(True)}/{len(looks_w)}; in view {sum(1 for f in feet if f)}/{len(feet)}; largest step {max(steps) if steps else None} px")
+
+
+@scenario("skirt-scale")
+def skirt_scale(run, c):
+    """A spring skirt on a scaled body (`characters::shape`: a `J_Sec_` bone under a bone with its
+    own scale takes that scale, compose-skirt-scale). No world: the asset view poses VRoid bases
+    from the tracked recipes on one fixed frame (`idle@0.5`, front) and writes every bone's place
+    (`LIVING_GAME_VIEW_JOINTS`). The skirt chains' `_end` joints sit at the hem: its height as a
+    share of the thigh, (upper leg - hem) / (upper leg - knee), and its width as a share of the upper
+    legs' span. Shino at legs 1.05 and girth 1.05 (`ranger`) keeps Shino's share and width at
+    scale 1 (`shino`); Vivi at legs 0.66, hips 1.15 and girth 1.35 (`small`) keeps Vivi's width
+    (`vivi`; her side chains hang from the hips, whose own scale leaves height at 1, so her share is
+    not asserted). On main's client before the change `ranger`'s hem stood 0.012 of the thigh too
+    high and `small`'s skirt 13% too narrow."""
+    s = "skirt-scale"
+    client = os.path.join(os.environ.get("CARGO_TARGET_DIR", os.path.join(ROOT, ".local/target")), "release/living-game")
+    out = os.path.join(ROOT, ".local/living/verify", run, "ui", s)
+    os.makedirs(out, exist_ok=True)
+    joints = os.path.join(out, "joints.jsonl")
+    if os.path.exists(joints):
+        os.remove(joints)
+    env = dict(os.environ, LIVING_GAME_VIEW="recipe:shino,recipe:ranger,recipe:vivi,recipe:small", LIVING_GAME_VIEW_OUT=out, LIVING_GAME_VIEW_SHOTS="idle@0.5/front", LIVING_GAME_VIEW_CLIP="idle", LIVING_GAME_VIEW_JOINTS=joints)
+    r = subprocess.run([client], capture_output=True, text=True, env=env, timeout=300)
+    open(os.path.join(out, "view.log"), "w").write(r.stdout + r.stderr)
+    by = {}
+    if os.path.exists(joints):
+        for line in open(joints):
+            d = json.loads(line)
+            by[d["file"]] = d["joints"]
+    c.check(s, "the asset view posed the four", r.returncode == 0 and all(f"recipe:{n}" in by for n in ("shino", "ranger", "vivi", "small")), f"rc {r.returncode}; {sorted(by)}")
+
+    def hem(j):
+        ends = [v for k, v in j.items() if "Skirt" in k and k.endswith("_end")]
+        if not ends or "J_Bip_L_UpperLeg" not in j:
+            return None
+        up = (j["J_Bip_L_UpperLeg"][1] + j["J_Bip_R_UpperLeg"][1]) / 2
+        knee = (j["J_Bip_L_LowerLeg"][1] + j["J_Bip_R_LowerLeg"][1]) / 2
+        y = sum(v[1] for v in ends) / len(ends)
+        span = abs(j["J_Bip_L_UpperLeg"][0] - j["J_Bip_R_UpperLeg"][0])
+        return (up - y) / (up - knee), (max(v[0] for v in ends) - min(v[0] for v in ends)) / span
+
+    h = {n: hem(by.get(f"recipe:{n}", {})) for n in ("shino", "ranger", "vivi", "small")}
+    ok = all(h.values())
+    c.check(s, "each wears a spring skirt (its chains' ends found)", ok, f"{h}")
+    if not ok:
+        return
+    c.check(s, "Shino scaled keeps her hem's place on the thigh", abs(h["ranger"][0] - h["shino"][0]) < 0.003, f"ranger {h['ranger'][0]:.4f}, shino {h['shino'][0]:.4f}")
+    c.check(s, "Shino scaled keeps her hem's width", abs(h["ranger"][1] - h["shino"][1]) < 0.01, f"ranger {h['ranger'][1]:.4f}, shino {h['shino'][1]:.4f}")
+    c.check(s, "Vivi scaled keeps her hem's width", abs(h["small"][1] - h["vivi"][1]) < 0.01, f"small {h['small'][1]:.4f}, vivi {h['vivi'][1]:.4f}")
 
 
 def main():

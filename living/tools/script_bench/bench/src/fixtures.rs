@@ -156,6 +156,7 @@ fn actor(r: &mut Rng, id: u32) -> ActorFacts {
         // Rested breath and focus (no extra draws, so the samples before stamina-1 stay the same).
         stamina: 100.0,
         focus: 100.0,
+        sex: String::new(),
     }
 }
 
@@ -192,6 +193,7 @@ fn target(r: &mut Rng, actor_id: u32) -> TargetFacts {
         hosts: false,
         lit: false,
         fuel: 0.0,
+        sex: String::new(),
     }
 }
 

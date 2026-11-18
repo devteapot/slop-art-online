@@ -541,11 +541,13 @@ fn kin_relations(ctx: &ReducerContext, speaker: &Character, other: &Character) -
 }
 
 /// Where `speaker`'s line names `other`: by name (`mention_at`) or by a kin word for what they
-/// are to the speaker (the world's `kin_terms()`), the earlier of the two.
+/// are to the speaker that fits their sex (the world's `kin_terms()`), the earlier of the two.
 fn named_at(ctx: &ReducerContext, sc: &living_rules::script::Scripts, speaker: &Character, text: &str, other: &Character) -> Option<usize> {
     let by_name = mention_at(text, &other.name);
     let rel = kin_relations(ctx, speaker, other);
-    let by_kin = if rel.is_empty() { None } else { sc.kin().named_at(text, &rel) };
+    // A kin word names them only if it fits their body's sex ("Mother" a female parent; body-sex),
+    // their true sex: a speaker knows their own kin. Without a row, any word of the relation.
+    let by_kin = if rel.is_empty() { None } else { sc.kin().named_at(text, &rel, crate::sex::of(ctx, other.id)) };
     match (by_name, by_kin) {
         (Some(a), Some(b)) => Some(a.min(b)),
         (a, b) => a.or(b),

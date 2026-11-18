@@ -7,6 +7,7 @@
 | A seed produces the described world: terrain, towns and cities, open settlements, households, wild-site and valley bands, packs, resources and animals | [seeded-world.md](seeded-world.md) |
 | Cached authored-world compilation and sheet resolution | [authored-worlds.md](authored-worlds.md) |
 | Looks: a seed's look data checked, written at genesis (`look_line`, `world.look_book`, a look row per person), Cullet's from char-4 with its cases, a runtime floor seed with looks | [looks.md](looks.md) |
+| Body sex (sex-1): every person one `sex` row, none for an animal; seeded residents the seed's `sex` (required of an authored cast), everyone else the world's pick (recomputed); every person's look of their sex, pool picks among the entries of their sex; the seed check's refusals and the sheets' warning | [sex.md](sex.md) |
 | Parser guards and failed publication | [seed-guards.md](seed-guards.md) |
 | Terrain, sites and what creation draws at random (resources, animals, names, ages, genes) repeat | [repeatability.md](repeatability.md) |
 

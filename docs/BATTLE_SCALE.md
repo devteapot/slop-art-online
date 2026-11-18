@@ -598,6 +598,23 @@ Structures are noticed by radius alone: no facing, no walls. In a battle the rem
 
 **Decision for the general coordinator:** whether to extend the script contract for this; A waits.
 
+## Exact paths E and C1 (`battle-exact-2`)
+
+From the profile of combat resolution and woken evaluations (`battle-profile`, 2026-11-13): approved by the general coordinator as one exact branch. Each has a law (on) to roll it back and a `_check` law (a diagnostic) that also does the full computation and counts any difference.
+
+- **E: the chronicle's repeat check reads its newest entries first** (`chronicle_recent`, `chronicle_recent_check`).
+  - Each first blow and each killing writes a chronicle line (`common::chronicle`). To fold a repeat ("(×3)") it compares the newest 40 entries of the last two minutes. It used to read every entry of the two minutes to find them: about 2,300 rows at 19 lines a second, 0.95 ms a call, 7% of the tick at 200 fighters.
+  - It now reads the last second, then 4 s, 16 s and the whole window, and stops at the first window that holds 40 entries from before this tick.
+  - **Why "before this tick":** inside the tick's transaction a range read gives the rows written in it (this tick's entries and repeats, all at `now`) apart from the committed ones, not merged by `at_ms` (SpacetimeDB 2.14.1, found by the check law: verify-core `chronicle_recent`, one difference in 68 and in 460 compared, before this rule). Entries before `now` are committed, and a later start's committed rows are the tail of the whole window's. So a narrow read with 40 of them has the full read's last 40, wherever this tick's rows come.
+  - **Note:** this also means "the newest 40" has always meant the newest 40 *committed* entries when 40 are in the window: a line repeated within the same tick is not folded into the entry written earlier in that tick. Unchanged here (exact), recorded for whoever revisits the chronicle.
+  - **Proof:** verify-core `chronicle_recent` 5/5: 457 reads compared, none differed; the narrow read used 83 times and the whole 374; off, neither, and lines still written.
+- **C1: noticing reads the structures in sight in place** (`notice_inplace`, `notice_inplace_check`).
+  - A look walks the chunks' cached structure lists (`common::for_structures_near`, the order `structures_near` gathers in) and builds the copied, sorted list only when something in sight is new.
+  - **The same calls in the same order where order matters:** a structure seen lately (its mark under `SEEN_MS`) is re-marked first; that changes no answer `prune_familiar` gives, which spares marks under `SEEN_MS` either way. Every other is marked and its familiarity asked nearest first, ties as in the full list (its sort is stable). Those calls insert rows and may prune, so they keep the full pass's order. A structure's seen key (`0x4000_0000 | id & 0x3fff_ffff`) is shared only by ids 2^30 apart.
+  - **Saves** the copy and the sort: about 12.7 µs of the 62 µs a look at the end of the 8-minute profile (about 2 ms/s), growing with the remains. The per-structure check of the seen set stays (C2, not built, would remove most of it).
+  - **Proof:** verify-core `notice_inplace` 6/6: 13,427 looks compared, none differed; the full list built for 159 of them; off, no in-place look, and new structures still noticed.
+- **Their words** are `law_about(l, name)` entries (laws-about-list, aba5c876). The old `laws_about` map would have passed the engine's 6,144-byte string limit with these four, since the engine counts all the strings of a returned map together; laws-about-list reads one law's words at a time.
+
 ## Verification it would need
 
 - **Unit tests:**

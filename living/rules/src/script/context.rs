@@ -9,10 +9,10 @@ use rhai::{Array, Dynamic, Map};
 /// Fields of `a`. The order is the bit order of [`Plan::top`].
 pub const TOP: [&str; 21] = ["actor", "target", "routine", "item", "qty", "night", "hour", "season", "text", "topic", "roll", "raining", "skill", "want", "want_qty", "records", "record", "daylight", "offer_id", "record_id", "offer"];
 /// Fields of `a.actor` (the body genes are `genes::BODY`; `factor` is the skill factor).
-pub const ACTOR: [&str; 33] = [
-    "id", "kind", "hp", "hunger", "energy", "near_fire", "near_shelter", "terrain", "activity", "age", "stage", "life", "knows", "inv", "kin_near", "pasture", "hurt_by", "hurt_ago", "hurt_by_near", "yielded_ago", "sensed", "bold", "room", "community", "home", "speed", "strength", "endurance", "vitality", "factor", "lit", "stamina", "focus",
+pub const ACTOR: [&str; 34] = [
+    "id", "kind", "hp", "hunger", "energy", "near_fire", "near_shelter", "terrain", "activity", "age", "stage", "life", "knows", "inv", "kin_near", "pasture", "hurt_by", "hurt_ago", "hurt_by_near", "yielded_ago", "sensed", "bold", "room", "community", "home", "speed", "strength", "endurance", "vitality", "factor", "lit", "stamina", "focus", "sex",
 ];
-pub const TARGET: [&str; 25] = ["class", "id", "kind", "name", "amount", "hp", "max_hp", "stage", "hurt_ago", "alive", "dist", "inv", "knows", "activity", "yielded_ago", "near_fire", "company", "bearing", "closing", "community", "owner", "home", "hosts", "lit", "fuel"];
+pub const TARGET: [&str; 26] = ["class", "id", "kind", "name", "amount", "hp", "max_hp", "stage", "hurt_ago", "alive", "dist", "inv", "knows", "activity", "yielded_ago", "near_fire", "company", "bearing", "closing", "community", "owner", "home", "hosts", "lit", "fuel", "sex"];
 pub const ROUTINE: [&str; 4] = ["exists", "ok", "failed", "changed_s"];
 
 const _: () = assert!(crate::genes::BODY.len() == 4);
@@ -361,6 +361,7 @@ fn visit(c: &SkillCtx, knack: &str, p: &Plan, mut f: impl FnMut(Level, &'static 
             "lit" => Val::B(a.lit),
             "stamina" => Val::F(a.stamina),
             "focus" => Val::F(a.focus),
+            "sex" => Val::Str(&a.sex),
             // How good the actor is at the skill being performed (knack × practice).
             "factor" => Val::F(crate::genes::skill_factor(&a.genes, &a.practice, &c.skill, knack)),
             gene => Val::F(crate::genes::gene(&a.genes, gene)),
@@ -397,6 +398,7 @@ fn visit(c: &SkillCtx, knack: &str, p: &Plan, mut f: impl FnMut(Level, &'static 
             "hosts" => Val::B(t.hosts),
             "lit" => Val::B(t.lit),
             "fuel" => Val::F(t.fuel),
+            "sex" => Val::Str(&t.sex),
             _ => Val::F(t.closing),
         };
         f(Level::Target, name, v);

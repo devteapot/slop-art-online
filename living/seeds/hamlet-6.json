@@ -30,6 +30,7 @@
         {
           "name": "Oren Hale",
           "age": 41,
+          "sex": "m",
           "household": "mill",
           "occupation": "farmer",
           "sheet": {
@@ -124,6 +125,7 @@
         {
           "name": "Ilsa Hale",
           "age": 38,
+          "sex": "f",
           "household": "mill",
           "occupation": "cook",
           "sheet": {
@@ -204,6 +206,7 @@
         {
           "name": "Pim Hale",
           "age": 7,
+          "sex": "m",
           "household": "mill",
           "occupation": "child",
           "parents": [
@@ -261,6 +264,7 @@
         {
           "name": "Teodor Vane",
           "age": 70,
+          "sex": "m",
           "household": "forge",
           "occupation": "mason",
           "knows": [
@@ -345,6 +349,7 @@
         {
           "name": "Brisk Marrow",
           "age": 29,
+          "sex": "m",
           "occupation": "guard",
           "sheet": {
             "narrative": "I watch the road and the ford. Nothing much happens, and I would like something to.",
@@ -397,6 +402,7 @@
         {
           "name": "Mara Vane",
           "age": 25,
+          "sex": "f",
           "household": "forge",
           "occupation": "carpenter",
           "inventory": {
@@ -466,6 +472,7 @@
         {
           "name": "Edda Marrow",
           "age": 27,
+          "sex": "f",
           "household": "marrow",
           "occupation": "fisher",
           "inventory": {
@@ -520,6 +527,7 @@
         {
           "name": "Tobin Marrow",
           "age": 1,
+          "sex": "m",
           "household": "marrow",
           "occupation": "child",
           "parents": [
@@ -549,6 +557,7 @@
         {
           "name": "Gerd Tarn",
           "age": 46,
+          "sex": "m",
           "household": "tarn",
           "occupation": "weaver",
           "knows": [
@@ -622,6 +631,7 @@
         {
           "name": "Ansel Tarn",
           "age": 21,
+          "sex": "m",
           "household": "tarn",
           "occupation": "weaver",
           "knows": [
@@ -685,6 +695,7 @@
         {
           "name": "Wren Tarn",
           "age": 13,
+          "sex": "f",
           "household": "tarn",
           "occupation": "child",
           "parents": [
@@ -736,6 +747,7 @@
         {
           "name": "Dagny Tarn",
           "age": 4,
+          "sex": "f",
           "household": "tarn",
           "occupation": "child",
           "parents": [
@@ -776,6 +788,7 @@
         {
           "name": "Sabine Orme",
           "age": 33,
+          "sex": "f",
           "household": "orme",
           "occupation": "healer",
           "inventory": {
@@ -837,6 +850,7 @@
         {
           "name": "Tam Orme",
           "age": 5,
+          "sex": "m",
           "household": "orme",
           "occupation": "child",
           "parents": [
@@ -889,6 +903,7 @@
         {
           "name": "Wenna Reed",
           "age": 37,
+          "sex": "f",
           "household": "reed",
           "occupation": "fisher",
           "sheet": {
@@ -974,6 +989,7 @@
         {
           "name": "Cal Reed",
           "age": 52,
+          "sex": "m",
           "household": "reed",
           "occupation": "hunter",
           "inventory": {
@@ -1029,6 +1045,7 @@
         {
           "name": "Sefa Reed",
           "age": 19,
+          "sex": "f",
           "household": "reed",
           "occupation": "fisher",
           "inventory": {
@@ -1100,6 +1117,7 @@
         {
           "name": "Lio Reed",
           "age": 10,
+          "sex": "m",
           "household": "reed",
           "occupation": "child",
           "parents": [
@@ -1149,6 +1167,7 @@
         {
           "name": "Bram Ashby",
           "age": 43,
+          "sex": "m",
           "household": "ashby",
           "occupation": "fisher",
           "inventory": {
@@ -1221,6 +1240,7 @@
         {
           "name": "Hild Ashby",
           "age": 40,
+          "sex": "f",
           "household": "ashby",
           "occupation": "fisher",
           "inventory": {
@@ -1292,6 +1312,7 @@
         {
           "name": "Kesta Ashby",
           "age": 17,
+          "sex": "f",
           "household": "ashby",
           "occupation": "fisher",
           "parents": [
@@ -1361,6 +1382,7 @@
         {
           "name": "Ivo Ashby",
           "age": 12,
+          "sex": "m",
           "household": "ashby",
           "occupation": "child",
           "parents": [
@@ -1417,6 +1439,7 @@
         {
           "name": "Nell Ashby",
           "age": 2,
+          "sex": "f",
           "household": "ashby",
           "occupation": "child",
           "parents": [
@@ -1460,6 +1483,7 @@
         {
           "name": "Fenn Mallory",
           "age": 23,
+          "sex": "m",
           "household": "mallory",
           "occupation": "builder",
           "inventory": {

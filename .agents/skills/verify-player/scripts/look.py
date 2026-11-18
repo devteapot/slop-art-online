@@ -7,9 +7,10 @@ across reconnects, and set by no player reducer.
 
 The run's player joins (its own identity). Then:
 - its `look` row (admin SQL; the table is private) wears the pool entry
-  `pool[splitmix64(world.seed ^ id * 0xD1B54A32D192ED03) % len(pool)]` of the run's seed, computed
-  here independently of the authority (living_rules::look::pool_pick), and its line is that
-  entry's line for the player's band;
+  `pool[splitmix64(world.seed ^ id * 0xD1B54A32D192ED03) % len(pool)]` of the run's seed, among
+  the sorted pool entries of the player's body sex (sex-1: its `sex` row; an entry's sex is its
+  lines' forms), computed here independently of the authority (living_rules::look::pool_pick),
+  and its line is that entry's line for the player's band;
 - its own `seen_characters` row (`own`), read as the player, carries that line's key, and a
   second read (a new connection with the same identity) gets the same key;
 - after every player reducer (`human_move`, `human_act`, `human_say`, `human_speak`,
@@ -82,10 +83,14 @@ def main():
     world = sql(rid, "SELECT seed, look_book FROM world")[0]
     row = sql(rid, f"SELECT id, person, line, band, next_ms FROM look WHERE id = {me}")
     row = row[0] if row else {}
-    pick = looks["pool"][pool_pick(int(world["seed"]), me, len(looks["pool"]))]
+    # Among the entries of the player's sex (sex-1), sorted; the whole pool with no sex row.
+    sex = {1: "f", 2: "m"}.get(next((r["sex"] for r in sql(rid, f"SELECT * FROM sex WHERE id = {me}")), None))
+    shows = lambda p: ({{"woman": "f", "girl": "f", "man": "m", "boy": "m"}.get((looks["words"].get(k, {}).get("form") or "").strip().split(" ")[-1]) for k in looks["people"].get(p, {}).values()} - {None})
+    pool = sorted({p for p in looks["pool"] if shows(p) == {sex}}) if sex else looks["pool"]
+    pick = pool[pool_pick(int(world["seed"]), me, len(pool))]
     band = BANDS[row.get("band", 0)] if row else "?"
     checks["the world wears the seed's look generation"] = world["look_book"] == looks["generation"]
-    checks["the player's look is the pool entry pool_pick(world seed, id, pool length) names"] = row.get("person") == pick
+    checks["the player's look is the pool entry pool_pick(world seed, id, n) names among the n of its sex"] = row.get("person") == pick
     # A seed names a band by its name or its code ("adult" or "3").
     entry = looks["people"][pick]
     checks["its line is that entry's line for its band"] = bool(row) and (entry.get(band) or entry.get(str(row.get("band")))) == row.get("line")

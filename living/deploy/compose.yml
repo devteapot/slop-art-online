@@ -21,7 +21,7 @@ services:
       # 2.10.1 data (the paused stage3/stage4 and aske-coast-6*/7* worlds) untouched.
       - living-stdb-2:/home/spacetime
       # Built module for `spacetime publish` inside the container.
-      - ../target/wasm32-unknown-unknown/release:/wasm:ro
+      - ../target/wasm32-unknown-unknown/release:/wasm:ro,z
     healthcheck:
       test: [CMD, curl, --fail, --silent, --max-time, "2", "http://127.0.0.1:3000/v1/ping"]
       interval: 3s

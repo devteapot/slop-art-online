@@ -138,7 +138,7 @@ Calls without errors on the trial stack; one thinking subject per world, so the 
 
 ### The choice
 
-DeepSeek V4.1 Flash, thinking off (the `deepseek-flash` profile), through a purpose `fast` on the `Urgent` lane, configured in `rethink.json` `fast.route`.
+DeepSeek V4.1 Flash, thinking off (the `deepseek-flash` profile), through a purpose `fast` on its own lane (`Lane::Fast`), configured in `rethink.json` `fast.route`.
 
 - It is the only model measured fast enough. Its compile fidelity without thinking was judged weak (5 of 24, MODEL_COST), so fidelity is a measure of the arm, not an assumption (§6).
 - The fast lane's small prompt is in think's size class, so its latency should be think's: about **2.0 s p50, 3.9 s p90** in a good hour.
@@ -206,7 +206,7 @@ An estimate only. No paid battle runs until the 100-fighter collapse is understo
 
 - **The rate.** §5.2's battle had 9.2 blows a second among 20, so each fighter is struck about every 2 s. The 6 s gap binds: 20 fighters × 1 call per 6 s is 3.3 calls a second.
 - **The global cap binds before that** (below): **2 calls a second, $0.0026 a second, $0.16 a minute**. A 3-minute battle costs about **$0.47**.
-- **The total spend** rises by the cap's share: at 2 calls a second the queue's Urgent share is spent on fast calls, and the cap keeps the queue from flooding.
+- **The total spend** rises by the cap's share, and the cap keeps the queue from flooding. Fast calls take no slot from the shared pool: they have their own (below).
 
 **Measured (2026-11-12, fake model, free): the battle with the fast lane on and off.**
 - **Setup.** `battle_diag.py --battle 20 --walkers 0 --minutes 10`, without and with `--fast-lane`, on main `619e0f9a` (battle-scale, without battle-fold), the two arms side by side on the trial service.
@@ -235,6 +235,28 @@ An estimate only. No paid battle runs until the 100-fighter collapse is understo
   The on arm was not slower; the differences run the other way and are within what the host's load moves. The lane's work (a trigger per blow, a turn per call, a row per fighter, a reply reducer per call) does not show at this size.
 - **What this does not answer.** 100 or 200 fighters (the collapse's scale, and battle-fold not yet in), and a real model's patches installed under load: here every reply kept the plan. So it does not settle default-on by itself.
 
+### The fast lane's own slots (fast-lane-slots, 2026-11-13)
+
+The battle run's pilot found the lane starved by its own service.
+- **The cause.** Fast calls were on the shared pool's Urgent lane, first come first served behind a battle's urgent slow deliberations. At 200 fighters they waited for a slot 1.8 s p50 and 4.0 s p90, and 15% timed out at 6 s.
+- **Now a lane of their own.** Fast calls are on `Lane::Fast`, with their own slots, as many as the world's `fast_lane_inflight` (read whenever the mind refreshes the rules). They never wait on the shared pool and never take a slot from it. The authority issues no more requests than that at once, so the lane's own queue is empty.
+  - Per-profile rate limits, outage gates and `LIVING_LLM_PER_MIN` still apply.
+
+Queue wait by class, free fake-model battles at 200 fighters (`battle_diag.py --battle 200 --walkers 16 --minutes 5 --keep-plans --fast-lane`, fast replies held 1 s; host load 8–18, other agents at work; ticks a second 41–54 before, 47–56 after):
+
+| Class | Before (main `71d24077`, `minds-slots-before`) | After, as shipped (`minds-slots-after2`) | With the urgent share, not shipped (`minds-slots-after`) |
+|---|---|---|---|
+| Fast | 4.0 s p50, 4.8 s p90; 106 of 206 timed out | **0.0 s p50, 0.1 s p90; 0 of 478** | 0.0 s, 0.1 s; 0 of 418 |
+| Urgent slow (think, compile) | 5.2 s, 16.5 s (1,952) | 5.2 s, 17.7 s (2,005) | 6.2 s, 17.1 s (1,978) |
+| Ordinary slow | 0.5 s, 1.7 s (578) | 0.7 s, 2.3 s (598) | 0.6 s, 2.0 s (515) |
+| Background (consolidation) | 19.6 s, 21.9 s (380) | 20.9 s, 23.0 s (366) | 20.7 s, 24.1 s (366) |
+
+**Urgent slow work is not starved by other work.** It waits behind itself.
+- In the before battle, routine and background work held about 14 of the 48 non-interactive slots on average. Urgent deliberations, about 2,000 in 5 minutes at about 4.5 s each, held the rest: the pool's whole capacity.
+- Ordinary slow work waits little because there is little of it, and it gets its turns.
+- **A guaranteed share was tried and taken out.** The rule was: while urgent work waits, routine and background hold at most half of the shared slots. It never acted, because they never held half, and the urgent waits were unchanged in its run (the third column).
+- What would shorten urgent waits in a battle is fewer urgent deliberations, or more slots. Neither is in this change.
+
 ### The bound that keeps a battle from flooding the queue
 
 - **Per character:** one in flight, the 6 s gap, merged triggers, stale drops (above).
@@ -243,7 +265,7 @@ An estimate only. No paid battle runs until the 100-fighter collapse is understo
   - Turns go first to the character triggered most recently.
 - **Measured** (verify-llm `fast-cap`, fake model, 20 fighters in ten pairs attacking each other, all served, each fast reply held 2.5 s, 30 s):
   - at most 4 issued at once and 4 in flight at the provider;
-  - at most 3 started in any one second (the bucket's 2 plus one refill);
+  - at most 3 started in any one second in that run; the bucket allows up to 4 (its burst of 2 plus one second's refill of 2), which the test now checks (fix-fast-cap-test);
   - 28 calls, and 19 of the 20 fighters got a call (9 got two);
   - the wait from trigger to issue was 0.09 s at p50, 4.7 s at p90 and 5.7 s at most (under the 8 s stale limit).
   - **No tick numbers.** Any reading in a battle would be confounded by the battle collapse under diagnosis, and nothing is tuned for battles.
@@ -288,7 +310,7 @@ An estimate only. No paid battle runs until the 100-fighter collapse is understo
   - (f) with the law off, blows ask nothing;
   - (g) the slow install the same blow started keeps the patched branch.
 - **verify-minds `fast-takeover`:** (d) the player's return drops the request; the minds take over again and the late reply is refused.
-- **verify-llm `fast-route`:** the purpose `fast` goes to `fast.route`'s profile on the urgent lane, journaled with `latency_ms` and `queue_wait_ms`; a reply past `timeout_ms` is dropped and journaled as a timeout.
+- **verify-llm `fast-route`:** the purpose `fast` goes to `fast.route`'s profile on its own lane (`fast`), journaled with `latency_ms` and `queue_wait_ms`; a reply past `timeout_ms` is dropped and journaled as a timeout.
 - **verify-llm `fast-cap`:** the laws' caps, as measured above.
 - **verify-core `seen_again`:** the repeat trigger, with `fast_lane_inflight` 0 so rows wait and can be read:
   - the windup reason first comes at the 3rd windup (law 3) and at the 2nd (law 2);
