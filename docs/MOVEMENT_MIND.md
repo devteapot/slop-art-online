@@ -494,6 +494,20 @@ The targets above are unchanged. This note fixes how they are measured, before t
 
 **Free cost.** One scratch world at a time on :3361, through the build slot. About 25 runs of 5–15 minutes. No model calls.
 
+### 4.2 Free arena runs (2026-11-18)
+
+The Spark run merged main at `0578a37f` into the arena driver at `354fddea`. The scratch worlds used the island seed, SpacetimeDB 2.14.1 and the previous worker's idle `slop-move-stdb` container on loopback port 3361. The scripted body and player orders run without an inference service. The proposed minded fake-model N1 trial requires separate trial configurations.
+
+The driver used the existing reducers and captured initial rows and incremental updates with the 2.14.1 CLI. Its recording selected subjects' `known_ground` by actor and `body` by ID. The 200-walker stress case used the scratch world's full developer body stream. The bench attached its own developer subscription for its body update count. [SpacetimeDB subscriptions](https://spacetimedb.com/docs/clients/subscriptions/) · [table performance](https://spacetimedb.com/docs/tables/performance/)
+
+**Smoke checks.** A one-subject N3 run recorded three arrivals in three crossings. The first N4 attempt exposed a harness error because `mind_act` refuses ongoing `flee`; that attempt was discarded. With N4's continuing intents driven through behavior graphs, the rerun recorded one daytime flight. The subject moved about 210 m over 60 s and neither escaped nor reported being cornered. These samples establish that the recordings can follow the harness, and are excluded from the five-replicate arms.
+
+**N1 result.** The off arms arrived within 3× the true optimum on 120/120 walks, with true-map p50 ratios of 0.988–1.083. The on arms reached 110/120 and met the 95% arrival target in 4/8 arms. Eight on walks ended with “could not get there.” The two terraced-town arms missed the belief-map ratio target, including a body p90 of 3.346. The other six met it. True-map p90s were at most 2.988, and all eight medians, 0.970–1.185, fell below the planned 1.2–2.0 interval. The terraced body arm had 0.52 stalls per ten walk-minutes and missed the rate target. The longest stall was 2.5 s. Law-on response p95s were 877–1,975 ms, all above 300 ms. The highest subject write rate in each on arm ranged from 0.897 to 1.356 ground rows/s, above 0.2 in every arm. The offset coordinate in N1-d left the successful subjects 4.14–6.32 m from the true place. One law-on click subject failed the offset walk and stopped 136.39 m from it.
+
+**Separate planner proposal.** A recorded “could not get there” is an authority outcome shared by multiple ways for a walk to fail. The 24-attempt wall case is a hypothesis until the planner exposes which exit it took. Refine the belief search's coarse graph to distinguish connected components or reachable boundary crossings within a chunk. When a proposed edge fails on known ground, refine that chunk's connectivity so the coarse search can bypass the observed barrier. Treat unknown cells as traversable at the existing unknown cost. Bound the work per steering update and keep the search frontier when it hits that budget. Test the closed-wall case against the exact belief search, including an actual no-way case and an identical-belief pair with different hidden gate states. Run the same arms to check the fuel and latency impact before changing the shipped default.
+
+**Paid work remains a separate decision.** The proposal is ten N1 model runs, five per law state at 20 minutes each (about $0.57), and two one-world-hour hamlet runs with 11 thinkers (about $3.8). Estimated total $4.4 with a $6 stop. This run made zero provider calls.
+
 ## 5. Plan and cost
 
 Smallest first. Each step is behind a law where it changes behaviour. Each runs the verification surfaces it touches: verify-core for the rules and the tick; verify-player for click-to-move; verify-client for any view; verify-minds for targets and told places. Each changes the surface skills in the same change where it alters their shape.
