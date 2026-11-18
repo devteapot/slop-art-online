@@ -192,7 +192,10 @@ def main():
     ap.add_argument("--seconds", type=int, default=120)
     ap.add_argument("--sample", type=int, default=24)
     ap.add_argument("--out", default=None)
+    ap.add_argument("--duel", action="store_true", help="stage the first two players as a stationary duel after warm-up")
     a = ap.parse_args()
+    if a.duel and a.players < 2:
+        ap.error("--duel needs at least two players")
     stamp = time.strftime("%Y%m%d-%H%M%S")
     db = f"verify-lookcost-{a.label}-{stamp}"
     out = Path(a.out or ROOT / ".local/look1/cost" / f"{a.label}-{stamp}")
@@ -207,14 +210,27 @@ def main():
         world = sql(db, "SELECT * FROM world", token)[0]
         res["world"] = {k: world.get(k) for k in ("run", "seed", "day_ms", "look_book")}
         tokens = [new_identity() for _ in range(a.players)]
-        players = [{"token": t, "name": f"Cost{i}", "role": "walk"} for i, t in enumerate(tokens)]
+        players = [{"token": t, "name": f"Cost{i}", "role": "duel" if a.duel and i < 2 else "walk"} for i, t in enumerate(tokens)]
         load = Proc([a.load, "players"], out / "players.stderr")
         load.send(json.dumps({"uri": URL, "db": db, "events": str(out / "events.jsonl"), "battle": [0.0, 0.0], "behaviour": {"walk_period_ms": 1500, "rejoin_s": 3}, "players": players, "client": "gate"}))
         joined = load.expect("joined", 900)
         ids = [p["id"] for p in sorted(joined["players"], key=lambda p: p["p"])]
         per = -(-a.players // a.groups)
         centers, spots = clusters(sql(db, "SELECT * FROM lot", token), a.groups, a.radius, per)
-        for cid, (x, y) in zip(ids, spots):
+        if a.duel:
+            res["duelists"] = ids[:2]
+            call(db, "place_at", [ids[0], *spots[0]], token)
+            first = sql(db, f"SELECT x, y FROM body WHERE id = {ids[0]}", token)[0]
+            for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (-1, -1)):
+                call(db, "place_at", [ids[1], first["x"] + dx, first["y"] + dy], token)
+                second = sql(db, f"SELECT x, y FROM body WHERE id = {ids[1]}", token)[0]
+                if (second["x"] - first["x"]) ** 2 + (second["y"] - first["y"]) ** 2 < 1.6 ** 2:
+                    break
+            else:
+                raise RuntimeError("could not place both duelists within strike reach")
+            res["duel_positions"] = [first, second]
+        start = 2 if a.duel else 0
+        for cid, (x, y) in zip(ids[start:], spots[start:]):
             call(db, "place_at", [cid, x, y], token)
         load.send("placed")
         ready = load.expect("ready", 900)
@@ -225,6 +241,8 @@ def main():
         time.sleep(a.warmup)
         call(db, "set_profile", [True], token)
         t0, b0 = time.time(), bytes_sent(ident)
+        if a.duel:
+            load.send("battle")
         time.sleep(a.seconds)
         t1, b1 = time.time(), bytes_sent(ident)
         call(db, "set_profile", [False], token)

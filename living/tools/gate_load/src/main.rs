@@ -153,6 +153,7 @@ fn counts_json(c: &Counts) -> Value {
 #[derive(Clone, Copy, PartialEq, Debug)]
 enum Role {
     Battle,
+    Duel,
     Walk,
 }
 
@@ -353,6 +354,34 @@ fn hook(p: &Player, log: &Log) {
             lg.put(json!({"k": "alive", "p": idx, "id": c.id, "name": c.name, "ts": unix_us()}));
         }
     });
+    if p.role == Role::Duel {
+        let (lg, idx) = (log.clone(), p.idx);
+        let fighter = move |f: &Fighter| {
+            if f.act != 0 && f.release_ms > f.act_ms {
+                lg.put(json!({"k": "seen_windup", "p": idx, "actor": f.id, "target": f.target,
+                              "start_ms": f.act_ms, "release_ms": f.release_ms, "ts": unix_us()}));
+            }
+        };
+        let inserted = fighter.clone();
+        conn.db.seen_fighters().on_insert(move |_, f| inserted(f));
+        conn.db.seen_fighters().on_update(move |_, a, b| {
+            if a.act != b.act || a.act_ms != b.act_ms {
+                fighter(b);
+            }
+        });
+        let (lg, idx) = (log.clone(), p.idx);
+        let doing = move |d: &Doing| {
+            lg.put(json!({"k": "seen_doing", "p": idx, "actor": d.id, "target": d.target,
+                          "start_ms": d.since_ms, "ts": unix_us()}));
+        };
+        let inserted = doing.clone();
+        conn.db.seen_doing().on_insert(move |_, d| inserted(d));
+        conn.db.seen_doing().on_update(move |_, a, b| {
+            if a.code != b.code || a.since_ms != b.since_ms {
+                doing(b);
+            }
+        });
+    }
     // My own motion row changed by my own call.
     let st = p.st.clone();
     let mine = move |ctx: &EventContext, id: u32, st: &Arc<Mutex<St>>| {
@@ -635,6 +664,7 @@ fn players_mode() {
     for (idx, p) in req["players"].as_array().unwrap().iter().enumerate() {
         let role = match p["role"].as_str() {
             Some("battle") => Role::Battle,
+            Some("duel") => Role::Duel,
             Some("walk") => Role::Walk,
             r => panic!("role {r:?}"),
         };
@@ -646,6 +676,8 @@ fn players_mode() {
         subscribe(&pl, client.base());
         players.push(pl);
     }
+    let duel: Vec<_> = players.iter().filter(|p| p.role == Role::Duel).collect();
+    assert!(duel.is_empty() || duel.len() == 2, "a duel needs two players");
     wait_applied(&players, 1, "base", Duration::from_secs(120));
     for p in &players {
         if p.st.lock().unwrap().me.is_none() {
@@ -712,11 +744,13 @@ fn players_mode() {
         .iter()
         .map(|p| Instant::now() + Duration::from_millis(match p.role {
             Role::Battle => fight_ms * p.idx as u64 / n as u64,
+            Role::Duel => 1_500 * u64::from(p.idx == duel[1].idx),
             Role::Walk => walk_ms * p.idx as u64 / n as u64,
         }))
         .collect();
     let mut rngs: Vec<Rng> = (0..n).map(|i| Rng(0x9E37_79B9_7F4A_7C15 ^ (i as u64 + 1).wrapping_mul(0xBF58_476D_1CE4_E5B9))).collect();
     let mut late = 0u64;
+    let mut duel_turns = [0; 2];
     while !stop.load(Ordering::SeqCst) {
         let now = Instant::now();
         for (i, p) in players.iter().enumerate() {
@@ -730,6 +764,23 @@ fn players_mode() {
                 Role::Battle if fighting.load(Ordering::Relaxed) => {
                     fight(p, &log, &cards, center, &mut rngs[i], &cfg);
                     fight_ms
+                }
+                Role::Duel => {
+                    if fighting.load(Ordering::Relaxed) {
+                        let side = usize::from(p.idx == duel[1].idx);
+                        let target = duel[1 - side].st.lock().unwrap().me;
+                        if let Some(b) = target.and_then(|id| p.conn.db.seen_bodies().id().find(&id)) {
+                            let (x, y) = pos(&b, now_ms());
+                            if duel_turns[side] % 2 == 0 {
+                                send_skill(p, &log, "strike", b.id, x, y, 0);
+                            } else {
+                                let node = json!({"do": {"skill": "wave", "target": {"id": b.id}}}).to_string();
+                                p.conn.reducers.human_act(node).expect("send duel wave");
+                            }
+                            duel_turns[side] += 1;
+                        }
+                    }
+                    3_000
                 }
                 Role::Battle | Role::Walk => {
                     walk(p, &log, &cfg);

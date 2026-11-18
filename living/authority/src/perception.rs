@@ -1072,7 +1072,11 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
             }
         }
     }
-    crate::frame::scene(id, viewer, &seen);
+    if health.is_some() {
+        crate::frame::scene(id, viewer, &near);
+    } else {
+        crate::frame::invalidate_scene(id);
+    }
     // The projections follow: a row per creature in the scene (itself included), projected
     // when it comes into sight, and again only when an input of the law changed: whom the
     // viewer knows (its knowledge epoch, or this instance has not projected it yet), a reveal

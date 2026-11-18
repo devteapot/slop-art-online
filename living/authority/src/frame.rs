@@ -98,9 +98,9 @@ struct Viewer {
     who: Identity,
     /// The creatures it perceives (not itself), as the last sweep left them; `None` until a
     /// sweep has run in this module instance.
-    scene: Option<HashSet<u32>>,
-    /// Changes marked after this sequence number are news to it.
-    seq: u64,
+    scene: Option<HashMap<u32, SceneRow>>,
+    near_ms: u64,
+    engaged_ms: u64,
     /// Compare the whole scene at the next frame (a fresh instance, a new scene).
     full: bool,
     last_ms: u64,
@@ -120,19 +120,29 @@ struct Viewer {
     earshot: Option<CharacterEarshot>,
 }
 
+/// Delivery cursors are scheduling hints. Values sent to players come from the tables.
+#[derive(Default)]
+struct SceneRow {
+    distance: f32,
+    seq: u64,
+    last_ms: u64,
+}
+
 impl Viewer {
     fn new(who: Identity) -> Self {
-        Self { who, scene: None, seq: 0, full: true, last_ms: 0, lines_ms: 0, band_ms: 0, band_seq: 0, events: Vec::new(), feed: VecDeque::new(), senses_ms: 0, senses: None, earshot_ms: 0, earshot: None }
+        Self { who, scene: None, near_ms: 0, engaged_ms: 0, full: true, last_ms: 0, lines_ms: 0, band_ms: 0, band_seq: 0, events: Vec::new(), feed: VecDeque::new(), senses_ms: 0, senses: None, earshot_ms: 0, earshot: None }
     }
 }
 
 thread_local! {
     static SEQ: Cell<u64> = const { Cell::new(0) };
     /// The sequence number of each creature's last change of motion, fighter row, and health.
-    static MOVED: RefCell<HashMap<u32, u64>> = RefCell::new(HashMap::new());
+    static MOVED: RefCell<HashMap<u32, MotionChange>> = RefCell::new(HashMap::new());
     static FOUGHT: RefCell<HashMap<u32, u64>> = RefCell::new(HashMap::new());
     static HURT: RefCell<HashMap<u32, u64>> = RefCell::new(HashMap::new());
     static DID: RefCell<HashMap<u32, u64>> = RefCell::new(HashMap::new());
+    static TARGET_DIRTY: RefCell<HashSet<u32>> = RefCell::new(HashSet::new());
+    static TARGETS: RefCell<HashMap<u32, Targets>> = RefCell::new(HashMap::new());
     /// Players' living characters, by character id.
     static VIEWERS: RefCell<HashMap<u32, Viewer>> = RefCell::new(HashMap::new());
     /// What creatures are like now, read once per `deliver` and shared by every viewer's frame
@@ -195,23 +205,54 @@ fn doing_now(ctx: &ReducerContext, id: u32) -> Option<Doing> {
     cached(|s| &mut s.doing, id, || ctx.db.doing().id().find(id))
 }
 
-fn mark(map: &'static std::thread::LocalKey<RefCell<HashMap<u32, u64>>>, id: u32) {
-    let s = SEQ.with(|s| {
+fn next_seq() -> u64 {
+    SEQ.with(|s| {
         let v = s.get() + 1;
         s.set(v);
         v
-    });
-    map.with(|m| m.borrow_mut().insert(id, s));
+    })
 }
 
-/// A creature's body row was written (its motion may have changed).
-pub fn moved(id: u32) {
-    mark(&MOVED, id);
+fn mark(map: &'static std::thread::LocalKey<RefCell<HashMap<u32, u64>>>, id: u32) {
+    let seq = next_seq();
+    map.with(|m| m.borrow_mut().insert(id, seq));
+}
+
+struct MotionChange {
+    seq: u64,
+    direction_seq: u64,
+    heading: f32,
+    facing: f32,
+}
+
+/// A change to the end of either turn segment is distinguished from a continuation.
+pub fn moved(body: &Body) {
+    let seq = next_seq();
+    let heading = body.heading + body.turn * body.turn_s;
+    let facing = heading + body.face_off + body.face_turn * body.face_turn_s;
+    MOVED.with(|changes| {
+        let mut changes = changes.borrow_mut();
+        let direction_seq = changes.get(&body.id).map_or(seq, |old| {
+            if living_rules::steer::wrap(heading - old.heading).abs() > 0.03
+                || living_rules::steer::wrap(facing - old.facing).abs() > 0.03 {
+                seq
+            } else {
+                old.direction_seq
+            }
+        });
+        changes.insert(body.id, MotionChange { seq, direction_seq, heading, facing });
+    });
+}
+
+fn motion_changed(body: u32, since: u64) -> (bool, bool) {
+    MOVED.with(|changes| changes.borrow().get(&body)
+        .map_or((false, false), |change| (change.seq > since, change.direction_seq > since)))
 }
 
 /// A creature's `fighter` row was written or deleted.
 pub fn fought(id: u32) {
     mark(&FOUGHT, id);
+    TARGET_DIRTY.with(|dirty| dirty.borrow_mut().insert(id));
 }
 
 /// A creature's health moved (its band, or exact health where shown).
@@ -222,6 +263,7 @@ pub fn hurt(id: u32) {
 /// A creature's `doing` row was written or deleted.
 pub fn did(id: u32) {
     mark(&DID, id);
+    TARGET_DIRTY.with(|dirty| dirty.borrow_mut().insert(id));
 }
 
 fn changed(map: &'static std::thread::LocalKey<RefCell<HashMap<u32, u64>>>, id: u32, since: u64) -> bool {
@@ -230,14 +272,19 @@ fn changed(map: &'static std::thread::LocalKey<RefCell<HashMap<u32, u64>>>, id: 
 
 /// The sweep's answer for a viewer: the creatures it perceives now (itself excluded). Rows of
 /// newcomers were written by the sweep as they are now.
-pub fn scene(id: u32, who: Identity, seen: &HashSet<u32>) {
+pub fn scene(id: u32, who: Identity, distances: &HashMap<u32, f32>) {
     VIEWERS.with(|v| {
         let mut v = v.borrow_mut();
         let e = v.entry(id).or_insert_with(|| Viewer::new(who));
         if e.who != who {
             *e = Viewer::new(who);
         }
-        e.scene = Some(seen.clone());
+        let scene = e.scene.get_or_insert_with(HashMap::new);
+        scene.retain(|body, _| distances.contains_key(body));
+        let upto = SEQ.with(Cell::get);
+        for (&body, &distance) in distances {
+            scene.entry(body).or_insert(SceneRow { seq: upto, ..SceneRow::default() }).distance = distance;
+        }
     });
 }
 
@@ -264,7 +311,25 @@ pub fn fed(id: u32, who: Identity, expires_ms: u64, row: u64) {
 /// Every viewer's next frame compares its whole scene (after a tick this instance did not see
 /// commit: what earlier frames wrote may have been rolled back).
 pub fn all_full() {
-    VIEWERS.with(|v| v.borrow_mut().values_mut().for_each(|e| e.full = true));
+    VIEWERS.with(|v| v.borrow_mut().values_mut().for_each(|e| {
+        e.full = true;
+        e.scene = None;
+        e.senses = None;
+        e.earshot = None;
+    }));
+    TARGETS.with(|targets| {
+        TARGET_DIRTY.with(|dirty| dirty.borrow_mut().extend(targets.borrow().keys().copied()));
+    });
+}
+
+/// An unscheduled sweep may still roll back. Reload its membership from the database.
+pub fn invalidate_scene(id: u32) {
+    VIEWERS.with(|viewers| {
+        if let Some(viewer) = viewers.borrow_mut().get_mut(&id) {
+            viewer.scene = None;
+            viewer.full = true;
+        }
+    });
 }
 
 pub fn forget(ctx: &ReducerContext, id: u32) {
@@ -277,96 +342,243 @@ pub fn interval(n: usize) -> u64 {
     (n as u64 * 1000 / SCENE_ROWS_PER_S).clamp(FRAME_MIN_MS, FRAME_MAX_MS)
 }
 
-/// The players whose frame is due get it (every tick, after the perception sweep), stalest
-/// first, within the step's budget of scene rows less those of the players `swept` in it.
+const NEAR_M: f32 = 8.0;
+const NEAR_MS: u64 = 50;
+const FAR_INTERVAL_MS: u64 = 100;
+const FAR_MAX_WAIT_MS: u64 = 200;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum FrameScope {
+    Engaged,
+    Relevant,
+    Whole,
+}
+
+impl FrameScope {
+    fn includes(self, distance: f32, engaged: bool) -> bool {
+        match self {
+            Self::Engaged => engaged,
+            Self::Relevant => engaged || distance <= NEAR_M,
+            Self::Whole => true,
+        }
+    }
+}
+
+#[derive(Default)]
+struct Targets {
+    fighter: Option<(u32, u64)>,
+    doing: Option<(u32, u64)>,
+}
+
+fn engagements(ctx: &ReducerContext, now: u64, human: &HashSet<u32>) -> HashMap<u32, HashSet<u32>> {
+    TARGETS.with(|targets| {
+        let mut targets = targets.borrow_mut();
+        let dirty = TARGET_DIRTY.with(|dirty| std::mem::take(&mut *dirty.borrow_mut()));
+        for actor in dirty {
+            let fighter = fighter_now(ctx, actor).filter(|f| f.act != 0 && f.target != 0 && f.until_ms > now);
+            let doing = doing_now(ctx, actor).filter(|d| d.target != 0 && d.until_ms > now);
+            targets.insert(actor, Targets {
+                fighter: fighter.map(|f| (f.target, f.until_ms)),
+                doing: doing.map(|d| (d.target, d.until_ms)),
+            });
+        }
+        let mut active: HashMap<u32, HashSet<u32>> = HashMap::new();
+        targets.retain(|&actor, target| {
+            let mut keep = false;
+            for (other, until) in [target.fighter, target.doing].into_iter().flatten() {
+                if now >= until {
+                    continue;
+                }
+                keep = true;
+                if human.contains(&actor) {
+                    active.entry(actor).or_default().insert(other);
+                }
+                if human.contains(&other) {
+                    active.entry(other).or_default().insert(actor);
+                }
+            }
+            keep
+        });
+        active
+    })
+}
+
+/// The old interval still governs whole scenes. Give nearby rows their own deadline, with
+/// a whole-scene deadline to keep the rest of the scene moving under sustained demand.
 pub fn deliver(ctx: &ReducerContext, now: u64, swept: &[u32]) {
     let budget = budget(ctx.timestamp.to_micros_since_unix_epoch());
     NOW.with(|n| *n.borrow_mut() = Some(Sources::default()));
     let humans = crate::combat::humans(ctx);
-    let due: Vec<(u32, Viewer)> = VIEWERS.with(|v| {
-        let mut v = v.borrow_mut();
-        let ids: HashSet<u32> = humans.iter().map(|(h, _)| *h).collect();
-        v.retain(|id, _| ids.contains(id));
+    let (due, engaged, mut rows) = VIEWERS.with(|viewers| {
+        let mut viewers = viewers.borrow_mut();
+        let ids: HashSet<u32> = humans.iter().map(|(id, _)| *id).collect();
+        viewers.retain(|id, _| ids.contains(id));
+        let engaged = engagements(ctx, now, &ids);
+        let no_targets = HashSet::new();
         let mut due = Vec::new();
-        for (id, who) in &humans {
-            let e = v.entry(*id).or_insert_with(|| Viewer::new(*who));
-            if e.who != *who {
-                *e = Viewer::new(*who);
+        for (id, who) in humans {
+            let viewer = viewers.entry(id).or_insert_with(|| Viewer::new(who));
+            if viewer.who != who {
+                *viewer = Viewer::new(who);
             }
-            let n = e.scene.as_ref().map_or(0, |s| s.len());
-            let every = interval(n);
-            if e.last_ms == 0 {
-                // A first frame comes within one interval, staggered by character so a crowd's
-                // frames spread over the ticks.
-                e.last_ms = now.saturating_sub((*id as u64).wrapping_mul(37) % every.max(1));
+            let scene = viewer.scene.get_or_insert_with(|| {
+                ctx.db.perceived().viewer().filter(who)
+                    .map(|row| (row.body, SceneRow { distance: f32::INFINITY, ..SceneRow::default() }))
+                    .collect()
+            });
+            let n = scene.len();
+            let targets = engaged.get(&id).unwrap_or(&no_targets);
+            let has_engaged = targets.iter().any(|id| scene.contains_key(id));
+            let has_near = has_engaged || scene.values().any(|row| row.distance <= NEAR_M);
+            let every = if has_near && n > 1 { FAR_INTERVAL_MS } else { interval(n) };
+            if viewer.last_ms == 0 {
+                viewer.last_ms = now.saturating_sub((u64::from(id) * 37) % every);
+                viewer.near_ms = viewer.last_ms;
+                viewer.engaged_ms = viewer.last_ms;
             }
-            if now.saturating_sub(e.last_ms) >= every {
-                due.push((e.last_ms, *id, n));
+            let age = now.saturating_sub(viewer.last_ms);
+            let near_age = now.saturating_sub(viewer.near_ms);
+            if age >= FAR_MAX_WAIT_MS || (viewer.full && age >= every) {
+                due.push((0, viewer.last_ms, id, FrameScope::Whole));
+            } else if now.saturating_sub(viewer.engaged_ms) >= FRAME_MIN_MS && has_engaged {
+                due.push((1, viewer.engaged_ms, id, FrameScope::Engaged));
+            } else if near_age >= NEAR_MS && has_near {
+                let urgent = scene.iter().any(|(&body, row)| row.distance <= NEAR_M
+                    && (motion_changed(body, row.seq).1 || changed(&DID, body, row.seq)));
+                let scope = if age >= every { FrameScope::Whole } else { FrameScope::Relevant };
+                due.push((if urgent { 2 } else { 3 }, viewer.near_ms, id, scope));
+            } else if age >= every {
+                due.push((4, viewer.last_ms, id, FrameScope::Whole));
             }
         }
-        due.sort_unstable();
-        let due_n = due.len();
-        // Each player swept in this step counts as a frame of its scene (and itself).
-        let mut rows: usize = swept.iter().map(|id| v.get(id).and_then(|e| e.scene.as_ref()).map_or(0, |s| s.len()) + 1).sum();
-        common::diag(|| "frames:swept_rows", rows as u64);
-        let mut served = Vec::new();
-        for (_, id, n) in due {
-            if !served.is_empty() && rows + n > budget {
-                break;
-            }
-            rows += n;
-            served.push(id);
-        }
-        common::diag(|| "frames:ticks", 1);
-        common::diag(|| "frames:due", due_n as u64);
-        common::diag(|| "frames:served", served.len() as u64);
-        common::diag(|| "frames:rows", rows as u64);
-        served.into_iter().filter_map(|id| v.remove(&id).map(|e| (id, e))).collect()
+        due.sort_unstable_by_key(|&(priority, last, id, _)| (priority, last, id));
+        let rows: usize = swept.iter().map(|id| viewers.get(id).and_then(|v| v.scene.as_ref()).map_or(0, HashMap::len) + 1).sum();
+        (due, engaged, rows)
     });
-    if common::profiling() {
-        let frames: Vec<_> = due.iter()
-            .map(|(id, viewer)| (*id, viewer.scene.as_ref().map_or(0, |scene| scene.len())))
-            .collect();
+    let no_targets = HashSet::new();
+    let due_n = due.len();
+    common::diag(|| "frames:swept_rows", rows as u64);
+    let profiling = common::profiling();
+    let mut frames = Vec::new();
+    let mut cadence = crate::frame_trace::Cadence::default();
+    let mut served = 0;
+    for (_, _, id, scope) in due {
+        let targets = engaged.get(&id).unwrap_or(&no_targets);
+        let viewer = VIEWERS.with(|viewers| {
+            let mut viewers = viewers.borrow_mut();
+            let cost = frame_cost(ctx, &viewers[&id], scope, targets);
+            if served != 0 && rows + cost > budget {
+                return None;
+            }
+            rows += cost;
+            viewers.remove(&id)
+        });
+        let Some(mut viewer) = viewer else { continue };
+        served += 1;
+        let count = frame(ctx, id, &mut viewer, now, scope, targets, profiling.then_some(&mut cadence));
+        VIEWERS.with(|viewers| viewers.borrow_mut().insert(id, viewer));
+        if profiling {
+            frames.push((id, count));
+        }
+    }
+    common::diag(|| "frames:ticks", 1);
+    common::diag(|| "frames:due", due_n as u64);
+    common::diag(|| "frames:served", served);
+    common::diag(|| "frames:rows", rows as u64);
+    if profiling {
+        cadence.log(ctx);
         log::info!("frame cadence: {} {} {:?}", ctx.timestamp.to_micros_since_unix_epoch(), budget, frames);
     }
-    for (id, mut e) in due {
-        frame(ctx, id, &mut e, now);
-        VIEWERS.with(|v| v.borrow_mut().insert(id, e));
-    }
-    // Rows written later (other transactions, the sweep) must be read again.
     NOW.with(|n| *n.borrow_mut() = None);
 }
 
-fn frame(ctx: &ReducerContext, id: u32, v: &mut Viewer, now: u64) {
-    let upto = SEQ.with(|s| s.get());
-    if let Some(scene) = v.scene.as_ref() {
-        let since = if v.full { 0 } else { v.seq };
+/// Motion and fighters each retain an entire scene in their view. A doing-only frame
+/// touches the much smaller activity stream. Empty passes still pay for processing.
+fn frame_cost(ctx: &ReducerContext, viewer: &Viewer, scope: FrameScope, targets: &HashSet<u32>) -> usize {
+    let Some(scene) = viewer.scene.as_ref() else { return 1 };
+    if viewer.full {
+        return scene.len() + 1;
+    }
+    let mut doing = 0;
+    for (&body, row) in scene {
+        if !scope.includes(row.distance, targets.contains(&body)) {
+            continue;
+        }
+        if motion_changed(body, row.seq).0 || changed(&FOUGHT, body, row.seq) || changed(&HURT, body, row.seq) {
+            return scene.len() + 1;
+        }
+        doing += usize::from(changed(&DID, body, row.seq));
+    }
+    if doing == 0 {
+        1
+    } else {
+        let shown = ctx.db.doing_seen().viewer().filter(viewer.who).count();
+        shown.saturating_add(doing).min(scene.len()) + 1
+    }
+}
+
+fn frame(ctx: &ReducerContext, id: u32, v: &mut Viewer, now: u64, scope: FrameScope, targets: &HashSet<u32>, mut cadence: Option<&mut crate::frame_trace::Cadence>) -> usize {
+    let upto = SEQ.with(Cell::get);
+    let mut count = 0;
+    if let Some(scene) = v.scene.as_mut() {
         let full = v.full;
-        for &body in scene {
-            if full || changed(&MOVED, body, since) {
+        let mut work = Vec::with_capacity(scene.len());
+        for (&body, row) in scene.iter_mut() {
+            let (moving, turning) = motion_changed(body, row.seq);
+            let moving = full || moving;
+            let hurt = full || changed(&HURT, body, row.seq);
+            let fighting = full || changed(&FOUGHT, body, row.seq);
+            let doing = full || changed(&DID, body, row.seq);
+            let engaged = targets.contains(&body);
+            let relevant = engaged || row.distance <= NEAR_M;
+            if !scope.includes(row.distance, engaged) {
+                continue;
+            }
+            if let Some(cadence) = cadence.as_deref_mut() {
+                cadence.served(now, &mut row.last_ms, relevant);
+            }
+            count += 1;
+            if moving || hurt || fighting || doing {
+                work.push(((!engaged, !relevant, !turning && !doing && !fighting),
+                           row.distance, body, moving, hurt, fighting, doing));
+            }
+        }
+        work.sort_unstable_by(|a, b| a.0.cmp(&b.0)
+            .then_with(|| a.1.total_cmp(&b.1))
+            .then_with(|| a.2.cmp(&b.2)));
+        for (_, _, body, moving, hurt, fighting, doing) in work {
+            if moving {
                 show_motion(ctx, id, body);
             }
-            let hurt = full || changed(&HURT, body, since);
-            if hurt || changed(&FOUGHT, body, since) {
+            if hurt || fighting {
                 show_fighter(ctx, id, v.who, body, hurt, now);
             }
-            if full || changed(&DID, body, since) {
+            if doing {
                 show_doing(ctx, id, v.who, body);
             }
+            scene.get_mut(&body).unwrap().seq = upto;
         }
-        // Projections follow health less often: their band is what `seen_characters` shows.
-        if full || now.saturating_sub(v.band_ms) >= BAND_MS {
-            let since = if full { 0 } else { v.band_seq };
-            for &body in scene {
-                if full || changed(&HURT, body, since) {
-                    show_band(ctx, v.who, body, now);
+        if scope == FrameScope::Whole {
+            // Projections follow health at their own slower cadence.
+            if full || now.saturating_sub(v.band_ms) >= BAND_MS {
+                let since = if full { 0 } else { v.band_seq };
+                for &body in scene.keys() {
+                    if full || changed(&HURT, body, since) {
+                        show_band(ctx, v.who, body, now);
+                    }
                 }
+                v.band_ms = now;
+                v.band_seq = upto;
             }
-            v.band_ms = now;
-            v.band_seq = upto;
+            v.full = false;
         }
-        v.full = false;
-        v.seq = upto;
+    }
+    v.engaged_ms = now;
+    if scope != FrameScope::Engaged {
+        v.near_ms = now;
+    }
+    if scope != FrameScope::Whole {
+        return count;
     }
     // The onlookers' feed: what happened in sight since the last frame, then what expired.
     for (ev, amount) in std::mem::take(&mut v.events) {
@@ -390,6 +602,7 @@ fn frame(ctx: &ReducerContext, id: u32, v: &mut Viewer, now: u64) {
         show_earshot(ctx, id, v, now);
     }
     v.last_ms = now;
+    count
 }
 
 /// Bring a player's `character_senses` row up to date with the `senses` law (kept per moment
@@ -431,7 +644,7 @@ fn show_earshot(ctx: &ReducerContext, id: u32, v: &mut Viewer, now: u64) {
         }
         return;
     }
-    let ways = crate::earshot::reach(ctx, id, common::pos(&b, now), |x| scene.contains(&x), now);
+    let ways = crate::earshot::reach(ctx, id, common::pos(&b, now), |x| scene.contains_key(&x), now);
     let text = crate::earshot::short_words(&ways, |x| common::label_for(ctx, &me, x));
     let row = CharacterEarshot { id, ways, text, at_ms: now };
     match v.earshot.as_ref() {

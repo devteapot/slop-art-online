@@ -254,3 +254,77 @@ tail to one stage.
 Source paths in the game are `living/authority/src/fast.rs`,
 `living/mind/src/main.rs`, `living/mind/src/mind.rs` and
 `living/mind/src/mind/fast.rs`.
+
+## Frame freshness on Cullet
+
+`frame-fresh` starts from `cd2afe42e`. With the shared sweep and frame
+budget, a viewer can receive updates to engaged and nearby characters
+between deliveries of its whole scene. The sweep supplies distances to
+characters already in sight. An unexpired combat move or visible activity
+targeting a character promotes the visible pair in both directions.
+Engaged frames become due at 33 ms and nearby frames at 50 ms. Direction
+changes, new visible activities and fighting moves take precedence over
+steady motion within the relevance group. Whole frames carry the remaining
+characters, ordered by distance, and take priority when they reach 200 ms.
+These are scheduling thresholds subject to the shared budget and the
+availability of the sight sweep. Distance uses that sweep's last sample.
+The player's own rows remain on their direct views.
+
+The partial pass limits copy updates to the selected part of the scene.
+Each body has a delivery cursor so moving between relevance groups preserves
+pending updates. Health projections, combat-event expiry, experience lines,
+senses and earshot run on the whole pass. Copy rows are read and written
+by the existing keys. A tick gap discards speculative scene membership and
+causes a full comparison. If there has been no new sweep, the scene comes
+from the committed `perceived.viewer` index. Distance, targeting and
+direction marks guide timing. The rows presented to each player still
+come from the authority's existing sight rules and per-viewer copies.
+
+### View work
+
+The [views documentation](https://spacetimedb.com/docs/functions/views/)
+recommends small read sets and describes incremental query-builder views.
+In the pinned [2.14.1 execution path](https://github.com/clockworklabs/SpacetimeDB/blob/v2.14.1/crates/core/src/host/wasm_common/module_host_actor.rs),
+`run_query_for_view` records table-wide dependencies, accepts only
+plain table rows and passes the result to the same materialization path
+as a procedural view. The procedural views continue to read one sender
+index key per stream. This preserves the narrow read set and sender
+authorization described in [table performance](https://spacetimedb.com/docs/tables/performance/),
+[indexes](https://spacetimedb.com/docs/tables/indexes/) and
+[subscriptions](https://spacetimedb.com/docs/clients/subscriptions/).
+There are no new database rows, indexes or client subscriptions.
+
+Changing any motion copy can still rebuild that sender's entire
+`seen_bodies` result. The budget therefore charges the scene size for
+a pass with pending motion, fighter or health changes. A doing-only pass
+checks the doing range for that sender and charges its smaller result plus
+possible additions. A pass with no marked scene change pays a minimum
+charge for scheduler and maintenance work. A partial pass with only a
+fighter or doing update leaves the motion view's read set untouched.
+Distant changes are coalesced into whole passes so they cannot trigger an
+extra motion-view rebuild during a nearby pass. Measure the effect using
+`view_calls` and `view_total_time_usec` for each scene view.
+
+The new scheduler state grows with currently perceived pairs and active
+targeting moves. A target change triggers two indexed primary-key reads at
+most, shared across viewers in the step. Scene cursor maintenance reuses
+the indexed sweep results. A roll-forward can inspect all pairs in one due
+viewer to select its work. The authority still bounds copy writes by the
+shared budget, and each changed copy is exposed only to its own viewer.
+
+### Measurement
+
+`tick_cost.py` reports p50, p90 and p95 intervals pooled across
+viewer/body pairs, both for all in sight and for engaged or within 8 m
+at the last sweep. A pass counts a pair even when the current row needed
+no write. This measures when the authority checks for new data. The
+`--duel` fixture tracks separate first-delivery latency for structured
+windups and visible activity over the duelists' Rust SDK connections.
+Neither timing measures an 80 ms RTT path or renderer presentation.
+
+The 216-player measurement requires the dev-box coordinator's quiet
+window. The scoped client comparisons and rollback scenes are recorded
+under the verify skills' validation directories. A two-player plan-test
+smoke measured 42.8/62.9/62.9 ms for first delivery of a windup
+(7 samples) and 56.3/64.7/64.7 ms for first delivery of a visible action
+(6 samples). The crowd target and change in view cost remain unmeasured.
