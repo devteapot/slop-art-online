@@ -256,7 +256,7 @@ def mirror_name(n):
     return n
 
 
-def make_armature():
+def make_armature(include_fringe=True):
     finger_joints()
     # The eyes' bones (VRoid's names), each at the centre of the ball its iris lies on: turning
     # one slides that iris over the white.
@@ -273,8 +273,9 @@ def make_armature():
         # file stands it where that type's own fringe ends (hair_fit.py). Under the forehead's
         # bone, so a person's fuller or flatter forehead carries it. No clip and no identity
         # value moves it.
-        JOINTS[hair.FRINGE_BONE] = tuple(hw(hair.fringe_point(HF)))
-        PARENT[hair.FRINGE_BONE] = "J_Id_Forehead"
+        if include_fringe:
+            JOINTS[hair.FRINGE_BONE] = tuple(hw(hair.fringe_point(HF)))
+            PARENT[hair.FRINGE_BONE] = "J_Id_Forehead"
     for n in [n for n in JOINTS if n.startswith("J_Bip_L_")]:
         x, y, z = JOINTS[n]
         JOINTS[mirror_name(n)] = (-x, y, z)
@@ -443,6 +444,32 @@ SHOULDER = Vector((-0.170 + ARM_OUT, -0.008, 1.420))  # the armhole's centre
 HOLE_R = 0.058
 
 
+def hip_share(z, x):
+    """The share of its side's upper leg that the trousers give a vertex round the hips, at height
+    z and side x: nothing from 0.98 m up, a fifth at the seat's upper row and three fifths at
+    its lower, less toward the middle (the seat between the legs stays the hips'), four fifths
+    at the leg's top and all of it from 0.72 m down. `trousers` writes these at its own rows;
+    this is the same rule at any height, for what is worn over and under them.
+
+    Every layer round the hips takes it (`torso_w`: a jersey's tucked hem, a smock's, an apron's
+    and a coat's skirt down to the leg's top): until 2026-11-13 each had a rule of its own, and
+    as the hip bent past 70 degrees, sitting down and standing up, the layers slid past each
+    other, the trousers' seat out through a skirt's back and a jersey out through the trousers'
+    front, on nearly everyone (cloth_check.py)."""
+    up = CROTCH_UP if STANCE else 0.0
+    side = smooth(abs(x) / 0.09)
+    za, zb, zc = 0.94 + 0.3 * up, 0.875 + up, 0.80 + 0.8 * up
+    if z >= 0.98:
+        return 0.0
+    if z >= za:
+        return 0.18 * side * (0.98 - z) / (0.98 - za)
+    if z >= zb:
+        return lerp(0.62, 0.18, (z - zb) / (za - zb)) * side
+    if z >= zc:
+        return lerp(0.80, 0.62 * side, (z - zc) / (zb - zc))
+    return lerp(1.0, 0.80, max(z - 0.72, 0.0) / (zc - 0.72))
+
+
 # A smock's skirt on spring bones (the reference's skirt is: three under each upper leg, front,
 # side and back, in one spring group with spheres on the legs). Below SKIRT_TOP a skirt vertex's
 # share of a thigh passes to that thigh's spring bones, all of it SKIRT_EASE lower, by where
@@ -492,9 +519,10 @@ def skirt_shares(z, k, hem):
     return out, 1.0 - free
 
 
-def torso_w(z, x, skirt=False, front=False, col=None):
-    """Weights of a torso vertex at height z (and side x, for a coat's skirt; column `col`, for a
-    skirt on spring bones)."""
+def torso_w(z, x, skirt=False, front=False, col=None, hip=None):
+    """Weights of a torso vertex at height z (and side x, for a coat's skirt). `hip`: the height
+    at which the vertex takes the trousers' share of the upper leg (`hip_share`), for a garment
+    without a skirt that reaches below the waist (a jersey's hem, tucked into the trousers)."""
     k = [(0.99, "J_Bip_C_Hips"), (1.09, "J_Bip_C_Spine"), (1.20, "J_Bip_C_Chest"), (1.31, "J_Bip_C_UpperChest")]
     if z <= k[0][0]:
         w = [(k[0][1], 1.0)]
@@ -517,6 +545,16 @@ def torso_w(z, x, skirt=False, front=False, col=None):
         side = min(abs(x) / 0.04, 1.0)
         left = t * (0.5 + 0.5 * side if x <= 0 else 0.5 - 0.5 * side)
         right = t - left
+        # Round the hips, down to the leg's top, a skirt moves as the trousers under it do
+        # (hip_share): its own side's leg alone, and the hips' between the legs. Below that it
+        # keeps its own rule, which the walk and the gaits were tuned with.
+        up = CROTCH_UP if STANCE else 0.0
+        # A raised crotch needs a longer transition above the thigh: the front
+        # panel still spans both legs as they separate in a brisk stride.
+        band = smooth((z - (0.80 + 0.8 * up)) / (0.075 + 0.7 * up))
+        own = hip_share(z, x)
+        left, right = lerp(left, own if x <= 0 else 0.0, band), lerp(right, 0.0 if x <= 0 else own, band)
+        t = left + right
         w = [(n, v * (1 - t)) for n, v in w]
         if SKIRT_SPRING is not None and col is not None and z < SKIRT_TOP:
             # The thighs' shares go to their spring bones. A vertex near the middle has a share
@@ -538,6 +576,12 @@ def torso_w(z, x, skirt=False, front=False, col=None):
             w += legs
         else:
             w += [("J_Bip_L_UpperLeg", left), ("J_Bip_R_UpperLeg", right)]
+    elif skirt and z < 0.98:
+        own = hip_share(z, x)
+        w = [(n, v * (1 - own)) for n, v in w] + [("J_Bip_L_UpperLeg" if x <= 0 else "J_Bip_R_UpperLeg", own)]
+    elif hip is not None and hip < 0.98:
+        own = hip_share(hip, x)
+        w = [(n, v * (1 - own)) for n, v in w] + [("J_Bip_L_UpperLeg" if x <= 0 else "J_Bip_R_UpperLeg", own)]
     return blend(*w)
 
 
@@ -612,7 +656,7 @@ def upper_garment(part, d, zs, hem, cuff, collar, front=None, skirt=0.0, tag_fn=
 
     rows = []
     for z in zs:
-        rows.append([part.v(col_point(z, k), torso_w(z, col_point(z, k).x, sk, k <= 4, col=k)) for k in ks])
+        rows.append([part.v(col_point(z, k), torso_w(z, col_point(z, k).x, sk, k <= 4, col=k, hip=None if sk else z)) for k in ks])
     # The armpit ring (A), the ring through the armhole's middle (M) and the yoke line (T). The
     # armhole takes columns 4..6: its rim is the first ring of the sleeve.
     hole = {}
@@ -710,7 +754,7 @@ def upper_garment(part, d, zs, hem, cuff, collar, front=None, skirt=0.0, tag_fn=
         cur = []
         for k in ks:
             pos = torso_point(z0 + dz, k, off(z0 + dz) + dd, skirt, edge=front(z0 + dz) if front and k == 1 else None, folds=folds)
-            cur.append(part.v(pos, torso_w(z0, pos.x, sk, col=k)))
+            cur.append(part.v(pos, torso_w(z0, pos.x, sk, col=k, hip=None if sk else z0 + dz)))
         for i in range(len(ks) - 1):
             k = ks[i]
             part.f((cur[i], cur[i + 1], prev[i + 1], prev[i]), ((k / NT, -j - 1), ((k + 1) / NT, -j - 1), ((k + 1) / NT, -j), (k / NT, -j)), tag_fn("hem", k, -j - 1))
@@ -783,8 +827,7 @@ def trousers(part, d, top=1.075, bottom=0.40, tag_fn=None):
             if z < 0.9 + up:
                 # The seat narrows into the legs' tops.
                 pos.x *= 0.99
-            side = smooth(abs(pos.x) / 0.09)
-            leg = (0.18 if z > 0.9 + up else 0.62) * side if z < 0.98 else 0.0
+            leg = hip_share(z, pos.x)
             row.append(part.v(pos, blend(*torso_w(z, pos.x).items(), ("J_Bip_L_UpperLeg", leg / max(1 - leg, 1e-3)))))
         rows.append(row)
     for r in range(len(rows) - 1):
@@ -1148,7 +1191,10 @@ def make_face(arm, spec, atlas_path):
         for v in tint_src:
             m.v.append(tuple(np.array(m.v[v]) + nrm_[v] * OVERLAY_OUT))
             m.col.append((1.0, 1.0, 1.0))
-            m.uv.append(m.uv[v])
+            # The transparent guard faces can extend under the jaw. Keep their
+            # samples on the transparent border of the shared lip/blush tile.
+            u, v_atlas = m.uv[v]
+            m.uv.append((np.clip(u, .1875 + 1/512, .8125 - 1/512), v_atlas))
             m.eye.append(m.eye[v])
         for f in tint_faces:
             m.f.append(tuple(index[v] for v in f))
@@ -2982,7 +3028,7 @@ def main():
     # the smock's or the apron's own piece. Not a far model alone, which lists no springs.
     skirted = spec.get("coat") == "smock" and a.lod != "far" and (a.parts == "all" or (a.parts == "keep" and {"Smock", "Apron"} & set(a.keep.split(","))))
     g["SKIRT_SPRING"] = max(spec["hem"], 0.50) if skirted else None
-    arm = make_armature()
+    arm = make_armature(include_fringe=not spec["piece"])
     if skirted:
         spec["skirt_springs"] = add_skirt_bones(arm, g["SKIRT_SPRING"])
     obs, tris = [], {}

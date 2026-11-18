@@ -147,8 +147,8 @@ PART_GAIN = 1.3
 # tone maps; a freckle one or two texels across at the paint's 0.3 came out 9% darker than the
 # skin at the median where about 40% was meant. A core has to be a few texels of nearly full
 # pigment to read as that on screen.
-FRECKLE_OVERLAY = (5.0, 0.92, 1.5)
-LINE_OVERLAY = (3.6, 0.90, 1.25)
+FRECKLE_OVERLAY = (2.9, 0.62, 1.25)
+LINE_OVERLAY = (2.0, 0.52, 1.15)
 # The seed of the iris every face type shares (person_params.SHARED_IRIS): its streaks are one
 # drawing for everyone.
 SHARED_IRIS_SEED = 7
@@ -377,8 +377,8 @@ def paint_iris(hf, look, rng):
 # the bottom toward the pupil (what makes an eye look lit) and its hot core, the two pale
 # streaks beside it, and the cool arc of sky under the lid. Each: its colour, and how much of it
 # covers the iris where it is strongest.
-IRIS_GLOW = ((1.0, 0.652, 0.308), 0.69)
-IRIS_HOT = ((1.0, 0.839, 0.517), 0.715)
+IRIS_GLOW = ((0.98, 0.41, 0.12), 0.84)
+IRIS_HOT = ((1.0, 0.83, 0.46), 0.87)
 IRIS_STREAK = ((0.801, 0.885, 1.0), 0.307)
 IRIS_SKY = ((0.55, 0.74, 1.0), 0.455)
 # The client lays the layer over the iris in linear light, where a light colour over a dark one
@@ -404,7 +404,7 @@ def iris_lights(light_side=1.0, layer=True):
     lid = 1.0 - 0.55 * smooth((dz - 0.30) / 0.50)
     parts = [
         # The glow: a flame from the bottom toward the pupil, wide at the rim and narrowing as it rises.
-        (IRIS_GLOW, smooth((low - 0.02) / 0.62) * np.exp(-((dx / (0.26 + 0.62 * low)) ** 2)) * inside * lid),
+        (IRIS_GLOW, smooth((low - 0.06) / 0.38) * smooth((0.15 + 0.62 * low - np.abs(dx)) / 0.18) * inside * lid),
         (IRIS_HOT, np.exp(-((dx / 0.34) ** 2 + ((dz + 0.66) / 0.24) ** 2)) * inside * lid),
     ]
     # Two pale streaks beside the glow, where light crosses the iris.
@@ -494,11 +494,14 @@ def paint_far(hf, look, size=FAR):
         px = np.clip((IRIS_PX / 2 + a * half * IRIS_WIDE).astype(int), 0, IRIS_PX - 1)
         py = np.clip((IRIS_PX / 2 - b * half).astype(int), 0, IRIS_PX - 1)
         skin[on] = iris[py[on], px[on]]
+        # The painted pupil loses contrast as the far tile is filtered down to a few pixels.
+        pupil = on & (a * a + b * b < 0.54 ** 2)
+        skin[pupil] *= 0.32
     # The lash line, heavier toward the outer corner, and the brows as one stroke each. From
     # far off they are a texel or two wide, so they are drawn a little heavier than life.
     ss = np.linspace(-1.0, 1.0 + look["lash_wing"], 16)
     up = hf.lid(np.clip(ss, -1, 1))[0]
-    c.stroke([(hf.eye_x + hf.eye_w * s, hf.eye_z + u + 0.0006) for s, u in zip(ss, up)], lambda t: 0.0008 + 0.0019 * look["lash_k"] * smooth(t / 0.5), look["lash"], 1.0, taper=(0.0, 0.2))
+    c.stroke([(hf.eye_x + hf.eye_w * s, hf.eye_z + u + 0.0006) for s, u in zip(ss, up)], lambda t: 0.0020 + 0.0022 * look["lash_k"] * smooth(t / 0.5), np.asarray(look["lash"]) * 0.55, 1.0, taper=(0.0, 0.12))
     top, bot = brow_shape(hf, 1)
     c.stroke([(xt, (zt + zb) / 2) for (xt, zt), (_, zb) in zip(top, bot)], lambda t: np.maximum(0.62 * hf.brow_w * brow_width(t), 0.0011), look["brow"], 0.92, taper=(0.1, 0.25))
     out[EYE_ROWS:] = c.img

@@ -2,7 +2,7 @@
 """Where one piece of a composed person's clothes comes through another, at rest and through clips.
 
     python3 living/tools/characters/cloth_check.py LINE.json [--styles DIR] [--types DIR]
-        [--clips CLIPS.glb] [--clip idle,walk] [--frames 16] [--least 2.0] [--json OUT] [--quiet]
+        [--clips CLIPS.glb] [--clip idle,walk] [--frames 16] [--least 2.0] [--json OUT] [--quiet] [--chair MM]
         [--springs] [--spring STIFFNESS,DRAG[,GRAVITY]] [--no-spring-scale]
 
 LINE.json is a person's line (`{"type", "proportions", "styles": {"outfit": [...]}, "belly"}`),
@@ -24,6 +24,16 @@ counted. It prints the
 worst of each pair in each clip and fails (exit 1) if anything stands out by more than `--least`
 millimetres (default 2). Sleeves are left out: an arm swings through a skirt in any clip that
 swings it, and that is the clip's, not the clothes'.
+
+In `sit_idle`, where a person is seated throughout, it also puts a chair under them (`chair`:
+the seat's top at the underside of the seated trousers, its back 2 cm behind them) and says how
+far each skirted piece (a smock, an apron, a coat) is below the seat's top and behind the
+chair's back; and in `sit_ground`, where a person sits on the ground as the game's townspeople
+do, how far each is under the ground (the lowest of the seated trousers and boots). With
+`--chair MM` these fail over MM millimetres; without it, they are reported only:
+a skirt's back flares behind the thighs standing and turns with them seated, which no fixed
+weight mends (docs/CHARACTERS.md, "Sitting").
+
 
 A piece's own bones (a skirt's spring chains) ride the nearest bone above them that the person
 has, as the client leaves them where it simulates nothing. `--springs` simulates them instead,
@@ -232,7 +242,9 @@ class Piece:
         j, binary = read_glb(path)
         self.name = os.path.basename(path)[:-4]
         wear = (j["scenes"][0].get("extras") or {}).get("outfit") or {}
-        self.slot, self.layer = wear.get("slot"), wear.get("layer", 0)
+        if not wear.get("slot") or "layer" not in wear:
+            raise ValueError(f"{path}: missing outfit slot or layer. Finish the style build before measuring.")
+        self.slot, self.layer = wear["slot"], wear["layer"]
         node = next(n for n in j["nodes"] if n.get("name") == "Cloth" and "mesh" in n)
         skin = j["skins"][node.get("skin", 0)]
         self.joints = [j["nodes"][k].get("name") for k in skin["joints"]]
@@ -356,6 +368,63 @@ def through(inner, pi, outer, po, no, axis, reach=0.04, beside=0.015):
     return depth
 
 
+SEATED = ("sit_idle",)  # the clips in which a person is seated on a chair throughout
+GROUND = ("sit_ground",)  # and on the ground: what the game's townspeople do (town.rs)
+OUTER = ("smock_5", "smock_7", "apron", "coat")  # the pieces with a skirt
+
+
+def chair(pieces, posed, mats, joints):
+    """A chair under a seated person, and what of their skirts is in it: {piece: (millimetres
+    below the seat's top, millimetres behind the chair's back, vertices more than 5 mm in
+    either)}. No scene has the seat, so it is put where the body says it is: the seat's top at
+    the underside of the seated trousers (the lowest of them under the pelvis and the thighs),
+    from 4 cm behind the trousers' back to 8 cm short of the knees and 25 cm each side; the
+    chair's back upright, 2 cm behind the trousers' back, to 45 cm above the seat."""
+    tr = next((p for p in pieces if p.name.startswith("trousers")), None)
+    if tr is None:
+        return {}
+    hips = joints["J_Bip_C_Hips"]
+    fwd = -mats["J_Bip_C_Hips"][:3, 2].copy()
+    fwd[1] = 0.0
+    fwd /= np.linalg.norm(fwd)
+    side = np.cross([0.0, 1.0, 0.0], fwd)
+    tv = posed[tr.name] - hips
+    knee = min(float((joints[f"J_Bip_{s}_LowerLeg"] - hips) @ fwd) for s in "LR")
+    along = tv @ fwd
+    under = (along > -0.2) & (along < knee - 0.08) & (np.abs(tv @ side) < 0.25)
+    if not under.any():
+        return {}
+    seat = float(tv[under][:, 1].min())
+    back = float(along[tv[:, 1] > seat + 0.02].min())
+    out = {}
+    for p in pieces:
+        if not p.name.startswith(OUTER):
+            continue
+        v = posed[p.name] - hips
+        a = v @ fwd
+        on = (a > back - 0.04) & (a < knee - 0.08) & (np.abs(v @ side) < 0.25)
+        below = seat - v[:, 1]
+        behind = (back - 0.02) - a
+        up = (v[:, 1] > seat) & (v[:, 1] < seat + 0.45) & (np.abs(v @ side) < 0.25)
+        out[p.name] = (
+            1000 * below[on].max(initial=0.0),
+            1000 * behind[up].max(initial=0.0),
+            int((((below > 0.005) & on) | ((behind > 0.005) & up)).sum()),
+        )
+    return out
+
+
+def ground(pieces, posed):
+    """The ground under a person seated on it, and what of their skirts is under it: {piece:
+    (millimetres below the ground, 0.0, vertices more than 5 mm below)}. The ground is where
+    the body rests: the lowest of the seated person's trousers and boots."""
+    low = [posed[p.name][:, 1].min() for p in pieces if p.name.startswith(("trousers", "boots"))]
+    if not low:
+        return {}
+    floor = float(min(low))
+    return {p.name: (max(floor - float(posed[p.name][:, 1].min()), 0.0) * 1000, 0.0, int((posed[p.name][:, 1] < floor - 0.005).sum())) for p in pieces if p.name.startswith(OUTER)}
+
+
 def springs_rest(springs, sk):
     """The spring bones' frames at rest on the skeleton's pose now, leaving the simulation's state alone."""
     keep = [(j["tail"], j["prev"]) for j in springs.joints]
@@ -370,6 +439,7 @@ def springs_rest(springs, sk):
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("line")
+    ap.add_argument("--chair", type=float, default=None, metavar="MM", help="fail above MM millimetres of seated contact with the seat top or back in sit_idle, or the floor in sit_ground")
     ap.add_argument("--styles", default="living/game/assets/lookdev/styles")
     ap.add_argument("--types", default="living/game/assets/lookdev/types")
     ap.add_argument("--clips", default="living/game/assets/lookdev/anim/own-clips.glb")
@@ -406,8 +476,7 @@ def main():
         for name in [c for c in a.clip.split(",") if c]:
             tracks = library.get(name)
             if tracks is None:
-                print(f"cloth_check: no clip {name!r} in {a.clips}")
-                continue
+                ap.error(f"no clip {name!r} in {a.clips}")
             length = max(t[0][-1] for t in tracks.values())
             if springs and a.springs:
                 # The clip played from its start a sixtieth of a second a step, the springs
@@ -427,7 +496,7 @@ def main():
                     mats, joints = sk.pose(at_time(tracks, t))
                     yield name, t, mats, joints, (dict(springs.step(sk, 0, fresh=True)) if springs else None)
 
-    worst, swing, count = {}, {}, 0
+    worst, swing, seats, count = {}, {}, {}, 0
     for clip, t, mats, joints, sprung in poses():
         count += 1
         axis = axis_points(joints)
@@ -437,6 +506,10 @@ def main():
             for p in pieces:
                 d = float(np.linalg.norm(posed[p.name] - p.posed(mats, dict(springs_rest(springs, sk))), axis=1).max()) * 1000
                 swing[clip] = max(swing.get(clip, 0.0), d)
+        if clip in SEATED or clip in GROUND:
+            for name, (below, behind, n) in (chair(pieces, posed, mats, joints) if clip in SEATED else ground(pieces, posed)).items():
+                r = seats.setdefault((name, clip), dict(below=0.0, behind=0.0, vertices=0))
+                r.update(below=max(r["below"], below), behind=max(r["behind"], behind), vertices=max(r["vertices"], n))
         normal = {p.name: p.normals(posed[p.name]) for p in pieces}
         for i, o in pairs:
             d = through(i, posed[i.name], o, posed[o.name], normal[o.name], axis)
@@ -456,11 +529,24 @@ def main():
         bad += fault
         if fault or not a.quiet:
             print(f"{i:16s} under {o:16s} {clip:6s} {'THROUGH' if fault else 'clear  '} by {r['most']:6.1f} mm at most (t {r.get('at', 0):.2f} s, on {r.get('bone', '-')}, {r.get('out', 0)} vertices); in {r['frames']} of {r['of']} poses")
+    cloth_bad = bad
+    for (name, clip), r in sorted(seats.items()):
+        fault = a.chair is not None and max(r["below"], r["behind"]) > a.chair
+        bad += fault
+        if fault or not a.quiet:
+            if clip in SEATED:
+                print(f"{name:16s} {clip}: seat top  {r['below']:6.1f} mm below")
+                print(f"{name:16s} {clip}: seat back {r['behind']:6.1f} mm behind")
+            else:
+                print(f"{name:16s} {clip}: ground    {r['below']:6.1f} mm below")
+            print(f"  {r['vertices']} vertices beyond 5 mm at most in one pose" + ("; exceeds contact limit" if fault else ""))
     if a.json:
-        json.dump({f"{i}|{o}|{clip}": r for (i, o, clip), r in worst.items()}, open(a.json, "w"), indent=1)
+        json.dump(dict({f"{i}|{o}|{clip}": r for (i, o, clip), r in worst.items()}, **{f"{name}|{'chair' if clip in SEATED else 'ground'}|{clip}": dict(most=max(r["below"], r["behind"]), **r) for (name, clip), r in seats.items()}), open(a.json, "w"), indent=1)
     if swing:
         print("cloth_check: springs simulated; the cloth is carried at most " + ", ".join(f"{v:.0f} mm in {c}" for c, v in swing.items()) + " from where it rides at rest")
-    print(f"cloth_check: {len(pairs)} pairs of pieces over {count} poses: " + (f"{bad} come through by more than {a.least} mm" if bad else f"none comes through by more than {a.least} mm"))
+    print(f"cloth_check: {len(pairs)} pairs of pieces over {count} poses: " + (f"{cloth_bad} pair/clip results come through by more than {a.least} mm" if cloth_bad else f"none comes through by more than {a.least} mm"))
+    if bad > cloth_bad:
+        print(f"cloth_check: {bad - cloth_bad} seat or ground results exceed {a.chair} mm")
     return 1 if bad else 0
 
 
