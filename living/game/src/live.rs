@@ -35,7 +35,7 @@
 
 use crate::bodies::stage_scale;
 use crate::camera::Cam;
-use crate::controls::{Input, Target};
+use crate::controls::Input;
 use crate::envs::Roam;
 use crate::island::{Island, LotRow};
 use crate::lookdev::{Fitted, Model};
@@ -110,13 +110,13 @@ impl Plugin for LivePlugin {
             .add_systems(Update, (land, lots, bodies, me).chain().in_set(Phase::Present).after(crate::combat::actions).after(crate::town::shows))
             .add_systems(
                 Update,
-                (crate::envs::hdr, crate::island::stream, crate::island::grey_boxes, crate::island::report, crate::lookdev::convert, crate::lookdev::night_glow, crate::lookdev::fit, crate::envs::solid_if_large, crate::lookdev::rig, crate::lookdev::animate, crate::lookdev::sun, crate::envs::cutaway, crate::envs::reach, report)
+                (crate::envs::hdr, crate::island::stream, crate::island::grey_boxes, crate::island::report, crate::lookdev::convert, crate::lookdev::night_glow, crate::lookdev::fit, crate::envs::solid_if_large, crate::lookdev::rig, crate::lookdev::animate, crate::lookdev::sun, report)
                     .chain()
                     .in_set(Phase::Present)
                     .after(me)
                     .run_if(island),
             )
-            .add_systems(Update, ground_cursor.in_set(Phase::Camera).after(crate::camera::follow).run_if(island))
+            .add_systems(Update, (crate::envs::cutaway, crate::envs::reach).chain().in_set(Phase::Camera).after(crate::camera::follow).before(indoors).run_if(island))
             // After sight, which sets every thing's visibility each frame: what stands inside a
             // closed building is hidden over it.
             .add_systems(Update, indoors.in_set(Phase::Camera).after(crate::sight::update).run_if(island));
@@ -1100,42 +1100,31 @@ fn bodies(
     input.face = my_face;
 }
 
-/// Follow my displayed body: the camera's target, the island's streaming centre and the
+/// Follow my displayed body: the island's streaming centre and the
 /// atmosphere's regions. Before I have a body, the island streams round the arrival point.
-fn me(net: NonSend<Net>, scene: NonSend<Scene>, island: Option<Res<Island>>, live: Res<Live>, mut target: ResMut<Target>, mut roam: ResMut<Roam>) {
-    let Some(island) = island else { return };
-    match net.my_id.and_then(|id| scene.shown.get(&id).map(|s| (id, s.0))) {
-        Some((id, p)) => {
-            let speed = live.shown.get(&id).map_or(0.0, |s| s.speed);
-            if p.distance(roam.pos) > 1e-3 {
-                roam.facing = (p - roam.pos).normalize_or(roam.facing);
-            }
-            roam.pos = p;
-            roam.moving = speed > MOVING;
-            // The authority's word, as for the clips; the laws' split without a row.
-            roam.running = match net.conn.as_ref().and_then(|c| crate::net::find_motion(c, id)) {
-                Some(m) => m.running,
-                None => live.walk_run.and_then(|w| w.1).is_some_and(|v| speed > v),
-            };
-            roam.speed = speed;
-            target.0 = Some(Vec3::new(p.x, island.height(p.x, p.y), p.y));
+fn me(net: NonSend<Net>, scene: NonSend<Scene>, island: Option<Res<Island>>, live: Res<Live>, mut roam: ResMut<Roam>) {
+    if island.is_none() { return; }
+    if let Some((id, p)) = net.my_id.and_then(|id| scene.shown.get(&id).map(|s| (id, s.0))) {
+        let speed = live.shown.get(&id).map_or(0.0, |s| s.speed);
+        if p.distance(roam.pos) > 1e-3 {
+            roam.facing = (p - roam.pos).normalize_or(roam.facing);
         }
-        None => target.0 = None,
+        roam.pos = p;
+        roam.moving = speed > MOVING;
+        // The authority's word, as for the clips; the laws' split without a row.
+        roam.running = match net.conn.as_ref().and_then(|c| crate::net::find_motion(c, id)) {
+            Some(m) => m.running,
+            None => live.walk_run.and_then(|w| w.1).is_some_and(|v| speed > v),
+        };
+        roam.speed = speed;
     }
 }
 
-/// Where the cursor meets the island's ground (the camera's own ray uses the tile ground). The
-/// eye's height over the island's hills is the camera's own (`camera::follow`).
-pub(crate) fn ground_cursor(island: Option<Res<Island>>, mut cam: ResMut<Cam>, cams: Query<(&Camera, &GlobalTransform), With<Camera3d>>, pointer: Res<crate::pointer::Pointer>) {
-    let Some(island) = island else { return };
-    let Ok((camera, gtf)) = cams.single() else { return };
-    let Some(c) = pointer.pos else { return };
-    let Ok(ray) = camera.viewport_to_world(gtf, c) else { return };
-    let (o, d) = (ray.origin, *ray.direction);
-    let below = |p: Vec3| p.y <= island.height(p.x, p.z);
+/// Intersect the camera ray with the island's sampled terrain height.
+pub(crate) fn ray_ground(island: &Island, o: Vec3, d: Vec3) -> Option<Vec3> {
+    let below = |p: Vec3| p.y <= island.foot_height(p.x, p.z);
     let mut prev = o;
     let mut t = 0.0;
-    cam.cursor_ground = None;
     while t < 400.0 {
         t += 1.0;
         let p = o + d * t;
@@ -1149,11 +1138,11 @@ pub(crate) fn ground_cursor(island: Option<Res<Island>>, mut cam: ResMut<Cam>, c
                     lo = mid;
                 }
             }
-            cam.cursor_ground = Some(hi);
-            return;
+            return Some(hi);
         }
         prev = p;
     }
+    None
 }
 
 /// Every 10 s: what the client holds from the authority, for measurements.
@@ -1344,7 +1333,7 @@ fn script(
     (target, mut sight, mut shine): (Option<Res<crate::capture::Target>>, Option<ResMut<crate::sightedge::SightEdge>>, ResMut<crate::style::HairShine>),
     (mut keys, mut buttons): (ResMut<ButtonInput<KeyCode>>, ResMut<ButtonInput<MouseButton>>),
     (mut dump, mut taps, ui): (ResMut<crate::ui::Dump>, ResMut<crate::keys::DoubleTap>, Res<crate::ui::hit::UiPointer>),
-    (time, mut exit, cams, mut weapon, mut lw): (Res<Time>, MessageWriter<AppExit>, Query<(&Camera, &GlobalTransform), With<Camera3d>>, ResMut<crate::weapon::Weapon>, ResMut<crate::twist::LookWalk>),
+    (time, mut exit, cams, mut weapon, mut lw, mut wheel): (Res<Time>, MessageWriter<AppExit>, Query<(&Camera, &GlobalTransform), With<Camera3d>>, ResMut<crate::weapon::Weapon>, ResMut<crate::twist::LookWalk>, MessageWriter<bevy::input::mouse::MouseWheel>),
 ) {
     // A point: X,Y as fractions of the picture, or @NAME, a tagged node of the game UI.
     let frac = |v: &str| match v.strip_prefix('@') {
@@ -1374,7 +1363,7 @@ fn script(
     }
     if let Some((id, lift)) = s.pointing {
         let at = hud.actors.iter().find(|a| a.id == id).and_then(|a| {
-            let ground = island.as_ref().map_or(a.head - Vec3::Y * (2.2 - lift), |i| Vec3::new(a.head.x, i.height(a.head.x, a.head.z) + lift, a.head.z));
+            let ground = island.as_ref().map_or(a.head - Vec3::Y * (2.2 - lift), |i| Vec3::new(a.head.x, i.foot_height(a.head.x, a.head.z) + lift, a.head.z));
             cams.iter().find_map(|(c, t)| Some((c.world_to_viewport(t, ground).ok()?, c.logical_viewport_size()?)))
         });
         if let Some((p, size)) = at {
@@ -1382,7 +1371,7 @@ fn script(
         }
     }
     if let Some((at, lift)) = s.pointing_at {
-        let p3 = island.as_ref().map_or(Vec3::new(at.x, lift, at.y), |i| Vec3::new(at.x, i.height(at.x, at.y) + lift, at.y));
+        let p3 = island.as_ref().map_or(Vec3::new(at.x, lift, at.y), |i| Vec3::new(at.x, i.foot_height(at.x, at.y) + lift, at.y));
         if let Some((p, size)) = cams.iter().find_map(|(c, t)| Some((c.world_to_viewport(t, p3).ok()?, c.logical_viewport_size()?))) {
             pointer.scripted = Some(p / size);
         }
@@ -1590,6 +1579,13 @@ fn script(
         }
         "pan" | "drag" => {
             pointer.scripted_turn += arg.parse::<f32>().unwrap_or(0.0) * if verb == "pan" { 0.6 } else { 1.0 };
+            true
+        }
+        "notches" => {
+            use bevy::input::{mouse::{MouseScrollUnit, MouseWheel}, touch::TouchPhase};
+            if let Ok(y) = arg.parse() {
+                wheel.write(MouseWheel { unit: MouseScrollUnit::Line, x: 0.0, y, window: Entity::PLACEHOLDER, phase: TouchPhase::Moved });
+            }
             true
         }
         "pinch" => {

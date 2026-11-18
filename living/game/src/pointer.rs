@@ -9,7 +9,7 @@
 //!   (`Confined` is unsupported), and a locked cursor reports a frozen position, so the game's
 //!   cursor is virtual: [`Pointer::pos`] is what every reader uses (the camera's ground ray,
 //!   facing, the aim), and the UI's picking is fed from it while captured.
-//! - **Turning the view.** Dragging with the left button (press and move, on a trackpad too), a
+//! - **Orbit turning.** Dragging with the left button (press and move, on a trackpad too), a
 //!   two-finger pan, or the middle button turns the view; while it turns, the cursor keeps its
 //!   screen position and what it points at (where you face) follows the view (owner, Cullet walk
 //!   1, 2026-11-11: it used to stay on its ground point and ride off with the view). A drag does
@@ -17,8 +17,9 @@
 //!   held [`HOLD_S`] (aiming, as before). A tap therefore fires on release, a click's length
 //!   later than a press would. A tap is marked ([`Pointer::tapped`]): on a peaceful person it
 //!   talks instead of striking (`combat.rs`).
-//! - **Zoom:** a pinch, or a notched mouse wheel, within a band round the current distance.
-//! - **Align:** a two-finger double tap turns the view to where you face (the middle tap too).
+//! - **Zoom:** a pinch or a notched mouse wheel. Top-down follows a height and tilt curve.
+//!   Orbit zooms within a band around its current distance.
+//! - **Orbit align:** a two-finger double tap or middle tap turns the view to where you face.
 //!
 //! A trackpad pan arrives as `MouseWheel { unit: Pixel }` with touch phases; a notched wheel as
 //! `Line` (winit, `hasPreciseScrollingDeltas`). The coast after a flick arrives as a second
@@ -71,9 +72,13 @@ pub struct Pointer {
     pub turn_px: f32,
     /// Zoom asked for this frame (a factor on the distance; 1 none).
     pub zoom: f32,
+    /// Signed line-wheel delta for the top-down curve.
+    pub wheel_notches: f32,
+    /// Pinch factor independently of line-wheel input.
+    pub pinch_factor: f32,
     /// A double tap: align the view to where I face.
     pub align: bool,
-    /// The left button is turning the view now (the cursor is placed by the camera, not moved).
+    /// The left button is dragging. Orbit holds the cursor in place during the drag.
     pub dragging: bool,
     /// Where the camera wants the cursor (keeping it on a ground point while an align turns the view).
     pub place: Option<Vec2>,
@@ -130,11 +135,25 @@ fn update(
     settings: Option<ResMut<bevy::picking::input::PointerInputSettings>>,
     ui: Res<crate::hud::UiWants>,
     input: Res<crate::controls::Input>,
+    cam: Res<crate::camera::Cam>,
     time: Res<Time>,
 ) {
     let now = time.elapsed_secs_f64();
     p.turn_px = std::mem::take(&mut p.scripted_turn);
     p.zoom = std::mem::replace(&mut p.scripted_zoom, 1.0);
+    p.pinch_factor = p.zoom;
+    p.wheel_notches = 0.0;
+    let wheel_events: Vec<_> = wheel.read().copied().collect();
+    let line_scroll = || wheel_events.iter().filter(|e| e.unit == MouseScrollUnit::Line).map(|e| e.y);
+    if !p.hold && !ui.over() && !ui.keyboard {
+        for notches in line_scroll() {
+            p.wheel_notches += notches;
+            p.zoom *= 1.0 - WHEEL_STEP * notches.clamp(-3.0, 3.0);
+        }
+    } else {
+        p.zoom = 1.0;
+        p.pinch_factor = 1.0;
+    }
     p.align = false;
     p.tapped = false;
     p.scroll_px = std::mem::take(&mut p.scripted_scroll);
@@ -168,6 +187,9 @@ fn update(
         }
         p.last_scripted = scripted;
         p.pos = scripted;
+        if ui.over() && !p.hold {
+            p.scroll_px += line_scroll().sum::<f32>() * 24.0;
+        }
         if std::mem::take(&mut p.scripted_tap) {
             buttons.press(MouseButton::Left);
             p.release_next = true;
@@ -181,9 +203,13 @@ fn update(
         return;
     };
     let size = Vec2::new(win.width(), win.height());
-    let lost = focus.read().any(|f| !f.focused);
+    let lost_event = focus.read().any(|f| !f.focused);
+    let lost = lost_event || !win.focused;
     let mut capture = p.captured;
     if lost {
+        p.wheel_notches = 0.0;
+        p.zoom = 1.0;
+        p.pinch_factor = 1.0;
         capture = false;
     }
     // Esc frees the cursor only once nothing else is open: the game UI decides that, and asks
@@ -253,7 +279,7 @@ fn update(
     }
     p.dragging = p.left == Left::Dragging;
     // Two-finger pans turn the view; a notched wheel zooms.
-    for e in wheel.read() {
+    for e in wheel_events {
         match e.unit {
             MouseScrollUnit::Pixel => {
                 match e.phase {
@@ -282,12 +308,14 @@ fn update(
                 }
             }
             MouseScrollUnit::Line if ui.over() => p.scroll_px += e.y * 24.0,
-            MouseScrollUnit::Line => p.zoom *= 1.0 - WHEEL_STEP * e.y.clamp(-3.0, 3.0),
+            MouseScrollUnit::Line => {}
         }
     }
     for g in pinch.read() {
-        if !p.hold {
-            p.zoom *= 1.0 - g.0.clamp(-0.5, 0.5);
+        if !p.hold && !ui.over() && !ui.keyboard && !lost {
+            let factor = 1.0 - g.0.clamp(-0.5, 0.5);
+            p.zoom *= factor;
+            p.pinch_factor *= factor;
         }
     }
     if taps.read().count() > 0 {
@@ -311,7 +339,7 @@ fn update(
         }
         p.pos = p.held_at.or(p.pos);
     } else if p.captured {
-        let moving = if p.dragging { Vec2::ZERO } else { delta };
+        let moving = if p.dragging && cam.mode == crate::camera::Mode::Orbit { Vec2::ZERO } else { delta };
         p.pos = Some((p.pos.unwrap_or(size / 2.0) + moving).clamp(Vec2::ZERO, size));
         if moving != Vec2::ZERO {
             if let (Some(pos), Some(target)) = (p.pos, bevy::camera::RenderTarget::Window(bevy::window::WindowRef::Entity(win_e)).normalize(Some(win_e))) {
@@ -350,6 +378,12 @@ fn update(
         if let Some(mut s) = settings {
             s.is_mouse_enabled = !capture;
         }
+    }
+    if lost {
+        p.pos = None;
+        p.held_at = None;
+        buttons.reset(MouseButton::Left);
+        p.tapped = false;
     }
 }
 

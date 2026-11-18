@@ -214,6 +214,8 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
             id: *id as u64,
             // Plates and hover: someone too far to make out by the colours drawn (`Looks::plate`).
             name: looks.plate(*id).map(String::from).unwrap_or_else(|| name_of(*id)),
+            compact_plate: (cam.mode == crate::camera::Mode::TopDown && c.kind == "person" && c.name.trim().is_empty())
+                .then(|| looks.compact_plate(*id).map(String::from)).flatten(),
             head: head(*id, *p, &c.kind),
             distance,
             // The one under the cursor (`pick.rs`): the same pick Enter and combat's target use.

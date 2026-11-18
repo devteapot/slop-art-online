@@ -59,6 +59,11 @@ impl Looks {
         self.plates.get(&id).or_else(|| self.labels.get(&id)).map(|s| s.as_str())
     }
 
+    /// The shorter outfit phrase for a stranger's overhead plate.
+    pub fn compact_plate(&self, id: u32) -> Option<&str> {
+        self.phrases.get(&id).and_then(Option::as_ref).map(|(_, far)| far.as_str()).or_else(|| self.plate(id))
+    }
+
     /// The same, capitalised for the start of a line.
     pub fn cap(&self, id: u32) -> String {
         crate::ui::label(self.of(id).unwrap_or("someone"))

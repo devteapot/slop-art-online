@@ -785,9 +785,10 @@ pub fn fade_trees(
     target: Res<crate::controls::Target>,
     palette: Res<Palette>,
     sight: Res<crate::sight::Sight>,
+    rig: Res<crate::camera::Cam>,
     me_size: Res<crate::bodies::MySize>,
     cam: Query<&Transform, (With<Camera3d>, Without<Tree>)>,
-    mut trees: Query<(&Transform, &mut MeshMaterial3d<Toon>, &mut Visibility), With<Tree>>,
+    mut trees: Query<(&Transform, &mut MeshMaterial3d<Toon>, &mut Visibility, Option<&bevy::camera::primitives::Aabb>), With<Tree>>,
 ) {
     let (Some(me), Ok(cam)) = (target.0, cam.single()) else { return };
     let head = me + Vec3::Y * 1.6 * me_size.0;
@@ -798,7 +799,7 @@ pub fn fade_trees(
     // The camera's side of the player, on the ground.
     let toward_cam = Vec2::new(a.x - me.x, a.z - me.z).normalize_or_zero();
     let cut_r = 5.0 * me_size.0.max(0.6);
-    for (t, mut mat, mut vis) in &mut trees {
+    for (t, mut mat, mut vis, bounds) in &mut trees {
         let state = sight.state_at(me2, Vec2::new(t.translation.x, t.translation.z));
         let crown = t.translation + Vec3::Y * 1.3 * t.scale.y;
         let reach = 0.55 * t.scale.x + 0.5;
@@ -811,11 +812,21 @@ pub fn fade_trees(
             let near_side = flat.length() < cut_r + reach && flat.dot(toward_cam) > -1.0;
             cut = if (off < reach && s < 0.97) || near_side { 2 } else if off < reach + 2.5 && s < 0.97 { 1 } else { 0 };
         }
+        if rig.mode == crate::camera::Mode::TopDown {
+            let blocks = bounds.is_some_and(|bounds| {
+                let inv = t.rotation.inverse();
+                let centre = t.translation + t.rotation * (Vec3::from(bounds.center) * t.scale);
+                let half = Vec3::from(bounds.half_extents) * t.scale.abs();
+                let local = |point| inv * (point - centre);
+                [head, me + Vec3::Y * 0.25].into_iter().any(|p| crate::envs::segment_hits_box(local(a), local(p), half, 0.35))
+            });
+            cut = u8::from(blocks);
+        }
         let want_vis = if cut == 2 { Visibility::Hidden } else { Visibility::Inherited };
         if *vis != want_vis {
             *vis = want_vis;
         }
-        let want = if state > 0 { &palette.tree_dim[state as usize - 1] } else if cut == 1 { &palette.tree_faded } else { &palette.tree };
+        let want = if cut == 1 && rig.mode == crate::camera::Mode::TopDown { &palette.tree_faded } else if state > 0 { &palette.tree_dim[state as usize - 1] } else if cut == 1 { &palette.tree_faded } else { &palette.tree };
         if &mat.0 != want {
             mat.0 = want.clone();
         }

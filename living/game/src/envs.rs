@@ -50,6 +50,11 @@ pub struct Occluder {
     pub open: bool,
 }
 
+/// Open roofs and canopies can overlap the foot probes in their fitted box. The ground supports
+/// the character underneath them.
+#[derive(Component)]
+pub struct OverheadCover;
+
 /// A landmark (Cullet's Cone, Watchglass, Counting House…): it is never faded for standing
 /// between the camera and you ([`cutaway`]), so it holds its place in the view.
 #[derive(Component)]
@@ -600,7 +605,7 @@ pub(crate) fn local_light(kind: &str, glow: Option<[f32; 3]>, height: f32, k: us
 /// [`SEE_THROUGH`] while the sight lines from the eye to my head, chest and feet pass through it,
 /// and fully while the eye is inside it; it comes back [`CUT_HOLD_S`] after the last frame it
 /// was in the way, so a line grazing a corner doesn't flicker. Landmarks ([`Landmark`]) and
-/// anything farther than [`CUT_NEAR`] from the eye never fade for being in the way (the
+/// anything beyond the eye-to-player segment never fades for being in the way (the
 /// Watchglass seen from the mole stays solid); only the eye inside a thing fades it.
 ///
 /// What I stand on or am stepping onto never fades, whatever the eye does ([`supports`]): a
@@ -610,7 +615,7 @@ pub fn cutaway(
     target: Res<crate::controls::Target>,
     time: Res<Time>,
     cam: Query<&Transform, (With<Camera3d>, Without<Occluder>)>,
-    mut q: Query<(Entity, &Transform, &mut Occluder, &mut crate::fade::Fade, Option<&Model>, Option<&Fitted>, Has<Landmark>)>,
+    mut q: Query<(Entity, &Transform, &mut Occluder, &mut crate::fade::Fade, Option<&Model>, Option<&Fitted>, Has<Landmark>, Has<OverheadCover>)>,
     mut held: Local<std::collections::HashMap<Entity, f32>>,
     mut under: Local<std::collections::HashSet<Entity>>,
     others: Query<(Entity, &Transform, &Model, &Fitted), Without<Occluder>>,
@@ -623,7 +628,7 @@ pub fn cutaway(
     let eye = cam.translation;
     let points = [me + Vec3::Y * 1.6, me + Vec3::Y * 1.05, me + Vec3::Y * 0.25];
     let feet = support_probes(me);
-    for (e, t, mut o, mut fade, model, fitted, landmark) in &mut q {
+    for (e, t, mut o, mut fade, model, fitted, landmark, overhead) in &mut q {
         // Models stay hidden until fitted (look-dev fit shows them).
         if model.is_some() && fitted.is_none() {
             continue;
@@ -638,7 +643,7 @@ pub fn cutaway(
         // Into the box's own frame.
         let inv = t.rotation.inverse();
         let local = |p: Vec3| inv * (p - centre);
-        if supports(&feet.map(local), half) {
+        if !overhead && supports(&feet.map(local), half) {
             if fade.target != 0.0 {
                 fade.target = 0.0;
             }
@@ -657,7 +662,7 @@ pub fn cutaway(
         let pad = Vec3::splat(0.25);
         // How far the eye is from the box's nearest point.
         let near = (local(eye).abs() - half).max(Vec3::ZERO).length();
-        let blocks = !landmark && near <= CUT_NEAR && points.iter().any(|p| segment_hits_box(local(eye), local(*p), half + pad, 0.35));
+        let blocks = !landmark && near <= eye.distance(me) + pad.length() && points.iter().any(|p| segment_hits_box(local(eye), local(*p), half + pad, 0.35));
         let want = if inside {
             1.0
         } else if blocks {

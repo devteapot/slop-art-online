@@ -359,6 +359,7 @@ fn bind_parse(s: &str) -> Option<Bind> {
 /// What a viewer keeps between sessions: the bindings and the Play settings.
 #[derive(Resource, Clone, Debug, PartialEq)]
 pub struct Prefs {
+    pub camera: crate::camera::Mode,
     pub control: crate::controls::Control,
     /// `unseen`, `limited` or `fade` (`sightedge::Mode`).
     pub sight_edge: Option<String>,
@@ -383,7 +384,7 @@ pub struct Prefs {
 
 impl Default for Prefs {
     fn default() -> Self {
-        Self { control: crate::controls::Control::default(), sight_edge: None, tips: true, auto_draw: true, dirty: false, theme: None, look_walk: None, sight_look: None, film: None, hair_shine: None }
+        Self { camera: crate::camera::Mode::default(), control: crate::controls::Control::default(), sight_edge: None, tips: true, auto_draw: true, dirty: false, theme: None, look_walk: None, sight_look: None, film: None, hair_shine: None }
     }
 }
 
@@ -417,6 +418,7 @@ pub fn load() -> (Binds, Prefs) {
     binds.preset = [Preset::Letters, Preset::Numbers].into_iter().find(|p| Binds::preset(*p).map == binds.map).unwrap_or(Preset::Own);
     let d = Prefs::default();
     let prefs = Prefs {
+        camera: if v["camera"].as_str() == Some("orbit") { crate::camera::Mode::Orbit } else { d.camera },
         control: match v["control"].as_str() {
             Some("cursor") => crate::controls::Control::Cursor,
             Some("travel") => crate::controls::Control::Travel,
@@ -442,6 +444,7 @@ pub fn save(binds: &Binds, prefs: &Prefs) {
     let v = serde_json::json!({
         "preset": binds.preset.name(),
         "binds": map,
+        "camera": prefs.camera.name(),
         "control": match prefs.control { crate::controls::Control::Cursor => "cursor", crate::controls::Control::Travel => "travel" },
         "sight_edge": prefs.sight_edge,
         "tips": prefs.tips,

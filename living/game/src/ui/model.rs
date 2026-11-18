@@ -233,6 +233,7 @@ pub enum Stance {
 pub struct Actor {
     pub id: u64,
     pub name: String,
+    pub compact_plate: Option<String>,
     /// Just above the head, in world space.
     pub head: Vec3,
     pub distance: f32,
@@ -248,6 +249,12 @@ pub struct Actor {
     pub exact: Option<(f32, f32)>,
     /// A person (not an animal).
     pub kind_person: bool,
+}
+
+impl Actor {
+    pub fn plate_name(&self) -> &str {
+        self.compact_plate.as_deref().unwrap_or(&self.name)
+    }
 }
 
 pub struct TargetInfo {

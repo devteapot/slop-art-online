@@ -111,7 +111,11 @@ fn main() {
     }
     app.add_systems(PostUpdate, perf::apply.before(post::update));
     perf::diagnostics(&mut app);
-    app.insert_resource(lookdev::FarModels::from_env()).add_systems(Update, (lookdev::character_shadows, lookdev::far_models));
+    app.insert_resource(lookdev::FarModels::from_env())
+        .add_systems(Update, lookdev::character_shadows)
+        .add_systems(PostUpdate, lookdev::far_models
+            .after(bevy::transform::TransformSystems::Propagate)
+            .before(bevy::camera::visibility::VisibilitySystems::VisibilityPropagate));
     app.insert_resource(ClearColor(camera::SKY))
         .add_plugins(style::StylePlugin)
         .add_plugins(post::PostPlugin)

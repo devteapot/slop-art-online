@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Run verify-ui scenarios on a verify-ui-* world and check what they did.
 
-  check.py --run RUN [SCENARIO ...]      default: every scenario but those that need a Cullet world
+  check.py --run RUN [SCENARIO ...]      default: the ordinary island scenarios
   check.py --list                        the scenarios, in the order they are defined (* needs Cullet)
   LIVING_GAME_THEME=night check.py …     the same in a theme (evidence in <scenario>-<theme>/)
 
@@ -26,14 +26,17 @@ W, H = 1600, 900
 # @scenario. CULLET: those the default run leaves out, because they need a Cullet world.
 SCENARIOS = {}
 CULLET = set()
+EXPLICIT = set()
 
 
-def scenario(name, cullet=False):
+def scenario(name, cullet=False, explicit=False):
     def register(function):
         assert name not in SCENARIOS, f"scenario {name} registered twice"
         SCENARIOS[name] = function
         if cullet:
             CULLET.add(name)
+        if explicit:
+            EXPLICIT.add(name)
         return function
     return register
 
@@ -1005,6 +1008,231 @@ def ground(d):
     return ((d or {}).get("extra") or {}).get("cursor_ground")
 
 
+@scenario("camera", explicit=True)
+def camera(run, c):
+    """Drive real line-wheel messages at the three top-down knots, with the field off and on."""
+    s = "camera"
+    ids = residents(run, 3)
+    if len(ids) != 3:
+        c.check(s, "three residents available", False, repr(ids))
+        return
+    front, back, behind_wall = ids
+    # Land seed 7, Brackenford. The wood line heads north from grass into Forest tiles.
+    # The roof point is on walking ground under the north eave of the market stall.
+    street, wood, behind_trees, roof = (420.5, 255.5), (276.5, 395.5), (277.5, 389.5), (412.5, 256.5)
+    syncs = [
+        "noon=sql|UPDATE world SET epoch_ms = {epoch_at:12} WHERE id = 0",
+        'fov_off=set_world_law|"fov_on"|"false"',
+        'fov_on=set_world_law|"fov_on"|"true"',
+        f"street=place_at|{{me}}|{street[0]}|{street[1]}",
+        f"wood=place_at|{{me}}|{wood[0]}|{wood[1]};place_at|{front}|{behind_trees[0]}|{behind_trees[1]}",
+    ]
+    knots = (("far", -30, 0.0, 26.0, 75.0, 46.0),
+             ("middle", 11, 0.55, 17.0, 70.0, 44.0),
+             ("near", 30, 1.0, 8.0, 50.0, 42.0))
+    for field in ("off", "on"):
+        plan = f"ready;sync:noon;sync:fov_{field};sync:street;wait:3;sync:scene;look:0;wait:2;cursor:0.70,0.55;wait:0.5;dump:initial;pan:300;drag:250;wait:0.5;dump:fixed;"
+        for stop, wheel, *_ in knots:
+            plan += f"notches:{wheel};wait:1.5;dump:{stop};shot:{stop};"
+            plan += f"point:{front}:0;wait:0.6;dump:{stop}_ground;point:{front}:0.8;wait:0.6;dump:{stop}_hover;"
+            if stop == "far":
+                plan += "key:KeyF:down;wait:0.5;notches:3;wait:0.5;dump:held_wheel;key:Escape:tap;key:KeyF:up;wait:0.5;"
+            plan += f"tap;wait:0.7;dump:{stop}_selected;shot:{stop}_window;"
+            if stop == "middle":
+                plan += f"cursor:@win:Person{front}:head;wait:0.5;notches:2;wait:0.5;dump:window_wheel;"
+            plan += f"chat:close;wait:0.3;click:@win:Person{front}:close;wait:0.5;cursor:0.70,0.55;wait:0.5;"
+        plan += "sync:wood;wait:3;look:180;wait:1;look:0;wait:1.5;"
+        for stop, wheel, *_ in knots:
+            plan += f"notches:{wheel};wait:1.5;dump:wood_{stop};shot:wood_{stop};"
+        roof_syncs = []
+        for stop, wheel, *_ in knots:
+            plan += f"sync:clear_{stop};wait:3;notches:{wheel};wait:1.5;"
+            plan += f"sync:roof_{stop};wait:3;look:180;wait:0.6;look:0;wait:1.2;dump:roof_{stop};shot:roof_{stop};"
+            roof_syncs += [
+                f"clear_{stop}=place_at|{{me}}|{street[0]}|{street[1]}",
+                f"roof_{stop}=place_at|{{me}}|{roof[0]}|{roof[1]}",
+            ]
+        out, code, text = drive(run, f"{s}-{field}", plan + "quit",
+                                places=[f"{front}:0:-2.5", f"{back}:2.5:4.5", f"{behind_wall}:1.0:-14.0"], syncs=syncs + roof_syncs,
+                                env={"RUST_LOG": "info,wgpu=warn,naga=warn,living_game::envs=debug"})
+        c.check(s, f"field {field}: client joined and finished", code == 0, text[-300:])
+        initial = view(dump(out, "initial"))
+        c.check(s, f"field {field}: fresh settings start at middle zoom", abs(initial.get("zoom", -1.0) - 0.55) < 0.001, repr(initial))
+        fixed = view(dump(out, "fixed"))
+        c.check(s, f"field {field}: drag and pan leave bearing at north", abs(fixed.get("yaw", -100.0)) < 0.01, repr(fixed))
+        held = dump(out, "held_wheel") or {}
+        c.check(s, f"field {field}: the held action wheel consumes line-wheel input",
+                abs(view(held).get("zoom", -1.0)) < 0.001 and bool((held.get("wheel") or {}).get("held")), repr(held.get("wheel")))
+        scene = dump(out, "scene") or {}
+        row = (scene.get("placed") or {}).get(str(front))
+        after_window = view(dump(out, "window_wheel"))
+        c.check(s, f"field {field}: wheel over a person window keeps zoom at middle", abs(after_window.get("zoom", -1.0) - 0.55) < 0.001, repr(after_window))
+        ranges = []
+        perceived = []
+        visible = []
+        trace = log(out)
+        for stop, _, z, height, pitch, fov in knots:
+            d = dump(out, stop) or {}
+            v = view(d)
+            data = d.get("extra") or {}
+            sense = data.get("facing_sight") or {}
+            ranges.append(sense.get("sight"))
+            perceived.append(set(d.get("perceived") or []))
+            visible.append({a["id"] for a in d.get("seen") or []})
+            good = all(abs(v.get(k, -100.0) - expected) < tolerance
+                       for k, expected, tolerance in (("zoom", z, 0.001), ("height", height, 0.1),
+                                                       ("pitch", pitch, 0.1), ("fov", fov, 0.1), ("yaw", 0, 0.01)))
+            c.check(s, f"{field} {stop}: north-up camera reaches the curve knot", good and v.get("mode") == "top-down", repr(v))
+            c.check(s, f"{field} {stop}: authority sight and Shade active",
+                    sense.get("on") == (field == "on") and sense.get("source") == "Authority" and data.get("sight_look") == "shade", repr(sense))
+            point = ground(dump(out, f"{stop}_ground"))
+            c.check(s, f"{field} {stop}: ground ray reaches the resident's known tile",
+                    point and row and math.hypot(point[0] - row[0], point[2] - row[1]) < 0.15, repr((point, row)))
+            hover = dump(out, f"{stop}_hover") or {}
+            selected = dump(out, f"{stop}_selected") or {}
+            c.check(s, f"{field} {stop}: point and tap select the resident",
+                    hover.get("under") == front and (selected.get("typing") or {}).get("to") == front,
+                    repr((hover.get("under"), selected.get("typing"))))
+            c.check(s, f"{field} {stop}: street, woods and roof stills captured",
+                    all(os.path.isfile(os.path.join(out, f"{prefix}{stop}.png")) for prefix in ("", "wood_", "roof_")))
+            wood_dump = dump(out, f"wood_{stop}") or {}
+            c.check(s, f"{field} {stop}: resident in generic forest remains in the scoped view",
+                    front in (wood_dump.get("perceived") or []), repr(wood_dump.get("perceived")))
+            under_roof = trace.partition(f"live script: sync:roof_{stop}")[2].partition(f"live script: dump:roof_{stop}")[0]
+            c.check(s, f"{field} {stop}: the market stall roof enters cutaway",
+                    re.search(r"cutaway: .*market_stall.* fades to ", under_roof) is not None, under_roof[-350:])
+        c.check(s, f"{field}: zoom keeps the authority's sight radius", ranges[0] is not None and len(set(ranges)) == 1, repr(ranges))
+        c.check(s, f"{field}: the resident behind the wall stays outside the scoped view",
+                all(behind_wall not in rows for rows in visible + perceived), repr((visible, perceived)))
+        if field == "on":
+            c.check(s, "field on: resident behind the player stays out of every pick list", all(back not in rows for rows in visible + perceived), repr((visible, perceived)))
+        else:
+            c.check(s, "field off: the rear resident is perceived", all(back in rows for rows in perceived), repr(perceived))
+
+
+@scenario("camera-lod", explicit=True)
+def camera_lod(run, c):
+    """Two uncapped runs with the same client, fixtures and framing, changing only the LOD cap."""
+    from datetime import datetime
+    s = "camera-lod"
+    ids = sorted(r["id"] for r in sql(run, "SELECT id, name, alive FROM character WHERE kind = 'person'")
+                 if r.get("alive") and r.get("name") != "Verifier")[:17]
+    if len(ids) < 12:
+        c.check(s, "at least 12 residents available", False, repr(ids))
+        return
+    offsets = [(x, y) for y in (-4, -2, 0, 2, 4) for x in (-4, -2, 2, 4)]
+    places = [f"{id}:{x}:{y}" for id, (x, y) in zip(ids, offsets)]
+    syncs = ['setup=set_world_law|"fov_on"|"false";place_at|{me}|420.5|255.5',
+             "noon=sql|UPDATE world SET epoch_ms = {epoch_at:12} WHERE id = 0"]
+    plan = "ready;sync:noon;sync:setup;wait:2;sync:scene;look:180;wait:4;cursor:0.68,0.42;wait:0.5;"
+    knots = (("far", -30), ("middle", 11), ("near", 30))
+    for stop, notches in knots:
+        plan += f"notches:{notches};wait:2;dump:{stop}_start;wait:8;dump:{stop}_end;shot:{stop};"
+    metrics = {}
+    for arm, cap in (("cap-8", "8"), ("uncapped", "0")):
+        ev = os.path.join(ROOT, ".local/living/verify", run, "ui", f"{s}-{arm}")
+        os.makedirs(ev, exist_ok=True)
+        frames = os.path.join(ev, "frames.csv")
+        out, code, msg = drive(run, f"{s}-{arm}", plan + "quit", places=places, syncs=syncs,
+                               env={"LIVING_GAME_LOD_CAP": cap, "LIVING_GAME_FRAMES": frames, "LIVING_GAME_FPS_CAP": "0"})
+        c.check(s, f"{arm}: client joined and captured the three stops", code == 0, msg[-300:])
+        frame_rows = []
+        if os.path.exists(frames):
+            with open(frames) as f:
+                frame_rows = [tuple(map(int, line.split(","))) for line in f]
+        trace = log(out)
+        times = {}
+        for stamp, label in re.findall(r"^([\dT:.\-]+Z).*live script: dump:(\w+)", trace, re.M):
+            times[label] = int(datetime.fromisoformat(stamp).timestamp() * 1_000_000)
+        scene = dump(out, "scene") or {}
+        metrics[arm] = {}
+        for stop, _ in knots:
+            lo = times.get(f"{stop}_start", 0)
+            hi = times.get(f"{stop}_end", 0)
+            intervals = sorted(delta / 1000 for unix, delta, _ in frame_rows if lo < unix < hi)
+            d = dump(out, f"{stop}_end") or {}
+            lod = (d.get("extra") or {}).get("lod") or {}
+            measured = len(intervals) >= 100 and lod.get("near", 0) + lod.get("far", 0) >= 8
+            c.check(s, f"{arm} {stop}: crowded street and uncapped samples", measured, repr(lod))
+            if intervals:
+                metrics[arm][stop] = {"frames": len(intervals), "p50_ms": intervals[len(intervals) // 2],
+                                      "p99_ms": intervals[math.ceil(len(intervals) * .99) - 1], **lod}
+            if arm == "cap-8":
+                c.check(s, f"{stop}: eight near models at most", lod.get("near", 100) <= 8, repr(lod))
+            if stop != "far":
+                near = {p["id"] for p in lod.get("people", []) if not p["far"]}
+                c.check(s, f"{stop}: player and at least one resident have the near model",
+                        scene.get("me") in near and len(near & set(ids)) >= 1, repr(near))
+    evidence = os.path.join(ROOT, ".local/living/verify", run, "ui", f"{s}.json")
+    with open(evidence, "w") as f:
+        json.dump(metrics, f, indent=2)
+
+
+@scenario("camera-faces", explicit=True)
+def camera_faces(run, c):
+    """Capture the ordinary middle and near framing with a generated resident beside Shino."""
+    s = "camera-faces"
+    generated, shino = 2, 3
+    rows = look_rows(run)
+    requested = {generated, shino}
+    if not requested <= rows.keys() or not os.path.isfile(LOOK_BOOK):
+        c.check(s, "play8 resident looks are available", False, repr(rows))
+        return
+    root = os.path.join(ROOT, ".local/living/verify", run, "ui")
+    book = book_copy(root, json.load(open(LOOK_BOOK)), "camera-shino", drop=[rows[shino]])
+    plan = ("ready;sync:noon;sync:stage;wait:3;sync:scene;look:180;wait:2;sync:face_south;wait:2;"
+            "cursor:0.15,0.55;wait:0.5;dump:middle_faces;shot:middle_faces;"
+            "notches:30;wait:2;dump:near_faces;shot:near_faces;quit")
+    syncs = [
+        "noon=sql|UPDATE world SET epoch_ms = {epoch_at:12} WHERE id = 0",
+        'stage=set_world_law|"fov_on"|"false";place_at|{me}|300.5|330.5',
+        "face_south=" + ";".join(f"sql|UPDATE body SET heading = 1.5707963, turn = 0.0, turn_s = 0.0, face_off = 0.0, face_turn = 0.0, face_turn_s = 0.0 WHERE id = {id}"
+                                 for id in (generated, shino)),
+    ]
+    out, code, msg = drive(run, s, plan, places=[f"{generated}:-1:-4.0", f"{shino}:1:-4.0"],
+                           syncs=syncs, extra=["--size", "3840x2160"], env={"LIVING_GAME_LOOK_BOOK": book})
+    c.check(s, "client joined and captured both faces", code == 0, msg[-300:])
+    for stop in ("middle", "near"):
+        d = dump(out, f"{stop}_faces") or {}
+        models = {m["id"]: m for m in (d.get("extra") or {}).get("lod", {}).get("people", [])}
+        a, b = models.get(generated, {}), models.get(shino, {})
+        c.check(s, f"{stop}: generated full model beside the Shino fallback",
+                a.get("far") is False and b.get("far") is False and "Shino" in b.get("model", "")
+                and os.path.isfile(os.path.join(out, f"{stop}_faces.png")), repr((a, b)))
+
+
+@scenario("camera-narrow")
+def camera_narrow(run, c):
+    """Use the narrow viewport's own cursor projection and drive the ordinary movement keys."""
+    s = "camera-narrow"
+    ids = residents(run, 1)
+    if not ids:
+        c.check(s, "resident available", False)
+        return
+    person = ids[0]
+    plan = (f"ready;sync:street;wait:3;sync:scene;look:0;wait:1;cursor:0.65,0.35;wait:0.5;"
+            f"notches:-30;wait:1.5;point:{person}:0.8;wait:0.7;tap;wait:0.8;dump:window;shot:window;"
+            f"chat:close;wait:0.4;click:@win:Person{person}:close;wait:0.4;"
+            "look:;cursor:0.65,0.35;wait:2;notches:11;wait:1.5;dump:middle;"
+            "key:KeyW:down;wait:0.8;key:KeyW:up;wait:0.5;"
+            "key:ShiftLeft:down;key:KeyS:down;wait:0.8;key:KeyS:up;key:ShiftLeft:up;wait:0.5;dump:moved;quit")
+    out, code, message = drive(run, s, plan, places=[f"{person}:0:-3"],
+                               syncs=["street=place_at|{me}|420.5|255.5"], extra=["--size", "960x900"],
+                               env={"RUST_LOG": "info,wgpu=warn,naga=warn,living_game::controls=debug"})
+    c.check(s, "narrow client joined and finished", code == 0, message[-300:])
+    d = dump(out, "window") or {}
+    r = next((w["rect"] for w in d.get("windows", []) if w["win"] == f"Person{person}"), {})
+    c.check(s, "the far person window stays inside the narrow viewport",
+            bool(r) and r["x"] >= 0 and r["y"] >= 0 and r["x"] + r["w"] <= 960 and r["y"] + r["h"] <= 900, repr(r))
+    before = (dump(out, "middle") or {}).get("me_at", {}).get("drawn")
+    after = (dump(out, "moved") or {}).get("me_at", {}).get("drawn")
+    c.check(s, "W then Shift+S stays on the north-south axis and runs farther south",
+            before and after and abs(before[0] - after[0]) < 0.25 and after[1] > before[1] + 0.25, repr((before, after)))
+    trace = log(out)
+    zoom_trace = trace.partition("live script: notches:11")[2].partition("live script: dump:middle")[0]
+    c.check(s, "a stationary cursor sends no look change during zoom", bool(zoom_trace) and "human_face(" not in zoom_trace, zoom_trace[-250:])
+
+
 @scenario("turns")
 def turns(run, c):
     """The cursor while the view turns or zooms (Cullet walk 1, the owner: a pan turned the view
@@ -1013,7 +1241,7 @@ def turns(run, c):
     nothing open: the cursor keeps its screen position (within 1 px), the view turns or zooms,
     and the ground under the cursor changes with the view."""
     s = "turns"
-    plan = ("ready;wait:2;frame:0;cursor:0.72,0.62;wait:1;dump:01;shot:01_start;"
+    plan = ("ready;wait:2;click:@menu;wait:0.4;click:@menu:Settings;wait:0.5;click:@settings:camera:orbit;wait:0.4;key:Escape:tap;wait:0.5;frame:0;cursor:0.72,0.62;wait:1;dump:01;shot:01_start;"
             "pan:300;wait:0.15;dump:02;shot:02_panning;wait:1.5;dump:03;shot:03_panned;"
             "pan:-500;wait:1.5;dump:04;shot:04_panned_back;"
             "pinch:0.3;wait:0.15;dump:05;wait:1.2;dump:06;shot:06_pinched_in;"
@@ -2626,8 +2854,8 @@ def main():
     if not f"verify-{a.run}".startswith("verify-ui-"):
         sys.exit("verify-ui runs use run names ui-* (worlds verify-ui-*)")
     c = Checks()
-    # The Cullet scenarios need a Cullet world (`--seed cullet`), the others the island's residents.
-    for name in a.scenarios or [k for k in SCENARIOS if k not in CULLET]:
+    # Special seed fixtures require a scenario name on the command line.
+    for name in a.scenarios or [k for k in SCENARIOS if k not in CULLET and k not in EXPLICIT]:
         if name not in SCENARIOS:
             sys.exit(f"unknown scenario {name}; known: {', '.join(SCENARIOS)}")
         SCENARIOS[name](a.run, c)
