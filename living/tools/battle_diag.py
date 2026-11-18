@@ -199,7 +199,7 @@ def main():
     state = {"respawns": 0, "stop": False, "fighters": [], "arriving": {}}
     head = {}
     try:
-        run.harness("launch", "--seed", "island")
+        run.harness("launch", "--seed", "island", "--archive-commitlog")
         run.harness("doctor")
         if a.fast_lane:
             run.admin("set_world_law", "fast_lane_on", "true")
@@ -444,10 +444,9 @@ def main():
                 familiar_sample("final")
             except Exception as e:
                 (run.directory / "familiar-final-error.txt").write_text(str(e))
-        # The harness pauses the world and reads it back as paused before deleting it
-        # (living/tools/world_delete.py).
-        run.finish_cleanup()
+        # The harness confirms the pause and archives the commitlog before deletion.
         (run.directory / "diag-result.json").write_text(json.dumps(head, indent=1))
+        run.finish_cleanup()
         print(json.dumps(head), flush=True)
     return 0 if head.get("status") == "done" else 1
 

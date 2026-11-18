@@ -43,6 +43,8 @@ LIVING = ROOT / "living"
 # The seed's script, composed as the authority composes a seed's laws at creation (one Python
 # copy of `floors::compose`, shared with living/tools/trials.py).
 sys.path.insert(0, str(LIVING / "tools"))
+import trial_archive  # noqa: E402
+import world_guard  # noqa: E402
 from install_script import OVERLAY_MARK, installed, same_script, seed_json, seed_script, without_world_laws  # noqa: E402
 STDB = str(LIVING / "tools/stdb")
 URL = os.environ.get("LIVING_STDB_URL", "http://127.0.0.1:3300").rstrip("/")
@@ -175,15 +177,20 @@ def launch(a):
         wasm = f"living_authority_verify_{a.run.replace('-', '_')}.wasm"
         (mount / wasm).write_bytes(built.read_bytes())
     st["wasm"] = wasm
-    # Record the database before publishing: a publish or script install that fails halfway
-    # still leaves a database for cleanup to delete.
+    keep = getattr(a, "keep_data", False)
+    owner = admin_token(initialize=True)
+    current = world_guard.lookup(URL, st["db"], owner)
+    if current is not None and (st.get("database_identity"), st.get("server_url")) != (current, URL):
+        sys.exit(f"refusing to overwrite {st['db']}: use a new run name")
+    fresh = ["--delete-data"] if current and not keep else []
+    command = [STDB, "publish", "-s", "local", "-b", f"/wasm/{wasm}", st["db"], *fresh, "-y"]
+    published = world_guard.arm(run_dir(a.run), URL, st["db"], owner, os.getppid(),
+                                command=command, expected=current, expected_epoch=st.get("world_epoch"))
+    st["database_identity"], st["world_epoch"] = published["identity"], published["epoch"]
+    st["server_url"] = URL
+    st["archive_commitlog"] = getattr(a, "archive_commitlog", False) or st.get("archive_commitlog", False)
     st["published"] = True
     save(st)
-    # --keep-data updates the module in place (as `just living-publish` does for the active
-    # world), so a mind's reconnect and recovery across a module update can be proven.
-    keep = getattr(a, "keep_data", False)
-    fresh = [] if keep else ["--delete-data"]
-    stdb("publish", "-s", "local", "-b", f"/wasm/{wasm}", st["db"], *fresh, "-y")
     # A seed with its own laws (`laws` or `laws_file`, a Rhai overlay) had them composed over the
     # shipped script and installed when its world was created; installing the plain script now
     # would drop them. Every other world gets the working tree's script, as before. `none` (a
@@ -192,7 +199,6 @@ def launch(a):
     # Python copy of `floors::compose`, shared with trials.py): the read-back below checks it.
     source, overlay = seed_script(a.seed)
     st["seed_laws"] = bool(overlay)
-    owner = admin_token()
     if st["seed_laws"]:
         how = "the seed carries its own laws: kept as installed at creation (no install_script)"
     else:
@@ -311,9 +317,13 @@ def player(a):
     sys.exit(0 if code == 200 else 1)
 
 
-def admin_token():
+def admin_token(*, initialize=False):
     """The world admin's token (the in-container CLI identity). Kept in memory only."""
-    out = stdb("login", "show", "--token").stdout
+    result = stdb("login", "show", "--token", check=False)
+    if initialize and "not logged in" in (result.stdout + result.stderr).lower():
+        stdb("login", "--server-issued-login", "local")
+        result = stdb("login", "show", "--token")
+    out = result.stdout
     for line in out.splitlines():
         if "auth token" in line and " is " in line:
             return line.rsplit(" is ", 1)[1].strip()
@@ -452,7 +462,21 @@ def cleanup(a):
     if st.get("observer"):
         observer(argparse.Namespace(run=a.run, action="stop"))
         st = load(a.run)
-    if st.get("published") and not getattr(a, "keep_db", False) and st["db"].startswith(PREFIX):
+    if st.get("published") and st["db"].startswith(PREFIX) and st.get("database_identity"):
+        if st.get("server_url") != URL:
+            sys.exit(f"refusing cleanup of {st['db']}: server differs from run record")
+        keep_db = getattr(a, "keep_db", False)
+        record = trial_archive.finish(
+            run_dir(a.run), URL, CONTAINER, st["db"], st["database_identity"], admin_token(),
+            delete=not keep_db, archive_commitlog=st.get("archive_commitlog", False), expected_epoch=st.get("world_epoch"),
+        )
+        st["published"] = keep_db
+        if record:
+            log(st, f"commitlog archive: {record}")
+        if not keep_db:
+            log(st, f"deleted {st['db']} (name no longer resolves)")
+        save(st)
+    elif st.get("published") and not getattr(a, "keep_db", False) and st["db"].startswith(PREFIX):
         # Pause the world first: SpacetimeDB 2.14.1 can panic, and take the whole server down,
         # when a database is deleted while its world still ticks (the trial service went down
         # that way on 2026-11-12 at 12:52; living/tools/trials.py delete_db does the same).
@@ -479,6 +503,8 @@ def cleanup(a):
         else:
             save(st)
             sys.exit(f"{st['db']} still answers SQL after delete (HTTP {code}); rerun cleanup or delete it with living/tools/stdb")
+    if not st.get("published"):
+        world_guard.stop(run_dir(a.run))
     if st.get("wasm", "").startswith("living_authority_verify_"):
         (wasm_mount() / st["wasm"]).unlink(missing_ok=True)
         log(st, f"removed module copy {st['wasm']}")
@@ -517,6 +543,7 @@ def main():
     p = sub.add_parser("launch"); p.add_argument("--run", required=True); p.add_argument("--seed", default="world")
     p.add_argument("--keep-data", action="store_true", help="update the run's existing database in place instead of publishing it fresh")
     p.add_argument("--target-dir", help="cargo target directory for the module build, e.g. under .local/living/verify/<run>/")
+    p.add_argument("--archive-commitlog", action="store_true", help="archive this run's commitlog before cleanup deletes it")
     p.set_defaults(f=launch)
     p = sub.add_parser("doctor"); p.add_argument("--run", required=True); p.set_defaults(f=doctor)
     p = sub.add_parser("player"); p.add_argument("--run", required=True); p.add_argument("action", choices=["join", "move", "act", "say"]); p.add_argument("args", nargs="+")
