@@ -10,8 +10,8 @@
 //!
 //! 1. On connect: `world`, `land` and `settlement` (1, 1 and about 6 rows).
 //! 2. Then, for the connection's lifetime (so the death screen keeps its rows):
-//!    - what I perceive: `seen_bodies` (the narrow motion stream), `seen_characters`,
-//!      `seen_fighters` and `seen_doing` (the others; `seen_characters` mine too);
+//!    - what I perceive: the near and far motion, fighter and doing views, their cues, and
+//!      `seen_characters` (mine too);
 //!    - my own state: my body, fighter and doing rows (`my_body`, `my_fighter`, `my_doing`),
 //!      `my_characters` (the one I play, kept after its death until I join again),
 //!      `my_vitals`, `my_experience`, `my_places`, `my_inventory`, `my_know_how`, my combat
@@ -45,7 +45,9 @@
 use bevy::prelude::*;
 use living_bindings::*;
 use living_rules::map::{chunk_id, chunk_xy, CHUNK};
-use spacetimedb_sdk::{DbContext, Identity, SubscriptionHandle as _, Table, TableWithPrimaryKey};
+use spacetimedb_sdk::{DbContext, EventTable, Identity, SubscriptionHandle as _, Table, TableWithPrimaryKey};
+use std::collections::HashMap;
+use std::ops::Deref;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -64,10 +66,7 @@ const STATIC: &[&str] = &["SELECT * FROM world", "SELECT * FROM land", "SELECT *
 /// What my character perceives and its own state (per-sender views, docs/PERCEPTION.md), and
 /// the rules' cards, for the connection's lifetime.
 const PERCEIVED: &[&str] = &[
-    "SELECT * FROM seen_bodies",
     "SELECT * FROM seen_characters",
-    "SELECT * FROM seen_fighters",
-    "SELECT * FROM seen_doing",
     // My own body, move and act, apart from my scene's: my own changes re-run one row.
     "SELECT * FROM my_body",
     "SELECT * FROM my_fighter",
@@ -109,7 +108,7 @@ const PERCEIVED: &[&str] = &[
 ];
 
 enum Signal {
-    Connection(Result<DbConnection, String>),
+    Connection(Result<PlayerConnection, String>),
     Identity(Identity, String),
     Static,
     Base,
@@ -185,7 +184,7 @@ pub struct Net {
     pub server: String,
     pub db: String,
     pub name: String,
-    pub conn: Option<DbConnection>,
+    pub conn: Option<PlayerConnection>,
     pub status: Status,
     pub mode: Mode,
     pub detail: String,
@@ -261,7 +260,191 @@ pub fn chunk_ranges(col: &str, (cx0, cx1): (u32, u32), (cy0, cy1): (u32, u32)) -
     (cy0..=cy1).map(|cy| format!("({col} >= {} AND {col} <= {})", chunk_id(cx0, cy), chunk_id(cx1, cy))).collect::<Vec<_>>().join(" OR ")
 }
 
-/// A perceived body as the drawing code takes it: its motion row (`seen_bodies`, which carries
+type Overlay<T> = Arc<Mutex<HashMap<u32, T>>>;
+
+#[derive(Default)]
+struct Cues {
+    motion: Overlay<Moving>,
+    fighter: Overlay<Option<Fighter>>,
+    doing: Overlay<Option<Doing>>,
+}
+
+/// The player's SDK connection and its transient cue state. Each reconnect gets fresh overlays.
+pub struct PlayerConnection {
+    sdk: DbConnection,
+    cues: Arc<Cues>,
+}
+
+impl Deref for PlayerConnection {
+    type Target = DbConnection;
+
+    fn deref(&self) -> &DbConnection {
+        &self.sdk
+    }
+}
+
+// Keep the SQL names and generated SDK accessors for each stream together. The
+// reads and callbacks below use these adapters so a tier rename has one edit point.
+macro_rules! perception_streams {
+    ($($stream:ident {
+        near: $near:ident => $near_handle:ident,
+        far: $far:ident => $far_handle:ident,
+        cue: $cue:ident => $cue_handle:ident, $cue_row:ty => $overlay:ty,
+        |$row:ident| $key:expr, $value:expr
+    }),+ $(,)?) => {
+        const PERCEPTION_STREAMS: &[&str] = &[
+            $(concat!("SELECT * FROM ", stringify!($near)),
+              concat!("SELECT * FROM ", stringify!($far)),
+              concat!("SELECT * FROM ", stringify!($cue)),)+
+        ];
+
+        $(
+            pub(crate) mod $stream {
+                use super::*;
+
+                pub(crate) fn near(db: &RemoteTables) -> $near_handle<'_> {
+                    db.$near()
+                }
+
+                pub(crate) fn far(db: &RemoteTables) -> $far_handle<'_> {
+                    db.$far()
+                }
+
+                pub(super) fn cue(db: &RemoteTables) -> $cue_handle<'_> {
+                    db.$cue()
+                }
+
+                pub(super) fn cue_value($row: &$cue_row) -> (u32, &$overlay) {
+                    ($key, $value)
+                }
+            }
+        )+
+    };
+}
+
+perception_streams! {
+    motion {
+        near: seen_bodies_near => SeenBodiesNearTableHandle,
+        far: seen_bodies_far => SeenBodiesFarTableHandle,
+        cue: seen_body_cue => SeenBodyCueTableHandle, SeenBodyCue => Moving,
+        |row| row.motion.id, &row.motion
+    },
+    fighting {
+        near: seen_fighters_near => SeenFightersNearTableHandle,
+        far: seen_fighters_far => SeenFightersFarTableHandle,
+        cue: seen_fighter_cue => SeenFighterCueTableHandle, SeenFighterCue => Option<Fighter>,
+        |row| row.body, &row.fighter
+    },
+    activity {
+        near: seen_doing_near => SeenDoingNearTableHandle,
+        far: seen_doing_far => SeenDoingFarTableHandle,
+        cue: seen_doing_cue => SeenDoingCueTableHandle, SeenDoingCue => Option<Doing>,
+        |row| row.body, &row.doing
+    },
+}
+
+fn motion_tier(db: &RemoteTables, id: u32) -> Option<Moving> {
+    motion::near(db).id().find(&id).or_else(|| motion::far(db).id().find(&id))
+}
+
+fn clear_on_tier_change<R: 'static, T, H>(tier: H, overlay: &Overlay<T>, id: fn(&R) -> u32)
+where
+    T: Send + 'static,
+    H: TableWithPrimaryKey<Row = R>,
+{
+    let inserts = overlay.clone();
+    let updates = overlay.clone();
+    let deletes = overlay.clone();
+    tier.on_insert(move |_, row| { inserts.lock().unwrap().remove(&id(row)); });
+    tier.on_update(move |_, _, row| { updates.lock().unwrap().remove(&id(row)); });
+    tier.on_delete(move |_, row| { deletes.lock().unwrap().remove(&id(row)); });
+}
+
+impl Cues {
+    fn counts(&self) -> (usize, usize, usize) {
+        (
+            self.motion.lock().unwrap().len(),
+            self.fighter.lock().unwrap().len(),
+            self.doing.lock().unwrap().len(),
+        )
+    }
+
+    fn listen(self: &Arc<Self>, conn: &DbConnection, latest: &Arc<AtomicU64>, latest_all: &Arc<AtomicU64>) {
+        let near = motion::near(&conn.db);
+        let far = motion::far(&conn.db);
+        clear_on_tier_change(motion::near(&conn.db), &self.motion, |row| row.id);
+        clear_on_tier_change(motion::far(&conn.db), &self.motion, |row| row.id);
+        clear_on_tier_change(fighting::near(&conn.db), &self.fighter, |row| row.id);
+        clear_on_tier_change(fighting::far(&conn.db), &self.fighter, |row| row.id);
+        clear_on_tier_change(activity::near(&conn.db), &self.doing, |row| row.id);
+        clear_on_tier_change(activity::far(&conn.db), &self.doing, |row| row.id);
+
+        track_motion_time(&near, latest, latest_all);
+        track_motion_time(&far, latest, latest_all);
+        let cues = self.clone();
+        near.on_delete(move |ctx, row| cues.forget_hidden(&ctx.db, row.id));
+        let cues = self.clone();
+        far.on_delete(move |ctx, row| cues.forget_hidden(&ctx.db, row.id));
+
+        let (motion, latest, latest_all) = (self.motion.clone(), latest.clone(), latest_all.clone());
+        motion::cue(&conn.db).on_insert(move |ctx, cue| {
+            let (id, row) = motion::cue_value(cue);
+            let Some(tier) = motion_tier(&ctx.db, id) else { return };
+            let mut motion = motion.lock().unwrap();
+            let previous = motion.get(&id).unwrap_or(&tier);
+            latest_all.fetch_max(row.t_ms, Ordering::Relaxed);
+            if row.t_ms > previous.t_ms {
+                latest.fetch_max(row.t_ms, Ordering::Relaxed);
+            }
+            motion.insert(id, row.clone());
+            trace!(id, "accepted motion cue");
+        });
+
+        let fighter = self.fighter.clone();
+        fighting::cue(&conn.db).on_insert(move |ctx, cue| {
+            let (id, row) = fighting::cue_value(cue);
+            if motion_tier(&ctx.db, id).is_some() {
+                fighter.lock().unwrap().insert(id, row.clone());
+            }
+        });
+
+        let doing = self.doing.clone();
+        activity::cue(&conn.db).on_insert(move |ctx, cue| {
+            let (id, row) = activity::cue_value(cue);
+            if motion_tier(&ctx.db, id).is_some() {
+                doing.lock().unwrap().insert(id, row.clone());
+            }
+        });
+    }
+
+    fn forget_hidden(&self, db: &RemoteTables, id: u32) {
+        // SDK callbacks see both tiers after the transaction, including tier migrations.
+        if motion_tier(db, id).is_none() {
+            self.fighter.lock().unwrap().remove(&id);
+            self.doing.lock().unwrap().remove(&id);
+        }
+    }
+}
+
+fn track_motion_time(
+    tier: &impl TableWithPrimaryKey<Row = Moving>,
+    latest: &Arc<AtomicU64>,
+    latest_all: &Arc<AtomicU64>,
+) {
+    let first = latest_all.clone();
+    tier.on_insert(move |_, new| {
+        first.fetch_max(new.t_ms, Ordering::Relaxed);
+    });
+    let (latest, latest_all) = (latest.clone(), latest_all.clone());
+    tier.on_update(move |_, old, new| {
+        latest_all.fetch_max(new.t_ms, Ordering::Relaxed);
+        if new.t_ms != old.t_ms {
+            latest.fetch_max(new.t_ms, Ordering::Relaxed);
+        }
+    });
+}
+
+/// A perceived body as the drawing code takes it: its motion row (which carries
 /// no path, chunk or kind), with the creature's kind from its `seen_characters` row (both views
 /// hold the same creatures).
 pub fn body_of(conn: &DbConnection, m: Moving) -> Body {
@@ -288,34 +471,58 @@ pub fn body_of(conn: &DbConnection, m: Moving) -> Body {
     }
 }
 
-/// Every body my character perceives, mine included (`my_body` and `seen_bodies`).
-pub fn bodies(conn: &DbConnection) -> impl Iterator<Item = Body> + '_ {
-    let rows: Vec<Moving> = conn.db.my_body().iter().chain(conn.db.seen_bodies().iter()).collect();
+/// Every body my character perceives, mine included.
+pub fn bodies(conn: &PlayerConnection) -> impl Iterator<Item = Body> + '_ {
+    let motion = conn.cues.motion.lock().unwrap();
+    let rows: Vec<_> = conn.db.my_body().iter().chain(motion::near(&conn.db).iter()
+        .chain(motion::far(&conn.db).iter())
+        .map(|row| motion.get(&row.id).cloned().unwrap_or(row)))
+        .collect();
     rows.into_iter().map(move |m| body_of(conn, m))
 }
 
-pub fn find_body(conn: &DbConnection, id: u32) -> Option<Body> {
+pub fn find_body(conn: &PlayerConnection, id: u32) -> Option<Body> {
     find_motion(conn, id).map(|m| body_of(conn, m))
 }
 
 /// A perceived body's motion row, mine included.
-pub fn find_motion(conn: &DbConnection, id: u32) -> Option<Moving> {
-    conn.db.my_body().id().find(&id).or_else(|| conn.db.seen_bodies().id().find(&id))
+pub fn find_motion(conn: &PlayerConnection, id: u32) -> Option<Moving> {
+    conn.db.my_body().id().find(&id)
+        .or_else(|| conn.cues.motion.lock().unwrap().get(&id).cloned())
+        .or_else(|| motion_tier(&conn.db, id))
 }
 
-/// A perceived fighter's row, mine included (`my_fighter` and `seen_fighters`).
-pub fn find_fighter(conn: &DbConnection, id: u32) -> Option<Fighter> {
-    conn.db.my_fighter().id().find(&id).or_else(|| conn.db.seen_fighters().id().find(&id))
+/// A perceived fighter's row, mine included.
+pub fn find_fighter(conn: &PlayerConnection, id: u32) -> Option<Fighter> {
+    if let Some(mine) = conn.db.my_fighter().id().find(&id) {
+        return Some(mine);
+    }
+    if let Some(cue) = conn.cues.fighter.lock().unwrap().get(&id) {
+        return cue.clone();
+    }
+    fighting::near(&conn.db).id().find(&id).or_else(|| fighting::far(&conn.db).id().find(&id))
 }
 
 /// Every perceived fighter's row, mine included.
-pub fn fighters(conn: &DbConnection) -> Vec<Fighter> {
-    conn.db.my_fighter().iter().chain(conn.db.seen_fighters().iter()).collect()
+pub fn fighters(conn: &PlayerConnection) -> Vec<Fighter> {
+    let fighter = conn.cues.fighter.lock().unwrap();
+    conn.db.my_fighter().iter()
+        .chain(fighting::near(&conn.db).iter()
+            .chain(fighting::far(&conn.db).iter())
+            .filter(|row| !fighter.contains_key(&row.id)))
+        .chain(fighter.values().filter_map(|cue| cue.clone()))
+        .collect()
 }
 
-/// What a perceived creature is visibly doing, mine included (`my_doing` and `seen_doing`).
-pub fn find_doing(conn: &DbConnection, id: u32) -> Option<Doing> {
-    conn.db.my_doing().id().find(&id).or_else(|| conn.db.seen_doing().id().find(&id))
+/// What a perceived creature is visibly doing, mine included.
+pub fn find_doing(conn: &PlayerConnection, id: u32) -> Option<Doing> {
+    if let Some(mine) = conn.db.my_doing().id().find(&id) {
+        return Some(mine);
+    }
+    if let Some(cue) = conn.cues.doing.lock().unwrap().get(&id) {
+        return cue.clone();
+    }
+    activity::near(&conn.db).id().find(&id).or_else(|| activity::far(&conn.db).id().find(&id))
 }
 
 impl Net {
@@ -376,6 +583,8 @@ impl Net {
         let (inbox, applied, gone, failed) = (self.inbox.clone(), self.inbox.clone(), self.inbox.clone(), self.inbox.clone());
         let body_t = self.body_t.clone();
         let body_t_all = self.body_t_all.clone();
+        let cues = Arc::new(Cues::default());
+        let listen = cues.clone();
         let builder = DbConnection::builder()
             .with_uri(self.server.clone())
             .with_database_name(self.db.clone())
@@ -386,27 +595,9 @@ impl Net {
                 applied.lock().unwrap().push(Signal::Identity(identity, token.to_string()));
                 // Only a new segment says how late rows arrive: a body entering view brings a
                 // segment that may have started minutes ago (docs/LATENCY.md, step 3).
-                let all = body_t_all.clone();
-                conn.db.seen_bodies().on_insert(move |_, new| {
-                    all.fetch_max(new.t_ms, Ordering::Relaxed);
-                });
-                let (mine_all, mine_t) = (body_t_all.clone(), body_t.clone());
-                conn.db.seen_bodies().on_update(move |_, old, new| {
-                    body_t_all.fetch_max(new.t_ms, Ordering::Relaxed);
-                    if new.t_ms != old.t_ms {
-                        body_t.fetch_max(new.t_ms, Ordering::Relaxed);
-                    }
-                });
-                let mine_first = mine_all.clone();
-                conn.db.my_body().on_insert(move |_, new| {
-                    mine_first.fetch_max(new.t_ms, Ordering::Relaxed);
-                });
-                conn.db.my_body().on_update(move |_, old, new| {
-                    mine_all.fetch_max(new.t_ms, Ordering::Relaxed);
-                    if new.t_ms != old.t_ms {
-                        mine_t.fetch_max(new.t_ms, Ordering::Relaxed);
-                    }
-                });
+                debug!("new connection cue overlays (motion, fighter, doing): {:?}", listen.counts());
+                listen.listen(conn, &body_t, &body_t_all);
+                track_motion_time(&conn.db.my_body(), &body_t, &body_t_all);
                 let ok = applied.clone();
                 let err = applied.clone();
                 conn.subscription_builder()
@@ -420,7 +611,7 @@ impl Net {
             })
             .on_connect_error(move |_, e| failed.lock().unwrap().push(Signal::Disconnected(format!("connect failed: {e}"))));
         std::thread::spawn(move || {
-            let r = builder.build().map_err(|e| e.to_string());
+            let r = builder.build().map(|sdk| PlayerConnection { sdk, cues }).map_err(|e| e.to_string());
             inbox.lock().unwrap().push(Signal::Connection(r));
         });
     }
@@ -430,6 +621,7 @@ impl Net {
         let Some(conn) = self.conn.as_ref() else { return };
         self.mode = if conn.db.land().count() > 0 { Mode::Land } else { Mode::Tiles };
         let mut queries: Vec<&str> = PERCEIVED.to_vec();
+        queries.extend_from_slice(PERCEPTION_STREAMS);
         if self.mode == Mode::Tiles {
             queries.push("SELECT * FROM terrain_chunk");
         } else {
@@ -631,6 +823,7 @@ pub fn pump(mut net: NonSendMut<Net>, time: Res<Time>) {
                 // Calls still waiting will not be answered (the SDK drops their callbacks).
                 crate::actions::lost();
                 if let Some(c) = net.conn.take() {
+                    debug!("dropping connection cue overlays (motion, fighter, doing): {:?}", c.cues.counts());
                     let _ = c.disconnect();
                 }
                 net.base = None;
