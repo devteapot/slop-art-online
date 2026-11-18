@@ -252,7 +252,7 @@ def mirror_name(n):
     return n
 
 
-def make_armature():
+def make_armature(include_fringe=True):
     finger_joints()
     # The eyes' bones (VRoid's names), each at the centre of the ball its iris lies on: turning
     # one slides that iris over the white.
@@ -269,8 +269,9 @@ def make_armature():
         # file stands it where that type's own fringe ends (hair_fit.py). Under the forehead's
         # bone, so a person's fuller or flatter forehead carries it. No clip and no identity
         # value moves it.
-        JOINTS[hair.FRINGE_BONE] = tuple(hw(hair.fringe_point(HF)))
-        PARENT[hair.FRINGE_BONE] = "J_Id_Forehead"
+        if include_fringe:
+            JOINTS[hair.FRINGE_BONE] = tuple(hw(hair.fringe_point(HF)))
+            PARENT[hair.FRINGE_BONE] = "J_Id_Forehead"
     for n in [n for n in JOINTS if n.startswith("J_Bip_L_")]:
         x, y, z = JOINTS[n]
         JOINTS[mirror_name(n)] = (-x, y, z)
@@ -495,7 +496,9 @@ def torso_w(z, x, skirt=False, front=False, hip=None):
         # (hip_share): its own side's leg alone, and the hips' between the legs. Below that it
         # keeps its own rule, which the walk and the gaits were tuned with.
         up = CROTCH_UP if STANCE else 0.0
-        band = smooth((z - (0.80 + 0.8 * up)) / (0.075 + 0.2 * up))
+        # A raised crotch needs a longer transition above the thigh: the front
+        # panel still spans both legs as they separate in a brisk stride.
+        band = smooth((z - (0.80 + 0.8 * up)) / (0.075 + 0.7 * up))
         own = hip_share(z, x)
         left, right = lerp(left, own if x <= 0 else 0.0, band), lerp(right, 0.0 if x <= 0 else own, band)
         t = left + right
@@ -751,8 +754,7 @@ def trousers(part, d, top=1.075, bottom=0.40, tag_fn=None):
             if z < 0.9 + up:
                 # The seat narrows into the legs' tops.
                 pos.x *= 0.99
-            side = smooth(abs(pos.x) / 0.09)
-            leg = (0.18 if z > 0.9 + up else 0.62) * side if z < 0.98 else 0.0
+            leg = hip_share(z, pos.x)
             row.append(part.v(pos, blend(*torso_w(z, pos.x).items(), ("J_Bip_L_UpperLeg", leg / max(1 - leg, 1e-3)))))
         rows.append(row)
     for r in range(len(rows) - 1):
@@ -2864,7 +2866,7 @@ def main():
     g["STRANDS_PATH"] = os.path.join(os.path.dirname(out), "strands.png")
     g["WHOLE_HEAD"] = a.parts in ("head", "face", "overlay")
     g["OVERLAY"] = a.overlay if a.parts == "overlay" else None
-    arm = make_armature()
+    arm = make_armature(include_fringe=not spec["piece"])
     obs, tris = [], {}
     for far in (False, True):
         if a.lod == ("far" if not far else "near"):

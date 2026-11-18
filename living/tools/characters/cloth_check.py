@@ -113,7 +113,9 @@ class Piece:
         j, binary = read_glb(path)
         self.name = os.path.basename(path)[:-4]
         wear = (j["scenes"][0].get("extras") or {}).get("outfit") or {}
-        self.slot, self.layer = wear.get("slot"), wear.get("layer", 0)
+        if not wear.get("slot") or "layer" not in wear:
+            raise ValueError(f"{path}: missing outfit slot or layer. Finish the style build before measuring.")
+        self.slot, self.layer = wear["slot"], wear["layer"]
         node = next(n for n in j["nodes"] if n.get("name") == "Cloth" and "mesh" in n)
         skin = j["skins"][node.get("skin", 0)]
         self.joints = [j["nodes"][k].get("name") for k in skin["joints"]]
@@ -259,8 +261,12 @@ def chair(pieces, posed, mats, joints):
         on = (a > back - 0.04) & (a < knee - 0.08) & (np.abs(v @ side) < 0.25)
         below = seat - v[:, 1]
         behind = (back - 0.02) - a
-        up = (v[:, 1] > seat) & (v[:, 1] < seat + 0.45)
-        out[p.name] = (max(float(below[on].max()) if on.any() else 0.0, 0.0) * 1000, max(float(behind[up].max()) if up.any() else 0.0, 0.0) * 1000, int(((below > 0.005) & on).sum() + ((behind > 0.005) & up).sum()))
+        up = (v[:, 1] > seat) & (v[:, 1] < seat + 0.45) & (np.abs(v @ side) < 0.25)
+        out[p.name] = (
+            1000 * below[on].max(initial=0.0),
+            1000 * behind[up].max(initial=0.0),
+            int((((below > 0.005) & on) | ((behind > 0.005) & up)).sum()),
+        )
     return out
 
 
@@ -278,7 +284,7 @@ def ground(pieces, posed):
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("line")
-    ap.add_argument("--chair", type=float, default=None, metavar="MM", help="also measure a seated person's skirts against a chair (in sit_idle), and fail where one is more than MM millimetres below the seat's top or behind the chair's back")
+    ap.add_argument("--chair", type=float, default=None, metavar="MM", help="fail above MM millimetres of seated contact with the seat top or back in sit_idle, or the floor in sit_ground")
     ap.add_argument("--styles", default="living/game/assets/lookdev/styles")
     ap.add_argument("--types", default="living/game/assets/lookdev/types")
     ap.add_argument("--clips", default="living/game/assets/lookdev/anim/own-clips.glb")
@@ -299,8 +305,7 @@ def main():
     for name in [c for c in a.clip.split(",") if c]:
         tracks = library.get(name)
         if tracks is None:
-            print(f"cloth_check: no clip {name!r} in {a.clips}")
-            continue
+            ap.error(f"no clip {name!r} in {a.clips}")
         length = max(t[0][-1] for t in tracks.values())
         for f in range(a.frames):
             t = length * f / a.frames
@@ -333,15 +338,22 @@ def main():
         bad += fault
         if fault or not a.quiet:
             print(f"{i:16s} under {o:16s} {clip:6s} {'THROUGH' if fault else 'clear  '} by {r['most']:6.1f} mm at most (t {r.get('at', 0):.2f} s, on {r.get('bone', '-')}, {r.get('out', 0)} vertices); in {r['frames']} of {r['of']} poses")
+    cloth_bad = bad
     for (name, clip), r in sorted(seats.items()):
         fault = a.chair is not None and max(r["below"], r["behind"]) > a.chair
         bad += fault
         if fault or not a.quiet:
-            where = f"on a chair: {r['below']:6.1f} mm below the seat's top, {r['behind']:6.1f} mm behind the chair's back" if clip in SEATED else f"on the ground: {r['below']:6.1f} mm below it"
-            print(f"{name:16s} {where} ({r['vertices']} vertices by more than 5 mm)" + (" THROUGH IT" if fault else ""))
+            if clip in SEATED:
+                print(f"{name:16s} {clip}: seat top  {r['below']:6.1f} mm below")
+                print(f"{name:16s} {clip}: seat back {r['behind']:6.1f} mm behind")
+            else:
+                print(f"{name:16s} {clip}: ground    {r['below']:6.1f} mm below")
+            print(f"  {r['vertices']} vertices beyond 5 mm at most in one pose" + ("; exceeds contact limit" if fault else ""))
     if a.json:
         json.dump(dict({f"{i}|{o}|{clip}": r for (i, o, clip), r in worst.items()}, **{f"{name}|{'chair' if clip in SEATED else 'ground'}|{clip}": dict(most=max(r["below"], r["behind"]), **r) for (name, clip), r in seats.items()}), open(a.json, "w"), indent=1)
-    print(f"cloth_check: {len(pairs)} pairs of pieces over {len(poses)} poses: " + (f"{bad} come through by more than {a.least} mm" if bad else f"none comes through by more than {a.least} mm"))
+    print(f"cloth_check: {len(pairs)} pairs of pieces over {len(poses)} poses: " + (f"{cloth_bad} pair/clip results come through by more than {a.least} mm" if cloth_bad else f"none comes through by more than {a.least} mm"))
+    if bad > cloth_bad:
+        print(f"cloth_check: {bad - cloth_bad} seat or ground results exceed {a.chair} mm")
     return 1 if bad else 0
 
 

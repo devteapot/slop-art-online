@@ -8,6 +8,7 @@
 # Both copies are finished the same way (shading data, the person's identity on the bones); the
 # one under anim/ has the clips.
 # Usage: living/tools/blender/gen_person.sh [PERSON ...]     (default: the presets)
+#   --outfits           rebuild the shared outfit pieces and stamp their wear metadata
 #   PERSON is [NAME=]SPEC. SPEC is a preset (man, woman, elder, youth, boy, girl, heavy), `<seed>:<kind>` (kind: man,
 #   woman, elder_man, elder_woman, boy, girl), a seed alone, or a parameter file (*.json). NAME
 #   defaults to the spec (a file's own name).
@@ -41,6 +42,9 @@
 #                       machine whose copy of the library is behind clips.json
 set -euo pipefail
 cd "$(dirname "$0")/../../.."
+if [[ "${1:-}" == --outfits ]]; then
+  exec living/tools/blender/gen_styles.sh outfit
+fi
 src=living/game/assets/lookdev
 blender=${BLENDER:-blender}
 animate=${ANIMATE:-living/tools/blender/animate.py}

@@ -1978,6 +1978,44 @@ The body pass, second part (2026-11-12, branch `char-4-body`): how the jersey, s
 3. **Sleeves** are smooth tubes with no fold at the elbow, and on a woman's form the sleeve's head stands a little proud of the narrow shoulder.
 4. **Boots** are a man's sea boots made narrower.
 
+### Sitting
+
+Shared outfits use the trousers' thigh share around the hip crease. The jersey takes it at its tucked hem. The smock, apron and coat blend into their existing skirt weights below the seat. A raised crotch has a longer transition so the smock's front can still span the thighs in a brisk stride. The 28 rebuilt outfits have the same joint names and near/far vertex and triangle counts as the shipped pieces.
+
+On the dev-box, `BLENDER=$HOME/.local/share/slop-tools/build-bin/blender JOBS=2 living/tools/blender/gen_person.sh --outfits` rebuilds and stamps the pieces. Run `python3 living/tools/characters/look_lines.py wear --check living/game/assets/lookdev/styles` before measuring. The cloth checker rejects pieces missing either wear field.
+
+Measured on Cullet's 64 residents and 23 test lines, with the same before and after lines and 24 evenly spaced frames per clip. Counts are distinct wearers with at least one crossing over 2 mm anywhere in the clip. Depth is the largest positive outward distance measured. The checker searches within 40 mm, so results near 40 mm cannot establish the full depth. It checks the near cloth mesh.
+
+| Clip | Wearers before | Wearers after | Worst before (mm) | Worst after (mm) |
+|---|---:|---:|---:|---:|
+| sit_down | 87 | 79 | 39.57 | 39.57 |
+| sit_idle | 8 | 2 | 35.50 | 34.50 |
+| stand_up | 87 | 82 | 39.46 | 39.06 |
+| sit_ground_down | 87 | 87 | 39.80 | 39.95 |
+| sit_ground | 87 | 82 | 39.98 | 39.97 |
+| stand_up_ground | 87 | 87 | 39.90 | 39.80 |
+| walk | 0 | 0 | 0 | 0 |
+| walk_brisk | 11 | 9 | 7.68 | 7.68 |
+| run | 1 | 1 | 2.02 | 2.02 |
+
+Each cell below counts wearers for that inner and outer piece, before → after. A wearer can appear in several columns. The coat jersey is the cut specifically for wearing under a coat.
+
+| Clip | Jersey → trousers | Coat jersey → coat | Coat jersey → trousers | Smock → apron | Trousers → apron | Trousers → coat | Trousers → smock |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| sit_down | 20→19 | 17→15 | 27→27 | 27→22 | 8→14 | 27→19 | 40→15 |
+| sit_idle | 2→0 | 3→1 | 1→0 | 0 | 1→1 | 2→1 | 3→1 |
+| stand_up | 20→20 | 20→10 | 27→27 | 19→19 | 17→11 | 27→26 | 40→20 |
+| sit_ground_down | 20→20 | 27→27 | 27→27 | 24→27 | 27→27 | 27→27 | 40→40 |
+| sit_ground | 20→16 | 17→12 | 27→23 | 19→19 | 10→16 | 27→23 | 40→39 |
+| stand_up_ground | 20→20 | 27→27 | 27→27 | 23→21 | 26→27 | 27→27 | 40→40 |
+| walk | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| walk_brisk | 0 | 0 | 1→0 | 0 | 3→3 | 0 | 10→9 |
+| run | 0 | 0 | 0 | 0 | 0 | 0 | 1→1 |
+
+At each wearer's deepest sampled bend, crossings persist on 58 of 87 sitting down on a chair, 57 standing up from it, 83 sitting down on the ground, and 87 rising from the ground. Across the three gaits nobody acquired a new crossing over 2 mm or a worse maximum above that threshold. All 87 passed the separate rest, idle and walk check at its default 16 frames per animated clip.
+
+`cloth_check.py LINE --clip sit_idle,sit_ground --frames 24` also reports seat-top, seat-back and ground depths. `--chair 5` makes contact beyond 5 mm fail independently of the cloth-to-cloth threshold. The chair is an analytical reference inferred from the posed trousers and knees. All 40 smock wearers and 27 coat wearers still crossed both chair surfaces. Their worst-frame seat depths ranged from 44.4 to 148.5 mm for smocks and 69.1 to 103.3 mm for coats. Their back depths ranged from 108.5 to 123.7 mm and 113.3 to 134.3 mm respectively. Client-side contact handling is a separate stage.
+
 ### The body: the landing
 
 The silhouettes and the cloth land together (2026-11-12, branch `char-4-body`, after the look-1 pair and looks-tex-1 were on main), as a pair with the client's half. The hands are parked on `char-4-hands` and land later.
