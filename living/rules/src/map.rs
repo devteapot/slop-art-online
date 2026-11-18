@@ -230,8 +230,7 @@ impl Map {
         let cw = self.w.div_ceil(CHUNK);
         for cy in y0 as u32 / CHUNK..=y1 as u32 / CHUNK {
             for cx in x0 as u32 / CHUNK..=x1 as u32 / CHUNK {
-                if f.get((cy * cw + cx) as usize).copied().unwrap_or(true)
-                    || self.cover.as_ref().is_some_and(|m| m.has_chunk(chunk_id(cx, cy))) {
+                if f.get((cy * cw + cx) as usize).copied().unwrap_or(true) {
                     return false;
                 }
             }
@@ -373,10 +372,10 @@ impl Map {
     /// Walks the exact tiles the segment crosses (a grid traversal), so its cost grows with
     /// the distance in tiles, not with a sampling rate.
     pub fn sight_clear(&self, a: (f32, f32), b: (f32, f32)) -> bool {
-        self.open_between(a, b) || if self.cover.is_some() {
+        if self.cover.as_ref().is_some_and(|m| m.might_cross(a, b)) {
             self.sight_walk_impl::<true>(a, b)
         } else {
-            self.sight_walk_impl::<false>(a, b)
+            self.open_between(a, b) || self.sight_walk_impl::<false>(a, b)
         }
     }
 

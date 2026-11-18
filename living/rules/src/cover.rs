@@ -1,10 +1,10 @@
 //! Static cover shared by the authority's map and the client's Shade.
 use crate::{
     land::{Land, LandParams},
-    map::{chunk_id, Map, Terrain, CHUNK},
+    map::{Map, Terrain, CHUNK},
 };
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(default)]
@@ -70,11 +70,18 @@ struct Cell {
 }
 
 #[derive(Debug, PartialEq)]
+struct CoverChunk {
+    cells: [Cell; (CHUNK * CHUNK) as usize],
+    occupied: [u16; CHUNK as usize],
+}
+
+#[derive(Debug, PartialEq)]
 pub struct Mask {
     w: u32,
     ground: Arc<[i16]>,
     eye_dm: f32,
-    chunks: HashMap<u32, Box<[Cell; (CHUNK * CHUNK) as usize]>>,
+    chunks_wide: u32,
+    chunks: Vec<Option<Box<CoverChunk>>>,
 }
 
 fn dm(metres: f32) -> i16 {
@@ -99,14 +106,39 @@ impl Mask {
         self.z(x as u32, y as u32) as f32 + self.eye_dm
     }
 
-    pub(crate) fn has_chunk(&self, id: u32) -> bool {
-        self.chunks.contains_key(&id)
+    fn chunk(&self, cx: u32, cy: u32) -> Option<&CoverChunk> {
+        if cx >= self.chunks_wide { return None; }
+        self.chunks.get((cy * self.chunks_wide + cx) as usize)?.as_deref()
+    }
+
+    /// Skip elevation and per-tile cover reads when the segment's box contains no cover.
+    pub(crate) fn might_cross(&self, a: (f32, f32), b: (f32, f32)) -> bool {
+        if a.0.min(b.0) < 0.0 || a.1.min(b.1) < 0.0 { return true; }
+        let (x0, x1) = (a.0.min(b.0) as u32, a.0.max(b.0) as u32);
+        let (y0, y1) = (a.1.min(b.1) as u32, a.1.max(b.1) as u32);
+        if x1 >= self.w || y1 / CHUNK >= self.chunks.len() as u32 / self.chunks_wide {
+            return true;
+        }
+        for cy in y0 / CHUNK..=y1 / CHUNK {
+            for cx in x0 / CHUNK..=x1 / CHUNK {
+                let Some(chunk) = self.chunk(cx, cy) else { continue };
+                let lx = x0.saturating_sub(cx * CHUNK);
+                let rx = (x1 - cx * CHUNK).min(CHUNK - 1);
+                let ly = y0.saturating_sub(cy * CHUNK);
+                let ry = (y1 - cy * CHUNK).min(CHUNK - 1);
+                let columns = (u16::MAX << lx) & (u16::MAX >> (CHUNK - 1 - rx));
+                if chunk.occupied[ly as usize..=ry as usize].iter().any(|row| row & columns != 0) {
+                    return true;
+                }
+            }
+        }
+        false
     }
 
     fn cell(&self, x: i32, y: i32) -> Option<&Cell> {
         let (x, y) = (u32::try_from(x).ok()?, u32::try_from(y).ok()?);
-        self.chunks.get(&chunk_id(x / CHUNK, y / CHUNK))
-            .map(|c| &c[((y % CHUNK) * CHUNK + x % CHUNK) as usize])
+        self.chunk(x / CHUNK, y / CHUNK)
+            .map(|c| &c.cells[((y % CHUNK) * CHUNK + x % CHUNK) as usize])
     }
 
     pub(crate) fn missile(&self, x: i32, y: i32) -> bool {
@@ -123,9 +155,13 @@ impl Mask {
     }
 
     fn add(&mut self, x: u32, y: u32, top: i16, brush_id: Option<u16>) {
-        let chunk = self.chunks.entry(chunk_id(x / CHUNK, y / CHUNK))
-            .or_insert_with(|| Box::new([Cell::default(); (CHUNK * CHUNK) as usize]));
-        let c = &mut chunk[((y % CHUNK) * CHUNK + x % CHUNK) as usize];
+        let index = ((y / CHUNK) * self.chunks_wide + x / CHUNK) as usize;
+        let chunk = self.chunks[index].get_or_insert_with(|| Box::new(CoverChunk {
+            cells: [Cell::default(); (CHUNK * CHUNK) as usize],
+            occupied: [0; CHUNK as usize],
+        }));
+        chunk.occupied[(y % CHUNK) as usize] |= 1 << (x % CHUNK);
+        let c = &mut chunk.cells[((y % CHUNK) * CHUNK + x % CHUNK) as usize];
         if let Some(id) = brush_id {
             if c.bits & BRUSH == 0 || top >= c.brush_top {
                 c.brush_top = top;
@@ -152,7 +188,10 @@ impl Mask {
     }
 
     pub fn geometry_bytes(&self) -> (usize, usize) {
-        (self.chunks.len() * std::mem::size_of::<[Cell; (CHUNK * CHUNK) as usize]>(), self.ground.len() * 2)
+        let chunks = self.chunks.iter().flatten().count();
+        let bytes = self.chunks.len() * std::mem::size_of::<Option<Box<CoverChunk>>>()
+            + chunks * std::mem::size_of::<CoverChunk>();
+        (bytes, self.ground.len() * 2)
     }
 }
 
@@ -241,7 +280,9 @@ pub fn compile(map: &Map, ground: Arc<[i16]>, recipe: &LandParams, policy: Polic
 
 pub fn compile_candidates(w: u32, h: u32, candidates: impl IntoIterator<Item = u32>,
     ground: Arc<[i16]>, recipe: &LandParams, policy: Policy) -> Mask {
-    let mut mask = Mask { w, ground, eye_dm: policy.eye_height_m * 10.0, chunks: HashMap::new() };
+    let chunks_wide = w.div_ceil(CHUNK);
+    let chunks = (0..chunks_wide * h.div_ceil(CHUNK)).map(|_| None).collect();
+    let mut mask = Mask { w, ground, eye_dm: policy.eye_height_m * 10.0, chunks_wide, chunks };
     for candidate in candidates {
         let i = candidate & !DROP_MARK;
         let (x, y) = (i % w, i / w);
@@ -343,6 +384,6 @@ mod tests {
     fn old_empty_recipe_has_no_authored_cover() {
         let params: LandParams = serde_json::from_str("{}").unwrap();
         assert!(params.cover.is_empty());
-        assert_eq!(compile(&blank(), Arc::from([0; 256]), &params, policy()).geometry_bytes().0, 0);
+        assert!(compile(&blank(), Arc::from([0; 256]), &params, policy()).chunks.iter().all(Option::is_none));
     }
 }

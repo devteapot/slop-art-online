@@ -167,7 +167,7 @@ The land generator already has the elevation field at genesis. The authority sam
 it once at tile centres and writes quantized bands with the procedural cover candidates.
 This lives privately in `cover_ground`, and the enabled module map compiles the sparse
 chunk mask from these bands once per map cache load. Cover-off map loads read no bands.
-Runtime mask compilation does not generate land. A land made before the new genesis
+Runtime mask compilation does not generate land. The sparse mask uses a chunk directory and occupied row bits. If a ray's bounding rectangle has no cover cells, it takes the legacy trace without eye interpolation. A land made before the new genesis
 data was available needs that data before it can accept the switch. The map uses static
 genesis cover geometry while live terrain edits and gate state apply through the
 existing terrain trace. [Shared cover compiler](../living/rules/src/cover.rs).
