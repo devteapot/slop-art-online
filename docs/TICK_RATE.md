@@ -322,9 +322,100 @@ no write. This measures when the authority checks for new data. The
 windups and visible activity over the duelists' Rust SDK connections.
 Neither timing measures an 80 ms RTT path or renderer presentation.
 
-The 216-player measurement requires the dev-box coordinator's quiet
-window. The scoped client comparisons and rollback scenes are recorded
-under the verify skills' validation directories. A two-player plan-test
-smoke measured 42.8/62.9/62.9 ms for first delivery of a windup
-(7 samples) and 56.3/64.7/64.7 ms for first delivery of a visible action
-(6 samples). The crowd target and change in view cost remain unmeasured.
+#### 216-player results
+
+The dev-box series ran 2026-11-18 from 21:18:10 to 21:59:46 UTC
+under the exclusive build gate. The baseline was `cd2afe42e` with
+measurement-only instrumentation and the candidate was `de8bd2fa2`.
+Each arm ran three 120 s walking windows on Cullet and plan-test after
+a 30 s warm-up. The fixture used 216 real SDK players in seven clusters
+of up to 31 and one passive owner subscriber. Ready-state mean scene
+sizes ranged from 43.1 to 43.9 characters on Cullet and 26.2 to 26.5 on
+plan-test. Each run started below 4 on the one-minute load average.
+The two additional Cullet windows lasted 30 s, with 214 walkers and
+two stationary duelists.
+
+The threshold was **missed**. Cullet's median fell from 59.50 to
+59.46 ticks/s, with candidate runs spanning 59.35–59.47. Near-frame
+p50 improved from 167 to 150 ms. The median p90 held at 233 ms, well
+above the 100 ms target, and p95 rose from 251 to 266 ms. The
+candidate's near p90 ranged from 233 to 318 ms. Plan-test near p90
+rose from 50 to 66 ms and all-in-sight p90 rose from 50 to 100 ms.
+The shared budget still charges an entire sender's motion view for
+a single changed copy. Overdue whole scenes compete with partial passes,
+and the candidate's 100 ms whole-scene scheduling interval also reduces
+cadence on plan-test, where main commonly serves a whole scene every
+33–50 ms.
+
+Rows per tick count viewer/body pairs checked for delivery, including
+unchanged rows and zero-delivery ticks. They exclude sweep rows. The
+baseline profiler uses the last sweep's distance for the relevant
+category. It does not classify out-of-range engagement separately.
+The staged opponents were within melee reach in both arms. The
+candidate also counts out-of-range visible targets as relevant.
+
+| Run | Ticks/s | Engaged or ≤8 m p50/p90/p95 ms | All p50/p90/p95 ms | Rows/tick p10/p50/p90 | Load start → end |
+|---|---:|---:|---:|---:|---:|
+| main-cullet-r1 | 59.56 | 133/182/200 | 133/183/200 | 847/1167/1491 | 3.76 → 4.35 |
+| branch-cullet-r1 | 59.46 | 134/233/266 | 167/234/267 | 596/915/1257 | 3.83 → 3.21 |
+| main-plan-test-r1 | 59.98 | 33/50/50 | 33/50/50 | 796/1851/2148 | 3.21 → 3.09 |
+| branch-plan-test-r1 | 59.95 | 50/66/67 | 50/100/100 | 0/1003/2133 | 3.09 → 3.78 |
+| branch-cullet-r2 | 59.35 | 183/318/384 | 200/334/400 | 65/743/1256 | 3.78 → 3.96 |
+| main-cullet-r2 | 59.50 | 167/233/251 | 167/233/251 | 635/886/1219 | 3.96 → 3.98 |
+| branch-plan-test-r2 | 59.94 | 50/66/67 | 50/100/100 | 0/853/2253 | 3.98 → 2.93 |
+| main-plan-test-r2 | 59.99 | 33/50/50 | 33/50/50 | 748/2056/2200 | 2.93 → 3.05 |
+| main-cullet-r3 | 59.44 | 167/250/283 | 168/249/282 | 550/845/1135 | 3.05 → 3.58 |
+| branch-cullet-r3 | 59.47 | 150/233/250 | 167/233/266 | 648/913/1188 | 3.58 → 2.49 |
+| main-plan-test-r3 | 59.99 | 33/50/50 | 33/50/50 | 720/2063/2196 | 2.49 → 2.34 |
+| branch-plan-test-r3 | 59.84 | 50/66/67 | 50/100/100 | 0/969/2110 | 2.34 → 4.84 |
+| main-cullet-duel | 59.44 | 167/250/283 | 167/250/283 | 578/876/1116 | 3.98 → 3.36 |
+| branch-cullet-duel | 59.45 | 167/250/284 | 200/266/300 | 569/803/1089 | 3.36 → 3.32 |
+
+#### View refresh cost
+
+The table reports medians from the three walking runs per arm.
+Scene totals sum the six frame-delivered streams. The counters cover
+SpacetimeDB view execution and materialization over the window.
+
+| World | Arm | Scene views calls/s | Scene views ms/s | Motion view calls/s | Motion view ms/s |
+|---|---|---:|---:|---:|---:|
+| cullet | main | 2672.43 | 240.72 | 1734.14 | 140.81 |
+| cullet | branch | 2565.73 | 229.66 | 1705.26 | 134.98 |
+| plan-test | main | 3380.62 | 121.69 | 2969.87 | 100.95 |
+| plan-test | branch | 3042.07 | 113.02 | 2627.43 | 92.57 |
+
+On Cullet, aggregate scene-view work fell **4.6%** and motion-view
+work **4.1%**. The median motion-view cost per refresh was nearly
+unchanged at 80.2 µs on main and 80.3 µs on the candidate. On plan-test,
+aggregate scene-view work fell **7.1%**, with motion-view cost per
+refresh moving from 33.9 to 34.7 µs. The savings came from fewer
+refreshes. An affected motion view still returns the same sender-scoped
+rows through the same index key, and the experiment establishes no
+gain in the cost of a single full materialization.
+
+#### Cullet duel inside the crowd
+
+Each run recorded 10 accepted strikes and 10 visible waves from their
+opponents' SDK callbacks. Latency is the authority row's start time to
+first receipt over loopback. With 10 observations, p90 and p95 both
+select the largest sample under this percentile convention.
+
+| Opponent row | Main p50/p90/p95 ms | Frame-fresh p50/p90/p95 ms |
+|---|---:|---:|
+| 350 ms strike windup | 117.8/325.2/325.2 | 137.3/288.9/288.9 |
+| Visible action | 105.9/188.7/188.7 | 49.6/62.9/62.9 |
+
+The visible-action stream was substantially faster in this fixture.
+The windup median worsened and the tail remained too slow to support
+a claim about timed defence over 80 ms RTT. The duel arms had one run
+each. The experiment did not exercise remote latency, the rendered
+client, the 30-minute gate or the 2,000-character target.
+
+Raw evidence is under `.local/fresh/evidence/20261118-211530/`.
+`series.log` has timestamps and start/end load. Each run retains
+SDK events, load samples, metrics and profile windows. The retained
+replica logs restored the profile lines clipped by the CLI tail.
+Their tick counts were 10–20 below the metrics counters because
+the counters bracket a slightly wider interval. The table uses the
+recovered profile's window. `series-report.json` holds per-view costs
+and `duel-report.txt` holds the SDK latency samples' summary.
