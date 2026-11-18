@@ -32,6 +32,7 @@ mod far;
 mod earshot;
 mod fold;
 mod fast;
+mod known;
 
 use spacetimedb::{ReducerContext, ScheduleAt, Table, ViewContext};
 use std::time::Duration;

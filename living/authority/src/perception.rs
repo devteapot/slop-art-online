@@ -50,7 +50,7 @@ pub const SWEEP_MS: u64 = 200;
 /// over more ticks; but players swept in one tick share its chunk-body cache, and each tick that
 /// sweeps fills it afresh (cullet-sweep at 216 players: plan-test's sweep cost 44 ms/s in one
 /// phase, 61 in four, 79 in one per tick; the largest tick's share 10, 5.3 and 3.5 ms).
-const SWEEP_GROUPS: u64 = 4;
+const SWEEP_GROUPS: u64 = 12;
 
 /// A body's current motion segment as clients draw it (see `Body`): from `(x, y)` facing
 /// `heading` at `t_ms`, moving at velocity `(vx, vy)`, turning at `turn` rad/s for `turn_s`
@@ -998,7 +998,7 @@ pub fn sweep(ctx: &ReducerContext, now: u64, tick: u64) -> Vec<u32> {
 /// [`SWEEP_MS`] apart on one of [`SWEEP_GROUPS`] phases, by id, so sweeps spread over that many
 /// ticks whenever the players joined.
 fn turn_before(id: u32, now: u64) -> u64 {
-    let phase = (id as u64).wrapping_mul(37) % SWEEP_GROUPS * (SWEEP_MS / SWEEP_GROUPS);
+    let phase = (id as u64).wrapping_mul(37) % SWEEP_GROUPS * SWEEP_MS / SWEEP_GROUPS;
     now - (now + SWEEP_MS - phase) % SWEEP_MS
 }
 

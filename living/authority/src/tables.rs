@@ -951,6 +951,61 @@ pub struct FarHandle {
     pub made_out_ms: u64,
 }
 
+/// Known ground (docs/MOVEMENT_MIND.md, step 3): which 4 m cells of one 128 m block (8 × 8
+/// chunks) a character has seen, and the map's edit count (`ground_edit.id`) when each chunk was
+/// last seen. `cells`: 64 little-endian u16 masks; `seen_at`: 64 little-endian u32. Private.
+/// Written by the character's own looks (`known::mark`), at most every few seconds; gone at
+/// death.
+#[spacetimedb::table(accessor = known_ground,
+    index(accessor = by_actor_block, btree(columns = [actor, block])))]
+pub struct KnownGround {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    #[index(btree)]
+    pub actor: u32,
+    pub block: u32,
+    pub cells: Vec<u8>,
+    pub seen_at: Vec<u8>,
+    pub last_ms: u64,
+}
+
+/// What a character last saw of a thing that changes (docs/MOVEMENT_MIND.md, step 3): a gate
+/// open or shut (`kind` 1, `target` the gate's id, `state` 1 open). Private; bounded per
+/// observer; gone at death.
+#[spacetimedb::table(accessor = remembered,
+    index(accessor = by_observer_target, btree(columns = [observer, target])))]
+pub struct Remembered {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    #[index(btree)]
+    pub observer: u32,
+    pub target: u64,
+    pub kind: u8,
+    pub x: f32,
+    pub y: f32,
+    pub state: u8,
+    pub seen_ms: u64,
+}
+
+pub const REMEMBER_GATE: u8 = 1;
+
+/// A terrain tile changed after genesis (a wall built, a road laid): its chunk, its index in the
+/// chunk and its byte before. The id is the map's edit count, so a character's view of a chunk
+/// it saw at count `n` is the map now with the edits after `n` undone. Private; rare.
+#[spacetimedb::table(accessor = ground_edit)]
+pub struct GroundEdit {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    #[index(btree)]
+    pub chunk: u32,
+    pub tile: u16,
+    pub before: u8,
+    pub at_ms: u64,
+}
+
 /// Bodily familiarity: regions, creatures and structures a character has encountered.
 /// Recognition, not knowledge: it decides what is new enough to become an experience.
 /// `thing` = FAM_REGION | chunk, FAM_CREATURE | id, or FAM_STRUCTURE | id. Bounded per actor.

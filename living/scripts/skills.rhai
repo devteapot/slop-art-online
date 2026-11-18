@@ -84,6 +84,11 @@ fn laws() {
         // `fov_margin_deg` past an edge. A light on someone (`glow`) shows them only within the
         // field. Hearing stays all round.
         fov_on: false,
+        // Known ground (docs/MOVEMENT_MIND.md): how far ground is seen by day, metres (at night,
+        // one's own sight); the most 4 m cells one look marks (0: no cap; the rest come with
+        // later looks); whether walks are planned over what each walker has seen instead of the
+        // map; and the cost of a metre of unseen ground in such a plan.
+        ground_sight_m: 24.0, known_cells_pass: 0.0, nav_belief: false, unknown_cost: 1.5,
         // The wolves' spacing reflex (docs/PACK_MIND.md): their starting instincts carry,
         // beside each hunt, a weighted desire to keep apart from mates while closing on the
         // prey (hold 3-5 m from it, 4 m from other wolves one sees). An instinct, so a wolf's
@@ -121,6 +126,10 @@ fn laws() {
         // A body's scene worked out as far as each reader asks; `scene_lazy_check` (a diagnostic)
         // also works each answer out from the whole scene and counts any difference.
         scene_lazy: true, scene_lazy_check: false,
+        // The chronicle's repeat check reads its newest rows first; noticing reads the structures
+        // in sight in place. Their `_check` laws (diagnostics) also do each the whole way and
+        // count any difference.
+        chronicle_recent: true, chronicle_recent_check: false, notice_inplace: true, notice_inplace_check: false,
         // A bystander (one who sees an event it is not party to) is woken by what it sees at most
         // once per `witness_wake_ms` (docs/BATTLE_SCALE.md); what it sees is still told at once,
         // in full. 0: woken by each sight, as before.
@@ -3100,6 +3109,10 @@ fn law_about(l, name) {
         "warmth_check" => "a diagnostic: warmth is worked out both ways and compared",
         "scene_lazy" => "what is in sight is worked out as far as what one looks for needs",
         "scene_lazy_check" => "a diagnostic: each look is also worked out from all that is in sight and compared",
+        "chronicle_recent" => "a repeated event is matched against the newest entries of the record first",
+        "chronicle_recent_check" => "a diagnostic: each match is also made against two minutes of the record and compared",
+        "notice_inplace" => "what is new in sight is looked for without listing all that is in sight",
+        "notice_inplace_check" => "a diagnostic: each look is also made from the full list and compared",
         "profile_detail" => if l.profile_detail { "while profiling, the parts of each behaviour's evaluation are timed" } else { "profiling times each behaviour's evaluation whole" },
         "regard_cache_check" => if l.regard_cache_check { "every shared answer about another is checked against a fresh one" } else { "shared answers about another are not checked" },
         "fast_lane_on" => if l.fast_lane_on { "a mind may revise its fighting quickly between blows" } else { "a mind revises its fighting only when it thinks" },
@@ -3112,6 +3125,10 @@ fn law_about(l, name) {
         "alert_after_hit_s" => `a body struck within the last ${short(l.alert_after_hit_s)} s cannot fall asleep`,
         "alert_while_attacker_near" => if l.alert_while_attacker_near { "nor while the one who struck it is close and the fight is on" } else { "even with the one who struck it close by" },
         "fov_on" => if l.fov_on { "one sees fully only the way one faces" } else { "one sees as far in every direction" },
+        "ground_sight_m" => `ground is seen ${short(l.ground_sight_m)} m off by day, as far as one sees by night`,
+        "known_cells_pass" => if l.known_cells_pass > 0.0 { `one look takes in at most ${short(l.known_cells_pass)} patches of ground` } else { "one look takes in all the ground in view" },
+        "nav_belief" => if l.nav_belief { "one finds one's way over the ground one has seen, guessing at the rest" } else { "one's way is found over the land as it is" },
+        "unknown_cost" => `unseen ground is reckoned ${short(l.unknown_cost)} times as long to cross as known ground`,
         "pack_reflex" => if l.pack_reflex { "wolves are born keeping apart from their pack mates as they close on prey" } else { "wolves close on prey with no thought for where their pack mates are" },
         "fov_focal_deg" => `full sight within ${short(l.fov_focal_deg)} degrees of facing (when sight depends on facing)`,
         "fov_side_deg" => `side vision out to ${short(l.fov_side_deg)} degrees`,

@@ -35,6 +35,8 @@ thread_local! {
     static FAMILIAR_NEW: std::cell::RefCell<std::collections::HashMap<u32, u32>> = std::cell::RefCell::new(std::collections::HashMap::new());
     /// When each character last looked for what is new to it (`noticed`, fix 2).
     static NOTICED_AT: std::cell::RefCell<std::collections::HashMap<u32, u64>> = std::cell::RefCell::new(std::collections::HashMap::new());
+    /// When each character last looked at the ground (`known::mark`), at the noticing cadence.
+    static LOOKED_AT: std::cell::RefCell<std::collections::HashMap<u32, u64>> = std::cell::RefCell::new(std::collections::HashMap::new());
     /// Attention cues (`Ev::cues`), per character: when its cues were last checked, and the
     /// (cue, thing) pairs that have fired or were held back by the cooldown and have matched at
     /// every check since, so a cue fires when a thing begins to match, not while it goes on
@@ -1987,14 +1989,25 @@ impl<'a> Ev<'a> {
         // in sight is new.
         drop(part);
         let _part = common::detail_span("noticed.structures");
-        let ids: Vec<u64> = self.structures().iter().map(|(s, _)| s.id).collect();
-        common::diag(|| "noticed:structures", ids.len() as u64);
-        let mut new: Vec<usize> = Vec::new();
-        for (i, id) in ids.iter().enumerate() {
-            if !self.recently_seen(0x4000_0000 | (*id as u32 & 0x3fff_ffff)) && self.familiarity(FAM_STRUCTURE | id).is_none() {
-                new.push(i);
+        let new: Vec<usize> = if laws.notice_inplace {
+            let ids = self.new_structures_in_place(laws.notice_inplace_check);
+            if ids.is_empty() {
+                return;
             }
-        }
+            common::diag(|| "notice_inplace:listed", 1);
+            let ids: std::collections::HashSet<u64> = ids.into_iter().collect();
+            self.structures().iter().enumerate().filter(|(_, (s, _))| ids.contains(&s.id)).map(|(i, _)| i).collect()
+        } else {
+            let ids: Vec<u64> = self.structures().iter().map(|(s, _)| s.id).collect();
+            common::diag(|| "noticed:structures", ids.len() as u64);
+            let mut new: Vec<usize> = Vec::new();
+            for (i, id) in ids.iter().enumerate() {
+                if !self.recently_seen(structure_key(*id)) && self.familiarity(FAM_STRUCTURE | id).is_none() {
+                    new.push(i);
+                }
+            }
+            new
+        };
         common::diag(|| "noticed:structures_new", new.len() as u64);
         if new.is_empty() {
             return;
@@ -2035,6 +2048,54 @@ impl<'a> Ev<'a> {
                 crate::perceive::percept_owned(self.ctx, &self.me, now, "saw", if whose.is_some() { *owner } else { 0 }, 0, pos, text, 0.35);
             }
         }
+    }
+
+    /// The structures in sight that are new to this character (`noticed`, `notice_inplace`,
+    /// docs/BATTLE_SCALE.md battle-exact-2 C1), read in place from the chunks' lists: no copy of
+    /// them and no sort unless something is new. The same calls as the full list's pass, in the
+    /// same order where order matters:
+    /// - one looked at lately (its seen mark under `SEEN_MS`) is re-marked (`recently_seen`). That
+    ///   changes no answer `prune_familiar` gives (it spares marks under `SEEN_MS` either way), so
+    ///   these may come first;
+    /// - every other is marked and its familiarity asked, nearest first, ties in `structures_near`'s
+    ///   order (its sort is stable, so the order of these few is theirs in the full list). Those
+    ///   calls insert rows and may prune, so they keep the full pass's order.
+    /// `check` (`notice_inplace_check`) works the split out from the full list as well, before
+    /// any mark is set, and counts any difference.
+    fn new_structures_in_place(&mut self, check: bool) -> Vec<u64> {
+        let (ctx, me, now, at) = (self.ctx, self.me.id, self.now, self.at);
+        let r = common::sight_for(ctx, me, &self.w, now);
+        let lately = |k: u32| SEEN.with(|s| s.borrow().get(&me).and_then(|m| m.get(&k).copied())).is_some_and(|t| now.saturating_sub(t) < SEEN_MS);
+        let mut recent: Vec<u32> = Vec::new();
+        let mut other: Vec<(u64, f32)> = Vec::new();
+        common::for_structures_near(ctx, at, r, |s, d| {
+            let k = structure_key(s.id);
+            if lately(k) {
+                recent.push(k);
+            } else {
+                other.push((s.id, d));
+            }
+        });
+        other.sort_by(|a, b| a.1.total_cmp(&b.1));
+        if check {
+            let full: Vec<u64> = self.structures().iter().filter(|(s, _)| !lately(structure_key(s.id))).map(|(s, _)| s.id).collect();
+            let seen_n = self.structures().len() - full.len();
+            common::diag(|| "notice_inplace:checked", 1);
+            if full.iter().ne(other.iter().map(|(id, _)| id)) || seen_n != recent.len() {
+                common::diag(|| "notice_inplace:differed", 1);
+                log::error!("notice_inplace of {me}: in place {:?} ({} seen lately) differs from the full list's {:?} ({seen_n})", other.iter().map(|o| o.0).collect::<Vec<_>>(), recent.len(), full);
+            }
+        }
+        for k in recent {
+            self.recently_seen(k);
+        }
+        let mut new = Vec::new();
+        for (id, _) in other {
+            if !self.recently_seen(structure_key(id)) && self.familiarity(FAM_STRUCTURE | id).is_none() {
+                new.push(id);
+            }
+        }
+        new
     }
 
     /// One-line description of the surroundings when a region is first discovered.
@@ -2151,6 +2212,19 @@ impl<'a> Ev<'a> {
                 self.noticed();
             }
         }
+        // Known ground (docs/MOVEMENT_MIND.md, step 3): every character, a person's too, marks
+        // the ground it sees at the noticing cadence; a walk planned over what it had seen is
+        // planned again when it now sees its way blocked.
+        let (me, now) = (self.me.id, self.now);
+        if LOOKED_AT.with(|n| n.borrow().get(&me).map_or(true, |t| now.saturating_sub(*t) >= NOTICE_MS)) {
+            LOOKED_AT.with(|n| n.borrow_mut().insert(me, now));
+            if let Some(b) = ctx.db.body().id().find(me) {
+                let marked = crate::known::mark(ctx, me, self.at, common::facing_at(&b, now), now);
+                if marked > 0 && common::laws(ctx).nav_belief {
+                    crate::motion::replan_if_blocked(ctx, me, now);
+                }
+            }
+        }
         drop(mind);
         let _write = common::detail_span("after.write");
         if result != St::Run && !self.running.is_some_and(act::held) {
@@ -2196,6 +2270,11 @@ impl<'a> Ev<'a> {
             ctx.db.mind_state().id().update(cur);
         }
     }
+}
+
+/// A structure's key in the seen set (`recently_seen`).
+fn structure_key(id: u64) -> u32 {
+    0x4000_0000 | (id as u32 & 0x3fff_ffff)
 }
 
 /// A person seen too far away to make out is looked at again after this long (`noticed`,

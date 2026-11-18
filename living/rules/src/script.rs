@@ -530,6 +530,15 @@ pub struct Laws {
     /// Sight depends on facing (the `field` of `senses(a)`; the geometry is the `fov_*` laws,
     /// read by the script).
     pub fov_on: bool,
+    /// How far a character sees ground by day (metres): the cells of `known_ground` it marks
+    /// (docs/MOVEMENT_MIND.md, step 3). At night, its own sight.
+    pub ground_sight_m: f32,
+    /// Most ground cells one look marks (0: no cap); the rest are marked by later looks.
+    pub known_cells_pass: f32,
+    /// Walks are planned over what each walker has seen (its `known_ground`), not the map.
+    pub nav_belief: bool,
+    /// The cost of a metre of unseen ground against seen open ground, in a plan over belief.
+    pub unknown_cost: f32,
     /// Wolves' starting instincts carry the spacing reflex (docs/PACK_MIND.md, decision 1):
     /// beside each hunt, a weighted desire to keep apart from mates while closing on the prey
     /// (`graph::with_pack_reflex`). Read where an instinct is installed; a world turns it off.
@@ -621,6 +630,20 @@ pub struct Laws {
     /// Diagnostic: every lazy answer is also worked out from the whole scene, and a difference
     /// logged and counted (`diag:` `scene_lazy:differed`).
     pub scene_lazy_check: bool,
+    /// The chronicle's repeat check (docs/BATTLE_SCALE.md, battle-exact-2 E) reads the newest
+    /// rows first, widening its window until it holds the 40 it compares: the same 40 rows in
+    /// the same order. Off: every row of the last two minutes is read.
+    pub chronicle_recent: bool,
+    /// Diagnostic: each repeat check also reads every row of the last two minutes, and a
+    /// difference is logged and counted (`diag:` `chronicle_recent:differed`).
+    pub chronicle_recent_check: bool,
+    /// Noticing reads the structures in sight in place (docs/BATTLE_SCALE.md, battle-exact-2
+    /// C1): the copied and sorted list is built only when something in sight is new. Off: the
+    /// list is built at every look.
+    pub notice_inplace: bool,
+    /// Diagnostic: each look also works out what is new from the full list, and a difference
+    /// is logged and counted (`diag:` `notice_inplace:differed`).
+    pub notice_inplace_check: bool,
     /// The fast lane (docs/FAST_LANE.md): a mind-run character's re-plan between blows, asked
     /// of its mind on a blow taken or a move it sees repeated. Off: none is asked.
     pub fast_lane_on: bool,
@@ -701,6 +724,10 @@ impl Default for Laws {
             longing_after_min: 20.0,
             longing_food: 0.0,
             fov_on: false,
+            ground_sight_m: 24.0,
+            known_cells_pass: 0.0,
+            nav_belief: false,
+            unknown_cost: 1.5,
             pack_reflex: true,
             alert_after_hit_s: 15.0,
             alert_while_attacker_near: true,
@@ -727,6 +754,10 @@ impl Default for Laws {
             warmth_check: false,
             scene_lazy: true,
             scene_lazy_check: false,
+            chronicle_recent: true,
+            chronicle_recent_check: false,
+            notice_inplace: true,
+            notice_inplace_check: false,
             fast_lane_on: false,
             seen_again_n: 3.0,
             fast_lane_rate: 2.0,
@@ -2841,6 +2872,10 @@ impl Scripts {
             longing_after_min: g("longing_after_min", l.longing_after_min).clamp(0.0, 100_000.0),
             longing_food: g("longing_food", l.longing_food).clamp(0.0, 1_000.0),
             fov_on: flag("fov_on", l.fov_on),
+            ground_sight_m: g("ground_sight_m", l.ground_sight_m).clamp(0.0, 256.0),
+            known_cells_pass: g("known_cells_pass", l.known_cells_pass).clamp(0.0, 100_000.0),
+            nav_belief: flag("nav_belief", l.nav_belief),
+            unknown_cost: g("unknown_cost", l.unknown_cost).clamp(1.0, 20.0),
             pack_reflex: flag("pack_reflex", l.pack_reflex),
             alert_after_hit_s: g("alert_after_hit_s", l.alert_after_hit_s).clamp(0.0, 3_600.0),
             alert_while_attacker_near: flag("alert_while_attacker_near", l.alert_while_attacker_near),
@@ -2867,6 +2902,10 @@ impl Scripts {
             warmth_check: flag("warmth_check", l.warmth_check),
             scene_lazy: flag("scene_lazy", l.scene_lazy),
             scene_lazy_check: flag("scene_lazy_check", l.scene_lazy_check),
+            chronicle_recent: flag("chronicle_recent", l.chronicle_recent),
+            chronicle_recent_check: flag("chronicle_recent_check", l.chronicle_recent_check),
+            notice_inplace: flag("notice_inplace", l.notice_inplace),
+            notice_inplace_check: flag("notice_inplace_check", l.notice_inplace_check),
             fast_lane_on: flag("fast_lane_on", l.fast_lane_on),
             seen_again_n: g("seen_again_n", l.seen_again_n).round().clamp(1.0, 100.0),
             fast_lane_rate: g("fast_lane_rate", l.fast_lane_rate).clamp(0.0, 100.0),
@@ -3804,6 +3843,8 @@ mod tests {
         assert_eq!(l.witness_wake_ms, 500.0, "a bystander is woken at most twice a second (docs/BATTLE_SCALE.md)");
         assert_eq!(l.witness_fold_ms, 2000.0, "what an onlooker sees of fights is told every two seconds (docs/BATTLE_SCALE.md)");
         assert!(l.scene_lazy && !l.scene_lazy_check, "the scene worked out as far as asked; its check off");
+        assert!(l.chronicle_recent && !l.chronicle_recent_check, "the chronicle's repeat check reads the newest rows; its check off");
+        assert!(l.notice_inplace && !l.notice_inplace_check, "noticing reads structures in place; its check off");
         let about: std::collections::HashMap<String, String> = shipped.laws_about().into_iter().collect();
         assert!(about["cue_cooldown_s"].contains("600 s") && about["cue_gap_s"].contains("60 s"), "{about:?}");
         let on = Scripts::new(&with_world_laws(src, &[("cues_on".into(), serde_json::json!(true)), ("cue_cooldown_s".into(), serde_json::json!(30)), ("cue_gap_s".into(), serde_json::json!(-5)), ("cue_check_s".into(), serde_json::json!(0.01)), ("regard_cache".into(), serde_json::json!(false))])).unwrap();

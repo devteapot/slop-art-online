@@ -174,12 +174,12 @@ Checks, 7 s later: the line is said once (one chronicle row, no "(×2)"); there 
 
 ## Places in a talk turn
 
-Since `talk-places` (2026-11-13, docs/COMMUNICATION.md §20). A talk turn asks the authority where its character stands (`mind_where`, read back from `standing`) and lists, under "# Places you know, from where you stand", the character's places and the resources it remembers (`seen_stock`), each with the way from there (`living_rules::bearing`: "here" within 4 m, else metres and a compass word). The think and deliberate prompts' "# Places you remember" are the same lines from the scene's place (`Minds::places`).
+Since `talk-places` (2026-11-13, docs/COMMUNICATION.md §20). A talk turn asks the authority where its character stands (`mind_where`, read back from `standing`) and lists, under "# Places you know, from where you stand", the character's places and the resources it remembers (`seen_stock`), each with the way from there (`living_rules::bearing`: "here" within 4 m, else the distance in the scene's words, whole metres up to 30 and then tens, and a compass word). The think and deliberate prompts' "# Places you remember" are the same lines, nearest the scene's place, without the way (`Minds::places(actor, near, say_way)`); the scene's `places` (known-ground) give the way once.
 
 The `talk-places` case (`verify_minds.py --case talk-places`): H (thought for) on an open line with A beside it (its lines are the admin's `mind_say`); three berry bushes holding one berry each by H; H steps 23 m off and back (a look); H knows a place "verify well" 16 m east (`mind_update`). Checks:
 
 1. A asks where to find berries: H's talk prompt has the section, the well as `"verify well" at [x, y], 16 m east` and the bushes as `3 berry bush around [x, y], here: seen day …`; H's `standing` row is where H stands.
-2. H's think prompt's places carry the way.
+2. H's think prompt's "# Places you remember" has the well's coordinates with no way, and its scene's `places` entry for the well gives `dir` and `dist` matching the talk prompt's way (the way said once).
 3. H steps off; A gathers the three; the row is unchanged while H is away; back, it is gone with its count and seen time kept, and A's next question gets `berry bush around [x, y], here: gone when you were last here, day … (3 seen day …)`.
 
 The fake talk reply says a line and leaves the exchange open: a silent or ended reply settles it, and A's second question gets no turn. Evidence: `talk-places.json`, `prompt-talk-1.txt`, `prompt-think.txt`, `prompt-talk-2.txt`.

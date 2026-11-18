@@ -67,7 +67,7 @@ pub const ONLOOKER_MS: u64 = 300;
 /// The most scene rows (creatures in the scenes of the viewers served) one step's frames may
 /// cover; the budget ([`budget`]) starts here and never grows past it.
 pub const FRAME_ROWS_PER_TICK: usize = 2_500;
-/// The least the budget shrinks to; a step that sweeps no one still serves its stalest viewer
+/// The least the budget shrinks to; a step still serves its stalest due viewer
 /// whatever the budget (`deliver`).
 pub const FRAME_ROWS_MIN: usize = 250;
 /// How many rows each tick on time adds to the budget.
@@ -149,7 +149,7 @@ thread_local! {
 /// slot or more after the previous tick (a boundary was missed: the previous one's transaction
 /// ran past it, or something queued ahead of this one), [`FRAME_ROWS_STEP`] more otherwise. A
 /// gap of a second or more is a pause or a new instance, not a missed boundary.
-pub fn budget(start_us: i64) -> usize {
+fn budget(start_us: i64) -> usize {
     BUDGET.with(|b| {
         let (rows, last) = b.get();
         let gap = start_us - last;
@@ -311,7 +311,7 @@ pub fn deliver(ctx: &ReducerContext, now: u64, swept: &[u32]) {
         common::diag(|| "frames:swept_rows", rows as u64);
         let mut served = Vec::new();
         for (_, id, n) in due {
-            if rows > 0 && rows + n > budget {
+            if !served.is_empty() && rows + n > budget {
                 break;
             }
             rows += n;
@@ -323,6 +323,12 @@ pub fn deliver(ctx: &ReducerContext, now: u64, swept: &[u32]) {
         common::diag(|| "frames:rows", rows as u64);
         served.into_iter().filter_map(|id| v.remove(&id).map(|e| (id, e))).collect()
     });
+    if common::profiling() {
+        let frames: Vec<_> = due.iter()
+            .map(|(id, viewer)| (*id, viewer.scene.as_ref().map_or(0, |scene| scene.len())))
+            .collect();
+        log::info!("frame cadence: {} {} {:?}", ctx.timestamp.to_micros_since_unix_epoch(), budget, frames);
+    }
     for (id, mut e) in due {
         frame(ctx, id, &mut e, now);
         VIEWERS.with(|v| v.borrow_mut().insert(id, e));

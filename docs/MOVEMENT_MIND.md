@@ -2,9 +2,10 @@
 
 Status: **design, being built step by step** (designed on branch `research-movement`, from main `e09365be`, 2026-11-12). Built so far:
 - `flee-open` (main `33b50ced`): a flight takes open ground ([LIVING_CORE](LIVING_CORE.md#steering-locomotion)).
-- `pursue-last-seen`: nothing is followed out of sight; a pursuit goes to the last-seen place, a flight runs from it; `chase_lost_share` removed.
+- `pursue-last-seen` (main `3e58c025`): nothing is followed out of sight; a pursuit goes to the last-seen place, a flight runs from it; `chase_lost_share` removed.
+- `known-ground` (step 3; this branch): every character records the ground it sees (`known_ground`, `remembered`, `ground_edit`; `ground_sight_m` 24 m by day), and with the `nav_belief` law (off by default until the arenas pass) walks are planned over it; a mind's scene lists its remembered places with bearings ([LIVING_CORE](LIVING_CORE.md#steering-locomotion)). Built as the step-3 design note approved on 2026-11-13: three new private tables, no column added to an existing table (appending one rewrites the table and disconnects every client in 2.14.1); remembered gates in their own table rather than on `familiar`.
 
-Next: `known-ground` (step 3 below), then `nav-arenas` (§4). The rest of this paragraph is the design as written. Nothing else is built. No module was built and no model was called. The evidence below comes from reading the code on main and from scanning existing trial evidence under `~/dev/*/.local/living/trials/`. The target spread in [§4](#4-measures-the-navigation-arenas) is committed here before any arena runs.
+Next: `nav-arenas` (§4). The rest of this paragraph is the design as written. Nothing else is built. No module was built and no model was called. The evidence below comes from reading the code on main and from scanning existing trial evidence under `~/dev/*/.local/living/trials/`. The target spread in [§4](#4-measures-the-navigation-arenas) is committed here before any arena runs.
 
 The owner's ask: *"general movement, how they get where they want to go. pathfinding based on memory and what they can see. real time input like a real player, low latency."*
 
@@ -65,20 +66,21 @@ In the open the target never leaves sight, so the change does not show here, as 
 
 How fights end shifted with the flights: after, a fight's loser more often got clear ("clear" in 5 of 5 trading fights, against 0 of 5), because a flight now runs on from where the pursuer was last seen instead of ending when it went out of sight. Five fights an arm is a small sample.
 
-**Wolf ecology** (`living/tools/wolf_ecology.py`, the hamlet with 16 deer and a bold pack of 4, the overlay of the fix-pursuit-speed check; 2 worlds an arm). The before worlds were paused for a quiet window and their clock jumped 22.7 game hours on resuming, so both arms are compared over the same first **13.6 game hours** only:
+**Wolf ecology** (`living/tools/wolf_ecology.py`, the hamlet with 16 deer and a bold pack of 4, the overlay of the fix-pursuit-speed check; instinct graphs, no model). **4 worlds an arm, 24 game hours each**, run together on the trial server on 2026-11-13: before is main `db4c1e35` (the branch's base), after is `pursue-last-seen` `9e2b25a5`. Evidence: `~/slop-evidence/pursue-last-seen/eco2/`.
 
 | | Before | After |
 |---|---|---|
-| Resident-hours | 307 | 282 |
-| Attack episodes (per 1,000 resident-h) | 93 (303) | 94 (334) |
-| Blows begun | 628 | 690 |
-| People killed by wolves (per run) | 4 (1, 3) | 7 (4, 3) |
-| … per 1,000 resident-h | 13.0 | 24.9 |
-| Of those badly hurt / children | 4 / 1 | 7 / 2 |
-| Deer attacked / killed | 0 / 0 | 0 / 0 |
-| Wolves at 12 game hours | 4, 4 | 3, 4 (one killed by a person) |
+| Resident-hours | 847 | 896 |
+| Attack episodes (per 1,000 resident-h) | 195 (230), none at night | 182 (203), 11 at night |
+| Blows begun | 1,389 | 1,518 |
+| People killed of 48 (per world) | **19** (5, 7, 3, 4) | **14** (4, 3, 3, 4) |
+| … per 1,000 resident-h | 22.4 | 15.6 |
+| Deaths per episode | 0.10 | 0.08 |
+| Of the killed: badly hurt / children | 18 / 2 | 14 / 1 |
+| Deer attacked / killed | 22 / 0 | 44 / 1 |
+| Wolves died (all of age) | 16 | 16 |
 
-Attacks are the same; deaths are 7 against 4 of 24 residents, every victim badly hurt, worn down over several episodes. Earlier checks put this world at 2–5 dead per run in its first 12–18 game hours on either build (docs/STAMINA.md, fix-pursuit-speed), and 1, 3 against 4, 3 sits inside that spread. Two worlds an arm cannot say whether the rate moved. A reading of the mechanism: a person fleeing a wolf no longer stops when the wolf drops out of sight but runs on from where it last saw it, often away from the others, and a wolf no longer tracks through walls but goes to where it last saw its prey.
+With a bold pack beside a village, people die no more often with pursue-last-seen, and probably a little less (14 against 19 of 48); wolves went for deer twice as often. The worlds overlap (3–4 dead in most of each arm), so the fall is not certain. Almost every victim was worn down over several episodes, on both builds. An earlier two-world comparison cut to 13.6 game hours (its before worlds were paused for a quiet window and their clock jumped 22.7 game hours on resuming) pointed the other way, 7 against 4 of 24, and is superseded by this one.
 
 ## 1. Today
 

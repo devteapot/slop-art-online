@@ -710,6 +710,11 @@ fn round(v: f32) -> f64 {
 }
 
 /// What the character currently perceives, as compact JSON for the mind.
+/// The scene's list of one's remembered places, with bearings.
+pub const PLACES: &str = "places";
+/// How many remembered places a scene lists (nearest first).
+const PLACES_SHOWN: usize = 12;
+
 pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
     let _span = common::span("perceive.scene_json");
     common::diag(|| "scene_json", 1);
@@ -1069,6 +1074,24 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
     }
     if !smelled.is_empty() {
         scene[living_rules::species::SMELLED] = Value::Array(smelled);
+    }
+    // Remembered places (docs/MOVEMENT_MIND.md, step 3): each of one's own places, which way and
+    // how far from here, in the words used for what is in sight (`living_rules::bearing`, shared
+    // with the mind's talk-turn place lists), nearest first. Only one's own: a place one does not
+    // know is not listed. A deliberation's place list leaves the way to this.
+    let mut places: Vec<(f32, Value)> = ctx
+        .db
+        .place()
+        .actor()
+        .filter(id)
+        .map(|p| {
+            let d = common::dist(at, (p.x, p.y));
+            (d, json!({"name": p.name, "dir": common::direction(at, (p.x, p.y)), "dist": living_rules::bearing::rough_dist(d)}))
+        })
+        .collect();
+    if !places.is_empty() {
+        places.sort_by(|a, b| a.0.total_cmp(&b.0));
+        scene[PLACES] = Value::Array(places.into_iter().take(PLACES_SHOWN).map(|(_, v)| v).collect());
     }
     // While sight has a field (the `fov_on` law): which way one faces, and what one hears but
     // cannot see, in a person's words (what it sounds like, where from the way one faces and by

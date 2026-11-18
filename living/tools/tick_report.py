@@ -27,6 +27,21 @@ def series(diff, name):
             yield labels(k), v
 
 
+def histogram_summary(buckets, threshold, quantile):
+    """Bound a threshold share and quantile using the server's cumulative buckets."""
+    count = buckets.get("+Inf", 0)
+    if not count:
+        return None
+    ordered = [(0.0, 0)] + sorted((float(k), v) for k, v in buckets.items())
+    below = max(v for k, v in ordered if k <= threshold)
+    above = min(v for k, v in ordered if k >= threshold)
+    q = next(i for i, (_, v) in enumerate(ordered) if v / count >= quantile)
+    return {
+        "over_pct_bounds": [100 * (count - v) / count for v in (above, below)],
+        "p99_ms_bounds": [k * 1000 if k != float("inf") else None for k, _ in ordered[q - 1:q + 1]],
+    }
+
+
 def one(d):
     d = Path(d)
     m = json.loads((d / "metrics.json").read_text())
@@ -38,6 +53,7 @@ def one(d):
     r["ticks_per_s"] = t.get("ticks_per_s")
     r["gap_slots"] = t.get("gap_slots")
     r["delay_ms_grid"] = {k: round(v, 2) for k, v in t.get("delay_ms", {}).items()}
+    r["tick_body_over_16_7_ms_pct"] = t.get("body_over_16_7_ms_pct")
     r["tick_body_ms"] = {k: round(v, 2) for k, v in t.get("body_ms", {}).items()}
     # Per reducer: committed transactions, WASM time, whole call, wait.
     red = {}
@@ -65,13 +81,13 @@ def one(d):
         for lb, v in series(diff, name):
             views.setdefault(lb["view"], {})[key] = v / s / (1e3 if "usec" in name else 1)
     r["views"] = {k: {kk: round(vv, 2) for kk, vv in v.items()} for k, v in sorted(views.items(), key=lambda kv: -kv[1].get("total_ms_per_s", 0)) if v.get("calls_per_s")}
-    r["reducers"] = {k: {kk: round(vv, 2) for kk, vv in v.items()} for k, v in sorted(red.items(), key=lambda kv: -kv[1].get("call_ms_per_s", 0)) if v.get("calls_per_s") or v.get("wasm_ms_per_s")}
-    dl = dict(series(diff, "spacetime_scheduled_function_delay_seconds_sum").__iter__()) if False else None
+    r["reducers"] = {k: {kk: round(vv, 2) for kk, vv in v.items()} for k, v in sorted(red.items(), key=lambda kv: -kv[1].get("call_ms_per_s", 0)) if v.get("calls_per_s") or v.get("call_ms_per_s")}
     sd = {lb["function"]: v for lb, v in series(diff, "spacetime_scheduled_function_delay_seconds_sum")}
     sc = {lb["function"]: v for lb, v in series(diff, "spacetime_scheduled_function_delay_seconds_count")}
     r["sched_delay_ms_mean"] = {k: round(sd[k] / sc[k] * 1e3, 3) for k in sd if sc.get(k)}
     r["sched_delay_buckets_tick"] = {lb["le"]: v for lb, v in series(diff, "spacetime_scheduled_function_delay_seconds_bucket") if lb.get("function") == "tick"}
     r["tick_call_buckets"] = {lb["le"]: v for lb, v in series(diff, "spacetime_reducer_plus_query_duration_sec_bucket") if lb.get("reducer") == "tick"}
+    r["tick_call_16_7_ms"] = histogram_summary(r["tick_call_buckets"], 0.0167, 0.99)
     wasm_thread = [v for k, vs in th["threads_cpu_ms_per_s"].items() if k.startswith("wasm-") for v in vs]
     r["db_thread_cpu_ms_per_s"] = round(sum(wasm_thread), 1)
     r["process_cpu_ms_per_s"] = th["process_cpu_ms_per_s"]
@@ -87,12 +103,29 @@ def one(d):
            "rows_per_s": tot("spacetime_websocket_sent_num_rows_sum") / s, "bytes_sent_per_s": tot("spacetime_num_bytes_sent_to_clients_total") / s,
            "serialize_ms_per_s": tot("spacetime_websocket_serialize_secs_sum") * 1e3 / s,
            "pong_rtt_ms_mean": (tot("spacetime_websocket_pong_rtt_secs_sum") / tot("spacetime_websocket_pong_rtt_secs_count") * 1e3) if tot("spacetime_websocket_pong_rtt_secs_count") else None}
+    sub["query_ms_per_s"] = tot("spacetime_subscription_query_execution_time_micros_sum") / 1e3 / s
+    sub["update_cpu_ms_per_s"] = sum(
+        v / s * 1e3 for lb, v in series(diff, "spacetime_txn_cpu_time_sec_sum")
+        if lb.get("txn_type") == "Update"
+    )
+    if (d / "frames.json").exists():
+        frames = json.loads((d / "frames.json").read_text())
+        viewers = frames["viewers"]
+        r["frames"] = {
+            "rows_per_tick": frames["rows_per_tick"],
+            "ticks_at_budget_min": frames["ticks_at_budget_min"],
+            "ticks_observed": len(frames["ticks"]),
+            "frame_interval_ms": frames["frame_interval_ms"],
+            "scene_rows_per_s_per_viewer": sum(v["rows_per_s"] for v in viewers.values()) / res["players"],
+        }
     mind = None
     if (d / "mind.json").exists():
         md = (json.loads((d / "mind.json").read_text()) or {}).get("done") or {}
         if md.get("seconds"):
             ms = md["seconds"]
-            rows = {k: sum(v) / ms for k, v in md.get("events", {}).items()}
+            # A keyed update callback collapses a removed and an inserted row.
+            rows = {k: (insert + 2 * update + delete) / ms
+                    for k, (insert, update, delete) in md.get("events", {}).items()}
             mind = {"messages_per_s": md["messages"] / ms, "wire_bytes_per_s": md["bytes"] / ms, "rows_per_s": sum(rows.values()),
                     "rows_per_s_by_table": {k: round(v, 1) for k, v in sorted(rows.items(), key=lambda kv: -kv[1])}, "lag_ms": md.get("lag_ms")}
     players = res.get("players", 216)
@@ -112,17 +145,22 @@ def one(d):
 
 
 def table(rows):
-    print("| run | ticks/s | gaps (slots: n) | sched delay p50/p99 ms (grid) | tick body p50/p99 ms | tick call ms/s | all calls ms/s | db thread CPU ms/s | process CPU ms/s | in sight | load min/med/max |")
-    print("|" + "---|" * 11)
+    print("| run | ticks/s | gaps (slots: n) | sched delay p50/p99 ms (grid) | tick body p50/p99 ms | tick call ms/s | all calls ms/s | db thread CPU ms/s | process CPU ms/s | in sight | load min/med/max | body >16.7 ms % | frame rows/tick p10/p50/p90 | ticks at min | scene rows/s/player | viewer interval p50/p90 ms |")
+    print("|" + "---|" * 16)
     for r in rows:
         tick = r["reducers"].get("tick", {})
-        print(f"| {r['run']} | {r['ticks_per_s']} | {r['gap_slots']} | {r['delay_ms_grid'].get('p50')} / {r['delay_ms_grid'].get('p99')} | {r['tick_body_ms'].get('p50')} / {r['tick_body_ms'].get('p99')} | {tick.get('call_ms_per_s')} | {r['calls_ms_per_s_all']} | {r['db_thread_cpu_ms_per_s']} | {r['process_cpu_ms_per_s']} | {r['in_sight']} | {r['load_min_med_max']} |")
+        f = r.get("frames", {})
+        frame_rows, interval = f.get("rows_per_tick", {}), f.get("frame_interval_ms", {})
+        print(f"| {r['run']} | {r['ticks_per_s']} | {r['gap_slots']} | {r['delay_ms_grid'].get('p50')} / {r['delay_ms_grid'].get('p99')} | {r['tick_body_ms'].get('p50')} / {r['tick_body_ms'].get('p99')} | {tick.get('call_ms_per_s')} | {r['calls_ms_per_s_all']} | {r['db_thread_cpu_ms_per_s']} | {r['process_cpu_ms_per_s']} | {r['in_sight']} | {r['load_min_med_max']} | {r['tick_body_over_16_7_ms_pct']} | {frame_rows.get('p10')}/{frame_rows.get('p50')}/{frame_rows.get('p90')} | {f.get('ticks_at_budget_min')}/{f.get('ticks_observed')} | {f.get('scene_rows_per_s_per_viewer', 0):.2f} | {interval.get('p50')}/{interval.get('p90')} |")
     for r in rows:
-        print(f"\n### {r['run']}\n\n| reducer | calls/s | WASM ms/s | whole call ms/s | views triggered/s | wait mean ms |\n|---|---|---|---|---|---|")
+        print(f"\n### {r['run']}\n\n| reducer | calls/s | WASM ms/s | whole call ms/s | Update CPU ms/s | views triggered/s | wait mean ms |\n|---|---|---|---|---|---|---|")
         for k, v in r["reducers"].items():
-            print(f"| {k} | {v.get('calls_per_s', 0):.1f} | {v.get('wasm_ms_per_s', 0):.1f} | {v.get('call_ms_per_s', 0):.1f} | {v.get('views_per_s', 0):.0f} | {r['wait_ms_mean'].get(k, r['wait_ms_mean'].get('scheduled reducer') if k in ('tick', 'housekeeping') else '')} |")
+            print(f"| {k} | {v.get('calls_per_s', 0):.1f} | {v.get('wasm_ms_per_s', 0):.1f} | {v.get('call_ms_per_s', 0):.1f} | {v.get('update_cpu_ms_per_s', 0):.1f} | {v.get('views_per_s', 0):.0f} | {r['wait_ms_mean'].get(k, r['wait_ms_mean'].get('scheduled reducer') if k in ('tick', 'housekeeping') else '')} |")
+        print(f"\nScheduler delay histogram (seconds, cumulative) {r['sched_delay_buckets_tick']}")
+        print(f"\nWhole tick call histogram (seconds, cumulative) {r['tick_call_buckets']}")
+        print(f"\nWhole tick call threshold and p99 bounds {r['tick_call_16_7_ms']}")
         su, mp = r["subscriptions"], r["mind_probe"]
-        print(f"\nSubscriptions (all connections): {su.get('messages_per_s')} messages/s, {su.get('rows_per_s')} rows/s, {su.get('bytes_sent_per_s')} B/s; per player {su.get('players_messages_per_s_each')} messages/s, {su.get('players_rows_per_s_each')} rows/s, {su.get('players_bytes_per_s_each')} B/s; serialize {su.get('serialize_ms_per_s')} ms/s; pong RTT mean {su.get('pong_rtt_ms_mean')} ms; queue gauges max {r.get('gauges_max')}")
+        print(f"\nSubscriptions (all connections): {su.get('messages_per_s')} messages/s, {su.get('rows_per_s')} rows/s, {su.get('bytes_sent_per_s')} B/s; per player {su.get('players_messages_per_s_each')} messages/s, {su.get('players_rows_per_s_each')} rows/s, {su.get('players_bytes_per_s_each')} B/s; query {su.get('query_ms_per_s')} ms/s; Update CPU {su.get('update_cpu_ms_per_s')} ms/s; serialize {su.get('serialize_ms_per_s')} ms/s; pong RTT mean {su.get('pong_rtt_ms_mean')} ms; queue gauges max {r.get('gauges_max')}")
         if mp:
             print(f"Mind probe (owner): {mp['messages_per_s']:.1f} messages/s, {mp['rows_per_s']:.1f} rows/s, {mp['wire_bytes_per_s']:.0f} B/s; rows/s by table {mp['rows_per_s_by_table']}; lag {mp['lag_ms']}")
         print("\n| view | calls/s | function ms/s | with materializing ms/s | µs per call |\n|---|---|---|---|---|")

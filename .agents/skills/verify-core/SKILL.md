@@ -71,6 +71,9 @@ python3 "$C/scenes.py" cheap_alarms --run "$R" > "$E/cheap_alarms.txt" 2>&1
 python3 "$C/scenes.py" cheap_warmth --run "$R" > "$E/cheap_warmth.txt" 2>&1
 # The lazy scene gives the whole scene's answers, all round and by facing; off, the old path (features/battle.md, about 2.5 min).
 python3 "$C/scenes.py" scene_lazy --run "$R" > "$E/scene_lazy.txt" 2>&1
+# The chronicle's repeat check read newest first, and noticing read in place, give the full reads' answers; off, the old paths (features/battle.md, about 2 min each).
+python3 "$C/scenes.py" chronicle_recent --run "$R" > "$E/chronicle_recent.txt" 2>&1
+python3 "$C/scenes.py" notice_inplace --run "$R" > "$E/notice_inplace.txt" 2>&1
 # A mind's line waits when another spoke to its listener first, under heard_first_rethinks (features/speech.md, about 1.5 min).
 python3 "$C/scenes.py" heard_first --run "$R" > "$E/heard_first.txt" 2>&1
 # The shared answers equal fresh ones (regard_cache_check; features/cues.md#shared-answers, about 4 min;
@@ -90,6 +93,9 @@ python3 "$C/scenes.py" moves --run "$R" > "$E/moves.txt" 2>&1
 python3 "$C/scenes.py" flee_wall --run "$R" > "$E/flee_wall.txt" 2>&1
 # Nothing followed out of sight: a pursuit to the last-seen place, a flight from it (features/steering.md#out-of-sight-last-seen-places, about 1.5 min).
 python3 "$C/scenes.py" pursue_last_seen --run "$R" > "$E/pursue_last_seen.txt" 2>&1
+# Known ground marked by every character, and walks planned over it under nav_belief (features/steering.md#known-ground-and-walking-over-belief, about 4 min together).
+python3 "$C/scenes.py" known_ground --run "$R" > "$E/known_ground.txt" 2>&1
+python3 "$C/scenes.py" nav_belief --run "$R" > "$E/nav_belief.txt" 2>&1
 # Breath, tiredness and focus (features/breath.md, about 2 min; it changes and restores world laws).
 python3 "$C/scenes.py" stamina --run "$R" > "$E/stamina.txt" 2>&1
 # Fight length and the wolf chase (features/breath.md, about 20 min; set run_share or wolf_run

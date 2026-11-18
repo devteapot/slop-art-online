@@ -39,7 +39,8 @@ walk, profile a window, delete), and around the same window it also records:
 
 Writes `<out>/metrics.json` (before, after and the difference), `<out>/threads.json`,
 `<out>/ticks.json`, `<out>/mind.json` and `<out>/gauges.json` beside look_cost.py's `result.json`
-and `module.log`. Python standard library.
+and `module.log`. `frames.json` records the served scene rows and authority frame cadence per viewer.
+Python standard library.
 """
 
 import json
@@ -49,6 +50,8 @@ import subprocess
 import sys
 import time
 import urllib.request
+from collections import defaultdict
+from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -101,7 +104,6 @@ def ticks(log, t0, t1):
             continue
         stamp = m.group(1).rstrip("Z")
         sec, _, frac = stamp.partition(".")
-        from datetime import datetime, timezone
         base = datetime.strptime(sec, "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc).timestamp()
         end_us = int(round(base * 1e6)) + (int((frac + "000000")[:6]) if frac else 0)
         dur_us = float(m.group(2)) * {"µs": 1.0, "ms": 1e3, "s": 1e6}[m.group(3)]
@@ -118,15 +120,56 @@ def ticks(log, t0, t1):
     starts = [s for s, _, _ in rows]
     gaps = [(b - a) / 1e3 for a, b in zip(starts, starts[1:])]
     slots = [round(g / (INTERVAL_US / 1e3)) for g in gaps]
-    # Time from a tick's body ending to the next tick's start, and to the boundary after its own.
     q = lambda v, f: sorted(v)[min(len(v) - 1, int(len(v) * f))] if v else None
     return {
         "n": len(rows), "seconds": round((t1 - t0), 1), "ticks_per_s": round(len(rows) / (t1 - t0), 2),
         "gap_slots": {str(k): slots.count(k) for k in sorted(set(slots))},
         "delay_ms": {"p50": q(delays, .5), "p90": q(delays, .9), "p99": q(delays, .99), "max": max(delays), "mean": sum(delays) / len(delays)},
         "body_ms": {"p50": q([d / 1e3 for _, _, d in rows], .5), "p99": q([d / 1e3 for _, _, d in rows], .99)},
-        # One row per tick: start offset from the grid (ms), body (ms), slots to the next tick.
-        "rows": [[round(d, 3), round(r[2] / 1e3, 3), s] for d, r, s in zip(delays, rows, slots + [None])],
+        # Wall-clock timestamps from the module log, with grid-relative estimates.
+        "body_over_16_7_ms_pct": 100 * sum(d > 16_700 for _, _, d in rows) / len(rows),
+        "columns": ["start_us", "end_us", "grid_offset_ms", "body_ms", "slots_to_next"],
+        "rows": [[round(r[0]), r[1], round(d, 3), round(r[2] / 1e3, 3), s]
+                 for d, r, s in zip(delays, rows, slots + [None])],
+    }
+
+
+def frame_cadence(log, t0, t1):
+    """Count scene rows scheduled for delivery, including rows that needed no write."""
+    pattern = re.compile(r'frame cadence: (\d+) (\d+) (\[.*\])$')
+    ticks = []
+    by_viewer = defaultdict(list)
+    for line in log.splitlines():
+        match = pattern.search(line)
+        if not match:
+            continue
+        start_us, budget = map(int, match.groups()[:2])
+        if not t0 * 1e6 <= start_us < t1 * 1e6:
+            continue
+        # Rust's Debug representation of Vec<(u32, usize)>.
+        frames = json.loads(match[3].replace("(", "[").replace(")", "]"))
+        ticks.append([start_us, budget, sum(n for _, n in frames)])
+        for viewer, n in frames:
+            by_viewer[viewer].append([start_us, n])
+
+    def percentiles(samples):
+        samples = sorted(samples)
+        return {f"p{p}": samples[min(len(samples) - 1, len(samples) * p // 100)]
+                for p in (10, 50, 90)} if samples else {}
+
+    def intervals(frames):
+        return [(b[0] - a[0]) / 1000 for a, b in zip(frames, frames[1:])]
+
+    return {
+        "columns": ["start_us", "budget", "frame_scene_rows"],
+        "ticks": ticks,
+        "rows_per_tick": percentiles(t[2] for t in ticks),
+        "ticks_at_budget_min": sum(t[1] == 250 for t in ticks),
+        "frame_interval_ms": percentiles(v for frames in by_viewer.values() for v in intervals(frames)),
+        "viewers": {viewer: {"rows_per_s": sum(n for _, n in frames) / (t1 - t0),
+                             "interval_ms": percentiles(intervals(frames)),
+                             "frames": frames}
+                    for viewer, frames in by_viewer.items()},
     }
 
 
@@ -155,7 +198,7 @@ def main():
     assert out, "--out is required"
     out.mkdir(parents=True, exist_ok=True)
     box = {}
-    real_sleep, real_call = time.sleep, look_cost.call
+    real_call = look_cost.call
 
     # look_cost turns profiling on and off with `set_profile`; the window is between the two.
     load_bin = a[a.index("--load") + 1]
@@ -166,8 +209,8 @@ def main():
             if probe:
                 mp = look_cost.Proc([load_bin, "mind"], out / "mind.stderr")
                 mp.send(json.dumps({"uri": look_cost.URL, "db": db, "token": token}))
-                box["mind_ready"] = mp.expect("ready", 300)
                 box["mind"] = mp
+                box["mind_ready"] = mp.expect("ready", 300)
             real_call(db, reducer, args, token)
             box.update(ident=ident, pid=server_pid())
             box["stop"], box["gauges"] = threading.Event(), []
@@ -191,6 +234,11 @@ def main():
     try:
         look_cost.main()
     finally:
+        if "stop" in box:
+            box["stop"].set()
+        mind = box.get("mind")
+        if mind and mind.p.poll() is None:
+            mind.p.terminate()
         if "m1" in box:
             dur = box["t1"] - box["t0"]
             diff = {k: box["m1"].get(k, 0.0) - box["m0"].get(k, 0.0) for k in sorted(set(box["m0"]) | set(box["m1"]))}
@@ -206,9 +254,8 @@ def main():
             (out / "gauges.json").write_text(json.dumps({"columns": ["t"] + list(GAUGES), "rows": box.get("gauges", [])}) + "\n")
             if probe:
                 (out / "mind.json").write_text(json.dumps({"ready": box.get("mind_ready"), "done": box.get("mind_done")}, indent=1) + "\n")
-                if box["mind"].p.poll() is None:
-                    box["mind"].p.terminate()
             log = (out / "module.log").read_text() if (out / "module.log").exists() else ""
+            (out / "frames.json").write_text(json.dumps(frame_cadence(log, box["t0"], box["t1"])) + "\n")
             (out / "ticks.json").write_text(json.dumps(ticks(log, box["t0"], box["t1"])) + "\n")
 
 
