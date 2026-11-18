@@ -799,6 +799,7 @@ def n4(world, out, variant, law, kind, reps):
         p = world.nearest_walkable(base) if flight else sites[k][0]
         starts.append(p)
         world.call("place_at", sub.id, p[0], p[1])
+    missing_after_warmup = set()
     if variant in ("fk", "pk"):
         # Warm-up: a walk out into the field and back, so the ground around is known.
         if flight:
@@ -808,14 +809,19 @@ def n4(world, out, variant, law, kind, reps):
         tmp = Phase(world, folder / "warmup", [s.id for s in subs], 600, bench=False)
         walks_to(world, tmp, subs, warm, law)
         tmp.close()
+        survivors = world.bodies([s.id for s in subs])
         for sub, p in zip(subs, starts):
-            world.call("place_at", sub.id, p[0], p[1])
+            if sub.id in survivors:
+                world.call("place_at", sub.id, p[0], p[1])
+            else:
+                missing_after_warmup.add(sub.id)
     wait_for_light(world, world.light, subs)
     phase = Phase(world, folder, [s.id for s in subs] + fixtures, 600, known_ids=[s.id for s in subs], bench_seconds=60)
     hour = scenes.world_hour(world.s)[0]
     sight = person_sight(hour)
     meta = {"arena": "n4", "variant": variant, "law": law, "kind": kind, "spot": spot, "outward": u, "wall": wall, "hour": round(hour, 2), "light": "day" if sight == 11.0 else "night", "subjects": [s.id for s in subs],
-            "fixtures": fixtures, "starts": starts, "pursuit_sites": sites, "sight_m": sight, "flee_clear": world.law_value("flee_clear"), **world.meta()}
+            "fixtures": fixtures, "starts": starts, "pursuit_sites": sites, "missing_after_warmup": sorted(missing_after_warmup),
+            "sight_m": sight, "flee_clear": world.law_value("flee_clear"), **world.meta()}
     recs = []
     for k, (sub, fx, p) in enumerate(zip(subs, fixtures, starts)):
         if flight:
@@ -827,6 +833,8 @@ def n4(world, out, variant, law, kind, reps):
     t0 = world.now()
     starts_ms = {}
     for k, (sub, fx, p) in enumerate(zip(subs, fixtures, starts)):
+        if sub.id in missing_after_warmup:
+            continue
         if flight:
             # Close the initial 12 m gap until the subject can see its pursuer.
             world.call("set_behavior", fx, json.dumps(goto_node(p, True)))
@@ -847,6 +855,8 @@ def n4(world, out, variant, law, kind, reps):
         steering = world.rows(f"SELECT id, goal, target, gx, gy, keep, unseen_ms FROM steer WHERE {id_filter}")
         intents.append({"at_ms": world.now(), "steer": steering})
         for sub, fx in zip(subs, fixtures):
+            if sub.id in missing_after_warmup:
+                continue
             sub.keepalive()
             if flight and sub.id not in starts_ms and sub.id in bodies and fx in bodies:
                 me, him = world.pos(bodies[sub.id]), world.pos(bodies[fx])
@@ -884,7 +894,7 @@ def n4(world, out, variant, law, kind, reps):
                "told": [e["text"] for e in sorted(told, key=lambda e: e["id"]) if e["at_ms"] >= t0 and e["kind"] in ("act", "own")]}
         recs.append(rec)
         world.call("set_behavior", fx, json.dumps({"wait": 3600}))
-        if sub.kind == "body":
+        if sub.kind == "body" and sub.id not in missing_after_warmup:
             world.call("set_behavior", sub.id, json.dumps({"wait": 3600}))
     with (folder / "walks.jsonl").open("a") as f:
         for r in recs:
