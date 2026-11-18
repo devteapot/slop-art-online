@@ -127,3 +127,28 @@ The fight was also visible to unmonitored people in the full island world. The m
 Each candidate frame was at both scene caps, 14 creatures and 10 structures. The participants and the event reason reached the prompts. The prompt of each request preceded the yield. Each resident got one eligible request within the event and the death generated no second request under the prototype's cooldown. At this staged encounter rate the normalized model think rates were 0, 78.8 and 106.2 per resident-hour across the three arms. These short-window figures measure the trial workload. One sustained qualifying episode per resident within a five-minute gap would instead be at most 12 fresh requests per resident-hour.
 
 After the baseline window, an unrelated graph request deliberately opened one prompt per resident. All four frames then carried the yield and killing, showing that this evidence survived to a later eligible request. The fake compiler submitted an invalid `go` act for each resident. All four refusals surfaced in subsequent consolidation prompts with `goto` in the skill list. No automatic retry or physical effect followed. The free provider cost was $0.
+
+### Paid comparison results
+
+Runs `minds-bystanders-1-live-base` and `minds-bystanders-1-live-event` finished at 00:51 CET on November 19. The six staged bodies started at identical coordinates. Both arms recorded two accepted and released player strikes. The first did 7 damage in baseline and 6 in treatment. The second killed Aldric after he yielded, at +5.468 s and +5.617 s respectively. All four residents saw both strikes and received the yield, the explicit strike after yield, and the death line. The baseline had no resident fight thought, speech, deliberate movement or position change in its 34.049 s window.
+
+Times below are relative to the first landed blow in the candidate arm. Request times are the authority's, think reply times are the journal's, and effects come from the chronicle, experience and body snapshots.
+
+| Witness | Request | Think reply | Decision | Verified physical or spoken effect |
+| --- | ---: | ---: | --- | --- |
+| Cuth #2 | +0.000 s, heard | +4.185 s | Call for the attacker to stop and approach her husband to tend him | Call at +8.112 s. No completed approach or tend. |
+| Maud #3 | +0.000 s, heard | +15.644 s | Rouse the town and interpose for her father | Call at +17.708 s. No completed interposition. |
+| Agnes #9 | +0.867 s, saw | +4.334 s | Call for help and move closer | Call at +8.160 s. `goto` completed at +10.234 s. Final position was 8 m closer along the road. |
+| Bram #11 | +1.350 s, saw | +4.052 s | Alert the guards and keep back | Call at +7.179 s. A separate `do: "call"` act was refused as an unknown skill at +7.193 s. His `goto` completed at +14.817 s. |
+
+Four thoughts and four compilations led to four verified calls and two completed walks. The role-specific intentions were the models' replies. No intervention occurred before the killing and no completed protection or treatment was recorded. The candidate did not ask again on the yield or death. Its initial prompts described an attack in progress and did not have those later lines. Some warnings were already stale by the time they were spoken. Prompt opportunity improved and end-to-end response latency remained a separate limit. Bram's `call` refusal also reproduced the general skill-name failure with another word. The valid spoken call had already gone out through the separate speech path; resubmitting it during act repair would duplicate it.
+
+The 34.268 s candidate window produced 4 versus 0 resident think replies, or a short-window normalized rate of 105.1 versus 0 per resident-hour. One extra thought per resident in a staged episode is the interpretable exposure result. The spend watcher recorded 18 successful upstream calls. Baseline used 4 consolidation calls ($0.00560). The candidate used 4 consolidation, 4 think, 4 compile, and 2 talk calls ($0.02822). The total was $0.03382 and the difference was $0.02263, about $0.00566 per extra thought including associated calls and background cost variation. That gives about $0.006–$0.023 per resident-hour if one to four eligible episodes each add one thought. This estimate comes from one staged episode and four residents.
+
+### Coverage and recommendation to the coordinators
+
+The free tests reproduced the missing request with the existing laws and opened the path with a general event trigger. The paid comparison showed the model could choose speech and concrete acts from the witnessed scene. The imposed fight was short, the cast was small, and nobody had been assigned a prescribed response. The test covered four resident minds with sight of the same short encounter. Steady-state cost, crowd load, an occluded earshot-only listener, and longer fights remain open. The first paid attempt failed at local startup and spent $0. The corrected run finished both arms with no provider errors. All scratch databases were paused and deleted. The trial server did not restart.
+
+Keep the three production decisions separate. Start by testing timely requests on the recipient's own evidence, then test a way to carry an observed escalation into an in-flight or follow-up prompt without flooding the service. Independently test talk framing with speech and action shown as separate choices, and same-turn repair of rejected acts without replaying successful work. The measurement law remains off by default. Production implementation is pending the coordinators' decision.
+
+The replay extracts, free and paid runs, model journals, spend log and build evidence are archived on Spark in `~/slop-evidence/bystanders-1-2026-11-19.tar.zst` with a matching `.sha256`.
