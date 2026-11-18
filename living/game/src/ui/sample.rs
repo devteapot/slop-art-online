@@ -146,6 +146,7 @@ pub fn fill(
             let is_hostile = Some(e) == hostile;
             Actor {
                 id: e.to_bits(),
+                compact_plate: None,
                 name: if is_hostile { "Varek the Brigand".into() } else { name(e) },
                 head,
                 distance,

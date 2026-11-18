@@ -85,10 +85,19 @@ const IN_CROWD: u32 = 1 << 8;
 const WOLF_NEAR: u32 = 1 << 9;
 /// Something heard near and out of sight (only while sight has a field).
 const SOUND_NEAR: u32 = 1 << 10;
-/// Familiarity rows kept per character (docs/BATTLE_SCALE.md, fix 1): above what can be in sight
-/// in the densest place (a 200-character battle among its remains), so it is never what is in
-/// view that is forgotten. Over it, the oldest unseen rows go: never one seen within
-/// `FAMILIAR_KEEP_MS`, nor one whose thing is in the character's seen set (in view lately).
+/// Familiarity rows a character keeps before pruning (docs/BATTLE_SCALE.md, fix 1). Over it, the
+/// oldest unseen rows go: never one touched within `FAMILIAR_KEEP_MS`, nor one whose thing is in
+/// the character's seen set (in view lately), nor, with `notice_delta`, a structure within its last
+/// look's disc. It is never what is in view that is forgotten, so this is not a bound on a
+/// character's rows: what is in view can exceed it.
+///
+/// A battle site does. Measured at 200 fighters with refills over 30 minutes (`battle_diag.py
+/// --familiar`, run `minds-fam30-041631`, 2026-11-13): the first fighter passed 2,048 rows at 10.5
+/// minutes, 44 by 21 minutes and 634 characters by 30 (633 fighters, 1 resident; walkers foraging
+/// away never passed 21). The most was 2,984, about 90% of them remains in view. A surviving
+/// fighter's rows grew about 190 a minute at first, then about 100 a minute, the rate the remains
+/// at the site grew. Remains last an hour, so a site's hour of dead (about 5,800 at that rate)
+/// would put a fighter near 6,000 rows (docs/BATTLE_SCALE.md, "Familiarity of remains").
 const FAMILIAR_LIMIT: usize = 2_048;
 /// A familiarity row touched this recently is not pruned (twice its 30 s touch period).
 const FAMILIAR_KEEP_MS: u64 = 60_000;
@@ -1628,11 +1637,20 @@ impl<'a> Ev<'a> {
         common::diag(|| "familiar:over_by", (all.len() - FAMILIAR_LIMIT) as u64);
         all.sort_unstable();
         let mut over = all.len() - FAMILIAR_LIMIT;
+        // With `notice_delta`, a structure within the last look's disc is in view (the next look
+        // passes over it without re-marking it), and is spared as one in the seen set is.
+        let look = if common::laws(self.ctx).notice_delta { self.ctx.db.last_look().id().find(me) } else { None };
+        let in_look = |thing: u64| {
+            look.as_ref().is_some_and(|l| {
+                thing & !((1 << 40) - 1) == FAM_STRUCTURE
+                    && self.ctx.db.structure().id().find(thing & ((1 << 40) - 1)).is_some_and(|s| common::dist((l.x, l.y), (s.x, s.y)) <= l.r)
+            })
+        };
         for (last, id, thing) in all {
             if over == 0 {
                 break;
             }
-            if now.saturating_sub(last) < FAMILIAR_KEEP_MS || self.seen_key(thing).and_then(|k| self.seen_at(k)).is_some_and(|t| now.saturating_sub(t) < SEEN_MS) {
+            if now.saturating_sub(last) < FAMILIAR_KEEP_MS || self.seen_key(thing).and_then(|k| self.seen_at(k)).is_some_and(|t| now.saturating_sub(t) < SEEN_MS) || in_look(thing) {
                 continue;
             }
             common::diag(|| "familiar:evict", 1);
@@ -1990,7 +2008,7 @@ impl<'a> Ev<'a> {
         drop(part);
         let _part = common::detail_span("noticed.structures");
         let new: Vec<usize> = if laws.notice_inplace {
-            let ids = self.new_structures_in_place(laws.notice_inplace_check);
+            let ids = self.new_structures_in_place(laws.notice_inplace_check, laws.notice_delta, laws.notice_delta_check);
             if ids.is_empty() {
                 return;
             }
@@ -2014,16 +2032,26 @@ impl<'a> Ev<'a> {
         }
         let structures: Vec<(u64, String, u32, (f32, f32), f32)> = self.structures().iter().map(|(s, d)| (s.id, s.kind.clone(), s.owner, (s.x, s.y), *d)).collect();
         let mut told = vec![false; structures.len()];
+        // Which are new, by index (a look among many new remains asks it of each part).
+        let mut is_new = vec![false; structures.len()];
+        for &i in &new {
+            is_new[i] = true;
+        }
+        // Tiles by kind and owner, each in list order, for `joined_tiles`.
+        let mut groups: std::collections::HashMap<(&str, u32), Vec<usize>> = std::collections::HashMap::new();
+        for (j, (_, kind, owner, _, _)) in structures.iter().enumerate() {
+            groups.entry((kind.as_str(), *owner)).or_default().push(j);
+        }
         for &i in &new {
             if told[i] {
                 continue;
             }
-            let part = joined_tiles(&structures, i);
+            let part = joined_tiles(&structures, &groups[&(structures[i].1.as_str(), structures[i].2)], i);
             for &k in &part {
                 told[k] = true;
             }
             let (_, kind, owner, _, _) = &structures[i];
-            if *owner == self.me.id || part.iter().any(|k| !new.contains(k)) {
+            if *owner == self.me.id || part.iter().any(|k| !is_new[*k]) {
                 continue;
             }
             let nearest = *part.iter().min_by(|a, b| structures[**a].4.total_cmp(&structures[**b].4)).unwrap_or(&i);
@@ -2062,13 +2090,36 @@ impl<'a> Ev<'a> {
     ///   calls insert rows and may prune, so they keep the full pass's order.
     /// `check` (`notice_inplace_check`) works the split out from the full list as well, before
     /// any mark is set, and counts any difference.
-    fn new_structures_in_place(&mut self, check: bool) -> Vec<u64> {
+    ///
+    /// With `delta` (`notice_delta`, docs/BATTLE_SCALE.md C2), a structure that was in sight at the
+    /// character's last look (`last_look`, within `LOOK_VALID_MS`: in its disc, and no newer than the
+    /// highest id in sight then) is passed over: it was looked at then, and has had its `familiar`
+    /// row since (pruning spares the last look's disc, `prune_familiar`). Only structures built since
+    /// or come into sight are checked. `delta_check` (`notice_delta_check`) checks every one passed
+    /// over has its row. A look that finds no valid row checks everything, as without `delta`.
+    fn new_structures_in_place(&mut self, check: bool, delta: bool, delta_check: bool) -> Vec<u64> {
         let (ctx, me, now, at) = (self.ctx, self.me.id, self.now, self.at);
         let r = common::sight_for(ctx, me, &self.w, now);
         let lately = |k: u32| SEEN.with(|s| s.borrow().get(&me).and_then(|m| m.get(&k).copied())).is_some_and(|t| now.saturating_sub(t) < SEEN_MS);
+        let last = if delta { ctx.db.last_look().id().find(me).filter(|l| now.saturating_sub(l.at_ms) <= LOOK_VALID_MS) } else { None };
+        if delta {
+            common::diag(|| if last.is_some() { "notice_delta:incremental" } else { "notice_delta:whole" }, 1);
+        }
         let mut recent: Vec<u32> = Vec::new();
         let mut other: Vec<(u64, f32)> = Vec::new();
+        let mut passed: Vec<u64> = Vec::new();
+        let mut top = 0u64;
         common::for_structures_near(ctx, at, r, |s, d| {
+            top = top.max(s.id);
+            if let Some(l) = &last {
+                if s.id <= l.max_structure && common::dist((l.x, l.y), (s.x, s.y)) <= l.r {
+                    if delta_check || check {
+                        passed.push(s.id);
+                    }
+                    common::diag(|| "notice_delta:passed", 1);
+                    return;
+                }
+            }
             let k = structure_key(s.id);
             if lately(k) {
                 recent.push(k);
@@ -2076,10 +2127,27 @@ impl<'a> Ev<'a> {
                 other.push((s.id, d));
             }
         });
+        if delta {
+            let row = LastLook { id: me, x: at.0, y: at.1, r, max_structure: top, at_ms: now };
+            if last.is_some() || ctx.db.last_look().id().find(me).is_some() {
+                ctx.db.last_look().id().update(row);
+            } else {
+                ctx.db.last_look().insert(row);
+            }
+        }
+        if delta_check && !passed.is_empty() {
+            common::diag(|| "notice_delta:checked", passed.len() as u64);
+            let missing: Vec<u64> = passed.iter().copied().filter(|id| ctx.db.familiar().by_actor_thing().filter((me, FAM_STRUCTURE | id)).next().is_none()).collect();
+            if !missing.is_empty() {
+                common::diag(|| "notice_delta:differed", missing.len() as u64);
+                log::error!("notice_delta of {me}: passed over {missing:?}, which have no familiar row (they would have been new)");
+            }
+        }
         other.sort_by(|a, b| a.1.total_cmp(&b.1));
         if check {
-            let full: Vec<u64> = self.structures().iter().filter(|(s, _)| !lately(structure_key(s.id))).map(|(s, _)| s.id).collect();
-            let seen_n = self.structures().len() - full.len();
+            // The full list's split, less what the last look lets this one pass over (`delta`).
+            let full: Vec<u64> = self.structures().iter().filter(|(s, _)| !passed.contains(&s.id) && !lately(structure_key(s.id))).map(|(s, _)| s.id).collect();
+            let seen_n = self.structures().iter().filter(|(s, _)| !passed.contains(&s.id)).count() - full.len();
             common::diag(|| "notice_inplace:checked", 1);
             if full.iter().ne(other.iter().map(|(id, _)| id)) || seen_n != recent.len() {
                 common::diag(|| "notice_inplace:differed", 1);
@@ -2272,6 +2340,10 @@ impl<'a> Ev<'a> {
     }
 }
 
+/// A character's last look is the base of the next (`notice_delta`) for this long: about the seen
+/// set's horizon halved, so a look that came long after its last checks everything.
+const LOOK_VALID_MS: u64 = SEEN_MS / 2;
+
 /// A structure's key in the seen set (`recently_seen`).
 fn structure_key(id: u64) -> u32 {
     0x4000_0000 | (id as u32 & 0x3fff_ffff)
@@ -2443,14 +2515,18 @@ fn stance_fits(ctx: &ReducerContext, me: u32, other: u32, want: &str) -> bool {
 
 /// The tiles of one structure in a scene list (id, kind, owner, position, distance): those
 /// reached from `start` through neighbours (within 1.5 tiles) of the same kind and owner.
-fn joined_tiles(all: &[(u64, String, u32, (f32, f32), f32)], start: usize) -> Vec<usize> {
-    let (_, kind, owner, _, _) = &all[start];
+/// The tiles joined to `start`: of its kind and owner, each within 1.5 tiles of another, found
+/// in the order of the list. `same` is the list's indices of that kind and owner, in order: the
+/// only ones that can join, so a look among many new remains (each its own owner's) does not
+/// scan the whole list for each.
+fn joined_tiles(all: &[(u64, String, u32, (f32, f32), f32)], same: &[usize], start: usize) -> Vec<usize> {
     let mut part = vec![start];
     let mut k = 0;
     while k < part.len() {
         let p = all[part[k]].3;
-        for (j, (_, kd, ow, q, _)) in all.iter().enumerate() {
-            if kd == kind && ow == owner && !part.contains(&j) && (q.0 - p.0).powi(2) + (q.1 - p.1).powi(2) <= 2.25 {
+        for &j in same {
+            let q = all[j].3;
+            if !part.contains(&j) && (q.0 - p.0).powi(2) + (q.1 - p.1).powi(2) <= 2.25 {
                 part.push(j);
             }
         }
@@ -2492,14 +2568,62 @@ mod tests {
         // A town gate three tiles wide, a second gate further along the wall, two campfires
         // side by side by different builders.
         let all = vec![t(1, "gate", 0, 10.5, 4.5), t(2, "gate", 0, 11.5, 4.5), t(3, "gate", 0, 12.5, 4.5), t(4, "gate", 0, 30.5, 4.5), t(5, "campfire", 7, 2.5, 2.5), t(6, "campfire", 8, 3.5, 2.5)];
-        let mut first = super::joined_tiles(&all, 0);
+        let mut first = joined(&all, 0);
         first.sort();
         assert_eq!(first, vec![0, 1, 2]);
-        assert_eq!(super::joined_tiles(&all, 3), vec![3]);
-        assert_eq!(super::joined_tiles(&all, 4), vec![4]);
+        assert_eq!(joined(&all, 3), vec![3]);
+        assert_eq!(joined(&all, 4), vec![4]);
         // The island's first gate (verify-trial-fbbase, 24 tiles in a block about 7 by 8).
         let block: Vec<(f32, f32)> = vec![(503.5, 177.5), (504.5, 178.5), (505.5, 177.5), (505.5, 178.5), (505.5, 179.5), (505.5, 180.5), (506.5, 175.5), (506.5, 176.5), (506.5, 177.5), (506.5, 178.5), (506.5, 179.5), (506.5, 180.5), (506.5, 181.5), (507.5, 177.5), (507.5, 178.5), (507.5, 179.5), (507.5, 180.5), (507.5, 181.5), (507.5, 182.5), (508.5, 178.5), (508.5, 179.5), (508.5, 180.5), (509.5, 179.5), (509.5, 180.5)];
         let gate: Vec<_> = block.iter().enumerate().map(|(i, p)| t(100 + i as u64, "gate", 0, p.0, p.1)).collect();
-        assert_eq!(super::joined_tiles(&gate, 7).len(), 24);
+        assert_eq!(joined(&gate, 7).len(), 24);
+    }
+
+    type Tile = (u64, String, u32, (f32, f32), f32);
+
+    /// `joined_tiles` given its kind-and-owner group, as `noticed` gives it.
+    fn joined(all: &[Tile], i: usize) -> Vec<usize> {
+        let same: Vec<usize> = (0..all.len()).filter(|&j| all[j].1 == all[i].1 && all[j].2 == all[i].2).collect();
+        super::joined_tiles(all, &same, i)
+    }
+
+    /// The tiles joined to `start` as they were found before the groups: the whole list scanned
+    /// for each member.
+    fn joined_by_scan(all: &[Tile], start: usize) -> Vec<usize> {
+        let (_, kind, owner, _, _) = &all[start];
+        let mut part = vec![start];
+        let mut k = 0;
+        while k < part.len() {
+            let p = all[part[k]].3;
+            for (j, (_, kd, ow, q, _)) in all.iter().enumerate() {
+                if kd == kind && ow == owner && !part.contains(&j) && (q.0 - p.0).powi(2) + (q.1 - p.1).powi(2) <= 2.25 {
+                    part.push(j);
+                }
+            }
+            k += 1;
+        }
+        part
+    }
+
+    #[test]
+    fn joining_within_groups_finds_the_scan_s_tiles_in_its_order() {
+        // Remains of many owners, a few houses and gates of shared owners, on a small field so
+        // that many touch: every start gives the same tiles in the same order as the whole scan.
+        let mut seed = 12345u64;
+        let mut next = || {
+            seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            (seed >> 33) as u32
+        };
+        let kinds = ["remains", "gate", "shelter"];
+        let all: Vec<Tile> = (0..400u64)
+            .map(|id| {
+                let kind = kinds[(next() % 3) as usize];
+                let owner = if kind == "remains" { 1000 + id as u32 } else { next() % 3 };
+                (id, kind.to_string(), owner, ((next() % 20) as f32 + 0.5, (next() % 20) as f32 + 0.5), 0.0)
+            })
+            .collect();
+        for i in 0..all.len() {
+            assert_eq!(joined(&all, i), joined_by_scan(&all, i), "start {i}");
+        }
     }
 }

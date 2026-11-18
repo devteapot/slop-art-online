@@ -454,26 +454,19 @@ pub fn ingest(net: NonSend<Net>, scene: NonSend<Scene>, cards: Res<Cards>, mut c
 
 /// The creature under the cursor (`pick.rs`, the pick the nameplates and Enter use), else, with
 /// nobody under it, the nearest to its ground point (within 3.5 m of it, 30 m of me).
-pub fn pick(net: NonSend<Net>, scene: NonSend<Scene>, cam: Res<Cam>, target: Res<Target>, town: Res<crate::town::Town>, under: Res<crate::pick::Pick>, mut c: ResMut<Combat>) {
-    let (Some(cursor), Some(me_at)) = (cam.cursor_ground, target.0) else {
+pub fn pick(scene: NonSend<Scene>, cam: Res<Cam>, target: Res<Target>, under: Res<crate::pick::Pick>, mut c: ResMut<Combat>) {
+    let (Some(_), Some(me)) = (cam.cursor_ground, target.0) else {
         c.target = None;
         return;
     };
-    let cursor = Vec2::new(cursor.x, cursor.z);
-    let me_at = Vec2::new(me_at.x, me_at.z);
-    let me = net.my_id;
-    if let Some(id) = under.under.filter(|id| scene.shown.get(id).is_some_and(|(p, _)| p.distance(me_at) < 30.0)) {
-        c.target = Some(id);
-        return;
-    }
-    c.target = scene
-        .shown
-        .iter()
-        .filter(|(id, (p, _))| Some(**id) != me && p.distance(me_at) < 30.0 && !c.deaths.contains_key(id) && !town.hidden(**id))
-        .map(|(id, (p, _))| (*id, p.distance(cursor)))
-        .filter(|(_, d)| *d < 3.5)
-        .min_by(|a, b| a.1.total_cmp(&b.1))
-        .map(|(id, _)| id);
+    let near = |id| scene.shown.get(&id).is_some_and(|(p, _)| p.distance(me.xz()) < 30.0);
+    c.target = under.under.filter(|&id| near(id)).or_else(|| {
+        under.seen.iter()
+            .filter(|a| near(a.id))
+            .filter_map(|a| a.ground.filter(|d| *d < 3.5).map(|d| (a.id, d)))
+            .min_by(|a, b| a.1.total_cmp(&b.1))
+            .map(|(id, _)| id)
+    });
 }
 
 /// Whether a skill aimed this way turns the body toward the cursor while it is aimed: at a
@@ -499,7 +492,7 @@ pub fn input(
     ui: Res<crate::hud::UiWants>,
     cards: Res<Cards>,
     mut scripted: ResMut<Scripted>,
-    (pointer, mut talk, rules): (Res<crate::pointer::Pointer>, Option<ResMut<crate::talk::Talk>>, NonSend<crate::verbs::Rules>),
+    (pointer, mut talk, rules, picking): (Res<crate::pointer::Pointer>, Option<ResMut<crate::talk::Talk>>, NonSend<crate::verbs::Rules>, Res<crate::pick::Pick>),
     mut c: ResMut<Combat>,
     (binds, roles, mut weapon, taps): (Res<crate::keys::Binds>, Res<Roles>, ResMut<crate::weapon::Weapon>, Res<crate::keys::DoubleTap>),
 ) {
@@ -543,7 +536,7 @@ pub fn input(
     let person = |id: u32| conn.db.seen_characters().id().find(&id).is_some_and(|k| k.kind == "person");
     let tap_target = |c: &Combat| {
         let reach = roles.skill(Act::Primary).and_then(|s| cards.by_name(s)).map_or(0.0, |k| k.reach);
-        c.target.or_else(|| nearest(&scene, me_id, me, aim_point(&cam, me, &input), reach + 0.4))
+        c.target.or_else(|| nearest(&scene, &picking, me, aim_point(&cam, me, &input), reach + 0.4))
     };
     let tap_talks = |c: &Combat| (!weapon.drawn).then(|| tap_target(c)).flatten().filter(|id| person(*id));
     if !input.demo && pointer.tapped && free_mouse {
@@ -608,7 +601,7 @@ pub fn input(
         let aim = aim.unwrap_or_else(|| aim_point(&cam, me, &input));
         // Who or where it goes, by how the rules aim it.
         let (target_id, point) = match card.aim.as_str() {
-            "creature" => (tgt.or(c.target).or_else(|| nearest(&scene, me_id, me, aim, card.reach + 0.4)).unwrap_or(0), aim),
+            "creature" => (tgt.or(c.target).or_else(|| nearest(&scene, &picking, me, aim, card.reach + 0.4)).unwrap_or(0), aim),
             "self_or_ally" => (tgt.or(c.target.filter(|t| !hostile(conn, *t, me_id))).unwrap_or(0), aim),
             // A dash goes the way I move, else back from where I face (a jump: toward it). Facing
             // where I walk and not aiming, that is the facing drawn, not the cursor.
@@ -681,14 +674,13 @@ pub fn held(cur: Option<&(String, bool)>, press_dash: bool) -> bool {
     }
 }
 
-fn nearest(scene: &Scene, me_id: u32, me: Vec2, toward: Vec2, within: f32) -> Option<u32> {
+fn nearest(scene: &Scene, picking: &crate::pick::Pick, me: Vec2, toward: Vec2, within: f32) -> Option<u32> {
     let ahead = (toward - me).normalize_or(Vec2::Y);
-    scene
-        .shown
-        .iter()
-        .filter(|(id, (p, _))| **id != me_id && p.distance(me) <= within && (*p - me).normalize_or(ahead).dot(ahead) > 0.0)
-        .min_by(|a, b| a.1 .0.distance(me).total_cmp(&b.1 .0.distance(me)))
-        .map(|(id, _)| *id)
+    picking.seen.iter()
+        .filter_map(|actor| scene.shown.get(&actor.id).map(|(at, _)| (actor.id, *at - me)))
+        .filter(|(_, offset)| offset.length() <= within && offset.normalize_or(ahead).dot(ahead) > 0.0)
+        .min_by(|a, b| a.1.length_squared().total_cmp(&b.1.length_squared()).then(a.0.cmp(&b.0)))
+        .map(|(id, _)| id)
 }
 
 /// Whether a creature looks hostile to me: its move under way is aimed at me.
@@ -836,14 +828,14 @@ pub fn actions(net: NonSend<Net>, scene: NonSend<Scene>, input: Res<Input>, card
 
 /// Aim and range indicators, subtle and only while a skill key is held.
 #[allow(clippy::too_many_arguments)]
-fn indicators(mut g: Gizmos, net: NonSend<Net>, scene: NonSend<Scene>, cam: Res<Cam>, target: Res<Target>, input: Res<Input>, island: Option<Res<crate::island::Island>>, cards: Res<Cards>, c: Res<Combat>) {
+pub(crate) fn indicators(mut g: Gizmos, net: NonSend<Net>, scene: NonSend<Scene>, cam: Res<Cam>, target: Res<Target>, input: Res<Input>, island: Option<Res<crate::island::Island>>, cards: Res<Cards>, c: Res<Combat>) {
     // The held key's skill, else a raised guard's.
     let guard = || c.guarding.then(|| cards.all.iter().find(|card| card.aim == "facing" && card.slot != NOT_ON_BAR)).flatten();
     let (Some(card), Some(me3)) = (c.aiming.as_deref().and_then(|s| cards.by_name(s)).or_else(guard), target.0) else { return };
     let me = Vec2::new(me3.x, me3.z);
     let aim = c.script_aim.unwrap_or_else(|| aim_point(&cam, me, &input));
     let dir = (aim - me).normalize_or(Vec2::Y);
-    let ground = |p: Vec2| Vec3::new(p.x, island.as_ref().map_or(me3.y, |i| i.height(p.x, p.y)) + 0.06, p.y);
+    let ground = |p: Vec2| Vec3::new(p.x, island.as_ref().map_or(me3.y, |i| i.foot_height(p.x, p.y)) + 0.06, p.y);
     let flat = Quat::from_rotation_x(std::f32::consts::FRAC_PI_2);
     let soft = Color::srgba(1.0, 0.97, 0.88, 0.32);
     let warm = Color::srgba(1.0, 0.62, 0.32, 0.45);

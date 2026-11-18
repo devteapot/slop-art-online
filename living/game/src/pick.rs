@@ -81,8 +81,10 @@ pub struct PickPlugin;
 
 impl Plugin for PickPlugin {
     fn build(&self, app: &mut App) {
+        use crate::{camera, phase::Phase};
         app.init_resource::<Pick>()
-            .add_systems(Update, update.in_set(crate::phase::Phase::Camera).after(crate::camera::follow).after(crate::live::ground_cursor));
+            .add_systems(Update, (camera::cursor_hit, update).chain().in_set(Phase::Input).before(crate::ui::UiInput))
+            .add_systems(Update, (camera::cursor_hit, update).chain().in_set(Phase::Camera).after(camera::follow).before(crate::combat::indicators));
     }
 }
 
@@ -96,13 +98,14 @@ pub fn update(
     pointer: Res<crate::pointer::Pointer>,
     (sight, town, combat): (Res<crate::sight::Sight>, Res<crate::town::Town>, Res<crate::combat::Combat>),
     (island, live): (Option<Res<crate::island::Island>>, Res<crate::live::Live>),
-    cams: Query<(&Camera, &GlobalTransform), With<Camera3d>>,
+    cams: Query<&Camera, With<Camera3d>>,
     mut pick: ResMut<Pick>,
 ) {
     pick.under = None;
     pick.seen.clear();
     let (Some(cursor), Some(me_at)) = (pointer.pos, target.0) else { return };
-    let Ok((camera, gtf)) = cams.single() else { return };
+    let Ok(camera) = cams.single() else { return };
+    let gtf = &cam.pose;
     let me = net.my_id;
     let me2 = Vec2::new(me_at.x, me_at.z);
     let ground = cam.cursor_ground.map(|g| Vec2::new(g.x, g.z));
@@ -114,7 +117,7 @@ pub fn update(
         }
         let height = live.heights.get(id).copied().unwrap_or(DEFAULT_HEIGHT_M);
         let feet = match &island {
-            Some(i) => Vec3::new(p.x, i.height(p.x, p.y), p.y),
+            Some(i) => Vec3::new(p.x, i.foot_height(p.x, p.y), p.y),
             None => scene.at3(p.x, p.y),
         };
         let head = feet + Vec3::Y * height;

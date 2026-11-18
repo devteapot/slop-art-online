@@ -119,6 +119,7 @@ pub fn spawn(mut commands: Commands, bodies: Query<(Entity, &WinBody), Added<Win
             // Play.
             body.spawn((PageBody(Page::Play), Node { flex_grow: 1.0, flex_direction: FlexDirection::Column, ..default() }, Pickable::IGNORE)).with_children(|pg| {
                 row(pg, f, "Look", "The interface's theme (F4)", |c| kit::seg(c, f, "settings:theme", &super::wood::Name::ALL.map(|n| (n.label(), n.key()))));
+                row(pg, f, "Camera", "Choose how the camera follows your character", |c| kit::seg(c, f, "settings:camera", &[("Top-down (default)", "top-down"), ("Orbit (old)", "orbit")]));
                 row(pg, f, "Facing", "Which way your character looks while walking (F3)", |c| kit::seg(c, f, "settings:control", &[("Face where you walk", "travel"), ("Face the cursor", "cursor")]));
                 row(pg, f, "Looking aside", "Walking one way and looking another: how far the head and chest turn before the body follows", |c| kit::seg(c, f, "settings:look_walk", &crate::twist::PRESETS));
                 row(pg, f, "Edge of sight", "How what you can't see now is drawn (F2)", |c| kit::seg(c, f, "settings:sight", &[("Not seen now", "unseen"), ("Limited view", "limited"), ("Fade", "fade")]));
@@ -227,6 +228,10 @@ pub fn update(
         let (what, value) = t.rsplit_once(':').unwrap_or((t, ""));
         match what {
             "settings:page" => *page = if value == "controls" { Page::Controls } else { Page::Play },
+            "settings:camera" => {
+                prefs.camera = if value == "orbit" { crate::camera::Mode::Orbit } else { crate::camera::Mode::TopDown };
+                changed = true;
+            }
             "settings:control" => {
                 input.control = if value == "cursor" { crate::controls::Control::Cursor } else { crate::controls::Control::Travel };
                 changed = true;
@@ -316,6 +321,7 @@ pub fn update(
         let (what, value) = t.rsplit_once(':').unwrap_or((t, ""));
         match what {
             "settings:page" => Some((value == "controls") == (pg == Page::Controls)),
+            "settings:camera" => Some(value == prefs.camera.name()),
             "settings:control" => Some(value == control),
             "settings:sight" => Some(Some(value) == sight),
             "settings:look" => Some(Some(value) == look),

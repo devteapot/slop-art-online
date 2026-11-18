@@ -95,6 +95,10 @@ pub const ATTRIBUTE_GREY: bevy::mesh::MeshVertexAttribute = bevy::mesh::MeshVert
 /// itself (`toon.wesl` `hair_light`).
 pub const ATTRIBUTE_RING: bevy::mesh::MeshVertexAttribute = bevy::mesh::MeshVertexAttribute::new("Ring", 0x5c3e_9a02, bevy::render::render_resource::VertexFormat::Float32);
 
+/// The authored per-vertex outline width multiplier (`_OUTLINE_WIDTH`).
+/// The loader retains it as mesh data. In bevy_mod_outline 0.14, `OutlineVolume` sets the mesh width.
+pub const ATTRIBUTE_OUTLINE_WIDTH: bevy::mesh::MeshVertexAttribute = bevy::mesh::MeshVertexAttribute::new("OutlineWidth", 0x5c3e_9a03, bevy::render::render_resource::VertexFormat::Float32);
+
 /// The greying palette the one shared hair material holds (`ToonExt::tints`): row 0 the natural
 /// colours and row 1 the silvers that the people drawn with it carry, as sRGB bytes, each once.
 /// A greying person's hair meshes carry their two places in it and how grey they are in their

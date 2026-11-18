@@ -19,6 +19,12 @@
 //!   tick's delivery is timed with and without the commitlog's fsync.
 //! - `observe`: the lab observer's subscriptions (living/viewer/src/net.rs) as the owner, with
 //!   one character inspected.
+//! - `mind`: the mind service's subscriptions (living/mind/src/main.rs, the default switches:
+//!   player memory on) as the owner, through an in-process relay that counts the WebSocket
+//!   messages and bytes the server sends this connection; the rows of each table (inserted,
+//!   updated, deleted); and how late rows that carry a time arrive (`experience.at_ms`,
+//!   `fast_ask.issued_ms`, `audience.at_ms`: receipt here less the authority's time). Callbacks
+//!   only count, as the mind service's only forward to its threads (tick-rate, docs/TICK_RATE.md).
 //!
 //! Times are the host's wall clock in microseconds (`SystemTime`); the server container shares
 //! the host's kernel clock, and the namespaced clients do too.
@@ -946,6 +952,187 @@ fn observe_mode() {
     std::process::exit(0);
 }
 
+// ---- mind ------------------------------------------------------------------------------------
+
+/// The mind service's whole-table subscriptions (living/mind/src/main.rs), besides the
+/// `experience` filters and its own `cue`, `fast_ask` and `audience` subscriptions.
+const MIND: &[&str] = &[
+    "settlement", "mind_cursor", "world", "character", "brain", "persona", "relation", "judgment", "place", "seen_stock", "standing", "know_how", "community", "membership",
+    "background", "routine", "routine_stat", "genome", "script", "bond_offer", "trade_offer", "record", "record_party", "my_deliberations", "presence", "rhythm", "acquaintance",
+    "line_heard", "sex", "sex_seen",
+];
+
+/// Server-to-client WebSocket frames on one connection: after the HTTP upgrade's headers, each
+/// frame's header gives its length (server frames are not masked). Counts finished messages and
+/// all bytes.
+fn ws_count(mut from: TcpStream, mut to: TcpStream, msgs: Arc<AtomicU64>, bytes: Arc<AtomicU64>) {
+    let mut buf = vec![0u8; 1 << 16];
+    let mut pending: Vec<u8> = Vec::new();
+    let mut headers = true;
+    loop {
+        let n = match from.read(&mut buf) {
+            Ok(0) | Err(_) => break,
+            Ok(n) => n,
+        };
+        if to.write_all(&buf[..n]).is_err() {
+            break;
+        }
+        bytes.fetch_add(n as u64, Ordering::Relaxed);
+        pending.extend_from_slice(&buf[..n]);
+        if headers {
+            let Some(end) = pending.windows(4).position(|w| w == b"\r\n\r\n") else { continue };
+            pending.drain(..end + 4);
+            headers = false;
+        }
+        loop {
+            if pending.len() < 2 {
+                break;
+            }
+            let (b0, b1) = (pending[0], pending[1]);
+            let (len, mut at) = match b1 & 0x7f {
+                126 if pending.len() >= 4 => (u16::from_be_bytes([pending[2], pending[3]]) as usize, 4),
+                127 if pending.len() >= 10 => (u64::from_be_bytes(pending[2..10].try_into().unwrap()) as usize, 10),
+                126 | 127 => break,
+                l => (l as usize, 2),
+            };
+            if b1 & 0x80 != 0 {
+                at += 4;
+            }
+            if pending.len() < at + len {
+                break;
+            }
+            // A finished data message: FIN set on a text, binary or continuation frame.
+            if b0 & 0x80 != 0 && matches!(b0 & 0x0f, 0 | 1 | 2) {
+                msgs.fetch_add(1, Ordering::Relaxed);
+            }
+            pending.drain(..at + len);
+        }
+    }
+    let _ = to.shutdown(Shutdown::Both);
+}
+
+type Lags = Arc<Mutex<BTreeMap<&'static str, Vec<i64>>>>;
+
+fn lag(l: &Lags, table: &'static str, at_ms: u64) {
+    if at_ms > 0 {
+        l.lock().unwrap().entry(table).or_default().push(now_ms() as i64 - at_ms as i64);
+    }
+}
+
+fn quantiles(v: &mut [i64]) -> Value {
+    v.sort_unstable();
+    let q = |f: f64| v.get(((v.len() as f64 * f) as usize).min(v.len().saturating_sub(1))).copied();
+    json!({"n": v.len(), "p50": q(0.5), "p90": q(0.9), "p99": q(0.99), "max": v.last()})
+}
+
+fn mind_mode() {
+    let lines = stdin_lines();
+    let req: Value = serde_json::from_str(&lines.recv().expect("request line")).expect("request JSON");
+    let (uri, db, token) = (req["uri"].as_str().unwrap(), req["db"].as_str().unwrap(), req["token"].as_str().unwrap());
+    let upstream = uri.trim_start_matches("http://").trim_start_matches("ws://").trim_end_matches('/').to_string();
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+    let local = listener.local_addr().unwrap();
+    let (msgs, bytes) = (Arc::new(AtomicU64::new(0)), Arc::new(AtomicU64::new(0)));
+    let (m2, b2) = (msgs.clone(), bytes.clone());
+    std::thread::spawn(move || {
+        for s in listener.incoming() {
+            let Ok(client) = s else { continue };
+            let up = TcpStream::connect(&upstream).expect("upstream");
+            let _ = client.set_nodelay(true);
+            let _ = up.set_nodelay(true);
+            let (c2, u2) = (client.try_clone().unwrap(), up.try_clone().unwrap());
+            let (m, b) = (m2.clone(), b2.clone());
+            std::thread::spawn(move || ws_count(up, client, m, b));
+            std::thread::spawn(move || {
+                let (mut a, mut b) = (c2, u2);
+                let _ = std::io::copy(&mut a, &mut b);
+                let _ = b.shutdown(Shutdown::Both);
+            });
+        }
+    });
+    let (conn, me) = connect(&format!("http://{local}"), db, token, None);
+    let counts: Counts = Arc::default();
+    let lags: Lags = Arc::default();
+    macro_rules! timed {
+        ($table:ident, $field:ident) => {{
+            count!(conn, counts, $table);
+            let l = lags.clone();
+            conn.db.$table().on_insert(move |_, r| lag(&l, stringify!($table), r.$field));
+        }};
+    }
+    timed!(experience, at_ms);
+    timed!(fast_ask, issued_ms);
+    timed!(audience, at_ms);
+    let l = lags.clone();
+    conn.db.fast_ask().on_update(move |_, _, r| lag(&l, "fast_ask", r.issued_ms));
+    count!(conn, counts, cue);
+    count!(conn, counts, vitals);
+    count!(conn, counts, settlement);
+    count!(conn, counts, mind_cursor);
+    count!(conn, counts, world);
+    count!(conn, counts, character);
+    count!(conn, counts, brain);
+    count!(conn, counts, persona);
+    count!(conn, counts, relation);
+    count!(conn, counts, judgment);
+    count!(conn, counts, place);
+    count!(conn, counts, seen_stock);
+    count!(conn, counts, standing);
+    count!(conn, counts, know_how);
+    count!(conn, counts, community);
+    count!(conn, counts, membership);
+    count!(conn, counts, background);
+    count!(conn, counts, routine);
+    count!(conn, counts, routine_stat);
+    count!(conn, counts, genome);
+    count!(conn, counts, script);
+    count!(conn, counts, bond_offer);
+    count!(conn, counts, trade_offer);
+    count!(conn, counts, record);
+    count!(conn, counts, record_party);
+    count_plain!(conn, counts, my_deliberations);
+    count!(conn, counts, presence);
+    count!(conn, counts, rhythm);
+    count!(conn, counts, acquaintance);
+    count!(conn, counts, line_heard);
+    count!(conn, counts, sex);
+    count!(conn, counts, sex_seen);
+    let t0 = Instant::now();
+    let applied = Arc::new(Mutex::new(0u32));
+    let hex = me.to_hex();
+    let mut queries: Vec<String> = vec![
+        format!("SELECT * FROM experience WHERE controller = 0x{hex}"),
+        format!("SELECT vitals.* FROM vitals JOIN character ON vitals.id = character.id WHERE character.controller = 0x{hex} AND character.ai = true"),
+        format!("SELECT * FROM experience WHERE controller != 0x{hex}"),
+    ];
+    queries.extend(MIND.iter().map(|t| format!("SELECT * FROM {t}")));
+    for q in ["cue", "fast_ask", "audience"] {
+        let a = applied.clone();
+        conn.subscription_builder().on_applied(move |_| *a.lock().unwrap() += 1).on_error(move |_, e| eprintln!("no {q}: {e:?}")).subscribe([format!("SELECT * FROM {q}")]);
+    }
+    let a2 = applied.clone();
+    conn.subscription_builder().on_applied(move |_| *a2.lock().unwrap() += 1).on_error(|_, e| panic!("mind: {e}")).subscribe(queries);
+    while *applied.lock().unwrap() < 4 {
+        assert!(t0.elapsed() < Duration::from_secs(120), "mind subscriptions");
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    println!("{}", json!({"event": "ready", "after_s": t0.elapsed().as_secs_f32()}));
+    let _ = std::io::stdout().flush();
+    // `go` starts the window, `stop` ends it.
+    wait_for(&lines, "go");
+    counts.lock().unwrap().clear();
+    lags.lock().unwrap().clear();
+    let (m0, b0, w0) = (msgs.load(Ordering::Relaxed), bytes.load(Ordering::Relaxed), Instant::now());
+    wait_for(&lines, "stop");
+    let secs = w0.elapsed().as_secs_f64();
+    let (m1, b1) = (msgs.load(Ordering::Relaxed), bytes.load(Ordering::Relaxed));
+    let lag_json: serde_json::Map<String, Value> = lags.lock().unwrap().iter_mut().map(|(k, v)| (k.to_string(), quantiles(v))).collect();
+    println!("{}", json!({"event": "done", "seconds": secs, "messages": m1 - m0, "bytes": b1 - b0, "events": counts_json(&counts), "lag_ms": lag_json}));
+    let _ = std::io::stdout().flush();
+    let _ = conn.disconnect();
+    std::process::exit(0);
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     match args.get(1).map(String::as_str) {
@@ -953,9 +1140,10 @@ fn main() {
         Some("relay") => relay_mode(&args[2..]),
         Some("watch") => watch_mode(),
         Some("observe") => observe_mode(),
+        Some("mind") => mind_mode(),
         Some("soak") => soak::run(),
         m => {
-            eprintln!("usage: gate-load players|relay|watch|observe|soak (got {m:?})");
+            eprintln!("usage: gate-load players|relay|watch|observe|mind|soak (got {m:?})");
             std::process::exit(2);
         }
     }

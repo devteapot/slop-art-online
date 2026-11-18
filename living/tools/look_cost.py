@@ -7,7 +7,8 @@ under a crowd of real players.
                  --warmup 30 --seconds 120] [--container C --url U]
 
 What it does, in order:
-1. Publishes `/wasm/FILE` (a file in the server's `/wasm` mount) fresh as `verify-lookcost-<label>-<stamp>`
+1. Publishes `FILE` (relative to `/wasm` or absolute inside the container) fresh as
+   `verify-lookcost-<label>-<stamp>`
    on the worker's own server (`LIVING_STDB_CONTAINER`, `LIVING_STDB_URL`). The module's `init`
    installs its compiled script and creates the world from its compiled seed.
 2. Joins `--players` real players over their own WebSocket connections (`gate-load players`,
@@ -182,7 +183,7 @@ def spans(log, t0, t1):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--label", required=True)
-    ap.add_argument("--wasm", required=True, help="a file in the server's /wasm mount")
+    ap.add_argument("--wasm", required=True, help="a path inside the server container, relative to /wasm or absolute")
     ap.add_argument("--load", required=True, help="the gate-load binary built against the module's bindings")
     ap.add_argument("--players", type=int, default=216)
     ap.add_argument("--groups", type=int, default=7)
@@ -199,7 +200,7 @@ def main():
     res = {"label": a.label, "db": db, "wasm": a.wasm, "players": a.players, "groups": a.groups, "radius_m": a.radius, "warmup_s": a.warmup, "window_s": a.seconds}
     load = None
     try:
-        stdb("publish", "-s", "local", "-b", f"/wasm/{a.wasm}", db, "--delete-data", "-y")
+        stdb("publish", "-s", "local", "-b", str(Path("/wasm") / a.wasm), db, "--delete-data", "-y")
         token = admin_token()
         ident = json.loads(http(f"/v1/database/{db}")[1])["database_identity"]["__identity__"].removeprefix("0x")
         time.sleep(3)

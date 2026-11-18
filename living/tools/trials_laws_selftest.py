@@ -134,12 +134,13 @@ class Publish(unittest.TestCase):
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        self.saved = trials.sh, trials.http, trials.served_name
+        self.saved = trials.sh, trials.http, trials.served_name, trials.world_guard.arm
         trials.sh = lambda *a, **k: None
         trials.served_name = lambda n: n
+        trials.world_guard.arm = lambda *a, **k: {"identity": "c200selftest", "epoch": 1}
 
     def tearDown(self):
-        trials.sh, trials.http, trials.served_name = self.saved
+        trials.sh, trials.http, trials.served_name, trials.world_guard.arm = self.saved
         self.tmp.cleanup()
 
     def events(self):

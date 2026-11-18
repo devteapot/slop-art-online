@@ -17,6 +17,7 @@ import urllib.error
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[4] / 'living/tools'))
 import trials  # noqa: E402  (consolidation_table: the trial report's per-character accounting)
+import world_guard  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[4]
 # The mind binary the suite builds: in CARGO_TARGET_DIR when set (a private build directory),
@@ -85,6 +86,7 @@ class Run:
         self.cleanup_record = {}
         self.token = None
         self.launch_blocked = False
+        self.archive_commitlog = False
 
     def command(self, args, filename='driver.log', check=True, timeout=240):
         result = subprocess.run([str(x) for x in args], cwd=ROOT, capture_output=True, text=True, timeout=timeout)
@@ -96,6 +98,7 @@ class Run:
 
     def harness(self, *args):
         if args[0] == 'launch':
+            self.archive_commitlog = '--archive-commitlog' in args
             result = self.command(['docker', 'inspect', STDB_CONTAINER, '--format', '{{json .Mounts}}'])
             mounts = json.loads(result.stdout)
             source = next((m.get('Source') for m in mounts if m.get('Destination') == '/wasm'), None)
@@ -106,7 +109,8 @@ class Run:
             if source is None or not Path(source).is_dir() or not os.access(source, os.W_OK):
                 self.launch_blocked = True
                 raise RuntimeError(f"/wasm mount unavailable or unwritable: {source}; no database published")
-        return self.command([SHARED, args[0], '--run', self.name, *args[1:]])
+        return self.command([SHARED, args[0], '--run', self.name, *args[1:]],
+                            timeout=None if args[0] == 'cleanup' and self.archive_commitlog else 240)
 
     def sql(self, query, save):
         result = self.harness('sql', query, '--save', save)
@@ -196,6 +200,7 @@ class Run:
         self.mind = subprocess.Popen([str(MIND_BIN)], cwd=ROOT,
                                      env=self.env, stdout=stream, stderr=subprocess.STDOUT)
         self.processes.append(self.mind)
+        world_guard.set_mind(self.directory, self.mind.pid)
         (self.directory / 'processes.json').write_text(json.dumps({'mind_pid': self.mind.pid,
             'owned_pids': [p.pid for p in self.processes], 'only': self.env['LIVING_ONLY'],
             'neo4j': 'off', 'lod': self.env['LIVING_LOD']}, indent=2))

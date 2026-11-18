@@ -48,6 +48,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import ooc  # noqa: E402
+import trial_archive  # noqa: E402
+import world_guard  # noqa: E402
 from journal_io import restore  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -1075,6 +1077,7 @@ class Instance:
         self.outage_since = None
         self.outages = []
         self.published = False
+        self.cleanup_error = None
 
     # -- plumbing
     def log(self, line):
@@ -1121,12 +1124,12 @@ class Instance:
             wasm = f"{wasm}-{tag}"
         wasm = served_name(wasm)
         started = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime(time.time() - 5))
-        sh("docker", "exec", CONTAINER, "spacetime", "publish", "-s", "local", "-b", f"/wasm/{wasm}.wasm", self.db, "--delete-data", "-y", timeout=300)
+        command = ["docker", "exec", CONTAINER, "spacetime", "publish", "-s", "local",
+                   "-b", f"/wasm/{wasm}.wasm", self.db, "-y"]
+        owner = world_guard.arm(self.dir, URL, self.db, self.shared["token"], os.getpid(), command=command)
+        self.database_identity, self.world_epoch = owner["identity"], owner["epoch"]
         self.published = True
-        # Which database and which replica directory this run wrote: deleting a database leaves
-        # its replica on disk (SpacetimeDB 2.14.1, docs/STORE.md), so the record is what tells a
-        # run's commitlog apart from scratch later. The container's clock is UTC.
-        self.database_identity = database_identity(self.db)
+        # The replica remains on disk after logical deletion in SpacetimeDB 2.14.1.
         try:
             self.replica = replica_of(self.db, self.shared["token"], newer_than=started)
         except Exception as e:  # noqa: BLE001 - a missing record never stops a run
@@ -1635,6 +1638,7 @@ class Instance:
         p = subprocess.Popen([str(binary)], cwd=ROOT, env=env, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
         log.close()
         self.mind = Mind(p.pid, p)
+        world_guard.set_mind(self.dir, p.pid)
         # A planned restart (new thinkers) is not a crash: the runaway watchdog counts the others.
         if not planned:
             self.starts.append(time.time())
@@ -1819,8 +1823,8 @@ class Instance:
             self.log(f"mind stopped (pid {self.mind.pid})")
 
     # -- state kept for `resume`
-    STATE = ("database_identity", "replica", "status", "subject", "roles", "t0", "cursor", "jpos", "brain_rev", "done_at", "saved_graphs", "nsample",
-             "died", "published", "snapshots", "stopped_by", "starts", "runaway_seen", "thinkers", "capped", "census_at", "outages")
+    STATE = ("database_identity", "world_epoch", "replica", "status", "subject", "roles", "t0", "cursor", "jpos", "brain_rev", "done_at", "saved_graphs", "nsample",
+             "died", "published", "cleanup_error", "snapshots", "stopped_by", "starts", "runaway_seen", "thinkers", "capped", "census_at", "outages")
 
     def save(self):
         st = {k: getattr(self, k, None) for k in self.STATE}
@@ -1838,6 +1842,9 @@ class Instance:
         for k in self.STATE:
             if k in st and st[k] is not None:
                 setattr(self, k, st[k])
+        if not getattr(self, "database_identity", None) or database_identity(self.db) != self.database_identity:
+            self.published = False
+            raise RuntimeError("resume database identity differs from the run record")
         self.saved_graphs = {int(k): v for k, v in (st.get("saved_graphs") or {}).items()}
         if not self.subject:
             raise RuntimeError("no subject in state.json: the run had not started; run it again instead")
@@ -2235,6 +2242,13 @@ class Instance:
         try:
             if resume:
                 self.restore()
+                owner = world_guard.arm(self.dir, URL, self.db, self.shared["token"], os.getpid(),
+                                        expected=self.database_identity, expected_epoch=getattr(self, "world_epoch", None))
+                self.world_epoch = owner["epoch"]
+                if self.mind:
+                    world_guard.set_mind(self.dir, self.mind.pid)
+                if self.world["paused"] and not self.call("set_paused", False):
+                    raise RuntimeError("could not resume the paused world")
                 if self.trial.get("record", {}).get("bodies"):
                     threading.Thread(target=self.watch_bodies, args=(self.trial["record"]["bodies"],), daemon=True).start()
                 if (not self.mind or not self.mind.alive()) and self.shared["variants"][self.variant].get("mind") is not False:
@@ -2260,11 +2274,22 @@ class Instance:
                                 "concurrency": getattr(self, "concurrency", None) or mind_concurrency(self.trial), "world_laws": self.shared["variants"][self.variant].get("world_laws") or {}})
             (self.dir / "summary.json").write_text(json.dumps(summary, indent=1))
             keep = self.opts.keep_db or self.trial.get("keep_db")
-            if self.published and not keep and self.status != "failed-keep":
-                delete_db(self.db)
-            elif self.published and self.trial.get("kind") == "life":
-                # Kept, but stopped: a paused world does not tick or grow.
-                self.call("set_paused", True)
+            if self.published:
+                try:
+                    delete = not keep and self.status != "failed-keep"
+                    record = trial_archive.finish(
+                        self.dir, URL, CONTAINER, self.db, self.database_identity, self.shared["token"],
+                        delete=delete, expected_epoch=getattr(self, "world_epoch", None),
+                    )
+                    self.log(f"commitlog archive: {record}")
+                    self.published = bool(record and not delete)
+                    self.save()
+                except Exception as error:
+                    self.status = "failed-keep"
+                    self.cleanup_error = str(error)
+                    self.save()
+                    self.log(f"CLEANUP FAILED for {self.db}: {error}")
+                    print(f"CLEANUP FAILED for {self.db}: {error}", file=sys.stderr, flush=True)
 
 
 def delete_db(db):
@@ -2720,6 +2745,8 @@ def execute(a, instances, shared, resume=False):
         led["batches"][a.batch] = {"tokens": sum(x.get("tokens", 0) for x in sums), "instances": len(sums), "at": time.strftime("%Y-%m-%dT%H:%M:%S")}
         LEDGER.write_text(json.dumps(led, indent=1))
     report(argparse.Namespace(batch=a.batch))
+    if any(inst.cleanup_error for inst in instances):
+        sys.exit("trial cleanup failed; inspect the affected run logs before deleting any worlds")
 
 
 def run(a):

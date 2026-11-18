@@ -166,35 +166,69 @@ pub fn character_shadows(
     }
 }
 
-/// Where characters change to their far model (`person.py --lod both`: the far model's meshes
-/// are nodes named `Far*` on the same skeleton as the full model's). `LIVING_GAME_FAR=<m>`
-/// (default 10; `0` never changes to it), for a 1.75 m character and in proportion to height,
-/// as the spring bones' distance is; `LIVING_GAME_FAR_BAND=<m>` (default 1.5) is how much nearer
-/// a far character must come before it changes back, so one at the edge doesn't flicker.
+/// Head size in physical pixels, estimated from standing height and the recipe's head scale.
+/// The estimate uses a screen-aligned extent at the character's depth.
 #[derive(Resource, Clone, Copy, Debug)]
 pub struct FarModels {
-    pub at: f32,
-    pub band: f32,
+    far_below_px: f32,
+    near_above_px: f32,
+    cap: Option<usize>,
 }
 
 impl FarModels {
+    const HEAD_FRACTION: f32 = 1.0 / 7.5;
+    const DEFAULT_CAP: u16 = 8;
+
     pub fn from_env() -> Self {
-        let num = |k: &str, d: f32| std::env::var(k).ok().and_then(|v| v.parse::<f32>().ok()).unwrap_or(d);
-        Self { at: num("LIVING_GAME_FAR", 10.0).max(0.0), band: num("LIVING_GAME_FAR_BAND", 1.5).max(0.0) }
+        let num = |k: &str, d: f32| std::env::var(k).ok().and_then(|v| v.parse::<f32>().ok())
+            .filter(|v| v.is_finite()).unwrap_or(d);
+        // The fixed reference projection keeps the existing asset-view calibration overrides
+        // usable while the switch itself still takes projected pixels.
+        let old_at = num("LIVING_GAME_FAR", -1.0);
+        let old_band = num("LIVING_GAME_FAR_BAND", 1.5).max(0.0);
+        let reference = 1.75 * Self::HEAD_FRACTION * focal_pixels(900.0, 50.0_f32.to_radians());
+        let (far, near) = if old_at > 0.0 {
+            (reference / old_at, reference / (old_at - old_band).max(f32::MIN_POSITIVE))
+        } else if old_at == 0.0 {
+            (0.0, 0.0)
+        } else {
+            (11.0, 12.7)
+        };
+        let far_below_px = num("LIVING_GAME_LOD_FAR_PX", far).max(0.0);
+        let near_above_px = num("LIVING_GAME_LOD_NEAR_PX", near).max(far_below_px);
+        let cap = std::env::var("LIVING_GAME_LOD_CAP").ok().and_then(|v| v.parse::<u16>().ok())
+            .unwrap_or(if old_at < 0.0 { Self::DEFAULT_CAP } else { 0 });
+        Self { far_below_px, near_above_px, cap: (cap != 0).then_some(usize::from(cap)) }
     }
 
-    /// Whether a character `d` m from the camera, `height` m tall, shows its far model, given
-    /// what it shows now (None: not decided yet).
-    pub fn far(&self, d: f32, height: f32, now: Option<bool>) -> bool {
-        if self.at <= 0.0 {
+    fn far(&self, pixels: f32, now: Option<bool>) -> bool {
+        if self.far_below_px == 0.0 {
             return false;
         }
-        let d = d * 1.75 / height.max(0.3);
         match now {
-            Some(true) => d > self.at - self.band,
-            _ => d > self.at,
+            Some(true) => pixels < self.near_above_px,
+            _ => pixels < self.far_below_px,
         }
     }
+
+    fn rank(&self, pixels: f32, incumbent: bool) -> f32 {
+        if incumbent {
+            pixels + (self.near_above_px - self.far_below_px)
+        } else {
+            pixels
+        }
+    }
+}
+
+fn focal_pixels(viewport_height: f32, vertical_fov: f32) -> f32 {
+    viewport_height / (2.0 * (vertical_fov * 0.5).tan())
+}
+
+fn projected_head(height: f32, scale: f32, depth: f32, focal_px: f32) -> f32 {
+    if depth <= 0.0 {
+        return 0.0;
+    }
+    height * FarModels::HEAD_FRACTION * scale * focal_px / depth
 }
 
 /// A character's full and far meshes (empty `far`: its file has no far model), and which shows.
@@ -212,7 +246,7 @@ impl Lod {
     }
 }
 
-/// Show each character's far model beyond [`FarModels`]'s distance and its full model nearer.
+/// Switch full and far meshes at the [`FarModels`] projected-size thresholds.
 /// Both are skinned to the same bones, so one animation player, one set of spring bones and one
 /// shaped skeleton serve both; the far model has no morph targets (blinking and the mouth stop
 /// beyond the change). Hidden meshes draw in no view: neither shadows (`character_shadows`) nor
@@ -223,9 +257,10 @@ impl Lod {
 pub fn far_models(
     mut commands: Commands,
     settings: Res<FarModels>,
-    cams: Query<&GlobalTransform, With<Camera3d>>,
-    new: Query<(Entity, &GlobalTransform, &Model), (With<crate::characters::Character>, Without<Lod>)>,
-    mut chars: Query<(&GlobalTransform, &Model, &mut Lod)>,
+    cams: Query<(&Camera, &GlobalTransform, &Projection), With<Camera3d>>,
+    new: Query<(Entity, &GlobalTransform, &Model, &crate::characters::Character), Without<Lod>>,
+    mut chars: Query<(Entity, &GlobalTransform, &Model, &crate::characters::Character, &InheritedVisibility, &mut Lod)>,
+    (live, net): (Option<Res<crate::live::Live>>, Option<NonSend<crate::net::Net>>),
     added: Query<Entity, Added<Mesh3d>>,
     children: Query<&Children>,
     parents: Query<&ChildOf>,
@@ -233,7 +268,25 @@ pub fn far_models(
     meshes: Query<(), With<Mesh3d>>,
     mut vis: Query<&mut Visibility>,
 ) {
-    let cam = cams.single().ok().map(|c| c.translation());
+    let projection = cams.single().ok().and_then(|(cam, eye, projection)| {
+        let Projection::Perspective(p) = projection else { return None };
+        let focal = focal_pixels(cam.physical_viewport_size()?.y as f32, p.fov);
+        Some((cam, eye, eye.translation(), *eye.forward(), focal, cam.logical_viewport_rect()?))
+    });
+    let player = net.as_ref().and_then(|n| n.my_id).zip(live.as_ref())
+        .and_then(|(id, live)| live.drawn().find_map(|(actor, root)| (actor == id).then_some(root)));
+    let sample = |g: &GlobalTransform, model: &Model, character: &crate::characters::Character| {
+        let Some((camera, eye, origin, forward, focal, rect)) = projection else { return (0.0, false) };
+        let height = model.height.max(0.3);
+        let head = g.translation() + Vec3::Y * height;
+        let depth = (head - origin).dot(forward);
+        let pixels = projected_head(height, character.recipe.proportions.head, depth, focal);
+        let in_view = depth > 0.0 && camera.world_to_viewport(eye, head).is_ok_and(|point| {
+            let margin = Vec2::splat(pixels * 4.0);
+            point.cmpge(rect.min - margin).all() && point.cmple(rect.max + margin).all()
+        });
+        (pixels, in_view)
+    };
     let show = |lod: &Lod, far: bool, vis: &mut Query<&mut Visibility>| {
         let (show, hide) = if far { (&lod.far, &lod.near) } else { (&lod.near, &lod.far) };
         for (list, v) in [(show, Visibility::Inherited), (hide, Visibility::Hidden)] {
@@ -260,7 +313,7 @@ pub fn far_models(
     // Decided as soon as the scene is in, before the model is first shown (`fit`), so the two
     // never draw together.
     let mut fresh = Vec::new();
-    for (e, g, model) in &new {
+    for (e, g, model, character) in &new {
         if !children.iter_descendants(e).any(|d| meshes.contains(d)) {
             continue;
         }
@@ -276,7 +329,8 @@ pub fn far_models(
         let mut lod = Lod { near, far, far_now: None };
         if lod.has_far() {
             debug!("far models: {} has {} full and {} far meshes", model.file, lod.near.len(), lod.far.len());
-            let far = cam.is_some_and(|c| settings.far(g.translation().distance(c), model.height, None));
+            let (pixels, _) = sample(g, model, character);
+            let far = Some(e) != player && projection.is_some() && (settings.cap.is_some() || settings.far(pixels, None));
             show(&lod, far, &mut vis);
             lod.far_now = Some(far);
         }
@@ -290,7 +344,7 @@ pub fn far_models(
             if fresh.contains(&at) {
                 break;
             }
-            if let Ok((_, _, mut lod)) = chars.get_mut(at) {
+            if let Ok((_, _, _, _, _, mut lod)) = chars.get_mut(at) {
                 if lod.near.contains(&d) || lod.far.contains(&d) {
                     break;
                 }
@@ -305,12 +359,34 @@ pub fn far_models(
             }
         }
     }
-    let Some(cam) = cam else { return };
-    for (g, model, mut lod) in &mut chars {
+    if projection.is_none() { return; }
+    let mut reserved = usize::from(player.is_some());
+    let mut eligible = Vec::new();
+    for (entity, g, model, character, visible, lod) in &chars {
+        if Some(entity) == player || !visible.get() {
+            continue;
+        }
+        let (pixels, in_view) = sample(g, model, character);
+        if !in_view {
+            continue;
+        }
+        if !lod.has_far() {
+            // A native model such as Shino has no cheaper mesh to switch to.
+            reserved += 1;
+        } else if !settings.far(pixels, lod.far_now) {
+            eligible.push((entity, settings.rank(pixels, lod.far_now == Some(false))));
+        }
+    }
+    if let Some(cap) = settings.cap {
+        eligible.sort_unstable_by(|a, b| b.1.total_cmp(&a.1).then(a.0.cmp(&b.0)));
+        eligible.truncate(cap.saturating_sub(reserved));
+    }
+    let near: std::collections::HashSet<_> = eligible.into_iter().map(|(entity, _)| entity).collect();
+    for (entity, _, _, _, _, mut lod) in &mut chars {
         if !lod.has_far() {
             continue;
         }
-        let want = settings.far(g.translation().distance(cam), model.height, lod.far_now);
+        let want = Some(entity) != player && !near.contains(&entity);
         if lod.far_now != Some(want) {
             lod.far_now = Some(want);
             show(&lod, want, &mut vis);
@@ -1109,28 +1185,20 @@ mod tests {
     }
 
     #[test]
-    fn the_far_model_changes_with_a_band_so_the_edge_does_not_flicker() {
-        let f = FarModels { at: 10.0, band: 1.5 };
-        // Undecided: the distance alone.
-        assert!(!f.far(9.9, 1.75, None) && f.far(10.1, 1.75, None));
-        // Near stays near up to the distance; far stays far down to the band.
-        assert!(!f.far(10.0, 1.75, Some(false)));
-        assert!(f.far(8.6, 1.75, Some(true)) && !f.far(8.4, 1.75, Some(true)));
-        // Walking back and forth across 10 m by less than the band changes once.
-        let (mut now, mut changes) = (None, 0);
-        for i in 0..200 {
-            let d = 10.0 + 0.7 * (i as f32 * 0.3).sin();
-            let want = f.far(d, 1.75, now);
-            if now.is_some() && now != Some(want) {
-                changes += 1;
-            }
-            now = Some(want);
-        }
-        assert!(changes <= 1, "{changes} changes");
-        // In proportion to height: a giant twice as tall changes at twice the distance.
-        assert!(!f.far(19.0, 3.5, None) && f.far(21.0, 3.5, None));
-        // 0 never changes.
-        assert!(!FarModels { at: 0.0, band: 1.5 }.far(100.0, 1.75, None));
+    fn the_far_model_has_projected_size_hysteresis() {
+        let f = FarModels { far_below_px: 11.0, near_above_px: 12.7, cap: Some(8) };
+        assert!(f.far(10.9, None));
+        assert!(!f.far(11.0, Some(false)));
+        assert!(f.far(12.6, Some(true)));
+        assert!(!f.far(12.7, Some(true)));
+        assert!(f.rank(14.0, true) > f.rank(15.0, false));
+        assert!(f.rank(14.0, true) < f.rank(16.0, false));
+        let pixels = |height, depth, viewport, fov: f32| projected_head(height, 1.0, depth, focal_pixels(viewport, fov.to_radians()));
+        assert!(f.far(pixels(1.75, 27.0, 900.0, 46.0), None));
+        assert!(!f.far(pixels(1.75, 18.0, 900.0, 44.0), Some(true)));
+        assert!(!f.far(pixels(1.75, 10.4, 900.0, 42.0), Some(true)));
+        assert_eq!(pixels(1.75, 18.0, 1800.0, 44.0), pixels(3.5, 18.0, 900.0, 44.0));
+
     }
 
     #[test]

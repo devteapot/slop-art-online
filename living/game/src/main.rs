@@ -81,6 +81,7 @@ fn main() {
         .set(
             bevy::gltf::GltfPlugin::default()
                 .add_custom_vertex_attribute("OUTLINE_NORMAL", bevy_mod_outline::ATTRIBUTE_OUTLINE_NORMAL)
+                .add_custom_vertex_attribute("OUTLINE_WIDTH", characters::compose::ATTRIBUTE_OUTLINE_WIDTH)
                 // Hair's greying lock by lock (`_GREY`, characters/compose.rs).
                 .add_custom_vertex_attribute("GREY", characters::compose::ATTRIBUTE_GREY)
                 // Where hair may carry its ring (`_RING`, characters/compose.rs).
@@ -110,7 +111,11 @@ fn main() {
     }
     app.add_systems(PostUpdate, perf::apply.before(post::update));
     perf::diagnostics(&mut app);
-    app.insert_resource(lookdev::FarModels::from_env()).add_systems(Update, (lookdev::character_shadows, lookdev::far_models));
+    app.insert_resource(lookdev::FarModels::from_env())
+        .add_systems(Update, lookdev::character_shadows)
+        .add_systems(PostUpdate, lookdev::far_models
+            .after(bevy::transform::TransformSystems::Propagate)
+            .before(bevy::camera::visibility::VisibilitySystems::VisibilityPropagate));
     app.insert_resource(ClearColor(camera::SKY))
         .add_plugins(style::StylePlugin)
         .add_plugins(post::PostPlugin)
