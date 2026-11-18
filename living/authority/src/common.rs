@@ -220,6 +220,12 @@ pub fn now_ms(ctx: &ReducerContext) -> u64 {
     })
 }
 
+/// The current transaction's time as `now_ms` last gave it (0 before any): for stamps taken
+/// where no context is at hand (`frame`'s change marks, profiling only).
+pub fn tx_now() -> u64 {
+    TX.with(|t| t.get().1)
+}
+
 /// A number unique to the current transaction (after its first `now_ms`): the key of module
 /// caches valid within one transaction, which `now` alone no longer distinguishes.
 pub fn tx_seq() -> u64 {

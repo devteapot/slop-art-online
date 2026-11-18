@@ -115,7 +115,7 @@ impl From<&Body> for Moving {
 
 impl MotionSeen {
     pub fn of(id: u64, viewer: Identity, b: &Body) -> Self {
-        Self { id, viewer, motion: Motion::from(b), face_off: b.face_off, face_turn: b.face_turn, face_turn_s: b.face_turn_s, running: b.running }
+        Self { id, viewer, motion: Motion::from(b), face_off: b.face_off, face_turn: b.face_turn, face_turn_s: b.face_turn_s, running: b.running, near: false }
     }
     pub fn moving(&self) -> Moving {
         let m = &self.motion;
@@ -1072,7 +1072,7 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
             }
         }
     }
-    crate::frame::scene(id, viewer, &seen);
+    crate::frame::scene(ctx, id, viewer, &seen, &near, now);
     // The projections follow: a row per creature in the scene (itself included), projected
     // when it comes into sight, and again only when an input of the law changed: whom the
     // viewer knows (its knowledge epoch, or this instance has not projected it yet), a reveal
@@ -1145,8 +1145,9 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
     }
     // The move of each newcomer that has fought, with the band its projection grants.
     for body in &entered {
-        crate::frame::show_fighter(ctx, id, viewer, *body, true, now);
-        crate::frame::show_doing(ctx, id, viewer, *body);
+        let near = crate::frame::is_near(id, *body);
+        crate::frame::show_fighter(ctx, id, viewer, *body, near, true, now);
+        crate::frame::show_doing(ctx, id, viewer, *body, near);
     }
 }
 
@@ -1489,8 +1490,9 @@ fn kept_sweep(ctx: &ReducerContext, me: &Character, viewer: Identity, w: &World,
     }
     // The move of each newcomer that has fought, with the band its projection grants.
     for body in s.entered {
-        crate::frame::show_fighter(ctx, id, viewer, *body, true, now);
-        crate::frame::show_doing(ctx, id, viewer, *body);
+        let near = crate::frame::is_near(id, *body);
+        crate::frame::show_fighter(ctx, id, viewer, *body, near, true, now);
+        crate::frame::show_doing(ctx, id, viewer, *body, near);
     }
     if common::laws(ctx).regard_cache_check {
         check_rows(ctx, me, viewer, s.seen, now);
@@ -1807,6 +1809,24 @@ pub fn seen_bodies(ctx: &ViewContext) -> Vec<Moving> {
     ctx.db.motion_seen().viewer().filter(ctx.sender()).map(|m| m.moving()).collect()
 }
 
+// The two tiers of `seen_bodies`, `seen_fighters` and `seen_doing` (frame-views, docs/PERCEPTION.md
+// "Tiers"): each reads one key of its copies' `(viewer, near)` index, so a write to a far copy
+// re-runs only the far view and a write to a near copy only the near one. Their union is the
+// untiered view's rows. The near tier's copies follow at most every `frame::NEAR_COPY_MS`; a
+// client that also reads the cue event tables shows each near creature's cue until its next row.
+
+/// The others within `frame::NEAR_M` of me at my last sweep, as `seen_bodies` shows them.
+#[spacetimedb::view(accessor = seen_bodies_near, public, primary_key = id)]
+pub fn seen_bodies_near(ctx: &ViewContext) -> Vec<Moving> {
+    ctx.db.motion_seen().by_viewer_near().filter((ctx.sender(), true)).map(|m| m.moving()).collect()
+}
+
+/// The rest of the others I perceive, as `seen_bodies` shows them.
+#[spacetimedb::view(accessor = seen_bodies_far, public, primary_key = id)]
+pub fn seen_bodies_far(ctx: &ViewContext) -> Vec<Moving> {
+    ctx.db.motion_seen().by_viewer_near().filter((ctx.sender(), false)).map(|m| m.moving()).collect()
+}
+
 /// How my own living character's body moves, as it is.
 #[spacetimedb::view(accessor = my_body, public, primary_key = id)]
 pub fn my_body(ctx: &ViewContext) -> Vec<Moving> {
@@ -1831,6 +1851,18 @@ pub fn seen_fighters(ctx: &ViewContext) -> Vec<Fighter> {
     ctx.db.fighter_seen().viewer().filter(ctx.sender()).map(|f| f.fighter).collect()
 }
 
+/// The near tier of `seen_fighters` (see `seen_bodies_near`).
+#[spacetimedb::view(accessor = seen_fighters_near, public, primary_key = id)]
+pub fn seen_fighters_near(ctx: &ViewContext) -> Vec<Fighter> {
+    ctx.db.fighter_seen().by_viewer_near().filter((ctx.sender(), true)).map(|f| f.fighter).collect()
+}
+
+/// The far tier of `seen_fighters`.
+#[spacetimedb::view(accessor = seen_fighters_far, public, primary_key = id)]
+pub fn seen_fighters_far(ctx: &ViewContext) -> Vec<Fighter> {
+    ctx.db.fighter_seen().by_viewer_near().filter((ctx.sender(), false)).map(|f| f.fighter).collect()
+}
+
 /// My own living character's move under way and health band, as they are.
 #[spacetimedb::view(accessor = my_fighter, public, primary_key = id)]
 pub fn my_fighter(ctx: &ViewContext) -> Vec<Fighter> {
@@ -1842,6 +1874,18 @@ pub fn my_fighter(ctx: &ViewContext) -> Vec<Fighter> {
 #[spacetimedb::view(accessor = seen_doing, public, primary_key = id)]
 pub fn seen_doing(ctx: &ViewContext) -> Vec<Doing> {
     ctx.db.doing_seen().viewer().filter(ctx.sender()).map(|d| d.doing).collect()
+}
+
+/// The near tier of `seen_doing` (see `seen_bodies_near`).
+#[spacetimedb::view(accessor = seen_doing_near, public, primary_key = id)]
+pub fn seen_doing_near(ctx: &ViewContext) -> Vec<Doing> {
+    ctx.db.doing_seen().by_viewer_near().filter((ctx.sender(), true)).map(|d| d.doing).collect()
+}
+
+/// The far tier of `seen_doing`.
+#[spacetimedb::view(accessor = seen_doing_far, public, primary_key = id)]
+pub fn seen_doing_far(ctx: &ViewContext) -> Vec<Doing> {
+    ctx.db.doing_seen().by_viewer_near().filter((ctx.sender(), false)).map(|d| d.doing).collect()
 }
 
 /// What my own living character is visibly doing, as it is.

@@ -180,6 +180,20 @@ def spans(log, t0, t1):
     return out
 
 
+def clog_bytes(replica):
+    """The size of a replica's commitlog in the server container (bytes), or None."""
+    if replica is None:
+        return None
+    r = subprocess.run(["podman", "exec", CONTAINER, "du", "-sb", f"/home/spacetime/.local/share/spacetime/data/replicas/{replica}/clog"], capture_output=True, text=True)
+    return int(r.stdout.split()[0]) if r.returncode == 0 and r.stdout.strip() else None
+
+
+def newest_replica():
+    r = subprocess.run(["podman", "exec", CONTAINER, "ls", "/home/spacetime/.local/share/spacetime/data/replicas"], capture_output=True, text=True)
+    ids = [int(x) for x in r.stdout.split() if x.isdigit()]
+    return max(ids) if ids else None
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--label", required=True)
@@ -192,7 +206,12 @@ def main():
     ap.add_argument("--seconds", type=int, default=120)
     ap.add_argument("--sample", type=int, default=24)
     ap.add_argument("--out", default=None)
+    ap.add_argument("--duel", action="store_true", help="stage the first two players as a stationary duel after warm-up")
+    ap.add_argument("--cues", action="store_true", help="the players also subscribe the cue event tables (a module with them; frame-views)")
+    ap.add_argument("--fresh-every", type=int, default=0, help="sample every Nth player's motion freshness (gate-load `fresh`; 0: none)")
     a = ap.parse_args()
+    if a.duel and a.players < 2:
+        ap.error("--duel needs at least two players")
     stamp = time.strftime("%Y%m%d-%H%M%S")
     db = f"verify-lookcost-{a.label}-{stamp}"
     out = Path(a.out or ROOT / ".local/look1/cost" / f"{a.label}-{stamp}")
@@ -201,20 +220,34 @@ def main():
     load = None
     try:
         stdb("publish", "-s", "local", "-b", str(Path("/wasm") / a.wasm), db, "--delete-data", "-y")
+        replica = newest_replica()
         token = admin_token()
         ident = json.loads(http(f"/v1/database/{db}")[1])["database_identity"]["__identity__"].removeprefix("0x")
         time.sleep(3)
         world = sql(db, "SELECT * FROM world", token)[0]
         res["world"] = {k: world.get(k) for k in ("run", "seed", "day_ms", "look_book")}
         tokens = [new_identity() for _ in range(a.players)]
-        players = [{"token": t, "name": f"Cost{i}", "role": "walk"} for i, t in enumerate(tokens)]
+        players = [{"token": t, "name": f"Cost{i}", "role": "duel" if a.duel and i < 2 else "walk"} for i, t in enumerate(tokens)]
         load = Proc([a.load, "players"], out / "players.stderr")
-        load.send(json.dumps({"uri": URL, "db": db, "events": str(out / "events.jsonl"), "battle": [0.0, 0.0], "behaviour": {"walk_period_ms": 1500, "rejoin_s": 3}, "players": players, "client": "gate"}))
+        load.send(json.dumps({"uri": URL, "db": db, "events": str(out / "events.jsonl"), "battle": [0.0, 0.0], "behaviour": {"walk_period_ms": 1500, "rejoin_s": 3}, "players": players, "client": "gate", "cues": a.cues, "fresh_every": a.fresh_every}))
         joined = load.expect("joined", 900)
         ids = [p["id"] for p in sorted(joined["players"], key=lambda p: p["p"])]
         per = -(-a.players // a.groups)
         centers, spots = clusters(sql(db, "SELECT * FROM lot", token), a.groups, a.radius, per)
-        for cid, (x, y) in zip(ids, spots):
+        if a.duel:
+            res["duelists"] = ids[:2]
+            call(db, "place_at", [ids[0], *spots[0]], token)
+            first = sql(db, f"SELECT x, y FROM body WHERE id = {ids[0]}", token)[0]
+            for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (-1, -1)):
+                call(db, "place_at", [ids[1], first["x"] + dx, first["y"] + dy], token)
+                second = sql(db, f"SELECT x, y FROM body WHERE id = {ids[1]}", token)[0]
+                if (second["x"] - first["x"]) ** 2 + (second["y"] - first["y"]) ** 2 < 1.6 ** 2:
+                    break
+            else:
+                raise RuntimeError("could not place both duelists within strike reach")
+            res["duel_positions"] = [first, second]
+        start = 2 if a.duel else 0
+        for cid, (x, y) in zip(ids[start:], spots[start:]):
             call(db, "place_at", [cid, x, y], token)
         load.send("placed")
         ready = load.expect("ready", 900)
@@ -225,8 +258,16 @@ def main():
         time.sleep(a.warmup)
         call(db, "set_profile", [True], token)
         t0, b0 = time.time(), bytes_sent(ident)
+        clog0 = clog_bytes(replica)
+        load.send("fresh on")
+        if a.duel:
+            load.send("battle")
         time.sleep(a.seconds)
         t1, b1 = time.time(), bytes_sent(ident)
+        clog1 = clog_bytes(replica)
+        res["commitlog"] = {"replica": replica, "bytes_t0": clog0, "bytes_t1": clog1,
+                            "bytes_per_s": round((clog1 - clog0) / (t1 - t0), 1) if clog0 is not None and clog1 is not None else None}
+        load.send("fresh off")
         call(db, "set_profile", [False], token)
         # What each sampled player holds now, as that player.
         sample = []
@@ -236,7 +277,21 @@ def main():
                            "people_with_key": sum(1 for r in rows if r.get("kind") == "person" and r.get("look", "").startswith("lk_"))})
         load.send("stop")
         try:
-            load.expect("done", 300)
+            done = load.expect("done", 300)
+            # Motion freshness over the window, pooled over the sampled players (gate-load `fresh`).
+            fresh = {"near": {}, "all": {}, "by_cue": 0, "by_view": 0, "players": 0}
+            for p in done.get("players", []):
+                f = p.get("fresh")
+                if not f:
+                    continue
+                fresh["players"] += 1
+                fresh["by_cue"] += f["by_cue"]
+                fresh["by_view"] += f["by_view"]
+                for group in ("near", "all"):
+                    for ms, n in f[group].items():
+                        fresh[group][ms] = fresh[group].get(ms, 0) + n
+            res["fresh"] = fresh
+            res["cue_rows"] = {t: sum((p.get("events") or {}).get(t, [0])[0] for p in done.get("players", [])) for t in ("seen_body_cue", "seen_fighter_cue", "seen_doing_cue")}
         except RuntimeError:
             pass
         res["counts"] = {"projected": sql(db, "SELECT COUNT(*) AS n FROM projected", token)[0]["n"], "character": sql(db, "SELECT COUNT(*) AS n FROM character", token)[0]["n"]}

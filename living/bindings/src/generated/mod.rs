@@ -267,10 +267,22 @@ pub mod routine_type;
 pub mod script_table;
 pub mod script_type;
 pub mod seed_communities_reducer;
+pub mod seen_bodies_far_table;
+pub mod seen_bodies_near_table;
 pub mod seen_bodies_table;
+pub mod seen_body_cue_table;
+pub mod seen_body_cue_type;
 pub mod seen_character_type;
 pub mod seen_characters_table;
+pub mod seen_doing_cue_table;
+pub mod seen_doing_cue_type;
+pub mod seen_doing_far_table;
+pub mod seen_doing_near_table;
 pub mod seen_doing_table;
+pub mod seen_fighter_cue_table;
+pub mod seen_fighter_cue_type;
+pub mod seen_fighters_far_table;
+pub mod seen_fighters_near_table;
 pub mod seen_fighters_table;
 pub mod seen_stock_table;
 pub mod seen_stock_type;
@@ -599,10 +611,22 @@ pub use routine_type::Routine;
 pub use script_table::*;
 pub use script_type::Script;
 pub use seed_communities_reducer::seed_communities;
+pub use seen_bodies_far_table::*;
+pub use seen_bodies_near_table::*;
 pub use seen_bodies_table::*;
+pub use seen_body_cue_table::*;
+pub use seen_body_cue_type::SeenBodyCue;
 pub use seen_character_type::SeenCharacter;
 pub use seen_characters_table::*;
+pub use seen_doing_cue_table::*;
+pub use seen_doing_cue_type::SeenDoingCue;
+pub use seen_doing_far_table::*;
+pub use seen_doing_near_table::*;
 pub use seen_doing_table::*;
+pub use seen_fighter_cue_table::*;
+pub use seen_fighter_cue_type::SeenFighterCue;
+pub use seen_fighters_far_table::*;
+pub use seen_fighters_near_table::*;
 pub use seen_fighters_table::*;
 pub use seen_stock_table::*;
 pub use seen_stock_type::SeenStock;
@@ -1395,9 +1419,18 @@ pub struct DbUpdate {
     routine_stat: __sdk::TableUpdate<RoutineStat>,
     script: __sdk::TableUpdate<Script>,
     seen_bodies: __sdk::TableUpdate<Moving>,
+    seen_bodies_far: __sdk::TableUpdate<Moving>,
+    seen_bodies_near: __sdk::TableUpdate<Moving>,
+    seen_body_cue: __sdk::TableUpdate<SeenBodyCue>,
     seen_characters: __sdk::TableUpdate<SeenCharacter>,
     seen_doing: __sdk::TableUpdate<Doing>,
+    seen_doing_cue: __sdk::TableUpdate<SeenDoingCue>,
+    seen_doing_far: __sdk::TableUpdate<Doing>,
+    seen_doing_near: __sdk::TableUpdate<Doing>,
+    seen_fighter_cue: __sdk::TableUpdate<SeenFighterCue>,
     seen_fighters: __sdk::TableUpdate<Fighter>,
+    seen_fighters_far: __sdk::TableUpdate<Fighter>,
+    seen_fighters_near: __sdk::TableUpdate<Fighter>,
     seen_stock: __sdk::TableUpdate<SeenStock>,
     settlement: __sdk::TableUpdate<Settlement>,
     sex: __sdk::TableUpdate<SexRow>,
@@ -1757,15 +1790,42 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "seen_bodies" => db_update
                     .seen_bodies
                     .append(seen_bodies_table::parse_table_update(table_update)?),
+                "seen_bodies_far" => db_update
+                    .seen_bodies_far
+                    .append(seen_bodies_far_table::parse_table_update(table_update)?),
+                "seen_bodies_near" => db_update
+                    .seen_bodies_near
+                    .append(seen_bodies_near_table::parse_table_update(table_update)?),
+                "seen_body_cue" => db_update
+                    .seen_body_cue
+                    .append(seen_body_cue_table::parse_table_update(table_update)?),
                 "seen_characters" => db_update
                     .seen_characters
                     .append(seen_characters_table::parse_table_update(table_update)?),
                 "seen_doing" => db_update
                     .seen_doing
                     .append(seen_doing_table::parse_table_update(table_update)?),
+                "seen_doing_cue" => db_update
+                    .seen_doing_cue
+                    .append(seen_doing_cue_table::parse_table_update(table_update)?),
+                "seen_doing_far" => db_update
+                    .seen_doing_far
+                    .append(seen_doing_far_table::parse_table_update(table_update)?),
+                "seen_doing_near" => db_update
+                    .seen_doing_near
+                    .append(seen_doing_near_table::parse_table_update(table_update)?),
+                "seen_fighter_cue" => db_update
+                    .seen_fighter_cue
+                    .append(seen_fighter_cue_table::parse_table_update(table_update)?),
                 "seen_fighters" => db_update
                     .seen_fighters
                     .append(seen_fighters_table::parse_table_update(table_update)?),
+                "seen_fighters_far" => db_update
+                    .seen_fighters_far
+                    .append(seen_fighters_far_table::parse_table_update(table_update)?),
+                "seen_fighters_near" => db_update
+                    .seen_fighters_near
+                    .append(seen_fighters_near_table::parse_table_update(table_update)?),
                 "seen_stock" => db_update
                     .seen_stock
                     .append(seen_stock_table::parse_table_update(table_update)?),
@@ -2122,6 +2182,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.script = cache
             .apply_diff_to_table::<Script>("script", &self.script)
             .with_updates_by_pk(|row| &row.name);
+        diff.seen_body_cue = self.seen_body_cue.into_event_diff();
+        diff.seen_doing_cue = self.seen_doing_cue.into_event_diff();
+        diff.seen_fighter_cue = self.seen_fighter_cue.into_event_diff();
         diff.seen_stock = cache
             .apply_diff_to_table::<SeenStock>("seen_stock", &self.seen_stock)
             .with_updates_by_pk(|row| &row.id);
@@ -2256,14 +2319,32 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.seen_bodies = cache
             .apply_diff_to_table::<Moving>("seen_bodies", &self.seen_bodies)
             .with_updates_by_pk(|row| &row.id);
+        diff.seen_bodies_far = cache
+            .apply_diff_to_table::<Moving>("seen_bodies_far", &self.seen_bodies_far)
+            .with_updates_by_pk(|row| &row.id);
+        diff.seen_bodies_near = cache
+            .apply_diff_to_table::<Moving>("seen_bodies_near", &self.seen_bodies_near)
+            .with_updates_by_pk(|row| &row.id);
         diff.seen_characters = cache
             .apply_diff_to_table::<SeenCharacter>("seen_characters", &self.seen_characters)
             .with_updates_by_pk(|row| &row.id);
         diff.seen_doing = cache
             .apply_diff_to_table::<Doing>("seen_doing", &self.seen_doing)
             .with_updates_by_pk(|row| &row.id);
+        diff.seen_doing_far = cache
+            .apply_diff_to_table::<Doing>("seen_doing_far", &self.seen_doing_far)
+            .with_updates_by_pk(|row| &row.id);
+        diff.seen_doing_near = cache
+            .apply_diff_to_table::<Doing>("seen_doing_near", &self.seen_doing_near)
+            .with_updates_by_pk(|row| &row.id);
         diff.seen_fighters = cache
             .apply_diff_to_table::<Fighter>("seen_fighters", &self.seen_fighters)
+            .with_updates_by_pk(|row| &row.id);
+        diff.seen_fighters_far = cache
+            .apply_diff_to_table::<Fighter>("seen_fighters_far", &self.seen_fighters_far)
+            .with_updates_by_pk(|row| &row.id);
+        diff.seen_fighters_near = cache
+            .apply_diff_to_table::<Fighter>("seen_fighters_near", &self.seen_fighters_near)
             .with_updates_by_pk(|row| &row.id);
 
         diff
@@ -2599,14 +2680,41 @@ impl __sdk::DbUpdate for DbUpdate {
                 "seen_bodies" => db_update
                     .seen_bodies
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "seen_bodies_far" => db_update
+                    .seen_bodies_far
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "seen_bodies_near" => db_update
+                    .seen_bodies_near
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "seen_body_cue" => db_update
+                    .seen_body_cue
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "seen_characters" => db_update
                     .seen_characters
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "seen_doing" => db_update
                     .seen_doing
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "seen_doing_cue" => db_update
+                    .seen_doing_cue
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "seen_doing_far" => db_update
+                    .seen_doing_far
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "seen_doing_near" => db_update
+                    .seen_doing_near
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "seen_fighter_cue" => db_update
+                    .seen_fighter_cue
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "seen_fighters" => db_update
                     .seen_fighters
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "seen_fighters_far" => db_update
+                    .seen_fighters_far
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "seen_fighters_near" => db_update
+                    .seen_fighters_near
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "seen_stock" => db_update
                     .seen_stock
@@ -3020,14 +3128,41 @@ impl __sdk::DbUpdate for DbUpdate {
                 "seen_bodies" => db_update
                     .seen_bodies
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "seen_bodies_far" => db_update
+                    .seen_bodies_far
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "seen_bodies_near" => db_update
+                    .seen_bodies_near
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "seen_body_cue" => db_update
+                    .seen_body_cue
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "seen_characters" => db_update
                     .seen_characters
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "seen_doing" => db_update
                     .seen_doing
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "seen_doing_cue" => db_update
+                    .seen_doing_cue
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "seen_doing_far" => db_update
+                    .seen_doing_far
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "seen_doing_near" => db_update
+                    .seen_doing_near
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "seen_fighter_cue" => db_update
+                    .seen_fighter_cue
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "seen_fighters" => db_update
                     .seen_fighters
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "seen_fighters_far" => db_update
+                    .seen_fighters_far
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "seen_fighters_near" => db_update
+                    .seen_fighters_near
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "seen_stock" => db_update
                     .seen_stock
@@ -3225,9 +3360,18 @@ pub struct AppliedDiff<'r> {
     routine_stat: __sdk::TableAppliedDiff<'r, RoutineStat>,
     script: __sdk::TableAppliedDiff<'r, Script>,
     seen_bodies: __sdk::TableAppliedDiff<'r, Moving>,
+    seen_bodies_far: __sdk::TableAppliedDiff<'r, Moving>,
+    seen_bodies_near: __sdk::TableAppliedDiff<'r, Moving>,
+    seen_body_cue: __sdk::TableAppliedDiff<'r, SeenBodyCue>,
     seen_characters: __sdk::TableAppliedDiff<'r, SeenCharacter>,
     seen_doing: __sdk::TableAppliedDiff<'r, Doing>,
+    seen_doing_cue: __sdk::TableAppliedDiff<'r, SeenDoingCue>,
+    seen_doing_far: __sdk::TableAppliedDiff<'r, Doing>,
+    seen_doing_near: __sdk::TableAppliedDiff<'r, Doing>,
+    seen_fighter_cue: __sdk::TableAppliedDiff<'r, SeenFighterCue>,
     seen_fighters: __sdk::TableAppliedDiff<'r, Fighter>,
+    seen_fighters_far: __sdk::TableAppliedDiff<'r, Fighter>,
+    seen_fighters_near: __sdk::TableAppliedDiff<'r, Fighter>,
     seen_stock: __sdk::TableAppliedDiff<'r, SeenStock>,
     settlement: __sdk::TableAppliedDiff<'r, Settlement>,
     sex: __sdk::TableAppliedDiff<'r, SexRow>,
@@ -3474,15 +3618,60 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         );
         callbacks.invoke_table_row_callbacks::<Script>("script", &self.script, event);
         callbacks.invoke_table_row_callbacks::<Moving>("seen_bodies", &self.seen_bodies, event);
+        callbacks.invoke_table_row_callbacks::<Moving>(
+            "seen_bodies_far",
+            &self.seen_bodies_far,
+            event,
+        );
+        callbacks.invoke_table_row_callbacks::<Moving>(
+            "seen_bodies_near",
+            &self.seen_bodies_near,
+            event,
+        );
+        callbacks.invoke_table_row_callbacks::<SeenBodyCue>(
+            "seen_body_cue",
+            &self.seen_body_cue,
+            event,
+        );
         callbacks.invoke_table_row_callbacks::<SeenCharacter>(
             "seen_characters",
             &self.seen_characters,
             event,
         );
         callbacks.invoke_table_row_callbacks::<Doing>("seen_doing", &self.seen_doing, event);
+        callbacks.invoke_table_row_callbacks::<SeenDoingCue>(
+            "seen_doing_cue",
+            &self.seen_doing_cue,
+            event,
+        );
+        callbacks.invoke_table_row_callbacks::<Doing>(
+            "seen_doing_far",
+            &self.seen_doing_far,
+            event,
+        );
+        callbacks.invoke_table_row_callbacks::<Doing>(
+            "seen_doing_near",
+            &self.seen_doing_near,
+            event,
+        );
+        callbacks.invoke_table_row_callbacks::<SeenFighterCue>(
+            "seen_fighter_cue",
+            &self.seen_fighter_cue,
+            event,
+        );
         callbacks.invoke_table_row_callbacks::<Fighter>(
             "seen_fighters",
             &self.seen_fighters,
+            event,
+        );
+        callbacks.invoke_table_row_callbacks::<Fighter>(
+            "seen_fighters_far",
+            &self.seen_fighters_far,
+            event,
+        );
+        callbacks.invoke_table_row_callbacks::<Fighter>(
+            "seen_fighters_near",
+            &self.seen_fighters_near,
             event,
         );
         callbacks.invoke_table_row_callbacks::<SeenStock>("seen_stock", &self.seen_stock, event);
@@ -4282,9 +4471,18 @@ impl __sdk::SpacetimeModule for RemoteModule {
         routine_stat_table::register_table(client_cache);
         script_table::register_table(client_cache);
         seen_bodies_table::register_table(client_cache);
+        seen_bodies_far_table::register_table(client_cache);
+        seen_bodies_near_table::register_table(client_cache);
+        seen_body_cue_table::register_table(client_cache);
         seen_characters_table::register_table(client_cache);
         seen_doing_table::register_table(client_cache);
+        seen_doing_cue_table::register_table(client_cache);
+        seen_doing_far_table::register_table(client_cache);
+        seen_doing_near_table::register_table(client_cache);
+        seen_fighter_cue_table::register_table(client_cache);
         seen_fighters_table::register_table(client_cache);
+        seen_fighters_far_table::register_table(client_cache);
+        seen_fighters_near_table::register_table(client_cache);
         seen_stock_table::register_table(client_cache);
         settlement_table::register_table(client_cache);
         sex_table::register_table(client_cache);
@@ -4420,9 +4618,18 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "routine_stat",
         "script",
         "seen_bodies",
+        "seen_bodies_far",
+        "seen_bodies_near",
+        "seen_body_cue",
         "seen_characters",
         "seen_doing",
+        "seen_doing_cue",
+        "seen_doing_far",
+        "seen_doing_near",
+        "seen_fighter_cue",
         "seen_fighters",
+        "seen_fighters_far",
+        "seen_fighters_near",
         "seen_stock",
         "settlement",
         "sex",

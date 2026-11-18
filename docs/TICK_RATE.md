@@ -254,3 +254,227 @@ tail to one stage.
 Source paths in the game are `living/authority/src/fast.rs`,
 `living/mind/src/main.rs`, `living/mind/src/mind.rs` and
 `living/mind/src/mind/fast.rs`.
+
+## Frame freshness on Cullet (frame-fresh, not merged)
+
+Recorded from branch `frame-fresh` (`66ca8a26f`, GPT-6.2 Sol, 2026-11-18), which was not merged: frame-views ([below](#frame-views-cues-and-tiers)) replaced it. Its code is on that branch; its evidence path below is in that branch's worktree.
+
+`frame-fresh` starts from `cd2afe42e`. With the shared sweep and frame
+budget, a viewer can receive updates to engaged and nearby characters
+between deliveries of its whole scene. The sweep supplies distances to
+characters already in sight. An unexpired combat move or visible activity
+targeting a character promotes the visible pair in both directions.
+Engaged frames become due at 33 ms and nearby frames at 50 ms. Direction
+changes, new visible activities and fighting moves take precedence over
+steady motion within the relevance group. Whole frames carry the remaining
+characters, ordered by distance, and take priority when they reach 200 ms.
+These are scheduling thresholds subject to the shared budget and the
+availability of the sight sweep. Distance uses that sweep's last sample.
+The player's own rows remain on their direct views.
+
+The partial pass limits copy updates to the selected part of the scene.
+Each body has a delivery cursor so moving between relevance groups preserves
+pending updates. Health projections, combat-event expiry, experience lines,
+senses and earshot run on the whole pass. Copy rows are read and written
+by the existing keys. A tick gap discards speculative scene membership and
+causes a full comparison. If there has been no new sweep, the scene comes
+from the committed `perceived.viewer` index. Distance, targeting and
+direction marks guide timing. The rows presented to each player still
+come from the authority's existing sight rules and per-viewer copies.
+
+### View work
+
+The [views documentation](https://spacetimedb.com/docs/functions/views/)
+recommends small read sets and describes incremental query-builder views.
+In the pinned [2.14.1 execution path](https://github.com/clockworklabs/SpacetimeDB/blob/v2.14.1/crates/core/src/host/wasm_common/module_host_actor.rs),
+`run_query_for_view` records table-wide dependencies, accepts only
+plain table rows and passes the result to the same materialization path
+as a procedural view. The procedural views continue to read one sender
+index key per stream. This preserves the narrow read set and sender
+authorization described in [table performance](https://spacetimedb.com/docs/tables/performance/),
+[indexes](https://spacetimedb.com/docs/tables/indexes/) and
+[subscriptions](https://spacetimedb.com/docs/clients/subscriptions/).
+There are no new database rows, indexes or client subscriptions.
+
+Changing any motion copy can still rebuild that sender's entire
+`seen_bodies` result. The budget therefore charges the scene size for
+a pass with pending motion, fighter or health changes. A doing-only pass
+checks the doing range for that sender and charges its smaller result plus
+possible additions. A pass with no marked scene change pays a minimum
+charge for scheduler and maintenance work. A partial pass with only a
+fighter or doing update leaves the motion view's read set untouched.
+Distant changes are coalesced into whole passes so they cannot trigger an
+extra motion-view rebuild during a nearby pass. Measure the effect using
+`view_calls` and `view_total_time_usec` for each scene view.
+
+The new scheduler state grows with currently perceived pairs and active
+targeting moves. A target change triggers two indexed primary-key reads at
+most, shared across viewers in the step. Scene cursor maintenance reuses
+the indexed sweep results. A roll-forward can inspect all pairs in one due
+viewer to select its work. The authority still bounds copy writes by the
+shared budget, and each changed copy is exposed only to its own viewer.
+
+### Measurement
+
+`tick_cost.py` reports p50, p90 and p95 intervals pooled across
+viewer/body pairs, both for all in sight and for engaged or within 8 m
+at the last sweep. A pass counts a pair even when the current row needed
+no write. This measures when the authority checks for new data. The
+`--duel` fixture tracks separate first-delivery latency for structured
+windups and visible activity over the duelists' Rust SDK connections.
+Neither timing measures an 80 ms RTT path or renderer presentation.
+
+#### 216-player results
+
+The dev-box series ran 2026-11-18 from 21:18:10 to 21:59:46 UTC
+under the exclusive build gate. The baseline was `cd2afe42e` with
+measurement-only instrumentation and the candidate was `de8bd2fa2`.
+Each arm ran three 120 s walking windows on Cullet and plan-test after
+a 30 s warm-up. The fixture used 216 real SDK players in seven clusters
+of up to 31 and one passive owner subscriber. Ready-state mean scene
+sizes ranged from 43.1 to 43.9 characters on Cullet and 26.2 to 26.5 on
+plan-test. Each run started below 4 on the one-minute load average.
+The two additional Cullet windows lasted 30 s, with 214 walkers and
+two stationary duelists.
+
+The threshold was **missed**. Cullet's median fell from 59.50 to
+59.46 ticks/s, with candidate runs spanning 59.35–59.47. Near-frame
+p50 improved from 167 to 150 ms. The median p90 held at 233 ms, well
+above the 100 ms target, and p95 rose from 251 to 266 ms. The
+candidate's near p90 ranged from 233 to 318 ms. Plan-test near p90
+rose from 50 to 66 ms and all-in-sight p90 rose from 50 to 100 ms.
+The shared budget still charges an entire sender's motion view for
+a single changed copy. Overdue whole scenes compete with partial passes,
+and the candidate's 100 ms whole-scene scheduling interval also reduces
+cadence on plan-test, where main commonly serves a whole scene every
+33–50 ms.
+
+Rows per tick count viewer/body pairs checked for delivery, including
+unchanged rows and zero-delivery ticks. They exclude sweep rows. The
+baseline profiler uses the last sweep's distance for the relevant
+category. It does not classify out-of-range engagement separately.
+The staged opponents were within melee reach in both arms. The
+candidate also counts out-of-range visible targets as relevant.
+
+| Run | Ticks/s | Engaged or ≤8 m p50/p90/p95 ms | All p50/p90/p95 ms | Rows/tick p10/p50/p90 | Load start → end |
+|---|---:|---:|---:|---:|---:|
+| main-cullet-r1 | 59.56 | 133/182/200 | 133/183/200 | 847/1167/1491 | 3.76 → 4.35 |
+| branch-cullet-r1 | 59.46 | 134/233/266 | 167/234/267 | 596/915/1257 | 3.83 → 3.21 |
+| main-plan-test-r1 | 59.98 | 33/50/50 | 33/50/50 | 796/1851/2148 | 3.21 → 3.09 |
+| branch-plan-test-r1 | 59.95 | 50/66/67 | 50/100/100 | 0/1003/2133 | 3.09 → 3.78 |
+| branch-cullet-r2 | 59.35 | 183/318/384 | 200/334/400 | 65/743/1256 | 3.78 → 3.96 |
+| main-cullet-r2 | 59.50 | 167/233/251 | 167/233/251 | 635/886/1219 | 3.96 → 3.98 |
+| branch-plan-test-r2 | 59.94 | 50/66/67 | 50/100/100 | 0/853/2253 | 3.98 → 2.93 |
+| main-plan-test-r2 | 59.99 | 33/50/50 | 33/50/50 | 748/2056/2200 | 2.93 → 3.05 |
+| main-cullet-r3 | 59.44 | 167/250/283 | 168/249/282 | 550/845/1135 | 3.05 → 3.58 |
+| branch-cullet-r3 | 59.47 | 150/233/250 | 167/233/266 | 648/913/1188 | 3.58 → 2.49 |
+| main-plan-test-r3 | 59.99 | 33/50/50 | 33/50/50 | 720/2063/2196 | 2.49 → 2.34 |
+| branch-plan-test-r3 | 59.84 | 50/66/67 | 50/100/100 | 0/969/2110 | 2.34 → 4.84 |
+| main-cullet-duel | 59.44 | 167/250/283 | 167/250/283 | 578/876/1116 | 3.98 → 3.36 |
+| branch-cullet-duel | 59.45 | 167/250/284 | 200/266/300 | 569/803/1089 | 3.36 → 3.32 |
+
+#### View refresh cost
+
+The table reports medians from the three walking runs per arm.
+Scene totals sum the six frame-delivered streams. The counters cover
+SpacetimeDB view execution and materialization over the window.
+
+| World | Arm | Scene views calls/s | Scene views ms/s | Motion view calls/s | Motion view ms/s |
+|---|---|---:|---:|---:|---:|
+| cullet | main | 2672.43 | 240.72 | 1734.14 | 140.81 |
+| cullet | branch | 2565.73 | 229.66 | 1705.26 | 134.98 |
+| plan-test | main | 3380.62 | 121.69 | 2969.87 | 100.95 |
+| plan-test | branch | 3042.07 | 113.02 | 2627.43 | 92.57 |
+
+On Cullet, aggregate scene-view work fell **4.6%** and motion-view
+work **4.1%**. The median motion-view cost per refresh was nearly
+unchanged at 80.2 µs on main and 80.3 µs on the candidate. On plan-test,
+aggregate scene-view work fell **7.1%**, with motion-view cost per
+refresh moving from 33.9 to 34.7 µs. The savings came from fewer
+refreshes. An affected motion view still returns the same sender-scoped
+rows through the same index key, and the experiment establishes no
+gain in the cost of a single full materialization.
+
+#### Cullet duel inside the crowd
+
+Each run recorded 10 accepted strikes and 10 visible waves from their
+opponents' SDK callbacks. Latency is the authority row's start time to
+first receipt over loopback. With 10 observations, p90 and p95 both
+select the largest sample under this percentile convention.
+
+| Opponent row | Main p50/p90/p95 ms | Frame-fresh p50/p90/p95 ms |
+|---|---:|---:|
+| 350 ms strike windup | 117.8/325.2/325.2 | 137.3/288.9/288.9 |
+| Visible action | 105.9/188.7/188.7 | 49.6/62.9/62.9 |
+
+The visible-action stream was substantially faster in this fixture.
+The windup median worsened and the tail remained too slow to support
+a claim about timed defence over 80 ms RTT. The duel arms had one run
+each. The experiment did not exercise remote latency, the rendered
+client, the 30-minute gate or the 2,000-character target.
+
+Raw evidence is under `.local/fresh/evidence/20261118-211530/` in frame-fresh's worktree.
+`series.log` has timestamps and start/end load. Each run retains
+SDK events, load samples, metrics and profile windows. The retained
+replica logs restored the profile lines clipped by the CLI tail.
+Their tick counts were 10–20 below the metrics counters because
+the counters bracket a slightly wider interval. The table uses the
+recovered profile's window. `series-report.json` holds per-view costs
+and `duel-report.txt` holds the SDK latency samples' summary.
+
+## Frame views: cues and tiers
+
+Branch `frame-views` (2026-11-18, dev-box, Claude Opus 5.5 at high effort): an escalation. frame-fresh (GPT-6.2 Sol, above) did not reach the target, so under AGENTS.md ("Escalation") the task moved to Opus. The target (the general coordinator's decision): a frame interval of at most 100 ms at p90 for engaged others and others within 8 m, at 216 players on Cullet (43 in sight), keeping about 59.5 ticks a second or better; in a crowded duel, the windup and visible-action p90 within the contract's networked line (150 ms p95 at 80 ms RTT). All in sight may stay higher.
+
+### What frame-views keeps from frame-fresh, and what it drops
+
+- **Kept:** the engagements (`engaged_of`, frame-fresh's `engagements`: an unexpired move or visible act aimed at someone makes the pair engaged both ways, read again only for creatures whose rows were written); the sweep's distances handed to the frames (`frame::scene`); the profiling pair cadence (`frame_trace.rs`, extended with staleness); the duel fixture (`look_cost.py --duel`, gate-load's `duel` role) and `tick_cost.py`'s pair percentiles.
+- **Dropped:** the relevance scheduler (engaged, near and whole-frame passes with per-body cursors) and its cost model. Its own measurement found the limit: in 2.14.1 any write to a viewer's copies re-runs that viewer's whole view of them, so a near pass costs a whole scene, and ordering passes cannot change that.
+
+### Design
+
+Two changes, documented in [Perception](PERCEPTION.md#cues-and-tiers-what-is-near-reaches-a-player-at-once-frame-views):
+
+1. **Cues** deliver near and engaged changes without re-running any view: event tables (`seen_body_cue`, `seen_fighter_cue`, `seen_doing_cue`) filtered per subscriber by row-level security. Near pairs are cued at the viewer's cue tick (every second tick, by id), engaged pairs at every tick. Cost: one row per change per viewer it is near, independent of scene size.
+2. **Tiers** cut what a frame re-runs: each copy table gained `near` and a `(viewer, near)` index, and each perception view two tiers, so a frame of the far creatures re-runs only the far views. Near copies follow at most every 500 ms, behind the cues.
+
+**Why not tiers alone.** In the measured crowd (seven clusters of 31 within 3 m), about 30 of the 43 in sight are within 8 m, so a near view still holds most of the scene; refreshing it fast enough for 100 ms would cost what whole frames cost now. Per refresh, a view's cost also has a large fixed part (on the smoke runs about 40 µs of the 54 µs a 13-row far view took, against 85 µs for 43 rows), so many small views do not help either. Freshness for near changes has to come from something whose cost follows the changes, not the scene: cues.
+
+**Why not cues alone.** The first smoke runs (cues, no tiers; host load 4–5, not a measurement) gave near motion at the SDK a p90 of 39 ms against 185 ms on main at the same load, but the cue traffic (24 messages a second per player against 10) shrank the frames' budget: all in sight went from 185 to 239 ms at p90, and whole frames from 217 to 384 ms. Tiers give the frames that time back.
+
+### SpacetimeDB documentation and source consulted
+
+Pinned 2.14.1 (server image, `spacetimedb` and `spacetimedb-sdk`). The live docs (version selector 2.0.0) were read for [views](https://spacetimedb.com/docs/functions/views/), [subscriptions](https://spacetimedb.com/docs/clients/subscriptions/) and [their semantics](https://spacetimedb.com/docs/clients/subscriptions/semantics), [event tables](https://spacetimedb.com/docs/tables/event-tables/), [performance](https://spacetimedb.com/docs/tables/performance/), [access permissions](https://spacetimedb.com/docs/tables/access-permissions) and the [SQL reference](https://spacetimedb.com/docs/reference/sql); the `v2.14.1` tag's own docs tree (commit `a0bf6be`) for event tables, [row-level security](https://spacetimedb.com/docs/how-to/rls) and [automatic migrations](https://spacetimedb.com/docs/databases/automatic-migrations). Each was checked against the tag's source.
+
+| Documentation says | 2.14.1 source (read, not tested unless noted) | Design implication |
+|---|---|---|
+| A procedural view re-executes in full when a row in its read set changes; keep read sets small (views). | `materialize_view_arg_hash` (`crates/engine/src/relational_db.rs`) deletes every row of the sender's result and inserts the new ones; `views_for_refresh` (`crates/datastore/src/locking_tx_datastore/mut_tx.rs`) matches each written row against the index keys each view read (`views_for_index_seek`, per column list and key). | A view's cost is its whole result. A `(viewer, near)` key separates two views over one table: a write re-runs only the view whose key the row has. |
+| (not in the docs) | `ViewReadSets::merge` drops each refreshed view's old read set with `remove_view_call`, which walks every table's, column list's and key's view set in the database. | Every refresh pays for the database's whole read set: fewer refreshes matter as much as smaller ones. Six new views add 216 × 6 one-key entries. |
+| Event tables: rows exist only in the inserting transaction, are broadcast to subscribers on commit and never stored; only `on_insert`; views cannot read them; RLS applies with the same semantics; the inserts are in the commitlog; v2 protocol only. | `is_event` in the datastore and `encode_v2_rows` (`EventTableRows`, inserts only); a subscribe-all query skips event tables (`crates/core/src/subscription/subscription.rs`). | Cues re-run no view and are not in the client cache. The owner's subscribe-all (mind service, observer) does not receive them. They do grow the commitlog (below). |
+| RLS (experimental, `unstable` feature): a `client_visibility_filter` SQL rule with `:sender`; the docs recommend views instead, but event tables cannot be read by views, and the event-table page points to RLS for per-identity delivery. | The rule is compiled into each non-owner's query (`QueryHash` includes the caller); a `viewer = :sender` equality becomes a search argument (`PhysicalPlan::search_args`, `const_or_param_value`), so each inserted row is matched only to its viewer's query, through a delta index on `viewer` (`DeltaTableIndexes`). | Per-subscriber filtering of cues on the authority, with pruning per row. Verified live: `verify-client`'s `cues.py` (another identity, an anonymous connection and a query naming another identity receive none). |
+| Subscriptions: one update message per transaction per client, a state delta; avoid overlapping queries. | `eval_updates_sequential` runs on the database thread inside the tick's transaction. | Each tick with a cue for a client is a message to it: cue messages are a per-tick cost, so near cues go every other tick per viewer. |
+| Automatic migrations allow adding tables, indexes, and columns at the end with a default. | — | Additive: `near` (default false), `by_viewer_near`, six views, three event tables; the old views stay. |
+| Performance: split tables by access pattern; private tables cost no client traffic. | — | Copies stay private; tiers split one table's reads by key rather than duplicating rows. |
+
+**Assumed:** that a later version's incremental query-builder views or event-table views would allow a simpler design (the docs defer both); that RLS keeps its 2.14.1 semantics until the module moves version (it is marked unstable).
+
+### Data paths and costs
+
+| Path | Reads | Writes | Recipients | Rate (216 walkers on Cullet) | Retained |
+|---|---|---|---|---|---|
+| Cue pass (`frame::cues`, every tick) | marks in memory; `body`, `fighter`, `doing`, `vitals` and `projected.by_viewer_body` by key, once per creature per tick (`Sources`) | event-table rows | the viewer only (RLS) | about 20 rows a second per player in the smoke runs | nothing in the database; one commitlog record per row |
+| Far frame | the far copies' keys | far copies changed | far views' subscribers | at the frames' budget | copies as before |
+| Near copies | the near copies' keys | near copies changed, at most every 500 ms | near views' subscribers | ≤2 refreshes a second per viewer, plus tier changes | as before |
+| Tier change (sweep) | the creature's truth | its three copies (content and `near`) | both tiers' subscribers | when a creature crosses 8 m (9 m going out) | — |
+
+Module memory: per viewer, its near set and pending cues (about the scene); per creature, the viewers it is near; per actor with an unexpired aimed move, its targets. The commitlog grows by each cue's row (about 100 bytes); the series records the database's disk before and after each window.
+
+### Client change
+
+The laptop owns the game client (`living/game`); nothing in it changes in this branch. The change, exactly:
+
+- **Queries** (`living/game/src/net.rs`, the perception list): replace `SELECT * FROM seen_bodies`, `SELECT * FROM seen_fighters` and `SELECT * FROM seen_doing` with `SELECT * FROM seen_bodies_near`, `SELECT * FROM seen_bodies_far`, `SELECT * FROM seen_fighters_near`, `SELECT * FROM seen_fighters_far`, `SELECT * FROM seen_doing_near`, `SELECT * FROM seen_doing_far`, `SELECT * FROM seen_body_cue`, `SELECT * FROM seen_fighter_cue` and `SELECT * FROM seen_doing_cue`, in the same subscription as the rest of the perception set. The recipient is each player's own connection: RLS gives it only its own cues. The observer and the mind service subscribe nothing new.
+- **Reads** (`find_motion`, `bodies`, `find_fighter`, `fighters`, `find_doing`): a perceived creature's row is the one in either tier. Keep three overlays keyed by creature id: `Moving`, `Option<Fighter>`, `Option<Doing>`. A cue's `on_insert` sets the overlay for its creature (`motion.id`, or `body`) when that creature is in `seen_bodies_near` or `seen_bodies_far`; any insert, update or delete of that creature in the same stream's two tiers clears it; a reconnect clears all. Show the overlay when there is one (`None`: no fighter row, nothing being done), else the tier row.
+- **Elsewhere:** the late-row timing callbacks (`net.rs`, docs/LATENCY.md step 3) attach to both motion tiers and to `seen_body_cue`; the counts in `live.rs` add the two tiers.
+- **Bindings:** regenerated here, additive: the six views, the three event tables and their types; the private `MotionSeen`, `FighterSeen` and `DoingSeen` gained `near`.
+- **Until the client moves:** it keeps working on the untiered views, but sees near creatures change at most every 500 ms (their copies follow at `NEAR_COPY_MS`). Land the client change with this branch, or before it.

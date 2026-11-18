@@ -12,6 +12,7 @@ pub struct DoingSeen {
     pub id: u64,
     pub viewer: __sdk::Identity,
     pub doing: Doing,
+    pub near: bool,
 }
 
 impl __sdk::InModule for DoingSeen {
@@ -25,6 +26,7 @@ pub struct DoingSeenCols {
     pub id: __sdk::__query_builder::Col<DoingSeen, u64>,
     pub viewer: __sdk::__query_builder::Col<DoingSeen, __sdk::Identity>,
     pub doing: __sdk::__query_builder::Col<DoingSeen, Doing>,
+    pub near: __sdk::__query_builder::Col<DoingSeen, bool>,
 }
 
 impl __sdk::__query_builder::HasCols for DoingSeen {
@@ -34,6 +36,7 @@ impl __sdk::__query_builder::HasCols for DoingSeen {
             id: __sdk::__query_builder::Col::new(table_name, "id"),
             viewer: __sdk::__query_builder::Col::new(table_name, "viewer"),
             doing: __sdk::__query_builder::Col::new(table_name, "doing"),
+            near: __sdk::__query_builder::Col::new(table_name, "near"),
         }
     }
 }

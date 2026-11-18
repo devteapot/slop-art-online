@@ -1,7 +1,7 @@
 use living_bindings::*;
 use serde::Deserialize;
 use serde_json::{json, Value};
-use spacetimedb_sdk::{DbContext, Table, TableWithPrimaryKey};
+use spacetimedb_sdk::{DbContext, EventTable, Table, TableWithPrimaryKey};
 use std::io::{self, Read, Write};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -39,7 +39,7 @@ macro_rules! primary_tables {
             mind_cursor, know_how, artifact, trade_offer, background, gate, experience,
             routine, routine_stat, cue, script, community, membership, join_request, genome,
             practice, land, settlement, lot, fighter, skill_card, act_card, speech_card, doing, weather,
-            seen_bodies, seen_characters, seen_fighters, seen_doing, my_body, my_fighter, my_doing, my_characters, my_vitals,
+            seen_bodies, seen_characters, seen_fighters, seen_doing, seen_bodies_near, seen_bodies_far, seen_fighters_near, seen_fighters_far, seen_doing_near, seen_doing_far, my_body, my_fighter, my_doing, my_characters, my_vitals,
             my_experience, my_places, my_inventory, my_know_how, my_offers, my_heard, my_senses, my_earshot, my_act_outcomes, my_known_names, my_sex);
     };
 }
@@ -56,8 +56,11 @@ fn emit(value: &Value) {
     io::stdout().flush().expect("probe stdout");
 }
 
-fn stream_change(signals: &Mutex<Signals>, value: Value) {
+/// A streamed change, stamped with when the probe received it (`ms`, unix ms).
+fn stream_change(signals: &Mutex<Signals>, mut value: Value) {
     if signals.lock().unwrap().stream_live {
+        let ms = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as u64;
+        value["ms"] = json!(ms);
         emit(&value);
     }
 }
@@ -84,6 +87,15 @@ fn stream_callbacks(c: &DbConnection, signals: Arc<Mutex<Signals>>) {
     primary_tables!(insert_delete, c, signals);
     primary_tables!(updates, c, signals);
     insert_delete!(c, signals; my_deliberations, my_combat, my_readiness, my_skill_uses);
+    // The cue event tables (docs/PERCEPTION.md, "Cues"): inserts only, never cached.
+    macro_rules! events {
+        ($c:expr, $signals:expr; $($table:ident),*) => { $(
+            let inserted = $signals.clone();
+            EventTable::on_insert(&$c.db.$table(), move |_, row| stream_change(&inserted,
+                json!({"event":"insert","table":stringify!($table),"row":row_json(row)})));
+        )* };
+    }
+    events!(c, signals; seen_body_cue, seen_fighter_cue, seen_doing_cue);
 }
 
 fn stream_initial(c: &DbConnection, r: &Request, identity: &str) {

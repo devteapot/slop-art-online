@@ -43,7 +43,26 @@
 //! - **The budget follows the boundaries** ([`budget`]): a tick that starts a slot or more after
 //!   the previous one shrinks it by an eighth, and each tick on time grows it by
 //!   [`FRAME_ROWS_STEP`] rows, up to [`FRAME_ROWS_PER_TICK`].
-
+//!
+//! **Cues and tiers** (frame-views, 2026-11-18; docs/PERCEPTION.md, "Cues and tiers"). In 2.14.1
+//! any write to one of a viewer's copies re-runs that viewer's whole view of them, so a frame costs
+//! about the scene whatever changed in it, and no ordering of frames makes a near change cheaper
+//! (frame-fresh, docs/TICK_RATE.md). So:
+//! - **Cues.** What is near a viewer (within [`NEAR_M`] at its last sweep) or engaged with it (a
+//!   move or visible act aimed at it, or its own aimed at them) is sent as rows of the event
+//!   tables `seen_body_cue`, `seen_fighter_cue` and `seen_doing_cue`, which no view reads and the
+//!   database never stores. Each creature that changed since the last tick goes, as the viewer's
+//!   copy would hold it now, to the viewers it is near at their next cue tick (every
+//!   [`CUE_TICKS`]) and to those engaged with it at once. A cue costs one row whatever the scene.
+//! - **Tiers.** Each copy has a `near` column, and each view two tiers reading one key of the
+//!   `(viewer, near)` index (`seen_*_near`, `seen_*_far`): a far frame re-runs only the far views.
+//!   Near copies follow at most every [`NEAR_COPY_MS`]; cues carry their changes meanwhile, and
+//!   they are the durable state behind the cues. A creature that changes tier at a sweep has its
+//!   copies written as it is now, in the new tier.
+//!
+//! A client shows a creature's cue until its next tier row. A frame that writes no copy of a far
+//! creature cued since the last frame (engaged from beyond [`NEAR_M`]) cues it as it is now
+//! (reconcile), so a client is never left on a cue its copy will not replace.
 use crate::combat::Seen;
 use crate::common;
 use crate::perception::Moving;
@@ -88,6 +107,23 @@ pub const SENSES_MS: u64 = 250;
 /// A player's earshot (`my_earshot`) is asked again at most this often (ms): someone stepping
 /// into or out of a way's reach shows within this.
 pub const EARSHOT_MS: u64 = 250;
+/// A creature within this distance of a viewer at its last sweep is near it: its changes reach
+/// the viewer as cues at the next tick. One already near stays near until [`NEAR_KEEP_M`].
+pub const NEAR_M: f32 = 8.0;
+pub const NEAR_KEEP_M: f32 = 9.0;
+/// A viewer's copies of its near creatures (the near tier, `seen_*_near`) follow them at most
+/// this often (ms): cues carry their changes, the copies are the durable state behind them.
+pub const NEAR_COPY_MS: u64 = 500;
+/// A viewer's near cues go out every this many ticks (its phase by id), so a crowd's changes reach
+/// each viewer in one update per two ticks rather than one per tick; cues of those engaged with it
+/// go at every tick.
+pub const CUE_TICKS: u64 = 2;
+
+/// The streams a cue carries, as bits.
+const MOTION: u8 = 1;
+const FIGHTER: u8 = 2;
+const DOING: u8 = 4;
+const ALL: u8 = MOTION | FIGHTER | DOING;
 
 /// The key of a viewer's `motion_seen` row of a creature.
 pub fn key(viewer: u32, body: u32) -> u64 {
@@ -118,11 +154,27 @@ struct Viewer {
     /// When its earshot was last asked, and the row last written (`None`: read it first).
     earshot_ms: u64,
     earshot: Option<CharacterEarshot>,
+    /// The creatures near it at its last sweep (a subset of `scene`): its copies of them are the
+    /// near tier.
+    near: HashSet<u32>,
+    /// When, and up to which change, its near copies last followed them.
+    near_ms: u64,
+    near_seq: u64,
+    /// The streams of each creature of the far tier cued since its last frame (engaged with it
+    /// from beyond [`NEAR_M`]; reconciled at the next).
+    cued: HashMap<u32, u8>,
+    /// Near creatures' streams changed since its last cues (sent at its next cue tick), and the
+    /// sequence number then.
+    pending: HashMap<u32, u8>,
+    pending_seq: u64,
+    /// Reconcile every creature in the scene at the next frame (a fresh instance, a step this
+    /// instance did not see commit: what it was sent is unknown).
+    reconcile: bool,
 }
 
 impl Viewer {
     fn new(who: Identity) -> Self {
-        Self { who, scene: None, seq: 0, full: true, last_ms: 0, lines_ms: 0, band_ms: 0, band_seq: 0, events: Vec::new(), feed: VecDeque::new(), senses_ms: 0, senses: None, earshot_ms: 0, earshot: None }
+        Self { who, scene: None, seq: 0, full: true, last_ms: 0, lines_ms: 0, band_ms: 0, band_seq: 0, events: Vec::new(), feed: VecDeque::new(), senses_ms: 0, senses: None, earshot_ms: 0, earshot: None, near: HashSet::new(), near_ms: 0, near_seq: 0, cued: HashMap::new(), pending: HashMap::new(), pending_seq: 0, reconcile: true }
     }
 }
 
@@ -133,6 +185,20 @@ thread_local! {
     static FOUGHT: RefCell<HashMap<u32, u64>> = RefCell::new(HashMap::new());
     static HURT: RefCell<HashMap<u32, u64>> = RefCell::new(HashMap::new());
     static DID: RefCell<HashMap<u32, u64>> = RefCell::new(HashMap::new());
+    /// The streams of each creature changed since the last tick's cues.
+    static PENDING: RefCell<HashMap<u32, u8>> = RefCell::new(HashMap::new());
+    /// The viewers each creature is near (`Viewer::near`, by the viewers' last sweeps).
+    static NEAR_OF: RefCell<HashMap<u32, HashSet<u32>>> = RefCell::new(HashMap::new());
+    /// What each creature's move and visible act are aimed at, and until when (from frame-fresh):
+    /// read again for creatures whose rows were written (`TARGET_DIRTY`).
+    static TARGETS: RefCell<HashMap<u32, Targets>> = RefCell::new(HashMap::new());
+    static TARGET_DIRTY: RefCell<HashSet<u32>> = RefCell::new(HashSet::new());
+    /// Profiling only: when each creature's recent changes were marked (sequence, ms), for the
+    /// staleness of deliveries (`frame_trace`).
+    static CHANGES: RefCell<HashMap<u32, VecDeque<(u64, u64)>>> = RefCell::new(HashMap::new());
+    /// The sequence number at the last tick's cues, and how many ticks have sent cues.
+    static CUED_SEQ: Cell<u64> = const { Cell::new(0) };
+    static CUE_TICK: Cell<u64> = const { Cell::new(0) };
     /// Players' living characters, by character id.
     static VIEWERS: RefCell<HashMap<u32, Viewer>> = RefCell::new(HashMap::new());
     /// What creatures are like now, read once per `deliver` and shared by every viewer's frame
@@ -195,49 +261,126 @@ fn doing_now(ctx: &ReducerContext, id: u32) -> Option<Doing> {
     cached(|s| &mut s.doing, id, || ctx.db.doing().id().find(id))
 }
 
-fn mark(map: &'static std::thread::LocalKey<RefCell<HashMap<u32, u64>>>, id: u32) {
+fn mark(map: &'static std::thread::LocalKey<RefCell<HashMap<u32, u64>>>, id: u32, stream: u8) {
     let s = SEQ.with(|s| {
         let v = s.get() + 1;
         s.set(v);
         v
     });
     map.with(|m| m.borrow_mut().insert(id, s));
+    PENDING.with(|p| *p.borrow_mut().entry(id).or_default() |= stream);
+    if common::profiling() {
+        CHANGES.with(|c| {
+            let mut c = c.borrow_mut();
+            let q = c.entry(id).or_default();
+            if q.len() == 16 {
+                q.pop_front();
+            }
+            q.push_back((s, common::tx_now()));
+        });
+    }
 }
 
 /// A creature's body row was written (its motion may have changed).
 pub fn moved(id: u32) {
-    mark(&MOVED, id);
+    mark(&MOVED, id, MOTION);
 }
 
 /// A creature's `fighter` row was written or deleted.
 pub fn fought(id: u32) {
-    mark(&FOUGHT, id);
+    mark(&FOUGHT, id, FIGHTER);
+    TARGET_DIRTY.with(|d| d.borrow_mut().insert(id));
 }
 
 /// A creature's health moved (its band, or exact health where shown).
 pub fn hurt(id: u32) {
-    mark(&HURT, id);
+    mark(&HURT, id, FIGHTER);
 }
 
 /// A creature's `doing` row was written or deleted.
 pub fn did(id: u32) {
-    mark(&DID, id);
+    mark(&DID, id, DOING);
+    TARGET_DIRTY.with(|d| d.borrow_mut().insert(id));
+}
+
+/// Profiling only: the time of a creature's first change after `since`, if still recorded.
+fn changed_at(id: u32, since: u64) -> Option<u64> {
+    CHANGES.with(|c| c.borrow().get(&id).and_then(|q| q.iter().find(|(s, _)| *s > since).map(|(_, ms)| *ms)))
 }
 
 fn changed(map: &'static std::thread::LocalKey<RefCell<HashMap<u32, u64>>>, id: u32, since: u64) -> bool {
     map.with(|m| m.borrow().get(&id).is_some_and(|s| *s > since))
 }
 
-/// The sweep's answer for a viewer: the creatures it perceives now (itself excluded). Rows of
-/// newcomers were written by the sweep as they are now.
-pub fn scene(id: u32, who: Identity, seen: &HashSet<u32>) {
-    VIEWERS.with(|v| {
+/// The sweep's answer for a viewer: the creatures it perceives now (itself excluded), with how
+/// far each is (the sweep's reading), which decides the near ones. Rows of newcomers were written
+/// by the sweep as they are now. A creature that changes tier has its copies written as it is now,
+/// in its new tier (it leaves one tier's view and enters the other's in this transaction).
+pub fn scene(ctx: &ReducerContext, id: u32, who: Identity, seen: &HashSet<u32>, dist: &HashMap<u32, f32>, now: u64) {
+    let flips: Vec<(u32, bool)> = VIEWERS.with(|v| {
         let mut v = v.borrow_mut();
         let e = v.entry(id).or_insert_with(|| Viewer::new(who));
         if e.who != who {
+            unnear(id, &e.near);
             *e = Viewer::new(who);
         }
         e.scene = Some(seen.clone());
+        let near: HashSet<u32> = seen
+            .iter()
+            .copied()
+            .filter(|b| dist.get(b).is_some_and(|d| *d <= NEAR_M || (*d <= NEAR_KEEP_M && e.near.contains(b))))
+            .collect();
+        let mut flips = Vec::new();
+        NEAR_OF.with(|n| {
+            let mut n = n.borrow_mut();
+            for b in e.near.difference(&near) {
+                if let Some(s) = n.get_mut(b) {
+                    s.remove(&id);
+                    if s.is_empty() {
+                        n.remove(b);
+                    }
+                }
+                if seen.contains(b) {
+                    flips.push((*b, false));
+                }
+            }
+            for b in near.difference(&e.near) {
+                n.entry(*b).or_default().insert(id);
+                flips.push((*b, true));
+            }
+        });
+        // Their copies are written as they are now: nothing cued of them is still owed.
+        for (b, _) in &flips {
+            e.cued.remove(b);
+            e.pending.remove(b);
+        }
+        e.near = near;
+        flips
+    });
+    for (body, near) in flips {
+        show_motion(ctx, id, body, near);
+        show_fighter(ctx, id, who, body, near, true, now);
+        show_doing(ctx, id, who, body, near);
+    }
+}
+
+/// Whether `body` is in the near tier of viewer `id` (as its last sweep left it).
+pub fn is_near(id: u32, body: u32) -> bool {
+    VIEWERS.with(|v| v.borrow().get(&id).is_some_and(|e| e.near.contains(&body)))
+}
+
+/// A viewer's near creatures no longer have it as a viewer.
+fn unnear(id: u32, near: &HashSet<u32>) {
+    NEAR_OF.with(|n| {
+        let mut n = n.borrow_mut();
+        for b in near {
+            if let Some(s) = n.get_mut(b) {
+                s.remove(&id);
+                if s.is_empty() {
+                    n.remove(b);
+                }
+            }
+        }
     });
 }
 
@@ -264,11 +407,19 @@ pub fn fed(id: u32, who: Identity, expires_ms: u64, row: u64) {
 /// Every viewer's next frame compares its whole scene (after a tick this instance did not see
 /// commit: what earlier frames wrote may have been rolled back).
 pub fn all_full() {
-    VIEWERS.with(|v| v.borrow_mut().values_mut().for_each(|e| e.full = true));
+    VIEWERS.with(|v| {
+        v.borrow_mut().values_mut().for_each(|e| {
+            e.full = true;
+            e.reconcile = true;
+        })
+    });
+    TARGETS.with(|t| TARGET_DIRTY.with(|d| d.borrow_mut().extend(t.borrow().keys().copied())));
 }
 
 pub fn forget(ctx: &ReducerContext, id: u32) {
-    VIEWERS.with(|v| v.borrow_mut().remove(&id));
+    if let Some(e) = VIEWERS.with(|v| v.borrow_mut().remove(&id)) {
+        unnear(id, &e.near);
+    }
     release_lines(ctx, id);
 }
 
@@ -286,15 +437,27 @@ pub fn deliver(ctx: &ReducerContext, now: u64, swept: &[u32]) {
     let due: Vec<(u32, Viewer)> = VIEWERS.with(|v| {
         let mut v = v.borrow_mut();
         let ids: HashSet<u32> = humans.iter().map(|(h, _)| *h).collect();
-        v.retain(|id, _| ids.contains(id));
+        v.retain(|id, e| {
+            let keep = ids.contains(id);
+            if !keep {
+                unnear(*id, &e.near);
+            }
+            keep
+        });
         let mut due = Vec::new();
         for (id, who) in &humans {
             let e = v.entry(*id).or_insert_with(|| Viewer::new(*who));
             if e.who != *who {
+                unnear(*id, &e.near);
                 *e = Viewer::new(*who);
             }
-            let n = e.scene.as_ref().map_or(0, |s| s.len());
-            let every = interval(n);
+            // A frame re-materializes the far tier's views, and the near tier's when its copies
+            // are due to follow (`NEAR_COPY_MS`); its interval follows the far tier's size.
+            let n_all = e.scene.as_ref().map_or(0, |s| s.len());
+            let far = n_all.saturating_sub(e.near.len());
+            let near_due = e.full || now.saturating_sub(e.near_ms) >= NEAR_COPY_MS;
+            let n = far + if near_due { e.near.len() } else { 0 };
+            let every = interval(far);
             if e.last_ms == 0 {
                 // A first frame comes within one interval, staggered by character so a crowd's
                 // frames spread over the ticks.
@@ -329,30 +492,248 @@ pub fn deliver(ctx: &ReducerContext, now: u64, swept: &[u32]) {
             .collect();
         log::info!("frame cadence: {} {} {:?}", ctx.timestamp.to_micros_since_unix_epoch(), budget, frames);
     }
+    let mut trace = common::profiling().then(crate::frame_trace::Trace::default);
+    let mut served = HashSet::with_capacity(due.len());
     for (id, mut e) in due {
-        frame(ctx, id, &mut e, now);
+        served.insert(id);
+        frame(ctx, id, &mut e, now, trace.as_mut());
         VIEWERS.with(|v| v.borrow_mut().insert(id, e));
+    }
+    let phase = common::span("tick.cues");
+    cues(ctx, now, &served, &humans, trace.as_mut());
+    drop(phase);
+    if let Some(t) = trace {
+        t.log(ctx);
     }
     // Rows written later (other transactions, the sweep) must be read again.
     NOW.with(|n| *n.borrow_mut() = None);
 }
 
-fn frame(ctx: &ReducerContext, id: u32, v: &mut Viewer, now: u64) {
+/// What each creature's move and visible act are aimed at (a scheduling hint: who is engaged
+/// with whom decides only who is sent cues, never what a cue or a copy holds).
+#[derive(Default)]
+struct Targets {
+    fighter: Option<(u32, u64)>,
+    doing: Option<(u32, u64)>,
+}
+
+/// The players engaged with each creature now: those its unexpired move or visible act is aimed
+/// at, and those whose own is aimed at it (from frame-fresh's `engagements`).
+fn engaged_of(ctx: &ReducerContext, now: u64, human: &HashSet<u32>) -> HashMap<u32, Vec<u32>> {
+    TARGETS.with(|targets| {
+        let mut targets = targets.borrow_mut();
+        let dirty = TARGET_DIRTY.with(|d| std::mem::take(&mut *d.borrow_mut()));
+        for actor in dirty {
+            let fighter = fighter_now(ctx, actor).filter(|f| f.act != 0 && f.target != 0 && f.until_ms > now);
+            let doing = doing_now(ctx, actor).filter(|d| d.target != 0 && d.until_ms > now);
+            targets.insert(actor, Targets { fighter: fighter.map(|f| (f.target, f.until_ms)), doing: doing.map(|d| (d.target, d.until_ms)) });
+        }
+        let mut of: HashMap<u32, Vec<u32>> = HashMap::new();
+        targets.retain(|&actor, t| {
+            let mut keep = false;
+            for (other, until) in [t.fighter, t.doing].into_iter().flatten() {
+                if now >= until {
+                    continue;
+                }
+                keep = true;
+                // The target sees the actor's changes, and the actor the target's.
+                if human.contains(&other) {
+                    of.entry(actor).or_default().push(other);
+                }
+                if human.contains(&actor) {
+                    of.entry(other).or_default().push(actor);
+                }
+            }
+            keep
+        });
+        of
+    })
+}
+
+/// The tick's cues: each creature that changed since the last tick, to the viewers it is near or
+/// engaged with that had no frame in this tick (a frame wrote their copies already), and each
+/// viewer's newly near creatures that changed since its last frame.
+fn cues(ctx: &ReducerContext, now: u64, served: &HashSet<u32>, humans: &[(u32, Identity)], mut trace: Option<&mut crate::frame_trace::Trace>) {
+    let pending = PENDING.with(|p| std::mem::take(&mut *p.borrow_mut()));
+    let since = CUED_SEQ.with(|c| c.replace(SEQ.with(Cell::get)));
+    let ids: HashSet<u32> = humans.iter().map(|(h, _)| *h).collect();
+    let engaged = engaged_of(ctx, now, &ids);
+    if let Some(t) = trace.as_deref_mut() {
+        // Every near pair is looked at in every tick's cues (a change marked since the last).
+        let pairs: usize = VIEWERS.with(|v| v.borrow().values().map(|e| e.near.len()).sum());
+        t.cue_pass(now, pairs as u32);
+    }
+    // (viewer, creature, streams, far, since): pairs engaged at once (from the far tier only when
+    // the viewer had no frame in this tick: the frame wrote their copies); near pairs are kept for
+    // the viewer's next cue tick.
+    let mut work: Vec<(u32, u32, u8, bool, u64)> = Vec::new();
+    let mut held: Vec<(u32, u32, u8)> = Vec::new();
+    NEAR_OF.with(|n| {
+        let n = n.borrow();
+        for (&body, &bits) in &pending {
+            let near = n.get(&body);
+            let engaged = engaged.get(&body);
+            for &viewer in near.into_iter().flatten() {
+                if engaged.is_some_and(|e| e.contains(&viewer)) {
+                    work.push((viewer, body, bits, false, since));
+                } else {
+                    held.push((viewer, body, bits));
+                }
+            }
+            for &viewer in engaged.into_iter().flatten() {
+                if !near.is_some_and(|s| s.contains(&viewer)) && !served.contains(&viewer) {
+                    work.push((viewer, body, bits, true, since));
+                }
+            }
+        }
+    });
+    let tick = CUE_TICK.with(|t| {
+        let v = t.get() + 1;
+        t.set(v);
+        v
+    });
+    VIEWERS.with(|v| {
+        let mut v = v.borrow_mut();
+        for (viewer, body, bits) in held {
+            if let Some(e) = v.get_mut(&viewer) {
+                if e.pending.is_empty() {
+                    e.pending_seq = since;
+                }
+                *e.pending.entry(body).or_default() |= bits;
+            }
+        }
+        for (id, e) in v.iter_mut() {
+            if !e.pending.is_empty() && (tick + *id as u64) % CUE_TICKS == 0 {
+                let since = e.pending_seq;
+                work.extend(e.pending.drain().map(|(body, bits)| (*id, body, bits, false, since)));
+            }
+        }
+    });
+    if work.is_empty() {
+        return;
+    }
+    work.sort_unstable_by_key(|w| (w.0, w.1));
+    work.dedup_by(|a, b| {
+        let same = a.0 == b.0 && a.1 == b.1;
+        if same {
+            b.2 |= a.2;
+            b.4 = b.4.min(a.4);
+        }
+        same
+    });
+    let mut rows = 0u64;
+    let mut i = 0;
+    while i < work.len() {
+        let viewer = work[i].0;
+        let j = work[i..].iter().position(|w| w.0 != viewer).map_or(work.len(), |k| i + k);
+        VIEWERS.with(|v| {
+            let mut v = v.borrow_mut();
+            let Some(e) = v.get_mut(&viewer) else { return };
+            let Some(scene) = e.scene.as_ref() else { return };
+            for &(_, body, bits, far, since) in &work[i..j] {
+                if !scene.contains(&body) {
+                    continue;
+                }
+                let sent = cue(ctx, e.who, body, bits, now);
+                if sent == 0 {
+                    continue;
+                }
+                rows += sent.count_ones() as u64;
+                if far {
+                    *e.cued.entry(body).or_default() |= sent;
+                }
+                if let Some(t) = trace.as_deref_mut() {
+                    if let Some(at) = changed_at(body, since) {
+                        t.stale(now.saturating_sub(at), !far, true);
+                    }
+                }
+            }
+        });
+        i = j;
+    }
+    common::diag(|| "cues:rows", rows);
+}
+
+/// Send `viewer` (`who`) cues of the streams `bits` of `body`, as its copies would hold them now.
+/// Returns the streams sent (motion only for a body that is there).
+fn cue(ctx: &ReducerContext, who: Identity, body: u32, bits: u8, now: u64) -> u8 {
+    let mut sent = 0;
+    if bits & MOTION != 0 {
+        if let Some(m) = motion_now(ctx, body) {
+            ctx.db.seen_body_cue().insert(SeenBodyCue { viewer: who, at_ms: now, motion: m });
+            sent |= MOTION;
+        }
+    }
+    if bits & FIGHTER != 0 {
+        ctx.db.seen_fighter_cue().insert(SeenFighterCue { viewer: who, at_ms: now, body, fighter: fighter_cue(ctx, who, body, now) });
+        sent |= FIGHTER;
+    }
+    if bits & DOING != 0 {
+        ctx.db.seen_doing_cue().insert(SeenDoingCue { viewer: who, at_ms: now, body, doing: doing_now(ctx, body) });
+        sent |= DOING;
+    }
+    sent
+}
+
+/// A creature's fighter row as a viewer's frame would show it after a change of its health: the
+/// move as it is, the band as this viewer perceives it now.
+fn fighter_cue(ctx: &ReducerContext, who: Identity, body: u32, now: u64) -> Option<Fighter> {
+    fighter_now(ctx, body).map(|f| Fighter { band: perceived_band(ctx, who, body, now).0, ..f })
+}
+
+fn frame(ctx: &ReducerContext, id: u32, v: &mut Viewer, now: u64, mut trace: Option<&mut crate::frame_trace::Trace>) {
     let upto = SEQ.with(|s| s.get());
     if let Some(scene) = v.scene.as_ref() {
         let since = if v.full { 0 } else { v.seq };
         let full = v.full;
+        // The near tier follows at most every `NEAR_COPY_MS` (cues carry its changes meanwhile).
+        let near_due = full || now.saturating_sub(v.near_ms) >= NEAR_COPY_MS;
+        let near_since = if full { 0 } else { v.near_seq };
+        // The creatures cued since the last frame: a stream whose copy this frame does not write
+        // is cued as it is now (`Cues` above).
+        let mut cued = std::mem::take(&mut v.cued);
+        if std::mem::take(&mut v.reconcile) {
+            cued = scene.iter().map(|b| (*b, ALL)).collect();
+        }
         for &body in scene {
-            if full || changed(&MOVED, body, since) {
-                show_motion(ctx, id, body);
+            let near = v.near.contains(&body);
+            if near && !near_due {
+                continue;
+            }
+            let since = if near { near_since } else { since };
+            let mut wrote = 0;
+            if (full || changed(&MOVED, body, since)) && show_motion(ctx, id, body, near) {
+                wrote |= MOTION;
             }
             let hurt = full || changed(&HURT, body, since);
-            if hurt || changed(&FOUGHT, body, since) {
-                show_fighter(ctx, id, v.who, body, hurt, now);
+            if (hurt || changed(&FOUGHT, body, since)) && show_fighter(ctx, id, v.who, body, near, hurt, now) {
+                wrote |= FIGHTER;
             }
-            if full || changed(&DID, body, since) {
-                show_doing(ctx, id, v.who, body);
+            if (full || changed(&DID, body, since)) && show_doing(ctx, id, v.who, body, near) {
+                wrote |= DOING;
             }
+            if let Some(t) = trace.as_deref_mut() {
+                // Near copies are the durable state behind cues; their freshness is the cues'.
+                if !near {
+                    if wrote != 0 && !full {
+                        if let Some(at) = changed_at(body, since) {
+                            t.stale(now.saturating_sub(at), false, false);
+                        }
+                    }
+                    t.served(id, body, now, false);
+                }
+            }
+            if let Some(bits) = cued.get(&body) {
+                let rest = bits & !wrote;
+                if rest != 0 {
+                    cue(ctx, v.who, body, rest, now);
+                    common::diag(|| "cues:reconciled", rest.count_ones() as u64);
+                }
+            }
+        }
+        if near_due {
+            v.near_ms = now;
+            v.near_seq = upto;
         }
         // Projections follow health less often: their band is what `seen_characters` shows.
         if full || now.saturating_sub(v.band_ms) >= BAND_MS {
@@ -441,61 +822,81 @@ fn show_earshot(ctx: &ReducerContext, id: u32, v: &mut Viewer, now: u64) {
     }
 }
 
-fn show_motion(ctx: &ReducerContext, viewer: u32, body: u32) {
+/// Bring a viewer's `motion_seen` row of a creature up to date, in its tier (`near`). Returns
+/// whether the copy was written.
+fn show_motion(ctx: &ReducerContext, viewer: u32, body: u32, near: bool) -> bool {
     let k = key(viewer, body);
-    let (Some(mut row), Some(m)) = (ctx.db.motion_seen().id().find(k), motion_now(ctx, body)) else { return };
-    if row.moving() != m {
+    let (Some(mut row), Some(m)) = (ctx.db.motion_seen().id().find(k), motion_now(ctx, body)) else { return false };
+    if row.moving() != m || row.near != near {
         row.set(&m);
+        row.near = near;
         ctx.db.motion_seen().id().update(row);
+        return true;
     }
+    false
 }
 
 /// Bring a viewer's `fighter_seen` row of a creature up to date: its move as it is now; its
 /// band as the viewer perceives it (255 while its projection hides health) when `hurt`, else
-/// as last shown. A creature with no fighter row has none.
-pub fn show_fighter(ctx: &ReducerContext, viewer: u32, who: Identity, body: u32, hurt: bool, now: u64) {
+/// as last shown. A creature with no fighter row has none. Returns whether the copy was written.
+pub fn show_fighter(ctx: &ReducerContext, viewer: u32, who: Identity, body: u32, near: bool, hurt: bool, now: u64) -> bool {
     let k = key(viewer, body);
     let row = ctx.db.fighter_seen().id().find(k);
     let Some(f) = fighter_now(ctx, body) else {
         if row.is_some() {
             ctx.db.fighter_seen().id().delete(k);
+            return true;
         }
-        return;
+        return false;
     };
     let band = match row.as_ref() {
         Some(r) if !hurt => r.fighter.band,
         _ => perceived_band(ctx, who, body, now).0,
     };
-    let new = FighterSeen { id: k, viewer: who, fighter: Fighter { band, ..f } };
+    let new = FighterSeen { id: k, viewer: who, fighter: Fighter { band, ..f }, near };
     match row {
-        Some(r) if r == new => {}
+        Some(r) if r == new => false,
         Some(_) => {
             ctx.db.fighter_seen().id().update(new);
+            true
         }
         None => {
             ctx.db.fighter_seen().insert(new);
+            true
         }
     }
 }
 
 /// Bring a viewer's `doing_seen` row of a creature up to date (none while it shows nothing).
-pub fn show_doing(ctx: &ReducerContext, viewer: u32, who: Identity, body: u32) {
+/// Returns whether the copy was written.
+pub fn show_doing(ctx: &ReducerContext, viewer: u32, who: Identity, body: u32, near: bool) -> bool {
     let k = key(viewer, body);
     let row = ctx.db.doing_seen().id().find(k);
     match (doing_now(ctx, body), row) {
         (None, Some(_)) => {
             ctx.db.doing_seen().id().delete(k);
+            true
         }
-        (None, None) => {}
-        (Some(d), Some(r)) if r.doing == d => {}
+        (None, None) => false,
+        (Some(d), Some(r)) if r.doing == d && r.near == near => false,
         (Some(d), Some(_)) => {
-            ctx.db.doing_seen().id().update(DoingSeen { id: k, viewer: who, doing: d });
+            ctx.db.doing_seen().id().update(DoingSeen { id: k, viewer: who, doing: d, near });
+            true
         }
         (Some(d), None) => {
-            ctx.db.doing_seen().insert(DoingSeen { id: k, viewer: who, doing: d });
+            ctx.db.doing_seen().insert(DoingSeen { id: k, viewer: who, doing: d, near });
+            true
         }
     }
 }
+
+// Row-level security for the cue event tables: a client receives only its own cues.
+#[spacetimedb::client_visibility_filter]
+const SEEN_BODY_CUE_FILTER: spacetimedb::Filter = spacetimedb::Filter::Sql("SELECT * FROM seen_body_cue WHERE viewer = :sender");
+#[spacetimedb::client_visibility_filter]
+const SEEN_FIGHTER_CUE_FILTER: spacetimedb::Filter = spacetimedb::Filter::Sql("SELECT * FROM seen_fighter_cue WHERE viewer = :sender");
+#[spacetimedb::client_visibility_filter]
+const SEEN_DOING_CUE_FILTER: spacetimedb::Filter = spacetimedb::Filter::Sql("SELECT * FROM seen_doing_cue WHERE viewer = :sender");
 
 /// A creature's band as this viewer perceives it now (255 while its projection hides health),
 /// with its projection row.

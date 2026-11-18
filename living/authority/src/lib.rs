@@ -11,6 +11,7 @@ mod codes;
 mod combat;
 mod floor;
 mod frame;
+mod frame_trace;
 mod island;
 mod look;
 mod mind;

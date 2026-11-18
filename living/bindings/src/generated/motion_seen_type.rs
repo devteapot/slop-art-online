@@ -16,6 +16,7 @@ pub struct MotionSeen {
     pub face_turn: f32,
     pub face_turn_s: f32,
     pub running: bool,
+    pub near: bool,
 }
 
 impl __sdk::InModule for MotionSeen {
@@ -33,6 +34,7 @@ pub struct MotionSeenCols {
     pub face_turn: __sdk::__query_builder::Col<MotionSeen, f32>,
     pub face_turn_s: __sdk::__query_builder::Col<MotionSeen, f32>,
     pub running: __sdk::__query_builder::Col<MotionSeen, bool>,
+    pub near: __sdk::__query_builder::Col<MotionSeen, bool>,
 }
 
 impl __sdk::__query_builder::HasCols for MotionSeen {
@@ -46,6 +48,7 @@ impl __sdk::__query_builder::HasCols for MotionSeen {
             face_turn: __sdk::__query_builder::Col::new(table_name, "face_turn"),
             face_turn_s: __sdk::__query_builder::Col::new(table_name, "face_turn_s"),
             running: __sdk::__query_builder::Col::new(table_name, "running"),
+            near: __sdk::__query_builder::Col::new(table_name, "near"),
         }
     }
 }
