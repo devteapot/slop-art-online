@@ -88,6 +88,8 @@ Aldric's second yield at 21:44:30.676 was followed by a blow at 21:44:33.925 and
 | Aldith #16 | 23 / 1 / 12 | Y/Y/Y | Y/Y/Y | Publicly named the killings after yield. First call after Cuth fell was at +20.623 s. |
 | Leofwine #17 | 0 / 0 / 0 | — | — | No verified response. |
 
+As a replay estimate, ten resident IDs received a recorded episode-related fight or death line at salience 0.7 or higher, or an audible call from a participant, using the capture's actual recipients. Applying one fresh thought each to that set over play8's 278 s would add about 7.6 per resident-hour and $0.063–$0.065 to that session at the historical all-in rate. This is a counterfactual estimate from the recorded sight and speech paths. It omits the new awake impact sounds and any prior event that would consume a resident's gap. The short and unusually violent session is not a steady-state forecast.
+
 Ten resident witnesses got the Aldric death line and nine got the Cuth death line. None got a direct bystander request about the death. The audit distinguishes actions during an encounter from reactions demonstrably caused by the death. Mere location change and later claims about others are insufficient to establish causation.
 
 ## Measurement-only law and trial
@@ -100,7 +102,7 @@ The comparison uses the archived play8 laws, the island seed, a player-identity 
 
 The watcher admits at most 24 requests total across both paid arms, each at most 64 KiB and 8,192 output tokens, charging a conservative $0.10 reservation per admission before forwarding. It records usage and computes the estimated actual cost with the trial runner's pricing. The admission cap reserves at most $2.40, and the 25th request is refused locally. The checked rates are published by [Mistral](https://docs.mistral.ai/inference/pricing?currency=usd). The provider key stays in memory on the trial host.
 
-The Spark build gate passed after adding the law's required description. The spend watcher's mock check admitted 24 requests, refused the 25th without forwarding, and reserved a maximum of $2.40. The free scratch arms completed and were paused and deleted. The paid comparison is queued behind the shared battle lock.
+The Spark build gate passed after adding the law's required description. The spend watcher's mock check admitted 24 requests, refused the 25th without forwarding, and reserved a maximum of $2.40. The free scratch arms completed and were paused and deleted. The first paid attempt stopped in both arms at verify startup. Its startup check expected a concrete default profile instead of the play8 routing mix. It sent no provider requests. Both scratch worlds were paused and deleted. The retry gives the helper a concrete fallback and assigns the play8 mix to the study residents.
 
 
 ### Free comparison results

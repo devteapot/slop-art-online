@@ -68,6 +68,10 @@ def arm(label, first_sight, candidate, target, source, proxy):
         # Start the model before staging the strangers so a first-sight request can be consumed.
         if proxy:
             models = json.loads((ROOT / "living/configs/models.json").read_text())
+            # The verify helper's startup check needs a concrete default profile. Keep
+            # the play8 per-purpose routing explicitly assigned to each study resident.
+            models["default"] = "glm-flash"
+            models["assign"].update({name: "people" for name in names})
             models["profiles"] = {k: v for k, v in models["profiles"].items() if k in ("glm-flash", "deepseek-flash")}
             for profile in models["profiles"].values():
                 profile.update(base_url=proxy, key_env="LIVING_VERIFY_FAKE_KEY")
