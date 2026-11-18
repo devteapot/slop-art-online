@@ -627,7 +627,9 @@ Accepted by the general coordinator with its documented difference (note C, C2).
 - **`FAMILIAR_LIMIT`'s comment** now says what the battle measured: a site exceeds 2,048 (634 characters passed it in 30 minutes, the most 2,984), because what is in view is never pruned.
 - **Proof:** verify-core `notice_delta` 8/8 (27,888 structures passed over, all familiar; 14,070 incremental looks); `notice_inplace` 6/6 with `notice_delta` on; `familiar_dense` 4/4, `notice_rate` 4/4, `first_sight` 22/22. See the validation record.
 
-## Familiarity of remains (design note, not built)
+## Familiarity of remains (before R1 and R2)
+
+The implementation and its measurements are recorded in [Seen remains](SEEN_REMAINS.md).
 
 *For the general coordinator, 2026-11-13. This note is about how a body's memory of having seen remains is kept. It is not about the remains themselves: they stay individual in the world, each lying where its person fell (the general coordinator's earlier ruling against merging them into a pile stands).*
 

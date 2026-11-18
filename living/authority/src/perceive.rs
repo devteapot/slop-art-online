@@ -988,9 +988,27 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
     let resources: Vec<Value> = groups.into_iter().map(|(k, n, near)| json!({"kind": k, "count": n, "nearest": near})).collect();
 
     let mut structures = Vec::new();
+    let mut other_structures = 0;
     for (s, d) in common::structures_near(ctx, at, r) {
+        let remains = s.kind == "remains";
+        if !remains {
+            if other_structures >= 10 {
+                continue;
+            }
+            other_structures += 1;
+        }
         let mut o = json!({"id": s.id, "kind": s.kind, "at": [round(s.x), round(s.y)], "dist": round(d), "dir": direction(at, (s.x, s.y))});
-        if let Some(by) = common::owner_label(ctx, &me, s.owner, &s.kind) {
+        if remains {
+            let label = ctx.db.character().id().find(s.owner).map_or_else(
+                || "a stranger".to_owned(),
+                |dead| if dead.kind == "person" && crate::perception::knows_name(ctx, &me, &dead) {
+                    dead.name
+                } else {
+                    crate::perception::unnamed(&dead, false)
+                },
+            );
+            o["of"] = json!(label);
+        } else if let Some(by) = common::owner_label(ctx, &me, s.owner, &s.kind) {
             o["by"] = json!(by);
         }
         // A fire that needs no feeding burns; one that burns fuel burns while it has fuel (what
@@ -1027,9 +1045,6 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
             o["contents"] = Value::Object(inv);
         }
         structures.push(o);
-        if structures.len() >= 10 {
-            break;
-        }
     }
 
     // Nearest notable terrain within sight.

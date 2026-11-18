@@ -29,6 +29,7 @@ pub mod sex;
 pub mod realm;
 pub mod reasons;
 pub mod records;
+pub mod remains;
 pub mod normalize;
 #[cfg(feature = "scripting")]
 pub mod floors;

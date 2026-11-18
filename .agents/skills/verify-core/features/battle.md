@@ -31,7 +31,7 @@ What lets a dense battle of minded characters keep its tick (docs/BATTLE_SCALE.m
   - The nearest pick (`Ev::first_seen`) and a creature looked up by id (`Ev::seen_by_id`: `visible_creature`, the `threatened` condition by facing) test only as far as their answer needs. Readers of the whole list (`Ev::creatures`: desires, `count`, `doing`, cues, noticing, the stranger filter) test every one.
   - Resources and the heard list are gathered when first asked for. The nearest pick reads the list in place, not a copy.
   - `perception::sensed` is `Sensing::all`, one implementation for both.
-- **Remains in sight** (`brain.rs`): a scene's structures are gathered only when an evaluation reads one (`Ev::structures`), so a fighter's 15 Hz evaluation does not copy every remains in sight; noticing checks each structure's id against the seen set and copies their details only when one is new.
+- **Remains in sight** (`brain.rs`): a scene's structures are gathered only when an evaluation reads one (`Ev::structures`), so a fighter's 15 Hz evaluation does not copy every remains in sight; noticing checks durable ranges by block and copies structure details only when something is new.
 
 ## Driving it
 
@@ -91,6 +91,12 @@ On a launched default-seed run (`scenes.py <case> --run "$R"`):
   - Checks: structures put up and the remains noticed; looks incremental, passing over more structures than looks; every structure passed over familiar (at least 1,000 checked, none not); every walker has its `last_look` row; with the law off, nothing passed over and new structures still noticed.
   - A look comes about once a second, so a last look older than 45 s (a whole look) is a first look or one after a gap; the scene does not force one.
 - `witness_wake` checks B's folded line holding the blow on V within `witness_fold_ms`; the `sight`, `fov` and facing duel scenes check who is told a fight (walls, facing) through the folded lines.
+
+- **`seen_remains`** (fresh default-seed run):
+  - Two observers learn the names of two of the 20 people before leaving the field. The bodies are staged while the observers are away.
+  - With `seen_ranges_check` on, the first observer receives two named lines and one line counting 18 strangers. The counted experience has zero subject and object, salience 0.8, and the nearest body's position.
+  - Leaving and returning produces no new lines. One new body and a new shelter each produce one line. Death removes the observer's private block rows.
+  - With `seen_ranges` off, the second observer receives the same three lines and keeps 20 legacy familiarity rows. Turning it back on transfers those IDs to ranges without repeating the lines.
 
 The rules tests `attention_cues_are_the_world_s_laws` (the laws' defaults and descriptions), `alarm_cells_give_the_law_s_answer_at_every_moment` (a cell's answer is the law's at every millisecond of five fighters' rows) and `fold::tests` (the line's words, counts and order) and the authority's `fold::tests` (each blow in exactly one window per onlooker) cover the rest offline. `profile_detail` (a diagnostic law) times the parts of each evaluation while profiling. The scale evidence is `living/tools/battle_diag.py` (docs/BATTLE_SCALE.md).
 

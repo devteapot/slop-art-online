@@ -4209,6 +4209,66 @@ def body_case(run):
     return {'status': 'pass' if ok else 'fail', 'checks': checks}
 
 
+
+@case('seen-remains')
+def seen_remains_case(run):
+    """A real mind gets the count, the named exceptions and the complete field in its prompt."""
+    from types import SimpleNamespace
+
+    path = ROOT / '.agents/skills/verify-core/scripts/scenes.py'
+    spec = importlib.util.spec_from_file_location('core_scenes', path)
+    core = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(core)
+    run.harness('launch')
+    run.harness('doctor')
+    rows = lambda query: run.private(query, 'field-query')
+    adapter = SimpleNamespace(rows=rows, call=run.admin,
+                              wait=lambda condition, seconds: run.wait(condition, 'introduction', seconds))
+    line = core.clear_line(adapter)
+    before = {r['id'] for r in rows('SELECT id FROM character')}
+    run.admin('spawn_crowd', 21, True)
+    observer, *dead = sorted(r['id'] for r in rows('SELECT id FROM character') if r['id'] not in before)
+    for who in [observer, *dead]:
+        run.admin('set_behavior', who, json.dumps({'wait': 300}))
+    at, _, names = core.stage_seen_remains(adapter, (observer,), dead, line)
+    field = {r['id'] for r in run.private("SELECT * FROM structure WHERE kind = 'remains'", 'field')
+             if r['owner'] in dead}
+    assert len(field) == 20
+    run.admin('place_at', observer, *at)
+    prefix = 'You notice the remains of 18 strangers around you, the nearest '
+    told = lambda: [r for r in run.private(f'SELECT * FROM experience WHERE observer = {observer}', 'told')
+                   if r['text'].startswith('You notice') and 'remains' in r['text']]
+    lines = run.wait(lambda: value if len(value := told()) >= 3 else None, 'three remains lines', 15)
+    run.start(model(run, {'replies': {'think': {'thought': 'I look around.', 'intend': [], 'say': None},
+                                     'deliberate': basic_reply()}}), [observer])
+    requests = lambda: shared.rows(run.directory / 'fake-requests.jsonl')
+    sent_text = lambda e: '\n'.join(str(m.get('content', '')) for m in e['body'].get('messages', []))
+    run.request(observer, 'seen-remains')
+    prompt = run.wait(lambda: [sent_text(e) for e in requests() if 'verify seen-remains' in sent_text(e)],
+                      'remains prompt', 60)[0]
+    (run.directory / 'prompt-seen-remains.txt').write_text(prompt)
+    entries, decoder = {}, json.JSONDecoder()
+    for start in re.finditer(r'\{"at":', prompt):
+        try:
+            row, _ = decoder.raw_decode(prompt, start.start())
+        except ValueError:
+            continue
+        if row.get('kind') == 'remains':
+            entries[row['id']] = row
+    sent = '\n'.join(sent_text(e) for e in requests())
+    named = [r['text'] for r in lines if r['text'].startswith('You notice a remains') and
+             any(name in r['text'] for name in names)]
+    checks = {
+        'three experiences include the exact counted line': len(lines) == 3 and sum(r['text'].startswith(prefix) for r in lines) == 1,
+        'the counted line reaches a real mind prompt': prefix in sent,
+        'both named exceptions reach the mind': len(named) == 2 and all(text in sent for text in named),
+        'the scene lists all twenty distinct bodies': field <= entries.keys(),
+        'the scene labels known and unknown people as perceived':
+            sorted(entries[id]['of'] for id in field) == sorted([*names, *['a stranger'] * 18]),
+    }
+    return {'status': 'pass' if all(checks.values()) else 'fail', 'checks': checks,
+            'body_ids': sorted(field), 'prompt_body_ids': sorted(entries)}
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--run', help='new suite name starting with minds- (gate- for the merge scene gate)')

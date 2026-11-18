@@ -1043,6 +1043,19 @@ pub struct LastLook {
     pub at_ms: u64,
 }
 
+/// Inclusive structure-id ranges for one observer and one 128 m block.
+#[spacetimedb::table(accessor = seen_structures,
+    index(accessor = by_actor_block, btree(columns = [actor, block])))]
+pub struct SeenStructures {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    #[index(btree)]
+    pub actor: u32,
+    pub block: u32,
+    pub ranges: Vec<u64>,
+}
+
 pub const FAM_REGION: u64 = 1 << 40;
 pub const FAM_CREATURE: u64 = 2 << 40;
 pub const FAM_STRUCTURE: u64 = 3 << 40;

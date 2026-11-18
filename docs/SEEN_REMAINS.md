@@ -1,6 +1,6 @@
-# Seen structures as ranges, and one counted line for strangers' remains (R1, R2: design)
+# Seen structures and counted remains (R1 and R2)
 
-*Design for the build, 2026-11-13. Approved by the general coordinator from the remains note (docs/BATTLE_SCALE.md, "Familiarity of remains"). Nothing here is built yet. Branch `battle-seen-ranges`, after C2 (`battle-notice-delta`).*
+*Design for the build, 2026-11-13. Approved by the general coordinator from the remains note (docs/BATTLE_SCALE.md, "Familiarity of remains"). Implementation on `battle-seen-ranges` is based on C2 as merged to main (`1cd32ab2`).*
 
 ## What stays as it is
 
@@ -110,3 +110,11 @@ Then re-project to 8 hours (about 5,800 bodies at the site).
 - **Rows:** a newcomer's first look writes 1–2 rows instead of about 2,700 `familiar` rows and lines. A death deletes 1–2 instead of about 2,500.
 - **Lines:** about 1.6 counted lines a second from arrivals, instead of 4,700.
 - **Noticing:** down to the in-disc range lookups and the few lines. That is to be measured, not assumed.
+
+## Implementation
+
+The authority reads one indexed row for each actor and block touched by a look. It writes one row for each block with new or migrated IDs. Compaction reads the existing structure index for the block's 64 chunks and retains ranges for structures that are still present. The private table stays outside the game and mind subscription sets. The actor index makes death cleanup proportional to the blocks visited by that actor. With the diagnostic law off, a range hit needs no per-structure familiarity lookup. A range miss still checks the legacy index so that existing worlds preserve recognition.
+
+The model scene includes all remains within its existing structure sight radius. Each body keeps its ID, position and contents. The ten-entry limit still applies to other structures. The cost of producing and sending all bodies in a scene is distinct from the cost of writing and storing first-sight lines.
+
+SpacetimeDB's [table](https://spacetimedb.com/docs/tables/), [index](https://spacetimedb.com/docs/tables/indexes/) and [performance](https://spacetimedb.com/docs/tables/performance/) guidance supports the focused private table, actor/block lookup, and grouped writes. The pinned 2.14.1 table API supports tuple B-tree filtering and actor-index deletion. [Automatic migrations](https://spacetimedb.com/docs/databases/automatic-migrations/) permits adding the private table without rewriting an existing one. Legacy migration is an authority transaction when a structure is next checked.

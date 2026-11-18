@@ -274,6 +274,8 @@ pub mod seen_doing_table;
 pub mod seen_fighters_table;
 pub mod seen_stock_table;
 pub mod seen_stock_type;
+pub mod seen_structures_table;
+pub mod seen_structures_type;
 pub mod seen_type;
 pub mod set_background_reducer;
 pub mod set_behavior_reducer;
@@ -606,6 +608,8 @@ pub use seen_doing_table::*;
 pub use seen_fighters_table::*;
 pub use seen_stock_table::*;
 pub use seen_stock_type::SeenStock;
+pub use seen_structures_table::*;
+pub use seen_structures_type::SeenStructures;
 pub use seen_type::Seen;
 pub use set_background_reducer::set_background;
 pub use set_behavior_reducer::set_behavior;
@@ -1399,6 +1403,7 @@ pub struct DbUpdate {
     seen_doing: __sdk::TableUpdate<Doing>,
     seen_fighters: __sdk::TableUpdate<Fighter>,
     seen_stock: __sdk::TableUpdate<SeenStock>,
+    seen_structures: __sdk::TableUpdate<SeenStructures>,
     settlement: __sdk::TableUpdate<Settlement>,
     sex: __sdk::TableUpdate<SexRow>,
     sex_seen: __sdk::TableUpdate<SexSeen>,
@@ -1769,6 +1774,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "seen_stock" => db_update
                     .seen_stock
                     .append(seen_stock_table::parse_table_update(table_update)?),
+                "seen_structures" => db_update
+                    .seen_structures
+                    .append(seen_structures_table::parse_table_update(table_update)?),
                 "settlement" => db_update
                     .settlement
                     .append(settlement_table::parse_table_update(table_update)?),
@@ -2124,6 +2132,9 @@ impl __sdk::DbUpdate for DbUpdate {
             .with_updates_by_pk(|row| &row.name);
         diff.seen_stock = cache
             .apply_diff_to_table::<SeenStock>("seen_stock", &self.seen_stock)
+            .with_updates_by_pk(|row| &row.id);
+        diff.seen_structures = cache
+            .apply_diff_to_table::<SeenStructures>("seen_structures", &self.seen_structures)
             .with_updates_by_pk(|row| &row.id);
         diff.settlement = cache
             .apply_diff_to_table::<Settlement>("settlement", &self.settlement)
@@ -2611,6 +2622,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "seen_stock" => db_update
                     .seen_stock
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "seen_structures" => db_update
+                    .seen_structures
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "settlement" => db_update
                     .settlement
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
@@ -3032,6 +3046,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "seen_stock" => db_update
                     .seen_stock
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "seen_structures" => db_update
+                    .seen_structures
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "settlement" => db_update
                     .settlement
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -3229,6 +3246,7 @@ pub struct AppliedDiff<'r> {
     seen_doing: __sdk::TableAppliedDiff<'r, Doing>,
     seen_fighters: __sdk::TableAppliedDiff<'r, Fighter>,
     seen_stock: __sdk::TableAppliedDiff<'r, SeenStock>,
+    seen_structures: __sdk::TableAppliedDiff<'r, SeenStructures>,
     settlement: __sdk::TableAppliedDiff<'r, Settlement>,
     sex: __sdk::TableAppliedDiff<'r, SexRow>,
     sex_seen: __sdk::TableAppliedDiff<'r, SexSeen>,
@@ -3486,6 +3504,11 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
             event,
         );
         callbacks.invoke_table_row_callbacks::<SeenStock>("seen_stock", &self.seen_stock, event);
+        callbacks.invoke_table_row_callbacks::<SeenStructures>(
+            "seen_structures",
+            &self.seen_structures,
+            event,
+        );
         callbacks.invoke_table_row_callbacks::<Settlement>("settlement", &self.settlement, event);
         callbacks.invoke_table_row_callbacks::<SexRow>("sex", &self.sex, event);
         callbacks.invoke_table_row_callbacks::<SexSeen>("sex_seen", &self.sex_seen, event);
@@ -4286,6 +4309,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         seen_doing_table::register_table(client_cache);
         seen_fighters_table::register_table(client_cache);
         seen_stock_table::register_table(client_cache);
+        seen_structures_table::register_table(client_cache);
         settlement_table::register_table(client_cache);
         sex_table::register_table(client_cache);
         sex_seen_table::register_table(client_cache);
@@ -4424,6 +4448,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "seen_doing",
         "seen_fighters",
         "seen_stock",
+        "seen_structures",
         "settlement",
         "sex",
         "sex_seen",

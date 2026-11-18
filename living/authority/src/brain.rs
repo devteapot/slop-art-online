@@ -2002,30 +2002,33 @@ impl<'a> Ev<'a> {
         // Structures. One made of several tiles (a town gate is a block of gate tiles) is noticed
         // once: new tiles touching others of the same kind and owner are one thing, and nothing
         // is said when any part of it was already familiar.
-        // Remains and every other structure lie still: one looked at lately is in the seen set,
-        // so a look costs one check of its id, and their details are copied only when something
-        // in sight is new.
+        // Durable block ranges answer structure newness. The legacy path uses recent marks
+        // and familiarity. Details are copied only when something in sight is new.
         drop(part);
         let _part = common::detail_span("noticed.structures");
+        let mut seen = crate::seen_structures::Look::default();
         let new: Vec<usize> = if laws.notice_inplace {
-            let ids = self.new_structures_in_place(laws.notice_inplace_check, laws.notice_delta, laws.notice_delta_check);
+            let ids = self.new_structures_in_place(&laws, &mut seen);
             if ids.is_empty() {
+                // An unchanged look can still have migrated legacy familiarity.
+                seen.write(self.ctx);
                 return;
             }
             common::diag(|| "notice_inplace:listed", 1);
             let ids: std::collections::HashSet<u64> = ids.into_iter().collect();
             self.structures().iter().enumerate().filter(|(_, (s, _))| ids.contains(&s.id)).map(|(i, _)| i).collect()
         } else {
-            let ids: Vec<u64> = self.structures().iter().map(|(s, _)| s.id).collect();
+            let ids: Vec<_> = self.structures().iter().map(|(s, _)| (s.id, s.chunk)).collect();
             common::diag(|| "noticed:structures", ids.len() as u64);
             let mut new: Vec<usize> = Vec::new();
-            for (i, id) in ids.iter().enumerate() {
-                if !self.recently_seen(structure_key(*id)) && self.familiarity(FAM_STRUCTURE | id).is_none() {
+            for (i, (id, chunk)) in ids.into_iter().enumerate() {
+                if self.new_structure(&laws, &mut seen, id, chunk) {
                     new.push(i);
                 }
             }
             new
         };
+        seen.write(self.ctx);
         common::diag(|| "noticed:structures_new", new.len() as u64);
         if new.is_empty() {
             return;
@@ -2040,24 +2043,46 @@ impl<'a> Ev<'a> {
         // Tiles by kind and owner, each in list order, for `joined_tiles`.
         let mut groups: std::collections::HashMap<(&str, u32), Vec<usize>> = std::collections::HashMap::new();
         for (j, (_, kind, owner, _, _)) in structures.iter().enumerate() {
-            groups.entry((kind.as_str(), *owner)).or_default().push(j);
+            if kind != "remains" {
+                groups.entry((kind.as_str(), *owner)).or_default().push(j);
+            }
         }
+        let mut counted = Vec::new();
         for &i in &new {
             if told[i] {
                 continue;
             }
-            let part = joined_tiles(&structures, &groups[&(structures[i].1.as_str(), structures[i].2)], i);
+            let (id, kind, owner, pos, dist) = &structures[i];
+            if kind == "remains" {
+                // Each body is an individual, even when several lie on the same tile.
+                if *owner != self.me.id {
+                    let person = self.ctx.db.character().id().find(*owner);
+                    let named = person.as_ref().is_some_and(|p| {
+                        p.kind == "person" && crate::perception::knows_name(self.ctx, &self.me, p)
+                    });
+                    let readable = self.ctx.db.artifact().holder().filter(STRUCTURE_BIT | id)
+                        .any(|a| matches!(a.kind.as_str(), "tablet" | "sign"));
+                    if named || readable {
+                        self.notice_remains(*owner, *pos, *dist);
+                    } else {
+                        let group = person.filter(|p| p.kind != "person")
+                            .map_or_else(|| "stranger".to_owned(), |p| p.kind);
+                        counted.push((*owner, *pos, *dist, group));
+                    }
+                }
+                continue;
+            }
+            let part = joined_tiles(&structures, &groups[&(kind.as_str(), *owner)], i);
             for &k in &part {
                 told[k] = true;
             }
-            let (_, kind, owner, _, _) = &structures[i];
             if *owner == self.me.id || part.iter().any(|k| !is_new[*k]) {
                 continue;
             }
             let nearest = *part.iter().min_by(|a, b| structures[**a].4.total_cmp(&structures[**b].4)).unwrap_or(&i);
             let (_, _, _, pos, dist) = structures[nearest];
-            let whose = if *owner != 0 && kind != "remains" { common::owner_label(self.ctx, &self.me, *owner, kind) } else { None };
-            let by = if let Some(w) = &whose { format!(" built by {w}") } else if kind == "remains" { format!(" — the remains of {}", common::label_for(self.ctx, &self.me, *owner)) } else { String::new() };
+            let whose = if *owner != 0 { common::owner_label(self.ctx, &self.me, *owner, kind) } else { None };
+            let by = if let Some(w) = &whose { format!(" built by {w}") } else { String::new() };
             // Its extent as it lies on the ground (a town gate is a block of gate tiles).
             let wide = if part.len() > 1 {
                 let (xs, ys): (Vec<f32>, Vec<f32>) = part.iter().map(|k| structures[*k].3).unzip();
@@ -2067,17 +2092,75 @@ impl<'a> Ev<'a> {
                 String::new()
             };
             let text = format!("You notice a {kind}{wide}{by}, {dist:.0} tiles {}.", direction(at, pos));
-            if kind == "remains" {
-                // Remains are a death seen again, as what it left: their observer is a bystander
-                // of it (woken at most once per `witness_wake_ms`, docs/BATTLE_SCALE.md), told at once.
-                crate::perceive::percept_seen(self.ctx, &self.me, now, "saw", *owner, 0, pos, text, 0.8, false);
-            } else {
-                // Whose it is, only as the line names them (house-owner-label).
-                crate::perceive::percept_owned(self.ctx, &self.me, now, "saw", if whose.is_some() { *owner } else { 0 }, 0, pos, text, 0.35);
+            // Whose it is, only as the line names them (house-owner-label).
+            crate::perceive::percept_owned(self.ctx, &self.me, now, "saw", if whose.is_some() { *owner } else { 0 }, 0, pos, text, 0.35);
+        }
+        if let [only] = counted.as_slice() {
+            self.notice_remains(only.0, only.1, only.2);
+        } else if let Some(nearest) = counted.first() {
+            let mut groups: Vec<(&str, usize)> = Vec::new();
+            for (_, _, _, label) in &counted {
+                if let Some(group) = groups.iter_mut().find(|(name, _)| *name == label) {
+                    group.1 += 1;
+                } else {
+                    groups.push((label, 1));
+                }
             }
+            let (_, pos, dist, _) = nearest;
+            let text = living_rules::remains::counted_line(&groups, (*dist, direction(at, *pos)));
+            crate::perceive::percept_seen(self.ctx, &self.me, now, "saw", 0, 0, *pos, text, 0.8, false);
         }
     }
 
+    fn notice_remains(&self, owner: u32, pos: (f32, f32), dist: f32) {
+        let label = common::label_for(self.ctx, &self.me, owner);
+        let direction = direction(self.at, pos);
+        let text = format!("You notice a remains — the remains of {label}, {dist:.0} tiles {direction}.");
+        crate::perceive::percept_seen(self.ctx, &self.me, self.now, "saw", owner, 0, pos, text, 0.8, false);
+    }
+
+    fn new_structure(&mut self, laws: &living_rules::script::Laws, look: &mut crate::seen_structures::Look, id: u64, chunk: u32) -> bool {
+        let thing = FAM_STRUCTURE | id;
+        if !laws.seen_ranges {
+            return !self.recently_seen(structure_key(id)) && self.familiarity(thing).is_none();
+        }
+
+        let (ctx, actor) = (self.ctx, self.me.id);
+        let previously_seen = look.seen(ctx, actor, chunk, id);
+        if previously_seen && !laws.seen_ranges_check {
+            return false;
+        }
+
+        // Legacy recognition seeds the ranges. Migration and its deletion are in the
+        // same transaction as the block write. The diagnostic maintains a shadow row.
+        let legacy = if laws.seen_ranges_check {
+            self.recently_seen(structure_key(id));
+            self.familiarity(thing)
+        } else {
+            ctx.db.familiar().by_actor_thing().filter((actor, thing)).next()
+        };
+        if !previously_seen {
+            look.add(ctx, actor, chunk, id);
+        }
+        let new = !previously_seen && legacy.is_none();
+        if laws.seen_ranges_check {
+            common::diag(|| "seen_ranges:checked", 1);
+            match (previously_seen, legacy.is_some()) {
+                (true, false) => common::diag(|| "seen_ranges:kept", 1),
+                (false, true) => {
+                    common::diag(|| "seen_ranges:differed", 1);
+                    log::error!("seen_ranges of {actor}: structure {id} was missing from the ranges");
+                }
+                _ => {}
+            }
+        } else if let Some(row) = legacy {
+            ctx.db.familiar().id().delete(row.id);
+            common::diag(|| "seen_ranges:migrated", 1);
+        }
+        new
+    }
+
+    /// With ranges on, recent marks and ordering for familiarity pruning are unnecessary.
     /// The structures in sight that are new to this character (`noticed`, `notice_inplace`,
     /// docs/BATTLE_SCALE.md battle-exact-2 C1), read in place from the chunks' lists: no copy of
     /// them and no sort unless something is new. The same calls as the full list's pass, in the
@@ -2093,28 +2176,29 @@ impl<'a> Ev<'a> {
     ///
     /// With `delta` (`notice_delta`, docs/BATTLE_SCALE.md C2), a structure that was in sight at the
     /// character's last look (`last_look`, within `LOOK_VALID_MS`: in its disc, and no newer than the
-    /// highest id in sight then) is passed over: it was looked at then, and has had its `familiar`
-    /// row since (pruning spares the last look's disc, `prune_familiar`). Only structures built since
-    /// or come into sight are checked. `delta_check` (`notice_delta_check`) checks every one passed
-    /// over has its row. A look that finds no valid row checks everything, as without `delta`.
-    fn new_structures_in_place(&mut self, check: bool, delta: bool, delta_check: bool) -> Vec<u64> {
+    /// highest id in sight then) is passed over: it was recorded in a range or in `familiar`
+    /// (pruning spares legacy rows in the last look's disc). Only structures built since or come
+    /// into sight are checked. `notice_delta_check` verifies that skipped IDs are recognized.
+    /// A look that finds no valid row checks everything.
+    fn new_structures_in_place(&mut self, laws: &living_rules::script::Laws, look: &mut crate::seen_structures::Look) -> Vec<u64> {
+        let (check, delta, delta_check) = (laws.notice_inplace_check, laws.notice_delta, laws.notice_delta_check);
         let (ctx, me, now, at) = (self.ctx, self.me.id, self.now, self.at);
         let r = common::sight_for(ctx, me, &self.w, now);
-        let lately = |k: u32| SEEN.with(|s| s.borrow().get(&me).and_then(|m| m.get(&k).copied())).is_some_and(|t| now.saturating_sub(t) < SEEN_MS);
+        let lately = |k: u32| !laws.seen_ranges && SEEN.with(|s| s.borrow().get(&me).and_then(|m| m.get(&k).copied())).is_some_and(|t| now.saturating_sub(t) < SEEN_MS);
         let last = if delta { ctx.db.last_look().id().find(me).filter(|l| now.saturating_sub(l.at_ms) <= LOOK_VALID_MS) } else { None };
         if delta {
             common::diag(|| if last.is_some() { "notice_delta:incremental" } else { "notice_delta:whole" }, 1);
         }
         let mut recent: Vec<u32> = Vec::new();
-        let mut other: Vec<(u64, f32)> = Vec::new();
-        let mut passed: Vec<u64> = Vec::new();
+        let mut other: Vec<(u64, u32, f32)> = Vec::new();
+        let mut passed: Vec<(u64, u32)> = Vec::new();
         let mut top = 0u64;
         common::for_structures_near(ctx, at, r, |s, d| {
             top = top.max(s.id);
             if let Some(l) = &last {
                 if s.id <= l.max_structure && common::dist((l.x, l.y), (s.x, s.y)) <= l.r {
                     if delta_check || check {
-                        passed.push(s.id);
+                        passed.push((s.id, s.chunk));
                     }
                     common::diag(|| "notice_delta:passed", 1);
                     return;
@@ -2124,7 +2208,7 @@ impl<'a> Ev<'a> {
             if lately(k) {
                 recent.push(k);
             } else {
-                other.push((s.id, d));
+                other.push((s.id, s.chunk, d));
             }
         });
         if delta {
@@ -2137,19 +2221,25 @@ impl<'a> Ev<'a> {
         }
         if delta_check && !passed.is_empty() {
             common::diag(|| "notice_delta:checked", passed.len() as u64);
-            let missing: Vec<u64> = passed.iter().copied().filter(|id| ctx.db.familiar().by_actor_thing().filter((me, FAM_STRUCTURE | id)).next().is_none()).collect();
+            let missing: Vec<u64> = passed.iter().filter_map(|&(id, chunk)| {
+                let seen = (laws.seen_ranges && look.seen(ctx, me, chunk, id))
+                    || ctx.db.familiar().by_actor_thing().filter((me, FAM_STRUCTURE | id)).next().is_some();
+                (!seen).then_some(id)
+            }).collect();
             if !missing.is_empty() {
                 common::diag(|| "notice_delta:differed", missing.len() as u64);
-                log::error!("notice_delta of {me}: passed over {missing:?}, which have no familiar row (they would have been new)");
+                log::error!("notice_delta of {me}: passed over {missing:?}, which have no recognition record (they would have been new)");
             }
         }
-        other.sort_by(|a, b| a.1.total_cmp(&b.1));
+        if !laws.seen_ranges || laws.seen_ranges_check || check {
+            other.sort_by(|a, b| a.2.total_cmp(&b.2));
+        }
         if check {
             // The full list's split, less what the last look lets this one pass over (`delta`).
-            let full: Vec<u64> = self.structures().iter().filter(|(s, _)| !passed.contains(&s.id) && !lately(structure_key(s.id))).map(|(s, _)| s.id).collect();
-            let seen_n = self.structures().iter().filter(|(s, _)| !passed.contains(&s.id)).count() - full.len();
+            let full: Vec<u64> = self.structures().iter().filter(|(s, _)| !passed.contains(&(s.id, s.chunk)) && !lately(structure_key(s.id))).map(|(s, _)| s.id).collect();
+            let seen_n = self.structures().iter().filter(|(s, _)| !passed.contains(&(s.id, s.chunk))).count() - full.len();
             common::diag(|| "notice_inplace:checked", 1);
-            if full.iter().ne(other.iter().map(|(id, _)| id)) || seen_n != recent.len() {
+            if full.iter().ne(other.iter().map(|(id, _, _)| id)) || seen_n != recent.len() {
                 common::diag(|| "notice_inplace:differed", 1);
                 log::error!("notice_inplace of {me}: in place {:?} ({} seen lately) differs from the full list's {:?} ({seen_n})", other.iter().map(|o| o.0).collect::<Vec<_>>(), recent.len(), full);
             }
@@ -2158,8 +2248,8 @@ impl<'a> Ev<'a> {
             self.recently_seen(k);
         }
         let mut new = Vec::new();
-        for (id, _) in other {
-            if !self.recently_seen(structure_key(id)) && self.familiarity(FAM_STRUCTURE | id).is_none() {
+        for (id, chunk, _) in other {
+            if self.new_structure(laws, look, id, chunk) {
                 new.push(id);
             }
         }

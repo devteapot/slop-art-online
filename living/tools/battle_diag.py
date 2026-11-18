@@ -155,6 +155,11 @@ def metrics(ident):
         if line.startswith("#") or ident not in line:
             continue
         name = line.split("{", 1)[0]
+        if name in ("spacetime_table_size_bytes", "spacetime_data_size_table_bytes_used_by_index_keys"):
+            table = re.search(r'table_name="(familiar|seen_structures)"', line)
+            if table:
+                out[f"{name}:{table[1]}"] = int(float(line.rsplit(" ", 1)[1]))
+            continue
         if name in ("reducer_wasm_time_usec_sum", "reducer_wasm_time_usec_count", "reducer_wasm_time_usec"):
             m = re.search(r'reducer="([^"]+)"', line)
             if m:
@@ -204,7 +209,9 @@ def main():
     state = {"respawns": 0, "stop": False, "fighters": [], "arriving": {}}
     head = {}
     try:
-        run.harness("launch", "--seed", "island", "--archive-commitlog")
+        target = os.environ.get("CARGO_TARGET_DIR")
+        target_arg = ["--target-dir", target] if target else []
+        run.harness("launch", "--seed", "island", "--archive-commitlog", *target_arg)
         run.harness("doctor")
         if a.fast_lane:
             run.admin("set_world_law", "fast_lane_on", "true")
@@ -415,6 +422,7 @@ def main():
             sample["metrics"] = metrics(ident) if ident else {}
             if a.familiar:
                 try:
+                    sample["rows"]["seen_structures"] = count(run, "seen_structures")
                     fs = familiar_sample(f"{k:02d}")
                     sample["familiar"] = {"rows": fs["rows"], "roles": fs["roles"], "over": len(fs["first_over"])}
                 except Exception as e:

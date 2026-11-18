@@ -7168,5 +7168,118 @@ def notice_delta(s):
 SCENES["notice_delta"] = notice_delta
 
 
+def stage_seen_remains(s, observers, dead, line):
+    """Introduce the first two people, then leave the bodies together before observers arrive."""
+    at = line[5]
+    away = (at[0], at[1] + 45)
+    names = {row["id"]: row["name"] for row in s.rows("SELECT id, name FROM character")}
+    for i, who in enumerate(observers):
+        s.call("place_at", who, at[0] - 1 + i, at[1])
+    for i, who in enumerate(dead[:2]):
+        s.call("place_at", who, at[0] + 2 + i, at[1])
+        s.call("mind_say", who, f"I am {names[who]}.", 0, "", 0, FS_TALK)
+        for observer in observers:
+            s.wait(lambda: s.rows(f"SELECT id FROM acquaintance WHERE observer = {observer} AND known = {who}"), 8)
+    for who in observers:
+        s.call("place_at", who, *away)
+    for i, who in enumerate(dead):
+        x = at[0] + (1 + i % 5)
+        y = at[1] + (i // 5 % 3 - 1)
+        s.call("place_at", who, x, y)
+        s.call("kill", who, "seen remains fixture")
+    return at, away, [names[who] for who in dead[:2]]
+
+
+def seen_remains(s):
+    if (s.out / "seen-remains-field.json").exists():
+        raise RuntimeError("use a fresh world for the seen remains fixture")
+    line = clear_line(s)
+    observer, legacy, builder, extra, *dead = s.people(24)
+    for who in (observer, legacy, builder, extra, *dead):
+        s.graph(who, {"wait": 300})
+    for who in (builder, extra):
+        s.call("place_at", who, line[-1][0], line[-1][1] + 45)
+    at, away, names = stage_seen_remains(s, (observer, legacy), dead, line)
+    bodies = [r for r in s.rows("SELECT * FROM structure WHERE kind = 'remains'", "field")
+              if r["owner"] in dead]
+    (s.out / "seen-remains-field.json").write_text(json.dumps(bodies, indent=2))
+    s.expect("field has 20 individual bodies", len(bodies) == 20, bodies)
+
+    def lines(actor, label):
+        return [r for r in s.rows(f"SELECT * FROM experience WHERE observer = {actor} AND kind = 'saw'", label)
+                if r["text"].startswith("You notice")]
+
+    def remains(actor, label):
+        return [r for r in lines(actor, label) if "remains" in r["text"]]
+
+    def first(actor, label):
+        s.call("place_at", actor, *at)
+        got = s.wait(lambda: (rows if len(rows := remains(actor, label)) >= 3 else None), 15)
+        folded = [r for r in got if r["text"].startswith("You notice the remains of 18 strangers around you, the nearest ")]
+        s.expect(label + " has two named lines and one exact counted line",
+                 len(got) == 3 and len(folded) == 1 and
+                 all(any(name in r["text"] and r["subject"] for r in got) for name in names), got)
+        s.expect(label + " counted experience has no person id and lies on a body",
+                 folded[0]["subject"] == folded[0]["object"] == 0 and abs(folded[0]["salience"] - 0.8) < 0.001
+                 and any((r["x"], r["y"]) == (folded[0]["x"], folded[0]["y"]) for r in bodies), folded)
+        return got
+
+    def legacy_rows(actor):
+        return [r for r in s.rows(f"SELECT thing FROM familiar WHERE actor = {actor}", "legacy-familiar")
+                if r["thing"] in {3 << 40 | body["id"] for body in bodies}]
+
+    def blocks(actor):
+        return s.rows(f"SELECT * FROM seen_structures WHERE actor = {actor}", "seen-blocks")
+
+    set_law(s, "seen_ranges_check", True)
+    set_law(s, "notice_delta_check", True)
+    s.call("set_profile", True)
+    stamp = time.time()
+    try:
+        got = first(observer, "ranges-on")
+        s.expect("diagnostic keeps the corresponding legacy rows", len(legacy_rows(observer)) == 20)
+        s.expect("ranges are stored in at most two block rows here", 1 <= len(blocks(observer)) <= 2)
+        s.call("place_at", observer, *away)
+        time.sleep(3)
+        s.call("place_at", observer, *at)
+        time.sleep(3)
+        s.expect("return to the field does not repeat any remains line", remains(observer, "returned") == got)
+        diagnostics = diag_totals(s, stamp)
+        s.expect("ranges and C2 comparisons ran with no differences",
+                 diagnostics.get("seen_ranges:checked", 0) >= 20 and
+                 diagnostics.get("notice_delta:checked", 0) >= 20 and
+                 diagnostics.get("seen_ranges:differed", 0) == diagnostics.get("notice_delta:differed", 0) == 0,
+                 diagnostics)
+    finally:
+        s.call("set_profile", False)
+        set_law(s, "notice_delta_check", False)
+        set_law(s, "seen_ranges_check", False)
+
+    s.call("place_at", observer, *away)
+    set_law(s, "seen_ranges", False)
+    first(legacy, "ranges-off")
+    s.expect("law off records each field body in familiarity", len(legacy_rows(legacy)) == 20)
+    set_law(s, "seen_ranges", True)
+    s.wait(lambda: not legacy_rows(legacy), 15)
+    s.expect("migration drained the rows and did not repeat the lines",
+             1 <= len(blocks(legacy)) <= 2 and len(remains(legacy, "migrated-remains")) == 3)
+    s.call("place_at", legacy, *away)
+
+    s.call("place_at", observer, *at)
+    s.call("place_at", extra, at[0] + 2, at[1] - 1)
+    s.call("kill", extra, "one new body")
+    fresh = s.wait(lambda: [r for r in remains(observer, "one-new") if r["subject"] == extra], 12)
+    s.expect("one new body gets its own line", len(fresh) == 1 and fresh[0]["text"].startswith("You notice a remains"), fresh)
+    s.call("place_at", builder, at[0] + 3, at[1] + 1)
+    s.call("place_structure", builder, "shelter")
+    fresh = s.wait(lambda: [r for r in lines(observer, "shelter") if r["text"].startswith("You notice a shelter")], 12)
+    s.expect("the new shelter is noticed once", len(fresh) == 1, fresh)
+    s.call("kill", observer, "seen ranges death cleanup")
+    s.expect("death deletes the observer's block rows", not blocks(observer))
+
+
+SCENES["seen_remains"] = seen_remains
+
+
 if __name__ == "__main__":
     raise SystemExit(main())
