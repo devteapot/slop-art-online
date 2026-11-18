@@ -118,3 +118,40 @@ The authority reads one indexed row for each actor and block touched by a look. 
 The model scene includes all remains within its existing structure sight radius. Each body keeps its ID, position and contents. The ten-entry limit still applies to other structures. The cost of producing and sending all bodies in a scene is distinct from the cost of writing and storing first-sight lines.
 
 SpacetimeDB's [table](https://spacetimedb.com/docs/tables/), [index](https://spacetimedb.com/docs/tables/indexes/) and [performance](https://spacetimedb.com/docs/tables/performance/) guidance supports the focused private table, actor/block lookup, and grouped writes. The pinned 2.14.1 table API supports tuple B-tree filtering and actor-index deletion. [Automatic migrations](https://spacetimedb.com/docs/databases/automatic-migrations/) permits adding the private table without rewriting an existing one. Legacy migration is an authority transaction when a structure is next checked.
+
+## 30-minute measurement
+
+Both Spark trial runs used SpacetimeDB 2.14.1 on port 3320, with 200 fighter slots, 16 walkers and 310 seeded characters. Refills started about 30 m away with a 0.25 s minimum gap. The benchmark sampled each minute with `battle_diag.py --familiar --law profile_detail=true`, including SQL row counts, table metrics and per-actor familiarity reads. There was no game observer. `minds-seen-fake2-1118-210724` used one mind-service subscriber with a local fake provider. `minds-seen-match-1118-213921` used no mind service, matching archived `minds-fam30-041631`. Both runs finished before 22:12 CET on November 18. A comparable C2-only run was unavailable.
+
+| At minute 27 | Archived fam30, pre-C2 | R1 + R2, matched no mind | R1 + R2, fake mind |
+| --- | ---: | ---: | ---: |
+| Remains within 30 m | 2,675 | 2,904 | 374 |
+| Fighters assigned to battle / refilling | 170 / 29 | 111 / 73 | 198 / 2 |
+| Live characters in world | 487 | 457 | 463 |
+| `brain.noticed` ms/s | 277.60 | 93.92 | 7.93 |
+| `noticed.structures` ms/s | — | 79.88 | 3.26 |
+| `perceive.scene_json` ms/s | 34.31 | 575.37 | 1.58 |
+| `familiar` rows | 465,100 | 43,046 | 74,360 |
+| `seen_structures` rows | — | 696 | 1,305 |
+| `familiar` pages / index keys, MB | ~69.8 combined estimate | 2.750 / 1.007 | 3.601 / 1.785 |
+| `seen_structures` pages / index keys, MB | — | 0.842 / 0.014 | 0.411 / 0.026 |
+| `percept:saw` /s | 5,261.2 | 186.5 | 1.1 |
+| All experiences /s | 5,804.7 | 622.4 | 12.1 |
+| Tick work ms/s | 682.47 | 898.92 | 165.51 |
+| Ticks/s | 32.7 | 7.5 | 59.7 |
+
+Row counts, sizes, total experiences and tick rates come from sample 28. Table sizes use the server's page and index-key gauges, in decimal MB. The baseline lacked those gauges. Its estimate uses its historical assumption of 150 bytes per familiarity row. Timing spans come from complete module log windows, about 20 s for the baseline and 30 s for each new run. Sight rates use the full intervals between diagnostic reports. This avoids truncation of the detailed CLI log tail and the extra seconds around the archive's diagnostic window. The original archive summary reported 275.47 ms/s of noticing and 4,713 sight events/s.
+
+The matched replay spent 66% less time noticing and produced 96% fewer sight events. Its tick rate fell from 32.7 to 7.5 Hz. The former authority scene capped the whole structure list at ten. Returning each individual body now spends more time constructing and writing scenes when reasons update pending deliberations. Scene construction rose from 34 to 575 ms/s. Immediately after the matched sample, an 18.75 s unprofiled window ran at 9.0 ticks/s. The matched and archived runs refilled at 1.69 and 1.61 fighters/s between minutes 5 and 27. Their one-minute host loads were 8.9–10.1 and 4.8–4.3 in sample 28. The comparison includes C2 and these workload differences. The fake-model fight's refills tapered to nearly zero, so its lower timings describe a quieter fight.
+
+### Eight-hour projection
+
+An hour of retention at 1.6 deaths/s gives about 5,760 simultaneous bodies. The matched accrual of 1.72 remains/s would give about 6,200 if it persists. For 200 fighters whose field sight covers one or two blocks, local recognition occupies about 200–400 block rows, plus rows from other places. At 1.6 arrivals/s, one or two block writes for each first look at the field would be about 1.6–3.2 writes/s. Further looks can add more IDs. Each look emits at most one counted line, plus named and readable exceptions.
+
+At fixed block count and linear payload growth, the measured 0.842 MB of range-table pages would reach about 1.7–1.8 MB. At fixed look and request rates with work growing linearly in the number of bodies, structure noticing would take approximately 160–170 ms/s and scene construction 1,140–1,230 ms/s. That estimate exceeds one second of reducer time per wall second for scene construction alone. Sight radius, queueing, action cadence, range fragmentation and exploration can change those results. An eight-hour run and the performance gate remain outstanding.
+
+## Verification results
+
+Core field 15/15, C2 module upgrade 6/6, mixed remains and tablet 6/6, mind prompt 5/5, player 3/3 and SDK privacy 3/3. The final core check logged 210 comparisons and 4,117 C2 checks with zero differences. The upgrade kept a live subscriber and migrated three legacy IDs. Cargo passed 41 authority, 329 rules, 124 mind and 128 game tests. `just living-check` and the fuel gate passed. Bindings were regenerated with the trial container's 2.14.1 CLI.
+
+The first fake-model attempt was paused by the orphan guard when the build-slot wrapper exited. The completed run applied the slot around Cargo so the guard followed the long-lived driver. The aborted attempt and the full profiling windows are preserved in the evidence. The fake-model benchmark predates the final diagnostic-only correction and ran with the diagnostic off.

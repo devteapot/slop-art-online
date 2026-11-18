@@ -743,3 +743,25 @@ Deleting the scratch database of `minds-bdat-124436` while its world still ran 3
   - The same page says "If a reducer throws an exception or returns an error, all of its changes are automatically rolled back."
 - [Event tables](https://spacetimedb.com/docs/tables/event-tables/) were considered for `fight_seen` and not used: their rows exist "only for the duration of the transaction that created them", and the fold must hold blows across ticks.
 - Versioned source: `crates/durability/src/imp/local.rs:358`, where the delete-time panic is.
+
+## R1 and R2 as built
+
+The authority stores recognition in block ranges and emits one counted line for a look's unnamed remains. The complete mind scene lists each body. The matched replay refilled 1.69 fighters/s against 1.61/s in the archived pre-C2 run.
+
+| At minute 27 | fam30 | R1 + R2, no mind | R1 + R2, fake mind |
+| --- | ---: | ---: | ---: |
+| Remains at site | 2,675 | 2,904 | 374 |
+| Noticing ms/s | 277.60 | 93.92 | 7.93 |
+| Structure noticing ms/s | — | 79.88 | 3.26 |
+| Familiarity rows | 465,100 | 43,046 | 74,360 |
+| Seen-structure rows | — | 696 | 1,305 |
+| Familiarity pages / index keys, MB | ~69.8 combined estimate | 2.750 / 1.007 | 3.601 / 1.785 |
+| Seen-structure pages / index keys, MB | — | 0.842 / 0.014 | 0.411 / 0.026 |
+| Sight experiences/s | 5,261.2 | 186.5 | 1.1 |
+| All experiences/s | 5,804.7 | 622.4 | 12.1 |
+| Tick ms/s | 682.47 | 898.92 | 165.51 |
+| Ticks/s | 32.7 | 7.5 | 59.7 |
+
+In the matched replay, scene construction rose from 34.31 to 575.37 ms/s and cadence fell. A short unprofiled sample ran at 9.0 ticks/s. The fake-model fight tapered off before its sample.
+
+The eight-hour projection at 5,760–6,200 bodies gives about 200–400 field recognition rows for 200 fighters and 1.7–1.8 MB of range-table pages under linear payload growth. Maintaining the matched request rate under a linear per-body workload would put scene construction alone at 1,140–1,230 ms/s. See [Seen remains](SEEN_REMAINS.md#30-minute-measurement) for window lengths, sizing and workload assumptions.
