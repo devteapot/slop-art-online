@@ -202,7 +202,7 @@ class World:
 class Phase:
     """One phase's recording: a body subscription, the stimulus log, bench alongside."""
 
-    def __init__(self, world, folder, ids, seconds, bench=True, known_ids=()):
+    def __init__(self, world, folder, ids, seconds, bench=True, known_ids=(), bench_seconds=90):
         self.w, self.dir = world, Path(folder)
         self.dir.mkdir(parents=True, exist_ok=True)
         self.stim = (self.dir / "stimuli.jsonl").open("a")
@@ -216,7 +216,7 @@ class Phase:
         self.bench = None
         if bench:
             # A fixed window from the phase's start (its busiest walking), left to finish.
-            self.bench = subprocess.Popen([sys.executable, str(ROOT / "living/tools/bench.py"), "--db", world.s.db, "--seconds", "90", "--body-writes"],
+            self.bench = subprocess.Popen([sys.executable, str(ROOT / "living/tools/bench.py"), "--db", world.s.db, "--seconds", str(bench_seconds), "--body-writes"],
                                           stdout=(self.dir / "bench.txt").open("w"), stderr=subprocess.STDOUT, env={**os.environ, "LIVING_STDB": STDB})
         time.sleep(1.5)
 
@@ -746,7 +746,7 @@ def n4(world, out, variant, law, kind, reps):
         walks_to(world, tmp, subs, warm, law)
         tmp.close()
     wait_for_light(world, world.light, subs)
-    phase = Phase(world, folder, [s.id for s in subs] + fixtures, 600, known_ids=[s.id for s in subs])
+    phase = Phase(world, folder, [s.id for s in subs] + fixtures, 600, known_ids=[s.id for s in subs], bench_seconds=60)
     hour = scenes.world_hour(world.s)[0]
     sight = person_sight(hour)
     meta = {"arena": "n4", "variant": variant, "law": law, "kind": kind, "spot": spot, "outward": u, "wall": wall, "hour": round(hour, 2), "light": "day" if sight == 11.0 else "night", "subjects": [s.id for s in subs],
