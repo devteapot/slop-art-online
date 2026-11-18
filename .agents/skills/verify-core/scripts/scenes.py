@@ -7027,13 +7027,13 @@ def notice_inplace(s):
     kinds = ["shelter", "storage"]
     placed = []
 
-    def build(n, t_end, k=0):
-        # Each spot once: a new tile beside a familiar one of the same kind and owner is part of
-        # it, and is rightly not told again.
-        n += k
+    def build(n, t_end, near=False):
+        # Use a separate strip for the second window so its structures are within sight and
+        # more than 1.5 tiles from the first window's structures of the same kind and owner.
+        k = 0
         while time.time() < t_end and k < n:
             x = line[k % len(line)][0]
-            y = line[0][1] + (-4.0 if k % 2 == 0 else 6.0) + (-1 if k % 2 == 0 else 1) * (k // len(line)) * 3.0
+            y = line[0][1] + ((-1.5 if k % 2 == 0 else 3.5) if near else (-4.0 if k % 2 == 0 else 6.0))
             s.call("place_at", builder, x, y, check=False)
             if s.call("place_structure", builder, kinds[k % 2], check=False).returncode == 0:
                 placed.append((x, y))
@@ -7049,7 +7049,7 @@ def notice_inplace(s):
         on, t_on = diag_window(s, 45, keys)
         t.join()
         set_law(s, "notice_inplace", False)
-        t = threading.Thread(target=build, args=(6, time.time() + 22, 32))
+        t = threading.Thread(target=build, args=(6, time.time() + 22), kwargs={"near": True})
         t.start()
         off, t_off = diag_window(s, 20, keys)
         t.join()
