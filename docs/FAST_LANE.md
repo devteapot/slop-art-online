@@ -320,7 +320,7 @@ Queue wait by class, free fake-model battles at 200 fighters (`battle_diag.py --
 - **verify-player `fast_lane`:** a played body struck by four heavy blows gets no `fast_ask` row, and its rows carry no count or "again".
 - **Unit tests:** `mind::fast::tests` (what a reply may change; no count or tactic text in the prompt); the rules' install check covers the six laws.
 
-## The battle run (plan approved 2026-11-13; not run)
+## The battle run plan (approved 2026-11-13)
 
 The run that decides whether `fast_lane_on` becomes default-on. The general coordinator approved it at about $3.6, with a $6 stop, in a quiet window.
 
@@ -345,6 +345,86 @@ B and C run with `--fast-lane --fast-real`: only the fast route, `deepseek-flash
 Free test `minds-flbt2-040645` (20 fighters, 4 minutes, `--fake-fast-patch`): patches installed about once a second, refused rarely, and the fight held with refills. The timed-defence share was 33–58% a window.
 
 **Measures and readings** are the plan's. A default-on recommendation goes to the owner.
+
+## The battle run (partial: A1, B1, C1)
+
+The revised run scheduled eight 10-minute battles. A usage limit stopped the run after three completed 200-fighter battles with refills. A1 had the lane off, B1 used the shipped caps (2/s, 4 in flight), and C1 used half caps. Each arm has **one replicate and no noise estimate**. Windows from the same battle share a history. The interrupted B2 and the pilots are excluded.
+
+Regenerate the results from the saved run directories on Spark.
+
+```bash
+python3 living/tools/flb_report.py ~/dev/slop-cm-flb/.local/living/verify/minds-flb-{a,b,c}-200-1
+```
+
+The report reads the saved diagnostic summaries, bench counters, skill exports, fast thought exports and model journals. The run directories are sufficient for the results below. The server commitlog is unnecessary.
+
+### Timed defence
+
+| Defence share | A1 | B1 | C1 |
+|---|---:|---:|---:|
+| All sampled windows | 52.6% (3,559/6,764) | 65.3% (3,647/5,584) | 58.1% (5,333/9,174) |
+| First window | 53.5% | 52.8% | 53.1% |
+| Last five windows | 51.2% | 75.3% | 59.8% |
+| Sampled after first patch | — | 80.6% (1,962/2,434) | 77.8% (1,842/2,367) |
+| Final export, exact start to release | 50.9% (568/1,115) | 76.8% (232/302) | 57.9% (777/1,341) |
+| Final export, eventually patched target before first patch | — | 59.3% (16/27) | 57.1% (16/28) |
+| Final export, patched target after first patch | — | 91.9% (158/172) | 85.3% (284/333) |
+
+Each attack aimed at a fighter counts once if the target began a dodge, block or jump during its windup. The driver sampled roughly 30 seconds per minute, using the fighter roster at sample time and allowing 50 ms past release or a 750 ms fallback windup when release was missing. It overwrote `skill-uses.json` every sample, and the authority retains at most 24 uses per actor. The final exports cover 44.1–44.6 seconds of accepted uses. The exact recomputation uses inclusive start and release timestamps, excluding 31, 13 and 47 attacks with missing releases, respectively. The full-run before-patch cohort cannot be reconstructed from the aggregates. The exact before/after numbers reflect late-patched and still-observed fighters, with different exposures before and after. An accepted defence during windup does not establish that it prevented the blow.
+
+### Why B1 had fewer deaths
+
+| Measure | A1 | B1 | C1 |
+|---|---:|---:|---:|
+| Fighter deaths observed by keeper | 509 | 185 | 373 |
+| Refills spawned | 395 | 187 | 372 |
+| On fighting roster / still arriving, final sample | 71 / 12 | 191 / 9 | 184 / 15 |
+| World hits across bench samples | 5,356 | 2,605 | 5,245 |
+| World hits per estimated fighter-minute | 11.85 | 2.97 | 6.53 |
+| Hits / (hits + blocks + dodges) | 48.0% | 40.7% | 44.6% |
+| World hits in last six bench samples | 2,714 | 518 | 2,694 |
+| Accepted back_off/s, first four → last six windows | 0 → 0 | 32.03 → 11.62 | 19.20 → 21.95 |
+| Accepted flee/s, first four → last six windows | 0.23 → 0.23 | 1.15 → 0.57 | 0.75 → 0.67 |
+| Completed heal/s, first four → last six windows | 6.15 → 3.82 | 5.03 → 0.72 | 6.35 → 4.43 |
+| Fighter pairs / observed bouts, final export | 294 / 350 | 85 / 121 | 370 / 467 |
+| Median observed bout span, all / multi-attack only (s) | 1.74 / 3.63 | 0.00 / 4.73 | 0.00 / 4.32 |
+
+The keeper counted 185 B1 deaths against 509 A1 deaths. The original near-halving compared **refill spawns**. B1 retained more fighters on the fighting roster, yet registered fewer aimed attacks than A1, especially late (1,117 versus 2,689 in the last five samples). Its recorded resolutions also shifted toward dodges and blocks. Along with the rise in accepted retreats, this points to both avoiding exchanges and defending during them. C1 also retreated and defended more often than A1 on these measures, while its late hit count stayed near A1's. B1 completed fewer heals, so the recorded healing rate does not support more healing as the explanation.
+
+Hits are world counters across about 302 sampled seconds per arm. They count resolutions outside the block and dodge categories. Fighter-minutes are estimated from adjacent sampled keeper counts, starting at 200. The counters include ambient activity and lack per-fighter outcomes or HP deltas, so actual damage taken and effective HP restored cannot be totaled. Retreat and heal rates are also world-wide and can include repeated actions by the same fighter. The final-export engagement proxy groups released attacks between fighter pairs and splits each pair at gaps over five seconds. Single-attack bouts have zero observed span. Repeated exchanges in B1 lasted somewhat longer in this slice, but there were far fewer of them. Full fight lengths and engagement counts are unavailable because the retained attacks can miss either end of a fight.
+
+All arms used the same 200-fighter setup, 16 extra walkers, 310 ambient characters at publish, keep-plans and a 0.5 s refill gap from 30 m. The probe sites differed (A1 412.21, 239.95; B1 407.58, 236.96; C1 405.05, 243.41). The starting positions of the 200 fighters were not exported. By the fourth sample A1/B1/C1 had spawned 151/150/146 refills, against 267/154/203 keeper deaths. Similar early spawn counts argue against B1 getting a faster supply of replacements. Later its lower spawn count coincided with fewer vacancies and more fighters on the fighting roster. Spawns do not measure arrival times, and the asynchronous keeper reads can show temporarily inconsistent totals. A1's refill backlog changes density and workload over the run, and the different sites and initial placements remain possible contributors.
+
+### Tick after the opening two minutes
+
+| Measure | A1 | B1 | C1 |
+|---|---:|---:|---:|
+| Mean ticks/s | 56.18 | 58.21 | 57.46 |
+| Ticks over 16.7 ms | 233 | 114 | 205 |
+| New keeper deaths per interval, range | 32–71 | 0–22 | 22–44 |
+| Remains at site, range | 231–541 | 154–209 | 195–408 |
+| Ticks/s adjusted to 27.92 deaths per interval | 56.68 | 57.64 | 57.53 |
+| Ticks/s adjusted to 289.33 remains at site | 56.33 | 58.05 | 57.47 |
+
+Each adjustment fits one pooled within-arm slope and a separate intercept per arm across the eight samples starting at minute two. It evaluates each arm at the pooled mean of that covariate. There is no A1/B1 overlap on either covariate in these windows. The death adjustment shrinks B1's lead over A1 from about 2.0 to 1.0 ticks/s. The remains adjustment leaves a larger gap, but both extrapolate for B1 and cannot isolate lane overhead from changes in combat, population or noticing. The world-wide structure-noticing counter averaged about 3,015/s in B1's last six samples versus 13,982/s in A1 and 12,194/s in C1. The observed tick improvement came with much less work of that kind.
+
+### Cost and latency
+
+| Measure | A1 | B1 | C1 |
+|---|---:|---:|---:|
+| Estimated fast spend / nominal minute | $0 | $0.0555 | $0.0377 |
+| Estimated fast spend, total | $0 | $0.5551 | $0.3774 |
+| Failed journal calls | — (0 calls) | 6.9% (34/491) | 2.7% (7/258) |
+| Patched fighters / timed installs | 0 / 0 | 219 / 317 | 156 / 179 |
+| Issue → install, p50 / p90 (ms) | — | 1,228 / 4,150 | 1,371 / 5,398 |
+| Delivery, issue → pickup | — | 27 / 2,054 | 35 / 3,730 |
+| Prompt and other local time, pickup → send minus model | — | 129 / 475 | 124 / 655 |
+| Model round trip | — | 873 / 1,594 | 879 / 1,960 |
+| Authority admission, send → install | — | 1 / 28 | 1 / 30 |
+
+Spend is based on journal usage at the repository's historical list prices. Timeouts have no usage or cost, and provider billing could include work absent from these estimates. Failed-call share uses journal errors, independently of authority expirations or patch refusals. Timing matches installed thoughts to unique timestamps in the final cumulative `fast-*.json` export. Prompt preparation has no separate timestamp. Its residual includes local processing, model queueing and reply handling. Phase percentiles are computed separately.
+
+**Decision.** B1's recorded spend is under about $0.06/min and its timed-defence share rose. Behaviour changed in the observed battle. The plan's requirement that B be within A's noise remains untested, and the different battle workloads prevent a clean tick-cost comparison. Keep the default off pending replication. The partial result supports testing the shipped caps again.
 
 ## What this design does not do
 
