@@ -1,0 +1,53 @@
+[
+  {
+    "clips": [
+      {
+        "name": "idle",
+        "seconds": 5.9666666984558105
+      },
+      {
+        "name": "walk",
+        "seconds": 1.0
+      },
+      {
+        "name": "run",
+        "seconds": 0.6000000238418579
+      },
+      {
+        "name": "talk",
+        "seconds": 5.9666666984558105
+      },
+      {
+        "name": "sit_idle",
+        "seconds": 5.9666666984558105
+      },
+      {
+        "name": "sit_ground",
+        "seconds": 7.9666666984558105
+      }
+    ],
+    "file": "view/own-cora-live.glb",
+    "glow": false,
+    "materials": [
+      "M00_001_01_Cloth_01_CLOTH",
+      "M00_000_Hair_00_HAIR",
+      "M00_000_00_Body_00_SKIN",
+      "M00_000_00_Face_00_SKIN",
+      "M00_000_00_Eye_00_EYE",
+      "M00_000_00_EyeIris_00_EYE",
+      "M00_000_00_FaceEyeline_00_FACE",
+      "M00_000_00_FaceBrow_00_FACE",
+      "M00_000_00_FaceTint_00_FACE"
+    ],
+    "meshes": 10,
+    "photos": "/home/carlid/.t3/worktrees/slop-art-online/t3-6762ede0-32f78e31e155f0d4/.local/char-live-1/restart/bevy/own-cora-live",
+    "size_m": [
+      0.6072799563407898,
+      1.6554367542266846,
+      0.30019932985305786
+    ],
+    "triangles": 32308,
+    "vertex_colours": true,
+    "vertices": 21834
+  }
+]

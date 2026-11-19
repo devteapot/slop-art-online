@@ -28,3 +28,11 @@
 {"stage": "expressions-b-checkpoint", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
 {"stage": "rig", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
 {"stage": "rig-checkpoint", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "game-export", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "game-export", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "rig-b", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "rig-b-checkpoint", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "final-export", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "game-shading", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "game-shading-checkpoint", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "colours-in-game", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}

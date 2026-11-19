@@ -1,0 +1,57 @@
+{
+  "front coat": {
+    "x": 718,
+    "y": 352,
+    "median_srgb": [
+      149,
+      135,
+      143
+    ],
+    "game_linear_Y": 0.257,
+    "sheet_linear_Y": 0.2066
+  },
+  "jersey": {
+    "x": 791,
+    "y": 288,
+    "median_srgb": [
+      134,
+      65,
+      56
+    ],
+    "game_linear_Y": 0.0913,
+    "sheet_linear_Y": 0.0646
+  },
+  "apron": {
+    "x": 802,
+    "y": 491,
+    "median_srgb": [
+      215,
+      190,
+      163
+    ],
+    "game_linear_Y": 0.5392,
+    "sheet_linear_Y": 0.5161
+  },
+  "trousers": {
+    "x": 721,
+    "y": 660,
+    "median_srgb": [
+      90,
+      71,
+      63
+    ],
+    "game_linear_Y": 0.0704,
+    "sheet_linear_Y": 0.0488
+  },
+  "boots": {
+    "x": 687,
+    "y": 794,
+    "median_srgb": [
+      123,
+      78,
+      49
+    ],
+    "game_linear_Y": 0.0988,
+    "sheet_linear_Y": 0.073
+  }
+}

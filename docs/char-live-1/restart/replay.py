@@ -1765,3 +1765,232 @@ weight_report=validate_weights()
 assert weight_report['weight_sum_error']<1.e-4 and weight_report['max_influences']<=4,weight_report
 (ROOT/'rig-weights.json').write_text(json.dumps(weight_report,indent=2)+'\n')
 review_pass('rig')
+
+# 2026-11-19T15:04:21.239848+00:00  rig-playable-export
+import merge_primitives as glb_io
+from array import array
+clip_src=repo_file('living/game/assets/lookdev/anim/own-clips.glb')
+cj,cb=glb_io.read_glb(str(clip_src))
+clip_times={'idle':.45,'walk':.28,'run':.18,'talk':.72,'sit_idle':.65,'sit_ground':.6}
+motions={a['name']:a for a in cj['animations'] if a['name'] in clip_times}
+def export_cora():
+    # Combine matching garment parts for the exporter. Keep the separate
+    # editable scene objects and all face shape keys in the checkpoint.
+    copies=[]
+    for ob in rig_items:
+        dup=ob.copy();dup.data=ob.data.copy();scene.collection.objects.link(dup)
+        to_local=rig.matrix_world.inverted()@ob.matrix_world
+        dup.data.transform(to_local,shape_keys=True)
+        dup.matrix_parent_inverse=Matrix.Identity(4);dup.matrix_basis=Matrix.Identity(4)
+        copies.append(dup)
+    bpy.ops.object.select_all(action='DESELECT')
+    for dup,ob in zip(copies,rig_items):
+        if ob!=face:dup.select_set(True)
+    joined=next(d for d,o in zip(copies,rig_items) if o!=face)
+    facecopy=next(d for d,o in zip(copies,rig_items) if o==face)
+    bpy.context.view_layer.objects.active=joined;bpy.ops.object.join()
+    joined.name='Cora garments hair and hands'
+    facecopy.select_set(True);rig.select_set(True)
+    dst=ROOT/'own-cora-live.glb'
+    bpy.ops.export_scene.gltf(filepath=str(dst),export_format='GLB',use_selection=True,export_yup=True,export_skins=True,export_animations=False,export_vertex_color='ACTIVE',export_all_vertex_colors=False,export_normals=True,export_materials='EXPORT',export_def_bones=False,export_leaf_bone=False,export_rest_position_armature=True,export_morph=True,export_morph_normal=False,export_try_sparse_sk=False)
+    for dup in (joined,facecopy):bpy.data.objects.remove(dup,do_unlink=True)
+    # Pack the actual six project clips. The view can also resolve these by
+    # the existing shared-clip path when the asset is named own-cora-live.
+    j,binary=glb_io.read_glb(str(dst));nodeids={n.get('name'):i for i,n in enumerate(j['nodes'])}
+    maps={}
+    def acc(i):
+        if i not in maps:
+            vals,fmt=glb_io.read_accessor(cj,cb,i)
+            src=cj['accessors'][i];bv=cj['bufferViews'][src['bufferView']]
+            binary.extend(b'\0'*(-len(binary)%4))
+            new_view=len(j['bufferViews']);data=vals.tobytes()
+            j['bufferViews'].append(dict(buffer=0,byteOffset=len(binary),byteLength=len(data)));binary.extend(data)
+            maps[i]=len(j['accessors']);j['accessors'].append({**src,'bufferView':new_view,'byteOffset':0})
+        return maps[i]
+    j['animations']=[]
+    for name,a in motions.items():
+        channels=[]
+        for ch in a['channels']:
+            target=ch['target'];bone=cj['nodes'][target['node']]['name']
+            assert bone in nodeids,bone
+            channels.append({**ch,'target':{**target,'node':nodeids[bone]}})
+        j['animations'].append(dict(name=name,channels=channels,samplers=[{**s,'input':acc(s['input']),'output':acc(s['output'])} for s in a['samplers']]))
+    # glTF multiplies COLOR_0 automatically by the surface colour/texture.
+    # Explicitly retain the generator atlas on the face swatch multiply.
+    face_m=next(m for m in j['materials'] if m['name']==generator.MAT['face'])
+    eye_m=next(m for m in j['materials'] if m['name']==generator.MAT['eye'])
+    face_m['pbrMetallicRoughness']['baseColorTexture']=eye_m['pbrMetallicRoughness']['baseColorTexture'].copy()
+    for mat in j['materials']:
+        if mat['name'] in (generator.MAT['cloth'],generator.MAT['hair'],generator.MAT['skin'],generator.MAT['face']):
+            mat['pbrMetallicRoughness']['baseColorFactor']=[1.,1.,1.,1.]
+    j['buffers'][0]['byteLength']=len(binary)
+    glb_io.write_glb(str(dst),j,binary)
+    prims=[p for m in j['meshes'] for p in m['primitives']]
+    info=dict(triangles=sum(j['accessors'][p['indices']]['count']//3 for p in prims),vertices=sum(j['accessors'][i]['count'] for i in {p['attributes']['POSITION'] for p in prims}),primitives=len(prims),materials=len(j['materials']),clips=list(motions),face_keys=next(m['extras']['targetNames'] for m in j['meshes'] if 'targetNames' in m.get('extras',{})))
+    assert info['triangles']<=50000 and len(info['face_keys'])==15
+    (ROOT/'game-counts.json').write_text(json.dumps(info,indent=2)+'\n')
+export_cora()
+audit('game-export')
+
+# 2026-11-19T15:07:12.609412+00:00  export-active-pigment
+import merge_primitives as glb_io
+from array import array
+clip_src=repo_file('living/game/assets/lookdev/anim/own-clips.glb')
+cj,cb=glb_io.read_glb(str(clip_src))
+clip_times={'idle':.45,'walk':.28,'run':.18,'talk':.72,'sit_idle':.65,'sit_ground':.6}
+motions={a['name']:a for a in cj['animations'] if a['name'] in clip_times}
+def export_cora():
+    # Combine matching garment parts for the exporter. Keep the separate
+    # editable scene objects and all face shape keys in the checkpoint.
+    copies=[]
+    for ob in rig_items:
+        dup=ob.copy();dup.data=ob.data.copy();scene.collection.objects.link(dup)
+        to_local=rig.matrix_world.inverted()@ob.matrix_world
+        dup.data.transform(to_local,shape_keys=True)
+        dup.matrix_parent_inverse=Matrix.Identity(4);dup.matrix_basis=Matrix.Identity(4)
+        copies.append(dup)
+    bpy.ops.object.select_all(action='DESELECT')
+    for dup,ob in zip(copies,rig_items):
+        if ob!=face:dup.select_set(True)
+    joined=next(d for d,o in zip(copies,rig_items) if o!=face)
+    facecopy=next(d for d,o in zip(copies,rig_items) if o==face)
+    bpy.context.view_layer.objects.active=joined;bpy.ops.object.join()
+    colors=joined.data.color_attributes
+    colors.active_color=colors['Color']
+    colors.render_color_index=colors.active_color_index
+    joined.name='Cora garments hair and hands'
+    facecopy.select_set(True);rig.select_set(True)
+    dst=ROOT/'own-cora-live.glb'
+    bpy.ops.export_scene.gltf(filepath=str(dst),export_format='GLB',use_selection=True,export_yup=True,export_skins=True,export_animations=False,export_vertex_color='ACTIVE',export_all_vertex_colors=False,export_normals=True,export_materials='EXPORT',export_def_bones=False,export_leaf_bone=False,export_rest_position_armature=True,export_morph=True,export_morph_normal=False,export_try_sparse_sk=False)
+    for dup in (joined,facecopy):bpy.data.objects.remove(dup,do_unlink=True)
+    # Pack the actual six project clips. The view can also resolve these by
+    # the existing shared-clip path when the asset is named own-cora-live.
+    j,binary=glb_io.read_glb(str(dst));nodeids={n.get('name'):i for i,n in enumerate(j['nodes'])}
+    maps={}
+    def acc(i):
+        if i not in maps:
+            vals,fmt=glb_io.read_accessor(cj,cb,i)
+            src=cj['accessors'][i];bv=cj['bufferViews'][src['bufferView']]
+            binary.extend(b'\0'*(-len(binary)%4))
+            new_view=len(j['bufferViews']);data=vals.tobytes()
+            j['bufferViews'].append(dict(buffer=0,byteOffset=len(binary),byteLength=len(data)));binary.extend(data)
+            maps[i]=len(j['accessors']);j['accessors'].append({**src,'bufferView':new_view,'byteOffset':0})
+        return maps[i]
+    j['animations']=[]
+    for name,a in motions.items():
+        channels=[]
+        for ch in a['channels']:
+            target=ch['target'];bone=cj['nodes'][target['node']]['name']
+            assert bone in nodeids,bone
+            channels.append({**ch,'target':{**target,'node':nodeids[bone]}})
+        j['animations'].append(dict(name=name,channels=channels,samplers=[{**s,'input':acc(s['input']),'output':acc(s['output'])} for s in a['samplers']]))
+    # glTF multiplies COLOR_0 automatically by the surface colour/texture.
+    # Explicitly retain the generator atlas on the face swatch multiply.
+    face_m=next(m for m in j['materials'] if m['name']==generator.MAT['face'])
+    eye_m=next(m for m in j['materials'] if m['name']==generator.MAT['eye'])
+    face_m['pbrMetallicRoughness']['baseColorTexture']=eye_m['pbrMetallicRoughness']['baseColorTexture'].copy()
+    for mat in j['materials']:
+        if mat['name'] in (generator.MAT['cloth'],generator.MAT['hair'],generator.MAT['skin'],generator.MAT['face']):
+            mat['pbrMetallicRoughness']['baseColorFactor']=[1.,1.,1.,1.]
+    j['buffers'][0]['byteLength']=len(binary)
+    glb_io.write_glb(str(dst),j,binary)
+    prims=[p for m in j['meshes'] for p in m['primitives']]
+    assert all('COLOR_0' in p['attributes'] for p in prims)
+    info=dict(triangles=sum(j['accessors'][p['indices']]['count']//3 for p in prims),vertices=sum(j['accessors'][i]['count'] for i in {p['attributes']['POSITION'] for p in prims}),primitives=len(prims),materials=len(j['materials']),clips=list(motions),face_keys=next(m['extras']['targetNames'] for m in j['meshes'] if 'targetNames' in m.get('extras',{})))
+    assert info['triangles']<=50000 and len(info['face_keys'])==15
+    (ROOT/'game-counts.json').write_text(json.dumps(info,indent=2)+'\n')
+export_cora()
+audit('game-export')
+
+# 2026-11-19T15:09:26.585717+00:00  rig-seat-clearance
+# Fit garment deformation at the knees and pocket welts. Subdivide the long
+# pelvis-to-hem spans before assigning weights so the whole strip can bend.
+def reset_weights(ob,v,weights):
+    for g in list(v.groups):ob.vertex_groups[g.group].remove([v.index])
+    total=sum(weights.values())
+    for name,w in weights.items():
+        if w>0:
+            group=ob.vertex_groups.get(name)
+            if group is None:group=ob.vertex_groups.new(name=name)
+            group.add([v.index],w/total,'REPLACE')
+def fabric_weight(p):
+    x,y,z=p.x/unit,p.y/unit,785-p.z/unit
+    if z<330:return skin_vertex(outer,p)
+    legshare=sat((z-330)/68)
+    left=sat((x+27)/54)
+    return {'J_Bip_C_Hips':1-legshare,'J_Bip_L_UpperLeg':legshare*left,'J_Bip_R_UpperLeg':legshare*(1-left)}
+for ob in [outer,bib]:
+    bm=bmesh.new();bm.from_mesh(ob.data)
+    if ob==bib:
+        # The apron is a front panel hanging from a waistband. Cull its
+        # hidden lower back and side before grading its drape to the thighs.
+        gone=[f for f in bm.faces if (785-f.calc_center_median().z/unit)>320 and f.calc_center_median().y/unit>2]
+        bmesh.ops.delete(bm,geom=gone,context='FACES')
+    long=[e for e in bm.edges if abs(e.verts[0].co.z-e.verts[1].co.z)>30*unit and min(v.co.z for v in e.verts)<wp(0,0,300)[2]]
+    bmesh.ops.subdivide_edges(bm,edges=long,cuts=3,use_grid_fill=True)
+    bm.to_mesh(ob.data);bm.free();ob.data.update()
+    for v in ob.data.vertices:reset_weights(ob,v,fabric_weight(v.co))
+# Trim the leg sections consistently hidden by the standing panel. Taper the
+# hidden thigh above the knee to give the overlapping lower layers clearance.
+for ob in [o for o in rig_items if o.name.startswith('Trouser leg')]:
+    sg=1 if ob.name.endswith('L') else -1
+    for v in ob.data.vertices:
+        z=785-v.co.z/unit
+        f=.77+.23*sat((z-500)/84)
+        v.co.x=sg*42*unit+(v.co.x-sg*42*unit)*f;v.co.y*=f
+    bm=bmesh.new();bm.from_mesh(ob.data)
+    bmesh.ops.delete(bm,geom=[v for v in bm.verts if 785-v.co.z/unit<411],context='VERTS')
+    bm.to_mesh(ob.data);bm.free()
+# Snap pocket patches to the outer panel at their true depth. Interpolate
+# skin weights across the same support triangle for both bag and welt.
+from mathutils.bvhtree import BVHTree
+from mathutils.geometry import barycentric_transform
+outer.data.calc_loop_triangles()
+ts=[tuple(t.vertices) for t in outer.data.loop_triangles]
+coords=[v.co.copy() for v in outer.data.vertices]
+surface_tree=BVHTree.FromPolygons(coords,ts,all_triangles=True)
+for ob in [o for o in rig_items if o.name.startswith(('Patch pocket','Pocket welt','Tailoring centre back'))]:
+    for v in ob.data.vertices:
+        q=v.co.copy();sgn=-1 if 'back' in ob.name else 1
+        x=q.x
+        for shrink in range(20):
+            hit,norm,idx,dist=surface_tree.ray_cast(Vector((x,-sgn*.4,q.z)),Vector((0,sgn,0)),1.)
+            if hit is not None:break
+            x*=.982
+        if hit is None:continue
+        indices=ts[idx]
+        ww=barycentric_transform(hit,*(coords[i] for i in indices),Vector((1,0,0)),Vector((0,1,0)),Vector((0,0,1)))
+        wg={}
+        for i,share in zip(indices,ww):
+            for g in outer.data.vertices[i].groups:
+                name=outer.vertex_groups[g.group].name;wg[name]=wg.get(name,0)+max(0.,share)*g.weight
+        reset_weights(ob,v,wg)
+        v.co=hit+norm*(.0035 if 'welt' in ob.name else .0018)
+for j in range(nn):
+    reset_weights(neck,neck.data.vertices[j],{'J_Bip_C_Neck':.75,'J_Bip_C_Head':.25})
+weight_report=validate_weights()
+assert weight_report['weight_sum_error']<1.e-4 and weight_report['max_influences']<=4
+(ROOT/'rig-weights.json').write_text(json.dumps(weight_report,indent=2)+'\n')
+review_pass('rig-b')
+export_cora()
+audit('final-export')
+bpy.ops.wm.save_as_mainfile(filepath=str(ROOT/'cora-final.blend'))
+
+# 2026-11-19T15:13:58.894823+00:00  game-colour-fit
+# Under the game's day lighting the coat shifts beige and the dark jersey
+# and trousers lift. Grade only the cloth pigments, retaining the single
+# shared material, the coat's cool heather hue, and each layer's shadow.
+bins=[(wool,(.55,.52,.73)),(knit,(.54,.39,.44)),(trouser,(.52,.49,.55)),(leather,(.58,.50,.48)),
+      (linen,(.95,.93,.96)),(cuffmat,(.90,.89,.93)),(panel,(.66,.58,.78)),(facing,(.76,.73,.84))]
+for ob in rig_items:
+    if not any(m==clothmat for m in ob.data.materials):continue
+    pigment=ob.data.color_attributes['Color']
+    for item in pigment.data:
+        rgb=np.array(item.color[:3])
+        closest,adjust=min(bins,key=lambda pair:np.linalg.norm(rgb-np.array(pair[0].diffuse_color[:3])))
+        if np.linalg.norm(rgb-np.array(closest.diffuse_color[:3]))<.003:
+            item.color=(*np.clip(rgb*adjust,0,1),1.)
+review_pass('game-shading')
+export_cora()
+audit('colours-in-game')
+bpy.ops.wm.save_as_mainfile(filepath=str(ROOT/'cora-final.blend'))

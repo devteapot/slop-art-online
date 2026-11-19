@@ -1,0 +1,23 @@
+{
+  "orbit_differing_pixels": {
+    "game-shading-back.png": 0,
+    "game-shading-front.png": 0,
+    "game-shading-middle.png": 0,
+    "game-shading-near.png": 0,
+    "game-shading-profile.png": 0,
+    "game-shading-three-quarter.png": 0
+  },
+  "live_glb_sha256": "4e00f25419f51c1446ee4a89d5a858da673c39a0e105c35075057ca8fc3591d2",
+  "replay_glb_sha256": "4e00f25419f51c1446ee4a89d5a858da673c39a0e105c35075057ca8fc3591d2",
+  "identical_counts": true,
+  "audit": {
+    "stage": "colours-in-game",
+    "materials": 26,
+    "images": [
+      "cora.atlas.png",
+      "cora.iris.png",
+      "cora.tint.png"
+    ],
+    "failures": []
+  }
+}
