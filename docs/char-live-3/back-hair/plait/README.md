@@ -1,6 +1,6 @@
 # Item 1 · final plait review
 
-The plait is visible as auburn below the nape at both 58° play distances. The final mean width is **7.8 px at Near** and **5.1 px at Middle**, within 0.5 px of the registered rear drawing. The final plait is brighter than both drawing samples. The back portrait shows the brighter tops of the interwoven sections. Several bright-to-dark edges at the nape and towards the tie are more angular and higher in contrast than the drawing. The GC’s visual verdict is pending. [Native play comparison and enlargements](play-review.png) · [Back, profile and plait comparison](orbit-review.jpg)
+The plait is visible as auburn below the nape at both 58° play distances. The final mean width is **7.8 px at Near** and **5.1 px at Middle**, within 0.5 px of the registered rear drawing. The final plait is brighter than both drawing samples. The back portrait shows the brighter tops of the interwoven sections. Several bright-to-dark edges at the nape and towards the tie are more angular and higher in contrast than the drawing. The GC passed the final plait. [Native play comparison and enlargements](play-review.png) · [Back, profile and plait comparison](orbit-review.jpg)
 
 ## Measurements
 
@@ -28,3 +28,7 @@ All **12 hair and skin and 8 garment checks pass**. The contract audit reports z
 A triangle-by-triangle comparison found identical positions, corner normals, UVs, colours and rig attributes on all **20,868 hair triangles outside the plait**. All original material definitions, face and garment primitives, face morphs, clips and skinning matched the grouped asset. The hair mask changes only in R on the three braid islands. Across the 1600 × 900 rear game frames, one Near pixel and zero Middle pixels outside a four-pixel margin of the marked plait differed by more than eight channel levels from the grouped fit. The rear portrait had ten such pixels. Factory replay regenerated the GLB and both sidecars byte for byte and reproduced all 13 Bevy stills pixel for pixel. [Replay and preservation evidence](replay-check.json) · [GLB](own-cora-live.glb) · [Editable scene](cora-final.blend) · [Journal](../../session.jsonl) · [Replay](../../replay.py)
 
 The final item-1 attempt ran approximately 21:54–22:02 UTC on 19 November. Usage was one xhigh artistic fit, fixed-dye and visibility controls, one independent replay and two full daylight capture sets using the existing release client. Item 1 used two high attempts and one xhigh in total. Item 2 awaits the coordinator’s verdict and effort reset.
+
+## GC verdict
+
+Item 1 passed. The play-camera defect is fixed. For the later tuning pass, adjust one plait band value. Mean luma is about 25% above the rear drawing (Near 86 against 69, Middle 89 against 69). The close-view segment gaps and the transitions at the nape and tie are harsh.

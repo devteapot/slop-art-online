@@ -33,3 +33,7 @@ OCIO="$PWD/docs/char-live-1/standard.ocio" CHAR_LIVE_OUTPUT="$PWD/.local/cora3-r
 Item 1 ran approximately 21:44–21:53 UTC on 19 November, including packaging and verification. It used two high artistic attempts, a baseline capture, independent replay and paired visibility controls. It reused the existing release binary. No private Cargo build tree was created. The four later items await the GC’s successive verdicts.
 
 The GC retained the grouped locks and authorized one xhigh attempt on the plait alone. The final package compares all three arms at the fixed nape windows and records the close-view residual. [Final plait review](plait/README.md)
+
+## GC verdict
+
+Item 1 passed. The play-camera defect is fixed. For the later tuning pass, adjust one plait band value. Mean luma is about 25% above the rear drawing (Near 86 against 69, Middle 89 against 69). The close-view segment gaps and the transitions at the nape and tie are harsh.
