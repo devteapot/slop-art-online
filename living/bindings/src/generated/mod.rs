@@ -82,6 +82,8 @@ pub mod far_handle_table;
 pub mod far_handle_type;
 pub mod fast_ask_table;
 pub mod fast_ask_type;
+pub mod fast_sight_table;
+pub mod fast_sight_type;
 pub mod fight_seen_table;
 pub mod fight_seen_type;
 pub mod fighter_seen_table;
@@ -425,6 +427,8 @@ pub use far_handle_table::*;
 pub use far_handle_type::FarHandle;
 pub use fast_ask_table::*;
 pub use fast_ask_type::FastAsk;
+pub use fast_sight_table::*;
+pub use fast_sight_type::FastSight;
 pub use fight_seen_table::*;
 pub use fight_seen_type::FightSeen;
 pub use fighter_seen_table::*;
@@ -1348,6 +1352,7 @@ pub struct DbUpdate {
     familiar: __sdk::TableUpdate<Familiar>,
     far_handle: __sdk::TableUpdate<FarHandle>,
     fast_ask: __sdk::TableUpdate<FastAsk>,
+    fast_sight: __sdk::TableUpdate<FastSight>,
     fight_seen: __sdk::TableUpdate<FightSeen>,
     fighter: __sdk::TableUpdate<Fighter>,
     fighter_seen: __sdk::TableUpdate<FighterSeen>,
@@ -1563,6 +1568,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "fast_ask" => db_update
                     .fast_ask
                     .append(fast_ask_table::parse_table_update(table_update)?),
+                "fast_sight" => db_update
+                    .fast_sight
+                    .append(fast_sight_table::parse_table_update(table_update)?),
                 "fight_seen" => db_update
                     .fight_seen
                     .append(fight_seen_table::parse_table_update(table_update)?),
@@ -2012,6 +2020,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.fast_ask = cache
             .apply_diff_to_table::<FastAsk>("fast_ask", &self.fast_ask)
             .with_updates_by_pk(|row| &row.actor);
+        diff.fast_sight = cache
+            .apply_diff_to_table::<FastSight>("fast_sight", &self.fast_sight)
+            .with_updates_by_pk(|row| &row.actor);
         diff.fight_seen = cache
             .apply_diff_to_table::<FightSeen>("fight_seen", &self.fight_seen)
             .with_updates_by_pk(|row| &row.id);
@@ -2434,6 +2445,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "fast_ask" => db_update
                     .fast_ask
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "fast_sight" => db_update
+                    .fast_sight
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "fight_seen" => db_update
                     .fight_seen
@@ -2871,6 +2885,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "fast_ask" => db_update
                     .fast_ask
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "fast_sight" => db_update
+                    .fast_sight
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "fight_seen" => db_update
                     .fight_seen
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -3243,6 +3260,7 @@ pub struct AppliedDiff<'r> {
     familiar: __sdk::TableAppliedDiff<'r, Familiar>,
     far_handle: __sdk::TableAppliedDiff<'r, FarHandle>,
     fast_ask: __sdk::TableAppliedDiff<'r, FastAsk>,
+    fast_sight: __sdk::TableAppliedDiff<'r, FastSight>,
     fight_seen: __sdk::TableAppliedDiff<'r, FightSeen>,
     fighter: __sdk::TableAppliedDiff<'r, Fighter>,
     fighter_seen: __sdk::TableAppliedDiff<'r, FighterSeen>,
@@ -3421,6 +3439,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         callbacks.invoke_table_row_callbacks::<Familiar>("familiar", &self.familiar, event);
         callbacks.invoke_table_row_callbacks::<FarHandle>("far_handle", &self.far_handle, event);
         callbacks.invoke_table_row_callbacks::<FastAsk>("fast_ask", &self.fast_ask, event);
+        callbacks.invoke_table_row_callbacks::<FastSight>("fast_sight", &self.fast_sight, event);
         callbacks.invoke_table_row_callbacks::<FightSeen>("fight_seen", &self.fight_seen, event);
         callbacks.invoke_table_row_callbacks::<Fighter>("fighter", &self.fighter, event);
         callbacks.invoke_table_row_callbacks::<FighterSeen>(
@@ -4322,6 +4341,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         familiar_table::register_table(client_cache);
         far_handle_table::register_table(client_cache);
         fast_ask_table::register_table(client_cache);
+        fast_sight_table::register_table(client_cache);
         fight_seen_table::register_table(client_cache);
         fighter_table::register_table(client_cache);
         fighter_seen_table::register_table(client_cache);
@@ -4465,6 +4485,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "familiar",
         "far_handle",
         "fast_ask",
+        "fast_sight",
         "fight_seen",
         "fighter",
         "fighter_seen",

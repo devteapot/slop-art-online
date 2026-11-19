@@ -106,9 +106,10 @@ impl Minds {
         let outline = brain.as_ref().and_then(|b| living_rules::graph::parse(&b.graph).ok()).map(|g| living_rules::graph::outline(&g.root)).unwrap_or_default();
         let plan = brain.as_ref().map(|b| b.plan.clone()).unwrap_or_default();
         let persona = format!("{}{}", self.persona_text(actor), self.own_timings(actor));
+        let now = self.fast_now(actor, ask.issued_ms);
         let msgs = vec![
             Msg { role: "system", content: prompts::fast_system() },
-            Msg { role: "user", content: prompts::fast_user(&ask.reason, &persona, &experiences, &plan, &outline, &self.repertoire_text(actor)) },
+            Msg { role: "user", content: prompts::fast_user(&ask.reason, &persona, &experiences, &plan, &outline, &self.repertoire_text(actor), &now) },
         ];
         let call = self.llm.chat_in_lane(&self.fast.route, Attention::OnStage, "fast", &c.name, &msgs, Lane::Fast);
         let reply = match tokio::time::timeout(Duration::from_millis(self.fast.timeout_ms), call).await {
@@ -162,6 +163,25 @@ impl Minds {
                 rx.await?.map_err(|e| anyhow!("mind_patch: {e}"))
             }
         }
+    }
+
+    /// Its own health and breath now (its `vitals` row, projected to now: self-perception) and
+    /// what it saw as this request was issued (the authority's `fast_sight` row for this issue:
+    /// its own sight, never the world's truth). Unknown parts are left out of the prompt.
+    fn fast_now(&self, actor: u32, issued_ms: u64) -> prompts::FastNow {
+        let now = llm::now_ms();
+        let v = self.conn.db.vitals().id().find(&actor);
+        let health = self.body_now(actor).filter(|b| b.max_hp > 0.0).map(|b| 100.0 * b.hp / b.max_hp);
+        let stamina = v.map(|v| living_rules::pools::level(v.stamina, v.stamina_rate, v.stamina_from_ms, v.at_ms, v.stamina_max, now));
+        let sight = self.conn.db.fast_sight().actor().find(&actor).filter(|s| s.issued_ms == issued_ms).map(|s| prompts::FastSeen {
+            people: s.people,
+            fighting: s.fighting,
+            at_me: s.at_me,
+            friends: s.friends,
+            enemies: s.enemies,
+            wolves: s.wolves,
+        });
+        prompts::FastNow { health, stamina, sight }
     }
 
     async fn fast_done(&self, actor: u32, issued_ms: u64, summary: &str, detail: Value, reference: &str, reply: Option<&llm::Reply>) -> Result<()> {
@@ -240,19 +260,129 @@ mod tests {
     fn the_prompt_has_no_count_and_no_tactic() {
         // What the repeat trigger contributes is the event as perceived: no count, no "again".
         let reason = "A stranger winds up an attack at you";
-        let user = prompts::fast_user(reason, "Wren", &["A stranger attacked you (9 damage)".into()], "walk to town", "first: …", "- stay safe");
+        let user = prompts::fast_user(reason, "Wren", &["A stranger attacked you (9 damage)".into()], "walk to town", "first: …", "- stay safe", &prompts::FastNow::default());
         // The stable parts come first, for the providers' prefix caches; why now and what has just
         // happened come last.
         assert!(user.starts_with("# Who you are\nWren") && user.find("# Your routines") < user.find("# Why now"), "{user}");
         let why = user.split("# Why now").nth(1).unwrap().split("# What has just happened").next().unwrap();
         assert!(!why.contains("again") && !why.chars().any(|c| c.is_ascii_digit()), "{why}");
         // The rules text keeps its own words ("ready again 900 ms"); nothing counts anyone's moves.
-        for text in [&user, &prompts::fast_system()] {
+        for text in [&user, &prompts::fast_system_v(1), &prompts::fast_system_v(2)] {
             assert!(!regex_like_count(text), "a count in the fast lane's prompt");
             for tactic in ["dodge on", "when they wind up", "counter"] {
                 assert!(!text.to_lowercase().contains(tactic), "tactic text {tactic:?} in the fast lane's prompt");
             }
         }
+    }
+
+    /// The lines the first frame's combat words carry that sell a way out, and its example
+    /// pairing a seen enemy with flight (docs/FAST_LANE_WHY.md).
+    const SOLD: [&str; 3] = [
+        "stepping back or running as it winds up makes it miss",
+        "You can outrun a person who keeps stopping to swing",
+        "\"relation\": \"enemy\"}}}, \"then\": {\"do\": \"flee\"",
+    ];
+
+    /// The balanced frame (`fast_frame` 2) shows holding, pressing, making room and re-entering,
+    /// and breaking contact alike, every one a legal patch, retreats under the condition that
+    /// ends them; none of the lines that sold running away is left. The first frame (1) is the
+    /// replicates' text, those lines included, so the choice between them is real.
+    #[test]
+    fn the_balanced_frame_shows_four_ways_and_sells_none() {
+        let v1 = prompts::fast_system_v(1);
+        let v2 = prompts::fast_system_v(2);
+        for line in SOLD {
+            assert!(v1.contains(line), "the first frame lost {line:?}");
+            assert!(!v2.contains(line), "the balanced frame still has {line:?}");
+        }
+        // The same physics in neutral words: reach at the windup's end, the swinger standing still.
+        assert!(v2.contains("when its windup ends; whoever swings stands still meanwhile, and cannot swing again until it has recovered. A wolf runs faster than a person."), "{v2}");
+        let mine = vec!["facing an enemy".to_string()];
+        for (name, graph) in prompts::FAST_V2_WAYS {
+            assert!(v2.contains(&format!("- {name}: {graph}")), "{name} missing from the balanced frame");
+            // Each way is a legal patch as written.
+            let g: Value = serde_json::from_str(graph).unwrap();
+            match change_of(&json!({"patch": {"label": "combat", "graph": g}, "thought": "t"}), &mine) {
+                Change::Patch { target, .. } => assert_eq!(target, "combat"),
+                Change::Keep(why) => panic!("{name}: {why}"),
+            }
+        }
+        let names: Vec<&str> = prompts::FAST_V2_WAYS.iter().map(|(n, _)| *n).collect();
+        assert_eq!(names, ["hold your ground", "press", "make room and re-enter", "break contact"]);
+        // Retreats are shown only under a condition, with the fight below them to return to.
+        let way = |n: &str| prompts::FAST_V2_WAYS.iter().find(|(k, _)| *k == n).unwrap().1;
+        for (n, retreat) in [("make room and re-enter", "back_off"), ("break contact", "flee")] {
+            let g: Value = serde_json::from_str(way(n)).unwrap();
+            let first = g["first"].as_array().unwrap();
+            assert!(first[0]["if"].is_object() && first[0]["then"]["do"] == retreat, "{n}: {g}");
+            assert_eq!(first.last().unwrap()["do"], "strike", "{n}: {g}");
+        }
+        for (n, _) in prompts::FAST_V2_WAYS.iter().filter(|(n, _)| !n.contains("room") && !n.contains("break")) {
+            assert!(!way(n).contains("flee") && !way(n).contains("back_off"), "{n}");
+        }
+        // Keeping comes first among the replies; the first frame put the combat rewrite first.
+        let replies = v2.find("{\"keep\": true").unwrap();
+        assert!(replies < v2.find("{\"patch\": {\"label\": \"combat\"").unwrap() && replies < v2.find("{\"switch\"").unwrap(), "{v2}");
+        assert!(v1.find("{\"patch\"").unwrap() < v1.find("{\"keep\": true").unwrap());
+        // The rest of the system text is the same world: rules and grammar both present.
+        for part in ["COMBAT:", "BEHAVIOR GRAPH (JSON)", "REPERTOIRE:"] {
+            assert!(v1.contains(part) && v2.contains(part), "{part}");
+        }
+        // Byte-stable across calls (the providers' prefix caches).
+        assert_eq!(v2, prompts::fast_system_v(2));
+    }
+
+    /// The request carries the asker's own health and breath, and counts of what it sees, only
+    /// from what it was given (its vitals; the authority's `fast_sight` for the issue): nothing
+    /// is said of what it was not given, and why now stays the event as perceived.
+    #[test]
+    fn the_request_says_how_one_is_and_what_one_sees() {
+        let now = prompts::FastNow {
+            health: Some(62.4),
+            stamina: Some(39.6),
+            sight: Some(prompts::FastSeen { people: 7, fighting: 4, at_me: 2, friends: 0, enemies: 1, wolves: 0 }),
+        };
+        let user = prompts::fast_user("A stranger attacked you (9 damage)", "Wren", &["x".into()], "fight", "first: …", "", &now);
+        let tail = user.split("# How you are now\n").nth(1).expect("a How you are now section");
+        assert_eq!(
+            tail,
+            "Your health: 62 (0-100).\nYour breath (stamina): 40 (0-100).\nIn sight as you were asked: 7 people; of them 4 visibly in a hostile move (2 at you), 0 you count as friends or family, 1 you count as enemies.\n"
+        );
+        assert!(user.find("# What has just happened") < user.find("# How you are now"));
+        // Unknown parts are not guessed: no sight row, no counts; nothing known, no section.
+        let partial = prompts::FastNow { health: Some(100.0), stamina: None, sight: None };
+        let user = prompts::fast_user("r", "Wren", &[], "p", "o", "", &partial);
+        assert!(user.ends_with("# How you are now\nYour health: 100 (0-100).\n") && !user.contains("In sight"), "{user}");
+        let none = prompts::fast_user("r", "Wren", &[], "p", "o", "", &prompts::FastNow::default());
+        assert!(!none.contains("# How you are now"), "{none}");
+        let alone = prompts::FastNow { sight: Some(prompts::FastSeen { wolves: 1, ..Default::default() }), ..Default::default() };
+        assert_eq!(alone.lines(), "In sight as you were asked: 0 people; 1 wolf.\n");
+    }
+
+    /// No legal patch is refused for what it does: an unconditioned retreat ahead of the attack,
+    /// a bare flight, a back-off alone, or a switch to a routine with no fight in it are installed
+    /// as written (the model chooses; the frame guides by example only).
+    #[test]
+    fn no_patch_is_refused_for_retreating() {
+        let mine = vec!["stay safe".to_string()];
+        for g in [
+            json!({"first": [{"do": "flee", "target": "attacker"}, {"do": "strike", "target": "attacker"}]}),
+            json!({"do": "flee", "target": {"nearest": {"kind": "person"}}}),
+            json!({"do": "back_off", "target": "attacker", "distance": 8}),
+        ] {
+            match change_of(&json!({"patch": {"label": "combat", "graph": g.clone()}, "thought": "away"}), &mine) {
+                Change::Patch { target, graph, .. } => {
+                    assert_eq!(target, "combat");
+                    assert!(graph.contains("flee") || graph.contains("back_off"), "{graph}");
+                }
+                Change::Keep(why) => panic!("refused {g}: {why}"),
+            }
+            match change_of(&json!({"routine": {"name": "stay safe", "graph": g.clone()}}), &mine) {
+                Change::Patch { target, .. } => assert_eq!(target, "routine:stay safe"),
+                Change::Keep(why) => panic!("refused routine {g}: {why}"),
+            }
+        }
+        assert!(matches!(change_of(&json!({"switch": "stay safe"}), &mine), Change::Patch { .. }));
     }
 
     fn regex_like_count(t: &str) -> bool {

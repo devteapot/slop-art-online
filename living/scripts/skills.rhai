@@ -157,6 +157,11 @@ fn laws() {
         // world at most `fast_lane_rate` are issued a second and `fast_lane_inflight` at once;
         // a character's start `fast_lane_gap_s` apart; a trigger waiting `fast_lane_stale_s` is dropped.
         fast_lane_on: false, seen_again_n: 3.0, fast_lane_rate: 2.0, fast_lane_inflight: 4.0, fast_lane_gap_s: 6.0, fast_lane_stale_s: 8.0,
+        // Which frame the fast lane's prompt is written in (docs/FAST_LANE_FRAME.md): 2, the
+        // balanced one (keeping, holding, pressing, making room and re-entering, and breaking
+        // contact shown alike, in the same words of danger); 1, the first frame, kept for
+        // comparisons. Read by the mind service only; the lane itself is `fast_lane_on`.
+        fast_frame: 2.0,
         // First sights (docs/FIRST_SIGHT.md): seeing someone one cannot place (whose name one
         // does not know, and who is near enough to make out) for the first time asks one's mind
         // for a thought, at most once within `first_sight_gap_s`. Off: it is only noticed.
@@ -3171,6 +3176,7 @@ fn law_about(l, name) {
         "fast_lane_inflight" => `and at most ${short(l.fast_lane_inflight)} are under way at once`,
         "fast_lane_gap_s" => `one's quick revisions begin at least ${short(l.fast_lane_gap_s)} s apart`,
         "fast_lane_stale_s" => `a reason for one that waits ${short(l.fast_lane_stale_s)} s is let go`,
+        "fast_frame" => if l.fast_frame >= 2.0 { "a quick revision is asked with every way of answering a fight shown alike" } else { "a quick revision is asked in its first words" },
         "force_outcomes" => if l.force_outcomes { "whoever strikes, shoots or casts learns how it came out, as far as they see" } else { "a blow, shot or bolt tells its maker how it came out only when it fails, or for a few skills" },
         "alert_after_hit_s" => `a body struck within the last ${short(l.alert_after_hit_s)} s cannot fall asleep`,
         "alert_while_attacker_near" => if l.alert_while_attacker_near { "nor while the one who struck it is close and the fight is on" } else { "even with the one who struck it close by" },

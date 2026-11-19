@@ -157,6 +157,12 @@ async fn main() -> Result<()> {
             c.subscription_builder()
                 .on_error(|_, e| log::warn!("no `fast_ask` subscription ({e:?}): this world has no fast lane"))
                 .subscribe(["SELECT * FROM fast_ask".to_string()]);
+            // What each asker saw when its fast request was issued (private, one row per
+            // `fast_ask` row; docs/FAST_LANE_FRAME.md). A world without it still starts; its fast
+            // requests then say nothing of what is in sight.
+            c.subscription_builder()
+                .on_error(|_, e| log::warn!("no `fast_sight` subscription ({e:?}): fast requests say nothing of what is in sight"))
+                .subscribe(["SELECT * FROM fast_sight".to_string()]);
             if mind::greet_audience() {
                 c.subscription_builder()
                     .on_error(|_, e| log::warn!("no `audience` subscription ({e:?}): this world does not keep who heard a line; LIVING_GREET falls back to `off` here"))

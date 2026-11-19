@@ -2474,7 +2474,7 @@ fn first_sight_text(parts: &[String]) -> String {
 /// Whether `me`'s relationship to `other` fits a selector's relation filter. Every creature
 /// filter of a graph goes through here: `sees`, `near`, `nearest` targets, `count` and
 /// `health_of`.
-fn relation_ok(ctx: &ReducerContext, me: u32, other: u32, want: &str) -> bool {
+pub(crate) fn relation_ok(ctx: &ReducerContext, me: u32, other: u32, want: &str) -> bool {
     // With the world's `stranger_by_name` law, "stranger" is what the scene's word means:
     // someone whose name I do not know (docs/STRANGERS.md). A relation row or its label does
     // not count: feelings about someone are not knowing their name.

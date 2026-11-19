@@ -70,8 +70,12 @@ def main():
         try:
             command('cleanup', [str(HARNESS), 'cleanup', '--run', args.run])
             state = json.loads(state_path.read_text())
-            proof = {'database': database, 'cleanup_confirmed_sql_404':
-                     f'deleted {database} (SQL now 404)' in (directory / 'cleanup.log').read_text(),
+            # The harness's two deletion paths log their check differently: the commitlog-archive
+            # path (trial_archive.finish) "name no longer resolves", the pause-and-delete one
+            # "SQL now 404". Either is the server's own confirmation; the HTTP check repeats it.
+            cleaned = (directory / 'cleanup.log').read_text()
+            confirmed = any(f'deleted {database} ({how})' in cleaned for how in ('SQL now 404', 'name no longer resolves'))
+            proof = {'database': database, 'cleanup_confirmed_sql_404': confirmed and V.http(f'/v1/database/{database}/sql', 'SELECT 1 FROM world', raw=True)[0] == 404,
                      'published': state.get('published', False), 'player_token_removed': 'token' not in state,
                      'shared_container_running': V.container_up(),
                      'living_token_unchanged': token_digest() == before_token,

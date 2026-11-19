@@ -493,7 +493,7 @@ pub fn resolve_sheet(sheet: &serde_json::Value, lookup: &dyn Fn(&str) -> Option<
 
 /// An authored temperament is also the body's: the sheet's person traits replace the drawn
 /// or inherited ones in the genome (and are what an authored child inherits from).
-fn author_temperament(ctx: &ReducerContext, id: u32, sheet: &serde_json::Value) {
+pub(crate) fn author_temperament(ctx: &ReducerContext, id: u32, sheet: &serde_json::Value) {
     let Some(traits) = sheet["traits"].as_object() else { return };
     let Some(mut row) = ctx.db.genome().id().find(id) else { return };
     let mut genes: living_rules::genes::Genes = serde_json::from_str(&row.genes).unwrap_or_default();

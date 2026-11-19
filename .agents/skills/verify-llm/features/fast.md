@@ -1,6 +1,6 @@
 # The fast lane's route and caps
 
-docs/FAST_LANE.md. Purpose `fast` (`llm.rs` `Lane::for_purpose`: `Lane::Fast`, its own slots, as many as the world's `fast_lane_inflight`, outside the shared pool, since fast-lane-slots), routed by `rethink.json` `fast.route`; `fast.timeout_ms` drops a late reply (`mind/fast.rs`, journaled as a timeout). The caps are world laws the authority applies when it issues `fast_ask` rows: `fast_lane_rate` (2 a second) and `fast_lane_inflight` (4). The fake tells a fast request by its system prompt (`fake_llm.py` `purpose_of`) and keeps the plan by default.
+docs/FAST_LANE.md. Purpose `fast` (`llm.rs` `Lane::for_purpose`: `Lane::Fast`, its own slots, as many as the world's `fast_lane_inflight`, outside the shared pool, since fast-lane-slots), routed by `rethink.json` `fast.route`; `fast.timeout_ms` drops a late reply (`mind/fast.rs`, journaled as a timeout). The caps are world laws the authority applies when it issues `fast_ask` rows: `fast_lane_rate` (2 a second) and `fast_lane_inflight` (4). The fake tells a fast request by its system prompt (`fake_llm.py` `purpose_of`: "Something has just happened to you (see Why now)", which both frames of the world law `fast_frame` open with; docs/FAST_LANE_FRAME.md) and keeps the plan by default.
 
 ## Cases
 

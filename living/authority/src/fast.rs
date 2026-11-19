@@ -146,7 +146,7 @@ pub fn pump(ctx: &ReducerContext, now: u64) {
             }
         } else if r.first_ms == 0 {
             if now.saturating_sub(r.last_issued_ms) >= gap {
-                ctx.db.fast_ask().actor().delete(r.actor);
+                forget(ctx, r.actor);
             }
         } else if now.saturating_sub(r.first_ms) > stale || !laws.fast_lane_on {
             common::diag(|| "fast:stale", 1);
@@ -180,13 +180,14 @@ pub fn pump(ctx: &ReducerContext, now: u64) {
             continue;
         }
         let Some(c) = ctx.db.character().id().find(r.actor).filter(|c| served(ctx, c)) else {
-            ctx.db.fast_ask().actor().delete(r.actor);
+            forget(ctx, r.actor);
             continue;
         };
         r.issued_ms = now;
         r.last_issued_ms = now;
         r.base_ms = ctx.db.brain().id().find(c.id).map_or(0, |b| b.installed_ms);
         ctx.db.fast_ask().actor().update(r);
+        sight(ctx, c.id, now);
         common::diag(|| "fast:issued", 1);
         inflight += 1;
         tokens -= 1.0;
@@ -214,5 +215,47 @@ pub fn answered(ctx: &ReducerContext, actor: u32, issued_ms: u64, now: u64) {
 
 /// The character's mind no longer holds it (its person is back) or it died: nothing is asked.
 pub fn cancel(ctx: &ReducerContext, actor: u32) {
+    forget(ctx, actor);
+}
+
+/// The request goes, and what was seen for it.
+fn forget(ctx: &ReducerContext, actor: u32) {
     ctx.db.fast_ask().actor().delete(actor);
+    ctx.db.fast_sight().actor().delete(actor);
+}
+
+/// What the character sees as its request is issued, counted (`fast_sight`): its own sight now
+/// (`perception::sensed`, the one sight rule), what each one seen is visibly doing
+/// (`perception::visibly`) and its own relationships to them (`brain::relation_ok`). One gather
+/// of the creatures round it per issue, at most `fast_lane_rate` a second across the world.
+fn sight(ctx: &ReducerContext, actor: u32, now: u64) {
+    let _detail = common::detail_span("fast.sight");
+    let Some(body) = ctx.db.body().id().find(actor) else { return };
+    let at = common::pos(&body, now);
+    let (seen, _) = crate::perception::sensed(ctx, actor, at, now);
+    let sc = common::scripts(ctx);
+    let mut row = FastSight { actor, issued_ms: now, people: 0, fighting: 0, at_me: 0, friends: 0, enemies: 0, wolves: 0 };
+    for n in &seen {
+        match &*n.kind {
+            "wolf" => row.wolves += 1,
+            "person" => {
+                row.people += 1;
+                if let Some(v) = crate::perception::visibly(ctx, &sc, n.id, now).filter(|v| v.combat && v.is(&sc, "hostile")) {
+                    row.fighting += 1;
+                    row.at_me += v.at(actor, at, n.pos) as u32;
+                }
+                if crate::brain::relation_ok(ctx, actor, n.id, "friend") || crate::brain::relation_ok(ctx, actor, n.id, "family") {
+                    row.friends += 1;
+                } else if crate::brain::relation_ok(ctx, actor, n.id, "enemy") {
+                    row.enemies += 1;
+                }
+            }
+            _ => {}
+        }
+    }
+    if ctx.db.fast_sight().actor().find(actor).is_some() {
+        ctx.db.fast_sight().actor().update(row);
+    } else {
+        ctx.db.fast_sight().insert(row);
+    }
 }

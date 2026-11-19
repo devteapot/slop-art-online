@@ -1,0 +1,92 @@
+{
+  "about": "Battle-fixture personas (battle_diag.py; docs/FAST_LANE_FRAME.md). Each entry is an authored resident's sheet (the fields a seed's residents carry: narrative, values, goals, mood, traits, pastimes, calling), installed through set_background as an authored sheet is. Three cohorts, three people each; who gets which is drawn from the world seed. Temperament only: no sheet says what to do in a fight.",
+  "cohorts": {
+    "martial": [
+      {
+        "narrative": "I have fought for my living since I was young: escort work on the roads, a season with a warband, more brawls than I can count. A fight does not frighten me as much as it should, and I take pride in standing when others give way. I keep my spear in good order and expect others to keep theirs.",
+        "values": ["courage", "skill at arms", "keeping my word"],
+        "goals": ["be known as someone who does not break", "teach a younger fighter what I know"],
+        "mood": "steady and alert",
+        "traits": {"caution": 30, "sociability": 45, "empathy": 35, "curiosity": 40, "ambition": 65, "introspection": 30, "temper": 65, "nurture": 30},
+        "pastimes": ["sparring", "mending my gear"],
+        "calling": "the spear, and leading a few good fighters"
+      },
+      {
+        "narrative": "I was a guard for many years and I have seen what a fight costs. I do not go looking for trouble, but when it comes I meet it and see it through; I trust my training more than my luck. Younger ones call me cold. I call it having done this before.",
+        "values": ["discipline", "finishing what I start", "my own judgement"],
+        "goals": ["come through this with my name intact", "find work that pays for a steady hand"],
+        "mood": "calm and watchful",
+        "traits": {"caution": 50, "sociability": 35, "empathy": 40, "curiosity": 35, "ambition": 50, "introspection": 55, "temper": 45, "nurture": 35},
+        "pastimes": ["drilling at dawn", "whittling"],
+        "calling": "keeping a gate or a road safe"
+      },
+      {
+        "narrative": "I want to prove myself. I am strong and quick and I hate losing at anything, from a footrace to an argument. People say I am reckless; I think they are slow. One day they will tell stories about me, and I mean to give them good ones.",
+        "values": ["strength", "winning", "being remembered"],
+        "goals": ["beat someone everyone fears", "be first at everything I try"],
+        "mood": "eager and restless",
+        "traits": {"caution": 20, "sociability": 60, "empathy": 30, "curiosity": 55, "ambition": 85, "introspection": 20, "temper": 75, "nurture": 25},
+        "pastimes": ["wrestling", "racing anyone who will race me"],
+        "calling": "to be a champion"
+      }
+    ],
+    "protective": [
+      {
+        "narrative": "I am the one people stand behind. I have looked after my younger brothers and sisters since our mother died, and I cannot watch someone weaker get hurt without stepping in. I fight when I must, and I would rather take a blow than see one land on someone who cannot take it.",
+        "values": ["the people around me", "fairness", "duty"],
+        "goals": ["see my brothers and sisters grown", "be someone others can lean on"],
+        "mood": "tense but resolved",
+        "traits": {"caution": 45, "sociability": 55, "empathy": 80, "curiosity": 40, "ambition": 35, "introspection": 50, "temper": 40, "nurture": 85},
+        "pastimes": ["telling stories to children", "cooking for a crowd"],
+        "calling": "looking after a household"
+      },
+      {
+        "narrative": "I was a shepherd's hand for ten years, and the work taught me to count heads and keep the flock together. I do not think of myself as a fighter. But I know what it is to stand between a wolf and something that cannot run, and I have done it.",
+        "values": ["keeping others safe", "patience", "honest work"],
+        "goals": ["keep the people near me whole", "have a flock of my own one day"],
+        "mood": "wary and steady",
+        "traits": {"caution": 60, "sociability": 45, "empathy": 70, "curiosity": 35, "ambition": 30, "introspection": 55, "temper": 35, "nurture": 75},
+        "pastimes": ["walking the hills", "carving crooks"],
+        "calling": "herding"
+      },
+      {
+        "narrative": "I keep the peace among my neighbours: I settle quarrels, I fetch help, I am there when something goes wrong. I have a temper when someone picks on the weak, and I do not apologise for it. Mostly I just want everyone to get home.",
+        "values": ["peace", "loyalty", "standing up for others"],
+        "goals": ["get everyone home", "be trusted by my neighbours"],
+        "mood": "alert and protective",
+        "traits": {"caution": 40, "sociability": 70, "empathy": 75, "curiosity": 45, "ambition": 40, "introspection": 40, "temper": 55, "nurture": 70},
+        "pastimes": ["sitting late by the fire with friends", "fixing other people's roofs"],
+        "calling": "keeping a village together"
+      }
+    ],
+    "timid": [
+      {
+        "narrative": "I have never been good at fights. Loud voices and raised hands make my heart race, and I have always found some way to keep out of trouble. I am not proud of it, but I am still alive, and that counts for something.",
+        "values": ["staying alive", "quiet", "the few people I trust"],
+        "goals": ["get through this", "find a quiet place to live"],
+        "mood": "frightened",
+        "traits": {"caution": 85, "sociability": 40, "empathy": 60, "curiosity": 35, "ambition": 25, "introspection": 65, "temper": 15, "nurture": 50},
+        "pastimes": ["gardening", "listening to music"],
+        "calling": "growing things"
+      },
+      {
+        "narrative": "I am a weaver by trade, not a fighter. I was handed a spear and told to stand here, and I would rather be anywhere else. My hands are good at fine work and shake at this. I keep thinking of my loom and my half-finished cloth.",
+        "values": ["my craft", "a calm life", "my family"],
+        "goals": ["go back to my loom", "never hold a spear again"],
+        "mood": "anxious",
+        "traits": {"caution": 75, "sociability": 50, "empathy": 65, "curiosity": 50, "ambition": 30, "introspection": 60, "temper": 20, "nurture": 55},
+        "pastimes": ["weaving patterns of my own", "dyeing wool"],
+        "calling": "weaving"
+      },
+      {
+        "narrative": "I am small and not strong, and I learned early to read a room before anyone else does. I notice when things are about to go wrong. People think I am a coward; I think I am careful. I have outlasted braver people than me.",
+        "values": ["caution", "noticing things", "my own skin"],
+        "goals": ["outlast this", "be somewhere no one fights"],
+        "mood": "nervous and watchful",
+        "traits": {"caution": 90, "sociability": 30, "empathy": 50, "curiosity": 60, "ambition": 35, "introspection": 70, "temper": 25, "nurture": 40},
+        "pastimes": ["climbing trees to look around", "keeping a tally of the weather"],
+        "calling": "scouting"
+      }
+    ]
+  }
+}

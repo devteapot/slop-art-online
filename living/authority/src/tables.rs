@@ -1101,6 +1101,30 @@ pub struct FastAsk {
     pub base_ms: u64,
 }
 
+/// What a character asked for a fast re-plan saw when its request was issued (docs/FAST_LANE.md,
+/// "The request"): counts of the people and wolves in its own sight at that moment, by the one
+/// sight rule, and of those how many were visibly fighting, aimed at it, or whom it counts as
+/// friends or enemies by its own relationships. Never the world's truth beyond its sight. One row
+/// per character with a `fast_ask` row (private; the mind service reads it); written at issue,
+/// removed with the request.
+#[spacetimedb::table(accessor = fast_sight)]
+pub struct FastSight {
+    #[primary_key]
+    pub actor: u32,
+    /// The issue it was seen at (`fast_ask.issued_ms`).
+    pub issued_ms: u64,
+    pub people: u32,
+    /// People in sight visibly in a hostile move (winding up, releasing or recovering a blow,
+    /// shot or bolt), and of those, aimed at it.
+    pub fighting: u32,
+    pub at_me: u32,
+    /// People in sight it counts as friends or family, and as enemies (its own relationships,
+    /// as a graph's `relation` reads them).
+    pub friends: u32,
+    pub enemies: u32,
+    pub wolves: u32,
+}
+
 /// A sleeping body (one in a `sleep` act, or between two sleeps of one night: a sleep that ends
 /// unrested is slept again) and the reasons to think that arrived while it slept. A sleeper's
 /// mind thinks only on what wakes the body (`perceive::Wake`); everything else waits here and is

@@ -53,6 +53,7 @@ from datetime import datetime, timezone
 from functools import lru_cache
 from pathlib import Path
 
+from battle_personas import PERSONAS, persona_mix, refill_personas
 from verify_steering import pose
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -307,11 +308,14 @@ def main():
     ap.add_argument("--familiar", action="store_true",
                     help="read every character's `familiar` row count at each sample and once more before cleanup, by role "
                          "(fighter, walker, resident): familiar.json, familiar-<k>.json (docs/BATTLE_SCALE.md, note C2)")
+    ap.add_argument("--no-personas", action="store_true",
+                    help="fighters without personas (\"(no persona yet)\"), as before battle_personas.json; by default each "
+                         "fighter and refill is given a martial, protective or timid sheet drawn from the world seed")
     ap.add_argument("--law", action="append", default=[], metavar="NAME=VALUE",
                     help="set a world law after launch (JSON value), e.g. witness_fold_ms=0 or profile_detail=true")
     a = ap.parse_args()
     run = vm.Run(a.run)
-    state = {"respawns": 0, "stop": False, "fighters": [], "arriving": {}}
+    state = {"respawns": 0, "stop": False, "fighters": [], "arriving": {}, "personas": {}}
     head = {}
     roster = {}
     stop_capture = threading.Event()
@@ -358,9 +362,21 @@ def main():
             # Only the ones spawned (a resident's child born meanwhile is new too).
             return sorted(c["id"] for c in run.sql("SELECT id, name, alive FROM character", "chars") if c["id"] not in have and c["name"].startswith("Walker") and c["alive"])
 
-        def fighter(id, into, origin=None):
+        refills = refill_personas(seed["seed"])
+
+        def persona(id, kind):
+            """Give a fighter its sheet as an authored resident's background, before its mind
+            forms an identity (the sheet is installed as written: no model call)."""
+            if kind is None:
+                return
+            cohort, index = kind
+            state["personas"][id] = f"{cohort}-{index + 1}"
+            run.admin("set_background", id, json.dumps({"sheet": PERSONAS[cohort][index]}))
+
+        def fighter(id, into, origin=None, kind=None):
             """Set up a fighter: at the site, fighting; or (a refill) `--refill-from` away at a
             random bearing, walking to a spot in the battle, given the fight when it arrives."""
+            persona(id, kind)
             run.admin("place_at", id, *(origin if origin else into))
             run.admin("grant_items", id, "spear", 1)
             run.admin("grant_know_how", id, "wound_tending")
@@ -370,9 +386,9 @@ def main():
             else:
                 run.admin("set_behavior", id, json.dumps(graph(id)))
 
-        def refill(id, into, origin):
+        def refill(id, into, origin, kind):
             try:
-                fighter(id, into, origin)
+                fighter(id, into, origin, kind)
             except RuntimeError:
                 # A refill can die during setup. The keeper will try a new fighter.
                 pass
@@ -397,8 +413,9 @@ def main():
                 run.admin("place_at", body["id"], *staging)
                 if body["id"] in before:
                     ambient_moved[body["id"]] = (x, y)
-        for id, into in zip(fighters, slots):
-            fighter(id, into)
+        mix = [None] * a.battle if a.no_personas else persona_mix(seed["seed"], a.battle)
+        for id, into, kind in zip(fighters, slots, mix):
+            fighter(id, into, kind=kind)
         for id, into in zip(made[a.battle:], walker_slots):
             run.admin("place_at", id, *into)
         bodies = {b["id"]: (b["x"], b["y"])
@@ -490,7 +507,9 @@ def main():
                             bearing = rng.uniform(0, 2 * math.pi)
                             distance = a.refill_from + rng.uniform(-3, 3)
                             origin = (site[0] + distance * math.cos(bearing), site[1] + distance * math.sin(bearing))
-                            setups.append((id, into, origin))
+                            # Drawn here, in spawn order, so the refills' personas follow
+                            # their own seeded stream whatever order the setups finish in.
+                            setups.append((id, into, origin, None if a.no_personas else next(refills)))
                         with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
                             list(pool.map(lambda setup: refill(*setup), setups))
                         state["respawns"] += len(ids)
@@ -500,9 +519,9 @@ def main():
                 time.sleep(min(0.5, a.refill_gap))
 
         keeper = threading.Thread(target=keep_battle, daemon=True)
-        head = {"arm": a.arm, "fast_real": a.fast_real, "keep_plans": a.keep_plans, "fake_fast_patch": a.fake_fast_patch, "battle": a.battle, "walkers": a.walkers, "refill": not a.no_refill, "refill_from": a.refill_from, "refill_gap": a.refill_gap, "laws": a.law, "site": site, "ambient_at_publish": len(before), "mind": not a.no_mind, "fast_lane": a.fast_lane,
+        head = {"arm": a.arm, "fast_real": a.fast_real, "keep_plans": a.keep_plans, "fake_fast_patch": a.fake_fast_patch, "battle": a.battle, "walkers": a.walkers, "refill": not a.no_refill, "personas": not a.no_personas, "refill_from": a.refill_from, "refill_gap": a.refill_gap, "laws": a.law, "site": site, "ambient_at_publish": len(before), "mind": not a.no_mind, "fast_lane": a.fast_lane,
                 "nproc": os.cpu_count(), "db_identity": ident, "world_seed": seed["seed"],
-                "layout": [{"id": id, "at": bodies[id]} for id in fighters],
+                "layout": [{"id": id, "at": bodies[id], "persona": state["personas"].get(id)} for id in fighters],
                 "walker_layout": [{"id": id, "at": bodies[id]} for id in made[a.battle:]],
                 "ambient_displaced": [{"id": id, "from": at, "to": bodies.get(id)}
                                       for id, at in ambient_moved.items()],
@@ -568,7 +587,7 @@ def main():
             if a.fast_lane:
                 # Fast calls whose request was issued in this window, from their `thought` rows.
                 fast = []
-                for r in run.private("SELECT kind, detail, at_ms FROM thought WHERE kind = 'fast'", f"fast-{k:02d}"):
+                for r in run.private("SELECT actor, kind, summary, detail, at_ms FROM thought WHERE kind = 'fast'", f"fast-{k:02d}"):
                     try:
                         issued = json.loads(r["detail"]).get("issued_ms") or r["at_ms"]
                     except (ValueError, TypeError):
@@ -637,6 +656,14 @@ def main():
             sampler.join()
         if keeper and keeper.ident is not None:
             keeper.join()
+        # Every fast thought (patches with their replies, kept and refused ones), before cleanup
+        # deletes the world: the last window's export misses those after it.
+        if a.fast_lane and "started_ms" in head:
+            try:
+                run.private("SELECT actor, kind, summary, detail, at_ms FROM thought WHERE kind = 'fast'", "fast-final")
+            except Exception as e:  # noqa: BLE001
+                (run.directory / "fast-final-error.txt").write_text(str(e))
+        head["persona_of"] = {str(k): v for k, v in state["personas"].items()}
         # The last read of `familiar`, before cleanup deletes the world.
         if a.familiar and "familiar_sample" in locals():
             try:

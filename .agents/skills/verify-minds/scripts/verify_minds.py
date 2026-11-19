@@ -1235,6 +1235,162 @@ def fast_lane_case(run):
     return {'status': 'pass', 'fast_requests': len(requests()), 'refused': [t['summary'] for t in refused][:2], 'why': why.strip()[:200]}
 
 
+# The balanced frame's case (docs/FAST_LANE_FRAME.md): the lines of the first frame that sold
+# running away, and an unconditioned retreat ahead of the attack (a legal patch, never refused).
+FAST_SOLD = ('stepping back or running as it winds up makes it miss', 'You can outrun a person who keeps stopping to swing',
+             '"relation": "enemy"}}}, "then": {"do": "flee"')
+FAST_WAYS = ('- hold your ground: ', '- press: ', '- make room and re-enter: ', '- break contact: ')
+FAST_RETREAT = {'patch': {'label': 'combat', 'graph': {'first': [{'do': 'flee', 'target': 'attacker'}, {'do': 'strike', 'target': 'attacker'}]}},
+                'thought': 'verify fast frame: out of here first.'}
+
+
+def battle_personas():
+    spec = importlib.util.spec_from_file_location('battle_personas', ROOT / 'living/tools/battle_personas.py')
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+@case('fast-frame')
+def fast_frame_case(run):
+    """The balanced fast frame (docs/FAST_LANE_FRAME.md) with the fake model, `fast_frame` 2 (the
+    law as shipped), `fast_lane_on` on: the other strikes at the eye with a spear; a friend of the
+    eye stands beside it; a stranger stands far out of sight.
+
+    - (p) the battle fixture's persona mix (battle_personas.py) is deterministic per seed, an even
+      mix of martial, protective and timid sheets with the fields a seed's residents carry and no
+      fight instructions; the eye given one through `set_background` (as battle_diag.py does)
+      gets it as its persona, its traits in its genome, with no model call.
+    - (a) the first fast request's system text shows the four ways (hold, press, make room and
+      re-enter, break contact) and none of the lines that sold running away; keep comes first.
+    - (b) its user text ends with How you are now: the eye's own health and breath, and counts of
+      what it saw at issue equal to the authority's `fast_sight` row for that issue (its own
+      sight: the friend counted as a friend, the far stranger not counted at all).
+    - (c) the reply, an unconditioned retreat ahead of the attack, is installed as written
+      (`mind_patch`, source `fast`): no legal patch is refused for what it does.
+    - (d) `fast_frame` 1: the next request is the first frame's text, those lines included."""
+    bp = battle_personas()
+    mix = bp.persona_mix(7, 100)
+    assert mix == bp.persona_mix(7, 100) and mix != bp.persona_mix(8, 100), 'the persona mix is not a function of the seed'
+    counts = {k: sum(1 for c, _ in mix if c == k) for k in bp.COHORTS}
+    assert sorted(counts.values()) == [33, 33, 34], counts
+    refills = bp.refill_personas(7)
+    assert [next(refills) for _ in range(20)] == [x for x, _ in zip(bp.refill_personas(7), range(20))]
+    for cohort, sheets in bp.PERSONAS.items():
+        for sheet in sheets:
+            assert set(sheet) == bp.SHEET_FIELDS and set(sheet['traits']) == bp.PERSON_TRAITS, (cohort, sorted(sheet))
+            words = json.dumps(sheet).lower()
+            assert not any(w in words for w in ('flee', 'back off', 'back_off', 'retreat', 'strike', 'dodge', 'block')), (cohort, 'a fight instruction in a persona')
+    seed_sheet = json.loads((ROOT / 'living/seeds/island.json').read_text())
+    resident = next(r for t in seed_sheet['towns'] for r in t['residents'] if r.get('sheet'))['sheet']
+    assert bp.SHEET_FIELDS <= set(resident) | {'pastimes', 'calling'}, sorted(resident)
+    people = prepare(run)
+    eye, other = [p['id'] for p in people]
+    have = {c['id'] for c in run.sql('SELECT id FROM character', 'chars-0')}
+    run.admin('spawn_crowd', 2, False)
+    friend, far = sorted(c['id'] for c in run.sql('SELECT id, name FROM character', 'chars-1') if c['id'] not in have and c['name'].startswith('Walker'))[:2]
+    e = wall_spots(run)['open']
+    w, h, tiles = terrain(run)
+    far_at = next((x + .5, y + .5) for y in range(h) for x in range(w)
+                  if tiles[y * w + x] not in UNWALKABLE and 28 <= math.dist((x + .5, y + .5), e) <= 40)
+    for who in (eye, other, friend, far):
+        run.admin('set_behavior', who, json.dumps({'wait': 300}))
+    run.admin('place_at', eye, *e)
+    run.admin('place_at', other, e[0] + 1.2, e[1])
+    run.admin('place_at', friend, e[0] + 2.4, e[1])
+    run.admin('place_at', far, *far_at)
+    run.admin('grant_items', other, 'spear', 1)
+    cohort, index = mix[0]
+    sheet = dict(bp.PERSONAS[cohort][index], relations=[{'id': friend, 'trust': 80, 'affinity': 70, 'label': 'friend', 'note': 'We came here together.'}])
+    run.admin('set_background', eye, json.dumps({'sheet': sheet}))
+    genes = json.loads(run.private(f'SELECT * FROM genome WHERE id = {eye}', 'eye-genome')[0]['genes'])
+    assert all(genes.get(f'trait:{t}') == v for t, v in sheet['traits'].items()), {'genes': genes, 'sheet': sheet['traits']}
+    run.admin('set_world_law', 'fast_lane_on', 'true')
+    script = {'replies': {'think': {'thought': 'Someone is hitting me.', 'intend': ['stand my ground'], 'say': None}, 'deliberate': basic_reply()},
+              'rules': [{'purpose': 'fast', 'reply': FAST_RETREAT, 'times': -1}, {'purpose': 'deliberate', 'delay_s': 5, 'times': -1}]}
+    run.start(model(run, script), [eye], extra_env={'LIVING_RETHINK_CONFIG': fast_config(run)})
+    persona = run.wait(lambda: run.sql(f'SELECT * FROM persona WHERE id = {eye}', 'eye-persona') or None, "the eye's persona from its sheet", 30)[0]
+    assert persona['narrative'] == sheet['narrative'] and persona['values'] == sheet['values'] and persona['mood'] == sheet['mood'], persona
+    assert json.loads(persona['traits']).get('caution') == sheet['traits']['caution'], persona['traits']
+    requests = lambda: [x for x in shared.rows(run.directory / 'fake-requests.jsonl') if x['purpose'] == 'fast']
+    text = lambda x, role: '\n'.join(str(m.get('content', '')) for m in x['body'].get('messages', []) if m.get('role') == role)
+    # The sheet is installed as written: no identity call (its system prompt opens on the
+    # starting identity); later consolidations of what the eye lives are ordinary.
+    identity_calls = [x for x in shared.rows(run.directory / 'fake-requests.jsonl') if 'starting identity' in text(x, 'system')]
+    assert not identity_calls, 'a model call made the persona'
+    seen = {}
+
+    def first_with_sight():
+        for r in run.private(f'SELECT * FROM fast_sight WHERE actor = {eye}', 'fast-sight'):
+            seen[r['issued_ms']] = r
+        return requests() or None
+    run.admin('set_behavior', other, json.dumps({'first': [{'do': {'skill': 'attack', 'target': {'id': eye}}}, {'wait': 0.3}]}))
+    first = run.wait(first_with_sight, 'a fast request after a blow', 30)[0]
+    system, user = text(first, 'system'), text(first, 'user')
+    # (a) the balanced frame.
+    for way in FAST_WAYS:
+        assert way in system, f'{way!r} missing from the fast system text'
+    for line in FAST_SOLD:
+        assert line not in system, f'{line!r} in the balanced frame'
+    assert system.index('{"keep": true') < system.index('{"patch": {"label": "combat"'), 'keep is not first among the replies'
+    # (b) how it is now, from its own vitals and the issue's own sight row.
+    assert sheet['narrative'] in user.split('# Your top level')[0], 'the persona is not in Who you are'
+    now = user.split('# How you are now\n')[1]
+    health = re.search(r'Your health: (\d+) \(0-100\)', now)
+    breath = re.search(r'Your breath \(stamina\): (\d+) \(0-100\)', now)
+    sight = re.search(r'In sight as you were asked: (\d+) (?:people|person); of them (\d+) visibly in a hostile move \((\d+) at you\), (\d+) you count as friends or family, (\d+) you count as enemies', now)
+    assert health and breath and sight, now
+    vitals = run.private(f'SELECT * FROM vitals WHERE id = {eye}', 'eye-vitals')[0]
+    # Health only falls in this fight (no healing): the prompt's is at least the eye's now.
+    assert int(health[1]) <= 100 and int(health[1]) >= int(100 * vitals['hp'] / vitals['max_hp']) - 2, (now, vitals)
+    for _ in range(20):
+        if seen:
+            break
+        first_with_sight()
+        time.sleep(0.2)
+    assert seen, 'no fast_sight row was read for the issue'
+    row = seen[max(seen)]
+    assert [int(g) for g in sight.groups()] == [row['people'], row['fighting'], row['at_me'], row['friends'], row['enemies']], (now, row)
+    assert row['friends'] == 1 and row['people'] >= 2, row
+    bodies = {b['id']: b for b in run.private('SELECT * FROM body', 'bodies')}
+    near = sum(1 for c in run.sql("SELECT id, kind, alive FROM character WHERE kind = 'person'", 'persons')
+               if c['alive'] and c['id'] != eye and c['id'] in bodies and math.dist((bodies[c['id']]['x'], bodies[c['id']]['y']), e) <= 12)
+    assert row['people'] <= near and math.dist((bodies[far]['x'], bodies[far]['y']), e) > 20, {'row': row, 'near': near}
+    # (c) the unconditioned retreat is installed as written.
+    patched = run.wait(lambda: [b for b in run.sql(f'SELECT * FROM brain WHERE id = {eye}', 'brain-patched') if b['source'] == 'fast' and 'flee' in b['graph']] or None, 'the retreat patch installed', 20)[0]
+    thoughts = [t for t in run.private(f'SELECT * FROM thought WHERE actor = {eye}', 'thoughts') if t['kind'] == 'fast']
+    assert any('combat branch rewritten' in t['summary'] for t in thoughts) and not any(t['summary'].startswith(('kept: the combat', 'refused')) for t in thoughts), thoughts
+    clock = lambda: run.sql('SELECT last_ms FROM clock', 'clock')[0]['last_ms']
+    # (d) the first frame, selectable. The installed flight took the eye away: back beside the
+    # other, standing, so blows land again.
+    run.admin('set_world_law', 'fast_frame', '1')
+    run.admin('set_behavior', other, json.dumps({'wait': 300}))
+    run.admin('set_behavior', eye, json.dumps({'wait': 300}))
+    run.admin('place_at', eye, *e)
+    run.admin('place_at', other, e[0] + 1.2, e[1])
+    time.sleep(7.0)
+    n = len(requests())
+    t1 = clock()
+    run.admin('set_behavior', other, json.dumps({'first': [{'do': {'skill': 'attack', 'target': {'id': eye}}}, {'wait': 0.3}]}))
+    try:
+        second = run.wait(lambda: requests()[n:] or None, 'a fast request under fast_frame 1', 40)[0]
+    except RuntimeError:
+        run.private(f'SELECT * FROM experience WHERE observer = {eye} AND at_ms >= {t1}', 'eye-after-reset')
+        run.private(f'SELECT * FROM experience WHERE observer = {other} AND at_ms >= {t1}', 'other-after-reset')
+        run.sql(f'SELECT * FROM character WHERE id = {other} OR id = {eye}', 'pair-after-reset')
+        run.private(f'SELECT * FROM fast_ask WHERE actor = {eye}', 'fast-ask-after-reset')
+        raise
+    old = text(second, 'system')
+    assert all(line in old for line in FAST_SOLD) and not any(way in old for way in FAST_WAYS), 'fast_frame 1 is not the first frame'
+    assert '# How you are now' in text(second, 'user'), 'the request lost its condition under fast_frame 1'
+    run.admin('set_world_law', 'fast_lane_on', 'false')
+    run.admin('set_behavior', other, json.dumps({'wait': 300}))
+    (run.directory / 'fast-frame-v2.txt').write_text(system + '\n\n----- user -----\n' + user)
+    (run.directory / 'fast-frame-v1.txt').write_text(old)
+    return {'status': 'pass', 'now': now.strip(), 'sight_row': row, 'persona': f'{cohort}-{index + 1}', 'patched': patched['graph'][:300],
+            'v1_sha256': hashlib.sha256(old.encode()).hexdigest(), 'v2_sha256': hashlib.sha256(system.encode()).hexdigest()}
+
+
 @case('fast-takeover')
 def fast_takeover_case(run):
     """(d) The controller rule (docs/FAST_LANE.md): a player's character, taken over by the minds,

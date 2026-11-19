@@ -1,6 +1,6 @@
 # The fast lane's triggers
 
-docs/FAST_LANE.md; `living/authority/src/fast.rs` (triggers, the `fast_ask` rows, the pump), `act.rs` `damage` (a blow taken), `combat.rs` `accepted` (a move seen), `mind.rs` `mind_patch` and `mind_fast_done`, the laws `fast_lane_on` (false), `seen_again_n` (3), `fast_lane_rate` (2), `fast_lane_inflight` (4), `fast_lane_gap_s` (6), `fast_lane_stale_s` (8) in `skills.rhai` `laws()`.
+docs/FAST_LANE.md; `living/authority/src/fast.rs` (triggers, the `fast_ask` rows, the pump), `act.rs` `damage` (a blow taken), `combat.rs` `accepted` (a move seen), `mind.rs` `mind_patch` and `mind_fast_done`, the laws `fast_lane_on` (false), `seen_again_n` (3), `fast_lane_rate` (2), `fast_lane_inflight` (4), `fast_lane_gap_s` (6), `fast_lane_stale_s` (8) in `skills.rhai` `laws()`. At each issue `fast::sight` writes the asker's `fast_sight` row: counts of the people and wolves in its own sight (`perception::sensed`), of those in a hostile move and at it (`perception::visibly`), and of its friends and enemies (`brain::relation_ok`); it goes with the request (`fast::forget`). `fast_diag` issues rows, so it runs that path; the counts themselves are checked by verify-minds `fast-frame` (docs/FAST_LANE_FRAME.md).
 
 ## What a run shows
 

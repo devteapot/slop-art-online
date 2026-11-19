@@ -451,16 +451,30 @@ pub fn grammar() -> String {
     grammar_with(&skills_help(), true)
 }
 
+/// A person's examples of beliefs acting for them, as every prompt with the grammar has them.
+const PERSON_EXAMPLES: &str = "{\"if\": {\"believes\": \"wolves_near_home\", \"night\": true}, \"then\": {\"do\": \"goto\", \"target\": {\"nearest\": \"campfire\"}}} or \
+{\"if\": {\"sees\": {\"nearest\": {\"kind\": \"person\", \"relation\": \"enemy\"}}}, \"then\": {\"do\": \"flee\", \"target\": {\"nearest\": {\"kind\": \"person\", \"relation\": \"enemy\"}}}}";
+
+/// The balanced fast frame's (docs/FAST_LANE_FRAME.md): the same first example; the second hands
+/// a seen enemy to a routine of one's own instead of pairing it with flight.
+const PERSON_EXAMPLES_BALANCED: &str = "{\"if\": {\"believes\": \"wolves_near_home\", \"night\": true}, \"then\": {\"do\": \"goto\", \"target\": {\"nearest\": \"campfire\"}}} or \
+{\"if\": {\"sees\": {\"nearest\": {\"kind\": \"person\", \"relation\": \"enemy\"}}}, \"then\": {\"routine\": \"facing an enemy\"}}";
+
 /// Graph grammar for a body with the given skills (and whether it can speak).
 pub fn grammar_with(skills: &str, speaks: bool) -> String {
+    grammar_examples(skills, speaks, PERSON_EXAMPLES)
+}
+
+/// The grammar with a person's examples given (`PERSON_EXAMPLES` everywhere but the balanced
+/// fast frame).
+fn grammar_examples(skills: &str, speaks: bool, person_examples: &str) -> String {
     // People and animals get examples of their own kind of life (an animal shown a person's
     // example, like seeking the campfire when wolves are near, copies it).
     let (making, examples) = if speaks {
         (
             " \\\nThe graph is your body's real-time behavior: moving, keeping close, fleeing, fighting, eating, sleeping, keeping warm and work loops. \
 Deliberate one-off interactions (starting a family, trading, giving, teaching, writing, reading, joining) are ACTS you decide in a reply (see ACTS), not graph branches.",
-            "{\"if\": {\"believes\": \"wolves_near_home\", \"night\": true}, \"then\": {\"do\": \"goto\", \"target\": {\"nearest\": \"campfire\"}}} or \
-{\"if\": {\"sees\": {\"nearest\": {\"kind\": \"person\", \"relation\": \"enemy\"}}}, \"then\": {\"do\": \"flee\", \"target\": {\"nearest\": {\"kind\": \"person\", \"relation\": \"enemy\"}}}}",
+            person_examples,
         )
     } else {
         (
@@ -1081,7 +1095,82 @@ pub fn is_night(hour: f32) -> bool {
 /// the graph grammar, and the four answers it may give. No acts, no dealings, no tactics: what to
 /// do is the character's own.
 pub fn fast_system() -> String {
-    fast_system_in(frame())
+    fast_system_v(fast_frame())
+}
+
+/// The world's `fast_frame` law (docs/FAST_LANE_FRAME.md): 1, the first frame; 2, the balanced
+/// one (the law's default, and the default with no rules loaded).
+pub fn fast_frame() -> u8 {
+    compiled().map_or(2, |s| s.laws().fast_frame.round().clamp(1.0, 2.0) as u8)
+}
+
+/// The fast system prompt in frame `version` (1 or 2).
+pub fn fast_system_v(version: u8) -> String {
+    if version <= 1 {
+        fast_system_in(frame())
+    } else {
+        fast_balanced_in(frame(), &world_rules())
+    }
+}
+
+/// The lines of the world's combat text that the first frame carries and the balanced one
+/// words without favouring a way out (docs/FAST_LANE_WHY.md): the combat law's own text, with
+/// the same physics. Matched in the world's text as the rules give it; a world whose combat
+/// words differ is told them as they are (and the mind logs it once).
+pub const FAST_V1_COMBAT_LINES: &str = ": stepping back or running as it winds up makes it miss, but whoever swings stands still meanwhile. \
+You can outrun a person who keeps stopping to swing, not a wolf (a wolf catches the young, old, tired or surprised).";
+pub const FAST_V2_COMBAT_LINES: &str = "; whoever swings stands still meanwhile, and cannot swing again until it has recovered. A wolf runs faster than a person.";
+
+/// The balanced frame's ways of writing a `combat` branch, each as short as the others; none is
+/// put first as the answer. Retreats carry the condition that ends them.
+pub const FAST_V2_WAYS: [(&str, &str); 4] = [
+    (
+        "hold your ground",
+        "{\"first\": [{\"if\": {\"threatened\": true}, \"then\": {\"do\": \"block\"}}, {\"do\": \"strike\", \"target\": \"attacker\"}], \"label\": \"combat\"}",
+    ),
+    (
+        "press",
+        "{\"first\": [{\"if\": {\"health_of\": {\"target\": \"attacker\", \"below\": 50}}, \"then\": {\"do\": \"strike\", \"target\": \"attacker\", \"run\": true}}, {\"do\": \"strike\", \"target\": {\"nearest\": \"person\"}, \"run\": true}], \"label\": \"combat\"}",
+    ),
+    (
+        "make room and re-enter",
+        "{\"first\": [{\"if\": {\"any\": [{\"stamina\": {\"below\": 25}}, {\"count\": {\"of\": \"person\", \"within\": 4, \"at_least\": 3}}]}, \"then\": {\"do\": \"back_off\", \"target\": \"attacker\", \"distance\": 5}}, {\"do\": \"strike\", \"target\": \"attacker\"}], \"label\": \"combat\"}",
+    ),
+    (
+        "break contact",
+        "{\"first\": [{\"if\": {\"health\": {\"below\": 25}}, \"then\": {\"do\": \"flee\", \"target\": \"attacker\"}}, {\"do\": \"strike\", \"target\": \"attacker\"}], \"label\": \"combat\"}",
+    ),
+];
+
+/// The balanced fast frame (`fast_frame` 2): keeping comes first among the replies; four ways of
+/// writing the `combat` branch are shown alike; the world's combat text is worded without
+/// favouring a way out; the grammar's second example hands a seen enemy to one's own routine.
+fn fast_balanced_in(frame: Frame, rules: &str) -> String {
+    static WARNED: std::sync::Once = std::sync::Once::new();
+    let rules = if rules.contains(FAST_V1_COMBAT_LINES) {
+        rules.replace(FAST_V1_COMBAT_LINES, FAST_V2_COMBAT_LINES)
+    } else {
+        if !rules.is_empty() {
+            WARNED.call_once(|| log::warn!("fast frame 2: the world's combat words are not the shipped ones; told as they are"));
+        }
+        rules.to_string()
+    };
+    let ways: Vec<String> = FAST_V2_WAYS.iter().map(|(name, graph)| format!("- {name}: {graph}")).collect();
+    shared(format!(
+        "{} Stay in character: your personality, values, relationships and memories are yours. \
+Something has just happened to you (see Why now); How you are now gives your own health and breath and what you see at this moment. \
+Your body goes on doing what your top level and your routines say while you think; \
+what you answer changes them from the next moment on, not the moment that is passing. \
+You may keep everything as it is, rewrite your `combat` branch, rewrite one of the routines listed under Your routines, or switch your `combat` branch to one of them. \
+A `combat` branch can be written many ways, each as short as the others. Four of them, side by side; none is the right one, and which fits is yours to judge from who you are and what you perceive:\n{}\n\
+Use only what you have perceived and what you know how to do. Refer to people by the ids you see in your acts and your memory; the ids are handles, never words: when you speak, name people by their name or as you would describe them. Reply with ONE JSON object, one of:\n\
+{{\"keep\": true, \"thought\": \"one sentence, in your words\"}}\n\
+{{\"patch\": {{\"label\": \"combat\", \"graph\": {{...}}}}, \"thought\": \"...\"}}\n\
+{{\"routine\": {{\"name\": \"one of your routines\", \"graph\": {{...}}}}, \"thought\": \"...\"}}\n\
+{{\"switch\": \"one of your routines\", \"thought\": \"...\"}}",
+        opening(frame, THINK_OPENING),
+        ways.join("\n"),
+    )) + "\n\n" + rules.as_str() + "\n\n" + grammar_examples(&skills_help(), true, PERSON_EXAMPLES_BALANCED).as_str()
 }
 
 fn fast_system_in(frame: Frame) -> String {
@@ -1104,7 +1193,7 @@ Use only what you have perceived and what you know how to do. Refer to people by
 /// Ordered from the most to the least stable between one character's fast calls, so a
 /// provider's prefix cache can reuse the person, the plan and the routines across the calls of
 /// one fight (docs/FAST_LANE.md); the content is the same in any order.
-pub fn fast_user(reason: &str, persona: &str, experiences: &[String], plan: &str, outline: &str, repertoire: &str) -> String {
+pub fn fast_user(reason: &str, persona: &str, experiences: &[String], plan: &str, outline: &str, repertoire: &str, now: &FastNow) -> String {
     let mut out = format!("# Who you are\n{persona}\n\n# Your top level (plan: {plan})\n{outline}\n");
     if !repertoire.is_empty() {
         out.push_str(&format!("\n# Your routines\n{repertoire}\n"));
@@ -1113,7 +1202,57 @@ pub fn fast_user(reason: &str, persona: &str, experiences: &[String], plan: &str
     for e in experiences {
         out.push_str(&format!("- {e}\n"));
     }
+    let lines = now.lines();
+    if !lines.is_empty() {
+        out.push_str(&format!("\n# How you are now\n{lines}"));
+    }
     out
+}
+
+/// The asker's own condition and what it sees, for the fast request (docs/FAST_LANE_FRAME.md):
+/// its health and breath from its own `vitals` (self-perception, on the graph's 0-100 scales),
+/// and counts from the authority's `fast_sight` row for this issue (its own sight then, never
+/// the world's truth). `None`: not known (no row), and nothing is said of it.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct FastNow {
+    pub health: Option<f32>,
+    pub stamina: Option<f32>,
+    pub sight: Option<FastSeen>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct FastSeen {
+    pub people: u32,
+    pub fighting: u32,
+    pub at_me: u32,
+    pub friends: u32,
+    pub enemies: u32,
+    pub wolves: u32,
+}
+
+impl FastNow {
+    pub fn lines(&self) -> String {
+        let mut out = String::new();
+        if let Some(h) = self.health {
+            out.push_str(&format!("Your health: {:.0} (0-100).\n", h.clamp(0.0, 100.0)));
+        }
+        if let Some(s) = self.stamina {
+            out.push_str(&format!("Your breath (stamina): {:.0} (0-100).\n", s.clamp(0.0, 100.0)));
+        }
+        if let Some(v) = &self.sight {
+            let people = |n: u32| if n == 1 { "1 person".to_string() } else { format!("{n} people") };
+            let mut line = format!("In sight as you were asked: {}", people(v.people));
+            if v.people > 0 {
+                line.push_str(&format!("; of them {} visibly in a hostile move ({} at you), {} you count as friends or family, {} you count as enemies", v.fighting, v.at_me, v.friends, v.enemies));
+            }
+            if v.wolves > 0 {
+                line.push_str(&format!("; {} {}", v.wolves, if v.wolves == 1 { "wolf" } else { "wolves" }));
+            }
+            out.push_str(&line);
+            out.push_str(".\n");
+        }
+        out
+    }
 }
 
 pub fn deliberate_user(c: &Ctx, scene: &str, graph_outline: &str, plan: &str, reason: &str, repertoire: &str) -> Segments {

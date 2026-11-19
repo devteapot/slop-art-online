@@ -257,8 +257,15 @@ def combat_samples(path, head):
     coverage_starts = [start for start, _ in coverage]
     last_sample = previous[0]
 
-    def tally(key, at, amount=1):
+    # The same events by fighter (all exported events, as `totals`), for cohort reports.
+    by_actor = defaultdict(lambda: defaultdict(int))
+    for actor, times in engagements.items():
+        by_actor[actor]["engagements_started"] = len(times)
+
+    def tally(key, at, amount=1, actor=None):
         totals[key] += amount
+        if actor is not None:
+            by_actor[actor][key] += amount
         index = bisect_right(coverage_starts, at) - 1
         if index >= 0 and at < coverage[index][1]:
             covered_counts[key] += amount
@@ -273,8 +280,8 @@ def combat_samples(path, head):
         full_window = deadline <= last_sample and not any(left < deadline and start < right
                                                             for left, right in gaps)
         status = "reengaged" if reengaged else "no_reengagement" if full_window else "censored"
-        tally("retreats", start)
-        tally(f"retreats_{status}", start)
+        tally("retreats", start, actor=actor)
+        tally(f"retreats_{status}", start, actor=actor)
         retreats.append({"actor": actor, "at_ms": start, "skill": skill, "result": status,
                          "reengaged_ms": times[index] if reengaged else None})
 
@@ -285,22 +292,22 @@ def combat_samples(path, head):
         if use["skill"] not in ATTACKS or not use["accepted_ms"]:
             continue
         if fighting(use["actor"], use["accepted_ms"]):
-            tally("attacks_attempted", use["accepted_ms"])
+            tally("attacks_attempted", use["accepted_ms"], actor=use["actor"])
         damage = DAMAGE.search(use["outcome"])
         if not damage:
             continue
         amount = int(next(value for value in damage.groups() if value is not None))
         if fighting(use["actor"], use["outcome_ms"]):
-            tally("damage_dealt", use["outcome_ms"], amount)
+            tally("damage_dealt", use["outcome_ms"], amount, actor=use["actor"])
         # The aim is the actual victim for direct skills. A missile may hit another body.
         if use["skill"] not in ("bowshot", "firebolt") and fighting(use["target"], use["outcome_ms"]):
-            tally("damage_taken", use["outcome_ms"], amount)
+            tally("damage_taken", use["outcome_ms"], amount, actor=use["target"])
     for row in hurt.values():
         # Missile victim's own percept uses the same rounded damage phrasing.
         damage = DAMAGE.search(row["text"])
         if damage and fighting(row["observer"], row["at_ms"]):
             amount = int(next(value for value in damage.groups() if value is not None))
-            tally("damage_taken", row["at_ms"], amount)
+            tally("damage_taken", row["at_ms"], amount, actor=row["observer"])
 
     observed = sum(values["observed"] for values in seconds.values())
     fighter_minutes = observed / 60
@@ -314,7 +321,9 @@ def combat_samples(path, head):
         duration = values["observed"]
         fighter_shares[actor] = {"observed_seconds": duration,
                                  **{f"{key}_share": values[key] / duration if duration else None
-                                    for key in time_keys}}
+                                    for key in time_keys},
+                                 **{f"{key}_seconds": values[key] for key in time_keys},
+                                 "events": dict(by_actor.get(actor, {}))}
     return {
         "available": True, "method": setup, "samples": samples, "sample_errors": errors,
         "longest_sample_gap_s": longest_gap / 1000, "observed_fighter_minutes": fighter_minutes,

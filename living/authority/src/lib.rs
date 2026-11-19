@@ -415,10 +415,13 @@ pub fn admin_set_vitals(ctx: &ReducerContext, id: u32, hp: f32) -> Result<(), St
 }
 
 /// Test support: set a character's background (read by its mind when it first forms an identity).
+/// A background carrying an authored sheet with traits makes them the body's temperament too, as
+/// a seed's authored resident has it (`seed::author_temperament`).
 #[spacetimedb::reducer]
 pub fn set_background(ctx: &ReducerContext, id: u32, text: String) -> Result<(), String> {
     require_admin(ctx)?;
-    serde_json::from_str::<serde_json::Value>(&text).map_err(|e| format!("background must be JSON: {e}"))?;
+    let bg = serde_json::from_str::<serde_json::Value>(&text).map_err(|e| format!("background must be JSON: {e}"))?;
+    seed::author_temperament(ctx, id, &bg["sheet"]);
     if ctx.db.background().id().find(id).is_some() {
         ctx.db.background().id().update(Background { id, text });
     } else {

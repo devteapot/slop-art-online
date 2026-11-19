@@ -673,6 +673,9 @@ pub struct Laws {
     pub fast_lane_gap_s: f32,
     /// A trigger still waiting its turn after this many seconds is dropped.
     pub fast_lane_stale_s: f32,
+    /// Which frame the fast lane's prompt is written in (docs/FAST_LANE_FRAME.md): 1, the first
+    /// (the Nov 19 replicates'), or 2, the balanced one. A diagnostic choice for comparisons.
+    pub fast_frame: f32,
     /// A sound heard but not seen is near within this, close within the next (metres), and
     /// lingers this long after it was last heard (seconds).
     pub heard_near_m: f32,
@@ -787,6 +790,7 @@ impl Default for Laws {
             fast_lane_inflight: 4.0,
             fast_lane_gap_s: 6.0,
             fast_lane_stale_s: 8.0,
+            fast_frame: 2.0,
             heard_near_m: 5.0,
             heard_close_m: 15.0,
             heard_linger_s: 2.0,
@@ -2991,6 +2995,7 @@ impl Scripts {
             fast_lane_inflight: g("fast_lane_inflight", l.fast_lane_inflight).round().clamp(0.0, 256.0),
             fast_lane_gap_s: g("fast_lane_gap_s", l.fast_lane_gap_s).clamp(0.0, 600.0),
             fast_lane_stale_s: g("fast_lane_stale_s", l.fast_lane_stale_s).clamp(0.5, 600.0),
+            fast_frame: g("fast_frame", l.fast_frame).round().clamp(1.0, 2.0),
             heard_near_m: g("heard_near_m", l.heard_near_m).clamp(0.0, 256.0),
             heard_close_m: g("heard_close_m", l.heard_close_m).clamp(0.0, 256.0),
             heard_linger_s: g("heard_linger_s", l.heard_linger_s).clamp(0.0, 60.0),
