@@ -174,16 +174,32 @@ Checks, 7 s later: the line is said once (one chronicle row, no "(×2)"); there 
 
 ## Places in a talk turn
 
-Since `talk-places` (2026-11-13, docs/COMMUNICATION.md §20). A talk turn asks the authority where its character stands (`mind_where`, read back from `standing`) and lists, under "# Places you know, from where you stand", the character's places and the resources it remembers (`seen_stock`), each with the way from there (`living_rules::bearing`: "here" within 4 m, else the distance in the scene's words, whole metres up to 30 and then tens, and a compass word). The think and deliberate prompts' "# Places you remember" are the same lines, nearest the scene's place, without the way (`Minds::places(actor, near, say_way)`); the scene's `places` (known-ground) give the way once.
+Since `talk-places` (2026-11-13, docs/COMMUNICATION.md §20). A talk turn asks the authority where its character stands (since `reply-timing` the procedure `mind_reach`, whose answer comes back to the call; before, `mind_where`, read back from `standing`) and lists, under "# Places you know, from where you stand", the character's places and the resources it remembers (`seen_stock`), each with the way from there (`living_rules::bearing`: "here" within 4 m, else the distance in the scene's words, whole metres up to 30 and then tens, and a compass word). The think and deliberate prompts' "# Places you remember" are the same lines, nearest the scene's place, without the way (`Minds::places(actor, near, say_way)`); the scene's `places` (known-ground) give the way once.
 
 The `talk-places` case (`verify_minds.py --case talk-places`): H (thought for) on an open line with A beside it (its lines are the admin's `mind_say`); three berry bushes holding one berry each by H; H steps 23 m off and back (a look); H knows a place "verify well" 16 m east (`mind_update`). Checks:
 
-1. A asks where to find berries: H's talk prompt has the section, the well as `"verify well" at [x, y], 16 m east` and the bushes as `3 berry bush around [x, y], here: seen day …`; H's `standing` row is where H stands.
+1. A asks where to find berries: H's talk prompt has the section, the well as `"verify well" at [x, y], 16 m east` and the bushes as `3 berry bush around [x, y], here: seen day …`, measured from H's body; its "# Now" says H stands still and where A is (`mind_reach`).
 2. H's think prompt's "# Places you remember" has the well's coordinates with no way, and its scene's `places` entry for the well gives `dir` and `dist` matching the talk prompt's way (the way said once).
 3. H steps off; A gathers the three; the row is unchanged while H is away; back, it is gone with its count and seen time kept, and A's next question gets `berry bush around [x, y], here: gone when you were last here, day … (3 seen day …)`.
 
 The fake talk reply says a line and leaves the exchange open: a silent or ended reply settles it, and A's second question gets no turn. Evidence: `talk-places.json`, `prompt-talk-1.txt`, `prompt-think.txt`, `prompt-talk-2.txt`.
 
+
+## A reply is said when it is ready
+
+Since `reply-timing` (2026-11-19, docs/COMMUNICATION.md §21).
+- A reply turn says its line as soon as the model's reply is parsed (`talk.rs` `reply_turn`, `Pace::of`). Before, it was held until the line it answered was done being said (`saying_ms`). Reception is judged when the line is said, so the replier walking on meanwhile no longer loses it.
+- The old said time is the line's place in the exchange's rhythm (`paced_ms`; the `spoke` and `voice` maps). The speaker's next line keeps `SPEECH_GAP_MS` from it.
+- "# Now" says where the other is from the replier's own perception, and where the replier is going, from the authority's `mind_reach` procedure ("Fern is 7 m west of you. You are walking to a spot 21 m east, away from Fern."; `reach_words`).
+- A reply-turn line answered by a `silence` within `MISSED_MS` gets one turn that weighs it: the prompt ends with "# What came of your last words" and the silence's words (`TalkUser.missed`), and the thought's `detail.missed` holds them. A second silence before the other is heard again ends the exchange.
+
+The `reply-timing` case (`verify_minds.py --case reply-timing`): on an open line F (its lines are the admin's `mind_say`) stands at tile 2, and H and K (thought for) each walk east on a `goto` graph and are greeted with twenty-one words and a question once 3.5 m off (they walk 2.6 m/s, `walk_base`) (a said line carries 9 m). The fake answers H at once, and K after `delay_s` 6. Checks:
+- **H:** F receives H's reply (no `silence`), said within 2.5 s of the greeting; F's next line, a call after F's own 2 s speaking gap (H is past 9 m by then), gets H's next turn; H's prompt says F is <N> m west (within 3 m of the bodies' distance) and that H walks to a spot east, away from F.
+- **K:** a truthful `silence` ("… could not have heard you"); exactly one follow-up turn, whose prompt ends with the silence's words and says K neither sees nor hears F; its talk thought has `detail.missed`; its own line is missed too, and the exchange is then over (`mind.log`).
+
+`VERIFY_REPLY_TIMING=main` runs the same scene against a build of main and checks main's behaviour instead: H's reply gets a `silence` and "out of earshot, conversation over", and K's silence gets no further turn. Run it from a main worktree with this script copied in. Evidence: `reply-timing.json`, `prompt-a.txt`, `prompt-b-follow.txt`.
+
+- The walk speed is the world's (`walk_base`); the case reads it from the body (`speed` in the evidence) and needs H past 9 m during the old 6.93 s hold. H is within reach for about 2 s after the greeting, so under heavy load a reply turn slower than that would put H out of reach at ready time too. `h_said_when_ready` shows that case.
 
 ## Speech with an act
 

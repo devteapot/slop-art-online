@@ -340,6 +340,52 @@ impl Anim {
         let g = self.set.gaits.gaits();
         self.blend.parts().iter().map(|&(i, w)| (g[i].clip, w * self.moving)).collect()
     }
+
+    /// How far the body is down on the ground by the clips it shows (0–1): what a seated
+    /// character's cloth contact is weighted by (`characters::SeatAnchor`). From the played
+    /// clip times ([`seat_of`]) and the clips' weights as `play` blends them: one-shots over the
+    /// standing loop (an upper-body one as far as the body stands, where it takes the whole
+    /// body), the standing loop as far as the body is not in its gait.
+    pub fn ground_seat(&self) -> f32 {
+        let (mut covered, mut seat) = (0.0f32, 0.0f32);
+        for o in &self.onces {
+            let w = (o.w * if o.upper { 1.0 - self.moving } else { 1.0 }).min(1.0 - covered).max(0.0);
+            covered += w;
+            seat += w * seat_of(o.clip, o.t, o.rate).unwrap_or(0.0);
+        }
+        let total: f32 = self.stands.iter().map(|s| s.1).sum();
+        if total > 0.0 {
+            let stand: f32 = self.stands.iter().map(|&(c, w)| w * seat_of(c, 0.0, 1.0).unwrap_or(0.0)).sum::<f32>() / total;
+            seat += (1.0 - covered).max(0.0) * (1.0 - self.moving).clamp(0.0, 1.0) * stand;
+        }
+        seat.clamp(0.0, 1.0)
+    }
+}
+
+/// The ground seat's clips and their contact frames (clip seconds): `sit_ground_down`'s cloth
+/// reaches the ground at [`SEAT_DOWN_S`], `sit_ground` is down throughout, and
+/// `stand_up_ground`'s cloth leaves it at [`SEAT_UP_S`] (cloth_check on the coats and smocks:
+/// the hem comes within 20 mm of the ground at 1.17–1.33 s going down, and is 46–126 mm clear at
+/// 1.4 s getting up, after pressing deepest at 0.8–1.2 s as the body rocks forward).
+pub const SEAT_DOWN_S: f32 = 1.2;
+pub const SEAT_UP_S: f32 = 1.3;
+/// The contact comes in and goes over this (s of display time: the clip's rate stretches it).
+pub const SEAT_RAMP_S: f32 = 0.2;
+
+/// How far a clip at time `t` (s), played at `rate`, has the body down on the ground (0–1), or
+/// `None` for a clip that is not a ground seat's.
+pub fn seat_of(clip: &str, t: f32, rate: f32) -> Option<f32> {
+    let ramp = SEAT_RAMP_S * rate.max(0.01);
+    let smooth = |x: f32| {
+        let x = x.clamp(0.0, 1.0);
+        x * x * (3.0 - 2.0 * x)
+    };
+    match clip {
+        "sit_ground_down" => Some(smooth((t - (SEAT_DOWN_S - ramp)) / ramp)),
+        "sit_ground" => Some(1.0),
+        "stand_up_ground" => Some(1.0 - smooth((t - SEAT_UP_S) / ramp)),
+        _ => None,
+    }
 }
 
 /// The glTF file a body's clips come from ([`clip_file`]), held so the load isn't dropped.
@@ -870,5 +916,34 @@ mod tests {
         assert!(a.onces.is_empty(), "it ended and does not play again while still listed");
         step(&mut a, &s, &Motion { action: Some(act(1500.0)), now_ms: 1500.0, ..default() }, 0.1);
         assert_eq!(a.onces.last().unwrap().start_ms, 1500.0);
+    }
+    #[test]
+    fn the_ground_seat_follows_the_clips_times() {
+        assert_eq!(seat_of("walk", 1.0, 1.0), None);
+        assert_eq!(seat_of("sit_ground_down", SEAT_DOWN_S - SEAT_RAMP_S - 0.01, 1.0), Some(0.0));
+        assert_eq!(seat_of("sit_ground_down", SEAT_DOWN_S, 1.0), Some(1.0));
+        assert_eq!(seat_of("sit_ground", 3.0, 1.0), Some(1.0));
+        assert_eq!(seat_of("stand_up_ground", SEAT_UP_S, 1.6), Some(1.0));
+        // Getting up plays at 1.6: the fade is 0.2 s of display time, 0.32 s of the clip.
+        let mid = seat_of("stand_up_ground", SEAT_UP_S + 0.16, 1.6).unwrap();
+        assert!((mid - 0.5).abs() < 1e-3, "{mid}");
+        assert_eq!(seat_of("stand_up_ground", SEAT_UP_S + 0.33, 1.6), Some(0.0));
+        let s = Arc::new(set());
+        let mut a = anim(&s);
+        assert_eq!(a.ground_seat(), 0.0, "standing idle is not seated");
+        a.stands = vec![("sit_ground", 1.0)];
+        assert_eq!(a.ground_seat(), 1.0, "the seated loop is down");
+        a.moving = 1.0;
+        assert_eq!(a.ground_seat(), 0.0, "walking off is not");
+        a.moving = 0.0;
+        let once = |clip, t, w, upper| Once { clip, rate: 1.6, from: 0.0, cut: None, start_ms: 0.0, key: 0.0, hold: None, w, t, upper };
+        a.onces = vec![once("stand_up_ground", 1.0, 1.0, false)];
+        assert_eq!(a.ground_seat(), 1.0, "early in getting up the cloth stays down");
+        a.onces = vec![once("stand_up_ground", 2.0, 1.0, false)];
+        assert_eq!(a.ground_seat(), 0.0, "late in it, it has left the ground");
+        a.onces = vec![once("stand_up_ground", 2.0, 0.5, false)];
+        assert!((a.ground_seat() - 0.5).abs() < 1e-6, "a one-shot fading in over the seated loop shares it");
+        a.onces = vec![once("wave", 0.5, 1.0, true)];
+        assert_eq!(a.ground_seat(), 0.0, "a gesture standing still takes the whole body (`play`)");
     }
 }

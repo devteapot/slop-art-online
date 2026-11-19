@@ -266,14 +266,17 @@ fn facing(in: VertexOutput) -> vec3<f32> {
 
 // The strand picture's own light at this point against its mean across the strands (a few taps
 // along u, where the strands vary): about 1 on average, above on light strands. 1 without UVs.
-fn strand_light(in: VertexOutput) -> f32 {
+// The taps read the mip the pixel's footprint selects (`duv`: the UV's screen derivatives, x/y
+// then z/w, taken in uniform control flow): strands finer than a pixel average out, so their
+// contrast fades at a distance instead of shimmering from frame to frame as mip 0 did.
+fn strand_light(in: VertexOutput, duv: vec4<f32>) -> f32 {
     var s = 1.0;
 @if(VERTEX_UVS_A && !BINDLESS) {
     let lum = vec3<f32>(0.3, 0.59, 0.11);
-    let here = dot(textureSampleLevel(pbr_bindings::base_color_texture, pbr_bindings::base_color_sampler, in.uv, 0.0).rgb, lum);
+    let here = dot(textureSampleGrad(pbr_bindings::base_color_texture, pbr_bindings::base_color_sampler, in.uv, duv.xy, duv.zw).rgb, lum);
     var mean = 0.0;
     for (var i = -3; i <= 3; i++) {
-        mean += dot(textureSampleLevel(pbr_bindings::base_color_texture, pbr_bindings::base_color_sampler, in.uv + vec2<f32>(f32(i) * 0.012, 0.0), 0.0).rgb, lum);
+        mean += dot(textureSampleGrad(pbr_bindings::base_color_texture, pbr_bindings::base_color_sampler, in.uv + vec2<f32>(f32(i) * 0.012, 0.0), duv.xy, duv.zw).rgb, lum);
     }
     s = here / max(mean / 7.0, 1e-3);
 }
@@ -307,6 +310,10 @@ fn fragment(
     // In uniform control flow: the gradients that painted detail samples with.
     let dpx = dpdx(p.xyz);
     let dpy = dpdy(p.xyz);
+    var duv = vec4<f32>(0.0);
+@if(VERTEX_UVS_A) {
+    duv = vec4<f32>(dpdx(in.uv), dpdy(in.uv));
+}
     // Painted detail on generated scenery, under the vertex colours, fading out with distance so
     // the far view stays calm. `relief` is how far its height moves the sun's band edge.
     var relief = 0.0;
@@ -368,7 +375,7 @@ fn fragment(
         let rim_strength = select(select(toon.rim.a, toon.face.w, face), 0.0, part || is_kind(4.0));
         color = color + rim_light(fr, lit, rim_strength) * sun;
         if (is_kind(4.0)) {
-            color = color + hair_light(albedo.rgb, N, V, L, lit, fr, strand_light(in), facing(in), in) * sun;
+            color = color + hair_light(albedo.rgb, N, V, L, lit, fr, strand_light(in, duv), facing(in), in) * sun;
         }
         color = color + point_lights(albedo.rgb, p.xyz, N, view_z, pbr_input.frag_coord.xy, pbr_input.is_orthographic);
         color = color + emission(pbr_input.material.emissive.rgb, sc);

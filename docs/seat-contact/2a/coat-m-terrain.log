@@ -1,0 +1,21 @@
+jersey_coat-m    under coat-m           rest   clear   by   -1.0 mm at most (t 0.00 s, on -, 0 vertices); in 0 of 1 poses
+jersey_coat-m    under coat-m           sit_ground THROUGH by   16.9 mm at most (t 4.48 s, on J_Fit_Belly, 6 vertices); in 5 of 16 poses
+jersey_coat-m    under coat-m           sit_ground_down THROUGH by   30.6 mm at most (t 1.30 s, on J_Bip_C_Hips, 13 vertices); in 5 of 16 poses
+jersey_coat-m    under coat-m           stand_up_ground THROUGH by   34.7 mm at most (t 0.93 s, on J_Bip_C_Hips, 19 vertices); in 6 of 16 poses
+jersey_coat-m    under trousers-m       rest   clear   by   -1.0 mm at most (t 0.00 s, on -, 0 vertices); in 0 of 1 poses
+jersey_coat-m    under trousers-m       sit_ground THROUGH by   16.7 mm at most (t 5.98 s, on J_Fit_Belly, 5 vertices); in 16 of 16 poses
+jersey_coat-m    under trousers-m       sit_ground_down THROUGH by   30.0 mm at most (t 0.93 s, on J_Fit_Belly, 11 vertices); in 9 of 16 poses
+jersey_coat-m    under trousers-m       stand_up_ground THROUGH by   37.8 mm at most (t 0.93 s, on J_Bip_C_Chest, 4 vertices); in 10 of 16 poses
+trousers-m       under coat-m           rest   clear   by   -1.0 mm at most (t 0.00 s, on -, 0 vertices); in 0 of 1 poses
+trousers-m       under coat-m           sit_ground THROUGH by   12.9 mm at most (t 0.00 s, on J_Bip_R_UpperLeg, 2 vertices); in 6 of 16 poses
+trousers-m       under coat-m           sit_ground_down THROUGH by   38.4 mm at most (t 2.60 s, on J_Bip_R_UpperLeg, 2 vertices); in 6 of 16 poses
+trousers-m       under coat-m           stand_up_ground THROUGH by   32.1 mm at most (t 0.77 s, on J_Bip_R_UpperLeg, 15 vertices); in 7 of 16 poses
+coat-m           sit_ground: ground       7.2 mm below
+  1 vertices beyond 5 mm at most in one pose
+coat-m           sit_ground: terrain      0.0 mm below
+  0 vertices beyond 5 mm at most in one pose
+coat-m           sit_ground_down: terrain     16.1 mm below
+  2 vertices beyond 5 mm at most in one pose
+coat-m           stand_up_ground: terrain     31.5 mm below
+  28 vertices beyond 5 mm at most in one pose
+cloth_check: 3 pairs of pieces over 49 poses: 9 pair/clip results come through by more than 2.0 mm

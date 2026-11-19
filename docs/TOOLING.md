@@ -27,6 +27,7 @@ Status: **current** (Tool 7, 2026-11-11, branch `tool-7`; the laptop's follow-up
 
 Three things are new:
 
+- **Disk space before building.** When any step needs to run, the check looks at free space on the filesystem holding Cargo's target directory (`CARGO_TARGET_DIR` or Cargo's configured target, normally `living/target`). Required free space is `SLOP_DISK_FLOOR_GB` (default 45) plus the greater of 2 GiB and the remaining cost (`SLOP_CHECK_COST_GB`, default 18, minus the space already occupied by the target tree). A fresh tree needs 63 GiB by default. `SLOP_CHECK_START_GB` overrides the total and `0` disables the guard. All three settings are whole GiB. Below the threshold, the check reports free space and how it calculated the threshold, lists up to six of the largest build trees under `~/.t3/worktrees/*/*/living/target` and `~/.t3/worktrees/*/*/.local/*/target`, then polls free space every 60 seconds. Waiting never deletes files. Plans and runs fully served by stamps skip the disk check.
 - **Lanes at once.** Cargo locks each build directory (`target/debug`, `target/release` and the wasm ones), so steps that use different directories can run together. The four lanes run in parallel, each lane's steps in the order above. The script bench is a cargo workspace of its own, built into `<target>/script-bench`, so its lane locks nothing the others use. One make-style jobserver (a fifo that every cargo joins) caps the lanes together at `CARGO_BUILD_JOBS` jobs (default: all cores). Each step's output goes to `<target>/living-check/<step>.log`, and a failing step's log is printed. After a failure no new step starts. `LIVING_CHECK_SERIAL=1` (or `--serial`) runs the steps one by one, with cargo's output on the terminal.
 - **Step stamps.** A step's inputs are:
   - the files of the packages it builds and their path dependencies (from `cargo metadata`); a path package that is no workspace member, such as a `[patch]` path, leaves the step unstampable until it is mapped;
@@ -53,7 +54,7 @@ Three things are new:
 
 A failure of the check itself (a full disk while writing a log, say) fails the step. Every planned step must end skipped, passed or failed, so a crash is never reported as a pass. With `CARGO_BUILD_JOBS` at or under the number of lanes, the steps run one by one. The jobserver caps compile jobs, not the threads of the rules tests while they run (libtest uses all cores).
 
-`just living-check-full` (or `LIVING_CHECK_FULL=1`) runs every step and ignores stamps; it still writes them. `python3 living/tools/check.py --plan` prints what would run or be skipped, and why. `--steps a,b` runs some steps. Every run is appended to `~/.cache/slop-check/runs.jsonl` with each step's time, the load average, the wrapper used and the cache stats. `python3 living/tools/check_selftest.py` checks the wrapper choice, the watchdog and the gate step's keying and judging (22 checks, about 2 s), building nothing. `--gate` adds four checks that build and run the gate step in a clone (below). `--plan --json PATH` writes each step's digest, inputs and whether its stamp applies.
+`just living-check-full` (or `LIVING_CHECK_FULL=1`) runs every step and ignores stamps; it still writes them. `python3 living/tools/check.py --plan` prints what would run or be skipped, and why. `--steps a,b` runs some steps. Every run is appended to `~/.cache/slop-check/runs.jsonl` with each step's time, the load average, the wrapper used and the cache stats. `python3 living/tools/check_selftest.py` checks the disk guard, wrapper choice, watchdog and the gate step's keying and judging without building. `--gate` adds four checks that build and run the gate step in a clone (below). `--plan --json PATH` writes each step's digest, inputs and whether its stamp applies.
 
 ### The script fuel gate
 
@@ -86,7 +87,7 @@ set -o pipefail; just living-merge plan-3 -m "Merge plan-3: what it brings"
 
 [`merge.py`](../living/tools/merge.py):
 
-1. Refuses a dirty worktree (untracked files included), an unfinished merge or rebase, `main` checked out here, the owner's checkout, and commits that `origin/main` lacks.
+1. Refuses a dirty worktree (untracked files included), an unfinished merge or rebase, `main` checked out here, the owner's checkout, and commits that `origin/main` lacks. Before fetching, it checks free space on the worktree and Cargo target filesystems ([disk policy](#disk)). It checks again before retrying a merge. A disk refusal names the path, free space and required space (exit 12).
 2. Fetches `main` and the branch, and pins the branch to the commit it has now. It prefers `origin/<branch>` and otherwise takes a local branch, saying so.
 3. Moves HEAD to `origin/main` (`git reset --keep`) and runs `git merge --no-ff`. On a conflict it aborts the merge, restores HEAD and stops (exit 4).
 4. Runs the check (`check.py`). If the check fails, HEAD is restored and nothing is pushed (exit 5). If the check changes the worktree (a rewritten `Cargo.lock`, say), it stops (exit 6).
@@ -100,7 +101,9 @@ set -o pipefail; just living-merge plan-3 -m "Merge plan-3: what it brings"
 5. Pushes the checked merge commit as a compare-and-swap: `git push --force-with-lease=refs/heads/main:<base> origin <merge>:refs/heads/main`. It lands only while `main` is still exactly the commit that was merged onto and checked, so it never lands on a `main` that moved or was rewound meanwhile. When the push is refused and the remote `main` is no longer the base, the tool re-fetches, merges the same branch commit onto the new `main` and checks again; stamps skip the steps whose inputs the new `main` did not change. It tries up to `--retries` times (5; exit 7 after). If the branch was merged by someone else meanwhile, it stops with nothing to push (exit 0). Any other push failure stops (exit 8) with the checked merge left in HEAD, and any other git failure stops with the summary (exit 9).
 6. Prints every git command it ran and a summary. The check's output is also kept in `~/.local/state/slop-merge/<time>-<branch>.log`.
 
-`--no-push` stops after a passing check. `python3 living/tools/merge_selftest.py` drives all of this against a throwaway remote (24 checks):
+`--no-push` stops after a passing check. `python3 living/tools/merge_selftest.py` drives these cases against a throwaway remote.
+
+- a fake `df` below, at and above the disk threshold, with a separate Cargo target, the trial volume on the same or a separate filesystem, and the overrides;
 - the dirty-worktree, local-commit, conflict, failing-check and dirtying-check refusals;
 - a failing and a passing scene gate (a stand-in command);
 - a `main` that moves during the check, and one rewound during the check;
@@ -130,10 +133,18 @@ Measured on the Spark on 2026-11-12, load average 75–105 on 20 cores, private 
 | Machine | Floor | Target (floor + 30 GB, about one cold check build) |
 | --- | --- | --- |
 | dev-box | 40 GB | 70 GB |
-| Spark | 60 GB proposed (`--floor-gb 60`): its paid trial servers write to the same disk, and several agents build cold at once | 90 GB |
+| Spark | 60 GB (`--floor-gb 60`): its paid trial servers write to the same disk, and several agents build cold at once | 90 GB |
 | laptop | 40 GB (the default; set `--floor-gb` when installing) | 70 GB |
 
 When the folders that may go are gone and free space is still under the floor, the report says so (exit 3), and the list shows what holds the rest.
+
+**Merge pre-check.** `living-merge` requires the floor plus 18 GB for a cold check on each filesystem holding its worktree or Cargo target. The merge tool reads the cleaner's installed `--floor-gb` from the systemd user service or launchd agent and uses 45 GB when there is no installed floor. With the fallback floor, 63 GB passes. The Spark's installed 60 GB floor requires 78 GB. Units match the cleaner (1 GB = 1,024³ bytes).
+
+On the Spark on 2026-11-19, `just living-check` passed in 949 s from a fresh worktree at `49adf9a3`, with an empty private `CARGO_TARGET_DIR`, eight Cargo jobs, the Spark sysroot and stamps forced off. The worktree and target grew by a sampled peak of 17.62 GB (18,915,008,512 allocated bytes), measured with `du -sk` during the check.
+
+The `--scenes` allowance for scratch databases is 1 GB on a filesystem also used by the trial server, as on the Spark (79 GB total). This is an estimate. The [trial disk inventory](trial-disk/removal-list-20261112.tsv) records 0.093 GB for one player scene replica. The separately alarmed [trial volume](TRIAL_DISK.md) only adds to the threshold when its filesystem matches the worktree or Cargo target filesystem.
+
+Set `SLOP_MERGE_FLOOR_GB` to override the floor, or `SLOP_MERGE_CHECK_GB` to override the cold check allowance. A host with the 40 GB cleanup floor can set `SLOP_MERGE_FLOOR_GB=45` to retain the dev-box wrapper's 63 GB minimum for a plain check. `SLOP_MERGE_DISK_CHECK=0` disables the pre-check and always prints a warning.
 
 **Never touched:**
 

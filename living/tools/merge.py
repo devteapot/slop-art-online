@@ -37,7 +37,11 @@ LIVING_MERGE_BINDINGS=always runs the bindings check whatever the merge touches 
 Exit codes: 0 merged and pushed (or nothing to merge), 2 usage, 3 refused (worktree), 4 merge
 conflict, 5 check failed, 6 check left the worktree dirty, 7 main kept moving, 8 push failed,
 9 another git command failed, 10 the scene gate failed (or could not run), 11 the bindings
-were not regenerated (or the bindings check could not run).
+were not regenerated (or the bindings check could not run), 12 refused (disk).
+
+Disk: SLOP_MERGE_FLOOR_GB overrides the installed disk cleaner's floor (45 GB without
+an installed floor). SLOP_MERGE_CHECK_GB overrides the cold check allowance (18 GB).
+SLOP_MERGE_DISK_CHECK=0 disables the pre-check and prints a warning.
 
 The push is a compare-and-swap (--force-with-lease on the main it merged onto): it lands only
 when main is still exactly the commit that was merged and checked, never over a main that
@@ -46,16 +50,28 @@ moved or was rewound meanwhile.
 import fcntl
 import hashlib
 import json
+import math
 import os
+from pathlib import Path
+import plistlib
+import re
 import shlex
 import subprocess
 import sys
 import time
+from xml.parsers.expat import ExpatError
+
+from check import target_dir
+from disk_clean import GB
 
 HOME = os.path.expanduser("~")
 # Checkouts this command never merges in: the owner's own.
 PROTECTED = [os.path.join(HOME, "dev/slop-art-online")]
 STATE = os.path.join(os.environ.get("XDG_STATE_HOME") or os.path.join(HOME, ".local/state"), "slop-merge")
+DISK_REFUSED = 12
+DEFAULT_FLOOR_GB = 45
+CHECK_GB = 18
+SCENE_GB = 1
 done = []  # what happened, for the summary
 
 
@@ -109,6 +125,95 @@ def summary(result):
     for line in done:
         print(f"  - {line}", flush=True)
     print(f"  = {result}", flush=True)
+
+
+def installed_floor():
+    """Read the argument written by disk_clean_install.sh on Linux or macOS."""
+    if sys.platform == "darwin":
+        plist = Path(HOME) / "Library/LaunchAgents/dev.slop.disk-clean.plist"
+        if not plist.is_file():
+            return DEFAULT_FLOOR_GB
+        args = plistlib.loads(plist.read_bytes()).get("ProgramArguments", [])
+    else:
+        systemd = Path(os.environ.get("XDG_CONFIG_HOME") or Path(HOME) / ".config") / "systemd/user"
+        unit = systemd / "slop-disk-clean.service"
+        if not unit.is_file():
+            return DEFAULT_FLOOR_GB
+        command = next((line.removeprefix("ExecStart=") for line in unit.read_text().splitlines()
+                        if line.startswith("ExecStart=")), "")
+        args = shlex.split(command)
+    if "--floor-gb" in args:
+        return args[args.index("--floor-gb") + 1]
+    return DEFAULT_FLOOR_GB
+
+
+def disk_budget():
+    if os.environ.get("SLOP_MERGE_DISK_CHECK") == "0":
+        say("WARNING: free-space pre-check disabled (SLOP_MERGE_DISK_CHECK=0)")
+        return None
+    try:
+        floor_override = os.environ.get("SLOP_MERGE_FLOOR_GB")
+        floor = float(installed_floor() if floor_override is None else floor_override)
+        cost = float(os.environ.get("SLOP_MERGE_CHECK_GB", CHECK_GB))
+        if floor < 0 or cost < 0 or not math.isfinite((floor + cost) * GB):
+            raise ValueError("floor and check cost must be finite, non-negative GB values")
+    except (OSError, ValueError, IndexError, ExpatError) as e:
+        refuse(DISK_REFUSED, f"disk: invalid floor or check cost: {e}")
+    return floor, cost
+
+
+def disk_free(*cmd, timeout=None):
+    df = subprocess.run(cmd, env={**os.environ, "LC_ALL": "C"}, capture_output=True, text=True,
+                        check=True, timeout=timeout)
+    row = df.stdout.strip().splitlines()[-1]
+    fields = re.fullmatch(r"(.+?)\s+(\d+)\s+\d+\s+(-?\d+)\s+\d+%\s+(.+)", row)
+    if not fields:
+        raise ValueError(f"unexpected df output for {cmd[-1]}: {row}")
+    device, blocks, available, mount = fields.groups()
+    return (device, blocks), int(available) * 1024, mount
+
+
+def scene_filesystem(scenes):
+    if not scenes or os.environ.get("LIVING_MERGE_SCENES_CMD"):
+        return None
+    container = os.environ.get("LIVING_GATE_STDB_CONTAINER", "slop-trials-stdb")
+    try:
+        filesystem, _, _ = disk_free("docker", "exec", "-e", "LC_ALL=C", container, "df", "-Pk",
+                                     "/home/spacetime", timeout=5)
+    except (OSError, ValueError, IndexError, subprocess.SubprocessError):
+        # The scene gate owns errors from reaching its server.
+        return None
+    return filesystem
+
+
+def check_disk(root, budget, scenes):
+    floor, cost = budget
+    try:
+        # Use the same Cargo resolution as living-check, including Cargo configuration.
+        if os.path.isfile("living/Cargo.toml") or os.environ.get("CARGO_TARGET_DIR") or os.environ.get("CARGO_BUILD_TARGET_DIR"):
+            target = target_dir(root)
+        else:
+            target = os.path.join(root, "living/target")
+        scene_fs = scene_filesystem(scenes)
+        paths = {"worktree": root, "Cargo target": target}
+        checked = set()
+        for label, path in paths.items():
+            probe = Path(path).resolve()
+            while not probe.exists():
+                probe = probe.parent
+            if probe in checked:
+                continue
+            checked.add(probe)
+            fs, free, mount = disk_free("df", "-Pk", str(probe))
+            scene_cost = SCENE_GB if fs == scene_fs else 0
+            need = floor + cost + scene_cost
+            if free < need * GB:
+                scene_note = f" + {scene_cost:g} GB scenes" if scene_cost else ""
+                return (f"disk: {label} at {path} ({fs[0]} on {mount}) has {free / GB:.2f} GB free; "
+                        f"need {need:g} GB ({floor:g} GB floor + {cost:g} GB check{scene_note})")
+    except (OSError, ValueError, IndexError, subprocess.CalledProcessError, RuntimeError) as e:
+        return f"disk: could not determine free space for the worktree and Cargo target: {e}"
+    return None
 
 
 def run_check(cmd, log_path, what="check"):
@@ -263,6 +368,7 @@ def run(argv):
         print(f"usage error ({e})\n{__doc__}", file=sys.stderr)
         return 2
     t_start = time.time()
+    budget = disk_budget()
     root = out("rev-parse", "--show-toplevel")
     os.chdir(root)
     real = os.path.realpath(root)
@@ -285,6 +391,10 @@ def run(argv):
     current = git("symbolic-ref", "-q", "--short", "HEAD", check=False, quiet=True).stdout.strip() or None
     if current == into:
         refuse(3, f"this worktree has {into} checked out; run from a worktree on another branch or a detached HEAD")
+    if budget is not None:
+        problem = check_disk(root, budget, scenes)
+        if problem:
+            refuse(DISK_REFUSED, problem)
     into_ref = f"refs/remotes/{remote}/{into}"
     git("fetch", remote, f"+refs/heads/{into}:{into_ref}")
     if branch.startswith(f"{remote}/"):
@@ -327,6 +437,11 @@ def run(argv):
     gate_base = None  # the main the scene gate last passed on
     attempt = 0
     while True:
+        if attempt and budget is not None:
+            problem = check_disk(root, budget, scenes)
+            if problem:
+                reset_to(start_head, "after the disk refusal")
+                refuse(DISK_REFUSED, problem)
         attempt += 1
         say(f"attempt {attempt}: merge {branch_sha[:10]} onto {remote}/{into} {base[:10]}")
         git("reset", "--keep", base)

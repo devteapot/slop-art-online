@@ -1,0 +1,18 @@
+jersey_smock-m   under smock_74-m       rest   clear   by   -1.0 mm at most (t 0.00 s, on -, 0 vertices); in 0 of 1 poses
+jersey_smock-m   under smock_74-m       sit_ground clear   by   -1.0 mm at most (t 0.00 s, on -, 0 vertices); in 0 of 16 poses
+jersey_smock-m   under smock_74-m       sit_ground_down clear   by   -1.0 mm at most (t 0.00 s, on -, 0 vertices); in 0 of 16 poses
+jersey_smock-m   under smock_74-m       stand_up_ground clear   by   -1.0 mm at most (t 0.00 s, on -, 0 vertices); in 0 of 16 poses
+trousers-m       under smock_74-m       rest   clear   by   -1.0 mm at most (t 0.00 s, on -, 0 vertices); in 0 of 1 poses
+trousers-m       under smock_74-m       sit_ground THROUGH by   14.6 mm at most (t 0.00 s, on J_Bip_C_Hips, 3 vertices); in 9 of 16 poses
+trousers-m       under smock_74-m       sit_ground_down THROUGH by   14.7 mm at most (t 1.30 s, on J_Bip_R_UpperLeg, 6 vertices); in 8 of 16 poses
+trousers-m       under smock_74-m       stand_up_ground THROUGH by   37.6 mm at most (t 0.93 s, on J_Bip_R_UpperLeg, 22 vertices); in 4 of 16 poses
+smock_74-m       sit_ground: ground       0.0 mm below
+  0 vertices beyond 5 mm at most in one pose
+smock_74-m       sit_ground: terrain      0.0 mm below
+  0 vertices beyond 5 mm at most in one pose
+smock_74-m       sit_ground_down: terrain      0.0 mm below
+  0 vertices beyond 5 mm at most in one pose
+smock_74-m       stand_up_ground: terrain     12.2 mm below
+  13 vertices beyond 5 mm at most in one pose
+cloth_check: springs simulated; the cloth is carried at most 0 mm in rest, 14 mm in sit_ground_down, 1 mm in sit_ground, 20 mm in stand_up_ground from where it rides at rest
+cloth_check: 6 pairs of pieces over 49 poses: 3 pair/clip results come through by more than 2.0 mm

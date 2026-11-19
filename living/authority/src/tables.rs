@@ -1339,6 +1339,36 @@ pub struct Standing {
     pub at_ms: u64,
 }
 
+/// Where a character stands and moves, and how it perceives someone it is answering, for its
+/// talk turn's frame (reply-timing, docs/COMMUNICATION.md): `mind_reach`'s answer to its
+/// controller alone (not a table, not broadcast). Only what the character itself perceives of
+/// the other: nothing of them when it neither sees nor hears them.
+#[derive(SpacetimeType, Clone, Debug, PartialEq, Default)]
+pub struct Reach {
+    /// Where it stands now.
+    pub x: f32,
+    pub y: f32,
+    /// How it perceives the other now: `seen`, `heard` (heard and not seen, while sight has a
+    /// field), or `""` (neither, or seen only as a figure too far away to make out).
+    pub other: String,
+    /// Seen: how far they are (m, whole metres). Heard: 0 (a sound's distance is in words).
+    pub other_m: f32,
+    /// Seen: which way they are ("to the north-east"). Heard: where the sound is and how far,
+    /// in the world's words ("behind you, to the south; close").
+    pub other_where: String,
+    /// How fast its body travels now (m/s; 0 standing).
+    pub speed: f32,
+    /// While it travels and sees the other: 1 its way takes it toward them, -1 away from them,
+    /// 0 past them (or it does not travel or see them).
+    pub toward: i8,
+    /// What its body is doing (its activity's words), `""` when nothing.
+    pub doing: String,
+    /// The point it is walking to, when its movement has one (`goal`).
+    pub goal: bool,
+    pub gx: f32,
+    pub gy: f32,
+}
+
 #[cfg_attr(open_tables, spacetimedb::table(accessor = place, public))]
 #[cfg_attr(not(open_tables), spacetimedb::table(accessor = place))]
 pub struct Place {

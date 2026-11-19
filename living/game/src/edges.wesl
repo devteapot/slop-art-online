@@ -540,7 +540,8 @@ fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
         let len = min(length(to), edges.bank.w);
         let dir = normalize(unproject(in.uv, 0.5) - eye);
         let steps = 6;
-        let jitter = hash2(in.position.xy + fract(edges.eye.w) * 17.0);
+        // Stagger neighbouring rays with an offset that stays stable between frames.
+        let jitter = hash2(in.position.xy);
         var acc = 0.0;
         for (var i = 0; i < steps; i++) {
             let s = (f32(i) + jitter) / f32(steps) * len;

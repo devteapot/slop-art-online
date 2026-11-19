@@ -1328,6 +1328,9 @@ pub struct TalkUser<'a> {
     /// from where one stands when that is known (`placed`); empty: no section (talk-places).
     pub places: &'a [String],
     pub placed: bool,
+    /// What came of one's own last words when the other could not have heard them (the
+    /// authority's `silence`, verbatim; reply-timing): told in place of a line to answer.
+    pub missed: Option<&'a str>,
 }
 
 pub fn talk_user(t: &TalkUser) -> String {
@@ -1371,9 +1374,14 @@ pub fn talk_user(t: &TalkUser) -> String {
     for l in t.conversation {
         out.push(Stability::Dynamic, format!("{l}\n"));
     }
-    out.push(Stability::Dynamic, format!("\n# What you are answering\n{other}: “{}”", t.heard));
-    if !t.how.is_empty() {
-        out.push(Stability::Dynamic, format!("\n{}", t.how));
+    match t.missed {
+        Some(m) => out.push(Stability::Dynamic, format!("\n# What came of your last words\n{m}")),
+        None => {
+            out.push(Stability::Dynamic, format!("\n# What you are answering\n{other}: “{}”", t.heard));
+            if !t.how.is_empty() {
+                out.push(Stability::Dynamic, format!("\n{}", t.how));
+            }
+        }
     }
     out.render()
 }
@@ -1394,6 +1402,24 @@ mod tests {
     /// The grammar's `doing` example names no skill a reader may never face (a mind copied
     /// "strike" against a foe whose blow is `attack`; r2c): a kind word, and `is` is said to take
     /// what a creature's `visibly`.is shows. Matching is unchanged.
+    /// A turn on a line the other could not have heard is told the authority's words verbatim
+    /// in place of a line to answer (reply-timing), with no advice.
+    #[test]
+    fn a_missed_line_is_told_in_the_authoritys_words() {
+        let silence = "Fern is too far away: they could not have heard you.";
+        let t = |missed| {
+            talk_user(&TalkUser {
+                name: "Agnes", identity: "", pacing: "", other: "Fern", other_id: 7, other_body: "", feeling: "", mind: &[], memories: &[], lately: &[], earlier: None,
+                scene: "Now.", body: "", conversation: &["You: “Morning!”".into()], heard: "Hello Agnes", how: "", between: &[], places: &[], placed: false, missed,
+            })
+        };
+        let missed = t(Some(silence));
+        assert!(missed.ends_with(&format!("# What came of your last words\n{silence}")), "{missed}");
+        assert!(!missed.contains("# What you are answering"));
+        let answering = t(None);
+        assert!(answering.contains("# What you are answering\nFern: “Hello Agnes”") && !answering.contains("came of your last words"));
+    }
+
     #[test]
     fn the_doing_example_uses_a_kind_word() {
         let g = grammar();
@@ -1553,6 +1579,7 @@ mod tests {
                     // Dynamic: the way to each place depends on where one stands now.
                     places: &["dynamic-place".into()],
                     placed: true,
+                    missed: None,
                 }),
             ),
             "animal_impulse" | "animal_compile" | "animal_consolidate" => {

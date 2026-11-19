@@ -16,12 +16,11 @@ Per phase:
 3. **Time ÷ true optimal**: walked time over the true-map optimal at the order.
 4. **Stuck events**: a subject with a walk under way that moves less than 0.15 m in 2 s while
    more than 2.5 m from its goal; per 10 walk-minutes, and the longest.
-5. **Input latency**: from a stimulus to the subject's first body segment at or after it whose
-   velocity turns more than 15° or changes speed by more than 30% against the velocity just
-   before the stimulus (from standing, starting to move counts); none within 2 s is "no
-   response", counted apart. Stimuli: N1 the order; N2 the first moment a shut gate tile is within
-   the subject's ground sight (`ground_sight_m`) with a clear line; N3 a walker entering a 4 m,
-   ±30° cone ahead; N4 the chaser or fixture turning more than 30° within the subject's sight.
+5. **Response**: report command-to-first-write and command-to-physical-effect from
+   act-correlated evidence, with a two-second window for each. A missing join is
+   unobservable. Older geometric stimulus-to-segment results are retained as proxies.
+   For N2 mid-close, report the first observed gate-bypassing route and velocity
+   change on that route, timed separately from closure and geometric visibility.
 Guards: body row updates per second (the subscription), `tick.motion` from `bench.txt`,
 known_ground rows and bytes, re-plans per walk (a subject's `path` changing between orders).
 A subject's pace is the median speed of its moving segments on non-road tiles (on roads, the
@@ -34,6 +33,7 @@ import os
 import statistics
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -64,7 +64,8 @@ class Track:
     """One body's segments in time order."""
 
     def __init__(self, rows):
-        self.rows = sorted(rows, key=lambda r: r["t_ms"])
+        self.observed_rows = list(rows)
+        self.rows = sorted(self.observed_rows, key=lambda r: r["t_ms"])
         self.ts = [r["t_ms"] for r in self.rows]
 
     def at(self, t):
@@ -192,13 +193,231 @@ def optimal_beliefs(folder, walks, tiles_file, W, H, road, unknown):
     return [json.loads(l) for l in out.stdout.splitlines() if l.startswith("{")]
 
 
-def gate_stimuli(track, t0, t1, tiles, W, shut, sight, line_clear):
+def json_lines(path):
+    if path.exists():
+        with path.open() as stream:
+            for line in stream:
+                if line.startswith("{"):
+                    yield json.loads(line)
+
+
+def response_summary(samples, key):
+    values = [s[key] for s in samples if s[key] is not None]
+    return {"p50_ms": pct(values, .5), "p90_ms": pct(values, .9), "p95_ms": pct(values, .95),
+            "answered": len(values),
+            "unanswered": sum(s[key] is None and s.get(key + "_observed", s["observed"])
+                              for s in samples),
+            "unobservable": sum(not s.get(key + "_observed", s["observed"]) for s in samples)}
+
+
+def act_response(sent, act_id, tagged_segments, previous, end, segment_end=None):
+    """Score a command from only its own authoritative writes in the response window.
+
+    Each tagged segment is (act id, authoritative write time, body row). 'previous'
+    carries the predecessor of that exact row, even if it was written after dispatch.
+    """
+    result = {"act_id": act_id, "first_write_ms": None, "physical_effect_ms": None,
+              "observed": act_id is not None}
+    baseline = None
+    for key, stamp, row in tagged_segments:
+        if act_id is None or key != act_id or not sent <= stamp <= min(end, sent + 2000):
+            continue
+        if result["first_write_ms"] is None:
+            result["first_write_ms"] = stamp - sent
+        if row is None:
+            continue
+        before = previous.get(id(row))
+        if baseline is None and before is not None:
+            baseline = pose(before, stamp)[1]
+        if baseline is None:
+            continue
+        # A continuous turn can cross the threshold between writes. End the
+        # observation at the next segment or at the end of this segment's motion.
+        stop = min(end, sent + 2000, row["next_ms"] - 1)
+        if segment_end is not None:
+            stop = min(stop, segment_end[id(row)])
+        timing = [stamp]
+        if row.get("turn"):
+            timing.extend(range(math.ceil(stamp + 1), math.floor(stop) + 1, 10))
+        for at in timing:
+            _, velocity = pose(row, at)
+            if changed(baseline, velocity) and (before is None or changed(pose(before, at)[1], velocity)):
+                result["physical_effect_ms"] = at - sent
+                return result
+    return result
+
+
+def transaction_acts(path):
+    """Consume the queued ID and open its activity in the same committed update."""
+    pending, active, writes = {}, {}, {}
+    captured = False
+    for update in json_lines(path):
+        captured |= "act_queue" in update or "activity" in update
+        queue = update.get("act_queue", {})
+        activities = update.get("activity", {})
+        inserted = {a["id"]: a for a in activities.get("inserts", [])}
+        started = set()
+        removed = {}
+        for act in queue.get("deletes", []):
+            removed.setdefault(act["actor"], []).append(act)
+        for act in queue.get("inserts", []):
+            pending[act["id"]] = act
+        for actor, acts in removed.items():
+            activity = inserted.get(actor)
+            if (activity and activity["node"] == 65534 and activity["skill"] == "goto"
+                    and len(acts) == 1 and json.loads(acts[0]["node"]).get("do", {}).get("skill") == "goto"):
+                act = acts[0]
+                if act["id"] in pending:
+                    active[actor] = (act["id"], activity["started_ms"])
+                    started.add(actor)
+        ended = {a["id"] for a in activities.get("deletes", []) if a["id"] not in inserted}
+        for actor in inserted.keys() - started:
+            if actor in active and inserted[actor]["started_ms"] != active[actor][1]:
+                active.pop(actor, None)
+        for row in update.get("body", {}).get("inserts", []):
+            actor = row["id"]
+            if actor in active:
+                key, start = active[actor]
+                # A first write in the activity's transaction has the reducer's
+                # authoritative start stamp. Later rows can be anchor rewrites.
+                if actor in started or (actor not in ended and row["t_ms"] > start):
+                    stamp = start if actor in started else row["t_ms"]
+                    writes.setdefault(actor, []).append((key, stamp, row))
+        body_actors = {row["id"] for row in update.get("body", {}).get("inserts", [])}
+        for row in update.get("steer", {}).get("inserts", []):
+            actor = row["id"]
+            if actor in started and actor not in body_actors:
+                key, start = active[actor]
+                writes.setdefault(actor, []).append((key, start, None))
+        for actor in ended:
+            active.pop(actor, None)
+    return captured, pending, writes
+
+
+def trace_acts(folder):
+    """Read the latency branch's queue and synchronous goto-start write markers.
+
+    The body marker inside goto's begin call precedes its act_started marker in
+    the same reducer. Later body writes have no activity provenance in this trace.
+    """
+    markers = {}
+    path = folder / "input-latency-authority-full.jsonl"
+    if not path.exists():
+        path = folder / "input-latency-authority.jsonl"
+    for row in json_lines(path):
+        message = row.get("message", "")
+        if message.startswith("input_latency "):
+            _, stage, actor, key, reducer, _, _, *detail = message.split()
+            markers.setdefault(int(actor), []).append(
+                (row["ts"] / 1000, stage, int(key), int(reducer), detail))
+    return markers
+
+
+def walk_response(walk, track, trace, transactions, next_send):
+    actor = walk["subject"]
+    sent, ack = walk.get("order_send_wall_ms"), walk.get("order_ack_wall_ms")
+    result = {"act_id": None, "first_write_ms": None, "physical_effect_ms": None, "observed": False}
+    if sent is None or not track:
+        return result
+    captured, pending, writes = transactions
+    stop = min(walk.get("end_ms", sent + 2000), next_send)
+    # A later transaction may re-anchor a segment to an earlier t_ms.
+    # Use subscription order to identify the overwritten body row.
+    observed = track.observed_rows
+    previous = {id(row): before for before, row in zip(observed, observed[1:])}
+    segment_end = {id(row): following["t_ms"] - 1 for row, following in zip(observed, observed[1:])}
+    if observed:
+        segment_end[id(observed[-1])] = stop
+    target = walk["waypoints"][0] if walk.get("waypoints") else walk["goal"]
+    candidates = []
+    segments = []
+    if trace:
+        candidates = [key for stamp, stage, key, _, detail in trace
+                      if stage == "act_queued" and sent <= stamp <= ack and detail[-1] == "goto"]
+        if len(candidates) == 1:
+            key = candidates[0]
+            for i, (stamp, stage, started, txn, _) in enumerate(trace):
+                if stage != "act_started" or started != key or stamp > stop:
+                    continue
+                # Only writes inside this invocation of the actor's goto begin.
+                for written, event, segment, other_txn, detail in reversed(trace[:i]):
+                    if other_txn != txn or event == "act_attempt":
+                        break
+                    if event == "body_written":
+                        rows = [row for row in track.segments_from(segment, segment)
+                                if all(math.isclose(row[field], float(value), abs_tol=1e-5)
+                                       for field, value in zip(("vx", "vy"), detail))]
+                        segments.append((key, written, rows[0] if len(rows) == 1 else None))
+                segments.reverse()
+                break
+    elif captured:
+        source = "human" if walk.get("kind") == "click" else "nav-arena"
+        candidates = [key for key, act in pending.items()
+                      if act["actor"] == actor and act["source"] == source
+                      and sent < act["at_ms"] + 1 and act["at_ms"] <= ack
+                      and json.loads(act["node"]).get("do", {}).get("target", {}).get("at") == target]
+        # Reuse the track's row objects so the predecessor lookup is unambiguous.
+        segments = [(key, max(sent, stamp), next((r for r in track.segments_from(row["t_ms"], row["t_ms"])
+                                      if r == row), None) if row is not None else None)
+                    for key, stamp, row in writes.get(actor, ())]
+    if len(candidates) == 1:
+        result = act_response(sent, candidates[0], segments, previous, stop, segment_end)
+        if trace and result["physical_effect_ms"] is None:
+            # The historical trace stops attributing writes when begin returns.
+            result["physical_effect_ms_observed"] = False
+    return result
+
+
+def path_crosses(start, path, tiles):
+    """Whether the remaining waypoint polyline crosses any of the specified tiles."""
+    for point in path:
+        end = (point["x"], point["y"]) if isinstance(point, dict) else tuple(point)
+        steps = max(1, math.ceil(math.dist(start, end) * 8))
+        if any(tuple(math.floor(a + (b - a) * n / steps) for a, b in zip(start, end))
+               in tiles for n in range(steps + 1)):
+            return True
+        start = end
+    return False
+
+
+def reroute_response(track, closed, visible, end, tiles, centre, alternative, goal):
+    """Find a gate-bypassing leg while still on the approach side of the gate."""
+    write, effect, baseline = None, None, None
+    for before, row in zip(track.rows, track.rows[1:]):
+        stamp = row["t_ms"]
+        if not closed <= stamp <= end or not row["path"]:
+            continue
+        start = (row["x"], row["y"])
+        if sum((a - c) * (b - c) for a, b, c in zip(start, goal, centre)) >= 0:
+            break
+        last = row["path"][-1]
+        endpoint = (last["x"], last["y"]) if isinstance(last, dict) else tuple(last)
+        if path_crosses(start, row["path"], tiles):
+            continue
+        if math.dist(endpoint, goal) > 0.1 and not path_crosses(start, row["path"], alternative):
+            continue
+        if write is None:
+            write = stamp
+            baseline = pose(before, stamp)[1]
+        if changed(baseline, pose(row, stamp)[1]):
+            effect = stamp
+            break
+    return {"reroute_segment_ms": write, "reroute_effect_segment_ms": effect,
+            "closure_to_reroute_ms": write - closed if write is not None else None,
+            "closure_to_effect_ms": effect - closed if effect is not None else None,
+            "visibility_to_reroute_ms": write - visible if write is not None and visible is not None else None,
+            "visibility_to_effect_ms": effect - visible if effect is not None and visible is not None else None}
+
+
+def gate_stimuli(track, t0, t1, shut, sight, line_clear, closes=None):
     """The first moment within [t0, t1] a shut tile is within `sight` m with a clear line."""
     t = t0
     while t <= t1:
         p, _ = track.where(t)
         if p:
             for g in shut:
+                if closes is not None and t < closes.get(g, math.inf):
+                    continue
                 c = (g[0] + 0.5, g[1] + 0.5)
                 if math.dist(p, c) <= sight(t) and line_clear(p, c):
                     return t
@@ -362,8 +581,13 @@ def chase_report(folder, ph, walks, tracks, line_clear):
         rows.append(r)
     flights = [r for r in rows if "escaped" in r]
     pursuits = [r for r in rows if "sight_lost" in r]
-    out = {"phase": folder.name, "arena": "n4", "variant": ph.get("variant"), "law": ph.get("law"), "kind": ph.get("kind"), "hour": ph.get("hour"), "light": ph.get("light"), "walks": len(rows),
+    out = {"phase": folder.name, "source_run": folder.parent.name, "arena": "n4", "variant": ph.get("variant"), "law": ph.get("law"), "kind": ph.get("kind"), "hour": ph.get("hour"), "light": ph.get("light"), "walks": len(rows),
            "latency_p50_ms": pct(lat, 0.5), "latency_p95_ms": pct(lat, 0.95), "no_response": no_resp, "stimuli": len(lat) + no_resp, "walks_detail": rows}
+    samples = [{"first_write_ms": None, "physical_effect_ms": None, "observed": False}
+               for _ in range(len(lat) + no_resp)]
+    out.update(first_write=response_summary(samples, "first_write_ms"),
+               physical_effect=response_summary(samples, "physical_effect_ms"),
+               proxy_latency_p90_ms=pct(lat, .9))
     out.update(chase_stalls(folder, tracks, walks))
     if flights:
         out.update(escape_rate=round(sum(r["escaped"] is not None for r in flights) / len(flights), 3), cornered_rate=round(sum(r["cornered"] for r in flights) / len(flights), 3))
@@ -375,13 +599,19 @@ def chase_report(folder, ph, walks, tracks, line_clear):
     return out
 
 
-def phase_report(folder):
+def phase_report(folder, response_only=False):
     folder = Path(folder)
     ph = json.loads((folder / "phase.json").read_text())
     walks = [json.loads(l) for l in (folder / "walks.jsonl").read_text().splitlines() if l.strip()] if (folder / "walks.jsonl").exists() else []
     tracks, ground = load_tracks(folder / "bodies.jsonl")
     tiles_file = Path(ph["tiles_file"]) if ph.get("tiles_file") else None
     W, H = ph.get("W"), ph.get("H")
+    if tiles_file:
+        for parent in folder.resolve().parents:
+            candidate = parent / "verify" / tiles_file.parent.name / tiles_file.name
+            if candidate.exists():
+                tiles_file = candidate
+                break
     tiles = tiles_file.read_bytes() if tiles_file and tiles_file.exists() else b""
     road = ph.get("laws", {}).get("road_speed") or 1.4
     unknown = ph.get("laws", {}).get("unknown_cost") or 1.5
@@ -416,7 +646,17 @@ def phase_report(folder):
         for w in walks:
             last[w["subject"]] = w
         test = list(last.values())
-    beliefs = optimal_beliefs(folder, test, tiles_file, W, H, road, unknown) if tiles and test else [{}] * len(test)
+    beliefs = optimal_beliefs(folder, test, tiles_file, W, H, road, unknown) if tiles and test and not response_only else [{}] * len(test)
+    trace = trace_acts(folder)
+    transactions = transaction_acts(folder / "bodies.jsonl") if not trace else (False, {}, {})
+    stimuli_log = {s["what"]: s for s in json_lines(folder / "stimuli.jsonl")}
+    gate_memory = {}
+    if ph["arena"] == "n2" and ph["variant"] == "mid-close":
+        gate_ids = set(ph["gate_a"]["ids"])
+        for update in json_lines(folder / "bodies.jsonl"):
+            for row in update.get("remembered", {}).get("inserts", []):
+                if row["kind"] == 1 and row["state"] == 0 and row["target"] in gate_ids:
+                    gate_memory.setdefault(row["observer"], []).append(row["seen_ms"])
     rows, lat, no_resp, stuck, walk_min, replans = [], [], 0, [], 0.0, []
     diagnostics = {}
     exit_file = folder / "route-exits.jsonl"
@@ -439,6 +679,15 @@ def phase_report(folder):
              "ratio_known": round(walked / known_s, 3) if completed and known_s else None, "ratio_true": round(walked / true_s, 3) if completed and true_s else None,
              "belief_unseen_tiles": bel.get("unseen_tiles") if bel else None, "prior_cells_in_box": w.get("prior_cells_in_box"),
              "route_exits": diagnostics.get((w["subject"], w["walk"]), [])}
+        if ph["arena"] in ("n1", "n2"):
+            next_send = min((s["order_send_wall_ms"] for s in test
+                             if s["subject"] == w["subject"] and s["walk"] > w["walk"]
+                             and "order_send_wall_ms" in s), default=math.inf)
+            response = walk_response(w, tr, trace.get(w["subject"], ()), transactions, next_send)
+            if ph["arena"] == "n1":
+                r["responses"] = [response]
+            else:
+                r["dispatch_response"] = response
         if tr:
             ev = stuck_events(tr, t_order, t_end, w["goal"])
             stuck += [(e[1] - e[0]) / 1000 for e in ev]
@@ -451,7 +700,28 @@ def phase_report(folder):
                 # Use the pre-call sample as the lower timestamp bound of the order.
                 stims = [w["order_ms"][0]]
             elif ph["arena"] == "n2":
-                g = gate_stimuli(tr, t_order, t_end, tiles, W, [tuple(x) for x in ph["gate_a"]["tiles"]], sight_at, line_clear) if ph.get("variant") in ("a", "b") else None
+                closed = stimuli_log.get("gate shut", {})
+                gate_tiles = {tuple(x) for x in ph["gate_a"]["tiles"]}
+                close_ms = closed.get("completed_ms")
+                close_started = closed.get("started_ms")
+                mid = ph["variant"] == "mid-close"
+                g = None
+                if ph["variant"] in ("a", "b", "mid-close") and tiles and (not mid or closed.get("all_shut")):
+                    earliest = close_started if mid else close_ms
+                    closes = {(x, y): stamp for x, y, stamp in closed.get("closed_tiles", ())}
+                    g = gate_stimuli(tr, max(t_order, earliest or t_order), t_end,
+                                     gate_tiles, sight_at, line_clear, closes or None)
+                if mid:
+                    before = stimuli_log.get("before gate close", {})
+                    planned = before.get("routes", {}).get(str(w["subject"]), False)
+                    memory = min((stamp for stamp in gate_memory.get(w["subject"], ())
+                                  if close_started is not None and close_started <= stamp <= t_end), default=None)
+                    r.update(route_via_gate_before_close=planned, gate_closed_ms=close_ms,
+                             gate_first_closed_ms=close_started, gate_memory_ms=memory)
+                    if planned and closed.get("all_shut") and close_started is not None:
+                        r.update(reroute_response(tr, close_started, g, t_end, gate_tiles,
+                                                  ph["gate_a"]["centre"], {tuple(tile) for tile in ph["gate_b"]["tiles"]},
+                                                  w["goal"]))
                 r["gate_seen_ms_after_order"] = (g - t_order) if g else None
                 stims = [g] if g else []
                 # Leak check: before the gate is seen, does the walk head for gate A?
@@ -471,10 +741,13 @@ def phase_report(folder):
                 else:
                     lat.append(l)
             r["latency_ms"] = [latency(tr, s) for s in stims]
+            if ph["arena"] != "n1":
+                r["responses"] = [{"first_write_ms": None, "physical_effect_ms": None,
+                                   "observed": False} for _ in stims]
         rows.append(r)
     arrived = sum(r["arrived_in_3x"] for r in rows)
     reachable = sum(r["reachable"] for r in rows)
-    out = {"phase": folder.name, "arena": ph["arena"], "variant": ph.get("variant"), "law": ph.get("law"), "kind": ph.get("kind"), "walks": len(rows),
+    out = {"phase": folder.name, "source_run": folder.parent.name, "arena": ph["arena"], "variant": ph.get("variant"), "law": ph.get("law"), "kind": ph.get("kind"), "walks": len(rows),
            "reachable": reachable, "arrived_in_3x": arrived, "arrival_rate": round(arrived / reachable, 3) if reachable else None,
            "could_not_get_there": sum("could not get there" in (r["failure"] or " ".join(r["told"] or ())) for r in rows),
            "ratio_known_p50": pct([r["ratio_known"] for r in rows], 0.5), "ratio_known_p90": pct([r["ratio_known"] for r in rows], 0.9),
@@ -489,6 +762,32 @@ def phase_report(folder):
                 reason = row["route_exits"][-1] if row["route_exits"] else "missing_diagnostic"
                 reasons[reason] = reasons.get(reason, 0) + 1
         out["could_not_get_there_by_exit"] = reasons
+    samples = [response for row in rows for response in row.get("responses", ())]
+    out["first_write"] = response_summary(samples, "first_write_ms")
+    out["physical_effect"] = response_summary(samples, "physical_effect_ms")
+    out["proxy_latency_p90_ms"] = pct(lat, .9)
+    if ph["arena"] == "n2":
+        dispatch = [row["dispatch_response"] for row in rows]
+        out["dispatch_first_write"] = response_summary(dispatch, "first_write_ms")
+        out["dispatch_physical_effect"] = response_summary(dispatch, "physical_effect_ms")
+        if ph["variant"] == "mid-close":
+            eligible = [r for r in rows if r.get("route_via_gate_before_close")
+                        and stimuli_log.get("gate shut", {}).get("all_shut")]
+            out["mid_close_valid"] = len(eligible)
+            for origin in ("closure", "visibility"):
+                for response in ("reroute", "effect"):
+                    key = f"{origin}_to_{response}_ms"
+                    observations = []
+                    before_stimulus = 0
+                    for row in eligible:
+                        ms = row.get(key)
+                        if ms is not None and ms < 0:
+                            before_stimulus += 1
+                            continue
+                        seen = row.get("gate_seen_ms_after_order") is not None
+                        observations.append({key: ms if ms is not None and ms <= 2000 else None,
+                                             "observed": origin == "closure" or seen})
+                    out[key] = response_summary(observations, key) | {"before_stimulus": before_stimulus}
     if ph["arena"] == "n3":
         out["contacts_under_0_4m"] = sum(r.get("contacts_under_0_4m", 0) for r in rows)
     if ph["arena"] == "n2":
@@ -564,6 +863,39 @@ def selftest():
     assert pct([1, 2, 3, 4], 0.5) == 2.5
     writes = ground_write_rate([{"subject": 1, "order_ms": [900, 1000], "end_ms": 6000}], {1: [900, 1000, 5000, 6000]})
     assert writes == {"writes": 2, "actor_seconds": 5.0, "writes_per_actor_s": 0.4, "max_writes_per_actor_s": 0.4}
+    # An unrelated write after send and before the accepted act cannot answer.
+    _, early, same, turn = rows
+    sent = 1000
+    same = dict(same, t_ms=1100, vx=1.4)
+    turn = dict(turn, t_ms=1200)
+    previous = {id(same): early, id(turn): same}
+    tags = [(7, 990, early), (6, 1040, early), (7, 1100, same), (7, 1200, turn)]
+    assert act_response(sent, 7, tags[:2], previous, 3000)["first_write_ms"] is None
+    write = act_response(sent, 7, tags[:3], previous, 3000)
+    assert write["first_write_ms"] == 100 and write["physical_effect_ms"] is None
+    effect = act_response(sent, 7, tags, previous, 3000)
+    assert effect["first_write_ms"] == 100 and effect["physical_effect_ms"] == 200
+    assert path_crosses((0.5, 0.5), [{"x": 2.5, "y": 0.5}], {(1, 0)})
+    queued = {"id": 7, "actor": 1, "at_ms": 1005, "source": "nav-arena",
+              "node": json.dumps({"do": {"skill": "goto", "target": {"at": [9, 9]}}})}
+    activity = {"id": 1, "skill": "goto", "node": 65534, "started_ms": 1100}
+    updates = [
+        {"act_queue": {"inserts": [queued]}, "body": {"inserts": [rows[0]]}},
+        {"body": {"inserts": [early]}},
+        {"act_queue": {"deletes": [queued]}, "activity": {"inserts": [activity]},
+         "body": {"inserts": [same]}},
+        {"body": {"inserts": [turn]}},
+        {"activity": {"deletes": [activity]}, "body": {"inserts": [rows[-1]]}},
+    ]
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "bodies.jsonl"
+        path.write_text("".join(json.dumps(update) + "\n" for update in updates))
+        tx = transaction_acts(path)
+        sample = walk_response({"subject": 1, "order_send_wall_ms": 1000, "order_ack_wall_ms": 1010,
+                                "end_ms": 3000, "goal": [9, 9]}, Track([rows[0], early, same, turn]),
+                               (), tx, math.inf)
+        assert sample == effect, sample
+        assert len(tx[2][1]) == 2, tx
     print("nav_report selftest: ok")
 
 
@@ -573,13 +905,14 @@ def main():
     r = sub.add_parser("report")
     r.add_argument("dirs", nargs="+")
     r.add_argument("--json")
+    r.add_argument("--response-only", action="store_true", help="skip the archived optimal-path calculation")
     sub.add_parser("selftest")
     a = ap.parse_args()
     if a.cmd == "selftest":
         return selftest()
-    reps = [phase_report(f) for f in folders(a.dirs)]
-    keys = ["phase", "walks", "arrival_rate", "ratio_known_p50", "ratio_known_p90", "ratio_true_p50", "ratio_true_p90", "stuck_per_10min", "stuck_longest_s", "latency_p50_ms", "latency_p95_ms", "no_response", "replans_per_walk"]
-    chase = ["phase", "walks", "hour", "escape_rate", "cornered_rate", "sight_lost", "reacquired", "captured", "latency_p50_ms", "latency_p95_ms", "no_response"]
+    reps = [phase_report(f, a.response_only) for f in folders(a.dirs)]
+    keys = ["phase", "walks", "arrival_rate", "ratio_known_p50", "ratio_known_p90", "ratio_true_p50", "ratio_true_p90", "stuck_per_10min", "stuck_longest_s", "latency_p50_ms", "latency_p95_ms", "no_response", "replans_per_walk", "first_write", "physical_effect"]
+    chase = ["phase", "walks", "hour", "escape_rate", "cornered_rate", "sight_lost", "reacquired", "captured", "latency_p50_ms", "latency_p95_ms", "no_response", "first_write", "physical_effect"]
     for ks, sel in ((keys, lambda r: r["arena"] != "n4"), (chase, lambda r: r["arena"] == "n4")):
         group = [r for r in reps if sel(r)]
         if group:

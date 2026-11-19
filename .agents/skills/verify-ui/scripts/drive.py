@@ -44,7 +44,7 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../.."))
 STDB = os.path.join(ROOT, "living/tools/stdb")
 V = os.path.join(ROOT, ".agents/skills/verify/scripts/verify.py")
 sys.path.insert(0, os.path.dirname(V))
-from verify import http
+from verify import admin_token, http, load, refresh_lease, require_running
 
 
 def stdb(*args):
@@ -58,8 +58,10 @@ def call(db, reducer, *args):
     return {"reducer": reducer, "args": [str(a) for a in args], "code": code, "out": out[-400:]}
 
 
-def sql(run, q):
+def sql(run, q, *, required=False):
     r = subprocess.run([sys.executable, V, "sql", "--run", run, q], capture_output=True, text=True)
+    if required and r.returncode:
+        sys.exit(r.stderr.strip() or f"owner SQL failed: {q}")
     i = r.stdout.find("[")
     try:
         return json.loads(r.stdout[i:]) if i >= 0 else []
@@ -74,14 +76,6 @@ def epoch_at(run, hour):
     day, now = int(w["day_ms"]), int(time.time() * 1000)
     days = (now - int(w["epoch_ms"]) + day * 7 // 24) // day
     return now + day * 7 // 24 - int(hour / 24.0 * day) - days * day
-
-
-def admin_token():
-    _, out = stdb("login", "show", "--token")
-    for line in out.splitlines():
-        if "auth token" in line and " is " in line:
-            return line.rsplit(" is ", 1)[1].strip()
-    sys.exit("could not read the admin token from `spacetime login show --token`")
 
 
 WALK_BLOCKED = {2, 4, 7, 8, 9}  # water, rock, wall, drop, low (`Terrain::walkable`)
@@ -150,6 +144,9 @@ def main():
     db = f"verify-{a.run}"
     if not db.startswith("verify-ui-"):
         sys.exit(f"refusing {db}: verify-ui runs use verify-ui-* worlds (run names ui-*)")
+    st = load(a.run)
+    owner = admin_token()
+    require_running(st, owner)
     out = os.path.join(ROOT, ".local/living/verify", a.run, "ui", a.name)
     os.makedirs(out, exist_ok=True)
     for f in os.listdir(out):
@@ -180,17 +177,17 @@ def main():
             os.remove(secret)
         fd = os.open(secret, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         with os.fdopen(fd, "w") as f:
-            f.write(admin_token())
+            f.write(owner)
         env["LIVING_GAME_ADMIN_TOKEN_FILE"] = secret
     try:
-        run_client(a, db, out, client, env, places, syncs, free_places)
+        run_client(a, db, out, client, env, places, syncs, free_places, st, owner)
     finally:
         if secret and os.path.exists(secret):
             os.remove(secret)
             print("admin token file deleted", flush=True)
 
 
-def run_client(a, db, out, client, env, places, syncs, free_places=()):
+def run_client(a, db, out, client, env, places, syncs, free_places, st, owner):
     log_path = os.path.join(out, "client.log")
     log = open(log_path, "w")
     p = subprocess.Popen([client], env=env, stdout=log, stderr=subprocess.STDOUT, cwd=ROOT)
@@ -201,7 +198,7 @@ def run_client(a, db, out, client, env, places, syncs, free_places=()):
     for sig in (signal.SIGTERM, signal.SIGHUP):
         signal.signal(sig, lambda n, _f: sys.exit(128 + n))
     try:
-        return drive_client(a, db, out, client, p, log_path, places, syncs, env["LIVING_GAME_TOKEN"], free_places)
+        return drive_client(a, db, out, client, p, log_path, places, syncs, env["LIVING_GAME_TOKEN"], free_places, st, owner)
     finally:
         stop(p)
 
@@ -219,14 +216,28 @@ def stop(p):
         p.wait()
 
 
-def drive_client(a, db, out, client, p, log_path, places, syncs, token_path, free_places):
+def drive_client(a, db, out, client, p, log_path, places, syncs, token_path, free_places, st, owner):
     scene = {"world": db, "plan": a.plan, "places": places, "calls": [], "snaps": {}, "client": client, "admin_link": a.admin_link}
     me, placed, t0, ident, last_at = None, False, time.time(), None, None
+    next_renewal = 0
+
+    def act(reducer, *args):
+        refresh_lease(st)
+        return call(db, reducer, *args)
+
+    def position(cid):
+        refresh_lease(st)
+        return body(db, cid)
+
     while p.poll() is None:
         if time.time() - t0 > a.timeout:
             print(f"timeout after {a.timeout} s: stopping the client (pid {p.pid})", flush=True)
             p.terminate()
             break
+        # The connected client can spend minutes driving input between Python scene actions.
+        if time.monotonic() >= next_renewal:
+            refresh_lease(st)
+            next_renewal = time.monotonic() + 1
         text = open(log_path, errors="replace").read()
         if me is None:
             m = re.search(r"playing character #(\d+)", text)
@@ -234,28 +245,28 @@ def drive_client(a, db, out, client, p, log_path, places, syncs, token_path, fre
                 me = int(m.group(1))
                 scene["me"] = me
         if me is not None and not placed and "scene.go" in text and "waiting for" in text:
-            at = body(db, me)
+            at = position(me)
             scene["me_at"] = at
             for i, dx, dy in places:
-                scene["calls"].append(call(db, "place_at", i, at[0] + float(dx), at[1] + float(dy)))
-                scene["calls"].append(call(db, "set_behavior", i, json.dumps(json.dumps({"wait": 600}))))
+                scene["calls"].append(act("place_at", i, at[0] + float(dx), at[1] + float(dy)))
+                scene["calls"].append(act("set_behavior", i, json.dumps(json.dumps({"wait": 600}))))
             if free_places:
                 spots = free_tiles(a.run, at, [(float(dx), float(dy)) for _, dx, dy in free_places])
                 scene["free_spots"] = {i: list(c) for (i, _, _), c in zip(free_places, spots)}
                 for (i, _, _), c in zip(free_places, spots):
-                    scene["calls"].append(call(db, "place_at", i, c[0], c[1]))
-                    scene["calls"].append(call(db, "set_behavior", i, json.dumps(json.dumps({"wait": 600}))))
+                    scene["calls"].append(act("place_at", i, c[0], c[1]))
+                    scene["calls"].append(act("set_behavior", i, json.dumps(json.dumps({"wait": 600}))))
                 places = places + free_places
-            time.sleep(1.0)
+            require_running(st, owner)
             # Where each landed: `place_at` snaps to the nearest walkable tile, so two asked-for
             # spots in a stall can share one.
-            scene["placed"] = {i: body(db, int(i)) for i, _, _ in places}
+            scene["placed"] = {i: position(int(i)) for i, _, _ in places}
             open(os.path.join(out, "scene.go"), "w").close()
             placed = True
         for name, calls in list(syncs.items()):
             if me is not None and f"{name}.go" in text and "waiting for" in text:
                 # The player's position now, else where it last was (a body gone at death).
-                at = body(db, me) or last_at
+                at = position(me) or last_at
                 last_at = at
                 # `refree`: put the free-placed residents back on their own tiles (town life may
                 # have walked them off).
@@ -274,6 +285,7 @@ def drive_client(a, db, out, client, p, log_path, places, syncs, token_path, fre
                             q = q.replace(m.group(0), str(epoch_at(a.run, float(m.group(1)))))
                         wall_ms = int(time.time() * 1000)
                         if c[0] == "client_sql":
+                            refresh_lease(st)
                             with open(token_path) as token_file:
                                 status, response = http(f"/v1/database/{db}/sql", q, token_file.read().strip(), raw=True)
                             if status != 200:
@@ -282,7 +294,7 @@ def drive_client(a, db, out, client, p, log_path, places, syncs, token_path, fre
                             names = [column["name"]["some"] for column in result["schema"]["elements"]]
                             rows = [dict(zip(names, row)) for row in result["rows"]]
                         else:
-                            rows = sql(a.run, q)
+                            rows = sql(a.run, q, required=True)
                         scene["snaps"].setdefault(name, []).append({"query": q, "wall_ms": wall_ms, "rows": rows})
                         continue
                     if c[0] == "player":
@@ -303,11 +315,11 @@ def drive_client(a, db, out, client, p, log_path, places, syncs, token_path, fre
                         r = subprocess.run([sys.executable, V, "call", "--run", a.run, c[1], args, "--as-player"], capture_output=True, text=True)
                         scene["calls"].append({"reducer": c[1], "as": "player", "args": args, "code": r.returncode, "out": (r.stdout + r.stderr)[-300:]})
                         continue
-                    scene["calls"].append(call(db, c[0], *[sub(x) for x in c[1:]]))
+                    scene["calls"].append(act(c[0], *[sub(x) for x in c[1:]]))
                 time.sleep(0.5)
                 moved = sorted({sub(c[1]) for c in calls if c[0] == "place_at"})
                 if moved:
-                    scene.setdefault("placed_at", {})[name] = {i: body(db, int(i)) for i in moved}
+                    scene.setdefault("placed_at", {})[name] = {i: position(int(i)) for i in moved}
                 open(os.path.join(out, f"{name}.go"), "w").close()
                 del syncs[name]
         time.sleep(0.4)
