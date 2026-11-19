@@ -209,7 +209,7 @@ def main():
     for p in people:
         p["file"] = os.path.join(out, "people", p["name"] + ".json")
         with open(p["file"], "w") as f:
-            json.dump({k: v for k, v in p.items() if k not in ("name", "full_name", "household", "file")}, f, indent=1)
+            json.dump({k: v for k, v in p.items() if k not in ("name", "full_name", "file")}, f, indent=1)
     lods = a.lod.split(",")
     if not a.skip_build:
         def build(p):

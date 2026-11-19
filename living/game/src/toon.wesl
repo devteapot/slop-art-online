@@ -12,7 +12,7 @@ import bevy_pbr::render::{
 };
 import living_game::toon_light::{
     toon, is_kind, hash3, noise3, rgb_to_hsv, hsv_to_rgb, scene, wetted, view_depth, sun_shadow, sun_color,
-    bands, banded, puddles, wet_sheen, fresnel, rim_light, point_lights, emission, has_sun, sun_direction, eye,
+    bands, banded, puddles, wet_sheen, fresnel, rim_light, point_lights, emission, has_sun, sun_direction, eye, metres_per_pixel,
 };
 
 @if(PREPASS_PIPELINE)
@@ -295,10 +295,24 @@ fn aa(t: f32, w: f32, x: f32, fw: f32) -> f32 {
 
 // A hand-made file's hair (style.rs `Kind::HandHair`, docs/HANDMADE_HAIR.md, "The hair profile"):
 // at most three flat levels from two thresholds on N·L, the shade colour in cast shadow, and one
-// broad highlight where its mask (the second UVs' y as 1 + _HIGHLIGHT, or the mask texture's R)
-// passes 0.5, only where the sun reaches. Returns the base colour and how far the point is out of
-// shade (`s1`).
-fn hand_hair(N: vec3<f32>, L: vec3<f32>, vis: f32, in: VertexOutput, duv: vec4<f32>) -> vec4<f32> {
+// broad highlight where its mask (the larger of the second UVs' y as 1 + _HIGHLIGHT and the mask
+// texture's R) passes 0.5, only where the sun reaches; and, v1.1, the lock ink lines from the
+// texture's G (a distance field in UV, "Lock ink lines"). `duv` is the UV's screen derivatives,
+// taken in uniform control flow; `view_z` the point's view depth.
+struct HandHair {
+    // The base colour, before the light.
+    base: vec3<f32>,
+    // How far the point is out of shade (0 in the shade band and in cast shadow).
+    s1: f32,
+    // How much of the pixel the ink line covers.
+    ink: f32,
+}
+
+// A pixel's metres at the Near stop (view.rs: 8 m up at 58°, 9.43 m away, FOV 42°, 900 px tall):
+// `ink_px` is the line's width there.
+const INK_NEAR_M_PX: f32 = 0.00805;
+
+fn hand_hair(N: vec3<f32>, L: vec3<f32>, vis: f32, in: VertexOutput, duv: vec4<f32>, view_z: f32) -> HandHair {
     let ndl = dot(N, L);
     let fw = fwidth(ndl);
     let t = toon.hand_bands;
@@ -309,14 +323,39 @@ fn hand_hair(N: vec3<f32>, L: vec3<f32>, vis: f32, in: VertexOutput, duv: vec4<f
 @if(VERTEX_UVS_B) {
     mask = in.uv_b.y - 1.0;
 }
+    var cov = 0.0;
 @if(VERTEX_UVS_A) {
     if (toon.hand[3].w > 0.5) {
-        mask = textureSampleGrad(face_map, face_sampler, in.uv, duv.xy, duv.zw).r;
+        // One tap for both: R the highlight, G the ink field.
+        let tex = textureSampleGrad(face_map, face_sampler, in.uv, duv.xy, duv.zw);
+        mask = max(mask, tex.r);
+        if (toon.hand_ink_range.z > 0.5 && tex.g < 1.0) {
+            let range = toon.hand_ink_range.x;
+            // The UV a pixel spans (its longer side): the distance in pixels.
+            let fw_uv = max(max(length(duv.xy), length(duv.zw)), 1e-7);
+            let d_px = tex.g * range / fw_uv;
+            // The width and the fade follow the pixel's size at its depth and the hair's texel
+            // density (metres per UV, measured from the mesh: `hand_ink_range.w`), which are
+            // smooth on screen: screen derivatives step between pixel quads, and a fade driven
+            // by them flickered as the camera moved.
+            let m_px = max(metres_per_pixel(view_z), 1e-6);
+            let w = toon.hand_ink.w * min(INK_NEAR_M_PX / m_px, 4.0);
+            // How much of the pixel (a 1-pixel box across the line) a line `w` wide covers: it
+            // sums to w across the line whatever its place in the pixels, so a thin line moving by
+            // a fraction of a pixel neither flickers nor crawls.
+            cov = clamp(min(d_px + 0.5, w * 0.5) - max(d_px - 0.5, -w * 0.5), 0.0, 1.0);
+            // Neighbouring lines' spacing on screen, estimated as 2 · ink_range (the field's
+            // range is half the narrowest spacing): fade before they would merge.
+            let m_uv = toon.hand_ink_range.w;
+            let space = select(2.0 * range / fw_uv, 2.0 * range * m_uv / m_px, m_uv > 0.0);
+            let fade = toon.hand_ink_range.y;
+            cov = cov * smoothstep(fade, 2.0 * fade, space);
+        }
     }
 }
     let fm = fwidth(mask);
     let h = select(0.0, aa(0.5, t.w, mask, fm), mask >= 0.0) * s1;
-    return vec4<f32>(mix(level, toon.hand[3].rgb, h), s1);
+    return HandHair(mix(level, toon.hand[3].rgb, h), s1, cov);
 }
 
 @fragment
@@ -410,9 +449,12 @@ fn fragment(
         let hand = is_kind(5.0);
         var lit_albedo = albedo.rgb;
         if (hand) {
-            let hh = hand_hair(N, L, shadow, in, duv);
-            lit_albedo = hh.rgb;
-            color = hh.rgb * sun + hh.rgb * sc.fill * mix(1.0, 0.45, hh.a);
+            let hh = hand_hair(N, L, shadow, in, duv, view_z);
+            color = hh.base * sun + hh.base * sc.fill * mix(1.0, 0.45, hh.s1);
+            // The ink takes the shade band's light wherever it falls.
+            let ink = toon.hand_ink.rgb;
+            color = mix(color, ink * sun + ink * sc.fill, hh.ink);
+            lit_albedo = mix(hh.base, ink, hh.ink);
         }
         if (toon.atmo.y > 0.05 && N.y > 0.97 && (tag & (1u << 24u)) == 0u) {
             color = puddles(color, p.xyz, 0.0);

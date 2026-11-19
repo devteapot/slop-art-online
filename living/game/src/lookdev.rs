@@ -631,7 +631,9 @@ pub fn convert(
                     let map = face_map.as_ref().or(hair_map.as_ref()).map(|f| assets.load_builder().with_settings(|s: &mut bevy::image::ImageLoaderSettings| s.is_srgb = false).load(f.clone()));
                     let mut toon = style.kind(b, kind, map);
                     if let Some(p) = profile {
-                        p.apply(&mut toon.extension.params, hair_map.is_some());
+                        p.apply(&mut toon.extension.params, hair_map.as_deref());
+                        // The ink's fade reads the hair's texel density, from its mesh.
+                        toon.extension.params.hand_ink_range.w = meshes.get(&mesh.0).and_then(|m| crate::handmade::metres_per_uv(&m)).unwrap_or(0.0);
                     }
                     if let Some(f) = file_forward {
                         toon.extension.params.file = f.extend(1.0);
