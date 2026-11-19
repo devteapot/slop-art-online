@@ -2,6 +2,7 @@
 
 | Feature | Cases | File |
 | --- | --- | --- |
+| A container's contents in a scoped world (docs/FEED_SCOPING.md, minds match players): the prompt shows a storage's kind and `inside` "not looked into", never its contents; told to look, the mind's `inspect` writes `contents_seen` and the line "You look inside the storage: 3 berries."; its next prompt says what it found, and its `take` gets them | `chest` | [contents.md](contents.md) |
 | A cached Jev judgment drives the graph: asked in the background, cached by `mind_judged`, read by `judged` | `jev` | [judgments.md](judgments.md) |
 | A deliberation consumes the reasons its prompt contained: plan-finished churn during model calls keeps no older reason pending, a reason arriving mid-call waits for the next deliberation only; each thought's `detail.reasons` with `carried_before` | `reasons` | [deliberation.md](deliberation.md) |
 | A prompt's scene and its experiences describe one moment: what a deliberation leaves pending is handed on with a scene taken then, and a prompt lists no experience after its scene | `scene-since` | [deliberation.md](deliberation.md) |

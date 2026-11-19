@@ -1,0 +1,7 @@
+# A container's contents (scoped worlds)
+
+docs/FEED_SCOPING.md, "Fuel and contents". In a world at stage ≥ 1 (`feed_scope_on`), a mind's scene shows a container's presence and kind and an `inside` field: "not looked into: inspect it (or take from it) to see what it holds", or what it found when it last looked. Contents come only through `inspect`, or reaching the container to take from it or store in it (`contents_seen`); a graph's `holds` counts a container known to hold the item or not yet looked into.
+
+`verify_minds.py --run "$R" --case chest` (default seed): the world to stage 2 (`feed_scope_grace_s` 1), a second resident stores 3 berries in a storage it put up (`place_structure`, `grant_items`, `mind_act` store) and walks off, and the mind under test is placed beside it. The fake model answers the first deliberation (marker `verify chest-look`) with an `inspect` of the chest and the second (`verify chest-take`) with a `take`. Proven from the requests the fake server logged and the authority's rows: the first prompt's entry for the chest has kind `storage`, `inside` "not looked into", and no `contents` or berries; `contents_seen` and the line "You look inside the storage: 3 berries." follow the inspect; the second prompt says "3 berries when you looked inside"; the berries end in the mind's inventory. Evidence: `sent-look.txt`, `sent-take.txt`, `result.json`.
+
+In a world at stage 0 the scene keeps `contents` as before; that path is covered by the other cases, which run with the law off.

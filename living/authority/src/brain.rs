@@ -2051,10 +2051,10 @@ impl<'a> Ev<'a> {
         let _part = common::detail_span("noticed.structures");
         let mut seen = crate::seen_structures::Look::default();
         let new: Vec<usize> = if laws.notice_inplace {
-            let mut scoped_seen = Vec::new();
-            let ids = self.new_structures_in_place(&laws, &mut seen, &mut scoped_seen);
+            let (mut scoped_seen, mut present) = (Vec::new(), Vec::new());
+            let ids = self.new_structures_in_place(&laws, &mut seen, &mut scoped_seen, &mut present);
             if let Some(look) = self.scope_look() {
-                crate::scope::remember_seen(self.ctx, self.me.id, &look, &scoped_seen, now);
+                crate::scope::remember_seen(self.ctx, self.me.id, &look, &scoped_seen, &present, now);
             }
             if ids.is_empty() {
                 // An unchanged look can still have migrated legacy familiarity.
@@ -2067,7 +2067,8 @@ impl<'a> Ev<'a> {
         } else {
             if let Some(look) = self.scope_look() {
                 let visible = self.structures().to_vec();
-                crate::scope::remember_seen(self.ctx, self.me.id, &look, &visible, now);
+                let present: Vec<u64> = visible.iter().map(|(s, _)| s.id).collect();
+                crate::scope::remember_seen(self.ctx, self.me.id, &look, &visible, &present, now);
             }
             let sighted = crate::store::sighted(self.ctx);
             let ids: Vec<_> = self.structures().iter().map(|(s, _)| (s.id, s.chunk, sighted && crate::store::scoped_kind(&s.kind))).collect();
@@ -2241,7 +2242,12 @@ impl<'a> Ev<'a> {
     /// In a scoped world a sight-scoped candidate is always tested by the sight test (never
     /// passed over by the last look's disc: a body hidden then may be seen now from inside the
     /// same disc), and those seen are handed back in `scoped_seen` for memory.
-    fn new_structures_in_place(&mut self, laws: &living_rules::script::Laws, look: &mut crate::seen_structures::Look, scoped_seen: &mut Vec<(Structure, f32)>) -> Vec<u64> {
+    ///
+    /// A sight-scoped thing without a state one sees (not a fire) that is already in the
+    /// character's scoped ranges is neither new nor anything to remember anew: it is not tested
+    /// (it goes in `present`, which keeps its memory from being taken as a witnessed absence; a
+    /// thing there whose place is in sight passes the same test).
+    fn new_structures_in_place(&mut self, laws: &living_rules::script::Laws, look: &mut crate::seen_structures::Look, scoped_seen: &mut Vec<(Structure, f32)>, present: &mut Vec<u64>) -> Vec<u64> {
         let (check, delta, delta_check) = (laws.notice_inplace_check, laws.notice_delta, laws.notice_delta_check);
         let sight = self.scope_look();
         let sc = common::scripts(self.ctx);
@@ -2262,6 +2268,11 @@ impl<'a> Ev<'a> {
         common::for_structures_near(ctx, at, r, |s, d| {
             let scoped = eye.is_some() && crate::store::scoped_kind(&s.kind);
             if scoped {
+                present.push(s.id);
+                if laws.seen_ranges && !sc.structure(&s.kind).fire() && look.seen(ctx, me, s.chunk, s.id, true) {
+                    common::diag(|| "scope:notice_known", 1);
+                    return;
+                }
                 if !eye.as_ref().is_some_and(|e| e.sees(&sc, s, d, false, now)) {
                     return;
                 }

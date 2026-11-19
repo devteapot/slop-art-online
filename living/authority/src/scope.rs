@@ -157,6 +157,10 @@ thread_local! {
     static OWNERS_REV: Cell<u64> = const { Cell::new(0) };
     /// Each character's last memory check: its chunk and when.
     static CHECKED: RefCell<HashMap<u32, (u32, u64)>> = RefCell::new(HashMap::new());
+    /// What each character's `remembered_thing` rows hold, as this instance last wrote or read them
+    /// ((observer, target) -> place, open, lit): a sighting that changes nothing reads no row.
+    /// Dropped with the copies (`clear_memory`) when ticks do not follow on.
+    static MEMO: RefCell<HashMap<(u32, u64), (f32, f32, Option<bool>, bool)>> = RefCell::new(HashMap::new());
 }
 
 /// A structure or resource write: the cells it touches are built again (all of them for
@@ -168,6 +172,7 @@ pub fn invalidate_cells(t: i64, chunk: Option<u32>) {
 /// Module memory no longer follows the committed rows (`perception::sweep`).
 pub fn clear_memory() {
     COPIES.with(|c| c.borrow_mut().clear());
+    MEMO.with(|m| m.borrow_mut().clear());
 }
 
 /// One character's copies are read from the table at its next sweep (a sweep outside the tick).
@@ -387,6 +392,7 @@ pub fn forget(ctx: &ReducerContext, id: u32, viewer: Identity) {
 /// A character died: what it remembered and found out goes with it.
 pub fn forget_dead(ctx: &ReducerContext, id: u32) {
     ctx.db.remembered_thing().observer().delete(id);
+    MEMO.with(|m| m.borrow_mut().retain(|(o, _), _| *o != id));
     ctx.db.fuel_seen().observer().delete(id);
     ctx.db.contents_seen().observer().delete(id);
     ctx.db.seen_structures_scoped().actor().delete(id);
@@ -448,6 +454,11 @@ fn owners(ctx: &ReducerContext, me: &Character, viewer: Identity) {
 /// Remember a sight-scoped structure as just seen (a player's copy entering or changing; a mind's
 /// noticing).
 fn remember_thing(ctx: &ReducerContext, observer: u32, t: &SeenThing, now: u64) {
+    let state = (t.x, t.y, t.open, t.lit);
+    if MEMO.with(|m| m.borrow().get(&(observer, t.id)) == Some(&state)) {
+        return;
+    }
+    MEMO.with(|m| m.borrow_mut().insert((observer, t.id), state));
     let chunk = living_rules::map::chunk_of(t.x, t.y);
     match ctx.db.remembered_thing().by_observer_target().filter((observer, t.id)).next() {
         Some(r) if r.x == t.x && r.y == t.y && r.open == t.open && r.lit == t.lit && r.kind == t.kind => {}
@@ -456,12 +467,13 @@ fn remember_thing(ctx: &ReducerContext, observer: u32, t: &SeenThing, now: u64) 
             common::diag(|| "scope:memory_write", 1);
         }
         None => {
-            let mine: Vec<(u64, u64)> = ctx.db.remembered_thing().observer().filter(observer).map(|r| (r.seen_ms, r.id)).collect();
+            let mine: Vec<(u64, u64, u64)> = ctx.db.remembered_thing().observer().filter(observer).map(|r| (r.seen_ms, r.id, r.target)).collect();
             if mine.len() >= REMEMBER_THINGS {
                 let mut mine = mine;
                 mine.sort_unstable();
-                for (_, id) in &mine[..mine.len() + 1 - REMEMBER_THINGS] {
+                for (_, id, target) in &mine[..mine.len() + 1 - REMEMBER_THINGS] {
                     ctx.db.remembered_thing().id().delete(*id);
+                    MEMO.with(|m| m.borrow_mut().remove(&(observer, *target)));
                 }
             }
             ctx.db.remembered_thing().insert(RememberedThing { id: 0, observer, target: t.id, kind: t.kind.clone(), x: t.x, y: t.y, chunk, open: t.open, lit: t.lit, seen_ms: now });
@@ -493,6 +505,7 @@ fn recheck(ctx: &ReducerContext, observer: u32, eye: &Eye, gather: f32, seen: im
         }
         if eye.sees_at((r.x, r.y), d, 0.0, false) {
             ctx.db.remembered_thing().id().delete(r.id);
+            MEMO.with(|m| m.borrow_mut().remove(&(observer, r.target)));
             common::diag(|| "scope:memory_gone", 1);
         }
     }
@@ -500,13 +513,15 @@ fn recheck(ctx: &ReducerContext, observer: u32, eye: &Eye, gather: f32, seen: im
 
 /// A mind's noticing (`brain::noticed`): what it sees of sight-scoped structures (`visible`, the
 /// scene's list after the sight test) is remembered by the same rule as a player's.
-pub fn remember_seen(ctx: &ReducerContext, observer: u32, look: &Look, visible: &[(Structure, f32)], now: u64) {
-    let mut keys: HashSet<u64> = HashSet::new();
+///
+/// `present`: the sight-scoped things there now within the look's radius (tested or not): a
+/// memory of one of them is never taken as a witnessed absence.
+pub fn remember_seen(ctx: &ReducerContext, observer: u32, look: &Look, visible: &[(Structure, f32)], present: &[u64], now: u64) {
+    let keys: HashSet<u64> = present.iter().map(|id| key(1, *id)).collect();
     for (s, _) in visible {
         if !store::scoped_kind(&s.kind) {
             continue;
         }
-        keys.insert(key(1, s.id));
         let t = seen_structure(ctx, s, 0, now);
         remember_thing(ctx, observer, &t, now);
     }
