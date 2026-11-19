@@ -39,14 +39,16 @@
 //! group's collider spheres. It runs after the animation pose and transform propagation, at a
 //! fixed 60 Hz (at most three steps a frame, so it stays stable at low and variable frame rates),
 //! and writes the bones' local and global transforms. Distances and forces scale with the
-//! character. Level of detail: only a character whose full mesh is drawn is simulated (the far
-//! model has no spring bones, `lookdev::far_models`), so the near-model cap bounds the work; a
-//! model with no far mesh counts as full. Within those, characters beyond
-//! `LIVING_GAME_SPRING_NEAR` metres (default 40, scaled by height) or past the nearest
-//! `LIVING_GAME_SPRING_BUDGET` (default 48) rest rigid. A character that starts to be simulated
-//! (its full mesh shown again, or back within the bounds) is settled first: its tails are placed
-//! at rest and stepped `LIVING_GAME_SPRING_SETTLE` times (default 60) against the frame's pose
-//! with the velocity then dropped, so its locks and hems start hanging, without a swing in.
+//! character. Level of detail: only a character whose full mesh is drawn is simulated
+//! (`lookdev::far_models`), so the near-model cap bounds the work; a model with no far mesh
+//! counts as full. Within those, characters beyond `LIVING_GAME_SPRING_NEAR` metres (default
+//! 40, scaled by height) or past the nearest `LIVING_GAME_SPRING_BUDGET` (default 48) rest. A
+//! resting character's joints keep the rotations they were last given (the far model's cloth is
+//! skinned to them too, so neither model pops at the change). A character that starts to be
+//! simulated (its full mesh shown again, or back within the bounds) starts still from those kept
+//! rotations, as it was drawn; the first time, from rest stepped `LIVING_GAME_SPRING_SETTLE`
+//! times (default 60) against the frame's pose with the velocity then dropped, so its locks and
+//! hems start hanging, without a swing in.
 //! **Seat contact** (stage 2a, docs/seat-contact/): a character seated on the ground carries a
 //! [`SeatAnchor`] (`live.rs`), a world-space plane through the terrain at the clips' seat. Its
 //! cloth groups ([`CLOTH_GROUPS`], by the VRM group's `comment`: `Skirt`, `Coat`) keep their
@@ -1452,6 +1454,11 @@ const PARALLEL_FROM: usize = 24;
 /// Least drag while settling: the hanging pose does not depend on drag, and a light chain
 /// would otherwise still swing after the settling steps.
 const SETTLE_DRAG: f32 = 0.4;
+/// A waking character's chains are drawn easing from where they were drawn (the rotations kept
+/// while resting) to the simulation over this long (s): its pose may have moved meanwhile (the
+/// seated loop turns the head 15–30°), so the settled chains lie off the drawn ones, and taking
+/// them at once popped the hair 16–35° (verify-ui `seat`).
+const WAKE_EASE_S: f32 = 0.3;
 /// Frames after waking that `springwake` follows.
 const WAKE_FRAMES: usize = 30;
 
@@ -1578,6 +1585,14 @@ pub struct Springs {
     ran: bool,
     /// Each joint's new local rotation and global transform.
     out: Vec<(Quat, GlobalTransform)>,
+    /// The local rotations the joints were last drawn with (the rigid pose until first
+    /// simulated), which they keep while the chains rest; and whether they were simulated, so a
+    /// waking character starts from them, not from the rigid pose.
+    drawn: Vec<Quat>,
+    held: bool,
+    /// Waking: the rotations drawn as it woke, eased out over [`WAKE_EASE_S`] from when it was
+    /// first drawn so (`Time::elapsed_secs`; negative until then).
+    ease: Option<(Vec<Quat>, f32)>,
     centres: Vec<(Vec3, f32)>,
     /// The seat contact this frame, for the cloth groups ([`SeatAnchor`]).
     contact: Option<Contact>,
@@ -1657,14 +1672,17 @@ pub fn rig_springs(
         }
         let n = joints.len();
         debug!("characters: {} has {n} spring joints, {} collider spheres", model.file, spheres.len());
-        commands.entity(e).insert(Springs { joints, groups, spheres, active: false, fresh: true, ran: false, out: vec![(Quat::IDENTITY, GlobalTransform::IDENTITY); n], centres: vec![], contact: None, seat_low: f32::INFINITY, seat_steps: 0, seat_ground: None, wake: None });
+        let drawn = joints.iter().map(|j| j.r0).collect();
+        commands.entity(e).insert(Springs { joints, groups, spheres, active: false, fresh: true, ran: false, out: vec![(Quat::IDENTITY, GlobalTransform::IDENTITY); n], drawn, held: false, ease: None, centres: vec![], contact: None, seat_low: f32::INFINITY, seat_steps: 0, seat_ground: None, wake: None });
     }
 }
 
 impl Springs {
     /// Simulate `steps` fixed steps against the current pose (read-only transforms). A fresh
-    /// character is first placed at rest and settled for `settle` steps against this pose, its
-    /// velocity then dropped: it starts from its hanging pose instead of swinging into it.
+    /// character is first placed where its joints were drawn (the rotations they kept while its
+    /// chains rested; at rest the first time) and settled for `settle` steps against this pose,
+    /// its velocity then dropped: it starts from the nearest hanging pose instead of swinging
+    /// into it, and is drawn easing to it from where it was drawn (`springs`).
     fn simulate(&mut self, steps: u32, settle: u32, globals: &Query<&GlobalTransform>) {
         self.centres.clear();
         for s in &self.spheres {
@@ -1678,6 +1696,10 @@ impl Springs {
         }
         self.ran = true;
         if std::mem::replace(&mut self.fresh, false) {
+            // Placed along the rotations the joints kept (`held`), else at rest, and settled: the
+            // nearest hanging pose to what was drawn. What is drawn eases from there to it
+            // (`ease`, in `springs`).
+            self.ease = Some((self.drawn.clone(), -1.0));
             self.pass(globals, None);
             for _ in 0..settle {
                 self.pass(globals, Some(SETTLE_DRAG));
@@ -1685,14 +1707,17 @@ impl Springs {
             for j in &mut self.joints {
                 j.prev = j.tail;
             }
+            self.held = true;
         }
         for _ in 0..steps {
             self.pass(globals, Some(0.0));
         }
     }
 
-    /// One pass over the joints in hierarchy order: `None` places the tails at rest, `Some(d)`
-    /// takes a fixed step with at least drag `d`. Either way the results go to `out`.
+    /// One pass over the joints in hierarchy order: `None` places the tails along the rotations
+    /// the joints were drawn with (`held`, else at rest), `Some(d)` takes a fixed step with at
+    /// least drag `d`.
+    /// Either way the results go to `out`.
     fn pass(&mut self, globals: &Query<&GlobalTransform>, step: Option<f32>) {
         let contact = self.contact;
         // The seat's ground itself (with or without a contact), for the report.
@@ -1716,7 +1741,8 @@ impl Springs {
             let len = j.len * sc;
             match step {
                 None => {
-                    j.tail = pos + rest_dir * len;
+                    let kept = if self.held { pr * self.drawn[i] } else { rest };
+                    j.tail = pos + kept * j.axis * len;
                     j.prev = j.tail;
                 }
                 Some(least_drag) => {
@@ -1780,8 +1806,8 @@ pub fn springs(
     let steps = ((clock.0 / STEP) as u32).min(MAX_STEPS);
     clock.0 = (clock.0 - steps as f32 * STEP).min(STEP);
     let start = std::time::Instant::now();
-    // Who is simulated: visible with the full mesh drawn (the far model has no spring bones),
-    // near enough for their size, and the nearest within budget.
+    // Who is simulated: visible with the full mesh drawn (a far model is too small for its
+    // chains' motion to show), near enough for their size, and the nearest within budget.
     let mut want: Vec<(f32, Entity)> = Vec::new();
     {
         let globals = set.p0();
@@ -1800,9 +1826,10 @@ pub fn springs(
     want.sort_by(|a, b| a.0.total_cmp(&b.0));
     want.truncate(settings.budget);
     let chosen: std::collections::HashSet<Entity> = want.iter().map(|w| w.1).collect();
-    // Characters going to rest: back to their rigid pose, placed and settled afresh when they
-    // wake (`Springs::simulate`).
-    let mut resting: Vec<(Entity, Quat)> = Vec::new();
+    // Characters going to rest keep the rotations they were last given: the far model is
+    // skinned to the same spring joints (a cloth's `FarCloth` hangs about an eighth of its
+    // weight on them), so going back to the rigid pose popped its hem as it changed, and the
+    // full mesh popped back on waking. They wake from there, still (`Springs::simulate`).
     for (e, mut sp, _, _, _) in &mut chars {
         let now = chosen.contains(&e);
         // Seated on the ground: the cloth's contact, as far as the clips say the body is down.
@@ -1813,7 +1840,6 @@ pub fn springs(
         }
         sp.seat_ground = seat.filter(|_| settings.seat_log).map(|(a, _)| (a.point, a.normal));
         if sp.active && !now {
-            resting.extend(sp.joints.iter().map(|j| (j.e, j.r0)));
             sp.wake = None;
         }
         if !sp.active && now {
@@ -1851,16 +1877,41 @@ pub fn springs(
         n_chars += 1;
         n_joints += sp.joints.len() as u32;
         let mut turn = 0.0f32;
-        for (j, (local, global)) in sp.joints.iter().zip(&sp.out) {
-            if let Ok((mut tf, mut g)) = writes.get_mut(j.e) {
-                if sp.wake.is_some() {
-                    turn = turn.max(tf.rotation.angle_between(*local).to_degrees());
+        // Waking: drawn easing from the rotations drawn as it woke to the simulation's, the
+        // globals put together down the chains from the eased rotations.
+        let now_s = time.elapsed_secs();
+        let ease = sp.ease.take().map(|(from, t0)| {
+            let t0 = if t0 < 0.0 { now_s } else { t0 };
+            let w = ((now_s - t0) / WAKE_EASE_S).clamp(0.0, 1.0);
+            (from, t0, w * w * (3.0 - 2.0 * w))
+        });
+        let mut shown: Vec<GlobalTransform> = Vec::with_capacity(if ease.is_some() { sp.joints.len() } else { 0 });
+        for i in 0..sp.joints.len() {
+            let (local, global) = match &ease {
+                Some((from, _, w)) => {
+                    let local = from[i].slerp(sp.out[i].0, *w).normalize();
+                    let j = &sp.joints[i];
+                    let parent = match j.parent {
+                        Up::Bone(b) => writes.get(b).map(|(_, g)| *g).unwrap_or(sp.out[i].1),
+                        Up::Joint(k) => shown[k],
+                    };
+                    (local, parent.mul_transform(Transform { translation: j.t, rotation: local, scale: j.s0 }))
                 }
-                tf.rotation = *local;
-                *g = *global;
+                None => sp.out[i],
+            };
+            shown.push(global);
+            if let Ok((mut tf, mut g)) = writes.get_mut(sp.joints[i].e) {
+                if sp.wake.is_some() {
+                    turn = turn.max(tf.rotation.angle_between(local).to_degrees());
+                }
+                tf.rotation = local;
+                *g = global;
             }
+            sp.drawn[i] = local;
         }
-        // `springwake`: frame 0 is the change from the rigid pose; later frames are the chains'
+        sp.ease = ease.filter(|e| e.2 < 1.0).map(|(from, t0, _)| (from, t0));
+        // `springwake`: frame 0 is the change from the pose the joints kept while resting (what was
+        // drawn: the far model shares them), later frames the chains'
         // own motion, which a swing in would show as large early turns.
         let joints = sp.joints.len();
         if let Some(w) = sp.wake.as_mut() {
@@ -1871,11 +1922,6 @@ pub fn springs(
                 info!("springwake: {} {e} ({} joints, settle {}): largest turn {:.1}° at waking, {later:.1}° a frame after; [{}]", ch.recipe.name, joints, settings.settle, w[0], list.join(" "));
                 sp.wake = None;
             }
-        }
-    }
-    for (e, r) in resting {
-        if let Ok((mut tf, _)) = writes.get_mut(e) {
-            tf.rotation = r;
         }
     }
     stats.frames += 1;
@@ -2012,6 +2058,9 @@ mod tests {
             fresh: true,
             ran: false,
             out: vec![(Quat::IDENTITY, GlobalTransform::IDENTITY)],
+            drawn: vec![Quat::IDENTITY],
+            held: false,
+            ease: None,
             centres: vec![],
             contact: None,
             seat_low: f32::INFINITY,
@@ -2099,5 +2148,27 @@ mod tests {
             last = t;
         }
         assert!(most < 1e-3, "no swing after waking: {most} m a step");
+    }
+
+    /// Waking again (the camera far, then near): the chain starts along the rotations its joints
+    /// were drawn with and kept while resting (the far model drew them), not from the rigid pose;
+    /// the first waking still starts at rest.
+    #[test]
+    fn waking_again_starts_where_the_chain_was_drawn() {
+        let (mut w, e) = hanging(true);
+        w.get_mut::<Springs>(e).unwrap().contact = Contact::new(&GROUND, 1.0);
+        run(&mut w, 0, 0);
+        assert!((tail(&w, e).y + 0.2).abs() < 1e-4, "the first waking starts at rest: {}", tail(&w, e));
+        run(&mut w, 30, 0);
+        let drawn = tail(&w, e);
+        assert!((drawn.y - 0.02).abs() < 1e-3, "lying on the ground: {drawn}");
+        // Resting keeps the joints' rotations; waking places the tails along them.
+        {
+            let mut sp = w.get_mut::<Springs>(e).unwrap();
+            sp.drawn = sp.out.iter().map(|o| o.0).collect();
+            sp.fresh = true;
+        }
+        run(&mut w, 0, 0);
+        assert!((tail(&w, e) - drawn).length() < 1e-4, "woken where it was drawn: {} against {drawn}", tail(&w, e));
     }
 }

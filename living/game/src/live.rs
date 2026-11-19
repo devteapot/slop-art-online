@@ -875,6 +875,7 @@ fn bodies(
         let sitting = show.idle == Some("sit_ground") && !show.hidden;
         if s.sitting && !sitting && s.rising.is_none() && action.is_none() && !mine {
             s.rising = Some((scene.now_ms, s.drawn));
+            info!("seat: #{id} gets up at ({:.2}, {:.2})", s.drawn.x, s.drawn.y);
         }
         s.sitting = sitting;
         // Taking flight from standing: startle where it stood first.
@@ -963,8 +964,11 @@ fn bodies(
         // A turn take playing: the legs follow its curve until it ends; walking or a move breaks
         // it off where it is.
         let mut turn_action = None;
+        // Seated on the ground or getting up: the ground clips hold the body, which a turn take
+        // (a standing clip) would lift to its feet.
+        let grounded = s.sitting || s.rising.is_some_and(|(t, _)| scene.now_ms - t < STAND_UP.2);
         if let (Some(tp), Some(g)) = (s.turn, gaits.as_ref()) {
-            if walking || action.is_some() || cursor_turn.is_some() {
+            if walking || action.is_some() || cursor_turn.is_some() || grounded {
                 s.turn = None;
             } else {
                 let (by, done) = crate::takes::turned(g, &tp, scene.now_ms);
@@ -981,9 +985,10 @@ fn bodies(
             }
         }
         // Standing, legs that would swivel past `takes::TURN_ON` turn by a take instead: toward the
-        // look, a standing body's own heading (where its segment's turn ends) or its activity.
-        let standing_to = row.as_ref().filter(|b| b.vx == 0.0 && b.vy == 0.0).map(|b| b.heading + if b.turn_s > 0.0 { b.turn } else { 0.0 });
-        let turn_to = if cursor_turn.is_some() { None } else { look_at.or(busy).or(standing_to.filter(|_| slow)) };
+        // look, a standing body's own heading (where its segment's turn ends: `turn` is a rate
+        // over `turn_s`, as `standing` above follows it) or its activity.
+        let standing_to = row.as_ref().filter(|b| b.vx == 0.0 && b.vy == 0.0).map(|b| b.heading + if b.turn_s > 0.0 { b.turn * b.turn_s } else { 0.0 });
+        let turn_to = if cursor_turn.is_some() || grounded { None } else { look_at.or(busy).or(standing_to.filter(|_| slow)) };
         if let (Some(g), Some(to), None, false, None, None) = (gaits.as_ref(), turn_to, s.turn, walking, action, s.stop) {
             if s.speed < crate::anim::STEP_OFF {
                 if let Some(clip) = crate::takes::turn_for(g, living_rules::steer::wrap(to - s.yaw)) {
@@ -1015,6 +1020,9 @@ fn bodies(
                 None
             }
             _ if s.turn.is_some() => None,
+            // Seated on the ground or getting up, the body keeps the way it sat (its cloth's
+            // seat is fixed behind it); the head and chest still take a look.
+            _ if s.person && grounded && action.is_none() => Some(s.yaw),
             // Walking and looking: the legs ease toward the travel turned by what the head and
             // chest leave (or its reverse, looking back), and the takes for the travel from them
             // play; where the file has none there, the forward gaits along the travel (reversed
