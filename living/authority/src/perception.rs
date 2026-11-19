@@ -299,6 +299,17 @@ impl Sensing {
         None
     }
 
+    /// Creature `id` as sensed: `(it, true)` seen, `(it, false)` heard and not seen (within
+    /// hearing while sight has a field), `None` neither: the list of `all` it is in.
+    pub fn sensed_id(&mut self, ctx: &ReducerContext, now: u64, id: u32) -> Option<(NearCreature, bool)> {
+        let i = self.cands.iter().position(|c| c.id == id)?;
+        if self.sees(ctx, i, now) {
+            Some((self.cands[i].clone(), true))
+        } else {
+            (self.cands[i].dist <= self.hearing).then(|| (self.cands[i].clone(), false))
+        }
+    }
+
     /// Creature `id` as seen, if it is: `all().0` holds it.
     pub fn by_id(&mut self, ctx: &ReducerContext, now: u64, id: u32) -> Option<NearCreature> {
         let i = self.cands.iter().position(|c| c.id == id)?;

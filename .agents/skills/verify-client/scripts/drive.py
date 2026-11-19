@@ -126,6 +126,10 @@ PLAYER = {'use_skill': ['strike', 0, 0.0, 0.0], 'release_skill': ['block'],
           'human_face': [1.0, 0.0], 'human_gaze': [1]}
 MIND = ['mind_routines', 'mind_install', 'mind_install_way', 'mind_say', 'mind_act', 'mind_skip',
         'mind_consolidated', 'mind_update', 'mind_judged', 'mind_where']
+# Procedures (their answer goes to the caller alone), under the same controller rule: a talk turn's
+# reach (reply-timing, docs/COMMUNICATION.md §21), called for the character and someone else.
+# `mind_act_checked` (bystanders-2) is driven by verify-minds `act-repair` and verify-player `gaze`.
+PROCEDURES = {'mind_reach': lambda actor, other: [actor, other]}
 # The fast lane's answers (docs/FAST_LANE.md): for an open request only, which exists only for a
 # body its mind holds, so a player is refused even on its own character.
 FAST = ['mind_patch', 'mind_fast_done']
@@ -312,6 +316,19 @@ class Run:
         V.log(self.state, f"client {label} {reducer}{json.dumps(args)} -> {code} {body.strip()}")
         return okay
 
+    def call_procedure(self, label, token, procedure, args, expected=None):
+        """A procedure's typed `Result` is its answer: a refusal may come back as an `Err` value, so
+        it passes when its words are in the body whatever the status; an accepted call is a 200
+        without an error."""
+        code, body = V.http(f"/v1/database/{self.state['db']}/call/{procedure}", args, token)
+        okay = expected in body if expected is not None else code == 200 and not re.search(r'"(err|Err)"', body)
+        row = {'identity': label, 'reducer': procedure, 'procedure': True, 'args': args, 'http_status': code,
+               'body': body, 'expected': expected or 'accepted', 'pass': okay}
+        self.matrix.append(row)
+        write(self.directory / 'reducers.json', self.matrix)
+        V.log(self.state, f"client {label} {procedure}{json.dumps(args)} -> {code} {body.strip()}")
+        return okay
+
     def query(self, query, as_player, seconds, name, as_admin=False):
         if as_player and not self.state.get('token'):
             raise ValueError('no player yet: run verify.py player join NAME first')
@@ -413,6 +430,10 @@ class Run:
         expected = set(ADMIN) | set(MIND) | set(FAST) | set(PLAYER) | {'join', 'join_as', 'human_move', 'human_act', 'human_say', 'human_speak', 'tick', 'housekeeping', 'genesis_step'}
         if set(reducers) != expected:
             raise RuntimeError(f'reducer inventory changed: {set(reducers) ^ expected}')
+        procedures = {m[1] for path in (ROOT / 'living/authority/src').glob('*.rs')
+                      for m in re.finditer(r'#\[spacetimedb::procedure\]\s*pub fn (\w+)\(', path.read_text())}
+        if procedures != set(PROCEDURES) | {'mind_act_checked'}:
+            raise RuntimeError(f'procedure inventory changed: {procedures ^ (set(PROCEDURES) | {"mind_act_checked"})}')
         # The mind service connects as the world's admin, so `require_admin` cannot refuse it an
         # admin reducer by identity: the guard is that it never calls these (its sources name none).
         never_by_minds = ['admin_set_vitals', 'kill', 'relook', 'set_world_law', 'install_script', 'backfill_sex']
@@ -473,6 +494,10 @@ class Run:
                 for actor in [ai['id'], other]:
                     self.call(label, token, reducer, mind_args(reducer, actor, label), 'not your character')
                 self.call(label, token, reducer, mind_args(reducer, own, label), 'no fast re-plan was asked')
+            for procedure, args in PROCEDURES.items():
+                for actor in [ai['id'], other]:
+                    self.call_procedure(label, token, procedure, args(actor, own), 'not your character')
+                self.call_procedure(label, token, procedure, args(own, ai['id']))
             for reducer in ['tick', 'housekeeping']:
                 self.call(label, token, reducer, [{'scheduled_id': 0, 'scheduled_at': {'Interval': 16667}}],
                           'No such procedure', expected_status=404)
@@ -491,6 +516,8 @@ class Run:
             self.call('anonymous-http-no-token', None, reducer, args, 'admin only')
         for reducer in MIND + FAST:
             self.call('anonymous-http-no-token', None, reducer, mind_args(reducer, ai['id'], 'anonymous'), 'not your character')
+        for procedure, args in PROCEDURES.items():
+            self.call_procedure('anonymous-http-no-token', None, procedure, args(ai['id'], 0), 'not your character')
         for reducer in ['tick', 'housekeeping']:
             self.call('anonymous-http-no-token', None, reducer, [{'scheduled_id': 0, 'scheduled_at': {'Interval': 16667}}],
                       'No such procedure', expected_status=404)
