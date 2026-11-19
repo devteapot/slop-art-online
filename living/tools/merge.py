@@ -41,6 +41,7 @@ were not regenerated (or the bindings check could not run), 12 refused (disk).
 
 Disk: SLOP_MERGE_FLOOR_GB overrides the installed disk cleaner's floor (45 GB without
 an installed floor). SLOP_MERGE_CHECK_GB overrides the cold check allowance (18 GB).
+Each attempt subtracts allocated Cargo target space, with a 2 GB minimum allowance.
 SLOP_MERGE_DISK_CHECK=0 disables the pre-check and prints a warning.
 
 The push is a compare-and-swap (--force-with-lease on the main it merged onto): it lands only
@@ -61,7 +62,7 @@ import sys
 import time
 from xml.parsers.expat import ExpatError
 
-from check import target_dir
+from check import remaining_check_cost, target_dir
 from disk_clean import GB
 
 HOME = os.path.expanduser("~")
@@ -187,13 +188,15 @@ def scene_filesystem(scenes):
 
 
 def check_disk(root, budget, scenes):
-    floor, cost = budget
+    floor, cold_cost = budget
     try:
         # Use the same Cargo resolution as living-check, including Cargo configuration.
         if os.path.isfile("living/Cargo.toml") or os.environ.get("CARGO_TARGET_DIR") or os.environ.get("CARGO_BUILD_TARGET_DIR"):
             target = target_dir(root)
         else:
             target = os.path.join(root, "living/target")
+        cost_bytes, target_bytes = remaining_check_cost(target, cold_cost * GB)
+        cost = cost_bytes / GB
         scene_fs = scene_filesystem(scenes)
         paths = {"worktree": root, "Cargo target": target}
         checked = set()
@@ -210,7 +213,9 @@ def check_disk(root, budget, scenes):
             if free < need * GB:
                 scene_note = f" + {scene_cost:g} GB scenes" if scene_cost else ""
                 return (f"disk: {label} at {path} ({fs[0]} on {mount}) has {free / GB:.2f} GB free; "
-                        f"need {need:g} GB ({floor:g} GB floor + {cost:g} GB check{scene_note})")
+                        f"need {need:g} GB ({floor:g} GB floor + {cost:g} GB check{scene_note}); "
+                        f"check cost is max of 2 GB and {cold_cost:g} GB minus "
+                        f"{target_bytes / GB:.2f} GB already in Cargo target {target}")
     except (OSError, ValueError, IndexError, subprocess.CalledProcessError, RuntimeError) as e:
         return f"disk: could not determine free space for the worktree and Cargo target: {e}"
     return None
