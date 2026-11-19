@@ -1124,7 +1124,7 @@ index 6326cfa7..75794845 100644
              check_ctx_plan: flag("check_ctx_plan", l.check_ctx_plan),
              check_ctx_check: flag("check_ctx_check", l.check_ctx_check),
 diff --git a/living/scripts/skills.rhai b/living/scripts/skills.rhai
-index d37907bf..27bb6c22 100644
+index d37907bf..364d91e4 100644
 --- a/living/scripts/skills.rhai
 +++ b/living/scripts/skills.rhai
 @@ -122,6 +122,7 @@ fn laws() {
@@ -1135,6 +1135,14 @@ index d37907bf..27bb6c22 100644
          profile_detail: false,
          // How a fighter's work is done (docs/BATTLE_SCALE.md, battle-cheap), none of it changing what
          // anyone perceives or does: a move's check before it starts given only the fields it reads;
+@@ -3166,6 +3167,7 @@ fn law_about(l, name) {
+         "notice_delta_check" => "a diagnostic: what a look passes over is checked to be already familiar",
+         "seen_ranges" => "remember which structures were seen in ranges of ids by block",
+         "seen_ranges_check" => "a diagnostic: compare structure newness with familiarity",
++        "feed_scope_probe" => "whether the scratch feed scoping workload projects mutable structures",
+         "profile_detail" => if l.profile_detail { "while profiling, the parts of each behaviour's evaluation are timed" } else { "profiling times each behaviour's evaluation whole" },
+         "regard_cache_check" => if l.regard_cache_check { "every shared answer about another is checked against a fresh one" } else { "shared answers about another are not checked" },
+         "fast_lane_on" => if l.fast_lane_on { "a mind may revise its fighting quickly between blows" } else { "a mind revises its fighting only when it thinks" },
 diff --git a/living/tools/feed_scope_cost.py b/living/tools/feed_scope_cost.py
 new file mode 100644
 index 00000000..44586889
@@ -1380,7 +1388,7 @@ index 00000000..44586889
 +if __name__ == "__main__":
 +    main()
 diff --git a/living/tools/gate_load/src/main.rs b/living/tools/gate_load/src/main.rs
-index a890964b..880f442c 100644
+index a890964b..668335d2 100644
 --- a/living/tools/gate_load/src/main.rs
 +++ b/living/tools/gate_load/src/main.rs
 @@ -643,7 +643,15 @@ fn players_mode() {
@@ -1409,7 +1417,7 @@ index a890964b..880f442c 100644
 +    let lines = stdin_lines();
 +    let req: Value = serde_json::from_str(&lines.recv().expect("request line")).expect("request JSON");
 +    let start = Instant::now();
-+    let (conn, _) = connect(req["uri"].as_str().unwrap(), req["db"].as_str().unwrap(), req["token"].as_str().unwrap(), None);
++    let (conn, _) = connect(req["uri"].as_str().unwrap(), req["db"].as_str().unwrap(), req["token"].as_str().unwrap(), Client::Game.confirmed());
 +    let (sent, applied) = std::sync::mpsc::channel();
 +    let errors = sent.clone();
 +    conn.subscription_builder()
