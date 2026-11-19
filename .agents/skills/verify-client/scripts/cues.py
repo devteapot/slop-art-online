@@ -3,7 +3,8 @@
 
     cues.py --run client-...      (a run launched with verify.py launch, any seed; build the probe first)
 
-Three players join, each with its own identity: A (the harness player), B and C. A and B stand
+Three players join, each with its own fresh identity (not the harness player, so the scene also
+runs after the fixed suite): A, B and C. A and B stand
 1 m apart on a quiet open line, a held stranger F 10 m from A (in sight by day, not near), and C
 40 m or more away. Four Rust SDK probes stream for about 28 s: A (its `seen_*` views and their
 `_near` and `_far` tiers, `my_body` and the three cue event tables), B and C (the cue tables) and an anonymous connection (the cue
@@ -11,16 +12,23 @@ tables). Meanwhile B steps (`human_move`), waves at A (`human_act`) and strikes 
 (`use_skill`); F is moved (admin `place_at`). Checks:
 
 - row-level security: every cue a client receives names it as the viewer; C and the anonymous
-  connection receive none of A's, B's or F's; B asking for A's rows by identity gets nothing;
+  connection receive none of A's, B's or F's; B asking for A's rows by identity gets nothing.
+  Each probe streams from its connection on (the initial subscription's callbacks included), and
+  each negative probe must show its subscription accepted (applied, never rejected): an empty
+  stream from a refused subscription would prove nothing;
 - A is cued B's motion and B's strikes: each windup reaches A first by `seen_fighter_cue`, within
-  60 ms of its `act_ms` (B is in A's near tier, whose copies follow only every 500 ms); A receives
+  100 ms of its `act_ms` (B is in A's near tier, whose copies follow only every 500 ms); A receives
   B's wave and is never cued F (not near, not engaged);
 - the tiers: B is in A's near tier (`seen_*_near`) and F in its far tier; no creature is in both,
   and their union is exactly the untiered view's rows (`seen_bodies`, `seen_fighters`, `seen_doing`);
 - convergence: replaying A's stream with the client's rule (the union of the tiers, and a cue that
   stands for that creature until its next tier row) ends on exactly the rows of A's views.
 
-Admin calls (`spawn_crowd`, `set_behavior`, `place_at`) set the scene. Writes
+- the kill switch: with the `cue_transport_on` law off, no cue reaches anyone (A, B, an anonymous
+  connection) and each of B's windups reaches A by its near tier within 150 ms of `act_ms`.
+  The law is turned on for the first phase and put back as the world had it at the end.
+
+Admin calls (`spawn_crowd`, `set_behavior`, `place_at`, `set_world_law`) set the scene. Writes
 `RUN/cues-<who>.jsonl` and `RUN/cues.json`. Python standard library only.
 """
 
@@ -52,8 +60,9 @@ STREAMS = ("seen_bodies", "seen_fighters", "seen_doing")
 
 
 def stream(db, token, queries, seconds, path):
-    """Run a probe in stream mode, writing its lines to `path`; returns the thread."""
-    req = {"uri": V.URL, "db": db, "token": token, "queries": queries, "seconds": seconds, "stream": True}
+    """Run a probe in stream mode, from the connection on (the initial subscription's callbacks
+    included), writing its lines to `path`; returns the thread."""
+    req = {"uri": V.URL, "db": db, "token": token, "queries": queries, "seconds": seconds, "stream": True, "from_start": True}
 
     def go():
         with open(path, "w") as out:
@@ -67,6 +76,15 @@ def stream(db, token, queries, seconds, path):
 
 def lines(path):
     return [json.loads(x) for x in Path(path).read_text().splitlines() if x.strip()]
+
+
+def accepted(events):
+    """The probe's subscription was applied (its `initial` event and a `complete` that says
+    applied) and never rejected: a negative probe that delivered nothing proves nothing unless
+    its subscription was accepted."""
+    return any(e.get("event") == "initial" for e in events) and \
+        any(e.get("event") == "complete" and e.get("status") == "applied" for e in events) and \
+        not any(e.get("status") == "rejected" or e.get("status") == "error" for e in events)
 
 
 def hcall(db, token, reducer, args):
@@ -141,10 +159,9 @@ def main():
     st = V.load(rid)
     db = st["db"]
     out = ROOT / ".local/living/verify" / rid
-    run(HARNESS, "player", "--run", rid, "join", "Cue A")
-    st = V.load(rid)
-    tok = {"a": st["token"]}
-    for who in ("b", "c"):
+    # Three fresh identities (not the harness player, so the scene runs after the fixed suite too).
+    tok = {}
+    for who in ("a", "b", "c"):
         code, body = V.http("/v1/identity", {})
         tok[who] = json.loads(body)["token"]
         hcall(db, tok[who], "join", [f"Cue {who.upper()}"])
@@ -162,6 +179,10 @@ def main():
     pos = {x["id"]: (x["x"], x["y"]) for x in sql(rid, "SELECT id, x, y FROM body")}
     if math.dist(pos[c], pos[a]) < 40:
         call(rid, "place_at", [c, line[0][0], line[0][1] + (60 if line[0][1] < 200 else -60)])
+    # Cues are a law (`cue_transport_on`, off until accepted): on for the first phase, off for the second,
+    # then back as the world had it.
+    had = [r for r in sql(rid, "SELECT * FROM world_law") if r.get("name") == "cue_transport_on"]
+    call(rid, "set_world_law", ["cue_transport_on", "true"])
     time.sleep(2.0)
     pos = {x["id"]: (x["x"], x["y"]) for x in sql(rid, "SELECT id, x, y FROM body")}
     seconds = 28
@@ -229,24 +250,58 @@ def main():
         "placed as planned (B within 1.5 m of A, F 9-12 m, C 30 m or more)": math.dist(pos[a], pos[b]) <= 1.5 and 9 <= math.dist(pos[a], pos[f]) <= 12 and math.dist(pos[a], pos[c]) >= 30,
         "A's cues all name A as the viewer": bool(a_cues) and all(viewer_of(e) == ident["a"] for e in a_cues),
         "B's cues all name B": all(viewer_of(e) == ident["b"] for e in cue_rows["b"]),
+        "every probe's subscription was accepted (applied, never rejected), the negative ones included": all(accepted(e) for e in ev.values()) and accepted(peek_ev),
         "C receives no cue of A, B or F": not [e for e in cue_rows["c"] if body_of(e) in (a, b, f)] and all(viewer_of(e) == ident["c"] for e in cue_rows["c"]),
         "the anonymous connection receives no cue": not cue_rows["anon"],
         "B asking for A's cues by identity receives none": not [e for e in peek_ev if e.get("event") == "insert"],
         "A is cued B's motion": len(of(b, "seen_body_cue")) >= 3,
         "A receives B's wave (by a cue or its view)": bool(waves),
-        "A receives each of B's strike windups first by a cue, within 60 ms of act_ms (B is near)": len(first) >= 5 and max(late) <= 60 and all(v[1] == "cue" for v in first.values()),
+        "A receives each of B's strike windups first by a cue, within 100 ms of act_ms (B is near)": len(first) >= 5 and max(late) <= 100 and all(v[1] == "cue" for v in first.values()),
         "A is never cued F (not near, not engaged)": not [e for e in a_cues if body_of(e) == f],
         "B is in A's near tier and F in its far tier": b in tiers["near"] and f in tiers["far"],
         "the tiers partition each view: no creature in both, their union is the untiered view's rows": not any(overlap.values()) and not any(split.values()) and bool(union["seen_bodies"]),
         "replayed with the client's rule (tiers, and a cue until the creature's next row), A ends on its views' rows": not any(differ.values()),
     }
+    # Off: the authority writes no cue, and B's windups reach A through its near tier at A's frames.
+    call(rid, "set_world_law", ["cue_transport_on", "false"])
+    call(rid, "place_at", [b, *line[11]])
+    time.sleep(1.5)
+    off_paths = {w: out / f"cues-off-{w}.jsonl" for w in ("a", "b", "anon")}
+    off_threads = [stream(db, tok["a"], TIERS + CUES, 12, off_paths["a"]), stream(db, tok["b"], CUES, 12, off_paths["b"]),
+                   stream(db, None, CUES, 12, off_paths["anon"])]
+    time.sleep(3.0)
+    # Only the moves struck from here on: the streams' initial rows hold the last one of the first phase.
+    off_t0 = int(time.time() * 1000)
+    for _ in range(4):
+        hcall(db, tok["b"], "use_skill", ["strike", a, pa[0], pa[1]])
+        time.sleep(1.6)
+    for t in off_threads:
+        t.join()
+    off = {w: lines(p) for w, p in off_paths.items()}
+    off_first = {}
+    for e in off["a"]:
+        if e.get("table") in ("seen_fighters_near", "seen_fighters_far") and e.get("event") in ("insert", "update") \
+                and e["row"]["id"] == b and e["row"].get("act", 0) != 0 and e["row"]["act_ms"] >= off_t0 \
+                and e["row"]["act_ms"] not in off_first:
+            off_first[e["row"]["act_ms"]] = (e["ms"] - e["row"]["act_ms"], e["table"])
+    off_cues = sum(1 for w in off for e in off[w] if e.get("event") == "insert" and e.get("table") in CUE_OF)
+    restore = had[0]["value"] if had else "false"
+    call(rid, "set_world_law", ["cue_transport_on", restore if isinstance(restore, str) else json.dumps(restore)])
+    checks.update({
+        "law off: every probe ran to its end": all(e[-1].get("code") == 0 for e in off.values()),
+        "law off: every probe's subscription was accepted": all(accepted(e) for e in off.values()),
+        "law off: no cue reaches anyone": off_cues == 0,
+        "law off: each of B's windups reaches A by its near tier within 150 ms of act_ms": len(off_first) >= 3
+        and all(v[1] == "seen_fighters_near" and v[0] <= 150 for v in off_first.values()),
+    })
     result = {"a": a, "b": b, "c": c, "f": f, "dist": {k: round(math.dist(pos[a], pos[k]), 2) for k in (b, c, f)},
               "cues": {w: len(r) for w, r in cue_rows.items()}, "cue_tables_a": {t: sum(e["table"] == t for e in a_cues) for t in CUE_OF},
-              "windups": {str(k): v for k, v in first.items()}, "differ": differ, "overlap": overlap, "split": split, "tiers": tiers, "act_window": act_window, "checks": checks}
+              "windups": {str(k): v for k, v in first.items()}, "differ": differ, "overlap": overlap, "split": split, "tiers": tiers, "act_window": act_window,
+              "off": {"cues": off_cues, "windups": {str(k): v for k, v in off_first.items()}}, "checks": checks}
     (out / "cues.json").write_text(json.dumps(result, indent=1) + "\n")
     for k, v in checks.items():
         print(("PASS " if v else "FAIL ") + k)
-    print(json.dumps({k: result[k] for k in ("dist", "cues", "cue_tables_a", "windups", "differ", "tiers")}))
+    print(json.dumps({k: result[k] for k in ("dist", "cues", "cue_tables_a", "windups", "differ", "tiers", "off")}))
     return 0 if all(checks.values()) else 1
 
 

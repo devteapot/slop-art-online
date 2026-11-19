@@ -12,7 +12,6 @@ pub struct FighterSeen {
     pub id: u64,
     pub viewer: __sdk::Identity,
     pub fighter: Fighter,
-    pub near: bool,
 }
 
 impl __sdk::InModule for FighterSeen {
@@ -26,7 +25,6 @@ pub struct FighterSeenCols {
     pub id: __sdk::__query_builder::Col<FighterSeen, u64>,
     pub viewer: __sdk::__query_builder::Col<FighterSeen, __sdk::Identity>,
     pub fighter: __sdk::__query_builder::Col<FighterSeen, Fighter>,
-    pub near: __sdk::__query_builder::Col<FighterSeen, bool>,
 }
 
 impl __sdk::__query_builder::HasCols for FighterSeen {
@@ -36,7 +34,6 @@ impl __sdk::__query_builder::HasCols for FighterSeen {
             id: __sdk::__query_builder::Col::new(table_name, "id"),
             viewer: __sdk::__query_builder::Col::new(table_name, "viewer"),
             fighter: __sdk::__query_builder::Col::new(table_name, "fighter"),
-            near: __sdk::__query_builder::Col::new(table_name, "near"),
         }
     }
 }

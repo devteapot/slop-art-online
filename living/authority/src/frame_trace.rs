@@ -10,6 +10,11 @@ thread_local! {
     static LAST: RefCell<HashMap<u64, u64>> = RefCell::new(HashMap::new());
 }
 
+/// A creature died: its pairs' last looks go.
+pub(crate) fn forget(body: u32) {
+    LAST.with(|l| l.borrow_mut().retain(|k, _| *k == u64::MAX || (*k & 0xFFFF_FFFF) as u32 != body));
+}
+
 #[derive(Default)]
 pub(crate) struct Trace {
     /// Interval (ms) → (pairs, near pairs).

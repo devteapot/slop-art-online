@@ -18,6 +18,10 @@ struct Request {
     until_actor: Option<u32>,
     #[serde(default)]
     stream: bool,
+    /// Stream callbacks from the connection on, the initial subscription's own included (the
+    /// default streams only changes after it applied); for proving no row arrives at all.
+    #[serde(default)]
+    from_start: bool,
 }
 
 #[derive(Default)]
@@ -351,7 +355,7 @@ fn connect(r: &Request, signals: Arc<Mutex<Signals>>) -> Result<DbConnection, St
 }
 
 fn drive(r: &Request, drop_connection: bool) -> Result<Value, String> {
-    let signals = Arc::new(Mutex::new(Signals::default()));
+    let signals = Arc::new(Mutex::new(Signals { stream_live: r.stream && r.from_start, ..Signals::default() }));
     let c = connect(r, signals.clone())?;
     let start = Instant::now();
     loop {
@@ -436,8 +440,9 @@ fn main() {
             .read_to_string(&mut input)
             .map_err(|e| e.to_string())?;
         let r: Request = serde_json::from_str(&input).map_err(|e| e.to_string())?;
-        if !r.db.starts_with("verify-client-") {
-            return Err("database must start with verify-client-".into());
+        // A verify-client run, or the merge's scene gate (living/tools/scene_gate.py, case `cues`).
+        if !r.db.starts_with("verify-client-") && !r.db.starts_with("verify-gate-") {
+            return Err("database must start with verify-client- or verify-gate-".into());
         }
         let first = drive(&r, r.drop_file.is_some())?;
         if r.drop_file.is_some() {

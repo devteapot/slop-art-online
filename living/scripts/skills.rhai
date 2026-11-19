@@ -133,6 +133,10 @@ fn laws() {
         // A look checks only the structures new since the last look, or outside its sight then;
         // `notice_delta_check` (a diagnostic) checks that every one skipped was already familiar.
         notice_delta: true, notice_delta_check: false,
+        // How what is near a player, or fighting it, reaches the player's client: as cues at once,
+        // behind near copies that follow every 500 ms (on), or at the player's frames (off).
+        // Delivery only: the client ends on the same rows either way (docs/PERCEPTION.md).
+        cue_transport_on: false,
         // A bystander (one who sees an event it is not party to) is woken by what it sees at most
         // once per `witness_wake_ms` (docs/BATTLE_SCALE.md); what it sees is still told at once,
         // in full. 0: woken by each sight, as before.
@@ -3109,6 +3113,7 @@ fn law_about(l, name) {
         "check_ctx_check" => "a diagnostic: each move is weighed both ways and compared",
         "alarm_cells" => "the body's alarms are worked out again only when something they read can change",
         "alarm_cells_check" => "a diagnostic: each kept alarm answer is worked out afresh and compared",
+        "cue_transport_on" => if l.cue_transport_on { "what is near a player, or fighting it, reaches the player's screen at once" } else { "what is near a player reaches the player's screen with the rest of what it sees" },
         "warmth_check" => "a diagnostic: warmth is worked out both ways and compared",
         "scene_lazy" => "what is in sight is worked out as far as what one looks for needs",
         "scene_lazy_check" => "a diagnostic: each look is also worked out from all that is in sight and compared",

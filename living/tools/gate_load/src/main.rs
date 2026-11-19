@@ -790,6 +790,7 @@ fn players_mode() {
     // Subscribe the cue event tables (a module with them), and sample every Nth player's motion
     // freshness (0: none).
     let cues = req["cues"].as_bool().unwrap_or(false);
+    let tiers = req["tiers"].as_bool().unwrap_or(false);
     let fresh_every = req["fresh_every"].as_u64().unwrap_or(0) as usize;
     let started = Instant::now();
     let mut players = Vec::new();
@@ -807,14 +808,15 @@ fn players_mode() {
         let pl = Player { idx, role, name: p["name"].as_str().unwrap().to_string(), conn, counts: Arc::default(), st: Arc::default(), applied: Arc::default(), errors: Arc::default(), fresh };
         hook(&pl, &log);
         let mut queries = client.base();
-        if cues {
-            // What the game client subscribes with cues (frame-views): the two tiers of each
-            // perception view in place of the view, and the three cue event tables.
+        // What the game client subscribes with the tiers (frame-views): the two tiers of each
+        // perception view in place of the view; with cues, also the three cue event tables.
+        // Separate switches, so the cue subscriptions' own cost can be measured.
+        if tiers {
             queries.retain(|q| !["SELECT * FROM seen_bodies", "SELECT * FROM seen_fighters", "SELECT * FROM seen_doing"].contains(&q.as_str()));
-            queries.extend(
-                ["seen_bodies_near", "seen_bodies_far", "seen_fighters_near", "seen_fighters_far", "seen_doing_near", "seen_doing_far", "seen_body_cue", "seen_fighter_cue", "seen_doing_cue"]
-                    .map(|t| format!("SELECT * FROM {t}")),
-            );
+            queries.extend(["seen_bodies_near", "seen_bodies_far", "seen_fighters_near", "seen_fighters_far", "seen_doing_near", "seen_doing_far"].map(|t| format!("SELECT * FROM {t}")));
+        }
+        if cues {
+            queries.extend(["seen_body_cue", "seen_fighter_cue", "seen_doing_cue"].map(|t| format!("SELECT * FROM {t}")));
         }
         subscribe(&pl, queries);
         players.push(pl);

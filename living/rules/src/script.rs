@@ -615,6 +615,12 @@ pub struct Laws {
     /// The body's alarms (`status_of`) are answered from the last answer while no field it reads
     /// has crossed one of its levels (battle-cheap path 2). Off: asked at every evaluation.
     pub alarm_cells: bool,
+    /// How what is near a player, or fighting it, reaches its client (docs/PERCEPTION.md, "Cues
+    /// and tiers"): on, as cues at once (the `seen_*_cue` event tables, filtered per client by
+    /// row-level security) behind near copies that follow every 500 ms; off, no cue is written
+    /// and the near copies follow at every frame. A switch for the delivery, not for what is
+    /// perceived: the rows a client ends on are the same.
+    pub cue_transport_on: bool,
     /// Diagnostic: every alarm answer from a cell is also asked afresh, and a difference logged
     /// and counted (`alarm:differed`).
     pub alarm_cells_check: bool,
@@ -758,6 +764,7 @@ impl Default for Laws {
             check_ctx_plan: true,
             check_ctx_check: false,
             alarm_cells: true,
+            cue_transport_on: false,
             alarm_cells_check: false,
             warmth_check: false,
             scene_lazy: true,
@@ -2908,6 +2915,7 @@ impl Scripts {
             check_ctx_plan: flag("check_ctx_plan", l.check_ctx_plan),
             check_ctx_check: flag("check_ctx_check", l.check_ctx_check),
             alarm_cells: flag("alarm_cells", l.alarm_cells),
+            cue_transport_on: flag("cue_transport_on", l.cue_transport_on),
             alarm_cells_check: flag("alarm_cells_check", l.alarm_cells_check),
             warmth_check: flag("warmth_check", l.warmth_check),
             scene_lazy: flag("scene_lazy", l.scene_lazy),
@@ -3919,6 +3927,23 @@ mod tests {
         assert!(!off.laws().earshot);
         let about: std::collections::HashMap<String, String> = off.laws_about().into_iter().collect();
         assert!(about["earshot"].contains("judges for oneself"), "{about:?}");
+    }
+
+    #[test]
+    fn cue_transport_on_is_off_until_accepted_and_separate_from_attention_cues() {
+        // frame-views: the cue event tables' kill switch (docs/TICK_RATE.md, "Row-level security,
+        // the kill switch and SpacetimeDB upgrades"); `cues_on` is the minds' attention cues.
+        let src = include_str!("../../scripts/skills.rhai");
+        let shipped = Scripts::new(src).unwrap();
+        assert!(!shipped.laws().cue_transport_on);
+        assert!(!shipped.laws().cues_on);
+        let about: std::collections::HashMap<String, String> = shipped.laws_about().into_iter().collect();
+        assert!(about["cue_transport_on"].contains("with the rest of what it sees"), "{about:?}");
+        let on = Scripts::new(&with_world_laws(src, &[("cue_transport_on".into(), serde_json::json!(true))])).unwrap();
+        on.validate().unwrap();
+        assert!(on.laws().cue_transport_on && !on.laws().cues_on);
+        let about: std::collections::HashMap<String, String> = on.laws_about().into_iter().collect();
+        assert!(about["cue_transport_on"].contains("at once"), "{about:?}");
     }
 
     #[test]

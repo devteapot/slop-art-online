@@ -207,7 +207,10 @@ def main():
     ap.add_argument("--sample", type=int, default=24)
     ap.add_argument("--out", default=None)
     ap.add_argument("--duel", action="store_true", help="stage the first two players as a stationary duel after warm-up")
+    ap.add_argument("--tiers", action="store_true", help="the players subscribe the near and far tier views in place of seen_bodies, seen_fighters, seen_doing (frame-views)")
     ap.add_argument("--cues", action="store_true", help="the players also subscribe the cue event tables (a module with them; frame-views)")
+    ap.add_argument("--law", action="append", default=[], metavar="NAME=VALUE", help="set a world law after publishing (admin set_world_law), e.g. cue_transport_on=true")
+    ap.add_argument("--battle", type=int, default=0, help="the first N players fight in one dense group (radius 9 m round the first cluster's centre) from the window's start; the rest walk")
     ap.add_argument("--fresh-every", type=int, default=0, help="sample every Nth player's motion freshness (gate-load `fresh`; 0: none)")
     a = ap.parse_args()
     if a.duel and a.players < 2:
@@ -226,10 +229,19 @@ def main():
         time.sleep(3)
         world = sql(db, "SELECT * FROM world", token)[0]
         res["world"] = {k: world.get(k) for k in ("run", "seed", "day_ms", "look_book")}
+        for law in a.law:
+            name, value = law.split("=", 1)
+            call(db, "set_world_law", [name, value], token)
+        res["laws"] = a.law
         tokens = [new_identity() for _ in range(a.players)]
-        players = [{"token": t, "name": f"Cost{i}", "role": "duel" if a.duel and i < 2 else "walk"} for i, t in enumerate(tokens)]
+        role = lambda i: "duel" if a.duel and i < 2 else "battle" if i < a.battle else "walk"
+        players = [{"token": t, "name": f"Cost{i}", "role": role(i)} for i, t in enumerate(tokens)]
+        site = None
+        if a.battle:
+            lots = sql(db, "SELECT * FROM lot", token)
+            site = clusters(lots, a.groups, a.radius, 1)[0][0]
         load = Proc([a.load, "players"], out / "players.stderr")
-        load.send(json.dumps({"uri": URL, "db": db, "events": str(out / "events.jsonl"), "battle": [0.0, 0.0], "behaviour": {"walk_period_ms": 1500, "rejoin_s": 3}, "players": players, "client": "gate", "cues": a.cues, "fresh_every": a.fresh_every}))
+        load.send(json.dumps({"uri": URL, "db": db, "events": str(out / "events.jsonl"), "battle": list(site or (0.0, 0.0)), "behaviour": {"walk_period_ms": 1500, "fight_period_ms": 250, "rejoin_s": 3}, "players": players, "client": "gate", "tiers": a.tiers, "cues": a.cues, "fresh_every": a.fresh_every}))
         joined = load.expect("joined", 900)
         ids = [p["id"] for p in sorted(joined["players"], key=lambda p: p["p"])]
         per = -(-a.players // a.groups)
@@ -246,7 +258,13 @@ def main():
             else:
                 raise RuntimeError("could not place both duelists within strike reach")
             res["duel_positions"] = [first, second]
-        start = 2 if a.duel else 0
+        if a.battle:
+            res["battle"] = {"fighters": a.battle, "site": site, "radius_m": 9.0}
+            for i, cid in enumerate(ids[:a.battle]):
+                ang, rr = i * 2.399963, 9.0 * ((i + 0.5) / a.battle) ** 0.5
+                import math
+                call(db, "place_at", [cid, site[0] + rr * math.cos(ang), site[1] + rr * math.sin(ang)], token)
+        start = 2 if a.duel else a.battle
         for cid, (x, y) in zip(ids[start:], spots[start:]):
             call(db, "place_at", [cid, x, y], token)
         load.send("placed")
@@ -260,7 +278,7 @@ def main():
         t0, b0 = time.time(), bytes_sent(ident)
         clog0 = clog_bytes(replica)
         load.send("fresh on")
-        if a.duel:
+        if a.duel or a.battle:
             load.send("battle")
         time.sleep(a.seconds)
         t1, b1 = time.time(), bytes_sent(ident)

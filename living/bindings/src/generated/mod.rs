@@ -59,6 +59,8 @@ pub mod cue_type;
 pub mod cursor_type;
 pub mod deliberation_table;
 pub mod deliberation_type;
+pub mod doing_near_table;
+pub mod doing_near_type;
 pub mod doing_seen_table;
 pub mod doing_seen_type;
 pub mod doing_table;
@@ -76,6 +78,8 @@ pub mod fast_ask_table;
 pub mod fast_ask_type;
 pub mod fight_seen_table;
 pub mod fight_seen_type;
+pub mod fighter_near_table;
+pub mod fighter_near_type;
 pub mod fighter_seen_table;
 pub mod fighter_seen_type;
 pub mod fighter_table;
@@ -179,6 +183,8 @@ pub mod mind_update_type;
 pub mod mind_where_reducer;
 pub mod missile_table;
 pub mod missile_type;
+pub mod motion_near_table;
+pub mod motion_near_type;
 pub mod motion_seen_table;
 pub mod motion_seen_type;
 pub mod motion_type;
@@ -403,6 +409,8 @@ pub use cue_type::Cue;
 pub use cursor_type::Cursor;
 pub use deliberation_table::*;
 pub use deliberation_type::Deliberation;
+pub use doing_near_table::*;
+pub use doing_near_type::DoingNear;
 pub use doing_seen_table::*;
 pub use doing_seen_type::DoingSeen;
 pub use doing_table::*;
@@ -420,6 +428,8 @@ pub use fast_ask_table::*;
 pub use fast_ask_type::FastAsk;
 pub use fight_seen_table::*;
 pub use fight_seen_type::FightSeen;
+pub use fighter_near_table::*;
+pub use fighter_near_type::FighterNear;
 pub use fighter_seen_table::*;
 pub use fighter_seen_type::FighterSeen;
 pub use fighter_table::*;
@@ -523,6 +533,8 @@ pub use mind_update_type::MindUpdate;
 pub use mind_where_reducer::mind_where;
 pub use missile_table::*;
 pub use missile_type::Missile;
+pub use motion_near_table::*;
+pub use motion_near_type::MotionNear;
 pub use motion_seen_table::*;
 pub use motion_seen_type::MotionSeen;
 pub use motion_type::Motion;
@@ -1333,6 +1345,7 @@ pub struct DbUpdate {
     cue: __sdk::TableUpdate<Cue>,
     deliberation: __sdk::TableUpdate<Deliberation>,
     doing: __sdk::TableUpdate<Doing>,
+    doing_near: __sdk::TableUpdate<DoingNear>,
     doing_seen: __sdk::TableUpdate<DoingSeen>,
     expecting: __sdk::TableUpdate<Expecting>,
     experience: __sdk::TableUpdate<Experience>,
@@ -1341,6 +1354,7 @@ pub struct DbUpdate {
     fast_ask: __sdk::TableUpdate<FastAsk>,
     fight_seen: __sdk::TableUpdate<FightSeen>,
     fighter: __sdk::TableUpdate<Fighter>,
+    fighter_near: __sdk::TableUpdate<FighterNear>,
     fighter_seen: __sdk::TableUpdate<FighterSeen>,
     floor_seed: __sdk::TableUpdate<FloorSeed>,
     gate: __sdk::TableUpdate<Gate>,
@@ -1374,6 +1388,7 @@ pub struct DbUpdate {
     mind_cursor: __sdk::TableUpdate<MindCursor>,
     mind_state: __sdk::TableUpdate<MindState>,
     missile: __sdk::TableUpdate<Missile>,
+    motion_near: __sdk::TableUpdate<MotionNear>,
     motion_seen: __sdk::TableUpdate<MotionSeen>,
     my_act_outcomes: __sdk::TableUpdate<ActOutcome>,
     my_body: __sdk::TableUpdate<Moving>,
@@ -1532,6 +1547,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "doing" => db_update
                     .doing
                     .append(doing_table::parse_table_update(table_update)?),
+                "doing_near" => db_update
+                    .doing_near
+                    .append(doing_near_table::parse_table_update(table_update)?),
                 "doing_seen" => db_update
                     .doing_seen
                     .append(doing_seen_table::parse_table_update(table_update)?),
@@ -1556,6 +1574,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "fighter" => db_update
                     .fighter
                     .append(fighter_table::parse_table_update(table_update)?),
+                "fighter_near" => db_update
+                    .fighter_near
+                    .append(fighter_near_table::parse_table_update(table_update)?),
                 "fighter_seen" => db_update
                     .fighter_seen
                     .append(fighter_seen_table::parse_table_update(table_update)?),
@@ -1655,6 +1676,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "missile" => db_update
                     .missile
                     .append(missile_table::parse_table_update(table_update)?),
+                "motion_near" => db_update
+                    .motion_near
+                    .append(motion_near_table::parse_table_update(table_update)?),
                 "motion_seen" => db_update
                     .motion_seen
                     .append(motion_seen_table::parse_table_update(table_update)?),
@@ -1993,6 +2017,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.doing = cache
             .apply_diff_to_table::<Doing>("doing", &self.doing)
             .with_updates_by_pk(|row| &row.id);
+        diff.doing_near = cache
+            .apply_diff_to_table::<DoingNear>("doing_near", &self.doing_near)
+            .with_updates_by_pk(|row| &row.id);
         diff.doing_seen = cache
             .apply_diff_to_table::<DoingSeen>("doing_seen", &self.doing_seen)
             .with_updates_by_pk(|row| &row.id);
@@ -2016,6 +2043,9 @@ impl __sdk::DbUpdate for DbUpdate {
             .with_updates_by_pk(|row| &row.id);
         diff.fighter = cache
             .apply_diff_to_table::<Fighter>("fighter", &self.fighter)
+            .with_updates_by_pk(|row| &row.id);
+        diff.fighter_near = cache
+            .apply_diff_to_table::<FighterNear>("fighter_near", &self.fighter_near)
             .with_updates_by_pk(|row| &row.id);
         diff.fighter_seen = cache
             .apply_diff_to_table::<FighterSeen>("fighter_seen", &self.fighter_seen)
@@ -2112,6 +2142,9 @@ impl __sdk::DbUpdate for DbUpdate {
             .with_updates_by_pk(|row| &row.id);
         diff.missile = cache
             .apply_diff_to_table::<Missile>("missile", &self.missile)
+            .with_updates_by_pk(|row| &row.id);
+        diff.motion_near = cache
+            .apply_diff_to_table::<MotionNear>("motion_near", &self.motion_near)
             .with_updates_by_pk(|row| &row.id);
         diff.motion_seen = cache
             .apply_diff_to_table::<MotionSeen>("motion_seen", &self.motion_seen)
@@ -2422,6 +2455,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "doing" => db_update
                     .doing
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "doing_near" => db_update
+                    .doing_near
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "doing_seen" => db_update
                     .doing_seen
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
@@ -2445,6 +2481,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "fighter" => db_update
                     .fighter
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "fighter_near" => db_update
+                    .fighter_near
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "fighter_seen" => db_update
                     .fighter_seen
@@ -2544,6 +2583,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "missile" => db_update
                     .missile
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "motion_near" => db_update
+                    .motion_near
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "motion_seen" => db_update
                     .motion_seen
@@ -2870,6 +2912,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "doing" => db_update
                     .doing
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "doing_near" => db_update
+                    .doing_near
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "doing_seen" => db_update
                     .doing_seen
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -2893,6 +2938,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "fighter" => db_update
                     .fighter
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "fighter_near" => db_update
+                    .fighter_near
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "fighter_seen" => db_update
                     .fighter_seen
@@ -2992,6 +3040,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "missile" => db_update
                     .missile
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "motion_near" => db_update
+                    .motion_near
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "motion_seen" => db_update
                     .motion_seen
@@ -3274,6 +3325,7 @@ pub struct AppliedDiff<'r> {
     cue: __sdk::TableAppliedDiff<'r, Cue>,
     deliberation: __sdk::TableAppliedDiff<'r, Deliberation>,
     doing: __sdk::TableAppliedDiff<'r, Doing>,
+    doing_near: __sdk::TableAppliedDiff<'r, DoingNear>,
     doing_seen: __sdk::TableAppliedDiff<'r, DoingSeen>,
     expecting: __sdk::TableAppliedDiff<'r, Expecting>,
     experience: __sdk::TableAppliedDiff<'r, Experience>,
@@ -3282,6 +3334,7 @@ pub struct AppliedDiff<'r> {
     fast_ask: __sdk::TableAppliedDiff<'r, FastAsk>,
     fight_seen: __sdk::TableAppliedDiff<'r, FightSeen>,
     fighter: __sdk::TableAppliedDiff<'r, Fighter>,
+    fighter_near: __sdk::TableAppliedDiff<'r, FighterNear>,
     fighter_seen: __sdk::TableAppliedDiff<'r, FighterSeen>,
     floor_seed: __sdk::TableAppliedDiff<'r, FloorSeed>,
     gate: __sdk::TableAppliedDiff<'r, Gate>,
@@ -3315,6 +3368,7 @@ pub struct AppliedDiff<'r> {
     mind_cursor: __sdk::TableAppliedDiff<'r, MindCursor>,
     mind_state: __sdk::TableAppliedDiff<'r, MindState>,
     missile: __sdk::TableAppliedDiff<'r, Missile>,
+    motion_near: __sdk::TableAppliedDiff<'r, MotionNear>,
     motion_seen: __sdk::TableAppliedDiff<'r, MotionSeen>,
     my_act_outcomes: __sdk::TableAppliedDiff<'r, ActOutcome>,
     my_body: __sdk::TableAppliedDiff<'r, Moving>,
@@ -3448,6 +3502,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
             event,
         );
         callbacks.invoke_table_row_callbacks::<Doing>("doing", &self.doing, event);
+        callbacks.invoke_table_row_callbacks::<DoingNear>("doing_near", &self.doing_near, event);
         callbacks.invoke_table_row_callbacks::<DoingSeen>("doing_seen", &self.doing_seen, event);
         callbacks.invoke_table_row_callbacks::<Expecting>("expecting", &self.expecting, event);
         callbacks.invoke_table_row_callbacks::<Experience>("experience", &self.experience, event);
@@ -3456,6 +3511,11 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         callbacks.invoke_table_row_callbacks::<FastAsk>("fast_ask", &self.fast_ask, event);
         callbacks.invoke_table_row_callbacks::<FightSeen>("fight_seen", &self.fight_seen, event);
         callbacks.invoke_table_row_callbacks::<Fighter>("fighter", &self.fighter, event);
+        callbacks.invoke_table_row_callbacks::<FighterNear>(
+            "fighter_near",
+            &self.fighter_near,
+            event,
+        );
         callbacks.invoke_table_row_callbacks::<FighterSeen>(
             "fighter_seen",
             &self.fighter_seen,
@@ -3517,6 +3577,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         callbacks.invoke_table_row_callbacks::<MindCursor>("mind_cursor", &self.mind_cursor, event);
         callbacks.invoke_table_row_callbacks::<MindState>("mind_state", &self.mind_state, event);
         callbacks.invoke_table_row_callbacks::<Missile>("missile", &self.missile, event);
+        callbacks.invoke_table_row_callbacks::<MotionNear>("motion_near", &self.motion_near, event);
         callbacks.invoke_table_row_callbacks::<MotionSeen>("motion_seen", &self.motion_seen, event);
         callbacks.invoke_table_row_callbacks::<ActOutcome>(
             "my_act_outcomes",
@@ -4385,6 +4446,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         cue_table::register_table(client_cache);
         deliberation_table::register_table(client_cache);
         doing_table::register_table(client_cache);
+        doing_near_table::register_table(client_cache);
         doing_seen_table::register_table(client_cache);
         expecting_table::register_table(client_cache);
         experience_table::register_table(client_cache);
@@ -4393,6 +4455,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         fast_ask_table::register_table(client_cache);
         fight_seen_table::register_table(client_cache);
         fighter_table::register_table(client_cache);
+        fighter_near_table::register_table(client_cache);
         fighter_seen_table::register_table(client_cache);
         floor_seed_table::register_table(client_cache);
         gate_table::register_table(client_cache);
@@ -4426,6 +4489,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         mind_cursor_table::register_table(client_cache);
         mind_state_table::register_table(client_cache);
         missile_table::register_table(client_cache);
+        motion_near_table::register_table(client_cache);
         motion_seen_table::register_table(client_cache);
         my_act_outcomes_table::register_table(client_cache);
         my_body_table::register_table(client_cache);
@@ -4532,6 +4596,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "cue",
         "deliberation",
         "doing",
+        "doing_near",
         "doing_seen",
         "expecting",
         "experience",
@@ -4540,6 +4605,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "fast_ask",
         "fight_seen",
         "fighter",
+        "fighter_near",
         "fighter_seen",
         "floor_seed",
         "gate",
@@ -4573,6 +4639,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "mind_cursor",
         "mind_state",
         "missile",
+        "motion_near",
         "motion_seen",
         "my_act_outcomes",
         "my_body",

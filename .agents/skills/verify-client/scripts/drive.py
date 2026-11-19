@@ -105,7 +105,9 @@ PRIVATE = ['fast_ask', 'far_handle', 'slumber', 'land_plan', 'clock', 'steer', '
            # Each person's body sex (sex-1, docs/LIVING_CORE.md "Body sex"): private in every build;
            # a player reads its own through my_sex and perceives others' only as drawn. What each mind
            # remembers of others' bodies (`sex_seen`): the mind service reads it as the owner.
-           'sex', 'sex_seen']
+           'sex', 'sex_seen',
+           # The near tier's copies (frame-views): a player reads them through seen_*_near.
+           'motion_near', 'fighter_near', 'doing_near']
 # Private in the default `scoped` build; public only in a LIVING_PERCEPTION=open build (diagnostics).
 SCOPED = ['body', 'character', 'fighter', 'doing', 'vitals', 'experience', 'place', 'audience',
           'inventory', 'know_how']
@@ -415,6 +417,23 @@ class Run:
         expected = set(ADMIN) | set(MIND) | set(FAST) | set(PLAYER) | {'join', 'join_as', 'human_move', 'human_act', 'human_say', 'human_speak', 'tick', 'housekeeping', 'genesis_step'}
         if set(reducers) != expected:
             raise RuntimeError(f'reducer inventory changed: {set(reducers) ^ expected}')
+        # The cue event tables (frame-views) are filtered per client by row-level security, which the
+        # owner bypasses; the SDK's subscribe-all helper expands the generated ALL_TABLE_NAMES,
+        # cue tables included. So no program here may subscribe all, and the owner's programs (the
+        # mind service, the observer) may not name a cue table (docs/TICK_RATE.md, "Row-level
+        # security, the kill switch and SpacetimeDB upgrades").
+        sources = [p for d in ('living', '.agents/skills') for p in (ROOT / d).rglob('*')
+                   if p.suffix in ('.rs', '.py') and p.is_file() and '/target' not in str(p)
+                   and 'bindings/src/generated' not in str(p) and '/.local/' not in str(p)]
+        everything = [str(p.relative_to(ROOT)) for p in sources
+                      if re.search(r'subscribe_to_all_tables\(|SELECT \* FROM \*', p.read_text(errors='replace'))
+                      and p.name != 'drive.py']
+        if everything:
+            raise RuntimeError(f'a program subscribes every table (cue tables included, RLS bypassed for the owner): {everything}')
+        owners = [str(p.relative_to(ROOT)) for d in ('living/mind', 'living/viewer') for p in (ROOT / d).rglob('*.rs')
+                  if '/target' not in str(p) and re.search(r'seen_(body|fighter|doing)_cue', p.read_text(errors='replace'))]
+        if owners:
+            raise RuntimeError(f'an owner program names a cue table: {owners}')
         # The mind service connects as the world's admin, so `require_admin` cannot refuse it an
         # admin reducer by identity: the guard is that it never calls these (its sources name none).
         never_by_minds = ['admin_set_vitals', 'kill', 'relook', 'set_world_law', 'install_script', 'backfill_sex']

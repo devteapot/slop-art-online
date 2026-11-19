@@ -54,8 +54,9 @@
 //!   database never stores. Each creature that changed since the last tick goes, as the viewer's
 //!   copy would hold it now, to the viewers it is near at their next cue tick (every
 //!   [`CUE_TICKS`]) and to those engaged with it at once. A cue costs one row whatever the scene.
-//! - **Tiers.** Each copy has a `near` column, and each view two tiers reading one key of the
-//!   `(viewer, near)` index (`seen_*_near`, `seen_*_far`): a far frame re-runs only the far views.
+//! - **Tiers.** Near copies live in their own tables (`motion_near`, `fighter_near`,
+//!   `doing_near`), far ones in the old copy tables, and each view has two tiers reading one
+//!   table's key (`seen_*_near`, `seen_*_far`): a far frame re-runs only the far views.
 //!   Near copies follow at most every [`NEAR_COPY_MS`]; cues carry their changes meanwhile, and
 //!   they are the durable state behind the cues. A creature that changes tier at a sweep has its
 //!   copies written as it is now, in the new tier.
@@ -114,10 +115,10 @@ pub const NEAR_KEEP_M: f32 = 9.0;
 /// A viewer's copies of its near creatures (the near tier, `seen_*_near`) follow them at most
 /// this often (ms): cues carry their changes, the copies are the durable state behind them.
 pub const NEAR_COPY_MS: u64 = 500;
-/// A viewer's near cues go out every this many ticks (its phase by id), so a crowd's changes reach
-/// each viewer in one update per two ticks rather than one per tick; cues of those engaged with it
-/// go at every tick.
-pub const CUE_TICKS: u64 = 2;
+/// A viewer's near cues go out every this many ticks (its phase by id); cues of those engaged with
+/// it go at every tick. 2 was measured (frame-views' selection pair, docs/TICK_RATE.md): about a
+/// sixth fewer messages per player, near cues staler by about 15 ms at p90, so 1.
+pub const CUE_TICKS: u64 = 1;
 
 /// The streams a cue carries, as bits.
 const MOTION: u8 = 1;
@@ -434,6 +435,8 @@ pub fn deliver(ctx: &ReducerContext, now: u64, swept: &[u32]) {
     let budget = budget(ctx.timestamp.to_micros_since_unix_epoch());
     NOW.with(|n| *n.borrow_mut() = Some(Sources::default()));
     let humans = crate::combat::humans(ctx);
+    // The `cue_transport_on` law: off, no cue is written and near copies follow at every frame.
+    let on = common::laws(ctx).cue_transport_on;
     let due: Vec<(u32, Viewer)> = VIEWERS.with(|v| {
         let mut v = v.borrow_mut();
         let ids: HashSet<u32> = humans.iter().map(|(h, _)| *h).collect();
@@ -455,7 +458,7 @@ pub fn deliver(ctx: &ReducerContext, now: u64, swept: &[u32]) {
             // are due to follow (`NEAR_COPY_MS`); its interval follows the far tier's size.
             let n_all = e.scene.as_ref().map_or(0, |s| s.len());
             let far = n_all.saturating_sub(e.near.len());
-            let near_due = e.full || now.saturating_sub(e.near_ms) >= NEAR_COPY_MS;
+            let near_due = e.full || !on || now.saturating_sub(e.near_ms) >= NEAR_COPY_MS;
             let n = far + if near_due { e.near.len() } else { 0 };
             let every = interval(far);
             if e.last_ms == 0 {
@@ -496,11 +499,17 @@ pub fn deliver(ctx: &ReducerContext, now: u64, swept: &[u32]) {
     let mut served = HashSet::with_capacity(due.len());
     for (id, mut e) in due {
         served.insert(id);
-        frame(ctx, id, &mut e, now, trace.as_mut());
+        frame(ctx, id, &mut e, now, on, trace.as_mut());
         VIEWERS.with(|v| v.borrow_mut().insert(id, e));
     }
     let phase = common::span("tick.cues");
-    cues(ctx, now, &served, &humans, trace.as_mut());
+    if on {
+        cues(ctx, now, &served, &humans, trace.as_mut());
+    } else {
+        // Nothing is owed while cues are off: what changes reaches clients at their frames.
+        PENDING.with(|p| p.borrow_mut().clear());
+        VIEWERS.with(|v| v.borrow_mut().values_mut().for_each(|e| e.pending.clear()));
+    }
     drop(phase);
     if let Some(t) = trace {
         t.log(ctx);
@@ -681,13 +690,13 @@ fn fighter_cue(ctx: &ReducerContext, who: Identity, body: u32, now: u64) -> Opti
     fighter_now(ctx, body).map(|f| Fighter { band: perceived_band(ctx, who, body, now).0, ..f })
 }
 
-fn frame(ctx: &ReducerContext, id: u32, v: &mut Viewer, now: u64, mut trace: Option<&mut crate::frame_trace::Trace>) {
+fn frame(ctx: &ReducerContext, id: u32, v: &mut Viewer, now: u64, on: bool, mut trace: Option<&mut crate::frame_trace::Trace>) {
     let upto = SEQ.with(|s| s.get());
     if let Some(scene) = v.scene.as_ref() {
         let since = if v.full { 0 } else { v.seq };
         let full = v.full;
         // The near tier follows at most every `NEAR_COPY_MS` (cues carry its changes meanwhile).
-        let near_due = full || now.saturating_sub(v.near_ms) >= NEAR_COPY_MS;
+        let near_due = full || !on || now.saturating_sub(v.near_ms) >= NEAR_COPY_MS;
         let near_since = if full { 0 } else { v.near_seq };
         // The creatures cued since the last frame: a stream whose copy this frame does not write
         // is cued as it is now (`Cues` above).
@@ -723,7 +732,7 @@ fn frame(ctx: &ReducerContext, id: u32, v: &mut Viewer, now: u64, mut trace: Opt
                     t.served(id, body, now, false);
                 }
             }
-            if let Some(bits) = cued.get(&body) {
+            if let Some(bits) = cued.get(&body).filter(|_| on) {
                 let rest = bits & !wrote;
                 if rest != 0 {
                     cue(ctx, v.who, body, rest, now);
@@ -822,29 +831,56 @@ fn show_earshot(ctx: &ReducerContext, id: u32, v: &mut Viewer, now: u64) {
     }
 }
 
-/// Bring a viewer's `motion_seen` row of a creature up to date, in its tier (`near`). Returns
-/// whether the copy was written.
+/// Bring a viewer's copy of a creature's motion up to date, in its tier: `motion_near` when
+/// `near`, else `motion_seen` (moved between them as it is now when the tier changed). Returns
+/// whether a copy was written.
 fn show_motion(ctx: &ReducerContext, viewer: u32, body: u32, near: bool) -> bool {
     let k = key(viewer, body);
-    let (Some(mut row), Some(m)) = (ctx.db.motion_seen().id().find(k), motion_now(ctx, body)) else { return false };
-    if row.moving() != m || row.near != near {
-        row.set(&m);
-        row.near = near;
-        ctx.db.motion_seen().id().update(row);
-        return true;
+    let in_near = ctx.db.motion_near().id().find(k);
+    let was_near = in_near.is_some();
+    let Some(mut row) = in_near.map(|r| r.copy).or_else(|| ctx.db.motion_seen().id().find(k)) else { return false };
+    let Some(m) = motion_now(ctx, body) else { return false };
+    let changed = row.moving() != m;
+    if !changed && was_near == near {
+        return false;
     }
-    false
+    row.set(&m);
+    put_motion(ctx, row, was_near, near);
+    true
 }
 
-/// Bring a viewer's `fighter_seen` row of a creature up to date: its move as it is now; its
-/// band as the viewer perceives it (255 while its projection hides health) when `hurt`, else
-/// as last shown. A creature with no fighter row has none. Returns whether the copy was written.
+fn put_motion(ctx: &ReducerContext, row: MotionSeen, was_near: bool, near: bool) {
+    match (was_near, near) {
+        (true, true) => {
+            ctx.db.motion_near().id().update(MotionNear { id: row.id, viewer: row.viewer, copy: row });
+        }
+        (false, false) => {
+            ctx.db.motion_seen().id().update(row);
+        }
+        (false, true) => {
+            ctx.db.motion_seen().id().delete(row.id);
+            ctx.db.motion_near().insert(MotionNear { id: row.id, viewer: row.viewer, copy: row });
+        }
+        (true, false) => {
+            ctx.db.motion_near().id().delete(row.id);
+            ctx.db.motion_seen().insert(row);
+        }
+    }
+}
+
+/// Bring a viewer's copy of a creature's `fighter` row up to date, in its tier (`fighter_near`
+/// when `near`, else `fighter_seen`): its move as it is now; its band as the viewer perceives it
+/// (255 while its projection hides health) when `hurt`, else as last shown. A creature with no
+/// fighter row has none. Returns whether a copy was written.
 pub fn show_fighter(ctx: &ReducerContext, viewer: u32, who: Identity, body: u32, near: bool, hurt: bool, now: u64) -> bool {
     let k = key(viewer, body);
-    let row = ctx.db.fighter_seen().id().find(k);
+    let in_near = ctx.db.fighter_near().id().find(k);
+    let was_near = in_near.is_some();
+    let row = in_near.map(|r| r.copy).or_else(|| ctx.db.fighter_seen().id().find(k));
     let Some(f) = fighter_now(ctx, body) else {
         if row.is_some() {
             ctx.db.fighter_seen().id().delete(k);
+            ctx.db.fighter_near().id().delete(k);
             return true;
         }
         return false;
@@ -853,41 +889,95 @@ pub fn show_fighter(ctx: &ReducerContext, viewer: u32, who: Identity, body: u32,
         Some(r) if !hurt => r.fighter.band,
         _ => perceived_band(ctx, who, body, now).0,
     };
-    let new = FighterSeen { id: k, viewer: who, fighter: Fighter { band, ..f }, near };
-    match row {
-        Some(r) if r == new => false,
-        Some(_) => {
-            ctx.db.fighter_seen().id().update(new);
-            true
+    let new = FighterSeen { id: k, viewer: who, fighter: Fighter { band, ..f } };
+    if row.as_ref() == Some(&new) && was_near == near {
+        return false;
+    }
+    match (row.is_some() && was_near, row.is_some() && !was_near, near) {
+        (true, _, true) => {
+            ctx.db.fighter_near().id().update(FighterNear { id: k, viewer: who, copy: new });
         }
-        None => {
-            ctx.db.fighter_seen().insert(new);
-            true
+        (_, true, false) => {
+            ctx.db.fighter_seen().id().update(new);
+        }
+        (in_n, in_f, near) => {
+            if in_n {
+                ctx.db.fighter_near().id().delete(k);
+            }
+            if in_f {
+                ctx.db.fighter_seen().id().delete(k);
+            }
+            if near {
+                ctx.db.fighter_near().insert(FighterNear { id: k, viewer: who, copy: new });
+            } else {
+                ctx.db.fighter_seen().insert(new);
+            }
         }
     }
+    true
 }
 
-/// Bring a viewer's `doing_seen` row of a creature up to date (none while it shows nothing).
-/// Returns whether the copy was written.
+/// Bring a viewer's copy of what a creature is visibly doing up to date, in its tier
+/// (`doing_near` when `near`, else `doing_seen`; none while it shows nothing). Returns whether a
+/// copy was written.
 pub fn show_doing(ctx: &ReducerContext, viewer: u32, who: Identity, body: u32, near: bool) -> bool {
     let k = key(viewer, body);
-    let row = ctx.db.doing_seen().id().find(k);
-    match (doing_now(ctx, body), row) {
-        (None, Some(_)) => {
+    let in_near = ctx.db.doing_near().id().find(k);
+    let was_near = in_near.is_some();
+    let row = in_near.map(|r| r.copy).or_else(|| ctx.db.doing_seen().id().find(k));
+    let Some(d) = doing_now(ctx, body) else {
+        if row.is_some() {
             ctx.db.doing_seen().id().delete(k);
-            true
+            ctx.db.doing_near().id().delete(k);
+            return true;
         }
-        (None, None) => false,
-        (Some(d), Some(r)) if r.doing == d && r.near == near => false,
-        (Some(d), Some(_)) => {
-            ctx.db.doing_seen().id().update(DoingSeen { id: k, viewer: who, doing: d, near });
-            true
+        return false;
+    };
+    let new = DoingSeen { id: k, viewer: who, doing: d };
+    if row.as_ref() == Some(&new) && was_near == near {
+        return false;
+    }
+    match (row.is_some() && was_near, row.is_some() && !was_near, near) {
+        (true, _, true) => {
+            ctx.db.doing_near().id().update(DoingNear { id: k, viewer: who, copy: new });
         }
-        (Some(d), None) => {
-            ctx.db.doing_seen().insert(DoingSeen { id: k, viewer: who, doing: d, near });
-            true
+        (_, true, false) => {
+            ctx.db.doing_seen().id().update(new);
+        }
+        (in_n, in_f, near) => {
+            if in_n {
+                ctx.db.doing_near().id().delete(k);
+            }
+            if in_f {
+                ctx.db.doing_seen().id().delete(k);
+            }
+            if near {
+                ctx.db.doing_near().insert(DoingNear { id: k, viewer: who, copy: new });
+            } else {
+                ctx.db.doing_seen().insert(new);
+            }
         }
     }
+    true
+}
+
+/// A creature left a viewer's scene, or died: its copies in both tiers go.
+pub fn drop_copies(ctx: &ReducerContext, viewer: u32, body: u32) {
+    let k = key(viewer, body);
+    ctx.db.motion_seen().id().delete(k);
+    ctx.db.fighter_seen().id().delete(k);
+    ctx.db.doing_seen().id().delete(k);
+    ctx.db.motion_near().id().delete(k);
+    ctx.db.fighter_near().id().delete(k);
+    ctx.db.doing_near().id().delete(k);
+}
+
+/// A creature died: its profiling history goes (`CHANGES`, `frame_trace`). Only that: a death
+/// that rolls back must not take marks or tiers that still owe a delivery, and those maps lose a
+/// creature's keys by other paths (the sweep's scenes, `engaged_of`'s expiry).
+pub fn creature_gone(id: u32) {
+    CHANGES.with(|c| c.borrow_mut().remove(&id));
+    crate::frame_trace::forget(id);
 }
 
 // Row-level security for the cue event tables: a client receives only its own cues.
