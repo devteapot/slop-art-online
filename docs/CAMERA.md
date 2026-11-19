@@ -247,7 +247,7 @@ Local references are in `.local/living/camera-1/refs/` in the owner's main check
 
 ## Gaze authority implementation
 
-Gaze ships disabled in the base law and in Cullet. The authority first derives
+Gaze ships disabled in the base law. Cullet's overlay enables it, with `fov_on`, since the 2026-11-19 switch-on ([cover sight](COVER_SIGHT.md#switch-on-2026-11-19)); every other seed keeps it off. The authority first derives
 the original world's light cap from `senses(a)`. Enabled worlds run the shared
 Rhai modifier over that result, using band shares and angles from `gaze_bands()`.
 The near ring, peripheral share and facing use the existing sight primitives.

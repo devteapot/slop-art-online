@@ -7,10 +7,15 @@
 // need rate below is per game hour (`per: "hour"`), so these numbers are the balance per game
 // day whatever the day length; the engine turns them into real time.
 
-// Keep Cullet brush cosmetic until the cover acceptance switch-on.
+// Cover sight and gaze are on in Cullet (switch-on 2026-11-19, docs/COVER_SIGHT.md and
+// docs/CAMERA.md §4): trunks, hedges, brush and quarry faces hide people; the gaze bands apply.
 fn laws() {
     let policy = base_laws();
-    policy.cover_brush_on = false;
+    policy.cover_sight_on = true;
+    policy.cover_brush_on = true;
+    policy.gaze_on = true;
+    // Enabling gaze makes Middle directional even where fov_on is false (CAMERA.md §4); explicit.
+    policy.fov_on = true;
     policy
 }
 
