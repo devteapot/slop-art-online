@@ -1,0 +1,170 @@
+[
+  {
+    "trial": "ink-first",
+    "base": [
+      23,
+      3,
+      1
+    ],
+    "width_px": 1.05,
+    "range": 0.009,
+    "coordinate": [
+      751,
+      295
+    ],
+    "min5": [
+      75,
+      41,
+      32
+    ],
+    "delta": [
+      16,
+      14,
+      14
+    ]
+  },
+  {
+    "trial": "ink-second",
+    "base": [
+      12,
+      0,
+      0
+    ],
+    "width_px": 1.05,
+    "range": 0.009,
+    "coordinate": [
+      751,
+      295
+    ],
+    "min5": [
+      69,
+      39,
+      32
+    ],
+    "delta": [
+      10,
+      12,
+      14
+    ]
+  },
+  {
+    "trial": "ink-floor",
+    "base": [
+      0,
+      0,
+      0
+    ],
+    "width_px": 1.05,
+    "range": 0.009,
+    "coordinate": [
+      751,
+      295
+    ],
+    "min5": [
+      63,
+      39,
+      33
+    ],
+    "delta": [
+      4,
+      12,
+      15
+    ]
+  },
+  {
+    "trial": "ink-width118",
+    "base": [
+      12,
+      0,
+      0
+    ],
+    "width_px": 1.18,
+    "range": 0.009,
+    "coordinate": [
+      751,
+      295
+    ],
+    "min5": [
+      68,
+      39,
+      32
+    ],
+    "delta": [
+      9,
+      12,
+      14
+    ]
+  },
+  {
+    "trial": "ink-width160",
+    "base": [
+      8,
+      0,
+      0
+    ],
+    "width_px": 1.6,
+    "range": 0.009,
+    "coordinate": [
+      751,
+      295
+    ],
+    "min5": [
+      65,
+      38,
+      31
+    ],
+    "delta": [
+      6,
+      11,
+      13
+    ]
+  },
+  {
+    "trial": "ink-range014",
+    "base": [
+      9,
+      0,
+      0
+    ],
+    "width_px": 1.05,
+    "range": 0.014,
+    "coordinate": [
+      751,
+      295
+    ],
+    "min5": [
+      67,
+      39,
+      33
+    ],
+    "delta": [
+      8,
+      12,
+      15
+    ]
+  },
+  {
+    "trial": "black-field",
+    "base": [
+      0,
+      0,
+      0
+    ],
+    "width_px": 1.6,
+    "range": 0.009,
+    "coordinate": [
+      751,
+      295
+    ],
+    "min5": [
+      34,
+      32,
+      29
+    ],
+    "delta": [
+      -25,
+      5,
+      11
+    ]
+  }
+]

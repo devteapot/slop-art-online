@@ -1,0 +1,13 @@
+{
+  "pixels": [
+    2048,
+    2048
+  ],
+  "ink_range": 0.009,
+  "black_guide_texels": 11749,
+  "zero_distance_texels": 11749,
+  "within_range": 469197,
+  "R_unchanged": true,
+  "on_line_exact": true,
+  "B_max": 0
+}
