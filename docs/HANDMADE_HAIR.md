@@ -2,6 +2,8 @@
 
 **Status (2026-11-19): contract v1, agreed; the client side is built on branch `handmade-hair` (not merged).** This is the format that dev-box's live Blender session authors to. dev-box agreed phase 1's draft (f0463412) with one change, folded in here before any file was made to it: a sixth slot, `"tint"`, for layers multiplied over skin. Phase 2 built the client side: the profile, the classification, the forward turn and the calibration frame (`living/game/src/handmade.rs`, `living/tools/characters/calibrate.py`). From here, a change to any name or meaning below needs a new contract number (`slop.contract`).
 
+**v1.1 (2026-11-19): lock ink lines,** for the opt-in profile only; see [lock ink lines](#lock-ink-lines-v11). It adds optional fields and the mask texture's G channel, and makes one change to v1's meaning: a mask texture no longer replaces `_HIGHLIGHT` but combines with it (the larger wins), so a texture made for ink alone keeps a file's per-vertex highlight. Files keep `"contract": 1`. A v1 file draws as before (one with both a mask texture and `_HIGHLIGHT` now shows the larger of the two; none has been made): no v1 file can carry ink fields, and ink is drawn only where they are set. The shader for v1.1 is in progress on branch `hair-ink`; `ink_field.py` and the audit are there now.
+
 **Why:** dev-box's hand-made character Cora (`own-cora-live.glb`) read as a glossy helmet in the client. The diagnosis (`.local/living/cora-material/FINDINGS.md` on the laptop) found four causes:
 
 - the gloss is painted into the hair's vertex colours;
@@ -190,11 +192,12 @@ Use a texture when the highlight needs a sharper shape than the hair's triangles
 
 - **File:** a PNG beside the GLB the client loads, named for it: `view/own-cora-live.glb` → `view/own-cora-live.hair.png`. A block-compressed copy `<stem>.hair.ktx2`, if present, is preferred, by the same rule as face maps (`lookdev::face_map_files`).
 - **Override per material:** `slop.hair.highlight_map` (string), a path under the asset folder, for example `"view/cora-fringe.hair.png"`. It wins over the file beside the GLB.
-- **Channel:** **R**, linear data, loaded with sRGB off. Write 8-bit greyscale (PNG colour type 0) or RGB/RGBA with the mask in R. G, B and A are reserved: write 0 in G and B, and 255 in A. The bundle step may compress it.
+- **Channel:** **R**, linear data, loaded with sRGB off. Write 8-bit greyscale (PNG colour type 0) or RGB/RGBA with the mask in R. **G** is the lock ink field (v1.1, [lock ink lines](#lock-ink-lines-v11)); B is reserved (write 0), A 255. The bundle step may compress it.
 - **Coordinates:** the hair primitive's **TEXCOORD_0**, with glTF's convention (UV (0, 0) is the image's top-left). Blender's exporter flips V for you, so a mask painted in Blender against the hair's UV map lines up.
 - **Not embedded in the GLB:** Bevy's glTF loader decodes any image that no material uses as a linear channel as sRGB colour. A mask embedded in the file would arrive gamma-encoded, so it is a sidecar, as face maps are.
 - **Binding:** the client binds it in the face map's slot (`toon.wesl` binding 101/102). Hair materials leave that slot unused, so the texture adds one texture read and no new binding.
-- **When a mask texture is found, it replaces the per-vertex mask** for that material. A `_HIGHLIGHT` in the same file is ignored there, with one warning, so one source draws each highlight.
+- **With both sources, the larger wins** (v1.1; v1 let the texture replace `_HIGHLIGHT`): mask = max(`_HIGHLIGHT`, R). A texture made only for ink (R = 0) therefore leaves a file's per-vertex highlight as it is, and R can add sharper shapes beside it.
+- **The hair needs a real UV unwrap** for any texture: R, G, or both. Cora's exported hair has none: every hair vertex sits at UV (0, 1), so a texture reads one texel everywhere. The audit warns when a hair texture or ink fields meet hair UVs that span no area.
 
 ### Semantics
 
@@ -206,6 +209,72 @@ Use a texture when the highlight needs a sharper shape than the hair's triangles
 - **The mask stays on the model.** It moves with the locks and does not slide with the camera or the light. It shows only where the sun reaches (`h × s1` above): it is gone in the shade band and in cast shadow.
 - **No mask means no highlight.** A profile hair with neither source draws three bands and nothing else. There is no fallback ring and no forward-axis guess.
 - **Far meshes:** if the file has `Far*` hair nodes (the client's far switch beyond about 10 m), they wear a material with the same `slop` (or the same material). Each carries its own `_HIGHLIGHT`, or uses the same mask texture through matching UVs.
+
+## Lock ink lines (v1.1)
+
+Cora's drawing separates locks with thin dark ink lines where they meet; the client's outline draws only silhouettes, so the locks merge. The profile can draw those lines from a distance field in the mask texture.
+
+**The field:** `<stem>.hair.png`, channel **G**, linear, in the hair's TEXCOORD_0 (like R): the distance from each texel to the nearest lock line, as G = min(1, d / `ink_range`), d in UV units (a texel is 1/width across, 1/height down). 0 is on a line; 1 (255), or a file without G (greyscale), is no ink. R stays the highlight mask; B is 0. Make it with the tool below; do not paint G by hand.
+
+**The fields** (in `extras.slop.hair`, all optional):
+
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `ink` | `[r, g, b]` integers, sRGB 0–255 | `shade` × 0.6, in linear | The line's base colour. It is lit exactly as the shade band is, wherever the line falls (in the lit band too), and shadowed and graded with it: the sun never brightens it beyond the shade band's light. |
+| `ink_px` | number, screen pixels | `1.25` | The line's width at the Near stop, in a view 900 pixels tall. It scales with the world size of a pixel at the line (`m_px` below), so lines thicken as the camera comes closer and thin as it goes, up to 4 × `ink_px`. |
+| `ink_range` | number, UV units, > 0 | `0.004` | The distance G = 255 stands for. Must equal the `--range` the field was made with. Set it to about half the narrowest spacing between neighbouring lines, in UV: the fade below assumes so. |
+| `ink_fade_px` | number, screen pixels | `3.0` | Lines fade out where neighbouring lines would come closer than this on screen (they would merge into a smear and shimmer). |
+
+**When ink is drawn:** only on profile hair, only when the profile sets **at least one** of the four fields, and only when the material has a mask texture. v1 told authors to write G = 0, which here would mean "on a line everywhere", so a v1 texture without ink fields never draws ink. The audit warns when ink fields are set without a texture or with a G that is all 255, and when a texture has a G with lines in it but no ink field is set.
+
+**What the client computes** (`toon.wesl` `hand_hair`):
+
+```
+d_uv  = G * ink_range                               // G < 1; the field's texel, bilinear
+fw    = max(|∂uv/∂x|, |∂uv/∂y|)                     // UV a pixel spans, along its longer side (screen derivatives)
+d_px  = d_uv / fw                                   // distance to the line in screen pixels
+m_px  = |view depth| * 2 / (projection[1][1] * viewport height)   // metres a pixel spans at the point's depth
+w     = ink_px * min(0.00805 / m_px, 4)             // 0.00805 m: a pixel at the Near stop (9.43 m, 42°, 900 px)
+cov   = clamp(min(d_px + 0.5, w/2) - max(d_px - 0.5, -w/2), 0, 1)  // a 1-pixel box across a line w wide
+space = 2 * ink_range * m_uv / m_px                 // neighbouring lines' spacing on screen, estimated
+cov  *= smoothstep(ink_fade_px, 2 * ink_fade_px, space)
+color = mix(color, ink * sun + ink * sky_fill, cov) // the shade band's light
+```
+
+- **The antialiasing** is a one-pixel box across the line: a line's coverage sums to its width w across it, wherever it falls among the pixels, so a line thinner than a pixel draws fainter instead of breaking up, and does not flicker as it moves by a fraction of a pixel.
+- **The footprint estimate:** the distance field only says how far the nearest line is, not where the next one lies, so the spacing between lines is estimated from `ink_range` (set to half the narrowest spacing): `2 · ink_range` in UV, and on screen that times the hair's texel density `m_uv` (metres per UV unit: the median over the hair mesh's triangles of √(area / UV area), measured when the material is made; `handmade.rs` `metres_per_uv`) over the pixel's size `m_px`. When the spacing drops below `ink_fade_px` the lines fade out over the next doubling, so toward the Far stop the lines first thin with the zoom and then go before they merge.
+- **Why the depth, not screen derivatives, for `w` and the fade:** derivatives are constant over each 2×2 pixel quad, so a fade or width driven by them steps from quad to quad, and the steps crawl as the camera moves. That measured as shimmer in the hand-made line's first build. The pixel's size at its depth and a per-material texel density are smooth on screen. `d_px` keeps `fw`, which measured steady. A mesh without UV area falls back to `2 · ink_range / fw`.
+- **Sampling:** the field is sampled with the pixel's own UV gradients (`textureSampleGrad`), bilinear, in the same tap as R: no extra pass and no extra read where the highlight texture is already read; one read when ink alone brings the texture. A PNG has no mips, so it is read at level 0, like the face shadow map; a KTX2 copy's mips are used, and a mipped distance field only thins distant lines further.
+- The line draws over the bands and the highlight, in cast shadow and in light alike.
+- **`ink_fade_px` against shimmer** (laptop, 2026-11-19, `hair_shimmer.py` on a Cora copy with stand-in cylindrical hair UVs, 9 strokes, `ink_range` 0.05, `ink_px` 1.25). Ratios F_ink / F_edge, with ink px a frame in brackets; ≤ 1.5 passes:
+
+  | `ink_fade_px` | Near pan | Middle pan | Middle zoom | Far pan / zoom |
+  |---|---|---|---|---|
+  | 1.0 | 1.00 (288) | 1.53 (119) | 0.82 (115) | 0.86 (47) / 0.97 (44) |
+  | 1.5 | 1.00 (288) | 1.53 (119) | 0.82 (115) | 1.16 (27) / 1.17 (14) |
+  | 2.0 | 1.00 (288) | 1.53 (119) | 0.83 (113) | faded |
+  | 2.5 | 1.00 (288) | 1.71 (94) | 0.90 (81) | faded |
+  | **3.0 (default)** | 0.99 (289) | **2.45 (4)** | 1.23 (1) | faded |
+  | 3.5 | 0.85 (278)¹ | faded (0.6) | faded | faded |
+  | 4.0 | 0.99 (241)¹ | faded (0.1) | faded | faded |
+  | 5.0 | 1.63 (6)¹ | faded | faded | faded |
+
+  ¹ From the first shimmer script, whose hair region was a fixed box round Cora's head; the rows without the mark are `hair_shimmer.py`'s. That script gave 0.83 for 3.0's Near pan and 1.97 for its Middle pan.
+  - **No value passes the Middle pan with lines there.** Values of 3.5 and above pass it only by fading the lines out at Middle, and 5.0 fails the Near pan in the fade's tail. At 2.0 and below the Middle pan sits at 1.53, its floor with lines fully on, just above the threshold. At 3.0, Middle keeps about 4 faint ink pixels a frame (8–13 levels) in the fade's tail, which is what flickers.
+  - **The default stays 3.0:** it shows lines at Near and fades them out by Middle. A file that wants lock lines at Middle can set `ink_fade_px` to 2.0, at a measured 1.53, which is steadier than 3.0's tail and just above the threshold. Values of 1.5 or less also keep lines at Far, where they measured steady (0.86–1.17).
+
+**The tool:**
+
+```
+python3 living/tools/characters/ink_field.py LINES.png STEM.hair.png [--range 0.004] [--seams-as-lines --glb FILE.glb [--material NAME]] [--size WxH]
+```
+
+- **LINES.png:** the lock lines painted dark on light, at the hair texture's resolution, in the hair's UV space (glTF's top-left origin, as Blender exports an image). A texel is on a line where its luminance is below half (and, with alpha, its alpha above half). Paint lines **one or two texels wide**: the field measures from line texels, so a wide painted line draws wide when the camera is close.
+- **The output:** an exact Euclidean distance transform, in UV units, written into G (8 bits: 1/255 of `ink_range` a step, 0.016 of a texel at 1024 px and the default range). R is kept from an existing `STEM.hair.png`, or 0 in a new one; B is 0.
+- **`--seams-as-lines`** adds the borders of the hair's UV islands as lines: the edges of the hair primitives used by one triangle only, rasterized from `--glb`. Hair built of lock cards has a lock's outline there. LINES.png may then be `-`.
+- Plain Python, no dependencies (the transform is Felzenszwalb and Huttenlocher's exact one, by columns then rows; a few seconds at 1024²). It prints the `ink_range` to put in the extras.
+
+**Calibrating ink:** a patch on a line takes `"sample": "min5"` (the darkest pixel, by luminance, of a 5×5 window instead of the 9×9 median), so a one- or two-pixel line is measured rather than averaged away. Tune `ink` against the drawing's line colour the way the swatches are tuned.
 
 ## The face shadow
 
@@ -279,6 +348,7 @@ One fixed daylight frame that authors render after every palette change and comp
 
   - A patch's target is `"target": [r, g, b]` (display sRGB, 0–255), or `"drawing": [x, y]`: the 9×9 median of the drawing (the top-level `"drawing"` image, relative to the targets file) at that pixel.
   - Each shot key (`portrait`, `near`, `portrait45`) gives the pixel to measure in that shot, as the 9×9 median. A patch can be measured in any of the shots.
+  - `"sample": "min5"` (v1.1, for ink lines) takes instead the darkest pixel, by luminance, of a 5×5 window, in the shots and in the drawing.
   - Tolerance: the patch's own `"tolerance"`, else the file's `"tolerance"` by whether the patch's name starts with "hair", else 8 and 10.
   - `"swatch"` (optional): the palette swatch the patch tunes. The report then suggests that swatch's next value: each linear channel scaled by target ÷ measured, averaged over the shots. Rerun after each change, since the grade is not linear.
 - **The command:**
@@ -293,7 +363,15 @@ One fixed daylight frame that authors render after every palette change and comp
   - every material's slot (a material without one is a warning, an unknown slot an error), a hair profile only on hair, its four swatches (three integers 0–255), `t2` above `t1`, unknown profile keys;
   - the mask: `_HIGHLIGHT`'s accessor (SCALAR FLOAT), its values and coverage (the share of hair vertices above 0.5), the mask texture if there is one, both at once (a warning: the texture wins), neither (a warning: no highlight);
   - the face: skinned, TEXCOORD_1 present, VEC2 FLOAT, the same on every vertex and equal to the declared forward, and a face shadow map found;
-  - a tint that is opaque (a warning), and an `anim/` copy whose scene `slop` differs.
+  - a tint that is opaque (a warning), and an `anim/` copy whose scene `slop` differs;
+  - ink (v1.1, warnings): `ink_range` above 0, `ink_px` and `ink_fade_px` numbers, `ink` three integers; ink fields without a mask texture, or with a texture whose G is missing or holds no line; a G with lines but no ink field; hair UVs that span no area while a texture or ink is set.
+- **Ink shimmer** (v1.1), for a file with ink fields:
+
+  ```
+  python3 living/tools/characters/hair_shimmer.py view/<file>.glb [--out DIR] [--binary PATH] [--plain-stills DIR] [--ink-stills DIR]
+  ```
+
+  It takes the file as it is, with its own `ink_range`, `ink_px`, `ink_fade_px` and `ink`, and as the reference a temporary copy without the ink fields (the hair-only profile, highlight and all; removed afterwards). It renders both through the asset view: 1600×900, 11:00, paused idle, springs off, at the Near, Middle and Far stops, a pan (16 stills, 0.1° a frame) and a zoom (16, the height up 0.3% a frame) each. For each sequence it prints the flicker ratio F = Σ|x(i+1) − 2·x(i) + x(i−1)| / Σx of the ink's darkening (F_ink) and of the profile's own band edges (F_edge), over the hair pixels round the ink, and **passes when F_ink ≤ 1.5 × F_edge**: the line flickers no more, per unit of what it draws, than the band edges already seen in motion, with half again for a line's two edges. A sequence whose ink darkens fewer than one pixel a frame by more than 8 levels is `faded`, not scored. Output goes to `.local/living/hair-shimmer/<stem>/<time>/` (`plain/`, `ink/`, `shimmer.json`); the exit code is 1 on a failing sequence. `--plain-stills` and `--ink-stills` reuse an earlier run's still folders. Plain Python; about 25 s to score, plus the two renders.
 - **A palette is done** when every measured patch passes. The tolerances are starting values, to agree with the owner on the first Cora pass, and the owner judges the result in-game.
 
 ## Compatibility
