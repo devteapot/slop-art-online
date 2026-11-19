@@ -276,6 +276,10 @@ fn body(p: &mut Probe) -> Result<(), String> {
         return Ok(());
     }
     let parts = s.status_part_names();
+    // The whole law's answer by the values of what it reads: samples the law cannot tell apart
+    // (an infant and a grown person, for a law that does not read the stage) are run once.
+    let reads = s.status_reads();
+    let mut answered: std::collections::HashMap<Vec<u8>, Vec<super::Status>> = Default::default();
     for b in s.sample_bodies(&super::body::SHIPPED_VITALS) {
         let about = || format!("for a {} {}{} with {}", b.stage, b.kind, if b.night { " at night" } else { "" }, b.fields.iter().map(|(k, v)| format!("{k} {v}")).collect::<Vec<_>>().join(", "));
         if parts.is_empty() {
@@ -285,14 +289,24 @@ fn body(p: &mut Probe) -> Result<(), String> {
         }
         // By the parts first, so a part's bad answer is refused in its name. Each part is kept on
         // what it reads, so across the samples most parts are answered from their memo: the check
-        // costs one run of the whole law a sample, not the parts again (an install runs in a
+        // costs at most one run of the whole law a sample, not the parts again (an install runs in a
         // world's `init`, near its energy budget on the island).
         let joined = s.status_of(&b).map_err(|e| format!("install refused: {e} ({})", about()))?;
-        // The reference, run once on the whole body (also counting its operations for the fuel
-        // report): the parts joined are `status_of` (docs/STATUS_PARTS.md), so a world that
-        // changes one changes the other.
-        let d = p.raw("status_of", (b.map_for_check(),), &about)?;
-        let law = super::body::read_status(d).map_err(|e| format!("install refused: {e} ({})", about()))?;
+        // The reference, run on the whole body (also counting its operations for the fuel report)
+        // once for each state the law can tell apart: the parts joined are `status_of`
+        // (docs/STATUS_PARTS.md), so a world that changes one changes the other.
+        let key = reads.as_ref().map(|r| b.key_of_reads(r));
+        let law = match key.as_ref().and_then(|k| answered.get(k)) {
+            Some(law) => law.clone(),
+            None => {
+                let d = p.raw("status_of", (b.map_for_check(),), &about)?;
+                let law = super::body::read_status(d).map_err(|e| format!("install refused: {e} ({})", about()))?;
+                if let Some(k) = key {
+                    answered.insert(k, law.clone());
+                }
+                law
+            },
+        };
         if *joined != law {
             let names = |v: &[super::Status]| v.iter().map(|x| x.name.as_str()).collect::<Vec<_>>().join(", ");
             return Err(format!(

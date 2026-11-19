@@ -403,6 +403,34 @@ impl BodyFacts {
         k
     }
 
+    /// The values of the facts `reads` names alone, `kind`, `stage` and `night` only when named:
+    /// two bodies with the same key get the same answer from a law that reads only those.
+    pub(super) fn key_of_reads(&self, reads: &BTreeSet<String>) -> Vec<u8> {
+        let mut k = Vec::with_capacity(16 + reads.len() * 9);
+        if reads.contains("kind") {
+            k.extend(self.kind.as_bytes());
+        }
+        k.push(0);
+        if reads.contains("stage") {
+            k.extend(self.stage.as_bytes());
+        }
+        k.push(0);
+        k.push(if reads.contains("night") { self.night as u8 } else { 2 });
+        for (n, v) in self.fields.iter().filter(|(n, _)| reads.contains(n)) {
+            k.extend(n.as_bytes());
+            k.push(0);
+            k.extend(v.to_le_bytes());
+        }
+        for (n, v) in &self.share {
+            if reads.contains(&format!("share.{n}")) {
+                k.extend(n.as_bytes());
+                k.push(1);
+                k.extend(v.to_le_bytes());
+            }
+        }
+        k
+    }
+
     fn key(&self) -> Vec<u8> {
         let mut k = Vec::with_capacity(16 + self.fields.len() * 8);
         k.extend(self.kind.as_bytes());
