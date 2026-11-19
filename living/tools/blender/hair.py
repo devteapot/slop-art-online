@@ -949,6 +949,13 @@ class Hair:
             n = int(np.clip(round(total / seg), 3 if self.detail >= 1 else 2, 22))
             pts, on, s = self._resample(path, touch, n)
             pts = self._wave(pts, on, s, k)
+            if k["chain"] >= 0 and self.chains[k["chain"]]["name"].startswith("Front") and "front" in self.comb.b:
+                body = self.comb.b
+                across = np.sqrt(np.maximum(1 - (pts[:, 0] / body["half_w"])**2, 0.0))
+                chest = body["torso_y"] + np.interp(pts[:, 2], *body["front"]) * across
+                contact = smooth((body["shoulder_z"] + 0.075 - pts[:, 2]) / 0.085)
+                pts[:, 1] += contact * (chest + 0.021 - pts[:, 1])
+                s = np.r_[0.0, np.cumsum(np.linalg.norm(np.diff(pts, axis=0), axis=1))]
             col = self._lock_colour(k, base, tipc, silver, grey)
             first = len(self.v)
             self._ribbon(pts, on, s, k, col)
