@@ -1,0 +1,34 @@
+[
+  {
+    "body": "woman",
+    "root_joint": "J_Sec_Hair1_01",
+    "root_scalp_mm_in_rig_space": 0.016,
+    "braid_triangles_intersecting_upper_back_and_collar": 0,
+    "left_ear_landmark_rays_open_of_3": 3,
+    "right_ear_landmark_rays_open_of_3": 3
+  },
+  {
+    "body": "man",
+    "root_joint": "J_Sec_Hair1_01",
+    "root_scalp_mm_in_rig_space": 0.812,
+    "braid_triangles_intersecting_upper_back_and_collar": 173,
+    "left_ear_landmark_rays_open_of_3": 1,
+    "right_ear_landmark_rays_open_of_3": 1
+  },
+  {
+    "body": "elder",
+    "root_joint": "J_Sec_Hair1_01",
+    "root_scalp_mm_in_rig_space": 0.77,
+    "braid_triangles_intersecting_upper_back_and_collar": 328,
+    "left_ear_landmark_rays_open_of_3": 1,
+    "right_ear_landmark_rays_open_of_3": 1
+  },
+  {
+    "body": "girl",
+    "root_joint": "J_Sec_Hair1_01",
+    "root_scalp_mm_in_rig_space": 1.592,
+    "braid_triangles_intersecting_upper_back_and_collar": 0,
+    "left_ear_landmark_rays_open_of_3": 3,
+    "right_ear_landmark_rays_open_of_3": 3
+  }
+]

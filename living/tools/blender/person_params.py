@@ -270,7 +270,7 @@ def draw(given=None):
     p["beard"] = dict(style=bs, stubble=round(u("beard.stubble", 0.25, 1.0) if bs == "stubble" else (u("beard.stubble", 0.0, 0.45) if male and age >= 17 else 0.0), 2))
     # Clothes, in Cullet's cloth.
     if child:
-        coat = pick("outfit.coat", COATS, (0, 3, 6) if male else (0, 9, 1))
+        coat = pick("outfit.coat", COATS, (1, 3, 6) if male else (1, 8, 1))
         head = "none"
     elif male:
         coat = pick("outfit.coat", COATS, (5, 3, 2))
@@ -319,6 +319,24 @@ def cloth(seed, name, value):
         raise SystemExit(f"{name}: {value!r} is not one of {sorted(CLOTH)} or an [r, g, b] list")
     a, b, lo, hi = CLOTH[value]
     return mix(PAL[a], PAL[b], rnd(seed, f"cloth.{name}").uniform(lo, hi))
+
+
+def value_dye(rgb, target):
+    """Move a dye toward black or white to reach a linear luminance."""
+    linear = [c / 12.92 if c <= .04045 else ((c + .055) / 1.055)**2.4 for c in rgb]
+    value = sum(c * w for c, w in zip(linear, (.2126, .7152, .0722)))
+    if value <= 1e-8:
+        linear = [target] * 3
+    else:
+        gain = min(target / value, 1 / max(linear))
+        linear = [c * gain for c in linear]
+        # A saturated channel caps the dye gain. Lift toward neutral only for
+        # the remaining luminance that the original chromaticity cannot reach.
+        reached = value * gain
+        if target > reached:
+            lift = (target - reached) / (1 - reached)
+            linear = [c + lift * (1 - c) for c in linear]
+    return tuple(c * 12.92 if c <= .0031308 else 1.055 * c**(1/2.4) - .055 for c in linear)
 
 
 def resolve(p):
@@ -414,12 +432,21 @@ def resolve(p):
         hair_style=hair_p["style"], hair_length=hair_p.get("length", 0.07), recede=0.024 * clip(hair_p.get("recede", 0.0), 0, 1),
         hair=dict(style=hair_p["style"], length=float(hair_p.get("length", 0.07)), parting=float(hair_p.get("parting", 0.0)), fringe=float(hair_p.get("fringe", 0.7)), volume=float(hair_p.get("volume", 0.5)),
                   curl=float(hair_p.get("curl", 0.0)), fringe_style=hair_p.get("fringe_style", "auto")),
+        braid_ease=float(hair_p.get("back_ease", (.034 + .030 * max(0, w)) if male and age >= 15 else 0)),
         bald=smooth((clip(hair_p.get("recede", 0.0), 0, 1) - 0.55) / 0.40) if hair_p["style"] == "balding" else 0.0,
         beard=style if male else "none", coat=None if outfit["coat"] == "none" else outfit["coat"], headwear=None if outfit["headwear"] == "none" else outfit["headwear"],
         coat_colour=cloth(seed, "coat", outfit["coat_colour"]), jersey=cloth(seed, "jersey", outfit["jersey_colour"]), headwear_colour=cloth(seed, "headwear", outfit["headwear_colour"]),
         patches=(cloth(seed, "patch1", "canvas"), cloth(seed, "patch2", "olive"), cloth(seed, "patch3", "red")), apron=bool(outfit.get("apron", False)), hem=float(outfit.get("hem", 0.74)),
         recipe=recipe,
     )
+    if spec["coat"] == "coat":
+        spec["coat_cut"] = outfit.get("coat_cut", seed % 3)
+        if type(spec["coat_cut"]) is not int or spec["coat_cut"] not in (0, 1, 2):
+            raise ValueError("outfit.coat_cut must be 0, 1 or 2")
+        house = rnd(p.get("household", p.get("family", seed)), "wardrobe.house")
+        wearer = rnd(seed, "wardrobe.wearer")
+        spec["coat_colour"] = value_dye(spec["coat_colour"], house.uniform(.25, .34))
+        spec["jersey"] = value_dye(spec["jersey"], wearer.uniform(.075, .105))
     if typed:
         spec["person"] = person_line(spec, recipe, male)
     return spec
@@ -558,7 +585,7 @@ COLLARED = ("long", "tail", "braid")
 # The styles that lie on the back and that men or children also wear are written a second time,
 # `<style>[.N][.collar].m`, combed over a man's back: a woman's back lies up to 5 cm further
 # forward under the same head, so one file cannot lie on both (docs/CHARACTERS.md, "The body").
-MAN_BACKED = ("long", "tail", "braids")
+MAN_BACKED = ("long", "tail", "braid", "braids")
 CUTS = 3  # how many cuts of each style are written: `<style>`, `<style>.2`, `<style>.3`, each with its own length, parting, fringe and volume
 STYLE_HEAD = "adult-f-b"  # the head every shared hair style is built on; a type's file carries its fit onto that type (hair_fit.py)
 
@@ -567,16 +594,19 @@ def from_style(style):
     """The figure a shared hair style's file is built on (`style:<name>`): the standard head with
     every identity value at 0, and the style at the lengths and parting its own seed draws."""
     parts = style.split(".")
-    man = parts[-1] == "m"  # as it lies on a man's or a child's back
+    full_back = parts[-1] == "full"
+    man = parts[-1] == "m" or full_back  # as it lies on a man's or a child's back
     parts = parts[:-1] if man else parts
     style, under, cut = parts[0], ("cap" if parts[-1] == "cap" else ""), next((int(x) for x in parts[1:] if x.isdigit()), 1)
     collar = parts[-1] == "collar"
-    if style not in STYLES or (under and style not in CAPPED) or (collar and style not in COLLARED) or (man and style not in MAN_BACKED) or not 1 <= cut <= CUTS or len(parts) > 1 + bool(under) + collar + (cut > 1):
+    if (full_back and style != "braid") or style not in STYLES or (under and style not in CAPPED) or (collar and style not in COLLARED) or (man and style not in MAN_BACKED) or not 1 <= cut <= CUTS or len(parts) > 1 + bool(under) + collar + (cut > 1):
         raise SystemExit(f"style {'.'.join(parts)!r}: one of {STYLES}, with `.2` to `.{CUTS}` for another cut, `.cap` for {CAPPED} under a cap, `.collar` for {COLLARED} over a coat and a last `.m` for {MAN_BACKED} on a man's back")
     male = style in ("short", "crop", "swept", "sides", "shag", "tousled", "balding")
     # Another cut is the same style from another seed: the generator draws its length, parting,
     # fringe, volume and curl from it, as it did for each person.
     hair = dict(style=style)
+    if style == "braid" and man:
+        hair["back_ease"] = .064 if full_back else .034
     if style == "balding":
         # The crown is bald by how far the hairline has receded, and at the standard figure's age
         # a seed draws almost none: until the sheets step this style's file had a full head of hair.
@@ -590,7 +620,8 @@ def from_style(style):
 # and limbs are built differently); a piece worn on the head is fitted like hair.
 PIECES = dict(
     jersey=(dict(coat="none"), ("Jersey",)), jersey_coat=(dict(coat="coat"), ("Jersey",)), jersey_smock=(dict(coat="smock", hem=0.58), ("Jersey",)),
-    coat=(dict(coat="coat"), ("Coat", "Buttons")), trousers=(dict(coat="none"), ("Trousers",)), boots=(dict(coat="none"), ("Boots",)),
+    coat=(dict(coat="coat", coat_cut=0), ("Coat", "Buttons")),
+    **{f"coat_{cut}": (dict(coat="coat", coat_cut=cut), ("Coat", "Buttons")) for cut in (1, 2)}, trousers=(dict(coat="none"), ("Trousers",)), boots=(dict(coat="none"), ("Boots",)),
     **{f"smock_{round(h * 100)}": (dict(coat="smock", hem=h, apron=False), ("Smock",)) for h in (0.50, 0.58, 0.74)},
     **{f"apron_{round(h * 100)}": (dict(coat="smock", hem=h, apron=True), ("Apron",)) for h in (0.50, 0.58, 0.74)},
     smock_bands=(dict(coat="smock", hem=0.58, apron=False), ("SmockBands",)),  # the bands round a smock's sleeves, the same on every length
@@ -677,7 +708,8 @@ def worn(spec):
     form = "f" if spec["woman_torso"] else "m"
     coat, head = spec["coat"], spec["headwear"]
     if coat == "coat":
-        top = [f"coat-{form}", f"jersey_coat-{form}"]
+        coat_piece = "coat" if spec["coat_cut"] == 0 else f"coat_{spec['coat_cut']}"
+        top = [f"{coat_piece}-{form}", f"jersey_coat-{form}"]
     elif coat == "smock":
         hem = int(round(max(spec["hem"], 0.50) * 100))
         top = [f"smock_{hem}-{form}", f"smock_bands-{form}", f"jersey_smock-{form}"] + ([f"apron_{hem}-{form}"] if spec["apron"] else [])
@@ -689,7 +721,13 @@ def worn(spec):
     if coat == "coat" and style in COLLARED and head != "kerchief":
         hair += ".collar"  # the cut as combed over a coat's collar
     if form == "m" and style in MAN_BACKED and head != "kerchief" and not hair.endswith(".cap"):
-        hair += ".m"  # as it lies on a man's or a child's back
+        if style == "braid":
+            if spec["braid_ease"] > .049:
+                hair += ".full"
+            elif spec["braid_ease"] > .015:
+                hair += ".m"
+        else:
+            hair += ".m"  # as it lies on a man's or a child's back
     return hair, top + [f"trousers-{form}", f"boots-{form}"], [head] if head else []
 
 

@@ -634,7 +634,7 @@ def arm_w(x):
     return blend(("J_Bip_L_Shoulder", sh), ("J_Bip_L_UpperArm", (1 - sh) * (1 - lower)), ("J_Bip_L_LowerArm", lower * (1 - hand)), ("J_Bip_L_Hand", lower * hand))
 
 
-def upper_garment(part, d, zs, hem, cuff, collar, front=None, skirt=0.0, tag_fn=None, cols=None, neck_d=None, tuck=None, folds=0.0):
+def upper_garment(part, d, zs, hem, cuff, collar, front=None, skirt=0.0, tag_fn=None, cols=None, neck_d=None, tuck=None, folds=0.0, neckline=0.0):
     """The left half of a torso-and-arms garment at offset d from the body.
 
     zs: ring heights from the hem up to the armpit ring (exclusive of it); hem / cuff / collar
@@ -663,7 +663,7 @@ def upper_garment(part, d, zs, hem, cuff, collar, front=None, skirt=0.0, tag_fn=
     rr = HOLE_R + d
     for name, ang in (("A4", 315), ("A5", 270), ("A6", 225), ("M6", 180), ("T6", 135), ("T5", 90), ("T4", 45), ("M4", 0)):
         a = math.radians(ang)
-        hole[name] = SHOULDER + Vector((-d * 0.6 - 0.004 * abs(math.sin(a)), rr * 0.98 * math.cos(a), rr * math.sin(a)))
+        hole[name] = SHOULDER + Vector((-d * 0.6 - 0.004 * abs(math.sin(a)), rr * 0.98 * math.cos(a), rr * math.sin(a) - 0.014 * max(0.0, math.sin(a))))
     zA, zM = 1.375, 1.42
 
     def shoulder_w(pos, base):
@@ -715,7 +715,11 @@ def upper_garment(part, d, zs, hem, cuff, collar, front=None, skirt=0.0, tag_fn=
             phi = math.asin(min(front(1.5) / (base + dr), 1.0))
         s, c = math.sin(phi), math.cos(phi)
         z = 1.488 + 0.016 * smooth(k / 5.0) + dz
-        return Vector((-(base + dr) * s, cage_head.NECK_Y - 0.002 + (base * 1.08 + dr) * c, z))
+        # Positive depth gives a scoop; a negative depth tapers the opening to a V.
+        front_share = max(0.0, c)
+        opening = abs(neckline) * (front_share ** 2 if neckline >= 0 else max(0.0, front_share - abs(s)) ** 1.3)
+        return Vector((-(base + dr + abs(neckline) * 0.34) * s,
+                       cage_head.NECK_Y - 0.002 + (base * 1.08 + dr) * c + opening * 0.90, z - opening))
 
     prev = rowT
     neck_x = across(blend(("J_Bip_C_UpperChest", 0.6), ("J_Bip_C_Neck", 0.4)))  # the weights of the last step below
@@ -726,7 +730,7 @@ def upper_garment(part, d, zs, hem, cuff, collar, front=None, skirt=0.0, tag_fn=
             a = part.co[rowT[i]]
             b = neck_point(k)
             b.x /= neck_x  # the neck hole stays round where the shoulders' bones are scaled across
-            pos = a.lerp(b, t) + Vector((0, 0, -0.006 * math.sin(PI * t)))
+            pos = a.lerp(b, t) + Vector((0, 0, -0.010 * math.sin(PI * t) * abs(math.sin(2 * PI * k / NT))))
             neck = 0.4 * smooth((t - 0.3) / 0.7)
             cur.append(part.v(pos, shoulder_w(pos, blend(("J_Bip_C_UpperChest", 1 - neck), ("J_Bip_C_Neck", neck)))))
         r = len(rows) - 2 + step
@@ -739,7 +743,7 @@ def upper_garment(part, d, zs, hem, cuff, collar, front=None, skirt=0.0, tag_fn=
     for dz, dr, w in collar:
         cur = []
         for k in ks:
-            pos = neck_point(k, dz, dr)
+            pos = neck_point(k, (0.55 if neckline else 1.0) * dz, dr)
             pos.x /= across(w)
             cur.append(part.v(pos, w))
         for i in range(len(ks) - 1):
@@ -768,8 +772,14 @@ def upper_garment(part, d, zs, hem, cuff, collar, front=None, skirt=0.0, tag_fn=
     stations = [s for s in ARM if s[0] >= cuff[0] + 1e-6]
     n = 0
     for x, ry, rz in stations + [(cuff[0], *table(ARM_X, cuff[0]))]:
-        cur = ring(part, (x, ARM_Y, ARM_Z), (0, 1, 0), (0, 0, 1), ry * LIMB_K + d, rz * LIMB_K + d, 8, arm_w(x))
-        part.band(prev, cur, n, n + 1, tag=tag_fn("sleeve", 0, n))
+        cur = ring(part, (x, ARM_Y, ARM_Z - 0.010 * max(0.0, 1.0 - n / 2)), (0, 1, 0), (0, 0, 1), ry * LIMB_K + d, rz * LIMB_K + d, 8, arm_w(x))
+        if n == 0:
+            # Use the existing first sleeve ring for the narrow set-in seam.
+            # The next span carries the sleeve cap over the deltoid.
+            for inner, outer in zip(rim, cur):
+                part.co[outer] = part.co[inner].lerp(part.co[outer], 0.24)
+        sleeve_tag = tag_fn("sleeve", 0, n)
+        part.band(prev, cur, n, n + 1, tag=10 if n == 0 and sleeve_tag == 0 else sleeve_tag)
         prev = cur
         n += 1
     for dx, dd in cuff[1]:
@@ -1466,6 +1476,7 @@ def far_beard(arm, m, look):
 
 
 NECK_R = 0.0316  # the neck's radius (head_form.neck_radius), set for the person in configure
+NECK_FLARE = 1.58  # lateral radius at the exposed lower neck, in neck radii
 NECK_EASE = 0.004  # how far off the neck a garment's neck hole lies, before the garment's own distance off the body
 
 
@@ -1485,12 +1496,29 @@ def make_neck(arm):
         # A typed head brings the neck's top with it: the tube ends where the head's ring begins.
         stations = stations[:3]
     prev = None
+    lateral = [n * 2.85, n * NECK_FLARE]
     for i, (z, cy, r, w) in enumerate(stations):
-        cur = ring(part, (0, cy, z), (1, 0, 0), (0, 1, 0), r / across(w), r * 1.04, 10, w)
+        # The trapezius widens the lower side contour while the throat keeps its depth.
+        side_radius = lateral[i] if i < len(lateral) else r
+        cur = ring(part, (0, cy, z), (1, 0, 0), (0, 1, 0), side_radius / across(w), r * 1.04, 10, w)
+        if i == 0:
+            # Extend the front of the basal ring under an open neckline. The sides
+            # retain the measured trapezius width; the throat above keeps its depth.
+            for j, vertex in enumerate(cur):
+                front = max(0.0, math.sin(2 * PI * j / len(cur)))
+                part.co[vertex].y += 0.035 * front
+                part.co[vertex].z -= 0.026 * front
         if prev:
             part.band(prev, cur, i - 1, i)
         prev = cur
-    return build(part, arm, MAT["skin"], lambda tag, u, v, co, n: mix(SKIN, SKIN_SHADE, 0.25 * smooth((1.56 - co.z) / 0.08)))
+    def skin_colour(tag, u, v, co, normal):
+        # The soft shadow beneath each clavicle runs up and out from the notch.
+        clavicle_z = 1.456 + 0.22 * abs(co.x)
+        front = smooth((co.y - y) / 0.026)
+        clavicle = front * math.exp(-((co.z - clavicle_z) / 0.006) ** 2)
+        return mix(SKIN, SKIN_SHADE, 0.25 * smooth((1.56 - co.z) / 0.08) + 0.18 * clavicle)
+
+    return build(part, arm, MAT["skin"], skin_colour)
 
 
 # ---------------------------------------------------------------------------------------------
@@ -1644,7 +1672,7 @@ def make_hair(arm, spec, pos, quads, covered=None, bones=None):
     back = back_table()
     thick = dict(coat=0.015, smock=0.014).get(wears, 0.0)
     half_w, half_d = shoulder_half()
-    body = dict(neck_r=collar / HEAD_SCALE, neck_y=(cage_head.NECK_Y - HEAD.y) / HEAD_SCALE, neck_top=HF.chin_z + 0.022, shoulder_z=hd(1.468 + (0.030 if wears else 0.014)),
+    body = dict(braid_ease=spec["braid_ease"] / HEAD_SCALE, belt_z=hd(1.13 if STANCE else 1.06), neck_r=collar / HEAD_SCALE, neck_y=(cage_head.NECK_Y - HEAD.y) / HEAD_SCALE, neck_top=HF.chin_z + 0.022, shoulder_z=hd(1.468 + (0.030 if wears else 0.014)),
                 half_w=(half_w + 0.035) / HEAD_SCALE, half_d=(half_d + 0.035) / HEAD_SCALE, torso_y=(0.0 - HEAD.y) / HEAD_SCALE, round=0.05 / HEAD_SCALE,
                 collar=(np.array([hd(z) for z in cone[0]]), np.array(cone[1]) / HEAD_SCALE), back=(np.array([hd(z) for z in back[0]]), (np.array(back[1]) + thick * GIRTH) / HEAD_SCALE))
     h = hair.Hair(HF, hs, hairline, covered=covered, bald=bald_depth, body=body, detail=0.4 if FAR else 1.0)
@@ -2021,11 +2049,11 @@ def head_point(az, z):
     return p
 
 
-def make_buttons(arm):
+def make_buttons(arm, opening):
     """Horn toggles down the coat's left front edge."""
     verts, faces, cols, weights = [], [], [], []
     for z in (1.36, 1.24, 1.12, 1.00):
-        edge = lerp(0.058, 0.026, smooth((z - 0.70) / 0.75))
+        edge = opening(z)
         p = torso_point(z, 1, 0.024, 1.0, edge=edge + 0.020)
         nrm = Vector((-0.25, 1, 0)).normalized()
         e1 = Vector((1, 0.25, 0)).normalized()
@@ -2152,6 +2180,8 @@ def jersey_colour(base):
         c = mix(base, (0, 0, 0), 0.16 * rib)
         if tag in (2, 3):
             c = mix(c, (0, 0, 0), 0.12)
+        if tag == 10:
+            c = mix(c, (0, 0, 0), 0.26 * math.exp(-((v - 0.18) / 0.23) ** 2))
         return mottle(c, co, 0.06)
 
     return colour
@@ -2193,6 +2223,8 @@ def coat_colour(base, patches, bands=False):
         c = relit(c, level * lerp(1.0, HEM_TONE, low) * lerp(1.0, SHOULDER_TONE, high))
         if tag in (4, 5, 6):  # patches: other cloth, never matching, at a set tone of this one
             c = patches[tag - 4] if bands else relit(patches[tag - 4], level * PATCH_TONES[tag - 4])
+        elif tag == 10:  # the set-in sleeve seam
+            c = relit(c, lightness(c) * (1.0 - 0.42 * math.exp(-((v - 0.18) / 0.23) ** 2)))
         elif tag == 7:  # collar lining
             c = relit(mix(PAL["kelp"], PAL["tar"], 0.3), level * LINING_TONE)
         elif tag == 8:  # an apron
@@ -2404,6 +2436,9 @@ def configure(spec):
         g["NECK_R"] = cage_head.neck_radius_of(face_types.load()["types"][spec["type"]])
     else:
         g["NECK_R"] = head_form.neck_radius(spec["masc"], spec["child"])
+    # Adult male types already have a broader column. Bound their exposed flare
+    # for the narrower heads the identity bones can give them (cut at -0.14H).
+    g["NECK_FLARE"] = 1.22 if typed and t["sex"] == "male" and t["band"] in ("adult", "elder") else 1.58
     # The chin stays where the neck expects it, whatever the face's length.
     g["HEAD"] = Vector((0, -0.004, 1.535 - HF.chin_z * HEAD_SCALE))
 
@@ -2424,7 +2459,7 @@ def build_person(arm, spec, atlas_path, body=False, bones=None):
         p = trousers(Part("BodyLegs"), 0.0, top=1.0, bottom=0.11).mirrored()
         obs.append(build(p, arm, MAT["skin"], lambda *a: SKIN))
     else:
-        # Jersey: a roll neck, ribbed cuffs and hem. Under a coat only its front, collar and cuffs
+        # Jersey: a V at the neck, ribbed cuffs and hem. Under a coat only its front, collar and cuffs
         # are kept; under a smock its collar and cuffs.
         def jtag(kind, k, r):
             if kind in ("collar", "cuff"):
@@ -2438,6 +2473,8 @@ def build_person(arm, spec, atlas_path, body=False, bones=None):
             return 0
 
         neck = {"J_Bip_C_Neck": 1.0}
+        # Keep the same V when the jersey is worn alone or under an open coat.
+        jersey_open = 0.0 if coat == "smock" else -.040
         p = upper_garment(
             Part("Jersey"), 0.008, [0.975, 1.01, 1.08, 1.16, 1.24, 1.32],
             hem=[(-0.030, 0.003), (-0.034, -0.006)], cuff=(-0.700, [(-0.012, 0.003), (-0.026, 0.003), (-0.028, -0.004)]),
@@ -2445,7 +2482,7 @@ def build_person(arm, spec, atlas_path, body=False, bones=None):
             # Tucked into the trousers (their top is at 1.087, 12 mm off the body): below it the
             # jersey lies 3 mm off the body where it lay 8, and its ribbed hem 11, a millimetre
             # inside the waistband, which showed through the back of it as slivers.
-            tuck=(1.10, 0.005),
+            tuck=(1.10, 0.005), neckline=jersey_open,
         ).mirrored()
         obs.append(build(p, arm, MAT["cloth"], jersey_colour(spec["jersey"])))
         chest = blend(("J_Bip_C_UpperChest", 0.75), ("J_Bip_C_Neck", 0.25))
@@ -2461,14 +2498,20 @@ def build_person(arm, spec, atlas_path, body=False, bones=None):
                     return 6  # one on the back
                 return 0
 
+            cut = person_params.rnd(spec["coat_cut"], "coat.cut")
+            hem_z = cut.uniform(.65, .73)
+            gap = cut.uniform(.048, .061)
+            cuff_depth = cut.uniform(.024, .038)
+            def opening(z):
+                return lerp(gap, .026, smooth((z - hem_z) / (1.45 - hem_z)))
             p = upper_garment(
-                Part("Coat"), 0.024, [0.70, 0.79, 0.88, 0.97, 1.06, 1.15, 1.24, 1.32],
-                hem=[], cuff=(-0.640, [(-0.030, 0.006)]), collar=[(0.020, 0.004, chest), (0.042, 0.009, chest)],
-                front=lambda z: lerp(0.058, 0.026, smooth((z - 0.70) / 0.75)), skirt=1.0, tag_fn=ctag, neck_d=0.019,
+                Part("Coat"), 0.024, [hem_z, 0.79, 0.88, 0.97, 1.06, 1.15, 1.24, 1.32],
+                hem=[], cuff=(-0.657, [(-.004, .007), (-cuff_depth, .008), (-cuff_depth-.002, .002)]), collar=[(0.020, 0.004, chest), (0.042, 0.009, chest)],
+                front=opening, skirt=1.0, tag_fn=ctag, neck_d=0.019, neckline=-0.038 if STANCE else -0.012,
             ).mirrored()
             obs.append(build(p, arm, MAT["cloth"], coat_colour(spec["coat_colour"], spec["patches"]), solid=0.006))
             if not FAR:
-                obs.append(make_buttons(arm))
+                obs.append(make_buttons(arm, opening))
         elif coat == "smock":
             # A pull-over smock to the knee, an apron tied over it.
             zs = [z for z in (0.50, 0.58, 0.66, 0.74, 0.82, 0.90, 0.98, 1.06, 1.13, 1.20, 1.26, 1.32) if z >= hem - 1e-6]
@@ -2801,6 +2844,10 @@ def join_kinds(obs, far=False):
                 bpy.ops.object.join()
         lead.name = ("Far" if far else "") + kind
         lead.data.name = lead.name
+        if kind == "Cloth":
+            attrs = lead.data.color_attributes
+            attrs.active_color = attrs["Color"]
+            attrs.render_color_index = attrs.active_color_index
         out.append(lead)
     return out
 
@@ -2903,6 +2950,10 @@ def add_vrm(path, title, springs=None, skirts=None):
     b = open(path, "rb").read()
     jl = struct.unpack("<I", b[12:16])[0]
     j = json.loads(b[20 : 20 + jl])
+    for mesh in j["meshes"]:
+        if mesh.get("name") in ("Cloth", "FarCloth"):
+            if any("COLOR_0" not in prim["attributes"] for prim in mesh["primitives"]):
+                raise ValueError(f"{path}: missing COLOR_0 on {mesh['name']}")
     rest = b[20 + jl :]
     nodes = {n.get("name"): i for i, n in enumerate(j["nodes"])}
     bones = [{"bone": "leftEye", "node": nodes["J_Adj_L_FaceEye"], "useDefaultValues": True}, {"bone": "rightEye", "node": nodes["J_Adj_R_FaceEye"], "useDefaultValues": True}]
@@ -3054,6 +3105,10 @@ def main():
         if a.atelier and not far:
             from authored import atelier
             atelier.dress(parts, arm, spec, raw_object)
+        elif not far and not a.body and spec["coat"] == "coat":
+            from authored import garment_panels
+            garment = next(ob for ob in parts if ob.name.split(".")[0] == "Coat")
+            parts.extend(garment_panels.fitted(garment, arm, raw_object, spec["coat_colour"]))
         shaded = False
         if a.parts == "keep" and not a.no_shade:
             # An outfit piece is shaded as it is worn, with the rest of the outfit and the body
