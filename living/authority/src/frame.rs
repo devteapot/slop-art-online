@@ -179,6 +179,8 @@ struct Viewer {
     /// sequence number then.
     pending: HashMap<u32, u8>,
     pending_seq: u64,
+    /// Near creatures whose cue the budget deferred, and the cue tick it was first deferred at.
+    deferred: HashMap<u32, u64>,
     /// Reconcile every creature in the scene at the next frame (a fresh instance, a step this
     /// instance did not see commit: what it was sent is unknown).
     reconcile: bool,
@@ -186,7 +188,7 @@ struct Viewer {
 
 impl Viewer {
     fn new(who: Identity) -> Self {
-        Self { who, scene: None, seq: 0, full: true, last_ms: 0, lines_ms: 0, band_ms: 0, band_seq: 0, events: Vec::new(), feed: VecDeque::new(), senses_ms: 0, senses: None, earshot_ms: 0, earshot: None, near: HashSet::new(), near_ms: 0, near_seq: 0, cued: HashMap::new(), pending: HashMap::new(), pending_seq: 0, reconcile: true }
+        Self { who, scene: None, seq: 0, full: true, last_ms: 0, lines_ms: 0, band_ms: 0, band_seq: 0, events: Vec::new(), feed: VecDeque::new(), senses_ms: 0, senses: None, earshot_ms: 0, earshot: None, near: HashSet::new(), near_ms: 0, near_seq: 0, cued: HashMap::new(), pending: HashMap::new(), pending_seq: 0, deferred: HashMap::new(), reconcile: true }
     }
 }
 
@@ -205,6 +207,8 @@ thread_local! {
     /// read again for creatures whose rows were written (`TARGET_DIRTY`).
     static TARGETS: RefCell<HashMap<u32, Targets>> = RefCell::new(HashMap::new());
     static TARGET_DIRTY: RefCell<HashSet<u32>> = RefCell::new(HashSet::new());
+    /// Each viewer's creatures engaged with it at the last tick (its near tier holds them first).
+    static ENGAGED: RefCell<HashMap<u32, HashSet<u32>>> = RefCell::new(HashMap::new());
     /// Profiling only: when each creature's recent changes were marked (sequence, ms), for the
     /// staleness of deliveries (`frame_trace`).
     static CHANGES: RefCell<HashMap<u32, VecDeque<(u64, u64)>>> = RefCell::new(HashMap::new());
@@ -337,22 +341,27 @@ pub fn scene(ctx: &ReducerContext, id: u32, who: Identity, seen: &HashSet<u32>, 
             *e = Viewer::new(who);
         }
         e.scene = Some(seen.clone());
-        // Within NEAR_M (NEAR_KEEP_M for one already near), the NEAR_MAX nearest; one already near
+        // First, whoever is engaged with it (its move or visible act aimed at the viewer, or the
+        // viewer's at it), at any distance in sight and past the cap. Then, in the slots left of
+        // NEAR_MAX, the nearest within NEAR_M (NEAR_KEEP_M for one already near); one already near
         // counts half a metre nearer, so a crowd's tier does not flap at the cut.
+        let engaged: HashSet<u32> = ENGAGED.with(|g| g.borrow().get(&id).map(|s| s.iter().copied().filter(|b| seen.contains(b)).collect()).unwrap_or_default());
+        let slots = NEAR_MAX.saturating_sub(engaged.len());
         let mut cand: Vec<(f32, u32)> = seen
             .iter()
+            .filter(|b| !engaged.contains(b))
             .filter_map(|b| {
                 let d = *dist.get(b)?;
                 let was = e.near.contains(b);
                 (d <= NEAR_M || (was && d <= NEAR_KEEP_M)).then_some((if was { d - 0.5 } else { d }, *b))
             })
             .collect();
-        if cand.len() > NEAR_MAX {
+        if cand.len() > slots {
             cand.sort_unstable_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
-            cand.truncate(NEAR_MAX);
+            cand.truncate(slots);
             common::diag(|| "cues:near_capped", 1);
         }
-        let near: HashSet<u32> = cand.into_iter().map(|(_, b)| b).collect();
+        let near: HashSet<u32> = engaged.iter().copied().chain(cand.into_iter().map(|(_, b)| b)).collect();
         let mut flips = Vec::new();
         NEAR_OF.with(|n| {
             let mut n = n.borrow_mut();
@@ -525,9 +534,13 @@ pub fn deliver(ctx: &ReducerContext, now: u64, swept: &[u32]) {
         VIEWERS.with(|v| v.borrow_mut().insert(id, e));
     }
     let phase = common::span("tick.cues");
+    // Who is engaged with whom this tick; those engaged with a viewer join its near tier at once.
+    let ids: HashSet<u32> = humans.iter().map(|(h, _)| *h).collect();
+    let engaged = engaged_of(ctx, now, &ids);
+    engaged_tiers(ctx, now, &engaged);
     if on {
         let cue_budget = (CUE_ROWS_PER_TICK * budget / FRAME_ROWS_PER_TICK).max(CUE_ROWS_MIN);
-        cues(ctx, now, &served, &humans, cue_budget, trace.as_mut());
+        cues(ctx, now, &served, &engaged, cue_budget, trace.as_mut());
     } else {
         // Nothing is owed while cues are off: what changes reaches clients at their frames.
         PENDING.with(|p| p.borrow_mut().clear());
@@ -585,11 +598,53 @@ fn engaged_of(ctx: &ReducerContext, now: u64, human: &HashSet<u32>) -> HashMap<u
 /// The tick's cues: each creature that changed since the last tick, to the viewers it is near or
 /// engaged with that had no frame in this tick (a frame wrote their copies already), and each
 /// viewer's newly near creatures that changed since its last frame.
-fn cues(ctx: &ReducerContext, now: u64, served: &HashSet<u32>, humans: &[(u32, Identity)], cue_budget: usize, mut trace: Option<&mut crate::frame_trace::Trace>) {
+/// Those engaged with a viewer (`engaged_of`: creature → viewers) and in its scene join its near
+/// tier at once, beyond `NEAR_M` and past `NEAR_MAX` (an archer aiming at it from 20 m outranks
+/// the twelfth bystander); its sweeps then rank them first (`scene`). Their copies move as they
+/// are now.
+fn engaged_tiers(ctx: &ReducerContext, now: u64, engaged: &HashMap<u32, Vec<u32>>) {
+    let mut by_viewer: HashMap<u32, HashSet<u32>> = HashMap::new();
+    for (&body, viewers) in engaged {
+        for &v in viewers {
+            by_viewer.entry(v).or_default().insert(body);
+        }
+    }
+    let flips: Vec<(u32, Identity, u32)> = VIEWERS.with(|v| {
+        let mut v = v.borrow_mut();
+        let mut out = Vec::new();
+        for (vid, bodies) in &by_viewer {
+            let Some(e) = v.get_mut(vid) else { continue };
+            let Some(scene) = e.scene.as_ref() else { continue };
+            let new: Vec<u32> = bodies.iter().copied().filter(|b| scene.contains(b) && !e.near.contains(b)).collect();
+            for b in new {
+                e.near.insert(b);
+                e.cued.remove(&b);
+                e.pending.remove(&b);
+                out.push((*vid, e.who, b));
+            }
+        }
+        out
+    });
+    NEAR_OF.with(|n| {
+        let mut n = n.borrow_mut();
+        for (vid, _, b) in &flips {
+            n.entry(*b).or_default().insert(*vid);
+        }
+    });
+    if !flips.is_empty() {
+        common::diag(|| "cues:engaged_near", flips.len() as u64);
+    }
+    for (vid, who, b) in flips {
+        show_motion(ctx, vid, b, true);
+        show_fighter(ctx, vid, who, b, true, true, now);
+        show_doing(ctx, vid, who, b, true);
+    }
+    ENGAGED.with(|e| *e.borrow_mut() = by_viewer);
+}
+
+fn cues(ctx: &ReducerContext, now: u64, served: &HashSet<u32>, engaged: &HashMap<u32, Vec<u32>>, cue_budget: usize, mut trace: Option<&mut crate::frame_trace::Trace>) {
     let pending = PENDING.with(|p| std::mem::take(&mut *p.borrow_mut()));
     let since = CUED_SEQ.with(|c| c.replace(SEQ.with(Cell::get)));
-    let ids: HashSet<u32> = humans.iter().map(|(h, _)| *h).collect();
-    let engaged = engaged_of(ctx, now, &ids);
     if let Some(t) = trace.as_deref_mut() {
         // Every near pair is looked at in every tick's cues (a change marked since the last).
         let pairs: usize = VIEWERS.with(|v| v.borrow().values().map(|e| e.near.len()).sum());
@@ -598,7 +653,7 @@ fn cues(ctx: &ReducerContext, now: u64, served: &HashSet<u32>, humans: &[(u32, I
     // (viewer, creature, streams, far, since): pairs engaged at once (from the far tier only when
     // the viewer had no frame in this tick: the frame wrote their copies); near pairs are kept for
     // the viewer's next cue tick.
-    let mut work: Vec<(u32, u32, u8, bool, u64, bool)> = Vec::new();
+    let mut work: Vec<Cue> = Vec::new();
     let mut held: Vec<(u32, u32, u8)> = Vec::new();
     NEAR_OF.with(|n| {
         let n = n.borrow();
@@ -656,20 +711,8 @@ fn cues(ctx: &ReducerContext, now: u64, served: &HashSet<u32>, humans: &[(u32, I
     });
     // The tick's budget of cue rows: engaged pairs first, then near ones in a turn that rotates by
     // tick; what is over waits as the viewer's pending cues.
-    let total: usize = work.iter().map(|w| w.2.count_ones() as usize).sum();
-    if total > cue_budget {
-        let turn = |viewer: u32| (viewer as u64).wrapping_mul(0x9E37_79B9).wrapping_add(tick.wrapping_mul(0x85EB_CA6B)) as u32;
-        work.sort_unstable_by_key(|w| (!w.5, turn(w.0), w.1));
-        let mut rows = 0;
-        let mut keep = work.len();
-        for (k, w) in work.iter().enumerate() {
-            rows += w.2.count_ones() as usize;
-            if rows > cue_budget && !w.5 {
-                keep = k;
-                break;
-            }
-        }
-        let late = work.split_off(keep);
+    let late = over_budget(&mut work, cue_budget, tick);
+    if !late.is_empty() {
         common::diag(|| "cues:deferred", late.len() as u64);
         VIEWERS.with(|v| {
             let mut v = v.borrow_mut();
@@ -680,10 +723,10 @@ fn cues(ctx: &ReducerContext, now: u64, served: &HashSet<u32>, humans: &[(u32, I
                     }
                     e.pending_seq = e.pending_seq.min(since);
                     *e.pending.entry(body).or_default() |= bits;
+                    e.deferred.entry(body).or_insert(tick);
                 }
             }
         });
-        work.sort_unstable_by_key(|w| (w.0, w.1));
     }
     let mut rows = 0u64;
     let mut i = 0;
@@ -694,7 +737,11 @@ fn cues(ctx: &ReducerContext, now: u64, served: &HashSet<u32>, humans: &[(u32, I
             let mut v = v.borrow_mut();
             let Some(e) = v.get_mut(&viewer) else { return };
             let Some(scene) = e.scene.as_ref() else { return };
-            for &(_, body, bits, far, since, _) in &work[i..j] {
+            for &(_, body, bits, far, since, urgent) in &work[i..j] {
+                let waited = e.deferred.remove(&body).map(|t| tick - t);
+                if let Some(t) = trace.as_deref_mut() {
+                    t.waited(waited.unwrap_or(0), urgent);
+                }
                 if !scene.contains(&body) {
                     continue;
                 }
@@ -716,6 +763,33 @@ fn cues(ctx: &ReducerContext, now: u64, served: &HashSet<u32>, humans: &[(u32, I
         i = j;
     }
     common::diag(|| "cues:rows", rows);
+}
+
+/// One cue to send: (viewer, creature, streams, from the far tier, changes since, engaged).
+type Cue = (u32, u32, u8, bool, u64, bool);
+
+/// Keep within `budget` cue rows: every engaged pair (whatever the budget), then near pairs in a
+/// turn that rotates with `tick`. Returns the near pairs over it (they wait for the next tick);
+/// `work` stays sorted by viewer and creature.
+fn over_budget(work: &mut Vec<Cue>, budget: usize, tick: u64) -> Vec<Cue> {
+    let total: usize = work.iter().map(|w| w.2.count_ones() as usize).sum();
+    if total <= budget {
+        return Vec::new();
+    }
+    let turn = |viewer: u32| (viewer as u64).wrapping_mul(0x9E37_79B9).wrapping_add(tick.wrapping_mul(0x85EB_CA6B)) as u32;
+    work.sort_unstable_by_key(|w| (!w.5, turn(w.0), w.1));
+    let mut rows = 0;
+    let mut keep = work.len();
+    for (k, w) in work.iter().enumerate() {
+        rows += w.2.count_ones() as usize;
+        if rows > budget && !w.5 {
+            keep = k;
+            break;
+        }
+    }
+    let late = work.split_off(keep);
+    work.sort_unstable_by_key(|w| (w.0, w.1));
+    late
 }
 
 /// Send `viewer` (`who`) cues of the streams `bits` of `body`, as its copies would hold them now.
@@ -1105,5 +1179,42 @@ pub fn catch_up_lines(ctx: &ReducerContext, id: u32) {
         if ctx.db.line_seen().id().find(e.id).is_none() {
             line(ctx, e);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn cue(viewer: u32, body: u32, engaged: bool) -> Cue {
+        (viewer, body, MOTION, false, 0, engaged)
+    }
+
+    #[test]
+    fn the_cue_budget_keeps_every_engaged_pair_first() {
+        // 10 engaged pairs and 100 near ones, budget 20: all 10 engaged and 10 near go.
+        let mut work: Vec<Cue> = (0..10).map(|i| cue(i, 1000 + i, true)).chain((0..100).map(|i| cue(i % 7, i, false))).collect();
+        let late = over_budget(&mut work, 20, 3);
+        assert_eq!(work.len(), 20);
+        assert_eq!(work.iter().filter(|w| w.5).count(), 10);
+        assert_eq!(late.len(), 90);
+        assert!(late.iter().all(|w| !w.5), "an engaged pair was deferred");
+        assert!(work.windows(2).all(|p| (p[0].0, p[0].1) <= (p[1].0, p[1].1)), "kept work is sorted by viewer and creature");
+        // More engaged pairs than the budget: all of them still go, no near one does.
+        let mut work: Vec<Cue> = (0..30).map(|i| cue(i, i, true)).chain((0..5).map(|i| cue(i, 500 + i, false))).collect();
+        let late = over_budget(&mut work, 20, 4);
+        assert_eq!(work.len(), 30);
+        assert!(work.iter().all(|w| w.5));
+        assert_eq!(late.len(), 5);
+        // Within budget: nothing deferred.
+        let mut work: Vec<Cue> = (0..5).map(|i| cue(i, i, false)).collect();
+        assert!(over_budget(&mut work, 20, 5).is_empty());
+        // The near pairs kept rotate with the tick: different ticks favour different viewers.
+        let near = |tick| {
+            let mut w: Vec<Cue> = (0..50).map(|i| cue(i, i, false)).collect();
+            over_budget(&mut w, 10, tick);
+            w.iter().map(|c| c.0).collect::<Vec<_>>()
+        };
+        assert_ne!(near(1), near(2));
     }
 }

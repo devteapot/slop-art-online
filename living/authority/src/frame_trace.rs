@@ -22,6 +22,8 @@ pub(crate) struct Trace {
     /// Staleness (ms) from a creature's first change not yet delivered to its delivery → (frame
     /// writes, of which near, cues).
     stale: BTreeMap<u64, (u32, u32, u32)>,
+    /// Ticks a sent cue had waited over the budget → (near cues, engaged cues).
+    waited: BTreeMap<u64, (u32, u32)>,
 }
 
 impl Trace {
@@ -46,6 +48,16 @@ impl Trace {
         }
     }
 
+    /// A cue went out `ticks` after the budget first deferred it (0: not deferred).
+    pub fn waited(&mut self, ticks: u64, engaged: bool) {
+        let w = self.waited.entry(ticks).or_default();
+        if engaged {
+            w.1 += 1;
+        } else {
+            w.0 += 1;
+        }
+    }
+
     /// A change reached a viewer `ms` after it was made, by a frame's copy or by a cue.
     pub fn stale(&mut self, ms: u64, near: bool, cue: bool) {
         let s = self.stale.entry(ms).or_default();
@@ -62,6 +74,10 @@ impl Trace {
         if !self.cadence.is_empty() {
             let counts: Vec<_> = self.cadence.into_iter().map(|(ms, (all, near))| (ms, all, near)).collect();
             log::info!("frame pair cadence: {ts} {counts:?}");
+        }
+        if !self.waited.is_empty() {
+            let counts: Vec<_> = self.waited.into_iter().map(|(t, (near, engaged))| (t, near, engaged)).collect();
+            log::info!("cue waited: {ts} {counts:?}");
         }
         if !self.stale.is_empty() {
             let counts: Vec<_> = self.stale.into_iter().map(|(ms, (all, near, cue))| (ms, all, near, cue)).collect();

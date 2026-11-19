@@ -11,7 +11,8 @@ touches behaviour, these cases with the fake model only:
   verify-minds   roundtrip, acts, dealings, conversation (each its own world, the real living-mind)
   verify-player  combat (combat.py --scene all: the staged fights, an island world)
   verify-client  cues (cues.py: the cue event tables reach only their viewer under row-level
-                 security, on and with the `cue_transport_on` law off; a default-seed world, the SDK probe)
+                 security, on and with the `cue_transport_on` law off; near_tier.py: whoever is
+                 engaged with a player is first in its near tier; a default-seed world, the SDK probe)
   living-mind    mind-unit: its cargo tests (`just living-check` builds the mind, tests only the rules)
 
 The five worlds and the tests run at once. A case whose only failures are parts on the red-on-main
@@ -417,7 +418,8 @@ class Runner:
                 if self.sh(["env", f"CARGO_TARGET_DIR={env_dir}", "cargo", "build", "--locked", "--manifest-path", probe], root, log, 1500):
                     return {"cues": (False, f"{log} (probe build failed)", time.time() - t0)}
                 code = self.sh([sys.executable, ".agents/skills/verify-client/scripts/cues.py", "--run", run], root, ev / "cues.txt", 600)
-                return {"cues": (code == 0, str(ev / "cues.json"), time.time() - t0)}
+                tier = self.sh([sys.executable, ".agents/skills/verify-client/scripts/near_tier.py", "--run", run], root, ev / "near_tier.txt", 300)
+                return {"cues": (code == 0 and tier == 0, str(ev / "cues.json"), time.time() - t0)}
             if group == "player":
                 if self.sh([sys.executable, V, "player", "--run", run, "join", "GateTester"], root, log, 120):
                     return {"combat": (False, f"{log} (join failed)", time.time() - t0)}
