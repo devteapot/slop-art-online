@@ -433,18 +433,18 @@ def reclaim(reader, control, candidates, record, output):
                             record["keep_list"], lambda *_: None)
         for row, latest in zip(candidates, offline_rows, strict=True):
             if (latest["replica"], latest["identity"], latest["names"]) != (row["replica"], row["identity"], row["names"]):
-                continue
+                raise RuntimeError(f"offline replica mapping changed for {row['replica']}")
             if latest["classification"] == "live" or latest["reason"] in {
                 "database matches explicit keep-list", "database name unavailable for keep-list check",
             }:
-                continue
+                raise RuntimeError(f"offline replica is protected: {row['replica']}")
             archive = Path(row["archive"])
             # The historical manifest supplies its own checksum.
             historical, _ = evidence_index(EVIDENCE)
             sha = next((sha for _, _, path, sha in historical[row["replica"]] if path == archive), None)
             if not verify_existing(row["replica"], [(archive, sha)], running=False):
                 row.update(action="keep", reason="needs archive: offline commitlog verification failed")
-                continue
+                raise RuntimeError(f"offline archive verification failed for {row['replica']}")
             if command("docker", "inspect", "--format", "{{.State.Running}}", SERVER).strip() != b"false":
                 raise RuntimeError("trial server started during its maintenance window")
             target = Path(OFFLINE) / "replicas" / row["replica"]
