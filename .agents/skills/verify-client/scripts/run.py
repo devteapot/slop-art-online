@@ -80,7 +80,7 @@ def main():
             cleaned = (directory / 'cleanup.log').read_text()
             proof = {'database': database, 'cleanup_confirmed_sql_404':
                      f'deleted {database} (SQL now 404)' in cleaned or f'deleted {database} (name no longer resolves)' in cleaned,
-                     'published': state.get('published', False), 'player_token_removed': 'token' not in state,
+                     'published': state.get('published', False), 'player_token_removed': not any(key in V.load(args.run) for key in ('token', 'token2')),
                      'shared_container_running': V.container_up(),
                      'living_token_unchanged': token_digest() == before_token,
                      'evidence_files': sorted(p.name for p in directory.iterdir())}

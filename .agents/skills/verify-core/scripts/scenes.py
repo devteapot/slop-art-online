@@ -13,10 +13,12 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 import sys
-sys.path.insert(0, str(Path(__file__).resolve().parents[4] / "living/tools"))
-from law_values import own_laws  # noqa: E402  (the world's own law values, docs/LAW_OVERRIDE.md)
 
 ROOT = Path(__file__).resolve().parents[4]
+sys.path.insert(0, str(ROOT / "living/tools"))
+from law_values import own_laws  # noqa: E402
+from verify_credentials import redact  # noqa: E402
+
 STDB = ROOT / "living/tools/stdb"
 BASE = ROOT / ".local/living/verify"
 
@@ -38,10 +40,10 @@ class Scene:
     def command(self, *args, check=True):
         r = subprocess.run([str(STDB), *args], capture_output=True, text=True, timeout=180)
         with self.log.open("a") as f:
-            f.write(json.dumps({"at_ms": time.time_ns() // 1_000_000, "args": args,
-                                "exit": r.returncode, "stdout": r.stdout, "stderr": r.stderr}) + "\n")
+            f.write(json.dumps({"at_ms": time.time_ns() // 1_000_000, "args": [redact(arg) for arg in args],
+                                "exit": r.returncode, "stdout": redact(r.stdout), "stderr": redact(r.stderr)}) + "\n")
         if check and r.returncode:
-            raise RuntimeError(f"stdb {args[0]} failed: {r.stderr[-500:]}")
+            raise RuntimeError(f"stdb {args[0]} failed: {redact(r.stderr)[-500:]}")
         return r
 
     def call(self, reducer, *args, check=True):
@@ -65,10 +67,11 @@ class Scene:
                 code, body = r.status, r.read().decode()
         except urllib.error.HTTPError as e:
             code, body = e.code, e.read().decode()
+        safe_body = redact(body, (self.token,))
         with self.log.open("a") as f:
-            f.write(json.dumps({"at_ms": time.time_ns() // 1_000_000, "args": ["call (http)", self.db, reducer, f"{len(json.dumps(args))} bytes"], "exit": 0 if code == 200 else 1, "stdout": body, "stderr": ""}) + "\n")
+            f.write(json.dumps({"at_ms": time.time_ns() // 1_000_000, "args": ["call (http)", self.db, reducer, f"{len(json.dumps(args))} bytes"], "exit": 0 if code == 200 else 1, "stdout": safe_body, "stderr": ""}) + "\n")
         if check and code != 200:
-            raise RuntimeError(f"{reducer} over HTTP failed: {code} {body[-500:]}")
+            raise RuntimeError(f"{reducer} over HTTP failed: {code} {safe_body[-500:]}")
         return subprocess.CompletedProcess([reducer], 0 if code == 200 else 1, body, "")
 
     def http_rows(self, query):
@@ -92,7 +95,7 @@ class Scene:
         names = [e["name"]["some"] for e in table["schema"]["elements"]]
         rows = [dict(zip(names, row)) for row in table["rows"]]
         if label:
-            (self.out / f"{self.name}-{label}.json").write_text(json.dumps(rows, indent=2) + "\n")
+            (self.out / f"{self.name}-{label}.json").write_text(redact(json.dumps(rows, indent=2)) + "\n")
         return rows
 
     def expect(self, name, passed, detail=None, fatal=True, known=False):
@@ -189,7 +192,7 @@ def tick(s):
     finally:
         s.call("set_profile", False)
     r = s.command("logs", "-s", "local", s.db)
-    (s.out / "tick-profile.txt").write_text(r.stdout)
+    (s.out / "tick-profile.txt").write_text(redact(r.stdout))
     s.expect("profile emits actual tick spans", 'tick' in r.stdout and ('µs' in r.stdout or 'us' in r.stdout), s.db)
 
 

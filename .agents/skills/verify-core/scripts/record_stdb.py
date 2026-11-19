@@ -9,6 +9,8 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[4]
+sys.path.insert(0, str(ROOT / "living/tools"))
+from verify_credentials import redact
 
 
 def main():
@@ -28,16 +30,16 @@ def main():
         state_path.write_text(json.dumps({"run": run, "db": db, "published": True, "pids": {}}) + "\n")
     r = subprocess.run([str(ROOT / "living/tools/stdb"), *args], capture_output=True, text=True)
     with (out / "stdb-actions.jsonl").open("a") as f:
-        f.write(json.dumps({"at_ms": time.time_ns() // 1_000_000, "args": args,
-                            "exit": r.returncode, "stdout": r.stdout, "stderr": r.stderr}) + "\n")
+        f.write(json.dumps({"at_ms": time.time_ns() // 1_000_000, "args": [redact(arg) for arg in args],
+                            "exit": r.returncode, "stdout": redact(r.stdout), "stderr": redact(r.stderr)}) + "\n")
     if args[0] == "sql" and r.returncode == 0 and "FROM routine" in args[-1]:
         match = re.search(r"WHERE actor = (\d+)", args[-1])
         if match:
             readback(out, db, "routine", match[1])
     if args[0] == "call" and r.returncode == 0 and args[4] == "set_behavior":
         readback(out, db, "brain", args[5])
-    sys.stdout.write(r.stdout)
-    sys.stderr.write(r.stderr)
+    sys.stdout.write(redact(r.stdout))
+    sys.stderr.write(redact(r.stderr))
     if args[0] == "delete" and r.returncode == 0 and state_path.exists():
         state = json.loads(state_path.read_text())
         state["driver_deleted"] = True
@@ -50,11 +52,11 @@ def readback(out, db, table, actor):
     args = ["sql", "--format", "json", "-s", "local", db, f"SELECT * FROM {table} WHERE {key} = {int(actor)}"]
     r = subprocess.run([str(ROOT / "living/tools/stdb"), *args], capture_output=True, text=True)
     with (out / "stdb-actions.jsonl").open("a") as f:
-        f.write(json.dumps({"at_ms": time.time_ns() // 1_000_000, "args": args,
-                            "exit": r.returncode, "stdout": r.stdout, "stderr": r.stderr}) + "\n")
+        f.write(json.dumps({"at_ms": time.time_ns() // 1_000_000, "args": [redact(arg) for arg in args],
+                            "exit": r.returncode, "stdout": redact(r.stdout), "stderr": redact(r.stderr)}) + "\n")
     if r.returncode:
-        sys.exit(f"installed {table} readback failed: {r.stderr[-500:]}")
-    (out / f"installed-{table}-{actor}-{time.time_ns()}.json").write_text(r.stdout)
+        sys.exit(f"installed {table} readback failed: {redact(r.stderr)[-500:]}")
+    (out / f"installed-{table}-{actor}-{time.time_ns()}.json").write_text(redact(r.stdout))
 
 
 if __name__ == "__main__":
