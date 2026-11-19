@@ -1,0 +1,1432 @@
+diff --git a/living/authority/src/brain.rs b/living/authority/src/brain.rs
+index 93f344bc..65f96fd5 100644
+--- a/living/authority/src/brain.rs
++++ b/living/authority/src/brain.rs
+@@ -420,7 +420,12 @@ impl<'a> Ev<'a> {
+             let by = std::panic::Location::caller();
+             common::diag(|| format!("structures@{}", by.line()), 1);
+             let r = common::sight_for(self.ctx, self.me.id, &self.w, self.now);
+-            let v = common::structures_near(self.ctx, self.at, r);
++            let _sight = common::detail_span("sight.structure_brain_list");
++            let mut v = common::structures_near(self.ctx, self.at, r);
++            if crate::feed_probe::enabled(self.ctx) {
++                let sight = crate::feed_probe::Look::new(self.ctx, self.me.id, &self.w, self.now);
++                v.retain(|(row, d)| sight.sees(self.at, row, *d));
++            }
+             common::diag(|| "scene:structures_n", v.len() as u64);
+             self.scene.as_mut().unwrap().structures = Some(v);
+         }
+@@ -2189,9 +2194,15 @@ impl<'a> Ev<'a> {
+         let mut other: Vec<(u64, u32, f32)> = Vec::new();
+         let mut passed: Vec<(u64, u32)> = Vec::new();
+         let mut top = 0u64;
++        let probe = laws.feed_scope_probe;
++        let span = common::detail_span("sight.structure_notice");
++        let sight = probe.then(|| crate::feed_probe::Look::new(ctx, me, &self.w, now));
+         common::for_structures_near(ctx, at, r, |s, d| {
++            if sight.as_ref().is_some_and(|look| !look.sees(at, s, d)) {
++                return;
++            }
+             top = top.max(s.id);
+-            if let Some(l) = &last {
++            if let Some(l) = last.as_ref().filter(|_| !probe || !crate::feed_probe::mutable(&s.kind)) {
+                 if s.id <= l.max_structure && common::dist((l.x, l.y), (s.x, s.y)) <= l.r {
+                     if delta_check || check {
+                         passed.push((s.id, s.chunk));
+@@ -2207,6 +2218,7 @@ impl<'a> Ev<'a> {
+                 other.push((s.id, s.chunk, d));
+             }
+         });
++        drop(span);
+         if delta {
+             let row = LastLook { id: me, x: at.0, y: at.1, r, max_structure: top, at_ms: now };
+             if last.is_some() || ctx.db.last_look().id().find(me).is_some() {
+diff --git a/living/authority/src/feed_probe.rs b/living/authority/src/feed_probe.rs
+new file mode 100644
+index 00000000..60b643a6
+--- /dev/null
++++ b/living/authority/src/feed_probe.rs
+@@ -0,0 +1,189 @@
++//! Scratch cost probe. The legacy feeds remain public in both benchmark arms.
++use crate::{
++    common, perception,
++    tables::{world_law__view, Structure},
++};
++use living_rules::{map::Map, script::Senses};
++use spacetimedb::{Identity, ReducerContext, Table, ViewContext};
++
++pub fn enabled(ctx: &ReducerContext) -> bool {
++    common::laws(ctx).feed_scope_probe
++}
++
++pub fn mutable(kind: &str) -> bool {
++    !matches!(
++        kind,
++        "house" | "shelter" | "hall" | "workshop" | "market" | "inn"
++    )
++}
++
++pub fn visible(
++    map: &Map,
++    at: (f32, f32),
++    heading: f32,
++    senses: &Senses,
++    row: &Structure,
++    distance: f32,
++) -> bool {
++    living_rules::sight::sees(
++        map,
++        at,
++        heading,
++        (row.x, row.y),
++        distance,
++        senses,
++        0.0,
++        None,
++    )
++}
++
++/// For callers that already have local candidates and need a single observer snapshot.
++pub struct Look {
++    map: std::rc::Rc<Map>,
++    heading: f32,
++    senses: Senses,
++}
++
++impl Look {
++    pub fn new(ctx: &ReducerContext, actor: u32, world: &crate::tables::World, now: u64) -> Self {
++        use crate::tables::body;
++        Self {
++            map: common::map(ctx),
++            heading: ctx
++                .db
++                .body()
++                .id()
++                .find(actor)
++                .map_or(0.0, |b| common::facing_at(&b, now)),
++            senses: common::senses_of(ctx, actor, world, now),
++        }
++    }
++
++    pub fn sees(&self, at: (f32, f32), row: &Structure, distance: f32) -> bool {
++        !mutable(&row.kind) || visible(&self.map, at, self.heading, &self.senses, row, distance)
++    }
++}
++
++#[derive(Clone, PartialEq, spacetimedb::SpacetimeType)]
++pub struct FeedProbeObject {
++    pub id: u64,
++    pub kind: String,
++    pub x: f32,
++    pub y: f32,
++    pub gate_open: Option<bool>,
++    pub lit_until_ms: u64,
++}
++
++#[spacetimedb::table(accessor = feed_probe_copy)]
++pub struct FeedProbeCopy {
++    #[primary_key]
++    #[auto_inc]
++    pub id: u64,
++    #[index(btree)]
++    pub viewer: Identity,
++    pub character: u32,
++    pub object: FeedProbeObject,
++}
++
++#[spacetimedb::view(accessor = my_feed_probe, public, primary_key = id)]
++pub fn my_feed_probe(ctx: &ViewContext) -> Vec<FeedProbeObject> {
++    if !ctx
++        .db
++        .world_law()
++        .name()
++        .find("feed_scope_probe".to_string())
++        .is_some_and(|row| row.value == "true")
++    {
++        return Vec::new();
++    }
++    let Some(character) = perception::living(ctx) else {
++        return Vec::new();
++    };
++    ctx.db
++        .feed_probe_copy()
++        .viewer()
++        .filter(ctx.sender())
++        .filter(|row| row.character == character.id)
++        .map(|row| row.object)
++        .collect()
++}
++
++pub fn sweep(
++    ctx: &ReducerContext,
++    viewer: Identity,
++    character: u32,
++    at: (f32, f32),
++    heading: f32,
++    senses: &Senses,
++    map: &Map,
++) {
++    use crate::tables::gate;
++    let span = common::detail_span("sight.feed_probe_player");
++    let mut visible_objects = Vec::new();
++    common::for_structures_near(ctx, at, senses.sight, |row, distance| {
++        if mutable(&row.kind) && visible(map, at, heading, senses, row, distance) {
++            visible_objects.push(row.clone());
++        }
++    });
++    drop(span);
++
++    let mut old: std::collections::HashMap<_, _> = ctx
++        .db
++        .feed_probe_copy()
++        .viewer()
++        .filter(viewer)
++        .map(|row| (row.object.id, row))
++        .collect();
++    for row in visible_objects {
++        let gate_open = (row.kind == "gate")
++            .then(|| ctx.db.gate().id().find(row.id))
++            .flatten()
++            .map(|gate| gate.open);
++        let object = FeedProbeObject {
++            id: row.id,
++            kind: row.kind,
++            x: row.x,
++            y: row.y,
++            gate_open,
++            lit_until_ms: row.lit_until_ms,
++        };
++        match old.remove(&object.id) {
++            Some(prior) if prior.character == character && prior.object == object => {}
++            Some(prior) => {
++                ctx.db.feed_probe_copy().id().update(FeedProbeCopy {
++                    id: prior.id,
++                    viewer,
++                    character,
++                    object,
++                });
++                common::diag(|| "feed_probe:update", 1);
++            }
++            None => {
++                ctx.db.feed_probe_copy().insert(FeedProbeCopy {
++                    id: 0,
++                    viewer,
++                    character,
++                    object,
++                });
++                common::diag(|| "feed_probe:insert", 1);
++            }
++        }
++    }
++    for row in old.into_values() {
++        ctx.db.feed_probe_copy().id().delete(row.id);
++        common::diag(|| "feed_probe:delete", 1);
++    }
++}
++
++pub fn forget(ctx: &ReducerContext, viewer: Identity) {
++    let ids: Vec<_> = ctx
++        .db
++        .feed_probe_copy()
++        .viewer()
++        .filter(viewer)
++        .map(|row| row.id)
++        .collect();
++    for id in ids {
++        ctx.db.feed_probe_copy().id().delete(id);
++    }
++}
+diff --git a/living/authority/src/lib.rs b/living/authority/src/lib.rs
+index f1bf32a5..fd4c9c67 100644
+--- a/living/authority/src/lib.rs
++++ b/living/authority/src/lib.rs
+@@ -13,6 +13,7 @@ mod codes;
+ mod combat;
+ mod floor;
+ mod frame;
++mod feed_probe;
+ mod island;
+ mod look;
+ mod mind;
+diff --git a/living/authority/src/perceive.rs b/living/authority/src/perceive.rs
+index b1b811a8..1a7d1c12 100644
+--- a/living/authority/src/perceive.rs
++++ b/living/authority/src/perceive.rs
+@@ -767,7 +767,13 @@ fn select_scene_structures(ctx: &ReducerContext, me: &Character, at: (f32, f32),
+     // Group in the same stable distance order as the individual structure list.
+     let mut groups = Vec::<(std::rc::Rc<str>, usize, (f32, f32), f32, usize)>::new();
+     let mut ordinal = 0;
++    let probe = crate::feed_probe::enabled(ctx);
++    let span = common::detail_span("sight.structure_scene");
++    let sight = probe.then(|| crate::feed_probe::Look::new(ctx, me.id, &common::world(ctx), common::now_ms(ctx)));
+     common::for_structures_near(ctx, at, r, |s, dist| {
++        if sight.as_ref().is_some_and(|look| !look.sees(at, s, dist)) {
++            return;
++        }
+         ordinal += 1;
+         let mut named = false;
+         if s.kind == "remains" {
+@@ -794,6 +800,7 @@ fn select_scene_structures(ctx: &ReducerContext, me: &Character, at: (f32, f32),
+             individual.insert(index, (s.clone(), dist, named));
+         }
+     });
++    drop(span);
+     if !groups.is_empty() {
+         individual.truncate(STRUCTURE_LIMIT - 1);
+     }
+diff --git a/living/authority/src/perception.rs b/living/authority/src/perception.rs
+index b0657a12..db96841a 100644
+--- a/living/authority/src/perception.rs
++++ b/living/authority/src/perception.rs
+@@ -1066,6 +1066,9 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
+         }
+     }
+     drop(sight_span);
++    if crate::feed_probe::enabled(ctx) {
++        crate::feed_probe::sweep(ctx, viewer, id, here, heading, &senses, map);
++    }
+     if scheduled && senses.gaze.is_some() {
+         crate::attention::project(ctx, id, &senses, now);
+     }
+@@ -1643,6 +1646,9 @@ pub fn health_moved(ctx: &ReducerContext, id: u32, now: u64) {
+
+ /// A player's character died: it perceives nothing any more.
+ pub fn forget(ctx: &ReducerContext, id: u32, viewer: Identity) {
++    if crate::feed_probe::enabled(ctx) {
++        crate::feed_probe::forget(ctx, viewer);
++    }
+     crate::frame::forget(ctx, id);
+     for p in ctx.db.perceived().viewer().filter(viewer).map(|p| p.id).collect::<Vec<_>>() {
+         ctx.db.perceived().id().delete(p);
+diff --git a/living/bindings/src/generated/feed_probe_copy_table.rs b/living/bindings/src/generated/feed_probe_copy_table.rs
+new file mode 100644
+index 00000000..8550d9ee
+--- /dev/null
++++ b/living/bindings/src/generated/feed_probe_copy_table.rs
+@@ -0,0 +1,229 @@
++// THIS FILE IS AUTOMATICALLY GENERATED BY SPACETIMEDB. EDITS TO THIS FILE
++// WILL NOT BE SAVED. MODIFY TABLES IN YOUR MODULE SOURCE CODE INSTEAD.
++
++#![allow(unused, clippy::all)]
++use super::feed_probe_copy_type::FeedProbeCopy;
++use super::feed_probe_object_type::FeedProbeObject;
++use spacetimedb_sdk::__codegen::{self as __sdk, __lib, __sats, __ws};
++
++/// Table handle for the table `feed_probe_copy`.
++///
++/// Obtain a handle from the [`FeedProbeCopyTableAccess::feed_probe_copy`] method on [`super::RemoteTables`],
++/// like `ctx.db.feed_probe_copy()`.
++///
++/// Users are encouraged not to explicitly reference this type,
++/// but to directly chain method calls,
++/// like `ctx.db.feed_probe_copy().on_insert(...)`.
++pub struct FeedProbeCopyTableHandle<'ctx> {
++    imp: __sdk::TableHandle<FeedProbeCopy>,
++    ctx: std::marker::PhantomData<&'ctx super::RemoteTables>,
++}
++
++/// Lifetime-aware accessor marker for the table `feed_probe_copy`.
++pub struct FeedProbeCopyTableAccessor;
++
++impl __sdk::TableAccessor<super::RemoteTables> for FeedProbeCopyTableAccessor {
++    type Row = FeedProbeCopy;
++    type Handle<'db> = FeedProbeCopyTableHandle<'db>;
++
++    fn get<'db>(db: &'db super::RemoteTables) -> Self::Handle<'db> {
++        db.feed_probe_copy()
++    }
++}
++
++#[allow(non_camel_case_types)]
++/// Extension trait for access to the table `feed_probe_copy`.
++///
++/// Implemented for [`super::RemoteTables`].
++pub trait FeedProbeCopyTableAccess {
++    #[allow(non_snake_case)]
++    /// Obtain a [`FeedProbeCopyTableHandle`], which mediates access to the table `feed_probe_copy`.
++    fn feed_probe_copy(&self) -> FeedProbeCopyTableHandle<'_>;
++}
++
++impl FeedProbeCopyTableAccess for super::RemoteTables {
++    fn feed_probe_copy(&self) -> FeedProbeCopyTableHandle<'_> {
++        FeedProbeCopyTableHandle {
++            imp: self.imp.get_table::<FeedProbeCopy>("feed_probe_copy"),
++            ctx: std::marker::PhantomData,
++        }
++    }
++}
++
++pub struct FeedProbeCopyInsertCallbackId(__sdk::CallbackId);
++pub struct FeedProbeCopyDeleteCallbackId(__sdk::CallbackId);
++
++impl<'ctx> __sdk::TableLike for FeedProbeCopyTableHandle<'ctx> {
++    type Row = FeedProbeCopy;
++    type EventContext = super::EventContext;
++
++    fn count(&self) -> u64 {
++        self.imp.count()
++    }
++    fn iter(&self) -> impl Iterator<Item = FeedProbeCopy> + '_ {
++        self.imp.iter()
++    }
++}
++
++impl<'ctx> __sdk::Table for FeedProbeCopyTableHandle<'ctx> {
++    type Row = FeedProbeCopy;
++    type EventContext = super::EventContext;
++
++    fn count(&self) -> u64 {
++        self.imp.count()
++    }
++    fn iter(&self) -> impl Iterator<Item = FeedProbeCopy> + '_ {
++        self.imp.iter()
++    }
++
++    type InsertCallbackId = FeedProbeCopyInsertCallbackId;
++
++    fn on_insert(
++        &self,
++        callback: impl FnMut(&Self::EventContext, &Self::Row) + Send + 'static,
++    ) -> FeedProbeCopyInsertCallbackId {
++        FeedProbeCopyInsertCallbackId(self.imp.on_insert(Box::new(callback)))
++    }
++
++    fn remove_on_insert(&self, callback: FeedProbeCopyInsertCallbackId) {
++        self.imp.remove_on_insert(callback.0)
++    }
++
++    type DeleteCallbackId = FeedProbeCopyDeleteCallbackId;
++
++    fn on_delete(
++        &self,
++        callback: impl FnMut(&Self::EventContext, &Self::Row) + Send + 'static,
++    ) -> FeedProbeCopyDeleteCallbackId {
++        FeedProbeCopyDeleteCallbackId(self.imp.on_delete(Box::new(callback)))
++    }
++
++    fn remove_on_delete(&self, callback: FeedProbeCopyDeleteCallbackId) {
++        self.imp.remove_on_delete(callback.0)
++    }
++}
++
++impl<'ctx> __sdk::WithInsert for FeedProbeCopyTableHandle<'ctx> {
++    type InsertCallbackId = FeedProbeCopyInsertCallbackId;
++
++    fn on_insert(
++        &self,
++        callback: impl FnMut(&Self::EventContext, &Self::Row) + Send + 'static,
++    ) -> FeedProbeCopyInsertCallbackId {
++        FeedProbeCopyInsertCallbackId(self.imp.on_insert(Box::new(callback)))
++    }
++
++    fn remove_on_insert(&self, callback: FeedProbeCopyInsertCallbackId) {
++        self.imp.remove_on_insert(callback.0)
++    }
++}
++
++impl<'ctx> __sdk::WithDelete for FeedProbeCopyTableHandle<'ctx> {
++    type DeleteCallbackId = FeedProbeCopyDeleteCallbackId;
++
++    fn on_delete(
++        &self,
++        callback: impl FnMut(&Self::EventContext, &Self::Row) + Send + 'static,
++    ) -> FeedProbeCopyDeleteCallbackId {
++        FeedProbeCopyDeleteCallbackId(self.imp.on_delete(Box::new(callback)))
++    }
++
++    fn remove_on_delete(&self, callback: FeedProbeCopyDeleteCallbackId) {
++        self.imp.remove_on_delete(callback.0)
++    }
++}
++
++pub struct FeedProbeCopyUpdateCallbackId(__sdk::CallbackId);
++
++impl<'ctx> __sdk::TableWithPrimaryKey for FeedProbeCopyTableHandle<'ctx> {
++    type UpdateCallbackId = FeedProbeCopyUpdateCallbackId;
++
++    fn on_update(
++        &self,
++        callback: impl FnMut(&Self::EventContext, &Self::Row, &Self::Row) + Send + 'static,
++    ) -> FeedProbeCopyUpdateCallbackId {
++        FeedProbeCopyUpdateCallbackId(self.imp.on_update(Box::new(callback)))
++    }
++
++    fn remove_on_update(&self, callback: FeedProbeCopyUpdateCallbackId) {
++        self.imp.remove_on_update(callback.0)
++    }
++}
++
++impl<'ctx> __sdk::WithUpdate for FeedProbeCopyTableHandle<'ctx> {
++    type UpdateCallbackId = FeedProbeCopyUpdateCallbackId;
++
++    fn on_update(
++        &self,
++        callback: impl FnMut(&Self::EventContext, &Self::Row, &Self::Row) + Send + 'static,
++    ) -> FeedProbeCopyUpdateCallbackId {
++        FeedProbeCopyUpdateCallbackId(self.imp.on_update(Box::new(callback)))
++    }
++
++    fn remove_on_update(&self, callback: FeedProbeCopyUpdateCallbackId) {
++        self.imp.remove_on_update(callback.0)
++    }
++}
++
++/// Access to the `id` unique index on the table `feed_probe_copy`,
++/// which allows point queries on the field of the same name
++/// via the [`FeedProbeCopyIdUnique::find`] method.
++///
++/// Users are encouraged not to explicitly reference this type,
++/// but to directly chain method calls,
++/// like `ctx.db.feed_probe_copy().id().find(...)`.
++pub struct FeedProbeCopyIdUnique<'ctx> {
++    imp: __sdk::UniqueConstraintHandle<FeedProbeCopy, u64>,
++    phantom: std::marker::PhantomData<&'ctx super::RemoteTables>,
++}
++
++impl<'ctx> FeedProbeCopyTableHandle<'ctx> {
++    /// Get a handle on the `id` unique index on the table `feed_probe_copy`.
++    pub fn id(&self) -> FeedProbeCopyIdUnique<'ctx> {
++        FeedProbeCopyIdUnique {
++            imp: self.imp.get_unique_constraint::<u64>("id"),
++            phantom: std::marker::PhantomData,
++        }
++    }
++}
++
++impl<'ctx> FeedProbeCopyIdUnique<'ctx> {
++    /// Find the subscribed row whose `id` column value is equal to `col_val`,
++    /// if such a row is present in the client cache.
++    pub fn find(&self, col_val: &u64) -> Option<FeedProbeCopy> {
++        self.imp.find(col_val)
++    }
++}
++
++#[doc(hidden)]
++pub(super) fn register_table(client_cache: &mut __sdk::ClientCache<super::RemoteModule>) {
++    let _table = client_cache.get_or_make_table::<FeedProbeCopy>("feed_probe_copy");
++    _table.add_unique_constraint::<u64>("id", |row| &row.id);
++}
++
++#[doc(hidden)]
++pub(super) fn parse_table_update(
++    raw_updates: __ws::v2::TableUpdate,
++) -> __sdk::Result<__sdk::TableUpdate<FeedProbeCopy>> {
++    __sdk::TableUpdate::parse_table_update(raw_updates).map_err(|e| {
++        __sdk::InternalError::failed_parse("TableUpdate<FeedProbeCopy>", "TableUpdate")
++            .with_cause(e)
++            .into()
++    })
++}
++
++#[allow(non_camel_case_types)]
++/// Extension trait for query builder access to the table `FeedProbeCopy`.
++///
++/// Implemented for [`__sdk::QueryTableAccessor`].
++pub trait feed_probe_copyQueryTableAccess {
++    #[allow(non_snake_case)]
++    /// Get a query builder for the table `FeedProbeCopy`.
++    fn feed_probe_copy(&self) -> __sdk::__query_builder::Table<FeedProbeCopy>;
++}
++
++impl feed_probe_copyQueryTableAccess for __sdk::QueryTableAccessor {
++    fn feed_probe_copy(&self) -> __sdk::__query_builder::Table<FeedProbeCopy> {
++        __sdk::__query_builder::Table::new("feed_probe_copy")
++    }
++}
+diff --git a/living/bindings/src/generated/feed_probe_copy_type.rs b/living/bindings/src/generated/feed_probe_copy_type.rs
+new file mode 100644
+index 00000000..6b602bfa
+--- /dev/null
++++ b/living/bindings/src/generated/feed_probe_copy_type.rs
+@@ -0,0 +1,62 @@
++// THIS FILE IS AUTOMATICALLY GENERATED BY SPACETIMEDB. EDITS TO THIS FILE
++// WILL NOT BE SAVED. MODIFY TABLES IN YOUR MODULE SOURCE CODE INSTEAD.
++
++#![allow(unused, clippy::all)]
++use spacetimedb_sdk::__codegen::{self as __sdk, __lib, __sats, __ws};
++
++use super::feed_probe_object_type::FeedProbeObject;
++
++#[derive(__lib::ser::Serialize, __lib::de::Deserialize, Clone, PartialEq, Debug)]
++#[sats(crate = __lib)]
++pub struct FeedProbeCopy {
++    pub id: u64,
++    pub viewer: __sdk::Identity,
++    pub character: u32,
++    pub object: FeedProbeObject,
++}
++
++impl __sdk::InModule for FeedProbeCopy {
++    type Module = super::RemoteModule;
++}
++
++/// Column accessor struct for the table `FeedProbeCopy`.
++///
++/// Provides typed access to columns for query building.
++pub struct FeedProbeCopyCols {
++    pub id: __sdk::__query_builder::Col<FeedProbeCopy, u64>,
++    pub viewer: __sdk::__query_builder::Col<FeedProbeCopy, __sdk::Identity>,
++    pub character: __sdk::__query_builder::Col<FeedProbeCopy, u32>,
++    pub object: __sdk::__query_builder::Col<FeedProbeCopy, FeedProbeObject>,
++}
++
++impl __sdk::__query_builder::HasCols for FeedProbeCopy {
++    type Cols = FeedProbeCopyCols;
++    fn cols(table_name: &'static str) -> Self::Cols {
++        FeedProbeCopyCols {
++            id: __sdk::__query_builder::Col::new(table_name, "id"),
++            viewer: __sdk::__query_builder::Col::new(table_name, "viewer"),
++            character: __sdk::__query_builder::Col::new(table_name, "character"),
++            object: __sdk::__query_builder::Col::new(table_name, "object"),
++        }
++    }
++}
++
++/// Indexed column accessor struct for the table `FeedProbeCopy`.
++///
++/// Provides typed access to indexed columns for query building.
++pub struct FeedProbeCopyIxCols {
++    pub id: __sdk::__query_builder::IxCol<FeedProbeCopy, u64>,
++    pub viewer: __sdk::__query_builder::IxCol<FeedProbeCopy, __sdk::Identity>,
++}
++
++impl __sdk::__query_builder::HasIxCols for FeedProbeCopy {
++    type IxCols = FeedProbeCopyIxCols;
++    fn ix_cols(table_name: &'static str) -> Self::IxCols {
++        FeedProbeCopyIxCols {
++            id: __sdk::__query_builder::IxCol::new(table_name, "id"),
++            viewer: __sdk::__query_builder::IxCol::new(table_name, "viewer"),
++        }
++    }
++}
++
++impl __sdk::__query_builder::CanBeLookupTable for FeedProbeCopy {}
+diff --git a/living/bindings/src/generated/feed_probe_object_type.rs b/living/bindings/src/generated/feed_probe_object_type.rs
+new file mode 100644
+index 00000000..7f013b77
+--- /dev/null
++++ b/living/bindings/src/generated/feed_probe_object_type.rs
+@@ -0,0 +1,46 @@
++// THIS FILE IS AUTOMATICALLY GENERATED BY SPACETIMEDB. EDITS TO THIS FILE
++// WILL NOT BE SAVED. MODIFY TABLES IN YOUR MODULE SOURCE CODE INSTEAD.
++
++#![allow(unused, clippy::all)]
++use spacetimedb_sdk::__codegen::{self as __sdk, __lib, __sats, __ws};
++
++#[derive(__lib::ser::Serialize, __lib::de::Deserialize, Clone, PartialEq, Debug)]
++#[sats(crate = __lib)]
++pub struct FeedProbeObject {
++    pub id: u64,
++    pub kind: String,
++    pub x: f32,
++    pub y: f32,
++    pub gate_open: Option<bool>,
++    pub lit_until_ms: u64,
++}
++
++impl __sdk::InModule for FeedProbeObject {
++    type Module = super::RemoteModule;
++}
++
++/// Column accessor struct for the table `FeedProbeObject`.
++///
++/// Provides typed access to columns for query building.
++pub struct FeedProbeObjectCols {
++    pub id: __sdk::__query_builder::Col<FeedProbeObject, u64>,
++    pub kind: __sdk::__query_builder::Col<FeedProbeObject, String>,
++    pub x: __sdk::__query_builder::Col<FeedProbeObject, f32>,
++    pub y: __sdk::__query_builder::Col<FeedProbeObject, f32>,
++    pub gate_open: __sdk::__query_builder::Col<FeedProbeObject, Option<bool>>,
++    pub lit_until_ms: __sdk::__query_builder::Col<FeedProbeObject, u64>,
++}
++
++impl __sdk::__query_builder::HasCols for FeedProbeObject {
++    type Cols = FeedProbeObjectCols;
++    fn cols(table_name: &'static str) -> Self::Cols {
++        FeedProbeObjectCols {
++            id: __sdk::__query_builder::Col::new(table_name, "id"),
++            kind: __sdk::__query_builder::Col::new(table_name, "kind"),
++            x: __sdk::__query_builder::Col::new(table_name, "x"),
++            y: __sdk::__query_builder::Col::new(table_name, "y"),
++            gate_open: __sdk::__query_builder::Col::new(table_name, "gate_open"),
++            lit_until_ms: __sdk::__query_builder::Col::new(table_name, "lit_until_ms"),
++        }
++    }
++}
+diff --git a/living/bindings/src/generated/mod.rs b/living/bindings/src/generated/mod.rs
+index e485d7a8..c713b781 100644
+--- a/living/bindings/src/generated/mod.rs
++++ b/living/bindings/src/generated/mod.rs
+@@ -82,6 +82,9 @@ pub mod far_handle_table;
+ pub mod far_handle_type;
+ pub mod fast_ask_table;
+ pub mod fast_ask_type;
++pub mod feed_probe_copy_table;
++pub mod feed_probe_copy_type;
++pub mod feed_probe_object_type;
+ pub mod fight_seen_table;
+ pub mod fight_seen_type;
+ pub mod fighter_seen_table;
+@@ -202,6 +205,7 @@ pub mod my_deliberations_table;
+ pub mod my_doing_table;
+ pub mod my_earshot_table;
+ pub mod my_experience_table;
++pub mod my_feed_probe_table;
+ pub mod my_fighter_table;
+ pub mod my_heard_table;
+ pub mod my_inventory_table;
+@@ -429,6 +433,9 @@ pub use far_handle_table::*;
+ pub use far_handle_type::FarHandle;
+ pub use fast_ask_table::*;
+ pub use fast_ask_type::FastAsk;
++pub use feed_probe_copy_table::*;
++pub use feed_probe_copy_type::FeedProbeCopy;
++pub use feed_probe_object_type::FeedProbeObject;
+ pub use fight_seen_table::*;
+ pub use fight_seen_type::FightSeen;
+ pub use fighter_seen_table::*;
+@@ -549,6 +556,7 @@ pub use my_deliberations_table::*;
+ pub use my_doing_table::*;
+ pub use my_earshot_table::*;
+ pub use my_experience_table::*;
++pub use my_feed_probe_table::*;
+ pub use my_fighter_table::*;
+ pub use my_heard_table::*;
+ pub use my_inventory_table::*;
+@@ -1356,6 +1364,7 @@ pub struct DbUpdate {
+     familiar: __sdk::TableUpdate<Familiar>,
+     far_handle: __sdk::TableUpdate<FarHandle>,
+     fast_ask: __sdk::TableUpdate<FastAsk>,
++    feed_probe_copy: __sdk::TableUpdate<FeedProbeCopy>,
+     fight_seen: __sdk::TableUpdate<FightSeen>,
+     fighter: __sdk::TableUpdate<Fighter>,
+     fighter_seen: __sdk::TableUpdate<FighterSeen>,
+@@ -1400,6 +1409,7 @@ pub struct DbUpdate {
+     my_doing: __sdk::TableUpdate<Doing>,
+     my_earshot: __sdk::TableUpdate<CharacterEarshot>,
+     my_experience: __sdk::TableUpdate<Experience>,
++    my_feed_probe: __sdk::TableUpdate<FeedProbeObject>,
+     my_fighter: __sdk::TableUpdate<Fighter>,
+     my_heard: __sdk::TableUpdate<LineHeard>,
+     my_inventory: __sdk::TableUpdate<Inventory>,
+@@ -1572,6 +1582,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
+                 "fast_ask" => db_update
+                     .fast_ask
+                     .append(fast_ask_table::parse_table_update(table_update)?),
++                "feed_probe_copy" => db_update
++                    .feed_probe_copy
++                    .append(feed_probe_copy_table::parse_table_update(table_update)?),
+                 "fight_seen" => db_update
+                     .fight_seen
+                     .append(fight_seen_table::parse_table_update(table_update)?),
+@@ -1704,6 +1717,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
+                 "my_experience" => db_update
+                     .my_experience
+                     .append(my_experience_table::parse_table_update(table_update)?),
++                "my_feed_probe" => db_update
++                    .my_feed_probe
++                    .append(my_feed_probe_table::parse_table_update(table_update)?),
+                 "my_fighter" => db_update
+                     .my_fighter
+                     .append(my_fighter_table::parse_table_update(table_update)?),
+@@ -2024,6 +2040,9 @@ impl __sdk::DbUpdate for DbUpdate {
+         diff.fast_ask = cache
+             .apply_diff_to_table::<FastAsk>("fast_ask", &self.fast_ask)
+             .with_updates_by_pk(|row| &row.actor);
++        diff.feed_probe_copy = cache
++            .apply_diff_to_table::<FeedProbeCopy>("feed_probe_copy", &self.feed_probe_copy)
++            .with_updates_by_pk(|row| &row.id);
+         diff.fight_seen = cache
+             .apply_diff_to_table::<FightSeen>("fight_seen", &self.fight_seen)
+             .with_updates_by_pk(|row| &row.id);
+@@ -2294,6 +2313,9 @@ impl __sdk::DbUpdate for DbUpdate {
+         diff.my_experience = cache
+             .apply_diff_to_table::<Experience>("my_experience", &self.my_experience)
+             .with_updates_by_pk(|row| &row.id);
++        diff.my_feed_probe = cache
++            .apply_diff_to_table::<FeedProbeObject>("my_feed_probe", &self.my_feed_probe)
++            .with_updates_by_pk(|row| &row.id);
+         diff.my_fighter = cache
+             .apply_diff_to_table::<Fighter>("my_fighter", &self.my_fighter)
+             .with_updates_by_pk(|row| &row.id);
+@@ -2450,6 +2472,9 @@ impl __sdk::DbUpdate for DbUpdate {
+                 "fast_ask" => db_update
+                     .fast_ask
+                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
++                "feed_probe_copy" => db_update
++                    .feed_probe_copy
++                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                 "fight_seen" => db_update
+                     .fight_seen
+                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+@@ -2582,6 +2607,9 @@ impl __sdk::DbUpdate for DbUpdate {
+                 "my_experience" => db_update
+                     .my_experience
+                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
++                "my_feed_probe" => db_update
++                    .my_feed_probe
++                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                 "my_fighter" => db_update
+                     .my_fighter
+                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+@@ -2889,6 +2917,9 @@ impl __sdk::DbUpdate for DbUpdate {
+                 "fast_ask" => db_update
+                     .fast_ask
+                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
++                "feed_probe_copy" => db_update
++                    .feed_probe_copy
++                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                 "fight_seen" => db_update
+                     .fight_seen
+                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+@@ -3021,6 +3052,9 @@ impl __sdk::DbUpdate for DbUpdate {
+                 "my_experience" => db_update
+                     .my_experience
+                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
++                "my_feed_probe" => db_update
++                    .my_feed_probe
++                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                 "my_fighter" => db_update
+                     .my_fighter
+                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+@@ -3264,6 +3298,7 @@ pub struct AppliedDiff<'r> {
+     familiar: __sdk::TableAppliedDiff<'r, Familiar>,
+     far_handle: __sdk::TableAppliedDiff<'r, FarHandle>,
+     fast_ask: __sdk::TableAppliedDiff<'r, FastAsk>,
++    feed_probe_copy: __sdk::TableAppliedDiff<'r, FeedProbeCopy>,
+     fight_seen: __sdk::TableAppliedDiff<'r, FightSeen>,
+     fighter: __sdk::TableAppliedDiff<'r, Fighter>,
+     fighter_seen: __sdk::TableAppliedDiff<'r, FighterSeen>,
+@@ -3308,6 +3343,7 @@ pub struct AppliedDiff<'r> {
+     my_doing: __sdk::TableAppliedDiff<'r, Doing>,
+     my_earshot: __sdk::TableAppliedDiff<'r, CharacterEarshot>,
+     my_experience: __sdk::TableAppliedDiff<'r, Experience>,
++    my_feed_probe: __sdk::TableAppliedDiff<'r, FeedProbeObject>,
+     my_fighter: __sdk::TableAppliedDiff<'r, Fighter>,
+     my_heard: __sdk::TableAppliedDiff<'r, LineHeard>,
+     my_inventory: __sdk::TableAppliedDiff<'r, Inventory>,
+@@ -3443,6 +3479,11 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
+         callbacks.invoke_table_row_callbacks::<Familiar>("familiar", &self.familiar, event);
+         callbacks.invoke_table_row_callbacks::<FarHandle>("far_handle", &self.far_handle, event);
+         callbacks.invoke_table_row_callbacks::<FastAsk>("fast_ask", &self.fast_ask, event);
++        callbacks.invoke_table_row_callbacks::<FeedProbeCopy>(
++            "feed_probe_copy",
++            &self.feed_probe_copy,
++            event,
++        );
+         callbacks.invoke_table_row_callbacks::<FightSeen>("fight_seen", &self.fight_seen, event);
+         callbacks.invoke_table_row_callbacks::<Fighter>("fighter", &self.fighter, event);
+         callbacks.invoke_table_row_callbacks::<FighterSeen>(
+@@ -3535,6 +3576,11 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
+             &self.my_experience,
+             event,
+         );
++        callbacks.invoke_table_row_callbacks::<FeedProbeObject>(
++            "my_feed_probe",
++            &self.my_feed_probe,
++            event,
++        );
+         callbacks.invoke_table_row_callbacks::<Fighter>("my_fighter", &self.my_fighter, event);
+         callbacks.invoke_table_row_callbacks::<LineHeard>("my_heard", &self.my_heard, event);
+         callbacks.invoke_table_row_callbacks::<Inventory>(
+@@ -4349,6 +4395,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
+         familiar_table::register_table(client_cache);
+         far_handle_table::register_table(client_cache);
+         fast_ask_table::register_table(client_cache);
++        feed_probe_copy_table::register_table(client_cache);
+         fight_seen_table::register_table(client_cache);
+         fighter_table::register_table(client_cache);
+         fighter_seen_table::register_table(client_cache);
+@@ -4393,6 +4440,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
+         my_doing_table::register_table(client_cache);
+         my_earshot_table::register_table(client_cache);
+         my_experience_table::register_table(client_cache);
++        my_feed_probe_table::register_table(client_cache);
+         my_fighter_table::register_table(client_cache);
+         my_heard_table::register_table(client_cache);
+         my_inventory_table::register_table(client_cache);
+@@ -4493,6 +4541,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
+         "familiar",
+         "far_handle",
+         "fast_ask",
++        "feed_probe_copy",
+         "fight_seen",
+         "fighter",
+         "fighter_seen",
+@@ -4537,6 +4586,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
+         "my_doing",
+         "my_earshot",
+         "my_experience",
++        "my_feed_probe",
+         "my_fighter",
+         "my_heard",
+         "my_inventory",
+diff --git a/living/bindings/src/generated/my_feed_probe_table.rs b/living/bindings/src/generated/my_feed_probe_table.rs
+new file mode 100644
+index 00000000..22886f89
+--- /dev/null
++++ b/living/bindings/src/generated/my_feed_probe_table.rs
+@@ -0,0 +1,228 @@
++// THIS FILE IS AUTOMATICALLY GENERATED BY SPACETIMEDB. EDITS TO THIS FILE
++// WILL NOT BE SAVED. MODIFY TABLES IN YOUR MODULE SOURCE CODE INSTEAD.
++
++#![allow(unused, clippy::all)]
++use super::feed_probe_object_type::FeedProbeObject;
++use spacetimedb_sdk::__codegen::{self as __sdk, __lib, __sats, __ws};
++
++/// Table handle for the table `my_feed_probe`.
++///
++/// Obtain a handle from the [`MyFeedProbeTableAccess::my_feed_probe`] method on [`super::RemoteTables`],
++/// like `ctx.db.my_feed_probe()`.
++///
++/// Users are encouraged not to explicitly reference this type,
++/// but to directly chain method calls,
++/// like `ctx.db.my_feed_probe().on_insert(...)`.
++pub struct MyFeedProbeTableHandle<'ctx> {
++    imp: __sdk::TableHandle<FeedProbeObject>,
++    ctx: std::marker::PhantomData<&'ctx super::RemoteTables>,
++}
++
++/// Lifetime-aware accessor marker for the table `my_feed_probe`.
++pub struct MyFeedProbeTableAccessor;
++
++impl __sdk::TableAccessor<super::RemoteTables> for MyFeedProbeTableAccessor {
++    type Row = FeedProbeObject;
++    type Handle<'db> = MyFeedProbeTableHandle<'db>;
++
++    fn get<'db>(db: &'db super::RemoteTables) -> Self::Handle<'db> {
++        db.my_feed_probe()
++    }
++}
++
++#[allow(non_camel_case_types)]
++/// Extension trait for access to the table `my_feed_probe`.
++///
++/// Implemented for [`super::RemoteTables`].
++pub trait MyFeedProbeTableAccess {
++    #[allow(non_snake_case)]
++    /// Obtain a [`MyFeedProbeTableHandle`], which mediates access to the table `my_feed_probe`.
++    fn my_feed_probe(&self) -> MyFeedProbeTableHandle<'_>;
++}
++
++impl MyFeedProbeTableAccess for super::RemoteTables {
++    fn my_feed_probe(&self) -> MyFeedProbeTableHandle<'_> {
++        MyFeedProbeTableHandle {
++            imp: self.imp.get_table::<FeedProbeObject>("my_feed_probe"),
++            ctx: std::marker::PhantomData,
++        }
++    }
++}
++
++pub struct MyFeedProbeInsertCallbackId(__sdk::CallbackId);
++pub struct MyFeedProbeDeleteCallbackId(__sdk::CallbackId);
++
++impl<'ctx> __sdk::TableLike for MyFeedProbeTableHandle<'ctx> {
++    type Row = FeedProbeObject;
++    type EventContext = super::EventContext;
++
++    fn count(&self) -> u64 {
++        self.imp.count()
++    }
++    fn iter(&self) -> impl Iterator<Item = FeedProbeObject> + '_ {
++        self.imp.iter()
++    }
++}
++
++impl<'ctx> __sdk::Table for MyFeedProbeTableHandle<'ctx> {
++    type Row = FeedProbeObject;
++    type EventContext = super::EventContext;
++
++    fn count(&self) -> u64 {
++        self.imp.count()
++    }
++    fn iter(&self) -> impl Iterator<Item = FeedProbeObject> + '_ {
++        self.imp.iter()
++    }
++
++    type InsertCallbackId = MyFeedProbeInsertCallbackId;
++
++    fn on_insert(
++        &self,
++        callback: impl FnMut(&Self::EventContext, &Self::Row) + Send + 'static,
++    ) -> MyFeedProbeInsertCallbackId {
++        MyFeedProbeInsertCallbackId(self.imp.on_insert(Box::new(callback)))
++    }
++
++    fn remove_on_insert(&self, callback: MyFeedProbeInsertCallbackId) {
++        self.imp.remove_on_insert(callback.0)
++    }
++
++    type DeleteCallbackId = MyFeedProbeDeleteCallbackId;
++
++    fn on_delete(
++        &self,
++        callback: impl FnMut(&Self::EventContext, &Self::Row) + Send + 'static,
++    ) -> MyFeedProbeDeleteCallbackId {
++        MyFeedProbeDeleteCallbackId(self.imp.on_delete(Box::new(callback)))
++    }
++
++    fn remove_on_delete(&self, callback: MyFeedProbeDeleteCallbackId) {
++        self.imp.remove_on_delete(callback.0)
++    }
++}
++
++impl<'ctx> __sdk::WithInsert for MyFeedProbeTableHandle<'ctx> {
++    type InsertCallbackId = MyFeedProbeInsertCallbackId;
++
++    fn on_insert(
++        &self,
++        callback: impl FnMut(&Self::EventContext, &Self::Row) + Send + 'static,
++    ) -> MyFeedProbeInsertCallbackId {
++        MyFeedProbeInsertCallbackId(self.imp.on_insert(Box::new(callback)))
++    }
++
++    fn remove_on_insert(&self, callback: MyFeedProbeInsertCallbackId) {
++        self.imp.remove_on_insert(callback.0)
++    }
++}
++
++impl<'ctx> __sdk::WithDelete for MyFeedProbeTableHandle<'ctx> {
++    type DeleteCallbackId = MyFeedProbeDeleteCallbackId;
++
++    fn on_delete(
++        &self,
++        callback: impl FnMut(&Self::EventContext, &Self::Row) + Send + 'static,
++    ) -> MyFeedProbeDeleteCallbackId {
++        MyFeedProbeDeleteCallbackId(self.imp.on_delete(Box::new(callback)))
++    }
++
++    fn remove_on_delete(&self, callback: MyFeedProbeDeleteCallbackId) {
++        self.imp.remove_on_delete(callback.0)
++    }
++}
++
++pub struct MyFeedProbeUpdateCallbackId(__sdk::CallbackId);
++
++impl<'ctx> __sdk::TableWithPrimaryKey for MyFeedProbeTableHandle<'ctx> {
++    type UpdateCallbackId = MyFeedProbeUpdateCallbackId;
++
++    fn on_update(
++        &self,
++        callback: impl FnMut(&Self::EventContext, &Self::Row, &Self::Row) + Send + 'static,
++    ) -> MyFeedProbeUpdateCallbackId {
++        MyFeedProbeUpdateCallbackId(self.imp.on_update(Box::new(callback)))
++    }
++
++    fn remove_on_update(&self, callback: MyFeedProbeUpdateCallbackId) {
++        self.imp.remove_on_update(callback.0)
++    }
++}
++
++impl<'ctx> __sdk::WithUpdate for MyFeedProbeTableHandle<'ctx> {
++    type UpdateCallbackId = MyFeedProbeUpdateCallbackId;
++
++    fn on_update(
++        &self,
++        callback: impl FnMut(&Self::EventContext, &Self::Row, &Self::Row) + Send + 'static,
++    ) -> MyFeedProbeUpdateCallbackId {
++        MyFeedProbeUpdateCallbackId(self.imp.on_update(Box::new(callback)))
++    }
++
++    fn remove_on_update(&self, callback: MyFeedProbeUpdateCallbackId) {
++        self.imp.remove_on_update(callback.0)
++    }
++}
++
++/// Access to the `id` unique index on the table `my_feed_probe`,
++/// which allows point queries on the field of the same name
++/// via the [`MyFeedProbeIdUnique::find`] method.
++///
++/// Users are encouraged not to explicitly reference this type,
++/// but to directly chain method calls,
++/// like `ctx.db.my_feed_probe().id().find(...)`.
++pub struct MyFeedProbeIdUnique<'ctx> {
++    imp: __sdk::UniqueConstraintHandle<FeedProbeObject, u64>,
++    phantom: std::marker::PhantomData<&'ctx super::RemoteTables>,
++}
++
++impl<'ctx> MyFeedProbeTableHandle<'ctx> {
++    /// Get a handle on the `id` unique index on the table `my_feed_probe`.
++    pub fn id(&self) -> MyFeedProbeIdUnique<'ctx> {
++        MyFeedProbeIdUnique {
++            imp: self.imp.get_unique_constraint::<u64>("id"),
++            phantom: std::marker::PhantomData,
++        }
++    }
++}
++
++impl<'ctx> MyFeedProbeIdUnique<'ctx> {
++    /// Find the subscribed row whose `id` column value is equal to `col_val`,
++    /// if such a row is present in the client cache.
++    pub fn find(&self, col_val: &u64) -> Option<FeedProbeObject> {
++        self.imp.find(col_val)
++    }
++}
++
++#[doc(hidden)]
++pub(super) fn register_table(client_cache: &mut __sdk::ClientCache<super::RemoteModule>) {
++    let _table = client_cache.get_or_make_table::<FeedProbeObject>("my_feed_probe");
++    _table.add_unique_constraint::<u64>("id", |row| &row.id);
++}
++
++#[doc(hidden)]
++pub(super) fn parse_table_update(
++    raw_updates: __ws::v2::TableUpdate,
++) -> __sdk::Result<__sdk::TableUpdate<FeedProbeObject>> {
++    __sdk::TableUpdate::parse_table_update(raw_updates).map_err(|e| {
++        __sdk::InternalError::failed_parse("TableUpdate<FeedProbeObject>", "TableUpdate")
++            .with_cause(e)
++            .into()
++    })
++}
++
++#[allow(non_camel_case_types)]
++/// Extension trait for query builder access to the table `FeedProbeObject`.
++///
++/// Implemented for [`__sdk::QueryTableAccessor`].
++pub trait my_feed_probeQueryTableAccess {
++    #[allow(non_snake_case)]
++    /// Get a query builder for the table `FeedProbeObject`.
++    fn my_feed_probe(&self) -> __sdk::__query_builder::Table<FeedProbeObject>;
++}
++
++impl my_feed_probeQueryTableAccess for __sdk::QueryTableAccessor {
++    fn my_feed_probe(&self) -> __sdk::__query_builder::Table<FeedProbeObject> {
++        __sdk::__query_builder::Table::new("my_feed_probe")
++    }
++}
+diff --git a/living/rules/src/script.rs b/living/rules/src/script.rs
+index 6326cfa7..75794845 100644
+--- a/living/rules/src/script.rs
++++ b/living/rules/src/script.rs
+@@ -611,6 +611,7 @@ pub struct Laws {
+     /// A diagnostic: while profiling (`set_profile`), also time the parts of a behaviour graph's
+     /// evaluation (its conditions, targets, act starts, alerts), docs/BATTLE_SCALE.md. Off by
+     /// default: those spans are many and would weigh on what an ordinary profile measures.
++    pub feed_scope_probe: bool,
+     pub profile_detail: bool,
+     /// A move's check before it starts is given a context of the fields the check reads alone
+     /// (its plan; docs/BATTLE_SCALE.md, battle-cheap path 1): the same answer, without gathering
+@@ -769,6 +770,7 @@ impl Default for Laws {
+             witness_fold_ms: 2000.0,
+             regard_cache: true,
+             regard_cache_check: false,
++            feed_scope_probe: false,
+             profile_detail: false,
+             check_ctx_plan: true,
+             check_ctx_check: false,
+@@ -2975,6 +2977,7 @@ impl Scripts {
+             witness_fold_ms: g("witness_fold_ms", l.witness_fold_ms).clamp(0.0, 10_000.0),
+             regard_cache: flag("regard_cache", l.regard_cache),
+             regard_cache_check: flag("regard_cache_check", l.regard_cache_check),
++            feed_scope_probe: flag("feed_scope_probe", l.feed_scope_probe),
+             profile_detail: flag("profile_detail", l.profile_detail),
+             check_ctx_plan: flag("check_ctx_plan", l.check_ctx_plan),
+             check_ctx_check: flag("check_ctx_check", l.check_ctx_check),
+diff --git a/living/scripts/skills.rhai b/living/scripts/skills.rhai
+index d37907bf..27bb6c22 100644
+--- a/living/scripts/skills.rhai
++++ b/living/scripts/skills.rhai
+@@ -122,6 +122,7 @@ fn laws() {
+         // compares every shared answer with a fresh one and logs any difference.
+         regard_cache: true, regard_cache_check: false,
+         // A diagnostic: while profiling, also time the parts of a graph's evaluation.
++        feed_scope_probe: false,
+         profile_detail: false,
+         // How a fighter's work is done (docs/BATTLE_SCALE.md, battle-cheap), none of it changing what
+         // anyone perceives or does: a move's check before it starts given only the fields it reads;
+diff --git a/living/tools/feed_scope_cost.py b/living/tools/feed_scope_cost.py
+new file mode 100644
+index 00000000..c684f3e5
+--- /dev/null
++++ b/living/tools/feed_scope_cost.py
+@@ -0,0 +1,236 @@
++#!/usr/bin/env python3
++"""Run one shadow-feed arm on a private SpacetimeDB server, under the Spark battle lock."""
++import argparse
++import fcntl
++import json
++import math
++import os
++from pathlib import Path
++import shutil
++import statistics
++import subprocess
++import time
++
++import battle_diag as battle
++import look_cost as load
++
++ROOT = Path(__file__).resolve().parents[2]
++VERIFY = ROOT / ".agents/skills/verify/scripts/verify.py"
++
++
++def host():
++    mem = int(next(line.split()[1] for line in Path("/proc/meminfo").read_text().splitlines()
++                   if line.startswith("MemAvailable:")))
++    return dict(time=time.strftime("%Y-%m-%dT%H:%M:%S%z"), load=os.getloadavg(),
++                available_memory_kib=mem, free_disk_bytes=shutil.disk_usage(ROOT).free)
++
++
++def check_host():
++    hour, minute = map(int, time.strftime("%H:%M").split(":"))
++    if hour < 2 or hour * 60 + minute >= 23 * 60 + 15:
++        raise RuntimeError("outside the permitted measurement window")
++    info = host()
++    if info["available_memory_kib"] < 40 * 1024**2 or info["free_disk_bytes"] < 45 * 1024**3:
++        raise RuntimeError(f"resource floor: {info}")
++    return info
++
++
++def run(args):
++    evidence = ROOT / ".local/living/verify" / args.run
++    evidence.mkdir(parents=True, exist_ok=False)
++    db = f"verify-{args.run}"
++    build_slot = Path.home() / "slop-mq/build-slot"
++    binary = Path(os.environ["CARGO_TARGET_DIR"]) / "release/gate-load"
++    seed = args.woods_seed if args.workload == "woods" else "cullet"
++
++    def harness(command, *extra):
++        prefix = [build_slot] if command == "launch" else []
++        with (evidence / "harness.log").open("a") as log:
++            subprocess.run([*prefix, VERIFY, command, "--run", args.run, *extra],
++                           stdout=log, stderr=subprocess.STDOUT, check=True)
++
++    def stdb(*cli, timeout=180):
++        return load.sh("docker", "exec", "-i", load.CONTAINER, "spacetime", *cli, timeout=timeout)
++
++    load.stdb = stdb
++    client = None
++    attempted = False
++    try:
++        (evidence / "host-before-launch.json").write_text(json.dumps(check_host()))
++        attempted = True
++        harness("launch", "--seed", seed, "--target-dir", os.environ["CARGO_TARGET_DIR"])
++        harness("doctor")
++        owner = load.admin_token()
++
++        def sql(query):
++            return load.sql(db, query, owner)
++
++        def call(reducer, *values):
++            load.call(db, reducer, values, owner)
++
++        for key, value in {"feed_scope_probe": args.arm == "on", "profile_detail": True,
++                           "cover_sight_on": True, "fov_on": args.workload != "round",
++                           "gaze_on": args.workload != "round"}.items():
++            call("set_world_law", key, json.dumps(value))
++
++        def census():
++            return {row["id"]: row for row in sql("SELECT id, name, alive FROM character") if row["alive"]}
++
++        ambient = len(census())
++        fighters = []
++        center = (0, 0)
++        if args.workload == "woods":
++            call("set_paused", True)
++            for key in ("dmg_strike", "dmg_strike_spear"):
++                call("set_world_law", key, "0.05")
++            before = census()
++            call("spawn_crowd", 96, True)
++            fighters = sorted(census().keys() - before.keys())
++            if len(fighters) != 96:
++                raise RuntimeError(f"expected 96 fighters, got {len(fighters)}")
++            center = (276, 224)
++            tiles = {}
++            positions = []
++            for y in range(216, 233):
++                for x in range(268, 285):
++                    chunk = (y // 16 << 16) | x // 16
++                    if chunk not in tiles:
++                        row, = sql(f"SELECT tiles FROM terrain_chunk WHERE id = {chunk}")
++                        data = row["tiles"]
++                        tiles[chunk] = bytes.fromhex(data.removeprefix("0x")) if isinstance(data, str) else bytes(data)
++                    if tiles[chunk][(y % 16) * 16 + x % 16] in (0, 1, 3, 5, 6):
++                        positions.append((x + 0.5, y + 0.5))
++            positions.sort(key=lambda xy: (math.dist(xy, center), xy))
++            if len(positions) < 96:
++                raise RuntimeError("too few walkable wooded tiles")
++            for index, (fighter, at) in enumerate(zip(fighters, positions)):
++                call("place_at", fighter, *at)
++                call("grant_items", fighter, "spear", 1)
++                call("set_behavior", fighter, json.dumps({"first": [
++                    {"if": {"cond": {"threatened": True}, "then": {"do": {"skill": "dodge" if index % 2 else "block"}}}},
++                    {"do": {"skill": "strike", "target": {"nearest": "person"}}},
++                ]}))
++                if index % 2 == 0:
++                    call("place_structure", fighter, "remains")
++            call("set_paused", False)
++            count = 8
++            spots = [(center[0] + 8 * math.cos(i * math.tau / count),
++                      center[1] + 8 * math.sin(i * math.tau / count)) for i in range(count)]
++        else:
++            if ambient != 64:
++                raise RuntimeError(f"expected 64 Cullet residents, got {ambient}")
++            count = 152
++            _, spots = load.clusters(sql("SELECT * FROM lot"), 7, 3.0, -(-count // 7))
++
++        tokens = [load.new_identity() for _ in range(count)]
++        client = load.Proc([binary, "players"], evidence / "players.stderr")
++        client.send(json.dumps({
++            "uri": load.URL, "db": db, "events": str(evidence / "events.jsonl"),
++            "battle": center, "behaviour": {"walk_period_ms": 1500},
++            "players": [{"token": token, "name": f"Feed{i}", "role": "walk"} for i, token in enumerate(tokens)],
++            "client": "game", "feed_probe": True,
++        }))
++        joined = client.expect("joined", 300)
++        for player, (x, y) in zip(joined["players"], spots):
++            call("place_at", player["id"], x, y)
++        client.send("placed")
++        client.expect("ready", 300)
++        day_ms = sql("SELECT day_ms FROM world")[0]["day_ms"]
++        noon = time.time_ns() // 1_000_000 - day_ms * 5 // 24
++        harness("sql", f"UPDATE world SET epoch_ms = {noon} WHERE id = 0")
++        client.send("go")
++        time.sleep(5)
++        harness("doctor")
++        host_before = check_host()
++        start_census = census()
++        ident = battle.database_identity(db)
++        if not ident:
++            raise RuntimeError("could not resolve the database identity")
++        m0 = battle.metrics(ident)
++        first_stats = sql("SELECT ticks, at_ms FROM stats")[0]
++        call("set_profile", True)
++        start = time.time()
++        fighter_counts = []
++        try:
++            for offset in range(5, args.seconds, 5):
++                time.sleep(max(0, start + offset - time.time()))
++                if fighters:
++                    bodies = sql("SELECT id, x, y FROM body")
++                    local = sum(row["id"] in fighters and math.dist((row["x"], row["y"]), center) <= 16
++                                for row in bodies)
++                    fighter_counts.append(local)
++            time.sleep(max(0, start + args.seconds - time.time()))
++        finally:
++            end = time.time()
++            call("set_profile", False)
++        last_stats = sql("SELECT ticks, at_ms FROM stats")[0]
++        m1 = battle.metrics(ident)
++        end_census = census()
++        log = stdb("logs", "-s", "local", db, "-n", "450000")
++        (evidence / "module.log").write_text(log)
++        spans = load.spans(log, start, end)
++        ticks = spans.get("tick", [])
++        if not ticks or last_stats["ticks"] <= first_stats["ticks"] or client.p.poll() is not None:
++            raise RuntimeError("missing tick samples or live SDK workload")
++        diags, diag_seconds = battle.diag_counts(type("Run", (), {"db": db})(), start, end)
++        elapsed = end - start
++        actions = sql(f"SELECT COUNT(*) AS n FROM skill_use WHERE accepted_ms >= {int(start * 1000)} AND accepted_ms < {int(end * 1000)}")[0]["n"]
++        sight = {key: sum(values) / elapsed for key, values in spans.items()
++                 if key.startswith(("sight.", "scene.sensed"))}
++        bytes_key = "spacetime_num_bytes_sent_to_clients_total"
++        memory_key = "spacetime_worker_wasm_memory_bytes"
++        if any(key not in data for data in (m0, m1) for key in (bytes_key, memory_key)):
++            raise RuntimeError("missing required DB metrics")
++        # Close the original connections before reconnecting with the retained player identity.
++        client.p.terminate()
++        client.p.wait(timeout=30)
++        reconnect = subprocess.run([binary, "feed-snapshot"], text=True, input=json.dumps({
++            "uri": load.URL, "db": db, "token": tokens[0],
++        }) + "\n", capture_output=True, check=True, timeout=60)
++        result = dict(workload=args.workload, arm=args.arm, duration_s=elapsed,
++                      host_before=host_before, host_after=host(), clients=count, ambient=ambient,
++                      census=[len(start_census), len(end_census)],
++                      fighters=[sum(f in c for f in fighters) for c in (start_census, end_census)],
++                      local_fighters_in_16m=fighter_counts, accepted_skill_uses_s=actions / elapsed,
++                      sight_ms_s=sum(sight.values()), sight_spans_ms_s=sight,
++                      tick_ms=statistics.mean(ticks), tick_samples=len(ticks),
++                      ticks_s=(last_stats["ticks"] - first_stats["ticks"]) * 1000 / (last_stats["at_ms"] - first_stats["at_ms"]),
++                      late_share=sum(tick > 16.7 for tick in ticks) / len(ticks),
++                      copy_writes_s=sum(value for key, value in diags.items() if key.startswith("feed_probe:")),
++                      diagnostic_seconds=diag_seconds,
++                      total_kb_s_per_client=(m1[bytes_key] - m0[bytes_key]) / (1000 * elapsed * count),
++                      reconnect=json.loads(reconnect.stdout), wasm_memory_bytes=[m0[memory_key], m1[memory_key]],
++                      metrics_before=m0, metrics_after=m1)
++        (evidence / "result.json").write_text(json.dumps(result, indent=2) + "\n")
++        if fighters and result["fighters"] != [96, 96]:
++            raise RuntimeError("fighter census fell below 96")
++        print(json.dumps({key: value for key, value in result.items() if not key.startswith("metrics_")}), flush=True)
++    finally:
++        if client and client.p.poll() is None:
++            client.p.terminate()
++            client.p.wait(timeout=30)
++        if attempted:
++            harness("cleanup")
++
++
++def main():
++    parser = argparse.ArgumentParser(description=__doc__)
++    parser.add_argument("--run", required=True)
++    parser.add_argument("--workload", choices=("round", "middle", "woods"), required=True)
++    parser.add_argument("--arm", choices=("off", "on"), required=True)
++    parser.add_argument("--woods-seed", type=lambda path: str(Path(path).resolve()))
++    parser.add_argument("--seconds", type=int, default=30)
++    args = parser.parse_args()
++    if args.workload == "woods" and not args.woods_seed:
++        parser.error("--woods-seed must point to the archived cover acceptance fixture")
++    if os.environ.get("LIVING_STDB_CONTAINER") != "slop-feed-scoping-stdb" or load.URL != "http://127.0.0.1:3398":
++        parser.error("requires the dedicated slop-feed-scoping-stdb server at 127.0.0.1:3398")
++    if Path(os.environ["CARGO_TARGET_DIR"]).resolve() != Path.home() / "slop-feedscope-target":
++        parser.error("requires the dedicated cargo target")
++    with (Path.home() / "slop-mq/battle.lock").open("r") as lock:
++        fcntl.flock(lock, fcntl.LOCK_EX)
++        run(args)
++
++
++if __name__ == "__main__":
++    main()
+diff --git a/living/tools/gate_load/src/main.rs b/living/tools/gate_load/src/main.rs
+index a890964b..959bdca4 100644
+--- a/living/tools/gate_load/src/main.rs
++++ b/living/tools/gate_load/src/main.rs
+@@ -643,7 +643,11 @@ fn players_mode() {
+         log.put(json!({"k": "conn", "p": idx, "role": format!("{role:?}"), "identity": identity.to_hex().to_string(), "ts": t, "connected": unix_us()}));
+         let pl = Player { idx, role, name: p["name"].as_str().unwrap().to_string(), conn, counts: Arc::default(), st: Arc::default(), applied: Arc::default(), errors: Arc::default() };
+         hook(&pl, &log);
+-        subscribe(&pl, client.base());
++        let mut queries = client.base();
++        if req["feed_probe"].as_bool().unwrap_or(false) {
++            queries.push("SELECT * FROM my_feed_probe".into());
++        }
++        subscribe(&pl, queries);
+         players.push(pl);
+     }
+     wait_applied(&players, 1, "base", Duration::from_secs(120));
+@@ -866,6 +870,27 @@ fn relay_mode(args: &[String]) {
+     snapshot(&mut file);
+ }
+
++/// Measure a fresh SDK connection and application of the probe snapshot with a retained identity.
++fn feed_snapshot() {
++    let lines = stdin_lines();
++    let req: Value = serde_json::from_str(&lines.recv().expect("request line")).expect("request JSON");
++    let start = Instant::now();
++    let (conn, _) = connect(req["uri"].as_str().unwrap(), req["db"].as_str().unwrap(), req["token"].as_str().unwrap(), None);
++    let (sent, applied) = std::sync::mpsc::channel();
++    let errors = sent.clone();
++    conn.subscription_builder()
++        .on_applied(move |ctx| {
++            let _ = sent.send(Ok((start.elapsed().as_secs_f64() * 1000.0, ctx.db.my_feed_probe().count())));
++        })
++        .on_error(move |_, error| {
++            let _ = errors.send(Err(error.to_string()));
++        })
++        .subscribe(vec!["SELECT * FROM my_feed_probe"]);
++    let (ms, rows) = applied.recv_timeout(Duration::from_secs(30)).expect("probe snapshot").expect("probe subscription");
++    println!("{}", json!({"ms": ms, "rows": rows}));
++    let _ = conn.disconnect();
++}
++
+ // ---- watch -----------------------------------------------------------------------------------
+
+ fn watch_mode() {
+@@ -1139,6 +1164,7 @@ fn main() {
+         Some("players") => players_mode(),
+         Some("relay") => relay_mode(&args[2..]),
+         Some("watch") => watch_mode(),
++        Some("feed-snapshot") => feed_snapshot(),
+         Some("observe") => observe_mode(),
+         Some("mind") => mind_mode(),
+         Some("soak") => soak::run(),
