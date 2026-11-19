@@ -158,6 +158,10 @@ pub mod last_look_table;
 pub mod last_look_type;
 pub mod law_change_table;
 pub mod law_change_type;
+pub mod law_override_table;
+pub mod law_override_type;
+pub mod law_revision_table;
+pub mod law_revision_type;
 pub mod leaf_result_type;
 pub mod line_heard_table;
 pub mod line_heard_type;
@@ -526,6 +530,10 @@ pub use last_look_table::*;
 pub use last_look_type::LastLook;
 pub use law_change_table::*;
 pub use law_change_type::LawChange;
+pub use law_override_table::*;
+pub use law_override_type::LawOverride;
+pub use law_revision_table::*;
+pub use law_revision_type::LawRevision;
 pub use leaf_result_type::LeafResult;
 pub use line_heard_table::*;
 pub use line_heard_type::LineHeard;
@@ -1426,6 +1434,8 @@ pub struct DbUpdate {
     land_plan: __sdk::TableUpdate<LandPlan>,
     last_look: __sdk::TableUpdate<LastLook>,
     law_change: __sdk::TableUpdate<LawChange>,
+    law_override: __sdk::TableUpdate<LawOverride>,
+    law_revision: __sdk::TableUpdate<LawRevision>,
     line_heard: __sdk::TableUpdate<LineHeard>,
     line_seen: __sdk::TableUpdate<LineSeen>,
     look: __sdk::TableUpdate<Look>,
@@ -1711,6 +1721,12 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "law_change" => db_update
                     .law_change
                     .append(law_change_table::parse_table_update(table_update)?),
+                "law_override" => db_update
+                    .law_override
+                    .append(law_override_table::parse_table_update(table_update)?),
+                "law_revision" => db_update
+                    .law_revision
+                    .append(law_revision_table::parse_table_update(table_update)?),
                 "line_heard" => db_update
                     .line_heard
                     .append(line_heard_table::parse_table_update(table_update)?),
@@ -2199,6 +2215,12 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.law_change = cache
             .apply_diff_to_table::<LawChange>("law_change", &self.law_change)
             .with_updates_by_pk(|row| &row.id);
+        diff.law_override = cache
+            .apply_diff_to_table::<LawOverride>("law_override", &self.law_override)
+            .with_updates_by_pk(|row| &row.name);
+        diff.law_revision = cache
+            .apply_diff_to_table::<LawRevision>("law_revision", &self.law_revision)
+            .with_updates_by_pk(|row| &row.id);
         diff.line_heard = cache
             .apply_diff_to_table::<LineHeard>("line_heard", &self.line_heard)
             .with_updates_by_pk(|row| &row.line);
@@ -2659,6 +2681,12 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "law_change" => db_update
                     .law_change
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "law_override" => db_update
+                    .law_override
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "law_revision" => db_update
+                    .law_revision
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "line_heard" => db_update
                     .line_heard
@@ -3138,6 +3166,12 @@ impl __sdk::DbUpdate for DbUpdate {
                 "law_change" => db_update
                     .law_change
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "law_override" => db_update
+                    .law_override
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "law_revision" => db_update
+                    .law_revision
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "line_heard" => db_update
                     .line_heard
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -3496,6 +3530,8 @@ pub struct AppliedDiff<'r> {
     land_plan: __sdk::TableAppliedDiff<'r, LandPlan>,
     last_look: __sdk::TableAppliedDiff<'r, LastLook>,
     law_change: __sdk::TableAppliedDiff<'r, LawChange>,
+    law_override: __sdk::TableAppliedDiff<'r, LawOverride>,
+    law_revision: __sdk::TableAppliedDiff<'r, LawRevision>,
     line_heard: __sdk::TableAppliedDiff<'r, LineHeard>,
     line_seen: __sdk::TableAppliedDiff<'r, LineSeen>,
     look: __sdk::TableAppliedDiff<'r, Look>,
@@ -3720,6 +3756,16 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         callbacks.invoke_table_row_callbacks::<LandPlan>("land_plan", &self.land_plan, event);
         callbacks.invoke_table_row_callbacks::<LastLook>("last_look", &self.last_look, event);
         callbacks.invoke_table_row_callbacks::<LawChange>("law_change", &self.law_change, event);
+        callbacks.invoke_table_row_callbacks::<LawOverride>(
+            "law_override",
+            &self.law_override,
+            event,
+        );
+        callbacks.invoke_table_row_callbacks::<LawRevision>(
+            "law_revision",
+            &self.law_revision,
+            event,
+        );
         callbacks.invoke_table_row_callbacks::<LineHeard>("line_heard", &self.line_heard, event);
         callbacks.invoke_table_row_callbacks::<LineSeen>("line_seen", &self.line_seen, event);
         callbacks.invoke_table_row_callbacks::<Look>("look", &self.look, event);
@@ -4651,6 +4697,8 @@ impl __sdk::SpacetimeModule for RemoteModule {
         land_plan_table::register_table(client_cache);
         last_look_table::register_table(client_cache);
         law_change_table::register_table(client_cache);
+        law_override_table::register_table(client_cache);
+        law_revision_table::register_table(client_cache);
         line_heard_table::register_table(client_cache);
         line_seen_table::register_table(client_cache);
         look_table::register_table(client_cache);
@@ -4808,6 +4856,8 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "land_plan",
         "last_look",
         "law_change",
+        "law_override",
+        "law_revision",
         "line_heard",
         "line_seen",
         "look",

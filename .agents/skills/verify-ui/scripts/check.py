@@ -22,6 +22,8 @@ V = os.path.join(ROOT, ".agents/skills/verify/scripts/verify.py")
 sys.path.insert(0, os.path.dirname(V))
 import verify
 from drive import next_sync_wait
+sys.path.insert(0, os.path.join(ROOT, "living/tools"))
+from law_values import own_laws
 
 W, H = 1600, 900
 
@@ -1660,12 +1662,245 @@ def texel(meta, pix, x, y):
     return pix[j * n + i] if 0 <= i < n and 0 <= j < n else None
 
 
+LOG_LINE = re.compile(r"^(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d+)Z\s+(\w+)\s+([\w:]+): (.*)$")
+
+
+def timed_lines(out):
+    """The client log's lines with their wall time (s since the epoch)."""
+    import datetime
+    rows = []
+    for line in log(out).splitlines():
+        m = LOG_LINE.match(line)
+        if m:
+            stamp = datetime.datetime.strptime(m[1][:26], "%Y-%m-%dT%H:%M:%S.%f").replace(tzinfo=datetime.timezone.utc)
+            rows.append((stamp.timestamp(), m[4]))
+    return rows
+
+
+def first_after(lines, pattern, after, before=None):
+    for t, text in lines:
+        if t >= after and (before is None or t < before) and re.search(pattern, text):
+            return t, text
+    return None
+
+
+@scenario("law-override", explicit=True)
+def law_override(run, c):
+    """Value-only law edits reach a connected client in place (docs/LAW_OVERRIDE.md): each of
+    the delivery, gaze and cover laws set through `set_world_law` (which writes `law_override`
+    only) while a client plays, with the script revision unchanged, the client's reaction time,
+    the delivery switch made before broken (no creature missing from the reads, frame by frame:
+    `LIVING_GAME_SEEN_LOG`) and the world's tick gap around the call (the authority's `clock`
+    sampled every ~20 ms); an ordinary law (`turn_rate`) still installs a new revision, compiled
+    here with the overrides kept; a reconnect and a fresh client with overrides present take the
+    set the rows choose first. The laws touched are restored afterwards."""
+    import threading
+    s = "law-override"
+    st = verify.load(run)
+    db, token = st["db"], verify.admin_token()
+    name = f"{s}-{THEME}" if THEME else s
+    base = os.path.join(ROOT, ".local/living/verify", run, "ui")
+    out = os.path.join(base, name)
+
+    def q(query):
+        code, body = verify.http(f"/v1/database/{db}/sql", query, token, raw=True, timeout=5)
+        if code != 200:
+            return None
+        res = json.loads(body)[-1]
+        names = [col["name"]["some"] for col in res["schema"]["elements"]]
+        return [dict(zip(names, row)) for row in res["rows"]]
+
+    def revision():
+        rows = q("SELECT revision FROM script WHERE name = 'skills'") or [{}]
+        return rows[0].get("revision")
+
+    def set_law(law, value):
+        verify.refresh_lease(st)
+        t0 = time.time()
+        code, body = verify.http(f"/v1/database/{db}/call/set_world_law", [law, value], token, timeout=60)
+        return {"law": law, "value": value, "code": code, "reply": body[:300], "t0": t0, "t1": time.time()}
+
+    # The world clock every ~20 ms, for the tick gap around each call.
+    ticks, stop = [], threading.Event()
+
+    def sample():
+        while not stop.is_set():
+            rows = q("SELECT tick FROM clock WHERE id = 0")
+            if rows:
+                ticks.append((time.time(), int(rows[0]["tick"])))
+            time.sleep(0.02)
+
+    def gap(t0, t1):
+        """The longest wall time (ms) the tick stood still in [t0, t1], by the samples."""
+        w = [(t, k) for t, k in ticks if t0 <= t <= t1]
+        worst, last_t, last_k = 0.0, None, None
+        for t, k in w:
+            if last_k is None or k != last_k:
+                if last_t is not None:
+                    worst = max(worst, t - last_t)
+                last_t, last_k = t, k
+        if w and last_t is not None:
+            worst = max(worst, w[-1][0] - last_t)
+        rate = (w[-1][1] - w[0][1]) / (w[-1][0] - w[0][0]) if len(w) > 1 and w[-1][0] > w[0][0] else 0.0
+        return round(worst * 1000, 1), round(rate, 1), len(w)
+
+    original = {r["name"]: r["value"] for r in (q("SELECT name, value FROM law_override") or [])}
+    cover = (q("SELECT * FROM cover_law") or [{}])[0]
+    fill = float(cover.get("cover_brush_min_fill", 0.6))
+    new_fill = 0.5 if abs(fill - 0.5) > 1e-3 else 0.7
+    shipped = {"cue_transport_on": "true", "near_tier_on": "true", "gaze_on": "false", "cover_sight_on": "false",
+               "cover_brush_min_fill": f"{fill:g}", "turn_rate": "6"}
+    touched = list(shipped)
+    in_place = r"rules: law overrides laid over in place .*changed \[\"{law}\"\]; delivery {d} cover {c} gaze {g}"
+    steps = [
+        ("cue_transport_on", "false", "delivery", r"rules: cue_transport_on false near_tier_on true", None),
+        ("near_tier_on", "false", "delivery", r"perception: on the untiered set after", "untiered"),
+        ("near_tier_on", "true", "delivery", r"perception: on the tiered set after", "tiered"),
+        ("cue_transport_on", "true", "delivery", r"rules: cue_transport_on true near_tier_on true", None),
+        ("gaze_on", "true", "gaze", r"sight edge: my senses from the authority \(my_senses_v_2\)", None),
+        ("gaze_on", "false", "gaze", r"sight edge: my senses from the authority \(my_senses\)", None),
+        ("cover_sight_on", "true", "cover", r"sight field: cover policy Some\(", None),
+        ("cover_brush_min_fill", f"{new_fill:g}", "cover", rf"sight field: cover policy Some\(.*brush_min_fill: {new_fill:g}\b", None),
+        ("cover_sight_on", "false", "cover", r"sight field: cover policy None", None),
+    ]
+    plan = "ready;wait:2;sync:armed;wait:1;dump:before;sync:toggled;dump:toggled;reconnect;wait:8;dump:reconnected;sync:done;quit"
+    cmd = [sys.executable, os.path.join(HERE, "drive.py"), "--run", run, "--name", name, "--plan", plan, "--timeout", "900"]
+    os.makedirs(base, exist_ok=True)
+    seen_path = os.path.join(base, f"{name}.seen.jsonl")
+    env = dict(os.environ, LIVING_GAME_SEEN_LOG=seen_path)
+    results, installs = [], []
+    sampler = threading.Thread(target=sample, daemon=True)
+    sampler.start()
+    drive_log = open(os.path.join(base, f"{name}.drive.log"), "w")
+    p = subprocess.Popen(cmd, stdout=drive_log, stderr=subprocess.STDOUT, env=env)
+
+    def wait_for(pattern, secs):
+        end = time.time() + secs
+        while time.time() < end and p.poll() is None:
+            if re.search(pattern, log(out)):
+                return True
+            time.sleep(0.2)
+        return False
+
+    def go(sync):
+        open(os.path.join(out, f"{sync}.go"), "w").close()
+
+    try:
+        if not wait_for(r"live script: waiting for \S*/armed\.go", 400):
+            c.check(s, "the client reached the toggles", False, f"drive exit {p.poll()}")
+            return
+        go("armed")
+        time.sleep(4)
+        quiet = gap(time.time() - 3.5, time.time())
+        for law, value, cls, effect, _ in steps:
+            rev = revision()
+            r = set_law(law, value)
+            time.sleep(3.0)
+            r.update(cls=cls, rev_before=rev, rev_after=revision())
+            r["gap_ms"], r["ticks_per_s"], r["samples"] = gap(r["t0"] - 0.5, r["t1"] + 1.5)
+            results.append(r)
+        for law, value in (("turn_rate", "6.5"), ("turn_rate", shipped["turn_rate"] if "turn_rate" not in original else original["turn_rate"])):
+            rev = revision()
+            r = set_law(law, value)
+            time.sleep(4.0)
+            r.update(rev_before=rev, rev_after=revision())
+            r["gap_ms"], r["ticks_per_s"], r["samples"] = gap(r["t0"] - 0.5, r["t1"] + 2.5)
+            installs.append(r)
+        # The reconnect: the client on the tiered set (both delivery laws on, as it now knows
+        # them) drops its connection, and while it is offline (it retries after 3 s) both laws
+        # go off, so its first result after the reconnect holds rows it has not seen.
+        t_reconnect = time.time()
+        go("toggled")
+        offline = wait_for(r"offline: ", 30)
+        pre = [set_law("cue_transport_on", "false"), set_law("near_tier_on", "false")]
+        wait_for(r"live script: waiting for \S*/done\.go", 60)
+        go("done")
+        p.wait(timeout=120)
+        # A fresh client on the world with those overrides present.
+        fresh_out, fresh_code, _ = drive(run, f"{s}-fresh", "ready;wait:3;dump:fresh;quit")
+    finally:
+        if p.poll() is None:
+            p.terminate()
+        for law in touched:
+            set_law(law, original.get(law, shipped[law]))
+        stop.set()
+        drive_log.close()
+    lines = timed_lines(out)
+    frames = []
+    if os.path.exists(seen_path):
+        for line in open(seen_path):
+            try:
+                frames.append(json.loads(line))
+            except ValueError:
+                pass
+    report = {"quiet_gap_ms": quiet, "steps": results, "installs": installs, "pre_reconnect": pre}
+    c.check(s, "the world's tick ran between calls (quiet gap under 150 ms)", quiet[0] < 150, f"{quiet}")
+    for r, (law, value, cls, effect, switch) in zip(results, steps):
+        tag = f"{law}={value}"
+        c.check(s, f"{tag}: set_world_law accepted", r["code"] == 200, r["reply"])
+        c.check(s, f"{tag}: the script revision did not change", r["rev_before"] == r["rev_after"] and r["rev_before"] is not None, f"{r['rev_before']} -> {r['rev_after']}")
+        pat = in_place.format(law=law, d=str(cls == "delivery").lower(), c=str(cls == "cover").lower(), g=str(cls == "gaze").lower())
+        hit = first_after(lines, pat, r["t0"] - 0.05)
+        eff = first_after(lines, effect, r["t0"] - 0.05)
+        r["laid_over_ms"] = round((hit[0] - r["t1"]) * 1000, 1) if hit else None
+        r["effect_ms"] = round((eff[0] - r["t1"]) * 1000, 1) if eff else None
+        r["effect_line"] = eff[1] if eff else None
+        c.check(s, f"{tag}: laid over in place as {cls}", hit is not None, pat)
+        c.check(s, f"{tag}: the client reacted within a second ({effect})", eff is not None and eff[0] - r["t1"] < 1.0, f"{r['effect_ms']} ms")
+        c.check(s, f"{tag}: no compile on the client", first_after(lines, r"rules: skill script revision \d+ compiled", r["t0"] - 0.05, r["t0"] + 3.0) is None)
+        c.check(s, f"{tag}: no world freeze (tick gap under 150 ms)", r["gap_ms"] < 150, f"{r['gap_ms']} ms")
+        if switch:
+            sub = first_after(lines, rf"perception: subscribing the {switch} set", r["t0"] - 0.05)
+            r["missing_line"] = eff[1] if eff else None
+            c.check(s, f"{tag}: the {switch} set subscribed beside the old one and applied", sub is not None and eff is not None)
+            c.check(s, f"{tag}: the client's switch line lists nobody missing", bool(eff) and "missing now []" in eff[1], eff[1] if eff else "")
+            # Frame by frame: each creature in the reads just before the call and 1 s after the
+            # switch is in every frame between.
+            if eff:
+                t0_ms, t1_ms = r["t0"] * 1000 - 300, (eff[0] + 1.0) * 1000
+                before = [f for f in frames if f.get("wall_ms", 0) < r["t0"] * 1000]
+                after = [f for f in frames if f.get("wall_ms", 0) >= t1_ms]
+                ids = lambda f: {row[0] for row in f.get("rows", [])}
+                keep = (ids(before[-1]) & ids(after[0])) if before and after else set()
+                window = [f for f in frames if t0_ms <= f.get("wall_ms", 0) <= t1_ms]
+                gaps = [f["wall_ms"] for f in window if keep - ids(f)]
+                r["frames"], r["kept"], r["frames_missing"] = len(window), len(keep), len(gaps)
+                sets = {f.get("reads") for f in window}
+                c.check(s, f"{tag}: no frame without a creature kept across the switch", window and keep and not gaps,
+                        f"{len(window)} frames, {len(keep)} kept, {len(gaps)} with one missing; reads {sets}")
+    for r in installs:
+        tag = f"turn_rate={r['value']} (full install)"
+        comp = first_after(lines, rf"rules: skill script revision {r['rev_after']} compiled \(\d+ skills, \d+ law overrides\)", r["t0"] - 0.05)
+        r["compiled_ms"] = round((comp[0] - r["t1"]) * 1000, 1) if comp else None
+        c.check(s, f"{tag}: a new script revision", r["code"] == 200 and r["rev_after"] == (r["rev_before"] or 0) + 1, f"{r['rev_before']} -> {r['rev_after']} {r['reply']}")
+        c.check(s, f"{tag}: compiled here with the overrides", comp is not None, comp[1] if comp else "")
+        c.check(s, f"{tag}: the perception set kept (no subscribe after the compile)", first_after(lines, r"perception: subscribing", r["t0"] - 0.05, r["t0"] + 4.0) is None)
+    after = [(t, x) for t, x in lines if t >= t_reconnect]
+    subscribed = [x for _, x in after if x.startswith("perception: subscribing")]
+    world = [x for _, x in after if x.startswith("world subscribed after")]
+    down = [t for t, x in after if x.startswith("offline: ")]
+    report["reconnect"] = {"subscribed": subscribed, "world": world, "offline": bool(offline), "laws_set_while_offline": pre,
+                           "set_before_reconnect": bool(down) and all(r["t1"] < next((t for t, x in after if x.startswith("world subscribed after")), 0) for r in pre)}
+    c.check(s, "reconnect: the delivery laws went off while the client was offline", report["reconnect"]["set_before_reconnect"] and all(r["code"] == 200 for r in pre), f"{report['reconnect']}")
+    c.check(s, "reconnect: the base set came back with the overrides", any("law overrides)" in x for x in world), f"{world}")
+    c.check(s, "reconnect: the first set chosen is the one the new rows choose (untiered), no tiered set first",
+            bool(subscribed) and "untiered" in subscribed[0] and not any("the tiered set" in x for x in subscribed), f"{subscribed}")
+    flog = log(fresh_out)
+    fsub = re.findall(r"perception: subscribing the (\w+) set", flog)
+    fcomp = re.findall(r"rules: skill script revision \d+ compiled \(\d+ skills, (\d+) law overrides\)", flog)
+    report["fresh"] = {"exit": fresh_code, "subscribed": fsub, "compiled_with": fcomp}
+    c.check(s, "fresh client: compiled with the world's overrides", bool(fcomp) and int(fcomp[0]) >= 2, f"{fcomp}")
+    c.check(s, "fresh client: only the untiered set subscribed", fsub == ["untiered"], f"{fsub}")
+    json.dump(report, open(os.path.join(base, f"{name}.json"), "w"), indent=1)
+
+
 @scenario("gaze", cullet=True, explicit=True)
 def gaze(run, c):
     """Drive zoom through all gaze bands, coalescing, reconnect and the Cullet hedge."""
     name = "gaze"
     state = {"gaze_on": "false", "fov_on": "true", "cover_sight_on": "false", "cover_brush_on": "true"}
-    original = {r["name"]: r["value"] for r in sql(run, "SELECT name,value FROM world_law")}
+    # The world's own values: `law_override` laid over `world_law` (older modules), one helper for every verify script.
+    original = own_laws(lambda q: sql(run, q))
     ids = residents(run, 5)
     if len(ids) != 5:
         c.check(name, "five stationary residents available", False, repr(ids))

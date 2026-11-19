@@ -21,7 +21,8 @@
 //!      feed and timing (`my_combat`, `my_readiness`) and the skill bar's `skill_card` (docs/COMBAT.md); the visible skills'
 //!      `act_card` and the one `weather` row (docs/TOWN_LIFE.md), both small and nearly static;
 //!      the world's installed skill script (`script`, the `skills` row: about 70 kB, sent again
-//!      only when a script is installed), from which `verbs.rs` offers acts;
+//!      only when a script is installed), from which `verbs.rs` offers acts, and the world's own
+//!      law values laid over it (`law_override`: a value-only law changes there alone);
 //!    - by the world's kind ([`Mode`]): **land** (a `land` row exists; the island): terrain
 //!      comes from regenerating the land (`live.rs`), so `terrain_chunk` is only subscribed in
 //!      the window, for edits; **tiles** (the lab worlds): `terrain_chunk` whole.
@@ -110,7 +111,27 @@ const PERCEIVED: &[&str] = &[
     "SELECT * FROM weather",
     // The rules themselves, for offering acts (`verbs.rs`): one row, changed only by installs.
     "SELECT * FROM script WHERE name = 'skills'",
+    // The world's own law values (tens of rows, one per law ever set; written by `set_world_law`
+    // and a seed's `rules`), laid over the compiled script (`verbs::Rules`, docs/LAW_OVERRIDE.md):
+    // a value-only law (the delivery, cover and gaze laws) changes here alone, with the script
+    // row and its revision untouched. Beside `script` in one set, so the first result after a
+    // connect or reconnect holds both, and the laws are in force before a law is read.
+    "SELECT * FROM law_override",
 ];
+
+/// Bumped by every `law_override` insert, update and delete this process's connections see, and
+/// once when a connection's base set is applied (a world whose rows all went while I was away
+/// sends no delete): `verbs::Rules` lays the rows over again when it moves.
+static LAW_ROWS: AtomicU64 = AtomicU64::new(0);
+
+/// How many times the `law_override` rows have changed here (`LAW_ROWS`).
+pub fn law_rows() -> u64 {
+    LAW_ROWS.load(Ordering::Acquire)
+}
+
+fn law_rows_moved() {
+    LAW_ROWS.fetch_add(1, Ordering::AcqRel);
+}
 
 enum Signal {
     Connection(Result<PlayerConnection, String>),
@@ -598,8 +619,10 @@ fn perception_set(cues_on: bool, tiers_on: bool) -> u32 {
 }
 
 /// The world's delivery laws, `cue_transport_on` and `near_tier_on`, read from the installed
-/// `skills` script the client already compiles (`verbs::Rules`; the authority writes a world's
-/// own law values into it), once per revision. They choose the perception set: both off, the
+/// `skills` script the client already compiles with the world's `law_override` rows laid over it
+/// (`verbs::Rules`, docs/LAW_OVERRIDE.md), again whenever the laws in force change
+/// (`Rules::laws_key`: a compile, or a value-only edit laid over in place with the script
+/// revision unchanged, `Applied::delivery`). They choose the perception set: both off, the
 /// untiered views as main's client subscribes them (`UNTIERED_STREAMS`: on the authority both off
 /// is main's delivery, and a client on the tiers then pays for twice the views, docs/TICK_RATE.md
 /// "Short series"); either on, the tiers and the cue tables (`TIERED_STREAMS`). A script that
@@ -608,13 +631,15 @@ fn perception_set(cues_on: bool, tiers_on: bool) -> u32 {
 /// old, the old dropped once the new one is applied (no frame without the others), and then
 /// reads move to it and the overlays are cleared. Each frame the cue law is passed to the
 /// connection's overlays, so a fresh connection takes it at once.
-pub fn perception_law(mut net: NonSendMut<Net>, rules: Option<NonSend<crate::verbs::Rules>>, time: Res<Time>, mut law: Local<Option<(u32, bool, bool)>>) {
+pub fn perception_law(mut net: NonSendMut<Net>, rules: Option<NonSend<crate::verbs::Rules>>, time: Res<Time>, mut law: Local<Option<(u64, bool, bool)>>) {
     let Some(rules) = rules else { return };
     if let Some(sc) = rules.scripts.as_ref() {
-        if law.is_none_or(|(rev, _, _)| rev != rules.revision) {
+        if law.is_none_or(|(key, _, _)| key != rules.laws_key) {
             let (c, t) = delivery_laws(&sc.laws());
-            info!("rules: cue_transport_on {c} near_tier_on {t} (script revision {})", rules.revision);
-            *law = Some((rules.revision, c, t));
+            if law.is_none_or(|(_, oc, ot)| (oc, ot) != (c, t)) {
+                info!("rules: cue_transport_on {c} near_tier_on {t} (script revision {}, laws {})", rules.revision, rules.laws_key);
+            }
+            *law = Some((rules.laws_key, c, t));
         }
     }
     let (cues_on, tiers_on) = match *law {
@@ -669,15 +694,18 @@ pub fn perception_law(mut net: NonSendMut<Net>, rules: Option<NonSend<crate::ver
 }
 
 /// `LIVING_GAME_SEEN_LOG=<file>`: every frame, the others as the reads see them then (the set in
-/// place, its rows' segment `t_ms`, the overlays' sizes), one JSON line, for checking a switch of
-/// perception sets frame by frame.
+/// place, its rows' segment `t_ms`, the overlays' sizes) and the wall clock (`wall_ms`, to line
+/// frames up with an outside driver's calls), one JSON line, for checking a switch of perception
+/// sets frame by frame.
 pub fn seen_log(net: NonSend<Net>, time: Res<Time>, mut out: Local<Option<Option<std::io::BufWriter<std::fs::File>>>>) {
     use std::io::Write;
     let w = out.get_or_insert_with(|| std::env::var("LIVING_GAME_SEEN_LOG").ok().filter(|p| !p.is_empty()).and_then(|p| std::fs::File::create(p).ok()).map(std::io::BufWriter::new));
     let (Some(w), Some(conn)) = (w.as_mut(), net.conn.as_ref()) else { return };
     let untiered = conn.untiered();
+    let wall_ms = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis() as u64);
     let line = serde_json::json!({
         "t": time.elapsed_secs_f64(),
+        "wall_ms": wall_ms,
         "set": net.perception.current.as_ref().map(|s| if s.key[0] == UNTIERED { "untiered" } else { "tiered" }),
         "reads": if untiered { "untiered" } else { "tiered" },
         "rows": conn.perceived_rows(untiered),
@@ -857,6 +885,10 @@ impl Net {
                 debug!("new connection cue overlays (motion, fighter, doing): {:?}", listen.counts());
                 listen.listen(conn, &body_t, &body_t_all);
                 track_motion_time(&conn.db.my_body(), &body_t, &body_t_all);
+                // The world's own law values: `verbs::Rules` lays them over on its next refresh.
+                conn.db.law_override().on_insert(|_, _| law_rows_moved());
+                conn.db.law_override().on_update(|_, _, _| law_rows_moved());
+                conn.db.law_override().on_delete(|_, _| law_rows_moved());
                 let ok = applied.clone();
                 let err = applied.clone();
                 conn.subscription_builder()
@@ -1133,7 +1165,11 @@ pub fn pump(mut net: NonSendMut<Net>, time: Res<Time>) {
             }
             Signal::Static => net.subscribe_base(),
             Signal::Base => {
-                info!("world subscribed after {now:.1} s");
+                info!("world subscribed after {now:.1} s ({} law overrides)", net.conn.as_ref().map_or(0, |c| c.db.law_override().count()));
+                // The rows are this connection's now: laid over before a law is read this frame
+                // (`verbs::refresh_rules` runs before `perception_law`), so a reconnect never
+                // chooses its set by the last connection's values.
+                law_rows_moved();
                 net.status = Status::Live;
                 net.ever_live = true;
                 net.gaze_view = net.conn.as_ref().map(|conn| {
@@ -1230,6 +1266,136 @@ mod cue_tests {
         assert_eq!(delivery_fallback(), (true, true));
         assert_eq!(delivery_fallback(), delivery_laws(&sc.laws()));
         assert_eq!(perception_set(delivery_fallback().0, delivery_fallback().1), TIERED);
+    }
+
+    /// `law_override` rows as the bindings deliver them.
+    fn rows(of: &[(&str, &str)]) -> Vec<LawOverride> {
+        of.iter().enumerate().map(|(i, (name, value))| LawOverride { name: name.to_string(), value: value.to_string(), revision: i as u32 + 1 }).collect()
+    }
+
+    fn set_of(rules: &crate::verbs::Rules) -> u32 {
+        let (c, t) = delivery_laws(&rules.scripts.as_ref().expect("compiled").laws());
+        perception_set(c, t)
+    }
+
+    const SHIPPED: &str = include_str!("../../scripts/skills.rhai");
+
+    #[test]
+    fn law_override_rows_decode_as_the_authority_decodes_them() {
+        let r = rows(&[("near_tier_on", "false"), ("cover_eye_height_m", " 1.25 "), ("not_json", "{oops"), ("cue_transport_on", "true"), ("near_tier_on", "true")]);
+        let over = crate::verbs::overrides_of_rows(&r);
+        // By name, the last of a name kept, a value that is not JSON left out: the same as
+        // `overrides_of` on the same (name, value) pairs, which the authority runs.
+        assert_eq!(over, vec![
+            ("cover_eye_height_m".to_string(), serde_json::json!(1.25)),
+            ("cue_transport_on".to_string(), serde_json::json!(true)),
+            ("near_tier_on".to_string(), serde_json::json!(true)),
+        ]);
+        assert_eq!(over, living_rules::script::overrides_of(r.iter().map(|r| (r.name.as_str(), r.value.as_str()))));
+        assert!(crate::verbs::overrides_of_rows(&[]).is_empty());
+    }
+
+    #[test]
+    fn a_delivery_override_flips_the_set_in_place_with_the_script_revision_kept() {
+        let mut rules = crate::verbs::Rules::default();
+        rules.take(7, SHIPPED, living_rules::DEFAULT_DAY_MS, &[], 1);
+        assert_eq!((rules.revision, rules.applied.as_ref()), (7, None), "a compile");
+        assert_eq!(set_of(&rules), TIERED);
+        let key = rules.laws_key;
+        // Both delivery laws off by `law_override` alone, the script row unchanged.
+        let off = crate::verbs::overrides_of_rows(&rows(&[("cue_transport_on", "false"), ("near_tier_on", "false")]));
+        rules.take(7, SHIPPED, living_rules::DEFAULT_DAY_MS, &off, 2);
+        let a = rules.applied.clone().expect("laid over in place, not compiled");
+        assert!(a.delivery && !a.cover && !a.gaze, "{a:?}");
+        assert_eq!(a.changed, ["cue_transport_on", "near_tier_on"]);
+        assert_eq!(rules.revision, 7);
+        assert!(rules.laws_key > key, "the laws' readers see a change");
+        assert_eq!(set_of(&rules), UNTIERED, "both off: main's untiered set");
+        // One back on: the tiers again.
+        let one = crate::verbs::overrides_of_rows(&rows(&[("cue_transport_on", "false"), ("near_tier_on", "true")]));
+        let key = rules.laws_key;
+        rules.take(7, SHIPPED, living_rules::DEFAULT_DAY_MS, &one, 3);
+        assert_eq!(rules.applied.as_ref().map(|a| a.changed.clone()), Some(vec!["near_tier_on".to_string()]));
+        assert!(rules.laws_key > key);
+        assert_eq!(set_of(&rules), TIERED);
+        // The same rows again (a row rewritten with its value): nothing in force changed, so
+        // nothing that reads the laws reads them again.
+        let key = rules.laws_key;
+        rules.take(7, SHIPPED, living_rules::DEFAULT_DAY_MS, &one, 4);
+        assert_eq!(rules.laws_key, key);
+    }
+
+    #[test]
+    fn cover_and_gaze_overrides_change_the_sight_laws_in_place() {
+        let mut rules = crate::verbs::Rules::default();
+        rules.take(3, SHIPPED, living_rules::DEFAULT_DAY_MS, &[], 1);
+        let sc = rules.scripts.as_ref().unwrap();
+        let (l, gaze) = (sc.laws(), sc.gaze_enabled());
+        assert!(!l.cover_sight_on && !l.gaze_on && !gaze, "the island's laws as shipped: cover and gaze off");
+        let over = crate::verbs::overrides_of_rows(&rows(&[("cover_sight_on", "true"), ("cover_eye_height_m", "1.25"), ("cover_brush_on", "true")]));
+        rules.take(3, SHIPPED, living_rules::DEFAULT_DAY_MS, &over, 2);
+        let a = rules.applied.clone().expect("in place");
+        assert!(a.cover && !a.delivery && !a.gaze, "{a:?}");
+        let sc = rules.scripts.as_ref().unwrap();
+        let l = sc.laws();
+        assert!(l.cover_sight_on && l.cover_brush_on);
+        assert!((l.cover_eye_height_m - 1.25).abs() < 1e-6);
+        assert_eq!(sc.law_value("cover_sight_on"), Some(serde_json::json!(true)), "Rhai's law(name) reads it too");
+        // Gaze on, in place: the senses the edge of sight asks follow it (the ceilings and the
+        // senses memo refreshed by `apply_overrides`), the same as a fresh compile under it.
+        let ctx = living_rules::script::SkillCtx::default();
+        let mut gaze = over.clone();
+        gaze.push(("gaze_on".to_string(), serde_json::json!(true)));
+        rules.take(3, SHIPPED, living_rules::DEFAULT_DAY_MS, &gaze, 3);
+        let a = rules.applied.clone().expect("in place");
+        assert!(a.gaze && !a.cover, "{a:?}");
+        let sc = rules.scripts.as_ref().unwrap();
+        assert!(sc.gaze_enabled() && sc.laws().gaze_on);
+        let fresh = living_rules::script::Scripts::with_overrides(SHIPPED, living_rules::DEFAULT_DAY_MS, &gaze).unwrap();
+        assert_eq!(format!("{:?}", sc.senses(&ctx)), format!("{:?}", fresh.senses(&ctx)));
+        assert_eq!(sc.laws(), fresh.laws());
+    }
+
+    #[test]
+    fn a_reconnect_lays_the_rows_it_finds_over_before_a_law_is_read() {
+        // A client started on a world whose delivery laws were set off since the last install:
+        // the first result holds the rows beside the script, so the first compile takes them and
+        // the first set chosen is the untiered one (no tiered set first).
+        let off = crate::verbs::overrides_of_rows(&rows(&[("cue_transport_on", "false"), ("near_tier_on", "false"), ("walk_base", "2.8")]));
+        let mut rules = crate::verbs::Rules::default();
+        rules.take(9, SHIPPED, living_rules::DEFAULT_DAY_MS, &off, 1);
+        assert!(rules.applied.is_none(), "compiled with them");
+        assert_eq!(set_of(&rules), UNTIERED);
+        assert_eq!(rules.scripts.as_ref().unwrap().law_value("walk_base"), Some(serde_json::json!(2.8)));
+        // A reconnect to the same world, the rows as they were: nothing changed in force.
+        let key = rules.laws_key;
+        rules.take(9, SHIPPED, living_rules::DEFAULT_DAY_MS, &off, 2);
+        assert_eq!(rules.laws_key, key);
+        // A reconnect after the delivery rows went (a world reset in place): the last
+        // connection's values are not kept; the shipped laws are in force again, in place.
+        let rest = crate::verbs::overrides_of_rows(&rows(&[("walk_base", "2.8")]));
+        rules.take(9, SHIPPED, living_rules::DEFAULT_DAY_MS, &rest, 3);
+        assert!(rules.applied.as_ref().is_some_and(|a| a.delivery));
+        assert_eq!(set_of(&rules), TIERED);
+    }
+
+    #[test]
+    fn an_override_of_an_ordinary_law_at_the_same_revision_compiles_again() {
+        // `walk_base` is not value-only: laid over in place it is refused, and the script is
+        // compiled with the rows instead (as after an install that has not reached me yet).
+        let mut rules = crate::verbs::Rules::default();
+        rules.take(4, SHIPPED, living_rules::DEFAULT_DAY_MS, &[], 1);
+        let key = rules.laws_key;
+        let over = crate::verbs::overrides_of_rows(&rows(&[("walk_base", "3.0")]));
+        rules.take(4, SHIPPED, living_rules::DEFAULT_DAY_MS, &over, 2);
+        assert!(rules.applied.is_none(), "compiled, not laid over");
+        assert!(rules.laws_key > key);
+        assert_eq!(rules.revision, 4);
+        assert_eq!(rules.scripts.as_ref().unwrap().law_value("walk_base"), Some(serde_json::json!(3.0)));
+        // A new revision (a full install) compiles with the rows too.
+        rules.take(5, SHIPPED, living_rules::DEFAULT_DAY_MS, &over, 3);
+        assert_eq!((rules.revision, rules.applied.as_ref()), (5, None));
+        assert_eq!(rules.scripts.as_ref().unwrap().law_value("walk_base"), Some(serde_json::json!(3.0)));
     }
 
     #[test]

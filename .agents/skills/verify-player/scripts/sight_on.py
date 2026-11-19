@@ -116,8 +116,10 @@ law = sql("SELECT * FROM cover_law", player)
 want = dict(id=0, cover_sight_on=True, cover_eye_height_m=1.6, cover_brush_on=a.brush == "true",
             cover_brush_min_fill=0.6, cover_cliff_step_m=2.0)
 record("cover_law as shipped by the overlay (player's view)", law == [want], law)
-overrides = sql("SELECT * FROM world_law")
-record("no admin law overrides before the checks", not overrides, overrides)
+# The world's own law values: `law_override` since law-override (docs/LAW_OVERRIDE.md), public;
+# `world_law` before it (no longer written).
+overrides = [o for o in sql("SELECT * FROM law_override", player) if o["name"].startswith(("cover_", "gaze_", "fov_"))]
+record("no admin law overrides of cover, gaze or facing before the checks (law_override, player's view)", not overrides, overrides)
 senses = sql("SELECT * FROM my_senses_v_2", player)
 record("gaze on as shipped: the player's applied field exists at Middle", len(senses) == 1 and senses[0]["band"] == 0, senses)
 legacy = sql("SELECT * FROM my_senses", player)

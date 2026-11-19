@@ -778,6 +778,11 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
     // stored before normalization dropped the word) means nothing and is not carried.
     let item = if sc.skills().get(skill).is_some_and(|k| !k.needs_item) && living_rules::normalize::force_word(item) { "" } else { item };
     let cur = ctx.db.activity().id().find(id);
+    if cur.is_none() {
+        // What it was seen doing, held since a continuous activity ended (`town::hold`), gives
+        // way to what begins now: the same one renewed takes the row up again in place.
+        crate::town::unhold(ctx, id);
+    }
     if let Some(a) = &cur {
         // A new graph may continue what the character was already doing (the same amount
         // too: a 4 s wait does not carry on a 30 s one).
@@ -1456,7 +1461,11 @@ fn finish(ctx: &ReducerContext, a: Activity, ok: bool, why: &str, now: u64) {
 fn finish_as(ctx: &ReducerContext, a: Activity, ok: bool, why: &str, now: u64, code: &'static str) {
     let _detail = common::detail_span("act.finish");
     let sc = common::scripts(ctx);
-    crate::town::unshown(ctx, &sc, a.id, &a.skill);
+    // A continuous activity that ends well is still seen until the body's next decision
+    // (`town::hold`); anything else stops being shown now.
+    if !(ok && a.node != PLAYER && crate::town::hold(ctx, &sc, a.id, &a.skill)) {
+        crate::town::unshown(ctx, &sc, a.id, &a.skill);
+    }
     let timed = sc.shapes().timed(&a.skill);
     if timed || sc.shows().record(&a.skill) {
         let what = if ok { why.to_string() } else { format!("failed: {why}") };

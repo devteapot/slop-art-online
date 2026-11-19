@@ -228,15 +228,44 @@ pub struct Clock {
     pub missed: u64,
 }
 
-/// A world's own value of a law (a seed's `rules`: `minds`, `fire_warmth`, …), over the
-/// script's `laws()`. Written when the world is created; read with the laws, once per script
-/// revision (docs/WORLD_RULES.md, "A world's own laws").
+/// A world's own value of a law before `law_override` (2026-11-19): kept as it was and no
+/// longer written or read; a world's rows are copied into `law_override` once, by the first
+/// transaction that reads the laws on a module with that table (`common::law_rev`).
 #[spacetimedb::table(accessor = world_law)]
 pub struct WorldLaw {
     #[primary_key]
     pub name: String,
     /// The value as JSON: a number, or true or false.
     pub value: String,
+}
+
+/// A world's own value of a law (a seed's `rules`, `set_world_law`), over the script's
+/// `laws()`: every one, public and read-only (admin `set_world_law` writes it). The law in force
+/// is this value when a row names it, else the script's (`living_rules::script::Scripts::
+/// with_overrides`, `apply_overrides`): the authority and every client that compiles the
+/// `script` row lay these rows over it in the same place, so they compute alike
+/// (docs/LAW_OVERRIDE.md). A value-only law (`living_rules::script::VALUE_ONLY`) changes here
+/// alone; any other change also installs the script again with the values written at its end.
+/// A new table, so adding it rewrites no existing one (docs/LAW_OVERRIDE.md, "Storage").
+#[spacetimedb::table(accessor = law_override, public)]
+pub struct LawOverride {
+    #[primary_key]
+    pub name: String,
+    /// The value as JSON: a number, or true or false (as `set_world_law` takes it).
+    pub value: String,
+    /// The law revision (`law_revision`) that wrote it.
+    pub revision: u32,
+}
+
+/// The world's law revision: one more at each write of `law_override` (private, one row,
+/// `id` 0). The authority's laws in force are kept in module memory by it and the script
+/// revision (`common::laws`, `common::scripts`). No row: the world's `world_law` rows are not
+/// yet copied into `law_override` (`common::law_rev`).
+#[spacetimedb::table(accessor = law_revision)]
+pub struct LawRevision {
+    #[primary_key]
+    pub id: u32,
+    pub revision: u32,
 }
 
 /// Effective, world-wide cover policy used by Shade.
@@ -1973,8 +2002,11 @@ pub struct ActCard {
 }
 
 /// What a character is visibly doing right now, for a skill with an `act_card`: written when
-/// it starts being performed, deleted when it ends. Clients receive it through their body
-/// window (a join on `body.id`), like `fighter`. It holds what anyone looking would see.
+/// it starts being performed, deleted when it ends. A continuous activity that ends well is
+/// held, left as it was, until the body's next evaluation (`town::hold`; a row with no activity
+/// behind it): renewed in place, keeping its `since_ms`, when the same activity begins again,
+/// else replaced or deleted then. Clients receive it through their body window (a join on
+/// `body.id`), like `fighter`. It holds what anyone looking would see.
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(open_tables, spacetimedb::table(accessor = doing, public))]
 #[cfg_attr(not(open_tables), spacetimedb::table(accessor = doing))]
@@ -2076,7 +2108,8 @@ pub struct LawChange {
     pub new: String,
     pub at_ms: u64,
     pub by: Identity,
-    /// The script revision the change installed (`script.revision`).
+    /// The script revision in force after the change (`script.revision`): a new one when it
+    /// installed the script, the one before for a value-only law (`law_override`, docs/LAW_OVERRIDE.md).
     pub revision: u32,
 }
 

@@ -114,7 +114,19 @@ pub struct HairProfile {
     /// `highlight_map`: a mask texture's path under the asset folder, instead of the file's own
     /// `<stem>.hair.png`.
     pub highlight_map: Option<String>,
+    /// Lock ink lines (v1.1, docs/HANDMADE_HAIR.md "Lock ink lines"): drawn only when the profile
+    /// sets one of `ink`, `ink_px`, `ink_range`, `ink_fade_px` (`inked`) and the mask texture
+    /// has a G channel. `ink`: the line's colour (default `shade` x 0.6 in linear).
+    pub inked: bool,
+    pub ink: Option<[u8; 3]>,
+    pub ink_px: f32,
+    pub ink_range: f32,
+    pub ink_fade_px: f32,
 }
+
+pub const INK_PX: f32 = 1.25;
+pub const INK_RANGE: f32 = 0.004;
+pub const INK_FADE_PX: f32 = 3.0;
 
 pub const T1: f32 = -0.20;
 pub const T2: f32 = 0.40;
@@ -186,7 +198,24 @@ pub fn hair_of(h: &serde_json::Value) -> Result<HairProfile, String> {
         edge: num("edge", EDGE)?.max(0.0),
         feather: num("highlight_feather", FEATHER)?.clamp(0.0, 0.5),
         highlight_map: h["highlight_map"].as_str().map(String::from),
+        inked: ["ink", "ink_px", "ink_range", "ink_fade_px"].iter().any(|k| h.get(*k).is_some()),
+        ink: match h.get("ink") {
+            None => None,
+            Some(_) => match colour("ink") {
+                Ok(c) => Some(c),
+                Err(e) => {
+                    warn_once(format!("handmade: hair profile: {e}; the ink is shade x 0.6"));
+                    None
+                }
+            },
+        },
+        ink_px: num("ink_px", INK_PX)?.max(0.0),
+        ink_range: num("ink_range", INK_RANGE)?,
+        ink_fade_px: num("ink_fade_px", INK_FADE_PX)?.max(0.0),
     };
+    if p.inked && p.ink_range <= 0.0 {
+        return Err(format!("ink_range {} is not above 0", p.ink_range));
+    }
     if p.t2 <= p.t1 {
         return Err(format!("t2 {} is not above t1 {}", p.t2, p.t1));
     }
@@ -213,11 +242,57 @@ fn linear(c: [u8; 3]) -> Vec3 {
 }
 
 impl HairProfile {
-    /// Put the profile into a material's parameters (`mask_texture`: the mask is a texture).
-    pub fn apply(&self, p: &mut ToonParams, mask_texture: bool) {
-        p.hand = [linear(self.shade).extend(0.0), linear(self.mid).extend(0.0), linear(self.light).extend(0.0), linear(self.highlight).extend(if mask_texture { 1.0 } else { 0.0 })];
+    /// Put the profile into a material's parameters (`mask`: the mask texture's path, if any).
+    pub fn apply(&self, p: &mut ToonParams, mask: Option<&str>) {
+        p.hand = [linear(self.shade).extend(0.0), linear(self.mid).extend(0.0), linear(self.light).extend(0.0), linear(self.highlight).extend(if mask.is_some() { 1.0 } else { 0.0 })];
         p.hand_bands = Vec4::new(self.t1, self.t2, self.edge, self.feather);
+        let ink = self.inked && mask.is_some_and(has_green);
+        if self.inked && !ink {
+            warn_once(format!("handmade: ink fields set but no mask texture with a G channel ({mask:?}): no ink is drawn"));
+        }
+        let colour = self.ink.map(linear).unwrap_or(linear(self.shade) * 0.6);
+        p.hand_ink = colour.extend(self.ink_px);
+        p.hand_ink_range = Vec4::new(self.ink_range, self.ink_fade_px, if ink { 1.0 } else { 0.0 }, 0.0);
     }
+}
+
+/// The hair's texel density for the ink's fade: the median, over its triangles, of metres per UV
+/// unit (the square root of a triangle's area over its UV area). None without UVs or area.
+pub fn metres_per_uv(m: &Mesh) -> Option<f32> {
+    let Some(bevy::mesh::VertexAttributeValues::Float32x3(pos)) = m.attribute(Mesh::ATTRIBUTE_POSITION) else { return None };
+    let Some(bevy::mesh::VertexAttributeValues::Float32x2(uv)) = m.attribute(Mesh::ATTRIBUTE_UV_0) else { return None };
+    let idx: Vec<usize> = match m.indices() {
+        Some(i) => i.iter().collect(),
+        None => (0..pos.len()).collect(),
+    };
+    let mut r: Vec<f32> = idx
+        .chunks_exact(3)
+        .filter_map(|t| {
+            let (a, b, c) = (Vec3::from(pos[t[0]]), Vec3::from(pos[t[1]]), Vec3::from(pos[t[2]]));
+            let (p, q, s) = (Vec2::from(uv[t[0]]), Vec2::from(uv[t[1]]), Vec2::from(uv[t[2]]));
+            let area = (b - a).cross(c - a).length();
+            let uv_area = (q - p).perp_dot(s - p).abs();
+            (uv_area > 1e-12 && area > 0.0).then(|| (area / uv_area).sqrt())
+        })
+        .collect();
+    if r.is_empty() {
+        return None;
+    }
+    r.sort_by(f32::total_cmp);
+    Some(r[r.len() / 2])
+}
+
+/// Whether a mask texture has a G channel (the ink field): a PNG's colour type says (RGB or
+/// RGBA, not grey); a KTX2 copy is read through its PNG beside it, else taken to have one.
+pub fn has_green(path: &str) -> bool {
+    use std::io::Read;
+    let png = if path.ends_with(".ktx2") { format!("{}.png", path.trim_end_matches(".ktx2")) } else { path.to_string() };
+    let Ok(mut f) = std::fs::File::open(std::path::Path::new(&crate::lookdev::asset_root()).join(&png)) else { return path.ends_with(".ktx2") };
+    let mut head = [0u8; 26];
+    if f.read_exact(&mut head).is_err() || &head[1..4] != b"PNG" {
+        return false;
+    }
+    matches!(head[25], 2 | 6)
 }
 
 /// The highlight mask texture for a profile hair of `file`, if there is one: the profile's own
@@ -330,6 +405,34 @@ mod tests {
         let mut bad = profile();
         bad.as_object_mut().unwrap().remove("highlight");
         assert!(hair_of(&bad).is_err());
+    }
+
+    #[test]
+    fn ink_is_opt_in_and_checks_its_range() {
+        let p = hair_of(&profile()).unwrap();
+        assert!(!p.inked, "a v1 profile draws no ink");
+        let mut inked = profile();
+        inked["ink_range"] = json!(0.05);
+        let p = hair_of(&inked).unwrap();
+        assert!(p.inked);
+        assert_eq!((p.ink, p.ink_px, p.ink_range, p.ink_fade_px), (None, INK_PX, 0.05, INK_FADE_PX));
+        inked["ink"] = json!([20, 8, 4]);
+        assert_eq!(hair_of(&inked).unwrap().ink, Some([20, 8, 4]));
+        inked["ink_range"] = json!(0.0);
+        assert!(hair_of(&inked).is_err());
+    }
+
+    #[test]
+    fn texel_density_is_metres_per_uv() {
+        // A 2 m square mapped onto the unit UV square: 2 m per UV unit.
+        let mut m = Mesh::new(bevy::mesh::PrimitiveTopology::TriangleList, Default::default());
+        m.insert_attribute(Mesh::ATTRIBUTE_POSITION, vec![[0.0f32, 0.0, 0.0], [2.0, 0.0, 0.0], [2.0, 2.0, 0.0], [0.0, 2.0, 0.0]]);
+        m.insert_attribute(Mesh::ATTRIBUTE_UV_0, vec![[0.0f32, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]]);
+        m.insert_indices(bevy::mesh::Indices::U32(vec![0, 1, 2, 0, 2, 3]));
+        assert!((metres_per_uv(&m).unwrap() - 2.0).abs() < 1e-5);
+        let mut flat = m.clone();
+        flat.insert_attribute(Mesh::ATTRIBUTE_UV_0, vec![[0.0f32, 1.0]; 4]);
+        assert_eq!(metres_per_uv(&flat), None);
     }
 
     #[test]

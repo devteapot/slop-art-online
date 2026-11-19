@@ -28,6 +28,8 @@ The probe is outside the `living/` workspace. Build it separately with:
 CARGO_TARGET_DIR="$PWD/.local/living/verify/target-client" cargo build --locked --manifest-path .agents/skills/verify-client/scripts/probe/Cargo.toml
 ```
 
+The probe connects only to scratch worlds: `verify-client-*`, and `verify-player-*` and `verify-core-*` for the other skills' streams (verify-player's `rest_seen.py`, verify-core's `doing_deltas.py`).
+
 To drive a database you already launched through the shared harness:
 
 ```bash
