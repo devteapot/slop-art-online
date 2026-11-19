@@ -761,14 +761,14 @@ def hair(run, c):
     saved = json.load(open(st)).get("hair_shine") if os.path.exists(st) else None
     c.check(s, "the settings file keeps the last choice", saved == "today", str(saved))
     # The same settings file: the next start reads Today back. Then A, placed beside me and held
-    # still, speaks to me with their window open, the camera comes in close (`view:`, 2.4 m),
-    # and the shines in turn.
+    # still, speaks to me with their window open. Zoom the top-down camera to Near,
+    # then capture the shines in turn.
     a, _ = residents(run)
     thought = json.dumps({"kind": "talk", "summary": "", "detail": "", "latency_ms": 0, "tokens": 0, "model": "verify-ui scene", "reference": ""})
     answer = f'answer=mind_say|{a}|"Good day to you."|{{me}}|""|0|{thought}'
     seq = ["crown", "today", "crown", "soft", "crown"]
     shots = "".join(f"shine:{v};wait:0.7;shot:{i + 1:02d}_{v};" for i, v in enumerate(seq))
-    plan = (f"ready;wait:2;dump:00;shine:crown;sync:scene;wait:1.5;menu:f@id:{a};wait:0.5;click:@acts:0:window;wait:1;sync:answer;wait:0.5;view:8:2.4:30;wait:4;" + shots + "dump:06;quit")
+    plan = (f"ready;wait:2;dump:00;shine:crown;sync:scene;wait:1.5;menu:f@id:{a};wait:0.5;click:@acts:0:window;wait:1;sync:answer;wait:0.5;cursor:0.70,0.55;notches:30;wait:4;" + shots + "dump:06;quit")
     out2, code2, _ = drive(run, s, plan, places=[f"{a}:-1.5:1.5"], syncs=[answer])
     c.check(s, "the next start reads it back", x(out2, "00").get("hair_shine") == "today", str(x(out2, "00").get("hair_shine")))
     c.check(s, "A's window is open in the photographs", any(w.startswith("Person") for w, _ in wins(dump(out2, "06"))), str(wins(dump(out2, "06"))))
