@@ -1,4 +1,16 @@
 {
+  "combat": {
+    "case": "combat",
+    "first_main": "3b24a6ba1ac1900ff63b4e656f3f15dcf0b1992b",
+    "first_seen": "2026-11-20T00:34:03+01:00",
+    "last_evidence": "/home/carlid/.local/state/slop-merge/scene-gate/main/.local/living/verify/gate-1120002428-main2-combat-player/gate.log (launch or doctor failed)",
+    "last_main": "3b24a6ba1ac1900ff63b4e656f3f15dcf0b1992b",
+    "last_seen": "2026-11-20T00:34:03+01:00",
+    "owner": null,
+    "reason": null,
+    "skill": "verify-player",
+    "times": 1
+  },
   "doing_seen": {
     "case": "doing_seen",
     "first_main": "95d11f433",
