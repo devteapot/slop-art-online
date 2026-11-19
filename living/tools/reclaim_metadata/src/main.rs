@@ -17,6 +17,11 @@ fn hex(bytes: &[u8]) -> String {
 }
 
 fn control(path: &Path) -> Result<Value> {
+    for name in ["conf", "db"] {
+        if !path.join(name).is_file() || fs::metadata(path.join(name))?.len() == 0 {
+            return Err(format!("control copy missing {name}").into());
+        }
+    }
     let db = sled::Config::default()
         .path(path)
         .mode(sled::Mode::HighThroughput)

@@ -40,10 +40,11 @@ def command(*args, **kwargs):
     return subprocess.check_output(args, **kwargs)
 
 
-def mount(script, *, writable=False, args=()):
+def mount(script, *, writable=False, stdin=False, args=()):
     # --mount and a preflight volume inspect keep the target fixed.
     flags = "" if writable else ",readonly"
-    return ("docker", "run", "--rm", "--pull", "never", "--network", "none", "--user", "0",
+    input_flag = ("-i",) if stdin else ()
+    return ("docker", "run", *input_flag, "--rm", "--pull", "never", "--network", "none", "--user", "0",
             "--mount", f"type=volume,src={SERVER},dst=/v{flags}", "--entrypoint", "sh",
             IMAGE, "-eu", "-c", script, "trial-reclaim", *args)
 
@@ -75,12 +76,15 @@ def collect_metadata(reader, *, running, include_snapshots=True):
             script += '; find replicas -maxdepth 4 -type f -name "*.snapshot_bsatn" -print0'
         tar_script = 'cd "$1"; tar --null --no-recursion -cf - -T -'
         if running:
-            invoke = lambda s: ("docker", "exec", "-i", SERVER, "sh", "-eu", "-c", s, "trial-reclaim", DATA)
+            def invoke(script, *, stdin=False):
+                input_flag = ("-i",) if stdin else ()
+                return ("docker", "exec", *input_flag, SERVER, "sh", "-eu", "-c", script, "trial-reclaim", DATA)
         else:
-            invoke = lambda s: mount(s, args=(OFFLINE,))
+            def invoke(script, *, stdin=False):
+                return mount(script, stdin=stdin, args=(OFFLINE,))
         names = command(*invoke(script), timeout=120)
         with tempfile.TemporaryFile() as copied:
-            subprocess.run(invoke(tar_script), input=names, stdout=copied, check=True, timeout=180)
+            subprocess.run(invoke(tar_script, stdin=True), input=names, stdout=copied, check=True, timeout=180)
             copied.seek(0)
             snapshots = []
             with tarfile.open(fileobj=copied) as archive:
@@ -93,6 +97,10 @@ def collect_metadata(reader, *, running, include_snapshots=True):
                     target.write_bytes(archive.extractfile(entry).read())
                     if match:
                         snapshots.append(str(target))
+        for required in ("control-db/conf", "control-db/db"):
+            file = path / required
+            if not file.is_file() or not file.stat().st_size:
+                raise RuntimeError(f"metadata copy is missing {required}; refusing to open an incomplete sled copy")
         result = json.loads(command(str(reader), str(path / "control-db"),
                                     input="".join(f"{s}\n" for s in snapshots), text=True, timeout=120))
         return result["control"], {str(Path(p).relative_to(path)): row for p, row in result["snapshots"].items()}

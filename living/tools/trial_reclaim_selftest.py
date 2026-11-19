@@ -2,6 +2,7 @@
 """Exercise reclaim decisions and exact archive matching on a fake replica tree."""
 import collections
 import hashlib
+import io
 import subprocess
 import tarfile
 import tempfile
@@ -10,7 +11,7 @@ from pathlib import Path
 
 from unittest.mock import patch
 
-from trial_reclaim import HAMLETS, OFFLINE, check_archive, check_report_paths, plan, replica_removal_command, restrict_to_review
+from trial_reclaim import HAMLETS, OFFLINE, check_archive, check_report_paths, collect_metadata, plan, replica_removal_command, restrict_to_review
 
 
 class ReclaimTests(unittest.TestCase):
@@ -72,6 +73,32 @@ class ReclaimTests(unittest.TestCase):
         self.assertEqual([row["action"] for row in rows], ["delete", "keep", "keep", "keep", "keep"])
         self.assertEqual(rows[1]["reason"], "paid, archived")
         self.assertEqual(rows[4]["classification"], "live")
+
+    def test_offline_copy_feeds_tar_list_and_rejects_empty_copy(self):
+        files = b"control-db/conf\0control-db/db\0"
+        def copy_fixture(args, *, input, stdout, **kwargs):
+            self.assertIn("-i", args)
+            self.assertIn(",readonly", next(arg for arg in args if arg.startswith("type=volume")))
+            self.assertEqual(input, files)
+            with tarfile.open(fileobj=stdout, mode="w") as archive:
+                for name in transfer:
+                    entry = tarfile.TarInfo(name)
+                    entry.size = 1
+                    archive.addfile(entry, io.BytesIO(b"x"))
+
+        with patch("trial_reclaim.command", side_effect=[
+                files, '{"control": {}, "snapshots": {}}']) as command, patch(
+                "trial_reclaim.subprocess.run", side_effect=copy_fixture):
+            transfer = ["control-db/conf", "control-db/db"]
+            self.assertEqual(collect_metadata("reader", running=False), ({}, {}))
+            self.assertEqual(command.call_args.args[0], "reader")
+
+        with patch("trial_reclaim.command", return_value=files) as command, patch(
+                "trial_reclaim.subprocess.run", side_effect=copy_fixture):
+            transfer = []
+            with self.assertRaisesRegex(RuntimeError, "metadata copy is missing control-db/conf"):
+                collect_metadata("reader", running=False)
+            self.assertEqual(command.call_count, 1)  # Never start sled against an empty directory.
 
     def test_evidence_is_never_a_removal_target(self):
         with tempfile.TemporaryDirectory() as tmp:
