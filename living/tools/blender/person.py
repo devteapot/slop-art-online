@@ -663,7 +663,7 @@ def upper_garment(part, d, zs, hem, cuff, collar, front=None, skirt=0.0, tag_fn=
     rr = HOLE_R + d
     for name, ang in (("A4", 315), ("A5", 270), ("A6", 225), ("M6", 180), ("T6", 135), ("T5", 90), ("T4", 45), ("M4", 0)):
         a = math.radians(ang)
-        hole[name] = SHOULDER + Vector((-d * 0.6 - 0.004 * abs(math.sin(a)), rr * 0.98 * math.cos(a), rr * math.sin(a)))
+        hole[name] = SHOULDER + Vector((-d * 0.6 - 0.004 * abs(math.sin(a)), rr * 0.98 * math.cos(a), rr * math.sin(a) - 0.014 * max(0.0, math.sin(a))))
     zA, zM = 1.375, 1.42
 
     def shoulder_w(pos, base):
@@ -726,7 +726,7 @@ def upper_garment(part, d, zs, hem, cuff, collar, front=None, skirt=0.0, tag_fn=
             a = part.co[rowT[i]]
             b = neck_point(k)
             b.x /= neck_x  # the neck hole stays round where the shoulders' bones are scaled across
-            pos = a.lerp(b, t) + Vector((0, 0, -0.006 * math.sin(PI * t)))
+            pos = a.lerp(b, t) + Vector((0, 0, -0.010 * math.sin(PI * t) * abs(math.sin(2 * PI * k / NT))))
             neck = 0.4 * smooth((t - 0.3) / 0.7)
             cur.append(part.v(pos, shoulder_w(pos, blend(("J_Bip_C_UpperChest", 1 - neck), ("J_Bip_C_Neck", neck)))))
         r = len(rows) - 2 + step
@@ -768,8 +768,14 @@ def upper_garment(part, d, zs, hem, cuff, collar, front=None, skirt=0.0, tag_fn=
     stations = [s for s in ARM if s[0] >= cuff[0] + 1e-6]
     n = 0
     for x, ry, rz in stations + [(cuff[0], *table(ARM_X, cuff[0]))]:
-        cur = ring(part, (x, ARM_Y, ARM_Z), (0, 1, 0), (0, 0, 1), ry * LIMB_K + d, rz * LIMB_K + d, 8, arm_w(x))
-        part.band(prev, cur, n, n + 1, tag=tag_fn("sleeve", 0, n))
+        cur = ring(part, (x, ARM_Y, ARM_Z - 0.010 * max(0.0, 1.0 - n / 2)), (0, 1, 0), (0, 0, 1), ry * LIMB_K + d, rz * LIMB_K + d, 8, arm_w(x))
+        if n == 0:
+            # Use the existing first sleeve ring for the narrow set-in seam.
+            # The next span carries the sleeve cap over the deltoid.
+            for inner, outer in zip(rim, cur):
+                part.co[outer] = part.co[inner].lerp(part.co[outer], 0.24)
+        sleeve_tag = tag_fn("sleeve", 0, n)
+        part.band(prev, cur, n, n + 1, tag=10 if n == 0 and sleeve_tag == 0 else sleeve_tag)
         prev = cur
         n += 1
     for dx, dd in cuff[1]:
@@ -2150,6 +2156,8 @@ def jersey_colour(base):
         c = mix(base, (0, 0, 0), 0.16 * rib)
         if tag in (2, 3):
             c = mix(c, (0, 0, 0), 0.12)
+        if tag == 10:
+            c = mix(c, (0, 0, 0), 0.26 * math.exp(-((v - 0.18) / 0.23) ** 2))
         return mottle(c, co, 0.06)
 
     return colour
@@ -2191,6 +2199,8 @@ def coat_colour(base, patches, bands=False):
         c = relit(c, level * lerp(1.0, HEM_TONE, low) * lerp(1.0, SHOULDER_TONE, high))
         if tag in (4, 5, 6):  # patches: other cloth, never matching, at a set tone of this one
             c = patches[tag - 4] if bands else relit(patches[tag - 4], level * PATCH_TONES[tag - 4])
+        elif tag == 10:  # the set-in sleeve seam
+            c = relit(c, lightness(c) * (1.0 - 0.42 * math.exp(-((v - 0.18) / 0.23) ** 2)))
         elif tag == 7:  # collar lining
             c = relit(mix(PAL["kelp"], PAL["tar"], 0.3), level * LINING_TONE)
         elif tag == 8:  # an apron
