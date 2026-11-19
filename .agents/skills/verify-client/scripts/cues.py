@@ -12,7 +12,10 @@ tables). Meanwhile B steps (`human_move`), waves at A (`human_act`) and strikes 
 (`use_skill`); F is moved (admin `place_at`). Checks:
 
 - row-level security: every cue a client receives names it as the viewer; C and the anonymous
-  connection receive none of A's, B's or F's; B asking for A's rows by identity gets nothing.
+  connection receive none of A's, B's or F's; B asking for A's rows by identity gets nothing; C
+  subscribing every public table by name (what the SDK's `subscribe_to_all_tables` sends, cue
+  tables included) receives no one else's cue, and C's `SELECT * FROM *` (the server's own
+  expansion, which leaves event tables out in 2.14.1) receives no cue at all.
   Each probe streams from its connection on (the initial subscription's callbacks included), and
   each negative probe must show its subscription accepted (applied, never rejected): an empty
   stream from a refused subscription would prove nothing;
@@ -35,6 +38,7 @@ Admin calls (`spawn_crowd`, `set_behavior`, `place_at`, `set_world_law`) set the
 import argparse
 import importlib.util
 import json
+import re
 import math
 import os
 import subprocess
@@ -194,6 +198,14 @@ def main():
     time.sleep(3.0)
     # B asks for A's cues by identity: row-level security must still give it only its own.
     peek = stream(db, tok["b"], [f"SELECT * FROM seen_body_cue WHERE viewer = 0x{ident['a']}"], 12, out / "cues-b-peek.jsonl")
+    # Subscribe-all, both ways, as player C (row-level security must still filter, whatever
+    # assembled the query): the SDK's `subscribe_to_all_tables` expands the generated table names
+    # into one query each (cue tables included; a player's would fail on private tables, so here
+    # every public table's), and the server's own `SELECT * FROM *` leaves event tables out.
+    public = sorted(set(re.findall(r"#\[spacetimedb::table\(accessor = (\w+), public", "\n".join(
+        p.read_text() for p in (ROOT / "living/authority/src").glob("*.rs")))))
+    all_c = stream(db, tok["c"], [f"SELECT * FROM {t}" for t in public], 12, out / "cues-c-all-names.jsonl")
+    star_c = stream(db, tok["c"], ["SELECT * FROM *"], 12, out / "cues-c-star.jsonl")
     t0 = time.time()
     for dx in (1, -1, 1):
         hcall(db, tok["b"], "human_move", [dx, 0, False])
@@ -215,6 +227,10 @@ def main():
         t.join()
     ev = {w: lines(p) for w, p in paths.items()}
     peek_ev = lines(out / "cues-b-peek.jsonl")
+    for t in (all_c, star_c):
+        t.join()
+    all_ev, star_ev = lines(out / "cues-c-all-names.jsonl"), lines(out / "cues-c-star.jsonl")
+    foreign = lambda evs: [e for e in evs if e.get("event") == "insert" and e.get("table") in CUE_OF and norm(e["row"]["viewer"]) != ident["c"]]
     cue_rows = {w: [e for e in ev[w] if e.get("event") == "insert" and e.get("table") in CUE_OF] for w in ev}
     body_of = lambda e: e["row"]["motion"]["id"] if e["table"] == "seen_body_cue" else e["row"]["body"]
     viewer_of = lambda e: norm(e["row"]["viewer"])
@@ -254,6 +270,8 @@ def main():
         "C receives no cue of A, B or F": not [e for e in cue_rows["c"] if body_of(e) in (a, b, f)] and all(viewer_of(e) == ident["c"] for e in cue_rows["c"]),
         "the anonymous connection receives no cue": not cue_rows["anon"],
         "B asking for A's cues by identity receives none": not [e for e in peek_ev if e.get("event") == "insert"],
+        "C subscribing every public table by name (the SDK's subscribe-all, cue tables included), accepted, receives no one else's cue": accepted(all_ev) and not foreign(all_ev),
+        "C subscribing SELECT * FROM *, accepted, receives no cue at all (event tables left out)": accepted(star_ev) and not [e for e in star_ev if e.get("table") in CUE_OF],
         "A is cued B's motion": len(of(b, "seen_body_cue")) >= 3,
         "A receives B's wave (by a cue or its view)": bool(waves),
         "A receives each of B's strike windups first by a cue, within 100 ms of act_ms (B is near)": len(first) >= 5 and max(late) <= 100 and all(v[1] == "cue" for v in first.values()),
