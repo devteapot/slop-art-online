@@ -1543,6 +1543,149 @@ def texel(meta, pix, x, y):
     return pix[j * n + i] if 0 <= i < n and 0 <= j < n else None
 
 
+@scenario("cover", cullet=True)
+def cover(run, c):
+    """The same Cullet sight rays with cover on and off, through the real client."""
+    ids = residents(run, 1)
+    if not ids:
+        c.check("cover", "adult resident available", False)
+        return
+    call_admin(run, "set_world_law", ["fov_on", "false"])
+    call_admin(run, "set_world_law", ["cover_brush_on", "true"])
+    for fixture, eye, contact, blocks in (
+        ("trunk", (781.5, 457.5), (785.5, 457.5), True),
+        ("edge", (781.5, 457.5), (785.5, 459.5), False),
+        ("brush", (608.5, 479.5), (608.5, 472.5), True),
+        # Cullet's mid_row_plot_toft_3_hedge, 1.8 m high, plan origin (510, 784).
+        ("hedge", (523.5, 698.5), (527.5, 698.5), True),
+    ):
+        cover_pair(run, c, ids[0], fixture, eye, contact, blocks)
+    cover_canopy(run, c)
+
+
+def cover_pair(run, c, target, fixture, eye, contact, blocks):
+    stops = (("far", -30, 19.0), ("middle", 11, 12.0), ("near", 30, 8.0))
+    name = f"cover-{fixture}"
+    directory = os.path.join(ROOT, ".local/living/verify", run, "ui",
+                             f"{name}-{THEME}" if THEME else name, "fields")
+    if os.path.isdir(directory):
+        for filename in os.listdir(directory):
+            if re.fullmatch(r"field-\d+\.(json|pgm)", filename):
+                os.remove(os.path.join(directory, filename))
+    x, y = contact
+    syncs = [
+        "daylight=sql|UPDATE world SET epoch_ms = {epoch_at:12} WHERE id = 0",
+        'enable=set_world_law|"cover_sight_on"|"true"',
+        'disable=set_world_law|"cover_sight_on"|"false"',
+        f"positions=place_at|{{me}}|{eye[0]}|{eye[1]};place_at|{target}|{x}|{y};"
+        f"set_behavior|{target}|{json.dumps(json.dumps({'wait': 600}))}",
+    ]
+    plan = ["ready", "weapon:sheathe", "frame:0", "yaw:0", "sightlook:shade", "sync:daylight", "sync:positions"]
+    for state in ("on", "off"):
+        plan += [f"sync:{'enable' if state == 'on' else 'disable'}", "wait:7"]
+        for stop, notches, _ in stops:
+            key = f"{state}_{stop}"
+            syncs.append(f"{key}=sql|SELECT body FROM perceived WHERE viewer = 0x{{ident}};"
+                         "sql|SELECT * FROM cover_law;"
+                         f"sql|SELECT id,x,y FROM body WHERE id = {{me}} OR id = {target}")
+            plan += ["cursor:0.7,0.55", f"notches:{notches}", "wait:1.5",
+                     f"pointat:{x},{y}:1.0", "wait:0.5", f"sync:{key}", f"dump:{key}", f"shot:{key}"]
+            if blocks and state == "on":
+                plan += ["weapon:sheathe", "wait:0.5", "tap", "wait:0.6", f"dump:{key}_talk",
+                         "weapon:draw", "wait:0.5", "tap", "wait:0.6", f"dump:{key}_attack",
+                         "weapon:sheathe"]
+    out, code, output = drive(run, name, ";".join(plan + ["quit"]), syncs=syncs,
+                              env={"LIVING_SIGHT_FIELD_DUMP": directory})
+    c.check(name, "client joined and finished", code == 0, output[-500:])
+    scene = dump(out, "scene") or {}
+    me = scene.get("me")
+    fields = field_dumps(directory) if os.path.isdir(directory) else []
+    trace = log(out)
+    for state in ("on", "off"):
+        hidden = state == "on" and blocks
+        for stop, _, height in stops:
+            key = f"{state}_{stop}"
+            d = dump(out, key) or {}
+            talk = dump(out, f"{key}_talk") or {}
+            extra = d.get("extra") or {}
+            snapshots = scene.get("snaps", {}).get(key, [])
+            if len(snapshots) != 3:
+                c.check(name, f"{key}: authority snapshots present", False)
+                continue
+            perception, law, positions = [snap["rows"] for snap in snapshots]
+            actual = {row["id"]: (row["x"], row["y"]) for row in positions}
+            law_ok = bool(law) and law[0]["cover_brush_on"] and law[0]["cover_sight_on"] == (state == "on")
+            c.check(name, f"{key}: policy and exact positions", law_ok and actual == {me: eye, target: contact}, repr(actual))
+            v = view(d)
+            c.check(name, f"{key}: camera stop and still", v.get("mode") == "top-down"
+                    and abs(v.get("height", -1) - height) < 0.1
+                    and os.path.isfile(os.path.join(out, f"{key}.png")), repr(v))
+            authority = target in {row["body"] for row in perception}
+            perceived = target in (d.get("perceived") or [])
+            seen = target in {row["id"] for row in d.get("seen") or []}
+            drawn = target in {row["id"] for row in d.get("looks") or []}
+            c.check(name, f"{key}: authority and client agree on visibility",
+                    (authority, perceived, seen, drawn) == (not hidden,) * 4,
+                    repr((authority, perceived, seen, drawn)))
+            candidates = [(meta, pixels) for meta, pixels in fields
+                          if meta["wall_ms"] <= snapshots[0]["wall_ms"]
+                          and math.dist(meta["eye"], eye) < 0.2]
+            shade = texel(*candidates[-1], *contact) if candidates else None
+            c.check(name, f"{key}: Shade agrees with authority at the target",
+                    shade == (255 if authority else 0) and extra.get("sight_look") == "shade", repr(shade))
+            pointer = extra.get("cursor") or {}
+            on_screen = all(0 < pointer.get(axis, -1) < 1 for axis in ("fx", "fy"))
+            hovered = target in {row["id"] for row in d.get("hovered") or []}
+            addressed = (talk.get("typing") or {}).get("to")
+            if hidden:
+                segment = trace.partition(f"live script: sync:{key}")[2].partition(f"live script: dump:{key}_attack")[0]
+                strikes = re.findall(r"tap: strike \(at (.*?), weapon drawn\)", segment)
+                naming = [word for kind, word in d.get("naming") or [] if kind in ("hover", "target")]
+                quiet = (d.get("under") is None and not hovered and not naming
+                         and d.get("targeted") is None and addressed != target
+                         and bool(strikes) and all(who != f"Some({target})" for who in strikes))
+                c.check(name, f"{key}: no hover, label, plate, talk or strike target",
+                        on_screen and quiet, repr((pointer, d.get("under"), naming, addressed, strikes)))
+            else:
+                c.check(name, f"{key}: cursor can pick the visible resident",
+                        on_screen and d.get("under") == target and hovered,
+                        repr((pointer, d.get("under"), hovered)))
+
+
+def cover_canopy(run, c):
+    # Cullet's streamed land client uses the authored Hanger tree at (783.2, 457.4).
+    canopy = (783.5, 457.5)
+    plan = ["ready", "weapon:sheathe", "frame:0", "sync:daylight"]
+    syncs = ["daylight=sql|UPDATE world SET epoch_ms = {epoch_at:12} WHERE id = 0",
+             'enable=set_world_law|"cover_sight_on"|"true"',
+             'disable=set_world_law|"cover_sight_on"|"false"']
+    for state in ("on", "off"):
+        plan += [f"sync:{'enable' if state == 'on' else 'disable'}", "wait:3"]
+        for stop, notches in (("middle", -9 if state == "off" else 0), ("near", 30)):
+            key = f"{state}_{stop}"
+            syncs += [f"clear_{key}=place_at|{{me}}|775.5|457.5",
+                      f"tree_{key}=place_at|{{me}}|{canopy[0]}|{canopy[1]}"]
+            plan += [f"sync:clear_{key}", "wait:3", "cursor:0.7,0.55", f"notches:{notches}",
+                     f"sync:tree_{key}", "wait:3", f"dump:{key}", f"shot:{key}"]
+    name = "cover-canopy"
+    out, code, output = drive(run, name, ";".join(plan + ["quit"]), syncs=syncs,
+                              env={"RUST_LOG": "info,wgpu=warn,naga=warn,living_game::envs=debug"})
+    c.check(name, "client joined and finished", code == 0, output[-500:])
+    trace = log(out)
+    for state in ("on", "off"):
+        for stop, height in (("middle", 12.0), ("near", 8.0)):
+            key = f"{state}_{stop}"
+            d = dump(out, key) or {}
+            body = (d.get("me_at") or {}).get("body") or {}
+            segment = trace.partition(f"live script: sync:tree_{key}")[2].partition(f"live script: dump:{key}")[0]
+            faded = re.search(r"cutaway: .*hanger_tree.* fades to ", segment)
+            c.check(name, f"{key}: Hanger tree cuts away above the player",
+                    (body.get("x"), body.get("y")) == canopy and bool(faded)
+                    and abs(view(d).get("height", -1) - height) < 0.1
+                    and os.path.isfile(os.path.join(out, f"{key}.png")),
+                    repr((body, view(d), faded.group(0) if faded else None)))
+
+
 # The looks the scenario faces (live script `look:DEG`: 0 north, clockwise) and where the
 # residents stand round the player (dx, dy metres; +y south; `place_at` puts them on tile
 # centres): north and south at 5 m, east and west at 5.5 m (past the near ring's and side
