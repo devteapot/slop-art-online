@@ -859,10 +859,22 @@ fn players_mode() {
     let size = players[0].conn.db.land().iter().next().map_or(2048, |l| l.size);
     let t = Instant::now();
     for p in &players {
-        let me = p.st.lock().unwrap().me.unwrap();
+        let mut asked: Option<Instant> = None;
         let at = loop {
-            if let Some(b) = p.conn.db.my_body().id().find(&me) {
-                break (b.x, b.y);
+            // A viewer killed before the window (a battle round it) joins again, as walkers do.
+            let me = p.st.lock().unwrap().me;
+            match me {
+                None => {
+                    if asked.is_none_or(|a| a.elapsed() > Duration::from_secs(3)) {
+                        send_join(p, &log, p.name.clone());
+                        asked = Some(Instant::now());
+                    }
+                }
+                Some(me) => {
+                    if let Some(b) = p.conn.db.my_body().id().find(&me) {
+                        break (b.x, b.y);
+                    }
+                }
             }
             assert!(t.elapsed() < Duration::from_secs(60), "no body for player {}", p.idx);
             std::thread::sleep(Duration::from_millis(10));

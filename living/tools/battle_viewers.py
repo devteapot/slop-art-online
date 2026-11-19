@@ -155,7 +155,7 @@ def one(a, n, out):
             ts = None
             if at is not None:
                 from datetime import datetime, timezone
-                st = loglines[at][:26].rstrip("Z")
+                st = loglines[at].split("Z", 1)[0]
                 ts = datetime.strptime(st, "%Y-%m-%dT%H:%M:%S.%f").replace(tzinfo=timezone.utc).timestamp()
             after = tc.ticks(log, ts - 0.001, ts + 3) if ts else {}
             def after_freeze(t_a, t_b):
@@ -167,7 +167,7 @@ def one(a, n, out):
                     if not mm:
                         continue
                     from datetime import datetime, timezone
-                    end = datetime.strptime(l[:26].rstrip("Z"), "%Y-%m-%dT%H:%M:%S.%f").replace(tzinfo=timezone.utc).timestamp()
+                    end = datetime.strptime(l.split("Z", 1)[0], "%Y-%m-%dT%H:%M:%S.%f").replace(tzinfo=timezone.utc).timestamp()
                     dur = float(mm.group(2)) * {"µs": 1e-3, "ms": 1.0, "s": 1e3}[mm.group(3)]
                     if t_a <= end < t_b:
                         rr.append((end - dur / 1e3, dur))
