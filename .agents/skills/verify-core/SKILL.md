@@ -44,6 +44,8 @@ python3 "$C/scenes.py" doing --run "$R" > "$E/doing.txt" 2>&1
 # What someone is visibly doing: the `doing` condition and the scene's `visibly`, by sight, field
 # and far label (features/doing.md, about 2 min).
 python3 "$C/scenes.py" doing_seen --run "$R" > "$E/doing_seen.txt" 2>&1
+# A continuous activity renewed in place: no blink of doing nothing between two rests, a real change still at once, the renew_in_place law (features/doing.md, about 2 min).
+python3 "$C/scenes.py" doing_renew --run "$R" > "$E/doing_renew.txt" 2>&1
 # Committed moves end early only by a wall or death (features/combat.md, about 30 s).
 python3 "$C/scenes.py" committed --run "$R" > "$E/committed.txt" 2>&1
 # A dodge over before the blow came, and a cooldown's refusals told once (features/combat.md, about 20 s).

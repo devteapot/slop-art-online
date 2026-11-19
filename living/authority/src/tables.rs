@@ -1973,8 +1973,10 @@ pub struct ActCard {
 }
 
 /// What a character is visibly doing right now, for a skill with an `act_card`: written when
-/// it starts being performed, deleted when it ends. Clients receive it through their body
-/// window (a join on `body.id`), like `fighter`. It holds what anyone looking would see.
+/// it starts being performed, deleted when it ends. A continuous activity renewed in the
+/// transaction that ended it (one rest after another, `brain`'s renewing pass) is updated in
+/// place and keeps its `since_ms`. Clients receive it through their body window (a join on
+/// `body.id`), like `fighter`. It holds what anyone looking would see.
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(open_tables, spacetimedb::table(accessor = doing, public))]
 #[cfg_attr(not(open_tables), spacetimedb::table(accessor = doing))]
