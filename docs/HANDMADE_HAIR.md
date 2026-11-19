@@ -246,6 +246,22 @@ color = mix(color, ink * sun + ink * sky_fill, cov) // the shade band's light
 - **Why the depth, not screen derivatives, for `w` and the fade:** derivatives are constant over each 2×2 pixel quad, so a fade or width driven by them steps from quad to quad, and the steps crawl as the camera moves. That measured as shimmer in the hand-made line's first build. The pixel's size at its depth and a per-material texel density are smooth on screen. `d_px` keeps `fw`, which measured steady. A mesh without UV area falls back to `2 · ink_range / fw`.
 - **Sampling:** the field is sampled with the pixel's own UV gradients (`textureSampleGrad`), bilinear, in the same tap as R: no extra pass and no extra read where the highlight texture is already read; one read when ink alone brings the texture. A PNG has no mips, so it is read at level 0, like the face shadow map; a KTX2 copy's mips are used, and a mipped distance field only thins distant lines further.
 - The line draws over the bands and the highlight, in cast shadow and in light alike.
+- **`ink_fade_px` against shimmer** (laptop, 2026-11-19, `hair_shimmer.py` on a Cora copy with stand-in cylindrical hair UVs, 9 strokes, `ink_range` 0.05, `ink_px` 1.25). Ratios F_ink / F_edge, with ink px a frame in brackets; ≤ 1.5 passes:
+
+  | `ink_fade_px` | Near pan | Middle pan | Middle zoom | Far pan / zoom |
+  |---|---|---|---|---|
+  | 1.0 | 1.00 (288) | 1.53 (119) | 0.82 (115) | 0.86 (47) / 0.97 (44) |
+  | 1.5 | 1.00 (288) | 1.53 (119) | 0.82 (115) | 1.16 (27) / 1.17 (14) |
+  | 2.0 | 1.00 (288) | 1.53 (119) | 0.83 (113) | faded |
+  | 2.5 | 1.00 (288) | 1.71 (94) | 0.90 (81) | faded |
+  | **3.0 (default)** | 0.99 (289) | **2.45 (4)** | 1.23 (1) | faded |
+  | 3.5 | 0.85 (278)¹ | faded (0.6) | faded | faded |
+  | 4.0 | 0.99 (241)¹ | faded (0.1) | faded | faded |
+  | 5.0 | 1.63 (6)¹ | faded | faded | faded |
+
+  ¹ From the first shimmer script, whose hair region was a fixed box round Cora's head; the rows without the mark are `hair_shimmer.py`'s. That script gave 0.83 for 3.0's Near pan and 1.97 for its Middle pan.
+  - **No value passes the Middle pan with lines there.** Values of 3.5 and above pass it only by fading the lines out at Middle, and 5.0 fails the Near pan in the fade's tail. At 2.0 and below the Middle pan sits at 1.53, its floor with lines fully on, just above the threshold. At 3.0, Middle keeps about 4 faint ink pixels a frame (8–13 levels) in the fade's tail, which is what flickers.
+  - **The default stays 3.0:** it shows lines at Near and fades them out by Middle. A file that wants lock lines at Middle can set `ink_fade_px` to 2.0, at a measured 1.53, which is steadier than 3.0's tail and just above the threshold. Values of 1.5 or less also keep lines at Far, where they measured steady (0.86–1.17).
 
 **The tool:**
 
@@ -349,6 +365,13 @@ One fixed daylight frame that authors render after every palette change and comp
   - the face: skinned, TEXCOORD_1 present, VEC2 FLOAT, the same on every vertex and equal to the declared forward, and a face shadow map found;
   - a tint that is opaque (a warning), and an `anim/` copy whose scene `slop` differs;
   - ink (v1.1, warnings): `ink_range` above 0, `ink_px` and `ink_fade_px` numbers, `ink` three integers; ink fields without a mask texture, or with a texture whose G is missing or holds no line; a G with lines but no ink field; hair UVs that span no area while a texture or ink is set.
+- **Ink shimmer** (v1.1), for a file with ink fields:
+
+  ```
+  python3 living/tools/characters/hair_shimmer.py view/<file>.glb [--out DIR] [--binary PATH] [--plain-stills DIR] [--ink-stills DIR]
+  ```
+
+  It takes the file as it is, with its own `ink_range`, `ink_px`, `ink_fade_px` and `ink`, and as the reference a temporary copy without the ink fields (the hair-only profile, highlight and all; removed afterwards). It renders both through the asset view: 1600×900, 11:00, paused idle, springs off, at the Near, Middle and Far stops, a pan (16 stills, 0.1° a frame) and a zoom (16, the height up 0.3% a frame) each. For each sequence it prints the flicker ratio F = Σ|x(i+1) − 2·x(i) + x(i−1)| / Σx of the ink's darkening (F_ink) and of the profile's own band edges (F_edge), over the hair pixels round the ink, and **passes when F_ink ≤ 1.5 × F_edge**: the line flickers no more, per unit of what it draws, than the band edges already seen in motion, with half again for a line's two edges. A sequence whose ink darkens fewer than one pixel a frame by more than 8 levels is `faded`, not scored. Output goes to `.local/living/hair-shimmer/<stem>/<time>/` (`plain/`, `ink/`, `shimmer.json`); the exit code is 1 on a failing sequence. `--plain-stills` and `--ink-stills` reuse an earlier run's still folders. Plain Python; about 25 s to score, plus the two renders.
 - **A palette is done** when every measured patch passes. The tolerances are starting values, to agree with the owner on the first Cora pass, and the owner judges the result in-game.
 
 ## Compatibility
