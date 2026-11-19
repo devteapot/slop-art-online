@@ -49,6 +49,10 @@ are made game-ready (`library_clip`):
   lifted by a smooth curve never below that depth and the leg solved to it; the summary gets
   `floor_lift_m` and `floor_frames`. A clip that never goes under bakes exactly as without it.
 - `grip: {"R": deg, "L": deg}` curls a hand that holds something (Kimodo's fingers stay relaxed).
+- `ground_seat: "name#seed@frame"`: the shared cross-legged source pose. The retargeter
+  skins the target's seat and each boot, fits them to the floor, and uses the fitted base
+  through the loop. The descent and rise ease to that base at their shared end. Markers
+  also check the rolled boot's contact point. The bake needs the referenced pose take.
 - Foot-down markers (`foot_markers`): every clip's summary gets `contacts: {"L": [[a, b], …],
   "R": …}`, each foot's contact windows in normalised clip time, detected from the baked take
   (heel or ball within 3 cm of the floor and slower than 0.3 m/s in the game's world). A gait's
@@ -840,6 +844,9 @@ SOMA_HIPS_REST = 1.005  # SOMA's rest hips height above the soles, m
 # The SOMA skeleton (joint names, parents, rest pose): fixed data, kept in the repo so any machine
 # with the Kimodo NPZ cache can build the clips.
 SOMA_JSON = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "kimodo", "somaskel77_skeleton.json")
+sys.path.insert(0, os.path.dirname(SOMA_JSON))
+import seated
+
 TURN = Matrix.Diagonal((-1.0, 1.0, -1.0))  # SOMA faces +Z, VRoid −Z: half a turn round Y
 HIPS = bone("C", "Hips")
 
@@ -1463,7 +1470,7 @@ MARK_FLOOR = 0.03
 MARK_STILL = 0.3
 
 
-def foot_markers(sk, frames, belt_v, cyclic, track=None):
+def foot_markers(sk, frames, belt_v, cyclic, track=None, seat_refs=None):
     """Each foot's contact windows, detected from the baked take: per frame, whether the heel or
     the ball of the foot is on the floor and still in the game's world (the clip on its belt, or
     along its path). Returns {"L": [[a, b], …], "R": …} in normalised clip time (0–1; a loop's
@@ -1479,6 +1486,9 @@ def foot_markers(sk, frames, belt_v, cyclic, track=None):
         f_ = sk.feet[side]
         ft = bone(side, "Foot")
         refs = (f_["heel"], Vector((f_["toe"].x, f_["sole"], f_["toe"].z)))
+
+        if seat_refs:
+            refs += (seat_refs[side],)
 
         def pts(k):
             rot, pos = fk[k % count]
@@ -1896,7 +1906,7 @@ def joins_a_gait(spec):
     return spec.get("travel") == "path" and ("hop" in spec or "travel_deg" in spec or "#" in ends)
 
 
-def library_clip(sk, soma, spec, path, neutral, speeds, max_scale):
+def library_clip(sk, soma, spec, path, neutral, speeds, max_scale, seat=None):
     """A Kimodo NPZ made game-ready by its library entry. Returns frames and a summary."""
     m = load_soma(path)
     T = m["P"].shape[0]
@@ -1958,10 +1968,34 @@ def library_clip(sk, soma, spec, path, neutral, speeds, max_scale):
         frames = plant_feet(sk, frames, contacts, belt_v, kind == "loop", stats, track, planted_out=planted)
     frames = guarded(sk, frames, kind == "loop", stats, planted)
     frames = limbs_guarded(sk, frames, kind == "loop", stats)
+    seat_refs = None
+    if seat is not None:
+        (q, off), legs, points, seat_refs = seat
+        ox, oz = spec["offset"] if spec.get("start") == spec["ground_seat"] else spec["end_offset"]
+        anchor = q, off + TURN @ Vector((ox, 0, oz)) * soma.k
+        # The transition takes move the pelvis sideways as they fold and unfold the legs.
+        # Ease over time at their shared keyframe so that travel retains its source timing.
+        if kind == "loop":
+            seat_weights = [1.0] * len(frames)
+        else:
+            releasing = spec.get("start") == spec["ground_seat"]
+            seat_weights = [smooth(1 - (k if releasing else n - k) / (FPS * 0.8))
+                            for k in range(n + 1)]
+        frames = seated.apply(frames, anchor, seat_weights, HIPS, bone("C", "Spine"), legs)
+        if kind != "loop":
+            planted = {side: smooth_weights([float(any(c[i] for i in CONTACT[side])) for c in contacts],
+                                            cyclic=False) for side in legs}
+            level = w["root"][0 if releasing else -1, 1]
+            for k, pose in enumerate(frames):
+                # Engage the seat as the source pelvis reaches the shared sitting height.
+                weight = smooth(1 - (w["root"][k, 1] - level) / 0.08)
+                feet = {side: v[k] for side, v in planted.items()}
+                frames[k] = seated.ground_pose(sk, pose, points, legs, HIPS, fk_pose, solve_leg,
+                                               plant=feet, seat_weight=weight)
     # Foot-down markers. A gait's loop starts where its right foot comes down (the start of the
     # right foot's longest contact), so phase 0 is the same event in every gait and the game can
     # play them all at one shared phase.
-    marks, touch, _ = foot_markers(sk, frames, belt_v, kind == "loop", track)
+    marks, touch, _ = foot_markers(sk, frames, belt_v, kind == "loop", track, seat_refs)
     if kind == "loop" and loco and touch["R"]:
         frames = rotate_loop(frames, touch["R"])
         info["phase_shift"] = round(touch["R"] / n, 4)
@@ -2229,6 +2263,7 @@ def main():
         soma = Soma(sk, SOMA_JSON)
         neutral = neutral_frame(sk, soma, lib["neutral"], a.kimodo_dir) if lib.get("neutral") else None
         only = {x for x in a.only.split(",") if x}
+        seats = {}
         for name, e, seed in library_entries(lib, only, a.seeds):
             if "keyed" in e:
                 keyed(name, e["keyed"])
@@ -2238,7 +2273,15 @@ def main():
                 summary[name] = info
             else:
                 path = os.path.join(a.kimodo_dir, f"{e['name']}_s{seed}.npz")
-                frames, info = library_clip(sk, soma, e, path, neutral, speeds, a.max_scale)
+                ref = e.get("ground_seat")
+                if ref and ref not in seats:
+                    legs = {side: [bone(side, n) for n in LEG] for side in "LR"}
+                    points = seated.contact_vertices(sk, meshes, HIPS, legs)
+                    pose = neutral_frame(sk, soma, ref, a.kimodo_dir)
+                    q, off = seated.ground_pose(sk, pose, points, legs, HIPS, fk_pose, solve_leg)
+                    refs = seated.sole_refs(sk, (q, off), points, legs, fk_pose)
+                    seats[ref] = ((q, off), legs, points, refs)
+                frames, info = library_clip(sk, soma, e, path, neutral, speeds, a.max_scale, seats.get(ref))
                 stats = {k: v for k, v in info.items() if k not in ("source", "kind", "loop", "contacts")}
                 add(name, key_frames(arm, name, frames, stats))
                 summary[name] = info
