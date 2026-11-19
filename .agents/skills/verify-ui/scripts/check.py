@@ -3516,6 +3516,90 @@ def skirt_scale(run, c):
     c.check(s, "Vivi scaled keeps her hem's width", abs(h["small"][1] - h["vivi"][1]) < 0.01, f"small {h['small'][1]:.4f}, vivi {h['vivi'][1]:.4f}")
 
 
+def seated_outfits(run):
+    """Residents beside whom the scene can sit, by their line's outer garment: skirted (a smock
+    or an apron, `Skirt` spring chains) and coated (a coat; `Coat` chains once the generator
+    builds them, docs/seat-contact/)."""
+    book = json.load(open(LOOK_BOOK)) if os.path.exists(LOOK_BOOK) else {"lines": {}}
+    rows = look_rows(run)
+    out = {"skirt": [], "coat": []}
+    for cid in residents(run, 400):
+        outfit = (book["lines"].get(rows.get(cid, ""), {}).get("person") or {}).get("styles", {}).get("outfit", [])
+        if any(p.startswith(("smock_", "apron_")) and not p.startswith("smock_bands") for p in outfit):
+            out["skirt"].append(cid)
+        elif any(p.startswith("coat-") for p in outfit):
+            out["coat"].append(cid)
+    return out
+
+
+@scenario("seat")
+def seat(run, c):
+    """Seated cloth on the ground (seat-2a, docs/seat-contact/): skirted and coated residents
+    beside me in the crowded street (eight near: me and seven), told to rest at noon in dry
+    weather (`set_behavior` `{"do": "rest"}`, scene setup), so town.rs sits them on the ground
+    (`sit_ground_down`, then `sit_ground`; about three in ten stand at ease instead), then told to
+    wander (a new graph alone does not end a rest; moving off does), so they get up where they sat
+    (`stand_up_ground`) and walk off. Stills going down, seated, getting up and up. While
+    they sit the camera goes far and back near, so their springs rest and wake (the re-entry
+    reseed, `LIVING_GAME_PERF=springwake`). Two arms: the contact on, and off
+    (`LIVING_GAME_SEAT_CONTACT=0`); `LIVING_GAME_PERF=seat` logs each seated character's lowest
+    cloth tail above its ground, and frames.csv and the springs line give the cost."""
+    s = "seat"
+    who = seated_outfits(run)
+    ids = who["skirt"][:4] + who["coat"][:3]
+    c.check(s, "skirted and coated residents to seat", len(who["skirt"]) >= 1 and len(who["coat"]) >= 1 and len(ids) == 7, f"skirt {who['skirt'][:4]}, coat {who['coat'][:3]}")
+    if len(ids) < 2:
+        return
+    ring = [(2.2, 0.0), (-2.2, 0.0), (0.0, 2.2), (0.0, -2.2), (1.6, 1.6), (-1.6, -1.6), (1.6, -1.6)]
+    free = [f"{i}:{x}:{y}" for i, (x, y) in zip(ids, ring)]
+    rest = json.dumps(json.dumps({"do": "rest"}))
+    wander = json.dumps(json.dumps({"do": "wander"}))
+    syncs = ['setup=set_world_law|"fov_on"|"false";place_at|{me}|420.5|255.5;set_weather|false|900',
+             "noon=sql|UPDATE world SET epoch_ms = {epoch_at:12} WHERE id = 0",
+             "sit=" + ";".join(f"set_behavior|{i}|{rest}" for i in ids),
+             "up=" + ";".join(f"set_behavior|{i}|{wander}" for i in ids)]
+    plan = ("ready;sync:noon;sync:setup;wait:2;sync:scene;look:180;cursor:0.5,0.55;wait:3;notches:30;wait:2;dump:standing;shot:00_standing;"
+            "sync:sit;wait:1.6;shot:01_down;wait:2.4;dump:seated;shot:02_seated;wait:3;shot:03_idle;"
+            "notches:-30;wait:2;notches:30;wait:3;dump:rewoken;shot:04_rewoken;wait:3;"
+            "sync:up;wait:0.9;shot:05_rising;wait:1.2;shot:06_rising_late;wait:2;dump:up;shot:07_up;wait:1;quit")
+    arms = {}
+    for arm, env in (("on", {}), ("off", {"LIVING_GAME_SEAT_CONTACT": "0"})):
+        name = f"{s}-{arm}"
+        ev = os.path.join(ROOT, ".local/living/verify", run, "ui", name)
+        os.makedirs(ev, exist_ok=True)
+        frames = os.path.join(ev, "frames.csv")
+        out, code, text = drive(run, name, plan, free=free, syncs=syncs, env=dict(env, LIVING_GAME_PERF="seat,springwake", LIVING_GAME_FRAMES=frames, LIVING_GAME_FPS_CAP="0"))
+        c.check(s, f"{arm}: client ran and joined", code == 0, text[-300:])
+        L = log(out)
+        sat = sorted({int(m) for m in re.findall(r"seat: #(\d+) sits on the ground", L)} & set(ids))
+        rose = sorted({int(m) for m in re.findall(r"seat: #(\d+) is off the ground", L)} & set(ids))
+        lows = [(n, int(k), float(v)) for n, k, v in re.findall(r"seat: (.+?) \S+: (\d+) cloth joints, lowest tail (-?[\d.]+|inf) mm", L) if v != "inf"]
+        # The seated characters' springs waking as the camera comes back near (their entities, from
+        # their seat reports), after they sat.
+        seated_e = {e for _, e, k, _ in re.findall(r"seat: (.+?) (\S+): (\d+) cloth joints, lowest tail (-?[\d.]+|inf) mm", L) if int(k) > 0}
+        after = L.split("live script: dump:seated", 1)[-1]
+        wakes = [(e, float(a), float(b)) for e, a, b in re.findall(r"springwake: \S+ (\S+) \(\d+ joints, settle \d+\): largest turn ([\d.]+)° at waking, ([\d.]+)° a frame after", after) if e in seated_e]
+        springs = [float(x) for x in re.findall(r"springs: .*?([\d.]+) µs CPU a character-step", L)]
+        rows = []
+        if os.path.exists(frames):
+            rows = [tuple(map(int, line.split(","))) for line in open(frames) if line.strip()]
+        ms = sorted(r[1] / 1000 for r in rows[len(rows) // 4:])
+        arms[arm] = {"sat": sat, "rose": rose, "cloth_lows_mm": lows, "wakes_deg": wakes, "spring_us_per_char_step": springs,
+                     "frames": len(ms), "p50_ms": ms[len(ms) // 2] if ms else None, "p99_ms": ms[math.ceil(len(ms) * .99) - 1] if ms else None,
+                     "skirt": [i for i in sat if i in who["skirt"]], "coat": [i for i in sat if i in who["coat"]]}
+        d = dump(out, "seated") or {}
+        seen = {x["id"] for x in d.get("seen") or []}
+        c.check(s, f"{arm}: a skirted and a coated resident sit on the ground in view", arms[arm]["skirt"] and arms[arm]["coat"] and set(sat) <= seen, f"sat {sat} (skirt {arms[arm]['skirt']}, coat {arms[arm]['coat']}); in view {sorted(seen)}")
+        c.check(s, f"{arm}: everyone who sat got up and was let go of the ground", sat and set(rose) == set(sat), f"sat {sat}, off the ground {rose}")
+        if arm == "on":
+            cloth = [x for x in lows if x[1] > 0]
+            c.check(s, "on: seated cloth tails stay on the ground's side (at most 5 mm under it)", cloth and min(v for _, _, v in cloth) >= -5.0, f"{len(cloth)} reports; lowest {min((v for _, _, v in cloth), default=None)} mm")
+        c.check(s, f"{arm}: waking seated (far and back near) settles without a swing", wakes and max(b for _, _, b in wakes) < 10.0, f"{wakes}")
+    evidence = os.path.join(ROOT, ".local/living/verify", run, "ui", "seat.json")
+    json.dump(arms, open(evidence, "w"), indent=1)
+    on, off = arms.get("on", {}), arms.get("off", {})
+    c.check(s, "frame cost with the contact on and off (eight near, crowded street)", on.get("p50_ms") and off.get("p50_ms"), json.dumps({k: {x: arms[k].get(x) for x in ("frames", "p50_ms", "p99_ms")} for k in arms}))
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--run")

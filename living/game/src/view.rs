@@ -559,6 +559,19 @@ pub fn batch(
             }
             Pose::Game => game_camera(&mut tf, &mut proj, Vec3::new(c.x, 0.0, c.z)),
         }
+        // A ground seat's clip sits the body on the checker: its cloth takes the game's ground
+        // contact, weighted by the clip's time (`characters::SeatAnchor`).
+        let seat = shot.clip.and_then(|(clip, t)| crate::anim::seat_of(&item.clips[clip].0, t, 1.0));
+        if let Some(root) = roots.iter().find(|(_, it)| it.index == i).map(|(e, _)| e) {
+            match seat {
+                Some(w) => {
+                    commands.entity(root).try_insert(crate::characters::SeatAnchor { point: Vec3::ZERO, normal: Vec3::Y, weight: Some(w) });
+                }
+                None => {
+                    commands.entity(root).try_remove::<crate::characters::SeatAnchor>();
+                }
+            }
+        }
         if let (Some((clip, t)), Some((_, nodes, p))) = (shot.clip, &item.graph) {
             if let (Ok(mut pl), Some(node)) = (players.get_mut(*p), nodes.get(clip)) {
                 pl.stop_all();
