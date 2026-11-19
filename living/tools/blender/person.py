@@ -2754,6 +2754,16 @@ def coat_weights(ob):
                 group = groups.get(name) or groups.new(name=name)
                 group.add([vertex.index], weight * share / total, "REPLACE")
 
+        # Lower side and rear panels ride the folded thigh when springs are idle too.
+        hips = next((w for name, w in before if name == "J_Bip_C_Hips"), 0.0)
+        chains = [g for g in vertex.groups if "Coat" in groups[g.group].name and g.weight > 0]
+        if hips and chains:
+            strongest = max(chains, key=lambda g: g.weight)
+            target = groups[strongest.group]
+            shift = hips * 0.5 * min((SKIRT_TOP - z) / SKIRT_EASE, 1.0)
+            target.add([vertex.index], shift, "ADD")
+            groups["J_Bip_C_Hips"].add([vertex.index], hips - shift, "REPLACE")
+
 
 def spread_head_weights(obs):
     """On a typed head, what hangs on the head (hair, headwear, the neck's top, the far head)
