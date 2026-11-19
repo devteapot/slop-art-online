@@ -1,0 +1,62 @@
+{
+  "scene": {
+    "contract": 1,
+    "character": "handmade",
+    "forward": "+Z"
+  },
+  "materials": {
+    "M00_000_Hair_00_HAIR": {
+      "slot": "hair",
+      "hair": {
+        "shade": [
+          48,
+          14,
+          5
+        ],
+        "mid": [
+          101,
+          35,
+          7
+        ],
+        "light": [
+          116,
+          40,
+          7
+        ],
+        "highlight": [
+          134,
+          50,
+          12
+        ],
+        "t1": -0.2,
+        "t2": 0.4,
+        "edge": 0.02,
+        "highlight_feather": 0.08
+      }
+    },
+    "M00_000_00_Body_00_SKIN": {
+      "slot": "skin"
+    },
+    "M00_000_00_Face_00_SKIN": {
+      "slot": "face"
+    },
+    "M00_000_00_Eye_00_EYE": {
+      "slot": "eyes"
+    },
+    "M00_000_00_EyeIris_00_EYE": {
+      "slot": "eyes"
+    },
+    "M00_000_00_FaceEyeline_00_FACE": {
+      "slot": "eyes"
+    },
+    "M00_000_00_FaceBrow_00_FACE": {
+      "slot": "eyes"
+    },
+    "M00_000_00_FaceTint_00_FACE": {
+      "slot": "tint"
+    },
+    "M00_001_01_Cloth_01_CLOTH": {
+      "slot": "cloth"
+    }
+  }
+}

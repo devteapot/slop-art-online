@@ -1,0 +1,126 @@
+{
+  "drawing": "/Users/carlid/dev/slop-art-online/.local/living/char-live-1-stage1/face.png",
+  "tolerance": {
+    "hair": 8,
+    "other": 10
+  },
+  "patches": {
+    "hair shade": {
+      "target": [
+        88,
+        42,
+        27
+      ],
+      "drawing": [
+        553,
+        106
+      ],
+      "swatch": "shade",
+      "portrait45": [
+        893,
+        530
+      ]
+    },
+    "hair mid": {
+      "target": [
+        152,
+        72,
+        43
+      ],
+      "drawing": [
+        474,
+        165
+      ],
+      "swatch": "mid",
+      "portrait": [
+        785,
+        290
+      ],
+      "portrait45": [
+        864,
+        325
+      ]
+    },
+    "hair light": {
+      "target": [
+        168,
+        84,
+        53
+      ],
+      "drawing": [
+        434,
+        136
+      ],
+      "swatch": "light",
+      "portrait": [
+        821,
+        266
+      ],
+      "portrait45": [
+        820,
+        275
+      ]
+    },
+    "hair highlight": {
+      "target": [
+        183,
+        97,
+        62
+      ],
+      "drawing": [
+        454,
+        132
+      ],
+      "swatch": "highlight",
+      "portrait45": [
+        874,
+        290
+      ]
+    },
+    "skin cheek": {
+      "target": [
+        235,
+        164,
+        128
+      ],
+      "drawing": [
+        601,
+        336
+      ],
+      "portrait": [
+        873,
+        414
+      ]
+    },
+    "coat": {
+      "target": [
+        156,
+        126,
+        135
+      ],
+      "drawing": [
+        708,
+        741
+      ],
+      "portrait": [
+        656,
+        696
+      ]
+    },
+    "jersey": {
+      "target": [
+        118,
+        50,
+        43
+      ],
+      "drawing": [
+        603,
+        781
+      ],
+      "portrait": [
+        800,
+        767
+      ]
+    }
+  }
+}

@@ -60,6 +60,13 @@ struct Toon {
     // Painted detail (toon.wesl `detail`): x 1 where the vertex colours' alpha names surfaces
     // (generated scenery), z full detail until (m), w none from (m).
     detail: vec4<f32>,
+    // A hand-made hair profile (style.rs `Kind::HandHair`, handmade.rs): shade, mid, light and
+    // highlight as linear rgb; hand[3].w 1 when the highlight mask is a texture (`face_map`).
+    hand: array<vec4<f32>, 4>,
+    // The profile's x t1, y t2 (N·L), z edge, w highlight feather.
+    hand_bands: vec4<f32>,
+    // A hand-made file's forward in the mesh's own frame (xyz), w 1 when set (toon.wesl `facing`).
+    file: vec4<f32>,
     // Per surface (style.rs `Surface`): x 1 / tile size (1/m), y strength, z mapping (0
     // triplanar, 1 planar per face).
     layers: array<vec4<f32>, 18>,
