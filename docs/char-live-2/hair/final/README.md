@@ -36,7 +36,7 @@ The 1600 × 900 portrait uses an 11:00 sun, the default grade and idle at 0 seco
 
 Production ink is **(65,39,33)**, or **(+31,+7,+4)** above the black floor and **(−80,−30,−10)** below the rendered auburn mid. The mid is the 9 × 9 channel median at (759,341) in the same frame. The original ink delta is (+6,+12,+15). In linear luminance the ink sits 13.6% of the way from the floor to the mid. The drawing’s ink luminance is 15.3% of its mid.
 
-**The proposed dev-box target is (65,41,33), pending GC review.** Decode the measured floor and mid with the sRGB transfer function. For each linear channel, divide drawing ink (59,27,18) by drawing mid (152,72,43), also decoded. Multiply this ratio by the rendered mid minus floor, add the floor, then sRGB-encode and round once. The production result differs from this proposal by **(0,−2,0)**. Both calibration files retain the original drawing sample alongside the accepted target. A GPU confirmation can repeat the same registered measurements and report its own floor. [Contrast calculation and source values](ink-contrast.json)
+**The GC accepted (65,41,33) as the dev-box ink target.** Decode the measured floor and mid with the sRGB transfer function. For each linear channel, divide drawing ink (59,27,18) by drawing mid (152,72,43), also decoded. Multiply this ratio by the rendered mid minus floor, add the floor, then sRGB-encode and round once. The production result differs from this target by **(0,−2,0)**. Both calibration files retain the original drawing sample alongside the accepted target. A GPU confirmation can repeat the same registered measurements and report its own floor. [Contrast calculation and source values](ink-contrast.json)
 
 ## Middle motion and fade choice
 
@@ -55,7 +55,7 @@ The official tool compares 16 stills per sequence against the same file with the
 
 Both tool runs returned success with all six sequences faded. The shader estimates line spacing from the median metres per UV unit of the hair primitive. Measured on this unwrap, that is 0.69089 m per UV unit. With the authored field range of 0.009 UV the spacing estimate is 12.44 mm, about 1.54 pixels at the shader’s reference Near pixel size. Both candidate fade thresholds exceed that estimate. The numbered portrait tips describe close-up readability. The play-distance sequences give the GC evidence of how early the lines disappear.
 
-Across all 150 walking frames the two independently rendered arms matched pixel for pixel. The same was true for each arm against the plain reference over all 96 idle pan and zoom frames. Three frames per encoded clip (0, 74 and 149) decoded exactly to the original RGB pixels. The clips therefore show the same Middle result at both settings. The two production files are supplied for the GC’s choice. [Frame and encode checks](motion-check.json)
+Across all 150 walking frames the two independently rendered arms matched pixel for pixel. The same was true for each arm against the plain reference over all 96 idle pan and zoom frames. Three frames per encoded clip (0, 74 and 149) decoded exactly to the original RGB pixels. The clips therefore show the same Middle result at both settings. The GC selected 2.0 for the production file. [Frame and encode checks](motion-check.json)
 
 ## Asset and replay
 
@@ -63,7 +63,7 @@ The standalone GLB contains **48,896 triangles**, six clips and 15 face expressi
 
 The authored 2048² sidecar carries the highlight in R and the line distance in G. B is zero. The line guide has 11,908 zero-distance texels. The topology check covers all 24,276 hair triangles on the exact exported UV0. Every triangle lies within one of the 32 registered islands, including the scalp support at its wrap. The material audit found the three generated maps in Blender. [Line guide](lock-lines.png) · [Packed R and G](own-cora-live.hair.png) · [UV audit](seam-audit.json) · [Material audit](material-audit.json)
 
-To rebuild, run the journal from the repository root with the session’s Blender shim. Set `CHAR_LIVE_OUTPUT` to an empty output directory. The original review used fade 3.0. The final journal entry applies the GC’s fade of 2.0. The comparison GLB changes the single `ink_fade_px` number in its material JSON and carries identical binary geometry, animations and sidecars. [Session journal](../../session.jsonl) · [Replay entry point](../../replay.py)
+To rebuild, run the journal from the repository root with the session’s Blender shim. Set `CHAR_LIVE_OUTPUT` to an empty output directory. The original review used fade 3.0. The final journal entry applies the GC’s fade of 2.0. The original comparison changed only `ink_fade_px`. Both GLB names now resolve to the selected 2.0 asset. [Session journal](../../session.jsonl) · [Replay entry point](../../replay.py)
 
 ```bash
 BLENDER="$HOME/.local/share/slop-tools/build-bin/blender"
