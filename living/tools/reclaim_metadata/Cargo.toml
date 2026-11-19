@@ -1,0 +1,11 @@
+[package]
+name = "trial-reclaim-metadata"
+version = "0.1.0"
+edition = "2021"
+
+[workspace]
+
+[dependencies]
+sled = "=0.34.7"
+blake3 = "1"
+serde_json = "1"

@@ -67,6 +67,8 @@ import threading
 import time
 from pathlib import Path
 
+from trial_activity import running_trial
+
 HOME = Path.home()
 STATE = Path(os.environ.get("XDG_STATE_HOME") or HOME / ".local/state") / "slop-merge" / "scene-gate"
 REDS_DEFAULT = HOME / "slop-mq/red-on-main.json" if (HOME / "slop-mq").is_dir() else STATE / "red-on-main.json"
@@ -791,7 +793,8 @@ def main(argv):
         return 2
     if a.f in (cmd_run, cmd_recheck) or (a.f is cmd_reds and not (a.add or a.drop or a.owner)):
         refresh_reds(a.reds)  # the shared list from git into the cache (or the cache, said so)
-    return a.f(a)
+    with running_trial(getattr(a, "stdb_container", None)):
+        return a.f(a)
 
 
 if __name__ == "__main__":

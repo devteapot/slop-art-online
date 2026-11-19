@@ -50,6 +50,8 @@ import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
+from trial_activity import running_trial
+
 ROOT = Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location("privacy", ROOT / ".agents/skills/verify-minds/scripts/privacy.py")
 pv = importlib.util.module_from_spec(spec)
@@ -457,4 +459,5 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    with running_trial(os.environ.get("LIVING_STDB_CONTAINER")):
+        sys.exit(main())

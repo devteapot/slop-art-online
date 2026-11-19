@@ -14,6 +14,8 @@ import urllib.request
 from contextlib import contextmanager
 from pathlib import Path
 
+from trial_activity import running_trial
+
 GRACE_SECONDS = 120
 
 
@@ -32,7 +34,7 @@ def process_stamp(pid):
 
 
 def request(url, token, body=None, json_body=False):
-    headers = {"Authorization": f"Bearer {token}"}
+    headers = {"Authorization": f"Bearer {token}"} if token else {}
     if json_body:
         headers["Content-Type"] = "application/json"
     req = urllib.request.Request(url, body, headers)
@@ -107,7 +109,10 @@ def arm(directory, url, db, token, driver_pid, *, command=None, expected=None, e
     path = lease(directory)
     generation = secrets.token_hex(16)
     result = directory / f".world-guard-start-{generation}.json"
-    config = dict(path=str(path), result=str(result), generation=generation, url=url, db=db,
+    container = None
+    if command:
+        container = command[2] if command[:2] == ["docker", "exec"] else os.environ.get("LIVING_STDB_CONTAINER")
+    config = dict(container=container, path=str(path), result=str(result), generation=generation, url=url, db=db,
                   token=token, driver=[driver_pid, process_stamp(driver_pid)], grace=grace,
                   command=command, expected=expected, expected_epoch=expected_epoch)
     with (directory / "world-guard.log").open("a") as log:
@@ -127,7 +132,7 @@ def arm(directory, url, db, token, driver_pid, *, command=None, expected=None, e
 
 def prepare(config):
     url, db, token = (config[key] for key in ("url", "db", "token"))
-    with world_lock(url, db):
+    with running_trial(config["container"]), world_lock(url, db):
         existing = lookup(url, db, token)
         if existing != config["expected"]:
             raise RuntimeError(f"refusing to guard or publish {db}: database identity differs from run record")

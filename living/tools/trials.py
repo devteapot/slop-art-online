@@ -49,6 +49,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import ooc  # noqa: E402
 import trial_archive  # noqa: E402
+from trial_activity import running_trial  # noqa: E402
 import world_guard  # noqa: E402
 from journal_io import restore  # noqa: E402
 
@@ -3351,7 +3352,11 @@ def main():
     p.add_argument("--batch", required=True)
     p.set_defaults(f=life_report)
     a = ap.parse_args()
-    a.f(a)
+    if a.f in (run, resume, clean, up, down):
+        with running_trial(CONTAINER):
+            a.f(a)
+    else:
+        a.f(a)
 
 
 if __name__ == "__main__":
