@@ -42,6 +42,132 @@ const NOT_FACTS: [&str; 3] = ["id", "at_ms", "rate_key"];
 const AGO_MAX_S: f64 = 120.0;
 /// States kept before the memo starts over.
 const KEPT: usize = 4096;
+/// The most parts `status_parts()` may name.
+pub const MAX_PARTS: usize = 16;
+/// Distinct answers kept per part before its memo starts over.
+const ANSWERS_KEPT: usize = 256;
+/// Differences `status_parts_check` keeps in words until they are taken.
+const DIFFERENCES_KEPT: usize = 8;
+
+/// How the authority asks `status_of` (its `status_parts` and `status_parts_check` laws). The
+/// default, for the mind service and clients, goes by the parts with no check.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct StatusWay {
+    /// By the parts the script declares (`status_parts()`); false: the whole law (the rollback).
+    pub parts: bool,
+    /// A diagnostic: every ask by the parts is also asked of the whole law with the whole body,
+    /// the two compared (`calls::STATUS_CHECKED`, `calls::STATUS_DIFFERED`), and the whole law's
+    /// answer given where they differ.
+    pub check: bool,
+}
+
+impl Default for StatusWay {
+    fn default() -> Self {
+        StatusWay { parts: true, check: false }
+    }
+}
+
+/// What one part of `status_of` reads of the body (`fields::Fields`), worked out once.
+#[derive(Debug, Default)]
+struct PartPlan {
+    kind: bool,
+    stage: bool,
+    night: bool,
+    /// Facts by name, in order of name.
+    fields: Vec<String>,
+    /// Meters whose share it reads, in order of name.
+    shares: Vec<String>,
+}
+
+/// One declared part of `status_of` (`status_parts()`) and its memo: each answer it gave once,
+/// and the answer's index by the values of what it reads.
+struct Part {
+    name: String,
+    /// None: it reads the body whole or by computed names, and is kept on all of it.
+    plan: Option<PartPlan>,
+    memo: RefCell<HashMap<Vec<u8>, u32>>,
+    answers: RefCell<Vec<Rc<Vec<Status>>>>,
+}
+
+impl Part {
+    /// The values of what it reads, as a key: a byte for present or not and each value, in the
+    /// plan's order (one plan per part, so no names).
+    fn key(&self, b: &BodyFacts, k: &mut Vec<u8>) {
+        let Some(p) = &self.plan else {
+            k.extend(b.key());
+            return;
+        };
+        if p.kind {
+            k.extend(b.kind.as_bytes());
+            k.push(0);
+        }
+        if p.stage {
+            k.extend(b.stage.as_bytes());
+            k.push(0);
+        }
+        if p.night {
+            k.push(b.night as u8);
+        }
+        let mut put = |v: Option<f64>| match v {
+            Some(v) => {
+                k.push(1);
+                k.extend(v.to_le_bytes());
+            },
+            None => k.push(0),
+        };
+        for f in &p.fields {
+            put(b.get(f));
+        }
+        for m in &p.shares {
+            put(b.share.iter().find(|(n, _)| n == m).map(|(_, v)| *v));
+        }
+    }
+
+    /// The body as the part is called with it: what it reads alone (as a skill's check is
+    /// given its plan's fields), or all of it.
+    fn map(&self, b: &BodyFacts) -> Map {
+        let Some(p) = &self.plan else { return b.map() };
+        let mut m = Map::new();
+        for f in &p.fields {
+            if let Some(v) = b.get(f) {
+                m.insert(f.as_str().into(), Dynamic::from_float(v));
+            }
+        }
+        if !p.shares.is_empty() {
+            let mut share = Map::new();
+            for n in &p.shares {
+                if let Some((_, v)) = b.share.iter().find(|(k, _)| k == n) {
+                    share.insert(n.as_str().into(), Dynamic::from_float(*v));
+                }
+            }
+            m.insert("share".into(), share.into());
+        }
+        if p.kind {
+            m.insert("kind".into(), b.kind.clone().into());
+        }
+        if p.stage {
+            m.insert("stage".into(), b.stage.clone().into());
+        }
+        if p.night {
+            m.insert("night".into(), b.night.into());
+        }
+        m
+    }
+}
+
+/// The parts `status_of` is declared in, their memos and the joined answers.
+struct Parts {
+    list: Vec<Part>,
+    /// What is wrong with the declaration (an install refuses it; asks go to the whole law).
+    errors: Vec<String>,
+    /// The joined answer by the parts' answers (their indices, in order).
+    joined: RefCell<HashMap<Vec<u32>, Rc<Vec<Status>>>>,
+    /// What the parts read together, with the fields each share is made of (for
+    /// `BodyFacts::next_change_ms`); None when one reads the body whole.
+    reads: Option<Rc<BTreeSet<String>>>,
+    /// The key of the part being asked, reused.
+    key: RefCell<Vec<u8>>,
+}
 
 /// What bounds a meter: another field of the row, or a number.
 #[derive(Clone, Debug, PartialEq)]
@@ -291,6 +417,10 @@ pub(super) struct Body {
     memo: RefCell<HashMap<Vec<u8>, Rc<Vec<Status>>>>,
     /// What `status_of` reads, worked out once (`Scripts::status_reads`).
     reads: RefCell<Option<Option<Rc<BTreeSet<String>>>>>,
+    /// The parts it is declared in (`status_parts()`); None: asked whole.
+    parts: Option<Parts>,
+    /// Differences `status_parts_check` found, in words, until taken.
+    differed: RefCell<Vec<String>>,
 }
 
 /// The meters when the script declares none: health and energy, as the client drew them.
@@ -355,7 +485,7 @@ fn read_meters(d: Dynamic) -> (Vec<Meter>, Vec<String>) {
     (out, errors)
 }
 
-fn read_status(d: Dynamic) -> Result<Vec<Status>, String> {
+pub(super) fn read_status(d: Dynamic) -> Result<Vec<Status>, String> {
     let list = d.try_cast::<Array>().ok_or("status_of must return a list of #{ name, tone, text }")?;
     list.into_iter()
         .map(|e| {
@@ -400,7 +530,10 @@ fn read_status(d: Dynamic) -> Result<Vec<Status>, String> {
 }
 
 impl Scripts {
-    pub(super) fn read_body(&self) -> Body {
+    /// `whole_only`: the script's own `status_of` came without its own `status_parts` while the
+    /// rest of the shipped script was merged under it (`Scripts::with_day`): its law is asked
+    /// whole, so the shipped parts never stand in for it.
+    pub(super) fn read_body(&self, whole_only: bool) -> Body {
         let (meters, errors) = if self.nullary.contains("meters") {
             match self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "meters", ()) {
                 Ok(d) => read_meters(d),
@@ -409,7 +542,94 @@ impl Scripts {
         } else {
             (default_meters(), Vec::new())
         };
-        Body { meters, errors, memo: Default::default(), reads: Default::default() }
+        let parts = if whole_only { None } else { self.read_parts(&meters) };
+        Body { meters, errors, memo: Default::default(), reads: Default::default(), parts, differed: Default::default() }
+    }
+
+    /// `status_parts()`, its names checked and each part's reads worked out.
+    fn read_parts(&self, meters: &[Meter]) -> Option<Parts> {
+        if !self.nullary.contains("status_parts") {
+            return None;
+        }
+        let mut errors = Vec::new();
+        let mut names: Vec<String> = Vec::new();
+        match self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "status_parts", ()) {
+            Err(e) => errors.push(format!("status_parts: {e}")),
+            Ok(d) => match d.try_cast::<Array>() {
+                None => errors.push("status_parts: must return a list of the names of its parts".into()),
+                Some(list) => {
+                    for (i, v) in list.into_iter().enumerate() {
+                        match v.into_string() {
+                            Err(_) => errors.push(format!("status_parts: entry {i} is not a function's name")),
+                            Ok(n) if n == "status_of" || n == "status_parts" => errors.push(format!("status_parts: `{n}` cannot be one of its parts")),
+                            Ok(n) if !self.unary.contains(&n) => errors.push(format!("status_parts: `{n}` is not a function of one parameter (the body) in the script")),
+                            Ok(n) if names.contains(&n) => errors.push(format!("status_parts: `{n}` is named twice")),
+                            Ok(n) => names.push(n),
+                        }
+                    }
+                },
+            },
+        }
+        if !self.unary.contains("status_of") {
+            errors.push("status_parts: the script has no `status_of(a)`, the parts' reference".into());
+        }
+        if names.is_empty() && errors.is_empty() {
+            errors.push("status_parts: names no part".into());
+        }
+        if names.len() > MAX_PARTS {
+            errors.push(format!("status_parts: names {} parts (at most {MAX_PARTS})", names.len()));
+        }
+        let list: Vec<Part> = names.into_iter().map(|name| Part { plan: self.part_plan(&name, meters), name, memo: Default::default(), answers: Default::default() }).collect();
+        let mut reads = Some(BTreeSet::new());
+        for p in &list {
+            let (Some(r), Some(plan)) = (reads.as_mut(), p.plan.as_ref()) else {
+                reads = None;
+                break;
+            };
+            r.extend(plan.fields.iter().cloned());
+            for (on, k) in [(plan.kind, "kind"), (plan.stage, "stage"), (plan.night, "night")] {
+                if on {
+                    r.insert(k.to_string());
+                }
+            }
+            for n in &plan.shares {
+                let m = meters.iter().find(|m| m.name == *n).expect("part_plan: shares are meters");
+                r.insert(format!("share.{n}"));
+                r.insert(m.value.clone());
+                if let MeterMax::Field(f) = &m.max {
+                    r.insert(f.clone());
+                }
+            }
+        }
+        Some(Parts { list, errors, joined: Default::default(), reads: reads.map(Rc::new), key: Default::default() })
+    }
+
+    /// What part `name` reads of the body; None when it reads it whole, by computed names, or
+    /// the share of a meter there is not.
+    fn part_plan(&self, name: &str, meters: &[Meter]) -> Option<PartPlan> {
+        let u = self.fields.of(name, 1)?.first()?;
+        if u.all || !u.by_param.is_empty() {
+            return None;
+        }
+        let mut p = PartPlan::default();
+        for (k, sub) in &u.keys {
+            match k.as_str() {
+                "kind" => p.kind = true,
+                "stage" => p.stage = true,
+                "night" => p.night = true,
+                "share" => {
+                    if sub.all || !sub.by_param.is_empty() {
+                        return None;
+                    }
+                    for n in sub.keys.keys() {
+                        meters.iter().find(|m| m.name == *n)?;
+                        p.shares.push(n.clone());
+                    }
+                },
+                _ => p.fields.push(k.clone()),
+            }
+        }
+        Some(p)
     }
 
     /// The body's meters (`meters()`, else health and energy), in their order.
@@ -440,16 +660,49 @@ impl Scripts {
     }
 
     /// How a body is (`status_of(a)`), kept per state; none when the script has no such law.
+    /// By its parts (`status_parts()`) when the script declares them, else whole.
     pub fn status_of(&self, b: &BodyFacts) -> Result<Rc<Vec<Status>>, String> {
-        self.status_of_profiled(b, |_| ())
+        self.status_of_profiled(b, StatusWay::default(), |_| ())
     }
 
-    /// Asks the same law, optionally timing memo lookup and evaluation with caller-provided guards.
-    pub fn status_of_profiled<T>(&self, b: &BodyFacts, span: impl Fn(&str) -> T) -> Result<Rc<Vec<Status>>, String> {
+    /// [`Self::status_of`] the way `way` says (the authority's `status_parts` and
+    /// `status_parts_check` laws), timing its steps with caller-provided guards
+    /// (`status.lookup`, `status.miss`, `status.rhai`, `status.check`).
+    pub fn status_of_profiled<T>(&self, b: &BodyFacts, way: StatusWay, span: impl Fn(&str) -> T) -> Result<Rc<Vec<Status>>, String> {
         if !self.unary.contains("status_of") {
             return Ok(Rc::new(Vec::new()));
         }
         super::calls::note(super::calls::STATUS_ASKED);
+        if !self.uses_parts(way) {
+            return self.status_whole(b, &span);
+        }
+        let s = self.status_by_parts(b, &span)?;
+        if way.check {
+            // The reference, asked afresh of the whole law with the whole body: no memo, no plan.
+            let _check = span("status.check");
+            super::calls::note(super::calls::STATUS_CHECKED);
+            let whole = self.status_fresh(b)?;
+            if whole != *s {
+                super::calls::note(super::calls::STATUS_DIFFERED);
+                let names = |v: &[Status]| v.iter().map(|x| x.name.as_str()).collect::<Vec<_>>().join(", ");
+                let mut told = self.body.differed.borrow_mut();
+                if told.len() < DIFFERENCES_KEPT {
+                    told.push(format!("the parts gave [{}] where status_of gives [{}] for a {} {}{} ({})", names(&s), names(&whole), b.stage, b.kind, if b.night { " at night" } else { "" }, b.fields.iter().map(|(k, v)| format!("{k} {v}")).collect::<Vec<_>>().join(", ")));
+                }
+                return Ok(Rc::new(whole));
+            }
+        }
+        Ok(s)
+    }
+
+    /// Whether an ask the way `way` says goes by the parts: the script declares them well, and
+    /// `way` does not ask for the whole law.
+    pub fn uses_parts(&self, way: StatusWay) -> bool {
+        way.parts && self.body.parts.as_ref().is_some_and(|p| p.errors.is_empty())
+    }
+
+    /// The whole law, kept on what it reads (the way before `status_parts`, and its rollback).
+    fn status_whole<T>(&self, b: &BodyFacts, span: &impl Fn(&str) -> T) -> Result<Rc<Vec<Status>>, String> {
         let lookup = span("status.lookup");
         let key = match self.status_reads() {
             Some(r) => b.key_reading(&r),
@@ -462,17 +715,132 @@ impl Scripts {
         drop(lookup);
         let _miss = span("status.miss");
         super::calls::note(super::calls::STATUS_RUN);
-        let d = {
+        let s = {
             let _rhai = span("status.rhai");
-            self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "status_of", (b.map(),)).map_err(|e| format!("status_of: {e}"))?
+            Rc::new(self.status_fresh(b)?)
         };
-        let s = Rc::new(read_status(d)?);
         let mut memo = self.body.memo.borrow_mut();
         if memo.len() >= KEPT {
             memo.clear();
         }
         memo.insert(key, s.clone());
         Ok(s)
+    }
+
+    /// `status_of(a)` run on the whole body, kept nowhere.
+    fn status_fresh(&self, b: &BodyFacts) -> Result<Vec<Status>, String> {
+        let d = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "status_of", (b.map(),)).map_err(|e| format!("status_of: {e}"))?;
+        read_status(d)
+    }
+
+    /// The parts' answers joined in their order, each part's kept on what it reads.
+    fn status_by_parts<T>(&self, b: &BodyFacts, span: &impl Fn(&str) -> T) -> Result<Rc<Vec<Status>>, String> {
+        let parts = self.body.parts.as_ref().expect("uses_parts");
+        let _all = span("status.parts");
+        super::calls::note(super::calls::PARTS_ASKED);
+        let mut ids = [0u32; MAX_PARTS];
+        let n = parts.list.len();
+        let mut key = parts.key.borrow_mut();
+        for (i, part) in parts.list.iter().enumerate() {
+            key.clear();
+            part.key(b, &mut key);
+            let found = part.memo.borrow().get(key.as_slice()).copied();
+            ids[i] = match found {
+                Some(id) => {
+                    super::calls::note(super::calls::PART_MEMO);
+                    id
+                },
+                None => {
+                    let _miss = span("status.miss");
+                    super::calls::note(super::calls::PART_RUN);
+                    super::calls::note(super::calls::PART_RUN_BY + i.min(MAX_PARTS - 1));
+                    let d = {
+                        let _rhai = span("status.rhai");
+                        self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, &part.name, (part.map(b),)).map_err(|e| format!("{}: {e}", part.name))?
+                    };
+                    let answer = read_status(d).map_err(|e| e.replacen("status_of", &part.name, 1))?;
+                    let mut answers = part.answers.borrow_mut();
+                    let id = match answers.iter().position(|a| **a == answer) {
+                        Some(id) => id as u32,
+                        None => {
+                            if answers.len() >= ANSWERS_KEPT {
+                                // The ids name answers in the joined memo: both start over.
+                                answers.clear();
+                                part.memo.borrow_mut().clear();
+                                parts.joined.borrow_mut().clear();
+                            }
+                            answers.push(Rc::new(answer));
+                            (answers.len() - 1) as u32
+                        },
+                    };
+                    let mut memo = part.memo.borrow_mut();
+                    if memo.len() >= KEPT {
+                        memo.clear();
+                    }
+                    memo.insert(key.clone(), id);
+                    id
+                },
+            };
+        }
+        drop(key);
+        let ids = &ids[..n];
+        if let Some(s) = parts.joined.borrow().get(ids) {
+            super::calls::note(super::calls::PARTS_JOINED);
+            return Ok(s.clone());
+        }
+        let mut out = Vec::new();
+        for (part, id) in parts.list.iter().zip(ids) {
+            out.extend(part.answers.borrow()[*id as usize].iter().cloned());
+        }
+        let s = Rc::new(out);
+        let mut joined = parts.joined.borrow_mut();
+        if joined.len() >= KEPT {
+            joined.clear();
+        }
+        joined.insert(ids.to_vec(), s.clone());
+        Ok(s)
+    }
+
+    /// The differences `status_parts_check` found since the last take (at most a few, in words),
+    /// cleared: for the caller to log.
+    pub fn take_status_differences(&self) -> Vec<String> {
+        std::mem::take(&mut *self.body.differed.borrow_mut())
+    }
+
+    /// The parts the script declares (`status_parts()`), in their order: empty when it declares
+    /// none.
+    pub fn status_part_names(&self) -> Vec<String> {
+        self.body.parts.as_ref().map(|p| p.list.iter().map(|x| x.name.clone()).collect()).unwrap_or_default()
+    }
+
+    /// What is wrong with `status_parts()` (an install refuses it; the whole law answers).
+    pub fn status_parts_errors(&self) -> &[String] {
+        self.body.parts.as_ref().map(|p| p.errors.as_slice()).unwrap_or(&[])
+    }
+
+    /// What one part reads (`BodyFacts` field names, `share.<meter>`, `kind`, `stage`,
+    /// `night`); `None` when it reads the body whole or is not a part.
+    pub fn status_part_reads(&self, name: &str) -> Option<BTreeSet<String>> {
+        let p = self.body.parts.as_ref()?.list.iter().find(|p| p.name == name)?;
+        let plan = p.plan.as_ref()?;
+        let mut out: BTreeSet<String> = plan.fields.iter().cloned().collect();
+        out.extend(plan.shares.iter().map(|s| format!("share.{s}")));
+        for (on, k) in [(plan.kind, "kind"), (plan.stage, "stage"), (plan.night, "night")] {
+            if on {
+                out.insert(k.into());
+            }
+        }
+        Some(out)
+    }
+
+    /// The facts the answer read the way `way` says depends on, for when a kept answer can
+    /// change (`BodyFacts::next_change_ms`): the parts' reads together when it goes by the
+    /// parts (`None` when one reads the body whole), else [`Self::status_reads`].
+    pub fn status_reads_as(&self, way: StatusWay) -> Option<Rc<BTreeSet<String>>> {
+        if self.uses_parts(way) {
+            return self.body.parts.as_ref().and_then(|p| p.reads.clone());
+        }
+        self.status_reads()
     }
 
     /// The facts `status_of` reads from a body (`BodyFacts` field names, and `share.<meter>` for
@@ -584,6 +952,7 @@ pub fn fields_of_json(v: &serde_json::Value) -> Vec<(String, f64)> {
 
 #[cfg(test)]
 mod tests {
+    use super::super::calls;
     use super::*;
 
     const SHIPPED: &str = include_str!("../../../scripts/skills.rhai");
@@ -791,5 +1160,282 @@ fn status_of(a) {
         let sc = Scripts::new(&src).unwrap();
         sc.validate().unwrap();
         assert_eq!(sc.meters().len(), 5);
+    }
+
+    // ---- status_parts (docs/STATUS_PARTS.md) ------------------------------------------------
+
+    /// The shipped `status_of` as it stood before it was split into parts (main 9d112a51), as an
+    /// overlay: the reference the parts are held to.
+    const BEFORE_PARTS: &str = include_str!("status_of_before_parts.rhai");
+    const WHOLE: StatusWay = StatusWay { parts: false, check: false };
+
+    /// A small deterministic generator for sampled bodies.
+    struct Lcg(u64);
+    impl Lcg {
+        fn next(&mut self) -> u64 {
+            self.0 = self.0.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            self.0 >> 33
+        }
+        fn pick<T: Copy>(&mut self, xs: &[T]) -> T {
+            xs[(self.next() % xs.len() as u64) as usize]
+        }
+    }
+
+    /// A vitals row and the moment it is read at: each meter at, just under and just over the
+    /// law's levels, rates falling, still and rising, hurt never, just now and long ago, and now
+    /// and then a field missing (a body the row does not give hunger or breath).
+    fn sampled_row(g: &mut Lcg) -> (Vec<(String, f64)>, u64) {
+        let hunger = g.pick(&[0.0, 10.0, 15.0, 15.4, 16.0, 30.0, 40.0, 40.6, 41.0, 55.0, 55.6, 56.0, 70.0, 79.4, 80.0, 90.0, 96.4, 97.0, 99.0, 99.6, 100.0]);
+        let energy = g.pick(&[0.0, 0.4, 1.0, 5.0, 9.4, 9.6, 10.0, 11.0, 11.6, 12.0, 20.0, 29.6, 30.0, 49.0, 50.0, 70.0, 84.6, 85.0, 100.0]);
+        let max_hp = g.pick(&[100.0, 80.0, 40.0, 7.0]);
+        let share = g.pick(&[0.0, 0.05, 0.14, 0.145, 0.15, 0.2, 0.34, 0.35, 0.5, 0.59, 0.6, 0.75, 0.89, 0.9, 0.95, 0.985, 0.99, 0.995, 1.0]);
+        let hp_rate = g.pick(&[-3.0, -0.5, -0.02, -0.011, -0.01, -0.004, 0.0, 0.004, 0.01, 0.011, 0.02, 0.6, 2.0]);
+        let stamina = g.pick(&[0.0, 5.0, 19.0, 19.4, 19.6, 20.0, 21.0, 60.0, 100.0]);
+        let hurt = g.pick(&[-1.0, 0.0, 0.4, 1.0, 14.0, 14.9, 15.0, 15.2, 60.0, 119.0, 200.0]);
+        let now = 1_000_000u64;
+        let mut raw = row(share * max_hp, hunger, energy, hp_rate);
+        let set = |raw: &mut Vec<(String, f64)>, k: &str, v: f64| raw.iter_mut().find(|(n, _)| n == k).unwrap().1 = v;
+        set(&mut raw, "max_hp", max_hp);
+        set(&mut raw, "at_ms", now as f64);
+        set(&mut raw, "stamina", stamina);
+        set(&mut raw, "stamina_from_ms", now as f64);
+        set(&mut raw, "hurt_ms", if hurt < 0.0 { 0.0 } else { now as f64 - hurt * 1000.0 });
+        for gone in ["hunger", "energy", "stamina", "hp_rate", "hurt_ms"] {
+            if g.next() % 23 == 0 {
+                raw.retain(|(k, _)| k != gone);
+            }
+        }
+        (raw, now)
+    }
+
+    fn sampled_body(g: &mut Lcg, sc: &Scripts) -> BodyFacts {
+        let (kind, stage) = g.pick(&[("person", "adult"), ("person", "infant"), ("person", "elder"), ("wolf", "adult"), ("deer", "adult")]);
+        let night = g.next() % 2 == 0;
+        let (raw, now) = sampled_row(g);
+        BodyFacts::of(kind, stage, night, &raw, sc.meters(), now)
+    }
+
+    #[test]
+    fn the_shipped_parts_joined_are_the_law_before_the_split() {
+        // The parts (with their memos and reduced bodies), the whole law (now their join) and the
+        // law as it was written before the split give the same ordered statuses, every field
+        // alike, on 6,000 sampled bodies; and on Cullet, whose `slow_words` differs.
+        for overlay in ["", include_str!("../../../seeds/worlds/cullet/laws.rhai")] {
+            let base = if overlay.is_empty() { SHIPPED.to_string() } else { crate::floors::compose(SHIPPED, overlay).unwrap() };
+            let sc = Scripts::new(&base).unwrap();
+            assert_eq!(sc.status_part_names().len(), 8);
+            let before = Scripts::new(&crate::floors::compose(&base, BEFORE_PARTS).unwrap()).unwrap();
+            assert!(before.status_part_names().is_empty(), "an overlay of status_of alone is asked whole");
+            let mut g = Lcg(7);
+            let mut seen = std::collections::BTreeSet::new();
+            for _ in 0..6000 {
+                let b = sampled_body(&mut g, &sc);
+                let parts = sc.status_of(&b).unwrap();
+                assert_eq!(*parts, *sc.status_of_profiled(&b, WHOLE, |_| ()).unwrap(), "{b:?}");
+                assert_eq!(*parts, *before.status_of(&b).unwrap(), "{b:?}");
+                seen.extend(parts.iter().map(|s| s.name.clone()));
+            }
+            for name in ["starving", "very_hungry", "hungry", "peckish", "fed", "not_hungry", "spent", "exhausted", "tired", "a_little_tired", "well_rested", "rested", "barely_alive", "badly_hurt", "hurt", "a_little_hurt", "unhurt", "freezing", "in_combat", "out_of_breath", "slowed", "wasting", "recovering"] {
+                assert!(seen.contains(name), "the samples meet `{name}`: {seen:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn each_part_is_kept_on_what_it_reads() {
+        let sc = Scripts::new(SHIPPED).unwrap();
+        let reads = |p: &str| sc.status_part_reads(p).unwrap_or_else(|| panic!("{p} reads named facts")).into_iter().collect::<Vec<_>>();
+        assert_eq!(reads("hunger_part"), ["hunger"]);
+        assert_eq!(reads("energy_part"), ["energy"]);
+        assert_eq!(reads("health_part"), ["share.health"]);
+        assert_eq!(reads("cold_part"), ["hp_rate", "hunger", "kind", "night"]);
+        assert_eq!(reads("combat_part"), ["hurt_ago_s"]);
+        assert_eq!(reads("breath_part"), ["stamina"]);
+        let slowed = reads("slowed_part");
+        assert!(slowed.contains(&"energy".to_string()) && slowed.iter().all(|r| r == "energy" || r == "kind"), "{slowed:?}");
+        assert_eq!(reads("mending_part"), ["hp_rate", "share.health"]);
+        // A kept answer lasts until a fact a part reads can change: the same facts as the whole law's.
+        assert_eq!(sc.status_reads_as(StatusWay::default()), sc.status_reads());
+        assert_eq!(sc.status_reads_as(WHOLE), sc.status_reads());
+    }
+
+    #[test]
+    fn a_change_of_breath_alone_asks_one_part() {
+        let sc = Scripts::new(SHIPPED).unwrap();
+        let mut raw = row(58.0, 40.0, 70.0, 0.0);
+        let body = |raw: &[(String, f64)]| BodyFacts::of("person", "adult", false, raw, sc.meters(), 0);
+        sc.status_of(&body(&raw)).unwrap();
+        let _ = calls::take();
+        for stamina in [3.0, 4.0, 17.0, 33.0] {
+            raw.iter_mut().find(|(k, _)| k == "stamina").unwrap().1 = stamina;
+            let s = sc.status_of(&body(&raw)).unwrap();
+            assert_eq!(*s, *sc.status_of_profiled(&body(&raw), WHOLE, |_| ()).unwrap());
+            let c = calls::take();
+            let ran: Vec<usize> = (0..8).filter(|i| c[calls::PART_RUN_BY + i] > 0).collect();
+            assert_eq!((c[calls::PART_RUN], ran), (1, vec![5]), "stamina {stamina}: only breath_part runs (the whole check above ran the whole law)");
+            assert_eq!(c[calls::PART_MEMO], 7);
+        }
+        // The same breath again: no part runs, the joined answer is the one kept.
+        let a = sc.status_of(&body(&raw)).unwrap();
+        let b = sc.status_of(&body(&raw)).unwrap();
+        assert!(Rc::ptr_eq(&a, &b));
+        let c = calls::take();
+        assert_eq!((c[calls::PART_RUN], c[calls::PARTS_JOINED]), (0, 2));
+    }
+
+    #[test]
+    fn full_memos_start_over_with_the_same_answers() {
+        // A part read on a fact of thousands of values, each its own answer: its memo and its
+        // answers fill and start over (and the joined answers with them), and every answer is
+        // still the whole law's.
+        let overlay = r#"
+fn status_parts() { ["level_part", "breath_part"] }
+fn level_part(a) { if a.hp == () { [] } else { [#{ name: "level", tone: "plain", text: "Level " + a.hp.to_string() }] } }
+fn status_of(a) { level_part(a) + breath_part(a) }
+"#;
+        let sc = Scripts::new(&crate::floors::compose(SHIPPED, overlay).unwrap()).unwrap();
+        assert_eq!(sc.status_part_names(), ["level_part", "breath_part"]);
+        sc.validate().unwrap();
+        let mut raw = row(0.0, 40.0, 70.0, 0.0);
+        raw.iter_mut().find(|(k, _)| k == "max_hp").unwrap().1 = 10_000.0;
+        for round in 0..2 {
+            for hp in (0..(KEPT as u32 + 300)).step_by(if round == 0 { 1 } else { 7 }) {
+                raw.iter_mut().find(|(k, _)| k == "hp").unwrap().1 = hp as f64;
+                raw.iter_mut().find(|(k, _)| k == "stamina").unwrap().1 = (hp % 40) as f64;
+                let b = BodyFacts::of("person", "adult", false, &raw, sc.meters(), 0);
+                assert_eq!(*sc.status_of(&b).unwrap(), sc.status_fresh(&b).unwrap(), "hp {hp}");
+            }
+        }
+        let parts = sc.body.parts.as_ref().unwrap();
+        assert!(parts.list[0].answers.borrow().len() <= ANSWERS_KEPT && parts.list[0].memo.borrow().len() <= KEPT);
+        assert!(parts.joined.borrow().len() <= KEPT);
+    }
+
+    #[test]
+    fn a_part_that_reads_the_body_whole_is_kept_on_all_of_it() {
+        let overlay = r#"
+fn status_parts() { ["counted_part", "breath_part"] }
+fn counted_part(a) { if a.len() > 3 { [#{ name: "many", tone: "plain", text: "Many facts" }] } else { [] } }
+fn status_of(a) { counted_part(a) + breath_part(a) }
+"#;
+        let sc = Scripts::new(&crate::floors::compose(SHIPPED, overlay).unwrap()).unwrap();
+        sc.validate().unwrap();
+        assert!(sc.status_part_reads("counted_part").is_none());
+        assert!(sc.status_reads_as(StatusWay::default()).is_none(), "one part reads the body whole: every fact may change it");
+        let mut g = Lcg(11);
+        for _ in 0..300 {
+            let b = sampled_body(&mut g, &sc);
+            assert_eq!(*sc.status_of(&b).unwrap(), sc.status_fresh(&b).unwrap());
+        }
+    }
+
+    #[test]
+    fn floors_that_change_the_body_law_keep_their_law() {
+        // A floor that replaces `status_of` alone (Cullet's thirst, above) is asked it whole.
+        let thirst = r#"
+fn status_of(a) {
+    let out = base_status_of(a);
+    if a.stamina != () && a.stamina < 50.0 { out.push(#{ name: "winded", tone: "warn", text: "Winded" }); }
+    out
+}
+"#;
+        let sc = Scripts::new(&crate::floors::compose(SHIPPED, thirst).unwrap()).unwrap();
+        sc.validate().unwrap();
+        assert!(sc.status_part_names().is_empty());
+        let mut r = row(100.0, 30.0, 60.0, 0.0);
+        r.iter_mut().find(|(k, _)| k == "stamina").unwrap().1 = 30.0;
+        assert!(statuses(&sc, &r, false).contains(&"winded".to_string()));
+        // A floor that changes one part: both ways give its answer.
+        let breath = r#"fn breath_part(a) { if a.stamina != () && a.stamina < 40.0 { [#{ name: "out_of_breath", tone: "warn", text: "Out of breath", meter: "stamina", felt: "out of breath" }] } else { [] } }"#;
+        let sc = Scripts::new(&crate::floors::compose(SHIPPED, breath).unwrap()).unwrap();
+        sc.validate().unwrap();
+        assert_eq!(sc.status_part_names().len(), 8);
+        let b = BodyFacts::of("person", "adult", false, &r, sc.meters(), 0);
+        assert!(sc.status_of(&b).unwrap().iter().any(|s| s.name == "out_of_breath"));
+        assert_eq!(sc.status_of(&b).unwrap(), sc.status_of_profiled(&b, WHOLE, |_| ()).unwrap());
+        // Both replaced and in agreement: accepted.
+        let both = r#"
+fn status_parts() { ["breath_part", "hunger_part"] }
+fn status_of(a) { breath_part(a) + hunger_part(a) }
+"#;
+        let sc = Scripts::new(&crate::floors::compose(SHIPPED, both).unwrap()).unwrap();
+        sc.validate().unwrap();
+        assert_eq!(sc.status_part_names(), ["breath_part", "hunger_part"]);
+        // Both replaced, in disagreement: refused, naming the body and both answers.
+        let differ = r#"
+fn status_parts() { ["hunger_part", "breath_part"] }
+fn status_of(a) { breath_part(a) + hunger_part(a) }
+"#;
+        let e = Scripts::new(&crate::floors::compose(SHIPPED, differ).unwrap()).unwrap().validate().unwrap_err();
+        assert!(e.contains("status_of and status_parts disagree: override both or neither") && e.contains("the parts joined give [") && e.contains("for a adult person"), "{e}");
+        // The parts alone replaced, so they no longer join to the base's `status_of`: refused.
+        let e = Scripts::new(&crate::floors::compose(SHIPPED, r#"fn status_parts() { ["hunger_part"] }"#).unwrap()).unwrap().validate().unwrap_err();
+        assert!(e.contains("status_of and status_parts disagree"), "{e}");
+    }
+
+    #[test]
+    fn a_script_of_its_own_status_of_on_the_shipped_laws_is_asked_it_whole() {
+        // A script without some required laws runs on the shipped script's (`borrowed`); its own
+        // `status_of` is not replaced by the shipped parts merged under it.
+        let own = r#"
+fn rates(a) { #{ hunger: 0.0, energy: 0.0, hp: 0.0 } }
+fn move_speed(a) { 1.0 }
+fn status_of(a) { [#{ name: "fine", tone: "plain", text: "Fine" }] }
+"#;
+        let sc = Scripts::new(own).unwrap();
+        assert!(sc.status_part_names().is_empty());
+        assert_eq!(statuses(&sc, &row(10.0, 99.0, 1.0, -1.0), true), ["fine"]);
+    }
+
+    #[test]
+    fn bad_declarations_of_parts_are_refused_at_install() {
+        let bad = |overlay: &str| Scripts::new(&crate::floors::compose(SHIPPED, overlay).unwrap()).and_then(|s| s.validate().map(|_| ())).unwrap_err();
+        assert!(bad(r#"fn status_parts() { ["hunger_part", "thirst_part"] }"#).contains("`thirst_part` is not a function of one parameter"));
+        assert!(bad(r#"fn status_parts() { ["hunger_part", "hunger_part"] }"#).contains("`hunger_part` is named twice"));
+        assert!(bad(r#"fn status_parts() { ["hunger_status_of"] } fn hunger_status_of(a, b) { [] }"#).contains("not a function of one parameter"));
+        assert!(bad(r#"fn status_parts() { "hunger_part" }"#).contains("must return a list"));
+        assert!(bad(r#"fn status_parts() { [] }"#).contains("names no part"));
+        assert!(bad(r#"fn status_parts() { ["status_of"] }"#).contains("cannot be one of its parts"));
+        let e = bad(r#"fn breath_part(a) { [#{ name: "out_of_breath", tone: "teal", text: "Out of breath" }] }"#);
+        assert!(e.contains("breath_part") && e.contains("tone 'teal'"), "{e}");
+        let e = bad(r#"fn breath_part(a) { 3 }"#);
+        assert!(e.contains("breath_part"), "{e}");
+        // Not installed, a bad declaration asks the whole law.
+        let sc = Scripts::new(&crate::floors::compose(SHIPPED, r#"fn status_parts() { ["hunger_part", "hunger_part"] }"#).unwrap()).unwrap();
+        assert!(!sc.uses_parts(StatusWay::default()));
+        assert_eq!(statuses(&sc, &row(100.0, 30.0, 60.0, 0.0), false), ["not_hungry", "rested", "unhurt"]);
+    }
+
+    #[test]
+    fn the_check_compares_with_the_whole_law_and_gives_it_where_they_differ() {
+        let sc = Scripts::new(SHIPPED).unwrap();
+        let check = StatusWay { parts: true, check: true };
+        let mut g = Lcg(3);
+        let _ = calls::take();
+        for _ in 0..200 {
+            let b = sampled_body(&mut g, &sc);
+            sc.status_of_profiled(&b, check, |_| ()).unwrap();
+        }
+        let c = calls::take();
+        assert_eq!((c[calls::STATUS_CHECKED], c[calls::STATUS_DIFFERED]), (200, 0));
+        assert!(c[calls::PART_MEMO] > 0, "kept parts were checked too");
+        assert!(sc.take_status_differences().is_empty());
+        // Parts that are not the law (a script not installed, so not refused): counted, told,
+        // and the whole law's answer given.
+        let differ = r#"
+fn status_parts() { ["hunger_part", "breath_part"] }
+fn status_of(a) { breath_part(a) + hunger_part(a) }
+"#;
+        let sc = Scripts::new(&crate::floors::compose(SHIPPED, differ).unwrap()).unwrap();
+        let mut r = row(100.0, 30.0, 60.0, 0.0);
+        r.iter_mut().find(|(k, _)| k == "stamina").unwrap().1 = 5.0;
+        let b = BodyFacts::of("person", "adult", false, &r, sc.meters(), 0);
+        let s = sc.status_of_profiled(&b, check, |_| ()).unwrap();
+        assert_eq!(s.iter().map(|x| x.name.as_str()).collect::<Vec<_>>(), ["out_of_breath", "not_hungry"]);
+        assert_eq!(calls::take()[calls::STATUS_DIFFERED], 1);
+        let told = sc.take_status_differences();
+        assert!(told.len() == 1 && told[0].contains("the parts gave [not_hungry, out_of_breath] where status_of gives [out_of_breath, not_hungry]"), "{told:?}");
+        // The rollback: the whole law, as before.
+        assert_eq!(sc.status_of_profiled(&b, WHOLE, |_| ()).unwrap().iter().map(|x| x.name.as_str()).collect::<Vec<_>>(), ["out_of_breath", "not_hungry"]);
     }
 }

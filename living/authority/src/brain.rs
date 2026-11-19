@@ -2453,6 +2453,9 @@ thread_local! {
 
 struct AlarmCell {
     rev: u32,
+    /// The way the law was asked (`status_parts`, `status_parts_check`): a switch takes effect
+    /// at once, on kept answers too.
+    way: living_rules::script::StatusWay,
     row: [u64; 20],
     stage: u8,
     night: bool,
@@ -2465,22 +2468,29 @@ struct AlarmCell {
 /// asked. The same statuses at the same moments: `alarm_cells_check` compares each.
 fn alarm_statuses(ctx: &ReducerContext, sc: &living_rules::script::Scripts, me: &Character, vit: &Vitals, night: bool, now: u64) -> Rc<Vec<living_rules::script::Status>> {
     let laws = common::laws(ctx);
+    let way = living_rules::script::StatusWay { parts: laws.status_parts, check: laws.status_parts_check };
     let ask = || {
         let facts = {
             let _span = common::detail_span("status.facts");
             living_rules::script::BodyFacts::of(&me.kind, crate::common::stage_name(me.stage), night, &vit.fields(), sc.meters(), now)
         };
         let _span = common::detail_span("status.ask");
-        sc.status_of_profiled(&facts, common::detail_span).unwrap_or_else(|e| {
+        let s = sc.status_of_profiled(&facts, way, common::detail_span).unwrap_or_else(|e| {
             log::warn!("status_of for {}: {e}", me.id);
             Rc::new(Vec::new())
-        })
+        });
+        if way.check {
+            for d in sc.take_status_differences() {
+                log::error!("status_parts of {}: {d}", me.id);
+            }
+        }
+        s
     };
     if !laws.alarm_cells {
         return ask();
     }
     let (rev, row) = (common::scripts_rev(ctx), vit.bits());
-    let kept = ALARM_CELLS.with(|c| c.borrow().get(&me.id).filter(|e| e.rev == rev && e.row == row && e.stage == me.stage && e.night == night && now < e.until).map(|e| e.statuses.clone()));
+    let kept = ALARM_CELLS.with(|c| c.borrow().get(&me.id).filter(|e| e.rev == rev && e.way == way && e.row == row && e.stage == me.stage && e.night == night && now < e.until).map(|e| e.statuses.clone()));
     if let Some(s) = kept {
         common::diag(|| "alarm:kept", 1);
         if laws.alarm_cells_check {
@@ -2499,14 +2509,15 @@ fn alarm_statuses(ctx: &ReducerContext, sc: &living_rules::script::Scripts, me: 
         status_inputs_changed(sc, me, vit, night, now);
     }
     let statuses = ask();
-    let reads = sc.status_reads();
+    // Until a fact the way asked reads can change (the parts' reads together, or the whole law's).
+    let reads = sc.status_reads_as(way);
     let until = living_rules::script::BodyFacts::next_change_ms(&vit.fields(), sc.meters(), now, reads.as_deref());
     ALARM_CELLS.with(|c| {
         let mut c = c.borrow_mut();
         if c.len() > 8192 {
             c.clear();
         }
-        c.insert(me.id, AlarmCell { rev, row, stage: me.stage, night, until, statuses: statuses.clone() });
+        c.insert(me.id, AlarmCell { rev, way, row, stage: me.stage, night, until, statuses: statuses.clone() });
     });
     statuses
 }

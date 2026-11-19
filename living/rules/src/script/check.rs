@@ -115,7 +115,7 @@ pub fn validate_traced(s: &Scripts, limits: super::Limits) -> Result<(Report, Ve
 }
 
 /// Laws the engine asks by name, besides those it calls with a context, a name or an event.
-pub const ENGINE_LAWS: [&str; 20] = ["look_bands", "appearance_in_scene", "female_share", "sex_words", "owner_shown", "perceived_of", "record_text", "items", "structures", "resources", "know_how", "recipes", "structure_traits", "occupation_knows", "source_of", "carcass", "daylight", "life_years", "meters", "status_of"];
+pub const ENGINE_LAWS: [&str; 21] = ["look_bands", "appearance_in_scene", "female_share", "sex_words", "owner_shown", "perceived_of", "record_text", "items", "structures", "resources", "know_how", "recipes", "structure_traits", "occupation_knows", "source_of", "carcass", "daylight", "life_years", "meters", "status_of", "status_parts"];
 
 /// Every law the engine asks is declared with a description for minds (`<law>_law()`, or listed
 /// in another's `covers`), and every world constant has its words in `law_about(l, name)`.
@@ -269,13 +269,36 @@ fn body(p: &mut Probe) -> Result<(), String> {
     if let Some(e) = s.meter_errors().first() {
         return Err(format!("install refused: {e}"));
     }
+    if let Some(e) = s.status_parts_errors().first() {
+        return Err(format!("install refused: {e}"));
+    }
     if !s.has("status_of") {
         return Ok(());
     }
+    let parts = s.status_part_names();
+    let whole = super::StatusWay { parts: false, check: false };
     for b in s.sample_bodies(&super::body::SHIPPED_VITALS) {
         let about = || format!("for a {} {}{} with {}", b.stage, b.kind, if b.night { " at night" } else { "" }, b.fields.iter().map(|(k, v)| format!("{k} {v}")).collect::<Vec<_>>().join(", "));
+        // Each part gives a list of statuses (counting its operations for the fuel report).
+        for f in &parts {
+            let d = p.raw(f, (b.map_for_check(),), &about)?;
+            super::body::read_status(d).map_err(|e| format!("install refused: {} ({})", e.replacen("status_of", f, 1), about()))?;
+        }
         let _ = p.raw("status_of", (b.map_for_check(),), &about)?; // counts its operations for the fuel report
-        s.status_of(&b).map_err(|e| format!("install refused: {e} ({})", about()))?;
+        // Each part's answer is a list of statuses (an error names the part)...
+        let joined = s.status_of(&b).map_err(|e| format!("install refused: {e} ({})", about()))?;
+        let law = s.status_of_profiled(&b, whole, |_| ()).map_err(|e| format!("install refused: {e} ({})", about()))?;
+        // ...and the parts joined are `status_of` (docs/STATUS_PARTS.md): a world that changes one
+        // changes the other.
+        if !parts.is_empty() && joined != law {
+            let names = |v: &[super::Status]| v.iter().map(|x| x.name.as_str()).collect::<Vec<_>>().join(", ");
+            return Err(format!(
+                "install refused: status_of and status_parts disagree: override both or neither (the parts joined give [{}], status_of gives [{}], {})",
+                names(&joined),
+                names(&law),
+                about()
+            ));
+        }
     }
     Ok(())
 }
