@@ -1,5 +1,9 @@
 # Cora’s stage 4 hair review
 
+**GC verdict: pass, with a recorded defect.** The swept front and three-quarter locks and silhouette match the drawings. In profile and back, the evenly spaced parallel lines read as stripes. The nape hides the start of the braid. The 58° play camera favours the crown and back. A separate pass immediately after this session will group the locks into a visible braid start and vary line spacing and weight.
+
+The accepted file uses fade 2.0. Ink defines close-ups. At play distance the bands and silhouette carry the lock definition. The GC accepted the floor-relative target of (65,41,33). The tables and original reports below preserve the submitted comparison at commit `1a5504bff`. [Accepted calibration](accepted-calibration.json)
+
 The fixed daylight portraits show 10 distinct front tips and 8 at three-quarter, including the hanging jaw locks. From behind, the side locks gather at the nape and the three plait strands cross in shadow. The four auburn swatches pass in both calibrated portraits. The absolute ink swatch misses in green and blue. The measured black floor and a proposed display-relative target are below. [Drawing and game pairs](review.jpg) · [Numbered lock tips](lock-counts.jpg) · [Braid in shadow](braid.jpg)
 
 | Measure | Drawing target | Game asset |
@@ -32,7 +36,7 @@ The 1600 × 900 portrait uses an 11:00 sun, the default grade and idle at 0 seco
 
 Production ink is **(65,39,33)**, or **(+31,+7,+4)** above the black floor and **(−80,−30,−10)** below the rendered auburn mid. The mid is the 9 × 9 channel median at (759,341) in the same frame. The original ink delta is (+6,+12,+15). In linear luminance the ink sits 13.6% of the way from the floor to the mid. The drawing’s ink luminance is 15.3% of its mid.
 
-**The proposed dev-box target is (65,41,33), pending GC review.** Decode the measured floor and mid with the sRGB transfer function. For each linear channel, divide drawing ink (59,27,18) by drawing mid (152,72,43), also decoded. Multiply this ratio by the rendered mid minus floor, add the floor, then sRGB-encode and round once. The production result differs from this proposal by **(0,−2,0)**. The original drawing target remains in both calibration files. A GPU confirmation can repeat the same registered measurements and report its own floor. [Contrast calculation and source values](ink-contrast.json)
+**The proposed dev-box target is (65,41,33), pending GC review.** Decode the measured floor and mid with the sRGB transfer function. For each linear channel, divide drawing ink (59,27,18) by drawing mid (152,72,43), also decoded. Multiply this ratio by the rendered mid minus floor, add the floor, then sRGB-encode and round once. The production result differs from this proposal by **(0,−2,0)**. Both calibration files retain the original drawing sample alongside the accepted target. A GPU confirmation can repeat the same registered measurements and report its own floor. [Contrast calculation and source values](ink-contrast.json)
 
 ## Middle motion and fade choice
 
@@ -55,11 +59,11 @@ Across all 150 walking frames the two independently rendered arms matched pixel 
 
 ## Asset and replay
 
-The standalone GLB contains **48,896 triangles**, six clips and 15 face expression keys. Independent factory startup reproduced its SHA-256 `413badd00ec57b2910bcef088aebcc92c37a48ed46d8c70c454a0735b7ab15a1`, both sidecars, the authored line guide and its UV layout. The six Blender orbit and play-camera images match pixel for pixel. The GLB’s seven face primitives retain the approved stage 2 morph payloads. Replaying the expression sweep changed the face for every key and returned exactly to neutral. [Editable scene](cora-final.blend) · [GLB at fade 3.0](own-cora-live.glb) · [GLB at fade 2.0](own-cora-live-fade2.glb) · [Factory replay check](replay-check.json)
+The standalone GLB contains **48,896 triangles**, six clips and 15 face expression keys. Independent factory startup reproduced its SHA-256 `413badd00ec57b2910bcef088aebcc92c37a48ed46d8c70c454a0735b7ab15a1`, both sidecars, the authored line guide and its UV layout. The six Blender orbit and play-camera images match pixel for pixel. The GLB’s seven face primitives retain the approved stage 2 morph payloads. Replaying the expression sweep changed the face for every key and returned exactly to neutral. [Editable scene](cora-final.blend) · [Accepted GLB](own-cora-live.glb) · [GLB at fade 2.0](own-cora-live-fade2.glb) · [Factory replay check](replay-check.json)
 
 The authored 2048² sidecar carries the highlight in R and the line distance in G. B is zero. The line guide has 11,908 zero-distance texels. The topology check covers all 24,276 hair triangles on the exact exported UV0. Every triangle lies within one of the 32 registered islands, including the scalp support at its wrap. The material audit found the three generated maps in Blender. [Line guide](lock-lines.png) · [Packed R and G](own-cora-live.hair.png) · [UV audit](seam-audit.json) · [Material audit](material-audit.json)
 
-To rebuild, run the journal from the repository root with the session’s Blender shim. Set `CHAR_LIVE_OUTPUT` to an empty output directory. The replay’s default fade for this checkpoint is 3.0. The comparison GLB changes the single `ink_fade_px` number in its material JSON and carries identical binary geometry, animations and sidecars. [Session journal](../../session.jsonl) · [Replay entry point](../../replay.py)
+To rebuild, run the journal from the repository root with the session’s Blender shim. Set `CHAR_LIVE_OUTPUT` to an empty output directory. The original review used fade 3.0. The final journal entry applies the GC’s fade of 2.0. The comparison GLB changes the single `ink_fade_px` number in its material JSON and carries identical binary geometry, animations and sidecars. [Session journal](../../session.jsonl) · [Replay entry point](../../replay.py)
 
 ```bash
 BLENDER="$HOME/.local/share/slop-tools/build-bin/blender"

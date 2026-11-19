@@ -87,9 +87,9 @@
     "hair ink": {
       "sample": "min5",
       "target": [
-        59,
-        27,
-        18
+        65,
+        41,
+        33
       ],
       "drawing": [
         422,
@@ -124,5 +124,43 @@
       47,
       3
     ]
+  },
+  "ink_floor_relative": {
+    "shot": "portrait",
+    "sample": "min5",
+    "window_center": [
+      751,
+      295
+    ],
+    "floor": [
+      34,
+      32,
+      29
+    ],
+    "drawing_ink": [
+      59,
+      27,
+      18
+    ],
+    "drawing_mid": [
+      152,
+      72,
+      43
+    ],
+    "rendered_mid": [
+      145,
+      69,
+      43
+    ],
+    "mid_median9_center": [
+      759,
+      341
+    ],
+    "target": [
+      65,
+      41,
+      33
+    ],
+    "method": "sRGB decode, per-channel floor + drawing_ink / drawing_mid * (rendered_mid - floor), sRGB encode and round."
   }
 }
