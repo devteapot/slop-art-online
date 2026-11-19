@@ -61,6 +61,11 @@ def main():
         command('doctor', [str(HARNESS), 'doctor', '--run', args.run])
         command('player-join', [str(HARNESS), 'player', '--run', args.run, 'join', 'ClientPrimary'])
         command('drive', [str(SKILL / 'scripts/drive.py'), '--run', args.run])
+        # The cue event tables' row-level security is a perception boundary (frame-views): every
+        # suite run proves it, with three fresh identities (scripts/cues.py, features/perception.md).
+        command('cues', [str(SKILL / 'scripts/cues.py'), '--run', args.run])
+        # Those engaged with a player are first in its near tier, past the cap (near_tier.py).
+        command('near-tier', [str(SKILL / 'scripts/near_tier.py'), '--run', args.run])
         exit_code = 0
     except (RuntimeError, subprocess.SubprocessError, OSError) as error:
         print(str(error), file=sys.stderr)

@@ -105,14 +105,18 @@ PRIVATE = ['attention', 'applied_gaze', 'cover_ground', 'fast_ask', 'far_handle'
            # Each person's body sex (sex-1, docs/LIVING_CORE.md "Body sex"): private in every build;
            # a player reads its own through my_sex and perceives others' only as drawn. What each mind
            # remembers of others' bodies (`sex_seen`): the mind service reads it as the owner.
-           'sex', 'sex_seen']
+           'sex', 'sex_seen',
+           # The near tier's copies (frame-views): a player reads them through seen_*_near.
+           'motion_near', 'fighter_near', 'doing_near']
 # Private in the default `scoped` build; public only in a LIVING_PERCEPTION=open build (diagnostics).
 SCOPED = ['body', 'character', 'fighter', 'doing', 'vitals', 'experience', 'place', 'audience',
           'inventory', 'know_how']
 # The per-sender views: what a player perceives and its own state.
 VIEWS = ['seen_bodies', 'seen_characters', 'seen_fighters', 'seen_doing', 'my_body', 'my_fighter', 'my_doing', 'my_characters',
          'my_vitals', 'my_experience', 'my_places', 'my_inventory', 'my_know_how',
-         'my_deliberations', 'my_combat', 'my_readiness', 'my_skill_uses', 'my_records', 'my_offers', 'heard_sounds', 'my_heard', 'my_senses', 'my_senses_v2', 'my_earshot', 'my_act_outcomes', 'my_known_names', 'my_sex']
+         'my_deliberations', 'my_combat', 'my_readiness', 'my_skill_uses', 'my_records', 'my_offers', 'heard_sounds', 'my_heard', 'my_senses', 'my_senses_v2', 'my_earshot', 'my_act_outcomes', 'my_known_names', 'my_sex',
+         # The near and far tiers of the three copy-backed views (frame-views; scripts/cues.py proves them).
+         'seen_bodies_near', 'seen_bodies_far', 'seen_fighters_near', 'seen_fighters_far', 'seen_doing_near', 'seen_doing_far']
 SEEN = ['seen_bodies', 'seen_characters', 'seen_fighters', 'seen_doing']
 # The player's own living character's body, fighter and doing rows (others' come as copies in seen_*).
 BODY = ['my_body', 'my_fighter', 'my_doing']
@@ -434,6 +438,24 @@ class Run:
                       for m in re.finditer(r'#\[spacetimedb::procedure\]\s*pub fn (\w+)\(', path.read_text())}
         if procedures != set(PROCEDURES) | {'mind_act_checked'}:
             raise RuntimeError(f'procedure inventory changed: {procedures ^ (set(PROCEDURES) | {"mind_act_checked"})}')
+        # The cue event tables (frame-views) are filtered per client by row-level security, which the
+        # owner bypasses; the SDK's subscribe-all helper expands the generated ALL_TABLE_NAMES,
+        # cue tables included. So no program here may subscribe all (but `cues.py`, which does so as a
+        # player to prove it gets only its own cues), and the owner's programs (the
+        # mind service, the observer) may not name a cue table (docs/TICK_RATE.md, "Row-level
+        # security, the kill switch and SpacetimeDB upgrades").
+        sources = [p for d in ('living', '.agents/skills') for p in (ROOT / d).rglob('*')
+                   if p.suffix in ('.rs', '.py') and p.is_file() and '/target' not in str(p)
+                   and 'bindings/src/generated' not in str(p) and '/.local/' not in str(p)]
+        everything = [str(p.relative_to(ROOT)) for p in sources
+                      if re.search(r'subscribe_to_all_tables\(|SELECT \* FROM \*', p.read_text(errors='replace'))
+                      and p.name not in ('drive.py', 'cues.py')]  # cues.py subscribes all as player C, on purpose
+        if everything:
+            raise RuntimeError(f'a program subscribes every table (cue tables included, RLS bypassed for the owner): {everything}')
+        owners = [str(p.relative_to(ROOT)) for d in ('living/mind', 'living/viewer') for p in (ROOT / d).rglob('*.rs')
+                  if '/target' not in str(p) and re.search(r'seen_(body|fighter|doing)_cue', p.read_text(errors='replace'))]
+        if owners:
+            raise RuntimeError(f'an owner program names a cue table: {owners}')
         # The mind service connects as the world's admin, so `require_admin` cannot refuse it an
         # admin reducer by identity: the guard is that it never calls these (its sources name none).
         never_by_minds = ['admin_set_vitals', 'kill', 'relook', 'set_world_law', 'install_script', 'backfill_sex']

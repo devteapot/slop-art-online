@@ -684,7 +684,7 @@ fn nearest(scene: &Scene, picking: &crate::pick::Pick, me: Vec2, toward: Vec2, w
 }
 
 /// Whether a creature looks hostile to me: its move under way is aimed at me.
-pub fn hostile(conn: &DbConnection, id: u32, me: u32) -> bool {
+pub fn hostile(conn: &crate::net::PlayerConnection, id: u32, me: u32) -> bool {
     crate::net::find_fighter(conn, id).is_some_and(|f| f.target == me && f.act != 0)
 }
 
@@ -694,7 +694,7 @@ pub const HURT_HOSTILE_MS: f64 = 15_000.0;
 /// Whether a creature is hostile to me as far as my client knows: its move under way is aimed
 /// at me, or it hurt me within [`HURT_HOSTILE_MS`] (my `vitals.hurt_by`). The HUD's hostile
 /// stance and the tap rule use it.
-pub fn hostile_to_me(conn: &DbConnection, id: u32, me: u32, now_ms: f64) -> bool {
+pub fn hostile_to_me(conn: &crate::net::PlayerConnection, id: u32, me: u32, now_ms: f64) -> bool {
     let hurt = conn.db.my_vitals().id().find(&me).is_some_and(|v| v.hurt_by == id && v.hurt_by != 0 && now_ms - (v.hurt_ms as f64) < HURT_HOSTILE_MS);
     hurt || hostile(conn, id, me)
 }

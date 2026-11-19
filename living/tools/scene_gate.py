@@ -11,6 +11,9 @@ touches behaviour, these cases with the fake model only:
                  mechanics (its own default-seed world)
   verify-minds   roundtrip, acts, dealings, conversation (each its own world, the real living-mind)
   verify-player  combat (combat.py --scene all: the staged fights, an island world)
+  verify-client  cues (cues.py: the cue event tables reach only their viewer under row-level
+                 security, on and with the `cue_transport_on` law off; near_tier.py: whoever is
+                 engaged with a player is first in its near tier; a default-seed world, the SDK probe)
   living-mind    mind-unit: its cargo tests (`just living-check` builds the mind, tests only the rules)
 
 The world groups and the tests run at once. A case whose only failures are parts on the red-on-main
@@ -81,7 +84,7 @@ BEHAVIOUR = ("living/authority/", "living/rules/", "living/scripts/", "living/mi
              "living/tools/verify_mechanics.py",
              ".agents/skills/verify/scripts/", ".agents/skills/verify-core/scripts/",
              ".agents/skills/verify-minds/scripts/", ".agents/skills/verify-player/scripts/",
-             ".agents/skills/verify-llm/scripts/")
+             ".agents/skills/verify-llm/scripts/", ".agents/skills/verify-client/scripts/")
 
 # Each case: its surface skill and the world group it runs in. Known flakes are from the skills'
 # validation records (each skill's references/validation/); they get the same one retry, never a pass.
@@ -102,6 +105,9 @@ CASES = {
     "combat":       {"skill": "verify-player", "group": "player",
                      "flaky": "staged fights in town geometry (a bolt into a passer-by, an arrow into a wall): verify-player validation, l2; "
                               "the kill scene 34/35 then 2/2 (stamina-1)"},
+    # Row-level security on the cue event tables is a perception boundary (frame-views): every
+    # behavioural merge proves no other identity receives a player's cues.
+    "cues":         {"skill": "verify-client", "group": "client"},
     # living-mind's own cargo tests: `just living-check` builds the mind but tests only living-rules.
     "mind-unit":    {"skill": "living-mind", "group": "unit",
                      "flaky": "timing bounds under load: llm::tests::unreachable_provider_holds_calls (1.97 s against 2 s), "
@@ -405,7 +411,7 @@ class Runner:
         ev = Path(root) / ".local/living/verify" / run
         ev.mkdir(parents=True, exist_ok=True)
         log = ev / "gate.log"
-        seed = "world" if group in {"core", "mechanics"} else "island"
+        seed = "world" if group in {"core", "mechanics", "client"} else "island"
         # Mechanics uses the raw CLI, so the gate process supervises its world instead of an inactivity lease.
         launch_args = ("--driver-pid", str(os.getpid())) if group == "mechanics" else ()
         try:
@@ -417,6 +423,14 @@ class Runner:
                                 "--db", f"verify-{run}", "--out", report], root, ev / "mechanics.txt", 900)
                 ok = code == 0 and report.is_file()
                 return {"mechanics": (ok, str(report if report.exists() else ev / "mechanics.txt"), time.time() - t0)}
+            if group == "client":
+                probe = ".agents/skills/verify-client/scripts/probe/Cargo.toml"
+                env_dir = str(Path(root) / ".local/living/verify/target-client")
+                if self.sh(["env", f"CARGO_TARGET_DIR={env_dir}", "cargo", "build", "--locked", "--manifest-path", probe], root, log, 1500):
+                    return {"cues": (False, f"{log} (probe build failed)", time.time() - t0)}
+                code = self.sh([sys.executable, ".agents/skills/verify-client/scripts/cues.py", "--run", run], root, ev / "cues.txt", 600)
+                tier = self.sh([sys.executable, ".agents/skills/verify-client/scripts/near_tier.py", "--run", run], root, ev / "near_tier.txt", 300)
+                return {"cues": (code == 0 and tier == 0, str(ev / "cues.json"), time.time() - t0)}
             if group == "player":
                 if self.sh([sys.executable, V, "player", "--run", run, "join", "GateTester"], root, log, 120):
                     return {"combat": (False, f"{log} (join failed)", time.time() - t0)}

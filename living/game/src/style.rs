@@ -252,6 +252,11 @@ pub struct ToonParams {
     /// A hand-made file's forward in this mesh's own frame (xyz), w 1 when set; else the
     /// character files' −Z (`toon.wesl` `facing`). The material's own.
     pub file: Vec4,
+    /// A profile's lock ink (v1.1): rgb the line's linear colour, w `ink_px`.
+    pub hand_ink: Vec4,
+    /// x `ink_range` (UV), y `ink_fade_px`, z 1 when ink is drawn (an ink field set and the mask
+    /// texture has G).
+    pub hand_ink_range: Vec4,
     /// Per [`Surface`]: x 1 / tile size (1/m), y strength, z mapping (0 triplanar, 1 planar).
     pub layers: [Vec4; SURFACES],
 }
@@ -564,6 +569,8 @@ impl Style {
             hand: [Vec4::ZERO; 4],
             hand_bands: Vec4::ZERO,
             file: Vec4::ZERO,
+            hand_ink: Vec4::ZERO,
+            hand_ink_range: Vec4::ZERO,
             layers: surface_layers(),
         }
     }
@@ -700,6 +707,8 @@ fn apply(style: Res<Style>, mut toons: ResMut<Assets<Toon>>, mut outlines: Query
         m.extension.params.hand = old.hand;
         m.extension.params.hand_bands = old.hand_bands;
         m.extension.params.file = old.file;
+        m.extension.params.hand_ink = old.hand_ink;
+        m.extension.params.hand_ink_range = old.hand_ink_range;
         m.extension.params.recolor = old.recolor;
         m.extension.params.recolor_from = old.recolor_from;
         m.extension.params.detail.x = old.detail.x;

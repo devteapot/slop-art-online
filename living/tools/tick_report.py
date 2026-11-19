@@ -116,6 +116,10 @@ def one(d):
             "ticks_at_budget_min": frames["ticks_at_budget_min"],
             "ticks_observed": len(frames["ticks"]),
             "frame_interval_ms": frames["frame_interval_ms"],
+            "pair_interval_ms": {
+                group: {key: value for key, value in stats.items() if key != "counts_ms"}
+                for group, stats in frames.get("pair_interval_ms", {}).items()
+            },
             "scene_rows_per_s_per_viewer": sum(v["rows_per_s"] for v in viewers.values()) / res["players"],
         }
     mind = None

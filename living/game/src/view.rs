@@ -11,6 +11,8 @@
 //!     camera, 28° down, 22 m) or `YAW:PITCH[:ZOOM[:AIM]]` (degrees; yaw 0 faces the model's
 //!     front; zoom 1 frames the model, 0.5 is twice as close; aim is the height looked at as a
 //!     fraction of the model's, 0.92 for a character's face);
+//!   - a game camera stop, 58° down at the chest: `near@YAW` (8 m up, FOV 42°), `middle@YAW`
+//!     (12 m, 44°), `far@YAW` (19 m, 46°), or `play:HEIGHT:FOV@YAW` anywhere between;
 //!   - `views`: the five angles and `game`;
 //!   - `<clip>`: six frames of that clip from the side; `<clip>/<view>` from that view;
 //!     `<clip>@<seconds>` or `<clip>@<seconds>/<view>`: one frame;
@@ -89,7 +91,16 @@ struct Shot {
 
 fn parse_view(s: &str) -> Option<(String, Pose)> {
     if let Some((stop, angle)) = s.split_once('@') {
-        let (height, fov) = match stop { "near" => (8., 42.), "middle" => (12., 44.), _ => return None };
+        // The game camera's stops (camera.rs `Rig`), or `play:<height>:<fov>` between them.
+        let (height, fov) = match stop {
+            "near" => (8., 42.),
+            "middle" => (12., 44.),
+            "far" => (19., 46.),
+            _ => {
+                let mut p = stop.strip_prefix("play:")?.split(':').map(|v| v.parse::<f32>().ok());
+                (p.next()??, p.next()??)
+            }
+        };
         return Some((s.replace('@', "_"), Pose::PlayStop { height, yaw: angle.parse().ok()?, fov }));
     }
     if s == "game" {

@@ -1,7 +1,7 @@
 use living_bindings::*;
 use serde::Deserialize;
 use serde_json::{json, Value};
-use spacetimedb_sdk::{DbContext, Table, TableWithPrimaryKey};
+use spacetimedb_sdk::{DbContext, EventTable, Table, TableWithPrimaryKey};
 use std::io::{self, Read, Write};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -18,6 +18,10 @@ struct Request {
     until_actor: Option<u32>,
     #[serde(default)]
     stream: bool,
+    /// Stream callbacks from the connection on, the initial subscription's own included (the
+    /// default streams only changes after it applied); for proving no row arrives at all.
+    #[serde(default)]
+    from_start: bool,
 }
 
 #[derive(Default)]
@@ -39,7 +43,7 @@ macro_rules! primary_tables {
             mind_cursor, know_how, artifact, trade_offer, background, gate, experience,
             routine, routine_stat, cue, script, community, membership, join_request, genome,
             practice, land, settlement, lot, fighter, skill_card, act_card, speech_card, doing, weather,
-            seen_bodies, seen_characters, seen_fighters, seen_doing, my_body, my_fighter, my_doing, my_characters, my_vitals,
+            seen_bodies, seen_characters, seen_fighters, seen_doing, seen_bodies_near, seen_bodies_far, seen_fighters_near, seen_fighters_far, seen_doing_near, seen_doing_far, my_body, my_fighter, my_doing, my_characters, my_vitals,
             my_experience, my_places, my_inventory, my_know_how, my_offers, my_heard, my_senses, my_senses_v_2, my_earshot, my_act_outcomes, my_known_names, my_sex);
     };
 }
@@ -56,8 +60,11 @@ fn emit(value: &Value) {
     io::stdout().flush().expect("probe stdout");
 }
 
-fn stream_change(signals: &Mutex<Signals>, value: Value) {
+/// A streamed change, stamped with when the probe received it (`ms`, unix ms).
+fn stream_change(signals: &Mutex<Signals>, mut value: Value) {
     if signals.lock().unwrap().stream_live {
+        let ms = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as u64;
+        value["ms"] = json!(ms);
         emit(&value);
     }
 }
@@ -84,6 +91,15 @@ fn stream_callbacks(c: &DbConnection, signals: Arc<Mutex<Signals>>) {
     primary_tables!(insert_delete, c, signals);
     primary_tables!(updates, c, signals);
     insert_delete!(c, signals; my_deliberations, my_combat, my_readiness, my_skill_uses);
+    // The cue event tables (docs/PERCEPTION.md, "Cues"): inserts only, never cached.
+    macro_rules! events {
+        ($c:expr, $signals:expr; $($table:ident),*) => { $(
+            let inserted = $signals.clone();
+            EventTable::on_insert(&$c.db.$table(), move |_, row| stream_change(&inserted,
+                json!({"event":"insert","table":stringify!($table),"row":row_json(row)})));
+        )* };
+    }
+    events!(c, signals; seen_body_cue, seen_fighter_cue, seen_doing_cue);
 }
 
 fn stream_initial(c: &DbConnection, r: &Request, identity: &str) {
@@ -341,7 +357,7 @@ fn connect(r: &Request, signals: Arc<Mutex<Signals>>) -> Result<DbConnection, St
 }
 
 fn drive(r: &Request, drop_connection: bool) -> Result<Value, String> {
-    let signals = Arc::new(Mutex::new(Signals::default()));
+    let signals = Arc::new(Mutex::new(Signals { stream_live: r.stream && r.from_start, ..Signals::default() }));
     let c = connect(r, signals.clone())?;
     let start = Instant::now();
     loop {
@@ -426,8 +442,10 @@ fn main() {
             .read_to_string(&mut input)
             .map_err(|e| e.to_string())?;
         let r: Request = serde_json::from_str(&input).map_err(|e| e.to_string())?;
-        if !r.db.starts_with("verify-client-") && !r.db.starts_with("verify-player-gaze-") {
-            return Err("database must start with verify-client- or verify-player-gaze-".into());
+        // A verify-client run, the merge's scene gate (living/tools/scene_gate.py, case `cues`), or
+        // verify-player's gaze scenes.
+        if !r.db.starts_with("verify-client-") && !r.db.starts_with("verify-gate-") && !r.db.starts_with("verify-player-gaze-") {
+            return Err("database must start with verify-client-, verify-gate- or verify-player-gaze-".into());
         }
         let first = drive(&r, r.drop_file.is_some())?;
         if r.drop_file.is_some() {
