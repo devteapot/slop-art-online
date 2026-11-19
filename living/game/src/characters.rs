@@ -39,9 +39,17 @@
 //! group's collider spheres. It runs after the animation pose and transform propagation, at a
 //! fixed 60 Hz (at most three steps a frame, so it stays stable at low and variable frame rates),
 //! and writes the bones' local and global transforms. Distances and forces scale with the
-//! character. Level of detail: characters beyond `LIVING_GAME_SPRING_NEAR` metres (default 40,
-//! scaled by height) or past the nearest `LIVING_GAME_SPRING_BUDGET` (default 48) rest rigid;
-//! `LIVING_GAME_SPRINGS=0` turns the simulation off. Every few seconds it logs its cost.
+//! character. Level of detail: only a character whose full mesh is drawn is simulated (the far
+//! model has no spring bones, `lookdev::far_models`), so the near-model cap bounds the work; a
+//! model with no far mesh counts as full. Within those, characters beyond
+//! `LIVING_GAME_SPRING_NEAR` metres (default 40, scaled by height) or past the nearest
+//! `LIVING_GAME_SPRING_BUDGET` (default 48) rest rigid. A character that starts to be simulated
+//! (its full mesh shown again, or back within the bounds) is settled first: its tails are placed
+//! at rest and stepped `LIVING_GAME_SPRING_SETTLE` times (default 60) against the frame's pose
+//! with the velocity then dropped, so its locks and hems start hanging, without a swing in.
+//! `LIVING_GAME_SPRINGS=0` turns the simulation off. Every few seconds it logs its cost;
+//! `LIVING_GAME_PERF=springwake` logs how far each woken character's joints turn per frame, and
+//! `springfar` simulates far-drawn characters too, as before, to compare.
 //!
 //! `LIVING_GAME_PERF=frames` logs frame times every 2 s outside the island (whose own
 //! `island perf` line does it), with the number of characters and outfit meshes.
@@ -632,7 +640,7 @@ impl Plugin for CharactersPlugin {
             .init_resource::<SpringClock>()
             .init_resource::<SpringStats>()
             .add_systems(Update, (shape, recolor, rig_springs, outfit::dress, rebuilt, frames))
-            .add_systems(PostUpdate, (hips.after(bevy::app::AnimationSystems).before(TransformSystems::Propagate), springs.after(TransformSystems::Propagate)));
+            .add_systems(PostUpdate, (hips.after(bevy::app::AnimationSystems).before(TransformSystems::Propagate), springs.after(TransformSystems::Propagate).after(crate::lookdev::far_models)));
     }
 }
 
@@ -1363,12 +1371,19 @@ pub struct SpringSettings {
     pub budget: usize,
     /// Distance (m) within which a 1.75 m character is simulated; scales with height.
     pub near: f32,
+    /// Fixed steps a character is settled for against its current pose when it starts to be
+    /// simulated (0: it starts from rest).
+    pub settle: u32,
+    /// Log each woken character's per-frame joint turn (`LIVING_GAME_PERF=springwake`).
+    pub wake_log: bool,
+    /// Simulate characters drawn far too, as before spring-near (`LIVING_GAME_PERF=springfar`).
+    pub far_too: bool,
 }
 
 impl SpringSettings {
     fn from_env() -> Self {
         let num = |k: &str, d: f32| std::env::var(k).ok().and_then(|v| v.parse::<f32>().ok()).unwrap_or(d);
-        Self { enabled: std::env::var("LIVING_GAME_SPRINGS").map_or(true, |v| v != "0"), budget: num("LIVING_GAME_SPRING_BUDGET", 48.0) as usize, near: num("LIVING_GAME_SPRING_NEAR", 40.0) }
+        Self { enabled: std::env::var("LIVING_GAME_SPRINGS").map_or(true, |v| v != "0"), budget: num("LIVING_GAME_SPRING_BUDGET", 48.0) as usize, near: num("LIVING_GAME_SPRING_NEAR", 40.0), settle: num("LIVING_GAME_SPRING_SETTLE", 60.0).max(0.0) as u32, wake_log: crate::perf::has("springwake"), far_too: crate::perf::has("springfar") }
     }
 }
 
@@ -1386,6 +1401,8 @@ pub struct SpringStats {
     /// Time inside the simulation summed over threads, and fixed steps taken.
     cpu_nanos: u64,
     steps: u32,
+    /// Frames that took at least one fixed step.
+    stepped: u32,
     since: f32,
 }
 
@@ -1393,6 +1410,11 @@ const STEP: f32 = 1.0 / 60.0;
 const MAX_STEPS: u32 = 3;
 /// Simulate characters in parallel from this many.
 const PARALLEL_FROM: usize = 24;
+/// Least drag while settling: the hanging pose does not depend on drag, and a light chain
+/// would otherwise still swing after the settling steps.
+const SETTLE_DRAG: f32 = 0.4;
+/// Frames after waking that `springwake` follows.
+const WAKE_FRAMES: usize = 30;
 
 #[derive(Clone, Copy)]
 enum Up {
@@ -1446,6 +1468,8 @@ pub struct Springs {
     /// Each joint's new local rotation and global transform.
     out: Vec<(Quat, GlobalTransform)>,
     centres: Vec<(Vec3, f32)>,
+    /// `springwake`: the largest joint turn (degrees) in each frame since waking.
+    wake: Option<Vec<f32>>,
 }
 
 /// Find each shaped character's spring chains and colliders.
@@ -1515,13 +1539,15 @@ pub fn rig_springs(
         }
         let n = joints.len();
         debug!("characters: {} has {n} spring joints, {} collider spheres", model.file, spheres.len());
-        commands.entity(e).insert(Springs { joints, groups, spheres, active: false, fresh: true, ran: false, out: vec![(Quat::IDENTITY, GlobalTransform::IDENTITY); n], centres: vec![] });
+        commands.entity(e).insert(Springs { joints, groups, spheres, active: false, fresh: true, ran: false, out: vec![(Quat::IDENTITY, GlobalTransform::IDENTITY); n], centres: vec![], wake: None });
     }
 }
 
 impl Springs {
-    /// Simulate `steps` fixed steps against the current pose (read-only transforms).
-    fn simulate(&mut self, steps: u32, globals: &Query<&GlobalTransform>) {
+    /// Simulate `steps` fixed steps against the current pose (read-only transforms). A fresh
+    /// character is first placed at rest and settled for `settle` steps against this pose, its
+    /// velocity then dropped: it starts from its hanging pose instead of swinging into it.
+    fn simulate(&mut self, steps: u32, settle: u32, globals: &Query<&GlobalTransform>) {
         self.centres.clear();
         for s in &self.spheres {
             match globals.get(s.bone) {
@@ -1532,33 +1558,50 @@ impl Springs {
                 Err(_) => self.centres.push((Vec3::splat(f32::MAX), 0.0)),
             }
         }
-        let fresh = std::mem::replace(&mut self.fresh, false);
         self.ran = true;
-        for step in 0..steps.max(1) {
-            for i in 0..self.joints.len() {
-                let parent = match self.joints[i].parent {
-                    Up::Bone(b) => match globals.get(b) {
-                        Ok(g) => *g,
-                        Err(_) => continue,
-                    },
-                    Up::Joint(k) => self.out[k].1,
-                };
-                let (ps, pr, _) = parent.to_scale_rotation_translation();
-                let sc = ps.x.abs().max(1e-6);
-                let j = &mut self.joints[i];
-                let g = &self.groups[j.group];
-                let pos = parent.transform_point(j.t);
-                let rest = pr * j.r0;
-                let rest_dir = rest * j.axis;
-                let len = j.len * sc;
-                if fresh && step == 0 {
+        if std::mem::replace(&mut self.fresh, false) {
+            self.pass(globals, None);
+            for _ in 0..settle {
+                self.pass(globals, Some(SETTLE_DRAG));
+            }
+            for j in &mut self.joints {
+                j.prev = j.tail;
+            }
+        }
+        for _ in 0..steps {
+            self.pass(globals, Some(0.0));
+        }
+    }
+
+    /// One pass over the joints in hierarchy order: `None` places the tails at rest, `Some(d)`
+    /// takes a fixed step with at least drag `d`. Either way the results go to `out`.
+    fn pass(&mut self, globals: &Query<&GlobalTransform>, step: Option<f32>) {
+        for i in 0..self.joints.len() {
+            let parent = match self.joints[i].parent {
+                Up::Bone(b) => match globals.get(b) {
+                    Ok(g) => *g,
+                    Err(_) => continue,
+                },
+                Up::Joint(k) => self.out[k].1,
+            };
+            let (ps, pr, _) = parent.to_scale_rotation_translation();
+            let sc = ps.x.abs().max(1e-6);
+            let j = &mut self.joints[i];
+            let g = &self.groups[j.group];
+            let pos = parent.transform_point(j.t);
+            let rest = pr * j.r0;
+            let rest_dir = rest * j.axis;
+            let len = j.len * sc;
+            match step {
+                None => {
                     j.tail = pos + rest_dir * len;
                     j.prev = j.tail;
                 }
-                if steps > 0 {
+                Some(least_drag) => {
                     // Verlet: inertia less drag, a pull back to the rest direction, gravity. Forces
                     // are in the model's units, so they scale with the character.
-                    let mut next = j.tail + (j.tail - j.prev) * (1.0 - g.drag) + rest_dir * (g.stiffness * STEP * sc) + g.gravity * (STEP * sc);
+                    let drag = g.drag.max(least_drag);
+                    let mut next = j.tail + (j.tail - j.prev) * (1.0 - drag) + rest_dir * (g.stiffness * STEP * sc) + g.gravity * (STEP * sc);
                     next = pos + (next - pos).try_normalize().unwrap_or(rest_dir) * len;
                     for &si in &g.spheres {
                         let (c, r) = self.centres[si];
@@ -1572,23 +1615,29 @@ impl Springs {
                     j.prev = j.tail;
                     j.tail = next;
                 }
-                let to = (j.tail - pos).try_normalize().unwrap_or(rest_dir);
-                let world = Quat::from_rotation_arc(rest_dir.normalize(), to) * rest;
-                let local = (pr.inverse() * world).normalize();
-                self.out[i] = (local, parent.mul_transform(Transform { translation: j.t, rotation: local, scale: j.s0 }));
             }
+            let to = (j.tail - pos).try_normalize().unwrap_or(rest_dir);
+            let world = Quat::from_rotation_arc(rest_dir.normalize(), to) * rest;
+            let local = (pr.inverse() * world).normalize();
+            self.out[i] = (local, parent.mul_transform(Transform { translation: j.t, rotation: local, scale: j.s0 }));
         }
     }
 }
 
-/// Run the spring chains after the pose is final, nearest characters first, within budget.
+/// Whether a character's full mesh is drawn: no far model, or the far model not showing.
+fn full_mesh_drawn(lod: Option<&crate::lookdev::Lod>) -> bool {
+    lod.is_none_or(|l| !l.has_far() || l.far_now != Some(true))
+}
+
+/// Run the spring chains after the pose is final, for characters whose full mesh is drawn,
+/// nearest first, within budget.
 #[allow(clippy::type_complexity)]
 pub fn springs(
     settings: Res<SpringSettings>,
     mut clock: ResMut<SpringClock>,
     mut stats: ResMut<SpringStats>,
     time: Res<Time>,
-    mut chars: Query<(Entity, &mut Springs, &Character, Option<&InheritedVisibility>)>,
+    mut chars: Query<(Entity, &mut Springs, &Character, Option<&InheritedVisibility>, Option<&crate::lookdev::Lod>)>,
     cams: Query<Entity, With<Camera3d>>,
     mut set: ParamSet<(Query<&GlobalTransform>, Query<(&mut Transform, &mut GlobalTransform)>)>,
 ) {
@@ -1596,13 +1645,14 @@ pub fn springs(
     let steps = ((clock.0 / STEP) as u32).min(MAX_STEPS);
     clock.0 = (clock.0 - steps as f32 * STEP).min(STEP);
     let start = std::time::Instant::now();
-    // Who is simulated: visible, near enough for their size, and the nearest within budget.
+    // Who is simulated: visible with the full mesh drawn (the far model has no spring bones),
+    // near enough for their size, and the nearest within budget.
     let mut want: Vec<(f32, Entity)> = Vec::new();
     {
         let globals = set.p0();
         let eye = cams.iter().next().and_then(|c| globals.get(c).ok()).map(|g| g.translation());
-        for (e, _, ch, vis) in &chars {
-            if !settings.enabled || vis.is_some_and(|v| !v.get()) {
+        for (e, _, ch, vis, lod) in &chars {
+            if !settings.enabled || vis.is_some_and(|v| !v.get()) || !(settings.far_too || full_mesh_drawn(lod)) {
                 continue;
             }
             let Ok(g) = globals.get(e) else { continue };
@@ -1615,25 +1665,31 @@ pub fn springs(
     want.sort_by(|a, b| a.0.total_cmp(&b.0));
     want.truncate(settings.budget);
     let chosen: std::collections::HashSet<Entity> = want.iter().map(|w| w.1).collect();
-    // Characters going to rest: back to their rigid pose, placed afresh when they wake.
+    // Characters going to rest: back to their rigid pose, placed and settled afresh when they
+    // wake (`Springs::simulate`).
     let mut resting: Vec<(Entity, Quat)> = Vec::new();
-    for (e, mut sp, _, _) in &mut chars {
+    for (e, mut sp, _, _, _) in &mut chars {
         let now = chosen.contains(&e);
         if sp.active && !now {
             resting.extend(sp.joints.iter().map(|j| (j.e, j.r0)));
+            sp.wake = None;
         }
         if !sp.active && now {
             sp.fresh = true;
+            if settings.wake_log {
+                sp.wake = Some(Vec::with_capacity(WAKE_FRAMES + 1));
+            }
         }
         sp.active = now;
     }
     let cpu = std::sync::atomic::AtomicU64::new(0);
     {
         let globals = set.p0();
-        let run = |(_, mut sp, _, _): (Entity, Mut<Springs>, &Character, Option<&InheritedVisibility>)| {
+        let settle = settings.settle;
+        let run = |(_, mut sp, _, _, _): (Entity, Mut<Springs>, &Character, Option<&InheritedVisibility>, Option<&crate::lookdev::Lod>)| {
             if sp.active && (steps > 0 || sp.fresh) {
                 let t = std::time::Instant::now();
-                sp.simulate(steps, &globals);
+                sp.simulate(steps, settle, &globals);
                 cpu.fetch_add(t.elapsed().as_nanos() as u64, std::sync::atomic::Ordering::Relaxed);
             }
         };
@@ -1646,16 +1702,32 @@ pub fn springs(
     }
     let mut writes = set.p1();
     let (mut n_chars, mut n_joints) = (0u32, 0u32);
-    for (_, mut sp, _, _) in &mut chars {
+    for (e, mut sp, ch, _, _) in &mut chars {
         if !sp.active || !std::mem::replace(&mut sp.ran, false) {
             continue;
         }
         n_chars += 1;
         n_joints += sp.joints.len() as u32;
+        let mut turn = 0.0f32;
         for (j, (local, global)) in sp.joints.iter().zip(&sp.out) {
             if let Ok((mut tf, mut g)) = writes.get_mut(j.e) {
+                if sp.wake.is_some() {
+                    turn = turn.max(tf.rotation.angle_between(*local).to_degrees());
+                }
                 tf.rotation = *local;
                 *g = *global;
+            }
+        }
+        // `springwake`: frame 0 is the change from the rigid pose; later frames are the chains'
+        // own motion, which a swing in would show as large early turns.
+        let joints = sp.joints.len();
+        if let Some(w) = sp.wake.as_mut() {
+            w.push(turn);
+            if w.len() > WAKE_FRAMES {
+                let later = w[1..].iter().copied().fold(0.0f32, f32::max);
+                let list: Vec<String> = w.iter().map(|t| format!("{t:.1}")).collect();
+                info!("springwake: {} {e} ({} joints, settle {}): largest turn {:.1}° at waking, {later:.1}° a frame after; [{}]", ch.recipe.name, joints, settings.settle, w[0], list.join(" "));
+                sp.wake = None;
             }
         }
     }
@@ -1670,6 +1742,7 @@ pub fn springs(
     stats.nanos += start.elapsed().as_nanos();
     stats.cpu_nanos += cpu.into_inner();
     stats.steps += steps * n_chars;
+    stats.stepped += u32::from(steps > 0);
     stats.since += time.delta_secs();
     if stats.since >= 3.0 {
         if stats.characters > 0 {
@@ -1680,10 +1753,11 @@ pub fn springs(
             // character and fixed step.
             let per_step = stats.cpu_nanos as f64 / 1000.0 / stats.steps.max(1) as f64;
             info!(
-                "springs: {chars_per:.1} characters ({:.0} joints) a frame, {us:.0} µs a frame (wall), {:.1} µs a character; {per_step:.1} µs CPU a character-step, {:.2} steps a frame",
+                "springs: {chars_per:.1} characters ({:.0} joints) a frame, {us:.0} µs a frame (wall), {:.1} µs a character; {per_step:.1} µs CPU a character-step, {:.2} steps a frame; {:.1} characters a stepped frame",
                 stats.joints as f64 / f,
                 us / chars_per.max(1e-9),
-                stats.steps as f64 / stats.characters.max(1) as f64
+                stats.steps as f64 / stats.characters.max(1) as f64,
+                stats.characters as f64 / stats.stepped.max(1) as f64
             );
         }
         *stats = SpringStats::default();
