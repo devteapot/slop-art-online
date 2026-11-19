@@ -1,0 +1,6 @@
+{"stage": "open-approved", "materials": 10, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "item1-export", "materials": 10, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "item1-export", "materials": 11, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "item1-export", "materials": 11, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "item2-eye-frame", "materials": 11, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "item2-expression-sweep", "materials": 11, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
