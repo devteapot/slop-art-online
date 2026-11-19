@@ -107,6 +107,35 @@ pub struct Moving {
     pub running: bool,
 }
 
+/// A `Moving` without its id: the public motion copies' column (`seen_body_copy.seg`), whose row
+/// names the creature in `body` (battle-views' slim row).
+#[derive(SpacetimeType, Clone, Debug, PartialEq)]
+pub struct Segment {
+    pub x: f32,
+    pub y: f32,
+    pub t_ms: u64,
+    pub vx: f32,
+    pub vy: f32,
+    pub heading: f32,
+    pub turn: f32,
+    pub turn_s: f32,
+    pub next_ms: u64,
+    pub speed: f32,
+    pub face_off: f32,
+    pub face_turn: f32,
+    pub face_turn_s: f32,
+    pub running: bool,
+}
+
+impl Segment {
+    pub fn of(m: &Moving) -> Self {
+        Self { x: m.x, y: m.y, t_ms: m.t_ms, vx: m.vx, vy: m.vy, heading: m.heading, turn: m.turn, turn_s: m.turn_s, next_ms: m.next_ms, speed: m.speed, face_off: m.face_off, face_turn: m.face_turn, face_turn_s: m.face_turn_s, running: m.running }
+    }
+    pub fn moving(&self, id: u32) -> Moving {
+        Moving { id, x: self.x, y: self.y, t_ms: self.t_ms, vx: self.vx, vy: self.vy, heading: self.heading, turn: self.turn, turn_s: self.turn_s, next_ms: self.next_ms, speed: self.speed, face_off: self.face_off, face_turn: self.face_turn, face_turn_s: self.face_turn_s, running: self.running }
+    }
+}
+
 impl From<&Body> for Moving {
     fn from(b: &Body) -> Self {
         Self { id: b.id, x: b.x, y: b.y, t_ms: b.t_ms, vx: b.vx, vy: b.vy, heading: b.heading, turn: b.turn, turn_s: b.turn_s, next_ms: b.next_ms, speed: b.speed, face_off: b.face_off, face_turn: b.face_turn, face_turn_s: b.face_turn_s, running: b.running }
@@ -116,6 +145,12 @@ impl From<&Body> for Moving {
 impl MotionSeen {
     pub fn of(id: u64, viewer: Identity, b: &Body) -> Self {
         Self { id, viewer, motion: Motion::from(b), face_off: b.face_off, face_turn: b.face_turn, face_turn_s: b.face_turn_s, running: b.running }
+    }
+    /// The row holding `m` (a public copy moved back, `frame::all_private`).
+    pub fn with(id: u64, viewer: Identity, m: &Moving) -> Self {
+        let mut row = Self { id, viewer, motion: Motion { id: 0, x: 0.0, y: 0.0, t_ms: 0, vx: 0.0, vy: 0.0, heading: 0.0, turn: 0.0, turn_s: 0.0, next_ms: 0, speed: 0.0 }, face_off: 0.0, face_turn: 0.0, face_turn_s: 0.0, running: false };
+        row.set(m);
+        row
     }
     pub fn moving(&self) -> Moving {
         let m = &self.motion;
@@ -1085,7 +1120,7 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
     for p in &rows {
         if !seen.contains(&p.body) {
             ctx.db.perceived().id().delete(p.id);
-            crate::frame::drop_copies(ctx, id, p.body);
+            crate::frame::drop_copies(ctx, id, viewer, p.body);
         }
     }
     let entered: Vec<u32> = seen.difference(&had).copied().collect();
@@ -1097,14 +1132,7 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
         ctx.db.perceived().insert(Perceived { id: 0, viewer, body: *body, since_ms: now });
         // How it moves, as it is now; frames keep it current (`frame.rs`).
         if let Some(b) = ctx.db.body().id().find(*body) {
-            let row = MotionSeen::of(crate::frame::key(id, *body), viewer, &b);
-            // In the far tier; the frames' scene moves it to the near tier when it is near.
-            ctx.db.motion_near().id().delete(row.id);
-            if ctx.db.motion_seen().id().find(row.id).is_some() {
-                ctx.db.motion_seen().id().update(row);
-            } else {
-                ctx.db.motion_seen().insert(row);
-            }
+            crate::frame::new_motion(ctx, id, viewer, &b);
         }
     }
     crate::frame::scene(ctx, id, viewer, &seen, &near, now);
@@ -1147,7 +1175,7 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
             if let Some(p) = ctx.db.projected().body().filter(id).find(|p| p.own && p.viewer == viewer) {
                 let pr = project(ctx, &me, &me, now);
                 if !pr.same_as(&p) {
-                    ctx.db.projected().id().update(pr.into_row(viewer, id, true, p.id));
+                    proj_update(ctx, pr.into_row(viewer, id, true, p.id));
                 }
                 return;
             }
@@ -1162,21 +1190,21 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
     let mut have: HashSet<u32> = HashSet::new();
     for p in ctx.db.projected().viewer().filter(viewer).collect::<Vec<_>>() {
         if !seen.contains(&p.body) || p.own != (p.body == id) || !have.insert(p.body) {
-            ctx.db.projected().id().delete(p.id);
+            proj_delete(ctx, p.id);
             continue;
         }
         if all || again.contains(&p.body) {
             let Some(t) = ctx.db.character().id().find(p.body) else { continue };
             let pr = project(ctx, &me, &t, now);
             if !pr.same_as(&p) {
-                ctx.db.projected().id().update(pr.into_row(viewer, p.body, p.own, p.id));
+                proj_update(ctx, pr.into_row(viewer, p.body, p.own, p.id));
             }
         }
     }
     for body in seen.difference(&have) {
         let Some(t) = ctx.db.character().id().find(*body) else { continue };
         let pr = project(ctx, &me, &t, now);
-        ctx.db.projected().insert(pr.into_row(viewer, *body, *body == id, 0));
+        proj_insert(ctx, pr.into_row(viewer, *body, *body == id, 0));
     }
     // The move of each newcomer that has fought, with the band its projection grants.
     for body in &entered {
@@ -1461,7 +1489,7 @@ fn kept_sweep(ctx: &ReducerContext, me: &Character, viewer: Identity, w: &World,
         let mut have: HashSet<u32> = HashSet::new();
         for p in ctx.db.projected().viewer().filter(viewer).collect::<Vec<_>>() {
             if !(p.body == id || s.seen.contains(&p.body)) || p.own != (p.body == id) || !have.insert(p.body) {
-                ctx.db.projected().id().delete(p.id);
+                proj_delete(ctx, p.id);
             }
         }
         again.extend(s.seen.iter().copied());
@@ -1470,7 +1498,7 @@ fn kept_sweep(ctx: &ReducerContext, me: &Character, viewer: Identity, w: &World,
         for body in s.gone {
             v.rows.remove(body);
             for p in ctx.db.projected().by_viewer_body().filter((viewer, *body)).map(|p| p.id).collect::<Vec<_>>() {
-                ctx.db.projected().id().delete(p);
+                proj_delete(ctx, p);
             }
         }
         let fresh: HashSet<u32> = s.entered.iter().copied().collect();
@@ -1512,14 +1540,14 @@ fn kept_sweep(ctx: &ReducerContext, me: &Character, viewer: Identity, w: &World,
         match rows.as_slice() {
             [p] if p.own == own => {
                 if !pr.same_as(p) {
-                    ctx.db.projected().id().update(pr.into_row(viewer, body, own, p.id));
+                    proj_update(ctx, pr.into_row(viewer, body, own, p.id));
                 }
             }
             _ => {
                 for p in &rows {
-                    ctx.db.projected().id().delete(p.id);
+                    proj_delete(ctx, p.id);
                 }
-                ctx.db.projected().insert(pr.into_row(viewer, body, own, 0));
+                proj_insert(ctx, pr.into_row(viewer, body, own, 0));
             }
         }
     }
@@ -1648,7 +1676,7 @@ pub fn health_moved(ctx: &ReducerContext, id: u32, now: u64) {
             p.band = b;
             p.hp = exact;
             row_touched(p.viewer, p.body);
-            ctx.db.projected().id().update(p);
+            proj_update(ctx, p);
         }
     }
 }
@@ -1671,6 +1699,9 @@ pub fn forget(ctx: &ReducerContext, id: u32, viewer: Identity) {
     for p in ctx.db.motion_near().viewer().filter(viewer).map(|p| p.id).collect::<Vec<_>>() {
         ctx.db.motion_near().id().delete(p);
     }
+    for p in ctx.db.seen_body_copy().viewer().filter(viewer).collect::<Vec<_>>() {
+        ctx.db.seen_body_copy().delete(p);
+    }
     for p in ctx.db.fighter_near().viewer().filter(viewer).map(|p| p.id).collect::<Vec<_>>() {
         ctx.db.fighter_near().id().delete(p);
     }
@@ -1678,7 +1709,7 @@ pub fn forget(ctx: &ReducerContext, id: u32, viewer: Identity) {
         ctx.db.doing_near().id().delete(p);
     }
     for p in ctx.db.projected().viewer().filter(viewer).map(|p| p.id).collect::<Vec<_>>() {
-        ctx.db.projected().id().delete(p);
+        proj_delete(ctx, p);
     }
     for k in ctx.db.heard().viewer().filter(viewer).map(|h| h.key).collect::<Vec<_>>() {
         ctx.db.heard().key().delete(k);
@@ -1704,10 +1735,10 @@ pub fn gone(ctx: &ReducerContext, id: u32) {
     let players: HashMap<Identity, u32> = crate::combat::humans(ctx).into_iter().map(|(c, who)| (who, c)).collect();
     for p in rows {
         if let Some(viewer) = players.get(&p.viewer) {
-            crate::frame::drop_copies(ctx, *viewer, id);
+            crate::frame::drop_copies(ctx, *viewer, p.viewer, id);
         }
         row_touched(p.viewer, id);
-        ctx.db.projected().id().delete(p.id);
+        proj_delete(ctx, p.id);
     }
 }
 
@@ -1863,6 +1894,11 @@ pub fn my_known_names(ctx: &ViewContext) -> Vec<KnownName> {
 
 #[spacetimedb::view(accessor = seen_bodies, public, primary_key = id)]
 pub fn seen_bodies(ctx: &ViewContext) -> Vec<Moving> {
+    // A viewer's copies are all public (`motion_tables_on`) or all private (`frame.rs`).
+    let public: Vec<Moving> = ctx.db.seen_body_copy().viewer().filter(ctx.sender()).map(|c| c.seg.moving(c.body)).collect();
+    if !public.is_empty() {
+        return public;
+    }
     let far = ctx.db.motion_seen().viewer().filter(ctx.sender()).map(|m| m.moving());
     far.chain(ctx.db.motion_near().viewer().filter(ctx.sender()).map(|m| m.copy.moving())).collect()
 }
@@ -1876,12 +1912,20 @@ pub fn seen_bodies(ctx: &ViewContext) -> Vec<Moving> {
 /// The others within `frame::NEAR_M` of me at my last sweep, as `seen_bodies` shows them.
 #[spacetimedb::view(accessor = seen_bodies_near, public, primary_key = id)]
 pub fn seen_bodies_near(ctx: &ViewContext) -> Vec<Moving> {
+    let public: Vec<Moving> = ctx.db.seen_body_copy().viewer_near().filter((ctx.sender(), true)).map(|c| c.seg.moving(c.body)).collect();
+    if !public.is_empty() {
+        return public;
+    }
     ctx.db.motion_near().viewer().filter(ctx.sender()).map(|m| m.copy.moving()).collect()
 }
 
 /// The rest of the others I perceive, as `seen_bodies` shows them.
 #[spacetimedb::view(accessor = seen_bodies_far, public, primary_key = id)]
 pub fn seen_bodies_far(ctx: &ViewContext) -> Vec<Moving> {
+    let public: Vec<Moving> = ctx.db.seen_body_copy().viewer_near().filter((ctx.sender(), false)).map(|c| c.seg.moving(c.body)).collect();
+    if !public.is_empty() {
+        return public;
+    }
     ctx.db.motion_seen().viewer().filter(ctx.sender()).map(|m| m.moving()).collect()
 }
 
@@ -1897,7 +1941,7 @@ pub fn my_body(ctx: &ViewContext) -> Vec<Moving> {
 #[spacetimedb::view(accessor = seen_characters, public, primary_key = id)]
 pub fn seen_characters(ctx: &ViewContext) -> Vec<SeenCharacter> {
     projections(ctx)
-        .map(|p| SeenCharacter { id: p.body, name: p.name, label: p.label, kind: p.kind, stage: p.stage, folk: p.folk, style: p.style, own: p.own, band: p.band, hp: p.hp, max_hp: p.max_hp, look: p.look })
+        .map(|p| seen_of(&p))
         .collect()
 }
 
@@ -2063,4 +2107,77 @@ pub fn my_offers(ctx: &ViewContext) -> Vec<MyOffer> {
     let to_me = ctx.db.trade_offer().to().filter(c.id).map(|o| row(o, true));
     let mine = ctx.db.trade_offer().from().filter(c.id).filter(|o| o.to != c.id).map(|o| row(o, false));
     to_me.chain(mine).collect()
+}
+
+
+// ---- battle-views addendum 2: the projections mirrored into `seen_character_copy` ----------
+//
+// `projected` stays the authority's own state; these three are its only writers, and each also
+// writes the viewer's mirror row when that viewer's mirror is whole (`mirrored`). A viewer's mirror
+// is filled whole at its frame once the `characters_table_on` law is on (`fill_mirror`), and every
+// mirror row goes in the one tick that sees the law off (`drop_mirrors`).
+
+/// What `seen_characters` returns for a projected row.
+pub fn seen_of(p: &Projected) -> SeenCharacter {
+    SeenCharacter { id: p.body, name: p.name.clone(), label: p.label.clone(), kind: p.kind.clone(), stage: p.stage, folk: p.folk.clone(), style: p.style.clone(), own: p.own, band: p.band, hp: p.hp, max_hp: p.max_hp, look: p.look.clone() }
+}
+
+/// Whether viewer `who`'s mirror is whole (`copy_state`, written with the fill and the drop, so
+/// a step that rolls back takes it back with them).
+pub fn mirrored(ctx: &ReducerContext, who: Identity) -> bool {
+    crate::frame::copy_state(ctx, who).mirrored
+}
+
+fn mirror_put(ctx: &ReducerContext, p: &Projected) {
+    if !mirrored(ctx, p.viewer) {
+        return;
+    }
+    let row = SeenCharacterCopy { id: p.id, viewer: p.viewer, row: seen_of(p) };
+    if ctx.db.seen_character_copy().id().find(p.id).is_some() {
+        ctx.db.seen_character_copy().id().update(row);
+    } else {
+        ctx.db.seen_character_copy().insert(row);
+    }
+}
+
+/// Insert a projected row (and its mirror row). Returns it with its id.
+pub fn proj_insert(ctx: &ReducerContext, p: Projected) -> Projected {
+    let p = ctx.db.projected().insert(p);
+    mirror_put(ctx, &p);
+    p
+}
+
+/// Update a projected row (and its mirror row).
+pub fn proj_update(ctx: &ReducerContext, p: Projected) {
+    mirror_put(ctx, &p);
+    ctx.db.projected().id().update(p);
+}
+
+/// Delete a projected row (and its mirror row, wherever the viewer's mirror stands).
+pub fn proj_delete(ctx: &ReducerContext, id: u64) {
+    ctx.db.projected().id().delete(id);
+    ctx.db.seen_character_copy().id().delete(id);
+}
+
+/// Fill viewer `who`'s mirror from its projected rows, whole, in this transaction. Returns how many.
+pub fn fill_mirror(ctx: &ReducerContext, who: Identity) -> usize {
+    let rows: Vec<Projected> = ctx.db.projected().viewer().filter(who).collect();
+    for p in &rows {
+        ctx.db.seen_character_copy().id().delete(p.id);
+        ctx.db.seen_character_copy().insert(SeenCharacterCopy { id: p.id, viewer: who, row: seen_of(p) });
+    }
+    crate::frame::set_copy_state(ctx, CopyState { mirrored: true, ..crate::frame::copy_state(ctx, who) });
+    rows.len()
+}
+
+/// The kill switch of the `characters_table_on` law: every mirror row goes in this transaction.
+pub fn drop_mirrors(ctx: &ReducerContext) -> usize {
+    let ids: Vec<u64> = ctx.db.seen_character_copy().iter().map(|r| r.id).collect();
+    for id in &ids {
+        ctx.db.seen_character_copy().id().delete(*id);
+    }
+    for s in ctx.db.copy_state().iter().filter(|s| s.mirrored).collect::<Vec<_>>() {
+        crate::frame::set_copy_state(ctx, CopyState { mirrored: false, ..s });
+    }
+    ids.len()
 }

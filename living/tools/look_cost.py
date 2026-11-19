@@ -56,6 +56,21 @@ def stdb(*args, timeout=600):
     return sh("podman", "exec", "-i", CONTAINER, "spacetime", *args, timeout=timeout)
 
 
+def delete_world(db):
+    """Delete a `verify-lookcost-*` database only after its world reads back paused
+    (`world_delete.py`: SpacetimeDB 2.14.1 can take the whole server down when a ticking world is
+    deleted). Its load's connections should be closed first. Raises when it was not deleted."""
+    if not db.startswith("verify-lookcost-"):
+        raise RuntimeError(f"refusing to delete {db}: not a verify-lookcost- database")
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import world_delete
+    cli = lambda *a: subprocess.run(["podman", "exec", "-i", CONTAINER, "spacetime", *a], capture_output=True, text=True, timeout=600)
+    deleted, why = world_delete.cli_pause_and_delete(cli, db)
+    print(f"delete {db}: {why}", file=sys.stderr, flush=True)
+    if not deleted:
+        raise RuntimeError(f"{db}: {why}")
+
+
 def http(path, body=None, token=None, raw=False):
     data = body.encode() if raw else (json.dumps(body).encode() if body is not None else None)
     req = urllib.request.Request(URL + path, data=data, method="POST" if data is not None or path == "/v1/identity" else "GET")
@@ -209,6 +224,8 @@ def main():
     ap.add_argument("--duel", action="store_true", help="stage the first two players as a stationary duel after warm-up")
     ap.add_argument("--tiers", action="store_true", help="the players subscribe the near and far tier views in place of seen_bodies, seen_fighters, seen_doing (frame-views)")
     ap.add_argument("--cues", action="store_true", help="the players also subscribe the cue event tables (a module with them; frame-views)")
+    ap.add_argument("--character-tables", action="store_true", help="the players subscribe seen_character_copy in place of seen_characters (battle-views; set characters_table_on with --law)")
+    ap.add_argument("--motion-tables", action="store_true", help="the players subscribe seen_body_copy in place of the motion views (battle-views; set the motion_tables_on law with --law)")
     ap.add_argument("--law", action="append", default=[], metavar="NAME=VALUE", help="set a world law after publishing (admin set_world_law), e.g. cue_transport_on=true")
     ap.add_argument("--battle", type=int, default=0, help="the first N players fight in one dense group (radius 9 m round the first cluster's centre) from the window's start; the rest walk")
     ap.add_argument("--fresh-every", type=int, default=0, help="sample every Nth player's motion freshness (gate-load `fresh`; 0: none)")
@@ -242,7 +259,7 @@ def main():
             land = sql(db, "SELECT * FROM land", token)[0]
             site = (land["arrive_x"], land["arrive_y"] - 30.0)
         load = Proc([a.load, "players"], out / "players.stderr")
-        load.send(json.dumps({"uri": URL, "db": db, "events": str(out / "events.jsonl"), "battle": list(site or (0.0, 0.0)), "behaviour": {"walk_period_ms": 1500, "fight_period_ms": 250, "rejoin_s": 3}, "players": players, "client": "gate", "tiers": a.tiers, "cues": a.cues, "fresh_every": a.fresh_every}))
+        load.send(json.dumps({"uri": URL, "db": db, "events": str(out / "events.jsonl"), "battle": list(site or (0.0, 0.0)), "behaviour": {"walk_period_ms": 1500, "fight_period_ms": 250, "rejoin_s": 3}, "players": players, "client": "gate", "tiers": a.tiers, "cues": a.cues, "motion_tables": a.motion_tables, "character_tables": a.character_tables, "fresh_every": a.fresh_every}))
         joined = load.expect("joined", 900)
         ids = [p["id"] for p in sorted(joined["players"], key=lambda p: p["p"])]
         per = -(-a.players // a.groups)
@@ -341,8 +358,8 @@ def main():
     finally:
         if load and load.p.poll() is None:
             load.p.terminate()
-        stdb("delete", "-s", "local", db, "-y") if db.startswith("verify-lookcost-") else None
         (out / "result.json").write_text(json.dumps(res, indent=1) + "\n")
+        delete_world(db)
     print(json.dumps(res, indent=1))
 
 

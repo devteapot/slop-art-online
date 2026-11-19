@@ -653,6 +653,19 @@ pub struct Laws {
     /// frame re-runs one view as before frame-views; with `cue_transport_on` off too, a player's
     /// delivery is main's.
     pub near_tier_on: bool,
+    /// Whether a player's motion copies reach its client as rows of the public `seen_body_copy`
+    /// table, filtered per client by row-level security (battle-views, docs/BATTLE_VIEWERS.md), in
+    /// place of the private copy tables behind the motion views. The views read whichever holds
+    /// a player's copies, so they show the same either way. Off (the kill switch), every public
+    /// copy goes back to the private tables in one tick. A switch for the delivery, not for what is
+    /// perceived.
+    pub motion_tables_on: bool,
+    /// Whether a player's `seen_characters` rows also reach its client as rows of the public
+    /// `seen_character_copy` table, filtered per client by row-level security (battle-views,
+    /// docs/BATTLE_VIEWERS.md, addendum 2): a mirror of its `projected` rows, kept whole per
+    /// viewer. Off (the kill switch), every mirror row goes in one tick. Delivery only: the view
+    /// shows the same either way.
+    pub characters_table_on: bool,
     /// Diagnostic: every alarm answer from a cell is also asked afresh, and a difference logged
     /// and counted (`alarm:differed`).
     pub alarm_cells_check: bool,
@@ -814,6 +827,8 @@ impl Default for Laws {
             alarm_cells: true,
             cue_transport_on: true,
             near_tier_on: true,
+            motion_tables_on: false,
+            characters_table_on: false,
             alarm_cells_check: false,
             status_parts: true,
             status_parts_check: false,
@@ -3159,6 +3174,8 @@ impl Scripts {
             alarm_cells: flag("alarm_cells", l.alarm_cells),
             cue_transport_on: flag("cue_transport_on", l.cue_transport_on),
             near_tier_on: flag("near_tier_on", l.near_tier_on),
+            motion_tables_on: flag("motion_tables_on", l.motion_tables_on),
+            characters_table_on: flag("characters_table_on", l.characters_table_on),
             alarm_cells_check: flag("alarm_cells_check", l.alarm_cells_check),
             status_parts: flag("status_parts", l.status_parts),
             status_parts_check: flag("status_parts_check", l.status_parts_check),
@@ -3409,9 +3426,13 @@ pub enum ValueOnly {
 /// value changes nothing a full install derives beyond what [`Scripts::apply_overrides`] and the
 /// authority refresh for its class. A script that reads one elsewhere makes it an ordinary law
 /// for that world ([`Scripts::value_only`]).
-pub const VALUE_ONLY: [(&str, ValueOnly); 8] = [
+pub const VALUE_ONLY: [(&str, ValueOnly); 10] = [
     ("cue_transport_on", ValueOnly::Delivery),
     ("near_tier_on", ValueOnly::Delivery),
+    // battle-views: where a player's motion copies live (`frame.rs`, `seen_body_copy`).
+    ("motion_tables_on", ValueOnly::Delivery),
+    // battle-views: the mirror of a player's projections (`perception.rs`, `seen_character_copy`).
+    ("characters_table_on", ValueOnly::Delivery),
     ("cover_sight_on", ValueOnly::Cover),
     ("cover_eye_height_m", ValueOnly::Cover),
     ("cover_brush_on", ValueOnly::Cover),
@@ -4319,6 +4340,12 @@ mod tests {
         on.validate().unwrap();
         assert!(on.laws().cue_transport_on && !on.laws().cues_on);
         assert!(shipped.laws().near_tier_on, "the near tier is on by default");
+        assert!(!shipped.laws().motion_tables_on, "the motion tables are off until battle-views' acceptance");
+        assert!(!shipped.laws().characters_table_on, "the characters table is off until battle-views' acceptance");
+        assert!(about["characters_table_on"].contains("what it may look at"), "{about:?}");
+        assert!(about["motion_tables_on"].contains("what it may look at"), "{about:?}");
+        let tables = Scripts::new(&with_world_laws(src, &[("motion_tables_on".into(), serde_json::json!(true))])).unwrap();
+        assert!(tables.laws().motion_tables_on && tables.laws().near_tier_on && tables.laws().cue_transport_on);
         let off = Scripts::new(&with_world_laws(src, &[("near_tier_on".into(), serde_json::json!(false)), ("cue_transport_on".into(), serde_json::json!(false))])).unwrap();
         off.validate().unwrap();
         assert!(!off.laws().near_tier_on && !off.laws().cue_transport_on);

@@ -157,8 +157,12 @@ def main():
                     steps.append({"module": m, "kept_data": i > 0, "panics": panics, "guard_lines": guarded, **s})
                 print(f"chain {n} step {i} {m}: panics {len(panics)}, guard {len(guarded)}, ticking {s['ticking']}, looks {s['looks']}, characters {s['characters']}, timers {s['tick_timer']}/{s['slow_timer']}" + (f"; relook exit {s['relook']['exit']}, looks {s['relook']['after']['looks']}, ticking {s['relook']['after']['ticking']}, panics {len(s['relook']['panics_since'])}" if s.get("relook") else ""), flush=True)
         finally:
-            stdb("call", "-s", "local", db, "set_paused", "true", check=False)
-            stdb("delete", "-s", "local", db, "-y", check=False)
+            # The shared rule (living/tools/world_delete.py): delete only a world read back as paused.
+            sys.path.insert(0, str(Path(__file__).resolve().parents[4] / "living/tools"))
+            import world_delete
+            cli = lambda *a: subprocess.run(["podman", "exec", "-i", CONTAINER, "spacetime", *a], capture_output=True, text=True, timeout=600)
+            deleted, why = world_delete.cli_pause_and_delete(cli, db)
+            print(f"delete {db}: {why}", flush=True)
         report["chains"].append({"chain": mods, "db": db, "steps": steps,
                                  "updates_without_panic": sum(1 for s in steps[1:] if not s["panics"]), "updates": len(steps) - 1})
     (out / "updates.json").write_text(json.dumps(report, indent=1) + "\n")
