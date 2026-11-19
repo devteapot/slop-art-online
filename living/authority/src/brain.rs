@@ -429,11 +429,12 @@ impl<'a> Ev<'a> {
             let by = std::panic::Location::caller();
             common::diag(|| format!("structures@{}", by.line()), 1);
             let r = common::sight_for(self.ctx, self.me.id, &self.w, self.now);
+            // Timed in both arms (the same region, law on or off) for the feed-scope cost gate.
+            let _sight = common::detail_span("sight.structure_brain_list");
             let mut v = common::structures_near(self.ctx, self.at, r);
             // Sight-scoped things are in the scene only when the sight test sees them (scoped
             // worlds): what the graph's targets, conditions and noticing may use.
             if let Some(look) = self.scope_look() {
-                let _sight = common::detail_span("sight.structure_brain_list");
                 let (eye, sc, now) = (look.eye(), common::scripts(self.ctx), self.now);
                 v.retain(|(s, d)| !crate::store::scoped_kind(&s.kind) || eye.sees(&sc, s, *d, false, now));
             }
@@ -2243,7 +2244,8 @@ impl<'a> Ev<'a> {
         let mut other: Vec<(u64, u32, f32, bool)> = Vec::new();
         let mut passed: Vec<(u64, u32)> = Vec::new();
         let mut top = 0u64;
-        let span = sight.as_ref().map(|_| common::detail_span("sight.structure_notice"));
+        // Timed in both arms (the same region, law on or off) for the feed-scope cost gate.
+        let span = common::detail_span("sight.structure_notice");
         let eye = sight.as_ref().map(|l| l.eye());
         common::for_structures_near(ctx, at, r, |s, d| {
             let scoped = eye.is_some() && crate::store::scoped_kind(&s.kind);

@@ -84,6 +84,7 @@ def main():
 
     def stream(name, query, who="--as-player", seconds=4):
         """What the client holds after subscribing (`initial`), and the live inserts, by table."""
+        name = name.replace("_", "-")
         r = run(DRIVE, "--run", rid, "--query", query, who, "--seconds", seconds, "--save", name, check=False)
         lines = [json.loads(x) for x in (out / f"{name}.jsonl").read_text().splitlines()] if (out / f"{name}.jsonl").exists() else []
         initial, live, error = {}, [], None
@@ -149,7 +150,9 @@ def main():
         check(f"SQL: anonymous cannot select {table}", sql(f"SELECT * FROM {table}", None) is None)
     for table in ("structure_held", "thing_seen", "remembered_thing"):
         s = stream(f"feed-ws-{table}", f"SELECT * FROM {table}")
-        check(f"WebSocket: a player's subscription to {table} is refused", s["exit"] != 0 or s["error"], s["error"])
+        # Refused by the server (a rejected subscription in the probe's own record), not by the
+        # driver before connecting.
+        check(f"WebSocket: a player's subscription to {table} is refused", s["exit"] != 0 and bool(s["error"]) and (out / f"feed-ws-{table.replace('_', '-')}.jsonl").exists(), s["error"])
     for table in ("structure", "gate", "resource_node"):
         s = stream(f"feed-ws-legacy-{table}", f"SELECT * FROM {table}")
         check(f"WebSocket: the legacy {table} feed is empty at stage 2", s["exit"] == 0 and not any(s["initial"].values()) and not s["live"], s["initial"])

@@ -773,7 +773,8 @@ fn select_scene_structures(ctx: &ReducerContext, me: &Character, at: (f32, f32),
     // A scoped world's sight-scoped things are in the scene only when the sight test sees them,
     // before any grouping, counting or the ten-slot limit (docs/FEED_SCOPING.md).
     let look = crate::store::sighted(ctx).then(|| crate::scope::Look::from(ctx, common::map(ctx), at, heading, common::senses_of(ctx, me.id, &common::world(ctx), common::now_ms(ctx))));
-    let span = look.as_ref().map(|_| common::detail_span("sight.structure_scene"));
+    // Timed in both arms (the same region, law on or off) for the feed-scope cost gate.
+    let span = common::detail_span("sight.structure_scene");
     let eye = look.as_ref().map(|l| l.eye());
     let (sc, now) = (common::scripts(ctx), common::now_ms(ctx));
     common::for_structures_near(ctx, at, r, |s, dist| {

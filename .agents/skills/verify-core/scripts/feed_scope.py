@@ -45,6 +45,7 @@ def opt(x):
 def main():
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("--run", required=True)
+    p.add_argument("--part", choices=("body", "gate"), default="body", help="body: the brush fixture (--seed cullet); gate: a town's gate (--seed island)")
     a = p.parse_args()
     if not a.run.startswith("core-feed-"):
         p.error("use a core-feed-* run")
@@ -98,6 +99,7 @@ def main():
     # ---- the stages ---------------------------------------------------------------------------
     save("stage 0 before the law", (psql("SELECT * FROM feed_scope", None) or [{"stage": 0}])[0]["stage"] == 0)
     legacy0 = len(s.rows("SELECT id FROM structure"))
+    gates0 = len(s.rows("SELECT id FROM gate"))
     s.call("set_world_law", "feed_scope_grace_s", "1")
     s.call("set_world_law", "feed_scope_on", "true")
     s.wait(lambda: (psql("SELECT * FROM feed_scope", None) or [{}])[0].get("stage") == 1, 15, 0.2)
@@ -106,15 +108,29 @@ def main():
     held = s.rows("SELECT id, kind FROM structure_held", "held")
     save("stage 2: the legacy structure, gate and resource rows are empty, the owner reads the held rows",
          not s.rows("SELECT id FROM structure") and not s.rows("SELECT id FROM gate") and not s.rows("SELECT id FROM resource_node")
-         and len(held) == legacy0 and bool(s.rows("SELECT id FROM gate_held")), {"legacy_before": legacy0, "held": len(held)})
+         and len(held) == legacy0 and len(s.rows("SELECT id FROM gate_held")) == gates0, {"legacy_before": legacy0, "held": len(held), "gates": gates0})
     kinds = {r["kind"] for r in psql("SELECT kind FROM map_structure", None)}
     save("the public map holds allowlisted architecture only", kinds and kinds <= {"shelter", "house", "hall", "workshop", "market", "inn", "smokehouse", "furnace", "gate"}, sorted(kinds))
     save("lots name no door structure at stage 2", all(r["structure"] == 0 for r in psql("SELECT structure FROM lot", None)))
     for table in ("structure_held", "gate_held", "resource_held", "thing_seen", "remembered_thing", "fuel_seen", "lot_door"):
         save(f"a player cannot select {table}", psql(f"SELECT * FROM {table}") is None)
 
-    # ---- a body behind a hedge ----------------------------------------------------------------
     me = psql("SELECT id FROM my_characters")[0]["id"]
+    if a.part == "gate":
+        gate_part(s, save, psql, settle, things, remembered, key, me)
+    else:
+        body_part(s, save, psql, settle, things, remembered, key, me)
+
+    # ---- the law off after stage 2 --------------------------------------------------------------
+    s.call("set_world_law", "feed_scope_on", "false")
+    time.sleep(2.5)
+    save("law off at stage 2 keeps the feeds closed", psql("SELECT * FROM feed_scope", None)[0]["stage"] == 2 and not psql("SELECT id FROM structure", None))
+    (s.out / f"feed-scope-{a.part}-results.json").write_text(json.dumps(s.results, indent=2) + "\n")
+    print(f"{sum(r['passed'] for r in s.results.values())}/{len(s.results)} checks passed", flush=True)
+
+
+def body_part(s, save, psql, settle, things, remembered, key, me):
+    """A body behind a hedge: hidden, seen, remembered (Cullet's brush)."""
     victim, mind = s.people(2)
     s.graph(mind, {"wait": 600})
     s.call("place_at", victim, *HIDDEN)
@@ -150,10 +166,11 @@ def main():
         s.call("set_behavior", mind, json.dumps({"think": marker}))
         row = s.wait(lambda: [r for r in s.rows(f"SELECT reason, scene FROM deliberation WHERE actor = {mind}") if marker in r["reason"]], 70, 0.5)[0]
         sc = json.loads(row["scene"])
-        return [x.get("id") for x in sc.get("structures", [])], sc
+        # A stranger's remains is folded into the counted entry (R2), named ones listed by id.
+        return [x.get("id") if x.get("kind") != "counted_remains" else "counted" for x in sc.get("structures", [])], sc
 
     ids, scene = scene_ids("I finished my plan. Verify feed hidden.")
-    save("hidden: not in the mind's pending scene", remains["id"] not in ids, ids)
+    save("hidden: not in the mind's pending scene, nor counted", remains["id"] not in ids and "counted" not in ids, ids)
     s.graph(mind, {"wait": 600})
 
     s.call("place_at", me, *inside)
@@ -164,7 +181,7 @@ def main():
     s.wait(noticed, 15)
     save("in sight: the mind notices it", bool(noticed()), noticed())
     ids, scene = scene_ids("I finished my plan. Verify feed seen.")
-    save("in sight: in the mind's pending scene", remains["id"] in ids, ids)
+    save("in sight: in the mind's pending scene (listed or counted)", remains["id"] in ids or "counted" in ids, ids)
     s.graph(mind, {"wait": 600})
     save("in sight: both remember it", rk in remembered() and bool(s.rows(f"SELECT id FROM remembered_thing WHERE observer = {mind} AND target = {remains['id']}")))
 
@@ -174,7 +191,10 @@ def main():
     r = remembered().get(rk)
     save("out of sight: remembered as last seen", r is not None and r["kind"] == "remains" and abs(r["x"] - remains["x"]) < 0.01, r)
 
-    # ---- a gate's state -----------------------------------------------------------------------
+
+
+def gate_part(s, save, psql, settle, things, remembered, key, me):
+    """A gate's state is seen only in sight, and remembered as last seen."""
     gates = s.rows("SELECT * FROM gate_held")
     members = {m["member"]: m["community"] for m in s.rows("SELECT * FROM membership")}
     alive = {c["id"] for c in s.rows("SELECT id FROM character WHERE alive = true")}
@@ -193,9 +213,13 @@ def main():
                 break
     save("in sight: the gate's state is in my_things", seen_at is not None and opt(things()[gk]["open"]) is True, seen_at)
     save("in sight: the gate is remembered open", opt(remembered().get(gk, {}).get("open")) is True, remembered().get(gk))
-    s.call("place_at", me, *AWAY)
+    away = None
+    for dx, dy in ((90, 0), (-90, 0), (0, 90), (0, -90), (70, 70), (-70, 70), (70, -70), (-70, -70)):
+        if s.call("place_at", me, centre[0] + dx, centre[1] + dy, check=False).returncode == 0:
+            away = (centre[0] + dx, centre[1] + dy)
+            break
     settle(1.5)
-    save("away: the gate's copy is gone", gk not in things())
+    save("away: the gate's copy is gone", away is not None and gk not in things(), away)
     tile = (gate["x"], gate["y"])
     adj = [(centre[0] + dx, centre[1] + dy) for dx, dy in ((1, 0), (0, 1), (-1, 0), (0, -1))]
     for q in adj:
@@ -207,19 +231,12 @@ def main():
     settle(1.0)
     save("away: shut out of sight, the copy is still absent and the memory still open",
          gk not in things() and opt(remembered().get(gk, {}).get("open")) is True, remembered().get(gk))
-    s.call("place_at", keeper, *AWAY)
+    s.call("place_at", keeper, *away)
     s.call("place_at", me, *seen_at)
     settle(2.0)
     s.wait(lambda: opt(remembered().get(gk, {}).get("open")) is False, 10)
     save("back in sight: the copy and the memory read shut", opt(things().get(gk, {}).get("open")) is False and opt(remembered()[gk]["open"]) is False, things().get(gk))
     s.act(keeper, {"do": "open", "target": {"id": gate["id"]}})
-
-    # ---- the law off after stage 2 --------------------------------------------------------------
-    s.call("set_world_law", "feed_scope_on", "false")
-    time.sleep(2.5)
-    save("law off at stage 2 keeps the feeds closed", psql("SELECT * FROM feed_scope", None)[0]["stage"] == 2 and not psql("SELECT id FROM structure", None))
-    (s.out / "feed-scope-results.json").write_text(json.dumps(s.results, indent=2) + "\n")
-    print(f"{sum(r['passed'] for r in s.results.values())}/{len(s.results)} checks passed", flush=True)
 
 
 if __name__ == "__main__":

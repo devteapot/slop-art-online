@@ -326,8 +326,41 @@ impl Client {
     }
 }
 
+/// Which public-feed set the game players subscribe (`feed` in the request,
+/// docs/FEED_SCOPING.md): absent, as before; `legacy`, the game client's current set with the
+/// subscriptions added since BASE (whole `gate`, `structure` and `resource_node` windows); `scoped`,
+/// the client contract at stage >= 1 (no `gate`, `map_structure` and `map_resource` windows, the
+/// sender-scoped `my_things`, `my_remembered_things`, `my_owners`, `my_stock`, `my_fuel_seen`).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Feed {
+    Unset,
+    Legacy,
+    Scoped,
+}
+
+impl Feed {
+    fn from(v: &Value) -> Self {
+        match v.as_str() {
+            None => Feed::Unset,
+            Some("legacy") => Feed::Legacy,
+            Some("scoped") => Feed::Scoped,
+            Some(f) => panic!("feed {f:?}: legacy or scoped"),
+        }
+    }
+
+    fn extra(self) -> Vec<String> {
+        let common = ["cover_law", "feed_scope", "my_offers", "my_known_names", "my_earshot", "speech_card", "my_records", "heard_sounds", "my_senses", "my_act_outcomes"];
+        let own: &[&str] = match self {
+            Feed::Unset => return Vec::new(),
+            Feed::Legacy => &["gate"],
+            Feed::Scoped => &["my_things", "my_remembered_things", "my_owners", "my_stock", "my_fuel_seen"],
+        };
+        common.iter().chain(own).map(|t| format!("SELECT * FROM {t}")).collect()
+    }
+}
+
 /// The static windows the game client keeps round where it stands (living/game/src/net.rs).
-fn windows(x: f32, y: f32, size: u32, client: Client) -> Vec<String> {
+fn windows(x: f32, y: f32, size: u32, client: Client, feed: Feed) -> Vec<String> {
     let n = (size as f32 / CHUNK) as i32;
     let (cx, cy) = (((x / CHUNK).floor() as i32).clamp(0, n - 1), ((y / CHUNK).floor() as i32).clamp(0, n - 1));
     let span = |c: i32, r: i32| ((c - r).max(0) as u32, (c + r).min(n - 1) as u32);
@@ -337,8 +370,9 @@ fn windows(x: f32, y: f32, size: u32, client: Client) -> Vec<String> {
         format!("SELECT * FROM lot WHERE {}", chunk_ranges("chunk", span(cx, LOT_CHUNKS), span(cy, LOT_CHUNKS))),
     ];
     if client == Client::Game {
-        q.push(format!("SELECT * FROM resource_node WHERE {}", chunk_ranges("chunk", xs, ys)));
-        q.push(format!("SELECT * FROM structure WHERE {}", chunk_ranges("chunk", xs, ys)));
+        let (res, st) = if feed == Feed::Scoped { ("map_resource", "map_structure") } else { ("resource_node", "structure") };
+        q.push(format!("SELECT * FROM {res} WHERE {}", chunk_ranges("chunk", xs, ys)));
+        q.push(format!("SELECT * FROM {st} WHERE {}", chunk_ranges("chunk", xs, ys)));
     }
     q
 }
@@ -792,6 +826,7 @@ fn players_mode() {
     let cues = req["cues"].as_bool().unwrap_or(false);
     let tiers = req["tiers"].as_bool().unwrap_or(false);
     let fresh_every = req["fresh_every"].as_u64().unwrap_or(0) as usize;
+    let feed = Feed::from(&req["feed"]);
     let started = Instant::now();
     let mut players = Vec::new();
     for (idx, p) in req["players"].as_array().unwrap().iter().enumerate() {
@@ -818,6 +853,7 @@ fn players_mode() {
         if cues {
             queries.extend(["seen_body_cue", "seen_fighter_cue", "seen_doing_cue"].map(|t| format!("SELECT * FROM {t}")));
         }
+        queries.extend(feed.extra());
         subscribe(&pl, queries);
         players.push(pl);
     }
@@ -850,7 +886,7 @@ fn players_mode() {
             assert!(t.elapsed() < Duration::from_secs(60), "no body for player {}", p.idx);
             std::thread::sleep(Duration::from_millis(10));
         };
-        subscribe(p, windows(at.0, at.1, size, client));
+        subscribe(p, windows(at.0, at.1, size, client, feed));
     }
     wait_applied(&players, 2, "windows", Duration::from_secs(180));
     let cards: HashMap<String, Card> = players[0].conn.db.skill_card().iter().map(|c| (c.skill.clone(), Card { cost: c.cost, reach: c.reach, hold_ms: (c.windup_ms + c.recover_ms) as u64 })).collect();
@@ -1065,6 +1101,30 @@ fn relay_mode(args: &[String]) {
         }
     }
     snapshot(&mut file);
+}
+
+/// A fresh SDK connection with a retained player identity: the time to the applied first result of
+/// the arm's feed queries (`queries` in the request), and the rows it brought (docs/FEED_SCOPING.md).
+fn feed_snapshot() {
+    let lines = stdin_lines();
+    let req: Value = serde_json::from_str(&lines.recv().expect("request line")).expect("request JSON");
+    let queries: Vec<String> = req["queries"].as_array().expect("queries").iter().map(|q| q.as_str().unwrap().to_string()).collect();
+    let start = Instant::now();
+    let (conn, _) = connect(req["uri"].as_str().unwrap(), req["db"].as_str().unwrap(), req["token"].as_str().unwrap(), Client::Game.confirmed());
+    let (sent, applied) = std::sync::mpsc::channel();
+    let errors = sent.clone();
+    conn.subscription_builder()
+        .on_applied(move |ctx| {
+            let rows = ctx.db.my_things().count() + ctx.db.my_remembered_things().count() + ctx.db.structure().count() + ctx.db.gate().count() + ctx.db.map_structure().count();
+            let _ = sent.send(Ok((start.elapsed().as_secs_f64() * 1000.0, rows)));
+        })
+        .on_error(move |_, error| {
+            let _ = errors.send(Err(error.to_string()));
+        })
+        .subscribe(queries);
+    let (ms, rows) = applied.recv_timeout(Duration::from_secs(30)).expect("feed snapshot").expect("feed subscription");
+    println!("{}", json!({"ms": ms, "rows": rows}));
+    let _ = conn.disconnect();
 }
 
 // ---- watch -----------------------------------------------------------------------------------
@@ -1340,6 +1400,7 @@ fn main() {
         Some("players") => players_mode(),
         Some("relay") => relay_mode(&args[2..]),
         Some("watch") => watch_mode(),
+        Some("feed-snapshot") => feed_snapshot(),
         Some("observe") => observe_mode(),
         Some("mind") => mind_mode(),
         Some("soak") => soak::run(),
