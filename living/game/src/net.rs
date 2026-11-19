@@ -49,7 +49,7 @@ use spacetimedb_sdk::{DbContext, EventTable, Identity, SubscriptionHandle as _, 
 use std::collections::HashMap;
 use std::ops::Deref;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 /// Half-size (tiles) of the square of chunks kept subscribed around the player (tile worlds).
@@ -267,12 +267,23 @@ struct Cues {
     motion: Overlay<Moving>,
     fighter: Overlay<Option<Fighter>>,
     doing: Overlay<Option<Doing>>,
+    /// The world's `cue_transport_on` law, as the installed `skills` script last compiled here
+    /// says (`cue_law`); unknown until then, when cues are taken (the authority writes none
+    /// while the law is off). Off: overlays are cleared and no cue is taken.
+    off: AtomicBool,
 }
 
 /// The player's SDK connection and its transient cue state. Each reconnect gets fresh overlays.
 pub struct PlayerConnection {
     sdk: DbConnection,
     cues: Arc<Cues>,
+}
+
+impl PlayerConnection {
+    /// How many creatures each overlay holds (motion, fighter, doing), for the live report.
+    pub fn cue_counts(&self) -> (usize, usize, usize) {
+        self.cues.counts()
+    }
 }
 
 impl Deref for PlayerConnection {
@@ -369,6 +380,23 @@ impl Cues {
         )
     }
 
+    fn clear(&self) {
+        self.motion.lock().unwrap().clear();
+        self.fighter.lock().unwrap().clear();
+        self.doing.lock().unwrap().clear();
+    }
+
+    /// The `cue_transport_on` law's value: turning off clears every overlay, since a creature's
+    /// last cue would otherwise be shown until its next tier row (docs/TICK_RATE.md).
+    fn set_transport(&self, on: bool) {
+        if !on && !self.off.swap(true, Ordering::Relaxed) {
+            debug!("cue_transport_on off: clearing cue overlays (motion, fighter, doing): {:?}", self.counts());
+            self.clear();
+        } else if on {
+            self.off.store(false, Ordering::Relaxed);
+        }
+    }
+
     fn listen(self: &Arc<Self>, conn: &DbConnection, latest: &Arc<AtomicU64>, latest_all: &Arc<AtomicU64>) {
         let near = motion::near(&conn.db);
         let far = motion::far(&conn.db);
@@ -386,8 +414,12 @@ impl Cues {
         let cues = self.clone();
         far.on_delete(move |ctx, row| cues.forget_hidden(&ctx.db, row.id));
 
-        let (motion, latest, latest_all) = (self.motion.clone(), latest.clone(), latest_all.clone());
+        let (cues, latest, latest_all) = (self.clone(), latest.clone(), latest_all.clone());
         motion::cue(&conn.db).on_insert(move |ctx, cue| {
+            if cues.off.load(Ordering::Relaxed) {
+                return;
+            }
+            let motion = &cues.motion;
             let (id, row) = motion::cue_value(cue);
             let Some(tier) = motion_tier(&ctx.db, id) else { return };
             let mut motion = motion.lock().unwrap();
@@ -400,19 +432,21 @@ impl Cues {
             trace!(id, "accepted motion cue");
         });
 
-        let fighter = self.fighter.clone();
+        let cues = self.clone();
         fighting::cue(&conn.db).on_insert(move |ctx, cue| {
             let (id, row) = fighting::cue_value(cue);
-            if motion_tier(&ctx.db, id).is_some() {
-                fighter.lock().unwrap().insert(id, row.clone());
+            if !cues.off.load(Ordering::Relaxed) && motion_tier(&ctx.db, id).is_some() {
+                cues.fighter.lock().unwrap().insert(id, row.clone());
+                trace!(id, "accepted fighter cue");
             }
         });
 
-        let doing = self.doing.clone();
+        let cues = self.clone();
         activity::cue(&conn.db).on_insert(move |ctx, cue| {
             let (id, row) = activity::cue_value(cue);
-            if motion_tier(&ctx.db, id).is_some() {
-                doing.lock().unwrap().insert(id, row.clone());
+            if !cues.off.load(Ordering::Relaxed) && motion_tier(&ctx.db, id).is_some() {
+                cues.doing.lock().unwrap().insert(id, row.clone());
+                trace!(id, "accepted doing cue");
             }
         });
     }
@@ -442,6 +476,24 @@ fn track_motion_time(
             latest.fetch_max(new.t_ms, Ordering::Relaxed);
         }
     });
+}
+
+/// The world's `cue_transport_on` law, read from the installed `skills` script the client
+/// already compiles (`verbs::Rules`; the authority writes a world's own law values into it), once
+/// per revision; each frame it is passed to the connection's overlays, so a fresh connection
+/// takes it at once. A script that does not compile here leaves the last value.
+pub fn cue_law(net: NonSend<Net>, rules: Option<NonSend<crate::verbs::Rules>>, mut law: Local<Option<(u32, bool)>>) {
+    let Some(rules) = rules else { return };
+    if let Some(sc) = rules.scripts.as_ref() {
+        if law.is_none_or(|(rev, _)| rev != rules.revision) {
+            let on = sc.laws().cue_transport_on;
+            info!("rules: cue_transport_on {on} (script revision {})", rules.revision);
+            *law = Some((rules.revision, on));
+        }
+    }
+    if let (Some(conn), Some((_, on))) = (net.conn.as_ref(), *law) {
+        conn.cues.set_transport(on);
+    }
 }
 
 /// A perceived body as the drawing code takes it: its motion row (which carries
@@ -848,4 +900,29 @@ pub fn pump(mut net: NonSendMut<Net>, time: Res<Time>) {
         net.connect();
     }
     net.maintain();
+}
+
+#[cfg(test)]
+mod cue_tests {
+    use super::*;
+
+    fn moving(id: u32) -> Moving {
+        Moving { id, x: 0.0, y: 0.0, t_ms: 1, vx: 0.0, vy: 0.0, heading: 0.0, turn: 0.0, turn_s: 0.0, next_ms: 0, speed: 0.0, face_off: 0.0, face_turn: 0.0, face_turn_s: 0.0, running: false }
+    }
+
+    #[test]
+    fn cue_transport_off_clears_every_overlay_and_on_takes_cues_again() {
+        let cues = Cues::default();
+        assert!(!cues.off.load(Ordering::Relaxed), "cues are taken until the law is known");
+        cues.motion.lock().unwrap().insert(7, moving(7));
+        cues.fighter.lock().unwrap().insert(7, None);
+        cues.doing.lock().unwrap().insert(8, None);
+        cues.set_transport(true);
+        assert_eq!(cues.counts(), (1, 1, 1), "on keeps what is shown");
+        cues.set_transport(false);
+        assert_eq!(cues.counts(), (0, 0, 0), "off clears all");
+        assert!(cues.off.load(Ordering::Relaxed));
+        cues.set_transport(true);
+        assert!(!cues.off.load(Ordering::Relaxed), "on again takes cues");
+    }
 }

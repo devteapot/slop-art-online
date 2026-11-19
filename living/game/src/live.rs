@@ -1173,7 +1173,7 @@ fn report(net: NonSend<Net>, live: Res<Live>, time: Res<Time>, mut next: Local<f
             .sum()
     });
     info!(
-        "live: cache body {} character {} doing {} act_card {} weather {} lot {} terrain_chunk {} ({} tiles edited) settlement {} experience {}; drawn {} characters, {} lots; window moves {}; digests {}",
+        "live: cache body {} character {} doing {} act_card {} weather {} lot {} terrain_chunk {} ({} tiles edited) settlement {} experience {}; drawn {} characters, {} lots; window moves {}; digests {}; cue overlays {:?}",
         conn.db.my_body().count() + crate::net::motion::near(&conn.db).count() + crate::net::motion::far(&conn.db).count(),
         conn.db.seen_characters().count(),
         conn.db.my_doing().count() + crate::net::activity::near(&conn.db).count() + crate::net::activity::far(&conn.db).count(),
@@ -1191,7 +1191,8 @@ fn report(net: NonSend<Net>, live: Res<Live>, time: Res<Time>, mut next: Local<f
             Some(true) => "match",
             Some(false) => "DIFFER",
             None => "pending",
-        }
+        },
+        conn.cue_counts()
     );
 }
 
