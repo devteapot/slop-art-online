@@ -727,7 +727,9 @@ struct SceneStructureCache {
     stamp: i64,
     structures: u64,
     names: u64,
-    by_observer: std::collections::HashMap<u32, ((f32, f32), f32, std::rc::Rc<SceneStructures>)>,
+    /// By observer: its place, radius, facing and the gate revision it was selected at (a scoped
+    /// world's sight test reads facing and gates), and the selection.
+    by_observer: std::collections::HashMap<u32, ((f32, f32), f32, f32, u64, std::rc::Rc<SceneStructures>)>,
 }
 
 thread_local! {
@@ -736,10 +738,11 @@ thread_local! {
 
 /// Repeated requests at the same position and radius in one transaction share the exact
 /// selection. The renderer still reads live contents and fire state for the selected IDs.
-fn scene_structures(ctx: &ReducerContext, me: &Character, at: (f32, f32), r: f32) -> std::rc::Rc<SceneStructures> {
+fn scene_structures(ctx: &ReducerContext, me: &Character, at: (f32, f32), heading: f32, r: f32) -> std::rc::Rc<SceneStructures> {
     let Some(names) = crate::perception::answers_generation() else {
-        return std::rc::Rc::new(select_scene_structures(ctx, me, at, r));
+        return std::rc::Rc::new(select_scene_structures(ctx, me, at, heading, r));
     };
+    let gates = common::gate_revision();
     SCENE_STRUCTURES.with(|cache| {
         let mut cache = cache.borrow_mut();
         let stamp = common::stamp(ctx);
@@ -748,26 +751,35 @@ fn scene_structures(ctx: &ReducerContext, me: &Character, at: (f32, f32), r: f32
             cache.by_observer.clear();
             (cache.stamp, cache.structures, cache.names) = (stamp, structures, names);
         }
-        if let Some((position, radius, selection)) = cache.by_observer.get(&me.id) {
-            if (*position, *radius) == (at, r) {
+        if let Some((position, radius, facing, gate_rev, selection)) = cache.by_observer.get(&me.id) {
+            if (*position, *radius, *facing, *gate_rev) == (at, r, heading, gates) {
                 common::diag(|| "scene.structures:hit", 1);
                 return selection.clone();
             }
         }
         common::diag(|| "scene.structures:miss", 1);
-        let selection = std::rc::Rc::new(select_scene_structures(ctx, me, at, r));
-        cache.by_observer.insert(me.id, (at, r, selection.clone()));
+        let selection = std::rc::Rc::new(select_scene_structures(ctx, me, at, heading, r));
+        cache.by_observer.insert(me.id, (at, r, heading, gates, selection.clone()));
         selection
     })
 }
 
-fn select_scene_structures(ctx: &ReducerContext, me: &Character, at: (f32, f32), r: f32) -> SceneStructures {
+fn select_scene_structures(ctx: &ReducerContext, me: &Character, at: (f32, f32), heading: f32, r: f32) -> SceneStructures {
     let mut individual = Vec::<(Structure, f32, bool)>::with_capacity(STRUCTURE_LIMIT);
     let mut known = None;
     // Group in the same stable distance order as the individual structure list.
     let mut groups = Vec::<(std::rc::Rc<str>, usize, (f32, f32), f32, usize)>::new();
     let mut ordinal = 0;
+    // A scoped world's sight-scoped things are in the scene only when the sight test sees them,
+    // before any grouping, counting or the ten-slot limit (docs/FEED_SCOPING.md).
+    let look = crate::store::sighted(ctx).then(|| crate::scope::Look::from(ctx, common::map(ctx), at, heading, common::senses_of(ctx, me.id, &common::world(ctx), common::now_ms(ctx))));
+    let span = look.as_ref().map(|_| common::detail_span("sight.structure_scene"));
+    let eye = look.as_ref().map(|l| l.eye());
+    let (sc, now) = (common::scripts(ctx), common::now_ms(ctx));
     common::for_structures_near(ctx, at, r, |s, dist| {
+        if eye.as_ref().is_some_and(|e| crate::store::scoped_kind(&s.kind) && !e.sees(&sc, s, dist, false, now)) {
+            return;
+        }
         ordinal += 1;
         let mut named = false;
         if s.kind == "remains" {
@@ -794,6 +806,7 @@ fn select_scene_structures(ctx: &ReducerContext, me: &Character, at: (f32, f32),
             individual.insert(index, (s.clone(), dist, named));
         }
     });
+    drop(span);
     if !groups.is_empty() {
         individual.truncate(STRUCTURE_LIMIT - 1);
     }
@@ -1088,7 +1101,8 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
     }
     let resources: Vec<Value> = groups.into_iter().map(|(k, n, near)| json!({"kind": k, "count": n, "nearest": near})).collect();
 
-    let selection = scene_structures(ctx, &me, at, r);
+    let selection = scene_structures(ctx, &me, at, common::facing_at(&b, now), r);
+    let scoped = crate::store::sighted(ctx);
     let mut structures = Vec::with_capacity(STRUCTURE_LIMIT);
     for (s, d, named) in &selection.individual {
         let d = *d;
@@ -1113,7 +1127,17 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
         let t = sc.structure(&s.kind);
         if let Some(b) = &t.burns {
             let (lit, fuel) = crate::act::fire_state(ctx, &s, now);
-            o["state"] = json!(if lit { format!("burning, about {:.0} hours of {} left on it", (fuel / b.rate).max(0.5), b.fuel) } else { "out".to_string() });
+            if scoped {
+                // Lit or out is what a look shows; the fuel left only what one found by
+                // looking it over (`inspect`), as of then.
+                o["state"] = json!(if lit { "burning" } else { "out" });
+                if let Some(f) = ctx.db.fuel_seen().by_observer_target().filter((id, s.id)).next() {
+                    let w = common::world(ctx);
+                    o["fuel"] = json!(format!("about {} hours of {} left on it when you looked it over, {}", crate::scope::fuel_words(f.left), b.fuel, living_rules::day_clock(f.seen_ms, w.epoch_ms, w.day_ms)));
+                }
+            } else {
+                o["state"] = json!(if lit { format!("burning, about {:.0} hours of {} left on it", (fuel / b.rate).max(0.5), b.fuel) } else { "out".to_string() });
+            }
         } else if t.fire() {
             o["state"] = json!("burning");
         }
@@ -1124,7 +1148,7 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
             }
         }
         if s.kind == "gate" {
-            if let Some(g) = ctx.db.gate().id().find(s.id) {
+            if let Some(g) = crate::store::gate(ctx, s.id) {
                 o["state"] = json!(if g.open { "open" } else { "shut" });
                 if let Some(c) = ctx.db.community().id().find(g.community) {
                     o["kept_by"] = json!(c.name);

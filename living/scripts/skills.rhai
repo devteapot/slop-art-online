@@ -90,6 +90,11 @@ fn laws() {
         cover_eye_height_m: 1.6,
         gaze_on: false,
         cover_sight_on: false,
+        // Public-feed scoping (docs/FEED_SCOPING.md): small mutable things reach a player only
+        // through what its character sees; noticing and mind scenes use the same test. Off; the
+        // cutover closes the legacy feeds `feed_scope_grace_s` seconds after it begins.
+        feed_scope_on: false,
+        feed_scope_grace_s: 10.0,
         // Known ground (docs/MOVEMENT_MIND.md): how far ground is seen by day, metres (at night,
         // one's own sight); the most 4 m cells one look marks (0: no cap; the rest come with
         // later looks); whether walks are planned over what each walker has seen instead of the
@@ -1845,6 +1850,8 @@ fn wave_ui() { #{ look: #{ icon: "wave" } } }
 fn nod_ui() { #{ look: #{ icon: "wave" } } }
 // A workplace's wheel (Cullet's fuel fires): feeding (making's look is with its grid above).
 fn feed_ui() { #{ look: #{ icon: "fire" } } }
+// Looking a fire over for the fuel left on it (a fire's wheel, beside feeding).
+fn inspect_ui() { #{ label: "Look over", on: ["thing"], look: #{ icon: "eye" } } }
 // Which places get a wheel, and its layout (docs/INTERFACE.md §8): hold F on a target, move
 // toward a section, let go. A person's social acts are pinned, so a direction learned once keeps
 // working (a refused one greys in place); anything else the rules offer is behind More. Any
@@ -2693,6 +2700,10 @@ fn rework_spec() {
 
 fn wave_spec() { #{ target: true, on_the_move: true, reach: 12.0, about: "Wave to someone you can see: a greeting, a farewell or an answer to one. They see it and may answer.", takes: "someone in sight within 12 tiles, 1.2 s", gives: "they see you wave at them" } }
 fn nod_spec() { #{ target: true, on_the_move: true, reach: 6.0, about: "Nod to someone near you: a quiet greeting or a yes. They see it and may answer.", takes: "someone within 6 tiles, 0.7 s", gives: "they see you nod at them" } }
+// Looking a fire over (docs/FEED_SCOPING.md): seeing a fire shows only whether it burns; how much
+// fuel is left on it is found by looking it over close, and remembered as of then (its scene
+// says so, a player's client shows it from `my_fuel_seen`). The same for every controller.
+fn inspect_spec() { #{ target: true, target_class: "structure", reach: 2.0, listed: having("structures", "burns").len() > 0, about: "Look a fire that burns fuel (a hearth, an oven, a furnace, a lamp) over closely: how much fuel is left on it.", takes: "a fire that burns fuel within 2 tiles, 1 s", gives: "how many hours of fuel it has left, remembered as of now" } }
 fn appraise_spec() { #{ target: true, target_class: "creature", reach: 6.0, about: "Look someone (a person or an animal) over closely: for a while you see exactly how hurt they are.", takes: "someone within 6 tiles, 1.5 s", gives: "for 20 s you see exactly how hurt they are" } }
 fn face_spec() { #{ target: true, reach: 15.0, about: "Turn where you stand to face someone or something you can see (a person coming up to you or speaking, a fight, a sound).", takes: "something or someone in sight", gives: "you turn to face it" } }
 fn step_aside_spec() { #{ target: true, reach: 3.0, about: "Step a pace aside to let someone coming toward you pass, in a narrow street or a doorway.", takes: "someone coming at you where there is little room", gives: "a pace to the side, out of their way" } }
@@ -2728,6 +2739,15 @@ fn appraise_check(a) {
     ""
 }
 fn appraise_duration(a) { 1500 }
+fn inspect_check(a) {
+    if a.target.class != "structure" { return "look over a fire that burns fuel"; }
+    if burns_of(a.target.kind) == () { return `the ${a.target.kind} burns no fuel`; }
+    if a.actor.activity == "sleep" { return "you are asleep"; }
+    if a.target.dist > 2.0 { return "too far to look it over"; }
+    ""
+}
+fn inspect_duration(a) { 1000 }
+fn inspect_done(a) { [#{ op: "inspect" }] }
 fn appraise_done(a) { [#{ op: "reveal", what: "health", secs: 20.0 }] }
 fn nod_check(a) { gesture_check(a, 6.0) }
 fn nod_duration(a) { 700 }
@@ -2770,6 +2790,7 @@ fn play_done(a) { [#{ op: "vitals", energy: -0.5 }] }
 fn wave_shows() { #{ look: "gesture", faces: true, record: true } }
 fn nod_shows() { #{ look: "gesture", faces: true, record: true } }
 fn appraise_shows() { #{ look: "gesture", faces: true, record: true } }
+fn inspect_shows() { #{ look: "gesture", faces: true } }
 fn face_shows() { #{ look: "turn", faces: true, turn: true, record: true } }
 fn step_aside_shows() { #{ look: "step", aside: true, record: true } }
 fn play_shows() { #{ look: "play" } }
@@ -3194,6 +3215,8 @@ fn law_about(l, name) {
         "alert_while_attacker_near" => if l.alert_while_attacker_near { "nor while the one who struck it is close and the fight is on" } else { "even with the one who struck it close by" },
         "gaze_on" => "whether creatures can change their gaze band",
         "cover_sight_on" => "whether cover hides people",
+        "feed_scope_on" => if l.feed_scope_on { "small things, fires and gates are known only as far as one sees them" } else { "small things, fires and gates are shown to every player's client" },
+        "feed_scope_grace_s" => `clients have ${short(l.feed_scope_grace_s)} s to switch before the open feeds close`,
         "cover_eye_height_m" => "the standing eye height in metres",
         "cover_brush_on" => "whether dense brush hides people",
         "cover_brush_min_fill" => "minimum fill for brush concealment",

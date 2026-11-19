@@ -236,7 +236,8 @@ fn the_three_looks_by_name_are_declared_not_coded() {
     let mut declared: Vec<&str> = s.ui_specs().filter(|u| u.declared).map(|u| u.name.as_str()).collect();
     declared.sort();
     // and the recipe grids of the ways of making (recipes-1): craft, cook, smoke, make.
-    assert_eq!(declared, ["accept", "appraise", "block", "bowshot", "cook", "craft", "decline", "dodge", "face", "feed", "firebolt", "give", "heal", "jump", "make", "nod", "offer", "shoot", "smoke", "strike", "teach", "throw", "wave"], "the shipped script declares these");
+    // inspect (feed-scope): looking a fire over for its fuel, a thing's act.
+    assert_eq!(declared, ["accept", "appraise", "block", "bowshot", "cook", "craft", "decline", "dodge", "face", "feed", "firebolt", "give", "heal", "inspect", "jump", "make", "nod", "offer", "shoot", "smoke", "strike", "teach", "throw", "wave"], "the shipped script declares these");
     // Face is in no list of a player's (play-test 5): a player faces where it looks, as the tip says.
     let face = s.ui("face").unwrap();
     assert!(face.on.is_empty() && face.tip.is_some() && !s.ui_default("face").unwrap().on.is_empty(), "{face:?}");

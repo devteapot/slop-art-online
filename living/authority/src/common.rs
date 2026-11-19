@@ -430,9 +430,8 @@ thread_local! {
 
 /// Closed gates block like walls.
 fn gate_blocks(ctx: &ReducerContext, w: u32, h: u32) -> std::collections::HashSet<u32> {
-    ctx.db
-        .gate()
-        .iter()
+    crate::store::all_gates(ctx)
+        .into_iter()
         .filter(|g| !g.open && g.x >= 0 && g.y >= 0 && (g.x as u32) < w && (g.y as u32) < h)
         .map(|g| g.y as u32 * w + g.x as u32)
         .collect()
@@ -560,6 +559,16 @@ pub fn invalidate_map() {
 /// terrain.
 pub fn invalidate_gates(ctx: &ReducerContext) {
     GATES_CHANGED.with(|g| g.set(stamp(ctx)));
+    GATE_REVISION.with(|r| r.set(r.get().wrapping_add(1)));
+}
+
+thread_local! {
+    static GATE_REVISION: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+
+/// Bumped by every gate opened or shut (a cache key part for what sight sees).
+pub fn gate_revision() -> u64 {
+    GATE_REVISION.with(std::cell::Cell::get)
 }
 
 /// Change one terrain tile (a road laid, a wall built) and persist its chunk row.
@@ -1048,7 +1057,7 @@ pub fn stock_of(ctx: &ReducerContext, r: &ResourceNode) -> ResourceNode {
     if r.pool == 0 || r.pool == r.id {
         return r.clone();
     }
-    ctx.db.resource_node().id().find(r.pool).unwrap_or_else(|| r.clone())
+    crate::store::resource(ctx, r.pool).unwrap_or_else(|| r.clone())
 }
 
 /// A node's amount now: what it held at `at_ms` and its regrowth since, at its kind's share of
@@ -1461,14 +1470,14 @@ pub fn invalidate_traits(ctx: &ReducerContext, id: u32) {
     TRAITS.with(|c| c.borrow_mut().invalidate(t, Some(id)));
 }
 
-fn chunk_resources(ctx: &ReducerContext, chunk: u32) -> Rc<Vec<ResourceNode>> {
+pub(crate) fn chunk_resources(ctx: &ReducerContext, chunk: u32) -> Rc<Vec<ResourceNode>> {
     let t = stamp(ctx);
-    CHUNK_RESOURCES.with(|c| c.borrow_mut().get(t, chunk, || Rc::new(ctx.db.resource_node().chunk().filter(chunk).collect())))
+    CHUNK_RESOURCES.with(|c| c.borrow_mut().get(t, chunk, || Rc::new(crate::store::resources_in(ctx, chunk).into_iter().collect())))
 }
 
 pub(crate) fn chunk_structures(ctx: &ReducerContext, chunk: u32) -> Rc<Vec<Structure>> {
     let t = stamp(ctx);
-    CHUNK_STRUCTURES.with(|c| c.borrow_mut().get(t, chunk, || Rc::new(ctx.db.structure().chunk().filter(chunk).collect())))
+    CHUNK_STRUCTURES.with(|c| c.borrow_mut().get(t, chunk, || Rc::new(crate::store::structures_in(ctx, chunk).into_iter().collect())))
 }
 
 thread_local! {
@@ -1826,5 +1835,5 @@ pub fn trap_catch(ctx: &ReducerContext, s: &Structure, now: u64) {
     }
     let mut t = s.clone();
     t.built_ms += n * every;
-    ctx.db.structure().id().update(t);
+    crate::store::update_structure(ctx, t);
 }

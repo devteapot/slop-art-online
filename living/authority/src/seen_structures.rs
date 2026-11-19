@@ -1,14 +1,16 @@
 //! Durable structure recognition. A look reads each block once and flushes its changes together.
 
-use crate::tables::{seen_structures, SeenStructures};
+use crate::tables::{seen_structures, seen_structures_scoped, SeenStructures};
 use living_rules::{known, map};
 use spacetimedb::{ReducerContext, Table};
 use std::collections::BTreeMap;
 
 const COMPACT_AFTER: usize = 64;
 
+/// Blocks by (scoped, block): a scoped world's sight-scoped kinds keep their ranges in
+/// `seen_structures_scoped` (docs/FEED_SCOPING.md), everything else in `seen_structures`.
 #[derive(Default)]
-pub(crate) struct Look(BTreeMap<u32, Block>);
+pub(crate) struct Look(BTreeMap<(bool, u32), Block>);
 
 struct Block {
     row: SeenStructures,
@@ -16,14 +18,13 @@ struct Block {
 }
 
 impl Look {
-    fn block(&mut self, ctx: &ReducerContext, actor: u32, block: u32) -> &mut Block {
-        self.0.entry(block).or_insert_with(|| Block {
-            row: ctx
-                .db
-                .seen_structures()
-                .by_actor_block()
-                .filter((actor, block))
-                .next()
+    fn block(&mut self, ctx: &ReducerContext, actor: u32, block: u32, scoped: bool) -> &mut Block {
+        self.0.entry((scoped, block)).or_insert_with(|| Block {
+            row: if scoped {
+                ctx.db.seen_structures_scoped().by_actor_block().filter((actor, block)).next()
+            } else {
+                ctx.db.seen_structures().by_actor_block().filter((actor, block)).next()
+            }
                 .unwrap_or_else(|| SeenStructures {
                     id: 0,
                     actor,
@@ -34,21 +35,21 @@ impl Look {
         })
     }
 
-    pub(crate) fn seen(&mut self, ctx: &ReducerContext, actor: u32, chunk: u32, id: u64) -> bool {
+    pub(crate) fn seen(&mut self, ctx: &ReducerContext, actor: u32, chunk: u32, id: u64, scoped: bool) -> bool {
         contains(
-            &self.block(ctx, actor, known::block_of(chunk).0).row.ranges,
+            &self.block(ctx, actor, known::block_of(chunk).0, scoped).row.ranges,
             id,
         )
     }
 
-    pub(crate) fn add(&mut self, ctx: &ReducerContext, actor: u32, chunk: u32, id: u64) {
-        self.block(ctx, actor, known::block_of(chunk).0)
+    pub(crate) fn add(&mut self, ctx: &ReducerContext, actor: u32, chunk: u32, id: u64, scoped: bool) {
+        self.block(ctx, actor, known::block_of(chunk).0, scoped)
             .added
             .push(id);
     }
 
     pub(crate) fn write(self, ctx: &ReducerContext) {
-        for (_, Block { mut row, added }) in self.0 {
+        for ((scoped, _), Block { mut row, added }) in self.0 {
             if added.is_empty() {
                 continue;
             }
@@ -65,10 +66,19 @@ impl Look {
                 }
                 row.ranges = compact(&row.ranges, live);
             }
-            if row.id == 0 {
-                ctx.db.seen_structures().insert(row);
-            } else {
-                ctx.db.seen_structures().id().update(row);
+            match (scoped, row.id == 0) {
+                (false, true) => {
+                    ctx.db.seen_structures().insert(row);
+                }
+                (false, false) => {
+                    ctx.db.seen_structures().id().update(row);
+                }
+                (true, true) => {
+                    ctx.db.seen_structures_scoped().insert(row);
+                }
+                (true, false) => {
+                    ctx.db.seen_structures_scoped().id().update(row);
+                }
             }
         }
     }

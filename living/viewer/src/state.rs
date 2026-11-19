@@ -192,18 +192,18 @@ impl Snap {
                 let gen = net.gens.resources.load(std::sync::atomic::Ordering::Relaxed);
                 let mut cache = net.resource_cache.borrow_mut();
                 if cache.0 != gen {
-                    *cache = (gen, std::sync::Arc::new(c.db.resource_node().iter().collect()));
+                    *cache = (gen, std::sync::Arc::new(c.db.resource_node().iter().chain(c.db.resource_held().iter()).collect()));
                 }
                 cache.1.clone()
             },
-            structures: c.db.structure().iter().collect(),
+            structures: c.db.structure().iter().chain(c.db.structure_held().iter()).collect(),
             expecting: c.db.expecting().iter().collect(),
             bond_offers: c.db.bond_offer().iter().collect(),
             artifacts: c.db.artifact().iter().collect(),
             literate: c.db.know_how().iter().filter(|k| k.technique == "writing").map(|k| k.actor).collect(),
             torches: c.db.inventory().iter().filter(|i| i.item == "torch" && i.qty > 0 && i.owner < (1u64 << 32)).map(|i| i.owner as u32).collect(),
             trades: c.db.trade_offer().iter().collect(),
-            gates: c.db.gate().iter().map(|g| (g.id, g)).collect(),
+            gates: c.db.gate().iter().chain(c.db.gate_held().iter()).map(|g| (g.id, g)).collect(),
         }
     }
 

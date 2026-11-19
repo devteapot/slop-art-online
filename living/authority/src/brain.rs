@@ -165,6 +165,9 @@ struct Ev<'a> {
     acting: bool,
     /// The leaf whose activity's success this evaluation read (`finished`), and its skill.
     done: Option<(u16, String)>,
+    /// This character's look for the sight test of sight-scoped things (scoped worlds; built
+    /// on first use).
+    look: Option<Rc<crate::scope::Look>>,
 }
 
 /// Work that, once begun under an `if`, is finished even after the `if`'s condition stops
@@ -195,7 +198,7 @@ pub fn evaluate(ctx: &ReducerContext, id: u32, now: u64) {
         cur = ctx.db.activity().id().find(id);
     }
     let acting = cur.as_ref().map_or(false, |a| act::held(a.node));
-    let mut ev = Ev { ctx, now, w, me, at, needs, vit, orig: st.clone(), st, g, scene: None, smelled: None, smell: false, running: None, path: Vec::new(), status: String::new(), visits: 0, last_fail: String::new(), want: (String::new(), 0), answers: (0, 0), run: None, spacing: Default::default(), latched: None, acting, done: None };
+    let mut ev = Ev { ctx, now, w, me, at, needs, vit, orig: st.clone(), st, g, scene: None, smelled: None, smell: false, running: None, path: Vec::new(), status: String::new(), visits: 0, last_fail: String::new(), want: (String::new(), 0), answers: (0, 0), run: None, spacing: Default::default(), latched: None, acting, done: None, look: None };
     // A pace aside (an `aside` skill in the script) is a short walk that finishes on its own too.
     let sc = common::scripts(ctx);
     ev.latched = cur.filter(|a| a.revision == ev.st.revision && (sc.skills().get(&a.skill).is_some_and(|k| k.latch) || sc.shows().aside(&a.skill))).map(|a| a.node);
@@ -238,7 +241,7 @@ pub fn resolve_for(ctx: &ReducerContext, id: u32, t: &Target, now: u64) -> Optio
     let g = common::compiled(ctx, id, st.revision)?;
     let at = pos(&body, now);
     let needs = common::needs(&vit, now);
-    let mut ev = Ev { ctx, now, w: common::world(ctx), me, at, needs, vit, orig: st.clone(), st, g, scene: None, smelled: None, smell: false, running: None, path: Vec::new(), status: String::new(), visits: 0, last_fail: String::new(), want: (String::new(), 0), answers: (0, 0), run: None, spacing: Default::default(), latched: None, acting: false, done: None };
+    let mut ev = Ev { ctx, now, w: common::world(ctx), me, at, needs, vit, orig: st.clone(), st, g, scene: None, smelled: None, smell: false, running: None, path: Vec::new(), status: String::new(), visits: 0, last_fail: String::new(), want: (String::new(), 0), answers: (0, 0), run: None, spacing: Default::default(), latched: None, acting: false, done: None, look: None };
     ev.sensed(t)
 }
 
@@ -426,11 +429,31 @@ impl<'a> Ev<'a> {
             let by = std::panic::Location::caller();
             common::diag(|| format!("structures@{}", by.line()), 1);
             let r = common::sight_for(self.ctx, self.me.id, &self.w, self.now);
-            let v = common::structures_near(self.ctx, self.at, r);
+            let mut v = common::structures_near(self.ctx, self.at, r);
+            // Sight-scoped things are in the scene only when the sight test sees them (scoped
+            // worlds): what the graph's targets, conditions and noticing may use.
+            if let Some(look) = self.scope_look() {
+                let _sight = common::detail_span("sight.structure_brain_list");
+                let (eye, sc, now) = (look.eye(), common::scripts(self.ctx), self.now);
+                v.retain(|(s, d)| !crate::store::scoped_kind(&s.kind) || eye.sees(&sc, s, *d, false, now));
+            }
             common::diag(|| "scene:structures_n", v.len() as u64);
             self.scene.as_mut().unwrap().structures = Some(v);
         }
         self.scene.as_ref().and_then(|s| s.structures.as_deref()).unwrap_or(&[])
+    }
+
+    /// The look of the sight test (scoped worlds only).
+    fn scope_look(&mut self) -> Option<Rc<crate::scope::Look>> {
+        if !crate::store::sighted(self.ctx) {
+            return None;
+        }
+        if self.look.is_none() {
+            let b = self.ctx.db.body().id().find(self.me.id)?;
+            let senses = common::senses_of(self.ctx, self.me.id, &self.w, self.now);
+            self.look = Some(Rc::new(crate::scope::Look::from(self.ctx, common::map(self.ctx), self.at, common::facing_at(&b, self.now), senses)));
+        }
+        self.look.clone()
     }
 
     fn smelled(&mut self) -> &[NearCreature] {
@@ -1650,7 +1673,7 @@ impl<'a> Ev<'a> {
         let in_look = |thing: u64| {
             look.as_ref().is_some_and(|l| {
                 thing & !((1 << 40) - 1) == FAM_STRUCTURE
-                    && self.ctx.db.structure().id().find(thing & ((1 << 40) - 1)).is_some_and(|s| common::dist((l.x, l.y), (s.x, s.y)) <= l.r)
+                    && crate::store::structure(self.ctx, thing & ((1 << 40) - 1)).is_some_and(|s| common::dist((l.x, l.y), (s.x, s.y)) <= l.r)
             })
         };
         for (last, id, thing) in all {
@@ -2015,7 +2038,11 @@ impl<'a> Ev<'a> {
         let _part = common::detail_span("noticed.structures");
         let mut seen = crate::seen_structures::Look::default();
         let new: Vec<usize> = if laws.notice_inplace {
-            let ids = self.new_structures_in_place(&laws, &mut seen);
+            let mut scoped_seen = Vec::new();
+            let ids = self.new_structures_in_place(&laws, &mut seen, &mut scoped_seen);
+            if let Some(look) = self.scope_look() {
+                crate::scope::remember_seen(self.ctx, self.me.id, &look, &scoped_seen, now);
+            }
             if ids.is_empty() {
                 // An unchanged look can still have migrated legacy familiarity.
                 seen.write(self.ctx);
@@ -2025,11 +2052,16 @@ impl<'a> Ev<'a> {
             let ids: std::collections::HashSet<u64> = ids.into_iter().collect();
             self.structures().iter().enumerate().filter(|(_, (s, _))| ids.contains(&s.id)).map(|(i, _)| i).collect()
         } else {
-            let ids: Vec<_> = self.structures().iter().map(|(s, _)| (s.id, s.chunk)).collect();
+            if let Some(look) = self.scope_look() {
+                let visible = self.structures().to_vec();
+                crate::scope::remember_seen(self.ctx, self.me.id, &look, &visible, now);
+            }
+            let sighted = crate::store::sighted(self.ctx);
+            let ids: Vec<_> = self.structures().iter().map(|(s, _)| (s.id, s.chunk, sighted && crate::store::scoped_kind(&s.kind))).collect();
             common::diag(|| "noticed:structures", ids.len() as u64);
             let mut new: Vec<usize> = Vec::new();
-            for (i, (id, chunk)) in ids.into_iter().enumerate() {
-                if self.new_structure(&laws, &mut seen, id, chunk) {
+            for (i, (id, chunk, scoped)) in ids.into_iter().enumerate() {
+                if self.new_structure(&laws, &mut seen, id, chunk, scoped) {
                     new.push(i);
                 }
             }
@@ -2122,14 +2154,23 @@ impl<'a> Ev<'a> {
         crate::perceive::percept_seen(self.ctx, &self.me, self.now, "saw", owner, 0, pos, text, 0.8, false);
     }
 
-    fn new_structure(&mut self, laws: &living_rules::script::Laws, look: &mut crate::seen_structures::Look, id: u64, chunk: u32) -> bool {
+    /// `scoped`: a sight-scoped kind in a scoped world. Its sightings are kept apart
+    /// (`seen_structures_scoped`), and recognition from before the cutover (old ranges,
+    /// `familiar` rows from the radius-only rule) does not count: it was not proof of a sighting.
+    fn new_structure(&mut self, laws: &living_rules::script::Laws, look: &mut crate::seen_structures::Look, id: u64, chunk: u32, scoped: bool) -> bool {
         let thing = FAM_STRUCTURE | id;
         if !laws.seen_ranges {
             return !self.recently_seen(structure_key(id)) && self.familiarity(thing).is_none();
         }
 
         let (ctx, actor) = (self.ctx, self.me.id);
-        let previously_seen = look.seen(ctx, actor, chunk, id);
+        let previously_seen = look.seen(ctx, actor, chunk, id, scoped);
+        if scoped {
+            if !previously_seen {
+                look.add(ctx, actor, chunk, id, true);
+            }
+            return !previously_seen;
+        }
         if previously_seen && !laws.seen_ranges_check {
             return false;
         }
@@ -2143,7 +2184,7 @@ impl<'a> Ev<'a> {
             ctx.db.familiar().by_actor_thing().filter((actor, thing)).next()
         };
         if !previously_seen {
-            look.add(ctx, actor, chunk, id);
+            look.add(ctx, actor, chunk, id, false);
         }
         let new = !previously_seen && legacy.is_none();
         if laws.seen_ranges_check {
@@ -2183,8 +2224,14 @@ impl<'a> Ev<'a> {
     /// (pruning spares legacy rows in the last look's disc). Only structures built since or come
     /// into sight are checked. `notice_delta_check` verifies that skipped IDs are recognized.
     /// A look that finds no valid row checks everything.
-    fn new_structures_in_place(&mut self, laws: &living_rules::script::Laws, look: &mut crate::seen_structures::Look) -> Vec<u64> {
+    ///
+    /// In a scoped world a sight-scoped candidate is always tested by the sight test (never
+    /// passed over by the last look's disc: a body hidden then may be seen now from inside the
+    /// same disc), and those seen are handed back in `scoped_seen` for memory.
+    fn new_structures_in_place(&mut self, laws: &living_rules::script::Laws, look: &mut crate::seen_structures::Look, scoped_seen: &mut Vec<(Structure, f32)>) -> Vec<u64> {
         let (check, delta, delta_check) = (laws.notice_inplace_check, laws.notice_delta, laws.notice_delta_check);
+        let sight = self.scope_look();
+        let sc = common::scripts(self.ctx);
         let (ctx, me, now, at) = (self.ctx, self.me.id, self.now, self.at);
         let r = common::sight_for(ctx, me, &self.w, now);
         let lately = |k: u32| !laws.seen_ranges && SEEN.with(|s| s.borrow().get(&me).and_then(|m| m.get(&k).copied())).is_some_and(|t| now.saturating_sub(t) < SEEN_MS);
@@ -2193,12 +2240,21 @@ impl<'a> Ev<'a> {
             common::diag(|| if last.is_some() { "notice_delta:incremental" } else { "notice_delta:whole" }, 1);
         }
         let mut recent: Vec<u32> = Vec::new();
-        let mut other: Vec<(u64, u32, f32)> = Vec::new();
+        let mut other: Vec<(u64, u32, f32, bool)> = Vec::new();
         let mut passed: Vec<(u64, u32)> = Vec::new();
         let mut top = 0u64;
+        let span = sight.as_ref().map(|_| common::detail_span("sight.structure_notice"));
+        let eye = sight.as_ref().map(|l| l.eye());
         common::for_structures_near(ctx, at, r, |s, d| {
+            let scoped = eye.is_some() && crate::store::scoped_kind(&s.kind);
+            if scoped {
+                if !eye.as_ref().is_some_and(|e| e.sees(&sc, s, d, false, now)) {
+                    return;
+                }
+                scoped_seen.push((s.clone(), d));
+            }
             top = top.max(s.id);
-            if let Some(l) = &last {
+            if let Some(l) = last.as_ref().filter(|_| !scoped) {
                 if s.id <= l.max_structure && common::dist((l.x, l.y), (s.x, s.y)) <= l.r {
                     if delta_check || check {
                         passed.push((s.id, s.chunk));
@@ -2211,9 +2267,10 @@ impl<'a> Ev<'a> {
             if lately(k) {
                 recent.push(k);
             } else {
-                other.push((s.id, s.chunk, d));
+                other.push((s.id, s.chunk, d, scoped));
             }
         });
+        drop(span);
         if delta {
             let row = LastLook { id: me, x: at.0, y: at.1, r, max_structure: top, at_ms: now };
             if last.is_some() || ctx.db.last_look().id().find(me).is_some() {
@@ -2225,7 +2282,7 @@ impl<'a> Ev<'a> {
         if delta_check && !passed.is_empty() {
             common::diag(|| "notice_delta:checked", passed.len() as u64);
             let missing: Vec<u64> = passed.iter().filter_map(|&(id, chunk)| {
-                let seen = (laws.seen_ranges && look.seen(ctx, me, chunk, id))
+                let seen = (laws.seen_ranges && look.seen(ctx, me, chunk, id, false))
                     || ctx.db.familiar().by_actor_thing().filter((me, FAM_STRUCTURE | id)).next().is_some();
                 (!seen).then_some(id)
             }).collect();
@@ -2242,7 +2299,7 @@ impl<'a> Ev<'a> {
             let full: Vec<u64> = self.structures().iter().filter(|(s, _)| !passed.contains(&(s.id, s.chunk)) && !lately(structure_key(s.id))).map(|(s, _)| s.id).collect();
             let seen_n = self.structures().iter().filter(|(s, _)| !passed.contains(&(s.id, s.chunk))).count() - full.len();
             common::diag(|| "notice_inplace:checked", 1);
-            if full.iter().ne(other.iter().map(|(id, _, _)| id)) || seen_n != recent.len() {
+            if full.iter().ne(other.iter().map(|(id, _, _, _)| id)) || seen_n != recent.len() {
                 common::diag(|| "notice_inplace:differed", 1);
                 log::error!("notice_inplace of {me}: in place {:?} ({} seen lately) differs from the full list's {:?} ({seen_n})", other.iter().map(|o| o.0).collect::<Vec<_>>(), recent.len(), full);
             }
@@ -2251,8 +2308,8 @@ impl<'a> Ev<'a> {
             self.recently_seen(k);
         }
         let mut new = Vec::new();
-        for (id, chunk, _) in other {
-            if self.new_structure(laws, look, id, chunk) {
+        for (id, chunk, _, scoped) in other {
+            if self.new_structure(laws, look, id, chunk, scoped) {
                 new.push(id);
             }
         }

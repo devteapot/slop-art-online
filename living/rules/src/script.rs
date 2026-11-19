@@ -410,6 +410,9 @@ pub enum Effect {
     /// The actor perceives more of the target creature for `secs` seconds: `what` names the
     /// field the `perceived_of` law then sees as revealed (e.g. `health`).
     Reveal { what: String, secs: f32 },
+    /// The target fire is looked over: how much fuel is left on it is found out and kept
+    /// (`fuel_seen`) and told (the `inspect` skill; docs/FEED_SCOPING.md).
+    Inspect,
     /// Make a record: its kind, status, parties by role and terms, falling due after `due_h`
     /// world hours (none: never). The actor must be one of its parties.
     Record { kind: String, status: String, parties: Vec<(String, u64)>, terms: serde_json::Map<String, serde_json::Value>, due_h: Option<f32> },
@@ -537,6 +540,15 @@ pub struct Laws {
     pub cover_eye_height_m: f32,
     pub gaze_on: bool,
     pub cover_sight_on: bool,
+    /// Public-feed scoping (docs/FEED_SCOPING.md): small mutable things (remains, storage,
+    /// signs, traps, fires and lamps, gate state, live stock) reach a player's client only
+    /// through what its character sees, and noticing and mind scenes use the same test. Off by
+    /// default; turning it on starts the world's cutover (stage 1, then stage 2 after
+    /// `feed_scope_grace_s`), which cannot be undone once the legacy feeds have closed.
+    pub feed_scope_on: bool,
+    /// Seconds between a world's stage 1 (scoped feeds beside the legacy ones) and stage 2 (the
+    /// legacy feeds closed): the time a connected client has to switch its subscriptions.
+    pub feed_scope_grace_s: f32,
     /// How far a character sees ground by day (metres): the cells of `known_ground` it marks
     /// (docs/MOVEMENT_MIND.md, step 3). At night, its own sight.
     pub ground_sight_m: f32,
@@ -764,6 +776,8 @@ impl Default for Laws {
             cover_eye_height_m: 1.6,
             gaze_on: false,
             cover_sight_on: false,
+            feed_scope_on: false,
+            feed_scope_grace_s: 10.0,
             ground_sight_m: 24.0,
             known_cells_pass: 0.0,
             nav_belief: false,
@@ -3103,6 +3117,8 @@ impl Scripts {
             cover_eye_height_m: g("cover_eye_height_m", l.cover_eye_height_m),
             gaze_on: flag("gaze_on", l.gaze_on),
             cover_sight_on: flag("cover_sight_on", l.cover_sight_on),
+            feed_scope_on: flag("feed_scope_on", l.feed_scope_on),
+            feed_scope_grace_s: g("feed_scope_grace_s", l.feed_scope_grace_s).clamp(0.0, 3600.0),
             ground_sight_m: g("ground_sight_m", l.ground_sight_m).clamp(0.0, 256.0),
             known_cells_pass: g("known_cells_pass", l.known_cells_pass).clamp(0.0, 100_000.0),
             nav_belief: flag("nav_belief", l.nav_belief),
@@ -3836,6 +3852,7 @@ fn effect(d: Dynamic) -> Result<Effect, String> {
         "launch" => Effect::Launch,
         "hail" => Effect::Hail,
         "reveal" => Effect::Reveal { what: s("what"), secs: (n("secs") as f32).clamp(0.0, 600.0) },
+        "inspect" => Effect::Inspect,
         "record" => {
             let parties = parties_of(m.get("parties"))?;
             if parties.is_empty() || parties.len() > crate::records::MAX_PARTIES {

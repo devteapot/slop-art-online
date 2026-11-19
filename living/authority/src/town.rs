@@ -416,8 +416,8 @@ pub fn seat(ctx: &ReducerContext, h: &crate::island::Hosted, si: usize, communit
                 let r = s.radius_m.max(40.0) * 1.5;
                 let mut v = Vec::new();
                 for c in living_rules::map::chunks_around(s.centre.0, s.centre.1, r) {
-                    v.extend(ctx.db.resource_node().chunk().filter(c).filter(|n| n.kind == other && dist((n.x, n.y), s.centre) <= r).map(|n| near((n.x, n.y))));
-                    v.extend(ctx.db.structure().chunk().filter(c).filter(|n| n.kind == other && dist((n.x, n.y), s.centre) <= r).map(|n| (n.x, n.y)));
+                    v.extend(crate::store::resources_in(ctx, c).into_iter().filter(|n| n.kind == other && dist((n.x, n.y), s.centre) <= r).map(|n| near((n.x, n.y))));
+                    v.extend(crate::store::structures_in(ctx, c).into_iter().filter(|n| n.kind == other && dist((n.x, n.y), s.centre) <= r).map(|n| (n.x, n.y)));
                 }
                 v
             }
@@ -544,7 +544,7 @@ fn house_of(ctx: &ReducerContext, c: &Character) -> Option<Structure> {
     let home = (c.home_x, c.home_y);
     living_rules::map::chunks_around(home.0, home.1, 2.0)
         .into_iter()
-        .flat_map(|k| ctx.db.structure().chunk().filter(k).collect::<Vec<_>>())
+        .flat_map(|k| crate::store::structures_in(ctx, k).into_iter().collect::<Vec<_>>())
         .filter(|s| s.kind == "house" && dist((s.x, s.y), home) <= 1.5)
         .min_by(|a, b| dist((a.x, a.y), home).total_cmp(&dist((b.x, b.y), home)))
 }

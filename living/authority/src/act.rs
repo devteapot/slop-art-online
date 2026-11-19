@@ -343,7 +343,7 @@ fn target_facts(ctx: &ReducerContext, t: &TargetRef, from: (f32, f32), now: u64)
     let mut f = TargetFacts { class: "none".into(), ..Default::default() };
     match t.class {
         1 => {
-            if let Some(n) = ctx.db.resource_node().id().find(t.id) {
+            if let Some(n) = crate::store::resource(ctx, t.id) {
                 f.class = "resource".into();
                 f.id = n.id;
                 // A spot of a shared stock has what its stock has.
@@ -353,7 +353,7 @@ fn target_facts(ctx: &ReducerContext, t: &TargetRef, from: (f32, f32), now: u64)
             }
         }
         2 => {
-            if let Some(s) = ctx.db.structure().id().find(t.id) {
+            if let Some(s) = crate::store::structure(ctx, t.id) {
                 if s.kind == "trap" {
                     common::trap_catch(ctx, &s, now);
                 }
@@ -541,7 +541,7 @@ fn skill_ctx_with(ctx: &ReducerContext, id: u32, a: &Activity, now: u64, roll: f
             target.home = crate::records::home_of(ctx, a.target.id as u32);
         }
         2 => {
-            target.owner = ctx.db.structure().id().find(a.target.id).map_or(0, |s| s.owner);
+            target.owner = crate::store::structure(ctx, a.target.id).map_or(0, |s| s.owner);
             if target.owner != 0 {
                 target.home = crate::records::home_of(ctx, target.owner);
                 target.community = crate::records::community_party(ctx, target.owner);
@@ -644,8 +644,8 @@ fn label(skill: &str, item: &str, t: &Resolved) -> String {
 fn target_pos(ctx: &ReducerContext, t: &TargetRef, now: u64) -> Option<(f32, f32)> {
     match t.class {
         3 => ctx.db.body().id().find(t.id as u32).map(|b| pos(&b, now)),
-        1 => ctx.db.resource_node().id().find(t.id).map(|n| (n.x, n.y)),
-        2 => ctx.db.structure().id().find(t.id).map(|s| (s.x, s.y)),
+        1 => crate::store::resource(ctx, t.id).map(|n| (n.x, n.y)),
+        2 => crate::store::structure(ctx, t.id).map(|s| (s.x, s.y)),
         4 | 5 => Some((t.x, t.y)),
         _ => None,
     }
@@ -930,7 +930,7 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
                 None => {
                     let sign = living_rules::map::chunks_around(here.0, here.1, 8.0)
                         .into_iter()
-                        .flat_map(|c| ctx.db.structure().chunk().filter(c).collect::<Vec<_>>())
+                        .flat_map(|c| crate::store::structures_in(ctx, c).into_iter().collect::<Vec<_>>())
                         .filter(|s| s.kind == "sign" && dist(here, (s.x, s.y)) <= 8.0)
                         .min_by(|a, b| dist(here, (a.x, a.y)).total_cmp(&dist(here, (b.x, b.y))))
                         .ok_or("you carry nothing to read and there is no sign here")?;
@@ -1720,7 +1720,7 @@ fn apply(ctx: &ReducerContext, a: &Activity, sctx: &SkillCtx, effects: Vec<Effec
             }
             Effect::Remove { item, qty } => common::inv_remove(ctx, me as u64, &item, qty)?,
             Effect::Harvest { qty } => {
-                let spot = ctx.db.resource_node().id().find(a.target.id).ok_or("resource gone")?;
+                let spot = crate::store::resource(ctx, a.target.id).ok_or("resource gone")?;
                 // A spot of a shared stock takes from the node that holds it.
                 let mut n = common::stock_of(ctx, &spot);
                 let have = common::amount_now(ctx, &n, now);
@@ -1730,7 +1730,7 @@ fn apply(ctx: &ReducerContext, a: &Activity, sctx: &SkillCtx, effects: Vec<Effec
                 n.amount = have - qty;
                 n.at_ms = now;
                 common::invalidate_resources(ctx, Some(n.chunk));
-                ctx.db.resource_node().id().update(n);
+                crate::store::update_resource(ctx, n);
             }
             Effect::Vitals { hp, hunger, energy } => {
                 if let Some(mut v) = ctx.db.vitals().id().find(me) {
@@ -1822,7 +1822,7 @@ fn apply(ctx: &ReducerContext, a: &Activity, sctx: &SkillCtx, effects: Vec<Effec
                 move_tablets(ctx, &item, STRUCTURE_BIT | a.target.id, me as u64, qty);
                 notes.push(format!("took {qty} {item}"));
                 // Whether taking it is theft is the `theft(a)` law's to say.
-                if let Some(s) = ctx.db.structure().id().find(a.target.id).filter(|_| common::scripts(ctx).holds("theft", sctx)) {
+                if let Some(s) = crate::store::structure(ctx, a.target.id).filter(|_| common::scripts(ctx).holds("theft", sctx)) {
                     crate::perceive::witnessed_owned(ctx, now, at, "took", me, s.owner, &s.kind, &format!("{{a}} took {qty} {item} from {{b}}'s {}", s.kind), 0.5, &[me]);
                 }
             }
@@ -1849,6 +1849,16 @@ fn apply(ctx: &ReducerContext, a: &Activity, sctx: &SkillCtx, effects: Vec<Effec
                     percept(ctx, &c, now, "appraise", target, 0, at, format!("You look {label} over: {seen}."), 0.3);
                     notes.push(format!("{label} has {seen}"));
                 }
+            }
+            Effect::Inspect => {
+                if a.target.class != 2 {
+                    return Err("nothing to look over".into());
+                }
+                let text = crate::scope::inspect(ctx, me, a.target.id, now)?;
+                if let Some(c) = ctx.db.character().id().find(me) {
+                    percept(ctx, &c, now, "inspect", 0, 0, at, text.clone(), 0.3);
+                }
+                notes.push(text);
             }
             Effect::Launch => {
                 let sc = common::scripts(ctx);
@@ -1897,7 +1907,7 @@ fn apply(ctx: &ReducerContext, a: &Activity, sctx: &SkillCtx, effects: Vec<Effec
                 let _ = w;
                 let holder = if a.item == "sign" {
                     common::invalidate_structures(ctx);
-                    let s = ctx.db.structure().insert(Structure { id: 0, kind: "sign".into(), x: at.0, y: at.1, chunk: chunk_of(at.0, at.1), owner: me, built_ms: now, lit_until_ms: 0 });
+                    let s = crate::store::insert_structure(ctx, Structure { id: 0, kind: "sign".into(), x: at.0, y: at.1, chunk: chunk_of(at.0, at.1), owner: me, built_ms: now, lit_until_ms: 0 });
                     STRUCTURE_BIT | s.id
                 } else {
                     common::inv_add(ctx, me as u64, "tablet", 1);
@@ -2063,7 +2073,7 @@ fn apply(ctx: &ReducerContext, a: &Activity, sctx: &SkillCtx, effects: Vec<Effec
             Effect::Plant => {
                 let sc = common::scripts(ctx);
                 common::invalidate_resources(ctx, None);
-                ctx.db.resource_node().insert(ResourceNode {
+                crate::store::insert_resource(ctx, ResourceNode {
                     id: 0,
                     kind: "berry_bush".into(),
                     x: at.0,
@@ -2127,16 +2137,16 @@ fn apply(ctx: &ReducerContext, a: &Activity, sctx: &SkillCtx, effects: Vec<Effec
                 } else {
                     let p = (tx as f32 + 0.5, ty as f32 + 0.5);
                     common::invalidate_structures(ctx);
-                    let s = ctx.db.structure().insert(Structure { id: 0, kind: "gate".into(), x: p.0, y: p.1, chunk: chunk_of(p.0, p.1), owner: me, built_ms: now, lit_until_ms: 0 });
+                    let s = crate::store::insert_structure(ctx, Structure { id: 0, kind: "gate".into(), x: p.0, y: p.1, chunk: chunk_of(p.0, p.1), owner: me, built_ms: now, lit_until_ms: 0 });
                     let community = ctx.db.membership().member().find(me).map(|m| m.community).unwrap_or(0);
-                    ctx.db.gate().insert(Gate { id: s.id, x: tx, y: ty, open: true, community, changed_ms: now, changed_by: me });
+                    crate::store::insert_gate(ctx, Gate { id: s.id, x: tx, y: ty, open: true, community, changed_ms: now, changed_by: me });
                     common::chronicle(ctx, now, "build", me, 0, p, format!("{my_name} built a gate"));
                     witnessed(ctx, now, p, "built", me, 0, &format!("{{a}} built a gate at ({tx},{ty})"), 0.4, &[me]);
                     notes.push(format!("built gate #{}", s.id));
                 }
             }
             Effect::Gate { open } => {
-                let mut g = ctx.db.gate().id().find(a.target.id).ok_or("that is not a gate")?;
+                let mut g = crate::store::gate(ctx, a.target.id).ok_or("that is not a gate")?;
                 if g.community != 0 && ctx.db.membership().member().find(me).map_or(true, |m| m.community != g.community) {
                     let keepers = ctx.db.community().id().find(g.community).map(|c| c.name).unwrap_or_else(|| "its community".into());
                     return Err(format!("only {keepers} may open or close this gate"));
@@ -2148,7 +2158,7 @@ fn apply(ctx: &ReducerContext, a: &Activity, sctx: &SkillCtx, effects: Vec<Effec
                 g.changed_ms = now;
                 g.changed_by = me;
                 let p = (g.x as f32 + 0.5, g.y as f32 + 0.5);
-                ctx.db.gate().id().update(g);
+                crate::store::update_gate(ctx, g);
                 common::invalidate_gates(ctx);
                 if !open {
                     motion::resteer_near(ctx, p, 6.0, now);
@@ -2163,19 +2173,19 @@ fn apply(ctx: &ReducerContext, a: &Activity, sctx: &SkillCtx, effects: Vec<Effec
             }
             Effect::Fuel { item, qty } => notes.push(feed(ctx, me, a.target.id, &item, qty, now)?),
             Effect::Burn { units } => {
-                let mut s = ctx.db.structure().id().find(a.target.id).ok_or("the fire is gone")?;
+                let mut s = crate::store::structure(ctx, a.target.id).ok_or("the fire is gone")?;
                 let sc = common::scripts(ctx);
                 let Some(b) = sc.structure(&s.kind).burns.clone() else { return Err(format!("the {} burns no fuel", s.kind)) };
                 s.lit_until_ms = living_rules::fire::drawn(s.lit_until_ms, now, units, b.rate, common::world(ctx).day_ms).ok_or_else(|| format!("the {} has too little fuel left", s.kind))?;
                 common::invalidate_structures(ctx);
-                ctx.db.structure().id().update(s);
+                crate::store::update_structure(ctx, s);
             }
             Effect::Build { kind } => {
                 if !catalog::is_structure(&kind) {
                     return Err(format!("cannot build {kind}"));
                 }
                 common::invalidate_structures(ctx);
-                let s = ctx.db.structure().insert(Structure { id: 0, kind: kind.clone(), x: at.0, y: at.1, chunk: chunk_of(at.0, at.1), owner: me, built_ms: now, lit_until_ms: 0 });
+                let s = crate::store::insert_structure(ctx, Structure { id: 0, kind: kind.clone(), x: at.0, y: at.1, chunk: chunk_of(at.0, at.1), owner: me, built_ms: now, lit_until_ms: 0 });
                 common::chronicle(ctx, now, "build", me, 0, at, format!("{my_name} built a {kind}"));
                 witnessed(ctx, now, at, "built", me, 0, &format!("{{a}} built a {kind} at ({:.0},{:.0})", at.0, at.1), 0.4, &[me]);
                 notes.push(format!("built {kind} #{}", s.id));
@@ -2209,7 +2219,7 @@ fn technique_help(t: &str) -> String {
 /// fuel trait (the kind's `burns.fuel`) in units. An out fire is lit, a lit one burns longer;
 /// the fire's one written value is when it runs out (`lit_until_ms`), and the items are gone.
 fn feed(ctx: &ReducerContext, me: u32, id: u64, item: &str, qty: u32, now: u64) -> Result<String, String> {
-    let mut s = ctx.db.structure().id().find(id).ok_or("the fire is gone")?;
+    let mut s = crate::store::structure(ctx, id).ok_or("the fire is gone")?;
     let sc = common::scripts(ctx);
     let Some(b) = sc.structure(&s.kind).burns.clone() else { return Err(format!("the {} burns no fuel", s.kind)) };
     let worth = sc.tables().number("items", item, &b.fuel).filter(|w| *w > 0.0).ok_or_else(|| format!("{item} is not fuel for the {}", s.kind))?;
@@ -2219,7 +2229,7 @@ fn feed(ctx: &ReducerContext, me: u32, id: u64, item: &str, qty: u32, now: u64) 
     s.lit_until_ms = until;
     let (kind, at) = (s.kind.clone(), (s.x, s.y));
     common::invalidate_structures(ctx);
-    ctx.db.structure().id().update(s);
+    crate::store::update_structure(ctx, s);
     if !was_lit {
         witnessed(ctx, now, at, "lit", me, 0, &format!("{{a}} lit the {kind}"), 0.3, &[me]);
     }
@@ -2442,6 +2452,7 @@ fn missed(ctx: &ReducerContext, attacker: u32, victim: u32, at_v: (f32, f32), sk
 pub fn forget_dead(ctx: &ReducerContext, id: u32) {
     ctx.db.familiar().actor().delete(id);
     ctx.db.seen_structures().actor().delete(id);
+    crate::scope::forget_dead(ctx, id);
     crate::known::forget(ctx, id);
     ctx.db.last_look().id().delete(id);
     ctx.db.character_senses().id().delete(id);
@@ -2871,7 +2882,7 @@ pub fn die_unseen(ctx: &ReducerContext, id: u32, cause: &str, now: u64, killer: 
     let held: Vec<Artifact> = ctx.db.artifact().holder().filter(id as u64).collect();
     if !left.is_empty() || !held.is_empty() || kind == "person" {
         common::invalidate_structures(ctx);
-        let s = ctx.db.structure().insert(Structure { id: 0, kind: "remains".into(), x: at.0, y: at.1, chunk: chunk_of(at.0, at.1), owner: id, built_ms: now, lit_until_ms: 0 });
+        let s = crate::store::insert_structure(ctx, Structure { id: 0, kind: "remains".into(), x: at.0, y: at.1, chunk: chunk_of(at.0, at.1), owner: id, built_ms: now, lit_until_ms: 0 });
         for (item, q) in left {
             common::inv_add(ctx, STRUCTURE_BIT | s.id, &item, q);
         }

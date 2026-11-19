@@ -101,6 +101,9 @@ pub fn mark(ctx: &ReducerContext, id: u32, at: (f32, f32), heading: f32, now: u6
     }
     let map = common::map(ctx);
     let mut senses = common::senses_of(ctx, id, &w, now);
+    // A scoped world samples gates with the character's own sight, not the ground radius that
+    // replaces it for marking cells (docs/FEED_SCOPING.md: the one sight test).
+    let own = senses;
     senses.sight = radius;
     let offsets = ring(radius);
     let ep = epoch(ctx);
@@ -133,7 +136,8 @@ pub fn mark(ctx: &ReducerContext, id: u32, at: (f32, f32), heading: f32, now: u6
             }
         });
     }
-    let changed = remember_gates(ctx, id, at, heading, &senses, &map, now) || !found.is_empty();
+    let gate_senses = if crate::store::sighted(ctx) { &own } else { &senses };
+    let changed = remember_gates(ctx, id, at, heading, gate_senses, &map, now) || !found.is_empty();
     if changed {
         REVISION.with(|r| *r.borrow_mut().entry(id).or_default() += 1);
     }
@@ -181,7 +185,7 @@ fn remember_gates(ctx: &ReducerContext, id: u32, at: (f32, f32), heading: f32, s
         if !(living_rules::sight::within(at, heading, p, d, senses, 0.0, None) && map.sight_clear(at, p)) {
             continue;
         }
-        let Some(g) = ctx.db.gate().id().find(s.id) else { continue };
+        let Some(g) = crate::store::gate(ctx, s.id) else { continue };
         let state = u8::from(g.open);
         match ctx.db.remembered().by_observer_target().filter((id, s.id)).next() {
             Some(r) if r.state == state => {}
@@ -210,6 +214,7 @@ fn remember_gates(ctx: &ReducerContext, id: u32, at: (f32, f32), heading: f32, s
 
 /// `id`'s belief over the map: its own seen cells and remembered gates.
 pub fn belief<'a>(ctx: &'a ReducerContext, id: u32, map: &'a living_rules::map::Map) -> Belief<'a> {
+    let scoped = crate::store::sighted(ctx);
     let gates: HashMap<u32, bool> = ctx
         .db
         .remembered()
@@ -217,8 +222,15 @@ pub fn belief<'a>(ctx: &'a ReducerContext, id: u32, map: &'a living_rules::map::
         .filter(id)
         .filter(|r| r.kind == REMEMBER_GATE)
         .filter_map(|r| {
-            let g = ctx.db.gate().id().find(r.target)?;
-            (g.x >= 0 && g.y >= 0).then(|| (g.y as u32 * map.w + g.x as u32, r.state == 1))
+            // A scoped world's belief is built from what was remembered alone: a gate's place
+            // as seen, never its row now (docs/FEED_SCOPING.md).
+            let (x, y) = if scoped {
+                (r.x.floor() as i32, r.y.floor() as i32)
+            } else {
+                let g = crate::store::gate(ctx, r.target)?;
+                (g.x, g.y)
+            };
+            (x >= 0 && y >= 0 && (!scoped || (x as u32) < map.w)).then(|| (y as u32 * map.w + x as u32, r.state == 1))
         })
         .collect();
     Belief::new(

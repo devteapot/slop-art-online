@@ -37,6 +37,11 @@ const QUERIES: &[&str] = &[
     "SELECT * FROM trade_offer",
     "SELECT * FROM background",
     "SELECT * FROM gate",
+    // A scoped world's canonical rows (stage 2, docs/FEED_SCOPING.md): the public tables above
+    // are empty then, and these private ones hold the same rows.
+    "SELECT * FROM structure_held",
+    "SELECT * FROM gate_held",
+    "SELECT * FROM resource_held",
 ];
 
 /// A per-character experience subscription (only the inspected character's rows).
@@ -207,6 +212,7 @@ impl Net {
                 }
                 watch!(terrain_chunk, terrain);
                 watch!(resource_node, resources);
+                watch!(resource_held, resources);
                 macro_rules! incremental {
                     ($table:ident, $gen:ident, $queue:ident) => {{
                         let q = gens.$queue.clone();

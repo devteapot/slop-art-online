@@ -1100,7 +1100,7 @@ pub fn populate<'a>(ctx: &ReducerContext, s: &'a Seed, map: &living_rules::map::
     for a in &s.artifacts {
         let at = map.nearest_walkable(a.at[0], a.at[1]).unwrap_or((48.0, 48.0));
         common::invalidate_structures(ctx);
-        let st = ctx.db.structure().insert(Structure { id: 0, kind: a.kind.clone(), x: at.0, y: at.1, chunk: chunk_of(at.0, at.1), owner: 0, built_ms: 0, lit_until_ms: 0 });
+        let st = crate::store::insert_structure(ctx, Structure { id: 0, kind: a.kind.clone(), x: at.0, y: at.1, chunk: chunk_of(at.0, at.1), owner: 0, built_ms: 0, lit_until_ms: 0 });
         ctx.db.artifact().insert(Artifact { id: 0, kind: a.kind.clone(), holder: STRUCTURE_BIT | st.id, author: 0, author_name: a.author_name.clone(), written_ms: 0, topic: a.topic.clone(), text: a.text.clone() });
     }
     let mut authored: Vec<(String, u32)> = Vec::new();
@@ -1477,12 +1477,12 @@ fn plan_resources(ctx: &ReducerContext, map: &living_rules::map::Map, at: &[livi
         let regen = r.regrow_per_h.map_or_else(|| sc.regrow_per_min(kind, 0.5), |v| v as f64 * sc.per_minute()) as f32;
         let pool = if r.pool.is_empty() { 0 } else { pools.get(r.pool.as_str()).copied().unwrap_or(0) };
         common::invalidate_resources(ctx, None);
-        let row = ctx.db.resource_node().insert(ResourceNode { id: 0, kind: kind.clone(), x: q.0, y: q.1, chunk: chunk_of(q.0, q.1), amount: max, max, regen, at_ms: now, pool });
+        let row = crate::store::insert_resource(ctx, ResourceNode { id: 0, kind: kind.clone(), x: q.0, y: q.1, chunk: chunk_of(q.0, q.1), amount: max, max, regen, at_ms: now, pool });
         if !r.pool.is_empty() && pool == 0 {
             pools.insert(&r.pool, row.id);
             let mut head = row;
             head.pool = head.id;
-            ctx.db.resource_node().id().update(head);
+            crate::store::update_resource(ctx, head);
         }
         placed += 1;
     }
@@ -1504,7 +1504,7 @@ fn put_authored(ctx: &ReducerContext, map: &living_rules::map::Map, kind: &str, 
     common::invalidate_structures(ctx);
     let burns = common::scripts(ctx).structure(kind).burns.clone();
     let lit_until_ms = burns.filter(|_| fuel > 0.0).and_then(|b| living_rules::fire::fed(0, now, fuel, b.rate, common::world(ctx).day_ms, None)).unwrap_or(0);
-    let row = ctx.db.structure().insert(Structure { id: 0, kind: kind.to_string(), x: at.0, y: at.1, chunk: chunk_of(at.0, at.1), owner, built_ms: now, lit_until_ms });
+    let row = crate::store::insert_structure(ctx, Structure { id: 0, kind: kind.to_string(), x: at.0, y: at.1, chunk: chunk_of(at.0, at.1), owner, built_ms: now, lit_until_ms });
     for (item, q) in contents {
         common::inv_add(ctx, STRUCTURE_BIT | row.id, item, *q);
     }
@@ -1537,7 +1537,7 @@ fn plan_structures(ctx: &ReducerContext, map: &living_rules::map::Map, h: &crate
             continue;
         }
         if st.kind.is_empty() {
-            let own = h.lots.iter().position(|l| l.key == st.lot).and_then(|i| ctx.db.lot().id().find(i as u32)).map_or(0, |l| l.structure);
+            let own = h.lots.iter().position(|l| l.key == st.lot).and_then(|i| ctx.db.lot().id().find(i as u32)).map_or(0, |l| crate::store::lot_structure(ctx, &l));
             if own == 0 {
                 log::warn!("plan: lot {} has no structure at its door to hold its contents; left out", st.lot);
                 continue;
@@ -1580,10 +1580,8 @@ fn settlement_resources(ctx: &ReducerContext, map: &living_rules::map::Map, t: &
     let (cx, cy) = (center.0 as i32, center.1 as i32);
     for (kind, want) in &t.resources {
         let ground = ground_of(kind);
-        let mut spots: Vec<(f32, f32)> = ctx
-            .db
-            .resource_node()
-            .iter()
+        let mut spots: Vec<(f32, f32)> = crate::store::all_resources(ctx)
+            .into_iter()
             .filter(|n| n.kind == *kind)
             .map(|n| (n.x, n.y))
             .collect();
@@ -1605,7 +1603,7 @@ fn settlement_resources(ctx: &ReducerContext, map: &living_rules::map::Map, t: &
                     }
                     common::invalidate_resources(ctx, None);
                     let max = max_of(kind);
-                    ctx.db.resource_node().insert(ResourceNode { id: 0, kind: kind.clone(), x: p.0, y: p.1, chunk: chunk_of(p.0, p.1), amount: max, max, regen: sc.regrow_per_min(kind, 0.5) as f32, at_ms: now, pool: 0 });
+                    crate::store::insert_resource(ctx, ResourceNode { id: 0, kind: kind.clone(), x: p.0, y: p.1, chunk: chunk_of(p.0, p.1), amount: max, max, regen: sc.regrow_per_min(kind, 0.5) as f32, at_ms: now, pool: 0 });
                     spots.push(p);
                     have += 1;
                 }
@@ -1630,12 +1628,12 @@ fn place_nodes(ctx: &ReducerContext, nodes: &[SeedNode], now: u64) {
         let regen = n.regrow_per_h.map(|r| (r as f64 * sc.per_minute()) as f32).or(n.regrow).unwrap_or_else(|| sc.regrow_per_min(&n.kind, 0.5) as f32);
         let pool = if n.pool.is_empty() { 0 } else { pools.get(n.pool.as_str()).copied().unwrap_or(0) };
         common::invalidate_resources(ctx, None);
-        let row = ctx.db.resource_node().insert(ResourceNode { id: 0, kind: n.kind.clone(), x: n.at[0], y: n.at[1], chunk: chunk_of(n.at[0], n.at[1]), amount: max, max, regen, at_ms: now, pool });
+        let row = crate::store::insert_resource(ctx, ResourceNode { id: 0, kind: n.kind.clone(), x: n.at[0], y: n.at[1], chunk: chunk_of(n.at[0], n.at[1]), amount: max, max, regen, at_ms: now, pool });
         if !n.pool.is_empty() && pool == 0 {
             pools.insert(&n.pool, row.id);
             let mut head = row;
             head.pool = head.id;
-            ctx.db.resource_node().id().update(head);
+            crate::store::update_resource(ctx, head);
         }
     }
 }
@@ -1685,7 +1683,7 @@ fn spawn_resources_in(ctx: &ReducerContext, map: &living_rules::map::Map, rows: 
         }
         placed.entry(cell).or_default().push(p);
         common::invalidate_resources(ctx, None);
-        ctx.db.resource_node().insert(ResourceNode {
+        crate::store::insert_resource(ctx, ResourceNode {
             id: 0,
             kind: kind.into(),
             x: p.0,
@@ -1785,7 +1783,7 @@ fn occupation_know_how(ctx: &ReducerContext, occ: &str) -> Vec<String> {
 /// A place a family would choose to live: grass with the most berry bushes within 10
 /// tiles, fish within 14, not on top of another family, nearer the middle on ties.
 fn homestead(ctx: &ReducerContext, map: &living_rules::map::Map, taken: &[(f32, f32)]) -> (f32, f32) {
-    let food: Vec<(String, f32, f32)> = ctx.db.resource_node().iter().filter(|r| r.kind == "berry_bush" || r.kind == "fishing_spot").map(|r| (r.kind, r.x, r.y)).collect();
+    let food: Vec<(String, f32, f32)> = crate::store::all_resources(ctx).into_iter().filter(|r| r.kind == "berry_bush" || r.kind == "fishing_spot").map(|r| (r.kind, r.x, r.y)).collect();
     let (cx, cy) = (map.w as f32 / 2.0, map.h as f32 / 2.0);
     let mut best = ((cx, cy), f32::MIN);
     for y in (6..map.h as i32 - 6).step_by(2) {
@@ -1825,18 +1823,18 @@ fn house(ctx: &ReducerContext, map: &living_rules::map::Map, home: (f32, f32), o
 /// over its inn or in its hall owns that building, with no second house beside it.
 fn house_at(ctx: &ReducerContext, map: &living_rules::map::Map, home: (f32, f32), owner: u32, now: u64, any_kind: bool) -> u64 {
     let at = walkable_near(map, home);
-    let here: Vec<Structure> = ctx.db.structure().chunk().filter(chunk_of(at.0, at.1)).filter(|s| (any_kind || s.kind == "house") && s.owner == 0 && common::dist((s.x, s.y), at) < 0.75).collect();
+    let here: Vec<Structure> = crate::store::structures_in(ctx, chunk_of(at.0, at.1)).into_iter().filter(|s| (any_kind || s.kind == "house") && s.owner == 0 && common::dist((s.x, s.y), at) < 0.75).collect();
     // Other things may stand at a lot's door (a plan's hearth or lamp, docs/AUTHORED_PLANS.md):
     // the building is the structure a lot row names; only then anything else standing there.
     // Once per household at creation, over the lot rows.
-    let building = |s: &&Structure| ctx.db.lot().iter().any(|l| l.structure == s.id);
+    let building = |s: &&Structure| ctx.db.lot().iter().any(|l| crate::store::lot_structure(ctx, &l) == s.id);
     let standing = here.iter().find(building).or_else(|| here.iter().find(|s| s.kind == "house")).or_else(|| here.first()).cloned();
     match standing {
         Some(mut s) => {
             let id = s.id;
             s.owner = owner;
             common::invalidate_structures(ctx);
-            ctx.db.structure().id().update(s);
+            crate::store::update_structure(ctx, s);
             id
         }
         None => put(ctx, map, "house", home, owner, now),
@@ -1846,7 +1844,7 @@ fn house_at(ctx: &ReducerContext, map: &living_rules::map::Map, home: (f32, f32)
 fn put(ctx: &ReducerContext, map: &living_rules::map::Map, kind: &str, at: (f32, f32), owner: u32, now: u64) -> u64 {
     let at = walkable_near(map, at);
     common::invalidate_structures(ctx);
-    ctx.db.structure().insert(Structure { id: 0, kind: kind.into(), x: at.0, y: at.1, chunk: chunk_of(at.0, at.1), owner, built_ms: now, lit_until_ms: 0 }).id
+    crate::store::insert_structure(ctx, Structure { id: 0, kind: kind.into(), x: at.0, y: at.1, chunk: chunk_of(at.0, at.1), owner, built_ms: now, lit_until_ms: 0 }).id
 }
 
 /// A settlement's named buildings: each on free walkable ground 5-12 tiles from the center,
@@ -1857,7 +1855,7 @@ fn buildings(ctx: &ReducerContext, map: &living_rules::map::Map, t: &SeedTown, l
         return;
     }
     let center = layout.center;
-    let mut taken: Vec<(f32, f32)> = ctx.db.structure().iter().filter(|s| common::dist((s.x, s.y), center) < 16.0).map(|s| (s.x, s.y)).collect();
+    let mut taken: Vec<(f32, f32)> = crate::store::all_structures(ctx).into_iter().filter(|s| common::dist((s.x, s.y), center) < 16.0).map(|s| (s.x, s.y)).collect();
     let mut places = Vec::new();
     for (i, b) in t.buildings.iter().enumerate() {
         // A named building that is a planned lot stands at that lot's door.
@@ -1868,12 +1866,12 @@ fn buildings(ctx: &ReducerContext, map: &living_rules::map::Map, t: &SeedTown, l
         if let Some(at) = at_lot {
             let owner = authored.iter().find(|(n, _)| *n == b.owner).map(|(_, id)| *id).unwrap_or(0);
             // The lot's own structure stands at its door already when it is of this kind.
-            let existing = ctx.db.structure().chunk().filter(chunk_of(at.0, at.1)).find(|s| s.kind == b.kind && common::dist((s.x, s.y), at) < 0.6);
+            let existing = crate::store::structures_in(ctx, chunk_of(at.0, at.1)).into_iter().find(|s| s.kind == b.kind && common::dist((s.x, s.y), at) < 0.6);
             match existing {
                 Some(mut st) if owner != 0 => {
                     common::invalidate_structures(ctx);
                     st.owner = owner;
-                    ctx.db.structure().id().update(st);
+                    crate::store::update_structure(ctx, st);
                 }
                 Some(_) => {}
                 None => {
@@ -1927,8 +1925,8 @@ fn town(ctx: &ReducerContext, map: &living_rules::map::Map, t: &SeedTown, layout
     for &(gx, gy) in &layout.gates {
         let p = (gx as f32 + 0.5, gy as f32 + 0.5);
         common::invalidate_structures(ctx);
-        let sid = ctx.db.structure().insert(Structure { id: 0, kind: "gate".into(), x: p.0, y: p.1, chunk: chunk_of(p.0, p.1), owner: 0, built_ms: 0, lit_until_ms: 0 }).id;
-        ctx.db.gate().insert(Gate { id: sid, x: gx, y: gy, open: true, community: c.id, changed_ms: now, changed_by: 0 });
+        let sid = crate::store::insert_structure(ctx, Structure { id: 0, kind: "gate".into(), x: p.0, y: p.1, chunk: chunk_of(p.0, p.1), owner: 0, built_ms: 0, lit_until_ms: 0 }).id;
+        crate::store::insert_gate(ctx, Gate { id: sid, x: gx, y: gy, open: true, community: c.id, changed_ms: now, changed_by: 0 });
     }
     let (ids, authored): (Vec<u32>, Vec<(String, u32)>) = if t.residents.is_empty() {
         (drawn_households(ctx, map, t, layout, now), Vec::new())
@@ -1948,7 +1946,7 @@ fn town(ctx: &ReducerContext, map: &living_rules::map::Map, t: &SeedTown, layout
     let sc = common::scripts(ctx);
     for p in &layout.fields {
         common::invalidate_resources(ctx, None);
-        ctx.db.resource_node().insert(ResourceNode {
+        crate::store::insert_resource(ctx, ResourceNode {
             id: 0,
             kind: "berry_bush".into(),
             x: p.0,

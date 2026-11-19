@@ -21,7 +21,9 @@ mod motion;
 mod outcomes;
 mod perceive;
 mod speech;
+mod scope;
 mod stock;
+mod store;
 mod perception;
 mod presence;
 mod records;
@@ -482,7 +484,7 @@ pub fn place_structure(ctx: &ReducerContext, near: u32, kind: String) -> Result<
     let b = ctx.db.body().id().find(near).ok_or("no such body")?;
     let p = common::pos(&b, now);
     common::invalidate_structures(ctx);
-    ctx.db.structure().insert(Structure { id: 0, kind, x: p.0 + 0.8, y: p.1, chunk: living_rules::map::chunk_of(p.0 + 0.8, p.1), owner: near, built_ms: now, lit_until_ms: 0 });
+    crate::store::insert_structure(ctx, Structure { id: 0, kind, x: p.0 + 0.8, y: p.1, chunk: living_rules::map::chunk_of(p.0 + 0.8, p.1), owner: near, built_ms: now, lit_until_ms: 0 });
     Ok(())
 }
 
@@ -495,7 +497,7 @@ pub fn place_resource(ctx: &ReducerContext, near: u32, kind: String, dx: f32, dy
     if !living_rules::catalog::is_resource(&kind) {
         return Err(format!("no resource kind {kind}"));
     }
-    if pool != 0 && ctx.db.resource_node().id().find(pool).is_none() {
+    if pool != 0 && crate::store::resource(ctx, pool).is_none() {
         return Err(format!("no resource node {pool}"));
     }
     let now = common::now_ms(ctx);
@@ -506,7 +508,7 @@ pub fn place_resource(ctx: &ReducerContext, near: u32, kind: String, dx: f32, dy
     let max = if max > 0.0 { max } else { sc.tables().number("resources", &kind, "max").unwrap_or(5.0) as f32 };
     let regen = sc.regrow_per_min(&kind, 0.5) as f32;
     common::invalidate_resources(ctx, None);
-    ctx.db.resource_node().insert(ResourceNode { id: 0, kind, x, y, chunk: living_rules::map::chunk_of(x, y), amount: max, max, regen, at_ms: now, pool });
+    crate::store::insert_resource(ctx, ResourceNode { id: 0, kind, x, y, chunk: living_rules::map::chunk_of(x, y), amount: max, max, regen, at_ms: now, pool });
     Ok(())
 }
 

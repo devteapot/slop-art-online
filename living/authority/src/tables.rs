@@ -148,7 +148,10 @@ impl From<&LookWords> for living_rules::look::LookWords {
 
 /// A gate's state, apart from its structure row (which rarely changes): open or shut, and the
 /// community whose members may open and close it (0 = anyone).
+/// `gate_held` (private) holds the same rows once a world's feeds are scoped (stage 2,
+/// docs/FEED_SCOPING.md); `gate` is then empty.
 #[spacetimedb::table(accessor = gate, public)]
+#[spacetimedb::table(accessor = gate_held)]
 pub struct Gate {
     #[primary_key]
     pub id: u64,
@@ -677,8 +680,12 @@ pub struct Inventory {
 
 pub const STRUCTURE_BIT: u64 = 1 << 40;
 
+/// `resource_held` (private) holds the same rows once a world's feeds are scoped (stage 2,
+/// docs/FEED_SCOPING.md); `resource_node` is then empty and `map_resource` is the public
+/// landmark. Read and write through `crate::store`.
 #[derive(Clone)]
 #[spacetimedb::table(accessor = resource_node, public)]
+#[spacetimedb::table(accessor = resource_held)]
 pub struct ResourceNode {
     #[primary_key]
     #[auto_inc]
@@ -699,8 +706,12 @@ pub struct ResourceNode {
     pub pool: u64,
 }
 
+/// `structure_held` (private) holds the same rows once a world's feeds are scoped (stage 2,
+/// docs/FEED_SCOPING.md); `structure` is then empty and `map_structure` is the public
+/// architecture. Read and write through `crate::store`.
 #[derive(Clone)]
 #[spacetimedb::table(accessor = structure, public)]
+#[spacetimedb::table(accessor = structure_held)]
 pub struct Structure {
     #[primary_key]
     #[auto_inc]
@@ -1094,8 +1105,12 @@ pub struct LastLook {
     pub at_ms: u64,
 }
 
-/// Inclusive structure-id ranges for one observer and one 128 m block.
+/// Inclusive structure-id ranges for one observer and one 128 m block. In a scoped world
+/// (docs/FEED_SCOPING.md) the ids of sight-scoped kinds go to `seen_structures_scoped`
+/// instead, written only by sightings that passed the sight test.
 #[spacetimedb::table(accessor = seen_structures,
+    index(accessor = by_actor_block, btree(columns = [actor, block])))]
+#[spacetimedb::table(accessor = seen_structures_scoped,
     index(accessor = by_actor_block, btree(columns = [actor, block])))]
 pub struct SeenStructures {
     #[primary_key]
@@ -2464,4 +2479,179 @@ pub struct SlowTimer {
     #[auto_inc]
     pub scheduled_id: u64,
     pub scheduled_at: ScheduleAt,
+}
+
+// ---- public-feed scoping (docs/FEED_SCOPING.md, "Authority shapes") -------------------------
+
+/// The world's feed stage (one row, id 0; absent = 0): 0 the legacy public feeds (law off),
+/// 1 scoped feeds written beside the legacy ones (the clients' switch window), 2 the legacy
+/// feeds closed and the canonical rows private (latched). Public: the only thing a client
+/// reads to choose its subscriptions.
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = feed_scope, public)]
+pub struct FeedScope {
+    #[primary_key]
+    pub id: u8,
+    pub stage: u8,
+    /// When the world entered this stage.
+    pub since_ms: u64,
+}
+
+/// The next id of a held table (`structure`, `resource`) once rows are inserted with explicit
+/// ids (stage 2). Private.
+#[spacetimedb::table(accessor = id_seq)]
+pub struct IdSeq {
+    #[primary_key]
+    pub name: String,
+    pub next: u64,
+}
+
+/// A lot's door structure once `lot.structure` reads 0 (stage 2). Private.
+#[spacetimedb::table(accessor = lot_door)]
+pub struct LotDoor {
+    #[primary_key]
+    pub lot: u32,
+    pub structure: u64,
+}
+
+/// Public architecture (stage >= 1): stable map geometry and a neutral kind, for the allowlisted
+/// kinds (`store::MAP_KINDS`) only. `id` is the structure's.
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = map_structure, public)]
+pub struct MapStructure {
+    #[primary_key]
+    pub id: u64,
+    pub kind: String,
+    pub x: f32,
+    pub y: f32,
+    #[index(btree)]
+    pub chunk: u32,
+}
+
+/// Public resource landmarks (stage >= 1): where each node is and its kind, no stock.
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = map_resource, public)]
+pub struct MapResource {
+    #[primary_key]
+    pub id: u64,
+    pub kind: String,
+    pub x: f32,
+    pub y: f32,
+    #[index(btree)]
+    pub chunk: u32,
+}
+
+/// Architecture with an owner (stage >= 1), for owner labels (`owner_seen`). Private.
+#[spacetimedb::table(accessor = owned_by)]
+pub struct OwnedBy {
+    #[primary_key]
+    pub structure: u64,
+    #[index(btree)]
+    pub owner: u32,
+    pub kind: String,
+}
+
+/// What a viewer sees of one thing now: a copy's payload and a row of `my_things`. `class` 1 is
+/// a structure, 0 a resource node; `key` is `class << 56 | id`. `open` for gates; `lit` for
+/// fires (false for anything else); `owner` only when the `owner_shown` law grants it to this
+/// viewer (0 otherwise); `left` and `max` (whole units) for a resource node only.
+#[derive(Clone, Debug, PartialEq, spacetimedb::SpacetimeType)]
+pub struct SeenThing {
+    pub key: u64,
+    pub class: u8,
+    pub id: u64,
+    pub kind: String,
+    pub x: f32,
+    pub y: f32,
+    pub open: Option<bool>,
+    pub lit: bool,
+    pub owner: u32,
+    pub left: Option<u32>,
+    pub max: Option<u32>,
+}
+
+/// A viewer's copy of a thing its character sees (private; `scope::sweep`, at the player's
+/// perception sweep), written when it comes into sight or its payload changes, gone when it
+/// leaves sight, at death and at a hand-over to the minds.
+#[spacetimedb::table(accessor = thing_seen)]
+pub struct ThingSeen {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    #[index(btree)]
+    pub viewer: Identity,
+    pub character: u32,
+    pub thing: SeenThing,
+}
+
+/// A viewer's owner label for architecture (private; written when its knowledge changes).
+#[spacetimedb::table(accessor = owner_seen)]
+pub struct OwnerSeen {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    #[index(btree)]
+    pub viewer: Identity,
+    pub structure: u64,
+    pub owner: u32,
+}
+
+/// A row of `my_owners`.
+#[derive(Clone, Debug, PartialEq, spacetimedb::SpacetimeType)]
+pub struct OwnerLabel {
+    pub structure: u64,
+    pub owner: u32,
+}
+
+/// What a character last saw of a sight-scoped thing other than a gate (gates: `remembered`):
+/// written when first seen and when its seen place or state changes, by the sight test, for
+/// every controller; gone when a sighting of its place finds it missing, at death, or the
+/// oldest first past `scope::REMEMBER_THINGS`. `lit` as last seen. Private.
+#[spacetimedb::table(accessor = remembered_thing,
+    index(accessor = by_observer_target, btree(columns = [observer, target])),
+    index(accessor = by_observer_chunk, btree(columns = [observer, chunk])))]
+pub struct RememberedThing {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    #[index(btree)]
+    pub observer: u32,
+    pub target: u64,
+    pub kind: String,
+    pub x: f32,
+    pub y: f32,
+    pub chunk: u32,
+    pub open: Option<bool>,
+    pub lit: bool,
+    pub seen_ms: u64,
+}
+
+/// A row of `my_remembered_things`: a thing as last seen (`class` 1; `key` as in [`SeenThing`]).
+#[derive(Clone, Debug, PartialEq, spacetimedb::SpacetimeType)]
+pub struct RememberedSeen {
+    pub key: u64,
+    pub class: u8,
+    pub id: u64,
+    pub kind: String,
+    pub x: f32,
+    pub y: f32,
+    pub open: Option<bool>,
+    pub lit: bool,
+    pub seen_ms: u64,
+}
+
+/// The fuel a character found on a fire when it looked it over (`inspect`): `left` in hours of
+/// burning at that moment. Bounded per character; gone at death. Private (`my_fuel_seen`).
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = fuel_seen,
+    index(accessor = by_observer_target, btree(columns = [observer, target])))]
+pub struct FuelSeen {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    #[index(btree)]
+    pub observer: u32,
+    pub target: u64,
+    pub left: f32,
+    pub seen_ms: u64,
 }

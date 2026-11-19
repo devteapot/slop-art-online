@@ -389,6 +389,11 @@ pub fn knowledge_changed(ctx: &ReducerContext, id: Option<u32>) {
 }
 
 /// The knowledge epochs a viewer's rows depend on, as committed: everyone's (row 0) and its own.
+/// The knowledge epochs `id`'s regard of others was last worked out at (the world's, its own).
+pub(crate) fn epoch_of(ctx: &ReducerContext, id: u32) -> (u64, u64) {
+    knowledge_epoch(ctx, id)
+}
+
 fn knowledge_epoch(ctx: &ReducerContext, id: u32) -> (u64, u64) {
     let of = |k: u32| ctx.db.knowledge_epoch().id().find(k).map_or(0, |r| r.epoch);
     (of(0), of(id))
@@ -1076,6 +1081,12 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
         }
     }
     drop(sight_span);
+    // Sight-scoped things, in the same pass, with the same senses, facing and map (scoped
+    // worlds, docs/FEED_SCOPING.md).
+    if crate::store::sighted(ctx) {
+        let look = crate::scope::Look::from(ctx, common::map(ctx), here, heading, senses);
+        crate::scope::sweep(ctx, &me, viewer, &look, now);
+    }
     if scheduled && senses.gaze.is_some() {
         crate::attention::project(ctx, id, &senses, now);
     }
@@ -1655,6 +1666,7 @@ pub fn health_moved(ctx: &ReducerContext, id: u32, now: u64) {
 
 /// A player's character died: it perceives nothing any more.
 pub fn forget(ctx: &ReducerContext, id: u32, viewer: Identity) {
+    crate::scope::forget(ctx, id, viewer);
     crate::frame::forget(ctx, id);
     for p in ctx.db.perceived().viewer().filter(viewer).map(|p| p.id).collect::<Vec<_>>() {
         ctx.db.perceived().id().delete(p);

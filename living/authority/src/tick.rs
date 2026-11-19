@@ -219,7 +219,7 @@ fn expire_remains(ctx: &ReducerContext, now: u64) {
             ctx.db.inventory().id().delete(i);
         }
         common::invalidate_remains_label(ctx, r.structure);
-        ctx.db.structure().id().delete(r.structure);
+        crate::store::delete_structure(ctx, r.structure);
     }
     common::invalidate_structures(ctx);
 }
@@ -255,7 +255,7 @@ fn spoil(ctx: &ReducerContext, now: u64) {
         }
         let rate = if r.owner & STRUCTURE_BIT != 0 {
             // Kept in a structure: the `kept_spoil` law's share for its kind.
-            let kind = ctx.db.structure().id().find(r.owner & !STRUCTURE_BIT).map(|s| s.kind).unwrap_or_default();
+            let kind = crate::store::structure(ctx, r.owner & !STRUCTURE_BIT).map(|s| s.kind).unwrap_or_default();
             rate * *kept.entry(kind.clone()).or_insert_with(|| sc.num_of("kept_spoil", &kind, 1.0 / 3.0) as f32)
         } else {
             if carrier.0 != r.owner {
@@ -405,6 +405,7 @@ pub fn housekeeping(ctx: &ReducerContext, _t: SlowTimer) -> Result<(), String> {
     crate::perception::report_kept(ctx);
     common::report_diag();
     crate::town::refresh_weather(ctx, now);
+    crate::store::step(ctx, now);
     crate::presence::housekeeping(ctx, now);
     crate::town::guests_leave(ctx, now);
     crate::perception::expire(ctx, now);
