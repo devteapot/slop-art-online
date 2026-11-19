@@ -480,6 +480,8 @@ def hip_share(z, x):
 # coat, a far model alone); else the hem's height.
 SKIRT_SPRING = None
 COAT_SPRING = False
+COAT_ROOT, COAT_HEM = 0.93, 0.70
+COAT_JOINT = COAT_ROOT + 0.60 * (COAT_HEM - COAT_ROOT)
 SKIRT_TOP, SKIRT_EASE, SKIRT_KNEE, SKIRT_BEND = 0.86, 0.10, 0.66, 0.08
 SKIRT_CHAINS = (("Front", 2.0), ("Side", 5.0), ("Back", 8.0))  # a chain and the torso's column it stands on (0 front, NT / 4 the side, NT / 2 back)
 
@@ -507,13 +509,15 @@ def skirt_bone(side, chain, joint, hem):
 def skirt_shares(z, k, hem):
     """A left-side skirt vertex's shares of its own side's spring bones (column k, height z):
     ({bone: share of the thigh's weight}, the share that stays the thigh's own)."""
-    free = smooth(((0.93 if COAT_SPRING else SKIRT_TOP) - z) / SKIRT_EASE)
+    free = smooth((SKIRT_TOP - z) / SKIRT_EASE)
     if free <= 1e-4:
         return {}, 1.0
     phi = 360.0 * k / NT
     front, back = 1.0 - smooth((phi - 45.0) / 36.0), smooth((phi - 99.0) / 36.0)
     round_leg = {"Front": front, "Side": max(1.0 - front - back, 0.0), "Back": back}
     low = smooth((SKIRT_KNEE + SKIRT_BEND / 2 - z) / SKIRT_BEND) if COAT_SPRING or skirt_long(hem) else 0.0
+    if COAT_SPRING:
+        low = smooth((COAT_JOINT + 0.05 - z) / 0.08)
     out = {}
     stay = 1.0 - free
     if COAT_SPRING:
@@ -1908,7 +1912,7 @@ def add_skirt_bones(arm, hem):
     """The spring bones of a smock's skirt (SKIRT_SPRING): three chains under each upper leg,
     on the skirt's own surface at the front, the side and the back (skirt_joints). Returns the
     chains, each a list of bone names."""
-    zs = [SKIRT_TOP, SKIRT_KNEE] if COAT_SPRING else skirt_joints(hem)
+    zs = [COAT_ROOT, COAT_JOINT] if COAT_SPRING else skirt_joints(hem)
     columns = (("Side", NT / 4), ("Back", 8)) if COAT_SPRING else SKIRT_CHAINS
     chains = []
     bpy.context.view_layer.objects.active = arm
@@ -1919,8 +1923,6 @@ def add_skirt_bones(arm, hem):
             parent = arm.data.edit_bones[f"J_Bip_{side}_UpperLeg"]
             names = []
             for joint, z in enumerate(zs):
-                if COAT_SPRING and chain == "Side" and joint == 0:
-                    z = 0.93
                 p = torso_point(z, k, SKIRT_OFF, 1.0, folds=0.0 if COAT_SPRING else 1.0)
                 eb = arm.data.edit_bones.new(skirt_bone(side, chain, joint, hem))
                 eb.head = (0, 0, 0)
@@ -2514,7 +2516,7 @@ def build_person(arm, spec, atlas_path, body=False, bones=None):
                 return 0
 
             p = upper_garment(
-                Part("Coat"), 0.024, [0.70, 0.79, 0.88, 0.97, 1.06, 1.15, 1.24, 1.32],
+                Part("Coat"), 0.024, [COAT_HEM, 0.79, 0.88, 0.97, 1.06, 1.15, 1.24, 1.32],
                 hem=[], cuff=(-0.640, [(-0.030, 0.006)]), collar=[(0.020, 0.004, chest), (0.042, 0.009, chest)],
                 front=lambda z: lerp(0.058, 0.026, smooth((z - 0.70) / 0.75)), skirt=1.0, tag_fn=ctag, neck_d=0.019, neckline=-0.038 if STANCE else -0.012,
             ).mirrored()
@@ -2724,7 +2726,7 @@ def coat_weights(ob):
     """Split the finished coat's thigh weights after its fit, subdivision and belly weighting."""
     for vertex in ob.data.vertices:
         x, y, z = vertex.co
-        if z >= 0.93:
+        if z >= SKIRT_TOP:
             continue
         groups = ob.vertex_groups
         before = sorted(((groups[g.group].name, g.weight) for g in vertex.groups if g.weight > 0), key=lambda q: -q[1])[:4]
@@ -2735,14 +2737,14 @@ def coat_weights(ob):
         side = torso_point(z, NT / 4, 0.024, 1.0)
         end = torso_point(z, 0 if y >= side.y else NT / 2, 0.024, 1.0)
         angle = math.atan2(abs(x / side.x), (y - side.y) / abs(end.y - side.y))
-        own, stay = skirt_shares(z, angle * NT / (2 * PI), 0.70)
+        own, stay = skirt_shares(z, angle * NT / (2 * PI), COAT_HEM)
         spare = 4 - len(before)
         for thigh, weight in legs:
             side_name = thigh.split("_")[2]
             if (x <= 0) == (side_name == "L"):
                 shares = [(n.replace("_L_", f"_{side_name}_"), w) for n, w in own.items()]
             else:
-                shares = [(skirt_bone(side_name, "Back", int(z < SKIRT_KNEE), 0.70), 1 - stay)]
+                shares = [(skirt_bone(side_name, "Back", int(z < COAT_JOINT), COAT_HEM), 1 - stay)]
             shares = sorted([(thigh, stay)] + shares, key=lambda q: -q[1])
             keep = [(n, w) for n, w in shares[:1 + spare] if w > 1e-5]
             spare -= len(keep) - 1
