@@ -184,6 +184,8 @@ def main():
     }
     # The kill switch: off, every public copy goes back at once; the views still show the scene.
     seen_on = {r["id"] for r in player_sql(db, tok["a"], "SELECT id FROM seen_bodies")}
+    # The switch is a value-only law (docs/LAW_OVERRIDE.md): an override row, no reinstall.
+    script_rev = sorted((r["name"], r["revision"]) for r in sql(rid, "SELECT name, revision FROM script"))
     off_path = out / "motion-tables-off-a.jsonl"
     off_stream = stream(db, tok["a"], [TABLE], 6, off_path)
     time.sleep(2.0)
@@ -198,6 +200,8 @@ def main():
     call(rid, "set_world_law", ["motion_tables_on", "true"])
     time.sleep(1.0)
     back = player_sql(db, tok["a"], "SELECT * FROM seen_body_copy")
+    script_rev_after = sorted((r["name"], r["revision"]) for r in sql(rid, "SELECT name, revision FROM script"))
+    override = [r for r in sql(rid, "SELECT * FROM law_override") if r.get("name") == "motion_tables_on"]
     restore = had[0]["value"] if had else "false"
     call(rid, "set_world_law", ["motion_tables_on", restore if isinstance(restore, str) else json.dumps(restore)])
     checks.update({
@@ -205,6 +209,7 @@ def main():
         "law off: A's stream of the table, accepted, ends empty": accepted(off_ev) and off_ev[-1].get("code") == 0 and not final(off_ev, "seen_body_copy"),
         "law off: A's views still show the same creatures, from the private tables": bool(seen_on) and seen_off == seen_on and private_off == len(seen_on),
         "law on again: A's rows return within a second": {r["body"] for r in back} == seen_on,
+        "the switch went through a law_override row, with no reinstall (the script rows' revisions unchanged)": bool(override) and script_rev == script_rev_after,
     })
     result = {"a": a, "b": b, "c": c, "f": f, "dist": {k: round(math.dist(pos[a], pos[k]), 2) for k in (b, c, f)},
               "rows": {w: len(r) for w, r in got.items()}, "a_table": sorted(by_body), "a_view": sorted(a_view),

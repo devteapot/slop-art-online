@@ -186,6 +186,9 @@ struct St {
 #[derive(Default)]
 struct Fresh {
     last_t: HashMap<u32, u64>,
+    /// `seen_body_copy` rows held per creature (no primary key: a change is an insert of the new
+    /// row, then the delete of the old one, in one transaction; the SDK fires inserts first).
+    held: HashMap<u32, u32>,
     near: BTreeMap<u64, u32>,
     all: BTreeMap<u64, u32>,
     by_cue: u32,
@@ -462,8 +465,25 @@ fn hook(p: &Player, log: &Log) {
         // No primary key: a copy's change arrives as a delete and an insert in one update, so an
         // insert of a creature already shown is a new segment (`fresh_sample` keeps the newest).
         conn.db.seen_body_copy().on_insert(move |ctx, c| {
-            let first = st.lock().unwrap().fresh.last_t.get(&c.body).is_none();
+            // A change if the creature's old row is still held (its delete follows); an entry or a
+            // re-entry into sight otherwise, which is not a fresh segment.
+            let first = {
+                let mut s = st.lock().unwrap();
+                let held = s.fresh.held.entry(c.body).or_default();
+                *held += 1;
+                *held == 1
+            };
             fresh_sample(ctx, &st, &copy_moving(c), false, first);
+        });
+        let st = p.st.clone();
+        conn.db.seen_body_copy().on_delete(move |_, c| {
+            let mut s = st.lock().unwrap();
+            if let Some(h) = s.fresh.held.get_mut(&c.body) {
+                *h = h.saturating_sub(1);
+                if *h == 0 {
+                    s.fresh.held.remove(&c.body);
+                }
+            }
         });
         let st = p.st.clone();
         EventTable::on_insert(&conn.db.seen_body_cue(), move |ctx, c| {
