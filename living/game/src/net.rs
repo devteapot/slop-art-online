@@ -41,7 +41,8 @@
 //!    - tiles: `resource_node` and `structure` per chunk within [`REGION_R`].
 //! 4. Public-feed scoping (docs/FEED_SCOPING.md, `feed.rs`): those are the legacy feed's, at
 //!    `feed_scope.stage` 0 (`gate` whole in the base on land worlds). At stage ≥ 1 the base holds
-//!    `my_things`, `my_remembered_things`, `my_owners`, `my_stock` and `my_fuel_seen` instead, and
+//!    `my_things`, `my_remembered_things`, `my_owners`, `my_stock`, `my_fuel_seen` and
+//!    `my_contents_seen` instead, and
 //!    the near window `map_resource` and `map_structure` over the same chunks. A crossing of 0 ↔ 1
 //!    subscribes a whole new base and the near window beside the old ones and drops the old ones
 //!    once both are in (`Net::switch_feed`), independent of the perception set's switch.
@@ -1732,7 +1733,7 @@ mod feed_switch_tests {
                     let legacy = stage == 0;
                     assert_eq!(has("structure") && has("resource_node"), legacy, "legacy windows at stage {stage}");
                     assert_eq!(has("gate"), legacy && mode == Mode::Land, "gate at stage {stage} {mode:?}");
-                    for v in ["my_things", "my_remembered_things", "my_owners", "my_stock", "my_fuel_seen", "map_structure", "map_resource"] {
+                    for v in ["my_things", "my_remembered_things", "my_owners", "my_stock", "my_fuel_seen", "my_contents_seen", "map_structure", "map_resource"] {
                         assert_eq!(has(v), !legacy, "{v} at stage {stage}");
                     }
                 }

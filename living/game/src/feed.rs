@@ -8,7 +8,8 @@
 //!   near window's `structure` and `resource_node` by chunk and `gate` whole in the base;
 //! - **scoped** (stage ≥ 1): what my character sees now (`my_things`), what it remembers of
 //!   sight-scoped things (`my_remembered_things`), owner labels (`my_owners`), depletion it saw
-//!   (`my_stock`) and fuel it found by looking fires over (`my_fuel_seen`) in the base, and the
+//!   (`my_stock`), fuel it found by looking fires over (`my_fuel_seen`) and what it found inside
+//!   containers (`my_contents_seen`) in the base, and the
 //!   public map projections (`map_structure`, `map_resource`) in the near window by chunk.
 //!
 //! `net.rs` switches between the two make-before-break: the new base and the new near window are
@@ -88,6 +89,8 @@ pub const SCOPED_BASE: &[&str] = &[
     "SELECT * FROM my_stock",
     // Fuel it found on fires by looking them over (`inspect`).
     "SELECT * FROM my_fuel_seen",
+    // What it found inside containers when it looked in, took or stored (iteration 2).
+    "SELECT * FROM my_contents_seen",
 ];
 
 /// The feed's queries in the base subscription for a world kind (`land`: whether a `land` row
@@ -417,6 +420,35 @@ pub fn fire_check(lit: bool, seen: Option<(f32, u64)>, rate: f32, now: u64, day_
     }
 }
 
+/// A kind whose inside can be looked into (the authority's `scope::container`): one that `holds`
+/// things (its `holds` trait, `holds`), remains, a trap.
+pub fn container(holds: bool, kind: &str) -> bool {
+    holds || kind == "remains" || kind == "trap"
+}
+
+/// What my character found inside a container when it last looked in (or took from it, or stored
+/// in it): the items and when (authority ms), from `my_contents_seen`; None: it has not looked.
+pub fn contents_seen(db: &RemoteTables, me: u32, id: u64) -> Option<(Vec<(String, u32)>, u64)> {
+    db.my_contents_seen().iter().filter(|r| r.observer == me && r.target == id).max_by_key(|r| r.seen_ms).map(|r| (r.items.into_iter().filter(|i| i.qty > 0).map(|i| (i.item, i.qty)).collect(), r.seen_ms))
+}
+
+/// How a container's inside reads in a title: "3 berries, 2 wood when you looked inside, M ago",
+/// "nothing inside when you looked, M ago", or "not looked inside" (presence only until then).
+pub fn contents_words(seen: Option<&(Vec<(String, u32)>, u64)>, now_ms: f64) -> String {
+    match seen {
+        None => "not looked inside".to_string(),
+        Some((items, at)) => {
+            let ago = ago_words((now_ms - *at as f64).max(0.0) / 1000.0);
+            if items.is_empty() {
+                format!("nothing inside when you looked, {ago}")
+            } else {
+                let list = items.iter().map(|(i, q)| format!("{q} {}", i.replace('_', " "))).collect::<Vec<_>>().join(", ");
+                format!("{list} when you looked inside, {ago}")
+            }
+        }
+    }
+}
+
 /// How the fuel found on a fire reads in a title: "about N h of fuel left, as of when you looked
 /// it over, M ago" (`ago` in real seconds of the authority clock).
 pub fn fuel_words(hours: f32, ago_s: f64) -> String {
@@ -574,5 +606,14 @@ mod tests {
         assert!(fire_check(true, None, 3.0, 0, day).is_nan());
         assert_eq!(fuel_words(4.2, 125.0), "about 4 h of fuel left, as of when you looked it over, 2 min ago");
         assert_eq!(fuel_words(0.0, 1.0), "no fuel left, as of when you looked it over, just now");
+    }
+
+    #[test]
+    fn a_container_reads_as_found_inside_or_not_looked_into() {
+        assert!(container(true, "storage") && container(false, "remains") && !container(false, "house"));
+        assert_eq!(contents_words(None, 0.0), "not looked inside");
+        let found = (vec![("berries".to_string(), 3), ("dried_fish".to_string(), 1)], 1_000);
+        assert_eq!(contents_words(Some(&found), 181_000.0), "3 berries, 1 dried fish when you looked inside, 3 min ago");
+        assert_eq!(contents_words(Some(&(Vec::new(), 0)), 1_000.0), "nothing inside when you looked, just now");
     }
 }

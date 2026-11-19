@@ -960,22 +960,29 @@ fn thing_title(conn: &DbConnection, rules: &Scripts, me: u32, class: &str, kind:
     }
 }
 
-/// What a fire's title adds under the scoped feed: burning or out as seen now, and the fuel my
-/// character found by looking it over, as of then (`my_fuel_seen`); nothing for a fire whose
-/// state it does not see, nor under the legacy feed.
-fn fire_words(conn: &DbConnection, rules: &Scripts, me: &Me, t: &TargetFacts) -> Option<String> {
+/// What a thing's title adds under the scoped feed, for a thing in sight: a fire burning or out as
+/// seen now, and the fuel my character found by looking it over, as of then (`my_fuel_seen`); a
+/// container what it found inside when it last looked (`my_contents_seen`), else that it has not
+/// looked inside (presence only). Nothing under the legacy feed, as main.
+fn state_words(conn: &DbConnection, rules: &Scripts, me: &Me, t: &TargetFacts) -> Option<String> {
     if crate::feed::reads() != crate::feed::Feed::Scoped || t.class != "structure" {
         return None;
     }
     let kind = rules.structure(&t.kind);
-    kind.burns.as_ref()?;
     let burns = |k: &str| Some(rules.structure(k).burns.is_some());
     let seen = crate::feed::find(&conn.db, 1, t.id, me.now_ms, &burns).filter(|k| k.source == crate::feed::Source::Live)?;
-    let state = if seen.lit == Some(true) { "burning" } else { "out" };
-    Some(match crate::feed::fuel_seen(&conn.db, me.actor.id, t.id) {
-        Some((hours, at)) => format!("{state}; {}", crate::feed::fuel_words(hours, (me.now_ms - at as f64).max(0.0) / 1000.0)),
-        None => state.to_string(),
-    })
+    let mut words: Vec<String> = Vec::new();
+    if kind.burns.is_some() {
+        let state = if seen.lit == Some(true) { "burning" } else { "out" };
+        words.push(match crate::feed::fuel_seen(&conn.db, me.actor.id, t.id) {
+            Some((hours, at)) => format!("{state}; {}", crate::feed::fuel_words(hours, (me.now_ms - at as f64).max(0.0) / 1000.0)),
+            None => state.to_string(),
+        });
+    }
+    if crate::feed::container(kind.holds.is_some(), &t.kind) {
+        words.push(crate::feed::contents_words(crate::feed::contents_seen(&conn.db, me.actor.id, t.id).as_ref(), me.now_ms));
+    }
+    (!words.is_empty()).then(|| words.join("; "))
 }
 
 /// What the choices toward an aim are worked out from: its title, the target as I perceive it,
@@ -1008,7 +1015,7 @@ fn toward(conn: &DbConnection, rules: &Scripts, me: &Me, my_at: Vec2, aim: &Aim)
             }
             let mut t = thing_facts(class, kind, *id, *amount, at.distance(my_at));
             fire_facts(conn, rules, &mut t, me);
-            let title = match fire_words(conn, rules, me, &t) {
+            let title = match state_words(conn, rules, me, &t) {
                 Some(w) => format!("{title} — {w}"),
                 None => title,
             };
