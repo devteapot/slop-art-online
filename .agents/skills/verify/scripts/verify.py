@@ -175,7 +175,10 @@ def launch(a):
     mount = wasm_mount()
     if tdir or built.parent.resolve() != mount.resolve():
         wasm = f"living_authority_verify_{a.run.replace('-', '_')}.wasm"
-        (mount / wasm).write_bytes(built.read_bytes())
+        module_copy = mount / wasm
+        module_copy.write_bytes(built.read_bytes())
+        # The container's CLI can run under a different UID from the host launcher.
+        module_copy.chmod(0o644)
     st["wasm"] = wasm
     keep = getattr(a, "keep_data", False)
     owner = admin_token(initialize=True)
