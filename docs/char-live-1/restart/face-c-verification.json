@@ -1,0 +1,33 @@
+{
+  "RGBA_differing_pixels": {
+    "front": 0,
+    "three-quarter": 0,
+    "profile": 0,
+    "back": 0,
+    "near": 0,
+    "middle": 0,
+    "close": 0,
+    "neutral": 0,
+    "blink": 0,
+    "talk": 0,
+    "smile": 0,
+    "returned": 0
+  },
+  "expression_pixels_changed_from_neutral": {
+    "blink": 5421,
+    "talk": 6441,
+    "smile": 4061,
+    "returned": 0
+  },
+  "replayed_design_and_map_hashes_identical": true,
+  "saved_audit": {
+    "stage": "face-c-saved",
+    "materials": 25,
+    "images": [
+      "cora.atlas.png",
+      "cora.iris.png",
+      "cora.tint.png"
+    ],
+    "failures": []
+  }
+}

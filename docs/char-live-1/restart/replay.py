@@ -1252,3 +1252,251 @@ face.data.calc_loop_triangles()
 (ROOT/'face-final-design.json').write_text(json.dumps(dict(type=tf,scale=k,triangles=len(face.data.loop_triangles),
     keys=list(keys.keys()),generator_assets=allowed_generator_images),indent=2)+'\n')
 face_review_final('face-b')
+
+# 2026-11-19T14:46:16.602652+00:00  face-xhigh-geometry-diagnostics
+cg=generator.cage_head
+c0=cg.Cage(tf)
+regions={}
+for r in ('cheek','tip','lip_up','mouth','lip_low','chin_top','chin','jaw','under_jaw','neck'):
+    pts=c0.grid_h[c0.R[r]]
+    regions[r]=np.round(pts[:9],4).tolist()
+smooth_count=sum(p.use_smooth for p in face.data.polygons)
+diag=dict(cage_vertices=len(c0.v),subdivided_vertices=len(c0.subdivided()[0]),smooth_polygons=smooth_count,
+          polygons=len(face.data.polygons),has_custom_normals=face.data.has_custom_normals,
+          modifiers=[m.type for m in face.modifiers],planes=tf['planes'],rows=regions)
+(ROOT/'face-c-before.json').write_text(json.dumps(diag,indent=2)+'\n')
+
+# 2026-11-19T14:51:54.581882+00:00  face-c-cage-and-ear-fit
+# Fit the generated control cage in head-height units. Keep the project cage,
+# eye construction, topology, paint and expression displacements together.
+cg=generator.cage_head
+rig_transform=rig.matrix_world.copy()
+saved_key_names=list(face.data.shape_keys.key_blocks.keys())
+for mat in face.data.materials:
+    for node in list(mat.node_tree.nodes):
+        if node.type=='TEX_IMAGE':mat.node_tree.nodes.remove(node)
+bpy.data.objects.remove(face,do_unlink=True)
+bpy.data.objects.remove(rig,do_unlink=True)
+for im in list(bpy.data.images):
+    if im.name.startswith(('cora.','tint')):bpy.data.images.remove(im)
+allowed_generator_images.clear()
+
+tf['planes'].update(cheek_corner=.12,jaw_line=.14,under_jaw=.20)
+tf['jaw'].update(roll=.023,inset=.59,curve=.64)
+for field,vals in {
+    'w15':[.172,.323,.449,.550,.632],
+    'w30':[.199,.369,.501,.607,.703],
+    'wide':[.213,.393,.529,.633,.727],
+    'p00':[.013,.026,.044,.020,-.003],
+    'p08':[-.018,.010,.024,.005,-.018]}.items():
+    tf['sections'][field][:5]=vals
+tf['mouth'].update(w=.151,lips=.017,curve=.0008)
+tf['ear'].update(size=.196,out_deg=28.)
+# The projected jaw line runs from a rounded chin along an ascending angle
+# to the ear. The near-side cheek above it follows a graded share of the fit.
+jaw_arc=np.array([(0,.012,.008),(.022,.009,.0085),(.044,.001,.0105),
+    (.059,-.012,.014),(.084,-.031,.020),(.117,-.056,.029),(.153,-.088,.043),
+    (.201,-.143,.069),(.268,-.262,.130),(.310,-.402,.217),(.307,-.555,.303)])
+stock_fit=cg.Cage.fit
+def fit_cora_rows(self,rounds=5):
+    pal=self.plan
+    carry={'jaw':1.,'chin':.85,'chin_top':.50,'lip_low':.29,'mouth':.19,
+           'lip_up':.14,'base':.095,'tip':.07,'cheek':.04,'under_jaw':.36}
+    for c,goal in enumerate(jaw_arc):
+        delta=goal-self.grid_h[self.R['jaw'],c]
+        signs=(1,) if c==0 else (-1,1)
+        for sgn in signs:
+            offsets=self.H*np.array((sgn*delta[0],delta[1],delta[2]))
+            for row,share in carry.items():
+                # Retain the central lip, in both open and closed states.
+                if row in ('lip_low','mouth','lip_up','base','tip','cheek') and c<=2:continue
+                self.v[self.vid(self.R[row],sgn*c)] += offsets*share
+    # Keep all four cheek columns ordered outside even the wide/smile mouth.
+    for row in ('lip_up','mouth','lip_low'):
+        r=self.R[row]
+        for sgn in (-1,1):
+            a=self.v[self.vid(r,sgn*cg.C_B)]
+            b=self.v[self.vid(r,sgn*cg.C_CORNER)]
+            for j,fraction in enumerate((.17,.36,.59,.81),cg.C_E0):
+                idx=self.vid(r,sgn*j)
+                self.v[idx,0]=a[0]+(b[0]-a[0])*fraction
+                self.v[idx,1]=a[1]+(b[1]-a[1])*(.56*fraction+.44*fraction*fraction)
+    # Keep the eye openings, brow and forehead on their authored limits.
+    # Allow subdivision to round the remaining cage instead of undoing its
+    # averaging with five rounds of inverse fitting at the cheek and chin.
+    target=self.v.copy()
+    S=self.subdivided()[0][:len(target)]
+    facial_z=target[:,2]/self.H+cg.ZC
+    strength=np.clip((facial_z-.30)/.11,0.,1.)
+    for i in range(rounds):
+        self.v+=(target-S@self.v)*strength[:,None]
+cg.Cage.fit=fit_cora_rows
+stock_face=cg.CageFace
+class FittedCoraFace(stock_face):
+    EAR_SEG=24
+    LINES=False
+    def __init__(self,*args,**kwargs):
+        super().__init__(*args,**kwargs)
+        global fitted_cage
+        fitted_cage=self
+    def _mouth_inside(self,m,state):
+        start=len(m.v)
+        super()._mouth_inside(m,state)
+        for i in range(start,len(m.v)):
+            x,y,z=m.v[i]
+            m.v[i]=(x,y-.0018-.0020*min(abs(x)/self.hf.mouth_w,1.)**2,z)
+    def _ears(self,m):
+        start=len(m.v)
+        super()._ears(m)
+        # Sculpt the generator's helix and concha. Bring the ear a little
+        # forward of the tucked mass and give the inner rim a warm turn.
+        for i in range(start,len(m.v)):
+            x,y,z=m.v[i]
+            m.v[i]=(x,y+.0025,z-.0010)
+    def _skin(self,state):
+        pos=super()._skin(state)
+        if not state.get('mouth',0):
+            upper=sorted(set(self.mouth_up),key=lambda i:pos[i,0])
+            lower=sorted(set(self.mouth_lo),key=lambda i:pos[i,0])
+            for u,l in zip(upper,lower):
+                pos[u]=pos[l]=.5*(pos[u]+pos[l])
+        return pos
+cg.CageFace=FittedCoraFace
+generator.HF=cg.CageHead(tf);hf=generator.HF
+rig=generator.make_armature()
+outdir=ROOT/'cora-face-c-paint';outdir.mkdir(exist_ok=True)
+face,_,_=generator.make_face(rig,spec,str(outdir/'cora.atlas.png'))
+cg.CageFace=stock_face
+cg.Cage.fit=stock_fit
+for suffix in ('atlas','iris','tint'):
+    path=outdir/f'cora.{suffix}.png'
+    allowed_generator_images[hashlib.sha256(path.read_bytes()).hexdigest()]=path.name
+for im in list(bpy.data.images):
+    if im.name=='tint' and not im.users:bpy.data.images.remove(im)
+rig.matrix_world=rig_transform
+bpy.context.view_layer.update()
+keys=face.data.shape_keys.key_blocks
+assert list(keys.keys())==saved_key_names
+for b,sm in zip(keys['Basis'].data,keys['Fcl_MTH_Fun'].data):
+    sm.co=b.co+1.55*(sm.co-b.co)
+
+# The textured ears point at the skin swatch. The generator carries the
+# relief pigment as a multiplier on COLOR_0, as does the glTF material.
+skinmat=bpy.data.materials[generator.MAT['face']]
+tree=skinmat.node_tree
+base=tree.nodes.get('Principled BSDF').inputs['Base Color']
+tex=base.links[0].from_socket
+earcol=tree.nodes.new('ShaderNodeVertexColor');earcol.layer_name='Color'
+multiply=tree.nodes.new('ShaderNodeMixRGB');multiply.blend_type='MULTIPLY'
+multiply.inputs[0].default_value=1.
+tree.links.new(tex,multiply.inputs[1]);tree.links.new(earcol.outputs['Color'],multiply.inputs[2])
+tree.links.new(multiply.outputs[0],base)
+for mat in face.data.materials:
+    bs=mat.node_tree.nodes.get('Principled BSDF')
+    if not bs.inputs['Base Color'].is_linked:
+        vc=mat.node_tree.nodes.new('ShaderNodeVertexColor');vc.layer_name='Color'
+        mat.node_tree.links.new(vc.outputs['Color'],bs.inputs['Base Color'])
+    bs.inputs['Specular IOR Level'].default_value=.1
+
+# Use the same ellipsoid-normal fit as living/tools/face_normals.py.
+# Blender's frame has Z up and +Y forward prior to rotating the rig.
+# Carry a common normal across the separate under-jaw, UV and pigment seams.
+sys.path.insert(0,str(repo_file('living/tools')))
+import face_normals as normal_source
+raw=fitted_cage
+me=face.data
+baseco=np.array([v.co[:] for v in me.vertices])
+surf=raw.skin_n+len(raw._extra)
+shadepos=np.array(raw.mesh.v)
+lo=shadepos[:surf].min(axis=0);hi=shadepos[:surf].max(axis=0)
+half=(hi[0]-lo[0])/2
+centre=np.array(((hi[0]+lo[0])/2,hi[1]-normal_source.CENTRE_BACK*2*half,
+    lo[2]+normal_source.CENTRE_Y*(hi[2]-lo[2])))
+radii=half*np.array(normal_source.RADII)[[0,2,1]]
+def unitrows(v):
+    return v/np.maximum(np.linalg.norm(v,axis=1,keepdims=True),1.e-12)
+proxy=unitrows((shadepos[:surf]-centre)/(radii*radii))
+sn=unitrows(.13*raw.skin_normals[:surf]+.87*proxy)
+normals=np.array([v.normal[:] for v in me.vertices])
+normals[:surf]=sn
+used_under=sorted({i for f in raw.under_faces for i in f})
+under_indices=sorted({i for f,kind in zip(raw.mesh.f,raw.mesh.fm) if kind=='under' for i in f})
+normals[under_indices]=sn[used_under]
+# The tinted guards have exactly the source skin positions plus OVERLAY_OUT.
+from mathutils.kdtree import KDTree
+kd=KDTree(surf)
+for i,p in enumerate(shadepos[:surf]):kd.insert(p+raw.skin_normals[i]*generator.OVERLAY_OUT,i)
+kd.balance()
+for tri,kind in zip(raw.mesh.f,raw.mesh.fm):
+    if kind=='tint':
+        for i in tri:
+            _,src,dist=kd.find(shadepos[i])
+            assert dist<.00001
+            normals[i]=sn[src]
+for poly in me.polygons:poly.use_smooth=True
+me.normals_split_custom_set_from_vertices(normals.tolist())
+assert me.has_custom_normals
+# Match the attached neck's top positions and normals to the actual cage.
+ring_ids=raw.under_neck
+cworld=face.matrix_world
+vp=[(cworld@me.vertices[i].co,i) for i in ring_ids]
+center=sum((p for p,i in vp),Vector())/len(vp)
+vp.sort(key=lambda pair:neck_angle(pair[0]))
+nn=len(vp)
+for j,(p,idx) in enumerate(vp):neck.data.vertices[j].co=p
+neck.data.update()
+neck_normals=[v.normal.copy() for v in neck.data.vertices]
+for j,(p,idx) in enumerate(vp):
+    neck_normals[j]=(cworld.to_3x3()@Vector(normals[idx])).normalized()
+neck.data.normals_split_custom_set_from_vertices(neck_normals)
+skin_slot=next(p.material_index for p in me.polygons if p.vertices[0] in set(under_indices))
+neck.data.materials.clear();neck.data.materials.append(me.materials[skin_slot])
+neckcol=neck.data.color_attributes.new(name='Color',type='FLOAT_COLOR',domain='CORNER')
+neck_rgb=me.color_attributes['Color'].data[next(p.loop_start for p in me.polygons if p.material_index==skin_slot)].color[:]
+for item in neckcol.data:item.color=neck_rgb
+
+# Continue the accepted dark cap edge inward to the scalp. Behind the ear
+# the turn drops toward the braid root, covering the rear temple in profile.
+count=72
+rings=[]
+for level in range(5):
+    row=[]
+    for j in range(count):
+        p=hair_ob.data.vertices[1+15*count+j].co
+        x,y,z=p.x/unit,p.y/unit,785-p.z/unit
+        angle=j*math.tau/count
+        rear=(1-math.cos(angle))*.5
+        trailing=sat((rear-.40)/.34)
+        earhole=math.exp(-((rear-.52)/.12)**2)
+        drop=4+trailing*(max(0,120-z)+2)-3*earhole
+        d=(0,.36,.80,1,1)[level]
+        scale=(1,.94,.80,.58,.26)[level]
+        row.append(wp(x*scale,2+(y-2)*scale,z+d*drop+(-8 if level==4 else 0)))
+    rings+=row
+linerfaces=[(r*count+j,(r+1)*count+j,(r+1)*count+(j+1)%count,r*count+(j+1)%count)
+            for r in range(4) for j in range(count)]
+linerfaces.append(tuple(reversed(range(4*count,5*count))))
+liner=geo('Ear tuck and nape lining',rings,linerfaces,hair_material)
+ca=liner.data.color_attributes.new(name='Color',type='FLOAT_COLOR',domain='CORNER')
+for poly in liner.data.polygons:
+    poly.use_smooth=True
+    for li in poly.loop_indices:ca.data[li].color=palette[underhair]
+# Join into the existing single material hair primitive, keeping every
+# vertex and colour of the accepted sweep and braid.
+bpy.ops.object.select_all(action='DESELECT')
+liner.select_set(True);hair_ob.select_set(True)
+bpy.context.view_layer.objects.active=hair_ob
+bpy.ops.object.join()
+assert list(hair_ob.data.materials)==[hair_material]
+for ob in (face,hair_ob):ob.data.calc_loop_triangles()
+keyrange={key.name:float(max((q.co-b.co).length for q,b in zip(key.data,keys['Basis'].data))) for key in list(keys)[1:]}
+assert len(keyrange)==15 and min(keyrange.values())>0
+stats=dict(type=tf,cage_vertices=len(hf.cage.v),subdivided_vertices=raw.skin_n,
+           smooth_polygons=sum(p.use_smooth for p in me.polygons),custom_normals=me.has_custom_normals,
+           face_triangles=len(me.loop_triangles),hair_triangles=len(hair_ob.data.loop_triangles),
+           key_max_displacements_m=keyrange,ear_segments=24,neck_ring=len(vp),generator_assets=allowed_generator_images)
+(ROOT/'face-c-design.json').write_text(json.dumps(stats,indent=2)+'\n')
+audit('face-c-fitted')
+
+# 2026-11-19T14:52:11.826921+00:00  face-c-orbit-expression-audit
+face_review_final('face-c')

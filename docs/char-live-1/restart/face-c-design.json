@@ -1,0 +1,202 @@
+{
+  "type": {
+    "id": "adult-f-c",
+    "band": "adult",
+    "ages": [
+      18,
+      60
+    ],
+    "sex": "female",
+    "line": "c",
+    "name": "long",
+    "head": {
+      "height_m": 0.233,
+      "figure_heads": 7.0,
+      "chin_drop": 0.0
+    },
+    "sections": {
+      "z": [
+        0.04,
+        0.12,
+        0.2,
+        0.28,
+        0.4,
+        0.52,
+        0.64,
+        0.76,
+        0.88
+      ],
+      "w15": [
+        0.172,
+        0.323,
+        0.449,
+        0.55,
+        0.632,
+        0.640714,
+        0.5667585714285714,
+        0.57567,
+        0.38688
+      ],
+      "w30": [
+        0.199,
+        0.369,
+        0.501,
+        0.607,
+        0.703,
+        0.695554,
+        0.7128114285714287,
+        0.6696,
+        0.5719500000000001
+      ],
+      "wide": [
+        0.213,
+        0.393,
+        0.529,
+        0.633,
+        0.727,
+        0.701952,
+        0.7339385714285714,
+        0.7086600000000001,
+        0.5719500000000001
+      ],
+      "p00": [
+        0.013,
+        0.026,
+        0.044,
+        0.02,
+        -0.003,
+        0.016,
+        0.034,
+        0.019,
+        -0.052
+      ],
+      "p08": [
+        -0.018,
+        0.01,
+        0.024,
+        0.005,
+        -0.018,
+        0.003,
+        0.015,
+        0.002,
+        -0.078
+      ],
+      "p30": [
+        null,
+        null,
+        -0.273,
+        -0.108,
+        -0.115,
+        -0.081,
+        -0.058,
+        -0.1,
+        -0.209
+      ]
+    },
+    "skull": {
+      "crown": 1.0,
+      "depth": 0.86,
+      "back_z": 0.58
+    },
+    "eye": {
+      "z": 0.455,
+      "apart": 0.328,
+      "w": 0.193,
+      "h": 0.071,
+      "tilt_deg": 3.3,
+      "behind_brow": 0.038,
+      "behind_cheek": 0.041,
+      "iris": 0.5,
+      "shape": 0.06,
+      "fold": 0.65,
+      "iris_behind_lid": 0.017,
+      "white_depth": 0.064
+    },
+    "brow": {
+      "above_eye": 0.089,
+      "thick": 0.015,
+      "tilt_deg": -1.0,
+      "arch": 0.28,
+      "ridge": 0.0,
+      "lift": 0.002,
+      "brow_z": 0.553,
+      "length": 1.0
+    },
+    "nose": {
+      "tip_z": 0.295,
+      "out": 0.114,
+      "tip_y": 0.094,
+      "base_z": 0.273,
+      "bridge_z": 0.448,
+      "width": 0.096
+    },
+    "mouth": {
+      "z": 0.183,
+      "w": 0.151,
+      "lips": 0.017,
+      "curve": 0.0008
+    },
+    "jaw": {
+      "angle_z": 0.3,
+      "angle_back": 0.359,
+      "under": 0.06,
+      "curve": 0.64,
+      "inset": 0.59,
+      "roll": 0.023,
+      "rear_rise": 0.04
+    },
+    "ear": {
+      "z": 0.374,
+      "size": 0.196,
+      "out_deg": 28.0,
+      "back": 0.5
+    },
+    "planes": {
+      "cheek_corner": 0.12,
+      "brow_line": 0.35,
+      "jaw_line": 0.14,
+      "under_jaw": 0.2
+    },
+    "body": {
+      "height_m": [
+        1.53,
+        1.67,
+        1.81
+      ],
+      "weight": -0.3,
+      "muscle": -0.05,
+      "head_power": 0.6
+    },
+    "made_from": "reference + (pass 2's adult woman \u2212 pass 2's adult woman) \u2212 0.5 \u00d7 (sister \u2212 reference), lengthened"
+  },
+  "cage_vertices": 589,
+  "subdivided_vertices": 2330,
+  "smooth_polygons": 3354,
+  "custom_normals": true,
+  "face_triangles": 6496,
+  "hair_triangles": 12978,
+  "key_max_displacements_m": {
+    "Fcl_EYE_Close": 0.020625353067574872,
+    "Fcl_EYE_Close_L": 0.020625353067574872,
+    "Fcl_EYE_Close_R": 0.020625353067574872,
+    "Fcl_EYE_Joy": 0.012475132677350925,
+    "Fcl_MTH_A": 0.009732002487004439,
+    "Fcl_MTH_I": 0.004542142429575592,
+    "Fcl_MTH_U": 0.006535907068183392,
+    "Fcl_MTH_E": 0.006001703736225921,
+    "Fcl_MTH_O": 0.008825942950523675,
+    "Fcl_MTH_Fun": 0.0060823748422641575,
+    "Fcl_MTH_Sorrow": 0.003118424986639287,
+    "Fcl_BRW_Angry": 0.0042137257944909155,
+    "Fcl_BRW_Sorrow": 0.004000366487311761,
+    "Fcl_BRW_Surprised": 0.005392522203430956,
+    "Fcl_BRW_Fun": 0.0028603572190436404
+  },
+  "ear_segments": 24,
+  "neck_ring": 56,
+  "generator_assets": {
+    "436f4525b2bdaaab02816dcfbd865070d52d50c5bb476c1da94d6d19687cb4a9": "cora.atlas.png",
+    "307a6c5805d361b75f0f3bb03a5fd3cfb77e7ed67fe2af1db2e3801376924808": "cora.iris.png",
+    "5e71699d09e3d6be436d5746704bb26fff8e1cc736c51b0ed7a5c89fec0f253c": "cora.tint.png"
+  }
+}

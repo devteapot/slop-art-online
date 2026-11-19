@@ -13,3 +13,6 @@
 {"stage": "face-a", "materials": 25, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png", "tint"], "failures": []}
 {"stage": "face-b", "materials": 25, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
 {"stage": "face-b-saved", "materials": 25, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "face-c-fitted", "materials": 25, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "face-c", "materials": 25, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "face-c-saved", "materials": 25, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
