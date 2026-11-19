@@ -1,0 +1,9 @@
+{
+  "overlapping_coat_jersey_triangle_pairs": 0,
+  "underlap_samples": 236,
+  "min_underlap_clearance_mm": 3.1566086690872908,
+  "max_underlap_clearance_mm": 11.843407526612282,
+  "max_lateral_overlap_mm": 8.650065530799475,
+  "jersey_vertices": 474,
+  "body_and_rib_triangles": 860
+}

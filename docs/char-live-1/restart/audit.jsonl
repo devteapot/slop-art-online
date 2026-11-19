@@ -3,3 +3,4 @@
 {"stage": "restart-cleaned", "materials": 4, "images": [], "failures": []}
 {"stage": "clothing", "materials": 14, "images": [], "failures": []}
 {"stage": "clothing-fit", "materials": 17, "images": [], "failures": []}
+{"stage": "clothing-xhigh", "materials": 17, "images": [], "failures": []}

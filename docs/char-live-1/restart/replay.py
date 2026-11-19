@@ -636,3 +636,102 @@ tube("Tailoring centre back",[wp(0,y,z) for z,y in
 display.show_specular_highlight=False
 display.studio_light='paint.sl' if 'paint.sl' in [x.name for x in bpy.context.preferences.studio_lights] else display.studio_light
 frame("clothing-fit")
+
+# 2026-11-19T14:28:56.222105+00:00  clothing-xhigh-measure
+def section_debug(ob):
+    return [[round(c/unit,3) for c in v.co] for v in ob.data.vertices]
+with (ROOT/'cloth-sections.json').open('w') as fp:
+    json.dump({k:section_debug(objs[k]) for k in
+      ['Coat envelope with centre opening','Notched lapel L','V neck jersey','V rib binding','Chest above neckline']}, fp)
+
+# 2026-11-19T14:30:24.109955+00:00  clothing-xhigh-fit
+# A dressed model only exposes a small knit panel. Follow each authored coat
+# edge down to the belt and leave 4 sheet pixels of concealed seam allowance.
+# Resolve this from the coat mesh so the narrowing at the waist is retained.
+from bisect import bisect_right
+import numpy as np
+coat_obj=objs["Coat envelope with centre opening"]
+edges=[v.co.copy() for v in list(coat_obj.data.vertices)[::33]]
+stations=[(785-p.z/unit,p.x/unit,p.y/unit) for p in edges]
+def edge_at(z):
+    i=max(0,min(len(stations)-2,bisect_right([r[0] for r in stations],z)-1))
+    lo,hi=stations[i:i+2]
+    t=(z-lo[0])/(hi[0]-lo[0])
+    return tuple(lo[k]+(hi[k]-lo[k])*t for k in (1,2))
+def v_edge(z):
+    return max(0,(186-z)*30/35)
+allowance=4.
+def overlap_width(z):
+    return edge_at(z)[0]+allowance-v_edge(z)
+lo,hi=151.,163.
+for _ in range(30):
+    mid=(lo+hi)/2
+    if overlap_width(mid)>0:hi=mid
+    else:lo=mid
+tip=(lo+hi)/2
+# The previous neckline was a 35 px V ending at y=186. The darker 5 px knit
+# edge now shares vertices with the panel instead of standing on a second tube.
+def front_depth(x,z):
+    edge_x,edge_y=edge_at(z)
+    radius=float(np.interp(z,[151,167,202,214,233,277,287],[39,43,47,48,46,38,32]))
+    raw=-radius*math.sqrt(max(0,1-(x/63)**2))
+    # Blend into the interior before reaching the coat. The local tangent
+    # follows the front wool across the short overlap. Depth increases inward.
+    guard=edge_y+3.5+.52*(x-edge_x)
+    t=max(0,min(1,(x-edge_x+10)/9))
+    return raw+(max(raw,guard)-raw)*t*t*(3-2*t)
+vs=[];polys=[];mats=[];vmap={}
+def panel_vertex(x,z):
+    xyz=wp(x,front_depth(abs(x),z),z)
+    key=tuple(round(v,8) for v in xyz)
+    if key not in vmap:
+        vmap[key]=len(vs);vs.append(xyz)
+    return vmap[key]
+rows=sorted(set([tip,tip+1,tip+2.5,tip+4,163.,166.,170.,174.,177.,181.,186.,191.,
+                 196.,200.,207.,214.,224.,233.,243.,260.,273.,279.,282.,287.]))
+for side in (-1,1):
+    previous=None
+    for z in rows:
+        edge_x,_=edge_at(z)
+        end=edge_x+allowance
+        start=min(end,v_edge(z))
+        rib_end=max(start,min(end,v_edge(z-5)))
+        xs=[start,rib_end]+[rib_end+(end-rib_end)*j/10 for j in range(1,11)]
+        current=[panel_vertex(side*x,z) for x in xs]
+        if previous:
+            for j in range(len(xs)-1):
+                f=list(dict.fromkeys([previous[j],current[j],current[j+1],previous[j+1]]))
+                if len(f)>=3:
+                    polys.append(f if side==1 else f[::-1])
+                    mats.append(1 if j==0 else 0)
+        previous=current
+shirt=geo("Fitted jersey and V rib",vs,polys,knit)
+shirt.data.materials.append(binding)
+for f,mat_index in zip(shirt.data.polygons,mats):
+    f.material_index=mat_index; f.use_smooth=True
+for name in ("V neck jersey","V rib binding"):
+    bpy.data.objects.remove(objs[name],do_unlink=True)
+# Evaluate after Solidify, including the coat's inner surface and edge wall.
+bpy.context.view_layer.update()
+deps=bpy.context.evaluated_depsgraph_get()
+coat_tree=BVHTree.FromObject(coat_obj,deps)
+knit_tree=BVHTree.FromObject(shirt,deps)
+pairs=coat_tree.overlap(knit_tree)
+# Sample face interiors as well as the vertices. Measure Euclidean clearance
+# against the finished shell for all samples projected under its front edge.
+clearances=[]
+for p in list(vs)+[f.center.copy() for f in shirt.data.polygons]:
+    x,y,world_z=p
+    z=785-world_z/unit
+    edge_x,_=edge_at(z)
+    if abs(x)/unit>=edge_x:
+        clearances.append(coat_tree.find_nearest(Vector(p))[3]*1000)
+report=dict(overlapping_coat_jersey_triangle_pairs=len(pairs),
+            underlap_samples=len(clearances),min_underlap_clearance_mm=min(clearances),
+            max_underlap_clearance_mm=max(clearances),
+            max_lateral_overlap_mm=allowance*unit*1000,
+            jersey_vertices=len(vs),body_and_rib_triangles=sum(len(f.vertices)-2 for f in shirt.data.polygons))
+(ROOT/'clothing-clearance.json').write_text(json.dumps(report,indent=2)+'\n')
+
+# 2026-11-19T14:30:35.961700+00:00  clothing-xhigh-review
+frame("clothing-xhigh")

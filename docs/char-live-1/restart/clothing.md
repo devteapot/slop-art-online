@@ -18,3 +18,11 @@ OCIO="$PWD/../standard.ocio" CHAR_LIVE_OUTPUT="$PWD/rebuilt" "$HOME/.local/share
 ```
 
 Restart, clothing, two six-view reviews and replay took about four minutes wall time. No image-generation calls or game build were used. Model-token usage and cost were unavailable.
+
+## Clothing gate passed on the xhigh fit
+
+The [six-view review](clothing-xhigh-review.png) shows a red V in the front opening, continuous heather wool over the shoulders and a clear rear neckline. The front, three-quarter, profile and back views include overlays. The 58° Near and Middle crops show the value separation at game framing. The coat opening, lapels, cuffs, apron ties, trousers and boots are the existing geometry from the second fit.
+
+The [accepted checkpoint](cora-clothing-xhigh.blend) replaces the full jersey and its separate rib tube with a front insert. The V edge retains its original 35 px drop and the rib occupies a 5 px band on the same mesh. Each side follows the actual coat edge and continues 8.65 mm underneath it. The new insert and rib use 860 triangles together. The full coat shell with its thickness modifier and the insert have zero intersecting triangle pairs in rest pose. A nearest-surface check at 236 underlap vertices and face centres measured 3.16–11.84 mm between the surfaces. This fit will need its motion check with the rig. [Clearance data](clothing-clearance.json)
+
+The strict audit after rendering found 17 material datablocks, zero image datablocks and zero violations. Factory-startup replay reproduced all six final RGBA renders pixel for pixel and the same clearance JSON. The xhigh clothing work took about 2½ minutes, including replay. No image-generation calls or game build ran. Token and billing totals were unavailable.
