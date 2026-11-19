@@ -28,6 +28,8 @@ export CARGO_TARGET_DIR=$PWD/.local/target            # a private target dir (ot
 
 `scripts/drive.py` runs one headless client (`LIVING_GAME_LIVE`, `LIVING_GAME_LIVE_PLAN`) and keeps its evidence; `scripts/check.py` runs the scenarios with their checks.
 
+The driver renews the scratch world's inactivity lease while the client runs. Scenarios fail early with `scratch world is paused` or `scratch world tick stationary` if the authority fails the health check at scenario start or before perception results are used.
+
 ```bash
 S=.agents/skills/verify-ui/scripts
 $S/check.py --list                          # every scenario, in the order defined (each registers itself with @scenario); * needs a Cullet world
