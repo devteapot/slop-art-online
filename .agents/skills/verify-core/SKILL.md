@@ -69,6 +69,9 @@ python3 "$C/scenes.py" witness_fold --run "$R" > "$E/witness_fold.txt" 2>&1
 python3 "$C/scenes.py" cheap_check_ctx --run "$R" > "$E/cheap_check_ctx.txt" 2>&1
 python3 "$C/scenes.py" cheap_alarms --run "$R" > "$E/cheap_alarms.txt" 2>&1
 python3 "$C/scenes.py" cheap_warmth --run "$R" > "$E/cheap_warmth.txt" 2>&1
+# The body's statuses by their parts equal the whole law over every status, and off ask it whole
+# (features/battle.md, about 2.5 min). It moves the world to its night: run it on its own world, or last.
+python3 "$C/scenes.py" status_parts --run "$R" > "$E/status_parts.txt" 2>&1
 # The lazy scene gives the whole scene's answers, all round and by facing; off, the old path (features/battle.md, about 2.5 min).
 python3 "$C/scenes.py" scene_lazy --run "$R" > "$E/scene_lazy.txt" 2>&1
 # The chronicle's repeat check read newest first, and noticing read in place, give the full reads' answers; off, the old paths (features/battle.md, about 2 min each).
