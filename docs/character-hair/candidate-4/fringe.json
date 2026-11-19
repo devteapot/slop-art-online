@@ -1,0 +1,338 @@
+{
+ "child-u-a": {
+  "brow_top_mm": 11.650239920483772,
+  "fullest_mm": 2.941568431820585,
+  "fullest": "bob.3",
+  "median_mm": 13.947647862522006,
+  "styles": 39,
+  "off_standard_mm": 0.4984869898796447,
+  "off_standard_in": "tousled",
+  "before_skin_mm": 10.14675189110989,
+  "before_skin_in": "bob.3",
+  "move_mm": [
+   0.0,
+   -1.3753092281556523,
+   0.4780599510204875
+  ]
+ },
+ "child-u-b": {
+  "brow_top_mm": 7.368359920483773,
+  "fullest_mm": 2.9413345460409523,
+  "fullest": "bob.3",
+  "median_mm": 14.701157035962087,
+  "styles": 39,
+  "off_standard_mm": 1.7525904505071281,
+  "off_standard_in": "tousled",
+  "before_skin_mm": 9.578616827258148,
+  "before_skin_in": "shag.2",
+  "move_mm": [
+   0.0,
+   -5.876828175917392,
+   2.0900620165274635
+  ]
+ },
+ "child-u-c": {
+  "brow_top_mm": 9.496479920483777,
+  "fullest_mm": 2.9413082771236887,
+  "fullest": "bob.3",
+  "median_mm": 14.405550421777269,
+  "styles": 39,
+  "off_standard_mm": 1.260632601996825,
+  "off_standard_in": "tousled",
+  "before_skin_mm": 8.654203424759949,
+  "before_skin_in": "bob.3",
+  "move_mm": [
+   0.0,
+   -3.9735421020041795,
+   1.030125319169961
+  ]
+ },
+ "youth-f-a": {
+  "brow_top_mm": 17.642111298564355,
+  "fullest_mm": 2.9421925265271653,
+  "fullest": "bob.3",
+  "median_mm": 13.857652218550843,
+  "styles": 40,
+  "off_standard_mm": 1.7972805654349315,
+  "off_standard_in": "swept",
+  "before_skin_mm": 11.151383342935944,
+  "before_skin_in": "braids.3",
+  "move_mm": [
+   0.0,
+   4.427838937610229,
+   -1.0494166315791338
+  ]
+ },
+ "youth-f-b": {
+  "brow_top_mm": 13.052551298564355,
+  "fullest_mm": 2.942004837384715,
+  "fullest": "bob.3",
+  "median_mm": 14.718032602945573,
+  "styles": 40,
+  "off_standard_mm": 0.10700145315345821,
+  "off_standard_in": "swept",
+  "before_skin_mm": 10.094814557087078,
+  "before_skin_in": "bob.3",
+  "move_mm": [
+   0.0,
+   -0.26059600078376377,
+   0.11418453354157532
+  ]
+ },
+ "youth-f-c": {
+  "brow_top_mm": 15.231951298564328,
+  "fullest_mm": 2.9418870653226126,
+  "fullest": "bob.3",
+  "median_mm": 14.34334142998317,
+  "styles": 40,
+  "off_standard_mm": 0.6653439994090959,
+  "off_standard_in": "swept",
+  "before_skin_mm": 10.274073050681398,
+  "before_skin_in": "bob.3",
+  "move_mm": [
+   0.0,
+   2.0100504498294924,
+   0.8434026651279736
+  ]
+ },
+ "youth-m-a": {
+  "brow_top_mm": 17.449716389834954,
+  "fullest_mm": 2.9429406095706767,
+  "fullest": "bob.3",
+  "median_mm": 13.63364059943095,
+  "styles": 40,
+  "off_standard_mm": 2.4927102161795816,
+  "off_standard_in": "swept",
+  "before_skin_mm": 10.750335289556629,
+  "before_skin_in": "braids.3",
+  "move_mm": [
+   0.0,
+   4.846465628213892,
+   -1.2987121503155592
+  ]
+ },
+ "youth-m-b": {
+  "brow_top_mm": 12.885796389834962,
+  "fullest_mm": 2.942791807282852,
+  "fullest": "bob.3",
+  "median_mm": 14.466411584616035,
+  "styles": 40,
+  "off_standard_mm": 0.6589187095340492,
+  "off_standard_in": "swept",
+  "before_skin_mm": 10.63733640392621,
+  "before_skin_in": "bun.2",
+  "move_mm": [
+   0.0,
+   0.27078322415508005,
+   -0.3466192345153857
+  ]
+ },
+ "youth-m-c": {
+  "brow_top_mm": 16.552316389834964,
+  "fullest_mm": 2.942678872110971,
+  "fullest": "bob.3",
+  "median_mm": 13.837677895178867,
+  "styles": 40,
+  "off_standard_mm": 1.9790961296151082,
+  "off_standard_in": "swept",
+  "before_skin_mm": 11.071870772516979,
+  "before_skin_in": "braids.3",
+  "move_mm": [
+   0.0,
+   3.9837953245032143,
+   -0.01716037323329367
+  ]
+ },
+ "adult-f-a": {
+  "brow_top_mm": 17.89851129856435,
+  "fullest_mm": 2.942179597757111,
+  "fullest": "bob.3",
+  "median_mm": 13.816275261869016,
+  "styles": 40,
+  "off_standard_mm": 1.8825922315663917,
+  "off_standard_in": "swept",
+  "before_skin_mm": 11.185415818071572,
+  "before_skin_in": "braids.3",
+  "move_mm": [
+   0.0,
+   4.67849708803314,
+   -0.8907546425039603
+  ]
+ },
+ "adult-f-b": {
+  "brow_top_mm": 13.308951298564352,
+  "fullest_mm": 2.942016879231346,
+  "fullest": "bob.3",
+  "median_mm": 14.669886389881981,
+  "styles": 40,
+  "off_standard_mm": 0.0,
+  "off_standard_in": "tousled.3",
+  "before_skin_mm": 10.295828996954192,
+  "before_skin_in": "bob.3",
+  "move_mm": [
+   0.0,
+   0.0,
+   4.163336342344337e-14
+  ]
+ },
+ "adult-f-c": {
+  "brow_top_mm": 15.48835129856436,
+  "fullest_mm": 2.9418924695192583,
+  "fullest": "bob.3",
+  "median_mm": 14.296040157035561,
+  "styles": 40,
+  "off_standard_mm": 0.768632916571697,
+  "off_standard_in": "swept",
+  "before_skin_mm": 10.289951553322032,
+  "before_skin_in": "bob.3",
+  "move_mm": [
+   0.0,
+   2.2734448500560944,
+   0.8449234877168921
+  ]
+ },
+ "adult-m-a": {
+  "brow_top_mm": 17.603556389834957,
+  "fullest_mm": 2.943080417359356,
+  "fullest": "bob.3",
+  "median_mm": 13.544723628065025,
+  "styles": 40,
+  "off_standard_mm": 2.7238874117561096,
+  "off_standard_in": "swept",
+  "before_skin_mm": 10.766758814428165,
+  "before_skin_in": "braids.3",
+  "move_mm": [
+   0.0,
+   5.192873560393219,
+   -2.1961813670264565
+  ]
+ },
+ "adult-m-b": {
+  "brow_top_mm": 13.01399638983496,
+  "fullest_mm": 2.9429170006249894,
+  "fullest": "bob.3",
+  "median_mm": 14.385858485313152,
+  "styles": 40,
+  "off_standard_mm": 0.8679325232363624,
+  "off_standard_in": "swept",
+  "before_skin_mm": 10.252173422961475,
+  "before_skin_in": "bun.2",
+  "move_mm": [
+   0.0,
+   0.5862860471488318,
+   -0.9500617274894874
+  ]
+ },
+ "adult-m-c": {
+  "brow_top_mm": 16.706156389834934,
+  "fullest_mm": 2.9427983222809484,
+  "fullest": "bob.3",
+  "median_mm": 13.75852415440626,
+  "styles": 40,
+  "off_standard_mm": 2.183460319375776,
+  "off_standard_in": "swept",
+  "before_skin_mm": 10.932713292965746,
+  "before_skin_in": "bun.2",
+  "move_mm": [
+   0.0,
+   4.297910151329853,
+   -0.8204512818971027
+  ]
+ },
+ "elder-f-a": {
+  "brow_top_mm": 8.180951298564345,
+  "fullest_mm": 2.9420265797730494,
+  "fullest": "bob.3",
+  "median_mm": 14.409930984887964,
+  "styles": 39,
+  "off_standard_mm": 1.2677087392480857,
+  "off_standard_in": "tousled",
+  "before_skin_mm": 10.247979275213579,
+  "before_skin_in": "bob.3",
+  "move_mm": [
+   0.0,
+   -4.836977387526087,
+   -0.2552109357877308
+  ]
+ },
+ "elder-f-b": {
+  "brow_top_mm": 4.078551298564347,
+  "fullest_mm": 2.941850506635202,
+  "fullest": "bob.3",
+  "median_mm": 15.10437540892351,
+  "styles": 39,
+  "off_standard_mm": 2.4234959720066414,
+  "off_standard_in": "tousled",
+  "before_skin_mm": 9.915356018585008,
+  "before_skin_in": "bun.2",
+  "move_mm": [
+   0.0,
+   -9.031570034086167,
+   0.8326810619927044
+  ]
+ },
+ "elder-f-c": {
+  "brow_top_mm": 7.078431298564352,
+  "fullest_mm": 2.941729672660154,
+  "fullest": "bob.3",
+  "median_mm": 14.637668494890566,
+  "styles": 39,
+  "off_standard_mm": 1.6468112802738872,
+  "off_standard_in": "tousled",
+  "before_skin_mm": 10.139928928469613,
+  "before_skin_in": "short.cap",
+  "move_mm": [
+   0.0,
+   -5.934312377310125,
+   1.5046358984638353
+  ]
+ },
+ "elder-m-a": {
+  "brow_top_mm": 12.307486189834957,
+  "fullest_mm": 2.9432142452718857,
+  "fullest": "bob.3",
+  "median_mm": 14.44291722109714,
+  "styles": 40,
+  "off_standard_mm": 0.8300604738815665,
+  "off_standard_in": "swept",
+  "before_skin_mm": 9.909117106516804,
+  "before_skin_in": "bun.2",
+  "move_mm": [
+   0.0,
+   -0.07988936416847281,
+   -2.454328056781932
+  ]
+ },
+ "elder-m-b": {
+  "brow_top_mm": 8.230726189834956,
+  "fullest_mm": 2.943054347002372,
+  "fullest": "bob.3",
+  "median_mm": 14.115451541685475,
+  "styles": 39,
+  "off_standard_mm": 0.7773124039418562,
+  "off_standard_in": "tousled",
+  "before_skin_mm": 8.789491796946047,
+  "before_skin_in": "bun.2",
+  "move_mm": [
+   0.0,
+   -4.167113251667631,
+   -0.773647647839229
+  ]
+ },
+ "elder-m-c": {
+  "brow_top_mm": 14.307406189834937,
+  "fullest_mm": 2.942931217610134,
+  "fullest": "bob.3",
+  "median_mm": 14.14946701558173,
+  "styles": 40,
+  "off_standard_mm": 1.3804747744787775,
+  "off_standard_in": "swept",
+  "before_skin_mm": 10.124613922741569,
+  "before_skin_in": "bun.2",
+  "move_mm": [
+   0.0,
+   1.9172894015051511,
+   -1.0616726959086638
+  ]
+ }
+}

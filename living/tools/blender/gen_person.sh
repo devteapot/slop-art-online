@@ -135,7 +135,9 @@ for p in "${people[@]}"; do
       python3 living/tools/merge_primitives.py "$f" "$f.tmp" && mv "$f.tmp" "$f"
       python3 living/tools/face_normals.py "$f" "$f.tmp" --png "${f%.glb}.face.png" && mv "$f.tmp" "$f"
       # The strand texture is the same for everyone: every file names the one copy (share.py).
-      [ -f "$src/strands.png" ] || cp "$dir/strands.png" "$src/strands.png"
+      if ! cmp -s "$dir/strands.png" "$src/strands.png"; then
+        cp "$dir/strands.png" "$src/strands.png.$BASHPID.tmp" && mv "$src/strands.png.$BASHPID.tmp" "$src/strands.png"
+      fi
       python3 living/tools/characters/share.py strands --shared "$src/strands.png" "$f" > /dev/null
       # A face type's head takes its designed shadows: the planar proxy's normals and the type's
       # drawn threshold map (face_shadow.py), in place of the ellipsoid's. SHADOWS=ellipsoid keeps

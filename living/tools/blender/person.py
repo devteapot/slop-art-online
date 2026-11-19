@@ -1629,7 +1629,7 @@ def make_hair(arm, spec, pos, quads, covered=None, bones=None):
     e1 /= np.linalg.norm(e1)
     e2 = np.cross(wn, e1)
     reps = 5.0
-    cap_c = np.array(HAIR) * 0.80 / hair.TEX_MEAN
+    cap_c = np.array(HAIR) * (0.80 if FAR or BALD > 0.01 else 0.58) / hair.TEX_MEAN
     cap_uv = []
     for p_, n_, d_ in zip(cp, cn, cd):
         verts.append(hw(p_ + n_ * (0.0010 + 0.0050 * smooth(d_ / 0.02))))
@@ -1678,6 +1678,19 @@ def make_hair(arm, spec, pos, quads, covered=None, bones=None):
     body = dict(neck_r=collar / HEAD_SCALE, neck_y=(cage_head.NECK_Y - HEAD.y) / HEAD_SCALE, neck_top=HF.chin_z + 0.022, shoulder_z=hd(1.468 + (0.030 if wears else 0.014)),
                 half_w=(half_w + 0.035) / HEAD_SCALE, half_d=(half_d + 0.035) / HEAD_SCALE, torso_y=(0.0 - HEAD.y) / HEAD_SCALE, round=0.05 / HEAD_SCALE,
                 collar=(np.array([hd(z) for z in cone[0]]), np.array(cone[1]) / HEAD_SCALE), back=(np.array([hd(z) for z in back[0]]), (np.array(back[1]) + thick * GIRTH) / HEAD_SCALE))
+    if hs["style"] == "long" and not FAR:
+        # Chest depths in the hanging hair's frame. Include the garment ease and
+        # the coat opening; the chest centre is forward of the body axis.
+        zs = np.linspace(1.02, 1.48, 24)
+        front = []
+        for z in zs:
+            if STANCE:
+                _, depth, centre = STANCE.form(STANCE.beside_head(z))
+                front.append((depth + centre) * GIRTH / WOMAN_GIRTH)
+            else:
+                _, depth, centre = table(TORSO, z)
+                front.append((depth + centre) * GIRTH)
+        body["front"] = (np.array([hd(z) for z in zs]), (np.array(front) + thick + 0.014) / HEAD_SCALE)
     h = hair.Hair(HF, hs, hairline, covered=covered, bald=bald_depth, body=body, detail=0.4 if FAR else 1.0)
     base = len(verts)
     # The far model's hair follows the bones the full model's hair added, when both are built.
@@ -1688,6 +1701,10 @@ def make_hair(arm, spec, pos, quads, covered=None, bones=None):
     # (hair.fringe_share); the rest of each vertex stays the head's, shared out over the identity
     # bones afterwards (spread_head_weights).
     fringe = hair.fringe_share(HF, hairline, h.v) if TYPED and len(h.v) else np.zeros(len(h.v))
+    # The swept cut exposes the upper forehead. Its short combed edge still
+    # follows the type's brow when that brow sits high on the fitted skull.
+    if hs["style"] == "swept" and not FAR:
+        fringe = np.sqrt(fringe)
     for p_, c_, uv_, ch, al, fr in zip(h.v, h.col, h.uv, h.chain, h.along, fringe):
         verts.append(hw(p_))
         cols.append(tuple(c_))
@@ -1698,6 +1715,14 @@ def make_hair(arm, spec, pos, quads, covered=None, bones=None):
             weights.append({"J_Bip_C_Head": 1.0 - float(fr), hair.FRINGE_BONE: float(fr)} if fr < 0.996 else {hair.FRINGE_BONE: 1.0})
         else:
             weights.append({"J_Bip_C_Head": 1.0})
+    continuous_crown = h.full_cut and hs["style"] in ("bob", "bob_parted", "long")
+    if continuous_crown:
+        # Every panel samples the same horizontal position and height across the
+        # crown. Cartesian projection keeps the sides and the back seam continuous.
+        local = np.vstack([cp, np.asarray([cp[i] for i in extra]).reshape(-1, 3), h.v])
+        crown_blend = hair.smooth((local[:, 2] - (HF.top_z - 0.120)) / 0.048)
+        crown_uv = np.column_stack([0.5 + local[:, 0] / 0.36, 0.72 + (local[:, 2] - HF.top_z) / 0.48])
+        uvs = np.asarray(uvs) + crown_blend[:, None] * (crown_uv - uvs)
     lock_faces = [tuple(base + i for i in f) for f in h.f]
     ob = raw_object("Hair", verts, faces + lock_faces, weights, cols, MAT["hair"], arm, uvs=uvs)
     if spec.get("atelier") and not FAR:
@@ -1710,19 +1735,28 @@ def make_hair(arm, spec, pos, quads, covered=None, bones=None):
     # How much of the head's light ring each vertex takes (`_RING`, hair.ring_mask): none on a
     # fringe, at a lock's tip or on the sides that face the head. The scalp's cap takes it whole.
     ring = ob.data.attributes.new("_RING", "FLOAT", "POINT")
-    ring.data.foreach_set("value", np.concatenate([np.ones(base), hair.ring_mask(HF, hairline, h.v, h.nrm, 1.0 - h.uv[:, 1], h.along) if len(h.v) else np.zeros(0)]).astype(np.float32))
+    ring_values = np.concatenate([np.ones(base), hair.ring_mask(HF, hairline, h.v, h.nrm, 1.0 - h.uv[:, 1], h.along) if len(h.v) else np.zeros(0)])
     # Shading normals: the cap's are the head's, the locks' their own (hair.py).
     normals = [tuple(head_normal(np.array(p_)[None, :])[0]) for p_ in cp] + [None] * len(extra)
     for i, k in extra.items():
         normals[k] = normals[i]
     normals += [tuple(n_) for n_ in h.nrm]
+    if continuous_crown:
+        radial = hair.unit(np.column_stack([local[:, 0], local[:, 1] + 0.010, np.zeros(len(local))]))
+        rise = hair.RING_TILT * np.maximum(local[:, 2] - (HF.top_z - hair.RING_FROM), 0.0) / 0.11
+        radial[:, 2] = rise
+        envelope = hair.unit(radial)
+        outward = (np.sum(envelope * normals, axis=1) > 0).astype(float)
+        ring_values += crown_blend * (outward - ring_values)
+        blend = (outward * crown_blend)[:, None]
+        normals = hair.unit(np.asarray(normals) * (1 - blend) + envelope * blend)
+    ring.data.foreach_set("value", ring_values.astype(np.float32))
     ob.data.normals_split_custom_set_from_vertices(normals)
     # The strands' picture, the same for everyone.
     path = STRANDS_PATH
-    if not os.path.exists(path):
-        # Written whole or not at all: several people are generated at once.
-        face_paint.write_png(path + f".{os.getpid()}.tmp", hair.paint_strands())
-        os.replace(path + f".{os.getpid()}.tmp", path)
+    # Refresh old lookdev maps too. Parallel generators publish identical whole files.
+    face_paint.write_png(path + f".{os.getpid()}.tmp", hair.paint_strands())
+    os.replace(path + f".{os.getpid()}.tmp", path)
     img = bpy.data.images.load(path)
     img.pack()
     mat = material(MAT["hair"])
@@ -1792,6 +1826,8 @@ BACK_SPHERES = []  # (bone, centre, radius): the back that hair lying on it must
 HIT = 0.002  # a hair joint's own radius against the spheres: less than the hair's own distance off the cloth it was combed over
 
 
+FRONT_SPHERES = []
+FRONT_ROOTS = set()
 BACK_ROOTS = set()  # the first bones of the chains that lie on the back
 ROPE_ROOTS = set()  # the first bones of a tail's or a braid's chain, where it hangs down the back
 ROPE_HIT = 0.012  # a rope's joints are its axis: the game holds them this far off the back's spheres, the rope's own radius less a little
@@ -1805,6 +1841,28 @@ def back_spheres(h, back, thick, names):
     would pass into the back. The game holds each hair joint out of these spheres. Each is
     made no larger than leaves every joint clear of it at rest, so they do not move the hair
     as it was combed."""
+    FRONT_ROOTS.clear()
+    FRONT_SPHERES.clear()
+    body = h.comb.b
+    if "front" in body:
+        for ci, chain in enumerate(h.chains):
+            if chain["name"].startswith("Front") and ci in names:
+                FRONT_ROOTS.add(names[ci][0])
+        # Two broad contact patches per side under the locks. Transform the
+        # chest surface back to the bone's rest frame just as for the back.
+        for z in (1.32, 1.42):
+            for side in (-1, 1):
+                x = side * 0.48 * body["half_w"]
+                local_z = (z - HEAD.z) / HEAD_SCALE
+                y = body["torso_y"] + np.interp(local_z, *body["front"]) * math.sqrt(1 - (x / body["half_w"])**2)
+                radius = 0.065
+                centre = np.array(hw((x, y, local_z))) - np.array([0, radius - 0.004, 0])
+                bone = "J_Bip_C_UpperChest"
+                if STANCE:
+                    centre = STANCE.to_rest(bone, (centre[0], centre[1], STANCE.beside_head(z)))
+                    scale = STANCE.scale[bone]
+                    radius /= 0.5 * (scale[0] + scale[2])
+                FRONT_SPHERES.append((bone, tuple(centre), radius))
     BACK_SPHERES.clear()
     BACK_ROOTS.clear()
     ROPE_ROOTS.clear()
@@ -2894,8 +2952,14 @@ def secondary(nodes, springs, skirts=None):
     ropes = [c for c in springs if c[0] in ROPE_ROOTS]
     # A tail or a braid down the back is a rope with its joints on its axis: held off the neck,
     # the chest and the back by its own radius, and not off the head it is tied on.
-    groups = [group("Hair", [c for c in springs if c[0] not in BACK_ROOTS and c[0] not in ROPE_ROOTS], range(3))] + ([group("HairBack", on_back, range(len(colliders)))] if on_back else []) \
+    groups = [group("Hair", [c for c in springs if c[0] not in BACK_ROOTS | ROPE_ROOTS | FRONT_ROOTS], range(3))] + ([group("HairBack", on_back, range(len(colliders)))] if on_back else []) \
         + ([group("HairRope", ropes, range(1, len(colliders)), ROPE_HIT)] if ropes else [])
+    front = [c for c in springs if c[0] in FRONT_ROOTS]
+    if front:
+        idx = len(colliders)
+        colliders.append({"node": nodes["J_Bip_C_UpperChest"],
+                          "colliders": [sphere(bone, pos, radius) for bone, pos, radius in FRONT_SPHERES]})
+        groups.append(group("HairFront", front, [0, 1, 2, idx]))
     groups = [g for g in groups if g["bones"]]
     return skirt_block(nodes, skirts, sphere, {"boneGroups": groups, "colliderGroups": colliders})
 
