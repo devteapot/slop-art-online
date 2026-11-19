@@ -1,6 +1,6 @@
 # Cora’s stage 3 face shading
 
-The final dev-box AMD daylight calibration passed all 12 patches. The cheek measured **(236,165,128)** against a base of **(238,181,144)**. Its green and blue drop by 16 levels each, within the agreed ±6 of the drawing’s drops of 19 and 20. The upper-neck shadow measured **(195,128,98)** against **(192,121,90)**. The GLB has 48,896 triangles, six embedded clips and 15 expression keys. The final artistic attempt is submitted for the GC’s side-by-side verdict. [Matched front, three-quarter, profile, back, Near and Middle](review.jpg) · [Face detail against the drawing and second attempt](face-detail.jpg) · [Daylight calibration and contract audit](calibration-report.json)
+The final dev-box AMD daylight calibration passed all 12 patches. The cheek measured **(236,165,128)** against a base of **(238,181,144)**. Its green and blue drop by 16 levels each, within the agreed ±6 of the drawing’s drops of 19 and 20. The upper-neck shadow measured **(195,128,98)** against **(192,121,90)**. The GLB has 48,896 triangles, six embedded clips and 15 expression keys. The GC passed the final artistic attempt with four recorded defects for the follow-up session. [Matched front, three-quarter, profile, back, Near and Middle](review.jpg) · [Face detail against the drawing and second attempt](face-detail.jpg) · [Daylight calibration and contract audit](calibration-report.json)
 
 | Fixed portrait patch | Drawing target | First high | Second high | Final xhigh |
 |---|---|---|---|---|
@@ -33,3 +33,12 @@ The factory rebuild reproduced the packaged GLB and both sidecars byte for byte.
 ## Stage time and usage
 
 Stage 3 ran from approximately 20:57 to 21:30 UTC on 19 November, including the shared-host quiet window. The two high attempts produced their review frames by 21:21 and 21:23. The black-floor control finished at 21:24, the final xhigh calibration at 21:27 and its independent factory verification at 21:30. The factory run took 2 min 56 s. Three artistic attempts used the existing release client on the dev-box AMD GPU. Disk had 51 GiB free at submission.
+
+## GC verdict and follow-up
+
+Stage 3 passed. The GC found the cheek seam gone and accepted the blush, rounded chin and fine mouth line. The GC assigned the following four defects to one focused session alongside the back-of-hair work.
+
+- The upper lid reads thin and flat. Match the drawing’s thicker winged line and lashes, and open and enlarge the eye slightly.
+- The brows need the drawing’s heavier, darker shape.
+- Replace the pink spot at the nose tip with one soft side shade and a small highlight.
+- The neck has a horizontal collar-like band under the jaw. The drawing has a single clean jaw outline over soft neck shading.
