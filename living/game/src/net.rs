@@ -10,8 +10,11 @@
 //!
 //! 1. On connect: `world`, `land` and `settlement` (1, 1 and about 6 rows).
 //! 2. Then, for the connection's lifetime (so the death screen keeps its rows):
-//!    - what I perceive: the near and far motion, fighter and doing views, their cues, and
-//!      `seen_characters` (mine too);
+//!    - what I perceive: `seen_characters` (mine too), and the others' motion, fighter and
+//!      doing rows as a set of their own, chosen by the world's delivery laws once the installed
+//!      script is compiled (`perception_law`): the near and far tier views and their cue tables,
+//!      or, while `cue_transport_on` and `near_tier_on` are both off, `seen_bodies`,
+//!      `seen_fighters` and `seen_doing` as on main;
 //!    - my own state: my body, fighter and doing rows (`my_body`, `my_fighter`, `my_doing`),
 //!      `my_characters` (the one I play, kept after its death until I join again),
 //!      `my_vitals`, `my_experience`, `my_places`, `my_inventory`, `my_know_how`, my combat
@@ -212,7 +215,15 @@ pub struct Net {
     base: Option<SubscriptionHandle>,
     near: Window,
     far: Window,
+    /// The perception streams' set: key [`TIERED`] or [`UNTIERED`] (`perception_law`).
+    perception: Window,
+    /// When the set being subscribed was asked for (elapsed s), for the switch's log line.
+    perception_asked: f64,
 }
+
+/// The perception sets' keys in [`Net::perception`].
+const TIERED: u32 = 0;
+const UNTIERED: u32 = 1;
 
 impl Default for Net {
     fn default() -> Self {
@@ -242,6 +253,8 @@ impl Default for Net {
             base: None,
             near: Window::default(),
             far: Window::default(),
+            perception: Window::default(),
+            perception_asked: 0.0,
         }
     }
 }
@@ -268,9 +281,12 @@ struct Cues {
     fighter: Overlay<Option<Fighter>>,
     doing: Overlay<Option<Doing>>,
     /// The world's `cue_transport_on` law, as the installed `skills` script last compiled here
-    /// says (`cue_law`); unknown until then, when cues are taken (the authority writes none
+    /// says (`perception_law`); unknown until then, when cues are taken (the authority writes none
     /// while the law is off). Off: overlays are cleared and no cue is taken.
     off: AtomicBool,
+    /// Reads take the untiered views (`seen_bodies`, `seen_fighters`, `seen_doing`): the set in
+    /// place is the untiered one (`Perception`). Else the tiers and the overlays.
+    untiered: AtomicBool,
 }
 
 /// The player's SDK connection and its transient cue state. Each reconnect gets fresh overlays.
@@ -284,6 +300,21 @@ impl PlayerConnection {
     pub fn cue_counts(&self) -> (usize, usize, usize) {
         self.cues.counts()
     }
+
+    /// Whether reads take the untiered views (the untiered set is in place).
+    pub fn untiered(&self) -> bool {
+        self.cues.untiered.load(Ordering::Relaxed)
+    }
+
+    /// The others I perceive by the set in place (id, segment `t_ms`), for the seen log.
+    fn perceived_rows(&self, untiered: bool) -> Vec<(u32, u64)> {
+        if untiered {
+            motion::all(&self.db).iter().map(|m| (m.id, m.t_ms)).collect()
+        } else {
+            let o = self.cues.motion.lock().unwrap();
+            motion::near(&self.db).iter().chain(motion::far(&self.db).iter()).map(|m| (m.id, o.get(&m.id).map_or(m.t_ms, |c| c.t_ms))).collect()
+        }
+    }
 }
 
 impl Deref for PlayerConnection {
@@ -296,22 +327,31 @@ impl Deref for PlayerConnection {
 
 // Keep the SQL names and generated SDK accessors for each stream together. The
 // reads and callbacks below use these adapters so a tier rename has one edit point.
+// Two sets of queries: the tiered set (each stream's near and far tier and its cue table) and,
+// while both of the world's delivery laws are off, the untiered set (each stream's one view, as
+// main's client subscribes): `Perception`, `perception_law`.
 macro_rules! perception_streams {
     ($($stream:ident {
+        all: $all:ident => $all_handle:ident,
         near: $near:ident => $near_handle:ident,
         far: $far:ident => $far_handle:ident,
         cue: $cue:ident => $cue_handle:ident, $cue_row:ty => $overlay:ty,
         |$row:ident| $key:expr, $value:expr
     }),+ $(,)?) => {
-        const PERCEPTION_STREAMS: &[&str] = &[
+        const TIERED_STREAMS: &[&str] = &[
             $(concat!("SELECT * FROM ", stringify!($near)),
               concat!("SELECT * FROM ", stringify!($far)),
               concat!("SELECT * FROM ", stringify!($cue)),)+
         ];
+        const UNTIERED_STREAMS: &[&str] = &[$(concat!("SELECT * FROM ", stringify!($all)),)+];
 
         $(
             pub(crate) mod $stream {
                 use super::*;
+
+                pub(crate) fn all(db: &RemoteTables) -> $all_handle<'_> {
+                    db.$all()
+                }
 
                 pub(crate) fn near(db: &RemoteTables) -> $near_handle<'_> {
                     db.$near()
@@ -335,18 +375,21 @@ macro_rules! perception_streams {
 
 perception_streams! {
     motion {
+        all: seen_bodies => SeenBodiesTableHandle,
         near: seen_bodies_near => SeenBodiesNearTableHandle,
         far: seen_bodies_far => SeenBodiesFarTableHandle,
         cue: seen_body_cue => SeenBodyCueTableHandle, SeenBodyCue => Moving,
         |row| row.motion.id, &row.motion
     },
     fighting {
+        all: seen_fighters => SeenFightersTableHandle,
         near: seen_fighters_near => SeenFightersNearTableHandle,
         far: seen_fighters_far => SeenFightersFarTableHandle,
         cue: seen_fighter_cue => SeenFighterCueTableHandle, SeenFighterCue => Option<Fighter>,
         |row| row.body, &row.fighter
     },
     activity {
+        all: seen_doing => SeenDoingTableHandle,
         near: seen_doing_near => SeenDoingNearTableHandle,
         far: seen_doing_far => SeenDoingFarTableHandle,
         cue: seen_doing_cue => SeenDoingCueTableHandle, SeenDoingCue => Option<Doing>,
@@ -380,6 +423,11 @@ impl Cues {
         )
     }
 
+    /// Cues are taken while the law is on (or not yet known) and reads are on the tiers.
+    fn taking(&self) -> bool {
+        !self.off.load(Ordering::Relaxed) && !self.untiered.load(Ordering::Relaxed)
+    }
+
     fn clear(&self) {
         self.motion.lock().unwrap().clear();
         self.fighter.lock().unwrap().clear();
@@ -409,6 +457,7 @@ impl Cues {
 
         track_motion_time(&near, latest, latest_all);
         track_motion_time(&far, latest, latest_all);
+        track_motion_time(&motion::all(&conn.db), latest, latest_all);
         let cues = self.clone();
         near.on_delete(move |ctx, row| cues.forget_hidden(&ctx.db, row.id));
         let cues = self.clone();
@@ -416,7 +465,7 @@ impl Cues {
 
         let (cues, latest, latest_all) = (self.clone(), latest.clone(), latest_all.clone());
         motion::cue(&conn.db).on_insert(move |ctx, cue| {
-            if cues.off.load(Ordering::Relaxed) {
+            if !cues.taking() {
                 return;
             }
             let motion = &cues.motion;
@@ -435,7 +484,7 @@ impl Cues {
         let cues = self.clone();
         fighting::cue(&conn.db).on_insert(move |ctx, cue| {
             let (id, row) = fighting::cue_value(cue);
-            if !cues.off.load(Ordering::Relaxed) && motion_tier(&ctx.db, id).is_some() {
+            if cues.taking() && motion_tier(&ctx.db, id).is_some() {
                 cues.fighter.lock().unwrap().insert(id, row.clone());
                 trace!(id, "accepted fighter cue");
             }
@@ -444,7 +493,7 @@ impl Cues {
         let cues = self.clone();
         activity::cue(&conn.db).on_insert(move |ctx, cue| {
             let (id, row) = activity::cue_value(cue);
-            if !cues.off.load(Ordering::Relaxed) && motion_tier(&ctx.db, id).is_some() {
+            if cues.taking() && motion_tier(&ctx.db, id).is_some() {
                 cues.doing.lock().unwrap().insert(id, row.clone());
                 trace!(id, "accepted doing cue");
             }
@@ -478,22 +527,93 @@ fn track_motion_time(
     });
 }
 
-/// The world's `cue_transport_on` law, read from the installed `skills` script the client
-/// already compiles (`verbs::Rules`; the authority writes a world's own law values into it), once
-/// per revision; each frame it is passed to the connection's overlays, so a fresh connection
-/// takes it at once. A script that does not compile here leaves the last value.
-pub fn cue_law(net: NonSend<Net>, rules: Option<NonSend<crate::verbs::Rules>>, mut law: Local<Option<(u32, bool)>>) {
+/// The world's delivery laws, `cue_transport_on` and `near_tier_on`, read from the installed
+/// `skills` script the client already compiles (`verbs::Rules`; the authority writes a world's
+/// own law values into it), once per revision. They choose the perception set: both off, the
+/// untiered views as main's client subscribes them (`UNTIERED_STREAMS`: on the authority both off
+/// is main's delivery, and a client on the tiers then pays for twice the views, docs/TICK_RATE.md
+/// "Short series"); either on, the tiers and the cue tables (`TIERED_STREAMS`). A script that
+/// does not compile here keeps the last values, or the tiers before any. The new set is
+/// subscribed beside the old, the old dropped once the new one is applied (no frame without the
+/// others), and then reads move to it and the overlays are cleared. Each frame the cue law is
+/// passed to the connection's overlays, so a fresh connection takes it at once.
+pub fn perception_law(mut net: NonSendMut<Net>, rules: Option<NonSend<crate::verbs::Rules>>, time: Res<Time>, mut law: Local<Option<(u32, bool, bool)>>) {
     let Some(rules) = rules else { return };
     if let Some(sc) = rules.scripts.as_ref() {
-        if law.is_none_or(|(rev, _)| rev != rules.revision) {
-            let on = sc.laws().cue_transport_on;
-            info!("rules: cue_transport_on {on} (script revision {})", rules.revision);
-            *law = Some((rules.revision, on));
+        if law.is_none_or(|(rev, _, _)| rev != rules.revision) {
+            let l = sc.laws();
+            info!("rules: cue_transport_on {} near_tier_on {} (script revision {})", l.cue_transport_on, l.near_tier_on, rules.revision);
+            *law = Some((rules.revision, l.cue_transport_on, l.near_tier_on));
         }
     }
-    if let (Some(conn), Some((_, on))) = (net.conn.as_ref(), *law) {
-        conn.cues.set_transport(on);
+    let (cues_on, tiers_on) = match *law {
+        Some((_, c, t)) => (c, t),
+        None if rules.error.is_some() => (false, true),
+        None => return,
+    };
+    if net.status != Status::Live || net.conn.is_none() {
+        return;
     }
+    if let Some(conn) = net.conn.as_ref() {
+        conn.cues.set_transport(cues_on);
+    }
+    let want = if !cues_on && !tiers_on { UNTIERED } else { TIERED };
+    let now = time.elapsed_secs_f64();
+    if net.perception.wanted() != Some(&vec![want]) {
+        let set = if want == UNTIERED { UNTIERED_STREAMS } else { TIERED_STREAMS };
+        info!("perception: subscribing the {} set ({} queries; cue_transport_on {cues_on}, near_tier_on {tiers_on})", if want == UNTIERED { "untiered" } else { "tiered" }, set.len());
+        let sub = net.subscribe(set.iter().map(|q| q.to_string()).collect(), vec![want]);
+        net.perception.replace(sub);
+        net.perception_asked = now;
+    }
+    let before = net.perception.current.as_ref().map(|s| s.key[0]);
+    let old_rows = if before.is_some() && net.perception.next.as_ref().is_some_and(|s| s.handle.is_active()) {
+        net.conn.as_ref().map(|c| c.perceived_rows(c.untiered()))
+    } else {
+        None
+    };
+    net.perception.settle();
+    let after = net.perception.current.as_ref().map(|s| s.key[0]);
+    if after != before {
+        let untiered = after == Some(UNTIERED);
+        let asked = net.perception_asked;
+        let Some(conn) = net.conn.as_ref() else { return };
+        let counts = conn.cues.counts();
+        conn.cues.clear();
+        conn.cues.untiered.store(untiered, Ordering::Relaxed);
+        let new: std::collections::HashSet<u32> = conn.perceived_rows(untiered).into_iter().map(|(id, _)| id).collect();
+        let old: std::collections::HashSet<u32> = old_rows.unwrap_or_default().into_iter().map(|(id, _)| id).collect();
+        let mut missing: Vec<u32> = old.difference(&new).copied().collect();
+        missing.sort_unstable();
+        info!(
+            "perception: on the {} set after {:.0} ms ({} others; {} were in the old set, missing now {:?}); overlays cleared (motion, fighter, doing): {:?}",
+            if untiered { "untiered" } else { "tiered" },
+            (now - asked) * 1000.0,
+            new.len(),
+            old.len(),
+            missing,
+            counts
+        );
+    }
+}
+
+/// `LIVING_GAME_SEEN_LOG=<file>`: every frame, the others as the reads see them then (the set in
+/// place, its rows' segment `t_ms`, the overlays' sizes), one JSON line, for checking a switch of
+/// perception sets frame by frame.
+pub fn seen_log(net: NonSend<Net>, time: Res<Time>, mut out: Local<Option<Option<std::io::BufWriter<std::fs::File>>>>) {
+    use std::io::Write;
+    let w = out.get_or_insert_with(|| std::env::var("LIVING_GAME_SEEN_LOG").ok().filter(|p| !p.is_empty()).and_then(|p| std::fs::File::create(p).ok()).map(std::io::BufWriter::new));
+    let (Some(w), Some(conn)) = (w.as_mut(), net.conn.as_ref()) else { return };
+    let untiered = conn.untiered();
+    let line = serde_json::json!({
+        "t": time.elapsed_secs_f64(),
+        "set": net.perception.current.as_ref().map(|s| if s.key[0] == UNTIERED { "untiered" } else { "tiered" }),
+        "reads": if untiered { "untiered" } else { "tiered" },
+        "rows": conn.perceived_rows(untiered),
+        "overlays": conn.cues.counts(),
+    });
+    let _ = writeln!(w, "{line}");
+    let _ = w.flush();
 }
 
 /// A perceived body as the drawing code takes it: its motion row (which carries
@@ -525,12 +645,16 @@ pub fn body_of(conn: &DbConnection, m: Moving) -> Body {
 
 /// Every body my character perceives, mine included.
 pub fn bodies(conn: &PlayerConnection) -> impl Iterator<Item = Body> + '_ {
+    if conn.untiered() {
+        let rows: Vec<Moving> = conn.db.my_body().iter().chain(motion::all(&conn.db).iter()).collect();
+        return Box::new(rows.into_iter().map(move |m| body_of(conn, m))) as Box<dyn Iterator<Item = Body> + '_>;
+    }
     let motion = conn.cues.motion.lock().unwrap();
     let rows: Vec<_> = conn.db.my_body().iter().chain(motion::near(&conn.db).iter()
         .chain(motion::far(&conn.db).iter())
         .map(|row| motion.get(&row.id).cloned().unwrap_or(row)))
         .collect();
-    rows.into_iter().map(move |m| body_of(conn, m))
+    Box::new(rows.into_iter().map(move |m| body_of(conn, m)))
 }
 
 pub fn find_body(conn: &PlayerConnection, id: u32) -> Option<Body> {
@@ -539,6 +663,9 @@ pub fn find_body(conn: &PlayerConnection, id: u32) -> Option<Body> {
 
 /// A perceived body's motion row, mine included.
 pub fn find_motion(conn: &PlayerConnection, id: u32) -> Option<Moving> {
+    if conn.untiered() {
+        return conn.db.my_body().id().find(&id).or_else(|| motion::all(&conn.db).id().find(&id));
+    }
     conn.db.my_body().id().find(&id)
         .or_else(|| conn.cues.motion.lock().unwrap().get(&id).cloned())
         .or_else(|| motion_tier(&conn.db, id))
@@ -549,6 +676,9 @@ pub fn find_fighter(conn: &PlayerConnection, id: u32) -> Option<Fighter> {
     if let Some(mine) = conn.db.my_fighter().id().find(&id) {
         return Some(mine);
     }
+    if conn.untiered() {
+        return fighting::all(&conn.db).id().find(&id);
+    }
     if let Some(cue) = conn.cues.fighter.lock().unwrap().get(&id) {
         return cue.clone();
     }
@@ -557,6 +687,9 @@ pub fn find_fighter(conn: &PlayerConnection, id: u32) -> Option<Fighter> {
 
 /// Every perceived fighter's row, mine included.
 pub fn fighters(conn: &PlayerConnection) -> Vec<Fighter> {
+    if conn.untiered() {
+        return conn.db.my_fighter().iter().chain(fighting::all(&conn.db).iter()).collect();
+    }
     let fighter = conn.cues.fighter.lock().unwrap();
     conn.db.my_fighter().iter()
         .chain(fighting::near(&conn.db).iter()
@@ -570,6 +703,9 @@ pub fn fighters(conn: &PlayerConnection) -> Vec<Fighter> {
 pub fn find_doing(conn: &PlayerConnection, id: u32) -> Option<Doing> {
     if let Some(mine) = conn.db.my_doing().id().find(&id) {
         return Some(mine);
+    }
+    if conn.untiered() {
+        return activity::all(&conn.db).id().find(&id);
     }
     if let Some(cue) = conn.cues.doing.lock().unwrap().get(&id) {
         return cue.clone();
@@ -672,8 +808,9 @@ impl Net {
     fn subscribe_base(&mut self) {
         let Some(conn) = self.conn.as_ref() else { return };
         self.mode = if conn.db.land().count() > 0 { Mode::Land } else { Mode::Tiles };
+        // The perception streams are a set of their own (`perception_law`), chosen by the
+        // world's delivery laws once the installed script is compiled.
         let mut queries: Vec<&str> = PERCEIVED.to_vec();
-        queries.extend_from_slice(PERCEPTION_STREAMS);
         if self.mode == Mode::Tiles {
             queries.push("SELECT * FROM terrain_chunk");
         } else {
@@ -881,6 +1018,7 @@ pub fn pump(mut net: NonSendMut<Net>, time: Res<Time>) {
                 net.base = None;
                 net.near = Window::default();
                 net.far = Window::default();
+                net.perception = Window::default();
                 net.my_id = None;
                 net.join_sent = false;
                 net.connecting = false;
@@ -908,6 +1046,16 @@ mod cue_tests {
 
     fn moving(id: u32) -> Moving {
         Moving { id, x: 0.0, y: 0.0, t_ms: 1, vx: 0.0, vy: 0.0, heading: 0.0, turn: 0.0, turn_s: 0.0, next_ms: 0, speed: 0.0, face_off: 0.0, face_turn: 0.0, face_turn_s: 0.0, running: false }
+    }
+
+    #[test]
+    fn the_untiered_set_is_main_s_three_views_and_the_base_holds_no_stream() {
+        // Both laws off: the client subscribes exactly main's perception queries.
+        assert_eq!(UNTIERED_STREAMS, ["SELECT * FROM seen_bodies", "SELECT * FROM seen_fighters", "SELECT * FROM seen_doing"]);
+        assert_eq!(TIERED_STREAMS.len(), 9);
+        for q in UNTIERED_STREAMS.iter().chain(TIERED_STREAMS) {
+            assert!(!PERCEIVED.contains(q), "{q} is in the base set too");
+        }
     }
 
     #[test]
