@@ -2466,8 +2466,12 @@ struct AlarmCell {
 fn alarm_statuses(ctx: &ReducerContext, sc: &living_rules::script::Scripts, me: &Character, vit: &Vitals, night: bool, now: u64) -> Rc<Vec<living_rules::script::Status>> {
     let laws = common::laws(ctx);
     let ask = || {
-        let facts = living_rules::script::BodyFacts::of(&me.kind, crate::common::stage_name(me.stage), night, &vit.fields(), sc.meters(), now);
-        sc.status_of(&facts).unwrap_or_else(|e| {
+        let facts = {
+            let _span = common::detail_span("status.facts");
+            living_rules::script::BodyFacts::of(&me.kind, crate::common::stage_name(me.stage), night, &vit.fields(), sc.meters(), now)
+        };
+        let _span = common::detail_span("status.ask");
+        sc.status_of_profiled(&facts, common::detail_span).unwrap_or_else(|e| {
             log::warn!("status_of for {}: {e}", me.id);
             Rc::new(Vec::new())
         })
