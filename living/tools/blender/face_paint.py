@@ -404,7 +404,7 @@ def iris_lights(light_side=1.0, layer=True):
     lid = 1.0 - 0.55 * smooth((dz - 0.30) / 0.50)
     parts = [
         # The glow: a flame from the bottom toward the pupil, wide at the rim and narrowing as it rises.
-        (IRIS_GLOW, smooth((low - 0.06) / 0.38) * smooth((0.15 + 0.62 * low - np.abs(dx)) / 0.18) * inside * lid),
+        (IRIS_GLOW, smooth((-dz + 0.12) / 0.60) * smooth((0.70 - np.abs(dx)) / 0.22) * inside * lid),
         (IRIS_HOT, np.exp(-((dx / 0.34) ** 2 + ((dz + 0.66) / 0.24) ** 2)) * inside * lid),
     ]
     # Two pale streaks beside the glow, where light crosses the iris.
@@ -413,6 +413,10 @@ def iris_lights(light_side=1.0, layer=True):
     # A cool arc of sky along the rim under the lid, on the lit side.
     parts.append((IRIS_SKY, np.exp(-(((rr - 0.80) / 0.075) ** 2)) * smooth((dz - 0.10) / 0.25) * smooth((0.86 - dz) / 0.2) * smooth((dx * light_side + 0.55) / 0.5)))
     rgb, cover = np.zeros(dx.shape + (3,)), np.zeros(dx.shape)
+    # Use the overlay for the lid shadow and limbal ring so the calibrated
+    # iris source colour still drives every resident's recolour.
+    parts.append((((0.065, 0.045, 0.08), 0.80), smooth((dz + 0.06) / 0.53) * inside))
+    parts.append((((0.055, 0.035, 0.06), 0.90), smooth((rr - 0.72) / 0.10) * inside))
     for (colour, most), shape in parts:
         a = most * shape
         rgb = rgb * (1 - a)[..., None] + np.array(colour) * a[..., None]
@@ -422,7 +426,21 @@ def iris_lights(light_side=1.0, layer=True):
     out = np.empty(dx.shape + (4,))
     out[..., :3] = np.where(cover[..., None] > 1e-6, rgb / np.maximum(cover, 1e-6)[..., None], np.array(IRIS_GLOW[0]))
     out[..., 3] = (cover * keep) ** (LIGHTS_GAMMA if layer else 1.0)
+    if layer:
+        # The catchlight shares the iris disc and its eye weights; the separate
+        # half-weighted glint could pass behind the iris on composed heads.
+        glint = catchlight(dx, dz, light_side)
+        alpha = out[..., 3]
+        combined = glint + alpha * (1 - glint)
+        premul = glint[..., None] + out[..., :3] * (alpha * (1 - glint))[..., None]
+        out[..., :3] = premul / np.maximum(combined[..., None], 1e-8)
+        out[..., 3] = combined
     return out
+
+
+def catchlight(x, z, side):
+    radius = np.hypot((x - 0.27 * side) / 0.52, (z - 0.28) / 0.37)
+    return smooth((1 - radius) / 0.16)
 
 
 def lit_iris(iris, light_side=1.0):
@@ -497,11 +515,17 @@ def paint_far(hf, look, size=FAR):
         # The painted pupil loses contrast as the far tile is filtered down to a few pixels.
         pupil = on & (a * a + b * b < 0.54 ** 2)
         skin[pupil] *= 0.32
+        glint = catchlight(a, b, look.get("light_side", 1.0)) * on
+        skin += (np.array([1.0, 1.0, 0.985]) - skin) * glint[..., None]
     # The lash line, heavier toward the outer corner, and the brows as one stroke each. From
     # far off they are a texel or two wide, so they are drawn a little heavier than life.
     ss = np.linspace(-1.0, 1.0 + look["lash_wing"], 16)
     up = hf.lid(np.clip(ss, -1, 1))[0]
     c.stroke([(hf.eye_x + hf.eye_w * s, hf.eye_z + u + 0.0006) for s, u in zip(ss, up)], lambda t: 0.0023 + 0.0025 * look["lash_k"] * smooth(t / 0.5), np.asarray(look["lash"]) * 0.55, 1.0, taper=(0.0, 0.12))
+    outer = np.linspace(0.22, 0.98, 10)
+    lower = hf.lid(outer)[1]
+    c.stroke([(hf.eye_x + hf.eye_w * s, hf.eye_z + z) for s, z in zip(outer, lower)],
+             0.0008, (0.53, 0.10, 0.13), 0.74, taper=(0.3, 0.4))
     top, bot = brow_shape(hf, 1)
     c.stroke([(xt, (zt + zb) / 2) for (xt, zt), (_, zb) in zip(top, bot)], lambda t: np.maximum(0.62 * hf.brow_w * brow_width(t), 0.0011), look["brow"], 0.92, taper=(0.1, 0.25))
     out[EYE_ROWS:] = c.img

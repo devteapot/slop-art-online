@@ -383,6 +383,23 @@ def compose(measured):
                 types[tid]["brow"]["lift"] = brow_lift(types[tid]["eye"], types[tid]["brow"])
                 eye = types[tid]["eye"]
                 eye["h"] = round(eye["h"] * (1.05 if elder or masc else 1.10), 3)
+                # Scale the aperture around its existing centre. Identity still controls
+                # spacing, openness and iris size independently for each resident.
+                strength = 0.50 if elder else 0.65 if child else 1.0
+                eye["w"] = round(eye["w"] * (1 + 0.08 * strength), 3)
+                # Raise the brow with the upper lid, preserving clearance for blinks and
+                # identity extremes. Leave the eye centre and pupil spacing in place.
+                old_height = eye["h"]
+                gain = 0.15 if elder else 0.32 if child else 0.40
+                eye["h"] = round(old_height * (1 + gain), 3)
+                brow = types[tid]["brow"]
+                brow["above_eye"] = round(brow["above_eye"] + 0.60 * (eye["h"] - old_height), 3)
+                eye["iris"] = round(eye["iris"] * (1.08 if elder else 1.17), 3)
+                for i, height in enumerate(section["z"]):
+                    fullness = max(0.0, 1 - abs(height - 0.25) / 0.12)
+                    for key in ("w15", "w30"):
+                        if section[key][i] is not None:
+                            section[key][i] = round(section[key][i] - 0.016 * strength * fullness, 3)
     return types
 
 

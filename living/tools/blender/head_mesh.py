@@ -655,8 +655,8 @@ class Face:
         # Lower line: the outer part only, as the reference has it.
         lk = look["lower"]
         s3 = [0.22 + 0.78 * i / 8 for i in range(9)]
-        w3 = [(0.00022 + 0.00060 * lk * smooth((s - 0.22) / 0.5)) * (1.0 if s < 0.85 else 0.6) for s in s3]
-        low_c = mix3(look["skin_line"], band, 0.30 + 0.55 * min(lk, 1.0))
+        w3 = [(0.00035 + 0.00080 * lk * smooth((s - 0.22) / 0.5)) * (1.0 if s < 0.85 else 0.6) for s in s3]
+        low_c = mix3(look["skin_line"], (0.53, 0.10, 0.13), 0.55 + 0.20 * min(lk, 1.0))
         self._strip(m, [at(s, lo(s) + 0.0003) for s in s3], [at(s, lo(s) - w) for s, w in zip(s3, w3)], low_c, low_c, "line", 0.0010)
         # The fold above the lid: it stands clear of the band, and closes onto the lid with a blink.
         fold = look["fold"]
