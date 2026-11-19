@@ -803,8 +803,15 @@ pub fn doing_of(ctx: &ReducerContext, id: u32, observer: (u32, &str, (f32, f32))
                 None => moving_label(run, (x, y), heading, std::iter::empty()),
             })
         }
-        _ => a.map(|a| a.label),
+        _ => a.map(|a| a.label).or_else(|| held_doing(ctx, id)),
     }
+}
+
+/// The skill a body's `doing` row was held for between two uses of one continuous activity
+/// (`town::hold`): what it is still seen doing while no activity runs (the caller found none).
+fn held_doing(ctx: &ReducerContext, id: u32) -> Option<String> {
+    let d = ctx.db.doing().id().find(id)?;
+    common::scripts(ctx).shows().iter().find(|(_, s)| s.code == d.code).map(|(skill, _)| skill.to_string())
 }
 
 /// Whom someone is going to, as `observer` perceives them: "you", their label (a name it knows,
@@ -861,7 +868,10 @@ pub fn visibly(ctx: &ReducerContext, sc: &Scripts, id: u32, now: u64) -> Option<
         }
     }
     let d = ctx.db.doing().id().find(id).filter(|d| !d.indoors)?;
-    let phase = doing::act_phase(d.since_ms, d.until_ms, now)?;
+    // A row held between two uses of one continuous activity (`town::hold`: no activity runs)
+    // is still under way past its end.
+    let until = if d.until_ms <= now && ctx.db.activity().id().find(id).is_none() { 0 } else { d.until_ms };
+    let phase = doing::act_phase(d.since_ms, until, now)?;
     let skill = sc.shows().iter().find(|(_, s)| s.code == d.code)?.0.to_string();
     Some(Visibly { skill, phase, target: d.target, aim: (0.0, 0.0), combat: false })
 }

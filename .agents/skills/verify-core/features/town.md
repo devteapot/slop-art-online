@@ -28,6 +28,7 @@ Launch an island run (`$V launch --run core-<x> --seed island`) and drive `scrip
 - The natural weather is held dry for the run; without that a natural spell can rain on any scene.
 - `aside` needs a resident standing where at most 17 of the 25 surrounding tiles are walkable with a clear 6-tile approach; it retries for 30 s and reports when none is found.
 - Scenes assert shares and kinds, not exact counts: who stands where depends on the RNG and the hour the run started.
+- `town.py`'s own reads and calls do not renew the harness's 10-minute inactivity lease. Launch with `VERIFY_LEASE_SECONDS=2700`, or the orphan guard pauses the world ten minutes in (`world-guard.log`). The world's hour follows the wall clock, so the later scenes still run but read a frozen world: on 2026-11-19 (`core-town1`, `core-town0`) the morning checks found "0 of 195 who slept at home are away from it" and "0 people felt a new day".
 
 ## Hospitality
 

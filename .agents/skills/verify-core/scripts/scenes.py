@@ -5637,6 +5637,134 @@ def body_sex(s):
     finally:
         s.call("install_script", shipped)
 
+REST_MS = 8000  # rest_duration in living/scripts/skills.rhai
+
+
+def doing_watch(s, who, seconds, every=0.02):
+    """Samples of `who`'s `doing` row over HTTP for `seconds` (about every 20 ms): (local ms, row
+    or None, the authority's clock when sampled)."""
+    out = []
+    end = time.monotonic() + seconds
+    while time.monotonic() < end:
+        rows = s.http_rows(f"SELECT * FROM doing WHERE id = {who}")
+        out.append((time.time_ns() // 1_000_000, rows[0] if rows else None))
+        time.sleep(every)
+    return out
+
+
+def doing_renewals(samples):
+    """What a run of samples shows: each renewal (the row's end moved on to a new rest's, the row
+    held, past its end, between them), with the authority's gap between the old
+    rest's end and the next one's start (its end less the rest's 8 s): the pacing, which the
+    hold must leave as it was; whether the start (`since_ms`) was kept; how many samples saw the
+    row held; and the longest stretch the row was absent (local ms, from the last sample with a
+    row to the next)."""
+    renewals, last, held = [], None, 0
+    for at, row in samples:
+        if row is None:
+            continue
+        if row["until_ms"] < at:
+            # Past its end and still there: held until the next evaluation (local and authority
+            # clocks are the host's).
+            held += 1
+        if last is not None and row["until_ms"] != last["until_ms"]:
+            renewals.append({"old_until": last["until_ms"], "new_since": row["since_ms"], "new_until": row["until_ms"],
+                             "gap_ms": (row["until_ms"] - REST_MS) - last["until_ms"], "since_kept": row["since_ms"] == last["since_ms"]})
+        last = row
+    misses = [i for i, (_, r) in enumerate(samples) if r is None]
+    longest, i = 0, 0
+    while i < len(samples):
+        if samples[i][1] is None:
+            j = i
+            while j < len(samples) and samples[j][1] is None:
+                j += 1
+            if i > 0 and j < len(samples):
+                longest = max(longest, samples[j][0] - samples[i - 1][0])
+            i = j
+        else:
+            i += 1
+    steps = [samples[k + 1][0] - samples[k][0] for k in range(len(samples) - 1)]
+    step = sorted(steps)[len(steps) // 2] if steps else None
+    return {"renewals": renewals, "samples": len(samples), "missing_samples": len(misses), "held_samples": held, "longest_absent_ms": longest, "median_sample_ms": step}
+
+
+def doing_renew(s):
+    """A rest renewed in place (doing-renew): a resident whose only desire is to rest rests 8 s at a
+    time, and each rest that finishes is followed by the next at the body's next evaluation, as
+    before (about a second later here: the pacing is unchanged). Its `doing` row stays: held as it
+    was (past its end) between two rests, then renewed in place. Polled about every 20 ms
+    for 34 s (three renewals or more): no sample lacks it, the gap between a rest's end and the
+    next one's start is the old one (median 500 ms or more, none past 1.1 s), and the row keeps
+    its `since_ms` (one rest going on). A rest under a `first` root renews the same way.
+    A real change still shows at once: a graph that walks the resident off ends the rest, and the
+    row is gone while it walks (walking is not shown), within a second of the install. With the
+    `renew_in_place` law off the old way comes back: the row is absent after each rest.
+    `--baseline` (a build before doing-renew) records the same without asserting the renewal:
+    there the row is absent for a while after each rest (about 1 s) and a new rest starts anew."""
+    line = open_line(s, avoid=[(b["x"], b["y"]) for b in s.rows("SELECT x, y FROM body")])
+    (s.out / f"{s.name}-line.json").write_text(json.dumps(line) + "\n")
+    rester, other = s.people(2)
+    s.call("place_at", rester, *line[2])
+    s.call("place_at", other, *line[12])
+    results = {}
+    for root, graph in (("desires", {"desires": [{"want": "rest", "weight": {"base": 1.0}, "do": {"do": "rest"}}]}),
+                        ("first", {"first": [{"do": "rest"}]})):
+        s.graph(rester, graph)
+        s.wait(lambda: s.http_rows(f"SELECT * FROM doing WHERE id = {rester}"), 10, 0.1)
+        samples = doing_watch(s, rester, 34 if root == "desires" else 18)
+        (s.out / f"{s.name}-samples-{root}.json").write_text(json.dumps(samples) + "\n")
+        got = doing_renewals(samples)
+        results[root] = got
+        (s.out / f"{s.name}-renewals-{root}.json").write_text(json.dumps(got, indent=1) + "\n")
+        print(json.dumps({root: {k: v for k, v in got.items() if k != "renewals"}, "gaps_ms": [r["gap_ms"] for r in got["renewals"]], "since_kept": [r["since_kept"] for r in got["renewals"]]}), flush=True)
+        want = 3 if root == "desires" else 1
+        enough = len(got["renewals"]) >= want
+        if s.baseline:
+            s.expect(f"baseline ({root}): renewals seen", enough, got["renewals"], fatal=False)
+            continue
+        s.expect(f"{root}: the rest was renewed {want} times or more", enough, len(got["renewals"]))
+        s.expect(f"{root}: no sample lacks the doing row (none absent 100 ms or more)", got["missing_samples"] == 0 and got["longest_absent_ms"] < 100, {k: got[k] for k in ("missing_samples", "longest_absent_ms", "median_sample_ms")})
+        gaps = sorted(r["gap_ms"] for r in got["renewals"])
+        s.expect(f"{root}: the pacing is the old one: each next rest begins at the body's next evaluation (median 500 ms or more, none past 1.1 s), the row held between", gaps and gaps[len(gaps) // 2] >= 500 and gaps[-1] <= 1100 and got["held_samples"] > 0, {"gaps_ms": gaps, "held_samples": got["held_samples"]})
+        s.expect(f"{root}: a renewed rest keeps its since_ms (one rest going on)", all(r["since_kept"] for r in got["renewals"]), got["renewals"])
+    # A real change: walked off, the rest ends and the row goes at once.
+    row = s.http_rows(f"SELECT * FROM doing WHERE id = {rester}")
+    sent = time.time_ns() // 1_000_000
+    s.call("set_behavior", rester, json.dumps({"seq": [{"do": {"skill": "goto", "target": {"at": list(line[14])}}}, {"wait": 300}]}))
+    after = doing_watch(s, rester, 2.0)
+    (s.out / f"{s.name}-samples-walk.json").write_text(json.dumps(after) + "\n")
+    gone = next((at for at, r in after if r is None), None)
+    act = s.rows(f"SELECT id, skill, phase, started_ms FROM activity WHERE id = {rester}", "walk-activity")
+    back = [at for at, r in after if r is not None and gone is not None and at > gone]
+    detail = {"row_before": row, "gone_after_ms": None if gone is None else gone - sent, "activity": act, "row_again": len(back)}
+    print(json.dumps({"walk": detail}), flush=True)
+    s.expect("rest → walk: the doing row is gone within a second of the new graph", gone is not None and gone - sent < 1000, detail)
+    s.expect("rest → walk: it walks (goto) and nothing is shown while it does", bool(act) and act[0]["skill"] == "goto" and not back, detail)
+    off = None
+    if not s.baseline:
+        # The switch: with the `renew_in_place` law off, each rest starts afresh at the next
+        # evaluation, as before doing-renew (the row is absent meanwhile).
+        set_law(s, "renew_in_place", False)
+        try:
+            s.graph(rester, {"desires": [{"want": "rest", "weight": {"base": 1.0}, "do": {"do": "rest"}}]})
+            s.wait(lambda: s.http_rows(f"SELECT * FROM doing WHERE id = {rester}"), 10, 0.1)
+            samples = doing_watch(s, rester, 18)
+            (s.out / f"{s.name}-samples-law-off.json").write_text(json.dumps(samples) + "\n")
+            off = doing_renewals(samples)
+            print(json.dumps({"law_off": {k: v for k, v in off.items() if k != "renewals"}, "gaps_ms": [r["gap_ms"] for r in off["renewals"]]}), flush=True)
+            s.expect("renew_in_place off: the row is absent after each rest, and the next starts afresh", off["renewals"] and off["missing_samples"] > 0 and not any(r["since_kept"] for r in off["renewals"]), off)
+        finally:
+            set_law(s, "renew_in_place", True)
+    (s.out / f"{s.name}-summary.json").write_text(json.dumps({"results": {k: {kk: vv for kk, vv in v.items()} for k, v in results.items()}, "walk": detail, "law_off": off}, indent=1) + "\n")
+    # Off the shared open line, standing: later scenes (doing) place their own people on it.
+    for k, who in enumerate((rester, other)):
+        s.graph(who, {"wait": 120})
+        s.call("place_at", who, line[0][0] + 60 + 2 * k, line[0][1] + 40, check=False)
+
+
+SCENES["doing_renew"] = doing_renew
+
+
 def main():
     import sys
     if sys.argv[1:2] == ["sex-seed"]:

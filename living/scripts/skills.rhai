@@ -105,6 +105,10 @@ fn laws() {
         // struck it, in a fight still on, is within `wake_reach` (`sleep_check`, every
         // controller alike).
         alert_after_hit_s: 15.0, alert_while_attacker_near: true,
+        // A rest, a sleep, work, eating or play that ends well is still seen until the body's
+        // next look, which takes it up again or turns to something else: no blink of doing
+        // nothing between two rests (doing-renew). False: seen doing nothing until then.
+        renew_in_place: true,
         // Who a behaviour graph's `relation: "stranger"` filter matches (docs/STRANGERS.md).
         // Off: anyone one has no relation row about (feelings the mind wrote), or a relation
         // labelled "stranger". On: anyone whose name one does not know, the rule that names
@@ -3186,6 +3190,7 @@ fn law_about(l, name) {
         "fast_lane_stale_s" => `a reason for one that waits ${short(l.fast_lane_stale_s)} s is let go`,
         "force_outcomes" => if l.force_outcomes { "whoever strikes, shoots or casts learns how it came out, as far as they see" } else { "a blow, shot or bolt tells its maker how it came out only when it fails, or for a few skills" },
         "alert_after_hit_s" => `a body struck within the last ${short(l.alert_after_hit_s)} s cannot fall asleep`,
+        "renew_in_place" => if l.renew_in_place { "a rest, a sleep or work is still seen while it is taken up again" } else { "between one rest, sleep or piece of work and the next, nothing is seen for a moment" },
         "alert_while_attacker_near" => if l.alert_while_attacker_near { "nor while the one who struck it is close and the fight is on" } else { "even with the one who struck it close by" },
         "gaze_on" => "whether creatures can change their gaze band",
         "cover_sight_on" => "whether cover hides people",
