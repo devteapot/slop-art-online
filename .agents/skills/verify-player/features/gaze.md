@@ -1,6 +1,6 @@
 # Gaze input and applied senses
 
-Use a fresh Cullet scratch database and its two player identities. The script enables `gaze_on` and cover only for the fixture. The shipped laws default to off.
+Use a fresh Cullet scratch database and its two player identities. Cullet ships `gaze_on`, `fov_on` and cover on (2026-11-19); the script turns them off first and enables each only for its fixture. For the laws as shipped, run `sight_on.py` ([cover](cover.md)).
 
 ```sh
 V=.agents/skills/verify/scripts/verify.py

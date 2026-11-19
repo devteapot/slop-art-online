@@ -4086,7 +4086,8 @@ mod tests {
         const BASE: &str = include_str!("../../scripts/skills.rhai");
         const CULLET: &str = include_str!("../../seeds/worlds/cullet/laws.rhai");
         for (source, day, night) in [(BASE.to_owned(), 11.0, 6.0), (crate::floors::compose(BASE, CULLET).unwrap(), 48.0, 14.0)] {
-            let off = Scripts::new(&with_world_laws(&source, &[("fov_on".into(), true.into())])).unwrap();
+            // Gaze off explicitly: Cullet ships it on (2026-11-19).
+            let off = Scripts::new(&with_world_laws(&source, &[("fov_on".into(), true.into()), ("gaze_on".into(), false.into())])).unwrap();
             let on = Scripts::new(&with_world_laws(&source, &[("gaze_on".into(), true.into())])).unwrap();
             on.validate().unwrap();
             let ctx = |gaze_band| SkillCtx { gaze_band, ..Default::default() };

@@ -42,7 +42,8 @@ fn main() {
                 }
             }
         }
-        panic!("{feature} probe missing")
+        // A land without this feature (the island has no authored brush) reports null.
+        Value::Null
     };
     println!("{}", json!({"trunk":probe("trunk"), "brush":probe("brush"),
         "cliff":probe("cliff"), "overlook":probe("overlook")}));

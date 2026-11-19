@@ -52,8 +52,11 @@ def settle():
         call("human_move", [0.0, 0.0, False], player, check=False)
         time.sleep(0.2)
 
+# Cullet ships cover on (2026-11-19); the fixture starts from both laws off and sets them itself.
+call("set_world_law", ["cover_sight_on","false"])
+call("set_world_law", ["cover_brush_on","false"])
 r = sql("SELECT * FROM cover_law", player)
-save("public singleton exact fields and off default", r == [
+save("public singleton exact fields with the laws off", r == [
     {"id":0, "cover_sight_on": False, "cover_eye_height_m":1.6, "cover_brush_on":False,
      "cover_brush_min_fill":0.6, "cover_cliff_step_m":2.0}], r)
 for table in ("cover_ground", "attention"):
