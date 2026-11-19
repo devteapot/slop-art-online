@@ -1,0 +1,131 @@
+{
+  "source": "turnaround.png",
+  "patches": {
+    "front coat": {
+      "rectangle_xyxy": [
+        102,
+        288,
+        124,
+        310
+      ],
+      "median_srgb": [
+        132,
+        123,
+        129
+      ],
+      "linear_Y": 0.2066
+    },
+    "back coat": {
+      "rectangle_xyxy": [
+        594,
+        317,
+        619,
+        344
+      ],
+      "median_srgb": [
+        149,
+        127,
+        137
+      ],
+      "linear_Y": 0.2337
+    },
+    "jersey": {
+      "rectangle_xyxy": [
+        165,
+        208,
+        191,
+        245
+      ],
+      "median_srgb": [
+        116,
+        53,
+        46
+      ],
+      "linear_Y": 0.0646
+    },
+    "apron": {
+      "rectangle_xyxy": [
+        163,
+        418,
+        193,
+        448
+      ],
+      "median_srgb": [
+        211,
+        186,
+        163
+      ],
+      "linear_Y": 0.5161
+    },
+    "trousers": {
+      "rectangle_xyxy": [
+        116,
+        607,
+        140,
+        640
+      ],
+      "median_srgb": [
+        74,
+        59,
+        57
+      ],
+      "linear_Y": 0.0488
+    },
+    "cuff": {
+      "rectangle_xyxy": [
+        55,
+        335,
+        77,
+        348
+      ],
+      "median_srgb": [
+        193,
+        170,
+        166
+      ],
+      "linear_Y": 0.4284
+    },
+    "boots": {
+      "rectangle_xyxy": [
+        106,
+        741,
+        124,
+        760
+      ],
+      "median_srgb": [
+        104,
+        68,
+        49
+      ],
+      "linear_Y": 0.073
+    },
+    "hair": {
+      "rectangle_xyxy": [
+        143,
+        49,
+        159,
+        61
+      ],
+      "median_srgb": [
+        142,
+        71,
+        46
+      ],
+      "linear_Y": 0.1045
+    },
+    "braid shadow": {
+      "rectangle_xyxy": [
+        649,
+        167,
+        657,
+        187
+      ],
+      "median_srgb": [
+        131,
+        69,
+        45
+      ],
+      "linear_Y": 0.0927
+    }
+  }
+}

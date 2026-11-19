@@ -173,3 +173,274 @@ for label, yaw in [("front",0),("three-quarter",35),("profile",90),("back",180)]
     scene.render.filepath = str(ROOT / ("blockout-"+label+".png"))
     bpy.ops.render.render(write_still=True)
 view(0)
+
+# 2026-11-19T14:03:53.953627+00:00  face-hair
+from pathlib import Path
+import numpy as np
+import os
+import math
+SOURCE = Path(globals().get("__file__",str(Path.cwd()/"bridge.py"))).resolve().parent
+if not (SOURCE/"face.png").exists(): SOURCE = Path.cwd()
+for name in ["Cranial envelope including hair allowance","Eye datum -1","Eye datum 1"]:
+    bpy.data.objects.remove(bpy.data.objects[name],do_unlink=True)
+def linear(v):
+    return ((v/255+.055)/1.055)**2.4 if v>10 else v/3294.6
+def dye(name,rgb):
+    m=bpy.data.materials.new(name)
+    m.diffuse_color=(*[linear(v) for v in rgb],1)
+    m.use_nodes=True
+    p=m.node_tree.nodes.get("Principled BSDF")
+    p.inputs["Base Color"].default_value=m.diffuse_color
+    p.inputs["Roughness"].default_value=.88
+    return m
+skin=dye("Warm skin",(230,171,137))
+hairmat=dye("Auburn",(133,66,41))
+deep=dye("Auburn shadow",(93,42,31))
+glint=dye("Copper facet",(162,85,51))
+tie=dye("Braid binding",(73,48,37))
+# One UV atlas for the face and the swept hair panels. Back/edge polygons
+# sample their own material colour. Pack the source for standalone Blender use.
+pic=bpy.data.images.load(str(SOURCE/"face.png"))
+pic.pack()
+paint=dye("Portrait paint",(235,179,145))
+tex=paint.node_tree.nodes.new("ShaderNodeTexImage")
+tex.image=pic
+paint.node_tree.nodes.active=tex
+paint.node_tree.links.new(tex.outputs["Color"],paint.node_tree.nodes["Principled BSDF"].inputs["Base Color"])
+s=104/468
+def pos(u,v,d):
+    return ((u-526)*s*unit,d*unit,(763-(v-16)*s)*unit)
+def mesh_art(name,coords,faces,mats,indices=None,uvs=None):
+    me=bpy.data.meshes.new(name)
+    me.from_pydata(coords,[],faces)
+    me.update()
+    ob=bpy.data.objects.new(name,me)
+    scene.collection.objects.link(ob)
+    for m in mats: me.materials.append(m)
+    layer=me.uv_layers.new(name="Portrait coordinates") if uvs else None
+    for i,f in enumerate(me.polygons):
+        f.use_smooth=True
+        if indices: f.material_index=indices[i]
+        if layer:
+            for li in f.loop_indices:
+                u,v=uvs[me.loops[li].vertex_index]
+                layer.data[li].uv=(u/pic.size[0],1-v/pic.size[1])
+    return ob
+def grid(nr,nc,wrap=False):
+    return [(r*nc+c,(r+1)*nc+c,(r+1)*nc+(c+1)%nc,r*nc+(c+1)%nc)
+        for r in range(nr-1) for c in range(nc if wrap else nc-1)]
+# Each face section sets the width, centre-depth and depth radius. Use a
+# flatter frontal arc between the cheeks and add the nose in surface relief.
+section=np.array([(50,35,3,17),(85,95,2,27),(130,129,2,32),(180,142,2,35),
+ (225,146,1,36),(265,143,0,35),(292,140,-1,35),(325,136,-2,34),
+ (352,130,-3,33),(380,119,-5,31),(405,107,-7,28),(430,89,-10,25),
+ (450,66,-13,21),(471,37,-17,15),(483,8,-20,9),(486,2,-21,5)])
+def dim(v): return [float(np.interp(v,section[:,0],section[:,i])) for i in (1,2,3)]
+def front(u,v):
+    w,d,r=dim(v)
+    dx=(u-526)/w
+    relief=7*math.exp(-((u-526)/22)**2-((v-305)/58)**2)+11*math.exp(-((u-526)/21)**2-((v-348)/14)**2)
+    return d-r*(max(0,1-dx*dx)**.38)-relief
+coords=[]; uvs=[]; ids=[]
+rows=sorted(set([*range(50,483,7),*map(int,section[:,0])]))
+N=84
+for v in rows:
+    w,d,r=dim(v)
+    for j in range(N):
+        a=2*math.pi*j/N
+        u=526+w*math.sin(a)
+        depth=front(u,v) if math.cos(a)>=0 else d-r*math.cos(a)
+        coords.append(pos(u,v,depth)); uvs.append((u,v))
+faces=grid(len(rows),N,True)
+for f in faces:
+    j=f[0]%N
+    ids.append(0 if math.cos(2*math.pi*(j+.5)/N)>.22 else 1)
+head=mesh_art("Cora | cheek jaw and nasal planes",coords,faces,[paint,skin],ids,uvs)
+def portrait_panel(name,rings,mat,shade=None,frontpaint=True):
+    coords=[]; uvs=[]; idx=[]
+    N=24
+    for v,u,w,depth,t in rings:
+        for j in range(N):
+            a=2*math.pi*j/N
+            x=u+w*math.sin(a)
+            coords.append(pos(x,v,depth-t*math.cos(a)))
+            uvs.append((x,v))
+    faces=grid(len(rings),N,True)
+    for f in faces:
+        c=math.cos(2*math.pi*(f[0]%N+.5)/N)
+        idx.append(0 if frontpaint and c>.22 else 1 if c>-.55 or shade is None else 2)
+    return mesh_art(name,coords,faces,[paint,mat,shade or mat],idx,uvs)
+# Skull cap; a full back volume tapering into the nape. The exposed forehead
+# is opened by lifting the lower cap edge around its front arc.
+coords=[];uvs=[];idx=[]
+nc=72; nr=23
+for row in range(nr):
+    for j in range(nc):
+        a=2*math.pi*j/nc
+        edge=1.97-.95*math.cos(a)
+        t=.025+(edge-.025)*row/(nr-1)
+        u=508+177*math.sin(t)*math.sin(a)
+        v=19+209*(1-math.cos(t))
+        d=4-46*math.sin(t)*math.cos(a)
+        coords.append(pos(u,v,d));uvs.append((u,v))
+faces=grid(nr,nc,True)
+for f in faces:
+    j=f[0]%nc
+    u,v=uvs[f[0]]
+    idx.append(0 if math.cos(2*math.pi*(j+.5)/nc)>.5 and v<127 else 1)
+cap=mesh_art("Cora | swept crown and nape",coords,faces,[paint,hairmat],idx,uvs)
+portrait_panel("Cora | sweeping forelock",[
+ (17,532,3,-7,1),(26,514,44,-13,4),(45,503,81,-20,6),
+ (75,476,91,-25,8),(110,451,87,-29,9),(150,428,86,-32,9),
+ (188,404,91,-33,9),(215,393,84,-34,10),(241,372,74,-32,9),
+ (264,352,64,-29,8),(289,337,65,-25,7),(314,337,54,-20,6),
+ (338,343,39,-17,5),(362,342,27,-16,4),(380,327,9,-14,3),
+ (393,325,2,-13,1)],hairmat,deep)
+portrait_panel("Cora | near temple curl",[
+ (244,374,43,-25,5),(290,369,35,-25,6),(335,360,28,-22,6),
+ (376,345,23,-20,5),(405,331,18,-19,4),(440,318,12,-17,4),
+ (465,321,10,-15,3),(490,338,8,-14,2),(515,357,5,-12,2),(541,360,1,-11,1)],hairmat,deep)
+portrait_panel("Cora | parted temple",[
+ (73,598,8,-14,3),(91,610,38,-20,4),(120,630,40,-21,6),
+ (151,651,35,-20,6),(188,669,40,-18,7),(225,684,32,-16,8),
+ (260,677,23,-14,6),(288,665,11,-11,4),(319,665,4,-8,2)],hairmat,deep)
+portrait_panel("Cora | fine temple wisp",[(237,700,13,-13,3),(272,701,16,-14,3),
+ (303,709,12,-15,4),(330,696,9,-14,3),(360,680,6,-13,2),
+ (390,688,6,-12,2),(422,696,5,-11,2),(451,683,4,-10,2),(475,668,1,-9,1)],hairmat,deep)
+for side in (-1,1):
+    u=526+side*138
+    portrait_panel("Cora | ear "+str(side),[(278,u,2,0,2),(286,u,12,-1,5),
+     (306,u+side*4,17,-1,6),(335,u+side*2,15,0,5),(355,u,9,1,4),(365,u-4*side,2,2,1)],skin,frontpaint=False)
+# Alternate the path of three continuous plaited locks on the centre back.
+for strand in range(3):
+    rings=[]
+    for k in range(63):
+        q=k/62
+        a=q*math.pi*9+strand*2*math.pi/3
+        radius=11*(1-.64*q)
+        rings.append((94+156*q,radius*math.sin(a),42+12*q+radius*.56*math.cos(a),
+                      radius*.83,radius*.85))
+    loft("Cora | plait "+str(strand+1),rings,[hairmat,glint,deep][strand],n=12)
+loft("Cora | binding",[(246,0,54,6.5,6),(252,0,54,6,6)],tie,n=14)
+loft("Cora | braid brush",[(251,0,54,4,4),(258,0,54,7,5),(268,-1,54,9,6),(279,-2,52,6,4),(290,0,50,1,1)],hairmat,n=18)
+bpy.data.objects['Neck'].data.materials[0]=skin
+scene.display.shading.color_type="TEXTURE"
+scene.display.shading.light="FLAT"
+scene.display.shading.show_shadows=False
+scene.display.shading.show_cavity=False
+
+# 2026-11-19T14:04:14.071596+00:00  face-checkpoint
+view(0)
+bpy.ops.wm.save_as_mainfile(filepath=str(ROOT/"cora-face-progress.blend"))
+
+# 2026-11-19T14:10:50.634255+00:00  face-review
+def orbit(stage):
+    for label,yaw in [("front",0),("three-quarter",35),("profile",90),("back",180)]:
+        view(yaw)
+        camera.data.ortho_scale=810*unit
+        scene.render.resolution_x=320; scene.render.resolution_y=810
+        scene.render.filepath=str(ROOT/f"{stage}-{label}.png")
+        bpy.ops.render.render(write_still=True)
+    view(0)
+def closeup(stage,yaw):
+    view(yaw)
+    camera.location.z=(785-88)*unit
+    camera.data.ortho_scale=150*unit
+    scene.render.resolution_x=512;scene.render.resolution_y=512
+    scene.render.filepath=str(ROOT/f"{stage}-close.png")
+    bpy.ops.render.render(write_still=True)
+    camera.data.ortho_scale=810*unit
+    scene.render.resolution_x=320;scene.render.resolution_y=810
+    view(0)
+orbit("p2a")
+closeup("p2a",-35)
+
+# 2026-11-19T14:12:33.744322+00:00  face-second-fit
+# Oblique construction plane uses the approved portrait camera. Its two
+# coordinates locate a contour; the third measures depth into the skull.
+az=math.radians(-35)
+ex=Vector((math.cos(az),math.sin(az),0))
+away=Vector((-math.sin(az),math.cos(az),0))
+def oblique(u,v,depth):
+    p=ex*((u-1276.5)*s*unit)+away*(depth*unit)
+    p.z=pos(526,v,0)[2]
+    return p
+def uv35(p):
+    return (1276.5+p.dot(ex)/(unit*s),16+(763-p.z/unit)/s)
+def traced(name,sections,material,painted=True):
+    vs=[];uv=[];idx=[]
+    N=32
+    for v,u,w,d,t in sections:
+        for j in range(N):
+            a=2*math.pi*j/N
+            x=u+w*math.sin(a)
+            vs.append(oblique(x,v,d-t*math.cos(a)))
+            uv.append((x,v))
+    fs=grid(len(sections),N,True)
+    for f in fs:
+        idx.append(0 if painted and math.cos(2*math.pi*(f[0]%N+.5)/N)>.20 else 1)
+    return mesh_art(name,vs,fs,[paint,material],idx,uv)
+# Shape the negative space above the exposed ear and add the posterior lock
+# that flows from the parietal ridge toward the nape.
+traced("Cora | rear temple sweep",[(45,1270,14,-16,2),(63,1243,56,-20,6),
+ (91,1203,69,-25,6),(127,1162,68,-29,7),(168,1125,66,-31,7),
+ (194,1102,60,-31,7),(217,1096,54,-31,6),(246,1080,41,-30,6),
+ (275,1066,35,-27,5),(302,1053,27,-24,4),(326,1047,18,-22,3),
+ (355,1048,10,-20,2),(375,1059,2,-19,1)],hairmat)
+traced("Cora | tuck behind ear",[(243,1117,18,-22,5),(270,1113,29,-25,7),
+ (299,1101,31,-24,8),(332,1091,31,-23,7),(362,1093,32,-21,8),
+ (389,1113,32,-18,6),(413,1126,31,-15,5),(433,1128,18,-12,4),
+ (451,1112,3,-9,1)],hairmat)
+# The larger helix sits proud of the crown. The painted inner ear is recessed.
+traced("Cora | visible helix and concha",[(271,1155,5,-24,2),(281,1151,21,-29,4),
+ (297,1148,28,-30,5),(320,1156,31,-31,6),(340,1167,29,-30,5),
+ (359,1179,22,-27,4),(373,1190,12,-24,3),(382,1194,2,-20,1)],skin)
+# A fitted back UV follows the crown's radial sections and the plait; the
+# strands retain independent volume in profile and can later share one atlas.
+turn=bpy.data.images.load(str(SOURCE/"turnaround.png")); turn.pack()
+def texture_material(name,image):
+    mat=dye(name,(131,65,39))
+    node=mat.node_tree.nodes.new("ShaderNodeTexImage");node.image=image
+    mat.node_tree.nodes.active=node
+    mat.node_tree.links.new(node.outputs["Color"],mat.node_tree.nodes["Principled BSDF"].inputs["Base Color"])
+    return mat
+rear_paint=texture_material("Nape and plait paint",turn)
+def set_uv(ob,f,values,image):
+    layer=ob.data.uv_layers.active or ob.data.uv_layers.new()
+    for li,(u,v) in zip(f.loop_indices,values):
+        layer.data[li].uv=(u/image.size[0],1-v/image.size[1])
+for obj in [cap]+[ob for ob in scene.objects if "plait " in ob.name]:
+    obj.data.materials.append(rear_paint)
+    for f in obj.data.polygons:
+        ps=[obj.data.vertices[k].co for k in f.vertices]
+        center=sum(ps,Vector((0,0,0)))/len(ps)
+        if obj==cap and center.y < 10*unit:
+            if center.x<0 and f.material_index==1:
+                # Preserve the cranial dome on the visible side, with the
+                # side-specific swept grain behind the front locks.
+                uv=[uv35(p) for p in ps]
+                if all(1082<u<1410 and 40<v<258 for u,v in uv):
+                    f.material_index=0
+                    set_uv(obj,f,uv,pic)
+            continue
+        v=785-center.z/unit
+        if obj==cap:
+            uv=[(656-p.x/unit*.77,max(28,min(119,785-p.z/unit))) for p in ps]
+        else:
+            uv=[(656-p.x/unit*.65,min(247,max(110,785-p.z/unit))) for p in ps]
+        f.material_index=len(obj.data.materials)-1
+        set_uv(obj,f,uv,turn)
+# Smooth depth progression through the bridge; preserve projected frontal
+# mouth/eye spacing while giving the tip a readable oblique silhouette.
+for pt in head.data.vertices:
+    u=526+pt.co.x/unit/s
+    v=16+(763-pt.co.z/unit)/s
+    if pt.co.y<0:
+        pt.co.y-=unit*(4*math.exp(-((u-526)/18)**2-((v-330)/43)**2)+3*math.exp(-((u-526)/19)**2-((v-348)/14)**2))
+for pt in bpy.data.objects["Neck"].data.vertices:
+    pt.co.x*=.86
+    pt.co.y=pt.co.y*.84+unit*6
+orbit("p2b")
+closeup("p2b",-35)
+view(0)
+bpy.ops.wm.save_as_mainfile(filepath=str(ROOT/"cora-face-progress.blend"))
