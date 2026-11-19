@@ -2510,6 +2510,38 @@ mod tests {
         assert_eq!(q.poll(turn, now + Duration::from_secs(15)).0, Step::Prepare);
     }
 
+    /// Cost of one scheduler pass with a battle-sized queue (run with --ignored, release).
+    #[test]
+    #[ignore]
+    fn pass_cost_with_a_battle_queue() {
+        let models: ModelsFile = serde_json::from_value(json!({"default": "p", "profiles": {
+            "p": {"base_url": "x", "model": "m", "key_env": "unused", "requests_per_minute": 6000}
+        }}))
+        .unwrap();
+        let scheduler = Scheduler::new(&models, 64, 0.0);
+        let mut q = scheduler.queue.lock().unwrap();
+        let now = q.global_next;
+        for i in 0..200u64 {
+            q.sequence += 1;
+            let id = q.sequence;
+            let lane = [Lane::Urgent, Lane::Urgent, Lane::Routine, Lane::Background][(i % 4) as usize];
+            let prompt = if i % 3 == 0 { Prompt::Ready } else { Prompt::NeedsPreparation };
+            q.waiting.push_back(Waiting { id, profile: "p".into(), lane, cost: 10, prompt });
+        }
+        q.in_flight = 64;
+        q.lower_in_flight = 48;
+        let ids: Vec<u64> = q.waiting.iter().map(|w| w.id).collect();
+        let t = Instant::now();
+        let mut n = 0u64;
+        for round in 0..100 {
+            for id in &ids {
+                let _ = q.poll(*id, now + Duration::from_millis(round));
+                n += 1;
+            }
+        }
+        println!("pass cost: {:.1} us per poll over {n} polls, 200 waiting, pool full", t.elapsed().as_secs_f64() * 1e6 / n as f64);
+    }
+
     /// The battles' grant stall (docs/MIND_HARNESS.md §8): many ready calls, free slots and no
     /// grants for seconds, because only the call the scheduler picked could take its slot, and
     /// its task was not running (held up behind other work on its worker thread). A ticket whose
