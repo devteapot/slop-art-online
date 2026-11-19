@@ -465,7 +465,7 @@ class Hair:
 
     # The layers styles are made of. ---------------------------------------------------------
 
-    def curtain(self, z_end, points=7, depth=0.028, back_drop=0.0, g=42.0, chain=None, front=72.0, el=34.0, tip_out=0.0, groove=1.0, splay=0.0, gather=0.0, front_end=None):
+    def curtain(self, z_end, points=7, depth=0.028, back_drop=0.0, g=42.0, chain=None, front=57.0, el=34.0, tip_out=0.0, groove=1.0, splay=0.0, gather=0.0, front_end=None):
         """The sides and back as one sheet hanging from mid-height, from in front of one ear
         round the back to the other. Its front edges hang at the ear's front, so from the side
         the face stays clear."""
@@ -484,7 +484,7 @@ class Hair:
         self.sheet(roots, "down", z_end=z_end, points=points, depth=depth, hem=lambda u: -back_drop * smooth((abs(ang(u)) - 95) / 60) + short(u), lift=0.004, g=g,
                    chain=None if chain is None else (lambda u: chain(ang(u))), shade=-0.05, edges=(0.25, 0.25), tip_out=tip_out, groove=groove, splay=splay, gather=gather)
 
-    def over(self, z_end, points=3, depth=0.03, back_drop=0.0, g=30.0, chain=None, front=70.0, lift=0.009, tip_out=0.0, splay=0.0, gather=0.0, front_end=None, back_th=50.0):
+    def over(self, z_end, points=3, depth=0.03, back_drop=0.0, g=30.0, chain=None, front=60.0, lift=0.009, tip_out=0.0, splay=0.0, gather=0.0, front_end=None, back_th=50.0):
         """From the parting across the top and down over the curtain, one sheet a side, fanning
         round the crown at the back. Its front edge comes down over the temple to the ear's front.
         `back_th`: how far toward straight back its back edge is combed (degrees). At 88 the two
@@ -532,9 +532,9 @@ class Hair:
         little lower toward the ear, so it closes the skin beside the fringe and stays above
         and behind the eye."""
         for side in (-1, 1):
-            az = side * np.linspace(34.0, 74.0, 9)
+            az = side * np.linspace(29.0, 74.0, 9)
             roots = np.array([self.point(a, self.hairline(a) + 0.006) for a in az])
-            self.sheet(roots, np.array([0.0, -0.55, -1.0]), length=lambda u: lerp(0.040, 0.028, u), points=2, depth=0.008, lift=0.004, g=30.0, shade=-0.03, edges=(0.6, 0.3), thick=0.003,
+            self.sheet(roots, np.array([0.0, -0.55, -1.0]), length=lambda u: lerp(0.051, 0.028, u), points=2, depth=0.008, lift=0.004, g=30.0, shade=-0.03, edges=(0.6, 0.3), thick=0.003,
                        bulge=0.001, check=True)
 
     def fringe_reach(self, least):
@@ -607,17 +607,17 @@ class Hair:
         """In front of and above the ear, close to the head, `drop` metres long: one small sheet
         a side, where a short style's own points leave skin showing, most on a narrow skull."""
         for side in (-1, 1):
-            az = side * np.linspace(54.0, 86.0, 9)
+            az = side * np.linspace(46.0, 86.0, 9)
             roots = self.comb.surface(az, np.full(9, 38.0))
-            self.sheet(roots, DOWN + np.array([0, 0.12, 0]), length=lambda u: 0.030 + drop * (1.2 - 0.4 * u), points=3, depth=0.010, lift=0.003, g=40.0, shade=-0.03, edges=(0.7, 0.4), thick=0.003,
+            self.sheet(roots, DOWN + np.array([0, 0.12, 0]), length=lambda u: 0.030 + drop * (1.5 - 0.7 * u), points=3, depth=0.010, lift=0.003, g=40.0, shade=-0.03, edges=(0.7, 0.4), thick=0.003,
                        bulge=0.001, check=True)
 
     def temples(self, z_end, n=2, width=0.030, chain=None):
         """Locks at the ears' front, to the jaw: far enough back that the eye shows from the side."""
         for side in (-1, 1):
             for k in range(n):
-                az = side * (72 + 8 * k)
-                self.lock(az + self.u(-2, 2), 30 + self.u(-3, 3), DOWN + np.array([0, 0.08, 0]), z_end=z_end + 0.02 * (n - 1 - k) + self.u(-0.008, 0.008), length=0.6, width=width, lift=0.006, g=45.0,
+                az = side * (63 + 12 * k)
+                self.lock(az + self.u(-2, 2), 30 + self.u(-3, 3), DOWN + np.array([0, 0.08, 0]), z_end=z_end - 0.014 + 0.02 * (n - 1 - k) + self.u(-0.008, 0.008), length=0.6, width=1.16 * width, lift=0.006, g=45.0,
                           layer=1, chain=-1 if chain is None else chain(az), taper=2.0)
 
     def cap(self, drop=0.006, points=15, depth=0.012, fringe=None, lift=0.006, tip_out=0.0, splay=0.0, g=22.0, raise_hem=0.0, swirl=18.0, shade=0.0, uneven=0.35):
@@ -958,8 +958,8 @@ class Hair:
         the client makes from the file's `_GREY` and the person's `grey` (person_params), so a
         person's own file and the same person composed from a shared style grey alike. The
         vertices that follow carry the lock's mask."""
-        c = base * (1 + 0.04 * k["tone"] + k["shade"])
-        t = tipc * (1 + 0.04 * k["tone"] + k["shade"])
+        c = base * (1 + 0.025 * k["tone"] + k["shade"])
+        t = tipc * (1 + 0.025 * k["tone"] + k["shade"])
         mask = person_params.grey_mask(k["grey"])
         if not k.get("column"):
             self.marks.append((len(self.v), mask))
@@ -1144,7 +1144,7 @@ class Hair:
             cb[j], ct[j] = self._lock_colour(dict(tone=0.6 * tone, shade=sp["shade"], grey=places[j], column=True), base, tipc, silver, grey)
         even = sp["even"]
         rootshade = lerp(lerp(0.76, 0.92, even), 1.0, smooth(T / 0.22))
-        grad = smooth((T - 0.35) / 0.65) * (1 - 0.8 * even)
+        grad = 0.65 * smooth((T - 0.35) / 0.65) * (1 - 0.8 * even)
         groove = 1 - 0.26 * sp["groove"] * (kk ** 1.5)[:, None] * smooth((T - 0.25) / 0.45)[None, :]
         edge = (1 - 0.16 * (1 - (E - 0.12) / 0.88))[:, None]
         # The ends are drawn darker, a line along the hem.
