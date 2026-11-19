@@ -173,12 +173,17 @@ def wait_ping(seconds):
 
 def launch(a):
     st = load(a.run)
-    try:
-        idle_seconds = int(os.environ.get("VERIFY_LEASE_SECONDS", DEFAULT_LEASE_SECONDS))
-        if idle_seconds < 2:
-            raise ValueError
-    except ValueError:
-        sys.exit("VERIFY_LEASE_SECONDS must be an integer of at least 2 seconds")
+    driver_pid = getattr(a, "driver_pid", None)
+    idle_seconds = None
+    if driver_pid is None:
+        try:
+            idle_seconds = int(os.environ.get("VERIFY_LEASE_SECONDS", DEFAULT_LEASE_SECONDS))
+            if idle_seconds < 2:
+                raise ValueError
+        except ValueError:
+            sys.exit("VERIFY_LEASE_SECONDS must be an integer of at least 2 seconds")
+    elif driver_pid < 1 or world_guard.process_stamp(driver_pid) is None:
+        sys.exit("--driver-pid must identify the running supervisor")
     if not st["db"].startswith(PREFIX):
         sys.exit(f"refusing to publish {st['db']}: verification databases start with {PREFIX}")
     if len(st["db"]) > 63:
@@ -227,7 +232,7 @@ def launch(a):
         sys.exit(f"refusing to overwrite {st['db']}: use a new run name")
     fresh = ["--delete-data"] if current and not keep else []
     command = [STDB, "publish", "-s", "local", "-b", f"/wasm/{wasm}", st["db"], *fresh, "-y"]
-    published = world_guard.arm(run_dir(a.run), URL, st["db"], owner, command=command,
+    published = world_guard.arm(run_dir(a.run), URL, st["db"], owner, driver_pid=driver_pid, command=command,
                                 expected=current, expected_epoch=st.get("world_epoch"),
                                 idle_seconds=idle_seconds)
     st["database_identity"], st["world_epoch"] = published["identity"], published["epoch"]
@@ -620,6 +625,7 @@ def main():
     p = sub.add_parser("launch"); p.add_argument("--run", required=True); p.add_argument("--seed", default="world")
     p.add_argument("--keep-data", action="store_true", help="update the run's existing database in place instead of publishing it fresh")
     p.add_argument("--target-dir", help="cargo target directory for the module build, e.g. under .local/living/verify/<run>/")
+    p.add_argument("--driver-pid", type=int, help="watch the supplied long-lived supervisor instead of using an inactivity lease")
     p.add_argument("--archive-commitlog", action="store_true", help="archive this run's commitlog before cleanup deletes it")
     p.set_defaults(f=launch)
     p = sub.add_parser("doctor"); p.add_argument("--run", required=True); p.set_defaults(f=doctor)

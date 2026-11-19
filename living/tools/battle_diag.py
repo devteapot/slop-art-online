@@ -320,7 +320,8 @@ def main():
     try:
         target = os.environ.get("CARGO_TARGET_DIR")
         target_args = ["--target-dir", target] if target else []
-        run.harness("launch", "--seed", "island", "--archive-commitlog", *target_args)
+        run.harness("launch", "--seed", "island", "--archive-commitlog",
+                    "--driver-pid", str(os.getpid()), *target_args)
         token = authority_token()
         run.harness("doctor")
         run.admin("set_paused", True)
