@@ -114,7 +114,7 @@ def band_of(stage, age):
 
 def given_for(person, band, age):
     """A person's parameters as given to the generator for a band: who they are, at that age."""
-    g = {k: person[k] for k in ("seed", "sex", "family", "skin") if k in person}
+    g = {k: person[k] for k in ("seed", "sex", "family", "household", "skin") if k in person}
     g["age"] = age
     if band == 0:
         g["hair"] = dict(style="crop")
@@ -165,6 +165,43 @@ def painted(line, rule):
             hh, s, v = colorsys.rgb_to_hsv(*linear(h))
             line["colors"]["outfit"][piece] = stored(colorsys.hsv_to_rgb((hh + dh) % 1.0, min(s * ks, 1.0), min(v * kv, 1.0)))
     return line
+
+
+def layer_colours(params, line):
+    """Set the visible layer values after the generator has measured or estimated the cloth dye."""
+    outfit = line["colors"]["outfit"]
+    seed = params["seed"]
+    home = params.get("household") or params.get("family", seed)
+    house = person_params.rnd(home, "wardrobe.house")
+    wearer = person_params.rnd(seed, "wardrobe.wearer")
+    # Households favour one arrangement, with some members wearing its inverse.
+    light_outer = (house.random() < 0.5) != (wearer.random() < 0.30)
+    light = wearer.uniform(0.48, 0.66)
+    dark = wearer.uniform(0.055, 0.115)
+    accent = house.choice(("oxblood", "mustard", "chalk_blue", "sea_green"))
+    for piece, colour in outfit.items():
+        part = stem(piece)
+        if part == "kerchief":
+            outfit[piece] = person_params.hexed(person_params.PAL[accent])
+            continue
+        if part == "coat" or (part.startswith("smock_") and part != "smock_bands"):
+            target = light if light_outer else dark
+        elif part.startswith("jersey_") or part == "smock_bands":
+            target = dark if light_outer else light
+        elif part == "jersey":
+            target = 0.38  # stay below the recolour shader’s lightening range to keep the bodice dark
+        else:
+            continue
+        rgb = linear(colour)
+        value = sum(x * weight for x, weight in zip(rgb, (0.2126, 0.7152, 0.0722)))
+        if target > value:
+            rgb = [x + (1 - x) * (target - value) / max(1 - value, 1e-6) for x in rgb]
+        else:
+            rgb = [x * target / max(value, 1e-6) for x in rgb]
+        if part == "jersey":
+            scale = min(1.0, 0.44 / max(rgb))
+            rgb = [x * scale for x in rgb]
+        outfit[piece] = stored(rgb)
 
 
 def words_of(p, line, band):
@@ -282,6 +319,7 @@ def book(a):
     for who, b, params, line, made in entries:
         if not made:
             painted(line, rule)
+        layer_colours(params, line)
         line = {k: line[k] for k in DRAWN if k in line}
         k = key_of(line)
         lines[k] = dict(person=line, words=words_of(params, line, b))

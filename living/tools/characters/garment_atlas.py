@@ -41,6 +41,13 @@ def paint(path):
     grey -= 0.12 * stroke(x - 0.47, 0.065) * stroke(wave, 0.010)
     grey -= 0.08 * stroke(z - hem - 0.087 - 0.024 * np.sin(17 * x), 0.012) * stroke(x - 0.12, 0.075)
     grey += 0.014 * np.sin(2 * np.pi * x / 0.006) * np.sin(2 * np.pi * z / 0.008)
+    # A sleeveless overlayer: the open V and armhole curve leave the light shirt visible.
+    neck = 1.35 + 1.15 * x
+    shoulder = 0.20 - 0.050 * np.clip((1.49 - z) / 0.16, 0, 1)
+    bodice = (~coat) & (z < np.minimum(neck, 1.485)) & (x < shoulder)
+    grey *= np.where(bodice, 0.38, 1.0)
+    grey *= np.where(coat & (placket < 0.043), 0.63, 1.0)
+    grey *= np.where(coat & ((z > 1.486) | cuff), 0.67, 1.0)
     pixels = np.uint8(np.clip(grey, 0, 1) * 255 + 0.5)
     pixels[:48, :48] = 255  # neutral swatch used by the far shells and other clothes
     Image.fromarray(pixels).convert("RGB").save(path)
