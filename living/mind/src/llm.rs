@@ -563,6 +563,8 @@ struct Queue {
     global_rpm: f64,
     global_next: Instant,
     last_trace_probe: Option<Instant>,
+    /// Grant-stall watch (urgent-merge A/B instrumentation, the branch's `Queue::watch`).
+    stall: Option<(Instant, usize)>,
 }
 
 impl Queue {
@@ -654,6 +656,34 @@ impl Queue {
         }).count()
     }
 
+    /// The branch's grant-stall watch, unchanged: a shared-pool call whose profile pacing has
+    /// passed, a free slot for its lane, and no grant; logged when a stall of 1 s or more ends.
+    fn watch(&mut self, now: Instant) {
+        let lower_limit = self.concurrency.saturating_sub((self.concurrency / 4).max(1)).max(1);
+        let free_lower = self.in_flight < self.concurrency && self.lower_in_flight < lower_limit;
+        let free_interactive = self.in_flight < self.concurrency;
+        let rates = &mut self.rates;
+        let ready = self
+            .waiting
+            .iter()
+            .filter(|w| w.lane != Lane::Fast)
+            .filter(|w| if w.lane == Lane::Interactive { free_interactive } else { free_lower })
+            .filter(|w| rates.get_mut(&w.profile).unwrap().ready_at(w.cost, now) <= now)
+            .count();
+        match (&mut self.stall, ready) {
+            (None, 0) => {}
+            (None, n) => self.stall = Some((now, n)),
+            (Some((_, most)), n) if n > 0 => *most = (*most).max(n),
+            (Some((since, most)), _) => {
+                let ms = now.saturating_duration_since(*since).as_millis();
+                if ms >= 1000 {
+                    log::warn!("grant stall: {ms} ms with up to {most} ready calls and free slots");
+                }
+                self.stall = None;
+            }
+        }
+    }
+
     fn start(&mut self, id: u64, now: Instant) -> (Lane, Option<String>) {
         let pos = self.waiting.iter().position(|w| w.id == id).unwrap();
         let w = self.waiting.remove(pos).unwrap();
@@ -673,6 +703,12 @@ impl Queue {
         if w.lane != Lane::Interactive {
             let offset = (0..NON_INTERACTIVE_ADMISSIONS.len()).find(|offset| NON_INTERACTIVE_ADMISSIONS[(self.next_lane + offset) % NON_INTERACTIVE_ADMISSIONS.len()] == w.lane).unwrap();
             self.next_lane = (self.next_lane + offset + 1) % NON_INTERACTIVE_ADMISSIONS.len();
+        }
+        if let Some((since, most)) = self.stall.take() {
+            let ms = now.saturating_duration_since(since).as_millis();
+            if ms >= 1000 {
+                log::warn!("grant stall: {ms} ms with up to {most} ready calls and free slots");
+            }
         }
         self.rates.get_mut(&w.profile).unwrap().sent(id, w.cost, now);
         self.in_flight += 1;
@@ -747,6 +783,7 @@ impl Scheduler {
                 global_rpm,
                 global_next: now,
                 last_trace_probe: None,
+                stall: None,
             }),
             changed: tokio::sync::Notify::new(),
             trace_latency: std::env::var("LIVING_INPUT_LATENCY").is_ok_and(|v| v == "1"),
@@ -779,6 +816,7 @@ impl Scheduler {
                     return Err(anyhow!("estimated request tokens {cost} exceed {profile} tokens_per_minute"));
                 }
                 let now = Instant::now();
+                q.watch(now);
                 let candidate = q.candidate(now);
                 if candidate == Some(id) {
                     let (lane, probe) = q.start(id, now);
