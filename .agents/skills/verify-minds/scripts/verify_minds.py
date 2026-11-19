@@ -4228,9 +4228,11 @@ def seen_remains_case(run):
     before = {r['id'] for r in rows('SELECT id FROM character')}
     run.admin('spawn_crowd', 23, True)
     observer, builder, *dead = sorted(r['id'] for r in rows('SELECT id FROM character') if r['id'] not in before)
+    writer = dead[-1]
+    # The writer needs to survive the setup in the same quiet area as the field.
+    run.admin('place_at', writer, *line[10])
     for who in [observer, builder, *dead]:
         run.admin('set_behavior', who, json.dumps({'wait': 300}))
-    writer = dead[-1]
     run.admin('grant_know_how', writer, 'writing')
     run.admin('grant_items', writer, 'wood', 1)
     run.admin('set_behavior', writer, json.dumps({'do': {'skill': 'write', 'item': 'tablet',

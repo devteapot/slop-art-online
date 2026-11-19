@@ -427,6 +427,10 @@ struct Answers {
     differed: u64,
 }
 
+pub(crate) fn answers_generation() -> Option<u64> {
+    (!marks_dropped()).then(|| ANSWERS_GEN.with(std::cell::Cell::get))
+}
+
 /// A write changed what some observer may make of some target (see `ANSWERS_GEN`).
 pub fn answers_changed() {
     if marks_dropped() {

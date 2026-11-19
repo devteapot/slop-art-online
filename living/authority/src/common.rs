@@ -1237,6 +1237,7 @@ impl<V: Clone, K: Copy + Eq + std::hash::Hash> WriteCache<V, K> {
 
 thread_local! {
     static CHUNK_RESOURCES: RefCell<WriteCache<Rc<Vec<ResourceNode>>>> = RefCell::new(WriteCache::new());
+    static STRUCTURES_REVISION: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
     static CHUNK_STRUCTURES: RefCell<WriteCache<Rc<Vec<Structure>>>> = RefCell::new(WriteCache::new());
     // A body's kind is fixed. Readability changes when an artifact moves, and these
     // entries are dropped with expired remains. As in the chunk cache, values read
@@ -1313,8 +1314,13 @@ pub fn invalidate_resources(ctx: &ReducerContext, chunk: Option<u32>) {
     CHUNK_RESOURCES.with(|c| c.borrow_mut().invalidate(t, chunk));
 }
 
+pub(crate) fn structures_revision() -> u64 {
+    STRUCTURES_REVISION.with(std::cell::Cell::get)
+}
+
 /// Call before inserting a structure.
 pub fn invalidate_structures(ctx: &ReducerContext) {
+    STRUCTURES_REVISION.with(|revision| revision.set(revision.get().wrapping_add(1)));
     let t = stamp(ctx);
     CHUNK_STRUCTURES.with(|c| c.borrow_mut().invalidate(t, None));
 }
@@ -1333,6 +1339,7 @@ pub(crate) fn remains_label(ctx: &ReducerContext, id: u64, owner: u32) -> (Rc<st
 }
 
 pub(crate) fn invalidate_remains_label(ctx: &ReducerContext, id: u64) {
+    STRUCTURES_REVISION.with(|revision| revision.set(revision.get().wrapping_add(1)));
     REMAINS_LABELS.with(|cache| cache.borrow_mut().invalidate(stamp(ctx), Some(id)));
 }
 
