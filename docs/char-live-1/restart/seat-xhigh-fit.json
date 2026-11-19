@@ -1,0 +1,48 @@
+{
+  "weights": {
+    "weight_sum_error": 1.993030309677124e-07,
+    "max_influences": 4
+  },
+  "open_apron_edges": 0,
+  "open_coat_edges": 0,
+  "seated_hem": {
+    "sit_idle": [
+      {
+        "seconds": 0.2,
+        "centre_drop_from_mean_thigh_mm": 81.8
+      },
+      {
+        "seconds": 0.65,
+        "centre_drop_from_mean_thigh_mm": 85.7
+      },
+      {
+        "seconds": 1.4,
+        "centre_drop_from_mean_thigh_mm": 86.9
+      }
+    ],
+    "sit_ground": [
+      {
+        "seconds": 0.2,
+        "centre_drop_from_mean_thigh_mm": 104.0
+      },
+      {
+        "seconds": 0.65,
+        "centre_drop_from_mean_thigh_mm": 102.7
+      },
+      {
+        "seconds": 1.4,
+        "centre_drop_from_mean_thigh_mm": 103.7
+      }
+    ]
+  },
+  "apron_topology": {
+    "boundary_edges": 0,
+    "nonmanifold_edges": 0,
+    "triangles": 2784
+  },
+  "coat_topology": {
+    "boundary_edges": 0,
+    "nonmanifold_edges": 0,
+    "triangles": 2636
+  }
+}

@@ -1,0 +1,70 @@
+{
+  "sit_idle": [
+    {
+      "seconds": 0.2,
+      "apron_triangles_crossing_trousers": 145,
+      "coat_triangles_crossing_trousers": 32
+    },
+    {
+      "seconds": 0.65,
+      "apron_triangles_crossing_trousers": 143,
+      "coat_triangles_crossing_trousers": 32
+    },
+    {
+      "seconds": 1.4,
+      "apron_triangles_crossing_trousers": 143,
+      "coat_triangles_crossing_trousers": 32
+    }
+  ],
+  "sit_ground": [
+    {
+      "seconds": 0.2,
+      "apron_triangles_crossing_trousers": 372,
+      "coat_triangles_crossing_trousers": 73
+    },
+    {
+      "seconds": 0.6,
+      "apron_triangles_crossing_trousers": 371,
+      "coat_triangles_crossing_trousers": 77
+    },
+    {
+      "seconds": 1.4,
+      "apron_triangles_crossing_trousers": 358,
+      "coat_triangles_crossing_trousers": 77
+    }
+  ],
+  "walk": [
+    {
+      "seconds": 0.05,
+      "apron_triangles_crossing_trousers": 143,
+      "coat_triangles_crossing_trousers": 0
+    },
+    {
+      "seconds": 0.28,
+      "apron_triangles_crossing_trousers": 46,
+      "coat_triangles_crossing_trousers": 0
+    },
+    {
+      "seconds": 0.69,
+      "apron_triangles_crossing_trousers": 74,
+      "coat_triangles_crossing_trousers": 0
+    }
+  ],
+  "run": [
+    {
+      "seconds": 0.06,
+      "apron_triangles_crossing_trousers": 78,
+      "coat_triangles_crossing_trousers": 26
+    },
+    {
+      "seconds": 0.18,
+      "apron_triangles_crossing_trousers": 179,
+      "coat_triangles_crossing_trousers": 0
+    },
+    {
+      "seconds": 0.47,
+      "apron_triangles_crossing_trousers": 189,
+      "coat_triangles_crossing_trousers": 0
+    }
+  ]
+}

@@ -4,7 +4,11 @@
 
 Cora loads in the Bevy asset view with her layered town outfit, centre-back braid and all 15 face keys. The review sheet pairs the head drawings with game portraits, then shows the fixed 58° camera at Near and Middle and two frames from the project’s motion library. The [full rig review](rig-play-review.jpg) shows six poses from front, three-quarter, side, back and both play stops. All poses used the release game on the dev-box. The seat review used the character alone on the checker.
 
-**Rig acceptance is open.** In the first high fit, the moving thigh showed through the apron and the pocket welt separated from the coat in a seat. The second high fit subdivided the panels through the hip, transferred pocket weights from their supporting triangles, seated the neck ring and trimmed hidden trouser and apron surfaces. The running front improved. Chair sitting now exposes a gap between the apron and knees, and the ground seat shows cut edges and a poor drape. Normalized weights and successful playback did not settle the garment fit. [Seated detail](seat-final-detail.jpg) · [Weights](rig-weights.json)
+**The final rig fit failed seated and gait clearance. Modelling stopped after the granted xhigh attempt.** The chair gap has closed. The apron now rests across the two thighs and dips between the knees. Its centre hem sits 82–87 mm below the mean of the two thigh sections in the three measured chair frames. The updated apron and coat each have zero boundary and nonmanifold edges. The ground sit still exposes dark trouser patches through the apron below the hands. The walking and running front also show the stepping thigh cutting into the apron. The coat spreads around the crossed legs at ground level. [Seated detail](seat-xhigh-detail.jpg) · [Seat orbits](seat-xhigh-seat-orbits.jpg) · [Gait orbits](seat-xhigh-gait-orbits.jpg)
+
+This fit restored the trouser thighs and seat under the apron, curved the apron across each thigh, kept a share of pelvis weight down the centre and blended the lower front hem toward the shins. Both garments carry baked inner faces and a connected rim. All deformations use the ordinary J_Bip joints. The six source clips retain their original channels. The first high fit had trouser breakthrough and floating pocket welts. The second cleared some running intersections but left daylight at the chair knees and exposed the lower cloth edges on the ground. [Earlier high-fit detail](seat-final-detail.jpg) · [Final fit measurements](seat-xhigh-fit.json) · [Weights](rig-weights.json)
+
+Bevy captured three times per clip for walk (0.05, 0.28, 0.69 s), run (0.06, 0.18, 0.47 s), chair (0.20, 0.65, 1.40 s) and ground sit (0.20, 0.60, 1.40 s). Each had front, three-quarter, profile, back, Near and Middle views. The posed geometry check counted distinct lower-panel triangles that cross either trouser leg below the waist attachment. At the three ground frames, 358–372 apron triangles cross the trousers. The metric includes inner and outer surfaces and measures geometry rather than visible pixels. [Intersection counts](seat-xhigh-crossings.json) · [Final neutral orbit and overlays](seat-xhigh-review.png)
 
 **Known face defect for the dedicated profile session.** The chin runs into the neck without a rising jaw. The brow, nose and lips read flat in profile. The dark hair lining behind the ear forms a blunt lobe. These appear in the [Bevy profile](game/profile.png) and [matched Blender overlay](face-c-profile-review.png). The three-quarter portrait keeps the green iris, catchlight, freckles, smaller shaped ear and short closed mouth.
 
@@ -12,8 +16,8 @@ Cora loads in the Bevy asset view with her layered town outfit, centre-back brai
 
 | Near GLB | Count |
 |---|---:|
-| Render triangles | 32,308 |
-| Exported vertices | 21,834 |
+| Render triangles | 37,210 |
+| Exported vertices | 24,084 |
 | Used materials | 9 |
 | Mesh primitives | 10 |
 | Expression keys | 15 |
@@ -45,10 +49,11 @@ Times are approximate wall-clock durations. Stages overlap with the build or ano
 | Hands | About 1m 40s including both fits and review. |
 | Expressions | About 1m 15s including the revised O and brow, full-key check and orbit. |
 | Rig, export and game | First bind at 15:03 UTC. First game series started at 15:04:35. The second rig fit was captured by 15:10:28. Final daylight grading and replay followed. |
+| Final xhigh rig fit | About 5m for weights, tailoring and measurements before the hold. Awaited the coordinator’s resume for about 15m. Captures began at 15:38 UTC. The 89 Bevy stills, replay and final evidence occupied roughly another 5m. |
 | Release build | 2m 14s with the shared sccache, overlapping the art passes. |
 | Back-port plan and review package | Began during the earlier face fits. Final plan, counts and review package assembled after the game captures. Independent plan-writing time was not metered. |
 
-The session used one game build. The remaining passes used zero external image generations. Model-token and billing totals were unavailable.
+The session used one game build. The final rig check reused that release binary and required no build slot after the timed run. The remaining passes used zero external image generations. Model-token and billing totals were unavailable.
 
 ## Replay
 

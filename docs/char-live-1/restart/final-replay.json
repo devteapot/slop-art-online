@@ -1,17 +1,17 @@
 {
   "orbit_differing_pixels": {
-    "game-shading-back.png": 0,
-    "game-shading-front.png": 0,
-    "game-shading-middle.png": 0,
-    "game-shading-near.png": 0,
-    "game-shading-profile.png": 0,
-    "game-shading-three-quarter.png": 0
+    "seat-xhigh-back.png": 0,
+    "seat-xhigh-front.png": 0,
+    "seat-xhigh-middle.png": 0,
+    "seat-xhigh-near.png": 0,
+    "seat-xhigh-profile.png": 0,
+    "seat-xhigh-three-quarter.png": 0
   },
-  "live_glb_sha256": "4e00f25419f51c1446ee4a89d5a858da673c39a0e105c35075057ca8fc3591d2",
-  "replay_glb_sha256": "4e00f25419f51c1446ee4a89d5a858da673c39a0e105c35075057ca8fc3591d2",
+  "live_glb_sha256": "f2c7642ecc66e1b0c27803ddcb38b4d7c1b2512e77152b6afe950a5df69ea97d",
+  "replay_glb_sha256": "f2c7642ecc66e1b0c27803ddcb38b4d7c1b2512e77152b6afe950a5df69ea97d",
   "identical_counts": true,
   "audit": {
-    "stage": "colours-in-game",
+    "stage": "seat-xhigh-inspection",
     "materials": 26,
     "images": [
       "cora.atlas.png",

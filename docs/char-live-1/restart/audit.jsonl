@@ -36,3 +36,8 @@
 {"stage": "game-shading", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
 {"stage": "game-shading-checkpoint", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
 {"stage": "colours-in-game", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "seat-xhigh-weights", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "seat-xhigh", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "seat-xhigh-checkpoint", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "seat-xhigh-export", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "seat-xhigh-inspection", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}

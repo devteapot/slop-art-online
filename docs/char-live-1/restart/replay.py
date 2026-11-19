@@ -1994,3 +1994,262 @@ review_pass('game-shading')
 export_cora()
 audit('colours-in-game')
 bpy.ops.wm.save_as_mainfile(filepath=str(ROOT/'cora-final.blend'))
+
+# 2026-11-19T15:19:30.062112+00:00  xchair-inventory
+for o in [outer,bib,objs['Trouser leg L']]:
+    print(o.name,o.matrix_world,[(m.name,m.type) for m in o.modifiers],o.data.materials[:],o.data.color_attributes['Color'].data[0].color[:],flush=True)
+    print(sorted({round(785-v.co.z/unit) for v in o.data.vertices}),flush=True)
+
+# 2026-11-19T15:20:04.446099+00:00  xchair-pose-measure
+# Measure the true clip poses and deformation in metres without invoking the renderer.
+# glTF joint matrices are evaluated in their exported hierarchy and then
+# changed into the same Z-up world coordinates as the live garment meshes.
+baseline_file=ROOT/'own-cora-live.glb'
+posed_j,posed_b=glb_io.read_glb(str(baseline_file))
+posed_nodes=posed_j['nodes']
+posed_names={node.get('name'):i for i,node in enumerate(posed_nodes)}
+posed_parent={child:i for i,node in enumerate(posed_nodes) for child in node.get('children',[])}
+Z_UP=np.array([[1,0,0,0],[0,0,-1,0],[0,1,0,0],[0,0,0,1.]])
+def sample_matrices(clip=None,t=0.):
+    curves={}
+    if clip:
+        motion=motions[clip]
+        for ch in motion['channels']:
+            sm=motion['samplers'][ch['sampler']]
+            times=np.array(glb_io.read_accessor(cj,cb,sm['input'])[0]);path=ch['target']['path']
+            vals=np.array(glb_io.read_accessor(cj,cb,sm['output'])[0]).reshape(len(times),-1)
+            k=max(0,min(len(times)-2,int(np.searchsorted(times,t)-1)))
+            frac=np.clip((t-times[k])/max(times[k+1]-times[k],1.e-8),0.,1.) if len(times)>1 else 0.
+            a,b=vals[k],vals[min(len(times)-1,k+1)]
+            if path=='rotation' and np.dot(a,b)<0:b=-b
+            val=(1-frac)*a+frac*b
+            curves[(cj['nodes'][ch['target']['node']]['name'],path)]=val
+    cache={}
+    def mat(i):
+        if i in cache:return cache[i]
+        d=posed_nodes[i];name=d.get('name')
+        tr=curves.get((name,'translation'),d.get('translation',[0,0,0]))
+        x,y,z,w=curves.get((name,'rotation'),d.get('rotation',[0,0,0,1]))
+        q=Quaternion((w,x,y,z)).normalized()
+        loc=np.eye(4);loc[:3,:3]=np.array(q.to_matrix())@np.diag(d.get('scale',[1,1,1]));loc[:3,3]=tr
+        cache[i]=(mat(posed_parent[i]) if i in posed_parent else Z_UP)@loc
+        return cache[i]
+    return {name:mat(i) for name,i in posed_names.items() if name and name.startswith('J_')}
+bind_mats=sample_matrices()
+def skin_pose(clip,time):
+    return {n:m@np.linalg.inv(bind_mats[n]) for n,m in sample_matrices(clip,time).items()}
+def deform_at(mats,co,weights):
+    q=np.array([*co,1.])
+    return sum(float(v)*(mats[k]@q)[:3] for k,v in weights.items())
+for clip in ('sit_idle','sit_ground','run'):
+    posed=sample_matrices(clip,.28 if clip=='run' else .65)
+    print(clip,{n:np.round(posed[n][:3,3],3).tolist() for n in ('J_Bip_C_Hips','J_Bip_L_UpperLeg','J_Bip_L_LowerLeg','J_Bip_L_Foot')},flush=True)
+    sm=skin_pose(clip,.28 if clip=='run' else .65)
+    print('prior hem xyz',[(x,np.round(deform_at(sm,wp(x,y,530),fabric_weight(Vector(wp(x,y,530)))),3).tolist()) for x,y in ((0,-48),(40,-39),(70,-9))],flush=True)
+
+# 2026-11-19T15:20:27.345312+00:00  xchair-hem-pin-measure
+for pose in ('sit_idle','sit_ground','walk'):
+    mm=skin_pose(pose,.65 if pose!='walk' else .28)
+    for sag in (0,.24):
+        for shin in (0,.33,.66):
+            pts=[deform_at(mm,wp(0,-24,545),{'J_Bip_L_UpperLeg':(1-sag)/2,'J_Bip_R_UpperLeg':(1-sag)/2,'J_Bip_C_Hips':sag}),
+                 deform_at(mm,wp(44,-34,551),{'J_Bip_L_UpperLeg':1-shin,'J_Bip_L_LowerLeg':shin}),
+                 deform_at(mm,wp(64,-14,544),{'J_Bip_L_UpperLeg':1-shin,'J_Bip_L_LowerLeg':shin})]
+            print(pose,sag,shin,np.round(pts,3).tolist(),flush=True)
+
+# 2026-11-19T15:22:05.880130+00:00  seat-xhigh-weight-fit
+# Reconstruct the trouser rise up to the seat so a bent hip always has a
+# complete thigh under the apron. Match the retained knee segment at its
+# existing edge, preserving the boot and lower-leg fit.
+def replace_surface(ob,vs,fs,colour):
+    data=bpy.data.meshes.new(ob.name+' tailored surface')
+    data.from_pydata(vs,[],fs);data.update()
+    data.materials.append(clothmat)
+    colors=data.color_attributes.new(name='Color',type='FLOAT_COLOR',domain='CORNER')
+    for q in colors.data:q.color=colour
+    data.color_attributes.active_color=colors
+    data.color_attributes.render_color_index=data.color_attributes.active_color_index
+    ob.data=data
+    for p in data.polygons:p.use_smooth=True
+    return data
+def ring_faces(rows,cols,closed=True):
+    return [(r*cols+j,(r+1)*cols+j,(r+1)*cols+(j+1)%cols,r*cols+(j+1)%cols)
+            for r in range(rows-1) for j in range(cols if closed else cols-1)]
+for side in ['L','R']:
+    leg=objs['Trouser leg '+side]
+    s=1 if side=='L' else -1
+    src=leg.data
+    rgb=src.color_attributes['Color'].data[0].color[:]
+    vs=[v.co.copy() for v in src.vertices]
+    fs=[tuple(p.vertices) for p in src.polygons]
+    first=[i for i,v in enumerate(vs) if abs(785-v.z/unit-508)<1]
+    assert len(first)==32
+    first.sort(key=lambda i:math.atan2(vs[i].x/unit-s*42,-vs[i].y/unit))
+    bottom=first
+    for zz,ctr,dep,width,thick in [(475,41,3,27,30),(444,40,4,28,31),(414,39,4,30,32),(387,38,4,32,33),(367,36,5,34,34),(347,34,5,33,32),(324,32,5,29,29)]:
+        top=[]
+        for j,prev in enumerate(first):
+            a=math.atan2(vs[prev].x/unit-s*42,1-vs[prev].y/unit)
+            top.append(len(vs));vs.append(Vector(wp(s*ctr+width*math.sin(a),dep-thick*math.cos(a),zz)))
+        fs.extend((top[j],bottom[j],bottom[(j+1)%32],top[(j+1)%32]) for j in range(32))
+        bottom=top
+    fs.append(tuple(bottom))
+    replace_surface(leg,vs,fs,rgb)
+    for v in leg.data.vertices:reset_weights(leg,v,skin_vertex(leg,v.co))
+# Closed seat/yoke under the waist and between the two restored leg roots.
+col=objs['Trouser leg L'].data.color_attributes['Color'].data[0].color[:]
+seatrows=[(309,49,32),(329,57,35),(349,64,37),(365,66,37),(383,62,34),(396,52,26)]
+seatvs=[wp(w*math.sin(a*math.tau/40),5-d*math.cos(a*math.tau/40),z) for z,w,d in seatrows for a in range(40)]
+seatfs=ring_faces(len(seatrows),40)+[tuple(range(40)),tuple(reversed(range(len(seatvs)-40,len(seatvs))))]
+seat=bpy.data.objects.new('Trouser seat yoke',bpy.data.meshes.new('Yoke blank'))
+scene.collection.objects.link(seat);replace_surface(seat,seatvs,seatfs,col)
+seat.parent=rig;seat.matrix_world=Matrix.Identity(4)
+arm=seat.modifiers.new('Cora body weights','ARMATURE');arm.object=rig;rig_items.append(seat)
+# Rest hem and lap are a contoured sheet with a small centre trough and
+# ease above each knee. The centre drapes from the pelvis between the two
+# independently moving thighs. Across each knee the terminal hem rolls down
+# with the shin. Interior weighting has zero dependence on clip identity.
+def lap_weights(p,apron=True):
+    x,y,z=p.x/unit,p.y/unit,785-p.z/unit
+    front=sat((10-y)/38)
+    ax=abs(x)
+    middle=math.exp(-(ax/23.)**2)
+    deep=sat((z-349)/142)
+    # Keep the side seam close to its thigh and let the centre and back
+    # retain some gravity when the upper legs rotate out onto the ground.
+    thigh=sat((z-328)/74)
+    retain=(.31*middle if apron else (.36*middle+.09*(1-front)))
+    thigh*=1-deep*retain
+    shin=.52*sat((z-502)/58)*sat((ax-9)/22)*(1 if apron else .6+.35*front)
+    left=sat((x+38)/76)
+    weights={'J_Bip_C_Hips':1-thigh,'J_Bip_L_UpperLeg':thigh*left*(1-shin),
+             'J_Bip_R_UpperLeg':thigh*(1-left)*(1-shin)}
+    weights['J_Bip_'+('L' if x>=0 else 'R')+'_LowerLeg']=thigh*shin
+    return weights
+for v in seat.data.vertices:reset_weights(seat,v,lap_weights(v.co))
+# The apron below the tie is a shaped front panel. A narrow internal turn
+# along its whole rim closes the silhouette at a ground seat.
+zstations=(279,294,306,318,332,348,365,384,404,424,446,465,482,499,515,527,538)
+widths=(54,57,58,61,63,65,67,67,68,68,69,69,69,69,69,68,67)
+n=41;vs=[];fs=ring_faces(len(zstations),n,False)
+for z,w in zip(zstations,widths):
+    drape=sat((z-335)/140)
+    for j in range(n):
+        u=2*j/(n-1)-1;ax=abs(u*w)
+        # At the apron sides the cloth wraps the outer quadriceps. Across
+        # the thighs its section changes continuously into a two-lobed lap.
+        belt=3-42*math.sqrt(max(0.,1-.94*u*u))
+        legcenter=42+3*sat((z-440)/110)
+        curve=math.sqrt(max(.025,1-((ax-legcenter)/33.)**2))
+        seat_depth=2.-(7.+28.*curve+6.*math.exp(-(ax/25.)**2))
+        if ax<20:seat_depth-=9*(1-ax/20)
+        y=(1-drape)*belt+drape*seat_depth
+        y-=2.3*math.cos(2*math.pi*(u+.08))*sat((z-324)/115)
+        zz=z+sat((z-478)/60)*(10+9*math.exp(-((ax-44)/19)**2)-4*u*u)
+        vs.append(Vector(wp(w*u,y,zz)))
+apron_col=bib.data.color_attributes['Color'].data[0].color[:]
+replace_surface(bib,vs,fs,apron_col)
+for v in bib.data.vertices:reset_weights(bib,v,lap_weights(v.co))
+def apply_wall(ob,thickness):
+    # Bake thickness into the editable vertex groups, so the exporter joins
+    # true back faces and rims instead of dropping an unapplied modifier.
+    wall=next((m for m in ob.modifiers if m.type=='SOLIDIFY'),None)
+    if wall is None:wall=ob.modifiers.new('Turned cloth edge','SOLIDIFY')
+    wall.thickness=thickness;wall.offset=-1.;wall.use_even_offset=False;wall.use_rim=True
+    ob.modifiers.move(list(ob.modifiers).index(wall),0)
+    bpy.context.view_layer.objects.active=ob
+    bpy.ops.object.modifier_apply(modifier=wall.name)
+apply_wall(bib,.0019)
+# Bring the side of the open coat in towards the thigh, leaving ease behind
+# the seat. Preserve both front edges and the yoke at the waist.
+for v in outer.data.vertices:
+    x,y,z=v.co.x/unit,v.co.y/unit,785-v.co.z/unit
+    lower=sat((z-348)/176)
+    across=sat((abs(x)-48)/57)
+    v.co.x*=1-.17*across*lower
+    v.co.y-=unit*3.5*sat((-y-15)/32)*lower
+    if z>328:reset_weights(outer,v,lap_weights(v.co,False))
+# Pockets and the back seam stay on the same coat triangle through a pose.
+outer.data.update();outer.data.calc_loop_triangles()
+tri_ids=[tuple(t.vertices) for t in outer.data.loop_triangles]
+outer_pos=[v.co.copy() for v in outer.data.vertices]
+surface_tree=BVHTree.FromPolygons(outer_pos,tri_ids,all_triangles=True)
+for ob in [o for o in rig_items if o.name.startswith(('Patch pocket','Pocket welt','Tailoring centre back'))]:
+    for v in ob.data.vertices:
+        hit,norm,ti,dist=surface_tree.find_nearest(v.co)
+        if hit is None:continue
+        tri=tri_ids[ti]
+        bars=barycentric_transform(hit,*(outer_pos[i] for i in tri),Vector((1,0,0)),Vector((0,1,0)),Vector((0,0,1)))
+        weights={}
+        for i,share in zip(tri,bars):
+            for g in outer.data.vertices[i].groups:
+                bn=outer.vertex_groups[g.group].name
+                weights[bn]=weights.get(bn,0.)+max(0.,share)*g.weight
+        weights=dict(sorted(weights.items(),key=lambda it:-it[1])[:4])
+        reset_weights(ob,v,weights)
+        v.co=hit+norm*(.0028 if 'welt' in ob.name else .0016)
+apply_wall(outer,.0028)
+def edge_count(ob):
+    bm=bmesh.new();bm.from_mesh(ob.data)
+    count=sum(e.is_boundary for e in bm.edges);bm.free();return count
+weight_report=validate_weights()
+assert weight_report['weight_sum_error']<1.e-4 and weight_report['max_influences']<=4
+assert edge_count(bib)==0 and edge_count(outer)==0
+details=dict(weights=weight_report,open_apron_edges=edge_count(bib),open_coat_edges=edge_count(outer),
+             seated_hem={})
+for clip in ('sit_idle','sit_ground'):
+    details['seated_hem'][clip]=[]
+    for t in (.2,.65,1.4):
+        mats=skin_pose(clip,t)
+        row=vs[-n:]
+        hem=[deform_at(mats,c,lap_weights(c)) for c in row]
+        details['seated_hem'][clip].append(dict(seconds=t,centre_drop_from_mean_thigh_mm=round(1000*(.5*(hem[7][2]+hem[33][2])-hem[20][2]),1)))
+(ROOT/'seat-xhigh-fit.json').write_text(json.dumps(details,indent=2)+'\n')
+audit('seat-xhigh-weights')
+bpy.ops.wm.save_as_mainfile(filepath=str(ROOT/'cora-seat-xhigh.blend'))
+
+# 2026-11-19T15:23:35.858529+00:00  seat-xhigh-topology-report
+# Keep the current numerical rig report with the seated checkpoint. Check that
+# both garment layers have real side walls and that their edges are manifold.
+def mesh_topology(ob):
+    bm=bmesh.new();bm.from_mesh(ob.data)
+    info={'boundary_edges':sum(e.is_boundary for e in bm.edges),
+          'nonmanifold_edges':sum(not e.is_manifold for e in bm.edges),
+          'triangles':sum(len(p.verts)-2 for p in bm.faces)}
+    bm.free();return info
+for o,k in [(bib,'apron_topology'),(outer,'coat_topology')]:
+    details[k]=mesh_topology(o)
+(ROOT/'seat-xhigh-fit.json').write_text(json.dumps(details,indent=2)+'\n')
+(ROOT/'rig-weights.json').write_text(json.dumps(weight_report,indent=2)+'\n')
+
+# 2026-11-19T15:38:32.257237+00:00  seat-xhigh-orbit-and-export
+review_pass('seat-xhigh')
+export_cora()
+audit('seat-xhigh-export')
+bpy.ops.wm.save_as_mainfile(filepath=str(ROOT/'cora-final.blend'))
+
+# 2026-11-19T15:40:56.382570+00:00  seat-xhigh-pose-inspection
+# Pair only lower garment triangles with trouser triangles. Exclude the
+# overlapping waist attachment and report actual surface crossings.
+def panels_in_pose(ob,mats,below):
+    coords=[];z0=[]
+    for v in ob.data.vertices:
+        w={ob.vertex_groups[g.group].name:g.weight for g in v.groups if g.weight>0}
+        p=ob.matrix_world@v.co;coords.append(deform_at(mats,p,w));z0.append(785-p.z/unit)
+    ob.data.calc_loop_triangles()
+    inds=[tuple(t.vertices) for t in ob.data.loop_triangles if min(z0[i] for i in t.vertices)>below]
+    return BVHTree.FromPolygons(coords,inds,all_triangles=True),inds
+results={}
+for clip,ts in [('sit_idle',(.2,.65,1.4)),('sit_ground',(.2,.6,1.4)),('walk',(.05,.28,.69)),('run',(.06,.18,.47))]:
+    results[clip]=[]
+    for t in ts:
+        mats=skin_pose(clip,t)
+        legtrees=[panels_in_pose(objs['Trouser leg '+s],mats,360)[0] for s in ('L','R')]
+        row={'seconds':t}
+        for garment,name in [(bib,'apron'),(outer,'coat')]:
+            tree,triangles=panels_in_pose(garment,mats,360)
+            crossed={i for tr in legtrees for i,j in tree.overlap(tr)}
+            row[name+'_triangles_crossing_trousers']=len(crossed)
+        results[clip].append(row)
+(ROOT/'seat-xhigh-crossings.json').write_text(json.dumps(results,indent=2)+'\n')
+audit('seat-xhigh-inspection')
