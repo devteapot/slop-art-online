@@ -15,6 +15,7 @@ blocks = [json.loads(line) for line in (root / "session.jsonl").read_text().spli
 expected = {
     "restart-material-audit": ("RuntimeError", "Render Result"),
     "clothing": ("ZeroDivisionError", "divide by zero"),
+    "hair-viewport-and-audit": ("TypeError", "enum \"MATERIAL\" not found"),
 }
 parts = [header]
 for row in blocks:

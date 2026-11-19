@@ -4,3 +4,8 @@
 {"stage": "clothing", "materials": 14, "images": [], "failures": []}
 {"stage": "clothing-fit", "materials": 17, "images": [], "failures": []}
 {"stage": "clothing-xhigh", "materials": 17, "images": [], "failures": []}
+{"stage": "hair", "materials": 18, "images": [], "failures": []}
+{"stage": "hair-saved", "materials": 18, "images": [], "failures": []}
+{"stage": "hair-finish", "materials": 18, "images": [], "failures": []}
+{"stage": "hair-finish-saved", "materials": 18, "images": [], "failures": []}
+{"stage": "hair-final", "materials": 18, "images": [], "failures": []}

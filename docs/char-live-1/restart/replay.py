@@ -735,3 +735,290 @@ report=dict(overlapping_coat_jersey_triangle_pairs=len(pairs),
 
 # 2026-11-19T14:30:35.961700+00:00  clothing-xhigh-review
 frame("clothing-xhigh")
+
+# 2026-11-19T14:34:00.845372+00:00  hair-first-fit
+import sys
+from pathlib import Path
+def repo_file(relative):
+    for parent in [Path.cwd(),*Path.cwd().parents,ROOT,*ROOT.parents]:
+        if (parent/relative).exists():return parent/relative
+    raise FileNotFoundError(relative)
+sys.path.insert(0,str(repo_file('living/tools/blender')))
+import person as generator
+hair_material=generator.material(generator.MAT["hair"])
+# The approved silhouette includes hair allowance. Keep an editable scalp
+# proxy with an exposed temple and a simple pinna until the face rig is fitted.
+skull=objs["Cranial envelope including hair allowance"]
+for v in skull.data.vertices:
+    v.co.x*=.70;v.co.y*=.69
+    v.co.z-=max(0,(v.co.z/unit-655)/110)*7*unit
+dress(skull,flesh)
+for side in (-1,1):
+    loft("Pinna fitting guide "+str(side),[(77,33,1,2,4),(81,35,1,5,9),
+        (88,36,2,6,10),(96,34,4,4,8),(101,32,4,2,4)],flesh,side=side,n=16)
+
+# One mesh and the generator's white _HAIR material. Face-corner colours
+# carry the dyes through glTF COLOR_0, the same path as generated hair.
+H=[]; F=[]; colors=[]
+def hairface(indices,dye):
+    F.append(tuple(indices));colors.append(dye)
+auburn='90472e'; warm='a45435'; shadow='693322'; underhair='593022'; shine='c2784b'
+def cap_surface(a,t,lift=0):
+    # The crown parts slightly to Cora's left; the dome narrows into the nape.
+    st=math.sin(t);ct=math.cos(t)
+    x=8*max(ct,0)**2+(50+lift)*st*math.sin(a)
+    y=3-9*max(ct,0)**2-(54+lift)*st*math.cos(a)
+    z=79-(58+lift)*ct
+    return Vector(wp(x,y,z))
+def hair_end(a):
+    deg=math.degrees((a+math.pi)%math.tau-math.pi)
+    return float(np.interp(deg,[-180,-146,-113,-98,-83,-68,-51,-32,-12,14,27,55,75,92,109,125,151,180],
+       [124,118,99,77,74,86,79,68,57,48,49,65,79,74,81,103,118,124]))
+def emit_cap():
+    n=72;steps=16
+    top=len(H);H.append(cap_surface(0,0))
+    for r in range(1,steps+1):
+        for j in range(n):
+            a=j*math.tau/n
+            t=math.acos((79-hair_end(a))/58)*r/steps
+            H.append(cap_surface(a,t))
+    for j in range(n):hairface((top,top+1+j,top+1+(j+1)%n),underhair)
+    for r in range(steps-1):
+        for j in range(n):
+            k=top+1+r*n
+            hairface((k+j,k+n+j,k+n+(j+1)%n,k+(j+1)%n),underhair)
+emit_cap()
+# Wide gathered sheets comb over the dark base. The sweep turns around the
+# head as it descends. The relief and pigment both follow that turn.
+n=96; steps=20;base=len(H)
+H.append(cap_surface(0,0,1.5))
+for r in range(1,steps+1):
+    u=r/steps
+    for j in range(n):
+        phase=j*math.tau/n
+        a=phase+.68*(1-u)**1.5
+        end=hair_end(a)-1.5+1.0*math.cos(phase*7+.5)
+        t=math.acos((79-end)/58)*u
+        bulge=.9+2.2*(.5+.5*math.cos(phase*7))*(math.sin(math.pi*u)**.7)
+        H.append(cap_surface(a,t,bulge))
+for j in range(n):hairface((base,base+1+j,base+1+(j+1)%n),auburn)
+for r in range(steps-1):
+    for j in range(n):
+        k=base+1+r*n
+        phase=(j+.5)*math.tau/n
+        tone=math.cos(phase*7);u=(r+1.5)/steps
+        pigment=shadow if tone<-.93 or u>.95 else auburn
+        if tone>.3 and u<.88:pigment=warm
+        hairface((k+j,k+n+j,k+n+(j+1)%n,k+(j+1)%n),pigment)
+# Closed swept forelocks. Stations are azimuth, polar angle, cross-sheet
+# half width and lift. The near lock crosses the brow toward the temple.
+def smooth_path(table,t):
+    i=min(int(t*(len(table)-1)),len(table)-2);f=t*(len(table)-1)-i
+    a,b,c,d=[np.asarray(table[min(max(k,0),len(table)-1)],float) for k in (i-1,i,i+1,i+2)]
+    return .5*((2*b)+(-a+c)*f+(2*a-5*b+4*c-d)*f*f+(-a+3*b-3*c+d)*f**3)
+def sweep(table,highlight=False):
+    cols=12;rows=29;base=len(H)
+    for i in range(rows):
+        q=i/(rows-1)
+        az,t,w,lift=smooth_path(table,q)
+        delta=smooth_path(table,min(1,q+.003))-smooth_path(table,max(0,q-.003))
+        T=np.array([math.radians(delta[0])*max(.20,math.sin(t)),delta[1]])
+        T/=max(1e-12,np.linalg.norm(T))
+        for j in range(cols):
+            angle=j*math.tau/cols;d=w*math.sin(angle)/52
+            a=math.radians(az)+d*T[1]/max(.20,math.sin(t))
+            v=t-d*T[0]
+            H.append(cap_surface(a,v,lift+max(.1,w*.30)*math.cos(angle)))
+    for i in range(rows-1):
+        for j in range(cols):
+            k=base+i*cols;c=math.cos((j+.5)*math.tau/cols)
+            pigment=auburn if c>.0 else shadow
+            if c>.55:pigment=warm
+            if highlight and 4<=i<=14 and c>.84:pigment=shine
+            hairface((k+j,k+cols+j,k+cols+(j+1)%cols,k+(j+1)%cols),pigment)
+    hairface(tuple(base+j for j in range(cols)),shadow)
+    hairface(tuple(base+(rows-1)*cols+j for j in reversed(range(cols))),shadow)
+sweep([(52,.31,1.1,1.1),(24,.50,6,2),(9,.80,10,3),(-15,1.06,11,3),
+       (-37,1.28,10,2.8),(-54,1.48,7,2.6),(-64,1.67,4,2),(-65,1.84,.35,1)],True)
+sweep([(47,.33,1,1),(38,.60,6,2.5),(45,.92,8,2.6),(54,1.14,8,2.4),
+       (62,1.34,6,2),(67,1.56,4,1.7),(62,1.85,.4,.8)])
+# Sharply tapered, flattened locks at the cheek and a centre-back plait.
+def lock(table,basecolor=auburn,facets=True,rows=25,sides=10):
+    start=len(H)
+    for i in range(rows):
+        x,y,z,w,depth=smooth_path(table,i/(rows-1))
+        for j in range(sides):
+            a=math.tau*j/sides
+            H.append(wp(x+w*math.sin(a),y-depth*math.cos(a),z))
+    for i in range(rows-1):
+        for j in range(sides):
+            k=start+i*sides;lit=math.cos((j+.5)*math.tau/sides)
+            pigment=(shadow if lit<-.7 else warm if lit>.60 else basecolor) if facets else basecolor
+            hairface((k+j,k+sides+j,k+sides+(j+1)%sides,k+(j+1)%sides),pigment)
+    hairface(tuple(start+j for j in range(sides)),basecolor)
+    hairface(tuple(start+(rows-1)*sides+j for j in reversed(range(sides))),basecolor)
+lock([(-41,-25,70,3,3),(-43,-26,81,6,4),(-40,-26,92,5,3),
+      (-36,-24,102,4,2.6),(-36,-22,112,3,2),(-41,-19,122,1.8,1.2),(-39,-18,132,.25,.25)])
+lock([(43,-21,76,3,3),(44,-23,87,4.7,3),(39,-23,100,3.4,2.2),
+      (41,-22,109,2.7,1.7),(44,-21,118,1.6,1.2),(42,-20,127,.25,.25)])
+# The woven paths cross in x while changing depth. The braid follows the
+# outside of the coat and tapers from the gathered nape to a bound brush.
+for strand in range(3):
+    path=[]
+    for i in range(56):
+        u=i/55
+        a=math.tau*2.8*u+strand*math.tau/3
+        rad=(1-u)*9.8+4*u
+        y=float(np.interp(u,[0,.15,.37,.67,1],[42,49,55,62,55]))
+        path.append((rad*math.sin(a),y+.68*rad*math.sin(2*a),107+143*u,rad*.81,rad*.72))
+    lock(path,[auburn,warm,'80402a'][strand],True,57,10)
+lock([(0,55,248,5.8,5),(0,55,252,5.2,4.6),(0,55,256,5.5,4.8)],'503426',False,4)
+lock([(0,55,255,4,3.5),(-2,55,264,7,6),(-2,54,274,7,5.5),
+      (-.5,52,284,4.5,3),(2,50,292,.3,.3)],auburn)
+hair_ob=geo("Cora | swept hair and back braid",H,F,hair_material)
+attr=hair_ob.data.color_attributes.new(name="Color",type='FLOAT_COLOR',domain='CORNER')
+palette={k:(*generator.lin(tuple(c/255 for c in bytes.fromhex(k))),1) for k in set(colors)}
+for face,color in zip(hair_ob.data.polygons,colors):
+    for loop in face.loop_indices:attr.data[loop].color=palette[color]
+    face.use_smooth=True
+hair_ob.data.color_attributes.active_color=attr
+bm=bmesh.new();bm.from_mesh(hair_ob.data)
+bmesh.ops.recalc_face_normals(bm,faces=bm.faces[:]);bm.to_mesh(hair_ob.data);bm.free()
+
+# 2026-11-19T14:34:20.377229+00:00  hair-review
+def hair_review(stage):
+    # Workbench displays the generator's paint in vertex mode. Supply the
+    # flat-dyed clothing colours for this diagnostic only.
+    preview=[]
+    for ob in scene.objects:
+        if ob.type!='MESH' or ob.data.color_attributes.active_color is not None:continue
+        attr=ob.data.color_attributes.new(name="Review dye",type='FLOAT_COLOR',domain='CORNER')
+        for f in ob.data.polygons:
+            c=ob.data.materials[f.material_index].diffuse_color
+            for li in f.loop_indices:attr.data[li].color=c
+        ob.data.color_attributes.active_color=attr
+        preview.append((ob,attr.name))
+    display.color_type='VERTEX'
+    for label,yaw in [('front',0),('temple',-35),('ear',-90),('nape',160)]:
+        view(yaw); camera.location.z=(785-88)*unit
+        camera.data.ortho_scale=157*unit
+        scene.render.resolution_x=420;scene.render.resolution_y=420
+        scene.render.filepath=str(ROOT/f"{stage}-detail-{label}.png")
+        bpy.ops.render.render(write_still=True)
+    camera.data.ortho_scale=810*unit
+    scene.render.resolution_x=320;scene.render.resolution_y=810
+    frame(stage)
+    for ob,name in preview:
+        ob.data.color_attributes.remove(ob.data.color_attributes[name])
+    display.color_type='MATERIAL'
+    audit(stage+"-saved")
+    bpy.ops.wm.save_as_mainfile(filepath=str(ROOT/f"cora-{stage}.blend"))
+hair_review("hair")
+
+# 2026-11-19T14:35:28.734454+00:00  hair-second-fit
+# Identify components through construction order, preserving the generator's
+# single material. Shape keys and face geometry are outside this fitting pass.
+mesh=hair_ob.data
+cap_count=1+72*16
+dome_count=1+96*20
+fringe_first=cap_count+dome_count
+curl_first=fringe_first+2*29*12
+def sat(t):
+    t=max(0,min(1,t));return t*t*(3-2*t)
+for vert in mesh.vertices:
+    idx=vert.index
+    x,y,z=vert.co.x/unit,vert.co.y/unit,785-vert.co.z/unit
+    a=math.atan2(x,3-y)
+    if idx<curl_first:
+        # Curl the underside toward the scalp at the front of the temple.
+        # Both overlapping shells undergo the same displacement.
+        side=min(1,abs(math.sin(a))*1.6)
+        bend=sat((z-43)/36)*sat((math.cos(a)+.16)/.56)*(.095+.12*side)
+        x*=1-bend
+        y=3+(y-3)*(1-bend)
+        # A gathered style draws the back downward to one nape anchor.
+        if math.cos(a)<0:
+            cinch=.34*sat((z-75)/42)*sat(-math.cos(a)*2)
+            x*=1-cinch
+            y+=2*cinch
+    elif idx<curl_first+2*25*10:
+        seat=.20-.12*sat((z-82)/38)
+        x*=1-seat
+        y*=1-seat
+        if x<0:x-=2.5*math.sin(sat((z-83)/44)*math.pi*2)
+    vert.co=wp(x,y,z)
+# Repaint the rear in fewer curved groups and make the leading reflection a
+# single tapered leaf. A continuous value at the tips avoids a squared bar.
+attr=mesh.color_attributes["Color"]
+def mix_rgb(one,two,t):
+    return tuple(one[i]+(two[i]-one[i])*t for i in range(4))
+for face in mesh.polygons:
+    ids=list(face.vertices)
+    first=min(ids)
+    if cap_count<=first<fringe_first:
+        for li in face.loop_indices:
+            p=mesh.vertices[mesh.loops[li].vertex_index].co
+            x,y,z=p.x/unit,p.y/unit,785-p.z/unit
+            a=math.atan2(x,3-y)
+            rear=sat((-math.cos(a)+.05)/.5)
+            if rear:
+                depth=sat((z-33)/84)
+                u=(math.pi-abs(a))*(1+1.75*depth)
+                flow=math.cos(6*u+.65*depth)
+                shade=.27+.51*sat((flow+.7)/1.5)
+                tone=mix_rgb(palette[shadow],palette[warm],shade)
+                attr.data[li].color=mix_rgb(attr.data[li].color,tone,rear)
+    elif fringe_first<=first<fringe_first+29*12:
+        for li in face.loop_indices:
+            idx=mesh.loops[li].vertex_index-fringe_first
+            row,col=divmod(idx,12)
+            t=row/28
+            cosine=math.cos(col*math.tau/12)
+            colr=mix_rgb(palette[auburn],palette[warm],sat((cosine+.2)/1.05))
+            longitudinal=max(0,1-((t-.46)/.31)**2)
+            across=(math.sin(col*math.tau/12)-.12*math.sin(t*math.pi*2))
+            highlight=sat((longitudinal*.34-abs(across))/.19)*sat(cosine*2)
+            attr.data[li].color=mix_rgb(colr,palette[shine],highlight)
+mesh.update()
+hair_review("hair-finish")
+
+# 2026-11-19T14:36:11.280458+00:00  hair-viewport-and-audit
+try:
+    # Blender material preview and the game's COLOR_0 input use the same paint.
+    # The sole hair material retains its generator name, roughness and culling.
+    color_input=hair_material.node_tree.nodes.new("ShaderNodeVertexColor")
+    color_input.layer_name="Color"
+    hair_material.node_tree.links.new(color_input.outputs["Color"],hair_material.node_tree.nodes["Principled BSDF"].inputs["Base Color"])
+    for screen in bpy.data.screens:
+        for area in screen.areas:
+            if area.type=='VIEW_3D':
+                space=area.spaces.active
+                space.shading.type='MATERIAL'
+                space.region_3d.view_location=Vector((0,0,1.05))
+                space.region_3d.view_distance=3.3
+                space.region_3d.view_rotation=camera.rotation_euler.to_quaternion()
+    hair_ob.data.calc_loop_triangles()
+    (ROOT/'hair-stats.json').write_text(json.dumps(dict(vertices=len(hair_ob.data.vertices),triangles=len(hair_ob.data.loop_triangles),
+        materials=[m.name for m in hair_ob.data.materials],images=len(bpy.data.images)),indent=2)+'\n')
+    audit("hair-final")
+    bpy.ops.wm.save_as_mainfile(filepath=str(ROOT/"cora-hair-finish.blend"))
+except TypeError as exc:
+    if 'enum "MATERIAL" not found' not in str(exc):
+        raise
+
+# 2026-11-19T14:36:28.092648+00:00  hair-save-material-preview
+scene.render.engine='CYCLES'
+for screen in bpy.data.screens:
+    for area in screen.areas:
+        if area.type=='VIEW_3D':
+            space=area.spaces.active
+            space.shading.type='MATERIAL'
+            space.region_3d.view_location=Vector((0,0,1.05))
+            space.region_3d.view_distance=3.3
+            space.region_3d.view_rotation=camera.rotation_euler.to_quaternion()
+hair_ob.data.calc_loop_triangles()
+(ROOT/'hair-stats.json').write_text(json.dumps(dict(vertices=len(hair_ob.data.vertices),triangles=len(hair_ob.data.loop_triangles),
+    materials=[m.name for m in hair_ob.data.materials],images=len(bpy.data.images)),indent=2)+'\n')
+audit("hair-final")
+bpy.ops.wm.save_as_mainfile(filepath=str(ROOT/"cora-hair-finish.blend"))
+scene.render.engine='BLENDER_WORKBENCH'
