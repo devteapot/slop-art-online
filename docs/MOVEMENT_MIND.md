@@ -745,6 +745,22 @@ A dash indicates an unavailable or inapplicable measure. N4 flight outcomes are 
 | `n4-pu-on-click-night` | reacquired of 3 miss (2) · stuck met (0.0) · latency unavailable · writes met (0.049) |
 
 
+### 4.3 Resumable belief planner (2026-11-19)
+
+The authority now searches connected regions of each belief chunk, joined at passable shared border tiles. Unknown ground remains traversable at the configured cost. Coarse and fine search frontiers resume across steering updates. Failures record the terminal planner or movement exit in the authority log. The planner reads buffered ground observations immediately, while persistence writes at most one dirty row per actor every 5.5 seconds. The default stays off. [Implementation and initial validation](../.agents/skills/verify-core/references/validation/2026-11-19-0040-nav-planner.md)
+
+The eight scored closed-gate arms reached 20/20 in each law state, with zero stalls and zero “could not get there” outcomes. The prior law-on sweep had 14 such failures. Gate A was shut and all subjects remembered it open when ordered. In the known-alternative arms, eight of ten law-on subjects remembered an alternative gate tile open at dispatch, compared with ten of ten law-off subjects. The pair of law-on subjects without that preparation also arrived.
+
+The law-on ground-write maximum was 0.161 rows per subject-second in the closed-gate arms. The closed-gate latency samples had 15/20 unanswered stimuli on and 3/20 off. The qualifying-response p95s were 42 ms for the single known-alternative body response and 1,709 ms for known-alternative clicks. The unknown-alternative arms had zero qualifying responses on. Off p95s were 1,904–1,977 ms. These intervals start at estimated geometric sight. They include the time to the next character observation and do not establish a 150 ms reaction guarantee.
+
+The reopened-gate control reached 10/10 in each law state. It established both physical reopening and stale shut memory for eight on subjects and seven off subjects. All twelve N2 arms had zero scored stalls and zero told “could not get there” outcomes.
+
+The rerun used the existing isolated `slop-move-stdb` 2.14.1 service on loopback port 3361. For each variant, the off and on arms started in fresh island databases with the body run first and the player click run second. Orders used `mind_act` and `human_act`, with five subjects per arm. There was no mind service in these databases and zero model calls. Arms captured scoped developer subscriptions for the subjects' body and ground rows, with a 90-second motion profile and a separate body-write observer. Population refers to the bench's observations and can drift as the world runs. Scoring uses the pre-call clock sample for N1 input latency, so a response during the reducer call can count.
+
+All 120 N1 walks physically arrived in each law state. The within-3× score was 118/120 on and 120/120 off. Both law-on terraced-town arms scored 14/15, with one walk per arm above 3× and both belief-ratio targets missed. All N1 p95 response values exceeded 300 ms, with ranges of 395–1,927 ms on and 485–1,851 ms off. There were six unanswered N1 stimuli on and two off. Across N1 and N2, all 28 arms had zero scored stalls and zero told failures. Every arm met the ground-write guard, peaking at 0.176 rows per actor-second. The lowest observed write gap was 5.900 s across 2,524 gaps.
+
+Six of fourteen matched-population motion comparisons exceeded 2×. The largest was the unknown-alternative N2 body arm at 47.52 ms/s on and 4.02 ms/s off. First-leg replay on the 300 captured order snapshots reached a maximum of 12.41M fuel on and 28.78M off. One first-leg replay on a separate archived input reached 22.00M on. The free results support the closed-gate reliability fix and the ground-write target. The latency, motion and terraced-town misses keep the release gate unmet. [Per-arm results and target decisions](../.agents/skills/verify-core/references/validation/2026-11-19-0408-nav-planner-arenas.md)
+
 ## 5. Plan and cost
 
 Smallest first. Each step is behind a law where it changes behaviour. Each runs the verification surfaces it touches: verify-core for the rules and the tick; verify-player for click-to-move; verify-client for any view; verify-minds for targets and told places. Each changes the surface skills in the same change where it alters their shape.

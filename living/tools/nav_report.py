@@ -455,9 +455,9 @@ def phase_report(folder):
                 r["gate_seen_ms_after_order"] = (g - t_order) if g else None
                 stims = [g] if g else []
                 # Leak check: before the gate is seen, does the walk head for gate A?
-                p0 = tr.segments_from(t_order, t_order + 1500)
-                first = p0[0].get("path") if p0 else None
-                pts = [(c["x"], c["y"]) if isinstance(c, dict) else tuple(c) for c in (first or [])]
+                p0 = tr.segments_from(w["order_ms"][0], t_order + 1500)
+                first = next((row["path"] for row in p0 if row.get("path")), [])
+                pts = [(float(c["x"]), float(c["y"])) if isinstance(c, dict) else tuple(map(float, c)) for c in first]
                 r["first_path_by_gate_a"] = any(math.dist(q, tuple(ph["gate_a"]["centre"])) < 8 for q in pts) if pts else None
                 r["passed_gate_b"] = any(math.dist(tr.where(t)[0], tuple(ph["gate_b"]["centre"])) < 5 for t in range(int(t_order), int(t_end), 500) if tr.where(t)[0])
             if ph["arena"] == "n3":
@@ -526,11 +526,12 @@ def add_guards(out, folder):
             out["population"] = {"people": j.get("people"), "animals": j.get("animals"), "ticks_per_s": j.get("ticks_per_s")}
             ticks, samples = j["seconds"] * j["ticks_per_s"], out["tick_ms"]["samples"]
             if ticks > 0 and samples:
-                # The CLI log tail can cover only part of the profile window. Express motion
-                # time per second of sampled ticks at the clock's measured tick rate.
                 out["tick_ms"]["sample_fraction"] = round(samples / ticks, 3)
-                if sp.get("ms_per_s") is not None and abs(sp["n"] - samples) <= 1:
-                    out["tick_motion"]["sample_ms_per_s"] = round(sp["ms_per_s"] * ticks / samples, 2)
+            if ticks > 0 and sp.get("n") and sp.get("ms_per_s") is not None:
+                # The CLI log tail can cover only part of the profile window. Use the motion
+                # span's count, since the tail can include a tick without its motion span.
+                out["tick_motion"]["sample_fraction"] = round(sp["n"] / ticks, 3)
+                out["tick_motion"]["sample_ms_per_s"] = round(sp["ms_per_s"] * ticks / sp["n"], 2)
             out["body_writes_per_s"] = (j.get("body_writes") or {}).get("row_updates_per_s")
         except (ValueError, AttributeError):
             out["bench"] = "unreadable"
