@@ -15,6 +15,7 @@ Two residents are placed beside the player and held still for the talk and items
 (admin `place_at` and `set_behavior`: scene setup, not player acts).
 """
 import argparse, glob, json, math, os, re, subprocess, sys, time
+from contextlib import contextmanager
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, "../../../.."))
@@ -47,8 +48,10 @@ def scenario(name, cullet=False, explicit=False):
     return register
 
 
-def sql(run, q):
+def sql(run, q, *, check=False):
     r = subprocess.run([sys.executable, V, "sql", "--run", run, q], capture_output=True, text=True)
+    if check and r.returncode:
+        raise RuntimeError(r.stderr.strip())
     t = r.stdout
     i = t.find("[")
     return json.loads(t[i:]) if i >= 0 else []
@@ -62,10 +65,13 @@ def sql_as_player(run, q):
     return json.loads(t[i:]) if i >= 0 else []
 
 
-def call_admin(run, reducer, args):
+def call_admin(run, reducer, args, *, check=False):
     """An admin reducer call (scene setup or restore), its output for evidence."""
     r = subprocess.run([sys.executable, V, "call", "--run", run, reducer, json.dumps(args), "--as-admin"], capture_output=True, text=True)
-    return r.stdout + r.stderr
+    output = r.stdout + r.stderr
+    if check and r.returncode:
+        raise RuntimeError(output.strip())
+    return output
 
 
 def residents(run, n=2):
@@ -74,6 +80,49 @@ def residents(run, n=2):
     rows = [r for r in rows if r.get("alive") and r.get("stage") == 2 and r.get("name") not in ("Verifier",)]
     rows.sort(key=lambda r: r["id"])
     return [r["id"] for r in rows[:n]]
+
+
+@contextmanager
+def resident_fixture(run, ids):
+    """Borrow residents for a scene and release their temporary position and graph."""
+    where = " OR ".join(f"id = {actor}" for actor in ids)
+    bodies = {r["id"]: r for r in sql(run, f"SELECT id, x, y FROM body WHERE {where}")}
+    graphs = {r["id"]: r["graph"] for r in sql(run, f"SELECT id, graph FROM brain WHERE {where}")}
+    if any(actor not in bodies or actor not in graphs for actor in ids):
+        raise RuntimeError(f"could not snapshot body and brain for fixture residents {ids}")
+    try:
+        yield
+    finally:
+        errors = []
+        # Return everyone to their tiles before waking the original behavior graphs.
+        calls = [("place_at", [actor, bodies[actor]["x"], bodies[actor]["y"]]) for actor in ids]
+        calls += [("set_behavior", [actor, graphs[actor]]) for actor in ids]
+        for reducer, args in calls:
+            try:
+                call_admin(run, reducer, args, check=True)
+            except RuntimeError as error:
+                errors.append(f"{reducer} for resident #{args[0]}: {error}")
+        if errors:
+            raise RuntimeError("resident fixture restore failed:\n" + "\n".join(errors))
+
+
+@contextmanager
+def sight_fixture(run, defaults):
+    """Restore scene daylight and sight laws, including laws compiled into the seed."""
+    original = own_laws(lambda q: sql(run, q))
+    epoch = sql(run, "SELECT epoch_ms FROM world")[0]["epoch_ms"]
+    try:
+        yield
+    finally:
+        try:
+            for law, default in defaults.items():
+                call_admin(run, "set_world_law", [law, original.get(law, default)], check=True)
+        finally:
+            sql(run, f"UPDATE world SET epoch_ms = {epoch} WHERE id = 0", check=True)
+
+
+# These four laws are enabled in Cullet's authored script before any override exists.
+CULLET_SIGHT = dict.fromkeys(("gaze_on", "fov_on", "cover_sight_on", "cover_brush_on"), "true")
 
 
 THEME = os.environ.get("LIVING_GAME_THEME", "")
@@ -1140,9 +1189,10 @@ def camera(run, c):
                 f"clear_{stop}=place_at|{{me}}|{street[0]}|{street[1]}",
                 f"roof_{stop}=place_at|{{me}}|{roof[0]}|{roof[1]}",
             ]
-        out, code, text = drive(run, f"{s}-{field}", plan + "quit",
-                                places=[f"{front}:0:-2.5", f"{back}:2.5:4.5", f"{behind_wall}:1.0:-14.0"], syncs=syncs + roof_syncs,
-                                env={"LIVING_GAME_DEV": "1", "RUST_LOG": "info,wgpu=warn,naga=warn,living_game::envs=debug"})
+        with resident_fixture(run, ids):
+            out, code, text = drive(run, f"{s}-{field}", plan + "quit",
+                                    places=[f"{front}:0:-2.5", f"{back}:2.5:4.5", f"{behind_wall}:1.0:-14.0"], syncs=syncs + roof_syncs,
+                                    env={"LIVING_GAME_DEV": "1", "RUST_LOG": "info,wgpu=warn,naga=warn,living_game::envs=debug"})
         c.check(s, f"field {field}: client joined and finished", code == 0, text[-300:])
         initial = view(dump(out, "initial"))
         c.check(s, f"field {field}: fresh settings start at middle zoom", abs(initial.get("zoom", -1.0) - 0.55) < 0.001, repr(initial))
@@ -1899,8 +1949,6 @@ def gaze(run, c):
     """Drive zoom through all gaze bands, coalescing, reconnect and the Cullet hedge."""
     name = "gaze"
     state = {"gaze_on": "false", "fov_on": "true", "cover_sight_on": "false", "cover_brush_on": "true"}
-    # The world's own values: `law_override` laid over `world_law` (older modules), one helper for every verify script.
-    original = own_laws(lambda q: sql(run, q))
     ids = residents(run, 5)
     if len(ids) != 5:
         c.check(name, "five stationary residents available", False, repr(ids))
@@ -1958,17 +2006,12 @@ def gaze(run, c):
                      "reconnect", "wait:0.35", "notches:30", "wait:6", "sync:after_reconnect"]
     labels.append("off_after")
     plan += ["sync:disable", "notches:-30", "wait:0.5", "notches:11", "wait:3.5", "sync:off_after", "shot:off_after", "quit"]
-    epoch = sql(run, "SELECT epoch_ms FROM world")[0]["epoch_ms"]
-    try:
+    with sight_fixture(run, CULLET_SIGHT), resident_fixture(run, ids):
         for law, value in state.items():
-            call_admin(run, "set_world_law", [law, value])
+            call_admin(run, "set_world_law", [law, value], check=True)
         out, code, drive_log = drive(run, name, ";".join(plan), syncs=syncs + [snapshot(k) for k in labels],
                                      env={"LIVING_GAME_CONTROL": "cursor", "LIVING_SIGHT_FIELD_DUMP": directory,
                                           "RUST_LOG": "info,wgpu=warn,naga=warn,living_game::net=debug,living_game::sightedge=trace"})
-    finally:
-        for law in state:
-            call_admin(run, "set_world_law", [law, original.get(law, "false")])
-        sql(run, f"UPDATE world SET epoch_ms = {epoch} WHERE id = 0")
 
     scene = dump(out, "scene") or {}
     me, snaps = scene.get("me"), scene.get("snaps", {})
@@ -2115,18 +2158,19 @@ def cover(run, c):
     if not ids:
         c.check("cover", "adult resident available", False)
         return
-    call_admin(run, "set_world_law", ["fov_on", "false"])
-    call_admin(run, "set_world_law", ["cover_brush_on", "true"])
-    for fixture, eye, contact, blocks in (
-        ("trunk", (781.5, 457.5), (785.5, 457.5), True),
-        ("edge", (781.5, 457.5), (785.5, 459.5), False),
-        # The closer point still crosses the brush and stays in the near camera's frame.
-        ("brush", (608.5, 479.5), (608.5, 474.5), True),
-        # Cullet's mid_row_plot_toft_3_hedge, 1.8 m high, plan origin (510, 784).
-        ("hedge", (523.5, 698.5), (527.5, 698.5), True),
-    ):
-        cover_pair(run, c, ids[0], fixture, eye, contact, blocks)
-    cover_canopy(run, c)
+    with sight_fixture(run, CULLET_SIGHT), resident_fixture(run, ids):
+        for law, value in (("gaze_on", "false"), ("fov_on", "false"), ("cover_brush_on", "true")):
+            call_admin(run, "set_world_law", [law, value], check=True)
+        for fixture, eye, contact, blocks in (
+            ("trunk", (781.5, 457.5), (785.5, 457.5), True),
+            ("edge", (781.5, 457.5), (785.5, 459.5), False),
+            # The closer point still crosses the brush and stays in the near camera's frame.
+            ("brush", (608.5, 479.5), (608.5, 474.5), True),
+            # Cullet's mid_row_plot_toft_3_hedge, 1.8 m high, plan origin (510, 784).
+            ("hedge", (523.5, 698.5), (527.5, 698.5), True),
+        ):
+            cover_pair(run, c, ids[0], fixture, eye, contact, blocks)
+        cover_canopy(run, c)
 
 
 def cover_pair(run, c, target, fixture, eye, contact, blocks):
@@ -3603,8 +3647,13 @@ def looks(run, c):
     a, b = residents(run, 2)
     ev = os.path.join(ROOT, ".local/living/verify", run, "ui")
     test_book = book_copy(ev, book, "looks-without-b", drop=[rows.get(b, "")])
-    plan = "ready;sync:scene;cursor:0.5,0.5;wait:5;dump:00;shot:00_drawn;sync:hold;wait:0.6;point:{A};wait:0.5;dump:01;quit".replace("{A}", str(a))
-    out, code, text = drive(run, s, plan, free=[f"{a}:-2.5:1.0", f"{b}:2.0:-1.0"], syncs=["hold=refree"], env={"LIVING_GAME_LOOK_BOOK": test_book})
+    # Start on open ground even if the previous scenario left the player beside Cullet's hedge.
+    plan = (f"ready;sync:open_ground;look:0;sync:scene;cursor:0.5,0.5;wait:5;"
+            f"dump:00;shot:00_drawn;sync:hold;wait:0.6;point:{a};wait:0.5;dump:01;quit")
+    with resident_fixture(run, (a, b)):
+        out, code, text = drive(run, s, plan, free=[f"{a}:-2.0:-1.5", f"{b}:2.0:-1.5"],
+                                syncs=["open_ground=place_at|{me}|781.5|469.5", "hold=refree"],
+                                env={"LIVING_GAME_LOOK_BOOK": test_book})
     c.check(s, "client ran and joined", code == 0, text[-300:])
     L = log(out)
     d0 = dump(out, "00") or {}
@@ -3699,7 +3748,8 @@ def looks_band(run, c):
     before = look_rows(run)
     burst = "".join(f"dump:b{i:03d};wait:0.2;" + (f"shot:b{i:03d};" if i % 10 == 0 else "") for i in range(350))
     plan = f"ready;sync:scene;cursor:0.5,0.5;wait:1;{burst}quit"
-    out, code, text = drive(run, s, plan, free=[f"{ids[0]}:-2.5:1.0", f"{ids[1]}:2.0:-1.0", f"{ids[2]}:0.5:2.2"])
+    with resident_fixture(run, ids):
+        out, code, text = drive(run, s, plan, free=[f"{ids[0]}:-2.5:1.0", f"{ids[1]}:2.0:-1.0", f"{ids[2]}:0.5:2.2"])
     c.check(s, "client ran and joined", code == 0, text[-300:])
     after = look_rows(run)
     L = log(out)
