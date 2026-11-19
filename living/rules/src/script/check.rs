@@ -278,6 +278,7 @@ fn body(p: &mut Probe) -> Result<(), String> {
     let parts = s.status_part_names();
     // The whole law's answer by the values of what it reads: samples the law cannot tell apart
     // (an infant and a grown person, for a law that does not read the stage) are run once.
+    let (join, mut ran) = (s.status_of_is_join(), false);
     let reads = s.status_reads();
     let mut answered: std::collections::HashMap<Vec<u8>, Vec<super::Status>> = Default::default();
     for b in s.sample_bodies(&super::body::SHIPPED_VITALS) {
@@ -292,6 +293,17 @@ fn body(p: &mut Probe) -> Result<(), String> {
         // costs at most one run of the whole law a sample, not the parts again (an install runs in a
         // world's `init`, near its energy budget on the island).
         let joined = s.status_of(&b).map_err(|e| format!("install refused: {e} ({})", about()))?;
+        // `status_of` written as the parts joined in their order (as shipped, and in every floor
+        // that keeps it): equal by construction, so the law is run once, for the fuel report, not
+        // on every sample. The install runs in a world's `init`, which on the island is within
+        // 1% of SpacetimeDB 2.14.1's energy budget for a call.
+        if join {
+            if !ran {
+                let _ = p.raw("status_of", (b.map_for_check(),), &about)?;
+                ran = true;
+            }
+            continue;
+        }
         // The reference, run on the whole body (also counting its operations for the fuel report)
         // once for each state the law can tell apart: the parts joined are `status_of`
         // (docs/STATUS_PARTS.md), so a world that changes one changes the other.
