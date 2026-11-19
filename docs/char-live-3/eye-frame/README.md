@@ -26,3 +26,5 @@ The fit extends the existing upper strip by 4 mm and raises its terminal station
 **Replay and usage.** A second Blender factory startup rebuilt the GLB, the face and hair sidecars, and the calibration JSON byte for byte. All 18 expression and registered portrait frames matched pixel for pixel. A second Bevy capture using the rebuilt export reproduced all 13 daylight stills pixel for pixel. [Replay and preservation results](replay-check.json) · [Verification script](verify_fit.py)
 
 One artistic attempt at high. Reference measurement and scripting took place during the quiet window. The fit began at 22:16 UTC on 19 November and verification finished at 22:35 UTC. This interval includes roughly 17 minutes waiting for the gate and disk floor before the second daylight capture. Two factory runs and two 13-shot Bevy captures used the existing release binary. No private build tree was created.
+
+The GC returned the first fit for a lid-stroke revision. The second high fit is waiting on the laptop’s decision about distance-field coverage for face parts. [Short client-hook proposal](lid-ink-proposal.md)
