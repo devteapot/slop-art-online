@@ -305,3 +305,30 @@ SpacetimeDB documentation consulted for these shapes:
 - [auto-increment](https://spacetimedb.com/docs/tables/auto-increment): an explicit nonzero value is used as given, and whether the sequence advances is not stated.
 
 These pages are from the 2.0 docs. The pinned 2.14.1 crate source (`spacetimedb-2.14.1`, `spacetimedb-bindings-macro-2.14.1`) matches the view `primary_key` form this repository already uses. The access-change and `AddColumns` behaviour is the 2.14.1 planner cited above, to be checked on an owned scratch database during the build.
+
+## Build measurement, 2026-11-19 (branch `feed-scope`)
+
+The cost gate above, on the built authority at `0f604656` (law off: stage 0 with the legacy client set; law on: stage 2 with the scoped set, `living/tools/feed_scope_cost.py`), on a private server (`slop-feedscope-bench`), under `~/slop-mq/battle.lock` (held 21:35–22:45 CET), 30 s profiled windows, interleaved off/on. Cullet: 64 residents and 152 walking SDK clients (216 live), two runs per arm per field. Wooded battle: the archived cover-acceptance land, 96 fighters with reduced-damage spears round (276, 224), 48 staged remains, 8 walking SDK witnesses, four runs per arm. Sight is the sum of `sight.player_candidates`, `scene.sensed`, `sight.structure_notice`, `sight.structure_brain_list`, `sight.structure_scene` (all timed in both arms) and, on, `sight.player_things` (the copies' candidate pass and payload).
+
+| Workload | Arm | Runs | Sight ms/s | Tick ms | Ticks/s | Late % | Copy writes/s | Memory writes/s | kB/s/client | Reconnect ms | Load 1-min at start |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Cullet Round | off | 2 | 32.57–34.92 | 2.83–3.15 | 59.05–59.17 | 0.00 | 0 | 0 | 7.37–7.38 | 45.4–61.9 | 5.4–16.0 |
+| Cullet Round | on | 2 | 48.76–49.32 | 2.93–2.98 | 58.98–59.15 | 0.00 | 129.7–136.3 | 10.7–11.7 | 6.88–7.18 | 46.3–49.6 | 4.0 |
+| Cullet Middle | off | 2 | 23.87–33.30 | 2.50–3.58 | 57.49–58.93 | 0.00 | 0 | 0 | 5.64–6.47 | 48.7–65.3 | 5.5–6.3 |
+| Cullet Middle | on | 2 | 41.40–51.40 | 2.96–3.75 | 55.15–58.36 | 0.00 | 260.9–263.6 | 11.4–11.9 | 5.21–6.07 | 45.4–59.0 | 4.1 |
+| Wooded battle | off | 4 (+4 retries) | 4.54–5.17 | 5.53–6.84 | 55.32–58.94 | 0.57–3.23 | 0 | – | – | – | 2.5–6.0 |
+| Wooded battle | on | 4 (+4 retries) | 5.45–7.80 | 5.43–9.61 | 51.54–59.05 | 0.85–7.31 | 43.1–57.9 | – | 10.36–10.54 (2 runs) | 57.5–57.7 (2 runs) | 2.2–5.1 |
+
+**Verdict: keep the law off.** No workload meets the budget.
+
+| Workload | Worst on sight vs. off mean | Ticks/s floor | Late-share ceiling |
+| --- | ---: | --- | --- |
+| Cullet Round | +46.2% (off mean 33.74) vs +15% allowed | Fail, 58.98 vs 59.05 | Pass, 0.00% |
+| Cullet Middle | +79.8% (off mean 28.59) | Fail, 55.15 vs 57.49 | Pass, 0.00% |
+| Wooded battle | +60.2% (off mean 4.87) | Fail, 51.54 vs 55.32 | Fail, 7.31% vs 3.23% |
+
+Where it goes. In Cullet, `sight.player_things` alone is 16.5–22.0 ms/s for about 7,500 candidate tests a second: 2.2–2.9 µs a test, against about 1 µs a test for people in the same sweep (`sight.player_candidates`). The ray is not the cost; the work round it is, per candidate and per seen thing at every 200 ms sweep: the viewer's copies read and keyed, the payload rebuilt (`act::fire_state` through the script and the world row, a gate's point lookup, the owner check), and for a depleted node `stock_of` and `amount_now` (the season's regrowth). The probe's scan, which built no payload, was 5.2–7.9 ms/s. In the woods the increment is `sight.player_things` 0.85 ms/s for eight witnesses, plus noticing (+0.34) and the scene list (+0.10) from building each mind's look and testing its sight-scoped candidates, about +1.3 ms/s against 0.73 allowed.
+
+Next iteration (before another series): build each seen thing's payload once per transaction, shared by every viewer swept in it (lit, open, `left`/`max` per structure or node and transaction), and the chunk lists with each candidate's light so the test reads no script; keep the viewer's previous copies in module memory keyed by the sweep (as `KEPT` does for people), reading the table only after a gap; and give a mind's look the noticing pass's own senses and facing instead of reading them again. The ray test and its inputs stay as they are. Then the same series.
+
+Validity notes. Three Cullet off runs started above the brief's one-minute load of 6 (Round 16.0, Middle 6.3 and 5.5): the first series' load wait gave up after 30 minutes and measured anyway. The driver now never measures above the limit. In the woods the server wrote the module log late: 15 of 16 runs failed the driver's completeness check when it read the log 2 s after the window. Their windows were re-read from the replica logs afterwards (`.local/feedscope/recover.py`; the counts agree with the expected ticks). Ticks/s for those comes from the tick span count over the window, and their action rate and census were not kept. The two woods on runs that completed in the driver held 96 of 96 fighters, 414 live, and 66.4–69.4 accepted skill uses/s. The driver now reads the log until the window is complete. The 30-minute and 8-hour gates and the client's presentation stay open. Evidence: `~/slop-evidence/feed-scope-2026-11-19.tar.zst` (with `.sha256`), runs `fc-s1-*`, `feedcost-s1.jsonl`, `woods-recovered.json`.

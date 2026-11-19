@@ -69,12 +69,14 @@ def check_host():
 
 
 def wait_load(limit, most_s):
-    """Wait for the one-minute load average under `limit` (at most `most_s`); the wait and the
-    load at the end are recorded."""
+    """Wait for the one-minute load average under `limit`; never measure above it. The wait ends
+    when the measurement window closes (or after `most_s`), which stops the series."""
     t0 = time.time()
-    while os.getloadavg()[0] >= limit and time.time() - t0 < most_s:
+    while os.getloadavg()[0] >= limit:
+        if not in_window() or time.time() - t0 > most_s:
+            raise SystemExit(f"load stayed at or above {limit} for {round(time.time() - t0)} s (now {os.getloadavg()}): stopping the series")
         time.sleep(15)
-    return {"waited_s": round(time.time() - t0), "load": os.getloadavg(), "under": os.getloadavg()[0] < limit}
+    return {"waited_s": round(time.time() - t0), "load": os.getloadavg(), "under": True}
 
 
 def parse_log(path, start, end):
@@ -124,7 +126,7 @@ def one(name, workload, arm, seconds, woods_seed, max_load):
     client = None
     attempted = False
     try:
-        waited = wait_load(max_load, 1800)
+        waited = wait_load(max_load, 6 * 3600)
         (evidence / "host-before-launch.json").write_text(json.dumps({**check_host(), "load_wait": waited}))
         attempted = True
         harness("launch", "--seed", seed, "--target-dir", os.environ["CARGO_TARGET_DIR"])
@@ -237,12 +239,17 @@ def one(name, workload, arm, seconds, woods_seed, max_load):
         last_stats = sql("SELECT ticks, at_ms FROM stats")[0]
         m1 = battle.metrics(ident)
         end_census = census()
-        time.sleep(2)
-        module_log(ident, evidence / "module-full.jsonl")
-        spans, diags, periods = parse_log(evidence / "module-full.jsonl", start, end)
-        ticks = spans.pop("tick", [])
         elapsed = end - start
         ticks_s = (last_stats["ticks"] - first_stats["ticks"]) * 1000 / (last_stats["at_ms"] - first_stats["at_ms"])
+        # The server writes a busy module's log late (the woods' spans arrived tens of seconds after
+        # the window, 2026-11-19): read it until the window's tick spans are all there.
+        for _ in range(30):
+            time.sleep(3)
+            module_log(ident, evidence / "module-full.jsonl")
+            spans, diags, periods = parse_log(evidence / "module-full.jsonl", start, end)
+            ticks = spans.pop("tick", [])
+            if abs(len(ticks) - ticks_s * elapsed) <= ticks_s * elapsed * 0.03:
+                break
         if not ticks or last_stats["ticks"] <= first_stats["ticks"] or client.p.poll() is not None:
             raise RuntimeError("missing tick samples or live SDK workload")
         if abs(len(ticks) - ticks_s * elapsed) > ticks_s * elapsed * 0.03:
