@@ -1,0 +1,5 @@
+{"stage": "restart", "materials": 4, "images": ["Render Result"], "failures": ["unapproved image: Render Result"]}
+{"stage": "restart-cleaned", "materials": 4, "images": [], "failures": []}
+{"stage": "restart-cleaned", "materials": 4, "images": [], "failures": []}
+{"stage": "clothing", "materials": 14, "images": [], "failures": []}
+{"stage": "clothing-fit", "materials": 17, "images": [], "failures": []}
