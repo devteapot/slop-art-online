@@ -1669,6 +1669,8 @@ def make_hair(arm, spec, pos, quads, covered=None, bones=None):
             weights.append({"J_Bip_C_Head": 1.0})
     lock_faces = [tuple(base + i for i in f) for f in h.f]
     ob = raw_object("Hair", verts, faces + lock_faces, weights, cols, MAT["hair"], arm, uvs=uvs)
+    if spec.get("atelier") and not FAR:
+        ob["scalp_vertices"] = base
     orient_islands(ob, skip=len(faces))
     # How soon each vertex's lock goes grey (`_GREY`, person_params.grey_mask): the client mixes a
     # shared style's tint toward the person's silver by it. The scalp's cap is a middling lock.
@@ -2944,6 +2946,16 @@ TYPE_BROW = (0.94, 0.94, 0.94)  # a type's brows in its own file, before the cli
 TYPE_PARTS = ("Face", "Hands", "Neck", "FarHead")  # a face type's file: its head and skin, near and far
 
 
+def export_glb(out):
+    bpy.ops.export_scene.gltf(
+        filepath=out, export_format="GLB", export_yup=True, export_skins=True, export_animations=False, export_vertex_color="ACTIVE",
+        export_all_vertex_colors=False, export_normals=True, export_materials="EXPORT", export_def_bones=False, export_leaf_bone=False,
+        export_rest_position_armature=True, use_selection=False, export_morph=True, export_morph_normal=False,
+        export_try_sparse_sk=False,  # Bevy's loader rejects sparse morph accessors
+        export_attributes=True,  # the hair's `_GREY`
+    )
+
+
 def main():
     argv = sys.argv[sys.argv.index("--") + 1 :] if "--" in sys.argv else []
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
@@ -2970,6 +2982,7 @@ def main():
     ap.add_argument("--keep", default="", help="with --parts keep: the parts to keep, by name, comma-separated (Jersey, Coat, Buttons, Smock, Trousers, Boots, Cap, CapPeak, Kerchief, KerchiefKnot)")
     ap.add_argument("--no-lines", action="store_true", help="leave out the shell lines at the jaw, ears and mouth (cage_head.CageFace._shell_lines), to compare")
     ap.add_argument("--blend")
+    ap.add_argument("--atelier", action="store_true", help="use the hybrid spike’s authored near parts")
     a = ap.parse_args(argv)
     if a.no_lines:
         cage_head.CageFace.LINES = False
@@ -2979,6 +2992,7 @@ def main():
         given = person_params.from_variant("man")
     params = person_params.draw(given)
     spec = person_params.resolve(params)
+    spec["atelier"] = a.atelier
     spec["expression"] = {k: float(v) for k, v in (x.split("=") for x in a.expression.split(",") if x)}
     unknown = set(spec["expression"]) - set(head_mesh.EXPRESSIONS)
     if unknown:
@@ -3036,6 +3050,9 @@ def main():
             continue
         g["FAR"] = far
         parts = build_person(arm, spec, stem + (".far.png" if far else ".atlas.png"), body=a.body, bones=spec.get("spring_bones") if far else None)
+        if a.atelier and not far:
+            from authored import atelier
+            atelier.dress(parts, arm, spec, raw_object)
         shaded = False
         if a.parts == "keep" and not a.no_shade:
             # An outfit piece is shaded as it is worn, with the rest of the outfit and the body
@@ -3070,15 +3087,11 @@ def main():
         obs += join_kinds(parts, far)
     g["FAR"] = False
     if a.blend:
+        if a.atelier:
+            bpy.context.preferences.filepaths.save_version = 0
         bpy.ops.wm.save_as_mainfile(filepath=os.path.abspath(a.blend))
     write_params()  # again: the line's piece colours are now the painted ones
-    bpy.ops.export_scene.gltf(
-        filepath=out, export_format="GLB", export_yup=True, export_skins=True, export_animations=False, export_vertex_color="ACTIVE",
-        export_all_vertex_colors=False, export_normals=True, export_materials="EXPORT", export_def_bones=False, export_leaf_bone=False,
-        export_rest_position_armature=True, use_selection=False, export_morph=True, export_morph_normal=False,
-        export_try_sparse_sk=False,  # Bevy's loader rejects sparse morph accessors
-        export_attributes=True,  # the hair's `_GREY`
-    )
+    export_glb(out)
     # The far model alone hangs rigid: it lists no spring bones, so the game simulates none.
     j = add_vrm(out, f"Cullet resident {params['seed']} ({params['sex']}, {params['age']:.0f})", spec.get("springs") if a.lod != "far" else None, spec.get("skirt_springs") if a.lod != "far" else None)
     zs = [v.co.z for ob in obs for v in ob.data.vertices]
