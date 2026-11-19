@@ -65,3 +65,5 @@ Cases with their own asks (`drop`, `death-names`, `watch-fight`, `reasons`, `ret
 Each free case launches its own database through `verify.py` and passes doctor before driving the real mind binary. Admin calls arrange scenes only. Requests go through the production HTTP model boundary, and replies return through production mind reducers. Public snapshots use shared SQL; private deliberations use shared `sql --as-admin` with the token held in memory. Store-backed projections belong to `verify-knowledge`.
 
 All evidence stays under `.local/living/verify/`. The paid tier is documented and intentionally unexecuted. Runtime discovery uses the shared `.agents/skills/` source and the existing Claude and Cursor links.
+
+- [Cover in a pending mind scene](cover.md)

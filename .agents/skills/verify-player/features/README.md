@@ -24,3 +24,5 @@
 Baseline: `verify-<run>` published by `$V launch` and `$V doctor` passing. One identity per run; `join` succeeds once per identity while its character lives. For a second player, use a second run name, or mint another identity with `curl -X POST http://127.0.0.1:3300/v1/identity` (`appraise.py` keeps one as `token2` in the run's state).
 
 Every HTTP call is a connection: `$V player` calls connect and disconnect around each call, so after more than the `takeover_s` law (30 s) without a call the world's minds take the character over, and the next call hands it back before it runs ([verify-client presence](../../verify-client/features/presence.md)).
+
+- [Cover in a player’s live projection](cover.md)

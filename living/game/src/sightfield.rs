@@ -100,6 +100,8 @@ pub struct SightField {
     /// The tiles sight is tested on: the hosted land, with the window's edits and shut gates.
     map: Option<Arc<Map>>,
     hosted: Option<Arc<Map>>,
+    cover_policy: Option<living_rules::cover::Policy>,
+    cover_mask: Option<Arc<living_rules::cover::Mask>>,
     sig: u64,
     next_tiles: f32,
     seen: Vec<u8>,
@@ -173,6 +175,8 @@ fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
         task: None,
         map: None,
         hosted: None,
+        cover_policy: None,
+        cover_mask: None,
         sig: 0,
         next_tiles: 0.0,
         seen: vec![0; (SIZE * SIZE) as usize],
@@ -195,12 +199,25 @@ fn attach(mut commands: Commands, field: Option<Res<SightField>>, cams: Query<En
 
 /// Keep the tiles the authority tests sight on: the hosted land, where the window's
 /// `terrain_chunk` rows differ from it, and the shut gates.
-fn tiles(mut field: Option<ResMut<SightField>>, live: Res<crate::live::Live>, net: NonSend<Net>, time: Res<Time>) {
+fn tiles(mut field: Option<ResMut<SightField>>, live: Res<crate::live::Live>, island: Option<Res<crate::island::Island>>, net: NonSend<Net>, time: Res<Time>) {
     let Some(field) = field.as_deref_mut() else { return };
     let Some(hosted) = live.hosted_map() else { return };
+    let Some(island) = island else { return };
     field.next_tiles -= time.delta_secs();
     let new_land = !field.hosted.as_ref().is_some_and(|h| Arc::ptr_eq(h, &hosted));
-    if !new_land && field.next_tiles > 0.0 {
+    let policy = net.conn.as_ref().and_then(|c| c.db.cover_law().iter().next())
+        .filter(|l| l.cover_sight_on)
+        .map(|l| living_rules::cover::Policy { eye_height_m: l.cover_eye_height_m,
+            brush_on: l.cover_brush_on, brush_min_fill: l.cover_brush_min_fill, cliff_step_m: l.cover_cliff_step_m });
+    let changed = field.cover_policy != policy;
+    if new_land || changed {
+        field.cover_mask = policy.and_then(|p| {
+            let recipe = live.cover_recipe()?;
+            Some(Arc::new(living_rules::cover::compile(&hosted, living_rules::cover::ground(&island.land), recipe, p)))
+        });
+        field.cover_policy = policy;
+    }
+    if !new_land && !changed && field.next_tiles > 0.0 {
         return;
     }
     field.next_tiles = TILES_S;
@@ -222,10 +239,10 @@ fn tiles(mut field: Option<ResMut<SightField>>, live: Res<crate::live::Live>, ne
     edits.hash(&mut h);
     shut.hash(&mut h);
     let sig = h.finish();
-    if !new_land && sig == field.sig {
+    if !new_land && !changed && sig == field.sig {
         return;
     }
-    let map = if edits.is_empty() && shut.is_empty() {
+    let map = if edits.is_empty() && shut.is_empty() && field.cover_mask.is_none() {
         hosted.clone()
     } else {
         let mut m = (*hosted).clone();
@@ -233,6 +250,7 @@ fn tiles(mut field: Option<ResMut<SightField>>, live: Res<crate::live::Live>, ne
             m.put_chunk(*id, t);
         }
         m.set_blocked(shut.iter().copied().collect::<HashSet<u32>>());
+        m.cover = field.cover_mask.clone();
         Arc::new(m)
     };
     info!("sight field: tiles from the hosted land, {} edited chunks in the window, {} shut gates", edits.len(), shut.len());
@@ -637,6 +655,26 @@ mod tests {
         assert_eq!(seen[texel(60.25, 62.25)], 255, "the open side");
         assert_eq!(seen[texel(71.75, 62.25)], 255, "the wall's far column is part of a seen wall");
         assert_eq!(seen[texel(64.25, 95.25)], 0, "beyond the reach");
+    }
+
+    #[test]
+    fn shade_matches_shared_authority_cover() {
+        let mut map = open(128);
+        let params = serde_json::from_value(serde_json::json!({"cover":{"brush":[
+            {"id":"hedge","area":[[68,59],[70,59],[70,64],[68,64],[68,59]],"height_m":2.0,"fill":0.9}
+        ]}})).unwrap();
+        let policy = living_rules::cover::Policy {
+            eye_height_m: 1.6, brush_on: true, brush_min_fill: 0.6, cliff_step_m: 2.0,
+        };
+        map.cover = Some(Arc::new(living_rules::cover::compile(&map, Arc::from([]), &params, policy)));
+        let eye = Vec2::new(64.5, 62.25);
+        let mut field = vec![0; (SIZE * SIZE) as usize];
+        compute(&map, eye, 30.0, IVec2::ZERO, &mut field, None);
+        let texel = |x: f32, y: f32| ((y / TEXEL) as i32 * SIZE + (x / TEXEL) as i32) as usize;
+        for (point, expected) in [((69.25, 62.25), false), ((73.25, 62.25), false), ((66.25, 62.25), true)] {
+            assert_eq!(map.sight_clear((eye.x, eye.y), point), expected);
+            assert_eq!(field[texel(point.0, point.1)] == 255, expected);
+        }
     }
 
     fn day_field(heading: f32) -> Facing {

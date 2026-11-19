@@ -84,6 +84,11 @@ fn laws() {
         // `fov_margin_deg` past an edge. A light on someone (`glow`) shows them only within the
         // field. Hearing stays all round.
         fov_on: false,
+        cover_cliff_step_m: 2.0,
+        cover_brush_min_fill: 0.6,
+        cover_brush_on: true,
+        cover_eye_height_m: 1.6,
+        cover_sight_on: false,
         // Known ground (docs/MOVEMENT_MIND.md): how far ground is seen by day, metres (at night,
         // one's own sight); the most 4 m cells one look marks (0: no cap; the rest come with
         // later looks); whether walks are planned over what each walker has seen instead of the
@@ -3131,6 +3136,11 @@ fn law_about(l, name) {
         "force_outcomes" => if l.force_outcomes { "whoever strikes, shoots or casts learns how it came out, as far as they see" } else { "a blow, shot or bolt tells its maker how it came out only when it fails, or for a few skills" },
         "alert_after_hit_s" => `a body struck within the last ${short(l.alert_after_hit_s)} s cannot fall asleep`,
         "alert_while_attacker_near" => if l.alert_while_attacker_near { "nor while the one who struck it is close and the fight is on" } else { "even with the one who struck it close by" },
+        "cover_sight_on" => "whether cover hides people",
+        "cover_eye_height_m" => "the standing eye height in metres",
+        "cover_brush_on" => "whether dense brush hides people",
+        "cover_brush_min_fill" => "minimum fill for brush concealment",
+        "cover_cliff_step_m" => "the minimum cliff step in metres",
         "fov_on" => if l.fov_on { "one sees fully only the way one faces" } else { "one sees as far in every direction" },
         "ground_sight_m" => `ground is seen ${short(l.ground_sight_m)} m off by day, as far as one sees by night`,
         "known_cells_pass" => if l.known_cells_pass > 0.0 { `one look takes in at most ${short(l.known_cells_pass)} patches of ground` } else { "one look takes in all the ground in view" },

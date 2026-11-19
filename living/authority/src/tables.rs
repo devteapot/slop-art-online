@@ -239,6 +239,28 @@ pub struct WorldLaw {
     pub value: String,
 }
 
+/// Effective, world-wide cover policy used by Shade.
+#[derive(Clone, Copy, PartialEq)]
+#[spacetimedb::table(accessor = cover_law, public)]
+pub struct CoverLaw {
+    #[primary_key]
+    pub id: u8,
+    pub cover_sight_on: bool,
+    pub cover_eye_height_m: f32,
+    pub cover_brush_on: bool,
+    pub cover_brush_min_fill: f32,
+    pub cover_cliff_step_m: f32,
+}
+
+/// Quantized generation output, private and read only when cover is enabled.
+#[spacetimedb::table(accessor = cover_ground)]
+pub struct CoverGround {
+    #[primary_key]
+    pub id: u32,
+    pub heights: Vec<i16>,
+    pub candidates: Vec<u32>,
+}
+
 #[spacetimedb::table(accessor = script, public)]
 pub struct Script {
     #[primary_key]

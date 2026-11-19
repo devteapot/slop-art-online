@@ -62,3 +62,5 @@ This directory is the maintained source for verifying interface D in the game cl
 
 - Report the run name, the scenarios run, `checks.json`, and the photographs that show each feature.
 - Say which entry points were not driven (a real trackpad, the system cursor, model answers).
+
+- [Cover geometry in Shade](cover.md)

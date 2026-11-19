@@ -361,6 +361,39 @@ fn gate_blocks(ctx: &ReducerContext, w: u32, h: u32) -> std::collections::HashSe
         .collect()
 }
 
+pub fn publish_cover_law(ctx: &ReducerContext, l: living_rules::script::Laws) {
+    let row = CoverLaw { id: 0, cover_sight_on: l.cover_sight_on,
+        cover_eye_height_m: l.cover_eye_height_m, cover_brush_on: l.cover_brush_on,
+        cover_brush_min_fill: l.cover_brush_min_fill, cover_cliff_step_m: l.cover_cliff_step_m };
+    match ctx.db.cover_law().id().find(0) {
+        None => { ctx.db.cover_law().insert(row); }
+        Some(old) if old != row => { ctx.db.cover_law().id().update(row); invalidate_map(); }
+        Some(_) => {}
+    }
+}
+
+fn cover_mask(ctx: &ReducerContext, map: &Map) -> Option<std::sync::Arc<living_rules::cover::Mask>> {
+    let law = laws(ctx);
+    if !law.cover_sight_on { return None; }
+    let _span = spacetimedb::log_stopwatch::LogStopwatch::new("map.cover");
+    let recipe = ctx.db.land_plan().id().find(0).and_then(|p| serde_json::from_str(&p.params).ok()).unwrap_or_default();
+    let mut bands: Vec<_> = ctx.db.cover_ground().iter().collect();
+    if bands.is_empty() {
+        log::warn!("cover: this land predates quantized genesis data");
+        return None;
+    }
+    bands.sort_unstable_by_key(|b| b.id);
+    let candidates = bands.iter().flat_map(|b| b.candidates.iter().copied()).collect::<Vec<_>>();
+    let ground = bands.into_iter().flat_map(|b| b.heights).collect();
+    let mask = living_rules::cover::compile_candidates(map.w, map.h, candidates, ground, &recipe, living_rules::cover::Policy {
+        eye_height_m: law.cover_eye_height_m, brush_on: law.cover_brush_on,
+        brush_min_fill: law.cover_brush_min_fill, cliff_step_m: law.cover_cliff_step_m,
+    });
+    let (m, g) = mask.geometry_bytes();
+    log::info!("cover: {m} mask bytes, {g} ground bytes");
+    Some(std::sync::Arc::new(mask))
+}
+
 pub fn map(ctx: &ReducerContext) -> Rc<Map> {
     MAP.with(|m| {
         let t = stamp(ctx);
@@ -400,6 +433,7 @@ pub fn map(ctx: &ReducerContext) -> Rc<Map> {
         let w = world(ctx);
         let mut map = Map::from_chunks(w.width, w.height, ctx.db.terrain_chunk().iter().map(|c| (c.id, c.tiles)));
         map.set_blocked(gate_blocks(ctx, w.width, w.height));
+        map.cover = cover_mask(ctx, &map);
         let map = Rc::new(map);
         *cached = Some(map.clone());
         map

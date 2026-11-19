@@ -335,11 +335,12 @@ impl<'a> Ev<'a> {
 
     /// The creatures seen, nearest first: every one in sight range tested.
     fn creatures(&mut self) -> &[NearCreature] {
-        let (ctx, now) = (self.ctx, self.now);
+        let (ctx, now, actor) = (self.ctx, self.now, self.me.id);
         let s = self.scene();
         if s.creatures.is_none() {
             let _span = common::detail_span("scene.sensed");
             let (seen, heard) = s.sensing.all(ctx, now);
+            note_sight_changes(actor, &seen);
             common::note_scene(seen.len());
             common::diag(|| "scene:all", 1);
             s.creatures = Some(seen);
@@ -2626,4 +2627,28 @@ mod tests {
             assert_eq!(joined(&all, i), joined_by_scan(&all, i), "start {i}");
         }
     }
+}
+
+thread_local! {
+    static PROFILE_VISIBLE: std::cell::RefCell<std::collections::HashMap<u32, std::collections::HashSet<u32>>> = Default::default();
+}
+
+fn note_sight_changes(actor: u32, seen: &[NearCreature]) {
+    if !common::profiling() { return; }
+    PROFILE_VISIBLE.with(|visible| {
+        let mut visible = visible.borrow_mut();
+        if visible.len() >= 4096 && !visible.contains_key(&actor) {
+            visible.clear();
+        }
+        let current = seen.iter().map(|c| c.id).collect();
+        if let Some(previous) = visible.insert(actor, current) {
+            let current = &visible[&actor];
+            common::diag(|| "mind_visible:add", current.difference(&previous).count() as u64);
+            common::diag(|| "mind_visible:drop", previous.difference(current).count() as u64);
+        }
+    });
+}
+
+pub fn reset_sight_profile() {
+    PROFILE_VISIBLE.with(|visible| visible.borrow_mut().clear());
 }

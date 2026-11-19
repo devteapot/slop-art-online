@@ -71,6 +71,8 @@ pub struct PlanSpec {
     /// for their kinds.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub resources: Vec<ResourceSpec>,
+    #[serde(default, skip_serializing_if = "crate::cover::Spec::is_empty")]
+    pub cover: crate::cover::Spec,
     /// Structures the authority places when the world is created (a furnace at a mouth, lamps
     /// along a quay, a store), at a point in the plan's frame or at a lot's door or spot, with
     /// the fuel a fire starts burning and the items it holds ([`StructureSpec`]).
@@ -135,6 +137,10 @@ pub struct FixtureSpec {
 pub struct ResourceSpec {
     pub kind: String,
     pub at: [f32; 2],
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trunk_r_m: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trunk_h_m: Option<f32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max: Option<f32>,
     /// Units it regrows a game hour of growing time (the world's day turns it into real time).

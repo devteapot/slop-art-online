@@ -321,6 +321,7 @@ pub struct Live {
     pub digests_ok: Option<bool>,
     /// The tiles as the authority hosted them at world creation, to find later edits.
     hosted: Option<Arc<Map>>,
+    cover_recipe: Option<LandParams>,
     lots: HashMap<u32, Vec<Entity>>,
     shown: HashMap<u32, Shown>,
     /// Height (m) of each drawn character, for nameplates and bubbles.
@@ -339,6 +340,8 @@ pub struct Live {
 impl Live {
     /// The tiles as the authority hosted them at world creation (`host::hosted_map`), once the
     /// land is regenerated.
+    pub fn cover_recipe(&self) -> Option<&LandParams> { self.cover_recipe.as_ref() }
+
     pub fn hosted_map(&self) -> Option<Arc<Map>> {
         self.hosted.clone()
     }
@@ -416,6 +419,7 @@ fn land(
         info!("land: mood {} (fog {:.0}–{:.0} m)", def.id, def.mood.fog_start, def.mood.fog_end);
     }
     live.hosted = Some(built.hosted);
+    live.cover_recipe = Some(built.params.clone());
     let arrive = Vec2::new(row.arrive_x, row.arrive_y);
     roam.pos = arrive;
     // Its ground map is the environment made for this land's; the first world environment's

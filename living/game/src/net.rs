@@ -60,7 +60,7 @@ pub const LOT_CHUNKS: i32 = 11;
 pub const RECENTRE: i32 = 2;
 pub const LOT_RECENTRE: i32 = 5;
 
-const STATIC: &[&str] = &["SELECT * FROM world", "SELECT * FROM land", "SELECT * FROM settlement"];
+const STATIC: &[&str] = &["SELECT * FROM cover_law", "SELECT * FROM world", "SELECT * FROM land", "SELECT * FROM settlement"];
 /// What my character perceives and its own state (per-sender views, docs/PERCEPTION.md), and
 /// the rules' cards, for the connection's lifetime.
 const PERCEIVED: &[&str] = &[

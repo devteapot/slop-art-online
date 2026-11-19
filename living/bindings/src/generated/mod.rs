@@ -50,6 +50,10 @@ pub mod community_table;
 pub mod community_type;
 pub mod connection_table;
 pub mod connection_type;
+pub mod cover_ground_table;
+pub mod cover_ground_type;
+pub mod cover_law_table;
+pub mod cover_law_type;
 pub mod create_floor_reducer;
 pub mod cry_prompt_type;
 pub mod cue_fire_type;
@@ -383,6 +387,10 @@ pub use community_table::*;
 pub use community_type::Community;
 pub use connection_table::*;
 pub use connection_type::Connection;
+pub use cover_ground_table::*;
+pub use cover_ground_type::CoverGround;
+pub use cover_law_table::*;
+pub use cover_law_type::CoverLaw;
 pub use create_floor_reducer::create_floor;
 pub use cry_prompt_type::CryPrompt;
 pub use cue_fire_type::CueFire;
@@ -1308,6 +1316,8 @@ pub struct DbUpdate {
     combat_seen: __sdk::TableUpdate<CombatSeen>,
     community: __sdk::TableUpdate<Community>,
     connection: __sdk::TableUpdate<Connection>,
+    cover_ground: __sdk::TableUpdate<CoverGround>,
+    cover_law: __sdk::TableUpdate<CoverLaw>,
     cue: __sdk::TableUpdate<Cue>,
     deliberation: __sdk::TableUpdate<Deliberation>,
     doing: __sdk::TableUpdate<Doing>,
@@ -1492,6 +1502,12 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "connection" => db_update
                     .connection
                     .append(connection_table::parse_table_update(table_update)?),
+                "cover_ground" => db_update
+                    .cover_ground
+                    .append(cover_ground_table::parse_table_update(table_update)?),
+                "cover_law" => db_update
+                    .cover_law
+                    .append(cover_law_table::parse_table_update(table_update)?),
                 "cue" => db_update
                     .cue
                     .append(cue_table::parse_table_update(table_update)?),
@@ -1926,6 +1942,12 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.connection = cache
             .apply_diff_to_table::<Connection>("connection", &self.connection)
             .with_updates_by_pk(|row| &row.id);
+        diff.cover_ground = cache
+            .apply_diff_to_table::<CoverGround>("cover_ground", &self.cover_ground)
+            .with_updates_by_pk(|row| &row.id);
+        diff.cover_law = cache
+            .apply_diff_to_table::<CoverLaw>("cover_law", &self.cover_law)
+            .with_updates_by_pk(|row| &row.id);
         diff.cue = cache
             .apply_diff_to_table::<Cue>("cue", &self.cue)
             .with_updates_by_pk(|row| &row.id);
@@ -2333,6 +2355,12 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "connection" => db_update
                     .connection
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "cover_ground" => db_update
+                    .cover_ground
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "cover_law" => db_update
+                    .cover_law
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "cue" => db_update
                     .cue
@@ -2755,6 +2783,12 @@ impl __sdk::DbUpdate for DbUpdate {
                 "connection" => db_update
                     .connection
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "cover_ground" => db_update
+                    .cover_ground
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "cover_law" => db_update
+                    .cover_law
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "cue" => db_update
                     .cue
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -3138,6 +3172,8 @@ pub struct AppliedDiff<'r> {
     combat_seen: __sdk::TableAppliedDiff<'r, CombatSeen>,
     community: __sdk::TableAppliedDiff<'r, Community>,
     connection: __sdk::TableAppliedDiff<'r, Connection>,
+    cover_ground: __sdk::TableAppliedDiff<'r, CoverGround>,
+    cover_law: __sdk::TableAppliedDiff<'r, CoverLaw>,
     cue: __sdk::TableAppliedDiff<'r, Cue>,
     deliberation: __sdk::TableAppliedDiff<'r, Deliberation>,
     doing: __sdk::TableAppliedDiff<'r, Doing>,
@@ -3299,6 +3335,12 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         callbacks.invoke_table_row_callbacks::<CombatSeen>("combat_seen", &self.combat_seen, event);
         callbacks.invoke_table_row_callbacks::<Community>("community", &self.community, event);
         callbacks.invoke_table_row_callbacks::<Connection>("connection", &self.connection, event);
+        callbacks.invoke_table_row_callbacks::<CoverGround>(
+            "cover_ground",
+            &self.cover_ground,
+            event,
+        );
+        callbacks.invoke_table_row_callbacks::<CoverLaw>("cover_law", &self.cover_law, event);
         callbacks.invoke_table_row_callbacks::<Cue>("cue", &self.cue, event);
         callbacks.invoke_table_row_callbacks::<Deliberation>(
             "deliberation",
@@ -4195,6 +4237,8 @@ impl __sdk::SpacetimeModule for RemoteModule {
         combat_seen_table::register_table(client_cache);
         community_table::register_table(client_cache);
         connection_table::register_table(client_cache);
+        cover_ground_table::register_table(client_cache);
+        cover_law_table::register_table(client_cache);
         cue_table::register_table(client_cache);
         deliberation_table::register_table(client_cache);
         doing_table::register_table(client_cache);
@@ -4333,6 +4377,8 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "combat_seen",
         "community",
         "connection",
+        "cover_ground",
+        "cover_law",
         "cue",
         "deliberation",
         "doing",
