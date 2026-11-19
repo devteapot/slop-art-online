@@ -87,8 +87,10 @@ pub fn scene_of(j: &serde_json::Value, file: &str) -> Option<Handmade> {
     Some(Handmade { plus_z, tops })
 }
 
-/// A material's slot (`slop.slot`).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// A material's slot (`slop.slot`), read by its lowercase variant name (`"hair"`, `"tint"`, ...):
+/// serde spells them, so the client's skill-name guard doesn't read the `face` slot as the skill.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum Slot {
     Hair,
     Skin,
@@ -131,18 +133,15 @@ pub struct MaterialSlop {
 pub fn material_of(extras: Option<&str>, what: &str) -> MaterialSlop {
     let Some(v) = extras.and_then(|x| serde_json::from_str::<serde_json::Value>(x).ok()) else { return MaterialSlop::default() };
     let Some(slop) = v.get("slop") else { return MaterialSlop::default() };
-    let slot = match slop["slot"].as_str() {
-        Some("hair") => Some(Slot::Hair),
-        Some("skin") => Some(Slot::Skin),
-        Some("face") => Some(Slot::Face),
-        Some("eyes") => Some(Slot::Eyes),
-        Some("tint") => Some(Slot::Tint),
-        Some("cloth") => Some(Slot::Cloth),
+    let slot = match slop.get("slot").filter(|v| !v.is_null()) {
         None => None,
-        Some(other) => {
-            warn_once(format!("handmade: {what}: slot {other:?} is not known; drawn as cloth"));
-            Some(Slot::Cloth)
-        }
+        Some(v) => match serde_json::from_value::<Slot>(v.clone()) {
+            Ok(s) => Some(s),
+            Err(_) => {
+                warn_once(format!("handmade: {what}: slot {v} is not known; drawn as cloth"));
+                Some(Slot::Cloth)
+            }
+        },
     };
     let hair = match (slot, slop.get("hair")) {
         (Some(Slot::Hair), Some(h)) => match hair_of(h) {

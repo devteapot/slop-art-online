@@ -163,9 +163,11 @@ pub struct Item {
 }
 
 impl Item {
-    /// The clip index a shot of clip `c` plays (its variant's, when the model has one).
+    /// The clip index a shot of clip `c` plays (its variant's, when the model has one). A model
+    /// without that clip (a scenery file has none) keeps `c`, and the caller finds no node.
     fn played(&self, c: usize) -> usize {
-        let name = crate::anim::resolve(&self.plays, crate::anim::intern(&self.clips[c].0));
+        let Some(clip) = self.clips.get(c) else { return c };
+        let name = crate::anim::resolve(&self.plays, crate::anim::intern(&clip.0));
         self.clips.iter().position(|x| x.0 == name).unwrap_or(c)
     }
 }
@@ -350,13 +352,6 @@ pub fn setup(
         let shots = parse_shots(&spec, &clips, &shown, file);
         let first_clip = shown.first().copied().unwrap_or(0);
         let graph = (!clips.is_empty()).then(|| (assets.load::<Gltf>(clip_src.clone()), vec![], Entity::PLACEHOLDER));
-        let plays: crate::anim::Plays = match (recipe.as_ref().and_then(|r| r.person.as_ref()).filter(|_| crate::anim::variants_on()), styled.as_ref()) {
-            (Some(p), Some(s)) => crate::anim::variants(&p.kind, s.worn.iter().filter_map(|w| w.slot.as_deref())).into_iter().filter(|(_, v)| clips.iter().any(|c| c.0 == *v)).collect(),
-            _ => vec![],
-        };
-        if !plays.is_empty() {
-            info!("view: {file} plays {plays:?}");
-        }
         // Copies beside it (`LIVING_GAME_VIEW_COPIES`), in rows of four a side behind its line.
         let copies = std::env::var("LIVING_GAME_VIEW_COPIES").ok().and_then(|n| n.parse::<usize>().ok()).unwrap_or(1);
         if recipe.is_none() {
@@ -366,6 +361,13 @@ pub fn setup(
                 let copy = Model { vrm: model.vrm, file: file.clone(), height: model.height, ground_y: 0.0, glow: None };
                 commands.spawn((copy, crate::characters::SceneOf(handle.clone()), Transform::from_translation(at).with_rotation(turn), Visibility::Hidden));
             }
+        }
+        let plays: crate::anim::Plays = match (recipe.as_ref().and_then(|r| r.person.as_ref()).filter(|_| crate::anim::variants_on()), styled.as_ref()) {
+            (Some(p), Some(s)) => crate::anim::variants(&p.kind, s.worn.iter().filter_map(|w| w.slot.as_deref())).into_iter().filter(|(_, v)| clips.iter().any(|c| c.0 == *v)).collect(),
+            _ => vec![],
+        };
+        if !plays.is_empty() {
+            info!("view: {file} plays {plays:?}");
         }
         let mut e = commands.spawn((model, Item { index, clips, shots, first_clip, graph, turn, plays }, crate::characters::SceneOf(handle), Transform::from_rotation(turn), Visibility::Hidden));
         if let Some(r) = recipe {

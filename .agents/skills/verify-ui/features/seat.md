@@ -15,7 +15,7 @@ What a sitter plays is resolved per body when its clips are bound (sit-f-select,
 ## Sub-features
 
 - `contact`: cloth tails stay at or above the ground while seated and getting up. Hair and every other group are untouched.
-- `release`: everyone who sat is let go once up: one `seat: #ID is off the ground` line per `seat: #ID sits on the ground` line.
+- `release` requires a `seat: #ID is off the ground` line after `sync:up` for each fixture resident who sat before the wait.
 - `variants`: each sitter's `plays` is what its look line selects (`check.py`'s `seat_clips`, from the same `clip_variants.json`). The scene seats at least one variant sitter and one on the originals.
 - `segments`: one variant sitter is followed in the feet log (`LIVING_GAME_FEET`, `LIVING_GAME_FEET_ID`, its `hips_at`). `seat.json`'s `on.segments` gives each ground one-shot's peak speed of the hips and feet from the root, over the 0.12 s crossfade in and after it, and the hips' mean height over the ground in the loop. It is evidence, not a pass mark: compare with a run under `LIVING_GAME_CLIP_VARIANTS=0` (where the `variants` checks fail by design).
 - `wake`: a seated character whose springs rest and wake (camera far, then near: spring-near's far→near re-entry, reseeded and settled 60 steps with the contact) shows no swing after waking.
@@ -34,7 +34,7 @@ The scene is set up only through admin calls:
 - `--place-free` puts four skirted and three coated residents in a ring 2.2 m round me, chosen by their look line's outfit;
 - `set_weather false 900`, the epoch set to noon and `fov_on false` give a dry, lit, unscoped view;
 - `set_behavior {"do": "rest"}` sits them;
-- `set_behavior {"do": "wander"}` and then `refree` (each put back on its own tile) get them up. A new graph alone does not end a rest, and since iter-11's needs pacing wander or `goto` home leave them seated 47 s later; a placement ends it.
+- `sync:up` replaces their rest graphs with `set_behavior {"do": "goto", "target": "home"}`. The built-in home target resolves to each resident’s home on the island, and they rise without another placement.
 
 `LIVING_GAME_PERF=seat` logs each seated character's cloth against its ground every 3 s (`seat: NAME ENTITY: N cloth joints, lowest tail X mm above the ground`), and `springwake` logs each waking.
 

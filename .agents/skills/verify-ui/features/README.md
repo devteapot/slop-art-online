@@ -12,7 +12,7 @@ This directory is the maintained source for verifying interface D in the game cl
 | The film (`post::Film`): Soft (the default; spares dark pixels by day, the screen at night), Full (the screen, as before film-1) and None; Settings › Play › Film sets it, the settings file keeps a choice once made, `LIVING_GAME_FILM` starts in one | [film.md](film.md) | `check.py film` |
 | Gaze from the zoom target: Far, Middle and Near, authority-confirmed Shade, coalescing, reconnect and the Cullet hedge | [gaze.md](gaze.md) | `check.py gaze` (Cullet) |
 | The recipe grid: a way of making's products as cells, greyed with the rules' reasons, rows from the recipe, a cell sends the act | [grid.md](grid.md) | `check.py grid` on a Cullet world |
-| The hair shine (`style::HAIR_SHINES`): Crown (the default; a hard band over the crown, off a fringe), Soft and Today (the ring before hair-ring-1); Settings › Play › Hair shine sets it, the settings file keeps a choice once made, `LIVING_GAME_HAIR_SHINE` starts in one; the live script's `shine:` switches it in one view | [hair.md](hair.md) | `check.py hair` |
+| The hair shine (`style::HAIR_SHINES`): Crown (the default; a hard band over the crown, off a fringe), Soft and Today (the ring before hair-ring-1); Settings › Play › Hair shine sets it, the settings file keeps a choice once made, `LIVING_GAME_HAIR_SHINE` starts in one; the live script's `shine:` switches it in one view. Hand-made character GLBs can opt into explicit material slots, forward-axis handling and a hair palette through `extras.slop` | [hair.md](hair.md) | `check.py hair` for live presets, `just living-game-calibrate view/<file>.glb` for hand-made asset-view shots and colour checks |
 | Items on people: the pack, an item's acts, carrying an item onto someone's window or onto them, hold F › Give › | [items.md](items.md) | `check.py items` |
 | Looking aside while walking: Cursor snaps the local body to the look and strafes or backpedals. Natural follows from head to chest to legs, with three Looking aside choices | [look-walk.md](look-walk.md) | `check.py look-walk`; `check.py reversal` (no brief backwards gait at a reversal) |
 | People drawn from their look (look-1): the projected key's line from the look book, composed; the VRoid fallback and its warnings; a new key redrawn in place; chips by piece from the style files' slot and layer; the prewarm; background people from decor | [looks.md](looks.md) | `check.py looks` (Cullet), `check.py looks-old` (a world without looks, `looks_seed.py --old`), `check.py looks-band` (a Cullet world at a lab pace, `looks_seed.py`) |
@@ -46,7 +46,7 @@ This directory is the maintained source for verifying interface D in the game cl
 | `looks.rs` | [names.md](names.md), [looks.md](looks.md) (`clothes`, `place`) |
 | `net.rs` (owner subscription, gaze replies and reconnect) | [gaze.md](gaze.md) |
 | `post.rs` (`post::Film`) | [film.md](film.md) |
-| `style.rs` (`HAIR_SHINES`, `HairShine`), `toon.wesl` (`hair_light`) | [hair.md](hair.md) |
+| `handmade.rs` (scene metadata, material slots, forward turn), `lookdev.rs` (material assignment), `view.rs` (asset-view turn), `style.rs` (`HAIR_SHINES`, `Kind::HandHair`), `toon.wesl`, `toon_light.wesl`, `living/tools/characters/calibrate.py` | [hair.md](hair.md) |
 | `twist.rs` | [look-walk.md](look-walk.md) |
 | `ui/*` (interface D) | every feature |
 | `verbs.rs`, the skills' `_ui()` declarations | [items.md](items.md), [wheel.md](wheel.md), [grid.md](grid.md), [bar.md](bar.md), [offers.md](offers.md) |
