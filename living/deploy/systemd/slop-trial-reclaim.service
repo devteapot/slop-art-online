@@ -5,4 +5,4 @@ Description=Reclaim archived Slop Art Online trial replicas in a quiet window
 Type=oneshot
 WorkingDirectory=%h/.local/share/slop-trial-reclaim
 Environment=PATH=%h/.cargo/bin:/usr/local/bin:/usr/bin:/bin
-ExecStart=/usr/bin/python3 living/tools/trial_reclaim.py --apply
+ExecStart=/usr/bin/python3 living/tools/trial_reclaim_scheduled.py

@@ -407,13 +407,14 @@ def check_report_paths(output):
             raise ValueError("reclaim report must not be a symlink")
 
 
-def reclaim(reader, control, candidates, record, output):
+def reclaim(reader, control, candidates, record, output, *, extra_guards=lambda: []):
     # Validate the archive before stopping to keep downtime short. The offline pass rechecks
     # authoritative identity and the archived bytes before granting a write mount.
     if not candidates:
         return
-    if fresh := blockers() + quiet_worlds(control):
+    if fresh := blockers() + quiet_worlds(control) + extra_guards():
         record["blockers"].extend(fresh)
+        record["skipped"] = True
         return
     for row in candidates:
         if row["action"] == "delete-after-archive":
@@ -424,8 +425,9 @@ def reclaim(reader, control, candidates, record, output):
     if current != control:
         record["blockers"].append("live control metadata changed during the inventory")
         return
-    if fresh := blockers() + quiet_worlds(current):
+    if fresh := blockers() + quiet_worlds(current) + extra_guards():
         record["blockers"].extend(fresh)
+        record["skipped"] = True
         return
     # Run the signal against PID 1 inside the verified container. Never force-stop it.
     try:
@@ -478,7 +480,7 @@ def restart(control):
         raise RuntimeError("; ".join(after))
 
 
-def main():
+def main(argv=None, *, locks_held=False, scheduled=False, extra_guards=None):
     parser = argparse.ArgumentParser(description=__doc__)
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--dry-run", action="store_true", help="read-only inventory, even if a quiet-window gate is blocked")
@@ -487,7 +489,9 @@ def main():
     parser.add_argument("--keep", action="append", default=[], metavar="NAME_OR_GLOB")
     parser.add_argument("--output", type=Path)
     parser.add_argument("--reviewed-inventory", type=Path, help="limit removal to this reviewed dry run")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
+    if scheduled and args.reviewed_inventory:
+        parser.error("scheduled reclaim cannot use an explicit removal selection")
     now = datetime.datetime.now(datetime.timezone.utc)
     stamp = now.strftime("%Y%m%dT%H%M%SZ")
     mode = "dryrun" if args.dry_run else "apply"
@@ -501,11 +505,12 @@ def main():
         return 0
     record = dict(time=now.isoformat(), dry_run=args.dry_run, keep_list=[HAMLETS, *args.keep],
                   blockers=[], replicas=[], removed=[])
-    locks = maintenance_locks() if args.apply else contextlib.nullcontext(probe_locks())
+    locks = (contextlib.nullcontext([]) if locks_held else maintenance_locks()) if args.apply else contextlib.nullcontext(probe_locks())
     with locks as reasons:
         record["blockers"].extend(reasons + blockers())
         try:
             if record["blockers"] and args.apply:
+                record["skipped"] = True
                 return 1
             preflight()
             reader = metadata_reader()
@@ -514,10 +519,15 @@ def main():
             record["live_replicas"] = control["replicas"]
             record["blockers"].extend(quiet_worlds(control))
             if record["blockers"] and args.apply:
+                record["skipped"] = True
                 return 1
             record["replicas"] = plan(control, snapshots, sizes(running=True), evidence_index(EVIDENCE),
                                       record["keep_list"],
                                       lambda replica, candidates: verify_existing(replica, candidates, running=True))
+            if args.apply and not args.reviewed_inventory:
+                for row in record["replicas"]:
+                    if row["action"].startswith("delete") and row["classification"] not in {"verify", "fake", "no-model"}:
+                        row.update(action="keep", reason="paid and uncertain replicas require an explicit reviewed selection")
             if args.reviewed_inventory:
                 review = json.loads(args.reviewed_inventory.read_text())
                 record["reviewed_inventory"] = str(args.reviewed_inventory)
@@ -528,7 +538,8 @@ def main():
                 record["blockers"].append("control metadata changed during inventory; rerun before using this plan")
             if args.apply and not record["blockers"]:
                 candidates = [r for r in record["replicas"] if r["action"].startswith("delete")]
-                reclaim(reader, control, candidates, record, output)
+                options = {"extra_guards": extra_guards} if extra_guards else {}
+                reclaim(reader, control, candidates, record, output, **options)
                 return int(bool(record["blockers"]))
             return int(args.apply and bool(record["blockers"]))
         except (RuntimeError, OSError, ValueError, subprocess.SubprocessError) as error:
