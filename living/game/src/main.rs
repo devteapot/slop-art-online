@@ -50,6 +50,7 @@ mod sight;
 mod sightedge;
 mod sightfield;
 mod facing;
+mod feed;
 mod heardmark;
 mod sky;
 mod takes;
@@ -189,7 +190,7 @@ fn main() {
         phase::configure(&mut app);
         use phase::Phase;
         app.add_systems(Startup, (world::setup, camera::spawn, sight::setup))
-            .add_systems(Update, (net::pump, verbs::refresh_rules, net::perception_law, net::seen_log).chain().in_set(Phase::Net))
+            .add_systems(Update, (net::pump, verbs::refresh_rules, net::perception_law, net::seen_log, net::feed_log).chain().in_set(Phase::Net))
             .add_systems(Update, (bodies::update, world::things, controls::target, world::terrain.run_if(live::tiles), looks::update).chain().in_set(Phase::Mirror))
             .add_systems(Update, (demo::run, controls::scheme, keys::double_tap, controls::movement).chain().in_set(Phase::Input))
             .add_systems(Update, weapon::update.in_set(Phase::Input).after(crate::ui::UiInput).before(combat::input))

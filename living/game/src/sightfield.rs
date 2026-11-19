@@ -5,7 +5,7 @@
 //! `Map::sight_clear`, rock, walls and shut gates block, drops and things below eye height do not; docs/PERCEPTION.md). The client has the
 //! same tiles: the land regenerated as the authority hosted it (`living_rules::host::hosted_map`,
 //! `live.rs`), the `terrain_chunk` rows of its window where they differ (tiles edited since), and
-//! the shut gates (`gate`). So it runs the same `Map::sight_clear` on them:
+//! the shut gates (`gate`, or under the scoped feed those seen or remembered shut: `feed.rs`). So it runs the same `Map::sight_clear` on them:
 //!
 //! - **The field.** A texture of [`SIZE`] × [`SIZE`] texels of [`TEXEL`] m (two a tile) centred
 //!   on my tile: 1 where the line from where I stand to the texel's centre is clear, 0 where
@@ -238,8 +238,11 @@ fn tiles(mut field: Option<ResMut<SightField>>, live: Res<crate::live::Live>, is
                 edits.push((c.id, c.tiles));
             }
         }
-        for g in conn.db.gate().iter().filter(|g| !g.open && g.x >= 0 && g.y >= 0 && (g.x as u32) < hosted.w && (g.y as u32) < hosted.h) {
-            shut.push(g.y as u32 * hosted.w + g.x as u32);
+        // Shut gates as this client knows them (`feed::shut_gates`): the `gate` rows (legacy), or
+        // a gate seen shut now, else one remembered shut (scoped). A gate never seen does not
+        // block the Shade; the authority's collision still decides.
+        for (x, y) in crate::feed::shut_gates(&conn.db).into_iter().filter(|(x, y)| *x >= 0 && *y >= 0 && (*x as u32) < hosted.w && (*y as u32) < hosted.h) {
+            shut.push(y as u32 * hosted.w + x as u32);
         }
     }
     edits.sort_by_key(|e| e.0);

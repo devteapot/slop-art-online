@@ -149,6 +149,11 @@ impl Scene {
         self.ground.is_some()
     }
 
+    /// The (class, id) of every resource and structure drawn (`things`).
+    pub fn thing_keys(&self) -> impl Iterator<Item = (u8, u64)> + '_ {
+        self.things.keys().copied()
+    }
+
     /// First point where a ray meets the ground (marching, then refining), if any.
     pub fn ray_ground(&self, origin: Vec3, dir: Vec3) -> Option<Vec3> {
         let (step, max) = (0.5, 600.0);
@@ -631,24 +636,18 @@ fn thing_mesh(kind: &str) -> Option<(Mesh, Option<(Mesh, [u8; 3])>)> {
     Some((m.build(), glow))
 }
 
-/// Whether a structure burns at `now` (authority ms): one whose kind `burns` fuel while its
-/// `lit_until_ms` is ahead, any other always; `burns` None while the world's rules are not
-/// compiled here yet, when one never lit (0) or lit till later counts as burning.
-fn burning(burns: Option<bool>, until: u64, now: u64) -> bool {
-    match burns {
-        Some(true) => living_rules::fire::lit(until, now),
-        Some(false) => true,
-        None => until == 0 || living_rules::fire::lit(until, now),
-    }
-}
-
 /// On a land world the island draws these itself: buildings as lots, gates in its walls, and
 /// trees as its forest (an act names a tree by kind, the nearest one).
 const LAND_DRAWS: &[&str] = &["tree", "house", "hall", "inn", "workshop", "market", "gate"];
 
-/// Mirror subscribed resources and structures as entities (static, spawned once per row once the
-/// ground under them is known): on tile worlds all of them; on a land world (the island) what it
-/// does not draw itself, standing on its ground (what `verbs.rs` lets F act on).
+/// Mirror the resources and structures this client knows as entities (static, spawned once per
+/// row once the ground under them is known): on tile worlds all of them; on a land world (the
+/// island) what it does not draw itself, standing on its ground (what `verbs.rs` lets F act on).
+/// They come from the feed reads take (`feed::things`): the legacy rows, or under the scoped feed
+/// what my character sees now (`my_things`: a fire burning or out, a depleted bush drawn from
+/// `left / max`), what it remembers where and as it last saw it (`my_remembered_things`), and the
+/// map's architecture and landmarks at full size. Keys are (class, id) in both feeds, so a switch
+/// keeps every entity whose thing is known in both.
 #[allow(clippy::too_many_arguments)]
 pub fn things(
     mut commands: Commands,
@@ -661,27 +660,27 @@ pub fn things(
     island: Option<Res<crate::island::Island>>,
     (assets, rules, live): (Res<AssetServer>, Option<NonSend<crate::verbs::Rules>>, Option<Res<crate::live::Live>>),
     mut shown_lit: Local<HashMap<(u8, u64), bool>>,
+    mut shown_fill: Local<HashMap<(u8, u64), u8>>,
 ) {
     let Some(conn) = &net.conn else { return };
     let mut seen: HashSet<(u8, u64)> = HashSet::new();
-    let (resources, structures) = (conn.db.resource_node(), conn.db.structure());
-    // Whether a structure burns now: a kind that `burns` fuel while `lit_until_ms` is ahead of
-    // the authority's clock, any other always (a plain campfire). Before the world's rules have
-    // compiled here, one never lit (0) or lit till later counts as burning.
-    let now = scene.now_ms.max(0.0) as u64;
+    // Whether a structure burns now (`feed::Thing::glows`): a kind that `burns` fuel as its row
+    // says (legacy: while `lit_until_ms` is ahead of the authority's clock; scoped: lit as seen),
+    // any other always (a plain campfire). Before the world's rules have compiled here, legacy
+    // rows never lit (0) or lit till later count as burning.
     let sc = rules.as_ref().and_then(|r| r.scripts.as_ref());
-    let lit = |kind: &str, until: u64| burning(sc.map(|sc| sc.structure(kind).burns.is_some()), until, now);
-    let rows = resources
-        .iter()
-        .map(|r| ((0u8, r.id), r.kind, r.x, r.y, (r.amount / r.max.max(1.0)).clamp(0.4, 1.0), true))
-        .chain(structures.iter().map(|s| {
-            let on = lit(&s.kind, s.lit_until_ms);
-            ((1u8, s.id), s.kind, s.x, s.y, 1.0, on)
-        }))
-        .filter(|r| island.is_none() || !LAND_DRAWS.contains(&r.1.as_str()));
+    let burns = |kind: &str| sc.map(|sc| sc.structure(kind).burns.is_some());
+    let scoped = crate::feed::reads() == crate::feed::Feed::Scoped;
+    let rows = crate::feed::things(&conn.db, scene.now_ms, &burns)
+        .into_iter()
+        .map(|t| {
+            let lit = t.class == 0 || t.glows(burns(&t.kind));
+            (t.key(), t.fill(), lit, t.kind, t.x, t.y)
+        })
+        .filter(|r| island.is_none() || !LAND_DRAWS.contains(&r.3.as_str()));
     let ready = scene.ready() || island.is_some();
     let scene = &mut *scene;
-    for (key, kind, x, y, fill, lit) in rows {
+    for (key, fill, lit, kind, x, y) in rows {
         seen.insert(key);
         // A kit's fire is drawn again when it is lit or goes out (its glow is in its materials).
         if shown_lit.get(&key).is_some_and(|was| *was != lit) {
@@ -689,6 +688,18 @@ pub fn things(
                 commands.entity(e).despawn();
             }
             shown_lit.remove(&key);
+        }
+        // Under the scoped feed a resource seen depleted is drawn again at its new size (a copy
+        // comes, changes and goes as it is picked and regrows in sight). Legacy rows are drawn at
+        // the size they had when they came into the window, as main draws them.
+        let bucket = (fill * 20.0).round() as u8;
+        if scoped && key.0 == 0 && shown_fill.get(&key).is_some_and(|was| *was != bucket) {
+            if let Some(e) = scene.things.remove(&key) {
+                commands.entity(e).despawn();
+            }
+        }
+        if scoped && key.0 == 0 {
+            shown_fill.insert(key, bucket);
         }
         if !ready || scene.things.contains_key(&key) {
             continue;
@@ -760,9 +771,13 @@ pub fn things(
         }
         scene.things.insert(key, e);
     }
-    shown_lit.retain(|k, _| seen.contains(k));
+    // While a feed switch is under way, what is drawn stays until the new set is in
+    // (`feed::switching`): the old feed's rows can go first.
+    let hold = crate::feed::switching();
+    shown_lit.retain(|k, _| seen.contains(k) || hold);
+    shown_fill.retain(|k, _| (seen.contains(k) || hold) && scoped);
     scene.things.retain(|k, e| {
-        let keep = seen.contains(k);
+        let keep = seen.contains(k) || hold;
         if !keep {
             commands.entity(*e).despawn();
         }
@@ -829,7 +844,7 @@ pub fn fade_trees(
 
 #[cfg(test)]
 mod fire_tests {
-    use super::burning;
+    use crate::feed::burning;
 
     #[test]
     fn a_fire_that_eats_fuel_burns_only_until_its_fuel_runs_out() {

@@ -8,7 +8,8 @@
 //! state come from per-sender views on the authority, which enforces the perception boundary
 //! (docs/PERCEPTION.md): nothing of a creature beyond my sight or behind a wall reaches me.
 //!
-//! 1. On connect: `world`, `land` and `settlement` (1, 1 and about 6 rows).
+//! 1. On connect: `cover_law`, `world`, `land`, `settlement` and `feed_scope` (1, 1, about 6 rows,
+//!    and one or none: its stage chooses where structures, gates and resources come from, `feed.rs`).
 //! 2. Then, for the connection's lifetime (so the death screen keeps its rows):
 //!    - what I perceive: `seen_characters` (mine too), and the others' motion, fighter and
 //!      doing rows as a set of their own, chosen by the world's delivery laws once the installed
@@ -38,6 +39,12 @@
 //!    Subscription SQL has no `IN`, so a window is one id range per row of chunks (`id = (cy <<
 //!    16) | cx`), joined by `OR`;
 //!    - tiles: `resource_node` and `structure` per chunk within [`REGION_R`].
+//! 4. Public-feed scoping (docs/FEED_SCOPING.md, `feed.rs`): those are the legacy feed's, at
+//!    `feed_scope.stage` 0 (`gate` whole in the base on land worlds). At stage ≥ 1 the base holds
+//!    `my_things`, `my_remembered_things`, `my_owners`, `my_stock` and `my_fuel_seen` instead, and
+//!    the near window `map_resource` and `map_structure` over the same chunks. A crossing of 0 ↔ 1
+//!    subscribes a whole new base and the near window beside the old ones and drops the old ones
+//!    once both are in (`Net::switch_feed`), independent of the perception set's switch.
 //!
 //! Latency (docs/LATENCY.md, steps 1–3): the game reads unconfirmed (`with_confirmed_reads(false)`,
 //! SpacetimeDB's advice for real-time games: a delivery does not wait for the commit's fsync;
@@ -68,7 +75,9 @@ pub const LOT_CHUNKS: i32 = 11;
 pub const RECENTRE: i32 = 2;
 pub const LOT_RECENTRE: i32 = 5;
 
-const STATIC: &[&str] = &["SELECT * FROM cover_law", "SELECT * FROM world", "SELECT * FROM land", "SELECT * FROM settlement"];
+/// The world's one `feed_scope` row is among them: its stage chooses where structures, gates and
+/// resources come from (`feed.rs`) before the base is subscribed.
+const STATIC: &[&str] = &["SELECT * FROM cover_law", "SELECT * FROM world", "SELECT * FROM land", "SELECT * FROM settlement", "SELECT * FROM feed_scope"];
 /// What my character perceives and its own state (per-sender views, docs/PERCEPTION.md), and
 /// the rules' cards, for the connection's lifetime.
 const PERCEIVED: &[&str] = &[
@@ -283,7 +292,14 @@ pub struct Net {
     join_sent: bool,
     /// The call `on_reply` just logged, for `report` (`actions.rs`).
     last_call: std::cell::Cell<Option<crate::actions::Sent>>,
-    base: Option<SubscriptionHandle>,
+    /// The base subscription (the perceived set, the world kind's tables and the feed's base
+    /// queries) and the feed it carries.
+    base: Option<(crate::feed::Feed, SubscriptionHandle)>,
+    /// A base for the other feed, subscribed when `feed_scope.stage` crossed 0 ↔ 1, replacing
+    /// `base` once it and the near window for its feed are applied (`switch_feed`), and when it
+    /// was asked for (elapsed s).
+    base_next: Option<(crate::feed::Feed, SubscriptionHandle)>,
+    feed_asked: f64,
     gaze_view: Option<SubscriptionHandle>,
     gaze: GazeInput,
     near: Window,
@@ -324,6 +340,8 @@ impl Default for Net {
             join_sent: false,
             last_call: Default::default(),
             base: None,
+            base_next: None,
+            feed_asked: 0.0,
             gaze_view: None,
             gaze: GazeInput::default(),
             near: Window::default(),
@@ -715,6 +733,73 @@ pub fn seen_log(net: NonSend<Net>, time: Res<Time>, mut out: Local<Option<Option
     let _ = w.flush();
 }
 
+/// `LIVING_GAME_FEED_LOG=<file>`: one JSON line whenever the things the feed reads give change
+/// (and every second), for checking a feed switch frame by frame: the stage, the base in place and
+/// the one being subscribed, the near window's feed, the reads, the things by source, and the keys
+/// added and gone since the last line (verify-ui's `feed-scope`).
+#[allow(clippy::type_complexity)]
+pub fn feed_log(
+    net: NonSend<Net>,
+    scene: NonSend<crate::world::Scene>,
+    time: Res<Time>,
+    mut out: Local<Option<Option<std::io::BufWriter<std::fs::File>>>>,
+    mut last: Local<(std::collections::BTreeMap<(u8, u64), &'static str>, std::collections::BTreeSet<(u8, u64)>, String, f64)>,
+) {
+    use std::io::Write;
+    let w = out.get_or_insert_with(|| std::env::var("LIVING_GAME_FEED_LOG").ok().filter(|p| !p.is_empty()).and_then(|p| std::fs::File::create(p).ok()).map(std::io::BufWriter::new));
+    let (Some(w), Some(conn)) = (w.as_mut(), net.conn.as_ref()) else { return };
+    let now = time.elapsed_secs_f64();
+    let things: std::collections::BTreeMap<(u8, u64), &'static str> = crate::feed::things(&conn.db, 0.0, &|_| None).into_iter().map(|t| (t.key(), crate::feed::source_name(t.source))).collect();
+    // What is drawn (`world::things`' entities: on a land world without what the island draws).
+    let drawn: std::collections::BTreeSet<(u8, u64)> = scene.thing_keys().collect();
+    let state = format!(
+        "{:?} {:?} {:?} {:?} {:?} {} {}",
+        net.base_feed(),
+        net.base_next.as_ref().map(|(f, h)| (*f, h.is_active())),
+        net.near.current.as_ref().map(|s| window_feed(&s.key)),
+        net.near.next.as_ref().map(|s| (window_feed(&s.key), s.handle.is_active())),
+        crate::feed::reads(),
+        crate::feed::stage(&conn.db),
+        crate::feed::switching()
+    );
+    if things == last.0 && drawn == last.1 && state == last.2 && now - last.3 < 1.0 {
+        return;
+    }
+    let added: Vec<(u8, u64)> = things.keys().filter(|k| !last.0.contains_key(k)).copied().collect();
+    let gone: Vec<(u8, u64)> = last.0.keys().filter(|k| !things.contains_key(k)).copied().collect();
+    let drawn_added: Vec<(u8, u64)> = drawn.difference(&last.1).copied().collect();
+    let drawn_gone: Vec<(u8, u64)> = last.1.difference(&drawn).copied().collect();
+    let mut counts: std::collections::BTreeMap<&str, usize> = Default::default();
+    for s in things.values() {
+        *counts.entry(s).or_default() += 1;
+    }
+    let wall_ms = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis() as u64);
+    let line = serde_json::json!({
+        "t": now,
+        "wall_ms": wall_ms,
+        "status": format!("{:?}", net.status),
+        "stage": crate::feed::stage(&conn.db),
+        "base": net.base_feed().map(|f| f.name()),
+        "base_next": net.base_next.as_ref().map(|(f, h)| serde_json::json!({"set": f.name(), "applied": h.is_active()})),
+        "near": net.near.current.as_ref().map(|s| window_feed(&s.key).name()),
+        "near_next": net.near.next.as_ref().map(|s| serde_json::json!({"set": window_feed(&s.key).name(), "applied": s.handle.is_active()})),
+        "reads": crate::feed::reads().name(),
+        "settled": crate::feed::settled(),
+        "counts": counts,
+        "switching": crate::feed::switching(),
+        "added": added,
+        "gone": gone,
+        "drawn": drawn.len(),
+        "drawn_added": drawn_added,
+        "drawn_gone": drawn_gone,
+        "legacy_rows": [conn.db.structure().count(), conn.db.resource_node().count(), conn.db.gate().count()],
+        "scoped_rows": [conn.db.map_structure().count(), conn.db.map_resource().count(), conn.db.my_things().count(), conn.db.my_remembered_things().count()],
+    });
+    let _ = writeln!(w, "{line}");
+    let _ = w.flush();
+    *last = (things, drawn, state, now);
+}
+
 /// A perceived body as the drawing code takes it: its motion row (which carries
 /// no path, chunk or kind), with the creature's kind from its `seen_characters` row (both views
 /// hold the same creatures).
@@ -907,28 +992,100 @@ impl Net {
         });
     }
 
-    /// The static tables are in: pick the mode and subscribe what it needs before playing.
+    /// The static tables are in: pick the mode and the feed (`feed_scope.stage`), and subscribe
+    /// what they need before playing, in one set: the perceived set and the feed's base views
+    /// apply together (docs/FEED_SCOPING.md "Reconnect").
     fn subscribe_base(&mut self) {
         let Some(conn) = self.conn.as_ref() else { return };
         self.mode = if conn.db.land().count() > 0 { Mode::Land } else { Mode::Tiles };
-        // The perception streams are a set of their own (`perception_law`), chosen by the
-        // world's delivery laws once the installed script is compiled.
-        let mut queries: Vec<&str> = PERCEIVED.to_vec();
-        if self.mode == Mode::Tiles {
-            queries.push("SELECT * FROM terrain_chunk");
-        } else {
-            // Gates shut and opened (about a hundred rows on a town, changed rarely): a shut gate
-            // blocks sight, which the edge of sight draws (`sightfield.rs`).
-            queries.push("SELECT * FROM gate");
-        }
-        info!("world kind: {:?}", self.mode);
+        let stage = crate::feed::stage(&conn.db);
+        let feed = crate::feed::Feed::of_stage(stage);
+        let queries = base_set(self.mode, feed);
+        info!("world kind: {:?}; feed: {} (feed_scope stage {stage})", self.mode, feed.name());
+        crate::feed::reset();
+        crate::feed::set_reads(feed);
         let (ok, err) = (self.inbox.clone(), self.inbox.clone());
-        self.base = Some(
+        self.base = Some((
+            feed,
             conn.subscription_builder()
                 .on_applied(move |_| ok.lock().unwrap().push(Signal::Base))
                 .on_error(move |_, e| err.lock().unwrap().push(Signal::Error(format!("subscription error: {e}"))))
                 .subscribe(queries),
+        ));
+        self.base_next = None;
+    }
+
+    /// The feed the world's stage asks for now.
+    fn feed_wanted(&self) -> Option<crate::feed::Feed> {
+        self.conn.as_ref().map(|c| crate::feed::Feed::of_stage(crate::feed::stage(&c.db)))
+    }
+
+    /// The feed of the base in place.
+    fn base_feed(&self) -> Option<crate::feed::Feed> {
+        self.base.as_ref().map(|(f, _)| *f)
+    }
+
+    /// Follow `feed_scope.stage` across 0 ↔ 1 (docs/FEED_SCOPING.md "Client subscriptions"),
+    /// make-before-break: subscribe a base for the new feed beside the old (the near window
+    /// follows in `land_window`/`tile_window`, its key carrying the feed); once the new base and
+    /// a near window for its feed are both applied, drop the old base, move the reads and let the
+    /// near window settle. Until then everything is read and drawn from the old rows. A stage
+    /// that goes back before the switch is done cancels it.
+    fn switch_feed(&mut self, now: f64) {
+        let (Some(want), Some(have)) = (self.feed_wanted(), self.base_feed()) else { return };
+        let next = self.base_next.as_ref().map(|(f, _)| *f);
+        if want == have {
+            if let Some((f, h)) = self.base_next.take() {
+                info!("feed: the stage went back; the {} set is dropped before it was in", f.name());
+                let _ = h.unsubscribe();
+            }
+            crate::feed::set_switching(false);
+            return;
+        }
+        crate::feed::set_switching(true);
+        if next != Some(want) {
+            let Some(conn) = self.conn.as_ref() else { return };
+            let queries = base_set(self.mode, want);
+            info!("feed: subscribing the {} set beside the {} one ({} base queries; feed_scope stage {})", want.name(), have.name(), queries.len(), crate::feed::stage(&conn.db));
+            let inbox = self.inbox.clone();
+            let h = conn.subscription_builder().on_error(move |_, e| inbox.lock().unwrap().push(Signal::Error(format!("subscription error: {e}")))).subscribe(queries);
+            if let Some((_, old)) = self.base_next.replace((want, h)) {
+                let _ = old.unsubscribe();
+            }
+            self.feed_asked = now;
+        }
+        let base_in = self.base_next.as_ref().is_some_and(|(_, h)| h.is_active());
+        // No body yet (no window to wait for), or the near window for the new feed is in.
+        let window_in = self.near.wanted().is_none() || window_serves(&self.near, want);
+        if !(base_in && window_in) {
+            return;
+        }
+        let before: std::collections::HashSet<(u8, u64)> = self.feed_keys();
+        let (f, h) = self.base_next.take().expect("checked above");
+        if let Some((_, old)) = self.base.replace((f, h)) {
+            let _ = old.unsubscribe();
+        }
+        crate::feed::set_reads(f);
+        crate::feed::set_switching(false);
+        self.near.settle();
+        let after: std::collections::HashSet<(u8, u64)> = self.feed_keys();
+        let mut missing: Vec<(u8, u64)> = before.difference(&after).copied().collect();
+        missing.sort_unstable();
+        info!(
+            "feed: on the {} set after {:.0} ms ({} things; {} before, missing now {} {:?})",
+            f.name(),
+            (now - self.feed_asked) * 1000.0,
+            after.len(),
+            before.len(),
+            missing.len(),
+            &missing[..missing.len().min(24)]
         );
+    }
+
+    /// The keys of every thing the feed reads give now (for the switch's log line).
+    fn feed_keys(&self) -> std::collections::HashSet<(u8, u64)> {
+        let Some(conn) = self.conn.as_ref() else { return Default::default() };
+        crate::feed::things(&conn.db, 0.0, &|_| None).into_iter().map(|t| t.key()).collect()
     }
 
     /// The sweep publishes at most one row to the player's connection. A separate
@@ -1030,7 +1187,17 @@ impl Net {
             if let Some(conn) = &self.conn {
                 info!("joining as {}", self.name);
                 let name = self.name.clone();
-                let r = conn.reducers.join_then(self.name.clone(), self.on_reply("join", "join", || serde_json::json!({ "name": name })));
+                // Join (or a reclaim from the minds) sweeps my sight in its own transaction: until
+                // its result is in, an empty `my_things` is not "nothing in sight" (`feed.rs`).
+                crate::feed::joining(true);
+                let reply = self.on_reply("join", "join", || serde_json::json!({ "name": name }));
+                let r = conn.reducers.join_then(self.name.clone(), move |ctx, r| {
+                    reply(ctx, r);
+                    crate::feed::joining(false);
+                });
+                if r.is_err() {
+                    crate::feed::joining(false);
+                }
                 self.report("join", r);
             }
         }
@@ -1056,7 +1223,11 @@ impl Net {
             let sub = self.subscribe(q, key);
             self.far.replace(sub);
         }
-        self.near.settle();
+        // A near window for the other feed waits for the feed switch, which settles it with the
+        // base (`switch_feed`); a re-centre on the same feed settles here.
+        if self.near.next.as_ref().is_none_or(|n| window_feed(&n.key) == crate::feed::reads()) {
+            self.near.settle();
+        }
         self.far.settle();
     }
 
@@ -1071,19 +1242,24 @@ impl Net {
             })
             .collect();
         chunks.sort_unstable();
+        // The key: the chunks, then the feed's tag (a stage switch re-subscribes the window).
+        let feed = self.feed_wanted().unwrap_or_default();
+        let (resources, structures) = crate::feed::window_tables(feed);
+        chunks.push(feed.tag());
         if self.near.wanted() == Some(&chunks) {
             return None;
         }
         let mut q = Vec::with_capacity(chunks.len() * 2);
-        for c in &chunks {
-            q.push(format!("SELECT * FROM resource_node WHERE chunk = {c}"));
-            q.push(format!("SELECT * FROM structure WHERE chunk = {c}"));
+        for c in &chunks[..chunks.len() - 1] {
+            q.push(format!("SELECT * FROM {resources} WHERE chunk = {c}"));
+            q.push(format!("SELECT * FROM {structures} WHERE chunk = {c}"));
         }
         Some((chunks, q))
     }
 
     /// Land worlds: a square window of chunk ranges around a centre chunk, kept until I am
-    /// far enough from it. The key is the centre chunk.
+    /// far enough from it. The key is the centre chunk, and for the near window the feed's tag:
+    /// a stage switch re-subscribes it over the same chunks.
     fn land_window(&self, body: &Body, which: Which) -> Option<(Vec<u32>, Vec<String>)> {
         let (w, h) = self.map_size();
         let (nx, ny) = ((w / CHUNK) as i32, (h / CHUNK) as i32);
@@ -1092,24 +1268,40 @@ impl Net {
             Which::Near => (&self.near, RECENTRE, TERRAIN_CHUNKS),
             Which::Lots => (&self.far, LOT_RECENTRE, LOT_CHUNKS),
         };
+        let feed = self.feed_wanted().unwrap_or_default();
         if let Some(key) = window.wanted() {
             let (cx, cy) = chunk_xy(key[0]);
-            if (here.0 - cx as i32).abs() < recentre && (here.1 - cy as i32).abs() < recentre {
+            let same_feed = matches!(which, Which::Lots) || window_feed(key) == feed;
+            if same_feed && (here.0 - cx as i32).abs() < recentre && (here.1 - cy as i32).abs() < recentre {
+                // A stage switch keeps the window's centre: the same chunks, the other tables.
                 return None;
             }
         }
-        let (cx, cy) = (here.0.clamp(0, nx - 1), here.1.clamp(0, ny - 1));
+        let (cx, cy) = match (which, window.wanted()) {
+            (Which::Near, Some(key)) if window_feed(key) != feed && {
+                let (kx, ky) = chunk_xy(key[0]);
+                (here.0 - kx as i32).abs() < recentre && (here.1 - ky as i32).abs() < recentre
+            } => {
+                let (kx, ky) = chunk_xy(key[0]);
+                (kx as i32, ky as i32)
+            }
+            _ => (here.0.clamp(0, nx - 1), here.1.clamp(0, ny - 1)),
+        };
         let span = |c: i32, n: i32, r: i32| ((c - r).max(0) as u32, (c + r).min(n - 1) as u32);
         let (xs, ys) = (span(cx, nx, r), span(cy, ny, r));
-        let q = match which {
-            Which::Near => vec![
-                format!("SELECT * FROM terrain_chunk WHERE {}", chunk_ranges("id", xs, ys)),
-                format!("SELECT * FROM resource_node WHERE {}", chunk_ranges("chunk", xs, ys)),
-                format!("SELECT * FROM structure WHERE {}", chunk_ranges("chunk", xs, ys)),
-            ],
-            Which::Lots => vec![format!("SELECT * FROM lot WHERE {}", chunk_ranges("chunk", xs, ys))],
+        let (resources, structures) = crate::feed::window_tables(feed);
+        let (q, key) = match which {
+            Which::Near => (
+                vec![
+                    format!("SELECT * FROM terrain_chunk WHERE {}", chunk_ranges("id", xs, ys)),
+                    format!("SELECT * FROM {resources} WHERE {}", chunk_ranges("chunk", xs, ys)),
+                    format!("SELECT * FROM {structures} WHERE {}", chunk_ranges("chunk", xs, ys)),
+                ],
+                vec![chunk_id(cx as u32, cy as u32), feed.tag()],
+            ),
+            Which::Lots => (vec![format!("SELECT * FROM lot WHERE {}", chunk_ranges("chunk", xs, ys))], vec![chunk_id(cx as u32, cy as u32)]),
         };
-        Some((vec![chunk_id(cx as u32, cy as u32)], q))
+        Some((key, q))
     }
 
     /// Ask for a new character after my death (the death screen's "Arrive as a new stranger"):
@@ -1170,6 +1362,7 @@ pub fn pump(mut net: NonSendMut<Net>, time: Res<Time>) {
                 // (`verbs::refresh_rules` runs before `perception_law`), so a reconnect never
                 // chooses its set by the last connection's values.
                 law_rows_moved();
+                crate::feed::base_applied();
                 net.status = Status::Live;
                 net.ever_live = true;
                 net.gaze_view = net.conn.as_ref().map(|conn| {
@@ -1192,6 +1385,8 @@ pub fn pump(mut net: NonSendMut<Net>, time: Res<Time>) {
                     let _ = c.disconnect();
                 }
                 net.base = None;
+                net.base_next = None;
+                crate::feed::reset();
                 net.gaze_view = None;
                 net.gaze.reset_owner();
                 net.near = Window::default();
@@ -1216,6 +1411,40 @@ pub fn pump(mut net: NonSendMut<Net>, time: Res<Time>) {
         net.connect();
     }
     net.maintain();
+    if net.status == Status::Live {
+        net.switch_feed(now);
+    }
+}
+
+/// The base set for a world kind and feed: the perceived set (the perception streams are a set of
+/// their own, `perception_law`), the world kind's own (`terrain_chunk` whole on tile worlds) and
+/// the feed's base queries (`feed::base_queries`: `gate` on legacy land worlds, the scoped views).
+fn base_set(mode: Mode, feed: crate::feed::Feed) -> Vec<&'static str> {
+    let mut queries: Vec<&'static str> = PERCEIVED.to_vec();
+    if mode == Mode::Tiles {
+        queries.push("SELECT * FROM terrain_chunk");
+    }
+    queries.extend(crate::feed::base_queries(feed, mode != Mode::Tiles));
+    queries
+}
+
+/// The feed a near window's key carries (its last element; land: `[centre, tag]`, tiles:
+/// `[chunks…, tag]`). The lots window has none and reads as legacy, which it never switches.
+fn window_feed(key: &[u32]) -> crate::feed::Feed {
+    match key {
+        [_, .., tag] => crate::feed::Feed::of_tag(*tag),
+        _ => crate::feed::Feed::Legacy,
+    }
+}
+
+/// Whether the near window serves `feed` now: its newest applied subscription is for it.
+fn window_serves(w: &Window, feed: crate::feed::Feed) -> bool {
+    if let Some(n) = &w.next {
+        if n.handle.is_active() {
+            return window_feed(&n.key) == feed;
+        }
+    }
+    w.current.as_ref().is_some_and(|c| window_feed(&c.key) == feed)
 }
 
 #[cfg(test)]
@@ -1465,5 +1694,64 @@ mod gaze_tests {
         assert_eq!(Near.at_zoom(0.74), Middle);
         assert_eq!(Far.at_zoom(1.0), Near);
         assert_eq!(Near.at_zoom(0.0), Far);
+    }
+}
+
+#[cfg(test)]
+mod feed_switch_tests {
+    use super::*;
+    use crate::feed::Feed;
+
+    /// Every query a connection holds once settled, for a stage, the two delivery laws and a
+    /// world kind: the static set, the base (perceived, the kind's own, the feed's base), the
+    /// perception set and the near window's tables (by name).
+    fn held(stage: u8, cues: bool, tiers: bool, mode: Mode) -> Vec<String> {
+        let feed = Feed::of_stage(stage);
+        let perception = if perception_set(cues, tiers) == UNTIERED { UNTIERED_STREAMS } else { TIERED_STREAMS };
+        let (r, s) = crate::feed::window_tables(feed);
+        STATIC.iter().chain(base_set(mode, feed).iter()).chain(perception.iter()).map(|q| q.to_string()).chain([format!("SELECT * FROM {r}"), format!("SELECT * FROM {s}")]).collect()
+    }
+
+    #[test]
+    fn the_feed_and_perception_sets_combine_in_every_state() {
+        for mode in [Mode::Land, Mode::Tiles] {
+            for (cues, tiers) in [(false, false), (true, false), (false, true), (true, true)] {
+                let perception = if perception_set(cues, tiers) == UNTIERED { UNTIERED_STREAMS } else { TIERED_STREAMS };
+                for stage in [0u8, 1, 2] {
+                    let q = held(stage, cues, tiers, mode);
+                    let mut sorted = q.clone();
+                    sorted.sort();
+                    sorted.dedup();
+                    assert_eq!(sorted.len(), q.len(), "a query twice at stage {stage} ({cues}, {tiers}, {mode:?})");
+                    let has = |t: &str| q.iter().any(|x| x == &format!("SELECT * FROM {t}"));
+                    // The perception streams follow the laws alone, whatever the stage.
+                    for p in perception {
+                        assert!(q.iter().any(|x| x == p), "{p} at stage {stage}");
+                    }
+                    assert!(has("feed_scope"), "the stage itself is static");
+                    let legacy = stage == 0;
+                    assert_eq!(has("structure") && has("resource_node"), legacy, "legacy windows at stage {stage}");
+                    assert_eq!(has("gate"), legacy && mode == Mode::Land, "gate at stage {stage} {mode:?}");
+                    for v in ["my_things", "my_remembered_things", "my_owners", "my_stock", "my_fuel_seen", "map_structure", "map_resource"] {
+                        assert_eq!(has(v), !legacy, "{v} at stage {stage}");
+                    }
+                }
+                // Stage 1 and 2 hold the same set: the cut is the authority's.
+                assert_eq!(held(1, cues, tiers, mode), held(2, cues, tiers, mode));
+            }
+        }
+        // Stage 0 with both laws off is main's land set plus the static `feed_scope`.
+        let main: Vec<String> = held(0, false, false, Mode::Land).into_iter().filter(|q| q != "SELECT * FROM feed_scope").collect();
+        assert!(main.contains(&"SELECT * FROM gate".to_string()) && main.contains(&"SELECT * FROM seen_bodies".to_string()));
+    }
+
+    #[test]
+    fn a_window_key_carries_its_feed_and_the_lots_window_none() {
+        assert_eq!(window_feed(&[chunk_id(3, 4), Feed::Scoped.tag()]), Feed::Scoped);
+        assert_eq!(window_feed(&[chunk_id(3, 4), Feed::Legacy.tag()]), Feed::Legacy);
+        assert_eq!(window_feed(&[chunk_id(3, 4)]), Feed::Legacy);
+        // Tiles: the chunks, then the tag.
+        assert_eq!(window_feed(&[1, 2, 3, Feed::Scoped.tag()]), Feed::Scoped);
+        assert_eq!(window_feed(&[]), Feed::Legacy);
     }
 }

@@ -466,6 +466,7 @@ pub struct DumpExtra<'w, 's> {
     live: Option<Res<'w, crate::live::Live>>,
     shine: Res<'w, crate::style::HairShine>,
     town: Option<Res<'w, crate::town::Town>>,
+    rules: Option<NonSend<'w, crate::verbs::Rules>>,
 }
 
 impl DumpExtra<'_, '_> {
@@ -521,7 +522,13 @@ impl DumpExtra<'_, '_> {
             // character id: a wave made while walking on plays on (talk-turns' `on_the_move`).
             "onces": self.town.as_ref().map(|t| t.shows.iter().filter_map(|(id, s)| s.once.map(|a| (id.to_string(), serde_json::json!(a.clip)))).collect::<serde_json::Map<_, _>>()),
             // Each speaking body's mouth now (`mouth.rs`), by character id.
-            "mouths": self.mouths.as_ref().map(|m| m.by_id.iter().map(|(id, w)| (id.to_string(), serde_json::json!(w))).collect::<serde_json::Map<_, _>>())})
+            "mouths": self.mouths.as_ref().map(|m| m.by_id.iter().map(|(id, w)| (id.to_string(), serde_json::json!(w))).collect::<serde_json::Map<_, _>>()),
+            // Public-feed scoping (`feed.rs`): the stage, the feed reads take, and every thing
+            // known with its source (legacy, live, remembered, map) and state as drawn.
+            "feed_scope": self.net.conn.as_ref().map(|c| {
+                let sc = self.rules.as_ref().and_then(|r| r.scripts.as_ref());
+                crate::feed::dump(&c.db, self.scene.now_ms, &|k| sc.map(|sc| sc.structure(k).burns.is_some()))
+            })})
     }
 }
 

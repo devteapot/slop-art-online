@@ -278,6 +278,8 @@ impl Choice {
             leaf["text"] = t.into();
         }
         match aim {
+            // Going to a remembered thing's place: the walk alone (`go_to_its_place`).
+            Aim::Thing { at, .. } if self.skill == "goto" => serde_json::json!({"do": "goto", "target": {"at": [at.x, at.y]}}),
             // Acts name things by kind, nearest first: walk to the one I mean, then act.
             Aim::Thing { at, nearest: false, .. } => serde_json::json!({"seq": [{"do": "goto", "target": {"at": [at.x, at.y]}}, leaf]}),
             _ => leaf,
@@ -749,7 +751,7 @@ pub(crate) fn stage_name(s: u8) -> &'static str {
 /// My character's facts as far as its client knows them: its rows, the world's calendar, the
 /// ground under it and the fires about it, as the authority's `act::facts` builds them.
 #[allow(clippy::too_many_arguments)]
-fn me_facts(conn: &DbConnection, me: u32, now_ms: f64, rules: &Scripts, weather: Option<bool>, things: &[(&'static str, String, Vec2, u64, f32)], at: Vec2, here: &Here) -> Me {
+fn me_facts(conn: &DbConnection, me: u32, now_ms: f64, rules: &Scripts, weather: Option<bool>, things: &[Known], at: Vec2, here: &Here) -> Me {
     let c = conn.db.my_characters().id().find(&me);
     let v = conn.db.my_vitals().id().find(&me);
     // Breath and focus as the row projects them (docs/STAMINA.md): a move short of either is refused.
@@ -772,22 +774,22 @@ fn me_facts(conn: &DbConnection, me: u32, now_ms: f64, rules: &Scripts, weather:
     let laws = rules.laws();
     let w = conn.db.world().iter().next();
     let (epoch, day_ms, year) = w.as_ref().map_or((0, living_rules::DEFAULT_DAY_MS, 4), |w| (w.epoch_ms, w.day_ms, w.year_days.max(4) as u64));
-    let now = now_ms.max(0.0) as u64;
     // Warmth as the authority's `act::warmth` counts it: a roof within `shelter_warmth`; a
     // fire that needs no feeding within `fire_warmth`; one that burns fuel within its own
     // warmth, only while lit.
     let (mut near_fire, mut near_shelter) = (false, false);
-    for (class, kind, p, id, _) in things.iter().filter(|t| t.0 == "structure") {
-        let _ = class;
-        let d = p.distance(at);
-        let t = rules.structure(kind);
+    // What I remember out of sight warms nothing I can tell.
+    for k in things.iter().filter(|t| t.class == "structure" && !t.remembered) {
+        let d = k.at.distance(at);
+        let t = rules.structure(&k.kind);
         if t.roof && d <= laws.shelter_warmth {
             near_shelter = true;
         }
         match &t.burns {
             Some(b) => {
-                let lit = conn.db.structure().id().find(id).is_some_and(|s| living_rules::fire::lit(s.lit_until_ms, now));
-                near_fire |= lit && d <= b.warmth;
+                // Lit as the feed says (`feed::Thing::lit`: the row's `lit_until_ms` ahead, or
+                // seen burning); a fire whose state I don't know warms nothing I can tell.
+                near_fire |= k.lit == Some(true) && d <= b.warmth;
             }
             None => {
                 let reach = if t.roof { laws.shelter_warmth } else { laws.fire_warmth };
@@ -815,6 +817,7 @@ fn me_facts(conn: &DbConnection, me: u32, now_ms: f64, rules: &Scripts, weather:
         focus,
         ..Default::default()
     };
+    let now = now_ms.max(0.0) as u64;
     let season = living_rules::SEASONS[living_rules::season_of(now, epoch, day_ms, year)].to_string();
     Me { actor, night: here.night, hour: here.hour, raining: weather.unwrap_or(false), season, now_ms, day_ms }
 }
@@ -827,14 +830,34 @@ fn here_of(sc: &Scripts, clock: &crate::daylight::Clock, live: &crate::live::Liv
 }
 
 /// A structure's fire as the authority's `act::fire_state` reads it: lit, and the fuel left.
+/// Under the legacy feed from the row's `lit_until_ms`; under the scoped feed lit as seen now
+/// (`my_things`), and the fuel only as my character found it by looking it over (`my_fuel_seen`,
+/// [`crate::feed::fire_check`]: projected from that look, unknown when it never looked).
 fn fire_facts(conn: &DbConnection, rules: &Scripts, t: &mut TargetFacts, me: &Me) {
     if t.class != "structure" {
         return;
     }
-    // The rules' own reading of a fire (`StructureTraits::fire_state`, as the authority reads it):
-    // a fuel fire is lit while its row's `lit_until_ms` is ahead, holding what is left at its rate.
-    let lit_until = conn.db.structure().id().find(&t.id).map_or(0, |s| s.lit_until_ms);
-    workplace(rules, t, lit_until, me.now_ms.max(0.0) as u64, me.day_ms);
+    let now = me.now_ms.max(0.0) as u64;
+    let burns = |k: &str| Some(rules.structure(k).burns.is_some());
+    let known = crate::feed::find(&conn.db, 1, t.id, me.now_ms, &burns);
+    match known.as_ref().and_then(|k| k.lit_until_ms) {
+        // The rules' own reading of a fire (`StructureTraits::fire_state`, as the authority reads
+        // it): a fuel fire is lit while its row's `lit_until_ms` is ahead, holding what is left at
+        // its rate.
+        Some(until) => workplace(rules, t, until, now, me.day_ms),
+        None if known.is_none() && crate::feed::reads() == crate::feed::Feed::Legacy => workplace(rules, t, 0, now, me.day_ms),
+        None => {
+            let kind = rules.structure(&t.kind);
+            match &kind.burns {
+                Some(b) => {
+                    t.lit = known.as_ref().and_then(|k| k.lit) == Some(true);
+                    t.fuel = crate::feed::fire_check(t.lit, crate::feed::fuel_seen(&conn.db, me.actor.id, t.id), b.rate, now, me.day_ms);
+                }
+                // A fire that needs no feeding is always lit and holds none; anything else neither.
+                None => workplace(rules, t, 0, now, me.day_ms),
+            }
+        }
+    }
 }
 
 /// A workplace's `lit` and `fuel` for the rules' checks (`make_check`'s `burning(a)` and fuel):
@@ -862,36 +885,97 @@ fn thing_facts(class: &'static str, kind: &str, id: u64, amount: f32, dist: f32)
     TargetFacts { class: class.into(), id, kind: kind.to_string(), amount, dist, alive: false, ..Default::default() }
 }
 
-/// Resources and structures my client has rows for: (class, kind, where, id, what is left).
-fn things(conn: &DbConnection, now_ms: f64) -> Vec<(&'static str, String, Vec2, u64, f32)> {
-    let (resources, structures) = (conn.db.resource_node(), conn.db.structure());
-    let res = resources.iter().map(|r| {
-        let left = (r.amount + r.regen * ((now_ms - r.at_ms as f64).max(0.0) / 60_000.0) as f32).min(r.max);
-        ("resource", r.kind, Vec2::new(r.x, r.y), r.id, left)
-    });
-    let st = structures.iter().map(|s| ("structure", s.kind, Vec2::new(s.x, s.y), s.id, 0.0));
-    res.chain(st).collect()
+/// A resource or structure as my client knows it, for aiming (`feed::Thing`, flattened).
+#[derive(Clone, Debug)]
+struct Known {
+    class: &'static str,
+    kind: String,
+    at: Vec2,
+    id: u64,
+    /// What is left of a resource (legacy: interpolated; live: `left`; else taken as enough).
+    amount: f32,
+    /// Lit as known (`feed::Thing::lit`).
+    lit: Option<bool>,
+    /// Out of sight, as last seen: aimed only to go to its place.
+    remembered: bool,
+}
+
+impl Known {
+    fn aim(&self) -> Aim {
+        self.aim_nearest(false)
+    }
+
+    fn aim_nearest(&self, nearest: bool) -> Aim {
+        Aim::Thing { class: self.class, kind: self.kind.clone(), at: self.at, id: self.id, amount: self.amount, nearest }
+    }
+}
+
+/// Resources and structures my client knows, from the feed reads take (`feed::things`): the
+/// legacy rows, or what my character sees now, remembers, and the map's architecture and
+/// landmarks. A thing it knows of none of these ways is not offered.
+fn things(conn: &DbConnection, rules: &Scripts, now_ms: f64) -> Vec<Known> {
+    let burns = |k: &str| Some(rules.structure(k).burns.is_some());
+    crate::feed::things(&conn.db, now_ms, &burns)
+        .into_iter()
+        .map(|t| Known { class: t.class_name(), at: Vec2::new(t.x, t.y), id: t.id, amount: if t.class == 0 { t.amount() } else { 0.0 }, lit: t.lit, remembered: !t.actionable(), kind: t.kind })
+        .collect()
+}
+
+/// Whether the thing an aim names is one my character only remembers (out of sight), and when
+/// it last saw it (authority ms).
+fn remembered_at(conn: &DbConnection, rules: &Scripts, aim: &Aim, now_ms: f64) -> Option<u64> {
+    let Aim::Thing { class, id, .. } = aim else { return None };
+    let burns = |k: &str| Some(rules.structure(k).burns.is_some());
+    match crate::feed::find(&conn.db, (*class == "structure") as u8, *id, now_ms, &burns)?.source {
+        crate::feed::Source::Remembered { seen_ms } => Some(seen_ms),
+        _ => None,
+    }
+}
+
+/// The one choice toward a remembered thing: going to the place it was last seen.
+fn go_to_its_place() -> Choice {
+    Choice::new("goto", "Go to where it was".into())
 }
 
 /// What `id` is called, as I perceive it.
 /// A list's title for what it acts on (a person's is `looks.rs`'s).
 /// A target's title: a person or creature as `Looks` names them (the one way the client names
 /// anyone), a structure as my character may call it ([`thing_title`]), anything else by its kind.
-fn label_of_aim(looks: &crate::looks::Looks, conn: &DbConnection, me: u32, aim: &Aim) -> String {
+fn label_of_aim(looks: &crate::looks::Looks, conn: &DbConnection, rules: &Scripts, me: &Me, aim: &Aim) -> String {
     match aim {
         Aim::Me => "Yourself".into(),
-        Aim::Thing { class, kind, id, .. } => crate::ui::label(&thing_title(conn, me, class, kind, *id)),
+        Aim::Thing { .. } => crate::ui::label(&toward(conn, rules, me, Vec2::ZERO, aim).title),
         Aim::Creature { id } => looks.cap(*id),
     }
 }
 
 /// A thing's title: a structure through `looks::structure_name` (its owner only as my character
-/// knows them: the authority's `owner_shown` law), anything else by its kind.
-fn thing_title(conn: &DbConnection, me: u32, class: &str, kind: &str, id: u64) -> String {
-    match conn.db.structure().id().find(&id).filter(|_| class == "structure") {
+/// knows them: the authority's `owner_shown` law; under the scoped feed the copy's grant or
+/// `my_owners`), anything else by its kind.
+fn thing_title(conn: &DbConnection, rules: &Scripts, me: u32, class: &str, kind: &str, id: u64, now_ms: f64) -> String {
+    let burns = |k: &str| Some(rules.structure(k).burns.is_some());
+    match crate::feed::find(&conn.db, 1, id, now_ms, &burns).filter(|_| class == "structure") {
         Some(s) => crate::looks::structure_name(conn, me, kind, s.owner),
         None => pretty(kind),
     }
+}
+
+/// What a fire's title adds under the scoped feed: burning or out as seen now, and the fuel my
+/// character found by looking it over, as of then (`my_fuel_seen`); nothing for a fire whose
+/// state it does not see, nor under the legacy feed.
+fn fire_words(conn: &DbConnection, rules: &Scripts, me: &Me, t: &TargetFacts) -> Option<String> {
+    if crate::feed::reads() != crate::feed::Feed::Scoped || t.class != "structure" {
+        return None;
+    }
+    let kind = rules.structure(&t.kind);
+    kind.burns.as_ref()?;
+    let burns = |k: &str| Some(rules.structure(k).burns.is_some());
+    let seen = crate::feed::find(&conn.db, 1, t.id, me.now_ms, &burns).filter(|k| k.source == crate::feed::Source::Live)?;
+    let state = if seen.lit == Some(true) { "burning" } else { "out" };
+    Some(match crate::feed::fuel_seen(&conn.db, me.actor.id, t.id) {
+        Some((hours, at)) => format!("{state}; {}", crate::feed::fuel_words(hours, (me.now_ms - at as f64).max(0.0) / 1000.0)),
+        None => state.to_string(),
+    })
 }
 
 /// What the choices toward an aim are worked out from: its title, the target as I perceive it,
@@ -915,9 +999,20 @@ fn toward(conn: &DbConnection, rules: &Scripts, me: &Me, my_at: Vec2, aim: &Aim)
     match aim {
         Aim::Me => Toward { title: "Yourself".into(), target: None, open: true, requests: false },
         Aim::Thing { class, kind, at, id, amount, .. } => {
+            let title = thing_title(conn, rules, me.actor.id, class, kind, *id, me.now_ms);
+            // Out of sight, as last seen: its title says so, with no live facts, and the only
+            // choice is going to its place (`options`), as a creature no longer perceived has none.
+            if let Some(seen) = remembered_at(conn, rules, aim, me.now_ms) {
+                let ago = crate::feed::ago_words((me.now_ms - seen as f64).max(0.0) / 1000.0);
+                return Toward { title: format!("{title}, last seen {ago}"), target: None, open: false, requests: false };
+            }
             let mut t = thing_facts(class, kind, *id, *amount, at.distance(my_at));
             fire_facts(conn, rules, &mut t, me);
-            Toward { title: thing_title(conn, me.actor.id, class, kind, *id), target: Some(t), open: true, requests: false }
+            let title = match fire_words(conn, rules, me, &t) {
+                Some(w) => format!("{title} — {w}"),
+                None => title,
+            };
+            Toward { title, target: Some(t), open: true, requests: false }
         }
         Aim::Creature { id } => match creature_facts(conn, rules, *id, 0.0) {
             Some(t) => Toward { title: String::new(), requests: t.kind == me.actor.kind && t.kind == "person", target: Some(t), open: true },
@@ -930,7 +1025,8 @@ fn toward(conn: &DbConnection, rules: &Scripts, me: &Me, my_at: Vec2, aim: &Aim)
 fn options(conn: &DbConnection, rules: &Scripts, skills: &[Skill], me: &Me, my_at: Vec2, aim: &Aim) -> (String, Vec<Choice>) {
     let t = toward(conn, rules, me, my_at, aim);
     if !t.open {
-        return (t.title, Vec::new());
+        let only = if remembered_at(conn, rules, aim, me.now_ms).is_some() { vec![go_to_its_place()] } else { Vec::new() };
+        return (t.title, only);
     }
     let mut c = choices(rules, me, aim, t.target.as_ref(), skills);
     if t.requests {
@@ -1027,6 +1123,10 @@ fn refusal(sc: &Scripts, me: &Me, target: Option<&TargetFacts>, spec: &Skill) ->
 #[allow(clippy::too_many_arguments)]
 fn wheel_toward(conn: &DbConnection, sc: &Scripts, skills: &[Skill], me: &Me, my_at: Vec2, aim: &Aim, person: bool, title: String, at: Vec2) -> Option<crate::ui::wheel::WheelOpen> {
     use living_rules::ui::{wheel_of, Candidate, Choose, Pin, Section};
+    // A remembered thing has one choice, in the list (`options`).
+    if remembered_at(conn, sc, aim, me.now_ms).is_some() {
+        return None;
+    }
     let (on, kind) = place_of(conn, aim);
     let spec = sc.menu_for(on, &kind).filter(|m| m.choose == Choose::Wheel)?.clone();
     let t = toward(conn, sc, me, my_at, aim);
@@ -1180,23 +1280,26 @@ fn aim(
     }
     v.hint_at = now;
     let my_at = Vec2::new(me3.x, me3.z);
-    let all = things(conn, scene.now_ms);
+    let all = things(conn, sc, scene.now_ms);
     let cursor = cam.cursor_ground.map(|c| Vec2::new(c.x, c.z));
-    // Under the cursor: a creature (combat's pick), else a thing near its ground point.
-    let thing_near = |p: Vec2, r: f32| all.iter().filter(|t| t.2.distance(p) <= r && t.1 != "remains" || t.1 == "remains" && t.2.distance(p) <= r).min_by(|a, b| a.2.distance(p).total_cmp(&b.2.distance(p)));
+    // Under the cursor: a creature (combat's pick), else a thing near its ground point (one I
+    // remember out of sight too: its list offers going to its place).
+    let thing_near = |p: Vec2, r: f32| all.iter().filter(|t| t.at.distance(p) <= r && t.kind != "remains" || t.kind == "remains" && t.at.distance(p) <= r).min_by(|a, b| a.at.distance(p).total_cmp(&b.at.distance(p)));
     let creature_ok = |id: u32| id != me && !town.hidden(id) && scene.shown.get(&id).is_some_and(|(p, _)| p.distance(my_at) <= FAR_M);
     let picked = combat.target.filter(|id| creature_ok(*id)).map(|id| Aim::Creature { id });
-    let under = picked.or_else(|| cursor.and_then(|c| thing_near(c, CURSOR_THING_M)).filter(|t| t.2.distance(my_at) <= FAR_M).map(|t| (t.0, t.1.clone(), t.2, t.3, t.4)).map(|(class, kind, at, id, amount)| Aim::Thing { class, kind, at, id, amount, nearest: false }));
+    let under = picked.or_else(|| cursor.and_then(|c| thing_near(c, CURSOR_THING_M)).filter(|t| t.at.distance(my_at) <= FAR_M).map(Known::aim));
+    // F's nearest: something in sight (a remembered thing behind a wall is not what F means).
     let near = || {
         let c = scene.shown.iter().filter(|(id, (p, _))| creature_ok(**id) && p.distance(my_at) <= NEAR_M).map(|(id, (p, _))| (p.distance(my_at), Aim::Creature { id: *id }));
-        let t = all.iter().filter(|t| t.2.distance(my_at) <= NEAR_M).map(|t| (t.2.distance(my_at), Aim::Thing { class: t.0, kind: t.1.clone(), at: t.2, id: t.3, amount: t.4, nearest: false }));
+        let t = all.iter().filter(|t| !t.remembered && t.at.distance(my_at) <= NEAR_M).map(|t| (t.at.distance(my_at), t.aim()));
         c.chain(t).min_by(|a, b| a.0.total_cmp(&b.0)).map(|(_, a)| a)
     };
     let mut aim = under.or_else(near);
-    // Whether the thing is the nearest of its kind to me (acts resolve `{"nearest": kind}`).
+    // Whether the thing is the nearest of its kind to me (acts resolve `{"nearest": kind}` among
+    // what the actor sees, so a remembered one never counts).
     if let Some(Aim::Thing { kind, id, at, nearest, .. }) = aim.as_mut() {
         let d = at.distance(my_at);
-        *nearest = !all.iter().any(|t| t.1 == *kind && t.3 != *id && t.2.distance(my_at) < d - 0.05);
+        *nearest = !all.iter().any(|t| !t.remembered && t.kind == *kind && t.id != *id && t.at.distance(my_at) < d - 0.05);
     }
     let here = here_of(sc, &clock, &live, my_at);
     let me_facts = me_facts(conn, me, scene.now_ms, sc, weather.authority.map(|(r, _)| r), &all, my_at, &here);
@@ -1279,20 +1382,20 @@ pub fn input(
     let typing = controls.chat_open || wants.keyboard;
     let free = !typing && !controls.demo;
     let pressed = |k: KeyCode| free && keys.just_pressed(k);
-    let all = || things(conn, now_ms);
+    let all = || things(conn, sc, now_ms);
     let here = here_of(sc, &clock, &live, my_at);
     let facts = |_: &Aim| me_facts(conn, me, now_ms, sc, weather.authority.map(|(r, _)| r), &all(), my_at, &here);
     let is_person = |aim: &Aim| matches!(aim, Aim::Creature { id } if conn.db.seen_characters().id().find(id).is_some_and(|c| c.kind == "person"));
     let open = |v: &mut Verbs, aim: Aim, item: Option<String>| {
         let (_, choices) = options(conn, sc, &rules.skills, &facts(&aim), my_at, &aim);
-        let title = label_of_aim(&looks, conn, me, &aim);
+        let title = label_of_aim(&looks, conn, sc, &facts(&aim), &aim);
         let person = is_person(&aim);
         let at = v.place_next.take();
         v.menu = Some(Menu { aim, title, choices, group: None, item, person, at, more: false });
     };
     // A wheel where the world's `menus()` gives the target's place one, else the list.
     let wheel_or_list = |v: &mut Verbs, aim: Aim, held: bool, at: Vec2| {
-        let title = label_of_aim(&looks, conn, me, &aim);
+        let title = label_of_aim(&looks, conn, sc, &facts(&aim), &aim);
         match wheel_toward(conn, sc, &rules.skills, &facts(&aim), my_at, &aim, is_person(&aim), title, at) {
             Some(mut w) => {
                 w.held = held;
@@ -1583,7 +1686,7 @@ pub fn input(
         Some(("id", n)) => n.parse().ok().map(|id| Aim::Creature { id }),
         Some(("nearest", kind)) => {
             let a = all();
-            a.iter().filter(|t| t.1 == kind).min_by(|x, y| x.2.distance(my_at).total_cmp(&y.2.distance(my_at))).map(|t| Aim::Thing { class: t.0, kind: t.1.clone(), at: t.2, id: t.3, amount: t.4, nearest: true }).or_else(|| {
+            a.iter().filter(|t| t.kind == kind && !t.remembered).min_by(|x, y| x.at.distance(my_at).total_cmp(&y.at.distance(my_at))).map(|t| t.aim_nearest(true)).or_else(|| {
                 scene.shown.iter().filter(|(id, _)| **id != me && conn.db.seen_characters().id().find(id).is_some_and(|c| c.kind == kind)).min_by(|x, y| x.1 .0.distance(my_at).total_cmp(&y.1 .0.distance(my_at))).map(|(id, _)| Aim::Creature { id: *id })
             })
         }
@@ -1889,6 +1992,34 @@ mod tests {
         assert!(!choices(&sc, &bare, &aim, Some(&t), &all).iter().any(|c| c.skill == "make" && c.item.as_deref() == Some("glass")));
         let (why, _) = refusal_with(&sc, &bare, Some(&t), all.iter().find(|s| s.name == "make").unwrap(), "glass");
         assert!(why.contains("crucible"), "{why}");
+    }
+
+    #[test]
+    fn a_fire_seen_burning_whose_fuel_is_unknown_refuses_neither_make_nor_feed() {
+        // The scoped feed: lit as seen, fuel never looked at (`feed::fire_check`: NaN).
+        let src = living_rules::floors::compose(SKILLS, include_str!("../../seeds/worlds/cullet/laws.rhai")).unwrap();
+        let day = 2_880_000;
+        let sc = Scripts::with_day(&src, day).unwrap();
+        let aim = Aim::Thing { class: "structure", kind: "furnace".into(), at: Vec2::ZERO, id: 5, amount: 0.0, nearest: true };
+        let m = me(&[("sand", 2), ("ash", 1), ("crucible", 1), ("peat", 2)], &["glassmaking", "fire"]);
+        let mut t = thing_facts("structure", "furnace", 5, 0.0, 1.0);
+        t.lit = true;
+        t.fuel = crate::feed::fire_check(true, None, 3.0, 1_000_000, day);
+        let offered = choices(&sc, &m, &aim, Some(&t), &skills_of(&sc));
+        assert!(offered.iter().any(|c| c.skill == "make" && c.item.as_deref() == Some("glass")), "{offered:?}");
+        assert!(offered.iter().any(|c| c.skill == "feed"), "{offered:?}");
+        // Looked over an hour ago with 1 h left: none now, so glass waits for feeding.
+        let hour = day / 24;
+        t.fuel = crate::feed::fire_check(true, Some((1.0, 1_000_000 - hour)), 3.0, 1_000_000, day);
+        assert_eq!(t.fuel, 0.0);
+        assert!(!choices(&sc, &m, &aim, Some(&t), &skills_of(&sc)).iter().any(|c| c.skill == "make" && c.item.as_deref() == Some("glass")));
+    }
+
+    #[test]
+    fn going_to_a_remembered_things_place_is_the_walk_alone() {
+        let aim = Aim::Thing { class: "structure", kind: "remains".into(), at: Vec2::new(3.0, 4.0), id: 9, amount: 0.0, nearest: false };
+        let node = go_to_its_place().node(&aim, None);
+        assert_eq!(node, serde_json::json!({"do": "goto", "target": {"at": [3.0, 4.0]}}));
     }
 
     #[test]
