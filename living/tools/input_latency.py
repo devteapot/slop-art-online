@@ -2,6 +2,7 @@
 """Join opt-in authority, arena and mind timing evidence. Run with --help for inputs."""
 import argparse
 import json
+import re
 import time
 import urllib.request
 from collections import Counter, defaultdict
@@ -40,7 +41,63 @@ def marks(file):
                    function=row.get("function"), detail=detail)
 
 
-def fast_samples(authority, mind):
+MIND_MARKER = re.compile(r"\binput_latency_(grant|probe|callback|pickup|experience) (.+)$")
+
+
+def scheduler_trace(log, metrics, start, stop):
+    events = defaultdict(list)
+    grants = {}
+    probes = []
+    for line in log.read_text().splitlines():
+        match = MIND_MARKER.search(line)
+        if not match:
+            continue
+        event, values = match.groups()
+        at, *fields = values.split()
+        at = int(at)
+        if event == "grant":
+            call, lane, waiting, busy, fast_busy, poll_us, overrun_us = fields
+            grants[int(call)] = dict(grant_ms=at, lane=lane, waiting=int(waiting),
+                                     shared_busy=int(busy), fast_busy=int(fast_busy),
+                                     poll_us=int(poll_us), overrun_us=int(overrun_us))
+        if start <= at <= stop:
+            events[event].append(at)
+            if event == "grant":
+                events[f"grant_{lane.lower()}"].append(at)
+            if event == "probe":
+                waiting, busy, limit, fast_busy, fast_limit, ready, candidate = map(int, fields)
+                probes.append(dict(at_ms=at, waiting=waiting, shared_busy=busy, shared_limit=limit,
+                                   fast_busy=fast_busy, fast_limit=fast_limit, ready_with_slot=ready,
+                                   candidate=bool(candidate)))
+    ticks = []
+    if metrics.exists():
+        for sample in rows(metrics):
+            series = [v for k, v in sample["values"].items()
+                      if k.startswith("spacetime_num_txns_total{") and 'reducer="tick"' in k and 'committed="true"' in k]
+            if series:
+                ticks.append((sample["end_ms"], sum(series)))
+    stalls = []
+    times = [start, *sorted(events["grant"]), stop]
+    for a, b in zip(times, times[1:]):
+        if b - a < 2000:
+            continue
+        during = [p for p in probes if a < p["at_ms"] < b]
+        census = [(at, total) for at, total in ticks if a < at < b]
+        stalls.append({"from_ms": a, "to_ms": b, "duration_ms": b - a,
+                       "boundary_censored": a == start or b == stop,
+                       "callbacks": sum(a < t < b for t in events["callback"]),
+                       "pickups": sum(a < t < b for t in events["pickup"]),
+                       "seconds_with_experience_callback": sum(a < t < b for t in events["experience"]),
+                       "probes": during, "tick_samples": census})
+    bins = defaultdict(Counter)
+    for event, stamps in events.items():
+        for at in stamps:
+            bins[int((at - start) / 1000)][event] += 1
+    return grants, {"per_second": dict(sorted(bins.items())), "grant_gaps": stalls,
+                    "tick_samples": ticks}
+
+
+def fast_samples(authority, mind, grants=None):
     by_issue = defaultdict(dict)
     tick_ends = {}
     for m in marks(authority):
@@ -60,6 +117,9 @@ def fast_samples(authority, mind):
         tick = tick_ends.get(written["reducer_us"], {}).get("key")
         trace = {"first_trigger_ms": first, "latest_trigger_ms": trigger, "issue_ms": issue,
                  "ask_written_ms": start, **m}
+        grant = (grants or {}).get(m.get("admission_id"))
+        if grant:
+            trace["grant_ms"] = grant["grant_ms"]
         for stage in ("patch_enter", "patch_installed", "patch_refused", "fast_done", "fast_expired"):
             if stage in by_stage:
                 trace[stage + "_ms"] = by_stage[stage]["wall_ms"]
@@ -77,6 +137,14 @@ def fast_samples(authority, mind):
             ("authority_entry_to_install", "patch_enter_ms", "patch_installed_ms"),
         )
         spans = deltas(trace, route)
+        spans.update(deltas(trace, (
+            ("model_call_to_queue", "model_start_ms", "queue_enter_ms"),
+            ("model_queue_to_grant", "queue_enter_ms", "grant_ms"),
+            ("grant_to_model_reply", "grant_ms", "model_reply_ms"),
+        )))
+        if grant:
+            spans["observed_rpm_poll_delay"] = grant["poll_us"] / 1000
+            spans["observed_rpm_poll_overrun"] = grant["overrun_us"] / 1000
         spans.update(deltas(trace, (
             ("first_trigger_to_issue", "first_trigger_ms", "issue_ms"),
             ("latest_trigger_to_issue", "latest_trigger_ms", "issue_ms"),
@@ -251,14 +319,15 @@ def main():
     nav.add_argument("phase", type=Path, nargs="+", help="one or more nav_arena phase directories")
     a = cli.parse_args()
     if a.mode == "fast":
-        samples = list(fast_samples(a.run / "input-latency-authority.jsonl",
-                                    a.run / "journal/outcomes/input_latency_fast.jsonl"))
         metadata = json.loads((a.run / "diag-result.json").read_text())
         start = metadata["measurement_start_ms"]
         stop = metadata["measurement_end_ms"]
+        grants, scheduler = scheduler_trace(a.run / "mind.log", a.run / "input-latency-metrics.jsonl", start, stop)
+        samples = list(fast_samples(a.run / "input-latency-authority.jsonl",
+                                    a.run / "journal/outcomes/input_latency_fast.jsonl", grants))
         active = [s for s in samples if start <= s["issued_ms"] <= stop]
         result = {"summary": summary(active), "measurement_window_ms": [start, stop],
-                  "outside_window_n": len(samples) - len(active), "samples": samples}
+                  "outside_window_n": len(samples) - len(active), "scheduler": scheduler, "samples": samples}
     else:
         result = {}
         for phase in a.phase:

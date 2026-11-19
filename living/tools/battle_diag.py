@@ -149,7 +149,7 @@ def metrics(ident, *, trace=False):
             "spacetime_subscription_query_execution_time_micros_sum", "spacetime_subscription_query_execution_time_micros_count",
             "spacetime_subscription_lock_wait_time_sec_sum", "spacetime_subscription_send_queue_length", "spacetime_subscription_connections")
     timed = (
-        "spacetime_reducer_plus_query_duration_sec", "spacetime_reducer_wait_time_sec", "spacetime_txn_elapsed_time_sec",
+        "spacetime_num_txns_total", "spacetime_reducer_plus_query_duration_sec", "spacetime_reducer_wait_time_sec", "spacetime_txn_elapsed_time_sec",
         "spacetime_total_outgoing_queue_length", "spacetime_total_incoming_queue_length",
         "spacetime_websocket_serialize_secs", "spacetime_websocket_sent_msg_size_bytes",
         "spacetime_websocket_sent_num_rows", "spacetime_websocket_pong_rtt_secs",

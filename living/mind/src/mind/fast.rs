@@ -95,6 +95,7 @@ impl Minds {
         let picked_ms = llm::now_ms();
         if let Some(trace) = trace.as_deref_mut() {
             trace["picked_ms"] = json!(picked_ms);
+            log::info!("input_latency_pickup {picked_ms} {} {}", ask.actor, ask.issued_ms);
         }
         let actor = ask.actor;
         let Some(c) = self.conn.db.character().id().find(&actor) else { return Ok(()) };
@@ -146,6 +147,10 @@ impl Minds {
         };
         if let Some(trace) = trace.as_deref_mut() {
             trace["model_reply_ms"] = json!(llm::now_ms());
+            if let Some((id, at)) = reply.admission_trace {
+                trace["admission_id"] = json!(id);
+                trace["queue_enter_ms"] = json!(at);
+            }
         }
         let v = llm::parse_json(&reply.content).unwrap_or(Value::Null);
         let thought = v["thought"].as_str().unwrap_or_default().trim().to_string();
