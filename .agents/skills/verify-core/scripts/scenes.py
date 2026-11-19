@@ -7376,8 +7376,10 @@ def seen_remains_gaze(s):
         s.wait(lambda: s.rows(f"SELECT * FROM attention WHERE id = {observer} AND band = {code}"), 10)
         time.sleep(3)
     s.expect("Near, Middle and Far again repeat no remains line", remains("again") == got, remains("again"))
-    s.expect("the ranges hold every field body",
-             bool(s.rows(f"SELECT * FROM seen_structures WHERE actor = {observer}", "seen-blocks")))
+    ranges = [r["ranges"] for r in s.rows(f"SELECT * FROM seen_structures WHERE actor = {observer}", "seen-blocks")]
+    pairs = [(rs[k], rs[k + 1]) for rs in ranges for k in range(0, len(rs), 2)]
+    s.expect("the observer's ranges hold every field body",
+             all(any(a <= id <= b for a, b in pairs) for id in dist), {"ranges": ranges, "bodies": sorted(dist)})
     s.call("place_at", observer, *away)
 
 
