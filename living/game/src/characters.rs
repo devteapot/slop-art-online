@@ -785,6 +785,9 @@ fn bone_scale(name: &str, p: &Proportions) -> Option<BoneScale> {
 pub struct Shaped {
     hips: Option<Entity>,
     hips_k: f32,
+    /// The hips' rest height (file units): what a ground seat's clip measures its pose by
+    /// (`anim::ground_hips`).
+    rest_y: f32,
     /// The hips translation last written here (an animation's new value differs from it).
     written: Vec3,
     scales: HashMap<Entity, Vec3>,
@@ -819,7 +822,7 @@ pub fn shape(
             }
         }
         let Some(&hips) = by_name.get("J_Bip_C_Hips") else {
-            commands.entity(e).insert(Shaped { hips: None, hips_k: 1.0, written: Vec3::NAN, scales: HashMap::new(), helpers: HashMap::new() });
+            commands.entity(e).insert(Shaped { hips: None, hips_k: 1.0, rest_y: 0.0, written: Vec3::NAN, scales: HashMap::new(), helpers: HashMap::new() });
             continue;
         };
         let p = ch.recipe.proportions.clone();
@@ -921,17 +924,37 @@ pub fn shape(
         let base_hip = (hips0.y - lo) * 1.75 / figure.max(0.01);
         ch.stride = ((hips_y - lo) * k / base_hip.max(0.01)).max(0.05);
         debug!("characters: {} {:.2} m (×{k:.3}), hips ×{hips_k:.3}, stride {:.2}", ch.recipe.name, ch.recipe.height, ch.stride);
-        commands.entity(e).insert(Shaped { hips: Some(hips), hips_k, written: Vec3::NAN, scales, helpers });
+        commands.entity(e).insert(Shaped { hips: Some(hips), hips_k, rest_y: hips0.y, written: Vec3::NAN, scales, helpers });
     }
 }
 
 /// Scale the hips' translation (rest or freshly animated) with the leg chain.
-pub fn hips(mut chars: Query<&mut Shaped>, mut transforms: Query<&mut Transform>) {
-    for mut sh in &mut chars {
+///
+/// Sitting on the ground (sit-hips, docs/seat-contact/sit-hips.md): the legs do not carry a
+/// seated body, the seat under its pelvis does, and that is not scaled with the legs (the hips
+/// bone keeps its height, `bone_scale`). So in the ground seat's clips (their share of the pose,
+/// `anim::Anim::ground_share`) the hips' height is scaled from `hips_k` toward 1 as far as the
+/// clip has the pelvis down on the ground (`anim::ground_hips`, by the clip's hips height):
+/// a 1.19 m child's seat and boots sank 17-20 mm into the ground at `hips_k` 0.84, and a
+/// long-legged elder's floated. Across and along stay at `hips_k`; out of those clips nothing
+/// changes. A body posed without `anim.rs` (the asset view) is in a ground seat's clip while it
+/// carries a [`SeatAnchor`] with a weight.
+pub fn hips(mut chars: Query<(&mut Shaped, Option<&crate::anim::Anim>, Option<&SeatAnchor>)>, mut transforms: Query<&mut Transform>) {
+    for (mut sh, anim, anchor) in &mut chars {
         let Some(h) = sh.hips else { continue };
         let Ok(mut tf) = transforms.get_mut(h) else { continue };
         if tf.translation != sh.written {
-            let t = tf.translation * sh.hips_k;
+            let share = match anim {
+                Some(a) => a.ground_share(),
+                None => anchor.and_then(|a| a.weight).map_or(0.0, |_| 1.0),
+            };
+            let t = if share > 0.0 && sh.hips_k != 1.0 {
+                let down = share * crate::anim::ground_hips(tf.translation.y, sh.rest_y);
+                let k_y = sh.hips_k + (1.0 - sh.hips_k) * down;
+                Vec3::new(tf.translation.x * sh.hips_k, tf.translation.y * k_y, tf.translation.z * sh.hips_k)
+            } else {
+                tf.translation * sh.hips_k
+            };
             tf.translation = t;
             sh.written = t;
         }
@@ -1953,7 +1976,7 @@ mod tests {
         let mut app = App::new();
         app.add_message::<Rebuilt>().add_observer(on_ready);
         let recipe = Recipe { name: "test".into(), base: "lookdev/own-test.glb".into(), height: 1.2, proportions: Proportions::default(), colors: Colors::default(), outfit: BTreeMap::new(), identity: BTreeMap::new(), person: None };
-        let shaped = Shaped { hips: None, hips_k: 1.0, written: Vec3::NAN, scales: HashMap::new(), helpers: HashMap::new() };
+        let shaped = Shaped { hips: None, hips_k: 1.0, rest_y: 0.0, written: Vec3::NAN, scales: HashMap::new(), helpers: HashMap::new() };
         let fitted = Fitted { y_off: 0.0, size: Vec3::ONE, center: Vec3::ZERO };
         let e = app.world_mut().spawn((Character { recipe, stride: 0.6 }, fitted, shaped, outfit::Dressed, crate::anim::Bound, Visibility::Inherited)).id();
         let piece = app.world_mut().spawn((outfit::Piece { slot: "head".into(), material: "Hat".into() }, ChildOf(e))).id();

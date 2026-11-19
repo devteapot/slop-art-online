@@ -46,14 +46,19 @@ as a client from before the skirts' change does (a spring bone under a scaled bo
 scale).
 
 `--terrain` uses the client's pre-shape fitted bounds and scales the ground clips' hips
-translation by `hips_k` (`stand_up_ground` plays at 1.6×). It reports garment penetration
-against the flat floor in model-space millimetres. `--seat-contact` implies `--springs` and
+translation by `hips_k` (`stand_up_ground` plays at 1.6×), their height blended toward 1 as
+the clip's hips come down to the seat, as the client does since sit-hips (`--ground-hips`:
+`legs` as before, `contact` by the cloth contact's clip-time weight; `--ground-hips-band` tries
+another band). It reports garment penetration against the flat floor in model-space
+millimetres; `--heights OUT.csv` writes each pose's pelvis and lowest boots, trousers and
+skirted piece above it in world millimetres. `--seat-contact` implies `--springs` and
 applies the client's weighted ground plane to the cloth spring groups (`Skirt`, `Coat`).
 
 `--compare-client` compares one asset-view joint dump row on a ground clip at an explicit time
 (e.g. `LIVING_GAME_VIEW_SHOTS=sit_ground@0.5`). Supply the root's world Y in metres separately,
 since the dump is root-relative. In a debug build, break at view.rs:657 in `write_joints` and
-read `at.y`. The tool exits 1 if the root or either foot joint differs by more than 1 mm.
+read `at.y` (on the flat checker it is the fitted `y_off`, which the tool prints as `root`). The tool
+exits 1 if the root, the hips or either foot joint differs by more than 1 mm.
 
 Plain Python and numpy.
 """
@@ -289,6 +294,26 @@ def seat_of(clip, t, rate):
     if clip == "stand_up_ground":
         return 1.0 - smooth((t - SEAT_UP_S) / ramp)
     return None
+
+
+GROUND_HIPS_BAND = (0.17, 0.45)  # anim.rs `GROUND_HIPS`: the hips' heights (fractions of their rest) between which a ground seat's clip takes hips_k from 1 back to the legs'
+
+
+def ground_hips_k(mode, clip, t, h, hips_k, hips0, band=GROUND_HIPS_BAND):
+    """The multiplier on the hips' height in a ground seat's clip (characters.rs `hips`).
+
+    `legs`: hips_k throughout, as before sit-hips. `contact`: hips_k blended to 1 by the cloth
+    contact's clip-time weight (`seat_of`). `height`: blended to 1 by the clip's own hips
+    height h (file units) against their rest height hips0: all the way at or below band[0] of
+    it, not at all at or above band[1] (anim.rs `ground_hips`, the client's since sit-hips)."""
+    if mode == "legs" or clip not in SEAT_RATE:
+        return hips_k
+    if mode == "contact":
+        w = seat_of(clip, t, SEAT_RATE[clip])
+    else:
+        x = min(max((band[1] * hips0 - h) / max((band[1] - band[0]) * hips0, 1e-6), 0.0), 1.0)
+        w = x * x * (3 - 2 * x)
+    return hips_k + (1.0 - hips_k) * w
 
 
 def keep_above(ground, pos, nxt, length, r):
@@ -637,6 +662,9 @@ def main():
     ap.add_argument("--seat-contact", action="store_true", help="give the cloth spring groups the client's ground contact in the ground seat's clips (implies --springs and --terrain)")
     ap.add_argument("--compare-client", type=Path, metavar="JOINTS.jsonl", help="compare placement against one asset-view ground-clip joint dump row and exit")
     ap.add_argument("--client-root-y", type=float, metavar="METRES", help="the client root's measured world Y on the asset-view checker")
+    ap.add_argument("--ground-hips", choices=("height", "legs", "contact"), default="height", help="with --terrain: how a ground seat's clip scales the hips' height: `height` (the client's since sit-hips: hips_k blended to 1 as the clip's hips come down to the seat), `legs` (hips_k throughout, as before), `contact` (blended by the cloth contact's clip-time weight)")
+    ap.add_argument("--ground-hips-band", default="", metavar="LO,HI", help="with --ground-hips height: try this band (fractions of the hips' rest height) in place of the client's")
+    ap.add_argument("--heights", metavar="OUT.csv", help="with --terrain: write each ground-seat pose's hips multiplier and the pelvis and the lowest boots, trousers and skirted piece above the terrain (world mm)")
     a = ap.parse_args()
     if a.compare_client:
         if a.client_root_y is None or not np.isfinite(a.client_root_y):
@@ -653,6 +681,9 @@ def main():
     library = clips_compare.clips(a.clips)[0] if (a.clip or a.compare_client) and os.path.exists(a.clips) else {}
     if a.terrain:
         terrain, scale, root_y, hips_k = terrain_fit(sk, vertical_bounds(type_path, a.styles, line), line)
+        hips0 = float(sk.rest[sk.index["J_Bip_C_Hips"]][1])
+    band = tuple(float(x) for x in a.ground_hips_band.split(",")) if a.ground_hips_band else GROUND_HIPS_BAND
+    placed_k = [None]
     at_time = lambda tracks, t: {node: clips_compare.at(times, values, 4, t) for (node, path), (times, values) in tracks.items() if path == "rotation"}
 
     def posed_at(name, tracks, t):
@@ -660,9 +691,12 @@ def main():
         hips = tracks.get(("J_Bip_C_Hips", "translation"))
         placed = a.terrain and name in SEAT_RATE
         if placed:
-            # characters.rs:929–937 scales the whole local translation, keyed or at rest.
-            local = clips_compare.at(hips[0], hips[1], 3, t) if hips else sk.rest[sk.index["J_Bip_C_Hips"]]
-            sk.place_hips(np.array(local) * hips_k)
+            # characters.rs `hips` scales the whole local translation, keyed or at rest, by
+            # hips_k, and in a ground seat's clip its height by `ground_hips_k`.
+            local = np.array(clips_compare.at(hips[0], hips[1], 3, t) if hips else sk.rest[sk.index["J_Bip_C_Hips"]], float)
+            k_y = ground_hips_k(a.ground_hips, name, t, float(local[1]), hips_k, hips0, band)
+            placed_k[0] = k_y
+            sk.place_hips(local * np.array([hips_k, k_y, hips_k]))
         out = sk.pose(at_time(tracks, t))
         if placed:
             sk.place_hips(None)
@@ -673,14 +707,13 @@ def main():
             row = json.loads(a.compare_client.read_text())
             file = row["file"]
             clip, _, time = row["shot"].removeprefix("clip-").partition("@")
-            t = float(time)
+            t = float(time.partition("-")[0])  # a shot from a view (`clip@T/VIEW`) is named `clip-NAME@T-VIEW`
             if clip not in SEAT_RATE or not np.isfinite(t) or t < 0:
                 raise ValueError("expected a timed ground-clip shot")
             _, joints = posed_at(clip, library[clip], t)
             heights = [("root", root_y, a.client_root_y)]
-            for side in ("L", "R"):
-                foot = f"J_Bip_{side}_Foot"
-                heights.append((foot, root_y + scale * joints[foot][1], a.client_root_y + row["joints"][foot][1]))
+            for bone in ("J_Bip_C_Hips", "J_Bip_L_Foot", "J_Bip_R_Foot"):
+                heights.append((bone, root_y + scale * joints[bone][1], a.client_root_y + row["joints"][bone][1]))
         except (OSError, ValueError, KeyError, TypeError, IndexError) as e:
             ap.error(f"invalid client comparison input: {e}")
         print(f"{file} {row['shot']} (world Y in mm)")
@@ -737,6 +770,7 @@ def main():
                     yield name, t, mats, joints, (dict(springs.step(sk, 0, fresh=True)) if springs else None)
 
     worst, swing, seats, count = {}, {}, {}, 0
+    heights = []
     for clip, t, mats, joints, sprung in poses():
         count += 1
         axis = axis_points(joints)
@@ -753,6 +787,10 @@ def main():
                     below = terrain - posed[p.name][:, 1]
                     r = seats.setdefault((p.name, clip, "terrain"), dict(below=0.0, behind=0.0, vertices=0))
                     r.update(below=max(r["below"], 1000 * float(below.max(initial=0.0))), vertices=max(r["vertices"], int((below > 0.005).sum())))
+        if a.heights and a.terrain and clip in SEAT_RATE:
+            low = lambda pre: min((float(posed[p.name][:, 1].min()) for p in pieces if p.name.startswith(pre)), default=float("nan"))
+            mm = lambda y: (y - terrain) * scale * 1000
+            heights.append(dict(clip=clip, t=round(t, 4), hips_k=placed_k[0], pelvis_mm=mm(joints["J_Bip_C_Hips"][1]), boots_mm=mm(low("boots")), trousers_mm=mm(low("trousers")), garment_mm=mm(low(OUTER))))
         if clip in SEATED or clip in GROUND:
             for name, (below, behind, n) in (chair(pieces, posed, mats, joints) if clip in SEATED else ground(pieces, posed)).items():
                 r = seats.setdefault((name, clip, "seat"), dict(below=0.0, behind=0.0, vertices=0))
@@ -789,6 +827,12 @@ def main():
             else:
                 print(f"{name:16s} {clip}: ground    {r['below']:6.1f} mm below")
             print(f"  {r['vertices']} vertices beyond 5 mm at most in one pose" + ("; exceeds contact limit" if fault else ""))
+    if a.heights:
+        import csv
+        with open(a.heights, "w", newline="") as f:
+            w = csv.DictWriter(f, fieldnames=["clip", "t", "hips_k", "pelvis_mm", "boots_mm", "trousers_mm", "garment_mm"])
+            w.writeheader()
+            w.writerows(heights)
     if a.json:
         json.dump(dict({f"{i}|{o}|{clip}": r for (i, o, clip), r in worst.items()}, **{f"{name}|{'terrain' if kind == 'terrain' else 'chair' if clip in SEATED else 'ground'}|{clip}": dict(most=max(r["below"], r["behind"]), **r) for (name, clip, kind), r in seats.items()}), open(a.json, "w"), indent=1)
     if swing:
