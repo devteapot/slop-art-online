@@ -14,6 +14,7 @@ import subprocess
 import sys
 import time
 import traceback
+import urllib.error
 import urllib.request
 
 sys.dont_write_bytecode = True
@@ -1039,6 +1040,37 @@ def fov_case(run):
     finally:
         run.admin('set_world_law', 'fov_on', 'false')
     return {'status': 'pass', 'heard': heard, 'facing': scene.get('you', {}).get('facing'), 'noticed': [x['text'] for x in told], 'habit_turned': turned[:1], 'facing_after': round(facing, 2)}
+@case('gaze')
+def gaze_case(run):
+    """A real mind executes a gaze act from a loopback scripted response."""
+    actor = prepare(run)[0]['id']
+    run.admin('set_world_law', 'gaze_on', 'true')
+    pending = run.request(actor, 'gaze-before')
+    scene = json.loads(pending[0]['scene'])
+    assert scene['you']['gaze'] == 'middle', scene['you']
+    band = {'do': 'gaze', 'band': 'far'}
+    script = {'replies': {
+        'think': {'thought': 'I look farther ahead.', 'intend': ['look farther ahead'], 'say': None},
+        'deliberate': {'graph': 'keep', 'acts': [band, band, {'do': 'gaze', 'band': 'near'}]},
+        'act_repair': {'replacements': [None]},
+    }}
+    run.start(model(run, script), [actor])
+
+    def attempts():
+        return shared.rows(run.journal / 'outcomes/act_attempts.jsonl')
+
+    attempt = run.wait(attempts, 'gaze act submission')[0]
+    attention = run.private(f'SELECT * FROM attention WHERE id = {actor}', 'attention-far')
+    assert len(attention) == 1 and attention[0]['band'] == 1, attention
+    assert '250 ms' in json.dumps(attempt), attempt
+    run.request(actor, 'gaze-after')
+    requests = run.wait(
+        lambda: [r for r in shared.rows(run.directory / 'fake-requests.jsonl')
+                 if r['purpose'] == 'think' and re.search(r'"gaze":\s*"far"', json.dumps(r['body']).replace(r'\"', '"'))],
+        'a Far scene delivered to the fake endpoint', 30)
+    return {'status': 'pass', 'checks': 4, 'attention': attention, 'far_requests': len(requests)}
+
+
 @case('doing')
 def doing_case(run):
     """What someone is visibly doing reaches a mind (docs/PERCEPTION.md, "What someone is visibly
@@ -4209,6 +4241,82 @@ def body_case(run):
     return {'status': 'pass' if ok else 'fail', 'checks': checks}
 
 
+@case('act-repair', 'act-repair-stop', 'talk-act-repair')
+def act_repair_case(run, case):
+    actor = prepare(run)[0]['id']
+    run.harness('player', 'join', 'RepairReceiver')
+    receiver = run.sql("SELECT id FROM character WHERE name = 'RepairReceiver'", 'receiver')[0]['id']
+    # The procedure returns its typed denial to the caller and must make no act for this NPC.
+    player = json.loads((run.directory / 'state.json').read_text())['token']
+    request = urllib.request.Request(f'{shared.STDB_URL}/v1/database/{run.db}/call/mind_act_checked',
+                                     data=json.dumps([actor, [], 'verify']).encode(),
+                                     headers={'Content-Type': 'application/json', 'Authorization': f'Bearer {player}'})
+    try:
+        with urllib.request.urlopen(request, timeout=5) as response:
+            denial = response.read().decode()
+    except urllib.error.HTTPError as error:
+        denial = error.read().decode()
+    assert 'not your character' in denial, denial
+    (run.directory / 'procedure-denial.txt').write_text(denial)
+    run.admin('place_near', actor, receiver)
+    run.admin('grant_items', actor, 'stone', 3)
+    def receiver_stone(label):
+        rows = run.private(f"SELECT * FROM inventory WHERE owner = {receiver}", label)
+        return sum(row['qty'] for row in rows if row['item'] == 'stone')
+    stone_before = receiver_stone('receiver-before')
+    original = {'do': 'go', 'target': {'id': receiver}}
+    replacement = {'do': 'go' if case == 'act-repair-stop' else 'goto', 'target': {'id': receiver}}
+    gift = {'do': 'give', 'target': {'id': receiver}, 'item': 'stone', 'qty': 1}
+    phrase = 'I can spare this stone for you.'
+    script = {'replies': {
+        'think': {'thought': 'I can spare a stone.', 'intend': ['give a stone and walk beside them'],
+                  'say': {'text': phrase, 'to': receiver}},
+        'deliberate': {'graph': 'keep', 'acts': [original, gift]},
+        'act_repair': {'replacements': [replacement], 'say': phrase, 'acts': [gift]},
+    }}
+    if case == 'talk-act-repair':
+        run.admin('set_behavior', actor, json.dumps({'wait': 120}))
+        script['replies']['talk'] = {'thought': 'I have a stone to spare.', 'say': phrase,
+                                     'to': receiver, 'acts': [original, gift], 'end': True}
+    else:
+        run.request(actor, case)
+    script['rules'] = [{'purpose': 'act_repair', 'repair': True}]
+    run.start(model(run, script), [actor])
+    if case == 'talk-act-repair':
+        run.harness('player', 'say', 'How is your morning going?', '--to', str(actor))
+
+    def attempts():
+        return shared.rows(run.journal / 'outcomes/act_attempts.jsonl')
+
+    run.wait(lambda: len(attempts()) == 2, 'two journaled submissions')
+    run.wait(lambda: any('You did what you had decided: give' in row['text'] for row in
+                         run.private(f'SELECT * FROM experience WHERE observer = {actor}', 'gift-and-refusals')),
+             'valid sibling act completed')
+    if case != 'act-repair-stop':
+        run.wait(lambda: any('You did what you had decided: goto' in row['text'] for row in
+                             run.private(f'SELECT * FROM experience WHERE observer = {actor}', 'walk-completion')),
+                 'repaired walk completed')
+    time.sleep(3)
+    original_attempt, retry = attempts()
+    assert original_attempt['reference'] == retry['reference']
+    assert retry['source'] == ('talk' if case == 'talk-act-repair' else 'deliberate')
+    assert receiver_stone('receiver-after') == stone_before + 1
+    repair_calls = [j for j in run.exchanges() if j['purpose'] == 'act_repair']
+    spoken = [e for e in run.private(f'SELECT * FROM experience WHERE observer = {actor}', 'actor-experience')
+              if e['kind'] == 'said' and phrase in e['text']]
+    speech = [e for e in run.private(f'SELECT * FROM experience WHERE observer = {receiver}', 'listener-experience')
+              if e['kind'] == 'speech' and phrase in e['text']]
+    assert len(repair_calls) == len(spoken) == len(speech) == 1, (repair_calls, spoken, speech)
+    assert [json.loads(a) for a in original_attempt['acts']] == [original, gift], original_attempt
+    refusal = original_attempt['refused'][0]['refusal']
+    assert 'unknown skill `go`' in refusal and 'goto' in refusal.partition('Valid one-off act names: ')[2].split(', '), refusal
+    messages = repair_calls[0]['request']['messages']
+    assert json.loads(messages[-1]['content'])['rejected'] == original_attempt['refused']
+    assert [json.loads(a) for a in retry['acts']] == [replacement], retry
+    assert bool(retry['refused']) == (case == 'act-repair-stop'), retry
+    return {'status': 'pass', 'attempts': attempts(), 'repair_calls': len(repair_calls),
+            'speech_delivered': len(speech)}
+
 
 @case('seen-remains')
 def seen_remains_case(run):
@@ -4280,6 +4388,7 @@ def seen_remains_case(run):
     }
     return {'status': 'pass' if all(checks.values()) else 'fail', 'checks': checks,
             'field_ids': sorted(field.values()), 'scene_structures': structures}
+
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)

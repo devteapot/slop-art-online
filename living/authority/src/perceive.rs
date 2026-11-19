@@ -931,7 +931,11 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
         you.insert("you are waiting on".into(), Value::Array(mine));
     }
     let hour = common::hour(&w, now);
-    let r = common::sight_for(ctx, id, &w, now);
+    let senses = common::senses_of(ctx, id, &w, now);
+    let r = senses.sight;
+    if let Some(gaze) = senses.gaze {
+        you.insert("gaze".into(), json!(gaze.band.name()));
+    }
     let time = json!({"day": living_rules::day_of(now, w.epoch_ms, w.day_ms), "hour": round(hour), "night": common::scripts(ctx).is_night(hour), "season": common::season(ctx, now), "sight": r});
 
     let mut creatures = Vec::new();
@@ -939,7 +943,7 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
     let mut shown_as: std::collections::HashMap<u32, u32> = std::collections::HashMap::new();
     // What the character sees (sight and a clear sight line), each as it perceives them (the
     // `perceived_of` projection a player's view carries too).
-    let (in_sight, heard_now) = crate::perception::sensed(ctx, id, at, r, now);
+    let (in_sight, heard_now) = crate::perception::sensed(ctx, id, at, now);
     let sc = common::scripts(ctx);
     for c in &in_sight {
         let Some(ch) = ctx.db.character().id().find(c.id) else { continue };

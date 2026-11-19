@@ -1,5 +1,5 @@
 //! Settings (interface D): a wide window in the centre, opened from Menu (or Menu after Esc with
-//! nothing open), with two pages.
+//! nothing open).
 //!
 //! - **Play:** the interface's theme (Glass, Clear, Night, Linen, Walnut; F4 cycles it), the control scheme (facing the cursor, or where you walk; F3 switches it too),
 //!   how the body looks aside while walking (a look-walk preset, `twist.rs`),
@@ -43,6 +43,8 @@ pub enum Page {
     #[default]
     Play,
     Controls,
+    Camera,
+    CameraTuning,
 }
 
 #[derive(Component)]
@@ -87,6 +89,7 @@ fn act_label(a: Act, names: &SkillNames) -> String {
         Act::Character => "Character".into(),
         Act::Skills => "Skills and know-how".into(),
         Act::Log => "Log and people".into(),
+        Act::NorthUp => "Snap camera north".into(),
         Act::Glance => "Glance with the camera (hold)".into(),
     }
 }
@@ -110,7 +113,7 @@ pub fn spawn(mut commands: Commands, bodies: Query<(Entity, &WinBody), Added<Win
         commands.entity(e).with_children(|body| {
             // Pages.
             body.spawn((Node { width: Val::Px(150.0), flex_direction: FlexDirection::Column, row_gap: Val::Px(6.0), flex_shrink: 0.0, ..default() }, Pickable::IGNORE)).with_children(|tabs| {
-                for (label, page) in [("Play", "play"), ("Controls", "controls")] {
+                for (label, page) in [("Play", "play"), ("Controls", "controls"), ("Camera", "rotation"), ("Camera tuning", "camera")].into_iter().filter(|&(_, page)| page != "camera" || camera_dev()) {
                     tabs.spawn((super::hit::Hot, Tag(format!("settings:page:{page}")), kit::Paint::Choice, Lit(false), Node { padding: UiRect::axes(Val::Px(12.0), Val::Px(8.0)), border: wood::b(2.0), border_radius: wood::r(8.0), ..default() }, bevy::ui::BackgroundGradient::default(), BorderColor::all(wood::edge())))
                         .with_child((Text::new(label), wood::ink(f, 14.0, 800), Pickable::IGNORE));
                 }
@@ -119,7 +122,9 @@ pub fn spawn(mut commands: Commands, bodies: Query<(Entity, &WinBody), Added<Win
             // Play.
             body.spawn((PageBody(Page::Play), Node { flex_grow: 1.0, flex_direction: FlexDirection::Column, ..default() }, Pickable::IGNORE)).with_children(|pg| {
                 row(pg, f, "Look", "The interface's theme (F4)", |c| kit::seg(c, f, "settings:theme", &super::wood::Name::ALL.map(|n| (n.label(), n.key()))));
-                row(pg, f, "Facing", "Which way your character looks while walking (F3)", |c| kit::seg(c, f, "settings:control", &[("Face where you walk", "travel"), ("Face the cursor", "cursor")]));
+                row(pg, f, "Camera", "Choose how the camera follows your character", |c| kit::seg(c, f, "settings:camera", &[("Top-down (default)", "top-down"), ("Orbit (old)", "orbit")]));
+                row(pg, f, "Facing", "", |c| kit::seg(c, f, "settings:facing", &crate::controls::Facing::CHOICES));
+                row(pg, f, "Movement look", "When to follow the mouse (F3)", |c| kit::seg(c, f, "settings:control", &[("Face where you walk", "travel"), ("Face the cursor", "cursor")]));
                 row(pg, f, "Looking aside", "Walking one way and looking another: how far the head and chest turn before the body follows", |c| kit::seg(c, f, "settings:look_walk", &crate::twist::PRESETS));
                 row(pg, f, "Edge of sight", "How what you can't see now is drawn (F2)", |c| kit::seg(c, f, "settings:sight", &[("Not seen now", "unseen"), ("Limited view", "limited"), ("Fade", "fade")]));
                 row(pg, f, "Unseen ground", "How ground you don't see now looks, with \"not seen now\"", |c| kit::seg(c, f, "settings:look", &crate::sightedge::Look::ALL.map(|l| (l.label(), l.name()))));
@@ -134,12 +139,21 @@ pub fn spawn(mut commands: Commands, bodies: Query<(Entity, &WinBody), Added<Win
                     kit::button(c, f, "Show tips again", "settings:tips_again", true);
                 });
             });
+            body.spawn((PageBody(Page::Camera), Node { flex_grow: 1.0, flex_direction: FlexDirection::Column, display: Display::None, ..default() }, Pickable::IGNORE)).with_children(|pg| {
+                row(pg, f, "Top-down rotation", "Middle drag or twist two fingers. Middle tap snaps north.", |c| kit::toggle(c, "settings:camera_rotate"));
+                row(pg, f, "Rotation speed", "", |c| kit::seg(c, f, "settings:camera_rotate_speed", &[("Slow", "0.5"), ("Normal", "1"), ("Fast", "2")]));
+                row(pg, f, "Invert rotation", "", |c| kit::toggle(c, "settings:camera_rotate_invert"));
+            });
+            if camera_dev() {
+                body.spawn((PageBody(Page::CameraTuning), Node { flex_grow: 1.0, flex_direction: FlexDirection::Column, display: Display::None, ..default() }, Pickable::IGNORE))
+                    .with_children(|pg| camera_panel(pg, f));
+            }
             // Controls.
             body.spawn((PageBody(Page::Controls), Node { flex_grow: 1.0, flex_direction: FlexDirection::Column, display: Display::None, ..default() }, Pickable::IGNORE)).with_children(|pg| {
                 row(pg, f, "Skill keys", "Mouse buttons stay the basic attacks", |c| kit::seg(c, f, "settings:preset", &[("Q E R, plus 1–9", "letters"), ("1–9 only", "numbers"), ("My own", "own")]));
                 pg.spawn((Node { display: Display::Grid, grid_template_columns: RepeatedGridTrack::fr(2, 1.0), column_gap: Val::Px(26.0), ..default() }, Pickable::IGNORE)).with_children(|grid| {
                     let groups: [(&str, Vec<Act>); 3] = [
-                        ("Moving", vec![Act::Forward, Act::Back, Act::Left, Act::Right, Act::Run, Act::Jump, Act::Dodge, Act::Glance]),
+                        ("Moving", vec![Act::Forward, Act::Back, Act::Left, Act::Right, Act::Run, Act::Jump, Act::Dodge, Act::Glance, Act::NorthUp]),
                         ("Fighting", { let mut v = vec![Act::Weapon, Act::Primary, Act::Secondary, Act::Skill1, Act::Skill2, Act::Skill3]; v.extend((0..crate::keys::EXTRA).map(Act::Extra)); v }),
                         ("People and things", vec![Act::Interact, Act::Talk, Act::Address, Act::Way, Act::Wave, Act::Nod, Act::LookOver, Act::Pack, Act::Character, Act::Skills, Act::Log]),
                     ];
@@ -174,6 +188,10 @@ pub fn spawn(mut commands: Commands, bodies: Query<(Entity, &WinBody), Added<Win
 }
 
 pub(super) fn row(p: &mut ChildSpawnerCommands, f: &Fonts, label: &str, help: &str, control: impl FnOnce(&mut ChildSpawnerCommands)) {
+    row_entity(p, f, label, help, control);
+}
+
+fn row_entity(p: &mut ChildSpawnerCommands, f: &Fonts, label: &str, help: &str, control: impl FnOnce(&mut ChildSpawnerCommands)) -> Entity {
     p.spawn((Node { display: Display::Grid, grid_template_columns: vec![GridTrack::px(220.0), GridTrack::fr(1.0)], column_gap: Val::Px(12.0), align_items: AlignItems::Center, padding: UiRect::vertical(Val::Px(9.0)), border: UiRect::bottom(Val::Px(1.5)), ..default() }, BorderColor::all(wood::line()), Pickable::IGNORE)).with_children(|r| {
         r.spawn((Node { flex_direction: FlexDirection::Column, ..default() }, Pickable::IGNORE)).with_children(|l| {
             l.spawn((Text::new(label), wood::ink(f, 14.0, 800), Pickable::IGNORE));
@@ -182,7 +200,7 @@ pub(super) fn row(p: &mut ChildSpawnerCommands, f: &Fonts, label: &str, help: &s
             }
         });
         r.spawn((Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: Val::Px(10.0), ..default() }, Pickable::IGNORE)).with_children(control);
-    });
+    }).id()
 }
 
 /// Clicks on the pages' controls, a binding's new key, and the pages' state.
@@ -226,7 +244,59 @@ pub fn update(
     if let Some(t) = kit::clicked(&ui, &tags) {
         let (what, value) = t.rsplit_once(':').unwrap_or((t, ""));
         match what {
-            "settings:page" => *page = if value == "controls" { Page::Controls } else { Page::Play },
+            "settings:page" => *page = match value {
+                "controls" => Page::Controls,
+                "rotation" => Page::Camera,
+                "camera" if camera_dev() => Page::CameraTuning,
+                _ => Page::Play,
+            },
+            "settings:facing" => {
+                prefs.facing = Some(if value == "cursor" {
+                    input.control = crate::controls::Control::Cursor;
+                    crate::controls::Facing::Cursor
+                } else {
+                    crate::controls::Facing::Natural
+                });
+                changed = true;
+            }
+            "settings:camera_preset" if camera_dev() => {
+                if let Some(tuning) = crate::camera::Tuning::preset(value) {
+                    prefs.camera_tuning = tuning;
+                    changed = true;
+                }
+            }
+            "settings:camera_pitch" if camera_dev() => {
+                let tuning = &mut prefs.camera_tuning;
+                match value {
+                    "late" => {
+                        tuning.fixed_pitch.get_or_insert(tuning.stops[1].pitch);
+                        tuning.late_tilt.get_or_insert(crate::camera::LateTilt {
+                            tilt_start: 0.8,
+                            near_pitch: tuning.stops[2].pitch,
+                        });
+                    }
+                    "fixed" => {
+                        tuning.fixed_pitch.get_or_insert(tuning.stops[1].pitch);
+                        tuning.late_tilt = None;
+                    }
+                    _ => {
+                        tuning.fixed_pitch = None;
+                        tuning.late_tilt = None;
+                        tuning.keep_fov_curve = false;
+                    }
+                }
+                changed = true;
+            }
+            "settings:camera" => {
+                prefs.camera = if value == "orbit" { crate::camera::Mode::Orbit } else { crate::camera::Mode::TopDown };
+                changed = true;
+            }
+            "settings:camera_rotate_speed" => {
+                if let Ok(speed) = value.parse::<f32>() {
+                    prefs.camera_rotate_speed = speed.clamp(0.5, 2.0);
+                    changed = true;
+                }
+            }
             "settings:control" => {
                 input.control = if value == "cursor" { crate::controls::Control::Cursor } else { crate::controls::Control::Travel };
                 changed = true;
@@ -273,6 +343,14 @@ pub fn update(
                 changed = true;
             }
             _ => match t {
+                "settings:camera_rotate" => {
+                    prefs.camera_rotate = !prefs.camera_rotate;
+                    changed = true;
+                }
+                "settings:camera_rotate_invert" => {
+                    prefs.camera_rotate_invert = !prefs.camera_rotate_invert;
+                    changed = true;
+                }
                 "settings:auto_draw" => {
                     prefs.auto_draw = !prefs.auto_draw;
                     changed = true;
@@ -315,7 +393,15 @@ pub fn update(
     kit::light(&mut lit, |t| {
         let (what, value) = t.rsplit_once(':').unwrap_or((t, ""));
         match what {
-            "settings:page" => Some((value == "controls") == (pg == Page::Controls)),
+            "settings:page" => Some(value == match pg { Page::Play => "play", Page::Controls => "controls", Page::Camera => "rotation", Page::CameraTuning => "camera" }),
+            "settings:facing" => Some(value == prefs.facing().name()),
+            "settings:camera_pitch" => Some(value == match (prefs.camera_tuning.fixed_pitch, prefs.camera_tuning.late_tilt) {
+                (None, _) => "curve",
+                (_, Some(_)) => "late",
+                _ => "fixed",
+            }),
+            "settings:camera_rotate_speed" => Some(value.parse::<f32>() == Ok(prefs.camera_rotate_speed)),
+            "settings:camera" => Some(value == prefs.camera.name()),
             "settings:control" => Some(value == control),
             "settings:sight" => Some(Some(value) == sight),
             "settings:look" => Some(Some(value) == look),
@@ -325,6 +411,8 @@ pub fn update(
             "settings:film" => Some(value == film_now),
             "settings:hair" => Some(value == shine_now),
             _ => match t {
+                "settings:camera_rotate" => Some(prefs.camera_rotate),
+                "settings:camera_rotate_invert" => Some(prefs.camera_rotate_invert),
                 "settings:auto_draw" => Some(prefs.auto_draw),
                 "settings:tips" => Some(prefs.tips),
                 _ => None,
@@ -354,6 +442,180 @@ pub fn update(
     }
 }
 
+fn camera_dev() -> bool {
+    std::env::var("LIVING_GAME_DEV").as_deref() == Ok("1")
+}
+
+#[derive(Component, Clone, Copy)]
+pub(super) enum CameraSlider {
+    Height(usize),
+    Pitch(usize),
+    Fov(usize),
+    FixedPitch,
+    TiltStart,
+    NearPitch,
+    Wheel,
+    Easing,
+}
+
+impl CameraSlider {
+    fn range(self) -> (f32, f32, f32) {
+        match self {
+            Self::Height(_) => (2.0, 50.0, 0.1),
+            Self::Pitch(_) | Self::FixedPitch | Self::NearPitch => (15.0, 89.0, 0.1),
+            Self::Fov(_) => (15.0, 90.0, 0.1),
+            Self::TiltStart => (0.0, 1.0, 0.01),
+            Self::Wheel => (0.005, 0.25, 0.001),
+            Self::Easing => (1.0, 40.0, 0.1),
+        }
+    }
+
+    fn value(self, t: &mut crate::camera::Tuning) -> Option<&mut f32> {
+        match self {
+            Self::Height(i) => Some(&mut t.stops[i].distance),
+            Self::Pitch(i) if t.fixed_pitch.is_none() => Some(&mut t.stops[i].pitch),
+            Self::Fov(i) if t.fixed_pitch.is_none() || t.keep_fov_curve || i == 1 => Some(&mut t.stops[i].fov),
+            Self::FixedPitch => t.fixed_pitch.as_mut(),
+            Self::TiltStart => t.late_tilt.as_mut().map(|tilt| &mut tilt.tilt_start),
+            Self::NearPitch => t.late_tilt.as_mut().map(|tilt| &mut tilt.near_pitch),
+            Self::Wheel => Some(&mut t.wheel_step),
+            Self::Easing => Some(&mut t.easing_rate),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Component)]
+pub(super) struct CameraSliderFill;
+#[derive(Component)]
+pub(super) struct CameraSliderText;
+#[derive(Component)]
+pub(super) struct LateTiltRow;
+
+fn slider(parent: &mut ChildSpawnerCommands, f: &Fonts, key: &str, control: CameraSlider) {
+    parent.spawn((control, super::hit::Hot, Tag(format!("settings:camera_slider:{key}")),
+        Node { width: Val::Px(112.0), height: Val::Px(24.0), align_items: AlignItems::Center, justify_content: JustifyContent::Center, overflow: Overflow::clip(), border_radius: wood::r(5.0), ..default() },
+        BackgroundColor(wood::surface())))
+        .with_children(|s| {
+            s.spawn((CameraSliderFill, Node { position_type: PositionType::Absolute, left: Val::Px(0.0), height: Val::Percent(100.0), ..default() },
+                BackgroundColor(wood::line()), Pickable::IGNORE));
+            s.spawn((CameraSliderText, Text::new(""), wood::ink(f, 13.0, 800), Pickable::IGNORE));
+        });
+}
+
+fn camera_panel(pg: &mut ChildSpawnerCommands, f: &Fonts) {
+    let presets = &crate::camera::Tuning::PRESETS;
+    for (label, choices) in [("Our presets", &presets[..2]), ("Reference presets", &presets[2..])] {
+        row(pg, f, label, "", |c| {
+            for &(name, key, _) in choices {
+                kit::button(c, f, name, &format!("settings:camera_preset:{key}"), true);
+            }
+        });
+    }
+    row(pg, f, "Pitch mode", "", |c| kit::seg(c, f, "settings:camera_pitch", &[
+        ("Tilt curve", "curve"), ("Fixed pitch", "fixed"), ("Tilt near", "late"),
+    ]));
+    row(pg, f, "Zoom stops", "", |c| {
+        for label in ["Far", "Middle", "Near"] {
+            c.spawn((Text::new(label), wood::ink(f, 13.0, 800), Node { width: Val::Px(112.0), ..default() }, Pickable::IGNORE));
+        }
+    });
+    for (label, key, field) in [
+        ("Height (m)", "height", CameraSlider::Height as fn(usize) -> CameraSlider),
+        ("Pitch (°)", "pitch", CameraSlider::Pitch),
+        ("Vertical FOV (°)", "fov", CameraSlider::Fov),
+    ] {
+        row(pg, f, label, "", |c| {
+            for (i, stop) in ["far", "middle", "near"].into_iter().enumerate() {
+                slider(c, f, &format!("{key}:{stop}"), field(i));
+            }
+            if key == "pitch" {
+                slider(c, f, "pitch:fixed", CameraSlider::FixedPitch);
+            }
+        });
+    }
+    for (label, key, slider_kind) in [
+        ("Tilt start z", "tilt_start", CameraSlider::TiltStart),
+        ("Near pitch (°)", "near_pitch", CameraSlider::NearPitch),
+    ] {
+        let entity = row_entity(pg, f, label, "", |c| slider(c, f, key, slider_kind));
+        pg.commands().entity(entity).insert(LateTiltRow);
+    }
+    row(pg, f, "Wheel step", "", |c| slider(c, f, "wheel", CameraSlider::Wheel));
+    row(pg, f, "Easing (per second)", "", |c| slider(c, f, "easing", CameraSlider::Easing));
+    row(pg, f, "Export", "Writes camera-tuning.json beside the settings file", |c| {
+        kit::button(c, f, "Copy values", "settings:camera_copy", true);
+    });
+}
+
+pub(super) fn camera_controls(
+    ui: Res<UiPointer>,
+    tags: Query<&Tag>,
+    mut prefs: ResMut<Prefs>,
+    cam: Res<crate::camera::Cam>,
+    mut clipboard: ResMut<bevy::clipboard::Clipboard>,
+    mut sliders: Query<(Entity, &CameraSlider, &ComputedNode, &bevy::ui::UiGlobalTransform, &Children, &mut Node), Without<CameraSliderFill>>,
+    mut fills: Query<&mut Node, (With<CameraSliderFill>, Without<LateTiltRow>)>,
+    mut tilt_rows: Query<&mut Node, (With<LateTiltRow>, Without<CameraSlider>)>,
+    mut texts: Query<&mut Text, With<CameraSliderText>>,
+) {
+    if sliders.is_empty() { return; }
+    let active = ui.dropped.or_else(|| ui.down.zip(ui.pos).map(|((entity, _), pos)| (entity, pos)))
+        .or_else(|| ui.clicked.zip(ui.pos));
+    let mut tuning = prefs.camera_tuning;
+    for mut node in &mut tilt_rows {
+        let display = if tuning.late_tilt.is_some() { Display::Grid } else { Display::None };
+        if node.display != display {
+            node.display = display;
+        }
+    }
+    for (entity, slider, measured, tf, children, mut node) in &mut sliders {
+        let value = slider.value(&mut tuning);
+        show(&mut node, value.is_some());
+        let Some(value) = value else { continue };
+        let (min, max, step) = slider.range();
+        if let Some((_, pos)) = active.filter(|(e, _)| *e == entity && measured.size().x > 0.0) {
+            let centre = tf.affine().translation.x;
+            let t = ((pos.x * ui.scale - centre) / measured.size().x + 0.5).clamp(0.0, 1.0);
+            *value = (((min + t * (max - min)) / step).round() * step).clamp(min, max);
+        }
+        for child in children.iter() {
+            if let Ok(mut fill) = fills.get_mut(child) {
+                fill.width = Val::Percent(100.0 * ((*value - min) / (max - min)).clamp(0.0, 1.0));
+            }
+            if let Ok(mut text) = texts.get_mut(child) {
+                let digits = match slider {
+                    CameraSlider::Wheel => 3,
+                    CameraSlider::TiltStart => 2,
+                    _ => 1,
+                };
+                set_text(&mut text, &format!("{value:.digits$}"));
+            }
+        }
+    }
+    if tuning != prefs.camera_tuning {
+        prefs.camera_tuning = tuning;
+        prefs.dirty = true;
+    }
+    if kit::clicked(&ui, &tags) == Some("settings:camera_copy") {
+        let mut values = serde_json::json!(tuning);
+        values["bearing"] = serde_json::json!(cam.shown_yaw.rem_euclid(360.0));
+        let json = serde_json::to_string_pretty(&values).expect("camera tuning is serializable");
+        if !crate::capture::headless() {
+            if let Err(e) = clipboard.set_text(json.as_str()) {
+                warn!("settings: could not copy camera values: {e}");
+            }
+        }
+        let path = crate::keys::path().with_file_name("camera-tuning.json");
+        let result = std::fs::create_dir_all(path.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(std::path::Path::new(".")))
+            .and_then(|_| std::fs::write(&path, json));
+        match result {
+            Ok(()) => info!("settings: wrote camera values to {}", path.display()),
+            Err(e) => warn!("settings: could not write {}: {e}", path.display()),
+        }
+    }
+}
+
 /// The settings file's Play settings, once at start, unless the environment sets them
 /// (`LIVING_GAME_CONTROL`, `LIVING_SIGHT_EDGE`, `LIVING_GAME_LOOK_WALK`, `LIVING_GAME_FILM`,
 /// `LIVING_GAME_HAIR_SHINE`, used by
@@ -363,7 +625,7 @@ pub fn apply_prefs(prefs: Res<Prefs>, mut input: ResMut<crate::controls::Input>,
         return;
     }
     *done = true;
-    if let (Some(p), true) = (prefs.look_walk.as_deref().and_then(crate::twist::LookWalk::preset), std::env::var("LIVING_GAME_LOOK_WALK").is_err()) {
+    if let (Some(p), true) = (prefs.look_walk.as_deref().and_then(|p| crate::twist::LookWalk::parse(p).ok()), std::env::var("LIVING_GAME_LOOK_WALK").is_err()) {
         *lw = p;
     }
     if std::env::var("LIVING_GAME_CONTROL").is_err() {

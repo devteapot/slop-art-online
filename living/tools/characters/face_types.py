@@ -368,6 +368,16 @@ def compose(measured):
                     body=dict(height_m=[round(bh[0] + dh, 2), round(bh[1] + dh, 2), round(bh[2] + dh, 2)], weight=round(bw + dw, 2), muscle=round(bm + dm, 2), head_power=0.6),
                     made_from=f"reference + (pass 2's {band} {dict(f='woman', m='man', u='child')[sex]} − pass 2's adult woman)" + dict(a=" + 0.8 × (sister − reference)", b="", c=" − 0.5 × (sister − reference), lengthened")[line],
                 )
+                # Joint fit of the profile underside and the 40-degree cheek silhouette.
+                jaw = types[tid]["jaw"]
+                jaw.update(angle_z=round(jaw["angle_z"] + 0.100, 3),
+                           angle_back=round(jaw["angle_back"] - 0.041, 3),
+                           curve=0.438, inset=0.506, roll=0.072)
+                section = types[tid]["sections"]
+                for key in ("w15", "w30", "wide"):
+                    for i, height in enumerate(section["z"]):
+                        if section[key][i] is not None:
+                            section[key][i] = round(section[key][i] - 0.039 * max(0, 1 - abs(height - 0.16) / 0.15), 3)
                 # The brow is drawn above the head's own brow line, as the reference's is (brow_lift).
                 types[tid]["brow"]["lift"] = brow_lift(types[tid]["eye"], types[tid]["brow"])
     return types

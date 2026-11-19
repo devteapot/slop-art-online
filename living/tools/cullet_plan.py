@@ -1572,10 +1572,17 @@ def drop_wall(id, lo, hi, axis, edge, a, b, facing, cause, coping=0.12):
     return fixture(id, "retaining_wall", at, (b - a, WALL_D), facing, H[lo], fall + coping, cause, age=0.9, repair=0.5, fall_m=fall, coping_m=coping, lower=lo, upper=hi, ends=[False, False])
 
 
+cover_cliffs = []
+
+
 def face(id, lo, hi, axis, edge, a, b, facing, cause, rock="basalt", **extra):
     """A length of the quarry's face: the raw rock a drop was cut into, not a built wall. It
     stands in the lower level's drop strip like a retaining wall, 1.2 m deep at its foot."""
     fall, depth = H[hi] - H[lo], 1.2
+    # The raw face has a non-walkable Drop strip between the two floors. Top edges
+    # disambiguate it from the town's open overlooks and built terrace risers.
+    points = [[a, edge], [b, edge]] if axis == "x" else [[edge, a], [edge, b]]
+    cover_cliffs.append({"id": id, "points": points, "height_m": r2(fall)})
     out = []
     for k, (u0, u1) in enumerate(sections(a, b, 10.0)):
         mid = (u0 + u1) / 2
@@ -2173,6 +2180,28 @@ for r in [r for r in resources if r["kind"] == "peat_bank"]:
 # Output
 
 
+# Localised dense growth. Keep the Moss road, cottage approach, plot entrances and
+# working beds clear. The kit's low weeds are separate dressing.
+COVER_BRUSH = [
+    {"id": "moss_west_gorse", "area": [[-83, 263], [-72, 260], [-65, 267], [-69, 277], [-80, 275]],
+     "height_m": 1.8, "fill": 0.8},
+    {"id": "moss_east_bracken", "area": [[93, 292], [105, 289], [114, 296], [110, 304], [98, 305]],
+     "height_m": 1.65, "fill": 0.7},
+    {"id": "hanger_west_understorey", "area": [[192, 244], [201, 244], [212, 251], [208, 261], [195, 257]],
+     "height_m": 1.8, "fill": 0.8},
+    {"id": "hanger_east_understorey", "area": [[269, 274], [281, 271], [290, 279], [285, 289], [272, 285]],
+     "height_m": 1.9, "fill": 0.8},
+    {"id": "mid_row_toft_3_brush", "area": [[15.6, 69.8], [17.0, 69.2], [18.6, 70.1], [18.3, 72.4], [15.8, 72.5]],
+     "height_m": 1.7, "fill": 0.75},
+    {"id": "mid_row_plot_toft_3_hedge", "area": rect(15.0, 84.2, 16.3, 88.0),
+     "height_m": 1.8, "fill": 0.85},
+    {"id": "high_row_garden_3_brush", "area": [[12.0, 103.9], [14.7, 103.5], [15.5, 105.9], [14.1, 107.4], [12.0, 106.9]],
+     "height_m": 1.8, "fill": 0.8},
+    {"id": "high_row_plot_garden_3_hedge", "area": rect(11.5, 113.8, 12.9, 117.6),
+     "height_m": 1.8, "fill": 0.85},
+]
+
+
 def plan():
     return {
         "id": "cullet",
@@ -2190,6 +2219,7 @@ def plan():
         "stairs": stairs,
         "lots": lots,
         "resources": resources,
+        "cover": {"brush": COVER_BRUSH, "cliffs": cover_cliffs},
         "structures": structures,
         "household_stores": HOUSEHOLD_STORES,
         "fixtures": fixtures,

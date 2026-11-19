@@ -114,10 +114,10 @@ fn relevant<'a>(model: &'a HudModel, project: impl Fn(Vec3) -> Option<Vec2>) -> 
     if model.death.is_some() {
         return Vec::new();
     }
-    model
+    let mut candidates: Vec<_> = model
         .actors
         .iter()
-        .filter(|a| a.hovered || a.targeted || a.greeted || a.exact.is_some() || a.stance == Stance::Hostile)
+        .filter(|a| a.hovered || a.targeted || a.talking || a.greeted || a.exact.is_some() || a.stance == Stance::Hostile)
         // A speaker's bubble carries the name: a plate that would add nothing else (no health, not
         // hostile) under it only repeats it, which in a crowd doubled every hovered speaker.
         .filter(|a| a.hp.is_some() || a.exact.is_some() || a.stance == Stance::Hostile || !model.bubbles.iter().any(|b| b.speaker == a.id))
@@ -129,8 +129,22 @@ fn relevant<'a>(model: &'a HudModel, project: impl Fn(Vec3) -> Option<Vec2>) -> 
             }
             (alpha >= 0.02).then_some((p, alpha, a))
         })
-        .take(PLATES)
-        .collect()
+        .collect();
+    candidates.sort_by(|(_, _, a), (_, _, b)| {
+        let priority = |a: &Actor| (a.hovered, a.targeted, a.talking, a.stance == Stance::Hostile);
+        priority(b).cmp(&priority(a)).then_with(|| a.distance.total_cmp(&b.distance)).then_with(|| a.id.cmp(&b.id))
+    });
+    let mut placed: Vec<(Vec2, f32, &Actor)> = Vec::new();
+    for (point, alpha, actor) in candidates {
+        if placed.iter().any(|(other, _, _)| (point.x - other.x).abs() < WRAP * 0.6 && (point.y - other.y).abs() < 24.0) {
+            continue;
+        }
+        placed.push((point, alpha, actor));
+        if placed.len() == PLATES {
+            break;
+        }
+    }
+    placed
 }
 
 /// The camera's projection into UI units (Val px): this frame's placement (the camera has no
@@ -167,7 +181,7 @@ pub fn plates(
     }
     for (pn, mut t, mut c) in &mut names {
         if let Some((_, alpha, a)) = shown(pn.0) {
-            set_text(&mut t, &super::label(&a.name));
+            set_text(&mut t, &super::label(a.plate_name()));
             let col = if a.stance == Stance::Hostile {
                 theme::HOSTILE
             } else if a.targeted {

@@ -19,3 +19,6 @@
 | Town life: public `act_card` and `weather` (and `doing` in an open build); admin-only `set_weather` | [town.md](town.md) | `town-public.json`, `reducers.json` |
 
 Run every feature except `game-client` with the automatic recipe in [SKILL.md](../SKILL.md), once per build (the default `scoped` and `LIVING_PERCEPTION=open`; docs/PERCEPTION.md). `game-client` runs the real game client headless against a land world (`--seed island`), as its file describes. The baseline is a fresh `verify-client-*` database launched and checked by the shared harness. The fixed suite requires the primary player to be named `ClientPrimary`. Other identities and fixtures stay within that database.
+
+- [The effective cover policy and private geometry](cover.md)
+- [Gaze projection and privacy](gaze.md)

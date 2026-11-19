@@ -8,7 +8,7 @@ Free: the fake model; scratch `verify-minds-*` databases on the trial stack.
                  [--refill-gap 0.5] [--law NAME=VALUE ...]
 
 Seed `island` (its residents and animals on their own rules). `--battle` minded people
-(`spawn_crowd`) packed within 7 m of the battle site (where `spawn_battle` stages one) fight the
+(`spawn_crowd`) packed onto seed-ordered walkable tiles near the arrival point fight the
 nearest person: strike; dodge or block when threatened; heal below half (knowing
 wound_tending). `--walkers` more walk as foragers. A fighter who dies is replaced (the load
 generator's respawn, counted), unless `--no-refill`: deaths are then permanent, as in the game,
@@ -35,12 +35,14 @@ two windows in a row run below 2 ticks a second (collapse). Evidence:
 """
 import argparse
 import concurrent.futures
+import gzip
 import importlib.util
 import json
 import math
 import os
 import random
 import re
+import signal
 import subprocess
 import sys
 import threading
@@ -48,7 +50,10 @@ import time
 import traceback
 import urllib.request
 from datetime import datetime, timezone
+from functools import lru_cache
 from pathlib import Path
+
+from verify_steering import pose
 
 ROOT = Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location("privacy", ROOT / ".agents/skills/verify-minds/scripts/privacy.py")
@@ -59,6 +64,111 @@ STDB = str(ROOT / "living/tools/stdb")
 URL = os.environ.get("LIVING_STDB_URL", "http://127.0.0.1:3300").rstrip("/")
 TABLES = ["character", "experience", "structure", "skill_use", "deliberation", "familiar", "combat_seen", "chronicle", "thought",
           "mind_state", "far_handle", "act_outcome", "line_heard", "inventory", "body", "vitals", "routine", "slumber", "relation", "judgment"]
+
+
+CONTACT_PERIOD_S = 1.0
+AWAY_RADIUS_M = 15.0
+REENGAGE_S = 10.0
+
+
+def authority_token():
+    result = subprocess.run([STDB, "login", "show", "--token"], capture_output=True, text=True,
+                            check=True, timeout=20)
+    match = re.search(r"eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+", result.stdout)
+    if not match:
+        raise RuntimeError("could not read the scratch database owner's token")
+    return match[0]
+
+
+def authority_sql(run, token, query):
+    """Read an owner-only diagnostic projection without a CLI subprocess per sample."""
+    request = urllib.request.Request(f"{URL}/v1/database/{run.db}/sql", data=query.encode(),
+                                     headers={"Authorization": f"Bearer {token}"})
+    with urllib.request.urlopen(request, timeout=8) as response:
+        result, = json.load(response)
+    names = [element["name"]["some"] for element in result["schema"]["elements"]]
+    return [dict(zip(names, row)) for row in result["rows"]]
+
+
+def initial_formation(run, token, world, count, walkers):
+    """Pick tile centres from the terrain, without depending on moving bodies or reducer RNG."""
+    width, height = world["width"], world["height"]
+    arrival, = run.private("SELECT arrive_x, arrive_y FROM land WHERE id = 0", "battle-arrival")
+    anchor = (arrival["arrive_x"], arrival["arrive_y"] - 20)
+    x0, y0 = map(math.floor, anchor)
+
+    @lru_cache(maxsize=256)
+    def chunk(cx, cy):
+        row, = authority_sql(run, token, f"SELECT tiles FROM terrain_chunk WHERE id = {(cy << 16) | cx}")
+        data = row["tiles"]
+        return bytes.fromhex(data.removeprefix("0x")) if isinstance(data, str) else bytes(data)
+
+    def walkable(x, y):
+        return chunk(x // 16, y // 16)[(y % 16) * 16 + x % 16] in (0, 1, 3, 5, 6)
+
+    candidates = [(x + 0.5, y + 0.5)
+                  for y in range(max(0, y0 - 35), min(height, y0 + 36))
+                  for x in range(max(0, x0 - 35), min(width, x0 + 36))
+                  if walkable(x, y)]
+    candidates.sort(key=lambda p: (math.dist(p, anchor), p))
+    formation_size = max(200, count)
+    if len(candidates) < formation_size:
+        raise RuntimeError("too few walkable tiles for the initial battle formation")
+    site = candidates[0]
+    slots = candidates[:formation_size]
+    rng = random.Random(world["seed"])
+    rng.shuffle(slots)
+    offsite = {}
+    # A separate stream keeps walker positions unchanged across battle sizes.
+    rng = random.Random(f"battle walkers {world['seed']}")
+    for _ in range(walkers * 100):
+        if len(offsite) == walkers:
+            break
+        x, y = rng.randrange(4, width - 4), rng.randrange(4, height - 4)
+        point = (x + 0.5, y + 0.5)
+        if math.dist(point, site) > 45 and walkable(x, y):
+            offsite[point] = None
+    if len(offsite) != walkers:
+        raise RuntimeError("too few walkable tiles for the extra walkers")
+    staging = next(p for p in candidates[formation_size:] if math.dist(p, site) >= 22)
+    return site, slots, list(offsite), staging
+
+
+def capture_combat(run, token, roster, stop, first_ms, path):
+    """Save observations across the entire run, including gaps between profiling windows."""
+    def query(sql):
+        return authority_sql(run, token, sql)
+
+    since = first_ms
+    with gzip.open(path, "wt", compresslevel=3) as stream:
+        while True:
+            loop_start = time.monotonic()
+            at_ms = time.time_ns() // 1_000_000
+            try:
+                bodies = query("SELECT id, x, y, vx, vy, t_ms, next_ms, heading, turn, turn_s FROM body")
+                activities = query("SELECT id, skill, started_ms FROM activity")
+                fighters = roster.copy()
+                uses = query("SELECT id, actor, target, skill, accepted_ms, outcome, outcome_ms "
+                             f"FROM skill_use WHERE accepted_ms >= {since} OR outcome_ms >= {since}")
+                hurt = query("SELECT id, observer, at_ms, text FROM experience "
+                             f"WHERE kind = 'attacked' AND at_ms >= {since}")
+                # Bodies vanish at death. Roster entries persist for event attribution.
+                sample = {"at_ms": at_ms, "fighters": fighters,
+                          "bodies": [b for b in bodies if b["id"] in fighters],
+                          "activities": [a for a in activities if a["id"] in fighters],
+                          "uses": [u for u in uses if u["actor"] in fighters or u["target"] in fighters],
+                          "hurt": [h for h in hurt if h["observer"] in fighters and ": " in h["text"]]}
+                since = max(first_ms, at_ms - 2000)
+            except (OSError, ValueError) as e:
+                sample = {"at_ms": at_ms, "error": str(e)}
+            stream.write(json.dumps(sample, separators=(",", ":")) + "\n")
+            stream.flush()
+            if stop.wait(max(0.0, CONTACT_PERIOD_S - (time.monotonic() - loop_start))):
+                break
+
+
+def interrupted(signum, _frame):
+    raise KeyboardInterrupt(f"signal {signum}")
 
 
 def bench(run, label, seconds):
@@ -208,11 +318,18 @@ def main():
     run = vm.Run(a.run)
     state = {"respawns": 0, "stop": False, "fighters": [], "arriving": {}}
     head = {}
+    roster = {}
+    stop_capture = threading.Event()
+    sampler = keeper = None
+    signal.signal(signal.SIGTERM, interrupted)
     try:
         target = os.environ.get("CARGO_TARGET_DIR")
-        target_arg = ["--target-dir", target] if target else []
-        run.harness("launch", "--seed", "island", "--archive-commitlog", *target_arg)
+        target_args = ["--target-dir", target] if target else []
+        run.harness("launch", "--seed", "island", "--archive-commitlog",
+                    "--driver-pid", str(os.getpid()), *target_args)
+        token = authority_token()
         run.harness("doctor")
+        run.admin("set_paused", True)
         if a.fast_lane:
             run.admin("set_world_law", "fast_lane_on", "true")
         for law in a.law:
@@ -221,11 +338,15 @@ def main():
         # The database's identity by its name (`GET /v1/database/<name>`), not from `spacetime list`.
         ident = database_identity(run.db)
         before = {c["id"] for c in run.sql("SELECT id FROM character", "chars-0")}
-        run.admin("spawn_battle", 1)
-        probe = [c for c in run.sql("SELECT id FROM character", "chars-probe") if c["id"] not in before]
-        site = next(b for b in run.private("SELECT id, x, y FROM body", "bodies-probe") if b["id"] == probe[0]["id"])
-        run.admin("kill", probe[0]["id"], "diag probe")
-        site = (site["x"], site["y"])
+        # Keep the baseline roster export used by the earlier report.
+        run.sql("SELECT id FROM character", "chars-probe")
+        seed, = run.private("SELECT seed, width, height FROM world WHERE id = 0", "battle-seed")
+        site, formation, walker_slots, staging = initial_formation(run, token, seed, a.battle, a.walkers)
+        slots = formation[:a.battle]
+        strike_card, = run.private("SELECT reach FROM skill_card WHERE skill = 'strike'", "battle-reach")
+        if strike_card["reach"] <= 0:
+            raise RuntimeError("strike has no positive reach in the installed rules")
+        rng = random.Random(seed["seed"])
         fight_of = lambda id: [
             {"if": {"cond": {"health": {"below": 50}}, "then": {"do": {"skill": "heal", "target": "self"}}}},
             {"if": {"cond": {"threatened": True}, "then": {"do": {"skill": "dodge" if id % 2 == 0 else "block"}}}},
@@ -243,34 +364,58 @@ def main():
             # Only the ones spawned (a resident's child born meanwhile is new too).
             return sorted(c["id"] for c in run.sql("SELECT id, name, alive FROM character", "chars") if c["id"] not in have and c["name"].startswith("Walker") and c["alive"])
 
-        def fighter(id, arriving=False):
+        def fighter(id, into, origin=None):
             """Set up a fighter: at the site, fighting; or (a refill) `--refill-from` away at a
             random bearing, walking to a spot in the battle, given the fight when it arrives."""
+            run.admin("place_at", id, *(origin if origin else into))
+            run.admin("grant_items", id, "spear", 1)
+            run.admin("grant_know_how", id, "wound_tending")
+            if origin:
+                run.admin("set_behavior", id, json.dumps({"seq": [{"do": {"skill": "goto", "target": {"at": [into[0], into[1]]}}}, {"wait": 60}]}))
+                state["arriving"][id] = into
+            else:
+                run.admin("set_behavior", id, json.dumps(graph(id)))
+
+        def refill(id, into, origin):
             try:
-                into = (site[0] + random.uniform(-7, 7), site[1] + random.uniform(-7, 7))
-                if arriving:
-                    bearing = random.uniform(0, 2 * math.pi)
-                    r = a.refill_from + random.uniform(-3, 3)
-                    run.admin("place_at", id, site[0] + r * math.cos(bearing), site[1] + r * math.sin(bearing))
-                else:
-                    run.admin("place_at", id, *into)
-                run.admin("grant_items", id, "spear", 1)
-                run.admin("grant_know_how", id, "wound_tending")
-                if arriving:
-                    run.admin("set_behavior", id, json.dumps({"seq": [{"do": {"skill": "goto", "target": {"at": [into[0], into[1]]}}}, {"wait": 60}]}))
-                    state["arriving"][id] = into
-                else:
-                    run.admin("set_behavior", id, json.dumps(graph(id)))
+                fighter(id, into, origin)
             except RuntimeError:
-                # Gone before it was set up (killed at once in the press): the keeper replaces it.
+                # A refill can die during setup. The keeper will try a new fighter.
                 pass
 
         made = spawn(a.battle + a.walkers)
-        fighters = made[: a.battle]
+        if len(made) != a.battle + a.walkers:
+            raise RuntimeError(f"spawned only {len(made)} of {a.battle + a.walkers} initial walkers")
+        fighters = made[:a.battle]
+        # The authority snaps a placement if its tile is occupied. Clear the whole
+        # formation, including slots unused by smaller arms, before placing anyone.
+        all_slots = slots + walker_slots
+        assigned = set(formation + walker_slots)
+        ambient_moved = {}
+        at_ms = time.time_ns() // 1_000_000
+        before_formation = run.private(
+            "SELECT id, x, y, vx, vy, t_ms, next_ms, heading, turn, turn_s FROM body",
+            "before-formation")
+        for body in before_formation:
+            x, y = pose(body, at_ms)
+            tile = (math.floor(x) + 0.5, math.floor(y) + 0.5)
+            if tile in assigned:
+                run.admin("place_at", body["id"], *staging)
+                if body["id"] in before:
+                    ambient_moved[body["id"]] = (x, y)
+        for id, into in zip(fighters, slots):
+            fighter(id, into)
+        for id, into in zip(made[a.battle:], walker_slots):
+            run.admin("place_at", id, *into)
+        bodies = {b["id"]: (b["x"], b["y"])
+                  for b in run.private("SELECT id, x, y FROM body", "initial-bodies")}
+        misplaced = [(id, into, bodies.get(id)) for id, into in zip(made, all_slots)
+                     if bodies.get(id) != into]
+        if misplaced:
+            (run.directory / "misplaced.json").write_text(json.dumps(misplaced))
+            raise RuntimeError("the authority could not place every spawned person in their seed-defined slot")
         walkers = set(made[a.battle:])
         state["ever_fighters"] = set(fighters)
-        for id in fighters:
-            fighter(id)
         state["fighters"] = list(fighters)
         if not a.no_mind:
             replies = {"think": {"thought": "diag fixture: I keep fighting.", "intend": [], "say": None, "judgments": []},
@@ -333,6 +478,7 @@ def main():
                                 run.admin("set_behavior", f, json.dumps(graph(f)))
                                 del state["arriving"][f]
                                 state["fighters"].append(f)
+                                roster[f] = time.time_ns() // 1_000_000
                     short = a.battle - len(state["fighters"]) - len(state["arriving"])
                     # As many as the time since the last refill allows, at most one each
                     # `--refill-gap` seconds: a loop of the keeper can take longer than the gap
@@ -344,8 +490,15 @@ def main():
                         # refills below the deaths of a large battle.
                         ids = spawn(n)
                         state["ever_fighters"].update(ids)
+                        setups = []
+                        for id in ids:
+                            into = (site[0] + rng.uniform(-7, 7), site[1] + rng.uniform(-7, 7))
+                            bearing = rng.uniform(0, 2 * math.pi)
+                            distance = a.refill_from + rng.uniform(-3, 3)
+                            origin = (site[0] + distance * math.cos(bearing), site[1] + distance * math.sin(bearing))
+                            setups.append((id, into, origin))
                         with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
-                            list(pool.map(lambda i: fighter(i, arriving=True), ids))
+                            list(pool.map(lambda setup: refill(*setup), setups))
                         state["respawns"] += len(ids)
                         last = time.time() if allowed <= n else last + n * a.refill_gap
                 except Exception as e:
@@ -353,11 +506,20 @@ def main():
                 time.sleep(min(0.5, a.refill_gap))
 
         keeper = threading.Thread(target=keep_battle, daemon=True)
-        keeper.start()
         head = {"arm": a.arm, "fast_real": a.fast_real, "keep_plans": a.keep_plans, "fake_fast_patch": a.fake_fast_patch, "battle": a.battle, "walkers": a.walkers, "refill": not a.no_refill, "refill_from": a.refill_from, "refill_gap": a.refill_gap, "laws": a.law, "site": site, "ambient_at_publish": len(before), "mind": not a.no_mind, "fast_lane": a.fast_lane,
-                "nproc": os.cpu_count(), "db_identity": ident}
+                "nproc": os.cpu_count(), "db_identity": ident, "world_seed": seed["seed"],
+                "layout": [{"id": id, "at": bodies[id]} for id in fighters],
+                "walker_layout": [{"id": id, "at": bodies[id]} for id in made[a.battle:]],
+                "ambient_displaced": [{"id": id, "from": at, "to": bodies.get(id)}
+                                      for id, at in ambient_moved.items()],
+                "minutes": a.minutes, "combat_sampling": {"period_s": CONTACT_PERIOD_S, "away_radius_m": AWAY_RADIUS_M,
+                    "reengage_s": REENGAGE_S, "strike_release_reach_m": strike_card["reach"]}}
         (run.directory / "diag-head.json").write_text(json.dumps(head, indent=1))
         print(json.dumps(head), flush=True)
+        first_ms = time.time_ns() // 1_000_000
+        roster.update(dict.fromkeys(fighters, first_ms))
+        head["started_ms"] = first_ms
+        run.admin("set_paused", False)
         t_start, low, k = time.time(), 0, 0
         first_over = {}
 
@@ -390,11 +552,17 @@ def main():
             with (run.directory / "familiar.json").open("a") as f:
                 f.write(json.dumps(out) + "\n")
             return out
-        while time.time() - t_start < a.minutes * 60:
+        sampler = threading.Thread(target=capture_combat, args=(run, token, roster, stop_capture, first_ms,
+                                  run.directory / "combat-samples.jsonl.gz"))
+        sampler.start()
+        keeper.start()
+        deadline = t_start + a.minutes * 60
+        while time.time() < deadline:
             k += 1
             load0 = os.getloadavg()[0]
-            b, t0 = bench(run, f"{k:02d}", a.window)
-            t1 = t0 + 1.2 + a.window
+            window = min(a.window, max(1, int(deadline - time.time())))
+            b, t0 = bench(run, f"{k:02d}", window)
+            t1 = t0 + 1.2 + window
             d, secs = diag_counts(run, t0, t1 + 1)
             t, sp = b["tick_ms"], b["spans_ms"]
             sample = {"arm": a.arm, "k": k, "t_min": round((t0 - t_start) / 60, 1), "ticks_per_s": b["ticks_per_s"], "tick_p50": t["p50"], "tick_p99": t["p99"], "tick_max": t["max"],
@@ -413,7 +581,7 @@ def main():
                         issued = r["at_ms"]
                     fast.append(issued)
                 w0, w1 = t0 * 1000, t1 * 1000
-                sample["fast"] = {"calls_in_window": sum(1 for x in fast if w0 <= x < w1), "per_s": round(sum(1 for x in fast if w0 <= x < w1) / a.window, 3),
+                sample["fast"] = {"calls_in_window": sum(1 for x in fast if w0 <= x < w1), "per_s": round(sum(1 for x in fast if w0 <= x < w1) / window, 3),
                                   "total": len(fast), "fast_ask_rows": count(run, "fast_ask")}
             # Timed defences (R2's test, docs/COMBAT_MIND.md §4.2): each blow aimed at a fighter in
             # this window, and whether its target's dodge, block or jump began during the windup;
@@ -443,21 +611,45 @@ def main():
             low = low + 1 if b["ticks_per_s"] < 2 else 0
             if low >= 2:
                 print("collapse: two windows below 2 ticks a second", flush=True)
+                head["status"] = "collapse"
                 break
-            time.sleep(max(0, a.period - (time.time() - t0)))
-        head["status"] = "done"
+            time.sleep(max(0, min(deadline, t0 + a.period) - time.time()))
+        head.setdefault("status", "done")
+    except KeyboardInterrupt:
+        head["status"] = "interrupted"
     except Exception as error:
         (run.directory / "failure.txt").write_text(traceback.format_exc())
         head["status"] = f"fail: {type(error).__name__}: {error}"
     finally:
+        # Ignore repeated stop signals while the owner pauses and deletes the world.
+        signal.signal(signal.SIGTERM, signal.SIG_IGN)
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
         state["stop"] = True
+        head["ended_ms"] = time.time_ns() // 1_000_000
+        stop_capture.set()
+        if run.mind and run.mind.poll() is None:
+            run.mind.terminate()
+        if "started_ms" in head:
+            # Stop the tick before waiting for in-flight sampler or keeper queries. The
+            # harness retries the pause and requires its read-back before deleting.
+            req = urllib.request.Request(f"{URL}/v1/database/{run.db}/call/set_paused", data=b"[true]",
+                                         headers={"Authorization": f"Bearer {token}",
+                                                  "Content-Type": "application/json"})
+            try:
+                with urllib.request.urlopen(req, timeout=8):
+                    pass
+            except OSError:
+                pass
+        if sampler and sampler.ident is not None:
+            sampler.join()
+        if keeper and keeper.ident is not None:
+            keeper.join()
         # The last read of `familiar`, before cleanup deletes the world.
         if a.familiar and "familiar_sample" in locals():
             try:
                 familiar_sample("final")
             except Exception as e:
                 (run.directory / "familiar-final-error.txt").write_text(str(e))
-        # The harness confirms the pause and archives the commitlog before deletion.
         (run.directory / "diag-result.json").write_text(json.dumps(head, indent=1))
         run.finish_cleanup()
         print(json.dumps(head), flush=True)

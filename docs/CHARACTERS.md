@@ -205,7 +205,7 @@ A pass is also published through the asset board, the record of which version th
 
 `just living-town .local/town` runs `town.py`; `just living-people` runs `gen_person.sh`. A pass's own report page is written by `living/tools/characters/report.py` from the board's media and a notes file.
 
-`gen_person.sh` needs Blender and, for clips, the Kimodo library's takes. The library is `KIMODO_DIR` when set, else its home `.local/kimodo/library`, else `.local/kimodo/outputs/library` (a machine's own renders, which may be behind); the batch log says which was used ("gen_person: the clip library is …"). It bakes the whole library unless `ONLY` names clips. `ONLY=present` bakes every entry whose take is there, for a machine whose copy of the library is behind `clips.json`. The bake reads one take an entry, the picked one (`pick`, a seed) and the neutral pose's; an entry's other seeds are the candidates it was picked from. The log names every entry whose picked take is missing, with a count, and counts the candidates that are not there without naming them: a warning, not a failure. Until 2026-11-13 `present` asked for every seed of an entry, so a library holding only the picks lost entries without an error: the dev-box's two copies hold the picked take of every entry, and every candidate of only 30 of the 86 entries (`outputs/library`) or 67 (`~/archive/clip-library`), and its clip file had 29 clips, with none for backing, strafing, the diagonals or turning. With the rule as it is now the same libraries give 84. The photographs need the game's release build; `view_assets.sh` honours a private `CARGO_TARGET_DIR`. A person takes about 6 s to generate; adding two clips takes about 6 s more and 30 clips about 15 s. 64 people with `idle` and `walk` and their photographs took 5 minutes with six jobs on a loaded dev-box (pass 2, 2026-11-11; hair adds under a second a person). With the far models as well (pass 3), the 64 took 6 minutes to build and page, and their photographs 7 more.
+`gen_person.sh` needs Blender and, for clips, the Kimodo library's takes. The library is `KIMODO_DIR` when set, else its home `.local/kimodo/library`, else `.local/kimodo/outputs/library` (a machine's own renders, which may be behind); the batch log says which was used ("gen_person: the clip library is …"). It bakes the whole library unless `ONLY` names clips. `ONLY=present` bakes every entry whose take is there, for a machine whose copy of the library is behind `clips.json`. The bake reads each entry's picked take (`pick`, a seed), the neutral pose and, for the three ground seats, their shared `ground_seat` pose (`sit_ground_pose_s1.npz`, frame 45); an entry's other seeds are the candidates it was picked from. The log names every entry whose picked take is missing, with a count, and counts the candidates that are not there without naming them: a warning, not a failure. Until 2026-11-13 `present` asked for every seed of an entry, so a library holding only the picks lost entries without an error: the dev-box's two copies hold the picked take of every entry, and every candidate of only 30 of the 86 entries (`outputs/library`) or 67 (`~/archive/clip-library`), and its clip file had 29 clips, with none for backing, strafing, the diagonals or turning. With the rule as it is now the same libraries give 84. The photographs need the game's release build; `view_assets.sh` honours a private `CARGO_TARGET_DIR`. A person takes about 6 s to generate; adding two clips takes about 6 s more and 30 clips about 15 s. 64 people with `idle` and `walk` and their photographs took 5 minutes with six jobs on a loaded dev-box (pass 2, 2026-11-11; hair adds under a second a person). With the far models as well (pass 3), the 64 took 6 minutes to build and page, and their photographs 7 more.
 
 ## A person's parameters
 
@@ -1973,10 +1973,48 @@ The body pass, second part (2026-11-12, branch `char-4-body`): how the jersey, s
 
 **What still separates our clothes from the reference's,** ordered by how much it shows:
 
-1. **Nothing moves by itself.** A skirt follows the thighs and the hips by weights; it does not swing, lag or settle. The reference's skirt is on spring bones. Ours could be: the hair's spring groups and the back's spheres are the same machinery.
+1. **Nothing moves by itself.** A skirt follows the thighs and the hips by weights; it does not swing, lag or settle. The reference's skirt is on spring bones. Ours could be: the hair's spring groups and the back's spheres are the same machinery. (Done for smocks and aprons: [spring skirts](#spring-skirts).)
 2. **The cut.** A smock is still one bell from the waist and a coat a fitted tube; there is no seam, pleat, pocket or lapel that is modelled, only painted bands and patches.
 3. **Sleeves** are smooth tubes with no fold at the elbow, and on a woman's form the sleeve's head stands a little proud of the narrow shoulder.
 4. **Boots** are a man's sea boots made narrower.
+
+### Sitting
+
+Shared outfits use the trousers' thigh share around the hip crease. The jersey takes it at its tucked hem. The smock, apron and coat blend into their existing skirt weights below the seat. A raised crotch has a longer transition so the smock's front can still span the thighs in a brisk stride. The 28 rebuilt outfits have the same joint names and near/far vertex and triangle counts as the shipped pieces.
+
+On the dev-box, `BLENDER=$HOME/.local/share/slop-tools/build-bin/blender JOBS=2 living/tools/blender/gen_person.sh --outfits` rebuilds and stamps the pieces. Run `python3 living/tools/characters/look_lines.py wear --check living/game/assets/lookdev/styles` before measuring. The cloth checker rejects pieces missing either wear field.
+
+Measured on Cullet's 64 residents and 23 test lines, with the same before and after lines and 24 evenly spaced frames per clip. Counts are distinct wearers with at least one crossing over 2 mm anywhere in the clip. Depth is the largest positive outward distance measured. The checker searches within 40 mm, so results near 40 mm cannot establish the full depth. It checks the near cloth mesh.
+
+| Clip | Wearers before | Wearers after | Worst before (mm) | Worst after (mm) |
+|---|---:|---:|---:|---:|
+| sit_down | 87 | 79 | 39.57 | 39.57 |
+| sit_idle | 8 | 2 | 35.50 | 34.50 |
+| stand_up | 87 | 82 | 39.46 | 39.06 |
+| sit_ground_down | 87 | 87 | 39.80 | 39.95 |
+| sit_ground | 87 | 82 | 39.98 | 39.97 |
+| stand_up_ground | 87 | 87 | 39.90 | 39.80 |
+| walk | 0 | 0 | 0 | 0 |
+| walk_brisk | 11 | 9 | 7.68 | 7.68 |
+| run | 1 | 1 | 2.02 | 2.02 |
+
+Each cell below counts wearers for that inner and outer piece, before → after. A wearer can appear in several columns. The coat jersey is the cut specifically for wearing under a coat.
+
+| Clip | Jersey → trousers | Coat jersey → coat | Coat jersey → trousers | Smock → apron | Trousers → apron | Trousers → coat | Trousers → smock |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| sit_down | 20→19 | 17→15 | 27→27 | 27→22 | 8→14 | 27→19 | 40→15 |
+| sit_idle | 2→0 | 3→1 | 1→0 | 0 | 1→1 | 2→1 | 3→1 |
+| stand_up | 20→20 | 20→10 | 27→27 | 19→19 | 17→11 | 27→26 | 40→20 |
+| sit_ground_down | 20→20 | 27→27 | 27→27 | 24→27 | 27→27 | 27→27 | 40→40 |
+| sit_ground | 20→16 | 17→12 | 27→23 | 19→19 | 10→16 | 27→23 | 40→39 |
+| stand_up_ground | 20→20 | 27→27 | 27→27 | 23→21 | 26→27 | 27→27 | 40→40 |
+| walk | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| walk_brisk | 0 | 0 | 1→0 | 0 | 3→3 | 0 | 10→9 |
+| run | 0 | 0 | 0 | 0 | 0 | 0 | 1→1 |
+
+At each wearer's deepest sampled bend, crossings persist on 58 of 87 sitting down on a chair, 57 standing up from it, 83 sitting down on the ground, and 87 rising from the ground. Across the three gaits nobody acquired a new crossing over 2 mm or a worse maximum above that threshold. All 87 passed the separate rest, idle and walk check at its default 16 frames per animated clip.
+
+`cloth_check.py LINE --clip sit_idle,sit_ground --frames 24` also reports seat-top, seat-back and ground depths. `--chair 5` makes contact beyond 5 mm fail independently of the cloth-to-cloth threshold. The chair is an analytical reference inferred from the posed trousers and knees. All 40 smock wearers and 27 coat wearers still crossed both chair surfaces. Their worst-frame seat depths ranged from 44.4 to 148.5 mm for smocks and 69.1 to 103.3 mm for coats. Their back depths ranged from 108.5 to 123.7 mm and 113.3 to 134.3 mm respectively. Client-side contact handling is a separate stage.
 
 ### The body: the landing
 
@@ -2165,6 +2203,70 @@ No line and no key changes: a line names its style, and the styles keep their na
 **The check.** `fringe_check.py LOOKDEV` fails if a type's file or a style lacks the bone, if a type's fullest fringe ends below its brows' top or more than 6 mm above, if a style ends more than 3 mm from where it ends on the standard head, or if a fringe's vertex is behind the face's skin. `--table` prints the measures for files from before the bone. `person_check.py` knows the bone's rule.
 
 **What still separates ours from the reference's fringe:** its locks are even triangles where the reference's are curved and of several lengths; `tousled` and `short` end 14 to 20 mm above the brows in the middle, where a notch of the hem falls, with their points lower at the sides; a person's own `brow_height` (2.4 mm down to 4.1 mm up) is not followed, so a full fringe can lie over the tops of high brows; from above, as the game's camera looks, a full fringe covers the brows' upper edge.
+
+### Spring skirts
+
+2026-11-13, branch `char-4-skirts`, on top of [the fringe per type](#the-fringe-per-type). A skirt followed the thighs and the hips by weights and did not swing, lag or settle; the reference's skirt is on spring bones. **It needs one change in the client before its files can be used** (below): not merged or bundled until that is on main.
+
+**How the reference does it** (read from Shino's file): six spring bones, three under each `J_Bip_*_UpperLeg` (front, side, back), one joint each with an end bone; one spring group (stiffness 0.5, drag 0.05, no gravity, hit radius 2 cm); three spheres of 8.1 cm on each upper leg.
+
+**Ours** (`person.py`: `SKIRT_SPRING`, `skirt_shares`, `add_skirt_bones`, `skirt_block`):
+
+- **The same layout and names** in the files that hold a skirt, the 12 `smock_*` and `apron_*` pieces and a whole person in a smock: `J_Sec_L_SkirtFront`, `…Side`, `…Back` and the right side's, under the upper legs, standing on the skirt's own surface 7 cm below the hip joint. A smock and its apron name the same bones at the same places, so a person wearing both has one set.
+- **A long skirt's chains have two joints** (the second at 0.66 m, `…Front2`: hems at 0.50 and 0.58 m); a short one's (hem 0.74 m) one joint and an end bone. Twelve bones either way, all twelve simulated by the client (it simulates a chain's last bone too).
+- **Weights.** Below 0.86 m a skirt vertex's share of a thigh passes to that thigh's spring bones, all of it 10 cm lower, by where round the leg the vertex is (front to 45°, back from 135°, the side between, blended over 36°). The hips' share stays. Four bones a vertex: a share too many joins the largest of the same thigh's.
+- **At rest it is the skirt as it was.** The bones are the thigh's children, so where the client simulates nothing (a far character, one past the budget) the skirt is exactly the skirt without them. `cloth_check.py` now carries a piece's own bones on their parents, as the client does.
+- **The spring group:** stiffness 8, drag 0.7, no gravity, hit radius 2 cm; four spheres down each upper leg, each the leg's own size there. No gravity, as the reference: a skirt keeps the place its thigh gives it and lags and swings about that, so a seated person's skirt lies on the thighs as it does unsimulated and nothing new hangs through a seat.
+- **Coats are not changed:** a coat's skirt is open in front and still follows by weights.
+
+**Tuned by simulation** (`cloth_check.py --springs`: the client's own spring step, `characters.rs` `Springs::simulate`, played through a clip a sixtieth of a second a step, a loop measured on its second turn; `--spring STIFFNESS,DRAG` tries other values). At the reference's kind of values (0.8 and 0.3) the hem trailed the thigh by 13 to 24 cm and the thigh came through by 16 to 27 mm in a brisk walk and a run. At 8 and 0.7, on Cullet's 64 and 23 test lines:
+
+| People with something through by more than 2 mm, of 87; the most | Unsimulated | Simulated |
+|---|---|---|
+| At rest, idle, walk | 0 | 0 |
+| Brisk walk | 13; 7.6 mm | 15; 9.4 mm |
+| Run | 1; 2.0 mm | 2; 4.0 mm |
+| Sitting down | 86; 39.2 mm | 86; 39.2 mm |
+| Seated | 8; 35.5 mm | 8; 35.5 mm |
+
+- The sitting faults are the ones the cloth part left open (a seated thigh through the skirt's front); the springs neither mend nor worsen them.
+- How far the springs carry the hem from where it rides unsimulated: on a woman in a knee-length smock 30 mm in the walk, 49 in a brisk walk, 69 in a run, 13 sitting down, 2 seated; on a child 18, 29, 41; on a man's short smock 7, 11, 15.
+
+**The cost.**
+
+| | Before | After |
+|---|---|---|
+| Bones in a skirted piece's file | 81 | 94 (12 for the skirt, and the fringe's, which every file built since has) |
+| A composed skirt wearer's joints | 82 | 94 |
+| Vertices and triangles, the 12 files | 20,230; 35,900 | the same |
+| Bones a vertex | 4 | 4 |
+| The 12 files | 2.02 MB | 2.06 MB |
+| Spring joints among Cullet's 64 | 123 (hair) | 471 (348 on 29 skirt wearers) |
+
+- **The springs run in the client every frame**, not baked: its fixed 60 Hz step for the nearest 48 characters within 40 m.
+- **Measured** (`crowd.py`, Cullet's 64 as whole files at the game camera, a loaded machine): 33 characters and 302 joints simulated a frame, **0.13 ms a frame** for all springs, hair and skirts, 2.4 to 2.6 µs of CPU a character-step. Under heavier load, with 1.7 steps a frame, 0.36 ms. Three quarters of the joints are skirts', so the skirts are about 0.1 ms of it. Frame time with springs on and off differed by less than the runs' own noise (12.6 to 13.4 ms on the quiet pair).
+
+**What the client needs: one condition in `characters.rs` `shape`.** For a bone with a scale of its own (an upper leg takes girth, length, girth) the client scales the bone's vertices through a helper joint and multiplies its children's offsets by the scale; a child bone's own vertices get no scale. A spring bone that carries cloth lying on the scaled bone must take that scale as its own:
+
+```rust
+tf.translation = info.rest.get(cn.as_str()).map_or(tf.translation, |r| *r + belly) * v;
+if cn.as_str().starts_with("J_Sec_") {
+    tf.scale = v;
+}
+```
+
+- The spring step already keeps a joint's rest scale, and a second joint takes it through the hierarchy. The patch is `~/archive/deliverables/char-4-skirts-client-spring-scale.patch`, tested on the dev-box in a local build and not committed here.
+- **Without it the new files are wrong at rest too,** simulated or not, on every wearer whose legs are scaled:
+
+| Wearer | Smock | Hem above the floor: file before | new file, client with the change | new file, today's client | Width at the hem: before | with the change | today's client | Trousers through the smock at rest, today's client |
+|---|---|---|---|---|---|---|---|---|
+| a standard woman (legs 1.075): amara-okoro | `smock_58-f` | 555 mm | 555 mm (-0.0) | 572 mm (+17.0) | 548 mm | 548 mm (-0.0) | 544 mm (-3.5) | 0.0 mm (with the change 0.0) |
+| a child (legs 0.66): dory-tarn | `smock_58-m` | 672 mm | 672 mm (-0.0) | 595 mm (-77.2) | 504 mm | 504 mm (-0.0) | 499 mm (-5.0) | 0.0 mm (with the change 0.0) |
+| a heavy man (girth 1.207): benedikt-orme | `smock_74-m` | 736 mm | 736 mm (-0.0) | 736 mm (-0.0) | 501 mm | 501 mm (+0.0) | 493 mm (-7.6) | 0.0 mm (with the change 0.0) |
+
+- With the change the hem and the width are the file's from before to a tenth of a millimetre. The VRoid bases' own spring skirts have the same fault whenever a recipe scales the legs, and the change mends that too (`character:body-skirts`, the `vroid` sheet).
+
+**What still separates our skirts from the reference's:** the skirt is six hinged panels, not cloth: it swings and lags but does not fold or drape; with no gravity it lifts with a raised thigh as it did; sitting is as the cloth part left it; a coat's skirt does not move.
 
 ### The neck
 
@@ -2913,6 +3015,9 @@ What pass 2 proposed, in order of gain, and what became of it:
 1. **Hair.** Close up it looks washed out and half transparent in every shot, and its finish is as it was: a blocky fringe, ragged ends, gaps at the temple on the new head. Next.
 2. **The eyes' drawing:** thin lash lines and a plainer iris. Step 6.
 3. **The jaw's line does not hold at a distance.** Close up the shell line marks the jaw, the chin and the ears, lightly; at the game camera it is gone on the near head and a single darker pixel row on the far one, where the reference's whole figure is carried by its outline. A line in screen pixels is the client's ([lines](#lines-where-the-form-turns)).
+
+   **Far crown outline, laptop follow-up (2026-11-18).** Stock flat darkens the crown; real depth adds little and brings interior artefacts. At the Near camera stop with both residents on far LOD, stock flat darkened 55 of 65 sampled crown pixels on the braid and 25 of 65 on tousled hair by at least 20 luma levels against shell-off. Real depth darkened 60 and 41 respectively, with marks inside the hair and hands showing through clothing on turns. The earlier dev-box zero was specific to its crown crop. Moving the flat depth plane introduced chest or face contours, and isolating stencils found no removable crown occluder. Keep stock flat. Gameplay readability work uses the painted far-eye band and the cap of eight near models. A separate far-head mesh awaits owner play-test feedback.
+
 4. **Lips and blush are painted into the skin.** Step 6.
 5. **Clothes and silhouette, hands** (unchanged).
 

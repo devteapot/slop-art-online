@@ -8,6 +8,7 @@
 # Both copies are finished the same way (shading data, the person's identity on the bones); the
 # one under anim/ has the clips.
 # Usage: living/tools/blender/gen_person.sh [PERSON ...]     (default: the presets)
+#   --outfits           rebuild the shared outfit pieces and stamp their wear metadata
 #   PERSON is [NAME=]SPEC. SPEC is a preset (man, woman, elder, youth, boy, girl, heavy), `<seed>:<kind>` (kind: man,
 #   woman, elder_man, elder_woman, boy, girl), a seed alone, or a parameter file (*.json). NAME
 #   defaults to the spec (a file's own name).
@@ -41,6 +42,9 @@
 #                       machine whose copy of the library is behind clips.json
 set -euo pipefail
 cd "$(dirname "$0")/../../.."
+if [[ "${1:-}" == --outfits ]]; then
+  exec living/tools/blender/gen_styles.sh outfit
+fi
 src=living/game/assets/lookdev
 blender=${BLENDER:-blender}
 animate=${ANIMATE:-living/tools/blender/animate.py}
@@ -57,9 +61,9 @@ if [ "$clips_baked" = 1 ]; then
   echo "gen_person: the clip library is $kimodo" >&2
   # The takes the bake reads and the library does not hold, by name. A warning: a machine may
   # hold a part of the library. The bake reads one take an entry, the picked one (`pick`, a
-  # seed), and the neutral pose's; an entry's other seeds are the candidates it was picked
+  # seed), and any shared neutral or ground seat pose; an entry's other seeds are the candidates it was picked
   # from, kept for review, and a library may hold only the picks. They are counted, not named.
-  python3 - "$kimodo" "$only" >&2 <<'PY'
+  present=$(python3 - "$kimodo" "$only" <<'PY'
 import json, os, sys
 d, only = sys.argv[1], sys.argv[2]
 have = set(os.listdir(d)) if os.path.isdir(d) else set()
@@ -69,27 +73,34 @@ wanted = None if only in ("", "present") else set(only.split(","))
 if lib.get("neutral"):
     name, seed = lib["neutral"].split("@")[0].split("#")
     if f"{name}_s{int(seed)}.npz" not in have:
-        print(f"gen_person: warning: the neutral pose's take {name}_s{int(seed)}.npz is missing from {d}: no clip can be baked")
+        print(f"gen_person: warning: the neutral pose's take {name}_s{int(seed)}.npz is missing from {d}: no clip can be baked", file=sys.stderr)
 lost, spare = [], 0
+present = []
 for c in clips:
-    if (wanted is not None and c["name"] not in wanted) or "keyed" in c or "overlay" in c:
+    if wanted is not None and c["name"] not in wanted:
         continue
-    if f"{c['name']}_s{c['pick']}.npz" not in have:
+    if "keyed" in c or "overlay" in c:
+        present.append(c["name"])
+        continue
+    required = [f"{c['name']}_s{c['pick']}.npz"]
+    if "ground_seat" in c:
+        name, seed = c["ground_seat"].split("@")[0].split("#")
+        required.append(f"{name}_s{seed}.npz")
+    missing = [path for path in required if path not in have]
+    if missing:
         lost.append(c["name"])
-        print(f"gen_person: warning: {c['name']}: its take {c['name']}_s{c['pick']}.npz is missing from {d}" + ("; the entry is not baked (ONLY=present)" if only == "present" else ""))
+        print(f"gen_person: warning: {c['name']}: missing {', '.join(missing)} from {d}" + ("; the entry is not baked (ONLY=present)" if only == "present" else ""), file=sys.stderr)
+    else:
+        present.append(c["name"])
     spare += sum(f"{c['name']}_s{s}.npz" not in have for s in c.get("seeds", []) if s != c["pick"])
 n = len(clips) if wanted is None else sum(c["name"] in wanted for c in clips)
-print(f"gen_person: {len(lost)} of {n} entries have their take missing from {d}" + (": " + ", ".join(lost) if lost else "") + f"; {spare} candidate takes that were not picked are not there either (the bake does not read them)")
-PY
-fi
-if [ "$only" = present ]; then
-  only=$(python3 - "$kimodo" <<'PY'
-import json, os, sys
-have = set(os.listdir(sys.argv[1]))
-clips = json.load(open("living/tools/blender/clips.json"))["clips"]
-print(",".join(c["name"] for c in clips if c.get("kind") != "pose" and ("keyed" in c or "overlay" in c or f"{c['name']}_s{c['pick']}.npz" in have)))
+print(f"gen_person: {len(lost)} of {n} entries have their take missing from {d}" + (": " + ", ".join(lost) if lost else "") + f"; {spare} candidate takes that were not picked are not there either (the bake does not read them)", file=sys.stderr)
+print(",".join(present))
 PY
 )
+fi
+if [ "$clips_baked" = 1 ] && [ "$only" = present ]; then
+  only=$present
   echo "gen_person: baking the $(echo "$only" | tr ',' '\n' | wc -l) library entries whose take is in $kimodo" >&2
 fi
 people=("$@")

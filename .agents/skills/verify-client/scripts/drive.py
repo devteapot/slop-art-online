@@ -54,7 +54,7 @@ BASE_QUERIES = [
 ]
 # Private in every build: the authority's bookkeeping and developer audit truth
 # (docs/PERCEPTION.md). The observer and the mind service read them as the database owner.
-PRIVATE = ['fast_ask', 'far_handle', 'slumber', 'land_plan', 'clock', 'steer', 'walk_route', 'rot', 'wake', 'familiar', 'last_look', 'deliberation', 'rearing',
+PRIVATE = ['attention', 'applied_gaze', 'cover_ground', 'fast_ask', 'far_handle', 'slumber', 'land_plan', 'clock', 'steer', 'walk_route', 'rot', 'wake', 'familiar', 'last_look', 'deliberation', 'rearing',
            'known_ground', 'remembered', 'ground_edit', 'seen_structures',
            'act_queue', 'pasture', 'tick_timer', 'slow_timer', 'infant_cry',
            'combat_seen', 'fight_seen', 'missile', 'skill_use', 'readiness', 'skill_code',
@@ -112,18 +112,18 @@ SCOPED = ['body', 'character', 'fighter', 'doing', 'vitals', 'experience', 'plac
 # The per-sender views: what a player perceives and its own state.
 VIEWS = ['seen_bodies', 'seen_characters', 'seen_fighters', 'seen_doing', 'my_body', 'my_fighter', 'my_doing', 'my_characters',
          'my_vitals', 'my_experience', 'my_places', 'my_inventory', 'my_know_how',
-         'my_deliberations', 'my_combat', 'my_readiness', 'my_skill_uses', 'my_records', 'my_offers', 'heard_sounds', 'my_heard', 'my_senses', 'my_earshot', 'my_act_outcomes', 'my_known_names', 'my_sex']
+         'my_deliberations', 'my_combat', 'my_readiness', 'my_skill_uses', 'my_records', 'my_offers', 'heard_sounds', 'my_heard', 'my_senses', 'my_senses_v2', 'my_earshot', 'my_act_outcomes', 'my_known_names', 'my_sex']
 SEEN = ['seen_bodies', 'seen_characters', 'seen_fighters', 'seen_doing']
 # The player's own living character's body, fighter and doing rows (others' come as copies in seen_*).
 BODY = ['my_body', 'my_fighter', 'my_doing']
-OWN = BODY + ['my_characters', 'my_vitals', 'my_experience', 'my_places', 'my_inventory', 'my_know_how', 'my_offers', 'my_heard', 'my_senses', 'my_earshot', 'my_act_outcomes', 'my_known_names', 'my_sex']
+OWN = BODY + ['my_characters', 'my_vitals', 'my_experience', 'my_places', 'my_inventory', 'my_know_how', 'my_offers', 'my_heard', 'my_senses', 'my_senses_v_2', 'my_earshot', 'my_act_outcomes', 'my_known_names', 'my_sex']
 OPAQUE = {4, 7}             # rock, wall (living_rules::map::Terrain); a drop (8) and a low thing (9) are see-through
 UNWALKABLE = {2, 4, 7, 8, 9}  # water, rock, wall, drop, low
 # The player's combat input (docs/COMBAT.md): refusals are recorded and told through
 # `my_combat`, so these calls succeed for any living character.
 PLAYER = {'use_skill': ['strike', 0, 0.0, 0.0], 'release_skill': ['block'],
           # The player's look (fov-1): any living character may send it.
-          'human_face': [1.0, 0.0]}
+          'human_face': [1.0, 0.0], 'human_gaze': [1]}
 MIND = ['mind_routines', 'mind_install', 'mind_install_way', 'mind_say', 'mind_act', 'mind_skip',
         'mind_consolidated', 'mind_update', 'mind_judged', 'mind_where']
 # The fast lane's answers (docs/FAST_LANE.md): for an open request only, which exists only for a
@@ -485,7 +485,8 @@ class Run:
             self.call(label, token, 'human_speak', ['VERIFY_CLIENT_SPOKEN_' + label, 0, 'say'])
             self.call(label, token, 'human_speak', ['probe', 0, 'no_such_way'], 'no way of speaking called `no_such_way`')
             for reducer, args in PLAYER.items():
-                self.call(label, token, reducer, args)
+                refusal = 'gaze is disabled' if reducer == 'human_gaze' else None
+                self.call(label, token, reducer, args, refusal)
         for reducer, args in ADMIN.items():
             self.call('anonymous-http-no-token', None, reducer, args, 'admin only')
         for reducer in MIND + FAST:
@@ -754,6 +755,7 @@ class Run:
                     and {h['speaker'] for h in p['my_heard']} <= mine
                     # My senses: exactly one row, my character's, with the law's sight and hearing.
                     and [s['id'] for s in p['my_senses']] == sorted(mine) and all(s['sight'] > 0 and s['hearing'] > 0 for s in p['my_senses'])
+                    and not p['my_senses_v_2']  # Gaze ships disabled.
                     # My earshot: at most one row, my character's, naming only people my character sees.
                     and {r['id'] for r in p['my_earshot']} <= mine and all(set(h for w in r['ways'] for h in w['hearers']) <= set(p['seen_characters']) for r in p['my_earshot'])
                     # My outcomes: only my character's, each keyed by a line of my_experience.

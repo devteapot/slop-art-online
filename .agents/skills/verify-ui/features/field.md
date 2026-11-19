@@ -1,6 +1,6 @@
 # Facing sight (the field of view)
 
-While the world's `fov_on` law is on, what a character sees depends on where its body faces (`living_rules::sight::sees`, docs/PERCEPTION.md "The field of view"). The client draws the same rule from the same law:
+With gaze disabled, turning on the world's `fov_on` law makes what a character sees depend on where its body faces (`living_rules::sight::sees`, docs/PERCEPTION.md "The field of view"). The client draws the same rule from the same law. When gaze is enabled, the owner receives the effective field through `my_senses_v_2`. [Gaze scenario](gaze.md).
 
 - `living/game/src/sightedge.rs`: my senses are the authority's `my_senses` row (sight, hearing and, while `fov_on` is on, the field's five values: `focal_deg`, `side_deg`, `side_share`, `near_m`, `margin_deg`). Without the row (before it arrives, or while minds hold the character) the client asks the installed script's `senses(a)` for the sight only, with no field.
 - `living/game/src/sightfield.rs`: the field texture is the sight lines AND `sight::reach` at each texel's angle off `body.heading`. The facing comes from my own `my_body` row: `steer::facing` over `steer::pose`'s travel heading and look-2's `face_off`/`face_turn`/`face_turn_s`, as the authority's `common::facing_at`. It is recomputed on a 2° turn, as well as on the old triggers. With no field it is exactly the old field.

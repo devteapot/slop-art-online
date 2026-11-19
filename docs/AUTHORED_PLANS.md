@@ -178,6 +178,8 @@ The plan rides in `land.params` and the existing rows; no table, column, reducer
 
 Phase 2 of [the small city](SMALL_CITY.md#8-build-plan) (2026-11-11, branch `plan-2`). The source is [`living/tools/cullet_plan.py`](../living/tools/cullet_plan.py): it computes every lot, its height and its asset generator inputs, and writes [`living/seeds/worlds/cullet/plan.json`](../living/seeds/worlds/cullet/plan.json) (the plan, with the fields the engine ignores) and [`living/seeds/cullet.json`](../living/seeds/cullet.json) (seed 83 at 1024 m: the land, the plan merged into `map.params.plans`, a town with five named buildings and no people). Edit the script, not the files; `--check` says whether they are current. `living/game/assets/envs/cullet.json`'s `world` names seed 83 at 1024 m.
 
+[Cullet cover authoring](CULLET_COVER.md) records the plan's brush polygons, quarry edges and route-readability check for the coming cover law.
+
 **Layout pass 1 (2026-11-11, branch `layout-1`): [Cullet's layout](CULLET_LAYOUT.md).** The plan below was redrawn after the owner's first walk. What is current, where it differs from the grey city's paragraphs that follow:
 
 - **Levels.** 13: the Strand, the mole, Low, Mid and High Row, the upper terrace and the Crown as before, but ending at x −84 in the west (High Row's at x 70 in the east; the Crown with a 12 m ledge over the Ladder); three new ones, `lad_1` (+7.5), `lad_2` (+11.5) and `lad_3` (+15.5), the back halves of the Rows' bands between x −84 and −19.5; and the three outlying pads. Levelled ground is 3.6 ha (was 5.9 ha).

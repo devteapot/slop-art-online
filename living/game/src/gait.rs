@@ -459,13 +459,22 @@ impl Gaits {
     /// right) would fall back: the caller falls back to the forward gaits along the travel, so
     /// both sides always look alike.
     pub fn blend_toward(&self, speed: f32, stride: f32, family: Family, travel: f32, len: impl Fn(usize) -> f32 + Copy) -> Option<Blend> {
+        self.directional(speed, stride, family, travel, len, true)
+    }
+
+    /// Cursor holds the legs on the look even when the directional take has a short stride.
+    pub fn blend_cursor(&self, speed: f32, stride: f32, family: Family, travel: f32, len: impl Fn(usize) -> f32 + Copy) -> Option<Blend> {
+        self.directional(speed, stride, family, travel, len, false)
+    }
+
+    fn directional(&self, speed: f32, stride: f32, family: Family, travel: f32, len: impl Fn(usize) -> f32 + Copy, limit_cadence: bool) -> Option<Blend> {
         let family = family.settled();
-        let b = self.blend_side(speed, stride, family, travel, len)?;
-        self.blend_side(speed, stride, family, -travel, len)?;
+        let b = self.blend_side(speed, stride, family, travel, len, limit_cadence)?;
+        self.blend_side(speed, stride, family, -travel, len, limit_cadence)?;
         Some(b)
     }
 
-    fn blend_side(&self, speed: f32, stride: f32, family: Family, travel: f32, len: impl Fn(usize) -> f32 + Copy) -> Option<Blend> {
+    fn blend_side(&self, speed: f32, stride: f32, family: Family, travel: f32, len: impl Fn(usize) -> f32 + Copy, limit_cadence: bool) -> Option<Blend> {
         let fwd = self.blend(speed, stride, family, len);
         let deg = {
             let d = travel.to_degrees().rem_euclid(360.0);
@@ -526,7 +535,7 @@ impl Gaits {
             b.parts[k] = (i, w / sum);
             b.cycle_m += w / sum * cycle(i);
         }
-        (fwd.cycle_m <= CADENCE_MAX * b.cycle_m).then_some(b)
+        (!limit_cadence || fwd.cycle_m <= CADENCE_MAX * b.cycle_m).then_some(b)
     }
 
     /// Midway between the walking clips' fastest natural speed and the running clips' slowest
@@ -742,7 +751,7 @@ fn record(
     roam: Res<crate::envs::Roam>,
     scene: Option<NonSend<crate::world::Scene>>,
     camera: Query<&GlobalTransform, With<Camera3d>>,
-    (input, net): (Option<Res<crate::controls::Input>>, Option<NonSend<crate::net::Net>>),
+    (input, net, cam): (Option<Res<crate::controls::Input>>, Option<NonSend<crate::net::Net>>, Option<Res<crate::camera::Cam>>),
     mut feet: Local<HashMap<Entity, Tracked>>,
     mut spine: Local<HashMap<Entity, [Option<Entity>; 3]>>,
 ) {
@@ -833,6 +842,8 @@ fn record(
                 let (p, f) = (c.translation(), c.forward());
                 [p.x, p.y, p.z, (-f.y).asin().to_degrees()]
             }),
+            "eye_height": cam.as_ref().map(|c| c.eye_height),
+            "eye_clearance": cam.as_ref().map(|c| c.ground_clearance),
             "seg": scene.as_ref().map(|s| [s.mine_seg.0 as f64, s.mine_seg.1 as f64, s.mine_seg.2 as f64]),
             "clip": anim.map_or("", |a| a.showing()),
             // The shared phase, the gaits and their weights, and each foot's marker contact.
@@ -913,6 +924,7 @@ pub(crate) mod tests {
         // Behind at the rules' 2.6 m/s walk: 1.16 m a cycle against walk_brisk's 2.03 would step
         // 1.76 times as often, so it falls back.
         assert_eq!(g.blend_toward(2.6, 1.0, OLD, PI, len), None);
+        assert_eq!(name(&g.blend_cursor(2.6, 1.0, OLD, PI, len).unwrap()), vec![("walk_back", 1.0)]);
         // Between forward and the forward-right diagonal: both, by angle.
         let b = g.blend_toward(1.2, 1.0, OLD, 22.5f32.to_radians(), len).unwrap();
         assert_eq!(name(&b), vec![("walk", 0.5), ("walk_diag_fr", 0.5)]);
@@ -928,7 +940,7 @@ pub(crate) mod tests {
         let mut j = takes_json();
         j.as_object_mut().unwrap().remove("strafe_walk_cross_left");
         let lopsided = Gaits::parse(&j);
-        assert!(lopsided.blend_side(1.2, 1.0, OLD, PI / 2.0, len).is_some());
+        assert!(lopsided.blend_side(1.2, 1.0, OLD, PI / 2.0, len, true).is_some());
         assert_eq!(lopsided.blend_toward(1.2, 1.0, OLD, PI / 2.0, len), None);
         // A file with no directional takes falls back.
         assert_eq!(vivi().blend_toward(1.4, 1.0, OLD, PI / 2.0, len), None);

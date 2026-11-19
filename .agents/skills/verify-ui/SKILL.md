@@ -28,10 +28,12 @@ export CARGO_TARGET_DIR=$PWD/.local/target            # a private target dir (ot
 
 `scripts/drive.py` runs one headless client (`LIVING_GAME_LIVE`, `LIVING_GAME_LIVE_PLAN`) and keeps its evidence; `scripts/check.py` runs the scenarios with their checks.
 
+The driver renews the scratch world's inactivity lease while the client runs. Scenarios fail early with `scratch world is paused` or `scratch world tick stationary` if the authority fails the health check at scenario start or before perception results are used.
+
 ```bash
 S=.agents/skills/verify-ui/scripts
 $S/check.py --list                          # every scenario, in the order defined (each registers itself with @scenario); * needs a Cullet world
-$S/check.py --run $R                       # every scenario but the Cullet ones (PASS/FAIL per check)
+$S/check.py --run $R                       # ordinary island scenarios (PASS/FAIL per check)
 LIVING_GAME_THEME=night $S/check.py --run $R windows talk items   # the same in a theme; evidence in <scenario>-night/
 $S/check.py --run $R windows               # one
 $S/check.py --run $R names                 # on a Cullet world (`--seed cullet`): no seed name the player was not given
@@ -56,7 +58,10 @@ The live script's steps for the UI (`living/game/src/live.rs`, its doc comment h
 | `menu:f[@AIM]\|c\|close\|N`, `sync:NAME`, `shot:NAME`, `scroll:PX`, `dodge:W` | F's list (on AIM, e.g. `f@id:57`), my own list (`c`), closing it, or picking row N; wait for a scene; a photograph; two-finger scroll; a double tap |
 | `shine:NAME` | The hair shine (`crown`, `soft`, `today`) as Settings sets it, leaving open windows be (Settings would close them): to compare shines from one view |
 | `walk:DEG:S[:run]`, `hold:DEG[:run]`, `stop`, `look:DEG`, `lookwalk:SPEC` | Walk (or run) a compass direction for S seconds, or hold it until `stop`; look a compass direction (the cursor scheme's look, until `look:`); set the look-walk preset (`twist::LookWalk::parse`: `chest`, `head,body_s=0.3`) |
-| `pan:PX`, `drag:PX`, `pinch:F`, `frame:0` | A two-finger pan, a left drag or a pinch through the pointer's paths; no framing contexts (the dump's `extra.cursor`, `extra.view` and `extra.cursor_ground` show what they did) |
+| `reconnect` | Closes the player socket so the regular reconnect path runs. |
+| `notches:N` | Sends a line-wheel event through the pointer. Positive zooms in over the world or scrolls the window under the cursor. |
+| `pan:PX`, `drag:PX`, `pinch:F`, `frame:0` | A two-finger pan or left drag (Orbit turns), a pinch through either camera's zoom path, or disabling context framing (the dump's `extra.cursor`, `extra.view` and `extra.cursor_ground` show what they did) |
+| `mouse:middle:down\|up`, `motion:DX,DY`, `rotate:DEG` | Middle-button input, one frame of mouse motion, and a clockwise native rotation message. Combine middle-button press, motion and release to drive the top-down drag threshold. |
 
 Tags (`ui/hit.rs` `Tag`; a tag that is the start of another finds it, so `@acts:0:give` finds `acts:0:give:3`):
 - buttons and Menu: `pack`, `menu`, `menu:Character|Skills|Log|Settings|Leave`;
@@ -66,14 +71,22 @@ Tags (`ui/hit.rs` `Tag`; a tag that is the start of another finds it, so `@acts:
 - the log: `log:tab:0|1|2` (Heard, People, Events), `log:person:<I>`;
 - the list of acts: `acts:0:<skill>:<I>` (`talk`, `window`, `introduce`, `give`, `more`, …), its sub-list `acts:1:<item>:<I>`;
 - the pack: `pack:<item>:<I>`; know-how: `skill:<I>`; the tip: `tip:ok`, `tip:all`;
-- Settings: `settings:page:play|controls`, `settings:theme:glass|clear|night|linen|walnut`, `settings:look_walk:head|chest|loose`, `settings:control:travel|cursor`, `settings:sight:unseen|limited|fade`, `settings:look:memory|grey|wash|lantern|shadows|hatch`, `settings:film:soft|screen|off`, `settings:hair:crown|soft|today`, `settings:facing_sight` (the switch; shown only with the admin link), `settings:walk:2.6|3.0|3.4` (the walk law's choices; shown only with the admin link and the law in the script), `settings:auto_draw`, `settings:tips`, `settings:tips_again`, `settings:preset:letters|numbers|own`, `bind:<Act>:<slot>`.
+- Settings: `settings:page:play|controls|rotation|camera`, `settings:facing:cursor|natural`, `settings:camera:top-down|orbit`, `settings:theme:glass|clear|night|linen|walnut`, `settings:look_walk:head|chest|loose`, `settings:control:travel|cursor`, `settings:sight:unseen|limited|fade`, `settings:look:shade|memory|grey|wash|lantern|shadows|hatch`, `settings:film:soft|screen|off`, `settings:hair:crown|soft|today`, `settings:facing_sight` (the switch; shown only with the admin link), `settings:walk:2.6|3.0|3.4` (the walk law's choices; shown only with the admin link and the law in the script), `settings:auto_draw`, `settings:tips`, `settings:tips_again`, `settings:preset:letters|numbers|own`, `bind:<Act>:<slot>`.
 
-Facing sight (`check.py field`, [features/field.md](features/field.md)): drive.py's `--admin-link` gives the client the world admin's token in a mode-600 file it deletes after the drive, as `play.py` does for a scene with `"law_toggle": true`; a `--sync NAME='sql|QUERY;…'` call snapshots the authority (owner SQL, `{me}`, `{ident}`) into `scene.json`'s `snaps`.
+Facing sight (`check.py field`, [features/field.md](features/field.md)): drive.py's `--admin-link` gives the client the world admin's token in a mode-600 file it deletes after the drive, as `play.py` does for a scene with `"law_toggle": true`; a `--sync NAME='sql|QUERY;…'` call snapshots the authority (owner SQL, `{me}`, `{ident}`) into `scene.json`'s `snaps`. Use `client_sql|QUERY` in a sync to snapshot a view as the game client identity.
 
 
 Scenes: `--sync NAME='player|REDUCER|ARG|…'` acts as verify.py's player identity (`$V player join`), a second player beside mine (look-walk's others case). `--place ID:DX:DY` puts a resident beside the player and holds them still when the plan reaches `sync:scene`; `--place-free ID:DX:DY` puts one near that offset on a free walkable tile 1.5–3 m from the player with nothing opaque between (`scene.json` `free_spots`), and `--sync NAME=refree` puts them back there; `--sync NAME='reducer|arg;…'` makes other admin calls at `sync:NAME` (`{me}` the player's id, `(expr)` a Python expression of `mx`, `my` and `me`; in `sql|` snapshots also `{ident}` and `{epoch_at:HOUR}`, the world epoch that makes the hour HOUR now). All are scene setup through admin reducers, never player acts; name them in a report.
 
 drive.py's other options (its docstring): `--expect REGEX` (repeatable) must match client.log, else exit 1; `--size WxH` (default `1600x900`); `--token FILE` plays another character (default the run's `ui/player.token`); `--player NAME` (default "Verifier"); `--client PATH` (default `$CARGO_TARGET_DIR/release/living-game`, else `.local/target/release/living-game`); `--admin-link` (above); `--timeout S` (default 600; check.py passes 420). `LIVING_STDB_URL` points it at a worker's own server (default `http://127.0.0.1:3300`).
+
+Pass `camera`, `camera-rotate`, `camera-lod`, `camera-faces`, `camera-tuning`, `camera-lol` or `camera-lol-ridge` explicitly for the dedicated Brackenford fixtures in [camera.md](features/camera.md).
+
+`seat` sits skirted and coated residents on the ground in the crowded street and gets them up, the cloth's ground contact on and off (`LIVING_GAME_SEAT_CONTACT=0`), with `LIVING_GAME_PERF=seat` (each seated character's lowest cloth tail above its ground) and `springwake`: [seat.md](features/seat.md).
+
+Pass `gaze` on a Cullet scratch world to exercise the zoom bands, reconnect and the authored hedge. [Gaze evidence and setup](features/gaze.md).
+
+Developer camera controls (`LIVING_GAME_DEV=1`): `settings:camera_preset:ours-fixed|ours|supervive|lol|corepunk`, `settings:camera_pitch:curve|fixed|late`, `settings:camera_slider:height|pitch|fov:far|middle|near`, `settings:camera_slider:pitch:fixed`, `settings:camera_slider:tilt_start|near_pitch|wheel|easing` and `settings:camera_copy`. The tuning drive exports `camera-tuning.json` beside its `settings.json`, including the current bearing. Settings › Camera (`settings:page:rotation`) uses `settings:camera_rotate`, `settings:camera_rotate_speed:0.5|1|2`, and `settings:camera_rotate_invert`. The north snap binding is `bind:NorthUp:0`.
 
 ## Evidence
 

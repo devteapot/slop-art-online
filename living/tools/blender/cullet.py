@@ -6231,6 +6231,212 @@ GEN.update({kind: (gen_enclosure, budget) for kind, budget in ENCLOSURES_2.items
 GEN.update(quarry_face=(gen_quarry_face, 1500), quarry_crane=(gen_quarry_crane, 1500), kelp_kiln=(gen_kelp_kiln, 1500), quarry_bench=(gen_enclosure, 3500))
 
 
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+import cullet_brush
+
+
+def gen_brush(k, rng, patch):
+    cx, cy = patch["at"]
+    ground, floor, h = patch["ground"], patch["floor_m"], patch["height_m"]
+    hedge = patch["id"].endswith("_hedge")
+    gorse = "gorse" in patch["id"]
+    bracken = "bracken" in patch["id"]
+    warm = P.grass if bracken else P.kelp
+    leaf = mix(on(P.green, "leaves"), warm, 0.44 if bracken else 0.28)
+    shade = mix(P.kelp, P.tar, 0.66)
+    offset = rng.random() * 50
+
+    def point(x, y, z):
+        return Vector((x - cx, y - cy, ground(x, y) - floor + z))
+
+    # Share vertices across neighbouring canopy faces. Both normals and the
+    # painted light run across hedge sections, including around their sides.
+    builder = k.b
+    if k.body not in builder.mats:
+        builder.mats.append(k.body)
+    vertices = {}
+
+    def face(points, colours):
+        keys = [tuple(round(v, 6) for v in p) for p in points]
+        if len(set(keys)) != len(keys):
+            return
+        verts = []
+        for key in keys:
+            if key not in vertices:
+                vertices[key] = builder.bm.verts.new(key)
+            verts.append(vertices[key])
+        f = builder.bm.faces.new(verts)
+        f.material_index = builder.mats.index(k.body)
+        for loop, c in zip(f.loops, colours):
+            loop[builder.col] = (*c, surface_alpha("leaves"))
+
+    def paint(p):
+        x, y, z = p
+        height = (z + floor - ground(cx + x, cy + y)) / h
+        mottling = nz(x * 2.2, y * 2.2, offset) + 0.5 * nz(x * 5, y * 5, offset + 3)
+        tone = mix(shade, leaf, min(1, max(0, height * 0.93 + 0.20 * mottling)))
+        return mix(tone, P.grass, max(0, 0.32 * height + 0.36 * mottling - 0.13))
+
+    def foliage_triangle(a, b, c):
+        face([a, b, c], [paint(p) for p in (a, b, c)])
+        # A spray stays inside its host triangle in plan. Coloured pairs stand
+        # proud of the canopy and interrupt the outline around the shoulders.
+        weight = (b - a).cross(c - a).length
+        if rng.random() >= min(0.85, weight * (2.8 if hedge else 0.40)):
+            return
+        centre = (a + b + c) / 3
+
+        def raised(p, up):
+            limit = h + (0.12 if hedge else 0) + ground(cx + p.x, cy + p.y) - floor
+            return Vector((p.x, p.y, min(p.z + up, limit)))
+
+        # Splayed, individually tinted leaf blades. Barycentric
+        # construction keeps every blade inside its host triangle in plan.
+        for root, left, right in ((a, b, c), (b, c, a), (c, a, b)):
+            tip = centre.lerp(
+                root, min(0.82, 0.42 / max(0.001, (root - centre).length))
+            )
+            waist = centre.lerp(tip, 0.46)
+            narrow = 0.09 if bracken else 0.14
+            outer = waist.lerp(left, narrow)
+            inner = waist.lerp(right, narrow * 0.7)
+            col = mix(leaf, P.grass, rng.uniform(0.30, 0.85))
+            if gorse and rng.random() < 0.16:
+                col = on(P.mustard, "leaves")
+                tip = waist.lerp(tip, 0.65)
+            base = raised(centre, 0.018)
+            blade = [
+                base,
+                raised(outer, 0.115),
+                raised(tip, 0.12),
+                raised(inner, 0.075),
+            ]
+            if (blade[1] - base).cross(blade[2] - base).z < 0:
+                blade.reverse()
+            face(blade, [col] * 4)
+
+    if hedge:
+        rings = []
+        sections = list(cullet_brush.hedge_sections(patch, rng))
+        phase = rng.random() * TAU
+        for j, (y, left, right) in enumerate(sections):
+            t = j / (len(sections) - 1)
+            ridge = (
+                h
+                + 0.055
+                + 0.033 * sin(15 * t + phase)
+                + 0.011 * sin(26 * t)
+                + rng.uniform(-0.009, 0.009)
+            )
+            # The widest belt sits above the shaded foot. Shoulders arch over
+            # the ridge, each with its own rhythm along the continuous run.
+            profile = [
+                (0.22, -0.14),
+                (0.055, h * 0.28),
+                (0, h * rng.uniform(0.49, 0.66)),
+                (rng.uniform(0.035, 0.12), ridge * rng.uniform(0.81, 0.92)),
+                (0.25, ridge * rng.uniform(0.94, 0.99)),
+                (0.51 + 0.07 * sin(18 * t), ridge),
+                (0.77, ridge * rng.uniform(0.93, 0.99)),
+                (0.94, ridge * rng.uniform(0.78, 0.92)),
+                (1, h * rng.uniform(0.49, 0.66)),
+                (0.95, h * 0.27),
+                (0.79, -0.14),
+            ]
+            rings.append([point(left + (right - left) * u, y, z) for u, z in profile])
+        for r, s in zip(rings, rings[1:]):
+            for i in range(len(r) - 1):
+                foliage_triangle(r[i], r[i + 1], s[i + 1])
+                foliage_triangle(r[i], s[i + 1], s[i])
+
+        # Leaf fans on both flanks. Sample the loft at each leaf corner so the
+        # fans follow the changing shoulder, including at the turns in width.
+        def flank(y, height, right):
+            y = min(sections[-1][0] - 0.002, max(sections[0][0] + 0.002, y))
+            j = next(
+                (i for i in range(len(sections) - 1) if sections[i + 1][0] >= y),
+                len(sections) - 2,
+            )
+            t = (y - sections[j][0]) / (sections[j + 1][0] - sections[j][0])
+            profile = [a.lerp(b, t) for a, b in zip(rings[j], rings[j + 1])]
+            side = profile[5:][::-1] if right else profile[:6]
+            z = ground(cx + side[2].x, y) - floor + height
+            for a, b in zip(side, side[1:]):
+                if b.z >= z:
+                    fraction = max(0, min(1, (z - a.z) / max(0.001, b.z - a.z)))
+                    x = a.x + (b.x - a.x) * fraction
+                    # Small relief gives the leaf a readable shadow while its
+                    # projection stays inside the station's widest belt.
+                    room = abs(side[2].x - x)
+                    if room < 0.009:
+                        return None
+                    lift = min(room * 0.7, 0.026 + 0.009 * sin(y * 29 + z * 11))
+                    x += lift if right else -lift
+                    return Vector((x, y - cy, z))
+            return side[-1]
+
+        for right in (False, True):
+            for j in range(len(sections) - 1):
+                low_y, high_y = sections[j][0], sections[j + 1][0]
+                for band in (0.16, 0.32, 0.73, 0.88):
+                    y = (low_y + high_y) * 0.5 + rng.uniform(-0.012, 0.012)
+                    z = h * (band + rng.uniform(-0.09, 0.09))
+                    for sign in (-1, 1):
+                        size = rng.uniform(0.64, 1.35)
+                        uv = [(0, 0), (0.047, 0.098), (0.133, 0.151), (0.108, 0.041)]
+                        verts = [
+                            flank(y + sign * u * size * 0.44, z + v * size, right)
+                            for u, v in uv
+                        ]
+                        if any(v is None for v in verts):
+                            continue
+                        if (verts[1] - verts[0]).cross(verts[2] - verts[0]).x * (
+                            1 if right else -1
+                        ) < 0:
+                            verts.reverse()
+                        hue = mix(leaf, P.grass, rng.uniform(0.1, 0.82))
+                        if band < 0.4:
+                            hue = mix(shade, hue, 0.65)
+                        face(verts, [hue] * 4)
+        for r in (list(reversed(rings[0])), rings[-1]):
+            centre = sum(r, Vector((0, 0, 0))) / len(r)
+            for a, b in zip(r, r[1:] + r[:1]):
+                face([centre, a, b], [paint(p) for p in (centre, a, b)])
+    else:
+
+        def field(x, y):
+            return nz(x * 0.55, y * 0.55, offset) + 0.40 * nz(
+                x * 1.15, y * 1.15, offset + 4
+            )
+
+        regions, level, peak = cullet_brush.thicket(patch, rng, field)
+        boundary = {}
+        for poly in regions:
+            canopy = []
+            for x, y, value in poly:
+                relief = max(0, (value - level) / (peak - level))
+                canopy.append(point(x, y, h * (0.20 + 0.80 * relief**0.36)))
+            for a, b in zip(canopy, canopy[1:] + canopy[:1]):
+                key = tuple(
+                    sorted(
+                        (tuple(round(v, 5) for v in a), tuple(round(v, 5) for v in b))
+                    )
+                )
+                if key in boundary:
+                    del boundary[key]
+                else:
+                    boundary[key] = (a, b)
+            for i in range(1, len(canopy) - 1):
+                foliage_triangle(canopy[0], canopy[i], canopy[i + 1])
+        for a, b in boundary.values():
+            lo = point(cx + a.x, cy + a.y, -0.12)
+            hi = point(cx + b.x, cy + b.y, -0.12)
+            face([lo, hi, b, a], [shade, shade, paint(b), paint(a)])
+
+
+GEN["brush"] = gen_brush, 13000
+
+
 def neighbours(plan):
     """Who stands against whom: a terrace's houses east to west (the plan's `terraces`), and the
     rank of net lofts. Each lot learns the lot on its west (-X) and east (+X) party wall."""
@@ -6247,6 +6453,7 @@ def main():
     argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", required=True)
+    ap.add_argument("--heights", help="native land_dump heights.f32 for terrain-fitted brush")
     ap.add_argument("--plan", default=PLAN)
     ap.add_argument("--only", help="comma-separated ids or folders (default: everything the kit can build)")
     ap.add_argument("--lantern-core", type=float, default=LANTERN["core_m"], help="metres from a glasshouse's lantern within which every pane is lit")
@@ -6262,7 +6469,15 @@ def main():
     os.makedirs(a.out, exist_ok=True)
     only = set(a.only.split(",")) if a.only else None
     near = neighbours(plan)
+    brush = list(cullet_brush.fixtures(plan))
+    if brush and (not only or "brush" in only or any(p["id"] in only for p in brush)):
+        ground = cullet_brush.terrain_sampler(plan, a.heights)
+        for patch in brush:
+            patch.update(ground=ground, floor_m=ground(*patch["at"]))
+    else:
+        brush = []
     items = [dict(l, what="lot") for l in plan["lots"] if l.get("model")] + [dict(f, what="fixture") for f in plan["fixtures"]] + [dict(f, what="structure") for f in plan.get("structure_models", [])]
+    items.extend(brush)
     report, skipped, t_all = {}, [], time.time()
     table = {}
     ox, oy = plan["origin"]
@@ -6298,6 +6513,12 @@ def main():
         xs, ys = [v.co.x for v in k.b.bm.verts], [v.co.y for v in k.b.bm.verts]
         cx, cy = (min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2
         obj, _ = k.b.finish(it["id"])
+        if folder == "brush":
+            # The loft and contour share their vertices. Smooth the continuous
+            # foliage surface while each disconnected leaf keeps its own normal.
+            mesh = obj.data
+            mesh.shade_smooth()
+            mesh.normals_split_custom_set_from_vertices([v.normal.copy() for v in mesh.vertices])
         if not it.get("dressing"):  # street dressing is centred on its own rectangle, as props are
             obj.data.transform(Matrix.Translation((cx, cy, 0.0)))
         path = os.path.join(a.out, folder, f"{it['id']}.glb")

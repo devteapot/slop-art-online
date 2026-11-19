@@ -50,7 +50,7 @@ pub const SWEEP_MS: u64 = 200;
 /// over more ticks; but players swept in one tick share its chunk-body cache, and each tick that
 /// sweeps fills it afresh (cullet-sweep at 216 players: plan-test's sweep cost 44 ms/s in one
 /// phase, 61 in four, 79 in one per tick; the largest tick's share 10, 5.3 and 3.5 ms).
-const SWEEP_GROUPS: u64 = 4;
+const SWEEP_GROUPS: u64 = 12;
 
 /// A body's current motion segment as clients draw it (see `Body`): from `(x, y)` facing
 /// `heading` at `t_ms`, moving at velocity `(vx, vy)`, turning at `turn` rad/s for `turn_s`
@@ -194,7 +194,11 @@ pub struct MyOffer {
 #[allow(clippy::too_many_arguments)]
 pub fn in_sight(ctx: &ReducerContext, map: &Map, observer: u32, eye: (f32, f32), heading: f32, target: u32, at: (f32, f32), dist: f32, w: &World, now: u64, kept: bool) -> bool {
     let senses = common::senses_of(ctx, observer, w, now);
-    let glow = if target != 0 { common::glow_of(ctx, target, w, now) } else { 0.0 };
+    let glow = if target != 0 && senses.gaze.is_none_or(|gaze| gaze.glow > 0.0) {
+        common::glow_of(ctx, target, w, now)
+    } else {
+        0.0
+    };
     let keep = kept.then(|| common::laws(ctx).keep_seen_m);
     living_rules::sight::sees(map, eye, heading, at, dist, &senses, glow, keep)
 }
@@ -221,8 +225,8 @@ pub fn sees(ctx: &ReducerContext, id: u32, eye: &Body, at: (f32, f32), w: &World
 /// `senses` law's now) or the `glow` of a light on them (a carried torch, lamplight), within its
 /// field when the world's law turns it on, with a clear line. Heard: only while it has a field,
 /// within its hearing and not seen ([`heard`] for one that has no scene to share).
-pub fn sensed(ctx: &ReducerContext, id: u32, at: (f32, f32), sight: f32, now: u64) -> (Vec<NearCreature>, Vec<NearCreature>) {
-    Sensing::new(ctx, id, at, sight, now).all(ctx, now)
+pub fn sensed(ctx: &ReducerContext, id: u32, at: (f32, f32), now: u64) -> (Vec<NearCreature>, Vec<NearCreature>) {
+    Sensing::new(ctx, id, at, now).all(ctx, now)
 }
 
 /// What a body senses, worked out as far as it is asked (docs/BATTLE_SCALE.md, scene-lazy): every
@@ -245,12 +249,11 @@ pub struct Sensing {
 }
 
 impl Sensing {
-    pub fn new(ctx: &ReducerContext, id: u32, at: (f32, f32), sight: f32, now: u64) -> Sensing {
+    pub fn new(ctx: &ReducerContext, id: u32, at: (f32, f32), now: u64) -> Sensing {
         let map = common::map(ctx);
         let w = common::world(ctx);
         let senses = common::senses_of(ctx, id, &w, now);
-        let gather = common::gather_radius(ctx, sight);
-        let lit = gather > sight;
+        let (gather, lit) = common::gather_radius(ctx, &senses, 0.0);
         // Facing matters only with a field (one body lookup then), and only then is anything heard.
         let field = senses.field.is_some();
         let heading = if field { ctx.db.body().id().find(id).map_or(0.0, |b| common::facing_at(&b, now)) } else { 0.0 };
@@ -933,8 +936,9 @@ thread_local! {
 }
 
 /// Sweep the players whose turn it is (every tick, numbered `tick`; each player every
-/// [`SWEEP_MS`]).
-pub fn sweep(ctx: &ReducerContext, now: u64, tick: u64) {
+/// [`SWEEP_MS`]). Returns the players swept, whose sweeps share the step with frames
+/// (`frame::deliver`).
+pub fn sweep(ctx: &ReducerContext, now: u64, tick: u64) -> Vec<u32> {
     // What the sweep keeps across ticks was worked out from rows as this instance saw them in
     // its last tick. `tick` is the committed clock's tick plus one, so it follows that tick only
     // if that tick committed and no other ran since. A tick rolled back (its number comes again)
@@ -956,7 +960,7 @@ pub fn sweep(ctx: &ReducerContext, now: u64, tick: u64) {
     }
     let humans = crate::combat::humans(ctx);
     if humans.is_empty() {
-        return;
+        return Vec::new();
     }
     let due: Vec<(u32, Identity)> = LAST.with(|l| {
         let mut l = l.borrow_mut();
@@ -984,21 +988,24 @@ pub fn sweep(ctx: &ReducerContext, now: u64, tick: u64) {
             .collect()
     });
     if due.is_empty() {
-        return;
+        return Vec::new();
     }
     let w = common::world(ctx);
     let map = common::map(ctx);
     let mut health = HashMap::new();
+    let mut swept = Vec::with_capacity(due.len());
     for (id, viewer) in due {
         sweep_one(ctx, id, viewer, &w, &map, now, Some(&mut health));
+        swept.push(id);
     }
+    swept
 }
 
 /// The latest moment at or before `now` on character `id`'s phase: each player's turns fall
 /// [`SWEEP_MS`] apart on one of [`SWEEP_GROUPS`] phases, by id, so sweeps spread over that many
 /// ticks whenever the players joined.
 fn turn_before(id: u32, now: u64) -> u64 {
-    let phase = (id as u64).wrapping_mul(37) % SWEEP_GROUPS * (SWEEP_MS / SWEEP_GROUPS);
+    let phase = (id as u64).wrapping_mul(37) % SWEEP_GROUPS * SWEEP_MS / SWEEP_GROUPS;
     now - (now + SWEEP_MS - phase) % SWEEP_MS
 }
 
@@ -1026,6 +1033,7 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
     let rows: Vec<Perceived> = ctx.db.perceived().viewer().filter(viewer).collect();
     let had: HashSet<u32> = rows.iter().map(|p| p.body).collect();
     let mut seen: HashSet<u32> = HashSet::new();
+    let scheduled = health.is_some();
     // How far each one seen is, from the chunk cache (`kept_sweep` checks it is current).
     let mut near: HashMap<u32, f32> = HashMap::new();
     let keep = common::laws(ctx).keep_seen_m;
@@ -1033,9 +1041,9 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
     // people (a carried torch, lamplight); each is then seen by the one sight rule: its reach
     // in that direction (the field, when the world's law gives one), the light on it, and a
     // clear line. A creature already seen keeps the margins (`keep_seen_m`, the field's angle).
-    let gather = common::gather_radius(ctx, sight);
-    let lit = gather > sight;
-    for c in common::creatures_near(ctx, here, gather + keep, now) {
+    let (gather, lit) = common::gather_radius(ctx, &senses, keep);
+    let sight_span = common::detail_span("sight.player_candidates");
+    for c in common::creatures_near(ctx, here, gather, now) {
         if c.id == id {
             continue;
         }
@@ -1045,6 +1053,10 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
             seen.insert(c.id);
             near.insert(c.id, c.dist);
         }
+    }
+    drop(sight_span);
+    if scheduled && senses.gaze.is_some() {
+        crate::attention::project(ctx, id, &senses, now);
     }
     hear(ctx, id, viewer, here, &seen, now);
     // What it remembers of resources here (talk-places): the look a mind takes at its noticing.
@@ -1059,6 +1071,8 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
     }
     let entered: Vec<u32> = seen.difference(&had).copied().collect();
     let gone_from_sight: Vec<u32> = had.difference(&seen).copied().collect();
+    common::diag(|| "visible:add", entered.len() as u64);
+    common::diag(|| "visible:drop", gone_from_sight.len() as u64);
     let left = !gone_from_sight.is_empty();
     for body in &entered {
         ctx.db.perceived().insert(Perceived { id: 0, viewer, body: *body, since_ms: now });

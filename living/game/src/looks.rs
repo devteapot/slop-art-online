@@ -41,7 +41,7 @@ pub struct Looks {
     drawn_from: HashMap<u32, String>,
     /// For someone drawn from a line: what a glance says of them made out and from afar
     /// (`living_rules::look::phrase`, the words a mind is told too). None for a VRoid recipe.
-    phrases: HashMap<u32, Option<(String, String)>>,
+    phrases: HashMap<u32, Option<(String, String, String)>>,
     /// When a name first arrived for someone (they were a stranger to me before).
     pub named: Vec<(u32, String)>,
     known: HashMap<u32, bool>,
@@ -57,6 +57,11 @@ impl Looks {
     /// out, by the colours drawn ("someone in blue"). Never sent anywhere.
     pub fn plate(&self, id: u32) -> Option<&str> {
         self.plates.get(&id).or_else(|| self.labels.get(&id)).map(|s| s.as_str())
+    }
+
+    /// The main garment and form for a stranger’s overhead plate.
+    pub fn compact_plate(&self, id: u32) -> Option<&str> {
+        self.phrases.get(&id).and_then(Option::as_ref).map(|(_, _, short)| short.as_str()).or_else(|| self.plate(id))
     }
 
     /// The same, capitalised for the start of a line.
@@ -271,7 +276,15 @@ pub fn update(net: NonSend<Net>, island: Option<Res<crate::island::Island>>, mut
                 let k = clothes(&recipe);
                 // Drawn from the line: its words, as `phrase` says them.
                 let words = recipe.person.as_ref().and_then(|_| crate::characters::book::book()?.words(&key));
-                let ph = words.map(|(w, band)| (living_rules::look::phrase(&w, living_rules::look::LookSeen::Full, band), living_rules::look::phrase(&w, living_rules::look::LookSeen::Far, band)));
+                let ph = words.map(|(w, band)| {
+                    use living_rules::look::{phrase, LookSeen, LookWords};
+                    let short = LookWords {
+                        form: w.form.clone(),
+                        top: w.top.split(" with ").next().unwrap_or_default().to_string(),
+                        ..default()
+                    };
+                    (phrase(&w, LookSeen::Full, band), phrase(&w, LookSeen::Far, band), phrase(&short, LookSeen::Far, band))
+                });
                 looks.colours.insert(c.id, k.clone());
                 looks.phrases.insert(c.id, ph);
                 looks.drawn_from.insert(c.id, key);
@@ -279,8 +292,8 @@ pub fn update(net: NonSend<Net>, island: Option<Res<crate::island::Island>>, mut
             }
             (None, None) => (None, None),
         };
-        if let Some(Some(p)) = looks.phrases.get(&c.id) {
-            phrased.insert(c.id, p.clone());
+        if let Some(Some((full, far, _))) = looks.phrases.get(&c.id) {
+            phrased.insert(c.id, (full.clone(), far.clone()));
         }
         base.push((c.id, c.label.clone(), top, bottom));
     }

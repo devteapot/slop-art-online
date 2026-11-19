@@ -1,0 +1,13 @@
+jersey_coat-f    under coat-f           rest   clear   by   -1.0 mm at most (t 0.00 s, on -, 0 vertices); in 0 of 1 poses
+jersey_coat-f    under coat-f           run    clear   by   -1.0 mm at most (t 0.00 s, on -, 0 vertices); in 0 of 16 poses
+jersey_coat-f    under coat-f           walk   clear   by   -1.0 mm at most (t 0.00 s, on -, 0 vertices); in 0 of 16 poses
+jersey_coat-f    under coat-f           walk_brisk clear   by   -1.0 mm at most (t 0.00 s, on -, 0 vertices); in 0 of 16 poses
+jersey_coat-f    under trousers-f       rest   clear   by   -1.0 mm at most (t 0.00 s, on -, 0 vertices); in 0 of 1 poses
+jersey_coat-f    under trousers-f       run    clear   by   -1.0 mm at most (t 0.00 s, on -, 0 vertices); in 0 of 16 poses
+jersey_coat-f    under trousers-f       walk   clear   by   -1.0 mm at most (t 0.00 s, on -, 0 vertices); in 0 of 16 poses
+jersey_coat-f    under trousers-f       walk_brisk clear   by   -1.0 mm at most (t 0.00 s, on -, 0 vertices); in 0 of 16 poses
+trousers-f       under coat-f           rest   clear   by   -1.0 mm at most (t 0.00 s, on -, 0 vertices); in 0 of 1 poses
+trousers-f       under coat-f           run    clear   by   -1.0 mm at most (t 0.00 s, on -, 0 vertices); in 0 of 16 poses
+trousers-f       under coat-f           walk   clear   by   -1.0 mm at most (t 0.00 s, on -, 0 vertices); in 0 of 16 poses
+trousers-f       under coat-f           walk_brisk clear   by   -1.0 mm at most (t 0.00 s, on -, 0 vertices); in 0 of 16 poses
+cloth_check: 3 pairs of pieces over 49 poses: none comes through by more than 2.0 mm

@@ -1143,7 +1143,11 @@ fn spawn_item(commands: &mut Commands, assets: &AssetServer, land: &Land, it: &I
     let model = Model { vrm, file: it.file.clone(), height: if it.native { 0.0 } else { it.height }, ground_y: y, glow: it.glow };
     let handle = assets.load(GltfAssetLabel::Scene(0).from_asset(it.file.clone()));
     let mut e = commands.spawn((EnvPart, model, WorldAssetRoot(handle), Transform::from_translation(at).with_rotation(turn), Visibility::Hidden));
-    if it.height >= 3.0 {
+    let canopy = matches!(it.kind.as_str(), "tree" | "oak" | "pine" | "spruce" | "birch" | "coppice" | "young" | "sapling" | "giant" | "hanger_tree");
+    if canopy || it.kind == "market_stall" {
+        e.insert(crate::envs::OverheadCover);
+    }
+    if it.height >= 3.0 || canopy {
         e.insert((Occluder { height: it.height, open: false }, crate::fade::Fade::shown()));
     }
     if it.height <= SMALL {

@@ -52,3 +52,6 @@
 Use [SKILL.md](../SKILL.md). Admin setup and `mind_act` do not establish player permissions or authentic model behavior. Read [the validation records](../references/validation/README.md) (the newest files are the last validated runs) before treating a check as green.
 
 The `living/viewer/src/sync.rs` tests are all this skill covers of the viewer. Controls, panels and rendering need the future UI skill (not built; see `verify`) once that skill exists.
+
+- [The shared cover law and missile collision](cover.md)
+- [Gaze bands and sight](gaze.md)

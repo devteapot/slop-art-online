@@ -235,6 +235,15 @@ def check_model(item, rec, path):
                off_palette_share=round(shares[0] / tris, 4), materials=sorted(mats), doors=len(rec.get("doors", [])), sha256=hashlib.sha256(path.read_bytes()).hexdigest())
     ok = {}
     ok["footprint"] = over <= 0.1
+    if rec["kind"] == "brush":
+        polygon = item["area"]
+        cx, cy = item["at"]
+        # All present patches are convex and counterclockwise in plan metres.
+        ok["cover_polygon"] = all(
+            (bx - ax) * (y + cy - ay) - (by - ay) * (x + cx - ax) >= -1e-4
+            for (ax, ay), (bx, by) in zip(polygon, polygon[1:] + polygon[:1])
+            for x, y, _ in corners
+        )
     ok["triangles"] = tris <= rec["budget_tris"]
     ok["surfaces"] = out["tagged_share"] >= 0.9
     ok["palette"] = shares[0] == 0
@@ -277,7 +286,19 @@ def main():
     items = {l["id"]: dict(l, what="lot") for l in plan["lots"] if l.get("model")}
     items.update({f["id"]: dict(f, what="fixture") for f in plan["fixtures"]})
     items.update({f["id"]: dict(f, what="structure") for f in plan.get("structure_models", [])})
-    results, fails = {}, []
+    from cullet_brush import fixtures
+    brush = {patch["id"]: patch for patch in fixtures(plan)}
+    items.update(brush)
+    results, fails = {}, [f"{id}: missing brush model" for id in brush.keys() - report["models"].keys()]
+    # A correct mesh in the wrong place would still leave invisible cover.
+    placed = json.loads((kit / "fixtures.json").read_text())
+    ox, oy = plan["origin"]
+    for patch in brush.values():
+        matches = [f for f in placed if f["file"] == "envs/" + patch["model"]]
+        x, y = patch["at"]
+        expected = [round(ox + x, 3), round(oy - y, 3)]
+        if len(matches) != 1 or matches[0]["at"] != expected or matches[0]["front"] != [0, 1]:
+            fails.append(f"{patch['id']}: expected one south-facing fixture at {expected}")
     for id, rec in report["models"].items():
         item = items[id]
         path = kit / rec["file"]

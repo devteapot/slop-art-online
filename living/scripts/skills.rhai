@@ -84,6 +84,12 @@ fn laws() {
         // `fov_margin_deg` past an edge. A light on someone (`glow`) shows them only within the
         // field. Hearing stays all round.
         fov_on: false,
+        cover_cliff_step_m: 2.0,
+        cover_brush_min_fill: 0.6,
+        cover_brush_on: true,
+        cover_eye_height_m: 1.6,
+        gaze_on: false,
+        cover_sight_on: false,
         // Known ground (docs/MOVEMENT_MIND.md): how far ground is seen by day, metres (at night,
         // one's own sight); the most 4 m cells one look marks (0: no cap; the rest come with
         // later looks); whether walks are planned over what each walker has seen instead of the
@@ -179,6 +185,8 @@ fn laws() {
         // is told at full speed, and only its facing (head and chest: what it sees by, where a
         // guard faces) turns toward the look, at most `look_walk_deg` off its way.
         look_slack_deg: 10.0, look_walk_deg: 75.0,
+        // Shipped facing turn rate in rad/s. Worlds can raise it with a laws overlay.
+        turn_rate: 6.0,
         // Moving and breath (docs/STAMINA.md). A grown person's walk (m/s, before age, genes and
         // tiredness: `walk_base()`; a player's Settings offer 3.0 and 3.4), a person's run as a
         // share of its walk, and the fastest a road takes anyone (m/s; a body faster on its own,
@@ -229,6 +237,43 @@ fn senses(a) {
     if law("fov_on") { s.field = sight_field(a); }
     s
 }
+
+// Band numbers are stable protocol values: Middle 0, Far 1, Near 2.
+fn gaze_bands() {
+    [
+        #{ share: 1.0, focal_deg: law("fov_focal_deg"), side_deg: law("fov_side_deg") },
+        #{ share: 1.30, focal_deg: 35.0, side_deg: 65.0 },
+        #{ share: 0.60, focal_deg: 110.0, side_deg: 155.0 },
+    ]
+}
+
+fn gaze_ceiling(band) {
+    let day = sight_in("day");
+    let widest = if band == 0 { max(day, declared_glow_cap()) } else { day };
+    widest * gaze_bands()[band].share + law("keep_seen_m")
+}
+
+// The dispatcher calls this only in enabled worlds. Each world's senses(a) supplies its
+// original light cap: the island's light levels or Cullet's daylight and torch floor.
+fn gaze_view(a) {
+    let s = senses(a);
+    let bands = gaze_bands();
+    let band = bands[a.gaze_band];
+    let light_cap = s.sight;
+    let day = sight_in("day");
+    let ground = law("ground_sight_m");
+    let ground_cap = if light_cap + 0.01 < day { min(light_cap, ground) } else { ground };
+    let ground_ceiling = min(ground * band.share, ground);
+    s.ground = min(ground_cap * band.share, ground_ceiling);
+    s.sight = light_cap * band.share;
+    if s.field == () { s.field = sight_field(a); }
+    s.field.focal_deg = band.focal_deg;
+    s.field.side_deg = band.side_deg;
+    s.field.near_m = min(s.field.near_m, s.sight);
+    s
+}
+
+fn declared_glow_cap() { 0.0 }
 
 // How the view narrows away from facing (the `fov_*` laws); all round within the near ring,
 // less of it in the dark.
@@ -371,7 +416,7 @@ fn call_speech() {
 // run (a wolf 5.1 m/s, a deer 5.55). A road speeds no one past `run_top` (m/s), and a run costs
 // breath (`pools`).
 fn motion(a) {
-    #{ run: switch a.actor.kind { "person" => law("run_share"), "wolf" => law("wolf_run"), "deer" => law("deer_run"), _ => 1.5 }, flee: 1.15, aside: 0.8, turn_rate: 6.0, turn_slow: 0.4, separation: 0.8, separation_weight: 0.9, wander_turn: 1.2, wander_keep_s: 60.0, top: law("run_top"), charge: a.actor.kind == "wolf" }
+    #{ run: switch a.actor.kind { "person" => law("run_share"), "wolf" => law("wolf_run"), "deer" => law("deer_run"), _ => 1.5 }, flee: 1.15, aside: 0.8, turn_rate: law("turn_rate"), turn_slow: 0.4, separation: 0.8, separation_weight: 0.9, wander_turn: 1.2, wander_keep_s: 60.0, top: law("run_top"), charge: a.actor.kind == "wolf" }
 }
 
 // A grown, rested body of a kind at its normal pace (for descriptions).
@@ -3132,6 +3177,12 @@ fn law_about(l, name) {
         "force_outcomes" => if l.force_outcomes { "whoever strikes, shoots or casts learns how it came out, as far as they see" } else { "a blow, shot or bolt tells its maker how it came out only when it fails, or for a few skills" },
         "alert_after_hit_s" => `a body struck within the last ${short(l.alert_after_hit_s)} s cannot fall asleep`,
         "alert_while_attacker_near" => if l.alert_while_attacker_near { "nor while the one who struck it is close and the fight is on" } else { "even with the one who struck it close by" },
+        "gaze_on" => "whether creatures can change their gaze band",
+        "cover_sight_on" => "whether cover hides people",
+        "cover_eye_height_m" => "the standing eye height in metres",
+        "cover_brush_on" => "whether dense brush hides people",
+        "cover_brush_min_fill" => "minimum fill for brush concealment",
+        "cover_cliff_step_m" => "the minimum cliff step in metres",
         "fov_on" => if l.fov_on { "one sees fully only the way one faces" } else { "one sees as far in every direction" },
         "ground_sight_m" => `ground is seen ${short(l.ground_sight_m)} m off by day, as far as one sees by night`,
         "known_cells_pass" => if l.known_cells_pass > 0.0 { `one look takes in at most ${short(l.known_cells_pass)} patches of ground` } else { "one look takes in all the ground in view" },
@@ -3149,6 +3200,7 @@ fn law_about(l, name) {
         "heard_linger_s" => `a sound is kept in mind ${short(l.heard_linger_s)} s after it was last heard`,
         "look_slack_deg" => `a player's look within ${short(l.look_slack_deg)} degrees of the last is the same look`,
         "look_walk_deg" => `walking, one goes where one is going and faces where one looks, at most ${short(l.look_walk_deg)} degrees off one's way`,
+        "turn_rate" => `bodies turn to face at ${short(l.turn_rate)} radians a second`,
         "walk_base" => `a grown person walks ${l.walk_base} m/s`,
         "run_share" => `and runs ${l.run_share} times that`,
         "run_top" => `no road takes anyone past ${l.run_top} m/s`,

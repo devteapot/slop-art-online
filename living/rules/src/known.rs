@@ -546,7 +546,7 @@ mod tests {
     use super::*;
 
     fn open(w: u32, h: u32) -> Map {
-        Map { w, h, tiles: vec![Terrain::Grass as u8; (w * h) as usize], blocked: Default::default(), opaque: Default::default(), nav: Default::default() }
+        Map { w, h, tiles: vec![Terrain::Grass as u8; (w * h) as usize], blocked: Default::default(), cover: None, opaque: Default::default(), nav: Default::default() }
     }
 
     /// A belief from a list of blocks fully seen at edit count 0, with edits by chunk.
