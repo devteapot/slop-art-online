@@ -23,6 +23,8 @@ python3 "$V" launch --run "$R" > "$E/launch.txt" 2>&1
 python3 "$V" doctor --run "$R" > "$E/doctor.txt" 2>&1
 ```
 
+`scenes.py`, `town.py` and the other drivers call the authority directly, so they do not renew the harness's 10-minute lease (verify SKILL.md, "Launch"). For a batch of scenes or the town run, launch with `VERIFY_LEASE_SECONDS=2700`. Otherwise the world is paused partway and later scenes fail on a frozen world (a `sleeper` timeout, morning checks at 0).
+
 Stop driving if launch or doctor fails. Run cleanup and retain the error. The scenes use the in-container admin CLI. Do not mix a remote `LIVING_STDB_URL` with `stdb -s local`.
 
 ## Drive the baseline

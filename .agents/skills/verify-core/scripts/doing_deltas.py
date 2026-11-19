@@ -4,12 +4,14 @@ no pass mark).
 
 Two real Rust SDK subscriptions (verify-client's probe) run side by side for `--seconds`: the
 database owner's `SELECT * FROM doing` (every character's visible activity, what an observer or
-the mind service could follow), and a joined player's `SELECT * FROM seen_doing` (what its client
-is sent of the creatures it perceives). The player stands where the most people are within 30 m
+the mind service could follow), and a joined player's `seen_doing`, `seen_doing_near`,
+`seen_doing_far` and `seen_doing_cue` (what its client is sent of the creatures it perceives,
+under either delivery law; verify-player's `rest_seen.py` QUERIES). The player stands where the most people are within 30 m
 (a town's busiest spot), or, with `--battle N`, beside `spawn_battle N`'s fighters. Each stream's
 live changes are counted: inserts, deletes and updates per second, row operations per second
 (an update travels as one delete and one insert in its transaction), and blinks: a row deleted and
-inserted again for the same character within 1.5 s (a renewal shown as "doing nothing" between).
+inserted again for the same character within 1.5 s (a renewal shown as "doing nothing" between);
+for the cue table, cues and cues that say a creature is doing nothing.
 
     doing_deltas.py --run RUN [--seconds 60] [--battle N]
 
@@ -30,6 +32,14 @@ spec = importlib.util.spec_from_file_location("rest_seen", ROOT / ".agents/skill
 RS = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(RS)
 V = RS.V
+
+
+def cues(events, seconds):
+    """The `seen_doing_cue` rows (frame-views' event table: inserts only), and those that say a
+    creature is doing nothing."""
+    live = [e for e in events if e.get("table") == "seen_doing_cue" and e.get("event") == "insert"]
+    nothing = sum(1 for e in live if RS.option((e.get("row") or {}).get("doing")) is None)
+    return {"cues": len(live), "cues_of_nothing": nothing, "per_s": round(len(live) / seconds, 3), "nothing_per_s": round(nothing / seconds, 3)}
 
 
 def count(events, table, seconds):
@@ -83,7 +93,7 @@ def main():
     time.sleep(3)
     out = V.run_dir(st["run"])
     ta, ev_admin = RS.stream(st["db"], admin, ["SELECT * FROM doing"], a.seconds, out / f"doing-deltas-{tag}-admin.jsonl")
-    tp, ev_player = RS.stream(st["db"], tok, ["SELECT * FROM seen_doing"], a.seconds, out / f"doing-deltas-{tag}-player.jsonl")
+    tp, ev_player = RS.stream(st["db"], tok, RS.QUERIES, a.seconds, out / f"doing-deltas-{tag}-player.jsonl")
     clock0 = RS.sql(st, "SELECT tick, last_ms FROM clock", admin)[0]
     ta.join(timeout=a.seconds + 60)
     tp.join(timeout=a.seconds + 60)
@@ -92,7 +102,9 @@ def main():
     seen = len(RS.sql(st, "SELECT id FROM seen_characters", tok))
     res = {"db": st["db"], "what": tag, "seconds": a.seconds, "battle": a.battle, "people_within_30m": near, "player_sees": seen,
            "ticks": clock1["tick"] - clock0["tick"], "hour_ms": world.get("day_ms"),
-           "doing (owner)": count(ev_admin, "doing", a.seconds), "seen_doing (player)": count(ev_player, "seen_doing", a.seconds)}
+           "doing (owner)": count(ev_admin, "doing", a.seconds), "seen_doing (player)": count(ev_player, "seen_doing", a.seconds),
+           "seen_doing_near (player)": count(ev_player, "seen_doing_near", a.seconds), "seen_doing_far (player)": count(ev_player, "seen_doing_far", a.seconds),
+           "seen_doing_cue (player)": cues(ev_player, a.seconds)}
     (out / f"doing-deltas-{tag}.json").write_text(json.dumps(res, indent=1) + "\n")
     print(json.dumps(res, indent=1))
     return 0

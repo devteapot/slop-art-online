@@ -5750,6 +5750,10 @@ def doing_renew(s):
         finally:
             set_law(s, "renew_in_place", True)
     (s.out / f"{s.name}-summary.json").write_text(json.dumps({"results": {k: {kk: vv for kk, vv in v.items()} for k, v in results.items()}, "walk": detail, "law_off": off}, indent=1) + "\n")
+    # Off the shared open line, standing: later scenes (doing) place their own people on it.
+    for k, who in enumerate((rester, other)):
+        s.graph(who, {"wait": 120})
+        s.call("place_at", who, line[0][0] + 60 + 2 * k, line[0][1] + 40, check=False)
 
 
 SCENES["doing_renew"] = doing_renew
