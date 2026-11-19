@@ -2710,10 +2710,7 @@ SHORT_HOURS = {
 
 
 def compose(base, overlay):
-    # As `floors::compose`: an overlay that replaces `status_of` alone is asked it whole, the base's
-    # parts kept as `base_status_parts` (docs/STATUS_PARTS.md).
-    names = list(overlay) + (["status_parts"] if "status_of" in overlay and "status_parts" not in overlay else [])
-    for name in names:
+    for name in overlay:
         base = base.replace(f"fn {name}(", f"fn base_{name}(")
     return base + "\n" + "\n".join(overlay.values()) + "\n"
 
@@ -6681,111 +6678,6 @@ def battle_cheap(s):
 SCENES["cheap_check_ctx"] = battle_cheap
 SCENES["cheap_alarms"] = battle_cheap
 SCENES["cheap_warmth"] = battle_cheap
-
-
-def status_parts(s):
-    """The body's statuses asked by their parts (`status_parts`, docs/STATUS_PARTS.md) are the whole
-    `status_of`'s, for every status the shipped law has, and the `status_parts` law off asks the law
-    whole again (the rollback). Eight minded fighters on an open line (strikes, dodges, blocks, heals:
-    hurt, in combat, out of breath, recovering) and eight bodies beside them set by admin fixtures
-    (`admin_set_vitals` for health; owner SQL for hunger and energy, as the verify-ui noon fixtures
-    set the clock): starving, very hungry and exhausted, hungry and spent, peckish and tired, fed and
-    hurt, well rested and badly hurt, barely alive; the world's clock moved to its night (owner SQL
-    through `verify.py sql`, which records the epoch) and rain set (`set_weather`), so those out in it
-    lose health: freezing, wasting. With `status_parts_check` on for 75 s every ask by the parts is
-    also asked of the whole law with the whole body (`status_parts:checked`, `:differed`), and each
-    status the compared asks gave is counted (`status_parts:has:<name>`). Then 25 s with
-    `status_parts` off: no ask goes by the parts (`eval:status_parts_asked`) and the whole law
-    answers (`eval:status_run`, `eval:status_memo`). Every law is put back."""
-    import subprocess as sp
-    line = clear_line(s)
-    ppl = s.people(16)
-    fighters, bodies = ppl[:8], ppl[8:]
-    for k, who in enumerate(fighters):
-        s.call("place_at", who, line[2 + k % 4][0], line[2 + k % 4][1] + (k // 4) * 1.4)
-        s.call("grant_know_how", who, "wound_tending")
-        s.graph(who, {"first": [
-            {"if": {"cond": {"health": {"below": 50}}, "then": {"do": {"skill": "heal", "target": "self"}}}},
-            {"if": {"cond": {"threatened": True}, "then": {"do": {"skill": "dodge" if who % 2 == 0 else "block"}}}},
-            {"do": {"skill": "strike", "target": {"nearest": "person"}}}]})
-    for k, who in enumerate(bodies):
-        s.call("place_at", who, line[8 + k % 6][0], line[8 + k % 6][1] + 3.0 + (k // 6) * 1.4)
-        s.graph(who, {"wait": 300})
-    # (hunger, energy, health) of each body: every band of the three meters among them.
-    fixtures = [(99, 60, None), (85, 5, None), (60, 0, None), (45, 20, None), (10, 40, 50), (30, 90, 25), (20, 70, 10), (70, 15, 70)]
-    clock = lambda: s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
-    for who, (hunger, energy, hp) in zip(bodies, fixtures):
-        if hp is not None:
-            s.call("admin_set_vitals", who, float(hp))
-        s.command("sql", "-s", "local", s.db, f"UPDATE vitals SET hunger = {float(hunger)}, energy = {float(energy)}, at_ms = {clock()}, rate_key = 0 WHERE id = {who}")
-    s.rows("SELECT * FROM vitals", "fixtures")
-    # The world's night, now: its clock moved by owner SQL through the harness (which records the
-    # epoch for cleanup), and rain.
-    w = s.rows("SELECT epoch_ms, day_ms FROM world", "world-before")[0]
-    now = clock()
-    epoch = now - w["day_ms"] * 16 // 24
-    verify = str(ROOT / ".agents/skills/verify/scripts/verify.py")
-    r = sp.run(["python3", verify, "sql", "--run", s.out.name, f"UPDATE world SET epoch_ms = {epoch} WHERE id = 0"], capture_output=True, text=True)
-    s.expect("the world's clock moved to its night", r.returncode == 0, r.stderr[-300:])
-    s.call("set_weather", True, 600)
-    for law in ("status_parts_check",):
-        set_law(s, law, True)
-    s.call("set_profile", True)
-    windows = {}
-    t0 = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
-    try:
-        time.sleep(75)
-        t1 = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
-        set_law(s, "status_parts_check", False)
-        set_law(s, "status_parts", False)
-        time.sleep(3)
-        t2 = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
-        time.sleep(25)
-        t3 = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
-    finally:
-        s.call("set_profile", False)
-        set_law(s, "status_parts_check", False)
-        set_law(s, "status_parts", True)
-        s.call("set_weather", False, 0)
-    s.rows("SELECT * FROM vitals", "after")
-    logs = s.command("logs", "-s", "local", s.db, "-n", "400000").stdout.splitlines()
-    def window(a, b):
-        text = "\n".join(l for l in logs if a <= l[:19] < b and "diag:" in l)
-        keys = set(re.findall(r'"([^"]+)":\d+', text))
-        return {k: sum(int(x) for x in re.findall(rf'"{re.escape(k)}":(\d+)', text)) for k in keys}
-    check, whole = window(t0, t1), window(t2, t3)
-    errors = [l for l in logs if t0 <= l[:19] and "status_parts of" in l][:10]
-    has = {k.split(":", 2)[2]: n for k, n in check.items() if k.startswith("status_parts:has:")}
-    g = lambda m, k: m.get(k, 0)
-    m = {"check": {k: v for k, v in sorted(check.items()) if k.startswith(("status_parts", "eval:status", "alarm:"))},
-         "whole": {k: v for k, v in sorted(whole.items()) if k.startswith(("status_parts", "eval:status", "alarm:"))},
-         "has": has, "errors": errors, "windows": [t0, t1, t2, t3]}
-    (s.out / f"{s.name}-status-parts.json").write_text(json.dumps(m, indent=1) + "\n")
-    print("MEASURE", json.dumps({"check": m["check"], "whole": m["whole"], "has": has}), flush=True)
-    families = {
-        "hunger": ("starving", "very_hungry", "hungry", "peckish", "fed", "not_hungry"),
-        "energy": ("spent", "exhausted", "tired", "a_little_tired", "rested", "well_rested"),
-        "health": ("barely_alive", "badly_hurt", "hurt", "a_little_hurt", "unhurt"),
-        "cold": ("freezing",), "combat": ("in_combat",), "breath": ("out_of_breath",), "slowed": ("slowed",),
-        "mending": ("wasting", "recovering")}
-    try:
-        s.expect("many asks by the parts were also asked of the whole law, and none differed",
-                 g(check, "status_parts:checked") >= 500 and g(check, "status_parts:differed") == 0 and not errors,
-                 {"checked": g(check, "status_parts:checked"), "differed": g(check, "status_parts:differed"), "errors": errors})
-        s.expect("the compared asks gave a status of every part", all(any(has.get(n, 0) > 0 for n in names) for names in families.values()),
-                 {f: [n for n in names if has.get(n, 0)] for f, names in families.items()})
-        s.expect("every band of hunger, energy and health was compared, and both wasting and recovering",
-                 all(has.get(n, 0) > 0 for names in families.values() for n in names), sorted(n for names in families.values() for n in names if not has.get(n, 0)))
-        s.expect("kept parts answered most part asks", g(check, "eval:status_part_memo") > g(check, "eval:status_part_run") > 0, m["check"])
-        s.expect("status_parts off: the law asked whole, nothing by the parts",
-                 g(whole, "eval:status_calls") > 0 and g(whole, "eval:status_parts_asked") == 0 and g(whole, "eval:status_run") + g(whole, "eval:status_memo") == g(whole, "eval:status_calls"), m["whole"])
-    finally:
-        for who in ppl:
-            s.graph(who, {"wait": 300})
-        off_the_line(s, line, ppl, dy=80)
-
-
-SCENES["status_parts"] = status_parts
 
 
 def _sweep_player(s, name):

@@ -121,13 +121,13 @@ def main():
     spans = {}
     motion_ms = 0.0
     over_budget_after_motion = 0
-    for m in re.finditer(r'^(\S+Z)\s.*Timing span "([^"]+)": ([\d.]+)(ns|µs|ms|s)\b', logs, re.M):
+    for m in re.finditer(r'^(\S+Z)\s.*Timing span "([^"]+)": ([\d.]+)(µs|ms|s)\b', logs, re.M):
         # A line logged on the exact second has no fraction.
         stamp = m.group(1)[:26].rstrip("Z")
         at = datetime.strptime(stamp, "%Y-%m-%dT%H:%M:%S.%f" if "." in stamp else "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc).timestamp()
         if at < t0 - 1:
             continue
-        d = float(m.group(3)) * {"ns": 1e-6, "µs": 1e-3, "ms": 1.0, "s": 1e3}[m.group(4)]
+        d = float(m.group(3)) * {"µs": 1e-3, "ms": 1.0, "s": 1e3}[m.group(4)]
         spans.setdefault(m.group(2), []).append(d)
         if m.group(2) == "tick.motion":
             motion_ms += d

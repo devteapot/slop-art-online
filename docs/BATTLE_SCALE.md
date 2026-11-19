@@ -566,7 +566,7 @@ Structures are noticed by radius alone: no facing, no walls. In a battle the rem
 - C1 is exact, but small today; it is worth building with E as one small exact branch.
 - C2 is what an 8-hour battle needs, and waits on the decision above.
 
-## Design note B: the `status_of` law in per-meter parts (approved; built on `status-parts`, below)
+## Design note B: the `status_of` law in per-meter parts (not built; for the general coordinator)
 
 **What it costs** (the profile above):
 - The body's alarms (`brain.status`): 29.2 ms/s, 12% of the tick, over 633 calls a second.
@@ -597,51 +597,6 @@ Structures are noticed by radius alone: no facing, no walls. In a battle the rem
 - Every world script that defines `status_of` without parts keeps working as now.
 
 **Decision for the general coordinator:** whether to extend the script contract for this; A waits.
-
-## B as built (`status-parts`, 2026-11-19)
-
-Approved by the general coordinator after the fresh profile on main 497f75d1 (`status-profile`, fe3130c2; evidence `~/slop-evidence/status-profile-2026-11-19.tar.zst`): at 200 AI fighters, 16 walkers and no viewers, `status_of` cost 47.30–50.67 ms/s, of which whole-law memo misses were 43–46 ms/s (1,274–1,363 Rhai runs/s). Built to the revised sketch (`STATUS_PARTS_RECHECK.md` on `status-parts-recheck`); the API, install checks, composition and laws are in [STATUS_PARTS.md](STATUS_PARTS.md) and [WORLD_RULES.md](WORLD_RULES.md#the-body-meters-and-statuses).
-
-**The parts and what each is kept on** (`Scripts::status_part_reads`; test `each_part_is_kept_on_what_it_reads`):
-
-| Part | Its statuses | Reads (its key) |
-| --- | --- | --- |
-| `hunger_part` | fed … starving | `hunger` |
-| `energy_part` | well rested … spent | `energy` |
-| `health_part` | unhurt … barely alive | `share.health` |
-| `cold_part` | freezing | `hp_rate`, `hunger`, `kind`, `night` |
-| `combat_part` | in combat | `hurt_ago_s` |
-| `breath_part` | out of breath | `stamina` |
-| `slowed_part` | slowed | `energy` (and `kind` where a world's `slow_words` reads it) |
-| `mending_part` | wasting, recovering | `hp_rate`, `share.health` |
-
-The union is the whole law's reads, so alarm cells expire exactly as before; the cell also holds the way it was asked.
-
-**Same answers.** `status_parts_check` asks the whole `status_of` with the whole body at every ask by the parts:
-- verify-core `status_parts` (every one of the 23 statuses among the compared answers; fixtures for hunger, energy, health, night and rain): 9,457 asks compared, none differed; with `status_parts` off every ask went whole.
-- A 200-fighter, 16-walker battle (`battle_diag.py --law status_parts_check=true`, 2.5 minutes, three 40 s profiled windows): 148,779 asks compared (counted from the full replica log), none differed, no difference logged.
-- Rules tests: the parts joined equal the law as written before the split on 6,000 sampled bodies, also on Cullet.
-
-**What changed in the battle.** Which `combat_seen` rows are written, and when, is unchanged: the statuses, alarms and cell expiry are the same, and the change touches no table, view or delivery path.
-
-**A/B** (Spark, 2026-11-19, 18:39–23:12 CET; evidence `~/slop-evidence/status-parts-2026-11-19.tar.zst`). The same battle as the profile: `battle_diag.py` through status-profile's `arm.py`, island seed, 200 AI fighter slots refilled at the site (0.1 s gap) and 16 walkers, `--no-mind`, one 40 s window after 12 s of warm-up, `profile_detail` on. Viewers are SDK identities on a 10 m ring with the scoped subscriptions (`perception_load`), kept alive by an admin-only fixture: `admin_set_vitals(id, 1000)` for any viewer below 90% of full, every 0.5 s (rep 1 at 216: below 70% every 1.5 s). A is main 9d112a51 plus the timing commit (45c185bb); B is the branch (code 934d00fc). Private server `clockworklabs/spacetime:v2.14.1`, one `battle.lock` acquisition per series; each run started at 1-minute load under 6. Rates come from the full replica logs. `status_of` is the `status.ask` span (the whole `Scripts::status_of` call); Rhai runs are `status.rhai` spans (A: whole-law runs; B: part runs), equal to the counters within 1%.
-
-| Viewers | Runs A / B | `status_of` ms/s, A → B | p50 per ask | Rhai runs/s | `brain.status` ms/s | Tick ms/s | Ticks/s | Work per tick, ms |
-| ---: | ---: | --- | --- | --- | --- | --- | --- | --- |
-| 0 | 2 / 2 | 49.3 (47.0–51.6) → 5.0 (4.8–5.1) | 34 → 2.5 µs | 1,242 → 33 | 82.3 → 40.2 | 615 → 586 | 42.5 → 53.5 | 14.5 → 11.0 |
-| 1 | 1 / 1 | 48.4 → 4.6 | 34 → 2.4 µs | 1,292 → 29 | 81.3 → 38.4 | 602 → 562 | 44.7 → 51.3 | 13.5 → 11.0 |
-| 4 | 1 / 1 | 48.2 → 5.0 | 34 → 2.7 µs | 1,298 → 29 | 81.1 → 37.7 | 598 → 612 | 45.3 → 39.8 | 13.3 → 15.5 |
-| 16 | 0 / 1 | – → 4.4 | – → 2.6 µs | – → 31 | – → 34.7 | – → 550 | – → 41.8 | – → 13.2 |
-| 216 | 3 / 3 | 20.0 (19.3–20.6) → 2.3 (2.26–2.34) | 34 → 2.7 µs | 506 → 27 | 33.6 → 16.5 | 576 → 565 | 8.7 → 10.2 | 68 → 55 |
-
-- **`status_of` cost:** down 88–91% in every arm. The memo misses are gone: 1,178–1,306 whole-law runs a second (about 28 µs each) become 26–33 part runs (about 13 µs each); an ask whose parts all hit costs about 2 µs (eight keys, eight lookups and the joined answer).
-- **Ticks:** better in the paired arms at 0, 1 and 216 viewers. The one pair at 4 viewers had the branch lower (39.8 against 45.3 ticks/s; tick p99 96 ms), with host load reaching 11.2 in its window; it was not repeated.
-- **Host load was not matched.** In series 1 (A then B in each pair) the load rose to 11–20 during every A window and stayed near 3–7 in the B windows, from other work on the host. Series 2 ran B before A (the third 216 pair, and the 1, 4 and 16 arms) with window loads of 2–6 in both arms, except B's window at 4 viewers (up to 11.2). The run counts and the per-run cost do not depend on it (A's 28 µs a run matches the profile's, taken at load 4–8); the tick figures do.
-- **Viewers:** 216 of 216 alive through every window, 0 deaths, in the rep 2 and rep 3 pairs (854–910 heals in the window, 1,126–1,270 in the run) and at 1, 4 and 16 viewers. In rep 1 with the slower fixture, A kept all 216 (300 heals in the window) and B lost 46 late in its window (324 heals; 66 heal calls refused for the dead). Rep 1 is kept in the table above: its `status_of` and run counts sit with the other two.
-- **The tick advanced** in every run: the `stats` counter rose at every 4 s mark (one rep-1 A mark equal to the window's end sample, taken within the same second) and the largest logged gap between ticks was under 0.7 s.
-- The profiling instrumentation itself (`status.diag`, 15–18 ms/s at 0 viewers in both arms, outside `status.ask`) stays as it was; it runs only while profiling.
-
-
 
 ## Exact paths E and C1 (`battle-exact-2`)
 

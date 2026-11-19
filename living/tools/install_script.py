@@ -37,16 +37,12 @@ DEF = re.compile(r"^(\s*)(private\s+)?fn\s+([A-Za-z0-9_]+)(\s*\()", re.M)
 def compose_laws(base, overlay):
     """`living_rules::floors::compose` in Python: each function the overlay defines replaces the
     base's (`fn NAME(` at the start of a base line becomes `fn base_NAME(`), and the overlay is
-    appended after the floor-overlay line. An overlay of `status_of` without `status_parts` also
-    renames the base's `status_parts`, as the Rust does."""
+    appended after the floor-overlay line."""
     names = {m.group(3) for m in DEF.finditer(overlay)}
     bad = sorted(n for n in names if n.startswith("base_"))
     if bad:
         raise ValueError(f"floor overlay defines `{bad[0]}`: `base_` names are the replaced base functions")
-    # An overlay that replaces `status_of` alone is asked it whole: the base's parts are kept as
-    # `base_status_parts` (docs/STATUS_PARTS.md).
-    renames = names | ({"status_parts"} if "status_of" in names and "status_parts" not in names else set())
-    renamed = DEF.sub(lambda m: f"{m.group(1)}{m.group(2) or ''}fn base_{m.group(3)}{m.group(4)}" if m.group(3) in renames else m.group(0), base)
+    renamed = DEF.sub(lambda m: f"{m.group(1)}{m.group(2) or ''}fn base_{m.group(3)}{m.group(4)}" if m.group(3) in names else m.group(0), base)
     return renamed + ("" if renamed.endswith("\n") else "\n") + OVERLAY_MARK + overlay
 
 

@@ -1,18 +1,6 @@
-# `status_of` in per-meter parts
+# `status_of` in per-meter parts (API sketch, not built)
 
-*Sketch for the general coordinator, 2026-11-13; rechecked 2026-11-19 (`status-parts-recheck`, `docs/STATUS_PARTS_RECHECK.md` on that branch); built on branch `status-parts`, 2026-11-19, following the revised sketch. Note B in [BATTLE_SCALE.md](BATTLE_SCALE.md) has the profiles and the A/B measurement.*
-
-## As built (2026-11-19)
-
-The sketch below holds, with these decisions from the recheck:
-- **Keys.** A part is keyed on the values of what it reads alone, in its plan's order (no names): `share.<meter>` counts the share value, not the fields it is made of; `kind`, `stage` and `night` only when read. Each part keeps its distinct answers (at most 256) and maps a key to an answer's index; the joined answer is kept by the indices (at most 4,096), so an ask whose parts all hit returns the same `Rc` with no concatenation. A full memo starts over, as the whole law's did.
-- **The way asked** (`StatusWay { parts, check }`) is the authority's `status_parts` and `status_parts_check` laws; the mind service and the game client ask by the parts with no check. The alarm cell (`brain::AlarmCell`) holds the way it was asked, so a switch takes effect on kept answers too, and it expires on the active way's reads (`Scripts::status_reads_as`; for the shipped script the same facts as the whole law's).
-- **The check** runs the whole `status_of` on the whole body with no memo at every ask by the parts (memo hits included), compares the ordered list field by field, logs the difference (`status_parts of <id>: …`), counts `status_parts:checked` and `status_parts:differed`, and gives the whole law's answer where they differ.
-- **Composition.** `floors::compose` (and its Python copies, `living/tools/install_script.py` and verify-core's `compose`) renames the base's `status_parts` to `base_status_parts` when an overlay replaces `status_of` without it, so such a floor is asked its own law whole; a script of its own `status_of` running on borrowed shipped laws is asked whole too. A floor that replaces both is checked at install.
-- **Tables, reducers, views, subscriptions, bindings:** none changed. No retained rows. The per-part memos live in the `Scripts` instance's memory, like the whole law's memo.
-- **Counters while profiling:** `eval:status_parts_asked`, `eval:status_parts_joined`, `eval:status_part_memo`, `eval:status_part_run`, `eval:status_part_run:<i>` (by the part's place), and with the check `status_parts:checked`, `status_parts:differed`, `status_parts:has:<status>`.
-
-The original sketch follows.
+*Sketch for the general coordinator, 2026-11-13. Note B in [BATTLE_SCALE.md](BATTLE_SCALE.md) (on `battle-profile`) has the profile behind it. Nothing here is built.*
 
 ## Why
 

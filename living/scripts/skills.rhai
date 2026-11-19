@@ -133,9 +133,6 @@ fn laws() {
         // levels. The `_check` laws (diagnostics) also work each out the whole way and count any
         // difference; `warmth_check` likewise for warmth.
         check_ctx_plan: true, check_ctx_check: false, alarm_cells: true, alarm_cells_check: false, warmth_check: false,
-        // The body's statuses asked by their parts (`status_parts()`), each kept on what it reads;
-        // `status_parts_check` (a diagnostic) also asks the whole `status_of` and counts any difference.
-        status_parts: true, status_parts_check: false,
         // A body's scene worked out as far as each reader asks; `scene_lazy_check` (a diagnostic)
         // also works each answer out from the whole scene and counts any difference.
         scene_lazy: true, scene_lazy_check: false,
@@ -2901,38 +2898,27 @@ fn health_status(f) {
     else if f < 0.9 { #{ name: "a_little_hurt", tone: "plain", text: "A little hurt", meter: "health", felt: "a little hurt" } }
     else { #{ name: "unhurt", tone: "plain", text: "Unhurt", meter: "health", felt: "unhurt" } }
 }
-// The parts of how a body is, in the order their statuses are listed (docs/STATUS_PARTS.md). Each
-// takes the same body `a` as `status_of` and gives a list of its statuses (none, one or more); the
-// engine keeps each part's answer on what that part reads, so a change of breath alone asks only
-// `breath_part` again. `status_of` is the parts joined in this order and stays the law: the
-// engine's check law compares the two, and an install refuses a world whose parts joined differ
-// from its `status_of`. A floor that replaces `status_of` alone is asked it whole.
-fn status_parts() { ["hunger_part", "energy_part", "health_part", "cold_part", "combat_part", "breath_part", "slowed_part", "mending_part"] }
-fn hunger_part(a) { if a.hunger != () { [hunger_status(a.hunger)] } else { [] } }
-fn energy_part(a) { if a.energy != () { [energy_status(a.energy)] } else { [] } }
-fn health_part(a) { let f = a.share.health; if f != () { [health_status(f)] } else { [] } }
-// Losing health in the night air without starving: the cold (an alarm the mind acts on).
-fn cold_part(a) {
-    let falling = if a.hp_rate == () { 0.0 } else { a.hp_rate };
-    if a.night && a.kind == "person" && falling < 0.0 && a.hunger != () && a.hunger < 100.0 {
-        [#{ name: "freezing", tone: "bad", text: "Freezing", alarm: "You are freezing in the night air; you need a fire or shelter.", salience: 0.6, think: "always" }]
-    } else { [] }
-}
-fn combat_part(a) { if a.hurt_ago_s != () && a.hurt_ago_s >= 0.0 && a.hurt_ago_s < 15.0 { [#{ name: "in_combat", tone: "bad", text: "In combat" }] } else { [] } }
-// Breath: short of it after a run or in a fight (the refusal's words); slowed, and why.
-fn breath_part(a) { if a.stamina != () && a.stamina < 20.0 { [#{ name: "out_of_breath", tone: "warn", text: "Out of breath", meter: "stamina", felt: "out of breath" }] } else { [] } }
-fn slowed_part(a) {
-    if a.energy != () && slow_words(a.kind, a.energy) != "" { [#{ name: "slowed", tone: "warn", text: "Walking slower", meter: "energy", felt: "walking slower" }] } else { [] }
-}
-fn mending_part(a) {
-    let falling = if a.hp_rate == () { 0.0 } else { a.hp_rate };
-    let f = a.share.health;
-    if falling < -0.01 { [#{ name: "wasting", tone: "bad", text: "Wasting", felt: "you are growing weaker" }] }
-    else if falling > 0.01 && f != () && f < 0.99 { [#{ name: "recovering", tone: "good", text: "Recovering", felt: "your wounds are mending" }] }
-    else { [] }
-}
 fn status_of(a) {
-    hunger_part(a) + energy_part(a) + health_part(a) + cold_part(a) + combat_part(a) + breath_part(a) + slowed_part(a) + mending_part(a)
+    let out = [];
+    if a.hunger != () { out.push(hunger_status(a.hunger)); }
+    if a.energy != () { out.push(energy_status(a.energy)); }
+    let f = a.share.health;
+    if f != () { out.push(health_status(f)); }
+    let falling = if a.hp_rate == () { 0.0 } else { a.hp_rate };
+    // Losing health in the night air without starving: the cold (an alarm the mind acts on).
+    if a.night && a.kind == "person" && falling < 0.0 && a.hunger != () && a.hunger < 100.0 {
+        out.push(#{ name: "freezing", tone: "bad", text: "Freezing", alarm: "You are freezing in the night air; you need a fire or shelter.", salience: 0.6, think: "always" });
+    }
+    if a.hurt_ago_s != () && a.hurt_ago_s >= 0.0 && a.hurt_ago_s < 15.0 { out.push(#{ name: "in_combat", tone: "bad", text: "In combat" }); }
+    // Breath: short of it after a run or in a fight (the refusal's words); slowed, and why.
+    if a.stamina != () && a.stamina < 20.0 { out.push(#{ name: "out_of_breath", tone: "warn", text: "Out of breath", meter: "stamina", felt: "out of breath" }); }
+    if a.energy != () {
+        let slow = slow_words(a.kind, a.energy);
+        if slow != "" { out.push(#{ name: "slowed", tone: "warn", text: "Walking slower", meter: "energy", felt: "walking slower" }); }
+    }
+    if falling < -0.01 { out.push(#{ name: "wasting", tone: "bad", text: "Wasting", felt: "you are growing weaker" }); }
+    else if falling > 0.01 && f != () && f < 0.99 { out.push(#{ name: "recovering", tone: "good", text: "Recovering", felt: "your wounds are mending" }); }
+    out
 }
 
 // A rate of the rates law in real minutes, as the engine turns it (`per`: a game hour or a minute).
@@ -2942,7 +2928,7 @@ fn needs_law() {
     let awake = rates_awake();
     let l = laws();
     let rise = if awake == () { "hunger rises over time (100 = starving, which drains health); energy falls" } else { `hunger rises ~${short(per_real_minute(awake, awake.hunger))}/min (${short(awake.starving_at)} = starving, which drains health); energy falls ~${short(-per_real_minute(awake, awake.energy))}/min` };
-    #{ cadence: "event", topic: "body", covers: ["rates", "body_state", "freezing", "meters", "status_of", "status_parts"],
+    #{ cadence: "event", topic: "body", covers: ["rates", "body_state", "freezing", "meters", "status_of"],
        about: `${rise} awake and recovers while sleeping (faster within ${short(l.shelter_warmth)} m of a shelter or house). At night, people farther than ${short(l.fire_warmth)} m from a campfire and ${short(l.shelter_warmth)} m from a shelter or house, and without a warm cloak, are cold: it tires them, and on winter nights or in the rain it also costs health. Health recovers slowly when fed and rested. Death is permanent.` }
 }
 
@@ -3181,8 +3167,6 @@ fn law_about(l, name) {
         "check_ctx_check" => "a diagnostic: each move is weighed both ways and compared",
         "alarm_cells" => "the body's alarms are worked out again only when something they read can change",
         "alarm_cells_check" => "a diagnostic: each kept alarm answer is worked out afresh and compared",
-        "status_parts" => "how a body is, is worked out part by part, each part again only when something it reads has changed",
-        "status_parts_check" => "a diagnostic: how a body is, is also worked out whole and compared",
         "near_tier_on" => if l.near_tier_on { "what is near a player is kept apart from the rest of what it sees, and follows on its own" } else { "what a player sees is kept together" },
         "cue_transport_on" => if l.cue_transport_on { "what is near a player, or fighting it, reaches the player's screen at once" } else { "what is near a player reaches the player's screen with the rest of what it sees" },
         "warmth_check" => "a diagnostic: warmth is worked out both ways and compared",

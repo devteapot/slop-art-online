@@ -336,7 +336,6 @@ Checks at install. Unknown keys are refused when the script is compiled, naming 
   - an item's `icon` trait must be an item icon, and its `group` one of food, tool, material, garment or money;
   - `meters()` rows must name `my_vitals` fields;
   - `status_of` is called on sample actors and must return a list of `#{ name, tone, text }`.
-  - `status_parts()`, when declared, must name unary functions each once, each returning a list of statuses, and their answers joined must be `status_of`'s on every sample ([world rules](WORLD_RULES.md#the-body-meters-and-statuses)).
 
 ### Five declarations
 
@@ -458,7 +457,7 @@ How the box uses it:
 ### Declarations that are not skills
 
 These are kept small and follow the same rule: data in the script, read at compile, defaults when absent.
-- **Meters and statuses.** These go in a `meters()` table: `#{ name: "health", value: "hp", max: "max_hp", order: 0 }` and `#{ name: "energy", value: "energy", max: 100.0, order: 1 }`. A `status_of(a)` law returns `[#{ name: "hungry", tone: "warn", text: "Hungry" }, …]`. A world may declare the parts it is made of (`status_parts()`, the shipped eight by meter); a client asks `Scripts::status_of` either way and gets the same answer, each part kept on what it reads ([STATUS_PARTS.md](STATUS_PARTS.md)).
+- **Meters and statuses.** These go in a `meters()` table: `#{ name: "health", value: "hp", max: "max_hp", order: 0 }` and `#{ name: "energy", value: "energy", max: 100.0, order: 1 }`. A `status_of(a)` law returns `[#{ name: "hungry", tone: "warn", text: "Hungry" }, …]`.
   - The client calls it when a `my_vitals` row changes, replacing the pills' fixed thresholds.
   - If the AI alerts in `brain.rs:859-871` move onto it, there is one source instead of three. It must then be memoised per state, as `senses` is (`script.rs:1376-1398`), and its tick cost measured at 216 characters.
 - **Items.** `icon` and `label` become item traits (they already parse), plus an optional `group` (food, tool, material, garment, money) that orders the pack.
