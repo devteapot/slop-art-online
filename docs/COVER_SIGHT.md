@@ -172,6 +172,14 @@ data was available needs that data before it can accept the switch. The map uses
 genesis cover geometry while live terrain edits and gate state apply through the
 existing terrain trace. [Shared cover compiler](../living/rules/src/cover.rs).
 
+The acceptance Cullet mask with brush uses 334,624 bytes, plus 2,097,152 bytes
+of quantized ground. Genesis sampling took about 138 ms. The mask compiled in
+15–16 ms on activation. In the wooded island, the mask uses 9,718,816 bytes,
+plus 8,388,608 bytes of ground. Genesis sampling took about 803 ms, and mask
+compilation took 50–51 ms while the world was paused for setup. These figures
+are per cached mask and ground buffer and exclude table storage overhead. Cell
+tops are signed 16-bit decimetres.
+
 ### Public `cover_law` singleton
 
 | Field | Type | Shade use |
@@ -215,8 +223,7 @@ Read back `SELECT * FROM cover_law` under the player's identity. Clearing the sc
 test uses `["cover_sight_on","false"]` in the same command. This recipe is for new
 scratch worlds with the genesis cover bands.
 
-The scratch recipe was exercised on `verify-core-cover-222359` from the authored
-Cullet fixture with its normal overlay. Useful positions for the laptop's stills
+The scratch recipe was exercised on `verify-core-cover-012742` using the checked-in Cullet seed and its overlay. Useful positions for the laptop's stills
 are below. Coordinates are land metres.
 
 | Frame | Viewer | Target |
@@ -228,7 +235,51 @@ are below. Coordinates are land metres.
 
 The live proof checked those four positions with cover off, on and off again. It
 also checked arrows, player lines and the pending mind-scene target. See
-`.local/living/verify/core-cover-222359/cover-proof.jsonl`. The SDK probe at
-`.local/living/verify/client-cover-222747/` accepted `cover_law` and rejected
+`.local/living/verify/core-cover-012742/cover-proof.jsonl` (23 passing assertions). The SDK probe at
+`.local/living/verify/client-cover-015635/` accepted `cover_law` and rejected
 access to `cover_ground` and `attention`. The authored land dump preserved the
 three pinned digests.
+
+### Phase 2 acceptance
+
+The acceptance runs used the rebased implementation at `1d9eb7c1`. Each fresh
+scratch Cullet run had 64 ambient residents and 152 SDK game clients, for 216 live
+characters at both censuses. The four arms per field ran off, on, off, on, with a
+30-second profiled window per run. Each acquired the shared `battle.lock`.
+Sight time is the sum of `sight.player_candidates` and `scene.sensed`. Tick
+duration is the mean. Traffic comes from the server's per-database client bytes
+counter. Adds and drops count player-visible-set transitions.
+
+| Cullet field | Cover | Runs | Sight ms/s | Tick ms | Ticks/s | >16.7 ms | kB/s | Adds/s | Drops/s |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Round | Off | 2 | 27.02–39.21 | 2.52–3.95 | 59.13–59.47 | 0% | 803.3–813.6 | 259.1–261.2 | 253.1–255.8 |
+| Round | On | 2 | 27.09–28.29 | 2.35–2.48 | 59.53–59.53 | 0% | 780.7–797.2 | 239.6–251.7 | 234.1–248.2 |
+| Middle | Off | 2 | 25.52–28.33 | 2.78–3.08 | 59.23–59.43 | 0% | 688.7–701.7 | 731.2–754.4 | 743.7–766.9 |
+| Middle | On | 2 | 29.00–30.42 | 3.06–3.18 | 59.33–59.33 | 0% | 670.7–690.7 | 735.6–741.0 | 750.0–753.4 |
+
+Round passed both spread checks. Middle passed the late-tick check and exceeded
+the cover-off sight spread in both cover-on runs. The gate therefore stays closed.
+
+The wooded battle used a deterministic island site with 149 forest cells in a
+17×17 patch and an authored brush strip. Each arm ran for five minutes with
+facing on. The census recorded 96 of 96 fighters alive within 30 m at the
+start and end of all 24 profile windows, alongside 16 walkers and the
+310 ambient characters. We held spear damage low in both arms and used no
+refill. An owner SDK connection subscribed to mind data with no inference
+service. Sight measures `scene.sensed`, and adds and drops are mind-visible-set
+transitions. Windows were five seconds each. The preliminary 20-second
+windows overflowed the server's detailed log tail and were excluded.
+
+| Wooded battle | Runs | Sight ms/s | Tick ms | Ticks/s | >16.7 ms | kB/s | Adds/s | Drops/s |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Cover off | 2 | 25.09–27.31 | 6.04–6.26 | 57.47–57.80 | 1.64–1.82% | 431.4–432.1 | 87.0–134.2 | 99.5–119.3 |
+| Cover on | 2 | 27.58–28.38 | 5.66–7.08 | 54.52–58.53 | 0.62–2.77% | 364.4–396.1 | 86.6–92.0 | 89.9–92.6 |
+
+The wooded battle missed the sight gate in both cover-on runs. One cover-on
+run had fewer late ticks than either control, and the other had more. The
+shared lock covered each run. No other battle or scene process was detected
+inside the measured windows. See `acceptance-host.csv` in the evidence archive
+for per-run load, memory and population checks, and `acceptance-summary.txt`
+for run-level numbers. Far, visual captures at the three zoom stops, a
+separate live animal scene and a separate live replay against the unmodified
+main binary were outside the evidence collected here.
