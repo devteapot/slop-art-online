@@ -5,7 +5,7 @@ Free: the fake model; scratch `verify-minds-*` databases on the trial stack.
   battle_diag.py --run minds-bd-<stamp> [--battle 100] [--walkers 116] [--minutes 30]
                  [--window 30] [--period 60] [--no-mind] [--fast-lane [--fast-real] [--fake-fast-patch]]
                  [--keep-plans] [--law NAME=VALUE] [--arm LABEL] [--no-refill] [--refill-from 30]
-                 [--refill-gap 0.5] [--law NAME=VALUE ...]
+                 [--refill-gap 0.5] [--law NAME=VALUE ...] [--fixed-site X Y]
 
 Seed `island` (its residents and animals on their own rules). `--battle` minded people
 (`spawn_crowd`) packed onto seed-ordered walkable tiles near the arrival point fight the
@@ -92,11 +92,13 @@ def authority_sql(run, token, query):
     return [dict(zip(names, row)) for row in result["rows"]]
 
 
-def initial_formation(run, token, world, count, walkers):
-    """Pick tile centres from the terrain, without depending on moving bodies or reducer RNG."""
+def initial_formation(run, token, world, count, walkers, anchor=None):
+    """Pick tile centres from the terrain, without depending on moving bodies or reducer RNG.
+    The formation gathers round `anchor` (`--fixed-site`), or 20 m north of the arrival point."""
     width, height = world["width"], world["height"]
-    arrival, = run.private("SELECT arrive_x, arrive_y FROM land WHERE id = 0", "battle-arrival")
-    anchor = (arrival["arrive_x"], arrival["arrive_y"] - 20)
+    if anchor is None:
+        arrival, = run.private("SELECT arrive_x, arrive_y FROM land WHERE id = 0", "battle-arrival")
+        anchor = (arrival["arrive_x"], arrival["arrive_y"] - 20)
     x0, y0 = map(math.floor, anchor)
 
     @lru_cache(maxsize=256)
@@ -327,12 +329,19 @@ def main():
     ap.add_argument("--law", action="append", default=[], metavar="NAME=VALUE",
                     help="set a world law after launch (JSON value), e.g. witness_fold_ms=0 or profile_detail=true")
     ap.add_argument("--input-latency", action="store_true",
-                    help="record authority and mind timing plus database metrics for a fake-patch run")
+                    help="record authority and mind timing plus database metrics for a fake-model fast-lane run")
+    ap.add_argument("--fixed-site", nargs=2, type=float, metavar=("X", "Y"),
+                    help="stage a fixed population in stationary, nonlethal fights round this point, for fake-model comparisons")
     a = ap.parse_args()
-    if a.input_latency and (not a.fast_lane or not a.fake_fast_patch or a.fast_real or a.no_mind):
-        ap.error("--input-latency requires --fast-lane --fake-fast-patch with the fake model")
+    if a.input_latency and (not a.fast_lane or a.fast_real or a.no_mind):
+        ap.error("--input-latency requires --fast-lane with the fake model")
     if a.input_latency and not os.environ.get("CARGO_TARGET_DIR"):
         ap.error("--input-latency requires a private CARGO_TARGET_DIR")
+    fixed = a.fixed_site is not None
+    if fixed and (not a.keep_plans or a.fast_real or a.no_mind):
+        ap.error("--fixed-site needs --keep-plans and a fake mind")
+    if fixed:
+        a.no_refill = True
     run = vm.Run(a.run)
     state = {"respawns": 0, "stop": False, "fighters": [], "arriving": {}}
     head = {}
@@ -379,7 +388,11 @@ def main():
         # Keep the baseline roster export used by the earlier report.
         run.sql("SELECT id FROM character", "chars-probe")
         seed, = run.private("SELECT seed, width, height FROM world WHERE id = 0", "battle-seed")
-        site, formation, walker_slots, staging = initial_formation(run, token, seed, a.battle, a.walkers)
+        site, formation, walker_slots, staging = initial_formation(
+            run, token, seed, a.battle, a.walkers, tuple(a.fixed_site) if fixed else None)
+        if fixed:
+            for law in ("dmg_strike", "dmg_strike_spear"):
+                run.admin("set_world_law", law, "0.0")
         slots = formation[:a.battle]
         strike_card, = run.private("SELECT reach FROM skill_card WHERE skill = 'strike'", "battle-reach")
         if strike_card["reach"] <= 0:
@@ -442,7 +455,10 @@ def main():
                 if body["id"] in before:
                     ambient_moved[body["id"]] = (x, y)
         for id, into in zip(fighters, slots):
-            fighter(id, into)
+            if fixed:
+                run.admin("place_at", id, *into)
+            else:
+                fighter(id, into)
         for id, into in zip(made[a.battle:], walker_slots):
             run.admin("place_at", id, *into)
         bodies = {b["id"]: (b["x"], b["y"])
@@ -454,6 +470,34 @@ def main():
             raise RuntimeError("the authority could not place every spawned person in their seed-defined slot")
         walkers = set(made[a.battle:])
         state["ever_fighters"] = set(fighters)
+
+        def bodies_at_site(label):
+            alive = {c["id"] for c in run.sql("SELECT id, alive FROM character", f"fixed-alive-{label}") if c["alive"]}
+            spots = {b["id"]: (b["x"], b["y"]) for b in
+                     run.private("SELECT id, x, y FROM body", f"fixed-bodies-{label}")
+                     if b["id"] in alive and b["id"] in fighters and math.dist((b["x"], b["y"]), site) <= 16}
+            if len(spots) != a.battle:
+                raise RuntimeError(f"fixed fixture {label}: {len(spots)} of {a.battle} fighters at the site")
+            return spots
+
+        if fixed:
+            # Each fighter strikes its two nearest rivals within 1.6 m in turn, standing still;
+            # strikes do no damage (the laws above), so the same 200 fight for the whole run.
+            spots = bodies_at_site("start")
+            (run.directory / "fixed-layout.json").write_text(json.dumps([spots[f] for f in fighters]))
+            for fighter_id in fighters:
+                neighbors = sorted((math.dist(spots[fighter_id], spot), other) for other, spot in spots.items()
+                                   if other != fighter_id)
+                rivals = [other for distance, other in neighbors if distance <= 1.6][:2]
+                if not rivals:
+                    raise RuntimeError(f"fixed fighter {fighter_id} has no opponent in strike range")
+                strikes = []
+                for other in rivals:
+                    strikes.extend([{"do": {"skill": "strike", "target": {"id": other}}}, {"wait": 0.5}])
+                run.admin("set_behavior", fighter_id, json.dumps({"desires": [
+                    {"want": "fight", "weight": {"base": 5.0},
+                     "do": {"seq": {"label": "combat", "children": strikes}}}
+                ]}))
         state["fighters"] = list(fighters)
         if not a.no_mind:
             replies = {"think": {"thought": "diag fixture: I keep fighting.", "intend": [], "say": None, "judgments": []},
@@ -481,10 +525,12 @@ def main():
             # The minds of everyone spawned, and of the fighters spawned later to refill the battle:
             # ids are handed out in order, so the next few thousand are theirs (an empty
             # LIVING_ONLY would mean no one).
-            ids = list(made) + list(range(max(made) + 1, max(made) + 4001))
+            ids = list(made) if fixed else list(made) + list(range(max(made) + 1, max(made) + 4001))
             models, env = vm.model(run, script), {"LIVING_CONCURRENCY": "64"}
             if a.input_latency:
                 env["LIVING_INPUT_LATENCY"] = "1"
+            if fixed:
+                env["LIVING_BATTLE_TIMING"] = "1"
             if a.fast_real:
                 # Only the fast route is real: rethink.json `fast.route` names `deepseek-flash`.
                 real = json.loads((ROOT / "living/configs/models.json").read_text())["profiles"]["deepseek-flash"]
@@ -569,6 +615,7 @@ def main():
         head["started_ms"] = first_ms
         run.admin("set_paused", False)
         t_start, low, k = time.time(), 0, 0
+        (run.directory / "measure-start-ms.txt").write_text(str(int(t_start * 1000)))
         first_over = {}
 
         def familiar_sample(label):
@@ -603,7 +650,8 @@ def main():
         sampler = threading.Thread(target=capture_combat, args=(run, token, roster, stop_capture, first_ms,
                                   run.directory / "combat-samples.jsonl.gz"))
         sampler.start()
-        keeper.start()
+        if not fixed:
+            keeper.start()
         deadline = t_start + a.minutes * 60
         while time.time() < deadline:
             k += 1
@@ -617,6 +665,8 @@ def main():
                       "over_16_7": t["over_16_7ms"], "tick_samples": t["samples"], "spans_ms_s": {n: v["ms_per_s"] for n, v in sp.items() if v["ms_per_s"] >= 1.0},
                       "spans_n": {n: v["n"] for n, v in sp.items() if n.startswith(("perceive.", "brain."))}, "stats": {x: b.get(x) for x in ("evals_per_s", "experiences_per_s", "deliberation_requests_per_s", "motions_per_s")},
                       "diag_per_s": d, "diag_seconds": secs, "load_1m": [round(load0, 1), round(os.getloadavg()[0], 1)], "respawns": state["respawns"], "fighters_alive": len(state["fighters"]), "arriving": len(state["arriving"]), "fighter_deaths": state.get("deaths", 0)}
+            if fixed:
+                sample["fighters_alive"] = len(bodies_at_site(f"{k:02d}"))
             sample["rows"] = {tb: count(run, tb) for tb in TABLES}
             sample["alive"] = sum(1 for c in run.sql("SELECT id, alive FROM character", "census") if c["alive"])
             if a.fast_lane:
@@ -662,6 +712,8 @@ def main():
                 head["status"] = "collapse"
                 break
             time.sleep(max(0, min(deadline, t0 + a.period) - time.time()))
+        if fixed and "status" not in head:
+            head["fighters_at_end"] = len(bodies_at_site("end"))
         head.setdefault("status", "done")
     except KeyboardInterrupt:
         head["status"] = "interrupted"

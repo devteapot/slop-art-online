@@ -1552,7 +1552,7 @@ impl Minds {
                     continue;
                 }
                 self.actors.lock().unwrap().entry(actor).or_default().running = true;
-                let result = self.deliberate(&d).await;
+                let result = llm::DELIBERATION_STARTED_MS.scope(llm::now_ms(), self.deliberate(&d)).await;
                 self.actors.lock().unwrap().entry(actor).or_default().running = false;
                 self.clone().deliberation_ended(actor);
                 match result {
