@@ -42,7 +42,7 @@ STYLES = ("crop", "short", "tousled", "swept", "shag", "bob", "bob_parted", "lon
 # the others it scales the hairs' own length.
 HANGING = ("shag", "bob", "bob_parted", "long", "tail", "braid", "braids", "kerchief")
 
-TEX_W, TEX_H = 256, 512  # the strand texture
+TEX_W, TEX_H = 512, 1024  # the strand texture
 DOWN = np.array([0.0, 0.0, -1.0])
 
 
@@ -57,54 +57,16 @@ def unit(v):
 
 
 def paint_strands(seed=0):
-    """The strand texture: grey streaks running down (root at the top), darker at the root and
-    the tip, with a few dark gaps between strands. It wraps across, so a lock may take any
-    column. uint8, TEX_H × TEX_W × 3, sRGB; the same for everyone (colour is per vertex)."""
+    """Shared neutral hair colour and Crown modulation, periodic across a lock."""
     rng = np.random.default_rng(1000 + seed)
-    w, h = TEX_W, TEX_H
-    v = (np.arange(h) + 0.5) / h
-
-    def streaks(cells, drift):
-        """Noise that is fine across and slow along: `cells` streaks across, wandering."""
-        rows = 6
-        g = rng.random((rows + 1, cells))
-        u = (np.arange(w) + 0.5) / w * cells
-        out = np.empty((h, w))
-        for r in range(h):
-            t = v[r] * rows
-            i = min(int(t), rows - 1)
-            f = smooth(t - i)
-            uu = u + drift * math.sin(6.0 * v[r] + i)
-            i0 = np.floor(uu).astype(int) % cells
-            fu = smooth(uu - np.floor(uu))
-            a = g[i][i0] * (1 - fu) + g[i][(i0 + 1) % cells] * fu
-            b = g[i + 1][i0] * (1 - fu) + g[i + 1][(i0 + 1) % cells] * fu
-            out[r] = a * (1 - f) + b * f
-        return out
-
-    img = 0.80 + 0.13 * (streaks(9, 0.25) - 0.5) + 0.12 * (streaks(28, 0.15) - 0.5) + 0.10 * (streaks(75, 0.0) - 0.5)
-    # Gaps between strands: thin dark lines that come and go along the length.
-    for _ in range(11):
-        u0 = rng.uniform(0, w)
-        wid = rng.uniform(0.7, 1.6)
-        a, b = sorted(rng.uniform(-0.2, 1.2, 2))
-        wob = rng.uniform(0.5, 2.5)
-        ph = rng.uniform(0, 6.28)
-        for r in range(h):
-            if not a < v[r] < b:
-                continue
-            c = u0 + wob * math.sin(5.0 * v[r] + ph)
-            d = np.abs((np.arange(w) - c + w / 2) % w - w / 2)
-            k = np.clip(1 - d / wid, 0, 1) * smooth(min(v[r] - a, b - v[r]) / 0.08)
-            img[r] -= 0.20 * k
-    # A few light strands.
-    for _ in range(7):
-        u0 = rng.uniform(0, w)
-        ph = rng.uniform(0, 6.28)
-        for r in range(h):
-            c = u0 + 1.5 * math.sin(4.0 * v[r] + ph)
-            d = np.abs((np.arange(w) - c + w / 2) % w - w / 2)
-            img[r] += 0.07 * np.clip(1 - d / 1.2, 0, 1)
+    u = (np.arange(TEX_W) + 0.5) / TEX_W
+    v = (np.arange(TEX_H) + 0.5) / TEX_H
+    # Each ribbon samples a different slice. Broad, gently curved bands survive
+    # the Crown shader's level-zero taps without drawing a grid of bright hairs.
+    phase = rng.uniform(0, 2 * np.pi, 3)
+    bend = 0.025 * np.sin(4 * v[:, None] + phase[0])
+    across = 2 * np.pi * (u + bend)
+    img = 0.80 + 0.065 * np.cos(2 * across + phase[1]) + 0.028 * np.cos(5 * across + phase[2])
     # Darker at the root, a little darker toward the tip.
     shade = 1 - 0.30 * (1 - smooth(v / 0.16)) - 0.14 * smooth((v - 0.72) / 0.28)
     img = img * shade[:, None]
@@ -581,7 +543,11 @@ class Hair:
         # A few thick locks, as the reference's fringe is: fewer and deeper points than the
         # hem of the sides and back, and uneven.
         locks = max(3, round(points * 0.6))
-        self.sheet(roots, dirs, z_end=z_end, points=locks, depth=max(depth, 0.022) * (0.5 + 0.5 * f), hem=hem, lift=0.011, g=g, shade=0.05, edges=(0.5, 0.5), splay=splay,
+        if self.detail >= 1:
+            depth = max(depth, 0.012)
+        else:
+            depth = max(depth, 0.022)
+        self.sheet(roots, dirs, z_end=z_end, points=locks, depth=depth * (0.5 + 0.5 * f), hem=hem, lift=0.011, g=g, shade=0.05, edges=(0.5, 0.5), splay=splay,
                    tip_out=tip_out, thick=0.0035, check=True, uneven=0.45, sharp=0.55)
 
     def strands(self, n, z=None, chain=None):
@@ -589,6 +555,20 @@ class Hair:
         the sheets. With `z` (where hanging hair ends) they hang beside the sheets at the sides
         and back and flick out at the end; without, they rise from the top of short hair and
         stand up at the tip."""
+        if self.detail >= 1:
+            if z is None:
+                # Keep the cropped crown continuous. The cap supplies its silhouette.
+                return
+            # Nest a pair of broad blades in each side curtain. Offset their
+            # roots and hems so the tips separate while the upper halves overlap.
+            for side in (-1, 1):
+                for angle, elevation, width, hem in ((63, 41, 0.043, 0.012), (80, 47, 0.052, 0.024)):
+                    az = side * (angle + self.u(-2, 2))
+                    end = max(z, -0.105) + hem
+                    self.lock(az, elevation, DOWN, z_end=end, length=0.45,
+                              width=width, lift=0.006, bulge=0.003, tip_out=-0.002,
+                              chain=-1 if chain is None else chain(az), taper=2.4)
+            return
         for _ in range(n):
             if z is None:
                 az, el = self.u(-170, 170), self.u(46, 70)

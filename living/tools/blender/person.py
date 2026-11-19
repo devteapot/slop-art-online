@@ -1686,10 +1686,9 @@ def make_hair(arm, spec, pos, quads, covered=None, bones=None):
     ob.data.normals_split_custom_set_from_vertices(normals)
     # The strands' picture, the same for everyone.
     path = STRANDS_PATH
-    if not os.path.exists(path):
-        # Written whole or not at all: several people are generated at once.
-        face_paint.write_png(path + f".{os.getpid()}.tmp", hair.paint_strands())
-        os.replace(path + f".{os.getpid()}.tmp", path)
+    # Refresh old lookdev maps too. Parallel generators publish identical whole files.
+    face_paint.write_png(path + f".{os.getpid()}.tmp", hair.paint_strands())
+    os.replace(path + f".{os.getpid()}.tmp", path)
     img = bpy.data.images.load(path)
     img.pack()
     mat = material(MAT["hair"])

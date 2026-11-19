@@ -69,7 +69,9 @@ one() {
   # One shading mean a class, so the client can share one material between a class's files.
   python3 living/tools/characters/shade_mean.py "$kind" "$root/$item.glb" > /dev/null
   if [ "$kind" = hair ]; then
-    [ -f "$shared" ] || cp "$tmp/strands.png" "$shared"
+    if ! cmp -s "$tmp/strands.png" "$shared"; then
+      cp "$tmp/strands.png" "$shared.$BASHPID.tmp" && mv "$shared.$BASHPID.tmp" "$shared"
+    fi
     python3 living/tools/characters/share.py strands --shared "$shared" "$root/$item.glb" > /dev/null
   fi
   if [ "$kind" = overlay ]; then
