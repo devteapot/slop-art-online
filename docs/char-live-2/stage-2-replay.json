@@ -1,14 +1,14 @@
 {
   "blender": "5.2.2 LTS",
   "factory_startup": true,
-  "glb_sha256": "1ef1a6af92cf1fc3cfa3f4d9216643a2611a68abb3e29d28c9294505aeef8c5d",
+  "glb_sha256": "789f58ca648bab2be7c9c3e465cbbe5c54882834649820edd664108ce89d9bf7",
   "orbit": {
-    "front": "81b4a2426a1ce4ec65e71f079c0d123cc289f2245984dd2a106ebf75c2b09033",
-    "three-quarter": "10900dba916beaee027001e0f847be0f41b11d23adc9f4842b71fdb2a46886b7",
-    "profile": "74a95ee30b58b85382915710062954b757780b0a08c6a48e4e1cedeb4408c0b9",
-    "back": "c07e61530ed92e35547fbe72fce29dc498d94c9b647da9a721c86be7fa239db6",
-    "near": "f88e4917422aedf03044b3042ee8602ec22ee39a8c2164c5ddd0a88bd6496246",
-    "middle": "3dbc7d1dbae3457a789dc7f011ab0b2a5ab2c31d76078f3675024fda94069dcf"
+    "front": "72acd02aaec0aaec0ed4283349b588b482b0ce3572c5d090fc047f76b38b21b6",
+    "three-quarter": "b32e3a0409dbbf8c1d6fb20d86db67bbff0c224f90e3f7a91337601cfc29d14e",
+    "profile": "cdcb7095385db01b454a4acfdd9c8ec4ac6fb0d55c8a28b2f1382e40c2104b48",
+    "back": "e94d906fb40d4c427c446b4e00f9c8b4caafafdd76d903a0568bebf64641a006",
+    "near": "4941ee753e210bde94dcdba2a36720e687c418b43319738ebf079aad69de071e",
+    "middle": "9401db28ad8f4687482c8815f8152ab8a5a0c82bb2e2f5cf846885e8f5359d13"
   },
   "export": {
     "triangles": 37210,
@@ -40,5 +40,47 @@
       "Fcl_BRW_Surprised",
       "Fcl_BRW_Fun"
     ]
+  },
+  "independent_factory_replay": {
+    "glb_byte_identical": true,
+    "differing_pixels": {
+      "profile-fit-back.png": 0,
+      "profile-fit-portrait.png": 0,
+      "profile-fit-profile.png": 0,
+      "profile-fit-three-quarter.png": 0,
+      "stage2-back.png": 0,
+      "stage2-expression-Fcl_BRW_Angry.png": 0,
+      "stage2-expression-Fcl_BRW_Fun.png": 0,
+      "stage2-expression-Fcl_BRW_Sorrow.png": 0,
+      "stage2-expression-Fcl_BRW_Surprised.png": 0,
+      "stage2-expression-Fcl_EYE_Close.png": 0,
+      "stage2-expression-Fcl_EYE_Close_L.png": 0,
+      "stage2-expression-Fcl_EYE_Close_R.png": 0,
+      "stage2-expression-Fcl_EYE_Joy.png": 0,
+      "stage2-expression-Fcl_MTH_A.png": 0,
+      "stage2-expression-Fcl_MTH_E.png": 0,
+      "stage2-expression-Fcl_MTH_Fun.png": 0,
+      "stage2-expression-Fcl_MTH_I.png": 0,
+      "stage2-expression-Fcl_MTH_O.png": 0,
+      "stage2-expression-Fcl_MTH_Sorrow.png": 0,
+      "stage2-expression-Fcl_MTH_U.png": 0,
+      "stage2-expression-neutral.png": 0,
+      "stage2-expression-returned.png": 0,
+      "stage2-front.png": 0,
+      "stage2-middle.png": 0,
+      "stage2-near.png": 0,
+      "stage2-profile.png": 0,
+      "stage2-three-quarter.png": 0
+    },
+    "final_scene_audit": {
+      "stage": "stage2-expressions",
+      "materials": 26,
+      "images": [
+        "cora.atlas.png",
+        "cora.iris.png",
+        "cora.tint.png"
+      ],
+      "failures": []
+    }
   }
 }
