@@ -74,3 +74,74 @@ Each step: its own branch, the battle sweep and the 216 Cullet series as the acc
 - The per-row cost of RLS table subscriptions at 216 × 216 under a battle's change rate (the cue arms measured about 4,000–9,000 rows a second; a battle's copies are tens of thousands).
 - How much of the tick's 300 ms in the battle is the commit and the subscription evaluation (the whole-call residual) once views are gone.
 - Whether 2.14.1's `remove_view_call` walk falls with fewer views as expected (it scales with all views' read sets).
+
+## Addendum: B on the motion stream (design, not built)
+
+Status: 2026-11-19, branch `battle-views` (cut from `origin/main` `3df6e1f10`), for the reviewer and the dev-box coordinator before any building. Approved direction: B first, the motion stream only, behind a law, with the cue tables' safeguards.
+
+### What 2.14.1 allows (versioned source, `v2.14.1` `a0bf6be`)
+
+- Changing a table's access is an automatic migration with no disconnect (`auto_migrate.rs`, `ChangeAccess`; `engine/src/update.rs`, `alter_table_access`), but adding, removing or changing an RLS rule disconnects every client once (`ensure_disconnect_all_users` when `changed`). Adding a table does not disconnect; appending a column does (frame-views' rule). So the motion stream gets a **new** public table with its RLS rule in the same publish; the existing private tables stay unchanged.
+- Module code, reducers and views alike, reads tables unfiltered (the host's `instance_env` has no RLS path; RLS is applied in subscription compilation and SQL, `core/src/subscription`, `sql/execute.rs`). Views can therefore keep reading the copies wherever they live.
+- An RLS rule `viewer = :sender` compiles to a search argument with delta-index pruning, so a changed row is matched to its one viewer's query, not evaluated per subscriber (frame-views reading of `subscription.rs`; measured on the cue tables at about 1 µs a row). The owner bypasses RLS. The SDK's `subscribe_to_all_tables` names every public table and is filtered; the server's `SELECT * FROM *` is filtered too (cues.py, both ways).
+- Documentation: [RLS](https://spacetimedb.com/docs/how-to/rls) (experimental; the docs prefer views), [subscriptions](https://spacetimedb.com/docs/clients/subscriptions/) and [semantics](https://spacetimedb.com/docs/clients/subscriptions/semantics), [views](https://spacetimedb.com/docs/functions/views/), [indexes](https://spacetimedb.com/docs/tables/indexes/), [performance](https://spacetimedb.com/docs/tables/performance/).
+
+### The table and where the copies live
+
+One new public table, `seen_body_copy`, RLS `SELECT * FROM seen_body_copy WHERE viewer = :sender`:
+
+| Column | Type | Note |
+|---|---|---|
+| `id` | `u64`, primary key | the copy key `frame::key(viewer, body)`, as the private copies |
+| `viewer` | `Identity`, btree | the RLS column; the frames' per-viewer lookups |
+| `near` | `bool` | the tier; btree `(viewer, near)` for the tier views' read sets |
+| `moving` | `Moving` | exactly the row `seen_bodies` returns today (nothing a view hides is in it) |
+
+One table, not two: table subscriptions have no read sets, so the tier needs no table of its own, and a tier change becomes one update instead of a delete and an insert. The `(viewer, near)` index keeps the views' tier separation (2.14.1 tracks a view's read set per index key, `views_for_index_seek`).
+
+**A viewer's motion copies are all private or all public**, never mixed: a viewer's copies move between `motion_seen`/`motion_near` and `seen_body_copy` in one transaction. So the views need no route row: `seen_bodies_near` seeks `seen_body_copy` by `(sender, true)` and, when that is empty, reads `motion_near` by `sender` as today (and the same for far and the untiered view). With the law off, the only addition is one empty index seek per view call; this is what "off equals main" has to measure.
+
+### The law: `motion_tables_on`
+
+A value-only law under the Spark's override layer, in the delivery-only class with `cue_transport_on` and `near_tier_on`: read once per tick from the layer's snapshot, stable within the tick, no Rhai, validation, script row or cache dependency; default **off** until acceptance; a `law_about` line in `skills.rhai` like the other two. The views never read it (they follow the rows).
+
+- **On:** each viewer's next frame moves its copies into `seen_body_copy` and writes there from then on. Spread over one frame round; the frames' row budget counts the moved rows.
+- **Off (the kill switch):** the tick that first sees it off moves every public copy back to the private tables in that one transaction, so a leak through a changed RLS stops at once. A one-off burst: about 9,000 rows on Cullet at 216, about 47,000 in the 216-viewer battle. A stall of that one tick is accepted for a kill switch.
+- **Code path with the law off:** a world that has never had it on writes nothing to `seen_body_copy`; the frame checks one bool. `frame::tests` gains: law off writes no public copy and takes main's path; a flip on moves a viewer's copies whole; a flip off empties the table in one tick; tiers in the public table match the private tiers.
+- **Module memory:** `Viewer::public` (whether this viewer's copies are public); a fresh instance learns it at the viewer's first, full frame from whether `seen_body_copy` holds any of its rows.
+
+### Clients
+
+Views stay for the transition (old clients, verify-player's SQL, gate-load without the new flag), and stay correct with the law on or off. A client on tables subscribes `seen_body_copy` and `my_body` in place of `seen_bodies_near`/`_far`; the cue rule is unchanged (a cue stands until that creature's next copy row, now a `seen_body_copy` insert, update or delete). With the law off, the table is empty and such a client falls back to the tier views, as the laptop's client already switches on the delivery laws. The authority can merge alone with the law off; the laptop's client change follows, and the law goes on after both.
+
+### Data paths
+
+- **Written:** per viewer, the same copies as today, moved, not doubled; written at frames (far 33–100 ms, near at most every 500 ms, cues between). Tier change: one update. Indexes: pk, `viewer`, `(viewer, near)`.
+- **Read:** frames by pk; views by `(viewer, near)` or `viewer`; subscriptions by the RLS search argument.
+- **Recipients:** the one viewer (RLS); the owner only if it subscribed, which the guard forbids.
+- **Retained:** the current scene only; rows go when a creature leaves sight. Growth bounded by sight, as today; commitlog the same rows, a little less for tier changes; the off flip adds one burst.
+
+### Safeguards, each for `seen_body_copy`
+
+1. **Isolation gate:** verify-client `scripts/motion_tables.py`, scene-gate case `motion_tables` in the `client` group, built on `cues.py`'s harness. A, B, C and an anonymous connection subscribe `seen_body_copy` from the start (the initial rows checked, not only deltas), subscribe all by name, `SELECT * FROM *`, B queries `WHERE viewer = 0x<A>`, and B's SQL asks for A's rows. Every probe must be accepted: a rejected subscription fails the check, not passes it vacuously. Every row names its receiver; C and anonymous get none of A's or B's; A's rows equal `seen_bodies` (union) and its tiers equal the tier views. Then the law goes off: within one tick the table is empty to the owner's SQL and the views still give the same scene; it goes back on and the rows return. The law is put back as the world had it.
+2. **Owner subscribe-all guard:** `drive.py`'s source guard names `seen_body_copy` among the tables an owner program (mind, viewer) must not name; the route proof (the SDK's subscribe-all and `SELECT * FROM *` as a player) is in `motion_tables.py`, as in `cues.py`.
+3. **Kill switch off equals main, measured:** Cullet 216 paired arms, law off against main (`3df6e1f10`), and the 16-viewer battle; the frame test above.
+4. **Version-pin notes:** `seen_body_copy` added to TICK_RATE's list of every RLS-filtered table, the upgrade checklist (run the isolation gate on a new SpacetimeDB before the law goes on; on a failure, law off), and the one-time disconnect when the rule is published.
+5. **RLS evaluation cost at 216:** subscription update CPU ms/s, rows/s and µs a row, law on with players on the table against law off with players on the views (Cullet 216, and the 216-viewer battle).
+
+`maintain-verification-skill` on verify-client in the same change: `features/perception.md`, `permissions.md`, `visibility.md`, the public and private inventories in `drive.py`, `SKILL.md`, the gate case; and verify-core's frame notes for the law.
+
+### Measurement
+
+Baseline: the Spark's `battle-remeasure` tables (merged main, frame-views defaults and both laws off, at 0 and 216 viewers), not re-run here. Arms here, on my own scratch server `bv-stdb` (volume `bv-stdb-data`, 127.0.0.1:3344, v2.14.1), in a quiet window you set, with the gate lock and loads recorded:
+
+- **Battle** (200 fighters, `battle_viewers.py`): 1, 4, 16 and 216 viewers, each with the motion law off (players on views) and on (players on the table). One run per arm, 120 s.
+- **Cullet 216** (7 clusters of 31, `look_cost.py`): main, law off, law on (players on the table), three runs each, interleaved.
+- **Reported:** ticks/s (server counter), late share, two-slot gaps, top phases, motion and scene view ms/s, subscription update CPU, rows/msgs/kB a second, commitlog bytes, WASM memory, near and far freshness (SDK and `frame staleness`), the off flip's burst tick.
+- gate-load gains `--motion-tables` (subscribe `seen_body_copy` in place of the motion views).
+
+**Expected, from the series:** on Cullet 216 the motion views cost 106–165 ms/s (about the whole of the scene views' 110–170 ms/s), and a table subscriber should pay roughly its rows' evaluation instead (about 1 µs a row at about 20,000 rows/s in total); the frames' budget, which pays that refresh, should loosen, so far freshness should improve. In the battle the motion views are 125 of about 836 ms/s, so the 216-viewer battle will stay far from 60 ticks/s; the 4- and 16-viewer arms show the mechanism, and `seen_characters` (257 ms/s) is the next stream by cost.
+
+### Not in this step, and (C)
+
+Fighters, doing, `projected`/`seen_characters`, `combat_seen` follow the same pattern only after this one is measured. The sweep's V × C (recommendation 2) is untouched. Option C (a bounded far tier with crowd rows per cell) stays as sketched above, ready as a design decision for the owner if B and the sweep work are not enough.
