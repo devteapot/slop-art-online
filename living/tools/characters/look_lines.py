@@ -174,26 +174,33 @@ def layer_colours(params, line):
     home = params.get("household") or params.get("family", seed)
     house = person_params.rnd(home, "wardrobe.house")
     wearer = person_params.rnd(seed, "wardrobe.wearer")
-    # Households favour one arrangement, with some members wearing its inverse.
-    light_outer = (house.random() < 0.5) != (wearer.random() < 0.30)
-    light = wearer.uniform(0.48, 0.66)
-    dark = wearer.uniform(0.055, 0.115)
+
+    def luminance(rgb):
+        return sum(x * w for x, w in zip(rgb, (0.2126, 0.7152, 0.0722)))
+
+    outer = next((colour for piece, colour in outfit.items()
+                  if stem(piece) == "coat" or (piece.startswith("smock_") and stem(piece) != "smock_bands")), None)
+    outer_value = luminance(linear(outer)) if outer else 0.0
+    hair_value = luminance(linear(line["colors"]["hair"]))
+    # A light dye carries a dark inner layer. At intermediate values the
+    # hair breaks the tie, preserving separation around the head and neck.
+    dark_inner = outer_value >= 0.36 or (outer_value >= 0.22 and hair_value >= 0.25)
+    light = wearer.uniform(0.54, 0.68)
+    dark = wearer.uniform(0.045, 0.075)
     accent = house.choice(("oxblood", "mustard", "chalk_blue", "sea_green"))
     for piece, colour in outfit.items():
         part = stem(piece)
         if part == "kerchief":
             outfit[piece] = person_params.hexed(person_params.PAL[accent])
             continue
-        if part == "coat" or (part.startswith("smock_") and part != "smock_bands"):
-            target = light if light_outer else dark
-        elif part.startswith("jersey_") or part == "smock_bands":
-            target = dark if light_outer else light
+        if part.startswith("jersey_") or part == "smock_bands":
+            target = dark if dark_inner else light
         elif part == "jersey":
             target = 0.38  # stay below the recolour shader’s lightening range to keep the bodice dark
         else:
             continue
         rgb = linear(colour)
-        value = sum(x * weight for x, weight in zip(rgb, (0.2126, 0.7152, 0.0722)))
+        value = luminance(rgb)
         if target > value:
             rgb = [x + (1 - x) * (target - value) / max(1 - value, 1e-6) for x in rgb]
         else:
