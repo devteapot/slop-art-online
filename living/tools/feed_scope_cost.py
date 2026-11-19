@@ -54,9 +54,16 @@ def host():
     return dict(time=time.strftime("%Y-%m-%dT%H:%M:%S%z"), load=os.getloadavg(), available_memory_kib=mem, free_disk_bytes=shutil.disk_usage(ROOT).free)
 
 
+# The coordinator may close the night's reclaim window early (`--reclaim-closed`): then only
+# 23:15-24:00 stays closed.
+RECLAIM_CLOSED = False
+
+
 def in_window():
     hour, minute = map(int, time.strftime("%H:%M").split(":"))
-    return not (hour < 2 or hour * 60 + minute >= 23 * 60 + 15)
+    if hour * 60 + minute >= 23 * 60 + 15:
+        return False
+    return RECLAIM_CLOSED or hour >= 2
 
 
 def check_host():
@@ -300,7 +307,12 @@ def main():
     p.add_argument("--woods-seed", type=lambda x: Path(x).resolve())
     p.add_argument("--seconds", type=int, default=30)
     p.add_argument("--max-load", type=float, default=6.0)
+    p.add_argument("--reclaim-closed", action="store_true", help="the coordinator closed tonight's reclaim window before 02:00")
     a = p.parse_args()
+    global RECLAIM_CLOSED
+    RECLAIM_CLOSED = a.reclaim_closed
+    if a.reclaim_closed:
+        print("reclaim window closed early by the coordinator", flush=True)
     if load.CONTAINER == "sao-living_spacetimedb_1" or "3300" in load.URL:
         p.error("use a private server (LIVING_STDB_CONTAINER, LIVING_STDB_URL)")
     plan = [(w, int(n)) for w, n in (x.split(":") for x in a.workloads.split(","))]

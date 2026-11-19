@@ -334,3 +334,22 @@ Where it goes. In Cullet, `sight.player_things` alone is 16.5–22.0 ms/s for ab
 Next iteration (before another series): build each seen thing's payload once per transaction, shared by every viewer swept in it (lit, open, `left`/`max` per structure or node and transaction), and the chunk lists with each candidate's light so the test reads no script; keep the viewer's previous copies in module memory keyed by the sweep (as `KEPT` does for people), reading the table only after a gap; and give a mind's look the noticing pass's own senses and facing instead of reading them again. The ray test and its inputs stay as they are. Then the same series.
 
 Validity notes. Three Cullet off runs started above the brief's one-minute load of 6 (Round 16.0, Middle 6.3 and 5.5): the first series' load wait gave up after 30 minutes and measured anyway. The driver now never measures above the limit. In the woods the server wrote the module log late: 15 of 16 runs failed the driver's completeness check when it read the log 2 s after the window. Their windows were re-read from the replica logs afterwards (`.local/feedscope/recover.py`; the counts agree with the expected ticks). Ticks/s for those comes from the tick span count over the window, and their action rate and census were not kept. The two woods on runs that completed in the driver held 96 of 96 fighters, 414 live, and 66.4–69.4 accepted skill uses/s. The driver now reads the log until the window is complete. The 30-minute and 8-hour gates and the client's presentation stay open. Evidence: `~/slop-evidence/feed-scope-2026-11-19.tar.zst` (with `.sha256`), runs `fc-s1-*`, `feedcost-s1.jsonl`, `woods-recovered.json`.
+
+## Iteration 2 status (paused 2026-11-20, WIP)
+
+Built and verified on a private server (records in each surface skill's `references/validation/*-feed-scope-2.md`):
+
+- **Cost fixes:** the player thing sweep reads 64 m candidate cells that carry each candidate's light; each seen thing's payload is built once per transaction; copies stay in module memory between tick sweeps; a mind's look comes from its scene's own sensing. Also: remembered-thing writes skip unchanged sightings, and noticing skips known stateless sight-scoped things.
+- **Minds match players on contents:** a scoped scene shows kind and `inside`; contents come only from `inspect`, take or store (`contents_seen`, `my_contents_seen`); `holds` counts known-to-hold or not-yet-looked.
+- **Scenes:** verify-minds `chest` passes; verify-core body 26/26 and gate 18/18, verify-client feed scope 40/40, verify-player 9/9; the scene gate (13 cases, law off) passes.
+
+Partial re-measure, series `s3` (Cullet Middle only, 2 runs per arm, loads at start 2.2–3.4, stopped by the pause before Round):
+
+| Arm | Sight ms/s | `sight.player_things` | Thing tests/s | Ticks/s | Late % |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| off | 23.98–27.98 | – | – | 56.33–59.07 | 0.00 |
+| on | 30.74–38.83 | 5.42–7.27 | 7,477–7,701 | 52.80–55.81 | 0.00–0.06 |
+
+The per-test cost is now 0.72–0.94 µs, close to people's ~1 µs (it was 2.2–2.9 µs). Middle still fails the budget: +49.5% against the off mean of 25.98, and ticks/s fall below the lowest off run. The bound is now the number of tests. About 7,500 thing tests a second sit beside about 29,000 people tests, so at equal cost per test the feature adds about a quarter to player sight. That cannot fit +15% unless fewer things are tested each second. The options are a slower re-acquire rate for unseen candidates (latency, an owner's feel call) or a narrower candidate set.
+
+Left: Round and the wooded battle in a low-load window (`living/tools/feed_scope_cost.py --series <s> [--reclaim-closed]`), the verify-client `run.py` suite on this iteration, and the GC's call on the test-rate trade-off.
