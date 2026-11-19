@@ -119,6 +119,17 @@ pub const NEAR_COPY_MS: u64 = 500;
 /// it go at every tick. 2 was measured (frame-views' selection pair, docs/TICK_RATE.md): about a
 /// sixth fewer messages per player, near cues staler by about 15 ms at p90, so 1.
 pub const CUE_TICKS: u64 = 1;
+/// At most this many creatures are in a viewer's near tier: the nearest within [`NEAR_M`]. A
+/// near creature's every change is cued to the viewer, so in a dense crowd (200 fighters within
+/// 9 m) an unbounded tier fans each change out to everyone; the rest of the crowd follows at the
+/// frames, as on main.
+pub const NEAR_MAX: usize = 12;
+/// The most cue rows one tick writes while the frames' budget is whole; it shrinks with that
+/// budget (missed boundaries), down to [`CUE_ROWS_MIN`]. Cues of engaged pairs go first; near
+/// cues beyond it wait for the next tick (kept as the viewer's pending cues), in a turn that
+/// rotates by tick.
+pub const CUE_ROWS_PER_TICK: usize = 3_000;
+pub const CUE_ROWS_MIN: usize = 300;
 
 /// The streams a cue carries, as bits.
 const MOTION: u8 = 1;
@@ -326,11 +337,22 @@ pub fn scene(ctx: &ReducerContext, id: u32, who: Identity, seen: &HashSet<u32>, 
             *e = Viewer::new(who);
         }
         e.scene = Some(seen.clone());
-        let near: HashSet<u32> = seen
+        // Within NEAR_M (NEAR_KEEP_M for one already near), the NEAR_MAX nearest; one already near
+        // counts half a metre nearer, so a crowd's tier does not flap at the cut.
+        let mut cand: Vec<(f32, u32)> = seen
             .iter()
-            .copied()
-            .filter(|b| dist.get(b).is_some_and(|d| *d <= NEAR_M || (*d <= NEAR_KEEP_M && e.near.contains(b))))
+            .filter_map(|b| {
+                let d = *dist.get(b)?;
+                let was = e.near.contains(b);
+                (d <= NEAR_M || (was && d <= NEAR_KEEP_M)).then_some((if was { d - 0.5 } else { d }, *b))
+            })
             .collect();
+        if cand.len() > NEAR_MAX {
+            cand.sort_unstable_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
+            cand.truncate(NEAR_MAX);
+            common::diag(|| "cues:near_capped", 1);
+        }
+        let near: HashSet<u32> = cand.into_iter().map(|(_, b)| b).collect();
         let mut flips = Vec::new();
         NEAR_OF.with(|n| {
             let mut n = n.borrow_mut();
@@ -504,7 +526,8 @@ pub fn deliver(ctx: &ReducerContext, now: u64, swept: &[u32]) {
     }
     let phase = common::span("tick.cues");
     if on {
-        cues(ctx, now, &served, &humans, trace.as_mut());
+        let cue_budget = (CUE_ROWS_PER_TICK * budget / FRAME_ROWS_PER_TICK).max(CUE_ROWS_MIN);
+        cues(ctx, now, &served, &humans, cue_budget, trace.as_mut());
     } else {
         // Nothing is owed while cues are off: what changes reaches clients at their frames.
         PENDING.with(|p| p.borrow_mut().clear());
@@ -562,7 +585,7 @@ fn engaged_of(ctx: &ReducerContext, now: u64, human: &HashSet<u32>) -> HashMap<u
 /// The tick's cues: each creature that changed since the last tick, to the viewers it is near or
 /// engaged with that had no frame in this tick (a frame wrote their copies already), and each
 /// viewer's newly near creatures that changed since its last frame.
-fn cues(ctx: &ReducerContext, now: u64, served: &HashSet<u32>, humans: &[(u32, Identity)], mut trace: Option<&mut crate::frame_trace::Trace>) {
+fn cues(ctx: &ReducerContext, now: u64, served: &HashSet<u32>, humans: &[(u32, Identity)], cue_budget: usize, mut trace: Option<&mut crate::frame_trace::Trace>) {
     let pending = PENDING.with(|p| std::mem::take(&mut *p.borrow_mut()));
     let since = CUED_SEQ.with(|c| c.replace(SEQ.with(Cell::get)));
     let ids: HashSet<u32> = humans.iter().map(|(h, _)| *h).collect();
@@ -575,7 +598,7 @@ fn cues(ctx: &ReducerContext, now: u64, served: &HashSet<u32>, humans: &[(u32, I
     // (viewer, creature, streams, far, since): pairs engaged at once (from the far tier only when
     // the viewer had no frame in this tick: the frame wrote their copies); near pairs are kept for
     // the viewer's next cue tick.
-    let mut work: Vec<(u32, u32, u8, bool, u64)> = Vec::new();
+    let mut work: Vec<(u32, u32, u8, bool, u64, bool)> = Vec::new();
     let mut held: Vec<(u32, u32, u8)> = Vec::new();
     NEAR_OF.with(|n| {
         let n = n.borrow();
@@ -584,14 +607,14 @@ fn cues(ctx: &ReducerContext, now: u64, served: &HashSet<u32>, humans: &[(u32, I
             let engaged = engaged.get(&body);
             for &viewer in near.into_iter().flatten() {
                 if engaged.is_some_and(|e| e.contains(&viewer)) {
-                    work.push((viewer, body, bits, false, since));
+                    work.push((viewer, body, bits, false, since, true));
                 } else {
                     held.push((viewer, body, bits));
                 }
             }
             for &viewer in engaged.into_iter().flatten() {
                 if !near.is_some_and(|s| s.contains(&viewer)) && !served.contains(&viewer) {
-                    work.push((viewer, body, bits, true, since));
+                    work.push((viewer, body, bits, true, since, true));
                 }
             }
         }
@@ -614,7 +637,7 @@ fn cues(ctx: &ReducerContext, now: u64, served: &HashSet<u32>, humans: &[(u32, I
         for (id, e) in v.iter_mut() {
             if !e.pending.is_empty() && (tick + *id as u64) % CUE_TICKS == 0 {
                 let since = e.pending_seq;
-                work.extend(e.pending.drain().map(|(body, bits)| (*id, body, bits, false, since)));
+                work.extend(e.pending.drain().map(|(body, bits)| (*id, body, bits, false, since, false)));
             }
         }
     });
@@ -627,9 +650,41 @@ fn cues(ctx: &ReducerContext, now: u64, served: &HashSet<u32>, humans: &[(u32, I
         if same {
             b.2 |= a.2;
             b.4 = b.4.min(a.4);
+            b.5 |= a.5;
         }
         same
     });
+    // The tick's budget of cue rows: engaged pairs first, then near ones in a turn that rotates by
+    // tick; what is over waits as the viewer's pending cues.
+    let total: usize = work.iter().map(|w| w.2.count_ones() as usize).sum();
+    if total > cue_budget {
+        let turn = |viewer: u32| (viewer as u64).wrapping_mul(0x9E37_79B9).wrapping_add(tick.wrapping_mul(0x85EB_CA6B)) as u32;
+        work.sort_unstable_by_key(|w| (!w.5, turn(w.0), w.1));
+        let mut rows = 0;
+        let mut keep = work.len();
+        for (k, w) in work.iter().enumerate() {
+            rows += w.2.count_ones() as usize;
+            if rows > cue_budget && !w.5 {
+                keep = k;
+                break;
+            }
+        }
+        let late = work.split_off(keep);
+        common::diag(|| "cues:deferred", late.len() as u64);
+        VIEWERS.with(|v| {
+            let mut v = v.borrow_mut();
+            for (viewer, body, bits, _, since, _) in late {
+                if let Some(e) = v.get_mut(&viewer) {
+                    if e.pending.is_empty() {
+                        e.pending_seq = since;
+                    }
+                    e.pending_seq = e.pending_seq.min(since);
+                    *e.pending.entry(body).or_default() |= bits;
+                }
+            }
+        });
+        work.sort_unstable_by_key(|w| (w.0, w.1));
+    }
     let mut rows = 0u64;
     let mut i = 0;
     while i < work.len() {
@@ -639,7 +694,7 @@ fn cues(ctx: &ReducerContext, now: u64, served: &HashSet<u32>, humans: &[(u32, I
             let mut v = v.borrow_mut();
             let Some(e) = v.get_mut(&viewer) else { return };
             let Some(scene) = e.scene.as_ref() else { return };
-            for &(_, body, bits, far, since) in &work[i..j] {
+            for &(_, body, bits, far, since, _) in &work[i..j] {
                 if !scene.contains(&body) {
                     continue;
                 }

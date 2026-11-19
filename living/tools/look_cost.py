@@ -238,8 +238,9 @@ def main():
         players = [{"token": t, "name": f"Cost{i}", "role": role(i)} for i, t in enumerate(tokens)]
         site = None
         if a.battle:
-            lots = sql(db, "SELECT * FROM lot", token)
-            site = clusters(lots, a.groups, a.radius, 1)[0][0]
+            # Where the gate stages its battle (living/tools/gate.py): 30 m north of the arrival.
+            land = sql(db, "SELECT * FROM land", token)[0]
+            site = (land["arrive_x"], land["arrive_y"] - 30.0)
         load = Proc([a.load, "players"], out / "players.stderr")
         load.send(json.dumps({"uri": URL, "db": db, "events": str(out / "events.jsonl"), "battle": list(site or (0.0, 0.0)), "behaviour": {"walk_period_ms": 1500, "fight_period_ms": 250, "rejoin_s": 3}, "players": players, "client": "gate", "tiers": a.tiers, "cues": a.cues, "fresh_every": a.fresh_every}))
         joined = load.expect("joined", 900)
@@ -260,10 +261,17 @@ def main():
             res["duel_positions"] = [first, second]
         if a.battle:
             res["battle"] = {"fighters": a.battle, "site": site, "radius_m": 9.0}
+            import math
+            missed = 0
             for i, cid in enumerate(ids[:a.battle]):
                 ang, rr = i * 2.399963, 9.0 * ((i + 0.5) / a.battle) ** 0.5
-                import math
-                call(db, "place_at", [cid, site[0] + rr * math.cos(ang), site[1] + rr * math.sin(ang)], token)
+                try:
+                    call(db, "place_at", [cid, site[0] + rr * math.cos(ang), site[1] + rr * math.sin(ang)], token)
+                except RuntimeError:
+                    # Something stands there (a wall, water): beside the site's centre instead.
+                    missed += 1
+                    call(db, "place_at", [cid, site[0] + math.cos(ang), site[1] + math.sin(ang)], token)
+            res["battle"]["placed_beside"] = missed
         start = 2 if a.duel else a.battle
         for cid, (x, y) in zip(ids[start:], spots[start:]):
             call(db, "place_at", [cid, x, y], token)
