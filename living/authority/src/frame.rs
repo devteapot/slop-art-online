@@ -119,11 +119,12 @@ pub const NEAR_COPY_MS: u64 = 500;
 /// it go at every tick. 2 was measured (frame-views' selection pair, docs/TICK_RATE.md): about a
 /// sixth fewer messages per player, near cues staler by about 15 ms at p90, so 1.
 pub const CUE_TICKS: u64 = 1;
-/// At most this many creatures are in a viewer's near tier: the nearest within [`NEAR_M`]. A
-/// near creature's every change is cued to the viewer, so in a dense crowd (200 fighters within
-/// 9 m) an unbounded tier fans each change out to everyone; the rest of the crowd follows at the
-/// frames, as on main.
-pub const NEAR_MAX: usize = 12;
+/// At most this many creatures are in a viewer's near tier (beyond those engaged with it): the
+/// nearest within [`NEAR_M`]. A near creature's every change is cued to the viewer, so in a dense
+/// crowd (200 fighters within 9 m) an unbounded tier fans each change out to everyone; the rest
+/// of the crowd follows at the frames, as on main. 32 holds the measured crowd's whole near
+/// neighbourhood (31 within 3 m); 12 left most of it to frames (near p90 160 ms).
+pub const NEAR_MAX: usize = 32;
 /// The most cue rows one tick writes while the frames' budget is whole; it shrinks with that
 /// budget (missed boundaries), down to [`CUE_ROWS_MIN`]. Cues of engaged pairs go first; near
 /// cues beyond it wait for the next tick (kept as the viewer's pending cues), in a turn that

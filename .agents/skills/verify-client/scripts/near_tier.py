@@ -6,7 +6,7 @@ docs/PERCEPTION.md, "Cues and tiers").
 
 Two players join with fresh identities: A, and B. Thirteen held strangers stand within 4 m of A
 on a quiet open line; B stands 10 m from A (beyond the near tier's 8 m, within day sight). The
-near tier holds at most `frame::NEAR_MAX` (12). Read through A's own SQL (`seen_bodies_near`,
+near tier holds at most `frame::NEAR_MAX` (32). Read through A's own SQL (`seen_bodies_near`,
 `seen_bodies_far`):
 
 - before: the 12 nearest strangers are near, the farthest one and B are far;
@@ -35,7 +35,9 @@ SPEC.loader.exec_module(V)
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from earshot import call, open_line, sql  # noqa: E402
 
-NEAR_MAX = 12
+import re
+# The cap, as the authority has it (frame::NEAR_MAX).
+NEAR_MAX = int(re.search(r"pub const NEAR_MAX: usize = (\d+);", (ROOT / "living/authority/src/frame.rs").read_text())[1])
 
 
 def player_sql(db, token, query):
@@ -71,16 +73,17 @@ def main():
     chars = {c["name"]: c["id"] for c in sql(rid, "SELECT id, name FROM character")}
     a, b = chars["Tier A"], chars["Tier B"]
     before = {x["id"] for x in sql(rid, "SELECT id FROM character")}
-    call(rid, "spawn_crowd", [13, True])
+    call(rid, "spawn_crowd", [NEAR_MAX + 1, True])
     strangers = sorted(x["id"] for x in sql(rid, "SELECT id FROM character") if x["id"] not in before)
     for s in strangers:
         call(rid, "set_behavior", [s, json.dumps({"wait": 600})])
     line = open_line(rid, 30)
     ax, ay = line[10]
     call(rid, "place_at", [a, ax, ay])
-    # Thirteen spots within 4 m of A, at distinct distances.
-    spots = [(ax + dx, ay + dy) for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1), (1.5, 1), (-1.5, 1), (1.5, -1), (-1.5, -1),
-                                               (2.5, 0), (-2.5, 0), (3, 1.5), (-3, 1.5), (3.5, -1.5))]
+    # NEAR_MAX + 1 spots round A on the line's open tiles (5 wide), nearest first, within 7 m.
+    grid = sorted(((dx, dy) for dx in range(-7, 8) for dy in (-2, -1, 0, 1, 2) if (dx, dy) != (0, 0)),
+                  key=lambda d: (math.hypot(*d), d))
+    spots = [(ax + dx, ay + dy) for dx, dy in grid[:NEAR_MAX + 1]]
     for s, (x, y) in zip(strangers, spots):
         call(rid, "place_at", [s, x, y])
     call(rid, "place_at", [b, *line[20]])
@@ -112,11 +115,11 @@ def main():
     time.sleep(3.0)
     near2, far2 = tiers(db, tok["a"])
     checks = {
-        "placed as planned (13 strangers within 4 m of A, B 9-11 m)": all(dist[s] <= 4.2 for s in strangers) and 9 <= dist[b] <= 11,
-        "before: the 12 nearest strangers are near; the farthest stranger and B are far": near0 == set(by_dist[:NEAR_MAX]) and {by_dist[-1], b} <= far0,
+        f"placed as planned ({NEAR_MAX + 1} strangers within 7.5 m of A, B 9-11 m)": all(dist[s] <= 7.5 for s in strangers) and 9 <= dist[b] <= 11,
+        f"before: the {NEAR_MAX} nearest strangers are near; the farthest stranger and B are far": near0 == set(by_dist[:NEAR_MAX]) and {by_dist[-1], b} <= far0,
         "B waving at A (engaged) joins A's near tier within 1.5 s, beyond 8 m and past the cap": engaged is not None,
-        "while engaged, A's next sweep ranks the tier: B first and the 11 nearest strangers, 12 in all": ranked is not None,
-        "after the wave and two sweeps, B is far again and the 12 nearest are near": b in far2 and near2 == set(by_dist[:NEAR_MAX]),
+        f"while engaged, A's next sweep ranks the tier: B first and the {NEAR_MAX - 1} nearest strangers, {NEAR_MAX} in all": ranked is not None,
+        f"after the wave and two sweeps, B is far again and the {NEAR_MAX} nearest are near": b in far2 and near2 == set(by_dist[:NEAR_MAX]),
     }
     result = {"a": a, "b": b, "dist": {str(k): round(v, 2) for k, v in dist.items()}, "before": sorted(near0),
               "engaged": None if engaged is None else {"near": sorted(engaged[0]), "after_s": engaged[2]},
