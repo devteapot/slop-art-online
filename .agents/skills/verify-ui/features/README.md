@@ -13,6 +13,7 @@ This directory is the maintained source for verifying interface D in the game cl
 | The hair shine (`style::HAIR_SHINES`): Crown (the default; a hard band over the crown, off a fringe), Soft and Today (the ring before hair-ring-1); Settings › Play › Hair shine sets it, the settings file keeps a choice once made, `LIVING_GAME_HAIR_SHINE` starts in one; the live script's `shine:` switches it in one view | [hair.md](hair.md) | `check.py hair` |
 | Items on people: the pack, an item's acts, carrying an item onto someone's window or onto them, hold F › Give › | [items.md](items.md) | `check.py items` |
 | Looking aside while walking: head, then chest, then the body on an eased curve; legs on the travel's takes; a sidestep only after a sudden turn; the three presets (Settings › Play › Looking aside) | [look-walk.md](look-walk.md) | `check.py look-walk`; `check.py reversal` (no brief backwards gait at a reversal) |
+| Other characters in motion: the player's near and far body, fighter and doing views with transient cues; a tier change replaces a cue for that stream | [look-walk.md](look-walk.md) | `check.py look-walk` (others case); `check.py reversal`; SDK delivery and viewer scope via [verify-client](../../verify-client/SKILL.md) (`cues.py`) |
 | People drawn from their look (look-1): the projected key's line from the look book, composed; the VRoid fallback and its warnings; a new key redrawn in place; chips by piece from the style files' slot and layer; the prewarm; background people from decor | [looks.md](looks.md) | `check.py looks` (Cullet), `check.py looks-old` (a world without looks, `looks_seed.py --old`), `check.py looks-band` (a Cullet world at a lab pace, `looks_seed.py`) |
 | Names on screen: one way to name a person (`Looks`), places and houses by kind, the death screen by the cause's kind; the guard: no seed name the player was not given | [names.md](names.md) | `check.py names` (Cullet); `check.py death`; `check.py houses`; `check.py shot` |
 | Offers to me: a card per swap or proposal in the maker's window, Accept (the rules' skill on `offer`), refusals, Dismiss, a re-offer, terms | [offers.md](offers.md) | `check.py offers` |
@@ -40,6 +41,7 @@ This directory is the maintained source for verifying interface D in the game cl
 | `live.rs`: the live script every drive runs through (SKILL.md), and how a walking body's legs and upper body turn | the harness for every feature; [look-walk.md](look-walk.md); `recipe_for`, `swap_look`: [looks.md](looks.md) |
 | `characters/book.rs`, `characters/seen.rs`, `loading.rs` (the prewarm), `island.rs` (`person_recipe`) | [looks.md](looks.md) |
 | `looks.rs` | [names.md](names.md), [looks.md](looks.md) (`clothes`, `place`) |
+| `net.rs` (perception tiers and cue overlays) | [look-walk.md](look-walk.md), [talking.md](talking.md), [bar.md](bar.md) |
 | `post.rs` (`post::Film`) | [film.md](film.md) |
 | `style.rs` (`HAIR_SHINES`, `HairShine`), `toon.wesl` (`hair_light`) | [hair.md](hair.md) |
 | `twist.rs` | [look-walk.md](look-walk.md) |
