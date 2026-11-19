@@ -510,6 +510,27 @@ Since 2026-11-19, whichever waiter runs the pass decides for everyone (`Queue::d
 
 **Not changed.** A grant still waits for the next 50 ms poll when the profile's pacer (10 ms at 6,000/min) is the only thing holding it, so the pool grants at most about 20 calls per second after a backlog. The CPU-heavy work that holds tasks up is not addressed here: experience scans per deliberation and the nightly reorganizations.
 
+#### A/B on pinned main `48550720` (2026-11-19, in progress)
+
+A is main plus timing only (`urgent-merge-ab-control` `fe1cde4f`): the fixed-site driver, the fake timing log, a timing header carrying the deliberation's start, and the passive grant-stall watch. B is this branch. The protocol matches the series above: 200 fixed-site fighters, 16 walkers, island seed, five minutes, under `battle.lock`, with a preflight load under 6 and no compilers. The run used a private SpacetimeDB 2.14.1 container. Host load was sampled every 10 s. A run is **loaded** when more than a few of its samples had load over 6 or another checkout's compiler running. Those were builds outside the lock, so the run's ticks/s and waits cannot be compared. The orphan guard paused none of the runs: no `PAUSING ORPHAN` line, and every profiling window ticked. Every run ended with 200 fighters at the site.
+
+| Run | Arm | Host | Urgent starts | Reasons/urgent prompt | Urgent queue p50/p90 (s) | Routine queue p50/p90 (s) | Urgent hold p90 (ms) | Ticks/s | Grant stalls ≥1 s (max s, most ready) |
+| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| uo2a1 | A | clean | 744 | 1.026 | 13.852 / 22.057 | 8.714 / 16.99 | 0.154 | 45.9 | 9 (8.4, 177) |
+| uo3a1 | A | clean | 744 | 1.017 | 13.823 / 20.16 | 10.572 / 20.028 | 0.158 | 45.24 | 9 (12.5, 182) |
+| uo3a2 | A | clean | 750 | 1.024 | 13.998 / 24.537 | 5.012 / 14.312 | 0.153 | 45.1 | 14 (9.7, 193) |
+| uo2a2 | A | loaded | 843 | 1.094 | 15.893 / 49.025 | 0.706 / 9.072 | 0.22 | 30.32 | 25 (13.4, 170) |
+| uo2a3 | A | loaded | 728 | 1.011 | 12.37 / 18.068 | 0.436 / 2.376 | 0.169 | 39.24 | 10 (9.4, 129) |
+| uo2b1 | B `4b5cd4c8` | loaded | 668 | 1.557 | 14.688 / 19.007 | 0.485 / 1.245 | 20.569 | 42.38 | 0 (0.0, 0) |
+| uo2b2 | B `4b5cd4c8` | loaded | 782 | 1.711 | 14.172 / 21.62 | 0.801 / 1.85 | 315.491 | 34.58 | 0 (0.0, 0) |
+| uo3b1 | B `1a770e94` | loaded | 753 | 1.629 | 13.148 / 22.202 | 1.552 / 2.435 | 649.533 | 30.6 | 0 (0.0, 0) |
+| uo3b2 | B `1a770e94` | loaded | 845 | 1.63 | 13.809 / 25.211 | 1.46 / 6.621 | 503.228 | 36.06 | 0 (0.0, 0) |
+
+- **Grant stalls.** Every A run has 9–25 grant stalls of a second or more, the longest 8.4–13.4 s, with up to 193 ready calls and free slots. Every B run, on loaded hosts too, has none. A delayed owner now shows as its own slot hold: B's urgent hold p90 is 20–650 ms, against A's 0.15–0.22 ms.
+- **Merging.** B carries 1.56–1.71 reason lines per urgent prompt, against 1.01–1.09 on A, with 362–537 lines merged per run.
+- **Not settled.** No B run of the final runtime (`1a770e94`) has had a clean host yet. The one-sided verdict on queue p50/p90 and ticks/s against the spread of A's three clean runs is still open.
+- **The span before the queue.** The deliberation's start to its entry in the queue is a few seconds at p90 on clean A, where it includes building the prompt. It reaches 50–75 s on loaded runs of both arms (A uo2a2: 22.6 s at p90). That span is CPU and lock contention in the mind (the per-deliberation scan of every cached experience, the SDK cache), not the scheduler. The release benchmark `pass_cost_with_a_battle_queue` puts one scheduler pass at 1.5 µs with 200 waiting.
+
 ## Fixes from the rules2-r2 review (2026-11-10)
 
 Reviewers measured the `rules2-r2` trial journals (1,129 real calls, `.local/living/trials/rules2-r2/journal/`) and read the code at 6c8d1002. Each defect below was confirmed against the code and the journal before it was fixed. Branch `fix-mind-small`, one commit each; prompt edits are separate commits.
