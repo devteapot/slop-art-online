@@ -56,6 +56,21 @@ def stdb(*args, timeout=600):
     return sh("podman", "exec", "-i", CONTAINER, "spacetime", *args, timeout=timeout)
 
 
+def delete_world(db):
+    """Delete a `verify-lookcost-*` database only after its world reads back paused
+    (`world_delete.py`: SpacetimeDB 2.14.1 can take the whole server down when a ticking world is
+    deleted). Its load's connections should be closed first. Raises when it was not deleted."""
+    if not db.startswith("verify-lookcost-"):
+        raise RuntimeError(f"refusing to delete {db}: not a verify-lookcost- database")
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import world_delete
+    cli = lambda *a: subprocess.run(["podman", "exec", "-i", CONTAINER, "spacetime", *a], capture_output=True, text=True, timeout=600)
+    deleted, why = world_delete.cli_pause_and_delete(cli, db)
+    print(f"delete {db}: {why}", file=sys.stderr, flush=True)
+    if not deleted:
+        raise RuntimeError(f"{db}: {why}")
+
+
 def http(path, body=None, token=None, raw=False):
     data = body.encode() if raw else (json.dumps(body).encode() if body is not None else None)
     req = urllib.request.Request(URL + path, data=data, method="POST" if data is not None or path == "/v1/identity" else "GET")
@@ -342,8 +357,8 @@ def main():
     finally:
         if load and load.p.poll() is None:
             load.p.terminate()
-        stdb("delete", "-s", "local", db, "-y") if db.startswith("verify-lookcost-") else None
         (out / "result.json").write_text(json.dumps(res, indent=1) + "\n")
+        delete_world(db)
     print(json.dumps(res, indent=1))
 
 

@@ -67,8 +67,10 @@ def one(a, n, out):
                                   "behaviour": {"walk_period_ms": 1500, "rejoin_s": 3}, "players": players, "client": "gate",
                                   "tiers": a.tiers, "cues": a.cues, "motion_tables": a.motion_tables}))
             joined = load.expect("joined", 900)
+            lo, hi = (float(x) for x in a.ring.split(",")) if a.ring else (0.0, 6.0)
             for i, p in enumerate(sorted(joined["players"], key=lambda p: p["p"])):
-                ang, rr = i * 2.399963, 6.0 * ((i + 0.5) / n) ** 0.5
+                # Within 6 m of the centre (the default), or spread over the ring `--ring LO,HI` m.
+                ang, rr = i * 2.399963, (lo * lo + (hi * hi - lo * lo) * ((i + 0.5) / n)) ** 0.5
                 try:
                     lc.call(db, "place_at", [p["id"], site[0] + rr * math.cos(ang), site[1] + rr * math.sin(ang)], token)
                 except RuntimeError:
@@ -185,6 +187,10 @@ def one(a, n, out):
         res["ticks_per_s"] = round((c1 - c0) / (t1 - t0), 2) if c0 is not None and c1 is not None else None
         res["alive_characters"] = lc.sql(db, "SELECT COUNT(*) AS n FROM character WHERE alive = true", token)[0]["n"]
         res["window"] = {"t0": t0, "t1": t1}
+        # Liveness: the viewers' deaths in the window (gate-load's `death` events) and at the end.
+        if n:
+            deaths = [e for e in (json.loads(l) for l in open(out / f"events-v{n}.jsonl")) if e.get("k") == "death"]
+            res["viewer_deaths"] = {"window": sum(1 for e in deaths if t0 * 1e6 <= e.get("ts", 0) < t1 * 1e6), "run": len(deaths)}
         if a.detail or a.flip_off:
             held = res.get("held_at_ready")
             chars = [h.get("characters", 0) for h in held] if isinstance(held, list) else []
@@ -199,7 +205,7 @@ def one(a, n, out):
     finally:
         if load and load.p.poll() is None:
             load.p.terminate()
-        lc.stdb("delete", "-s", "local", db, "-y") if db.startswith("verify-lookcost-") else None
+        lc.delete_world(db)
     return res
 
 
@@ -216,6 +222,7 @@ def main():
     ap.add_argument("--cues", action="store_true")
     ap.add_argument("--motion-tables", action="store_true", help="the viewers subscribe seen_body_copy in place of the motion views (battle-views)")
     ap.add_argument("--law", action="append", default=[])
+    ap.add_argument("--ring", default=None, metavar="LO,HI", help="place the viewers over the ring LO-HI m from the battle's centre (outside the fighters' reach) instead of within 6 m")
     ap.add_argument("--detail", action="store_true", help="profile each window as tick_cost.py does (<out>/v<count>/)")
     ap.add_argument("--flip-off", action="store_true", help="after the window, turn motion_tables_on off and time the kill switch's tick")
     ap.add_argument("--out", required=True)

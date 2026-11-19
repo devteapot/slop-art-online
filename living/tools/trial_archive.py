@@ -8,6 +8,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
+import world_delete
 import world_guard
 
 REPLICAS = "/home/spacetime/.local/share/spacetime/data/replicas"
@@ -74,17 +75,22 @@ def finish(directory, url, container, db, identity, token, *, delete, archive_co
             raise RuntimeError(f"cannot read {db} before cleanup (HTTP {status})")
         if expected_epoch is not None and (not state or state[0] != expected_epoch):
             raise RuntimeError(f"refusing cleanup of {db}: world epoch differs from the run record")
-        if state and not state[1]:
+        # The shared rule (world_delete.py): paused, and read back as paused, before any delete.
+        def pause():
+            if state and state[1]:
+                return 200
             status, _ = world_guard.request(endpoint + "/call/set_paused", token, b"[true]", json_body=True)
             if status != 200:
                 raise RuntimeError(f"cannot pause {db} (HTTP {status})")
-        for _ in range(10):
-            status, state = world_guard.world(endpoint, token)
-            if status == 200 and state and state[1] is True:
-                break
-            time.sleep(1)
-        else:
-            raise RuntimeError(f"cannot verify {db} is paused")
+            return status
+
+        def read():
+            status, now = world_guard.world(endpoint, token)
+            return status, "true" if status == 200 and now and now[1] is True else "false"
+
+        paused, why = world_delete.pause_confirmed(pause, read)
+        if paused != "paused":
+            raise RuntimeError(f"cannot verify {db} is paused: {why}")
         # Keep the existing pause/delete settling interval for scheduled reducers.
         time.sleep(2)
         record = None
