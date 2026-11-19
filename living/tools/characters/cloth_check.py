@@ -4,7 +4,7 @@
     python3 living/tools/characters/cloth_check.py LINE.json [--styles DIR] [--types DIR]
         [--clips CLIPS.glb] [--clip idle,walk] [--frames 16] [--least 2.0] [--json OUT] [--quiet] [--chair MM]
         [--springs] [--spring STIFFNESS,DRAG[,GRAVITY]] [--no-spring-scale] [--terrain] [--seat-contact]
-        [--compare-client JOINTS.jsonl --client-root-y METRES]
+        [--compare-client JOINTS.jsonl --client-root-y METRES] [--ground-clips select|original|variant]
 
 LINE.json is a person's line (`{"type", "height", "proportions", "styles": {"outfit": [...]}, "belly"}`),
 or a `NAME.params.json` whose `person` is one. The person is posed the client's way: the type's
@@ -53,6 +53,14 @@ another band). It reports garment penetration against the flat floor in model-sp
 millimetres; `--heights OUT.csv` writes each pose's pelvis and lowest boots, trousers and
 skirted piece above it in world millimetres. `--seat-contact` implies `--springs` and
 applies the client's weighted ground plane to the cloth spring groups (`Skirt`, `Coat`).
+
+`--ground-clips` chooses the animations a logical clip plays, as the client resolves them per
+character (anim.rs `variants`, from `living/game/assets/characters/clip_variants.json`):
+`select` (the default) by the line's type and pieces, so an adult in `trousers-f` and `boots-f`
+sits on the `*_f` ground clips (docs/seat-contact/female-ground-bake/README.md); `original`
+always the logical clip itself (main before sit-f-select); `variant` every family's variant
+whatever the line. Everything else (rates, contact timing, the hips' height rule, the names
+printed) keys off the logical clip. A clip file without the variant plays the original.
 
 `--compare-client` compares one asset-view joint dump row on a ground clip at an explicit time
 (e.g. `LIVING_GAME_VIEW_SHOTS=sit_ground@0.5`). Supply the root's world Y in metres separately,
@@ -294,6 +302,18 @@ def seat_of(clip, t, rate):
     if clip == "stand_up_ground":
         return 1.0 - smooth((t - SEAT_UP_S) / ramp)
     return None
+
+
+VARIANTS = os.path.join(HERE, "..", "..", "game", "assets", "characters", "clip_variants.json")
+
+
+def variants(kind, worn, mode="select"):
+    """anim.rs `variants`: {logical clip: animation played} for a person of type `kind` wearing the pieces `worn`."""
+    out = {}
+    for f in json.load(open(VARIANTS))["families"]:
+        if mode == "variant" or (mode == "select" and any(kind.startswith(t) for t in f["types"]) and all(w in worn for w in f["wears"])):
+            out.update(f["clips"])
+    return out
 
 
 GROUND_HIPS_BAND = (0.17, 0.45)  # anim.rs `GROUND_HIPS`: the hips' heights (fractions of their rest) between which a ground seat's clip takes hips_k from 1 back to the legs'
@@ -664,6 +684,7 @@ def main():
     ap.add_argument("--client-root-y", type=float, metavar="METRES", help="the client root's measured world Y on the asset-view checker")
     ap.add_argument("--ground-hips", choices=("height", "legs", "contact"), default="height", help="with --terrain: how a ground seat's clip scales the hips' height: `height` (the client's since sit-hips: hips_k blended to 1 as the clip's hips come down to the seat), `legs` (hips_k throughout, as before), `contact` (blended by the cloth contact's clip-time weight)")
     ap.add_argument("--ground-hips-band", default="", metavar="LO,HI", help="with --ground-hips height: try this band (fractions of the hips' rest height) in place of the client's")
+    ap.add_argument("--ground-clips", choices=("select", "original", "variant"), default="select", help="the animations logical clips play: `select` (the client's: by the line's type and pieces, clip_variants.json), `original` (the logical clips themselves), `variant` (every family's variant)")
     ap.add_argument("--heights", metavar="OUT.csv", help="with --terrain: write each ground-seat pose's hips multiplier and the pelvis and the lowest boots, trousers and skirted piece above the terrain (world mm)")
     a = ap.parse_args()
     if a.compare_client:
@@ -679,6 +700,11 @@ def main():
     type_path = os.path.join(a.types, line["type"] + ".glb")
     sk = Skeleton(type_path, line.get("proportions") or {}, float(line.get("belly", 0.0)), belly_scaled=not a.old_belly)
     library = clips_compare.clips(a.clips)[0] if (a.clip or a.compare_client) and os.path.exists(a.clips) else {}
+    # The animation each logical clip plays (anim.rs `resolve`): only variants the clip file has.
+    plays = {k: v for k, v in variants(line["type"], line.get("styles", {}).get("outfit", []), a.ground_clips).items() if v in library}
+    played = lambda name: plays.get(name, name)
+    if plays and not a.quiet:
+        print("cloth_check: plays " + ", ".join(f"{v} for {k}" for k, v in sorted(plays.items())))
     if a.terrain:
         terrain, scale, root_y, hips_k = terrain_fit(sk, vertical_bounds(type_path, a.styles, line), line)
         hips0 = float(sk.rest[sk.index["J_Bip_C_Hips"]][1])
@@ -710,7 +736,7 @@ def main():
             t = float(time.partition("-")[0])  # a shot from a view (`clip@T/VIEW`) is named `clip-NAME@T-VIEW`
             if clip not in SEAT_RATE or not np.isfinite(t) or t < 0:
                 raise ValueError("expected a timed ground-clip shot")
-            _, joints = posed_at(clip, library[clip], t)
+            _, joints = posed_at(clip, library[played(clip)], t)
             heights = [("root", root_y, a.client_root_y)]
             for bone in ("J_Bip_C_Hips", "J_Bip_L_Foot", "J_Bip_R_Foot"):
                 heights.append((bone, root_y + scale * joints[bone][1], a.client_root_y + row["joints"][bone][1]))
@@ -745,7 +771,7 @@ def main():
         mats, joints = sk.pose({})
         yield "rest", 0.0, mats, joints, (dict(springs.step(sk, 0, fresh=True)) if springs else None)
         for name in [c for c in a.clip.split(",") if c]:
-            tracks = library.get(name)
+            tracks = library.get(played(name))
             if tracks is None:
                 ap.error(f"no clip {name!r} in {a.clips}")
             length = max(t[0][-1] for t in tracks.values())
