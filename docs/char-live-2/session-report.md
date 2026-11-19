@@ -14,7 +14,7 @@ Times are UTC on 19 November 2026. They include review and shared-host holds whe
 | 2 · Face profile | The first stop identified a cage limitation. After the generator gained two independent taper rows, the reviewer passed the front widths, profile and ear. The slight three-quarter chin corner carried into stage 3. | First cycle 16:34–16:53, two high fits and one xhigh. Resumed 17:10–17:25, two high fits and an independent replay. [Initial checkpoint](stage-2.md) · [Approved fit](resumed-profile/README.md) |
 | 4 · Hair | GC passed front and three-quarter. The back and profile still read as evenly spaced parallel stripes, and the braid start is hidden. The GC selected fade 2.0 and accepted floor-relative ink calibration. There are 10 front and 8 three-quarter tips. | 17:23–20:54, including quiet windows and waiting for the ink shader. Two high fits and one xhigh. One private release build, two shimmer runs and two delivered 150-frame comparison walks. [Hair decision and evidence](hair/final/README.md) |
 | 3 · Face shading | GC passed. The vertical cheek seam is gone, and the blush, rounded chin and mouth line read clearly. The four follow-up items are listed below. | 20:57–21:30 including the quiet window. Two high fits, one xhigh, a black-floor control and independent factory replay. [All three attempts and verdict](face-shading/README.md) |
-| 5 · Cloth and final Bevy review | The eight garment measurements, retained hair and skin calibration, contract audit and factory replay pass. The cloth sheet is submitted for the GC’s visual verdict. | 21:32–21:42, including final replay and walk verification. Two high dye fits. Reused the private release binary for the floor, material identification, daylight comparisons, orbit and 150-frame final walk. [Daylight measurements](final/cloth-measurements.json) · [Factory check](final/replay-check.json) |
+| 5 · Cloth and final Bevy review | The eight garment measurements, retained hair and skin calibration, contract audit and factory replay pass. The GC passed the cloth and closed char-live-2. The GC judged that Cora reads as the drawing in every view. | 21:32–21:42, including final replay and walk verification. Two high dye fits. Reused the private release binary for the floor, material identification, daylight comparisons, orbit and 150-frame final walk. [Daylight measurements](final/cloth-measurements.json) · [Factory check](final/replay-check.json) |
 
 ## Cloth
 
@@ -43,7 +43,9 @@ The standard calibration measures 14 portrait patches. Six additional full-body 
 
 The GC assigned the back-of-hair and face details to one follow-up session. Group the rear locks into a visible braid start at the nape. Vary their line spacing and weight, judging the crown and back at the 58° camera. On the face, give the slightly larger, more open eye a thick winged upper lid and visible lashes. Shape heavier, darker brows. Replace the pink nose-tip spot with one soft side shade and a small highlight. Resolve the horizontal collar-like neck band into a clean single jaw outline over a soft neck shade.
 
-The inherited char-live-1 rig report also recorded trouser breakthrough through the apron during gait and ground sitting. This session changed the cloth pigments. The final walk is available to inspect that garment in motion.
+## Later garment work outside colour
+
+Add the heather fleck and pocket stitching, model the apron’s full bow, and straighten the coat’s fall at the hips. The inherited rig defect also remains: the trousers break through the apron during gait and ground sitting. The final walk shows the garment in motion.
 
 ## Reproduction
 
