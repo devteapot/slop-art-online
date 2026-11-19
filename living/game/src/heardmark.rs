@@ -102,18 +102,18 @@ fn update(
     atmo: Option<Res<crate::daylight::Atmo>>,
     mut mats: ResMut<Assets<StandardMaterial>>,
     mut tfs: Query<&mut Transform>,
-    (time, mut laws): (Res<Time>, Local<Option<(u32, f32, f32)>>),
+    (time, mut laws): (Res<Time>, Local<Option<(u64, f32, f32)>>),
 ) {
     let dt = time.delta_secs();
     let rows: Vec<HeardSound> = net.conn.as_ref().map(|c| c.db.heard_sounds().iter().collect()).unwrap_or_default();
     if rows.is_empty() && marks.marks.is_empty() {
         return;
     }
-    // The bands' distances are laws of the world, read once per script revision.
-    if laws.is_none_or(|(rev, _, _)| rev != rules.revision) {
+    // The bands' distances are laws of the world, read again when the laws in force change.
+    if laws.is_none_or(|(rev, _, _)| rev != rules.laws_key) {
         if let Some(sc) = rules.scripts.as_ref() {
             let l = sc.laws();
-            *laws = Some((rules.revision, l.heard_near_m, l.heard_close_m));
+            *laws = Some((rules.laws_key, l.heard_near_m, l.heard_close_m));
         }
     }
     let (near_m, close_m) = laws.map_or((5.0, 15.0), |(_, n, c)| (n, c));

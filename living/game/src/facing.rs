@@ -76,8 +76,8 @@ pub struct FovState {
     pub walk: Option<f32>,
     /// The walk speed chips Settings shows now (label, selected), for the UI dump.
     pub walk_chips: Vec<(String, bool)>,
-    /// The script revision `walk` was read for.
-    walk_rev: Option<u32>,
+    /// The laws `walk` was read under (`Rules::laws_key`).
+    walk_rev: Option<u64>,
 }
 
 impl FovState {
@@ -128,11 +128,11 @@ impl Plugin for FacingPlugin {
     }
 }
 
-/// The field from my senses: on a change, the note and the readout. The walk law's value, per
-/// script revision.
+/// The field from my senses: on a change, the note and the readout. The walk law's value, read again
+/// when the laws in force change.
 fn watch(mut st: ResMut<FovState>, edge: Res<crate::sightedge::SightEdge>, rules: NonSend<crate::verbs::Rules>, mut verbs: Option<ResMut<crate::verbs::Verbs>>, time: Res<Time>) {
-    if let Some(sc) = rules.scripts.as_ref().filter(|_| st.walk_rev != Some(rules.revision)) {
-        st.walk_rev = Some(rules.revision);
+    if let Some(sc) = rules.scripts.as_ref().filter(|_| st.walk_rev != Some(rules.laws_key)) {
+        st.walk_rev = Some(rules.laws_key);
         let was = st.walk;
         st.walk = sc.law_value(WALK_LAW).and_then(|v| v.as_f64()).map(|v| v as f32);
         if st.walk != was {

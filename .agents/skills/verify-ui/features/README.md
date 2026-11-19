@@ -14,6 +14,7 @@ This directory is the maintained source for verifying interface D in the game cl
 | The recipe grid: a way of making's products as cells, greyed with the rules' reasons, rows from the recipe, a cell sends the act | [grid.md](grid.md) | `check.py grid` on a Cullet world |
 | The hair shine (`style::HAIR_SHINES`): Crown (the default; a hard band over the crown, off a fringe), Soft and Today (the ring before hair-ring-1); Settings › Play › Hair shine sets it, the settings file keeps a choice once made, `LIVING_GAME_HAIR_SHINE` starts in one; the live script's `shine:` switches it in one view. Hand-made character GLBs can opt into explicit material slots, forward-axis handling and a hair palette through `extras.slop` | [hair.md](hair.md) | `check.py hair` for live presets, `just living-game-calibrate view/<file>.glb` for hand-made asset-view shots and colour checks |
 | Items on people: the pack, an item's acts, carrying an item onto someone's window or onto them, hold F › Give › | [items.md](items.md) | `check.py items` |
+| Law overrides on a connected client: `law_override` in the base set, laid over the compiled script in place for a value-only law (delivery, gaze, cover; no compile, the script revision kept), compiled with the rows on an install; the delivery switch made before broken; a reconnect and a fresh client take the rows before a set is chosen | [law-override.md](law-override.md) | `check.py law-override` (island, explicit) |
 | Looking aside while walking: Cursor snaps the local body to the look and strafes or backpedals. Natural follows from head to chest to legs, with three Looking aside choices | [look-walk.md](look-walk.md) | `check.py look-walk`; `check.py reversal` (no brief backwards gait at a reversal) |
 | Other characters in motion: the player's near and far body, fighter and doing views with transient cues; a tier change replaces a cue for that stream | [look-walk.md](look-walk.md) | `check.py look-walk` (others case); `check.py reversal`; SDK delivery and viewer scope via [verify-client](../../verify-client/SKILL.md) (`cues.py`) |
 | People drawn from their look (look-1): the projected key's line from the look book, composed; the VRoid fallback and its warnings; a new key redrawn in place; chips by piece from the style files' slot and layer; the prewarm; background people from decor | [looks.md](looks.md) | `check.py looks` (Cullet), `check.py looks-old` (a world without looks, `looks_seed.py --old`), `check.py looks-band` (a Cullet world at a lab pace, `looks_seed.py`) |
@@ -45,11 +46,12 @@ This directory is the maintained source for verifying interface D in the game cl
 | `live.rs`: the live script every drive runs through (SKILL.md), and how a walking body's legs and upper body turn | the harness for every feature; [look-walk.md](look-walk.md); `recipe_for`, `swap_look`: [looks.md](looks.md) |
 | `characters/book.rs`, `characters/seen.rs`, `loading.rs` (the prewarm), `island.rs` (`person_recipe`) | [looks.md](looks.md) |
 | `looks.rs` | [names.md](names.md), [looks.md](looks.md) (`clothes`, `place`) |
-| `net.rs` (perception tiers and cue overlays; owner subscription, gaze replies and reconnect) | [look-walk.md](look-walk.md), [talking.md](talking.md), [bar.md](bar.md), [gaze.md](gaze.md) |
+| `net.rs` (perception tiers and cue overlays; owner subscription, gaze replies and reconnect; `law_override` and `law_rows`) | [look-walk.md](look-walk.md), [talking.md](talking.md), [bar.md](bar.md), [gaze.md](gaze.md), [law-override.md](law-override.md) |
 | `post.rs` (`post::Film`) | [film.md](film.md) |
 | `handmade.rs` (scene metadata, material slots, forward turn), `lookdev.rs` (material assignment), `view.rs` (asset-view turn), `style.rs` (`HAIR_SHINES`, `Kind::HandHair`), `toon.wesl`, `toon_light.wesl`, `living/tools/characters/calibrate.py` | [hair.md](hair.md) |
 | `twist.rs` | [look-walk.md](look-walk.md) |
 | `ui/*` (interface D) | every feature |
+| `verbs.rs` (`Rules`: the compiled script, `laws_key`, `refresh_rules`) | [law-override.md](law-override.md) |
 | `verbs.rs`, the skills' `_ui()` declarations | [items.md](items.md), [wheel.md](wheel.md), [grid.md](grid.md), [bar.md](bar.md), [offers.md](offers.md) |
 
 ## Baseline preconditions

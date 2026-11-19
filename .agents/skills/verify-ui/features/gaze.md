@@ -10,7 +10,7 @@ The player connection keeps the newest target while a request is in flight or co
 .agents/skills/verify-ui/scripts/check.py --run "$R" gaze
 ```
 
-Use a doctored Cullet scratch world with the terrain-fitted Cullet kit. The scenario enables gaze through `set_world_law`, selects the three stops on Ours, fixed 58°, and samples visible and hidden targets. It drives six opposite wheel inputs in under a second, disconnects the player's socket while changing zoom, and repeats the three stops with `cover_sight_on` and `cover_brush_on` at the authored hedge. The driver restores the scratch laws and epoch when finished.
+Use a doctored Cullet scratch world with the terrain-fitted Cullet kit. The scenario enables gaze through `set_world_law`, selects the three stops on Ours, fixed 58°, and samples visible and hidden targets. It drives six opposite wheel inputs in under a second, disconnects the player's socket while changing zoom, and repeats the three stops with `cover_sight_on` and `cover_brush_on` at the authored hedge. The driver restores the scratch laws and epoch when finished: the laws to the values `law_override` held before the run (since law-override; `world_law` is no longer written).
 
 Read `ui/gaze/gaze-proof.json` for the four assertions' inputs and outcomes, `scene.json` for the player-scoped SQL and admin fixture calls, and `fields/` for the masks and their numeric parameters. The Shade trace in `client.log` records each frame's applied band, drawn band, rendered radius, mask revision and shader mode. Still images show both fixtures at each stop. Gaze-off comparisons use the legacy owner view before and after enabling gaze.
 
