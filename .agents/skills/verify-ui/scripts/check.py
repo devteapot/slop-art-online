@@ -22,6 +22,8 @@ V = os.path.join(ROOT, ".agents/skills/verify/scripts/verify.py")
 sys.path.insert(0, os.path.dirname(V))
 import verify
 from drive import next_sync_wait
+sys.path.insert(0, os.path.join(ROOT, "living/tools"))
+from law_values import own_laws
 
 W, H = 1600, 900
 
@@ -1897,8 +1899,8 @@ def gaze(run, c):
     """Drive zoom through all gaze bands, coalescing, reconnect and the Cullet hedge."""
     name = "gaze"
     state = {"gaze_on": "false", "fov_on": "true", "cover_sight_on": "false", "cover_brush_on": "true"}
-    # The world's own values since law-override: `law_override` (`world_law` is no longer written).
-    original = {r["name"]: r["value"] for r in sql(run, "SELECT name,value FROM law_override")}
+    # The world's own values: `law_override` laid over `world_law` (older modules), one helper for every verify script.
+    original = own_laws(lambda q: sql(run, q))
     ids = residents(run, 5)
     if len(ids) != 5:
         c.check(name, "five stationary residents available", False, repr(ids))
