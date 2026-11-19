@@ -19,7 +19,7 @@ export CARGO_TARGET_DIR=$PWD/.local/target            # a private target dir (ot
 /Users/carlid/dev/slop-art-online/.local/bin/build-slot --label verify-ui cargo build --release --manifest-path living/Cargo.toml -p living-game
 ```
 
-- The island seed's newcomer arrives on Brackenford's square among residents. No mind service runs and no model is called: residents never answer, and the free tier is all there is.
+- The island seed's newcomer arrives on Brackenford's square among residents. No mind service runs and no model is called: residents never answer, and the free tier is all there is. The one exception is `reply-pace`, which starts `living-mind` for one resident against verify-llm's local fake model (`fake_llm.py`; no paid call): build it first (`cargo build --release -p living-mind` into the same `CARGO_TARGET_DIR`).
 - In a fresh worktree, link `living/game/assets/{lookdev,textures,view}` from the main checkout (`for d in lookdev textures view; do ln -s /Users/carlid/dev/slop-art-online/living/game/assets/$d living/game/assets/$d; done`). They are generated and git-ignored; without them the client draws no character models or textures, and `ready` waits for a fitted character until it gives up at 240 s.
 - On the laptop, heavy builds go through `build-slot` (at most three at once).
 - `drive.py` waits for the client's log to say `playing character #N` (the player's id), then, for `--place` and `--place-free`, for `scene.go` and `waiting for` (the plan at `sync:scene`), and for each `sync:NAME` the same way. The plan's own `ready` step waits in the client: until the island is drawn, the character has a body, the buildings round it are in, one person is fitted (when any is shown) and the loading cover has lifted, at least 2 s, or 240 s at most (`live.rs`).
@@ -119,6 +119,6 @@ It deletes `verify-<run>`; the evidence stays in `.local/living/verify/<run>/`. 
 ## What this skill does not prove
 
 - A real window, trackpad or system cursor: runs are headless, so the cursor is the script's. The capture, Esc giving the system cursor back and how winit reports a real two-finger pan or pinch need hardware (a play-test); `turns` drives what the pointer does with them.
-- What residents answer: no mind service runs.
+- What residents answer: no mind service runs (`reply-pace` runs one on a fake model, for when a reply's bubble shows, not for what a model would say).
 - That the rules handle what the UI sends correctly: use `verify-player` and `verify-core`.
 - Frame time or scale.
