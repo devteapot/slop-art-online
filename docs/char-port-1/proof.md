@@ -1,5 +1,7 @@
 # Four-body coat and braid fitting
 
+The [revised household values and original-hairstyle comparison](value/proof.md) supersede the dye values and front comparison below. This first fitting retains the four forced braids for the separate scalp and collar test.
+
 [Middle, 12 m](middle.jpg) · [Near, 8 m](near.jpg) · [Portrait](portrait.jpg) · [Back](back.jpg) · [Profile](profile.jpg)
 
 Each sheet uses the original recipe in the upper row and the same body, identity and seed wearing the open coat and single braid below. Middle and Near are central crops of the fixed play stops, photographed at the same scale.

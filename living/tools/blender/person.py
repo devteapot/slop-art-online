@@ -2225,6 +2225,8 @@ def coat_colour(base, patches, bands=False):
             c = patches[tag - 4] if bands else relit(patches[tag - 4], level * PATCH_TONES[tag - 4])
         elif tag == 10:  # the set-in sleeve seam
             c = relit(c, lightness(c) * (1.0 - 0.42 * math.exp(-((v - 0.18) / 0.23) ** 2)))
+        elif tag == 11:  # the fold next to the jersey opening
+            c = relit(base, level * .16)
         elif tag == 7:  # collar lining
             c = relit(mix(PAL["kelp"], PAL["tar"], 0.3), level * LINING_TONE)
         elif tag == 8:  # an apron
@@ -2488,6 +2490,8 @@ def build_person(arm, spec, atlas_path, body=False, bones=None):
         chest = blend(("J_Bip_C_UpperChest", 0.75), ("J_Bip_C_Neck", 0.25))
         if coat == "coat":
             def ctag(kind, k, r):
+                if kind in ("torso", "yoke") and k == 1:
+                    return 11
                 if kind == "collar":
                     return 7
                 if kind == "sleeve" and r in (3, 4):
@@ -3137,6 +3141,8 @@ def main():
             bake_shade(parts)
         if not far and a.parts == "all" and spec.get("person"):
             painted_pieces(parts, spec["person"])
+            if spec["coat"] == "coat":
+                person_params.set_coat_line_dyes(spec["person"], spec)
         for ob in parts:
             ob.data.calc_loop_triangles()
             tris[("Far" if far and not ob.name.startswith("Far") else "") + ob.name] = len(ob.data.loop_triangles)

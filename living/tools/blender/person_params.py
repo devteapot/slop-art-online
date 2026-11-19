@@ -443,13 +443,24 @@ def resolve(p):
         spec["coat_cut"] = outfit.get("coat_cut", seed % 3)
         if type(spec["coat_cut"]) is not int or spec["coat_cut"] not in (0, 1, 2):
             raise ValueError("outfit.coat_cut must be 0, 1 or 2")
-        house = rnd(p.get("household", p.get("family", seed)), "wardrobe.house")
+        house = rnd(p.get("household") or p.get("family") or seed, "wardrobe.house")
         wearer = rnd(seed, "wardrobe.wearer")
-        spec["coat_colour"] = value_dye(spec["coat_colour"], house.uniform(.25, .34))
-        spec["jersey"] = value_dye(spec["jersey"], wearer.uniform(.075, .105))
+        dark_coat = house.random() >= .5
+        coat_value = house.uniform(.010, .018) if dark_coat else house.uniform(.15, .17)
+        jersey_value = wearer.uniform(.32, .40) if dark_coat else wearer.uniform(.0002, .0005)
+        spec["coat_colour"] = value_dye(spec["coat_colour"], coat_value)
+        spec["jersey"] = value_dye(spec["jersey"], jersey_value)
     if typed:
         spec["person"] = person_line(spec, recipe, male)
     return spec
+
+
+def set_coat_line_dyes(line, spec):
+    for piece in line["styles"]["outfit"]:
+        if piece.startswith("coat"):
+            line["colors"]["outfit"][piece] = hexed(spec["coat_colour"])
+        elif piece.startswith("jersey_coat"):
+            line["colors"]["outfit"][piece] = hexed(spec["jersey"])
 
 
 def hexed(c):

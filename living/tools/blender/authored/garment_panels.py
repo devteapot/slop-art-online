@@ -33,7 +33,7 @@ def fitted(ob, arm, raw, dye):
                 z = (root-.008)*(1-t) + 1.28*t
                 row.append(surface(ob, x, z, .0035 + .007*(1-abs(q))))
             rows.append(row)
-        tones = [.50, .93, .94, .98, .53]
+        tones = [.24, .44, .57, .75, .41]
         parts.append(strip(ob, arm, raw, rows, [tuple(c*v for v in dye) for c in tones], (.51,.02,.98,.98)))
         # Two patch pockets with a raised welt, in the same cloth draw.
         pocket = []
@@ -49,6 +49,6 @@ def fitted(ob, arm, raw, dye):
         t = i / 16
         rows.append([surface(ob, centre + .009*q, 1.28-.17*t, .004+.003*(1-abs(q)))
                      for q in (-1,-.8,0,.8,1)])
-    parts.append(strip(ob, arm, raw, rows, [tuple(c*v for v in dye) for c in (.55,.91,.80,.92,.58)],
+    parts.append(strip(ob, arm, raw, rows, [tuple(c*v for v in dye) for c in (.28,.46,.52,.60,.35)],
                        (.02,.02,.48,.98)))
     return parts
