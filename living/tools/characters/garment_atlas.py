@@ -99,9 +99,42 @@ def attach(path):
     write_glb(path, doc, data)
 
 
+def trim_coat(path):
+    """Remove the hidden lining behind the upper back and inside the straight forearms.
+
+    Run after the outline normals are baked so the open interior never changes an outer line.
+    The open front, hem, armholes, elbow and both cuffs keep their full shell.
+    """
+    doc, data = read_glb(path)
+    mesh = next(m for m in doc["meshes"] if m["name"] == "Cloth")
+    for prim in mesh["primitives"]:
+        positions, _ = read_accessor(doc, data, prim["attributes"]["POSITION"])
+        indices, _ = read_accessor(doc, data, prim["indices"])
+        triangles = np.asarray(indices).reshape(-1, 3)
+        corners = np.asarray(positions).reshape(-1, 3)[triangles]
+        x, y, z = corners.mean(axis=1).T
+        normals = np.cross(corners[:, 1] - corners[:, 0], corners[:, 2] - corners[:, 0])
+        normals /= np.maximum(np.linalg.norm(normals, axis=1)[:, None], 1e-12)
+        hidden = (y > 1.03) & (y < 1.34) & (abs(x) < 0.13) & (z > 0.05) & (normals[:, 2] < -0.75)
+        for start in np.arange(0.36, 0.57, 0.025):
+            sleeve = (abs(x) >= start) & (abs(x) < start + 0.025)
+            if sleeve.any():
+                cy = (y[sleeve].max() + y[sleeve].min()) / 2
+                cz = (z[sleeve].max() + z[sleeve].min()) / 2
+                hidden |= sleeve & (normals[:, 1] * (y - cy) + normals[:, 2] * (z - cz) < -0.023)
+        remaining = triangles[~hidden].ravel()
+        acc = doc["accessors"][prim["indices"]]
+        view = doc["bufferViews"][acc["bufferView"]]
+        start = view.get("byteOffset", 0) + acc.get("byteOffset", 0)
+        raw = remaining.tobytes()
+        data[start:start + len(raw)] = raw
+        acc.update(count=len(remaining), min=[int(remaining.min())], max=[int(remaining.max())])
+    write_glb(path, doc, data)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("paint", "attach"))
+    parser.add_argument("action", choices=("paint", "attach", "trim-coat"))
     parser.add_argument("path", type=Path)
     args = parser.parse_args()
-    (paint if args.action == "paint" else attach)(args.path)
+    {"paint": paint, "attach": attach, "trim-coat": trim_coat}[args.action](args.path)

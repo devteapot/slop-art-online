@@ -88,6 +88,9 @@ one() {
     esac
   fi
   python3 living/tools/characters/outline_normals.py "$root/$item.glb" > /dev/null
+  case "$item" in
+    outfit/coat-m|outfit/coat-f) python3 living/tools/characters/garment_atlas.py trim-coat "$root/$item.glb" || return 1 ;;
+  esac
   rm -rf "$log" "$tmp"
   python3 living/tools/characters/share.py list "$root/$item.glb" | head -1
 }
