@@ -668,6 +668,9 @@ def n2(world, out, variant, law, kind, reps):
             time.sleep(0.2)
             bodies = world.bodies([s.id for s in subs])
         phase.mark("before gate close", routes=verified, bodies=bodies)
+        if not any(verified.values()):
+            log("N2 mid-close: no dispatched route crosses the open channel")
+            return
         all_shut = set_gate(world, keeper, a, False, subs)
         closed = [[g["x"], g["y"], g["changed_ms"]] for g in world.rows("SELECT * FROM gate")
                   if g["id"] in a["ids"] and not g["open"]]
