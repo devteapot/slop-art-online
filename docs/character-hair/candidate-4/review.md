@@ -41,3 +41,11 @@ The front locks stay visible over both garments through the sampled walk and sea
 [Young woman](young-woman.png) · [Young man](young-man.png) · [Elder](elder.png) · [Child](child.png) · [Long coat](long-coat.png) · [Long smock](long-smock.png) · [Rest, idle, walk and sitting](motion.jpg)
 
 The six sheets place Middle first, then Near and portrait. Main uses the original brow and candidate 4 uses the raised brow at `3670594b0`. Each light row changes the hair palette on the same character. Build and captures used the worktree's release renderer. Windowed laptop timing with the combined bundle remains the shipping gate.
+
+## Open items for a later pass
+
+The coordinator accepted candidate 4 (`61f2c7d4d`) for the combined bundle and deferred these three items.
+
+1. **Frontal width at Middle.** The long coat and smock cuts span 20 and 21 pixels front-on at 12 m. Shino spans 30. Widen the frontal silhouette and measure it again at the same camera stop.
+2. **Portrait highlight.** The crown band is heavier and streakier than Shino’s single ring. Soften its edges and carry it continuously across the panels.
+3. **Silver hair against pale skin.** In the silver row, the cheek lock nearly disappears into the face. Try a slightly darker inner curtain or shadow side where the lock meets the cheek, keeping the outer hair silver. [Long smock sheet](long-smock.png)
