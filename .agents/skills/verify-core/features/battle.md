@@ -97,6 +97,10 @@ On a launched default-seed run (`scenes.py <case> --run "$R"`):
   - With `seen_ranges_check` on, the first observer receives two named lines and one line counting 18 strangers. The counted experience has zero subject and object, salience 0.8, and the nearest body's position.
   - Leaving and returning produces no new lines. One new body and a new shelter each produce one line. Death removes the observer's private block rows.
   - With `seen_ranges` off, the second observer receives the same three lines and keeps 20 legacy familiarity rows. Turning it back on transfers those IDs to ranges without repeating the lines.
+- **`seen_remains_gaze`** (fresh `--seed cullet` run, by day; cover, facing sight and gaze on as Cullet ships them):
+  - Structures are taken within the observer's sight radius (`senses(a).sight`), which the gaze band scales: Near 0.6, Middle 1.0 of Cullet's 48 m by day, Far 1.3. Cover traces people only; it does not hide a structure from noticing, the scene or a player's public `structure` rows.
+  - An observer in Near arrives at eleven strangers' bodies, six about 14 m away and five about 38 m away. It is told one counted line for the six. Changing to Middle brings the five within reach: one more counted line, counting only those five.
+  - Near, Middle and Far again repeat no remains line, and the observer's `seen_structures` rows exist.
 
 The rules tests `attention_cues_are_the_world_s_laws` (the laws' defaults and descriptions), `alarm_cells_give_the_law_s_answer_at_every_moment` (a cell's answer is the law's at every millisecond of five fighters' rows) and `fold::tests` (the line's words, counts and order) and the authority's `fold::tests` (each blow in exactly one window per onlooker) cover the rest offline. `profile_detail` (a diagnostic law) times the parts of each evaluation while profiling. The scale evidence is `living/tools/battle_diag.py` (docs/BATTLE_SCALE.md).
 

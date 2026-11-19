@@ -5,6 +5,7 @@ import argparse
 import importlib.util
 import json
 import math
+import time
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -36,6 +37,8 @@ def main():
         admin("kill", who, "player remains fixture")
     field = {r["id"] for r in p.sql("SELECT * FROM structure WHERE kind = 'remains'") if r["owner"] in dead}
     admin("place_at", player, *at)
+    # Several looks pass at the field before the reads: a played character still runs no noticing.
+    time.sleep(5)
     body = p.sql("SELECT * FROM my_body", "player")[0]
     remains = p.sql("SELECT * FROM structure WHERE kind = 'remains'", "player")
     nearby = {r["id"] for r in remains if math.dist((body["x"], body["y"]), (r["x"], r["y"])) <= 6}
