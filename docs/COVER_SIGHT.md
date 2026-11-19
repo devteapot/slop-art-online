@@ -283,3 +283,23 @@ for per-run load, memory and population checks, and `acceptance-summary.txt`
 for run-level numbers. Far, visual captures at the three zoom stops, a
 separate live animal scene and a separate live replay against the unmodified
 main binary were outside the evidence collected here.
+
+## Switch-on gate (standing rule, 2026-11-19)
+
+The general coordinator restated the switch-on gate as a cost budget, which replaces the
+"within the cover-off spread" test used in phase 2. That test, with two runs per arm,
+demanded zero cost, while the 2.5D blocker test does measurably more work per check
+(+5–11% per check in the native probe). The rule for turning `cover_sight_on` on in any
+world, and for later changes to the trace:
+
+- **Sight cost:** sight ms/s with cover on is at most **+15%** over the cover-off arms' mean.
+- **Tick health:** ticks/s and the share of ticks over 16.7 ms with cover on fall within the
+  cover-off arms' spread.
+- **Runs:** interleaved off/on, at least **4 runs per arm** for the wooded battle at a fixed
+  local fighter count, and at least 2 per arm for Cullet 216 (Round and Middle), under
+  `~/slop-mq/battle.lock`, with host load recorded per run.
+
+Phase 2's Cullet runs pass this budget (Middle: on 29.0–30.4 against an off mean of 26.9 ms/s,
++13%; ticks and late ticks unchanged). The battle needs two more runs per arm before a verdict.
+When it passes, `cover_sight_on` and `cover_brush_on` go on in Cullet's overlay (its brush and
+hedge visuals are on main) and in the play-test world.
