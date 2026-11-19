@@ -11,6 +11,16 @@ The only textual conflict was the test map helper in `living/rules/src/known.rs`
 
 No table, reducer or view changed, so the bindings were not regenerated.
 
+## Second merge (main 8a5e3d95)
+
+Main moved during verification. The branch merged again as 4f0a9ec4. The only conflicts were nav-planner's and `arena-scorer`'s edits to `living/tools/nav_arena.py` and `nav_report.py`:
+
+- `n2` keeps main's mid-close `after_dispatch` inside `try`/`finally`, then logs the route exits.
+- `nav_report` keeps both the `route_exits` field and the first-write/effect responses, plus both summary blocks.
+- Both sides had already switched to the pre-call clock sample.
+
+`nav_report.py selftest` passed. `just living-check` passed again (325 s). On 4f0a9ec4, `core-nm-r5-160912` passed `moves` 6/6 and `known_ground` 10/10, `core-nm-r5-160912-steering` passed 5/5, and `core-nm-gate-r5-160912` passed `closed_gate` 4/4. The steering driver deleted its own world, and main's harness then refused the redundant cleanup because that world had no launch record. The checks below ran on 90c82d84. The Rust that main added in between is `reply-timing` (mind talk and the read-only `mind_reach` procedure), and living-check covers it.
+
 ## Checks
 
 - Cargo: `living-rules` passed 337 tests with 16 ignored. The belief suite passed 7/7, and gaze's `gaze_bands_change_light_reach_field_and_ground_in_both_worlds`, `gaze_zoom_has_boundary_hysteresis` and `gaze_ceiling_applies_to_glow_and_keep` passed. `living-authority --lib` passed 40/40. `just living-check` passed all eight steps in 500 s, with game tests at 139 passed and 1 ignored.
@@ -38,4 +48,4 @@ The cause is nav-planner's string pull. In `Search::advance`, it looks at most `
 
 - The updated `known_ground` scene was not rerun on main.
 - No SDK probe ran for gaze. There was no full verify-core baseline, no crowd, chase or scale run, and no laptop camera wiring.
-- Raw evidence is in `.local/living/verify/{core-nm-100337,core-nm-100337-steering,core-nm-gate-100337,player-gaze-nm-153601,player-gaze-nm-r4-155139,core-nm-r4-155139,core-nm-kg-153601,core-nmb-2ef3-152739,core-nmb-4643-152739}`, with logs in `.local/navmerge/`. Both are archived in `~/slop-evidence/nav-planner-merge-20261119.tar.zst`.
+- Raw evidence is in `.local/living/verify/{core-nm-r5-160912,core-nm-r5-160912-steering,core-nm-gate-r5-160912,core-nm-100337,core-nm-100337-steering,core-nm-gate-100337,player-gaze-nm-153601,player-gaze-nm-r4-155139,core-nm-r4-155139,core-nm-kg-153601,core-nmb-2ef3-152739,core-nmb-4643-152739}`, with logs in `.local/navmerge/`. Both are archived in `~/slop-evidence/nav-planner-merge-20261119.tar.zst`.
