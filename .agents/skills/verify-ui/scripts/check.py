@@ -71,6 +71,19 @@ def residents(run, n=2):
 
 
 THEME = os.environ.get("LIVING_GAME_THEME", "")
+BEARING = float(os.environ.get("VERIFY_UI_BEARING", "0")) % 360
+BEARING_SUFFIX = f"-bearing-{BEARING:g}" if BEARING else ""
+
+
+def bearing_offset(x, y):
+    angle = math.radians(BEARING)
+    return (x * math.cos(angle) - y * math.sin(angle),
+            x * math.sin(angle) + y * math.cos(angle))
+
+
+def at_bearing(d, expected=BEARING):
+    yaw = view(d).get("yaw")
+    return yaw is not None and abs((yaw - expected + 180) % 360 - 180) < 0.05
 
 
 def drive(run, name, plan, places=(), syncs=(), extra=(), free=(), env=None):
@@ -153,8 +166,8 @@ def apart(d):
 
 @scenario("windows")
 def windows(run, c):
-    s = "windows"
-    plan = ("ready;wait:2;shot:01_explore;dump:01;click:@menu;wait:0.4;shot:02_menu;dump:02;click:@menu:Settings;wait:0.5;shot:03_settings;dump:03;"
+    s = "windows" + BEARING_SUFFIX
+    plan = (f"ready;yaw:{BEARING};wait:2;shot:01_explore;dump:01;click:@menu;wait:0.4;shot:02_menu;dump:02;click:@menu:Settings;wait:0.5;shot:03_settings;dump:03;"
             "key:KeyI:tap;wait:0.4;key:KeyL:tap;wait:0.5;shot:04_log_pack;dump:04;slide:@win:Log:head>0.62,0.45:0.6;wait:0.2;shot:05_dragging;"
             "wait:0.5;shot:06_swapped;dump:06;click:@win:Pack:close;wait:0.4;dump:07;key:KeyI:tap;wait:0.4;dump:08;key:Escape:tap;wait:0.3;dump:09;key:Escape:tap;wait:0.3;dump:10;"
             "key:Escape:tap;wait:0.4;shot:11_esc_menu;dump:11;key:Escape:tap;wait:0.3;dump:12;quit")
@@ -162,6 +175,7 @@ def windows(run, c):
     c.check(s, "client ran and joined", code == 0, text[-300:])
     notes_clear(c, s, out)
     d = {k: dump(out, k) for k in ["01", "02", "03", "04", "06", "07", "08", "09", "10", "11", "12"]}
+    c.check(s, "requested bearing is shown", at_bearing(d["01"]), repr(view(d["01"])))
     c.check(s, "nothing open on arrival", d["01"] and wins(d["01"]) == [] and not d["01"]["menu"], str(wins(d["01"])))
     c.check(s, "Menu button opens the Menu list", d["02"] and d["02"]["menu"])
     c.check(s, "Menu › Settings opens Settings in the centre, and closes the list", d["03"] and wins(d["03"]) == [("Settings", "Centre")] and not d["03"]["menu"], str(wins(d["03"])))
@@ -939,21 +953,23 @@ def pick(run, c):
     behind standing where the cursor's ground point falls) names, hovers and addresses that one.
     The pick is one function for the nameplate, Enter and combat's target (living/game/src/pick.rs);
     before it, Enter took the hovered person nearest the cursor's ground point: the one behind."""
-    s = "pick"
+    s = "pick" + BEARING_SUFFIX
     a, b = residents(run)
     line = f"You in front, {int(time.time()) % 100000}."  # its own line: said rows from earlier drives don't count
-    # The view faces north (yaw 0, sim -y). A stands ahead and to the left; B 1.5 m behind A along
-    # the view, where the ray through A's chest meets the ground.
-    plan = ("ready;frame:0;yaw:0;wait:1.5;sync:scene;wait:2;point:{A}:1.3;wait:0.8;shot:01_pointed;dump:01;"
+    # A stands screen-left; B is farther along the view, where A's chest ray meets the ground.
+    plan = ("ready;frame:0;yaw:{BEARING};wait:1.5;sync:scene;wait:2;point:{A}:1.3;wait:0.8;shot:01_pointed;dump:01;"
             "key:Enter:tap;wait:0.6;shot:02_to_them;dump:02;type:{LINE};enter;wait:1.2;dump:03;key:Escape:tap;wait:0.6;"
             "point:{A}:1.3;wait:0.8;tap;wait:0.8;dump:04;key:Escape:tap;wait:0.4;"
-            "sync:stack;wait:1;point:{A}:1.0;wait:0.5;dump:05a;wait:0.5;dump:05b;wait:0.5;dump:05c;shot:05_stacked;quit").replace("{A}", str(a)).replace("{LINE}", line)
+            "sync:stack;wait:1;point:{A}:1.0;wait:0.5;dump:05a;wait:0.5;dump:05b;wait:0.5;dump:05c;shot:05_stacked;quit").replace("{A}", str(a)).replace("{LINE}", line).replace("{BEARING}", str(BEARING))
     # Last, both on one spot (stacked exactly on screen): one answer every frame, the nearer the camera.
-    stack = f"stack=place_at|{a}|(mx-3.0)|(my-1.0);place_at|{b}|(mx-3.0)|(my-1.0)"
-    out, code, text = drive(run, s, plan, places=[f"{a}:-3.0:-1.0", f"{b}:-3.0:-2.5"], syncs=[stack])
+    ax, ay = bearing_offset(-3.0, -1.0)
+    bx, by = bearing_offset(-3.0, -2.5)
+    stack = f"stack=place_at|{a}|(mx{ax:+.4f})|(my{ay:+.4f});place_at|{b}|(mx{ax:+.4f})|(my{ay:+.4f})"
+    out, code, text = drive(run, s, plan, places=[f"{a}:{ax:.4f}:{ay:.4f}", f"{b}:{bx:.4f}:{by:.4f}"], syncs=[stack])
     c.check(s, "client ran and joined", code == 0, text[-300:])
     d = {k: dump(out, k) for k in ["01", "02", "03", "04"]}
     L = log(out)
+    c.check(s, "requested bearing is shown", at_bearing(d["01"]), repr(view(d["01"])))
     hov = [h.get("id") for h in (d["01"] or {}).get("hovered") or []]
     c.check(s, "the cursor on the one in front: only they are hovered (one nameplate)", hov == [a], f"hovered {hov}, under {(d['01'] or {}).get('under')}, in front #{a}, behind #{b}")
     t2 = (d["02"] or {}).get("typing") or {}
@@ -1039,7 +1055,7 @@ def select_camera_preset(preset):
 @scenario("camera", explicit=True)
 def camera(run, c):
     """Drive real line-wheel messages at the three top-down knots, with the field off and on."""
-    s = "camera"
+    s = "camera" + BEARING_SUFFIX
     ids = residents(run, 3)
     if len(ids) != 3:
         c.check(s, "three residents available", False, repr(ids))
@@ -1047,7 +1063,8 @@ def camera(run, c):
     front, back, behind_wall = ids
     # Land seed 7, Brackenford. The wood line heads north from grass into Forest tiles.
     # The roof point is on walking ground under the north eave of the market stall.
-    street, wood, behind_trees, roof = (420.5, 255.5), (276.5, 395.5), (277.5, 389.5), (412.5, 256.5)
+    street, wood, behind_trees = (420.5, 255.5), (276.5, 395.5), (277.5, 389.5)
+    roof = (411.5, 256.5) if BEARING == 135 else (412.5, 256.5)
     syncs = [
         "noon=sql|UPDATE world SET epoch_ms = {epoch_at:12} WHERE id = 0",
         'fov_off=set_world_law|"fov_on"|"false"',
@@ -1059,7 +1076,7 @@ def camera(run, c):
              ("middle", 11, 0.55, 12.0, 58.0, 44.0),
              ("near", 30, 1.0, 8.0, 48.0, 42.0))
     for field in ("off", "on"):
-        plan = "ready;" + select_camera_preset("ours") + f"sync:noon;sync:fov_{field};sync:street;wait:3;sync:scene;look:0;wait:2;cursor:0.70,0.55;wait:0.5;dump:initial;pan:300;drag:250;wait:0.5;dump:fixed;"
+        plan = "ready;" + select_camera_preset("ours") + f"yaw:{BEARING};sync:noon;sync:fov_{field};sync:street;wait:3;sync:scene;look:0;wait:2;cursor:0.70,0.55;wait:0.5;dump:initial;pan:300;drag:250;wait:0.5;dump:fixed;"
         for stop, wheel, *_ in knots:
             plan += f"notches:{wheel};wait:1.5;dump:{stop};shot:{stop};"
             plan += f"point:{front}:0;wait:0.6;dump:{stop}_ground;point:{front}:0.8;wait:0.6;dump:{stop}_hover;"
@@ -1087,7 +1104,7 @@ def camera(run, c):
         initial = view(dump(out, "initial"))
         c.check(s, f"field {field}: fresh settings start at middle zoom", abs(initial.get("zoom", -1.0) - 0.55) < 0.001, repr(initial))
         fixed = view(dump(out, "fixed"))
-        c.check(s, f"field {field}: drag and pan leave bearing at north", abs(fixed.get("yaw", -100.0)) < 0.01, repr(fixed))
+        c.check(s, f"field {field}: left drag and pan keep the chosen bearing", at_bearing(dump(out, "fixed")), repr(fixed))
         held = dump(out, "held_wheel") or {}
         c.check(s, f"field {field}: the held action wheel consumes line-wheel input",
                 abs(view(held).get("zoom", -1.0)) < 0.001 and bool((held.get("wheel") or {}).get("held")), repr(held.get("wheel")))
@@ -1109,8 +1126,8 @@ def camera(run, c):
             visible.append({a["id"] for a in d.get("seen") or []})
             good = all(abs(v.get(k, -100.0) - expected) < tolerance
                        for k, expected, tolerance in (("zoom", z, 0.001), ("height", height, 0.1),
-                                                       ("pitch", pitch, 0.1), ("fov", fov, 0.1), ("yaw", 0, 0.01)))
-            c.check(s, f"{field} {stop}: north-up camera reaches the curve knot", good and v.get("mode") == "top-down", repr(v))
+                                                       ("pitch", pitch, 0.1), ("fov", fov, 0.1))) and at_bearing(d)
+            c.check(s, f"{field} {stop}: camera reaches the curve knot at the requested bearing", good and v.get("mode") == "top-down", repr(v))
             c.check(s, f"{field} {stop}: authority sight and Shade active",
                     sense.get("on") == (field == "on") and sense.get("source") == "Authority" and data.get("sight_look") == "shade", repr(sense))
             point = ground(dump(out, f"{stop}_ground"))
@@ -1143,6 +1160,63 @@ def camera(run, c):
             c.check(s, "field off: the rear resident is perceived", all(back in rows for rows in perceived), repr(perceived))
 
 
+@scenario("camera-rotate", explicit=True)
+def camera_rotate(run, c):
+    """Turn at Middle, drive real W, aim/pick, cut away an awning and snap north."""
+    s = "camera-rotate"
+    resident = residents(run, 1)[0]
+    open_settings = "click:@menu;wait:0.4;click:@menu:Settings;wait:0.6;"
+    drag = "mouse:middle:down;motion:3,0;wait:0.15;dump:threshold;motion:447,0;mouse:middle:up;"
+    plan = ("ready;click:@tip:ok;wait:0.3;sync:noon;sync:street;wait:3;sync:scene;cursor:0.55,0.42;wait:0.3;"
+            "dump:north;shot:middle-north;" + drag + "wait:0.6;dump:turned;shot:middle-135;"
+            f"point:{resident}:0.9;wait:0.4;dump:resident;point:{resident}:0;wait:0.4;dump:ground;"
+            "cursor:;key:KeyW:down;wait:0.8;key:KeyW:up;wait:0.6;dump:walked;"
+            "sync:roof;wait:3;dump:awning;shot:awning;key:KeyN:tap;wait:0.3;dump:key-snap;"
+            "cursor:0.60,0.40;rotate:135;wait:0.3;dump:gesture;"
+            "mouse:middle:down;motion:2,1;mouse:middle:up;wait:0.3;dump:tap-snap;"
+            + open_settings + "click:@settings:page:rotation;wait:0.4;shot:rotation-settings;click:@settings:camera_rotate_speed:2;wait:0.4;"
+            "click:@settings:camera_rotate_invert;wait:0.4;click:@settings:page:controls;wait:0.4;"
+            "click:@bind:NorthUp:0;wait:0.4;key:KeyY:tap;wait:0.4;"
+            "click:@settings:page:play;wait:0.4;key:Escape:tap;cursor:0.60,0.40;wait:0.6;"
+            "rotate:30;wait:0.3;dump:fast-invert;"
+            + open_settings + "click:@settings:page:camera;wait:0.4;click:@settings:camera_copy;wait:0.4;"
+            "key:Escape:tap;cursor:0.60,0.40;wait:0.4;key:KeyY:tap;wait:0.3;dump:rebound-snap;"
+            + open_settings + "click:@settings:page:rotation;wait:0.4;click:@settings:camera_rotate;wait:0.4;"
+            "key:Escape:tap;cursor:0.60,0.40;wait:0.6;rotate:90;wait:0.3;dump:disabled;quit")
+    out, code, msg = drive(run, s, plan, places=[f"{resident}:2:-2"], syncs=[
+        "noon=sql|UPDATE world SET epoch_ms = {epoch_at:12} WHERE id = 0",
+        'street=set_world_law|"fov_on"|"false";place_at|{me}|420.5|255.5',
+        "roof=place_at|{me}|411.5|256.5",
+    ], env={"LIVING_GAME_DEV": "1", "RUST_LOG": "info,wgpu=warn,naga=warn,living_game::envs=debug"})
+    c.check(s, "client joined and finished", code == 0, msg[-300:])
+    for label, yaw in (("north", 0), ("threshold", 0), ("turned", 135), ("awning", 135),
+                       ("key-snap", 0), ("gesture", 135), ("tap-snap", 0), ("fast-invert", 300), ("rebound-snap", 0), ("disabled", 0)):
+        d = dump(out, label)
+        c.check(s, f"{label}: bearing {yaw}° at Middle", at_bearing(d, yaw) and abs(view(d).get("zoom", -1) - 0.55) < 0.001, repr(view(d)))
+    picked = (dump(out, "resident") or {}).get("under")
+    c.check(s, "the rotated camera picks the resident", picked == resident, repr(picked))
+    row = ((dump(out, "scene") or {}).get("placed") or {}).get(str(resident))
+    hit = ground(dump(out, "ground"))
+    c.check(s, "the rotated camera ray reaches the resident's ground point",
+            bool(row and hit and math.hypot(row[0] - hit[0], row[1] - hit[2]) < 0.15), repr((row, hit)))
+    before, after = [(dump(out, name) or {}).get("me_at", {}).get("body") for name in ("turned", "walked")]
+    if before and after:
+        dx, dy = [after[k] - before[k] for k in ("x", "y")]
+        up, right = (dx + dy) / math.sqrt(2), (-dx + dy) / math.sqrt(2)
+        c.check(s, "W moves up-screen at 135°", up > 0.5 and abs(right) < up * 0.25, repr((dx, dy, up, right)))
+    else:
+        c.check(s, "W moves up-screen at 135°", False, repr((before, after)))
+    trace = log(out).partition("live script: sync:roof")[2].partition("live script: dump:awning")[0]
+    c.check(s, "the market awning cuts away at 135°", re.search(r"cutaway: .*market_stall.* fades to ", trace) is not None, trace[-500:])
+    c.check(s, "both Middle stills captured", all(os.path.isfile(os.path.join(out, f"middle-{name}.png")) for name in ("north", "135")))
+    prefs = dump(out, "settings") or {}
+    c.check(s, "the rotation settings are saved", prefs.get("camera_rotate") is False
+            and prefs.get("camera_rotate_speed") == 2 and prefs.get("camera_rotate_invert") is True)
+    c.check(s, "the new north key is saved", (prefs.get("binds") or {}).get("NorthUp") == ["KeyY"])
+    copied = dump(out, "camera-tuning") or {}
+    c.check(s, "Copy values exports the live bearing", abs(copied.get("bearing", -1) - 300) < 0.05, repr(copied))
+
+
 @scenario("camera-tuning", explicit=True)
 def camera_tuning(run, c):
     """Change live camera values and export them through the real Settings panel."""
@@ -1173,12 +1247,14 @@ def camera_tuning(run, c):
         path = os.path.join(out, name)
         return json.load(open(path)) if os.path.exists(path) else {}
     exported = read("camera-tuning.json")
+    bearing = exported.pop("bearing", None)
     late = exported.get("late_tilt") or {}
-    c.check(s, "Copy values writes the persisted live tuning, including tilt start and near pitch",
+    middle, close = [view(dump(out, name)) for name in ("late_middle", "late_near")]
+    c.check(s, "Copy values writes the persisted live tuning and the displayed bearing",
             bool(late) and exported == read("settings.json").get("camera_tuning")
             and abs(exported["fixed_pitch"] - fixed.get("pitch", 0)) < 0.1
-            and abs(late["tilt_start"] - 0.5) < 0.01, repr(exported))
-    middle, close = [view(dump(out, name)) for name in ("late_middle", "late_near")]
+            and abs(late["tilt_start"] - 0.5) < 0.01
+            and bearing is not None and at_bearing(dump(out, "late_middle"), bearing), repr((exported, bearing)))
     c.check(s, "Tilt near eases between the base and near pitches",
             bool(late and middle and close) and late["tilt_start"] < middle["zoom"] < 0.6
             and late["near_pitch"] < middle["pitch"] < exported["fixed_pitch"]
@@ -1286,7 +1362,7 @@ def camera_lod(run, c):
 
 def camera_lod_one(run, c, preset):
     from datetime import datetime
-    s = "camera-lod" if preset == "ours-fixed" else "camera-lod-lol"
+    s = ("camera-lod" if preset == "ours-fixed" else "camera-lod-lol") + BEARING_SUFFIX
     ids = sorted(r["id"] for r in sql(run, "SELECT id, name, alive FROM character WHERE kind = 'person'")
                  if r.get("alive") and r.get("name") != "Verifier")[:17]
     if len(ids) < 12:
@@ -1296,10 +1372,10 @@ def camera_lod_one(run, c, preset):
     if preset == "lol":
         # Pack the same residents into the closer view, without placing anyone on the player.
         offsets = [(x, y) for y in (-2.3, -1.2, -0.1, 1.0) for x in (-1.7, -0.6, 0.6, 1.7)]
-    places = [f"{id}:{x}:{y}" for id, (x, y) in zip(ids, offsets)]
+    places = [f"{id}:{x:.4f}:{y:.4f}" for id, (x, y) in zip(ids, (bearing_offset(*offset) for offset in offsets))]
     syncs = ['setup=set_world_law|"fov_on"|"false";place_at|{me}|420.5|255.5',
              "noon=sql|UPDATE world SET epoch_ms = {epoch_at:12} WHERE id = 0"]
-    plan = "ready;" + select_camera_preset(preset) + "sync:noon;sync:setup;wait:2;sync:scene;look:180;wait:4;cursor:0.68,0.42;wait:0.5;"
+    plan = "ready;" + select_camera_preset(preset) + f"yaw:{BEARING};sync:noon;sync:setup;wait:2;sync:scene;look:180;wait:4;cursor:0.68,0.42;wait:0.5;"
     knots = (("near", 30),) if preset == "lol" else (("far", -30), ("middle", 11), ("near", 30))
     for stop, notches in knots:
         plan += f"notches:{notches};wait:2;dump:{stop}_start;wait:8;dump:{stop}_end;shot:{stop};"
@@ -1328,7 +1404,7 @@ def camera_lod_one(run, c, preset):
             d = dump(out, f"{stop}_end") or {}
             lod = (d.get("extra") or {}).get("lod") or {}
             measured = len(intervals) >= 100 and lod.get("near", 0) + lod.get("far", 0) >= 8
-            c.check(s, f"{arm} {stop}: crowded street and uncapped samples", measured, repr(lod))
+            c.check(s, f"{arm} {stop}: crowded street and uncapped samples at the requested bearing", measured and at_bearing(d), repr(lod))
             if intervals:
                 metrics[arm][stop] = {"frames": len(intervals), "p50_ms": intervals[len(intervals) // 2],
                                       "p99_ms": intervals[math.ceil(len(intervals) * .99) - 1], **lod}
@@ -3437,7 +3513,7 @@ def main():
         if name not in SCENARIOS:
             sys.exit(f"unknown scenario {name}; known: {', '.join(SCENARIOS)}")
         SCENARIOS[name](a.run, c)
-    p = os.path.join(ROOT, ".local/living/verify", a.run, "ui", "checks.json")
+    p = os.path.join(ROOT, ".local/living/verify", a.run, "ui", f"checks{BEARING_SUFFIX}.json")
     os.makedirs(os.path.dirname(p), exist_ok=True)
     json.dump(c.rows, open(p, "w"), indent=1)
     failed = [r for r in c.rows if not r["ok"]]

@@ -5,7 +5,7 @@ This directory is the maintained source for verifying interface D in the game cl
 | Feature | File | Scenario |
 | --- | --- | --- |
 | The cluster and skill bar: the rules' places and looks, sheathe and draw (X), greyed with a reason, the rules' refusals, the held guard, the tooltip | [bar.md](bar.md) | `check.py bar`; `check.py own` (own outcomes); `check.py committed` (committed moves); `check.py move-off` (broken off by moving; gestures on the move) |
-| Camera in play: north-up follow, wheel and pinch zoom, stable cursor look while zooming, world picking, personal Shade at each stop, and live developer tuning with JSON export | [camera.md](camera.md) | `check.py camera`; `check.py camera-tuning`; `check.py camera-lol`; `check.py camera-lol-ridge`; `check.py camera-lod` |
+| Camera in play: follow, bearing and north snap, wheel and pinch zoom, stable cursor look while zooming, world picking, personal Shade at each stop, and live developer tuning with JSON export | [camera.md](camera.md) | `check.py camera`; `check.py camera-rotate`; `check.py camera-tuning`; `check.py camera-lol`; `check.py camera-lol-ridge`; `check.py camera-lod` |
 | Cover hides residents from the camera and cursor, with matching Shade and canopy cutaway checks | [cover.md](cover.md) | `check.py cover` (Cullet) |
 | A crowd of generated people: paged faces with their page's shadow map, the far model beyond 10 m, one shared clip file; people composed from type, style and overlay files (the default; `LIVING_GAME_COMPOSE=0` draws whole files), joint by joint and colour by colour against their whole files, style materials shared by what they draw; draw counts, batches, asset memory and foot slide | [crowd.md](crowd.md) | look-dev, no world: `living/tools/characters/crowd.py` (`lod`, `town` and `composed` runs), `compose_check.py`, `colour_check.py`, `check.py skirt-scale` (spring skirts on scaled bodies) |
 | Facing sight (`fov_on`): off draws no field; F5 or Settings › Play switches it through the admin link (`law_change` rows); the readout of the five values; the authority's perceived set against the client's field at four looks (`human_face`); a walking look held at 30° and the releases; heard marks per `heard_sounds` row | [field.md](field.md) | `check.py field` |
@@ -38,7 +38,7 @@ This directory is the maintained source for verifying interface D in the game cl
 | `controls.rs` (the look), `facing.rs`, `heardmark.rs`, `sightedge.rs`, `sightfield.rs` | [field.md](field.md), [gaze.md](gaze.md) |
 | `envs.rs` (the cutaway fade) | [support.md](support.md) |
 | `heard.rs`, `mouth.rs`, `pick.rs`, `talk.rs` | [talking.md](talking.md) |
-| `keys.rs` (Settings › Controls) | [windows.md](windows.md), [bar.md](bar.md) |
+| `keys.rs` (Settings › Controls) | [camera.md](camera.md), [windows.md](windows.md), [bar.md](bar.md) |
 | `live.rs`: the live script every drive runs through (SKILL.md), and how a walking body's legs and upper body turn | the harness for every feature; [look-walk.md](look-walk.md); `recipe_for`, `swap_look`: [looks.md](looks.md) |
 | `characters/book.rs`, `characters/seen.rs`, `loading.rs` (the prewarm), `island.rs` (`person_recipe`) | [looks.md](looks.md) |
 | `looks.rs` | [names.md](names.md), [looks.md](looks.md) (`clothes`, `place`) |

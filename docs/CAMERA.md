@@ -36,6 +36,8 @@ The SUPERVIVE Wiki's direct fetches returned 403. The search index supplied the 
 
 ## 2. Current in Slop Art Online
 
+The play camera now starts north-up and can turn around the character. Middle drag and native two-finger rotation on macOS change the bearing. N or a short middle tap snaps north, and the key is rebindable. The earlier fixed-bearing proposal below records the original design. [Current controls and verification](../.agents/skills/verify-ui/features/camera.md).
+
 Source audit at the branch base. See the [living core](LIVING_CORE.md), [interface](INTERFACE.md), [character models](CHARACTERS.md) and [perception](PERCEPTION.md). Where older sections describe prototypes, the current source takes precedence.
 
 - **Camera and movement.** [Camera](../living/game/src/camera.rs) uses Bevy's perspective camera with a 28° downward pitch, a 22 m slant distance and 50° vertical FOV in the ordinary adult baseline. Character size, cursor lead, context framing for fights, greetings and talk, sight distance and terrain clearance can change the actual framing. Brackets, middle drag, left drag and touch pan can rotate it. Middle tap aligns and Alt glances. [Pointer](../living/game/src/pointer.rs) already provides wheel/pinch zoom as a 0.6–1.4 distance factor. [Controls](../living/game/src/controls.rs) sends WASD movement relative to the current camera axes and has both Cursor and Travel facing settings. Shift runs. Cursor facing sends `human_face`; the Travel preset also uses cursor facing while aiming.
