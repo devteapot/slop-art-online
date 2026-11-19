@@ -291,6 +291,19 @@ def bindings_check(merge_sha, base, log_path, start_head, attempt):
     return 11
 
 
+def genesis_summary(record):
+    """The gate's genesis fuel per seed in one line (scene_gate.py, docs/TOOLING.md "Genesis fuel")."""
+    if record.get("genesis_disabled"):
+        return "genesis fuel check disabled (SLOP_GATE_GENESIS_CHECK=0)"
+    seeds = []
+    for g in record.get("genesis") or []:
+        fuel = g.get("init_fuel")
+        share = f"{fuel / 1e9:.3f}e9, {100 * fuel / g['budget']:.2f}%" if fuel is not None and g.get("budget") else "no fuel"
+        steps = f", largest step {g['largest_step_share']:.2%}" if g.get("steps") else ""
+        seeds.append(f"{g.get('seed')} {share}{steps} {'pass' if g.get('passed') else 'FAIL'}")
+    return f"genesis init fuel per run: {'; '.join(seeds)}" if seeds else None
+
+
 def scene_gate(merge_sha, base, gate_base, gate_json, log_path, start_head, attempt):
     """Run the scene gate on the checked merge; None when it passed (or was not needed this
     attempt), else the exit code after the summary."""
@@ -307,6 +320,11 @@ def scene_gate(merge_sha, base, gate_base, gate_json, log_path, start_head, atte
             done.append(f"attempt {attempt}: scene gate kept from {gate_base[:10]} (main's new commits touch no behaviour)")
             return None
     cmd = cmd or f"{shlex.quote(sys.executable)} {tool} run --base {base} --json {shlex.quote(gate_json)}"
+    os.environ["LIVING_MERGE_GATE_JSON"] = gate_json  # where the gate's record goes (a LIVING_MERGE_SCENES_CMD writes it there)
+    try:
+        os.remove(gate_json)  # an earlier attempt's record is not this run's
+    except FileNotFoundError:
+        pass
     code, secs = run_check(cmd, log_path, "scenes")
     record = {}
     try:
@@ -314,6 +332,9 @@ def scene_gate(merge_sha, base, gate_base, gate_json, log_path, start_head, atte
             record = json.load(f)
     except (OSError, ValueError):
         pass
+    fuel = genesis_summary(record)
+    if fuel:
+        done.append(f"attempt {attempt}: {fuel}")
     if code == 0:
         done.append(f"attempt {attempt}: scene gate {record.get('result', 'passed')} in {secs:.0f} s"
                     + (f" (evidence {record['evidence']})" if record.get("evidence") else ""))

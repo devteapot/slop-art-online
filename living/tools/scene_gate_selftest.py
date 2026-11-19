@@ -16,9 +16,12 @@ import sys
 import tempfile
 from pathlib import Path
 
+from urllib.error import HTTPError
+
+import scene_gate
 from scene_gate import (
     GENESIS_BUDGET, GENESIS_FUEL, GENESIS_RUNS, Runner, genesis_metrics, genesis_policy,
-    genesis_threshold, staged_genesis_report,
+    genesis_result_line, genesis_threshold, staged_genesis_report,
 )
 
 GATE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "scene_gate.py")
@@ -32,8 +35,9 @@ def sh(cmd, cwd):
     return r.stdout
 
 
-def gate(clone, cache, *args, wait=True):
-    env = {**os.environ, "LIVING_GATE_REDS_REPO": clone, "LIVING_GATE_REDS": cache, "LIVING_GATE_REDS_GIT": "1"}
+def gate(clone, cache, *args, wait=True, env_extra=None):
+    env = {**os.environ, "LIVING_GATE_REDS_REPO": clone, "LIVING_GATE_REDS": cache, "LIVING_GATE_REDS_GIT": "1",
+           **(env_extra or {})}
     p = subprocess.Popen([sys.executable, GATE, *args], cwd=clone, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     if not wait:
         return p
@@ -74,15 +78,34 @@ def check_genesis():
     expect("genesis: 10% headroom passes; fuel is divided by this database's init count",
            good["passed"] and good["init_fuel"] == 108_000_000_000 and good["init_runs"] == 2, good)
     bad = genesis_measurement(metrics(108_000_000_001), identity, threshold, None)
-    expect("genesis: under 10% with no baseline fails", not bad["passed"], bad)
+    expect("genesis: under 10% headroom (over 90% of the budget) fails", not bad["passed"], bad)
+    over = genesis_measurement(metrics(119_000_000_000), identity, threshold, None)
+    expect("genesis: an over-90% seed with no recorded baseline fails and says so",
+           not over["passed"] and "no recorded baseline" in over["failures"][0], over)
+    line = genesis_result_line(dict(seed="island", commit="c" * 40, budget=GENESIS_BUDGET, **over))
+    expect("genesis: the result line names the fuel, limit and verdict",
+           line.startswith("genesis island: init 119.000e9 fuel per run (2 init runs)") and "limit 108.000e9" in line
+           and line.endswith("— FAIL"), line)
+    expect("genesis: over 50% of the budget warns", len(good["warnings"]) == 1 and "over 50%" in good["warnings"][0], good)
+    quiet = genesis_measurement(metrics(60_000_000_000), identity, threshold, None)
+    expect("genesis: 50% of the budget passes without a warning", quiet["passed"] and not quiet["warnings"], quiet)
     override = genesis_threshold({"SLOP_GATE_GENESIS_HEADROOM": "5"})
     raised = genesis_measurement(metrics(110_000_000_000), identity, override, None)
     expect("genesis: configured headroom is used", raised["passed"], raised)
     expect("genesis: check can be disabled", genesis_threshold({"SLOP_GATE_GENESIS_CHECK": "0"}) is None)
+    for bad_value in ("abc", "-1", "101"):
+        try:
+            genesis_threshold({"SLOP_GATE_GENESIS_HEADROOM": bad_value})
+        except ValueError:
+            expect(f"genesis: SLOP_GATE_GENESIS_HEADROOM={bad_value} is refused", True)
+        else:
+            expect(f"genesis: SLOP_GATE_GENESIS_HEADROOM={bad_value} is refused", False)
     baseline = 119_500_000_000
-    for fuel, passed in ((119_619_499_999, True), (119_619_500_000, True), (119_619_500_001, False)):
+    for fuel, passed in ((119_000_000_000, True), (119_619_499_999, True), (119_619_500_000, True),
+                         (119_619_500_001, False), (119_900_000_000, False)):
         result = genesis_measurement(metrics(fuel), identity, threshold, baseline)
-        expect(f"genesis: baseline comparison for {fuel}", result["passed"] == passed, result)
+        expect(f"genesis: must not rise, baseline 119.5e9: {fuel / 1e9:.9f}e9 {'passes' if passed else 'fails'}",
+               result["passed"] == passed and result["policy"] == "baseline + 0.1%", result)
     graduated = genesis_measurement(metrics(108_000_000_000), identity, threshold, baseline)
     expect("genesis: enough headroom uses the standard rule even with a baseline",
            graduated["passed"] and graduated["policy"] == "10% minimum headroom", graduated)
@@ -94,6 +117,83 @@ def check_genesis():
             expect(f"genesis: missing {name} fails loudly", name in str(error), error)
         else:
             expect(f"genesis: missing {name} fails loudly", False)
+
+
+def check_genesis_live():
+    """Runner.genesis on a fake server: the launch writes state.json, the metrics come from a string."""
+    identity = "d" * 64
+    commit = "e" * 40
+
+    def metrics(fuel_total, runs):
+        lines = [f'{GENESIS_FUEL}{{db="{"f" * 64}",reducer="init"}} 5',
+                 f'{GENESIS_RUNS}{{db="{"f" * 64}",reducer="init"}} 2']
+        if fuel_total is not None:
+            lines.append(f'{GENESIS_FUEL}{{db="{identity}",reducer="init"}} {fuel_total}')
+        if runs is not None:
+            lines.append(f'{GENESIS_RUNS}{{db="{identity}",reducer="init"}} {runs}')
+        return "\n".join(lines) + "\n"
+
+    class Fake(Runner):
+        def __init__(self, root, published, metrics_text, cleanup_code=0):
+            super().__init__("fixture", dict(os.environ, LIVING_STDB_URL="http://fake", CARGO_TARGET_DIR="/nowhere"),
+                             root, root / "reds.json")
+            self.published, self.metrics_text, self.cleanup_code, self.cleaned = published, metrics_text, cleanup_code, []
+            self.launched = False
+
+        def sh(self, cmd, root, log, timeout, stdout=None):
+            run = cmd[cmd.index("--run") + 1]
+            if cmd[2] == "launch":
+                self.launched = True
+                state = Path(root) / ".local/living/verify" / run / "state.json"
+                state.parent.mkdir(parents=True, exist_ok=True)
+                state.write_text(json.dumps(dict(published=self.published, db=f"verify-{run}",
+                                                 **({"database_identity": identity} if self.published else {}))))
+                return 0 if self.published else 1
+            if cmd[2] == "cleanup":
+                self.cleaned.append(run)
+                return self.cleanup_code
+            raise AssertionError(cmd)
+
+    def http(runner):
+        def get(url):
+            if url.endswith("/identity"):
+                if runner.launched:  # the name stays reserved by a refused publish
+                    return identity
+                raise HTTPError(url, 404, "not found", None, None)
+            assert url == "http://fake/v1/metrics", url
+            return runner.metrics_text
+        return get
+
+    original = scene_gate.genesis_http
+    try:
+        with tempfile.TemporaryDirectory(prefix="genesis-live-selftest-") as t:
+            root = Path(t)
+            cases = [
+                ("a fresh publish's fuel and two init runs pass", True, metrics(2 * 17_300_000_000, 2), 0, None,
+                 lambda r: r["passed"] and r["init_fuel"] == 17_300_000_000 and r["init_runs"] == 2),
+                ("a missing fuel metric fails loudly", True, metrics(None, 2), 0, None,
+                 lambda r: not r["passed"] and GENESIS_FUEL in r["error"]),
+                ("a missing call-count metric fails loudly", True, metrics(2 * 17_300_000_000, None), 0, None,
+                 lambda r: not r["passed"] and GENESIS_RUNS in r["error"]),
+                ("one init run on a fresh publish fails", True, metrics(17_300_000_000, 1), 0, None,
+                 lambda r: not r["passed"] and "expected two init runs" in r["error"]),
+                ("over the budget with a baseline but a refused publish fails, with its fuel", None,
+                 metrics(GENESIS_BUDGET, 1), 0, 119_000_000_000,
+                 lambda r: not r["passed"] and r["init_fuel"] == GENESIS_BUDGET and "fresh publish not confirmed" in r["error"]),
+                ("a failed pause-confirm-delete fails", True, metrics(2 * 17_300_000_000, 2), 1, None,
+                 lambda r: not r["passed"] and "pause-confirm-delete failed" in r["error"]),
+            ]
+            for i, (name, published, text, cleanup_code, baseline, ok) in enumerate(cases):
+                runner = Fake(root, published, text, cleanup_code)
+                runner.stamp = f"fixture{i}"
+                scene_gate.genesis_http = http(runner)
+                result = runner.genesis(root, "island", commit, 10, baseline)
+                fields = {"seed", "commit", "init_fuel", "init_runs", "steps", "largest_step_share", "budget"}
+                named = name.startswith(("a missing", "a failed pause")) or fields <= set(result)
+                expect(f"genesis live: {name}", ok(result) and named
+                       and runner.cleaned == ([f"gate-fixture{i}-fuel-island"] if published else []), result)
+    finally:
+        scene_gate.genesis_http = original
 
 
 def check_staged_genesis():
@@ -141,6 +241,7 @@ def check_staged_genesis():
 
 def main():
     check_genesis()
+    check_genesis_live()
     check_staged_genesis()
     with tempfile.TemporaryDirectory(prefix="gate-reds-selftest-") as t:
         os.environ.update({"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"})
@@ -197,6 +298,19 @@ def main():
         gate(b, cb, "reds", "--add", "late", "--skill", "verify-minds", "--who", "y", "--reason", "seen by the run")
         code, out = gate(a, ca, "run", "--base", "HEAD", "--head", "HEAD")
         expect("a gate run (skipped) prints the list as on the remote", code == 0 and "skipped" in out and "late (verify-minds; owner y)" in out, out)
+
+        # the genesis overrides through the real CLI (no server needed for either)
+        code, out = gate(a, ca, "run", "--base", "HEAD", "--head", "HEAD", "--genesis-only",
+                         "--stdb-container", "no-such-container", env_extra={"SLOP_GATE_GENESIS_CHECK": "0"})
+        records = sorted(Path(a, ".local/living/verify").glob("gate-*/gate.json"))
+        record = json.loads(records[-1].read_text()) if records else {}
+        expect("SLOP_GATE_GENESIS_CHECK=0: the check is skipped with a warning (exit 0), and the record says so",
+               code == 0 and "WARNING genesis fuel check disabled" in out and record.get("genesis_disabled") is True
+               and record.get("genesis") == [] and record.get("result") == "genesis skipped", out)
+        code, out = gate(a, ca, "run", "--base", "HEAD", "--head", "HEAD", "--genesis-only",
+                         env_extra={"SLOP_GATE_GENESIS_HEADROOM": "ten"})
+        expect("SLOP_GATE_GENESIS_HEADROOM that is not a percentage is a setup error (exit 2)",
+               code == 2 and "genesis setup error" in out, out)
 
         # remote unreachable: the read falls back to the cache and says so; a change fails cleanly
         sh(f"git remote set-url origin {os.path.join(t, 'gone.git')}", b)

@@ -133,8 +133,10 @@ LOCK = threading.RLock()  # say() inside the list updates takes it again
 
 # SpacetimeDB v2.14.1 FunctionBudget::DEFAULT_BUDGET (client-api-messages/src/energy.rs).
 GENESIS_BUDGET = 120_000_000_000
-# The gate's scene worlds (combat and minds use island), Cullet and the player fixtures.
-GENESIS_SEEDS = ("world", "island", "cullet", "cullet-laws", "plan-test")
+# The gate's scene worlds (combat and minds use island), Cullet and the player fixtures
+# (verify-player's plan-test and cullet-laws). The default world goes last: its build in
+# CARGO_TARGET_DIR is the one the core, mechanics and client scenes then launch.
+GENESIS_SEEDS = ("island", "cullet", "cullet-laws", "plan-test", "world")
 GENESIS_FUEL = "reducer_wasmtime_fuel_used"
 GENESIS_RUNS = "spacetime_reducer_plus_query_duration_sec_count"
 GENESIS_BASELINE_FILE = Path(__file__).with_name("genesis_fuel_baselines.json")
@@ -198,36 +200,45 @@ def valid_fuel(fuel):
 def genesis_policy(measurement, threshold, baseline):
     fuel = measurement["init_fuel"]
     headroom = 100 * (GENESIS_BUDGET - fuel) / GENESIS_BUDGET
+    # The interim rule (docs/TOOLING.md, "Genesis fuel"): a seed with a recorded baseline that is
+    # short of the headroom may not rise more than 0.1% above it; with the headroom it graduates.
     use_baseline = headroom < threshold and baseline is not None
     init_passed = fuel * 1000 <= baseline * 1001 if use_baseline else headroom >= threshold
+    limit = baseline * 1.001 if use_baseline else GENESIS_BUDGET * (100 - threshold) / 100
     failures, warnings = [], []
     if not init_passed:
-        failures.append("init exceeds the allowed fuel")
+        why = ("more than 0.1% above its recorded baseline" if use_baseline else
+               f"under {threshold:g}% headroom" + ("" if baseline is not None else
+                                                    f" and no recorded baseline in {GENESIS_BASELINE_FILE.name}"))
+        failures.append(f"init {fuel / 1e9:.3f}e9 is over its limit {limit / 1e9:.3f}e9: {why}")
     if fuel > GENESIS_BUDGET / 2:
-        warnings.append(f"init uses {fuel:,} fuel (over 50% of budget)")
+        warnings.append(f"init uses {fuel / 1e9:.3f}e9 fuel, over 50% of its budget")
     for step in measurement["steps"]:
         step_fuel = step["fuel"]
-        detail = f"{step['phase']} / {step['label']} ({step['reducer']}) uses {step_fuel:,} fuel"
+        detail = f"step {step['phase']} / {step['label']} ({step['reducer']}) uses {step_fuel / 1e9:.3f}e9 fuel"
         step_headroom = 100 * (GENESIS_BUDGET - step_fuel) / GENESIS_BUDGET
         if step_headroom < threshold:
             failures.append(f"{detail} ({step_headroom:.2f}% headroom, requires {threshold:g}%)")
         if step_fuel > GENESIS_BUDGET / 2:
-            warnings.append(f"{detail} (over 50% of budget)")
+            warnings.append(f"{detail}, over 50% of its budget")
     return dict(headroom_pct=headroom, policy="baseline + 0.1%" if use_baseline else f"{threshold:g}% minimum headroom",
-                baseline_fuel=baseline, warnings=warnings, failures=failures, passed=not failures)
+                baseline_fuel=baseline, limit_fuel=limit, warnings=warnings, failures=failures, passed=not failures)
 
 
 def genesis_result_line(result):
+    def e9(fuel):
+        return f"{fuel / 1e9:.3f}e9"
     line = f"genesis {result['seed']}: "
-    if "init_fuel" in result:
-        line += (f"{result['init_fuel']:,.1f} init fuel / {result['budget']:,} budget, "
-                 f"{result['headroom_pct']:.2f}% headroom ({result['init_runs']} init runs, {result['policy']})")
+    if "headroom_pct" in result:
+        line += (f"init {e9(result['init_fuel'])} fuel per run ({result['init_runs']} init run{'s' if result['init_runs'] != 1 else ''}), "
+                 f"{100 - result['headroom_pct']:.2f}% of the {result['budget'] / 1e9:g}e9 budget, "
+                 f"{result['headroom_pct']:.2f}% headroom; rule {result['policy']}, limit {e9(result['limit_fuel'])}")
         if result["baseline_fuel"] is not None:
-            line += f", recorded baseline {result['baseline_fuel']:,} fuel"
+            line += f" (recorded baseline {e9(result['baseline_fuel'])})"
     else:
-        line += f"fuel unavailable / {result['budget']:,} budget, headroom unavailable"
+        line += "init fuel unavailable"
     if result.get("steps"):
-        line += f", largest of {len(result['steps'])} steps uses {result['largest_step_share']:.2%} of budget"
+        line += f"; largest of {len(result['steps'])} steps {result['largest_step_share']:.2%} of its budget"
     for detail in [*result.get("failures", []), result.get("error")]:
         if detail:
             line += f"; {detail}"
@@ -508,9 +519,10 @@ class Runner:
                 result.update(genesis_policy(result, threshold, baseline))
             except (OSError, ValueError) as error:
                 result["error"] = str(error)
-        print("RESULT " + genesis_result_line(result), flush=True)
+        # scene-gate: lines are what the merge queue forwards, on a pass and on a failure.
+        say(genesis_result_line(result))
         for warning in result.get("warnings", []):
-            print(f"RESULT WARNING: genesis {seed}: {warning}", flush=True)
+            say(f"WARNING genesis {seed}: {warning}")
         return result
 
     def genesis_live(self, root, seed, commit, threshold, baseline):
@@ -841,7 +853,7 @@ def cmd_run(a):
                 record.update(result="setup error")
                 return finish(a, record, 2)
         if threshold is None:
-            print("RESULT WARNING: genesis fuel check disabled by SLOP_GATE_GENESIS_CHECK=0", flush=True)
+            say("WARNING genesis fuel check disabled by SLOP_GATE_GENESIS_CHECK=0: init fuel is not measured")
         measurements = [] if threshold is None else [
             runner.genesis(repo, seed, head, threshold, baselines.get(seed), reports.get(seed)) for seed in GENESIS_SEEDS
         ]
