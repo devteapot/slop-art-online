@@ -10,3 +10,5 @@ docs/FEED_SCOPING.md ("Authority shapes"). `scripts/feed_scope.py --run client-f
 - `feed_scope`, `map_structure` (architecture kinds only) and `map_resource` (no stock fields) public.
 
 Build the probe first (SKILL.md); the probe knows the new tables and views. Evidence: `feed-ws-*.jsonl`, `feed_scope.json`. The fixed suite's inventories (`drive.py` `PRIVATE`, `VIEWS`, `BASE_QUERIES`) list the new private tables, the five views and the observer's `structure_held`, `gate_held` and `resource_held` queries; in a stage-0 world those three are empty.
+
+The game client's side (its subscription switch on `feed_scope.stage` and what it draws from the views) is verify-ui's [feed-scope.md](../../verify-ui/features/feed-scope.md) (`check.py feed-scope`, `feed-scope-gate`). Its query sets are listed in [game-client.md](game-client.md).

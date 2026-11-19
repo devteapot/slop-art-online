@@ -1816,6 +1816,12 @@ def law_override(run, c):
     plan = "ready;wait:2;sync:armed;wait:1;dump:before;sync:toggled;dump:toggled;reconnect;wait:8;dump:reconnected;sync:done;quit"
     cmd = [sys.executable, os.path.join(HERE, "drive.py"), "--run", run, "--name", name, "--plan", plan, "--timeout", "900"]
     os.makedirs(base, exist_ok=True)
+    # A rerun on the same world: the last run's client.log still says "waiting for …/armed.go"
+    # until drive.py starts the new client, and its unconsumed sync files would answer the new
+    # client's first waits. Clear both so `wait_for` sees only this client.
+    for stale in glob.glob(os.path.join(out, "*.go")) + [os.path.join(out, "client.log")]:
+        if os.path.exists(stale):
+            os.remove(stale)
     seen_path = os.path.join(base, f"{name}.seen.jsonl")
     env = dict(os.environ, LIVING_GAME_SEEN_LOG=seen_path)
     results, installs = [], []
@@ -4239,6 +4245,332 @@ def reply_pace(run, c):
     result["follow"] = {"row": f1, "bubble": b2}
     json.dump(result, open(os.path.join(ev, "reply-pace.json"), "w"), indent=1)
     print(f"{s}: {json.dumps(result)}", flush=True)
+
+
+# ---- public-feed scoping (docs/FEED_SCOPING.md; living/game/src/feed.rs) ------------------------
+
+FEED_LAWS = {"feed_scope_on": "false", "feed_scope_grace_s": "10"}
+# Allowlisted architecture (`map_structure`): a key of these kinds, or any resource, is a map
+# landmark under the scoped feed, so it may never go missing at a switch.
+FEED_MAP_KINDS = {"shelter", "house", "hall", "workshop", "market", "inn", "smokehouse", "furnace", "gate"}
+# Cullet's brush fixture (verify-core feed_scope.py, docs/COVER_SIGHT.md): outside the patch, the
+# hidden spot, and spots inside the patch to look from.
+BRUSH_OUT, BRUSH_HIDDEN = (608.5, 479.5), (608.5, 472.5)
+BRUSH_IN = ((608.5, 474.0), (609.5, 473.5), (607.5, 473.5), (608.5, 475.0))
+
+
+def feed_lines(path):
+    return [json.loads(l) for l in open(path)] if os.path.exists(path) else []
+
+
+def feed_of(d):
+    return ((d or {}).get("extra") or {}).get("feed_scope") or {}
+
+
+def feed_things(d):
+    return {(t["class"], t["id"]): t for t in feed_of(d).get("things") or []}
+
+
+@contextmanager
+def feed_fixture(run):
+    """Restore the feed laws a scene sets (a world at stage 2 stays there: the cut is latched)."""
+    original = own_laws(lambda q: sql(run, q))
+    try:
+        yield
+    finally:
+        for law, default in FEED_LAWS.items():
+            call_admin(run, "set_world_law", [law, original.get(law, default)])
+
+
+@scenario("feed-scope", cullet=True, explicit=True)
+def feed_scope(run, c):
+    """Public-feed scoping through the real client on a Cullet world at stage 0 (the scene cuts
+    it over for good: stage 2 is latched). One client, connected throughout: stage 0 drawn from
+    the legacy rows; the law on with a long grace (stage 1) switches it to the scoped set
+    make-before-break, the legacy rows drawn until the new set is applied; the law off at stage
+    1 switches it back; on again with `feed_scope_grace_s` 1 it switches and the cut lands
+    (stage 2: the legacy rows gone, nothing drawn lost); a reconnect at stage 2 subscribes only
+    the scoped set. Then, at stage 2: a stranger's remains in the brush hidden from outside it,
+    live from inside, remembered where it lay out of sight and live again; a lamp's lit/out
+    before looking it over and its fuel after (`inspect`, at 1.4 m); a boulder drawn smaller
+    once a stone is taken. Frame by frame through `LIVING_GAME_FEED_LOG`."""
+    s = "feed-scope"
+    stage0 = (sql(run, "SELECT stage FROM feed_scope") or [{"stage": 0}])[0]["stage"]
+    if stage0 != 0:
+        c.check(s, "the world starts at stage 0 (a fresh Cullet world: the cut is latched)", False, f"stage {stage0}")
+        return
+    name = f"{s}-{THEME}" if THEME else s
+    out_dir = os.path.join(ROOT, ".local/living/verify", run, "ui", name)
+    os.makedirs(out_dir, exist_ok=True)
+    flog = os.path.join(out_dir, "feed.jsonl")
+    if os.path.exists(flog):
+        os.remove(flog)
+    # A stranger for the remains (spawned, so no resident dies), held still out of the way.
+    before = {r["id"] for r in sql(run, "SELECT id FROM character")}
+    call_admin(run, "spawn_crowd", [1, True], check=True)
+    made = [r["id"] for r in sql(run, "SELECT id FROM character") if r["id"] not in before]
+    c.check(s, "a stranger spawned for the remains", len(made) == 1, repr(made))
+    if len(made) != 1:
+        return
+    victim = made[0]
+    call_admin(run, "set_behavior", [victim, json.dumps({"wait": 600})], check=True)
+    lamp = sorted(sql(run, "SELECT id, kind, x, y, lit_until_ms FROM structure WHERE kind = 'lamp'"), key=lambda r: r["id"])[0]
+    # A full boulder with no other within 3 m (the act takes the nearest of its kind), near the lamp.
+    rocks = sql(run, "SELECT id, kind, x, y, amount, max FROM resource_node WHERE kind = 'boulder'")
+    lone = [r for r in rocks if r["amount"] >= r["max"] - 0.01 and all(o["id"] == r["id"] or math.dist((o["x"], o["y"]), (r["x"], r["y"])) > 3.0 for o in rocks)]
+    rock = sorted(lone, key=lambda r: math.dist((r["x"], r["y"]), (lamp["x"], lamp["y"])))[0]
+    hold = f'set_behavior|{victim}|{json.dumps(json.dumps({"wait": 600}))}'
+    stage_q = "client_sql|SELECT * FROM feed_scope"
+    syncs = [
+        "daylight=sql|UPDATE world SET epoch_ms = {epoch_at:12} WHERE id = 0",
+        # Sight all round, cover and brush on (as cover.py and verify-core's feed_scope.py).
+        'laws=set_world_law|"fov_on"|"false";set_world_law|"gaze_on"|"false";set_world_law|"cover_sight_on"|"true";set_world_law|"cover_brush_on"|"true"',
+        f"s0={stage_q};sql|SELECT id FROM structure;sql|SELECT id FROM resource_node",
+        'shadow=set_world_law|"feed_scope_grace_s"|"120";set_world_law|"feed_scope_on"|"true"',
+        f"s1={stage_q};sql|SELECT id, kind FROM map_structure;sql|SELECT id FROM structure",
+        'back=set_world_law|"feed_scope_on"|"false"',
+        f"b0={stage_q};sql|SELECT id FROM map_structure",
+        'cut=set_world_law|"feed_scope_grace_s"|"1";set_world_law|"feed_scope_on"|"true"',
+        f"s2={stage_q};sql|SELECT id FROM structure;sql|SELECT id FROM gate;sql|SELECT id FROM resource_node;client_sql|SELECT * FROM my_things",
+        f"re={stage_q}",
+        # The brush.
+        f"h_set=place_at|{{me}}|{BRUSH_OUT[0]}|{BRUSH_OUT[1]};place_at|{victim}|{BRUSH_HIDDEN[0]}|{BRUSH_HIDDEN[1]};{hold}",
+        f'h_kill=kill|{victim}|"feed scope fixture"',
+        "h_hidden=sql|SELECT id, kind, x, y, owner FROM structure_held WHERE kind = 'remains';client_sql|SELECT * FROM my_things;client_sql|SELECT * FROM my_remembered_things",
+    ]
+    plan = ["ready", "weapon:sheathe", "frame:0", "sightlook:shade", "sync:daylight", "sync:laws", "wait:3", "sync:s0", "dump:s0",
+            "sync:shadow", "wait:5", "sync:s1", "dump:s1", "shot:s1",
+            "sync:back", "wait:5", "sync:b0", "dump:b0",
+            "sync:cut", "wait:6", "sync:s2", "dump:s2", "shot:s2",
+            "reconnect", "wait:10", "sync:re", "dump:re",
+            "sync:h_set", "wait:3", "sync:h_kill", "wait:3", "sync:h_hidden", "dump:h_hidden", "shot:h_hidden"]
+    for i, (x, y) in enumerate(BRUSH_IN):
+        syncs.append(f"h_in{i}=place_at|{{me}}|{x}|{y}")
+        syncs.append(f"h_in{i}s=client_sql|SELECT * FROM my_things")
+        plan += [f"sync:h_in{i}", "wait:3", f"sync:h_in{i}s", f"dump:h_in{i}"]
+    syncs.append(f"h_out=place_at|{{me}}|{BRUSH_OUT[0]}|{BRUSH_OUT[1]}")
+    syncs.append("h_outs=client_sql|SELECT * FROM my_things;client_sql|SELECT * FROM my_remembered_things")
+    plan += ["sync:h_out", "wait:3", "sync:h_outs", "dump:h_out", "shot:h_out"]
+    for i, (x, y) in enumerate(BRUSH_IN):
+        syncs.append(f"h_back{i}=place_at|{{me}}|{x}|{y}")
+        plan += [f"sync:h_back{i}", "wait:3", f"dump:h_back{i}"]
+    # The lamp, 1.4 m off; then the boulder.
+    syncs += [f"f_set=place_at|{{me}}|{lamp['x'] + 1.4}|{lamp['y']}", "f_fuel=client_sql|SELECT * FROM my_fuel_seen",
+              f"r_set=place_at|{{me}}|{rock['x'] + 1.0}|{rock['y']}", f"r_rows=client_sql|SELECT * FROM my_things;sql|SELECT id, amount, max FROM resource_held WHERE id = {rock['id']}"]
+    plan += ["sync:f_set", "wait:3", "menu:f@nearest:lamp", "wait:0.6", "dump:f_before", "shot:f_before", "menu:close",
+             "act:inspect@nearest:lamp", "wait:3", "sync:f_fuel", "menu:f@nearest:lamp", "wait:0.6", "dump:f_after", "shot:f_after", "menu:close",
+             "sync:r_set", "wait:3", "dump:r_full", "act:gather@nearest:boulder", "wait:8", "sync:r_rows", "dump:r_after", "shot:r_after", "quit"]
+    with feed_fixture(run), sight_fixture(run, CULLET_SIGHT):
+        out, code, output = drive(run, s, ";".join(plan), syncs=syncs, env={"LIVING_GAME_FEED_LOG": flog})
+    c.check(s, "client joined and finished", code == 0, output[-500:])
+    scene = dump(out, "scene") or {}
+    snaps = scene.get("snaps") or {}
+    me = scene.get("me")
+    L = log(out)
+    lines = feed_lines(flog)
+    stage_at = lambda k: ((snaps.get(k) or [{}])[0].get("rows") or [{"stage": 0}])[0].get("stage", 0) if (snaps.get(k) or [{}])[0].get("rows") is not None else None
+    rows_of = lambda k, i: (((snaps.get(k) or [])[i:i + 1] or [{}])[0].get("rows")) or []
+    known_kinds = {r["id"]: r["kind"] for r in sql(run, "SELECT id, kind FROM structure_held")}
+
+    # Stage 0: as main.
+    d0 = dump(out, "s0")
+    f0 = feed_of(d0)
+    c.check(s, "stage 0: the subscription is main's legacy set (feed_scope stage 0)", "feed: legacy (feed_scope stage 0)" in L and f0.get("reads") == "legacy" and f0.get("stage") == 0, repr({k: v for k, v in f0.items() if k != "things"}))
+    legacy0 = feed_things(d0)
+    c.check(s, "stage 0: every thing drawn comes from the legacy rows", legacy0 and all(t["source"] == "legacy" for t in legacy0.values()), repr(f0.get("counts")))
+
+    def switch(to, after_line):
+        """The feed log's commit to `to` after a log index: (index, line) or (None, None)."""
+        for i, l in enumerate(lines):
+            if i > after_line and l.get("reads") == to and (i == 0 or lines[i - 1].get("reads") != to):
+                return i, l
+        return None, None
+
+    def map_key(k):
+        cls, i = k
+        return cls == 0 or known_kinds.get(i) in FEED_MAP_KINDS
+
+    # Stage 1 (shadow), the switch to the scoped set.
+    i1, l1 = switch("scoped", -1)
+    d1 = dump(out, "s1")
+    c.check(s, "stage 1: the client switched to the scoped set", stage_at("s1") == 1 and feed_of(d1).get("reads") == "scoped" and i1 is not None, repr(feed_of(d1).get("counts")))
+    def window(lo, hi):
+        """The log lines from the first with a base for the other set being subscribed after
+        `lo` up to the switch at `hi` (the lines where the switch was under way)."""
+        start = next((j for j in range(lo + 1, hi) if lines[j].get("base_next")), hi)
+        return lines[start:hi]
+
+    def drawn_lost(ls):
+        return [tuple(k) for l in ls for k in l.get("drawn_gone") or [] if map_key(tuple(k))]
+
+    pre = window(-1, i1) if i1 is not None else []
+    asked = [l for l in pre if l.get("base_next") and not l["base_next"].get("applied")]
+    c.check(s, "stage 1: legacy rows read and drawn until the scoped set was applied",
+            asked and all(l["reads"] == "legacy" and l["legacy_rows"][0] > 0 for l in asked), f"{len(asked)} lines while subscribing: {[l['legacy_rows'] for l in asked][:4]}")
+    c.check(s, "stage 1: nothing drawn went missing while the switch was under way", pre and not [k for l in pre for k in l.get("drawn_gone") or []], repr([l.get("drawn_gone") for l in pre]))
+    gone_at = [tuple(k) for k in (l1 or {}).get("drawn_gone") or []]
+    lost = [k for k in gone_at if map_key(k)]
+    c.check(s, "stage 1: at the switch no drawn structure or resource of the map went (only sight-scoped things out of sight)", l1 is not None and not lost,
+            f"drawn gone {len(gone_at)}: {[(k, known_kinds.get(k[1])) for k in gone_at[:12]]}")
+    m = re.search(r"feed: on the scoped set after (\d+) ms \((\d+) things; (\d+) before", L)
+    c.check(s, "stage 1: the switch's time and counts are logged", m is not None, m and m[0])
+    # Back to 0.
+    i0, l0 = switch("legacy", i1 if i1 is not None else 0)
+    db0 = dump(out, "b0")
+    c.check(s, "law off at stage 1: back to stage 0 and the legacy set", stage_at("b0") == 0 and feed_of(db0).get("reads") == "legacy" and i0 is not None and "feed: on the legacy set" in L, repr(feed_of(db0).get("counts")))
+    back = window(i1, i0 + 1) if None not in (i1, i0) else []
+    # The authority clears the map projections in the transaction that sets stage 0, so the
+    # scoped rows go before the legacy set is in: the drawing holds (`feed::switching`).
+    data_gone = [tuple(k) for l in back for k in l.get("gone") or [] if map_key(tuple(k))]
+    c.check(s, "law off at stage 1: nothing drawn went missing switching back (the drawing held while the map rows were already gone)",
+            back and not drawn_lost(back), f"drawn lost {drawn_lost(back)[:8]}; map rows gone before the legacy set was in: {len(data_gone)}")
+    # The cut.
+    i2, l2 = switch("scoped", i0 if i0 is not None else 0)
+    d2 = dump(out, "s2")
+    legacy_after = [rows_of("s2", i) for i in (1, 2, 3)]
+    c.check(s, "stage 2: the cut landed and the client reads the scoped set", stage_at("s2") == 2 and feed_of(d2).get("reads") == "scoped" and not any(legacy_after), repr([len(x) for x in legacy_after]))
+    pre2 = window(i0, i2) if None not in (i0, i2) else []
+    c.check(s, "stage 1 again: nothing drawn went missing while the switch was under way, and at the switch no map thing", pre2 and not [k for l in pre2 for k in l.get("drawn_gone") or []] and not drawn_lost([l2 or {}]),
+            repr([l.get("drawn_gone") for l in pre2]))
+    after = lines[i2:] if i2 is not None else []
+    cut = next((j for j, l in enumerate(after) if l["legacy_rows"][0] == 0), None)
+    c.check(s, "stage 2: the legacy rows left the client cache after the switch, and nothing drawn went with them",
+            i2 is not None and cut is not None and cut > 0 and not drawn_lost(after[cut:cut + 1]) and not [k for l in after[cut:cut + 1] for k in l.get("gone") or [] if map_key(tuple(k))],
+            f"switch at line {i2}, cut {cut} lines later: {after[cut] if cut is not None else None}")
+    d2t = feed_things(d2)
+    c.check(s, "stage 2: map architecture and landmarks drawn with no legacy source", d2t and all(t["source"] in ("live", "map", "remembered") for t in d2t.values()), repr(feed_of(d2).get("counts")))
+    # Reconnect at stage 2.
+    dre = dump(out, "re")
+    re_part = partition_sync(L, "re")[0].rpartition("live script: reconnect")[2]
+    c.check(s, "reconnect at stage 2: subscribes the scoped set only, and draws the same things",
+            "feed: scoped (feed_scope stage 2)" in re_part and feed_of(dre).get("reads") == "scoped" and set(feed_things(dre)) >= {k for k, t in d2t.items() if t["source"] == "map"},
+            f"{len(feed_things(dre))} things, {len(d2t)} before")
+
+    # The brush: remains hidden, live, remembered, live again.
+    remains = [r for r in rows_of("h_hidden", 0) if r["owner"] == victim]
+    rid = remains[0]["id"] if remains else None
+    rkey = (1, rid)
+    key = (1 << 56) | (rid or 0)
+    c.check(s, "brush: the stranger's remains lies in the brush", rid is not None and math.dist((remains[0]["x"], remains[0]["y"]), BRUSH_HIDDEN) < 1.5, repr(remains))
+    hidden = dump(out, "h_hidden")
+    hid_rows = rows_of("h_hidden", 1)
+    c.check(s, "brush, outside: not in the client's my_things nor drawn", rid and key not in {r["key"] for r in hid_rows} and rkey not in feed_things(hidden), repr([r.get("kind") for r in hid_rows]))
+    seen_at = next((i for i in range(len(BRUSH_IN)) if rkey in feed_things(dump(out, f"h_in{i}")) and feed_things(dump(out, f"h_in{i}"))[rkey]["source"] == "live"), None)
+    c.check(s, "brush, inside: live in my_things and drawn where it lies", seen_at is not None and key in {r["key"] for r in rows_of(f"h_in{seen_at}s", 0)}, f"spot {seen_at}")
+    hout = dump(out, "h_out")
+    rem = feed_things(hout).get(rkey)
+    c.check(s, "brush, outside again: gone from my_things, drawn as remembered where it lay",
+            rid and key not in {r["key"] for r in rows_of("h_outs", 0)} and key in {r["key"] for r in rows_of("h_outs", 1)} and rem and rem["source"] == "remembered" and math.dist((rem["x"], rem["y"]), (remains[0]["x"], remains[0]["y"])) < 0.01,
+            repr(rem))
+    again = [i for i in range(len(BRUSH_IN)) if (feed_things(dump(out, f"h_back{i}")).get(rkey) or {}).get("source") == "live"]
+    c.check(s, "brush, inside again: live again", bool(again), repr(again))
+
+    # The lamp: lit or out before looking it over, its fuel after.
+    fb, fa = dump(out, "f_before") or {}, dump(out, "f_after") or {}
+    tb, ta = ((fb.get("acts") or {}).get("title") or ""), ((fa.get("acts") or {}).get("title") or "")
+    rows_b = (fb.get("acts") or {}).get("rows") or []
+    at = ((scene.get("placed_at") or {}).get("f_set") or {}).get(str(me))
+    c.check(s, "lamp: in sight its title says burning or out, and nothing of its fuel", ("burning" in tb or " out" in tb) and "fuel" not in tb, f"{tb}; me at {at}, lamp at {(lamp['x'], lamp['y'])}")
+    # The list names each row by its skill, as main's list does every act (the wheel takes the
+    # `_ui()` label, "Look over"); it is offered from the skill's spec and check, by no name here.
+    c.check(s, "lamp: looking it over is offered at a fire that burns fuel", any(r in ("inspect", "Look over") for r in rows_b), repr(rows_b))
+    fuel = rows_of("f_fuel", 0)
+    c.check(s, "lamp: looking it over at 1.4 m is accepted and kept (my_fuel_seen)", any(r["target"] == lamp["id"] for r in fuel) and re.search(r"verbs: .*→ .*inspect", L) is not None, repr(fuel))
+    c.check(s, "lamp: after, its title gives the fuel found, as of then", "as of when you looked it over" in ta and ("h of fuel left" in ta or "no fuel left" in ta or "less than an hour" in ta), ta)
+
+    # The boulder.
+    full = feed_things(dump(out, "r_full")).get((0, rock["id"]))
+    after_r = feed_things(dump(out, "r_after")).get((0, rock["id"]))
+    held = rows_of("r_rows", 1)
+    c.check(s, "boulder: full, it is a map landmark drawn at full size", full and full["source"] == "map" and full["fill"] == 1.0, repr(full))
+    c.check(s, "boulder: a stone taken, it is live and drawn from left / max", after_r and after_r["source"] == "live" and after_r["max"] and after_r["left"] < after_r["max"] and abs(after_r["fill"] - max(0.4, after_r["left"] / after_r["max"])) < 1e-3,
+            f"{after_r}; authority {held}")
+    json.dump({"me": me, "victim": victim, "remains": rid, "lamp": lamp, "rock": rock, "switch_lines": [i1, i0, i2]}, open(os.path.join(out, "feed-scope.json"), "w"), indent=1)
+
+
+@scenario("feed-scope-gate", explicit=True)
+def feed_scope_gate(run, c):
+    """A gate's state through the real client under public-feed scoping, on an island world at
+    stage 0 (the scene cuts it over for good). A far gate shut by a keeper at stage 0 is among the
+    client's shut gates (the legacy `gate` rows, all of them); after the cut it is not (never seen:
+    it does not block the Shade). A near gate seen open is live and open; away from it, its copy
+    goes and it is drawn as remembered open; shut by its keeper out of sight it still reads open;
+    back in sight it is live and shut and blocks; away again it is remembered shut and still blocks
+    the Shade (`feed::shut_gates`, which `sightfield.rs` lays on the hosted map)."""
+    s = "feed-scope-gate"
+    if (sql(run, "SELECT stage FROM feed_scope") or [{"stage": 0}])[0]["stage"] != 0:
+        c.check(s, "the world starts at stage 0 (a fresh island world: the cut is latched)", False)
+        return
+    gates = sql(run, "SELECT * FROM gate")
+    members = {m["member"]: m["community"] for m in sql(run, "SELECT * FROM membership")}
+    alive = {r["id"] for r in sql(run, "SELECT id, alive FROM character") if r["alive"]}
+    # Keepers: living members of a gate's community (a person, two for one community's gates).
+    people = {r["id"] for r in sql(run, "SELECT id, kind, stage FROM character") if r["kind"] == "person" and r["stage"] == 2}
+    keepers = lambda g: [m for m, cm in sorted(members.items()) if cm == g["community"] and m in alive and m in people]
+    g = next((g for g in sorted(gates, key=lambda g: g["id"]) if g["open"] and keepers(g)), None)
+    far = next((x for x in sorted(gates, key=lambda x: -math.dist((x["x"], x["y"]), (g["x"], g["y"]))) if x["open"] and [m for m in keepers(x) if m != keepers(g)[0]]), None) if g else None
+    c.check(s, "two open gates with living keepers, far apart", g and far and math.dist((g["x"], g["y"]), (far["x"], far["y"])) > 60, repr((g, far)))
+    if not (g and far):
+        return
+    k = keepers(g)[0]
+    kf = next(m for m in keepers(far) if m != k)
+    centre, fcentre = (g["x"] + 0.5, g["y"] + 0.5), (far["x"] + 0.5, far["y"] + 0.5)
+    act_q = lambda who, verb, gate: f'mind_act|{who}|{json.dumps([json.dumps({"do": verb, "target": {"id": gate["id"]}})])}|"verify-ui"'
+    hold = lambda who: f'set_behavior|{who}|{json.dumps(json.dumps({"wait": 600}))}'
+    near = [(centre[0] + dx, centre[1] + dy) for dx, dy in ((2, 0), (-2, 0), (0, 2), (0, -2))]
+    away = (centre[0] + 90, centre[1])
+    syncs = [
+        "daylight=sql|UPDATE world SET epoch_ms = {epoch_at:12} WHERE id = 0",
+        'laws=set_world_law|"fov_on"|"false"',
+        f"far_shut=place_at|{kf}|{fcentre[0] + 1}|{fcentre[1]};{hold(kf)};{act_q(kf, 'close', far)}",
+        f"g0=sql|SELECT id, open FROM gate WHERE id = {far['id']}",
+        'cut=set_world_law|"feed_scope_grace_s"|"1";set_world_law|"feed_scope_on"|"true"',
+        f"s2=client_sql|SELECT * FROM feed_scope;sql|SELECT id, open FROM gate_held WHERE id = {far['id']}",
+        f"away=place_at|{{me}}|{away[0]}|{away[1]}",
+        f"shut=place_at|{k}|{centre[0] + 1}|{centre[1]};{hold(k)};{act_q(k, 'close', g)}",
+        f"shut_s=sql|SELECT id, open FROM gate_held WHERE id = {g['id']};client_sql|SELECT * FROM my_remembered_things",
+        f"away2=place_at|{{me}}|{away[0]}|{away[1]};place_at|{k}|{centre[0] + 3}|{centre[1] + 3}",
+        f"reopen={act_q(k, 'open', g)};{act_q(kf, 'open', far)}",
+    ]
+    plan = ["ready", "weapon:sheathe", "frame:0", "sync:daylight", "sync:laws", "sync:far_shut", "wait:4", "sync:g0", "dump:g0",
+            "sync:cut", "wait:6", "sync:s2", "dump:s2"]
+    for tag in ("seen", "back"):
+        for i, (x, y) in enumerate(near):
+            syncs.append(f"{tag}{i}=place_at|{{me}}|{x}|{y}")
+            plan += [f"sync:{tag}{i}", "wait:2.5", f"dump:{tag}{i}"]
+        if tag == "seen":
+            plan += ["sync:away", "wait:3", "dump:away", "sync:shut", "wait:4", "sync:shut_s", "dump:shut"]
+    plan += ["sync:away2", "wait:3", "dump:away2", "shot:away2", "sync:reopen", "wait:2", "quit"]
+    with feed_fixture(run), resident_fixture(run, [k, kf]):
+        out, code, output = drive(run, s, ";".join(plan), syncs=syncs)
+        call_admin(run, "mind_act", [k, [json.dumps({"do": "open", "target": {"id": g["id"]}})], "verify-ui"])
+    c.check(s, "client joined and finished", code == 0, output[-500:])
+    scene = dump(out, "scene") or {}
+    snaps = scene.get("snaps") or {}
+    rows = lambda n, i=0: ((snaps.get(n) or [])[i:i + 1] or [{}])[0].get("rows") or []
+    tile, ftile = [g["x"], g["y"]], [far["x"], far["y"]]
+    gk = (1, g["id"])
+    d0 = feed_of(dump(out, "g0"))
+    c.check(s, "stage 0: the far gate shut by its keeper is among the client's shut gates (the legacy rows)",
+            rows("g0") and not rows("g0")[0]["open"] and ftile in d0.get("shut_gates", []) and d0.get("reads") == "legacy", repr((rows("g0"), d0.get("shut_gates"))))
+    d2 = feed_of(dump(out, "s2"))
+    c.check(s, "stage 2: the far gate, still shut but never seen, is not among them (no block in the Shade)",
+            d2.get("reads") == "scoped" and rows("s2", 1) and not rows("s2", 1)[0]["open"] and ftile not in d2.get("shut_gates", []), repr((d2.get("stage"), d2.get("shut_gates"))))
+    seen = [i for i in range(len(near)) if (feed_things(dump(out, f"seen{i}")).get(gk) or {}).get("source") == "live"]
+    st = feed_things(dump(out, f"seen{seen[0]}")).get(gk) if seen else None
+    c.check(s, "in sight: the gate is live and open, and does not block", st and st["gate_open"] is True and tile not in feed_of(dump(out, f"seen{seen[0]}")).get("shut_gates", []), repr(st))
+    a = feed_things(dump(out, "away")).get(gk)
+    c.check(s, "away: its copy gone, drawn as remembered open", a and a["source"] == "remembered" and a["gate_open"] is True, repr(a))
+    sh = feed_of(dump(out, "shut"))
+    shut_t = feed_things(dump(out, "shut")).get(gk)
+    c.check(s, "shut by its keeper out of sight: the authority's gate is shut, the client still remembers it open and it does not block",
+            rows("shut_s") and not rows("shut_s")[0]["open"] and shut_t and shut_t["source"] == "remembered" and shut_t["gate_open"] is True and tile not in sh.get("shut_gates", []), repr((rows("shut_s"), shut_t)))
+    back = [i for i in range(len(near)) if (feed_things(dump(out, f"back{i}")).get(gk) or {}).get("source") == "live"]
+    bt = feed_things(dump(out, f"back{back[0]}")).get(gk) if back else None
+    c.check(s, "back in sight: live and shut, and it blocks", bt and bt["gate_open"] is False and tile in feed_of(dump(out, f"back{back[0]}")).get("shut_gates", []), repr(bt))
+    a2 = feed_of(dump(out, "away2"))
+    a2t = feed_things(dump(out, "away2")).get(gk)
+    c.check(s, "away again: remembered shut, and still blocks the Shade", a2t and a2t["source"] == "remembered" and a2t["gate_open"] is False and tile in a2.get("shut_gates", []), repr(a2t))
 
 
 def main():
