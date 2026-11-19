@@ -111,6 +111,8 @@ $V cleanup --run <run> [--keep-db]
 ```
 
 - Leaves the observer if other runs still use it; otherwise stops it.
+- Requires the scratch database name, server and identity recorded at launch. Cleanup refuses unrecorded databases, older records without an identity, reference names and the kept play and walk worlds.
+- The epoch check detects a world reset in place under the same database identity. Set the clock through owner SQL using `$V sql --run <run> "UPDATE world SET epoch_ms = <milliseconds> WHERE id = 0"`. This records the new epoch for cleanup and the orphan guard in both guard modes. The verify-ui noon fixtures use this command. An epoch changed outside the harness still causes cleanup to refuse.
 - Pauses and verifies the pause before deleting `verify-<run>`. Launch with `--archive-commitlog` to save and validate a compressed commitlog and SHA-256 sidecar under `~/slop-evidence/` before deletion. With `--keep-db`, the world stays paused. Battle diagnostics enable archiving. See `docs/TRIAL_DISK.md`.
 - Stops the SpacetimeDB container only if this run started it and no other `verify-*` database is live, with a 60 s grace period. Exit code 137 means podman forced the stop with SIGKILL; report it as forced. The server runs as PID 1 and handles SIGINT but not SIGTERM. Cleanup therefore sends SIGINT, and `living/deploy/compose.yml` sets `stop_signal: SIGINT`; a clean stop exits 0 within a second.
 - Drops the player token. The evidence directory is kept.

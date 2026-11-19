@@ -59,6 +59,8 @@ OBSERVER = ROOT / ".local/living/verify/observer.json"
 COMPOSE = ["docker", "compose", "--env-file", str(ROOT / ".local/living/neo4j.env"), "-f", str(LIVING / "deploy/compose.yml"), "-p", "sao-living"]
 # Worlds kept for reference. The helper only ever publishes or deletes `verify-*`.
 PREFIX = "verify-"
+KEPT_PREFIXES = ("verify-play-", "verify-play2-", "verify-play3-", "verify-walk-",
+                 "verify-play8-", "verify-play9-", "verify-play10-")
 DEFAULT_LEASE_SECONDS = 600
 
 
@@ -91,6 +93,13 @@ def run_dir(run):
 def load(run):
     p = run_dir(run) / "state.json"
     return json.loads(p.read_text()) if p.exists() else {"run": run, "db": PREFIX + run, "pids": {}}
+
+
+def require_scratch_name(run, db):
+    if db != PREFIX + run or not re.fullmatch(r"verify-[a-z0-9]+(?:-[a-z0-9]+)*", db):
+        sys.exit(f"refusing {db}: database name must match the scratch run")
+    if db.startswith(KEPT_PREFIXES):
+        sys.exit(f"refusing {db}: kept verification world")
 
 
 def save(st):
@@ -184,8 +193,7 @@ def launch(a):
             sys.exit("VERIFY_LEASE_SECONDS must be an integer of at least 2 seconds")
     elif driver_pid < 1 or world_guard.process_stamp(driver_pid) is None:
         sys.exit("--driver-pid must identify the running supervisor")
-    if not st["db"].startswith(PREFIX):
-        sys.exit(f"refusing to publish {st['db']}: verification databases start with {PREFIX}")
+    require_scratch_name(a.run, st["db"])
     if len(st["db"]) > 63:
         # SpacetimeDB 2.14.1 publishes it, but its `/names` route then fails and with it
         # `spacetime list` for every database on the server (2026-11-12, docs/TRIAL_DISK.md).
@@ -390,7 +398,7 @@ def sql(a):
     token = None if anonymous else st.get("token") if as_player else admin_token()
     refresh_lease(st)
     epoch = re.fullmatch(r"UPDATE world SET epoch_ms = (\d+)(?: WHERE id = 0)?", a.query, re.IGNORECASE)
-    if epoch and st.get("lease_seconds") and not (anonymous or as_player):
+    if epoch and not (anonymous or as_player):
         code, body = set_scene_epoch(st, token, a.query, int(epoch[1]))
     else:
         code, body = http(f"/v1/database/{st['db']}/sql", a.query, token, raw=True)
@@ -409,12 +417,15 @@ def sql(a):
 def set_scene_epoch(st, token, query, epoch):
     """Keep the ownership check consistent when a scene fixture sets the time of day."""
     db = st["db"]
+    require_scratch_name(st["run"], db)
     path = world_guard.lease(run_dir(st["run"]))
     with world_guard.world_lock(URL, db):
+        st = load(st["run"])
         state = world_guard.read_lease(path)
-        identity = world_guard.lookup(URL, db, token)
-        if (st.get("server_url") != URL or not state or state.get("url") != URL
-                or identity != st["database_identity"] or identity != state["identity"]):
+        identity = st.get("database_identity")
+        if (st["db"] != db or not st.get("published") or st.get("server_url") != URL or not identity
+                or not state or state.get("url", URL) != URL or state["identity"] != identity
+                or world_guard.lookup(URL, db, token) != identity):
             sys.exit(f"refusing to change the clock of {db}: database identity differs from run record")
         endpoint = f"{URL}/v1/database/{identity}"
         _, prior = world_guard.world(endpoint, token)
@@ -422,10 +433,12 @@ def set_scene_epoch(st, token, query, epoch):
             sys.exit(f"refusing to change the clock of {db}: world epoch differs from run record")
         code, body = http(f"/v1/database/{identity}/sql", query, token, raw=True)
         if code == 200:
-            st = load(st["run"])
             st["world_epoch"] = epoch
             save(st)
-            world_guard.write_json(path, dict(state, epoch=epoch, activity=time.monotonic()))
+            state["epoch"] = epoch
+            if "activity" in state:
+                state["activity"] = time.monotonic()
+            world_guard.write_json(path, state)
         return code, body
 
 
@@ -541,50 +554,30 @@ def observer(a):
 
 def cleanup(a):
     st = load(a.run)
+    db = st["db"]
+    require_scratch_name(a.run, db)
+    if "published" not in st and not st.get("started_container"):
+        sys.exit(f"refusing cleanup of {db}: no launch record")
+    if st.get("published"):
+        if not st.get("database_identity"):
+            sys.exit(f"refusing cleanup of {db}: no database identity in launch record")
+        if st.get("server_url") != URL:
+            sys.exit(f"refusing cleanup of {db}: server differs from run record")
     if st.get("observer"):
         observer(argparse.Namespace(run=a.run, action="stop"))
         st = load(a.run)
-    if st.get("published") and st["db"].startswith(PREFIX) and st.get("database_identity"):
-        if st.get("server_url") != URL:
-            sys.exit(f"refusing cleanup of {st['db']}: server differs from run record")
+    if st.get("published"):
         keep_db = getattr(a, "keep_db", False)
         record = trial_archive.finish(
-            run_dir(a.run), URL, CONTAINER, st["db"], st["database_identity"], admin_token(),
+            run_dir(a.run), URL, CONTAINER, db, st["database_identity"], admin_token(),
             delete=not keep_db, archive_commitlog=st.get("archive_commitlog", False), expected_epoch=st.get("world_epoch"),
         )
         st["published"] = keep_db
         if record:
             log(st, f"commitlog archive: {record}")
         if not keep_db:
-            log(st, f"deleted {st['db']} (name no longer resolves)")
+            log(st, f"deleted {db} (name no longer resolves)")
         save(st)
-    elif st.get("published") and not getattr(a, "keep_db", False) and st["db"].startswith(PREFIX):
-        # Pause the world first: SpacetimeDB 2.14.1 can panic, and take the whole server down,
-        # when a database is deleted while its world still ticks (the trial service went down
-        # that way on 2026-11-12 at 12:52; living/tools/trials.py delete_db does the same).
-        tok = admin_token()
-        code, body = http(f"/v1/database/{st['db']}/call/set_paused", [True], tok)
-        paused = code == 404
-        for _ in range(10):
-            if paused:
-                break
-            c, b = http(f"/v1/database/{st['db']}/sql", "SELECT paused FROM world", tok, raw=True)
-            paused = c == 404 or (c == 200 and "true" in b.lower())
-            if not paused:
-                time.sleep(1)
-        if not paused:
-            save(st)
-            sys.exit(f"not deleting {st['db']}: its world could not be paused ({code} {body.strip()[:160]}); pause it, then rerun cleanup")
-        time.sleep(2)
-        stdb("delete", "-s", "local", st["db"], "-y", check=False)
-        # Trust the server, not the CLI's exit status: a deleted database answers SQL with 404.
-        code, body = http(f"/v1/database/{st['db']}/sql", "SELECT 1 FROM world", raw=True)
-        if code == 404:
-            st["published"] = False
-            log(st, f"deleted {st['db']} (SQL now 404)")
-        else:
-            save(st)
-            sys.exit(f"{st['db']} still answers SQL after delete (HTTP {code}); rerun cleanup or delete it with living/tools/stdb")
     if not st.get("published"):
         world_guard.stop(run_dir(a.run))
     if st.get("wasm", "").startswith("living_authority_verify_"):
