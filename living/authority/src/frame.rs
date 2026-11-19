@@ -188,11 +188,14 @@ struct Viewer {
     /// Reconcile every creature in the scene at the next frame (a fresh instance, a step this
     /// instance did not see commit: what it was sent is unknown).
     reconcile: bool,
+    /// Whether its motion copies are in the public `seen_body_copy` (the `motion_tables_on` law)
+    /// rather than `motion_seen`/`motion_near`; `None` until this instance has looked.
+    public: Option<bool>,
 }
 
 impl Viewer {
     fn new(who: Identity) -> Self {
-        Self { who, scene: None, seq: 0, full: true, last_ms: 0, lines_ms: 0, band_ms: 0, band_seq: 0, events: Vec::new(), feed: VecDeque::new(), senses_ms: 0, senses: None, earshot_ms: 0, earshot: None, near: HashSet::new(), near_ms: 0, near_seq: 0, cued: HashMap::new(), pending: HashMap::new(), pending_seq: 0, deferred: HashMap::new(), reconcile: true }
+        Self { who, scene: None, seq: 0, full: true, last_ms: 0, lines_ms: 0, band_ms: 0, band_seq: 0, events: Vec::new(), feed: VecDeque::new(), senses_ms: 0, senses: None, earshot_ms: 0, earshot: None, near: HashSet::new(), near_ms: 0, near_seq: 0, cued: HashMap::new(), pending: HashMap::new(), pending_seq: 0, deferred: HashMap::new(), reconcile: true, public: None }
     }
 }
 
@@ -222,6 +225,9 @@ thread_local! {
     /// The sequence number at the last tick's cues, and how many ticks have sent cues.
     static CUED_SEQ: Cell<u64> = const { Cell::new(0) };
     static CUE_TICK: Cell<u64> = const { Cell::new(0) };
+    /// The `motion_tables_on` law at the last tick (`None`: not yet in this instance, or after a
+    /// step this instance did not see commit).
+    static MOTION_TABLES: Cell<Option<bool>> = const { Cell::new(None) };
     /// Players' living characters, by character id.
     static VIEWERS: RefCell<HashMap<u32, Viewer>> = RefCell::new(HashMap::new());
     /// What creatures are like now, read once per `deliver` and shared by every viewer's frame
@@ -385,8 +391,9 @@ pub fn scene(ctx: &ReducerContext, id: u32, who: Identity, seen: &HashSet<u32>, 
         e.near = near;
         flips
     });
+    let public = if flips.is_empty() { false } else { public_of(ctx, id, who) };
     for (body, near) in flips {
-        show_motion(ctx, id, body, near);
+        show_motion(ctx, id, who, body, near, public);
         show_fighter(ctx, id, who, body, near, true, now);
         show_doing(ctx, id, who, body, near);
     }
@@ -467,8 +474,10 @@ pub fn all_full() {
         v.borrow_mut().values_mut().for_each(|e| {
             e.full = true;
             e.reconcile = true;
+            e.public = None;
         })
     });
+    MOTION_TABLES.with(|m| m.set(None));
     TARGETS.with(|t| TARGET_DIRTY.with(|d| d.borrow_mut().extend(t.borrow().keys().copied())));
 }
 
@@ -494,6 +503,19 @@ pub fn deliver(ctx: &ReducerContext, now: u64, swept: &[u32]) {
     // With `near_tier_on` off too, frames are scheduled as before frame-views.
     let on = common::laws(ctx).cue_transport_on;
     let tiers = common::laws(ctx).near_tier_on;
+    // The `motion_tables_on` law (battle-views): on, each viewer's frame moves its motion copies
+    // to `seen_body_copy`; off, the first tick to see it so (or a fresh instance's first) moves
+    // every public copy back at once.
+    let tables = common::laws(ctx).motion_tables_on;
+    if all_back(MOTION_TABLES.with(|m| m.replace(Some(tables))), tables) {
+        let phase = common::span("tick.motion_private");
+        let n = all_private(ctx);
+        drop(phase);
+        if n > 0 {
+            common::diag(|| "motion_tables:moved_out", n as u64);
+            log::info!("motion tables off: {n} copies moved back to the private tables");
+        }
+    }
     let due: Vec<(u32, Viewer)> = VIEWERS.with(|v| {
         let mut v = v.borrow_mut();
         let ids: HashSet<u32> = humans.iter().map(|(h, _)| *h).collect();
@@ -519,7 +541,8 @@ pub fn deliver(ctx: &ReducerContext, now: u64, swept: &[u32]) {
             // Rows, plus a fixed charge per frame for its views' own cost (a far frame of a few rows
             // costs mostly that): without it a crowd of small frames all fit one step, and after a
             // late tick every viewer comes due in the same step from then on.
-            let n = far + if near_due { e.near.len() } else { 0 } + if tiers { FRAME_FIXED_ROWS } else { 0 };
+            let moving_in = tables && e.public != Some(true);
+            let n = if moving_in { n_all } else { far + if near_due { e.near.len() } else { 0 } } + if tiers { FRAME_FIXED_ROWS } else { 0 };
             let every = interval(far);
             if e.last_ms == 0 {
                 // A first frame comes within one interval, staggered by character so a crowd's
@@ -681,7 +704,8 @@ fn engaged_tiers(ctx: &ReducerContext, now: u64, engaged: &HashMap<u32, Vec<u32>
         common::diag(|| "cues:engaged_near", flips.len() as u64);
     }
     for (vid, who, b) in flips {
-        show_motion(ctx, vid, b, true);
+        let public = public_of(ctx, vid, who);
+        show_motion(ctx, vid, who, b, true, public);
         show_fighter(ctx, vid, who, b, true, true, now);
         show_doing(ctx, vid, who, b, true);
     }
@@ -867,6 +891,18 @@ fn fighter_cue(ctx: &ReducerContext, who: Identity, body: u32, now: u64) -> Opti
 
 fn frame(ctx: &ReducerContext, id: u32, v: &mut Viewer, now: u64, on: bool, mut trace: Option<&mut crate::frame_trace::Trace>) {
     let upto = SEQ.with(|s| s.get());
+    // Where its motion copies are; with the `motion_tables_on` law on, a viewer whose copies are
+    // still private has them moved to `seen_body_copy` here, all at once (`to_public`).
+    let mut public = match v.public {
+        Some(p) => p,
+        None => ctx.db.seen_body_copy().viewer().filter(v.who).next().is_some(),
+    };
+    if !public && MOTION_TABLES.with(|m| m.get()) == Some(true) {
+        let n = to_public(ctx, v.who);
+        common::diag(|| "motion_tables:moved_in", n as u64);
+        public = true;
+    }
+    v.public = Some(public);
     if let Some(scene) = v.scene.as_ref() {
         let since = if v.full { 0 } else { v.seq };
         let full = v.full;
@@ -886,7 +922,7 @@ fn frame(ctx: &ReducerContext, id: u32, v: &mut Viewer, now: u64, on: bool, mut 
             }
             let since = if near { near_since } else { since };
             let mut wrote = 0;
-            if (full || changed(&MOVED, body, since)) && show_motion(ctx, id, body, near) {
+            if (full || changed(&MOVED, body, since)) && show_motion(ctx, id, v.who, body, near, public) {
                 wrote |= MOTION;
             }
             let hurt = full || changed(&HURT, body, since);
@@ -1009,8 +1045,21 @@ fn show_earshot(ctx: &ReducerContext, id: u32, v: &mut Viewer, now: u64) {
 /// Bring a viewer's copy of a creature's motion up to date, in its tier: `motion_near` when
 /// `near`, else `motion_seen` (moved between them as it is now when the tier changed). Returns
 /// whether a copy was written.
-fn show_motion(ctx: &ReducerContext, viewer: u32, body: u32, near: bool) -> bool {
+fn show_motion(ctx: &ReducerContext, viewer: u32, who: Identity, body: u32, near: bool, public: bool) -> bool {
     let k = key(viewer, body);
+    if public {
+        let Some(mut row) = ctx.db.seen_body_copy().id().find(k) else { return false };
+        let Some(m) = motion_now(ctx, body) else { return false };
+        if row.moving == m && row.near == near {
+            return false;
+        }
+        debug_assert_eq!(row.viewer, who);
+        row.moving = m;
+        row.near = near;
+        ctx.db.seen_body_copy().id().update(row);
+        return true;
+    }
+    let _ = who;
     // The expected tier's table first (the other only when the copy is not there).
     let (was_near, row) = if near {
         match ctx.db.motion_near().id().find(k) {
@@ -1171,12 +1220,106 @@ pub fn show_doing(ctx: &ReducerContext, viewer: u32, who: Identity, body: u32, n
 /// A creature left a viewer's scene, or died: its copies in both tiers go.
 pub fn drop_copies(ctx: &ReducerContext, viewer: u32, body: u32) {
     let k = key(viewer, body);
-    ctx.db.motion_seen().id().delete(k);
+    let public = VIEWERS.with(|v| v.borrow().get(&viewer).and_then(|e| e.public));
+    if public != Some(true) {
+        ctx.db.motion_seen().id().delete(k);
+        ctx.db.motion_near().id().delete(k);
+    }
+    if public != Some(false) {
+        ctx.db.seen_body_copy().id().delete(k);
+    }
     ctx.db.fighter_seen().id().delete(k);
     ctx.db.doing_seen().id().delete(k);
-    ctx.db.motion_near().id().delete(k);
     ctx.db.fighter_near().id().delete(k);
     ctx.db.doing_near().id().delete(k);
+}
+
+/// Whether viewer `id`'s motion copies are in `seen_body_copy` (looked up once per instance).
+fn public_of(ctx: &ReducerContext, id: u32, who: Identity) -> bool {
+    if let Some(p) = VIEWERS.with(|v| v.borrow().get(&id).filter(|e| e.who == who).and_then(|e| e.public)) {
+        return p;
+    }
+    let p = ctx.db.seen_body_copy().viewer().filter(who).next().is_some();
+    VIEWERS.with(|v| {
+        let mut v = v.borrow_mut();
+        let e = v.entry(id).or_insert_with(|| Viewer::new(who));
+        if e.who == who {
+            e.public = Some(p);
+        }
+    });
+    p
+}
+
+/// A creature came into viewer `id`'s sight: its motion copy as it is now, in the far tier (the
+/// frames' scene moves it to the near tier when it is near), in the table that holds the
+/// viewer's copies.
+pub fn new_motion(ctx: &ReducerContext, id: u32, who: Identity, b: &Body) {
+    let k = key(id, b.id);
+    if public_of(ctx, id, who) {
+        let row = SeenBodyCopy { id: k, viewer: who, near: false, moving: Moving::from(b) };
+        if ctx.db.seen_body_copy().id().find(k).is_some() {
+            ctx.db.seen_body_copy().id().update(row);
+        } else {
+            ctx.db.seen_body_copy().insert(row);
+        }
+        return;
+    }
+    let row = MotionSeen::of(k, who, b);
+    ctx.db.motion_near().id().delete(row.id);
+    if ctx.db.motion_seen().id().find(row.id).is_some() {
+        ctx.db.motion_seen().id().update(row);
+    } else {
+        ctx.db.motion_seen().insert(row);
+    }
+}
+
+/// Whether the tick moves every public motion copy back (the kill switch): the law is off and
+/// the last tick did not already see it off in this instance (it was on, or this instance, or a
+/// step it did not see commit, does not know where the copies are).
+fn all_back(was: Option<bool>, now: bool) -> bool {
+    !now && was != Some(false)
+}
+
+/// Move a viewer's motion copies from the private tables to `seen_body_copy`, tiers kept, in
+/// this transaction (its views read the private tables before it and the public one after).
+fn to_public(ctx: &ReducerContext, who: Identity) -> usize {
+    let far: Vec<MotionSeen> = ctx.db.motion_seen().viewer().filter(who).collect();
+    let near: Vec<MotionNear> = ctx.db.motion_near().viewer().filter(who).collect();
+    let n = far.len() + near.len();
+    // A row already there (module memory that missed a rollback) is replaced, not a duplicate
+    // key that would fail every tick from here on.
+    for r in far {
+        ctx.db.motion_seen().id().delete(r.id);
+        ctx.db.seen_body_copy().id().delete(r.id);
+        ctx.db.seen_body_copy().insert(SeenBodyCopy { id: r.id, viewer: who, near: false, moving: r.moving() });
+    }
+    for r in near {
+        ctx.db.motion_near().id().delete(r.id);
+        ctx.db.seen_body_copy().id().delete(r.id);
+        ctx.db.seen_body_copy().insert(SeenBodyCopy { id: r.id, viewer: who, near: true, moving: r.copy.moving() });
+    }
+    n
+}
+
+/// The kill switch of the `motion_tables_on` law: every public motion copy goes back to the
+/// private tables in this one transaction, so nothing reaches a client through the table once
+/// the law is off. Returns how many moved.
+fn all_private(ctx: &ReducerContext) -> usize {
+    let rows: Vec<SeenBodyCopy> = ctx.db.seen_body_copy().iter().collect();
+    for r in &rows {
+        ctx.db.seen_body_copy().id().delete(r.id);
+        // As in `to_public`: a private row already there is replaced.
+        ctx.db.motion_seen().id().delete(r.id);
+        ctx.db.motion_near().id().delete(r.id);
+        let copy = MotionSeen::with(r.id, r.viewer, &r.moving);
+        if r.near {
+            ctx.db.motion_near().insert(MotionNear { id: r.id, viewer: r.viewer, copy });
+        } else {
+            ctx.db.motion_seen().insert(copy);
+        }
+    }
+    VIEWERS.with(|v| v.borrow_mut().values_mut().for_each(|e| e.public = Some(false)));
+    rows.len()
 }
 
 /// A creature died: its profiling history goes (`CHANGES`, `frame_trace`). Only that: a death
@@ -1194,6 +1337,9 @@ const SEEN_BODY_CUE_FILTER: spacetimedb::Filter = spacetimedb::Filter::Sql("SELE
 const SEEN_FIGHTER_CUE_FILTER: spacetimedb::Filter = spacetimedb::Filter::Sql("SELECT * FROM seen_fighter_cue WHERE viewer = :sender");
 #[spacetimedb::client_visibility_filter]
 const SEEN_DOING_CUE_FILTER: spacetimedb::Filter = spacetimedb::Filter::Sql("SELECT * FROM seen_doing_cue WHERE viewer = :sender");
+// Row-level security for the public motion copies (battle-views): a client reads only its own.
+#[spacetimedb::client_visibility_filter]
+const SEEN_BODY_COPY_FILTER: spacetimedb::Filter = spacetimedb::Filter::Sql("SELECT * FROM seen_body_copy WHERE viewer = :sender");
 
 /// A creature's band as this viewer perceives it now (255 while its projection hides health),
 /// with its projection row.
@@ -1296,6 +1442,32 @@ mod tests {
         let near = near_set(true, &engaged, &seen, &dist, &HashSet::new());
         assert_eq!(near.len(), NEAR_MAX);
         assert!(near.contains(&3));
+    }
+
+    #[test]
+    fn motion_tables_off_moves_every_copy_back_once_and_off_stays_main_s_path() {
+        // battle-views' kill switch: the first tick to see `motion_tables_on` off moves every
+        // public copy back, whether it was on or this instance does not know (fresh, or after a
+        // step it did not see commit); ticks after that do nothing more, so a world that never
+        // had it on pays one empty table walk per instance.
+        assert!(all_back(None, false));
+        assert!(all_back(Some(true), false));
+        assert!(!all_back(Some(false), false));
+        assert!(!all_back(None, true) && !all_back(Some(true), true) && !all_back(Some(false), true));
+        // all_full (after a step this instance did not see commit) forgets the law's last value
+        // and where every viewer's copies are.
+        MOTION_TABLES.with(|m| m.set(Some(false)));
+        VIEWERS.with(|v| v.borrow_mut().insert(9, Viewer { public: Some(true), ..Viewer::new(Identity::ZERO) }));
+        all_full();
+        assert_eq!(MOTION_TABLES.with(|m| m.get()), None);
+        assert_eq!(VIEWERS.with(|v| v.borrow().get(&9).and_then(|e| e.public)), None);
+        VIEWERS.with(|v| v.borrow_mut().remove(&9));
+        // A copy moved either way holds the same row the motion views return.
+        let m = Moving { id: 5, x: 1.5, y: -2.0, t_ms: 77, vx: 0.5, vy: 0.25, heading: 1.0, turn: 0.1, turn_s: 0.3, next_ms: 99, speed: 1.2, face_off: 0.2, face_turn: -0.1, face_turn_s: 0.4, running: true };
+        let private = MotionSeen::with(key(3, 5), Identity::ZERO, &m);
+        assert_eq!(private.moving(), m);
+        let public = SeenBodyCopy { id: private.id, viewer: private.viewer, near: true, moving: private.moving() };
+        assert_eq!(public.moving, m);
     }
 
     #[test]

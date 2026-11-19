@@ -66,6 +66,9 @@ def main():
         command('cues', [str(SKILL / 'scripts/cues.py'), '--run', args.run])
         # Those engaged with a player are first in its near tier, past the cap (near_tier.py).
         command('near-tier', [str(SKILL / 'scripts/near_tier.py'), '--run', args.run])
+        # The public motion copies reach only their viewer, and the law off empties them at once
+        # (battle-views; motion_tables.py).
+        command('motion-tables', [str(SKILL / 'scripts/motion_tables.py'), '--run', args.run])
         exit_code = 0
     except (RuntimeError, subprocess.SubprocessError, OSError) as error:
         print(str(error), file=sys.stderr)

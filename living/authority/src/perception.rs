@@ -117,6 +117,12 @@ impl MotionSeen {
     pub fn of(id: u64, viewer: Identity, b: &Body) -> Self {
         Self { id, viewer, motion: Motion::from(b), face_off: b.face_off, face_turn: b.face_turn, face_turn_s: b.face_turn_s, running: b.running }
     }
+    /// The row holding `m` (a public copy moved back, `frame::all_private`).
+    pub fn with(id: u64, viewer: Identity, m: &Moving) -> Self {
+        let mut row = Self { id, viewer, motion: Motion { id: 0, x: 0.0, y: 0.0, t_ms: 0, vx: 0.0, vy: 0.0, heading: 0.0, turn: 0.0, turn_s: 0.0, next_ms: 0, speed: 0.0 }, face_off: 0.0, face_turn: 0.0, face_turn_s: 0.0, running: false };
+        row.set(m);
+        row
+    }
     pub fn moving(&self) -> Moving {
         let m = &self.motion;
         Moving { id: m.id, x: m.x, y: m.y, t_ms: m.t_ms, vx: m.vx, vy: m.vy, heading: m.heading, turn: m.turn, turn_s: m.turn_s, next_ms: m.next_ms, speed: m.speed, face_off: self.face_off, face_turn: self.face_turn, face_turn_s: self.face_turn_s, running: self.running }
@@ -1087,14 +1093,7 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
         ctx.db.perceived().insert(Perceived { id: 0, viewer, body: *body, since_ms: now });
         // How it moves, as it is now; frames keep it current (`frame.rs`).
         if let Some(b) = ctx.db.body().id().find(*body) {
-            let row = MotionSeen::of(crate::frame::key(id, *body), viewer, &b);
-            // In the far tier; the frames' scene moves it to the near tier when it is near.
-            ctx.db.motion_near().id().delete(row.id);
-            if ctx.db.motion_seen().id().find(row.id).is_some() {
-                ctx.db.motion_seen().id().update(row);
-            } else {
-                ctx.db.motion_seen().insert(row);
-            }
+            crate::frame::new_motion(ctx, id, viewer, &b);
         }
     }
     crate::frame::scene(ctx, id, viewer, &seen, &near, now);
@@ -1661,6 +1660,9 @@ pub fn forget(ctx: &ReducerContext, id: u32, viewer: Identity) {
     for p in ctx.db.motion_near().viewer().filter(viewer).map(|p| p.id).collect::<Vec<_>>() {
         ctx.db.motion_near().id().delete(p);
     }
+    for p in ctx.db.seen_body_copy().viewer().filter(viewer).map(|p| p.id).collect::<Vec<_>>() {
+        ctx.db.seen_body_copy().id().delete(p);
+    }
     for p in ctx.db.fighter_near().viewer().filter(viewer).map(|p| p.id).collect::<Vec<_>>() {
         ctx.db.fighter_near().id().delete(p);
     }
@@ -1853,6 +1855,11 @@ pub fn my_known_names(ctx: &ViewContext) -> Vec<KnownName> {
 
 #[spacetimedb::view(accessor = seen_bodies, public, primary_key = id)]
 pub fn seen_bodies(ctx: &ViewContext) -> Vec<Moving> {
+    // A viewer's copies are all public (`motion_tables_on`) or all private (`frame.rs`).
+    let public: Vec<Moving> = ctx.db.seen_body_copy().viewer().filter(ctx.sender()).map(|c| c.moving).collect();
+    if !public.is_empty() {
+        return public;
+    }
     let far = ctx.db.motion_seen().viewer().filter(ctx.sender()).map(|m| m.moving());
     far.chain(ctx.db.motion_near().viewer().filter(ctx.sender()).map(|m| m.copy.moving())).collect()
 }
@@ -1866,12 +1873,20 @@ pub fn seen_bodies(ctx: &ViewContext) -> Vec<Moving> {
 /// The others within `frame::NEAR_M` of me at my last sweep, as `seen_bodies` shows them.
 #[spacetimedb::view(accessor = seen_bodies_near, public, primary_key = id)]
 pub fn seen_bodies_near(ctx: &ViewContext) -> Vec<Moving> {
+    let public: Vec<Moving> = ctx.db.seen_body_copy().viewer_near().filter((ctx.sender(), true)).map(|c| c.moving).collect();
+    if !public.is_empty() {
+        return public;
+    }
     ctx.db.motion_near().viewer().filter(ctx.sender()).map(|m| m.copy.moving()).collect()
 }
 
 /// The rest of the others I perceive, as `seen_bodies` shows them.
 #[spacetimedb::view(accessor = seen_bodies_far, public, primary_key = id)]
 pub fn seen_bodies_far(ctx: &ViewContext) -> Vec<Moving> {
+    let public: Vec<Moving> = ctx.db.seen_body_copy().viewer_near().filter((ctx.sender(), false)).map(|c| c.moving).collect();
+    if !public.is_empty() {
+        return public;
+    }
     ctx.db.motion_seen().viewer().filter(ctx.sender()).map(|m| m.moving()).collect()
 }
 

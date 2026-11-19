@@ -13,7 +13,9 @@ touches behaviour, these cases with the fake model only:
   verify-player  combat (combat.py --scene all: the staged fights, an island world)
   verify-client  cues (cues.py: the cue event tables reach only their viewer under row-level
                  security, on and with the `cue_transport_on` law off; near_tier.py: whoever is
-                 engaged with a player is first in its near tier; a default-seed world, the SDK probe)
+                 engaged with a player is first in its near tier), motion_tables (motion_tables.py: the
+                 public motion copies reach only their viewer under row-level security, and the
+                 `motion_tables_on` law off empties the table at once); one default-seed world, the SDK probe
   living-mind    mind-unit: its cargo tests (`just living-check` builds the mind, tests only the rules)
 
 The world groups and the tests run at once. A case whose only failures are parts on the red-on-main
@@ -108,6 +110,8 @@ CASES = {
     # Row-level security on the cue event tables is a perception boundary (frame-views): every
     # behavioural merge proves no other identity receives a player's cues.
     "cues":         {"skill": "verify-client", "group": "client"},
+    # The same for the public motion copies (battle-views, `seen_body_copy`).
+    "motion_tables": {"skill": "verify-client", "group": "client"},
     # living-mind's own cargo tests: `just living-check` builds the mind but tests only living-rules.
     "mind-unit":    {"skill": "living-mind", "group": "unit",
                      "flaky": "timing bounds under load: llm::tests::unreachable_provider_holds_calls (1.97 s against 2 s), "
@@ -427,10 +431,15 @@ class Runner:
                 probe = ".agents/skills/verify-client/scripts/probe/Cargo.toml"
                 env_dir = str(Path(root) / ".local/living/verify/target-client")
                 if self.sh(["env", f"CARGO_TARGET_DIR={env_dir}", "cargo", "build", "--locked", "--manifest-path", probe], root, log, 1500):
-                    return {"cues": (False, f"{log} (probe build failed)", time.time() - t0)}
-                code = self.sh([sys.executable, ".agents/skills/verify-client/scripts/cues.py", "--run", run], root, ev / "cues.txt", 600)
-                tier = self.sh([sys.executable, ".agents/skills/verify-client/scripts/near_tier.py", "--run", run], root, ev / "near_tier.txt", 300)
-                return {"cues": (code == 0 and tier == 0, str(ev / "cues.json"), time.time() - t0)}
+                    return {c: (False, f"{log} (probe build failed)", time.time() - t0) for c in cases}
+                if "cues" in cases:
+                    code = self.sh([sys.executable, ".agents/skills/verify-client/scripts/cues.py", "--run", run], root, ev / "cues.txt", 600)
+                    tier = self.sh([sys.executable, ".agents/skills/verify-client/scripts/near_tier.py", "--run", run], root, ev / "near_tier.txt", 300)
+                    res["cues"] = (code == 0 and tier == 0, str(ev / "cues.json"), time.time() - t0)
+                if "motion_tables" in cases:
+                    code = self.sh([sys.executable, ".agents/skills/verify-client/scripts/motion_tables.py", "--run", run], root, ev / "motion_tables.txt", 300)
+                    res["motion_tables"] = (code == 0, str(ev / "motion_tables.json"), time.time() - t0)
+                return res
             if group == "player":
                 if self.sh([sys.executable, V, "player", "--run", run, "join", "GateTester"], root, log, 120):
                     return {"combat": (False, f"{log} (join failed)", time.time() - t0)}

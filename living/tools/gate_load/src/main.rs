@@ -225,10 +225,15 @@ fn fresh_sample(ctx: &EventContext, st: &Mutex<St>, m: &Moving, cue: bool, first
 /// (`seen_bodies_near`, `seen_bodies_far`; frame-views) the connection subscribed.
 fn seen_body(db: &RemoteTables, id: u32) -> Option<Moving> {
     db.seen_bodies().id().find(&id).or_else(|| db.seen_bodies_near().id().find(&id)).or_else(|| db.seen_bodies_far().id().find(&id))
+        .or_else(|| {
+            // The public copy table (battle-views), keyed by (my character, the creature).
+            let me = db.my_body().iter().next()?.id;
+            db.seen_body_copy().id().find(&(((me as u64) << 32) | id as u64)).map(|c| c.moving)
+        })
 }
 
 fn seen_body_count(db: &RemoteTables) -> u64 {
-    db.seen_bodies().count() + db.seen_bodies_near().count() + db.seen_bodies_far().count()
+    db.seen_bodies().count() + db.seen_bodies_near().count() + db.seen_bodies_far().count() + db.seen_body_copy().count()
 }
 
 fn fresh_json(f: &Fresh) -> Value {
@@ -377,6 +382,7 @@ fn hook(p: &Player, log: &Log) {
     count!(conn, p.counts, seen_doing);
     count!(conn, p.counts, seen_bodies_near);
     count!(conn, p.counts, seen_bodies_far);
+    count!(conn, p.counts, seen_body_copy);
     count!(conn, p.counts, seen_fighters_near);
     count!(conn, p.counts, seen_fighters_far);
     count!(conn, p.counts, seen_doing_near);
@@ -448,6 +454,10 @@ fn hook(p: &Player, log: &Log) {
         sample_view!(seen_bodies);
         sample_view!(seen_bodies_near);
         sample_view!(seen_bodies_far);
+        let st = p.st.clone();
+        conn.db.seen_body_copy().on_insert(move |ctx, c| fresh_sample(ctx, &st, &c.moving, false, true));
+        let st = p.st.clone();
+        conn.db.seen_body_copy().on_update(move |ctx, _, c| fresh_sample(ctx, &st, &c.moving, false, false));
         let st = p.st.clone();
         EventTable::on_insert(&conn.db.seen_body_cue(), move |ctx, c| {
             // A cue of a body not yet in my view is not a new segment of one I see.
@@ -791,6 +801,9 @@ fn players_mode() {
     // freshness (0: none).
     let cues = req["cues"].as_bool().unwrap_or(false);
     let tiers = req["tiers"].as_bool().unwrap_or(false);
+    // The public motion copies (battle-views, the `motion_tables_on` law): `seen_body_copy` in
+    // place of the motion views, as a client on the tables subscribes.
+    let motion_tables = req["motion_tables"].as_bool().unwrap_or(false);
     let fresh_every = req["fresh_every"].as_u64().unwrap_or(0) as usize;
     let started = Instant::now();
     let mut players = Vec::new();
@@ -817,6 +830,10 @@ fn players_mode() {
         }
         if cues {
             queries.extend(["seen_body_cue", "seen_fighter_cue", "seen_doing_cue"].map(|t| format!("SELECT * FROM {t}")));
+        }
+        if motion_tables {
+            queries.retain(|q| !["SELECT * FROM seen_bodies", "SELECT * FROM seen_bodies_near", "SELECT * FROM seen_bodies_far"].contains(&q.as_str()));
+            queries.push("SELECT * FROM seen_body_copy".to_string());
         }
         subscribe(&pl, queries);
         players.push(pl);

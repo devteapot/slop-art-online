@@ -289,6 +289,8 @@ pub mod seed_communities_reducer;
 pub mod seen_bodies_far_table;
 pub mod seen_bodies_near_table;
 pub mod seen_bodies_table;
+pub mod seen_body_copy_table;
+pub mod seen_body_copy_type;
 pub mod seen_body_cue_table;
 pub mod seen_body_cue_type;
 pub mod seen_character_type;
@@ -654,6 +656,8 @@ pub use seed_communities_reducer::seed_communities;
 pub use seen_bodies_far_table::*;
 pub use seen_bodies_near_table::*;
 pub use seen_bodies_table::*;
+pub use seen_body_copy_table::*;
+pub use seen_body_copy_type::SeenBodyCopy;
 pub use seen_body_cue_table::*;
 pub use seen_body_cue_type::SeenBodyCue;
 pub use seen_character_type::SeenCharacter;
@@ -1478,6 +1482,7 @@ pub struct DbUpdate {
     seen_bodies: __sdk::TableUpdate<Moving>,
     seen_bodies_far: __sdk::TableUpdate<Moving>,
     seen_bodies_near: __sdk::TableUpdate<Moving>,
+    seen_body_copy: __sdk::TableUpdate<SeenBodyCopy>,
     seen_body_cue: __sdk::TableUpdate<SeenBodyCue>,
     seen_characters: __sdk::TableUpdate<SeenCharacter>,
     seen_doing: __sdk::TableUpdate<Doing>,
@@ -1878,6 +1883,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "seen_bodies_near" => db_update
                     .seen_bodies_near
                     .append(seen_bodies_near_table::parse_table_update(table_update)?),
+                "seen_body_copy" => db_update
+                    .seen_body_copy
+                    .append(seen_body_copy_table::parse_table_update(table_update)?),
                 "seen_body_cue" => db_update
                     .seen_body_cue
                     .append(seen_body_cue_table::parse_table_update(table_update)?),
@@ -2288,6 +2296,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.script = cache
             .apply_diff_to_table::<Script>("script", &self.script)
             .with_updates_by_pk(|row| &row.name);
+        diff.seen_body_copy = cache
+            .apply_diff_to_table::<SeenBodyCopy>("seen_body_copy", &self.seen_body_copy)
+            .with_updates_by_pk(|row| &row.id);
         diff.seen_body_cue = self.seen_body_cue.into_event_diff();
         diff.seen_doing_cue = self.seen_doing_cue.into_event_diff();
         diff.seen_fighter_cue = self.seen_fighter_cue.into_event_diff();
@@ -2822,6 +2833,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "seen_bodies_near" => db_update
                     .seen_bodies_near
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "seen_body_copy" => db_update
+                    .seen_body_copy
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "seen_body_cue" => db_update
                     .seen_body_cue
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
@@ -3297,6 +3311,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "seen_bodies_near" => db_update
                     .seen_bodies_near
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "seen_body_copy" => db_update
+                    .seen_body_copy
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "seen_body_cue" => db_update
                     .seen_body_cue
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -3536,6 +3553,7 @@ pub struct AppliedDiff<'r> {
     seen_bodies: __sdk::TableAppliedDiff<'r, Moving>,
     seen_bodies_far: __sdk::TableAppliedDiff<'r, Moving>,
     seen_bodies_near: __sdk::TableAppliedDiff<'r, Moving>,
+    seen_body_copy: __sdk::TableAppliedDiff<'r, SeenBodyCopy>,
     seen_body_cue: __sdk::TableAppliedDiff<'r, SeenBodyCue>,
     seen_characters: __sdk::TableAppliedDiff<'r, SeenCharacter>,
     seen_doing: __sdk::TableAppliedDiff<'r, Doing>,
@@ -3825,6 +3843,11 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         callbacks.invoke_table_row_callbacks::<Moving>(
             "seen_bodies_near",
             &self.seen_bodies_near,
+            event,
+        );
+        callbacks.invoke_table_row_callbacks::<SeenBodyCopy>(
+            "seen_body_copy",
+            &self.seen_body_copy,
             event,
         );
         callbacks.invoke_table_row_callbacks::<SeenBodyCue>(
@@ -4685,6 +4708,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         seen_bodies_table::register_table(client_cache);
         seen_bodies_far_table::register_table(client_cache);
         seen_bodies_near_table::register_table(client_cache);
+        seen_body_copy_table::register_table(client_cache);
         seen_body_cue_table::register_table(client_cache);
         seen_characters_table::register_table(client_cache);
         seen_doing_table::register_table(client_cache);
@@ -4841,6 +4865,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "seen_bodies",
         "seen_bodies_far",
         "seen_bodies_near",
+        "seen_body_copy",
         "seen_body_cue",
         "seen_characters",
         "seen_doing",

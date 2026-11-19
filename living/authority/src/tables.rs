@@ -2253,6 +2253,29 @@ pub struct DoingNear {
     pub copy: DoingSeen,
 }
 
+// ---- battle-views: a player's motion copies as rows only it can read -------------------
+//
+// With the `motion_tables_on` law on (docs/BATTLE_VIEWERS.md, "Addendum"), a player's motion
+// copies live here instead of `motion_seen`/`motion_near`: one public table, filtered per client
+// by row-level security (`frame.rs`, `SEEN_BODY_COPY_FILTER`, `viewer = :sender`), so a client
+// subscribes it as a table and a written copy is matched to its one viewer without re-running a
+// view. A viewer's copies are all here or all in the private tables, never split (they move in
+// one transaction); the motion views read whichever holds them. `moving` is exactly the row
+// `seen_bodies` returns, so nothing a view hides is in it.
+
+/// A perceived creature's motion, as the viewer's frames last wrote it (public, row-level
+/// security): `id` is `frame::key(viewer character, body)`, `near` the tier.
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = seen_body_copy, public, index(accessor = viewer_near, btree(columns = [viewer, near])))]
+pub struct SeenBodyCopy {
+    #[primary_key]
+    pub id: u64,
+    #[index(btree)]
+    pub viewer: Identity,
+    pub near: bool,
+    pub moving: crate::perception::Moving,
+}
+
 // ---- cues: what a player is shown at once of those near it or engaged with it ----------
 //
 // Event tables (docs/PERCEPTION.md, "Cues"; `frame.rs`): a row exists only in the transaction
