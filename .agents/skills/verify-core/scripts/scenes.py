@@ -2114,6 +2114,25 @@ def known_cells(s, actor):
     return out
 
 
+# `known::FLUSH_MS`: an actor's dirty blocks are persisted one per 5.5 s, oldest first, at its looks
+# (about every 0.9 s), so a newly seen block can wait behind older ones (nav-planner).
+KNOWN_SETTLE_S = 7.0
+
+
+def known_settled(s, actor, want=lambda m: True, limit=75.0):
+    """`actor`'s persisted known ground once `want(cells)` holds and two reads a write interval
+    apart agree (its queue is drained); the last read if that never happens within `limit` s."""
+    t0, last = time.monotonic(), None
+    while True:
+        marked = known_cells(s, actor)
+        if want(marked) and marked == last:
+            return marked
+        if time.monotonic() - t0 > limit:
+            return marked
+        last = marked if want(marked) else None
+        time.sleep(KNOWN_SETTLE_S)
+
+
 def cell(p):
     """The 4 m cell of a point."""
     return (int(p[0]) // 4, int(p[1]) // 4)
@@ -2122,20 +2141,25 @@ def cell(p):
 def known_ground(s):
     """Known ground (docs/MOVEMENT_MIND.md, step 3): every character marks the 4 m cells it sees,
     out to `ground_sight_m` (24 by day) with the one sight rule, at its noticing cadence, written
-    every few seconds: open ground within about 20 m is marked and nothing past about 30 m; a cell
-    behind a wall is not, the wall's side toward it is; a player's character marks too; with
-    `known_cells_pass` set, a look marks at most that many and later looks take the rest (none
-    dropped); the rows go at death. Default seed."""
+    one block per 5.5 s per actor, oldest first: open ground within about 20 m is marked and nothing
+    past about 30 m; a cell behind a wall is not, the wall's side toward it is; a player's character
+    marks too; with `known_cells_pass` set, a look marks at most that many and later looks take the
+    rest (none dropped); the rows go at death. Residents stand still for it (a wait graph) and their
+    earlier ground is persisted before they are placed, so the rows read are this look's. Default
+    seed."""
     s.expect("ground is seen 24 m off by day (shipped)", law_value(s, "ground_sight_m") == 24, law_value(s, "ground_sight_m"))
     p, q, r = s.people(3)
+    for who in (p, q, r):
+        s.graph(who, {"wait": 600})
+    before = known_settled(s, p)
     spot = open_patch(s, size=60)
     s.call("place_at", p, *spot)
-    time.sleep(7.0)
+    time.sleep(1.0)
     here = body_at(s, p)
-    marked = known_cells(s, p)
     near = {(x, y) for x in range(cell(here)[0] - 6, cell(here)[0] + 7) for y in range(cell(here)[1] - 6, cell(here)[1] + 7) if math.dist((x * 4 + 2, y * 4 + 2), here) <= 20}
-    # Only around where it stands now: it also marked where it was spawned, before it was placed.
-    far = {c for c in marked if 30 < math.dist((c[0] * 4 + 2, c[1] * 4 + 2), here) <= 40}
+    marked = known_settled(s, p, lambda m: near <= m)
+    # Only what it marked here: its earlier ground (where it was spawned and walked) was persisted before.
+    far = {c for c in marked - before if 30 < math.dist((c[0] * 4 + 2, c[1] * 4 + 2), here) <= 40}
     s.expect("open ground within 20 m is marked", near <= marked, {"missing": sorted(near - marked)[:8], "marked": len(marked)})
     s.expect("nothing 30-40 m off in the open is marked (ground is seen 24 m off)", not far, sorted(far)[:8])
     # Behind a wall.
@@ -2143,8 +2167,7 @@ def known_ground(s):
     s.expect("the map has a wall to look past", bool(setups), setups)
     a, b, c = setups[0]
     s.call("place_at", q, *a)
-    time.sleep(7.0)
-    seen_q = known_cells(s, q)
+    seen_q = known_settled(s, q, lambda m: cell(b) in m)
     W, H, walk = tile_grid(s)
     s.expect("the cell in sight is marked, the one behind the wall is not", cell(b) in seen_q and cell(c) not in seen_q, {"a": a, "b": b, "c": c, "b_marked": cell(b) in seen_q, "c_marked": cell(c) in seen_q})
     # A player's character, by the same rule.
@@ -2155,10 +2178,13 @@ def known_ground(s):
     me = s.wait(lambda: next(iter(s.rows(f"SELECT id FROM character WHERE controller = 0x{st['identity']}")), None))["id"]
     spot2 = open_patch(s, size=40, avoid=[spot])
     s.call("place_at", me, *spot2)
-    time.sleep(7.0)
-    mine = known_cells(s, me)
+    time.sleep(1.0)
+    mine = known_settled(s, me, lambda m: cell(body_at(s, me)) in m and len(m) >= 40)
     s.expect("a player's character marks the ground it sees too", cell(body_at(s, me)) in mine and len(mine) >= 40, {"cells": len(mine)})
-    # The cap: at most N a look, the rest later, none dropped.
+    # The cap: at most N a look, the rest later, none dropped. Its earlier ground persisted first,
+    # so the spot's block is the only one queued; the rate counts only cells new since then (it
+    # may have seen ground round the new spot before).
+    before_r = known_settled(s, r)
     set_law(s, "known_cells_pass", 5)
     spot3 = open_patch(s, size=60, avoid=[spot, spot2])
     s.call("place_at", r, *spot3)
@@ -2166,14 +2192,15 @@ def known_ground(s):
     counts = []
     # Only the cells round the new spot: it also marked where it was spawned.
     round_here = lambda: len({c for c in known_cells(s, r) if math.dist((c[0] * 4 + 2, c[1] * 4 + 2), spot3) <= 30})
-    while time.monotonic() - t0 < 16:
+    new_here = lambda: len({c for c in known_cells(s, r) - before_r if math.dist((c[0] * 4 + 2, c[1] * 4 + 2), spot3) <= 30})
+    while time.monotonic() - t0 < 22:
         time.sleep(2.0)
-        counts.append((round(time.monotonic() - t0, 1), round_here()))
-    capped = counts[-1][1]
+        counts.append((round(time.monotonic() - t0, 1), new_here()))
+    capped = round_here()
     set_law(s, "known_cells_pass", 0)
-    time.sleep(7.0)
+    known_settled(s, r, lambda m: len({c for c in m if math.dist((c[0] * 4 + 2, c[1] * 4 + 2), spot3) <= 30}) >= 100)
     full = round_here()
-    (s.out / f"{s.name}-cap.json").write_text(json.dumps({"counts": counts, "full": full}) + "\n")
+    (s.out / f"{s.name}-cap.json").write_text(json.dumps({"counts": counts, "known_before": len(before_r), "capped": capped, "full": full}) + "\n")
     s.expect("capped at 5 a look: the count grows look by look, no faster", counts[-1][1] > 0 and all(n <= 5 * (t / 0.9 + 1) for t, n in counts) and counts[-1][1] > counts[0][1], counts)
     s.expect("uncapped again, the rest are marked (none dropped)", full > capped and full >= 100, {"capped": capped, "full": full})
     # Death.

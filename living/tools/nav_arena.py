@@ -31,6 +31,7 @@ import json
 import math
 import os
 import random
+import re
 import subprocess
 import sys
 import time
@@ -250,6 +251,28 @@ class Phase:
                     p.wait(10)
                 except subprocess.TimeoutExpired:
                     p.kill()
+
+
+def route_exits(world, folder, walks):
+    """Join terminal planner diagnostics to scored walks by actor and authority timestamp."""
+    pattern = re.compile(r"route_exit actor=(\d+) at_ms=(\d+) reason=(\w+)")
+    exits = []
+    log_path = folder / "route-exits.jsonl"
+    # Read after the phase so diagnostics include refusals before the bench begins.
+    with subprocess.Popen([STDB, "logs", "-s", "local", world.s.db],
+                          stdout=subprocess.PIPE, text=True) as logs:
+        for line in logs.stdout:
+            match = pattern.search(line)
+            if not match:
+                continue
+            actor, stamp, reason = match.groups()
+            actor, stamp = int(actor), int(stamp)
+            for walk in walks:
+                if actor == walk["subject"] and walk["order_ms"][0] <= stamp <= walk["end_ms"]:
+                    exits.append({"subject": actor, "walk": walk["walk"], "at_ms": stamp, "reason": reason})
+    if logs.returncode != 0:
+        raise RuntimeError(f"route diagnostics reader exited {logs.returncode}")
+    log_path.write_text("".join(json.dumps(row) + "\n" for row in exits))
 
 
 class Subject:
@@ -495,6 +518,7 @@ def n1(world, out, variant, law, kind, reps):
                                                    "subjects": [s.id for s in subs], **world.meta()}, indent=1))
     recs = walks_to(world, phase, subs, legs, law, box=box)
     phase.close()
+    route_exits(world, folder, recs)
     guards(world, folder, [s.id for s in subs])
     return recs
 
@@ -685,6 +709,7 @@ def n2(world, out, variant, law, kind, reps):
                         after_dispatch=close_after_dispatch if mid_close else None)
     finally:
         phase.close()
+    route_exits(world, folder, recs)
     guards(world, folder, [s.id for s in subs])
     return recs
 

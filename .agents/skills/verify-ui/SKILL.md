@@ -82,7 +82,7 @@ drive.py's other options (its docstring): `--expect REGEX` (repeatable) must mat
 
 Pass `camera`, `camera-rotate`, `camera-lod`, `camera-faces`, `camera-tuning`, `camera-lol` or `camera-lol-ridge` explicitly for the dedicated Brackenford fixtures in [camera.md](features/camera.md).
 
-`seat` sits skirted and coated residents on the ground in the crowded street and gets them up, the cloth's ground contact on and off (`LIVING_GAME_SEAT_CONTACT=0`), with `LIVING_GAME_PERF=seat` (each seated character's lowest cloth tail above its ground) and `springwake`: [seat.md](features/seat.md).
+`seat` sits skirted and coated residents on the ground in the crowded street and gets them up, the cloth's ground contact on and off (`LIVING_GAME_SEAT_CONTACT=0`), with `LIVING_GAME_PERF=seat` (each seated character's lowest cloth tail above its ground) and `springwake`. It also checks that each sitter plays the ground clips its look line selects (the female ground sit's `_f` variants for adults in `trousers-f` and `boots-f`; `LIVING_GAME_CLIP_VARIANTS=0` turns the selection off) and records one variant sitter's frames: [seat.md](features/seat.md).
 
 Pass `gaze` on a Cullet scratch world to exercise the zoom bands, reconnect and the authored hedge. [Gaze evidence and setup](features/gaze.md).
 
@@ -90,7 +90,7 @@ Developer camera controls (`LIVING_GAME_DEV=1`): `settings:camera_preset:ours-fi
 
 ## Evidence
 
-Each drive writes `.local/living/verify/<run>/ui/<name>/`: the photographs (`shot:`), dumps (`dump:`), `client.log`, the feet log when `LIVING_GAME_FEET` names one (also the body `LIVING_GAME_FEET_ID` names, each line with its `id`; `look-walk` does: every frame's feet, gaits, the legs', hips', chest's and head's yaw, the twist asked, the look, and the authority's heading and segment), `plan.txt`, `scene.json` (the player's id and the admin calls) and `settings.json` (the run's own settings file: `LIVING_GAME_SETTINGS`, so the owner's `~/.config/slop-art-online/game.json` is never touched). `check.py` writes `ui/checks.json`. A proof of a UI change holds:
+Each drive writes `.local/living/verify/<run>/ui/<name>/`: the photographs (`shot:`), dumps (`dump:`), `client.log`, the feet log when `LIVING_GAME_FEET` names one (also the body `LIVING_GAME_FEET_ID` names, each line with its `id`; `look-walk` does: every frame's feet, the hips' place (`hips_at`), gaits, the legs', hips', chest's and head's yaw, the twist asked, the look, and the authority's heading and segment), `plan.txt`, `scene.json` (the player's id and the admin calls) and `settings.json` (the run's own settings file: `LIVING_GAME_SETTINGS`, so the owner's `~/.config/slop-art-online/game.json` is never touched). `check.py` writes `ui/checks.json`. A proof of a UI change holds:
 
 - **the action:** the plan (`plan.txt`) and the client log's lines for it (`ui: window Pack opened at Right`, `say: "…" to #57`, `verbs: berries let go on #57: give berries`);
 - **the state:** the dumps before and after, and for anything sent, the authority's rows (`$V sql`: `experience` `said` rows, `inventory`);

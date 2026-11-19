@@ -3532,6 +3532,52 @@ def seated_outfits(run):
     return out
 
 
+CLIP_VARIANTS = os.path.join(ROOT, "living/game/assets/characters/clip_variants.json")
+
+
+def seat_clips(run, ids):
+    """{resident: the animation its seated loop should play}: anim.rs `variants` over its look
+    line's type and pieces (clip_variants.json; sit-f-select, the female ground sit)."""
+    book = json.load(open(LOOK_BOOK)) if os.path.exists(LOOK_BOOK) else {"lines": {}}
+    rows = look_rows(run)
+    families = json.load(open(CLIP_VARIANTS))["families"]
+    out = {}
+    for cid in ids:
+        person = book["lines"].get(rows.get(cid, ""), {}).get("person") or {}
+        kind, worn = person.get("type", ""), person.get("styles", {}).get("outfit", [])
+        out[cid] = next((f["clips"]["sit_ground"] for f in families if any(kind.startswith(t) for t in f["types"]) and all(w in worn for w in f["wears"])), "sit_ground")
+    return out
+
+
+def seat_segments(path, cid):
+    """A sitter's ground one-shots from the feet log, each from its start to the next one: the
+    peak speed of its hips and feet from its root (m/s) over the crossfade in (0.12 s) and after
+    it, frames where the root moves (a placement) left out, and its hips' mean height over the
+    ground in the seated loop. A pop between the variant clips would show as a peak above the
+    originals' (`LIVING_GAME_CLIP_VARIANTS=0`) in the same segment."""
+    if not os.path.exists(path):
+        return None
+    rows = [r for r in (json.loads(l) for l in open(path) if l.strip()) if r.get("id") == cid and r.get("hips_at")]
+    rel = lambda r, k: [a - b for a, b in zip(r[k][:3], r["root"])]
+    out, cur, seated = [], None, []
+    for a, b in zip(rows, rows[1:]):
+        act = tuple(b["action"]) if b.get("action") else None
+        if cur is None or act != cur["act"]:
+            cur = {"act": act, "t0": b["t"], "fade_mps": 0.0, "after_mps": 0.0, "frames": 0}
+            out.append(cur)
+        dt = b["t"] - a["t"]
+        if dt <= 0 or math.dist(a["root"], b["root"]) > 0.01:
+            continue
+        v = max(math.dist(rel(a, k), rel(b, k)) / dt for k in ("hips_at", "l", "r"))
+        key = "fade_mps" if b["t"] - cur["t0"] < 0.12 else "after_mps"
+        cur[key] = round(max(cur[key], v), 3)
+        cur["frames"] += 1
+        if b.get("clip") == "sit_ground":
+            seated.append(b["hips_at"][1] - b["l"][3])
+    segs = [dict(s, clip=s["act"][0], t0=round(s["t0"], 3), act=None) for s in out if s["act"] and s["act"][0] in ("sit_ground_down", "stand_up_ground")]
+    return {"segments": [{k: v for k, v in x.items() if k != "act"} for x in segs], "seated_hips_over_ground_m": round(sum(seated) / len(seated), 4) if seated else None}
+
+
 @scenario("seat")
 def seat(run, c):
     """Seated cloth on the ground (seat-2a, docs/seat-contact/): skirted and coated residents
@@ -3543,10 +3589,20 @@ def seat(run, c):
     they sit the camera goes far and back near, so their springs rest and wake (the re-entry
     reseed, `LIVING_GAME_PERF=springwake`). Two arms: the contact on, and off
     (`LIVING_GAME_SEAT_CONTACT=0`); `LIVING_GAME_PERF=seat` logs each seated character's lowest
-    cloth tail above its ground, and frames.csv and the springs line give the cost."""
+    cloth tail above its ground, and frames.csv and the springs line give the cost. Each sitter's
+    `seat:` line names the animation its seated loop plays: the female ground sit's variant for an
+    adult line in `trousers-f` and `boots-f`, else the original (sit-f-select)."""
     s = "seat"
     who = seated_outfits(run)
-    ids = who["skirt"][:4] + who["coat"][:3]
+    want = seat_clips(run, who["skirt"] + who["coat"])
+    skirts = who["skirt"][:4]
+    # At least one sitter of each kind, so the selector is seen both ways.
+    for kind in (lambda i: want[i] != "sit_ground", lambda i: want[i] == "sit_ground"):
+        if skirts and not any(kind(i) for i in skirts + who["coat"][:3]):
+            extra = next((i for i in who["skirt"][4:] if kind(i)), None)
+            if extra is not None:
+                skirts = skirts[:3] + [extra] if len(skirts) == 4 else skirts + [extra]
+    ids = skirts + who["coat"][:3]
     c.check(s, "skirted and coated residents to seat", len(who["skirt"]) >= 1 and len(who["coat"]) >= 1 and len(ids) == 7, f"skirt {who['skirt'][:4]}, coat {who['coat'][:3]}")
     if len(ids) < 2:
         return
@@ -3567,15 +3623,22 @@ def seat(run, c):
             "notches:-30;wait:2;notches:30;wait:3;dump:rewoken;shot:04_rewoken;wait:3;"
             "sync:up;sync:go;wait:0.9;shot:05_rising;wait:1.2;shot:06_rising_late;wait:2;dump:up;shot:07_up;wait:1;quit")
     arms = {}
+    # One variant sitter's hips and feet, frame by frame (the feet log): its seat's height, and
+    # each ground one-shot's peak speed, to compare with the originals' (seat_segments).
+    watch = next((i for i in ids if want.get(i) != "sit_ground"), None)
     for arm, env in (("on", {}), ("off", {"LIVING_GAME_SEAT_CONTACT": "0"})):
         name = f"{s}-{arm}"
         ev = os.path.join(ROOT, ".local/living/verify", run, "ui", name)
         os.makedirs(ev, exist_ok=True)
         frames = os.path.join(ev, "frames.csv")
+        feet = os.path.join(ev, "feet.jsonl")
+        if arm == "on" and watch is not None:
+            env = dict(env, LIVING_GAME_FEET=feet, LIVING_GAME_FEET_ID=str(watch))
         out, code, text = drive(run, name, plan, free=free, syncs=syncs, env=dict(env, LIVING_GAME_PERF="seat,springwake", LIVING_GAME_FRAMES=frames, LIVING_GAME_FPS_CAP="0"))
         c.check(s, f"{arm}: client ran and joined", code == 0, text[-300:])
         L = log(out)
         sat = sorted({int(m) for m in re.findall(r"seat: #(\d+) sits on the ground", L)} & set(ids))
+        plays = {int(i): clip for i, clip in re.findall(r"seat: #(\d+) sits on the ground .*?, plays (\S+)", L)}
         rose = sorted({int(m) for m in re.findall(r"seat: #(\d+) is off the ground", L)} & set(ids))
         lows = [(n, int(k), float(v)) for n, k, v in re.findall(r"seat: (.+?) \S+: (\d+) cloth joints, lowest tail (-?[\d.]+|inf) mm", L) if v != "inf"]
         # The seated characters' springs waking as the camera comes back near (their entities, from
@@ -3590,11 +3653,19 @@ def seat(run, c):
         ms = sorted(r[1] / 1000 for r in rows[len(rows) // 4:])
         arms[arm] = {"sat": sat, "rose": rose, "cloth_lows_mm": lows, "wakes_deg": wakes, "spring_us_per_char_step": springs,
                      "frames": len(ms), "p50_ms": ms[len(ms) // 2] if ms else None, "p99_ms": ms[math.ceil(len(ms) * .99) - 1] if ms else None,
-                     "skirt": [i for i in sat if i in who["skirt"]], "coat": [i for i in sat if i in who["coat"]]}
+                     "skirt": [i for i in sat if i in who["skirt"]], "coat": [i for i in sat if i in who["coat"]],
+                     "plays": {i: plays.get(i) for i in sat}, "selected": {i: want.get(i) for i in sat}}
+        if arm == "on" and watch is not None:
+            arms[arm]["segments"] = seat_segments(feet, watch)
+            c.check(s, f"on: #{watch}'s sitting down, seated loop and getting up are in its feet log (seat.json `segments`)",
+                    bool(arms[arm]["segments"] and arms[arm]["segments"]["segments"] and arms[arm]["segments"]["seated_hips_over_ground_m"]), json.dumps(arms[arm]["segments"])[:600])
         d = dump(out, "seated") or {}
         seen = {x["id"] for x in d.get("seen") or []}
         c.check(s, f"{arm}: a skirted and a coated resident sit on the ground in view", arms[arm]["skirt"] and arms[arm]["coat"] and set(sat) <= seen, f"sat {sat} (skirt {arms[arm]['skirt']}, coat {arms[arm]['coat']}); in view {sorted(seen)}")
         c.check(s, f"{arm}: everyone who sat got up and was let go of the ground", sat and set(rose) == set(sat), f"sat {sat}, off the ground {rose}")
+        variant = [i for i in sat if want.get(i) != "sit_ground"]
+        c.check(s, f"{arm}: each sitter plays the seated loop its line selects (a variant for {len(variant)}, the original for {len(sat) - len(variant)})",
+                sat and variant and len(variant) < len(sat) and all(plays.get(i) == want.get(i) for i in sat), f"plays {arms[arm]['plays']}, selected {arms[arm]['selected']}")
         if arm == "on":
             cloth = [x for x in lows if x[1] > 0]
             c.check(s, "on: seated cloth tails stay on the ground's side (at most 5 mm under it)", cloth and min(v for _, _, v in cloth) >= -5.0, f"{len(cloth)} reports; lowest {min((v for _, _, v in cloth), default=None)} mm")

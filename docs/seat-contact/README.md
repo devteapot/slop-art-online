@@ -10,6 +10,11 @@ Status: **2a client side built (branch `seat-2a`); the coat chains are specified
   - **The change:** in the ground clips the hips' height goes from `hips_k` to 1 as the clip's pelvis comes down to the seat.
   - **The child:** the 1.19 m child's seated boots go from −19.9 to −2.4 mm and its trousers from −16.7 to +0.8 mm. Its smock on the rise goes from −28.7 to −9.9 mm.
   - **Unchanged:** adults at `hips_k` 1, and every gait.
+- [female-ground-bake/](female-ground-bake/README.md): female ground-sit variants (`sit_ground_down_f`, `sit_ground_f`, `stand_up_ground_f`) baked beside the originals in the shared clip file (dev-box, main `8851982d2`), and the selector's spec.
+- [sit-f-select.md](sit-f-select.md): the client plays those variants for generated adults in `trousers-f` and `boots-f` (branch `sit-f-select`, 2026-11-19). The rule is data, `living/game/assets/characters/clip_variants.json`, resolved per body when its clips are bound; every logical clip name stays.
+  - **The women:** the average woman's seated boots go from +14.9 to −0.0 mm and her trousers from +30.3 to +0.5 mm; the short woman's from +14.0 to +0.1 and +29.3 to +1.9. These are dev-box's numbers, reproduced.
+  - **Unchanged:** the man, the child and both elders (byte-identical placement), and every gait.
+  - **Remaining:** the seated smock hems lie 22.6 / 13.2 mm under the terrain (garment work, dev-box).
 
 ## Stage 2a: what was built (seat-2a)
 
@@ -102,7 +107,7 @@ The difference is within the run's noise. The contact adds one plane test per cl
 ## What 2a does not do
 
 - **Coats:** without the generator's chains they are unchanged ([COAT_CHAINS.md](COAT_CHAINS.md)).
-- **The seated body's float:** −18 to +43 mm in the loop, which the side stills show. This belongs to the clip and fit. The ground bake has since planted the clip (ground-bake/), and sit-hips the short and long legs ([sit-hips.md](sit-hips.md)). The female lines still sit 13–15 mm high at the boots and 28–30 mm at the trousers.
+- **The seated body's float:** −18 to +43 mm in the loop, which the side stills show. This belongs to the clip and fit. The ground bake has since planted the clip (ground-bake/), and sit-hips the short and long legs ([sit-hips.md](sit-hips.md)). The female adult lines sat 13–15 mm high at the boots and 28–30 mm at the trousers until their own clips ([sit-f-select.md](sit-f-select.md)); female elders still do.
 - **Hip-region crossings:** trousers through coat or smock at the seat, 33–39 mm. These need weights, not a contact.
 - **Chairs and benches:** they need seat markers in world data first.
 

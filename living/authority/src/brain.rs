@@ -2373,8 +2373,8 @@ impl<'a> Ev<'a> {
         if LOOKED_AT.with(|n| n.borrow().get(&me).map_or(true, |t| now.saturating_sub(*t) >= NOTICE_MS)) {
             LOOKED_AT.with(|n| n.borrow_mut().insert(me, now));
             if let Some(b) = ctx.db.body().id().find(me) {
-                let marked = crate::known::mark(ctx, me, self.at, common::facing_at(&b, now), now);
-                if marked > 0 && common::laws(ctx).nav_belief {
+                let changed = crate::known::mark(ctx, me, self.at, common::facing_at(&b, now), now);
+                if changed && common::laws(ctx).nav_belief {
                     crate::motion::replan_if_blocked(ctx, me, now);
                 }
             }

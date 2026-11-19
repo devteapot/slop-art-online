@@ -151,6 +151,17 @@ pub struct Item {
     graph: Option<(Handle<Gltf>, Vec<AnimationNodeIndex>, Entity)>,
     /// The model's own turn to face the camera (VRM 0.x models face −Z).
     turn: Quat,
+    /// The clip variants it plays, as the game would (`anim::variants`, those its clips have):
+    /// a shot of a logical clip (`sit_ground@1.0`) plays its variant.
+    plays: crate::anim::Plays,
+}
+
+impl Item {
+    /// The clip index a shot of clip `c` plays (its variant's, when the model has one).
+    fn played(&self, c: usize) -> usize {
+        let name = crate::anim::resolve(&self.plays, crate::anim::intern(&self.clips[c].0));
+        self.clips.iter().position(|x| x.0 == name).unwrap_or(c)
+    }
 }
 
 #[derive(Resource)]
@@ -332,7 +343,14 @@ pub fn setup(
         let shots = parse_shots(&spec, &clips, &shown, file);
         let first_clip = shown.first().copied().unwrap_or(0);
         let graph = (!clips.is_empty()).then(|| (assets.load::<Gltf>(clip_src.clone()), vec![], Entity::PLACEHOLDER));
-        let mut e = commands.spawn((model, Item { index, clips, shots, first_clip, graph, turn }, crate::characters::SceneOf(handle), Transform::from_rotation(turn), Visibility::Hidden));
+        let plays: crate::anim::Plays = match (recipe.as_ref().and_then(|r| r.person.as_ref()).filter(|_| crate::anim::variants_on()), styled.as_ref()) {
+            (Some(p), Some(s)) => crate::anim::variants(&p.kind, s.worn.iter().filter_map(|w| w.slot.as_deref())).into_iter().filter(|(_, v)| clips.iter().any(|c| c.0 == *v)).collect(),
+            _ => vec![],
+        };
+        if !plays.is_empty() {
+            info!("view: {file} plays {plays:?}");
+        }
+        let mut e = commands.spawn((model, Item { index, clips, shots, first_clip, graph, turn, plays }, crate::characters::SceneOf(handle), Transform::from_rotation(turn), Visibility::Hidden));
         if let Some(r) = recipe {
             // A recipe's character: rigged for its face, shaped, recoloured and sprung.
             e.insert(crate::characters::Character { recipe: r, stride: 1.0 });
@@ -371,7 +389,7 @@ pub fn clips(
 ) {
     for (e, mut item) in &mut items {
         let clip_names: Vec<String> = item.clips.iter().map(|c| c.0.clone()).collect();
-        let pick = item.first_clip;
+        let pick = item.played(item.first_clip);
         let Some((handle, nodes, player)) = item.graph.as_mut() else { continue };
         if !nodes.is_empty() {
             continue;
@@ -561,7 +579,7 @@ pub fn batch(
         }
         // A ground seat's clip sits the body on the checker: its cloth takes the game's ground
         // contact, weighted by the clip's time (`characters::SeatAnchor`).
-        let seat = shot.clip.and_then(|(clip, t)| crate::anim::seat_of(&item.clips[clip].0, t, 1.0));
+        let seat = shot.clip.and_then(|(clip, t)| crate::anim::seat_of(crate::anim::logical(&item.clips[clip].0), t, 1.0));
         if let Some(root) = roots.iter().find(|(_, it)| it.index == i).map(|(e, _)| e) {
             match seat {
                 Some(w) => {
@@ -573,7 +591,7 @@ pub fn batch(
             }
         }
         if let (Some((clip, t)), Some((_, nodes, p))) = (shot.clip, &item.graph) {
-            if let (Ok(mut pl), Some(node)) = (players.get_mut(*p), nodes.get(clip)) {
+            if let (Ok(mut pl), Some(node)) = (players.get_mut(*p), nodes.get(item.played(clip))) {
                 pl.stop_all();
                 pl.play(*node).seek_to(t).pause();
             }
