@@ -2779,7 +2779,11 @@ def coat_weights(ob, hem):
         if hips and chains:
             strongest = max(chains, key=lambda g: g.weight)
             target = groups[strongest.group]
-            shift = hips * 0.5 * min((SKIRT_TOP - z) / SKIRT_EASE, 1.0)
+            # At the upper front quarter the unweighted row shares its normal with
+            # the moving row below. Preserve its original seat fit under the placket.
+            upper = min(max((z - 0.75) / 0.04, 0.0), 1.0)
+            front = min(max((y - 0.01) / 0.04, 0.0), 1.0)
+            shift = hips * 0.5 * min((SKIRT_TOP - z) / SKIRT_EASE, 1.0) * (1.0 - upper * front)
             target.add([vertex.index], shift, "ADD")
             groups["J_Bip_C_Hips"].add([vertex.index], hips - shift, "REPLACE")
 
