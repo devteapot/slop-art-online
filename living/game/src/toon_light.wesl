@@ -60,6 +60,17 @@ struct Toon {
     // Painted detail (toon.wesl `detail`): x 1 where the vertex colours' alpha names surfaces
     // (generated scenery), z full detail until (m), w none from (m).
     detail: vec4<f32>,
+    // A hand-made hair profile (style.rs `Kind::HandHair`, handmade.rs): shade, mid, light and
+    // highlight as linear rgb; hand[3].w 1 when the highlight mask is a texture (`face_map`).
+    hand: array<vec4<f32>, 4>,
+    // The profile's x t1, y t2 (N·L), z edge, w highlight feather.
+    hand_bands: vec4<f32>,
+    // A hand-made file's forward in the mesh's own frame (xyz), w 1 when set (toon.wesl `facing`).
+    file: vec4<f32>,
+    // A profile's lock ink (v1.1): rgb linear colour, w ink_px.
+    hand_ink: vec4<f32>,
+    // x ink_range (UV), y ink_fade_px, z 1 when ink is drawn.
+    hand_ink_range: vec4<f32>,
     // Per surface (style.rs `Surface`): x 1 / tile size (1/m), y strength, z mapping (0
     // triplanar, 1 planar per face).
     layers: array<vec4<f32>, 18>,
@@ -319,6 +330,13 @@ fn sun_direction() -> vec3<f32> {
 }
 
 // The camera's position.
+// The metres a screen pixel spans at view depth `z` (`view_depth`), in a perspective view: smooth
+// across the screen, unlike screen derivatives, which step between 2x2 pixel quads.
+fn metres_per_pixel(z: f32) -> f32 {
+    let k = view_bindings::view.clip_from_view[1][1];
+    return abs(z) * 2.0 / max(k * view_bindings::view.viewport.w, 1e-4);
+}
+
 fn eye() -> vec3<f32> {
     return view_bindings::view.world_position.xyz;
 }

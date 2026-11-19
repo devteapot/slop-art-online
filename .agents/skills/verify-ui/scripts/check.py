@@ -15,12 +15,16 @@ Two residents are placed beside the player and held still for the talk and items
 (admin `place_at` and `set_behavior`: scene setup, not player acts).
 """
 import argparse, glob, json, math, os, re, subprocess, sys, time
+from contextlib import contextmanager
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, "../../../.."))
 V = os.path.join(ROOT, ".agents/skills/verify/scripts/verify.py")
 sys.path.insert(0, os.path.dirname(V))
 import verify
+from drive import next_sync_wait
+sys.path.insert(0, os.path.join(ROOT, "living/tools"))
+from law_values import own_laws
 
 W, H = 1600, 900
 
@@ -44,8 +48,10 @@ def scenario(name, cullet=False, explicit=False):
     return register
 
 
-def sql(run, q):
+def sql(run, q, *, check=False):
     r = subprocess.run([sys.executable, V, "sql", "--run", run, q], capture_output=True, text=True)
+    if check and r.returncode:
+        raise RuntimeError(r.stderr.strip())
     t = r.stdout
     i = t.find("[")
     return json.loads(t[i:]) if i >= 0 else []
@@ -59,10 +65,13 @@ def sql_as_player(run, q):
     return json.loads(t[i:]) if i >= 0 else []
 
 
-def call_admin(run, reducer, args):
+def call_admin(run, reducer, args, *, check=False):
     """An admin reducer call (scene setup or restore), its output for evidence."""
     r = subprocess.run([sys.executable, V, "call", "--run", run, reducer, json.dumps(args), "--as-admin"], capture_output=True, text=True)
-    return r.stdout + r.stderr
+    output = r.stdout + r.stderr
+    if check and r.returncode:
+        raise RuntimeError(output.strip())
+    return output
 
 
 def residents(run, n=2):
@@ -71,6 +80,49 @@ def residents(run, n=2):
     rows = [r for r in rows if r.get("alive") and r.get("stage") == 2 and r.get("name") not in ("Verifier",)]
     rows.sort(key=lambda r: r["id"])
     return [r["id"] for r in rows[:n]]
+
+
+@contextmanager
+def resident_fixture(run, ids):
+    """Borrow residents for a scene and release their temporary position and graph."""
+    where = " OR ".join(f"id = {actor}" for actor in ids)
+    bodies = {r["id"]: r for r in sql(run, f"SELECT id, x, y FROM body WHERE {where}")}
+    graphs = {r["id"]: r["graph"] for r in sql(run, f"SELECT id, graph FROM brain WHERE {where}")}
+    if any(actor not in bodies or actor not in graphs for actor in ids):
+        raise RuntimeError(f"could not snapshot body and brain for fixture residents {ids}")
+    try:
+        yield
+    finally:
+        errors = []
+        # Return everyone to their tiles before waking the original behavior graphs.
+        calls = [("place_at", [actor, bodies[actor]["x"], bodies[actor]["y"]]) for actor in ids]
+        calls += [("set_behavior", [actor, graphs[actor]]) for actor in ids]
+        for reducer, args in calls:
+            try:
+                call_admin(run, reducer, args, check=True)
+            except RuntimeError as error:
+                errors.append(f"{reducer} for resident #{args[0]}: {error}")
+        if errors:
+            raise RuntimeError("resident fixture restore failed:\n" + "\n".join(errors))
+
+
+@contextmanager
+def sight_fixture(run, defaults):
+    """Restore scene daylight and sight laws, including laws compiled into the seed."""
+    original = own_laws(lambda q: sql(run, q))
+    epoch = sql(run, "SELECT epoch_ms FROM world")[0]["epoch_ms"]
+    try:
+        yield
+    finally:
+        try:
+            for law, default in defaults.items():
+                call_admin(run, "set_world_law", [law, original.get(law, default)], check=True)
+        finally:
+            sql(run, f"UPDATE world SET epoch_ms = {epoch} WHERE id = 0", check=True)
+
+
+# These four laws are enabled in Cullet's authored script before any override exists.
+CULLET_SIGHT = dict.fromkeys(("gaze_on", "fov_on", "cover_sight_on", "cover_brush_on"), "true")
 
 
 THEME = os.environ.get("LIVING_GAME_THEME", "")
@@ -115,6 +167,21 @@ def dump(out, name):
 def log(out):
     p = os.path.join(out, "client.log")
     return re.sub(r"\x1b\[[0-9;]*m", "", open(p, errors="replace").read()) if os.path.exists(p) else ""
+
+
+def partition_sync(text, name, *, last=False):
+    """Split at an exact live-script sync step name."""
+    matches = list(re.finditer(rf"live script: sync:{re.escape(name)}(?= \(me )", text))
+    if not matches:
+        return ("", "", text) if last else (text, "", "")
+    match = matches[-1] if last else matches[0]
+    return text[:match.start()], match[0], text[match.end():]
+
+
+def cutaway_fades(text, folder):
+    """Return the fading asset paths from this exact directory."""
+    files = re.findall(r"cutaway: (\S+) fades to ", text)
+    return [file for file in files if os.path.basename(os.path.dirname(file)) == folder]
 
 
 class Checks:
@@ -909,18 +976,18 @@ def offers(run, c):
 
 # Where the support scenario stands the player on Cullet (land metres; the plan's x + 510 and
 # 784 - y, as of layout pass 1: the Ladder Wynd at plan x -52, the Marver's terrace at x 68..80)
-# and what holds it up there: a kit fixture's file (part of its path); whether it is tall enough to
+# and what holds it up there: a kit fixture's file or directory; whether it is tall enough to
 # be an occluder, so the camera's fade (`envs::cutaway`) considers it at all; and whether it is what
 # I walk on there (a flight, a terrace, the quay: never faded), or only beside me (a retaining wall
 # below the edge I stand on, which may fade when it stands between the camera and me).
 SUPPORTS = [
-    ("stairs", 458.0, 755.0, "stairs/stairs_ladder_wynd_strand_to_low", True, True),
-    ("terrace", 584.0, 720.8, "marver_terrace/", False, True),
-    ("quay", 450.0, 782.6, "quay/", False, True),
+    ("stairs", 458.0, 755.0, "envs/cullet/stairs/stairs_ladder_wynd_strand_to_low.glb", True, True),
+    ("terrace", 584.0, 720.8, "envs/cullet/marver_terrace/marver_terrace.glb", False, True),
+    ("quay", 450.0, 782.6, "envs/cullet/quay/", False, True),
     # At the upper level's edge above a retaining wall: the drop's tiles keep you 1-1.5 m from
     # it, so it is beside you, never under you; it may fade when it stands between the camera
     # and you, as anything that hides you does.
-    ("wall", 440.0, 751.6, "retaining_wall/wall_002", False, False),
+    ("wall", 440.0, 751.6, "envs/cullet/retaining_wall/wall_002.glb", False, False),
 ]
 # Where the player stands first, away from every spot: the cutaway names what holds me up once,
 # as I come onto it, and the character keeps its place between drives.
@@ -949,22 +1016,25 @@ def support(run, c):
     c.check(s, "client ran and joined", code == 0, text[-300:])
     L = log(out)
     # The log in stretches, one per spot: from its sync step to the next.
-    parts = re.split(r"live script: sync:(\w+)", L)
+    parts = re.split(r"live script: sync:([^\n]+?)(?= \(me )", L)
     seg = {parts[i]: parts[i + 1] for i in range(1, len(parts) - 1, 2)}
     for name, x, y, part, occluder, walked in SUPPORTS:
         t = seg.get(name, "")
         held = set(re.findall(r"cutaway: (\S+) holds me up", t))
         faded = re.findall(r"cutaway: (\S+) fades to", t)
-        mine = [f for f in held if part in f]
+        def supports(file):
+            return os.path.dirname(file) == part.rstrip("/") if part.endswith("/") else file == part
+
+        mine = [f for f in held if supports(f)]
         if occluder:
             c.check(s, f"{name}: the cutaway finds what holds me up ({part})", bool(mine), f"held {sorted(held)}")
             # Only the plan's own flight is there: no other kit file of its kind drawn on it
             # (stairs-place: a Store Wynd flight stood at the Ladder Wynd's foot).
-            folder = part.split("/")[0] + "/"
-            others = sorted(f for f in held if folder in f and part not in f)
-            c.check(s, f"{name}: no other {folder[:-1]} model stands there", not others, f"also held {others}")
+            folder = os.path.dirname(part)
+            others = sorted(f for f in held if os.path.dirname(f) == folder and f != part)
+            c.check(s, f"{name}: no other {os.path.basename(folder)} model stands there", not others, f"also held {others}")
         # What held me up there, and what I walk on there, never fades there.
-        bad = [f for f in faded if f in held or (walked and part in f)]
+        bad = [f for f in faded if f in held or (walked and supports(f))]
         c.check(s, f"{name}: nothing under or beside my feet fades", t != "" and not bad, f"faded {bad}" if t else "no log for this spot")
     c.check(s, "photographs of each spot", all(os.path.exists(os.path.join(out, f"{n}.png")) for n, *_ in SUPPORTS))
 
@@ -1119,9 +1189,10 @@ def camera(run, c):
                 f"clear_{stop}=place_at|{{me}}|{street[0]}|{street[1]}",
                 f"roof_{stop}=place_at|{{me}}|{roof[0]}|{roof[1]}",
             ]
-        out, code, text = drive(run, f"{s}-{field}", plan + "quit",
-                                places=[f"{front}:0:-2.5", f"{back}:2.5:4.5", f"{behind_wall}:1.0:-14.0"], syncs=syncs + roof_syncs,
-                                env={"LIVING_GAME_DEV": "1", "RUST_LOG": "info,wgpu=warn,naga=warn,living_game::envs=debug"})
+        with resident_fixture(run, ids):
+            out, code, text = drive(run, f"{s}-{field}", plan + "quit",
+                                    places=[f"{front}:0:-2.5", f"{back}:2.5:4.5", f"{behind_wall}:1.0:-14.0"], syncs=syncs + roof_syncs,
+                                    env={"LIVING_GAME_DEV": "1", "RUST_LOG": "info,wgpu=warn,naga=warn,living_game::envs=debug"})
         c.check(s, f"field {field}: client joined and finished", code == 0, text[-300:])
         initial = view(dump(out, "initial"))
         c.check(s, f"field {field}: fresh settings start at middle zoom", abs(initial.get("zoom", -1.0) - 0.55) < 0.001, repr(initial))
@@ -1170,9 +1241,9 @@ def camera(run, c):
             wood_dump = dump(out, f"wood_{stop}") or {}
             c.check(s, f"{field} {stop}: resident in generic forest remains in the scoped view",
                     front in (wood_dump.get("perceived") or []), repr(wood_dump.get("perceived")))
-            under_roof = trace.partition(f"live script: sync:roof_{stop}")[2].partition(f"live script: dump:roof_{stop}")[0]
+            under_roof = partition_sync(trace, f"roof_{stop}")[2].partition(f"live script: dump:roof_{stop}")[0]
             c.check(s, f"{field} {stop}: the market stall roof enters cutaway",
-                    re.search(r"cutaway: .*market_stall.* fades to ", under_roof) is not None, under_roof[-350:])
+                    cutaway_fades(under_roof, "market_stall"), under_roof[-350:])
         c.check(s, f"{field}: zoom keeps the authority's sight radius", ranges[0] is not None and len(set(ranges)) == 1, repr(ranges))
         c.check(s, f"{field}: the resident behind the wall stays outside the scoped view",
                 all(behind_wall not in rows for rows in visible + perceived), repr((visible, perceived)))
@@ -1228,8 +1299,8 @@ def camera_rotate(run, c):
         c.check(s, "W moves up-screen at 135°", up > 0.5 and abs(right) < up * 0.25, repr((dx, dy, up, right)))
     else:
         c.check(s, "W moves up-screen at 135°", False, repr((before, after)))
-    trace = log(out).partition("live script: sync:roof")[2].partition("live script: dump:awning")[0]
-    c.check(s, "the market awning cuts away at 135°", re.search(r"cutaway: .*market_stall.* fades to ", trace) is not None, trace[-500:])
+    trace = partition_sync(log(out), "roof")[2].partition("live script: dump:awning")[0]
+    c.check(s, "the market awning cuts away at 135°", cutaway_fades(trace, "market_stall"), trace[-500:])
     c.check(s, "both Middle stills captured", all(os.path.isfile(os.path.join(out, f"middle-{name}.png")) for name in ("north", "135")))
     prefs = dump(out, "settings") or {}
     c.check(s, "the rotation settings are saved", prefs.get("camera_rotate") is False
@@ -1323,8 +1394,8 @@ def camera_lol(run, c):
     c.check(s, "the point and tap pick the resident", hover.get("under") == front and selected.get("to") == front,
         repr((hover.get("under"), selected)))
     trace = log(out)
-    roof = trace.partition("live script: sync:roof")[2].partition("live script: dump:under_awning")[0]
-    c.check(s, "the market awning enters cutaway", bool(re.search(r"cutaway: .*market_stall.* fades to ", roof)),
+    roof = partition_sync(trace, "roof")[2].partition("live script: dump:under_awning")[0]
+    c.check(s, "the market awning enters cutaway", cutaway_fades(roof, "market_stall"),
         roof[-300:])
     metrics = clearance_metrics(out, "hold:0", "dump:after_walk")
     c.check(s, "the eye clears the ground and stays continuous while walking out from the awning",
@@ -1641,12 +1712,243 @@ def texel(meta, pix, x, y):
     return pix[j * n + i] if 0 <= i < n and 0 <= j < n else None
 
 
+LOG_LINE = re.compile(r"^(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d+)Z\s+(\w+)\s+([\w:]+): (.*)$")
+
+
+def timed_lines(out):
+    """The client log's lines with their wall time (s since the epoch)."""
+    import datetime
+    rows = []
+    for line in log(out).splitlines():
+        m = LOG_LINE.match(line)
+        if m:
+            stamp = datetime.datetime.strptime(m[1][:26], "%Y-%m-%dT%H:%M:%S.%f").replace(tzinfo=datetime.timezone.utc)
+            rows.append((stamp.timestamp(), m[4]))
+    return rows
+
+
+def first_after(lines, pattern, after, before=None):
+    for t, text in lines:
+        if t >= after and (before is None or t < before) and re.search(pattern, text):
+            return t, text
+    return None
+
+
+@scenario("law-override", explicit=True)
+def law_override(run, c):
+    """Value-only law edits reach a connected client in place (docs/LAW_OVERRIDE.md): each of
+    the delivery, gaze and cover laws set through `set_world_law` (which writes `law_override`
+    only) while a client plays, with the script revision unchanged, the client's reaction time,
+    the delivery switch made before broken (no creature missing from the reads, frame by frame:
+    `LIVING_GAME_SEEN_LOG`) and the world's tick gap around the call (the authority's `clock`
+    sampled every ~20 ms); an ordinary law (`turn_rate`) still installs a new revision, compiled
+    here with the overrides kept; a reconnect and a fresh client with overrides present take the
+    set the rows choose first. The laws touched are restored afterwards."""
+    import threading
+    s = "law-override"
+    st = verify.load(run)
+    db, token = st["db"], verify.admin_token()
+    name = f"{s}-{THEME}" if THEME else s
+    base = os.path.join(ROOT, ".local/living/verify", run, "ui")
+    out = os.path.join(base, name)
+
+    def q(query):
+        code, body = verify.http(f"/v1/database/{db}/sql", query, token, raw=True, timeout=5)
+        if code != 200:
+            return None
+        res = json.loads(body)[-1]
+        names = [col["name"]["some"] for col in res["schema"]["elements"]]
+        return [dict(zip(names, row)) for row in res["rows"]]
+
+    def revision():
+        rows = q("SELECT revision FROM script WHERE name = 'skills'") or [{}]
+        return rows[0].get("revision")
+
+    def set_law(law, value):
+        verify.refresh_lease(st)
+        t0 = time.time()
+        code, body = verify.http(f"/v1/database/{db}/call/set_world_law", [law, value], token, timeout=60)
+        return {"law": law, "value": value, "code": code, "reply": body[:300], "t0": t0, "t1": time.time()}
+
+    # The world clock every ~20 ms, for the tick gap around each call.
+    ticks, stop = [], threading.Event()
+
+    def sample():
+        while not stop.is_set():
+            rows = q("SELECT tick FROM clock WHERE id = 0")
+            if rows:
+                ticks.append((time.time(), int(rows[0]["tick"])))
+            time.sleep(0.02)
+
+    def gap(t0, t1):
+        """The longest wall time (ms) the tick stood still in [t0, t1], by the samples."""
+        w = [(t, k) for t, k in ticks if t0 <= t <= t1]
+        worst, last_t, last_k = 0.0, None, None
+        for t, k in w:
+            if last_k is None or k != last_k:
+                if last_t is not None:
+                    worst = max(worst, t - last_t)
+                last_t, last_k = t, k
+        if w and last_t is not None:
+            worst = max(worst, w[-1][0] - last_t)
+        rate = (w[-1][1] - w[0][1]) / (w[-1][0] - w[0][0]) if len(w) > 1 and w[-1][0] > w[0][0] else 0.0
+        return round(worst * 1000, 1), round(rate, 1), len(w)
+
+    original = {r["name"]: r["value"] for r in (q("SELECT name, value FROM law_override") or [])}
+    cover = (q("SELECT * FROM cover_law") or [{}])[0]
+    fill = float(cover.get("cover_brush_min_fill", 0.6))
+    new_fill = 0.5 if abs(fill - 0.5) > 1e-3 else 0.7
+    shipped = {"cue_transport_on": "true", "near_tier_on": "true", "gaze_on": "false", "cover_sight_on": "false",
+               "cover_brush_min_fill": f"{fill:g}", "turn_rate": "6"}
+    touched = list(shipped)
+    in_place = r"rules: law overrides laid over in place .*changed \[\"{law}\"\]; delivery {d} cover {c} gaze {g}"
+    steps = [
+        ("cue_transport_on", "false", "delivery", r"rules: cue_transport_on false near_tier_on true", None),
+        ("near_tier_on", "false", "delivery", r"perception: on the untiered set after", "untiered"),
+        ("near_tier_on", "true", "delivery", r"perception: on the tiered set after", "tiered"),
+        ("cue_transport_on", "true", "delivery", r"rules: cue_transport_on true near_tier_on true", None),
+        ("gaze_on", "true", "gaze", r"sight edge: my senses from the authority \(my_senses_v_2\)", None),
+        ("gaze_on", "false", "gaze", r"sight edge: my senses from the authority \(my_senses\)", None),
+        ("cover_sight_on", "true", "cover", r"sight field: cover policy Some\(", None),
+        ("cover_brush_min_fill", f"{new_fill:g}", "cover", rf"sight field: cover policy Some\(.*brush_min_fill: {new_fill:g}\b", None),
+        ("cover_sight_on", "false", "cover", r"sight field: cover policy None", None),
+    ]
+    plan = "ready;wait:2;sync:armed;wait:1;dump:before;sync:toggled;dump:toggled;reconnect;wait:8;dump:reconnected;sync:done;quit"
+    cmd = [sys.executable, os.path.join(HERE, "drive.py"), "--run", run, "--name", name, "--plan", plan, "--timeout", "900"]
+    os.makedirs(base, exist_ok=True)
+    seen_path = os.path.join(base, f"{name}.seen.jsonl")
+    env = dict(os.environ, LIVING_GAME_SEEN_LOG=seen_path)
+    results, installs = [], []
+    sampler = threading.Thread(target=sample, daemon=True)
+    sampler.start()
+    drive_log = open(os.path.join(base, f"{name}.drive.log"), "w")
+    p = subprocess.Popen(cmd, stdout=drive_log, stderr=subprocess.STDOUT, env=env)
+
+    def wait_for(pattern, secs):
+        end = time.time() + secs
+        while time.time() < end and p.poll() is None:
+            if re.search(pattern, log(out)):
+                return True
+            time.sleep(0.2)
+        return False
+
+    def go(sync):
+        open(os.path.join(out, f"{sync}.go"), "w").close()
+
+    try:
+        if not wait_for(r"live script: waiting for \S*/armed\.go", 400):
+            c.check(s, "the client reached the toggles", False, f"drive exit {p.poll()}")
+            return
+        go("armed")
+        time.sleep(4)
+        quiet = gap(time.time() - 3.5, time.time())
+        for law, value, cls, effect, _ in steps:
+            rev = revision()
+            r = set_law(law, value)
+            time.sleep(3.0)
+            r.update(cls=cls, rev_before=rev, rev_after=revision())
+            r["gap_ms"], r["ticks_per_s"], r["samples"] = gap(r["t0"] - 0.5, r["t1"] + 1.5)
+            results.append(r)
+        for law, value in (("turn_rate", "6.5"), ("turn_rate", shipped["turn_rate"] if "turn_rate" not in original else original["turn_rate"])):
+            rev = revision()
+            r = set_law(law, value)
+            time.sleep(4.0)
+            r.update(rev_before=rev, rev_after=revision())
+            r["gap_ms"], r["ticks_per_s"], r["samples"] = gap(r["t0"] - 0.5, r["t1"] + 2.5)
+            installs.append(r)
+        # The reconnect: the client on the tiered set (both delivery laws on, as it now knows
+        # them) drops its connection, and while it is offline (it retries after 3 s) both laws
+        # go off, so its first result after the reconnect holds rows it has not seen.
+        t_reconnect = time.time()
+        go("toggled")
+        offline = wait_for(r"offline: ", 30)
+        pre = [set_law("cue_transport_on", "false"), set_law("near_tier_on", "false")]
+        wait_for(r"live script: waiting for \S*/done\.go", 60)
+        go("done")
+        p.wait(timeout=120)
+        # A fresh client on the world with those overrides present.
+        fresh_out, fresh_code, _ = drive(run, f"{s}-fresh", "ready;wait:3;dump:fresh;quit")
+    finally:
+        if p.poll() is None:
+            p.terminate()
+        for law in touched:
+            set_law(law, original.get(law, shipped[law]))
+        stop.set()
+        drive_log.close()
+    lines = timed_lines(out)
+    frames = []
+    if os.path.exists(seen_path):
+        for line in open(seen_path):
+            try:
+                frames.append(json.loads(line))
+            except ValueError:
+                pass
+    report = {"quiet_gap_ms": quiet, "steps": results, "installs": installs, "pre_reconnect": pre}
+    c.check(s, "the world's tick ran between calls (quiet gap under 150 ms)", quiet[0] < 150, f"{quiet}")
+    for r, (law, value, cls, effect, switch) in zip(results, steps):
+        tag = f"{law}={value}"
+        c.check(s, f"{tag}: set_world_law accepted", r["code"] == 200, r["reply"])
+        c.check(s, f"{tag}: the script revision did not change", r["rev_before"] == r["rev_after"] and r["rev_before"] is not None, f"{r['rev_before']} -> {r['rev_after']}")
+        pat = in_place.format(law=law, d=str(cls == "delivery").lower(), c=str(cls == "cover").lower(), g=str(cls == "gaze").lower())
+        hit = first_after(lines, pat, r["t0"] - 0.05)
+        eff = first_after(lines, effect, r["t0"] - 0.05)
+        r["laid_over_ms"] = round((hit[0] - r["t1"]) * 1000, 1) if hit else None
+        r["effect_ms"] = round((eff[0] - r["t1"]) * 1000, 1) if eff else None
+        r["effect_line"] = eff[1] if eff else None
+        c.check(s, f"{tag}: laid over in place as {cls}", hit is not None, pat)
+        c.check(s, f"{tag}: the client reacted within a second ({effect})", eff is not None and eff[0] - r["t1"] < 1.0, f"{r['effect_ms']} ms")
+        c.check(s, f"{tag}: no compile on the client", first_after(lines, r"rules: skill script revision \d+ compiled", r["t0"] - 0.05, r["t0"] + 3.0) is None)
+        c.check(s, f"{tag}: no world freeze (tick gap under 150 ms)", r["gap_ms"] < 150, f"{r['gap_ms']} ms")
+        if switch:
+            sub = first_after(lines, rf"perception: subscribing the {switch} set", r["t0"] - 0.05)
+            r["missing_line"] = eff[1] if eff else None
+            c.check(s, f"{tag}: the {switch} set subscribed beside the old one and applied", sub is not None and eff is not None)
+            c.check(s, f"{tag}: the client's switch line lists nobody missing", bool(eff) and "missing now []" in eff[1], eff[1] if eff else "")
+            # Frame by frame: each creature in the reads just before the call and 1 s after the
+            # switch is in every frame between.
+            if eff:
+                t0_ms, t1_ms = r["t0"] * 1000 - 300, (eff[0] + 1.0) * 1000
+                before = [f for f in frames if f.get("wall_ms", 0) < r["t0"] * 1000]
+                after = [f for f in frames if f.get("wall_ms", 0) >= t1_ms]
+                ids = lambda f: {row[0] for row in f.get("rows", [])}
+                keep = (ids(before[-1]) & ids(after[0])) if before and after else set()
+                window = [f for f in frames if t0_ms <= f.get("wall_ms", 0) <= t1_ms]
+                gaps = [f["wall_ms"] for f in window if keep - ids(f)]
+                r["frames"], r["kept"], r["frames_missing"] = len(window), len(keep), len(gaps)
+                sets = {f.get("reads") for f in window}
+                c.check(s, f"{tag}: no frame without a creature kept across the switch", window and keep and not gaps,
+                        f"{len(window)} frames, {len(keep)} kept, {len(gaps)} with one missing; reads {sets}")
+    for r in installs:
+        tag = f"turn_rate={r['value']} (full install)"
+        comp = first_after(lines, rf"rules: skill script revision {r['rev_after']} compiled \(\d+ skills, \d+ law overrides\)", r["t0"] - 0.05)
+        r["compiled_ms"] = round((comp[0] - r["t1"]) * 1000, 1) if comp else None
+        c.check(s, f"{tag}: a new script revision", r["code"] == 200 and r["rev_after"] == (r["rev_before"] or 0) + 1, f"{r['rev_before']} -> {r['rev_after']} {r['reply']}")
+        c.check(s, f"{tag}: compiled here with the overrides", comp is not None, comp[1] if comp else "")
+        c.check(s, f"{tag}: the perception set kept (no subscribe after the compile)", first_after(lines, r"perception: subscribing", r["t0"] - 0.05, r["t0"] + 4.0) is None)
+    after = [(t, x) for t, x in lines if t >= t_reconnect]
+    subscribed = [x for _, x in after if x.startswith("perception: subscribing")]
+    world = [x for _, x in after if x.startswith("world subscribed after")]
+    down = [t for t, x in after if x.startswith("offline: ")]
+    report["reconnect"] = {"subscribed": subscribed, "world": world, "offline": bool(offline), "laws_set_while_offline": pre,
+                           "set_before_reconnect": bool(down) and all(r["t1"] < next((t for t, x in after if x.startswith("world subscribed after")), 0) for r in pre)}
+    c.check(s, "reconnect: the delivery laws went off while the client was offline", report["reconnect"]["set_before_reconnect"] and all(r["code"] == 200 for r in pre), f"{report['reconnect']}")
+    c.check(s, "reconnect: the base set came back with the overrides", any("law overrides)" in x for x in world), f"{world}")
+    c.check(s, "reconnect: the first set chosen is the one the new rows choose (untiered), no tiered set first",
+            bool(subscribed) and "untiered" in subscribed[0] and not any("the tiered set" in x for x in subscribed), f"{subscribed}")
+    flog = log(fresh_out)
+    fsub = re.findall(r"perception: subscribing the (\w+) set", flog)
+    fcomp = re.findall(r"rules: skill script revision \d+ compiled \(\d+ skills, (\d+) law overrides\)", flog)
+    report["fresh"] = {"exit": fresh_code, "subscribed": fsub, "compiled_with": fcomp}
+    c.check(s, "fresh client: compiled with the world's overrides", bool(fcomp) and int(fcomp[0]) >= 2, f"{fcomp}")
+    c.check(s, "fresh client: only the untiered set subscribed", fsub == ["untiered"], f"{fsub}")
+    json.dump(report, open(os.path.join(base, f"{name}.json"), "w"), indent=1)
+
+
 @scenario("gaze", cullet=True, explicit=True)
 def gaze(run, c):
     """Drive zoom through all gaze bands, coalescing, reconnect and the Cullet hedge."""
     name = "gaze"
     state = {"gaze_on": "false", "fov_on": "true", "cover_sight_on": "false", "cover_brush_on": "true"}
-    original = {r["name"]: r["value"] for r in sql(run, "SELECT name,value FROM world_law")}
     ids = residents(run, 5)
     if len(ids) != 5:
         c.check(name, "five stationary residents available", False, repr(ids))
@@ -1704,17 +2006,12 @@ def gaze(run, c):
                      "reconnect", "wait:0.35", "notches:30", "wait:6", "sync:after_reconnect"]
     labels.append("off_after")
     plan += ["sync:disable", "notches:-30", "wait:0.5", "notches:11", "wait:3.5", "sync:off_after", "shot:off_after", "quit"]
-    epoch = sql(run, "SELECT epoch_ms FROM world")[0]["epoch_ms"]
-    try:
+    with sight_fixture(run, CULLET_SIGHT), resident_fixture(run, ids):
         for law, value in state.items():
-            call_admin(run, "set_world_law", [law, value])
+            call_admin(run, "set_world_law", [law, value], check=True)
         out, code, drive_log = drive(run, name, ";".join(plan), syncs=syncs + [snapshot(k) for k in labels],
                                      env={"LIVING_GAME_CONTROL": "cursor", "LIVING_SIGHT_FIELD_DUMP": directory,
                                           "RUST_LOG": "info,wgpu=warn,naga=warn,living_game::net=debug,living_game::sightedge=trace"})
-    finally:
-        for law in state:
-            call_admin(run, "set_world_law", [law, original.get(law, "false")])
-        sql(run, f"UPDATE world SET epoch_ms = {epoch} WHERE id = 0")
 
     scene = dump(out, "scene") or {}
     me, snaps = scene.get("me"), scene.get("snaps", {})
@@ -1780,8 +2077,8 @@ def gaze(run, c):
     legacy = ((snaps.get("off_before") or [{}, {}])[1].get("rows") or [{}])[0]
     same_middle = bool(legacy and senses_at_stops[1]) and all(legacy[k] == senses_at_stops[1][k] for k in sense_keys[1:-1])
     frame_pattern = r"gaze shade confirmed=(-?\d+) drawn=(-?\d+) radius=([-\d.]+) revision=(\d+) mode=(\d+)"
-    off_before, _, enabled = trace.partition("live script: sync:enable")
-    off_after = trace.rpartition("live script: sync:disable")[2]
+    off_before, _, enabled = partition_sync(trace, "enable")
+    off_after = partition_sync(trace, "disable", last=True)[2]
 
     def legacy_shade(label, output, eye):
         rows = snaps.get(label, [])
@@ -1797,7 +2094,7 @@ def gaze(run, c):
                         for meta, _ in fields))
 
     off_ok = legacy_shade("off_before", off_before, open_eye) and legacy_shade("off_after", off_after, hedge_eye)
-    approach = enabled.partition("live script: notches:-30")[2].partition("live script: sync:spin_start")[0]
+    approach = partition_sync(enabled.partition("live script: notches:-30")[2], "spin_start")[0]
     proof["stops"] = dict(samples=opened, reach=ranges, angles=angles, middle_matches_legacy=same_middle,
                           off_legacy=off_ok, sampled_fields=sampled_fields, sends=sent(approach))
     c.check(name, "1. Three fixed camera stops have different authority-matched Shade fields",
@@ -1805,7 +2102,7 @@ def gaze(run, c):
             and angles == [(35, 65), (70, 110), (110, 155)] and sent(approach)[:3] == [1, 0, 2],
             repr((ranges, angles, sampled_fields, opened_ok, same_middle, off_ok, drive_log[-300:])))
 
-    spin = trace.partition("live script: sync:spin_start")[2].partition("live script: sync:spin_end")[0]
+    spin = partition_sync(partition_sync(trace, "spin_start")[2], "spin_end")[0]
     replies = [(int(b), int(t)) for b, t in re.findall(r"gaze accepted band=(\d+) at_us=(\d+)", spin)]
     interval_ok = len(replies) >= 2 and all(b[1] - a[1] >= 250_000 for a, b in zip(replies, replies[1:]))
     frames = [(int(cb), int(db), float(r), int(rev), int(mode)) for cb, db, r, rev, mode in re.findall(frame_pattern, spin)]
@@ -1831,7 +2128,7 @@ def gaze(run, c):
             and replies[-1][0] == final[0].get("band") == 1,
             repr((duration, replies, len(frames), rendered, confirmed, no_flicker)))
 
-    reconnect = trace.partition("live script: reconnect")[2].partition("live script: sync:after_reconnect")[0]
+    reconnect = partition_sync(trace.partition("live script: reconnect")[2], "after_reconnect")[0]
     events = re.findall(r"(?m)(offline:.*|connected as .*|world subscribed .*|gaze owner applied band=\d+[^\n]*|gaze sent band=\d+)", reconnect)
     recovered = (snaps.get("after_reconnect") or [{}])[0].get("rows") or [{}]
     order = [re.sub(r"^(gaze (?:owner applied|sent) band=\d+).*", r"\1", line) for line in events if line.startswith("gaze ")]
@@ -1861,18 +2158,19 @@ def cover(run, c):
     if not ids:
         c.check("cover", "adult resident available", False)
         return
-    call_admin(run, "set_world_law", ["fov_on", "false"])
-    call_admin(run, "set_world_law", ["cover_brush_on", "true"])
-    for fixture, eye, contact, blocks in (
-        ("trunk", (781.5, 457.5), (785.5, 457.5), True),
-        ("edge", (781.5, 457.5), (785.5, 459.5), False),
-        # The closer point still crosses the brush and stays in the near camera's frame.
-        ("brush", (608.5, 479.5), (608.5, 474.5), True),
-        # Cullet's mid_row_plot_toft_3_hedge, 1.8 m high, plan origin (510, 784).
-        ("hedge", (523.5, 698.5), (527.5, 698.5), True),
-    ):
-        cover_pair(run, c, ids[0], fixture, eye, contact, blocks)
-    cover_canopy(run, c)
+    with sight_fixture(run, CULLET_SIGHT), resident_fixture(run, ids):
+        for law, value in (("gaze_on", "false"), ("fov_on", "false"), ("cover_brush_on", "true")):
+            call_admin(run, "set_world_law", [law, value], check=True)
+        for fixture, eye, contact, blocks in (
+            ("trunk", (781.5, 457.5), (785.5, 457.5), True),
+            ("edge", (781.5, 457.5), (785.5, 459.5), False),
+            # The closer point still crosses the brush and stays in the near camera's frame.
+            ("brush", (608.5, 479.5), (608.5, 474.5), True),
+            # Cullet's mid_row_plot_toft_3_hedge, 1.8 m high, plan origin (510, 784).
+            ("hedge", (523.5, 698.5), (527.5, 698.5), True),
+        ):
+            cover_pair(run, c, ids[0], fixture, eye, contact, blocks)
+        cover_canopy(run, c)
 
 
 def cover_pair(run, c, target, fixture, eye, contact, blocks):
@@ -1950,7 +2248,7 @@ def cover_pair(run, c, target, fixture, eye, contact, blocks):
             hovered = target in {row["id"] for row in d.get("hovered") or []}
             addressed = (talk.get("typing") or {}).get("to")
             if hidden:
-                segment = trace.partition(f"live script: sync:{key}")[2].partition(f"live script: dump:{key}_attack")[0]
+                segment = partition_sync(trace, key)[2].partition(f"live script: dump:{key}_attack")[0]
                 strikes = re.findall(r"tap: strike \(at (.*?), weapon drawn\)", segment)
                 naming = [word for kind, word in d.get("naming") or [] if kind in ("hover", "target")]
                 quiet = (d.get("under") is None and not hovered and not naming
@@ -1989,13 +2287,13 @@ def cover_canopy(run, c):
             key = f"{state}_{stop}"
             d = dump(out, key) or {}
             body = (d.get("me_at") or {}).get("body") or {}
-            segment = trace.partition(f"live script: sync:tree_{key}")[2].partition(f"live script: dump:{key}")[0]
-            faded = re.search(r"cutaway: .*hanger_tree.* fades to ", segment)
+            segment = partition_sync(trace, f"tree_{key}")[2].partition(f"live script: dump:{key}")[0]
+            faded = cutaway_fades(segment, "hanger_tree")
             c.check(name, f"{key}: Hanger tree cuts away above the player",
                     (body.get("x"), body.get("y")) == canopy and bool(faded)
                     and abs(view(d).get("height", -1) - height) < 0.1
                     and os.path.isfile(os.path.join(out, f"{key}.png")),
-                    repr((body, view(d), faded.group(0) if faded else None)))
+                    repr((body, view(d), faded)))
 
 
 # The looks the scenario faces (live script `look:DEG`: 0 north, clockwise) and where the
@@ -3349,8 +3647,13 @@ def looks(run, c):
     a, b = residents(run, 2)
     ev = os.path.join(ROOT, ".local/living/verify", run, "ui")
     test_book = book_copy(ev, book, "looks-without-b", drop=[rows.get(b, "")])
-    plan = "ready;sync:scene;cursor:0.5,0.5;wait:5;dump:00;shot:00_drawn;sync:hold;wait:0.6;point:{A};wait:0.5;dump:01;quit".replace("{A}", str(a))
-    out, code, text = drive(run, s, plan, free=[f"{a}:-2.5:1.0", f"{b}:2.0:-1.0"], syncs=["hold=refree"], env={"LIVING_GAME_LOOK_BOOK": test_book})
+    # Start on open ground even if the previous scenario left the player beside Cullet's hedge.
+    plan = (f"ready;sync:open_ground;look:0;sync:scene;cursor:0.5,0.5;wait:5;"
+            f"dump:00;shot:00_drawn;sync:hold;wait:0.6;point:{a};wait:0.5;dump:01;quit")
+    with resident_fixture(run, (a, b)):
+        out, code, text = drive(run, s, plan, free=[f"{a}:-2.0:-1.5", f"{b}:2.0:-1.5"],
+                                syncs=["open_ground=place_at|{me}|781.5|469.5", "hold=refree"],
+                                env={"LIVING_GAME_LOOK_BOOK": test_book})
     c.check(s, "client ran and joined", code == 0, text[-300:])
     L = log(out)
     d0 = dump(out, "00") or {}
@@ -3445,7 +3748,8 @@ def looks_band(run, c):
     before = look_rows(run)
     burst = "".join(f"dump:b{i:03d};wait:0.2;" + (f"shot:b{i:03d};" if i % 10 == 0 else "") for i in range(350))
     plan = f"ready;sync:scene;cursor:0.5,0.5;wait:1;{burst}quit"
-    out, code, text = drive(run, s, plan, free=[f"{ids[0]}:-2.5:1.0", f"{ids[1]}:2.0:-1.0", f"{ids[2]}:0.5:2.2"])
+    with resident_fixture(run, ids):
+        out, code, text = drive(run, s, plan, free=[f"{ids[0]}:-2.5:1.0", f"{ids[1]}:2.0:-1.0", f"{ids[2]}:0.5:2.2"])
     c.check(s, "client ran and joined", code == 0, text[-300:])
     after = look_rows(run)
     L = log(out)
@@ -3557,7 +3861,7 @@ def seat_segments(path, cid):
     originals' (`LIVING_GAME_CLIP_VARIANTS=0`) in the same segment."""
     if not os.path.exists(path):
         return None
-    rows = [r for r in (json.loads(l) for l in open(path) if l.strip()) if r.get("id") == cid and r.get("hips_at")]
+    rows = feet_rows(path, cid)
     rel = lambda r, k: [a - b for a, b in zip(r[k][:3], r["root"])]
     out, cur, seated = [], None, []
     for a, b in zip(rows, rows[1:]):
@@ -3578,16 +3882,56 @@ def seat_segments(path, cid):
     return {"segments": [{k: v for k, v in x.items() if k != "act"} for x in segs], "seated_hips_over_ground_m": round(sum(seated) / len(seated), 4) if seated else None}
 
 
+def script_t(text, step):
+    """The client's clock (s) at the first live-script line for STEP (`live script: STEP (me …,
+    t X s)`), the clock the feet log's `t` uses."""
+    m = re.search(rf"live script: {re.escape(step)} \(me .*?, t ([\d.]+) s\)", text)
+    return float(m.group(1)) if m else None
+
+
+def feet_rows(path, cid):
+    """A feet log's frames of one body (a line cut short when the client stopped is skipped)."""
+    out = []
+    for line in open(path):
+        try:
+            r = json.loads(line)
+        except ValueError:
+            continue
+        if r.get("id") == cid and r.get("hips_at"):
+            out.append(r)
+    return out
+
+
+def seated_frames(path, cid, t0, t1):
+    """The watched sitter's feet-log frames between t0 and t1 (client s) that show it off the
+    seated loop: any one-shot over it (getting up, settling down again, a turn take) or its hips
+    more than SEATED_HIPS_M over the ground (the seated loop keeps them about 0.11 m up, standing
+    about 0.9). Returns (frames in the window, [(t, clip, action, hips over ground m)])."""
+    if not os.path.exists(path) or t0 is None or t1 is None:
+        return 0, []
+    rows = [r for r in feet_rows(path, cid) if t0 <= r["t"] <= t1]
+    off = [(round(r["t"], 3), r.get("clip"), (r.get("action") or [None])[0], round(r["hips_at"][1] - r["l"][3], 3))
+           for r in rows if r.get("action") or r["hips_at"][1] - r["l"][3] > SEATED_HIPS_M]
+    return len(rows), off
+
+
+SEATED_HIPS_M = 0.35
+
+
 @scenario("seat")
 def seat(run, c):
     """Seated cloth on the ground (seat-2a, docs/seat-contact/): skirted and coated residents
     beside me in the crowded street (eight near: me and seven), told to rest at noon in dry
     weather (`set_behavior` `{"do": "rest"}`, scene setup), so town.rs sits them on the ground
     (`sit_ground_down`, then `sit_ground`; about three in ten stand at ease instead), then told to
-    wander and put back on their own tiles (`refree`: a new graph alone does not end a rest; a
-    placement does), so they get up where they sat (`stand_up_ground`) and walk off. Stills going down, seated, getting up and up. While
-    they sit the camera goes far and back near, so their springs rest and wake (the re-entry
-    reseed, `LIVING_GAME_PERF=springwake`). Two arms: the contact on, and off
+    go home at `sync:up`, so they get up where they sat (`stand_up_ground`) and walk off.
+    Stills going down, seated, getting up and up. They sit about 18 s, across two of the
+    authority's 8 s rest renewals (a new `doing` row each, snapshotted at `held0` and `held1`),
+    and meanwhile the camera goes Far, Near, Far and Near, so their springs rest and wake (the
+    re-entry reseed, `LIVING_GAME_PERF=springwake`). Nobody seated may rise before `up`: the
+    watched sitter's feet log stays in the seated loop (no one-shot, hips low) from the seated
+    dump to `up`, every sitter's one `gets up` line comes after `up`, and every seated wake starts
+    where its chains were drawn (under 5° at waking) and does not swing (under 10° a frame). Two arms: the contact on, and off
     (`LIVING_GAME_SEAT_CONTACT=0`); `LIVING_GAME_PERF=seat` logs each seated character's lowest
     cloth tail above its ground, and frames.csv and the springs line give the cost. Each sitter's
     `seat:` line names the animation its seated loop plays: the female ground sit's variant for an
@@ -3609,19 +3953,21 @@ def seat(run, c):
     ring = [(2.2, 0.0), (-2.2, 0.0), (0.0, 2.2), (0.0, -2.2), (1.6, 1.6), (-1.6, -1.6), (1.6, -1.6)]
     free = [f"{i}:{x}:{y}" for i, (x, y) in zip(ids, ring)]
     rest = json.dumps(json.dumps({"do": "rest"}))
-    wander = json.dumps(json.dumps({"do": "wander"}))
+    home = json.dumps(json.dumps({"do": "goto", "target": "home"}))
+    doing = "sql|SELECT id, since_ms, until_ms FROM doing WHERE " + " OR ".join(f"id = {i}" for i in ids)
     syncs = ['setup=set_world_law|"fov_on"|"false";place_at|{me}|420.5|255.5;set_weather|false|900',
              "noon=sql|UPDATE world SET epoch_ms = {epoch_at:12} WHERE id = 0",
              "sit=" + ";".join(f"set_behavior|{i}|{rest}" for i in ids),
-             "up=" + ";".join(f"set_behavior|{i}|{wander}" for i in ids),
-             # Since iter-11's needs pacing a new graph does not end a resting resident's rest
-             # (wander or goto home: still seated 47 s later, 2026-11-19); a placement does, so
-             # each is put back on its own tile and gets up where it sat.
-             "go=refree"]
+             "held0=" + doing, "held1=" + doing,
+             "up=" + ";".join(f"set_behavior|{i}|{home}" for i in ids)]
+    # Seated from about 4 s after `sit` to `up` about 18 s after it: across the rest renewals at
+    # about 8 and 16 s (the first while the camera is Near between two Far stops), and a
+    # Far → Near → Far → Near zoom.
     plan = ("ready;sync:noon;sync:setup;wait:2;sync:scene;look:180;cursor:0.5,0.55;wait:3;notches:30;wait:2;dump:standing;shot:00_standing;"
-            "sync:sit;wait:1.6;shot:01_down;wait:2.4;dump:seated;shot:02_seated;wait:3;shot:03_idle;"
-            "notches:-30;wait:2;notches:30;wait:3;dump:rewoken;shot:04_rewoken;wait:3;"
-            "sync:up;sync:go;wait:0.9;shot:05_rising;wait:1.2;shot:06_rising_late;wait:2;dump:up;shot:07_up;wait:1;quit")
+            "sync:sit;wait:1.6;shot:01_down;wait:2.4;dump:seated;shot:02_seated;sync:held0;"
+            "notches:-30;wait:2;notches:30;wait:2.5;shot:03_idle;notches:-30;wait:2;notches:30;wait:3;dump:rewoken;shot:04_rewoken;"
+            "wait:5;dump:renewed;shot:04b_renewed;sync:held1;"
+            "sync:up;wait:0.9;shot:05_rising;wait:1.2;shot:06_rising_late;wait:2;dump:up;shot:07_up;wait:1;quit")
     arms = {}
     # One variant sitter's hips and feet, frame by frame (the feet log): its seat's height, and
     # each ground one-shot's peak speed, to compare with the originals' (seat_segments).
@@ -3637,15 +3983,28 @@ def seat(run, c):
         out, code, text = drive(run, name, plan, free=free, syncs=syncs, env=dict(env, LIVING_GAME_PERF="seat,springwake", LIVING_GAME_FRAMES=frames, LIVING_GAME_FPS_CAP="0"))
         c.check(s, f"{arm}: client ran and joined", code == 0, text[-300:])
         L = log(out)
-        sat = sorted({int(m) for m in re.findall(r"seat: #(\d+) sits on the ground", L)} & set(ids))
+        up, after_up = next_sync_wait(L, 0, {os.path.join(out, "up.go"): "up"})
+        sat = sorted({int(m) for m in re.findall(r"seat: #(\d+) sits on the ground", L[:after_up])} & set(ids))
         plays = {int(i): clip for i, clip in re.findall(r"seat: #(\d+) sits on the ground .*?, plays (\S+)", L)}
-        rose = sorted({int(m) for m in re.findall(r"seat: #(\d+) is off the ground", L)} & set(ids))
+        rose = sorted({int(m) for m in re.findall(r"seat: #(\d+) is off the ground", L[after_up:])} & set(ids))
         lows = [(n, int(k), float(v)) for n, k, v in re.findall(r"seat: (.+?) \S+: (\d+) cloth joints, lowest tail (-?[\d.]+|inf) mm", L) if v != "inf"]
         # The seated characters' springs waking as the camera comes back near (their entities, from
         # their seat reports), after they sat.
         seated_e = {e for _, e, k, _ in re.findall(r"seat: (.+?) (\S+): (\d+) cloth joints, lowest tail (-?[\d.]+|inf) mm", L) if int(k) > 0}
-        after = L.split("live script: dump:seated", 1)[-1]
-        wakes = [(e, float(a), float(b)) for e, a, b in re.findall(r"springwake: \S+ (\S+) \(\d+ joints, settle \d+\): largest turn ([\d.]+)° at waking, ([\d.]+)° a frame after", after) if e in seated_e]
+        # Seated: from the seated dump to the `up` request.
+        seated_log = L.split("live script: dump:seated", 1)[-1].split("live script: sync:up (", 1)[0]
+        wakes = [(e, float(a), float(b)) for e, a, b in re.findall(r"springwake: \S+ (\S+) \(\d+ joints, settle \d+\): largest turn ([\d.]+)° at waking, ([\d.]+)° a frame after", seated_log) if e in seated_e]
+        # The authority's rest rows while they sat: a renewal extends the row in place (doing-renew:
+        # the same `since_ms`, a later `until_ms`), or, on older modules, writes a new `since_ms`.
+        sc = json.load(open(os.path.join(out, "scene.json"))) if os.path.exists(os.path.join(out, "scene.json")) else {}
+        held = [{r["id"]: (r["since_ms"], r["until_ms"]) for r in ((sc.get("snaps") or {}).get(k) or [{}])[0].get("rows", [])} for k in ("held0", "held1")]
+        renewed = sorted(i for i in sat if i in held[0] and i in held[1] and (held[0][i][0] != held[1][i][0] or held[1][i][1] > held[0][i][1]))
+        # Getting up after `sit` (residents resting already when the scene places them get up then).
+        sit_at = L.find("live script: sync:sit (")
+        gets_up = [(int(i), m.start()) for m in re.finditer(r"seat: #(\d+) gets up", L) for i in [m.group(1)] if int(i) in ids and m.start() > sit_at >= 0]
+        early_up = sorted({i for i, at in gets_up if at < after_up})
+        t_seated, t_far1, t_up = script_t(L, "dump:seated"), script_t(L, "notches:-30"), script_t(L, "sync:up")
+        t_far2 = next((float(x) for x in re.findall(r"live script: notches:-30 \(me .*?, t ([\d.]+) s\)", L)[1:2]), None)
         springs = [float(x) for x in re.findall(r"springs: .*?([\d.]+) µs CPU a character-step", L)]
         rows = []
         if os.path.exists(frames):
@@ -3662,14 +4021,26 @@ def seat(run, c):
         d = dump(out, "seated") or {}
         seen = {x["id"] for x in d.get("seen") or []}
         c.check(s, f"{arm}: a skirted and a coated resident sit on the ground in view", arms[arm]["skirt"] and arms[arm]["coat"] and set(sat) <= seen, f"sat {sat} (skirt {arms[arm]['skirt']}, coat {arms[arm]['coat']}); in view {sorted(seen)}")
-        c.check(s, f"{arm}: everyone who sat got up and was let go of the ground", sat and set(rose) == set(sat), f"sat {sat}, off the ground {rose}")
+        c.check(s, f"{arm}: everyone who sat got up and was let go of the ground after up", up == "up" and sat and rose == sat, f"sat {sat}, off the ground {rose}")
         variant = [i for i in sat if want.get(i) != "sit_ground"]
         c.check(s, f"{arm}: each sitter plays the seated loop its line selects (a variant for {len(variant)}, the original for {len(sat) - len(variant)})",
                 sat and variant and len(variant) < len(sat) and all(plays.get(i) == want.get(i) for i in sat), f"plays {arms[arm]['plays']}, selected {arms[arm]['selected']}")
         if arm == "on":
             cloth = [x for x in lows if x[1] > 0]
             c.check(s, "on: seated cloth tails stay on the ground's side (at most 5 mm under it)", cloth and min(v for _, _, v in cloth) >= -5.0, f"{len(cloth)} reports; lowest {min((v for _, _, v in cloth), default=None)} mm")
-        c.check(s, f"{arm}: waking seated (far and back near) settles without a swing", wakes and max(b for _, _, b in wakes) < 10.0, f"{wakes}")
+        c.check(s, f"{arm}: the authority renewed the sitters' rest while they sat (its doing row extended or new between held0 and held1)", renewed, f"held0 {held[0]}, held1 {held[1]}")
+        if watch is not None and arm == "on":
+            n, off = seated_frames(feet, watch, t_seated, t_up)
+            arms[arm]["seated_off_loop"] = off[:40]
+            c.check(s, f"on: #{watch} stays seated across the rest renewal (no one-shot, hips under {SEATED_HIPS_M} m, seated dump to up)",
+                    n > 100 and watch in renewed and not off, f"{n} frames; renewed {renewed}; off the loop {off[:6]}")
+            n2, off2 = seated_frames(feet, watch, t_far1, (t_far2 or 0) + 2.0)
+            c.check(s, f"on: #{watch} stays seated across Far → Near → Far", n2 > 50 and t_far2 and not off2, f"{n2} frames, t {t_far1}–{t_far2}; off the loop {off2[:6]}")
+        arms[arm]["gets_up"] = [i for i, _ in gets_up]
+        c.check(s, f"{arm}: every sitter gets up once, after up (`seat: #ID gets up`), none while seated", sat and early_up == [] and sorted(i for i, _ in gets_up) == sat,
+                f"gets up {[i for i, _ in gets_up]} (before up {early_up}), sat {sat}")
+        c.check(s, f"{arm}: seated springs wake (Far → Near) where they were drawn (under 5° at waking) and settle without a swing (under 10° a frame)",
+                wakes and max(a for _, a, _ in wakes) < 5.0 and max(b for _, _, b in wakes) < 10.0, f"{wakes}")
     evidence = os.path.join(ROOT, ".local/living/verify", run, "ui", "seat.json")
     json.dump(arms, open(evidence, "w"), indent=1)
     on, off = arms.get("on", {}), arms.get("off", {})

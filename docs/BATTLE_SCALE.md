@@ -841,3 +841,118 @@ The eight-hour scenario levels off at about 5,620–5,880 bodies and projects 2.
 A 30-minute A B A B replay compared C2 with bounded R1/R2 and the transaction-local scene cache. In the quieter pair at minute 27, C2 and cached R1/R2 held 2,812 and 2,668 remains, respectively. Cached R1/R2 reached 45.6 versus 26.7 ticks/s and 291 versus 661 late ticks in a 30-second window. Noticing fell from 210.70 to 90.89 ms/s and `percept:saw` from 4,012.8 to 227.1/s. Scene construction fell from 41.23 to 34.16 ms/s with a 6.98% selection-cache hit rate. The first pair missed the late-tick criterion under unequal host load. Both pairs kept the noticing and sight-event gains.
 
 The updated eight-hour sensitivity reaches about 5,500–6,050 bodies, 2.8–3.0 MB of seen-range pages, and 71–80 ms/s of cached scene construction at fixed request and hit rates. [The complete four-arm table, pause audit, and projection assumptions](SEEN_REMAINS.md#interleaved-scene-cache-replay) are in the design note.
+
+## After frame-views (2026-11-19)
+
+Measured on Spark (20 logical CPUs) at main `3df6e1f10def9260c70d1f232f3e2b0b3a3c839a` on a private SpacetimeDB 2.14.1 instance. One `battle.lock` hold covers the series. The `battle_diag.py` fixture uses seed `island`, 310 ambient characters at publish, 200 starting AI fighters packed around (406.5, 237.5), and 16 extra AI walkers. The keeper targets 200 fighters with replacements staged at the battle site and a minimum 0.1 s refill interval. Death and replacement can leave vacancies. All runs used the real mind service with loopback canned replies, zero external model calls, and Neo4j disabled.
+
+### Staging 216 SDK viewers
+
+Pause the fresh scratch world as its owner with `set_paused(true)` before spawning and placing the combatants. Keep the pause on while starting `gate-load players` with 216 distinct SDK identities assigned the `walk` role. Each SDK identity calls `join("RemeasureViewNNN")` and reports its character ID in the `joined` event. For sorted player index `i = 0..215`, call the generic owner reducer `place_at(id, site_x + 10 cos(2πi/216), site_y + 10 sin(2πi/216))`. On island the site was `(406.5, 237.5)`. The requested ring is 10 m from that site. In all four runs the snapped positions were 9.49–15.30 m from the site, with a median of 11.70 m. The positions are saved in `viewer-placement.json`. Send `placed` to the probe and wait for `ready` from its static window subscriptions before calling `set_paused(false)`. Leave the probe parked at its `go` barrier so its SDK threads receive updates without sending movement. Defaults use `tiers=true, cues=true`. The both-laws-off arm sets `cue_transport_on=false` and `near_tier_on=false` through `set_world_law`, and the probe uses `tiers=false, cues=false`.
+
+The pause protects placement. Once scoring starts, the observers can die under ordinary combat rules, which adds no heal traffic or invulnerability rule. All 216 identities stayed connected in each dense arm. At the start of scoring, after 20 s of warmup, 200–204 viewer characters were alive. At the end, 137–147 were alive. The 10 m radius is measured from the site, so it permits some viewers to be within 8 m of individual fighters. The near tier is capped at 32 creatures and ordinarily uses an 8 m radius around each viewer, with engaged creatures prioritized. The opening and closing census intervals below show how the changing live workload affects the 120 s average.
+
+Before deleting an owned scratch world, call `set_paused(true)`, read `SELECT epoch_ms, paused FROM world` as its owner, and require the recorded epoch and `paused = true`. The verify cleanup harness checks the database identity and world epoch, confirms the pause, waits two seconds for scheduled work to settle, deletes the scratch database, then verifies the name is gone. Dev-box reproduced a SpacetimeDB 2.14.1 scratch-server crash when deleting a database during a scheduled write (`local durability: actor vanished`, `durability/src/imp/local.rs:358`).
+
+### Battle results
+
+For each viewer count the arms ran in order defaults, off, defaults, off. The launcher admitted each run at a one-minute host load of at most 10. The observed load during scoring appears in the table. Each profile followed a 20 s live warmup and lasted about 120 s. Defaults used the shipped cue budget of 3,000 rows shrinking to 300. The 0 arm still included the real mind service's SDK connection.
+
+Tick cadence is from the authority stats counter. Tick duration and the share over 16.667 ms use the WASM spans. The whole-call mean includes view refresh, commit and subscription evaluation. Profile phase costs are milliseconds per wall second. Frame budget rows and cue inserts use the authority counters. With tiers on, the budget includes a fixed 16-row charge per served frame. Frame copy inserts are the server's row deltas for the six `motion_*`, `fighter_*`, and `doing_*` seen/near tables. View time is the server's view-rebuild counter including materialization. The player subtotal excludes the mind's `my_deliberations` view. Subscription traffic is the database-wide update byte counter including the mind. WebSocket payloads use the corresponding sent-message byte histogram, including all message types. WASM memory is the sum of the database's allocated linear memory across instances. Commitlog growth is the change in apparent bytes on disk across the window. Subscription deltas include durable view results and transient cue inserts under the pinned implementation. [SpacetimeDB subscriptions](https://spacetimedb.com/docs/clients/subscriptions/), [views](https://spacetimedb.com/docs/functions/views/), [event tables](https://spacetimedb.com/docs/tables/event-tables/), [performance guidance](https://spacetimedb.com/docs/tables/performance/).
+
+| SDK viewers / arm / rep | Living viewers start → end (min) | Active fighters min / median / max | Host 1m load | Ticks/s | WASM tick p50 / p95 / p99 ms | WASM >16.667 ms | Whole tick mean ms |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 0 defaults 1 | 0 → 0 (0) | 193 / 200 / 200 | 11.7–14.6 | 49.6 | 7.37 / 19.03 / 27.21 | 9.2% | 10.04 |
+| 0 off 1 | 0 → 0 (0) | 195 / 200 / 200 | 4.7–8.3 | 52.2 | 6.32 / 18.14 / 26.26 | 6.5% | 8.93 |
+| 0 defaults 2 | 0 → 0 (0) | 195 / 200 / 200 | 4.0–6.7 | 52.8 | 6.31 / 17.57 / 25.62 | 6.1% | 8.85 |
+| 0 off 2 | 0 → 0 (0) | 193 / 200 / 200 | 3.1–4.6 | 52.1 | 6.26 / 17.91 / 24.97 | 6.8% | 8.95 |
+| 216 defaults 1 | 200 → 137 (137) | 191 / 200 / 200 | 2.2–3.5 | 35.8 | 8.17 / 40.30 / 81.87 | 12.9% | 18.69 |
+| 216 off 1 | 200 → 139 (139) | 191 / 200 / 200 | 4.0–7.2 | 33.3 | 8.68 / 41.64 / 83.62 | 17.6% | 20.04 |
+| 216 defaults 2 | 204 → 146 (146) | 185 / 200 / 200 | 6.7–10.4 | 29.7 | 10.29 / 49.53 / 97.46 | 19.8% | 23.33 |
+| 216 off 2 | 200 → 147 (147) | 189 / 200 / 200 | 5.6–7.5 | 35.7 | 8.05 / 38.06 / 80.94 | 13.0% | 18.32 |
+
+| SDK viewers / arm / rep | Combat | Activity | Wakes | Fold | Slots | Perception | Frames | Cues |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 0 defaults 1 | 162.9 | 69.1 | 107.2 | 35.3 | 59.0 | 0.0 | 1.5 | 0.8 |
+| 0 off 1 | 157.4 | 62.0 | 96.0 | 33.5 | 58.4 | 0.0 | 0.5 | 0.0 |
+| 0 defaults 2 | 154.1 | 61.3 | 97.1 | 32.3 | 59.3 | 0.0 | 1.5 | 0.7 |
+| 0 off 2 | 155.5 | 62.8 | 94.3 | 32.6 | 56.1 | 0.0 | 0.5 | 0.0 |
+| 216 defaults 1 | 91.4 | 69.0 | 97.8 | 39.4 | 42.7 | 71.0 | 30.5 | 3.9 |
+| 216 off 1 | 87.9 | 73.6 | 104.7 | 40.8 | 41.8 | 65.8 | 27.0 | 0.0 |
+| 216 defaults 2 | 81.7 | 72.9 | 104.0 | 42.1 | 37.5 | 79.0 | 31.9 | 4.0 |
+| 216 off 2 | 88.1 | 67.7 | 97.8 | 38.4 | 44.0 | 67.6 | 28.1 | 0.0 |
+
+| SDK viewers / arm / rep | Frame budget rows / copy inserts per s | Cue rows/s | View rebuild ms/s total / player | Subscription update kB/s | WS payload kB/s | WASM MiB start → end | Commitlog Δ MB / MB/s |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 0 defaults 1 | 0 / 0 | 0 | 44.8 / 0.0 | 929.3 | 263.2 | 110.5 → 110.5 | 185.5 / 1.43 |
+| 0 off 1 | 0 / 0 | 0 | 41.0 / 0.0 | 881.2 | 249.1 | 114.7 → 114.7 | 178.4 / 1.38 |
+| 0 defaults 2 | 0 / 0 | 0 | 40.2 / 0.0 | 827.0 | 237.4 | 110.5 → 110.5 | 170.8 / 1.32 |
+| 0 off 2 | 0 / 0 | 0 | 43.0 / 0.0 | 892.1 | 253.9 | 114.5 → 114.5 | 180.8 / 1.39 |
+| 216 defaults 1 | 75,367 / 1,502 | 1,040 | 165.9 / 139.8 | 2,423.4 | 825.0 | 110.4 → 110.4 | 445.0 / 3.47 |
+| 216 off 1 | 76,939 / 1,284 | 0 | 164.8 / 136.8 | 2,370.1 | 695.2 | 114.6 → 114.6 | 429.7 / 3.36 |
+| 216 defaults 2 | 84,990 / 1,571 | 1,072 | 179.5 / 154.8 | 2,710.9 | 898.9 | 110.5 → 110.5 | 488.3 / 3.81 |
+| 216 off 2 | 81,490 / 1,315 | 0 | 166.8 / 140.1 | 2,334.4 | 687.8 | 114.5 → 114.5 | 430.3 / 3.34 |
+
+With zero SDK viewers, neither arm writes frame or cue rows. The three quieter windows were within 0.7 ticks/s of each other (52.1–52.8). The fourth was 49.6 ticks/s with the highest host load of the battle series. Combat led the WASM phases at 154–163 ms/s, followed by wakes at 94–107 ms/s.
+
+All 216 SDK connections remained open in the dense arms. The living census fell from 200–204 at the start of profiling to 137–147 at its end. In addition, the median fighter count within 15 m of the site was 148–165, while the median active fighter count across the world was 200 in every window. The shorter census intervals below use the stats snapshots closest to 40 s from each end. The opening intervals isolate the denser part of the sampled battle.
+
+| Arm / rep | Opening census interval | Closing census interval |
+| --- | --- | --- |
+| defaults 1 | 12.1 ticks/s over 42.0 s, 200 → 142 living | 53.8 ticks/s over 42.0 s, 140 → 137 living |
+| off 1 | 12.2 ticks/s over 38.0 s, 200 → 147 living | 52.0 ticks/s over 40.0 s, 144 → 139 living |
+| defaults 2 | 9.3 ticks/s over 39.9 s, 204 → 157 living | 48.4 ticks/s over 40.0 s, 148 → 146 living |
+| off 2 | 12.3 ticks/s over 38.9 s, 200 → 154 living | 52.4 ticks/s over 40.0 s, 149 → 147 living |
+
+Defaults and off overlap in the dense full-window cadence. The paired defaults-minus-off differences were +2.5 and −6.0 ticks/s. The second defaults run retained more living viewers through most of the opening interval and reached a higher host load. Defaults emitted 1,040–1,072 cue rows/s and used 19–31% more WebSocket payload bandwidth in the paired runs. Commitlog growth was 3.47–3.81 MB/s on defaults and 3.34–3.36 MB/s with both laws off. Player view rebuilds were 140–155 ms/s on defaults and 137–140 ms/s with both laws off. In both arms `seen_characters` was the most expensive view at 59–67 ms/s. Perception alone used 66–79 ms/s with SDK viewers and under 0.1 ms/s without them. The 120 s averages reflect both the crowded opening and the less dense closing interval.
+
+### Earlier measurements
+
+| Reference | 0 SDK viewers | High-viewer case | Workload difference |
+| --- | ---: | ---: | --- |
+| [Battle-cheap sustained battle](#acceptance-second-quiet-window-2026-11-12-18341956-utc) | 45.8 ticks/s, 17.7% of WASM ticks over 16.7 ms, median window p99 28 ms | — | 15 minutes of refills, no mind service |
+| Status-profile archive, main `497f75d1` plus timing | 45.7–48.9 ticks/s | 10.5–10.6 ticks/s, 219–221 ms/s view rebuild | 40 s profiles, no mind, stationary ring with falling living counts and the perception-load query set |
+| [Dev-box frame-views](TICK_RATE.md#post-review-series-acceptance) | 59.95 defaults, 59.98 prior main | 1.87–2.17 defaults, 2.77–2.84 prior main | Zero used `spawn_battle`; 216 used 200 player fighters and 16 player walkers |
+| [Dev-box battle-viewers](BATTLE_VIEWERS.md#where-the-time-goes-main-216-player-fighters-within-9-m-120-s) | — | About 540 ms/s in named per-viewer view rebuilds on prior main | A dense player-controlled battle |
+
+The current zero-viewer results were above the historical sustained 45.8 ticks/s and the 45.7–48.9 ticks/s in the status profile. The current opening 216-connection intervals bracket the status profile's 10.5–10.6 ticks/s. The status archive's 216-connection arms sent 850–889 kB/s of WebSocket payload over about 40 s. Current rates of 688–899 kB/s average over 120 s plus the surrounding measurement reads. The faster closing intervals explain much of the increase in full-window cadence relative to the shorter profile. Dev-box's player fighters kept the view workload in the battle itself and provide the stronger dense-view comparison.
+
+### Fast-lane delivery
+
+Two 10-minute runs used frame-views defaults and zero player SDK viewers, with `--fast-lane --fake-fast-patch --keep-plans` and a canned one-second fast reply. The labelled combat branch stays in place for patch installation. The local timing commit `e81e4d092525859f0f2ca596c07974e59454a150` applies the fast-path instrumentation from `input-latency` `d3d93a34` to the measured main revision. The mind used a private build of the pinned Rust SDK 2.14.1 with the receipt marker from the earlier experiment. This patch is outside the report branch. `just living-check` passed on the timing source before the two instrumented release binaries were built.
+
+The trace joins messages by actor and ask issue timestamp on the same host. WebSocket receipt is the userspace timestamp for the complete message before SDK decompression and decode. Write to receipt includes commit, delta evaluation, server queues and transport. Confirmed installs require an authority install marker and a successful mind result. Values are p50 / p90 / p95 in ms with the number of matched samples in parentheses. Missing late stages remain in the raw log and the denominators. The old comparison used a 30 m refill origin with a 0.5 s gap, so its active battle roster was smaller. [Previous input-latency measurements](https://github.com/devteapot/slop-art-online/blob/d3d93a34c7810c81ed10f766e096b5296d57c00a/docs/INPUT_LATENCY.md#spark-measurements-2026-11-19).
+
+| Run | Measured seconds | Active fighters min / median / max | 30 s profile ticks/s | Host 1m load | Issued / receipt / pickup / confirmed install |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 1 | 600.3 | 184 / 195 / 200 | 26.3–34.4 | 3.8–8.3 | 772 / 771 / 747 / 693 |
+| 2 | 600.1 | 187 / 195 / 200 | 27.8–35.0 | 3.5–12.9 | 811 / 811 / 792 / 731 |
+
+| Stage | Previous Spark | Run 1 | Run 2 |
+| --- | ---: | ---: | ---: |
+| Issue → ask write | 1.95 / 8.58 / 15.06 (773) | 2.13 / 8.38 / 14.45 (772) | 2.07 / 9.10 / 14.47 (811) |
+| Ask write → WebSocket receipt | 24.11 / 122.34 / 313.06 (773) | 26.71 / 61.70 / 112.59 (771) | 24.79 / 60.36 / 116.27 (811) |
+| WebSocket receipt → SDK callback | 10 / 237.60 / 479.20 (773) | 12.00 / 175.00 / 428.00 (771) | 13.00 / 184.00 / 338.50 (811) |
+| SDK callback → mind dispatch | 0 / 3,727 / 10,630 (761) | 0.00 / 3,798.60 / 7,830.70 (747) | 0.00 / 3,050.00 / 7,716.00 (791) |
+| Mind dispatch → task pickup | 0 / 1 / 2 (761) | 0.00 / 0.00 / 1.00 (747) | 0.00 / 0.00 / 1.00 (791) |
+| Task pickup → confirmed install | 1,171.49 / 2,038.33 / 2,487.94 (684) | 1,191.28 / 1,701.99 / 1,941.16 (693) | 1,199.34 / 1,800.49 / 2,008.71 (731) |
+| Issue → task pickup | 77 / 3,937 / 11,389 (764) | 62.00 / 4,695.80 / 8,047.40 (747) | 58.00 / 3,347.30 / 8,190.45 (792) |
+| Issue → confirmed install | 1,255 / 3,990 / 6,392 (684) | 1,313.47 / 4,797.01 / 7,132.15 (693) | 1,342.34 / 3,958.27 / 7,442.63 (731) |
+| Model queue → scheduler grant | 0 / 58.40 / 108.60 (739) | 0.00 / 71.20 / 108.95 (728) | 0.00 / 67.00 / 104.00 (772) |
+| Scheduler grant → fake reply and journal | 1,004 / 1,237.20 / 1,487.20 (739) | 1,003.00 / 1,069.60 / 1,214.95 (728) | 1,003.00 / 1,113.10 / 1,319.60 (772) |
+
+| Run | Issue count | Interior gaps ≥2 s | Longest gap start / length (s) | Receipt / callback / pickup | Experience seconds | Tick advance in sampled gap | Max queued / ready |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Previous Spark | 773 | 4 | 440.66 / 5.30 | 14 / 1 / 0 | 5 | 126 | 171 / 171 |
+| 1 | 772 | 4 | 331.23 / 3.54 | 20 / 1 / 0 | 4 | 142 | 197 / 197 |
+| 2 | 811 | 2 | 344.63 / 2.34 | 3 / 0 / 0 | 2 | 82 | 111 / 111 |
+
+Issue-to-pickup p95 fell from 11.39 s to 8.05–8.19 s. The p90 moved in opposite directions across replicates. Callback-to-dispatch remained the largest measured component of the tail at 7.72–7.83 s p95, down from 10.63 s. The SDK receipt-to-callback p95 was 339–428 ms against 479 ms. Issue-to-install p95 among confirmed installs rose from 6.39 s to 7.13–7.44 s. Pickup and install have different denominators. The study does not isolate an effect of frame-views on these timing changes because the fast runs have no player SDK viewers and the historical refill policy differs.
+
+The two longest current grant gaps were 3.54 s and 2.34 s against 5.30 s previously. The authority continued ticking and fast frames reached the socket during both current gaps, while no fast task pickup was recorded. Scheduler probes showed ready work with available capacity during the gaps. They establish overlapping delays in delivery and mind processing, with the cause of the grant gaps unresolved. The archive includes all gap intervals, per-second event counts, candidate probes and committed-tick samples.
+
+### Evidence and coverage
+
+The foreground series held `battle.lock` from 20:21:50 to 21:35:11 CET on 2026-11-19. The ten scratch worlds advanced their tick counters in every scored window. Verify cleanup confirmed the pause before deletion, and a subsequent lookup returned HTTP 404 for each database. The private server exited with code 0 after SIGINT to its PID. Minimum sampled MemAvailable was 90.9 GiB and minimum sampled disk free was 99.9 GiB. The archive `~/slop-evidence/battle-remeasure-2026-11-19.tar.zst` and its SHA-256 sidecar contain the raw module logs, SDK events, battle census, server metrics, fake-model journal, timing patch, build and cleanup evidence, and rollups.
+
+The series covers short profiled battle windows, two 10-minute default fast-path traces, and resident viewers that can die while connected. Sustained 216 living viewers, fast delivery under 216 SDK viewers, rendered-client responsiveness, a network RTT fixture, external providers, and the 30-minute and eight-hour performance gates remain outside this measurement.

@@ -105,6 +105,10 @@ fn laws() {
         // struck it, in a fight still on, is within `wake_reach` (`sleep_check`, every
         // controller alike).
         alert_after_hit_s: 15.0, alert_while_attacker_near: true,
+        // A rest, a sleep, work, eating or play that ends well is still seen until the body's
+        // next look, which takes it up again or turns to something else: no blink of doing
+        // nothing between two rests (doing-renew). False: seen doing nothing until then.
+        renew_in_place: true,
         // Who a behaviour graph's `relation: "stranger"` filter matches (docs/STRANGERS.md).
         // Off: anyone one has no relation row about (feelings the mind wrote), or a relation
         // labelled "stranger". On: anyone whose name one does not know, the rule that names
@@ -143,6 +147,14 @@ fn laws() {
         // `notice_delta_check` (a diagnostic) checks that every one skipped was already familiar.
         notice_delta: true, notice_delta_check: false,
         seen_ranges: true, seen_ranges_check: false,
+        // How what is near a player, or fighting it, reaches the player's client: as cues at once,
+        // behind near copies that follow every 500 ms (on, since frame-views' acceptance), or at the
+        // player's frames (off). Delivery only: the client ends on the same rows either way
+        // (docs/PERCEPTION.md).
+        cue_transport_on: true,
+        // Whether what a player sees is split into what is near it and the rest, each delivered
+        // apart (on), or delivered together (off; with cue_transport_on off too, as before).
+        near_tier_on: true,
         // A bystander (one who sees an event it is not party to) is woken by what it sees at most
         // once per `witness_wake_ms` (docs/BATTLE_SCALE.md); what it sees is still told at once,
         // in full. 0: woken by each sight, as before.
@@ -3171,6 +3183,8 @@ fn law_about(l, name) {
         "alarm_cells_check" => "a diagnostic: each kept alarm answer is worked out afresh and compared",
         "status_parts" => "how a body is, is worked out part by part, each part again only when something it reads has changed",
         "status_parts_check" => "a diagnostic: how a body is, is also worked out whole and compared",
+        "near_tier_on" => if l.near_tier_on { "what is near a player is kept apart from the rest of what it sees, and follows on its own" } else { "what a player sees is kept together" },
+        "cue_transport_on" => if l.cue_transport_on { "what is near a player, or fighting it, reaches the player's screen at once" } else { "what is near a player reaches the player's screen with the rest of what it sees" },
         "warmth_check" => "a diagnostic: warmth is worked out both ways and compared",
         "scene_lazy" => "what is in sight is worked out as far as what one looks for needs",
         "scene_lazy_check" => "a diagnostic: each look is also worked out from all that is in sight and compared",
@@ -3192,6 +3206,7 @@ fn law_about(l, name) {
         "fast_lane_stale_s" => `a reason for one that waits ${short(l.fast_lane_stale_s)} s is let go`,
         "force_outcomes" => if l.force_outcomes { "whoever strikes, shoots or casts learns how it came out, as far as they see" } else { "a blow, shot or bolt tells its maker how it came out only when it fails, or for a few skills" },
         "alert_after_hit_s" => `a body struck within the last ${short(l.alert_after_hit_s)} s cannot fall asleep`,
+        "renew_in_place" => if l.renew_in_place { "a rest, a sleep or work is still seen while it is taken up again" } else { "between one rest, sleep or piece of work and the next, nothing is seen for a moment" },
         "alert_while_attacker_near" => if l.alert_while_attacker_near { "nor while the one who struck it is close and the fight is on" } else { "even with the one who struck it close by" },
         "gaze_on" => "whether creatures can change their gaze band",
         "cover_sight_on" => "whether cover hides people",

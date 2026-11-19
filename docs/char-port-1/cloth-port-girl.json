@@ -1,0 +1,131 @@
+{
+ "jersey_coat-m|coat_1-m|rest": {
+  "most": -0.7728196668196209,
+  "frames": 0,
+  "of": 1,
+  "at": 0.0,
+  "bone": "J_Bip_C_Neck",
+  "out": 0
+ },
+ "jersey_coat-m|trousers-m|rest": {
+  "most": -1.0,
+  "frames": 0,
+  "of": 1
+ },
+ "trousers-m|coat_1-m|rest": {
+  "most": -1.0,
+  "frames": 0,
+  "of": 1
+ },
+ "jersey_coat-m|coat_1-m|idle": {
+  "most": -0.7128147053554782,
+  "frames": 0,
+  "of": 12,
+  "at": 1.49,
+  "bone": "J_Bip_C_Neck",
+  "out": 0
+ },
+ "jersey_coat-m|trousers-m|idle": {
+  "most": -1.0,
+  "frames": 0,
+  "of": 12
+ },
+ "trousers-m|coat_1-m|idle": {
+  "most": -1.0,
+  "frames": 0,
+  "of": 12
+ },
+ "jersey_coat-m|coat_1-m|walk": {
+  "most": -0.7390533537986632,
+  "frames": 0,
+  "of": 12,
+  "at": 0.67,
+  "bone": "J_Bip_C_Neck",
+  "out": 0
+ },
+ "jersey_coat-m|trousers-m|walk": {
+  "most": -1.0,
+  "frames": 0,
+  "of": 12
+ },
+ "trousers-m|coat_1-m|walk": {
+  "most": -1.0,
+  "frames": 0,
+  "of": 12
+ },
+ "jersey_coat-m|coat_1-m|run": {
+  "most": -0.7143851093490785,
+  "frames": 0,
+  "of": 12,
+  "at": 0.5,
+  "bone": "J_Bip_C_Neck",
+  "out": 0
+ },
+ "jersey_coat-m|trousers-m|run": {
+  "most": -1.0,
+  "frames": 0,
+  "of": 12
+ },
+ "trousers-m|coat_1-m|run": {
+  "most": -1.0,
+  "frames": 0,
+  "of": 12
+ },
+ "jersey_coat-m|coat_1-m|sit_idle": {
+  "most": -0.7600058855852795,
+  "frames": 0,
+  "of": 12,
+  "at": 0.0,
+  "bone": "J_Bip_C_Neck",
+  "out": 0
+ },
+ "jersey_coat-m|trousers-m|sit_idle": {
+  "most": -1.0,
+  "frames": 0,
+  "of": 12
+ },
+ "trousers-m|coat_1-m|sit_idle": {
+  "most": -1.0,
+  "frames": 0,
+  "of": 12
+ },
+ "jersey_coat-m|coat_1-m|sit_ground": {
+  "most": -0.7046279909855275,
+  "frames": 0,
+  "of": 12,
+  "at": 4.65,
+  "bone": "J_Bip_C_Neck",
+  "out": 0
+ },
+ "jersey_coat-m|trousers-m|sit_ground": {
+  "most": 0.9813117213247508,
+  "frames": 0,
+  "of": 12,
+  "at": 3.32,
+  "bone": "J_Bip_C_Hips",
+  "out": 0
+ },
+ "trousers-m|coat_1-m|sit_ground": {
+  "most": -1.0,
+  "frames": 0,
+  "of": 12
+ },
+ "coat_1-m|chair|sit_idle": {
+  "most": 116.77780347224245,
+  "below": 75.77296291107194,
+  "behind": 116.77780347224245,
+  "vertices": 518
+ },
+ "coat_1-m|terrain|sit_ground": {
+  "most": 0.0,
+  "below": 0.0,
+  "behind": 0.0,
+  "vertices": 0
+ },
+ "coat_1-m|ground|sit_ground": {
+  "most": 0.0,
+  "below": 0.0,
+  "behind": 0.0,
+  "vertices": 0
+ }
+}

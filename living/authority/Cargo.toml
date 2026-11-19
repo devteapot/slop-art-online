@@ -7,9 +7,11 @@ edition = "2021"
 crate-type = ["cdylib"]
 
 [dependencies]
-# `unstable` (SpacetimeDB 2.14.1) is needed for procedures: `mind_act_checked` and `mind_reach`
-# (living/authority/src/mind.rs) return values to the mind, which a reducer cannot. The 2.14.1
-# docs mark Rust procedures unstable: re-test both on any SpacetimeDB upgrade (docs/LIVING_CORE.md).
+# `unstable` (SpacetimeDB 2.14.1) is needed for two things, both to re-test on any SpacetimeDB
+# upgrade (docs/LIVING_CORE.md):
+# - procedures: `mind_act_checked` and `mind_reach` (living/authority/src/mind.rs) return values to
+#   the mind, which a reducer cannot; the 2.14.1 docs mark Rust procedures unstable;
+# - row-level security (`client_visibility_filter`) for the cue event tables (frame.rs; docs/TICK_RATE.md).
 spacetimedb = { workspace = true, features = ["unstable"] }
 log = "0.4"
 serde = { workspace = true }

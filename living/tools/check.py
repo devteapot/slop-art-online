@@ -102,6 +102,10 @@ STEPS = [
     # harness installing another script over them would take away (fix-laws).
     {"name": "seed-laws", "lane": "debug", "packages": ["living-authority"], "dirs": ["debug"],
      "cmd": ["cargo", "test", "--manifest-path", "living/Cargo.toml", "-p", "living-authority", "--lib", "seed::tests::a_seeds_laws_are_in_force_after_init"]},
+    # The frames' delivery (frame-views): with both delivery laws off the frames take main's path,
+    # and the cue budget keeps every engaged pair first (frame.rs, docs/PERCEPTION.md).
+    {"name": "frame-tests", "lane": "debug", "packages": ["living-authority"], "dirs": ["debug"],
+     "cmd": ["cargo", "test", "--manifest-path", "living/Cargo.toml", "-p", "living-authority", "--lib", "frame::tests"]},
     # The fuel budget gate (docs/LIVING_CORE.md, "Fuel budgets"): the Rhai bench module and
     # sb-host, then gate.py over budgets.json. Its packages' closure is the bench and its
     # fixtures (bench), the module, sb-host with wasmtime's configuration (host/src/main.rs)
@@ -201,6 +205,12 @@ def tree_size(path):
         return 0
 
 
+def remaining_check_cost(target, cold_cost):
+    """Return the remaining build allowance and allocated target size in bytes."""
+    size = tree_size(target) if os.path.isdir(target) else 0
+    return max(2 * GIB, cold_cost - size), size
+
+
 def disk_threshold(target, env):
     def gb(name, default):
         value = int(env.get(name) or default)
@@ -214,8 +224,7 @@ def disk_threshold(target, env):
 
     floor = gb("SLOP_DISK_FLOOR_GB", 45)
     cold_cost = gb("SLOP_CHECK_COST_GB", 18)
-    size = tree_size(target) if os.path.isdir(target) else 0
-    cost = max(2 * GIB, cold_cost * GIB - size)
+    cost, size = remaining_check_cost(target, cold_cost * GIB)
     return floor * GIB + cost, (
         f"{floor} GiB floor + {cost / GIB:.2f} GiB cost "
         f"(max of 2 GiB and {cold_cost} GiB minus {size / GIB:.2f} GiB already in target)"

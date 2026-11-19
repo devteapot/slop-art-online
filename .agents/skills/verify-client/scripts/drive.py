@@ -66,6 +66,8 @@ PRIVATE = ['attention', 'applied_gaze', 'cover_ground', 'fast_ask', 'far_handle'
            'guest', 'judged', 'rhythm',
            # Attention cues a mind wrote (docs/ATTENTION.md): read only by reducers and the owner.
            'cue',
+           # The world's law revision (docs/LAW_OVERRIDE.md): the authority's cache key; `law_override` is public.
+           'law_revision',
            # Handles for figures too far away to make out (far-handle, docs/STRANGERS.md §1): the authority's only.
            'far_handle',
            # A sleeper's waiting reasons (fix-sleep-thinking): the authority's only.
@@ -105,14 +107,18 @@ PRIVATE = ['attention', 'applied_gaze', 'cover_ground', 'fast_ask', 'far_handle'
            # Each person's body sex (sex-1, docs/LIVING_CORE.md "Body sex"): private in every build;
            # a player reads its own through my_sex and perceives others' only as drawn. What each mind
            # remembers of others' bodies (`sex_seen`): the mind service reads it as the owner.
-           'sex', 'sex_seen']
+           'sex', 'sex_seen',
+           # The near tier's copies (frame-views): a player reads them through seen_*_near.
+           'motion_near', 'fighter_near', 'doing_near']
 # Private in the default `scoped` build; public only in a LIVING_PERCEPTION=open build (diagnostics).
 SCOPED = ['body', 'character', 'fighter', 'doing', 'vitals', 'experience', 'place', 'audience',
           'inventory', 'know_how']
 # The per-sender views: what a player perceives and its own state.
 VIEWS = ['seen_bodies', 'seen_characters', 'seen_fighters', 'seen_doing', 'my_body', 'my_fighter', 'my_doing', 'my_characters',
          'my_vitals', 'my_experience', 'my_places', 'my_inventory', 'my_know_how',
-         'my_deliberations', 'my_combat', 'my_readiness', 'my_skill_uses', 'my_records', 'my_offers', 'heard_sounds', 'my_heard', 'my_senses', 'my_senses_v2', 'my_earshot', 'my_act_outcomes', 'my_known_names', 'my_sex']
+         'my_deliberations', 'my_combat', 'my_readiness', 'my_skill_uses', 'my_records', 'my_offers', 'heard_sounds', 'my_heard', 'my_senses', 'my_senses_v2', 'my_earshot', 'my_act_outcomes', 'my_known_names', 'my_sex',
+         # The near and far tiers of the three copy-backed views (frame-views; scripts/cues.py proves them).
+         'seen_bodies_near', 'seen_bodies_far', 'seen_fighters_near', 'seen_fighters_far', 'seen_doing_near', 'seen_doing_far']
 SEEN = ['seen_bodies', 'seen_characters', 'seen_fighters', 'seen_doing']
 # The player's own living character's body, fighter and doing rows (others' come as copies in seen_*).
 BODY = ['my_body', 'my_fighter', 'my_doing']
@@ -270,7 +276,7 @@ class Run:
         self.mode = self.state.get('perception', 'scoped')
         self.results = []
         self.matrix = []
-        self.secrets = [self.state.get('token', '')]
+        self.secrets = [self.state.get(key) for key in ('token', 'token2')]
 
     def check(self, name, okay, evidence, detail='', known=False):
         status = ('XPASS' if okay else 'XFAIL') if known else ('PASS' if okay else 'FAIL')
@@ -298,9 +304,9 @@ class Run:
             self.secrets.append(credential)
         else:
             credential = None
-        value = json.loads(result.stdout)
+        value = json.loads(V.redact(result.stdout, (*self.secrets, token)))
         value['process_exit'] = result.returncode
-        value['sdk_stderr'] = result.stderr
+        value['sdk_stderr'] = V.redact(result.stderr, (*self.secrets, token))
         write(self.directory / (name + '.json'), value)
         if result.returncode:
             raise RuntimeError(f'{name} probe failed; see {name}.json')
@@ -310,10 +316,11 @@ class Run:
         code, body = V.http(f"/v1/database/{self.state['db']}/call/{reducer}", args, token)
         okay = code == 200 if expected is None else code == expected_status and expected in body
         row = {'identity': label, 'reducer': reducer, 'args': args, 'http_status': code,
-               'body': body, 'expected': expected or 'accepted', 'pass': okay}
+               'body': V.redact(body, (*self.secrets, token)), 'expected': expected or 'accepted', 'pass': okay}
+        row = json.loads(V.redact(json.dumps(row), (*self.secrets, token)))
         self.matrix.append(row)
         write(self.directory / 'reducers.json', self.matrix)
-        V.log(self.state, f"client {label} {reducer}{json.dumps(args)} -> {code} {body.strip()}")
+        V.log(self.state, f"client {label} {reducer}{json.dumps(args)} -> {code} {body.strip()}", secrets=(*self.secrets, token))
         return okay
 
     def call_procedure(self, label, token, procedure, args, expected=None):
@@ -342,13 +349,18 @@ class Run:
         final = None
         with path.open('x') as evidence, stderr_path.open('x') as sdk_log:
             with subprocess.Popen([str(BINARY)], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                  stderr=sdk_log, text=True) as process:
+                                  stderr=subprocess.PIPE, text=True) as process:
+                def log_stderr():
+                    for line in process.stderr:
+                        sdk_log.write(V.redact(line, self.secrets))
+
+                stderr_reader = threading.Thread(target=log_stderr)
+                stderr_reader.start()
                 try:
                     process.stdin.write(json.dumps(request))
                     process.stdin.close()
                     for line in process.stdout:
-                        if any(secret and secret in line for secret in self.secrets):
-                            raise RuntimeError('credential found in probe output')
+                        line = V.redact(line, self.secrets)
                         final = json.loads(line)
                         evidence.write(line)
                         evidence.flush()
@@ -362,6 +374,7 @@ class Run:
                         except subprocess.TimeoutExpired:
                             process.kill()
                             process.wait()
+                    stderr_reader.join()
         if code or not final or final.get('event') != 'complete':
             raise RuntimeError(f'subscription failed; see {path.name} and {stderr_path.name}')
 
@@ -434,6 +447,24 @@ class Run:
                       for m in re.finditer(r'#\[spacetimedb::procedure\]\s*pub fn (\w+)\(', path.read_text())}
         if procedures != set(PROCEDURES) | {'mind_act_checked'}:
             raise RuntimeError(f'procedure inventory changed: {procedures ^ (set(PROCEDURES) | {"mind_act_checked"})}')
+        # The cue event tables (frame-views) are filtered per client by row-level security, which the
+        # owner bypasses; the SDK's subscribe-all helper expands the generated ALL_TABLE_NAMES,
+        # cue tables included. So no program here may subscribe all (but `cues.py`, which does so as a
+        # player to prove it gets only its own cues), and the owner's programs (the
+        # mind service, the observer) may not name a cue table (docs/TICK_RATE.md, "Row-level
+        # security, the kill switch and SpacetimeDB upgrades").
+        sources = [p for d in ('living', '.agents/skills') for p in (ROOT / d).rglob('*')
+                   if p.suffix in ('.rs', '.py') and p.is_file() and '/target' not in str(p)
+                   and 'bindings/src/generated' not in str(p) and '/.local/' not in str(p)]
+        everything = [str(p.relative_to(ROOT)) for p in sources
+                      if re.search(r'subscribe_to_all_tables\(|SELECT \* FROM \*', p.read_text(errors='replace'))
+                      and p.name not in ('drive.py', 'cues.py')]  # cues.py subscribes all as player C, on purpose
+        if everything:
+            raise RuntimeError(f'a program subscribes every table (cue tables included, RLS bypassed for the owner): {everything}')
+        owners = [str(p.relative_to(ROOT)) for d in ('living/mind', 'living/viewer') for p in (ROOT / d).rglob('*.rs')
+                  if '/target' not in str(p) and re.search(r'seen_(body|fighter|doing)_cue', p.read_text(errors='replace'))]
+        if owners:
+            raise RuntimeError(f'an owner program names a cue table: {owners}')
         # The mind service connects as the world's admin, so `require_admin` cannot refuse it an
         # admin reducer by identity: the guard is that it never calls these (its sources name none).
         never_by_minds = ['admin_set_vitals', 'kill', 'relook', 'set_world_law', 'install_script', 'backfill_sex']
@@ -623,7 +654,7 @@ class Run:
         setup = subprocess.run([str(HARNESS), 'call', '--run', self.state['run'],
                                 'set_behavior', json.dumps([actor, '{"think":"verify-client view fixture"}']),
                                 '--as-admin'], capture_output=True, text=True, timeout=30)
-        (self.directory / 'admin-scene-setup.log').write_text(setup.stdout + setup.stderr)
+        (self.directory / 'admin-scene-setup.log').write_text(V.redact(setup.stdout + setup.stderr, self.secrets))
         if setup.returncode:
             raise RuntimeError('admin set_behavior failed; see admin-scene-setup.log')
         views['admin'] = self.probe('view-admin', ['SELECT * FROM my_deliberations'], admin_token, seconds=55, until_actor=actor)
@@ -1015,7 +1046,7 @@ class Run:
         lines.extend(f'| {r["identity"]} | {r["reducer"]} | {r["http_status"]} | {r["body"].strip()} | {"PASS" if r["pass"] else "FAIL"} |' for r in self.matrix)
         (self.directory / 'reducers.md').write_text('\n'.join(lines) + '\n')
         for path in self.directory.glob('*'):
-            if path.is_file() and path.name != 'state.json':
+            if path.is_file():
                 data = path.read_bytes()
                 if any(secret and secret.encode() in data for secret in self.secrets):
                     raise RuntimeError(f'credential leaked into {path.name}')

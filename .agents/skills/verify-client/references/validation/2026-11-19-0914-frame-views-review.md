@@ -1,0 +1,11 @@
+# frame-views after the Spark's review (verify-client)
+
+Follows `2026-11-18-2334-frame-views.md` and `2026-11-18-2345-frame-views-maintain.md`. Branch `frame-views` after the seven review items (uncommitted tree, committed as the commit after `f9d909769`). Server: the worker's own `views-stdb` (v2.14.1, 127.0.0.1:3344), scoped build, profiling off; host shared (load 3–6).
+
+What changed in this surface: the near tier is three new private tables (`motion_near`, `fighter_near`, `doing_near`) instead of a `near` column; the cue law `cue_transport_on` (off until acceptance); `cues.py` streams from the connection on (initial callbacks included), asserts every negative probe's subscription was accepted, and has an off phase; `run.py` runs `cues.py` after the fixed suite; the scene gate has a case `cues`; `drive.py` lists the three new private tables and fails when a program subscribes every table or an owner program names a cue table; the probe accepts `verify-gate-*` databases and a `from_start` request.
+
+- `cues.py` alone: `client-viewsq-0846` failed only its new off-phase windup check, which timed a windup from the on phase left in the off phase's initial rows (fixed: only moves struck after the off phase began). `client-viewsq-0904` failed "each windup first by a cue within 60 ms": one windup at 81 ms through the debug probe; the bound is now 100 ms (in a two-player scene the frame path is fast too, so the cue-first part is the check).
+- The standard runner `run.py`, `client-views-0904`: the fixed suite's 45 checks and `cues.py`'s 19 passed; the cleanup proof passed. (`client-views-0846` stopped at the private-table inventory guard for the three new tables, now listed.)
+- Scene gate, `scene_gate.py run --force --cases cues --no-main-check` on `views-stdb`: `gate-cues-0846` flaky-pass (its first attempt hit the off-phase bug above, the retry passed after the fix), `gate-cues-0904` pass at the first attempt (75 s).
+- `sweep_rows.py --expect-kept` on Cullet, branch `client-viewsb-0846` and main `client-viewsm-0846`: 11 each; `--compare`: "the same rows of the scene's people at every step (7 steps)".
+- Not covered: the open build; an owner connection subscribing all (none exists; the guard is a source check); the game client (the laptop's `frame-views-client`).

@@ -11,7 +11,9 @@ use std::rc::Rc;
 
 thread_local! {
     static MAP: RefCell<Option<Rc<Map>>> = const { RefCell::new(None) };
-    static SCRIPTS: RefCell<Option<(u32, Rc<Scripts>)>> = const { RefCell::new(None) };
+    /// The compiled scripts, by the script revision and the law revision whose values they hold
+    /// (`None`: written in this transaction or one that may have rolled back; laid over again).
+    static SCRIPTS: RefCell<Option<(u32, Option<u32>, Rc<Scripts>)>> = const { RefCell::new(None) };
     static GRAPHS: RefCell<HashMap<u32, (u32, Rc<Compiled>)>> = RefCell::new(HashMap::new());
     /// Genes never change after birth.
     static GENES: RefCell<HashMap<u32, Rc<living_rules::genes::Genes>>> = RefCell::new(HashMap::new());
@@ -240,6 +242,12 @@ pub fn now_ms(ctx: &ReducerContext) -> u64 {
     })
 }
 
+/// The current transaction's time as `now_ms` last gave it (0 before any): for stamps taken
+/// where no context is at hand (`frame`'s change marks, profiling only).
+pub fn tx_now() -> u64 {
+    TX.with(|t| t.get().1)
+}
+
 /// A number unique to the current transaction (after its first `now_ms`): the key of module
 /// caches valid within one transaction, which `now` alone no longer distinguishes.
 pub fn tx_seq() -> u64 {
@@ -256,6 +264,8 @@ thread_local! {
     /// The world row, read once per transaction (it changes only through admin reducers,
     /// which call `invalidate_world`).
     static WORLD: RefCell<Option<(i64, World)>> = const { RefCell::new(None) };
+    /// The world's law revision (`law_revision`), read once per transaction.
+    static LAW_REV: std::cell::Cell<Option<(i64, u32)>> = const { std::cell::Cell::new(None) };
     /// The installed script revision, read once per transaction.
     static SCRIPTS_REV: std::cell::Cell<Option<(i64, u32)>> = const { std::cell::Cell::new(None) };
     /// Work counters for the `stats` row, added to the clock row once per tick instead of
@@ -302,7 +312,74 @@ pub fn scripts_rev(ctx: &ReducerContext) -> u32 {
 pub fn invalidate_scripts_rev() {
     SCRIPTS_REV.with(|c| c.set(None));
     SCRIPTS.with(|s| *s.borrow_mut() = None);
+    invalidate_law_rev();
+}
+
+/// The world's law revision (`law_revision`), read once per transaction. A world without the
+/// row has its `world_law` rows copied into `law_override` first, once (the first transaction
+/// on a module with the table that reads the laws: the tick, within a frame of an update).
+pub fn law_rev(ctx: &ReducerContext) -> u32 {
+    let t = stamp(ctx);
+    if let Some((_, rev)) = LAW_REV.with(|c| c.get()).filter(|(s, _)| *s == t) {
+        return rev;
+    }
+    let rev = match ctx.db.law_revision().id().find(0) {
+        Some(r) => r.revision,
+        None => migrate_world_laws(ctx),
+    };
+    LAW_REV.with(|c| c.set(Some((t, rev))));
+    rev
+}
+
+/// Copy a world's `world_law` rows (before `law_override`) into `law_override`, once.
+fn migrate_world_laws(ctx: &ReducerContext) -> u32 {
+    let mut n = 0;
+    for w in ctx.db.world_law().iter().collect::<Vec<_>>() {
+        if ctx.db.law_override().name().find(&w.name).is_none() {
+            ctx.db.law_override().insert(LawOverride { name: w.name, value: w.value, revision: 1 });
+            n += 1;
+        }
+    }
+    ctx.db.law_revision().insert(LawRevision { id: 0, revision: 1 });
+    if n > 0 {
+        log::info!("law_override: {n} world laws copied from world_law (law revision 1)");
+    }
+    1
+}
+
+/// The world's own law values (`law_override`), by name.
+pub fn overrides(ctx: &ReducerContext) -> Vec<(String, serde_json::Value)> {
+    let rows: Vec<LawOverride> = ctx.db.law_override().iter().collect();
+    living_rules::script::overrides_of(rows.iter().map(|r| (r.name.as_str(), r.value.as_str())))
+}
+
+/// Write a world's own value of a law (`law_override`, JSON) with the next law revision, which
+/// it returns; the laws in force follow at their next read (`scripts`, `laws`).
+pub fn set_law_override(ctx: &ReducerContext, name: &str, value: &str) -> u32 {
+    let rev = law_rev(ctx) + 1;
+    let row = LawOverride { name: name.to_string(), value: value.to_string(), revision: rev };
+    if ctx.db.law_override().name().find(&row.name).is_some() {
+        ctx.db.law_override().name().update(row);
+    } else {
+        ctx.db.law_override().insert(row);
+    }
+    ctx.db.law_revision().id().update(LawRevision { id: 0, revision: rev });
+    invalidate_law_rev();
+    rev
+}
+
+/// Call after writing `law_override`: the laws in force are laid over again at their next read.
+/// Whatever module memory holds by a law revision goes too, since a transaction that wrote one
+/// and then failed leaves it under a number the next write takes again (docs/LAW_OVERRIDE.md).
+pub fn invalidate_law_rev() {
+    LAW_REV.with(|c| c.set(None));
     LAWS.with(|l| l.set(None));
+    SCRIPTS.with(|s| {
+        if let Some(e) = s.borrow_mut().as_mut() {
+            e.1 = None;
+        }
+    });
+    COVER_FOR.with(|c| c.set(None));
 }
 
 #[derive(Clone, Copy, Default)]
@@ -381,15 +458,32 @@ fn gate_blocks(ctx: &ReducerContext, w: u32, h: u32) -> std::collections::HashSe
         .collect()
 }
 
-pub fn publish_cover_law(ctx: &ReducerContext, l: living_rules::script::Laws) {
-    let row = CoverLaw { id: 0, cover_sight_on: l.cover_sight_on,
+/// The cover policy in force, as the cover mask is compiled under it and `cover_law` publishes it.
+pub fn cover_law_of(l: &living_rules::script::Laws) -> CoverLaw {
+    CoverLaw { id: 0, cover_sight_on: l.cover_sight_on,
         cover_eye_height_m: l.cover_eye_height_m, cover_brush_on: l.cover_brush_on,
-        cover_brush_min_fill: l.cover_brush_min_fill, cover_cliff_step_m: l.cover_cliff_step_m };
+        cover_brush_min_fill: l.cover_brush_min_fill, cover_cliff_step_m: l.cover_cliff_step_m }
+}
+
+/// Publish the cover policy in force (`cover_law`, one row). The cached map's cover mask follows
+/// the laws by itself (`map`, `COVER_FOR`): the terrain is kept.
+pub fn publish_cover_law(ctx: &ReducerContext, l: living_rules::script::Laws) {
+    let row = cover_law_of(&l);
     match ctx.db.cover_law().id().find(0) {
         None => { ctx.db.cover_law().insert(row); }
-        Some(old) if old != row => { ctx.db.cover_law().id().update(row); invalidate_map(); }
+        Some(old) if old != row => { ctx.db.cover_law().id().update(row); }
         Some(_) => {}
     }
+}
+
+thread_local! {
+    /// The revisions (script, law) the cached map's cover mask was last checked at: a new
+    /// revision (or none, after a law write) compares the policy in force with `COVER_BUILT`.
+    static COVER_FOR: std::cell::Cell<Option<(u32, u32)>> = const { std::cell::Cell::new(None) };
+    /// The policy the cached map's cover mask was compiled under (a fact about the mask in
+    /// memory, whatever revision is committed): only a different policy compiles it again,
+    /// with the terrain and gates kept.
+    static COVER_BUILT: std::cell::Cell<Option<CoverLaw>> = const { std::cell::Cell::new(None) };
 }
 
 fn cover_mask(ctx: &ReducerContext, map: &Map) -> Option<std::sync::Arc<living_rules::cover::Mask>> {
@@ -446,6 +540,17 @@ pub fn map(ctx: &ReducerContext) -> Rc<Map> {
                     GATES_CHANGED.with(|c| c.set(0));
                 }
             }
+            // The cover policy in force: the mask again only when it changed (a cover law's value).
+            let revs = (scripts_rev(ctx), law_rev(ctx));
+            if COVER_FOR.with(|c| c.get()) != Some(revs) {
+                let policy = cover_law_of(&laws(ctx));
+                if COVER_BUILT.with(|c| c.get()) != Some(policy) {
+                    let mm = Rc::make_mut(map);
+                    mm.cover = cover_mask(ctx, mm);
+                    COVER_BUILT.with(|c| c.set(Some(policy)));
+                }
+                COVER_FOR.with(|c| c.set(Some(revs)));
+            }
             return map.clone();
         }
         // The whole map, once per module instance (and after world creation): every chunk row.
@@ -454,6 +559,8 @@ pub fn map(ctx: &ReducerContext) -> Rc<Map> {
         let mut map = Map::from_chunks(w.width, w.height, ctx.db.terrain_chunk().iter().map(|c| (c.id, c.tiles)));
         map.set_blocked(gate_blocks(ctx, w.width, w.height));
         map.cover = cover_mask(ctx, &map);
+        COVER_FOR.with(|c| c.set(Some((scripts_rev(ctx), law_rev(ctx)))));
+        COVER_BUILT.with(|c| c.set(Some(cover_law_of(&laws(ctx)))));
         let map = Rc::new(map);
         *cached = Some(map.clone());
         map
@@ -463,6 +570,8 @@ pub fn map(ctx: &ReducerContext) -> Rc<Map> {
 /// Drop the whole cached map (world creation; the next read rebuilds it from every chunk).
 pub fn invalidate_map() {
     MAP.with(|m| *m.borrow_mut() = None);
+    COVER_FOR.with(|c| c.set(None));
+    COVER_BUILT.with(|c| c.set(None));
     MAP_PATCHED.with(|p| *p.borrow_mut() = (0, Vec::new()));
     GATES_CHANGED.with(|g| g.set(0));
 }
@@ -513,45 +622,69 @@ pub fn set_tile(ctx: &ReducerContext, x: i32, y: i32, t: living_rules::map::Terr
     Ok(())
 }
 
-/// World laws from the installed scripts, with the world's own values over them (its seed's
-/// `rules`, `world_law`). Cached with the scripts: writing a world law moves `scripts_rev`.
+/// World laws in force: the installed script's, with the world's own values over them (its
+/// seed's `rules`, `set_world_law`: `law_override`), as the scripts lay them over (`scripts`).
+/// Kept by the script and law revisions, so a transaction reads one snapshot throughout (a tick
+/// sees a value edit at its start or not at all).
 pub fn laws(ctx: &ReducerContext) -> living_rules::script::Laws {
-    let rev = scripts_rev(ctx);
+    let rev = (scripts_rev(ctx), law_rev(ctx));
     if let Some(l) = LAWS.with(|l| l.get().filter(|(r, _)| *r == rev).map(|(_, l)| l)) {
         return l;
     }
-    let over: Vec<(String, serde_json::Value)> = ctx.db.world_law().iter().filter_map(|w| serde_json::from_str(&w.value).ok().map(|v| (w.name, v))).collect();
-    let sc = scripts(ctx);
-    let l = sc.laws_with(&over).unwrap_or_else(|e| {
-        log::warn!("world laws: {e}; the script's own values hold");
-        sc.laws()
-    });
+    let l = scripts(ctx).laws();
     LAWS.with(|c| c.set(Some((rev, l))));
     l
 }
 
 thread_local! {
-    static LAWS: std::cell::Cell<Option<(u32, living_rules::script::Laws)>> = const { std::cell::Cell::new(None) };
+    static LAWS: std::cell::Cell<Option<((u32, u32), living_rules::script::Laws)>> = const { std::cell::Cell::new(None) };
 }
 
+/// The installed script, compiled once per script revision, with the world's own law values laid
+/// over it (`law_override`). A new law revision on the same script lays the values over the
+/// compiled script in place (`Scripts::apply_overrides`: value-only laws, no compile, no
+/// validation); a new script revision compiles it again.
 pub fn scripts(ctx: &ReducerContext) -> Rc<Scripts> {
+    try_scripts(ctx).expect("installed skills script compiles with the world's laws")
+}
+
+/// [`scripts`], or why the world's law values cannot be laid over the installed script (a
+/// value-only edit's derived check, `set_world_law` refuses it).
+pub fn try_scripts(ctx: &ReducerContext) -> Result<Rc<Scripts>, String> {
     let rev = scripts_rev(ctx);
-    SCRIPTS.with(|s| {
-        if let Some((r, sc)) = s.borrow().as_ref() {
-            if *r == rev {
-                return sc.clone();
+    let lrev = law_rev(ctx);
+    let kept = SCRIPTS.with(|s| s.borrow_mut().take());
+    if let Some((r, l, sc)) = kept {
+        if r == rev && l == Some(lrev) {
+            SCRIPTS.with(|s| *s.borrow_mut() = Some((r, l, sc.clone())));
+            return Ok(sc);
+        }
+        if r == rev {
+            // The same script; the world's values moved (a value-only edit, or one rolled back).
+            let over = overrides(ctx);
+            match sc.apply_overrides(&over) {
+                Ok(a) => {
+                    if !a.changed.is_empty() {
+                        log::info!("laws in force: {:?} laid over the compiled script (law revision {lrev})", a.changed);
+                    }
+                    SCRIPTS.with(|s| *s.borrow_mut() = Some((r, Some(lrev), sc.clone())));
+                    return Ok(sc);
+                }
+                // Left as it was (a law that is not value-only here, or a derived check that
+                // refuses the value): compiled again with the values, which refuses them too.
+                Err(e) => log::info!("laws in force: {e}; compiling the script with the world's values (law revision {lrev})"),
             }
         }
-        let src = ctx.db.script().name().find("skills".to_string()).map(|s| s.source).unwrap_or_default();
-        // Laws written per game hour run on this world's day (its seed's `day_minutes`).
-        let mut sc = Scripts::with_day(&src, world(ctx).day_ms).expect("installed skills script compiles");
-        crate::codes::apply(ctx, &mut sc);
-        // Graph normalization and validation take the world's skills from its script.
-        living_rules::catalog::set_skills(sc.skills().clone());
-        let sc = Rc::new(sc);
-        *s.borrow_mut() = Some((rev, sc.clone()));
-        sc
-    })
+    }
+    let src = ctx.db.script().name().find("skills".to_string()).map(|s| s.source).unwrap_or_default();
+    // Laws written per game hour run on this world's day (its seed's `day_minutes`).
+    let mut sc = Scripts::with_overrides(&src, world(ctx).day_ms, &overrides(ctx))?;
+    crate::codes::apply(ctx, &mut sc);
+    // Graph normalization and validation take the world's skills from its script.
+    living_rules::catalog::set_skills(sc.skills().clone());
+    let sc = Rc::new(sc);
+    SCRIPTS.with(|s| *s.borrow_mut() = Some((rev, Some(lrev), sc.clone())));
+    Ok(sc)
 }
 
 /// A validated graph with its routines inlined: preorder subtree sizes, and for each node
@@ -1000,13 +1133,13 @@ struct Hot {
 thread_local! {
     /// The hot laws' answers by creature for one moment (`now`): every look and step in a tick
     /// asks the same few creatures again. Keyed by transaction, moment and scripts revision.
-    static HOT: RefCell<((i64, u64, u32), HashMap<u32, Hot>)> = RefCell::new(((0, 0, 0), HashMap::new()));
+    static HOT: RefCell<((i64, u64, u32, u32), HashMap<u32, Hot>)> = RefCell::new(((0, 0, 0, 0), HashMap::new()));
 }
 
 /// A hot law's answer for creature `id` now: kept for this moment here, else the law over the
 /// few facts it reads (gathered by its plan), kept per state by the scripts.
 fn hot<T: Copy>(ctx: &ReducerContext, id: u32, w: &World, now: u64, law: &str, slot: fn(&mut Hot) -> &mut Option<T>, ask: impl FnOnce(&Scripts, &living_rules::script::SkillCtx) -> T) -> T {
-    let key = (stamp(ctx), now, scripts_rev(ctx));
+    let key = (stamp(ctx), now, scripts_rev(ctx), law_rev(ctx));
     if let Some(v) = HOT.with(|c| {
         let mut c = c.borrow_mut();
         if c.0 != key {

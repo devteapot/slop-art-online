@@ -26,11 +26,23 @@ Preconditions: baseline.
   - deletes the drive's settings file;
   - `dump:01`: `extra.hair_shine == "crown"`, `extra.hair_shine_saved` null;
   - Settings › Hair shine › Soft, then Today (`dump:02`, `03`); the drive's `settings.json` has `"hair_shine": "today"`;
-  - a second drive reads it back (`dump:00`), sets `shine:crown`, places a resident beside the player (`--place`), opens their window (the camera on their face) and photographs `01_crown`, `01b_crown`, `02_today` and `03_soft` from one view;
-  - Crown against Today and Soft differs near the heads (`seen` in `dump:04`), and away from every head changes no more than `01b_crown` against `01_crown`.
+  - a second drive reads it back (`dump:00`), sets `shine:crown`, places a resident beside the player (`--place`), opens their window (the camera on their face) and photographs `01_crown`, `02_today`, `03_crown`, `04_soft` and `05_crown` from one view;
+  - Today and Soft each differ from the preceding Crown near the heads (`seen` in `dump:06`). Away from the heads, the check uses the surrounding Crown shots to account for changes from idle motion and lighting.
 - It refuses to run with `LIVING_GAME_HAIR_SHINE` or `LIVING_GAME_HAIR_RING` set.
+
+## Hand-made character files
+
+A GLB opts in through its default scene's `extras.slop` with `contract: 1` and `character: "handmade"`. The load observer turns authored `forward: "+Z"` scenes to the client's −Z convention. Material `extras.slop.slot` identifies hair, skin, face, eyes, tint and cloth. An opt-in hair material uses its own palette and thresholds. Files without the scene declaration use the existing material classification and shine controls. See the [asset contract](../../../../docs/HANDMADE_HAIR.md).
+
+```bash
+just living-game-calibrate view/<file>.glb
+```
+
+Run on a local hand-made export in `living/game/assets/view/` with its calibration targets and sidecars. The recipe builds the release client (honouring `CARGO_TARGET_DIR`), audits the metadata and renders three fixed daylight asset-view shots without a world. Inspect the portrait for the forward turn and the near and turned stills for the hair. The run writes screenshots, `client.log`, `colours.csv` and `report.json` under `.local/living/calibrate/<stem>/<time>/`. Exit 1 can indicate that measured patches missed their targets. Read the audit and patch results to identify the cause. The live `hair` scenario checks the existing presets on town characters.
+
+**Lock ink (contract v1.1):** a profile that sets any of `ink`, `ink_px`, `ink_range` or `ink_fade_px` draws lock lines from `<stem>.hair.png` G, a distance field made by `living/tools/characters/ink_field.py LINES.png STEM.hair.png --range R` (`--seams-as-lines --glb FILE.glb` for the UV island borders). `ink_range` must equal the field's `--range`. The hair needs a real UV unwrap; the audit warns when its TEXCOORD_0 spans no area, and `ink_field.py` refuses. Measure an ink line in the calibration frame with `"sample": "min5"` on its patch. To photograph the game camera's stops in the asset view, use `near@YAW`, `middle@YAW`, `far@YAW` or `play:HEIGHT:FOV@YAW` in `LIVING_GAME_VIEW_SHOTS`, after `idle@0/` for a paused pose. The shimmer evidence for ink (pans and zooms at each stop, the second temporal difference of the line's darkening against the profile's own band edges) is in the hair-ink report, `.local/living/hair-ink/shimmer.py` on the laptop; no live scenario checks ink.
 
 ## Gotchas
 
 - Opening Settings closes the other windows: compare shines in one view with `shine:`, not with Settings.
-- Live residents are VRoid bases until look-1 lands; composed people (char-4's) are judged in look-dev and the asset view (`docs/CHARACTERS.md`).
+- Live residents with a person line use composed models by default. The client can fall back to a VRoid base. For the live lookbook and fallback routes, see [looks.md](looks.md).

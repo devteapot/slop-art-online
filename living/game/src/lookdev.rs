@@ -467,7 +467,7 @@ pub fn build_lineup(commands: &mut Commands, meshes: &mut Assets<Mesh>, palette:
         let handle = assets.load::<bevy::gltf::Gltf>(file.clone());
         // glTF models face +Z, toward the camera's default side (south); VRM models face −Z.
         let vrm = name.ends_with(".vrm");
-        let turn = Quat::from_rotation_y(if vrm { std::f32::consts::PI } else { 0.0 });
+        let turn = Quat::from_rotation_y(if vrm || crate::handmade::of(&file).is_some() { std::f32::consts::PI } else { 0.0 });
         commands.spawn((crate::envs::EnvPart, Model::character(file, vrm), crate::characters::SceneOf(handle), Transform::from_translation(at).with_rotation(turn), Visibility::Hidden));
     }
     // `LIVING_GAME_CROWD=N[:seed][:style]`: N seeded random characters in rows south of the
@@ -491,24 +491,32 @@ pub fn convert(
     assets: Res<AssetServer>,
     q: Query<(Entity, &MeshMaterial3d<StandardMaterial>, &Mesh3d, Option<&bevy::gltf::GltfMaterialName>, Option<&bevy::gltf::GltfMaterialExtras>), Without<Converted>>,
     parents: Query<&ChildOf>,
-    models: Query<(&Model, Has<NoShadow>, Has<crate::bodies::Beast>, Has<NightGlow>, Has<Unlit>)>,
+    models: Query<(&Model, Has<NoShadow>, Has<crate::bodies::Beast>, Has<NightGlow>, Has<Unlit>, Has<crate::handmade::Turned>)>,
+    transforms: Query<&Transform>,
     mut glows: ResMut<NightGlows>,
     detail: Option<Res<crate::style::DetailLayers>>,
     palette: Res<Palette>,
-    mut done: Local<(HashMap<(AssetId<StandardMaterial>, u32), AssetId<Toon>>, HashSet<AssetId<Mesh>>, HashMap<String, AssetId<Toon>>)>,
+    mut done: Local<(HashMap<(AssetId<StandardMaterial>, u32), AssetId<Toon>>, HashSet<AssetId<Mesh>>, HashMap<String, AssetId<Toon>>, HashSet<AssetId<Mesh>>)>,
 ) {
     for (e, mat, mesh, name, extras) in &q {
-        // Only meshes under a look-dev model.
+        // Only meshes under a look-dev model. `chain`: the nodes' turns from the mesh up to the
+        // model's root (a hand-made file's forward in the mesh's frame, below).
         let mut cur = e;
         let mut owner = None;
+        let mut chain = vec![transforms.get(e).map_or(Quat::IDENTITY, |t| t.rotation)];
         while let Ok(p) = parents.get(cur) {
             cur = p.parent();
             if let Ok(m) = models.get(cur) {
                 owner = Some(m);
                 break;
             }
+            chain.push(transforms.get(cur).map_or(Quat::IDENTITY, |t| t.rotation));
         }
-        let Some((owner, no_shadow, beast, night, unlit)) = owner else { continue };
+        let Some((owner, no_shadow, beast, night, unlit, turned)) = owner else { continue };
+        // A hand-made character file (docs/HANDMADE_HAIR.md, `handmade.rs`): its materials are
+        // classed by their slots, and it is drawn as a character on every path.
+        let handmade = crate::handmade::of(&owner.file);
+        let character = owner.vrm || handmade.is_some();
         if no_shadow {
             commands.entity(e).insert(bevy::light::NotShadowCaster);
         }
@@ -532,11 +540,18 @@ pub fn convert(
         // `…Face_00_SKIN`.
         let n = name.map_or("", |n| n.0.as_str());
         let skin = n.ends_with("_SKIN") || n.contains("Skin") || n.contains("skin");
+        let slop = handmade.as_ref().map(|_| crate::handmade::material_of(extras.map(|x| x.value.as_str()), &format!("{} material {n:?}", owner.file))).unwrap_or_default();
+        if handmade.is_some() && slop.slot.is_none() {
+            crate::handmade::warn_once(format!("handmade: {}: material {n:?} has no slot; classed by its name", owner.file));
+        }
         let kind = match () {
-            _ if owner.vrm && n.contains("_HAIR") => Kind::Hair,
-            _ if owner.vrm && skin && n.contains("Face") => Kind::Face,
+            _ if slop.slot == Some(crate::handmade::Slot::Hair) => Kind::Hair,
+            _ if slop.slot == Some(crate::handmade::Slot::Face) => Kind::Face,
+            _ if slop.slot.is_some() => crate::handmade::kind_of(slop.slot.unwrap(), false, false),
+            _ if character && n.contains("_HAIR") => Kind::Hair,
+            _ if character && skin && n.contains("Face") => Kind::Face,
             _ if skin => Kind::Skin,
-            _ if owner.vrm && (n.contains("_FACE") || n.contains("_EYE")) => Kind::FacePart,
+            _ if character && (n.contains("_FACE") || n.contains("_EYE")) => Kind::FacePart,
             _ => Kind::Plain,
         };
         // A face's shadow map (living/tools/face_normals.py, run by gen_anim.sh and
@@ -551,19 +566,38 @@ pub fn convert(
             })
             .flatten();
         let kind = if kind == Kind::Face && face_map.is_none() { Kind::Skin } else { kind };
+        // A hair profile (`slop.hair`) and its mask texture, if it has one.
+        let profile = slop.hair.as_ref().filter(|_| kind == Kind::Hair);
+        let kind = if profile.is_some() { Kind::HandHair } else { kind };
+        let hair_map = profile.and_then(|p| crate::handmade::highlight_map(&owner.file, p));
+        let file_forward = handmade.as_ref().map(|h| {
+            chain.reverse();
+            crate::handmade::local_forward(h, turned, &chain)
+        });
         // Face parts (eyes, lashes, brows, mouth, the face itself) are many small morphing
-        // meshes whose shadows never read: they never cast one.
-        if owner.vrm && name.is_some_and(|n| n.0.contains("_FACE") || n.0.contains("_EYE") || n.0.contains("Face")) {
+        // meshes whose shadows never read: they never cast one. A hand-made file names them by
+        // slot.
+        let part = match slop.slot {
+            Some(s) => matches!(s, crate::handmade::Slot::Face | crate::handmade::Slot::Eyes | crate::handmade::Slot::Tint),
+            None => character && name.is_some_and(|n| n.0.contains("_FACE") || n.0.contains("_EYE") || n.0.contains("Face")),
+        };
+        if part {
             commands.entity(e).insert((bevy::light::NotShadowCaster, FacePart));
         }
         // Generated scenery (untextured, vertex-coloured, not a character) takes the painted
         // surfaces its vertex colours' alpha names (style.rs `Surface`). It is one flag for all
         // of it, so scenery keeps sharing its few materials.
-        let painted = detail.as_deref().filter(|_| !owner.vrm && kind == Kind::Plain && base.base_color_texture.is_none());
+        let painted = detail.as_deref().filter(|_| !character && kind == Kind::Plain && base.base_color_texture.is_none());
         // The caches hold ids, not handles: a material lives while some mesh wears it (a
         // town's outfit pieces go when its people do, and the first load's prewarm leaves none
         // behind, `loading.rs`), and is made again when needed.
-        let (by_source, _, by_content) = &mut *done;
+        // A profile hair's highlight mask goes into its second UVs, once a mesh.
+        if kind == Kind::HandHair && done.3.insert(mesh.0.id()) {
+            if let Some(mut m) = meshes.get_mut(&mesh.0) {
+                crate::handmade::pack_highlight(&mut m);
+            }
+        }
+        let (by_source, _, by_content, _) = &mut *done;
         let cached = by_source.get(&(mat.0.id(), glow_key)).and_then(|id| toons.get_strong_handle(*id));
         let toon = match cached {
             Some(h) => h,
@@ -571,6 +605,10 @@ pub fn convert(
                 let mut b = base.clone();
                 if owner.vrm && crate::perf::has("charopaque") && matches!(b.alpha_mode, AlphaMode::Mask(_)) {
                     b.alpha_mode = AlphaMode::Opaque;
+                }
+                // A tint layer multiplies the lit skin under it (`toon.wesl`).
+                if kind == Kind::Tint {
+                    b.alpha_mode = AlphaMode::Multiply;
                 }
                 if let Some([r, g, bl]) = glow {
                     let c = b.base_color.to_linear();
@@ -587,10 +625,19 @@ pub fn convert(
                 // People's light is its own material: its glow follows the daylight.
                 let night = night && b.emissive != LinearRgba::BLACK;
                 let authored = b.emissive;
-                let content = format!("{kind:?} {face_map:?} {} {night} {b:?}", painted.is_some());
+                let content = format!("{kind:?} {face_map:?} {} {night} {b:?} {profile:?} {hair_map:?} {file_forward:?}", painted.is_some());
                 let h = by_content.get(&content).and_then(|id| toons.get_strong_handle(*id)).unwrap_or_else(|| {
-                    let map = face_map.as_ref().map(|f| assets.load_builder().with_settings(|s: &mut bevy::image::ImageLoaderSettings| s.is_srgb = false).load(f.clone()));
+                    // A face's shadow map, or a profile hair's mask texture, in the same slot.
+                    let map = face_map.as_ref().or(hair_map.as_ref()).map(|f| assets.load_builder().with_settings(|s: &mut bevy::image::ImageLoaderSettings| s.is_srgb = false).load(f.clone()));
                     let mut toon = style.kind(b, kind, map);
+                    if let Some(p) = profile {
+                        p.apply(&mut toon.extension.params, hair_map.as_deref());
+                        // The ink's fade reads the hair's texel density, from its mesh.
+                        toon.extension.params.hand_ink_range.w = meshes.get(&mesh.0).and_then(|m| crate::handmade::metres_per_uv(&m)).unwrap_or(0.0);
+                    }
+                    if let Some(f) = file_forward {
+                        toon.extension.params.file = f.extend(1.0);
+                    }
                     if let Some(layers) = painted {
                         crate::style::with_detail(&mut toon, layers);
                     }
@@ -609,7 +656,7 @@ pub fn convert(
         // stencil at zero offset, which never reads them; generating them anyway rewrote every
         // new scenery mesh (another attribute, so another upload in another vertex layout), and a
         // first-seen model's meshes made a 150 ms frame on the development Mac.
-        let volume = owner.vrm || owner.file.starts_with("lookdev/") || owner.file.starts_with("view/");
+        let volume = character || owner.file.starts_with("lookdev/") || owner.file.starts_with("view/");
         if volume && done.1.insert(mesh.0.id()) {
             if let Some(mut m) = meshes.get_mut(&mesh.0) {
                 crate::style::outline_normals(&mut m);
@@ -623,7 +670,7 @@ pub fn convert(
             ec.insert(Visibility::Hidden);
         }
         ec.remove::<MeshMaterial3d<StandardMaterial>>().insert((MeshMaterial3d(toon), Converted));
-        if owner.vrm {
+        if character {
             ec.insert(outline(Outlined::Person, &style));
         } else if owner.file.starts_with("lookdev/") || owner.file.starts_with("view/") {
             ec.insert(outline(Outlined::Thing, &style));

@@ -28,6 +28,8 @@ The probe is outside the `living/` workspace. Build it separately with:
 CARGO_TARGET_DIR="$PWD/.local/living/verify/target-client" cargo build --locked --manifest-path .agents/skills/verify-client/scripts/probe/Cargo.toml
 ```
 
+The probe connects only to scratch worlds: `verify-client-*`, and `verify-player-*` and `verify-core-*` for the other skills' streams (verify-player's `rest_seen.py`, verify-core's `doing_deltas.py`).
+
 To drive a database you already launched through the shared harness:
 
 ```bash
@@ -53,6 +55,10 @@ On a launched and doctored `client-*` run (any seed), `scripts/house_label.py --
 On a launched and doctored `client-*` run (any seed), `scripts/far_label.py --run "$R"` joins a player, installs an overlay that makes everyone past 4 m `far` (as Cullet's law does past 24 m), places two strangers at 2 m and 6 m, and reads the player's `seen_characters` through the SDK probe: `a stranger` near, `someone too far away to make out` far, then `a stranger` once the far one is brought close ([features/perception.md](features/perception.md)). Admin calls set the scene. It installs the shipped script again at the end; run cleanup after it.
 
 On a launched and doctored `client-*` run with `--seed cullet` (a `perceived_of` that reads distance), `scripts/sweep_rows.py --run "$R" [--expect-kept]` records a player's `seen_characters` rows of a fixed scene step by step: strangers across the 24 m cut, an introduction, a known person going too far away to make out and back, new know-how, a death. Run it once on main's module and once on a branch's, then `scripts/sweep_rows.py --compare <run-a>/sweep_rows.json <run-b>/sweep_rows.json` must find the same rows at every step ([features/perception.md](features/perception.md)). It turns the `regard_cache_check` law on for the scene and off at the end.
+
+## Cues and tiers
+
+On a launched and doctored `client-*` run (any seed; build the probe first), `scripts/cues.py --run "$R"` proves the near and far tiers of `seen_bodies`, `seen_fighters` and `seen_doing` and the cue event tables (`seen_body_cue`, `seen_fighter_cue`, `seen_doing_cue`, docs/PERCEPTION.md "Cues and tiers"): three players with their own identities and an anonymous connection stream them while one player steps, waves and strikes beside another; row-level security keeps each cue to its viewer, a near opponent's windup arrives first by a cue, a far stranger is never cued, the tiers partition each view, and the client's rule (a cue until the creature's next tier row) ends on the views' rows; with the `cue_transport_on` law off, nothing is cued and the near tier carries the windups ([features/perception.md](features/perception.md)). The merge's scene gate runs it as case `cues`. `scripts/near_tier.py --run "$R"` (any seed, by day) proves the near tier's order: `NEAR_MAX` + 1 held strangers within 7.5 m of a player and a second player 10 m off; the `NEAR_MAX` nearest strangers are near, then the second player waves at the first and is in its near tier at once, past the cap, and first at the next sweep (it and the `NEAR_MAX` − 1 nearest), far again after the wave. `run.py` runs both after the fixed suite, and the gate's case `cues` runs both. Run it on its own launch: it joins the run's player identity.
 
 ## Looks
 
@@ -100,7 +106,7 @@ Evidence stays in `.local/living/verify/<run>/`. It includes `source-inventory.j
 
 `PASS` means the assertion held. `FAIL` means a required behavior or fixture failed. `XFAIL` means a known issue is still observable: since 2026-11-09 only the open build's public `experience` (the diagnostic build, docs/PERCEPTION.md); the default scoped build has none. `XPASS` means that assertion now holds. The driver exits 1 for `FAIL` or `XPASS`, so a change triggers review of the expected-fail check. A transport error or an empty fixture is a failure, never a known-issue success. The anonymous `thought` leak and, in a scoped build, the anonymous `experience` leak are closed and checked as ordinary assertions.
 
-Tokens stay in process memory except the shared harness's primary player token in `state.json`. The anonymous connection transfers its issued token through an inherited pipe so later HTTP calls use that same identity. The second player's token comes from `POST /v1/identity`. The admin (owner) SDK connections, the observer's among them, use the shared harness's `admin_token()` helper. Admin scene setup uses `verify.py call --as-admin`. No token is printed or saved into evidence. Cleanup removes the primary token and a credential scan checks the evidence.
+The shared harness keeps reconnect credentials in its mode 0600 private run state outside the evidence tree. The probe keeps its tokens in process memory. The anonymous connection transfers its issued token through an inherited pipe so later HTTP calls use that same identity. The second player's token comes from `POST /v1/identity`. The admin (owner) SDK connections, the observer's among them, use the shared harness's `admin_token()` helper. Admin scene setup uses `verify.py call --as-admin`. No token is printed or saved into evidence. Cleanup removes the primary token and a credential scan checks the evidence.
 
 ## Documentation and pinned versions
 
