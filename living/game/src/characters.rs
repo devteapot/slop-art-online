@@ -728,15 +728,20 @@ enum BoneScale {
     Uniform(f32),
 }
 
+/// Heavy generated figures carry more width through their chest and shoulders.
+fn torso_breadth(build: f32) -> f32 {
+    build + 0.32 * ((build - 1.13) / 0.075).clamp(0.0, 1.0).powi(4)
+}
+
 /// The scale a recipe gives each `J_Bip_*` bone. VRoid's rest rotations are identity, so the
 /// bone's local axes are the model's: legs and spine run along Y, arms along X.
-fn bone_scale(name: &str, p: &Proportions) -> Option<BoneScale> {
+fn bone_scale(name: &str, p: &Proportions, breadth: f32) -> Option<BoneScale> {
     use BoneScale::*;
     let g = p.build;
     let lerp = |a: f32, b: f32, t: f32| a + (b - a) * t;
     let side = name.strip_prefix("J_Bip_L_").or_else(|| name.strip_prefix("J_Bip_R_"));
     // Widths across the torso; the arms' roots move out with the upper chest.
-    let chest = g * p.shoulders;
+    let chest = breadth * p.shoulders;
     Some(match (name, side) {
         ("J_Bip_C_Hips", _) => Own(Vec3::new(g * p.hips, 1.0, g * p.hips.sqrt())),
         // The belly bone (under the spine, `compose::belly_offset`) takes the spine's own scale:
@@ -745,7 +750,7 @@ fn bone_scale(name: &str, p: &Proportions) -> Option<BoneScale> {
         // `LIVING_GAME_PERF=oldbelly`: the belly at the base's girth, as before (to compare).
         ("J_Fit_Belly", _) if crate::perf::has("oldbelly") => return None,
         ("J_Bip_C_Spine" | "J_Fit_Belly", _) => Own(Vec3::new(g * lerp(1.0, p.hips, 0.5), p.torso, g)),
-        ("J_Bip_C_Chest", _) => Own(Vec3::new(lerp(g, chest, 0.5), p.torso, g)),
+        ("J_Bip_C_Chest", _) => Own(Vec3::new(lerp(g, g * p.shoulders, 0.5), p.torso, g)),
         ("J_Bip_C_UpperChest", _) => Own(Vec3::new(chest, p.torso, g)),
         ("J_Bip_C_Neck", _) => Own(Vec3::new(g.powf(0.8), p.neck, g.powf(0.8))),
         ("J_Bip_C_Head", _) => Uniform(p.head),
@@ -804,12 +809,13 @@ pub fn shape(
             continue;
         };
         let p = ch.recipe.proportions.clone();
+        let breadth = if by_name.contains_key("J_Fit_Belly") { torso_breadth(p.build) } else { p.build };
         let rest = |n: &str| info.rest.get(n).copied().unwrap_or(Vec3::ZERO);
         let mut own: HashMap<String, Vec3> = HashMap::new();
         let mut scales = HashMap::new();
         let mut helpers: HashMap<Entity, Entity> = HashMap::new();
         for (name, &bone) in &by_name {
-            let Some(s) = bone_scale(name, &p) else { continue };
+            let Some(s) = bone_scale(name, &p, breadth) else { continue };
             // The base's own proportions need nothing.
             if matches!(s, BoneScale::Own(v) if v == Vec3::ONE) || matches!(s, BoneScale::Uniform(k) if k == 1.0) {
                 continue;
@@ -1710,12 +1716,12 @@ mod tests {
         };
         for (build, hips, torso) in [(0.82, 0.94, 0.97), (0.9, 1.0, 1.0), (1.22, 1.08, 1.03), (1.35, 0.9, 1.1)] {
             let p = Proportions { build, hips, torso, ..default() };
-            let spine = own(bone_scale("J_Bip_C_Spine", &p));
-            assert_eq!(own(bone_scale("J_Fit_Belly", &p)), spine, "build {build}, hips {hips}");
+            let spine = own(bone_scale("J_Bip_C_Spine", &p, torso_breadth(build)));
+            assert_eq!(own(bone_scale("J_Fit_Belly", &p, torso_breadth(build))), spine, "build {build}, hips {hips}");
             assert_ne!(spine, Vec3::ONE);
         }
         // At the base's own proportions there is nothing to do, for the belly as for the spine.
-        assert_eq!(own(bone_scale("J_Fit_Belly", &Proportions::default())), Vec3::ONE);
+        assert_eq!(own(bone_scale("J_Fit_Belly", &Proportions::default(), 1.0)), Vec3::ONE);
     }
 
     /// The `.thumb.png` contract (docs/CHARACTERS.md, pictures.py, bc7ktx): the cells `Thumb::of`

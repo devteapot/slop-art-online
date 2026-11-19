@@ -297,6 +297,9 @@ class Head:
         a = np.abs(az)
         corner = math.degrees(math.atan2(mw * end, 0.088))
         line = np.interp(a, [0, corner, corner + 14, 62, 84, 100], [zs - 0.004, lerp(zs, zm, 0.55), lerp(zs, zm, 0.50), lerp(zm, self.eye_z, 0.40), self.eye_z - 0.014, self.eye_z + 0.014])
+        if style in ("short", "full"):
+            # Cheek hair thins toward the sideburn and leaves the mouth corners bare.
+            line -= (0.014 if style == "short" else 0.007) * smooth((a - corner) / 24)
         jaw = smooth((line - z + 1.6 * e) / (1.6 * soft)) * smooth((104 - a) / 6.0)
         # The mouth stays clear, and the skin beside the moustache's ends.
         jaw = jaw * (1 - smooth((mw * 1.06 - ax) / 0.003) * smooth((z - lip_bot) / 0.003))
@@ -309,4 +312,5 @@ class Head:
             # Along the jaw only: its upper edge runs level below the mouth.
             low = smooth((np.minimum(line, lerp(zm, self.chin_z, 0.30)) - z + 1.6 * e) / (1.6 * soft)) * smooth((104 - a) / 6.0)
             return np.maximum(low, soul)
-        return np.maximum(np.maximum(mous, jaw), np.maximum(chin, soul))  # short, full
+        edge = 0.40 + 0.60 * smooth((line - z) / 0.020)
+        return np.maximum(np.maximum(mous, jaw * edge), np.maximum(chin, soul))  # short, full
