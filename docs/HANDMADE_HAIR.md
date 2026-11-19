@@ -305,7 +305,11 @@ One fixed daylight frame that authors render after every palette change and comp
   - `_GREY`/`_RING` as composed hair carries them;
   - the global hair-shine preset.
 
-  Phase 2's acceptance includes identical pixels for a VRoid base, a composed person and a scenery model before and after.
+  Measured on the laptop (2026-11-19), the branch against its base 8851982d2, through the asset view at 11:00 with springs off, in a three-quarter and a Near shot:
+  - **A VRoid base:** `recipe:adult:3` with `LIVING_GAME_COMPOSE=0`, on a paused idle frame. 1 pixel differs, by 3 levels or less; the Near shot is identical. Shown on its own (`lookdev/vroid-…glb`), a VRoid base's procedural breathing runs on wall time, so two runs of the same build already differ, and a still says nothing about shading.
+  - **A composed person:** `look:lk_000f47c0d8aa4056`, on a paused idle frame. The Near shot is identical. At three-quarter, 89 pixels differ by 3 levels or less, outside the eyes, whose blink differs between runs of the same build.
+  - **A scenery model:** `envs/cullet/ash_house/ash_house.glb`. 1 channel value differs by 1.
+  - **Cora's untouched file:** 3 pixels differ by 1 level against the diagnosis's raw stills, and its calibration patches equal the diagnosis's raw numbers.
 - **Generated (composed) characters are not affected.** `characters/compose.rs` classes style materials by name (`kind_of`) and packs `_GREY` and `1 + _RING` into UV1 as now. Their hair keeps the ring presets. They move to the profile only after an art comparison across hair colours and silhouettes, as a separate decision.
 - **A `character` file without a `hair` profile** gets the slot classification and the forward turn, and today's character hair. That alone removes the asset view's cream rim on Cora's hair.
 - **Within a profile hair material:**
@@ -314,6 +318,16 @@ One fixed daylight frame that authors render after every palette change and comp
   - UV1 overwritten.
 
   These are the only behaviours that differ from today's character hair, and they apply only where `slop.hair` is set.
+
+## Cost
+
+The profile replaces the ring's half vector, UV noise, lock hashes, Fresnel and up to eight strand samples with two thresholds, one interpolated scalar and, at most, one texture read. It adds no draw and no pass.
+
+**Measured on the laptop** (Apple M4 Pro, Metal, 2026-11-19): 8 Coras in the asset view (`LIVING_GAME_VIEW_COPIES=8`), today's character hair (slots, no profile) against the profile, uncapped (`LIVING_GAME_FPS_CAP=0`), in alternating runs, each run's median frame time over 10 s of steady frames.
+- **Why frame time:** wgpu offers no timestamp queries on this Metal device, so Bevy's per-pass GPU times are absent, and there is no Xcode for a Metal trace. This is the whole frame, not an isolated GPU time.
+- **8 near-drawn at the Near stop, 1600×900:** today 3.30 and 3.82 ms, the profile 3.40 and 3.24 ms.
+- **The same 8 seen close over the crown at 3840×2160,** where hair covers 31% of the frame: today 8.22, 7.04, 7.88 and 7.99 ms, the profile 8.51, 7.50, 7.31 and 8.86 ms. Paired, the profile is +0.29, +0.45, −0.56 and +0.87 ms: a mean of +0.26 ms against about 1 ms of run-to-run spread.
+- **The verdict:** no difference between the two paths is measurable on this machine. Other sessions shared the laptop, and the main world's own work varied between 2.0 and 3.7 ms a frame across runs.
 
 ## Cora, complete
 
