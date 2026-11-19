@@ -26,7 +26,11 @@ Each coat file (`coat-f.glb`, `coat-m.glb`, and any later coat style) has four t
 - **No front chain:** the front stays open, and its panels keep their upper-leg weights.
 - **No `_end` nodes:** a third node would be a ninth to twelfth joint. Joint 1's tail runs 7 cm on along its offset, down the coat, as a long skirt's does.
 - **Placement:** on the coat's own surface, as `add_skirt_bones` places a skirt's. The side chain stands on the torso column `NT / 4` and the rear on column 8 (`SKIRT_CHAINS`' `Side` and `Back`). Joint 0 is at `SKIRT_TOP` (0.86 m) and joint 1 at `SKIRT_KNEE` (0.66 m), standing, `SKIRT_OFF` off the body. The names must not clash with `J_Sec_*_Skirt*`: a coat and a smock are never worn together today, but the names keep that possible.
-- **Rest rotations:** identity, as every other spring bone. At rest (a far character, or one past the client's budget) the coat must deform exactly as it does without the chains: the bones are rigid children of the upper legs.
+- **Rest rotations:** identity, as every other spring bone. The bones are rigid children of the upper legs when unsimulated (a far character, or one past the client's near cap).
+- **The rest rule** (relaxed 2026-11-19 from "deform exactly as without the chains", so weight can move from the hips onto the chains): unsimulated, the coat must be
+  - **no worse than today's chain-less coat in every measured clip** (depth under terrain and body crossings; it may be better, e.g. a hem lifted away from the ground);
+  - **free of new crossings** in walk, brisk walk and run, springs on or off;
+  - **visually unchanged standing and walking** at the Middle (12 m) and Near (8 m) camera stops: a standing-idle and walk silhouette diff and still pair against the chain-less control, flagging any standing hem shift over about 10 mm before it ships.
 
 ## The weights
 
