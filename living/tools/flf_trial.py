@@ -5,7 +5,7 @@ caps, real fast calls, `--keep-plans`) at 100 fighters, the first frame against 
 rules, seed `island`, the fixed site and formation, the persona mix). Paid: start it with
 flf-all.sh only when the coordinator has authorized the run.
 
-Each run holds `~/slop-mq/battle.lock` (other workers share the host) and records the host's
+The trial holds `~/slop-mq/battle.lock` across its runs (other workers share the host) and records the host's
 load. The spend watcher tails the fast calls' journal: a hard stop at $2 across the trial, or more
 than 10% failed calls, or two windows under 2 ticks a second. No run starts within the reclaim
 window (23:15-02:00 CET), or so late it would reach it. The keys are copied from a trials
@@ -14,6 +14,8 @@ checkout's .env without being shown, removed afterwards, and the outputs scanned
 import datetime
 import fcntl
 import json
+import re
+import urllib.request
 import os
 from pathlib import Path
 import signal
@@ -34,6 +36,25 @@ LOCK = Path.home() / "slop-mq/battle.lock"
 KEYS = Path.home() / "dev/slop-trials/.env"
 # A run takes its minutes plus about seven of setup, refill and cleanup.
 RUN_BUDGET = datetime.timedelta(minutes=MINUTES + 12)
+
+
+def owner_token():
+    """The scratch databases' owner token, as battle_diag.py reads it (never printed)."""
+    out = subprocess.run([str(ROOT / "living/tools/stdb"), "login", "show", "--token"], capture_output=True, text=True, timeout=20).stdout
+    m = re.search(r"eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+", out)
+    return m[0] if m else None
+
+
+def tick_of(name, token):
+    """The world's tick count (`clock.tick`; a paused world's does not move), or None."""
+    req = urllib.request.Request(f"{SERVER}/v1/database/verify-{name}/sql", data=b"SELECT tick FROM clock",
+                                 headers={"Authorization": f"Bearer {token}"})
+    try:
+        with urllib.request.urlopen(req, timeout=8) as r:
+            rows = json.load(r)[0]["rows"]
+        return int(rows[0][0]) if rows else None
+    except (OSError, ValueError, KeyError, IndexError):
+        return None
 
 
 def interrupted(signum, _frame):
@@ -60,17 +81,18 @@ def run_one(frame, rep, out, previous_usd):
     path = LOCAL / "verify" / name
     live = LOCAL / "journal" / f"verify-{name}"
     log, watch = out / f"{name}.log", out / f"{name}.watch.jsonl"
-    # The host's battle lock, held by this process for the run (the child is battle_diag itself,
-    # so a stop signals it and its own cleanup runs).
-    lock = LOCK.open("a")
-    waited = time.time()
-    fcntl.flock(lock, fcntl.LOCK_EX)
-    record = {"run": name, "frame": frame, "rep": rep, "lock_wait_s": round(time.time() - waited, 1), "load_start": os.getloadavg(),
+    record = {"run": name, "frame": frame, "rep": rep, "load_start": os.getloadavg(),
               "started": datetime.datetime.now(ZoneInfo("Europe/Berlin")).isoformat(timespec="seconds")}
     print(f"start {name}", flush=True)
-    with lock, log.open("w") as stream, watch.open("w") as observations:
+    with log.open("w") as stream, watch.open("w") as observations:
         child = None
         journal = JournalUsage()
+        token = owner_token()
+        record["tick_watch"] = bool(token)
+        # The orphan guard pauses a world whose launcher's parent (battle_diag itself) is gone; a
+        # paused world spends model money for nothing. Once the battle has begun (diag-head.json),
+        # its tick must advance: 30 s without, and the trial stops.
+        last_tick, last_moved, polls = None, None, 0
         try:
             child = subprocess.Popen(
                 [sys.executable, str(ROOT / "living/tools/battle_diag.py"), "--run", name, "--battle", SIZE,
@@ -88,6 +110,20 @@ def run_one(frame, rep, out, previous_usd):
                     raise Stop("a successful fast call has no recorded or estimable price")
                 if current["calls"] >= 20 and current["failures"] * 10 > current["calls"]:
                     raise Stop("more than 10% of this run's fast calls failed")
+                polls += 1
+                head = path / "diag-head.json"
+                # Within the battle's own minutes only (diag-head.json is written just before the
+                # world is unpaused; the end's pause and cleanup come after them).
+                if token and head.exists() and polls % 10 == 0:
+                    began, now = head.stat().st_mtime, time.time()
+                    if began + 20 < now < began + MINUTES * 60 - 10:
+                        t = tick_of(name, token)
+                        if t is not None and t != last_tick:
+                            last_tick, last_moved = t, now
+                        record["tick_checks"] = record.get("tick_checks", 0) + 1
+                        record["last_tick"] = last_tick
+                        if now - (last_moved or began + 20) > 30:
+                            raise Stop(f"{name}: the world's tick has not advanced for 30 s (paused or stalled)")
                 diag = path / "diag.jsonl"
                 if diag.exists():
                     rows = [json.loads(line) for line in diag.open() if line.endswith("\n")]
@@ -129,6 +165,13 @@ def main():
     summary = {"runs": [], "limit_usd": LIMIT, "minutes": MINUTES, "size": SIZE,
                "commit": subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True, text=True).stdout.strip()}
     attempted, completed, spend, created = [], [], 0.0, False
+    # The host's battle lock, held by this process across the four runs (other workers share the
+    # host; one hold keeps their battles out from between the arms). The children are battle_diag
+    # itself, so a stop signals it and its own pause and cleanup run.
+    lock = LOCK.open("a")
+    waited = time.time()
+    fcntl.flock(lock, fcntl.LOCK_EX)
+    summary["lock_wait_s"] = round(time.time() - waited, 1)
     try:
         fd = os.open(key_file, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         created = True
@@ -167,6 +210,7 @@ def main():
         summary["estimated_usd"] = spend
         summary["worlds_deleted"] = {n: gone(n) for n in attempted}
         (out / "summary.json").write_text(json.dumps(summary, indent=2))
+        lock.close()
         print(json.dumps({"out": str(out), **summary}), flush=True)
     return int("stop" in summary or summary.get("report_exit", 0) != 0 or not all(summary["worlds_deleted"].values())
                or summary["key_fragment_files"] != 0)
