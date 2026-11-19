@@ -227,22 +227,23 @@ Cora's drawing separates locks with thin dark ink lines where they meet; the cli
 
 **When ink is drawn:** only on profile hair, only when the profile sets **at least one** of the four fields, and only when the material has a mask texture. v1 told authors to write G = 0, which here would mean "on a line everywhere", so a v1 texture without ink fields never draws ink. The audit warns when ink fields are set without a texture or with a G that is all 255, and when a texture has a G with lines in it but no ink field is set.
 
-**What the client computes** (`toon.wesl` `hand_hair`; `fwidth` and the screen derivatives are taken per pixel):
+**What the client computes** (`toon.wesl` `hand_hair`):
 
 ```
 d_uv  = G * ink_range                               // G < 1; the field's texel, bilinear
-fw    = max(|∂uv/∂x|, |∂uv/∂y|)                     // UV a pixel spans, along its longer side
+fw    = max(|∂uv/∂x|, |∂uv/∂y|)                     // UV a pixel spans, along its longer side (screen derivatives)
 d_px  = d_uv / fw                                   // distance to the line in screen pixels
-m_px  = max(|∂p/∂x|, |∂p/∂y|)                       // metres a pixel spans at the point
+m_px  = |view depth| * 2 / (projection[1][1] * viewport height)   // metres a pixel spans at the point's depth
 w     = ink_px * min(0.00805 / m_px, 4)             // 0.00805 m: a pixel at the Near stop (9.43 m, 42°, 900 px)
-cov   = (1 - smoothstep(w/2 - 0.5, w/2 + 0.5, d_px)) * min(w, 1)
-space = 2 * ink_range / fw                          // neighbouring lines' spacing on screen, estimated
+cov   = clamp(min(d_px + 0.5, w/2) - max(d_px - 0.5, -w/2), 0, 1)  // a 1-pixel box across a line w wide
+space = 2 * ink_range * m_uv / m_px                 // neighbouring lines' spacing on screen, estimated
 cov  *= smoothstep(ink_fade_px, 2 * ink_fade_px, space)
 color = mix(color, ink * sun + ink * sky_fill, cov) // the shade band's light
 ```
 
-- The edge is antialiased over one pixel, as the bands and the highlight are. A line thinner than a pixel draws fainter instead of breaking up (`min(w, 1)`).
-- **The footprint estimate:** the distance field only says how far the nearest line is, not where the next one lies, so the spacing between lines is estimated from `ink_range` (set to half the narrowest spacing): `2 · ink_range` in UV, `2 · ink_range / fw` on screen. When it drops below `ink_fade_px` the lines fade out over the next doubling, so at the Far stop the lines first thin with the zoom and then go before they merge.
+- **The antialiasing** is a one-pixel box across the line: a line's coverage sums to its width w across it, wherever it falls among the pixels, so a line thinner than a pixel draws fainter instead of breaking up, and does not flicker as it moves by a fraction of a pixel.
+- **The footprint estimate:** the distance field only says how far the nearest line is, not where the next one lies, so the spacing between lines is estimated from `ink_range` (set to half the narrowest spacing): `2 · ink_range` in UV, and on screen that times the hair's texel density `m_uv` (metres per UV unit: the median over the hair mesh's triangles of √(area / UV area), measured when the material is made; `handmade.rs` `metres_per_uv`) over the pixel's size `m_px`. When the spacing drops below `ink_fade_px` the lines fade out over the next doubling, so toward the Far stop the lines first thin with the zoom and then go before they merge.
+- **Why the depth, not screen derivatives, for `w` and the fade:** derivatives are constant over each 2×2 pixel quad, so a fade or width driven by them steps from quad to quad, and the steps crawl as the camera moves. That measured as shimmer in the hand-made line's first build. The pixel's size at its depth and a per-material texel density are smooth on screen. `d_px` keeps `fw`, which measured steady. A mesh without UV area falls back to `2 · ink_range / fw`.
 - **Sampling:** the field is sampled with the pixel's own UV gradients (`textureSampleGrad`), bilinear, in the same tap as R: no extra pass and no extra read where the highlight texture is already read; one read when ink alone brings the texture. A PNG has no mips, so it is read at level 0, like the face shadow map; a KTX2 copy's mips are used, and a mipped distance field only thins distant lines further.
 - The line draws over the bands and the highlight, in cast shadow and in light alike.
 
