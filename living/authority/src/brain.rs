@@ -2483,6 +2483,12 @@ fn alarm_statuses(ctx: &ReducerContext, sc: &living_rules::script::Scripts, me: 
             for d in sc.take_status_differences() {
                 log::error!("status_parts of {}: {d}", me.id);
             }
+            // While profiling: which statuses the compared asks gave (the check's coverage).
+            if common::profiling() {
+                for x in s.iter() {
+                    common::diag(|| format!("status_parts:has:{}", x.name), 1);
+                }
+            }
         }
         s
     };

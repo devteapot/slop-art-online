@@ -18,6 +18,13 @@
 //!   `<x>_ago_s` (whole seconds, at most an hour; -1 never), `share` (each meter's value over
 //!   its max, by meter name), `kind`, `stage` and `night`.
 //!
+//! - **`status_parts()`** (optional) names the functions `status_of` is made of, in order: each
+//!   takes the same body and returns a list of its statuses, and `status_of` is their join. The
+//!   engine keeps each part's answer on what that part reads (`fields::Fields`) and joins them, so
+//!   a change of one fact asks again only the parts that read it (docs/STATUS_PARTS.md). The
+//!   install refuses parts that do not join to `status_of`; the authority's `status_parts` law
+//!   (off: whole) and `status_parts_check` (a diagnostic that compares every ask) switch it.
+//!
 //! The authority's bodily alarms, the mind service's body words and the game client's pills
 //! all read `status_of`: one set of thresholds. Values reach the law rounded (whole numbers,
 //! rates to a hundredth), so bodies in the same state share one answer (kept per state).
