@@ -3,13 +3,13 @@
     "case": "combat",
     "first_main": "3b24a6ba1ac1900ff63b4e656f3f15dcf0b1992b",
     "first_seen": "2026-11-20T00:34:03+01:00",
-    "last_evidence": "/home/carlid/.local/state/slop-merge/scene-gate/main/.local/living/verify/gate-1120004810-main2-combat-player/gate.log (launch or doctor failed)",
-    "last_main": "3ed22a74dd457804bff22c7cd457922a2ebc11c4",
-    "last_seen": "2026-11-20T00:56:35+01:00",
+    "last_evidence": "/home/carlid/.local/state/slop-merge/scene-gate/main/.local/living/verify/gate-1120005720-recheck-combat-player/gate.log (launch or doctor failed)",
+    "last_main": "7fff6a61db7f57a8231f07d239f7170f5a674af0",
+    "last_seen": "2026-11-20T00:57:33+01:00",
     "owner": null,
     "reason": null,
     "skill": "verify-player",
-    "times": 2
+    "times": 3
   },
   "doing_seen": {
     "case": "doing_seen",
