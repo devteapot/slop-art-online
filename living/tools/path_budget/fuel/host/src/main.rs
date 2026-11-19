@@ -24,7 +24,6 @@ fn q(v: &mut [f64], p: f64) -> f64 {
 
 fn main() -> anyhow::Result<()> {
     let args: Vec<String> = std::env::args().collect();
-    let leg_m: f32 = args.get(3).map_or(64.0, |v| v.parse().unwrap());
     let mut config = Config::new();
     config.cranelift_opt_level(OptLevel::Speed).consume_fuel(true).epoch_interruption(true).wasm_backtrace_details(WasmBacktraceDetails::Enable);
     let engine = Engine::new(&config)?;
@@ -43,6 +42,47 @@ fn main() -> anyhow::Result<()> {
     }
     let tiles: TypedFunc<u32, u32> = f!("pb_tiles", u32, u32);
     let load: TypedFunc<(u32, u32), ()> = f!("pb_load", (u32, u32), ());
+    if args.get(2).is_some_and(|a| a == "--arena") {
+        // pb-host guest.wasm --arena TILES.bin W H report-optimal.json
+        let grid = std::fs::read(&args[3])?;
+        let w: u32 = args[4].parse()?;
+        let h: u32 = args[5].parse()?;
+        anyhow::ensure!(grid.len() == (w * h) as usize, "tile dimensions");
+        let p = tiles.call(&mut store, grid.len() as u32)? as usize;
+        memory.data_mut(&mut store)[p..p + grid.len()].copy_from_slice(&grid);
+        load.call(&mut store, (w, h))?;
+        let observe = f!("pb_observation", (), ());
+        let warm = f!("pb_warm", u32, u32);
+        let truth = f!("pb_true_first_leg", (f32, f32, f32, f32), i32);
+        let belief = f!("pb_belief_slice", (f32, f32, f32, f32), i32);
+        let walks: Vec<serde_json::Value> = serde_json::from_slice(&std::fs::read(&args[6])?)?;
+        for (i, walk) in walks.iter().enumerate() {
+            let encoded = serde_json::to_vec(walk)?;
+            store.set_fuel(BUDGET)?;
+            let p = tiles.call(&mut store, encoded.len() as u32)? as usize;
+            memory.data_mut(&mut store)[p..p + encoded.len()].copy_from_slice(&encoded);
+            observe.call(&mut store, ())?;
+            while warm.call(&mut store, 64)? != 0 {}
+            let coord = |endpoint: &str, axis: usize| walk[endpoint][axis].as_f64().unwrap() as f32;
+            let pose = (coord("start", 0), coord("start", 1), coord("goal", 0), coord("goal", 1));
+            store.set_fuel(BUDGET)?;
+            let off_result = truth.call(&mut store, pose)?;
+            let off_fuel = BUDGET - store.get_fuel()?;
+            let mut slices = Vec::new();
+            let on_result = loop {
+                store.set_fuel(BUDGET)?;
+                let result = belief.call(&mut store, pose)?;
+                slices.push(BUDGET - store.get_fuel()?);
+                if result != -2 { break result; }
+            };
+            println!("{}", serde_json::json!({
+                "walk": i, "off_result": off_result, "off_fuel": off_fuel,
+                "on_result": on_result, "on_slice_fuel": slices, "on_fuel": slices.iter().sum::<u64>(),
+            }));
+        }
+        return Ok(());
+    }
+    let leg_m: f32 = args.get(3).map_or(64.0, |v| v.parse().unwrap());
     let cold: TypedFunc<(), ()> = f!("pb_cold", (), ());
     let leg: TypedFunc<(f32, f32, f32, f32, f32), i32> = f!("pb_leg", (f32, f32, f32, f32, f32), i32);
     let px: TypedFunc<u32, f32> = f!("pb_x", u32, f32);

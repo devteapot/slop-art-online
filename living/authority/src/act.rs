@@ -1627,6 +1627,7 @@ pub fn on_motion(ctx: &ReducerContext, id: u32, ev: Event, now: u64) {
                         finish_as(ctx, a, false, &why, now, refusal());
                     }
                 } else if a.target.class != 3 {
+                    motion::route_exit(id, now, "arrival_out_of_reach");
                     finish(ctx, a, false, "could not get there", now);
                 }
             }

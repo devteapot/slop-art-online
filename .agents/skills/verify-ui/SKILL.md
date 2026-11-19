@@ -22,7 +22,7 @@ export CARGO_TARGET_DIR=$PWD/.local/target            # a private target dir (ot
 - The island seed's newcomer arrives on Brackenford's square among residents. No mind service runs and no model is called: residents never answer, and the free tier is all there is. The one exception is `reply-pace`, which starts `living-mind` for one resident against verify-llm's local fake model (`fake_llm.py`; no paid call): build it first (`cargo build --release -p living-mind` into the same `CARGO_TARGET_DIR`).
 - In a fresh worktree, link `living/game/assets/{lookdev,textures,view}` from the main checkout (`for d in lookdev textures view; do ln -s /Users/carlid/dev/slop-art-online/living/game/assets/$d living/game/assets/$d; done`). They are generated and git-ignored; without them the client draws no character models or textures, and `ready` waits for a fitted character until it gives up at 240 s.
 - On the laptop, heavy builds go through `build-slot` (at most three at once).
-- `drive.py` waits for the client's log to say `playing character #N` (the player's id), then, for `--place` and `--place-free`, for `scene.go` and `waiting for` (the plan at `sync:scene`), and for each `sync:NAME` the same way. The plan's own `ready` step waits in the client: until the island is drawn, the character has a body, the buildings round it are in, one person is fitted (when any is shown) and the loading cover has lifted, at least 2 s, or 240 s at most (`live.rs`).
+- `drive.py` waits for the client's log to say `playing character #N` (the player's id), then reads each complete `live script: waiting for <path>` line in order. It matches the full `<evidence-dir>/NAME.go` path, including `scene.go` for `--place` and `--place-free`, and consumes the wait once before acknowledging it. Use a distinct name for each sync in a plan. The plan's own `ready` step waits in the client: until the island is drawn, the character has a body, the buildings round it are in, one person is fitted (when any is shown) and the loading cover has lifted, at least 2 s, or 240 s at most (`live.rs`).
 
 ## Drive
 
@@ -32,6 +32,7 @@ The driver renews the scratch world's inactivity lease while the client runs. Sc
 
 ```bash
 S=.agents/skills/verify-ui/scripts
+$S/drive.py --self-test                      # sync matcher regression, offline
 $S/check.py --list                          # every scenario, in the order defined (each registers itself with @scenario); * needs a Cullet world
 $S/check.py --run $R                       # ordinary island scenarios (PASS/FAIL per check)
 LIVING_GAME_THEME=night $S/check.py --run $R windows talk items   # the same in a theme; evidence in <scenario>-night/
@@ -82,7 +83,7 @@ drive.py's other options (its docstring): `--expect REGEX` (repeatable) must mat
 
 Pass `camera`, `camera-rotate`, `camera-lod`, `camera-faces`, `camera-tuning`, `camera-lol` or `camera-lol-ridge` explicitly for the dedicated Brackenford fixtures in [camera.md](features/camera.md).
 
-`seat` sits skirted and coated residents on the ground in the crowded street and gets them up, the cloth's ground contact on and off (`LIVING_GAME_SEAT_CONTACT=0`), with `LIVING_GAME_PERF=seat` (each seated character's lowest cloth tail above its ground) and `springwake`: [seat.md](features/seat.md).
+`seat` sits skirted and coated residents on the ground in the crowded street and checks their unassisted rise after `sync:up` sends them home. It runs with cloth ground contact on and off (`LIVING_GAME_SEAT_CONTACT=0`) and logs the lowest seated cloth tails and spring wakes (`LIVING_GAME_PERF=seat,springwake`). It also checks that each sitter plays the ground clips its look line selects (the female ground sit's `_f` variants for adults in `trousers-f` and `boots-f`; `LIVING_GAME_CLIP_VARIANTS=0` turns the selection off) and records one variant sitter's frames: [seat.md](features/seat.md).
 
 Pass `gaze` on a Cullet scratch world to exercise the zoom bands, reconnect and the authored hedge. [Gaze evidence and setup](features/gaze.md).
 
@@ -90,7 +91,7 @@ Developer camera controls (`LIVING_GAME_DEV=1`): `settings:camera_preset:ours-fi
 
 ## Evidence
 
-Each drive writes `.local/living/verify/<run>/ui/<name>/`: the photographs (`shot:`), dumps (`dump:`), `client.log`, the feet log when `LIVING_GAME_FEET` names one (also the body `LIVING_GAME_FEET_ID` names, each line with its `id`; `look-walk` does: every frame's feet, gaits, the legs', hips', chest's and head's yaw, the twist asked, the look, and the authority's heading and segment), `plan.txt`, `scene.json` (the player's id and the admin calls) and `settings.json` (the run's own settings file: `LIVING_GAME_SETTINGS`, so the owner's `~/.config/slop-art-online/game.json` is never touched). `check.py` writes `ui/checks.json`. A proof of a UI change holds:
+Each drive writes `.local/living/verify/<run>/ui/<name>/`: the photographs (`shot:`), dumps (`dump:`), `client.log`, the feet log when `LIVING_GAME_FEET` names one (also the body `LIVING_GAME_FEET_ID` names, each line with its `id`; `look-walk` does: every frame's feet, the hips' place (`hips_at`), gaits, the legs', hips', chest's and head's yaw, the twist asked, the look, and the authority's heading and segment), `plan.txt`, `scene.json` (the player's id and the admin calls) and `settings.json` (the run's own settings file: `LIVING_GAME_SETTINGS`, so the owner's `~/.config/slop-art-online/game.json` is never touched). `check.py` writes `ui/checks.json`. A proof of a UI change holds:
 
 - **the action:** the plan (`plan.txt`) and the client log's lines for it (`ui: window Pack opened at Right`, `say: "…" to #57`, `verbs: berries let go on #57: give berries`);
 - **the state:** the dumps before and after, and for anything sent, the authority's rows (`$V sql`: `experience` `said` rows, `inventory`);

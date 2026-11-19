@@ -285,6 +285,16 @@ class Cage:
                ("brow", p.brow_z + 0.004), ("crease", max(lid_top + 0.022, lerp(lid_top, p.brow_z, 0.45))), ("lid_top", lid_top), ("eye", eye_row), ("lid_bot", lid_bot), ("under", lid_bot - 0.032), ("cheek", cheek_z)]
         shares = [("tip", min(no["tip_z"] / cheek_z, 0.90)), ("base", no["base_z"] / cheek_z), ("lip_up", (m["z"] + 0.024) / cheek_z), ("mouth", m["z"] / cheek_z), ("lip_low", (m["z"] - 0.024) / cheek_z),
                   ("chin_top", m["z"] * 0.50 / cheek_z), ("chin", 0.028 / cheek_z), ("jaw", 0.0)]
+        # An authored lower face can add two transverse loops. Zero offsets retain
+        # the original grid (including its subdivision stencils and vertex order).
+        chin_width = jaw.get("chin_taper", 0.0)
+        jaw_width = jaw.get("jaw_taper", 0.0)
+        if chin_width or jaw_width:
+            if not all(math.isfinite(delta) and delta > -1 for delta in (chin_width, jaw_width)):
+                raise ValueError("chin_taper and jaw_taper must be finite width offsets greater than -1")
+            for lower, name in (("chin", "chin_taper"), ("chin_top", "jaw_taper")):
+                i = next(i for i, row in enumerate(shares) if row[0] == lower)
+                shares.insert(i, (name, (shares[i - 1][1] + shares[i][1]) / 2))
         # Each row lies below the one before it, on every column. The tip's row is held to 0.90
         # of the way up to the cheek's; on a face whose nose base is higher than that (the men's
         # and one child's types) the base's row came out above the tip's away from the nose, and
@@ -329,6 +339,16 @@ class Cage:
                 z = lerp(jz[col], cheek_z, share)
                 x, y = p.at(z, col, self.eye_f)
                 grid[R[name], col] = (x, y, z)
+        if chin_width or jaw_width:
+            # The jaw line climbs towards the ear, so choose the width by
+            # physical height, including along that edge. Offsets are fractions
+            # of the local half-width. Leave the lips and nose in place.
+            for name, _ in shares:
+                row = grid[R[name]]
+                height = row[:, 2]
+                chin_weight = 1 - smooth((height - 0.095) / 0.05)
+                jaw_weight = (1 - chin_weight) * (1 - smooth((height - 0.15) / 0.12))
+                row[:, 0] *= 1 + (chin_width * chin_weight + jaw_width * jaw_weight)
         # Under the jaw and the neck's ring.
         # The neck's ring meets the neck's own tube (person.py make_neck, at NECK_RING_Z; the chin
         # at 1.535 m). The neck is a narrow column set well in under the jaw (head_form.neck_radius:
