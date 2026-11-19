@@ -16,3 +16,15 @@
 {"stage": "face-c-fitted", "materials": 25, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
 {"stage": "face-c", "materials": 25, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
 {"stage": "face-c-saved", "materials": 25, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "shading", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "shading-checkpoint", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "hands", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "hands-checkpoint", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "hands-b", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "hands-b-checkpoint", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "expressions", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "expressions-checkpoint", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "expressions-b", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "expressions-b-checkpoint", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "rig", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "rig-checkpoint", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}

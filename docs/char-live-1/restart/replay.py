@@ -1500,3 +1500,268 @@ audit('face-c-fitted')
 
 # 2026-11-19T14:52:11.826921+00:00  face-c-orbit-expression-audit
 face_review_final('face-c')
+
+# 2026-11-19T14:58:48.572276+00:00  shading
+# The matched sheet dyes below are scalar colour picks. Colours on the
+# finished garment travel through the generator's cloth slot as COLOR_0.
+for mat,hexcol in [(wool,'847b81'),(knit,'74352e'),(linen,'d3baa3'),(trouser,'4a3b39'),(leather,'684431'),(cuffmat,'c1aaa6')]:
+    col=(*generator.lin(tuple(q/255 for q in bytes.fromhex(hexcol))),1)
+    mat.diffuse_color=col;mat.node_tree.nodes.get('Principled BSDF').inputs['Base Color'].default_value=col
+clothmat=generator.material(generator.MAT['cloth'])
+def vertex_base(mat):
+    bs=mat.node_tree.nodes.get('Principled BSDF')
+    if not bs.inputs['Base Color'].is_linked:
+        c=mat.node_tree.nodes.new('ShaderNodeVertexColor');c.layer_name='Color'
+        mat.node_tree.links.new(c.outputs['Color'],bs.inputs['Base Color'])
+    bs.inputs['Roughness'].default_value=.95
+vertex_base(clothmat)
+for ob in list(scene.objects):
+    if ob.type!='MESH' or not ob.data.materials or not all(m and m.name.startswith('Cora_') and 'CLOTH' in m.name for m in ob.data.materials):continue
+    me=ob.data
+    ca=me.color_attributes.new(name='Color',type='FLOAT_COLOR',domain='CORNER')
+    for p in me.polygons:
+        col=me.materials[p.material_index].diffuse_color[:]
+        for li in p.loop_indices:ca.data[li].color=col
+        p.material_index=0
+    me.materials.clear();me.materials.append(clothmat)
+# One loose wavy lock per temple with a tapered section. Join the two
+# strands into the accepted hair to retain a single pigment/material draw.
+for sg in (-1,1):
+    coords=[];polys=[]
+    for i in range(23):
+        u=i/22
+        x=sg*(38+4.8*math.sin(u*math.tau-.5)+1.5*u);y=-26-3*math.sin(math.pi*u)
+        r=(1.8*(1-u)**.68+.10)
+        for j in range(7):
+            a=j*math.tau/7
+            coords.append(wp(x+r*math.sin(a),y+r*.71*math.cos(a),76+58*u))
+            if i:polys.append(((i-1)*7+j,(i-1)*7+(j+1)%7,i*7+(j+1)%7,i*7+j))
+    strand=geo('Loose temple wave',coords,polys,hair_material)
+    cc=strand.data.color_attributes.new(name='Color',type='FLOAT_COLOR',domain='CORNER')
+    for p in strand.data.polygons:
+        p.use_smooth=True
+        for li in p.loop_indices:cc.data[li].color=palette[warm if li%4==0 else auburn]
+    bpy.ops.object.select_all(action='DESELECT');strand.select_set(True);hair_ob.select_set(True)
+    bpy.context.view_layer.objects.active=hair_ob;bpy.ops.object.join()
+def review_pass(stage):
+    swaps=studio_preview()
+    try:frame(stage)
+    finally:
+        for tree,sock,old,nodes in swaps:
+            tree.links.new(old,sock)
+            for node in nodes:tree.nodes.remove(node)
+    audit(stage+'-checkpoint')
+    bpy.ops.wm.save_as_mainfile(filepath=str(ROOT/f'cora-{stage}.blend'))
+scene.view_settings.view_transform='Standard'
+review_pass('shading')
+
+# 2026-11-19T14:59:34.754462+00:00  hands
+palm_parts={}
+def hand_to_sheet(co,sg):
+    # Local +length lies along the middle finger, breadth toward the thumb,
+    # thickness toward the dorsum. Thumb stays forward in the hanging pose.
+    length=(generator.WRIST_X-co.x)*.79
+    breadth=(co.y-generator.ARM_Y)*.77
+    thick=(co.z-generator.ARM_Z)*.73
+    return Vector(wp(sg*126,-7,373))+Vector((sg*(.146*length+.989*thick),-breadth,-.989*length+.146*thick))
+for sg in (-1,1):
+    which='L' if sg==1 else 'R'
+    part=generator.make_hand(generator.Part('Hand '+which))
+    part.co=[hand_to_sheet(c,sg) for c in part.co]
+    if sg<0:part.w=[{generator.mirror_name(b):v for b,v in w.items()} for w in part.w]
+    ob=generator.build(part,rig,generator.MAT['skin'],lambda tag,u,v,co,n: (.93,.74,.65) if tag==1 else look['skin'])
+    ob.parent=None;ob.modifiers.clear()
+    palm_parts[which]=ob
+for name in ('Hand envelope L','Hand envelope R'):bpy.data.objects.remove(objs[name],do_unlink=True)
+def detail_view(stage,label,center,yaw,span):
+    view(yaw)
+    camera.location+=Vector(center)-Vector((0,0,(785-405)*unit))
+    camera.data.ortho_scale=span
+    scene.render.resolution_x=440;scene.render.resolution_y=440
+    scene.render.filepath=str(ROOT/f'{stage}-{label}.png');bpy.ops.render.render(write_still=True)
+def reset_views():
+    set_expression({});camera.data.ortho_scale=810*unit
+    scene.render.resolution_x=320;scene.render.resolution_y=810;view(0)
+swaps=studio_preview()
+for label,yaw in [('edge',0),('dorsal',85),('oblique',45)]:
+    detail_view('hands',label,wp(131,-8,404),yaw,.25)
+for tree,sock,old,nodes in swaps:
+    tree.links.new(old,sock)
+    for node in nodes:tree.nodes.remove(node)
+reset_views()
+review_pass('hands')
+
+# 2026-11-19T15:00:00.046366+00:00  rig-inventory
+print([(ob.name,len(ob.data.vertices)) for ob in scene.objects if ob.type=='MESH' and not ob.hide_render], flush=True)
+
+# 2026-11-19T15:00:36.483855+00:00  hands-fit
+for ob in palm_parts.values():bpy.data.objects.remove(ob,do_unlink=True)
+palm_parts={}
+generator.THUMB_DIR=Vector((-.89,.38,-.24)).normalized()
+generator.THUMB_LEN=tuple(x*.87 for x in generator.THUMB_LEN)
+generator.finger_joints()
+def hand_to_sheet(co,sg):
+    # Local +length lies along the middle finger, breadth toward the thumb,
+    # thickness toward the dorsum. Thumb stays forward in the hanging pose.
+    length=(generator.WRIST_X-co.x)*.79
+    breadth=(co.y-generator.ARM_Y)*.77
+    thick=(co.z-generator.ARM_Z)*.73
+    lateral=.84*thick+.54*breadth
+    depth=.54*thick-.84*breadth
+    return Vector(wp(sg*126,-7,371))+Vector((sg*(.12*length+.993*lateral),depth,-.993*length+.12*lateral))
+for sg in (-1,1):
+    which='L' if sg==1 else 'R'
+    part=generator.make_hand(generator.Part('Hand '+which))
+    part.co=[hand_to_sheet(c,sg) for c in part.co]
+    if sg<0:part.w=[{generator.mirror_name(b):v for b,v in w.items()} for w in part.w]
+    ob=generator.build(part,rig,generator.MAT['skin'],lambda tag,u,v,co,n: (.93,.74,.65) if tag==1 else look['skin'])
+    ob.parent=None;ob.modifiers.clear()
+    palm_parts[which]=ob
+def detail_view(stage,label,center,yaw,span):
+    view(yaw)
+    camera.location+=Vector(center)-Vector((0,0,(785-405)*unit))
+    camera.data.ortho_scale=span
+    scene.render.resolution_x=440;scene.render.resolution_y=440
+    scene.render.filepath=str(ROOT/f'{stage}-{label}.png');bpy.ops.render.render(write_still=True)
+def reset_views():
+    set_expression({});camera.data.ortho_scale=810*unit
+    scene.render.resolution_x=320;scene.render.resolution_y=810;view(0)
+swaps=studio_preview()
+for label,yaw in [('edge',0),('dorsal',85),('oblique',45)]:
+    detail_view('hands-b',label,wp(131,-8,404),yaw,.25)
+for tree,sock,old,nodes in swaps:
+    tree.links.new(old,sock)
+    for node in nodes:tree.nodes.remove(node)
+reset_views()
+review_pass('hands-b')
+
+# 2026-11-19T15:01:15.718276+00:00  expressions
+faceset=[('neutral',{}),('smile',{'Fcl_MTH_Fun':1,'Fcl_BRW_Fun':.55}),('talk',{'Fcl_MTH_A':.88}),('surprise',{'Fcl_BRW_Surprised':1,'Fcl_MTH_O':1}),('blink',{'Fcl_EYE_Close':1}),('returned',{})]
+swaps=studio_preview()
+for label,values in faceset+[(key.name,{key.name:1}) for key in list(face.data.shape_keys.key_blocks)[1:]]:
+    set_expression(values);detail_view('expressions',label,wp(0,0,87),0,150*unit)
+for tree,sock,old,nodes in swaps:
+    tree.links.new(old,sock)
+    for node in nodes:tree.nodes.remove(node)
+reset_views();review_pass('expressions')
+
+# 2026-11-19T15:01:59.147358+00:00  expression-surprise-fit
+# Give O a rounder aperture and make the brow raise legible at portrait size.
+for name,mult in [('Fcl_BRW_Surprised',2.15),('Fcl_MTH_O',1.42)]:
+    basis=face.data.shape_keys.key_blocks['Basis']
+    key=face.data.shape_keys.key_blocks[name]
+    for a,b in zip(key.data,basis.data):
+        d=a.co-b.co
+        if name=='Fcl_MTH_O' and d.length>.0003:
+            d.x*=1.45
+        a.co=b.co+d*mult
+faceset=[('neutral',{}),('smile',{'Fcl_MTH_Fun':1,'Fcl_BRW_Fun':.55}),('talk',{'Fcl_MTH_A':.88}),('surprise',{'Fcl_BRW_Surprised':1,'Fcl_MTH_O':1}),('blink',{'Fcl_EYE_Close':1}),('returned',{})]
+swaps=studio_preview()
+for label,values in faceset+[(key.name,{key.name:1}) for key in list(face.data.shape_keys.key_blocks)[1:]]:
+    set_expression(values);detail_view('expressions-b',label,wp(0,0,87),0,150*unit)
+for tree,sock,old,nodes in swaps:
+    tree.links.new(old,sock)
+    for node in nodes:tree.nodes.remove(node)
+reset_views();review_pass('expressions-b')
+
+# 2026-11-19T15:03:00.361893+00:00  rig-bind
+from mathutils import Quaternion
+# Preserve the accepted face/eye joint locations in world space, then fit the
+# generator's named skeleton to the A-pose. Absolute local clip rotations
+# can replace the neutral A rotation at the upper arm.
+oldrig=rig.matrix_world.copy()
+newscale=(785-363)*unit/.985
+newrig=Matrix.Rotation(math.pi,4,'Z')@Matrix.Scale(newscale,4)
+face_world=face.matrix_world.copy()
+bone_heads={b.name:oldrig@b.head_local for b in rig.data.bones}
+rig.name='Armature'
+rig.matrix_world=newrig
+face.matrix_world=face_world
+bpy.context.view_layer.objects.active=rig
+bpy.ops.object.mode_set(mode='EDIT')
+for b in rig.data.edit_bones:
+    name=b.name;sg=1 if '_L_' in name else -1
+    tailname=name.split('_')[-1]
+    pt=bone_heads[name]
+    if name=='Root':pt=Vector((0,0,0))
+    elif tailname in ('Hips','Spine','Chest','UpperChest','Belly'):
+        h={'Hips':363,'Spine':303,'Belly':304,'Chest':236,'UpperChest':188}[tailname]
+        pt=Vector(wp(0,-30 if tailname=='Belly' else 0,h))
+    elif tailname in ('Shoulder','UpperArm','LowerArm','Hand','UpperLeg','LowerLeg','Foot','ToeBase') and name.startswith('J_Bip_'):
+        xx,yy,zz={'Shoulder':(20,2,153),'UpperArm':(66,3,169),'LowerArm':(96,3,266),'Hand':(126,-7,371),'UpperLeg':(38,3,365),'LowerLeg':(46,-3,566),'Foot':(55,3,739),'ToeBase':(60,-33,773)}[tailname]
+        pt=Vector(wp(xx*sg,yy,zz))
+    elif name.startswith('J_Bip_') and tailname[-1:].isdigit():
+        pt=hand_to_sheet(Vector(generator.JOINTS['J_Bip_L_'+tailname]),sg)
+    pos=newrig.inverted()@pt
+    rest=Matrix.Rotation(math.pi/2,4,'X')
+    if name.startswith('J_Bip_') and (tailname in ('UpperArm','LowerArm','Hand') or tailname[-1:].isdigit()):
+        # In generator space the left arm extends along negative X.
+        angle={'UpperArm':72.8,'LowerArm':74.1}.get(tailname,83.)
+        rest=Matrix.Rotation(math.radians(-sg*angle),4,'Y')@rest
+    b.matrix=Matrix.Translation(pos)@rest
+bpy.ops.object.mode_set(mode='OBJECT')
+bpy.context.view_layer.update()
+rig_items=[o for o in scene.objects if o.type=='MESH' and not o.hide_render]
+def mix_weights(anchors,t):
+    for (s,a),(e,b) in zip(anchors,anchors[1:]):
+        if t<=e:
+            v=sat((t-s)/(e-s));return {a:1-v,b:v}
+    return {anchors[-1][1]:1}
+def skin_vertex(ob,world):
+    x,y,z=world.x/unit,world.y/unit,785-world.z/unit
+    side='L' if x>=0 else 'R'
+    leg='J_Bip_'+side+'_';sp='J_Bip_C_'
+    n=ob.name
+    if ob==hair_ob:
+        return mix_weights([(120,sp+'Head'),(165,sp+'Neck'),(225,sp+'UpperChest')],z)
+    if ob==neck:
+        return mix_weights([(128,sp+'Neck'),(170,sp+'UpperChest')],z)
+    if n.startswith(('Sleeve','Turned cuff')):
+        return mix_weights([(141,leg+'Shoulder'),(178,leg+'UpperArm'),(241,leg+'UpperArm'),(292,leg+'LowerArm')],z) if z<242 else mix_weights([(241,leg+'UpperArm'),(292,leg+'LowerArm')],z)
+    if n.startswith(('Boot','Stacked sole')):
+        return mix_weights([(728,leg+'LowerLeg'),(751,leg+'Foot')],z)
+    if n.startswith('Trouser leg'):
+        return mix_weights([(337,sp+'Hips'),(390,leg+'UpperLeg'),(530,leg+'UpperLeg'),(600,leg+'LowerLeg')],z)
+    if z<350:return mix_weights([(168,sp+'UpperChest'),(218,sp+'Chest'),(278,sp+'Spine'),(335,sp+'Hips')],z)
+    # Spread the mid-panel between both thighs; keep lateral fronts on
+    # their own thigh and the top edge on the pelvis.
+    rise=sat((z-350)/78);left=sat((x+33)/66)
+    return {sp+'Hips':1-rise,'J_Bip_L_UpperLeg':rise*left,'J_Bip_R_UpperLeg':rise*(1-left)}
+for ob in rig_items:
+    if ob==face:continue
+    world=ob.matrix_world.copy()
+    if ob not in palm_parts.values():
+        for v in ob.data.vertices:
+            w=skin_vertex(ob,world@v.co)
+            # collapse plateaux where two adjacent stations use one bone
+            s=sum(w.values())
+            if s<1.e-8:w={next(iter(w)):1};s=1
+            for n,vw in w.items():
+                if vw>0:
+                    g=ob.vertex_groups.get(n)
+                    if g is None:g=ob.vertex_groups.new(name=n)
+                    g.add([v.index],vw/s,'REPLACE')
+    ob.parent=rig;ob.matrix_world=world
+    m=ob.modifiers.new('Cora body weights','ARMATURE');m.object=rig
+bpy.context.view_layer.update()
+def validate_weights():
+    worst=0.;influences=0
+    for ob in rig_items:
+        for v in ob.data.vertices:
+            gs=[g for g in v.groups if g.weight>1.e-6]
+            assert all(ob.vertex_groups[g.group].name in rig.data.bones for g in gs)
+            worst=max(worst,abs(sum(g.weight for g in gs)-1))
+            influences=max(influences,len(gs))
+    return dict(weight_sum_error=worst,max_influences=influences)
+weight_report=validate_weights()
+# Vertex groups interpolated by hand subdivision can contain tiny tails.
+for ob in palm_parts.values():
+    for v in ob.data.vertices:
+        gs=sorted([(g.weight,g.group) for g in v.groups if g.weight>0],reverse=True)
+        for _,idx in gs[4:]:ob.vertex_groups[idx].remove([v.index])
+        sm=sum(w for w,idx in gs[:4])
+        for w,idx in gs[:4]:ob.vertex_groups[idx].add([v.index],w/sm,'REPLACE')
+weight_report=validate_weights()
+assert weight_report['weight_sum_error']<1.e-4 and weight_report['max_influences']<=4,weight_report
+(ROOT/'rig-weights.json').write_text(json.dumps(weight_report,indent=2)+'\n')
+review_pass('rig')
