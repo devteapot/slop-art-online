@@ -129,10 +129,21 @@ for p in "${people[@]}"; do
       cp "$dir/$name.glb" "$dir/anim/$name.glb"
       rm -f "$dir/anim/$name.clips.json"
     else
+      family_args=()
+      if [[ "$name" = own-clips && ( -z "$only" || ",$only," =~ ,(sit_ground|sit_ground_down|stand_up_ground), ) ]]; then
+        seat_dir=$(mktemp -d)
+        trap 'rm -rf -- "$seat_dir"' EXIT
+        if ! "$blender" -b --python-exit-code 1 -P living/tools/blender/person.py -- --variant piece:trousers-f \
+          --parts keep --keep Trousers,Boots --lod near --out "$seat_dir/contact.glb" > "$log" 2>&1; then
+          tail -30 "$log"; exit 1
+        fi
+        family_args=(--female-seat-mesh "$seat_dir/contact.glb")
+      fi
       if ! "$blender" -b --python-exit-code 1 -P "$animate" -- --in "$dir/$name.glb" --out "$dir/anim/$name.glb" \
-        --library living/tools/blender/clips.json --summary "$dir/anim/$name.clips.json" --kimodo-dir "$kimodo" ${only:+--only "$only"} > "$log" 2>&1; then
+        --library living/tools/blender/clips.json --summary "$dir/anim/$name.clips.json" --kimodo-dir "$kimodo" "${family_args[@]}" ${only:+--only "$only"} > "$log" 2>&1; then
         grep -v "OpenColorIO\|^ANIM" "$log" | tail -30; rm -f "$log"; exit 1
       fi
+      if (( ${#family_args[@]} )); then rm -rf -- "$seat_dir"; trap - EXIT; fi
       grep -E '^(SKELETON|GRAFT|SUMMARY)' "$log" | cut -c1-220 || true
     fi
     # The copy the game draws, and then the builder's own copy beside it, are finished the same

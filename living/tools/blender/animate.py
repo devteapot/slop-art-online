@@ -98,6 +98,7 @@ would need a second AnimationPlayer.
 """
 
 import argparse
+import copy
 import json
 import math
 import os
@@ -1906,7 +1907,7 @@ def joins_a_gait(spec):
     return spec.get("travel") == "path" and ("hop" in spec or "travel_deg" in spec or "#" in ends)
 
 
-def library_clip(sk, soma, spec, path, neutral, speeds, max_scale, seat=None):
+def library_clip(sk, soma, spec, path, neutral, speeds, max_scale, seat=None, base_frames=None):
     """A Kimodo NPZ made game-ready by its library entry. Returns frames and a summary."""
     m = load_soma(path)
     T = m["P"].shape[0]
@@ -1992,6 +1993,16 @@ def library_clip(sk, soma, spec, path, neutral, speeds, max_scale, seat=None):
                 feet = {side: v[k] for side, v in planted.items()}
                 frames[k] = seated.ground_pose(sk, pose, points, legs, HIPS, fk_pose, solve_leg,
                                                plant=feet, seat_weight=weight)
+                if base_frames is not None:
+                    # Keep the original standing/squat placement while the feet carry
+                    # the body. Follow sit-hips' seated height band into the family fit.
+                    base_q, base_off = base_frames[k]
+                    rest_y = sk.rest[HIPS].y - sk.floor
+                    height = (rest_y + base_off.y) / rest_y
+                    share = smooth((0.45 - height) / (0.45 - 0.17))
+                    fitted_q, fitted_off = frames[k]
+                    frames[k] = ({b: base_q[b].slerp(q, share) for b, q in fitted_q.items()},
+                                 base_off.lerp(fitted_off, share))
     # Foot-down markers. A gait's loop starts where its right foot comes down (the start of the
     # right foot's longest contact), so phase 0 is the same event in every gait and the game can
     # play them all at one shared phase.
@@ -2217,6 +2228,7 @@ def main():
     ap.add_argument("--max-scale", type=float, default=1.4, help="most a locomotion clip is sped up or slowed down to reach its speed")
     ap.add_argument("--height", type=float, default=1.75, help="height the game fits the character to, m")
     ap.add_argument("--kimodo", action="append", default=[], metavar="NAME=NPZ", help="add a clip retargeted from a Kimodo SOMA-RP NPZ as generated (repeatable)")
+    ap.add_argument("--female-seat-mesh", help="fit additional _f ground clips to the female trousers and boots on the shared skeleton")
     ap.add_argument("--library", help="clip library (clips.json): write its clips, made game-ready")
     # The library's home, and only where there is none the older copy under `outputs/` (gen_person.sh has the same rule).
     home = os.path.join(REPO, ".local", "kimodo", "library")
@@ -2231,6 +2243,13 @@ def main():
     unknown = [c for c in clips if c not in CLIPS]
     if unknown:
         raise SystemExit(f"unknown clips {unknown}")
+    legs = {side: [bone(side, n) for n in LEG] for side in "LR"}
+    if a.female_seat_mesh:
+        # Import the contact mesh first. Keep plain rest-space weights and offsets
+        # across import_model's scene reset. The output still uses the shared rig.
+        arm, meshes = import_model(os.path.abspath(a.female_seat_mesh))
+        female_rig = Skeleton(arm, meshes, a.height)
+        female_points = seated.contact_vertices(female_rig, meshes, HIPS, legs)
     arm, meshes = import_model(os.path.abspath(a.src))
     bpy.context.scene.render.fps = FPS
     sk = Skeleton(arm, meshes, a.height)
@@ -2264,6 +2283,18 @@ def main():
         neutral = neutral_frame(sk, soma, lib["neutral"], a.kimodo_dir) if lib.get("neutral") else None
         only = {x for x in a.only.split(",") if x}
         seats = {}
+        if a.female_seat_mesh:
+            sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+            from person_params import WOMAN
+            female_sk = copy.copy(sk)
+            female_sk.rest = dict(sk.rest)
+            # The client scales the foot and its descendants about the ankle.
+            # Fit its skin offsets and toe pivot in those same coordinates.
+            foot_scale = WOMAN["feet"]
+            for side, (_, _, foot, toe) in legs.items():
+                female_sk.rest[toe] = sk.rest[foot].lerp(sk.rest[toe], foot_scale)
+                female_points[side] = [[(b, w, delta * foot_scale if b in (foot, toe) else delta)
+                                        for b, w, delta in vertex] for vertex in female_points[side]]
         for name, e, seed in library_entries(lib, only, a.seeds):
             if "keyed" in e:
                 keyed(name, e["keyed"])
@@ -2274,17 +2305,24 @@ def main():
             else:
                 path = os.path.join(a.kimodo_dir, f"{e['name']}_s{seed}.npz")
                 ref = e.get("ground_seat")
-                if ref and ref not in seats:
-                    legs = {side: [bone(side, n) for n in LEG] for side in "LR"}
-                    points = seated.contact_vertices(sk, meshes, HIPS, legs)
-                    pose = neutral_frame(sk, soma, ref, a.kimodo_dir)
-                    q, off = seated.ground_pose(sk, pose, points, legs, HIPS, fk_pose, solve_leg)
-                    refs = seated.sole_refs(sk, (q, off), points, legs, fk_pose)
-                    seats[ref] = ((q, off), legs, points, refs)
-                frames, info = library_clip(sk, soma, e, path, neutral, speeds, a.max_scale, seats.get(ref))
-                stats = {k: v for k, v in info.items() if k not in ("source", "kind", "loop", "contacts")}
-                add(name, key_frames(arm, name, frames, stats))
-                summary[name] = info
+                families = [(name, sk, "")]
+                if ref and a.female_seat_mesh:
+                    families.append((name + "_f", female_sk, "f"))
+                base_frames = None
+                for clip_name, rig, family in families:
+                    key = ref, family
+                    if ref and key not in seats:
+                        points = female_points if family else seated.contact_vertices(sk, meshes, HIPS, legs)
+                        pose = neutral_frame(rig, soma, ref, a.kimodo_dir)
+                        q, off = seated.ground_pose(rig, pose, points, legs, HIPS, fk_pose, solve_leg)
+                        refs = seated.sole_refs(rig, (q, off), points, legs, fk_pose)
+                        seats[key] = ((q, off), legs, points, refs)
+                    frames, info = library_clip(rig, soma, e, path, neutral, speeds, a.max_scale, seats.get(key), base_frames)
+                    if not family:
+                        base_frames = frames
+                    stats = {k: v for k, v in info.items() if k not in ("source", "kind", "loop", "contacts")}
+                    add(clip_name, key_frames(arm, clip_name, frames, stats))
+                    summary[clip_name] = info
             # Upper-body clips play over the gait while the body moves (the game's anim.rs).
             if "layer" in e:
                 summary[name]["layer"] = e["layer"]
