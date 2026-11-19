@@ -556,10 +556,11 @@ pub struct Laws {
     /// A body cannot fall asleep while the one who last struck it, in a fight still on, is within
     /// `wake_reach` (the fact `hurt_by_near`).
     pub alert_while_attacker_near: bool,
-    /// A continuous activity (rest, sleep, work, eating, play) that finished and that the
-    /// behaviour graph would begin again begins again in the same transaction, its `doing` row
-    /// renewed in place (doing-renew). Off: it begins at the body's next evaluation, up to a
-    /// second later, and is seen doing nothing meanwhile, as before 2026-11-19.
+    /// A continuous activity (rest, sleep, work, eating, play) that ends well stays seen until
+    /// the body's next evaluation: its `doing` row is held, then renewed in place if the same
+    /// activity begins again, replaced or removed if not (doing-renew). Nothing begins sooner.
+    /// Off: the row is deleted at the end and the body is seen doing nothing until the next
+    /// begins, as before 2026-11-19.
     pub renew_in_place: bool,
     /// What a graph's `relation: "stranger"` filter means (docs/STRANGERS.md): off, no
     /// relation row (or one labelled "stranger"); on, someone whose name one does not know

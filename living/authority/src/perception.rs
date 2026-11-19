@@ -803,8 +803,15 @@ pub fn doing_of(ctx: &ReducerContext, id: u32, observer: (u32, &str, (f32, f32))
                 None => moving_label(run, (x, y), heading, std::iter::empty()),
             })
         }
-        _ => a.map(|a| a.label),
+        _ => a.map(|a| a.label).or_else(|| held_doing(ctx, id)),
     }
+}
+
+/// The skill a body's `doing` row was held for between two uses of one continuous activity
+/// (`town::hold`, `until_ms` 0): what it is still seen doing while no activity runs.
+fn held_doing(ctx: &ReducerContext, id: u32) -> Option<String> {
+    let d = ctx.db.doing().id().find(id).filter(|d| d.until_ms == 0)?;
+    common::scripts(ctx).shows().iter().find(|(_, s)| s.code == d.code).map(|(skill, _)| skill.to_string())
 }
 
 /// Whom someone is going to, as `observer` perceives them: "you", their label (a name it knows,

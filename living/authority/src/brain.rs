@@ -165,10 +165,6 @@ struct Ev<'a> {
     acting: bool,
     /// The leaf whose activity's success this evaluation read (`finished`), and its skill.
     done: Option<(u16, String)>,
-    /// A renewing pass (`renew`): only this leaf may begin; anything else ends the pass.
-    renew: Option<u16>,
-    /// The renewing pass came to something other than its leaf, so it is undone.
-    diverged: bool,
 }
 
 /// Work that, once begun under an `if`, is finished even after the `if`'s condition stops
@@ -199,7 +195,7 @@ pub fn evaluate(ctx: &ReducerContext, id: u32, now: u64) {
         cur = ctx.db.activity().id().find(id);
     }
     let acting = cur.as_ref().map_or(false, |a| act::held(a.node));
-    let mut ev = Ev { ctx, now, w, me, at, needs, vit, orig: st.clone(), st, g, scene: None, smelled: None, smell: false, running: None, path: Vec::new(), status: String::new(), visits: 0, last_fail: String::new(), want: (String::new(), 0), answers: (0, 0), run: None, spacing: Default::default(), latched: None, acting, done: None, renew: None, diverged: false };
+    let mut ev = Ev { ctx, now, w, me, at, needs, vit, orig: st.clone(), st, g, scene: None, smelled: None, smell: false, running: None, path: Vec::new(), status: String::new(), visits: 0, last_fail: String::new(), want: (String::new(), 0), answers: (0, 0), run: None, spacing: Default::default(), latched: None, acting, done: None };
     // A pace aside (an `aside` skill in the script) is a short walk that finishes on its own too.
     let sc = common::scripts(ctx);
     ev.latched = cur.filter(|a| a.revision == ev.st.revision && (sc.skills().get(&a.skill).is_some_and(|k| k.latch) || sc.shows().aside(&a.skill))).map(|a| a.node);
@@ -213,12 +209,15 @@ pub fn evaluate(ctx: &ReducerContext, id: u32, now: u64) {
         let _span = common::span("brain.graph");
         ev.run(&root.root, 0)
     };
-    let result = ev.renew(result, &root.root, played);
     common::diag(|| "eval:all", 1);
     common::diag(|| "do:visits", ev.visits as u64);
+    // The leaf whose end this evaluation read, if it came to nothing else: a continuous
+    // activity's `doing` row held at its end stays while this is so (`town::settle`).
+    let read_end = ev.done.take().map(|(_, skill)| skill).filter(|_| result == St::Ok && !played && !matches!(root.root, Node::Seq(_)));
     let _span = common::span("brain.after");
     ev.after(result, &root.root);
     drop(_span);
+    crate::town::settle(ctx, id, read_end.as_deref());
     let _span = common::detail_span("brain.slept");
     // Fell asleep, or woke (and thinks on what waited): perceive::slept.
     if let Some(me) = ctx.db.character().id().find(id) {
@@ -239,7 +238,7 @@ pub fn resolve_for(ctx: &ReducerContext, id: u32, t: &Target, now: u64) -> Optio
     let g = common::compiled(ctx, id, st.revision)?;
     let at = pos(&body, now);
     let needs = common::needs(&vit, now);
-    let mut ev = Ev { ctx, now, w: common::world(ctx), me, at, needs, vit, orig: st.clone(), st, g, scene: None, smelled: None, smell: false, running: None, path: Vec::new(), status: String::new(), visits: 0, last_fail: String::new(), want: (String::new(), 0), answers: (0, 0), run: None, spacing: Default::default(), latched: None, acting: false, done: None, renew: None, diverged: false };
+    let mut ev = Ev { ctx, now, w: common::world(ctx), me, at, needs, vit, orig: st.clone(), st, g, scene: None, smelled: None, smell: false, running: None, path: Vec::new(), status: String::new(), visits: 0, last_fail: String::new(), want: (String::new(), 0), answers: (0, 0), run: None, spacing: Default::default(), latched: None, acting: false, done: None };
     ev.sensed(t)
 }
 
@@ -546,9 +545,6 @@ impl<'a> Ev<'a> {
                 continue;
             }
             let r = self.run(&ds[i].body, ids[i]);
-            if plan && r == St::Ok && self.renew.is_some() {
-                return self.diverge();
-            }
             if plan && r == St::Ok {
                 self.set_mark(PLAN_DONE_MARK);
                 self.deliberate("I finished my plan.");
@@ -703,7 +699,6 @@ impl<'a> Ev<'a> {
                 self.leaf(id, &a.skill, target, a.item.as_deref().unwrap_or(""), a.qty.unwrap_or(0), a.text.as_deref().unwrap_or(""), a.topic.as_deref().unwrap_or(""), graph::describe(n))
             }
             Node::Wait(s) => self.leaf(id, "wait", Resolved::none(), "", s.round().max(1.0) as u32, "", "", graph::describe(n)),
-            Node::Say(_) | Node::Think(_) if self.renew.is_some() => self.diverge(),
             Node::Say(s) => {
                 // Pacing: a say node speaks at most once per 45 s, so a looping graph does not
                 // chatter. The mark is set only when the line is actually spoken.
@@ -862,47 +857,6 @@ impl<'a> Ev<'a> {
         St::Fail
     }
 
-    /// Renewing in place: a continuous activity that finished well at this evaluation, and that
-    /// the graph would begin again, begins again now, in the transaction that ended it, not at
-    /// the body's next slot evaluation up to a second later. So what it is seen doing (`doing`,
-    /// every `doing_seen` copy) does not blink out between two rests of one long rest, and the
-    /// row is renewed in place (`town::shown`). A second pass runs in which only that leaf may
-    /// begin; if the graph would come to anything else first (another leaf, a line, a thought, a
-    /// finished plan), the pass is undone and the next evaluation decides as before, so a
-    /// genuinely different activity follows as it always did. Only after a pass that came to
-    /// `Ok` with nothing under way, only for a continuous shown skill (`town::continuous`), not
-    /// for a body a person plays, not when the root is a sequence (the plan is finished), and
-    /// only under the `renew_in_place` law.
-    fn renew(&mut self, result: St, root: &Node, played: bool) -> St {
-        let Some((node, skill)) = self.done.clone() else { return result };
-        if result != St::Ok || played || matches!(root, Node::Seq(_)) || !common::laws(self.ctx).renew_in_place {
-            return result;
-        }
-        if !crate::town::continuous(&common::scripts(self.ctx), &skill) || self.ctx.db.activity().id().find(self.me.id).is_some() {
-            return result;
-        }
-        let _span = common::detail_span("brain.renew");
-        let kept = (self.st.clone(), std::mem::take(&mut self.path), self.status.clone(), self.running, self.last_fail.clone(), self.visits);
-        self.renew = Some(node);
-        self.diverged = false;
-        self.visits = 0;
-        let again = self.run(root, 0);
-        self.renew = None;
-        if again == St::Run && !self.diverged && self.running == Some(node) {
-            common::diag(|| format!("renew:{skill}"), 1);
-            return again;
-        }
-        common::diag(|| format!("renew:not:{skill}"), 1);
-        (self.st, self.path, self.status, self.running, self.last_fail, self.visits) = kept;
-        result
-    }
-
-    /// The renewing pass came to something other than its leaf: it stops here, as if running.
-    fn diverge(&mut self) -> St {
-        self.diverged = true;
-        St::Run
-    }
-
     fn leaf_fail(&mut self, id: u16, why: &str) -> St {
         let _ = id;
         self.last_fail = why.to_string();
@@ -930,9 +884,6 @@ impl<'a> Ev<'a> {
     #[allow(clippy::too_many_arguments)]
     fn leaf(&mut self, id: u16, skill: &str, target: Resolved, item: &str, qty: u32, text: &str, topic: &str, desc: String) -> St {
         let _span = common::detail_span("brain.leaf");
-        if self.renew.is_some_and(|r| r != id) {
-            return self.diverge();
-        }
         // A committed move under way holds the body until it has run its course (a dash may cut
         // in on a windup): the graph waits on it, as a player's keys do (`combat::held_by`).
         if let Some(a) = self.ctx.db.activity().id().find(self.me.id) {

@@ -6,9 +6,11 @@ player's character stands 3 m from it and sees it. The player's own subscription
 SDK probe of verify-client, under the player's identity) are streamed for 30 s: what the game
 client takes under the world's delivery laws (`seen_doing_near`, `seen_doing_far` and the
 `seen_doing_cue` event table, frame-views) and the untiered `seen_doing`. The resident's row
-arrives; every renewal reaches the client as one update of it (its end moved on, its `since_ms`
-kept), in `seen_doing` and in the tier it is in, never a delete followed by an insert, and no cue
-says it is doing nothing, so a client never shows "doing nothing" between two rests. Then the
+arrives; at each rest's end the row is held (open-ended, `until_ms` 0) and at the next rest's
+start renewed (its end moved on, its `since_ms` kept), both updates, in `seen_doing` and in the
+tier it is in, never a delete followed by an insert, and no cue says it is doing nothing, so a
+client never shows "doing nothing" between two rests. The next rest still begins at the old pace
+(about a second after the last ended). Then the
 resident is walked off (`set_behavior`): the client is told at once (a cue of nothing, the row
 deleted). `--baseline` (a build before doing-renew) records the
 same stream without asserting the renewal.
@@ -123,12 +125,21 @@ def changes(events, table, who):
     return out
 
 
-def tally(live, rester_until=None):
-    """Counts of one table's changes, and its renewals (updates whose end moved on)."""
+def tally(live, first=None):
+    """Counts of one table's changes, and its renewals: an update to a new rest's end, through the
+    row held open-ended between two rests (`until_ms` 0). `gap_ms` is the authority's gap between
+    the old rest's end and the next one's start (the pacing, as before doing-renew)."""
     ups = [c for c in live if c[1] == "update"]
-    return {"updates": len(ups), "deletes": sum(1 for c in live if c[1] == "delete"), "inserts": sum(1 for c in live if c[1] == "insert"),
-            "cues": sum(1 for c in live if c[1] == "cue"), "cues_of_nothing": sum(1 for c in live if c[1] == "cue" and c[3] is None),
-            "renewals": [{"at_ms": at, "gap_ms": (new["until_ms"] - REST_MS) - old["until_ms"], "since_kept": new["since_ms"] == old["since_ms"]} for at, ev, old, new in ups if old and new["until_ms"] != old["until_ms"]]}
+    renewals, last = [], first
+    for at, ev, old, new in live:
+        if ev not in ("update", "insert") or new is None or new.get("until_ms", 0) == 0:
+            continue
+        if last is not None and new["until_ms"] != last["until_ms"]:
+            renewals.append({"at_ms": at, "gap_ms": (new["until_ms"] - REST_MS) - last["until_ms"], "since_kept": new["since_ms"] == last["since_ms"]})
+        last = new
+    return {"updates": len(ups), "holds": sum(1 for c in ups if c[3].get("until_ms") == 0), "deletes": sum(1 for c in live if c[1] == "delete"),
+            "inserts": sum(1 for c in live if c[1] == "insert"), "cues": sum(1 for c in live if c[1] == "cue"),
+            "cues_of_nothing": sum(1 for c in live if c[1] == "cue" and c[3] is None), "renewals": renewals}
 
 
 def main():
@@ -193,7 +204,8 @@ def main():
     for q in QUERIES:
         name = q.rsplit(" ", 1)[1]
         live = changes(events, name, rester)
-        per[name] = tally([c for c in live if c[0] < sent])
+        start = (first.get(name) or [None])[0]
+        per[name] = tally([c for c in live if c[0] < sent], (start or {}).get("doing", start) if start else None)
         walk[name] = [(at - sent, ev if ev != "cue" else ("cue of nothing" if new is None else "cue")) for at, ev, _, new in live if at >= sent]
     # On a build before doing-renew a renewal is a delete, then an insert: how long the row was gone.
     gone = []
@@ -212,8 +224,8 @@ def main():
         check(st, "baseline: the stream was recorded", bool(first["seen_doing"]), summary)
     else:
         check(st, "the player's client has the resident's row (seen_doing and its tier)", bool(first["seen_doing"]) and bool(first[tier]), first)
-        check(st, "seen_doing: each rest renewal reaches the client as one update (none deleted, none inserted)", len(u["renewals"]) >= 3 and not u["deletes"] and not u["inserts"], {k: u[k] for k in ("updates", "deletes", "inserts")})
-        check(st, "seen_doing: each renewed row keeps its since_ms, its end moved on within 100 ms of the old end", all(r["since_kept"] and r["gap_ms"] < 100 for r in u["renewals"]), u["renewals"])
+        check(st, "seen_doing: each rest renewal reaches the client as updates of the row (held, then renewed), none deleted, none inserted", len(u["renewals"]) >= 2 and u["holds"] >= 2 and not u["deletes"] and not u["inserts"], {k: u[k] for k in ("updates", "holds", "deletes", "inserts")})
+        check(st, "seen_doing: each renewed row keeps its since_ms, the next rest beginning at the old pace (within 1.1 s of the old end)", u["renewals"] and all(r["since_kept"] and 0 <= r["gap_ms"] <= 1100 for r in u["renewals"]), u["renewals"])
         tt = per[tier]
         check(st, f"{tier}: the tier's row is never deleted or inserted while it rests, and follows the renewals", not tt["deletes"] and not tt["inserts"] and tt["updates"] >= 1, {k: tt[k] for k in ("updates", "deletes", "inserts")})
         c = per[CUE]

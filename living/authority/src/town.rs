@@ -141,7 +141,7 @@ pub const INDOORS_M: f32 = 3.5;
 
 /// A continuous shown skill: one that looks the same from one use to the next (resting,
 /// sleeping, work, eating, play), not a gesture, a turn or a pace aside, each of which is an act
-/// of its own. Its renewal is one activity going on (`brain` renews it in place).
+/// of its own. Its renewal is one activity going on (`hold`).
 pub fn continuous(sc: &living_rules::script::Scripts, skill: &str) -> bool {
     sc.shows().get(skill).is_some_and(|s| !(s.record || s.aside || s.turn))
 }
@@ -171,9 +171,9 @@ fn ended<R>(ctx: &ReducerContext, f: impl FnOnce(&mut HashMap<u32, Doing>) -> R)
 const RENEW_SPOT_M: f32 = 0.5;
 
 /// A shown skill starts being performed: anyone in view sees it (`doing`). A continuous one
-/// renewed in the transaction that ended it, the same skill on the same target at the same spot,
-/// is the same doing going on: the row keeps its `since_ms` (a client does not sit them down
-/// again) and only its end moves, one update in that transaction.
+/// taken up again where its row was held (`hold`), the same skill on the same target at the same
+/// spot, is the same doing going on: the row keeps its `since_ms` (a client does not sit them
+/// down again) and only its end moves, one update.
 pub fn shown(ctx: &ReducerContext, sc: &living_rules::script::Scripts, a: &Activity, at: Option<(f32, f32)>, now: u64) {
     let code = sc.shows().code(&a.skill);
     if code == 0 {
@@ -185,13 +185,14 @@ pub fn shown(ctx: &ReducerContext, sc: &living_rules::script::Scripts, a: &Activ
     let indoors = sc.shows().get(&a.skill).is_some_and(|s| s.look == "rest")
         && ctx.db.character().id().find(a.id).zip(ctx.db.body().id().find(a.id)).is_some_and(|(c, b)| (c.home_x != 0.0 || c.home_y != 0.0) && common::dist(common::pos(&b, now), (c.home_x, c.home_y)) <= INDOORS_M);
     let mut row = Doing { id: a.id, code, target: if a.target.class == 3 { a.target.id as u32 } else { 0 }, x, y, since_ms: now, until_ms: a.ends_ms, indoors };
-    if let Some(old) = ended(ctx, |e| e.remove(&a.id)) {
+    let current = ctx.db.doing().id().find(a.id);
+    if let Some(old) = current.clone().or_else(|| ended(ctx, |e| e.remove(&a.id))) {
         if old.code == row.code && old.target == row.target && old.indoors == row.indoors && dist((old.x, old.y), (x, y)) <= RENEW_SPOT_M && continuous(sc, &a.skill) {
             row.since_ms = old.since_ms;
         }
     }
     crate::frame::did(a.id);
-    if ctx.db.doing().id().find(a.id).is_some() {
+    if current.is_some() {
         ctx.db.doing().id().update(row);
     } else {
         ctx.db.doing().insert(row);
@@ -207,6 +208,55 @@ pub fn unshown(ctx: &ReducerContext, sc: &living_rules::script::Scripts, id: u32
             ctx.db.doing().id().delete(id);
         }
     }
+}
+
+/// A continuous shown skill that ended well, for a body no person plays, under the
+/// `renew_in_place` law: its `doing` row is held, open-ended (`until_ms` 0, its `since_ms` kept),
+/// instead of deleted. The body is between two uses of one continuous behaviour until its next
+/// evaluation: one that begins it again takes the row up in place (`unhold`, `shown`); one that
+/// begins anything else replaces it (`unhold`); one that leaves the body doing nothing deletes it
+/// (`settle`). Nothing is begun sooner than before. Returns whether the row was held.
+pub fn hold(ctx: &ReducerContext, sc: &living_rules::script::Scripts, id: u32, skill: &str) -> bool {
+    if !continuous(sc, skill) || !common::laws(ctx).renew_in_place {
+        return false;
+    }
+    if !ctx.db.character().id().find(id).is_some_and(|c| c.ai) || crate::presence::played(ctx, id) {
+        return false;
+    }
+    let Some(mut row) = ctx.db.doing().id().find(id) else { return false };
+    if row.code != sc.shows().code(skill) {
+        return false;
+    }
+    row.until_ms = 0;
+    crate::frame::did(id);
+    ctx.db.doing().id().update(row);
+    true
+}
+
+/// Something begins for a body with nothing under way: a row held at the end of its last
+/// activity (`hold`) gives way, kept for this transaction so that the same activity shown again
+/// keeps its start (`shown`).
+pub fn unhold(ctx: &ReducerContext, id: u32) {
+    if let Some(row) = ctx.db.doing().id().find(id).filter(|d| d.until_ms == 0) {
+        crate::frame::did(id);
+        ended(ctx, |e| e.insert(id, row));
+        ctx.db.doing().id().delete(id);
+    }
+}
+
+/// At the end of a body's evaluation: with nothing under way, a held row (`hold`) is deleted,
+/// unless this evaluation read the end of that very activity and came to nothing else
+/// (`read_end`, its skill): then the next evaluation decides.
+pub fn settle(ctx: &ReducerContext, id: u32, read_end: Option<&str>) {
+    if ctx.db.activity().id().find(id).is_some() {
+        return;
+    }
+    let Some(row) = ctx.db.doing().id().find(id).filter(|d| d.until_ms == 0) else { return };
+    if read_end.is_some_and(|skill| common::scripts(ctx).shows().code(skill) == row.code) {
+        return;
+    }
+    crate::frame::did(id);
+    ctx.db.doing().id().delete(id);
 }
 
 // ---- gestures --------------------------------------------------------------------
