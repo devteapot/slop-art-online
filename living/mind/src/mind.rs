@@ -1556,7 +1556,8 @@ impl Minds {
                     m.running = true;
                     m.taken_ms = d.updated_ms;
                 }
-                let result = self.deliberate(&d).await;
+                // The battle timing header's span from here to the slot grant (llm.rs).
+                let result = llm::DELIBERATION_STARTED_MS.scope(llm::now_ms(), self.deliberate(&d)).await;
                 // What it read at its turn is what it consumed (turn.rs); what came after is next.
                 seen = {
                     let mut a = self.actors.lock().unwrap();

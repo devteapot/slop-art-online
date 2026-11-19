@@ -1254,6 +1254,7 @@ impl Llm {
                     "sent_ms": now_ms(),
                     "urgent_arrived_ms": permit.urgent_arrived_ms,
                     "prompt_preparation_ms": permit.preparation_ms,
+                    "deliberation_started_ms": DELIBERATION_STARTED_MS.try_with(|at| *at).ok(),
                 }).to_string());
             }
             let resp = match request.send().await {
@@ -1669,6 +1670,13 @@ fn content_text(c: &Value) -> String {
         Value::Array(parts) => parts.iter().filter(|p| p["type"].as_str() == Some("text")).filter_map(|p| p["text"].as_str()).collect::<Vec<_>>().join(""),
         _ => String::new(),
     }
+}
+
+tokio::task_local! {
+    /// When the running deliberation began (`Minds::schedule`), for the battle timing header:
+    /// deliberation start to slot grant is the same span whether the prompt is built before the
+    /// ticket queues or while it holds its place.
+    pub static DELIBERATION_STARTED_MS: u64;
 }
 
 pub fn now_ms() -> u64 {
