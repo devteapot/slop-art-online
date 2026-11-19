@@ -581,6 +581,12 @@ struct Queue {
     /// slots expected to free while one prompt is prepared.
     grants: VecDeque<Instant>,
     preparation_ms: f64,
+    /// Steps decided for tickets whose owners have not collected them yet, and when
+    /// ([`Queue::dispatch`]): a granted slot or a nomination to prepare.
+    decided: HashMap<u64, (Step, Instant)>,
+    /// Grant-stall watch for the battle timing header: since when a ready call has had a free
+    /// slot with no grant, and the most ready calls seen meanwhile ([`Queue::watch`]).
+    stall: Option<(Instant, usize)>,
 }
 
 /// What a waiting ticket may do now ([`Queue::poll`]).
@@ -701,33 +707,75 @@ impl Queue {
         order
     }
 
-    /// Whether turn `id` may prepare its prompt now: it is among the next tickets to take a
-    /// slot, as many as the free slots plus the lookahead. It needs no free slot itself, so
-    /// the turns that will fill the next slots prepare in parallel, and in the order they will
-    /// be served, every lane in its share.
-    fn may_prepare(&mut self, id: u64, now: Instant) -> bool {
-        if self.waiting.iter().any(|w| w.id == id && w.lane == Lane::Fast) {
-            let free = self.fast_slots.saturating_sub(self.fast_in_flight);
-            return self.waiting.iter().filter(|w| w.lane == Lane::Fast).take(free + 1).any(|w| w.id == id);
+    /// Decide every step the queue allows now, for whichever tickets they belong to: grant
+    /// each call that may take a slot, then nominate each turn that may prepare. A turn may
+    /// prepare when it is among the next tickets to take a slot, as many as the free slots plus
+    /// the lookahead; it needs no free slot itself, so the turns that will fill the next slots
+    /// prepare in parallel and in the order they will be served, every lane in its share. The owners
+    /// collect their steps when they next run ([`Queue::poll`]). Before 2026-11-19 only the
+    /// owner of the one ticket the scheduler picked could take its step; when that task was
+    /// held up (behind other work on its worker thread), every grant waited for it.
+    /// Returns whether anything was decided.
+    fn dispatch(&mut self, now: Instant) -> bool {
+        let mut any = false;
+        while let Some(id) = self.candidate(now) {
+            let (lane, probe) = self.start(id, now);
+            self.decided.insert(id, (Step::Start(lane, probe), now));
+            any = true;
         }
+        let fast_free = self.fast_slots.saturating_sub(self.fast_in_flight);
+        let fast: Vec<u64> = self.waiting.iter().filter(|w| w.lane == Lane::Fast).take(fast_free + 1).map(|w| w.id).collect();
         let free = self.concurrency.saturating_sub(self.in_flight).min(self.lower_limit().saturating_sub(self.lower_in_flight));
         let limit = free + self.lookahead(now);
-        self.dispatch_order(limit).contains(&id)
+        let mut window = self.dispatch_order(limit);
+        window.extend(fast);
+        for id in window {
+            let w = self.waiting.iter_mut().find(|w| w.id == id).unwrap();
+            if w.prompt == Prompt::NeedsPreparation {
+                w.prompt = Prompt::Preparing(now);
+                self.decided.insert(id, (Step::Prepare, now));
+                any = true;
+            }
+        }
+        any
     }
 
-    /// What waiting ticket `id` may do now: begin preparing its prompt, take a slot, or wait.
-    fn poll(&mut self, id: u64, now: Instant) -> Step {
-        let prompt = self.waiting.iter().find(|w| w.id == id).unwrap().prompt;
-        match prompt {
-            Prompt::NeedsPreparation if self.may_prepare(id, now) => {
-                self.waiting.iter_mut().find(|w| w.id == id).unwrap().prompt = Prompt::Preparing(now);
-                Step::Prepare
+    /// What ticket `id` may do now: begin preparing its prompt, take its slot (granted at the
+    /// returned instant), or wait; and whether other tickets were given steps meanwhile.
+    fn poll(&mut self, id: u64, now: Instant) -> (Step, Instant, bool) {
+        let others = self.dispatch(now);
+        self.watch(now);
+        match self.decided.remove(&id) {
+            Some((step, at)) => (step, at, others),
+            None => (Step::Wait, now, others),
+        }
+    }
+
+    /// The grant-stall watch, for the battle timing evidence: a shared-pool call with its
+    /// prompt ready and its profile's pacing passed, a free slot for its lane, and no grant.
+    /// A stall of a second or more is logged when it ends.
+    fn watch(&mut self, now: Instant) {
+        let free_lower = self.in_flight < self.concurrency && self.lower_in_flight < self.lower_limit();
+        let free_interactive = self.in_flight < self.concurrency;
+        let rates = &mut self.rates;
+        let ready = self
+            .waiting
+            .iter()
+            .filter(|w| w.lane != Lane::Fast && w.prompt == Prompt::Ready)
+            .filter(|w| if w.lane == Lane::Interactive { free_interactive } else { free_lower })
+            .filter(|w| rates.get_mut(&w.profile).unwrap().ready_at(w.cost, now) <= now)
+            .count();
+        match (&mut self.stall, ready) {
+            (None, 0) => {}
+            (None, n) => self.stall = Some((now, n)),
+            (Some((_, most)), n) if n > 0 => *most = (*most).max(n),
+            (Some((since, most)), _) => {
+                let ms = now.saturating_duration_since(*since).as_millis();
+                if ms >= 1000 {
+                    log::warn!("grant stall: {ms} ms with up to {most} ready calls and free slots");
+                }
+                self.stall = None;
             }
-            Prompt::Ready if self.candidate(now) == Some(id) => {
-                let (lane, probe) = self.start(id, now);
-                Step::Start(lane, probe)
-            }
-            _ => Step::Wait,
         }
     }
 
@@ -780,6 +828,12 @@ impl Queue {
             self.owed.retain(|lane, n| *n > 0 && waiting.iter().any(|w| w.lane == *lane));
         }
         self.grants.push_back(now);
+        if let Some((since, most)) = self.stall.take() {
+            let ms = now.saturating_duration_since(since).as_millis();
+            if ms >= 1000 {
+                log::warn!("grant stall: {ms} ms with up to {most} ready calls and free slots");
+            }
+        }
         self.rates.get_mut(&w.profile).unwrap().sent(id, w.cost, now);
         self.in_flight += 1;
         self.lower_in_flight += usize::from(w.lane != Lane::Interactive);
@@ -841,7 +895,19 @@ impl Drop for Admission<'_> {
                 q.lower_in_flight -= usize::from(lane != Lane::Interactive);
             }
         } else {
-            q.waiting.retain(|w| w.id != self.id);
+            match q.decided.remove(&self.id) {
+                // Granted on its behalf, never collected: give the slot back.
+                Some((Step::Start(lane, probe), _)) => {
+                    if lane == Lane::Fast {
+                        q.fast_in_flight -= 1;
+                    } else {
+                        q.in_flight -= 1;
+                        q.lower_in_flight -= usize::from(lane != Lane::Interactive);
+                    }
+                    self.probe = probe;
+                }
+                _ => q.waiting.retain(|w| w.id != self.id),
+            }
         }
         if let Some(host) = &self.probe {
             let g = q.gates.get_mut(host).unwrap();
@@ -874,6 +940,8 @@ impl Scheduler {
                 owed: Default::default(),
                 grants: VecDeque::new(),
                 preparation_ms: 0.0,
+                decided: HashMap::new(),
+                stall: None,
             }),
             changed: tokio::sync::Notify::new(),
         }
@@ -911,22 +979,23 @@ impl Scheduler {
             changed.as_mut().enable();
             {
                 let mut q = self.queue.lock().unwrap();
-                let waiting = q.waiting.iter().find(|w| w.id == admission.id).unwrap();
-                if q.rates[&waiting.profile].tpm.is_some_and(|limit| waiting.cost > limit) {
-                    return Err(anyhow!("estimated request tokens {} exceed {} tokens_per_minute", waiting.cost, waiting.profile));
-                }
-                let now = Instant::now();
-                match q.poll(admission.id, now) {
-                    Step::Wait => {}
-                    Step::Prepare => {
-                        self.changed.notify_waiters();
-                        return Ok(admission);
+                // Not yet granted (a grant on its behalf takes it out of `waiting`).
+                if let Some(waiting) = q.waiting.iter().find(|w| w.id == admission.id) {
+                    if q.rates[&waiting.profile].tpm.is_some_and(|limit| waiting.cost > limit) {
+                        return Err(anyhow!("estimated request tokens {} exceed {} tokens_per_minute", waiting.cost, waiting.profile));
                     }
+                }
+                let (step, at, others) = q.poll(admission.id, Instant::now());
+                if others {
+                    self.changed.notify_waiters();
+                }
+                match step {
+                    Step::Wait => {}
+                    Step::Prepare => return Ok(admission),
                     Step::Start(lane, probe) => {
                         admission.lane = Some(lane);
                         admission.probe = probe;
-                        admission.granted = Some(now);
-                        self.changed.notify_waiters();
+                        admission.granted = Some(at);
                         return Ok(admission);
                     }
                 }
@@ -2169,9 +2238,10 @@ mod tests {
             }
             // Every waiter looks at the queue until none of them can act.
             'waiters: loop {
-                let ids: Vec<u64> = q.waiting.iter().map(|w| w.id).collect();
+                let mut ids: Vec<u64> = tickets.keys().copied().collect();
+                ids.sort_unstable();
                 for id in ids {
-                    match q.poll(id, now) {
+                    match q.poll(id, now).0 {
                         Step::Wait => continue,
                         Step::Prepare => preparing.push((ms + load.prepare_ms, id)),
                         Step::Start(lane, _) => {
@@ -2417,6 +2487,37 @@ mod tests {
         assert_eq!(requests[0]["body"]["prompt_cache_key"], requests[2]["body"]["prompt_cache_key"]);
         assert_ne!(requests[2]["body"]["prompt_cache_key"], requests[3]["body"]["prompt_cache_key"]);
         println!("fake transport evidence: {}", directory.display());
+    }
+
+    /// The battles' grant stall (docs/MIND_HARNESS.md §8): many ready calls, free slots and no
+    /// grants for seconds, because only the call the scheduler picked could take its slot, and
+    /// its task was not running (held up behind other work on its worker thread). A ticket whose
+    /// owner does not poll must cost its own slot only, never the others' grants.
+    #[tokio::test]
+    async fn a_held_up_ticket_does_not_stop_the_grants() {
+        let models: ModelsFile = serde_json::from_value(json!({"default": "p", "profiles": {
+            "p": {"base_url": "x", "model": "m", "key_env": "unused", "requests_per_minute": 60000}
+        }}))
+        .unwrap();
+        let scheduler = Scheduler::new(&models, 16, 0.0);
+        // First in its lane, and its owner never polls.
+        let held = scheduler.enqueue("p", Lane::Urgent, 10, Prompt::Ready);
+        let call = || scheduler.admit("p", Lane::Urgent, 10);
+        let admitted = tokio::time::timeout(Duration::from_secs(2), async { tokio::join!(call(), call(), call(), call(), call(), call()) })
+            .await
+            .expect("six ready calls with free slots got no grant in 2 s behind a held-up ticket");
+        let permits = [admitted.0.unwrap(), admitted.1.unwrap(), admitted.2.unwrap(), admitted.3.unwrap(), admitted.4.unwrap(), admitted.5.unwrap()];
+        assert_eq!(scheduler.queue.lock().unwrap().in_flight, 7, "the six and the held-up ticket, granted on its behalf");
+        drop(permits);
+        // The held-up owner gives up without ever polling: its slot is released.
+        drop(held);
+        // A turn nominated on its owner's behalf and dropped leaves no ticket behind.
+        let turn = scheduler.enqueue("p", Lane::Routine, 10, Prompt::NeedsPreparation);
+        let _ = tokio::time::timeout(Duration::from_secs(2), call()).await.unwrap().unwrap();
+        drop(turn);
+        let q = scheduler.queue.lock().unwrap();
+        assert_eq!((q.in_flight, q.lower_in_flight), (0, 0));
+        assert!(q.waiting.is_empty());
     }
 
     /// A nominated turn can prepare while other calls use the transport slot.
