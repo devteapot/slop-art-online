@@ -8,7 +8,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from trial_reclaim import HAMLETS, check_archive, plan, restrict_to_review
+from unittest.mock import patch
+
+from trial_reclaim import HAMLETS, OFFLINE, check_archive, check_report_paths, plan, replica_removal_command, restrict_to_review
 
 
 class ReclaimTests(unittest.TestCase):
@@ -70,6 +72,26 @@ class ReclaimTests(unittest.TestCase):
         self.assertEqual([row["action"] for row in rows], ["delete", "keep", "keep", "keep", "keep"])
         self.assertEqual(rows[1]["reason"], "paid, archived")
         self.assertEqual(rows[4]["classification"], "live")
+
+    def test_evidence_is_never_a_removal_target(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            evidence = root / "slop-evidence"
+            archive = evidence / "reclaim-archives-20261119"
+            archive.mkdir(parents=True)
+            alias = root / "evidence-alias"
+            alias.symlink_to(evidence, target_is_directory=True)
+            with patch("trial_reclaim.EVIDENCE", evidence):
+                for target in (evidence, archive / "123", alias / "123"):
+                    with self.subTest(target=target), self.assertRaisesRegex(ValueError, "slop-evidence"):
+                        replica_removal_command(target)
+                with self.assertRaisesRegex(ValueError, "protected evidence"):
+                    check_report_paths(archive / "report.json")
+                check_report_paths(evidence / "reclaim-report.json")
+                with self.assertRaisesRegex(ValueError, "numeric child"):
+                    replica_removal_command(Path(OFFLINE) / "replicas" / ".." / "123")
+                self.assertEqual(replica_removal_command(Path(OFFLINE) / "replicas" / "123")[-1],
+                                 f"{OFFLINE}/replicas/123")
 
     def test_archive_matches_exact_commitlog(self):
         with tempfile.TemporaryDirectory() as tmp:

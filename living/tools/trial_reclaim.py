@@ -331,9 +331,19 @@ def verify_existing(replica, candidates, *, running):
     return next((path for path, sha in candidates if check_archive(path, sha, expected, replica)), None)
 
 
-def write_record(record, output):
+def write_report_text(contents, output):
     output.parent.mkdir(parents=True, exist_ok=True)
-    tmp = output.with_suffix(".json.tmp")
+    with tempfile.NamedTemporaryFile(mode="w", dir=output.parent, prefix=".reclaim-report-", delete=False) as stream:
+        stream.write(contents)
+        temp = Path(stream.name)
+    temp.replace(output)
+
+
+def write_json(record, output):
+    write_report_text(json.dumps(record, indent=2) + "\n", output)
+
+
+def write_record(record, output):
     totals = collections.defaultdict(lambda: {"replicas": 0, "bytes": 0})
     classifications = collections.defaultdict(lambda: {"replicas": 0, "bytes": 0})
     for row in record["replicas"]:
@@ -342,8 +352,7 @@ def write_record(record, output):
             tally["bytes"] += row["bytes"]
     record["totals"] = dict(totals)
     record["classifications"] = dict(classifications)
-    tmp.write_text(json.dumps(record, indent=2) + "\n")
-    tmp.replace(output)
+    write_json(record, output)
     lines = [f"{record['time']} {'dry run' if record['dry_run'] else 'reclaim'} {SERVER}"]
     lines.extend(f"BLOCKED {reason}" for reason in record["blockers"])
     for label, tally in sorted(totals.items()):
@@ -354,12 +363,40 @@ def write_record(record, output):
     summary = lines + ["", "Replica\tBytes\tClass\tAction\tReason\tNames"]
     summary.extend(f"{r['replica']}\t{r['bytes']}\t{r['classification']}\t{r['action']}\t{r['reason']}\t{','.join(r['names'])}"
                    for r in record["replicas"])
-    output.with_suffix(".txt").write_text("\n".join(summary) + "\n")
+    write_report_text("\n".join(summary) + "\n", output.with_suffix(".txt"))
     with LOG.open("a") as log:
         print(*lines, f"JSON {output}", sep="\n", file=log)
         for row in record["removed"]:
             print(f"removed {row['replica']} {row['bytes']} bytes: {row['reason']}; {row['archive']}", file=log)
     print(*lines, f"JSON {output}", f"Summary {output.with_suffix('.txt')}", sep="\n")
+
+
+def replica_removal_command(target):
+    """Only issue removal for one direct, numeric child of the offline replica root."""
+    target = Path(target)
+    if target.resolve().is_relative_to(EVIDENCE.resolve()):
+        raise ValueError("refusing removal under ~/slop-evidence")
+    if target.parent != Path(OFFLINE) / "replicas" or not REPLICA.fullmatch(target.name):
+        raise ValueError("removal target must be a direct numeric child of the trial replica root")
+    script = (
+        'test -d "$1"; test ! -L "$1"; test "$(realpath -- "$1")" = "$1"; '
+        'rm -rf --one-file-system -- "$1"'
+    )
+    return mount(script, writable=True, args=(str(target),))
+
+
+def check_report_paths(output):
+    """Reports may be written beside archives, with archive trees left untouched."""
+    if output.suffix != ".json":
+        raise ValueError("reclaim report path must end in .json")
+    for path in (output, output.with_suffix(".txt")):
+        for candidate, evidence in ((path.absolute(), EVIDENCE.absolute()), (path.resolve(), EVIDENCE.resolve())):
+            if candidate.is_relative_to(evidence):
+                parts = candidate.relative_to(evidence).parts
+                if any(part.startswith(("reclaim-archives-", "commitlogs-")) for part in parts):
+                    raise ValueError("refusing report output inside a protected evidence archive tree")
+        if path.is_symlink():
+            raise ValueError("reclaim report must not be a symlink")
 
 
 def reclaim(reader, control, candidates, record, output):
@@ -410,10 +447,10 @@ def reclaim(reader, control, candidates, record, output):
                 continue
             if command("docker", "inspect", "--format", "{{.State.Running}}", SERVER).strip() != b"false":
                 raise RuntimeError("trial server started during its maintenance window")
-            script = 'case "$2" in ""|*[!0-9]*) exit 2;; esac; cd "$1/replicas"; test -d "$2"; test ! -L "$2"; rm -rf --one-file-system -- "$2"'
-            subprocess.run(mount(script, writable=True, args=(OFFLINE, row["replica"])), check=True, timeout=180)
+            target = Path(OFFLINE) / "replicas" / row["replica"]
+            subprocess.run(replica_removal_command(target), check=True, timeout=180)
             record["removed"].append(dict(row))
-            output.with_suffix(".json.partial").write_text(json.dumps(record, indent=2) + "\n")
+            write_json(record, output)
     finally:
         if command("docker", "inspect", "--format", "{{.State.Running}}", SERVER).strip() == b"false":
             restart(control)
@@ -447,6 +484,10 @@ def main():
     stamp = now.strftime("%Y%m%dT%H%M%SZ")
     mode = "dryrun" if args.dry_run else "apply"
     output = args.output or EVIDENCE / f"reclaim-{mode}-{stamp}.json"
+    try:
+        check_report_paths(output)
+    except ValueError as error:
+        parser.error(str(error))
     if args.if_over_gb is not None and float(command(str(ROOT / "trial_volume_size.sh"))) <= args.if_over_gb:
         print(f"Volume is at or below {args.if_over_gb:g} GB")
         return 0
@@ -487,7 +528,6 @@ def main():
             return 1
         finally:
             write_record(record, output)
-            output.with_suffix(".json.partial").unlink(missing_ok=True)
 
 
 if __name__ == "__main__":
