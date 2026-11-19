@@ -838,9 +838,12 @@ impl Minds {
                 let next = {
                     let mut t = self.talk.lock().unwrap();
                     let waiting = t.busy.get_mut(&listener).and_then(|w| w.take());
-                    // Someone else spoke to them meanwhile and is still waiting for an answer.
+                    // Someone else spoke to them meanwhile and is still waiting for an answer, or
+                    // their own line just said was missed (its silence came during the turn).
                     let due = waiting.filter(|s| {
-                        t.pairs.get(&pair(listener, *s)).map_or(false, |c| !c.ended && c.settled.is_none() && c.turns < MAX_TURNS && c.lines.last().map_or(false, |l| l.speaker == *s))
+                        t.pairs.get(&pair(listener, *s)).map_or(false, |c| {
+                            !c.ended && c.settled.is_none() && c.turns < MAX_TURNS && (c.missed.is_some() || c.lines.last().map_or(false, |l| l.speaker == *s))
+                        })
                     });
                     if due.is_none() {
                         t.busy.remove(&listener);

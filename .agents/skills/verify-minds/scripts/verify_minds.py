@@ -2430,7 +2430,7 @@ def talk_places_case(run):
         'three_bushes_placed': len(ours) == 3,
         'h_remembers_the_three': first['count'] == 3 and first['gone_ms'] == 0,
         'talk_prompt_lists_places_from_where_h_stands': bool(section),
-        'now_says_h_stands_still_and_where_a_is': 'You are standing still.' in talk1 and re.search(r'\n.+ is \d+ m \w+ of you\.|\n.+ is right beside you\.', talk1) is not None,
+        'now_says_h_stands_still_and_where_a_is': re.search(r'You are standing still[ .]', talk1) is not None and re.search(r'\n.+ is \d+ m \w+ of you\.|\n.+ is right beside you\.', talk1) is not None,
         'the_well_with_its_way': any(l.startswith('- ' + well_line) for l in section.splitlines()),
         'the_bushes_with_their_way_and_when_seen': any(l.startswith('- ' + bush_head) for l in section.splitlines()),
         'think_prompt_places_without_the_way': any(l == f'- "verify well" at [{well[0]:.0f}, {well[1]:.0f}]' for l in remember.splitlines()),
@@ -2505,27 +2505,43 @@ def reply_timing_case(run):
     requests = lambda: [e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] == 'talk']
     sent_text = lambda e: '\n'.join(str(x.get('content', '')) for x in e['body'].get('messages', []))
     prompts_of = lambda who, marker: [sent_text(e) for e in requests() if marker in sent_text(e) and '# Who you are\n' + names[who] in sent_text(e)]
-    body = lambda who: next(((b['x'], b['y'], b['vx'], b['vy']) for b in run.private('SELECT id, x, y, vx, vy FROM body', 'bodies') if b['id'] == who), None)
+    def body(who):
+        """Where `who` is now and its velocity: a body row holds where its motion segment began
+        (`x`, `y` at `t_ms`), so the position is projected along it (`common::pos`, straight
+        segments; these walks are straight east)."""
+        b = next((b for b in run.private(f'SELECT id, x, y, vx, vy, t_ms, next_ms FROM body WHERE id = {who}', 'bodies') if b['id'] == who), None)
+        if b is None:
+            return None
+        t = max(0.0, (min(time.time() * 1000, b['next_ms']) - b['t_ms']) / 1000.0)
+        return (b['x'] + b['vx'] * t, b['y'] + b['vy'] * t, b['vx'], b['vy'])
     say = lambda text, to, way='say': run.admin('mind_say', f, text, to, way, 0, TALK_THOUGHT)
-    exps = lambda: run.private(f'SELECT * FROM experience WHERE observer IN ({f}, {h}, {k})', 'experiences')
+    exps = lambda: run.private(f'SELECT * FROM experience WHERE observer = {f} OR observer = {h} OR observer = {k}', 'experiences')
     mind_log = lambda: (run.directory / 'mind.log').read_text(errors='replace')
 
-    def walk_off(who, start, at_m):
-        """`who` walks east from `start`; returns once it is `at_m` m from F, moving."""
-        run.admin('place_at', who, *line[start])
-        time.sleep(0.5)
-        run.admin('set_behavior', who, json.dumps({'seq': [{'do': {'skill': 'goto', 'target': {'at': list(line[27])}}}, {'wait': 300}]}))
+    def walk_off(who, start, at_m, within_m=6.0):
+        """`who` walks east from `start`; returns once it is `at_m` m from F and moving. A poll
+        that first sees it farther than `within_m` (the walk began between polls) starts again."""
         fx = body(f)
-        def far_enough():
-            b = body(who)
-            return [b] if b and math.dist(b[:2], fx[:2]) >= at_m and (b[2] or b[3]) else []
-        return run.wait(far_enough, f'{names[who]} walks {at_m} m off', 30)[0]
+        for attempt in range(4):
+            run.admin('set_behavior', who, json.dumps({'wait': 300}))
+            run.admin('place_at', who, *line[start])
+            time.sleep(0.5)
+            run.admin('set_behavior', who, json.dumps({'seq': [{'do': {'skill': 'goto', 'target': {'at': list(line[27])}}}, {'wait': 300}]}))
+            def far_enough():
+                b = body(who)
+                return [b] if b and math.dist(b[:2], fx[:2]) >= at_m and (b[2] or b[3]) else []
+            b = run.wait(far_enough, f'{names[who]} walks {at_m} m off', 30)[0]
+            if math.dist(b[:2], fx[:2]) <= within_m:
+                return b
+            run.note(f'{names[who]} was first seen walking {math.dist(b[:2], fx[:2]):.1f} m off (over {within_m}): again')
+        raise RuntimeError(f'{names[who]} was never seen walking within {within_m} m of F')
 
     # A: in reach when ready.
     a_start = walk_off(h, 5, 3.5)
     a_speed = math.hypot(a_start[2], a_start[3])
-    said_a = time.time()
     say(greeting('verify-rt-a'), h)
+    # When the authority said the greeting (H's row of it): the admin call itself takes a while.
+    greeted = run.wait(lambda: [e['at_ms'] for e in exps() if e['observer'] == h and e['subject'] == f and 'verify-rt-a)' in e['text']], 'H hears the greeting', 10)[0]
     heard_reply = lambda: [e for e in exps() if e['observer'] == f and e['subject'] == h and 'Good morning to you too' in e['text']]
     silence_of = lambda who: [e for e in exps() if e['observer'] == who and e['kind'] == 'silence' and e['subject'] == f]
     if main:
@@ -2536,16 +2552,20 @@ def reply_timing_case(run):
     else:
         a_reply = run.wait(heard_reply, 'F hears H', 30)
         # F's own 2 s speaking gap (`SPEAK_GAP_MS`) before its next line.
-        time.sleep(max(0.0, said_a + 2.3 - time.time()))
+        time.sleep(max(0.0, greeted / 1000.0 + 2.4 - time.time()))
         a2_at = body(h)
         # H walks 2.6 m/s (`walk_base`): past a said line's 9 m by then, within a call's 22.5 m.
         say('Where are you off to? (verify-rt-a2)', h, 'call')
         a2 = run.wait(lambda: prompts_of(h, 'verify-rt-a2'), "H's next turn", 30)
         a_silence = silence_of(h)
     a_prompt = next(iter(prompts_of(h, 'verify-rt-a')), '')
+    # From the greeting to the reply, by the authority's clock (before reply-timing at least the
+    # greeting's 6.93 s "being said").
+    reply_after_ms = a_reply[0]['at_ms'] - greeted if a_reply else None
     (run.directory / 'prompt-a.txt').write_text(a_prompt)
     at_reply = body(h)
-    # B: out of reach when ready.
+    # B: out of reach when ready (after F's own 2 s speaking gap since its last line).
+    time.sleep(2.5)
     b_start = walk_off(k, 5, 3.5)
     say(greeting('verify-rt-b'), k)
     b_silence = run.wait(lambda: silence_of(k), "K's reply out of reach", 40)
@@ -2575,7 +2595,7 @@ def reply_timing_case(run):
     else:
         checks.update({
             'h_reply_delivered': bool(a_reply) and not a_silence,
-            'h_said_when_ready': bool(a_reply) and a_reply[0]['at_ms'] / 1000.0 - said_a < 2.5,
+            'h_said_when_ready': reply_after_ms is not None and reply_after_ms < 2_500,
             'h_takes_the_next_turn': bool(a2),
             'frame_says_where_f_is': bool(frame) and frame.group(3) == 'west' and abs(int(frame.group(2)) - math.dist(a_start[:2], fb[:2])) <= 3.0,
             'frame_says_h_walks_away': re.search(r'You are walking to a spot \d+ m east, away from ', a_prompt) is not None,
@@ -2585,7 +2605,7 @@ def reply_timing_case(run):
             'k_choice_recorded': len(missed_thoughts) == 1 and json.loads(missed_thoughts[0]['detail'])['missed'] == first_silence,
             'one_follow_up_then_over': len(silence_of(k)) >= 2 and len(follow_prompts) == 1 and 'out of earshot, conversation over' in log,
         })
-    result = {'mode': 'main' if main else 'branch', 'f': f, 'h': h, 'k': k, 'speed': a_speed, 'a_start': a_start, 'at_reply': at_reply, 'a2_at': a2_at, 'b_start': b_start, 'k_at_follow': k_at_follow, 'f_at': fb,
+    result = {'mode': 'main' if main else 'branch', 'f': f, 'h': h, 'k': k, 'speed': a_speed, 'greeted_at_m': round(math.dist(a_start[:2], fb[:2]), 2), 'reply_after_ms': reply_after_ms, 'a_start': a_start, 'at_reply': at_reply, 'a2_at': a2_at, 'b_start': b_start, 'k_at_follow': k_at_follow, 'f_at': fb,
               'a_reply': a_reply, 'a_silence': a_silence, 'b_silence': b_silence, 'frame': frame.group(0) if frame else None,
               'follow_prompts': len(follow_prompts), 'missed_thoughts': missed_thoughts, 'checks': checks}
     (run.directory / 'reply-timing.json').write_text(json.dumps(result, indent=2, ensure_ascii=False))
