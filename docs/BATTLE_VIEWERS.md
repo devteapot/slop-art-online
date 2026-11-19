@@ -148,7 +148,7 @@ Fighters, doing, `projected`/`seen_characters`, `combat_seen` follow the same pa
 
 ## Addendum 2: `seen_characters` on the same mechanism, and a slimmer row (design, not built)
 
-Status: 2026-11-19, branch `battle-views`, for the reviewer before any building. It follows the motion stream's series (`.local/bv/evidence/20261119-190200-series/bv-report.md`): on Cullet 216 the table removed the motion views (84 ms/s on main) and two-slot gaps (68–125 on main, 0–1 on), at no visible update-CPU cost, but per-player bytes rose about 40%. `seen_characters` is the next stream by cost: 257 ms/s in the 216-player-fighter battle (468 µs a call, about 216 rows), about 90 ms/s on Cullet 216.
+Status: 2026-11-19, branch `battle-views`. The GC approved it; built the same day as designed (`seen_character_copy`, `characters_table_on`, `perception::proj_*`; docs/PERCEPTION.md "Projections mirrored as a table"). The slimmer `seen_body_copy` row was built at 98 B (the counts below said 97; the exact sum is 98). It follows the motion stream's series (`.local/bv/evidence/20261119-190200-series/bv-report.md`): on Cullet 216 the table removed the motion views (84 ms/s on main) and two-slot gaps (68–125 on main, 0–1 on), at no visible update-CPU cost, but per-player bytes rose about 40%. `seen_characters` is the next stream by cost: 257 ms/s in the 216-player-fighter battle (468 µs a call, about 216 rows), about 90 ms/s on Cullet 216.
 
 ### What `seen_characters` reads, from source
 

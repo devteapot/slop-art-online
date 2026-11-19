@@ -646,6 +646,12 @@ pub struct Laws {
     /// copy goes back to the private tables in one tick. A switch for the delivery, not for what is
     /// perceived.
     pub motion_tables_on: bool,
+    /// Whether a player's `seen_characters` rows also reach its client as rows of the public
+    /// `seen_character_copy` table, filtered per client by row-level security (battle-views,
+    /// docs/BATTLE_VIEWERS.md, addendum 2): a mirror of its `projected` rows, kept whole per
+    /// viewer. Off (the kill switch), every mirror row goes in one tick. Delivery only: the view
+    /// shows the same either way.
+    pub characters_table_on: bool,
     /// Diagnostic: every alarm answer from a cell is also asked afresh, and a difference logged
     /// and counted (`alarm:differed`).
     pub alarm_cells_check: bool,
@@ -801,6 +807,7 @@ impl Default for Laws {
             cue_transport_on: true,
             near_tier_on: true,
             motion_tables_on: false,
+            characters_table_on: false,
             alarm_cells_check: false,
             warmth_check: false,
             scene_lazy: true,
@@ -3141,6 +3148,7 @@ impl Scripts {
             cue_transport_on: flag("cue_transport_on", l.cue_transport_on),
             near_tier_on: flag("near_tier_on", l.near_tier_on),
             motion_tables_on: flag("motion_tables_on", l.motion_tables_on),
+            characters_table_on: flag("characters_table_on", l.characters_table_on),
             alarm_cells_check: flag("alarm_cells_check", l.alarm_cells_check),
             warmth_check: flag("warmth_check", l.warmth_check),
             scene_lazy: flag("scene_lazy", l.scene_lazy),
@@ -3389,11 +3397,13 @@ pub enum ValueOnly {
 /// value changes nothing a full install derives beyond what [`Scripts::apply_overrides`] and the
 /// authority refresh for its class. A script that reads one elsewhere makes it an ordinary law
 /// for that world ([`Scripts::value_only`]).
-pub const VALUE_ONLY: [(&str, ValueOnly); 9] = [
+pub const VALUE_ONLY: [(&str, ValueOnly); 10] = [
     ("cue_transport_on", ValueOnly::Delivery),
     ("near_tier_on", ValueOnly::Delivery),
     // battle-views: where a player's motion copies live (`frame.rs`, `seen_body_copy`).
     ("motion_tables_on", ValueOnly::Delivery),
+    // battle-views: the mirror of a player's projections (`perception.rs`, `seen_character_copy`).
+    ("characters_table_on", ValueOnly::Delivery),
     ("cover_sight_on", ValueOnly::Cover),
     ("cover_eye_height_m", ValueOnly::Cover),
     ("cover_brush_on", ValueOnly::Cover),
@@ -4302,6 +4312,8 @@ mod tests {
         assert!(on.laws().cue_transport_on && !on.laws().cues_on);
         assert!(shipped.laws().near_tier_on, "the near tier is on by default");
         assert!(!shipped.laws().motion_tables_on, "the motion tables are off until battle-views' acceptance");
+        assert!(!shipped.laws().characters_table_on, "the characters table is off until battle-views' acceptance");
+        assert!(about["characters_table_on"].contains("what it may look at"), "{about:?}");
         assert!(about["motion_tables_on"].contains("what it may look at"), "{about:?}");
         let tables = Scripts::new(&with_world_laws(src, &[("motion_tables_on".into(), serde_json::json!(true))])).unwrap();
         assert!(tables.laws().motion_tables_on && tables.laws().near_tier_on && tables.laws().cue_transport_on);

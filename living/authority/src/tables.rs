@@ -2314,6 +2314,34 @@ pub struct SeenBodyCopy {
     pub seg: crate::perception::Segment,
 }
 
+/// Where a viewer's battle-views copies stand (private): its motion copies in `seen_body_copy`
+/// (`public`) and its mirror of projections whole (`mirrored`). Written in the same transaction as
+/// the moves (`frame::to_public`, `all_private`, `perception::fill_mirror`, `drop_mirrors`), so
+/// a step that rolls back takes it back with them: module memory could not say so to a reducer
+/// that runs before the next tick. No row: neither.
+#[derive(Clone, Debug, Default, PartialEq)]
+#[spacetimedb::table(accessor = copy_state)]
+pub struct CopyState {
+    #[primary_key]
+    pub viewer: Identity,
+    pub public: bool,
+    pub mirrored: bool,
+}
+
+/// A mirror of a viewer's `projected` row (public, row-level security `viewer = :sender`;
+/// battle-views addendum 2, the `characters_table_on` law): `id` the projected row's, `row`
+/// exactly what `seen_characters` returns for it. Written by `perception::proj_*`, the only
+/// writers of `projected`, for a viewer whose mirror is whole (`perception::mirrored`).
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = seen_character_copy, public)]
+pub struct SeenCharacterCopy {
+    #[primary_key]
+    pub id: u64,
+    #[index(btree)]
+    pub viewer: Identity,
+    pub row: crate::perception::SeenCharacter,
+}
+
 // ---- cues: what a player is shown at once of those near it or engaged with it ----------
 //
 // Event tables (docs/PERCEPTION.md, "Cues"; `frame.rs`): a row exists only in the transaction

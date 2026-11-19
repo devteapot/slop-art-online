@@ -156,6 +156,9 @@ fn laws() {
         // can read (row-level security; on) or only through the motion views (off, until the
         // battle-views acceptance). The views show the same either way (docs/BATTLE_VIEWERS.md).
         motion_tables_on: false,
+        // The same for what a player perceives of the creatures it sees (its `seen_characters`
+        // rows mirrored into a table only that player can read; off until acceptance).
+        characters_table_on: false,
         // A bystander (one who sees an event it is not party to) is woken by what it sees at most
         // once per `witness_wake_ms` (docs/BATTLE_SCALE.md); what it sees is still told at once,
         // in full. 0: woken by each sight, as before.
@@ -3172,6 +3175,7 @@ fn law_about(l, name) {
         "alarm_cells" => "the body's alarms are worked out again only when something they read can change",
         "alarm_cells_check" => "a diagnostic: each kept alarm answer is worked out afresh and compared",
         "near_tier_on" => if l.near_tier_on { "what is near a player is kept apart from the rest of what it sees, and follows on its own" } else { "what a player sees is kept together" },
+        "characters_table_on" => if l.characters_table_on { "what each player perceives of others reaches it as rows meant for that player alone" } else { "what each player perceives of others reaches it through what it may look at" },
         "motion_tables_on" => if l.motion_tables_on { "how others move reaches each player as rows meant for that player alone" } else { "how others move reaches each player through what it may look at" },
         "cue_transport_on" => if l.cue_transport_on { "what is near a player, or fighting it, reaches the player's screen at once" } else { "what is near a player reaches the player's screen with the rest of what it sees" },
         "warmth_check" => "a diagnostic: warmth is worked out both ways and compared",

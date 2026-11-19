@@ -239,6 +239,11 @@ fn copy_moving(c: &SeenBodyCopy) -> Moving {
              face_off: s.face_off, face_turn: s.face_turn, face_turn_s: s.face_turn_s, running: s.running }
 }
 
+/// The characters I perceive, from the `seen_characters` view or its mirror table (battle-views).
+fn seen_characters_of(db: &RemoteTables) -> Vec<SeenCharacter> {
+    db.seen_characters().iter().chain(db.seen_character_copy().iter().map(|c| c.row)).collect()
+}
+
 fn seen_body_count(db: &RemoteTables) -> u64 {
     db.seen_bodies().count() + db.seen_bodies_near().count() + db.seen_bodies_far().count() + db.seen_body_copy().count()
 }
@@ -390,6 +395,7 @@ fn hook(p: &Player, log: &Log) {
     count!(conn, p.counts, seen_bodies_near);
     count!(conn, p.counts, seen_bodies_far);
     count_plain!(conn, p.counts, seen_body_copy);
+    count!(conn, p.counts, seen_character_copy);
     count!(conn, p.counts, seen_fighters_near);
     count!(conn, p.counts, seen_fighters_far);
     count!(conn, p.counts, seen_doing_near);
@@ -715,7 +721,7 @@ fn fight(p: &Player, log: &Log, cards: &HashMap<String, Card>, center: (f32, f32
     let here = pos(&mb, now);
     let current = p.st.lock().unwrap().target;
     let mut best: Option<(u32, (f32, f32), f32)> = None;
-    for c in db.seen_characters().iter() {
+    for c in seen_characters_of(db) {
         if c.own || c.id == me || c.kind != "person" {
             continue;
         }
@@ -831,6 +837,9 @@ fn players_mode() {
     // The public motion copies (battle-views, the `motion_tables_on` law): `seen_body_copy` in
     // place of the motion views, as a client on the tables subscribes.
     let motion_tables = req["motion_tables"].as_bool().unwrap_or(false);
+    // The mirror of a player's projections (battle-views addendum 2, `characters_table_on`):
+    // `seen_character_copy` in place of the `seen_characters` view.
+    let character_tables = req["character_tables"].as_bool().unwrap_or(false);
     let fresh_every = req["fresh_every"].as_u64().unwrap_or(0) as usize;
     let started = Instant::now();
     let mut players = Vec::new();
@@ -861,6 +870,10 @@ fn players_mode() {
         if motion_tables {
             queries.retain(|q| !["SELECT * FROM seen_bodies", "SELECT * FROM seen_bodies_near", "SELECT * FROM seen_bodies_far"].contains(&q.as_str()));
             queries.push("SELECT * FROM seen_body_copy".to_string());
+        }
+        if character_tables {
+            queries.retain(|q| q.as_str() != "SELECT * FROM seen_characters");
+            queries.push("SELECT * FROM seen_character_copy".to_string());
         }
         subscribe(&pl, queries);
         players.push(pl);
@@ -910,7 +923,7 @@ fn players_mode() {
     }
     wait_applied(&players, 2, "windows", Duration::from_secs(180));
     let cards: HashMap<String, Card> = players[0].conn.db.skill_card().iter().map(|c| (c.skill.clone(), Card { cost: c.cost, reach: c.reach, hold_ms: (c.windup_ms + c.recover_ms) as u64 })).collect();
-    let held: Vec<Value> = players.iter().map(|p| json!({"bodies": seen_body_count(&p.conn.db), "characters": p.conn.db.seen_characters().count()})).collect();
+    let held: Vec<Value> = players.iter().map(|p| json!({"bodies": seen_body_count(&p.conn.db), "characters": seen_characters_of(&p.conn.db).len()})).collect();
     println!("{}", json!({"event": "ready", "after_s": started.elapsed().as_secs_f32(), "cards": cards.keys().collect::<Vec<_>>(), "held": held}));
     let _ = std::io::stdout().flush();
     wait_for(&lines, "go");
@@ -1006,7 +1019,7 @@ fn players_mode() {
         .map(|p| {
             let s = p.st.lock().unwrap();
             json!({"p": p.idx, "role": format!("{:?}", p.role), "lives": s.lives, "alive": s.me.is_some(), "calls": s.seq, "unanswered": s.pending,
-                   "events": counts_json(&p.counts), "fresh": p.fresh.then(|| fresh_json(&s.fresh)), "held": {"bodies": seen_body_count(&p.conn.db), "characters": p.conn.db.seen_characters().count()},
+                   "events": counts_json(&p.counts), "fresh": p.fresh.then(|| fresh_json(&s.fresh)), "held": {"bodies": seen_body_count(&p.conn.db), "characters": seen_characters_of(&p.conn.db).len()},
                    "errors": *p.errors.lock().unwrap()})
         })
         .collect();

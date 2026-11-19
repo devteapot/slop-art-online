@@ -46,7 +46,7 @@ The layer's API:
 
 | Law | Class | Rust readers | Rhai readers (shipped) | Refreshed on a value edit |
 | --- | --- | --- | --- | --- |
-| `cue_transport_on`, `near_tier_on`, `motion_tables_on` (battle-views) | delivery | `frame.rs` via `common::laws(ctx)` (each tick, `scene`, `engaged_tiers`) | `laws()`, `law_about` | nothing derived. The next tick reads the new value. |
+| `cue_transport_on`, `near_tier_on`, `motion_tables_on`, `characters_table_on` (battle-views) | delivery | `frame.rs` via `common::laws(ctx)` (each tick, `scene`, `engaged_tiers`) | `laws()`, `law_about` | nothing derived. The next tick reads the new value. |
 | `cover_sight_on`, `cover_eye_height_m`, `cover_brush_on`, `cover_brush_min_fill`, `cover_cliff_step_m` | cover | `common::cover_mask`, `publish_cover_law`, the `cover_law` row (the game client's `sightfield.rs` reads that row) | `laws()`, `law_about` | the `cover_law` row in the reducer. The cached map's cover mask compiles again at its next read, only when the policy changed. Terrain and gates are kept. |
 | `gaze_on` | gaze | `attention::set` (`laws(ctx).gaze_on`), `common::hot`/`sight` via `Scripts::gaze_enabled` | `laws()`, `law_about` | the ceilings and samples, and the senses memo (in `apply_overrides`). When gaze goes off, the reducer also deletes the owner projection (`applied_gaze`), as an install did. When it goes on, sweeps fill the projection. |
 

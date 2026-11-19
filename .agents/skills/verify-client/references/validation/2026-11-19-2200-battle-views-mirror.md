@@ -1,0 +1,14 @@
+# battle-views: the mirror of projections, both laws value-only (verify-client)
+
+Follows `2026-11-19-2058-battle-views-slim-row.md`. Branch `battle-views` after merging `origin/main` (the law-override layer, `5b0377e32`/`56a6ab457`). New: `seen_character_copy` (public, row-level security `viewer = :sender`), the mirror of a player's `projected` rows behind `characters_table_on`; `motion_tables_on` and `characters_table_on` are value-only delivery laws (`law_override` rows); a private `copy_state` row per viewer says where its copies stand. Server: the worker's own `bv-stdb` (v2.14.1).
+
+- `motion_tables.py`, now covering both copy tables (27 checks): `client-bvch1` 27 of 27 (before `copy_state`); `client-bvfinal` (in the suite, on the final code) 27 of 27. Both switches went through `law_override` rows with the `script` rows' revisions unchanged (no reinstall).
+- Mutation proofs: without the mirror's rule (`client-bvchmut`), 7 of the 27 fail (every mirror isolation check, both subscribe-all checks and the mirror's return). Without the motion table's rule, 10 of the then 20 failed (`client-bvsmut2`, `2026-11-19-2058-…`).
+- Suite, `client-bvfinal`: exit 0; drive 45 PASS (the private inventory now names `copy_state`; `RLS_TABLES` and the owner guard name `seen_character_copy`); `cues.py` 21 of 21, `near_tier.py` 7 of 7.
+- Scene gate, cases `cues` and `motion_tables`, `gate-1119225655`: both pass.
+
+## maintain-verification-skill, scoped to this change
+
+Outcome: changed, in this branch. Index hygiene: the feature-map row "Motion copies as a table" became "Copy tables" (both tables). Source pass: one read-only reader, unanchored, on `perception.md`, `SKILL.md`, the README row, docs/PERCEPTION.md and docs/LAW_OVERRIDE.md against the authority, the law and the scripts. Drift it found, fixed here: "the only addition with the law off is one lookup per projected write" (also a delete per projected delete and a table walk per instance); "a mirrored viewer always holds its own row" (nothing enforced it; now `copy_state`); "the mirror row of a viewer whose mirror is whole" (true for inserts and updates; deletes always delete); the mutation counts (10 was of 20 checks). Its source concern, fixed in product code before the final runs: where a viewer's copies stood (public, mirrored) was module memory, which a reducer outside the tick (`sweep_now`, `health_moved`) could read stale after a tick that moved copies rolled back, leaving copies split or a mirror partial; it is now the `copy_state` row, rolled back with the moves. Live pass: the suite above on one launched world, doctored first, plus `motion_tables.py` on its own launches. Not covered: the game client (no client reads the tables yet), verify-ui, performance.
+
+Evidence: `.local/living/verify/client-bvch1/`, `client-bvchmut/`, `client-bvfinal/`, `gate-1119225655-a-client/`; earlier runs in `~/archive/worktree-evidence-20261119/battle-views-verify-runs.tar.gz`.

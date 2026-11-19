@@ -14,8 +14,8 @@ touches behaviour, these cases with the fake model only:
   verify-client  cues (cues.py: the cue event tables reach only their viewer under row-level
                  security, on and with the `cue_transport_on` law off; near_tier.py: whoever is
                  engaged with a player is first in its near tier), motion_tables (motion_tables.py: the
-                 public motion copies reach only their viewer under row-level security, and the
-                 `motion_tables_on` law off empties the table at once); one default-seed world, the SDK probe
+                 public copy tables, motion and projections, reach only their viewer under row-level
+                 security, and each law off empties its table at once); one default-seed world, the SDK probe
   living-mind    mind-unit: its cargo tests (`just living-check` builds the mind, tests only the rules)
 
 The world groups and the tests run at once. A case whose only failures are parts on the red-on-main

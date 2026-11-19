@@ -54,6 +54,8 @@ pub mod community_table;
 pub mod community_type;
 pub mod connection_table;
 pub mod connection_type;
+pub mod copy_state_table;
+pub mod copy_state_type;
 pub mod cover_ground_table;
 pub mod cover_ground_type;
 pub mod cover_law_table;
@@ -297,6 +299,8 @@ pub mod seen_body_copy_table;
 pub mod seen_body_copy_type;
 pub mod seen_body_cue_table;
 pub mod seen_body_cue_type;
+pub mod seen_character_copy_table;
+pub mod seen_character_copy_type;
 pub mod seen_character_type;
 pub mod seen_characters_table;
 pub mod seen_doing_cue_table;
@@ -426,6 +430,8 @@ pub use community_table::*;
 pub use community_type::Community;
 pub use connection_table::*;
 pub use connection_type::Connection;
+pub use copy_state_table::*;
+pub use copy_state_type::CopyState;
 pub use cover_ground_table::*;
 pub use cover_ground_type::CoverGround;
 pub use cover_law_table::*;
@@ -669,6 +675,8 @@ pub use seen_body_copy_table::*;
 pub use seen_body_copy_type::SeenBodyCopy;
 pub use seen_body_cue_table::*;
 pub use seen_body_cue_type::SeenBodyCue;
+pub use seen_character_copy_table::*;
+pub use seen_character_copy_type::SeenCharacterCopy;
 pub use seen_character_type::SeenCharacter;
 pub use seen_characters_table::*;
 pub use seen_doing_cue_table::*;
@@ -1395,6 +1403,7 @@ pub struct DbUpdate {
     combat_seen: __sdk::TableUpdate<CombatSeen>,
     community: __sdk::TableUpdate<Community>,
     connection: __sdk::TableUpdate<Connection>,
+    copy_state: __sdk::TableUpdate<CopyState>,
     cover_ground: __sdk::TableUpdate<CoverGround>,
     cover_law: __sdk::TableUpdate<CoverLaw>,
     cue: __sdk::TableUpdate<Cue>,
@@ -1496,6 +1505,7 @@ pub struct DbUpdate {
     seen_bodies_near: __sdk::TableUpdate<Moving>,
     seen_body_copy: __sdk::TableUpdate<SeenBodyCopy>,
     seen_body_cue: __sdk::TableUpdate<SeenBodyCue>,
+    seen_character_copy: __sdk::TableUpdate<SeenCharacterCopy>,
     seen_characters: __sdk::TableUpdate<SeenCharacter>,
     seen_doing: __sdk::TableUpdate<Doing>,
     seen_doing_cue: __sdk::TableUpdate<SeenDoingCue>,
@@ -1604,6 +1614,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "connection" => db_update
                     .connection
                     .append(connection_table::parse_table_update(table_update)?),
+                "copy_state" => db_update
+                    .copy_state
+                    .append(copy_state_table::parse_table_update(table_update)?),
                 "cover_ground" => db_update
                     .cover_ground
                     .append(cover_ground_table::parse_table_update(table_update)?),
@@ -1907,6 +1920,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "seen_body_cue" => db_update
                     .seen_body_cue
                     .append(seen_body_cue_table::parse_table_update(table_update)?),
+                "seen_character_copy" => db_update
+                    .seen_character_copy
+                    .append(seen_character_copy_table::parse_table_update(table_update)?),
                 "seen_characters" => db_update
                     .seen_characters
                     .append(seen_characters_table::parse_table_update(table_update)?),
@@ -2101,6 +2117,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.connection = cache
             .apply_diff_to_table::<Connection>("connection", &self.connection)
             .with_updates_by_pk(|row| &row.id);
+        diff.copy_state = cache
+            .apply_diff_to_table::<CopyState>("copy_state", &self.copy_state)
+            .with_updates_by_pk(|row| &row.viewer);
         diff.cover_ground = cache
             .apply_diff_to_table::<CoverGround>("cover_ground", &self.cover_ground)
             .with_updates_by_pk(|row| &row.id);
@@ -2323,6 +2342,12 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.seen_body_copy =
             cache.apply_diff_to_table::<SeenBodyCopy>("seen_body_copy", &self.seen_body_copy);
         diff.seen_body_cue = self.seen_body_cue.into_event_diff();
+        diff.seen_character_copy = cache
+            .apply_diff_to_table::<SeenCharacterCopy>(
+                "seen_character_copy",
+                &self.seen_character_copy,
+            )
+            .with_updates_by_pk(|row| &row.id);
         diff.seen_doing_cue = self.seen_doing_cue.into_event_diff();
         diff.seen_fighter_cue = self.seen_fighter_cue.into_event_diff();
         diff.seen_stock = cache
@@ -2565,6 +2590,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "connection" => db_update
                     .connection
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "copy_state" => db_update
+                    .copy_state
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "cover_ground" => db_update
                     .cover_ground
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
@@ -2867,6 +2895,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "seen_body_cue" => db_update
                     .seen_body_cue
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "seen_character_copy" => db_update
+                    .seen_character_copy
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "seen_characters" => db_update
                     .seen_characters
@@ -3049,6 +3080,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "connection" => db_update
                     .connection
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "copy_state" => db_update
+                    .copy_state
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "cover_ground" => db_update
                     .cover_ground
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -3352,6 +3386,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "seen_body_cue" => db_update
                     .seen_body_cue
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "seen_character_copy" => db_update
+                    .seen_character_copy
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "seen_characters" => db_update
                     .seen_characters
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -3491,6 +3528,7 @@ pub struct AppliedDiff<'r> {
     combat_seen: __sdk::TableAppliedDiff<'r, CombatSeen>,
     community: __sdk::TableAppliedDiff<'r, Community>,
     connection: __sdk::TableAppliedDiff<'r, Connection>,
+    copy_state: __sdk::TableAppliedDiff<'r, CopyState>,
     cover_ground: __sdk::TableAppliedDiff<'r, CoverGround>,
     cover_law: __sdk::TableAppliedDiff<'r, CoverLaw>,
     cue: __sdk::TableAppliedDiff<'r, Cue>,
@@ -3592,6 +3630,7 @@ pub struct AppliedDiff<'r> {
     seen_bodies_near: __sdk::TableAppliedDiff<'r, Moving>,
     seen_body_copy: __sdk::TableAppliedDiff<'r, SeenBodyCopy>,
     seen_body_cue: __sdk::TableAppliedDiff<'r, SeenBodyCue>,
+    seen_character_copy: __sdk::TableAppliedDiff<'r, SeenCharacterCopy>,
     seen_characters: __sdk::TableAppliedDiff<'r, SeenCharacter>,
     seen_doing: __sdk::TableAppliedDiff<'r, Doing>,
     seen_doing_cue: __sdk::TableAppliedDiff<'r, SeenDoingCue>,
@@ -3677,6 +3716,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         callbacks.invoke_table_row_callbacks::<CombatSeen>("combat_seen", &self.combat_seen, event);
         callbacks.invoke_table_row_callbacks::<Community>("community", &self.community, event);
         callbacks.invoke_table_row_callbacks::<Connection>("connection", &self.connection, event);
+        callbacks.invoke_table_row_callbacks::<CopyState>("copy_state", &self.copy_state, event);
         callbacks.invoke_table_row_callbacks::<CoverGround>(
             "cover_ground",
             &self.cover_ground,
@@ -3900,6 +3940,11 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         callbacks.invoke_table_row_callbacks::<SeenBodyCue>(
             "seen_body_cue",
             &self.seen_body_cue,
+            event,
+        );
+        callbacks.invoke_table_row_callbacks::<SeenCharacterCopy>(
+            "seen_character_copy",
+            &self.seen_character_copy,
             event,
         );
         callbacks.invoke_table_row_callbacks::<SeenCharacter>(
@@ -4658,6 +4703,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         combat_seen_table::register_table(client_cache);
         community_table::register_table(client_cache);
         connection_table::register_table(client_cache);
+        copy_state_table::register_table(client_cache);
         cover_ground_table::register_table(client_cache);
         cover_law_table::register_table(client_cache);
         cue_table::register_table(client_cache);
@@ -4759,6 +4805,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         seen_bodies_near_table::register_table(client_cache);
         seen_body_copy_table::register_table(client_cache);
         seen_body_cue_table::register_table(client_cache);
+        seen_character_copy_table::register_table(client_cache);
         seen_characters_table::register_table(client_cache);
         seen_doing_table::register_table(client_cache);
         seen_doing_cue_table::register_table(client_cache);
@@ -4817,6 +4864,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "combat_seen",
         "community",
         "connection",
+        "copy_state",
         "cover_ground",
         "cover_law",
         "cue",
@@ -4918,6 +4966,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "seen_bodies_near",
         "seen_body_copy",
         "seen_body_cue",
+        "seen_character_copy",
         "seen_characters",
         "seen_doing",
         "seen_doing_cue",
