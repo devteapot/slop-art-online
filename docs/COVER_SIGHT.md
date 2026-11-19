@@ -290,11 +290,13 @@ The general coordinator restated the switch-on gate as a cost budget, which repl
 "within the cover-off spread" test used in phase 2. That test, with two runs per arm,
 demanded zero cost, while the 2.5D blocker test does measurably more work per check
 (+5–11% per check in the native probe). The rule for turning `cover_sight_on` on in any
-world, and for later changes to the trace:
+world, and for later changes to the trace. The same rule applies to gaze (`CAMERA.md` §4) and
+other sight-cost features:
 
 - **Sight cost:** sight ms/s with cover on is at most **+15%** over the cover-off arms' mean.
-- **Tick health:** ticks/s and the share of ticks over 16.7 ms with cover on fall within the
-  cover-off arms' spread.
+- **Tick health (one-sided, 2026-11-19):** ticks/s with the feature on are no lower than the
+  lowest off run, and the share of ticks over 16.7 ms is no higher than the highest off run.
+  A run that is better than every off run passes; the test only guards against being worse.
 - **Runs:** interleaved off/on, at least **4 runs per arm** for the wooded battle at a fixed
   local fighter count, and at least 2 per arm for Cullet 216 (Round and Middle), under
   `~/slop-mq/battle.lock`, with host load recorded per run.
