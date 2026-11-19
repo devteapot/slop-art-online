@@ -1,0 +1,78 @@
+[
+  {
+    "body": "woman",
+    "triangles": 32128,
+    "vertices": 20004,
+    "primitives": 13,
+    "hair_primitives": 1,
+    "materials": [
+      "M00_000_00_Body_00_SKIN",
+      "M00_000_00_EyeIris_00_EYE",
+      "M00_000_00_Eye_00_EYE",
+      "M00_000_00_FaceBrow_00_FACE",
+      "M00_000_00_FaceEyeline_00_FACE",
+      "M00_000_00_FaceTint_00_FACE",
+      "M00_000_00_Face_00_SKIN",
+      "M00_000_Hair_00_HAIR",
+      "M00_001_01_Cloth_01_CLOTH"
+    ]
+  },
+  {
+    "body": "man",
+    "triangles": 34960,
+    "vertices": 21510,
+    "primitives": 16,
+    "hair_primitives": 1,
+    "materials": [
+      "M00_000_00_Body_00_SKIN",
+      "M00_000_00_EyeIris_00_EYE",
+      "M00_000_00_Eye_00_EYE",
+      "M00_000_00_FaceBrow_00_FACE",
+      "M00_000_00_FaceEyeline_00_FACE",
+      "M00_000_00_FaceOverlay_00_FACE",
+      "M00_000_00_FaceTint_00_FACE",
+      "M00_000_00_Face_00_SKIN",
+      "M00_000_00_Overlay_00_HAIR",
+      "M00_000_Hair_00_HAIR",
+      "M00_001_01_Cloth_01_CLOTH"
+    ]
+  },
+  {
+    "body": "elder",
+    "triangles": 35654,
+    "vertices": 21963,
+    "primitives": 17,
+    "hair_primitives": 1,
+    "materials": [
+      "M00_000_00_Body_00_SKIN",
+      "M00_000_00_EyeIris_00_EYE",
+      "M00_000_00_Eye_00_EYE",
+      "M00_000_00_FaceBrow_00_FACE",
+      "M00_000_00_FaceEyeline_00_FACE",
+      "M00_000_00_FaceOverlay_00_FACE",
+      "M00_000_00_FaceTint_00_FACE",
+      "M00_000_00_Face_00_SKIN",
+      "M00_000_00_Overlay_00_HAIR",
+      "M00_000_Hair_00_HAIR",
+      "M00_001_01_Cloth_01_CLOTH"
+    ]
+  },
+  {
+    "body": "girl",
+    "triangles": 32314,
+    "vertices": 20026,
+    "primitives": 13,
+    "hair_primitives": 1,
+    "materials": [
+      "M00_000_00_Body_00_SKIN",
+      "M00_000_00_EyeIris_00_EYE",
+      "M00_000_00_Eye_00_EYE",
+      "M00_000_00_FaceBrow_00_FACE",
+      "M00_000_00_FaceEyeline_00_FACE",
+      "M00_000_00_FaceTint_00_FACE",
+      "M00_000_00_Face_00_SKIN",
+      "M00_000_Hair_00_HAIR",
+      "M00_001_01_Cloth_01_CLOTH"
+    ]
+  }
+]
