@@ -24,3 +24,8 @@ Check the raw fake content, copied journal requests and authority thoughts. The 
 `parse_json` and `repair` repairs JSON slips. `Minds::deliberate` bounds compilation attempts to three. JSON parse failures have error null in the HTTP journal because transport succeeded. Authority thoughts and later request feedback establish semantic rejection. The repair cargo test also covers stray closers.
 
 Compilation retries keep their original lane.
+
+
+## Act repair
+
+`act_repair` inherits `think` routing, effort and output cap unless configured explicitly. It stays in the triggering turn's lane. It makes one model exchange for the refused batch. The original and repaired authority submissions are journaled under `outcomes/act_attempts.jsonl`, apart from the model-call counts. The [verify-minds cases](../../verify-minds/features/deliberation.md#act-repair) drive the authority rejection, a repair reply with a recoverable JSON slip, and the final result, including a second refusal that stops the turn's repair.

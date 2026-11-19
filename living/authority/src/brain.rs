@@ -320,10 +320,9 @@ impl<'a> Ev<'a> {
     fn scene(&mut self) -> &mut Scene {
         if self.scene.is_none() {
             let _span = common::span("brain.scene");
-            let r = common::sight_for(self.ctx, self.me.id, &self.w, self.now);
             // What the body sees: within its sight and with a clear sight line (the rule every
             // observer perceives by, `perception::in_sight`).
-            let sensing = crate::perception::Sensing::new(self.ctx, self.me.id, self.at, r, self.now);
+            let sensing = crate::perception::Sensing::new(self.ctx, self.me.id, self.at, self.now);
             self.scene = Some(Scene { sensing, creatures: None, heard: None, resources: None, structures: None });
             if !common::laws(self.ctx).scene_lazy {
                 self.creatures();
@@ -335,11 +334,12 @@ impl<'a> Ev<'a> {
 
     /// The creatures seen, nearest first: every one in sight range tested.
     fn creatures(&mut self) -> &[NearCreature] {
-        let (ctx, now) = (self.ctx, self.now);
+        let (ctx, now, actor) = (self.ctx, self.now, self.me.id);
         let s = self.scene();
         if s.creatures.is_none() {
             let _span = common::detail_span("scene.sensed");
             let (seen, heard) = s.sensing.all(ctx, now);
+            note_sight_changes(actor, &seen);
             common::note_scene(seen.len());
             common::diag(|| "scene:all", 1);
             s.creatures = Some(seen);
@@ -378,7 +378,7 @@ impl<'a> Ev<'a> {
         let got = self.scene().sensing.first(ctx, now, &mut pred);
         common::diag(|| "scene:first", 1);
         if laws.scene_lazy_check {
-            let full = crate::perception::sensed(ctx, self.me.id, self.at, common::sight_for(ctx, self.me.id, &self.w, now), now).0.into_iter().find(|c| pred(c));
+            let full = crate::perception::sensed(ctx, self.me.id, self.at, now).0.into_iter().find(|c| pred(c));
             common::diag(|| "scene_lazy:checked", 1);
             if full.as_ref().map(|c| c.id) != got.as_ref().map(|c| c.id) {
                 common::diag(|| "scene_lazy:differed", 1);
@@ -399,7 +399,7 @@ impl<'a> Ev<'a> {
         let got = self.scene().sensing.by_id(ctx, now, id);
         common::diag(|| "scene:by_id", 1);
         if laws.scene_lazy_check {
-            let full = crate::perception::sensed(ctx, self.me.id, self.at, common::sight_for(ctx, self.me.id, &self.w, now), now).0.into_iter().find(|c| c.id == id);
+            let full = crate::perception::sensed(ctx, self.me.id, self.at, now).0.into_iter().find(|c| c.id == id);
             common::diag(|| "scene_lazy:checked", 1);
             if full.as_ref().map(|c| c.id) != got.as_ref().map(|c| c.id) {
                 common::diag(|| "scene_lazy:differed", 1);
@@ -2626,4 +2626,28 @@ mod tests {
             assert_eq!(joined(&all, i), joined_by_scan(&all, i), "start {i}");
         }
     }
+}
+
+thread_local! {
+    static PROFILE_VISIBLE: std::cell::RefCell<std::collections::HashMap<u32, std::collections::HashSet<u32>>> = Default::default();
+}
+
+fn note_sight_changes(actor: u32, seen: &[NearCreature]) {
+    if !common::profiling() { return; }
+    PROFILE_VISIBLE.with(|visible| {
+        let mut visible = visible.borrow_mut();
+        if visible.len() >= 4096 && !visible.contains_key(&actor) {
+            visible.clear();
+        }
+        let current = seen.iter().map(|c| c.id).collect();
+        if let Some(previous) = visible.insert(actor, current) {
+            let current = &visible[&actor];
+            common::diag(|| "mind_visible:add", current.difference(&previous).count() as u64);
+            common::diag(|| "mind_visible:drop", previous.difference(current).count() as u64);
+        }
+    });
+}
+
+pub fn reset_sight_profile() {
+    PROFILE_VISIBLE.with(|visible| visible.borrow_mut().clear());
 }

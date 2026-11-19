@@ -76,7 +76,11 @@ fn block(ctx: &ReducerContext, id: u32, block: u32) -> Option<Known> {
 /// its own sight.
 pub fn ground_radius(ctx: &ReducerContext, id: u32, w: &World, now: u64) -> f32 {
     let laws = common::laws(ctx);
-    let sight = common::sight_for(ctx, id, w, now);
+    let senses = common::senses_of(ctx, id, w, now);
+    if let Some(gaze) = senses.gaze {
+        return gaze.ground.min(laws.ground_sight_m);
+    }
+    let sight = senses.sight;
     let day = common::scripts(ctx).reach().day;
     if sight + 0.01 < day {
         sight.min(laws.ground_sight_m)

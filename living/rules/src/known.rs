@@ -669,6 +669,7 @@ mod tests {
             h,
             tiles: vec![Terrain::Grass as u8; (w * h) as usize],
             blocked: Default::default(),
+            cover: None,
             opaque: Default::default(),
             nav: Default::default(),
         }

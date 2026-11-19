@@ -47,7 +47,7 @@ use bevy::prelude::*;
 use living_bindings::*;
 use living_rules::land::{Land, LandParams};
 use living_rules::map::{chunk_xy, Map, CHUNK};
-use spacetimedb_sdk::Table;
+use spacetimedb_sdk::{DbContext, Table};
 use std::collections::{HashMap, HashSet};
 use std::f32::consts::PI;
 use std::sync::{Arc, Mutex};
@@ -321,6 +321,7 @@ pub struct Live {
     pub digests_ok: Option<bool>,
     /// The tiles as the authority hosted them at world creation, to find later edits.
     hosted: Option<Arc<Map>>,
+    cover_recipe: Option<LandParams>,
     lots: HashMap<u32, Vec<Entity>>,
     shown: HashMap<u32, Shown>,
     /// Height (m) of each drawn character, for nameplates and bubbles.
@@ -339,6 +340,8 @@ pub struct Live {
 impl Live {
     /// The tiles as the authority hosted them at world creation (`host::hosted_map`), once the
     /// land is regenerated.
+    pub fn cover_recipe(&self) -> Option<&LandParams> { self.cover_recipe.as_ref() }
+
     pub fn hosted_map(&self) -> Option<Arc<Map>> {
         self.hosted.clone()
     }
@@ -416,6 +419,7 @@ fn land(
         info!("land: mood {} (fog {:.0}–{:.0} m)", def.id, def.mood.fog_start, def.mood.fog_end);
     }
     live.hosted = Some(built.hosted);
+    live.cover_recipe = Some(built.params.clone());
     let arrive = Vec2::new(row.arrive_x, row.arrive_y);
     roam.pos = arrive;
     // Its ground map is the environment made for this land's; the first world environment's
@@ -1234,6 +1238,8 @@ fn report(net: NonSend<Net>, live: Res<Live>, time: Res<Time>, mut next: Local<f
 ///   of the world (sim m, H m above the ground), `nudge:DX,DY` moves it by logical px
 ///   (an open wheel takes it as motion), `wheel:DIR` points the open wheel as the arrows do, and `pan:PX`, `drag:PX` and `pinch:F` turn the view or
 ///   zoom through the pointer's paths (`pointer.rs`: a two-finger pan, a left drag, a pinch);
+///   `motion:DX,DY` supplies one frame of mouse motion and `rotate:DEG` sends a clockwise
+///   rotation gesture; use `mouse:middle:down|up` around motion for a middle drag;
 ///   `frame:0` stops the view framing fights, talks and greetings (`frame:1` again);
 /// - `goto:X,Y`: click-to-move (`human_act` with `goto`); `yaw:DEG`: turn the view;
 ///   `view:PITCH:DISTANCE[:FOV]`: the game camera's pitch (deg), distance (m) and field of view
@@ -1355,7 +1361,10 @@ fn script(
     (mut skills, mut gestures, mut verbs, mut talk): (ResMut<crate::combat::Scripted>, ResMut<crate::town::Scripted>, ResMut<crate::verbs::Scripted>, ResMut<crate::talk::Talk>),
     (hud, loading, mut pointer): (Res<crate::ui::model::HudModel>, Option<Res<crate::loading::Loading>>, ResMut<crate::pointer::Pointer>),
     (target, mut sight, mut shine): (Option<Res<crate::capture::Target>>, Option<ResMut<crate::sightedge::SightEdge>>, ResMut<crate::style::HairShine>),
-    (mut keys, mut buttons): (ResMut<ButtonInput<KeyCode>>, ResMut<ButtonInput<MouseButton>>),
+    (mut keys, mut buttons, mut motion, mut rotation): (
+        ResMut<ButtonInput<KeyCode>>, ResMut<ButtonInput<MouseButton>>,
+        ResMut<bevy::input::mouse::AccumulatedMouseMotion>, MessageWriter<bevy::input::gestures::RotationGesture>,
+    ),
     (mut dump, mut taps, ui): (ResMut<crate::ui::Dump>, ResMut<crate::keys::DoubleTap>, Res<crate::ui::hit::UiPointer>),
     (time, mut exit, cams, mut weapon, mut lw, mut wheel): (Res<Time>, MessageWriter<AppExit>, Query<(&Camera, &GlobalTransform), With<Camera3d>>, ResMut<crate::weapon::Weapon>, ResMut<crate::twist::LookWalk>, MessageWriter<bevy::input::mouse::MouseWheel>),
 ) {
@@ -1603,6 +1612,24 @@ fn script(
         }
         "pan" | "drag" => {
             pointer.scripted_turn += arg.parse::<f32>().unwrap_or(0.0) * if verb == "pan" { 0.6 } else { 1.0 };
+            true
+        }
+        "reconnect" => {
+            if let Some(conn) = &net.conn {
+                let _ = conn.disconnect();
+            }
+            true
+        }
+        "motion" => {
+            if let Some((x, y)) = arg.split_once(',').and_then(|(x, y)| Some((x.parse().ok()?, y.parse().ok()?))) {
+                motion.delta += Vec2::new(x, y);
+            }
+            true
+        }
+        "rotate" => {
+            if let Ok(degrees) = arg.parse::<f32>() {
+                rotation.write(bevy::input::gestures::RotationGesture(-degrees));
+            }
             true
         }
         "notches" => {
