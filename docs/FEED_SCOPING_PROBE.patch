@@ -1378,23 +1378,27 @@ index 00000000..c684f3e5
 +if __name__ == "__main__":
 +    main()
 diff --git a/living/tools/gate_load/src/main.rs b/living/tools/gate_load/src/main.rs
-index a890964b..959bdca4 100644
+index a890964b..880f442c 100644
 --- a/living/tools/gate_load/src/main.rs
 +++ b/living/tools/gate_load/src/main.rs
-@@ -643,7 +643,11 @@ fn players_mode() {
+@@ -643,7 +643,15 @@ fn players_mode() {
          log.put(json!({"k": "conn", "p": idx, "role": format!("{role:?}"), "identity": identity.to_hex().to_string(), "ts": t, "connected": unix_us()}));
          let pl = Player { idx, role, name: p["name"].as_str().unwrap().to_string(), conn, counts: Arc::default(), st: Arc::default(), applied: Arc::default(), errors: Arc::default() };
          hook(&pl, &log);
 -        subscribe(&pl, client.base());
 +        let mut queries = client.base();
 +        if req["feed_probe"].as_bool().unwrap_or(false) {
-+            queries.push("SELECT * FROM my_feed_probe".into());
++            // Both cost fixtures are land worlds. Include the game subscriptions added since BASE.
++            queries.extend([
++                "cover_law", "gate", "my_offers", "my_known_names", "my_earshot", "speech_card",
++                "my_records", "heard_sounds", "my_senses", "my_act_outcomes", "my_feed_probe",
++            ].map(|table| format!("SELECT * FROM {table}")));
 +        }
 +        subscribe(&pl, queries);
          players.push(pl);
      }
      wait_applied(&players, 1, "base", Duration::from_secs(120));
-@@ -866,6 +870,27 @@ fn relay_mode(args: &[String]) {
+@@ -866,6 +874,27 @@ fn relay_mode(args: &[String]) {
      snapshot(&mut file);
  }
 
@@ -1422,7 +1426,7 @@ index a890964b..959bdca4 100644
  // ---- watch -----------------------------------------------------------------------------------
 
  fn watch_mode() {
-@@ -1139,6 +1164,7 @@ fn main() {
+@@ -1139,6 +1168,7 @@ fn main() {
          Some("players") => players_mode(),
          Some("relay") => relay_mode(&args[2..]),
          Some("watch") => watch_mode(),
