@@ -36,6 +36,8 @@ The SUPERVIVE Wiki's direct fetches returned 403. The search index supplied the 
 
 ## 2. Current in Slop Art Online
 
+The play camera now starts north-up and can turn around the character. Middle drag and native two-finger rotation on macOS change the bearing. N or a short middle tap snaps north, and the key is rebindable. The earlier fixed-bearing proposal below records the original design. [Current controls and verification](../.agents/skills/verify-ui/features/camera.md).
+
 Source audit at the branch base. See the [living core](LIVING_CORE.md), [interface](INTERFACE.md), [character models](CHARACTERS.md) and [perception](PERCEPTION.md). Where older sections describe prototypes, the current source takes precedence.
 
 - **Camera and movement.** [Camera](../living/game/src/camera.rs) uses Bevy's perspective camera with a 28° downward pitch, a 22 m slant distance and 50° vertical FOV in the ordinary adult baseline. Character size, cursor lead, context framing for fights, greetings and talk, sight distance and terrain clearance can change the actual framing. Brackets, middle drag, left drag and touch pan can rotate it. Middle tap aligns and Alt glances. [Pointer](../living/game/src/pointer.rs) already provides wheel/pinch zoom as a 0.6–1.4 distance factor. [Controls](../living/game/src/controls.rs) sends WASD movement relative to the current camera axes and has both Cursor and Travel facing settings. Shift runs. Cursor facing sends `human_face`; the Travel preset also uses cursor facing while aiming.
@@ -242,3 +244,62 @@ Local references are in `.local/living/camera-1/refs/` in the owner's main check
 [sv-end]: https://steamcommunity.com/games/1283700/announcements/detail/571524191533139168
 [cp-camera-2026]: https://www.youtube.com/watch?v=XljOWnKSTP8
 [cp-angle-recap]: https://www.youtube.com/watch?v=z4APxTjAp6Y
+
+## Gaze authority implementation
+
+Gaze ships disabled in the base law and in Cullet. The authority first derives
+the original world's light cap from `senses(a)`. Enabled worlds run the shared
+Rhai modifier over that result, using band shares and angles from `gaze_bands()`.
+The near ring, peripheral share and facing use the existing sight primitives.
+Creature acquisition and retention use the band ceiling, including glow and the
+keep margin. Groundsight uses its own band-scaled entitlement, capped by
+`ground_sight_m`. The daytime entitlement is determined from the original
+light cap before applying the band. Cover traces use the same authoritative
+eye and map. [Rhai law](../living/scripts/skills.rhai),
+[shared sight](../living/rules/src/sight.rs),
+[ground memory](../living/authority/src/known.rs).
+
+`human_gaze(band: u8)` accepts Middle (0), Far (1) and Near (2) for the caller's
+living character. Minds send `{"do":"gaze","band":"far"}` through the usual
+act entry point. A change writes one private `attention` row at most every
+250 ms per character. A repeat does zero writes, and death removes the row.
+Enabled sight reads that character's row by primary key and reuses the answer
+within the transaction. Aim and mind scenes read new intent when they need
+sight. Player contact membership and the owner's applied projection follow
+the scheduled sweep. [Attention and projection](../living/authority/src/attention.rs).
+
+The new private `applied_gaze` table has one row per swept player in enabled
+worlds. The owner receives it through `my_senses_v_2` with the applied band,
+creature ceiling, ground radius and the nested `CharacterSenses` field. The
+view resolves the sender's current living player and performs one primary-key
+read. A steady field causes zero writes, and disabled worlds keep the view
+empty. The legacy `my_senses` keeps its existing row format and cadence.
+The laptop can use the shared `GazeBand::at_zoom` hysteresis helper and the
+generated reducer and view accessors. [Shared bands](../living/rules/src/sight.rs),
+[generated binding entry point](../living/bindings/src/generated/mod.rs).
+
+### SpacetimeDB 2.14.1 delivery decision
+
+SpacetimeDB's pinned migration planner permits a view return-column change
+by replacing that view and requiring all clients to disconnect. A new view
+is planned as an addition. `my_senses_v_2` therefore carries the extended
+projection alongside the legacy view. Both gaze tables are new, so no existing
+table needs rewriting. The 2.14.1 generator canonicalizes the view name with
+the underscore before the version digit. [Automatic migrations](https://spacetimedb.com/docs/databases/automatic-migrations/),
+[pinned planner](https://github.com/clockworklabs/SpacetimeDB/blob/v2.14.1/crates/schema/src/auto_migrate.rs#L558-L700).
+
+Private keyed storage makes the request and sweep reads local. The view scopes
+its initial result and subsequent changes to the sender. It reads the applied
+projection, so acceptance writes alone do not invalidate it. Attention and
+the owner projection each retain at most a row per character that uses that
+path. [Tables](https://spacetimedb.com/docs/tables/),
+[indexes](https://spacetimedb.com/docs/tables/indexes/),
+[performance](https://spacetimedb.com/docs/tables/performance/),
+[views](https://spacetimedb.com/docs/functions/views/),
+[subscriptions](https://spacetimedb.com/docs/clients/subscriptions/).
+
+Cullet declares zero target glow in full daylight in its senses law. The
+enabled gather skips glow lookups in that light. In twilight it still checks
+glow in the peripheral sector when Far's forward reach is longer than a
+torch's glow. Runtime sight holds the result to the declared light bound.
+[Cullet light law](../living/seeds/worlds/cullet/laws.rhai).

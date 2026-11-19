@@ -7,6 +7,13 @@
 // need rate below is per game hour (`per: "hour"`), so these numbers are the balance per game
 // day whatever the day length; the engine turns them into real time.
 
+// Keep Cullet brush cosmetic until the cover acceptance switch-on.
+fn laws() {
+    let policy = base_laws();
+    policy.cover_brush_on = false;
+    policy
+}
+
 // ---- the day -----------------------------------------------------------------------------
 
 // Dusk and dawn each take about an hour, eased: half light at 20:00 and at 06:00, so night (less
@@ -101,6 +108,7 @@ fn known_within() { 24.0 }
 // How far someone is seen from at night: standing in lamplight, and carrying a light.
 fn lamplight_seen() { 28.0 }
 fn carried_light_seen() { 48.0 }
+fn declared_glow_cap() { carried_light_seen() }
 
 // Sight eases from the dark's to the day's with the light.
 fn senses(a) {
@@ -128,6 +136,7 @@ fn senses_law() {
     let l = base_senses_law();
     l.covers = ["glow"];
     l.reach.glow = carried_light_seen();
+    l.reach.glow_day = 0.0;
     l.about = `How far a creature sees and hears, in metres (one tile is one metre). By day one sees ${short(sight_in("day"))} m; in the dark ${short(sight_in("night"))} m, or ${short(sight_in("torch"))} m carrying a torch; sight grows and shrinks with the light at dusk and dawn. At night anyone standing in lamplight is seen from ${short(lamplight_seen())} m, and anyone carrying a light from ${short(carried_light_seen())} m. Within ${short(known_within())} m you can tell who someone is; farther off they are someone too far away to make out, and you cannot tell whose community they belong to. Rock, walls and shut gates block the line of sight. Speech carries ${short(hearing_of_people())} m.${field_about()}`;
     l
 }

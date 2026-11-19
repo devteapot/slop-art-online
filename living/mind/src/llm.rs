@@ -64,6 +64,7 @@ fn max_tokens() -> Option<u32> {
 fn parent_purpose(purpose: &str) -> Option<&'static str> {
     match purpose {
         "reorganize" => Some("consolidate"),
+        "act_repair" => Some("think"),
         _ => None,
     }
 }
@@ -130,7 +131,7 @@ pub fn split_spec(spec: &str) -> (&str, Option<&str>) {
 }
 
 /// The purposes the mind sends (see `Lane::for_purpose`); `*` in a mix covers the rest.
-pub const PURPOSES: [&str; 7] = ["think", "deliberate", "talk", "consolidate", "reorganize", "internalize", "judge"];
+pub const PURPOSES: [&str; 8] = ["think", "deliberate", "talk", "consolidate", "reorganize", "internalize", "judge", "act_repair"];
 
 /// The model purposes a person's route is used for (identity and birth go out as
 /// `consolidate`).

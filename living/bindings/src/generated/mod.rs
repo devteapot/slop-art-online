@@ -16,8 +16,12 @@ pub mod act_queue_table;
 pub mod activity_table;
 pub mod activity_type;
 pub mod admin_set_vitals_reducer;
+pub mod applied_gaze_table;
+pub mod applied_gaze_type;
 pub mod artifact_table;
 pub mod artifact_type;
+pub mod attention_table;
+pub mod attention_type;
 pub mod audience_table;
 pub mod audience_type;
 pub mod backfill_sex_reducer;
@@ -50,6 +54,10 @@ pub mod community_table;
 pub mod community_type;
 pub mod connection_table;
 pub mod connection_type;
+pub mod cover_ground_table;
+pub mod cover_ground_type;
+pub mod cover_law_table;
+pub mod cover_law_type;
 pub mod create_floor_reducer;
 pub mod cry_prompt_type;
 pub mod cue_fire_type;
@@ -110,6 +118,7 @@ pub mod hearer_type;
 pub mod housekeeping_reducer;
 pub mod human_act_reducer;
 pub mod human_face_reducer;
+pub mod human_gaze_reducer;
 pub mod human_move_reducer;
 pub mod human_say_reducer;
 pub mod human_speak_reducer;
@@ -160,6 +169,7 @@ pub mod lot_type;
 pub mod mark_type;
 pub mod membership_table;
 pub mod membership_type;
+pub mod mind_act_checked_procedure;
 pub mod mind_act_reducer;
 pub mod mind_consolidated_reducer;
 pub mod mind_cursor_table;
@@ -203,6 +213,7 @@ pub mod my_readiness_table;
 pub mod my_record_type;
 pub mod my_records_table;
 pub mod my_senses_table;
+pub mod my_senses_v_2_table;
 pub mod my_sex_table;
 pub mod my_sex_type;
 pub mod my_skill_uses_table;
@@ -348,8 +359,12 @@ pub use act_queue_table::*;
 pub use activity_table::*;
 pub use activity_type::Activity;
 pub use admin_set_vitals_reducer::admin_set_vitals;
+pub use applied_gaze_table::*;
+pub use applied_gaze_type::AppliedGaze;
 pub use artifact_table::*;
 pub use artifact_type::Artifact;
+pub use attention_table::*;
+pub use attention_type::Attention;
 pub use audience_table::*;
 pub use audience_type::Audience;
 pub use backfill_sex_reducer::backfill_sex;
@@ -382,6 +397,10 @@ pub use community_table::*;
 pub use community_type::Community;
 pub use connection_table::*;
 pub use connection_type::Connection;
+pub use cover_ground_table::*;
+pub use cover_ground_type::CoverGround;
+pub use cover_law_table::*;
+pub use cover_law_type::CoverLaw;
 pub use create_floor_reducer::create_floor;
 pub use cry_prompt_type::CryPrompt;
 pub use cue_fire_type::CueFire;
@@ -442,6 +461,7 @@ pub use hearer_type::Hearer;
 pub use housekeeping_reducer::housekeeping;
 pub use human_act_reducer::human_act;
 pub use human_face_reducer::human_face;
+pub use human_gaze_reducer::human_gaze;
 pub use human_move_reducer::human_move;
 pub use human_say_reducer::human_say;
 pub use human_speak_reducer::human_speak;
@@ -492,6 +512,7 @@ pub use lot_type::Lot;
 pub use mark_type::Mark;
 pub use membership_table::*;
 pub use membership_type::Membership;
+pub use mind_act_checked_procedure::mind_act_checked;
 pub use mind_act_reducer::mind_act;
 pub use mind_consolidated_reducer::mind_consolidated;
 pub use mind_cursor_table::*;
@@ -535,6 +556,7 @@ pub use my_readiness_table::*;
 pub use my_record_type::MyRecord;
 pub use my_records_table::*;
 pub use my_senses_table::*;
+pub use my_senses_v_2_table::*;
 pub use my_sex_table::*;
 pub use my_sex_type::MySex;
 pub use my_skill_uses_table::*;
@@ -710,6 +732,9 @@ pub enum Reducer {
     HumanFace {
         dx: f32,
         dy: f32,
+    },
+    HumanGaze {
+        band: u8,
     },
     HumanMove {
         dx: f32,
@@ -905,6 +930,7 @@ impl __sdk::Reducer for Reducer {
             Reducer::Housekeeping { .. } => "housekeeping",
             Reducer::HumanAct { .. } => "human_act",
             Reducer::HumanFace { .. } => "human_face",
+            Reducer::HumanGaze { .. } => "human_gaze",
             Reducer::HumanMove { .. } => "human_move",
             Reducer::HumanSay { .. } => "human_say",
             Reducer::HumanSpeak { .. } => "human_speak",
@@ -1003,6 +1029,9 @@ impl __sdk::Reducer for Reducer {
                     dx: dx.clone(),
                     dy: dy.clone(),
                 })
+            }
+            Reducer::HumanGaze { band } => {
+                __sats::bsatn::to_vec(&human_gaze_reducer::HumanGazeArgs { band: band.clone() })
             }
             Reducer::HumanMove { dx, dy, run } => {
                 __sats::bsatn::to_vec(&human_move_reducer::HumanMoveArgs {
@@ -1291,7 +1320,9 @@ pub struct DbUpdate {
     act_outcome: __sdk::TableUpdate<ActOutcome>,
     act_queue: __sdk::TableUpdate<PlannedAct>,
     activity: __sdk::TableUpdate<Activity>,
+    applied_gaze: __sdk::TableUpdate<AppliedGaze>,
     artifact: __sdk::TableUpdate<Artifact>,
+    attention: __sdk::TableUpdate<Attention>,
     audience: __sdk::TableUpdate<Audience>,
     background: __sdk::TableUpdate<Background>,
     belief: __sdk::TableUpdate<Belief>,
@@ -1306,6 +1337,8 @@ pub struct DbUpdate {
     combat_seen: __sdk::TableUpdate<CombatSeen>,
     community: __sdk::TableUpdate<Community>,
     connection: __sdk::TableUpdate<Connection>,
+    cover_ground: __sdk::TableUpdate<CoverGround>,
+    cover_law: __sdk::TableUpdate<CoverLaw>,
     cue: __sdk::TableUpdate<Cue>,
     deliberation: __sdk::TableUpdate<Deliberation>,
     doing: __sdk::TableUpdate<Doing>,
@@ -1369,6 +1402,7 @@ pub struct DbUpdate {
     my_readiness: __sdk::TableUpdate<Readiness>,
     my_records: __sdk::TableUpdate<MyRecord>,
     my_senses: __sdk::TableUpdate<CharacterSenses>,
+    my_senses_v_2: __sdk::TableUpdate<AppliedGaze>,
     my_sex: __sdk::TableUpdate<MySex>,
     my_skill_uses: __sdk::TableUpdate<SkillUse>,
     my_vitals: __sdk::TableUpdate<Vitals>,
@@ -1445,9 +1479,15 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "activity" => db_update
                     .activity
                     .append(activity_table::parse_table_update(table_update)?),
+                "applied_gaze" => db_update
+                    .applied_gaze
+                    .append(applied_gaze_table::parse_table_update(table_update)?),
                 "artifact" => db_update
                     .artifact
                     .append(artifact_table::parse_table_update(table_update)?),
+                "attention" => db_update
+                    .attention
+                    .append(attention_table::parse_table_update(table_update)?),
                 "audience" => db_update
                     .audience
                     .append(audience_table::parse_table_update(table_update)?),
@@ -1490,6 +1530,12 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "connection" => db_update
                     .connection
                     .append(connection_table::parse_table_update(table_update)?),
+                "cover_ground" => db_update
+                    .cover_ground
+                    .append(cover_ground_table::parse_table_update(table_update)?),
+                "cover_law" => db_update
+                    .cover_law
+                    .append(cover_law_table::parse_table_update(table_update)?),
                 "cue" => db_update
                     .cue
                     .append(cue_table::parse_table_update(table_update)?),
@@ -1679,6 +1725,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "my_senses" => db_update
                     .my_senses
                     .append(my_senses_table::parse_table_update(table_update)?),
+                "my_senses_v_2" => db_update
+                    .my_senses_v_2
+                    .append(my_senses_v_2_table::parse_table_update(table_update)?),
                 "my_sex" => db_update
                     .my_sex
                     .append(my_sex_table::parse_table_update(table_update)?),
@@ -1879,8 +1928,14 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.activity = cache
             .apply_diff_to_table::<Activity>("activity", &self.activity)
             .with_updates_by_pk(|row| &row.id);
+        diff.applied_gaze = cache
+            .apply_diff_to_table::<AppliedGaze>("applied_gaze", &self.applied_gaze)
+            .with_updates_by_pk(|row| &row.id);
         diff.artifact = cache
             .apply_diff_to_table::<Artifact>("artifact", &self.artifact)
+            .with_updates_by_pk(|row| &row.id);
+        diff.attention = cache
+            .apply_diff_to_table::<Attention>("attention", &self.attention)
             .with_updates_by_pk(|row| &row.id);
         diff.audience = cache
             .apply_diff_to_table::<Audience>("audience", &self.audience)
@@ -1923,6 +1978,12 @@ impl __sdk::DbUpdate for DbUpdate {
             .with_updates_by_pk(|row| &row.id);
         diff.connection = cache
             .apply_diff_to_table::<Connection>("connection", &self.connection)
+            .with_updates_by_pk(|row| &row.id);
+        diff.cover_ground = cache
+            .apply_diff_to_table::<CoverGround>("cover_ground", &self.cover_ground)
+            .with_updates_by_pk(|row| &row.id);
+        diff.cover_law = cache
+            .apply_diff_to_table::<CoverLaw>("cover_law", &self.cover_law)
             .with_updates_by_pk(|row| &row.id);
         diff.cue = cache
             .apply_diff_to_table::<Cue>("cue", &self.cue)
@@ -2245,6 +2306,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.my_senses = cache
             .apply_diff_to_table::<CharacterSenses>("my_senses", &self.my_senses)
             .with_updates_by_pk(|row| &row.id);
+        diff.my_senses_v_2 = cache
+            .apply_diff_to_table::<AppliedGaze>("my_senses_v_2", &self.my_senses_v_2)
+            .with_updates_by_pk(|row| &row.id);
         diff.my_sex = cache
             .apply_diff_to_table::<MySex>("my_sex", &self.my_sex)
             .with_updates_by_pk(|row| &row.id);
@@ -2287,8 +2351,14 @@ impl __sdk::DbUpdate for DbUpdate {
                 "activity" => db_update
                     .activity
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "applied_gaze" => db_update
+                    .applied_gaze
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "artifact" => db_update
                     .artifact
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "attention" => db_update
+                    .attention
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "audience" => db_update
                     .audience
@@ -2331,6 +2401,12 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "connection" => db_update
                     .connection
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "cover_ground" => db_update
+                    .cover_ground
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "cover_law" => db_update
+                    .cover_law
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "cue" => db_update
                     .cue
@@ -2520,6 +2596,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "my_senses" => db_update
                     .my_senses
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "my_senses_v_2" => db_update
+                    .my_senses_v_2
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "my_sex" => db_update
                     .my_sex
@@ -2708,8 +2787,14 @@ impl __sdk::DbUpdate for DbUpdate {
                 "activity" => db_update
                     .activity
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "applied_gaze" => db_update
+                    .applied_gaze
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "artifact" => db_update
                     .artifact
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "attention" => db_update
+                    .attention
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "audience" => db_update
                     .audience
@@ -2752,6 +2837,12 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "connection" => db_update
                     .connection
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "cover_ground" => db_update
+                    .cover_ground
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "cover_law" => db_update
+                    .cover_law
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "cue" => db_update
                     .cue
@@ -2942,6 +3033,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "my_senses" => db_update
                     .my_senses
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "my_senses_v_2" => db_update
+                    .my_senses_v_2
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "my_sex" => db_update
                     .my_sex
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -3121,7 +3215,9 @@ pub struct AppliedDiff<'r> {
     act_outcome: __sdk::TableAppliedDiff<'r, ActOutcome>,
     act_queue: __sdk::TableAppliedDiff<'r, PlannedAct>,
     activity: __sdk::TableAppliedDiff<'r, Activity>,
+    applied_gaze: __sdk::TableAppliedDiff<'r, AppliedGaze>,
     artifact: __sdk::TableAppliedDiff<'r, Artifact>,
+    attention: __sdk::TableAppliedDiff<'r, Attention>,
     audience: __sdk::TableAppliedDiff<'r, Audience>,
     background: __sdk::TableAppliedDiff<'r, Background>,
     belief: __sdk::TableAppliedDiff<'r, Belief>,
@@ -3136,6 +3232,8 @@ pub struct AppliedDiff<'r> {
     combat_seen: __sdk::TableAppliedDiff<'r, CombatSeen>,
     community: __sdk::TableAppliedDiff<'r, Community>,
     connection: __sdk::TableAppliedDiff<'r, Connection>,
+    cover_ground: __sdk::TableAppliedDiff<'r, CoverGround>,
+    cover_law: __sdk::TableAppliedDiff<'r, CoverLaw>,
     cue: __sdk::TableAppliedDiff<'r, Cue>,
     deliberation: __sdk::TableAppliedDiff<'r, Deliberation>,
     doing: __sdk::TableAppliedDiff<'r, Doing>,
@@ -3199,6 +3297,7 @@ pub struct AppliedDiff<'r> {
     my_readiness: __sdk::TableAppliedDiff<'r, Readiness>,
     my_records: __sdk::TableAppliedDiff<'r, MyRecord>,
     my_senses: __sdk::TableAppliedDiff<'r, CharacterSenses>,
+    my_senses_v_2: __sdk::TableAppliedDiff<'r, AppliedGaze>,
     my_sex: __sdk::TableAppliedDiff<'r, MySex>,
     my_skill_uses: __sdk::TableAppliedDiff<'r, SkillUse>,
     my_vitals: __sdk::TableAppliedDiff<'r, Vitals>,
@@ -3274,7 +3373,13 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         callbacks.invoke_table_row_callbacks::<ActOutcome>("act_outcome", &self.act_outcome, event);
         callbacks.invoke_table_row_callbacks::<PlannedAct>("act_queue", &self.act_queue, event);
         callbacks.invoke_table_row_callbacks::<Activity>("activity", &self.activity, event);
+        callbacks.invoke_table_row_callbacks::<AppliedGaze>(
+            "applied_gaze",
+            &self.applied_gaze,
+            event,
+        );
         callbacks.invoke_table_row_callbacks::<Artifact>("artifact", &self.artifact, event);
+        callbacks.invoke_table_row_callbacks::<Attention>("attention", &self.attention, event);
         callbacks.invoke_table_row_callbacks::<Audience>("audience", &self.audience, event);
         callbacks.invoke_table_row_callbacks::<Background>("background", &self.background, event);
         callbacks.invoke_table_row_callbacks::<Belief>("belief", &self.belief, event);
@@ -3297,6 +3402,12 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         callbacks.invoke_table_row_callbacks::<CombatSeen>("combat_seen", &self.combat_seen, event);
         callbacks.invoke_table_row_callbacks::<Community>("community", &self.community, event);
         callbacks.invoke_table_row_callbacks::<Connection>("connection", &self.connection, event);
+        callbacks.invoke_table_row_callbacks::<CoverGround>(
+            "cover_ground",
+            &self.cover_ground,
+            event,
+        );
+        callbacks.invoke_table_row_callbacks::<CoverLaw>("cover_law", &self.cover_law, event);
         callbacks.invoke_table_row_callbacks::<Cue>("cue", &self.cue, event);
         callbacks.invoke_table_row_callbacks::<Deliberation>(
             "deliberation",
@@ -3426,6 +3537,11 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         callbacks.invoke_table_row_callbacks::<CharacterSenses>(
             "my_senses",
             &self.my_senses,
+            event,
+        );
+        callbacks.invoke_table_row_callbacks::<AppliedGaze>(
+            "my_senses_v_2",
+            &self.my_senses_v_2,
             event,
         );
         callbacks.invoke_table_row_callbacks::<MySex>("my_sex", &self.my_sex, event);
@@ -4178,7 +4294,9 @@ impl __sdk::SpacetimeModule for RemoteModule {
         act_outcome_table::register_table(client_cache);
         act_queue_table::register_table(client_cache);
         activity_table::register_table(client_cache);
+        applied_gaze_table::register_table(client_cache);
         artifact_table::register_table(client_cache);
+        attention_table::register_table(client_cache);
         audience_table::register_table(client_cache);
         background_table::register_table(client_cache);
         belief_table::register_table(client_cache);
@@ -4193,6 +4311,8 @@ impl __sdk::SpacetimeModule for RemoteModule {
         combat_seen_table::register_table(client_cache);
         community_table::register_table(client_cache);
         connection_table::register_table(client_cache);
+        cover_ground_table::register_table(client_cache);
+        cover_law_table::register_table(client_cache);
         cue_table::register_table(client_cache);
         deliberation_table::register_table(client_cache);
         doing_table::register_table(client_cache);
@@ -4256,6 +4376,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         my_readiness_table::register_table(client_cache);
         my_records_table::register_table(client_cache);
         my_senses_table::register_table(client_cache);
+        my_senses_v_2_table::register_table(client_cache);
         my_sex_table::register_table(client_cache);
         my_skill_uses_table::register_table(client_cache);
         my_vitals_table::register_table(client_cache);
@@ -4316,7 +4437,9 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "act_outcome",
         "act_queue",
         "activity",
+        "applied_gaze",
         "artifact",
+        "attention",
         "audience",
         "background",
         "belief",
@@ -4331,6 +4454,8 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "combat_seen",
         "community",
         "connection",
+        "cover_ground",
+        "cover_law",
         "cue",
         "deliberation",
         "doing",
@@ -4394,6 +4519,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "my_readiness",
         "my_records",
         "my_senses",
+        "my_senses_v_2",
         "my_sex",
         "my_skill_uses",
         "my_vitals",

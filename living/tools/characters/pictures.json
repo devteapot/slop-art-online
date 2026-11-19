@@ -32,6 +32,10 @@
    "format": "ktx2",
    "mips": "box"
   },
+  "garment": {
+   "format": "ktx2",
+   "mips": "box"
+  },
   "strands": {
    "format": "ktx2",
    "mips": "box"

@@ -29,7 +29,17 @@ fn feedback(ctx: &ReducerContext, actor: u32, now: u64, text: String, salience: 
 
 /// Queue acts for `actor`; each is validated for the body first (a rejected one is told back).
 /// `replace` drops what was waiting and stops the act in progress (a player's new command).
-pub fn submit(ctx: &ReducerContext, actor: u32, acts: &[String], source: &str, replace: bool, now: u64) -> Vec<String> {
+pub fn submit(ctx: &ReducerContext, actor: u32, acts: &[String], source: &str, replace: bool, now: u64) {
+    submit_inner(ctx, actor, acts, source, replace, now, false);
+}
+
+/// Return ordered, synchronous refusals for this batch. Later activity outcomes remain
+/// experiences, since a queued interaction may start or fail well after this turn ends.
+pub fn submit_checked(ctx: &ReducerContext, actor: u32, acts: &[String], source: &str, now: u64) -> Vec<Option<String>> {
+    submit_inner(ctx, actor, acts, source, false, now, true)
+}
+
+fn submit_inner(ctx: &ReducerContext, actor: u32, acts: &[String], source: &str, replace: bool, now: u64, checked: bool) -> Vec<Option<String>> {
     let kind = ctx.db.character().id().find(actor).map(|c| c.kind).unwrap_or_default();
     let sp = common::species(&kind);
     if replace {
@@ -39,9 +49,27 @@ pub fn submit(ctx: &ReducerContext, actor: u32, acts: &[String], source: &str, r
             act::cancel(ctx, a, now, None);
         }
     }
-    let mut notes = Vec::new();
+    let mut results = Vec::new();
     for raw in acts.iter().take(rules::MAX_QUEUED) {
-        let parsed = serde_json::from_str::<serde_json::Value>(raw).map_err(|e| format!("not JSON: {e}")).and_then(|v| rules::parse(v, sp.as_ref(), common::scripts(ctx).shapes()));
+        let parsed = serde_json::from_str::<serde_json::Value>(raw).map_err(|e| format!("not JSON: {e}"));
+        if let Ok(v) = &parsed {
+            if !replace && v["do"] == "gaze" {
+                let band = match v["band"].as_str() {
+                    Some("middle") => Ok(living_rules::sight::GazeBand::Middle),
+                    Some("far") => Ok(living_rules::sight::GazeBand::Far),
+                    Some("near") => Ok(living_rules::sight::GazeBand::Near),
+                    _ => Err("gaze band must be middle, far or near".to_owned()),
+                };
+                let refusal = band.and_then(|band| crate::attention::set(ctx, actor, band, now)).err();
+                if let Some(why) = refusal.as_deref() {
+                    let told = Told { kind: kind::ACT, ok: false, skill: "gaze", code: code::REFUSED, what: "change gaze", why, other: 0 };
+                    feedback(ctx, actor, now, format!("You could not change gaze: {why}."), 0.4, false, told);
+                }
+                results.push((None, refusal));
+                continue;
+            }
+        }
+        let parsed = parsed.and_then(|v| rules::parse(v, sp.as_ref(), common::scripts(ctx).shapes()));
         let a = match parsed {
             Ok(a) => a,
             Err(why) => {
@@ -49,7 +77,7 @@ pub fn submit(ctx: &ReducerContext, actor: u32, acts: &[String], source: &str, r
                 let skill = serde_json::from_str::<serde_json::Value>(raw).ok().and_then(|v| v["do"].as_str().or_else(|| v["do"]["skill"].as_str()).or_else(|| v["skill"].as_str()).map(String::from)).unwrap_or_default();
                 let told = Told { kind: kind::ACT, ok: false, skill: &skill, code: code::UNREADABLE, what: &what, why: &why, other: 0 };
                 feedback(ctx, actor, now, format!("You could not act on what you decided ({what}): {why}"), 0.4, false, told);
-                notes.push(format!("rejected: {why}"));
+                results.push((None, Some(why)));
                 continue;
             }
         };
@@ -57,18 +85,44 @@ pub fn submit(ctx: &ReducerContext, actor: u32, acts: &[String], source: &str, r
             let what = graph::describe(&graph::Node::Do(a.clone()));
             let told = Told { kind: kind::ACT, ok: false, skill: &a.skill, code: code::BUSY, what: &what, why: "too much in mind already", other: 0 };
             feedback(ctx, actor, now, format!("You have too much in mind already to also {what}."), 0.3, false, told);
-            notes.push("queue full".into());
+            results.push((None, Some("too much in mind already".into())));
             continue;
         }
-        notes.push(graph::describe(&graph::Node::Do(a.clone())));
-        ctx.db.act_queue().insert(PlannedAct { id: 0, actor, node: rules::to_json(&a), source: source.chars().take(32).collect(), at_ms: now });
+        let queued = ctx.db.act_queue().insert(PlannedAct { id: 0, actor, node: rules::to_json(&a), source: source.chars().take(32).collect(), at_ms: now });
+        results.push((Some(queued.id), None));
     }
-    next(ctx, actor, now);
-    notes
+    if !checked {
+        next(ctx, actor, now);
+        return Vec::new();
+    }
+    next_reporting(ctx, actor, now, |id, why| {
+        if let Some((_, refusal)) = results.iter_mut().find(|(queued, _)| *queued == Some(id)) {
+            *refusal = Some(why.to_owned());
+            true
+        } else {
+            false
+        }
+    });
+    results.into_iter().map(|(_, refusal)| refusal.map(|why| refusal_with_names(ctx, &why))).collect()
+}
+
+fn refusal_with_names(ctx: &ReducerContext, why: &str) -> String {
+    let scripts = common::scripts(ctx);
+    let mut names = scripts.skills().iter()
+        .filter(|s| rules::not_an_act(&s.name, scripts.shapes()).is_none())
+        .map(|s| s.name.as_str()).collect::<Vec<_>>().join(", ");
+    if scripts.gaze_enabled() {
+        names.push_str(", gaze");
+    }
+    format!("{why}\nValid one-off act names: {names}.")
 }
 
 /// Start the next waiting act unless one is in progress.
 pub fn next(ctx: &ReducerContext, actor: u32, now: u64) {
+    next_reporting(ctx, actor, now, |_, _| false);
+}
+
+fn next_reporting(ctx: &ReducerContext, actor: u32, now: u64, mut report_refusal: impl FnMut(u64, &str) -> bool) {
     loop {
         if ctx.db.activity().id().find(actor).map_or(false, |a| a.node == ACT) {
             return;
@@ -92,7 +146,7 @@ pub fn next(ctx: &ReducerContext, actor: u32, now: u64) {
                 None => {
                     let why = format!("no {} in sight", graph::describe_target(t));
                     let told = Told { kind: kind::ACT, ok: false, skill: &a.skill, code: code::UNSEEN, what: &what, why: &why, other: 0 };
-                    feedback(ctx, actor, now, format!("What you had decided did not work out: {what}: {why}."), 0.5, true, told);
+                    feedback(ctx, actor, now, format!("What you had decided did not work out: {what}: {why}."), 0.5, !report_refusal(p.id, &why), told);
                     continue;
                 }
             },
@@ -107,7 +161,7 @@ pub fn next(ctx: &ReducerContext, actor: u32, now: u64) {
             }
             Err(why) => {
                 let told = Told { kind: kind::ACT, ok: false, skill: &a.skill, code: act::refusal(), what: &what, why: &why, other: 0 };
-                feedback(ctx, actor, now, format!("What you had decided did not work out: {what}: {why}."), 0.5, true, told)
+                feedback(ctx, actor, now, format!("What you had decided did not work out: {what}: {why}."), 0.5, !report_refusal(p.id, &why), told)
             }
         }
     }

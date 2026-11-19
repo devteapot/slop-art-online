@@ -15,6 +15,7 @@
 | Remembered places in the scene carry a bearing: each of one's own places, out of sight too, with the `dir`/`dist` words of things in sight; a place one does not know is not listed | `place-bearings` | [sight.md](sight.md#remembered-places-with-bearings) |
 | A resident of the seeded island knows its past and its people: relations as rows from world creation, its authored persona, people and `[before all this]` memories in its first prompt, secrets kept to their owner (scratch Neo4j) | `lives_mind.py` on an island run | [lives-mind.md](lives-mind.md) |
 | A sleeper thinks only on what wakes it: an offer to a sleeping mind starts no deliberation and waits in `slumber`, a quiet line to it takes no talk turn and waits in `heard_asleep`; an attack wakes it and its thought says why it woke, with the offer and the line that waited | `sleeper` | [deliberation.md](deliberation.md) |
+| A refused submitted act gets one repair in the same turn, while its original refusal, valid sibling acts and speech survive | `act-repair`, `act-repair-stop`, `talk-act-repair` | [deliberation.md](deliberation.md#act-repair) |
 | An island resident is a mind from the start: this service thinks for it, it answers, takes talk turns, accepts the trade and teaches through its own acts, keeps its given places through a replacing update | `resident` | [resident.md](resident.md) |
 | An offline player's character: takeover after `takeover_s`, thought for like any AI, handback (plan stops, graph held), a reply in flight refused | `takeover` | [takeover.md](takeover.md) |
 | Answer speech and close an exchange; a line parked while a deliberation runs; `LIVING_PARK=concurrent` turns alongside; `LIVING_GREET` modes over the `audience` table | `conversation`, `parked`, `alongside`, `greet` | [conversations.md](conversations.md) |
@@ -64,3 +65,6 @@ Cases with their own asks (`drop`, `death-names`, `watch-fight`, `reasons`, `ret
 Each free case launches its own database through `verify.py` and passes doctor before driving the real mind binary. Admin calls arrange scenes only. Requests go through the production HTTP model boundary, and replies return through production mind reducers. Public snapshots use shared SQL; private deliberations use shared `sql --as-admin` with the token held in memory. Store-backed projections belong to `verify-knowledge`.
 
 All evidence stays under `.local/living/verify/`. The paid tier is documented and intentionally unexecuted. Runtime discovery uses the shared `.agents/skills/` source and the existing Claude and Cursor links.
+
+- [Cover in a pending mind scene](cover.md)
+- [Gaze in a mind's scene](gaze.md)

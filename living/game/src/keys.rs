@@ -62,6 +62,7 @@ pub enum Act {
     Skills,
     Log,
     Glance,
+    NorthUp,
 }
 
 pub const EXTRA: u8 = 6;
@@ -70,7 +71,7 @@ impl Act {
     pub fn all() -> Vec<Act> {
         let mut v = vec![Act::Forward, Act::Back, Act::Left, Act::Right, Act::Run, Act::Jump, Act::Dodge, Act::Weapon, Act::Primary, Act::Secondary, Act::Skill1, Act::Skill2, Act::Skill3];
         v.extend((0..EXTRA).map(Act::Extra));
-        v.extend([Act::Interact, Act::Talk, Act::Address, Act::Way, Act::Wave, Act::Nod, Act::LookOver, Act::Pack, Act::Character, Act::Skills, Act::Log, Act::Glance]);
+        v.extend([Act::Interact, Act::Talk, Act::Address, Act::Way, Act::Wave, Act::Nod, Act::LookOver, Act::Pack, Act::Character, Act::Skills, Act::Log, Act::Glance, Act::NorthUp]);
         v
     }
 
@@ -170,6 +171,7 @@ impl Binds {
         set(Act::Skills, vec![K(KeyK)]);
         set(Act::Log, vec![K(KeyL)]);
         set(Act::Glance, vec![K(AltLeft), K(AltRight)]);
+        set(Act::NorthUp, vec![K(KeyN)]);
         Binds { map, preset: p }
     }
 
@@ -361,6 +363,9 @@ fn bind_parse(s: &str) -> Option<Bind> {
 pub struct Prefs {
     pub camera: crate::camera::Mode,
     pub camera_tuning: crate::camera::Tuning,
+    pub camera_rotate: bool,
+    pub camera_rotate_speed: f32,
+    pub camera_rotate_invert: bool,
     pub facing: Option<crate::controls::Facing>,
     pub cursor_facing: crate::twist::LookWalk,
     pub control: crate::controls::Control,
@@ -387,7 +392,7 @@ pub struct Prefs {
 
 impl Default for Prefs {
     fn default() -> Self {
-        Self { camera: crate::camera::Mode::default(), camera_tuning: Default::default(), facing: None, cursor_facing: crate::twist::LookWalk::cursor(), control: crate::controls::Control::default(), sight_edge: None, tips: true, auto_draw: true, dirty: false, theme: None, look_walk: None, sight_look: None, film: None, hair_shine: None }
+        Self { camera: crate::camera::Mode::default(), camera_tuning: Default::default(), camera_rotate: true, camera_rotate_speed: 1.0, camera_rotate_invert: false, facing: None, cursor_facing: crate::twist::LookWalk::cursor(), control: crate::controls::Control::default(), sight_edge: None, tips: true, auto_draw: true, dirty: false, theme: None, look_walk: None, sight_look: None, film: None, hair_shine: None }
     }
 }
 
@@ -420,6 +425,7 @@ pub fn load() -> (Binds, Prefs) {
         Some("own") => Preset::Own,
         _ => Preset::Letters,
     };
+    let has_north_up = v["binds"].get("NorthUp").is_some();
     let mut binds = Binds::preset(if preset == Preset::Own { Preset::Letters } else { preset });
     if let Some(m) = v["binds"].as_object() {
         for (k, list) in m {
@@ -427,11 +433,18 @@ pub fn load() -> (Binds, Prefs) {
             binds.map.insert(a, list.iter().filter_map(|b| b.as_str().and_then(bind_parse)).collect());
         }
     }
+    // A profile written before NorthUp may already use N for another action.
+    if !has_north_up && binds.map.iter().any(|(&a, slots)| a != Act::NorthUp && slots.contains(&Bind::Key(KeyCode::KeyN))) {
+        binds.map.insert(Act::NorthUp, Vec::new());
+    }
     binds.preset = [Preset::Letters, Preset::Numbers].into_iter().find(|p| Binds::preset(*p).map == binds.map).unwrap_or(Preset::Own);
     let d = Prefs::default();
     let prefs = Prefs {
         camera: if v["camera"].as_str() == Some("orbit") { crate::camera::Mode::Orbit } else { d.camera },
         camera_tuning: serde_json::from_value(v["camera_tuning"].clone()).unwrap_or_default(),
+        camera_rotate: v["camera_rotate"].as_bool().unwrap_or(d.camera_rotate),
+        camera_rotate_speed: v["camera_rotate_speed"].as_f64().map_or(d.camera_rotate_speed, |speed| speed.clamp(0.5, 2.0) as f32),
+        camera_rotate_invert: v["camera_rotate_invert"].as_bool().unwrap_or(d.camera_rotate_invert),
         facing: serde_json::from_value(v["facing"].clone()).ok(),
         cursor_facing: crate::twist::LookWalk::from_cursor_settings(&v["cursor_facing"]),
         control: match v["control"].as_str() {
@@ -461,6 +474,9 @@ pub fn save(binds: &Binds, prefs: &Prefs) {
         "binds": map,
         "camera": prefs.camera.name(),
         "camera_tuning": prefs.camera_tuning,
+        "camera_rotate": prefs.camera_rotate,
+        "camera_rotate_speed": prefs.camera_rotate_speed,
+        "camera_rotate_invert": prefs.camera_rotate_invert,
         "facing": prefs.facing,
         "cursor_facing": prefs.cursor_facing,
         "control": match prefs.control { crate::controls::Control::Cursor => "cursor", crate::controls::Control::Travel => "travel" },

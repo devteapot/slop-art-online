@@ -71,6 +71,19 @@ def residents(run, n=2):
 
 
 THEME = os.environ.get("LIVING_GAME_THEME", "")
+BEARING = float(os.environ.get("VERIFY_UI_BEARING", "0")) % 360
+BEARING_SUFFIX = f"-bearing-{BEARING:g}" if BEARING else ""
+
+
+def bearing_offset(x, y):
+    angle = math.radians(BEARING)
+    return (x * math.cos(angle) - y * math.sin(angle),
+            x * math.sin(angle) + y * math.cos(angle))
+
+
+def at_bearing(d, expected=BEARING):
+    yaw = view(d).get("yaw")
+    return yaw is not None and abs((yaw - expected + 180) % 360 - 180) < 0.05
 
 
 def drive(run, name, plan, places=(), syncs=(), extra=(), free=(), env=None):
@@ -153,8 +166,8 @@ def apart(d):
 
 @scenario("windows")
 def windows(run, c):
-    s = "windows"
-    plan = ("ready;wait:2;shot:01_explore;dump:01;click:@menu;wait:0.4;shot:02_menu;dump:02;click:@menu:Settings;wait:0.5;shot:03_settings;dump:03;"
+    s = "windows" + BEARING_SUFFIX
+    plan = (f"ready;yaw:{BEARING};wait:2;shot:01_explore;dump:01;click:@menu;wait:0.4;shot:02_menu;dump:02;click:@menu:Settings;wait:0.5;shot:03_settings;dump:03;"
             "key:KeyI:tap;wait:0.4;key:KeyL:tap;wait:0.5;shot:04_log_pack;dump:04;slide:@win:Log:head>0.62,0.45:0.6;wait:0.2;shot:05_dragging;"
             "wait:0.5;shot:06_swapped;dump:06;click:@win:Pack:close;wait:0.4;dump:07;key:KeyI:tap;wait:0.4;dump:08;key:Escape:tap;wait:0.3;dump:09;key:Escape:tap;wait:0.3;dump:10;"
             "key:Escape:tap;wait:0.4;shot:11_esc_menu;dump:11;key:Escape:tap;wait:0.3;dump:12;quit")
@@ -162,6 +175,7 @@ def windows(run, c):
     c.check(s, "client ran and joined", code == 0, text[-300:])
     notes_clear(c, s, out)
     d = {k: dump(out, k) for k in ["01", "02", "03", "04", "06", "07", "08", "09", "10", "11", "12"]}
+    c.check(s, "requested bearing is shown", at_bearing(d["01"]), repr(view(d["01"])))
     c.check(s, "nothing open on arrival", d["01"] and wins(d["01"]) == [] and not d["01"]["menu"], str(wins(d["01"])))
     c.check(s, "Menu button opens the Menu list", d["02"] and d["02"]["menu"])
     c.check(s, "Menu › Settings opens Settings in the centre, and closes the list", d["03"] and wins(d["03"]) == [("Settings", "Centre")] and not d["03"]["menu"], str(wins(d["03"])))
@@ -761,14 +775,14 @@ def hair(run, c):
     saved = json.load(open(st)).get("hair_shine") if os.path.exists(st) else None
     c.check(s, "the settings file keeps the last choice", saved == "today", str(saved))
     # The same settings file: the next start reads Today back. Then A, placed beside me and held
-    # still, speaks to me with their window open, the camera comes in close (`view:`, 2.4 m),
-    # and the shines in turn.
+    # still, speaks to me with their window open. Zoom the top-down camera to Near,
+    # then capture the shines in turn.
     a, _ = residents(run)
     thought = json.dumps({"kind": "talk", "summary": "", "detail": "", "latency_ms": 0, "tokens": 0, "model": "verify-ui scene", "reference": ""})
     answer = f'answer=mind_say|{a}|"Good day to you."|{{me}}|""|0|{thought}'
     seq = ["crown", "today", "crown", "soft", "crown"]
     shots = "".join(f"shine:{v};wait:0.7;shot:{i + 1:02d}_{v};" for i, v in enumerate(seq))
-    plan = (f"ready;wait:2;dump:00;shine:crown;sync:scene;wait:1.5;menu:f@id:{a};wait:0.5;click:@acts:0:window;wait:1;sync:answer;wait:0.5;view:8:2.4:30;wait:4;" + shots + "dump:06;quit")
+    plan = (f"ready;wait:2;dump:00;shine:crown;sync:scene;wait:1.5;menu:f@id:{a};wait:0.5;click:@acts:0:window;wait:1;sync:answer;wait:0.5;cursor:0.70,0.55;notches:30;wait:4;" + shots + "dump:06;quit")
     out2, code2, _ = drive(run, s, plan, places=[f"{a}:-1.5:1.5"], syncs=[answer])
     c.check(s, "the next start reads it back", x(out2, "00").get("hair_shine") == "today", str(x(out2, "00").get("hair_shine")))
     c.check(s, "A's window is open in the photographs", any(w.startswith("Person") for w, _ in wins(dump(out2, "06"))), str(wins(dump(out2, "06"))))
@@ -939,21 +953,23 @@ def pick(run, c):
     behind standing where the cursor's ground point falls) names, hovers and addresses that one.
     The pick is one function for the nameplate, Enter and combat's target (living/game/src/pick.rs);
     before it, Enter took the hovered person nearest the cursor's ground point: the one behind."""
-    s = "pick"
+    s = "pick" + BEARING_SUFFIX
     a, b = residents(run)
     line = f"You in front, {int(time.time()) % 100000}."  # its own line: said rows from earlier drives don't count
-    # The view faces north (yaw 0, sim -y). A stands ahead and to the left; B 1.5 m behind A along
-    # the view, where the ray through A's chest meets the ground.
-    plan = ("ready;frame:0;yaw:0;wait:1.5;sync:scene;wait:2;point:{A}:1.3;wait:0.8;shot:01_pointed;dump:01;"
+    # A stands screen-left; B is farther along the view, where A's chest ray meets the ground.
+    plan = ("ready;frame:0;yaw:{BEARING};wait:1.5;sync:scene;wait:2;point:{A}:1.3;wait:0.8;shot:01_pointed;dump:01;"
             "key:Enter:tap;wait:0.6;shot:02_to_them;dump:02;type:{LINE};enter;wait:1.2;dump:03;key:Escape:tap;wait:0.6;"
             "point:{A}:1.3;wait:0.8;tap;wait:0.8;dump:04;key:Escape:tap;wait:0.4;"
-            "sync:stack;wait:1;point:{A}:1.0;wait:0.5;dump:05a;wait:0.5;dump:05b;wait:0.5;dump:05c;shot:05_stacked;quit").replace("{A}", str(a)).replace("{LINE}", line)
+            "sync:stack;wait:1;point:{A}:1.0;wait:0.5;dump:05a;wait:0.5;dump:05b;wait:0.5;dump:05c;shot:05_stacked;quit").replace("{A}", str(a)).replace("{LINE}", line).replace("{BEARING}", str(BEARING))
     # Last, both on one spot (stacked exactly on screen): one answer every frame, the nearer the camera.
-    stack = f"stack=place_at|{a}|(mx-3.0)|(my-1.0);place_at|{b}|(mx-3.0)|(my-1.0)"
-    out, code, text = drive(run, s, plan, places=[f"{a}:-3.0:-1.0", f"{b}:-3.0:-2.5"], syncs=[stack])
+    ax, ay = bearing_offset(-3.0, -1.0)
+    bx, by = bearing_offset(-3.0, -2.5)
+    stack = f"stack=place_at|{a}|(mx{ax:+.4f})|(my{ay:+.4f});place_at|{b}|(mx{ax:+.4f})|(my{ay:+.4f})"
+    out, code, text = drive(run, s, plan, places=[f"{a}:{ax:.4f}:{ay:.4f}", f"{b}:{bx:.4f}:{by:.4f}"], syncs=[stack])
     c.check(s, "client ran and joined", code == 0, text[-300:])
     d = {k: dump(out, k) for k in ["01", "02", "03", "04"]}
     L = log(out)
+    c.check(s, "requested bearing is shown", at_bearing(d["01"]), repr(view(d["01"])))
     hov = [h.get("id") for h in (d["01"] or {}).get("hovered") or []]
     c.check(s, "the cursor on the one in front: only they are hovered (one nameplate)", hov == [a], f"hovered {hov}, under {(d['01'] or {}).get('under')}, in front #{a}, behind #{b}")
     t2 = (d["02"] or {}).get("typing") or {}
@@ -1039,7 +1055,7 @@ def select_camera_preset(preset):
 @scenario("camera", explicit=True)
 def camera(run, c):
     """Drive real line-wheel messages at the three top-down knots, with the field off and on."""
-    s = "camera"
+    s = "camera" + BEARING_SUFFIX
     ids = residents(run, 3)
     if len(ids) != 3:
         c.check(s, "three residents available", False, repr(ids))
@@ -1047,7 +1063,8 @@ def camera(run, c):
     front, back, behind_wall = ids
     # Land seed 7, Brackenford. The wood line heads north from grass into Forest tiles.
     # The roof point is on walking ground under the north eave of the market stall.
-    street, wood, behind_trees, roof = (420.5, 255.5), (276.5, 395.5), (277.5, 389.5), (412.5, 256.5)
+    street, wood, behind_trees = (420.5, 255.5), (276.5, 395.5), (277.5, 389.5)
+    roof = (411.5, 256.5) if BEARING == 135 else (412.5, 256.5)
     syncs = [
         "noon=sql|UPDATE world SET epoch_ms = {epoch_at:12} WHERE id = 0",
         'fov_off=set_world_law|"fov_on"|"false"',
@@ -1059,7 +1076,7 @@ def camera(run, c):
              ("middle", 11, 0.55, 12.0, 58.0, 44.0),
              ("near", 30, 1.0, 8.0, 48.0, 42.0))
     for field in ("off", "on"):
-        plan = "ready;" + select_camera_preset("ours") + f"sync:noon;sync:fov_{field};sync:street;wait:3;sync:scene;look:0;wait:2;cursor:0.70,0.55;wait:0.5;dump:initial;pan:300;drag:250;wait:0.5;dump:fixed;"
+        plan = "ready;" + select_camera_preset("ours") + f"yaw:{BEARING};sync:noon;sync:fov_{field};sync:street;wait:3;sync:scene;look:0;wait:2;cursor:0.70,0.55;wait:0.5;dump:initial;pan:300;drag:250;wait:0.5;dump:fixed;"
         for stop, wheel, *_ in knots:
             plan += f"notches:{wheel};wait:1.5;dump:{stop};shot:{stop};"
             plan += f"point:{front}:0;wait:0.6;dump:{stop}_ground;point:{front}:0.8;wait:0.6;dump:{stop}_hover;"
@@ -1087,7 +1104,7 @@ def camera(run, c):
         initial = view(dump(out, "initial"))
         c.check(s, f"field {field}: fresh settings start at middle zoom", abs(initial.get("zoom", -1.0) - 0.55) < 0.001, repr(initial))
         fixed = view(dump(out, "fixed"))
-        c.check(s, f"field {field}: drag and pan leave bearing at north", abs(fixed.get("yaw", -100.0)) < 0.01, repr(fixed))
+        c.check(s, f"field {field}: left drag and pan keep the chosen bearing", at_bearing(dump(out, "fixed")), repr(fixed))
         held = dump(out, "held_wheel") or {}
         c.check(s, f"field {field}: the held action wheel consumes line-wheel input",
                 abs(view(held).get("zoom", -1.0)) < 0.001 and bool((held.get("wheel") or {}).get("held")), repr(held.get("wheel")))
@@ -1109,8 +1126,8 @@ def camera(run, c):
             visible.append({a["id"] for a in d.get("seen") or []})
             good = all(abs(v.get(k, -100.0) - expected) < tolerance
                        for k, expected, tolerance in (("zoom", z, 0.001), ("height", height, 0.1),
-                                                       ("pitch", pitch, 0.1), ("fov", fov, 0.1), ("yaw", 0, 0.01)))
-            c.check(s, f"{field} {stop}: north-up camera reaches the curve knot", good and v.get("mode") == "top-down", repr(v))
+                                                       ("pitch", pitch, 0.1), ("fov", fov, 0.1))) and at_bearing(d)
+            c.check(s, f"{field} {stop}: camera reaches the curve knot at the requested bearing", good and v.get("mode") == "top-down", repr(v))
             c.check(s, f"{field} {stop}: authority sight and Shade active",
                     sense.get("on") == (field == "on") and sense.get("source") == "Authority" and data.get("sight_look") == "shade", repr(sense))
             point = ground(dump(out, f"{stop}_ground"))
@@ -1143,6 +1160,63 @@ def camera(run, c):
             c.check(s, "field off: the rear resident is perceived", all(back in rows for rows in perceived), repr(perceived))
 
 
+@scenario("camera-rotate", explicit=True)
+def camera_rotate(run, c):
+    """Turn at Middle, drive real W, aim/pick, cut away an awning and snap north."""
+    s = "camera-rotate"
+    resident = residents(run, 1)[0]
+    open_settings = "click:@menu;wait:0.4;click:@menu:Settings;wait:0.6;"
+    drag = "mouse:middle:down;motion:3,0;wait:0.15;dump:threshold;motion:447,0;mouse:middle:up;"
+    plan = ("ready;click:@tip:ok;wait:0.3;sync:noon;sync:street;wait:3;sync:scene;cursor:0.55,0.42;wait:0.3;"
+            "dump:north;shot:middle-north;" + drag + "wait:0.6;dump:turned;shot:middle-135;"
+            f"point:{resident}:0.9;wait:0.4;dump:resident;point:{resident}:0;wait:0.4;dump:ground;"
+            "cursor:;key:KeyW:down;wait:0.8;key:KeyW:up;wait:0.6;dump:walked;"
+            "sync:roof;wait:3;dump:awning;shot:awning;key:KeyN:tap;wait:0.3;dump:key-snap;"
+            "cursor:0.60,0.40;rotate:135;wait:0.3;dump:gesture;"
+            "mouse:middle:down;motion:2,1;mouse:middle:up;wait:0.3;dump:tap-snap;"
+            + open_settings + "click:@settings:page:rotation;wait:0.4;shot:rotation-settings;click:@settings:camera_rotate_speed:2;wait:0.4;"
+            "click:@settings:camera_rotate_invert;wait:0.4;click:@settings:page:controls;wait:0.4;"
+            "click:@bind:NorthUp:0;wait:0.4;key:KeyY:tap;wait:0.4;"
+            "click:@settings:page:play;wait:0.4;key:Escape:tap;cursor:0.60,0.40;wait:0.6;"
+            "rotate:30;wait:0.3;dump:fast-invert;"
+            + open_settings + "click:@settings:page:camera;wait:0.4;click:@settings:camera_copy;wait:0.4;"
+            "key:Escape:tap;cursor:0.60,0.40;wait:0.4;key:KeyY:tap;wait:0.3;dump:rebound-snap;"
+            + open_settings + "click:@settings:page:rotation;wait:0.4;click:@settings:camera_rotate;wait:0.4;"
+            "key:Escape:tap;cursor:0.60,0.40;wait:0.6;rotate:90;wait:0.3;dump:disabled;quit")
+    out, code, msg = drive(run, s, plan, places=[f"{resident}:2:-2"], syncs=[
+        "noon=sql|UPDATE world SET epoch_ms = {epoch_at:12} WHERE id = 0",
+        'street=set_world_law|"fov_on"|"false";place_at|{me}|420.5|255.5',
+        "roof=place_at|{me}|411.5|256.5",
+    ], env={"LIVING_GAME_DEV": "1", "RUST_LOG": "info,wgpu=warn,naga=warn,living_game::envs=debug"})
+    c.check(s, "client joined and finished", code == 0, msg[-300:])
+    for label, yaw in (("north", 0), ("threshold", 0), ("turned", 135), ("awning", 135),
+                       ("key-snap", 0), ("gesture", 135), ("tap-snap", 0), ("fast-invert", 300), ("rebound-snap", 0), ("disabled", 0)):
+        d = dump(out, label)
+        c.check(s, f"{label}: bearing {yaw}° at Middle", at_bearing(d, yaw) and abs(view(d).get("zoom", -1) - 0.55) < 0.001, repr(view(d)))
+    picked = (dump(out, "resident") or {}).get("under")
+    c.check(s, "the rotated camera picks the resident", picked == resident, repr(picked))
+    row = ((dump(out, "scene") or {}).get("placed") or {}).get(str(resident))
+    hit = ground(dump(out, "ground"))
+    c.check(s, "the rotated camera ray reaches the resident's ground point",
+            bool(row and hit and math.hypot(row[0] - hit[0], row[1] - hit[2]) < 0.15), repr((row, hit)))
+    before, after = [(dump(out, name) or {}).get("me_at", {}).get("body") for name in ("turned", "walked")]
+    if before and after:
+        dx, dy = [after[k] - before[k] for k in ("x", "y")]
+        up, right = (dx + dy) / math.sqrt(2), (-dx + dy) / math.sqrt(2)
+        c.check(s, "W moves up-screen at 135°", up > 0.5 and abs(right) < up * 0.25, repr((dx, dy, up, right)))
+    else:
+        c.check(s, "W moves up-screen at 135°", False, repr((before, after)))
+    trace = log(out).partition("live script: sync:roof")[2].partition("live script: dump:awning")[0]
+    c.check(s, "the market awning cuts away at 135°", re.search(r"cutaway: .*market_stall.* fades to ", trace) is not None, trace[-500:])
+    c.check(s, "both Middle stills captured", all(os.path.isfile(os.path.join(out, f"middle-{name}.png")) for name in ("north", "135")))
+    prefs = dump(out, "settings") or {}
+    c.check(s, "the rotation settings are saved", prefs.get("camera_rotate") is False
+            and prefs.get("camera_rotate_speed") == 2 and prefs.get("camera_rotate_invert") is True)
+    c.check(s, "the new north key is saved", (prefs.get("binds") or {}).get("NorthUp") == ["KeyY"])
+    copied = dump(out, "camera-tuning") or {}
+    c.check(s, "Copy values exports the live bearing", abs(copied.get("bearing", -1) - 300) < 0.05, repr(copied))
+
+
 @scenario("camera-tuning", explicit=True)
 def camera_tuning(run, c):
     """Change live camera values and export them through the real Settings panel."""
@@ -1173,12 +1247,14 @@ def camera_tuning(run, c):
         path = os.path.join(out, name)
         return json.load(open(path)) if os.path.exists(path) else {}
     exported = read("camera-tuning.json")
+    bearing = exported.pop("bearing", None)
     late = exported.get("late_tilt") or {}
-    c.check(s, "Copy values writes the persisted live tuning, including tilt start and near pitch",
+    middle, close = [view(dump(out, name)) for name in ("late_middle", "late_near")]
+    c.check(s, "Copy values writes the persisted live tuning and the displayed bearing",
             bool(late) and exported == read("settings.json").get("camera_tuning")
             and abs(exported["fixed_pitch"] - fixed.get("pitch", 0)) < 0.1
-            and abs(late["tilt_start"] - 0.5) < 0.01, repr(exported))
-    middle, close = [view(dump(out, name)) for name in ("late_middle", "late_near")]
+            and abs(late["tilt_start"] - 0.5) < 0.01
+            and bearing is not None and at_bearing(dump(out, "late_middle"), bearing), repr((exported, bearing)))
     c.check(s, "Tilt near eases between the base and near pitches",
             bool(late and middle and close) and late["tilt_start"] < middle["zoom"] < 0.6
             and late["near_pitch"] < middle["pitch"] < exported["fixed_pitch"]
@@ -1286,7 +1362,7 @@ def camera_lod(run, c):
 
 def camera_lod_one(run, c, preset):
     from datetime import datetime
-    s = "camera-lod" if preset == "ours-fixed" else "camera-lod-lol"
+    s = ("camera-lod" if preset == "ours-fixed" else "camera-lod-lol") + BEARING_SUFFIX
     ids = sorted(r["id"] for r in sql(run, "SELECT id, name, alive FROM character WHERE kind = 'person'")
                  if r.get("alive") and r.get("name") != "Verifier")[:17]
     if len(ids) < 12:
@@ -1296,10 +1372,10 @@ def camera_lod_one(run, c, preset):
     if preset == "lol":
         # Pack the same residents into the closer view, without placing anyone on the player.
         offsets = [(x, y) for y in (-2.3, -1.2, -0.1, 1.0) for x in (-1.7, -0.6, 0.6, 1.7)]
-    places = [f"{id}:{x}:{y}" for id, (x, y) in zip(ids, offsets)]
+    places = [f"{id}:{x:.4f}:{y:.4f}" for id, (x, y) in zip(ids, (bearing_offset(*offset) for offset in offsets))]
     syncs = ['setup=set_world_law|"fov_on"|"false";place_at|{me}|420.5|255.5',
              "noon=sql|UPDATE world SET epoch_ms = {epoch_at:12} WHERE id = 0"]
-    plan = "ready;" + select_camera_preset(preset) + "sync:noon;sync:setup;wait:2;sync:scene;look:180;wait:4;cursor:0.68,0.42;wait:0.5;"
+    plan = "ready;" + select_camera_preset(preset) + f"yaw:{BEARING};sync:noon;sync:setup;wait:2;sync:scene;look:180;wait:4;cursor:0.68,0.42;wait:0.5;"
     knots = (("near", 30),) if preset == "lol" else (("far", -30), ("middle", 11), ("near", 30))
     for stop, notches in knots:
         plan += f"notches:{notches};wait:2;dump:{stop}_start;wait:8;dump:{stop}_end;shot:{stop};"
@@ -1328,7 +1404,7 @@ def camera_lod_one(run, c, preset):
             d = dump(out, f"{stop}_end") or {}
             lod = (d.get("extra") or {}).get("lod") or {}
             measured = len(intervals) >= 100 and lod.get("near", 0) + lod.get("far", 0) >= 8
-            c.check(s, f"{arm} {stop}: crowded street and uncapped samples", measured, repr(lod))
+            c.check(s, f"{arm} {stop}: crowded street and uncapped samples at the requested bearing", measured and at_bearing(d), repr(lod))
             if intervals:
                 metrics[arm][stop] = {"frames": len(intervals), "p50_ms": intervals[len(intervals) // 2],
                                       "p99_ms": intervals[math.ceil(len(intervals) * .99) - 1], **lod}
@@ -1541,6 +1617,363 @@ def texel(meta, pix, x, y):
     j = int((y - meta["origin"][1]) / meta["texel"])
     n = meta["size"]
     return pix[j * n + i] if 0 <= i < n and 0 <= j < n else None
+
+
+@scenario("gaze", cullet=True, explicit=True)
+def gaze(run, c):
+    """Drive zoom through all gaze bands, coalescing, reconnect and the Cullet hedge."""
+    name = "gaze"
+    state = {"gaze_on": "false", "fov_on": "true", "cover_sight_on": "false", "cover_brush_on": "true"}
+    original = {r["name"]: r["value"] for r in sql(run, "SELECT name,value FROM world_law")}
+    ids = residents(run, 5)
+    if len(ids) != 5:
+        c.check(name, "five stationary residents available", False, repr(ids))
+        return
+    near, far, flank, rear, middle = ids
+    open_eye = (781.5, 457.5)
+    hedge_eye, hedge_contact = (523.5, 698.5), (527.5, 698.5)
+    open_targets = {near: (783.5, 457.5), far: (837.5, 457.5), flank: (781.5, 469.5), rear: (769.5, 457.5), middle: (821.5, 457.5)}
+    hedge_targets = {near: hedge_contact, flank: (523.5, 697.5)}
+    stops = (("far", 1, -30, 19.0), ("middle", 0, 11, 12.0), ("near", 2, 30, 8.0))
+
+    def setup(eye, points):
+        return ";".join([f"place_at|{{me}}|{eye[0]}|{eye[1]}"] +
+                        [f"place_at|{id}|{x}|{y};set_behavior|{id}|{json.dumps(json.dumps({'wait': 600}))}"
+                         for id, (x, y) in points.items()])
+
+    def snapshot(label):
+        return (f"{label}=client_sql|SELECT * FROM my_senses_v_2;"
+                "client_sql|SELECT * FROM my_senses;"
+                "client_sql|SELECT id FROM seen_characters;"
+                f"sql|SELECT id,x,y FROM body WHERE id = {{me}} OR id = {near} OR id = {far} OR id = {flank} OR id = {rear} OR id = {middle};"
+                "sql|SELECT * FROM cover_law;sql|SELECT * FROM attention WHERE id = {me}")
+
+    directory = os.path.join(ROOT, ".local/living/verify", run, "ui", f"{name}-{THEME}" if THEME else name, "fields")
+    for path in glob.glob(os.path.join(directory, "field-*")):
+        os.remove(path)
+    syncs = [
+        "daylight=sql|UPDATE world SET epoch_ms = {epoch_at:12} WHERE id = 0",
+        f"open={setup(open_eye, open_targets)}",
+        f"hedge={setup(hedge_eye, hedge_targets)}",
+        'enable=set_world_law|"gaze_on"|"true"',
+        'cover_on=set_world_law|"cover_sight_on"|"true"',
+        'disable=set_world_law|"gaze_on"|"false"',
+    ]
+    plan = ["ready", "frame:0", "sightlook:shade", "sync:daylight", "sync:open",
+            "look:270", "wait:0.8", "look:90", "cursor:0.7,0.55", "wait:2"]
+    labels = ["off_before"]
+    plan += ["sync:off_before", "shot:off_before", "sync:enable"]
+    for fixture in ("open", "hedge"):
+        if fixture == "hedge":
+            plan += ["sync:cover_on", "sync:hedge", "wait:2"]
+        for stop, _, notches, _ in stops:
+            label = f"{fixture}_{stop}"
+            labels.append(label)
+            plan += [f"notches:{notches}", "wait:1.6"]
+            if fixture == "hedge":
+                plan += [f"pointat:{hedge_contact[0]},{hedge_contact[1]}:1", "wait:0.3"]
+            plan += [f"sync:{label}", f"dump:{label}", f"shot:{label}", "cursor:0.7,0.55"]
+        if fixture == "open":
+            labels += ["spin_start", "spin_end", "after_reconnect"]
+            plan += ["notches:-30", "wait:1.6", "sync:spin_start",
+                     "notches:30", "wait:0.1", "notches:-30", "wait:0.1", "notches:30",
+                     "wait:0.1", "notches:-30", "wait:0.1", "notches:30", "wait:0.1",
+                     "notches:-30", "wait:1.5", "sync:spin_end",
+                     "reconnect", "wait:0.35", "notches:30", "wait:6", "sync:after_reconnect"]
+    labels.append("off_after")
+    plan += ["sync:disable", "notches:-30", "wait:0.5", "notches:11", "wait:3.5", "sync:off_after", "shot:off_after", "quit"]
+    epoch = sql(run, "SELECT epoch_ms FROM world")[0]["epoch_ms"]
+    try:
+        for law, value in state.items():
+            call_admin(run, "set_world_law", [law, value])
+        out, code, drive_log = drive(run, name, ";".join(plan), syncs=syncs + [snapshot(k) for k in labels],
+                                     env={"LIVING_GAME_CONTROL": "cursor", "LIVING_SIGHT_FIELD_DUMP": directory,
+                                          "RUST_LOG": "info,wgpu=warn,naga=warn,living_game::net=debug,living_game::sightedge=trace"})
+    finally:
+        for law in state:
+            call_admin(run, "set_world_law", [law, original.get(law, "false")])
+        sql(run, f"UPDATE world SET epoch_ms = {epoch} WHERE id = 0")
+
+    scene = dump(out, "scene") or {}
+    me, snaps = scene.get("me"), scene.get("snaps", {})
+    trace = log(out)
+    fields = field_dumps(directory) if os.path.isdir(directory) else []
+    proof = {}
+    sense_keys = ("id", "sight", "hearing", "field", "focal_deg", "side_deg", "side_share", "near_m", "margin_deg", "at_ms")
+    sent = lambda text: [int(b) for b in re.findall(r"gaze sent band=(\d+)", text)]
+
+    def sample(label, eye, band, points):
+        rows = snaps.get(label, [])
+        if len(rows) != 6:
+            return {"ok": False, "missing": label}
+        projected, legacy, perceived, positions, cover, intent = [r["rows"] for r in rows]
+        view_row = projected[0] if len(projected) == 1 else {}
+        senses = view_row.get("senses", {})
+        if isinstance(senses, list):
+            senses = dict(zip(sense_keys, senses))
+        candidates = [(meta, pixels) for meta, pixels in fields
+                      if meta["band"] == band and meta["wall_ms"] <= rows[0]["wall_ms"]
+                      and math.dist(meta["eye"], eye) < 0.2]
+        meta, pixels = candidates[-1] if candidates else ({}, b"")
+        visible = {r["id"] for r in perceived}
+        position_by_id = {r["id"]: (r["x"], r["y"]) for r in positions}
+        probes = {}
+        for id, point in points.items():
+            shade = texel(meta, pixels, *point) if meta else None
+            probes[id] = {"point": point, "exact": position_by_id.get(id) == point, "texel": shade,
+                          "authority": id in visible,
+                          "shade": shade is not None and shade >= 128 and math.dist(eye, point) <= meta["radius"]}
+        d = dump(out, label) or {}
+        matching = bool(meta.get("facing") and senses) and all(
+            abs(meta["facing"][k] - senses[k]) < 0.004 for k in ("sight", *sense_keys[4:-1]))
+        matching = matching and abs(meta["radius"] - senses["sight"]) < 0.004
+        ok = (view_row.get("id") == me and view_row.get("band") == band
+              and bool(intent) and intent[0]["band"] == band and matching and position_by_id.get(me) == eye
+              and all(p["exact"] and p["texel"] is not None and p["shade"] == p["authority"] for p in probes.values())
+              and any(p["authority"] for p in probes.values()) and not all(p["authority"] for p in probes.values())
+              and (d.get("extra") or {}).get("sight_look") == "shade"
+              and os.path.isfile(os.path.join(out, f"{label}.png")))
+        return dict(ok=ok, view=view_row, senses=senses, legacy=legacy, field=meta, probes=probes, cover=cover,
+                    drawn=near in {row["id"] for row in d.get("looks") or []},
+                    seen=near in {row["id"] for row in d.get("seen") or []},
+                    hovered=near in {row["id"] for row in d.get("hovered") or []},
+                    picked=d.get("under") == near, height=view(d).get("height", -1), pitch=view(d).get("pitch", -1))
+
+    def stops_at(fixture, eye, points):
+        result = {stop: sample(f"{fixture}_{stop}", eye, band, points) for stop, band, _, _ in stops}
+        good = all(result[stop]["ok"] and abs(result[stop]["height"] - height) < 0.1
+                   and abs(result[stop]["pitch"] - 58) < 0.1 for stop, _, _, height in stops)
+        return result, good
+
+    opened, opened_ok = stops_at("open", open_eye, open_targets)
+    senses_at_stops = [opened[stop].get("senses", {}) for stop, *_ in stops]
+    ranges = [r.get("sight", 0) for r in senses_at_stops]
+    angles = [(r.get("focal_deg"), r.get("side_deg")) for r in senses_at_stops]
+    probe_ids = (near, middle, far, flank, rear)
+    sampled_fields = [[row.get("probes", {}).get(id, {}).get("authority") for id in probe_ids]
+                      for row in opened.values()]
+    distinct = sampled_fields == [[True, True, True, False, False],
+                                  [True, True, False, True, False],
+                                  [True, False, False, True, False]]
+    legacy = ((snaps.get("off_before") or [{}, {}])[1].get("rows") or [{}])[0]
+    same_middle = bool(legacy and senses_at_stops[1]) and all(legacy[k] == senses_at_stops[1][k] for k in sense_keys[1:-1])
+    frame_pattern = r"gaze shade confirmed=(-?\d+) drawn=(-?\d+) radius=([-\d.]+) revision=(\d+) mode=(\d+)"
+    off_before, _, enabled = trace.partition("live script: sync:enable")
+    off_after = trace.rpartition("live script: sync:disable")[2]
+
+    def legacy_shade(label, output, eye):
+        rows = snaps.get(label, [])
+        frames = re.findall(frame_pattern, output)
+        if len(rows) != 6 or rows[0]["rows"] or len(rows[1]["rows"]) != 1 or not frames:
+            return False
+        row = rows[1]["rows"][0]
+        confirmed, drawn, radius, revision, mode = frames[-1]
+        return (not sent(output) and "gaze refused" not in output and confirmed == drawn == "-1"
+                and int(revision) > 0 and mode == "1" and abs(float(radius) - row["sight"]) < 0.004
+                and any(meta["band"] is None and meta["facing"]
+                        and math.dist(meta["eye"], eye) < 0.2 and abs(meta["sight"] - row["sight"]) < 0.004
+                        for meta, _ in fields))
+
+    off_ok = legacy_shade("off_before", off_before, open_eye) and legacy_shade("off_after", off_after, hedge_eye)
+    approach = enabled.partition("live script: notches:-30")[2].partition("live script: sync:spin_start")[0]
+    proof["stops"] = dict(samples=opened, reach=ranges, angles=angles, middle_matches_legacy=same_middle,
+                          off_legacy=off_ok, sampled_fields=sampled_fields, sends=sent(approach))
+    c.check(name, "1. Three fixed camera stops have different authority-matched Shade fields",
+            code == 0 and opened_ok and distinct and ranges[0] > ranges[1] > ranges[2] and same_middle and off_ok
+            and angles == [(35, 65), (70, 110), (110, 155)] and sent(approach)[:3] == [1, 0, 2],
+            repr((ranges, angles, sampled_fields, opened_ok, same_middle, off_ok, drive_log[-300:])))
+
+    spin = trace.partition("live script: sync:spin_start")[2].partition("live script: sync:spin_end")[0]
+    replies = [(int(b), int(t)) for b, t in re.findall(r"gaze accepted band=(\d+) at_us=(\d+)", spin)]
+    interval_ok = len(replies) >= 2 and all(b[1] - a[1] >= 250_000 for a, b in zip(replies, replies[1:]))
+    frames = [(int(cb), int(db), float(r), int(rev), int(mode)) for cb, db, r, rev, mode in re.findall(frame_pattern, spin)]
+    rendered = [b for i, (_, b, _, _, _) in enumerate(frames) if i == 0 or b != frames[i - 1][1]]
+    confirmed = [b for i, (b, _, _, _, _) in enumerate(frames) if i == 0 or b != frames[i - 1][0]]
+    same_frame = all(
+        (a[3] == b[3] if a[1] == b[1] else b[0] == b[1] and a[3] != b[3])
+        for a, b in zip(frames, frames[1:])
+    )
+    radius_by_band = {band: r for (_, band, _, _), r in zip(stops, ranges)}
+    no_flicker = bool(frames) and rendered == confirmed and same_frame and all(
+        mode == 1 and abs(radius - radius_by_band.get(b, -1)) < 0.004 for _, b, radius, _, mode in frames)
+    zoom_times = re.findall(r"(\d\d:\d\d:\d\d(?:\.\d+)?)Z.*live script: notches:", spin)
+    seconds = lambda t: sum(float(x) * (60 ** i) for i, x in enumerate(reversed(t.split(":"))))
+    duration = seconds(zoom_times[-1]) - seconds(zoom_times[0]) if len(zoom_times) == 6 else None
+    final = (snaps.get("spin_end") or [{}])[0].get("rows") or [{}]
+    max_per_second = max((sum(0 <= b[1] - a[1] < 1_000_000 for b in replies) for a in replies), default=0)
+    proof["spin"] = dict(duration_s=duration, accepted=replies, max_per_second=max_per_second,
+                         frames=frames, rendered=rendered,
+                         confirmed=confirmed, no_flicker=no_flicker)
+    c.check(name, "2. Rapid wheel spin respects the limiter, keeps the last band, and does not flicker",
+            duration is not None and 0 < duration < 1 and interval_ok and max_per_second <= 4 and no_flicker
+            and replies[-1][0] == final[0].get("band") == 1,
+            repr((duration, replies, len(frames), rendered, confirmed, no_flicker)))
+
+    reconnect = trace.partition("live script: reconnect")[2].partition("live script: sync:after_reconnect")[0]
+    events = re.findall(r"(?m)(offline:.*|connected as .*|world subscribed .*|gaze owner applied band=\d+[^\n]*|gaze sent band=\d+)", reconnect)
+    recovered = (snaps.get("after_reconnect") or [{}])[0].get("rows") or [{}]
+    order = [re.sub(r"^(gaze (?:owner applied|sent) band=\d+).*", r"\1", line) for line in events if line.startswith("gaze ")]
+    proof["reconnect"] = dict(events=events, after=recovered)
+    zoom_at = reconnect.find("live script: notches:30")
+    subscribed_at = reconnect.find("world subscribed")
+    c.check(name, "3. Reconnect restores Far before sending the queued Near band",
+            "offline:" in reconnect and 0 <= zoom_at < subscribed_at
+            and order == ["gaze owner applied band=1", "gaze sent band=2", "gaze owner applied band=2"]
+            and recovered[0].get("band") == 2, repr(events))
+
+    hedge, hedge_ok = stops_at("hedge", hedge_eye, hedge_targets)
+    hidden = all(row.get("cover") and row["cover"][0]["cover_sight_on"] and row["cover"][0]["cover_brush_on"]
+                 and row["probes"][near]["texel"] == 0 and not row["probes"][near]["authority"]
+                 and not any(row[k] for k in ("seen", "drawn", "hovered", "picked")) for row in hedge.values())
+    proof["hedge"] = hedge
+    c.check(name, "4. Gaze and cover hide the Cullet hedge contact at every stop", hedge_ok and hidden,
+            repr({stop: (row["ok"], row.get("probes")) for stop, row in hedge.items()}))
+    with open(os.path.join(out, "gaze-proof.json"), "w") as f:
+        json.dump(proof, f, indent=1)
+
+
+@scenario("cover", cullet=True)
+def cover(run, c):
+    """The same Cullet sight rays with cover on and off, through the real client."""
+    ids = residents(run, 1)
+    if not ids:
+        c.check("cover", "adult resident available", False)
+        return
+    call_admin(run, "set_world_law", ["fov_on", "false"])
+    call_admin(run, "set_world_law", ["cover_brush_on", "true"])
+    for fixture, eye, contact, blocks in (
+        ("trunk", (781.5, 457.5), (785.5, 457.5), True),
+        ("edge", (781.5, 457.5), (785.5, 459.5), False),
+        # The closer point still crosses the brush and stays in the near camera's frame.
+        ("brush", (608.5, 479.5), (608.5, 474.5), True),
+        # Cullet's mid_row_plot_toft_3_hedge, 1.8 m high, plan origin (510, 784).
+        ("hedge", (523.5, 698.5), (527.5, 698.5), True),
+    ):
+        cover_pair(run, c, ids[0], fixture, eye, contact, blocks)
+    cover_canopy(run, c)
+
+
+def cover_pair(run, c, target, fixture, eye, contact, blocks):
+    stops = (("far", -30, 19.0), ("middle", 11, 12.0), ("near", 30, 8.0))
+    name = f"cover-{fixture}"
+    directory = os.path.join(ROOT, ".local/living/verify", run, "ui",
+                             f"{name}-{THEME}" if THEME else name, "fields")
+    if os.path.isdir(directory):
+        for filename in os.listdir(directory):
+            if re.fullmatch(r"field-\d+\.(json|pgm)", filename):
+                os.remove(os.path.join(directory, filename))
+    x, y = contact
+    syncs = [
+        "daylight=sql|UPDATE world SET epoch_ms = {epoch_at:12} WHERE id = 0",
+        'enable=set_world_law|"cover_sight_on"|"true"',
+        'disable=set_world_law|"cover_sight_on"|"false"',
+        f"positions=place_at|{{me}}|{eye[0]}|{eye[1]};place_at|{target}|{x}|{y};"
+        f"set_behavior|{target}|{json.dumps(json.dumps({'wait': 600}))}",
+    ]
+    plan = ["ready", "weapon:sheathe", "frame:0", "yaw:0", "sightlook:shade", "sync:daylight", "sync:positions"]
+    for state in ("on", "off"):
+        plan += [f"sync:{'enable' if state == 'on' else 'disable'}", "wait:7"]
+        for stop, notches, _ in stops:
+            key = f"{state}_{stop}"
+            syncs.append(f"{key}=sql|SELECT body FROM perceived WHERE viewer = 0x{{ident}};"
+                         "sql|SELECT * FROM cover_law;"
+                         f"sql|SELECT id,x,y FROM body WHERE id = {{me}} OR id = {target}")
+            plan += ["cursor:0.7,0.55", f"notches:{notches}", "wait:1.5",
+                     f"pointat:{x},{y}:1.0", "wait:0.5", f"sync:{key}", f"dump:{key}", f"shot:{key}"]
+            if blocks and state == "on":
+                plan += ["weapon:sheathe", "wait:0.5", "tap", "wait:0.6", f"dump:{key}_talk",
+                         "weapon:draw", "wait:0.5", "tap", "wait:0.6", f"dump:{key}_attack",
+                         "weapon:sheathe"]
+    out, code, output = drive(run, name, ";".join(plan + ["quit"]), syncs=syncs,
+                              env={"LIVING_SIGHT_FIELD_DUMP": directory})
+    c.check(name, "client joined and finished", code == 0, output[-500:])
+    scene = dump(out, "scene") or {}
+    me = scene.get("me")
+    fields = field_dumps(directory) if os.path.isdir(directory) else []
+    trace = log(out)
+    for state in ("on", "off"):
+        hidden = state == "on" and blocks
+        for stop, _, height in stops:
+            key = f"{state}_{stop}"
+            d = dump(out, key) or {}
+            talk = dump(out, f"{key}_talk") or {}
+            extra = d.get("extra") or {}
+            snapshots = scene.get("snaps", {}).get(key, [])
+            if len(snapshots) != 3:
+                c.check(name, f"{key}: authority snapshots present", False)
+                continue
+            perception, law, positions = [snap["rows"] for snap in snapshots]
+            actual = {row["id"]: (row["x"], row["y"]) for row in positions}
+            law_ok = bool(law) and law[0]["cover_brush_on"] and law[0]["cover_sight_on"] == (state == "on")
+            c.check(name, f"{key}: policy and exact positions", law_ok and actual == {me: eye, target: contact}, repr(actual))
+            v = view(d)
+            c.check(name, f"{key}: camera stop and still", v.get("mode") == "top-down"
+                    and abs(v.get("height", -1) - height) < 0.1
+                    and os.path.isfile(os.path.join(out, f"{key}.png")), repr(v))
+            authority = target in {row["body"] for row in perception}
+            perceived = target in (d.get("perceived") or [])
+            seen = target in {row["id"] for row in d.get("seen") or []}
+            drawn = target in {row["id"] for row in d.get("looks") or []}
+            c.check(name, f"{key}: authority and client agree on visibility",
+                    (authority, perceived, seen, drawn) == (not hidden,) * 4,
+                    repr((authority, perceived, seen, drawn)))
+            candidates = [(meta, pixels) for meta, pixels in fields
+                          if meta["wall_ms"] <= snapshots[0]["wall_ms"]
+                          and math.dist(meta["eye"], eye) < 0.2]
+            shade = texel(*candidates[-1], *contact) if candidates else None
+            c.check(name, f"{key}: Shade agrees with authority at the target",
+                    shade == (255 if authority else 0) and extra.get("sight_look") == "shade", repr(shade))
+            pointer = extra.get("cursor") or {}
+            on_screen = all(0 < pointer.get(axis, -1) < 1 for axis in ("fx", "fy"))
+            hovered = target in {row["id"] for row in d.get("hovered") or []}
+            addressed = (talk.get("typing") or {}).get("to")
+            if hidden:
+                segment = trace.partition(f"live script: sync:{key}")[2].partition(f"live script: dump:{key}_attack")[0]
+                strikes = re.findall(r"tap: strike \(at (.*?), weapon drawn\)", segment)
+                naming = [word for kind, word in d.get("naming") or [] if kind in ("hover", "target")]
+                quiet = (d.get("under") is None and not hovered and not naming
+                         and d.get("targeted") is None and addressed != target
+                         and bool(strikes) and all(who != f"Some({target})" for who in strikes))
+                c.check(name, f"{key}: no hover, label, plate, talk or strike target",
+                        on_screen and quiet, repr((pointer, d.get("under"), naming, addressed, strikes)))
+            else:
+                c.check(name, f"{key}: cursor can pick the visible resident",
+                        on_screen and d.get("under") == target and hovered,
+                        repr((pointer, d.get("under"), hovered)))
+
+
+def cover_canopy(run, c):
+    # Cullet's streamed land client uses the authored Hanger tree at (783.2, 457.4).
+    canopy = (783.5, 457.5)
+    plan = ["ready", "weapon:sheathe", "frame:0", "sync:daylight"]
+    syncs = ["daylight=sql|UPDATE world SET epoch_ms = {epoch_at:12} WHERE id = 0",
+             'enable=set_world_law|"cover_sight_on"|"true"',
+             'disable=set_world_law|"cover_sight_on"|"false"']
+    for state in ("on", "off"):
+        plan += [f"sync:{'enable' if state == 'on' else 'disable'}", "wait:3"]
+        for stop, notches in (("middle", -9 if state == "off" else 0), ("near", 30)):
+            key = f"{state}_{stop}"
+            syncs += [f"clear_{key}=place_at|{{me}}|775.5|457.5",
+                      f"tree_{key}=place_at|{{me}}|{canopy[0]}|{canopy[1]}"]
+            plan += [f"sync:clear_{key}", "wait:3", "cursor:0.7,0.55", f"notches:{notches}",
+                     f"sync:tree_{key}", "wait:3", f"dump:{key}", f"shot:{key}"]
+    name = "cover-canopy"
+    out, code, output = drive(run, name, ";".join(plan + ["quit"]), syncs=syncs,
+                              env={"RUST_LOG": "info,wgpu=warn,naga=warn,living_game::envs=debug"})
+    c.check(name, "client joined and finished", code == 0, output[-500:])
+    trace = log(out)
+    for state in ("on", "off"):
+        for stop, height in (("middle", 12.0), ("near", 8.0)):
+            key = f"{state}_{stop}"
+            d = dump(out, key) or {}
+            body = (d.get("me_at") or {}).get("body") or {}
+            segment = trace.partition(f"live script: sync:tree_{key}")[2].partition(f"live script: dump:{key}")[0]
+            faded = re.search(r"cutaway: .*hanger_tree.* fades to ", segment)
+            c.check(name, f"{key}: Hanger tree cuts away above the player",
+                    (body.get("x"), body.get("y")) == canopy and bool(faded)
+                    and abs(view(d).get("height", -1) - height) < 0.1
+                    and os.path.isfile(os.path.join(out, f"{key}.png")),
+                    repr((body, view(d), faded.group(0) if faded else None)))
 
 
 # The looks the scenario faces (live script `look:DEG`: 0 north, clockwise) and where the
@@ -3080,7 +3513,7 @@ def main():
         if name not in SCENARIOS:
             sys.exit(f"unknown scenario {name}; known: {', '.join(SCENARIOS)}")
         SCENARIOS[name](a.run, c)
-    p = os.path.join(ROOT, ".local/living/verify", a.run, "ui", "checks.json")
+    p = os.path.join(ROOT, ".local/living/verify", a.run, "ui", f"checks{BEARING_SUFFIX}.json")
     os.makedirs(os.path.dirname(p), exist_ok=True)
     json.dump(c.rows, open(p, "w"), indent=1)
     failed = [r for r in c.rows if not r["ok"]]

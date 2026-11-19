@@ -467,6 +467,9 @@ impl Composer<'_> {
         // `recolor` finds it from the first mesh, as for any character.
         let meshes: Vec<&Mesh> = sources.iter().filter_map(|m| self.meshes.get(m)).collect();
         let source = super::source_mean(&base, &meshes, &self.thumbs, &self.images);
+        if let Some((tex, image)) = base.base_color_texture.as_ref().and_then(|tex| self.images.get(tex).map(|image| (tex, image))) {
+            debug!("compose: {own} texture {:?} {:?} {:?} mips {} sampler {:?}", tex.id(), tex.path(), image.texture_descriptor.format, image.texture_descriptor.mip_level_count, image.sampler);
+        }
         let content = format!("{kind:?} {face_map:?} {base:?}");
         let shared = source.filter(|_| !crate::perf::has("filestyles")).and_then(|src| {
             self.plans.toons.get(&content)?.iter().find(|(m, _)| (*m - src).abs().max_element() < SAME_SOURCE).map(|(_, h)| h.clone())

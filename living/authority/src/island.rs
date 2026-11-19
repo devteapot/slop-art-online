@@ -26,6 +26,8 @@ use spacetimedb::{ReducerContext, Table};
 pub struct Hosted {
     pub map: Map,
     pub info: LandInfo,
+    pub cover_ground: std::sync::Arc<[i16]>,
+    pub cover_candidates: Vec<u32>,
     pub settlements: Vec<Planned>,
     pub lots: Vec<PlannedLot>,
     /// The roads as a graph, for the stages of a known way (`town::seat`); dropped with the rest.
@@ -265,7 +267,10 @@ pub fn host(seed: u64, m: &SeedMap, land: &landgen::Land, params: &LandParams) -
     let resources = land.plans.iter().flat_map(|p| p.resources.iter().cloned()).collect();
     // A household's own structures stand inside its lot, within reach of where one can stand.
     let structures = living_rules::settle::placed_structures(land, &map, &hosted.reachable).map_err(|e| format!("map.params.plans: {e}"))?;
-    Ok(Hosted { map, info, settlements, lots, ways, resources, structures })
+    let _cover = spacetimedb::log_stopwatch::LogStopwatch::new("genesis.cover_ground");
+    let cover_ground = living_rules::cover::ground(land);
+    let cover_candidates = living_rules::cover::candidates(&map);
+    Ok(Hosted { map, info, cover_ground, cover_candidates, settlements, lots, ways, resources, structures })
 }
 
 /// The seed's settlement entry for each planned settlement. An entry of a site kind (`site`, or
@@ -349,7 +354,21 @@ pub fn scrub_land(ctx: &ReducerContext) {
 
 /// The `land` row, lot rows and the structures at their doors (owners are set as households
 /// move in).
+pub const COVER_BAND: usize = 16_384;
+pub fn keep_cover_band(ctx: &ReducerContext, h: &Hosted, i: usize) {
+    let from = i * COVER_BAND;
+    if from >= h.cover_ground.len() || ctx.db.cover_ground().id().find(i as u32).is_some() { return; }
+    let band = |v: &u32| ((v & !(1 << 31)) as usize) / COVER_BAND;
+    let a = h.cover_candidates.partition_point(|v| band(v) < i);
+    let b = h.cover_candidates.partition_point(|v| band(v) <= i);
+    ctx.db.cover_ground().insert(CoverGround { id: i as u32, candidates: h.cover_candidates[a..b].to_vec(),
+        heights: h.cover_ground[from..(from + COVER_BAND).min(h.cover_ground.len())].to_vec() });
+}
+
 pub fn build(ctx: &ReducerContext, h: &Hosted, now: u64) {
+    for i in 0..h.cover_ground.len().div_ceil(COVER_BAND) {
+        keep_cover_band(ctx, h, i);
+    }
     keep_land(ctx, h.info.clone());
     build_lots(ctx, h, 0..h.lots.len(), now);
 }
