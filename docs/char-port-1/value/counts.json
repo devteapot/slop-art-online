@@ -1,0 +1,54 @@
+{
+  "main": {
+    "woman": {
+      "triangles": 30264,
+      "vertices": 18322,
+      "primitives": 15,
+      "materials": 9
+    },
+    "man": {
+      "triangles": 33304,
+      "vertices": 20490,
+      "primitives": 16,
+      "materials": 11
+    },
+    "elder": {
+      "triangles": 31382,
+      "vertices": 19597,
+      "primitives": 18,
+      "materials": 11
+    },
+    "girl": {
+      "triangles": 27582,
+      "vertices": 16809,
+      "primitives": 14,
+      "materials": 9
+    }
+  },
+  "port": {
+    "woman": {
+      "triangles": 34192,
+      "vertices": 21120,
+      "primitives": 13,
+      "materials": 9
+    },
+    "man": {
+      "triangles": 34344,
+      "vertices": 21349,
+      "primitives": 16,
+      "materials": 11
+    },
+    "elder": {
+      "triangles": 32422,
+      "vertices": 20456,
+      "primitives": 18,
+      "materials": 11
+    },
+    "girl": {
+      "triangles": 32006,
+      "vertices": 19940,
+      "primitives": 13,
+      "materials": 9
+    }
+  }
+}
