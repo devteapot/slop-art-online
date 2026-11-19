@@ -3647,9 +3647,13 @@ def looks(run, c):
     a, b = residents(run, 2)
     ev = os.path.join(ROOT, ".local/living/verify", run, "ui")
     test_book = book_copy(ev, book, "looks-without-b", drop=[rows.get(b, "")])
-    plan = "ready;sync:scene;cursor:0.5,0.5;wait:5;dump:00;shot:00_drawn;sync:hold;wait:0.6;point:{A};wait:0.5;dump:01;quit".replace("{A}", str(a))
+    # Start on open ground even if the previous scenario left the player beside Cullet's hedge.
+    plan = (f"ready;sync:open_ground;look:0;sync:scene;cursor:0.5,0.5;wait:5;"
+            f"dump:00;shot:00_drawn;sync:hold;wait:0.6;point:{a};wait:0.5;dump:01;quit")
     with resident_fixture(run, (a, b)):
-        out, code, text = drive(run, s, plan, free=[f"{a}:-2.5:1.0", f"{b}:2.0:-1.0"], syncs=["hold=refree"], env={"LIVING_GAME_LOOK_BOOK": test_book})
+        out, code, text = drive(run, s, plan, free=[f"{a}:-2.0:-1.5", f"{b}:2.0:-1.5"],
+                                syncs=["open_ground=place_at|{me}|781.5|469.5", "hold=refree"],
+                                env={"LIVING_GAME_LOOK_BOOK": test_book})
     c.check(s, "client ran and joined", code == 0, text[-300:])
     L = log(out)
     d0 = dump(out, "00") or {}
