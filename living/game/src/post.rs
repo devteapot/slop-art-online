@@ -227,7 +227,13 @@ impl Plugin for PostPlugin {
         app.insert_resource(film);
         app.add_plugins((ExtractComponentPlugin::<Edges>::default(), UniformComponentPlugin::<Edges>::default(), ExtractComponentPlugin::<SightTexture>::default()));
         let Some(render_app) = app.get_sub_app_mut(RenderApp) else { return };
-        render_app.add_systems(RenderStartup, init_pipeline).add_systems(Core3d, draw.in_set(Core3dSystems::PostProcess));
+        // Before bloom (and so before tonemapping): unordered within the set, the render schedule
+        // ran this pass sometimes before bloom and sometimes after, and the whole picture flipped
+        // between the two results from frame to frame (flicker-2: about a level of 8-bit luma on
+        // every lit surface with the camera still).
+        render_app
+            .add_systems(RenderStartup, init_pipeline)
+            .add_systems(Core3d, draw.in_set(Core3dSystems::PostProcess).before(bevy::post_process::bloom::bloom));
     }
 }
 
