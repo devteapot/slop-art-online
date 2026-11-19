@@ -28,7 +28,7 @@ R=knowledge-$(date +%Y%m%d-%H%M%S)
 
 The helper calls shared `launch --seed authored-test` and `doctor`, starts its Neo4j container, builds the mind, drives every mapped feature and cleans up in `finally`. Builds and proof artifacts stay under `.local/living/verify/`. The shared harness retains its normal authority build paths.
 
-The database is `verify-$R`. The container is `sao-verify-neo4j-$R`, labeled with the run, bound only to `127.0.0.1:7691` and created without a named volume. Each Cargo test and the real mind receive explicit `LIVING_NEO4J_URI` and `LIVING_NEO4J_PASSWORD`. The random password exists only in `knowledge-state.json`, mode 0600, and the container's auth environment. Cleanup removes it from the state.
+The database is `verify-$R`. The container is `sao-verify-neo4j-$R`, labeled with the run, bound only to `127.0.0.1:7691` and created without a named volume. Each Cargo test and the real mind receive explicit `LIVING_NEO4J_URI` and `LIVING_NEO4J_PASSWORD`. The random password exists only in the private run-state directory documented by `verify`, in a mode 0600 file, and the container's auth environment. Cleanup removes it from the state.
 
 Never use Neo4j A on 7689 or Neo4j B on 7690. Never change the shared fake model server or runner. All model profiles in this proof point to the run's loopback fake endpoint.
 
@@ -103,7 +103,7 @@ The runner asserts table changes, exact knowledge sources, preserved row IDs and
 
 Eleven ignored memory tests (`TESTS` in the runner, `strangers_stay_apart` and `a_far_figure_joins_the_person` among them) create and delete graphs inside this scratch Neo4j. `recall_replay` requires `LIVING_RECALL_CASES`; the runner generates nonempty cases against the real mind's graph and asserts budgets and recalled content from its output. It also runs the two focused truthful-feedback rules tests.
 
-Evidence remains in `.local/living/verify/$R/`. Inspect `results.json`, the recorded SQL snapshots, `graph-*.cypher` and `graph-*.txt`, `recalled-deliberation.json`, Cargo test logs, `requests.jsonl`, `journal/` and `cleanup.json`. `knowledge-state.json` and shared `state.json` are private operational state, not evidence to share.
+Evidence remains in `.local/living/verify/$R/`. Inspect `results.json`, the recorded SQL snapshots, `graph-*.cypher` and `graph-*.txt`, `recalled-deliberation.json`, Cargo test logs, `requests.jsonl`, `journal/` and `cleanup.json`.
 
 ## Cleanup
 

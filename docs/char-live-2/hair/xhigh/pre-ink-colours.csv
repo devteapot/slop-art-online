@@ -1,0 +1,9 @@
+patch,shot,x,y,target_R,target_G,target_B,R,G,B,dR,dG,dB,tolerance,passed,luminance,target_luminance,saturation,target_saturation
+hair shade,portrait,860,488,88,42,27,89,49,35,1,7,8,8,True,0.0444,0.0381,0.6067,0.6932
+hair shade,portrait45,917,465,88,42,27,81,36,25,-7,-6,-2,8,True,0.0308,0.0381,0.6914,0.6932
+hair mid,portrait,759,341,152,72,43,156,75,48,4,3,5,8,True,0.1231,0.1148,0.6923,0.7171
+hair mid,portrait45,873,406,152,72,43,146,66,37,-6,-6,-6,8,True,0.1014,0.1148,0.7466,0.7171
+hair light,portrait,821,266,171,88,56,171,88,60,0,0,4,8,True,0.1596,0.1592,0.6491,0.6725
+hair light,portrait45,820,275,171,88,56,171,87,60,0,-1,4,8,True,0.158,0.1592,0.6491,0.6725
+hair highlight,portrait,773,267,187,99,63,185,96,69,-2,-3,6,8,True,0.1911,0.1985,0.627,0.6631
+hair highlight,portrait45,874,290,187,99,63,185,94,66,-2,-5,3,8,True,0.1871,0.1985,0.6432,0.6631

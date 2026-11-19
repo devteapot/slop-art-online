@@ -1,0 +1,60 @@
+{
+  "sha256": "d96df66588777fc4f7bfaffcbf051e32ab2aa3e7b732312c52afd69b423d645c",
+  "replay_sha256": "d96df66588777fc4f7bfaffcbf051e32ab2aa3e7b732312c52afd69b423d645c",
+  "sidecar_identical": true,
+  "differing_pixels": {
+    "hair4-front.png": 0,
+    "hair4-three-quarter.png": 0,
+    "hair4-profile.png": 0,
+    "hair4-back.png": 0,
+    "hair4-near.png": 0,
+    "hair4-middle.png": 0
+  },
+  "differing_gltf_sections": {},
+  "different_buffer_views": [],
+  "geometry_differences": [],
+  "export": {
+    "triangles": 48896,
+    "vertices": 29697,
+    "primitives": 10,
+    "materials": 9,
+    "clips": [
+      "idle",
+      "walk",
+      "run",
+      "talk",
+      "sit_idle",
+      "sit_ground"
+    ],
+    "face_keys": [
+      "Fcl_EYE_Close",
+      "Fcl_EYE_Close_L",
+      "Fcl_EYE_Close_R",
+      "Fcl_EYE_Joy",
+      "Fcl_MTH_A",
+      "Fcl_MTH_I",
+      "Fcl_MTH_U",
+      "Fcl_MTH_E",
+      "Fcl_MTH_O",
+      "Fcl_MTH_Fun",
+      "Fcl_MTH_Sorrow",
+      "Fcl_BRW_Angry",
+      "Fcl_BRW_Sorrow",
+      "Fcl_BRW_Surprised",
+      "Fcl_BRW_Fun"
+    ]
+  },
+  "own-cora-live.hair.png_identical": true,
+  "lock-lines.png_identical": true,
+  "lock-layout.json_identical": true,
+  "render_max_channel_delta": {
+    "hair4-front.png": 0,
+    "hair4-three-quarter.png": 0,
+    "hair4-profile.png": 0,
+    "hair4-back.png": 0,
+    "hair4-near.png": 0,
+    "hair4-middle.png": 0
+  },
+  "differing_hair_normals": 0,
+  "max_absolute_normal_component_delta": 0.0
+}

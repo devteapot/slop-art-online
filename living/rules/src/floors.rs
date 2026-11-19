@@ -28,9 +28,16 @@ pub fn compose(base: &str, overlay: &str) -> Result<String, String> {
     if let Some(n) = names.iter().find(|n| n.starts_with("base_")) {
         return Err(format!("floor overlay defines `{n}`: `base_` names are the replaced base functions"));
     }
+    // An overlay that replaces `status_of` alone is asked it whole: the base's parts, which its
+    // law may no longer be, are kept as `base_status_parts` (docs/STATUS_PARTS.md). One that
+    // replaces both is checked at install (the parts joined are its `status_of`).
+    let mut renamed = names.clone();
+    if names.contains("status_of") && !names.contains("status_parts") {
+        renamed.insert("status_parts".to_string());
+    }
     let mut out = String::with_capacity(base.len() + overlay.len() + 64);
     for line in base.split_inclusive('\n') {
-        out.push_str(&rename_def(line, &names));
+        out.push_str(&rename_def(line, &renamed));
     }
     if !out.ends_with('\n') {
         out.push('\n');

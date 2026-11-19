@@ -20,6 +20,8 @@ import trials  # noqa: E402  (consolidation_table: the trial report's per-charac
 import world_guard  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[4]
+sys.path.insert(0, str(ROOT / 'living/tools'))
+from verify_credentials import redact
 # The mind binary the suite builds: in CARGO_TARGET_DIR when set (a private build directory),
 # else living/target. Running another path would test whatever binary another checkout left.
 MIND_BIN = Path(os.environ.get('CARGO_TARGET_DIR') or ROOT / 'living/target') / 'release/living-mind'
@@ -91,7 +93,8 @@ class Run:
     def command(self, args, filename='driver.log', check=True, timeout=240):
         result = subprocess.run([str(x) for x in args], cwd=ROOT, capture_output=True, text=True, timeout=timeout)
         with (self.directory / filename).open('a') as stream:
-            stream.write('$ ' + ' '.join(str(x) for x in args) + '\n' + result.stdout + result.stderr + f'\nexit={result.returncode}\n')
+            message = '$ ' + ' '.join(map(str, args)) + '\n' + result.stdout + result.stderr
+            stream.write(redact(message, (self.token,)) + f'\nexit={result.returncode}\n')
         if check and result.returncode:
             raise RuntimeError(f'{args[0]} failed; see {self.directory / filename}')
         return result

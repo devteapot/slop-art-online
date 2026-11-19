@@ -1,6 +1,6 @@
 {
  "about": "Test cases for the look data (living/tools/characters/look_lines.py cases; docs/CHARACTERS.md, 'The look book'). Written with looks.json of the same generation.",
- "generation": "c4-5d64f53e",
+ "generation": "c4-cbcc40bf",
  "key_hash": {
   "rule": "lk_ + the first 16 hex digits of SHA-256 over the UTF-8 canonical JSON of the line's drawn fields: type, height, proportions, identity, colors, styles, belly, grey; keys sorted at every depth, separators ',' and ':', no spaces",
   "cases": [

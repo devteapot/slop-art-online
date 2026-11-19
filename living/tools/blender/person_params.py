@@ -290,6 +290,9 @@ def draw(given=None):
     # 34 values above are pass 2's and make the head only with `head: "loft"`.
     p["head"] = given.get("head", "cage")
     p["type"] = given.get("type") or face_types.type_for(seed, p["sex"], age, fam)
+    # Cut 0 crosses the trousers on the child fitting during ground sit-down.
+    if p["type"].startswith("child-") and seed % 3 == 0:
+        p["outfit"]["coat_cut"] = pick("outfit.child_coat_cut", (1, 2))
     if given.get("identity") is None:
         p["identity"] = face_types.draw_valid(face_types.load()["types"][p["type"]], seed, fam)
     deep_update(p, {k: v for k, v in given.items() if k not in ("seed", "family")})
