@@ -27,6 +27,8 @@ import subprocess
 import sys
 import tempfile
 import time
+from types import SimpleNamespace
+from unittest.mock import patch
 
 TOOLS = os.path.dirname(os.path.abspath(__file__))
 OURS = os.path.join(TOOLS, "sccache-rustc")
@@ -307,11 +309,47 @@ def game_tests_case():
            and ("--exact" in t["cmd"]) == bool(check.GAME_TEST_SKIPS), t["cmd"])
 
 
+def disk_cases(home):
+    import check
+
+    gib = check.GIB
+    target = os.path.join(home, "new", "target")
+    expect("disk: fresh tree requires 63 GiB", check.disk_threshold(target, {})[0] == 63 * gib)
+    warm = os.path.join(home, ".t3/worktrees/slop/warm/.local/check/target")
+    os.makedirs(warm)
+    with patch.object(check, "tree_size", return_value=10 * gib):
+        expect("disk: warm tree reduces cost", check.disk_threshold(warm, {})[0] == 53 * gib)
+        expect("disk: configurable floor and cold cost",
+               check.disk_threshold(warm, {"SLOP_DISK_FLOOR_GB": "40", "SLOP_CHECK_COST_GB": "14"})[0] == 44 * gib)
+    with patch.object(check, "tree_size", return_value=20 * gib):
+        expect("disk: cost is at least 2 GiB", check.disk_threshold(warm, {})[0] == 47 * gib)
+    expect("disk: start overrides both settings",
+           check.disk_threshold(warm, {"SLOP_CHECK_START_GB": "55", "SLOP_DISK_FLOOR_GB": "70",
+                                       "SLOP_CHECK_COST_GB": "30"})[0] == 55 * gib)
+    with patch.object(check.shutil, "disk_usage") as usage, patch.object(check, "tree_size") as size:
+        check.wait_for_disk(warm, {"SLOP_CHECK_START_GB": "0"})
+        expect("disk: zero bypasses disk usage and tree sizing", not usage.called and not size.called)
+
+    readings = [SimpleNamespace(free=free * gib) for free in (58, 60, 63)]
+    with patch.object(check.shutil, "disk_usage", side_effect=readings) as usage, \
+         patch.object(check.time, "sleep") as sleep, patch.object(check, "HOME", home), \
+         patch.object(check, "tree_size", return_value=10 * gib), patch.object(check, "say", wraps=check.say) as say:
+        check.wait_for_disk(target, {})
+        expect("disk: waits twice and checks the existing parent",
+               [c.args for c in sleep.call_args_list] == [(60,), (60,)]
+               and [c.args for c in usage.call_args_list] == [(home,)] * 3)
+        lines = [c.args[0] for c in say.call_args_list]
+        expect("disk: reports threshold once and lists build trees",
+               len(lines) == 3 and "58.00 GiB free" in lines[0] and "63.00 GiB required" in lines[0]
+               and "45 GiB floor + 18.00 GiB cost" in lines[0] and warm in lines[2], lines)
+
+
 def main(argv):
     game_tests_case()
     with tempfile.TemporaryDirectory(prefix="check-selftest-") as home:
         wrapper_cases(home)
         watchdog_case(home)
+        disk_cases(home)
     with tempfile.TemporaryDirectory(prefix="check-selftest-gate-") as home:
         gate_cases(home, "--gate" in argv)
     print("check_selftest:", "FAILED " + ", ".join(failures) if failures else "all passed")

@@ -41,6 +41,7 @@ SLOP_SCCACHE_DIR, SLOP_SCCACHE_SIZE (default 10G) and SLOP_SCCACHE_PORT (default
 the compile cache.
 """
 import fcntl
+import glob
 import hashlib
 import json
 import re
@@ -187,6 +188,67 @@ def target_dir(root):
         return os.path.abspath(t)
     meta = json.loads(run(["cargo", "metadata", "--manifest-path", "living/Cargo.toml", "--no-deps", "--format-version", "1", "--offline"], root))
     return meta["target_directory"]
+
+
+GIB = 1024 ** 3
+
+
+def tree_size(path):
+    """Allocated bytes, using the KiB output common to Linux and macOS du."""
+    try:
+        return int(run(["du", "-sk", os.path.realpath(path)], "/", stderr=subprocess.DEVNULL).split(maxsplit=1)[0]) * 1024
+    except (OSError, subprocess.CalledProcessError, ValueError, IndexError):
+        return 0
+
+
+def disk_threshold(target, env):
+    def gb(name, default):
+        value = int(env.get(name) or default)
+        if value < 0:
+            raise ValueError(f"{name} must be nonnegative")
+        return value
+
+    if env.get("SLOP_CHECK_START_GB"):
+        start = gb("SLOP_CHECK_START_GB", 0)
+        return start * GIB, f"SLOP_CHECK_START_GB={start}"
+
+    floor = gb("SLOP_DISK_FLOOR_GB", 45)
+    cold_cost = gb("SLOP_CHECK_COST_GB", 18)
+    size = tree_size(target) if os.path.isdir(target) else 0
+    cost = max(2 * GIB, cold_cost * GIB - size)
+    return floor * GIB + cost, (
+        f"{floor} GiB floor + {cost / GIB:.2f} GiB cost "
+        f"(max of 2 GiB and {cold_cost} GiB minus {size / GIB:.2f} GiB already in target)"
+    )
+
+
+def wait_for_disk(target, env):
+    target = os.path.realpath(target)
+    required, reason = disk_threshold(target, env)
+    if not required:
+        return
+    # The target may not exist yet. Check the filesystem that will hold it.
+    parent = target
+    while not os.path.exists(parent):
+        parent = os.path.dirname(parent)
+    free = shutil.disk_usage(parent).free
+    if free >= required:
+        return
+
+    say(f"{free / GIB:.2f} GiB free at {parent}, below {required / GIB:.2f} GiB "
+        f"required ({reason}); waiting, recheck every 60 s")
+    worktrees = os.path.join(HOME, ".t3", "worktrees")
+    paths = [path for pattern in ("*/*/living/target", "*/*/.local/*/target")
+             for path in glob.glob(os.path.join(glob.escape(worktrees), pattern))
+             if os.path.isdir(path)]
+    largest = sorted(((tree_size(path), path) for path in paths), reverse=True)[:6]
+    if largest:
+        say("largest build trees:")
+        for size, path in largest:
+            say(f"  {size / GIB:6.2f} GiB  {path}")
+    while free < required:
+        time.sleep(60)
+        free = shutil.disk_usage(parent).free
 
 
 def closures(root):
@@ -871,6 +933,10 @@ def main(argv):
                                            for s, d, inputs, files, st in plan]})
         return 0
 
+    todo = [x for x in plan if not x[4]]
+    if todo:
+        wait_for_disk(target, os.environ)
+
     env_extra, exe, how = sccache_env(root) if use_sccache else ({}, None, "off (--no-sccache)")
     env = {**os.environ, **env_extra}
     stats0 = None
@@ -970,7 +1036,6 @@ def main(argv):
                 if not isinstance(e, Exception):
                     raise
 
-    todo = [x for x in plan if not x[4]]
     for s, d, inputs, files, st in plan:
         if st:
             by_name[s["name"]] = {"name": s["name"], "skipped": True, "digest": d, "secs": 0}
