@@ -659,6 +659,8 @@ pub struct Laws {
     /// Diagnostic: every structure a look skips is checked to have its `familiar` row (it would
     /// not have been new), and one without is logged and counted (`notice_delta:differed`).
     pub notice_delta_check: bool,
+    pub seen_ranges: bool,
+    pub seen_ranges_check: bool,
     /// The fast lane (docs/FAST_LANE.md): a mind-run character's re-plan between blows, asked
     /// of its mind on a blow taken or a move it sees repeated. Off: none is asked.
     pub fast_lane_on: bool,
@@ -781,6 +783,8 @@ impl Default for Laws {
             notice_inplace_check: false,
             notice_delta: true,
             notice_delta_check: false,
+            seen_ranges: true,
+            seen_ranges_check: false,
             fast_lane_on: false,
             seen_again_n: 3.0,
             fast_lane_rate: 2.0,
@@ -2985,6 +2989,8 @@ impl Scripts {
             notice_inplace_check: flag("notice_inplace_check", l.notice_inplace_check),
             notice_delta: flag("notice_delta", l.notice_delta),
             notice_delta_check: flag("notice_delta_check", l.notice_delta_check),
+            seen_ranges: flag("seen_ranges", l.seen_ranges),
+            seen_ranges_check: flag("seen_ranges_check", l.seen_ranges_check),
             fast_lane_on: flag("fast_lane_on", l.fast_lane_on),
             seen_again_n: g("seen_again_n", l.seen_again_n).round().clamp(1.0, 100.0),
             fast_lane_rate: g("fast_lane_rate", l.fast_lane_rate).clamp(0.0, 100.0),

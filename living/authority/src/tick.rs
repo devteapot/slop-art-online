@@ -218,6 +218,7 @@ fn expire_remains(ctx: &ReducerContext, now: u64) {
         for i in ctx.db.inventory().owner().filter(owner).map(|i| i.id).collect::<Vec<_>>() {
             ctx.db.inventory().id().delete(i);
         }
+        common::invalidate_remains_label(ctx, r.structure);
         ctx.db.structure().id().delete(r.structure);
     }
     common::invalidate_structures(ctx);

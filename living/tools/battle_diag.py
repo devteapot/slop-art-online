@@ -265,6 +265,11 @@ def metrics(ident):
         if line.startswith("#") or ident not in line:
             continue
         name = line.split("{", 1)[0]
+        if name in ("spacetime_table_size_bytes", "spacetime_data_size_table_bytes_used_by_index_keys"):
+            table = re.search(r'table_name="(familiar|seen_structures)"', line)
+            if table:
+                out[f"{name}:{table[1]}"] = int(float(line.rsplit(" ", 1)[1]))
+            continue
         if name in ("reducer_wasm_time_usec_sum", "reducer_wasm_time_usec_count", "reducer_wasm_time_usec"):
             m = re.search(r'reducer="([^"]+)"', line)
             if m:
@@ -585,6 +590,7 @@ def main():
             sample["metrics"] = metrics(ident) if ident else {}
             if a.familiar:
                 try:
+                    sample["rows"]["seen_structures"] = count(run, "seen_structures")
                     fs = familiar_sample(f"{k:02d}")
                     sample["familiar"] = {"rows": fs["rows"], "roles": fs["roles"], "over": len(fs["first_over"])}
                 except Exception as e:

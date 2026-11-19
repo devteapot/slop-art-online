@@ -4,6 +4,7 @@
 //! `mind_*` reducers; they read only their characters' experiences and deliberations.
 
 mod act;
+mod seen_structures;
 mod acts;
 mod attention;
 mod brain;
@@ -219,6 +220,11 @@ pub fn set_world_law(ctx: &ReducerContext, name: String, value: String) -> Resul
     }
     let old = sc.law_value(&name).map(|o| o.to_string()).unwrap_or_default();
     let new = v.to_string();
+    if name == "seen_ranges" && old != new {
+        for look in ctx.db.last_look().iter().map(|look| look.id).collect::<Vec<_>>() {
+            ctx.db.last_look().id().delete(look);
+        }
+    }
     ctx.db.world_law().name().delete(name.clone());
     ctx.db.world_law().insert(WorldLaw { name: name.clone(), value: new.clone() });
     let source = ctx.db.script().name().find("skills".to_string()).map(|s| s.source).ok_or("no script installed")?;

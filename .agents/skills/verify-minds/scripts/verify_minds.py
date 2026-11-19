@@ -4484,6 +4484,78 @@ def act_repair_case(run, case):
             'speech_delivered': len(speech)}
 
 
+@case('seen-remains')
+def seen_remains_case(run):
+    """A real mind gets the count, the named exceptions and the bounded scene in its prompt."""
+    from types import SimpleNamespace
+
+    path = ROOT / '.agents/skills/verify-core/scripts/scenes.py'
+    spec = importlib.util.spec_from_file_location('core_scenes', path)
+    core = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(core)
+    run.harness('launch')
+    run.harness('doctor')
+    rows = lambda query: run.private(query, 'field-query')
+    adapter = SimpleNamespace(rows=rows, call=run.admin,
+                              wait=lambda condition, seconds: run.wait(condition, 'introduction', seconds))
+    line = core.clear_line(adapter)
+    before = {r['id'] for r in rows('SELECT id FROM character')}
+    run.admin('spawn_crowd', 23, True)
+    observer, builder, *dead = sorted(r['id'] for r in rows('SELECT id FROM character') if r['id'] not in before)
+    writer = dead[-1]
+    # The writer needs to survive the setup in the same quiet area as the field.
+    run.admin('place_at', writer, *line[10])
+    for who in [observer, builder, *dead]:
+        run.admin('set_behavior', who, json.dumps({'wait': 300}))
+    run.admin('grant_know_how', writer, 'writing')
+    run.admin('grant_items', writer, 'wood', 1)
+    run.admin('set_behavior', writer, json.dumps({'do': {'skill': 'write', 'item': 'tablet',
+                                                         'text': 'These are field notes.', 'topic': 'writing'}}))
+    run.wait(lambda: rows(f'SELECT id FROM artifact WHERE holder = {writer}'), 'tablet written')
+    at, _, names = core.stage_seen_remains(adapter, (observer,), dead, line)
+    field = {r['owner']: r['id'] for r in run.private("SELECT * FROM structure WHERE kind = 'remains'", 'field')
+             if r['owner'] in dead}
+    assert len(field) == 21
+    run.admin('place_at', builder, at[0] + 5, at[1])
+    for _ in range(10):
+        run.admin('place_structure', builder, 'shelter')
+    run.admin('place_at', observer, *at)
+    prefix = 'You notice the remains of 18 strangers around you, the nearest '
+    told = lambda: [r for r in run.private(f'SELECT * FROM experience WHERE observer = {observer}', 'told')
+                   if r['text'].startswith('You notice') and 'remains' in r['text']]
+    lines = run.wait(lambda: value if len(value := told()) >= 4 else None, 'four remains lines', 15)
+    run.start(model(run, {'replies': {'think': {'thought': 'I look around.', 'intend': [], 'say': None},
+                                     'deliberate': basic_reply()}}), [observer])
+    requests = lambda: shared.rows(run.directory / 'fake-requests.jsonl')
+    sent_text = lambda e: '\n'.join(str(m.get('content', '')) for m in e['body'].get('messages', []))
+    run.request(observer, 'seen-remains')
+    prompt = run.wait(lambda: [sent_text(e) for e in requests() if 'verify seen-remains' in sent_text(e)],
+                      'remains prompt', 60)[0]
+    (run.directory / 'prompt-seen-remains.txt').write_text(prompt)
+    structures = json.loads(scene_part(prompt))['structures']
+    bodies = {r['id']: r for r in structures if r['kind'] == 'remains'}
+    aggregate = [r for r in structures if r['kind'] == 'counted_remains']
+    known = {field[who]: name for who, name in zip(dead[:2], names)}
+    sent = '\n'.join(sent_text(e) for e in requests())
+    named = [r['text'] for r in lines if r['text'].startswith('You notice a remains') and
+             any(name in r['text'] for name in names)]
+    checks = {
+        'four experiences include the exact counted line': len(lines) == 4 and sum(r['text'].startswith(prefix) for r in lines) == 1,
+        'the counted line reaches a real mind prompt': prefix in sent,
+        'both named exceptions reach the mind': len(named) == 2 and all(text in sent for text in named),
+        'scene has one exact aggregate with no body ID':
+            len(aggregate) == 1 and 'id' not in aggregate[0] and
+            aggregate[0]['text'].startswith('the remains of 18 strangers, the nearest '),
+        'scene exposes only the named and readable individual bodies':
+            bodies.keys() == {*known, field[writer]} and all(bodies[id]['of'] == name for id, name in known.items())
+            and bodies[field[writer]]['contents'].get('tablet') == 1,
+        'counted remains use one of ten slots and leave space for shelters':
+            len(structures) == 10 and sum(r['kind'] == 'shelter' for r in structures) == 6,
+    }
+    return {'status': 'pass' if all(checks.values()) else 'fail', 'checks': checks,
+            'field_ids': sorted(field.values()), 'scene_structures': structures}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--run', help='new suite name starting with minds- (gate- for the merge scene gate)')

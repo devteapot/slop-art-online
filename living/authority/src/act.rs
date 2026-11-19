@@ -2180,6 +2180,11 @@ fn move_tablets(ctx: &ReducerContext, item: &str, from: u64, to: u64, qty: u32) 
     if item != "tablet" {
         return;
     }
+    for holder in [from, to] {
+        if holder & STRUCTURE_BIT != 0 {
+            common::invalidate_remains_label(ctx, holder ^ STRUCTURE_BIT);
+        }
+    }
     for mut t in ctx.db.artifact().holder().filter(from).take(qty as usize).collect::<Vec<_>>() {
         t.holder = to;
         ctx.db.artifact().id().update(t);
@@ -2426,6 +2431,7 @@ fn missed(ctx: &ReducerContext, attacker: u32, victim: u32, at_v: (f32, f32), sk
 /// (bounded per character) for the record; the mind's graph in Neo4j keeps its history.
 pub fn forget_dead(ctx: &ReducerContext, id: u32) {
     ctx.db.familiar().actor().delete(id);
+    ctx.db.seen_structures().actor().delete(id);
     crate::known::forget(ctx, id);
     ctx.db.last_look().id().delete(id);
     ctx.db.character_senses().id().delete(id);
@@ -2863,6 +2869,7 @@ pub fn die_unseen(ctx: &ReducerContext, id: u32, cause: &str, now: u64, killer: 
             t.holder = STRUCTURE_BIT | s.id;
             ctx.db.artifact().id().update(t);
         }
+        common::invalidate_remains_label(ctx, s.id);
         let last_ms = sc.remains_ms(&kind).max(0.0) as u64;
         ctx.db.rot().insert(Rot { structure: s.id, due_ms: now + last_ms });
     }

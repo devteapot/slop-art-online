@@ -51,3 +51,7 @@ Any seed with AI people (the default `world`). Writes `RUN/first_sight.json`. Th
 
 - Minds use the same projection and the same skill: a mind's scene lists `health: "34 of 60"` while its appraisal holds. That path is a graph leaf or a deliberate act, not driven here.
 - The resident must stand still for the 6 m reach; the script picks one whose segment has ended (`next_ms` at rest).
+
+## Remains
+
+On a fresh default-seed run, use `scripts/seen_remains.py --run "$R"`. The run's player joins with its own identity. Admin places and kills 20 scene actors before bringing the player to the field. The player can read every nearby remains structure and receives no `You notice` experience. Its identity is refused access to the private `seen_structures` table.

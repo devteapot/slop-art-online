@@ -1011,6 +1011,22 @@ def open_line(s, length=16, avoid=()):
     raise RuntimeError("no open line on this map")
 
 
+def walkable(s):
+    """Whether a tile is walkable on this world's map (`open_line`'s test)."""
+    w = s.rows("SELECT width, height FROM world")[0]
+    W, H = w["width"], w["height"]
+    tiles = bytearray(W * H)
+    for row in s.rows("SELECT * FROM terrain_chunk"):
+        data = row["tiles"]
+        data = bytes.fromhex(data.removeprefix("0x")) if isinstance(data, str) else bytes(data)
+        cx, cy = row["id"] & 0xFFFF, row["id"] >> 16
+        for k, t in enumerate(data):
+            x, y = cx * 16 + k % 16, cy * 16 + k // 16
+            if x < W and y < H:
+                tiles[y * W + x] = t
+    return lambda x, y: 0 <= x < W and 0 <= y < H and tiles[y * W + x] not in (2, 4, 7, 8, 9)
+
+
 def world_hour(s):
     w = s.rows("SELECT epoch_ms, day_ms FROM world")[0]
     now = s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
@@ -7166,6 +7182,208 @@ def notice_delta(s):
 
 
 SCENES["notice_delta"] = notice_delta
+
+
+def stage_seen_remains(s, observers, dead, line):
+    """Introduce the first two people, then leave the bodies together before observers arrive."""
+    at = line[5]
+    away = (at[0], at[1] + 45)
+    names = {row["id"]: row["name"] for row in s.rows("SELECT id, name FROM character")}
+    for i, who in enumerate(observers):
+        s.call("place_at", who, at[0] - 1 + i, at[1])
+    for i, who in enumerate(dead[:2]):
+        s.call("place_at", who, at[0] + 2 + i, at[1])
+        s.call("mind_say", who, f"I am {names[who]}.", 0, "", 0, FS_TALK)
+        for observer in observers:
+            s.wait(lambda: s.rows(f"SELECT id FROM acquaintance WHERE observer = {observer} AND known = {who}"), 8)
+    for who in observers:
+        s.call("place_at", who, *away)
+    for i, who in enumerate(dead):
+        x = at[0] + (1 + i % 5)
+        y = at[1] + (i // 5 % 3 - 1)
+        s.call("place_at", who, x, y)
+        s.call("kill", who, "seen remains fixture")
+    return at, away, [names[who] for who in dead[:2]]
+
+
+def seen_remains(s):
+    if (s.out / "seen-remains-field.json").exists():
+        raise RuntimeError("use a fresh world for the seen remains fixture")
+    line = clear_line(s)
+    observer, legacy, builder, extra, *dead = s.people(24)
+    for who in (observer, legacy, builder, extra, *dead):
+        s.graph(who, {"wait": 300})
+    for who in (builder, extra):
+        s.call("place_at", who, line[-1][0], line[-1][1] + 45)
+    at, away, names = stage_seen_remains(s, (observer, legacy), dead, line)
+    bodies = [r for r in s.rows("SELECT * FROM structure WHERE kind = 'remains'", "field")
+              if r["owner"] in dead]
+    (s.out / "seen-remains-field.json").write_text(json.dumps(bodies, indent=2))
+    s.expect("field has 20 individual bodies", len(bodies) == 20, bodies)
+
+    def lines(actor, label):
+        return [r for r in s.rows(f"SELECT * FROM experience WHERE observer = {actor} AND kind = 'saw'", label)
+                if r["text"].startswith("You notice")]
+
+    def remains(actor, label):
+        return [r for r in lines(actor, label) if "remains" in r["text"]]
+
+    def first(actor, label):
+        s.call("place_at", actor, *at)
+        got = s.wait(lambda: (rows if len(rows := remains(actor, label)) >= 3 else None), 15)
+        folded = [r for r in got if r["text"].startswith("You notice the remains of 18 strangers around you, the nearest ")]
+        s.expect(label + " has two named lines and one exact counted line",
+                 len(got) == 3 and len(folded) == 1 and
+                 all(any(name in r["text"] and r["subject"] for r in got) for name in names), got)
+        s.expect(label + " counted experience has no person id and lies on a body",
+                 folded[0]["subject"] == folded[0]["object"] == 0 and abs(folded[0]["salience"] - 0.8) < 0.001
+                 and any((r["x"], r["y"]) == (folded[0]["x"], folded[0]["y"]) for r in bodies), folded)
+        return got
+
+    def legacy_rows(actor):
+        return [r for r in s.rows(f"SELECT thing FROM familiar WHERE actor = {actor}", "legacy-familiar")
+                if r["thing"] in {3 << 40 | body["id"] for body in bodies}]
+
+    def blocks(actor):
+        return s.rows(f"SELECT * FROM seen_structures WHERE actor = {actor}", "seen-blocks")
+
+    set_law(s, "seen_ranges_check", True)
+    set_law(s, "notice_delta_check", True)
+    s.call("set_profile", True)
+    stamp = time.time()
+    try:
+        got = first(observer, "ranges-on")
+        s.expect("diagnostic keeps the corresponding legacy rows", len(legacy_rows(observer)) == 20)
+        s.expect("ranges are stored in at most two block rows here", 1 <= len(blocks(observer)) <= 2)
+        s.call("place_at", observer, *away)
+        time.sleep(3)
+        s.call("place_at", observer, *at)
+        time.sleep(3)
+        s.expect("return to the field does not repeat any remains line", remains(observer, "returned") == got)
+        diagnostics = diag_totals(s, stamp)
+        s.expect("ranges and C2 comparisons ran with no differences",
+                 diagnostics.get("seen_ranges:checked", 0) >= 20 and
+                 diagnostics.get("notice_delta:checked", 0) >= 20 and
+                 diagnostics.get("seen_ranges:differed", 0) == diagnostics.get("notice_delta:differed", 0) == 0,
+                 diagnostics)
+    finally:
+        s.call("set_profile", False)
+        set_law(s, "notice_delta_check", False)
+        set_law(s, "seen_ranges_check", False)
+
+    s.call("place_at", observer, *away)
+    set_law(s, "seen_ranges", False)
+    first(legacy, "ranges-off")
+    s.expect("law off records each field body in familiarity", len(legacy_rows(legacy)) == 20)
+    set_law(s, "seen_ranges", True)
+    s.wait(lambda: not legacy_rows(legacy), 15)
+    s.expect("migration drained the rows and did not repeat the lines",
+             1 <= len(blocks(legacy)) <= 2 and len(remains(legacy, "migrated-remains")) == 3)
+    s.call("place_at", legacy, *away)
+
+    s.call("place_at", observer, *at)
+    s.call("place_at", extra, at[0] + 2, at[1] - 1)
+    s.call("kill", extra, "one new body")
+    fresh = s.wait(lambda: [r for r in remains(observer, "one-new") if r["subject"] == extra], 12)
+    s.expect("one new body gets its own line", len(fresh) == 1 and fresh[0]["text"].startswith("You notice a remains"), fresh)
+    s.call("place_at", builder, at[0] + 3, at[1] + 1)
+    s.call("place_structure", builder, "shelter")
+    fresh = s.wait(lambda: [r for r in lines(observer, "shelter") if r["text"].startswith("You notice a shelter")], 12)
+    s.expect("the new shelter is noticed once", len(fresh) == 1, fresh)
+    s.call("kill", observer, "seen ranges death cleanup")
+    s.expect("death deletes the observer's block rows", not blocks(observer))
+
+
+SCENES["seen_remains"] = seen_remains
+
+
+def seen_remains_gaze(s):
+    """Seen ranges and the counted remains line under Cullet's shipped cover and gaze laws
+    (`--seed cullet`, by day). Structures are taken within the observer's sight radius, which the
+    gaze band scales (Near 0.6, Middle 1.0 of 48 m by day); cover traces only people. An observer
+    in Near is told one counted line for the strangers' bodies within Near. Middle brings the
+    outer bodies within reach: one more counted line, counting only those. Going back to Near and
+    to Middle again, and then to Far, repeats nothing."""
+    law = s.rows("SELECT * FROM cover_law")
+    s.expect("Cullet's cover law is on", bool(law) and law[0]["cover_sight_on"], law)
+    hour, day = world_hour(s)
+    if not 7.5 <= hour < 18.5:
+        wait_s = ((7.5 - hour) % 24) / 24 * day / 1000
+        print(f"waiting {wait_s:.0f} s for daylight (hour {hour:.1f})", flush=True)
+        time.sleep(wait_s + 5)
+    observer, *dead = s.people(12)
+    for who in (observer, *dead):
+        s.graph(who, {"wait": 600})
+    centre = clear_line(s)[0]
+    walk = walkable(s)
+    # Somewhere walkable well beyond Far (62 m by day) while the bodies are staged.
+    away = next(spot for step in range(72) for reach in (110, 90, 75)
+                if walk(int((spot := (centre[0] + reach * math.cos(step * math.pi / 36),
+                                      centre[1] + reach * math.sin(step * math.pi / 36)))[0]), int(spot[1])))
+    s.call("place_at", observer, *away)
+    s.act(observer, {"do": "gaze", "band": "near"})
+    s.wait(lambda: s.rows(f"SELECT * FROM attention WHERE id = {observer} AND band = 2"), 10)
+    picked = []
+    for i, who in enumerate(dead):
+        reach = 14 if i % 2 == 0 else 38
+        # Around the ring from this body's own angle, the first walkable tile clear of the others
+        # (Cullet's streets leave gaps between houses).
+        for step in range(72):
+            angle = i * 2 * math.pi / len(dead) + step * math.pi / 36
+            spot = (centre[0] + reach * math.cos(angle), centre[1] + reach * math.sin(angle))
+            if walk(int(spot[0]), int(spot[1])) and all(math.dist(spot, q) > 2 for q in picked):
+                break
+        else:
+            raise RuntimeError(f"no walkable tile {reach} m from {centre}")
+        picked.append(spot)
+        s.call("place_at", who, *spot)
+        s.call("kill", who, "seen remains gaze fixture")
+    s.call("place_at", observer, *centre)
+    at = s.rows(f"SELECT x, y FROM body WHERE id = {observer}")[0]
+    at = (at["x"], at["y"])
+    bodies = [r for r in s.rows("SELECT * FROM structure WHERE kind = 'remains'", "field") if r["owner"] in dead]
+    dist = {r["id"]: math.dist(at, (r["x"], r["y"])) for r in bodies}
+    near_r, middle_r = 48 * 0.6, 48.0
+    inner = [i for i, d in dist.items() if d <= near_r]
+    outer = [i for i, d in dist.items() if near_r < d <= middle_r]
+    s.expect("field of 11 bodies, none within 2 m of a band edge, split between Near and Middle",
+             len(bodies) == 11 and inner and outer and len(inner) + len(outer) == 11 and
+             all(abs(d - near_r) > 2 and abs(d - middle_r) > 2 for d in dist.values()),
+             {"at": at, "dist": dist})
+
+    def remains(label):
+        return [r for r in s.rows(f"SELECT * FROM experience WHERE observer = {observer} AND kind = 'saw'", label)
+                if r["text"].startswith("You notice") and "remains" in r["text"]]
+
+    def counted(n):
+        return f"You notice the remains of {n} strangers around you, the nearest "
+
+    got = s.wait(lambda: remains("near"), 15)
+    time.sleep(3)
+    got = remains("near")
+    s.expect(f"Near: one counted line for the {len(inner)} bodies within {near_r:.1f} m",
+             len(got) == 1 and got[0]["text"].startswith(counted(len(inner))), got)
+    s.act(observer, {"do": "gaze", "band": "middle"})
+    s.wait(lambda: s.rows(f"SELECT * FROM attention WHERE id = {observer} AND band = 0"), 10)
+    s.wait(lambda: len(remains("middle")) >= 2, 15)
+    time.sleep(3)
+    got = remains("middle")
+    s.expect(f"Middle: one more counted line, for only the {len(outer)} bodies it brought within reach",
+             len(got) == 2 and got[1]["text"].startswith(counted(len(outer))), got)
+    for band, code in (("near", 2), ("middle", 0), ("far", 1)):
+        time.sleep(1)
+        s.act(observer, {"do": "gaze", "band": band})
+        s.wait(lambda: s.rows(f"SELECT * FROM attention WHERE id = {observer} AND band = {code}"), 10)
+        time.sleep(3)
+    s.expect("Near, Middle and Far again repeat no remains line", remains("again") == got, remains("again"))
+    ranges = [r["ranges"] for r in s.rows(f"SELECT * FROM seen_structures WHERE actor = {observer}", "seen-blocks")]
+    pairs = [(rs[k], rs[k + 1]) for rs in ranges for k in range(0, len(rs), 2)]
+    s.expect("the observer's ranges hold every field body",
+             all(any(a <= id <= b for a, b in pairs) for id in dist), {"ranges": ranges, "bodies": sorted(dist)})
+    s.call("place_at", observer, *away)
+
+
+SCENES["seen_remains_gaze"] = seen_remains_gaze
 
 
 if __name__ == "__main__":

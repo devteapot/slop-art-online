@@ -139,6 +139,7 @@ fn laws() {
         // A look checks only the structures new since the last look, or outside its sight then;
         // `notice_delta_check` (a diagnostic) checks that every one skipped was already familiar.
         notice_delta: true, notice_delta_check: false,
+        seen_ranges: true, seen_ranges_check: false,
         // A bystander (one who sees an event it is not party to) is woken by what it sees at most
         // once per `witness_wake_ms` (docs/BATTLE_SCALE.md); what it sees is still told at once,
         // in full. 0: woken by each sight, as before.
@@ -3163,6 +3164,8 @@ fn law_about(l, name) {
         "notice_inplace_check" => "a diagnostic: each look is also made from the full list and compared",
         "notice_delta" => "a look for what is new looks only at what is new since the last look or has come into sight",
         "notice_delta_check" => "a diagnostic: what a look passes over is checked to be already familiar",
+        "seen_ranges" => "remember which structures were seen in ranges of ids by block",
+        "seen_ranges_check" => "a diagnostic: compare structure newness with familiarity",
         "profile_detail" => if l.profile_detail { "while profiling, the parts of each behaviour's evaluation are timed" } else { "profiling times each behaviour's evaluation whole" },
         "regard_cache_check" => if l.regard_cache_check { "every shared answer about another is checked against a fresh one" } else { "shared answers about another are not checked" },
         "fast_lane_on" => if l.fast_lane_on { "a mind may revise its fighting quickly between blows" } else { "a mind revises its fighting only when it thinks" },
