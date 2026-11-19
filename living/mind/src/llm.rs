@@ -987,11 +987,29 @@ impl Llm {
         let queued = Instant::now();
         let permit = self.scheduler.admit(profile, lane, cost).await?;
         let queue_wait_ms = queued.elapsed().as_millis() as u64;
+        let granted = Instant::now();
         let started = Instant::now();
         let url = format!("{}/chat/completions", p.base_url.trim_end_matches('/'));
         let mut unreachable = false;
         let result = async {
-            let resp = match self.http.post(&url).bearer_auth(key).json(&body).send().await {
+            let mut request = self.http.post(&url).bearer_auth(key).json(&body);
+            // Control-arm timing for the fixed-site battle (the urgent-merge A/B): the same header
+            // as the branch, only for the battle driver's loopback fake provider.
+            if p.key_env == "LIVING_VERIFY_FAKE_KEY"
+                && reqwest::Url::parse(&url).ok().and_then(|url| url.host_str().map(str::to_owned)).as_deref() == Some("127.0.0.1")
+                && std::env::var_os("LIVING_BATTLE_TIMING").is_some()
+            {
+                request = request.header("X-Living-Battle-Timing", json!({
+                    "lane": lane,
+                    "queue_wait_ms": queue_wait_ms,
+                    "slot_hold_ms": granted.elapsed().as_secs_f64() * 1000.0,
+                    "sent_ms": now_ms(),
+                    "urgent_arrived_ms": Value::Null,
+                    "prompt_preparation_ms": Value::Null,
+                    "deliberation_started_ms": DELIBERATION_STARTED_MS.try_with(|at| *at).ok(),
+                }).to_string());
+            }
+            let resp = match request.send().await {
                 Ok(r) => r,
                 Err(e) => {
                     // Only a connection that could not be made gates the host. A timeout is one
@@ -1404,6 +1422,11 @@ fn content_text(c: &Value) -> String {
         Value::Array(parts) => parts.iter().filter(|p| p["type"].as_str() == Some("text")).filter_map(|p| p["text"].as_str()).collect::<Vec<_>>().join(""),
         _ => String::new(),
     }
+}
+
+tokio::task_local! {
+    /// When the running deliberation began (`Minds::schedule`), for the battle timing header.
+    pub static DELIBERATION_STARTED_MS: u64;
 }
 
 pub fn now_ms() -> u64 {

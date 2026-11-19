@@ -154,7 +154,7 @@ class Script:
         with self.lock, self.log.open('a') as stream:
             stream.write(json.dumps({'at_ms': int(time.time() * 1000), **record}) + '\n')
 
-    def receive(self, body, batch_job=None):
+    def receive(self, body, batch_job=None, timing=None):
         purpose = purpose_of(body)
         with self.lock:
             self.sequence += 1
@@ -186,6 +186,8 @@ class Script:
                       'status': action.get('status', 200), 'delay_s': action.get('delay_s', 0),
                       'close_port': action.get('close_port', False), 'content': content,
                       'batch_job': batch_job}
+            if timing is not None:
+                record['timing'] = timing
             with self.log.open('a') as stream:
                 stream.write(json.dumps(record) + '\n')
         return action, content
@@ -347,7 +349,10 @@ class Handler(BaseHTTPRequestHandler):
                 raise ValueError('request must be an object')
         except (ValueError, TypeError):
             return self.respond(400, b'{"error":"invalid JSON body"}')
-        action, content = self.server.script.receive(body)
+        timing = self.headers.get("X-Living-Battle-Timing")
+        if timing is not None:
+            timing = {**json.loads(timing), "received_ms": int(time.time() * 1000)}
+        action, content = self.server.script.receive(body, timing=timing)
         if action.get('close_port'):
             self.connection.shutdown(socket.SHUT_RDWR)
             self.connection.close()
