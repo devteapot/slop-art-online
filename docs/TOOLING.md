@@ -23,6 +23,7 @@ Status: **current** (Tool 7, 2026-11-11, branch `tool-7`; the laptop's follow-up
 | `viewer-wasm` | `cargo build --manifest-path living/viewer/Cargo.toml --target wasm32-unknown-unknown --profile wasm-dev --bin living-viewer` | wasm-dev |
 | `rules-tests` | `cargo test -p living-rules` | debug |
 | `seed-laws` | `cargo test -p living-authority --lib seed::tests::a_seeds_laws_are_in_force_after_init`: every seed with its own laws has them in force after `init` | debug |
+| `frame-tests` | `cargo test -p living-authority --lib frame::tests`: with both delivery laws off the frames take main's path; the cue budget keeps every engaged pair first (frame-views) | debug |
 | `script-gate` | `cargo build --manifest-path living/tools/script_bench/Cargo.toml -p sb-module --target wasm32-unknown-unknown --release --features rhai`, then `-p sb-host --bin sb-host --release --no-default-features`, then [`gate.py`](../living/tools/script_bench/gate.py) ([below](#the-script-fuel-gate)) | script-bench |
 
 Three things are new:

@@ -216,6 +216,9 @@ thread_local! {
     /// Profiling only: when each creature's recent changes were marked (sequence, ms), for the
     /// staleness of deliveries (`frame_trace`).
     static CHANGES: RefCell<HashMap<u32, VecDeque<(u64, u64)>>> = RefCell::new(HashMap::new());
+    /// Whether either delivery law (`cue_transport_on`, `near_tier_on`) was on at the last tick.
+    /// Both off, the frames take main's path: no cue marks, no targets, no near tier (`deliver`).
+    static DELIVERY: Cell<bool> = const { Cell::new(true) };
     /// The sequence number at the last tick's cues, and how many ticks have sent cues.
     static CUED_SEQ: Cell<u64> = const { Cell::new(0) };
     static CUE_TICK: Cell<u64> = const { Cell::new(0) };
@@ -288,7 +291,9 @@ fn mark(map: &'static std::thread::LocalKey<RefCell<HashMap<u32, u64>>>, id: u32
         v
     });
     map.with(|m| m.borrow_mut().insert(id, s));
-    PENDING.with(|p| *p.borrow_mut().entry(id).or_default() |= stream);
+    if DELIVERY.with(Cell::get) {
+        PENDING.with(|p| *p.borrow_mut().entry(id).or_default() |= stream);
+    }
     if common::profiling() {
         CHANGES.with(|c| {
             let mut c = c.borrow_mut();
@@ -309,7 +314,9 @@ pub fn moved(id: u32) {
 /// A creature's `fighter` row was written or deleted.
 pub fn fought(id: u32) {
     mark(&FOUGHT, id, FIGHTER);
-    TARGET_DIRTY.with(|d| d.borrow_mut().insert(id));
+    if DELIVERY.with(Cell::get) {
+        TARGET_DIRTY.with(|d| d.borrow_mut().insert(id));
+    }
 }
 
 /// A creature's health moved (its band, or exact health where shown).
@@ -320,7 +327,9 @@ pub fn hurt(id: u32) {
 /// A creature's `doing` row was written or deleted.
 pub fn did(id: u32) {
     mark(&DID, id, DOING);
-    TARGET_DIRTY.with(|d| d.borrow_mut().insert(id));
+    if DELIVERY.with(Cell::get) {
+        TARGET_DIRTY.with(|d| d.borrow_mut().insert(id));
+    }
 }
 
 /// Profiling only: the time of a creature's first change after `since`, if still recorded.
@@ -347,27 +356,8 @@ pub fn scene(ctx: &ReducerContext, id: u32, who: Identity, seen: &HashSet<u32>, 
             *e = Viewer::new(who);
         }
         e.scene = Some(seen.clone());
-        // First, whoever is engaged with it (its move or visible act aimed at the viewer, or the
-        // viewer's at it), at any distance in sight and past the cap. Then, in the slots left of
-        // NEAR_MAX, the nearest within NEAR_M (NEAR_KEEP_M for one already near); one already near
-        // counts half a metre nearer, so a crowd's tier does not flap at the cut.
-        let engaged: HashSet<u32> = ENGAGED.with(|g| g.borrow().get(&id).map(|s| s.iter().copied().filter(|b| seen.contains(b)).collect()).unwrap_or_default());
-        let slots = NEAR_MAX.saturating_sub(engaged.len());
-        let mut cand: Vec<(f32, u32)> = seen
-            .iter()
-            .filter(|b| !engaged.contains(b))
-            .filter_map(|b| {
-                let d = *dist.get(b)?;
-                let was = e.near.contains(b);
-                (d <= NEAR_M || (was && d <= NEAR_KEEP_M)).then_some((if was { d - 0.5 } else { d }, *b))
-            })
-            .collect();
-        if cand.len() > slots {
-            cand.sort_unstable_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
-            cand.truncate(slots);
-            common::diag(|| "cues:near_capped", 1);
-        }
-        let near: HashSet<u32> = if tiers { engaged.iter().copied().chain(cand.into_iter().map(|(_, b)| b)).collect() } else { HashSet::new() };
+        let engaged = ENGAGED.with(|g| g.borrow().get(&id).cloned()).unwrap_or_default();
+        let near = near_set(tiers, &engaged, seen, dist, &e.near);
         let mut flips = Vec::new();
         NEAR_OF.with(|n| {
             let mut n = n.borrow_mut();
@@ -405,6 +395,34 @@ pub fn scene(ctx: &ReducerContext, id: u32, who: Identity, seen: &HashSet<u32>, 
 /// Whether `body` is in the near tier of viewer `id` (as its last sweep left it).
 pub fn is_near(id: u32, body: u32) -> bool {
     VIEWERS.with(|v| v.borrow().get(&id).is_some_and(|e| e.near.contains(&body)))
+}
+
+/// A viewer's near tier at a sweep. Off (`near_tier_on`): none, and nothing is worked out. On:
+/// first whoever is engaged with it (its move or visible act aimed at the viewer, or the viewer's
+/// at it), at any distance in sight and past the cap; then, in the slots left of [`NEAR_MAX`], the
+/// nearest within [`NEAR_M`] ([`NEAR_KEEP_M`] for one already near); one already near counts half
+/// a metre nearer, so a crowd's tier does not flap at the cut.
+fn near_set(tiers: bool, engaged: &HashSet<u32>, seen: &HashSet<u32>, dist: &HashMap<u32, f32>, was: &HashSet<u32>) -> HashSet<u32> {
+    if !tiers {
+        return HashSet::new();
+    }
+    let engaged: Vec<u32> = engaged.iter().copied().filter(|b| seen.contains(b)).collect();
+    let slots = NEAR_MAX.saturating_sub(engaged.len());
+    let mut cand: Vec<(f32, u32)> = seen
+        .iter()
+        .filter(|b| !engaged.contains(b))
+        .filter_map(|b| {
+            let d = *dist.get(b)?;
+            let already = was.contains(b);
+            (d <= NEAR_M || (already && d <= NEAR_KEEP_M)).then_some((if already { d - 0.5 } else { d }, *b))
+        })
+        .collect();
+    if cand.len() > slots {
+        cand.sort_unstable_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
+        cand.truncate(slots);
+        common::diag(|| "cues:near_capped", 1);
+    }
+    engaged.into_iter().chain(cand.into_iter().map(|(_, b)| b)).collect()
 }
 
 /// A viewer's near creatures no longer have it as a viewer.
@@ -545,17 +563,30 @@ pub fn deliver(ctx: &ReducerContext, now: u64, swept: &[u32]) {
         VIEWERS.with(|v| v.borrow_mut().insert(id, e));
     }
     let phase = common::span("tick.cues");
-    // Who is engaged with whom this tick; those engaged with a viewer join its near tier at once.
-    let ids: HashSet<u32> = humans.iter().map(|(h, _)| *h).collect();
-    let engaged = engaged_of(ctx, now, &ids);
-    engaged_tiers(ctx, now, &engaged);
-    if on {
-        let cue_budget = (CUE_ROWS_PER_TICK * budget / FRAME_ROWS_PER_TICK).max(CUE_ROWS_MIN);
-        cues(ctx, now, &served, &engaged, cue_budget, trace.as_mut());
-    } else {
-        // Nothing is owed while cues are off: what changes reaches clients at their frames.
+    // Both delivery laws off: main's path from here on (no engagements, no cue marks); what was
+    // kept for them goes once, at the change. An engagement under way when they are turned on
+    // again is known from its next move or act.
+    let delivery = on || tiers;
+    if DELIVERY.with(|d| d.replace(delivery)) && !delivery {
         PENDING.with(|p| p.borrow_mut().clear());
+        TARGETS.with(|t| t.borrow_mut().clear());
+        TARGET_DIRTY.with(|d| d.borrow_mut().clear());
+        ENGAGED.with(|e| e.borrow_mut().clear());
         VIEWERS.with(|v| v.borrow_mut().values_mut().for_each(|e| e.pending.clear()));
+    }
+    if delivery {
+        // Who is engaged with whom this tick; those engaged with a viewer join its near tier at once.
+        let ids: HashSet<u32> = humans.iter().map(|(h, _)| *h).collect();
+        let engaged = engaged_of(ctx, now, &ids);
+        engaged_tiers(ctx, now, &engaged);
+        if on {
+            let cue_budget = (CUE_ROWS_PER_TICK * budget / FRAME_ROWS_PER_TICK).max(CUE_ROWS_MIN);
+            cues(ctx, now, &served, &engaged, cue_budget, trace.as_mut());
+        } else {
+            // Nothing is owed while cues are off: what changes reaches clients at their frames.
+            PENDING.with(|p| p.borrow_mut().clear());
+            VIEWERS.with(|v| v.borrow_mut().values_mut().for_each(|e| e.pending.clear()));
+        }
     }
     drop(phase);
     if let Some(t) = trace {
@@ -845,7 +876,7 @@ fn frame(ctx: &ReducerContext, id: u32, v: &mut Viewer, now: u64, on: bool, mut 
         // The creatures cued since the last frame: a stream whose copy this frame does not write
         // is cued as it is now (`Cues` above).
         let mut cued = std::mem::take(&mut v.cued);
-        if std::mem::take(&mut v.reconcile) {
+        if std::mem::take(&mut v.reconcile) && on {
             cued = scene.iter().map(|b| (*b, ALL)).collect();
         }
         for &body in scene {
@@ -1235,6 +1266,36 @@ mod tests {
 
     fn cue(viewer: u32, body: u32, engaged: bool) -> Cue {
         (viewer, body, MOTION, false, 0, engaged)
+    }
+
+    #[test]
+    fn both_delivery_laws_off_take_main_s_path() {
+        // Off (DELIVERY false, as `deliver` sets it with both laws off): marks leave no cue owed
+        // and no target to read, and no near tier is worked out.
+        DELIVERY.with(|d| d.set(false));
+        PENDING.with(|p| p.borrow_mut().clear());
+        TARGET_DIRTY.with(|t| t.borrow_mut().clear());
+        moved(7);
+        fought(7);
+        hurt(7);
+        did(7);
+        assert!(PENDING.with(|p| p.borrow().is_empty()), "a cue was owed with both laws off");
+        assert!(TARGET_DIRTY.with(|t| t.borrow().is_empty()), "a target was marked with both laws off");
+        assert!(MOVED.with(|m| m.borrow().contains_key(&7)), "the frames' own marks are kept, as on main");
+        let seen: HashSet<u32> = (1..=40).collect();
+        let dist: HashMap<u32, f32> = (1..=40).map(|b| (b, b as f32 * 0.2)).collect();
+        let engaged: HashSet<u32> = [3].into_iter().collect();
+        assert!(near_set(false, &engaged, &seen, &dist, &HashSet::new()).is_empty());
+        // On: the same marks owe cues and mark targets; the near tier is engaged first, then the
+        // nearest up to the cap.
+        DELIVERY.with(|d| d.set(true));
+        moved(8);
+        did(8);
+        assert_eq!(PENDING.with(|p| p.borrow().get(&8).copied()), Some(MOTION | DOING));
+        assert!(TARGET_DIRTY.with(|t| t.borrow().contains(&8)));
+        let near = near_set(true, &engaged, &seen, &dist, &HashSet::new());
+        assert_eq!(near.len(), NEAR_MAX);
+        assert!(near.contains(&3));
     }
 
     #[test]
