@@ -543,7 +543,8 @@ fn retry_after(headers: &reqwest::header::HeaderMap, now: std::time::SystemTime)
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Prompt {
     NeedsPreparation,
-    Preparing,
+    /// Since when: preparation times set how far ahead turns prepare ([`Queue::lookahead`]).
+    Preparing(Instant),
     Ready,
 }
 
@@ -554,6 +555,9 @@ struct Waiting {
     cost: u64,
     prompt: Prompt,
 }
+
+/// How far back the shared pool's grant rate is measured ([`Queue::lookahead`]).
+const GRANT_WINDOW: Duration = Duration::from_secs(10);
 
 struct Queue {
     rates: HashMap<String, Rate>,
@@ -570,22 +574,39 @@ struct Queue {
     concurrency: usize,
     global_rpm: f64,
     global_next: Instant,
+    /// Weighted turns a lane lost while its next call was still preparing, to be given back
+    /// before the rotation's own ([`Queue::candidate`]); at most the lane's share of a cycle.
+    owed: std::collections::BTreeMap<Lane, usize>,
+    /// Recent shared-pool grants, and the mean preparation time (ms, decaying): together the
+    /// slots expected to free while one prompt is prepared.
+    grants: VecDeque<Instant>,
+    preparation_ms: f64,
 }
 
-impl Waiting {
-    fn eligible(&self, can_prepare: bool) -> bool {
-        self.prompt == Prompt::Ready || (self.prompt == Prompt::NeedsPreparation && can_prepare)
-    }
+/// What a waiting ticket may do now ([`Queue::poll`]).
+#[derive(Debug, PartialEq)]
+enum Step {
+    Wait,
+    /// Read the latest request and build the prompt; the ticket keeps its place, no slot yet.
+    Prepare,
+    /// Take a model slot in this lane (and probe this gated host).
+    Start(Lane, Option<String>),
+}
+
+/// A lane's admissions in one cycle of the weighted rotation.
+fn share(lane: Lane) -> usize {
+    NON_INTERACTIVE_ADMISSIONS.iter().filter(|l| **l == lane).count()
 }
 
 impl Queue {
-    /// The first waiting request of `lane` whose profile may send now (rate and outage gates).
-    fn ready_in(&mut self, lane: Lane, now: Instant, can_prepare: bool) -> Option<u64> {
+    /// The first waiting request of `lane` with its prompt ready whose profile may send now
+    /// (rate and outage gates).
+    fn ready_in(&mut self, lane: Lane, now: Instant) -> Option<u64> {
         // Keep a paced lane's turn so cheaper requests cannot consume its token budget forever.
         let (rates, gates, hosts) = (&mut self.rates, &self.gates, &self.hosts);
         self.waiting
             .iter()
-            .filter(|w| w.lane == lane && w.eligible(can_prepare))
+            .filter(|w| w.lane == lane && w.prompt == Prompt::Ready)
             .find(|w| {
                 let gate = gates.get(&hosts[&w.profile]);
                 gate.is_none_or(|g| g.retry_at.is_none_or(|at| g.probing.is_none() && now >= at)) && rates.get_mut(&w.profile).unwrap().ready_at(w.cost, now) <= now
@@ -593,35 +614,133 @@ impl Queue {
             .map(|w| w.id)
     }
 
+    fn has_ready(&self, lane: Lane) -> bool {
+        self.waiting.iter().any(|w| w.lane == lane && w.prompt == Prompt::Ready)
+    }
+
+    fn lower_limit(&self) -> usize {
+        self.concurrency.saturating_sub((self.concurrency / 4).max(1)).max(1)
+    }
+
+    /// The weighted lanes in rotation order from the current turn.
+    fn lanes_from_turn(&self) -> Vec<Lane> {
+        let mut lanes = Vec::with_capacity(3);
+        for offset in 0..NON_INTERACTIVE_ADMISSIONS.len() {
+            let lane = NON_INTERACTIVE_ADMISSIONS[(self.next_lane + offset) % NON_INTERACTIVE_ADMISSIONS.len()];
+            if !lanes.contains(&lane) {
+                lanes.push(lane);
+            }
+        }
+        lanes
+    }
+
+    /// The next ready call to take a slot. Only ready prompts compete; a turn still preparing
+    /// does not hold a slot, and its lane keeps the turn it misses (`owed`).
     fn candidate(&mut self, now: Instant) -> Option<u64> {
         if now < self.global_next {
             return None;
         }
-        // Bound preparation work without taking any transport slots. Skip work already
-        // preparing so other callers can dispatch while its prompt is built.
-        let preparing = self.waiting.iter().filter(|w| w.prompt == Prompt::Preparing).count();
-        let can_prepare = preparing < (self.concurrency / 16).max(1);
         // The fast lane's own slots: it never waits behind the shared pool, and never takes it.
-        if self.fast_in_flight < self.fast_slots && self.waiting.iter().any(|w| w.lane == Lane::Fast) {
-            if let Some(id) = self.ready_in(Lane::Fast, now, can_prepare) {
+        if self.fast_in_flight < self.fast_slots && self.has_ready(Lane::Fast) {
+            if let Some(id) = self.ready_in(Lane::Fast, now) {
                 return Some(id);
             }
         }
         if self.in_flight >= self.concurrency {
             return None;
         }
-        let lane = if self.waiting.iter().any(|w| w.lane == Lane::Interactive && w.eligible(can_prepare)) {
-            Lane::Interactive
-        } else {
-            (0..NON_INTERACTIVE_ADMISSIONS.len())
-                .map(|offset| NON_INTERACTIVE_ADMISSIONS[(self.next_lane + offset) % NON_INTERACTIVE_ADMISSIONS.len()])
-                .find(|lane| self.waiting.iter().any(|w| w.lane == *lane && w.eligible(can_prepare)))?
-        };
-        let lower_limit = self.concurrency.saturating_sub((self.concurrency / 4).max(1)).max(1);
-        if lane != Lane::Interactive && self.lower_in_flight >= lower_limit {
+        if self.has_ready(Lane::Interactive) {
+            return self.ready_in(Lane::Interactive, now);
+        }
+        if self.lower_in_flight >= self.lower_limit() {
             return None;
         }
-        self.ready_in(lane, now, can_prepare)
+        // A lane whose turn went by while its next call was preparing has it back first.
+        if let Some(lane) = self.lanes_from_turn().into_iter().find(|l| self.owed.get(l).is_some_and(|n| *n > 0) && self.has_ready(*l)) {
+            return self.ready_in(lane, now);
+        }
+        let lane = (0..NON_INTERACTIVE_ADMISSIONS.len())
+            .map(|offset| NON_INTERACTIVE_ADMISSIONS[(self.next_lane + offset) % NON_INTERACTIVE_ADMISSIONS.len()])
+            .find(|lane| self.has_ready(*lane))?;
+        self.ready_in(lane, now)
+    }
+
+    /// How many tickets beyond the free slots may hold a prepared or preparing prompt: the
+    /// slots expected to free while one prompt is prepared (recent grant rate times the mean
+    /// preparation time, with a quarter's margin), at least one per sixteen slots.
+    fn lookahead(&mut self, now: Instant) -> usize {
+        while self.grants.front().is_some_and(|at| now.saturating_duration_since(*at) > GRANT_WINDOW) {
+            self.grants.pop_front();
+        }
+        let per_s = self.grants.len() as f64 / GRANT_WINDOW.as_secs_f64();
+        let cover = (per_s * self.preparation_ms / 1000.0 * 1.25).ceil() as usize;
+        cover.max((self.concurrency / 16).max(1)).min(self.concurrency)
+    }
+
+    /// The shared pool's waiting tickets, the first `limit` in the order they are expected to
+    /// take slots: Interactive, then lanes owed a turn, then the weighted rotation, where a lane
+    /// keeps its turn while it has any ticket waiting.
+    fn dispatch_order(&self, limit: usize) -> Vec<u64> {
+        let mut fifo: std::collections::BTreeMap<Lane, VecDeque<u64>> = Default::default();
+        for w in self.waiting.iter().filter(|w| w.lane != Lane::Fast) {
+            fifo.entry(w.lane).or_default().push_back(w.id);
+        }
+        let mut order: Vec<u64> = fifo.remove(&Lane::Interactive).unwrap_or_default().into();
+        for lane in self.lanes_from_turn() {
+            for _ in 0..self.owed.get(&lane).copied().unwrap_or(0) {
+                order.extend(fifo.get_mut(&lane).and_then(VecDeque::pop_front));
+            }
+        }
+        let mut position = self.next_lane;
+        while order.len() < limit && fifo.values().any(|f| !f.is_empty()) {
+            let lane = NON_INTERACTIVE_ADMISSIONS[position % NON_INTERACTIVE_ADMISSIONS.len()];
+            order.extend(fifo.get_mut(&lane).and_then(VecDeque::pop_front));
+            position += 1;
+        }
+        order.truncate(limit);
+        order
+    }
+
+    /// Whether turn `id` may prepare its prompt now: it is among the next tickets to take a
+    /// slot, as many as the free slots plus the lookahead. It needs no free slot itself, so
+    /// the turns that will fill the next slots prepare in parallel, and in the order they will
+    /// be served, every lane in its share.
+    fn may_prepare(&mut self, id: u64, now: Instant) -> bool {
+        if self.waiting.iter().any(|w| w.id == id && w.lane == Lane::Fast) {
+            let free = self.fast_slots.saturating_sub(self.fast_in_flight);
+            return self.waiting.iter().filter(|w| w.lane == Lane::Fast).take(free + 1).any(|w| w.id == id);
+        }
+        let free = self.concurrency.saturating_sub(self.in_flight).min(self.lower_limit().saturating_sub(self.lower_in_flight));
+        let limit = free + self.lookahead(now);
+        self.dispatch_order(limit).contains(&id)
+    }
+
+    /// What waiting ticket `id` may do now: begin preparing its prompt, take a slot, or wait.
+    fn poll(&mut self, id: u64, now: Instant) -> Step {
+        let prompt = self.waiting.iter().find(|w| w.id == id).unwrap().prompt;
+        match prompt {
+            Prompt::NeedsPreparation if self.may_prepare(id, now) => {
+                self.waiting.iter_mut().find(|w| w.id == id).unwrap().prompt = Prompt::Preparing(now);
+                Step::Prepare
+            }
+            Prompt::Ready if self.candidate(now) == Some(id) => {
+                let (lane, probe) = self.start(id, now);
+                Step::Start(lane, probe)
+            }
+            _ => Step::Wait,
+        }
+    }
+
+    /// Turn `id` has its prompt, with this estimated cost; it may now take a slot.
+    fn prepared(&mut self, id: u64, cost: u64, now: Instant) {
+        let waiter = self.waiting.iter_mut().find(|w| w.id == id).unwrap();
+        debug_assert!(matches!(waiter.prompt, Prompt::Preparing(_)));
+        if let Prompt::Preparing(since) = waiter.prompt {
+            let ms = now.saturating_duration_since(since).as_secs_f64() * 1000.0;
+            self.preparation_ms = if self.preparation_ms == 0.0 { ms } else { 0.8 * self.preparation_ms + 0.2 * ms };
+        }
+        waiter.prompt = Prompt::Ready;
+        waiter.cost = cost;
     }
 
     fn start(&mut self, id: u64, now: Instant) -> (Lane, Option<String>) {
@@ -641,9 +760,26 @@ impl Queue {
             return (w.lane, probe);
         }
         if w.lane != Lane::Interactive {
-            let offset = (0..NON_INTERACTIVE_ADMISSIONS.len()).find(|offset| NON_INTERACTIVE_ADMISSIONS[(self.next_lane + offset) % NON_INTERACTIVE_ADMISSIONS.len()] == w.lane).unwrap();
-            self.next_lane = (self.next_lane + offset + 1) % NON_INTERACTIVE_ADMISSIONS.len();
+            if let Some(owed) = self.owed.get_mut(&w.lane).filter(|n| **n > 0) {
+                // A turn given back; the rotation stays where it was.
+                *owed -= 1;
+            } else {
+                let offset = (0..NON_INTERACTIVE_ADMISSIONS.len()).find(|offset| NON_INTERACTIVE_ADMISSIONS[(self.next_lane + offset) % NON_INTERACTIVE_ADMISSIONS.len()] == w.lane).unwrap();
+                // Turns passed over for lanes with calls still preparing are owed to them.
+                for skipped in 0..offset {
+                    let lane = NON_INTERACTIVE_ADMISSIONS[(self.next_lane + skipped) % NON_INTERACTIVE_ADMISSIONS.len()];
+                    if self.waiting.iter().any(|w| w.lane == lane) {
+                        let owed = self.owed.entry(lane).or_default();
+                        *owed = (*owed + 1).min(share(lane));
+                    }
+                }
+                self.next_lane = (self.next_lane + offset + 1) % NON_INTERACTIVE_ADMISSIONS.len();
+            }
+            // A lane with nothing waiting loses what it was owed, as an empty lane loses its turn.
+            let waiting = &self.waiting;
+            self.owed.retain(|lane, n| *n > 0 && waiting.iter().any(|w| w.lane == *lane));
         }
+        self.grants.push_back(now);
         self.rates.get_mut(&w.profile).unwrap().sent(id, w.cost, now);
         self.in_flight += 1;
         self.lower_in_flight += usize::from(w.lane != Lane::Interactive);
@@ -735,6 +871,9 @@ impl Scheduler {
                 concurrency,
                 global_rpm,
                 global_next: now,
+                owed: Default::default(),
+                grants: VecDeque::new(),
+                preparation_ms: 0.0,
             }),
             changed: tokio::sync::Notify::new(),
         }
@@ -761,11 +900,7 @@ impl Scheduler {
     }
 
     fn prompt_ready(&self, admission: &Admission<'_>, cost: u64) {
-        let mut q = self.queue.lock().unwrap();
-        let waiter = q.waiting.iter_mut().find(|w| w.id == admission.id).unwrap();
-        debug_assert!(waiter.prompt == Prompt::Preparing);
-        waiter.prompt = Prompt::Ready;
-        waiter.cost = cost;
+        self.queue.lock().unwrap().prepared(admission.id, cost, Instant::now());
         self.changed.notify_waiters();
     }
 
@@ -781,18 +916,19 @@ impl Scheduler {
                     return Err(anyhow!("estimated request tokens {} exceed {} tokens_per_minute", waiting.cost, waiting.profile));
                 }
                 let now = Instant::now();
-                if q.candidate(now) == Some(admission.id) {
-                    let waiting = q.waiting.iter_mut().find(|w| w.id == admission.id).unwrap();
-                    if waiting.prompt == Prompt::NeedsPreparation {
-                        waiting.prompt = Prompt::Preparing;
-                    } else {
-                        let (lane, probe) = q.start(admission.id, now);
+                match q.poll(admission.id, now) {
+                    Step::Wait => {}
+                    Step::Prepare => {
+                        self.changed.notify_waiters();
+                        return Ok(admission);
+                    }
+                    Step::Start(lane, probe) => {
                         admission.lane = Some(lane);
                         admission.probe = probe;
                         admission.granted = Some(now);
+                        self.changed.notify_waiters();
+                        return Ok(admission);
                     }
-                    self.changed.notify_waiters();
-                    return Ok(admission);
                 }
             }
             tokio::select! { _ = changed => {}, _ = tokio::time::sleep(Duration::from_millis(50)) => {} }
@@ -1935,6 +2071,180 @@ mod tests {
         q.fast_slots = 2;
         q.start(2, now + Duration::from_secs(2));
         assert_eq!(q.candidate(now + Duration::from_secs(3)), Some(4), "more slots, the next fast call goes");
+    }
+
+    /// A deterministic load on 64 shared slots, stepped at the waiters' 50 ms poll. Thinks
+    /// enter as deliberation turns (they prepare before they may take a slot) and are followed
+    /// by a ready compile call in the same lane; consolidations enter ready.
+    struct Load {
+        seconds: u64,
+        urgent_per_s: f64,
+        routine_every_s: f64,
+        background_per_s: f64,
+        prepare_ms: u64,
+        think_ms: u64,
+        compile_ms: u64,
+        /// Tickets that are already queued at the start, all urgent thinks.
+        backlog: usize,
+    }
+
+    #[derive(Default)]
+    struct Served {
+        /// Enqueue to slot grant, seconds, per think lane, in grant order.
+        urgent_thinks: Vec<f64>,
+        routine_thinks: Vec<f64>,
+        /// Routine thinks enqueued before the last 15 s that never got a slot.
+        routine_left: usize,
+        /// Most turns preparing at once.
+        preparing_peak: usize,
+    }
+
+    fn simulate(load: Load) -> Served {
+        let models: ModelsFile = serde_json::from_value(json!({"default": "p", "profiles": {
+            "p": {"base_url": "x", "model": "m", "key_env": "unused", "requests_per_minute": 60000}
+        }}))
+        .unwrap();
+        let scheduler = Scheduler::new(&models, 64, 0.0);
+        let mut q = scheduler.queue.lock().unwrap();
+        let t0 = q.global_next;
+        // id -> (lane, a think turn, enqueued at ms)
+        let mut tickets: HashMap<u64, (Lane, bool, u64)> = HashMap::new();
+        let mut preparing: Vec<(u64, u64)> = vec![];
+        let mut flying: Vec<(u64, Lane, bool)> = vec![];
+        let mut served = Served::default();
+        let push = |q: &mut Queue, tickets: &mut HashMap<u64, (Lane, bool, u64)>, lane: Lane, think: bool, ms: u64| {
+            q.sequence += 1;
+            let prompt = if think { Prompt::NeedsPreparation } else { Prompt::Ready };
+            q.waiting.push_back(Waiting { id: q.sequence, profile: "p".into(), lane, cost: 10, prompt });
+            tickets.insert(q.sequence, (lane, think, ms));
+        };
+        for _ in 0..load.backlog {
+            push(&mut q, &mut tickets, Lane::Urgent, true, 0);
+        }
+        let (mut next_urgent, mut next_routine, mut next_background) = (0.0, 0.0, 0.0);
+        for step in 0..load.seconds * 20 {
+            let ms = step * 50;
+            let now = t0 + Duration::from_millis(ms);
+            let mut i = 0;
+            while i < flying.len() {
+                if flying[i].0 <= ms {
+                    let (_, lane, think) = flying.swap_remove(i);
+                    q.in_flight -= 1;
+                    q.lower_in_flight -= usize::from(lane != Lane::Interactive);
+                    if think {
+                        push(&mut q, &mut tickets, lane, false, ms);
+                    }
+                } else {
+                    i += 1;
+                }
+            }
+            preparing.retain(|&(done, id)| {
+                if done > ms {
+                    return true;
+                }
+                q.prepared(id, 10, now);
+                false
+            });
+            if ms + 1000 < load.seconds * 1000 {
+                while load.urgent_per_s > 0.0 && next_urgent <= ms as f64 {
+                    push(&mut q, &mut tickets, Lane::Urgent, true, ms);
+                    next_urgent += 1000.0 / load.urgent_per_s;
+                }
+                while load.routine_every_s > 0.0 && next_routine <= ms as f64 {
+                    push(&mut q, &mut tickets, Lane::Routine, true, ms);
+                    next_routine += 1000.0 * load.routine_every_s;
+                }
+                while load.background_per_s > 0.0 && next_background <= ms as f64 {
+                    push(&mut q, &mut tickets, Lane::Background, false, ms);
+                    next_background += 1000.0 / load.background_per_s;
+                }
+            }
+            // Every waiter looks at the queue until none of them can act.
+            'waiters: loop {
+                let ids: Vec<u64> = q.waiting.iter().map(|w| w.id).collect();
+                for id in ids {
+                    match q.poll(id, now) {
+                        Step::Wait => continue,
+                        Step::Prepare => preparing.push((ms + load.prepare_ms, id)),
+                        Step::Start(lane, _) => {
+                            let (_, think, enqueued) = tickets[&id];
+                            if think {
+                                let waited = (ms - enqueued) as f64 / 1000.0;
+                                match lane {
+                                    Lane::Urgent => served.urgent_thinks.push(waited),
+                                    _ => served.routine_thinks.push(waited),
+                                }
+                            }
+                            flying.push((ms + if think { load.think_ms } else { load.compile_ms }, lane, think));
+                            tickets.remove(&id);
+                        }
+                    }
+                    served.preparing_peak = served.preparing_peak.max(preparing.len());
+                    continue 'waiters;
+                }
+                break;
+            }
+        }
+        let cutoff = (load.seconds - 15) * 1000;
+        served.routine_left = tickets.values().filter(|(lane, think, at)| *lane == Lane::Routine && *think && *at < cutoff).count();
+        served
+    }
+
+    fn quantile(values: &[f64], q: f64) -> f64 {
+        let mut v = values.to_vec();
+        v.sort_by(f64::total_cmp);
+        v[((v.len() as f64 * q) as usize).min(v.len() - 1)]
+    }
+
+    /// Urgent turns arrive faster than the pool serves them, as in the 200-fighter battle, and a
+    /// routine turn arrives every three seconds; preparing a prompt takes 2 s (recall under
+    /// load). Routine keeps its share: each turn is prepared as soon as it is among the next to
+    /// be served and granted when ready. Before 2026-11-19 at most four turns prepared at once,
+    /// chosen by a rotation that passed over a lane whose turns were all unprepared: routine got
+    /// one think in 180 s (54 left), and urgent thinks waited 104 s at p90.
+    #[test]
+    fn steady_urgent_turns_leave_routine_turns_their_share() {
+        let served = simulate(Load {
+            seconds: 180,
+            urgent_per_s: 5.0,
+            routine_every_s: 3.0,
+            background_per_s: 1.0,
+            prepare_ms: 2000,
+            think_ms: 5000,
+            compile_ms: 4000,
+            backlog: 0,
+        });
+        let (r50, r90, rmax) = (quantile(&served.routine_thinks, 0.5), quantile(&served.routine_thinks, 0.9), quantile(&served.routine_thinks, 1.0));
+        let u90 = quantile(&served.urgent_thinks, 0.9);
+        println!(
+            "routine thinks {} p50 {r50:.2} p90 {r90:.2} max {rmax:.2} left {}; urgent thinks {} p90 {u90:.2}; preparing peak {}",
+            served.routine_thinks.len(), served.routine_left, served.urgent_thinks.len(), served.preparing_peak
+        );
+        assert_eq!(served.routine_left, 0, "every routine turn got a slot");
+        assert!(rmax < 4.0, "a routine turn waited {rmax:.2} s behind saturated urgent work");
+        assert!(u90 < 20.0, "urgent thinks waited {u90:.2} s at p90: preparation throttled the pool");
+    }
+
+    /// After a stall leaves the slots free and a backlog of turns queued, the turns prepare in
+    /// parallel, as many as there are free slots, instead of draining through a few preparations
+    /// (before 2026-11-19: four at a time, 28 of 40 granted in 40 s). The grants then follow
+    /// the profile's pacing at the waiters' 50 ms poll.
+    #[test]
+    fn a_backlog_prepares_in_parallel_when_slots_are_free() {
+        let served = simulate(Load {
+            seconds: 40,
+            urgent_per_s: 0.0,
+            routine_every_s: 0.0,
+            background_per_s: 0.0,
+            prepare_ms: 5000,
+            think_ms: 5000,
+            compile_ms: 4000,
+            backlog: 40,
+        });
+        let last = quantile(&served.urgent_thinks, 1.0);
+        println!("{} backlog thinks granted, last after {last:.2} s; preparing peak {}", served.urgent_thinks.len(), served.preparing_peak);
+        assert_eq!(served.urgent_thinks.len(), 40);
+        assert!(last < 8.0, "the last of the backlog waited {last:.2} s for 5 s preparations and 48 free slots");
     }
 
     #[test]
