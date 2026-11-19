@@ -210,21 +210,21 @@ def paint_skin(hf, look, rng, layer=None):
     # The nose: shade under the tip and round the wings, a soft flank up the bridge, the
     # nostrils; stronger on a grown man's or an old face.
     wid = hf.nose_wid
-    nl = look["nose_line"]
-    c.blob(0.0, zs + 0.0010, 0.0078 * wid, 0.0022, shade, 0.80, mirror=False)
-    c.blob(0.0, zs - 0.0012, 0.0042 * wid, 0.0015, line, 0.40, mirror=False)
-    c.blob(0.0088 * wid, zs + 0.0030, 0.0019, 0.0026, line, 0.60 * look["nostril"])
-    c.stroke([(0.0048 * wid, zs + 0.0010), (0.0080 * wid, zs + 0.0016), (0.0112 * wid, zs + 0.0034), (0.0122 * wid, zs + 0.0062)], 0.00042, line, 0.85 * look["nostril"], taper=(0.25, 0.45))
+    nl = 0.45 * look["nose_line"]
+    c.blob(0.0, zs + 0.0010, 0.0078 * wid, 0.0022, shade, 0.40, mirror=False)
+    c.blob(0.0, zs - 0.0012, 0.0042 * wid, 0.0015, line, 0.20, mirror=False)
+    c.blob(0.0088 * wid, zs + 0.0030, 0.0019, 0.0026, line, 0.32 * look["nostril"])
+    c.stroke([(0.0048 * wid, zs + 0.0010), (0.0080 * wid, zs + 0.0016), (0.0112 * wid, zs + 0.0034), (0.0122 * wid, zs + 0.0062)], 0.00042, line, 0.45 * look["nostril"], taper=(0.25, 0.45))
     t = np.clip((zn - z) / (zn - zt), 0, 1)
     flank = np.exp(-(((ax - lerp(0.0060, 0.0100, t) * wid * 1.05) / 0.0026) ** 2)) * smooth((zn - 0.006 - z) / 0.012) * smooth((z - zt - 0.002) / 0.008)
     c.blend(shade, 0.30 * nl * flank)
     c.blob(0.0, zt + 0.0035, 0.0028 * wid, 0.0030, mix(skin, (1.0, 0.97, 0.93), 0.5), 0.30 * nl, mirror=False)
     # The lips: a tint, fuller below; the line between them; shade beneath.
-    tint = look["lip_tint"]
+    tint = 0.40 * look["lip_tint"]
     lz = hf.mouth_line(x)
     u = np.clip(ax / mw, 0, 1.2)
-    up_h = 0.0040 * hf.lip * np.clip(1 - u**2.2, 0, None) ** 0.75 * (1 - 0.26 * np.exp(-((ax / 0.0036) ** 2)))
-    lo_h = 0.0060 * hf.lip * (1 - (u / 0.92) ** 2.0).clip(0) ** 0.62
+    up_h = 0.0022 * hf.lip * np.clip(1 - u**2.2, 0, None) ** 0.75 * (1 - 0.26 * np.exp(-((ax / 0.0036) ** 2)))
+    lo_h = 0.0033 * hf.lip * (1 - (u / 0.92) ** 2.0).clip(0) ** 0.62
     lip_soft = 0.0009
     upper = smooth((lz + up_h - z) / lip_soft + 0.5) * smooth((z - lz) / lip_soft + 0.5) * (u < 1.0)
     lower = smooth((z - (lz - lo_h)) / lip_soft + 0.5) * smooth((lz - z) / lip_soft + 0.5) * (u < 0.92)
@@ -232,13 +232,13 @@ def paint_skin(hf, look, rng, layer=None):
     if layer is None:
         c.blend(mix(lip, shade, 0.25), 0.90 * tint * upper)
         c.blend(lip, 0.80 * tint * lower)
-        c.blob(0.0, zm - 0.45 * 0.0060 * hf.lip, 0.0050, 0.0013, mix(lip, (1.0, 0.96, 0.92), 0.6), 0.45 * tint * lower, mirror=False)
+        c.blob(0.0, zm - 0.45 * 0.0033 * hf.lip, 0.0050, 0.0013, mix(lip, (1.0, 0.96, 0.92), 0.6), 0.45 * tint * lower, mirror=False)
     else:
         # The upper lip a little deeper, the lower fuller with a light on it.
         lay(mix(LIP_PIGMENT, (0.34, 0.09, 0.10), 0.35), 0.78 * tint * upper)
         lay(LIP_PIGMENT, 0.72 * tint * lower)
-        lay(mix(LIP_PIGMENT, (1.0, 0.90, 0.86), 0.75), 0.34 * tint * lower * blob_of(0.0, zm - 0.45 * 0.0060 * hf.lip, 0.0050, 0.0013, mirror=False))
-    c.blob(0.0, zm - 0.0060 * hf.lip - 0.0028, 0.0095, 0.0022, shade, 0.42, mirror=False)
+        lay(mix(LIP_PIGMENT, (1.0, 0.90, 0.86), 0.75), 0.34 * tint * lower * blob_of(0.0, zm - 0.45 * 0.0033 * hf.lip, 0.0050, 0.0013, mirror=False))
+    c.blob(0.0, zm - 0.0033 * hf.lip - 0.0028, 0.0095, 0.0022, shade, 0.17, mirror=False)
     pts = [(mw * t_, float(hf.mouth_line(np.array([mw * t_]))[0])) for t_ in np.linspace(0, 1.0, 12)]
     mouth_c = mix(look["mouth_line"], line, 0.2)
     c.stroke(pts, lambda a: 0.00052 - 0.00022 * a, mouth_c, 0.95, soft=0.0003)
@@ -411,7 +411,7 @@ def iris_lights(light_side=1.0, layer=True):
     lid = 1.0 - 0.55 * smooth((dz - 0.30) / 0.50)
     parts = [
         # The glow: a flame from the bottom toward the pupil, wide at the rim and narrowing as it rises.
-        (IRIS_GLOW, smooth((low - 0.06) / 0.38) * smooth((0.15 + 0.62 * low - np.abs(dx)) / 0.18) * inside * lid),
+        (IRIS_GLOW, smooth((-dz + 0.12) / 0.60) * smooth((0.70 - np.abs(dx)) / 0.22) * inside * lid),
         (IRIS_HOT, np.exp(-((dx / 0.34) ** 2 + ((dz + 0.66) / 0.24) ** 2)) * inside * lid),
     ]
     # Two pale streaks beside the glow, where light crosses the iris.
@@ -420,6 +420,10 @@ def iris_lights(light_side=1.0, layer=True):
     # A cool arc of sky along the rim under the lid, on the lit side.
     parts.append((IRIS_SKY, np.exp(-(((rr - 0.80) / 0.075) ** 2)) * smooth((dz - 0.10) / 0.25) * smooth((0.86 - dz) / 0.2) * smooth((dx * light_side + 0.55) / 0.5)))
     rgb, cover = np.zeros(dx.shape + (3,)), np.zeros(dx.shape)
+    # Use the overlay for the lid shadow and limbal ring so the calibrated
+    # iris source colour still drives every resident's recolour.
+    parts.append((((0.065, 0.045, 0.08), 0.80), smooth((dz + 0.06) / 0.53) * inside))
+    parts.append((((0.055, 0.035, 0.06), 0.90), smooth((rr - 0.72) / 0.10) * inside))
     for (colour, most), shape in parts:
         a = most * shape
         rgb = rgb * (1 - a)[..., None] + np.array(colour) * a[..., None]
@@ -429,7 +433,21 @@ def iris_lights(light_side=1.0, layer=True):
     out = np.empty(dx.shape + (4,))
     out[..., :3] = np.where(cover[..., None] > 1e-6, rgb / np.maximum(cover, 1e-6)[..., None], np.array(IRIS_GLOW[0]))
     out[..., 3] = (cover * keep) ** (LIGHTS_GAMMA if layer else 1.0)
+    if layer:
+        # The catchlight shares the iris disc and its eye weights; the separate
+        # half-weighted glint could pass behind the iris on composed heads.
+        glint = catchlight(dx, dz, light_side)
+        alpha = out[..., 3]
+        combined = glint + alpha * (1 - glint)
+        premul = glint[..., None] + out[..., :3] * (alpha * (1 - glint))[..., None]
+        out[..., :3] = premul / np.maximum(combined[..., None], 1e-8)
+        out[..., 3] = combined
     return out
+
+
+def catchlight(x, z, side):
+    radius = np.hypot((x - 0.27 * side) / 0.52, (z - 0.28) / 0.37)
+    return smooth((1 - radius) / 0.16)
 
 
 def lit_iris(iris, light_side=1.0):
@@ -504,11 +522,17 @@ def paint_far(hf, look, size=FAR):
         # The painted pupil loses contrast as the far tile is filtered down to a few pixels.
         pupil = on & (a * a + b * b < 0.54 ** 2)
         skin[pupil] *= 0.32
+        glint = catchlight(a, b, look.get("light_side", 1.0)) * on
+        skin += (np.array([1.0, 1.0, 0.985]) - skin) * glint[..., None]
     # The lash line, heavier toward the outer corner, and the brows as one stroke each. From
     # far off they are a texel or two wide, so they are drawn a little heavier than life.
     ss = np.linspace(-1.0, 1.0 + look["lash_wing"], 16)
     up = hf.lid(np.clip(ss, -1, 1))[0]
-    c.stroke([(hf.eye_x + hf.eye_w * s, hf.eye_z + u + 0.0006) for s, u in zip(ss, up)], lambda t: 0.0020 + 0.0022 * look["lash_k"] * smooth(t / 0.5), np.asarray(look["lash"]) * 0.55, 1.0, taper=(0.0, 0.12))
+    c.stroke([(hf.eye_x + hf.eye_w * s, hf.eye_z + u + 0.0006) for s, u in zip(ss, up)], lambda t: 0.0023 + 0.0025 * look["lash_k"] * smooth(t / 0.5), np.asarray(look["lash"]) * 0.55, 1.0, taper=(0.0, 0.12))
+    outer = np.linspace(0.22, 0.98, 10)
+    lower = hf.lid(outer)[1]
+    c.stroke([(hf.eye_x + hf.eye_w * s, hf.eye_z + z) for s, z in zip(outer, lower)],
+             0.0008, (0.53, 0.10, 0.13), 0.74, taper=(0.3, 0.4))
     top, bot = brow_shape(hf, 1)
     c.stroke([(xt, (zt + zb) / 2) for (xt, zt), (_, zb) in zip(top, bot)], lambda t: np.maximum(0.62 * hf.brow_w * brow_width(t), 0.0011), look["brow"], 0.92, taper=(0.1, 0.25))
     out[EYE_ROWS:] = c.img

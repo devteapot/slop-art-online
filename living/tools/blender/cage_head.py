@@ -318,6 +318,9 @@ class Cage:
                 else:
                     hi = mid
             jz.append(hi)
+        for col in range(C_EAR + 1):
+            depth = p.chin_y - p.at(jz[col], col, self.eye_f)[1]
+            jz[col] += jaw.get("rear_rise", 0.0) * smooth((depth - 0.20) / 0.20)
         self.jaw_z = jz
         grid = np.zeros((nrows, HALF, 3))  # x, y, z in H
         for name, z in top:
@@ -1176,9 +1179,3 @@ class CageFace(head_mesh.Face):
         # The iris's lights: the same disc 0.3 mm before it, behind the highlights, in the lips'
         # and blush's layer (face_paint.iris_lights), which the client does not recolour.
         m.add(head_mesh.turn(ip + np.array([0.0, 0.0003, 0.0]), ball, yaw, pitch), white, uv, faces, "lights", facing=head_mesh.FORWARD, eye=(side, 1.0))
-        hs = look.get("light_side", 1.0)
-        for hx, hz_, ring in head_mesh.glints(hs):
-            n_ = len(ring)
-            ring_ = [(cx + hx * rad, cz + hz_ * rad)] + [(cx + (hx + a_) * rad, cz + (hz_ + b_) * rad) for a_, b_ in ring]
-            gp = np.array([(x, iris_y(x, z) + 0.0006, z) for x, z in ring_])
-            m.add(head_mesh.turn(gp, ball, 0.5 * yaw, 0.5 * pitch), (1.0, 1.0, 0.985), None, [(0, 1 + i, 1 + (i + 1) % n_) for i in range(n_)], "glint", facing=head_mesh.FORWARD, eye=(side, 0.5))
