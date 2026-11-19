@@ -257,6 +257,7 @@ class Hair:
         # 1 the full model; less for the far model: the same locks on the same paths, with
         # longer steps along them and three vertices across in place of six.
         self.detail = float(detail)
+        self.full_cut = detail >= 1 and covered is None and spec["style"] in ("bob", "bob_parted", "long", "shag", "short", "tousled", "crop", "swept")
         self.covered = covered or (lambda p: -1.0)
         self.bald = bald or (lambda p: -1.0)
         self.comb = Comb(hf, body)
@@ -442,7 +443,7 @@ class Hair:
         # front of it as a thin tail.
         short = (lambda u: 0.0) if front_end is None else (lambda u: (front_end - z_end) * smooth((108 - abs(ang(u))) / 16))
         self.sheet(roots, "down", z_end=z_end, points=points, depth=depth, hem=lambda u: -back_drop * smooth((abs(ang(u)) - 95) / 60) + short(u), lift=0.004, g=g,
-                   chain=None if chain is None else (lambda u: chain(ang(u))), shade=-0.05, edges=(0.25, 0.25), tip_out=tip_out, groove=groove, splay=splay, gather=gather)
+                   chain=None if chain is None else (lambda u: chain(ang(u))), shade=-0.38 if self.full_cut else -0.05, edges=(0.25, 0.25), tip_out=tip_out, groove=groove, splay=splay, gather=gather)
 
     def over(self, z_end, points=3, depth=0.03, back_drop=0.0, g=30.0, chain=None, front=70.0, lift=0.009, tip_out=0.0, splay=0.0, gather=0.0, front_end=None, back_th=50.0):
         """From the parting across the top and down over the curtain, one sheet a side, fanning
@@ -543,31 +544,45 @@ class Hair:
         # A few thick locks, as the reference's fringe is: fewer and deeper points than the
         # hem of the sides and back, and uneven.
         locks = max(3, round(points * 0.6))
+        if self.full_cut:
+            # A recessed backing joins the fringe in shadow. Four overlapping
+            # pieces have different widths, slopes and tip positions.
+            self.sheet(roots, dirs, z_end=z_end + 0.010, points=locks, depth=0.014,
+                       hem=hem, lift=0.006, g=g, shade=-0.30, check=True)
+            for left, right, tip, notch in ((0, 4, 0.74, 0.022), (3, 8, 0.32, 0.017),
+                                             (7, 12, 0.72, 0.026), (11, 14, 0.43, 0.020)):
+                def edge(u):
+                    slope = (tip - u) / tip if u < tip else (u - tip) / (1 - tip)
+                    return hem((left + (right - left) * u) / (len(ts) - 1)) + notch * slope
+                self.sheet(roots[left:right + 1], dirs[left:right + 1], z_end=z_end,
+                           points=0, cols=11, hem=edge, lift=0.010, g=g, thick=0.004,
+                           off=0.002 + 0.001 * (left % 2), check=True, groove=0.0)
+            return
         if self.detail >= 1:
-            depth = max(depth, 0.012)
+            depth = max(depth, 0.019)
         else:
             depth = max(depth, 0.022)
         self.sheet(roots, dirs, z_end=z_end, points=locks, depth=depth * (0.5 + 0.5 * f), hem=hem, lift=0.011, g=g, shade=0.05, edges=(0.5, 0.5), splay=splay,
                    tip_out=tip_out, thick=0.0035, check=True, uneven=0.45, sharp=0.55)
 
     def strands(self, n, z=None, chain=None):
-        """Single strands that lift off the hair, as the reference's has: thin locks a little off
-        the sheets. With `z` (where hanging hair ends) they hang beside the sheets at the sides
-        and back and flick out at the end; without, they rise from the top of short hair and
-        stand up at the tip."""
+        """Finish a cut with cheek panels at Near or the existing lifted locks at Far."""
         if self.detail >= 1:
             if z is None:
                 # Keep the cropped crown continuous. The cap supplies its silhouette.
                 return
-            # Nest a pair of broad blades in each side curtain. Offset their
-            # roots and hems so the tips separate while the upper halves overlap.
+            # Overlap the curtain from the temple to the ear. The inner blade
+            # follows the cheek to the jaw, the wider blade turns into the side.
             for side in (-1, 1):
-                for angle, elevation, width, hem in ((63, 41, 0.043, 0.012), (80, 47, 0.052, 0.024)):
-                    az = side * (angle + self.u(-2, 2))
-                    end = max(z, -0.105) + hem
-                    self.lock(az, elevation, DOWN, z_end=end, length=0.45,
-                              width=width, lift=0.006, bulge=0.003, tip_out=-0.002,
-                              chain=-1 if chain is None else chain(az), taper=2.4)
+                for az0, az1, height, tip in ((48, 74, 54, -0.010), (64, 104, 60, 0.004)):
+                    az = side * np.linspace(az0, az1, 11)
+                    roots = self.comb.surface(az, np.linspace(height, height - 12, len(az)))
+                    end = max(z, self.hf.chin_z - 0.014) + tip
+                    self.sheet(roots, DOWN, z_end=end, points=2, depth=0.022,
+                               hem=lambda u: 0.039 * u, lift=0.009, g=48,
+                               edges=(0.70, 1.0), tip_out=-0.004, off=0.002,
+                               bulge=0.004, groove=0.35, check=True, sharp=0.72,
+                               chain=None if chain is None else lambda u: chain(side * lerp(az0, az1, u)))
             return
         for _ in range(n):
             if z is None:
@@ -703,6 +718,13 @@ class Hair:
     def _bob(self):
         # Cut to one line, the ends turned under.
         z = self.side_line()
+        if self.full_cut:
+            z = min(z, self.hf.chin_z + 0.018) - 0.25 * self.length
+            self.curtain(z + 0.012, points=5, depth=0.012, back_drop=0.008, tip_out=0.002)
+            self.over(z, points=3, depth=0.032, back_drop=0.008, tip_out=0.005, back_th=88.0)
+            self.bangs("swept" if abs(self.parting) > 0.45 else "straight", points=6)
+            self.strands(1, z=z)
+            return
         self.curtain(z, points=6, depth=0.010, back_drop=-0.010, tip_out=-0.010)
         self.over(z, points=4, depth=0.010, back_drop=-0.010, tip_out=-0.010, back_th=88.0)
         self.bangs("swept" if abs(self.parting) > 0.45 else "straight", points=6)
@@ -1070,6 +1092,8 @@ class Hair:
         loop, tube = sp["loop"], sp["tube"]
         Ls = np.array([float(np.linalg.norm(np.diff(path, axis=0), axis=1).sum()) for _, path, _ in cols])
         seg = (0.020 - 0.006 * self.curl) / self.detail
+        if self.full_cut:
+            seg *= 0.64
         R = int(np.clip(round(float(np.median(Ls)) / seg), 3 if self.detail >= 1 else 2, 26))
         C, S, ON = np.zeros((M, R + 1, 3)), np.zeros((M, R + 1)), np.zeros((M, R + 1), bool)
         for j, (_, path, touch) in enumerate(cols):
@@ -1109,6 +1133,11 @@ class Hair:
         swell = np.sin(np.pi * np.minimum(T / 0.40, 1.0)) if sp.get("hang") else np.sin(np.pi * np.minimum(T * 1.15, 1.0))
         stand = sp["off"] * (smooth(T / 0.25) * (1 - 0.6 * smooth((T - 0.35) / 0.3)) if sp.get("hang") else smooth(T / 0.25))
         rise = np.array([q[0]["bulge"] for q in cols])[:, None] * swell[None, :] + k0["tip_out"] * (T ** 2)[None, :] + stand[None, :]
+        if self.full_cut:
+            # Lift the whole outer envelope around the temples and crown.
+            # The cut returns to the head at the jaw and at the collar.
+            crown = smooth((C[..., 2] + 0.095) / 0.125)
+            rise += (0.004 + 0.003 * self.volume) * crown * smooth(T / 0.11)[None, :]
         F = C + OUT * (rise + th)[..., None]
         B = C + OUT * (rise - 0.35 * th)[..., None]
         # Colour: each point a shade of its own, slight; darker at the root, in the notches

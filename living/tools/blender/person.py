@@ -1598,7 +1598,7 @@ def make_hair(arm, spec, pos, quads, covered=None, bones=None):
     e1 /= np.linalg.norm(e1)
     e2 = np.cross(wn, e1)
     reps = 5.0
-    cap_c = np.array(HAIR) * 0.80 / hair.TEX_MEAN
+    cap_c = np.array(HAIR) * (0.80 if FAR or BALD > 0.01 else 0.58) / hair.TEX_MEAN
     cap_uv = []
     for p_, n_, d_ in zip(cp, cn, cd):
         verts.append(hw(p_ + n_ * (0.0010 + 0.0050 * smooth(d_ / 0.02))))

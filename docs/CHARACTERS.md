@@ -381,7 +381,7 @@ The figures are the woman preset's with every face value at 0, computed from `he
 3. **Combing.** Every lock is walked from its root in 6 mm steps. It keeps its direction, bends toward the ground, and is pushed out of the head, the neck or collar, and the shoulders (`Comb`), so it flows over the skull and then hangs. Hair that lands on a shoulder slides forward or back off it.
 4. **Curl** bends the walked path into waves.
 5. **Ribbons.** Each path becomes a closed lens-shaped ribbon: five vertices across a flat front with turned edges, one behind, tapering to a point or cut blunt. A broad lock on the head bends across to follow the skull. Its shading normals turn only a little across the lock, so the head of hair shades as one mass.
-6. **Colour and strands.** Colour is per vertex: the hair's colour, a tone of the lock's own, a darker root, grey hairs lock by lock. Each lock takes its own column of one grey strand texture (`hair.paint_strands`, 256×512, the same file for everyone, written beside the models as `strands.png`).
+6. **Colour and strands.** Colour is per vertex: the hair's colour, a tone of the lock's own, a darker root, grey hairs lock by lock. Each lock takes its own column of one grey strand texture (`hair.paint_strands`, 512×1024, the same file for everyone, written beside the models as `strands.png`). [Hair comparison and full look-book counts](character-hair/review.md).
 7. **Springs.** The locks of `long`, `tail`, `braid` and `braids` hang from chains of bones under the head (`J_Sec_Hair<chain>_<joint>`, a joint every 9 cm). The file's VRM block lists them with spheres on the head, neck and chest, and the game's spring bones swing them (`characters.rs`).
 
 A braid is short fat locks crossing from side to side along a hanging path; a bun is locks wound round a ball.
@@ -2549,7 +2549,7 @@ looks-tex-1 (2026-11-12, from the laptop's proposal `~/archive/looks-tex-1-propo
 | Far page | `pages/types-far.ktx2` | BC7 sRGB | 1280² | box |
 | Tint page (lips, blush, the iris lights) | `pages/types-tint.ktx2` | BC7 sRGB, alpha | 1600×720 | box |
 | Iris page | `pages/types-iris.ktx2` | BC7 sRGB | 192² | box |
-| Hair strands | `strands.ktx2` | BC7 sRGB | 256×512 | box |
+| Hair strands | `strands.ktx2` | BC7 sRGB | 512×1024 | box |
 
 - **Beside each `.ktx2`, its summary** `<name>.thumb.png`: 64×64, RGBA 16-bit, the client's `Thumb` cells (each cell's mean linear colour times alpha, and its mean alpha), so a KTX2 person's recolour source colours are the PNG person's. 16 bits, because 8-bit sRGB would round them by up to about 0.004 linear, the client's `SAME_SOURCE`, and split materials.
 - **The GLBs** name their pictures by `uri` (`<type>.atlas.ktx2`, `../pages/types-far.ktx2`, `../../strands.ktx2`, `<name>.ktx2`), with no `mimeType` or `bufferView`. Their binary chunk is repacked without the PNG: the other buffer views keep their order, on 4-byte boundaries, and every `bufferView` index is renumbered.
