@@ -1,9 +1,10 @@
-//! North-up follow camera and the legacy orbit rig for comparison.
+//! Top-down follow camera and the legacy orbit rig for comparison.
 
 use crate::controls::Input;
 use crate::net::Net;
 use crate::world::{Draw, Scene};
 use bevy::camera::CameraProjection;
+use bevy::input::gestures::RotationGesture;
 use bevy::input::mouse::AccumulatedMouseMotion;
 use bevy::pbr::{DistanceFog, FogFalloff};
 use bevy::prelude::*;
@@ -80,7 +81,7 @@ impl Mode {
     }
 }
 
-/// The north-up camera's persisted tuning. Distances in the stops are vertical heights.
+/// The top-down camera's persisted tuning. Distances in the stops are vertical heights.
 #[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(default)]
 pub struct Tuning {
@@ -202,9 +203,12 @@ pub struct Cam {
     pub pose: GlobalTransform,
     pub look_dir: Option<Vec2>,
     look_pointer: Option<Vec2>,
+    look_yaw: f32,
     /// Yaw shown (degrees, 0 = north up) and where it is going.
     pub shown_yaw: f32,
     yaw: f32,
+    top_yaw: f32,
+    middle_drag: Option<MiddleDrag>,
     /// Yaw the movement keys are relative to; it lags a turning camera while keys are held.
     control_yaw: f32,
     focus: Vec3,
@@ -256,6 +260,26 @@ const PULL_OUT: f32 = 3.0;
 const LIFT_UP: f32 = 10.0;
 const LIFT_DOWN: f32 = 2.5;
 
+const ROTATE_DRAG_PX: f32 = 6.0;
+const ROTATE_DEG_PER_PX: f32 = 0.3;
+
+#[derive(Default)]
+struct MiddleDrag {
+    offset: Vec2,
+    dragged: bool,
+}
+
+impl MiddleDrag {
+    fn turn(&mut self, delta: Vec2) -> f32 {
+        if self.dragged {
+            return delta.x * ROTATE_DEG_PER_PX;
+        }
+        self.offset += delta;
+        self.dragged = self.offset.length() >= ROTATE_DRAG_PX;
+        if self.dragged { self.offset.x * ROTATE_DEG_PER_PX } else { 0.0 }
+    }
+}
+
 fn axes(yaw_deg: f32) -> (Vec2, Vec2) {
     let y = yaw_deg.to_radians();
     // Yaw 0 looks north (−Z); positive yaw turns the view clockwise seen from above.
@@ -263,14 +287,15 @@ fn axes(yaw_deg: f32) -> (Vec2, Vec2) {
 }
 
 impl Cam {
-    /// Turn the view to a yaw (degrees); it eases there.
+    /// Set the scripted bearing in degrees. Orbit eases to it.
     pub fn set_yaw(&mut self, yaw: f32) {
         self.yaw = yaw;
+        self.top_yaw = yaw.rem_euclid(360.0);
     }
 
     /// Ground-plane unit vectors for "screen up" and "screen right" of the movement keys.
     pub fn control_axes(&self) -> (Vec2, Vec2) {
-        axes(if self.mode == Mode::TopDown { 0.0 } else { self.control_yaw })
+        axes(if self.mode == Mode::TopDown { self.shown_yaw } else { self.control_yaw })
     }
 }
 
@@ -403,7 +428,10 @@ pub fn follow(
     windows: Query<&Window>,
     ui: Res<crate::hud::UiWants>,
     (town, combat, island, mut pointer, solids): (Option<Res<crate::town::Town>>, Option<Res<crate::combat::Combat>>, Option<Res<crate::island::Island>>, ResMut<crate::pointer::Pointer>, Query<(&Transform, &crate::lookdev::Fitted), (With<crate::envs::Solid>, Without<Camera3d>)>),
-    (time, binds, prefs, live): (Res<Time>, Option<Res<crate::keys::Binds>>, Option<Res<crate::keys::Prefs>>, Option<Res<crate::live::Live>>),
+    (time, binds, prefs, live, windows_ui, mut rotation): (
+        Res<Time>, Option<Res<crate::keys::Binds>>, Option<Res<crate::keys::Prefs>>,
+        Option<Res<crate::live::Live>>, Option<Res<crate::ui::win::Windows>>, MessageReader<RotationGesture>,
+    ),
 ) {
     let Ok((mut tf, mut proj, mut camera, gtf, mut fog)) = q.single_mut() else { return };
     let dt = time.delta_secs();
@@ -416,6 +444,7 @@ pub fn follow(
         cam.align = None;
         cam.dismissed = None;
         cam.lift = 0.0;
+        cam.middle_drag = None;
     }
     cam.mode = mode;
     let top_down = mode == Mode::TopDown;
@@ -424,6 +453,8 @@ pub fn follow(
     // Where the cursor meets the ground, from the current camera (the game's cursor: `pointer.rs`).
     let window = windows.single().ok();
     let screen_size = window.as_ref().map_or(crate::capture::size().as_vec2(), |w| Vec2::new(w.width(), w.height()));
+    // macOS reports counterclockwise degree deltas. Camera bearings increase clockwise.
+    let gesture = rotation.read().map(|g| -g.0).sum::<f32>();
     let cursor = pointer.pos.map(|c| (c, screen_size));
 
     // Turn by pointing: outside the middle zone of the screen the view turns toward the cursor's
@@ -517,7 +548,46 @@ pub fn follow(
         cam.control_yaw = if input.moving { cam.control_yaw + diff(cam.shown_yaw, cam.control_yaw) * ease(2.0) } else { cam.shown_yaw };
 
     } else {
-        cam.shown_yaw = 0.0;
+        use crate::keys::{Act, Bind};
+        let enabled = prefs.as_ref().is_none_or(|p| p.camera_rotate);
+        let controls_free = enabled && !input.demo && !ui.menu && !ui.keyboard && !pointer.hold
+            && window.as_ref().is_none_or(|w| w.focused)
+            && windows_ui.as_ref().is_none_or(|w| !w.is_open(crate::ui::win::Win::Settings));
+        let free = controls_free && !ui.over();
+        let middle_free = binds.as_ref().and_then(|b| b.holder(Bind::Mouse(MouseButton::Middle)))
+            .is_none_or(|(a, _)| a == Act::NorthUp);
+        if !free || !middle_free {
+            cam.middle_drag = None;
+        } else if mouse.just_pressed(MouseButton::Middle) {
+            cam.middle_drag = Some(MiddleDrag::default());
+        }
+        let mut turn = 0.0;
+        let mut tapped = false;
+        if let Some(drag) = &mut cam.middle_drag {
+            if mouse.pressed(MouseButton::Middle) || mouse.just_released(MouseButton::Middle) {
+                turn = drag.turn(motion.delta);
+            }
+            if mouse.just_released(MouseButton::Middle) {
+                tapped = !drag.dragged;
+            }
+            if !mouse.pressed(MouseButton::Middle) {
+                cam.middle_drag = None;
+            }
+        }
+        let snap_key = controls_free && binds.as_ref().is_some_and(|b| b.get(Act::NorthUp).iter().any(|bind| match *bind {
+            Bind::Key(key) => keys.just_pressed(key),
+            Bind::Mouse(button) if button != MouseButton::Middle => free && mouse.just_pressed(button),
+            _ => false,
+        }));
+        if !enabled || snap_key || tapped {
+            cam.top_yaw = 0.0;
+        } else if free {
+            let gain = prefs.as_ref().map_or(1.0, |p| {
+                if p.camera_rotate_invert { -p.camera_rotate_speed } else { p.camera_rotate_speed }
+            });
+            cam.top_yaw = (cam.top_yaw + (turn + gesture) * gain).rem_euclid(360.0);
+        }
+        cam.shown_yaw = cam.top_yaw;
         cam.align_request = false;
         cam.top_zoom.target = (cam.top_zoom.target + tuning.wheel_step * pointer.wheel_notches + 1.0 - pointer.pinch_factor).clamp(0.0, 1.0);
         cam.top_zoom.shown += (cam.top_zoom.target - cam.top_zoom.shown) * ease(tuning.easing_rate);
@@ -568,7 +638,8 @@ pub fn follow(
             cam.focus = me + Vec3::Y * height * CHEST_FRACTION;
         }
         let back = v.distance / v.pitch.to_radians().tan();
-        tf.translation = cam.focus + Vec3::new(0.0, v.distance, back);
+        let (up, _) = axes(cam.shown_yaw);
+        tf.translation = cam.focus + Vec3::new(-up.x * back, v.distance, -up.y * back);
     } else {
         // The view, brought in along the tilt toward the ground when sight is short.
         let mut orbit_view = r.view;
@@ -723,15 +794,38 @@ pub fn cursor_hit(
             None => None,
         }
     });
-    if cam.mode == Mode::Orbit || cam.look_pointer != pointer.pos || pointer.tapped || cam.cursor_ground.is_none() || cam.look_dir.is_none() {
+    // Zoom alone keeps the last look under a stationary pointer. Rotation changes the screen axes.
+    if cam.mode == Mode::Orbit || cam.look_pointer != pointer.pos || cam.look_yaw != cam.shown_yaw
+        || pointer.tapped || cam.cursor_ground.is_none() || cam.look_dir.is_none()
+    {
         cam.look_dir = cam.cursor_ground.zip(target.0).map(|(hit, me)| (hit - me).xz()).filter(|d| d.length_squared() > 0.09);
         cam.look_pointer = pointer.pos;
+        cam.look_yaw = cam.shown_yaw;
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_middle_tap_does_not_turn_the_camera() {
+        let mut drag = MiddleDrag::default();
+        assert_eq!(drag.turn(Vec2::new(3.0, 1.0)), 0.0);
+        assert!(!drag.dragged);
+        assert_eq!(drag.turn(Vec2::new(5.0, -1.0)), 8.0 * ROTATE_DEG_PER_PX);
+        assert!(drag.dragged);
+        assert_eq!(drag.turn(Vec2::new(-1.0, 0.0)), -ROTATE_DEG_PER_PX);
+    }
+
+    #[test]
+    fn top_down_movement_uses_the_displayed_bearing() {
+        let cam = Cam { mode: Mode::TopDown, shown_yaw: 135.0, control_yaw: 0.0, ..default() };
+        let (up, right) = cam.control_axes();
+        let diagonal = std::f32::consts::FRAC_1_SQRT_2;
+        assert!(up.distance(Vec2::splat(diagonal)) < 1e-6);
+        assert!(right.distance(Vec2::new(-diagonal, diagonal)) < 1e-6);
+    }
 
     #[test]
     fn top_down_curve_hits_the_knots_and_clamps() {

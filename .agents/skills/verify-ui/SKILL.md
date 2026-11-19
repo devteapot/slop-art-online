@@ -59,6 +59,7 @@ The live script's steps for the UI (`living/game/src/live.rs`, its doc comment h
 | `reconnect` | Closes the player socket so the regular reconnect path runs. |
 | `notches:N` | Sends a line-wheel event through the pointer. Positive zooms in over the world or scrolls the window under the cursor. |
 | `pan:PX`, `drag:PX`, `pinch:F`, `frame:0` | A two-finger pan or left drag (Orbit turns), a pinch through either camera's zoom path, or disabling context framing (the dump's `extra.cursor`, `extra.view` and `extra.cursor_ground` show what they did) |
+| `mouse:middle:down\|up`, `motion:DX,DY`, `rotate:DEG` | Middle-button input, one frame of mouse motion, and a clockwise native rotation message. Combine middle-button press, motion and release to drive the top-down drag threshold. |
 
 Tags (`ui/hit.rs` `Tag`; a tag that is the start of another finds it, so `@acts:0:give` finds `acts:0:give:3`):
 - buttons and Menu: `pack`, `menu`, `menu:Character|Skills|Log|Settings|Leave`;
@@ -68,7 +69,7 @@ Tags (`ui/hit.rs` `Tag`; a tag that is the start of another finds it, so `@acts:
 - the log: `log:tab:0|1|2` (Heard, People, Events), `log:person:<I>`;
 - the list of acts: `acts:0:<skill>:<I>` (`talk`, `window`, `introduce`, `give`, `more`, …), its sub-list `acts:1:<item>:<I>`;
 - the pack: `pack:<item>:<I>`; know-how: `skill:<I>`; the tip: `tip:ok`, `tip:all`;
-- Settings: `settings:page:play|controls|camera`, `settings:facing:cursor|natural`, `settings:camera:top-down|orbit`, `settings:theme:glass|clear|night|linen|walnut`, `settings:look_walk:head|chest|loose`, `settings:control:travel|cursor`, `settings:sight:unseen|limited|fade`, `settings:look:shade|memory|grey|wash|lantern|shadows|hatch`, `settings:film:soft|screen|off`, `settings:hair:crown|soft|today`, `settings:facing_sight` (the switch; shown only with the admin link), `settings:walk:2.6|3.0|3.4` (the walk law's choices; shown only with the admin link and the law in the script), `settings:auto_draw`, `settings:tips`, `settings:tips_again`, `settings:preset:letters|numbers|own`, `bind:<Act>:<slot>`.
+- Settings: `settings:page:play|controls|rotation|camera`, `settings:facing:cursor|natural`, `settings:camera:top-down|orbit`, `settings:theme:glass|clear|night|linen|walnut`, `settings:look_walk:head|chest|loose`, `settings:control:travel|cursor`, `settings:sight:unseen|limited|fade`, `settings:look:shade|memory|grey|wash|lantern|shadows|hatch`, `settings:film:soft|screen|off`, `settings:hair:crown|soft|today`, `settings:facing_sight` (the switch; shown only with the admin link), `settings:walk:2.6|3.0|3.4` (the walk law's choices; shown only with the admin link and the law in the script), `settings:auto_draw`, `settings:tips`, `settings:tips_again`, `settings:preset:letters|numbers|own`, `bind:<Act>:<slot>`.
 
 Facing sight (`check.py field`, [features/field.md](features/field.md)): drive.py's `--admin-link` gives the client the world admin's token in a mode-600 file it deletes after the drive, as `play.py` does for a scene with `"law_toggle": true`; a `--sync NAME='sql|QUERY;…'` call snapshots the authority (owner SQL, `{me}`, `{ident}`) into `scene.json`'s `snaps`. Use `client_sql|QUERY` in a sync to snapshot a view as the game client identity.
 
@@ -77,11 +78,11 @@ Scenes: `--sync NAME='player|REDUCER|ARG|…'` acts as verify.py's player identi
 
 drive.py's other options (its docstring): `--expect REGEX` (repeatable) must match client.log, else exit 1; `--size WxH` (default `1600x900`); `--token FILE` plays another character (default the run's `ui/player.token`); `--player NAME` (default "Verifier"); `--client PATH` (default `$CARGO_TARGET_DIR/release/living-game`, else `.local/target/release/living-game`); `--admin-link` (above); `--timeout S` (default 600; check.py passes 420). `LIVING_STDB_URL` points it at a worker's own server (default `http://127.0.0.1:3300`).
 
-Pass `camera`, `camera-lod`, `camera-faces`, `camera-tuning`, `camera-lol` or `camera-lol-ridge` explicitly for the dedicated Brackenford fixtures in [camera.md](features/camera.md).
+Pass `camera`, `camera-rotate`, `camera-lod`, `camera-faces`, `camera-tuning`, `camera-lol` or `camera-lol-ridge` explicitly for the dedicated Brackenford fixtures in [camera.md](features/camera.md).
 
 Pass `gaze` on a Cullet scratch world to exercise the zoom bands, reconnect and the authored hedge. [Gaze evidence and setup](features/gaze.md).
 
-Developer camera controls (`LIVING_GAME_DEV=1`): `settings:camera_preset:ours-fixed|ours|supervive|lol|corepunk`, `settings:camera_pitch:curve|fixed|late`, `settings:camera_slider:height|pitch|fov:far|middle|near`, `settings:camera_slider:pitch:fixed`, `settings:camera_slider:tilt_start|near_pitch|wheel|easing` and `settings:camera_copy`. The tuning drive exports `camera-tuning.json` beside its `settings.json`.
+Developer camera controls (`LIVING_GAME_DEV=1`): `settings:camera_preset:ours-fixed|ours|supervive|lol|corepunk`, `settings:camera_pitch:curve|fixed|late`, `settings:camera_slider:height|pitch|fov:far|middle|near`, `settings:camera_slider:pitch:fixed`, `settings:camera_slider:tilt_start|near_pitch|wheel|easing` and `settings:camera_copy`. The tuning drive exports `camera-tuning.json` beside its `settings.json`, including the current bearing. Settings › Camera (`settings:page:rotation`) uses `settings:camera_rotate`, `settings:camera_rotate_speed:0.5|1|2`, and `settings:camera_rotate_invert`. The north snap binding is `bind:NorthUp:0`.
 
 ## Evidence
 
