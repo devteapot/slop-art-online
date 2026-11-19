@@ -1,0 +1,15 @@
+jersey_coat-m    under coat-m           rest   clear   by   -1.0 mm at most (t 0.00 s, on -, 0 vertices); in 0 of 1 poses
+jersey_coat-m    under coat-m           sit_ground clear   by   -0.3 mm at most (t 5.98 s, on J_Bip_C_UpperChest, 0 vertices); in 0 of 8 poses
+jersey_coat-m    under coat-m           sit_idle clear   by   -1.0 mm at most (t 0.00 s, on -, 0 vertices); in 0 of 8 poses
+jersey_coat-m    under trousers-m       rest   clear   by   -1.0 mm at most (t 0.00 s, on -, 0 vertices); in 0 of 1 poses
+jersey_coat-m    under trousers-m       sit_ground THROUGH by    7.6 mm at most (t 0.00 s, on J_Bip_C_Hips, 1 vertices); in 2 of 8 poses
+jersey_coat-m    under trousers-m       sit_idle clear   by   -1.0 mm at most (t 0.00 s, on -, 0 vertices); in 0 of 8 poses
+trousers-m       under coat-m           rest   clear   by   -1.0 mm at most (t 0.00 s, on -, 0 vertices); in 0 of 1 poses
+trousers-m       under coat-m           sit_ground clear   by   -1.0 mm at most (t 0.00 s, on -, 0 vertices); in 0 of 8 poses
+trousers-m       under coat-m           sit_idle clear   by   -1.0 mm at most (t 0.00 s, on -, 0 vertices); in 0 of 8 poses
+coat-m           sit_ground: ground       0.0 mm below
+  0 vertices beyond 5 mm at most in one pose
+coat-m           sit_idle: seat top    79.0 mm below
+coat-m           sit_idle: seat back  127.3 mm behind
+  355 vertices beyond 5 mm at most in one pose
+cloth_check: 3 pairs of pieces over 17 poses: 1 pair/clip results come through by more than 2.0 mm
