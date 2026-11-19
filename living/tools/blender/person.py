@@ -3097,6 +3097,11 @@ def main():
         if a.atelier and not far:
             from authored import atelier
             atelier.dress(parts, arm, spec, raw_object)
+        elif not far and not a.body and a.variant in ("piece:coat-m", "piece:coat-f", "piece:jersey-m", "piece:jersey-f"):
+            from authored import garment_panels
+            garment_name = "Coat" if spec["coat"] == "coat" else "Jersey"
+            garment = next(ob for ob in parts if ob.name == garment_name)
+            parts.extend(garment_panels.fitted(garment, arm, raw_object))
         shaded = False
         if a.parts == "keep" and not a.no_shade:
             # An outfit piece is shaded as it is worn, with the rest of the outfit and the body
