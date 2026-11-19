@@ -168,6 +168,7 @@ pub struct TargetFacts {
 
 #[derive(Clone, Debug, Default)]
 pub struct SkillCtx {
+    pub gaze_band: crate::sight::GazeBand,
     pub actor: ActorFacts,
     pub target: TargetFacts,
     pub item: String,
@@ -530,6 +531,12 @@ pub struct Laws {
     /// Sight depends on facing (the `field` of `senses(a)`; the geometry is the `fov_*` laws,
     /// read by the script).
     pub fov_on: bool,
+    pub cover_cliff_step_m: f32,
+    pub cover_brush_min_fill: f32,
+    pub cover_brush_on: bool,
+    pub cover_eye_height_m: f32,
+    pub gaze_on: bool,
+    pub cover_sight_on: bool,
     /// How far a character sees ground by day (metres): the cells of `known_ground` it marks
     /// (docs/MOVEMENT_MIND.md, step 3). At night, its own sight.
     pub ground_sight_m: f32,
@@ -663,6 +670,8 @@ pub struct Laws {
     /// Diagnostic: every structure a look skips is checked to have its `familiar` row (it would
     /// not have been new), and one without is logged and counted (`notice_delta:differed`).
     pub notice_delta_check: bool,
+    pub seen_ranges: bool,
+    pub seen_ranges_check: bool,
     /// The fast lane (docs/FAST_LANE.md): a mind-run character's re-plan between blows, asked
     /// of its mind on a blow taken or a move it sees repeated. Off: none is asked.
     pub fast_lane_on: bool,
@@ -743,6 +752,12 @@ impl Default for Laws {
             longing_after_min: 20.0,
             longing_food: 0.0,
             fov_on: false,
+            cover_cliff_step_m: 2.0,
+            cover_brush_min_fill: 0.6,
+            cover_brush_on: true,
+            cover_eye_height_m: 1.6,
+            gaze_on: false,
+            cover_sight_on: false,
             ground_sight_m: 24.0,
             known_cells_pass: 0.0,
             nav_belief: false,
@@ -769,7 +784,7 @@ impl Default for Laws {
             check_ctx_plan: true,
             check_ctx_check: false,
             alarm_cells: true,
-            cue_transport_on: false,
+            cue_transport_on: true,
             near_tier_on: true,
             alarm_cells_check: false,
             warmth_check: false,
@@ -781,6 +796,8 @@ impl Default for Laws {
             notice_inplace_check: false,
             notice_delta: true,
             notice_delta_check: false,
+            seen_ranges: true,
+            seen_ranges_check: false,
             fast_lane_on: false,
             seen_again_n: 3.0,
             fast_lane_rate: 2.0,
@@ -810,6 +827,8 @@ pub struct Reach {
     pub night: f32,
     pub hearing: f32,
     pub glow: f32,
+    /// Optional narrower glow bound in full daylight (falls back to the all-light bound).
+    pub glow_day: f32,
 }
 
 impl Reach {
@@ -823,6 +842,10 @@ impl Reach {
         } else {
             self.day.max(self.night)
         }
+    }
+
+    pub fn glow_at(&self, dark: f32) -> f32 {
+        if dark <= 0.0 { self.glow_day } else { self.glow }
     }
 
     /// The farthest anything is seen at darkness `dark`: by an eye, or by a light on it.
@@ -1132,6 +1155,7 @@ pub struct Scripts {
     laws: std::collections::BTreeMap<String, LawSpec>,
     /// The farthest senses reach (from `senses_law()`).
     reach: Reach,
+    gaze_ceilings: Option<[f32; 3]>,
     /// Required laws the script lacks, taken from the shipped script (an install refuses them).
     borrowed: Vec<String>,
     /// The script's source (for the order of its declarations).
@@ -1487,8 +1511,8 @@ impl Scripts {
         let unary = ast.iter_functions().filter(|f| own(f.name) && f.params.len() == 1).map(|f| f.name.to_string()).collect();
         let nullary = ast.iter_functions().filter(|f| own(f.name) && f.params.is_empty()).map(|f| f.name.to_string()).collect();
         let fields = fields.unwrap_or_else(|| fields::Fields::analyze(&ast));
-        let reach = Reach { day: 0.0, night: 0.0, hearing: 0.0, glow: 0.0 };
-        let mut s = Self { engine, ast, fns, unary, nullary, shapes: Default::default(), shows: Default::default(), skills: Default::default(), ways: Vec::new(), kin: Default::default(), fields, plans: Default::default(), names: Default::default(), lists: Default::default(), needs: Default::default(), senses: Default::default(), moves: Default::default(), pools: Default::default(), glows: Default::default(), lives: Default::default(), hour_ms, daylight: Default::default(), laws: Default::default(), reach, borrowed, structures: Default::default(), seasons: Default::default(), tables, source: source.to_string(), law_errors: Default::default(), about: Ok(Vec::new()), ui: Default::default(), body: Default::default(), makings: Default::default() };
+        let reach = Reach { day: 0.0, night: 0.0, hearing: 0.0, glow: 0.0, glow_day: 0.0 };
+        let mut s = Self { engine, ast, fns, unary, nullary, shapes: Default::default(), shows: Default::default(), skills: Default::default(), ways: Vec::new(), kin: Default::default(), fields, plans: Default::default(), names: Default::default(), lists: Default::default(), needs: Default::default(), senses: Default::default(), moves: Default::default(), pools: Default::default(), glows: Default::default(), lives: Default::default(), hour_ms, daylight: Default::default(), laws: Default::default(), reach, gaze_ceilings: None, borrowed, structures: Default::default(), seasons: Default::default(), tables, source: source.to_string(), law_errors: Default::default(), about: Ok(Vec::new()), ui: Default::default(), body: Default::default(), makings: Default::default() };
         // Skills in the order the source declares them (the last declaration of a name counts).
         let declared = |name: &str| source.rfind(&format!("fn {name}_spec(")).unwrap_or(usize::MAX);
         // Required entry points.
@@ -1519,6 +1543,25 @@ impl Scripts {
         s.seasons = s.read_seasons()?;
         s.laws = s.read_laws()?;
         s.reach = s.read_reach()?;
+        if s.law_value("gaze_on") == Some(serde_json::Value::Bool(true)) {
+            let mut ceilings = [0.0f32; 3];
+            for band in crate::sight::GazeBand::ALL {
+                let d = s.engine.call_fn::<Dynamic>(&mut Scope::new(), &s.ast, "gaze_ceiling", (i64::from(band as u8),))
+                    .map_err(|e| format!("gaze_ceiling: {e}"))?;
+                ceilings[band as usize] = number(&d).filter(|n| (0.0..=256.0).contains(n))
+                    .ok_or("gaze_ceiling must be a number of metres (0..=256)")? as f32;
+            }
+            s.gaze_ceilings = Some(ceilings);
+            for gaze_band in crate::sight::GazeBand::ALL {
+                for (night, dark) in [(false, 0.0), (false, 0.25), (true, 0.75), (true, 1.0)] {
+                    for torch in [false, true] {
+                        let mut ctx = SkillCtx { gaze_band, night, dark, ..Default::default() };
+                        if torch { ctx.actor.inv.push(("torch".into(), 1)); }
+                        s.senses_unshared(&ctx)?;
+                    }
+                }
+            }
+        }
         for (f, names) in name_laws(&s) {
             for n in names {
                 s.num_of(&f, &n, 0.0);
@@ -2132,14 +2175,28 @@ impl Scripts {
         self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, f, ()).map_err(|e| format!("{f}: {e}"))?.try_cast::<Map>().ok_or_else(|| format!("{f} must return a map"))
     }
 
-    /// The farthest senses reach, from `senses_law()`.
+    /// The largest enabled gaze ceiling, for gathering possible onlookers.
+    pub fn gaze_reach(&self) -> f32 {
+        self.gaze_ceilings.map_or(0.0, |ceilings| ceilings.into_iter().fold(0.0, f32::max))
+    }
+
+    pub fn gaze_enabled(&self) -> bool {
+        self.gaze_ceilings.is_some()
+    }
+
+    /// Select once per law lookup, so the disabled world uses the original script path.
+    pub fn senses_function(&self) -> &'static str {
+        if self.gaze_enabled() { "gaze_view" } else { "senses" }
+    }
+
     fn read_reach(&self) -> Result<Reach, String> {
         let m = self.law_map("senses_law")?;
         let r = m.get("reach").and_then(|r| r.clone().try_cast::<Map>()).ok_or("senses_law: `reach` is a map of day, night and hearing (metres)")?;
         let g = |k: &str| r.get(k).and_then(number).map(|v| (v as f32).clamp(0.0, 256.0)).ok_or_else(|| format!("senses_law: `reach.{k}` must be a number of metres"));
         // `glow` bounds the `glow` law, and is needed only with one.
         let glow = if self.has("glow") { g("glow").map_err(|e| format!("{e} (the script has a `glow` law)"))? } else { 0.0 };
-        Ok(Reach { day: g("day")?, night: g("night")?, hearing: g("hearing")?, glow })
+        let glow_day = if r.contains_key("glow_day") { g("glow_day")?.min(glow) } else { glow };
+        Ok(Reach { day: g("day")?, night: g("night")?, hearing: g("hearing")?, glow, glow_day })
     }
 
     /// Every law the script declares, by name.
@@ -2251,6 +2308,12 @@ impl Scripts {
         let plan = self.plan(law);
         let mut key = Vec::with_capacity(16);
         context::key(ctx, "", &plan, &mut key);
+        if law == "gaze_view" {
+            // The decoded result also carries the chosen band and the light-dependent
+            // glow bound, even when an authored gaze_view does not read these inputs.
+            key.push(ctx.gaze_band as u8);
+            key.extend_from_slice(&ctx.dark.to_bits().to_le_bytes());
+        }
         if let Some(v) = memo.borrow().get(&key) {
             return Ok(*v);
         }
@@ -2265,7 +2328,7 @@ impl Scripts {
 
     /// A creature's senses (`senses(a)`), kept per state and held to the reach.
     pub fn senses(&self, ctx: &SkillCtx) -> Result<Senses, String> {
-        self.per_state("senses", &self.senses, ctx, || self.senses_unshared(ctx))
+        self.per_state(self.senses_function(), &self.senses, ctx, || self.senses_unshared(ctx))
     }
 
     /// How a creature moves (`motion(a)`), kept per state.
@@ -2301,9 +2364,11 @@ impl Scripts {
     /// The same, asking the law every time (benchmarks and install checks).
     #[doc(hidden)]
     pub fn senses_unshared(&self, ctx: &SkillCtx) -> Result<Senses, String> {
-        let m = context::map(ctx, "", &self.plan("senses"));
-        let d = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "senses", (m,)).map_err(|e| format!("senses: {e}"))?;
-        decode_senses(d, &self.reach, ctx.dark)
+        let f = self.senses_function();
+        let m = context::map(ctx, "", &self.plan(f));
+        let d = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, f, (m,)).map_err(|e| format!("senses: {e}"))?;
+        let gaze = self.gaze_ceilings.map(|ceilings| (ctx.gaze_band, ceilings[ctx.gaze_band as usize]));
+        decode_senses(d, &self.reach, ctx.dark, gaze)
     }
 
     /// How far a creature is seen from by a light on it (`glow(a)`, kept per state like
@@ -2895,6 +2960,12 @@ impl Scripts {
             longing_after_min: g("longing_after_min", l.longing_after_min).clamp(0.0, 100_000.0),
             longing_food: g("longing_food", l.longing_food).clamp(0.0, 1_000.0),
             fov_on: flag("fov_on", l.fov_on),
+            cover_cliff_step_m: g("cover_cliff_step_m", l.cover_cliff_step_m),
+            cover_brush_min_fill: g("cover_brush_min_fill", l.cover_brush_min_fill),
+            cover_brush_on: flag("cover_brush_on", l.cover_brush_on),
+            cover_eye_height_m: g("cover_eye_height_m", l.cover_eye_height_m),
+            gaze_on: flag("gaze_on", l.gaze_on),
+            cover_sight_on: flag("cover_sight_on", l.cover_sight_on),
             ground_sight_m: g("ground_sight_m", l.ground_sight_m).clamp(0.0, 256.0),
             known_cells_pass: g("known_cells_pass", l.known_cells_pass).clamp(0.0, 100_000.0),
             nav_belief: flag("nav_belief", l.nav_belief),
@@ -2933,6 +3004,8 @@ impl Scripts {
             notice_inplace_check: flag("notice_inplace_check", l.notice_inplace_check),
             notice_delta: flag("notice_delta", l.notice_delta),
             notice_delta_check: flag("notice_delta_check", l.notice_delta_check),
+            seen_ranges: flag("seen_ranges", l.seen_ranges),
+            seen_ranges_check: flag("seen_ranges_check", l.seen_ranges_check),
             fast_lane_on: flag("fast_lane_on", l.fast_lane_on),
             seen_again_n: g("seen_again_n", l.seen_again_n).round().clamp(1.0, 100.0),
             fast_lane_rate: g("fast_lane_rate", l.fast_lane_rate).clamp(0.0, 100.0),
@@ -3122,7 +3195,7 @@ fn decode_pools(d: Dynamic) -> Result<crate::pools::Pools, String> {
     })
 }
 
-fn decode_senses(d: Dynamic, reach: &Reach, dark: f32) -> Result<Senses, String> {
+fn decode_senses(d: Dynamic, reach: &Reach, dark: f32, band: Option<(crate::sight::GazeBand, f32)>) -> Result<Senses, String> {
     let m = d.try_cast::<Map>().ok_or("senses must return a map of sight and hearing")?;
     let g = |k: &str| m.get(k).and_then(number).map(|v| v as f32).ok_or_else(|| format!("senses: `{k}` must be a number of metres"));
     let field = match m.get("field") {
@@ -3135,7 +3208,20 @@ fn decode_senses(d: Dynamic, reach: &Reach, dark: f32) -> Result<Senses, String>
             Some(Field { focal_deg, side_deg: n("side_deg", 0.0, 180.0)?.max(focal_deg), side_share: n("side_share", 0.0, 1.0)?, near_m: n("near_m", 0.0, 256.0)?, margin_deg: n("margin_deg", 0.0, 90.0)? })
         }
     };
-    Ok(Senses { sight: g("sight")?.clamp(0.0, reach.sight(dark)), hearing: g("hearing")?.clamp(0.0, reach.hearing), field })
+    let mut sight = g("sight")?;
+    let gaze = if let Some((band, ceiling)) = band {
+        let ground = g("ground")?;
+        let f = field.ok_or("senses: enabled gaze requires a field")?;
+        if !(0.0..=256.0).contains(&ceiling) || !(0.0..=ceiling).contains(&sight)
+            || !(0.0..=256.0).contains(&ground) || !(0.0..=sight).contains(&f.near_m) {
+            return Err("senses: invalid gaze bounds".into());
+        }
+        Some(crate::sight::Gaze { band, ceiling, ground, glow: reach.glow_at(dark) })
+    } else {
+        sight = sight.clamp(0.0, reach.sight(dark));
+        None
+    };
+    Ok(Senses { sight, hearing: g("hearing")?.clamp(0.0, reach.hearing), field, gaze })
 }
 
 /// The function a world's own law values are written as at the end of its script.
@@ -3937,15 +4023,16 @@ mod tests {
     }
 
     #[test]
-    fn cue_transport_on_is_off_until_accepted_and_separate_from_attention_cues() {
+    fn cue_transport_on_is_on_since_acceptance_and_separate_from_attention_cues() {
         // frame-views: the cue event tables' kill switch (docs/TICK_RATE.md, "Row-level security,
-        // the kill switch and SpacetimeDB upgrades"); `cues_on` is the minds' attention cues.
+        // the kill switch and SpacetimeDB upgrades"), on by default since the acceptance series;
+        // `cues_on` is the minds' attention cues.
         let src = include_str!("../../scripts/skills.rhai");
         let shipped = Scripts::new(src).unwrap();
-        assert!(!shipped.laws().cue_transport_on);
+        assert!(shipped.laws().cue_transport_on);
         assert!(!shipped.laws().cues_on);
         let about: std::collections::HashMap<String, String> = shipped.laws_about().into_iter().collect();
-        assert!(about["cue_transport_on"].contains("with the rest of what it sees"), "{about:?}");
+        assert!(about["cue_transport_on"].contains("at once"), "{about:?}");
         let on = Scripts::new(&with_world_laws(src, &[("cue_transport_on".into(), serde_json::json!(true))])).unwrap();
         on.validate().unwrap();
         assert!(on.laws().cue_transport_on && !on.laws().cues_on);
@@ -3953,8 +4040,8 @@ mod tests {
         let off = Scripts::new(&with_world_laws(src, &[("near_tier_on".into(), serde_json::json!(false)), ("cue_transport_on".into(), serde_json::json!(false))])).unwrap();
         off.validate().unwrap();
         assert!(!off.laws().near_tier_on && !off.laws().cue_transport_on);
-        let about: std::collections::HashMap<String, String> = on.laws_about().into_iter().collect();
-        assert!(about["cue_transport_on"].contains("at once"), "{about:?}");
+        let about: std::collections::HashMap<String, String> = off.laws_about().into_iter().collect();
+        assert!(about["cue_transport_on"].contains("with the rest of what it sees"), "{about:?}");
     }
 
     #[test]
@@ -4037,6 +4124,50 @@ mod tests {
     }
 
     #[test]
+    fn gaze_bands_change_light_reach_field_and_ground_in_both_worlds() {
+        use crate::sight::GazeBand::{Far, Middle, Near};
+        const BASE: &str = include_str!("../../scripts/skills.rhai");
+        const CULLET: &str = include_str!("../../seeds/worlds/cullet/laws.rhai");
+        for (source, day, night) in [(BASE.to_owned(), 11.0, 6.0), (crate::floors::compose(BASE, CULLET).unwrap(), 48.0, 14.0)] {
+            // Gaze off explicitly: Cullet ships it on (2026-11-19).
+            let off = Scripts::new(&with_world_laws(&source, &[("fov_on".into(), true.into()), ("gaze_on".into(), false.into())])).unwrap();
+            let on = Scripts::new(&with_world_laws(&source, &[("gaze_on".into(), true.into())])).unwrap();
+            on.validate().unwrap();
+            let ctx = |gaze_band| SkillCtx { gaze_band, ..Default::default() };
+            let middle = on.senses(&ctx(Middle)).unwrap();
+            assert_eq!(Senses { gaze: None, ..middle }, off.senses(&ctx(Middle)).unwrap());
+            let far = on.senses(&ctx(Far)).unwrap();
+            let near = on.senses(&ctx(Near)).unwrap();
+            for (s, band, share, focal, side) in [(middle, Middle, 1.0, 70.0, 110.0), (far, Far, 1.3, 35.0, 65.0), (near, Near, 0.6, 110.0, 155.0)] {
+                let field = s.field.unwrap();
+                assert_eq!((field.focal_deg, field.side_deg), (focal, side));
+                assert_eq!(field.side_share, middle.field.unwrap().side_share);
+                assert_eq!(field.near_m, middle.field.unwrap().near_m);
+                assert!((s.sight - day * share).abs() < 0.001);
+                assert_eq!(s.gaze.unwrap().band, band);
+                let dark = on.senses(&SkillCtx { night: true, dark: 1.0, ..ctx(band) }).unwrap();
+                assert!((dark.sight - night * share).abs() < 0.001);
+                assert!((dark.gaze.unwrap().ground - night * share).abs() < 0.001);
+            }
+            // Far's own sight can exceed a twilight glow, while the glow can still
+            // reach beyond the observer's shorter peripheral sight.
+            let twilight = on.senses(&SkillCtx { dark: 0.05, ..ctx(Far) }).unwrap();
+            assert_eq!(far.gaze.unwrap().glow, 0.0);
+            assert!(twilight.gaze.unwrap().glow < twilight.sight);
+            if day == 48.0 {
+                let glow = twilight.gaze.unwrap().glow;
+                assert_eq!(glow, 48.0);
+                assert!(crate::sight::reach(&twilight, 50.0f32.to_radians(), glow, None) > twilight.sight / 2.0);
+            }
+            assert_eq!(middle.gaze.unwrap().ground, 24.0);
+            assert!((near.gaze.unwrap().ground - 14.4).abs() < 0.001);
+            assert!(near.gaze.unwrap().ceiling < middle.gaze.unwrap().ceiling);
+            assert!(far.gaze.unwrap().ceiling > middle.gaze.unwrap().ceiling);
+            assert_eq!(off.senses(&ctx(Far)).unwrap(), off.senses(&ctx(Near)).unwrap());
+        }
+    }
+
+    #[test]
     fn senses_are_a_law_per_creature() {
         let s = scripts();
         let got: Vec<(f32, f32)> = [(false, false), (true, false), (true, true), (false, true)].iter().map(|(n, t)| {
@@ -4044,7 +4175,7 @@ mod tests {
             (v.sight, v.hearing)
         }).collect();
         assert_eq!(got, vec![(11.0, 9.0), (6.0, 9.0), (9.0, 9.0), (11.0, 9.0)]);
-        assert_eq!(s.reach(), Reach { day: 11.0, night: 9.0, hearing: 9.0, glow: 0.0 });
+        assert_eq!(s.reach(), Reach { day: 11.0, night: 9.0, hearing: 9.0, glow: 0.0, glow_day: 0.0 });
         assert_eq!(s.law_plan("senses").describe(), vec!["actor.inv[torch]".to_string(), "night".to_string()], "the key is what the law reads");
         let spec = &s.law_specs()["senses"];
         assert_eq!((spec.cadence, spec.topic.as_str()), (Cadence::Hot, "senses"));

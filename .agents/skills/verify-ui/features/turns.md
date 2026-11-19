@@ -1,6 +1,6 @@
 # The Orbit camera while the view turns or zooms
 
-Choose **Orbit (old)** in Settings › Play › Camera. The default [Top-down camera](camera.md) keeps a fixed bearing.
+Choose **Orbit (old)** in Settings › Play › Camera. The default [Top-down camera](camera.md) turns with middle drag and native trackpad rotation.
 
 A two-finger pan, a left drag (press and move), the middle drag and `[` `]` turn the view; a pinch or a notched wheel zooms it within 0.6–1.4 of its distance. While the view turns or zooms, the game's cursor keeps its screen position, and what it points at (the ground point you face, aim at and act on) changes under it with the view. Only an align (a two-finger double tap or a middle tap) keeps the cursor on its ground point, so the align ends with that point straight ahead. Owner, Cullet walk 1 (2026-11-11): before `cursor-pan` the cursor stayed on its ground point and rode off with the view.
 
@@ -23,7 +23,7 @@ Preconditions: baseline; select Orbit under Settings › Play › Camera and clo
 - **Pan.** `pan:300` (a rightward pan through the pointer's own path, ×0.6 as a trackpad's pixels), then `pan:-500`. Dumps mid-pan and after: `extra.cursor` within 1 px of where it was, `extra.view.yaw` turned, `extra.cursor_ground` moved.
 - **Pinch.** `pinch:0.3` (in), then `pinch:-0.4` (out): `extra.view.zoom` down then up, the cursor within 1 px, the ground under it moved.
 - **Drag.** `drag:250`: the view turned, the cursor within 1 px.
-- Scenario: `check.py --run $R turns` (14 checks).
+- Scenario: `check.py --run $R turns` selects and checks both Facing presets.
 
 ## Gotchas
 

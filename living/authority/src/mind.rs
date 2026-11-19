@@ -609,13 +609,25 @@ pub fn mind_say(ctx: &ReducerContext, actor: u32, say: String, say_to: u32, way:
 /// back as an experience. `source` says where it was decided (e.g. "deliberate", "talk").
 #[spacetimedb::reducer]
 pub fn mind_act(ctx: &ReducerContext, actor: u32, acts: Vec<String>, source: String) -> Result<(), String> {
-    let c = authorize(ctx, actor)?;
-    if !c.alive {
+    require_live_controller(ctx, actor)?;
+    crate::acts::submit(ctx, actor, &acts, &source, false, common::now_ms(ctx));
+    Ok(())
+}
+
+/// Commit the same acts and experience feedback as the reducer, and return synchronous
+/// refusals to the controlling caller. A refused act is a committed outcome.
+#[spacetimedb::procedure]
+pub fn mind_act_checked(ctx: &mut spacetimedb::ProcedureContext, actor: u32, acts: Vec<String>, source: String) -> Result<Vec<Option<String>>, String> {
+    ctx.try_with_tx(|tx| {
+        require_live_controller(tx, actor)?;
+        Ok(crate::acts::submit_checked(tx, actor, &acts, &source, common::now_ms(tx)))
+    })
+}
+
+fn require_live_controller(ctx: &ReducerContext, actor: u32) -> Result<(), String> {
+    if !authorize(ctx, actor)?.alive {
         return Err("character is dead".into());
     }
-    let now = common::now_ms(ctx);
-    let notes = crate::acts::submit(ctx, actor, &acts, &source, false, now);
-    log::debug!("{} decides: {}", c.name, notes.join("; "));
     Ok(())
 }
 
@@ -635,6 +647,70 @@ pub fn mind_where(ctx: &ReducerContext, actor: u32) -> Result<(), String> {
         ctx.db.standing().insert(row);
     }
     Ok(())
+}
+
+/// Where the character stands and moves, and how it perceives `other` (someone it is answering),
+/// for its talk turn's frame (reply-timing, docs/COMMUNICATION.md): returned to the controller
+/// alone (a procedure's answer is not broadcast) and written nowhere. What it perceives of the
+/// other is its own sensing (`perception::Sensing`, the scene's): their distance and way when
+/// it sees them and can make them out, where the sound is when it only hears them, nothing when
+/// neither. Only the character's controller may ask.
+#[spacetimedb::procedure]
+pub fn mind_reach(ctx: &mut spacetimedb::ProcedureContext, actor: u32, other: u32) -> Result<Reach, String> {
+    ctx.try_with_tx(|tx| {
+        authorize(tx, actor)?;
+        Ok(reach(tx, actor, other, common::now_ms(tx)))
+    })
+}
+
+/// [`mind_reach`]'s answer.
+fn reach(ctx: &ReducerContext, actor: u32, other: u32, now: u64) -> Reach {
+    let (Some(me), Some(b)) = (ctx.db.character().id().find(actor), ctx.db.body().id().find(actor)) else { return Reach::default() };
+    let at = common::pos(&b, now);
+    let mut r = Reach { x: at.0, y: at.1, ..Default::default() };
+    let moving = (b.vx != 0.0 || b.vy != 0.0) && now < b.next_ms;
+    if moving {
+        r.speed = (b.vx * b.vx + b.vy * b.vy).sqrt();
+    }
+    if let Some(a) = ctx.db.activity().id().find(actor) {
+        r.doing = a.label;
+    }
+    if let Some(s) = ctx.db.steer().id().find(actor).filter(|s| s.goal == crate::motion::GOAL_POINT) {
+        (r.goal, r.gx, r.gy) = (true, s.gx, s.gy);
+    }
+    let other = crate::far::resolve(ctx, actor, other);
+    let Some(them) = ctx.db.character().id().find(other).filter(|c| c.alive && c.id != actor) else { return r };
+    match crate::perception::Sensing::new(ctx, actor, at, now).sensed_id(ctx, now, other) {
+        Some((c, true)) => {
+            // A figure too far away to make out is not known to be them (far-label).
+            let seen = crate::perception::project(ctx, &me, &them, now);
+            if them.kind == "person" && seen.name.is_empty() && seen.label == living_rules::script::FAR_PERSON {
+                return r;
+            }
+            r.other = "seen".into();
+            r.other_m = c.dist.round();
+            r.other_where = common::direction(at, c.pos).to_string();
+            if r.speed > 0.0 && c.dist > 0.5 {
+                let off = living_rules::steer::wrap((c.pos.1 - at.1).atan2(c.pos.0 - at.0) - common::heading_at(&b, now)).abs();
+                r.toward = if off < std::f32::consts::FRAC_PI_3 {
+                    1
+                } else if off > 2.0 * std::f32::consts::FRAC_PI_3 {
+                    -1
+                } else {
+                    0
+                };
+            }
+        }
+        Some((c, false)) => {
+            let laws = common::laws(ctx);
+            let band = living_rules::sight::heard_band(c.dist, laws.heard_near_m, laws.heard_close_m);
+            let (_, wh, far) = living_rules::sight::heard_words("person", at, common::facing_at(&b, now), c.pos, band);
+            r.other = "heard".into();
+            r.other_where = format!("{wh}; {far}");
+        }
+        None => {}
+    }
+    r
 }
 
 /// Give up on a pending deliberation (e.g. model failure), logging why.

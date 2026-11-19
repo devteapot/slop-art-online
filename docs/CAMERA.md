@@ -36,6 +36,8 @@ The SUPERVIVE Wiki's direct fetches returned 403. The search index supplied the 
 
 ## 2. Current in Slop Art Online
 
+The play camera now starts north-up and can turn around the character. Middle drag and native two-finger rotation on macOS change the bearing. N or a short middle tap snaps north, and the key is rebindable. The earlier fixed-bearing proposal below records the original design. [Current controls and verification](../.agents/skills/verify-ui/features/camera.md).
+
 Source audit at the branch base. See the [living core](LIVING_CORE.md), [interface](INTERFACE.md), [character models](CHARACTERS.md) and [perception](PERCEPTION.md). Where older sections describe prototypes, the current source takes precedence.
 
 - **Camera and movement.** [Camera](../living/game/src/camera.rs) uses Bevy's perspective camera with a 28° downward pitch, a 22 m slant distance and 50° vertical FOV in the ordinary adult baseline. Character size, cursor lead, context framing for fights, greetings and talk, sight distance and terrain clearance can change the actual framing. Brackets, middle drag, left drag and touch pan can rotate it. Middle tap aligns and Alt glances. [Pointer](../living/game/src/pointer.rs) already provides wheel/pinch zoom as a 0.6–1.4 distance factor. [Controls](../living/game/src/controls.rs) sends WASD movement relative to the current camera axes and has both Cursor and Travel facing settings. Shift runs. Cursor facing sends `human_face`; the Travel preset also uses cursor facing while aiming.
@@ -162,9 +164,50 @@ Drive one repeatable daytime street scene on an island scratch world with a visi
 
 Add a wheel clamp check at both ends and compare scoped view membership at a stationary pose and fixed facing across zoom levels. On a scratch scene with the facing law enabled, hold zoom and turn in place to prove the display follows the reported field. Keep stills and JSON under the run's local evidence paths. Repeat wheel, windows, field and cutaway/support regressions through the real Bevy client. These are Part B checks, with no build or run claimed for this design.
 
+## 6. References measured
+
+All play samples use 16:9 footage. Character height is the vertical silhouette from head to boots at 900 px viewport height, excluding nameplates, effects, weapons and shadows. Pitch is downward from horizontal, FOV is vertical, and metric heights are above the chest focus defined in §3. **V** means verified in our settings or in a named source. **E** means estimated from footage or a stated geometric prior. The bands describe reading and model sensitivity, with no statistical confidence claim. An unknown value has insufficient evidence for an error band.
+
+| Game | Zoom state | Height above chest or reported distance | Pitch | Vertical FOV | Character at 900 px | Pitch changes with zoom? |
+| --- | --- | ---: | ---: | ---: | ---: | --- |
+| Slop Art Online | Closest | 8 m V | 48° V | 42° V | 124 ± 3 px E | Yes, 17° across range V |
+| | Default | 12 m V | 58° V | 44° V | 75 ± 3 px E | |
+| | Farthest | 19 m V | 65° V | 46° V | 41 ± 3 px E | |
+| League of Legends | Closest shown | 4.8 ± 1.7 m E | 56° ± 8° E | 40° ± 5° E¹ | 215 ± 15 px E | Fixed-angle model fits the sweep E |
+| | Default proxy | 11.2 ± 4 m E | 56° ± 8° E | 40° ± 5° E¹ | 92 ± 8 px E | |
+| | Farthest shown | 11.2 ± 4 m E | 56° ± 8° E | 40° ± 5° E¹ | 92 ± 8 px E | |
+| SUPERVIVE | Closest | Unknown | Unknown | Unknown | Unknown | Grounded pan fits fixed orientation E. Glide zoom pitch unknown |
+| | Grounded default proxy | 23 ± 9 m E | 59° ± 7° E | 31° ± 7° E | 55 ± 8 px E | |
+| | Farthest, glide candidate | Unknown | Unknown | Unknown | Unknown² | |
+| Corepunk | Closest | Unknown | Unknown | Unknown | Unknown | 2021 Q&A describes a different close angle V (historical). Current wheel behavior unknown |
+| | Default proxy | 12 ± 6 m E | 60° ± 8° E³ | 49° ± 15° E³ | 67 ± 12 px E | |
+| | Farthest | 15.5 game units in Jan 2025, as recorded in §1 V (historical). Current cap unknown | Unknown | Unknown | Unknown | |
+
+¹ The 40° vertical interpretation is a working prior from the community report. The ±5° band is a sensitivity input for distance, since the footage could only constrain the combination of focal length and pitch. ² The airborne silhouette in the developer VOD changes pose and overlaps glide effects. A standing head-to-boot comparison would be misleading. ³ Alpha calibration, carried over provisionally to early access for the scale estimate. The early-access clip supplies the body pixels.
+
+### How the measurements were made
+
+- **Scale.** For an upright near-center subject, the first-order relation is `pixels ≈ f × body_height × cos(pitch) / slant_distance`, with `f = 450 / tan(vertical_FOV / 2)` in the normalized viewport. Multiplying slant distance by `sin(pitch)` gives vertical height above the subject's approximate mid-body depth. These are equivalent metres for a 1.8 m standing model. League uses the requested 1.8 m human-champion assumption. For the other games the same height is a normalization choice. None of the sources established a game-unit-to-metre conversion. Pose, clothing, off-center projection, and the difference between mid-body and chest are folded into the broad bands.
+- **Slop Art Online.** Camera values come from the three [camera knots](../living/game/src/camera.rs). Pixel measurements use the same adult player in the camera-1 square stills at 1600×900. The current curve makes the actor about 3.0× as tall at Near as at Far. Top-down bearing is fixed.
+- **League of Legends.** The player-view demonstration gives a repeatable wide state at 1:43 and 1:49, and a close plateau around 1:47. At 1:46.50, an in-transit check measured 180 ± 12 px. The wide state stands in for the default because the recording does not show a factory reset. Feature matches across the cracked river ramp support a fixed-orientation camera under a dolly model (28 of 89 candidate matches within 5 px at 1080p for wide-to-close with a roughly 2,200 px horizon offset). Plausible fits at horizon offsets around 1,800–3,200 px give the pitch band with the 40° FOV prior. Ramp elevation, matching noise and the short overlapping region prevent a useful independent FOV fit or a precise upper bound on small pitch changes. The sampled Garen grows about 2.3×. Ordinary play controls pan or lock at a fixed bearing in the sources inspected. Riot's separate replay camera can rotate. [Player sweep][lol-zoom-footage], [community camera report][lol-camera-report], [Riot dynamic camera][lol-camera-dev], [Riot replay tool][lol-camera-replay].
+- **SUPERVIVE.** On the training platform at 1:48, use the north and south points of the circular floor rim and the deck center to extrapolate the ground horizon. Use the paired upright cylinders for the vertical vanishing point. With a centered principal point, their offsets from screen center give `f² = horizon_offset × vertical_vanishing_offset`. Varying the picks gives shallow-to-steep solutions around the values in the table. The 1:25, 1:48 and 2:01 grounded samples span about 50–55 px for the same player. Floor matches between the last two fit a common orientation, and the recorded changes include cursor pan. That comparison cannot establish the pitch or size change from minimum to maximum zoom. The settings show locked/dynamic behavior and **Glide Zoomout**. Ordinary yaw rotation was neither shown nor documented in the checked sources. The official alpha match shows wider aerial framing at 1:01, with no controlled ground-to-glide calibration. Theorycraft ended live service on February 25, 2026. [Training and settings footage][sv-camera-footage], [developer match VOD][sv-match-vod], [end of service][sv-end].
+- **Corepunk.** The 2020 tavern frame at 0:36 gives perpendicular floor directions from plank seams and floor-aligned timbers. Extrapolating the two vanishing points gives the ground horizon and the focal length, using the orthogonality of the directions and a centered principal point. Line selection drives the broad bands. In the June 2026 gameplay clip at 1:45, the running avatar gives the body scale. No settings reset or entire zoom sweep is visible. The 2021 Q&A described a slightly different angle on zoom-in. That wording alone does not establish which axis changes, whether it is a separate camera option, or how current wheel zoom behaves. The patch archive refers to rotation, with ordinary player yaw controls still unconfirmed. Its historical distance cap is neither a chest height nor a documented metre conversion. The original Q&A returned no body and the patch archive timed out for direct extraction. The Q&A survives in a recorded recap and the archive value comes from the prior source check in §1. [Alpha gameplay][cp-video], [June 2026 player footage][cp-camera-2026], [Q&A recap][cp-angle-recap], [patch archive][cp-patches].
+
+### Bevy tuning presets
+
+Each cell is **height above chest in metres / downward pitch / vertical FOV**. Keep the three zoom coordinates and the chest focus from §3. These are exact tunable inputs. Where the measurements have gaps, the endpoint values are design choices for the play-test.
+
+| Preset | Far, z = 0.00 | Middle, z = 0.55 | Near, z = 1.00 | Basis |
+| --- | --- | --- | --- | --- |
+| League of Legends | 11.2 m / 56° / 40° | 11.2 m / 56° / 40° | 4.8 m / 56° / 40° | Wide and default share the sampled framing, so the wide half holds the same pose |
+| SUPERVIVE | 28.0 m / 59° / 31° | 23.0 m / 59° / 31° | 18.0 m / 59° / 31° | Grounded size and narrow lens at Middle, with a distance bracket for testing |
+| Corepunk | 15.0 m / 60° / 49° | 12.0 m / 60° / 49° | 7.0 m / 54° / 49° | Ordinary framing at Middle, with a modest close tilt to try based on the historical Q&A |
+
+**Recommendation.** Try fixed **58°** pitch across our existing three stops first, with the current heights and FOVs. This holds the default view exactly and isolates the effect of rotating the camera during zoom. Our Far-to-Near sweep currently changes both size and the visible proportions of ground and walls. League's sweep shows that a strong size change can work with a stable orientation. SUPERVIVE's grounded footage supports that choice for ordinary play, while Corepunk's historical close-angle option is a reason to keep a modest tilt available for comparison.
+
 ## Sources and local reference evidence
 
-Local references are in `.local/living/camera-1/refs/` in the owner's main checkout. They include two YouTube alpha gameplay preview stills and a source manifest. They are research evidence only.
+Local references are in `.local/living/camera-1/refs/` in the owner's main checkout. They include two YouTube alpha gameplay preview stills and a source manifest. The §6 full-resolution frames, timestamps and fitting notes are in `.local/living/camera-1/refs/measure/`. They are research evidence only.
 
 [cp-about]: https://corepunk.com/en-us/about
 [cp-faq]: https://corepunk.com/en-us/faq
@@ -191,3 +234,72 @@ Local references are in `.local/living/camera-1/refs/` in the owner's main check
 [stdb-docs]: https://spacetimedb.com/docs/
 [stdb-reducers]: https://spacetimedb.com/docs/functions/reducers/
 [stdb-version]: https://github.com/clockworklabs/SpacetimeDB/blob/v2.14.1/crates/bindings/src/lib.rs
+
+[lol-zoom-footage]: https://www.youtube.com/watch?v=62_C35tSIU8
+[lol-camera-report]: https://www.reddit.com/r/leagueoflegends/comments/1f12kha/
+[lol-camera-dev]: https://www.leagueoflegends.com/en-gb/news/dev/dev-wasd-controls-are-on-the-way/
+[lol-camera-replay]: https://github.com/RiotGames/leaguedirector
+[sv-camera-footage]: https://www.youtube.com/watch?v=EaS82MFgGGo
+[sv-match-vod]: https://www.youtube.com/watch?v=Fs9pGnI345E
+[sv-end]: https://steamcommunity.com/games/1283700/announcements/detail/571524191533139168
+[cp-camera-2026]: https://www.youtube.com/watch?v=XljOWnKSTP8
+[cp-angle-recap]: https://www.youtube.com/watch?v=z4APxTjAp6Y
+
+## Gaze authority implementation
+
+Gaze ships disabled in the base law. Cullet's overlay enables it, with `fov_on`, since the 2026-11-19 switch-on ([cover sight](COVER_SIGHT.md#switch-on-2026-11-19)); every other seed keeps it off. The authority first derives
+the original world's light cap from `senses(a)`. Enabled worlds run the shared
+Rhai modifier over that result, using band shares and angles from `gaze_bands()`.
+The near ring, peripheral share and facing use the existing sight primitives.
+Creature acquisition and retention use the band ceiling, including glow and the
+keep margin. Groundsight uses its own band-scaled entitlement, capped by
+`ground_sight_m`. The daytime entitlement is determined from the original
+light cap before applying the band. Cover traces use the same authoritative
+eye and map. [Rhai law](../living/scripts/skills.rhai),
+[shared sight](../living/rules/src/sight.rs),
+[ground memory](../living/authority/src/known.rs).
+
+`human_gaze(band: u8)` accepts Middle (0), Far (1) and Near (2) for the caller's
+living character. Minds send `{"do":"gaze","band":"far"}` through the usual
+act entry point. A change writes one private `attention` row at most every
+250 ms per character. A repeat does zero writes, and death removes the row.
+Enabled sight reads that character's row by primary key and reuses the answer
+within the transaction. Aim and mind scenes read new intent when they need
+sight. Player contact membership and the owner's applied projection follow
+the scheduled sweep. [Attention and projection](../living/authority/src/attention.rs).
+
+The new private `applied_gaze` table has one row per swept player in enabled
+worlds. The owner receives it through `my_senses_v_2` with the applied band,
+creature ceiling, ground radius and the nested `CharacterSenses` field. The
+view resolves the sender's current living player and performs one primary-key
+read. A steady field causes zero writes, and disabled worlds keep the view
+empty. The legacy `my_senses` keeps its existing row format and cadence.
+The laptop can use the shared `GazeBand::at_zoom` hysteresis helper and the
+generated reducer and view accessors. [Shared bands](../living/rules/src/sight.rs),
+[generated binding entry point](../living/bindings/src/generated/mod.rs).
+
+### SpacetimeDB 2.14.1 delivery decision
+
+SpacetimeDB's pinned migration planner permits a view return-column change
+by replacing that view and requiring all clients to disconnect. A new view
+is planned as an addition. `my_senses_v_2` therefore carries the extended
+projection alongside the legacy view. Both gaze tables are new, so no existing
+table needs rewriting. The 2.14.1 generator canonicalizes the view name with
+the underscore before the version digit. [Automatic migrations](https://spacetimedb.com/docs/databases/automatic-migrations/),
+[pinned planner](https://github.com/clockworklabs/SpacetimeDB/blob/v2.14.1/crates/schema/src/auto_migrate.rs#L558-L700).
+
+Private keyed storage makes the request and sweep reads local. The view scopes
+its initial result and subsequent changes to the sender. It reads the applied
+projection, so acceptance writes alone do not invalidate it. Attention and
+the owner projection each retain at most a row per character that uses that
+path. [Tables](https://spacetimedb.com/docs/tables/),
+[indexes](https://spacetimedb.com/docs/tables/indexes/),
+[performance](https://spacetimedb.com/docs/tables/performance/),
+[views](https://spacetimedb.com/docs/functions/views/),
+[subscriptions](https://spacetimedb.com/docs/clients/subscriptions/).
+
+Cullet declares zero target glow in full daylight in its senses law. The
+enabled gather skips glow lookups in that light. In twilight it still checks
+glow in the peripheral sector when Far's forward reach is longer than a
+torch's glow. Runtime sight holds the result to the declared light bound.
+[Cullet light law](../living/seeds/worlds/cullet/laws.rhai).

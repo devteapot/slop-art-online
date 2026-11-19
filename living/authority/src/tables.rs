@@ -239,6 +239,28 @@ pub struct WorldLaw {
     pub value: String,
 }
 
+/// Effective, world-wide cover policy used by Shade.
+#[derive(Clone, Copy, PartialEq)]
+#[spacetimedb::table(accessor = cover_law, public)]
+pub struct CoverLaw {
+    #[primary_key]
+    pub id: u8,
+    pub cover_sight_on: bool,
+    pub cover_eye_height_m: f32,
+    pub cover_brush_on: bool,
+    pub cover_brush_min_fill: f32,
+    pub cover_cliff_step_m: f32,
+}
+
+/// Quantized generation output, private and read only when cover is enabled.
+#[spacetimedb::table(accessor = cover_ground)]
+pub struct CoverGround {
+    #[primary_key]
+    pub id: u32,
+    pub heights: Vec<i16>,
+    pub candidates: Vec<u32>,
+}
+
 #[spacetimedb::table(accessor = script, public)]
 pub struct Script {
     #[primary_key]
@@ -1043,6 +1065,19 @@ pub struct LastLook {
     pub at_ms: u64,
 }
 
+/// Inclusive structure-id ranges for one observer and one 128 m block.
+#[spacetimedb::table(accessor = seen_structures,
+    index(accessor = by_actor_block, btree(columns = [actor, block])))]
+pub struct SeenStructures {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    #[index(btree)]
+    pub actor: u32,
+    pub block: u32,
+    pub ranges: Vec<u64>,
+}
+
 pub const FAM_REGION: u64 = 1 << 40;
 pub const FAM_CREATURE: u64 = 2 << 40;
 pub const FAM_STRUCTURE: u64 = 3 << 40;
@@ -1315,6 +1350,36 @@ pub struct Standing {
     pub x: f32,
     pub y: f32,
     pub at_ms: u64,
+}
+
+/// Where a character stands and moves, and how it perceives someone it is answering, for its
+/// talk turn's frame (reply-timing, docs/COMMUNICATION.md): `mind_reach`'s answer to its
+/// controller alone (not a table, not broadcast). Only what the character itself perceives of
+/// the other: nothing of them when it neither sees nor hears them.
+#[derive(SpacetimeType, Clone, Debug, PartialEq, Default)]
+pub struct Reach {
+    /// Where it stands now.
+    pub x: f32,
+    pub y: f32,
+    /// How it perceives the other now: `seen`, `heard` (heard and not seen, while sight has a
+    /// field), or `""` (neither, or seen only as a figure too far away to make out).
+    pub other: String,
+    /// Seen: how far they are (m, whole metres). Heard: 0 (a sound's distance is in words).
+    pub other_m: f32,
+    /// Seen: which way they are ("to the north-east"). Heard: where the sound is and how far,
+    /// in the world's words ("behind you, to the south; close").
+    pub other_where: String,
+    /// How fast its body travels now (m/s; 0 standing).
+    pub speed: f32,
+    /// While it travels and sees the other: 1 its way takes it toward them, -1 away from them,
+    /// 0 past them (or it does not travel or see them).
+    pub toward: i8,
+    /// What its body is doing (its activity's words), `""` when nothing.
+    pub doing: String,
+    /// The point it is walking to, when its movement has one (`goal`).
+    pub goal: bool,
+    pub gx: f32,
+    pub gy: f32,
 }
 
 #[cfg_attr(open_tables, spacetimedb::table(accessor = place, public))]

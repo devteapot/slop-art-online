@@ -67,12 +67,13 @@ For documentation-only work, check links, terminology, current/target labels and
 
 ## Models and coordination
 
-Coordinators run on Claude; subagents run on Codex models (owner's choice, 2026-11-18).
+Work is routed by kind (owner's choice, 2026-11-19; it replaces the 2026-11-18 routing).
 
 - **Coordinators:** each machine has one coordinator thread on Claude Opus 5.5 (`claude-opus-5-5`) at high reasoning effort.
-- **Subagents:** GPT-6.2 Sol (`gpt-6.2-sol`, Codex provider) at low reasoning effort by default. Start them with T3's `delegate_task` (provider `codex`), each in its own worktree from `origin/main`; Claude's native `Agent` tool would start a Claude model.
-- **Asset generation:** GPT-6.2 Astra (`gpt-6.2-astra`, Codex provider) at low reasoning effort for 3D models, textures and other generated assets.
-- **Escalation:** a task a Sol subagent has attempted and could not solve goes to Claude Opus 5.5 at high effort. Say in the report when a task was moved and why.
+- **Implementation of game logic and systems:** Claude Opus 5.5 at high effort. This covers the authority, rules and laws, the mind service, the game client's systems, schemas, subscriptions and merges of code that changes behaviour. Start these workers with Claude's native `Agent` tool or T3's `delegate_task` (provider `claudeAgent`, effort `high`), each in its own worktree from `origin/main`.
+- **Exploration and execution:** GPT-6.2 Sol (`gpt-6.2-sol`, Codex provider, via `delegate_task`) at low reasoning effort. This covers research and design surveys, diagnoses, measurement series and trial runs, reviews, documentation, tooling chores and verification runs. When a Sol task turns into implementing game logic, hand the implementation to Opus.
+- **Asset generation:** GPT-6.2 Astra (`gpt-6.2-astra`, Codex provider) at low reasoning effort for 3D models, skeletons, textures and the asset generators.
+- **Escalation:** a task a Sol or Astra worker has attempted and could not solve goes to Claude Opus 5.5 at high effort. Say in the report when a task was moved and why.
 - **Ultracode:** off for coordinators and subagents. Turn it on only when the owner asks for it for a named piece of work, and only for that work.
 - A model or provider the owner asks for by name overrides these defaults for that task.
 - A model named inside a skill does not override this section. This section does not switch the model of a thread the owner started.

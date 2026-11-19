@@ -23,4 +23,4 @@ done
 # client compile it in). A run elsewhere (--out) or of some models (--only) leaves the table alone.
 table=()
 if [ "$OUT" = living/game/assets/envs/cullet ] && [[ " ${args[*]} " != *" --only "* ]]; then table=(--table living/rules/data/buildings.json); fi
-"$BLENDER" -b -P living/tools/blender/cullet.py -- --out "$OUT" "${table[@]}" "${args[@]}" 2>&1 | grep -E '^GEN|Error|Traceback|^  File' || true
+"$BLENDER" -b --python-exit-code 1 -P living/tools/blender/cullet.py -- --out "$OUT" "${table[@]}" "${args[@]}" 2>&1 | grep -E '^GEN|Error|Traceback|^  File'

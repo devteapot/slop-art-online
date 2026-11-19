@@ -627,7 +627,9 @@ Accepted by the general coordinator with its documented difference (note C, C2).
 - **`FAMILIAR_LIMIT`'s comment** now says what the battle measured: a site exceeds 2,048 (634 characters passed it in 30 minutes, the most 2,984), because what is in view is never pruned.
 - **Proof:** verify-core `notice_delta` 8/8 (27,888 structures passed over, all familiar; 14,070 incremental looks); `notice_inplace` 6/6 with `notice_delta` on; `familiar_dense` 4/4, `notice_rate` 4/4, `first_sight` 22/22. See the validation record.
 
-## Familiarity of remains (design note, not built)
+## Familiarity of remains (before R1 and R2)
+
+The implementation and its measurements are recorded in [Seen remains](SEEN_REMAINS.md).
 
 *For the general coordinator, 2026-11-13. This note is about how a body's memory of having seen remains is kept. It is not about the remains themselves: they stay individual in the world, each lying where its person fell (the general coordinator's earlier ruling against merging them into a pile stands).*
 
@@ -741,3 +743,56 @@ Deleting the scratch database of `minds-bdat-124436` while its world still ran 3
   - The same page says "If a reducer throws an exception or returns an error, all of its changes are automatically rolled back."
 - [Event tables](https://spacetimedb.com/docs/tables/event-tables/) were considered for `fight_seen` and not used: their rows exist "only for the duration of the transaction that created them", and the fold must hold blows across ticks.
 - Versioned source: `crates/durability/src/imp/local.rs:358`, where the delete-time panic is.
+
+## R1 and R2 with the unbounded scene prototype
+
+The authority stores recognition in block ranges and emits one counted line for a look's unnamed remains. The complete mind scene lists each body. The matched replay refilled 1.69 fighters/s against 1.61/s in the archived pre-C2 run.
+
+| At minute 27 | fam30 | R1 + R2, no mind | R1 + R2, fake mind |
+| --- | ---: | ---: | ---: |
+| Remains at site | 2,675 | 2,904 | 374 |
+| Noticing ms/s | 277.60 | 93.92 | 7.93 |
+| Structure noticing ms/s | — | 79.88 | 3.26 |
+| Familiarity rows | 465,100 | 43,046 | 74,360 |
+| Seen-structure rows | — | 696 | 1,305 |
+| Familiarity pages / index keys, MB | ~69.8 combined estimate | 2.750 / 1.007 | 3.601 / 1.785 |
+| Seen-structure pages / index keys, MB | — | 0.842 / 0.014 | 0.411 / 0.026 |
+| Sight experiences/s | 5,261.2 | 186.5 | 1.1 |
+| All experiences/s | 5,804.7 | 622.4 | 12.1 |
+| Tick ms/s | 682.47 | 898.92 | 165.51 |
+| Ticks/s | 32.7 | 7.5 | 59.7 |
+
+In the matched replay, scene construction rose from 34.31 to 575.37 ms/s and cadence fell. A short unprofiled sample ran at 9.0 ticks/s. The fake-model fight tapered off before its sample.
+
+The eight-hour projection at 5,760–6,200 bodies gives about 200–400 field recognition rows for 200 fighters and 1.7–1.8 MB of range-table pages under linear payload growth. Maintaining the matched request rate under a linear per-body workload would put scene construction alone at 1,140–1,230 ms/s. See [Seen remains](SEEN_REMAINS.md#unbounded-scene-prototype-measurement) for window lengths, sizing and workload assumptions.
+
+## Bounded scene replay against C2
+
+Both arms ran for 30 minutes with no minds. They used the same replay flags, a separate acquisition of the Spark battle lock, and full module logs to recover the profile spans. The archived unbounded prototype is above.
+
+| Nearest sample to minute 27 | C2 only | Bounded R1 + R2 |
+| --- | ---: | ---: |
+| Sample start, minutes | 26.6 | 27.5 |
+| Remains at site | 2,733 | 2,749 |
+| One-minute host load, start–end | 4.6–4.7 | 23.2–22.1 |
+| Noticing ms/s | 204.62 | 167.47 |
+| Structure noticing ms/s | 178.73 | 126.91 |
+| Scene construction ms/s | 38.81 | 60.87 |
+| Familiarity rows | 434,543 | 55,924 |
+| Seen-structure rows | — | 683 |
+| Familiarity pages / index keys, MB | 21.409 / 10.456 | 3.077 / 1.335 |
+| Seen-structure pages / index keys, MB | — | 1.056 / 0.014 |
+| Sight experiences/s | 4,554.6 | 270.4 |
+| All experiences/s | 5,051.3 | 744.2 |
+| Tick work ms/s | 683.08 | 773.31 |
+| Ticks/s | 31.8 | 22.3 |
+
+The fixed run kept the noticing and sight-event gains and missed both tick criteria in the selected windows. The last windows showed 52.0 ticks/s and 535.62 ms/s for the fixed arm, against 47.9 ticks/s and 600.66 ms/s for C2. The host loads differed across the runs, including at the comparison point.
+
+The eight-hour scenario levels off at about 5,620–5,880 bodies and projects 2.2 MB of seen-range data pages with linear payload growth. The bounded scene serializes up to ten entries at either density. A linear cost sensitivity at fixed request rate projects about 125 ms/s for the whole scene span under the fixed arm's sampled conditions. See [Seen remains](SEEN_REMAINS.md#bounded-scene-replay-against-c2) for workload, timing methodology and projection assumptions.
+
+### Interleaved scene-cache replay
+
+A 30-minute A B A B replay compared C2 with bounded R1/R2 and the transaction-local scene cache. In the quieter pair at minute 27, C2 and cached R1/R2 held 2,812 and 2,668 remains, respectively. Cached R1/R2 reached 45.6 versus 26.7 ticks/s and 291 versus 661 late ticks in a 30-second window. Noticing fell from 210.70 to 90.89 ms/s and `percept:saw` from 4,012.8 to 227.1/s. Scene construction fell from 41.23 to 34.16 ms/s with a 6.98% selection-cache hit rate. The first pair missed the late-tick criterion under unequal host load. Both pairs kept the noticing and sight-event gains.
+
+The updated eight-hour sensitivity reaches about 5,500–6,050 bodies, 2.8–3.0 MB of seen-range pages, and 71–80 ms/s of cached scene construction at fixed request and hit rates. [The complete four-arm table, pause audit, and projection assumptions](SEEN_REMAINS.md#interleaved-scene-cache-replay) are in the design note.

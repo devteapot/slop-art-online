@@ -12,3 +12,5 @@
 | Terrain, sites and what creation draws at random (resources, animals, names, ages, genes) repeat | [repeatability.md](repeatability.md) |
 
 All drivers use `.agents/skills/verify-generation/scripts/generation.py` from the repository root. The default command drives all seven features (looks run with the worlds) (floors and plans run with the worlds). Scratch names begin `generation-`; databases begin `verify-generation-`.
+
+- [Authored cover syntax and genesis geometry](cover.md)

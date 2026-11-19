@@ -275,7 +275,7 @@ We can't reach Fortiche's per-shot painting and compositing, or painted light th
   - **Recipe:** a VRoid base, height, per-bone proportions (legs, torso, head, shoulders, build…) and colours (hair, eyes, skin, outfit). Folk ranges are adults 1.5–1.95 m, giants 4.5–5.5 m and small folk 0.55–0.7 m. Seeded random recipes fill crowds and `person` slots.
   - **Proportions:** helper joints scale proportions without shearing children, and the hips' translation follows leg length, so feet stay planted and every clip still plays.
   - **Colours:** the toon shader remaps each material group's mean texture colour to the recipe's colour, keeping the texture detail.
-  - **Springs:** hair and skirts simulate VRM 0.x springs and colliders from the file (UniVRM's logic) at a fixed 60 Hz. Only the nearest 48 characters within 40 m are simulated, at about 9–11 µs per character per step.
+  - **Springs:** hair and skirts simulate VRM 0.x springs and colliders from the file (UniVRM's logic) at a fixed 60 Hz. Only characters drawn with their full model are simulated (the far model has no spring bones), so the near-model cap of eight bounds the work; within those, the nearest 48 within 40 m. A character whose full model comes back starts from its settled hanging pose (60 steps against its pose, then still), so nothing swings in. Since 2026-11-19 (spring-near).
   - **Controls:** `LIVING_GAME_CROWD`, `LIVING_GAME_PLAYER` and `LIVING_GAME_VIEW=recipe:…`.
   - **Known gaps:**
     - multi-colour garments collapse to shades of one colour;

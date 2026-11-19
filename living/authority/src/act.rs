@@ -502,12 +502,14 @@ fn skill_ctx_with(ctx: &ReducerContext, id: u32, a: &Activity, now: u64, roll: f
     if has(&sc, &a.skill, |s| s.dares) && target.class == "creature" {
         target.yielded_ago = yielded_ago(ctx, target.id as u32, now);
         if actor.kind != "person" && target.kind == "person" {
-            let sight = common::sight_for(ctx, id, &w, now);
+            let senses = common::senses_of(ctx, id, &w, now);
+            let sight = senses.sight;
             let mut sensed: Vec<(String, u32)> = Vec::new();
             // Itself among them, as before; others when seen (a clear sight line) or smelled.
             let map = common::map(ctx);
             let heading = ctx.db.body().id().find(id).map_or(0.0, |b| common::facing_at(&b, now));
-            let seen = common::creatures_near(ctx, from, common::gather_radius(ctx, sight), now).into_iter().filter(|c| c.id == id || crate::perception::in_sight(ctx, &map, id, from, heading, c.id, c.pos, c.dist, &w, now, false));
+            let (gather, _) = common::gather_radius(ctx, &senses, 0.0);
+            let seen = common::creatures_near(ctx, from, gather, now).into_iter().filter(|c| c.id == id || crate::perception::in_sight(ctx, &map, id, from, heading, c.id, c.pos, c.dist, &w, now, false));
             for c in seen.chain(common::smelled_near(ctx, id, &actor.kind, from, sight, now)) {
                 match sensed.iter_mut().find(|(k, _)| *k == *c.kind) {
                     Some(e) => e.1 += 1,
@@ -550,6 +552,7 @@ fn skill_ctx_with(ctx: &ReducerContext, id: u32, a: &Activity, now: u64, roll: f
     }
     let records = if sc.skill_reads_records(&a.skill, a.phase == 1) { crate::records::of(ctx, id, now) } else { Vec::new() };
     SkillCtx {
+        gaze_band: Default::default(),
         records,
         want: a.want.clone(),
         want_qty: a.want_qty,
@@ -2177,6 +2180,11 @@ fn move_tablets(ctx: &ReducerContext, item: &str, from: u64, to: u64, qty: u32) 
     if item != "tablet" {
         return;
     }
+    for holder in [from, to] {
+        if holder & STRUCTURE_BIT != 0 {
+            common::invalidate_remains_label(ctx, holder ^ STRUCTURE_BIT);
+        }
+    }
     for mut t in ctx.db.artifact().holder().filter(from).take(qty as usize).collect::<Vec<_>>() {
         t.holder = to;
         ctx.db.artifact().id().update(t);
@@ -2423,9 +2431,11 @@ fn missed(ctx: &ReducerContext, attacker: u32, victim: u32, at_v: (f32, f32), sk
 /// (bounded per character) for the record; the mind's graph in Neo4j keeps its history.
 pub fn forget_dead(ctx: &ReducerContext, id: u32) {
     ctx.db.familiar().actor().delete(id);
+    ctx.db.seen_structures().actor().delete(id);
     crate::known::forget(ctx, id);
     ctx.db.last_look().id().delete(id);
     ctx.db.character_senses().id().delete(id);
+    crate::attention::forget(ctx, id);
     ctx.db.character_earshot().id().delete(id);
     ctx.db.experience().observer().delete(id);
     ctx.db.line_heard().speaker().delete(id);
@@ -2859,6 +2869,7 @@ pub fn die_unseen(ctx: &ReducerContext, id: u32, cause: &str, now: u64, killer: 
             t.holder = STRUCTURE_BIT | s.id;
             ctx.db.artifact().id().update(t);
         }
+        common::invalidate_remains_label(ctx, s.id);
         let last_ms = sc.remains_ms(&kind).max(0.0) as u64;
         ctx.db.rot().insert(Rot { structure: s.id, due_ms: now + last_ms });
     }

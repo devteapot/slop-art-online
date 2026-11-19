@@ -29,9 +29,26 @@ const RESEND: (i32, i32, bool) = (i32::MIN, i32::MIN, false);
 /// before sending the held intent again: about one token at 30 Hz.
 const RETRY_S: f64 = 0.04;
 
-/// How my character faces while it moves (F3, `LIVING_GAME_CONTROL`). Presentation and aim only:
-/// the authority has no look (`human_move` carries a direction and a gait), so either way the
-/// rules see the body's heading as its travel and each move's aim as the point it was sent with.
+/// The local character's facing animation. Movement and held-look intents use the existing reducers.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Facing {
+    Cursor,
+    Natural,
+}
+
+impl Facing {
+    pub const CHOICES: [(&str, &str); 2] = [("Cursor", "cursor"), ("Natural", "natural")];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Cursor => "cursor",
+            Self::Natural => "natural",
+        }
+    }
+}
+
+/// Whether holding a look is limited to aiming at a target or also used during normal travel.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum Control {
     /// Facing the cursor: WASD moves and the body looks where the mouse points.
@@ -289,11 +306,7 @@ pub fn movement(
     // walking; facing where I walk, the cursor's only while a move is aimed (a skill key held,
     // a guard up), then released (the body faces its travel again).
     let aims = combat.as_deref().is_some_and(|c| c.aims);
-    let dir = match input.control {
-        Control::Cursor => input.look,
-        Control::Travel if aims => input.look,
-        Control::Travel => None,
-    };
+    let dir = input.look.filter(|_| input.faces_cursor(aims));
     // While moving, the look is released unless [`FACE_WHILE_MOVING`] (see there). It goes
     // before this frame's move, so a walk that starts reaches the authority after the release,
     // while the body still stands: a release then keeps the facing and the walk turns on its

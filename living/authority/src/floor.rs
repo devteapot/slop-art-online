@@ -241,6 +241,11 @@ pub fn begin(ctx: &ReducerContext, s: &Seed, laws: Option<String>, now: u64) -> 
         log::info!("the seed's laws are installed over the shipped script");
     }
     world_laws(ctx, s);
+    let effective = crate::common::laws(ctx);
+    if effective.cover_sight_on && !s.map.as_ref().is_some_and(|m| m.kind == "land") {
+        return Err("cover sight requires a land seed".into());
+    }
+    crate::common::publish_cover_law(ctx, effective);
     let staged = s.map.as_ref().filter(|m| m.kind == "land").and_then(|m| crate::island::params_of(m).ok()).is_some_and(|(size, _)| size > INLINE_MAX_M);
     if !staged {
         seed::seed(ctx, now);
@@ -374,6 +379,10 @@ fn step(ctx: &ReducerContext) -> Result<(), String> {
                 if ctx.db.terrain_chunk().id().find(id).is_none() {
                     ctx.db.terrain_chunk().insert(TerrainChunk { id, tiles: h.map.chunk_bytes(id) });
                 }
+            }
+            // One cover band corresponds to 64 standard terrain chunks.
+            for band in a / 64..b.div_ceil(64) {
+                crate::island::keep_cover_band(ctx, h, band);
             }
             g.chunks = b as u32;
         } else if (g.lots as usize) < w.hosted.as_ref().expect("hosted").lots.len() {

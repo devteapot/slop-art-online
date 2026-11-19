@@ -1,14 +1,20 @@
 #!/usr/bin/env python3
-"""Regenerate the partial fast-lane battle report from saved run directories."""
+"""Regenerate the fast-lane battle report from saved run directories."""
 import argparse
-from bisect import bisect_left
+from bisect import bisect_left, bisect_right
 from collections import defaultdict
+import gzip
 import json
 import math
+import re
 from pathlib import Path
 from statistics import mean, median
 
-ATTACKS = {"strike", "attack", "bowshot", "shoot", "throw"}
+from verify_steering import pose
+
+ATTACKS = {"strike", "attack", "bowshot", "firebolt", "shoot", "throw"}
+RETREATS = {"back_off", "flee"}
+DAMAGE = re.compile(r"(?:hit for (\d+)|blocked, (\d+) got through|killed .+ \((\d+)\))$")
 DEFENCES = {"dodge", "block", "jump"}
 # Historical USD per million tokens, as recorded in model_cost.py for this run's model.
 FLASH_PRICES = (0.30, 0.007, 1.20)
@@ -82,7 +88,7 @@ def skill_snapshot(path, head, patches):
         durations.append((last - first) / 1000)
     timestamps = [r["accepted_ms"] for r in uses if r["accepted_ms"]]
     return {
-        "export_span_s": (max(timestamps) - min(timestamps)) / 1000,
+        "export_span_s": (max(timestamps) - min(timestamps)) / 1000 if timestamps else None,
         "unreleased_attacks": unreleased,
         "timed_defence": {key: share(sum(groups[key]), len(groups[key]))
                           for key in ("overall", "before", "after")},
@@ -162,11 +168,177 @@ def fast_stats(path, minutes):
     }
 
 
+def within_reach(positions, reach):
+    """Find contact with any other live fighter in this free-for-all."""
+    cells = defaultdict(list)
+    touching = set()
+    for actor, (x, y) in positions.items():
+        cx, cy = math.floor(x / reach), math.floor(y / reach)
+        for ix in range(cx - 1, cx + 2):
+            for iy in range(cy - 1, cy + 2):
+                for other, at in cells.get((ix, iy), []):
+                    if math.dist((x, y), at) <= reach:
+                        touching.update((actor, other))
+        cells[cx, cy].append((actor, (x, y)))
+    return touching
+
+
+def combat_samples(path, head):
+    file = path / "combat-samples.jsonl.gz"
+    if not file.exists():
+        return {"available": False, "reason": "historical run without combat samples"}
+
+    setup = head["combat_sampling"]
+    reach, radius = setup["strike_release_reach_m"], setup["away_radius_m"]
+    max_gap = 2.5 * setup["period_s"] * 1000
+    return_window = setup["reengage_s"] * 1000
+    roster, uses, hurt, retreat_starts = {}, {}, {}, set()
+    seconds = defaultdict(lambda: defaultdict(float))
+    engagements = defaultdict(list)
+    previous = None
+    longest_gap = errors = samples = 0
+    gaps = []
+    coverage = []
+    with gzip.open(file, "rt") as stream:
+        for line in stream:
+            sample = json.loads(line)
+            if "error" in sample:
+                errors += 1
+                continue
+            samples += 1
+            at = sample["at_ms"]
+            roster.update({int(i): began for i, began in sample["fighters"].items()})
+            activities = {a["id"]: a for a in sample["activities"]}
+            bodies = {b["id"]: b for b in sample["bodies"]}
+            positions = {i: pose(b, at) for i, b in bodies.items()}
+            contact = within_reach(positions, reach)
+            for i, a in activities.items():
+                if a["skill"] in RETREATS and a["started_ms"] >= roster[i]:
+                    retreat_starts.add((i, a["started_ms"], a["skill"]))
+            for row in sample["uses"]:
+                uses[row["id"]] = row
+            for row in sample["hurt"]:
+                hurt[row["id"]] = row
+            if previous:
+                then, old_positions, old_contact, old_idle = previous
+                gap = at - then
+                longest_gap = max(longest_gap, gap)
+                if gap > max_gap:
+                    gaps.append((then, at))
+                if 0 < gap <= max_gap:
+                    if coverage and coverage[-1][1] == then:
+                        coverage[-1] = (coverage[-1][0], at)
+                    else:
+                        coverage.append((then, at))
+                    for i, position in old_positions.items():
+                        delta = gap / 1000
+                        away = math.dist(position, head["site"]) > radius
+                        seconds[i]["observed"] += delta
+                        seconds[i]["contact"] += delta * (i in old_contact)
+                        seconds[i]["away"] += delta * away
+                        seconds[i]["idle"] += delta * (i in old_idle)
+                        seconds[i]["idle_or_away"] += delta * (away or i in old_idle)
+                        if i in contact and i not in old_contact:
+                            engagements[i].append(at)
+            idle = {i for i in bodies if not bodies[i]["vx"] and not bodies[i]["vy"]
+                    and (i not in activities or activities[i]["skill"] in ("wait", "wander"))}
+            previous = (at, positions, contact, idle)
+
+    if samples < 2:
+        return {"available": False, "reason": "fewer than two usable samples",
+                "samples": samples, "sample_errors": errors}
+
+    totals = dict.fromkeys(("attacks_attempted", "engagements_started", "retreats",
+                           "retreats_reengaged", "retreats_no_reengagement", "retreats_censored",
+                           "damage_taken", "damage_dealt"), 0)
+    totals["engagements_started"] = sum(map(len, engagements.values()))
+    covered_counts = dict.fromkeys(totals, 0)
+    covered_counts["engagements_started"] = totals["engagements_started"]
+    coverage_starts = [start for start, _ in coverage]
+    last_sample = previous[0]
+
+    def tally(key, at, amount=1):
+        totals[key] += amount
+        index = bisect_right(coverage_starts, at) - 1
+        if index >= 0 and at < coverage[index][1]:
+            covered_counts[key] += amount
+    retreats = []
+    for actor, start, skill in sorted(retreat_starts, key=lambda r: (r[1], r[0], r[2])):
+        if start >= last_sample:
+            continue
+        times = engagements[actor]
+        index = bisect_right(times, start)
+        deadline = start + return_window
+        reengaged = index != len(times) and times[index] <= deadline
+        full_window = deadline <= last_sample and not any(left < deadline and start < right
+                                                            for left, right in gaps)
+        status = "reengaged" if reengaged else "no_reengagement" if full_window else "censored"
+        tally("retreats", start)
+        tally(f"retreats_{status}", start)
+        retreats.append({"actor": actor, "at_ms": start, "skill": skill, "result": status,
+                         "reengaged_ms": times[index] if reengaged else None})
+
+    def fighting(actor, at):
+        return actor in roster and roster[actor] <= at < last_sample
+
+    for use in uses.values():
+        if use["skill"] not in ATTACKS or not use["accepted_ms"]:
+            continue
+        if fighting(use["actor"], use["accepted_ms"]):
+            tally("attacks_attempted", use["accepted_ms"])
+        damage = DAMAGE.search(use["outcome"])
+        if not damage:
+            continue
+        amount = int(next(value for value in damage.groups() if value is not None))
+        if fighting(use["actor"], use["outcome_ms"]):
+            tally("damage_dealt", use["outcome_ms"], amount)
+        # The aim is the actual victim for direct skills. A missile may hit another body.
+        if use["skill"] not in ("bowshot", "firebolt") and fighting(use["target"], use["outcome_ms"]):
+            tally("damage_taken", use["outcome_ms"], amount)
+    for row in hurt.values():
+        # Missile victim's own percept uses the same rounded damage phrasing.
+        damage = DAMAGE.search(row["text"])
+        if damage and fighting(row["observer"], row["at_ms"]):
+            amount = int(next(value for value in damage.groups() if value is not None))
+            tally("damage_taken", row["at_ms"], amount)
+
+    observed = sum(values["observed"] for values in seconds.values())
+    fighter_minutes = observed / 60
+    time_keys = ("contact", "away", "idle", "idle_or_away")
+    for key in time_keys:
+        totals[f"{key}_seconds"] = sum(values[key] for values in seconds.values())
+        covered_counts[f"{key}_seconds"] = totals[f"{key}_seconds"]
+    fighter_shares = {}
+    for actor in sorted(roster):
+        values = seconds[actor]
+        duration = values["observed"]
+        fighter_shares[actor] = {"observed_seconds": duration,
+                                 **{f"{key}_share": values[key] / duration if duration else None
+                                    for key in time_keys}}
+    return {
+        "available": True, "method": setup, "samples": samples, "sample_errors": errors,
+        "longest_sample_gap_s": longest_gap / 1000, "observed_fighter_minutes": fighter_minutes,
+        "used_interval_seconds": sum(end - start for start, end in coverage) / 1000,
+        "discarded_gap_seconds": sum(end - start for start, end in gaps) / 1000,
+        "totals": totals,
+        "observed_time_shares": {key: totals[f"{key}_seconds"] / observed if observed else None
+                                 for key in time_keys},
+        "per_fighter_minute": {key: value / fighter_minutes if fighter_minutes else None
+                               for key, value in covered_counts.items()},
+        "attacks_per_contact_minute": (60 * covered_counts["attacks_attempted"] / totals["contact_seconds"]
+                                       if totals["contact_seconds"] else None),
+        "damage_dealt_per_attempt": (covered_counts["damage_dealt"] / covered_counts["attacks_attempted"]
+                                     if covered_counts["attacks_attempted"] else None),
+        "fighters": fighter_shares,
+        "retreats": retreats,
+    }
+
+
 def summarize(path):
     head = read_json(path / "diag-result.json")
     rows = list(read_lines(path / "diag.jsonl"))
-    if head["status"] != "done" or len(rows) != 10:
-        raise ValueError(f"expected a completed ten-window run in {path}")
+    if head["status"] != "done" or not rows:
+        raise ValueError(f"expected a completed battle with diagnostic samples in {path}")
     mid = [r for r in rows if r["t_min"] >= 2]
     start, end = rows[0], rows[-1]
     fighter_minutes = 0.0
@@ -185,19 +357,25 @@ def summarize(path):
         blocked += bench["combat"]["blocked"]
         dodged += bench["combat"]["dodged"]
 
-    patches, fast = fast_stats(path, len(rows))
+    patches, fast = fast_stats(path, head.get("minutes", len(rows)))
 
     def rate(key, windows):
-        return mean(r["diag_per_s"].get(key, 0) for r in windows)
+        return mean(r["diag_per_s"].get(key, 0) for r in windows) if windows else None
 
     tick_samples = [
         {"minute": row["t_min"], "ticks_per_s": row["ticks_per_s"],
          "over_budget": row["over_16_7"], "new_deaths": row["fighter_deaths"] - prev["fighter_deaths"],
-         "remains_at_site": row["remains"]["at_site"]}
+         "remains_at_site": row["remains"].get("at_site")}
         for prev, row in zip(rows, rows[1:]) if row in mid
     ]
     return {
+        "arm": head["arm"],
         "site": head["site"],
+        "world_seed": head.get("world_seed"),
+        "layout": head.get("layout"),
+        "walker_layout": head.get("walker_layout"),
+        "ambient_displaced": head.get("ambient_displaced"),
+        "combat": combat_samples(path, head),
         "setup": {key: head[key] for key in ("battle", "walkers", "ambient_at_publish", "refill",
                                               "refill_gap", "refill_from", "keep_plans", "laws")},
         "sampled_defence": taken_from_samples(rows),
@@ -211,7 +389,7 @@ def summarize(path):
         "world_hits_last_six": sum(hit_windows[4:]),
         "world_hits_per_estimated_fighter_min": hits / fighter_minutes,
         "world_hits_per_second": hits / seconds,
-        "world_hits_per_resolved_nonmiss_pct": 100 * hits / (hits + blocked + dodged),
+        "world_hits_per_resolved_nonmiss_pct": 100 * hits / (hits + blocked + dodged) if hits + blocked + dodged else None,
         "action_rates_per_s": {
             key: [rate(key, windows) for windows in (rows[:4], rows[4:])]
             for key in ("begin:ok:back_off", "begin:ok:flee", "begin:ok:keep_distance",
@@ -221,10 +399,10 @@ def summarize(path):
         "first_four_respawn_counts": [r["respawns"] for r in rows[:4]],
         "first_four_death_counts": [r["fighter_deaths"] for r in rows[:4]],
         "end_fighters": end["fighters_alive"], "end_arriving": end["arriving"],
-        "ticks_per_s": mean(r["ticks_per_s"] for r in mid),
+        "ticks_per_s": mean(r["ticks_per_s"] for r in mid) if mid else None,
         "over_budget": sum(r["over_16_7"] for r in mid),
         "tick_samples": tick_samples,
-        "end_remains_at_site": end["remains"]["at_site"],
+        "end_remains_at_site": end["remains"].get("at_site"),
         "fast": fast,
     }
 
@@ -235,14 +413,19 @@ def adjust_ticks(arms, covariate):
     means = {}
     ranges = {}
     for arm, report in arms.items():
-        rows = report["tick_samples"]
+        rows = [row for row in report["tick_samples"] if row[covariate] is not None]
+        if not rows:
+            continue
         xs = [r[covariate] for r in rows]
         ys = [r["ticks_per_s"] for r in rows]
         mx, my = mean(xs), mean(ys)
         pairs.extend((x - mx, y - my) for x, y in zip(xs, ys))
         means[arm] = mx, my
         ranges[arm] = [min(xs), max(xs)]
-    slope = sum(x * y for x, y in pairs) / sum(x * x for x, _ in pairs)
+    variance = sum(x * x for x, _ in pairs)
+    if len(means) < 2 or not variance:
+        return None
+    slope = sum(x * y for x, y in pairs) / variance
     reference = mean(x for x, _ in means.values())
     return {"ranges": ranges, "slope": slope, "reference": reference,
             "adjusted_ticks_per_s": {arm: y + slope * (reference - x)
@@ -251,13 +434,20 @@ def adjust_ticks(arms, covariate):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("runs", type=Path, nargs=3, metavar="RUN",
-                        help="saved A1, B1 and C1 directories, in that order")
+    parser.add_argument("runs", type=Path, nargs="+", metavar="RUN",
+                        help="saved run directories, in any order")
     args = parser.parse_args()
-    arms = {arm: summarize(path) for arm, path in zip("ABC", args.runs)}
-    result = {"arms": arms, "tick_adjustments": {
-        key: adjust_ticks(arms, key) for key in ("new_deaths", "remains_at_site")
-    }}
+    arms = {path.name: summarize(path) for path in args.runs}
+    if len(arms) != len(args.runs):
+        parser.error("run directory names must be distinct")
+    by_size = defaultdict(dict)
+    for name, arm in arms.items():
+        by_size[arm["setup"]["battle"]][name] = arm
+    result = {"arms": arms, "estimated_total_usd": sum(a["fast"]["estimated_usd"] for a in arms.values()),
+              "tick_adjustments_by_size": {
+                  size: {key: adjust_ticks(group, key) for key in ("new_deaths", "remains_at_site")}
+                  for size, group in sorted(by_size.items())
+              }}
     print(json.dumps(result, indent=2, allow_nan=False))
 
 

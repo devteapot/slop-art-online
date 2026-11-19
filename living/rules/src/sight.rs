@@ -35,6 +35,65 @@ pub struct Field {
     pub margin_deg: f32,
 }
 
+/// An observer's selected gaze. Discriminants are used by the authority protocol.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[repr(u8)]
+pub enum GazeBand {
+    #[default]
+    Middle = 0,
+    Far = 1,
+    Near = 2,
+}
+
+impl GazeBand {
+    pub const ALL: [Self; 3] = [Self::Middle, Self::Far, Self::Near];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Middle => "middle",
+            Self::Far => "far",
+            Self::Near => "near",
+        }
+    }
+
+    /// Resolve a target zoom using the last selected band for the boundary dead zones.
+    pub fn at_zoom(self, zoom: f32) -> Self {
+        if !zoom.is_finite() {
+            return self;
+        }
+        const FAR: f32 = 0.275;
+        const NEAR: f32 = 0.775;
+        const HYSTERESIS: f32 = 0.025;
+        let far_edge = FAR + if self == Self::Far { HYSTERESIS } else { -HYSTERESIS };
+        let near_edge = NEAR + if self == Self::Near { -HYSTERESIS } else { HYSTERESIS };
+        if zoom <= far_edge {
+            Self::Far
+        } else if zoom > near_edge {
+            Self::Near
+        } else {
+            Self::Middle
+        }
+    }
+}
+
+impl TryFrom<u8> for GazeBand {
+    type Error = &'static str;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        Self::ALL.get(usize::from(value)).copied().ok_or("invalid gaze band")
+    }
+}
+
+/// Effective bounds supplied by the enabled gaze law.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Gaze {
+    pub band: GazeBand,
+    pub ceiling: f32,
+    pub ground: f32,
+    /// Maximum target glow under the world's current light.
+    pub glow: f32,
+}
+
 /// What a creature senses now (`senses(a)`): how far it sees and hears, in tiles (a tile is one
 /// metre), and how its view narrows away from facing (none: the same in every direction).
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -42,12 +101,17 @@ pub struct Senses {
     pub sight: f32,
     pub hearing: f32,
     pub field: Option<Field>,
+    pub gaze: Option<Gaze>,
 }
 
 impl Senses {
+    pub fn bound(&self, radius: f32) -> f32 {
+        self.gaze.map_or(radius, |gaze| radius.min(gaze.ceiling))
+    }
+
     /// Senses without a field (sight the same all round).
     pub fn round(sight: f32, hearing: f32) -> Self {
-        Self { sight, hearing, field: None }
+        Self { sight, hearing, field: None, gaze: None }
     }
 }
 
@@ -58,7 +122,7 @@ impl Senses {
 pub fn reach(senses: &Senses, off: f32, glow: f32, kept: Option<f32>) -> f32 {
     let keep = kept.unwrap_or(0.0);
     let lit = senses.sight.max(glow);
-    let Some(f) = senses.field else { return lit + keep };
+    let Some(f) = senses.field else { return senses.bound(lit + keep) };
     let margin = if kept.is_some() { f.margin_deg } else { 0.0 };
     let deg = wrap(off).abs().to_degrees();
     let ahead = if deg <= f.focal_deg + margin {
@@ -68,7 +132,7 @@ pub fn reach(senses: &Senses, off: f32, glow: f32, kept: Option<f32>) -> f32 {
     } else {
         0.0
     };
-    ahead.max(f.near_m.min(senses.sight)) + keep
+    senses.bound(ahead.max(f.near_m.min(senses.sight)) + keep)
 }
 
 /// Whether an eye at `eye`, its body facing `heading` (radians, `body.heading`), with `senses`,
@@ -86,7 +150,7 @@ pub fn within(eye: (f32, f32), heading: f32, at: (f32, f32), dist: f32, senses: 
         None => senses.sight.max(glow),
         Some(f) => f.near_m.min(senses.sight),
     } + kept.unwrap_or(0.0);
-    if dist <= floor {
+    if dist <= senses.bound(floor) {
         return true;
     }
     if senses.field.is_none() {
@@ -172,12 +236,12 @@ mod tests {
     use crate::map::{Map, Terrain};
 
     fn open() -> Map {
-        Map { w: 64, h: 64, tiles: vec![Terrain::Grass as u8; 64 * 64], blocked: Default::default(), opaque: Default::default(), nav: Default::default() }
+        Map { w: 64, h: 64, tiles: vec![Terrain::Grass as u8; 64 * 64], blocked: Default::default(), cover: None, opaque: Default::default(), nav: Default::default() }
     }
 
     /// The shipped starting values (`laws()`'s `fov_*`) by day.
     fn day() -> Senses {
-        Senses { sight: 11.0, hearing: 9.0, field: Some(Field { focal_deg: 70.0, side_deg: 110.0, side_share: 1.0 / 3.0, near_m: 3.0, margin_deg: 10.0 }) }
+        Senses { sight: 11.0, hearing: 9.0, gaze: None, field: Some(Field { focal_deg: 70.0, side_deg: 110.0, side_share: 1.0 / 3.0, near_m: 3.0, margin_deg: 10.0 }) }
     }
 
     /// A spot `d` metres away at `deg` degrees off an eye at (32, 32) facing east.
@@ -261,6 +325,31 @@ mod tests {
             }
         }
         assert!(n > 100_000);
+    }
+
+    #[test]
+    fn gaze_zoom_has_boundary_hysteresis() {
+        use GazeBand::{Far, Middle, Near};
+        assert_eq!(Middle.at_zoom(0.251), Middle);
+        assert_eq!(Middle.at_zoom(0.249), Far);
+        assert_eq!(Far.at_zoom(0.299), Far);
+        assert_eq!(Far.at_zoom(0.301), Middle);
+        assert_eq!(Middle.at_zoom(0.799), Middle);
+        assert_eq!(Middle.at_zoom(0.801), Near);
+        assert_eq!(Near.at_zoom(0.751), Near);
+        assert_eq!(Near.at_zoom(0.749), Middle);
+        assert_eq!(Near.at_zoom(0.0), Far);
+        assert_eq!(Far.at_zoom(1.0), Near);
+    }
+
+    #[test]
+    fn gaze_ceiling_applies_to_glow_and_keep() {
+        let mut s = day();
+        s.gaze = Some(Gaze { band: GazeBand::Near, ceiling: 12.0, ground: 8.0, glow: 28.0 });
+        assert!(sees_at(&s, 20.0, 12.0, 28.0, None));
+        assert!(!sees_at(&s, 20.0, 12.1, 28.0, None));
+        assert!(!sees_at(&s, 20.0, 12.1, 28.0, Some(1.0)));
+        assert!(sees_at(&s, 115.0, 3.5, 0.0, Some(1.0)));
     }
 
     #[test]

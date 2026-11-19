@@ -424,7 +424,124 @@ Each adjustment fits one pooled within-arm slope and a separate intercept per ar
 
 Spend is based on journal usage at the repository's historical list prices. Timeouts have no usage or cost, and provider billing could include work absent from these estimates. Failed-call share uses journal errors, independently of authority expirations or patch refusals. Timing matches installed thoughts to unique timestamps in the final cumulative `fast-*.json` export. Prompt preparation has no separate timestamp. Its residual includes local processing, model queueing and reply handling. Phase percentiles are computed separately.
 
-**Decision.** B1's recorded spend is under about $0.06/min and its timed-defence share rose. Behaviour changed in the observed battle. The plan's requirement that B be within A's noise remains untested, and the different battle workloads prevent a clean tick-cost comparison. Keep the default off pending replication. The partial result supports testing the shipped caps again.
+**Decision.** B1's recorded spend is under about $0.06/min and its timed-defence share rose. Behaviour changed in the observed battle. The plan's requirement that B be within A's noise remains untested, and the different battle workloads prevent a clean tick-cost comparison. At that point the default stayed off pending replication. The replicate decision is recorded below.
+
+## Replicates and the fight-exposure measures
+
+The replacement runs use the same `island` world seed. While the world is paused, the driver uses
+a point 20 m north of the land's arrival point and the closest walkable tile for the site. It
+orders the nearest 200 walkable tile centres by distance, shuffles them with the world seed,
+and uses the same prefix for the 100- and 200-fighter formations. The 16 extra walkers get
+seeded slots more than 45 m away. Before placement, the driver moves bodies occupying any
+reserved slot to a staging point at least 22 m from the site. It verifies the actual coordinates
+from `body` before starting the minds or unpausing and saves the seed, site, positions and
+any displaced inhabitants in `diag-head.json`. Ambient inhabitants otherwise run under the
+normal world rules. The crowd reducer still assigns
+random home coordinates, and placement changes bodies only. Refill bearings and approach points
+use a separate seeded stream, and refill timing depends on the battle.
+
+`combat-samples.jsonl.gz` contains roughly one owner SQL observation per second across the whole
+battle, including between benchmark windows. The report counts these rows as follows.
+
+- **Attacks attempted** use an accepted attack start in `skill_use`, once per row ID, even if the
+  attack misses or ends before release. The published count can miss rows trimmed between samples
+  because the authority keeps the last 24 skill uses per actor.
+- **Contact** means another living fighter within the installed `strike` skill's release reach
+  from `skill_card` (including the rules' lunge). The free-for-all treats every other fighter as a
+  potential opponent. The report projects the authoritative body's motion segment to sample
+  time. A fighter starts one engagement when consecutive samples show it going from out of
+  contact to in contact, irrespective of how many opponents are in reach. A fighter first
+  observed already in contact starts with no observed transition. This measures distance, with
+  no requirement for sight or an attack.
+- **Retreats** are distinct `back_off` and `flee` starts observed in `activity`. A re-engagement is
+  a subsequent contact transition by the same fighter within 10 wall-clock seconds of its
+  retreat start. A retreat with no observed return and an incomplete follow-up window is censored. Short retreats or contact transitions between observations can be missed.
+- **Damage** uses resolved `skill_use` outcomes for the attacker and the intended target of
+  direct attacks. For missiles, the victim's `attacked` percept identifies their own received
+  damage, since a missile can hit a different target. This is the rules' post-guard damage,
+  rounded to whole points and including overkill. Percept retention and cleanup at death can
+  omit some missile damage taken. Dodge and miss outcomes contribute zero.
+- **Away** is more than 15 m from the initial site. **Idle** means stationary with no active
+  skill, or stationary during a wait or wander activity. The report includes away time, idle
+  time and their union per fighter. A fighter without usable time has null shares. A refill starts contributing when the keeper installs
+  its combat graph after arrival.
+
+Each usable body sample contributes time up to the next sample, discarding gaps longer than
+2.5 seconds. Run totals count all exported events. The rates use events in the retained
+intervals and those intervals' observed fighter-minutes as their denominator. Read the contact and away time, attack rate and retreat returns alongside timed defence and
+damage dealt per attempt. The historical A1/B1/C1 data retain their old metrics and are
+marked unavailable for the new ones. The 40-fighter fake run tests the instrumentation at
+small scale. Its sampling costs and outcomes cannot establish the paid arms' tick or model
+performance.
+
+The sampler uses the documented owner [SQL diagnostic endpoint](https://spacetimedb.com/docs/http/database/).
+It projects columns from the existing tables and keeps the raw evidence on the driver.
+The database gets no new tables, reducer writes or subscriber. These bounded-rate SQL reads
+still add workload, especially where retained rows are scanned, and are the same in each
+replicate arm.
+
+Paid operation uses [flb-all.sh](../living/tools/flb-all.sh) after the coordinator opens the
+window. The live watcher tails model journals for price and failed calls, and reads each
+reported tick window. It uses journal cost when present and the historical Flash token
+prices otherwise. Costs for provider work without recorded usage can be absent, and
+already in-flight calls can settle after a stop. Every started runner goes through the
+verification harness's pause, read-back and deletion, with a cleanup retry and deletion
+check in the sequence driver. Each completed or stopped run gets a verified archive and
+SHA-256, and the sequence archive includes the combined report when all five runs finish.
+
+## Replicate results (2026-11-19)
+
+**Fast lane makes fighters disengage; stays off.** The shipped caps improved timed
+defence during the fights that remained. Fighters spent far less time in contact and
+much more time away from the site at both sizes. At 100 fighters, B recorded zero aimed
+blows in the sampled windows from minute six onward.
+
+The five new arms each ran for ten minutes on `8ece2972` (base `7e420b4e`, without
+`tick-rate`). They used island seed 7, site (406.5, 237.5), and matching initial
+positions within each size. The 100-fighter layout used the first 100 slots of the
+200-fighter layout. A1/B1/C1 ran on `b55d83b5` on Nov 13. Comparisons to those runs
+cross the authority base change, and the historical runs lack the new exposure measures.
+
+| Exposure or outcome | A2 · 200 | B2 · 200 | C2 · 200 | A · 100 | B · 100 |
+|---|---:|---:|---:|---:|---:|
+| Attack starts / fighter-minute | 26.24 | 7.15 | 16.83 | 26.04 | 4.44 |
+| Attack starts / contact-minute | 26.91 | 11.93 | 21.53 | 27.86 | 10.24 |
+| Time in contact | 97.5% | 60.0% | 78.2% | 93.5% | 43.3% |
+| Time away | 1.2% | 59.7% | 31.7% | 4.7% | 61.3% |
+| Idle or away | 71.3% | 89.3% | 79.1% | 71.5% | 92.4% |
+| Engagement starts / fighter-minute | 0.34 | 1.59 | 1.19 | 0.80 | 1.40 |
+| Retreats observed | 0 | 1,505 | 1,133 | 0 | 681 |
+| Re-engaged within 10 s | — | 798 | 451 | — | 363 |
+| Damage taken / fighter-minute | 134.3 | 27.3 | 79.5 | 133.0 | 13.4 |
+| Damage dealt / fighter-minute | 146.2 | 29.5 | 85.0 | 145.0 | 15.1 |
+| Timed defence | 51.3% | 59.3% | 53.6% | 51.8% | 65.0% |
+| Timed defence, post-patch blows | — | 70.4% | 69.6% | — | 76.9% |
+| Post-warm-up ticks/s | 36.94 | 59.05 | 53.48 | 56.50 | 59.98 |
+| Journal spend / nominal minute | $0 | $0.0543 | $0.0326 | $0 | $0.0284 |
+| Journal spend, total | $0 | $0.5428 | $0.3257 | $0 | $0.2843 |
+
+B entered contact more often, then broke off. Its attacks per observed contact-minute
+also fell at both sizes. The higher observed tick rates came with substantially less
+combat. One pinned lane-off run per size leaves run-to-run tick noise and lane overhead
+unresolved. Journal-estimated spend for the five new arms was **$1.1528** against the
+$4.08 stop. Both B arms came in below $0.06/min.
+
+| 200-fighter issue → mind pickup | Saved outcomes | p50 | p90 | p99 |
+|---|---:|---:|---:|---:|
+| B2 | 493 | 25 ms | 515 ms | 11,310 ms |
+| C2 | 267 | 29 ms | 1,062 ms | 10,322 ms |
+
+In the slowest pickup decile, median trigger-to-issue, issue-to-pickup and
+pickup-to-patch-send times were **100 / 4,147 / 1,549 ms** for B2 and
+**17 / 3,743 / 1,626 ms** for C2. Patch-send time covers only outcomes with a send
+timestamp. The existing outcomes recorded mind pickup, and SDK receipt and callback
+times were unavailable.
+
+C2's first publish attempt stopped before model calls. The host wrote the module
+copy as `0600` under its private umask, and UID 1000 in the container could not read it.
+The resumed runs used `0644` module copies. The verification launcher now applies
+that mode to its copies before the CLI opens the local binary passed to
+[`spacetime publish --bin-path`](https://spacetimedb.com/docs/cli-reference/#spacetime-publish).
 
 ## What this design does not do
 

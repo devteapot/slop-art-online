@@ -48,12 +48,14 @@
 use bevy::prelude::*;
 use living_bindings::*;
 use living_rules::map::{chunk_id, chunk_xy, CHUNK};
+use living_rules::sight::GazeBand;
 use spacetimedb_sdk::{DbContext, EventTable, Identity, SubscriptionHandle as _, Table, TableWithPrimaryKey};
 use std::collections::HashMap;
 use std::ops::Deref;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 /// Half-size (tiles) of the square of chunks kept subscribed around the player (tile worlds).
 pub const REGION_R: f32 = 40.0;
@@ -65,7 +67,7 @@ pub const LOT_CHUNKS: i32 = 11;
 pub const RECENTRE: i32 = 2;
 pub const LOT_RECENTRE: i32 = 5;
 
-const STATIC: &[&str] = &["SELECT * FROM world", "SELECT * FROM land", "SELECT * FROM settlement"];
+const STATIC: &[&str] = &["SELECT * FROM cover_law", "SELECT * FROM world", "SELECT * FROM land", "SELECT * FROM settlement"];
 /// What my character perceives and its own state (per-sender views, docs/PERCEPTION.md), and
 /// the rules' cards, for the connection's lifetime.
 const PERCEIVED: &[&str] = &[
@@ -115,8 +117,56 @@ enum Signal {
     Identity(Identity, String),
     Static,
     Base,
+    GazeReply(GazeBand, GazeReply),
     Disconnected(String),
     Error(String),
+}
+
+const GAZE_INTERVAL: Duration = Duration::from_millis(250);
+
+enum GazeReply {
+    Accepted,
+    Retry,
+    Refused,
+}
+
+#[derive(Default)]
+struct GazeInput {
+    desired: GazeBand,
+    owner: Option<u32>,
+    applied: Option<GazeBand>,
+    pending: Option<GazeBand>,
+    accepted: Option<GazeBand>,
+    refused: Option<GazeBand>,
+    retry_at: Option<Instant>,
+}
+
+impl GazeInput {
+    fn next(&self, now: Instant) -> Option<GazeBand> {
+        let applied = self.applied?;
+        (self.pending.is_none()
+            && self.retry_at.is_none_or(|at| now >= at)
+            && self.desired != self.accepted.unwrap_or(applied)
+            && self.refused != Some(self.desired))
+            .then_some(self.desired)
+    }
+
+    fn reply(&mut self, band: GazeBand, reply: GazeReply, now: Instant) {
+        if self.pending != Some(band) {
+            return;
+        }
+        self.pending = None;
+        self.retry_at = Some(now + GAZE_INTERVAL);
+        match reply {
+            GazeReply::Accepted => self.accepted = (self.applied != Some(band)).then_some(band),
+            GazeReply::Retry => {}
+            GazeReply::Refused => self.refused = Some(band),
+        }
+    }
+
+    fn reset_owner(&mut self) {
+        *self = Self { desired: self.desired, ..Self::default() };
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -213,6 +263,8 @@ pub struct Net {
     /// The call `on_reply` just logged, for `report` (`actions.rs`).
     last_call: std::cell::Cell<Option<crate::actions::Sent>>,
     base: Option<SubscriptionHandle>,
+    gaze_view: Option<SubscriptionHandle>,
+    gaze: GazeInput,
     near: Window,
     far: Window,
     /// The perception streams' set: key [`TIERED`] or [`UNTIERED`] (`perception_law`).
@@ -251,6 +303,8 @@ impl Default for Net {
             join_sent: false,
             last_call: Default::default(),
             base: None,
+            gaze_view: None,
+            gaze: GazeInput::default(),
             near: Window::default(),
             far: Window::default(),
             perception: Window::default(),
@@ -527,28 +581,45 @@ fn track_motion_time(
     });
 }
 
+/// The two laws as a compiled script gives them: (`cue_transport_on`, `near_tier_on`).
+fn delivery_laws(l: &living_rules::script::Laws) -> (bool, bool) {
+    (l.cue_transport_on, l.near_tier_on)
+}
+
+/// The laws taken while the world's script does not compile here and none was read before: the
+/// rules' defaults, as a fresh world starts (both on since frame-views' acceptance).
+fn delivery_fallback() -> (bool, bool) {
+    delivery_laws(&living_rules::script::Laws::default())
+}
+
+/// The perception set the two laws choose: the untiered set only while both are off.
+fn perception_set(cues_on: bool, tiers_on: bool) -> u32 {
+    if !cues_on && !tiers_on { UNTIERED } else { TIERED }
+}
+
 /// The world's delivery laws, `cue_transport_on` and `near_tier_on`, read from the installed
 /// `skills` script the client already compiles (`verbs::Rules`; the authority writes a world's
 /// own law values into it), once per revision. They choose the perception set: both off, the
 /// untiered views as main's client subscribes them (`UNTIERED_STREAMS`: on the authority both off
 /// is main's delivery, and a client on the tiers then pays for twice the views, docs/TICK_RATE.md
 /// "Short series"); either on, the tiers and the cue tables (`TIERED_STREAMS`). A script that
-/// does not compile here keeps the last values, or the tiers before any. The new set is
-/// subscribed beside the old, the old dropped once the new one is applied (no frame without the
-/// others), and then reads move to it and the overlays are cleared. Each frame the cue law is
-/// passed to the connection's overlays, so a fresh connection takes it at once.
+/// does not compile here keeps the last values, or before any the rules' defaults
+/// (`delivery_fallback`: both on, so the tiers with cues). The new set is subscribed beside the
+/// old, the old dropped once the new one is applied (no frame without the others), and then
+/// reads move to it and the overlays are cleared. Each frame the cue law is passed to the
+/// connection's overlays, so a fresh connection takes it at once.
 pub fn perception_law(mut net: NonSendMut<Net>, rules: Option<NonSend<crate::verbs::Rules>>, time: Res<Time>, mut law: Local<Option<(u32, bool, bool)>>) {
     let Some(rules) = rules else { return };
     if let Some(sc) = rules.scripts.as_ref() {
         if law.is_none_or(|(rev, _, _)| rev != rules.revision) {
-            let l = sc.laws();
-            info!("rules: cue_transport_on {} near_tier_on {} (script revision {})", l.cue_transport_on, l.near_tier_on, rules.revision);
-            *law = Some((rules.revision, l.cue_transport_on, l.near_tier_on));
+            let (c, t) = delivery_laws(&sc.laws());
+            info!("rules: cue_transport_on {c} near_tier_on {t} (script revision {})", rules.revision);
+            *law = Some((rules.revision, c, t));
         }
     }
     let (cues_on, tiers_on) = match *law {
         Some((_, c, t)) => (c, t),
-        None if rules.error.is_some() => (false, true),
+        None if rules.error.is_some() => delivery_fallback(),
         None => return,
     };
     if net.status != Status::Live || net.conn.is_none() {
@@ -557,7 +628,7 @@ pub fn perception_law(mut net: NonSendMut<Net>, rules: Option<NonSend<crate::ver
     if let Some(conn) = net.conn.as_ref() {
         conn.cues.set_transport(cues_on);
     }
-    let want = if !cues_on && !tiers_on { UNTIERED } else { TIERED };
+    let want = perception_set(cues_on, tiers_on);
     let now = time.elapsed_secs_f64();
     if net.perception.wanted() != Some(&vec![want]) {
         let set = if want == UNTIERED { UNTIERED_STREAMS } else { TIERED_STREAMS };
@@ -828,6 +899,69 @@ impl Net {
         );
     }
 
+    /// The sweep publishes at most one row to the player's connection. A separate
+    /// subscription leaves the base playable on servers predating the view.
+    pub fn gaze_view_ready(&self) -> bool {
+        self.gaze_view.as_ref().is_some_and(|view| view.is_active())
+    }
+
+    pub fn applied_gaze(&self) -> Option<AppliedGaze> {
+        let conn = self.conn.as_ref()?;
+        if !self.gaze_view_ready() {
+            return None;
+        }
+        conn.db.my_senses_v_2().id().find(&self.my_id?)
+    }
+
+    pub fn update_gaze(&mut self, zoom: f32) {
+        let desired = self.gaze.desired.at_zoom(zoom);
+        if desired != self.gaze.desired {
+            self.gaze.desired = desired;
+            self.gaze.refused = None;
+        }
+        let Some(row) = self.applied_gaze().filter(|_| self.status == Status::Live) else {
+            self.gaze.reset_owner();
+            return;
+        };
+        let Ok(band) = GazeBand::try_from(row.band) else { return };
+        if self.gaze.owner != Some(row.id) {
+            self.gaze.reset_owner();
+            self.gaze.owner = Some(row.id);
+        }
+        if self.gaze.applied != Some(band) {
+            debug!("gaze owner applied band={} sight={} focal={} side={}", row.band, row.senses.sight, row.senses.focal_deg, row.senses.side_deg);
+            self.gaze.applied = Some(band);
+        }
+        if self.gaze.accepted == Some(band) {
+            self.gaze.accepted = None;
+        }
+        let now = Instant::now();
+        let Some(band) = self.gaze.next(now) else { return };
+        let Some(conn) = &self.conn else { return };
+        let inbox = self.inbox.clone();
+        let result = conn.reducers.human_gaze_then(band as u8, move |ctx, result| {
+            let reply = match result {
+                Ok(Ok(())) => {
+                    debug!("gaze accepted band={} at_us={}", band as u8, ctx.event.timestamp.to_micros_since_unix_epoch());
+                    GazeReply::Accepted
+                }
+                Ok(Err(reason)) => {
+                    debug!("gaze refused band={}: {reason}", band as u8);
+                    // A new connection can recover a sweep before the last acceptance cools.
+                    if reason == "gaze changed less than 250 ms ago" { GazeReply::Retry } else { GazeReply::Refused }
+                }
+                Err(_) => GazeReply::Retry,
+            };
+            inbox.lock().unwrap().push(Signal::GazeReply(band, reply));
+        });
+        self.gaze.pending = Some(band);
+        if result.is_ok() {
+            debug!("gaze sent band={}", band as u8);
+        } else {
+            self.gaze.reply(band, GazeReply::Retry, now);
+        }
+    }
+
     fn subscribe(&self, queries: Vec<String>, key: Vec<u32>) -> Option<Sub> {
         let conn = self.conn.as_ref()?;
         let inbox = self.inbox.clone();
@@ -1002,11 +1136,17 @@ pub fn pump(mut net: NonSendMut<Net>, time: Res<Time>) {
                 info!("world subscribed after {now:.1} s");
                 net.status = Status::Live;
                 net.ever_live = true;
+                net.gaze_view = net.conn.as_ref().map(|conn| {
+                    conn.subscription_builder()
+                        .on_error(|_, e| debug!("gaze owner view unavailable: {e}"))
+                        .subscribe(["SELECT * FROM my_senses_v_2"])
+                });
             }
             Signal::Error(e) => {
                 warn!("{e}");
                 net.errors.lock().unwrap().push(e);
             }
+            Signal::GazeReply(band, reply) => net.gaze.reply(band, reply, Instant::now()),
             Signal::Disconnected(e) => {
                 warn!("offline: {e}");
                 // Calls still waiting will not be answered (the SDK drops their callbacks).
@@ -1016,6 +1156,8 @@ pub fn pump(mut net: NonSendMut<Net>, time: Res<Time>) {
                     let _ = c.disconnect();
                 }
                 net.base = None;
+                net.gaze_view = None;
+                net.gaze.reset_owner();
                 net.near = Window::default();
                 net.far = Window::default();
                 net.perception = Window::default();
@@ -1059,6 +1201,38 @@ mod cue_tests {
     }
 
     #[test]
+    fn both_delivery_laws_are_read_beside_the_seen_ranges_laws_and_choose_the_set() {
+        use living_rules::script::{with_world_laws, Scripts};
+        let shipped = include_str!("../../scripts/skills.rhai");
+        let sc = Scripts::new(shipped).unwrap();
+        // The shipped script: both laws found (both on, cues too, since frame-views' acceptance),
+        // beside main's seen_ranges laws, and the tiered set.
+        assert_eq!(delivery_laws(&sc.laws()), (true, true));
+        assert!(sc.laws().seen_ranges && !sc.laws().seen_ranges_check, "the seen_ranges laws read as shipped");
+        assert_eq!(perception_set(true, true), TIERED);
+        // A world's own values, as the authority writes them after `set_world_law`: each of the
+        // four states, with the seen_ranges laws changed beside them so a neighbour cannot mask
+        // a law that was not found.
+        for (cues, tiers, set) in [(true, true, TIERED), (true, false, TIERED), (false, true, TIERED), (false, false, UNTIERED)] {
+            let values = [
+                ("seen_ranges".to_string(), serde_json::json!(false)),
+                ("cue_transport_on".to_string(), serde_json::json!(cues)),
+                ("seen_ranges_check".to_string(), serde_json::json!(true)),
+                ("near_tier_on".to_string(), serde_json::json!(tiers)),
+            ];
+            let l = Scripts::new(&with_world_laws(shipped, &values)).unwrap().laws();
+            assert_eq!(delivery_laws(&l), (cues, tiers), "cue_transport_on {cues} near_tier_on {tiers}");
+            assert!(!l.seen_ranges && l.seen_ranges_check);
+            assert_eq!(perception_set(cues, tiers), set);
+        }
+        // A script that does not compile, with no law read before: the rules' defaults, as a fresh
+        // world starts, and so the tiered set with cues taken.
+        assert_eq!(delivery_fallback(), (true, true));
+        assert_eq!(delivery_fallback(), delivery_laws(&sc.laws()));
+        assert_eq!(perception_set(delivery_fallback().0, delivery_fallback().1), TIERED);
+    }
+
+    #[test]
     fn cue_transport_off_clears_every_overlay_and_on_takes_cues_again() {
         let cues = Cues::default();
         assert!(!cues.off.load(Ordering::Relaxed), "cues are taken until the law is known");
@@ -1072,5 +1246,58 @@ mod cue_tests {
         assert!(cues.off.load(Ordering::Relaxed));
         cues.set_transport(true);
         assert!(!cues.off.load(Ordering::Relaxed), "on again takes cues");
+    }
+}
+
+#[cfg(test)]
+mod gaze_tests {
+    use super::*;
+    use GazeBand::{Far, Middle, Near};
+
+    #[test]
+    fn gaze_waits_for_owner_and_keeps_only_the_latest_zoom() {
+        let now = Instant::now();
+        let mut gaze = GazeInput { desired: Far, ..Default::default() };
+        assert_eq!(gaze.next(now), None);
+        gaze.applied = Some(Middle);
+        assert_eq!(gaze.next(now), Some(Far));
+        gaze.pending = Some(Far);
+        gaze.desired = Near;
+        assert_eq!(gaze.next(now), None);
+        gaze.desired = Middle;
+        gaze.reply(Far, GazeReply::Accepted, now);
+        assert_eq!(gaze.next(now + Duration::from_millis(249)), None);
+        // The sweep may still show Middle. The successful Far reply means Middle must be sent.
+        assert_eq!(gaze.next(now + GAZE_INTERVAL), Some(Middle));
+        gaze.reset_owner();
+        assert_eq!(gaze.next(now + GAZE_INTERVAL), None);
+        gaze.applied = Some(Far);
+        assert_eq!(gaze.next(now + GAZE_INTERVAL), Some(Middle));
+    }
+
+    #[test]
+    fn refused_gaze_does_not_change_the_applied_band_or_repeat() {
+        let now = Instant::now();
+        let mut gaze = GazeInput { desired: Near, applied: Some(Far), pending: Some(Near), ..Default::default() };
+        gaze.reply(Near, GazeReply::Refused, now);
+        assert_eq!(gaze.applied, Some(Far));
+        assert_eq!(gaze.next(now + GAZE_INTERVAL), None);
+        gaze.desired = Middle;
+        assert_eq!(gaze.next(now + GAZE_INTERVAL), Some(Middle));
+    }
+
+    #[test]
+    fn target_zoom_holds_each_band_through_the_dead_zone() {
+        assert_eq!(Middle.at_zoom(0.55), Middle);
+        assert_eq!(Middle.at_zoom(0.26), Middle);
+        assert_eq!(Middle.at_zoom(0.24), Far);
+        assert_eq!(Far.at_zoom(0.29), Far);
+        assert_eq!(Far.at_zoom(0.31), Middle);
+        assert_eq!(Middle.at_zoom(0.79), Middle);
+        assert_eq!(Middle.at_zoom(0.81), Near);
+        assert_eq!(Near.at_zoom(0.76), Near);
+        assert_eq!(Near.at_zoom(0.74), Middle);
+        assert_eq!(Far.at_zoom(1.0), Near);
+        assert_eq!(Near.at_zoom(0.0), Far);
     }
 }
