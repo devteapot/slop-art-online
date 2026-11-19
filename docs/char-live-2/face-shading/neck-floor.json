@@ -1,0 +1,30 @@
+{
+  "target": [
+    192,
+    121,
+    90
+  ],
+  "sample": "median9",
+  "center": [
+    800,
+    506
+  ],
+  "bounds_inclusive": [
+    796,
+    502,
+    804,
+    510
+  ],
+  "floor": [
+    28,
+    28,
+    22
+  ],
+  "measured": [
+    195,
+    128,
+    98
+  ],
+  "control": "The face, skin and tint base RGB factors were set to zero in a copy of the second high GLB. Geometry, clip, lights, framing and grade are fixed.",
+  "source": "neck-black-floor.png"
+}

@@ -1,0 +1,31 @@
+{
+  "triangles": 48896,
+  "vertices": 29697,
+  "primitives": 9,
+  "materials": 9,
+  "clips": [
+    "idle",
+    "walk",
+    "run",
+    "talk",
+    "sit_idle",
+    "sit_ground"
+  ],
+  "face_keys": [
+    "Fcl_EYE_Close",
+    "Fcl_EYE_Close_L",
+    "Fcl_EYE_Close_R",
+    "Fcl_EYE_Joy",
+    "Fcl_MTH_A",
+    "Fcl_MTH_I",
+    "Fcl_MTH_U",
+    "Fcl_MTH_E",
+    "Fcl_MTH_O",
+    "Fcl_MTH_Fun",
+    "Fcl_MTH_Sorrow",
+    "Fcl_BRW_Angry",
+    "Fcl_BRW_Sorrow",
+    "Fcl_BRW_Surprised",
+    "Fcl_BRW_Fun"
+  ]
+}
