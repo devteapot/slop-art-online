@@ -441,10 +441,16 @@ impl Scripts {
 
     /// How a body is (`status_of(a)`), kept per state; none when the script has no such law.
     pub fn status_of(&self, b: &BodyFacts) -> Result<Rc<Vec<Status>>, String> {
+        self.status_of_profiled(b, |_| ())
+    }
+
+    /// Asks the same law, optionally timing memo lookup and evaluation with caller-provided guards.
+    pub fn status_of_profiled<T>(&self, b: &BodyFacts, span: impl Fn(&str) -> T) -> Result<Rc<Vec<Status>>, String> {
         if !self.unary.contains("status_of") {
             return Ok(Rc::new(Vec::new()));
         }
         super::calls::note(super::calls::STATUS_ASKED);
+        let lookup = span("status.lookup");
         let key = match self.status_reads() {
             Some(r) => b.key_reading(&r),
             None => b.key(),
@@ -453,8 +459,13 @@ impl Scripts {
             super::calls::note(super::calls::STATUS_MEMO);
             return Ok(s.clone());
         }
+        drop(lookup);
+        let _miss = span("status.miss");
         super::calls::note(super::calls::STATUS_RUN);
-        let d = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "status_of", (b.map(),)).map_err(|e| format!("status_of: {e}"))?;
+        let d = {
+            let _rhai = span("status.rhai");
+            self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "status_of", (b.map(),)).map_err(|e| format!("status_of: {e}"))?
+        };
         let s = Rc::new(read_status(d)?);
         let mut memo = self.body.memo.borrow_mut();
         if memo.len() >= KEPT {
