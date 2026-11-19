@@ -444,3 +444,231 @@ orbit("p2b")
 closeup("p2b",-35)
 view(0)
 bpy.ops.wm.save_as_mainfile(filepath=str(ROOT/"cora-face-progress.blend"))
+
+# 2026-11-19T14:17:56.462493+00:00  xhigh-input-survey
+import sys
+import importlib.util
+import json
+import numpy as np
+with (ROOT/'xhigh-inputs.json').open('w') as stream:
+    w,h=pic.size
+    k=4*((h-1-100)*w+490)
+    json.dump(dict(python=sys.version, pil=importlib.util.find_spec('PIL') is not None,
+      source_sample=list(pic.pixels[k:k+4]), material=pic.colorspace_settings.name,
+      head_mesh=[len(head.data.vertices),len(head.data.polygons)]),stream)
+
+# 2026-11-19T14:20:56.208036+00:00  crown-temple-ear-xhigh
+# One continuous cranium in fitted, oblique cross sections. The front opening
+# and helix recess cut this same surface. All views see the same UVs and mesh.
+for old in list(scene.objects):
+    if old.name.startswith("Cora | ") and not any(k in old.name for k in
+        ["cheek jaw","plait ","binding","braid brush","ear 1"]):
+        bpy.data.objects.remove(old,do_unlink=True)
+
+def image_rgb(im):
+    w,h=im.size
+    out=np.empty(w*h*4,dtype=np.float32)
+    im.pixels.foreach_get(out)
+    return out.reshape(h,w,4)[::-1,:,:3].copy()
+portrait_pixels=image_rgb(pic)
+back_pixels=image_rgb(turn)
+def clean_hair_pixels(im,bounds):
+    # Extend pigment beyond the drawing and into its skin holes for filtering.
+    # Closest valid sample in each row retains the directional highlights.
+    x0,y0,x1,y1=bounds
+    im=im[y0:y1,x0:x1].copy()
+    rr,gg,bb=im.transpose(2,0,1)
+    ok=(rr<.79)&(gg<.49)&(bb<.43)&(rr>gg*1.18)&(gg>bb*.96)
+    dest=im.copy()
+    xx=np.arange(im.shape[1])
+    for i in range(im.shape[0]):
+        good=np.flatnonzero(ok[i])
+        if good.size:
+            ix=np.searchsorted(good,xx)
+            lo=good[np.maximum(ix-1,0)]
+            hi=good[np.minimum(ix,len(good)-1)]
+            dest[i]=im[i,np.where(xx-lo<=hi-xx,lo,hi)]
+        else: dest[i]=np.array([103,47,30])/255
+    return dest
+obart=clean_hair_pixels(portrait_pixels,(1000,12,1525,530))
+frart=clean_hair_pixels(portrait_pixels,(246,12,748,547))
+bkart=clean_hair_pixels(back_pixels,(597,18,716,130))
+def sample(image,x,y):
+    x=np.clip(x,0,image.shape[1]-1.001); y=np.clip(y,0,image.shape[0]-1.001)
+    i=x.astype(int);j=y.astype(int)
+    fx=(x-i)[...,None];fy=(y-j)[...,None]
+    return ((image[j,i]*(1-fx)+image[j,i+1]*fx)*(1-fy)
+           +(image[j+1,i]*(1-fx)+image[j+1,i+1]*fx)*fy)
+def smooth(a,b,x):
+    t=np.clip((x-a)/(b-a),0,1)
+    return t*t*(3-2*t)
+def packed(name,rgb):
+    h,w,_=rgb.shape
+    im=bpy.data.images.new(name,width=w,height=h,alpha=False)
+    im.colorspace_settings.name='sRGB'
+    rgba=np.ones((h,w,4),dtype='f')
+    rgba[:,:,:3]=rgb[::-1]
+    im.pixels.foreach_set(rgba.ravel())
+    im.update();im.pack()
+    return im
+# v, bounds in oblique drawing, bounds in front drawing, depth radius in
+# turnaround pixels. Extremal loose strands have their own tapered paths.
+stations=np.array([
+ [18,1295,1305,527,536,2],[24,1253,1345,475,558,11],
+ [37,1203,1401,436,585,21],[53,1171,1421,412,605,29],
+ [78,1140,1436,387,641,36],[100,1124,1455,352,661,41],
+ [127,1102,1474,332,679,45],[152,1087,1482,323,691,47],
+ [182,1071,1498,305,709,49],[205,1056,1505,289,720,50],
+ [232,1047,1507,282,721,50],[259,1040,1502,277,718,50],
+ [284,1037,1494,278,716,49],[309,1037,1483,290,708,47],
+ [331,1046,1470,297,699,45],[354,1059,1456,313,688,42],
+ [376,1071,1444,326,673,39],[399,1080,1427,353,659,36],
+ [418,1096,1412,375,642,32],[438,1113,1395,396,629,27],
+ [451,1134,1374,418,611,23]],float)
+def crown_point(a,v):
+    left,right,fl,fr,rd=[np.interp(v,stations[:,0],stations[:,i]) for i in range(1,6)]
+    cu=((left+right)*.5-1276.5)*s
+    rw=(right-left)*s*.5
+    fx=(fr-fl)*s*.5
+    cd=(((fr+fl)*.5-526)*s-ex.x*cu)/away.x
+    skew=(np.sqrt(np.maximum(0,fx**2-(away.x*rd)**2))-ex.x*rw)/away.x
+    u=cu+rw*np.sin(a)
+    d=cd+skew*np.sin(a)-rd*np.cos(a)
+    return ((ex.x*u+away.x*d)*unit,(ex.y*u+away.y*d)*unit,(763-(v-16)*s)*unit)
+def drawing_u(x,y):
+    return 1276.5+(ex.x*x+ex.y*y)/(unit*s)
+def interp(table,v,column):
+    return np.interp(v,table[:,0],table[:,column])
+opening=np.array([(122,1390,1390),(132,1380,1397),(149,1375,1428),
+ (170,1367,1442),(194,1353,1449),(214,1337,1451),(232,1320,1455),
+ (251,1292,1457),(267,1253,1459),(282,1227,1456),(299,1208,1449),
+ (318,1193,1447),(342,1192,1445),(367,1198,1443),(389,1194,1442),
+ (415,1170,1440),(450,1153,1435)],float)
+ear_outline=np.array([(263,1140,1145),(269,1133,1153),(280,1126,1162),
+ (291,1122,1170),(304,1120,1177),(318,1121,1184),(331,1126,1187),
+ (345,1138,1192),(357,1151,1197),(368,1165,1201),(375,1180,1204),(379,1197,1203)],float)
+def kept(a,v):
+    x,y,z=crown_point(a,v); u=drawing_u(x,y)
+    # Face opens through the front half. Behind the face the shell gathers
+    # into the nape. Keep the opposite temple shorter in its side view.
+    front=max(interp(opening,v,1)-u,u-interp(opening,v,2),122-v)
+    mask=max(front,(-math.cos(a)-.18)*135)
+    stop=405-38*math.sin(a)+12*max(0,-math.cos(a))
+    if v>stop: mask=min(mask,stop-v)
+    ear=max(interp(ear_outline,v,1)-u-2,u-interp(ear_outline,v,2)-2,261-v,v-382)
+    return min(mask,max(ear,(-math.cos(a)-.05)*110))
+# Bake one atlas round the cranium. The approved oblique paint continues
+# across the former panel boundary. The far temple and occiput transition
+# to the other measured views. Coordinates stay fixed as the camera turns.
+aw,ah=1024,512
+aa=(np.arange(aw)+.5)[None,:]*2*math.pi/aw-math.pi
+vv=18+(np.arange(ah)+.5)[:,None]*433/ah
+xx,yy,zz=crown_point(aa,vv)
+base=sample(obart,drawing_u(xx,yy)-1000,vv-12)
+fcol=sample(frart,526+xx/(unit*s)-246,vv-12)
+frweight=(smooth(.73,.99,np.sin(aa))*smooth(-.2,.5,np.cos(aa)))[...,None]
+base=base*(1-frweight)+fcol*frweight
+bcol=sample(bkart,656-xx/unit*.91-597,np.clip(22+(vv-18)*.225,24,127)-18)
+bw=smooth(-.04,.71,-np.cos(aa))[...,None]
+base=base*(1-bw)+bcol*bw
+crown_atlas=packed("Cora swept crown pigment",base)
+crown_mat=texture_material("Cora | continuous crown pigment",crown_atlas)
+shadow=dye("Cora | undercut auburn",(79,37,28))
+# Polygon clipping at the forehead and ear boundaries prevents the grid from
+# leaving sawtooth edges. Share boundary vertices and keep a dark edge wall.
+nodes=[]; faces=[];uvs=[];lookup={}
+def add_node(a,v):
+    key=(round(a,6),round(v,5))
+    if key not in lookup:
+        lookup[key]=len(nodes)
+        nodes.append(crown_point(a,v));uvs.append(((a+math.pi)*aw/(2*math.pi),(v-18)*ah/433))
+    return lookup[key]
+angles=np.linspace(-math.pi,math.pi,101)
+levels=np.unique(np.r_[np.linspace(18,451,57),ear_outline[:,0],opening[:,0],stations[:,0]])
+for va,vb in zip(levels,levels[1:]):
+    for a,b in zip(angles,angles[1:]):
+        corners=[(a,va),(a,vb),(b,vb),(b,va)]
+        vals=[kept(*p) for p in corners]
+        cycle=[]
+        for k,p in enumerate(corners):
+            last=corners[k-1];fa=vals[k-1];fb=vals[k]
+            if (fa>0)!=(fb>0):
+                t=fa/(fa-fb)
+                cycle.append(add_node(last[0]+(p[0]-last[0])*t,last[1]+(p[1]-last[1])*t))
+            if fb>0:cycle.append(add_node(*p))
+        unique=list(dict.fromkeys(cycle))
+        if len(unique)>=3:faces.append(unique)
+# mesh_art expects source pixel UV units. Set the atlas UVs explicitly.
+crown=mesh_art("Cora | continuous swept crown",nodes,faces,[crown_mat,shadow])
+crown.data.uv_layers.new()
+for poly in crown.data.polygons:
+    set_uv(crown,poly,[uvs[i] for i in poly.vertices],crown_atlas)
+# Weld only the geometrically coincident seam vertices; loop UVs stay split.
+import bmesh
+bm=bmesh.new();bm.from_mesh(crown.data)
+bmesh.ops.remove_doubles(bm,verts=bm.verts[:],dist=.000003)
+bm.to_mesh(crown.data);bm.free()
+rim=crown.modifiers.new("Dark return under hairline","SOLIDIFY")
+rim.thickness=.003;rim.offset=-1;rim.material_offset=1;rim.material_offset_rim=1
+# Close the crown pole and put a dark hair under-shell inside the swept mass.
+# The lower edge follows the recession instead of extending over the ear.
+scalp_rings=[(20.7,1,-5,4,5),(24,0,-3,16,16),(32,0,0,29,24),
+ (43,-1,0,35,32),(55,-2,1,40,37),(65,-2,2,40,39)]
+loft("Cora | dark scalp beneath crown",scalp_rings,shadow,n=36)
+
+# A rounded, outward-facing pinna fills the opening cut above. The helix
+# stands forward of the recessed concha, with its root on the temporal plane.
+vs=[];us=[];fs=[]
+erows=np.linspace(263,379,27)
+N=24
+for v in erows:
+    l=interp(ear_outline,v,1); r=interp(ear_outline,v,2)
+    t=(v-263)/116
+    for j in range(N):
+        a=2*math.pi*j/N
+        q=math.sin(a)
+        u=(l+r)/2+(r-l)/2*q
+        cavity=2.7*math.exp(-((q+.02)/.44)**2-((t-.47)/.24)**2)
+        d=-24-3*math.sin(t*math.pi)-5*math.cos(a)+cavity
+        vs.append(oblique(u,v,d));us.append((u,v))
+fs=grid(len(erows),N,True)
+ear=mesh_art("Cora | tucked ear with recessed bowl",vs,fs,[paint,skin],
+    [0 if math.cos((f[0]%N+.5)*2*math.pi/N)>.03 else 1 for f in fs],us)
+
+# These narrow locks have closed lenticular sections and sweep away from
+# the ear before falling forward along the neck. The mass above is one mesh.
+wisps=texture_material("Cora | lock pigment",packed("Cora oblique auburn edge bleed",obart))
+lockimg=wisps.node_tree.nodes.get("Image Texture").image
+def strand(name,sections):
+    sec=np.array(sections,float)
+    levels=np.linspace(sec[0,0],sec[-1,0],32)
+    coords=[]; uv=[]
+    for v in levels:
+        u,w,d,r=[interp(sec,v,i) for i in range(1,5)]
+        for j in range(12):
+            a=j*math.pi/6
+            x=u+w*math.sin(a)
+            coords.append(oblique(x,v,d-r*math.cos(a)))
+            uv.append((x-1000,v-12))
+    ob=mesh_art(name,coords,grid(len(levels),12,True),[wisps])
+    ob.data.uv_layers.new()
+    for f in ob.data.polygons:set_uv(ob,f,[uv[i] for i in f.vertices],lockimg)
+    return ob
+strand("Cora | cheek curl forward of shoulder",[(291,1206,12,-32,4),(310,1203,13,-34,4),
+ (337,1203,13,-36,4),(362,1210,13,-37,4),(391,1225,12,-36,4),(417,1233,10,-35,3),
+ (437,1229,9,-34,3),(462,1212,7,-33,2),(485,1207,3.7,-31,1.5),(504,1216,.5,-29,.3)])
+strand("Cora | far cheek curl",[(264,1466,12,-16,4),(291,1460,11,-18,4),
+ (326,1452,9,-20,3),(355,1462,8,-21,3),(386,1477,8,-21,3),
+ (412,1481,8,-20,3),(436,1474,7,-18,2.5),(462,1456,5,-17,2),(482,1451,3,-15,1),(503,1458,.5,-15,.4)])
+strand("Cora | near temple flick",[(174,1066,1,-5,.4),(184,1050,4,-7,1),
+ (197,1043,6,-8,2),(208,1048,12,-9,3),(218,1060,16,-10,4),(228,1072,14,-10,4),
+ (244,1073,6,-8,2)])
+strand("Cora | lower temple flick",[(245,1071,17,-4,4),(267,1061,16,-5,4),
+ (293,1047,15,-6,3),(314,1035,12,-7,3),(339,1026,8,-8,2),(357,1029,4,-8,1.5),(374,1046,.5,-8,.4)])
+# Keep the crown volume and ear editable. Store a dedicated pass checkpoint.
+view(0)
+bpy.ops.wm.save_as_mainfile(filepath=str(ROOT/"cora-crown-fit.blend"))
+
+# 2026-11-19T14:21:07.290055+00:00  crown-temple-ear-review
+orbit("p2c")
+closeup("p2c",-35)
