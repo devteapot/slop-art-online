@@ -1270,6 +1270,8 @@ class Hair:
                         self.chain[i] = -1
                 continue
             m = int(np.clip(round(reach / 0.09), 1, 4))
+            if self.chains[ci]["name"].startswith("Front"):
+                m = 1  # One interval gives the chest lock a root and a tip joint.
             rows = []
             for j in range(m + 1):
                 at = reach * j / m
