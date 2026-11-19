@@ -12,8 +12,9 @@
 //! - `nofar`: no coarse ground and sea past the island's 170 m, and no landmarks past 190 m
 //!   (`island::stream`, `live::lots`): the long view's cost;
 //! - `nohair`, `charopaque`: characters without hair, or with alpha-masked materials drawn opaque;
-//! - `shadowmap=N`, `cascades=N`, `shadowfar=M`: the sun's shadow map size, cascade count and
-//!   reach;
+//! - `shadowmap=N`, `cascades=N`, `firstcascade=M`, `shadowfar=M`: the sun's shadow map size,
+//!   cascade count, first cascade's far edge and reach; `sunstep=D`: how far (degrees) the sun
+//!   moves before its shadow light turns (`world::SHADOWS`; 0 turns it every frame);
 //! - `people=K`: K times the island's people per settlement;
 //! - `nodetail`: no painted detail on scenery models (style.rs); `detailonly=bark+leaves` keeps
 //!   it on only the surfaces named;
