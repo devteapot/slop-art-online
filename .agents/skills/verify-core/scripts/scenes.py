@@ -2166,8 +2166,9 @@ def known_ground(s):
     mine = known_settled(s, me, lambda m: cell(body_at(s, me)) in m and len(m) >= 40)
     s.expect("a player's character marks the ground it sees too", cell(body_at(s, me)) in mine and len(mine) >= 40, {"cells": len(mine)})
     # The cap: at most N a look, the rest later, none dropped. Its earlier ground persisted first,
-    # so the spot's block is the only one queued.
-    known_settled(s, r)
+    # so the spot's block is the only one queued; the rate counts only cells new since then (it
+    # may have seen ground round the new spot before).
+    before_r = known_settled(s, r)
     set_law(s, "known_cells_pass", 5)
     spot3 = open_patch(s, size=60, avoid=[spot, spot2])
     s.call("place_at", r, *spot3)
@@ -2175,14 +2176,15 @@ def known_ground(s):
     counts = []
     # Only the cells round the new spot: it also marked where it was spawned.
     round_here = lambda: len({c for c in known_cells(s, r) if math.dist((c[0] * 4 + 2, c[1] * 4 + 2), spot3) <= 30})
+    new_here = lambda: len({c for c in known_cells(s, r) - before_r if math.dist((c[0] * 4 + 2, c[1] * 4 + 2), spot3) <= 30})
     while time.monotonic() - t0 < 22:
         time.sleep(2.0)
-        counts.append((round(time.monotonic() - t0, 1), round_here()))
-    capped = counts[-1][1]
+        counts.append((round(time.monotonic() - t0, 1), new_here()))
+    capped = round_here()
     set_law(s, "known_cells_pass", 0)
     known_settled(s, r, lambda m: len({c for c in m if math.dist((c[0] * 4 + 2, c[1] * 4 + 2), spot3) <= 30}) >= 100)
     full = round_here()
-    (s.out / f"{s.name}-cap.json").write_text(json.dumps({"counts": counts, "full": full}) + "\n")
+    (s.out / f"{s.name}-cap.json").write_text(json.dumps({"counts": counts, "known_before": len(before_r), "capped": capped, "full": full}) + "\n")
     s.expect("capped at 5 a look: the count grows look by look, no faster", counts[-1][1] > 0 and all(n <= 5 * (t / 0.9 + 1) for t, n in counts) and counts[-1][1] > counts[0][1], counts)
     s.expect("uncapped again, the rest are marked (none dropped)", full > capped and full >= 100, {"capped": capped, "full": full})
     # Death.
