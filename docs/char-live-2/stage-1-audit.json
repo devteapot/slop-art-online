@@ -6,5 +6,17 @@
     "cora.iris": "307a6c5805d361b75f0f3bb03a5fd3cfb77e7ed67fe2af1db2e3801376924808",
     "cora.tint": "5e71699d09e3d6be436d5746704bb26fff8e1cc736c51b0ed7a5c89fec0f253c"
   },
-  "new_blender_blocks": 0
+  "new_blender_blocks": 0,
+  "factory_replay_glb_matches": true,
+  "six_view_sheet_differing_pixels": 0,
+  "scene_audit": {
+    "stage": "seat-xhigh-inspection",
+    "materials": 26,
+    "images": [
+      "cora.atlas.png",
+      "cora.iris.png",
+      "cora.tint.png"
+    ],
+    "failures": []
+  }
 }

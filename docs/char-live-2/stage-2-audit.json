@@ -1,0 +1,35 @@
+{
+  "export": {
+    "stage": "stage2-final",
+    "materials": 26,
+    "images": [
+      "cora.atlas.png",
+      "cora.iris.png",
+      "cora.tint.png"
+    ],
+    "failures": []
+  },
+  "after_expression_renders": {
+    "stage": "stage2-expressions",
+    "materials": 26,
+    "images": [
+      "cora.atlas.png",
+      "cora.iris.png",
+      "cora.tint.png"
+    ],
+    "failures": []
+  },
+  "prior_failed_check": {
+    "stage": "stage2-expressions",
+    "materials": 26,
+    "images": [
+      "cora.atlas.png",
+      "cora.iris.png",
+      "cora.tint.png",
+      "Render Result"
+    ],
+    "failures": [
+      "unapproved image: Render Result"
+    ]
+  }
+}

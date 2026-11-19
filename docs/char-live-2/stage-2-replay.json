@@ -1,0 +1,44 @@
+{
+  "blender": "5.2.2 LTS",
+  "factory_startup": true,
+  "glb_sha256": "1ef1a6af92cf1fc3cfa3f4d9216643a2611a68abb3e29d28c9294505aeef8c5d",
+  "orbit": {
+    "front": "81b4a2426a1ce4ec65e71f079c0d123cc289f2245984dd2a106ebf75c2b09033",
+    "three-quarter": "10900dba916beaee027001e0f847be0f41b11d23adc9f4842b71fdb2a46886b7",
+    "profile": "74a95ee30b58b85382915710062954b757780b0a08c6a48e4e1cedeb4408c0b9",
+    "back": "c07e61530ed92e35547fbe72fce29dc498d94c9b647da9a721c86be7fa239db6",
+    "near": "f88e4917422aedf03044b3042ee8602ec22ee39a8c2164c5ddd0a88bd6496246",
+    "middle": "3dbc7d1dbae3457a789dc7f011ab0b2a5ab2c31d76078f3675024fda94069dcf"
+  },
+  "export": {
+    "triangles": 37210,
+    "vertices": 24089,
+    "primitives": 10,
+    "materials": 9,
+    "clips": [
+      "idle",
+      "walk",
+      "run",
+      "talk",
+      "sit_idle",
+      "sit_ground"
+    ],
+    "face_keys": [
+      "Fcl_EYE_Close",
+      "Fcl_EYE_Close_L",
+      "Fcl_EYE_Close_R",
+      "Fcl_EYE_Joy",
+      "Fcl_MTH_A",
+      "Fcl_MTH_I",
+      "Fcl_MTH_U",
+      "Fcl_MTH_E",
+      "Fcl_MTH_O",
+      "Fcl_MTH_Fun",
+      "Fcl_MTH_Sorrow",
+      "Fcl_BRW_Angry",
+      "Fcl_BRW_Sorrow",
+      "Fcl_BRW_Surprised",
+      "Fcl_BRW_Fun"
+    ]
+  }
+}
