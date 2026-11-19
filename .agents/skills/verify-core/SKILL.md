@@ -202,6 +202,16 @@ python3 "$V" launch --run "$L" --seed island > ".local/living/verify/$L/launch.t
 python3 "$C/lives.py" --run "$L" --minutes 24 > ".local/living/verify/$L/lives.txt" 2>&1
 python3 "$V" cleanup --run "$L" > ".local/living/verify/$L/cleanup.txt" 2>&1
 
+# Value-only law changes (about 3 min): the `law_override` row, law revision and audit, the script
+# kept, refusals rolled back, a client's first result, and the reducer's time (features/law-override.md,
+# docs/LAW_OVERRIDE.md). Needs the verify-client probe built (its SKILL.md).
+W=client-law-$(date +%H%M%S)   # a client-* name: its first-result checks drive verify-client's drive.py
+mkdir -p ".local/living/verify/$W"
+python3 "$V" launch --run "$W" --seed island > ".local/living/verify/$W/launch.txt" 2>&1
+python3 "$C/law_override.py" checks --run "$W" > ".local/living/verify/$W/law-checks.txt" 2>&1
+python3 "$C/law_override.py" time --run "$W" > ".local/living/verify/$W/law-time.txt" 2>&1
+python3 "$V" cleanup --run "$W" > ".local/living/verify/$W/cleanup.txt" 2>&1
+
 # Goods, fires that eat fuel and recipes over Cullet's goods (about 11 min), and a seeded
 # fishing ground's shared stock (features/goods.md, docs/WORLD_RULES.md).
 G=$R-goods

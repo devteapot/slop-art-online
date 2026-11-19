@@ -206,11 +206,10 @@ fn set_day(ctx: &ReducerContext, s: &Seed) -> Result<(), String> {
     Ok(())
 }
 
-/// Keep the seed's `rules` as the world's own laws (`world_law`) and have every cache read them.
+/// Keep the seed's `rules` as the world's own laws (`law_override`) and have every cache read them.
 fn world_laws(ctx: &ReducerContext, s: &Seed) {
     for (name, value) in &s.rules {
-        ctx.db.world_law().name().delete(name.clone());
-        ctx.db.world_law().insert(WorldLaw { name: name.clone(), value: value.to_string() });
+        common::set_law_override(ctx, name, &value.to_string());
     }
     if s.rules.is_empty() {
         return;
