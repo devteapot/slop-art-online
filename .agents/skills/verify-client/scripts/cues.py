@@ -185,7 +185,7 @@ def main():
         call(rid, "place_at", [c, line[0][0], line[0][1] + (60 if line[0][1] < 200 else -60)])
     # Cues are a law (`cue_transport_on`, off until accepted): on for the first phase, off for the second,
     # then back as the world had it.
-    had = [r for r in sql(rid, "SELECT * FROM world_law") if r.get("name") == "cue_transport_on"]
+    had = [r for r in sql(rid, "SELECT * FROM law_override") if r.get("name") == "cue_transport_on"]
     call(rid, "set_world_law", ["cue_transport_on", "true"])
     time.sleep(2.0)
     pos = {x["id"]: (x["x"], x["y"]) for x in sql(rid, "SELECT id, x, y FROM body")}

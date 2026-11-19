@@ -117,7 +117,7 @@ def main():
     time.sleep(3.0)
     near2, far2 = tiers(db, tok["a"])
     # The tiers' switch: `near_tier_on` off puts every copy in the far tier (the untiered tables).
-    had = [r for r in sql(rid, "SELECT * FROM world_law") if r.get("name") == "near_tier_on"]
+    had = [r for r in sql(rid, "SELECT * FROM law_override") if r.get("name") == "near_tier_on"]
     call(rid, "set_world_law", ["near_tier_on", "false"])
     time.sleep(1.0)
     near_off, far_off = tiers(db, tok["a"])
