@@ -418,6 +418,12 @@ def phase_report(folder):
         test = list(last.values())
     beliefs = optimal_beliefs(folder, test, tiles_file, W, H, road, unknown) if tiles and test else [{}] * len(test)
     rows, lat, no_resp, stuck, walk_min, replans = [], [], 0, [], 0.0, []
+    diagnostics = {}
+    exit_file = folder / "route-exits.jsonl"
+    if exit_file.exists():
+        for line in exit_file.read_text().splitlines():
+            entry = json.loads(line)
+            diagnostics.setdefault((entry["subject"], entry["walk"]), []).append(entry["reason"])
     for w, b in zip(test, beliefs):
         tr = tracks.get(w["subject"])
         t_order = w["order_ms"][1]
@@ -431,7 +437,8 @@ def phase_report(folder):
         completed = w.get("outcome") == "arrived"
         r = {"subject": w["subject"], "walk": w["walk"], "outcome": w.get("outcome"), "told": w.get("told"), "failure": w.get("failure"), "reachable": w.get("true") is not None, "arrived_in_3x": ok, "belief_blocked_in_truth": bel.get("blocked_in_truth") if bel else None, "walked_s": round(walked, 1), "pace": round(pace, 2) if pace else None,
              "ratio_known": round(walked / known_s, 3) if completed and known_s else None, "ratio_true": round(walked / true_s, 3) if completed and true_s else None,
-             "belief_unseen_tiles": bel.get("unseen_tiles") if bel else None, "prior_cells_in_box": w.get("prior_cells_in_box")}
+             "belief_unseen_tiles": bel.get("unseen_tiles") if bel else None, "prior_cells_in_box": w.get("prior_cells_in_box"),
+             "route_exits": diagnostics.get((w["subject"], w["walk"]), [])}
         if tr:
             ev = stuck_events(tr, t_order, t_end, w["goal"])
             stuck += [(e[1] - e[0]) / 1000 for e in ev]
@@ -439,8 +446,10 @@ def phase_report(folder):
             paths = [json.dumps(s.get("path")) for s in tr.segments_from(t_order, t_end)]
             replans.append(sum(1 for a, c in zip(paths, paths[1:]) if a != c))
             stims = []
-            if ph["arena"] in ("n1",):
-                stims = [t_order]
+            if ph["arena"] == "n1":
+                # The post-call clock sample can be later than the first response.
+                # Use the pre-call sample as the lower timestamp bound of the order.
+                stims = [w["order_ms"][0]]
             elif ph["arena"] == "n2":
                 g = gate_stimuli(tr, t_order, t_end, tiles, W, [tuple(x) for x in ph["gate_a"]["tiles"]], sight_at, line_clear) if ph.get("variant") in ("a", "b") else None
                 r["gate_seen_ms_after_order"] = (g - t_order) if g else None
@@ -473,6 +482,13 @@ def phase_report(folder):
            "stuck_per_10min": round(len(stuck) / (walk_min / 10), 2) if walk_min else None, "stuck_longest_s": round(max(stuck), 1) if stuck else 0.0,
            "latency_p50_ms": pct(lat, 0.5), "latency_p95_ms": pct(lat, 0.95), "no_response": no_resp, "stimuli": len(lat) + no_resp,
            "replans_per_walk": round(statistics.mean(replans), 2) if replans else None, "walks_detail": rows}
+    if exit_file.exists():
+        reasons = {}
+        for row in rows:
+            if "could not get there" in (row["failure"] or " ".join(row["told"] or ())):
+                reason = row["route_exits"][-1] if row["route_exits"] else "missing_diagnostic"
+                reasons[reason] = reasons.get(reason, 0) + 1
+        out["could_not_get_there_by_exit"] = reasons
     if ph["arena"] == "n3":
         out["contacts_under_0_4m"] = sum(r.get("contacts_under_0_4m", 0) for r in rows)
     if ph["arena"] == "n2":
