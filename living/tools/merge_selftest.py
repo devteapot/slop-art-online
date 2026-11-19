@@ -7,7 +7,7 @@ a failing check (nothing pushed), a check that dirties the tree (nothing pushed)
 during the check (re-fetch, re-merge, re-check, push), a clean merge (--no-ff, pushed), and the
 bindings check with a fake generator (changed bindings fail and are named, a failing generator
 fails, unchanged bindings pass, a docs-only merge skips it). A fake df exercises the disk
-pre-check at its boundary, on a separate target filesystem, and with the overrides.
+pre-check at its boundary, on a separate target filesystem, with cold and warm targets, on retry, and with the overrides.
 Touches nothing outside the temporary directory. Usage: merge_selftest.py
 """
 import os
@@ -64,16 +64,23 @@ def disk_selftest(t, coord):
     fake_df.write_text("""#!/bin/sh
 [ "$1" = -Pk ] || exit 1
 case "$2" in
-  */target-volume) device=target; free=$FAKE_DF_TARGET_GB ;;
+  */target-volume|*/target-volume/new/target) device=target; free=$FAKE_DF_TARGET_GB ;;
   */coord) device=worktree; free=$FAKE_DF_WORKTREE_GB ;;
   *) exit 1 ;;
 esac
 [ "$free" != error ] || exit 1
-[ ! -f "$FAKE_DF_PRESSURE_FLAG" ] || free=1
+[ ! -f "$FAKE_DF_PRESSURE_FLAG" ] || free=${FAKE_DF_PRESSURE_GB:-1}
 echo "Filesystem 1024-blocks Used Available Capacity Mounted on"
-echo "$device 104857600 0 $((free * 1048576)) 0% $2"
+blocks=$(awk -v free="$free" 'BEGIN { printf "%.0f", free * 1048576 }')
+echo "$device 104857600 0 $blocks 0% $2"
 """)
     fake_df.chmod(0o755)
+    fake_du = fake_df.with_name("du")
+    fake_du.write_text("""#!/bin/sh
+[ "$1" = -sk ] && [ -f "$2/size-kib" ] || exit 1
+printf '%s\\t%s\\n' "$(cat "$2/size-kib")" "$2"
+""")
+    fake_du.chmod(0o755)
     fake_docker = fake_df.with_name("docker")
     fake_docker.write_text("""#!/bin/sh
 [ "$1" = exec ] && [ "$6" = -Pk ] && [ "$7" = /home/spacetime ] || exit 1
@@ -90,7 +97,7 @@ echo "$FAKE_SCENE_DEVICE 104857600 0 66060288 0% /home/spacetime"
     code, o = probe(FAKE_DF_WORKTREE_GB="62")
     expect("disk below default threshold refuses before fetch or check (exit 12)",
            code == 12 and "62.00 GB free; need 63 GB (45 GB floor + 18 GB check)" in o
-           and "$ git fetch" not in o and "reached-check" not in o and sh("git rev-parse HEAD", coord) == head, o)
+           and "minus 0.00 GB already in Cargo target" in o and "$ git fetch" not in o and "reached-check" not in o and sh("git rev-parse HEAD", coord) == head, o)
     for free in ("63", "64"):
         code, o = probe(FAKE_DF_WORKTREE_GB=free, FAKE_DF_TARGET_GB=free)
         expect(f"disk with {free} GB reaches the check", code == 5 and "reached-check" in o, o)
@@ -104,6 +111,25 @@ echo "$FAKE_SCENE_DEVICE 104857600 0 66060288 0% /home/spacetime"
     expect("a separate trial volume leaves the host threshold unchanged", code == 5 and "reached-check" in o, o)
     code, o = probe(FAKE_DF_WORKTREE_GB="error")
     expect("a failed df refuses the merge (exit 12)", code == 12 and "could not determine free space" in o, o)
+
+    target = Path(t) / "target-volume/new/target"
+    target.mkdir(parents=True)
+    size = target / "size-kib"
+    size.write_text(str(10 * 1024 ** 2))
+    code, o = probe(FAKE_DF_TARGET_GB="52")
+    expect("warm target reduces the check allowance to 8 GB",
+           code == 12 and "need 53 GB (45 GB floor + 8 GB check)" in o
+           and "18 GB minus 10.00 GB already in Cargo target" in o, o)
+    code, o = probe(FAKE_DF_WORKTREE_GB="53", FAKE_DF_TARGET_GB="53")
+    expect("warm target reaches the check at the reduced threshold", code == 5 and "reached-check" in o, o)
+    size.write_text(str(18 * 1024 ** 2))
+    code, o = probe(FAKE_DF_TARGET_GB="46")
+    expect("fully built target still needs the 2 GB minimum allowance",
+           code == 12 and "need 47 GB (45 GB floor + 2 GB check)" in o
+           and "18 GB minus 18.00 GB already in Cargo target" in o, o)
+    size.unlink()
+    target.rmdir()
+    target.parent.rmdir()
 
     if sys.platform == "darwin":
         config = Path(t) / "Library/LaunchAgents/dev.slop.disk-clean.plist"
@@ -202,9 +228,14 @@ def main():
                and sh(f"git --git-dir={origin} rev-parse main", t) == sh("git rev-parse HEAD", mover), o)
         os.remove(flag)
         os.remove(os.path.join(t, "checks"))
-        code, o = merge(coord, ["feature", "-m", "Merge feature: the test"], check_cmd=racer)
+        os.remove(pressure)
+        warm_check = (f'{racer} && mkdir -p "$CARGO_TARGET_DIR" '
+                      f'&& echo 18874368 > "$CARGO_TARGET_DIR/size-kib" && touch {pressure}')
+        code, o = merge(coord, ["feature", "-m", "Merge feature: the test"], check_cmd=warm_check,
+                        env_extra={"FAKE_DF_PRESSURE_FLAG": pressure, "FAKE_DF_PRESSURE_GB": "48.8",
+                                   "SLOP_MERGE_FLOOR_GB": "45"})
         checks = int(open(os.path.join(t, "checks")).read())
-        expect("moved main: merged after a retry (exit 0)", code == 0 and "merging again" in o and checks == 2, o)
+        expect("moved main: retry succeeds at 48.8 GB after building an 18 GB target (exit 0)", code == 0 and "merging again" in o and checks == 2, o)
         head = sh(f"git --git-dir={origin} log -1 --format=%P%n%s main", t).split("\n")
         parents = head[0].split()
         expect("pushed a --no-ff merge with two parents and the message", len(parents) == 2 and head[1] == "Merge feature: the test", o)
