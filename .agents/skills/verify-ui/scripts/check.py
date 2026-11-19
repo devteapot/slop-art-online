@@ -3538,8 +3538,8 @@ def seat(run, c):
     beside me in the crowded street (eight near: me and seven), told to rest at noon in dry
     weather (`set_behavior` `{"do": "rest"}`, scene setup), so town.rs sits them on the ground
     (`sit_ground_down`, then `sit_ground`; about three in ten stand at ease instead), then told to
-    wander (a new graph alone does not end a rest; moving off does), so they get up where they sat
-    (`stand_up_ground`) and walk off. Stills going down, seated, getting up and up. While
+    wander and put back on their own tiles (`refree`: a new graph alone does not end a rest; a
+    placement does), so they get up where they sat (`stand_up_ground`) and walk off. Stills going down, seated, getting up and up. While
     they sit the camera goes far and back near, so their springs rest and wake (the re-entry
     reseed, `LIVING_GAME_PERF=springwake`). Two arms: the contact on, and off
     (`LIVING_GAME_SEAT_CONTACT=0`); `LIVING_GAME_PERF=seat` logs each seated character's lowest
@@ -3557,11 +3557,15 @@ def seat(run, c):
     syncs = ['setup=set_world_law|"fov_on"|"false";place_at|{me}|420.5|255.5;set_weather|false|900',
              "noon=sql|UPDATE world SET epoch_ms = {epoch_at:12} WHERE id = 0",
              "sit=" + ";".join(f"set_behavior|{i}|{rest}" for i in ids),
-             "up=" + ";".join(f"set_behavior|{i}|{wander}" for i in ids)]
+             "up=" + ";".join(f"set_behavior|{i}|{wander}" for i in ids),
+             # Since iter-11's needs pacing a new graph does not end a resting resident's rest
+             # (wander or goto home: still seated 47 s later, 2026-11-19); a placement does, so
+             # each is put back on its own tile and gets up where it sat.
+             "go=refree"]
     plan = ("ready;sync:noon;sync:setup;wait:2;sync:scene;look:180;cursor:0.5,0.55;wait:3;notches:30;wait:2;dump:standing;shot:00_standing;"
             "sync:sit;wait:1.6;shot:01_down;wait:2.4;dump:seated;shot:02_seated;wait:3;shot:03_idle;"
             "notches:-30;wait:2;notches:30;wait:3;dump:rewoken;shot:04_rewoken;wait:3;"
-            "sync:up;wait:0.9;shot:05_rising;wait:1.2;shot:06_rising_late;wait:2;dump:up;shot:07_up;wait:1;quit")
+            "sync:up;sync:go;wait:0.9;shot:05_rising;wait:1.2;shot:06_rising_late;wait:2;dump:up;shot:07_up;wait:1;quit")
     arms = {}
     for arm, env in (("on", {}), ("off", {"LIVING_GAME_SEAT_CONTACT": "0"})):
         name = f"{s}-{arm}"

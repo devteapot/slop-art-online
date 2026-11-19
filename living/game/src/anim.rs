@@ -347,19 +347,53 @@ impl Anim {
     /// standing loop (an upper-body one as far as the body stands, where it takes the whole
     /// body), the standing loop as far as the body is not in its gait.
     pub fn ground_seat(&self) -> f32 {
-        let (mut covered, mut seat) = (0.0f32, 0.0f32);
+        self.by_clips(seat_of)
+    }
+
+    /// How much of the body's pose comes from the ground seat's clips (0–1), whatever their
+    /// time: weighted as [`Anim::ground_seat`] is. `characters::hips` scales the hips' height in
+    /// that share by [`ground_hips`] (sit-hips).
+    pub fn ground_share(&self) -> f32 {
+        self.by_clips(|clip, _, _| seat_of(clip, 0.0, 1.0).map(|_| 1.0))
+    }
+
+    /// A value of the played clips (`of(clip, t, rate)`, 0 for `None`) weighted as `play` blends
+    /// them: one-shots over the standing loop, the standing loop as far as the body is not in its
+    /// gait.
+    fn by_clips(&self, of: impl Fn(&str, f32, f32) -> Option<f32>) -> f32 {
+        let (mut covered, mut sum) = (0.0f32, 0.0f32);
         for o in &self.onces {
             let w = (o.w * if o.upper { 1.0 - self.moving } else { 1.0 }).min(1.0 - covered).max(0.0);
             covered += w;
-            seat += w * seat_of(o.clip, o.t, o.rate).unwrap_or(0.0);
+            sum += w * of(o.clip, o.t, o.rate).unwrap_or(0.0);
         }
         let total: f32 = self.stands.iter().map(|s| s.1).sum();
         if total > 0.0 {
-            let stand: f32 = self.stands.iter().map(|&(c, w)| w * seat_of(c, 0.0, 1.0).unwrap_or(0.0)).sum::<f32>() / total;
-            seat += (1.0 - covered).max(0.0) * (1.0 - self.moving).clamp(0.0, 1.0) * stand;
+            let stand: f32 = self.stands.iter().map(|&(c, w)| w * of(c, 0.0, 1.0).unwrap_or(0.0)).sum::<f32>() / total;
+            sum += (1.0 - covered).max(0.0) * (1.0 - self.moving).clamp(0.0, 1.0) * stand;
         }
-        seat.clamp(0.0, 1.0)
+        sum.clamp(0.0, 1.0)
     }
+}
+
+/// The hips' heights, as fractions of their rest height, between which a ground seat's clip
+/// takes a short- or long-legged body's hips from the seat's scale (1: the pelvis rests on the
+/// ground, and the seat below it is not scaled with the legs) back to the legs' (`hips_k`: the
+/// feet carry the body). The shared clips' seated loop has the hips at 0.160 of rest; the lower
+/// bound clears it. The upper one was chosen with `cloth_check.py --ground-hips-band` on the
+/// 1.19 m child (docs/seat-contact/sit-hips.md): higher keeps the rise's smock out of the ground
+/// longer but lifts the feet off it while they carry the body (0.70: +20 mm; the clip-time
+/// weight of the cloth contact: +26 mm).
+pub const GROUND_HIPS: (f32, f32) = (0.17, 0.45);
+
+/// How far a ground seat's clip with the hips at `y` (file units) over a rest height `rest` has
+/// the pelvis resting on the ground (0–1): 1 at or below [`GROUND_HIPS`]`.0` of `rest`, 0 at or
+/// above `.1`, smooth between. By the clip's own pose, not its time, so it is 0 wherever the
+/// clips begin and end standing and nothing jumps as they blend in or out.
+pub fn ground_hips(y: f32, rest: f32) -> f32 {
+    let (lo, hi) = GROUND_HIPS;
+    let x = ((hi * rest - y) / ((hi - lo) * rest).max(1e-6)).clamp(0.0, 1.0);
+    x * x * (3.0 - 2.0 * x)
 }
 
 /// The ground seat's clips and their contact frames (clip seconds): `sit_ground_down`'s cloth
@@ -945,5 +979,27 @@ mod tests {
         assert!((a.ground_seat() - 0.5).abs() < 1e-6, "a one-shot fading in over the seated loop shares it");
         a.onces = vec![once("wave", 0.5, 1.0, true)];
         assert_eq!(a.ground_seat(), 0.0, "a gesture standing still takes the whole body (`play`)");
+    }
+
+    #[test]
+    fn the_ground_hips_come_from_the_clips_and_their_pose() {
+        let s = Arc::new(set());
+        let mut a = anim(&s);
+        assert_eq!(a.ground_share(), 0.0, "standing idle has no ground seat");
+        a.stands = vec![("sit_ground", 1.0)];
+        assert_eq!(a.ground_share(), 1.0);
+        let once = |clip, t, w| Once { clip, rate: 1.6, from: 0.0, cut: None, start_ms: 0.0, key: 0.0, hold: None, w, t, upper: false };
+        // Late in getting up the cloth has left the ground, but the clip still has the body.
+        a.onces = vec![once("stand_up_ground", 2.0, 1.0)];
+        assert_eq!(a.ground_seat(), 0.0);
+        assert_eq!(a.ground_share(), 1.0);
+        a.stands = vec![("idle", 1.0)];
+        a.onces = vec![once("stand_up_ground", 2.3, 0.25)];
+        assert!((a.ground_share() - 0.25).abs() < 1e-6, "fading out over standing, it shares the body");
+        // The pose: seated (0.157 of 0.985) all the way, standing (0.97) not at all.
+        assert_eq!(ground_hips(0.1572, 0.985), 1.0);
+        assert_eq!(ground_hips(0.972, 0.985), 0.0);
+        let mid = ground_hips(0.985 * (GROUND_HIPS.0 + GROUND_HIPS.1) / 2.0, 0.985);
+        assert!((mid - 0.5).abs() < 1e-5, "{mid}");
     }
 }

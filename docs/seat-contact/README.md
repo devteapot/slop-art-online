@@ -5,6 +5,11 @@ Status: **2a client side built (branch `seat-2a`); the coat chains are specified
 - [PROPOSAL.md](PROPOSAL.md): the dev-box design note, verified against the client at `29735dbe9`: where the sitting signal comes from, the proposed seat, back and ground spheres, the timing ramp, the coat chains in `person.py`, and the cost and proof plan.
 - [COAT_CHAINS.md](COAT_CHAINS.md): exactly what the generator must write for coat chains (8 joints a coat, the `Coat` group), and its acceptance.
 - [2a/](2a/): this stage's `cloth_check` logs (the five lines below, with and without the contact, and the gaits).
+- [ground-bake/](ground-bake/README.md): the final ground-sitting clip bake (dev-box, main `c39a33ee5`): boots and seat on the floor on the bake reference.
+- [sit-hips.md](sit-hips.md): the client places short- and long-legged bodies seated on the ground (branch `sit-hips`, 2026-11-19).
+  - **The change:** in the ground clips the hips' height goes from `hips_k` to 1 as the clip's pelvis comes down to the seat.
+  - **The child:** the 1.19 m child's seated boots go from −19.9 to −2.4 mm and its trousers from −16.7 to +0.8 mm. Its smock on the rise goes from −28.7 to −9.9 mm.
+  - **Unchanged:** adults at `hips_k` 1, and every gait.
 
 ## Stage 2a: what was built (seat-2a)
 
@@ -97,7 +102,7 @@ The difference is within the run's noise. The contact adds one plane test per cl
 ## What 2a does not do
 
 - **Coats:** without the generator's chains they are unchanged ([COAT_CHAINS.md](COAT_CHAINS.md)).
-- **The seated body's float:** −18 to +43 mm in the loop, which the side stills show. This belongs to the clip and fit.
+- **The seated body's float:** −18 to +43 mm in the loop, which the side stills show. This belongs to the clip and fit. The ground bake has since planted the clip (ground-bake/), and sit-hips the short and long legs ([sit-hips.md](sit-hips.md)). The female lines still sit 13–15 mm high at the boots and 28–30 mm at the trousers.
 - **Hip-region crossings:** trousers through coat or smock at the seat, 33–39 mm. These need weights, not a contact.
 - **Chairs and benches:** they need seat markers in world data first.
 

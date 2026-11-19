@@ -43,7 +43,7 @@ Maximum garment penetration from `--seat-contact --frames 16`, including springs
 
 On the final rise, the child’s smock peaks at 28.2 mm below ground in world space with the actual hip scale and 6.2 mm with unity. Main measured 40.1 and 18.5 mm. The remaining garment penetration and the deeper seated coat-f hem are visible limitations.
 
-The 1.19 m child uses `hips_k=0.843868`. [Main](main-child-rise.csv) and [fixed](fixed-child-rise.csv) give all 75 rise frames for both multipliers, including rigid boot, trousers and smock heights in world millimetres. The spring-enabled garment peaks above are sampled separately.
+The 1.19 m child uses `hips_k=0.843868`. The client's placement of it is fixed on branch `sit-hips` ([sit-hips.md](../sit-hips.md)): seated boots −2.4 mm and trousers +0.8 mm, and the rise's smock −9.9 mm. [Main](main-child-rise.csv) and [fixed](fixed-child-rise.csv) give all 75 rise frames for both multipliers, including rigid boot, trousers and smock heights in world millimetres. The spring-enabled garment peaks above are sampled separately.
 
 ## Side views
 

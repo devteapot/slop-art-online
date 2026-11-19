@@ -8,6 +8,8 @@ Seat contact, stage 2a (docs/seat-contact/). A resident who rests outdoors in dr
 
 At weight 0 the plane lies `SEAT_SINK` (0.25 m) under the ground and rises with the weight, so cloth is lifted out, never thrown. The anchor goes once the clips have the body off the ground. No server read, write or subscription is involved.
 
+The body itself is placed by `characters::hips` (sit-hips, `docs/seat-contact/sit-hips.md`). In the ground clips' share of the pose (`anim::Anim::ground_share`), the hips' height goes from `hips_k` to 1 as the clip's hips come down from 0.45 to 0.17 of their rest height (`anim::ground_hips`). A short-legged child then rests on its seat, not 17 mm under it. Out of those clips the placement is unchanged. The asset view takes the same path for a ground clip's shot, and `cloth_check.py --terrain` places bodies the same way (`--compare-client` checks the hips and feet against a view's joint dump).
+
 ## Sub-features
 
 - `contact`: cloth tails stay at or above the ground while seated and getting up. Hair and every other group are untouched.
@@ -28,7 +30,7 @@ The scene is set up only through admin calls:
 - `--place-free` puts four skirted and three coated residents in a ring 2.2 m round me, chosen by their look line's outfit;
 - `set_weather false 900`, the epoch set to noon and `fov_on false` give a dry, lit, unscoped view;
 - `set_behavior {"do": "rest"}` sits them;
-- `set_behavior {"do": "wander"}` gets them up. A new graph alone does not end a rest; moving off does.
+- `set_behavior {"do": "wander"}` and then `refree` (each put back on its own tile) get them up. A new graph alone does not end a rest, and since iter-11's needs pacing wander or `goto` home leave them seated 47 s later; a placement ends it.
 
 `LIVING_GAME_PERF=seat` logs each seated character's cloth against its ground every 3 s (`seat: NAME ENTITY: N cloth joints, lowest tail X mm above the ground`), and `springwake` logs each waking.
 
