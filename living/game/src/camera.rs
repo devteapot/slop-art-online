@@ -1,9 +1,10 @@
-//! North-up follow camera and the legacy orbit rig for comparison.
+//! Top-down follow camera and the legacy orbit rig for comparison.
 
 use crate::controls::Input;
 use crate::net::Net;
 use crate::world::{Draw, Scene};
 use bevy::camera::CameraProjection;
+use bevy::input::gestures::RotationGesture;
 use bevy::input::mouse::AccumulatedMouseMotion;
 use bevy::pbr::{DistanceFog, FogFalloff};
 use bevy::prelude::*;
@@ -11,11 +12,12 @@ use living_bindings::*;
 
 pub const SKY: Color = Color::srgb(0.62, 0.74, 0.86);
 
-#[derive(Clone, Copy, PartialEq, Debug, Default)]
+#[derive(Clone, Copy, PartialEq, Debug, Default, serde::Serialize, serde::Deserialize)]
 pub struct View {
     /// Angle above the ground plane, degrees (90 = straight down).
     pub pitch: f32,
-    /// Distance from the focus, metres (for an ordinary adult).
+    /// Orbit distance from focus, or vertical height in the top-down stops (metres).
+    #[serde(rename = "height")]
     pub distance: f32,
     /// Vertical field of view, degrees.
     pub fov: f32,
@@ -79,37 +81,104 @@ impl Mode {
     }
 }
 
-/// Each knot stores its zoom coordinate and the corresponding vertical height, pitch and FOV.
-struct ZoomCurve {
-    knots: [(f32, View); 3],
-    initial: f32,
-    wheel_step: f32,
-    response: f32,
-    chest_fraction: f32,
+/// The top-down camera's persisted tuning. Distances in the stops are vertical heights.
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
+pub struct Tuning {
+    pub stops: [View; 3],
+    pub wheel_step: f32,
+    pub easing_rate: f32,
+    pub fixed_pitch: Option<f32>,
+    pub late_tilt: Option<LateTilt>,
+    pub keep_fov_curve: bool,
 }
 
-const TOP_DOWN: ZoomCurve = ZoomCurve {
-    knots: [
-        (0.0, View { distance: 19.0, pitch: 65.0, fov: 46.0 }),
-        (0.55, View { distance: 12.0, pitch: 58.0, fov: 44.0 }),
-        (1.0, View { distance: 8.0, pitch: 48.0, fov: 42.0 }),
-    ],
-    initial: 0.55,
-    wheel_step: 0.05,
-    response: 12.0,
-    chest_fraction: 0.60,
-};
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct LateTilt {
+    pub tilt_start: f32,
+    pub near_pitch: f32,
+}
 
-impl ZoomCurve {
-    fn view(&self, zoom: f32) -> View {
-        let [(far, wide), (middle, mid), (near, tight)] = self.knots;
-        let (lo, hi, a, b) = if zoom <= middle {
-            (far, middle, wide, mid)
+const MIDDLE: f32 = 0.55;
+const CHEST_FRACTION: f32 = 0.60;
+
+const fn stop(height: f32, pitch: f32, fov: f32) -> View {
+    View { distance: height, pitch, fov }
+}
+
+fn smooth(t: f32) -> f32 {
+    let t = t.clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
+}
+
+impl Default for Tuning {
+    fn default() -> Self {
+        Self::OURS_FIXED
+    }
+}
+
+impl Tuning {
+    const OURS: Self = Self {
+        stops: [stop(19.0, 65.0, 46.0), stop(12.0, 58.0, 44.0), stop(8.0, 48.0, 42.0)],
+        wheel_step: 0.05,
+        easing_rate: 12.0,
+        fixed_pitch: None,
+        late_tilt: None,
+        keep_fov_curve: false,
+    };
+
+    const OURS_FIXED: Self = Self {
+        stops: [stop(19.0, 58.0, 46.0), stop(12.0, 58.0, 44.0), stop(8.0, 58.0, 42.0)],
+        fixed_pitch: Some(58.0),
+        keep_fov_curve: true,
+        ..Self::OURS
+    };
+
+    // Exact play-test inputs from camera-ref, docs/CAMERA.md §6 (cd53b289).
+    pub const PRESETS: [(&str, &str, Self); 5] = [
+        ("Ours, fixed 58°", "ours-fixed", Self::OURS_FIXED),
+        ("Ours (current)", "ours", Self::OURS),
+        ("SUPERVIVE", "supervive", Self {
+            stops: [stop(28.0, 59.0, 31.0), stop(23.0, 59.0, 31.0), stop(18.0, 59.0, 31.0)],
+            fixed_pitch: Some(59.0),
+            ..Self::OURS
+        }),
+        ("LoL", "lol", Self {
+            stops: [stop(11.2, 56.0, 40.0), stop(11.2, 56.0, 40.0), stop(4.8, 56.0, 40.0)],
+            fixed_pitch: Some(56.0),
+            ..Self::OURS
+        }),
+        ("Corepunk", "corepunk", Self {
+            stops: [stop(15.0, 60.0, 49.0), stop(12.0, 60.0, 49.0), stop(7.0, 54.0, 49.0)],
+            ..Self::OURS
+        }),
+    ];
+
+    pub fn preset(name: &str) -> Option<Self> {
+        Self::PRESETS.iter().find(|(_, key, _)| *key == name).map(|(_, _, tuning)| *tuning)
+    }
+
+    pub fn view(&self, zoom: f32) -> View {
+        let [wide, mid, tight] = self.stops;
+        let (lo, hi, a, b) = if zoom <= MIDDLE {
+            (0.0, MIDDLE, wide, mid)
         } else {
-            (middle, near, mid, tight)
+            (MIDDLE, 1.0, mid, tight)
         };
-        let t = ((zoom - lo) / (hi - lo)).clamp(0.0, 1.0);
-        a.lerp(b, t * t * (3.0 - 2.0 * t))
+        let mut view = a.lerp(b, smooth((zoom - lo) / (hi - lo)));
+        if let Some(pitch) = self.fixed_pitch {
+            view.pitch = if let Some(tilt) = self.late_tilt {
+                let start = tilt.tilt_start.clamp(0.0, 1.0);
+                let blend = if zoom >= 1.0 { 1.0 } else { smooth((zoom - start) / (1.0 - start).max(f32::EPSILON)) };
+                pitch + (tilt.near_pitch - pitch) * blend
+            } else {
+                pitch
+            };
+            if !self.keep_fov_curve {
+                view.fov = mid.fov;
+            }
+        }
+        view
     }
 }
 
@@ -120,7 +189,7 @@ pub struct Zoom {
 
 impl Default for Zoom {
     fn default() -> Self {
-        Self { target: TOP_DOWN.initial, shown: TOP_DOWN.initial }
+        Self { target: MIDDLE, shown: MIDDLE }
     }
 }
 
@@ -130,12 +199,16 @@ pub struct Cam {
     pub mode: Mode,
     pub top_zoom: Zoom,
     pub eye_height: f32,
+    pub ground_clearance: f32,
     pub pose: GlobalTransform,
     pub look_dir: Option<Vec2>,
     look_pointer: Option<Vec2>,
+    look_yaw: f32,
     /// Yaw shown (degrees, 0 = north up) and where it is going.
     pub shown_yaw: f32,
     yaw: f32,
+    top_yaw: f32,
+    middle_drag: Option<MiddleDrag>,
     /// Yaw the movement keys are relative to; it lags a turning camera while keys are held.
     control_yaw: f32,
     focus: Vec3,
@@ -187,6 +260,26 @@ const PULL_OUT: f32 = 3.0;
 const LIFT_UP: f32 = 10.0;
 const LIFT_DOWN: f32 = 2.5;
 
+const ROTATE_DRAG_PX: f32 = 6.0;
+const ROTATE_DEG_PER_PX: f32 = 0.3;
+
+#[derive(Default)]
+struct MiddleDrag {
+    offset: Vec2,
+    dragged: bool,
+}
+
+impl MiddleDrag {
+    fn turn(&mut self, delta: Vec2) -> f32 {
+        if self.dragged {
+            return delta.x * ROTATE_DEG_PER_PX;
+        }
+        self.offset += delta;
+        self.dragged = self.offset.length() >= ROTATE_DRAG_PX;
+        if self.dragged { self.offset.x * ROTATE_DEG_PER_PX } else { 0.0 }
+    }
+}
+
 fn axes(yaw_deg: f32) -> (Vec2, Vec2) {
     let y = yaw_deg.to_radians();
     // Yaw 0 looks north (−Z); positive yaw turns the view clockwise seen from above.
@@ -194,14 +287,15 @@ fn axes(yaw_deg: f32) -> (Vec2, Vec2) {
 }
 
 impl Cam {
-    /// Turn the view to a yaw (degrees); it eases there.
+    /// Set the scripted bearing in degrees. Orbit eases to it.
     pub fn set_yaw(&mut self, yaw: f32) {
         self.yaw = yaw;
+        self.top_yaw = yaw.rem_euclid(360.0);
     }
 
     /// Ground-plane unit vectors for "screen up" and "screen right" of the movement keys.
     pub fn control_axes(&self) -> (Vec2, Vec2) {
-        axes(if self.mode == Mode::TopDown { 0.0 } else { self.control_yaw })
+        axes(if self.mode == Mode::TopDown { self.shown_yaw } else { self.control_yaw })
     }
 }
 
@@ -326,7 +420,7 @@ pub fn follow(
     mouse: Res<ButtonInput<MouseButton>>,
     target: Res<crate::controls::Target>,
     input: Res<Input>,
-    net: NonSend<Net>,
+    mut net: NonSendMut<Net>,
     scene: NonSend<Scene>,
     sight: Res<crate::sight::Sight>,
     size: Res<crate::bodies::MySize>,
@@ -334,7 +428,10 @@ pub fn follow(
     windows: Query<&Window>,
     ui: Res<crate::hud::UiWants>,
     (town, combat, island, mut pointer, solids): (Option<Res<crate::town::Town>>, Option<Res<crate::combat::Combat>>, Option<Res<crate::island::Island>>, ResMut<crate::pointer::Pointer>, Query<(&Transform, &crate::lookdev::Fitted), (With<crate::envs::Solid>, Without<Camera3d>)>),
-    (time, binds, prefs, live): (Res<Time>, Option<Res<crate::keys::Binds>>, Option<Res<crate::keys::Prefs>>, Option<Res<crate::live::Live>>),
+    (time, binds, prefs, live, windows_ui, mut rotation): (
+        Res<Time>, Option<Res<crate::keys::Binds>>, Option<Res<crate::keys::Prefs>>,
+        Option<Res<crate::live::Live>>, Option<Res<crate::ui::win::Windows>>, MessageReader<RotationGesture>,
+    ),
 ) {
     let Ok((mut tf, mut proj, mut camera, gtf, mut fog)) = q.single_mut() else { return };
     let dt = time.delta_secs();
@@ -347,13 +444,17 @@ pub fn follow(
         cam.align = None;
         cam.dismissed = None;
         cam.lift = 0.0;
+        cam.middle_drag = None;
     }
     cam.mode = mode;
     let top_down = mode == Mode::TopDown;
+    let tuning = prefs.as_ref().map_or_else(Tuning::default, |p| p.camera_tuning);
 
     // Where the cursor meets the ground, from the current camera (the game's cursor: `pointer.rs`).
     let window = windows.single().ok();
     let screen_size = window.as_ref().map_or(crate::capture::size().as_vec2(), |w| Vec2::new(w.width(), w.height()));
+    // macOS reports counterclockwise degree deltas. Camera bearings increase clockwise.
+    let gesture = rotation.read().map(|g| -g.0).sum::<f32>();
     let cursor = pointer.pos.map(|c| (c, screen_size));
 
     // Turn by pointing: outside the middle zone of the screen the view turns toward the cursor's
@@ -447,11 +548,52 @@ pub fn follow(
         cam.control_yaw = if input.moving { cam.control_yaw + diff(cam.shown_yaw, cam.control_yaw) * ease(2.0) } else { cam.shown_yaw };
 
     } else {
-        cam.shown_yaw = 0.0;
+        use crate::keys::{Act, Bind};
+        let enabled = prefs.as_ref().is_none_or(|p| p.camera_rotate);
+        let controls_free = enabled && !input.demo && !ui.menu && !ui.keyboard && !pointer.hold
+            && window.as_ref().is_none_or(|w| w.focused)
+            && windows_ui.as_ref().is_none_or(|w| !w.is_open(crate::ui::win::Win::Settings));
+        let free = controls_free && !ui.over();
+        let middle_free = binds.as_ref().and_then(|b| b.holder(Bind::Mouse(MouseButton::Middle)))
+            .is_none_or(|(a, _)| a == Act::NorthUp);
+        if !free || !middle_free {
+            cam.middle_drag = None;
+        } else if mouse.just_pressed(MouseButton::Middle) {
+            cam.middle_drag = Some(MiddleDrag::default());
+        }
+        let mut turn = 0.0;
+        let mut tapped = false;
+        if let Some(drag) = &mut cam.middle_drag {
+            if mouse.pressed(MouseButton::Middle) || mouse.just_released(MouseButton::Middle) {
+                turn = drag.turn(motion.delta);
+            }
+            if mouse.just_released(MouseButton::Middle) {
+                tapped = !drag.dragged;
+            }
+            if !mouse.pressed(MouseButton::Middle) {
+                cam.middle_drag = None;
+            }
+        }
+        let snap_key = controls_free && binds.as_ref().is_some_and(|b| b.get(Act::NorthUp).iter().any(|bind| match *bind {
+            Bind::Key(key) => keys.just_pressed(key),
+            Bind::Mouse(button) if button != MouseButton::Middle => free && mouse.just_pressed(button),
+            _ => false,
+        }));
+        if !enabled || snap_key || tapped {
+            cam.top_yaw = 0.0;
+        } else if free {
+            let gain = prefs.as_ref().map_or(1.0, |p| {
+                if p.camera_rotate_invert { -p.camera_rotate_speed } else { p.camera_rotate_speed }
+            });
+            cam.top_yaw = (cam.top_yaw + (turn + gesture) * gain).rem_euclid(360.0);
+        }
+        cam.shown_yaw = cam.top_yaw;
         cam.align_request = false;
-        cam.top_zoom.target = (cam.top_zoom.target + TOP_DOWN.wheel_step * pointer.wheel_notches + 1.0 - pointer.pinch_factor).clamp(0.0, 1.0);
-        cam.top_zoom.shown += (cam.top_zoom.target - cam.top_zoom.shown) * ease(TOP_DOWN.response);
+        cam.top_zoom.target = (cam.top_zoom.target + tuning.wheel_step * pointer.wheel_notches + 1.0 - pointer.pinch_factor).clamp(0.0, 1.0);
+        cam.top_zoom.shown += (cam.top_zoom.target - cam.top_zoom.shown) * ease(tuning.easing_rate);
     }
+
+    net.update_gaze(cam.top_zoom.target);
 
     // Context: a fight I am in, else a conversation, else a gesture exchange. Turning the view
     // dismisses it until that context ends.
@@ -490,13 +632,14 @@ pub fn follow(
     };
     let v;
     if top_down {
-        v = TOP_DOWN.view(cam.top_zoom.shown);
+        v = tuning.view(cam.top_zoom.shown);
         if let Some(me) = target.0 {
             let height = net.my_id.and_then(|id| live.as_ref()?.heights.get(&id).copied()).unwrap_or(1.75 * s);
-            cam.focus = me + Vec3::Y * height * TOP_DOWN.chest_fraction;
+            cam.focus = me + Vec3::Y * height * CHEST_FRACTION;
         }
         let back = v.distance / v.pitch.to_radians().tan();
-        tf.translation = cam.focus + Vec3::new(0.0, v.distance, back);
+        let (up, _) = axes(cam.shown_yaw);
+        tf.translation = cam.focus + Vec3::new(-up.x * back, v.distance, -up.y * back);
     } else {
         // The view, brought in along the tilt toward the ground when sight is short.
         let mut orbit_view = r.view;
@@ -598,6 +741,7 @@ pub fn follow(
     tf.look_at(focus_point, Vec3::Y);
     cam.pose = GlobalTransform::from(*tf);
     cam.eye_height = eye.y - focus_point.y;
+    cam.ground_clearance = eye.y - ground;
     cam.shown = View { pitch: (-tf.forward().y).asin().to_degrees(), ..v };
     if let Projection::Perspective(p) = &mut *proj {
         p.fov = v.fov.to_radians();
@@ -650,9 +794,13 @@ pub fn cursor_hit(
             None => None,
         }
     });
-    if cam.mode == Mode::Orbit || cam.look_pointer != pointer.pos || pointer.tapped || cam.cursor_ground.is_none() || cam.look_dir.is_none() {
+    // Zoom alone keeps the last look under a stationary pointer. Rotation changes the screen axes.
+    if cam.mode == Mode::Orbit || cam.look_pointer != pointer.pos || cam.look_yaw != cam.shown_yaw
+        || pointer.tapped || cam.cursor_ground.is_none() || cam.look_dir.is_none()
+    {
         cam.look_dir = cam.cursor_ground.zip(target.0).map(|(hit, me)| (hit - me).xz()).filter(|d| d.length_squared() > 0.09);
         cam.look_pointer = pointer.pos;
+        cam.look_yaw = cam.shown_yaw;
     }
 }
 
@@ -661,13 +809,67 @@ mod tests {
     use super::*;
 
     #[test]
+    fn a_middle_tap_does_not_turn_the_camera() {
+        let mut drag = MiddleDrag::default();
+        assert_eq!(drag.turn(Vec2::new(3.0, 1.0)), 0.0);
+        assert!(!drag.dragged);
+        assert_eq!(drag.turn(Vec2::new(5.0, -1.0)), 8.0 * ROTATE_DEG_PER_PX);
+        assert!(drag.dragged);
+        assert_eq!(drag.turn(Vec2::new(-1.0, 0.0)), -ROTATE_DEG_PER_PX);
+    }
+
+    #[test]
+    fn top_down_movement_uses_the_displayed_bearing() {
+        let cam = Cam { mode: Mode::TopDown, shown_yaw: 135.0, control_yaw: 0.0, ..default() };
+        let (up, right) = cam.control_axes();
+        let diagonal = std::f32::consts::FRAC_1_SQRT_2;
+        assert!(up.distance(Vec2::splat(diagonal)) < 1e-6);
+        assert!(right.distance(Vec2::new(-diagonal, diagonal)) < 1e-6);
+    }
+
+    #[test]
     fn top_down_curve_hits_the_knots_and_clamps() {
         assert_eq!(Zoom::default().shown, 0.55);
-        for (z, knot) in TOP_DOWN.knots {
-            assert_eq!(TOP_DOWN.view(z), knot);
+        let tuning = Tuning::preset("ours").unwrap();
+        for (z, knot) in [0.0, MIDDLE, 1.0].into_iter().zip(tuning.stops) {
+            assert_eq!(tuning.view(z), knot);
         }
-        assert_eq!(TOP_DOWN.view(-1.0), TOP_DOWN.view(0.0));
-        assert_eq!(TOP_DOWN.view(2.0), TOP_DOWN.view(1.0));
-        assert_eq!(TOP_DOWN.view(0.275).distance, 15.5);
+        assert_eq!(tuning.view(-1.0), tuning.view(0.0));
+        assert_eq!(tuning.view(2.0), tuning.view(1.0));
+        assert_eq!(tuning.view(0.275).distance, 15.5);
     }
+
+    #[test]
+    fn fixed_pitch_only_zooms_by_height() {
+        let tuning = Tuning { fixed_pitch: Some(55.0), ..Tuning::OURS };
+        for (z, stop) in [0.0, MIDDLE, 1.0].into_iter().zip(tuning.stops) {
+            assert_eq!(tuning.view(z), View { pitch: 55.0, fov: 44.0, distance: stop.distance });
+        }
+        let saved = serde_json::to_string(&tuning).unwrap();
+        assert_eq!(serde_json::from_str::<Tuning>(&saved).unwrap(), tuning);
+    }
+
+
+    #[test]
+    fn play_default_holds_pitch_and_keeps_the_lens_curve() {
+        let tuning = Tuning::default();
+        for (z, expected_fov) in [0.0, MIDDLE, 1.0].into_iter().zip([46.0, 44.0, 42.0]) {
+            assert_eq!(tuning.view(z).pitch, 58.0);
+            assert_eq!(tuning.view(z).fov, expected_fov);
+        }
+    }
+
+    #[test]
+    fn late_tilt_stays_flat_until_its_start_then_eases_to_the_near_pitch() {
+        let tuning = Tuning {
+            late_tilt: Some(LateTilt { tilt_start: 0.8, near_pitch: 48.0 }),
+            ..Tuning::default()
+        };
+        for zoom in [0.0, 0.55, 0.8] {
+            assert_eq!(tuning.view(zoom).pitch, 58.0);
+        }
+        assert!((tuning.view(0.9).pitch - 53.0).abs() < 0.001);
+        assert_eq!(tuning.view(1.0).pitch, 48.0);
+    }
+
 }

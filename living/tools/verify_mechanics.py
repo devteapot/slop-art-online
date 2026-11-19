@@ -74,10 +74,15 @@ def main():
     ap.add_argument("--db", default="living-verify")
     ap.add_argument("--wasm", default="living_authority.wasm", help="module file in the server's /wasm mount")
     ap.add_argument("--out")
+    ap.add_argument("--gate-world", action="store_true", help=argparse.SUPPRESS)
     a = ap.parse_args()
     db = a.db
-    stdb("publish", "-s", "local", "-b", f"/wasm/{a.wasm}", db, "--delete-data", "-y")
-    time.sleep(3)
+    if a.gate_world:
+        if not re.fullmatch(r"verify-gate-[a-z0-9-]+-mechanics", db):
+            ap.error("--gate-world requires a launched mechanics gate database")
+    else:
+        stdb("publish", "-s", "local", "-b", f"/wasm/{a.wasm}", db, "--delete-data", "-y")
+        time.sleep(3)
     stdb("call", "-s", "local", db, "spawn_crowd", "10", "true")
     time.sleep(1.5)
     walkers = sorted(int(r["id"]) for r in rows(db, "SELECT id, name FROM character") if r["name"].startswith("Walker"))
@@ -144,19 +149,49 @@ def main():
     expecting = wait_for(lambda: rows(db, "SELECT * FROM expecting"), timeout=30)
     results["consensual conception"] = bool(expecting)
     # 7. Tending wounds: A strikes B once, lets the fight cool down, then tends B.
+    def vitals(i):
+        return rows(db, f"SELECT hp, hp_rate, at_ms FROM vitals WHERE id = {i}")[0]
+
+    def projected_hp(v, now_ms):
+        return float(v["hp"]) + float(v["hp_rate"]) * (now_ms - float(v["at_ms"])) / 60000
+
     def hp(i):
-        v = rows(db, f"SELECT hp, hp_rate, at_ms FROM vitals WHERE id = {i}")[0]
-        return float(v["hp"]) + float(v["hp_rate"]) * (time.time() * 1000 - float(v["at_ms"])) / 60000
+        return projected_hp(vitals(i), time.time() * 1000)
+
+    def wound_events(kind):
+        return [r for r in rows(db, f"SELECT id, kind, subject, text FROM experience WHERE observer = {B}")
+                if r["kind"] == kind and int(r["subject"]) == A]
+
     call(db, "set_behavior", str(B), idle)
+    old_hits = {r["id"] for r in wound_events("attacked")}
+    unwounded_hp = hp(B)
     call(db, "set_behavior", str(A), seq({"do": {"skill": "attack", "target": {"id": B}}}))
-    max_b = float(rows(db, f"SELECT id, max_hp FROM vitals WHERE id = {B}")[0]["max_hp"])  # varies with vitality genes
-    hurt = wait_for(lambda: hp(B) < max_b - 5, timeout=20)
+
+    def damage_dealt():
+        for event in wound_events("attacked"):
+            damage = re.search(r"\((\d+) damage\)", event["text"])
+            if event["id"] not in old_hits and damage:
+                return int(damage.group(1))
+        return 0
+
+    damage = wait_for(damage_dealt, timeout=20)
+    # Experience rounds damage to whole HP, and natural recovery can start before the poll.
+    hurt = bool(damage) and hp(B) <= unwounded_hp - damage / 2
     call(db, "set_behavior", str(A), idle)
     time.sleep(11)
-    before_hp = hp(B)
+    old_care = {r["id"] for r in wound_events("care")}
+    before = vitals(B)
+    before_hp = projected_hp(before, time.time() * 1000)
     call(db, "set_behavior", str(A), seq({"do": {"skill": "tend", "target": {"id": B}}}))
-    healed = wait_for(lambda: hp(B) >= min(before_hp + 8, max_b - 0.5), timeout=20)
-    results["tending wounds"] = bool(hurt) and bool(healed)
+    tended = wait_for(lambda: any(r["id"] not in old_care and "tended your wounds" in r["text"]
+                                 for r in wound_events("care")), timeout=20)
+    after = vitals(B)
+    now_ms = time.time() * 1000
+    after_hp = projected_hp(after, now_ms)
+    natural_hp = projected_hp(before, now_ms)
+    results["tending wounds"] = bool(hurt and tended and after_hp > max(before_hp, natural_hp) + 0.1)
+    print(f"  tending: {damage} damage reported, {before_hp:.2f} -> {after_hp:.2f} HP "
+          f"({natural_hp:.2f} projected without care), care recorded: {bool(tended)}")
     # 8. Settlements: lay road underfoot, build a wall and a gate beside, shut and open the gate.
     for t in ["masonry", "carpentry", "shelter"]:
         call(db, "grant_know_how", str(A), t)
@@ -225,43 +260,66 @@ def main():
     # keeps, bows and arrows, leather, and clearing forest into open ground.
     for t in ["fishing", "smoking", "fire", "archery", "tanning"]:
         call(db, "grant_know_how", str(D), t)
-    for item, n in [("fiber", 5), ("wood", 4), ("stone", 1), ("hide", 1)]:
-        call(db, "grant_items", str(D), item, str(n))
-    have = lambda who, item: sum(int(r["qty"]) for r in rows(db, f"SELECT item, qty FROM inventory WHERE owner = {who}") if r["item"] == item)
-    fish0 = have(D, "fish")
+
+    def inventory(who):
+        return {r["item"]: int(r["qty"]) for r in rows(db, f"SELECT item, qty FROM inventory WHERE owner = {who}")}
+
+    def reset_pack(who, **supplies):
+        # Settle the previous graph and verify each drop before granting the new inputs.
+        call(db, "set_behavior", str(who), idle)
+        for item, qty in inventory(who).items():
+            call(db, "set_behavior", str(who), seq({"do": {"skill": "drop", "item": item, "qty": qty}}))
+            if not wait_for(lambda: item not in inventory(who), timeout=10):
+                raise RuntimeError(f"could not empty pack for actor {who}: {inventory(who)}")
+        for item, qty in supplies.items():
+            call(db, "grant_items", str(who), item, qty)
+        if inventory(who) != supplies:
+            raise RuntimeError(f"expected pack {supplies}, got {inventory(who)}")
+
+    def report_pack_failure(case):
+        feedback = rows(db, f"SELECT kind, text FROM experience WHERE observer = {D}")
+        print(f"  {case}:", [r["text"][:150] for r in feedback][-6:], inventory(D))
+
+    reset_pack(D, fiber=3)
+    call(db, "set_behavior", str(D), seq({"do": {"skill": "craft", "item": "net"}}))
+    netted = wait_for(lambda: inventory(D).get("net") == 1, timeout=60)
+    # Put a stocked spot at the walker so residents cannot empty it during a walk.
+    call(db, "place_resource", D, "fishing_spot", 0, 0, 5, 0)
+    call(db, "set_behavior", str(D), seq({"do": {"skill": "gather", "target": {"nearest": "fishing_spot"}}}))
+    results["a net brings in two fish at once"] = bool(
+        netted and wait_for(lambda: inventory(D).get("fish") == 2, timeout=30))
+    if not results["a net brings in two fish at once"]:
+        report_pack_failure("net")
+
+    reset_pack(D, fish=1, wood=3, fiber=1, stone=1, hide=1)
+    call(db, "place_structure", str(D), "campfire")
+    call(db, "set_behavior", str(D), seq(
+        {"do": {"skill": "smoke", "target": {"nearest": "campfire"}, "item": "fish"}},
+        {"do": {"skill": "craft", "item": "bow"}},
+        {"do": {"skill": "craft", "item": "arrow"}},
+        {"do": {"skill": "craft", "item": "leather"}},
+    ))
+    products = {"smoked_fish": 1, "bow": 1, "arrow": 3, "leather": 1}
+    results["smoking, bow, arrows and leather"] = bool(
+        wait_for(lambda: inventory(D) == products, timeout=90))
+    if not results["smoking, bow, arrows and leather"]:
+        report_pack_failure("craft")
+
+    reset_pack(D)
     body = rows(db, f"SELECT x, y FROM body WHERE id = {D}")[0]
     dx, dy = float(body["x"]), float(body["y"])
-    # The nearest one that still holds some (a spot fished out by residents fails the gather).
-    nearest = lambda kind, at_least=0: min(((float(r["x"]), float(r["y"])) for r in rows(db, f"SELECT x, y, amount FROM resource_node WHERE kind = '{kind}'") if float(r["amount"]) >= at_least), key=lambda p: (p[0] - dx) ** 2 + (p[1] - dy) ** 2)
-    # Earlier checks left D with a full pack: set the berries down first, then make the net.
-    # These are their own sequence: a sequence restarts from its first step when a step fails,
-    # and with the berries already dropped a failed gather (a spot residents fished out
-    # meanwhile) left the walker failing `drop` forever, never gathering again.
+    trees = [(float(r["x"]), float(r["y"])) for r in
+             rows(db, "SELECT x, y FROM resource_node WHERE kind = 'tree'")]
+    tree = min(trees, key=lambda p: (p[0] - dx) ** 2 + (p[1] - dy) ** 2)
     call(db, "set_behavior", str(D), seq(
-        {"do": {"skill": "drop", "item": "berries", "qty": 60}},
-        {"do": {"skill": "craft", "item": "net"}},
+        {"do": {"skill": "goto", "target": {"at": list(tree)}}},
+        {"do": {"skill": "goto", "target": {"nearest": "forest"}}},
+        {"do": {"skill": "clear"}},
     ))
-    netted = wait_for(lambda: have(D, "net") >= 1, timeout=60)
-    # Then straight to a spot that holds some (placed, not walked, so residents cannot empty
-    # it on the way) and gather, again until it works.
-    spot = nearest("fishing_spot", 2)
-    call(db, "place_at", str(D), spot[0], spot[1])
-    call(db, "set_behavior", str(D), json.dumps({"first": [{"do": {"skill": "gather", "target": {"nearest": "fishing_spot"}}}, {"wait": 2}]}))
-    results["a net brings in two fish at once"] = bool(netted) and bool(wait_for(lambda: have(D, "fish") >= fish0 + 2, timeout=150))
-    if not results["a net brings in two fish at once"]:
-        print("  net:", [r["text"][:150] for r in rows(db, f"SELECT kind, text FROM experience WHERE observer = {D}")][-6:], rows(db, f"SELECT item, qty FROM inventory WHERE owner = {D}"))
-    call(db, "place_structure", str(D), "campfire")
-    time.sleep(1)
-    call(db, "set_behavior", str(D), seq({"do": {"skill": "smoke", "target": {"nearest": "campfire"}, "item": "fish"}}, {"do": {"skill": "craft", "item": "bow"}}, {"do": {"skill": "craft", "item": "arrow"}}, {"do": {"skill": "craft", "item": "leather"}}))
-    results["smoking, bow, arrows and leather"] = bool(wait_for(lambda: have(D, "smoked_fish") >= 1 and have(D, "bow") >= 1 and have(D, "arrow") >= 3 and have(D, "leather") >= 1, timeout=90))
-    if not results["smoking, bow, arrows and leather"]:
-        print("  craft:", [r["text"][:150] for r in rows(db, f"SELECT kind, text FROM experience WHERE observer = {D}")][-6:], rows(db, f"SELECT item, qty FROM inventory WHERE owner = {D}"))
-    wood0 = have(D, "wood")
-    tree = nearest("tree")
-    call(db, "set_behavior", str(D), seq({"do": {"skill": "goto", "target": {"at": [tree[0], tree[1]]}}}, {"do": {"skill": "goto", "target": {"nearest": "forest"}}}, {"do": {"skill": "clear"}}))
-    results["clearing forest yields wood"] = bool(wait_for(lambda: have(D, "wood") >= wood0 + 2, timeout=150))
+    results["clearing forest yields wood"] = bool(
+        wait_for(lambda: inventory(D).get("wood") == 2, timeout=150))
     if not results["clearing forest yields wood"]:
-        print("  clear:", [r["text"][:150] for r in rows(db, f"SELECT kind, text FROM experience WHERE observer = {D}")][-6:])
+        report_pack_failure("clear")
     # Force. F threatens G: G perceives it, and it counts as being threatened (G's own
     # graph yields to it).
     F, G, H, I, J = walkers[5:10]
@@ -347,6 +405,8 @@ def main():
     report = {"db": db, "results": results, "story": [r["text"] for r in rows(db, "SELECT kind, text FROM chronicle") if r["kind"] not in ("arrival", "time", "speech")]}
     if a.out:
         Path(a.out).write_text(json.dumps(report, indent=2) + "\n")
+    if a.gate_world:
+        sys.exit(0 if ok else 1)  # The gate's shared harness owns cleanup.
     # The scratch world would otherwise keep ticking (and writing its log) forever.
     # Paused and read back as paused before the delete (world_delete.py: a busy world's delete can
     # take SpacetimeDB 2.14.1 down).

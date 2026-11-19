@@ -54,8 +54,8 @@ BASE_QUERIES = [
 ]
 # Private in every build: the authority's bookkeeping and developer audit truth
 # (docs/PERCEPTION.md). The observer and the mind service read them as the database owner.
-PRIVATE = ['fast_ask', 'far_handle', 'slumber', 'land_plan', 'clock', 'steer', 'walk_route', 'rot', 'wake', 'familiar', 'last_look', 'deliberation', 'rearing',
-           'known_ground', 'remembered', 'ground_edit',
+PRIVATE = ['attention', 'applied_gaze', 'cover_ground', 'fast_ask', 'far_handle', 'slumber', 'land_plan', 'clock', 'steer', 'walk_route', 'rot', 'wake', 'familiar', 'last_look', 'deliberation', 'rearing',
+           'known_ground', 'remembered', 'ground_edit', 'seen_structures',
            'act_queue', 'pasture', 'tick_timer', 'slow_timer', 'infant_cry',
            'combat_seen', 'fight_seen', 'missile', 'skill_use', 'readiness', 'skill_code',
            'routine', 'routine_stat', 'background', 'brain', 'mind_state', 'mind_cursor',
@@ -114,22 +114,26 @@ SCOPED = ['body', 'character', 'fighter', 'doing', 'vitals', 'experience', 'plac
 # The per-sender views: what a player perceives and its own state.
 VIEWS = ['seen_bodies', 'seen_characters', 'seen_fighters', 'seen_doing', 'my_body', 'my_fighter', 'my_doing', 'my_characters',
          'my_vitals', 'my_experience', 'my_places', 'my_inventory', 'my_know_how',
-         'my_deliberations', 'my_combat', 'my_readiness', 'my_skill_uses', 'my_records', 'my_offers', 'heard_sounds', 'my_heard', 'my_senses', 'my_earshot', 'my_act_outcomes', 'my_known_names', 'my_sex',
+         'my_deliberations', 'my_combat', 'my_readiness', 'my_skill_uses', 'my_records', 'my_offers', 'heard_sounds', 'my_heard', 'my_senses', 'my_senses_v2', 'my_earshot', 'my_act_outcomes', 'my_known_names', 'my_sex',
          # The near and far tiers of the three copy-backed views (frame-views; scripts/cues.py proves them).
          'seen_bodies_near', 'seen_bodies_far', 'seen_fighters_near', 'seen_fighters_far', 'seen_doing_near', 'seen_doing_far']
 SEEN = ['seen_bodies', 'seen_characters', 'seen_fighters', 'seen_doing']
 # The player's own living character's body, fighter and doing rows (others' come as copies in seen_*).
 BODY = ['my_body', 'my_fighter', 'my_doing']
-OWN = BODY + ['my_characters', 'my_vitals', 'my_experience', 'my_places', 'my_inventory', 'my_know_how', 'my_offers', 'my_heard', 'my_senses', 'my_earshot', 'my_act_outcomes', 'my_known_names', 'my_sex']
+OWN = BODY + ['my_characters', 'my_vitals', 'my_experience', 'my_places', 'my_inventory', 'my_know_how', 'my_offers', 'my_heard', 'my_senses', 'my_senses_v_2', 'my_earshot', 'my_act_outcomes', 'my_known_names', 'my_sex']
 OPAQUE = {4, 7}             # rock, wall (living_rules::map::Terrain); a drop (8) and a low thing (9) are see-through
 UNWALKABLE = {2, 4, 7, 8, 9}  # water, rock, wall, drop, low
 # The player's combat input (docs/COMBAT.md): refusals are recorded and told through
 # `my_combat`, so these calls succeed for any living character.
 PLAYER = {'use_skill': ['strike', 0, 0.0, 0.0], 'release_skill': ['block'],
           # The player's look (fov-1): any living character may send it.
-          'human_face': [1.0, 0.0]}
+          'human_face': [1.0, 0.0], 'human_gaze': [1]}
 MIND = ['mind_routines', 'mind_install', 'mind_install_way', 'mind_say', 'mind_act', 'mind_skip',
         'mind_consolidated', 'mind_update', 'mind_judged', 'mind_where']
+# Procedures (their answer goes to the caller alone), under the same controller rule: a talk turn's
+# reach (reply-timing, docs/COMMUNICATION.md §21), called for the character and someone else.
+# `mind_act_checked` (bystanders-2) is driven by verify-minds `act-repair` and verify-player `gaze`.
+PROCEDURES = {'mind_reach': lambda actor, other: [actor, other]}
 # The fast lane's answers (docs/FAST_LANE.md): for an open request only, which exists only for a
 # body its mind holds, so a player is refused even on its own character.
 FAST = ['mind_patch', 'mind_fast_done']
@@ -316,6 +320,19 @@ class Run:
         V.log(self.state, f"client {label} {reducer}{json.dumps(args)} -> {code} {body.strip()}")
         return okay
 
+    def call_procedure(self, label, token, procedure, args, expected=None):
+        """A procedure's typed `Result` is its answer: a refusal may come back as an `Err` value, so
+        it passes when its words are in the body whatever the status; an accepted call is a 200
+        without an error."""
+        code, body = V.http(f"/v1/database/{self.state['db']}/call/{procedure}", args, token)
+        okay = expected in body if expected is not None else code == 200 and not re.search(r'"(err|Err)"', body)
+        row = {'identity': label, 'reducer': procedure, 'procedure': True, 'args': args, 'http_status': code,
+               'body': body, 'expected': expected or 'accepted', 'pass': okay}
+        self.matrix.append(row)
+        write(self.directory / 'reducers.json', self.matrix)
+        V.log(self.state, f"client {label} {procedure}{json.dumps(args)} -> {code} {body.strip()}")
+        return okay
+
     def query(self, query, as_player, seconds, name, as_admin=False):
         if as_player and not self.state.get('token'):
             raise ValueError('no player yet: run verify.py player join NAME first')
@@ -417,9 +434,14 @@ class Run:
         expected = set(ADMIN) | set(MIND) | set(FAST) | set(PLAYER) | {'join', 'join_as', 'human_move', 'human_act', 'human_say', 'human_speak', 'tick', 'housekeeping', 'genesis_step'}
         if set(reducers) != expected:
             raise RuntimeError(f'reducer inventory changed: {set(reducers) ^ expected}')
+        procedures = {m[1] for path in (ROOT / 'living/authority/src').glob('*.rs')
+                      for m in re.finditer(r'#\[spacetimedb::procedure\]\s*pub fn (\w+)\(', path.read_text())}
+        if procedures != set(PROCEDURES) | {'mind_act_checked'}:
+            raise RuntimeError(f'procedure inventory changed: {procedures ^ (set(PROCEDURES) | {"mind_act_checked"})}')
         # The cue event tables (frame-views) are filtered per client by row-level security, which the
         # owner bypasses; the SDK's subscribe-all helper expands the generated ALL_TABLE_NAMES,
-        # cue tables included. So no program here may subscribe all, and the owner's programs (the
+        # cue tables included. So no program here may subscribe all (but `cues.py`, which does so as a
+        # player to prove it gets only its own cues), and the owner's programs (the
         # mind service, the observer) may not name a cue table (docs/TICK_RATE.md, "Row-level
         # security, the kill switch and SpacetimeDB upgrades").
         sources = [p for d in ('living', '.agents/skills') for p in (ROOT / d).rglob('*')
@@ -427,7 +449,7 @@ class Run:
                    and 'bindings/src/generated' not in str(p) and '/.local/' not in str(p)]
         everything = [str(p.relative_to(ROOT)) for p in sources
                       if re.search(r'subscribe_to_all_tables\(|SELECT \* FROM \*', p.read_text(errors='replace'))
-                      and p.name != 'drive.py']
+                      and p.name not in ('drive.py', 'cues.py')]  # cues.py subscribes all as player C, on purpose
         if everything:
             raise RuntimeError(f'a program subscribes every table (cue tables included, RLS bypassed for the owner): {everything}')
         owners = [str(p.relative_to(ROOT)) for d in ('living/mind', 'living/viewer') for p in (ROOT / d).rglob('*.rs')
@@ -494,6 +516,10 @@ class Run:
                 for actor in [ai['id'], other]:
                     self.call(label, token, reducer, mind_args(reducer, actor, label), 'not your character')
                 self.call(label, token, reducer, mind_args(reducer, own, label), 'no fast re-plan was asked')
+            for procedure, args in PROCEDURES.items():
+                for actor in [ai['id'], other]:
+                    self.call_procedure(label, token, procedure, args(actor, own), 'not your character')
+                self.call_procedure(label, token, procedure, args(own, ai['id']))
             for reducer in ['tick', 'housekeeping']:
                 self.call(label, token, reducer, [{'scheduled_id': 0, 'scheduled_at': {'Interval': 16667}}],
                           'No such procedure', expected_status=404)
@@ -506,11 +532,14 @@ class Run:
             self.call(label, token, 'human_speak', ['VERIFY_CLIENT_SPOKEN_' + label, 0, 'say'])
             self.call(label, token, 'human_speak', ['probe', 0, 'no_such_way'], 'no way of speaking called `no_such_way`')
             for reducer, args in PLAYER.items():
-                self.call(label, token, reducer, args)
+                refusal = 'gaze is disabled' if reducer == 'human_gaze' else None
+                self.call(label, token, reducer, args, refusal)
         for reducer, args in ADMIN.items():
             self.call('anonymous-http-no-token', None, reducer, args, 'admin only')
         for reducer in MIND + FAST:
             self.call('anonymous-http-no-token', None, reducer, mind_args(reducer, ai['id'], 'anonymous'), 'not your character')
+        for procedure, args in PROCEDURES.items():
+            self.call_procedure('anonymous-http-no-token', None, procedure, args(ai['id'], 0), 'not your character')
         for reducer in ['tick', 'housekeeping']:
             self.call('anonymous-http-no-token', None, reducer, [{'scheduled_id': 0, 'scheduled_at': {'Interval': 16667}}],
                       'No such procedure', expected_status=404)
@@ -775,6 +804,7 @@ class Run:
                     and {h['speaker'] for h in p['my_heard']} <= mine
                     # My senses: exactly one row, my character's, with the law's sight and hearing.
                     and [s['id'] for s in p['my_senses']] == sorted(mine) and all(s['sight'] > 0 and s['hearing'] > 0 for s in p['my_senses'])
+                    and not p['my_senses_v_2']  # Gaze ships disabled.
                     # My earshot: at most one row, my character's, naming only people my character sees.
                     and {r['id'] for r in p['my_earshot']} <= mine and all(set(h for w in r['ways'] for h in w['hearers']) <= set(p['seen_characters']) for r in p['my_earshot'])
                     # My outcomes: only my character's, each keyed by a line of my_experience.

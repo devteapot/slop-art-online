@@ -69,6 +69,7 @@ const CLIP_FRAMES: usize = 6;
 enum Pose {
     /// `aim`: the height looked at, as a fraction of the model's height (default its middle).
     Orbit { yaw: f32, pitch: f32, zoom: f32, aim: Option<f32> },
+    PlayStop { height: f32, yaw: f32, fov: f32 },
     Game,
 }
 
@@ -81,6 +82,10 @@ struct Shot {
 }
 
 fn parse_view(s: &str) -> Option<(String, Pose)> {
+    if let Some((stop, angle)) = s.split_once('@') {
+        let (height, fov) = match stop { "near" => (8., 42.), "middle" => (12., 44.), _ => return None };
+        return Some((s.replace('@', "_"), Pose::PlayStop { height, yaw: angle.parse().ok()?, fov }));
+    }
     if s == "game" {
         return Some(("game".into(), Pose::Game));
     }
@@ -545,7 +550,27 @@ pub fn batch(
     let name = if let Some(shot) = item.shots.get(step) {
         match shot.pose {
             Pose::Orbit { yaw, pitch, zoom, aim } => place_camera(&mut tf, &mut proj, aim.map_or(c, |a| Vec3::new(c.x, c.y - h.y + 2.0 * h.y * a, c.z)), h, yaw, pitch, zoom),
+            Pose::PlayStop { height, yaw, fov } => {
+                let chest = Vec3::new(c.x, h.y * 1.2, c.z);
+                let reach = height / 58f32.to_radians().tan();
+                let angle = yaw.to_radians();
+                if let Projection::Perspective(p) = &mut *proj { p.fov = fov.to_radians(); }
+                *tf = Transform::from_translation(chest + Vec3::new(reach * angle.sin(), height, reach * angle.cos())).looking_at(chest, Vec3::Y);
+            }
             Pose::Game => game_camera(&mut tf, &mut proj, Vec3::new(c.x, 0.0, c.z)),
+        }
+        // A ground seat's clip sits the body on the checker: its cloth takes the game's ground
+        // contact, weighted by the clip's time (`characters::SeatAnchor`).
+        let seat = shot.clip.and_then(|(clip, t)| crate::anim::seat_of(&item.clips[clip].0, t, 1.0));
+        if let Some(root) = roots.iter().find(|(_, it)| it.index == i).map(|(e, _)| e) {
+            match seat {
+                Some(w) => {
+                    commands.entity(root).try_insert(crate::characters::SeatAnchor { point: Vec3::ZERO, normal: Vec3::Y, weight: Some(w) });
+                }
+                None => {
+                    commands.entity(root).try_remove::<crate::characters::SeatAnchor>();
+                }
+            }
         }
         if let (Some((clip, t)), Some((_, nodes, p))) = (shot.clip, &item.graph) {
             if let (Ok(mut pl), Some(node)) = (players.get_mut(*p), nodes.get(clip)) {

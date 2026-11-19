@@ -139,6 +139,8 @@ pub struct LandParams {
     /// as written; the generator steps aside for them. Empty: the land is as before.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub plans: Vec<settle::PlanSpec>,
+    #[serde(default, skip_serializing_if = "crate::cover::Spec::is_empty")]
+    pub cover: crate::cover::Spec,
     /// What hides what is behind it where the land is hosted ([`Sight`]): the eye height, and
     /// per kind of lot or prop how high it hides. Default: 1.6 m, and each model's own height.
     #[serde(default, skip_serializing_if = "Sight::is_default")]
@@ -445,7 +447,7 @@ pub struct SiteSpec {
 
 impl Default for LandParams {
     fn default() -> Self {
-        Self { cell_m: 8.0, relief: Relief::default(), water: Water::default(), regions: Regions::default(), sites: default_sites(), min_pocket_tiles: 60, settlements: SettleParams::default(), metro: None, plans: Vec::new(), sight: Sight::default() }
+        Self { cell_m: 8.0, relief: Relief::default(), water: Water::default(), regions: Regions::default(), sites: default_sites(), min_pocket_tiles: 60, settlements: SettleParams::default(), metro: None, plans: Vec::new(), cover: Default::default(), sight: Sight::default() }
     }
 }
 
@@ -2214,7 +2216,7 @@ fn finish_tiles(wk: Work) -> Land {
     let Work { mut land, tiles, sd, .. } = wk;
     let size_m = land.size;
     land.sd = sd;
-    land.map = Map { w: size_m, h: size_m, tiles, blocked: Default::default(), opaque: Default::default(), nav: Default::default() };
+    land.map = Map { w: size_m, h: size_m, tiles, blocked: Default::default(), cover: None, opaque: Default::default(), nav: Default::default() };
     land
 }
 

@@ -44,7 +44,7 @@ macro_rules! primary_tables {
             routine, routine_stat, cue, script, community, membership, join_request, genome,
             practice, land, settlement, lot, fighter, skill_card, act_card, speech_card, doing, weather,
             seen_bodies, seen_characters, seen_fighters, seen_doing, seen_bodies_near, seen_bodies_far, seen_fighters_near, seen_fighters_far, seen_doing_near, seen_doing_far, my_body, my_fighter, my_doing, my_characters, my_vitals,
-            my_experience, my_places, my_inventory, my_know_how, my_offers, my_heard, my_senses, my_earshot, my_act_outcomes, my_known_names, my_sex);
+            my_experience, my_places, my_inventory, my_know_how, my_offers, my_heard, my_senses, my_senses_v_2, my_earshot, my_act_outcomes, my_known_names, my_sex);
     };
 }
 
@@ -191,6 +191,7 @@ fn snapshot(c: &DbConnection) -> Value {
         heard_sounds,
         my_heard,
         my_senses,
+        my_senses_v_2,
         my_earshot,
         my_act_outcomes,
         my_known_names,
@@ -219,6 +220,7 @@ fn snapshot(c: &DbConnection) -> Value {
         "my_know_how": ids(c.db.my_know_how().iter().map(|r| r.actor).collect()),
         "my_offers": c.db.my_offers().iter().map(|r| json!({"id":r.id,"incoming":r.incoming,"from":r.from,"to":r.to,"give_item":r.give_item,"want_item":r.want_item,"until_ms":r.until_ms})).collect::<Vec<_>>(),
         // What my character senses (the `senses` law with all its facts), written on change.
+        "my_senses_v_2": c.db.my_senses_v_2().iter().map(|r| row_json(&r)).collect::<Vec<_>>(),
         "my_senses": c.db.my_senses().iter().map(|r| json!({"id":r.id,"sight":r.sight,"hearing":r.hearing,"field":r.field,"near_m":r.near_m,"at_ms":r.at_ms})).collect::<Vec<_>>(),
         // Whom a line I said now would reach, per way, and in words (written on change).
         "my_earshot": c.db.my_earshot().iter().map(|r| json!({"id":r.id,"ways":r.ways.iter().map(|w| json!({"way":w.way,"hearers":w.hearers})).collect::<Vec<_>>(),"text":r.text,"at_ms":r.at_ms})).collect::<Vec<_>>(),
@@ -440,9 +442,10 @@ fn main() {
             .read_to_string(&mut input)
             .map_err(|e| e.to_string())?;
         let r: Request = serde_json::from_str(&input).map_err(|e| e.to_string())?;
-        // A verify-client run, or the merge's scene gate (living/tools/scene_gate.py, case `cues`).
-        if !r.db.starts_with("verify-client-") && !r.db.starts_with("verify-gate-") {
-            return Err("database must start with verify-client- or verify-gate-".into());
+        // A verify-client run, the merge's scene gate (living/tools/scene_gate.py, case `cues`), or
+        // verify-player's gaze scenes.
+        if !r.db.starts_with("verify-client-") && !r.db.starts_with("verify-gate-") && !r.db.starts_with("verify-player-gaze-") {
+            return Err("database must start with verify-client-, verify-gate- or verify-player-gaze-".into());
         }
         let first = drive(&r, r.drop_file.is_some())?;
         if r.drop_file.is_some() {

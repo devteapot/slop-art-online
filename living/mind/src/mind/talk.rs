@@ -40,8 +40,11 @@ use tokio::sync::oneshot;
 
 /// Reply turns in one conversation (both sides together); stamina usually ends it sooner.
 const MAX_TURNS: u32 = 12;
-/// How long a talk turn waits for the authority to say where its character stands (talk-places).
+/// How long a talk turn waits for the authority to say where its character stands and how it
+/// perceives the other (`mind_reach`; talk-places, reply-timing).
 const STANDING_WAIT_MS: u64 = 2_000;
+/// A `silence` this soon after a reply turn's line is about that line (reply-timing).
+const MISSED_MS: u64 = 10_000;
 /// A conversation that has been quiet this long is over; the next line starts a new one.
 const QUIET_MS: u64 = 90_000;
 /// Speech older than this (e.g. replayed when the service starts) gets no turn.
@@ -304,6 +307,12 @@ struct Conversation {
     /// The turn (`turns`) in which a plan or promise between the two was made: a reply that
     /// settled something, or an act toward the other (talk-turns).
     promised: Option<u32>,
+    /// A reply turn's line the other could not have heard (its `silence`, in the authority's
+    /// words, and when it came): the speaker's next turn weighs it (reply-timing).
+    missed: Option<(String, u64)>,
+    /// A missed line already had its follow-up turn: another silence before the other is heard
+    /// again ends the exchange (one follow-up per missed line, no loop).
+    followed: bool,
 }
 
 impl Conversation {
@@ -345,8 +354,13 @@ pub struct Talks {
     overheard: HashMap<u32, u64>,
     /// Speech not addressed to anyone gets at most one reply: (speaker, at_ms) → listener.
     claimed: HashMap<(u32, u64), u32>,
-    /// When each character last spoke through a reply turn.
+    /// When each character's last reply-turn line stands in the exchange's rhythm (`Pace`'s
+    /// `paced_ms`: when it would have been said before reply-timing). Its next line keeps the
+    /// gap from this time, not from when the line was actually said.
     spoke: HashMap<u32, u64>,
+    /// Each character's last reply-turn line: when it was said and when, at speaking pace, it
+    /// is done being said (`paced_ms` + `saying_ms`). A turn answering it paces from there.
+    voice: HashMap<u32, (u64, u64)>,
     /// Recent reply-turn lines per character (for "you have talked a lot lately").
     said: HashMap<u32, Vec<u64>>,
     /// Lines that came while the listener's deliberation was running (its prompt already
@@ -577,10 +591,30 @@ impl Minds {
             return;
         }
         if e.kind == "silence" {
-            // Called someone who is out of earshot: that conversation is over.
-            if let Some(c) = self.talk.lock().unwrap().pairs.get_mut(&pair(e.observer, e.subject)) {
-                c.ended = true;
-                log::info!("{} and {}: out of earshot, conversation over", self.name(e.observer), self.name(e.subject));
+            // A reply turn's line the other could not have heard: the speaker's next turn is
+            // told so, in the authority's words, and weighs it (reply-timing). Once per missed
+            // line: a silence after that follow-up, or after any other line, ends the exchange.
+            let follow = {
+                let mut t = self.talk.lock().unwrap();
+                match t.pairs.get_mut(&pair(e.observer, e.subject)) {
+                    Some(c) => {
+                        let ours = c.lines.last().is_some_and(|l| l.turn && l.speaker == e.observer && l.to == e.subject && e.at_ms.abs_diff(l.at_ms) <= MISSED_MS);
+                        if ours && !c.ended && !c.followed {
+                            c.missed = Some((e.text.clone(), e.at_ms));
+                            c.followed = true;
+                            log::info!("{} and {}: out of earshot; {}'s next turn weighs it", self.name(e.observer), self.name(e.subject), self.name(e.observer));
+                            true
+                        } else {
+                            c.ended = true;
+                            log::info!("{} and {}: out of earshot, conversation over", self.name(e.observer), self.name(e.subject));
+                            false
+                        }
+                    }
+                    None => false,
+                }
+            };
+            if follow {
+                self.claim_turn(e.observer, e.subject);
             }
             return;
         }
@@ -734,6 +768,9 @@ impl Minds {
             }
             if !known {
                 c.lines.push(Line { speaker, to, text: text.clone(), at_ms: e.at_ms, at: (e.x, e.y), turn: false, exp: e.id });
+                // Heard from them again: a later missed line gets its own follow-up.
+                c.followed = false;
+                c.missed = None;
                 // A line from outside the exchange (a decision, a human) reopens a finished one
                 // only when it says something new.
                 if (c.ended || c.turns >= MAX_TURNS) && novelty >= NEW_MATTER {
@@ -801,9 +838,12 @@ impl Minds {
                 let next = {
                     let mut t = self.talk.lock().unwrap();
                     let waiting = t.busy.get_mut(&listener).and_then(|w| w.take());
-                    // Someone else spoke to them meanwhile and is still waiting for an answer.
+                    // Someone else spoke to them meanwhile and is still waiting for an answer, or
+                    // their own line just said was missed (its silence came during the turn).
                     let due = waiting.filter(|s| {
-                        t.pairs.get(&pair(listener, *s)).map_or(false, |c| !c.ended && c.settled.is_none() && c.turns < MAX_TURNS && c.lines.last().map_or(false, |l| l.speaker == *s))
+                        t.pairs.get(&pair(listener, *s)).map_or(false, |c| {
+                            !c.ended && c.settled.is_none() && c.turns < MAX_TURNS && (c.missed.is_some() || c.lines.last().map_or(false, |l| l.speaker == *s))
+                        })
                     });
                     if due.is_none() {
                         t.busy.remove(&listener);
@@ -1085,15 +1125,21 @@ impl Minds {
         let Some(c) = self.conn.db.character().id().find(&me) else { return Ok(()) };
         let temper = self.temper(me);
         let stamina = temper.stamina(self.affinity(me, other));
-        let (lines, own, reopened, lately_said, open) = {
+        let (lines, own, reopened, lately_said, open, missed) = {
             let mut t = self.talk.lock().unwrap();
             let now = llm::now_ms();
             let lately_said = t.said.get(&me).map_or(0, |v| v.iter().filter(|x| now.saturating_sub(**x) < 5 * 60_000).count());
             let conv = t.pairs.entry(pair(me, other)).or_default();
             let heard_text = conv.lines.iter().rev().find(|l| l.speaker == other).map(|l| l.text.clone()).unwrap_or_default();
-            (conv.lines.clone(), conv.own.get(&me).copied().unwrap_or(0), conv.reopened.clone(), lately_said, conv.open(&heard_text))
+            (conv.lines.clone(), conv.own.get(&me).copied().unwrap_or(0), conv.reopened.clone(), lately_said, conv.open(&heard_text), conv.missed.take())
         };
-        let Some(heard) = lines.iter().rev().find(|l| l.speaker == other).cloned() else { return Ok(()) };
+        // A turn on a missed line (reply-timing) answers what came of its own words; the other's
+        // last line, if any, is still what the exchange was about.
+        let heard = match (lines.iter().rev().find(|l| l.speaker == other).cloned(), &missed) {
+            (Some(h), _) => h,
+            (None, Some((_, at_ms))) => Line { speaker: other, to: me, text: String::new(), at_ms: *at_ms, at: lines.last().map_or((0.0, 0.0), |l| l.at), turn: false, exp: 0 },
+            (None, None) => return Ok(()),
+        };
         let lane = if self.is_player(me) || self.is_player(other) || lines.iter().any(|l| self.is_player(l.speaker) || self.is_player(l.to)) {
             Lane::Interactive
         } else {
@@ -1103,7 +1149,7 @@ impl Minds {
         // to answer, or a plan or promise just made, leaves `end` to the mind (talk-turns).
         let last_word = own + 1 >= stamina && !open;
         let enough = own + 1 >= stamina && open;
-        let ctx = TalkCtx { temper: &temper, lately_said, own, last_word, enough, reopened: reopened.as_ref() };
+        let ctx = TalkCtx { temper: &temper, lately_said, own, last_word, enough, reopened: reopened.as_ref(), missed: missed.as_ref().map(|m| m.0.as_str()) };
         let (system, user) = self.talk_prompt(&c, other, &lines, &heard, &ctx).await;
         let mut profile = self.profile(&c);
         let messages = [Msg { role: "system", content: system }, Msg { role: "user", content: user }];
@@ -1166,7 +1212,7 @@ impl Minds {
         let mut t = ThoughtIn {
             kind: "talk".into(),
             summary,
-            detail: json!({"with": other, "heard": heard.text, "reply": v, "stamina": stamina, "own_turns": own + 1, "last_word": last_word,
+            detail: json!({"with": other, "heard": heard.text, "missed": missed.as_ref().map(|m| &m.0), "reply": v, "stamina": stamina, "own_turns": own + 1, "last_word": last_word,
                            "settled": settled.as_ref().map(|s| json!({"outcome": s.outcome, "until_ms": s.until_ms})),
                            "conversation": lines.iter().map(|l| json!({"speaker": l.speaker, "to": l.to, "text": l.text})).collect::<Vec<_>>()})
             .to_string(),
@@ -1175,10 +1221,19 @@ impl Minds {
             model: reply.model.clone(),
             reference: reference(me, "talk"),
         };
-        // Answer once the other has had time to say their line (and no faster than the
-        // authority allows one to speak).
-        let last = self.talk.lock().unwrap().spoke.get(&me).copied().unwrap_or(0);
-        let wait = (last + SPEECH_GAP_MS).max(heard.at_ms + saying_ms(&heard.text)).saturating_sub(llm::now_ms());
+        // Said as soon as it is ready (reply-timing): whether the other receives it is judged
+        // when it is said, and waiting for the other's line to be done being said let the two
+        // walk apart (play-test 10: a reply ready in 572 ms waited 1.98 s, and its speaker had
+        // walked out of reach). Only the gap after one's own previous line is kept, on the
+        // exchange's rhythm (`Pace`); the rest of today's pacing moves the line's place in that
+        // rhythm (`spoke`, `voice`), which the next turn paces from.
+        let pace = {
+            let t = self.talk.lock().unwrap();
+            let last = t.spoke.get(&me).copied().unwrap_or(0);
+            let until = t.voice.get(&heard.speaker).filter(|(said, _)| said.abs_diff(heard.at_ms) <= 5_000).map_or(0, |v| v.1);
+            Pace::of(llm::now_ms(), last, heard.at_ms, &heard.text, until)
+        };
+        let wait = pace.say_ms.saturating_sub(llm::now_ms());
         if wait > 0 {
             tokio::time::sleep(Duration::from_millis(wait)).await;
         }
@@ -1198,7 +1253,9 @@ impl Minds {
         {
             let mut tk = self.talk.lock().unwrap();
             if !say.is_empty() {
-                tk.spoke.insert(me, now);
+                let paced = pace.paced_ms.max(now);
+                tk.spoke.insert(me, paced);
+                tk.voice.insert(me, (now, paced + saying_ms(&text)));
                 tk.said.entry(me).or_default().push(now);
                 if alongside {
                     if let Some(d) = tk.deliberating.get_mut(&me) {
@@ -1231,7 +1288,20 @@ impl Minds {
                 }
             }
         }
-        // What was settled is the speaker's own conclusion: it goes into their mind.
+        let turn_reference = t.reference.clone();
+        let mut result = self.say(me, say.clone(), to, way.clone(), t.clone()).await;
+        if matches!(&result, Err(e) if e.to_string().contains("too fast")) {
+            tokio::time::sleep(Duration::from_millis(SPEECH_GAP_MS)).await;
+            result = self.say(me, say.clone(), to, way.clone(), t).await;
+        }
+        if result.is_err() && !say.is_empty() {
+            let mut tk = self.talk.lock().unwrap();
+            if let Some(c) = tk.pairs.get_mut(&pair(me, to)) {
+                c.lines.retain(|l| !(l.turn && l.speaker == me && l.at_ms == now));
+            }
+        }
+        // What was settled is the speaker's own conclusion: it goes into their mind (after the
+        // line is said, so the write does not hold it back).
         if let (Some(s), Some(store)) = (&settled, &self.store) {
             if !s.outcome.is_empty() {
                 let key = format!("agreement:person_{other}");
@@ -1250,23 +1320,12 @@ impl Minds {
                     ],
                     ..Default::default()
                 };
-                if let Err(e) = store.apply(me, &patch, &t.reference, now).await {
+                if let Err(e) = store.apply(me, &patch, &turn_reference, now).await {
                     log::warn!("{}: agreement not remembered: {e:#}", c.name);
                 }
             }
         }
-        let mut result = self.say(me, say.clone(), to, way.clone(), t.clone()).await;
-        if matches!(&result, Err(e) if e.to_string().contains("too fast")) {
-            tokio::time::sleep(Duration::from_millis(SPEECH_GAP_MS)).await;
-            result = self.say(me, say.clone(), to, way.clone(), t).await;
-        }
-        if result.is_err() && !say.is_empty() {
-            let mut tk = self.talk.lock().unwrap();
-            if let Some(c) = tk.pairs.get_mut(&pair(me, to)) {
-                c.lines.retain(|l| !(l.turn && l.speaker == me && l.at_ms == now));
-            }
-        }
-        if let Err(e) = self.act(me, acts, "talk").await {
+        if let Err(e) = self.act(me, acts, "talk", &turn_reference, lane).await {
             log::warn!("{}: acts from a conversation not taken: {e:#}", c.name);
         }
         log::info!(
@@ -1289,25 +1348,27 @@ impl Minds {
         result
     }
 
-    /// Where `actor` stands now (talk-places): its `standing` row, written by the authority when
-    /// asked (`mind_where`), since this service does not follow bodies. None if the ask fails or
-    /// takes over [`STANDING_WAIT_MS`]; the turn then lists its places without the way to them.
-    async fn standing_now(&self, actor: u32) -> Option<(f32, f32)> {
+    /// Where `actor` stands and moves now, and how it perceives `other` (talk-places,
+    /// reply-timing): the authority's answer to `mind_reach`, since this service does not follow
+    /// bodies. None if the ask fails or takes over [`STANDING_WAIT_MS`]; the turn then lists its
+    /// places without the way to them and says nothing of the moment's distances.
+    async fn reach_now(&self, actor: u32, other: u32) -> Option<Reach> {
         let (tx, rx) = oneshot::channel();
-        if let Err(e) = self.conn.reducers.mind_where_then(actor, move |_, r| {
-            let _ = tx.send(flatten(r));
-        }) {
-            log::warn!("{}: where it stands not asked: {e:#}", self.name(actor));
-            return None;
-        }
+        self.conn.procedures.mind_reach_then(actor, other, move |_, r| {
+            let _ = tx.send(r);
+        });
         match tokio::time::timeout(Duration::from_millis(STANDING_WAIT_MS), rx).await {
-            Ok(Ok(Ok(()))) => self.conn.db.standing().actor().find(&actor).map(|s| (s.x, s.y)),
+            Ok(Ok(Ok(Ok(r)))) => Some(r),
+            Ok(Ok(Ok(Err(e)))) => {
+                log::warn!("{}: mind_reach: {e}", self.name(actor));
+                None
+            }
             Ok(Ok(Err(e))) => {
-                log::warn!("{}: mind_where: {e}", self.name(actor));
+                log::warn!("{}: mind_reach transport: {e:?}", self.name(actor));
                 None
             }
             _ => {
-                log::warn!("{}: mind_where gave no answer within {STANDING_WAIT_MS} ms", self.name(actor));
+                log::warn!("{}: mind_reach gave no answer within {STANDING_WAIT_MS} ms", self.name(actor));
                 None
             }
         }
@@ -1380,8 +1441,10 @@ impl Minds {
             17..=19 => "evening",
             _ => "night",
         };
-        // Where one stands now, asked of the authority (talk-places); else where the line was said.
-        let standing = self.standing_now(me).await;
+        // Where one stands and moves now and how one perceives the other, asked of the authority
+        // (talk-places, reply-timing); else where the line was said.
+        let reach = self.reach_now(me, other).await;
+        let standing = reach.as_ref().map(|r| (r.x, r.y));
         let here = standing.unwrap_or(heard.at);
         let places = self.places(me, standing, true);
         let near = self
@@ -1396,7 +1459,12 @@ impl Minds {
         let place = near.as_ref().map(|(d, n)| if *d <= 4.0 { format!("at \"{n}\"") } else { format!("near \"{n}\"") }).unwrap_or_else(|| "away from the places you know".into());
         let plan = self.conn.db.brain().id().find(&me).map(|b| b.plan).filter(|p| !p.is_empty());
         let doing = plan.clone().unwrap_or_else(|| "going about your day".into());
-        let scene = format!("{} ({part}), {place}. What you are doing: {doing}.", fmt(now));
+        let mut scene = format!("{} ({part}), {place}. What you are doing: {doing}.", fmt(now));
+        if let Some(r) = &reach {
+            // The place one is walking to, as one knows it (one's own places, within 6 m).
+            let goal_place = r.goal.then(|| self.conn.db.place().iter().filter(|p| p.actor == me).map(|p| (((p.x - r.gx).powi(2) + (p.y - r.gy).powi(2)).sqrt(), p.name)).filter(|(d, _)| *d <= 6.0).min_by(|a, b| a.0.total_cmp(&b.0)).map(|(_, n)| n)).flatten();
+            scene.push_str(&format!("\n{}", reach_words(&other_name, r, goal_place.as_deref()).join(" ")));
+        }
         let body = self.body_text(c.id);
         // What this exchange brings to mind: the other person, what was said, the place, the hour.
         let mut cues = Cues::default();
@@ -1425,7 +1493,8 @@ impl Minds {
         // The conversation up to the line being answered: that line is given once, under "What you
         // are answering" (talk-turns; before, it ended the transcript too). Lines after it, if
         // any, are not part of what this turn answers.
-        let upto = lines.iter().rposition(|l| l.speaker == heard.speaker && l.at_ms == heard.at_ms).unwrap_or(lines.len());
+        // A turn on a missed line shows the whole exchange, up to its own unheard words.
+        let upto = if ctx.missed.is_some() { lines.len() } else { lines.iter().rposition(|l| l.speaker == heard.speaker && l.at_ms == heard.at_ms).unwrap_or(lines.len()) };
         let convo: Vec<String> = lines[..upto]
             .iter()
             .rev()
@@ -1503,6 +1572,7 @@ impl Minds {
             between: &between,
             places: &places,
             placed: standing.is_some(),
+            missed: ctx.missed,
         };
         (prompts::talk_system(), prompts::talk_user(&t))
     }
@@ -1518,11 +1588,80 @@ struct TalkCtx<'a> {
     /// left to the mind (talk-turns).
     enough: bool,
     reopened: Option<&'a (Settled, String)>,
+    /// What came of its own last words, when the other could not have heard them (the
+    /// authority's `silence`, reply-timing).
+    missed: Option<&'a str>,
 }
 
 /// About how long a line takes to say aloud (people speak ~3 words a second).
 fn saying_ms(text: &str) -> u64 {
     (text.split_whitespace().count() as u64 * 330).clamp(1_500, 8_000)
+}
+
+/// When a reply turn's line is said, and its place in the exchange's rhythm (reply-timing).
+///
+/// Before, a reply was held until the line it answered was done being said (`saying_ms` from
+/// when it was heard) and `SPEECH_GAP_MS` after the speaker's own previous line, and the
+/// authority judged earshot when it was finally said. Now it is said when ready, so earshot is
+/// judged when the speaker starts speaking; the old time is kept as `paced_ms`, which the
+/// speaker's next line keeps its gap from. A speaker's lines are therefore never closer
+/// together than before on that rhythm, and when nobody's line comes sooner `paced_ms` is the
+/// old said time exactly.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Pace {
+    /// When it is said: once ready, and not before `SPEECH_GAP_MS` after one's previous line's
+    /// `paced_ms` (which also keeps the authority's 2 s speaking gap).
+    say_ms: u64,
+    /// When it was said before reply-timing: also not before the line answered is done being
+    /// said (`saying_ms` from when it was heard, or from where its own speaker's rhythm put it,
+    /// `heard_until_ms`, for a line this service said).
+    paced_ms: u64,
+}
+
+impl Pace {
+    fn of(ready_ms: u64, last_paced_ms: u64, heard_at_ms: u64, heard_text: &str, heard_until_ms: u64) -> Pace {
+        let say_ms = ready_ms.max(last_paced_ms + SPEECH_GAP_MS);
+        let paced_ms = say_ms.max(heard_at_ms + saying_ms(heard_text)).max(heard_until_ms);
+        Pace { say_ms, paced_ms }
+    }
+}
+
+/// What a talk turn's frame says of the moment from the replier's own perception
+/// (`mind_reach`, reply-timing): how far the other is when it sees or hears them, and whether
+/// and where it is walking, and whether that takes it toward or away from them. Facts only, no
+/// advice: whether to stop, turn, call out or walk on is the mind's. `goal_place`: the name of
+/// the replier's own known place it is walking to, if it knows one there.
+fn reach_words(other: &str, r: &Reach, goal_place: Option<&str>) -> Vec<String> {
+    let mut out = Vec::new();
+    let cap = |s: String| s.chars().next().map_or(String::new(), |c| c.to_uppercase().chain(s.chars().skip(1)).collect());
+    out.push(match r.other.as_str() {
+        "seen" if r.other_m < 1.5 => cap(format!("{other} is right beside you.")),
+        "seen" => cap(format!("{other} is {:.0} m {} of you.", r.other_m, r.other_where)),
+        "heard" => format!("You cannot see {other} now; you hear them {}.", r.other_where),
+        _ => format!("You neither see nor hear {other} now."),
+    });
+    let gait = if r.speed >= 3.0 { "running" } else { "walking" };
+    let motion = if r.speed <= 0.0 {
+        "You are standing still".to_string()
+    } else {
+        let to = match (r.goal, goal_place) {
+            (true, Some(p)) => format!(" to \"{p}\""),
+            (true, None) => match living_rules::bearing::from_here((r.x, r.y), (r.gx, r.gy)) {
+                h if h == "here" => " to a spot just here".to_string(),
+                h => format!(" to a spot {h}"),
+            },
+            _ => String::new(),
+        };
+        let way = match (r.other.as_str(), r.toward) {
+            ("seen", 1) => format!(", toward {other}"),
+            ("seen", -1) => format!(", away from {other}"),
+            ("seen", _) => format!(", past {other}"),
+            _ => String::new(),
+        };
+        format!("You are {gait}{to}{way}")
+    };
+    out.push(if r.doing.is_empty() { format!("{motion}.") } else { format!("{motion} ({}).", r.doing) });
+    out
 }
 
 fn id_of(v: &Value) -> u32 {
@@ -1787,6 +1926,111 @@ mod tests {
         // An act they already talked over is not news.
         c.lines.push(Line { speaker: 2, to: 1, text: "Three berries for one wood, then.".into(), at_ms: 0, at: (0.0, 0.0), turn: true, exp: 0 });
         assert!(c.novelty_without("Iseisevik offers you 3 berries for 1 wood.", &["iseisevik".to_string()]) < NEW_MATTER);
+    }
+
+    /// The rule before reply-timing: a reply was said once ready, the line it answers done being
+    /// said, and `SPEECH_GAP_MS` after one's own previous line.
+    fn said_before(ready: u64, last_said: u64, heard_at: u64, heard: &str) -> u64 {
+        ready.max(last_said + SPEECH_GAP_MS).max(heard_at + saying_ms(heard))
+    }
+
+    const T: u64 = 1_800_000_000_000;
+
+    /// Play-test 10: Fern's six words, Agnes's reply ready in 572 ms. It was said 1.98 s after
+    /// the greeting; now it is said when ready, and its place in the rhythm is the old time.
+    #[test]
+    fn a_reply_is_said_when_ready_and_keeps_its_old_place_in_the_rhythm() {
+        let fern = "Good morning to you, Agnes Fenner.";
+        assert_eq!(said_before(T + 572, 0, T, fern), T + 1_980);
+        let p = Pace::of(T + 572, 0, T, fern, 0);
+        assert_eq!(p, Pace { say_ms: T + 572, paced_ms: T + 1_980 });
+        // A reply ready after the line is done is said when ready, as before.
+        assert_eq!(Pace::of(T + 2_500, 0, T, fern, 0), Pace { say_ms: T + 2_500, paced_ms: T + 2_500 });
+    }
+
+    /// The speaker's next line is never sooner than the gap after where its previous line stands
+    /// in the rhythm, and so never closer to its previous line than before; however soon the
+    /// other answers (seeing the reply sooner), the gap holds.
+    #[test]
+    fn the_next_line_is_not_sooner_than_before() {
+        let fern = "Good morning to you, Agnes Fenner.";
+        let first = Pace::of(T + 572, 0, T, fern, 0);
+        let old_first = said_before(T + 572, 0, T, fern);
+        // Fern answers at once, 300 ms after the reply is said; Agnes is ready 400 ms later.
+        let fern2 = "Lovely day.";
+        let heard2 = first.say_ms + 300;
+        let second = Pace::of(heard2 + 400, first.paced_ms, heard2, fern2, 0);
+        assert!(second.say_ms >= old_first + SPEECH_GAP_MS, "{second:?} vs the old first line at {old_first}");
+        assert_eq!(second.say_ms, first.paced_ms + SPEECH_GAP_MS);
+        assert!(second.paced_ms >= second.say_ms);
+        // With the same lines at the same times, the rhythm is the old one exactly.
+        let mut last_old = 0;
+        let mut last_paced = 0;
+        for (i, words) in ["Hello.", "How is the bread today, and the oven?", "Fine.", "We should talk about the roof before the rain comes."].iter().enumerate() {
+            let heard = T + i as u64 * 9_000;
+            let ready = heard + 600;
+            let old = said_before(ready, last_old, heard, words);
+            let p = Pace::of(ready, last_paced, heard, words, 0);
+            assert_eq!(p.paced_ms, old, "line {i}");
+            assert!(p.say_ms <= old && p.say_ms >= ready, "line {i}: {p:?}");
+            (last_old, last_paced) = (old, p.paced_ms);
+        }
+    }
+
+    /// Two of this service's characters talking: each line's place in the rhythm comes from the
+    /// other's (`voice`), so the exchange keeps the old rhythm though each line is said when
+    /// ready, and neither speaker's lines come closer together than before.
+    #[test]
+    fn two_minds_keep_the_old_rhythm() {
+        let lines = ["Morning, Bram.", "Morning. Is the ford still high?", "Higher than yesterday.", "Then I'll wait until noon.", "Wise."];
+        // Before: each said once the other's line was done being said (ready 600 ms after hearing).
+        let mut old = vec![T];
+        for i in 1..lines.len() {
+            let own_last = if i >= 2 { old[i - 2] } else { 0 };
+            old.push(said_before(old[i - 1] + 600, own_last, old[i - 1], lines[i - 1]));
+        }
+        // Now: said when ready; heard at the time said; paced from the other's voice.
+        let (mut said, mut paced) = (vec![T], vec![T]);
+        for i in 1..lines.len() {
+            let own_last = if i >= 2 { paced[i - 2] } else { 0 };
+            let until = paced[i - 1] + saying_ms(lines[i - 1]);
+            let p = Pace::of(said[i - 1] + 600, own_last, said[i - 1], lines[i - 1], until);
+            said.push(p.say_ms);
+            paced.push(p.paced_ms);
+        }
+        for i in 1..lines.len() {
+            assert!(paced[i] >= old[i], "line {i}: paced {} before the old {}", paced[i], old[i]);
+            assert!(said[i] <= paced[i]);
+            if i >= 2 {
+                assert!(said[i] >= old[i - 2] + SPEECH_GAP_MS, "line {i}: the speaker's lines closer than before");
+            }
+        }
+        assert_eq!(paced, old, "the rhythm is the old one");
+    }
+
+    fn reach(other: &str, m: f32, toward: i8, speed: f32) -> Reach {
+        Reach { x: 10.0, y: 10.0, other: other.into(), other_m: m, other_where: if other == "heard" { "behind you, to the south; close".into() } else { "east".into() }, speed, toward, doing: String::new(), goal: false, gx: 0.0, gy: 0.0 }
+    }
+
+    /// The frame's two facts, from the replier's own perception, with no advice.
+    #[test]
+    fn the_frame_says_how_far_they_are_and_where_one_is_walking() {
+        let mut r = reach("seen", 9.0, -1, 1.4);
+        r.goal = true;
+        (r.gx, r.gy) = (10.0, 40.0);
+        assert_eq!(reach_words("Fern", &r, Some("the bakery")), vec!["Fern is 9 m east of you.", "You are walking to \"the bakery\", away from Fern."]);
+        assert_eq!(reach_words("Fern", &r, None)[1], "You are walking to a spot 30 m south, away from Fern.");
+        r.doing = "walking to the bakery".into();
+        assert_eq!(reach_words("Fern", &r, Some("the bakery"))[1], "You are walking to \"the bakery\", away from Fern (walking to the bakery).");
+        assert_eq!(reach_words("Fern", &reach("seen", 4.0, 1, 1.4), None), vec!["Fern is 4 m east of you.", "You are walking, toward Fern."]);
+        assert_eq!(reach_words("Fern", &reach("seen", 1.0, 0, 0.0), None), vec!["Fern is right beside you.", "You are standing still."]);
+        // Heard, not seen: where the sound is, in the world's words; no distance, no way.
+        assert_eq!(reach_words("Fern", &reach("heard", 0.0, 0, 1.4), None), vec!["You cannot see Fern now; you hear them behind you, to the south; close.", "You are walking."]);
+        assert_eq!(reach_words("a stranger", &reach("", 0.0, 0, 0.0), None), vec!["You neither see nor hear a stranger now.", "You are standing still."]);
+        assert_eq!(reach_words("a stranger", &reach("seen", 9.0, -1, 1.4), None)[0], "A stranger is 9 m east of you.");
+        for w in [reach_words("Fern", &r, None), reach_words("Fern", &reach("", 0.0, 0, 1.0), None)].concat() {
+            assert!(!w.contains("should") && !w.contains("stop") && !w.to_lowercase().contains("call"), "advice in {w}");
+        }
     }
 }
 

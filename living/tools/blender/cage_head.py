@@ -106,7 +106,7 @@ class Plan:
 
     def jaw_line(self, z):
         """The jaw line's depth at height z: straight from the chin to the angle of the jaw."""
-        return lerp(self.chin_y - 0.01, -self.jaw["angle_back"], min(max(z / self.jaw["angle_z"], 0.0), 1.0))
+        return lerp(self.chin_y - 0.01, -self.jaw["angle_back"], min(max(z / self.jaw["angle_z"], 0.0), 1.0) ** self.jaw.get("curve", 1.0))
 
     def back(self, z):
         """The back of the skull's depth at height z, and below it the nape's."""
@@ -345,8 +345,10 @@ class Cage:
             # A little wider than the column where the underside meets it, so the column's top
             # is a soft turn and not a crease.
             top = np.array([1.22 * neck_r * math.sin(th), neck_y + 1.22 * neck_r * math.cos(th), neck_z])
-            u = lerp(j, top, UNDER_IN)
+            u = lerp(j, top, jaw.get("inset", UNDER_IN))
             u[2] = lerp(j[2], neck_z, UNDER_DOWN) - 0.006 * (col < C_WIDE)
+            # The skin rolls back and up from the chin before it meets the neck.
+            u[2] += jaw.get("roll", 0.0) * max(0.0, math.cos(th))
             grid[R["under_jaw"], col] = u
             grid[R["neck"], col] = nk
         # The socket: the eye's edge sits behind the brow and the cheek; the rows round it lead in.
@@ -1005,7 +1007,7 @@ class CageFace(head_mesh.Face):
         self._beard = self.skin_pos - self._S @ cage.v
         # From the jaw line down the skin is the neck's (the plane under the jaw, the neck's ring): its
         # own faces, coloured and shaded as body skin, as the reference's face mask ends at the jaw.
-        jaw_row = cage.R["jaw"]
+        jaw_row = cage.R["under_jaw"]
         self.under_faces = [f for f, fi in zip(faces, parent) if cage.face_row[fi] >= jaw_row]
         self.neck_ring = {new[v] for v in cage.neck_ring} | {new[edge_row[e]] for e in edge_row if e[0] in set(cage.neck_ring) and e[1] in set(cage.neck_ring)}
         out = []

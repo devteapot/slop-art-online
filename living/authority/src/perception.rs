@@ -194,7 +194,11 @@ pub struct MyOffer {
 #[allow(clippy::too_many_arguments)]
 pub fn in_sight(ctx: &ReducerContext, map: &Map, observer: u32, eye: (f32, f32), heading: f32, target: u32, at: (f32, f32), dist: f32, w: &World, now: u64, kept: bool) -> bool {
     let senses = common::senses_of(ctx, observer, w, now);
-    let glow = if target != 0 { common::glow_of(ctx, target, w, now) } else { 0.0 };
+    let glow = if target != 0 && senses.gaze.is_none_or(|gaze| gaze.glow > 0.0) {
+        common::glow_of(ctx, target, w, now)
+    } else {
+        0.0
+    };
     let keep = kept.then(|| common::laws(ctx).keep_seen_m);
     living_rules::sight::sees(map, eye, heading, at, dist, &senses, glow, keep)
 }
@@ -221,8 +225,8 @@ pub fn sees(ctx: &ReducerContext, id: u32, eye: &Body, at: (f32, f32), w: &World
 /// `senses` law's now) or the `glow` of a light on them (a carried torch, lamplight), within its
 /// field when the world's law turns it on, with a clear line. Heard: only while it has a field,
 /// within its hearing and not seen ([`heard`] for one that has no scene to share).
-pub fn sensed(ctx: &ReducerContext, id: u32, at: (f32, f32), sight: f32, now: u64) -> (Vec<NearCreature>, Vec<NearCreature>) {
-    Sensing::new(ctx, id, at, sight, now).all(ctx, now)
+pub fn sensed(ctx: &ReducerContext, id: u32, at: (f32, f32), now: u64) -> (Vec<NearCreature>, Vec<NearCreature>) {
+    Sensing::new(ctx, id, at, now).all(ctx, now)
 }
 
 /// What a body senses, worked out as far as it is asked (docs/BATTLE_SCALE.md, scene-lazy): every
@@ -245,12 +249,11 @@ pub struct Sensing {
 }
 
 impl Sensing {
-    pub fn new(ctx: &ReducerContext, id: u32, at: (f32, f32), sight: f32, now: u64) -> Sensing {
+    pub fn new(ctx: &ReducerContext, id: u32, at: (f32, f32), now: u64) -> Sensing {
         let map = common::map(ctx);
         let w = common::world(ctx);
         let senses = common::senses_of(ctx, id, &w, now);
-        let gather = common::gather_radius(ctx, sight);
-        let lit = gather > sight;
+        let (gather, lit) = common::gather_radius(ctx, &senses, 0.0);
         // Facing matters only with a field (one body lookup then), and only then is anything heard.
         let field = senses.field.is_some();
         let heading = if field { ctx.db.body().id().find(id).map_or(0.0, |b| common::facing_at(&b, now)) } else { 0.0 };
@@ -294,6 +297,17 @@ impl Sensing {
             }
         }
         None
+    }
+
+    /// Creature `id` as sensed: `(it, true)` seen, `(it, false)` heard and not seen (within
+    /// hearing while sight has a field), `None` neither: the list of `all` it is in.
+    pub fn sensed_id(&mut self, ctx: &ReducerContext, now: u64, id: u32) -> Option<(NearCreature, bool)> {
+        let i = self.cands.iter().position(|c| c.id == id)?;
+        if self.sees(ctx, i, now) {
+            Some((self.cands[i].clone(), true))
+        } else {
+            (self.cands[i].dist <= self.hearing).then(|| (self.cands[i].clone(), false))
+        }
     }
 
     /// Creature `id` as seen, if it is: `all().0` holds it.
@@ -425,6 +439,10 @@ struct Answers {
     computed: u64,
     compared: u64,
     differed: u64,
+}
+
+pub(crate) fn answers_generation() -> Option<u64> {
+    (!marks_dropped()).then(|| ANSWERS_GEN.with(std::cell::Cell::get))
 }
 
 /// A write changed what some observer may make of some target (see `ANSWERS_GEN`).
@@ -1026,6 +1044,7 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
     let rows: Vec<Perceived> = ctx.db.perceived().viewer().filter(viewer).collect();
     let had: HashSet<u32> = rows.iter().map(|p| p.body).collect();
     let mut seen: HashSet<u32> = HashSet::new();
+    let scheduled = health.is_some();
     // How far each one seen is, from the chunk cache (`kept_sweep` checks it is current).
     let mut near: HashMap<u32, f32> = HashMap::new();
     let keep = common::laws(ctx).keep_seen_m;
@@ -1033,9 +1052,9 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
     // people (a carried torch, lamplight); each is then seen by the one sight rule: its reach
     // in that direction (the field, when the world's law gives one), the light on it, and a
     // clear line. A creature already seen keeps the margins (`keep_seen_m`, the field's angle).
-    let gather = common::gather_radius(ctx, sight);
-    let lit = gather > sight;
-    for c in common::creatures_near(ctx, here, gather + keep, now) {
+    let (gather, lit) = common::gather_radius(ctx, &senses, keep);
+    let sight_span = common::detail_span("sight.player_candidates");
+    for c in common::creatures_near(ctx, here, gather, now) {
         if c.id == id {
             continue;
         }
@@ -1045,6 +1064,10 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
             seen.insert(c.id);
             near.insert(c.id, c.dist);
         }
+    }
+    drop(sight_span);
+    if scheduled && senses.gaze.is_some() {
+        crate::attention::project(ctx, id, &senses, now);
     }
     hear(ctx, id, viewer, here, &seen, now);
     // What it remembers of resources here (talk-places): the look a mind takes at its noticing.
@@ -1057,6 +1080,8 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
     }
     let entered: Vec<u32> = seen.difference(&had).copied().collect();
     let gone_from_sight: Vec<u32> = had.difference(&seen).copied().collect();
+    common::diag(|| "visible:add", entered.len() as u64);
+    common::diag(|| "visible:drop", gone_from_sight.len() as u64);
     let left = !gone_from_sight.is_empty();
     for body in &entered {
         ctx.db.perceived().insert(Perceived { id: 0, viewer, body: *body, since_ms: now });
@@ -1783,6 +1808,37 @@ pub struct KnownName {
     pub name: String,
 }
 
+// Shared by the player view and mind scenes. The two SpacetimeDB contexts expose
+// different database handles, but use the same indexes and name recognition rules.
+macro_rules! known_name_ids {
+    ($ctx:ident, $me:ident, $set:expr) => {{
+        let mut ids = $set;
+        ids.insert($me.id);
+        for p in [$me.parent_a, $me.parent_b] {
+            if p != 0 {
+                ids.insert(p);
+            }
+        }
+        for child in $ctx.db.character().parent_a().filter($me.id).chain($ctx.db.character().parent_b().filter($me.id)) {
+            ids.insert(child.id);
+            for other in [child.parent_a, child.parent_b] {
+                if other != 0 {
+                    ids.insert(other);
+                }
+            }
+        }
+        ids.extend($ctx.db.acquaintance().observer().filter($me.id).map(|a| a.known));
+        if let Some(m) = $ctx.db.membership().member().find($me.id) {
+            ids.extend($ctx.db.membership().community().filter(m.community).map(|x| x.member));
+        }
+        ids
+    }};
+}
+
+pub(crate) fn known_name_ids(ctx: &ReducerContext, me: &Character) -> std::collections::HashSet<u32> {
+    known_name_ids!(ctx, me, std::collections::HashSet::new())
+}
+
 /// Whom my current character knows by name, with the name: itself, its parents, its children and
 /// their other parent, its community, and whoever told it their name (`acquaintance`, which also
 /// keeps the names of its community's dead). The same sources as `knows_name`, read by index. A
@@ -1791,25 +1847,7 @@ pub struct KnownName {
 #[spacetimedb::view(accessor = my_known_names, public, primary_key = id)]
 pub fn my_known_names(ctx: &ViewContext) -> Vec<KnownName> {
     let Some(me) = current(ctx) else { return Vec::new() };
-    let mut ids = std::collections::BTreeSet::new();
-    ids.insert(me.id);
-    for p in [me.parent_a, me.parent_b] {
-        if p != 0 {
-            ids.insert(p);
-        }
-    }
-    for child in ctx.db.character().parent_a().filter(me.id).chain(ctx.db.character().parent_b().filter(me.id)) {
-        ids.insert(child.id);
-        for other in [child.parent_a, child.parent_b] {
-            if other != 0 {
-                ids.insert(other);
-            }
-        }
-    }
-    ids.extend(ctx.db.acquaintance().observer().filter(me.id).map(|a| a.known));
-    if let Some(m) = ctx.db.membership().member().find(me.id) {
-        ids.extend(ctx.db.membership().community().filter(m.community).map(|x| x.member));
-    }
+    let ids = known_name_ids!(ctx, me, std::collections::BTreeSet::new());
     ids.into_iter().filter_map(|i| ctx.db.character().id().find(i).map(|c| KnownName { id: c.id, name: c.name })).collect()
 }
 

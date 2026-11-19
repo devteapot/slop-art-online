@@ -303,7 +303,7 @@ def main():
                 and e["row"]["act_ms"] not in off_first:
             off_first[e["row"]["act_ms"]] = (e["ms"] - e["row"]["act_ms"], e["table"])
     off_cues = sum(1 for w in off for e in off[w] if e.get("event") == "insert" and e.get("table") in CUE_OF)
-    restore = had[0]["value"] if had else "false"
+    restore = had[0]["value"] if had else "true"  # the shipped default since acceptance
     call(rid, "set_world_law", ["cue_transport_on", restore if isinstance(restore, str) else json.dumps(restore)])
     checks.update({
         "law off: every probe ran to its end": all(e[-1].get("code") == 0 for e in off.values()),

@@ -4,7 +4,9 @@
 //! `mind_*` reducers; they read only their characters' experiences and deliberations.
 
 mod act;
+mod seen_structures;
 mod acts;
+mod attention;
 mod brain;
 mod breath;
 mod codes;
@@ -86,6 +88,7 @@ pub fn init(ctx: &ReducerContext) -> Result<(), String> {
     town::cards(ctx, &sc);
     speech::cards(ctx, &sc);
     ctx.db.script().insert(Script { name: "skills".into(), source: seed::SKILLS.into(), revision: 1, updated_ms: now });
+    common::publish_cover_law(ctx, sc.laws());
     for kind in ["person", "deer", "wolf"] {
         living_rules::graph::parse(&seed::instinct(kind)).map_err(|e| format!("{kind} instinct: {e}"))?;
     }
@@ -143,6 +146,10 @@ pub(crate) fn install_source(ctx: &ReducerContext, source: String) -> Result<(),
         let _t = spacetimedb::log_stopwatch::LogStopwatch::new("install.compile");
         living_rules::script::Scripts::with_day(&source, common::world(ctx).day_ms)?
     };
+    if sc.laws().cover_sight_on && !common::world(ctx).run.is_empty()
+        && ctx.db.cover_ground().id().find(0).is_none() {
+        return Err("cover sight requires a land created with quantized cover geometry".into());
+    }
     // Installs are rare: always timed.
     let checked = {
         let _t = spacetimedb::log_stopwatch::LogStopwatch::new("install.validate");
@@ -169,6 +176,10 @@ pub(crate) fn install_source(ctx: &ReducerContext, source: String) -> Result<(),
     k.scripts_rev = rev;
     ctx.db.clock().id().update(k);
     common::invalidate_scripts_rev();
+    common::publish_cover_law(ctx, sc.laws());
+    if !sc.gaze_enabled() {
+        attention::clear_projection(ctx);
+    }
     // Takeovers already pending follow the new `takeover_s` law.
     presence::reschedule(ctx, sc.laws().takeover_s);
     // Looks change band by the life table and the `look_bands` law: their times follow.
@@ -205,8 +216,16 @@ pub fn set_world_law(ctx: &ReducerContext, name: String, value: String) -> Resul
     let v: serde_json::Value = serde_json::from_str(value.trim()).map_err(|_| format!("`{value}` is not a value: give a number or true or false"))?;
     let sc = common::scripts(ctx);
     sc.laws_with(&[(name.clone(), v.clone())])?;
+    if name == "cover_sight_on" && v == true && ctx.db.cover_ground().id().find(0).is_none() {
+        return Err("cover sight requires a land created with quantized cover geometry".into());
+    }
     let old = sc.law_value(&name).map(|o| o.to_string()).unwrap_or_default();
     let new = v.to_string();
+    if name == "seen_ranges" && old != new {
+        for look in ctx.db.last_look().iter().map(|look| look.id).collect::<Vec<_>>() {
+            ctx.db.last_look().id().delete(look);
+        }
+    }
     ctx.db.world_law().name().delete(name.clone());
     ctx.db.world_law().insert(WorldLaw { name: name.clone(), value: new.clone() });
     let source = ctx.db.script().name().find("skills".to_string()).map(|s| s.source).ok_or("no script installed")?;
@@ -264,6 +283,7 @@ pub fn set_profile(ctx: &ReducerContext, on: bool) -> Result<(), String> {
     require_admin(ctx)?;
     let mut k = common::clock(ctx);
     k.profile = on;
+    brain::reset_sight_profile();
     ctx.db.clock().id().update(k);
     Ok(())
 }
@@ -731,6 +751,13 @@ pub fn human_face(ctx: &ReducerContext, dx: f32, dy: f32) -> Result<(), String> 
     }
     let dir = (dx != 0.0 || dy != 0.0).then_some((dx, dy));
     motion::look(ctx, me.id, dir, common::now_ms(ctx))
+}
+
+/// Select Middle (0), Far (1) or Near (2). The scheduled sight sweep applies the new band.
+#[spacetimedb::reducer]
+pub fn human_gaze(ctx: &ReducerContext, band: u8) -> Result<(), String> {
+    let me = my_character(ctx)?;
+    attention::set(ctx, me.id, living_rules::sight::GazeBand::try_from(band)?, common::now_ms(ctx))
 }
 
 /// Move in a direction (screen axes: +x east, +y south; any length) or stop (`0, 0`), at a

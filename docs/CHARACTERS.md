@@ -205,7 +205,7 @@ A pass is also published through the asset board, the record of which version th
 
 `just living-town .local/town` runs `town.py`; `just living-people` runs `gen_person.sh`. A pass's own report page is written by `living/tools/characters/report.py` from the board's media and a notes file.
 
-`gen_person.sh` needs Blender and, for clips, the Kimodo library's takes. The library is `KIMODO_DIR` when set, else its home `.local/kimodo/library`, else `.local/kimodo/outputs/library` (a machine's own renders, which may be behind); the batch log says which was used ("gen_person: the clip library is …"). It bakes the whole library unless `ONLY` names clips. `ONLY=present` bakes every entry whose take is there, for a machine whose copy of the library is behind `clips.json`. The bake reads one take an entry, the picked one (`pick`, a seed) and the neutral pose's; an entry's other seeds are the candidates it was picked from. The log names every entry whose picked take is missing, with a count, and counts the candidates that are not there without naming them: a warning, not a failure. Until 2026-11-13 `present` asked for every seed of an entry, so a library holding only the picks lost entries without an error: the dev-box's two copies hold the picked take of every entry, and every candidate of only 30 of the 86 entries (`outputs/library`) or 67 (`~/archive/clip-library`), and its clip file had 29 clips, with none for backing, strafing, the diagonals or turning. With the rule as it is now the same libraries give 84. The photographs need the game's release build; `view_assets.sh` honours a private `CARGO_TARGET_DIR`. A person takes about 6 s to generate; adding two clips takes about 6 s more and 30 clips about 15 s. 64 people with `idle` and `walk` and their photographs took 5 minutes with six jobs on a loaded dev-box (pass 2, 2026-11-11; hair adds under a second a person). With the far models as well (pass 3), the 64 took 6 minutes to build and page, and their photographs 7 more.
+`gen_person.sh` needs Blender and, for clips, the Kimodo library's takes. The library is `KIMODO_DIR` when set, else its home `.local/kimodo/library`, else `.local/kimodo/outputs/library` (a machine's own renders, which may be behind); the batch log says which was used ("gen_person: the clip library is …"). It bakes the whole library unless `ONLY` names clips. `ONLY=present` bakes every entry whose take is there, for a machine whose copy of the library is behind `clips.json`. The bake reads each entry's picked take (`pick`, a seed), the neutral pose and, for the three ground seats, their shared `ground_seat` pose (`sit_ground_pose_s1.npz`, frame 45); an entry's other seeds are the candidates it was picked from. The log names every entry whose picked take is missing, with a count, and counts the candidates that are not there without naming them: a warning, not a failure. Until 2026-11-13 `present` asked for every seed of an entry, so a library holding only the picks lost entries without an error: the dev-box's two copies hold the picked take of every entry, and every candidate of only 30 of the 86 entries (`outputs/library`) or 67 (`~/archive/clip-library`), and its clip file had 29 clips, with none for backing, strafing, the diagonals or turning. With the rule as it is now the same libraries give 84. The photographs need the game's release build; `view_assets.sh` honours a private `CARGO_TARGET_DIR`. A person takes about 6 s to generate; adding two clips takes about 6 s more and 30 clips about 15 s. 64 people with `idle` and `walk` and their photographs took 5 minutes with six jobs on a loaded dev-box (pass 2, 2026-11-11; hair adds under a second a person). With the far models as well (pass 3), the 64 took 6 minutes to build and page, and their photographs 7 more.
 
 ## A person's parameters
 
@@ -1978,6 +1978,44 @@ The body pass, second part (2026-11-12, branch `char-4-body`): how the jersey, s
 3. **Sleeves** are smooth tubes with no fold at the elbow, and on a woman's form the sleeve's head stands a little proud of the narrow shoulder.
 4. **Boots** are a man's sea boots made narrower.
 
+### Sitting
+
+Shared outfits use the trousers' thigh share around the hip crease. The jersey takes it at its tucked hem. The smock, apron and coat blend into their existing skirt weights below the seat. A raised crotch has a longer transition so the smock's front can still span the thighs in a brisk stride. The 28 rebuilt outfits have the same joint names and near/far vertex and triangle counts as the shipped pieces.
+
+On the dev-box, `BLENDER=$HOME/.local/share/slop-tools/build-bin/blender JOBS=2 living/tools/blender/gen_person.sh --outfits` rebuilds and stamps the pieces. Run `python3 living/tools/characters/look_lines.py wear --check living/game/assets/lookdev/styles` before measuring. The cloth checker rejects pieces missing either wear field.
+
+Measured on Cullet's 64 residents and 23 test lines, with the same before and after lines and 24 evenly spaced frames per clip. Counts are distinct wearers with at least one crossing over 2 mm anywhere in the clip. Depth is the largest positive outward distance measured. The checker searches within 40 mm, so results near 40 mm cannot establish the full depth. It checks the near cloth mesh.
+
+| Clip | Wearers before | Wearers after | Worst before (mm) | Worst after (mm) |
+|---|---:|---:|---:|---:|
+| sit_down | 87 | 79 | 39.57 | 39.57 |
+| sit_idle | 8 | 2 | 35.50 | 34.50 |
+| stand_up | 87 | 82 | 39.46 | 39.06 |
+| sit_ground_down | 87 | 87 | 39.80 | 39.95 |
+| sit_ground | 87 | 82 | 39.98 | 39.97 |
+| stand_up_ground | 87 | 87 | 39.90 | 39.80 |
+| walk | 0 | 0 | 0 | 0 |
+| walk_brisk | 11 | 9 | 7.68 | 7.68 |
+| run | 1 | 1 | 2.02 | 2.02 |
+
+Each cell below counts wearers for that inner and outer piece, before → after. A wearer can appear in several columns. The coat jersey is the cut specifically for wearing under a coat.
+
+| Clip | Jersey → trousers | Coat jersey → coat | Coat jersey → trousers | Smock → apron | Trousers → apron | Trousers → coat | Trousers → smock |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| sit_down | 20→19 | 17→15 | 27→27 | 27→22 | 8→14 | 27→19 | 40→15 |
+| sit_idle | 2→0 | 3→1 | 1→0 | 0 | 1→1 | 2→1 | 3→1 |
+| stand_up | 20→20 | 20→10 | 27→27 | 19→19 | 17→11 | 27→26 | 40→20 |
+| sit_ground_down | 20→20 | 27→27 | 27→27 | 24→27 | 27→27 | 27→27 | 40→40 |
+| sit_ground | 20→16 | 17→12 | 27→23 | 19→19 | 10→16 | 27→23 | 40→39 |
+| stand_up_ground | 20→20 | 27→27 | 27→27 | 23→21 | 26→27 | 27→27 | 40→40 |
+| walk | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| walk_brisk | 0 | 0 | 1→0 | 0 | 3→3 | 0 | 10→9 |
+| run | 0 | 0 | 0 | 0 | 0 | 0 | 1→1 |
+
+At each wearer's deepest sampled bend, crossings persist on 58 of 87 sitting down on a chair, 57 standing up from it, 83 sitting down on the ground, and 87 rising from the ground. Across the three gaits nobody acquired a new crossing over 2 mm or a worse maximum above that threshold. All 87 passed the separate rest, idle and walk check at its default 16 frames per animated clip.
+
+`cloth_check.py LINE --clip sit_idle,sit_ground --frames 24` also reports seat-top, seat-back and ground depths. `--chair 5` makes contact beyond 5 mm fail independently of the cloth-to-cloth threshold. The chair is an analytical reference inferred from the posed trousers and knees. All 40 smock wearers and 27 coat wearers still crossed both chair surfaces. Their worst-frame seat depths ranged from 44.4 to 148.5 mm for smocks and 69.1 to 103.3 mm for coats. Their back depths ranged from 108.5 to 123.7 mm and 113.3 to 134.3 mm respectively. Client-side contact handling is a separate stage.
+
 ### The body: the landing
 
 The silhouettes and the cloth land together (2026-11-12, branch `char-4-body`, after the look-1 pair and looks-tex-1 were on main), as a pair with the client's half. The hands are parked on `char-4-hands` and land later.
@@ -2977,6 +3015,9 @@ What pass 2 proposed, in order of gain, and what became of it:
 1. **Hair.** Close up it looks washed out and half transparent in every shot, and its finish is as it was: a blocky fringe, ragged ends, gaps at the temple on the new head. Next.
 2. **The eyes' drawing:** thin lash lines and a plainer iris. Step 6.
 3. **The jaw's line does not hold at a distance.** Close up the shell line marks the jaw, the chin and the ears, lightly; at the game camera it is gone on the near head and a single darker pixel row on the far one, where the reference's whole figure is carried by its outline. A line in screen pixels is the client's ([lines](#lines-where-the-form-turns)).
+
+   **Far crown outline, laptop follow-up (2026-11-18).** Stock flat darkens the crown; real depth adds little and brings interior artefacts. At the Near camera stop with both residents on far LOD, stock flat darkened 55 of 65 sampled crown pixels on the braid and 25 of 65 on tousled hair by at least 20 luma levels against shell-off. Real depth darkened 60 and 41 respectively, with marks inside the hair and hands showing through clothing on turns. The earlier dev-box zero was specific to its crown crop. Moving the flat depth plane introduced chest or face contours, and isolating stencils found no removable crown occluder. Keep stock flat. Gameplay readability work uses the painted far-eye band and the cap of eight near models. A separate far-head mesh awaits owner play-test feedback.
+
 4. **Lips and blush are painted into the skin.** Step 6.
 5. **Clothes and silhouette, hands** (unchanged).
 

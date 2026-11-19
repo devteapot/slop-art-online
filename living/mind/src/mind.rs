@@ -278,6 +278,29 @@ pub(crate) fn acts_of(v: &Value) -> Vec<String> {
     list.into_iter().filter(|x| x.is_object()).take(living_rules::acts::MAX_QUEUED).map(|x| x.to_string()).collect()
 }
 
+fn act_refusals(acts: &[String], outcomes: Vec<Option<String>>) -> Vec<Value> {
+    acts.iter().zip(outcomes).filter_map(|(act, refusal)| {
+        refusal.map(|why| json!({"act": llm::parse_json(act).unwrap_or_else(|_| json!(act)), "refusal": why}))
+    }).collect()
+}
+
+/// One slot per refused act, in the order the authority received them.
+fn repaired_acts(reply: &Value, count: usize) -> Vec<String> {
+    reply["replacements"].as_array().filter(|items| items.len() == count)
+        .into_iter().flatten().filter(|item| item.is_object()).map(Value::to_string).collect()
+}
+
+#[cfg(test)]
+#[test]
+fn act_repair_only_takes_ordered_replacements_for_refused_slots() {
+    assert_eq!(repaired_acts(&json!({
+        "say": "must not be replayed",
+        "acts": [{"do": "give"}],
+        "replacements": [null, {"do": "goto", "target": {"place": "home"}}],
+    }), 2), [r#"{"do":"goto","target":{"place":"home"}}"#]);
+    assert!(repaired_acts(&json!({"replacements": [{"do": "goto"}, {"do": "give"}]}), 1).is_empty());
+}
+
 /// The persona's line on one's community: how many others belong, and by name only those one
 /// has feelings about (a town of 77 listed every name: 11–20% of a think or consolidation
 /// prompt, growing with the town).
@@ -1318,16 +1341,47 @@ impl Minds {
     }
 
     /// Hand deliberate acts to the authority (carried out once each, in order).
-    pub(crate) async fn act(&self, actor: u32, acts: Vec<String>, source: &str) -> Result<()> {
+    pub(crate) async fn act(&self, actor: u32, acts: Vec<String>, source: &str, reference: &str, lane: Lane) -> Result<()> {
         if acts.is_empty() {
             return Ok(());
         }
-        log::info!("{} acts ({source}): {}", self.name(actor), acts_text(&acts));
+        let rejected = act_refusals(&acts, self.submit_acts(actor, &acts, source).await?);
+        if rejected.is_empty() {
+            return Ok(());
+        }
+
+        let name = self.name(actor);
+        let repair = [
+            Msg { role: "system", content: prompts::ACT_REPAIR.into() },
+            Msg { role: "user", content: json!({"rejected": rejected}).to_string() },
+        ];
+        self.llm.outcome("act_attempts", &json!({
+            "actor": name, "source": source, "at_ms": llm::now_ms(), "attempt": 1, "reference": reference,
+            "acts": acts, "refused": rejected,
+        })).await;
+        let Some(c) = self.conn.db.character().id().find(&actor).filter(|c| c.alive) else { return Ok(()) };
+        let profile = self.profile(&c);
+        let reply = self.llm.chat_in_lane(&profile, self.attention(actor, None), "act_repair", &name, &repair, lane).await?;
+        let repaired = repaired_acts(&llm::parse_json(&reply.content)?, rejected.len());
+        if !repaired.is_empty() {
+            let result = self.submit_acts(actor, &repaired, source).await;
+            self.llm.outcome("act_attempts", &json!({
+                "actor": name, "source": source, "at_ms": llm::now_ms(), "attempt": 2, "reference": reference,
+                "acts": repaired, "refused": result.as_ref().ok().map(|r| act_refusals(&repaired, r.clone())),
+                "error": result.as_ref().err().map(ToString::to_string),
+            })).await;
+            result?;
+        }
+        Ok(())
+    }
+
+    async fn submit_acts(&self, actor: u32, acts: &[String], source: &str) -> Result<Vec<Option<String>>> {
+        log::info!("{} acts ({source}): {}", self.name(actor), acts_text(acts));
         let (tx, rx) = oneshot::channel();
-        self.conn.reducers.mind_act_then(actor, acts, source.to_string(), move |_, r| {
-            let _ = tx.send(flatten(r));
-        })?;
-        rx.await?.map_err(|e| anyhow!("mind_act: {e}"))
+        self.conn.procedures.mind_act_checked_then(actor, acts.to_vec(), source.to_string(), move |_, result| {
+            let _ = tx.send(result);
+        });
+        rx.await?.map_err(|e| anyhow!("mind_act_checked transport: {e:?}"))?.map_err(|e| anyhow!("mind_act_checked: {e}"))
     }
 
     async fn skip(&self, actor: u32, seen: u64, t: ThoughtIn) -> Result<()> {
@@ -2146,7 +2200,10 @@ impl Minds {
                     })?;
                     rx.await?.map_err(|e| anyhow!("mind_say: {e}"))?;
                     self.served_project(actor, served.as_deref(), "(carries on)", &thought_ref).await;
-                    return self.act(actor, acts, "deliberate").await;
+                    if let Err(e) = self.act(actor, acts, "deliberate", &thought_ref, lane).await {
+                        log::warn!("{}: acts from a deliberation not taken: {e:#}", c.name);
+                    }
+                    return Ok(());
                 }
             }
             // A patch replaces one labeled branch (e.g. combat tactics mid-fight) and keeps the rest.
@@ -2189,7 +2246,10 @@ impl Minds {
                     self.deliberation_says(actor, &say, to);
                     self.install(actor, g.to_json(), plan.clone(), say, to, way, d.updated_ms, t).await?;
                     self.served_project(actor, served.as_deref(), &plan, &thought_ref).await;
-                    return self.act(actor, acts, "deliberate").await;
+                    if let Err(e) = self.act(actor, acts, "deliberate", &thought_ref, lane).await {
+                        log::warn!("{}: acts from a deliberation not taken: {e:#}", c.name);
+                    }
+                    return Ok(());
                 }
                 Err(e) => {
                     last_err = format!("{e:#}");

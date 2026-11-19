@@ -367,6 +367,39 @@ fn gate_blocks(ctx: &ReducerContext, w: u32, h: u32) -> std::collections::HashSe
         .collect()
 }
 
+pub fn publish_cover_law(ctx: &ReducerContext, l: living_rules::script::Laws) {
+    let row = CoverLaw { id: 0, cover_sight_on: l.cover_sight_on,
+        cover_eye_height_m: l.cover_eye_height_m, cover_brush_on: l.cover_brush_on,
+        cover_brush_min_fill: l.cover_brush_min_fill, cover_cliff_step_m: l.cover_cliff_step_m };
+    match ctx.db.cover_law().id().find(0) {
+        None => { ctx.db.cover_law().insert(row); }
+        Some(old) if old != row => { ctx.db.cover_law().id().update(row); invalidate_map(); }
+        Some(_) => {}
+    }
+}
+
+fn cover_mask(ctx: &ReducerContext, map: &Map) -> Option<std::sync::Arc<living_rules::cover::Mask>> {
+    let law = laws(ctx);
+    if !law.cover_sight_on { return None; }
+    let _span = spacetimedb::log_stopwatch::LogStopwatch::new("map.cover");
+    let recipe = ctx.db.land_plan().id().find(0).and_then(|p| serde_json::from_str(&p.params).ok()).unwrap_or_default();
+    let mut bands: Vec<_> = ctx.db.cover_ground().iter().collect();
+    if bands.is_empty() {
+        log::warn!("cover: this land predates quantized genesis data");
+        return None;
+    }
+    bands.sort_unstable_by_key(|b| b.id);
+    let candidates = bands.iter().flat_map(|b| b.candidates.iter().copied()).collect::<Vec<_>>();
+    let ground = bands.into_iter().flat_map(|b| b.heights).collect();
+    let mask = living_rules::cover::compile_candidates(map.w, map.h, candidates, ground, &recipe, living_rules::cover::Policy {
+        eye_height_m: law.cover_eye_height_m, brush_on: law.cover_brush_on,
+        brush_min_fill: law.cover_brush_min_fill, cliff_step_m: law.cover_cliff_step_m,
+    });
+    let (m, g) = mask.geometry_bytes();
+    log::info!("cover: {m} mask bytes, {g} ground bytes");
+    Some(std::sync::Arc::new(mask))
+}
+
 pub fn map(ctx: &ReducerContext) -> Rc<Map> {
     MAP.with(|m| {
         let t = stamp(ctx);
@@ -406,6 +439,7 @@ pub fn map(ctx: &ReducerContext) -> Rc<Map> {
         let w = world(ctx);
         let mut map = Map::from_chunks(w.width, w.height, ctx.db.terrain_chunk().iter().map(|c| (c.id, c.tiles)));
         map.set_blocked(gate_blocks(ctx, w.width, w.height));
+        map.cover = cover_mask(ctx, &map);
         let map = Rc::new(map);
         *cached = Some(map.clone());
         map
@@ -695,7 +729,8 @@ pub fn age_days(c: &Character, w: &World, now: u64) -> f32 {
 /// The farthest anyone sees now (the `senses` law's reach by day or by night): onlookers are
 /// gathered within it before each one's own sight is tested.
 pub fn widest_sight(ctx: &ReducerContext, w: &World, now: u64) -> f32 {
-    scripts(ctx).reach().seen(dark(ctx, w, now))
+    let sc = scripts(ctx);
+    sc.reach().seen(dark(ctx, w, now)).max(sc.gaze_reach())
 }
 
 /// The farthest anyone hears.
@@ -950,43 +985,63 @@ struct Hot {
 
 thread_local! {
     /// The hot laws' answers by creature for one moment (`now`): every look and step in a tick
-    /// asks the same few creatures again. Cleared when the moment or the script revision changes.
-    static HOT: RefCell<(u64, u32, HashMap<u32, Hot>)> = RefCell::new((0, 0, HashMap::new()));
+    /// asks the same few creatures again. Keyed by transaction, moment and scripts revision.
+    static HOT: RefCell<((i64, u64, u32), HashMap<u32, Hot>)> = RefCell::new(((0, 0, 0), HashMap::new()));
 }
 
 /// A hot law's answer for creature `id` now: kept for this moment here, else the law over the
 /// few facts it reads (gathered by its plan), kept per state by the scripts.
 fn hot<T: Copy>(ctx: &ReducerContext, id: u32, w: &World, now: u64, law: &str, slot: fn(&mut Hot) -> &mut Option<T>, ask: impl FnOnce(&Scripts, &living_rules::script::SkillCtx) -> T) -> T {
-    let rev = scripts_rev(ctx);
+    let key = (stamp(ctx), now, scripts_rev(ctx));
     if let Some(v) = HOT.with(|c| {
         let mut c = c.borrow_mut();
-        if c.0 != now || c.1 != rev {
+        if c.0 != key {
             return None;
         }
-        c.2.get_mut(&id).and_then(|h| *slot(h))
+        c.1.get_mut(&id).and_then(|h| *slot(h))
     }) {
         return v;
     }
     let sc = scripts(ctx);
-    let c = crate::act::law_ctx(ctx, id, w, now, &sc.law_plan(law));
+    let senses = law == "senses";
+    let f = if senses { sc.senses_function() } else { law };
+    let mut c = crate::act::law_ctx(ctx, id, w, now, &sc.law_plan(f));
+    if senses && sc.gaze_enabled() {
+        c.gaze_band = crate::attention::band(ctx, id);
+    }
     let v = ask(&sc, &c);
     HOT.with(|c| {
         let mut c = c.borrow_mut();
-        if c.0 != now || c.1 != rev {
-            *c = (now, rev, HashMap::new());
+        if c.0 != key {
+            *c = (key, HashMap::new());
         }
-        *slot(c.2.entry(id).or_default()) = Some(v);
+        *slot(c.1.entry(id).or_default()) = Some(v);
     });
     v
 }
 
-/// A creature's senses now (the `senses` law).
+/// Drop the current answer after a same-transaction attention change.
+pub fn invalidate_senses(id: u32) {
+    HOT.with(|c| {
+        if let Some(h) = c.borrow_mut().1.get_mut(&id) {
+            h.senses = None;
+        }
+    });
+}
+
+/// A creature's senses now.
 pub fn senses_of(ctx: &ReducerContext, id: u32, w: &World, now: u64) -> living_rules::script::Senses {
     hot(ctx, id, w, now, "senses", |h| &mut h.senses, |sc, c| {
         sc.senses(c).unwrap_or_else(|e| {
             log::warn!("senses for {id}: {e}");
             let r = sc.reach();
-            living_rules::script::Senses { sight: r.sight(c.dark), hearing: r.hearing, field: None }
+            if sc.gaze_enabled() {
+                let mut blind = living_rules::script::Senses::round(0.0, r.hearing);
+                blind.gaze = Some(living_rules::sight::Gaze { band: c.gaze_band, ceiling: 0.0, ground: 0.0, glow: 0.0 });
+                blind
+            } else {
+                living_rules::script::Senses::round(r.sight(c.dark), r.hearing)
+            }
         })
     })
 }
@@ -998,17 +1053,25 @@ pub fn glow_of(ctx: &ReducerContext, id: u32, w: &World, now: u64) -> f32 {
         return 0.0;
     }
     hot(ctx, id, w, now, "glow", |h| &mut h.glow, |sc, c| {
-        sc.glow(c).unwrap_or_else(|e| {
+        let glow = sc.glow(c).unwrap_or_else(|e| {
             log::warn!("glow for {id}: {e}");
             0.0
-        })
+        });
+        if sc.gaze_enabled() { glow.min(sc.reach().glow_at(c.dark)) } else { glow }
     })
 }
 
-/// The radius to gather creatures an observer with sight `sight` may see: its sight, widened to
-/// the farthest glow when the script has one.
-pub fn gather_radius(ctx: &ReducerContext, sight: f32) -> f32 {
-    sight.max(scripts(ctx).reach().glow)
+/// Gather within the observer's reach or the world's glow, subject to the gaze ceiling.
+/// The second result says whether each target's glow could affect its visibility.
+pub fn gather_radius(ctx: &ReducerContext, senses: &living_rules::sight::Senses, keep: f32) -> (f32, bool) {
+    let (glow, lit) = match senses.gaze {
+        Some(gaze) => (gaze.glow, gaze.glow > 0.0),
+        None => {
+            let glow = scripts(ctx).reach().glow;
+            (glow, glow > senses.sight)
+        }
+    };
+    (senses.bound(senses.sight.max(glow) + keep), lit)
 }
 
 /// Whether a spot is in lamplight: within the light of a structure that gives it (its kind's
@@ -1207,18 +1270,18 @@ pub fn smelled_near(ctx: &ReducerContext, who: u32, kind: &str, at: (f32, f32), 
 /// written nothing are committed state and stay valid until a later write to their key. Like
 /// the map cache, this assumes the database runs its reducers one at a time in this module
 /// instance.
-struct WriteCache<V> {
-    rows: HashMap<u32, (V, i64)>,
+struct WriteCache<V, K = u32> {
+    rows: HashMap<K, (V, i64)>,
     /// Timestamp of the last transaction that wrote.
     wrote: i64,
 }
 
-impl<V: Clone> WriteCache<V> {
+impl<V: Clone, K: Copy + Eq + std::hash::Hash> WriteCache<V, K> {
     fn new() -> Self {
         Self { rows: HashMap::new(), wrote: 0 }
     }
 
-    fn get(&mut self, t: i64, key: u32, load: impl FnOnce() -> V) -> V {
+    fn get(&mut self, t: i64, key: K, load: impl FnOnce() -> V) -> V {
         if let Some((v, tag)) = self.rows.get(&key) {
             if *tag == 0 || *tag == t {
                 return v.clone();
@@ -1230,7 +1293,7 @@ impl<V: Clone> WriteCache<V> {
         v
     }
 
-    fn invalidate(&mut self, t: i64, key: Option<u32>) {
+    fn invalidate(&mut self, t: i64, key: Option<K>) {
         self.wrote = t;
         match key {
             Some(k) => {
@@ -1243,7 +1306,12 @@ impl<V: Clone> WriteCache<V> {
 
 thread_local! {
     static CHUNK_RESOURCES: RefCell<WriteCache<Rc<Vec<ResourceNode>>>> = RefCell::new(WriteCache::new());
+    static STRUCTURES_REVISION: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
     static CHUNK_STRUCTURES: RefCell<WriteCache<Rc<Vec<Structure>>>> = RefCell::new(WriteCache::new());
+    // A body's kind is fixed. Readability changes when an artifact moves, and these
+    // entries are dropped with expired remains. As in the chunk cache, values read
+    // after a write in this transaction are reloaded in the next transaction.
+    static REMAINS_LABELS: RefCell<WriteCache<(Rc<str>, bool), u64>> = RefCell::new(WriteCache::new());
     /// Temperament a persona states (curiosity, sociability, nurture; 50 when not stated).
     static TRAITS: RefCell<WriteCache<[f32; 3]>> = RefCell::new(WriteCache::new());
 }
@@ -1271,7 +1339,7 @@ fn chunk_resources(ctx: &ReducerContext, chunk: u32) -> Rc<Vec<ResourceNode>> {
     CHUNK_RESOURCES.with(|c| c.borrow_mut().get(t, chunk, || Rc::new(ctx.db.resource_node().chunk().filter(chunk).collect())))
 }
 
-fn chunk_structures(ctx: &ReducerContext, chunk: u32) -> Rc<Vec<Structure>> {
+pub(crate) fn chunk_structures(ctx: &ReducerContext, chunk: u32) -> Rc<Vec<Structure>> {
     let t = stamp(ctx);
     CHUNK_STRUCTURES.with(|c| c.borrow_mut().get(t, chunk, || Rc::new(ctx.db.structure().chunk().filter(chunk).collect())))
 }
@@ -1315,10 +1383,33 @@ pub fn invalidate_resources(ctx: &ReducerContext, chunk: Option<u32>) {
     CHUNK_RESOURCES.with(|c| c.borrow_mut().invalidate(t, chunk));
 }
 
+pub(crate) fn structures_revision() -> u64 {
+    STRUCTURES_REVISION.with(std::cell::Cell::get)
+}
+
 /// Call before inserting a structure.
 pub fn invalidate_structures(ctx: &ReducerContext) {
+    STRUCTURES_REVISION.with(|revision| revision.set(revision.get().wrapping_add(1)));
     let t = stamp(ctx);
     CHUNK_STRUCTURES.with(|c| c.borrow_mut().invalidate(t, None));
+}
+
+/// The group label and whether this body holds writing. Only a body's observer-independent
+/// metadata is cached. Name recognition is read from the observer's own indexes.
+pub(crate) fn remains_label(ctx: &ReducerContext, id: u64, owner: u32) -> (Rc<str>, bool) {
+    REMAINS_LABELS.with(|cache| cache.borrow_mut().get(stamp(ctx), id, || {
+        let kind = ctx.db.character().id().find(owner)
+            .map(|c| Rc::from(c.kind))
+            .unwrap_or_else(|| Rc::from("person"));
+        let readable = ctx.db.artifact().holder().filter(STRUCTURE_BIT | id)
+            .any(|artifact| matches!(artifact.kind.as_str(), "tablet" | "sign"));
+        (kind, readable)
+    }))
+}
+
+pub(crate) fn invalidate_remains_label(ctx: &ReducerContext, id: u64) {
+    STRUCTURES_REVISION.with(|revision| revision.set(revision.get().wrapping_add(1)));
+    REMAINS_LABELS.with(|cache| cache.borrow_mut().invalidate(stamp(ctx), Some(id)));
 }
 
 pub fn resources_near(ctx: &ReducerContext, at: (f32, f32), r: f32) -> Vec<(ResourceNode, f32)> {

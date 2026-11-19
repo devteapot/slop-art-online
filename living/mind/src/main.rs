@@ -178,10 +178,10 @@ async fn main() -> Result<()> {
                     "SELECT * FROM relation",
                     "SELECT * FROM judgment",
                     "SELECT * FROM place",
-                    // What each character has seen of resources, and where it stands when its
-                    // talk turn asks (private; talk-places).
+                    // What each character has seen of resources (private; talk-places). Where it
+                    // stands comes back to its talk turn from `mind_reach` (reply-timing): the
+                    // `standing` table is no longer read.
                     "SELECT * FROM seen_stock",
-                    "SELECT * FROM standing",
                     "SELECT * FROM know_how",
                     "SELECT * FROM community",
                     "SELECT * FROM membership",

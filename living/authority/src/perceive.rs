@@ -715,6 +715,103 @@ pub const PLACES: &str = "places";
 /// How many remembered places a scene lists (nearest first).
 const PLACES_SHOWN: usize = 12;
 
+const STRUCTURE_LIMIT: usize = 10;
+
+struct SceneStructures {
+    individual: Vec<(Structure, f32, bool)>,
+    aggregate: Option<(usize, Value)>,
+}
+
+#[derive(Default)]
+struct SceneStructureCache {
+    stamp: i64,
+    structures: u64,
+    names: u64,
+    by_observer: std::collections::HashMap<u32, ((f32, f32), f32, std::rc::Rc<SceneStructures>)>,
+}
+
+thread_local! {
+    static SCENE_STRUCTURES: std::cell::RefCell<SceneStructureCache> = Default::default();
+}
+
+/// Repeated requests at the same position and radius in one transaction share the exact
+/// selection. The renderer still reads live contents and fire state for the selected IDs.
+fn scene_structures(ctx: &ReducerContext, me: &Character, at: (f32, f32), r: f32) -> std::rc::Rc<SceneStructures> {
+    let Some(names) = crate::perception::answers_generation() else {
+        return std::rc::Rc::new(select_scene_structures(ctx, me, at, r));
+    };
+    SCENE_STRUCTURES.with(|cache| {
+        let mut cache = cache.borrow_mut();
+        let stamp = common::stamp(ctx);
+        let structures = common::structures_revision();
+        if (cache.stamp, cache.structures, cache.names) != (stamp, structures, names) {
+            cache.by_observer.clear();
+            (cache.stamp, cache.structures, cache.names) = (stamp, structures, names);
+        }
+        if let Some((position, radius, selection)) = cache.by_observer.get(&me.id) {
+            if (*position, *radius) == (at, r) {
+                common::diag(|| "scene.structures:hit", 1);
+                return selection.clone();
+            }
+        }
+        common::diag(|| "scene.structures:miss", 1);
+        let selection = std::rc::Rc::new(select_scene_structures(ctx, me, at, r));
+        cache.by_observer.insert(me.id, (at, r, selection.clone()));
+        selection
+    })
+}
+
+fn select_scene_structures(ctx: &ReducerContext, me: &Character, at: (f32, f32), r: f32) -> SceneStructures {
+    let mut individual = Vec::<(Structure, f32, bool)>::with_capacity(STRUCTURE_LIMIT);
+    let mut known = None;
+    // Group in the same stable distance order as the individual structure list.
+    let mut groups = Vec::<(std::rc::Rc<str>, usize, (f32, f32), f32, usize)>::new();
+    let mut ordinal = 0;
+    common::for_structures_near(ctx, at, r, |s, dist| {
+        ordinal += 1;
+        let mut named = false;
+        if s.kind == "remains" {
+            let (kind, readable) = common::remains_label(ctx, s.id, s.owner);
+            named = &*kind == "person" && known.get_or_insert_with(|| crate::perception::known_name_ids(ctx, me)).contains(&s.owner);
+            if !named && !readable {
+                let label = if &*kind == "person" { "stranger" } else { &kind };
+                if let Some(group) = groups.iter_mut().find(|group| &*group.0 == label) {
+                    group.1 += 1;
+                    if dist < group.3 {
+                        (group.2, group.3, group.4) = ((s.x, s.y), dist, ordinal);
+                    }
+                } else {
+                    groups.push((std::rc::Rc::from(label), 1, (s.x, s.y), dist, ordinal));
+                }
+                return;
+            }
+        }
+        let index = individual.partition_point(|(_, earlier, _)| *earlier <= dist);
+        if index < STRUCTURE_LIMIT {
+            if individual.len() == STRUCTURE_LIMIT {
+                individual.pop();
+            }
+            individual.insert(index, (s.clone(), dist, named));
+        }
+    });
+    if !groups.is_empty() {
+        individual.truncate(STRUCTURE_LIMIT - 1);
+    }
+
+    groups.sort_by(|a, b| a.3.total_cmp(&b.3).then(a.4.cmp(&b.4)));
+    let aggregate = groups.first().map(|(_, _, nearest, distance, _)| {
+        let counts: Vec<_> = groups.iter().map(|(label, n, ..)| (&**label, *n)).collect();
+        let dir = direction(at, *nearest);
+        let text = living_rules::remains::counted_scene(&counts, (*distance, dir));
+        let index = individual.partition_point(|(_, earlier, _)| earlier <= distance);
+        (index, json!({
+            "kind": "counted_remains", "at": [round(nearest.0), round(nearest.1)],
+            "dist": round(*distance), "dir": dir, "text": text,
+        }))
+    });
+    SceneStructures { individual, aggregate }
+}
+
 pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
     let _span = common::span("perceive.scene_json");
     common::diag(|| "scene_json", 1);
@@ -834,7 +931,11 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
         you.insert("you are waiting on".into(), Value::Array(mine));
     }
     let hour = common::hour(&w, now);
-    let r = common::sight_for(ctx, id, &w, now);
+    let senses = common::senses_of(ctx, id, &w, now);
+    let r = senses.sight;
+    if let Some(gaze) = senses.gaze {
+        you.insert("gaze".into(), json!(gaze.band.name()));
+    }
     let time = json!({"day": living_rules::day_of(now, w.epoch_ms, w.day_ms), "hour": round(hour), "night": common::scripts(ctx).is_night(hour), "season": common::season(ctx, now), "sight": r});
 
     let mut creatures = Vec::new();
@@ -842,7 +943,7 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
     let mut shown_as: std::collections::HashMap<u32, u32> = std::collections::HashMap::new();
     // What the character sees (sight and a clear sight line), each as it perceives them (the
     // `perceived_of` projection a player's view carries too).
-    let (in_sight, heard_now) = crate::perception::sensed(ctx, id, at, r, now);
+    let (in_sight, heard_now) = crate::perception::sensed(ctx, id, at, now);
     let sc = common::scripts(ctx);
     for c in &in_sight {
         let Some(ch) = ctx.db.character().id().find(c.id) else { continue };
@@ -987,10 +1088,23 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
     }
     let resources: Vec<Value> = groups.into_iter().map(|(k, n, near)| json!({"kind": k, "count": n, "nearest": near})).collect();
 
-    let mut structures = Vec::new();
-    for (s, d) in common::structures_near(ctx, at, r) {
+    let selection = scene_structures(ctx, &me, at, r);
+    let mut structures = Vec::with_capacity(STRUCTURE_LIMIT);
+    for (s, d, named) in &selection.individual {
+        let d = *d;
+        let remains = s.kind == "remains";
         let mut o = json!({"id": s.id, "kind": s.kind, "at": [round(s.x), round(s.y)], "dist": round(d), "dir": direction(at, (s.x, s.y))});
-        if let Some(by) = common::owner_label(ctx, &me, s.owner, &s.kind) {
+        if remains {
+            let label = ctx.db.character().id().find(s.owner).map_or_else(
+                || "a stranger".to_owned(),
+                |dead| if *named {
+                    dead.name
+                } else {
+                    crate::perception::unnamed(&dead, false)
+                },
+            );
+            o["of"] = json!(label);
+        } else if let Some(by) = common::owner_label(ctx, &me, s.owner, &s.kind) {
             o["by"] = json!(by);
         }
         // A fire that needs no feeding burns; one that burns fuel burns while it has fuel (what
@@ -1027,9 +1141,9 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
             o["contents"] = Value::Object(inv);
         }
         structures.push(o);
-        if structures.len() >= 10 {
-            break;
-        }
+    }
+    if let Some((index, entry)) = &selection.aggregate {
+        structures.insert(*index, entry.clone());
     }
 
     // Nearest notable terrain within sight.

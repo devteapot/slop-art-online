@@ -4,6 +4,7 @@
  "setting": "A wooded river valley enclosed by rocky ridges. A river runs north to south west of center with two sandy fords; a lake lies to the northeast. Nights are cold: people without a campfire or shelter nearby suffer. Food comes from berry bushes, fishing spots along the water, and hunting deer. Wolves roam the forests and grow bold at night. Three camps have grown apart and know different crafts: the west camp by the river builds shelters and storage, the lake folk fish, cook and keep written tablets, and the ridge hunters in the north make spears, warm cloaks and torches. A year has four seasons of two days; in winter nothing grows. (A rules test world: Cullet's laws and its 48-minute day over the valley's camps, until the Cullet seed exists; docs/CULLET_RULES.md.)",
  "day_minutes": 48,
  "laws_file": "worlds/cullet/laws.rhai",
+ "rules": {"cover_sight_on": false, "cover_brush_on": false, "gaze_on": false, "fov_on": false},
  "people": [
   {
    "name": "Mira",
