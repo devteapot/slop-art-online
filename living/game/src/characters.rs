@@ -47,6 +47,14 @@
 //! (its full mesh shown again, or back within the bounds) is settled first: its tails are placed
 //! at rest and stepped `LIVING_GAME_SPRING_SETTLE` times (default 60) against the frame's pose
 //! with the velocity then dropped, so its locks and hems start hanging, without a swing in.
+//! **Seat contact** (stage 2a, docs/seat-contact/): a character seated on the ground carries a
+//! [`SeatAnchor`] (`live.rs`), a world-space plane through the terrain at the clips' seat. Its
+//! cloth groups ([`CLOTH_GROUPS`], by the VRM group's `comment`: `Skirt`, `Coat`) keep their
+//! tails on the ground's side of it after the legs' spheres, weighted by the clips' time
+//! (`anim::Anim::ground_seat`); the plane lies [`SEAT_SINK`] under the ground at weight 0 and
+//! rises with it. The settle on waking takes the contact too. `LIVING_GAME_SEAT_CONTACT=0`
+//! turns it off.
+//!
 //! `LIVING_GAME_SPRINGS=0` turns the simulation off. Every few seconds it logs its cost;
 //! `LIVING_GAME_PERF=springwake` logs how far each woken character's joints turn per frame, and
 //! `springfar` simulates far-drawn characters too, as before, to compare.
@@ -656,6 +664,8 @@ struct FileInfo {
 }
 
 struct GroupDef {
+    /// The group's VRM `comment` (`Skirt`, `Hair`, `Coat`, …): what the chains are.
+    comment: String,
     stiffness: f32,
     gravity: Vec3,
     drag: f32,
@@ -705,6 +715,7 @@ fn file_info(file: &str) -> Arc<FileInfo> {
         .into_iter()
         .flatten()
         .map(|g| GroupDef {
+            comment: g["comment"].as_str().unwrap_or_default().to_string(),
             // VRM 0.x spells it "stiffiness".
             stiffness: g["stiffiness"].as_f64().or(g["stiffness"].as_f64()).unwrap_or(1.0) as f32,
             gravity: v3(&g["gravityDir"]) * g["gravityPower"].as_f64().unwrap_or(0.0) as f32,
@@ -1378,12 +1389,17 @@ pub struct SpringSettings {
     pub wake_log: bool,
     /// Simulate characters drawn far too, as before spring-near (`LIVING_GAME_PERF=springfar`).
     pub far_too: bool,
+    /// Seated cloth keeps to the ground (`SeatAnchor`); `LIVING_GAME_SEAT_CONTACT=0` turns it
+    /// off, to compare.
+    pub seat: bool,
+    /// Log each seated character's cloth against its ground (`LIVING_GAME_PERF=seat`).
+    pub seat_log: bool,
 }
 
 impl SpringSettings {
     fn from_env() -> Self {
         let num = |k: &str, d: f32| std::env::var(k).ok().and_then(|v| v.parse::<f32>().ok()).unwrap_or(d);
-        Self { enabled: std::env::var("LIVING_GAME_SPRINGS").map_or(true, |v| v != "0"), budget: num("LIVING_GAME_SPRING_BUDGET", 48.0) as usize, near: num("LIVING_GAME_SPRING_NEAR", 40.0), settle: num("LIVING_GAME_SPRING_SETTLE", 60.0).max(0.0) as u32, wake_log: crate::perf::has("springwake"), far_too: crate::perf::has("springfar") }
+        Self { enabled: std::env::var("LIVING_GAME_SPRINGS").map_or(true, |v| v != "0"), budget: num("LIVING_GAME_SPRING_BUDGET", 48.0) as usize, near: num("LIVING_GAME_SPRING_NEAR", 40.0), settle: num("LIVING_GAME_SPRING_SETTLE", 60.0).max(0.0) as u32, wake_log: crate::perf::has("springwake"), far_too: crate::perf::has("springfar"), seat: std::env::var("LIVING_GAME_SEAT_CONTACT").map_or(true, |v| v != "0"), seat_log: crate::perf::has("seat") }
     }
 }
 
@@ -1446,6 +1462,78 @@ struct Group {
     drag: f32,
     radius: f32,
     spheres: Vec<usize>,
+    /// Cloth that hangs to a seat ([`is_cloth`]): it takes the seat contact.
+    cloth: bool,
+}
+
+/// The VRM spring groups that are cloth hanging from the hips and legs, by their `comment`: a
+/// skirt's chains (`Skirt`, char-4-skirts) and a coat's (`Coat`, the generator's coat chains).
+/// A seated character's ground contact ([`SeatAnchor`]) applies to these alone; hair, sleeves
+/// and anything else keep their own spheres.
+pub const CLOTH_GROUPS: [&str; 2] = ["Skirt", "Coat"];
+
+/// Whether a spring group's VRM `comment` names cloth ([`CLOTH_GROUPS`]; any case).
+pub fn is_cloth(comment: &str) -> bool {
+    CLOTH_GROUPS.iter().any(|c| comment.trim().eq_ignore_ascii_case(c))
+}
+
+/// Where a character seated on the ground rests (`live.rs`, from `town::Show`'s `sit_ground`):
+/// a world-space plane through the terrain sampled at the clip's seat, with the terrain's
+/// normal, fixed for the whole sit and kept through getting up. While it is there, its cloth
+/// chains ([`is_cloth`]) are kept on the ground's side of it, as far as the clips' own time says
+/// the body is down (`anim::Anim::ground_seat`, 0–1).
+///
+/// The proposal (docs/seat-contact/PROPOSAL.md) gave the ground a sphere of 2 m radius whose
+/// top is the seat; a plane is that sphere's limit and does not fall away from the ground off
+/// the seat (2 cm 0.3 m to the side, where a cross-legged sitter's knees and hem are).
+#[derive(Component, Clone, Copy, Debug, PartialEq)]
+pub struct SeatAnchor {
+    /// The sampled ground at the seat (world), and the ground's upward normal there.
+    pub point: Vec3,
+    pub normal: Vec3,
+    /// How far the body is down, given by a caller that poses it without `anim.rs` (the asset
+    /// view); `None`: by the clips it shows (`Anim::ground_seat`).
+    pub weight: Option<f32>,
+}
+
+/// How deep below the ground a contact at weight 0 lies (m, the character's size): the ground
+/// rises to where it is as the weight comes up, so the cloth is lifted out, never thrown.
+pub const SEAT_SINK: f32 = 0.25;
+
+/// A seat contact for one frame: the plane, raised to the ground by its weight.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct Contact {
+    point: Vec3,
+    normal: Vec3,
+}
+
+impl Contact {
+    fn new(anchor: &SeatAnchor, weight: f32) -> Option<Self> {
+        let w = weight.clamp(0.0, 1.0);
+        (w > 0.0).then(|| Contact { point: anchor.point - anchor.normal * (SEAT_SINK * (1.0 - w)), normal: anchor.normal })
+    }
+
+    /// A tail `next` on a chain from `pos`, `len` long, kept `r` above the plane: as near
+    /// `next` as the chain's length lets it (its part along the normal raised, the rest kept in
+    /// proportion).
+    fn keep(&self, pos: Vec3, next: Vec3, len: f32, r: f32) -> Vec3 {
+        let n = self.normal;
+        if (next - self.point).dot(n) >= r {
+            return next;
+        }
+        let u = (next - pos).try_normalize().unwrap_or(-n);
+        // The least the tail's direction may point down, for the tail to stay r above the plane.
+        // A chain whose root is itself under it (the body in the ground) lies flat at most:
+        // pushing it up through the body would be worse.
+        let h = (pos - self.point).dot(n) - r;
+        let least = (-h / len.max(1e-6)).clamp(-1.0, 0.0);
+        let along = u.dot(n);
+        if along >= least {
+            return next;
+        }
+        let side = (u - n * along).try_normalize().unwrap_or_else(|| n.any_orthonormal_vector());
+        pos + (n * least + side * (1.0 - least * least).max(0.0).sqrt()) * len
+    }
 }
 
 struct Sphere {
@@ -1468,6 +1556,13 @@ pub struct Springs {
     /// Each joint's new local rotation and global transform.
     out: Vec<(Quat, GlobalTransform)>,
     centres: Vec<(Vec3, f32)>,
+    /// The seat contact this frame, for the cloth groups ([`SeatAnchor`]).
+    contact: Option<Contact>,
+    /// `LIVING_GAME_PERF=seat`: the lowest a cloth joint's tail came above its seat's ground
+    /// (m, the unraised ground) since the last report, and how many steps it was in contact.
+    seat_low: f32,
+    seat_steps: u32,
+    seat_ground: Option<(Vec3, Vec3)>,
     /// `springwake`: the largest joint turn (degrees) in each frame since waking.
     wake: Option<Vec<f32>>,
 }
@@ -1514,7 +1609,7 @@ pub fn rig_springs(
             }
             for g in info.springs.iter() {
                 let gi = groups.len();
-                groups.push(Group { stiffness: g.stiffness, gravity: g.gravity, drag: g.drag.clamp(0.0, 1.0), radius: g.radius, spheres: g.colliders.iter().filter_map(|c| collider_spheres.get(*c)).flatten().copied().collect() });
+                groups.push(Group { stiffness: g.stiffness, gravity: g.gravity, drag: g.drag.clamp(0.0, 1.0), radius: g.radius, spheres: g.colliders.iter().filter_map(|c| collider_spheres.get(*c)).flatten().copied().collect(), cloth: is_cloth(&g.comment) });
                 for root in &g.bones {
                     let Some(&r) = by_name.get(root.as_str()) else { continue };
                     // Depth first: parents before children.
@@ -1539,7 +1634,7 @@ pub fn rig_springs(
         }
         let n = joints.len();
         debug!("characters: {} has {n} spring joints, {} collider spheres", model.file, spheres.len());
-        commands.entity(e).insert(Springs { joints, groups, spheres, active: false, fresh: true, ran: false, out: vec![(Quat::IDENTITY, GlobalTransform::IDENTITY); n], centres: vec![], wake: None });
+        commands.entity(e).insert(Springs { joints, groups, spheres, active: false, fresh: true, ran: false, out: vec![(Quat::IDENTITY, GlobalTransform::IDENTITY); n], centres: vec![], contact: None, seat_low: f32::INFINITY, seat_steps: 0, seat_ground: None, wake: None });
     }
 }
 
@@ -1576,6 +1671,10 @@ impl Springs {
     /// One pass over the joints in hierarchy order: `None` places the tails at rest, `Some(d)`
     /// takes a fixed step with at least drag `d`. Either way the results go to `out`.
     fn pass(&mut self, globals: &Query<&GlobalTransform>, step: Option<f32>) {
+        let contact = self.contact;
+        // The seat's ground itself (with or without a contact), for the report.
+        let ground = self.seat_ground;
+        let mut low = f32::INFINITY;
         for i in 0..self.joints.len() {
             let parent = match self.joints[i].parent {
                 Up::Bone(b) => match globals.get(b) {
@@ -1612,6 +1711,14 @@ impl Springs {
                             next = pos + (pushed - pos).try_normalize().unwrap_or(rest_dir) * len;
                         }
                     }
+                    // A seated character's cloth keeps to the ground's side of its seat, after
+                    // the legs' spheres (a world-space plane, `SeatAnchor`).
+                    if let Some(c) = contact.filter(|_| g.cloth) {
+                        next = c.keep(pos, next, len, g.radius * sc);
+                    }
+                    if let (Some((at, up)), true) = (ground, g.cloth) {
+                        low = low.min((next - at).dot(up));
+                    }
                     j.prev = j.tail;
                     j.tail = next;
                 }
@@ -1620,6 +1727,10 @@ impl Springs {
             let world = Quat::from_rotation_arc(rest_dir.normalize(), to) * rest;
             let local = (pr.inverse() * world).normalize();
             self.out[i] = (local, parent.mul_transform(Transform { translation: j.t, rotation: local, scale: j.s0 }));
+        }
+        if step.is_some() && low.is_finite() {
+            self.seat_low = self.seat_low.min(low);
+            self.seat_steps += 1;
         }
     }
 }
@@ -1638,6 +1749,7 @@ pub fn springs(
     mut stats: ResMut<SpringStats>,
     time: Res<Time>,
     mut chars: Query<(Entity, &mut Springs, &Character, Option<&InheritedVisibility>, Option<&crate::lookdev::Lod>)>,
+    seats: Query<(&SeatAnchor, Option<&crate::anim::Anim>)>,
     cams: Query<Entity, With<Camera3d>>,
     mut set: ParamSet<(Query<&GlobalTransform>, Query<(&mut Transform, &mut GlobalTransform)>)>,
 ) {
@@ -1670,6 +1782,13 @@ pub fn springs(
     let mut resting: Vec<(Entity, Quat)> = Vec::new();
     for (e, mut sp, _, _, _) in &mut chars {
         let now = chosen.contains(&e);
+        // Seated on the ground: the cloth's contact, as far as the clips say the body is down.
+        let seat = seats.get(e).ok();
+        let contact = seat.filter(|_| settings.seat).and_then(|(a, an)| Contact::new(a, a.weight.or(an.map(|an| an.ground_seat())).unwrap_or(0.0)));
+        if sp.contact != contact {
+            sp.contact = contact;
+        }
+        sp.seat_ground = seat.filter(|_| settings.seat_log).map(|(a, _)| (a.point, a.normal));
         if sp.active && !now {
             resting.extend(sp.joints.iter().map(|j| (j.e, j.r0)));
             sp.wake = None;
@@ -1745,6 +1864,15 @@ pub fn springs(
     stats.stepped += u32::from(steps > 0);
     stats.since += time.delta_secs();
     if stats.since >= 3.0 {
+        // `LIVING_GAME_PERF=seat`: each seated character's cloth against its ground since the
+        // last report (the lowest cloth tail above it, a joint's radius when it lies on it).
+        for (e, mut sp, ch, _, _) in &mut chars {
+            if std::mem::replace(&mut sp.seat_steps, 0) > 0 && settings.seat_log {
+                let cloth = sp.joints.iter().filter(|j| sp.groups[j.group].cloth).count();
+                info!("seat: {} {e}: {cloth} cloth joints, lowest tail {:.1} mm above the ground", ch.recipe.name, sp.seat_low * 1000.0);
+            }
+            sp.seat_low = f32::INFINITY;
+        }
         if stats.characters > 0 {
             let f = stats.frames.max(1) as f64;
             let us = stats.nanos as f64 / 1000.0 / f;
@@ -1846,5 +1974,107 @@ mod tests {
         assert!(w.get_entity(piece).is_err(), "the outfit pieces on the old bones go");
         assert!(w.get_entity(other).is_ok(), "only outfit pieces go");
         assert_eq!(w.resource::<Messages<Rebuilt>>().iter_current_update_messages().count(), 1);
+    }
+    /// A spring chain hanging 0.3 m straight down from a bone 0.1 m above the ground: its tail
+    /// at rest is 0.2 m into the ground.
+    fn hanging(cloth: bool) -> (World, Entity) {
+        let mut w = World::new();
+        let bone = w.spawn(GlobalTransform::from_translation(Vec3::new(0.0, 0.1, 0.0))).id();
+        let joint = w.spawn(GlobalTransform::IDENTITY).id();
+        let sp = Springs {
+            joints: vec![Joint { e: joint, parent: Up::Bone(bone), t: Vec3::ZERO, r0: Quat::IDENTITY, s0: Vec3::ONE, axis: Vec3::NEG_Y, len: 0.3, group: 0, tail: Vec3::ZERO, prev: Vec3::ZERO }],
+            groups: vec![Group { stiffness: 8.0, gravity: Vec3::ZERO, drag: 0.7, radius: 0.02, spheres: vec![], cloth }],
+            spheres: vec![],
+            active: true,
+            fresh: true,
+            ran: false,
+            out: vec![(Quat::IDENTITY, GlobalTransform::IDENTITY)],
+            centres: vec![],
+            contact: None,
+            seat_low: f32::INFINITY,
+            seat_steps: 0,
+            seat_ground: None,
+            wake: None,
+        };
+        let e = w.spawn(sp).id();
+        (w, e)
+    }
+
+    fn run(w: &mut World, steps: u32, settle: u32) {
+        use bevy::ecs::system::RunSystemOnce;
+        w.run_system_once(move |mut q: Query<&mut Springs>, g: Query<&GlobalTransform>| {
+            for mut sp in &mut q {
+                sp.simulate(steps, settle, &g);
+            }
+        })
+        .unwrap();
+    }
+
+    fn tail(w: &World, e: Entity) -> Vec3 {
+        w.get::<Springs>(e).unwrap().joints[0].tail
+    }
+
+    const GROUND: SeatAnchor = SeatAnchor { point: Vec3::ZERO, normal: Vec3::Y, weight: None };
+
+    #[test]
+    fn the_cloth_groups_are_named_by_their_comment() {
+        assert!(is_cloth("Skirt") && is_cloth("skirt") && is_cloth("Coat") && is_cloth(" Coat "));
+        assert!(!is_cloth("Hair") && !is_cloth("HairBack") && !is_cloth("") && !is_cloth("Sleeve"));
+    }
+
+    #[test]
+    fn a_seat_contact_keeps_cloth_above_the_ground_and_nothing_else() {
+        for (cloth, above) in [(true, true), (false, false)] {
+            let (mut w, e) = hanging(cloth);
+            w.get_mut::<Springs>(e).unwrap().contact = Contact::new(&GROUND, 1.0);
+            run(&mut w, 30, 60);
+            let t = tail(&w, e);
+            let len = (t - Vec3::new(0.0, 0.1, 0.0)).length();
+            assert!((len - 0.3).abs() < 1e-4, "the chain keeps its length: {len}");
+            if above {
+                assert!((t.y - 0.02).abs() < 1e-3, "cloth lies on the ground, its radius above it: {t}");
+            } else {
+                assert!((t.y + 0.2).abs() < 1e-3, "hair hangs where it would: {t}");
+            }
+        }
+    }
+
+    #[test]
+    fn a_seat_contact_comes_in_with_its_weight() {
+        assert!(Contact::new(&GROUND, 0.0).is_none());
+        let half = Contact::new(&GROUND, 0.5).unwrap();
+        assert!((half.point.y + SEAT_SINK * 0.5).abs() < 1e-6, "half way up: {}", half.point);
+        let (mut w, e) = hanging(true);
+        w.get_mut::<Springs>(e).unwrap().contact = Some(half);
+        run(&mut w, 30, 60);
+        assert!((tail(&w, e).y - (0.02 - SEAT_SINK * 0.5)).abs() < 1e-3, "kept above the lowered ground: {}", tail(&w, e));
+    }
+
+    #[test]
+    fn a_chain_whose_root_is_in_the_ground_lies_flat_at_most() {
+        let c = Contact::new(&GROUND, 1.0).unwrap();
+        let pos = Vec3::new(0.0, -0.05, 0.0);
+        let t = c.keep(pos, pos + Vec3::new(0.1, -0.3, 0.0).normalize() * 0.3, 0.3, 0.02);
+        assert!((t.y - pos.y).abs() < 1e-4 && ((t - pos).length() - 0.3).abs() < 1e-4, "flat, not pushed up through the body: {t}");
+    }
+
+    /// Waking seated (the reseed on re-entry, `spring-near`'s settle): the first drawn frame is
+    /// already on the ground and the chain does not swing after it.
+    #[test]
+    fn waking_seated_settles_on_the_ground_without_a_swing() {
+        let (mut w, e) = hanging(true);
+        w.get_mut::<Springs>(e).unwrap().contact = Contact::new(&GROUND, 1.0);
+        run(&mut w, 1, 60);
+        let first = tail(&w, e);
+        assert!(first.y > 0.0, "on the ground at the first frame: {first}");
+        let mut most = 0.0f32;
+        let mut last = first;
+        for _ in 0..30 {
+            run(&mut w, 1, 60);
+            let t = tail(&w, e);
+            most = most.max((t - last).length());
+            last = t;
+        }
+        assert!(most < 1e-3, "no swing after waking: {most} m a step");
     }
 }

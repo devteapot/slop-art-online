@@ -58,8 +58,10 @@ def call(db, reducer, *args):
     return {"reducer": reducer, "args": [str(a) for a in args], "code": code, "out": out[-400:]}
 
 
-def sql(run, q):
+def sql(run, q, *, required=False):
     r = subprocess.run([sys.executable, V, "sql", "--run", run, q], capture_output=True, text=True)
+    if required and r.returncode:
+        sys.exit(r.stderr.strip() or f"owner SQL failed: {q}")
     i = r.stdout.find("[")
     try:
         return json.loads(r.stdout[i:]) if i >= 0 else []
@@ -292,7 +294,7 @@ def drive_client(a, db, out, client, p, log_path, places, syncs, token_path, fre
                             names = [column["name"]["some"] for column in result["schema"]["elements"]]
                             rows = [dict(zip(names, row)) for row in result["rows"]]
                         else:
-                            rows = sql(a.run, q)
+                            rows = sql(a.run, q, required=True)
                         scene["snaps"].setdefault(name, []).append({"query": q, "wall_ms": wall_ms, "rows": rows})
                         continue
                     if c[0] == "player":

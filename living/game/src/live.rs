@@ -192,6 +192,9 @@ struct Shown {
     sitting: bool,
     /// Getting up: since when (display ms) and where it sat.
     rising: Option<(f64, Vec2)>,
+    /// Where it sits on the ground, for its cloth (`characters::SeatAnchor`): set as it sits,
+    /// kept through getting up until the clips have it off the ground.
+    seat: Option<crate::characters::SeatAnchor>,
     /// Its file has a startle ([`STARTLE`]); how long it has stood (s); a startle playing: since
     /// when (display ms) and where it stood.
     startles: bool,
@@ -248,6 +251,23 @@ pub struct DrawnLook<'a> {
 /// played at this rate). The authority moves the body at once, so the drawn body waits at its
 /// seat while the clip plays, then catches up at up to [`CATCH_UP`] m/s faster than the body.
 const STAND_UP: (&str, f32, f64) = ("stand_up_ground", 1.6, 2467.0 / 1.6);
+/// The ground clips' seat lies this far behind where the body is drawn (m): `sit_ground_down`
+/// ends with the hips 0.39 m back (clips.json `end_offset` [0, -0.4]), where `sit_ground` and
+/// `stand_up_ground` keep them.
+const SEAT_BEHIND: f32 = 0.39;
+/// The ground's slope at a seat is sampled this far either side of it (m).
+const SEAT_SLOPE_M: f32 = 0.25;
+
+/// A seat on the ground behind a body drawn at `p` facing `dir` (sim): the terrain there and its
+/// normal, in the world (x, height, sim y).
+fn seat_anchor(island: &Island, p: Vec2, dir: Vec2) -> crate::characters::SeatAnchor {
+    let at = p - dir * SEAT_BEHIND;
+    let e = SEAT_SLOPE_M;
+    let hx = (island.height(at.x + e, at.y) - island.height(at.x - e, at.y)) / (2.0 * e);
+    let hz = (island.height(at.x, at.y + e) - island.height(at.x, at.y - e)) / (2.0 * e);
+    let normal = Vec3::new(-hx, 1.0, -hz).try_normalize().unwrap_or(Vec3::Y);
+    crate::characters::SeatAnchor { point: Vec3::new(at.x, island.height(at.x, at.y), at.y), normal, weight: None }
+}
 const CATCH_UP: f32 = 1.2;
 /// A turn take turns the legs at most this fast (radians a second): its own curve stays under it.
 const TURN_MAX: f32 = 720.0 * PI / 180.0;
@@ -561,6 +581,9 @@ fn swap_look(commands: &mut Commands, assets: &AssetServer, live: &mut Live, q: 
     let s = live.shown.get_mut(&id).unwrap();
     info!("looks: #{id} redrawn for a new look ({} → {})", if s.look.is_empty() { "none" } else { &s.look }, if now.look.is_empty() { "none" } else { &now.look });
     (s.entity, s.look, s.composed) = (new, now.look, recipe.person.is_some());
+    if let Some(seat) = s.seat {
+        commands.entity(new).try_insert(seat);
+    }
     live.heights.insert(id, recipe.height);
     live.swaps.push((old, new, id));
 }
@@ -800,7 +823,7 @@ fn bodies(
                 commands.entity(entity).insert(crate::gait::Logged(id));
             }
             let look = character.as_ref().filter(|_| person).map(crate::characters::seen::of).unwrap_or_default();
-            live.shown.insert(id, Shown { entity, last: p, speed: 0.0, person, beast, yaw: h, drawn: p, sitting: false, rising: None, startles, still: 0.0, startle: None, tilt: Quat::IDENTITY, kind: body.kind.clone(), face: h, back: false, turning: false, turn: None, jump: None, jump_key: -1.0, jump_took: false, walked: false, along: false, stop: None, stop_at: p, rest_at: None, calm_speed: 0.0, run_w: if row.as_ref().is_some_and(|r| r.running) { 1.0 } else { 0.0 }, look: look.look, composed });
+            live.shown.insert(id, Shown { entity, last: p, speed: 0.0, person, beast, yaw: h, drawn: p, sitting: false, rising: None, seat: None, startles, still: 0.0, startle: None, tilt: Quat::IDENTITY, kind: body.kind.clone(), face: h, back: false, turning: false, turn: None, jump: None, jump_key: -1.0, jump_took: false, walked: false, along: false, stop: None, stop_at: p, rest_at: None, calm_speed: 0.0, run_w: if row.as_ref().is_some_and(|r| r.running) { 1.0 } else { 0.0 }, look: look.look, composed });
             live.heights.insert(id, height);
             continue;
         }
@@ -1070,6 +1093,20 @@ fn bodies(
         } else {
             (ground, Quat::IDENTITY)
         };
+        // Seated on the ground (and getting up): the cloth's contact with it, fixed for the sit at
+        // the clips' seat, and let go once the clips have the body off the ground.
+        if s.person && (s.sitting || rising.is_some()) {
+            if s.seat.is_none() {
+                let seat = seat_anchor(&island, p, dir);
+                info!("seat: #{id} sits on the ground at ({:.2}, {:.3}, {:.2}), normal ({:.3}, {:.3}, {:.3})", seat.point.x, seat.point.y, seat.point.z, seat.normal.x, seat.normal.y, seat.normal.z);
+                s.seat = Some(seat);
+                commands.entity(s.entity).try_insert(seat);
+            }
+        } else if s.seat.is_some() && anims.get(s.entity).map_or(0.0, |a| a.ground_seat()) <= 0.0 {
+            s.seat = None;
+            info!("seat: #{id} is off the ground");
+            commands.entity(s.entity).try_remove::<crate::characters::SeatAnchor>();
+        }
         let Ok((mut tf, fitted, mut model, ch, mut motion, vis)) = q.get_mut(s.entity) else { continue };
         tf.translation.x = p.x;
         tf.translation.z = p.y;

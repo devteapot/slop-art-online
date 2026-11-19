@@ -325,11 +325,18 @@ def earshot(run, c):
     talk box takes whom Tab goes to, and their order, from `my_earshot`'s `say` list, and shows its
     sentence (in my own labels) in the box's hint line; someone who steps out of a say's reach
     drops from it while a call still reaches them. With it off: no row, the client's own reckoning,
-    as before. At noon on open grass, cleared (the authority lists only people one sees: 11 m by
-    day, 6 by night), residents A and B held 2 m and 6 m off a fresh player; B then 10 m off,
-    beyond a say's 9 m and within a call's reach and sight. The box cannot switch to whisper or call
-    (they have no place in it yet): their lists are only read."""
+    as before. Face both residents at noon on open grass so the Call list proves B stayed
+    visible after leaving Say range."""
     s = "earshot"
+    cards = {r["name"]: r["carry_m"] for r in sql(run, "SELECT name, carry_m FROM speech_card")}
+    carry, call_carry = cards.get("say", 0), cards.get("call", 0)
+    if not 0 < carry < call_carry:
+        c.check(s, "world speech cards give Say and a wider Call", False, str(cards))
+        return
+    print(f"{s}: Say carry {carry:g} m; Call carry {call_carry:g} m", flush=True)
+    # The card already applies carry_for to ordinary world hearing. Leave enough room
+    # for tile snapping while keeping B within the base island's short daytime sight.
+    away = min(1.1 * carry, (carry + call_carry) / 2)
     a, b = residents(run)
     # Anyone within 25 m of the spot (offline player characters of earlier drives among them) is
     # put 40 m east first: they would stand in every list.
@@ -339,16 +346,26 @@ def earshot(run, c):
         call_admin(run, "place_at", [r["id"], ax + 40, ay + 3 * i])
     tok = os.path.join(ROOT, ".local/living/verify", run, "ui", f"earshot-{int(time.time())}.token")
     syncs = ["noon=sql|UPDATE world SET epoch_ms = {epoch_at:12} WHERE id = 0", f"spot=place_at|{{me}}|{ax}|{ay}",
-             'on=set_world_law|"earshot"|"true"', f"away=place_at|{b}|(mx-10.0)|(my)", 'off=set_world_law|"earshot"|"false"']
-    plan = ("ready;sync:noon;sync:spot;wait:2;sync:on;sync:scene;wait:3;key:Enter:tap;wait:1.2;shot:01_box;dump:e1;tab;wait:0.4;dump:t1;tab;wait:0.4;dump:t2;tab;wait:0.4;dump:t3;"
+             'on=set_world_law|"earshot"|"true"', f"away=place_at|{b}|(mx+{away})|(my+1)",
+             "senses=client_sql|SELECT hearing, sight FROM my_senses",
+             'off=set_world_law|"earshot"|"false"']
+    plan = ("ready;sync:noon;sync:spot;wait:2;sync:on;sync:scene;look:90;wait:3;sync:senses;key:Enter:tap;wait:1.2;shot:01_box;dump:e1;tab;wait:0.4;dump:t1;tab;wait:0.4;dump:t2;tab;wait:0.4;dump:t3;"
             "key:Escape:tap;wait:0.3;sync:away;wait:2;key:Enter:tap;wait:1.2;shot:02_away;dump:e2;tab;wait:0.4;dump:t4;tab;wait:0.4;dump:t5;key:Escape:tap;wait:0.3;"
             "sync:off;wait:2;key:Enter:tap;wait:1.2;shot:03_off;dump:e3;tab;wait:0.4;dump:t6;key:Escape:tap;wait:0.3;quit")
     try:
-        out, code, text = drive(run, s, plan, places=[f"{a}:2:0", f"{b}:-6:0"], syncs=syncs, extra=["--token", tok, "--player", "Hearer"])
+        out, code, text = drive(
+            run, s, plan, places=[f"{a}:{0.6 * carry}:0", f"{b}:{0.8 * carry}:1"],
+            syncs=syncs, extra=["--token", tok, "--player", "Hearer"],
+            env={"LIVING_GAME_CONTROL": "cursor"},
+        )
     finally:
         # Back to the shipped law (on).
         call_admin(run, "set_world_law", ["earshot", "true"])
-    c.check(s, "client ran and joined (a fresh player)", code == 0, text[-300:])
+    scene = dump(out, "scene") or {}
+    snapshots = scene.get("snaps", {}).get("senses", [])
+    senses = snapshots[0]["rows"] if snapshots else []
+    ranges = f"Say carry {carry:g} m; Call carry {call_carry:g} m; my_senses {senses}"
+    c.check(s, "client ran and joined (a fresh player)", code == 0 and bool(senses), f"{ranges}; {text[-300:]}")
     d = {k: dump(out, k) or {} for k in ("e1", "t1", "t2", "t3", "e2", "t4", "t5", "e3", "t6")}
     ty = lambda k: d[k].get("typing") or {}
     told = lambda k: ty(k).get("told") or {}
@@ -379,7 +396,7 @@ def earshot(run, c):
     st = steps(("t1", "t2", "t3"))
     c.check(s, "law on: each Tab goes by the authority's say list, in its order", all(x[0] and x[1] for x in st), str(st))
     say2, call2 = ways("e2").get("say"), ways("e2").get("call")
-    c.check(s, "B steps 10 m off: out of the say list, still in the call's (in sight); the box follows", say2 is not None and b not in say2 and a in say2 and call2 is not None and b in call2 and ty("e2").get("earshot") == say2, f"say {say2}; call {call2}; box {ty('e2').get('earshot')}")
+    c.check(s, "B steps beyond Say range and stays visible in Call range", say2 is not None and b not in say2 and a in say2 and call2 is not None and b in call2 and ty("e2").get("earshot") == say2, f"say {say2}; call {call2}; box {ty('e2').get('earshot')}")
     st2 = steps(("t4", "t5"))
     c.check(s, "Tab then goes by the new say list and never to B", all(x[0] and x[1] for x in st2) and all(b not in (x[4] or []) and x[3] != b for x in st2), str(st2))
     c.check(s, "law off: no row, the client's own reckoning (A within it)", not ty("e3").get("told") and a in (ty("e3").get("earshot") or []), f"told {ty('e3').get('told')}; earshot {ty('e3').get('earshot')}")
@@ -3498,6 +3515,90 @@ def skirt_scale(run, c):
     c.check(s, "Shino scaled keeps her hem's width", abs(h["ranger"][1] - h["shino"][1]) < 0.01, f"ranger {h['ranger'][1]:.4f}, shino {h['shino'][1]:.4f}")
     c.check(s, "Vivi scaled keeps her hem's width", abs(h["small"][1] - h["vivi"][1]) < 0.01, f"small {h['small'][1]:.4f}, vivi {h['vivi'][1]:.4f}")
 
+
+def seated_outfits(run):
+    """Residents beside whom the scene can sit, by their line's outer garment: skirted (a smock
+    or an apron, `Skirt` spring chains) and coated (a coat; `Coat` chains once the generator
+    builds them, docs/seat-contact/)."""
+    book = json.load(open(LOOK_BOOK)) if os.path.exists(LOOK_BOOK) else {"lines": {}}
+    rows = look_rows(run)
+    out = {"skirt": [], "coat": []}
+    for cid in residents(run, 400):
+        outfit = (book["lines"].get(rows.get(cid, ""), {}).get("person") or {}).get("styles", {}).get("outfit", [])
+        if any(p.startswith(("smock_", "apron_")) and not p.startswith("smock_bands") for p in outfit):
+            out["skirt"].append(cid)
+        elif any(p.startswith("coat-") for p in outfit):
+            out["coat"].append(cid)
+    return out
+
+
+@scenario("seat")
+def seat(run, c):
+    """Seated cloth on the ground (seat-2a, docs/seat-contact/): skirted and coated residents
+    beside me in the crowded street (eight near: me and seven), told to rest at noon in dry
+    weather (`set_behavior` `{"do": "rest"}`, scene setup), so town.rs sits them on the ground
+    (`sit_ground_down`, then `sit_ground`; about three in ten stand at ease instead), then told to
+    wander (a new graph alone does not end a rest; moving off does), so they get up where they sat
+    (`stand_up_ground`) and walk off. Stills going down, seated, getting up and up. While
+    they sit the camera goes far and back near, so their springs rest and wake (the re-entry
+    reseed, `LIVING_GAME_PERF=springwake`). Two arms: the contact on, and off
+    (`LIVING_GAME_SEAT_CONTACT=0`); `LIVING_GAME_PERF=seat` logs each seated character's lowest
+    cloth tail above its ground, and frames.csv and the springs line give the cost."""
+    s = "seat"
+    who = seated_outfits(run)
+    ids = who["skirt"][:4] + who["coat"][:3]
+    c.check(s, "skirted and coated residents to seat", len(who["skirt"]) >= 1 and len(who["coat"]) >= 1 and len(ids) == 7, f"skirt {who['skirt'][:4]}, coat {who['coat'][:3]}")
+    if len(ids) < 2:
+        return
+    ring = [(2.2, 0.0), (-2.2, 0.0), (0.0, 2.2), (0.0, -2.2), (1.6, 1.6), (-1.6, -1.6), (1.6, -1.6)]
+    free = [f"{i}:{x}:{y}" for i, (x, y) in zip(ids, ring)]
+    rest = json.dumps(json.dumps({"do": "rest"}))
+    wander = json.dumps(json.dumps({"do": "wander"}))
+    syncs = ['setup=set_world_law|"fov_on"|"false";place_at|{me}|420.5|255.5;set_weather|false|900',
+             "noon=sql|UPDATE world SET epoch_ms = {epoch_at:12} WHERE id = 0",
+             "sit=" + ";".join(f"set_behavior|{i}|{rest}" for i in ids),
+             "up=" + ";".join(f"set_behavior|{i}|{wander}" for i in ids)]
+    plan = ("ready;sync:noon;sync:setup;wait:2;sync:scene;look:180;cursor:0.5,0.55;wait:3;notches:30;wait:2;dump:standing;shot:00_standing;"
+            "sync:sit;wait:1.6;shot:01_down;wait:2.4;dump:seated;shot:02_seated;wait:3;shot:03_idle;"
+            "notches:-30;wait:2;notches:30;wait:3;dump:rewoken;shot:04_rewoken;wait:3;"
+            "sync:up;wait:0.9;shot:05_rising;wait:1.2;shot:06_rising_late;wait:2;dump:up;shot:07_up;wait:1;quit")
+    arms = {}
+    for arm, env in (("on", {}), ("off", {"LIVING_GAME_SEAT_CONTACT": "0"})):
+        name = f"{s}-{arm}"
+        ev = os.path.join(ROOT, ".local/living/verify", run, "ui", name)
+        os.makedirs(ev, exist_ok=True)
+        frames = os.path.join(ev, "frames.csv")
+        out, code, text = drive(run, name, plan, free=free, syncs=syncs, env=dict(env, LIVING_GAME_PERF="seat,springwake", LIVING_GAME_FRAMES=frames, LIVING_GAME_FPS_CAP="0"))
+        c.check(s, f"{arm}: client ran and joined", code == 0, text[-300:])
+        L = log(out)
+        sat = sorted({int(m) for m in re.findall(r"seat: #(\d+) sits on the ground", L)} & set(ids))
+        rose = sorted({int(m) for m in re.findall(r"seat: #(\d+) is off the ground", L)} & set(ids))
+        lows = [(n, int(k), float(v)) for n, k, v in re.findall(r"seat: (.+?) \S+: (\d+) cloth joints, lowest tail (-?[\d.]+|inf) mm", L) if v != "inf"]
+        # The seated characters' springs waking as the camera comes back near (their entities, from
+        # their seat reports), after they sat.
+        seated_e = {e for _, e, k, _ in re.findall(r"seat: (.+?) (\S+): (\d+) cloth joints, lowest tail (-?[\d.]+|inf) mm", L) if int(k) > 0}
+        after = L.split("live script: dump:seated", 1)[-1]
+        wakes = [(e, float(a), float(b)) for e, a, b in re.findall(r"springwake: \S+ (\S+) \(\d+ joints, settle \d+\): largest turn ([\d.]+)° at waking, ([\d.]+)° a frame after", after) if e in seated_e]
+        springs = [float(x) for x in re.findall(r"springs: .*?([\d.]+) µs CPU a character-step", L)]
+        rows = []
+        if os.path.exists(frames):
+            rows = [tuple(map(int, line.split(","))) for line in open(frames) if line.strip()]
+        ms = sorted(r[1] / 1000 for r in rows[len(rows) // 4:])
+        arms[arm] = {"sat": sat, "rose": rose, "cloth_lows_mm": lows, "wakes_deg": wakes, "spring_us_per_char_step": springs,
+                     "frames": len(ms), "p50_ms": ms[len(ms) // 2] if ms else None, "p99_ms": ms[math.ceil(len(ms) * .99) - 1] if ms else None,
+                     "skirt": [i for i in sat if i in who["skirt"]], "coat": [i for i in sat if i in who["coat"]]}
+        d = dump(out, "seated") or {}
+        seen = {x["id"] for x in d.get("seen") or []}
+        c.check(s, f"{arm}: a skirted and a coated resident sit on the ground in view", arms[arm]["skirt"] and arms[arm]["coat"] and set(sat) <= seen, f"sat {sat} (skirt {arms[arm]['skirt']}, coat {arms[arm]['coat']}); in view {sorted(seen)}")
+        c.check(s, f"{arm}: everyone who sat got up and was let go of the ground", sat and set(rose) == set(sat), f"sat {sat}, off the ground {rose}")
+        if arm == "on":
+            cloth = [x for x in lows if x[1] > 0]
+            c.check(s, "on: seated cloth tails stay on the ground's side (at most 5 mm under it)", cloth and min(v for _, _, v in cloth) >= -5.0, f"{len(cloth)} reports; lowest {min((v for _, _, v in cloth), default=None)} mm")
+        c.check(s, f"{arm}: waking seated (far and back near) settles without a swing", wakes and max(b for _, _, b in wakes) < 10.0, f"{wakes}")
+    evidence = os.path.join(ROOT, ".local/living/verify", run, "ui", "seat.json")
+    json.dump(arms, open(evidence, "w"), indent=1)
+    on, off = arms.get("on", {}), arms.get("off", {})
+    c.check(s, "frame cost with the contact on and off (eight near, crowded street)", on.get("p50_ms") and off.get("p50_ms"), json.dumps({k: {x: arms[k].get(x) for x in ("frames", "p50_ms", "p99_ms")} for k in arms}))
 
 def main():
     ap = argparse.ArgumentParser()
