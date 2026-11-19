@@ -6,7 +6,7 @@ Since `feed-scope-client` (2026-11-19, [docs/FEED_SCOPING.md](../../../../docs/F
 
 - **The one input.** The public `feed_scope` row is in the static set, beside `world` and `land`. Its `stage` (no row means 0) chooses the feed:
   - **legacy** (stage 0, as main): `gate` whole in the base, and `structure` and `resource_node` in the near window by chunk;
-  - **scoped** (stage ≥ 1): `my_things`, `my_remembered_things`, `my_owners`, `my_stock` and `my_fuel_seen` in the base, and `map_structure` and `map_resource` in the near window over the same chunks.
+  - **scoped** (stage ≥ 1): `my_things`, `my_remembered_things`, `my_owners`, `my_stock`, `my_fuel_seen` and `my_contents_seen` in the base, and `map_structure` and `map_resource` in the near window over the same chunks.
 - **Its own switch.** The feed switch is independent of the perception tiers' switch (`net::perception_law`). Each of the two chooses its own queries: [law-override.md](law-override.md) covers the tiers, and `net::feed_switch_tests` checks every combination of stage, delivery laws and world kind.
 - **The base, whole.** The base subscription is the perceived set, the world kind's own queries and the feed's base queries, in one set (`net::base_set`). So a connect or reconnect applies the perceived rows and the feed's views together.
 - **A switch, made before broken.** When the stage crosses 0 ↔ 1 (`Net::switch_feed`):
@@ -35,6 +35,7 @@ Since `feed-scope-client` (2026-11-19, [docs/FEED_SCOPING.md](../../../../docs/F
     - its one choice is "Go to where it was" (`{"do": "goto", "target": {"at": …}}`);
     - it never opens a wheel and is never F's nearest.
   - **A live fire:** its title adds "burning" or "out". After the character has looked it over, it also adds "about N h of fuel left, as of when you looked it over, M ago" (`my_fuel_seen`).
+  - **A live container** (a kind that `holds`, remains, a trap; since feed-scope iteration 2): its title adds "not looked inside" until the character has looked in, taken from it or stored in it. After that it adds what was found then, as "3 berries when you looked inside, M ago" or "nothing inside when you looked, M ago" (`my_contents_seen`).
   - **The rules' fuel check:**
     - for a fire it has looked over, the fuel is projected from that look at its burn rate;
     - for a fire it never looked over, the fuel is NaN, which refuses no fuel comparison: the authority decides;
@@ -78,6 +79,7 @@ Both scenarios cut the world over for good, because stage 2 is latched. Run them
     - live from inside (a few spots);
     - remembered where it lay;
     - live again;
+  - **the remains, looked inside from 1.5 m:** "not looked inside" before; `my_contents_seen` and what was found after;
   - **lamp 72 at 1.4 m:**
     - burning or out with no fuel words, and looking it over offered;
     - `act:inspect`;

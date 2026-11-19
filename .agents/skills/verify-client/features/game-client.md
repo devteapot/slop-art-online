@@ -12,7 +12,7 @@
      - far, re-centred after 5 chunks: `lot` within ±11 chunks.
   4. Public-feed scoping (since feed-scope-client, 2026-11-19; docs/FEED_SCOPING.md "Client subscriptions"; [verify-ui feed-scope.md](../../verify-ui/features/feed-scope.md)).
      - **Stage 0:** the base carries `gate` (land worlds), exactly as main, with `feed_scope` in the static set.
-     - **Stage ≥ 1:** the base carries `my_things`, `my_remembered_things`, `my_owners`, `my_stock` and `my_fuel_seen` instead of `gate`, in the same set as the perceived queries (`net::base_set`).
+     - **Stage ≥ 1:** the base carries `my_things`, `my_remembered_things`, `my_owners`, `my_stock`, `my_fuel_seen` and `my_contents_seen` instead of `gate`, in the same set as the perceived queries (`net::base_set`).
      - **A crossing of 0 ↔ 1:** a whole new base and the near window for the new feed are subscribed beside the old ones. The old ones are dropped, and the reads move (`feed::reads`), only once both are applied (`Net::switch_feed`). The client logs `feed: subscribing the … set beside the … one` and `feed: on the … set after N ms (…)`.
      - **Independence:** the switch is separate from the perception tiers' (`net::feed_switch_tests` covers every combination).
      - **Reconnect:** the static set gives the stage, so the base is subscribed straight to that stage's set (the log says `feed: scoped (feed_scope stage 2)`).

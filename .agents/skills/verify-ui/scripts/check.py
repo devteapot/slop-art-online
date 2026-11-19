@@ -4354,6 +4354,10 @@ def feed_scope(run, c):
     for i, (x, y) in enumerate(BRUSH_IN):
         syncs.append(f"h_back{i}=place_at|{{me}}|{x}|{y}")
         plan += [f"sync:h_back{i}", "wait:3", f"dump:h_back{i}"]
+    # The remains is a container: looked inside from the first inside spot (1.5 m).
+    syncs += [f"c_set=place_at|{{me}}|{BRUSH_IN[0][0]}|{BRUSH_IN[0][1]}", "c_rows=client_sql|SELECT * FROM my_contents_seen"]
+    plan += ["sync:c_set", "wait:3", "menu:f@nearest:remains", "wait:0.6", "dump:c_before", "menu:close",
+             "act:inspect@nearest:remains", "wait:3", "sync:c_rows", "menu:f@nearest:remains", "wait:0.6", "dump:c_after", "shot:c_after", "menu:close"]
     # The lamp, 1.4 m off; then the boulder.
     syncs += [f"f_set=place_at|{{me}}|{lamp['x'] + 1.4}|{lamp['y']}", "f_fuel=client_sql|SELECT * FROM my_fuel_seen",
               f"r_set=place_at|{{me}}|{rock['x'] + 1.0}|{rock['y']}", f"r_rows=client_sql|SELECT * FROM my_things;sql|SELECT id, amount, max FROM resource_held WHERE id = {rock['id']}"]
@@ -4406,7 +4410,7 @@ def feed_scope(run, c):
     pre = window(-1, i1) if i1 is not None else []
     asked = [l for l in pre if l.get("base_next") and not l["base_next"].get("applied")]
     c.check(s, "stage 1: legacy rows read and drawn until the scoped set was applied",
-            asked and all(l["reads"] == "legacy" and l["legacy_rows"][0] > 0 for l in asked), f"{len(asked)} lines while subscribing: {[l['legacy_rows'] for l in asked][:4]}")
+            asked and all(l["reads"] == "legacy" and sum(l["legacy_rows"]) > 0 for l in asked), f"{len(asked)} lines while subscribing: {[l['legacy_rows'] for l in asked][:4]}")
     c.check(s, "stage 1: nothing drawn went missing while the switch was under way", pre and not [k for l in pre for k in l.get("drawn_gone") or []], repr([l.get("drawn_gone") for l in pre]))
     gone_at = [tuple(k) for k in (l1 or {}).get("drawn_gone") or []]
     lost = [k for k in gone_at if map_key(k)]
@@ -4433,7 +4437,9 @@ def feed_scope(run, c):
     c.check(s, "stage 1 again: nothing drawn went missing while the switch was under way, and at the switch no map thing", pre2 and not [k for l in pre2 for k in l.get("drawn_gone") or []] and not drawn_lost([l2 or {}]),
             repr([l.get("drawn_gone") for l in pre2]))
     after = lines[i2:] if i2 is not None else []
-    cut = next((j for j, l in enumerate(after) if l["legacy_rows"][0] == 0), None)
+    # The cut: every legacy row (structure, resource_node, gate) gone from the cache. A window may
+    # hold no structure at all (the arrival in the fields), so all three count.
+    cut = next((j for j, l in enumerate(after) if sum(l["legacy_rows"]) == 0), None)
     c.check(s, "stage 2: the legacy rows left the client cache after the switch, and nothing drawn went with them",
             i2 is not None and cut is not None and cut > 0 and not drawn_lost(after[cut:cut + 1]) and not [k for l in after[cut:cut + 1] for k in l.get("gone") or [] if map_key(tuple(k))],
             f"switch at line {i2}, cut {cut} lines later: {after[cut] if cut is not None else None}")
@@ -4464,6 +4470,13 @@ def feed_scope(run, c):
             repr(rem))
     again = [i for i in range(len(BRUSH_IN)) if (feed_things(dump(out, f"h_back{i}")).get(rkey) or {}).get("source") == "live"]
     c.check(s, "brush, inside again: live again", bool(again), repr(again))
+
+    # The remains' inside: presence only until looked into, then what was found, as of then.
+    cb, ca = ((dump(out, "c_before") or {}).get("acts") or {}).get("title") or "", ((dump(out, "c_after") or {}).get("acts") or {}).get("title") or ""
+    contents = [r for r in rows_of("c_rows", 0) if r["target"] == rid]
+    c.check(s, "remains: in sight its title says it was not looked inside (presence only)", "not looked inside" in cb, cb)
+    c.check(s, "remains: looked inside, kept (my_contents_seen) and its title gives what was found, as of then",
+            contents and ("when you looked inside" in ca or "nothing inside when you looked" in ca), f"{ca}; rows {contents}")
 
     # The lamp: lit or out before looking it over, its fuel after.
     fb, fa = dump(out, "f_before") or {}, dump(out, "f_after") or {}
