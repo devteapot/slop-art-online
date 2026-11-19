@@ -78,6 +78,9 @@ One chat call (`living/mind/src/mind/fast.rs`, `prompts::fast_system` and `fast_
 | What has just happened, oldest first: the newest 12 experiences (blows taken and dealt, own outcomes, refusals) | `exp_line`, as deliberation renders them |
 | Your top level (plan and outline) and Your routines (names, one line each, `routine_stat`) | the installed graph, `routine`, `routine_stat` |
 | The world's rules (physics), the graph grammar and the four replies; no acts or dealings | `world_rules()`, `grammar()`, a stable prefix (prompt-cached) |
+| How you are now: its own health and breath, and counts of what it saw when asked (people and wolves in sight; of them in a hostile move and at it; friends and enemies by its own relations) | its `vitals`; the authority's private `fast_sight` row for the issue ([balanced frame](FAST_LANE_FRAME.md), since `fast-lane-frame`) |
+
+**The frame** is chosen by the world law `fast_frame`: 2, the balanced frame (shipped since `fast-lane-frame`), shows holding, pressing, making room and re-entering and breaking contact alike and drops the lines that sold running away; 1 is the frame the Nov 19 replicates sent, kept for comparisons. Neither filters a reply: see [the balanced frame](FAST_LANE_FRAME.md).
 
 **Order, for the providers' prefix caches** (branch `prompt-cache-order`, 2026-11-12). The system prompt is the fixed part, about 11,000 tokens: the frame, `world_rules()` and `grammar()`, byte-identical across characters and calls. The user prompt then runs from the most to the least stable part between one character's calls in a fight: who you are, the top level, the routines, then why now and what has just happened. Before that change why now came first, so nothing after the system prompt could be reused between calls. The content is the same in either order. Measured cached shares are in [Prompt caching](#prompt-caching) below.
 
