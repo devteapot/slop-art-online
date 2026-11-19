@@ -1,0 +1,10 @@
+{
+  "inherited_scene_commit": "68d14037d",
+  "glb_sha256": "f2c7642ecc66e1b0c27803ddcb38b4d7c1b2512e77152b6afe950a5df69ea97d",
+  "exported_images_verified_in_packed_blend": {
+    "cora.atlas": "436f4525b2bdaaab02816dcfbd865070d52d50c5bb476c1da94d6d19687cb4a9",
+    "cora.iris": "307a6c5805d361b75f0f3bb03a5fd3cfb77e7ed67fe2af1db2e3801376924808",
+    "cora.tint": "5e71699d09e3d6be436d5746704bb26fff8e1cc736c51b0ed7a5c89fec0f253c"
+  },
+  "new_blender_blocks": 0
+}
