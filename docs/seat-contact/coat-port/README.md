@@ -37,3 +37,24 @@ Maximum world penetration in millimetres with springs and seat contact enabled, 
 2. Character assets, Astra: address garment layering at the woman's trousers and the elder's jersey against the coat front. Both crossings already occur in the ground-loop control. The woman's trousers reach 36.4 mm (control 36.8 mm) and the elder's jersey reaches 20.3 mm in both.
 
 The [wardrobe lines diff](changed-keys.csv) compares the released generation c4-5d64f53e with c4-cbcc40bf. Six child lines changed only their coat piece and its corresponding dye key. The other 881 active keys match exactly. No current child draw wears cut 0. Historical keys remain in the client book for existing worlds.
+
+## Shared clip bake and coat weights
+
+The original and coat-chain measurements used the same rise take (s109, frames 0–74).
+The shared dressed bake model puts all its garments in one cloth mesh. The seat
+fitter selected contact by dominant bone, so a spring-weighted hem could still
+count as hip or thigh support. At 0.967 s the coat-branch rise put the hips
+26.57 mm below the pre-chain bake. On the same v2 fittings this moved the
+16-pose rise depths from 0 to 9.49 mm for the man and from 25.60 to 43.30 mm
+for the elder. Dropping all vertices influenced by secondary joints still moved the rise hips
+by 29.30 mm: some of those hem vertices contributed to the reference contact
+surface before spring skinning. The shared clip source therefore keeps its coat
+on the original body weights. The contact fitter also skips secondary-joint
+vertices on skinned inputs. Renderable wardrobe pieces retain their chains.
+
+The usual local clip-bake command reproduces all 87 reference animations from
+f7ecc7398 exactly by decoded key time and value, including the rise hips.
+The coatless youth also matches all 87 reference animations. At 16 poses the
+shipped man and elder reach 0 and 25.60 mm on the rise. All four shipped
+fittings clear the 2 mm layer threshold in walk, brisk walk and run with
+springs off and on.

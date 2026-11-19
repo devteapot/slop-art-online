@@ -120,8 +120,12 @@ for p in "${people[@]}"; do
   for lod in "${lods[@]}"; do
     case "$lod" in near) dir=$src ;; far) dir=$src/far ;; both) dir=$src/lod ;; *) echo "gen_person: LOD: $lod is not near, far or both" >&2; exit 1 ;; esac
     mkdir -p "$dir/anim"
+    # The shared motion reference uses the coat's body weights. Renderable coats
+    # get their spring weights when built as people or wardrobe pieces.
+    clip_args=()
+    if [[ "$name" = own-clips && "$clips_baked" = 1 ]]; then clip_args=(--clip-source); fi
     # shellcheck disable=SC2086
-    if ! "$blender" -b --python-exit-code 1 -P living/tools/blender/person.py -- "${arg[@]}" ${PERSON_ARGS:-} --lod "$lod" --morphs "${MORPHS:-all}" $([ "${IDENTITY:-bones}" = bake ] && echo --bake) --out "$dir/$name.glb" > "$log" 2>&1; then
+    if ! "$blender" -b --python-exit-code 1 -P living/tools/blender/person.py -- "${arg[@]}" ${PERSON_ARGS:-} "${clip_args[@]}" --lod "$lod" --morphs "${MORPHS:-all}" $([ "${IDENTITY:-bones}" = bake ] && echo --bake) --out "$dir/$name.glb" > "$log" 2>&1; then
       grep -v OpenColorIO "$log" | tail -30; rm -f "$log"; exit 1
     fi
     grep -E '^PERSON' "$log" || true
