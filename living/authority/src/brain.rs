@@ -163,6 +163,8 @@ struct Ev<'a> {
     latched: Option<u16>,
     /// A deliberate act holds the body: graph leaves wait, except reflexes (see `acts.rs`).
     acting: bool,
+    /// The leaf whose activity's success this evaluation read (`finished`), and its skill.
+    done: Option<(u16, String)>,
 }
 
 /// Work that, once begun under an `if`, is finished even after the `if`'s condition stops
@@ -193,7 +195,7 @@ pub fn evaluate(ctx: &ReducerContext, id: u32, now: u64) {
         cur = ctx.db.activity().id().find(id);
     }
     let acting = cur.as_ref().map_or(false, |a| act::held(a.node));
-    let mut ev = Ev { ctx, now, w, me, at, needs, vit, orig: st.clone(), st, g, scene: None, smelled: None, smell: false, running: None, path: Vec::new(), status: String::new(), visits: 0, last_fail: String::new(), want: (String::new(), 0), answers: (0, 0), run: None, spacing: Default::default(), latched: None, acting };
+    let mut ev = Ev { ctx, now, w, me, at, needs, vit, orig: st.clone(), st, g, scene: None, smelled: None, smell: false, running: None, path: Vec::new(), status: String::new(), visits: 0, last_fail: String::new(), want: (String::new(), 0), answers: (0, 0), run: None, spacing: Default::default(), latched: None, acting, done: None };
     // A pace aside (an `aside` skill in the script) is a short walk that finishes on its own too.
     let sc = common::scripts(ctx);
     ev.latched = cur.filter(|a| a.revision == ev.st.revision && (sc.skills().get(&a.skill).is_some_and(|k| k.latch) || sc.shows().aside(&a.skill))).map(|a| a.node);
@@ -209,9 +211,13 @@ pub fn evaluate(ctx: &ReducerContext, id: u32, now: u64) {
     };
     common::diag(|| "eval:all", 1);
     common::diag(|| "do:visits", ev.visits as u64);
+    // The leaf whose end this evaluation read, if it came to nothing else: a continuous
+    // activity's `doing` row held at its end stays while this is so (`town::settle`).
+    let read_end = ev.done.take().map(|(_, skill)| skill).filter(|_| result == St::Ok && !played && !matches!(root.root, Node::Seq(_)));
     let _span = common::span("brain.after");
     ev.after(result, &root.root);
     drop(_span);
+    crate::town::settle(ctx, id, read_end.as_deref());
     let _span = common::detail_span("brain.slept");
     // Fell asleep, or woke (and thinks on what waited): perceive::slept.
     if let Some(me) = ctx.db.character().id().find(id) {
@@ -232,7 +238,7 @@ pub fn resolve_for(ctx: &ReducerContext, id: u32, t: &Target, now: u64) -> Optio
     let g = common::compiled(ctx, id, st.revision)?;
     let at = pos(&body, now);
     let needs = common::needs(&vit, now);
-    let mut ev = Ev { ctx, now, w: common::world(ctx), me, at, needs, vit, orig: st.clone(), st, g, scene: None, smelled: None, smell: false, running: None, path: Vec::new(), status: String::new(), visits: 0, last_fail: String::new(), want: (String::new(), 0), answers: (0, 0), run: None, spacing: Default::default(), latched: None, acting: false };
+    let mut ev = Ev { ctx, now, w: common::world(ctx), me, at, needs, vit, orig: st.clone(), st, g, scene: None, smelled: None, smell: false, running: None, path: Vec::new(), status: String::new(), visits: 0, last_fail: String::new(), want: (String::new(), 0), answers: (0, 0), run: None, spacing: Default::default(), latched: None, acting: false, done: None };
     ev.sensed(t)
 }
 
@@ -658,7 +664,7 @@ impl<'a> Ev<'a> {
             Node::Do(a) => {
                 // A leaf that has finished is done, whether or not its target is still in sight
                 // (a back_off or a flight that took it out of sight succeeded all the same).
-                if let Some(done) = self.finished(id) {
+                if let Some(done) = self.finished(id, &a.skill) {
                     return done;
                 }
                 let sensed = a.target.as_ref().map(|t| {
@@ -859,7 +865,7 @@ impl<'a> Ev<'a> {
 
     /// The outcome of leaf `id`'s activity that has ended since it was last visited (read once),
     /// unless that activity is still under way.
-    fn finished(&mut self, id: u16) -> Option<St> {
+    fn finished(&mut self, id: u16, skill: &str) -> Option<St> {
         let _span = common::detail_span("brain.finished");
         let rev = self.st.revision;
         let l = self.st.last.clone().filter(|l| l.node == id && l.revision == rev)?;
@@ -868,6 +874,7 @@ impl<'a> Ev<'a> {
         }
         self.st.last = None;
         if l.ok {
+            self.done = Some((id, skill.to_string()));
             return Some(St::Ok);
         }
         self.last_fail = l.why.clone();
@@ -906,7 +913,7 @@ impl<'a> Ev<'a> {
                 return St::Run;
             }
         }
-        if let Some(done) = self.finished(id) {
+        if let Some(done) = self.finished(id, skill) {
             return done;
         }
         let want = std::mem::take(&mut self.want);

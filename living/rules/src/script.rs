@@ -556,6 +556,12 @@ pub struct Laws {
     /// A body cannot fall asleep while the one who last struck it, in a fight still on, is within
     /// `wake_reach` (the fact `hurt_by_near`).
     pub alert_while_attacker_near: bool,
+    /// A continuous activity (rest, sleep, work, eating, play) that ends well stays seen until
+    /// the body's next evaluation: its `doing` row is held, then renewed in place if the same
+    /// activity begins again, replaced or removed if not (doing-renew). Nothing begins sooner.
+    /// Off: the row is deleted at the end and the body is seen doing nothing until the next
+    /// begins, as before 2026-11-19.
+    pub renew_in_place: bool,
     /// What a graph's `relation: "stranger"` filter means (docs/STRANGERS.md): off, no
     /// relation row (or one labelled "stranger"); on, someone whose name one does not know
     /// (`perception::knows_name`, the rule scenes and percepts name people by).
@@ -765,6 +771,7 @@ impl Default for Laws {
             pack_reflex: true,
             alert_after_hit_s: 15.0,
             alert_while_attacker_near: true,
+            renew_in_place: true,
             stranger_by_name: false,
             cues_on: false,
             cue_cooldown_s: 600.0,
@@ -3103,6 +3110,7 @@ impl Scripts {
             pack_reflex: flag("pack_reflex", l.pack_reflex),
             alert_after_hit_s: g("alert_after_hit_s", l.alert_after_hit_s).clamp(0.0, 3_600.0),
             alert_while_attacker_near: flag("alert_while_attacker_near", l.alert_while_attacker_near),
+            renew_in_place: flag("renew_in_place", l.renew_in_place),
             stranger_by_name: flag("stranger_by_name", l.stranger_by_name),
             cues_on: flag("cues_on", l.cues_on),
             cue_cooldown_s: g("cue_cooldown_s", l.cue_cooldown_s).clamp(0.0, 86_400.0),

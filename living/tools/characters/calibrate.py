@@ -18,7 +18,8 @@
    patches. Each patch's **target** is the colour the calibrated frame must show: `"target":
    [r, g, b]` (display sRGB), or `"drawing": [x, y]`, the 9x9 median of the drawing (`"drawing":
    "path.png"` at the top) there. Each shot key (`portrait`, `near`, `portrait45`) gives the
-   pixel to measure in that shot (9x9 median). A patch passes when every channel is within its
+   pixel to measure in that shot (9x9 median; `"sample": "min5"`, for ink lines, the darkest
+   pixel of a 5x5 window instead). A patch passes when every channel is within its
    tolerance: `"tolerance"` on the patch, else the file's `"tolerance": {"hair": 8, "other":
    10}` by whether the name starts with "hair", else 8 and 10. A patch may name the palette
    swatch it tunes (`"swatch": "mid"`); the report then suggests that swatch's next value
@@ -43,7 +44,8 @@ REPO = Path(__file__).resolve().parents[3]
 ASSETS = REPO / "living" / "game" / "assets"
 SLOTS = {"hair", "skin", "face", "eyes", "tint", "cloth"}
 SWATCHES = ("shade", "mid", "light", "highlight")
-HAIR_KEYS = set(SWATCHES) | {"t1", "t2", "edge", "highlight_feather", "highlight_map"}
+INK_KEYS = ("ink", "ink_px", "ink_range", "ink_fade_px")
+HAIR_KEYS = set(SWATCHES) | {"t1", "t2", "edge", "highlight_feather", "highlight_map"} | set(INK_KEYS)
 SHOTS = ("portrait", "near", "portrait45")
 FLOAT, SCALAR = 5126, "SCALAR"
 
@@ -91,14 +93,14 @@ def read_png(path):
         data = b[pos + 8 : pos + 8 + n]
         if tag == b"IHDR":
             w, h, depth, ctype, _, _, interlace = struct.unpack(">IIBBBBB", data)
-            if depth != 8 or ctype not in (0, 2, 6) or interlace:
-                raise ValueError(f"{path}: only 8-bit, non-interlaced grey/RGB/RGBA PNGs are read")
+            if depth != 8 or ctype not in (0, 2, 4, 6) or interlace:
+                raise ValueError(f"{path}: only 8-bit, non-interlaced grey, grey-alpha, RGB or RGBA PNGs are read")
         elif tag == b"IDAT":
             idat.append(data)
         elif tag == b"IEND":
             break
         pos += 12 + n
-    ch = {0: 1, 2: 3, 6: 4}[ctype]
+    ch = {0: 1, 2: 3, 4: 2, 6: 4}[ctype]
     raw = zlib.decompress(b"".join(idat))
     stride = w * ch
     rows, prev = [], bytearray(stride)
@@ -129,11 +131,24 @@ def read_png(path):
     return w, h, ch, rows
 
 
+def patch_min(img, x, y, r=2):
+    """The darkest pixel (by luminance) of a (2r+1)² window: for thin ink lines."""
+    w, h, ch, rows = img
+    best = None
+    for yy in range(max(y - r, 0), min(y + r + 1, h)):
+        for xx in range(max(x - r, 0), min(x + r + 1, w)):
+            px = rows[yy][xx * ch : xx * ch + 3] if ch >= 3 else [rows[yy][xx * ch]] * 3
+            lum = 0.2126 * px[0] + 0.7152 * px[1] + 0.0722 * px[2]
+            if best is None or lum < best[0]:
+                best = (lum, list(px))
+    return best[1]
+
+
 def patch_median(img, x, y, r=4):
     w, h, ch, rows = img
     out = []
     for c in range(3):
-        vals = sorted(rows[yy][xx * ch + min(c, ch - 1)] for yy in range(max(y - r, 0), min(y + r + 1, h)) for xx in range(max(x - r, 0), min(x + r + 1, w)))
+        vals = sorted(rows[yy][xx * ch + (c if ch >= 3 else 0)] for yy in range(max(y - r, 0), min(y + r + 1, h)) for xx in range(max(x - r, 0), min(x + r + 1, w)))
         out.append(vals[len(vals) // 2])
     return out
 
@@ -269,13 +284,57 @@ def audit(glb):
         if has and total:
             facts["highlight_vertices"] = f"{high} of {total} hair vertices above 0.5 ({100 * high / total:.1f}%)"
             if tex:
-                warns.append("both _HIGHLIGHT and a mask texture: the texture wins, _HIGHLIGHT is ignored")
+                facts["mask"] = f"per vertex (_HIGHLIGHT) and texture {tex}: the larger of the two (v1.1)"
             else:
                 facts["mask"] = "per vertex (_HIGHLIGHT)"
             if high == 0:
                 warns.append("_HIGHLIGHT is never above 0.5: no highlight is drawn")
         elif not tex:
             warns.append("a hair profile without _HIGHLIGHT or a mask texture: three bands, no highlight")
+    # Lock ink (v1.1): warnings only.
+    profiles = facts.get("profiles", {})
+    inked = {n: h for n, h in profiles.items() if any(k in h for k in INK_KEYS)}
+    g_lines = None
+    if tex:
+        png = tex[:-5] + ".png" if tex.endswith(".ktx2") else tex
+        if (ASSETS / png).exists():
+            try:
+                w, hh, ch, rows = read_png(ASSETS / png)
+                if ch >= 3:
+                    on = sum(1 for r in rows for x in range(w) if r[x * ch + 1] == 0)
+                    near = sum(1 for r in rows for x in range(w) if r[x * ch + 1] < 255)
+                    g_lines = near > 0
+                    facts["ink_field"] = f"G: {on} texels on a line, {100 * near / (w * hh):.1f}% within range"
+                else:
+                    facts["ink_field"] = "no G (a greyscale texture): no ink"
+            except ValueError:
+                pass
+    for name, h in inked.items():
+        r = h.get("ink_range", 0.004)
+        if not isinstance(r, (int, float)) or r <= 0:
+            warns.append(f"material {name!r}: hair.ink_range is {r!r}; it must be a number above 0 (no ink is drawn)")
+        for k in ("ink_px", "ink_fade_px"):
+            if k in h and (not isinstance(h[k], (int, float)) or h[k] <= 0):
+                warns.append(f"material {name!r}: hair.{k} is {h[k]!r}, not a number above 0")
+        if "ink" in h and not (isinstance(h["ink"], list) and len(h["ink"]) == 3 and all(isinstance(x, int) and 0 <= x <= 255 for x in h["ink"])):
+            warns.append(f"material {name!r}: hair.ink is {h['ink']!r}, not three integers 0-255 (the default, shade x 0.6, is used)")
+        if not tex:
+            warns.append(f"material {name!r}: ink fields but no mask texture ({stem}.hair.png): no ink is drawn")
+        elif g_lines is None:
+            warns.append(f"material {name!r}: ink fields but the texture has no G channel: no ink is drawn")
+        elif not g_lines:
+            warns.append(f"material {name!r}: ink fields but the texture's G is 255 everywhere: no line")
+    if not inked and g_lines:
+        warns.append("the mask texture's G holds lines but no hair profile sets an ink field: no ink is drawn (set ink_range)")
+    if hair_prims and (tex or inked):
+        us, vs = [], []
+        for p in hair_prims:
+            uv, _ = accessor(j, binary, p["attributes"]["TEXCOORD_0"]) if "TEXCOORD_0" in p["attributes"] else (None, None)
+            for u in uv or []:
+                us.append(u[0])
+                vs.append(u[1])
+        if not us or (max(us) - min(us)) * (max(vs) - min(vs)) < 1e-6:
+            warns.append("the hair's TEXCOORD_0 spans no area (no UV unwrap): its mask texture and ink read one texel everywhere")
     # The face.
     if face_prims:
         for p in face_prims:
@@ -371,10 +430,11 @@ def measure(targets_path, shots, profiles):
     imgs = {k: read_png(p) for k, p in shots.items()}
     rows, suggest = [], {}
     for name, p in t.get("patches", {}).items():
+        sample = patch_min if p.get("sample") == "min5" else patch_median
         if p.get("target"):
             target = list(p["target"])
         elif p.get("drawing") and drawing and any(p["drawing"]):
-            target = patch_median(drawing, *p["drawing"])
+            target = sample(drawing, *p["drawing"])
         else:
             continue
         limit = p.get("tolerance", tol["hair"] if name.lower().startswith("hair") else tol["other"])
@@ -382,7 +442,7 @@ def measure(targets_path, shots, profiles):
             at = p.get(shot)
             if not at or not any(at) or shot not in imgs:
                 continue
-            got = patch_median(imgs[shot], *at)
+            got = sample(imgs[shot], *at)
             d = [g - tg for g, tg in zip(got, target)]
             ok = all(abs(x) <= limit for x in d)
             rows.append(dict(patch=name, shot=shot, x=at[0], y=at[1], target=target, measured=got, delta=d, tolerance=limit, passed=ok,
