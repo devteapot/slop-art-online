@@ -51,6 +51,9 @@ BASE_QUERIES = [
     'SELECT * FROM trade_offer',
     'SELECT * FROM background',
     'SELECT * FROM gate',
+    'SELECT * FROM structure_held',
+    'SELECT * FROM gate_held',
+    'SELECT * FROM resource_held',
 ]
 # Private in every build: the authority's bookkeeping and developer audit truth
 # (docs/PERCEPTION.md). The observer and the mind service read them as the database owner.
@@ -109,7 +112,14 @@ PRIVATE = ['attention', 'applied_gaze', 'cover_ground', 'fast_ask', 'far_handle'
            # remembers of others' bodies (`sex_seen`): the mind service reads it as the owner.
            'sex', 'sex_seen',
            # The near tier's copies (frame-views): a player reads them through seen_*_near.
-           'motion_near', 'fighter_near', 'doing_near']
+           'motion_near', 'fighter_near', 'doing_near',
+           # Public-feed scoping (docs/FEED_SCOPING.md): the canonical rows of a scoped world
+           # (stage 2), each player's copies of what it sees and its owner labels, what each
+           # character remembers of sight-scoped things and the fuel it found on fires, the
+           # sightings of sight-scoped kinds, and the cutover's bookkeeping. A player reads its own
+           # through my_things, my_remembered_things, my_owners and my_fuel_seen.
+           'structure_held', 'gate_held', 'resource_held', 'thing_seen', 'owner_seen',
+           'remembered_thing', 'fuel_seen', 'seen_structures_scoped', 'owned_by', 'lot_door', 'id_seq']
 # Private in the default `scoped` build; public only in a LIVING_PERCEPTION=open build (diagnostics).
 SCOPED = ['body', 'character', 'fighter', 'doing', 'vitals', 'experience', 'place', 'audience',
           'inventory', 'know_how']
@@ -118,7 +128,8 @@ VIEWS = ['seen_bodies', 'seen_characters', 'seen_fighters', 'seen_doing', 'my_bo
          'my_vitals', 'my_experience', 'my_places', 'my_inventory', 'my_know_how',
          'my_deliberations', 'my_combat', 'my_readiness', 'my_skill_uses', 'my_records', 'my_offers', 'heard_sounds', 'my_heard', 'my_senses', 'my_senses_v2', 'my_earshot', 'my_act_outcomes', 'my_known_names', 'my_sex',
          # The near and far tiers of the three copy-backed views (frame-views; scripts/cues.py proves them).
-         'seen_bodies_near', 'seen_bodies_far', 'seen_fighters_near', 'seen_fighters_far', 'seen_doing_near', 'seen_doing_far']
+         'seen_bodies_near', 'seen_bodies_far', 'seen_fighters_near', 'seen_fighters_far', 'seen_doing_near', 'seen_doing_far',
+         'my_things', 'my_remembered_things', 'my_owners', 'my_stock', 'my_fuel_seen']
 SEEN = ['seen_bodies', 'seen_characters', 'seen_fighters', 'seen_doing']
 # The player's own living character's body, fighter and doing rows (others' come as copies in seen_*).
 BODY = ['my_body', 'my_fighter', 'my_doing']

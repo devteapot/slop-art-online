@@ -137,9 +137,10 @@ Checkpoint for branch `feed-scope`, 2026-11-19, against `origin/main` at `f93f05
 
 | Table | Fields | Indexes | Notes |
 | --- | --- | --- | --- |
-| `structure_held` | Same fields as `Structure`: `id: u64 #pk` (no auto_inc), `kind`, `x`, `y`, `chunk`, `owner`, `built_ms`, `lit_until_ms` | btree `chunk`, btree `owner` | Every structure, architecture included, so `owner`, `built_ms` and `lit_until_ms` are never public. Ids are kept from `structure`, so internal act targets, minds and logs are unchanged. |
-| `gate_held` | Same fields as `Gate` | `id` pk | Open/shut, community, changer and time stay private. |
-| `resource_held` | Same fields as `ResourceNode` (`id` pk, no auto_inc) | btree `chunk` | Amount, max, regrowth and pool stay private. |
+| `structure_held` | The `Structure` row type itself (a second `#[table]` on the same struct, which 2.14.1 supports): `id`, `kind`, `x`, `y`, `chunk`, `owner`, `built_ms`, `lit_until_ms` | pk `id`, btree `chunk` | Every structure, architecture included, so `owner`, `built_ms` and `lit_until_ms` are never public. Ids are kept from `structure`, so internal act targets, minds and logs are unchanged. The column's `auto_inc` is never used: every insert carries an id from `id_seq`. No owner index (it would change the `structure` table's schema too); owner labels read `owned_by`. |
+| `gate_held` | The `Gate` row type | pk `id` | Open/shut, community, changer and time stay private. |
+| `resource_held` | The `ResourceNode` row type | pk `id`, btree `chunk` | Amount, max, regrowth and pool stay private. Ids from `id_seq`. |
+| `owned_by` | `{ structure: u64 #pk, owner: u32, kind: String }` | pk, btree `owner` | Allowlisted architecture with an owner, from stage 1, for owner labels. |
 | `id_seq` | `{ name: String #pk, next: u64 }` with rows `structure` and `resource` | pk | Allocates ids after the move. The 2.14.1 docs do not say whether an explicit insert advances an auto_inc sequence, so we don't rely on one. |
 | `lot_door` | `{ lot: u32 #pk, structure: u64 }` | pk | The door link that `lot.structure` held. It is read in seed and island code. |
 
@@ -156,13 +157,13 @@ Checkpoint for branch `feed-scope`, 2026-11-19, against `origin/main` at `f93f05
 ### What a viewer sees now: copies and `my_things`
 
 - **`thing_seen`** (**private**), one row per thing a viewer's character sees: `{ id: u64 #pk #auto_inc, viewer: Identity, character: u32, thing: SeenThing }`, with a btree on `viewer`, as `motion_seen` has.
-- **`SeenThing`** (SpacetimeType): `{ key: u64, class: u8, id: u64, kind: String, x: f32, y: f32, open: Option<bool>, lit_until_ms: u64, owner: u32, left: Option<u32> }`.
+- **`SeenThing`** (SpacetimeType): `{ key: u64, class: u8, id: u64, kind: String, x: f32, y: f32, open: Option<bool>, lit: bool, owner: u32, left: Option<u32>, max: Option<u32> }`.
   - `class`: 1 is a structure and 0 is a resource, the client's own `scene.things` key.
   - `key` is `class << 56 | id`.
   - `open`: gates only.
-  - `lit_until_ms`: fires (kinds that `burns`), 0 otherwise. It is the visible fuel, from which the client derives lit and fuel left as it does today.
+  - `lit`: whether a fire reads as burning (a kind that `burns` while it has fuel, a campfire always), false for anything else. Fuel is not seen at a glance (the GC's decision at the go): it is found by looking a fire over (`inspect`, below).
   - `owner`: 0 unless the `owner_shown` law grants this viewer the owner (`common::owner_label`).
-  - `left`: resources only, the whole units on the node now.
+  - `left` and `max`: resources only, the whole units on the node now and its full stock, so the client draws a depleted node from `left / max` (laptop review).
 - **What gets a copy:**
   - every moved kind in sight;
   - allowlisted kinds that carry state, namely gates and burning kinds, so their state is seen only in sight;
@@ -184,24 +185,31 @@ Checkpoint for branch `feed-scope`, 2026-11-19, against `origin/main` at `f93f05
 ### Remembered vs current
 
 - **Gates** keep the existing private `remembered` rows (`kind = 1`: `target`, `x`, `y`, `state`, `seen_ms`), bounded at 512 per character and deleted at death. They are now written only by a sighting that passes the shared test, and `known::belief` takes a gate's tile from the memory row, not the live `gate` row.
-- **Other moved things** go in **`remembered_thing`** (**private**): `{ id: u64 #pk #auto_inc, observer: u32, target: u64, kind: String, x: f32, y: f32, open: Option<bool>, lit_until_ms: u64, seen_ms: u64 }`. It has a btree on `observer` and a btree on `(observer, target)`.
+- **Other moved things** go in **`remembered_thing`** (**private**): `{ id: u64 #pk #auto_inc, observer: u32, target: u64, kind: String, x: f32, y: f32, chunk: u32, open: Option<bool>, lit: bool, seen_ms: u64 }`. It has btrees on `observer`, `(observer, target)` and `(observer, chunk)` (the last for checking remembered places in sight, at most every 5 s per chunk and character).
   - **Written:** at the first sighting, and when the seen position or state changes, by the same test, in a player's sweep and in a mind's noticing pass. Both controllers keep the same memory.
   - **Deleted:** only when the thing is absent from a sighting of its remembered anchor (a witnessed absence), at death, or when the 256-per-character bound evicts the oldest `seen_ms` first.
   - A remains rotted behind cover stays remembered.
   - Old radius-only familiarity is never turned into memory.
 - **Resource depletion** stays in the existing `seen_stock`, which both controllers already write.
-- **`my_remembered_things`** (**public view**, `primary_key = key`): `living(ctx)`, then returns `RememberedThing { key, class: 1, id, kind, x, y, open, lit_until_ms, seen_ms }` from `remembered` (gates, `kind = "gate"`, `open = state == 1`) and `remembered_thing`. It reads by `observer` index.
+- **`my_remembered_things`** (**public view**, `primary_key = key`): `living(ctx)`, then returns `RememberedSeen { key, class: 1, id, kind, x, y, open, lit, seen_ms }` (`lit` as last seen, so the view carries no fuel) from `remembered` (gates, `kind = "gate"`, `open = state == 1`) and `remembered_thing`. It reads by `observer` index.
 - **`my_stock`** (**public view**, `primary_key = id`): the living character's `seen_stock` rows (`kind`, `x`, `y`, `count`, `nodes`, `seen_ms`, `gone_ms`).
 - **How the client tells them apart:** a thing in `my_things` is live. A key in `my_remembered_things` and not in `my_things` is last-seen, so the client draws it as remembered, with its stored state and `seen_ms`, not as gone. A key in neither is unknown.
 - The two views are separate tables in the client cache, so there is never a flag to misread.
 - **Gates in the sightfield:** a gate that is shut, live or remembered, blocks in Shade. One the viewer never saw is drawn open, or as the client's explicit unknown, and the authority's collision still decides.
 - `seen_ms` is when that state was last learned or changed, not refreshed while in sight. That would write every sweep. The client has its own leave-sight time while it is connected.
 
+### Fuel: the `inspect` skill
+
+- **`inspect`** (`living/scripts/skills.rhai`: `inspect_spec`, `inspect_check`, `inspect_done` with the `inspect` effect, `inspect_shows`, `inspect_ui` with the label "Look over", on a thing's wheel). A fire that burns fuel within 2 m, 1 s. Listed only where some structure kind `burns` (Cullet's hearths, ovens, furnaces, lamps). The same for players and minds.
+- **`fuel_seen`** (**private**): `{ id: u64 #pk #auto_inc, observer: u32, target: u64, left: f32, seen_ms: u64 }`, btrees on `observer` and `(observer, target)`. `left` is the hours of burning left at the look (0 when out). At most 32 per character, the oldest look first; gone at death.
+- **`my_fuel_seen`** (**public view**, `primary_key = id`): the living character's rows.
+- The actor is told "You look the hearth over: about 4 hours of fuel left on it." A mind's scene shows a fire as `"state": "burning"` or `"out"`, and, once it has looked, `"fuel": "about N hours of … left on it when you looked it over, <time>"`. In a world at stage 0 the scene keeps its old wording with the hours.
+
 ### The look and act path for moved kinds
 
 - **What the client looks at and inspects:** the client's `things()`/`toward()` list and target facts are built from `my_things` (live), `map_structure`/`map_resource` (architecture and landmarks) and `my_remembered_things`.
 - **A remembered target that is no longer in sight** shows its title as last seen, with no live facts and no choices except going to its place. This follows how a creature that is no longer perceived gets no choices.
-- **The authority's check:** a structure target of a moved kind, named by a player's `human_act`, resolves only if the actor's character currently sees it or remembers it. Otherwise it fails with `"it is gone"`, the text an absent structure gets today, so a guessed id, a hidden thing and an absent thing all read the same.
+- **The authority's check (as built):** an act's target is resolved from the actor's scene list (`brain.rs` `visible_thing`, through `resolve_for`, for `human_act`, deliberate acts and graphs alike), and that list holds a sight-scoped thing only when the sight test sees it now. A remembered thing is not a target until it is in sight again; the client offers going to its place. A guessed id, a hidden thing and an absent one fail alike (verify-player: outcome code `unseen` for both).
 - Performing the act still needs reach at arrival against the canonical row. A remembered thing that has gone fails there as it does today, and that contact is what reveals it.
 - Minds go through the same check, against their own scene and memory.
 - Text and contents are still read only through the existing read and inspect acts.
@@ -211,8 +219,9 @@ Checkpoint for branch `feed-scope`, 2026-11-19, against `origin/main` at `f93f05
 - `brain.rs` covers both the list path and the delta path, `perceive.rs::select_scene_structures` and `known::remember_gates`. From stage 1, all of them filter mutable candidates with the same `sees` call and the observer context already built by that pass, before marking, familiarity, counting, grouping and the ten-slot limit.
 - Static candidates keep the C2 disc shortcut. A mutable candidate is always tested.
 - **`seen_structures_scoped`** (**private**), shaped as `seen_structures`: `{ id #pk #auto_inc, actor: u32, block: u32, ranges: Vec<u64> }`, btree `(actor, block)`. It holds mutable ids that passed the test from stage 1. The old `seen_structures` keeps architecture only, so old radius-only ranges never prove a sighting.
-- At the move to stage 2, `familiar` rows (`FAM_STRUCTURE`) for mutable structures are deleted, so legacy familiarity is relearned from real sightings.
-- The scene's transaction cache key gains facing, senses band and the map/gate revision.
+- Legacy recognition does not count for a sight-scoped kind (as built): its newness reads `seen_structures_scoped` alone, never `familiar` rows or the old ranges, so legacy familiarity is relearned from real sightings without a backfill that deletes rows.
+- The scene's transaction cache key gains facing and a gate revision (bumped by every gate opened or shut). Senses do not change within one transaction for one observer.
+- Gates are sampled with the observer's own sight, not the ground-marking radius, and `known::belief` takes a gate's tile from the memory row.
 
 ### Client subscriptions
 
@@ -262,9 +271,18 @@ Structure and resource ids are kept through the move, and `my_things`, `map_stru
 
 ### Residual and open points for review
 
-- **Ids still show creation order.** A newly seen remains id says how many structures were made since. Hiding that needs per-viewer handles, which would change act targeting for both controllers, so it is out of this build unless asked for.
-- **Fuel is visible.** A fire's `lit_until_ms` in sight gives its fuel left, as the client shows today. If only lit/out should be seen, the copy carries `lit: bool` instead and the fuel stays behind an inspect act.
-- **No copies for resources at full stock.** That keeps writes O(depleted nodes in sight). The client draws unseen and full nodes alike as the landmark.
+Settled at the go (GC and laptop, 2026-11-19):
+
+- **Ids still show creation order: a known low-value leak, accepted for now.** A newly seen remains id says how many structures were made since. The future fix is per-viewer handles: each viewer's copies carry an opaque handle, resolved to the structure on the authority for that viewer's acts, the same for both controllers.
+- **Fuel:** lit or out only in sight; the fuel left through `inspect` (above).
+- **Full resources as landmarks:** agreed. Copies cover depleted nodes in sight only (O(depleted nodes in sight) writes).
+- **Fast stages for tests:** `feed_scope_grace_s` may be 0 or 1. Housekeeping steps the stage once a second, so a scratch world reaches stage 1 within about a second of the law and stage 2 a second or two later.
+
+Still open, outside this build:
+
+- A mind's scene lists the contents of storage and remains in sight (the existing scene rule). Players see presence only; their contents stay behind the inspect and take acts. Whether minds should see contents at a glance is a separate decision.
+- Owner labels on a copy are worked out when the thing comes into sight and when the viewer's knowledge changes; a storage claimed by someone else while in view keeps its old label until it leaves sight.
+- `land.params` is the separate follow-up agreed with the laptop.
 
 ### Proof and acceptance
 

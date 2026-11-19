@@ -84,6 +84,9 @@ python3 "$C/scenes.py" notice_delta --run "$R" > "$E/notice_delta.txt" 2>&1
 python3 "$C/scenes.py" seen_remains --run "$R" > "$E/seen_remains.txt" 2>&1
 # On a Cullet run (--seed cullet): counted remains under the shipped cover and gaze laws, by day (waits for daylight).
 python3 "$C/scenes.py" seen_remains_gaze --run "$R" > "$E/seen_remains_gaze.txt" 2>&1
+# Public-feed scoping (features/feed-scope.md): a fresh core-feed-* run with the player joined, your
+# own scratch server. --part body on --seed cullet (a body in brush), --part gate on --seed island.
+python3 "$C/feed_scope.py" --run "$R" --part body > "$E/feed_scope_body.txt" 2>&1
 # A mind's line waits when another spoke to its listener first, under heard_first_rethinks (features/speech.md, about 1.5 min).
 python3 "$C/scenes.py" heard_first --run "$R" > "$E/heard_first.txt" 2>&1
 # The shared answers equal fresh ones (regard_cache_check; features/cues.md#shared-answers, about 4 min;
