@@ -5,7 +5,7 @@ Status: **design, being built step by step** (designed on branch `research-movem
 - `pursue-last-seen` (main `3e58c025`): nothing is followed out of sight; a pursuit goes to the last-seen place, a flight runs from it; `chase_lost_share` removed.
 - `known-ground` (step 3; this branch): every character records the ground it sees (`known_ground`, `remembered`, `ground_edit`; `ground_sight_m` 24 m by day), and with the `nav_belief` law (off by default until the arenas pass) walks are planned over it; a mind's scene lists its remembered places with bearings ([LIVING_CORE](LIVING_CORE.md#steering-locomotion)). Built as the step-3 design note approved on 2026-11-13: three new private tables, no column added to an existing table (appending one rewrites the table and disconnects every client in 2.14.1); remembered gates in their own table rather than on `familiar`.
 
-Next: `nav-arenas` (§4). The rest of this paragraph is the design as written. Nothing else is built. No module was built and no model was called. The evidence below comes from reading the code on main and from scanning existing trial evidence under `~/dev/*/.local/living/trials/`. The target spread in [§4](#4-measures-the-navigation-arenas) is committed here before any arena runs.
+Next: `nav-arenas` (§4; how the arenas are built, committed before any run, in §4.1). The rest of this paragraph is the design as written. Nothing else is built. No module was built and no model was called. The evidence below comes from reading the code on main and from scanning existing trial evidence under `~/dev/*/.local/living/trials/`. The target spread in [§4](#4-measures-the-navigation-arenas) is committed here before any arena runs.
 
 The owner's ask: *"general movement, how they get where they want to go. pathfinding based on memory and what they can see. real time input like a real player, low latency."*
 
@@ -441,6 +441,309 @@ A **leak check** goes with every on-arm. Two subjects with the same start and go
 | Cost guards | `tick.motion` ≤ 2 × today's at the same population; leg fuel ≤ 20 M at most; ≤ 1 `known_ground` write per 5 s per exploring character | same | 200 walkers: tick p99 ≤ 16.7 ms, no tick over budget attributable to motion | same |
 
 A miss is reported with its evidence. No target moves after a run.
+
+### 4.1 How the arenas are built (branch `nav-arenas`, committed before any run, 2026-11-13)
+
+The targets above are unchanged. This note fixes how they are measured, before the first run. It is written after steps 1–3 (`flee-open`, `pursue-last-seen`, `known-ground`). Told places as told (`place.source`), the `known` and `last_seen` targets and the hands' event triggers (plan steps 3–5) are not built. So the on arm here is `nav_belief` over recorded ground, and latencies are those of today's cadence.
+
+**Where.** The `island` seed, on scratch `verify-nav-*` databases on the Spark's scratch server (`slop-move-stdb`, :3361). Never the trial server while the merge gate runs, and never a paused reference world.
+- N1: Brackenford (walled; its square, its inn, its north gate) and Kettlebridge (terraces joined by stairs and ramps).
+- N2: Brackenford's gates. A town member is the gate-keeper fixture, since only the town may shut them.
+- N3: Brackenford's square.
+- N4: a town edge with a house row, a fence or wall, and open field, found on the map by the driver (the nearest that fits).
+
+**Driver: `living/tools/nav_arena.py`.** It launches through `verify.py` and uses only existing reducers: `spawn_newcomer`, `spawn_crowd`, `place_at`, `set_behavior`, `set_world_law`, `grant_items`, and for players `join` and `human_act`. Fixtures act through the rules as any character does: the gate-keeper shuts a gate with the gate skill, a builder builds a wall with the build skill, a chaser chases with its graph. Nothing is installed in the subject, and no rule is bypassed for it.
+- **Fresh subjects.** Each walk's subject is a fresh character (a newcomer for N1, otherwise a spawned adult placed at the start), so it begins with no known ground except what a warm-up gives it.
+- **Off and on.** Each phase is run once with `nav_belief` off and once on, each with its own fresh subjects in the same world (the law is world-wide, and changing it between phases changes no character's knowledge).
+- **Replicates.** Five per variant, subject and law: five subjects at a time, started 2 s apart from starts at least 6 m apart.
+- **Recording.**
+  - A body subscription for the arena's characters (every segment, `bodies.jsonl`).
+  - The driver's own log of what it did and when (`stimuli.jsonl`, in the authority's time). The clock is sampled before and after each call, and the spread is kept.
+  - The gate rows (`changed_ms`), the subjects' `act` experiences, and `known_ground` row counts and bytes.
+  - The tick profile (`set_profile`) for `tick.motion` and for ticks over budget.
+
+**Subjects.**
+- **Body only:** a fixed graph per walk (a `goto` to the goal's coordinates; a told route is a `seq` of `goto`s).
+- **Click-to-move:** a player identity per walker, `human_act` `goto` to the same coordinates. The click goes through the same planner as a mind's `goto`.
+- **Minded, fake model (free):** `trials.py` configurations `living/trials/nav-n1-*.json` for N1 only. The newcomer's background sheet holds the three places as its own places, since a told place cannot yet be marked as told. The fake model's replies walk to them by name. This checks that names resolve and the walk completes, not what a mind would choose.
+- **Minded, real model (paid):** the same configurations on the trial models, asked for separately (below).
+
+**Variants as run.**
+- **N1:** (a) the three places in turn as coordinates; (b) a told route, the same goals through two waypoints; (c) Kettlebridge, three places on different terraces; (d) as (a), with the second goal's coordinates 6 m off. In (d), arrival counts at the told point or the nearest reachable point to it, and the distance to the true place is reported.
+- **N2:** warm-up from the start to the goal and back through the gate, then the gate shut (or a wall built on the route) out of the subject's sight, then the walk again. Variants: (a) an alternative way known (a second warm-up walk took it); (b) unknown; (c) the gate shut and then reopened before the subject comes within sight of it.
+- **N3:** 50 and 200 walkers in two opposing streams across the square at a run (2.6 m/s), each with a `seq` of `goto`s between the square's two sides. The subject crosses at right angles. Variants: one stream stopping in the subject's way (its walkers' graphs end in `wait`), and the subject running.
+- **N4 flight:** a chaser (a wolf from `spawn_crowd`'s animals where a wolf can be had, else a person at run speed with a chasing graph) starts 12 m from a subject whose graph flees it, by day and by night. **N4 pursuit:** the subject chases a fixture that walks a fixed route round a house corner, breaking line of sight. Each is run with the subject knowing the ground (a warm-up walk round the block) and not.
+
+**Report: `living/tools/nav_report.py`.** It computes the five measures of §4 and the cost guards from an arm's folder, by the definitions above, plus a self-test on hand-made rows.
+- **Optimal times.** A small Rust example, `living/rules/examples/nav_optimal.rs`, uses the same planner (`living_rules::known` over belief, `nav` over the true map) with no fuel limit. It reads the map's terrain chunks, the subject's `known_ground` and remembered gates at the moment of the order (read by the driver at that moment), the start and the goal. It gives the path's cost in metres at walking pace. The optimal time is that cost ÷ the subject's own pace for the gait (the median speed of its moving segments on open ground).
+- **Stimuli** come from authority rows only:
+  - N1: the order (the driver's call time). A belief arm also counts as stimuli the moments a replan follows a seen contradiction (the body's `path` changing).
+  - N2: the first moment the shut gate or new wall is within the subject's ground sight with a clear line (the map's line test over the tile grid).
+  - N3: a walker's body entering a 4 m cone ahead of the subject (±30°).
+  - N4: the chaser's or fixture's heading changing more than 30° while within the subject's sight.
+- **Latency** is the time from a stimulus to the first subject segment at or after it that turns more than 15° or slows more than 30%, by §4's rule. A stimulus with no such segment within 2 s is counted as "no response", separately.
+- **The leak check:** two subjects, the same start and goal, one with the shortcut walked in warm-up and one without. Their first legs must differ on the on arm. A gate shut out of a subject's sight must leave its `path` unchanged until it is seen.
+
+**Outputs.** `.local/living/nav/<run>/<arena>-<variant>-<law>-<subject>/`. A run summary is added to this section with each arm's measures beside its target. A miss stays a miss.
+
+**The paid arm, proposed, not run** (the owner decides; asked before any call):
+- N1 with a minded newcomer on the trial models: 2 arms (`nav_belief` off and on) × 5 repeats × 20 minutes. That is 10 × ⅓ h × $0.17 ≈ $0.57.
+- A hamlet arm: 11 thinkers × 1 world-hour × 2 arms ≈ $3.8.
+- Together about $4.4, stopped at $6, ceiling $8 with reruns.
+- The design's third arm (belief + known/told targets) is dropped until those targets exist.
+
+**Free cost.** One scratch world at a time on :3361, through the build slot. About 25 runs of 5–15 minutes. No model calls.
+
+### 4.2 Free arena runs (2026-11-18–19)
+
+The Spark run merged main at `0578a37f` into the arena driver at `354fddea`. The scratch worlds used the island seed, SpacetimeDB 2.14.1 and the previous worker's idle `slop-move-stdb` container on loopback port 3361. The scripted body and player orders run without an inference service. The proposed minded fake-model N1 trial requires separate trial configurations.
+
+The driver used the existing reducers and captured initial rows and incremental updates with the 2.14.1 CLI. Its recording selected subjects' `known_ground` by actor and `body` by ID. The 200-walker stress case used the scratch world's full developer body stream. The bench attached its own developer subscription for its body update count. [SpacetimeDB subscriptions](https://spacetimedb.com/docs/clients/subscriptions/) · [table performance](https://spacetimedb.com/docs/tables/performance/)
+
+Each arm attempted five fresh subjects using the body or player entry point. N1–N3 walks used `mind_act` or `human_act`. N4's ongoing body intents used graphs, and its scripted players clicked once a second while the fixture was visible. The N4 fixture chaser was a person and approached from about 12 m until visible. Pursuit fixtures followed short routes around recorded Brackenford corners. The driver scored 60-second N4 windows in each light. The other arms had 90-second profile windows.
+
+Walks that ended in failure contributed to arrival and stall counts through the told outcome time. Travel-ratio percentiles used completed walks with the corresponding optimal time available. The ratio compares a walk ending inside the 2.5 m arrival radius with the optimum to the requested tile. Belief snapshots contain persisted knowledge, which can lag buffered observations. Latency percentiles use qualifying responses with unanswered stimuli counted separately. N1 used order stimuli and N2 used a geometric sight estimate.
+
+The profile log tail often covered a fraction of the requested window. Motion ms/s below normalizes the sampled time by the measured tick rate. Resident counts grew between phases as new subjects joined the same world. The paired cost ratios therefore describe the observed arms, and the exact same-population cost guard remains unverified. The row write rate is the observed rate over each subject's recorded walk or chase window. Each buffered flush may touch multiple rows, and the planner can force a flush. Per-leg fuel requires a metered planner run and is unverified here.
+
+**Smoke checks.** A one-subject N3 run recorded three arrivals in three crossings. The first N4 attempt exposed a harness error because `mind_act` refuses ongoing `flee`; that attempt was discarded. With N4's continuing intents driven through behavior graphs, the rerun recorded one daytime flight. The subject moved about 210 m over 60 s and neither escaped nor reported being cornered. These samples establish that the recordings can follow the harness, and are excluded from the five-replicate arms.
+
+**N1 result.** The off arms arrived within 3× the true optimum on 120/120 walks, with true-map p50 ratios of 0.988–1.083. The on arms reached 110/120 and met the 95% arrival target in 4/8 arms. Eight on walks ended with “could not get there.” The two terraced-town arms missed the belief-map ratio target, including a body p90 of 3.346. The other six met it. True-map p90s were at most 2.988, and all eight medians, 0.970–1.185, fell below the planned 1.2–2.0 interval. The terraced body arm had 0.52 stalls per ten walk-minutes and missed the rate target. The longest stall was 2.5 s. Law-on response p95s were 877–1,975 ms, all above 300 ms. The highest subject write rate in each on arm ranged from 0.897 to 1.356 ground rows/s, above 0.2 in every arm. The offset coordinate in N1-d left the successful subjects 4.14–6.32 m from the true place. One law-on click subject failed the offset walk and stopped 136.39 m from it.
+
+**N2 closed-gate result.** Gate A was confirmed shut and all 20 law-on subjects still remembered it open when ordered. With the alternative gate remembered open, law on reached 1/5 body and 3/5 click walks. With the alternative unremembered, both reached 1/5. Those four arms missed their 95% or 90% targets. The four off arms reached 20/20. All 14 law-on non-arrivals were told “could not get there.” The first leg had a waypoint within 8 m of gate A on 9/20 on walks and 1/20 off walks. The known-alternative body arm missed the belief p50 target at 1.306. The other closed-gate arms met both belief percentiles, and the successful walks met all applicable true-map time thresholds. Three on arms missed the stall rate, and all met the 30-second limit. The on p95 response range was 901–1,871 ms against 150 ms.
+
+The original N2-b attempt had a durability acknowledgement timeout during gate restoration. Its on body result was 2/5 arrivals with three “could not get there” outcomes. The complete rerun moved profiling to the scored walk and supplied the primary N2-b figures. Gate memory and first-leg traces show that subjects with stale open memories could approach the shut gate. The paired same-belief hidden-gate comparison and the matched-start shortcut comparison remain unverified.
+
+The first N2-c run did not establish reopening and stale shut memory together in three of four arms. In the rerun the gate was physically open in all four, and in each law state 4/5 body and 3/5 click subjects still remembered at least one shut tile. All 20 walks arrived, including all 14 with the confirmed contradiction. The on arms met the arrival, belief-ratio and stall targets on the recorded sample. The stale-memory manipulation covered 14/20, and only the closed-gate variants had a gate-seen latency target.
+
+**N3 result.** Both law states reached 120/120 arrivals, with zero recorded stalls or “could not get there” outcomes. All law-on arms met the arrival, belief-map time, true-map time and stuck targets. The law-on p50 and p95 response ranges were 654–1,394 ms and 1,430–1,946 ms, above 50 and 150 ms in every arm. There were 1,266/2,023 unanswered stimuli on and 1,467/2,099 off. The recording found 370 close-contact entries on and 405 off. The runner used the shipped adult walk gait for the crowd's specified 2.6 m/s nominal speed.
+
+In the 200-walker arms, the off body and click tick p99s were 5.99 and 5.33 ms. The on p99s were 16.10 and 29.11 ms. The on click arm missed the 16.7 ms p99 target. Both on arms had two sampled ticks above 16.7 ms that would have been within budget after subtracting measured motion. The samples covered about 11–12% of the profile window. The bench counted 380–416 body row updates/s off and 321–391 on across 482–497 people and 33 animals.
+
+**N4 result.** Flight escapes were 18/40 off and 20/40 on. No body flight was told “cornered” in either law state (0/20 each), so the on body arms met the 10% target. The player procedure used click-to-move and did not exercise the authority's `flee` outcome. Pursuit capture was 37/40 off and 36/40 on. Reacquisition was 5/8 off and 13/15 on among losses where the target remained within 10 m of its last-seen position. Five on arms met 70%, two missed at 1/2 and 2/3, and one had no eligible loss. No N4 arm recorded a stall. The law-on turn-response latency target passed in one arm (70/70 ms), missed in nine and could not be scored in six. There were 37 unanswered stimuli out of 53 on. One subject disappeared during the original known-ground flight warm-up. The two missing night arms ran on a fresh scratch world, and all ten chases started.
+
+**Cost and release gate.** The 76 selected arms recorded 700 walks or chases. Over those arms, the world held 708–1,444 ground rows with 271,872–554,496 bytes of cell and epoch payload. The edit log held zero rows. The maximum observed subject write rate exceeded 0.2 rows/s in 30/38 law-on arms, reaching 1.522 rows/s. The eight arms at or below the limit were N4 pursuit observation windows. Sampled on/off motion ratios ranged from 0.29× to 4.40×, with nine above 2× across 37 comparable log samples. The recorded sample covered 11.2–18.8% of the profiling intervals. Reported replans count body-path changes and can include progress along an existing path. The release targets were missed. Across N1–N3, the law-on arms recorded 22 “could not get there” outcomes in 270 walks, and the off arms recorded zero. N4 had one additional matching outcome among 1,629 scripted law-on clicks, which repeat within the same chase.
+
+**Checks and evidence.** The cold release build of `nav_optimal`, `just living-check` through the build slot, `nav_report.py selftest`, Python compilation, and `git diff --check` passed. Smoke runs and superseded reruns are preserved alongside the selected captures in `~/slop-evidence/nav-arenas-2026-11-19.tar.zst`. Scratch worlds were paused and read back before deletion.
+
+**Separate planner proposal.** A recorded “could not get there” is an authority outcome shared by multiple ways for a walk to fail. The 24-attempt wall case is a hypothesis until the planner exposes which exit it took. Refine the belief search's coarse graph to distinguish connected components or reachable boundary crossings within a chunk. When a proposed edge fails on known ground, refine that chunk's connectivity so the coarse search can bypass the observed barrier. Treat unknown cells as traversable at the existing unknown cost. Bound the work per steering update and keep the search frontier when it hits that budget. Test the closed-wall case against the exact belief search, including an actual no-way case and an identical-belief pair with different hidden gate states. Run the same arms to check the fuel and latency impact before changing the shipped default.
+
+**Paid work remains a separate decision.** The proposal is ten N1 model runs, five per law state at 20 minutes each (about $0.57), and two one-world-hour hamlet runs with 11 thinkers (about $3.8). Estimated total $4.4 with a $6 stop. This run made zero provider calls.
+
+#### Per-arm results
+
+A dash indicates an unavailable or inapplicable measure. N4 flight outcomes are shown by light and controller.
+
+##### Walks
+
+| Arm | Arrived within 3× | Belief p50 / p90 | True p50 / p90 | Stuck per 10 min / longest s | Latency p50 / p95 ms | No response / stimuli | Could not get there |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `n1-a-off-body` | 15/15 | 0.887 / 1.061 | 1.033 / 1.104 | 0 / 0 | 322 / 1306.3 | 8 / 15 | 0 |
+| `n1-a-on-body` | 13/15 | 0.925 / 0.939 | 1.026 / 1.141 | 0 / 0 | 528 / 1900.95 | 1 / 15 | 2 |
+| `n1-a-off-click` | 15/15 | 0.948 / 1.025 | 1.029 / 1.166 | 0 / 0 | 329 / 1880.2 | 6 / 15 | 0 |
+| `n1-a-on-click` | 15/15 | 0.915 / 1.055 | 1.063 / 1.084 | 0 / 0 | 508 / 1855 | 2 / 15 | 0 |
+| `n1-b-off-body` | 15/15 | 0.864 / 1.064 | 1.034 / 1.106 | 0 / 0 | 207.5 / 620.9 | 3 / 15 | 0 |
+| `n1-b-on-body` | 15/15 | 0.883 / 1.035 | 1.018 / 1.077 | 0 / 0 | 270 / 1055 | 4 / 15 | 0 |
+| `n1-b-off-click` | 15/15 | 0.869 / 0.958 | 0.988 / 1.056 | 0 / 0 | 313 / 1697.9 | 0 / 15 | 0 |
+| `n1-b-on-click` | 15/15 | 0.891 / 0.963 | 0.97 / 1.003 | 0 / 0 | 675.5 / 1723.35 | 3 / 15 | 0 |
+| `n1-c-off-body` | 15/15 | 1.14 / 1.324 | 1.082 / 1.141 | 0 / 0 | 316 / 561 | 4 / 15 | 0 |
+| `n1-c-on-body` | 11/15 | 1.164 / 3.346 | 1.183 / 2.988 | 0.52 / 2.5 | 507 / 1492.4 | 2 / 15 | 2 |
+| `n1-c-off-click` | 15/15 | 1.107 / 1.32 | 1.083 / 1.113 | 0 / 0 | 328.5 / 458.75 | 3 / 15 | 0 |
+| `n1-c-on-click` | 13/15 | 1.166 / 2.661 | 1.185 / 2.161 | 0 / 0 | 372 / 877.35 | 5 / 15 | 2 |
+| `n1-d-off-body` | 15/15 | 0.891 / 0.949 | 1.024 / 1.075 | 0 / 0 | 382 / 483.5 | 5 / 15 | 0 |
+| `n1-d-on-body` | 15/15 | 0.905 / 0.949 | 0.975 / 1.138 | 0 / 0 | 591 / 1974.6 | 1 / 15 | 0 |
+| `n1-d-off-click` | 15/15 | 0.872 / 1.005 | 1.013 / 1.058 | 0 / 0 | 219.5 / 1993.3 | 5 / 15 | 0 |
+| `n1-d-on-click` | 13/15 | 0.977 / 1.016 | 1.077 / 1.121 | 0 / 0 | 444 / 1924.6 | 2 / 15 | 2 |
+| `n2-a-off-body` | 5/5 | 1.072 / 1.115 | 1.038 / 1.091 | 0 / 0 | 1828 / 1902.6 | 0 / 5 | 0 |
+| `n2-a-on-body` | 1/5 | 1.306 / 1.306 | 1.283 / 1.283 | 29.68 / 2.5 | 1741 / 1741 | 4 / 5 | 4 |
+| `n2-a-off-click` | 5/5 | 1.092 / 1.115 | 1.046 / 1.115 | 0 / 0 | 1810 / 1950.8 | 0 / 5 | 0 |
+| `n2-a-on-click` | 3/5 | 1.196 / 1.323 | 1.252 / 1.27 | 1.83 / 2.2 | 1602 / 1602 | 4 / 5 | 2 |
+| `n2-b-off-body` | 5/5 | 1.118 / 1.144 | 1.084 / 1.095 | 0 / 0 | 1753 / 1949.2 | 2 / 5 | 0 |
+| `n2-b-on-body` | 1/5 | 1.076 / 1.076 | 1.069 / 1.069 | 0 / 0 | 352 / 901 | 2 / 5 | 4 |
+| `n2-b-off-click` | 5/5 | 1.101 / 1.125 | 1.037 / 1.114 | 0 / 0 | — / — | 5 / 5 | 0 |
+| `n2-b-on-click` | 1/5 | 1.194 / 1.194 | 1.121 / 1.121 | 2.24 / 2.8 | 1441 / 1871.2 | 0 / 5 | 4 |
+| `n2-c-off-body` | 5/5 | 1.111 / 1.13 | 1.115 / 1.135 | 0 / 0 | — / — | 0 / 0 | 0 |
+| `n2-c-on-body` | 5/5 | 1.066 / 1.085 | 1.076 / 1.098 | 0 / 0 | — / — | 0 / 0 | 0 |
+| `n2-c-off-click` | 5/5 | 1.096 / 1.125 | 1.112 / 1.127 | 0 / 0 | — / — | 0 / 0 | 0 |
+| `n2-c-on-click` | 5/5 | 1.052 / 1.109 | 1.085 / 1.096 | 0 / 0 | — / — | 0 / 0 | 0 |
+| `n3-run-off-body` | 15/15 | 1.008 / 2.058 | 1.008 / 2.058 | 0 / 0 | 1196 / 1671 | 102 / 118 | 0 |
+| `n3-run-on-body` | 15/15 | 1.011 / 1.063 | 1.011 / 1.063 | 0 / 0 | 1137.5 / 1735.6 | 84 / 112 | 0 |
+| `n3-run-off-click` | 15/15 | 1.021 / 1.068 | 1.021 / 1.068 | 0 / 0 | — / — | 91 / 91 | 0 |
+| `n3-run-on-click` | 15/15 | 1.038 / 1.092 | 1.038 / 1.092 | 0 / 0 | 869 / 1597.55 | 85 / 105 | 0 |
+| `n3-stop-off-body` | 15/15 | 1.012 / 1.034 | 1.012 / 1.034 | 0 / 0 | 488 / 1788.9 | 121 / 129 | 0 |
+| `n3-stop-on-body` | 15/15 | 0.988 / 1.039 | 0.988 / 1.039 | 0 / 0 | 777 / 1946.4 | 106 / 125 | 0 |
+| `n3-stop-off-click` | 15/15 | 0.976 / 1.001 | 0.976 / 1.001 | 0 / 0 | 994 / 1831.6 | 112 / 126 | 0 |
+| `n3-stop-on-click` | 15/15 | 0.996 / 1.157 | 0.996 / 1.157 | 0 / 0 | 867 / 1877 | 95 / 112 | 0 |
+| `n3-w200-off-body` | 15/15 | 1.323 / 1.596 | 1.323 / 1.596 | 0 / 0 | 920 / 1958.7 | 390 / 609 | 0 |
+| `n3-w200-on-body` | 15/15 | 0.994 / 1.044 | 0.994 / 1.044 | 0 / 0 | 654 / 1822.4 | 307 / 706 | 0 |
+| `n3-w200-off-click` | 15/15 | 1.002 / 1.022 | 1.002 / 1.022 | 0 / 0 | 838.5 / 1914.5 | 398 / 720 | 0 |
+| `n3-w200-on-click` | 15/15 | 0.996 / 1.011 | 0.996 / 1.011 | 0 / 0 | 1033.5 / 1919.25 | 334 / 560 | 0 |
+| `n3-w50-off-body` | 15/15 | 0.986 / 1.029 | 0.986 / 1.029 | 0 / 0 | 1203 / 1950.2 | 132 / 157 | 0 |
+| `n3-w50-on-body` | 15/15 | 0.983 / 1.12 | 0.983 / 1.12 | 0 / 0 | 801.5 / 1429.7 | 132 / 150 | 0 |
+| `n3-w50-off-click` | 15/15 | 0.992 / 1.022 | 0.992 / 1.022 | 0 / 0 | 1234 / 1794.5 | 121 / 149 | 0 |
+| `n3-w50-on-click` | 15/15 | 0.993 / 1.015 | 0.993 / 1.015 | 0 / 0 | 1394 / 1903.95 | 123 / 153 | 0 |
+
+##### Chase and flight
+
+| Arm | World hour | Valid / attempted | Escaped / cornered | Reacquired / eligible losses | Captured / valid pursuits | Stuck per 10 min | Latency p50 / p95 ms | No response / stimuli |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `n4-fk-off-body-day` | 8.71 | 5 / 5 | 60.0% / 0.0% | — / — | — | 0 | 866 / 1584 | 7 / 15 |
+| `n4-fk-on-body-day` | 15.89 | 5 / 5 | 60.0% / 0.0% | — / — | — | 0 | — / — | 0 / 0 |
+| `n4-fk-off-click-day` | 12.32 | 5 / 5 | 0.0% / 0.0% | — / — | — | 0 | — / — | 0 / 0 |
+| `n4-fk-on-click-day` | 6.36 | 5 / 5 | 40.0% / 0.0% | — / — | — | 0 | 110 / 110 | 14 / 15 |
+| `n4-fk-off-body-night` | 20.1 | 5 / 5 | 40.0% / 0.0% | — / — | — | 0 | 378 / 980.4 | 6 / 11 |
+| `n4-fk-on-body-night` | 20.39 | 5 / 5 | 60.0% / 0.0% | — / — | — | 0 | 666 / 711 | 5 / 7 |
+| `n4-fk-off-click-night` | 0.3 | 5 / 5 | 40.0% / 0.0% | — / — | — | 0 | — / — | 4 / 4 |
+| `n4-fk-on-click-night` | 23.88 | 5 / 5 | 40.0% / 0.0% | — / — | — | 0 | 298 / 298 | 5 / 6 |
+| `n4-fu-off-body-day` | 7.4 | 5 / 5 | 60.0% / 0.0% | — / — | — | 0 | — / — | 0 / 0 |
+| `n4-fu-on-body-day` | 12.08 | 5 / 5 | 60.0% / 0.0% | — / — | — | 0 | — / — | 0 / 0 |
+| `n4-fu-off-click-day` | 9.75 | 5 / 5 | 60.0% / 0.0% | — / — | — | 0 | — / — | 0 / 0 |
+| `n4-fu-on-click-day` | 14.39 | 5 / 5 | 40.0% / 0.0% | — / — | — | 0 | 801 / 1042.8 | 6 / 11 |
+| `n4-fu-off-body-night` | 20.35 | 5 / 5 | 100.0% / 0.0% | — / — | — | 0 | 874 / 984 | 4 / 8 |
+| `n4-fu-on-body-night` | 0.97 | 5 / 5 | 60.0% / 0.0% | — / — | — | 0 | 625 / 670 | 1 / 3 |
+| `n4-fu-off-click-night` | 22.66 | 5 / 5 | 0.0% / 0.0% | — / — | — | 0 | — / — | 1 / 1 |
+| `n4-fu-on-click-night` | 3.29 | 5 / 5 | 40.0% / 0.0% | — / — | — | 0 | — / — | 6 / 6 |
+| `n4-pk-off-body-day` | 8.19 | 5 / 5 | — / — | 1 / 1 | 5 / 5 | 0 | 64 / 64 | 0 / 1 |
+| `n4-pk-on-body-day` | 13.99 | 5 / 5 | — / — | 1 / 2 | 3 / 5 | 0 | — / — | 0 / 0 |
+| `n4-pk-off-click-day` | 11.2 | 5 / 5 | — / — | 2 / 2 | 5 / 5 | 0 | — / — | 0 / 0 |
+| `n4-pk-on-click-day` | 16.81 | 5 / 5 | — / — | 2 / 2 | 5 / 5 | 0 | 70 / 70 | 0 / 1 |
+| `n4-pk-off-body-night` | 20.2 | 5 / 5 | — / — | 0 / 1 | 4 / 5 | 0 | — / — | 0 / 0 |
+| `n4-pk-on-body-night` | 1.87 | 5 / 5 | — / — | 1 / 1 | 4 / 5 | 0 | 108 / 108 | 0 / 1 |
+| `n4-pk-off-click-night` | 23.03 | 5 / 5 | — / — | 0 / 1 | 4 / 5 | 0 | — / — | 0 / 0 |
+| `n4-pk-on-click-night` | 20.36 | 5 / 5 | — / — | 3 / 3 | 5 / 5 | 0 | 492 / 492 | 0 / 1 |
+| `n4-pu-off-body-day` | 7.59 | 5 / 5 | — / — | 0 / 0 | 5 / 5 | 0 | 233 / 233 | 0 / 1 |
+| `n4-pu-on-body-day` | 12.27 | 5 / 5 | — / — | 0 / 0 | 5 / 5 | 0 | 100 / 100 | 0 / 1 |
+| `n4-pu-off-click-day` | 9.9 | 5 / 5 | — / — | 0 / 0 | 5 / 5 | 0 | 175.5 / 323.55 | 0 / 2 |
+| `n4-pu-on-click-day` | 14.73 | 5 / 5 | — / — | 2 / 2 | 5 / 5 | 0 | 128 / 128 | 0 / 1 |
+| `n4-pu-off-body-night` | 20.09 | 5 / 5 | — / — | 1 / 2 | 4 / 5 | 0 | — / — | 0 / 0 |
+| `n4-pu-on-body-night` | 1.2 | 5 / 5 | — / — | 2 / 2 | 5 / 5 | 0 | — / — | 0 / 0 |
+| `n4-pu-off-click-night` | 22.78 | 5 / 5 | — / — | 1 / 1 | 5 / 5 | 0 | — / — | 0 / 0 |
+| `n4-pu-on-click-night` | 3.55 | 5 / 5 | — / — | 2 / 3 | 4 / 5 | 0 | — / — | 0 / 0 |
+
+##### Cost guards
+
+| Arm | People / animals | Motion ms/s / p99 ms | Tick p99 ms / over budget / after adding motion | Tick samples | Replans / walk | Ground rows / payload bytes | Ground writes / actor-second (mean / max) | Ground edits | Body updates/s |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `n1-a-off-body` | 282 / 33 | 6.75 / 0.55 | 4.078 / 0 / 0 | 922 | 3.4 | 737 / 283008 | 0.266 / 0.279 | 0 | 131.1 |
+| `n1-a-on-body` | 292 / 33 | 10.94 / 0.86 | 19.788 / 19 / 2 | 860 | 6.67 | 878 / 337152 | 1.185 / 1.356 | 0 | 143 |
+| `n1-a-off-click` | 287 / 33 | 9.89 / 0.719 | 5.79 / 1 / 1 | 894 | 3.47 | 803 / 308352 | 0.255 / 0.262 | 0 | 138 |
+| `n1-a-on-click` | 297 / 33 | 19.09 / 1.03 | 11.466 / 4 / 1 | 909 | 5 | 913 / 350592 | 0.861 / 0.897 | 0 | 90.7 |
+| `n1-b-off-body` | 282 / 33 | 7.67 / 0.542 | 4.042 / 0 / 0 | 924 | 4.2 | 734 / 281856 | 0.269 / 0.291 | 0 | 131.3 |
+| `n1-b-on-body` | 292 / 33 | 11.04 / 1.2 | 21.741 / 14 / 1 | 869 | 3.53 | 865 / 332160 | 1.181 / 1.222 | 0 | 146.4 |
+| `n1-b-off-click` | 287 / 33 | 7.14 / 0.498 | 3.971 / 0 / 0 | 909 | 4.13 | 788 / 302592 | 0.254 / 0.275 | 0 | 141.4 |
+| `n1-b-on-click` | 297 / 33 | 5.03 / 0.323 | 8.963 / 1 / 0 | 908 | 3.2 | 900 / 345600 | 0.971 / 1.006 | 0 | 98.3 |
+| `n1-c-off-body` | 282 / 33 | 6.76 / 0.512 | 4.02 / 0 / 0 | 921 | 5.33 | 738 / 283392 | 0.324 / 0.384 | 0 | 130.2 |
+| `n1-c-on-body` | 292 / 33 | 5.12 / 0.514 | 17.427 / 10 / 0 | 884 | 28.87 | 930 / 357120 | 0.951 / 1.115 | 0 | 122.8 |
+| `n1-c-off-click` | 287 / 33 | 8.84 / 0.638 | 8.617 / 2 / 0 | 899 | 5.33 | 834 / 320256 | 0.332 / 0.394 | 0 | 149.2 |
+| `n1-c-on-click` | 297 / 33 | 13.54 / 0.523 | 39.746 / 25 / 1 | 877 | 20.2 | 1028 / 394752 | 1.074 / 1.151 | 0 | 62.9 |
+| `n1-d-off-body` | 282 / 33 | 6.88 / 0.499 | 4.054 / 0 / 0 | 920 | 4.27 | 732 / 281088 | 0.261 / 0.274 | 0 | 132.6 |
+| `n1-d-on-body` | 292 / 33 | 9.17 / 0.697 | 19.837 / 14 / 2 | 863 | 6.07 | 880 / 337920 | 1.158 / 1.18 | 0 | 153.8 |
+| `n1-d-off-click` | 287 / 33 | 8.04 / 0.557 | 4.781 / 0 / 0 | 895 | 3.53 | 805 / 309120 | 0.25 / 0.26 | 0 | 150.9 |
+| `n1-d-on-click` | 297 / 33 | 5.26 / 0.432 | 9.017 / 0 / 0 | 915 | 5.33 | 916 / 351744 | 0.809 / 0.938 | 0 | 90.3 |
+| `n2-a-off-body` | 282 / 33 | 4.19 / 0.258 | 3.862 / 0 / 0 | 931 | 11.4 | 837 / 321408 | 0.198 / 0.237 | 0 | 104.5 |
+| `n2-a-on-body` | 292 / 30 | 12.88 / 2.026 | 14.125 / 4 / 1 | 833 | 12 | 1084 / 416256 | 0.437 / 0.747 | 0 | 103.4 |
+| `n2-a-off-click` | 287 / 33 | 7.91 / 0.919 | 5.637 / 0 / 0 | 869 | 12 | 926 / 355584 | 0.305 / 0.327 | 0 | 141.4 |
+| `n2-a-on-click` | 297 / 27 | 7.84 / 0.535 | 8.901 / 2 / 2 | 910 | 13.2 | 1148 / 440832 | 0.237 / 0.523 | 0 | 68.1 |
+| `n2-b-off-body` | 282 / 33 | 6.11 / 0.498 | 4.233 / 0 / 0 | 904 | 13.4 | 797 / 306048 | 0.222 / 0.295 | 0 | 140.4 |
+| `n2-b-on-body` | 292 / 33 | 9.09 / 0.833 | 18.555 / 10 / 0 | 865 | 8.6 | 981 / 376704 | 1.007 / 1.375 | 0 | 120.3 |
+| `n2-b-off-click` | 287 / 33 | 1.76 / 0.271 | 3.193 / 0 / 0 | 954 | 12.4 | 871 / 334464 | 0.13 / 0.184 | 0 | 33.3 |
+| `n2-b-on-click` | 297 / 31 | 5.53 / 0.478 | 25.704 / 15 / 0 | 850 | 12.4 | 1087 / 417408 | 0.473 / 0.65 | 0 | 62.1 |
+| `n2-c-off-body` | 282 / 33 | 6.11 / 0.476 | 4.149 / 0 / 0 | 912 | 11.8 | 822 / 315648 | 0.24 / 0.294 | 0 | 142.1 |
+| `n2-c-on-body` | 292 / 32 | 8.83 / 0.541 | 10.313 / 4 / 2 | 862 | 10.2 | 986 / 378624 | 0.643 / 0.875 | 0 | 103.9 |
+| `n2-c-off-click` | 287 / 33 | 2.94 / 0.346 | 4.64 / 0 / 0 | 940 | 12 | 879 / 337536 | 0.153 / 0.196 | 0 | 38 |
+| `n2-c-on-click` | 297 / 30 | 7.15 / 0.393 | 93.239 / 9 / 0 | 829 | 14.6 | 1116 / 428544 | 0.482 / 0.863 | 0 | 79.2 |
+| `n3-run-off-body` | 332 / 33 | 10.58 / 0.59 | 4.706 / 0 / 0 | 829 | 0.27 | 863 / 331392 | 0.127 / 0.231 | 0 | 161.7 |
+| `n3-run-on-body` | 342 / 33 | 12.14 / 0.735 | 23.812 / 20 / 2 | 781 | 0 | 954 / 366336 | 0.377 / 0.429 | 0 | 177.8 |
+| `n3-run-off-click` | 337 / 33 | 9.67 / 0.584 | 4.684 / 0 / 0 | 814 | 0.07 | 915 / 351360 | 0.144 / 0.171 | 0 | 180.3 |
+| `n3-run-on-click` | 347 / 33 | 10.24 / 0.397 | 11.656 / 1 / 0 | 817 | 0 | 984 / 377856 | 0.391 / 0.452 | 0 | 124.7 |
+| `n3-stop-off-body` | 332 / 33 | 6.75 / 0.464 | 3.482 / 0 / 0 | 834 | 0.2 | 848 / 325632 | 0.118 / 0.162 | 0 | 145.1 |
+| `n3-stop-on-body` | 342 / 33 | 14.02 / 2.744 | 24.954 / 26 / 5 | 791 | 0 | 961 / 369024 | 0.373 / 0.41 | 0 | 154.3 |
+| `n3-stop-off-click` | 337 / 33 | 7.48 / 0.475 | 3.975 / 0 / 0 | 818 | 0 | 908 / 348672 | 0.102 / 0.129 | 0 | 151.6 |
+| `n3-stop-on-click` | 347 / 33 | 8.45 / 0.614 | 11.069 / 2 / 1 | 818 | 0.27 | 992 / 380928 | 0.335 / 0.368 | 0 | 115.1 |
+| `n3-w200-off-body` | 482 / 33 | 28.8 / 1.01 | 5.992 / 0 / 0 | 623 | 0.6 | 1322 / 507648 | 0.089 / 0.124 | 0 | 380.3 |
+| `n3-w200-on-body` | 492 / 33 | 31.66 / 1.091 | 16.1 / 3 / 2 | 626 | 0.07 | 1421 / 545664 | 0.373 / 0.425 | 0 | 390.9 |
+| `n3-w200-off-click` | 487 / 33 | 19.21 / 0.731 | 5.329 / 0 / 0 | 631 | 0 | 1377 / 528768 | 0.114 / 0.13 | 0 | 415.9 |
+| `n3-w200-on-click` | 497 / 33 | 22.45 / 0.759 | 29.108 / 23 / 2 | 660 | 0.07 | 1444 / 554496 | 0.347 / 0.392 | 0 | 320.5 |
+| `n3-w50-off-body` | 332 / 33 | 8.96 / 0.5 | 4.144 / 0 / 0 | 832 | 0 | 868 / 333312 | 0.118 / 0.133 | 0 | 158.8 |
+| `n3-w50-on-body` | 342 / 33 | 8.9 / 1.196 | 17.918 / 9 / 1 | 798 | 0.2 | 975 / 374400 | 0.35 / 0.38 | 0 | 172.4 |
+| `n3-w50-off-click` | 337 / 33 | 11.58 / 0.678 | 5.12 / 0 / 0 | 818 | 0 | 917 / 352128 | 0.11 / 0.138 | 0 | 180.1 |
+| `n3-w50-on-click` | 347 / 33 | 6.98 / 0.308 | 10.093 / 0 / 0 | 825 | 0 | 1012 / 388608 | 0.347 / 0.393 | 0 | 135.4 |
+| `n4-fk-off-body-day` | 287 / 33 | 9.43 / 0.619 | 4.231 / 0 / 0 | 628 | — | 748 / 287232 | 0.236 / 0.365 | 0 | 142.3 |
+| `n4-fk-on-body-day` | 307 / 33 | 11.46 / 0.839 | 24.672 / 16 / 0 | 575 | — | 926 / 355584 | 0.18 / 0.366 | 0 | 159.6 |
+| `n4-fk-off-click-day` | 297 / 33 | 8.89 / 0.551 | 4.644 / 0 / 0 | 601 | — | 844 / 324096 | 0.303 / 0.351 | 0 | 164.3 |
+| `n4-fk-on-click-day` | 317 / 33 | 34.87 / 2.932 | 189.684 / 31 / 1 | 518 | — | 1042 / 400128 | 0.842 / 1.522 | 0 | 150.1 |
+| `n4-fk-off-body-night` | 327 / 32 | 11.52 / 0.912 | 4.846 / 0 / 0 | 584 | — | 1206 / 463104 | 0.173 / 0.254 | 0 | 127.3 |
+| `n4-fk-on-body-night` | 287 / 33 | 5.4 / 0.299 | 5.321 / 0 / 0 | 641 | — | 833 / 319872 | 0.136 / 0.306 | 0 | 93.3 |
+| `n4-fk-off-click-night` | 334 / 32 | 8.55 / 0.712 | 4.622 / 0 / 0 | 540 | — | 1263 / 484992 | 0.172 / 0.237 | 0 | 87.5 |
+| `n4-fk-on-click-night` | 297 / 33 | 4.74 / 0.286 | 3.261 / 0 / 0 | 647 | — | 888 / 340992 | 0.701 / 1.124 | 0 | 56.7 |
+| `n4-fu-off-body-day` | 287 / 33 | 7.19 / 0.539 | 4.118 / 0 / 0 | 624 | — | 723 / 277632 | 0.206 / 0.332 | 0 | 144.9 |
+| `n4-fu-on-body-day` | 307 / 33 | 14.91 / 1.494 | 18.897 / 9 / 2 | 576 | — | 881 / 338304 | 0.16 / 0.301 | 0 | 168.2 |
+| `n4-fu-off-click-day` | 297 / 33 | 8.77 / 0.654 | 4.631 / 0 / 0 | 601 | — | 808 / 310272 | 0.2 / 0.368 | 0 | 149 |
+| `n4-fu-on-click-day` | 317 / 33 | 10.24 / 0.617 | 17.485 / 8 / 3 | 562 | — | 951 / 365184 | 0.884 / 1.38 | 0 | 163.9 |
+| `n4-fu-off-body-night` | 327 / 33 | 4.03 / 0.433 | 3.491 / 0 / 0 | 598 | — | 1029 / 395136 | 0.111 / 0.203 | 0 | 85.4 |
+| `n4-fu-on-body-night` | 347 / 33 | 5.59 / 0.327 | 10.509 / 2 / 0 | 573 | — | 1124 / 431616 | 0.132 / 0.22 | 0 | 53 |
+| `n4-fu-off-click-night` | 337 / 33 | 4.63 / 0.301 | 2.939 / 0 / 0 | 608 | — | 1078 / 413952 | 0.217 / 0.237 | 0 | 70.6 |
+| `n4-fu-on-click-night` | 357 / 33 | 3.99 / 0.24 | 3.946 / 0 / 0 | 558 | — | 1174 / 450816 | 0.887 / 1.078 | 0 | 60.6 |
+| `n4-pk-off-body-day` | 287 / 33 | — / 0.416 | 3.819 / 0 / 0 | 625 | — | 719 / 276096 | 0.013 / 0.05 | 0 | 113.3 |
+| `n4-pk-on-body-day` | 307 / 33 | 7.63 / 1.582 | 16.301 / 4 / 0 | 576 | — | 852 / 327168 | 0.017 / 0.05 | 0 | 139.9 |
+| `n4-pk-off-click-day` | 297 / 33 | 6.38 / 0.456 | 4.532 / 0 / 0 | 601 | — | 794 / 304896 | 0.013 / 0.033 | 0 | 143.5 |
+| `n4-pk-on-click-day` | 317 / 33 | 13.52 / 4.861 | 18.273 / 8 / 1 | 565 | — | 906 / 347904 | 0.043 / 0.066 | 0 | 142.3 |
+| `n4-pk-off-body-night` | 327 / 33 | 4.95 / 0.437 | 4.624 / 0 / 0 | 592 | — | 956 / 367104 | 0.003 / 0.017 | 0 | 75.8 |
+| `n4-pk-on-body-night` | 347 / 33 | 1.45 / 0.142 | 2.51 / 0 / 0 | 572 | — | 1020 / 391680 | 0.003 / 0.017 | 0 | 36.5 |
+| `n4-pk-off-click-night` | 337 / 33 | 2.52 / 0.213 | 4.049 / 0 / 0 | 587 | — | 991 / 380544 | 0.01 / 0.017 | 0 | 47.4 |
+| `n4-pk-on-click-night` | 357 / 33 | 11.08 / 0.509 | 9.189 / 2 / 2 | 533 | — | 1195 / 458880 | 0.007 / 0.017 | 0 | 113.1 |
+| `n4-pu-off-body-day` | 287 / 33 | 6.05 / 0.487 | 4.131 / 0 / 0 | 622 | — | 708 / 271872 | 0.023 / 0.033 | 0 | 126.4 |
+| `n4-pu-on-body-day` | 307 / 33 | 12.64 / 6.518 | 18.815 / 9 / 1 | 575 | — | 830 / 318720 | 0.021 / 0.03 | 0 | 138.1 |
+| `n4-pu-off-click-day` | 297 / 33 | 6.15 / 0.489 | 4.067 / 0 / 0 | 600 | — | 768 / 294912 | 0.06 / 0.082 | 0 | 134.6 |
+| `n4-pu-on-click-day` | 317 / 33 | 9.61 / 1.945 | 17.721 / 10 / 2 | 559 | — | 888 / 340992 | 0.056 / 0.082 | 0 | 148.8 |
+| `n4-pu-off-body-night` | 327 / 33 | 3.24 / 0.24 | 4.479 / 1 / 0 | 591 | — | 960 / 368640 | 0.026 / 0.033 | 0 | 69.3 |
+| `n4-pu-on-body-night` | 347 / 33 | 2.29 / 0.215 | 15.018 / 2 / 0 | 569 | — | 1029 / 395136 | 0.056 / 0.066 | 0 | 31.9 |
+| `n4-pu-off-click-night` | 337 / 33 | 2.37 / 0.229 | 2.937 / 0 / 0 | 606 | — | 996 / 382464 | 0.033 / 0.033 | 0 | 42.7 |
+| `n4-pu-on-click-night` | 357 / 33 | 3.75 / 0.274 | 11.855 / 0 / 0 | 549 | — | 1065 / 408960 | 0.03 / 0.049 | 0 | 37.3 |
+
+##### Law-on target decisions
+
+| Arm | Applicable targets and measured values |
+| --- | --- |
+| `n1-a-on-body` | arrivals miss (0.867) · belief met (0.925/0.939) · truth miss (1.026/1.141) · stuck met (0.0/0.0) · latency miss (1900.95) · writes miss (1.356) |
+| `n1-a-on-click` | arrivals met (1.0) · belief met (0.915/1.055) · truth miss (1.063/1.084) · stuck met (0.0/0.0) · latency miss (1855.0) · writes miss (0.897) |
+| `n1-b-on-body` | arrivals met (1.0) · belief met (0.883/1.035) · truth miss (1.018/1.077) · stuck met (0.0/0.0) · latency miss (1055.0) · writes miss (1.222) |
+| `n1-b-on-click` | arrivals met (1.0) · belief met (0.891/0.963) · truth miss (0.97/1.003) · stuck met (0.0/0.0) · latency miss (1723.35) · writes miss (1.006) |
+| `n1-c-on-body` | arrivals miss (0.733) · belief miss (1.164/3.346) · truth miss (1.183/2.988) · stuck miss (0.52/2.5) · latency miss (1492.4) · writes miss (1.115) |
+| `n1-c-on-click` | arrivals miss (0.867) · belief miss (1.166/2.661) · truth miss (1.185/2.161) · stuck met (0.0/0.0) · latency miss (877.35) · writes miss (1.151) |
+| `n1-d-on-body` | arrivals met (1.0) · belief met (0.905/0.949) · truth miss (0.975/1.138) · stuck met (0.0/0.0) · latency miss (1974.6) · writes miss (1.18) |
+| `n1-d-on-click` | arrivals miss (0.867) · belief met (0.977/1.016) · truth miss (1.077/1.121) · stuck met (0.0/0.0) · latency miss (1924.6) · writes miss (0.938) |
+| `n2-a-on-body` | arrivals miss (0.2) · belief miss (1.306/1.306) · truth met (1.283) · stuck miss (29.68/2.5) · latency miss (1741.0) · writes miss (0.747) |
+| `n2-a-on-click` | arrivals miss (0.6) · belief met (1.196/1.323) · truth met (1.252) · stuck miss (1.83/2.2) · latency miss (1602.0) · writes miss (0.523) |
+| `n2-b-on-body` | arrivals miss (0.2) · belief met (1.076/1.076) · truth met (1.069/1.069) · stuck met (0.0/0.0) · latency miss (901.0) · writes miss (1.375) |
+| `n2-b-on-click` | arrivals miss (0.2) · belief met (1.194/1.194) · truth met (1.121/1.121) · stuck miss (2.24/2.8) · latency miss (1871.2) · writes miss (0.65) |
+| `n2-c-on-body` | reopening fixture incomplete · arrivals met (1.0) · belief met (1.066/1.085) · stuck met (0.0/0.0) · writes miss (0.875) |
+| `n2-c-on-click` | reopening fixture incomplete · arrivals met (1.0) · belief met (1.052/1.109) · stuck met (0.0/0.0) · writes miss (0.863) |
+| `n3-run-on-body` | arrivals met (1.0) · belief met (1.011/1.063) · truth met (1.011) · stuck met (0.0/0.0) · latency miss (1137.5/1735.6) · writes miss (0.429) |
+| `n3-run-on-click` | arrivals met (1.0) · belief met (1.038/1.092) · truth met (1.038) · stuck met (0.0/0.0) · latency miss (869.0/1597.55) · writes miss (0.452) |
+| `n3-stop-on-body` | arrivals met (1.0) · belief met (0.988/1.039) · truth met (0.988) · stuck met (0.0/0.0) · latency miss (777.0/1946.4) · writes miss (0.41) |
+| `n3-stop-on-click` | arrivals met (1.0) · belief met (0.996/1.157) · truth met (0.996) · stuck met (0.0/0.0) · latency miss (867.0/1877.0) · writes miss (0.368) |
+| `n3-w200-on-body` | arrivals met (1.0) · belief met (0.994/1.044) · truth met (0.994) · stuck met (0.0/0.0) · latency miss (654.0/1822.4) · writes miss (0.425) · 200-crowd tick miss (16.1/2) |
+| `n3-w200-on-click` | arrivals met (1.0) · belief met (0.996/1.011) · truth met (0.996) · stuck met (0.0/0.0) · latency miss (1033.5/1919.25) · writes miss (0.392) · 200-crowd tick miss (29.108/2) |
+| `n3-w50-on-body` | arrivals met (1.0) · belief met (0.983/1.12) · truth met (0.983) · stuck met (0.0/0.0) · latency miss (801.5/1429.7) · writes miss (0.38) |
+| `n3-w50-on-click` | arrivals met (1.0) · belief met (0.993/1.015) · truth met (0.993) · stuck met (0.0/0.0) · latency miss (1394.0/1903.95) · writes miss (0.393) |
+| `n4-fk-on-body-day` | cornered met (0.0) · stuck met (0.0) · latency unavailable · writes miss (0.366) |
+| `n4-fk-on-body-night` | cornered met (0.0) · stuck met (0.0) · latency miss (666.0/711.0) · writes miss (0.306) |
+| `n4-fk-on-click-day` | cornered unavailable (click order) · stuck met (0.0) · latency miss (110.0/110.0) · writes miss (1.522) |
+| `n4-fk-on-click-night` | cornered unavailable (click order) · stuck met (0.0) · latency miss (298.0/298.0) · writes miss (1.124) |
+| `n4-fu-on-body-day` | cornered met (0.0) · stuck met (0.0) · latency unavailable · writes miss (0.301) |
+| `n4-fu-on-body-night` | cornered met (0.0) · stuck met (0.0) · latency miss (625.0/670.0) · writes miss (0.22) |
+| `n4-fu-on-click-day` | cornered unavailable (click order) · stuck met (0.0) · latency miss (801.0/1042.8) · writes miss (1.38) |
+| `n4-fu-on-click-night` | cornered unavailable (click order) · stuck met (0.0) · latency unavailable · writes miss (1.078) |
+| `n4-pk-on-body-day` | reacquired of 2 miss (1) · stuck met (0.0) · latency unavailable · writes met (0.05) |
+| `n4-pk-on-body-night` | reacquired of 1 met (1) · stuck met (0.0) · latency miss (108.0/108.0) · writes met (0.017) |
+| `n4-pk-on-click-day` | reacquired of 2 met (2) · stuck met (0.0) · latency met (70.0/70.0) · writes met (0.066) |
+| `n4-pk-on-click-night` | reacquired of 3 met (3) · stuck met (0.0) · latency miss (492.0/492.0) · writes met (0.017) |
+| `n4-pu-on-body-day` | reacquisition unavailable (0 eligible losses) · stuck met (0.0) · latency miss (100.0/100.0) · writes met (0.03) |
+| `n4-pu-on-body-night` | reacquired of 2 met (2) · stuck met (0.0) · latency unavailable · writes met (0.066) |
+| `n4-pu-on-click-day` | reacquired of 2 met (2) · stuck met (0.0) · latency miss (128.0/128.0) · writes met (0.082) |
+| `n4-pu-on-click-night` | reacquired of 3 miss (2) · stuck met (0.0) · latency unavailable · writes met (0.049) |
+
 
 ## 5. Plan and cost
 
