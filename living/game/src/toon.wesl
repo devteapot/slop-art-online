@@ -256,10 +256,13 @@ fn hair_light(albedo: vec3<f32>, N: vec3<f32>, V: vec3<f32>, L: vec3<f32>, lit: 
 
 // The character's forward, level: the mesh's world frame turned by the character's root (its
 // body's facing; a head turned aside is not followed). Our character files face -Z in their own
-// frame (VRM's convention), their roots turned to face +Z.
+// frame (VRM's convention), their roots turned to face +Z. A hand-made file says which way it
+// faces (`extras.slop.forward`); the client works that out in each mesh's own frame
+// (handmade.rs `local_forward`, in `toon.file`), whatever its nodes turn.
 fn facing(in: VertexOutput) -> vec3<f32> {
     let m = mesh_functions::get_world_from_local(in.instance_index);
-    let f = -m[2].xyz;
+    let own = select(vec3<f32>(0.0, 0.0, -1.0), toon.file.xyz, toon.file.w > 0.5);
+    let f = (m * vec4<f32>(own, 0.0)).xyz;
     let flat = vec3<f32>(f.x, 0.0, f.z);
     return select(normalize(flat), vec3<f32>(0.0, 0.0, 1.0), length(flat) < 1e-4);
 }
@@ -281,6 +284,39 @@ fn strand_light(in: VertexOutput, duv: vec4<f32>) -> f32 {
     s = here / max(mean / 7.0, 1e-3);
 }
     return s;
+}
+
+// A threshold `t` on `x` with a half-width `w`, never narrower than the pixel (`fw`, the screen
+// derivative of x): clean bands without stair steps.
+fn aa(t: f32, w: f32, x: f32, fw: f32) -> f32 {
+    let ww = max(max(w, fw), 1e-4);
+    return smoothstep(t - ww, t + ww, x);
+}
+
+// A hand-made file's hair (style.rs `Kind::HandHair`, docs/HANDMADE_HAIR.md, "The hair profile"):
+// at most three flat levels from two thresholds on N·L, the shade colour in cast shadow, and one
+// broad highlight where its mask (the second UVs' y as 1 + _HIGHLIGHT, or the mask texture's R)
+// passes 0.5, only where the sun reaches. Returns the base colour and how far the point is out of
+// shade (`s1`).
+fn hand_hair(N: vec3<f32>, L: vec3<f32>, vis: f32, in: VertexOutput, duv: vec4<f32>) -> vec4<f32> {
+    let ndl = dot(N, L);
+    let fw = fwidth(ndl);
+    let t = toon.hand_bands;
+    let s1 = aa(t.x, t.z, ndl, fw) * vis;
+    let s2 = aa(t.y, t.z, ndl, fw);
+    let level = mix(toon.hand[0].rgb, mix(toon.hand[1].rgb, toon.hand[2].rgb, s2), s1);
+    var mask = -1.0;
+@if(VERTEX_UVS_B) {
+    mask = in.uv_b.y - 1.0;
+}
+@if(VERTEX_UVS_A) {
+    if (toon.hand[3].w > 0.5) {
+        mask = textureSampleGrad(face_map, face_sampler, in.uv, duv.xy, duv.zw).r;
+    }
+}
+    let fm = fwidth(mask);
+    let h = select(0.0, aa(0.5, t.w, mask, fm), mask >= 0.0) * s1;
+    return vec4<f32>(mix(level, toon.hand[3].rgb, h), s1);
 }
 
 @fragment
@@ -305,6 +341,13 @@ fn fragment(
 @if(VERTEX_UVS_B)
     grey_v = in.uv_b.x;
     var albedo = vec4<f32>(recolor(pbr_input.material.base_color.rgb, tag, grey_v), pbr_input.material.base_color.a);
+    // A tint layer (style.rs `Kind::Tint`) is a factor over the lit skin under it, blended by
+    // multiplying (`AlphaMode::Multiply`: dst × mix(1, rgb, a), so premultiplied here), so it
+    // carries that skin's light and shadow and never glows on a shaded cheek.
+    if (is_kind(6.0)) {
+        out.color = vec4<f32>(albedo.rgb * albedo.a, albedo.a);
+        return out;
+    }
     let N = normalize(pbr_input.N);
     let p = pbr_input.world_position;
     // In uniform control flow: the gradients that painted detail samples with.
@@ -363,6 +406,14 @@ fn fragment(
         depth = select(depth, depth * toon.face.y, face);
         depth = select(depth, toon.shadow.a * toon.face.z, part);
         var color = banded(albedo.rgb, sun, lit, (1.0 - depth) * select(away, 1.0, skin || part), sc);
+        // A hand-made hair profile replaces the hair's colour and its banding.
+        let hand = is_kind(5.0);
+        var lit_albedo = albedo.rgb;
+        if (hand) {
+            let hh = hand_hair(N, L, shadow, in, duv);
+            lit_albedo = hh.rgb;
+            color = hh.rgb * sun + hh.rgb * sc.fill * mix(1.0, 0.45, hh.a);
+        }
         if (toon.atmo.y > 0.05 && N.y > 0.97 && (tag & (1u << 24u)) == 0u) {
             color = puddles(color, p.xyz, 0.0);
         }
@@ -372,16 +423,16 @@ fn fragment(
         let fr = fresnel(N, V);
         // Hair takes no general rim: its pale cream, added, is several times dark hair's own
         // colour and washes it out. Its one rim is `hair_light`'s, in its own hue (toon.hair.w).
-        let rim_strength = select(select(toon.rim.a, toon.face.w, face), 0.0, part || is_kind(4.0));
+        let rim_strength = select(select(toon.rim.a, toon.face.w, face), 0.0, part || is_kind(4.0) || hand);
         color = color + rim_light(fr, lit, rim_strength) * sun;
         if (is_kind(4.0)) {
             color = color + hair_light(albedo.rgb, N, V, L, lit, fr, strand_light(in, duv), facing(in), in) * sun;
         }
-        color = color + point_lights(albedo.rgb, p.xyz, N, view_z, pbr_input.frag_coord.xy, pbr_input.is_orthographic);
+        color = color + point_lights(lit_albedo, p.xyz, N, view_z, pbr_input.frag_coord.xy, pbr_input.is_orthographic);
         color = color + emission(pbr_input.material.emissive.rgb, sc);
         out.color = vec4<f32>(color, albedo.a);
     } else {
-        out.color = vec4<f32>(albedo.rgb * toon.extra.y, albedo.a);
+        out.color = vec4<f32>(select(albedo.rgb, toon.hand[0].rgb, is_kind(5.0)) * toon.extra.y, albedo.a);
     }
     out.color = main_pass_post_lighting_processing(pbr_input, out.color);
 }

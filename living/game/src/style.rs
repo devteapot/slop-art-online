@@ -199,6 +199,12 @@ pub enum Kind {
     FacePart = 3,
     /// Hair: an angel-ring highlight, a rim, and shadows toward the hair's own colour.
     Hair = 4,
+    /// A hand-made file's hair with its own profile (`handmade.rs`, docs/HANDMADE_HAIR.md): two
+    /// thresholds, three palette colours, one masked highlight; no rims, ring or core band.
+    HandHair = 5,
+    /// A layer multiplied over the lit skin under it (blush, freckles; a hand-made file's
+    /// `"tint"` slot): its colour is a factor, so it carries the skin's light and shadow.
+    Tint = 6,
 }
 
 #[derive(Clone, Copy, Debug, Default, Reflect, bevy::render::render_resource::ShaderType)]
@@ -237,6 +243,15 @@ pub struct ToonParams {
     /// Painted detail: x 1 on scenery whose vertex colours name surfaces ([`with_detail`]), z
     /// full detail until (m), w none from (m). The style sets z and w; x is the material's own.
     pub detail: Vec4,
+    /// A hand-made hair profile's palette ([`Kind::HandHair`], `handmade.rs`): shade, mid, light
+    /// and highlight as linear rgb; `hand[3].w` 1 when the highlight mask is a texture (bound as
+    /// [`ToonExt::face`]), else it comes from the second UVs. The material's own.
+    pub hand: [Vec4; 4],
+    /// The profile's numbers: x `t1`, y `t2` (N·L), z `edge`, w `highlight_feather`.
+    pub hand_bands: Vec4,
+    /// A hand-made file's forward in this mesh's own frame (xyz), w 1 when set; else the
+    /// character files' −Z (`toon.wesl` `facing`). The material's own.
+    pub file: Vec4,
     /// Per [`Surface`]: x 1 / tile size (1/m), y strength, z mapping (0 triplanar, 1 planar).
     pub layers: [Vec4; SURFACES],
 }
@@ -546,6 +561,9 @@ impl Style {
             hair_place: Vec4::new(self.hair_ring_up, self.hair_ring_front, LOCK_BINS, self.hair_ring_width_other.max(0.01)),
             hair_lock: Vec4::new(self.hair_lock_drop.clamp(0.0, 1.0), self.hair_lock_shift, self.hair_ring_level.clamp(0.0, 1.0), self.hair_ring_at),
             detail: Vec4::new(0.0, 0.0, self.detail_fade[0], self.detail_fade[1].max(self.detail_fade[0] + 1.0)),
+            hand: [Vec4::ZERO; 4],
+            hand_bands: Vec4::ZERO,
+            file: Vec4::ZERO,
             layers: surface_layers(),
         }
     }
@@ -674,10 +692,14 @@ fn apply(style: Res<Style>, mut toons: ResMut<Assets<Toon>>, mut outlines: Query
         ToonParams { shadow: Vec4::new(1.0, 1.0, 1.0, 0.45), rim: Vec4::ZERO, band: Vec4::new(-0.2, 0.6, 0.0, 1.0), extra: Vec4::new(1.0, 0.0, 1.0, 1.0), shade: Vec4::new(0.0, 0.0, 1.0, 0.0), recolor: Vec4::ZERO, recolor_from: Vec4::ZERO, atmo: Vec4::new(style.wind, style.wet, 0.0, 0.0), face: Vec4::new(0.3, 1.0, 1.0, 0.0), hair: Vec4::new(0.0, 0.1, 0.0, 0.0), ..style.params() }
     };
     for (_, m) in toons.iter_mut() {
-        // Keep each material's own kind (skin, face, hair), recolouring and detail.
+        // Keep each material's own kind (skin, face, hair), recolouring, detail and hand-made
+        // profile.
         let old = m.extension.params;
         m.extension.params = p;
         m.extension.params.shade.w = old.shade.w;
+        m.extension.params.hand = old.hand;
+        m.extension.params.hand_bands = old.hand_bands;
+        m.extension.params.file = old.file;
         m.extension.params.recolor = old.recolor;
         m.extension.params.recolor_from = old.recolor_from;
         m.extension.params.detail.x = old.detail.x;
