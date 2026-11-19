@@ -249,9 +249,9 @@ def mirror_name(n):
         return "J_Bip_R_" + n[8:]
     if n.startswith("J_Bip_R_"):
         return "J_Bip_L_" + n[8:]
-    if n.startswith("J_Sec_L_Skirt"):
+    if n.startswith(("J_Sec_L_Skirt", "J_Sec_L_Coat")):
         return "J_Sec_R_" + n[8:]
-    if n.startswith("J_Sec_R_Skirt"):
+    if n.startswith(("J_Sec_R_Skirt", "J_Sec_R_Coat")):
         return "J_Sec_L_" + n[8:]
     return n
 
@@ -507,7 +507,7 @@ def skirt_bone(side, chain, joint, hem):
 def skirt_shares(z, k, hem):
     """A left-side skirt vertex's shares of its own side's spring bones (column k, height z):
     ({bone: share of the thigh's weight}, the share that stays the thigh's own)."""
-    free = smooth((SKIRT_TOP - z) / SKIRT_EASE)
+    free = smooth(((0.93 if COAT_SPRING else SKIRT_TOP) - z) / SKIRT_EASE)
     if free <= 1e-4:
         return {}, 1.0
     phi = 360.0 * k / NT
@@ -566,19 +566,15 @@ def torso_w(z, x, skirt=False, front=False, col=None, hip=None):
             # The thighs' shares go to their spring bones. A vertex near the middle has a share
             # of the other thigh too: that goes to the other side's front or back bone alone.
             own, stay = skirt_shares(z, col, SKIRT_SPRING)
-            joint = 1 if (COAT_SPRING or skirt_long(SKIRT_SPRING)) and z < SKIRT_KNEE else 0
-            other = skirt_bone("R", "Front" if not COAT_SPRING and col <= NT / 4 else "Back", joint, SKIRT_SPRING)
+            joint = 1 if skirt_long(SKIRT_SPRING) and z < SKIRT_KNEE else 0
+            other = skirt_bone("R", "Front" if col <= NT / 4 else "Back", joint, SKIRT_SPRING)
             legs = [("J_Bip_L_UpperLeg", left * stay), ("J_Bip_R_UpperLeg", right * stay), (other, right * (1 - stay))] + [(n, left * v) for n, v in own.items()]
             legs = [(n, v) for n, v in legs if v > 1e-4]
             # Four bones a vertex: the smallest shares join the largest of the same thigh's, which
             # at rest changes nothing (they are that thigh's children).
             room = 4 - len([1 for n, v in w if v > 1e-4])
             while len(legs) > room:
-                candidates = legs
-                if COAT_SPRING:
-                    # Preserve each thigh's total even when the opposite thigh has one tiny share.
-                    candidates = [q for q in legs if any(r != q and ("_L_" in r[0]) == ("_L_" in q[0]) for r in legs)]
-                n0, v0 = min(candidates, key=lambda q: q[1])
+                n0, v0 = min(legs, key=lambda q: q[1])
                 legs.remove((n0, v0))
                 mine = [q for q in legs if ("_L_" in q[0]) == ("_L_" in n0)] or legs
                 n1, v1 = max(mine, key=lambda q: q[1])
@@ -1923,6 +1919,8 @@ def add_skirt_bones(arm, hem):
             parent = arm.data.edit_bones[f"J_Bip_{side}_UpperLeg"]
             names = []
             for joint, z in enumerate(zs):
+                if COAT_SPRING and chain == "Side" and joint == 0:
+                    z = 0.93
                 p = torso_point(z, k, SKIRT_OFF, 1.0, folds=0.0 if COAT_SPRING else 1.0)
                 eb = arm.data.edit_bones.new(skirt_bone(side, chain, joint, hem))
                 eb.head = (0, 0, 0)
@@ -2722,6 +2720,39 @@ def belly_weights(obs):
                 v.co = STANCE.written(after, stand)
 
 
+def coat_weights(ob):
+    """Split the finished coat's thigh weights after its fit, subdivision and belly weighting."""
+    for vertex in ob.data.vertices:
+        x, y, z = vertex.co
+        if z >= 0.93:
+            continue
+        groups = ob.vertex_groups
+        before = sorted(((groups[g.group].name, g.weight) for g in vertex.groups if g.weight > 0), key=lambda q: -q[1])[:4]
+        legs = [q for q in before if q[0].endswith("_UpperLeg")]
+        if not legs:
+            continue
+        # Measure the column on this coat ring (the front and rear radii differ).
+        side = torso_point(z, NT / 4, 0.024, 1.0)
+        end = torso_point(z, 0 if y >= side.y else NT / 2, 0.024, 1.0)
+        angle = math.atan2(abs(x / side.x), (y - side.y) / abs(end.y - side.y))
+        own, stay = skirt_shares(z, angle * NT / (2 * PI), 0.70)
+        spare = 4 - len(before)
+        for thigh, weight in legs:
+            side_name = thigh.split("_")[2]
+            if (x <= 0) == (side_name == "L"):
+                shares = [(n.replace("_L_", f"_{side_name}_"), w) for n, w in own.items()]
+            else:
+                shares = [(skirt_bone(side_name, "Back", int(z < SKIRT_KNEE), 0.70), 1 - stay)]
+            shares = sorted([(thigh, stay)] + shares, key=lambda q: -q[1])
+            keep = [(n, w) for n, w in shares[:1 + spare] if w > 1e-5]
+            spare -= len(keep) - 1
+            total = sum(w for n, w in keep)
+            groups[thigh].remove([vertex.index])
+            for name, share in keep:
+                group = groups.get(name) or groups.new(name=name)
+                group.add([vertex.index], weight * share / total, "REPLACE")
+
+
 def spread_head_weights(obs):
     """On a typed head, what hangs on the head (hair, headwear, the neck's top, the far head)
     follows the identity bones as the face does: each vertex's weight to `J_Bip_C_Head` is
@@ -3097,7 +3128,7 @@ def main():
     skirted = spec.get("coat") == "smock" and a.lod != "far" and (a.parts == "all" or (a.parts == "keep" and {"Smock", "Apron"} & set(a.keep.split(","))))
     coated = spec.get("coat") == "coat" and (a.parts == "all" or (a.parts == "keep" and "Coat" in a.keep.split(",")))
     g["COAT_SPRING"] = coated
-    g["SKIRT_SPRING"] = 0.70 if coated else max(spec["hem"], 0.50) if skirted else None
+    g["SKIRT_SPRING"] = max(spec["hem"], 0.50) if skirted else None
     arm = make_armature(include_fringe=not spec["piece"])
     if skirted or coated:
         spec["skirt_springs"] = add_skirt_bones(arm, g["SKIRT_SPRING"])
@@ -3135,6 +3166,10 @@ def main():
                     for key in [k for k in ob.data.shape_keys.key_blocks if k.name != "Basis" and k.name not in CLIENT_MORPHS]:
                         ob.shape_key_remove(key)
         belly_weights(parts)
+        if coated:
+            for ob in parts:
+                if ob.name.split(".")[0] == "Coat":
+                    coat_weights(ob)
         if TYPED:
             spread_head_weights(parts)
             if spec.get("baked") and spec.get("identity"):
