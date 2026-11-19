@@ -1022,3 +1022,233 @@ hair_ob.data.calc_loop_triangles()
 audit("hair-final")
 bpy.ops.wm.save_as_mainfile(filepath=str(ROOT/"cora-hair-finish.blend"))
 scene.render.engine='BLENDER_WORKBENCH'
+
+# 2026-11-19T14:40:03.012181+00:00  face-rig-fit
+import subprocess,types,copy
+from mathutils import Matrix
+# Read the three matched paint/topology modules at the approved eye-art commit.
+# All generator calls remain local and use the same face rig and morph names.
+eye_revision='6cab88bcd'
+repo=repo_file("living/tools/blender").parents[2]
+def local_art_module(name):
+    rel=f'living/tools/blender/{name}.py'
+    code=subprocess.check_output(['git','-C',str(repo),'show',f'{eye_revision}:{rel}'])
+    mod=types.ModuleType(name);mod.__file__=str(repo/rel)
+    sys.modules[name]=mod
+    exec(compile(code,f'{eye_revision}/{rel}','exec'),mod.__dict__)
+    setattr(generator,name,mod)
+for name in ("head_mesh","cage_head","face_paint"):local_art_module(name)
+pp=generator.person_params
+params=pp.draw(dict(type='adult-f-c',seed=37053,family=9396,sex='female',age=26,
+  build=dict(height=1.65,weight=.14,muscle=-.22),hair=dict(colour='auburn',style='braid'),
+  eyes=dict(colour='green'),skin=dict(tone=.38,freckles=.92,weathered=.05)))
+spec=pp.resolve(params)
+look=spec['look']
+look.update(iris=(.39,.46,.31),lash=(.18,.105,.075),brow=(.31,.19,.12),lashes=4,lashes_low=1,
+            lash_k=1.16,lash_wing=.22,lip_tint=.60,blush=.24,nose_line=.32,nostril=.35,
+            skin=(.91,.69,.55),skin_shade=(.77,.48,.38),skin_warm=(.90,.60,.48),
+            skin_line=(.52,.32,.26),freckles=.92,detail_size=1.20,lines=0.)
+generator.configure(spec)
+type_record=generator.person_params.face_types.load()['types']['adult-f-c']
+tf=generator.person_params.face_types.apply(type_record,{})
+# Normalised by the uncovered 95 px head (crown of hair sits higher).
+# Front face sheet: eye centres 140 px apart; eye opening about 80 x 32 px;
+# nose tip and mouth 128 and 80 px above chin in the portrait drawing.
+tf['eye'].update(z=.464,apart=.328,w=.193,h=.075,tilt_deg=3.0,shape=.06,iris=.50)
+tf['brow'].update(brow_z=.553,above_eye=.089,arch=.28,thick=.015,lift=.002)
+tf['nose'].update(tip_z=.300,base_z=.273,width=.096,bridge_z=.448,tip_y=.077)
+tf['mouth'].update(z=.183,w=.176,lips=.018,curve=.002)
+tf['jaw'].update(rear_rise=.04,curve=.49)
+for key in ('wide','w30','w15'):
+    for i,z in enumerate(tf['sections']['z']):
+        if tf['sections'][key][i] is not None:
+            tf['sections'][key][i]*=float(np.interp(z,[.04,.12,.28,.4,.55,.76],[.81,.88,.94,.93,.91,.93]))
+generator.HF=generator.cage_head.CageHead(tf)
+hf=generator.HF
+generator.WHOLE_HEAD=True
+rig=generator.make_armature()
+outdir=ROOT/'generator-face';outdir.mkdir(exist_ok=True)
+atlas_file=outdir/'cora.atlas.png'
+face,_,_=generator.make_face(rig,spec,str(atlas_file))
+# Only the three specific products written by the procedural generator may
+# enter the audit. Reject any other loaded or packed image.
+for suffix in ('atlas','iris','tint'):
+    path=outdir/f'cora.{suffix}.png'
+    allowed_generator_images[hashlib.sha256(path.read_bytes()).hexdigest()]=path.name
+for img in list(bpy.data.images):
+    if img.name=="tint" and not img.users and img.source=='GENERATED':
+        bpy.data.images.remove(img)
+# Align the rig and every morph in one transform so eye and identity joints
+# follow the same fit as the neutral head and its expressions.
+k=95*unit/generator.cage_head.H_FILE
+rig.matrix_world=(Matrix.Translation((0,-3*unit,(785-126)*unit-k*1.535))
+                  @Matrix.Rotation(math.pi,4,'Z')@Matrix.Scale(k,4))
+for ob in [skull,objs['Pinna fitting guide -1'],objs['Pinna fitting guide 1']]:
+    bpy.data.objects.remove(ob,do_unlink=True)
+# Connect the model's vertex colours to the inspectable Blender materials.
+# Textured slots already carry the procedural face paint; their vertices are
+# white. Flat lash, brow, and ear materials carry their own COLOR_0 values.
+for mat in face.data.materials:
+    p=next(n for n in mat.node_tree.nodes if n.type=='BSDF_PRINCIPLED')
+    if not p.inputs['Base Color'].is_linked:
+        node=mat.node_tree.nodes.new('ShaderNodeVertexColor');node.layer_name='Color'
+        mat.node_tree.links.new(node.outputs['Color'],p.inputs['Base Color'])
+    p.inputs['Specular IOR Level'].default_value=.12
+face.data.calc_loop_triangles()
+(ROOT/'face-design.json').write_text(json.dumps(dict(type=tf,scale=k,triangles=len(face.data.loop_triangles),
+    keys=list(face.data.shape_keys.key_blocks.keys()),generator_assets=allowed_generator_images),indent=2)+'\n')
+audit('face-generated')
+
+# 2026-11-19T14:40:28.014351+00:00  face-orbit-and-expressions
+scene.render.engine='CYCLES'
+scene.cycles.device='CPU';scene.cycles.samples=4;scene.cycles.use_denoising=False
+scene.cycles.max_bounces=2
+scene.world.use_nodes=True
+background=scene.world.node_tree.nodes.get('Background')
+background.inputs[0].default_value=(1,1,1,1);background.inputs[1].default_value=.80
+ld=bpy.data.lights.new('Portrait key','SUN');ld.energy=1.15;ld.angle=.20
+lamp=bpy.data.objects.new('Portrait key',ld);scene.collection.objects.link(lamp)
+lamp.rotation_euler=Vector((.5,.85,-.75)).to_track_quat('-Z','Y').to_euler()
+def set_expression(values):
+    for key in face.data.shape_keys.key_blocks:
+        if key.name!='Basis':key.value=values.get(key.name,0)
+    bpy.context.view_layer.update()
+def take_face(stage):
+    for label,yaw,keys in [('close',-35,{}),('neutral',0,{}),('blink',0,{'Fcl_EYE_Close':1}),
+        ('talk',0,{'Fcl_MTH_A':1}),('smile',0,{'Fcl_MTH_Fun':1,'Fcl_BRW_Fun':.45}),
+        ('returned',0,{})]:
+        set_expression(keys);view(yaw)
+        camera.location.z=(785-88)*unit;camera.data.ortho_scale=150*unit
+        scene.render.resolution_x=512;scene.render.resolution_y=512
+        scene.render.filepath=str(ROOT/f'{stage}-{label}.png')
+        bpy.ops.render.render(write_still=True)
+    camera.data.ortho_scale=810*unit
+    scene.render.resolution_x=320;scene.render.resolution_y=810
+    frame(stage)
+take_face('face-a')
+
+# 2026-11-19T14:41:40.128919+00:00  face-fit-diagnostics
+import collections
+ng=face.vertex_groups['J_Bip_C_Neck'].index
+ring=[face.matrix_world@v.co for v in face.data.vertices if any(g.group==ng and g.weight>.6 for g in v.groups)]
+def sheet3(q):return [q.x/unit,q.y/unit,785-q.z/unit]
+(ROOT/'neck-ring.json').write_text(json.dumps([sheet3(p) for p in ring]))
+
+# 2026-11-19T14:42:34.962984+00:00  face-second-fit
+# Retain the accepted hair and outfit. Rebuild the face from the same cage
+# with a broader lower cheek and less abruptly pointed chin.
+oldface=face
+for key,mult in [('wide',1.08),('w30',1.08),('w15',1.10)]:
+    for i,z in enumerate(tf['sections']['z']):
+        if z<.41:
+            tf['sections'][key][i]*=mult+.15*max(0,1-z/.16)
+tf['eye'].update(z=.455,h=.071,tilt_deg=3.3)
+tf['nose'].update(tip_y=.094,tip_z=.295)
+tf['mouth'].update(w=.177,curve=.001)
+# Hold generated material names, replace their old texture nodes before
+# rebuilding. All new images again come from the three generator outputs.
+for m in oldface.data.materials:
+    for n in list(m.node_tree.nodes):
+        if n.type=='TEX_IMAGE':m.node_tree.nodes.remove(n)
+bpy.data.objects.remove(oldface,do_unlink=True)
+bpy.data.objects.remove(rig,do_unlink=True)
+for im in list(bpy.data.images):
+    if im.name.startswith('cora.') or im.name.startswith('tint'):bpy.data.images.remove(im)
+allowed_generator_images.clear()
+genpaint=generator.face_paint
+genpaint.IRIS_GLOW=((.59,.70,.42),.73)
+genpaint.IRIS_HOT=((.77,.83,.55),.66)
+look.update(iris=(.42,.52,.31),skin=(.92,.715,.585),freckles=1.2,detail_size=1.4,blush=.17)
+generator.HF=generator.cage_head.CageHead(tf);hf=generator.HF
+rig=generator.make_armature()
+outdir=ROOT/'fitted-face';outdir.mkdir(exist_ok=True)
+face,_,_=generator.make_face(rig,spec,str(outdir/'cora.atlas.png'))
+for suffix in ('atlas','iris','tint'):
+    path=outdir/f'cora.{suffix}.png'
+    allowed_generator_images[hashlib.sha256(path.read_bytes()).hexdigest()]=path.name
+# Remove the transient paint buffer left by Blender after saving the tint.
+for im in list(bpy.data.images):
+    if im.name=='tint' and not im.users:bpy.data.images.remove(im)
+rig.matrix_world=(Matrix.Translation((0,-8*unit,(785-126)*unit-k*1.535))
+                  @Matrix.Rotation(math.pi,4,'Z')@Matrix.Scale(k,4))
+bpy.context.view_layer.update()
+for m in face.data.materials:
+    p=m.node_tree.nodes.get('Principled BSDF')
+    if not p.inputs['Base Color'].is_linked:
+        node=m.node_tree.nodes.new('ShaderNodeVertexColor');node.layer_name='Color'
+        m.node_tree.links.new(node.outputs['Color'],p.inputs['Base Color'])
+    p.inputs['Specular IOR Level'].default_value=.1
+keys=face.data.shape_keys.key_blocks
+for b,m in zip(keys['Basis'].data,keys['Fcl_MTH_Fun'].data):
+    delta=m.co-b.co
+    m.co=b.co+1.55*delta
+# The actual head carries a 56-vertex neck ring. Continue its local section
+# to the collarbones, replacing both overlapping blockout neck volumes.
+ng=face.vertex_groups['J_Bip_C_Neck'].index
+top_ring=[face.matrix_world@v.co for v in face.data.vertices if any(g.group==ng and g.weight>.6 for g in v.groups)]
+center=sum(top_ring,Vector())/len(top_ring)
+def neck_angle(p):return math.atan2(p.x-center.x,center.y-p.y)
+top_ring.sort(key=neck_angle)
+vs=list(top_ring);fs=[];n=len(top_ring)
+for row,(z,w,d,cy) in enumerate([(138,14,15,-2),(147,24,22,-1),(155,44,26,0),(174,58,32,0),(188,56,34,0)]):
+    for j,p in enumerate(top_ring):
+        a=neck_angle(p)
+        vs.append(wp(w*math.sin(a),cy-d*math.cos(a),z))
+        fs.append((row*n+j,(row+1)*n+j,(row+1)*n+(j+1)%n,row*n+(j+1)%n))
+for name in ('Neck','Chest above neckline'):bpy.data.objects.remove(objs[name],do_unlink=True)
+neck=geo('Cora fitted neck and collarbones',vs,fs,flesh)
+for p in neck.data.polygons:p.use_smooth=True
+
+# For the modelling review, use a fixed toon ramp directly on the actual
+# generated pigments. It avoids Monte Carlo lighting noise and observes the
+# backface culling that the client applies to the inverted jaw/ear shells.
+# Keep the PBR shader intact for GLB export; restore its output before save.
+def studio_preview():
+    swaps=[]
+    for mat in {m for ob in scene.objects if ob.type=='MESH' for m in ob.data.materials if m and m.use_nodes}:
+        tree=mat.node_tree
+        output=next(n for n in tree.nodes if n.type=='OUTPUT_MATERIAL')
+        sock=output.inputs['Surface']
+        if not sock.is_linked:continue
+        original=sock.links[0].from_socket
+        bs=next(n for n in tree.nodes if n.type=='BSDF_PRINCIPLED')
+        made=[]
+        def add(kind):
+            node=tree.nodes.new(kind);made.append(node);return node
+        link=tree.links.new
+        geom=add('ShaderNodeNewGeometry')
+        dot=add('ShaderNodeVectorMath');dot.operation='DOT_PRODUCT'
+        link(geom.outputs['Normal'],dot.inputs[0]);dot.inputs[1].default_value=(-.38,-.70,.60)
+        ramp=add('ShaderNodeValToRGB');ramp.color_ramp.interpolation='EASE'
+        r=ramp.color_ramp.elements
+        r[0].position=.05;r[0].color=(.76,.69,.66,1);r[1].position=.23;r[1].color=(1,1,1,1)
+        link(dot.outputs['Value'],ramp.inputs[0])
+        mix=add('ShaderNodeMixRGB');mix.blend_type='MULTIPLY';mix.inputs[0].default_value=1
+        rgb=bs.inputs['Base Color']
+        if rgb.is_linked:link(rgb.links[0].from_socket,mix.inputs[1])
+        else:mix.inputs[1].default_value=rgb.default_value
+        link(ramp.outputs[0],mix.inputs[2])
+        em=add('ShaderNodeEmission');link(mix.outputs[0],em.inputs[0])
+        trans=add('ShaderNodeBsdfTransparent');sh=em.outputs[0]
+        if bs.inputs['Alpha'].is_linked:
+            transparent=add('ShaderNodeMixShader');link(bs.inputs['Alpha'].links[0].from_socket,transparent.inputs[0])
+            link(trans.outputs[0],transparent.inputs[1]);link(sh,transparent.inputs[2]);sh=transparent.outputs[0]
+        if mat.use_backface_culling:
+            cull=add('ShaderNodeMixShader');link(geom.outputs['Backfacing'],cull.inputs[0]);link(sh,cull.inputs[1]);link(trans.outputs[0],cull.inputs[2]);sh=cull.outputs[0]
+        link(sh,sock);swaps.append((tree,sock,original,made))
+    return swaps
+def face_review_final(stage):
+    swaps=studio_preview()
+    try:
+        scene.cycles.samples=12
+        take_face(stage)
+    finally:
+        for tree,sock,original,nodes in swaps:
+            tree.links.new(original,sock)
+            for n in nodes:tree.nodes.remove(n)
+    audit(stage+'-saved')
+    bpy.ops.wm.save_as_mainfile(filepath=str(ROOT/f'cora-{stage}.blend'))
+face.data.calc_loop_triangles()
+(ROOT/'face-final-design.json').write_text(json.dumps(dict(type=tf,scale=k,triangles=len(face.data.loop_triangles),
+    keys=list(keys.keys()),generator_assets=allowed_generator_images),indent=2)+'\n')
+face_review_final('face-b')

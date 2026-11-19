@@ -9,3 +9,7 @@
 {"stage": "hair-finish", "materials": 18, "images": [], "failures": []}
 {"stage": "hair-finish-saved", "materials": 18, "images": [], "failures": []}
 {"stage": "hair-final", "materials": 18, "images": [], "failures": []}
+{"stage": "face-generated", "materials": 25, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png", "tint"], "failures": []}
+{"stage": "face-a", "materials": 25, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png", "tint"], "failures": []}
+{"stage": "face-b", "materials": 25, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "face-b-saved", "materials": 25, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}

@@ -1,0 +1,197 @@
+{
+  "type": {
+    "id": "adult-f-c",
+    "band": "adult",
+    "ages": [
+      18,
+      60
+    ],
+    "sex": "female",
+    "line": "c",
+    "name": "long",
+    "head": {
+      "height_m": 0.233,
+      "figure_heads": 7.0,
+      "chin_drop": 0.0
+    },
+    "sections": {
+      "z": [
+        0.04,
+        0.12,
+        0.2,
+        0.28,
+        0.4,
+        0.52,
+        0.64,
+        0.76,
+        0.88
+      ],
+      "w15": [
+        0.12178350000000002,
+        0.283283,
+        0.45945900000000006,
+        0.596618,
+        0.6506280000000001,
+        0.640714,
+        0.5667585714285714,
+        0.57567,
+        0.38688
+      ],
+      "w30": [
+        0.11977470000000001,
+        0.3215718000000001,
+        0.49533119999999997,
+        0.6426216,
+        0.7201548000000001,
+        0.695554,
+        0.7128114285714287,
+        0.6696,
+        0.5719500000000001
+      ],
+      "wide": [
+        0.11977470000000001,
+        0.3333726000000001,
+        0.49533119999999997,
+        0.6964272,
+        0.758322,
+        0.701952,
+        0.7339385714285714,
+        0.7086600000000001,
+        0.5719500000000001
+      ],
+      "p00": [
+        -0.033,
+        0.009,
+        0.047,
+        0.02,
+        -0.003,
+        0.016,
+        0.034,
+        0.019,
+        -0.052
+      ],
+      "p08": [
+        -0.077,
+        -0.011,
+        0.017,
+        0.005,
+        -0.018,
+        0.003,
+        0.015,
+        0.002,
+        -0.078
+      ],
+      "p30": [
+        null,
+        null,
+        -0.273,
+        -0.108,
+        -0.115,
+        -0.081,
+        -0.058,
+        -0.1,
+        -0.209
+      ]
+    },
+    "skull": {
+      "crown": 1.0,
+      "depth": 0.86,
+      "back_z": 0.58
+    },
+    "eye": {
+      "z": 0.455,
+      "apart": 0.328,
+      "w": 0.193,
+      "h": 0.071,
+      "tilt_deg": 3.3,
+      "behind_brow": 0.038,
+      "behind_cheek": 0.041,
+      "iris": 0.5,
+      "shape": 0.06,
+      "fold": 0.65,
+      "iris_behind_lid": 0.017,
+      "white_depth": 0.064
+    },
+    "brow": {
+      "above_eye": 0.089,
+      "thick": 0.015,
+      "tilt_deg": -1.0,
+      "arch": 0.28,
+      "ridge": 0.0,
+      "lift": 0.002,
+      "brow_z": 0.553,
+      "length": 1.0
+    },
+    "nose": {
+      "tip_z": 0.295,
+      "out": 0.114,
+      "tip_y": 0.094,
+      "base_z": 0.273,
+      "bridge_z": 0.448,
+      "width": 0.096
+    },
+    "mouth": {
+      "z": 0.183,
+      "w": 0.177,
+      "lips": 0.018,
+      "curve": 0.001
+    },
+    "jaw": {
+      "angle_z": 0.3,
+      "angle_back": 0.359,
+      "under": 0.06,
+      "curve": 0.49,
+      "inset": 0.506,
+      "roll": 0.072,
+      "rear_rise": 0.04
+    },
+    "ear": {
+      "z": 0.374,
+      "size": 0.235,
+      "out_deg": 22.0,
+      "back": 0.5
+    },
+    "planes": {
+      "cheek_corner": 0.86,
+      "brow_line": 0.35,
+      "jaw_line": 0.91,
+      "under_jaw": 0.8
+    },
+    "body": {
+      "height_m": [
+        1.53,
+        1.67,
+        1.81
+      ],
+      "weight": -0.3,
+      "muscle": -0.05,
+      "head_power": 0.6
+    },
+    "made_from": "reference + (pass 2's adult woman \u2212 pass 2's adult woman) \u2212 0.5 \u00d7 (sister \u2212 reference), lengthened"
+  },
+  "scale": 0.8012443695650839,
+  "triangles": 6756,
+  "keys": [
+    "Basis",
+    "Fcl_EYE_Close",
+    "Fcl_EYE_Close_L",
+    "Fcl_EYE_Close_R",
+    "Fcl_EYE_Joy",
+    "Fcl_MTH_A",
+    "Fcl_MTH_I",
+    "Fcl_MTH_U",
+    "Fcl_MTH_E",
+    "Fcl_MTH_O",
+    "Fcl_MTH_Fun",
+    "Fcl_MTH_Sorrow",
+    "Fcl_BRW_Angry",
+    "Fcl_BRW_Sorrow",
+    "Fcl_BRW_Surprised",
+    "Fcl_BRW_Fun"
+  ],
+  "generator_assets": {
+    "afe7e71b70c8322ec6bfdfe39d984d2033c778f2b84207ac22f900aa6332e0ba": "cora.atlas.png",
+    "307a6c5805d361b75f0f3bb03a5fd3cfb77e7ed67fe2af1db2e3801376924808": "cora.iris.png",
+    "d76888cd5e5efd433b749dcadb2017f281dd9c2553f557b860254d64c3781a2b": "cora.tint.png"
+  }
+}
