@@ -14,6 +14,7 @@ pub struct Deliberation {
     pub updated_ms: u64,
     pub scene: String,
     pub revision: u32,
+    pub arrived: String,
 }
 
 impl __sdk::InModule for Deliberation {
@@ -31,6 +32,7 @@ pub struct DeliberationCols {
     pub updated_ms: __sdk::__query_builder::Col<Deliberation, u64>,
     pub scene: __sdk::__query_builder::Col<Deliberation, String>,
     pub revision: __sdk::__query_builder::Col<Deliberation, u32>,
+    pub arrived: __sdk::__query_builder::Col<Deliberation, String>,
 }
 
 impl __sdk::__query_builder::HasCols for Deliberation {
@@ -44,6 +46,7 @@ impl __sdk::__query_builder::HasCols for Deliberation {
             updated_ms: __sdk::__query_builder::Col::new(table_name, "updated_ms"),
             scene: __sdk::__query_builder::Col::new(table_name, "scene"),
             revision: __sdk::__query_builder::Col::new(table_name, "revision"),
+            arrived: __sdk::__query_builder::Col::new(table_name, "arrived"),
         }
     }
 }

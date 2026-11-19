@@ -5,7 +5,7 @@ Since 2026-11-10 ([seeded lives](../../../../docs/SEEDED_LIVES.md)). The island 
 ## Sub-features
 
 - **Seat** (right after publishing): every resident of the seed is placed with its sheet; every hamlet the seed names is peopled; every sheet relation is a `relation` row; every carrier knows the way to its far market as stages (`work 1` … `work n`, each leg 220 m or less); every outlaw has a spot on the road (`work`, `along_m` from home).
-- **Routes** (watched): carriers leave home with goods (`take` at the home square), reach their stages and the far market, `store` there, take that market's surplus and walk back. Goods move between settlements' stores.
+- **Routes** (watched): carriers leave home with goods (`take` at the home `store`), reach their stages and the far market's store (`work`), `store` there, take that market's surplus and walk back. Goods move between settlements' stores.
 - **The road**: outlaws keep their spot by day; with a friend near, they `threaten` an outsider passing; an outsider threatened while outnumbered and with no friend near `yield`s (the island's `stay safe`); the outlaws `seize` from someone who yielded. Chronicle rows `threat`, `yield`, `seize`.
 - **Ties**: gestures (`wave`, `nod`, `face`) aimed at someone, classed by the actor's seeded relation to its target (`friend`, `enemy`, `known`, `none`).
 

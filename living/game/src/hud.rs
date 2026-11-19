@@ -15,9 +15,18 @@ use std::collections::HashMap;
 pub struct UiWants {
     pub pointer: bool,
     pub keyboard: bool,
-    /// A list or a panel of the game UI is open (`verbs.rs`): the mouse picks from it, not the
-    /// skill bar.
+    /// A list of acts is open (`verbs.rs`): the mouse picks from it, not the skill bar.
     pub menu: bool,
+    /// The cursor is over the game UI's windows, buttons or cluster, or a press or drag that
+    /// began on them is under way (`ui/hit.rs`).
+    pub game: bool,
+}
+
+impl UiWants {
+    /// The pointer belongs to a UI (egui's panels or the game's), not the world.
+    pub fn over(&self) -> bool {
+        self.pointer || self.game
+    }
 }
 
 #[derive(Resource)]
@@ -45,7 +54,7 @@ pub fn draw(
     mut style: ResMut<crate::style::Style>,
     lookdev: Option<ResMut<crate::lookdev::Lookdev>>,
     envs: Option<ResMut<crate::envs::Envs>>,
-    keys: Res<ButtonInput<KeyCode>>,
+    (keys, fov): (Res<ButtonInput<KeyCode>>, Option<Res<crate::facing::FovState>>),
     time: Res<Time>,
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
@@ -69,6 +78,10 @@ pub fn draw(
             match (net.my_id, net.my_body()) {
                 (Some(id), Some(b)) => {
                     ui.label(format!("{} (#{id}) at {:.1}, {:.1}", names.get(&id).map_or(net.name.as_str(), |n| n.as_str()), b.x, b.y));
+                    // Facing sight's five values, for the developer (`facing.rs`).
+                    if let Some(f) = fov.as_ref().and_then(|f| f.field) {
+                        ui.label(egui::RichText::new(format!("facing sight: {}", crate::facing::values(&f))).small());
+                    }
                 }
                 _ => {
                     ui.label(format!("joining as {}…", net.name));
@@ -86,7 +99,7 @@ pub fn draw(
             if let Some(e) = net.errors.lock().unwrap().last() {
                 ui.colored_label(egui::Color32::LIGHT_RED, e);
             }
-            ui.label(egui::RichText::new("WASD move · Shift run · cursor: face and aim · R or middle-tap: turn to where you face · [ ] or middle-drag: rotate · Alt+mouse: glance · right click: walk to · Enter: talk · F1 panels").small().weak());
+            ui.label(egui::RichText::new("WASD move · Shift run, dodge · cursor: face and aim · left tap: strike (a peaceful person: talk), hold: strike · right click: bow · Q fire bolt · E block · R heal · Space jump · drag, [ ] or middle-drag: turn the view · middle-tap: align · Alt+mouse: glance · Enter: talk · F act · F1 panels").small().weak());
         });
     });
 
@@ -175,6 +188,7 @@ pub fn draw(
             ui.add(egui::Slider::new(&mut s.line_strength, 0.0..=1.0).text("edge lines"));
             ui.add(egui::Slider::new(&mut s.depth_threshold, 0.01..=0.3).text("depth edge threshold"));
             ui.add(egui::Slider::new(&mut s.normal_threshold, 0.05..=1.5).text("crease threshold"));
+            ui.add(egui::Slider::new(&mut s.crease_step, 0.0..=0.3).text("smallest crease step (m)"));
             ui.add(egui::Slider::new(&mut s.line_width, 0.5..=3.0).text("line width (px)"));
             ui.horizontal(|ui| {
                 ui.label("line colour");

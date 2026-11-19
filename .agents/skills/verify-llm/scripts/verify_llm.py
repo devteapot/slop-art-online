@@ -15,20 +15,29 @@ import traceback
 import urllib.request
 import urllib.error
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[4] / 'living/tools'))
+import trials  # noqa: E402  (consolidation_table: the trial report's per-character accounting)
+import world_guard  # noqa: E402
+
 ROOT = Path(__file__).resolve().parents[4]
 sys.path.insert(0, str(ROOT / 'living/tools'))
 from verify_credentials import redact
 # The mind binary the suite builds: in CARGO_TARGET_DIR when set (a private build directory),
 # else living/target. Running another path would test whatever binary another checkout left.
 MIND_BIN = Path(os.environ.get('CARGO_TARGET_DIR') or ROOT / 'living/target') / 'release/living-mind'
+# A mind binary built elsewhere, for a mutant run (verify-minds `sex-boundary`): the driver still
+# builds the tree's own, and runs this one.
+if os.environ.get('LIVING_VERIFY_MIND_BIN'):
+    MIND_BIN = Path(os.environ['LIVING_VERIFY_MIND_BIN'])
 SHARED = ROOT / '.agents/skills/verify/scripts/verify.py'
 # The server verify.py uses: the shared container, or a worker's own (see verify/SKILL.md).
 STDB_URL = os.environ.get('LIVING_STDB_URL', 'http://127.0.0.1:3300').rstrip('/')
 STDB_CONTAINER = os.environ.get('LIVING_STDB_CONTAINER', 'sao-living_spacetimedb_1')
 FAKE = Path(__file__).with_name('fake_llm.py')
 CASES = ('basic', 'routing-group', 'routing-assign', 'routing-rotate', 'routing-child',
-         'routing-default', 'overflow', 'retry-fallback', 'error-overflow', 'outage',
-         'repair', 'deliberation-retry', 'retry-exhausted', 'timeout', 'missing-default-key', 'mix')
+         'routing-default', 'overflow', 'capacity-overflow', 'capacity-retry', 'retry-fallback', 'error-overflow', 'outage',
+         'repair', 'deliberation-retry', 'retry-exhausted', 'timeout', 'missing-default-key', 'mix',
+         'fast-route', 'fast-cap')
 FIELDS = {'at_ms', 'actor', 'purpose', 'profile', 'model', 'latency_ms', 'request', 'reply', 'tokens', 'error', 'lane', 'queue_wait_ms', 'prompt_tokens', 'completion_tokens', 'cached_tokens', 'effort', 'mix', 'attention'}
 
 
@@ -62,7 +71,7 @@ def stop(process):
 
 class Run:
     def __init__(self, name, prefix="llm"):
-        if prefix not in ("llm", "minds"):
+        if prefix not in ("llm", "minds", "gate"):  # gate: the merge's scene gate (living/tools/scene_gate.py)
             raise ValueError("unsupported caller prefix")
         if not re.fullmatch(prefix + r'-[a-zA-Z0-9-]+', name):
             raise ValueError('run must match the validated caller prefix')
@@ -79,6 +88,7 @@ class Run:
         self.cleanup_record = {}
         self.token = None
         self.launch_blocked = False
+        self.archive_commitlog = False
 
     def command(self, args, filename='driver.log', check=True, timeout=240):
         result = subprocess.run([str(x) for x in args], cwd=ROOT, capture_output=True, text=True, timeout=timeout)
@@ -91,6 +101,7 @@ class Run:
 
     def harness(self, *args):
         if args[0] == 'launch':
+            self.archive_commitlog = '--archive-commitlog' in args
             result = self.command(['docker', 'inspect', STDB_CONTAINER, '--format', '{{json .Mounts}}'])
             mounts = json.loads(result.stdout)
             source = next((m.get('Source') for m in mounts if m.get('Destination') == '/wasm'), None)
@@ -101,7 +112,8 @@ class Run:
             if source is None or not Path(source).is_dir() or not os.access(source, os.W_OK):
                 self.launch_blocked = True
                 raise RuntimeError(f"/wasm mount unavailable or unwritable: {source}; no database published")
-        return self.command([SHARED, args[0], '--run', self.name, *args[1:]])
+        return self.command([SHARED, args[0], '--run', self.name, *args[1:]],
+                            timeout=None if args[0] == 'cleanup' and self.archive_commitlog else 240)
 
     def sql(self, query, save):
         result = self.harness('sql', query, '--save', save)
@@ -191,6 +203,7 @@ class Run:
         self.mind = subprocess.Popen([str(MIND_BIN)], cwd=ROOT,
                                      env=self.env, stdout=stream, stderr=subprocess.STDOUT)
         self.processes.append(self.mind)
+        world_guard.set_mind(self.directory, self.mind.pid)
         (self.directory / 'processes.json').write_text(json.dumps({'mind_pid': self.mind.pid,
             'owned_pids': [p.pid for p in self.processes], 'only': self.env['LIVING_ONLY'],
             'neo4j': 'off', 'lod': self.env['LIVING_LOD']}, indent=2))
@@ -233,7 +246,122 @@ def profile(port, model, **extra):
             'reasoning_effort': {p: p for p in ('think', 'deliberate', 'consolidate', 'talk')}, **extra}
 
 
+def fast_case(run, case):
+    """The fast lane (docs/FAST_LANE.md) on a real world with the release mind and a fake fast
+    provider. Fighters are spawned minds (`spawn_crowd`), each pair 1.2 m apart with spears, the
+    world's `fast_lane_on` law on; a blow taken issues a `fast_ask` row the mind serves.
+
+    fast-route: one pair, only the victim served. Purpose `fast` goes to `rethink.json`'s
+    `fast.route` profile (a profile of its own here) on the fast lane (its own slots), never to the default
+    profile; the first reply is held past `fast.timeout_ms` and is dropped as a timeout
+    (journaled, a `fast` thought "kept: timed out"); later ones keep the plan ("kept: as it is").
+
+    fast-cap: a battle of 20 (ten pairs attacking each other), all served, under the world's laws
+    as shipped (`fast_lane_rate` 2 a second, `fast_lane_inflight` 4), each fast reply held 2.5 s.
+    At most 4 requests are ever issued at once (sampled `fast_ask`) and in flight at the provider,
+    and no more are issued in any one second than the bucket allows: its burst, one second's worth
+    (2), plus one second's refill (2), 4 as shipped, counted at the authority's issue times.
+    Records how many fighters got a call and how long each trigger waited for its turn."""
+    run.harness('launch')
+    run.harness('doctor')
+    before = {c['id'] for c in run.sql('SELECT id FROM character', 'ids-before')}
+    pairs = 1 if case == 'fast-route' else 10
+    run.admin('spawn_crowd', 2 * pairs, True)
+    made = sorted(c['id'] for c in run.sql('SELECT id FROM character', 'ids-after') if c['id'] not in before)
+    assert len(made) == 2 * pairs, made
+    victims, foes = made[:pairs], made[pairs:]
+    for who in made:
+        run.admin('set_behavior', who, json.dumps({'wait': 300}))
+    run.admin('set_world_law', 'fast_lane_on', 'true')
+    origin = run.sql(f'SELECT x, y FROM body WHERE id = {victims[0]}', 'origin')[0]
+    for k, (v, f) in enumerate(zip(victims, foes)):
+        x, y = origin['x'] + 4.0 * (k % 5), origin['y'] + 4.0 * (k // 5)
+        run.admin('place_at', v, x, y)
+        run.admin('place_at', f, x + 1.2, y)
+        run.admin('grant_items', f, 'spear', 1)
+        run.admin('grant_items', v, 'spear', 1)
+    a, b = free_port(), free_port()
+    while b == a:
+        b = free_port()
+    models = {'default': 'primary', 'profiles': {'primary': profile(a, 'fake-primary'), 'fastp': profile(b, 'fake-fast')}}
+    cfg = json.loads((ROOT / 'living/configs/rethink.json').read_text())
+    cfg['fast'] = {'route': 'fastp', 'timeout_ms': 3000, 'experiences': 12}
+    path = run.directory / 'rethink-fast.json'
+    path.write_text(json.dumps(cfg, indent=2))
+    run.fake(a, {}, 'primary')
+    held = {'rules': [{'purpose': 'fast', 'delay_s': 5, 'times': 1}]} if case == 'fast-route' else {'rules': [{'purpose': 'fast', 'delay_s': 2.5, 'times': -1}]}
+    run.fake(b, held, 'fast')
+    served = victims if case == 'fast-route' else made
+    run.start(models, served, extra_env={'LIVING_RETHINK_CONFIG': str(path), 'LIVING_CONCURRENCY': '32'})
+    t0 = int(time.time() * 1000)
+    graph = lambda other: json.dumps({'first': [{'do': {'skill': 'attack', 'target': {'id': other}}}, {'wait': 0.5}]})
+    for v, f in zip(victims, foes):
+        run.admin('set_behavior', f, graph(v))
+        if case == 'fast-cap':
+            run.admin('set_behavior', v, graph(f))
+    fast_log = run.directory / 'fast-requests.jsonl'
+    thoughts = lambda: [t for t in run.private('SELECT * FROM thought', 'thoughts') if t['kind'] == 'fast']
+    if case == 'fast-route':
+        run.wait(lambda: len([t for t in thoughts() if t['summary'].startswith('kept: as it is')]) >= 1 and any('timed out' in t['summary'] for t in thoughts()), 'a timed-out and an answered fast request', 90)
+        fast = [r for r in rows(fast_log) if r['purpose'] == 'fast']
+        primary_fast = [r for r in rows(run.directory / 'primary-requests.jsonl') if r['purpose'] == 'fast']
+        journal = [e for e in run.exchanges() if e.get('purpose') == 'fast']
+        assert len(fast) >= 2 and not primary_fast, {'fast_at_fast': len(fast), 'fast_at_primary': len(primary_fast)}
+        assert all(r['model'] == 'fake-fast' for r in fast), [r['model'] for r in fast]
+        assert any('timeout' in (e.get('error') or '') for e in journal), journal[:3]
+        answered = [e for e in journal if not e.get('error')]
+        assert answered and all(e.get('profile') == 'fastp' and str(e.get('lane', '')).lower() == 'fast' and 'latency_ms' in e and 'queue_wait_ms' in e for e in answered), answered[:2]
+        (run.directory / 'result.json').write_text(json.dumps({'case': case, 'pass': True, 'fast_requests': len(fast), 'journal': len(journal),
+                                                               'thoughts': [t['summary'] for t in thoughts()][:6]}, indent=2))
+        return
+    # fast-cap: watch the issued rows for 30 s.
+    issued_max, samples = 0, 0
+    end = time.time() + 30
+    while time.time() < end:
+        issued = [r for r in run.private('SELECT * FROM fast_ask', 'fast-ask') if r['issued_ms']]
+        issued_max = max(issued_max, len(issued))
+        samples += 1
+        time.sleep(0.25)
+    for v, f in zip(victims, foes):
+        run.admin('set_behavior', f, json.dumps({'wait': 300}))
+        run.admin('set_behavior', v, json.dumps({'wait': 300}))
+    time.sleep(4)
+    calls = sorted(r['at_ms'] for r in rows(fast_log) if r['purpose'] == 'fast')
+    spans = [(r['at_ms'], r['at_ms'] + int(r['delay_s'] * 1000)) for r in rows(fast_log) if r['purpose'] == 'fast']
+    concurrent = max((sum(1 for s, e in spans if s <= t < e) for t, _ in spans), default=0)
+    done = thoughts()
+    # The bucket (`fast::pump`) holds at most one second's worth, max(rate, 1), and refills `rate`
+    # a second, so up to burst + rate can start in any one second: 2 + 2 = 4 as shipped. Starts are
+    # counted where the bucket acts, at the authority's issue times (each answer's `issued_ms`);
+    # arrival at the provider adds the mind's pickup jitter and is recorded, not checked.
+    rate, inflight = 2, 4
+    burst = max(rate, 1)
+    one_second_limit = burst + rate
+    issued = sorted({json.loads(t['detail'] or '{}').get('issued_ms') for t in done} - {None, 0})
+    per_second = max((sum(1 for u in issued if t <= u < t + 1000) for t in issued), default=0)
+    at_provider = max((sum(1 for u in calls if t <= u < t + 1000) for t in calls), default=0)
+    waits, by_fighter = [], {}
+    for t in done:
+        d = json.loads(t['detail'] or '{}')
+        if d.get('issued_ms') and d.get('trigger_ms'):
+            waits.append((d['issued_ms'] - d['trigger_ms']) / 1000)
+        by_fighter[t['actor']] = by_fighter.get(t['actor'], 0) + 1
+    q = sorted(waits)
+    pct = lambda p: round(q[min(len(q) - 1, int(p * len(q)))], 2) if q else None
+    record = {'case': case, 'fighters': len(made), 'laws': {'fast_lane_rate': rate, 'fast_lane_inflight': inflight, 'fast_lane_gap_s': 6},
+              'window_s': 30, 'samples': samples, 'issued_at_once_max': issued_max, 'in_flight_at_provider_max': concurrent,
+              'issued_in_one_second_max': per_second, 'one_second_limit': one_second_limit, 'arrived_at_provider_in_one_second_max': at_provider,
+              'calls': len(calls), 'fighters_with_a_call': len(by_fighter),
+              'calls_per_fighter': sorted(by_fighter.values()), 'wait_s_p50': pct(0.5), 'wait_s_p90': pct(0.9), 'wait_s_max': q[-1] if q else None}
+    (run.directory / 'result.json').write_text(json.dumps(record, indent=2))
+    assert calls and issued and issued_max <= inflight and concurrent <= inflight and per_second <= one_second_limit, record
+    record['pass'] = True
+    (run.directory / 'result.json').write_text(json.dumps(record, indent=2))
+
+
 def run_case(run, case):
+    if case in ('fast-route', 'fast-cap'):
+        return fast_case(run, case)
     run.harness('launch')
     run.harness('doctor')
     people = sorted(run.sql("SELECT id, name, stage, alive FROM character WHERE kind = 'person'", 'people'), key=lambda x: x['id'])
@@ -272,6 +400,15 @@ def run_case(run, case):
     elif case in ('overflow', 'error-overflow'):
         models['profiles']['primary']['overflow'] = 'alternate'
         script = {'rules': [{'purpose': 'think', 'status': 429 if case == 'overflow' else 500, 'times': -1}]}
+    elif case == 'capacity-overflow':
+        # The provider has no capacity for the primary's model (Mistral's 429 body): listed
+        # memory work goes to the overflow at the overflow's effort.
+        models['profiles']['primary'].update(overflow='alternate', capacity_overflow=['consolidate'])
+        script = {'rules': [{'purpose': 'consolidate', 'capacity': True, 'times': -1}]}
+    elif case == 'capacity-retry':
+        # No fallback: the first experience consolidation's call and its paced retry find no
+        # capacity; the mind tries again 20 s later, and that one is integrated.
+        script = {'rules': [{'purpose': 'consolidate', 'contains': 'New experiences to integrate', 'capacity': True, 'times': 2}]}
     elif case in ('retry-fallback', 'timeout'):
         models['assign'] = {adults[0]['name']: 'alternate'}
     elif case == 'repair':
@@ -370,6 +507,15 @@ def run_case(run, case):
             recovery = re.search(r'reachable again after .*?; (\d+) calls were held meanwhile', log)
             assert recovery and int(recovery[1]) > 0, 'recovery must report held callers'
             assert len(run.exchanges()) > before
+        if case in ('capacity-overflow', 'capacity-retry'):
+            run.harness('player', 'join', 'LlmCapacityVerifier')
+            player = run.sql("SELECT id FROM character WHERE name = 'LlmCapacityVerifier'", 'capacity-player')[0]['id']
+            run.admin('place_near', player, ids[0])
+            run.harness('player', 'say', 'Hello, can you hear me?', '--to', str(ids[0]))
+            run.wait(lambda: any(t['kind'] == 'consolidate' and t['summary'] == 'I remember this moment.'
+                                 for t in run.sql(f'SELECT * FROM thought WHERE actor = {ids[0]}', 'capacity-thoughts')), 'accepted consolidation', 180)
+            outcomes = run.journal / 'outcomes/consolidations.jsonl'
+            run.wait(lambda: any(r['outcome'] == 'integrated' and r['model_call'] for r in rows(outcomes)), 'integrated consolidation outcome', 20)
         if case == 'basic':
             run.harness('player', 'join', 'LlmVerifier')
             player = run.sql("SELECT id FROM character WHERE name = 'LlmVerifier'", 'player')[0]['id']
@@ -390,6 +536,35 @@ def run_case(run, case):
         failure = next(e for e in exchanges if e['purpose'] == 'think' and e['profile'] == 'primary' and e['error'])
         assert ('HTTP 429' if case == 'overflow' else 'HTTP 500') in failure['error']
         assert any(e['purpose'] == 'think' and e['profile'] == 'alternate' and not e['error'] for e in exchanges)
+    elif case == 'capacity-overflow':
+        memory = sorted([e for e in exchanges if e['purpose'] == 'consolidate'], key=lambda e: e['at_ms'])
+        short = [e for e in memory if e['profile'] == 'primary']
+        assert short and all('HTTP 429' in e['error'] and 'backend_out_of_capacity' in e['error'] for e in short), short
+        moved = [e for e in memory if e['profile'] == 'alternate']
+        assert moved and all(e['error'] is None and e['lane'] == 'background' and e['effort'] == 'consolidate' for e in moved), moved
+        # Each capacity failure goes straight to the overflow: no paced retry on the short model.
+        assert len(short) == len(moved), (len(short), len(moved))
+        assert all(e['profile'] == 'primary' for e in exchanges if e['purpose'] in ('think', 'deliberate')), 'only listed memory work moves'
+        assert not re.search(r'consolidation for .* failed', (run.directory / 'mind.log').read_text()), 'no consolidation failed'
+        lines = rows(run.journal / 'outcomes/consolidations.jsonl')
+        assert lines and all(r['outcome'] == 'integrated' and r['route'] == 'fallback' and r['model'] == 'fake-alternate' for r in lines if r['model_call']), lines
+        table = trials.consolidation_table(run.journal)
+        mine = table['by_character'][selected[0]['name']]
+        assert mine['fallback'] >= 1 and mine['primary'] == 0 and mine['retried'] == 0 and mine['lost'] == 0, mine
+        expected = {'consolidate': {'primary_capacity_429': len(short), 'alternate_ok': len(moved)}, 'table': table}
+    elif case == 'capacity-retry':
+        memory = sorted([e for e in exchanges if e['purpose'] == 'consolidate' and 'New experiences to integrate' in json.dumps(e['request'])], key=lambda e: e['at_ms'])
+        assert [bool(e['error']) for e in memory[:3]] == [True, True, False], [(e['profile'], e['error']) for e in memory]
+        assert all(e['profile'] == 'primary' for e in memory), 'no overflow without capacity_overflow'
+        assert memory[2]['at_ms'] - memory[1]['at_ms'] >= 19000, 'the retry waits for the consolidation backoff'
+        assert re.search(r'consolidation for .* failed \(1x\).*backend_out_of_capacity', (run.directory / 'mind.log').read_text())
+        lines = [r for r in rows(run.journal / 'outcomes/consolidations.jsonl') if r['model_call']]
+        assert [(r['outcome'], r['route'], r['attempt']) for r in lines[:2]] == [('failed', None, 1), ('integrated', 'primary', 2)], lines
+        assert 'backend_out_of_capacity' in lines[0]['failure'] and lines[0]['retry_in_s'] == 20
+        table = trials.consolidation_table(run.journal)
+        mine = table['by_character'][selected[0]['name']]
+        assert mine['retried'] == 1 and mine['lost'] == 0 and mine['primary'] >= 1 and mine['capacity_429'] == 1, mine
+        expected = {'table': table}
     elif case == 'retry-fallback':
         failed = sorted([e for e in exchanges if e['purpose'] == 'think' and e['profile'] == 'alternate' and e['error']], key=lambda e: e['at_ms'])
         fallback = min(e['at_ms'] for e in exchanges if e['purpose'] == 'think' and e['profile'] == 'primary' and not e['error'])

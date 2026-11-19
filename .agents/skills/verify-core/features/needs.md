@@ -2,7 +2,7 @@
 
 ## Sub-features
 
-- Idle hunger rises and energy falls, at the rules' pace: every person rate is scaled by `person_pace` (0.3 since iter-11: hunger 1.2 a minute), and the needs and infant scenes read the law and scale their thresholds and hunger waits by it.
+- Idle hunger rises and energy falls, at the rules' pace: every person rate is scaled by `person_pace` (0.3 since iter-11: hunger 1.2 a minute), and the needs and infant scenes read the law and scale their thresholds and hunger waits by it. Since `rules-1` the shipped rates are written per game hour (`per: "hour"`, the old per-minute numbers halved) and the engine doubles them on the 12-minute day, so the scenes' real-minute expectations (cold tiring 1.5 × `person_pace` a minute) are unchanged; `person_pace` now scales game-hour rates. A world with another day is [laws.md](laws.md).
 - Rest recovers energy over time.
 - Eating consumes food and lowers hunger.
 - "food" is whatever the rules give nutrition (`nutrition(item)` in `skills.rhai`): `has food`, and eat, give, store and take of `food`, all read it. `eat food` takes the most nourishing food held.
@@ -39,6 +39,48 @@ After feeding the adults to prevent unrelated starvation/injury requests, a cloa
 
 ## Since `laws-2` (2026-11-11)
 
-- Warmth by structure is the script's `structure_traits()` (`warms`, `roof`), at the laws' `fire_warmth` and `shelter_warmth`; the values and the result are unchanged (docs/WORLD_RULES.md, "Traits instead of lists").
+- Warmth by structure is the script's `structures()` traits (`warms`, `roof`; `structure_traits()` before 2026-11-11), at the laws' `fire_warmth` and `shelter_warmth`; the values and the result are unchanged (docs/WORLD_RULES.md, "Traits instead of lists"). A fire that eats fuel (`burns`) warms within its own radius only while lit (`structure.lit_until_ms`); the `goods` scene covers it ([goods.md](goods.md)).
 - The need-rate key compares hunger and energy with the thresholds the `rates` law last gave that body (`NeedLaw::cuts`), not copies of them in `brain.rs`: a world whose law moves `starving_at` or `fed_below` recomputes at its own levels. `scenes.py needs` and `food` drive the shipped values.
 - A new body's hunger and energy are the laws `spawn_hunger` (25) and `spawn_energy` (85). Food kept in a structure spoils at `kept_spoil(kind)` (1/3).
+
+## Meters and statuses
+
+Since 2026-11-11 (branch `rules-senses-outcomes`; docs/WORLD_RULES.md "The body: meters and statuses"). How a body is, for the players' screens, the minds' body words and the bodily alarms, is one law: `status_of(a)`, over the bars `meters()` names (fields of `my_vitals`). The authority's alarms (`brain.rs` `alerts`, bodies the minds hold) are the statuses' `alarm`s; each is told once per episode (a bit among the top 16 of `mind_state.alerts`, by its words), asks the mind to think when its `think` says so, and quotes the routine of its `routine` want.
+
+- `scenes.py alarms` (any seed, about 1 min): an overlay adds a status with an alarm to every body. A spawned person is told it once (a `body` line) over 6 s while it lasts, its deliberation request carries "Your body: …"; the shipped script installed again ends the episode, and the overlay again tells it a second time. A meter naming `stamina`, which the vitals row lacks, is refused at install ("not a my_vitals field"). The shipped script is installed again at the end.
+- Cargo (`living-rules`, `script::body::tests`): the shipped meters and their fields; one set of thresholds (the old alarms at their thresholds, badly hurt and barely alive one episode, the body words); the body moving along its rates within its meters; a world adding `stamina` with a meters row only; bad meters and statuses refused at install; one answer per state; Cullet composing with the law.
+
+## Sleepers' thoughts
+
+A sleeping body's mind is asked to think only on what wakes it (`perceive::Wake`, `living/authority/src/perceive.rs`): being attacked, an alarm of its own body that asks for a thought (`brain.rs`, `alerts`), and a loud sound near it (`Wake::Sound`, `perceive::wakes`): one at least the `wake_loudness` law (2) loud within `wake_reach` (8 m) of a sleeper who hears it, whoever plays the sleeper and whoever made it. Loudness is the sound's spec's: a way of speaking's `loudness` (`say` 1, `whisper` 0.2, `call` `call_carry()` 2.5), a species signal's (`cry` 2.5 and, since `packs-2`, `howl` 2 in `species.json`; others 0), a skill's (`loudness: 2.0` on attack, strike, bowshot, firebolt, throw and shoot: the noise of a fight where a blow lands, `perceive::noise`). A baby's cry wakes its parent because it is loud and near, and a stranger at the same distance as well; a carer it did not wake is asked once it wakes. An attention cue does not wake (a sleeping body is not watching): a cue that matches for a sleeper is taken (`ask_to_think`, its cooldown runs) and its thought waits in `slumber` like any other. Every other request waits in the private `slumber` table (one row per sleeper: `since_ms`, `until_ms` the current sleep's end, the reasons and their arrival times as `deliberation` keeps them). A line whose words reach a sleeper and do not wake it is kept in the private `heard_asleep` table (the latest 20 per sleeper), with a "While you slept, you heard: …" reason in `slumber`: no conversation turn, no name learnt, not in the line's `audience` or `line_heard`; on waking it is told as a `heard_asleep` experience in the same words, a line to the room with how it was said in the hearer's labels (speech-address: "to the room, naming you"; `perceive::heard_on_waking`), for any controller.
+
+`scenes.py sleeper` (the infant fixture: its sound cases need a baby; about 8 min): a `think` between two short sleeps waits in `slumber`, not in `deliberation`; the body sleeps on through the gap; a new graph wakes it and the request reads "You woke up." then the waited reason; asleep again, another adult's graph attack wakes it with "You woke up: … is attacking you!" first and the waited reason after it, and the percept says so. Under `cues_on`, a sleeper's cue (an unknown person near its bed) fires, its line waits in `slumber`, no request is made and the body sleeps on; woken, it is asked with the cue's line after "You woke up.". By sound: a parent 3 m from its crying baby wakes, and a stranger at the same distance; a quiet line to a sleeper does not wake it and waits untold in `heard_asleep`, a called name wakes it and the quiet line is then told as heard while asleep, and a quiet line to the room naming it is told with how it was said in its own labels ("…said to the room, naming you: …"); a fight 3 m away wakes a sleeper, one 12 m away does not.
+
+### A signal's reach from its loudness (since `packs-2`)
+
+A species signal with no `range` of its own carries its `loudness` times each listener's own hearing (`species::Signal::reach`; `perceive::signal` gathers within the widest hearing times the loudness, then keeps each listener within its own). The shipped howl is loudness 2: 18 m where people hear 9 m. As loud as a shout, it wakes a sleeper within `wake_reach`. Signals with a `range` (the cry 12 m, growl, whimper, yip, the deer's calls) keep it. `scenes.py howl_reach` (default seed): a wolf howls on an open line; a person asleep 6 m off wakes, told "You woke up: You hear a long howl from a wolf, …"; one 15 m off hears it; one 25 m off does not. Cargo: `species::tests::a_signal_without_a_range_carries_by_its_loudness`. Evidence: `howl_reach-heard.json`.
+
+## Sleep in a fight
+
+A body does not fall asleep in a fight. The script's `sleep_check(a)` (`living/scripts/skills.rhai`) refuses the sleep skill, for graphs, minds' acts and `human_act` alike, in the body fact's words and nothing else:
+
+- "you cannot sleep: you were struck moments ago" while `a.actor.hurt_ago` is within the `alert_after_hit_s` law (15 s; the `in_combat` status's window);
+- "you cannot sleep: someone who struck you is close" while the law `alert_while_attacker_near` is on (default) and the fact `a.actor.hurt_by_near` holds: the one who last struck the body is alive, within the `wake_reach` law, and the fight is still on (struck within `act::FIGHT_MS`, 30 s, the gap after which a blow is a new fight's first). `hurt_by_near` is worked out in `act::facts` from the `vitals` row (`hurt_by`, `hurt_ms`) and the attacker's body; no table gains a column.
+
+A refused sleep fails its routine, so a graph's next desire takes over; a mind is told the refusal as any failed act. Every blow that lands wakes a sleeping victim, whoever plays it (`perceive::wake_struck` in `act::damage`): before, only a fight's first blow did (through its deliberation request), and later blows went to the AI-only, throttled fight report, so a body could sleep through a fight (r2e heavy r4: 8 of 10 night blows landed on a sleeper). The first blow's deliberation is unchanged.
+
+`scenes.py alert_after_hit` (any seed, about 2 min): struck once, a sleep is refused for 15 s and then taken; struck with the attacker left 2 m off, refused as "someone who struck you is close" past 15 s and taken once they walk away (within the 30 s fight); with both laws off (so a struck body sleeps again at once), the fight's second blow (within 30 s, not a first) wakes the sleeper with "You woke up: … is attacking you!". It sets and restores both laws.
+
+
+## An admin sets a body's health
+
+`admin_set_vitals(id, hp)` (`living/authority/src/lib.rs`, admin only) sets a living body's health to `hp`; more than its maximum is its maximum. It re-anchors the vitals row at that moment (`common::settle`), refreshes the fight band (`combat::refresh_band`), and updates what others see of the body's health (`perception::health_moved`). Nothing perceives it as care: no experience is written for anyone. Each use is a chronicle line of kind `admin` ("admin set <name>'s health 41 -> 100"). Trial timelines are its only user: the `vitals` step (docs/TRIALS.md), which R3's arenas use to start each meeting at full health (docs/COMBAT_MIND.md §5.4); summary.json `admin_vitals` lists every use. verify-client checks that every non-admin identity is refused, and that the mind service's sources never call it (it connects as the world's admin).
+
+`scenes.py admin_vitals`:
+- set to 40, then to 1000, read back as 40 and as the maximum;
+- each use an `admin` chronicle line;
+- 0 refused ("health must be above 0"), writing nothing;
+- after `kill`, refused ("no living character with that id").
+
+A negative value cannot be passed through the admin CLI, which reads "-5" as a flag.
+

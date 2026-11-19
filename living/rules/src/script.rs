@@ -12,15 +12,50 @@
 //! [`Scripts::validate`] runs every function on sample inputs before an install is accepted.
 
 use rhai::packages::Package;
-use rhai::{Array, Dynamic, Engine, Map, Scope, AST};
+use rhai::{Array, Dynamic, Engine, ImmutableString, Map, Scope, AST};
 use std::cell::RefCell;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::rc::Rc;
 
+/// Counts of script calls for the authority's profiling (docs/BATTLE_SCALE.md): skill calls
+/// (`<skill>_check`, `_done` and the rest, through `call`), and `status_of` asked, answered from
+/// its memo, and run. Plain counters in this instance's memory, read and cleared by
+/// `calls::take`; they decide nothing.
+pub mod calls {
+    use std::cell::Cell;
+    pub const SKILL: usize = 0;
+    pub const STATUS_ASKED: usize = 1;
+    pub const STATUS_MEMO: usize = 2;
+    pub const STATUS_RUN: usize = 3;
+    thread_local! {
+        static CALLS: Cell<[u64; 4]> = const { Cell::new([0; 4]) };
+    }
+    pub fn note(i: usize) {
+        CALLS.with(|c| {
+            let mut v = c.get();
+            v[i] += 1;
+            c.set(v);
+        });
+    }
+    /// The counts since the last take, cleared.
+    pub fn take() -> [u64; 4] {
+        CALLS.with(|c| c.replace([0; 4]))
+    }
+}
+
+pub mod body;
 mod check;
+#[cfg(test)]
+mod seed_check;
+#[cfg(test)]
+mod overlay_check;
 pub mod context;
 pub mod fields;
+pub mod speech;
+mod ui;
+pub use ui::UiWork;
 pub use check::Report;
+pub use body::{Alarm, BodyFacts, Meter, MeterMax, Status, Think};
 
 #[derive(Clone, Debug, Default)]
 pub struct ActorFacts {
@@ -53,6 +88,9 @@ pub struct ActorFacts {
     /// Who last hurt the actor, and how long ago (ms; none when never).
     pub hurt_by: u32,
     pub hurt_ago: Option<f32>,
+    /// The one who last hurt the actor is alive and within the `wake_reach` law of it, and the
+    /// fight is still on (struck within the authority's fight window, `act::FIGHT_MS`).
+    pub hurt_by_near: bool,
     /// How long ago the actor yielded (ms; none when it has not).
     pub yielded_ago: Option<f32>,
     /// Creatures the actor senses (in sight, or smelled for a species with a scent) by kind;
@@ -68,6 +106,17 @@ pub struct ActorFacts {
     pub community: u64,
     /// Where the actor's household lives (`"x,y"`, whole tiles; empty: no home).
     pub home: String,
+    /// The actor stands in lamplight: within the `lights` radius of a structure that gives
+    /// light (its traits in `structures()`), or within the light of a fire that burns fuel while
+    /// it is lit.
+    pub lit: bool,
+    /// Breath (`stamina`) and the non-bodily pool (`focus`) now, as the `pools(a)` law and the
+    /// vitals row give them (docs/STAMINA_PROPOSAL.md).
+    pub stamina: f32,
+    pub focus: f32,
+    /// The body's sex, "female" or "male" (`living_rules::sex::Sex::name`); "" when the world
+    /// holds none (an animal, or a person of a world from before sex).
+    pub sex: String,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -109,15 +158,26 @@ pub struct TargetFacts {
     pub hosts: bool,
     /// Where a creature's household lives, or a structure's owner's (`"x,y"`; empty: none).
     pub home: String,
+    /// A structure that is a fire: whether it burns now (one that needs no feeding always
+    /// does), and the fuel a fire that burns fuel still holds (units of its kind's fuel).
+    pub lit: bool,
+    pub fuel: f32,
+    /// A creature target's sex, as `ActorFacts::sex` ("" when none is held).
+    pub sex: String,
 }
 
 #[derive(Clone, Debug, Default)]
 pub struct SkillCtx {
+    pub gaze_band: crate::sight::GazeBand,
     pub actor: ActorFacts,
     pub target: TargetFacts,
     pub item: String,
     pub qty: u32,
+    /// It is night: the `daylight` law below one half (`Scripts::is_night`).
     pub night: bool,
+    /// How dark it is, 0 (full day) to 1 (full night): one minus the `daylight` law, in steps
+    /// of 1/20 so that laws kept per state share answers (`a.daylight` in the script).
+    pub dark: f32,
     pub hour: f32,
     pub season: String,
     pub text: String,
@@ -138,6 +198,27 @@ pub struct SkillCtx {
     pub records: Vec<crate::records::RecordFacts>,
     /// The record at hand: the one falling due (`on_expire`).
     pub record: Option<crate::records::RecordFacts>,
+    /// What an answer (accept, decline) names: a trade offer's id, a record's id (0: none).
+    pub offer_id: u64,
+    pub record_id: u64,
+    /// The trade offer at hand (filled only for a law that reads it): the one the act names, or,
+    /// when that one is gone or none is named, the target's standing offer to the actor.
+    pub offer: Option<OfferFacts>,
+}
+
+/// A trade offer as the rules see it (`a.offer`): `#{ id, from, to, give, give_qty, want,
+/// want_qty, open, left_s }`. `open` is false once it can no longer be accepted.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct OfferFacts {
+    pub id: u64,
+    pub from: u32,
+    pub to: u32,
+    pub give: String,
+    pub give_qty: u32,
+    pub want: String,
+    pub want_qty: u32,
+    pub open: bool,
+    pub left_s: f32,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -198,6 +279,9 @@ pub struct RegardIn {
     /// The observer is looking at itself.
     pub own: bool,
     pub night: bool,
+    /// How far the target is, in whole metres (rounded up); 0 unless the law reads `p.dist`
+    /// (`Scripts::regard_reads_dist`), so the key stays small for a law that does not.
+    pub dist: u16,
 }
 
 /// How precisely a field is perceived.
@@ -209,13 +293,35 @@ pub enum Precision {
     Exact,
 }
 
+/// How a person too far away to make out is called (`Regard::far`), by the authority's
+/// projection (players' `seen_*` labels, minds' scenes, percepts) and in memory with their id
+/// ("someone too far away to make out #77").
+pub const FAR_PERSON: &str = "someone too far away to make out";
+
+/// Where the handles of figures too far away to make out begin (far-handle): a mind's scene and
+/// experiences name such a figure by a handle of its own sighting, never by the person's id, so
+/// nothing else in a prompt (relations, community, memory) can tie the figure to a name. No
+/// character, structure or resource id reaches it.
+pub const FAR_HANDLE_BASE: u32 = 1_000_000_000;
+
 /// The `perceived_of` law's answer: which fields of the target the observer gets.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub struct Regard {
     /// Its name; otherwise a label (`a stranger`, `a wolf`).
     pub name: bool,
     pub health: Precision,
+    /// Too far away to make out (a law's `far`, e.g. Cullet's past `known_within`): who a person
+    /// is, and whose community they belong to, cannot be told. A person is then "someone too far
+    /// away to make out", known or not (docs/STRANGERS.md, far-label).
+    pub far: bool,
+    /// How much of the target's look a mind is told (docs/LOOK.md §3): `Full` for oneself and
+    /// whoever is made out, `Far` for someone too far away to make out (a law's `far`), as a
+    /// law's `look` ("full", "far", "none") says otherwise. The look's key reaches a player's
+    /// client whenever the target is seen, whatever this is.
+    pub look: LookSeen,
 }
+
+pub use crate::look::LookSeen;
 
 impl Regard {
     /// The rule without a `perceived_of` law: names when known (animals know their own kind's),
@@ -223,7 +329,7 @@ impl Regard {
     pub fn default_for(p: &RegardIn) -> Self {
         let name = p.own || p.known || (p.observer_kind != "person" && p.observer_kind == p.target_kind);
         let health = if p.own || p.revealed.iter().any(|r| r == "health") { Precision::Exact } else { Precision::Band };
-        Self { name, health }
+        Self { name, health, far: false, look: LookSeen::Full }
     }
 }
 
@@ -237,6 +343,9 @@ pub enum Effect {
     Harvest { qty: f32 },
     /// Change the actor's needs.
     Vitals { hp: f32, hunger: f32, energy: f32 },
+    /// Spend from one of the actor's short pools (`stamina` or `focus`, the `pools(a)` law):
+    /// its refill starts after the pool's delay.
+    Spend { pool: String, amount: f32 },
     /// Eat the grass where the actor stands (the chunk's pasture).
     Graze,
     /// Damage the target creature.
@@ -253,6 +362,11 @@ pub enum Effect {
     Store { item: String, qty: u32 },
     /// Move items from the target structure to the actor.
     Take { item: String, qty: u32 },
+    /// Put items from the actor's pack on the target fire as fuel (each worth its `burns.fuel`
+    /// trait in units): an out fire is lit, a lit one burns longer.
+    Fuel { item: String, qty: u32 },
+    /// Draw `units` of fuel from the target fire (the heat a recipe takes): it burns down sooner.
+    Burn { units: f32 },
     /// Replace (or retire) one of the actor's routines, or its top level, with the reworked
     /// version the act carries.
     Rework,
@@ -276,8 +390,12 @@ pub enum Effect {
     Plant,
     /// Propose a trade to the target.
     Offer,
-    /// Accept the target's standing offer.
-    Accept,
+    /// Accept the target's trade offer to the actor: the one with this id, or (0) the one
+    /// standing.
+    Accept { offer: u64 },
+    /// End the target's trade offer to the actor without a trade: the one with this id, or (0)
+    /// the one standing.
+    Decline { offer: u64 },
     Found,
     Join,
     Welcome,
@@ -327,6 +445,9 @@ pub struct Laws {
     pub danger_near: f32,
     pub danger_far: f32,
     pub repeat_failure_s: f32,
+    /// Every blow, shot or bolt a character makes is told to it with how it came out, as far as
+    /// it sees (docs/COMBAT_MIND.md §3.1). Off: only notable skills and failures, as before.
+    pub force_outcomes: bool,
     /// Walking speed multiplier on road tiles.
     pub road_speed: f32,
     // ---- steering (see `steer.rs`; how each creature turns and keeps apart is its `motion`) ----
@@ -359,8 +480,13 @@ pub struct Laws {
     /// How long a played character stands without any connection of its person before the
     /// world's minds take it over (seconds; docs/PLAYER_MEMORY.md).
     pub takeover_s: f32,
-    /// How long one `follow` lasts before the follower looks again, seconds.
+    /// How long one `follow` lasts before the follower looks again, seconds (also how long a
+    /// `keep_distance` or a `circle` lasts when it names no time).
     pub follow_s: f32,
+    /// A movement held to a creature (`follow`, `keep_distance`, `circle`, `close_in`,
+    /// `back_off`) goes by where it was last seen while it is out of sight, and ends when it has
+    /// not been seen for this many seconds (`steer::INTENTS`).
+    pub lost_after_s: f32,
     /// `read` with nothing named reads the nearest sign within this many metres.
     pub read_sign_m: f32,
     /// Others of one's own kind within this many metres count as kin near (`a.actor.kin_near`).
@@ -371,10 +497,13 @@ pub struct Laws {
     pub join_window_s: f32,
     /// Speech to no one in particular is taken as addressed to the only listener within this many metres.
     pub address_m: f32,
+    /// A sound at least this loud (a line's way, a signal, a blow: their specs' `loudness`; a
+    /// voice is 1) wakes a sleeper within `wake_reach` metres who hears it, whoever plays it.
+    pub wake_loudness: f32,
+    /// How near a loud sound must be to wake a sleeper (metres).
+    pub wake_reach: f32,
     /// A creature already in a player's sight stays seen until this many metres beyond the player's sight.
     pub keep_seen_m: f32,
-    /// A chased creature is lost from sight beyond this share of the chaser's sight (or its scent, if farther).
-    pub chase_lost_share: f32,
     /// Hunger of a body that comes into the world.
     pub spawn_hunger: f32,
     /// Energy of a body that comes into the world.
@@ -383,6 +512,203 @@ pub struct Laws {
     pub pasture_per_tile: f32,
     /// A crying infant makes its carers think about it; false: the cry is only heard.
     pub cry_prompts_carers: bool,
+    /// Speech records who heard each line and how they stood toward the speaker (the private
+    /// `audience` table), for the mind service's conversation rules (on since 2026-11-11, when
+    /// `LIVING_GREET=nearest` became the minds' default).
+    pub speech_audience: bool,
+    /// A line to someone tells the speaker the truth when they could not have heard it ("Bram
+    /// is too far away: they could not have heard you."), and a plan's queued line is not said
+    /// into the air: dropped once the conversation has moved past it, and when its addressee is
+    /// beyond the way's reach as it comes due, told to the speaker instead (docs/COMMUNICATION.md
+    /// §15). Off: `speech-2`'s words ("No answer from …" when the addressee is not seen), and a
+    /// queued line is said whenever it comes due.
+    pub speech_truth: bool,
+    /// Real minutes after one's own birth, or one's youngest child's, before a grown person
+    /// feels the longing for a child; the most nurturing feel it sooner ([`longing_wait_ms`]).
+    pub longing_after_min: f32,
+    /// Food one must carry for that longing to be felt (0: it does not depend on food).
+    pub longing_food: f32,
+    /// Sight depends on facing (the `field` of `senses(a)`; the geometry is the `fov_*` laws,
+    /// read by the script).
+    pub fov_on: bool,
+    pub cover_cliff_step_m: f32,
+    pub cover_brush_min_fill: f32,
+    pub cover_brush_on: bool,
+    pub cover_eye_height_m: f32,
+    pub gaze_on: bool,
+    pub cover_sight_on: bool,
+    /// How far a character sees ground by day (metres): the cells of `known_ground` it marks
+    /// (docs/MOVEMENT_MIND.md, step 3). At night, its own sight.
+    pub ground_sight_m: f32,
+    /// Most ground cells one look marks (0: no cap); the rest are marked by later looks.
+    pub known_cells_pass: f32,
+    /// Walks are planned over what each walker has seen (its `known_ground`), not the map.
+    pub nav_belief: bool,
+    /// The cost of a metre of unseen ground against seen open ground, in a plan over belief.
+    pub unknown_cost: f32,
+    /// Wolves' starting instincts carry the spacing reflex (docs/PACK_MIND.md, decision 1):
+    /// beside each hunt, a weighted desire to keep apart from mates while closing on the prey
+    /// (`graph::with_pack_reflex`). Read where an instinct is installed; a world turns it off.
+    pub pack_reflex: bool,
+    /// A body struck this many seconds ago cannot fall asleep (the script's `sleep_check`, the
+    /// same for every controller).
+    pub alert_after_hit_s: f32,
+    /// A body cannot fall asleep while the one who last struck it, in a fight still on, is within
+    /// `wake_reach` (the fact `hurt_by_near`).
+    pub alert_while_attacker_near: bool,
+    /// A continuous activity (rest, sleep, work, eating, play) that ends well stays seen until
+    /// the body's next evaluation: its `doing` row is held, then renewed in place if the same
+    /// activity begins again, replaced or removed if not (doing-renew). Nothing begins sooner.
+    /// Off: the row is deleted at the end and the body is seen doing nothing until the next
+    /// begins, as before 2026-11-19.
+    pub renew_in_place: bool,
+    /// What a graph's `relation: "stranger"` filter means (docs/STRANGERS.md): off, no
+    /// relation row (or one labelled "stranger"); on, someone whose name one does not know
+    /// (`perception::knows_name`, the rule scenes and percepts name people by).
+    pub stranger_by_name: bool,
+    /// Attention cues (docs/ATTENTION.md): what a mind wrote it should be brought to think
+    /// about, matched against what its character perceives. Off: nothing is matched.
+    pub cues_on: bool,
+    /// A cue fires at most once per thing it matched within this many seconds.
+    pub cue_cooldown_s: f32,
+    /// A character is brought to think by its cues at most once within this many seconds.
+    pub cue_gap_s: f32,
+    /// A first sight of someone one cannot place (not known by name, not too far to make out)
+    /// asks one's mind for a thought (docs/FIRST_SIGHT.md). Off: a first sight is only noticed.
+    pub first_sight_thinks: bool,
+    /// First sights bring a character to think at most once within this many seconds.
+    pub first_sight_gap_s: f32,
+    /// A mind's line to someone, coming due after another was heard addressing them since the
+    /// scene the decision read, is not said yet: the speaker is told so and asked to think
+    /// again with that line in front of it (first-sight-crowd, docs/FIRST_SIGHT.md). Off: said.
+    pub heard_first_rethinks: bool,
+    /// The think prompt's framing (docs/FRAMING.md): off, today's ("Start from why you are
+    /// thinking now: that is what this moment of thought is about. …"); on, the neutral one
+    /// replayed as N2 ("What just happened is shown beside what you perceive. …", the reason's
+    /// section headed "# What just happened" where it stands).
+    pub think_framing: bool,
+    /// A person's scene says whom a line said now would reach, at each way of speaking, among
+    /// the people they perceive (earshot, docs/COMMUNICATION.md §17): a mind's deliberation scene
+    /// ("who would hear you now") and a player's `my_earshot`. On as shipped (since earshot-on);
+    /// off, neither is told.
+    pub earshot: bool,
+    /// How often a character's cues are checked against what it perceives (seconds).
+    pub cue_check_s: f32,
+    /// A bystander, one who sees an event it is not party to, is woken by what it sees at most
+    /// once per this many ms (docs/BATTLE_SCALE.md, fix 3); the percept is written at once and in
+    /// full. 0: woken by each, as before.
+    pub witness_wake_ms: f32,
+    /// A diagnostic, 0 in play (docs/PERCEPTION.md, "Module memory and rollback"): a step the
+    /// world fails on purpose, to prove that nothing kept in module memory outlives a
+    /// transaction that rolled back (1 the tick after its sweep, 2 the tick by a panic, 3
+    /// `place_at`, 4 `kill`, 5 `join`; 6 drops the marks kept in memory, as if made elsewhere).
+    pub memory_test: f32,
+    /// What an onlooker sees of fights it is not party to is told as one line per this many ms
+    /// (docs/BATTLE_SCALE.md, fix 4): every blow it could see, with counts and outcomes. A blow
+    /// at it or by it is told at once. 0: each fight's first blow told at once, as before.
+    pub witness_fold_ms: f32,
+    /// What each observer makes of each target (name known, the `perceived_of` answer) is
+    /// computed once per transaction and shared (`perception::with_answers`). Off: every
+    /// asker computes it afresh (the same answers; for measuring the cache).
+    pub regard_cache: bool,
+    /// Diagnostic: every shared answer is also computed afresh and compared; differences are
+    /// logged and counted (`perception::report_answers`). Costs both.
+    pub regard_cache_check: bool,
+    /// A diagnostic: while profiling (`set_profile`), also time the parts of a behaviour graph's
+    /// evaluation (its conditions, targets, act starts, alerts), docs/BATTLE_SCALE.md. Off by
+    /// default: those spans are many and would weigh on what an ordinary profile measures.
+    pub profile_detail: bool,
+    /// A move's check before it starts is given a context of the fields the check reads alone
+    /// (its plan; docs/BATTLE_SCALE.md, battle-cheap path 1): the same answer, without gathering
+    /// what it never reads (kin near, practice, community and home, warmth). Off: the whole context.
+    pub check_ctx_plan: bool,
+    /// Diagnostic: every such check is also asked with the whole context, and a difference logged
+    /// and counted (`diag:` `check_ctx:differed`).
+    pub check_ctx_check: bool,
+    /// The body's alarms (`status_of`) are answered from the last answer while no field it reads
+    /// has crossed one of its levels (battle-cheap path 2). Off: asked at every evaluation.
+    pub alarm_cells: bool,
+    /// How what is near a player, or fighting it, reaches its client (docs/PERCEPTION.md, "Cues
+    /// and tiers"): on, as cues at once (the `seen_*_cue` event tables, filtered per client by
+    /// row-level security) behind near copies that follow every 500 ms; off, no cue is written
+    /// and the near copies follow at every frame. A switch for the delivery, not for what is
+    /// perceived: the rows a client ends on are the same.
+    pub cue_transport_on: bool,
+    /// Whether a player's copies are split into a near tier and a far tier (docs/PERCEPTION.md,
+    /// "Cues and tiers"). Off, every copy is in the far tier (the untiered views' tables), so a
+    /// frame re-runs one view as before frame-views; with `cue_transport_on` off too, a player's
+    /// delivery is main's.
+    pub near_tier_on: bool,
+    /// Diagnostic: every alarm answer from a cell is also asked afresh, and a difference logged
+    /// and counted (`alarm:differed`).
+    pub alarm_cells_check: bool,
+    /// Diagnostic: warmth (battle-cheap path 3: only what warms or shelters, visited in place)
+    /// is also worked out from a full copy, and a difference logged and counted
+    /// (`warmth:differed`).
+    pub warmth_check: bool,
+    /// A body's scene is worked out as far as each reader asks (docs/BATTLE_SCALE.md,
+    /// scene-lazy): the nearest seen of a kind tests sight only for the nearest candidates, a
+    /// creature asked about by id only for it. The same answers as the whole scene. Off: every
+    /// creature in sight range is tested and the resources gathered when the scene is begun.
+    pub scene_lazy: bool,
+    /// Diagnostic: every lazy answer is also worked out from the whole scene, and a difference
+    /// logged and counted (`diag:` `scene_lazy:differed`).
+    pub scene_lazy_check: bool,
+    /// The chronicle's repeat check (docs/BATTLE_SCALE.md, battle-exact-2 E) reads the newest
+    /// rows first, widening its window until it holds the 40 it compares: the same 40 rows in
+    /// the same order. Off: every row of the last two minutes is read.
+    pub chronicle_recent: bool,
+    /// Diagnostic: each repeat check also reads every row of the last two minutes, and a
+    /// difference is logged and counted (`diag:` `chronicle_recent:differed`).
+    pub chronicle_recent_check: bool,
+    /// Noticing reads the structures in sight in place (docs/BATTLE_SCALE.md, battle-exact-2
+    /// C1): the copied and sorted list is built only when something in sight is new. Off: the
+    /// list is built at every look.
+    pub notice_inplace: bool,
+    /// Diagnostic: each look also works out what is new from the full list, and a difference
+    /// is logged and counted (`diag:` `notice_inplace:differed`).
+    pub notice_inplace_check: bool,
+    /// A look for what is new checks only the structures newer than, or outside the disc of, the
+    /// character's last look within 45 s (docs/BATTLE_SCALE.md, C2; the `last_look` row): the rest
+    /// were looked at then. Pruning `familiar` spares structures within that disc. Off: every
+    /// structure in sight is checked at each look.
+    pub notice_delta: bool,
+    /// Diagnostic: every structure a look skips is checked to have its `familiar` row (it would
+    /// not have been new), and one without is logged and counted (`notice_delta:differed`).
+    pub notice_delta_check: bool,
+    pub seen_ranges: bool,
+    pub seen_ranges_check: bool,
+    /// The fast lane (docs/FAST_LANE.md): a mind-run character's re-plan between blows, asked
+    /// of its mind on a blow taken or a move it sees repeated. Off: none is asked.
+    pub fast_lane_on: bool,
+    /// The same visible move aimed at a character by the same creature, seen this many times
+    /// in one fight, asks a fast re-plan (counted for the trigger only; never told).
+    pub seen_again_n: f32,
+    /// Fast re-plans issued a second, across the world, at most.
+    pub fast_lane_rate: f32,
+    /// Fast re-plans in flight at once, across the world, at most.
+    pub fast_lane_inflight: f32,
+    /// A character's fast re-plans start at least this many seconds apart.
+    pub fast_lane_gap_s: f32,
+    /// A trigger still waiting its turn after this many seconds is dropped.
+    pub fast_lane_stale_s: f32,
+    /// A sound heard but not seen is near within this, close within the next (metres), and
+    /// lingers this long after it was last heard (seconds).
+    pub heard_near_m: f32,
+    pub heard_close_m: f32,
+    pub heard_linger_s: f32,
+    /// A held look (`human_face`): a change within this many degrees is the same look; walking,
+    /// the body's facing (not its travel) turns toward the look at most this many degrees off its
+    /// way (`steer::walk_face`).
+    pub look_slack_deg: f32,
+    pub look_walk_deg: f32,
+}
+
+/// How long after one's own birth, or one's youngest child's, a grown person waits before
+/// longing for a child: `after_min` real minutes, shortened by nurture (0..100) to a sixth of
+/// it at most nurturing. With the shipped 20 minutes this is the old `20 - nurture / 6`.
+pub fn longing_wait_ms(after_min: f32, nurture: f32) -> f32 {
+    60_000.0 * after_min.max(0.0) * (1.0 - nurture.clamp(0.0, 100.0) / 120.0)
 }
 
 
@@ -397,6 +723,7 @@ impl Default for Laws {
             danger_near: 8.0,
             danger_far: 12.0,
             repeat_failure_s: 120.0,
+            force_outcomes: true,
             road_speed: 1.4,
             slow_radius: 1.2,
             corner_radius: 0.9,
@@ -413,46 +740,124 @@ impl Default for Laws {
             flee_clear: 9.0,
             takeover_s: 30.0,
             follow_s: 12.0,
+            lost_after_s: 2.0,
             read_sign_m: 8.0,
             kin_near_m: 4.0,
             trade_window_s: 180.0,
             join_window_s: 300.0,
             address_m: 6.0,
+            wake_loudness: 2.0,
+            wake_reach: 8.0,
             keep_seen_m: 1.0,
-            chase_lost_share: 1.4,
             spawn_hunger: 25.0,
             spawn_energy: 85.0,
             pasture_per_tile: 0.02,
             cry_prompts_carers: true,
+            speech_audience: true,
+            speech_truth: true,
+            longing_after_min: 20.0,
+            longing_food: 0.0,
+            fov_on: false,
+            cover_cliff_step_m: 2.0,
+            cover_brush_min_fill: 0.6,
+            cover_brush_on: true,
+            cover_eye_height_m: 1.6,
+            gaze_on: false,
+            cover_sight_on: false,
+            ground_sight_m: 24.0,
+            known_cells_pass: 0.0,
+            nav_belief: false,
+            unknown_cost: 1.5,
+            pack_reflex: true,
+            alert_after_hit_s: 15.0,
+            alert_while_attacker_near: true,
+            renew_in_place: true,
+            stranger_by_name: false,
+            cues_on: false,
+            cue_cooldown_s: 600.0,
+            cue_gap_s: 60.0,
+            first_sight_thinks: false,
+            earshot: true,
+            first_sight_gap_s: 300.0,
+            heard_first_rethinks: false,
+            think_framing: false,
+            cue_check_s: 1.0,
+            witness_wake_ms: 500.0,
+            memory_test: 0.0,
+            witness_fold_ms: 2000.0,
+            regard_cache: true,
+            regard_cache_check: false,
+            profile_detail: false,
+            check_ctx_plan: true,
+            check_ctx_check: false,
+            alarm_cells: true,
+            cue_transport_on: true,
+            near_tier_on: true,
+            alarm_cells_check: false,
+            warmth_check: false,
+            scene_lazy: true,
+            scene_lazy_check: false,
+            chronicle_recent: true,
+            chronicle_recent_check: false,
+            notice_inplace: true,
+            notice_inplace_check: false,
+            notice_delta: true,
+            notice_delta_check: false,
+            seen_ranges: true,
+            seen_ranges_check: false,
+            fast_lane_on: false,
+            seen_again_n: 3.0,
+            fast_lane_rate: 2.0,
+            fast_lane_inflight: 4.0,
+            fast_lane_gap_s: 6.0,
+            fast_lane_stale_s: 8.0,
+            heard_near_m: 5.0,
+            heard_close_m: 15.0,
+            heard_linger_s: 2.0,
+            look_slack_deg: 10.0,
+            look_walk_deg: 75.0,
         }
     }
 }
 
-/// What a creature senses now (`senses(a)`): how far it sees and hears, in tiles (a tile is
-/// one metre).
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct Senses {
-    pub sight: f32,
-    pub hearing: f32,
-}
+/// What a creature senses now (`senses(a)`): how far it sees and hears, and how its view
+/// narrows away from facing (the one sight rule, [`crate::sight`]).
+pub use crate::sight::{Field, Senses};
 
 /// The farthest anyone's senses reach (`reach` in `senses_law()`): by day and by night, and
-/// hearing. The engine gathers onlookers and listeners within these before testing each one's
-/// own senses, and holds every answer of the law to them.
+/// hearing; and `glow`, the farthest anyone is seen by a light on them (the `glow` law; 0 when
+/// the script has none). The engine gathers onlookers and listeners within these before testing
+/// each one's own senses, and holds every answer of the laws to them.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Reach {
     pub day: f32,
     pub night: f32,
     pub hearing: f32,
+    pub glow: f32,
+    /// Optional narrower glow bound in full daylight (falls back to the all-light bound).
+    pub glow_day: f32,
 }
 
 impl Reach {
-    pub fn sight(&self, night: bool) -> f32 {
-        if night {
+    /// The farthest anyone sees at darkness `dark` (0 day, 1 night; in twilight the wider of
+    /// the two, since a law may ease between them).
+    pub fn sight(&self, dark: f32) -> f32 {
+        if dark <= 0.0 {
+            self.day
+        } else if dark >= 1.0 {
             self.night
         } else {
-            self.day
+            self.day.max(self.night)
         }
+    }
+
+    pub fn glow_at(&self, dark: f32) -> f32 {
+        if dark <= 0.0 { self.glow_day } else { self.glow }
+    }
+
+    /// The farthest anything is seen at darkness `dark`: by an eye, or by a light on it.
+    pub fn seen(&self, dark: f32) -> f32 {
+        self.sight(dark).max(self.glow)
     }
 }
 
@@ -476,12 +881,18 @@ pub struct Moves {
     /// search keeps a direction; otherwise it picks one at random.
     pub wander_turn: f32,
     pub wander_keep_s: f32,
+    /// The fastest a road takes a body (m/s): the road's bonus stops here, though a body that
+    /// is faster on its own keeps its speed (infinite: no cap; a law without `top`).
+    pub top: f32,
+    /// The approach to a blow (a `closes_in` skill at a creature) runs unless the act says
+    /// walk: a predator's charge (false: it walks unless the act says run).
+    pub charge: bool,
 }
 
 impl Moves {
     /// Steering constants for [`crate::steer::plan`] (the road's speed is the world's).
     pub fn tuning(&self, road_speed: f32) -> crate::steer::Tuning {
-        crate::steer::Tuning { turn_rate: self.turn_rate, turn_slow: self.turn_slow, road_speed, ..Default::default() }
+        crate::steer::Tuning { turn_rate: self.turn_rate, turn_slow: self.turn_slow, road_speed, top: self.top, ..Default::default() }
     }
 }
 
@@ -527,7 +938,88 @@ pub const LAW_TRAITS: &[&str] = &["about", "cadence", "topic", "reach", "covers"
 /// Laws the engine asks for that a script installed before they existed may lack: such a script
 /// runs with the shipped script's functions underneath its own until its next install, and an
 /// install without them is refused.
-pub const REQUIRED_LAWS: &[&str] = &["senses", "motion", "items", "structure_traits"];
+pub const REQUIRED_LAWS: &[&str] = &["senses", "motion", "items", "structures", "resources", "know_how"];
+
+/// The world's data tables (read once when the script compiles): each a list of maps with a
+/// `name`, in the script's order. `items`, `structures`, `resources` and `know_how` are
+/// required; `recipes` is the world's own (none when the script has no `recipes()`).
+pub const TABLES: &[&str] = &["items", "structures", "resources", "know_how", "recipes"];
+/// An item's traits a client draws it by (data only: no rule reads them; docs/WORLD_RULES.md,
+/// "What a client shows").
+pub const ITEM_LOOK: [&str; 3] = ["icon", "label", "group"];
+
+/// The data tables as the rules read them through the engine's primitives: `entry_of(table,
+/// name)` (the entry's map, or `()`), `names_of(table)` (its names, in order) and
+/// `having(table, trait)` (the names whose entry has the trait, neither `()` nor false). The
+/// rules match by traits (food is what has nutrition, fuel what has the fire's fuel trait), and
+/// these lookups cost one operation each instead of rebuilding a list per question.
+#[derive(Clone, Debug, Default)]
+pub struct Tables {
+    by: HashMap<String, (Vec<String>, HashMap<String, Map>)>,
+    /// The world constants in force (`laws()` with the world's own values over them, from the
+    /// script's `world_law_values()`), read by laws through `law(name)`.
+    laws: Map,
+}
+
+impl Tables {
+    pub fn entry(&self, table: &str, name: &str) -> Option<&Map> {
+        self.by.get(table).and_then(|(_, m)| m.get(name))
+    }
+
+    pub fn names(&self, table: &str) -> &[String] {
+        self.by.get(table).map_or(&[], |(n, _)| n.as_slice())
+    }
+
+    /// A trait of an entry that is a number.
+    pub fn number(&self, table: &str, name: &str, t: &str) -> Option<f64> {
+        self.entry(table, name).and_then(|m| m.get(t)).and_then(number)
+    }
+
+    /// A trait of an entry that is a list of words (`ground: ["sand"]`).
+    pub fn words(&self, table: &str, name: &str, t: &str) -> Vec<String> {
+        let Some(v) = self.entry(table, name).and_then(|m| m.get(t)) else { return Vec::new() };
+        v.clone().try_cast::<Array>().unwrap_or_default().into_iter().filter_map(|w| w.into_string().ok()).collect()
+    }
+
+    /// A trait of an entry that is true.
+    pub fn flag(&self, table: &str, name: &str, t: &str) -> bool {
+        self.entry(table, name).and_then(|m| m.get(t)).is_some_and(|v| v.as_bool() == Ok(true))
+    }
+
+    pub fn having(&self, table: &str, t: &str) -> Vec<String> {
+        let Some((names, m)) = self.by.get(table) else { return Vec::new() };
+        names.iter().filter(|n| m.get(n.as_str()).and_then(|e| e.get(t)).is_some_and(|v| !v.is_unit() && v.as_bool() != Ok(false))).cloned().collect()
+    }
+
+    /// The entries, in order, whose trait `t` is the text `value`; an entry without it counts as
+    /// `absent` (`entries_where("recipes", "by", "make", "make")`: a recipe names its way, or is
+    /// made by `make`).
+    pub fn entries_where(&self, table: &str, t: &str, value: &str, absent: &str) -> Vec<&Map> {
+        let Some((names, m)) = self.by.get(table) else { return Vec::new() };
+        names.iter().filter_map(|n| m.get(n.as_str())).filter(|e| match e.get(t) {
+            None => absent == value,
+            Some(v) if v.is_unit() => absent == value,
+            Some(v) => v.clone().into_string().is_ok_and(|s| s == value),
+        }).collect()
+    }
+}
+
+/// The engine's primitives over the data tables (see [`Tables`]).
+fn register_tables(e: &mut Engine, t: &Rc<RefCell<Tables>>) {
+    let t1 = t.clone();
+    e.register_fn("entry_of", move |table: &str, name: &str| -> Dynamic { t1.borrow().entry(table, name).map_or(Dynamic::UNIT, |m| m.clone().into()) });
+    let t2 = t.clone();
+    e.register_fn("names_of", move |table: &str| -> Array { t2.borrow().names(table).iter().map(|n| Dynamic::from(n.clone())).collect() });
+    let t3 = t.clone();
+    e.register_fn("having", move |table: &str, tr: &str| -> Array { t3.borrow().having(table, tr).into_iter().map(Dynamic::from).collect() });
+    // A world constant in force: the script's `laws()` value, or the world's own
+    // (`world_law_values()`, which `set_world_law` and a seed's `rules` write). Unit when no
+    // such law.
+    let t5 = t.clone();
+    e.register_fn("entries_where", move |table: &str, tr: &str, value: &str, absent: &str| -> Array { t5.borrow().entries_where(table, tr, value, absent).into_iter().map(|m| m.clone().into()).collect() });
+    let t4 = t.clone();
+    e.register_fn("law", move |name: &str| -> Dynamic { t4.borrow().laws.get(name).cloned().unwrap_or(Dynamic::UNIT) });
+}
 
 /// Distinct states whose senses or moves are kept before the memo starts over.
 const CREATURE_MEMO: usize = 1_024;
@@ -566,6 +1058,11 @@ pub enum NeedLaw {
         /// (`wet_energy`, `cold_hp`) is divided.
         appetite_gene: String,
         hardiness_gene: String,
+        /// Real minutes' worth of the law's unit: the law writes its rates per game hour
+        /// (`per: "hour"`) and the engine turns them into rates per real minute for the world's
+        /// day length (60,000 ms over the real ms of a game hour); 1 for a law written per real
+        /// minute (`per: "minute"`, or no `per`, as scripts were before day lengths varied).
+        per_min: f64,
     },
     /// A script whose `rates(a)` returns the finished rates (`hunger`, `energy`, `hp`).
     Final(Rates),
@@ -587,7 +1084,7 @@ impl NeedLaw {
     pub fn rates(&self, a: &ActorFacts) -> Rates {
         match self {
             NeedLaw::Final(r) => *r,
-            NeedLaw::Params { hunger, energy, starving_at, starving_hp, fed_below, rested_above, healing_hp, spent_at, spent_hp, healing, tiring_gene, healing_gene, wet_energy, cold_hp, appetite_gene, hardiness_gene } => {
+            NeedLaw::Params { hunger, energy, starving_at, starving_hp, fed_below, rested_above, healing_hp, spent_at, spent_hp, healing, tiring_gene, healing_gene, wet_energy, cold_hp, appetite_gene, hardiness_gene, per_min } => {
                 let (h, e) = (a.hunger as f64, a.energy as f64);
                 let mut hp = 0.0f64;
                 if h >= *starving_at {
@@ -612,7 +1109,11 @@ impl NeedLaw {
                 let hardy = gene(hardiness_gene).max(0.1);
                 energy += wet_energy / hardy;
                 hp += cold_hp / hardy;
-                Rates { hunger_per_min: (*hunger * gene(appetite_gene)) as f32, energy_per_min: energy as f32, hp_per_min: hp as f32 }
+                // Into the engine's unit, a real minute, last: on the 12-minute day a game hour
+                // is half a real minute, a factor of exactly 2, so the rates are the same numbers
+                // as when the law was written per real minute.
+                let k = *per_min;
+                Rates { hunger_per_min: (*hunger * gene(appetite_gene) * k) as f32, energy_per_min: (energy * k) as f32, hp_per_min: (hp * k) as f32 }
             },
         }
     }
@@ -628,6 +1129,10 @@ pub struct Scripts {
     shows: crate::social::Shows,
     /// Every skill the script declares (`<skill>_spec()`).
     skills: std::sync::Arc<crate::catalog::Skills>,
+    /// The ways of speaking (`<way>_speech()`), in their order.
+    ways: Vec<speech::WaySpec>,
+    /// The words a speaker uses for someone by their relation to them (`kin_terms()`), by relation.
+    kin: speech::KinTerms,
     /// Functions of no parameter.
     nullary: HashSet<String>,
     /// What each function reads of its parameters.
@@ -644,27 +1149,173 @@ pub struct Scripts {
     /// `senses(a)` and `motion(a)` the same way.
     senses: RefCell<HashMap<Vec<u8>, Senses>>,
     moves: RefCell<HashMap<Vec<u8>, Moves>>,
+    pools: RefCell<HashMap<Vec<u8>, crate::pools::Pools>>,
+    /// `glow(a)` the same way.
+    glows: RefCell<HashMap<Vec<u8>, f32>>,
+    /// Life tables under the `life_years` law, by species.
+    lives: RefCell<HashMap<String, crate::life::Life>>,
+    /// The world's game hour in real milliseconds (its day length over 24).
+    hour_ms: f64,
+    /// `daylight(hour)` by game minute of the day (NaN: not asked yet).
+    daylight: RefCell<Vec<f32>>,
     /// Every law the script declares (`<law>_law()`), by name.
     laws: std::collections::BTreeMap<String, LawSpec>,
     /// The farthest senses reach (from `senses_law()`).
     reach: Reach,
+    /// The gaze bands' ceilings while the `gaze_on` law holds (`gaze_ceiling(band)`), else none.
+    /// A value-only change of `gaze_on` reads them again ([`Scripts::apply_overrides`]).
+    gaze_ceilings: std::cell::Cell<Option<[f32; 3]>>,
+    /// The world's own law values over the script's ([`Scripts::apply_overrides`]: the
+    /// authority's `law_override` rows), by name. [`Scripts::laws_map`] lays them over.
+    overrides: RefCell<Vec<(String, serde_json::Value)>>,
+    /// The value-only laws ([`VALUE_ONLY`]) that this script names only where the constants are
+    /// declared and described (`value_only_in`): their values can change without an install.
+    value_only: Vec<&'static str>,
     /// Required laws the script lacks, taken from the shipped script (an install refuses them).
     borrowed: Vec<String>,
     /// The script's source (for the order of its declarations).
     source: String,
     /// Law declarations that failed when read (an install refuses them).
     law_errors: RefCell<Vec<String>>,
-    /// What each kind of structure does for those near it (`structure_traits()`).
+    /// `law_about(laws(), name)` for each constant, read once when the script compiles, under [`COMPILE_OPERATIONS`]
+    /// like the laws' other descriptions: what each world constant is, or why it could not be read.
+    /// None after a value-only edit ([`Scripts::apply_overrides`]): read again, with the
+    /// compile's limits, when next asked (only an install's checks and tests ask).
+    about: RefCell<Option<Result<Vec<(String, String)>, String>>>,
+    /// What each kind of structure does for those near it (its traits in `structures()`).
     structures: HashMap<String, StructureTraits>,
+    /// Resource kinds' shares of their regrowth by season (`regrow_by_season`), when not the
+    /// shipped ones.
+    seasons: HashMap<String, [f32; 4]>,
+    /// The data tables, shared with the engine's primitives.
+    tables: Rc<RefCell<Tables>>,
+    /// How each skill is presented (`<name>_ui()` over its defaults), and what was wrong with
+    /// the declarations (an install refuses them; a client plays on with the defaults).
+    ui: ui::UiRead,
+    /// What each way of making makes (a skill with `<skill>_making()`), in the script's order:
+    /// each product's recipe as data (`recipe_parts`).
+    makings: BTreeMap<String, Vec<RecipeParts>>,
+    /// The body's meters and the memo of its statuses (`meters()`, `status_of(a)`).
+    body: body::Body,
 }
 
-/// What a kind of structure does for those near it (`structure_traits()`).
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
+/// What a kind of structure does for those near it (its traits in `structures()`).
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct StructureTraits {
-    /// A hearth: near it counts as near a fire.
+    /// A fire that needs no feeding (a campfire): near it counts as near a fire, within the
+    /// `fire_warmth` law (a building that warms: within `shelter_warmth`).
     pub warms: bool,
     /// A roof: near it counts as sheltered.
     pub roof: bool,
+    /// It gives light: those within this many metres stand in lamplight (`a.actor.lit`; 0: none).
+    /// A kind that `burns` gives it only while lit.
+    pub lights: f32,
+    /// A fire that burns fuel (a hearth, an oven, a furnace, a lamp): it warms and lights only
+    /// while lit.
+    pub burns: Option<Burns>,
+    /// A store: the most things it holds in all (`holds`; none: not a store). One stores into
+    /// and takes from a kind that has it.
+    pub holds: Option<f32>,
+    /// The kind it counts as wherever a kind is asked by name (`like: "storage"`: a graph's
+    /// `nearest storage` finds it too); empty: only its own name.
+    pub like: String,
+    /// It shows whose it is to anyone who looks (a shop's sign, a marker): its owner is named
+    /// to an observer who does not know them (`owner_shown`, `o.shows`). Off by default.
+    pub shows_owner: bool,
+}
+
+/// One product of a way of making, as a recipe grid lays it out (`Scripts::recipe_parts`): the
+/// script's `recipe_parts(skill, way, product)`, read once at install, with each name's look.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct RecipeParts {
+    /// The skill whose grid it is in (`make`, `craft`, `cook`, `smoke`, or a world's own way).
+    pub skill: String,
+    /// What is made, and how it looks (`recipe_look`).
+    pub product: String,
+    pub look: ItemLook,
+    /// How many one act makes.
+    pub makes: u32,
+    /// What the act names as its item (`human_act`'s `item`): the product, or for a way whose item
+    /// is what is used (`cook`, `smoke`), the item it is made from.
+    pub item: String,
+    /// Used up from the pack.
+    pub takes: Vec<RecipePart>,
+    /// Held and not used up (none yet: goods-3 adds the recipes' `tools`).
+    pub tools: Vec<RecipePart>,
+    /// The structure kind it is made at, `"fire"` for any fire, or empty: anywhere.
+    pub at: String,
+    /// The fire there must be burning.
+    pub lit: bool,
+    /// Units of fuel it draws from that fire (0: none).
+    pub fuel: f32,
+    /// The technique it needs (empty: none).
+    pub knows: String,
+    /// How long one act takes.
+    pub ms: u64,
+}
+
+/// A name a recipe asks for and how many: an item, or a trait that any item carrying it
+/// satisfies (`alkali`: ash, or a world's soda).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct RecipePart {
+    pub name: String,
+    pub qty: u32,
+    /// The items that satisfy it, in the items' order: the item itself, or every item with the
+    /// trait.
+    pub any_of: Vec<String>,
+    /// How it looks: the item's look; for a trait, the look of the trait's name (its name as the
+    /// icon and the label), which a client may draw as its first item's.
+    pub look: ItemLook,
+}
+
+/// What a client shows of an item or of what a recipe makes (`Scripts::item_look_of`).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ItemLook {
+    /// A short stable id the client draws it by (docs/WORLD_RULES.md lists them).
+    pub icon: String,
+    /// Its name for players, lower case as in a sentence.
+    pub label: String,
+    /// Where a pack or a recipe grid sorts it (empty: none).
+    pub group: String,
+}
+
+/// A fire that eats fuel (`burns: #{ fuel, rate, warmth, light, holds }`).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Burns {
+    /// The item trait that makes something its fuel; the trait's number is the units one item
+    /// gives (`fuel: 1.0` on peat).
+    pub fuel: String,
+    /// Units burnt per game hour while lit.
+    pub rate: f32,
+    /// How far it warms and lights while lit (metres; the kind's `lights` counts too).
+    pub warmth: f32,
+    pub light: f32,
+    /// The most fuel it holds (units; none: no limit).
+    pub holds: Option<f32>,
+}
+
+impl StructureTraits {
+    /// Whether this kind is a fire at all (one that needs no feeding, or one that burns fuel).
+    pub fn fire(&self) -> bool {
+        self.burns.is_some() || (self.warms && !self.roof)
+    }
+
+    /// How far it lights the dark when it burns (its `lights`, or its fire's `burns.light`).
+    pub fn light(&self) -> f32 {
+        self.lights.max(self.burns.as_ref().map_or(0.0, |b| b.light))
+    }
+
+    /// A structure of this kind as the rules' checks see it (`a.target.lit`, `a.target.fuel`):
+    /// a fire that burns fuel is lit while `lit_until_ms` (the `structure` row's) is ahead of
+    /// `now`, holding what is left at its rate on a day of `day_ms` (the `world` row's); a fire
+    /// that needs no feeding is always lit and holds none; anything else is neither. The
+    /// authority and a client computing the same facts call this.
+    pub fn fire_state(&self, lit_until_ms: u64, now: u64, day_ms: u64) -> (bool, f32) {
+        match &self.burns {
+            Some(b) => (crate::fire::lit(lit_until_ms, now), crate::fire::fuel_left(lit_until_ms, now, b.rate, day_ms)),
+            None => (self.fire(), 0.0),
+        }
+    }
 }
 
 /// Largest script source accepted. `skills.rhai` is about 56 KB; compile time and memory grow
@@ -675,8 +1326,15 @@ pub const MAX_SOURCE: usize = 256 * 1024;
 /// At about 600 WASM instructions per operation, a call that runs into it costs about 1.2 M
 /// instructions (about 0.1 ms in the module).
 pub const MAX_OPERATIONS: u64 = 2_000;
+/// The most operations a function read once when the script compiles may take (its data tables,
+/// skills' specs, ways, laws' descriptions and the interface's declarations): they grow with a
+/// world's content (a description lists every recipe) and run once per install, not while the
+/// world runs; the engine's calls keep [`MAX_OPERATIONS`] (goods-3).
+pub const COMPILE_OPERATIONS: u64 = 20_000;
 /// Distinct states whose rates are kept before the memo starts over.
 const NEEDS_MEMO: usize = 4_096;
+/// Minutes in a game day: `daylight` is read at each.
+const DAY_MINUTES: usize = 24 * 60;
 
 /// The engine's limits on one call (Rhai's sandbox): operations, call depth, expression depth
 /// (outside and inside functions) and the size of strings, arrays and maps a script makes.
@@ -691,17 +1349,82 @@ pub struct Limits {
 }
 
 /// About 2–4× what the rules use on the install samples (`measure_limits`, 2026-11-09): call
-/// depth 3, expression depth 19 in and out of functions, strings 570 characters, arrays 26
-/// entries, maps 30 entries (`laws()` has 29). The string limit bounds what a script builds,
-/// not the text it is handed (a reworked routine arrives as up to 32,000 characters).
-pub const LIMITS: Limits = Limits { operations: MAX_OPERATIONS, call_levels: 8, expr_depth: (40, 40), string: 2_048, array: 64, map: 64 };
+/// depth 3, expression depth 19 in and out of functions, strings 570 characters. The string
+/// limit bounds what a script builds, not the text it is handed (a reworked routine arrives as
+/// up to 32,000 characters). Rhai counts the entries of arrays and maps nested in a value
+/// together, so the world's data tables (`items()`, `resources()`, each a list of maps) set the
+/// array and map limits: Cullet's goods over the shipped ones hold about 110 map entries in
+/// `resources()` and 60 array entries (2026-11-11); the limits leave room for a world about
+/// four times that. Rhai counts the strings of a map together too: `laws_about(l)`, the words
+/// for every world constant, held 1,959 characters before the field of view's laws (`fov-1`,
+/// 2026-11-11) and 2,373 after. `stamina-1` (2026-11-11) added 38 constants for breath, focus,
+/// costs, health and blows: their words bring it past 4,096 (about 4,200 with the numbers), so the
+/// string limit is 6,144; their numbers are written as they are (`${l.x}`, not `short`), since a
+/// call each took `laws_about` past its operations. Since `laws-about-list` (2026-11-13), when the
+/// words of 126 constants reached 6,144, they are asked one constant at a time
+/// (`law_about(l, name)`) and joined in Rust, so they no longer count against this limit.
+pub const LIMITS: Limits = Limits { operations: MAX_OPERATIONS, call_levels: 8, expr_depth: (40, 40), string: 6_144, array: 256, map: 512 };
 
-fn engine() -> Engine {
-    engine_with(LIMITS)
+/// Rhai's hashing keys, the same in every build of every program that runs the laws: the
+/// authority, the game client and the mind service (docs/LIVING_CORE.md, "One hashing seed").
+///
+/// Rhai hashes function names, call signatures and `switch` cases with `ahash`, and turns on
+/// `ahash`'s `compile-time-rng`. Unless a seed is set, the keys are random numbers drawn each
+/// time `ahash` compiles (a new target folder, a cache miss, a toolchain update), and they
+/// decide where entries land in Rhai's tables and in which order it hands back a script's
+/// functions. So the same source cost a different fuel per call from build to build (`tool-8`),
+/// and a rule that followed that order (`fov-1`'s field analysis) decided differently by build.
+/// Fixed keys make both a function of the code alone.
+///
+/// The value is the fuel bench's key set 0 since `tool-8` (`sb_bench::hashing_seed(0)`), so the
+/// gate's history at that set is the game's; nothing else about it matters but that it is not
+/// zero (Rhai takes zero keys as no seed) and never changes: changing it moves every law's fuel.
+/// It was not chosen for a law's fuel. Fixed keys are public, so whoever chooses a string that
+/// Rhai hashes could look for collisions: to slow the engine (hash flooding) or to take a wrong
+/// `switch` branch (Rhai matches a case by its hash alone). Acceptable while scripts come from a
+/// world's seed and admin installs; the docs list where a player's words reach a hashed
+/// position today (an act's item) and when to revisit.
+pub const HASHING_SEED: [u64; 4] = [0x5eed_0000_0000_0001, 0x5eed_0000_0000_0002, 0x5eed_0000_0000_0003, 0x5eed_0000_0000_0004];
+
+/// Fix Rhai's hashing keys to [`HASHING_SEED`] (`rhai::config::hashing::set_hashing_seed`) and
+/// return the keys in force. Rhai reads them once per process (a module instance), so this must
+/// run before anything touches Rhai: every engine of this crate is made by [`new_engine`], which
+/// calls it. Keys set earlier by someone else stay in force (the fuel bench's other key sets).
+pub fn fix_hashing() -> [u64; 4] {
+    #[cfg(test)]
+    if let Some(k) = test_seed() {
+        let _ = rhai::config::hashing::set_hashing_seed(k);
+        return k.unwrap_or_default();
+    }
+    let _ = rhai::config::hashing::set_hashing_seed(Some(HASHING_SEED));
+    rhai::config::hashing::get_hashing_seed().unwrap_or_default()
 }
 
-fn engine_with(l: Limits) -> Engine {
-    let mut e = Engine::new_raw();
+/// Tests only: other keys for this process (`LIVING_RHAI_TEST_SEED`: four numbers, or `build`
+/// for the keys this build of `ahash` drew), for the check that no rule depends on them.
+#[cfg(test)]
+fn test_seed() -> Option<Option<[u64; 4]>> {
+    let v = std::env::var("LIVING_RHAI_TEST_SEED").ok()?;
+    if v == "build" {
+        return Some(None);
+    }
+    let k: Vec<u64> = v.split(',').map(|w| w.trim().parse().expect("LIVING_RHAI_TEST_SEED: four numbers or `build`")).collect();
+    Some(Some(k.try_into().expect("LIVING_RHAI_TEST_SEED: four numbers")))
+}
+
+/// A bare Rhai engine, after [`fix_hashing`]. The only way this crate makes one.
+pub fn new_engine() -> Engine {
+    fix_hashing();
+    Engine::new_raw()
+}
+
+fn engine(t: &Rc<RefCell<Tables>>) -> Engine {
+    engine_with(LIMITS, t)
+}
+
+fn engine_with(l: Limits, t: &Rc<RefCell<Tables>>) -> Engine {
+    let mut e = new_engine();
+    register_tables(&mut e, t);
     rhai::packages::StandardPackage::new().register_into_engine(&mut e);
     e.set_max_operations(l.operations);
     e.set_max_call_levels(l.call_levels);
@@ -715,13 +1438,20 @@ fn engine_with(l: Limits) -> Engine {
     e
 }
 
+/// The world's day for its laws: `hour_ms()`, real milliseconds in a game hour, and
+/// `day_minutes()`, real minutes in a game day.
+fn register_day(e: &mut Engine, hour_ms: f64) {
+    e.register_fn("hour_ms", move || hour_ms);
+    e.register_fn("day_minutes", move || hour_ms * 24.0 / 60_000.0);
+}
+
 /// Constant laws the engine looks up by a name, and the names it asks them for.
 fn name_laws(s: &Scripts) -> Vec<(String, Vec<String>)> {
     let skills: Vec<String> = s.shapes.names().map(String::from).chain(s.skills.names().map(String::from)).collect();
     let kinds: Vec<String> = crate::catalog::CREATURES.iter().map(|k| k.to_string()).collect();
     let items: Vec<String> = s.skills.items.iter().map(|i| i.name.clone()).collect();
-    let structures: Vec<String> = crate::catalog::STRUCTURES.iter().map(|k| k.to_string()).collect();
-    let resources: Vec<String> = crate::catalog::RESOURCES.iter().map(|(k, _)| k.to_string()).collect();
+    let structures: Vec<String> = s.skills.structures.iter().map(|k| k.name.clone()).collect();
+    let resources: Vec<String> = s.skills.resources.iter().map(|k| k.name.clone()).collect();
     let mut out = Vec::new();
     let mut add = |f: &str, d: &[String]| {
         if s.has(f) {
@@ -734,15 +1464,20 @@ fn name_laws(s: &Scripts) -> Vec<(String, Vec<String>)> {
     for f in ["combat_cooldown", "combat_recover", "combat_cost"] {
         add(f, &skills);
     }
-    for f in ["lunge", "max_hp", "yield_ms", "carry_limit", "carried_spoil", "remains_s"] {
+    // Rates and durations in game time (`_per_h`, `_h`), and the same in real time as scripts
+    // before rates-2 wrote them (`spoil_rate`, `regrow`, `remains_s`, `trap_every_s`).
+    for f in ["lunge", "max_hp", "yield_ms", "carry_limit", "carried_spoil", "remains_h", "remains_s"] {
         add(f, &kinds);
     }
+    add("spoil_per_h", &items);
     add("spoil_rate", &items);
     add("nutrition", &items);
+    add("carry_of", &items);
+    add("regrow_per_h", &resources);
     add("regrow", &resources);
     add("planted_max", &resources);
     add("kept_spoil", &structures);
-    for f in ["trap_every_s", "trap_holds"] {
+    for f in ["trap_every_h", "trap_every_s", "trap_holds"] {
         add(f, &["meat".to_string()]);
     }
     // A dash's and a step's distance and speed by kind.
@@ -754,26 +1489,54 @@ fn name_laws(s: &Scripts) -> Vec<(String, Vec<String>)> {
 }
 
 impl Scripts {
+    /// The script for a world with the shipped day length ([`crate::DEFAULT_DAY_MS`]).
     pub fn new(source: &str) -> Result<Self, String> {
+        Self::with_day(source, crate::DEFAULT_DAY_MS)
+    }
+
+    /// The script for a world whose day lasts `day_ms` real milliseconds. Laws written per game
+    /// hour (`rates` with `per: "hour"`) are turned into real time by it, and a law may read it:
+    /// `hour_ms()` (real milliseconds in a game hour) and `day_minutes()` (real minutes in a day).
+    pub fn with_day(source: &str, day_ms: u64) -> Result<Self, String> {
+        Self::with_overrides(source, day_ms, &[])
+    }
+
+    /// The script for a world whose day lasts `day_ms`, with the world's own law values `over`
+    /// laid over its laws (the authority's `law_override` rows; see [`Scripts::apply_overrides`]):
+    /// everything the script derives from its laws is read under them, as an install reads it.
+    pub fn with_overrides(source: &str, day_ms: u64, over: &[(String, serde_json::Value)]) -> Result<Self, String> {
         if source.len() > MAX_SOURCE {
             return Err(format!("script source exceeds {} KiB", MAX_SOURCE / 1024));
         }
-        let engine = engine();
+        let day_ms = day_ms.max(24);
+        let hour_ms = day_ms as f64 / 24.0;
+        let tables: Rc<RefCell<Tables>> = Default::default();
+        let mut engine = engine(&tables);
+        register_day(&mut engine, hour_ms);
         let mut ast = engine.compile(source).map_err(|e| format!("script compile: {e}"))?.clone_functions_only();
         // A script from before a required law existed runs on the shipped script's functions,
         // with its own on top, until it is installed again.
         let borrowed: Vec<String> = REQUIRED_LAWS.iter().filter(|f| !ast.iter_functions().any(|d| d.name == **f)).map(|f| f.to_string()).collect();
+        // What each function reads, from its own source: the field analysis places statements by
+        // line and column, which two sources share, so a merged script is analysed source by
+        // source, the script's own functions over the shipped ones.
+        let mut fields = None;
         if !borrowed.is_empty() {
             const SHIPPED: &str = include_str!("../../scripts/skills.rhai");
             let base = engine.compile(SHIPPED).map_err(|e| format!("shipped script compile: {e}"))?.clone_functions_only();
+            fields = Some(fields::Fields::analyze(&base).under(fields::Fields::analyze(&ast)));
             ast = base.merge(&ast);
         }
-        let fns = ast.iter_functions().map(|f| f.name.to_string()).collect();
-        let unary = ast.iter_functions().filter(|f| f.params.len() == 1).map(|f| f.name.to_string()).collect();
-        let nullary = ast.iter_functions().filter(|f| f.params.is_empty()).map(|f| f.name.to_string()).collect();
-        let fields = fields::Fields::analyze(&ast);
-        let reach = Reach { day: 0.0, night: 0.0, hearing: 0.0 };
-        let mut s = Self { engine, ast, fns, unary, nullary, shapes: Default::default(), shows: Default::default(), skills: Default::default(), fields, plans: Default::default(), names: Default::default(), lists: Default::default(), needs: Default::default(), senses: Default::default(), moves: Default::default(), laws: Default::default(), reach, borrowed, structures: Default::default(), source: source.to_string(), law_errors: Default::default() };
+        // A floor's overlay keeps each base function it replaces as `base_NAME` (`floors::compose`):
+        // only the overlay calls those, so the engine never takes one for a law, a skill's part or
+        // a declaration of its own (`base_sleep_duration` is not the rules of a skill `base_sleep`).
+        let own = |name: &str| !name.starts_with("base_");
+        let fns = ast.iter_functions().filter(|f| own(f.name)).map(|f| f.name.to_string()).collect();
+        let unary = ast.iter_functions().filter(|f| own(f.name) && f.params.len() == 1).map(|f| f.name.to_string()).collect();
+        let nullary = ast.iter_functions().filter(|f| own(f.name) && f.params.is_empty()).map(|f| f.name.to_string()).collect();
+        let fields = fields.unwrap_or_else(|| fields::Fields::analyze(&ast));
+        let reach = Reach { day: 0.0, night: 0.0, hearing: 0.0, glow: 0.0, glow_day: 0.0 };
+        let mut s = Self { engine, ast, fns, unary, nullary, shapes: Default::default(), shows: Default::default(), skills: Default::default(), ways: Vec::new(), kin: Default::default(), fields, plans: Default::default(), names: Default::default(), lists: Default::default(), needs: Default::default(), senses: Default::default(), moves: Default::default(), pools: Default::default(), glows: Default::default(), lives: Default::default(), hour_ms, daylight: Default::default(), laws: Default::default(), reach, gaze_ceilings: Default::default(), overrides: RefCell::new(sorted_overrides(over)), value_only: value_only_in(source), borrowed, structures: Default::default(), seasons: Default::default(), tables, source: source.to_string(), law_errors: Default::default(), about: RefCell::new(Some(Ok(Vec::new()))), ui: Default::default(), body: Default::default(), makings: Default::default() };
         // Skills in the order the source declares them (the last declaration of a name counts).
         let declared = |name: &str| source.rfind(&format!("fn {name}_spec(")).unwrap_or(usize::MAX);
         // Required entry points.
@@ -782,19 +1545,43 @@ impl Scripts {
                 return Err(format!("script must define `{f}(a)`"));
             }
         }
+        // What is read once here may take more than a call of the running world (above).
+        s.engine.set_max_operations(COMPILE_OPERATIONS);
+        // The world constants in force, for `law(name)`.
+        let laws = s.laws_map();
+        s.tables.borrow_mut().laws = laws;
+        // The data tables first: specs and laws may read them (`names_of("recipes")`).
+        s.read_tables()?;
         s.shapes = s.read_shapes()?;
         s.shows = s.read_shows()?;
         let mut skills = s.read_specs(&declared)?;
         skills.items = s.read_items()?;
+        skills.resources = s.kinds_of("resources");
+        skills.structures = s.kinds_of("structures");
+        skills.techniques = s.read_know_how()?;
         s.skills = std::sync::Arc::new(skills);
+        s.makings = s.read_makings()?;
+        s.ways = s.read_ways()?;
+        s.kin = s.read_kin()?;
         s.structures = s.read_structures()?;
+        s.seasons = s.read_seasons()?;
         s.laws = s.read_laws()?;
         s.reach = s.read_reach()?;
+        s.read_gaze(&s.engine)?;
         for (f, names) in name_laws(&s) {
             for n in names {
                 s.num_of(&f, &n, 0.0);
             }
         }
+        // Presentation last: it reads the skills, shapes, shows and tables, and never fails the
+        // compile (`ui_errors`).
+        s.ui = s.read_ui();
+        // The body's meters: never fail the compile either (`meter_errors`, refused at install).
+        s.body = s.read_body();
+        // The world constants' words: read once, with what is read once (they list every
+        // constant, and grow with a world's laws).
+        *s.about.borrow_mut() = Some(s.read_laws_about(&s.engine));
+        s.engine.set_max_operations(LIMITS.operations);
         Ok(s)
     }
 
@@ -803,6 +1590,22 @@ impl Scripts {
     /// not provide or exceeds the engine's limits. Returns the operations each function took.
     pub fn validate(&self) -> Result<Report, String> {
         check::validate(self, LIMITS)
+    }
+
+    /// The operations a function of no arguments takes (a law's description, a spec), with no
+    /// limit, for measuring (goods-3).
+    #[cfg(test)]
+    pub(crate) fn ops_of(&self, f: &str) -> u64 {
+        let count = Rc::new(std::cell::Cell::new(0u64));
+        let mut engine = engine_with(Limits { operations: 10_000_000, ..LIMITS }, &self.tables);
+        register_day(&mut engine, self.hour_ms);
+        let c2 = count.clone();
+        engine.on_progress(move |n| {
+            c2.set(n);
+            None
+        });
+        let _ = engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, f, ());
+        count.get()
     }
 
     /// The fields a law is called with (all of them when the analysis cannot say).
@@ -838,7 +1641,7 @@ impl Scripts {
                 continue;
             }
             let m = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, f, ()).map_err(|e| format!("{f}: {e}"))?.try_cast::<Map>().ok_or_else(|| format!("{f} must return a map"))?;
-            const KNOWN: &[&str] = &["aim", "timed", "rooted", "hostile", "reflex", "evades", "real_time", "melee", "closes_in", "menace", "force", "dares", "hold_ms", "arc", "takes", "knack", "needs", "knows"];
+            const KNOWN: &[&str] = &["aim", "timed", "rooted", "committed", "hostile", "reflex", "evades", "real_time", "melee", "closes_in", "menace", "force", "dares", "hold_ms", "arc", "takes", "knack", "needs", "knows"];
             if let Some(k) = m.keys().find(|k| !KNOWN.contains(&k.as_str())) {
                 return Err(format!("{f}: unknown trait `{k}` (traits are {})", KNOWN.join(", ")));
             }
@@ -860,6 +1663,7 @@ impl Scripts {
                 aim,
                 timed: flag("timed")?,
                 rooted: flag("rooted")?,
+                committed: flag("committed")?,
                 hostile: flag("hostile")?,
                 reflex: flag("reflex")?,
                 // A dash evades unless it says otherwise; nothing else does.
@@ -912,45 +1716,273 @@ impl Scripts {
         Ok(crate::catalog::Skills::new(list))
     }
 
+    /// The ways of speaking (`<way>_speech()`), read once here, in their `order` (then the
+    /// source's). A script that declares none speaks by the shipped `say` (today's speech), so a
+    /// world installed before ways were declared keeps speaking until its next install.
+    /// The world's kin terms (`kin_terms()`, a map of relation to words), or the defaults when
+    /// the script has none (`speech::KinTerms::default`).
+    fn read_kin(&self) -> Result<speech::KinTerms, String> {
+        if !self.has("kin_terms") {
+            return Ok(speech::KinTerms::default());
+        }
+        let m = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "kin_terms", ()).map_err(|e| format!("kin_terms: {e}"))?.try_cast::<Map>().ok_or("kin_terms must return a map of relation to a list of words")?;
+        speech::KinTerms::of(&m)
+    }
+
+    /// The words a speaker uses for someone by their relation to them (`kin_terms()`).
+    pub fn kin(&self) -> &speech::KinTerms {
+        &self.kin
+    }
+
+    fn read_ways(&self) -> Result<Vec<speech::WaySpec>, String> {
+        let mut ways = Vec::new();
+        for f in self.nullary.iter().filter(|f| f.ends_with("_speech")) {
+            let way = f.trim_end_matches("_speech");
+            if way.is_empty() {
+                continue;
+            }
+            if !way.chars().all(|c| c.is_ascii_lowercase() || c == '_') {
+                return Err(format!("{f}: a way's name is lowercase letters and _"));
+            }
+            if self.skills.get(way).is_some() || self.shapes.get(way).is_some() {
+                return Err(format!("{f}: `{way}` is a skill already; a way of speaking needs a name of its own"));
+            }
+            let m = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, f, ()).map_err(|e| format!("{f}: {e}"))?.try_cast::<Map>().ok_or_else(|| format!("{f} must return a map"))?;
+            let w = speech::way_of(way, &m)?;
+            if !w.needs.is_empty() && !self.skills.techniques.iter().any(|t| t.name == w.needs) {
+                return Err(format!("{f}: `needs` names a technique of `know_how()`, not `{}`", w.needs));
+            }
+            ways.push(w);
+        }
+        if ways.is_empty() {
+            ways.push(speech::WaySpec::say());
+        }
+        if !ways.iter().any(|w| w.name == speech::SAY) {
+            return Err("the script's ways of speaking need `say_speech()` (every line said without a way is said by it)".into());
+        }
+        ways.sort_by_key(|w| (w.order, self.source_at(&format!("fn {}_speech(", w.name)), w.name.clone()));
+        Ok(ways)
+    }
+
+    /// The ways of speaking, in their order.
+    pub fn ways(&self) -> &[speech::WaySpec] {
+        &self.ways
+    }
+
+    /// A way of speaking by name.
+    pub fn way(&self, name: &str) -> Option<&speech::WaySpec> {
+        self.ways.iter().find(|w| w.name == name)
+    }
+
     /// Every skill the script declares.
     pub fn skills(&self) -> &std::sync::Arc<crate::catalog::Skills> {
         &self.skills
     }
 
-    /// The world's items and their traits (`items()`: a list of maps with a `name`), read once.
-    fn read_items(&self) -> Result<Vec<crate::catalog::ItemSpec>, String> {
-        let a = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "items", ()).map_err(|e| format!("items: {e}"))?.try_cast::<Array>().ok_or("items must return a list of maps")?;
-        let mut out: Vec<crate::catalog::ItemSpec> = Vec::new();
-        for d in a {
-            let m = d.try_cast::<Map>().ok_or("items: each item is a map with a name")?;
-            let name = m.get("name").and_then(|v| v.clone().into_string().ok()).filter(|n| !n.is_empty()).ok_or("items: each item has a name")?;
-            if out.iter().any(|i| i.name == name) {
-                return Err(format!("items: `{name}` twice"));
+    /// The data tables (`items()`, `structures()`, `resources()`, `know_how()`, `recipes()`):
+    /// each a list of maps with a distinct `name`, read once.
+    fn read_tables(&self) -> Result<(), String> {
+        let mut t = Tables::default();
+        for f in TABLES {
+            if !self.has(f) {
+                if REQUIRED_LAWS.contains(f) {
+                    return Err(format!("script must define `{f}()`"));
+                }
+                continue;
             }
-            let traits = m.iter().filter(|(k, _)| k.as_str() != "name").map(|(k, v)| (k.to_string(), v.to_string())).collect();
-            out.push(crate::catalog::ItemSpec { name, traits });
+            let a = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, f, ()).map_err(|e| format!("{f}: {e}"))?.try_cast::<Array>().ok_or_else(|| format!("{f} must return a list of maps"))?;
+            let (mut names, mut by) = (Vec::new(), HashMap::new());
+            for d in a {
+                let m = d.try_cast::<Map>().ok_or_else(|| format!("{f}: each entry is a map with a name"))?;
+                let name = m.get("name").and_then(|v| v.clone().into_string().ok()).filter(|n| !n.is_empty()).ok_or_else(|| format!("{f}: each entry has a name"))?;
+                if by.contains_key(&name) {
+                    return Err(format!("{f}: `{name}` twice"));
+                }
+                names.push(name.clone());
+                by.insert(name, m);
+            }
+            t.by.insert(f.to_string(), (names, by));
+        }
+        t.laws = std::mem::take(&mut self.tables.borrow_mut().laws);
+        *self.tables.borrow_mut() = t;
+        Ok(())
+    }
+
+    /// The data tables, as the rules read them.
+    pub fn tables(&self) -> std::cell::Ref<'_, Tables> {
+        self.tables.borrow()
+    }
+
+    /// The entries of a table with their traits as words (a trait that is true reads "true").
+    fn kinds_of(&self, table: &str) -> Vec<crate::catalog::KindSpec> {
+        let t = self.tables.borrow();
+        t.names(table)
+            .iter()
+            .map(|n| {
+                let traits = t.entry(table, n).map(|m| m.iter().filter(|(k, _)| k.as_str() != "name").map(|(k, v)| (k.to_string(), v.to_string())).collect()).unwrap_or_default();
+                crate::catalog::KindSpec { name: n.clone(), traits }
+            })
+            .collect()
+    }
+
+    /// The world's items and their traits (`items()`), read once.
+    /// An item's `icon`, `label` and `group` (what a client shows of it) must be texts.
+    fn read_items(&self) -> Result<Vec<crate::catalog::ItemSpec>, String> {
+        let t = self.tables.borrow();
+        for n in t.names("items") {
+            let m = t.entry("items", n).expect("listed");
+            for k in ITEM_LOOK {
+                if m.get(k).is_some_and(|v| !v.is_string()) {
+                    return Err(format!("items: the {k} of `{n}` must be a text"));
+                }
+            }
+        }
+        drop(t);
+        Ok(self.kinds_of("items").into_iter().map(|k| crate::catalog::ItemSpec { name: k.name, traits: k.traits }).collect())
+    }
+
+    /// The world's techniques (`know_how()`: a `name` and a `help`, what one is told it is).
+    fn read_know_how(&self) -> Result<Vec<crate::catalog::TechniqueSpec>, String> {
+        let t = self.tables.borrow();
+        let mut out = Vec::new();
+        for n in t.names("know_how") {
+            let m = t.entry("know_how", n).expect("listed");
+            let help = match m.get("help") {
+                None => String::new(),
+                Some(v) => v.clone().into_string().map_err(|_| format!("know_how: the help of `{n}` must be a text"))?,
+            };
+            out.push(crate::catalog::TechniqueSpec { name: n.clone(), help });
         }
         Ok(out)
     }
 
-    /// What each kind of structure does for those near it (`structure_traits()`), read once.
+    /// What each kind of structure does for those near it (its traits in `structures()`), read
+    /// once. A script from before structures were listed (2026-11-11) also has
+    /// `structure_traits()`: its `warms` and `roof` stand over the listed kinds'.
     fn read_structures(&self) -> Result<HashMap<String, StructureTraits>, String> {
-        let m = self.law_map("structure_traits")?;
+        let t = self.tables.borrow();
         let mut out = HashMap::new();
-        for (k, v) in m {
-            let t = v.try_cast::<Map>().ok_or_else(|| format!("structure_traits: `{k}` must be a map of traits"))?;
-            if let Some(x) = t.keys().find(|x| !["warms", "roof"].contains(&x.as_str())) {
-                return Err(format!("structure_traits: unknown trait `{x}` of `{k}` (traits are warms, roof)"));
+        for k in t.names("structures") {
+            let m = t.entry("structures", k).expect("listed");
+            let flag = |x: &str| -> Result<bool, String> { m.get(x).map_or(Ok(false), |v| v.as_bool().map_err(|_| format!("structures: `{x}` of `{k}` must be true or false"))) };
+            let lights = match m.get("lights") {
+                None => 0.0,
+                Some(v) => number(v).ok_or_else(|| format!("structures: `lights` of `{k}` must be a number of metres"))?.clamp(0.0, 64.0) as f32,
+            };
+            let burns = match m.get("burns") {
+                None => None,
+                Some(v) => Some(burns_of(k, v)?),
+            };
+            let holds = match m.get("holds") {
+                None => None,
+                Some(v) => Some(number(v).filter(|n| *n >= 0.0 && n.is_finite()).ok_or_else(|| format!("structures: `holds` of `{k}` is the most things it holds in all (a number of at least 0)"))? as f32),
+            };
+            let like = match m.get("like") {
+                None => String::new(),
+                Some(v) => {
+                    let l = v.clone().into_string().map_err(|_| format!("structures: `like` of `{k}` names the kind it counts as"))?;
+                    if l == *k || t.entry("structures", &l).is_none() {
+                        return Err(format!("structures: `like` of `{k}` is `{l}`, which is not another kind of the table"));
+                    }
+                    l
+                }
+            };
+            out.insert(k.clone(), StructureTraits { warms: flag("warms")?, roof: flag("roof")?, lights, burns, holds, like, shows_owner: flag("shows_owner")? });
+        }
+        if self.has("structure_traits") {
+            let legacy = self.law_map("structure_traits")?;
+            for (k, v) in legacy {
+                let m = v.try_cast::<Map>().ok_or_else(|| format!("structure_traits: `{k}` must be a map of traits"))?;
+                if let Some(x) = m.keys().find(|x| !["warms", "roof", "lights"].contains(&x.as_str())) {
+                    return Err(format!("structure_traits: unknown trait `{x}` of `{k}` (traits are warms, roof, lights)"));
+                }
+                let flag = |x: &str| m.get(x).is_some_and(|v| v.as_bool().unwrap_or(false));
+                let e = out.entry(k.to_string()).or_default();
+                (e.warms, e.roof) = (flag("warms"), flag("roof"));
+                if let Some(v) = m.get("lights") {
+                    e.lights = number(v).ok_or_else(|| format!("structure_traits: `{k}.lights` must be a number of metres"))?.clamp(0.0, 64.0) as f32;
+                }
             }
-            let flag = |x: &str| t.get(x).is_some_and(|v| v.as_bool().unwrap_or(false));
-            out.insert(k.to_string(), StructureTraits { warms: flag("warms"), roof: flag("roof") });
         }
         Ok(out)
+    }
+
+    /// Whether an observer is told whose a structure of `kind` is (the `owner_shown(o)` law;
+    /// owner-known): `knows`, it knows the owner's name; `shows`, the structure shows its owner
+    /// (its kind's `shows_owner`). Without the law: when it knows them or the structure shows it.
+    pub fn owner_shown(&self, knows: bool, shows: bool, kind: &str) -> bool {
+        if !self.has("owner_shown") {
+            return knows || shows;
+        }
+        let key = format!("{knows}:{shows}:{kind}");
+        if let Some(v) = self.names.borrow().get("owner_shown").and_then(|t| t.get(&key)) {
+            return v.is_some_and(|x| x != 0.0);
+        }
+        let mut o = Map::new();
+        o.insert("knows".into(), Dynamic::from(knows));
+        o.insert("shows".into(), Dynamic::from(shows));
+        o.insert("kind".into(), Dynamic::from(kind.to_string()));
+        let v = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "owner_shown", (o,)).ok().and_then(|d| d.as_bool().ok()).unwrap_or(knows || shows);
+        self.names.borrow_mut().entry("owner_shown".into()).or_default().insert(key, Some(if v { 1.0 } else { 0.0 }));
+        v
     }
 
     /// What a kind of structure does for those near it.
-    pub fn structure(&self, kind: &str) -> StructureTraits {
-        self.structures.get(kind).copied().unwrap_or_default()
+    pub fn structure(&self, kind: &str) -> &StructureTraits {
+        static NONE: StructureTraits = StructureTraits { warms: false, roof: false, lights: 0.0, burns: None, holds: None, like: String::new(), shows_owner: false };
+        self.structures.get(kind).unwrap_or(&NONE)
+    }
+
+    /// Whether a structure of `kind` is what a rule or a graph asks for by `name`: that kind, or
+    /// one `like` it (Cullet's `store` is `like: "storage"`).
+    pub fn is_kind(&self, kind: &str, name: &str) -> bool {
+        kind == name || (!name.is_empty() && self.structure(kind).like == name)
+    }
+
+    /// The share of a resource kind's regrowth rate in each season (spring, summer, autumn,
+    /// winter): its `regrow_by_season` in `resources()`, any season it leaves out at the
+    /// shipped share ([`crate::GROWING`]: full, and none in winter).
+    pub fn regrow_seasons(&self, kind: &str) -> [f32; 4] {
+        self.seasons.get(kind).copied().unwrap_or(crate::GROWING)
+    }
+
+    /// What minds are told the seasons do to the land, after the calendar: the script's
+    /// `seasons_text()` (built from the resource kinds' `regrow_by_season`), or, for a script
+    /// without it, the words every world was told before (2026-11-11).
+    pub fn seasons_words(&self) -> String {
+        const BEFORE: &str = "In winter nothing regrows and nights are colder: store food before it.";
+        if !self.has("seasons_text") {
+            return BEFORE.into();
+        }
+        self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "seasons_text", ()).ok().and_then(|d| d.into_string().ok()).unwrap_or_else(|| BEFORE.into())
+    }
+
+    /// Every resource kind's `regrow_by_season`, read once (only kinds that have it).
+    fn read_seasons(&self) -> Result<HashMap<String, [f32; 4]>, String> {
+        let t = self.tables.borrow();
+        let mut out = HashMap::new();
+        for k in t.names("resources") {
+            let Some(v) = t.entry("resources", k).and_then(|m| m.get("regrow_by_season")) else { continue };
+            let m = v.clone().try_cast::<Map>().ok_or_else(|| format!("resources: `regrow_by_season` of `{k}` is a map of seasons (spring, summer, autumn, winter) to shares of its rate"))?;
+            let mut by = crate::GROWING;
+            for (season, share) in m {
+                let i = crate::SEASONS.iter().position(|x| *x == season.as_str()).ok_or_else(|| format!("resources: `regrow_by_season` of `{k}` names `{season}`, which is no season (spring, summer, autumn, winter)"))?;
+                by[i] = number(&share).filter(|n| *n >= 0.0 && *n <= 16.0).ok_or_else(|| format!("resources: `regrow_by_season.{season}` of `{k}` is a share of its rate (0 to 16)"))? as f32;
+            }
+            out.insert(k.clone(), by);
+        }
+        Ok(out)
+    }
+
+    /// How far any structure warms or shelters (the farthest the engine looks for one).
+    pub fn warmth_reach(&self, laws: &Laws) -> f32 {
+        self.structures.values().fold(laws.fire_warmth.max(laws.shelter_warmth), |r, t| r.max(t.burns.as_ref().map_or(0.0, |b| b.warmth)))
+    }
+
+    /// The farthest any kind of structure gives light (0: none does): its `lights`, or a fire's
+    /// `burns.light`.
+    pub fn widest_light(&self) -> f32 {
+        self.structures.values().map(|t| t.light()).fold(0.0, f32::max)
     }
 
     /// A list of words a law of one name gives (`occupation_knows("fisher")`); empty when the
@@ -971,6 +2003,110 @@ impl Scripts {
         self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, f, (arg.to_string(),)).ok()?.into_string().ok()
     }
 
+    /// What a way of making makes (`craft`, `cook`, `smoke`, `make`, or a world's own: a skill
+    /// with `<skill>_making()`), in the script's order: a recipe grid's cells. Empty for a skill
+    /// that is no way of making, or that makes nothing in this world.
+    pub fn products_of(&self, skill: &str) -> Vec<&str> {
+        self.makings.get(skill).map(|v| v.iter().map(|p| p.product.as_str()).collect()).unwrap_or_default()
+    }
+
+    /// What an act of a way of making names as its item to make `product`: the product itself,
+    /// or for a way whose item is what is used (`cook`, `smoke`), the item it is made from
+    /// (`cooked_fish` → `fish`). None when the way does not make it.
+    pub fn making_item(&self, skill: &str, product: &str) -> Option<&str> {
+        self.recipe_parts(skill, product).map(|p| p.item.as_str())
+    }
+
+    /// A product of a way of making as data, for a recipe grid's cell: what it takes and holds,
+    /// where, with what heat and knowing, how long; each name with its look. None when the way
+    /// does not make it. `made_how(product)` is the same recipe in words.
+    pub fn recipe_parts(&self, skill: &str, product: &str) -> Option<&RecipeParts> {
+        self.makings.get(skill)?.iter().find(|p| p.product == product)
+    }
+
+    /// The ways of making and what they make (`products_of`, `making_item`), read once: for each
+    /// skill with `<skill>_making()`, the script's `products_of(skill)` and, for each product,
+    /// `making_item(skill, way, product)`. A script without them (from before recipes-1) has none.
+    fn read_makings(&self) -> Result<BTreeMap<String, Vec<RecipeParts>>, String> {
+        let mut out = BTreeMap::new();
+        if !self.unary.contains("products_of") || !self.fns.contains("recipe_parts") {
+            return Ok(out);
+        }
+        let mut ways: Vec<&String> = self.nullary.iter().filter(|f| f.ends_with("_making")).collect();
+        ways.sort();
+        for f in ways {
+            let skill = f.trim_end_matches("_making");
+            if self.skills.get(skill).is_none() {
+                return Err(format!("{f}: `{skill}` is not a skill (no `{skill}_spec()`): a way of making is a skill's"));
+            }
+            let way = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, f, ()).map_err(|e| format!("{f}: {e}"))?;
+            if !way.is_map() {
+                return Err(format!("{f} must return a map"));
+            }
+            let products = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "products_of", (skill.to_string(),)).map_err(|e| format!("products_of(\"{skill}\"): {e}"))?;
+            let products = products.try_cast::<Array>().ok_or_else(|| format!("products_of(\"{skill}\") must return a list of names"))?;
+            let mut made: Vec<RecipeParts> = Vec::new();
+            for p in products {
+                let p = p.into_string().map_err(|_| format!("products_of(\"{skill}\") must return a list of names"))?;
+                if made.iter().any(|q| q.product == p) {
+                    continue;
+                }
+                let bad = |what: &str| format!("recipe_parts(\"{skill}\", \"{p}\"): {what}");
+                let m = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "recipe_parts", (skill.to_string(), way.clone(), p.clone())).map_err(|e| bad(&e.to_string()))?;
+                let Some(m) = m.try_cast::<Map>() else { return Err(bad("must return a map")) };
+                let text = |k: &str| m.get(k).and_then(|v| v.clone().into_string().ok()).unwrap_or_default();
+                let num = |k: &str| m.get(k).and_then(|v| v.as_float().ok().or_else(|| v.as_int().ok().map(|n| n as f64))).unwrap_or(0.0);
+                let parts = |k: &str| -> Result<Vec<RecipePart>, String> {
+                    let Some(t) = m.get(k).and_then(|v| v.clone().try_cast::<Map>()) else { return Ok(Vec::new()) };
+                    let mut out = Vec::new();
+                    for (name, n) in t {
+                        let qty = n.as_int().map_err(|_| bad(&format!("`{k}.{name}` must be a whole number")))?.max(0) as u32;
+                        let name = name.to_string();
+                        let tables = self.tables.borrow();
+                        let any_of = if tables.entry("items", &name).is_some() { vec![name.clone()] } else { tables.having("items", &name) };
+                        drop(tables);
+                        out.push(RecipePart { look: self.item_look_of("item_look", &name).unwrap_or_default(), name, qty, any_of });
+                    }
+                    Ok(out)
+                };
+                made.push(RecipeParts {
+                    skill: skill.to_string(),
+                    look: self.item_look_of("recipe_look", &p).unwrap_or_default(),
+                    makes: num("makes").max(0.0) as u32,
+                    item: text("item"),
+                    takes: parts("takes")?,
+                    tools: parts("tools")?,
+                    at: text("at"),
+                    lit: m.get("lit").and_then(|v| v.as_bool().ok()).unwrap_or(false),
+                    fuel: num("fuel") as f32,
+                    knows: text("knows"),
+                    ms: num("ms").max(0.0) as u64,
+                    product: p,
+                });
+            }
+            out.insert(skill.to_string(), made);
+        }
+        Ok(out)
+    }
+
+    /// How an item looks in a client (`item_look`), or what a recipe makes (`recipe_look`: its
+    /// product's look under the recipe's own `icon` and `label`). None when the script has no
+    /// such function or it fails (a script from before 2026-11-11's looks).
+    pub fn item_look_of(&self, f: &str, name: &str) -> Option<ItemLook> {
+        if !self.has(f) {
+            return None;
+        }
+        let m = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, f, (name.to_string(),)).ok()?.try_cast::<Map>()?;
+        let text = |k: &str| m.get(k).and_then(|v| v.clone().into_string().ok()).unwrap_or_default();
+        Some(ItemLook { icon: text("icon"), label: text("label"), group: text("group") })
+    }
+
+    /// A yes-or-no law of one name (`fire_kind("hearth")`); false when the script has none, it
+    /// fails or it is not a yes or no.
+    pub fn yes_of(&self, f: &str, arg: &str) -> bool {
+        self.unary.contains(f) && self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, f, (arg.to_string(),)).ok().and_then(|d| d.as_bool().ok()).unwrap_or(false)
+    }
+
     /// A yes-or-no law of a context (`theft(a)`); false when the script has none or it fails.
     pub fn holds(&self, f: &str, ctx: &SkillCtx) -> bool {
         self.has(f) && self.call(f, ctx).ok().and_then(|d| d.as_bool().ok()).unwrap_or(false)
@@ -982,7 +2118,7 @@ impl Scripts {
         let Some(i) = context::ACTOR.iter().position(|f| *f == field) else { return false };
         ["_check", "_duration", "_done"].iter().any(|p| {
             let f = format!("{skill}{p}");
-            self.has(&f) && self.plan(&f).actor & (1 << i) != 0
+            self.has(&f) && self.plan(&f).actor & (1u64 << i) != 0
         })
     }
 
@@ -1007,7 +2143,7 @@ impl Scripts {
                 return Err(format!("{f}: unknown trait `{k}` (traits are {})", LAW_TRAITS.join(", ")));
             }
             let text = |k: &str| m.get(k).map_or(Ok(String::new()), |v| v.clone().into_string().map_err(|_| format!("{f}: `{k}` must be a string")));
-            let about = text("about")?;
+            let about = self.timed_words(f, &text("about")?)?;
             if about.trim().is_empty() {
                 return Err(format!("{f}: `about` says what the law is, for a mind (in the world's units: one tile is one metre)"));
             }
@@ -1021,16 +2157,52 @@ impl Scripts {
         Ok(out)
     }
 
+    /// A law's words with each `{windup:<skill>}` replaced by that combat skill's windup as the
+    /// skill cards show it (`timing`, a person's), so a description follows the laws in force
+    /// (a law changed on a running world installs the script again). A token naming no timed
+    /// skill is refused at install.
+    fn timed_words(&self, f: &str, about: &str) -> Result<String, String> {
+        let mut out = String::new();
+        let mut rest = about;
+        while let Some(i) = rest.find("{windup:") {
+            out.push_str(&rest[..i]);
+            let tail = &rest[i + "{windup:".len()..];
+            let end = tail.find('}').ok_or_else(|| format!("{f}: an unclosed `{{windup:` in `about`"))?;
+            let skill = &tail[..end];
+            let t = self.timing(skill).filter(|t| t.windup_ms > 0).ok_or_else(|| format!("{f}: `{{windup:{skill}}}` names no combat skill with a windup"))?;
+            out.push_str(&seconds(t.windup_ms));
+            rest = &tail[end + 1..];
+        }
+        out.push_str(rest);
+        Ok(out)
+    }
+
     fn law_map(&self, f: &str) -> Result<Map, String> {
         self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, f, ()).map_err(|e| format!("{f}: {e}"))?.try_cast::<Map>().ok_or_else(|| format!("{f} must return a map"))
     }
 
-    /// The farthest senses reach, from `senses_law()`.
+    /// The largest enabled gaze ceiling, for gathering possible onlookers.
+    pub fn gaze_reach(&self) -> f32 {
+        self.gaze_ceilings.get().map_or(0.0, |ceilings| ceilings.into_iter().fold(0.0, f32::max))
+    }
+
+    pub fn gaze_enabled(&self) -> bool {
+        self.gaze_ceilings.get().is_some()
+    }
+
+    /// Select once per law lookup, so the disabled world uses the original script path.
+    pub fn senses_function(&self) -> &'static str {
+        if self.gaze_enabled() { "gaze_view" } else { "senses" }
+    }
+
     fn read_reach(&self) -> Result<Reach, String> {
         let m = self.law_map("senses_law")?;
         let r = m.get("reach").and_then(|r| r.clone().try_cast::<Map>()).ok_or("senses_law: `reach` is a map of day, night and hearing (metres)")?;
         let g = |k: &str| r.get(k).and_then(number).map(|v| (v as f32).clamp(0.0, 256.0)).ok_or_else(|| format!("senses_law: `reach.{k}` must be a number of metres"));
-        Ok(Reach { day: g("day")?, night: g("night")?, hearing: g("hearing")? })
+        // `glow` bounds the `glow` law, and is needed only with one.
+        let glow = if self.has("glow") { g("glow").map_err(|e| format!("{e} (the script has a `glow` law)"))? } else { 0.0 };
+        let glow_day = if r.contains_key("glow_day") { g("glow_day")?.min(glow) } else { glow };
+        Ok(Reach { day: g("day")?, night: g("night")?, hearing: g("hearing")?, glow, glow_day })
     }
 
     /// Every law the script declares, by name.
@@ -1038,15 +2210,55 @@ impl Scripts {
         &self.laws
     }
 
-    /// What each world constant is (`laws_about(laws())`), by name: the script's words for the
+    /// What each world constant is (`law_about(laws(), name)`), by name: the script's words for the
     /// values in force. Empty when the script does not say.
     pub fn laws_about(&self) -> Vec<(String, String)> {
-        if !self.has("laws_about") {
-            return Vec::new();
+        self.about_now().unwrap_or_default()
+    }
+
+    /// Why `laws_about` could not be read when the script compiled, if it could not.
+    pub fn laws_about_error(&self) -> Option<String> {
+        self.about_now().err()
+    }
+
+    /// The constants' words: as the compile read them, or read again for the values in force
+    /// after a value-only edit.
+    fn about_now(&self) -> Result<Vec<(String, String)>, String> {
+        if let Some(a) = self.about.borrow().as_ref() {
+            return a.clone();
         }
+        let a = self.read_laws_about(&self.compile_engine());
+        *self.about.borrow_mut() = Some(a.clone());
+        a
+    }
+
+    /// The world constants' words as the compile reads them: `law_about(laws(), name)` for each
+    /// constant, one call and one string at a time (each under [`COMPILE_OPERATIONS`]), joined
+    /// here, so no value the script builds holds them all and no engine limit grows with the
+    /// number of laws (Rhai counts every string inside one value against its string limit). A
+    /// script that has only the old `laws_about(l)`, one map of them all (a world's script
+    /// installed before 2026-11-13), is read that way.
+    fn read_laws_about(&self, engine: &Engine) -> Result<Vec<(String, String)>, String> {
         let m = self.laws_map();
-        let Ok(d) = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "laws_about", (m,)) else { return Vec::new() };
-        d.try_cast::<Map>().unwrap_or_default().into_iter().map(|(k, v)| (k.to_string(), v.into_string().unwrap_or_default())).collect()
+        if self.has("law_about") {
+            let mut keys: Vec<String> = m.keys().map(|k| k.to_string()).collect();
+            keys.sort();
+            let mut out = Vec::with_capacity(keys.len());
+            for k in keys {
+                let d = engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "law_about", (m.clone(), ImmutableString::from(k.as_str()))).map_err(|e| format!("law_about({k}): {e}"))?;
+                if d.is_unit() {
+                    continue;
+                }
+                let text = d.into_string().map_err(|t| format!("law_about({k}): words must be a string, not {t}"))?;
+                out.push((k, text));
+            }
+            return Ok(out);
+        }
+        if !self.has("laws_about") {
+            return Ok(Vec::new());
+        }
+        let d = engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "laws_about", (m,)).map_err(|e| format!("laws_about: {e}"))?;
+        Ok(d.try_cast::<Map>().unwrap_or_default().into_iter().map(|(k, v)| (k.to_string(), v.into_string().unwrap_or_default())).collect())
     }
 
     /// The world's rules as minds are told them, built from the laws' descriptions: one line per
@@ -1072,6 +2284,11 @@ impl Scripts {
             let mut parts: Vec<String> = laws.iter().filter(|l| &l.topic == topic).map(|l| l.about.trim().to_string()).collect();
             if let Some((_, t)) = world.iter().find(|(k, _)| k == topic) {
                 parts.push(t.trim().to_string());
+            }
+            // The ways of speaking, each in its own words and with its reach in metres (from its
+            // spec and the world's hearing, as `speech_card` gives them), in their order.
+            if topic == "speech" {
+                parts.extend(self.ways.iter().map(|w| format!("{} ({}) = {}", w.name, w.reach_words(self.reach.hearing), w.about.trim())));
             }
             if parts.is_empty() {
                 continue;
@@ -1108,6 +2325,12 @@ impl Scripts {
         let plan = self.plan(law);
         let mut key = Vec::with_capacity(16);
         context::key(ctx, "", &plan, &mut key);
+        if law == "gaze_view" {
+            // The decoded result also carries the chosen band and the light-dependent
+            // glow bound, even when an authored gaze_view does not read these inputs.
+            key.push(ctx.gaze_band as u8);
+            key.extend_from_slice(&ctx.dark.to_bits().to_le_bytes());
+        }
         if let Some(v) = memo.borrow().get(&key) {
             return Ok(*v);
         }
@@ -1122,7 +2345,7 @@ impl Scripts {
 
     /// A creature's senses (`senses(a)`), kept per state and held to the reach.
     pub fn senses(&self, ctx: &SkillCtx) -> Result<Senses, String> {
-        self.per_state("senses", &self.senses, ctx, || self.senses_unshared(ctx))
+        self.per_state(self.senses_function(), &self.senses, ctx, || self.senses_unshared(ctx))
     }
 
     /// How a creature moves (`motion(a)`), kept per state.
@@ -1136,12 +2359,284 @@ impl Scripts {
         decode_moves(self.call("motion", ctx)?)
     }
 
+    /// Why a body walks slower than its pace (`slowed(a)`), in words its status and its mind
+    /// share; empty when it is not, or the script has no such law.
+    pub fn slowed(&self, ctx: &SkillCtx) -> String {
+        if !self.has("slowed") {
+            return String::new();
+        }
+        self.call("slowed", ctx).ok().and_then(|d| d.into_string().ok()).unwrap_or_default()
+    }
+
+    /// A creature's short pools (`pools(a)`), kept per state; the shipped numbers when the
+    /// script has no such law. The engine finishes the cap and the refill for the body's
+    /// tiredness (`crate::pools::PoolLaw::cap`, `regen`).
+    pub fn pools(&self, ctx: &SkillCtx) -> Result<crate::pools::Pools, String> {
+        if !self.has("pools") {
+            return Ok(crate::pools::Pools::default());
+        }
+        self.per_state("pools", &self.pools, ctx, || decode_pools(self.call("pools", ctx)?))
+    }
+
     /// The same, asking the law every time (benchmarks and install checks).
     #[doc(hidden)]
     pub fn senses_unshared(&self, ctx: &SkillCtx) -> Result<Senses, String> {
-        let m = context::map(ctx, "", &self.plan("senses"));
-        let d = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "senses", (m,)).map_err(|e| format!("senses: {e}"))?;
-        decode_senses(d, &self.reach, ctx.night)
+        self.senses_with(&self.engine, ctx)
+    }
+
+    /// `senses_unshared` on `engine` (the script's own, or one with the compile's limits).
+    fn senses_with(&self, engine: &Engine, ctx: &SkillCtx) -> Result<Senses, String> {
+        let f = self.senses_function();
+        let m = context::map(ctx, "", &self.plan(f));
+        let d = engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, f, (m,)).map_err(|e| format!("senses: {e}"))?;
+        let gaze = self.gaze_ceilings.get().map(|ceilings| (ctx.gaze_band, ceilings[ctx.gaze_band as usize]));
+        decode_senses(d, &self.reach, ctx.dark, gaze)
+    }
+
+    /// The gaze bands' ceilings while the `gaze_on` law holds, and every band's senses on the
+    /// install's samples (each light, with and without a torch), as the compile reads them on
+    /// `engine`; none without the law. On an error the ceilings are left as they were.
+    fn read_gaze(&self, engine: &Engine) -> Result<(), String> {
+        if self.law_value("gaze_on") != Some(serde_json::Value::Bool(true)) {
+            self.gaze_ceilings.set(None);
+            return Ok(());
+        }
+        let mut ceilings = [0.0f32; 3];
+        for band in crate::sight::GazeBand::ALL {
+            let d = engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "gaze_ceiling", (i64::from(band as u8),))
+                .map_err(|e| format!("gaze_ceiling: {e}"))?;
+            ceilings[band as usize] = number(&d).filter(|n| (0.0..=256.0).contains(n))
+                .ok_or("gaze_ceiling must be a number of metres (0..=256)")? as f32;
+        }
+        let before = self.gaze_ceilings.replace(Some(ceilings));
+        for gaze_band in crate::sight::GazeBand::ALL {
+            for (night, dark) in [(false, 0.0), (false, 0.25), (true, 0.75), (true, 1.0)] {
+                for torch in [false, true] {
+                    let mut ctx = SkillCtx { gaze_band, night, dark, ..Default::default() };
+                    if torch { ctx.actor.inv.push(("torch".into(), 1)); }
+                    if let Err(e) = self.senses_with(engine, &ctx) {
+                        self.gaze_ceilings.set(before);
+                        return Err(e);
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// How far a creature is seen from by a light on it (`glow(a)`, kept per state like
+    /// senses; 0 when the script has no such law): an onlooker sees it within the wider of its
+    /// own sight and this.
+    pub fn glow(&self, ctx: &SkillCtx) -> Result<f32, String> {
+        if !self.has("glow") {
+            return Ok(0.0);
+        }
+        self.per_state("glow", &self.glows, ctx, || self.glow_unshared(ctx))
+    }
+
+    /// The same, asking the law every time.
+    #[doc(hidden)]
+    pub fn glow_unshared(&self, ctx: &SkillCtx) -> Result<f32, String> {
+        decode_glow(self.call("glow", ctx)?, &self.reach)
+    }
+
+    /// The length of this world's game hour, in real milliseconds (its day over 24).
+    pub fn hour_ms(&self) -> f64 {
+        self.hour_ms
+    }
+
+    /// How light it is at `hour` (0..24): the `daylight(hour)` law, 0 (night) to 1 (day), read
+    /// once per game minute of the day and kept for the script revision, so asking it costs a
+    /// lookup. A script without the law has the shipped day: light from 06:00 to 20:00.
+    pub fn daylight(&self, hour: f32) -> f32 {
+        let minute = ((hour.rem_euclid(24.0) * 60.0) as usize).min(DAY_MINUTES - 1);
+        if let Some(v) = self.daylight.borrow().get(minute).copied().filter(|v| !v.is_nan()) {
+            return v;
+        }
+        let h = minute as f64 / 60.0;
+        let v = if self.has("daylight") {
+            self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "daylight", (h,)).ok().and_then(|d| number(&d)).map(|v| (v as f32).clamp(0.0, 1.0))
+        } else {
+            None
+        }
+        .unwrap_or(if (6.0..20.0).contains(&h) { 1.0 } else { 0.0 });
+        let mut t = self.daylight.borrow_mut();
+        if t.is_empty() {
+            t.resize(DAY_MINUTES, f32::NAN);
+        }
+        t[minute] = v;
+        v
+    }
+
+    /// A species' life table under the world's rules: the `life_years(t)` law, given the
+    /// species' table in years (`kind`, `lifespan`, and the ages `infant`, `child`, `elder` and
+    /// `old_age` where those stages end or begin, `gestation`, `interbirth`), returns it with any
+    /// of them changed. An age it leaves alone keeps its years under a new lifespan. A script
+    /// without the law (the shipped one) has the species' table exactly as `species.json` gives
+    /// it. Read once per species and kept for the script revision; a table the law gets wrong
+    /// (an install refuses it: `life_law`) leaves the species' own.
+    pub fn life(&self, kind: &str, base: crate::life::Life) -> crate::life::Life {
+        if !self.has("life_years") {
+            return base;
+        }
+        if let Some(l) = self.lives.borrow().get(kind) {
+            return *l;
+        }
+        let l = self.life_law(kind, base).unwrap_or(base);
+        self.lives.borrow_mut().insert(kind.to_string(), l);
+        l
+    }
+
+    /// The `life_years` law's table for a species, or what is wrong with it.
+    pub fn life_law(&self, kind: &str, base: crate::life::Life) -> Result<crate::life::Life, String> {
+        if !self.has("life_years") {
+            return Ok(base);
+        }
+        let y = base.years as f64;
+        let ages = [("infant", base.infant), ("child", base.child), ("elder", base.elder), ("old_age", base.old_age), ("gestation", base.gestation), ("interbirth", base.interbirth)];
+        let mut t = rhai::Map::new();
+        t.insert("kind".into(), Dynamic::from(kind.to_string()));
+        t.insert("lifespan".into(), Dynamic::from_float(y));
+        for (k, f) in ages {
+            t.insert(k.into(), Dynamic::from_float(f as f64 * y));
+        }
+        let out = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "life_years", (t.clone(),)).map_err(|e| format!("life_years: {e}"))?;
+        let out = out.try_cast::<rhai::Map>().ok_or("life_years must return the table it is given (a map)")?;
+        let get = |k: &str| -> Result<f64, String> { out.get(k).map(|d| number(d).ok_or(format!("life_years: {k} must be a number of years"))).unwrap_or_else(|| Ok(number(&t[k]).unwrap_or(0.0))) };
+        let span = get("lifespan")?;
+        if !(span > 0.0) {
+            return Err(format!("life_years: {kind}'s lifespan must be more than 0 years, not {span}"));
+        }
+        let mut l = base;
+        l.years = span as f32;
+        let mut last = 0.0;
+        for (k, f) in ages {
+            let given = get(k)?;
+            // An age left as it was keeps its fraction when the lifespan is the same (no rounding).
+            let frac = if given == f as f64 * y && span == y { f } else { (given / span) as f32 };
+            match k {
+                "infant" => l.infant = frac,
+                "child" => l.child = frac,
+                "elder" => l.elder = frac,
+                "old_age" => l.old_age = frac,
+                "gestation" => l.gestation = frac,
+                _ => l.interbirth = frac,
+            }
+            if matches!(k, "infant" | "child" | "elder" | "old_age") {
+                if given < last || given > span {
+                    return Err(format!("life_years: {kind}'s ages must run infant <= child <= elder <= old_age <= lifespan ({span}); {k} is {given}"));
+                }
+                last = given;
+            }
+        }
+        Ok(l)
+    }
+
+    /// The world's look bands (docs/LOOK.md §4): the `look_bands()` law's `youth` and `adult`
+    /// ages in years (shipped `#{ youth: 12.0, adult: 18.0 }`); without the law, or with one that
+    /// fails (an install refuses it: `look_bands_law`), those defaults.
+    pub fn look_bands(&self) -> crate::look::LookBands {
+        self.look_bands_law().unwrap_or_default()
+    }
+
+    /// The `look_bands()` law's thresholds, or what is wrong with them: numbers of years, with
+    /// youth no later than adulthood.
+    pub fn look_bands_law(&self) -> Result<crate::look::LookBands, String> {
+        let d = crate::look::LookBands::default();
+        if !self.has("look_bands") {
+            return Ok(d);
+        }
+        let out = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "look_bands", ()).map_err(|e| format!("look_bands: {e}"))?;
+        let out = out.try_cast::<rhai::Map>().ok_or("look_bands must return a map: #{ youth: 12.0, adult: 18.0 }")?;
+        if let Some(k) = out.keys().find(|k| !["youth", "adult"].contains(&k.as_str())) {
+            return Err(format!("look_bands: unknown key `{k}` (the keys are youth and adult)"));
+        }
+        let get = |k: &str, v: f32| -> Result<f32, String> { out.get(k).map_or(Ok(v), |d| number(d).map(|x| x as f32).ok_or(format!("look_bands: {k} must be a number of years"))) };
+        let b = crate::look::LookBands { youth: get("youth", d.youth)?, adult: get("adult", d.adult)? };
+        if !(b.youth >= 0.0 && b.adult >= b.youth) {
+            return Err(format!("look_bands: youth ({}) and adult ({}) must be ages in years, youth no later than adult", b.youth, b.adult));
+        }
+        Ok(b)
+    }
+
+    /// The share of people the world makes female when no seed or player says (body-sex): the
+    /// `female_share()` law, 0..1 (shipped and without the law 0.5; an install refuses another
+    /// value: `female_share_law`).
+    pub fn female_share(&self) -> f32 {
+        self.female_share_law().unwrap_or(0.5)
+    }
+
+    /// The `female_share()` law's value, or what is wrong with it.
+    pub fn female_share_law(&self) -> Result<f32, String> {
+        if !self.has("female_share") {
+            return Ok(0.5);
+        }
+        let out = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "female_share", ()).map_err(|e| format!("female_share: {e}"))?;
+        let v = number(&out).ok_or("female_share must return a number from 0 to 1")? as f32;
+        if !(0.0..=1.0).contains(&v) {
+            return Err(format!("female_share must return a number from 0 to 1, not {v}"));
+        }
+        Ok(v)
+    }
+
+    /// The words for a body by sex and life stage (body-sex): the `sex_words()` law (shipped and
+    /// without it `living_rules::sex::SexWords::default`).
+    pub fn sex_words(&self) -> crate::sex::SexWords {
+        self.sex_words_law().unwrap_or_default()
+    }
+
+    /// The `sex_words()` law's words, or what is wrong with them: `#{ female: [4 words], male: [4
+    /// words] }`, one per life stage (infant, child, adult, elder).
+    pub fn sex_words_law(&self) -> Result<crate::sex::SexWords, String> {
+        if !self.has("sex_words") {
+            return Ok(Default::default());
+        }
+        let out = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "sex_words", ()).map_err(|e| format!("sex_words: {e}"))?;
+        let m = out.try_cast::<rhai::Map>().ok_or("sex_words must return #{ female: [4 words], male: [4 words] }")?;
+        if let Some(k) = m.keys().find(|k| !["female", "male"].contains(&k.as_str())) {
+            return Err(format!("sex_words: unknown key `{k}` (the keys are female and male)"));
+        }
+        let four = |k: &str| -> Result<[String; 4], String> {
+            let a = m.get(k).cloned().ok_or(format!("sex_words: `{k}` is missing"))?.try_cast::<rhai::Array>().ok_or(format!("sex_words: `{k}` is a list of 4 words"))?;
+            let ws: Vec<String> = a.into_iter().map(|w| w.into_string().map(|w| w.trim().to_string())).collect::<Result<_, _>>().map_err(|_| format!("sex_words: `{k}` holds words"))?;
+            if ws.len() != 4 || ws.iter().any(|w| w.is_empty()) {
+                return Err(format!("sex_words: `{k}` is 4 words, one per life stage (infant, child, adult, elder)"));
+            }
+            Ok([ws[0].clone(), ws[1].clone(), ws[2].clone(), ws[3].clone()])
+        };
+        Ok(crate::sex::SexWords { female: four("female")?, male: four("male")? })
+    }
+
+    /// Whom a mind's scene describes by look (docs/LOOK.md §3): the `appearance_in_scene()` law,
+    /// "unnamed" (shipped and without the law: strangers and far figures), "all" or "none".
+    pub fn appearance_in_scene(&self) -> crate::look::AppearanceInScene {
+        self.appearance_in_scene_law().unwrap_or_default()
+    }
+
+    /// The `appearance_in_scene()` law's value, or what is wrong with it.
+    pub fn appearance_in_scene_law(&self) -> Result<crate::look::AppearanceInScene, String> {
+        if !self.has("appearance_in_scene") {
+            return Ok(Default::default());
+        }
+        let out = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "appearance_in_scene", ()).map_err(|e| format!("appearance_in_scene: {e}"))?;
+        let v = out.into_string().map_err(|_| "appearance_in_scene must return \"unnamed\", \"all\" or \"none\"".to_string())?;
+        crate::look::AppearanceInScene::parse(&v).ok_or_else(|| format!("appearance_in_scene must return \"unnamed\", \"all\" or \"none\", not \"{v}\""))
+    }
+
+    /// How dark it is at `hour`, in the steps laws see it (`SkillCtx::dark`).
+    pub fn dark(&self, hour: f32) -> f32 {
+        ((1.0 - self.daylight(hour)) * 20.0).round() / 20.0
+    }
+
+    /// Whether it is night at `hour`: less than half light.
+    pub fn is_night(&self, hour: f32) -> bool {
+        self.daylight(hour) < 0.5
+    }
+
+    /// Whether `perceived_of` reads how far the target is (`p.dist`): only then does the engine
+    /// give it the distance, and project a target again as it comes nearer or goes farther.
+    pub fn regard_reads_dist(&self) -> bool {
+        self.has("perceived_of") && self.fields.of("perceived_of", 1).and_then(|u| u.first()).is_none_or(|u| u.all || !u.by_param.is_empty() || u.keys.contains_key("dist"))
     }
 
     /// What others see of a skill and what it means to them (`<skill>_shows()`), read once
@@ -1202,8 +2697,16 @@ impl Scripts {
     }
 
     fn call(&self, f: &str, ctx: &SkillCtx) -> Result<Dynamic, String> {
+        calls::note(calls::SKILL);
         let m = context::map(ctx, self.shapes.knack(&ctx.skill), &self.plan(f));
         self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, f, (m,)).map_err(|e| format!("{f}: {e}"))
+    }
+
+    /// The fields `<skill>_check` reads (its plan), for a context built with those alone
+    /// (docs/BATTLE_SCALE.md, battle-cheap path 1). `None` when the skill has no check.
+    pub fn check_plan(&self, skill: &str) -> Option<Rc<context::Plan>> {
+        let f = format!("{skill}_check");
+        self.has(&f).then(|| self.plan(&f))
     }
 
     pub fn check(&self, skill: &str, ctx: &SkillCtx) -> Result<(), String> {
@@ -1244,6 +2747,25 @@ impl Scripts {
         self.effects(&format!("{skill}_hit"), ctx)
     }
 
+    /// A combat skill's timing as a person has it (`skill_card`'s numbers, and the minds' skill
+    /// reference): its windup (`<skill>_duration`; none for a dash or a guard), recovery
+    /// (`combat_recover`), cooldown (`combat_cooldown`), a guard's hold and a missile's speed.
+    pub fn timing(&self, skill: &str) -> Option<crate::combat::Timing> {
+        use crate::combat::Aim;
+        let shape = self.shapes().get(skill)?;
+        let c = SkillCtx { actor: ActorFacts { kind: "person".into(), ..Default::default() }, skill: skill.to_string(), qty: shape.hold_ms, ..Default::default() };
+        let windup_ms = if matches!(shape.aim, Aim::Dash | Aim::Facing) { 0 } else { self.duration_ms(skill, &c).unwrap_or(0) as u32 };
+        let speed = if shape.missile { self.missile(skill, &c).map_or(0.0, |m| m.speed) } else { 0.0 };
+        Some(crate::combat::Timing {
+            aim: shape.aim,
+            windup_ms,
+            recover_ms: self.num_of("combat_recover", skill, 0.0) as u32,
+            cooldown_ms: self.num_of("combat_cooldown", skill, 0.0) as u32,
+            hold_ms: if shape.aim == Aim::Facing { shape.hold_ms } else { 0 },
+            speed,
+        })
+    }
+
     /// A skill's missile (`<skill>_missile(a)`: a map of speed, range and radius).
     pub fn missile(&self, skill: &str, ctx: &SkillCtx) -> Result<crate::combat::MissileSpec, String> {
         let f = format!("{skill}_missile");
@@ -1251,6 +2773,15 @@ impl Scripts {
             return Err(format!("{skill} has no missile"));
         }
         decode_missile(&f, self.call(&f, ctx)?)
+    }
+
+    /// What a missile of `skill` is to one it strikes or who sees it strike: the `called` of
+    /// `<skill>_missile(a)` ("an arrow"), "something" when the script does not say.
+    pub fn missile_called(&self, skill: &str) -> String {
+        let f = format!("{skill}_missile");
+        let ctx = SkillCtx { skill: skill.to_string(), ..Default::default() };
+        let called = if self.has(&f) { self.call(&f, &ctx).ok().and_then(|d| d.try_cast::<Map>()).and_then(|m| m.get("called").and_then(|v| v.clone().into_string().ok())) } else { None };
+        called.map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).unwrap_or_else(|| "something".into())
     }
 
     /// What the rules make of an event (`on_<event>(a)`: `on_give`, `on_store`, `on_host` after
@@ -1292,8 +2823,14 @@ impl Scripts {
     /// Whether a skill's rules read the actor's records: on its way (`performing` false) its
     /// check and duration; once performed, its check, effects and hook too.
     pub fn skill_reads_records(&self, skill: &str, performing: bool) -> bool {
+        self.skill_reads(skill, "records", performing)
+    }
+
+    /// Whether a skill's rules read a top-level field of the context (`records`, `offer`): on its
+    /// way its check and duration; once performed, its check, effects and hook too.
+    pub fn skill_reads(&self, skill: &str, field: &str, performing: bool) -> bool {
         let parts: &[&str] = if performing { &["_check", "_duration", "_done"] } else { &["_check", "_duration"] };
-        parts.iter().any(|p| self.reads(&format!("{skill}{p}"), "records")) || (performing && self.reads(&format!("on_{skill}"), "records"))
+        parts.iter().any(|p| self.reads(&format!("{skill}{p}"), field)) || (performing && self.reads(&format!("on_{skill}"), field))
     }
 
     fn effects(&self, f: &str, ctx: &SkillCtx) -> Result<Vec<Effect>, String> {
@@ -1314,7 +2851,15 @@ impl Scripts {
     pub fn rates_unshared(&self, ctx: &SkillCtx) -> Result<Rates, String> {
         let m = context::map(ctx, self.shapes.knack(&ctx.skill), &self.plan("rates"));
         let d = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "rates", (m,)).map_err(|e| format!("rates: {e}"))?;
-        Ok(NeedLaw::from_dynamic(d)?.rates(&ctx.actor))
+        Ok(NeedLaw::from_dynamic(d, self.hour_ms)?.rates(&ctx.actor))
+    }
+
+    /// Whether `rates(a)`'s answer for the actor's state is already kept, so [`Self::need_law`]
+    /// will not ask the law (for profiling how often the law itself runs).
+    pub fn need_law_kept(&self, ctx: &SkillCtx) -> bool {
+        let mut key = Vec::with_capacity(64);
+        context::key(ctx, self.shapes.knack(&ctx.skill), &self.plan("rates"), &mut key);
+        self.needs.borrow().contains_key(&key)
     }
 
     /// What `rates(a)` says for the actor's state.
@@ -1326,7 +2871,7 @@ impl Scripts {
             return Ok(l.clone());
         }
         let m = context::map(ctx, self.shapes.knack(&ctx.skill), &plan);
-        let law = NeedLaw::from_dynamic(self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "rates", (m,)).map_err(|e| format!("rates: {e}"))?)?;
+        let law = NeedLaw::from_dynamic(self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "rates", (m,)).map_err(|e| format!("rates: {e}"))?, self.hour_ms)?;
         let mut memo = self.needs.borrow_mut();
         if memo.len() >= NEEDS_MEMO {
             memo.clear();
@@ -1354,11 +2899,135 @@ impl Scripts {
         self.laws_map().keys().map(|k| k.to_string()).collect()
     }
 
+    /// `laws()`, with the world's own values over it (`world_law_values()`, the block
+    /// [`with_world_laws`] writes at the end of a world's script; a key that is not a law, or of
+    /// another kind, is left out).
     fn laws_map(&self) -> Map {
         if !self.has("laws") {
             return Map::new();
         }
-        self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "laws", ()).ok().and_then(|d| d.try_cast::<Map>()).unwrap_or_default()
+        let mut m = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "laws", ()).ok().and_then(|d| d.try_cast::<Map>()).unwrap_or_default();
+        if self.has(WORLD_LAW_VALUES) {
+            let over = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, WORLD_LAW_VALUES, ()).ok().and_then(|d| d.try_cast::<Map>()).unwrap_or_default();
+            for (k, v) in over {
+                let fits = m.get(&k).is_some_and(|cur| cur.is_bool() == v.is_bool() && (cur.is_bool() || number(&v).is_some()));
+                if fits {
+                    let v = if v.is_bool() { v } else { Dynamic::from(number(&v).unwrap_or(0.0)) };
+                    m.insert(k, v);
+                }
+            }
+        }
+        // The world's own values (`law_override`) over both: the one place a law's value in force
+        // is decided. A name that is not a law here, or a value of another kind, is left out.
+        for (k, v) in self.overrides.borrow().iter() {
+            if let Some(d) = m.get(k.as_str()).and_then(|cur| override_value(cur, v)) {
+                m.insert(k.as_str().into(), d);
+            }
+        }
+        m
+    }
+
+    /// What a creature of `kind` sounds like to a listener who cannot see it (`heard_as(kind)`):
+    /// "person", "deer", "wolf", or "creature" where the rules cannot tell. Without the law,
+    /// those three kinds by name and "creature" for any other.
+    pub fn heard_as(&self, kind: &str) -> String {
+        if self.has("heard_as") {
+            if let Ok(d) = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "heard_as", (kind.to_string(),)) {
+                if let Ok(s) = d.into_string() {
+                    if !s.is_empty() {
+                        return s;
+                    }
+                }
+            }
+        }
+        if matches!(kind, "person" | "deer" | "wolf") { kind.to_string() } else { "creature".to_string() }
+    }
+
+    /// The world's own law values laid over the script's (as given to [`Scripts::with_overrides`]
+    /// or [`Scripts::apply_overrides`]), by name.
+    pub fn overrides(&self) -> Vec<(String, serde_json::Value)> {
+        self.overrides.borrow().clone()
+    }
+
+    /// Whether `name` is a value-only law in this script, and what its value reaches: one of
+    /// [`VALUE_ONLY`] that the script names only where the constants are declared and described
+    /// (`laws`, `law_about`). A script that reads it anywhere else (an overlay's `law("gaze_on")`
+    /// in a function of its own) makes it an ordinary law, changed by an install.
+    pub fn value_only(&self, name: &str) -> Option<ValueOnly> {
+        VALUE_ONLY.iter().find(|(n, _)| *n == name && self.value_only.contains(n)).map(|(_, c)| *c)
+    }
+
+    /// Lay the world's own law values `over` over the script's laws in place, with the compiled
+    /// script kept: the laws in force (`laws()`, `law_value`, Rhai's `law(name)`) take them, and
+    /// what the script derived from a changed law is read again: the gaze ceilings and their
+    /// samples for `gaze_on` (with the senses kept per state), and the constants' words (when next
+    /// asked). Every
+    /// law whose value in force changes must be value-only here ([`Scripts::value_only`]); a
+    /// change to any other is refused, with nothing changed, and needs the script compiled with
+    /// the values ([`Scripts::with_overrides`]) and, at the authority, installed. A refusal of a
+    /// derived check (a gaze ceiling out of bounds) also leaves everything as it was.
+    pub fn apply_overrides(&self, over: &[(String, serde_json::Value)]) -> Result<Applied, String> {
+        let old_over = self.overrides.replace(sorted_overrides(over));
+        let new = self.laws_map();
+        let old = self.tables.borrow().laws.clone();
+        let mut changed: Vec<String> = new.iter().filter(|(k, v)| old.get(k.as_str()).map_or(true, |o| !same_law_value(o, v))).map(|(k, _)| k.to_string()).collect();
+        changed.extend(old.keys().filter(|k| !new.contains_key(k.as_str())).map(|k| k.to_string()));
+        changed.sort();
+        let mut a = Applied { changed, ..Default::default() };
+        for k in &a.changed {
+            match self.value_only(k) {
+                Some(ValueOnly::Delivery) => a.delivery = true,
+                Some(ValueOnly::Cover) => a.cover = true,
+                Some(ValueOnly::Gaze) => a.gaze = true,
+                None => {
+                    self.overrides.replace(old_over);
+                    return Err(format!("the law `{k}` is not value-only in this script: its change needs an install"));
+                }
+            }
+        }
+        if a.changed.is_empty() {
+            return Ok(a);
+        }
+        self.tables.borrow_mut().laws = new;
+        if a.gaze {
+            // What the compile reads once, read again with its limits.
+            let engine = self.compile_engine();
+            if let Err(e) = self.read_gaze(&engine) {
+                self.tables.borrow_mut().laws = old;
+                self.overrides.replace(old_over);
+                return Err(e);
+            }
+            // Kept per state under the other function (`senses` or `gaze_view`) and ceilings.
+            self.senses.borrow_mut().clear();
+        }
+        // The constants' words follow the values, read when next asked.
+        *self.about.borrow_mut() = None;
+        Ok(a)
+    }
+
+    /// A function of one text argument called on this script's engine, its answer in words
+    /// (tests: `law(name)` as the laws read it).
+    #[cfg(test)]
+    pub(crate) fn call_test(&self, f: &str, arg: &str) -> String {
+        self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, f, (ImmutableString::from(arg),)).map_or_else(|e| format!("error: {e}"), |d| d.to_string())
+    }
+
+    /// An engine on this script's tables and day with the compile's operations
+    /// ([`COMPILE_OPERATIONS`]), for what is read once after the compile.
+    fn compile_engine(&self) -> Engine {
+        let mut e = engine_with(Limits { operations: COMPILE_OPERATIONS, ..LIMITS }, &self.tables);
+        register_day(&mut e, self.hour_ms);
+        e
+    }
+
+    /// The world constants in force, as the script's laws read them (`law(name)`).
+    pub fn law_value(&self, name: &str) -> Option<serde_json::Value> {
+        let t = self.tables.borrow();
+        let v = t.laws.get(name)?;
+        if let Ok(b) = v.as_bool() {
+            return Some(serde_json::Value::Bool(b));
+        }
+        number(v).and_then(serde_json::Number::from_f64).map(serde_json::Value::Number)
     }
 
     /// The world constants with a world's own values over the script's (a seed's `rules`: a
@@ -1391,6 +3060,7 @@ impl Scripts {
             danger_near: g("danger_near", l.danger_near),
             danger_far: g("danger_far", l.danger_far),
             repeat_failure_s: g("repeat_failure_s", l.repeat_failure_s),
+            force_outcomes: flag("force_outcomes", l.force_outcomes),
             road_speed: g("road_speed", l.road_speed),
             slow_radius: g("slow_radius", l.slow_radius).clamp(0.0, 8.0),
             corner_radius: g("corner_radius", l.corner_radius).clamp(0.0, 4.0),
@@ -1401,23 +3071,90 @@ impl Scripts {
             scent_hz: g("scent_hz", l.scent_hz).clamp(0.1, 60.0),
             input_hz: g("input_hz", l.input_hz).clamp(1.0, 120.0),
             input_burst: g("input_burst", l.input_burst).clamp(1.0, 240.0),
-            pasture_regen: g("pasture_regen", l.pasture_regen).clamp(0.0, 1.0),
+            // Per game hour (`pasture_regen_per_h`), or per real minute in a script that still
+            // writes `pasture_regen`; the engine keeps it per real minute.
+            pasture_regen: if m.contains_key("pasture_regen") || !m.contains_key("pasture_regen_per_h") { g("pasture_regen", l.pasture_regen) } else { m.get("pasture_regen_per_h").and_then(number).map_or(l.pasture_regen, |v| (v * self.per_minute()) as f32) }.clamp(0.0, 1.0),
             alone_within: g("alone_within", l.alone_within).clamp(0.0, 40.0),
             face_slack: g("face_slack", l.face_slack).clamp(0.0, 3.0),
             flee_clear: g("flee_clear", l.flee_clear).clamp(1.0, 60.0),
             takeover_s: g("takeover_s", l.takeover_s).clamp(0.0, 3_600.0),
             follow_s: g("follow_s", l.follow_s).clamp(0.5, 600.0),
+            lost_after_s: g("lost_after_s", l.lost_after_s).clamp(0.0, 60.0),
             read_sign_m: g("read_sign_m", l.read_sign_m).clamp(0.0, 64.0),
             kin_near_m: g("kin_near_m", l.kin_near_m).clamp(0.0, 32.0),
             trade_window_s: g("trade_window_s", l.trade_window_s).clamp(1.0, 3_600.0),
             join_window_s: g("join_window_s", l.join_window_s).clamp(1.0, 7_200.0),
             address_m: g("address_m", l.address_m).clamp(0.0, 64.0),
+            wake_loudness: g("wake_loudness", l.wake_loudness).clamp(0.0, 100.0),
+            wake_reach: g("wake_reach", l.wake_reach).clamp(0.0, 64.0),
             keep_seen_m: g("keep_seen_m", l.keep_seen_m).clamp(0.0, 8.0),
-            chase_lost_share: g("chase_lost_share", l.chase_lost_share).clamp(1.0, 8.0),
             spawn_hunger: g("spawn_hunger", l.spawn_hunger).clamp(0.0, 100.0),
             spawn_energy: g("spawn_energy", l.spawn_energy).clamp(0.0, 100.0),
             pasture_per_tile: g("pasture_per_tile", l.pasture_per_tile).clamp(0.0, 10.0),
             cry_prompts_carers: flag("cry_prompts_carers", l.cry_prompts_carers),
+            speech_audience: flag("speech_audience", l.speech_audience),
+            speech_truth: flag("speech_truth", l.speech_truth),
+            longing_after_min: g("longing_after_min", l.longing_after_min).clamp(0.0, 100_000.0),
+            longing_food: g("longing_food", l.longing_food).clamp(0.0, 1_000.0),
+            fov_on: flag("fov_on", l.fov_on),
+            cover_cliff_step_m: g("cover_cliff_step_m", l.cover_cliff_step_m),
+            cover_brush_min_fill: g("cover_brush_min_fill", l.cover_brush_min_fill),
+            cover_brush_on: flag("cover_brush_on", l.cover_brush_on),
+            cover_eye_height_m: g("cover_eye_height_m", l.cover_eye_height_m),
+            gaze_on: flag("gaze_on", l.gaze_on),
+            cover_sight_on: flag("cover_sight_on", l.cover_sight_on),
+            ground_sight_m: g("ground_sight_m", l.ground_sight_m).clamp(0.0, 256.0),
+            known_cells_pass: g("known_cells_pass", l.known_cells_pass).clamp(0.0, 100_000.0),
+            nav_belief: flag("nav_belief", l.nav_belief),
+            unknown_cost: g("unknown_cost", l.unknown_cost).clamp(1.0, 20.0),
+            pack_reflex: flag("pack_reflex", l.pack_reflex),
+            alert_after_hit_s: g("alert_after_hit_s", l.alert_after_hit_s).clamp(0.0, 3_600.0),
+            alert_while_attacker_near: flag("alert_while_attacker_near", l.alert_while_attacker_near),
+            renew_in_place: flag("renew_in_place", l.renew_in_place),
+            stranger_by_name: flag("stranger_by_name", l.stranger_by_name),
+            cues_on: flag("cues_on", l.cues_on),
+            cue_cooldown_s: g("cue_cooldown_s", l.cue_cooldown_s).clamp(0.0, 86_400.0),
+            cue_gap_s: g("cue_gap_s", l.cue_gap_s).clamp(0.0, 3_600.0),
+            first_sight_thinks: flag("first_sight_thinks", l.first_sight_thinks),
+            earshot: flag("earshot", l.earshot),
+            first_sight_gap_s: g("first_sight_gap_s", l.first_sight_gap_s).clamp(0.0, 3_600.0),
+            heard_first_rethinks: flag("heard_first_rethinks", l.heard_first_rethinks),
+            think_framing: flag("think_framing", l.think_framing),
+            cue_check_s: g("cue_check_s", l.cue_check_s).clamp(0.1, 60.0),
+            witness_wake_ms: g("witness_wake_ms", l.witness_wake_ms).clamp(0.0, 10_000.0),
+            memory_test: g("memory_test", l.memory_test).round().clamp(0.0, 9.0),
+            witness_fold_ms: g("witness_fold_ms", l.witness_fold_ms).clamp(0.0, 10_000.0),
+            regard_cache: flag("regard_cache", l.regard_cache),
+            regard_cache_check: flag("regard_cache_check", l.regard_cache_check),
+            profile_detail: flag("profile_detail", l.profile_detail),
+            check_ctx_plan: flag("check_ctx_plan", l.check_ctx_plan),
+            check_ctx_check: flag("check_ctx_check", l.check_ctx_check),
+            alarm_cells: flag("alarm_cells", l.alarm_cells),
+            cue_transport_on: flag("cue_transport_on", l.cue_transport_on),
+            near_tier_on: flag("near_tier_on", l.near_tier_on),
+            alarm_cells_check: flag("alarm_cells_check", l.alarm_cells_check),
+            warmth_check: flag("warmth_check", l.warmth_check),
+            scene_lazy: flag("scene_lazy", l.scene_lazy),
+            scene_lazy_check: flag("scene_lazy_check", l.scene_lazy_check),
+            chronicle_recent: flag("chronicle_recent", l.chronicle_recent),
+            chronicle_recent_check: flag("chronicle_recent_check", l.chronicle_recent_check),
+            notice_inplace: flag("notice_inplace", l.notice_inplace),
+            notice_inplace_check: flag("notice_inplace_check", l.notice_inplace_check),
+            notice_delta: flag("notice_delta", l.notice_delta),
+            notice_delta_check: flag("notice_delta_check", l.notice_delta_check),
+            seen_ranges: flag("seen_ranges", l.seen_ranges),
+            seen_ranges_check: flag("seen_ranges_check", l.seen_ranges_check),
+            fast_lane_on: flag("fast_lane_on", l.fast_lane_on),
+            seen_again_n: g("seen_again_n", l.seen_again_n).round().clamp(1.0, 100.0),
+            fast_lane_rate: g("fast_lane_rate", l.fast_lane_rate).clamp(0.0, 100.0),
+            fast_lane_inflight: g("fast_lane_inflight", l.fast_lane_inflight).round().clamp(0.0, 256.0),
+            fast_lane_gap_s: g("fast_lane_gap_s", l.fast_lane_gap_s).clamp(0.0, 600.0),
+            fast_lane_stale_s: g("fast_lane_stale_s", l.fast_lane_stale_s).clamp(0.5, 600.0),
+            heard_near_m: g("heard_near_m", l.heard_near_m).clamp(0.0, 256.0),
+            heard_close_m: g("heard_close_m", l.heard_close_m).clamp(0.0, 256.0),
+            heard_linger_s: g("heard_linger_s", l.heard_linger_s).clamp(0.0, 60.0),
+            look_slack_deg: g("look_slack_deg", l.look_slack_deg).clamp(0.0, 90.0),
+            look_walk_deg: g("look_walk_deg", l.look_walk_deg).clamp(0.0, 180.0),
         };
         Ok(l)
     }
@@ -1446,6 +3183,56 @@ impl Scripts {
         let v = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, f, (arg.to_string(),)).ok().and_then(|d| number(&d));
         self.names.borrow_mut().entry(f.to_string()).or_default().insert(arg.to_string(), v);
         v.unwrap_or(default)
+    }
+
+    /// Game hours in a real minute on this world's day (2 on the shipped 12-minute day, ½ on a
+    /// 48-minute one): what a rate written per game hour is multiplied by to be per real minute.
+    pub fn per_minute(&self) -> f64 {
+        60_000.0 / self.hour_ms
+    }
+
+    /// A rate of a name (spoiling of an item, regrowth of a resource) per real minute on this
+    /// world's day. The script writes it per game hour in `per_h` (`spoil_per_h`); a script that
+    /// still defines the real-minute law `per_min` (`spoil_rate`, every script before rates-2,
+    /// or an overlay written in real time) is taken as it is. `default` is per real minute.
+    pub fn per_real_minute(&self, per_h: &str, per_min: &str, arg: &str, default: f64) -> f64 {
+        if !self.has(per_min) && self.has(per_h) {
+            let v = self.num_of(per_h, arg, f64::NAN);
+            return if v.is_nan() { default } else { v * self.per_minute() };
+        }
+        self.num_of(per_min, arg, default)
+    }
+
+    /// A duration of a name (how long remains lie, how often a trap catches) in real
+    /// milliseconds on this world's day: written in game hours in `hours` (`remains_h`), or in
+    /// real seconds in `seconds` (`remains_s`) by a script that still defines that law, which is
+    /// taken as it is. `default_ms` is real milliseconds.
+    pub fn real_ms(&self, hours: &str, seconds: &str, arg: &str, default_ms: f64) -> f64 {
+        if !self.has(seconds) && self.has(hours) {
+            let v = self.num_of(hours, arg, f64::NAN);
+            return if v.is_nan() { default_ms } else { v * self.hour_ms };
+        }
+        self.num_of(seconds, arg, default_ms / 1000.0) * 1000.0
+    }
+
+    /// Share of an item that spoils in a real minute (`spoil_per_h`, a game hour's share).
+    pub fn spoil_per_min(&self, item: &str) -> f64 {
+        self.per_real_minute("spoil_per_h", "spoil_rate", item, 0.0)
+    }
+
+    /// Units a resource of a kind regrows in a real minute of growing time (`regrow_per_h`).
+    pub fn regrow_per_min(&self, kind: &str, default: f64) -> f64 {
+        self.per_real_minute("regrow_per_h", "regrow", kind, default)
+    }
+
+    /// Real milliseconds a creature's remains lie (`remains_h`, game hours).
+    pub fn remains_ms(&self, kind: &str) -> f64 {
+        self.real_ms("remains_h", "remains_s", kind, 1_800_000.0)
+    }
+
+    /// Real milliseconds between a trap's catches (`trap_every_h`, game hours).
+    pub fn trap_every_ms(&self) -> f64 {
+        self.real_ms("trap_every_h", "trap_every_s", "meat", 240_000.0)
     }
 
     /// Items a one-argument law gives as a map (`fn carcass(kind) { #{ meat: 5, hide: 1 } }`),
@@ -1499,13 +3286,245 @@ fn decode_moves(d: Dynamic) -> Result<Moves, String> {
         separation_weight: g("separation_weight", 0.0, 5.0)?,
         wander_turn: g("wander_turn", 0.0, std::f32::consts::PI)?,
         wander_keep_s: g("wander_keep_s", 0.0, 3_600.0)?,
+        top: if m.contains_key("top") { g("top", 0.5, 50.0)? } else { f32::INFINITY },
+        charge: match m.get("charge") {
+            None => false,
+            Some(v) => v.as_bool().map_err(|_| "motion: `charge` must be true or false".to_string())?,
+        },
     })
 }
 
-fn decode_senses(d: Dynamic, reach: &Reach, night: bool) -> Result<Senses, String> {
+/// `pools(a)`: `#{ stamina: #{ max, regen_per_s, delay_ms, run_per_s, guard_per_s, resume,
+/// tires_per_point, rested_at, spent_share, exhausted_below, exhausted_regen }, focus: #{ max,
+/// regen_per_s, delay_ms } }`; a field left out keeps the shipped number.
+fn decode_pools(d: Dynamic) -> Result<crate::pools::Pools, String> {
+    let m = d.try_cast::<Map>().ok_or("pools must return a map with stamina and focus")?;
+    let base = crate::pools::Pools::default();
+    let sub = |k: &str| -> Result<Map, String> { m.get(k).map(|v| v.clone().try_cast::<Map>().ok_or_else(|| format!("pools: `{k}` must be a map"))).unwrap_or_else(|| Ok(Map::new())) };
+    let (st, fo) = (sub("stamina")?, sub("focus")?);
+    let g = |m: &Map, k: &str, d: f32, lo: f32, hi: f32| -> Result<f32, String> {
+        match m.get(k) {
+            None => Ok(d),
+            Some(v) => number(v).map(|v| (v as f32).clamp(lo, hi)).ok_or_else(|| format!("pools: `{k}` must be a number")),
+        }
+    };
+    let pool = |m: &Map, b: crate::pools::PoolLaw| -> Result<crate::pools::PoolLaw, String> {
+        Ok(crate::pools::PoolLaw {
+            max: g(m, "max", b.max, 0.0, 10_000.0)?,
+            regen_per_s: g(m, "regen_per_s", b.regen_per_s, 0.0, 10_000.0)?,
+            delay_ms: g(m, "delay_ms", b.delay_ms as f32, 0.0, 600_000.0)? as u32,
+            rested_at: g(m, "rested_at", b.rested_at, 0.0, 100.0)?,
+            spent_share: g(m, "spent_share", b.spent_share, 0.0, 1.0)?,
+            exhausted_below: g(m, "exhausted_below", b.exhausted_below, 0.0, 100.0)?,
+            exhausted_regen: g(m, "exhausted_regen", b.exhausted_regen, 0.0, 10.0)?,
+        })
+    };
+    // Focus does not depend on tiredness unless the law says so.
+    let unbound = crate::pools::PoolLaw { rested_at: 0.0, spent_share: 1.0, exhausted_below: 0.0, exhausted_regen: 1.0, ..base.focus };
+    Ok(crate::pools::Pools {
+        stamina: pool(&st, base.stamina)?,
+        breath: crate::pools::Breath {
+            run_per_s: g(&st, "run_per_s", base.breath.run_per_s, 0.0, 10_000.0)?,
+            guard_per_s: g(&st, "guard_per_s", base.breath.guard_per_s, 0.0, 10_000.0)?,
+            resume: g(&st, "resume", base.breath.resume, 0.0, 10_000.0)?,
+            tires_per_point: g(&st, "tires_per_point", base.breath.tires_per_point, 0.0, 10.0)?,
+        },
+        focus: pool(&fo, unbound)?,
+    })
+}
+
+fn decode_senses(d: Dynamic, reach: &Reach, dark: f32, band: Option<(crate::sight::GazeBand, f32)>) -> Result<Senses, String> {
     let m = d.try_cast::<Map>().ok_or("senses must return a map of sight and hearing")?;
     let g = |k: &str| m.get(k).and_then(number).map(|v| v as f32).ok_or_else(|| format!("senses: `{k}` must be a number of metres"));
-    Ok(Senses { sight: g("sight")?.clamp(0.0, reach.sight(night)), hearing: g("hearing")?.clamp(0.0, reach.hearing) })
+    let field = match m.get("field") {
+        None => None,
+        Some(f) if f.is_unit() => None,
+        Some(f) => {
+            let f = f.clone().try_cast::<Map>().ok_or("senses: `field` is a map of focal_deg, side_deg, side_share, near_m and margin_deg")?;
+            let n = |k: &str, lo: f32, hi: f32| f.get(k).and_then(number).map(|v| (v as f32).clamp(lo, hi)).ok_or_else(|| format!("senses: `field.{k}` must be a number"));
+            let focal_deg = n("focal_deg", 0.0, 180.0)?;
+            Some(Field { focal_deg, side_deg: n("side_deg", 0.0, 180.0)?.max(focal_deg), side_share: n("side_share", 0.0, 1.0)?, near_m: n("near_m", 0.0, 256.0)?, margin_deg: n("margin_deg", 0.0, 90.0)? })
+        }
+    };
+    let mut sight = g("sight")?;
+    let gaze = if let Some((band, ceiling)) = band {
+        let ground = g("ground")?;
+        let f = field.ok_or("senses: enabled gaze requires a field")?;
+        if !(0.0..=256.0).contains(&ceiling) || !(0.0..=ceiling).contains(&sight)
+            || !(0.0..=256.0).contains(&ground) || !(0.0..=sight).contains(&f.near_m) {
+            return Err("senses: invalid gaze bounds".into());
+        }
+        Some(crate::sight::Gaze { band, ceiling, ground, glow: reach.glow_at(dark) })
+    } else {
+        sight = sight.clamp(0.0, reach.sight(dark));
+        None
+    };
+    Ok(Senses { sight, hearing: g("hearing")?.clamp(0.0, reach.hearing), field, gaze })
+}
+
+/// What a value-only law's value reaches beyond the laws in force (see [`VALUE_ONLY`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ValueOnly {
+    /// Read by the authority's frames alone (`frame.rs`): nothing derived, the next tick reads it.
+    Delivery,
+    /// The cover policy: the authority's `cover_law` row and its cover mask (`living_rules::cover`).
+    Cover,
+    /// The gaze bands: the ceilings and senses ([`Scripts::apply_overrides`]), and the
+    /// authority's owner projection (`applied_gaze`).
+    Gaze,
+}
+
+/// The laws whose value can change on a running world without an install (`set_world_law`'s
+/// value-only path, docs/LAW_OVERRIDE.md), with what each reaches. A law belongs here only
+/// when no script function but the constants' own (`laws`, `law_about`) reads it, so a new
+/// value changes nothing a full install derives beyond what [`Scripts::apply_overrides`] and the
+/// authority refresh for its class. A script that reads one elsewhere makes it an ordinary law
+/// for that world ([`Scripts::value_only`]).
+pub const VALUE_ONLY: [(&str, ValueOnly); 8] = [
+    ("cue_transport_on", ValueOnly::Delivery),
+    ("near_tier_on", ValueOnly::Delivery),
+    ("cover_sight_on", ValueOnly::Cover),
+    ("cover_eye_height_m", ValueOnly::Cover),
+    ("cover_brush_on", ValueOnly::Cover),
+    ("cover_brush_min_fill", ValueOnly::Cover),
+    ("cover_cliff_step_m", ValueOnly::Cover),
+    ("gaze_on", ValueOnly::Gaze),
+];
+
+/// The functions a value-only law may be named in: the constants (`laws`, an overlay's
+/// `base_laws`), their words and a world's own values.
+const VALUE_ONLY_READERS: [&str; 5] = ["laws", "base_laws", "law_about", "laws_about", WORLD_LAW_VALUES];
+
+/// What [`Scripts::apply_overrides`] changed: the laws whose value in force changed, and the
+/// classes they belong to (what the caller refreshes of its own).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Applied {
+    pub changed: Vec<String>,
+    pub delivery: bool,
+    pub cover: bool,
+    pub gaze: bool,
+}
+
+/// The value-only laws `source` names only in [`VALUE_ONLY_READERS`]: each place the name
+/// appears as a word (a key, a field, a `law("…")` string, a comment) counts for the function
+/// declared last before it, and anywhere outside those functions (or before any function) the
+/// law is not value-only in this script.
+fn value_only_in(source: &str) -> Vec<&'static str> {
+    // Every function's start, by the line that declares it (`fn name(`, `private fn name(`).
+    let mut starts: Vec<(usize, &str)> = Vec::new();
+    let mut at = 0;
+    for line in source.split_inclusive('\n') {
+        let t = line.trim_start();
+        let t = t.strip_prefix("private ").map(str::trim_start).unwrap_or(t);
+        if let Some(rest) = t.strip_prefix("fn ") {
+            let name = rest.trim_start().split(|c: char| !(c.is_ascii_alphanumeric() || c == '_')).next().unwrap_or("");
+            if !name.is_empty() {
+                starts.push((at, name));
+            }
+        }
+        at += line.len();
+    }
+    let word = |c: u8| c.is_ascii_alphanumeric() || c == b'_';
+    let bytes = source.as_bytes();
+    VALUE_ONLY.iter().map(|(n, _)| *n).filter(|n| {
+        source.match_indices(n).filter(|(i, _)| {
+            let before = *i == 0 || !word(bytes[i - 1]);
+            let after = i + n.len() >= bytes.len() || !word(bytes[i + n.len()]);
+            before && after
+        }).all(|(i, _)| {
+            let f = starts.iter().take_while(|(s, _)| *s <= i).last().map(|(_, f)| *f);
+            f.is_some_and(|f| VALUE_ONLY_READERS.contains(&f))
+        })
+    }).collect()
+}
+
+/// The world's own law values from `law_override` rows (name, value as JSON), as the authority
+/// and every client decode them for [`Scripts::with_overrides`] and [`Scripts::apply_overrides`]:
+/// by name; a value that is not JSON is left out.
+pub fn overrides_of<'a>(rows: impl IntoIterator<Item = (&'a str, &'a str)>) -> Vec<(String, serde_json::Value)> {
+    let v: Vec<(String, serde_json::Value)> = rows.into_iter().filter_map(|(k, v)| serde_json::from_str(v.trim()).ok().map(|v| (k.to_string(), v))).collect();
+    sorted_overrides(&v)
+}
+
+/// Overrides by name, the last of a name kept.
+fn sorted_overrides(over: &[(String, serde_json::Value)]) -> Vec<(String, serde_json::Value)> {
+    let mut m: BTreeMap<String, serde_json::Value> = BTreeMap::new();
+    for (k, v) in over {
+        m.insert(k.clone(), v.clone());
+    }
+    m.into_iter().collect()
+}
+
+/// A world's own value of a law whose script value is `cur`, as the laws read it: true or false
+/// for a flag, a number (as a float) for a number; none for a value of another kind.
+fn override_value(cur: &Dynamic, v: &serde_json::Value) -> Option<Dynamic> {
+    match v {
+        serde_json::Value::Bool(b) if cur.is_bool() => Some(Dynamic::from(*b)),
+        serde_json::Value::Number(n) if !cur.is_bool() && number(cur).is_some() => Some(Dynamic::from(n.as_f64()?)),
+        _ => None,
+    }
+}
+
+/// Two values of a law alike: the same flag, or the same number.
+fn same_law_value(a: &Dynamic, b: &Dynamic) -> bool {
+    match (a.as_bool(), b.as_bool()) {
+        (Ok(x), Ok(y)) => x == y,
+        (Err(_), Err(_)) => match (number(a), number(b)) {
+            (Some(x), Some(y)) => x == y,
+            _ => a.type_name() == b.type_name(),
+        },
+        _ => false,
+    }
+}
+
+/// The function a world's own law values are written as at the end of its script.
+pub const WORLD_LAW_VALUES: &str = "world_law_values";
+/// The line that starts that block.
+const WORLD_LAW_MARK: &str = "// ---- this world's own law values (written by the authority: a seed's `rules`, `set_world_law`) ----";
+
+/// A world's script with its own law values written at its end as `world_law_values()`, which
+/// the laws read through `law(name)` and the engine reads over `laws()`. Any earlier such block
+/// is replaced; no values leave the script without one. Every client that compiles the
+/// world's `script` row then has the values in force (docs/PERCEPTION.md, "Changing a law on a
+/// running world").
+pub fn with_world_laws(source: &str, values: &[(String, serde_json::Value)]) -> String {
+    let base = match source.find(WORLD_LAW_MARK) {
+        Some(i) => source[..i].trim_end_matches('\n'),
+        None => source,
+    };
+    if values.is_empty() {
+        return if base.len() == source.len() { source.to_string() } else { format!("{base}\n") };
+    }
+    let mut v: Vec<&(String, serde_json::Value)> = values.iter().collect();
+    v.sort_by(|a, b| a.0.cmp(&b.0));
+    let body: Vec<String> = v
+        .iter()
+        .filter(|(k, _)| !k.is_empty() && k.chars().all(|c| c.is_ascii_alphanumeric() || c == '_'))
+        .map(|(k, val)| {
+            let val = match val {
+                serde_json::Value::Bool(b) => b.to_string(),
+                serde_json::Value::Number(n) => {
+                    let f = n.as_f64().unwrap_or(0.0);
+                    if f.fract() == 0.0 && f.abs() < 1e15 { format!("{f:.1}") } else { format!("{f}") }
+                }
+                _ => "()".to_string(),
+            };
+            format!("{k}: {val}")
+        })
+        .collect();
+    format!("{base}\n\n{WORLD_LAW_MARK}\nfn {WORLD_LAW_VALUES}() {{ #{{ {} }} }}\n", body.join(", "))
+}
+
+/// The script without a world's own law values (what was installed).
+pub fn without_world_laws(source: &str) -> &str {
+    match source.find(WORLD_LAW_MARK) {
+        Some(i) => source[..i].trim_end_matches('\n'),
+        None => source,
+    }
+}
+
+fn decode_glow(d: Dynamic, reach: &Reach) -> Result<f32, String> {
+    Ok((number(&d).ok_or("glow must return a number of metres")? as f32).clamp(0.0, reach.glow))
 }
 
 fn number(d: &Dynamic) -> Option<f64> {
@@ -1516,9 +3535,26 @@ fn number(d: &Dynamic) -> Option<f64> {
 }
 
 /// The traits a skill's spec may have.
-pub const SPEC_TRAITS: &[&str] = &["target", "item", "args", "reach", "about", "takes", "gives", "listed", "talk", "items", "latch", "notable", "moving", "moment", "reflex"];
+pub const SPEC_TRAITS: &[&str] = &["target", "item", "args", "reach", "about", "takes", "gives", "listed", "talk", "items", "latch", "notable", "moving", "moment", "reflex", "target_class", "loudness", "on_the_move"];
 
 /// A skill's spec from what `<skill>_spec()` returned.
+/// A kind's `burns` trait: `#{ fuel: "<item trait>", rate: <units a game hour>, warmth: <m>,
+/// light: <m>, holds: <units> }` (warmth, light and holds optional).
+fn burns_of(kind: &str, v: &Dynamic) -> Result<Burns, String> {
+    let m = v.clone().try_cast::<Map>().ok_or_else(|| format!("structures: `burns` of `{kind}` is a map (fuel, rate, warmth, light, holds)"))?;
+    if let Some(x) = m.keys().find(|x| !["fuel", "rate", "warmth", "light", "holds"].contains(&x.as_str())) {
+        return Err(format!("structures: unknown `burns` trait `{x}` of `{kind}` (they are fuel, rate, warmth, light, holds)"));
+    }
+    let fuel = m.get("fuel").and_then(|v| v.clone().into_string().ok()).filter(|f| !f.is_empty()).ok_or_else(|| format!("structures: `burns.fuel` of `{kind}` names the item trait it burns"))?;
+    let rate = m.get("rate").and_then(number).filter(|r| *r > 0.0 && r.is_finite()).ok_or_else(|| format!("structures: `burns.rate` of `{kind}` is the fuel units it burns a game hour (> 0)"))? as f32;
+    let metres = |x: &str| -> Result<f32, String> { m.get(x).map_or(Ok(0.0), |v| number(v).filter(|n| *n >= 0.0 && *n <= 64.0).map(|n| n as f32).ok_or_else(|| format!("structures: `burns.{x}` of `{kind}` is metres (0..64)"))) };
+    let holds = match m.get("holds") {
+        None => None,
+        Some(v) => Some(number(v).filter(|n| *n > 0.0).ok_or_else(|| format!("structures: `burns.holds` of `{kind}` is the most units it holds (> 0)"))? as f32),
+    };
+    Ok(Burns { fuel, rate, warmth: metres("warmth")?, light: metres("light")?, holds })
+}
+
 fn spec_of(skill: &str, m: &Map) -> Result<crate::catalog::SkillSpec, String> {
     let f = format!("{skill}_spec");
     if let Some(k) = m.keys().find(|k| !SPEC_TRAITS.contains(&k.as_str())) {
@@ -1542,6 +3578,19 @@ fn spec_of(skill: &str, m: &Map) -> Result<crate::catalog::SkillSpec, String> {
         return Err(format!("{f}: `about` describes the skill for a mind: what it does, when it is useful, what it is not"));
     }
     let reach = m.get("reach").map_or(Ok(0.0), |v| number(v).ok_or_else(|| format!("{f}: `reach` must be a number")))?;
+    // What the target may be: a class or a list of them.
+    let target_class = match m.get("target_class") {
+        None => Vec::new(),
+        Some(v) if v.is_string() => vec![v.clone().into_string().unwrap_or_default()],
+        Some(_) => list("target_class")?,
+    };
+    let classes = crate::catalog::TARGET_CLASSES;
+    if let Some(c) = target_class.iter().find(|c| !classes.contains(&c.as_str())) {
+        return Err(format!("{f}: `target_class` '{c}' is not a target class ({})", classes.join(", ")));
+    }
+    if !target_class.is_empty() && !flag("target", false)? {
+        return Err(format!("{f}: `target_class` needs `target: true`"));
+    }
     Ok(crate::catalog::SkillSpec {
         name: skill.to_string(),
         needs_target: flag("target", false)?,
@@ -1557,15 +3606,27 @@ fn spec_of(skill: &str, m: &Map) -> Result<crate::catalog::SkillSpec, String> {
         items: list("items")?,
         latch: flag("latch", false)?,
         notable: flag("notable", false)?,
-        moving: flag("moving", false)?,
+        moving: flag("moving", false)? || flag("on_the_move", false)?,
+        on_the_move: flag("on_the_move", false)?,
         moment: flag("moment", false)?,
+        loudness: m.get("loudness").map_or(Ok(0.0), |v| number(v).ok_or_else(|| format!("{f}: `loudness` must be a number")))?.clamp(0.0, 100.0) as f32,
         reflex: flag("reflex", false)?,
+        target_class,
     })
+}
+
+/// Milliseconds as a mind reads them: "0.65 s", "1 s", "1.5 s".
+fn seconds(ms: u32) -> String {
+    let s = format!("{:.2}", ms as f64 / 1000.0);
+    format!("{} s", s.trim_end_matches('0').trim_end_matches('.'))
 }
 
 fn decode_missile(f: &str, d: Dynamic) -> Result<crate::combat::MissileSpec, String> {
     let m = d.try_cast::<Map>().ok_or_else(|| format!("{f} must return a map"))?;
     let g = |k: &str| m.get(k).and_then(number).map(|v| v as f32).ok_or_else(|| format!("{f} missing {k}"));
+    if m.get("called").is_some_and(|v| !v.is_string()) {
+        return Err(format!("{f}: `called` is what the missile is called, a string (\"an arrow\")"));
+    }
     Ok(crate::combat::MissileSpec { speed: g("speed")?.clamp(1.0, 120.0), range: g("range")?.clamp(0.5, 80.0), radius: g("radius")?.clamp(0.05, 3.0) })
 }
 
@@ -1575,11 +3636,18 @@ fn decode_effects(f: &str, d: Dynamic) -> Result<Vec<Effect>, String> {
 }
 
 impl NeedLaw {
-    /// Decode what `rates(a)` returned.
-    pub fn from_dynamic(d: Dynamic) -> Result<NeedLaw, String> {
+    /// Decode what `rates(a)` returned, in a world whose game hour lasts `hour_ms` real
+    /// milliseconds (its `per` says whether the law writes per game hour or per real minute).
+    pub fn from_dynamic(d: Dynamic, hour_ms: f64) -> Result<NeedLaw, String> {
         let m = d.try_cast::<Map>().ok_or("rates must return a map")?;
+        let per_min = match m.get("per").map(|v| v.clone().into_string()) {
+            None => 1.0,
+            Some(Ok(u)) if u == "minute" => 1.0,
+            Some(Ok(u)) if u == "hour" => 60_000.0 / hour_ms.max(1.0),
+            Some(_) => return Err("rates: `per` is \"hour\" (a game hour) or \"minute\" (a real minute)".into()),
+        };
         if !m.contains_key("starving_at") {
-            let g = |k: &str| m.get(k).and_then(number).unwrap_or(0.0) as f32;
+            let g = |k: &str| (m.get(k).and_then(number).unwrap_or(0.0) * per_min) as f32;
             return Ok(NeedLaw::Final(Rates { hunger_per_min: g("hunger"), energy_per_min: g("energy"), hp_per_min: g("hp") }));
         }
         let n = |k: &str| m.get(k).and_then(number).ok_or_else(|| format!("rates: `{k}` must be a number"));
@@ -1601,6 +3669,7 @@ impl NeedLaw {
             cold_hp: n("cold_hp")?,
             appetite_gene: m.get("appetite_gene").and_then(|v| v.clone().into_string().ok()).unwrap_or_default(),
             hardiness_gene: m.get("hardiness_gene").and_then(|v| v.clone().into_string().ok()).unwrap_or_default(),
+            per_min,
         })
     }
 }
@@ -1632,6 +3701,7 @@ fn regard_map(p: &RegardIn) -> Map {
     m.insert("target".into(), t.into());
     m.insert("self".into(), p.own.into());
     m.insert("night".into(), p.night.into());
+    m.insert("dist".into(), Dynamic::from_float(p.dist as f64));
     m
 }
 
@@ -1650,7 +3720,20 @@ fn decode_regard(r: Dynamic, p: &RegardIn) -> Result<Regard, String> {
         Some(Ok(h)) if h == "none" => Precision::None,
         Some(_) => return Err("perceived_of: `health` is \"exact\", \"band\" or \"none\"".into()),
     };
-    Ok(Regard { name, health })
+    let far = match r.get("far") {
+        None => false,
+        Some(v) => v.as_bool().map_err(|_| "perceived_of: `far` must be true or false")?,
+    };
+    let look = match r.get("look").map(|v| v.clone().into_string()) {
+        None if far && !p.own => LookSeen::Far,
+        None => LookSeen::Full,
+        Some(Ok(l)) if l == "full" => LookSeen::Full,
+        Some(Ok(l)) if l == "far" => LookSeen::Far,
+        Some(Ok(l)) if l == "none" => LookSeen::None,
+        Some(_) => return Err("perceived_of: `look` is \"full\", \"far\" or \"none\"".into()),
+    };
+    // Someone too far to make out is never named.
+    Ok(Regard { name: name && !far, health, far, look })
 }
 
 /// A record's parties: a map of role → character id (or community party).
@@ -1712,6 +3795,10 @@ fn effect(d: Dynamic) -> Result<Effect, String> {
         "remove" => Effect::Remove { item: s("item"), qty: qty()? },
         "harvest" => Effect::Harvest { qty: n("qty") as f32 },
         "vitals" => Effect::Vitals { hp: n("hp") as f32, hunger: n("hunger") as f32, energy: n("energy") as f32 },
+        "spend" => match s("pool").as_str() {
+            p @ ("stamina" | "focus") => Effect::Spend { pool: p.into(), amount: (n("amount") as f32).max(0.0) },
+            p => return Err(format!("spend: pool `{p}` is not stamina or focus")),
+        },
         "graze" => Effect::Graze,
         "damage" => Effect::Damage { amount: n("amount") as f32 },
         "heal" => Effect::Heal { amount: n("amount") as f32 },
@@ -1720,6 +3807,14 @@ fn effect(d: Dynamic) -> Result<Effect, String> {
         "seize" => Effect::Seize { item: s("item"), qty: qty()? },
         "store" => Effect::Store { item: s("item"), qty: qty()? },
         "take" => Effect::Take { item: s("item"), qty: qty()? },
+        "fuel" => Effect::Fuel { item: s("item"), qty: qty()? },
+        "burn" => {
+            let u = n("units");
+            if !(u > 0.0 && u.is_finite()) {
+                return Err("burn needs units > 0".into());
+            }
+            Effect::Burn { units: u as f32 }
+        },
         "build" => Effect::Build { kind: s("kind") },
         "bond" => Effect::Bond,
         "signal" => Effect::Signal,
@@ -1731,7 +3826,8 @@ fn effect(d: Dynamic) -> Result<Effect, String> {
         "read" => Effect::Read,
         "plant" => Effect::Plant,
         "offer" => Effect::Offer,
-        "accept" => Effect::Accept,
+        "accept" => Effect::Accept { offer: n("offer").max(0.0) as u64 },
+        "decline" => Effect::Decline { offer: n("offer").max(0.0) as u64 },
         "found" => Effect::Found,
         "join" => Effect::Join,
         "welcome" => Effect::Welcome,
@@ -1767,6 +3863,25 @@ fn effect(d: Dynamic) -> Result<Effect, String> {
 mod tests {
     use super::*;
 
+    #[test]
+    fn the_combat_law_tells_the_attack_windup_the_cards_show() {
+        let src = include_str!("../../scripts/skills.rhai");
+        let s = Scripts::new(src).unwrap();
+        let about = &s.law_specs()["combat"].about;
+        assert_eq!(s.timing("attack").unwrap().windup_ms, 650);
+        assert!(about.contains("A person's attack winds up for 0.65 s before it lands") && !about.contains("{windup"), "{about}");
+        // A world whose attack winds up longer is told so: the words follow the laws.
+        let slow = src.replace("if inv(a, \"spear\") > 0 { 750 } else { 650 }", "if inv(a, \"spear\") > 0 { 750 } else { 900 }");
+        assert_ne!(slow, src, "attack_duration's shape changed: update this test");
+        let about = Scripts::new(&slow).unwrap().law_specs()["combat"].about.clone();
+        assert!(about.contains("winds up for 0.9 s before it lands"), "{about}");
+        // A token that names no combat skill with a windup is refused at install.
+        let odd = src.replace("{windup:attack}", "{windup:gather}");
+        assert!(Scripts::new(&odd).err().unwrap_or_default().contains("{windup:gather}"));
+        assert_eq!(seconds(1000), "1 s");
+        assert_eq!(seconds(1500), "1.5 s");
+    }
+
     fn scripts() -> Scripts {
         Scripts::new(include_str!("../../scripts/skills.rhai")).expect("skills compile")
     }
@@ -1780,11 +3895,94 @@ mod tests {
     /// orders, with the world's own sections (seasons, life) where they belong; every law the
     /// engine asks and every world constant must be described, or an install is refused.
     #[test]
+    fn ways_of_speaking_are_read_from_the_script() {
+        let s = scripts();
+        let names: Vec<&str> = s.ways().iter().map(|w| w.name.as_str()).collect();
+        assert_eq!(names, ["say", "whisper", "call"]);
+        let whisper = s.way("whisper").unwrap();
+        assert_eq!((whisper.carry, whisper.only_to, whisper.reach, whisper.kind.as_str(), whisper.names, whisper.animals.as_str()), (speech::Carry::Within(1.5), true, 1.5, "whisper", false, ""));
+        let noticed = whisper.noticed.as_ref().unwrap();
+        assert_eq!((noticed.within_m, noticed.seen, noticed.kind.as_str(), noticed.text.as_str()), (6.0, true, "whispered", "{a} whispers something to {b}."));
+        let call = s.way("call").unwrap();
+        assert_eq!((call.carry_for(9.0), call.max_chars, call.gap_s, call.animals.as_str(), call.public()), (22.5, 80, 6.0, "a person shouting", true));
+        assert!(call.about.contains("within 22.5 m"), "{}", call.about);
+        // The shipped `say` is today's speech, field for field (the regression baseline).
+        let mut say = s.way("say").unwrap().clone();
+        assert_eq!(say.about, speech::WaySpec::say().about);
+        say.about = speech::WaySpec::say().about;
+        assert_eq!(say, speech::WaySpec::say());
+        // Each way with its reach in metres, from its spec and the world's hearing (9 m here).
+        let t = s.world_text(&[]);
+        assert!(t.contains("SPEAKING: say (carries 9 m) = Speak aloud."), "{t}");
+        assert!(t.contains(" whisper (to someone within 1.5 m) = Whisper") && t.contains(" call (carries 22.5 m) = Call out"), "{t}");
+        assert_eq!((say.reach_words(12.0), whisper.reach_words(12.0), call.reach_words(12.0)), ("carries 12 m".into(), "to someone within 1.5 m".into(), "carries 30 m".into()));
+        let src = include_str!("../../scripts/skills.rhai");
+        let with = |overlay: &str| Scripts::new(&crate::floors::compose(src, overlay).unwrap());
+        // A way the engine cannot keep is refused, naming the key.
+        let e = with("fn shout_speech() { #{ about: \"x\", cost: #{ energy: 2.0 } } }").err().unwrap();
+        assert!(e.contains("unknown trait `cost`"), "{e}");
+        let e = with("fn hush_speech() { #{ about: \"x\", words: #{ within_m: 1.5, only_to: true } } }").err().unwrap();
+        assert!(e.contains("need `to: \"required\"`"), "{e}");
+        let e = with("fn wave_speech() { #{ about: \"x\" } }").err().unwrap();
+        assert!(e.contains("is a skill already"), "{e}");
+        let e = with("fn say_speech() { #{ about: \"x\", needs: \"telepathy\" } }").err().unwrap();
+        assert!(e.contains("names a technique"), "{e}");
+        // A second way comes in its order, and its words for one ear reach no animal.
+        let two = with("fn hush_speech() { #{ about: \"Hush.\", order: 1, to: \"required\", words: #{ within_m: 1.5, only_to: true }, heard_to_you: \"{a} hushes to you\" } }").unwrap();
+        let w = two.way("hush").unwrap();
+        assert_eq!(two.ways().iter().map(|w| w.name.as_str()).collect::<Vec<_>>(), ["say", "whisper", "hush", "call"]);
+        assert_eq!((w.carry, w.only_to, w.animals.as_str(), w.label.as_str()), (speech::Carry::Within(1.5), true, "", "Hush"));
+        assert_eq!((w.carry_for(9.0), w.widest(9.0)), (1.5, 1.5));
+        assert!(two.world_text(&[]).contains("say (carries 9 m) = Speak aloud. Everyone within earshot hears you, also when you speak to one person. whisper (to someone within 1.5 m) = Whisper to someone beside you (within 1.5 m)."));
+        // A script with no ways at all speaks by today's `say`.
+        let none = Scripts::new(&src.replace("_speech()", "_speech_old()")).unwrap();
+        assert_eq!(none.way("say"), Some(&speech::WaySpec::say()));
+    }
+
+    #[test]
+    fn ways_refuse_in_their_checks_words() {
+        use speech::check_way;
+        let s = scripts();
+        let me = ActorFacts { id: 1, kind: "person".into(), stage: "adult".into(), ..Default::default() };
+        let them = |dist: f32, alive: bool| Some(TargetFacts { class: "creature".into(), id: 2, kind: "person".into(), alive, dist, ..Default::default() });
+        let check = |way: &str, to, since| check_way(&s, way, me.clone(), to, "hello", since);
+        // The words a client shows before sending are the reducer's (both call `check_way`).
+        assert_eq!(check("whisper", None, None), Err("a whisper needs someone to whisper to".into()));
+        assert_eq!(check("whisper", them(3.0, true), None), Err("too far to whisper: step closer".into()));
+        assert_eq!(check("whisper", them(1.0, false), None), Err("too far to whisper: step closer".into()), "absent or dead reads as too far: ids cannot be probed");
+        assert_eq!(check("whisper", them(1.0, true), None), Ok(()));
+        assert_eq!(check("call", None, Some(3_000)), Err("too soon to call out again: wait a few seconds".into()));
+        assert_eq!(check("call", None, Some(6_000)), Ok(()));
+        assert_eq!(check("call", None, None), Ok(()));
+        assert_eq!(check("say", them(30.0, true), Some(0)), Ok(()), "say has no check of its own");
+        assert_eq!(check("", None, None), Ok(()), "no way named is say");
+        assert_eq!(check("shout", None, None), Err("no way of speaking called `shout`".into()), "the engine's own refusal, in the reducer's words");
+        // A way whose spec requires something must refuse it in its check, or the install is refused.
+        let src = include_str!("../../scripts/skills.rhai");
+        let install = |overlay: &str| Scripts::new(&crate::floors::compose(src, overlay).unwrap()).and_then(|s| s.validate().map(|_| ()));
+        let e = install("fn hush_speech() { #{ about: \"Hush.\", to: \"required\", reach: 1.0, words: #{ within_m: 1.0, only_to: true } } }").unwrap_err();
+        assert!(e.contains("has no `hush_check(a)`"), "{e}");
+        let e = install("fn hush_speech() { #{ about: \"Hush.\", to: \"required\", reach: 1.0, words: #{ within_m: 1.0, only_to: true } } }\nfn hush_check(a) { if a.target.class == \"none\" { return \"hush to whom?\"; } \"\" }").unwrap_err();
+        assert!(e.contains("accepts a line to someone 1.5 m away"), "{e}");
+        let e = install("fn whisper_check(a) { \"\" }").unwrap_err();
+        assert!(e.contains("accepts a line to no one"), "{e}");
+        let e = install("fn call_check(a) { \"\" }").unwrap_err();
+        assert!(e.contains("a second line 5000 ms after the first"), "{e}");
+        let e = install("fn say_check(a) { \"no\" }").unwrap_err();
+        assert!(e.contains("refuses a line that breaks nothing"), "{e}");
+        // A check reads only what `check_way` gives, which a client can give too.
+        let e = install("fn say_check(a) { if a.hour > 30.0 { return \"never\"; } \"\" }").unwrap_err();
+        assert!(e.contains("`say_check` reads `a.hour`"), "{e}");
+        let e = Scripts::new(&crate::floors::compose(src, "fn sign_speech() { #{ about: \"Sign.\", needs_sight: true } }").unwrap()).err().unwrap();
+        assert!(e.contains("`needs_sight` is not built yet"), "{e}");
+    }
+
+    #[test]
     fn world_text_is_built_from_the_laws() {
         let s = scripts();
         let t = s.world_text(&[("seasons", "a year is 8 days.".into()), ("life", "a person lives about 70 years.".into())]);
         let heads: Vec<&str> = t.lines().map(|l| l.split(':').next().unwrap_or("")).collect();
-        assert_eq!(heads[1..].join(" "), "SENSES MOVING SEASONS BODY KNOW-HOW FOOD MAKING SETTLEMENTS LIFE COMBAT FORCE COMMUNITIES TIME OTHERS", "{t}");
+        assert_eq!(heads[1..].join(" "), "SENSES SPEAKING MOVING SEASONS BODY KNOW-HOW FOOD MAKING SETTLEMENTS LIFE COMBAT FORCE COMMUNITIES TIME OTHERS", "{t}");
         assert!(t.starts_with("One day lasts 12 real minutes; night is 20:00-06:00.\nSENSES: How far a creature sees and hears, in metres (one tile is one metre). By day one sees 11 m; at night 6 m, or 9 m carrying a torch."), "{t}");
         assert!(t.contains("FOOD: berries 12, fish 16, meat 20, cooked_fish 34, cooked_meat 42, smoked_fish 24, smoked_meat 30 (hunger points). Cook raw fish or meat at a campfire"), "{t}");
         assert!(t.contains("BODY: hunger rises ~1.2/min (100 = starving") && t.contains("within reach (about 2 m; a wolf's leap about 3.2)") && t.contains("for 20 s you do not strike back") && t.contains("Deer can be hunted (5 meat)"), "{t}");
@@ -1797,7 +3995,7 @@ mod tests {
         // Undescribed laws are refused.
         let bare = Scripts::new(&src.replace("fn theft_law()", "fn theft_old_law()")).unwrap();
         assert!(bare.validate().unwrap_err().contains("the law `theft` has no description"));
-        let mute = Scripts::new(&src.replace("        follow_s: `one follow lasts", "        follow_z: `one follow lasts")).unwrap();
+        let mute = Scripts::new(&src.replace("        \"follow_s\" => `one follow lasts", "        \"follow_z\" => `one follow lasts")).unwrap();
         assert!(mute.validate().unwrap_err().contains("the world constant `follow_s` has no description"));
         assert!(s.validate().is_ok());
     }
@@ -1819,15 +4017,18 @@ mod tests {
         let names: Vec<String> = s.skills().items.iter().map(|i| i.name.clone()).collect();
         assert_eq!(names.join(" "), "berries fish meat cooked_fish cooked_meat wood stone fiber spear hide cloak torch tablet clay axe pick smoked_fish smoked_meat net basket bow arrow salve leather armor mark");
         let with = |f: fn(&crate::catalog::SkillSpec) -> bool| s.skills().iter().filter(|k| f(k)).map(|k| k.name.clone()).collect::<std::collections::BTreeSet<_>>().into_iter().collect::<Vec<_>>().join(" ");
-        assert_eq!(with(|k| k.latch), "build cook craft eat experiment gather give plant read rest sleep store take teach write");
-        assert_eq!(with(|k| k.notable), "attack build conceive cook craft give store take threaten yield");
-        assert_eq!(with(|k| k.moving), "eat signal wait");
-        assert_eq!(with(|k| k.moment), "flee follow graze rest sleep wait wander");
+        // `feed` and `make` (2026-11-11) are there for a world with fires that burn fuel and recipes.
+        assert_eq!(with(|k| k.latch), "build cook craft eat experiment feed gather give make plant read rest sleep store take teach write");
+        assert_eq!(with(|k| k.notable), "attack build conceive cook craft feed give make store take threaten yield");
+        // `wave` and `nod` are done on the move (talk-turns, `on_the_move`, which implies `moving`).
+        assert_eq!(with(|k| k.moving), "eat nod signal wait wave");
+        assert_eq!(with(|k| k.on_the_move), "nod wave");
+        assert_eq!(with(|k| k.moment), "circle flee follow graze keep_distance rest sleep wait wander");
         assert_eq!(with(|k| k.reflex), "flee");
-        assert_eq!((s.structure("house"), s.structure("campfire"), s.structure("workshop"), s.structure("storage")), (StructureTraits { warms: true, roof: true }, StructureTraits { warms: true, roof: false }, StructureTraits { warms: false, roof: true }, StructureTraits::default()));
+        assert_eq!((s.structure("house"), s.structure("campfire"), s.structure("workshop"), s.structure("storage")), (&StructureTraits { warms: true, roof: true, ..Default::default() }, &StructureTraits { warms: true, ..Default::default() }, &StructureTraits { roof: true, ..Default::default() }, &StructureTraits { holds: Some(120.0), ..Default::default() }));
         assert_eq!(s.words_of("occupation_knows", "fisher"), vec!["spear", "cooking", "fishing"]);
         assert_eq!((s.num_of("kept_spoil", "storage", 0.0), s.num_of("planted_max", "berry_bush", 0.0)), (1.0 / 3.0, 5.0));
-        assert_eq!((s.num_of("max_hp", "wolf", 0.0), s.num_of("lunge", "wolf", 0.0), s.num_of("remains_s", "deer", 0.0), s.num_of("dodge_speed", "person", 0.0)), (55.0, 1.8, 1800.0, 5.2));
+        assert_eq!((s.num_of("max_hp", "wolf", 0.0), s.num_of("lunge", "wolf", 0.0), s.remains_ms("deer"), s.num_of("dodge_speed", "person", 0.0)), (s.law_value("hp_wolf").and_then(|v| v.as_f64()).unwrap(), 1.8, 1_800_000.0, 5.2), "a wolf's health is the hp_wolf law");
         // The words minds and players read are the ones the lists gave.
         assert_eq!(s.text_of("source_of", "food").unwrap(), "gather berries at a berry_bush or fish at a fishing_spot, take food from a storage, or hunt");
         let cook = |s: &Scripts, item: &str| {
@@ -1851,30 +4052,374 @@ mod tests {
         assert!(s.done("graze", &SkillCtx::default()).unwrap().contains(&Effect::Graze));
     }
 
-    /// How a creature moves besides its walk is a law per creature, with the values the engine
-    /// had (run 1.5 × walk, flight 1.15, stepping aside 0.8, turning 6 rad/s keeping 0.4 of its
-    /// speed in the sharpest turns, keeping 0.8 m from others at weight 0.9).
+    /// How a creature moves besides its walk is a law per creature: a person runs `run_share`
+    /// times its walk (a world law), animals 1.5 times (charging at a hunt's approach), a flight
+    /// 1.15, stepping aside 0.8, turning 6 rad/s keeping 0.4 of its speed in the sharpest turns,
+    /// keeping 0.8 m from others at weight 0.9; no road takes anyone past `run_top`.
     #[test]
     fn moves_are_a_law_per_creature() {
         let s = scripts();
-        let m = s.moves(&creature(false, false)).unwrap();
-        assert_eq!(m, Moves { run: 1.5, flee: 1.15, aside: 0.8, turn_rate: 6.0, turn_slow: 0.4, separation: 0.8, separation_weight: 0.9, wander_turn: 1.2, wander_keep_s: 60.0 });
-        assert_eq!(s.law_plan("motion").describe(), Vec::<String>::new(), "the shipped law reads nothing: one answer for everyone");
+        let mut person = creature(false, false);
+        person.actor.kind = "person".into();
+        let m = s.moves(&person).unwrap();
+        let share = s.law_value("run_share").and_then(|v| v.as_f64()).unwrap() as f32;
+        let top = s.law_value("run_top").and_then(|v| v.as_f64()).unwrap() as f32;
+        assert_eq!(m, Moves { run: share, flee: 1.15, aside: 0.8, turn_rate: 6.0, turn_slow: 0.4, separation: 0.8, separation_weight: 0.9, wander_turn: 1.2, wander_keep_s: 60.0, top, charge: false });
+        assert_eq!(s.law_plan("motion").describe(), vec!["actor.kind".to_string()], "the shipped law reads only the kind");
+        let mut wolf = creature(false, false);
+        wolf.actor.kind = "wolf".into();
+        let w = s.moves(&wolf).unwrap();
+        assert_eq!((w.run, w.charge, w.top), (1.5, true, top));
         let spec = &s.law_specs()["motion"];
         assert_eq!(spec.cadence, Cadence::Hot);
-        assert!(spec.about.contains("Grown people walk 2.6, wolves 3.4, deer 3.7") && spec.about.contains("Running is 1.5 times one's walk and a flight 1.15 times"), "{}", spec.about);
+        assert!(spec.about.contains("Grown people walk 2.6, wolves 3.4, deer 3.7") && spec.about.contains(&format!("A person runs {} times its walk", share)) && spec.about.contains(&format!("past {} m/s", top)), "{}", spec.about);
         // A floor where wolves run harder: the law reads the kind, and only wolves change.
         let src = include_str!("../../scripts/skills.rhai").replace("fn motion(a)", "fn base_motion(a)");
         let f = Scripts::new(&format!("{src}\nfn motion(a) {{ let m = base_motion(a); if a.actor.kind == \"wolf\" {{ m.run = 2.0; }} m }}")).unwrap();
-        let mut wolf = creature(false, false);
-        wolf.actor.kind = "wolf".into();
-        assert_eq!((f.moves(&wolf).unwrap().run, f.moves(&creature(false, false)).unwrap().run), (2.0, 1.5));
-        assert!(f.validate().is_ok());
+        assert_eq!((f.moves(&wolf).unwrap().run, f.moves(&person).unwrap().run), (2.0, share));
+        if let Err(e) = f.validate() { panic!("{e}"); }
+        // A law without `top` or `charge` (an older floor's): no cap, no charge.
+        let old = Scripts::new(&format!("{src}\nfn motion(a) {{ #{{ run: 1.5, flee: 1.15, aside: 0.8, turn_rate: 6.0, turn_slow: 0.4, separation: 0.8, separation_weight: 0.9, wander_turn: 1.2, wander_keep_s: 60.0 }} }}")).unwrap();
+        let o = old.moves(&wolf).unwrap();
+        assert_eq!((o.top, o.charge), (f32::INFINITY, false));
     }
 
     /// Sight and hearing are a law per creature in the script, with the values the engine had
     /// as constants (11 m by day, 6 at night, 9 with a torch; hearing 9), shared by every
     /// creature in the same state and held to the law's reach.
+    #[test]
+    fn the_pack_reflex_is_on_by_default_and_a_world_turns_it_off() {
+        let src = include_str!("../../scripts/skills.rhai");
+        let shipped = Scripts::new(src).unwrap();
+        assert!(shipped.laws().pack_reflex, "on in every world unless it says otherwise");
+        assert_eq!(shipped.law_value("pack_reflex"), Some(serde_json::json!(true)));
+        let off_src = with_world_laws(src, &[("pack_reflex".into(), serde_json::json!(false))]);
+        let off = Scripts::new(&off_src).unwrap();
+        off.validate().unwrap();
+        assert!(!off.laws().pack_reflex);
+        // A script that does not name the law keeps the reflex on (the Rust default).
+        assert!(Laws::default().pack_reflex);
+    }
+
+    #[test]
+    fn sight_depends_on_facing_only_when_the_world_s_law_says() {
+        let src = include_str!("../../scripts/skills.rhai");
+        let off = Scripts::new(src).unwrap();
+        // Off (the shipped script): no field in any state, and the law reads what it read before.
+        for (n, t) in [(false, false), (true, false), (true, true)] {
+            assert_eq!(off.senses(&creature(n, t)).unwrap().field, None);
+        }
+        assert_eq!(off.law_plan("senses").describe(), vec!["actor.inv[torch]".to_string(), "night".to_string()]);
+        assert_eq!(off.law_value("fov_on"), Some(serde_json::json!(false)));
+        assert!(!off.law_specs()["senses"].about.contains("degrees"));
+        assert!(!off.laws().fov_on);
+        // A world's own values (`set_world_law`, a seed's `rules`) written into its script.
+        let on_src = with_world_laws(src, &[("fov_on".into(), serde_json::json!(true))]);
+        let on = Scripts::new(&on_src).unwrap();
+        on.validate().unwrap();
+        assert!(on.laws().fov_on);
+        let day = on.senses(&creature(false, false)).unwrap();
+        assert_eq!(day.field, Some(crate::sight::Field { focal_deg: 70.0, side_deg: 110.0, side_share: 0.3333, near_m: 3.0, margin_deg: 10.0 }));
+        assert_eq!((day.sight, day.hearing), (11.0, 9.0));
+        assert_eq!(on.senses(&creature(true, false)).unwrap().field.unwrap().near_m, 2.0, "less all round in the dark");
+        assert_eq!(on.senses(&creature(true, true)).unwrap().field.unwrap().near_m, 3.0, "a torch lights the near ring");
+        assert!(on.law_specs()["senses"].about.contains("70 degrees"), "{}", on.law_specs()["senses"].about);
+        // Writing again replaces the block; no values give back the installed script.
+        let twice = with_world_laws(&on_src, &[("fov_on".into(), serde_json::json!(true)), ("fov_focal_deg".into(), serde_json::json!(60))]);
+        assert_eq!(twice.matches("fn world_law_values()").count(), 1);
+        assert_eq!(Scripts::new(&twice).unwrap().senses(&creature(false, false)).unwrap().field.unwrap().focal_deg, 60.0);
+        assert_eq!(without_world_laws(&twice).trim_end(), src.trim_end());
+        assert_eq!(with_world_laws(src, &[]), src);
+        // A value of the wrong kind, or a name that is no law, is not taken from the block.
+        let odd = Scripts::new(&with_world_laws(src, &[("fov_on".into(), serde_json::json!(2)), ("no_such".into(), serde_json::json!(1))])).unwrap();
+        assert!(!odd.laws().fov_on && odd.law_value("no_such").is_none());
+        // What a sound out of sight is told as.
+        assert_eq!((on.heard_as("person"), on.heard_as("wolf"), on.heard_as("hare")), ("person".into(), "wolf".into(), "creature".into()));
+    }
+
+    /// How far a walker's facing may turn from its way toward a held look is the world's law:
+    /// 75 degrees shipped, a world's own value taken (and kept within 0..180).
+    /// Attention cues (docs/ATTENTION.md): off by default, with their cooldown and gap as laws
+    /// a world may set (`set_world_law`), clamped to sane bounds.
+    #[test]
+    fn the_constants_words_are_read_with_the_compile_s_budget() {
+        // `law_about` is read once per install, a call per constant: a world whose words for one
+        // constant take more than the running world's MAX_OPERATIONS still installs, and a
+        // failure to read them is refused with its own reason, not as a constant without words.
+        let src = include_str!("../../scripts/skills.rhai");
+        let long = r#"fn law_about(l, name) {
+            if name != "address_m" { return base_law_about(l, name); }
+            let extra = "";
+            for i in 0..600 { if i % 300 == 0 { extra += " (and so on)"; } else if i < 0 { extra += "never"; } }
+            base_law_about(l, name) + extra
+        }"#;
+        let sc = Scripts::new(&crate::floors::compose(src, long).unwrap()).unwrap();
+        assert!(sc.laws_about_error().is_none(), "{:?}", sc.laws_about_error());
+        let about: std::collections::HashMap<String, String> = sc.laws_about().into_iter().collect();
+        assert!(about["address_m"].ends_with(" (and so on) (and so on)"), "{:?}", about.get("address_m"));
+        sc.validate().expect("installs: its words were read within the compile's budget");
+        // The same words asked under the running world's cap (the engine after the compile) are not read.
+        assert!(sc.engine.call_fn::<Dynamic>(&mut Scope::new(), &sc.ast, "law_about", (sc.laws_map(), ImmutableString::from("address_m"))).is_err(), "the test's words take more than {MAX_OPERATIONS} operations");
+        // Words that cannot be read at all are refused as such.
+        let broken = Scripts::new(&crate::floors::compose(src, "fn law_about(l, name) { if name == \"address_m\" { l.no_such_law.len() } else { base_law_about(l, name) } }").unwrap()).unwrap();
+        assert!(broken.laws_about_error().is_some());
+        assert!(broken.validate().unwrap_err().contains("law_about"), "{:?}", broken.validate());
+    }
+
+    /// The constants' words are asked one constant at a time and joined in Rust, so their total
+    /// has no ceiling: Rhai counts every string inside one value against its string limit
+    /// (`LIMITS.string`, 6,144), which the old `laws_about(l)`, one map of them all, reached on
+    /// 2026-11-13 (`known-ground`). Here a world with 150 more constants and long words for every
+    /// one (about 50,000 characters, about 8 times the limit and today's total) installs, and
+    /// each constant reads back its own words.
+    #[test]
+    fn many_long_words_for_the_constants_install() {
+        let src = include_str!("../../scripts/skills.rhai");
+        let shipped = Scripts::new(src).unwrap();
+        let today: usize = shipped.laws_about().iter().map(|(_, t)| t.len()).sum();
+        let pad = "and so on, at some length, as a world's own description of a constant may well run on ".repeat(2);
+        let extra_laws: String = (0..150).map(|i| format!("m.extra_law_{i} = {i}.0; ")).collect();
+        let overlay = format!(
+            r#"fn laws() {{ let m = base_laws(); {extra_laws} m }}
+            fn law_about(l, name) {{
+                let base = base_law_about(l, name);
+                let head = if type_of(base) == "string" {{ base }} else if name.starts_with("extra_law_") {{ "an extra constant " + name }} else {{ return (); }};
+                head + ": {pad}"
+            }}"#
+        );
+        let sc = Scripts::new(&crate::floors::compose(src, &overlay).unwrap()).unwrap();
+        assert!(sc.laws_about_error().is_none(), "{:?}", sc.laws_about_error());
+        sc.validate().expect("a world with many long words installs");
+        let about: std::collections::HashMap<String, String> = sc.laws_about().into_iter().collect();
+        let total: usize = about.values().map(|t| t.len()).sum();
+        assert!(about.len() >= shipped.laws_about().len() + 150, "{} words", about.len());
+        assert!(total > 3 * LIMITS.string && total > 3 * today, "{total} characters against today's {today} and the limit {}", LIMITS.string);
+        assert!(about["extra_law_149"].starts_with("an extra constant extra_law_149: and so on"), "{}", about["extra_law_149"]);
+        assert!(about["fire_warmth"].starts_with("a campfire warms those within"), "{}", about["fire_warmth"]);
+    }
+
+    #[test]
+    fn attention_cues_are_the_world_s_laws() {
+        let src = include_str!("../../scripts/skills.rhai");
+        let shipped = Scripts::new(src).unwrap();
+        let l = shipped.laws();
+        assert!(!l.cues_on);
+        assert_eq!((l.cue_cooldown_s, l.cue_gap_s, l.cue_check_s), (600.0, 60.0, 1.0));
+        assert!(l.regard_cache && !l.regard_cache_check, "answers are shared by default, unchecked");
+        assert_eq!(l.witness_wake_ms, 500.0, "a bystander is woken at most twice a second (docs/BATTLE_SCALE.md)");
+        assert_eq!(l.witness_fold_ms, 2000.0, "what an onlooker sees of fights is told every two seconds (docs/BATTLE_SCALE.md)");
+        assert!(l.scene_lazy && !l.scene_lazy_check, "the scene worked out as far as asked; its check off");
+        assert!(l.chronicle_recent && !l.chronicle_recent_check, "the chronicle's repeat check reads the newest rows; its check off");
+        assert!(l.notice_inplace && !l.notice_inplace_check, "noticing reads structures in place; its check off");
+        assert!(l.notice_delta && !l.notice_delta_check, "a look checks only what is new since the last; its check off");
+        let about: std::collections::HashMap<String, String> = shipped.laws_about().into_iter().collect();
+        assert!(about["cue_cooldown_s"].contains("600 s") && about["cue_gap_s"].contains("60 s"), "{about:?}");
+        let on = Scripts::new(&with_world_laws(src, &[("cues_on".into(), serde_json::json!(true)), ("cue_cooldown_s".into(), serde_json::json!(30)), ("cue_gap_s".into(), serde_json::json!(-5)), ("cue_check_s".into(), serde_json::json!(0.01)), ("regard_cache".into(), serde_json::json!(false))])).unwrap();
+        on.validate().unwrap();
+        let l = on.laws();
+        assert!(l.cues_on && !l.regard_cache);
+        assert_eq!((l.cue_cooldown_s, l.cue_gap_s, l.cue_check_s), (30.0, 0.0, 0.1));
+        assert!(about["cue_check_s"].contains("1 s"), "{about:?}");
+        assert!(about["witness_wake_ms"].contains("500 ms"), "{about:?}");
+        assert!(about["witness_fold_ms"].contains("2000 ms") && about["witness_fold_ms"].contains("who fell"), "{about:?}");
+        assert_eq!(l.memory_test, 0.0, "no step fails on purpose in play");
+        assert!(about["memory_test"].starts_with("A test switch"), "{about:?}");
+        let t = Scripts::new(&with_world_laws(src, &[("memory_test".into(), serde_json::json!(3.4))])).unwrap();
+        assert_eq!(t.laws().memory_test, 3.0);
+    }
+
+    /// First sights that ask for a thought (docs/FIRST_SIGHT.md): off by default, with the gap a
+    /// world may set, clamped to 0..3600 s.
+    #[test]
+    fn kin_terms_name_a_relation_and_are_the_world_s() {
+        use crate::sex::Sex;
+        let src = include_str!("../../scripts/skills.rhai");
+        let sc = Scripts::new(src).unwrap();
+        let k = sc.kin();
+        assert_eq!(k, &speech::KinTerms::default(), "the shipped script's kin terms are the defaults");
+        assert_eq!(k.named_at("But you have to ask Mother first for the crust", &["parent"], None), Some(5));
+        assert_eq!(k.named_at("ask Mother first", &["child", "sibling"], None), None, "a parent word names a parent only");
+        assert_eq!(k.named_at("Gran! Come see", &["grandparent"], None), Some(0));
+        assert_eq!(k.named_at("my motherland", &["parent"], None), None, "whole words only");
+        // By the named one's sex (body-sex): "Mother" names a mother, not a father; "parent" both.
+        assert_eq!(k.named_at("ask Mother first", &["parent"], Some(Sex::Female)), Some(1));
+        assert_eq!(k.named_at("ask Mother first", &["parent"], Some(Sex::Male)), None);
+        assert_eq!(k.named_at("ask Father first", &["parent"], Some(Sex::Male)), Some(1));
+        assert_eq!(k.named_at("ask Father first", &["parent"], Some(Sex::Female)), None);
+        assert_eq!(k.named_at("ask your parent", &["parent"], Some(Sex::Female)), Some(2));
+        assert_eq!(k.named_at("ask your parent", &["parent"], Some(Sex::Male)), Some(2));
+        assert_eq!(k.named_at("my son and my daughter", &["child"], Some(Sex::Female)), Some(4));
+        assert_eq!(k.named_at("my son and my daughter", &["child"], Some(Sex::Male)), Some(1));
+        let base = src.replace("fn kin_terms()", "fn shipped_kin_terms()");
+        let own = Scripts::new(&format!("{base}\nfn kin_terms() {{ #{{ parent: [\"Amma\"] }} }}\n")).unwrap();
+        assert_eq!(own.kin().named_at("Amma, look", &["parent"], Some(Sex::Male)), Some(0), "a plain list is words for anyone");
+        assert_eq!(own.kin().named_at("Mother, look", &["parent"], None), None, "a world's own terms replace the defaults");
+        let by = Scripts::new(&format!("{base}\nfn kin_terms() {{ #{{ parent: #{{ female: [\"Amma\"], male: [\"Appa\"] }} }} }}\n")).unwrap();
+        assert_eq!(by.kin().named_at("Appa, look", &["parent"], Some(Sex::Male)), Some(0));
+        assert_eq!(by.kin().named_at("Appa, look", &["parent"], Some(Sex::Female)), None);
+        assert!(Scripts::new(&format!("{base}\nfn kin_terms() {{ #{{ cousin: [\"coz\"] }} }}\n")).is_err(), "an unknown relation is refused");
+        assert!(Scripts::new(&format!("{base}\nfn kin_terms() {{ #{{ parent: #{{ mostly: [\"ma\"] }} }} }}\n")).is_err(), "an unknown key is refused");
+    }
+
+    #[test]
+    fn earshot_is_the_world_s_law_and_on_as_shipped() {
+        let src = include_str!("../../scripts/skills.rhai");
+        let shipped = Scripts::new(src).unwrap();
+        assert!(shipped.laws().earshot);
+        let about: std::collections::HashMap<String, String> = shipped.laws_about().into_iter().collect();
+        assert!(about["earshot"].contains("would reach if one spoke now"), "{about:?}");
+        let off = Scripts::new(&with_world_laws(src, &[("earshot".into(), serde_json::json!(false))])).unwrap();
+        off.validate().unwrap();
+        assert!(!off.laws().earshot);
+        let about: std::collections::HashMap<String, String> = off.laws_about().into_iter().collect();
+        assert!(about["earshot"].contains("judges for oneself"), "{about:?}");
+    }
+
+    #[test]
+    fn cue_transport_on_is_on_since_acceptance_and_separate_from_attention_cues() {
+        // frame-views: the cue event tables' kill switch (docs/TICK_RATE.md, "Row-level security,
+        // the kill switch and SpacetimeDB upgrades"), on by default since the acceptance series;
+        // `cues_on` is the minds' attention cues.
+        let src = include_str!("../../scripts/skills.rhai");
+        let shipped = Scripts::new(src).unwrap();
+        assert!(shipped.laws().cue_transport_on);
+        assert!(!shipped.laws().cues_on);
+        let about: std::collections::HashMap<String, String> = shipped.laws_about().into_iter().collect();
+        assert!(about["cue_transport_on"].contains("at once"), "{about:?}");
+        let on = Scripts::new(&with_world_laws(src, &[("cue_transport_on".into(), serde_json::json!(true))])).unwrap();
+        on.validate().unwrap();
+        assert!(on.laws().cue_transport_on && !on.laws().cues_on);
+        assert!(shipped.laws().near_tier_on, "the near tier is on by default");
+        let off = Scripts::new(&with_world_laws(src, &[("near_tier_on".into(), serde_json::json!(false)), ("cue_transport_on".into(), serde_json::json!(false))])).unwrap();
+        off.validate().unwrap();
+        assert!(!off.laws().near_tier_on && !off.laws().cue_transport_on);
+        let about: std::collections::HashMap<String, String> = off.laws_about().into_iter().collect();
+        assert!(about["cue_transport_on"].contains("with the rest of what it sees"), "{about:?}");
+    }
+
+    #[test]
+    fn first_sight_thinks_is_the_world_s_law() {
+        let src = include_str!("../../scripts/skills.rhai");
+        let shipped = Scripts::new(src).unwrap();
+        let l = shipped.laws();
+        assert!(!l.first_sight_thinks);
+        assert_eq!(l.first_sight_gap_s, 300.0);
+        let about: std::collections::HashMap<String, String> = shipped.laws_about().into_iter().collect();
+        assert!(about["first_sight_thinks"].contains("not thought over"), "{about:?}");
+        assert!(about["first_sight_gap_s"].contains("300 s"), "{about:?}");
+        let on = Scripts::new(&with_world_laws(src, &[("first_sight_thinks".into(), serde_json::json!(true)), ("first_sight_gap_s".into(), serde_json::json!(9_999))])).unwrap();
+        on.validate().unwrap();
+        let l = on.laws();
+        assert!(l.first_sight_thinks);
+        assert_eq!(l.first_sight_gap_s, 3_600.0);
+        let about: std::collections::HashMap<String, String> = on.laws_about().into_iter().collect();
+        assert!(about["first_sight_thinks"].contains("brings you to think"), "{about:?}");
+    }
+
+    /// The think prompt's framing (docs/FRAMING.md): today's by default, a world may set the
+    /// neutral one.
+    #[test]
+    fn think_framing_is_the_world_s_law() {
+        let src = include_str!("../../scripts/skills.rhai");
+        let shipped = Scripts::new(src).unwrap();
+        assert!(!shipped.laws().think_framing);
+        let about: std::collections::HashMap<String, String> = shipped.laws_about().into_iter().collect();
+        assert!(about["think_framing"].contains("why one is thinking"), "{about:?}");
+        let on = Scripts::new(&with_world_laws(src, &[("think_framing".into(), serde_json::json!(true))])).unwrap();
+        on.validate().unwrap();
+        assert!(on.laws().think_framing);
+    }
+
+    /// A line overtaken by someone else's (first-sight-crowd): off by default, a world may set it.
+    #[test]
+    fn heard_first_rethinks_is_the_world_s_law() {
+        let src = include_str!("../../scripts/skills.rhai");
+        let shipped = Scripts::new(src).unwrap();
+        assert!(!shipped.laws().heard_first_rethinks);
+        let about: std::collections::HashMap<String, String> = shipped.laws_about().into_iter().collect();
+        assert!(about["heard_first_rethinks"].contains("said when it comes due"), "{about:?}");
+        let on = Scripts::new(&with_world_laws(src, &[("heard_first_rethinks".into(), serde_json::json!(true))])).unwrap();
+        on.validate().unwrap();
+        assert!(on.laws().heard_first_rethinks);
+        let about: std::collections::HashMap<String, String> = on.laws_about().into_iter().collect();
+        assert!(about["heard_first_rethinks"].contains("think again"), "{about:?}");
+    }
+
+    #[test]
+    fn the_walking_look_limit_is_the_world_s_law() {
+        let src = include_str!("../../scripts/skills.rhai");
+        let shipped = Scripts::new(src).unwrap();
+        assert_eq!(shipped.laws().look_walk_deg, 75.0);
+        assert_eq!(shipped.law_value("look_walk_deg"), Some(serde_json::json!(75.0)));
+        let about = shipped.laws_about().into_iter().find(|(k, _)| k == "look_walk_deg").map(|(_, t)| t).unwrap_or_default();
+        assert!(about.contains("75 degrees"), "{about}");
+        let tuned = Scripts::new(&with_world_laws(src, &[("look_walk_deg".into(), serde_json::json!(40))])).unwrap();
+        tuned.validate().unwrap();
+        assert_eq!(tuned.laws().look_walk_deg, 40.0);
+        let wild = Scripts::new(&with_world_laws(src, &[("look_walk_deg".into(), serde_json::json!(400))])).unwrap();
+        assert_eq!(wild.laws().look_walk_deg, 180.0);
+        // Cullet's laws leave it alone: a Cullet world takes the shipped value.
+        assert!(!include_str!("../../seeds/worlds/cullet/laws.rhai").contains("look_walk_deg"));
+    }
+
+    /// A script from before a required law runs with the shipped one merged under it. The two
+    /// sources share line numbers, so the field analysis must not attribute one's statements to
+    /// the other's functions: the borrowed law reads what it reads, every time.
+    #[test]
+    fn a_borrowed_law_reads_its_own_fields_every_time() {
+        let src = include_str!("../../scripts/skills.rhai");
+        let old_src = src.replace("fn senses(a)", "fn senses_gone(a)");
+        for _ in 0..40 {
+            let old = Scripts::new(&old_src).unwrap();
+            assert_eq!(old.law_plan("senses").describe(), vec!["actor.inv[torch]".to_string(), "night".to_string()]);
+            assert_eq!(old.senses(&creature(true, false)).unwrap().sight, 6.0);
+        }
+    }
+
+    #[test]
+    fn gaze_bands_change_light_reach_field_and_ground_in_both_worlds() {
+        use crate::sight::GazeBand::{Far, Middle, Near};
+        const BASE: &str = include_str!("../../scripts/skills.rhai");
+        const CULLET: &str = include_str!("../../seeds/worlds/cullet/laws.rhai");
+        for (source, day, night) in [(BASE.to_owned(), 11.0, 6.0), (crate::floors::compose(BASE, CULLET).unwrap(), 48.0, 14.0)] {
+            // Gaze off explicitly: Cullet ships it on (2026-11-19).
+            let off = Scripts::new(&with_world_laws(&source, &[("fov_on".into(), true.into()), ("gaze_on".into(), false.into())])).unwrap();
+            let on = Scripts::new(&with_world_laws(&source, &[("gaze_on".into(), true.into())])).unwrap();
+            on.validate().unwrap();
+            let ctx = |gaze_band| SkillCtx { gaze_band, ..Default::default() };
+            let middle = on.senses(&ctx(Middle)).unwrap();
+            assert_eq!(Senses { gaze: None, ..middle }, off.senses(&ctx(Middle)).unwrap());
+            let far = on.senses(&ctx(Far)).unwrap();
+            let near = on.senses(&ctx(Near)).unwrap();
+            for (s, band, share, focal, side) in [(middle, Middle, 1.0, 70.0, 110.0), (far, Far, 1.3, 35.0, 65.0), (near, Near, 0.6, 110.0, 155.0)] {
+                let field = s.field.unwrap();
+                assert_eq!((field.focal_deg, field.side_deg), (focal, side));
+                assert_eq!(field.side_share, middle.field.unwrap().side_share);
+                assert_eq!(field.near_m, middle.field.unwrap().near_m);
+                assert!((s.sight - day * share).abs() < 0.001);
+                assert_eq!(s.gaze.unwrap().band, band);
+                let dark = on.senses(&SkillCtx { night: true, dark: 1.0, ..ctx(band) }).unwrap();
+                assert!((dark.sight - night * share).abs() < 0.001);
+                assert!((dark.gaze.unwrap().ground - night * share).abs() < 0.001);
+            }
+            // Far's own sight can exceed a twilight glow, while the glow can still
+            // reach beyond the observer's shorter peripheral sight.
+            let twilight = on.senses(&SkillCtx { dark: 0.05, ..ctx(Far) }).unwrap();
+            assert_eq!(far.gaze.unwrap().glow, 0.0);
+            assert!(twilight.gaze.unwrap().glow < twilight.sight);
+            if day == 48.0 {
+                let glow = twilight.gaze.unwrap().glow;
+                assert_eq!(glow, 48.0);
+                assert!(crate::sight::reach(&twilight, 50.0f32.to_radians(), glow, None) > twilight.sight / 2.0);
+            }
+            assert_eq!(middle.gaze.unwrap().ground, 24.0);
+            assert!((near.gaze.unwrap().ground - 14.4).abs() < 0.001);
+            assert!(near.gaze.unwrap().ceiling < middle.gaze.unwrap().ceiling);
+            assert!(far.gaze.unwrap().ceiling > middle.gaze.unwrap().ceiling);
+            assert_eq!(off.senses(&ctx(Far)).unwrap(), off.senses(&ctx(Near)).unwrap());
+        }
+    }
+
     #[test]
     fn senses_are_a_law_per_creature() {
         let s = scripts();
@@ -1883,7 +4428,7 @@ mod tests {
             (v.sight, v.hearing)
         }).collect();
         assert_eq!(got, vec![(11.0, 9.0), (6.0, 9.0), (9.0, 9.0), (11.0, 9.0)]);
-        assert_eq!(s.reach(), Reach { day: 11.0, night: 9.0, hearing: 9.0 });
+        assert_eq!(s.reach(), Reach { day: 11.0, night: 9.0, hearing: 9.0, glow: 0.0, glow_day: 0.0 });
         assert_eq!(s.law_plan("senses").describe(), vec!["actor.inv[torch]".to_string(), "night".to_string()], "the key is what the law reads");
         let spec = &s.law_specs()["senses"];
         assert_eq!((spec.cadence, spec.topic.as_str()), (Cadence::Hot, "senses"));
@@ -1917,7 +4462,28 @@ mod tests {
         let odd = Scripts::new(&format!("{}\nfn odd(k) {{ if k == \"a\" {{ 3 }} else {{ #{{ meat: 0.5, hide: -1, bone: 2 }} }} }}", include_str!("../../scripts/skills.rhai"))).unwrap();
         assert!(odd.items_of("odd", "a").is_empty());
         assert_eq!(odd.items_of("odd", "b"), vec![("bone".to_string(), 2)]);
-        assert_eq!((sc.num_of("remains_s", "deer", 0.0), sc.num_of("remains_s", "person", 0.0)), (1800.0, 3600.0));
+        assert_eq!((sc.remains_ms("deer"), sc.remains_ms("person")), (1_800_000.0, 3_600_000.0));
+    }
+
+    /// Spoiling, regrowth, grass, traps and remains are written in game time and turned into
+    /// real time for the world's day; a script that still writes them in real time (a law of
+    /// the old name) is taken as it is, whatever the day.
+    #[test]
+    fn game_time_rates_follow_the_day_and_real_time_laws_stay_real() {
+        let src = include_str!("../../scripts/skills.rhai");
+        let lab = Scripts::new(src).unwrap();
+        let long = Scripts::with_day(src, 48 * 60_000).unwrap();
+        // The shipped numbers on the 12-minute day: what they were per real minute and second.
+        assert_eq!((lab.spoil_per_min("fish"), lab.spoil_per_min("smoked_fish"), lab.spoil_per_min("berries")), (0.05, 0.002, 0.02));
+        assert_eq!((lab.regrow_per_min("fishing_spot", 0.0), lab.regrow_per_min("berry_bush", 0.0), lab.regrow_per_min("no_such", 0.5)), (1.4, 1.2, 0.0));
+        assert_eq!((lab.trap_every_ms(), lab.remains_ms("wolf"), lab.laws().pasture_regen), (240_000.0, 1_800_000.0, 0.0015));
+        // A four-times-longer day: a quarter of the rate per real minute, four times the time.
+        assert_eq!((long.spoil_per_min("fish"), long.regrow_per_min("fishing_spot", 0.0)), (0.0125, 0.35));
+        assert_eq!((long.trap_every_ms(), long.remains_ms("person"), long.laws().pasture_regen), (960_000.0, 14_400_000.0, 0.000375));
+        // An overlay in real time keeps its numbers on any day.
+        let old = format!("{src}\nfn spoil_rate(item) {{ 0.05 }}\nfn remains_s(kind) {{ 90 }}\nfn trap_every_s(x) {{ 60.0 }}\nfn regrow(kind) {{ 2.0 }}");
+        let old = Scripts::with_day(&old, 48 * 60_000).unwrap();
+        assert_eq!((old.spoil_per_min("fish"), old.remains_ms("deer"), old.trap_every_ms(), old.regrow_per_min("tree", 0.0)), (0.05, 90_000.0, 60_000.0, 2.0));
     }
 
     #[test]
@@ -1925,12 +4491,12 @@ mod tests {
         let sc = scripts();
         let base = RegardIn { observer_kind: "person".into(), target_kind: "person".into(), ..Default::default() };
         // A stranger: a label, and health only as a band.
-        assert_eq!(sc.perceived_of(&base), Regard { name: false, health: Precision::Band });
+        assert_eq!(sc.perceived_of(&base), Regard { name: false, health: Precision::Band, far: false, look: LookSeen::Full });
         // Known by name; an appraisal shows exact health while it holds.
-        assert_eq!(sc.perceived_of(&RegardIn { known: true, ..base.clone() }), Regard { name: true, health: Precision::Band });
-        assert_eq!(sc.perceived_of(&RegardIn { revealed: vec!["health".into()], ..base.clone() }), Regard { name: false, health: Precision::Exact });
+        assert_eq!(sc.perceived_of(&RegardIn { known: true, ..base.clone() }), Regard { name: true, health: Precision::Band, far: false, look: LookSeen::Full });
+        assert_eq!(sc.perceived_of(&RegardIn { revealed: vec!["health".into()], ..base.clone() }), Regard { name: false, health: Precision::Exact, far: false, look: LookSeen::Full });
         // Oneself: everything. Animals know their own kind by name, and not people's.
-        assert_eq!(sc.perceived_of(&RegardIn { own: true, ..base.clone() }), Regard { name: true, health: Precision::Exact });
+        assert_eq!(sc.perceived_of(&RegardIn { own: true, ..base.clone() }), Regard { name: true, health: Precision::Exact, far: false, look: LookSeen::Full });
         let wolf = RegardIn { observer_kind: "wolf".into(), target_kind: "wolf".into(), ..Default::default() };
         assert!(sc.perceived_of(&wolf).name);
         assert!(!sc.perceived_of(&RegardIn { target_kind: "person".into(), ..wolf }).name);
@@ -1939,7 +4505,41 @@ mod tests {
             assert_eq!(sc.perceived_of(&p), Regard::default_for(&p));
         }
         let blind = Scripts::new(&format!("{}\nfn perceived_of(p) {{ #{{ name: true, health: \"none\" }} }}", include_str!("../../scripts/skills.rhai").replace("fn perceived_of(p)", "fn perceived_of_old(p)"))).unwrap();
-        assert_eq!(blind.perceived_of(&base), Regard { name: true, health: Precision::None });
+        assert_eq!(blind.perceived_of(&base), Regard { name: true, health: Precision::None, far: false, look: LookSeen::Full });
+        // A law may say someone is too far away to make out: never named then, known or not.
+        let far = Scripts::new(&format!("{}\nfn perceived_of(p) {{ #{{ name: p.target.known, far: p.dist > 20.0 }} }}", include_str!("../../scripts/skills.rhai").replace("fn perceived_of(p)", "fn perceived_of_old(p)"))).unwrap();
+        let known_at = |dist: u16| RegardIn { known: true, dist, ..base.clone() };
+        assert_eq!((far.perceived_of(&known_at(30)).name, far.perceived_of(&known_at(30)).far), (false, true));
+        assert_eq!((far.perceived_of(&known_at(10)).name, far.perceived_of(&known_at(10)).far), (true, false));
+        // The look (docs/LOOK.md §3): made out, in full; too far away to make out, the far words;
+        // a law may say otherwise (a foggy world).
+        assert_eq!(far.perceived_of(&known_at(10)).look, LookSeen::Full);
+        assert_eq!(far.perceived_of(&known_at(30)).look, LookSeen::Far);
+        let fog = Scripts::new(&format!("{}\nfn perceived_of(p) {{ #{{ far: p.dist > 20.0, look: if p.dist > 10.0 {{ \"none\" }} else {{ \"full\" }} }} }}", include_str!("../../scripts/skills.rhai").replace("fn perceived_of(p)", "fn perceived_of_old(p)"))).unwrap();
+        assert_eq!(fog.perceived_of(&known_at(15)).look, LookSeen::None);
+        assert_eq!(fog.perceived_of(&known_at(5)).look, LookSeen::Full);
+        let bad = Scripts::new(&format!("{}\nfn perceived_of(p) {{ #{{ look: \"shade\" }} }}", include_str!("../../scripts/skills.rhai").replace("fn perceived_of(p)", "fn perceived_of_old(p)"))).unwrap();
+        assert!(bad.validate().unwrap_err().contains("`look` is"), "a look the engine does not know is refused at install");
+    }
+
+    #[test]
+    fn look_laws_are_read_and_checked() {
+        let sc = scripts();
+        assert_eq!(sc.look_bands(), crate::look::LookBands { youth: 12.0, adult: 18.0 });
+        assert_eq!(sc.appearance_in_scene(), crate::look::AppearanceInScene::Unnamed);
+        let with = |extra: &str| Scripts::new(&format!("{}\n{extra}", include_str!("../../scripts/skills.rhai").replace("fn look_bands()", "fn look_bands_old()").replace("fn appearance_in_scene()", "fn appearance_in_scene_old()")));
+        let late = with("fn look_bands() { #{ youth: 14.0, adult: 21.0 } }\nfn appearance_in_scene() { \"all\" }").unwrap();
+        assert_eq!(late.look_bands(), crate::look::LookBands { youth: 14.0, adult: 21.0 });
+        assert_eq!(late.appearance_in_scene(), crate::look::AppearanceInScene::All);
+        assert!(late.validate().is_ok());
+        for (bad, says) in [
+            ("fn look_bands() { #{ youth: 20.0, adult: 18.0 } }\nfn appearance_in_scene() { \"none\" }", "youth no later than adult"),
+            ("fn look_bands() { #{ youth: 12.0, adult: 18.0, elder: 60.0 } }\nfn appearance_in_scene() { \"none\" }", "unknown key `elder`"),
+            ("fn look_bands() { #{ youth: 12.0, adult: 18.0 } }\nfn appearance_in_scene() { \"strangers\" }", "not \"strangers\""),
+        ] {
+            let e = with(bad).unwrap().validate().unwrap_err();
+            assert!(e.contains(says), "{e}");
+        }
     }
 
     #[test]
@@ -1960,15 +4560,34 @@ mod tests {
         assert_eq!(over("fire_warmth", serde_json::json!(5)).unwrap().fire_warmth, 5.0);
         assert!(over("mindz", serde_json::json!(false)).unwrap_err().starts_with("`mindz` is not a law of this world"));
         assert!(over("cry_prompts_carers", serde_json::json!(0)).unwrap_err().contains("takes true or false"));
+        // Who heard a line is kept by default (the minds' `LIVING_GREET=nearest` reads it); a world may turn it off.
+        assert!(sc.laws().speech_audience && !over("speech_audience", serde_json::json!(false)).unwrap().speech_audience);
+        // What a graph's "stranger" means is off (no relation row) unless the world turns it on
+        // (someone whose name one does not know), and the words say which (docs/STRANGERS.md).
+        assert!(!sc.laws().stranger_by_name && over("stranger_by_name", serde_json::json!(true)).unwrap().stranger_by_name);
+        let shipped = include_str!("../../scripts/skills.rhai");
+        let about = |src: &str| Scripts::new(src).unwrap().laws_about().into_iter().find(|(k, _)| k == "stranger_by_name").map(|(_, t)| t).unwrap_or_default();
+        let on = with_world_laws(shipped, &[("stranger_by_name".into(), serde_json::json!(true))]);
+        assert_eq!((about(shipped).as_str(), about(&on).as_str()), ("in a routine, a stranger is someone one has no feelings about yet", "in a routine, a stranger is someone whose name one does not know"));
+        // A speaker is told the truth about a line no one addressed could hear (on by default); a world may turn it off.
+        assert!(sc.laws().speech_truth && !over("speech_truth", serde_json::json!(false)).unwrap().speech_truth);
         // Rule numbers that were Rust constants, with their values.
         let l = sc.laws();
         assert_eq!((l.follow_s, l.read_sign_m, l.kin_near_m, l.trade_window_s, l.join_window_s, l.address_m), (12.0, 8.0, 4.0, 180.0, 300.0, 6.0));
-        assert_eq!((l.keep_seen_m, l.chase_lost_share, l.spawn_hunger, l.spawn_energy, l.pasture_per_tile), (1.0, 1.4, 25.0, 85.0, 0.02));
+        assert_eq!((l.keep_seen_m, l.spawn_hunger, l.spawn_energy, l.pasture_per_tile), (1.0, 25.0, 85.0, 0.02));
+        // The longing for a child: shipped values keep the old wait (20 − nurture/6 minutes, any food).
+        assert_eq!((l.longing_after_min, l.longing_food), (20.0, 0.0));
+        for n in [0.0, 30.0, 60.0, 100.0] {
+            assert!((longing_wait_ms(l.longing_after_min, n) - 60_000.0 * (20.0 - n / 6.0)).abs() < 0.5);
+        }
+        let w = over("longing_after_min", serde_json::json!(90)).unwrap();
+        assert_eq!((w.longing_after_min, over("longing_food", serde_json::json!(4)).unwrap().longing_food), (90.0, 4.0));
+        assert!((longing_wait_ms(90.0, 60.0) - 60_000.0 * 45.0).abs() < 0.5);
     }
 
     fn ctx() -> SkillCtx {
         SkillCtx {
-            actor: ActorFacts { id: 1, kind: "person".into(), hp: 100.0, hunger: 50.0, energy: 80.0, terrain: "grass".into(), ..Default::default() },
+            actor: ActorFacts { id: 1, kind: "person".into(), hp: 100.0, hunger: 50.0, energy: 80.0, terrain: "grass".into(), stamina: 100.0, focus: 100.0, ..Default::default() },
             ..Default::default()
         }
     }
@@ -1999,22 +4618,180 @@ mod tests {
         println!("{text}\n({} chars)", text.len());
     }
 
+    /// Breath and focus (docs/STAMINA.md): every move's cost and pool, refused with too little,
+    /// the pools law's numbers, a guard as long as breath lasts, and nothing of it from energy.
+    #[test]
+    fn moves_cost_breath_or_focus_and_too_little_refuses_them() {
+        let s = scripts();
+        for (skill, pool) in [("strike", "stamina"), ("bowshot", "stamina"), ("dodge", "stamina"), ("jump", "stamina"), ("block", "stamina"), ("attack", "stamina"), ("throw", "stamina"), ("shoot", "stamina"), ("threaten", "stamina"), ("firebolt", "focus"), ("heal", "focus")] {
+            let cost = s.law_value(&format!("cost_{skill}")).and_then(|v| v.as_f64()).unwrap();
+            assert_eq!(s.num_of("combat_cost", skill, -1.0), cost, "{skill}: its cost is its law");
+            assert_eq!(s.text_of("combat_pool", skill).as_deref(), Some(pool), "{skill}");
+        }
+        assert_eq!(s.text_of("pool_word", "focus").as_deref(), Some("mana"), "the screen word is the world's");
+        let mut c = ctx();
+        c.actor.knows = vec!["fire_bolt".into(), "wound_tending".into()];
+        c.actor.inv = vec![("bow".into(), 1), ("arrow".into(), 3), ("spear".into(), 1)];
+        // Out of breath: the body's moves are refused; focus is apart.
+        c.actor.stamina = 4.0;
+        for skill in ["dodge", "jump", "block"] {
+            c.skill = skill.into();
+            assert_eq!(s.check(skill, &c).unwrap_err(), "out of breath", "{skill}");
+        }
+        c.actor.stamina = 20.0;
+        c.skill = "dodge".into();
+        assert!(s.check("dodge", &c).is_ok(), "a dodge with exactly its breath");
+        assert!(s.done("dodge", &c).unwrap().contains(&Effect::Spend { pool: "stamina".into(), amount: 20.0 }));
+        c.skill = "jump".into();
+        assert_eq!(s.done("jump", &c).unwrap(), vec![Effect::Spend { pool: "stamina".into(), amount: 10.0 }]);
+        // Fire takes mana, and too little is the world's word for it; breath does not help.
+        c.skill = "firebolt".into();
+        c.target = TargetFacts { class: "point".into(), ..Default::default() };
+        c.actor.focus = 29.0;
+        c.actor.stamina = 100.0;
+        assert_eq!(s.check("firebolt", &c).unwrap_err(), "not enough mana");
+        c.actor.focus = 30.0;
+        assert!(s.check("firebolt", &c).is_ok());
+        assert!(s.done("firebolt", &c).unwrap().contains(&Effect::Spend { pool: "focus".into(), amount: 30.0 }));
+        // A guard lasts as long as its breath: (breath - its cost) / 4 a second, at most its hold.
+        c.skill = "block".into();
+        c.qty = 8000;
+        c.actor.stamina = 100.0;
+        assert_eq!(s.duration_ms("block", &c).unwrap(), 8000);
+        c.actor.stamina = 25.0;
+        assert_eq!(s.duration_ms("block", &c).unwrap(), 5000);
+        c.actor.stamina = 5.0;
+        assert_eq!(s.duration_ms("block", &c).unwrap(), 200, "the briefest guard");
+        assert_eq!(s.done("block", &c).unwrap(), vec![Effect::Spend { pool: "stamina".into(), amount: 5.0 }]);
+        // An animal's bite takes breath too: a wolf out of breath waits for it.
+        let mut w = ctx();
+        w.actor.kind = "wolf".into();
+        w.actor.hunger = 90.0;
+        w.skill = "attack".into();
+        w.target = TargetFacts { class: "creature".into(), id: 2, kind: "deer".into(), alive: true, hp: 40.0, max_hp: 40.0, dist: 1.0, ..Default::default() };
+        assert!(s.check("attack", &w).is_ok());
+        let bite = s.law_value("cost_attack").and_then(|v| v.as_f64()).unwrap() as f32;
+        assert!(s.done("attack", &w).unwrap().contains(&Effect::Spend { pool: "stamina".into(), amount: bite }));
+        w.actor.stamina = bite - 1.0;
+        assert_eq!(s.check("attack", &w).unwrap_err(), "out of breath");
+        // Holding a guard no longer tires (the rates of a guard are those of being awake).
+        let mut g = ctx();
+        g.actor.activity = "block".into();
+        let mut a = ctx();
+        a.actor.activity = String::new();
+        assert_eq!(s.rates(&g).unwrap().energy_per_min, s.rates(&a).unwrap().energy_per_min);
+    }
+
+    /// The pools law: the shipped numbers, deer with more breath, elders' slower back, tiredness
+    /// capping breath (50 at energy 0, 75 at 17.5, full from 35) and halving its refill below 10.
+    #[test]
+    fn the_pools_law_gives_breath_and_focus_in_real_seconds() {
+        let s = scripts();
+        let mut c = ctx();
+        c.actor.stage = "adult".into();
+        let p = s.pools(&c).unwrap();
+        assert_eq!(p, crate::pools::Pools::default(), "the shipped law is the default");
+        assert_eq!((p.stamina.max, p.stamina.regen_per_s, p.stamina.delay_ms, p.breath.run_per_s, p.breath.guard_per_s, p.breath.resume, p.breath.tires_per_point), (100.0, 25.0, 1000, 4.0, 4.0, 30.0, 0.02));
+        assert_eq!((p.focus.max, p.focus.regen_per_s, p.focus.delay_ms), (100.0, 3.0, 2000));
+        assert_eq!((p.stamina.cap(0.0), p.stamina.cap(17.5), p.stamina.cap(35.0)), (50.0, 75.0, 100.0));
+        assert_eq!((p.stamina.regen(9.9), p.stamina.regen(10.0)), (12.5, 25.0));
+        c.actor.stage = "elder".into();
+        assert!((s.pools(&c).unwrap().stamina.regen_per_s - 17.5).abs() < 1e-4);
+        c.actor.stage = "adult".into();
+        c.actor.kind = "deer".into();
+        assert_eq!(s.pools(&c).unwrap().stamina.max, 120.0);
+        assert_eq!(s.law_plan("pools").describe(), vec!["actor.kind".to_string(), "actor.stage".to_string()], "kept per kind and stage");
+        // Each number is a world law, changed on a running world with `set_world_law`.
+        let src = include_str!("../../scripts/skills.rhai");
+        let w = Scripts::new(&with_world_laws(src, &[("stamina_regen".into(), serde_json::json!(40)), ("cost_dodge".into(), serde_json::json!(15)), ("run_top".into(), serde_json::json!(6))])).unwrap();
+        c.actor.kind = "person".into();
+        assert_eq!(w.pools(&c).unwrap().stamina.regen_per_s, 40.0);
+        assert_eq!(w.num_of("combat_cost", "dodge", 0.0), 15.0);
+        assert_eq!(w.moves(&c).unwrap().top, 6.0);
+        // A law that leaves a number out keeps the shipped one; a wrong one is refused.
+        assert_eq!(decode_pools(Dynamic::from(Map::new())).unwrap(), crate::pools::Pools::default());
+        let mut bad = Map::new();
+        bad.insert("stamina".into(), Dynamic::from(3_i64));
+        assert!(decode_pools(Dynamic::from(bad)).is_err());
+    }
+
+    /// The walk: 2.6 m/s from the narrow `walk_base` law (a player's setting changes it with
+    /// `set_world_law`, and Cullet's overlay reads it too), times 0.8 when exhausted (it was 0.6),
+    /// and every slowdown says why in the words a status and a mind share.
+    #[test]
+    fn the_walk_is_the_walk_base_law_and_a_slowed_body_says_why() {
+        let src = include_str!("../../scripts/skills.rhai");
+        let cullet_src = crate::floors::compose(src, include_str!("../../seeds/worlds/cullet/laws.rhai")).unwrap();
+        let walk = |s: &Scripts, energy: f32| {
+            let mut c = ctx();
+            c.actor.stage = "adult".into();
+            c.actor.energy = energy;
+            c.actor.genes = Default::default();
+            (s.move_speed(&c).unwrap(), s.slowed(&c))
+        };
+        let close = |a: f32, b: f32| (a - b).abs() < 1e-4;
+        let island = Scripts::new(src).unwrap();
+        let (w, why) = walk(&island, 80.0);
+        assert!(close(w, 2.6) && why.is_empty(), "{w} {why}");
+        let (w, why) = walk(&island, 20.0);
+        assert!(close(w, 2.6) && why.is_empty(), "tired on the island: the walk is the walk");
+        let (w, why) = walk(&island, 5.0);
+        assert!(close(w, 2.08) && why == "exhausted, so you walk slower", "{w} {why}");
+        let cullet = Scripts::new(&cullet_src).unwrap();
+        let (w, why) = walk(&cullet, 20.0);
+        assert!(close(w, 2.08) && why == "tired, so you walk slower", "{w} {why}");
+        let (w, why) = walk(&cullet, 5.0);
+        assert!(close(w, 2.08) && why == "exhausted, so you walk slower", "{w} {why}");
+        // A setting of 3.0: both worlds walk faster, with the same slowdowns.
+        let set = [("walk_base".to_string(), serde_json::json!(3.0))];
+        assert!(close(walk(&Scripts::new(&with_world_laws(src, &set)).unwrap(), 80.0).0, 3.0));
+        assert!(close(walk(&Scripts::new(&with_world_laws(&cullet_src, &set)).unwrap(), 20.0).0, 2.4));
+        // The run: the `run_share` law times the walk, capped on a road at `run_top`
+        // (steer::road_pace); a setting of the share changes it on a running world.
+        let mut c = ctx();
+        c.actor.stage = "adult".into();
+        let m = island.moves(&c).unwrap();
+        let share = island.law_value("run_share").and_then(|v| v.as_f64()).unwrap() as f32;
+        assert!(close(m.run, share));
+        let run = 2.6 * m.run;
+        assert_eq!(crate::steer::road_pace(run, 1.0, &m.tuning(1.4)), (run * 1.4).min(m.top).max(run));
+        // A wolf runs past the top on its own (5.1 against 4.6): a road does not slow it, and no
+        // person outruns it, even on a road (intended).
+        let mut w = ctx();
+        w.actor.kind = "wolf".into();
+        let wm = island.moves(&w).unwrap();
+        let wolf = 3.4 * wm.run;
+        assert!(wolf > m.top && crate::steer::road_pace(wolf, 1.0, &wm.tuning(1.4)) == wolf && crate::steer::road_pace(run, 1.0, &m.tuning(1.4)) < wolf);
+        let slower = Scripts::new(&with_world_laws(src, &[("run_share".into(), serde_json::json!(1.65))])).unwrap();
+        assert!(close(slower.moves(&c).unwrap().run, 1.65));
+        assert!(close(crate::steer::road_pace(2.6, 1.0, &m.tuning(1.4)), 3.64), "a road walk is as fast as before");
+    }
+
     #[test]
     fn starter_combat_skills_follow_the_rules() {
         let s = scripts();
         let mut c = ctx();
         let foe = TargetFacts { class: "creature".into(), id: 2, kind: "wolf".into(), alive: true, hp: 55.0, max_hp: 55.0, dist: 1.2, ..Default::default() };
-        // A strike: a short windup, a blow and its energy.
+        // A strike: a short windup, a blow and its breath (no tiredness: combat does not spend
+        // energy, docs/STAMINA.md).
         c.skill = "strike".into();
         c.target = foe.clone();
         assert!(s.check("strike", &c).is_ok());
         assert_eq!(s.duration_ms("strike", &c).unwrap(), 350);
         let fx = s.done("strike", &c).unwrap();
-        assert!(fx.iter().any(|e| matches!(e, Effect::Damage { amount } if *amount > 5.0)), "{fx:?}");
-        assert!(fx.iter().any(|e| matches!(e, Effect::Vitals { energy, .. } if *energy < 0.0)), "{fx:?}");
+        let (dmg, cost) = (s.law_value("dmg_strike").and_then(|v| v.as_f64()).unwrap() as f32, s.law_value("cost_strike").and_then(|v| v.as_f64()).unwrap() as f32);
+        assert!(fx.iter().any(|e| matches!(e, Effect::Damage { amount } if (*amount - dmg).abs() < 1e-3)), "{fx:?}");
+        assert!(fx.contains(&Effect::Spend { pool: "stamina".into(), amount: cost }), "{fx:?}");
+        assert!(!fx.iter().any(|e| matches!(e, Effect::Vitals { .. })), "{fx:?}");
+        // Tiredness does not refuse a blow; breath does.
         c.actor.energy = 1.0;
-        assert_eq!(s.check("strike", &c).unwrap_err(), "too tired");
+        assert!(s.check("strike", &c).is_ok());
+        c.actor.stamina = cost - 0.1;
+        assert_eq!(s.check("strike", &c).unwrap_err(), "out of breath");
+        c.actor.stamina = cost;
+        assert!(s.check("strike", &c).is_ok());
         c.actor.energy = 80.0;
+        c.actor.stamina = 100.0;
         // A bow shot needs a bow and an arrow, launches a missile, and its hit is damage.
         c.skill = "bowshot".into();
         c.target = TargetFacts { class: "place".into(), ..Default::default() };
@@ -2058,6 +4835,21 @@ mod tests {
     /// The shapes the script declares classify the existing skills exactly as the name lists
     /// they replaced (2026-11-09) did.
     #[test]
+    fn a_missile_is_called_what_its_skill_says() {
+        let s = scripts();
+        assert_eq!(s.missile_called("bowshot"), "an arrow");
+        assert_eq!(s.missile_called("firebolt"), "a bolt of fire");
+        // A skill with no missile, or a missile that does not say: "something".
+        assert_eq!(s.missile_called("strike"), "something");
+        // Every missile the shipped script has says what it is.
+        for (skill, shape) in s.shapes().iter() {
+            if shape.missile {
+                assert_ne!(s.missile_called(skill), "something", "{skill}_missile has no `called`");
+            }
+        }
+    }
+
+    #[test]
     fn combat_shapes_classify_the_existing_skills_as_before() {
         use crate::combat::Aim;
         let s = scripts();
@@ -2072,6 +4864,9 @@ mod tests {
         assert_eq!(with(|x| x.missile), sorted(vec!["bowshot", "firebolt"]));
         assert_eq!(with(|x| x.aim == Aim::Point), sorted(vec!["bowshot", "firebolt"]));
         assert_eq!(with(|x| x.rooted), sorted(vec!["strike", "bowshot", "firebolt", "heal", "attack", "shoot"]));
+        // Committed (combat minds §3.2, committed-moves): every windup and the dashes, the same for
+        // every controller.
+        assert_eq!(with(|x| x.committed), sorted(vec!["strike", "bowshot", "firebolt", "heal", "attack", "shoot", "throw", "dodge", "jump"]));
         assert_eq!(with(|x| x.hostile), sorted(vec!["attack", "throw", "shoot", "threaten", "strike", "bowshot", "firebolt"]));
         assert_eq!(with(|x| x.force), sorted(vec!["attack", "throw", "shoot", "yield", "strike", "bowshot", "firebolt"]));
         assert_eq!(with(|x| x.dares), sorted(vec!["attack", "seize", "strike"]));
@@ -2087,7 +4882,7 @@ mod tests {
         let real: Vec<&str> = s.skills().names().filter(|n| sh.real_time(n)).collect();
         let mut real = real;
         real.sort();
-        assert_eq!(real, sorted(vec!["wander", "flee", "follow", "dodge", "jump", "block", "attack", "throw", "shoot", "strike", "bowshot", "firebolt", "wait", "sleep", "rest", "graze"]));
+        assert_eq!(real, sorted(vec!["wander", "flee", "follow", "keep_distance", "circle", "dodge", "jump", "block", "attack", "throw", "shoot", "strike", "bowshot", "firebolt", "wait", "sleep", "rest", "graze"]));
         let mut reflex: Vec<&str> = s.skills().names().filter(|n| sh.reflex(n)).collect();
         reflex.sort();
         assert_eq!(reflex, sorted(vec!["flee", "dodge", "jump", "block", "attack", "throw", "shoot", "strike", "bowshot", "firebolt", "heal", "yield"]));
@@ -2130,6 +4925,356 @@ fn icebolt_hit(a) { [#{ op: "damage", amount: 9.0 * armor(a) }] }
         let refused = |extra: &str| Scripts::new(&format!("{}\n{extra}", include_str!("../../scripts/skills.rhai"))).err().unwrap_or_default();
         assert!(refused(r#"fn zap_combat() { #{ aim: "point" } }"#).contains("zap_missile"));
         assert!(refused(r#"fn zap_combat() { #{ aim: "creature", flying: true } }"#).contains("unknown trait `flying`"));
+    }
+
+    /// Cullet's laws, goods among them (`seeds/worlds/cullet/laws.rhai`), over the shipped rules.
+    fn cullet() -> Scripts {
+        let src = crate::floors::compose(include_str!("../../scripts/skills.rhai"), include_str!("../../seeds/worlds/cullet/laws.rhai")).unwrap();
+        Scripts::new(&src).expect("cullet laws compile")
+    }
+
+    /// A person at a structure, carrying `inv` and knowing `knows`; the structure lit with
+    /// `fuel` units left (a campfire's facts say nothing of fuel).
+    fn at_fire(kind: &str, lit: bool, fuel: f32, inv: &[(&str, u32)], knows: &[&str], skill: &str, item: &str, qty: u32) -> SkillCtx {
+        SkillCtx {
+            actor: ActorFacts { id: 1, kind: "person".into(), stage: "adult".into(), hunger: 40.0, energy: 80.0, inv: inv.iter().map(|(k, n)| (k.to_string(), *n)).collect(), knows: knows.iter().map(|k| k.to_string()).collect(), ..Default::default() },
+            target: TargetFacts { class: "structure".into(), id: 7, kind: kind.into(), dist: 1.0, lit, fuel, ..Default::default() },
+            item: item.into(),
+            qty,
+            skill: skill.into(),
+            ..Default::default()
+        }
+    }
+
+    /// A store holds what its kind `holds` (rules-3): the shipped storage 120 things, refused
+    /// past that with the same words as before; a world's own kind of store holds its own and is
+    /// found wherever a storage is asked for by name (`like`). Cullet's four stores hold theirs,
+    /// and a crate anyone builds there is the shipped storage again.
+    #[test]
+    fn a_world_switches_committed_per_skill_in_its_own_laws() {
+        // A world's laws (an overlay through `floors::compose`, as a seed's `laws_file` is
+        // installed) may make one skill uncommitted without touching code; the others keep theirs.
+        let src = include_str!("../../scripts/skills.rhai");
+        let w = Scripts::new(&crate::floors::compose(src, "fn dodge_combat() { let s = base_dodge_combat(); s.committed = false; s }").unwrap()).unwrap();
+        let sh = w.shapes();
+        assert!(!sh.get("dodge").unwrap().committed);
+        assert!(sh.get("jump").unwrap().committed && sh.get("strike").unwrap().committed && sh.get("throw").unwrap().committed);
+        // The rest of the dodge's shape is the shipped one, and no `base_dodge` skill appears.
+        assert_eq!(sh.get("dodge").unwrap().aim, crate::combat::Aim::Dash);
+        assert!(sh.get("dodge").unwrap().evades && sh.get("base_dodge").is_none());
+        assert!(scripts().shapes().get("dodge").unwrap().committed);
+    }
+
+    #[test]
+    fn a_store_holds_what_its_kind_holds() {
+        let shipped = scripts();
+        let at = |kind: &str, held: u32, qty: u32| SkillCtx {
+            actor: ActorFacts { id: 1, kind: "person".into(), stage: "adult".into(), inv: vec![("wood".into(), 500)], ..Default::default() },
+            target: TargetFacts { class: "structure".into(), id: 7, kind: kind.into(), dist: 1.0, inv: vec![("stone".into(), held)], ..Default::default() },
+            item: "wood".into(),
+            qty,
+            skill: "store".into(),
+            ..Default::default()
+        };
+        let take = |kind: &str| {
+            let mut c = at(kind, 3, 1);
+            (c.item, c.skill, c.actor.inv) = ("stone".into(), "take".into(), Vec::new());
+            c
+        };
+        assert_eq!(shipped.structure("storage").holds, Some(120.0));
+        assert!(shipped.check("store", &at("storage", 100, 20)).is_ok());
+        assert_eq!(shipped.check("store", &at("storage", 100, 21)).unwrap_err(), "the storage is full (it holds 100 of 120 things)");
+        assert_eq!(shipped.check("store", &at("house", 0, 1)).unwrap_err(), "can only store in a storage");
+        assert!(shipped.check("take", &take("storage")).is_ok());
+        assert_eq!(shipped.check("take", &take("house")).unwrap_err(), "nothing to take from");
+        assert!(shipped.skills().get("store").unwrap().takes.contains("(a storage holds 120 things in all)"));
+        // A world's own store: its size, and a storage wherever one is asked for by name.
+        let src = crate::floors::compose(include_str!("../../scripts/skills.rhai"), r#"fn structures() { base_structures() + [#{ name: "barn", like: "storage", holds: 500 }] }"#).unwrap();
+        let w = Scripts::new(&src).unwrap();
+        w.validate().unwrap();
+        assert!(w.check("store", &at("barn", 400, 100)).is_ok() && w.check("store", &at("storage", 100, 21)).is_err());
+        assert_eq!(w.check("store", &at("barn", 400, 101)).unwrap_err(), "the storage is full (it holds 400 of 500 things)");
+        assert!(w.check("take", &take("barn")).is_ok());
+        assert!(w.is_kind("barn", "storage") && w.is_kind("storage", "storage") && !w.is_kind("storage", "barn") && !w.is_kind("house", "storage") && !shipped.is_kind("barn", "storage"));
+        assert!(w.skills().get("store").unwrap().takes.contains("(a storage holds 120 things in all; a barn 500)"));
+        let refused = |extra: &str| Scripts::new(&crate::floors::compose(include_str!("../../scripts/skills.rhai"), extra).unwrap()).err().unwrap_or_default();
+        assert!(refused(r#"fn structures() { base_structures() + [#{ name: "barn", like: "silo", holds: 5 }] }"#).contains("`like` of `barn` is `silo`"));
+        assert!(refused(r#"fn structures() { base_structures() + [#{ name: "barn", holds: -1 }] }"#).contains("`holds` of `barn`"));
+        // Cullet's stores.
+        let c = cullet();
+        let holds: Vec<(&str, Option<f32>, bool)> = ["store", "peat_barn", "yard_store", "house_store", "storage"].iter().map(|k| (*k, c.structure(k).holds, c.is_kind(k, "storage"))).collect();
+        assert_eq!(holds, vec![("store", Some(1200.0), true), ("peat_barn", Some(1000.0), true), ("yard_store", Some(900.0), true), ("house_store", Some(150.0), true), ("storage", Some(120.0), true)]);
+        assert!(!c.has("storage_holds") && !shipped.has("storage_holds"));
+        assert_eq!(c.check("store", &at("house_store", 100, 51)).unwrap_err(), "the storage is full (it holds 100 of 150 things)");
+    }
+
+    /// Regrowth by season is a value on each resource kind (rules-3): the shipped kinds have
+    /// none, so they regrow fully outside winter and not at all in it, as before; a kind's
+    /// `regrow_by_season` changes the seasons it names. Cullet's fish keep regrowing in winter,
+    /// its root plots rest; and minds are told what winter does from the same table.
+    #[test]
+    fn regrowth_by_season_is_a_value_on_each_kind() {
+        let shipped = scripts();
+        for k in shipped.tables().names("resources") {
+            assert_eq!(shipped.regrow_seasons(k), crate::GROWING, "{k}");
+        }
+        assert_eq!(shipped.regrow_seasons("no_such_kind"), crate::GROWING);
+        assert_eq!(shipped.seasons_words(), "In winter nothing regrows and nights are colder: store food before it.");
+        let c = cullet();
+        let by = |k: &str| c.regrow_seasons(k);
+        assert_eq!((by("fishing_spot"), by("weir"), by("kelp_bed"), by("greens_bed")), ([1.0, 1.0, 1.0, 0.75], [1.0, 1.0, 1.0, 0.75], [1.0, 1.0, 1.0, 1.25], [1.0, 1.0, 1.0, 0.5]));
+        assert_eq!((by("root_plot"), by("sand_bank"), by("peat_bank"), by("tree"), by("berry_bush")), (crate::GROWING, [1.0; 4], crate::GROWING, crate::GROWING, crate::GROWING));
+        assert_eq!(c.seasons_words(), "In winter kelp_bed and sand_bank regrow as in the other seasons or more, fishing_spot, greens_bed and weir more slowly, and berry_bush, tree, boulder, reeds, clay_bank, peat_bank and root_plot not at all. Nights are colder: store food before it.");
+        c.validate().unwrap();
+        // A season named wrong, or a share that is no number, is refused.
+        let refused = |extra: &str| Scripts::new(&crate::floors::compose(include_str!("../../scripts/skills.rhai"), extra).unwrap()).err().unwrap_or_default();
+        assert!(refused(r#"fn resources() { base_resources() + [#{ name: "kelp_bed", yields: "fish", regrow_per_h: 0.1, max: 2.0, regrow_by_season: #{ monsoon: 1.0 } }] }"#).contains("`monsoon`, which is no season"));
+        assert!(refused(r#"fn resources() { base_resources() + [#{ name: "kelp_bed", yields: "fish", regrow_per_h: 0.1, max: 2.0, regrow_by_season: #{ winter: "lots" } }] }"#).contains("regrow_by_season.winter"));
+        // A Cullet winter's day: a fishing ground regrows three quarters of a day's rate, a root
+        // plot nothing (the regrowth the authority applies, `common::amount_now`).
+        let (day, epoch) = (crate::cullet_check::CULLET_DAY_MS, 1_000_000u64);
+        let w0 = epoch + day * 6 - day * 7 / 24;
+        let grown = |k: &str| crate::regrowth_ms(w0, w0 + day, epoch, day, crate::YEAR_DAYS, &c.regrow_seasons(k)) as f64 / day as f64;
+        assert_eq!((grown("fishing_spot"), grown("root_plot"), grown("kelp_bed")), (0.75, 0.0, 1.25));
+    }
+
+    /// Goods are data with traits, and the rules match by trait: a fire burns whatever has its
+    /// fuel trait, glass takes any alkali, food is what has nutrition. A fire is lit only while
+    /// it holds fuel; feeding an out one takes knowing fire; recipes needing heat need it burning
+    /// and draw their fuel from it. The shipped world offers neither feeding nor making (it has
+    /// no such fires or recipes), and installs with Cullet's goods pass the install checks.
+    #[test]
+    fn goods_are_data_matched_by_trait_and_fires_eat_fuel() {
+        let shipped = scripts();
+        let s = cullet();
+        let r = s.validate().unwrap();
+        let (f, n) = r.heaviest().unwrap();
+        assert!(n * 2 <= LIMITS.operations, "{f} takes {n} operations; the limit is {}", LIMITS.operations);
+        // `--nocapture` prints what the goods' laws cost (docs/WORLD_RULES.md, "Goods, recipes and fuel").
+        let base = shipped.validate().unwrap();
+        for k in ["feed_check", "feed_done", "make_check", "make_done", "make_duration", "cook_check", "smoke_check", "gather_duration", "store_check", "eat_check", "source_of"] {
+            eprintln!("ops {k:16} shipped {:>5} cullet {:>5}", base.ops.get(k).copied().unwrap_or(0), r.ops.get(k).copied().unwrap_or(0));
+        }
+        eprintln!("heaviest: shipped {:?}, cullet {:?}; calls {} / {}", base.heaviest(), r.heaviest(), base.calls, r.calls);
+        let listed = |s: &Scripts, k: &str| s.skills().get(k).unwrap().listed;
+        assert!(!listed(&shipped, "feed") && !listed(&shipped, "make") && listed(&s, "feed") && listed(&s, "make"));
+        assert_eq!(s.skills().get("make").unwrap().items, ["ash", "glass", "pane", "float", "bottle", "mark", "pot", "crucible", "mould", "smoked_fish", "smoked_meat", "baked_roots", "lamp_oil"]);
+        assert!(s.skills().resources.iter().any(|k| k.name == "peat_bank" && k.traits["yields"] == "peat"));
+        assert_eq!(s.structure("furnace").burns.as_ref().map(|b| (b.fuel.as_str(), b.rate, b.holds)), Some(("fuel", 3.0, Some(40.0))));
+        assert!(s.structure("hearth").fire() && s.structure("campfire").fire() && !s.structure("house").fire() && !s.structure("storage").fire());
+        let go = |c: &SkillCtx| s.check(&c.skill, c).and_then(|_| s.done(&c.skill, c));
+        // Feeding: peat and wood both burn in a hearth (each has the `fuel` trait); oil does not.
+        assert_eq!(go(&at_fire("hearth", false, 0.0, &[("peat", 3)], &["fire"], "feed", "peat", 3)).unwrap(), vec![Effect::Fuel { item: "peat".into(), qty: 3 }]);
+        assert_eq!(go(&at_fire("hearth", true, 2.0, &[("wood", 2), ("kelp", 1)], &[], "feed", "fuel", 1)).unwrap(), vec![Effect::Fuel { item: "wood".into(), qty: 1 }]);
+        assert!(go(&at_fire("hearth", true, 2.0, &[("lamp_oil", 1)], &[], "feed", "lamp_oil", 1)).unwrap_err().contains("not fuel for the hearth (it burns wood or peat)"));
+        assert_eq!(go(&at_fire("lamp", false, 0.0, &[("lamp_oil", 1)], &["fire"], "feed", "fuel", 1)).unwrap(), vec![Effect::Fuel { item: "lamp_oil".into(), qty: 1 }]);
+        // An out fire is lit again only by someone who knows fire; a lit one by anyone; a fire
+        // holds what it holds; a campfire burns no fuel.
+        assert!(go(&at_fire("hearth", false, 0.0, &[("peat", 3)], &[], "feed", "peat", 1)).unwrap_err().contains("is out, and you don't know how to light a fire"));
+        assert!(go(&at_fire("hearth", true, 1.0, &[("peat", 3)], &[], "feed", "peat", 1)).is_ok());
+        assert!(go(&at_fire("hearth", true, 11.0, &[("peat", 3)], &["fire"], "feed", "peat", 2)).unwrap_err().contains("holds at most 12 units"));
+        assert_eq!(go(&at_fire("campfire", true, 0.0, &[("wood", 3)], &["fire"], "feed", "wood", 1)).unwrap_err(), "the campfire burns no fuel");
+        // Kelp burnt to ash at any burning fire, a campfire too, not at an out hearth.
+        let ash = vec![Effect::Remove { item: "kelp".into(), qty: 4 }, Effect::Add { item: "ash".into(), qty: 1 }, Effect::Vitals { hp: 0.0, hunger: 0.0, energy: -1.0 }];
+        assert_eq!(go(&at_fire("hearth", true, 3.0, &[("kelp", 5)], &[], "make", "ash", 0)).unwrap(), ash);
+        assert_eq!(go(&at_fire("campfire", false, 0.0, &[("kelp", 4)], &[], "make", "ash", 0)).unwrap(), ash);
+        assert!(go(&at_fire("hearth", false, 0.0, &[("kelp", 4)], &[], "make", "ash", 0)).unwrap_err().contains("is out: feed it first"));
+        assert!(go(&at_fire("hearth", true, 3.0, &[("kelp", 3)], &[], "make", "ash", 0)).unwrap_err().starts_with("ash takes 4 kelp (kelp: gather it at a kelp_bed"));
+        // Glass: an alkali and sand at a burning furnace, with a unit of its fuel, by those who
+        // know glassmaking, melted in a crucible they keep (goods-3).
+        let glass = at_fire("furnace", true, 3.0, &[("ash", 1), ("sand", 3), ("crucible", 1)], &["glassmaking"], "make", "glass", 0);
+        assert_eq!(go(&glass).unwrap(), vec![Effect::Remove { item: "ash".into(), qty: 1 }, Effect::Remove { item: "sand".into(), qty: 2 }, Effect::Burn { units: 1.0 }, Effect::Add { item: "glass".into(), qty: 1 }, Effect::Vitals { hp: 0.0, hunger: 0.0, energy: -1.0 }]);
+        assert!(go(&SkillCtx { target: TargetFacts { fuel: 0.5, ..glass.target.clone() }, ..glass.clone() }).unwrap_err().contains("too little fuel left"));
+        assert!(go(&SkillCtx { target: TargetFacts { lit: false, fuel: 0.0, ..glass.target.clone() }, ..glass.clone() }).unwrap_err().contains("is out"));
+        assert_eq!(go(&SkillCtx { target: TargetFacts { kind: "hearth".into(), ..glass.target.clone() }, ..glass.clone() }).unwrap_err(), "glass is made at a furnace");
+        assert!(go(&SkillCtx { actor: ActorFacts { knows: vec![], ..glass.actor.clone() }, ..glass.clone() }).unwrap_err().starts_with("you don't know how to make glass"));
+        assert_eq!(s.text_of("source_of", "glass").unwrap(), "make it at a furnace from 1 alkali, 2 sand and 1 fuel from it, using a crucible (knowing glassmaking)");
+        // Without the crucible, refused naming it and how one is come by.
+        assert_eq!(go(&SkillCtx { actor: ActorFacts { inv: vec![("ash".into(), 1), ("sand".into(), 3)], ..glass.actor.clone() }, ..glass.clone() }).unwrap_err(), "glass is made with a crucible in your pack, not used up (crucible: make it at an oven from 3 clay and 0.5 fuel from it (knowing toolmaking))");
+        // Any alkali serves: a world's soda is used like ash, by the trait alone.
+        let overlay = include_str!("../../seeds/worlds/cullet/laws.rhai").replace("#{ name: \"sand\", icon: \"sand\", label: \"sand\", group: \"material\" },", "#{ name: \"sand\", icon: \"sand\", label: \"sand\", group: \"material\" }, #{ name: \"soda\", alkali: true },");
+        let soda = Scripts::new(&crate::floors::compose(include_str!("../../scripts/skills.rhai"), &overlay).unwrap()).unwrap();
+        let c = at_fire("furnace", true, 3.0, &[("soda", 2), ("sand", 2), ("crucible", 1)], &["glassmaking"], "make", "glass", 0);
+        assert_eq!(soda.check("make", &c).and_then(|_| soda.done("make", &c)).unwrap()[0], Effect::Remove { item: "soda".into(), qty: 1 });
+        // Turning an item by its trait: fish smoked over peat at a smokehouse, roots baked.
+        assert_eq!(go(&at_fire("smokehouse", true, 4.0, &[("fish", 2)], &["smoking"], "make", "smoked_fish", 0)).unwrap()[..3], [Effect::Remove { item: "fish".into(), qty: 1 }, Effect::Burn { units: 0.5 }, Effect::Add { item: "smoked_fish".into(), qty: 1 }]);
+        assert_eq!(go(&at_fire("oven", true, 4.0, &[("roots", 1)], &[], "make", "baked_roots", 0)).unwrap()[..3], [Effect::Remove { item: "roots".into(), qty: 1 }, Effect::Burn { units: 0.25 }, Effect::Add { item: "baked_roots".into(), qty: 1 }]);
+        assert_eq!(go(&at_fire("oven", true, 4.0, &[("roots", 1)], &[], "make", "glass_beads", 0)).unwrap_err(), "no one makes glass_beads at a workplace");
+        assert_eq!(go(&at_fire("oven", true, 4.0, &[("roots", 1)], &[], "make", "spear", 0)).unwrap_err(), "no one makes spear at a workplace (spear: craft it (1 stone, 2 wood))");
+        // A lamp burns oil for light and is no fire to cook at (goods-3).
+        assert_eq!(go(&at_fire("lamp", true, 4.0, &[("fish", 1)], &["cooking"], "cook", "fish", 1)).unwrap_err(), "cooking needs a campfire");
+        // Cooking works at a burning hearth as at a campfire, not at an out one.
+        assert!(go(&at_fire("hearth", true, 1.0, &[("fish", 1)], &["cooking"], "cook", "fish", 1)).is_ok());
+        assert!(go(&at_fire("hearth", false, 0.0, &[("fish", 1)], &["cooking"], "cook", "fish", 1)).unwrap_err().contains("is out"));
+        // Food is what has nutrition: roots feed, peat does not.
+        assert!(go(&at_fire("hearth", true, 1.0, &[("roots", 1)], &[], "eat", "roots", 1)).is_ok());
+        assert_eq!(go(&at_fire("hearth", true, 1.0, &[("peat", 1)], &[], "eat", "peat", 1)).unwrap_err(), "peat is not food");
+        // The minds' world text names the fires and the recipes; the shipped world's does not.
+        let text = s.world_text(&[]);
+        assert!(text.contains("a furnace burns 3 fuel a game hour (wood or peat)") && text.contains("glass: make it at a furnace"), "{text}");
+        assert!(!shipped.world_text(&[]).contains("Fires that burn fuel"));
+    }
+
+    /// Everything made is a recipe in one table, made by one mechanism through four ways in
+    /// (recipes-1): craft, cook and smoke keep their names, items and words; a recipe grid reads
+    /// what each way makes as data; a cell greys with the rules' own words when only its inputs
+    /// are missing; and a world whose recipes leave the shipped ones out offers no cooking.
+    #[test]
+    fn making_is_one_mechanism_through_four_ways() {
+        let (island, c) = (scripts(), cullet());
+        // What each way makes, and what its acts name.
+        assert_eq!(island.products_of("craft"), ["spear", "cloak", "torch", "axe", "pick", "net", "basket", "bow", "arrow", "salve", "leather", "armor"]);
+        assert_eq!(island.products_of("cook"), ["cooked_fish", "cooked_meat"]);
+        assert_eq!(island.products_of("smoke"), ["smoked_fish", "smoked_meat"]);
+        assert!(island.products_of("make").is_empty() && island.products_of("eat").is_empty());
+        assert_eq!(c.products_of("make"), ["ash", "glass", "pane", "float", "bottle", "mark", "pot", "crucible", "mould", "smoked_fish", "smoked_meat", "baked_roots", "lamp_oil"]);
+        assert_eq!(c.products_of("cook"), island.products_of("cook"), "Cullet's people cook as the island's do");
+        assert_eq!((island.making_item("cook", "cooked_meat"), island.making_item("craft", "arrow"), c.making_item("make", "smoked_fish")), (Some("meat"), Some("arrow"), Some("smoked_fish")));
+        assert_eq!(island.making_item("cook", "spear"), None);
+        // A grid cell's parts, as data.
+        let glass = c.recipe_parts("make", "glass").unwrap();
+        fn part(p: &RecipePart) -> (&str, u32, Vec<String>) {
+            (p.name.as_str(), p.qty, p.any_of.clone())
+        }
+        assert_eq!(glass.takes.iter().map(part).collect::<Vec<_>>(), [("alkali", 1, vec!["ash".to_string()]), ("sand", 2, vec!["sand".to_string()])]);
+        assert_eq!((glass.at.as_str(), glass.lit, glass.fuel, glass.knows.as_str(), glass.ms, glass.makes), ("furnace", true, 1.0, "glassmaking", 15000, 1));
+        // What it is made with and keeps (goods-3): by name, or by trait (any vessel).
+        assert_eq!(glass.tools.iter().map(part).collect::<Vec<_>>(), [("crucible", 1, vec!["crucible".to_string()])]);
+        let oil = c.recipe_parts("make", "lamp_oil").unwrap();
+        assert_eq!(oil.tools.iter().map(part).collect::<Vec<_>>(), [("vessel", 1, vec!["bottle".to_string(), "pot".to_string()])]);
+        assert_eq!((oil.tools[0].look.label.as_str(), c.recipe_parts("make", "float").unwrap().tools[0].look.label.as_str()), ("vessel", "blowpipe"));
+        assert_eq!((glass.look.label.as_str(), glass.takes[1].look.label.as_str()), ("glass", "sand"));
+        let cook = island.recipe_parts("cook", "cooked_fish").unwrap();
+        assert_eq!((cook.item.as_str(), cook.takes.iter().map(part).collect::<Vec<_>>(), cook.at.as_str(), cook.lit, cook.knows.as_str(), cook.ms), ("fish", vec![("fish", 1, vec!["fish".to_string()])], "fire", true, "cooking", 4000));
+        let arrow = island.recipe_parts("craft", "arrow").unwrap();
+        assert_eq!((arrow.makes, arrow.at.as_str(), arrow.lit, arrow.ms, arrow.look.group.as_str()), (3, "", false, 8000, "weapon"));
+        assert_eq!(island.text_of("made_how", "cooked_fish").unwrap(), "cook it at a fire from 1 fish (knowing cooking)");
+        assert_eq!(island.text_of("made_how", "spear").unwrap(), "craft it from 1 stone, 2 wood (knowing spear)");
+        assert_eq!(c.text_of("made_how", "glass").unwrap(), "make it at a furnace from 1 alkali, 2 sand and 1 fuel from it, using a crucible (knowing glassmaking)");
+        assert_eq!(c.text_of("made_how", "lamp_oil").unwrap(), "make it at a fire from 2 fish, using a vessel");
+        // The grids are declared: each way's cells are its products, described in its words.
+        for (w, s) in [("island", &island), ("cullet", &c)] {
+            for skill in ["craft", "cook", "smoke"] {
+                let u = s.ui(skill).unwrap();
+                assert_eq!((u.choose, u.source, u.detail.as_deref()), (crate::ui::Choose::Grid, Some(crate::ui::ItemSource::Products), Some("made_how")), "{w} {skill}");
+            }
+        }
+        // A cell greys with the check's own words when only its inputs are missing, and the act
+        // passes once the pack holds them: for every product of every way, in both worlds.
+        for (w, s) in [("island", &island), ("cullet", &c)] {
+            let names = s.tables().names("know_how").to_vec();
+            let know: Vec<&str> = names.iter().map(|k| k.as_str()).collect();
+            for skill in ["craft", "cook", "smoke", "make"] {
+                for p in s.products_of(skill) {
+                    let r = s.recipe_parts(skill, p).unwrap();
+                    let at = match r.at.as_str() { "" | "fire" => "campfire", k => k };
+                    let takes: Vec<(&str, u32)> = r.takes.iter().map(|t| (t.any_of[0].as_str(), t.qty)).collect();
+                    let have: Vec<(&str, u32)> = takes.iter().cloned().chain(r.tools.iter().map(|t| (t.any_of[0].as_str(), t.qty))).collect();
+                    let without = s.check(skill, &at_fire(at, true, 6.0, &[], &know, skill, &r.item, 1)).unwrap_err();
+                    assert!(!without.is_empty() && !without.contains("{"), "{w}: {skill} {p} without its inputs: {without:?}");
+                    // Without its tools, refused in the way's words naming the tool (goods-3).
+                    if let Some(t) = r.tools.first() {
+                        let no_tool = s.check(skill, &at_fire(at, true, 6.0, &takes, &know, skill, &r.item, 1)).unwrap_err();
+                        assert!(no_tool.contains(&format!("a {}", t.name)) && !no_tool.contains("{"), "{w}: {skill} {p} without its tool: {no_tool:?}");
+                    }
+                    s.check(skill, &at_fire(at, true, 6.0, &have, &know, skill, &r.item, 1)).unwrap_or_else(|e| panic!("{w}: {skill} {p} with its inputs: {e}"));
+                }
+            }
+        }
+        assert_eq!(island.check("cook", &at_fire("campfire", true, 0.0, &[], &["cooking"], "cook", "fish", 1)).unwrap_err(), "no fish in your pack (fish: gather it at a fishing_spot, or take it from a storage)");
+        assert_eq!(island.check("craft", &at_fire("campfire", true, 0.0, &[("wood", 2)], &["spear"], "craft", "spear", 1)).unwrap_err(), "need 1 stone for a spear (stone: gather it at a boulder, or take it from a storage)");
+        // A world whose recipes leave out the shipped ones makes nothing by them, and is not
+        // offered crafting, cooking or smoking (its own overlay must add `base_recipes()`).
+        let bare = Scripts::new(&crate::floors::compose(include_str!("../../scripts/skills.rhai"), "fn recipes() { [#{ name: \"ash\", at: \"fire\", lit: true, takes: #{ wood: 2 } }] }").unwrap()).unwrap();
+        assert!(bare.products_of("cook").is_empty() && !bare.skills().get("cook").unwrap().listed && !bare.skills().get("craft").unwrap().listed);
+        assert_eq!(bare.products_of("make"), ["ash"]);
+        // Building is recipes too (goods-3): such a world builds nothing either.
+        assert!(!bare.skills().get("build").unwrap().listed);
+    }
+
+    /// Every item says how a client shows it (`icon`, `label`, `group`), as data no rule reads;
+    /// what a recipe makes looks like its product unless the recipe says otherwise; a look that
+    /// is not text is refused at install.
+    #[test]
+    fn items_and_recipes_say_how_they_look() {
+        let look = |icon: &str, label: &str, group: &str| Some(ItemLook { icon: icon.into(), label: label.into(), group: group.into() });
+        for s in [scripts(), cullet()] {
+            let t = s.tables();
+            for n in t.names("items") {
+                let e = t.entry("items", n).unwrap();
+                for k in ITEM_LOOK {
+                    assert!(e.get(k).and_then(|v| v.clone().into_string().ok()).is_some_and(|v| !v.is_empty()), "item {n} has no {k}");
+                }
+                // Within the interface's vocabulary (`living_rules::ui`).
+                let text = |k: &str| e[k].clone().into_string().unwrap();
+                assert!(crate::ui::ITEM_ICONS.contains(&text("icon").as_str()), "item {n}: icon {} is not in ui::ITEM_ICONS", text("icon"));
+                assert!(crate::ui::ITEM_GROUPS.contains(&text("group").as_str()), "item {n}: group {} is not in ui::ITEM_GROUPS", text("group"));
+            }
+        }
+        let (shipped, s) = (scripts(), cullet());
+        assert_eq!(shipped.item_look_of("item_look", "cooked_fish"), look("cooked_fish", "cooked fish", "food"));
+        assert_eq!(s.item_look_of("item_look", "lamp_oil"), look("lamp_oil", "lamp oil", "fuel"));
+        assert_eq!(s.item_look_of("item_look", "glass"), look("glass", "glass", "glass"));
+        // An item without looks (a world's own, from before): its name, spaced; no group.
+        assert_eq!(s.item_look_of("item_look", "glass_beads"), look("glass_beads", "glass beads", ""));
+        // A recipe looks like its product, a recipe that turns items like each product.
+        assert_eq!(s.item_look_of("recipe_look", "glass"), s.item_look_of("item_look", "glass"));
+        assert_eq!(s.item_look_of("recipe_look", "smoked_meat"), look("smoked_meat", "smoked meat", "food"));
+        let over = include_str!("../../seeds/worlds/cullet/laws.rhai").replace("#{ name: \"lamp_oil\", at: \"fire\",", "#{ name: \"lamp_oil\", label: \"rendered oil\", icon: \"oil_jar\", at: \"fire\",");
+        let over = Scripts::new(&crate::floors::compose(include_str!("../../scripts/skills.rhai"), &over).unwrap()).unwrap();
+        assert_eq!(over.item_look_of("recipe_look", "lamp_oil"), look("oil_jar", "rendered oil", "fuel"));
+        assert_eq!(over.item_look_of("item_look", "lamp_oil"), look("lamp_oil", "lamp oil", "fuel"));
+        let bad = include_str!("../../scripts/skills.rhai").replace("#{ name: \"berries\", icon: \"berries\",", "#{ name: \"berries\", icon: 3,");
+        assert_eq!(Scripts::new(&bad).err().unwrap(), "items: the icon of `berries` must be a text");
+    }
+
+    /// Teaching takes the world's know-how table, not only what experimenting can reveal, so
+    /// Cullet's glassmaking and the shipped fire_bolt and wound_tending can be taught. Every
+    /// technique the old list had answers as before; the minds are told every technique.
+    #[test]
+    fn teaching_takes_the_worlds_know_how() {
+        let (shipped, s) = (scripts(), cullet());
+        let teach = |s: &Scripts, item: &str, knows: &[&str], theirs: &[&str]| {
+            let mut c = ctx();
+            c.skill = "teach".into();
+            c.item = item.into();
+            c.actor.knows = knows.iter().map(|k| k.to_string()).collect();
+            c.target = TargetFacts { class: "creature".into(), kind: "person".into(), id: 9, alive: true, stage: "adult".into(), knows: theirs.iter().map(|k| k.to_string()).collect(), ..Default::default() };
+            s.check("teach", &c)
+        };
+        assert_eq!(teach(&s, "glassmaking", &["glassmaking"], &["fire"]), Ok(()));
+        assert_eq!(teach(&s, "glassmaking", &["glassmaking"], &[]).unwrap_err(), "they must first learn fire");
+        assert_eq!(teach(&s, "glassmaking", &[], &["fire"]).unwrap_err(), "you don't know glassmaking yourself");
+        assert_eq!(teach(&shipped, "glassmaking", &["glassmaking"], &["fire"]).unwrap_err().split(" (").next(), Some("there is no technique called glassmaking"));
+        for t in ["fire_bolt", "wound_tending"] {
+            assert_eq!(teach(&shipped, t, &[t], &[]), Ok(()));
+        }
+        assert!(teach(&s, "glass", &[], &[]).unwrap_err().contains("there is no technique called glass (the techniques are: fire, cooking"));
+        // The minds' world text names every technique of the table, with its brief.
+        let about = |s: &Scripts| s.law_specs()["know_how"].about.clone();
+        let (a, b) = (about(&shipped), about(&s));
+        assert!(a.starts_with("you can only do techniques you know: fire (campfire), cooking, spear, shelter, storage, cloak (2 hides from hunted deer + 1 fiber; keeps you warm at night), torch (lights the night, you see farther), planting (grow new berry bushes), writing (write and read tablets and signs), masonry (walls), carpentry (houses and gates; needs shelter), fishing,"), "{a}");
+        for t in s.skills().techniques.iter() {
+            assert!(b.contains(&t.name), "{} is not in {b}", t.name);
+        }
+        assert!(b.contains("toolmaking (axe, pick; pots, crucibles and drop moulds of fired clay), glassmaking (glass from ash and sand at the furnace, and panes, floats, bottles and drops). Others may know"), "{b}");
+    }
+
+    /// Others see someone making at a workplace or feeding a fire, players and minds alike;
+    /// the authority and a client read a fire's state through one primitive.
+    #[test]
+    fn making_and_feeding_are_seen_and_a_fire_state_is_shared() {
+        let s = cullet();
+        for k in ["make", "feed"] {
+            assert_eq!(s.shows().get(k).map(|x| x.look.as_str()), Some("work"));
+        }
+        let day = 48 * 60_000;
+        let furnace = s.structure("furnace");
+        // 3 units a game hour on a 48-minute day: a unit lasts 40 s.
+        assert_eq!(furnace.fire_state(140_000, 100_000, day), (true, 1.0));
+        assert_eq!(furnace.fire_state(100_000, 100_000, day), (false, 0.0));
+        assert_eq!(s.structure("campfire").fire_state(0, 100_000, day), (true, 0.0));
+        assert_eq!(s.structure("house").fire_state(0, 100_000, day), (false, 0.0));
     }
 
     /// A skill added only in the script (its spec and rules) is one a graph, an act and a
@@ -2198,7 +5343,7 @@ fn hum_spec() {{ #{{ target: false }} }}")).err().unwrap_or_default();
         assert!(matches!(&fx[0], Effect::Amend { id: 5, status: Some(st), due_h: Some(h), .. } if st == "agreed" && (*h - 30.0).abs() < 1e-3), "{fx:?}");
         assert!(tells(&fx).iter().any(|(to, t)| *to == 1 && t.ends_with("by dusk tomorrow.")), "{fx:?}");
         // Without terms standing it is an ordinary trade's accept.
-        assert_eq!(s.done("accept", &SkillCtx { records: vec![], ..c.clone() }).unwrap(), vec![Effect::Accept]);
+        assert_eq!(s.done("accept", &SkillCtx { records: vec![], ..c.clone() }).unwrap(), vec![Effect::Accept { offer: 0 }]);
         // The newcomer stores 10 wood in the resident's household store: its part is done and the
         // resident is told what it owes.
         let store = TargetFacts { class: "structure".into(), kind: "storage".into(), id: 77, owner: 3, home: "10,10".into(), dist: 1.0, ..Default::default() };
@@ -2237,6 +5382,69 @@ fn hum_spec() {{ #{{ target: false }} }}")).err().unwrap_or_default();
         // How a party reads its records.
         let regard = RecordFacts { kind: "regard".into(), parties: vec![("holder".into(), crate::records::COMMUNITY | 2), ("toward".into(), crate::records::COMMUNITY | 3)], me: "holder".into(), terms: serde_json::json!({"label": "rival town", "value": -35, "why": "the broken match"}).as_object().unwrap().clone(), ..Default::default() };
         assert_eq!(s.record_text(&regard).unwrap(), format!("your people hold {{id:{}}} as rival town (the broken match)", crate::records::COMMUNITY | 3));
+    }
+
+    /// An answer (accept, decline) takes exactly what it names, a trade offer or a proposal, or
+    /// is refused with the reason; without a name, accept takes what it always took (terms
+    /// first, then the trade) and decline ends that same one. The maker is told of a decline.
+    #[test]
+    fn answers_take_what_they_name() {
+        use crate::records::RecordFacts;
+        let s = scripts();
+        let person = |id: u64| TargetFacts { class: "creature".into(), id, kind: "person".into(), alive: true, dist: 1.0, stage: "adult".into(), ..Default::default() };
+        let tells = |fx: &[Effect]| fx.iter().filter_map(|e| if let Effect::Tell { to, text, .. } = e { Some((*to, text.clone())) } else { None }).collect::<Vec<_>>();
+        let terms = serde_json::json!({"from_gives": "berries", "from_qty": 3, "to_gives": "wood", "to_qty": 10, "from_done": 0, "to_done": 0, "from_home": "", "to_home": "", "words": ""}).as_object().unwrap().clone();
+        let proposal = |id: u64, status: &str, open: bool, from: u64, me: &str| RecordFacts { id, kind: "agreement".into(), status: status.into(), open, terms: terms.clone(), parties: vec![("from".into(), from), ("to".into(), if me == "to" { 9 } else { 1 })], me: me.into(), by: from as u32, ..Default::default() };
+        let offer = |id: u64, to: u32, open: bool| Some(OfferFacts { id, from: 1, to, give: "fish".into(), give_qty: 2, want: "hide".into(), want_qty: 1, open, left_s: 60.0 });
+        // 9 is asked by 1: terms (record 5) and a trade (offer 41).
+        let base = SkillCtx { actor: ActorFacts { id: 9, kind: "person".into(), stage: "adult".into(), ..Default::default() }, target: person(1), hour: 7.0, records: vec![proposal(5, "offered", true, 1, "to")], offer: offer(41, 9, true), ..Default::default() };
+        for skill in ["accept", "decline"] {
+            let c = SkillCtx { skill: skill.into(), ..base.clone() };
+            let refused = |offer_id: u64, record_id: u64, records: Vec<RecordFacts>, at_hand: Option<OfferFacts>| s.check(skill, &SkillCtx { offer_id, record_id, records, offer: at_hand, ..c.clone() }).err().unwrap_or_default();
+            assert_eq!(s.check(skill, &c), Ok(()), "{skill} with no name");
+            assert_eq!(refused(41, 0, c.records.clone(), c.offer.clone()), "", "{skill} offer 41");
+            assert_eq!(refused(0, 5, c.records.clone(), None), "", "{skill} record 5");
+            // Refusals: gone, changed, not addressed to you, expired, already agreed, both named.
+            assert_eq!(refused(41, 0, vec![], None), "that offer is gone");
+            assert_eq!(refused(41, 0, vec![], offer(42, 9, true)), "they have changed their offer: now their 2 fish for your 1 hide");
+            assert_eq!(refused(41, 0, vec![], offer(41, 7, true)), "that offer is not addressed to you");
+            assert_eq!(refused(41, 0, vec![], offer(41, 9, false)), "that offer has expired");
+            assert_eq!(refused(0, 6, vec![], None), "that proposal is gone");
+            assert_eq!(refused(0, 6, vec![proposal(5, "offered", true, 1, "to")], None), "they have changed their terms: now you give 10 wood, they give 3 berries");
+            assert_eq!(refused(0, 5, vec![proposal(5, "offered", true, 1, "from")], None), "that proposal is not addressed to you");
+            assert_eq!(refused(0, 5, vec![proposal(5, "offered", true, 4, "to")], None), "that proposal is not addressed to you");
+            assert_eq!(refused(0, 5, vec![proposal(5, "agreed", true, 1, "to")], None), "you have already agreed to it");
+            assert_eq!(refused(0, 5, vec![proposal(5, "not taken", false, 1, "to")], None), "that proposal has expired");
+            assert_eq!(refused(0, 5, vec![proposal(5, "declined", false, 1, "to")], None), "that proposal was declined");
+            assert_eq!(refused(41, 5, c.records.clone(), c.offer.clone()), "name one thing to answer: the offer or the proposal");
+        }
+        // accept: the named offer is taken even with terms standing (before, the terms won).
+        let acc = SkillCtx { skill: "accept".into(), ..base.clone() };
+        assert_eq!(s.done("accept", &SkillCtx { offer_id: 41, ..acc.clone() }).unwrap(), vec![Effect::Accept { offer: 41 }]);
+        assert!(matches!(&s.done("accept", &SkillCtx { record_id: 5, ..acc.clone() }).unwrap()[0], Effect::Amend { id: 5, status: Some(st), .. } if st == "agreed"));
+        // Without a name, as before: the terms, then (none standing) the trade.
+        assert!(matches!(&s.done("accept", &acc).unwrap()[0], Effect::Amend { id: 5, .. }));
+        assert_eq!(s.done("accept", &SkillCtx { records: vec![], ..acc.clone() }).unwrap(), vec![Effect::Accept { offer: 0 }]);
+        // decline: a proposal is closed as declined and its maker told; onlookers see it.
+        let dec = SkillCtx { skill: "decline".into(), ..base.clone() };
+        for c in [SkillCtx { record_id: 5, ..dec.clone() }, dec.clone()] {
+            let fx = s.done("decline", &c).unwrap();
+            assert!(matches!(&fx[0], Effect::Close { id: 5, status, .. } if status == "declined"), "{fx:?}");
+            assert!(tells(&fx).iter().any(|(to, t)| *to == 1 && t == "{actor} declined your terms: you give 3 berries, they give 10 wood."), "{fx:?}");
+            assert!(fx.iter().any(|e| matches!(e, Effect::Witness { .. })), "{fx:?}");
+        }
+        // ... a trade offer is ended, its maker told what was declined.
+        for c in [SkillCtx { offer_id: 41, ..dec.clone() }, SkillCtx { records: vec![], ..dec.clone() }] {
+            let fx = s.done("decline", &c).unwrap();
+            assert_eq!(fx[0], Effect::Decline { offer: 41 }, "{fx:?}");
+            assert!(tells(&fx).iter().any(|(to, t)| *to == 1 && t == "{actor} declined your offer of 2 fish for 1 hide."), "{fx:?}");
+        }
+        // ... and with nothing standing the engine is asked, and refuses.
+        assert_eq!(s.done("decline", &SkillCtx { records: vec![], offer: None, ..dec.clone() }).unwrap(), vec![Effect::Decline { offer: 0 }]);
+        // The rules read the offer only for the skills that answer.
+        assert!(s.skill_reads("accept", "offer", false) && s.skill_reads("decline", "offer", true) && !s.skill_reads("give", "offer", true));
+        // A proposal to the reader names its id, for the answer.
+        assert!(s.record_text(&proposal(5, "offered", true, 1, "to")).unwrap().ends_with("accept or decline (toward them, record 5)"));
     }
 
     #[test]
@@ -2278,6 +5486,22 @@ fn hum_spec() {{ #{{ target: false }} }}")).err().unwrap_or_default();
         assert!(s.check("teach", &c).unwrap_err().contains("don't know cloak yourself"));
     }
 
+    /// Every know-how can be taught, not only what experimenting can reveal: fire_bolt and
+    /// wound_tending (learned only from someone or from writing) were refused as "no technique".
+    #[test]
+    fn every_know_how_can_be_taught() {
+        let s = scripts();
+        let names: Vec<String> = s.tables().names("know_how").to_vec();
+        assert!(names.iter().any(|n| n == "fire_bolt") && names.iter().any(|n| n == "wound_tending"), "{names:?}");
+        for t in &names {
+            let mut c = ctx();
+            c.item = t.clone();
+            c.actor.knows = names.clone();
+            c.target = TargetFacts { class: "creature".into(), kind: "person".into(), id: 9, alive: true, stage: "adult".into(), knows: s.tables().words("know_how", t, "requires"), ..Default::default() };
+            assert_eq!(s.check("teach", &c), Ok(()), "teach {t}");
+        }
+    }
+
     #[test]
     fn gifts_must_fit_the_receivers_pack() {
         let s = scripts();
@@ -2316,13 +5540,15 @@ fn hum_spec() {{ #{{ target: false }} }}")).err().unwrap_or_default();
         // badly hurt the target already is.
         assert!(s.check("attack", &c).is_ok());
         let full = damage(&s.done("attack", &c).unwrap());
-        assert!((full - 18.0).abs() < 1e-3, "a spear blow: {full}");
+        let spear = s.law_value("dmg_spear").and_then(|v| v.as_f64()).unwrap() as f32;
+        assert!((full - spear).abs() < 1e-3, "a spear blow is the dmg_spear law: {full}");
         c.target.hp = 5.0;
         assert!(s.check("attack", &c).is_ok(), "no beating stops short of the badly hurt");
         assert_eq!(damage(&s.done("attack", &c).unwrap()), full, "a blow that exceeds health is not held back");
         c.skill = "strike".into();
         assert!(s.check("strike", &c).is_ok());
-        assert!((damage(&s.done("strike", &c).unwrap()) - 15.0).abs() < 1e-3, "the starter strike too");
+        let spear_strike = s.law_value("dmg_strike_spear").and_then(|v| v.as_f64()).unwrap() as f32;
+        assert!((damage(&s.done("strike", &c).unwrap()) - spear_strike).abs() < 1e-3, "the starter strike too");
         c.skill = "attack".into();
         // A word about force on the item changes nothing.
         for word in ["hurt", "kill"] {
@@ -2483,8 +5709,6 @@ fn rates(a) {
         hunger *= 0.5;
     } else if act == "rest" {
         energy = 6.0;
-    } else if act == "block" {
-        energy = -12.0;
     }
     if a.actor.hunger >= 100.0 {
         hp -= 4.0;

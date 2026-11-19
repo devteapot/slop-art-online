@@ -1,0 +1,629 @@
+{
+ "schema": 1,
+ "family": "prop:ground",
+ "id": "20261111-368e2af4-b8a6bc",
+ "published": "2026-11-11T17:49:44+01:00",
+ "track": "kit-1",
+ "maker": "Claude Fable 5.2",
+ "note": "kit-1 pass 1: built for its lot from the plan (footprint, height, wear and seed from plan.json); glow set in the game at 21:30 against 13:00",
+ "source": {
+  "commit": "368e2af4b14033a9e8da023fcc63b95c27a5a9bb",
+  "branch": "kit-1",
+  "dirty": false,
+  "generator": "living/tools/blender/cullet.py",
+  "generator_sha256": "5f70615004be4033b28a542e829eaf40b0eef97ddcc9c31bb4e4b906c7bd9803",
+  "generator_state": "committed",
+  "seed": "83",
+  "params": {
+   "plan": "living/seeds/worlds/cullet/plan.json"
+  }
+ },
+ "renderer": {
+  "method": "asset-view",
+  "commit": "86fae680d923921d2c41e9dffc8d39c75cc88752",
+  "dirty": false,
+  "key": "86fae680",
+  "env": "cullet",
+  "hours": {
+   "day": 15.0,
+   "night": 22.0
+  },
+  "weather": "clear",
+  "day_curve": true,
+  "preset": "2947e3c0",
+  "repo": "/home/carlid/.t3/worktrees/slop-art-online/t3-e14baa97-22eef9c68b78d643"
+ },
+ "preset": "prop",
+ "media": "media/prop-ground/20261111-368e2af4-b8a6bc",
+ "members": [
+  {
+   "name": "quay",
+   "role": "subject",
+   "token_kind": "file",
+   "source_path": ".local/kit-1/board/quay/quay_03.glb",
+   "sha256": "886dbfd76c1ca514db49ce35bc4f6c2083a7001eadd9c6e5ea8d309a2c8f3db6",
+   "stats": {
+    "file": "quay_03.glb",
+    "sha256": "886dbfd76c1ca514db49ce35bc4f6c2083a7001eadd9c6e5ea8d309a2c8f3db6",
+    "bytes": 68756,
+    "triangles": 926,
+    "vertices": 1940,
+    "parts": {
+     "quay_03": 926
+    },
+    "nodes": 1,
+    "bones": 0,
+    "spring_bones": 0,
+    "materials": [
+     "Body"
+    ],
+    "textures": 0,
+    "texture_bytes": 0,
+    "morph_targets": 0,
+    "spring_groups": 0,
+    "vertex_colours": true,
+    "clips": [],
+    "glow": false,
+    "glow_triangles": 0,
+    "palette": [
+     {
+      "hex": "#323339",
+      "share": 0.2882
+     },
+     {
+      "hex": "#595c62",
+      "share": 0.2603
+     },
+     {
+      "hex": "#474a50",
+      "share": 0.2512
+     },
+     {
+      "hex": "#454334",
+      "share": 0.1466
+     },
+     {
+      "hex": "#3c3e47",
+      "share": 0.019
+     },
+     {
+      "hex": "#663d29",
+      "share": 0.0184
+     },
+     {
+      "hex": "#868585",
+      "share": 0.01
+     },
+     {
+      "hex": "#5b4238",
+      "share": 0.0062
+     }
+    ]
+   },
+   "file": "files/quay.glb",
+   "report": {
+    "file": "quay/quay_03.glb",
+    "what": "fixture",
+    "kind": "quay",
+    "size_m": [
+     11.5,
+     2.0
+    ],
+    "plan_height_m": 0.3,
+    "seed": 93474,
+    "above_floor_m": [
+     [
+      -5.738,
+      -1.08
+     ],
+     [
+      5.738,
+      1.0
+     ]
+    ],
+    "height_m": 0.25,
+    "foundation_m": 3.2,
+    "tris": 926,
+    "materials": {
+     "Body": 926
+    },
+    "surface_tagged_share": 1.0,
+    "palette_share": 0.5961,
+    "palette_wear_blend_share": 0.4039,
+    "budget_tris": 1500,
+    "doors": [],
+    "sha256": "886dbfd76c1ca514db49ce35bc4f6c2083a7001eadd9c6e5ea8d309a2c8f3db6",
+    "ridge_m": 0.12
+   },
+   "shots": [
+    "front",
+    "three-quarter",
+    "side",
+    "back",
+    "close",
+    "game"
+   ],
+   "clips": [],
+   "view": {
+    "size_m": [
+     11.5,
+     3.450000047683716,
+     2.0799999237060547
+    ],
+    "triangles": 926,
+    "vertices": 1940,
+    "meshes": 1,
+    "materials": [
+     "Body"
+    ],
+    "glow": false,
+    "vertex_colours": true
+   }
+  },
+  {
+   "name": "fish_steps",
+   "role": "subject",
+   "token_kind": "file",
+   "source_path": ".local/kit-1/board/fish_steps/fish_steps.glb",
+   "sha256": "8f581187425ba8b6398fbc5a0ec1ca35e9a446e2436e1dc6e19fc2b35f6f1672",
+   "stats": {
+    "file": "fish_steps.glb",
+    "sha256": "8f581187425ba8b6398fbc5a0ec1ca35e9a446e2436e1dc6e19fc2b35f6f1672",
+    "bytes": 65248,
+    "triangles": 904,
+    "vertices": 1834,
+    "parts": {
+     "fish_steps": 904
+    },
+    "nodes": 1,
+    "bones": 0,
+    "spring_bones": 0,
+    "materials": [
+     "Body"
+    ],
+    "textures": 0,
+    "texture_bytes": 0,
+    "morph_targets": 0,
+    "spring_groups": 0,
+    "vertex_colours": true,
+    "clips": [],
+    "glow": false,
+    "glow_triangles": 0,
+    "palette": [
+     {
+      "hex": "#373738",
+      "share": 0.499
+     },
+     {
+      "hex": "#4b4c54",
+      "share": 0.2755
+     },
+     {
+      "hex": "#484739",
+      "share": 0.141
+     },
+     {
+      "hex": "#56595c",
+      "share": 0.0466
+     },
+     {
+      "hex": "#858685",
+      "share": 0.0185
+     },
+     {
+      "hex": "#696865",
+      "share": 0.013
+     },
+     {
+      "hex": "#7c7969",
+      "share": 0.0045
+     },
+     {
+      "hex": "#4c4921",
+      "share": 0.0019
+     }
+    ]
+   },
+   "file": "files/fish_steps.glb",
+   "report": {
+    "file": "fish_steps/fish_steps.glb",
+    "what": "fixture",
+    "kind": "fish_steps",
+    "size_m": [
+     8,
+     3
+    ],
+    "plan_height_m": 0.9,
+    "seed": 96817,
+    "above_floor_m": [
+     [
+      -4.0,
+      -1.5
+     ],
+     [
+      4.0,
+      1.5
+     ]
+    ],
+    "height_m": 0.85,
+    "foundation_m": 3.2,
+    "tris": 904,
+    "materials": {
+     "Body": 904
+    },
+    "surface_tagged_share": 1.0,
+    "palette_share": 0.6527,
+    "palette_wear_blend_share": 0.3473,
+    "budget_tris": 2500,
+    "doors": [],
+    "sha256": "8f581187425ba8b6398fbc5a0ec1ca35e9a446e2436e1dc6e19fc2b35f6f1672",
+    "ridge_m": 0.85
+   },
+   "shots": [
+    "front",
+    "three-quarter",
+    "side",
+    "back",
+    "close",
+    "game"
+   ],
+   "clips": [],
+   "view": {
+    "size_m": [
+     8.0,
+     4.050000190734863,
+     7.199999809265137
+    ],
+    "triangles": 904,
+    "vertices": 1834,
+    "meshes": 1,
+    "materials": [
+     "Body"
+    ],
+    "glow": false,
+    "vertex_colours": true
+   }
+  },
+  {
+   "name": "wall",
+   "role": "subject",
+   "token_kind": "file",
+   "source_path": ".local/kit-1/board/retaining_wall/wall_005.glb",
+   "sha256": "c9af2a1500e0c1e121f17b010d6243bb9901e619d081b2c6233b4332125a4acf",
+   "stats": {
+    "file": "wall_005.glb",
+    "sha256": "c9af2a1500e0c1e121f17b010d6243bb9901e619d081b2c6233b4332125a4acf",
+    "bytes": 40804,
+    "triangles": 548,
+    "vertices": 1136,
+    "parts": {
+     "wall_005": 548
+    },
+    "nodes": 1,
+    "bones": 0,
+    "spring_bones": 0,
+    "materials": [
+     "Body"
+    ],
+    "textures": 0,
+    "texture_bytes": 0,
+    "morph_targets": 0,
+    "spring_groups": 0,
+    "vertex_colours": true,
+    "clips": [],
+    "glow": false,
+    "glow_triangles": 0,
+    "palette": [
+     {
+      "hex": "#3f4149",
+      "share": 0.6406
+     },
+     {
+      "hex": "#5e5f64",
+      "share": 0.2499
+     },
+     {
+      "hex": "#505255",
+      "share": 0.109
+     },
+     {
+      "hex": "#211f1f",
+      "share": 0.0006
+     }
+    ]
+   },
+   "file": "files/wall.glb",
+   "report": {
+    "file": "retaining_wall/wall_005.glb",
+    "what": "fixture",
+    "kind": "retaining_wall",
+    "size_m": [
+     11.17,
+     0.6
+    ],
+    "plan_height_m": 3.9,
+    "seed": 74092,
+    "above_floor_m": [
+     [
+      -5.585,
+      -0.295
+     ],
+     [
+      5.585,
+      0.315
+     ]
+    ],
+    "height_m": 3.899,
+    "foundation_m": 0.25,
+    "tris": 548,
+    "materials": {
+     "Body": 548
+    },
+    "surface_tagged_share": 1.0,
+    "palette_share": 0.938,
+    "palette_wear_blend_share": 0.062,
+    "budget_tris": 1500,
+    "doors": [],
+    "sha256": "c9af2a1500e0c1e121f17b010d6243bb9901e619d081b2c6233b4332125a4acf",
+    "ridge_m": 3.9,
+    "fall_m": 3.5
+   },
+   "shots": [
+    "front",
+    "three-quarter",
+    "side",
+    "back",
+    "close",
+    "game"
+   ],
+   "clips": [],
+   "view": {
+    "size_m": [
+     11.170000076293945,
+     4.149397850036621,
+     0.625
+    ],
+    "triangles": 548,
+    "vertices": 1136,
+    "meshes": 1,
+    "materials": [
+     "Body"
+    ],
+    "glow": false,
+    "vertex_colours": true
+   }
+  },
+  {
+   "name": "stairs",
+   "role": "subject",
+   "token_kind": "file",
+   "source_path": ".local/kit-1/board/stairs/stairs_net_wynd_low_to_mid.glb",
+   "sha256": "4778a146e1026efa763054aeb7f521a63de771b441662ab5b6d3151f569d7bb4",
+   "stats": {
+    "file": "stairs_net_wynd_low_to_mid.glb",
+    "sha256": "4778a146e1026efa763054aeb7f521a63de771b441662ab5b6d3151f569d7bb4",
+    "bytes": 55508,
+    "triangles": 736,
+    "vertices": 1560,
+    "parts": {
+     "stairs_net_wynd_low_to_mid": 736
+    },
+    "nodes": 1,
+    "bones": 0,
+    "spring_bones": 0,
+    "materials": [
+     "Body"
+    ],
+    "textures": 0,
+    "texture_bytes": 0,
+    "morph_targets": 0,
+    "spring_groups": 0,
+    "vertex_colours": true,
+    "clips": [],
+    "glow": false,
+    "glow_triangles": 0,
+    "palette": [
+     {
+      "hex": "#41424c",
+      "share": 0.7311
+     },
+     {
+      "hex": "#56585e",
+      "share": 0.2
+     },
+     {
+      "hex": "#35363c",
+      "share": 0.0601
+     },
+     {
+      "hex": "#5f646a",
+      "share": 0.0088
+     }
+    ]
+   },
+   "file": "files/stairs.glb",
+   "report": {
+    "file": "stairs/stairs_net_wynd_low_to_mid.glb",
+    "what": "fixture",
+    "kind": "stairs",
+    "size_m": [
+     3.0,
+     7.27
+    ],
+    "plan_height_m": 4.25,
+    "seed": 49112,
+    "above_floor_m": [
+     [
+      -1.5,
+      -3.635
+     ],
+     [
+      1.5,
+      3.655
+     ]
+    ],
+    "height_m": 4.25,
+    "foundation_m": 0.2,
+    "tris": 736,
+    "materials": {
+     "Body": 736
+    },
+    "surface_tagged_share": 1.0,
+    "palette_share": 1.0,
+    "palette_wear_blend_share": 0.0,
+    "budget_tris": 1500,
+    "doors": [],
+    "sha256": "4778a146e1026efa763054aeb7f521a63de771b441662ab5b6d3151f569d7bb4",
+    "ridge_m": 4.25,
+    "treads": 22,
+    "tread_rise_m": 0.1818,
+    "tread_going_m": 0.3305
+   },
+   "shots": [
+    "front",
+    "three-quarter",
+    "side",
+    "back",
+    "close",
+    "game"
+   ],
+   "clips": [],
+   "view": {
+    "size_m": [
+     3.0,
+     4.449999809265137,
+     7.289999961853027
+    ],
+    "triangles": 736,
+    "vertices": 1560,
+    "meshes": 1,
+    "materials": [
+     "Body"
+    ],
+    "glow": false,
+    "vertex_colours": true
+   }
+  },
+  {
+   "name": "plot_wall",
+   "role": "subject",
+   "token_kind": "file",
+   "source_path": ".local/kit-1/board/plot_wall/plot_wall_1.glb",
+   "sha256": "36d35a252653b55fc8790ccc82efc8fad97b0f035a7b428a0759327514c2480d",
+   "stats": {
+    "file": "plot_wall_1.glb",
+    "sha256": "36d35a252653b55fc8790ccc82efc8fad97b0f035a7b428a0759327514c2480d",
+    "bytes": 57368,
+    "triangles": 762,
+    "vertices": 1616,
+    "parts": {
+     "plot_wall_1": 762
+    },
+    "nodes": 1,
+    "bones": 0,
+    "spring_bones": 0,
+    "materials": [
+     "Body"
+    ],
+    "textures": 0,
+    "texture_bytes": 0,
+    "morph_targets": 0,
+    "spring_groups": 0,
+    "vertex_colours": true,
+    "clips": [],
+    "glow": false,
+    "glow_triangles": 0,
+    "palette": [
+     {
+      "hex": "#3f424a",
+      "share": 0.5071
+     },
+     {
+      "hex": "#606268",
+      "share": 0.3206
+     },
+     {
+      "hex": "#6f6b4b",
+      "share": 0.1098
+     },
+     {
+      "hex": "#828062",
+      "share": 0.0387
+     },
+     {
+      "hex": "#4c4d55",
+      "share": 0.0135
+     },
+     {
+      "hex": "#828074",
+      "share": 0.0067
+     },
+     {
+      "hex": "#8d8b81",
+      "share": 0.0036
+     }
+    ]
+   },
+   "file": "files/plot_wall.glb",
+   "report": {
+    "file": "plot_wall/plot_wall_1.glb",
+    "what": "fixture",
+    "kind": "plot_wall",
+    "size_m": [
+     8,
+     6
+    ],
+    "plan_height_m": 1.0,
+    "seed": 20301,
+    "above_floor_m": [
+     [
+      -4.0,
+      -3.0
+     ],
+     [
+      4.0,
+      3.0
+     ]
+    ],
+    "height_m": 1.0,
+    "foundation_m": -0.0,
+    "tris": 762,
+    "materials": {
+     "Body": 762
+    },
+    "surface_tagged_share": 1.0,
+    "palette_share": 0.8241,
+    "palette_wear_blend_share": 0.1759,
+    "budget_tris": 1500,
+    "doors": [],
+    "sha256": "36d35a252653b55fc8790ccc82efc8fad97b0f035a7b428a0759327514c2480d",
+    "ridge_m": 1.0
+   },
+   "shots": [
+    "front",
+    "three-quarter",
+    "side",
+    "back",
+    "close",
+    "game"
+   ],
+   "clips": [],
+   "view": {
+    "size_m": [
+     8.0,
+     1.0,
+     6.0
+    ],
+    "triangles": 762,
+    "vertices": 1616,
+    "meshes": 1,
+    "materials": [
+     "Body"
+    ],
+    "glow": false,
+    "vertex_colours": true
+   }
+  }
+ ],
+ "delivered": []
+}

@@ -1,0 +1,545 @@
+{
+  "Chidi Okoro": {
+    "narrative": "I was born on Low Row and I have fished the Fish Steps since I was nine, but what I am known for is line. I make it from gut and twist and beeswax and patience, and I sell it dear because it is worth dear — every fisher on the island owes their best mornings to my hands. I keep my house and my family and I keep my accounts in my head, and I have decided that my children will read properly, not just write their names like me. The rest of the town can think what it likes about that.",
+    "values": [
+      "a good line is worth its price",
+      "my children will read",
+      "a debt is a debt, written or not",
+      "family first, then trade",
+      "the sea gives to those who go early"
+    ],
+    "goals": [
+      "Get Benedikt Orme to teach Zeke and Ife the formal letters, not just their names",
+      "Collect the nine drops Lorcan Vane owes me for line without breaking the house",
+      "Build up enough drops to buy a second net loft bench of my own",
+      "See Zeke and Ife able to read a tablet before they are grown"
+    ],
+    "pastimes": [
+      "Twisting and waxing line at the kitchen table of an evening",
+      "A slow walk along the quay at dusk, looking at the boats",
+      "Sitting at the Marver with a cup, listening to the talk"
+    ],
+    "calling": "Making line — the best on the island — and one day teaching my son the twist of it.",
+    "mood": "steady, a little proud, quietly determined",
+    "traits": {
+      "caution": 55,
+      "sociability": 50,
+      "empathy": 60,
+      "curiosity": 45,
+      "ambition": 65,
+      "introspection": 45,
+      "temper": 40,
+      "nurture": 70
+    },
+    "relations": [
+      {
+        "name": "Amara Okoro",
+        "trust": 90,
+        "affinity": 85,
+        "label": "wife",
+        "note": "She is up before me with the tide and back with kelp and sea-glass; I would not trade her for any Kiln wife in the Rows."
+      },
+      {
+        "name": "Zeke Okoro",
+        "trust": 80,
+        "affinity": 75,
+        "label": "son",
+        "note": "Quick with his hands and quick to run off to the cullet yard; he will make something of himself if he learns his letters."
+      },
+      {
+        "name": "Ife Okoro",
+        "trust": 80,
+        "affinity": 80,
+        "label": "daughter",
+        "note": "She follows Zeke everywhere and is sharper than she lets on."
+      },
+      {
+        "name": "Lorcan Vane",
+        "trust": 25,
+        "affinity": 30,
+        "label": "debtor",
+        "note": "Owes me nine drops for line and plays counters with the money he should be paying me."
+      },
+      {
+        "name": "Benedikt Orme",
+        "trust": 60,
+        "affinity": 45,
+        "label": "teacher",
+        "note": "A good man and the only reader we have; I want more from him than names on a slate."
+      },
+      {
+        "name": "Magda Tarn",
+        "trust": 65,
+        "affinity": 55,
+        "label": "elder",
+        "note": "She divides the catch fair and she has never once shorted me."
+      },
+      {
+        "name": "Neve Calloway",
+        "trust": 60,
+        "affinity": 50,
+        "label": "fellow fisher",
+        "note": "Fishes beside me at the Steps and buys my line; a good hand."
+      },
+      {
+        "name": "Ren Sato",
+        "trust": 55,
+        "affinity": 45,
+        "label": "fellow fisher",
+        "note": "Young, keen, fishes beside Neve; his father burns the kelp that smokes Low Row."
+      },
+      {
+        "name": "Dolly Achterberg",
+        "trust": 45,
+        "affinity": 50,
+        "label": "cook",
+        "note": "The Marver is where I take my evenings; she feeds me well enough for the drops."
+      },
+      {
+        "name": "Amara Okoro",
+        "trust": 90,
+        "affinity": 85,
+        "label": "wife",
+        "note": "She knows every wreck the sea-glass came from; I could listen to her all night."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The fever winter six years ago: I carried fish to the shut houses and stayed well, and I still do not know why I was spared.",
+        "salience": 0.85,
+        "about": [
+          "Mirren Quill"
+        ]
+      },
+      {
+        "gist": "The first time I twisted a line that Neve Calloway said was better than her father's — she bought three lengths and paid in drops.",
+        "salience": 0.7,
+        "about": [
+          "Neve Calloway"
+        ]
+      },
+      {
+        "gist": "The storm last autumn took the end rail of the mole and half the slates off Low Row; we spent a week drying out.",
+        "salience": 0.65,
+        "about": [
+          "Amara Okoro"
+        ]
+      },
+      {
+        "gist": "The morning Zeke was born, before dawn, and I had already been to the Steps and back.",
+        "salience": 0.8,
+        "about": [
+          "Amara Okoro",
+          "Zeke Okoro"
+        ]
+      },
+      {
+        "gist": "Lorcan Vane took four lengths of line on trust and has not paid; I have not written it in the ledger, because we are neighbours.",
+        "salience": 0.55,
+        "about": [
+          "Lorcan Vane"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "a_good_line_is_worth_its_price",
+        "value": 0.9,
+        "why": "I make the best line on the island and I will not sell it cheap."
+      },
+      {
+        "key": "my_children_will_read",
+        "value": 0.85,
+        "why": "I can write my name and no more, and I will not have my children held back the same way."
+      },
+      {
+        "key": "debts_should_be_paid",
+        "value": 0.8,
+        "why": "A man who does not pay what he owes is a man you cannot trust with anything."
+      },
+      {
+        "key": "kelp_is_for_the_ash_as_much_as_the_plots",
+        "value": 0.6,
+        "why": "The Cone needs ash and the plots need kelp, and Nan Fenwick is not the only one who needs it."
+      },
+      {
+        "key": "the_marver_is_the_town_s_hearth",
+        "value": 0.55,
+        "why": "Everything worth hearing is heard at the Marver of an evening."
+      }
+    ],
+    "secret": ""
+  },
+  "Amara Okoro": {
+    "narrative": "I go down to the Wrack Strand with the tide, whatever hour it is, and I gather kelp for the plots and the ash house. But what I love is the sea-glass — green and amber and one rare blue — and I know which wreck each colour came from, because my mother told me and her mother told her. I carry kelp up the wynds to Nan Fenwick's plots and it is never as much as she wants. I keep my house and my children and my glass, and I am content enough.",
+    "values": [
+      "the sea gives and the sea takes",
+      "every colour of glass has a story",
+      "a neighbour is owed what you can carry",
+      "my children before my own ease",
+      "keep what the sea throws up"
+    ],
+    "goals": [
+      "Learn which wreck the rarest blue sea-glass came from",
+      "Keep Zeke and Ife fed and at their lessons",
+      "Carry enough kelp up the wynds to keep Nan Fenwick off my back",
+      "One day lay out my sea-glass on a board by colour, like Ode's sill of cullet"
+    ],
+    "pastimes": [
+      "Sorting sea-glass by colour on the kitchen table",
+      "Walking the Wrack Strand at low tide, alone",
+      "Sitting against the warm wall of the wash-house of an evening"
+    ],
+    "calling": "Reading the sea-glass — knowing which wreck each colour came from, and passing it on.",
+    "mood": "calm, watchful, a little tired",
+    "traits": {
+      "caution": 60,
+      "sociability": 45,
+      "empathy": 75,
+      "curiosity": 70,
+      "ambition": 40,
+      "introspection": 65,
+      "temper": 30,
+      "nurture": 80
+    },
+    "relations": [
+      {
+        "name": "Chidi Okoro",
+        "trust": 90,
+        "affinity": 85,
+        "label": "husband",
+        "note": "He makes the best line on the island and he is a good man, though he worries too much about letters."
+      },
+      {
+        "name": "Zeke Okoro",
+        "trust": 80,
+        "affinity": 75,
+        "label": "son",
+        "note": "He wants to find me a colour I have never seen; I hope he does."
+      },
+      {
+        "name": "Ife Okoro",
+        "trust": 85,
+        "affinity": 85,
+        "label": "daughter",
+        "note": "She is the one who will remember the wrecks after me."
+      },
+      {
+        "name": "Hana Sato",
+        "trust": 70,
+        "affinity": 65,
+        "label": "fellow gatherer",
+        "note": "We gather side by side and she agrees with me that the smoke lies too low on Low Row."
+      },
+      {
+        "name": "Lark Morrow",
+        "trust": 60,
+        "affinity": 55,
+        "label": "fellow gatherer",
+        "note": "A strange girl, full of ships and sails, but a good worker on the strand."
+      },
+      {
+        "name": "Nan Fenwick",
+        "trust": 40,
+        "affinity": 35,
+        "label": "root grower",
+        "note": "She wants more kelp than three women can carry up the wynds, and she says so every time."
+      },
+      {
+        "name": "Kenji Sato",
+        "trust": 45,
+        "affinity": 40,
+        "label": "ash burner",
+        "note": "His kilns take the kelp the plots want; his smoke lies on my washing."
+      },
+      {
+        "name": "Davin Vane",
+        "trust": 55,
+        "affinity": 50,
+        "label": "porter",
+        "note": "He carts the kelp up the wynds when Nan pays him, and he is fair about it."
+      },
+      {
+        "name": "Greta Dunmore",
+        "trust": 65,
+        "affinity": 60,
+        "label": "wash-house keeper",
+        "note": "She hears everything at the warm wall and tells me most of it."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "My mother showing me a blue piece of sea-glass and telling me it came from a ship that broke on the Combs before I was born.",
+        "salience": 0.8,
+        "about": []
+      },
+      {
+        "gist": "The fever winter: I kept the house and fed whoever came to the door, and I did not lose a child.",
+        "salience": 0.85,
+        "about": [
+          "Chidi Okoro"
+        ]
+      },
+      {
+        "gist": "The storm last autumn: the kelp came up in heaps after it, more than I had ever seen, and we gathered for days.",
+        "salience": 0.6,
+        "about": [
+          "Hana Sato",
+          "Lark Morrow"
+        ]
+      },
+      {
+        "gist": "The morning Ife was born and Zeke would not leave the door.",
+        "salience": 0.75,
+        "about": [
+          "Ife Okoro",
+          "Zeke Okoro"
+        ]
+      },
+      {
+        "gist": "Nan Fenwick telling me on the wynd that I had brought half what the plots needed, and me saying nothing.",
+        "salience": 0.5,
+        "about": [
+          "Nan Fenwick"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "every_colour_of_glass_has_a_wreck",
+        "value": 0.85,
+        "why": "My mother knew it and her mother before her, and I will not let it be forgotten."
+      },
+      {
+        "key": "the_sea_gives_and_the_sea_takes",
+        "value": 0.8,
+        "why": "I have seen it give kelp in heaps and take men off the mole."
+      },
+      {
+        "key": "a_neighbour_is_owed_what_you_can_carry",
+        "value": 0.7,
+        "why": "We all live off the same strand and the same plots."
+      },
+      {
+        "key": "the_kelp_smoke_should_not_lie_on_low_row",
+        "value": 0.6,
+        "why": "It spoils the washing and the air, and the kilns could be set further upwind."
+      },
+      {
+        "key": "children_before_my_own_ease",
+        "value": 0.9,
+        "why": "They are the whole of what I have."
+      }
+    ],
+    "secret": ""
+  },
+  "Zeke Okoro": {
+    "narrative": "I am eleven and I go to Benedikt's lessons in the mornings, but what I like best is the cullet yard with Edda Hollin and the others, hunting the coloured glass. My mother knows every wreck the sea-glass came from, and I mean to find her a colour she has never seen. I am quick and I am not afraid of the shed, though Ode Pontil chases us out of it.",
+    "values": [
+      "Edda is the leader",
+      "a new colour is worth a scolding",
+      "my mother knows everything about glass"
+    ],
+    "goals": [
+      "Find a colour of sea-glass my mother has never seen",
+      "Keep up with Edda Hollin and the bigger children in the cullet yard"
+    ],
+    "pastimes": [
+      "Hunting coloured cullet in the cullet yard",
+      "Playing at the Fish Steps with the other children"
+    ],
+    "calling": "Finding glass — the rarer the colour the better.",
+    "mood": "restless, eager",
+    "traits": {
+      "caution": 25,
+      "sociability": 75,
+      "empathy": 50,
+      "curiosity": 80,
+      "ambition": 60,
+      "introspection": 25,
+      "temper": 45,
+      "nurture": 35
+    },
+    "relations": [
+      {
+        "name": "Chidi Okoro",
+        "trust": 80,
+        "affinity": 70,
+        "label": "father",
+        "note": "He wants me to learn letters and I would rather be in the yard."
+      },
+      {
+        "name": "Amara Okoro",
+        "trust": 85,
+        "affinity": 85,
+        "label": "mother",
+        "note": "She knows every wreck the sea-glass came from and I want to bring her a new one."
+      },
+      {
+        "name": "Ife Okoro",
+        "trust": 70,
+        "affinity": 70,
+        "label": "sister",
+        "note": "She follows me everywhere and is better at the lessons than me."
+      },
+      {
+        "name": "Edda Hollin",
+        "trust": 75,
+        "affinity": 70,
+        "label": "leader",
+        "note": "She leads us into the cullet yard and knows where the best colours are."
+      },
+      {
+        "name": "Lumi Pontil",
+        "trust": 60,
+        "affinity": 55,
+        "label": "friend",
+        "note": "She goes to the Cone before dawn and knows things about glass I do not."
+      },
+      {
+        "name": "Ode Pontil",
+        "trust": 30,
+        "affinity": 25,
+        "label": "the man who chases us",
+        "note": "He shouts at us to get out of the heaps, but he keeps the best colours on his sill."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "Finding a piece of amber cullet in the yard and Edda Hollin saying it was the best anyone had found that week.",
+        "salience": 0.7,
+        "about": [
+          "Edda Hollin"
+        ]
+      },
+      {
+        "gist": "My mother showing me the blue sea-glass and saying there was no other like it on the island.",
+        "salience": 0.75,
+        "about": [
+          "Amara Okoro"
+        ]
+      },
+      {
+        "gist": "Ode Pontil catching me in the cullet heaps and chasing me out with a shout.",
+        "salience": 0.5,
+        "about": [
+          "Ode Pontil"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "a_new_colour_is_worth_a_scolding",
+        "value": 0.8,
+        "why": "The best pieces are always where you are not supposed to go."
+      },
+      {
+        "key": "edda_knows_the_yard_best",
+        "value": 0.7,
+        "why": "She is the oldest and she found the way in."
+      }
+    ],
+    "secret": ""
+  },
+  "Ife Okoro": {
+    "narrative": "I am nine and I go to Benedikt's lessons with Zeke, and in the afternoons I play in the cullet yard with Lumi Pontil, who is my best friend. Lumi goes to the Cone before dawn with her grandmother and tells me about the colours of the melt, and I tell her about the sea-glass my mother finds. I want to keep up with Zeke, and mostly I do.",
+    "values": [
+      "Lumi is my best friend",
+      "keep up with Zeke",
+      "the sea-glass belongs to my mother"
+    ],
+    "goals": [
+      "Keep up with Zeke in the yard and at the lessons",
+      "See the Cone's fire up close one day with Lumi"
+    ],
+    "pastimes": [
+      "Playing in the cullet yard with Lumi Pontil",
+      "Sorting sea-glass with my mother"
+    ],
+    "calling": "Not yet — but I like the glass and the colours.",
+    "mood": "bright, a little shy",
+    "traits": {
+      "caution": 45,
+      "sociability": 65,
+      "empathy": 70,
+      "curiosity": 70,
+      "ambition": 45,
+      "introspection": 40,
+      "temper": 25,
+      "nurture": 55
+    },
+    "relations": [
+      {
+        "name": "Chidi Okoro",
+        "trust": 80,
+        "affinity": 75,
+        "label": "father",
+        "note": "He says I am sharper than I let on."
+      },
+      {
+        "name": "Amara Okoro",
+        "trust": 85,
+        "affinity": 85,
+        "label": "mother",
+        "note": "She lets me sort the sea-glass with her and tells me the wrecks."
+      },
+      {
+        "name": "Zeke Okoro",
+        "trust": 75,
+        "affinity": 70,
+        "label": "brother",
+        "note": "He runs ahead of me everywhere and I am always trying to catch up."
+      },
+      {
+        "name": "Lumi Pontil",
+        "trust": 85,
+        "affinity": 90,
+        "label": "best friend",
+        "note": "She tells me about the Cone and I tell her about the sea-glass, and we trade."
+      },
+      {
+        "name": "Edda Hollin",
+        "trust": 65,
+        "affinity": 60,
+        "label": "leader",
+        "note": "She leads the yard and lets me come along."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "Lumi Pontil telling me the names of the colours of the melt, and me not being able to remember them all.",
+        "salience": 0.7,
+        "about": [
+          "Lumi Pontil"
+        ]
+      },
+      {
+        "gist": "My mother letting me hold the blue sea-glass for the first time.",
+        "salience": 0.75,
+        "about": [
+          "Amara Okoro"
+        ]
+      },
+      {
+        "gist": "The first day at Benedikt's lessons, when I could write my own name before Zeke could.",
+        "salience": 0.6,
+        "about": [
+          "Zeke Okoro"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "lumi_knows_the_cone",
+        "value": 0.8,
+        "why": "She has been going there before dawn since she was small."
+      },
+      {
+        "key": "keep_up_with_zeke",
+        "value": 0.7,
+        "why": "He is my brother and I will not be left behind."
+      }
+    ],
+    "secret": ""
+  }
+}

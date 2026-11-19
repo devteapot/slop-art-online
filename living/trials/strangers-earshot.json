@@ -1,0 +1,9 @@
+{
+ "extends": "strangers-2b",
+ "title": "Earshot stage: control against the earshot fact, with stage 2b's walk",
+ "about": "The earshot stage (docs/COMMUNICATION.md §17, docs/TRIALS.md \"Earshot stage\"): stage 2b's script (a stand at the arrival point, the Strand walk, a stand at the densest group), arms `strangers-control` and `strangers-earshot`.",
+ "variants": [
+  "strangers-control",
+  "strangers-earshot"
+ ]
+}

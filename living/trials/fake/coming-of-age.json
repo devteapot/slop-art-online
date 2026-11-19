@@ -1,0 +1,45 @@
+{
+ "about": "Proof only, for births_report.py's coming-of-age measures (why_unpaired) on hamlet-6: latency-like delays, and every deliberation of Wren Tarn (#11, a child who comes of age at minute 14) decides to start a family with Ivo Ashby (#22, unrelated; of age at minute 21), in words that name him, so a fake run has a person coming of age with candidates, mentions, attempts and the body's refusals. Real minds decide for themselves.",
+ "rules": [
+  {
+   "purpose": "deliberate",
+   "contains": "# Who you are (Wren Tarn)",
+   "delay_s": 4.0,
+   "times": -1,
+   "reply": {
+    "plan": "verify fake: ask Ivo to start a family with me",
+    "graph": {
+     "wait": 2
+    },
+    "acts": [
+     {
+      "do": "conceive",
+      "target": {
+       "id": 22
+      }
+     }
+    ]
+   }
+  },
+  {
+   "purpose": "think",
+   "delay_s": 5.0,
+   "times": -1
+  },
+  {
+   "purpose": "deliberate",
+   "delay_s": 4.0,
+   "times": -1
+  },
+  {
+   "purpose": "talk",
+   "delay_s": 1.5,
+   "times": -1
+  },
+  {
+   "purpose": "consolidate",
+   "delay_s": 2.0,
+   "times": -1
+  }
+ ]
+}

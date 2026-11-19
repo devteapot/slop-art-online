@@ -30,7 +30,6 @@ use bevy::camera::visibility::DynamicSkinnedMeshBounds;
 use bevy::gltf::{Gltf, GltfMaterial, GltfMaterialName, GltfMesh, GltfNode, GltfSkin};
 use bevy::mesh::skinning::SkinnedMesh;
 use bevy::prelude::*;
-use bevy_mod_outline::OutlineMeshExt;
 use serde::Deserialize;
 use std::collections::{HashMap, HashSet};
 use std::sync::OnceLock;
@@ -170,7 +169,7 @@ impl Wardrobe {
                 let base = bevy::pbr::gltf::standard_material_from_gltf_material(&gm);
                 let key = if name.starts_with("Glow") { format!("{base:?}") } else { format!("{file}#{name}") };
                 if let Some(mut m) = meshes.get_mut(&p.mesh) {
-                    let _ = m.generate_outline_normals(&Default::default());
+                    crate::style::outline_normals(&mut m);
                 }
                 prims.push((p.mesh.clone(), name, key, base));
             }

@@ -140,6 +140,8 @@ pub struct LlmCfg {
 pub struct Gate {
     pub mode: Mode,
     pub file: File,
+    /// Jev's input price, from the local prices file (crate::prices); unknown without one.
+    pub prices: crate::prices::Prices,
     key: String,
     http: reqwest::Client,
 }
@@ -168,7 +170,11 @@ impl Gate {
             Mode::Llm => String::new(),
         };
         let http = reqwest::Client::builder().timeout(Duration::from_millis(file.jev.timeout_ms.max(500))).user_agent("sao-living-mind/0.1").build()?;
-        Ok(Self { mode, file, key, http })
+        let prices = crate::prices::Prices::load(root)?;
+        if mode == Mode::Jev {
+            log::info!("rethink gate: {}", prices.describe(&file.jev.provider.model));
+        }
+        Ok(Self { mode, file, prices, key, http })
     }
 
     fn jev_body(&self, state: &Value) -> Value {
@@ -204,7 +210,7 @@ impl Gate {
         .await;
         let latency_ms = started.elapsed().as_millis() as u64;
         let input_tokens = result.as_ref().ok().and_then(|v| v["usage"]["input_tokens"].as_u64());
-        let cost = input_tokens.map(|t| t as f64 * self.file.jev.provider.input_usd_per_m / 1e6);
+        let cost = self.prices.input_cost(&self.file.jev.provider.model, input_tokens);
         let answers: BTreeMap<String, f32> = result
             .as_ref()
             .ok()
@@ -220,7 +226,7 @@ impl Gate {
         .await;
         result?;
         let p = self.file.jev.combine.p(&answers).ok_or_else(|| anyhow!("no usable answer"))?;
-        Ok(Judged { p, answers, latency_ms, tokens: input_tokens.unwrap_or(0), cost_usd: cost.unwrap_or(0.0) })
+        Ok(Judged { p, answers, latency_ms, tokens: input_tokens.unwrap_or(0), cost_usd: cost })
     }
 
     /// Ask a chat model for a yes/no; the call is journaled by `Llm` (purpose `rethink`).
@@ -245,7 +251,8 @@ impl Gate {
         };
         let mut answers = BTreeMap::new();
         answers.insert("rethink".to_string(), p);
-        Ok(Judged { p, answers, latency_ms: started.elapsed().as_millis() as u64, tokens: r.tokens as u64, cost_usd: 0.0 })
+        // the chat model's cost is in its own journal entry (purpose rethink), not known here
+        Ok(Judged { p, answers, latency_ms: started.elapsed().as_millis() as u64, tokens: r.tokens as u64, cost_usd: None })
     }
 
     /// The probability at which this arm lets a trigger through.
@@ -275,7 +282,8 @@ pub struct Judged {
     pub answers: BTreeMap<String, f32>,
     pub latency_ms: u64,
     pub tokens: u64,
-    pub cost_usd: f64,
+    /// `None` when unknown: no price for the model, no token count, or a cost journaled elsewhere.
+    pub cost_usd: Option<f64>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
@@ -286,6 +294,9 @@ pub enum Verdict {
     /// The judge said carry on: the request stays pending and gathers.
     Hold,
     Urgent,
+    /// Never held: someone is waiting on this character (a line to it not yet answered) or its
+    /// body keeps failing the same act ([`waits_on`]; docs/GATE_LIVE.md, gl1).
+    Waits,
     /// No thought yet since the service started.
     First,
     MaxHold,
@@ -307,6 +318,57 @@ pub struct Exp {
     pub subject: u32,
     pub object: u32,
     pub text: String,
+}
+
+/// How far back an unanswered line to the character counts (as the state's asking window).
+const WAITS_LINE_MS: u64 = 10 * 60_000;
+/// Failures of the same act, since the last deliberation, that make a request never held.
+const WAITS_FAILURES: usize = 2;
+
+/// Why a request must not be held, from the character's own percepts (rows the authority wrote):
+/// - a line someone said or whispered *to* it in the last 10 minutes, with no line of its own to
+///   that person since (`speech`/`whisper` with `object` = the character, against its own
+///   `said`/`whisper`/`whispered` with `object` = the speaker);
+/// - the same deliberate act failing twice since its last deliberation ("What you had decided did
+///   not work out: <act>: …"), or the authority's own line that it keeps turning back and forth.
+///
+/// In gl1 these were the six holds judged harmful (docs/GATE_LIVE.md): people asking and left
+/// unanswered for 2–6 minutes, and bodies pacing on a failing goto while held.
+pub fn waits_on<'a>(exps: impl IntoIterator<Item = &'a Exp>, me: u32, now_ms: u64, since_ms: u64) -> Option<&'static str> {
+    let mut asked: BTreeMap<u32, u64> = BTreeMap::new();
+    let mut answered: BTreeMap<u32, u64> = BTreeMap::new();
+    let mut failed: BTreeMap<String, usize> = BTreeMap::new();
+    let mut pacing = false;
+    for e in exps {
+        if e.at_ms > now_ms {
+            continue;
+        }
+        match e.kind.as_str() {
+            "speech" | "whisper" if e.object == me && e.subject != 0 && e.subject != me => {
+                asked.insert(e.subject, e.at_ms);
+            }
+            "said" | "whisper" | "whispered" if e.subject == me && e.object != 0 => {
+                answered.insert(e.object, e.at_ms);
+            }
+            _ => {}
+        }
+        if e.at_ms >= since_ms {
+            if e.kind == "act" {
+                if let Some(rest) = e.text.split_once("did not work out:").map(|(_, r)| r) {
+                    *failed.entry(rest.split(':').next().unwrap_or("").trim().to_string()).or_default() += 1;
+                }
+            } else if e.kind == "self" && e.text.contains("turning back and forth") {
+                pacing = true;
+            }
+        }
+    }
+    if asked.iter().any(|(who, at)| now_ms.saturating_sub(*at) <= WAITS_LINE_MS && answered.get(who).is_none_or(|a| a < at)) {
+        return Some("a line to this character is unanswered");
+    }
+    if pacing || failed.values().any(|n| *n >= WAITS_FAILURES) {
+        return Some("the same act keeps failing");
+    }
+    None
 }
 
 const RING: usize = 128;
@@ -353,11 +415,16 @@ pub struct Stats {
     /// Re-raised triggers on a held request with nothing new: held without asking.
     pub unchanged: u64,
     pub urgent: u64,
+    /// Never held because someone waits on the character or the same act keeps failing.
+    pub waits: u64,
     pub first: u64,
     pub max_hold: u64,
     pub fallback: u64,
     pub tokens: u64,
-    pub cost_usd: f64,
+    /// The known part of the judges' cost; `None` while none is known.
+    pub cost_usd: Option<f64>,
+    /// Judged calls whose cost is unknown (not counted in `cost_usd`).
+    pub cost_unknown: u64,
 }
 
 impl Stats {
@@ -366,6 +433,7 @@ impl Stats {
             Verdict::Rethink => self.rethink += 1,
             Verdict::Hold => self.hold += 1,
             Verdict::Urgent => self.urgent += 1,
+            Verdict::Waits => self.waits += 1,
             Verdict::First => self.first += 1,
             Verdict::MaxHold => self.max_hold += 1,
             Verdict::Fallback => self.fallback += 1,
@@ -400,23 +468,14 @@ pub fn ago(ms: u64) -> String {
     }
 }
 
-fn level(v: &Value, key: &str) -> Option<&'static str> {
-    let x = v[key].as_f64()?;
-    Some(match key {
-        "health" if x >= 80.0 => "unhurt",
-        "health" if x >= 50.0 => "hurt",
-        "health" if x >= 25.0 => "badly hurt",
-        "health" => "near death",
-        "hunger" if x < 50.0 => "not hungry",
-        "hunger" if x < 80.0 => "hungry",
-        "hunger" if x < 97.0 => "very hungry",
-        "hunger" => "starving",
-        "energy" if x > 50.0 => "rested",
-        "energy" if x > 25.0 => "tired",
-        "energy" if x > 12.0 => "very tired",
-        "energy" => "exhausted",
-        _ => return None,
-    })
+/// The body in words by meter (`{"health": "unhurt", "hunger": "very hungry", …}`): the
+/// `felt` words of the world's `status_of` law, from the scene's numbers (`health` of
+/// `max_health`, 100 when not given; `hunger`, `energy`).
+fn levels(v: &Value) -> serde_json::Map<String, Value> {
+    let n = |k: &str| v[k].as_f64().map(|x| x as f32);
+    let (Some(hp), Some(hunger), Some(energy)) = (n("health"), n("hunger"), n("energy")) else { return Default::default() };
+    let b = crate::prompts::Body { hp, max_hp: n("max_health").unwrap_or(100.0), hunger, energy, ..Default::default() };
+    crate::prompts::felt_by_meter(&b).into_iter().map(|(k, w)| (k, json!(w))).collect()
 }
 
 fn failed(e: &Exp) -> bool {
@@ -470,24 +529,30 @@ pub fn state(i: &Inputs, lim: &Limits) -> Value {
     }
     let unanswered: Vec<String> = asks
         .iter()
-        .filter(|(to, (_, first, _, _))| !window.iter().any(|e| e.subject == **to && e.at_ms >= *first && matches!(e.kind.as_str(), "speech" | "gesture" | "heard")))
+        .filter(|(to, (_, first, _, _))| !window.iter().any(|e| e.subject == **to && e.at_ms >= *first && matches!(e.kind.as_str(), "speech" | "whisper" | "gesture" | "heard")))
         .filter(|(_, (lines, _, _, _))| *lines > 0)
         .map(|(_, (lines, first, last, silences))| {
-            let mut s = format!("{last} — {lines} line{} to them since {}, no answer", if *lines == 1 { "" } else { "s" }, ago(i.now_ms.saturating_sub(*first)));
-            if *silences > 0 {
-                s.push_str(" (they seemed out of earshot)");
+            let n = format!("{lines} line{} to them since {}", if *lines == 1 { "" } else { "s" }, ago(i.now_ms.saturating_sub(*first)));
+            // The world's `speech_truth`: a line they could not have heard is not an unanswered
+            // one (it reads as a refusal).
+            if *silences > 0 && crate::prompts::speech_truth() {
+                if silences >= lines {
+                    format!("{last} — {n}; they could not have heard you: out of earshot")
+                } else {
+                    format!("{last} — {n}, no answer; {silences} of them could not have reached them (out of earshot)")
+                }
+            } else {
+                let mut s = format!("{last} — {n}, no answer");
+                if *silences > 0 {
+                    s.push_str(" (they seemed out of earshot)");
+                }
+                s
             }
-            s
         })
         .collect();
     let repeats = new.iter().filter(|e| e.kind == "repeat").count();
     let recent: Vec<Value> = i.thoughts.iter().rev().take(lim.recent_thoughts).rev().map(|(at, plan)| json!({"when": ago(i.now_ms.saturating_sub(*at)), "plan": cut(plan, 240)})).collect();
-    let mut body = serde_json::Map::new();
-    for k in ["health", "hunger", "energy"] {
-        if let Some(l) = level(i.body, k) {
-            body.insert(k.into(), json!(l));
-        }
-    }
+    let body = levels(i.body);
     json!({
         "character": {"name": i.name, "goals": i.goals},
         "current_plan": if i.plan.is_empty() { "(none)".to_string() } else { cut(i.plan, 300) },
@@ -546,11 +611,13 @@ impl Minds {
         if !c.alive || !gate.file.kinds.iter().any(|k| *k == c.kind) {
             return true;
         }
-        let (seen, held_for, holds, unchanged) = {
+        let (seen, held_for, holds, unchanged, waits) = {
             let t = self.rethink_track.lock().unwrap();
             let tr = t.get(&d.actor);
             let unchanged = tr.is_some_and(|t| t.unchanged(&d.reason));
-            (tr.and_then(|t| t.seen_ms), tr.and_then(|t| t.held_since).map(|h| h.elapsed()), tr.map_or(0, |t| t.holds), unchanged)
+            let seen = tr.and_then(|t| t.seen_ms);
+            let waits = tr.and_then(|t| waits_on(t.ring.iter(), d.actor, llm::now_ms(), seen.unwrap_or(0)));
+            (seen, tr.and_then(|t| t.held_since).map(|h| h.elapsed()), tr.map_or(0, |t| t.holds), unchanged, waits)
         };
         let lane = self.deliberation_lane(d);
         let mut judged: Option<Judged> = None;
@@ -560,6 +627,8 @@ impl Minds {
             Verdict::Urgent
         } else if seen.is_none() {
             Verdict::First
+        } else if waits.is_some() {
+            Verdict::Waits
         } else if held_for.is_some_and(|h| h >= Duration::from_secs(gate.file.max_hold_s)) {
             Verdict::MaxHold
         } else if unchanged {
@@ -588,7 +657,10 @@ impl Minds {
             s.count(verdict);
             if let Some(j) = &judged {
                 s.tokens += j.tokens;
-                s.cost_usd += j.cost_usd;
+                match j.cost_usd {
+                    Some(c) => s.cost_usd = Some(s.cost_usd.unwrap_or(0.0) + c),
+                    None => s.cost_unknown += 1,
+                }
             }
         }
         if verdict == Verdict::Hold {
@@ -600,7 +672,7 @@ impl Minds {
                 "latency_ms": judged.as_ref().map_or(0, |j| j.latency_ms), "tokens": 0, "verdict": verdict,
                 "p": judged.as_ref().map(|j| j.p), "answers": judged.as_ref().map(|j| &j.answers), "threshold": gate.threshold(),
                 "reason": d.reason, "requested_ms": d.requested_ms, "updated_ms": d.updated_ms, "lane": lane,
-                "held_s": held_for.map(|h| h.as_secs()), "holds_before": holds, "state": st, "error": error,
+                "held_s": held_for.map(|h| h.as_secs()), "holds_before": holds, "waits_on": waits, "state": st, "error": error,
             }))
             .await;
         verdict.proceeds()
@@ -722,6 +794,8 @@ fn points(dir: &Path, gate: &Gate) -> Result<(String, Vec<Point>)> {
             Some(Verdict::Urgent)
         } else if seen.is_none() {
             Some(Verdict::First)
+        } else if waits_on(exps.iter(), me, req_ms, seen.unwrap_or(0)).is_some() {
+            Some(Verdict::Waits)
         } else {
             None
         };
@@ -835,7 +909,7 @@ mod tests {
         let asks = st["spoke_to_without_answer"].as_array().unwrap();
         assert_eq!(asks.len(), 1, "Ivo answered; Lyma did not: {asks:?}");
         assert!(asks[0].as_str().unwrap().contains("2 lines to them"), "{asks:?}");
-        assert_eq!(st["body"], json!({"health": "unhurt", "hunger": "very hungry", "energy": "very tired"}));
+        assert_eq!(st["body"], json!({"health": "unhurt", "hunger": "very hungry", "energy": "tired"}));
         assert_eq!(st["last_thought"], "about 2 minutes ago");
         assert!(s["perceived"].as_array().unwrap().iter().any(|l| l.as_str().unwrap().contains("Ivo")));
     }
@@ -852,7 +926,7 @@ mod tests {
     #[test]
     fn urgent_reasons_bypass_and_routine_ones_are_gated() {
         let file: File = serde_json::from_str(&std::fs::read_to_string(std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../configs/rethink.json")).unwrap()).unwrap();
-        let g = Gate { mode: Mode::Jev, file, key: String::new(), http: reqwest::Client::new() };
+        let g = Gate { mode: Mode::Jev, file, prices: Default::default(), key: String::new(), http: reqwest::Client::new() };
         let r = |reason: &str| g.urgent(reason, Lane::deliberation(reason, false));
         assert!(r("I finished my plan.\nWolf is attacking you!"));
         assert!(r("Your body: You are very hungry."));
@@ -879,6 +953,31 @@ mod tests {
         assert_eq!(t.holds, 2);
         t.judged(Verdict::Rethink, "I finished my plan.");
         assert!(!t.unchanged("I finished my plan.") && t.held_since.is_none() && t.holds == 0);
+    }
+
+    #[test]
+    fn someone_waiting_or_a_failing_act_is_never_held() {
+        let m = 60_000;
+        let line = |at, from, to, text: &str| Exp { at_ms: at, kind: "speech".into(), subject: from, object: to, text: text.into() };
+        let said = |at, me, to| Exp { at_ms: at, kind: "said".into(), subject: me, object: to, text: "You said to them: “Yes.”".into() };
+        // Posy (#4) asked Edda (#7); Edda has not answered: never held.
+        let asked = vec![line(2 * m, 4, 7, "Posy said to you: “Will you come?”")];
+        assert_eq!(waits_on(&asked, 7, 3 * m, 0), Some("a line to this character is unanswered"));
+        // Answered since: held as before.
+        let answered = vec![line(2 * m, 4, 7, "Posy said to you: “Will you come?”"), said(2 * m + 5_000, 7, 4)];
+        assert_eq!(waits_on(&answered, 7, 3 * m, 0), None);
+        // A line between two others, or one older than ten minutes, does not count.
+        assert_eq!(waits_on(&[line(2 * m, 4, 9, "Posy said to Ivo: “Hi.”")], 7, 3 * m, 0), None);
+        assert_eq!(waits_on(&asked, 7, 13 * m, 0), None);
+        // The same act failing twice since the last deliberation; once is not enough.
+        let fail = |at| Exp { at_ms: at, kind: "act".into(), subject: 7, object: 0, text: "What you had decided did not work out: goto → (534,628): no path".into() };
+        assert_eq!(waits_on(&[fail(m)], 7, 3 * m, 0), None);
+        assert_eq!(waits_on(&[fail(m), fail(2 * m)], 7, 3 * m, 0), Some("the same act keeps failing"));
+        // Failures before the last deliberation were already seen by it.
+        assert_eq!(waits_on(&[fail(m), fail(2 * m)], 7, 3 * m, 2 * m + 1), None);
+        // The authority's own line about pacing.
+        let pace = Exp { at_ms: 2 * m, kind: "self".into(), subject: 7, object: 0, text: "You keep turning back and forth (goto → (534,628), then goto → (566,688), over and over) without getting anywhere.".into() };
+        assert_eq!(waits_on(&[pace], 7, 3 * m, 0), Some("the same act keeps failing"));
     }
 
     #[test]

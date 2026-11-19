@@ -24,6 +24,14 @@ pub enum Terrain {
     Road = 6,
     /// Built by people: blocks movement.
     Wall = 7,
+    /// A drop or ledge between two ground levels (a terrace's, a planned settlement's): too
+    /// steep to step up or down, so it blocks walking, steering, routes and building like a
+    /// wall, but it is open air, so sight and missiles pass over it (`docs/PERCEPTION.md`).
+    Drop = 8,
+    /// Ground under something that stands in the way but below eye height (a cart, a low well:
+    /// `host::hosted_map` by the land's `sight` parameters): it blocks the foot like a wall, but
+    /// one sees over it, and missiles fly over it.
+    Low = 9,
 }
 
 impl Terrain {
@@ -36,11 +44,18 @@ impl Terrain {
             5 => Self::Dirt,
             6 => Self::Road,
             7 => Self::Wall,
+            8 => Self::Drop,
+            9 => Self::Low,
             _ => Self::Grass,
         }
     }
     pub fn walkable(self) -> bool {
-        !matches!(self, Self::Water | Self::Rock | Self::Wall)
+        !matches!(self, Self::Water | Self::Rock | Self::Wall | Self::Drop | Self::Low)
+    }
+    /// Whether it stops sight and missiles: rock and walls do; water, forest, a drop, a low
+    /// obstacle and open ground do not.
+    pub fn opaque(self) -> bool {
+        matches!(self, Self::Rock | Self::Wall)
     }
     pub fn name(self) -> &'static str {
         match self {
@@ -52,6 +67,30 @@ impl Terrain {
             Self::Dirt => "dirt",
             Self::Road => "road",
             Self::Wall => "wall",
+            Self::Drop => "drop",
+            Self::Low => "low",
+        }
+    }
+
+    /// What a class means to someone who sees it, in plain words, where its name does not say
+    /// (a mind's scene, `terrain_near`): a drop and a low thing block the foot and not the eye,
+    /// which "drop" and "low" alone do not tell. The rest are understood by name.
+    pub fn words(self) -> Option<&'static str> {
+        match self {
+            Self::Drop => Some("a drop to ground at another level (stairs, ramps and roads join the levels)"),
+            Self::Low => Some("something low or open in the way, such as a cart, a low wall or an open stall"),
+            _ => None,
+        }
+    }
+
+    /// How the class meets the foot and the eye, from [`Self::walkable`] and [`Self::opaque`],
+    /// for a class described by [`Self::words`].
+    pub fn passage(self) -> &'static str {
+        match (self.walkable(), self.opaque()) {
+            (false, false) => "you can see past it but not walk through it",
+            (false, true) => "it blocks the way and the view",
+            (true, true) => "you can walk through it but not see past it",
+            (true, false) => "you can walk and see through it",
         }
     }
 }
@@ -94,6 +133,7 @@ pub struct Map {
     pub tiles: Vec<u8>,
     /// Tiles closed by structures (a shut gate), by tile index; rebuilt when they change.
     pub blocked: std::collections::HashSet<u32>,
+    pub cover: Option<std::sync::Arc<crate::cover::Mask>>,
     /// Per chunk (`cy * chunks_wide + cx`): whether any of its tiles is opaque (rock or wall),
     /// built on the first sight test and kept by `set` and `put_chunk`, so a sight line over
     /// open chunks needs no tile walk. Code that writes `tiles` directly does so while
@@ -129,10 +169,14 @@ impl Map {
     }
 
     /// Whether a missile flies through a continuous position: walls, rock and shut gates
-    /// stop it; water, forest and open ground do not.
+    /// stop it; water, forest, a drop and open ground do not.
     pub fn passable_missile(&self, x: f32, y: f32) -> bool {
         let (tx, ty) = (x.floor() as i32, y.floor() as i32);
-        !matches!(self.get(tx, ty), Terrain::Wall | Terrain::Rock) && (self.blocked.is_empty() || !self.blocked.contains(&(ty as u32 * self.w + tx as u32)))
+        self.passable_sight_tile(tx, ty) && !self.cover.as_ref().is_some_and(|c| c.missile(tx, ty))
+    }
+
+    fn passable_sight_tile(&self, tx: i32, ty: i32) -> bool {
+        !self.get(tx, ty).opaque() && (self.blocked.is_empty() || !self.blocked.contains(&(ty as u32 * self.w + tx as u32)))
     }
 
     /// Change one tile (roads, walls); callers persist the chunk.
@@ -154,7 +198,7 @@ impl Map {
     }
 
     fn chunk_opaque(&self, cx: u32, cy: u32) -> bool {
-        (cy * CHUNK..((cy + 1) * CHUNK).min(self.h)).any(|y| (cx * CHUNK..((cx + 1) * CHUNK).min(self.w)).any(|x| matches!(Terrain::from_u8(self.tiles[(y * self.w + x) as usize]), Terrain::Wall | Terrain::Rock)))
+        (cy * CHUNK..((cy + 1) * CHUNK).min(self.h)).any(|y| (cx * CHUNK..((cx + 1) * CHUNK).min(self.w)).any(|x| Terrain::from_u8(self.tiles[(y * self.w + x) as usize]).opaque()))
     }
 
     fn opaque_chunks(&self) -> &[bool] {
@@ -237,7 +281,7 @@ impl Map {
                 }
             }
         }
-        Self { w, h, tiles, blocked: Default::default(), opaque: Default::default(), nav: Default::default() }
+        Self { w, h, tiles, blocked: Default::default(), cover: None, opaque: Default::default(), nav: Default::default() }
     }
 
     /// Nearest walkable tile center to a point, searching outward.
@@ -277,6 +321,33 @@ impl Map {
         self.nearest_walkable(x, y)
     }
 
+    /// Nearest walkable tile within `radius` tiles of a point that `taken` does not claim (a
+    /// tile another body stands on), nearest tile centre first: the point itself when its own
+    /// tile qualifies and `exact`, else that tile's centre. With `from`, only tiles of the
+    /// ground walkable from there count once routes are warmed (`warm_routes`). Reads at most
+    /// the (2r+1)² tiles around the point; None when none qualifies.
+    pub fn nearest_free(&self, x: f32, y: f32, radius: f32, exact: bool, from: Option<(f32, f32)>, taken: impl Fn(i32, i32) -> bool) -> Option<(f32, f32)> {
+        let home = from.and_then(|f| self.component_near(f));
+        let ok = |tx: i32, ty: i32| self.walkable(tx, ty) && !taken(tx, ty) && home.map_or(true, |h| self.component_of(tx, ty) == Some(h));
+        let (tx, ty) = (x.floor() as i32, y.floor() as i32);
+        if exact && ok(tx, ty) {
+            return Some((x, y));
+        }
+        let r = radius.ceil() as i32;
+        let mut best: Option<(f32, i32, i32)> = None;
+        for dy in -r..=r {
+            for dx in -r..=r {
+                let (cx, cy) = ((tx + dx) as f32 + 0.5, (ty + dy) as f32 + 0.5);
+                let d = (cx - x).hypot(cy - y);
+                if d > radius || best.is_some_and(|b| d >= b.0) || !ok(tx + dx, ty + dy) {
+                    continue;
+                }
+                best = Some((d, tx + dx, ty + dy));
+            }
+        }
+        best.map(|(_, bx, by)| (bx as f32 + 0.5, by as f32 + 0.5))
+    }
+
     /// True when the straight segment only crosses walkable tiles.
     pub fn line_clear(&self, a: (f32, f32), b: (f32, f32)) -> bool {
         let d = ((b.0 - a.0).powi(2) + (b.1 - a.1).powi(2)).sqrt();
@@ -296,35 +367,77 @@ impl Map {
     }
 
     /// Whether one can see from `a` to `b`: no tile the segment crosses between the two ends
-    /// is opaque (wall, rock or a shut gate, as for missiles; water, forest and open ground
-    /// are not). The ends' own tiles never block, so someone standing in a gateway is seen.
+    /// is opaque (wall, rock or a shut gate, as for missiles; water, forest, a drop and open
+    /// ground are not). The ends' own tiles never block, so someone standing in a gateway is seen.
     /// Walks the exact tiles the segment crosses (a grid traversal), so its cost grows with
     /// the distance in tiles, not with a sampling rate.
     pub fn sight_clear(&self, a: (f32, f32), b: (f32, f32)) -> bool {
-        self.open_between(a, b) || self.sight_walk(a, b)
+        if self.cover.as_ref().is_some_and(|m| m.might_cross(a, b)) {
+            self.sight_walk_impl::<true>(a, b)
+        } else {
+            self.open_between(a, b) || self.sight_walk_impl::<false>(a, b)
+        }
     }
 
-    /// The tile walk behind [`Map::sight_clear`].
+    /// The tile walk behind [`Map::sight_clear`]. Where the segment passes exactly through a
+    /// tile corner it goes straight into the diagonal tile and touches the two tiles beside the
+    /// corner only at that point: it is stopped there only when both of them are opaque (two
+    /// walls meeting at the corner), never by one wall's corner alone. So the walk is the same
+    /// both ways: who sees someone across a corner is seen by them.
+    #[cfg(test)]
     fn sight_walk(&self, a: (f32, f32), b: (f32, f32)) -> bool {
+        self.sight_walk_impl::<false>(a, b)
+    }
+
+    fn sight_walk_impl<const COVER: bool>(&self, a: (f32, f32), b: (f32, f32)) -> bool {
         let (mut tx, mut ty) = (a.0.floor() as i32, a.1.floor() as i32);
         let end = (b.0.floor() as i32, b.1.floor() as i32);
         let (dx, dy) = (b.0 - a.0, b.1 - a.1);
         let (sx, sy) = (dx.signum() as i32, dy.signum() as i32);
-        // Parameter t along the segment at the next vertical and horizontal tile edge.
-        let next = |p: f32, d: f32, t: i32| if d > 0.0 { (t as f32 + 1.0 - p) / d } else if d < 0.0 { (t as f32 - p) / d } else { f32::INFINITY };
-        let (mut tmx, mut tmy) = (next(a.0, dx, tx), next(a.1, dy, ty));
-        let (tdx, tdy) = (if dx != 0.0 { 1.0 / dx.abs() } else { f32::INFINITY }, if dy != 0.0 { 1.0 / dy.abs() } else { f32::INFINITY });
+        // Parameter t along the segment at the next vertical and horizontal tile edge, each
+        // from its edge's own coordinate (not summed step by step): a corner the segment passes
+        // through exactly is a tie both ways, as two exact quotients that are equal round alike.
+        let at = |p: f32, d: f32, edge: i32| if d != 0.0 { (edge as f32 - p) / d } else { f32::INFINITY };
+        let (mut ex, mut ey) = (tx + (sx > 0) as i32, ty + (sy > 0) as i32);
+        let cover = if COVER { self.cover.as_deref() } else { None };
+        let eyes = cover.map(|m| (m.eye(tx, ty), m.eye(end.0, end.1)));
+        let ray = |t: f32| eyes.map_or(0.0, |(a, b)| a + (b - a) * t);
+        let brush_a = cover.and_then(|m| m.brush(tx, ty, ray(0.0)));
+        let brush_b = cover.and_then(|m| m.brush(end.0, end.1, ray(1.0)));
+        if (tx, ty) != end && brush_a != brush_b {
+            return false;
+        }
+        let clear = |x, y, t| self.passable_sight_tile(x, y)
+            && !cover.is_some_and(|m| m.hides(x, y, ray(t), brush_a));
         let mut guard = (end.0 - tx).abs() + (end.1 - ty).abs() + 2;
         while (tx, ty) != end && guard > 0 {
             guard -= 1;
+            let (tmx, tmy) = (at(a.0, dx, ex), at(a.1, dy, ey));
             if tmx < tmy {
                 tx += sx;
-                tmx += tdx;
-            } else {
+                ex += sx;
+            } else if tmy < tmx {
                 ty += sy;
-                tmy += tdy;
+                ey += sy;
+            } else {
+                // Through the corner itself (both edges at once). A segment that ends on the
+                // corner ends in its end tile, which may be one beside it.
+                if (tx + sx, ty) == end || (tx, ty + sy) == end {
+                    break;
+                }
+                if !clear(tx + sx, ty, tmx) && !clear(tx, ty + sy, tmy) {
+                    return false;
+                }
+                tx += sx;
+                ty += sy;
+                ex += sx;
+                ey += sy;
             }
-            if (tx, ty) != end && !self.passable_missile(tx as f32 + 0.5, ty as f32 + 0.5) {
+            let sample = if cover.is_some() {
+                (tmx.min(tmy) + at(a.0, dx, ex).min(at(a.1, dy, ey))) * 0.5
+            } else { 0.0 };
+            if (tx, ty) != end && (!clear(tx, ty, sample) || brush_a.is_some_and(|id|
+                cover.and_then(|m| m.brush(tx, ty, ray(sample))) != Some(id))) {
                 return false;
             }
         }
@@ -573,7 +686,7 @@ pub fn generate(seed: u64) -> Map {
             }
         }
     }
-    Map { w: MAP_W, h: MAP_H, tiles, blocked: Default::default(), opaque: Default::default(), nav: Default::default() }
+    Map { w: MAP_W, h: MAP_H, tiles, blocked: Default::default(), cover: None, opaque: Default::default(), nav: Default::default() }
 }
 
 #[cfg(test)]
@@ -605,7 +718,7 @@ mod tests {
 
     #[test]
     fn sight_is_stopped_by_walls_rock_and_shut_gates_only() {
-        let mut m = Map { w: 32, h: 32, tiles: vec![Terrain::Grass as u8; 32 * 32], blocked: Default::default(), opaque: Default::default(), nav: Default::default() };
+        let mut m = Map { w: 32, h: 32, tiles: vec![Terrain::Grass as u8; 32 * 32], blocked: Default::default(), cover: None, opaque: Default::default(), nav: Default::default() };
         // A wall across x = 10 from y = 0 to y = 19, water at x = 20.
         for y in 0..20 {
             m.set(10, y, Terrain::Wall);
@@ -628,15 +741,150 @@ mod tests {
         assert!(!m.sight_clear((5.5, 5.5), (15.5, 5.5)), "a shut gate hides");
         // Exactly along a tile corner: the traversal must not slip diagonally between two
         // walls touching at a corner.
-        let mut c = Map { w: 8, h: 8, tiles: vec![Terrain::Grass as u8; 64], blocked: Default::default(), opaque: Default::default(), nav: Default::default() };
+        let mut c = Map { w: 8, h: 8, tiles: vec![Terrain::Grass as u8; 64], blocked: Default::default(), cover: None, opaque: Default::default(), nav: Default::default() };
         c.set(3, 4, Terrain::Wall);
         c.set(4, 3, Terrain::Wall);
         assert!(!c.sight_clear((2.5, 5.5), (5.5, 2.5)), "two walls meeting at a corner hide");
+        assert!(!c.sight_clear((5.5, 2.5), (2.5, 5.5)), "both ways");
+    }
+
+    /// One wall's corner does not hide: someone standing in a gateway is seen from the tile
+    /// diagonally beside it across the wall's end, and sees back (the verify-minds `dealings`
+    /// scene: a demander placed beside a guard in a city gate, 2026-11-11). Before, the walk
+    /// broke an exact corner tie toward one side, so one of the two saw the other and not back.
+    #[test]
+    fn sight_across_one_walls_corner_is_the_same_both_ways() {
+        let mut m = Map { w: 16, h: 16, tiles: vec![Terrain::Grass as u8; 256], blocked: Default::default(), cover: None, opaque: Default::default(), nav: Default::default() };
+        // A city wall along y = 8 with a gateway at x = 6.
+        for x in 0..16 {
+            if x != 6 {
+                m.set(x, 8, Terrain::Wall);
+            }
+        }
+        let gate = (6.5, 8.5);
+        for beside in [(7.5, 7.5), (7.5, 9.5), (5.5, 7.5), (5.5, 9.5)] {
+            assert!(m.sight_clear(beside, gate) && m.sight_clear(gate, beside), "{beside:?} and the gateway see each other");
+        }
+        // Where `place_near` puts someone beside a body in the gateway (the free tile nearest
+        // the one east of it, which is wall): in plain view of it, and it of them.
+        for (taken, label) in [(None, "east of it is wall"), (Some((7, 7)), "and the first diagonal is taken")] {
+            let at = m.nearest_free(gate.0 + 1.0, gate.1, 6.0, true, Some(gate), |x, y| Some((x, y)) == taken || (x, y) == (6, 8)).unwrap();
+            assert!((at.0 - gate.0).hypot(at.1 - gate.1) < 1.5, "{label}: {at:?}");
+            assert!(m.sight_clear(at, gate) && m.sight_clear(gate, at), "{label}: {at:?} and the gateway see each other");
+        }
+        // Across the wall from beside the gateway (no gap between them): hidden both ways.
+        assert!(!m.sight_clear((7.5, 7.5), (7.5, 9.5)) && !m.sight_clear((7.5, 9.5), (7.5, 7.5)));
+        assert!(!m.sight_clear((7.5, 7.5), (8.5, 9.5)) && !m.sight_clear((8.5, 9.5), (7.5, 7.5)));
+        // Diagonally through the open gateway, past a wall's corner on each side of it; shut,
+        // the gate hides.
+        assert!(m.sight_clear((7.5, 7.5), (5.5, 9.5)) && m.sight_clear((5.5, 9.5), (7.5, 7.5)));
+        m.blocked.insert(8 * 16 + 6);
+        assert!(!m.sight_clear((7.5, 7.5), (5.5, 9.5)) && !m.sight_clear((5.5, 9.5), (7.5, 7.5)));
+        // A segment ending exactly on a corner ends in its own tile, beside the corner, not in
+        // the wall diagonally past it.
+        let mut c = Map { w: 16, h: 16, tiles: vec![Terrain::Grass as u8; 256], blocked: Default::default(), cover: None, opaque: Default::default(), nav: Default::default() };
+        c.set(4, 4, Terrain::Wall);
+        assert!(c.sight_walk((5.5, 3.5), (5.0, 4.0)));
+    }
+
+    /// Sight between tile centres (where bodies are placed, and where exact corner crossings
+    /// happen) is symmetric over random walls and rock.
+    #[test]
+    fn sight_between_tile_centres_is_symmetric() {
+        let mut m = Map { w: 48, h: 48, tiles: vec![Terrain::Grass as u8; 48 * 48], blocked: Default::default(), cover: None, opaque: Default::default(), nav: Default::default() };
+        let mut r: u64 = 0x9e37_79b9_7f4a_7c15;
+        let mut next = || {
+            r ^= r << 13;
+            r ^= r >> 7;
+            r ^= r << 17;
+            r
+        };
+        for _ in 0..500 {
+            let (x, y) = ((next() % 48) as i32, (next() % 48) as i32);
+            m.set(x, y, if next() % 2 == 0 { Terrain::Wall } else { Terrain::Rock });
+        }
+        for _ in 0..20_000 {
+            let a = ((next() % 48) as f32 + 0.5, (next() % 48) as f32 + 0.5);
+            let b = (((a.0 as i64 + (next() % 17) as i64 - 8).clamp(0, 47)) as f32 + 0.5, ((a.1 as i64 + (next() % 17) as i64 - 8).clamp(0, 47)) as f32 + 0.5);
+            assert_eq!(m.sight_walk(a, b), m.sight_walk(b, a), "{a:?} <-> {b:?}");
+        }
+    }
+
+    #[test]
+    fn nearest_free_skips_walls_taken_tiles_and_cut_off_ground() {
+        let mut m = Map { w: 16, h: 16, tiles: vec![Terrain::Grass as u8; 256], blocked: Default::default(), cover: None, opaque: Default::default(), nav: Default::default() };
+        m.set(6, 5, Terrain::Wall);
+        let none = |_: i32, _: i32| false;
+        // The point's own tile is free: the point itself, or its tile's centre.
+        assert_eq!(m.nearest_free(5.2, 5.3, 6.0, true, None, none), Some((5.2, 5.3)));
+        assert_eq!(m.nearest_free(5.2, 5.3, 6.0, false, None, none), Some((5.5, 5.5)));
+        // Inside the wall: the nearest walkable tile centre instead.
+        let p = m.nearest_free(6.6, 5.5, 6.0, true, None, none).unwrap();
+        assert!(m.free(p.0, p.1) && (p == (7.5, 5.5)), "{p:?}");
+        // A taken tile is passed over for the next nearest.
+        let taken = |x: i32, y: i32| (x, y) == (5, 5);
+        let q = m.nearest_free(5.4, 5.5, 6.0, false, None, taken).unwrap();
+        assert_ne!((q.0.floor() as i32, q.1.floor() as i32), (5, 5));
+        assert!(((q.0 - 5.4).hypot(q.1 - 5.5)) <= 1.2, "{q:?}");
+        // Nothing free within the radius.
+        let all = |_: i32, _: i32| true;
+        assert_eq!(m.nearest_free(5.5, 5.5, 6.0, true, None, all), None);
+        // A pocket walled off from the walker's ground is not offered once routes are warm.
+        let mut w = Map { w: 32, h: 32, tiles: vec![Terrain::Grass as u8; 1024], blocked: Default::default(), cover: None, opaque: Default::default(), nav: Default::default() };
+        for i in 9..=13 {
+            for (x, y) in [(i, 9), (i, 13), (9, i), (13, i)] {
+                w.set(x, y, Terrain::Wall);
+            }
+        }
+        while w.warm_routes(64) {}
+        let inside = w.nearest_free(11.5, 11.5, 6.0, true, Some((11.5, 11.5)), none).unwrap();
+        assert_eq!((inside.0.floor() as i32, inside.1.floor() as i32), (11, 11));
+        let out = w.nearest_free(11.5, 11.5, 6.0, true, Some((5.5, 5.5)), none).unwrap();
+        let (ox, oy) = (out.0.floor() as i32, out.1.floor() as i32);
+        assert!(!(9..=13).contains(&ox) || !(9..=13).contains(&oy), "outside the walls: {out:?}");
+    }
+
+    /// A mind's scene tells a drop and a low thing in words, with how they meet the foot and the
+    /// eye from the class's own rules; other classes go by name.
+    #[test]
+    fn drops_and_low_things_are_told_in_words() {
+        for t in [Terrain::Drop, Terrain::Low] {
+            assert!(t.words().is_some(), "{t:?}");
+            assert_eq!(t.passage(), "you can see past it but not walk through it");
+        }
+        assert_eq!(Terrain::Wall.passage(), "it blocks the way and the view");
+        for k in 0..=9 {
+            let t = Terrain::from_u8(k);
+            assert_eq!(t.words().is_some(), matches!(t, Terrain::Drop | Terrain::Low), "{t:?}");
+        }
+    }
+
+    /// A drop between two levels: one sees and shoots across it, and no one walks, steers or
+    /// routes across it.
+    #[test]
+    fn a_drop_blocks_walking_but_not_sight_or_missiles() {
+        let mut m = Map { w: 48, h: 48, tiles: vec![Terrain::Grass as u8; 48 * 48], blocked: Default::default(), cover: None, opaque: Default::default(), nav: Default::default() };
+        // A drop across the whole map at y = 20 (an upper level above it, a lower one below).
+        for x in 0..48 {
+            m.set(x, 20, Terrain::Drop);
+        }
+        let (up, down) = ((10.5, 17.5), (12.5, 23.5));
+        assert!(!Terrain::Drop.walkable() && !Terrain::Drop.opaque());
+        assert!(m.sight_clear(up, down) && m.sight_clear(down, up), "the levels see each other");
+        assert!(m.passable_missile(11.5, 20.5), "a missile flies over the drop");
+        assert!(!m.free(11.5, 20.5) && !m.line_clear(up, down), "no one steps onto it");
+        assert!(m.path(up, down, 20_000).is_none(), "no route across");
+        assert!(m.nearest_reachable(up, 11.5, 20.5).is_some_and(|p| p.1 < 20.0), "a click on the drop stays on my level");
+        // A stair (walkable) through it joins the levels; a wall beside it still hides.
+        m.set(30, 20, Terrain::Road);
+        assert!(m.path(up, down, 20_000).is_some(), "the stair joins the levels");
+        m.set(11, 20, Terrain::Wall);
+        assert!(!m.sight_clear((11.5, 17.5), (11.5, 23.5)), "a wall on the drop still hides");
     }
 
     #[test]
     fn sight_over_open_chunks_agrees_with_the_tile_walk() {
-        let mut m = Map { w: 64, h: 64, tiles: vec![Terrain::Grass as u8; 64 * 64], blocked: Default::default(), opaque: Default::default(), nav: Default::default() };
+        let mut m = Map { w: 64, h: 64, tiles: vec![Terrain::Grass as u8; 64 * 64], blocked: Default::default(), cover: None, opaque: Default::default(), nav: Default::default() };
         // Walls and rock in some chunks, none in others.
         let mut r: u64 = 7;
         let mut next = || {

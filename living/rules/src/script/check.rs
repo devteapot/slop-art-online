@@ -46,6 +46,8 @@ struct Probe<'a> {
     /// Answers by function and by the values of the fields it reads: a law is a function of
     /// those alone, so a sample that agrees on them is the same call and is not repeated.
     seen: std::collections::HashMap<(String, Vec<u8>), Dynamic>,
+    /// Every call and its answer, when asked for (`validate_traced`, the hashing-seed check).
+    trace: Option<Vec<String>>,
 }
 
 impl Probe<'_> {
@@ -56,6 +58,9 @@ impl Probe<'_> {
         let e = self.report.ops.entry(f.to_string()).or_insert(0);
         *e = (*e).max(n);
         self.report.calls += 1;
+        if let Some(t) = &mut self.trace {
+            t.push(format!("{f} {} -> {:?}", about(), r.as_ref().map_err(|e| e.to_string())));
+        }
         r.map_err(|e| format!("install refused: `{f}` failed {}: {e}", about()))
     }
 
@@ -93,21 +98,27 @@ fn describe(c: &SkillCtx) -> String {
 /// The functions the engine calls with a context: `<skill>_check`, `_duration`, `_done`, `_hit`,
 /// `_missile`, and the need laws.
 pub const SKILL_PARTS: [&str; 5] = ["_check", "_duration", "_done", "_hit", "_missile"];
-pub const CTX_LAWS: [&str; 6] = ["rates", "body_state", "move_speed", "senses", "motion", "theft"];
+pub const CTX_LAWS: [&str; 9] = ["rates", "body_state", "move_speed", "senses", "motion", "theft", "glow", "pools", "slowed"];
 
 pub fn validate(s: &Scripts, limits: super::Limits) -> Result<Report, String> {
     if let Some(f) = s.borrowed.first() {
         return Err(format!("install refused: the script has no `{f}` law (the engine asks it; see the shipped script)"));
     }
     // The samples are the script's own items and skills, not the process's world's.
-    catalog::scoped(s.skills().clone(), || validate_scoped(s, limits))
+    catalog::scoped(s.skills().clone(), || validate_scoped(s, limits, None).map(|(r, _)| r))
+}
+
+/// [`validate`], with every call it made and its answer (in no particular order).
+#[cfg(test)]
+pub fn validate_traced(s: &Scripts, limits: super::Limits) -> Result<(Report, Vec<String>), String> {
+    catalog::scoped(s.skills().clone(), || validate_scoped(s, limits, Some(Vec::new())))
 }
 
 /// Laws the engine asks by name, besides those it calls with a context, a name or an event.
-pub const ENGINE_LAWS: [&str; 7] = ["perceived_of", "record_text", "items", "structure_traits", "occupation_knows", "source_of", "carcass"];
+pub const ENGINE_LAWS: [&str; 20] = ["look_bands", "appearance_in_scene", "female_share", "sex_words", "owner_shown", "perceived_of", "record_text", "items", "structures", "resources", "know_how", "recipes", "structure_traits", "occupation_knows", "source_of", "carcass", "daylight", "life_years", "meters", "status_of"];
 
 /// Every law the engine asks is declared with a description for minds (`<law>_law()`, or listed
-/// in another's `covers`), and every world constant has its words in `laws_about`.
+/// in another's `covers`), and every world constant has its words in `law_about(l, name)`.
 fn described(s: &Scripts) -> Result<(), String> {
     let declared: std::collections::BTreeSet<&str> = s.laws.values().flat_map(|l| std::iter::once(l.name.as_str()).chain(l.covers.iter().map(|c| c.as_str()))).collect();
     let mut asked: Vec<String> = s.ctx_laws().into_iter().filter(|f| CTX_LAWS.contains(&f.as_str()) || f.starts_with("on_")).collect();
@@ -124,44 +135,154 @@ fn described(s: &Scripts) -> Result<(), String> {
     if let Some(f) = asked.iter().find(|f| !declared.contains(f.as_str())) {
         return Err(format!("install refused: the law `{f}` has no description (declare `{f}_law()` with `about`, or list it in another law's `covers`)"));
     }
+    if let Some(e) = s.laws_about_error() {
+        return Err(format!("install refused: the world constants' words could not be read ({e})"));
+    }
     if s.has("laws") {
         let about = s.laws_about();
         for k in s.law_names() {
             if !about.iter().any(|(n, t)| *n == k && !t.trim().is_empty()) {
-                return Err(format!("install refused: the world constant `{k}` has no description (give it words in `laws_about(l)`)"));
+                return Err(format!("install refused: the world constant `{k}` has no description (give it words in `law_about(l, name)`)"));
             }
         }
     }
     Ok(())
 }
 
-fn validate_scoped(s: &Scripts, limits: super::Limits) -> Result<Report, String> {
+/// The interface declarations (`<name>_ui()`) read without a problem: an install refuses what a
+/// client would only log and play on without (docs/INTERFACE.md §3).
+fn interface(s: &Scripts) -> Result<(), String> {
+    const SHOWN: usize = 12;
+    let e = s.ui_errors();
+    if e.is_empty() {
+        return Ok(());
+    }
+    let more = if e.len() > SHOWN { format!("; and {} more", e.len() - SHOWN) } else { String::new() };
+    Err(format!("install refused: {}{more}", e.iter().take(SHOWN).cloned().collect::<Vec<_>>().join("; ")))
+}
+
+fn validate_scoped(s: &Scripts, limits: super::Limits, trace: Option<Vec<String>>) -> Result<(Report, Vec<String>), String> {
     // Every law reads only fields the engine provides.
     for f in s.ctx_laws() {
         Plan::of(&f, s.fields.of(&f, 1).and_then(|u| u.first()), true).map_err(|e| format!("install refused: {e}"))?;
     }
     let count = Rc::new(Cell::new(0u64));
-    let mut engine = super::engine_with(limits);
+    let mut engine = super::engine_with(limits, &s.tables);
+    super::register_day(&mut engine, s.hour_ms);
     let c2 = count.clone();
     engine.on_progress(move |n| {
         c2.set(n);
         None
     });
-    let mut p = Probe { s, engine, count, report: Report::default(), seen: Default::default() };
+    let mut p = Probe { s, engine, count, report: Report::default(), seen: Default::default(), trace };
     laws_and_tables(&mut p)?;
     needs(&mut p)?;
     skills(&mut p)?;
     hooks(&mut p)?;
     yes_or_no(&mut p)?;
     described(s)?;
+    interface(s)?;
     record_texts(&mut p)?;
     regard(&mut p)?;
-    Ok(p.report)
+    daylight(&mut p)?;
+    life_years(s)?;
+    s.look_bands_law().map_err(|e| format!("install refused: {e}"))?;
+    s.appearance_in_scene_law().map_err(|e| format!("install refused: {e}"))?;
+    s.female_share_law().map_err(|e| format!("install refused: {e}"))?;
+    s.sex_words_law().map_err(|e| format!("install refused: {e}"))?;
+    ways(&mut p)?;
+    body(&mut p)?;
+    if s.has("seasons_text") {
+        let d = p.raw("seasons_text", (), &|| String::new())?;
+        if !d.is_string() {
+            return Err("install refused: `seasons_text()` must return a text".into());
+        }
+    }
+    Ok((p.report, p.trace.unwrap_or_default()))
+}
+
+/// A way's refusals are its `<way>_check(a)`: the reducer returns exactly its words, and a
+/// client runs the same check before it sends. So a way whose spec requires something (an
+/// addressee, a reach, a technique, a gap) must have a check that refuses a line breaking it,
+/// in its own words; the install tries each on a sample.
+fn ways(p: &mut Probe) -> Result<(), String> {
+    let s = p.s;
+    let speaker = actors().into_iter().find(|a| a.kind == "person" && a.stage == "adult").unwrap_or_default();
+    for w in s.ways().to_vec() {
+        let f = format!("{}_check", w.name);
+        // Only what `speech::check_way` gives (a client must be able to give the same).
+        if s.has(&f) {
+            let plan = s.plan(&f);
+            if let Some(k) = super::context::TOP.iter().enumerate().find(|(i, k)| plan.top & (1 << i) != 0 && !super::speech::CHECK_FIELDS.contains(k)).map(|(_, k)| k) {
+                return Err(format!("install refused: `{f}` reads `a.{k}`; a way's check reads only {} (what a client can give it too)", super::speech::CHECK_FIELDS.iter().map(|k| format!("`a.{k}`")).collect::<Vec<_>>().join(", ")));
+            }
+        }
+        let gap_ms = (w.gap_s * 1000.0) as u64;
+        let needs_check = w.to == super::speech::To::Required || w.reach > 0.0 || !w.needs.is_empty() || gap_ms > 2_000;
+        if !s.has(&f) {
+            if needs_check {
+                return Err(format!("install refused: the way `{}` requires something (an addressee, a reach, a technique or a gap) but has no `{f}(a)`; its refusals are the check's words", w.name));
+            }
+            continue;
+        }
+        let near = TargetFacts { class: "creature".into(), id: 9, kind: "person".into(), alive: true, dist: if w.reach > 0.0 { w.reach * 0.5 } else { 1.0 }, ..Default::default() };
+        let mut tries: Vec<(String, SkillCtx)> = Vec::new();
+        let knows = |a: &ActorFacts| { let mut a = a.clone(); if !w.needs.is_empty() && !a.knows.contains(&w.needs) { a.knows.push(w.needs.clone()); } a };
+        if w.to == super::speech::To::Required {
+            tries.push(("a line to no one".into(), super::speech::check_ctx(&w.name, knows(&speaker), None, "hello", None)));
+        }
+        if w.reach > 0.0 {
+            let far = TargetFacts { dist: w.reach + 0.5, ..near.clone() };
+            tries.push((format!("a line to someone {} m away (reach {})", w.reach + 0.5, w.reach), super::speech::check_ctx(&w.name, knows(&speaker), Some(far), "hello", None)));
+            tries.push(("a line to someone absent or dead".into(), super::speech::check_ctx(&w.name, knows(&speaker), Some(TargetFacts { alive: false, ..near.clone() }), "hello", None)));
+        }
+        if !w.needs.is_empty() {
+            let mut a = speaker.clone();
+            a.knows.retain(|k| *k != w.needs);
+            tries.push((format!("a speaker who does not know `{}`", w.needs), super::speech::check_ctx(&w.name, a, Some(near.clone()), "hello", None)));
+        }
+        if gap_ms > 2_000 {
+            tries.push((format!("a second line {} ms after the first (gap {} s)", gap_ms - 1_000, w.gap_s), super::speech::check_ctx(&w.name, knows(&speaker), Some(near.clone()), "hello", Some(gap_ms - 1_000))));
+        }
+        for (what, c) in tries {
+            let d = p.ctx(&f, &c)?;
+            let words = d.clone().into_string().map_err(|_| format!("install refused: `{f}` must return a string (its refusal, or \"\")"))?;
+            if words.trim().is_empty() {
+                return Err(format!("install refused: `{f}` accepts {what}, which the way `{}` forbids; refuse it in the world's words", w.name));
+            }
+        }
+        // A line that breaks nothing is accepted.
+        let ok = super::speech::check_ctx(&w.name, knows(&speaker), if w.to == super::speech::To::Required || w.reach > 0.0 { Some(near.clone()) } else { None }, "hello", None);
+        let d = p.ctx(&f, &ok)?;
+        if !d.clone().into_string().unwrap_or_default().is_empty() {
+            return Err(format!("install refused: `{f}` refuses a line that breaks nothing the way `{}` requires (to someone {} m away, first of its kind): {}", w.name, ok.target.dist, d));
+        }
+    }
+    Ok(())
+}
+
+/// `meters()` rows are well formed, and `status_of` returns statuses for every meter empty,
+/// half and full, by day and at night, hurt and not (on the shipped vitals; the authority
+/// checks the meters' fields against its own row).
+fn body(p: &mut Probe) -> Result<(), String> {
+    let s = p.s;
+    if let Some(e) = s.meter_errors().first() {
+        return Err(format!("install refused: {e}"));
+    }
+    if !s.has("status_of") {
+        return Ok(());
+    }
+    for b in s.sample_bodies(&super::body::SHIPPED_VITALS) {
+        let about = || format!("for a {} {}{} with {}", b.stage, b.kind, if b.night { " at night" } else { "" }, b.fields.iter().map(|(k, v)| format!("{k} {v}")).collect::<Vec<_>>().join(", "));
+        let _ = p.raw("status_of", (b.map_for_check(),), &about)?; // counts its operations for the fuel report
+        s.status_of(&b).map_err(|e| format!("install refused: {e} ({})", about()))?;
+    }
+    Ok(())
 }
 
 fn laws_and_tables(p: &mut Probe) -> Result<(), String> {
     let s = p.s;
-    for f in s.fns.iter().filter(|f| f.as_str() == "laws" || f.as_str() == "skill_bar" || f.ends_with("_combat") || f.ends_with("_shows")) {
+    for f in s.fns.iter().filter(|f| f.as_str() == "laws" || f.as_str() == "skill_bar" || f.ends_with("_combat") || f.ends_with("_shows") || f.ends_with("_ui")) {
         let d = p.raw(f, (), &|| String::new())?;
         if f == "laws" && !d.is_map() {
             return Err("install refused: `laws` must return a map".into());
@@ -219,10 +340,10 @@ fn needs(p: &mut Probe) -> Result<(), String> {
             if warm {
                 (a.near_fire, a.near_shelter) = (true, true);
             }
-            let c = SkillCtx { actor: a, night, raining, season: season.into(), hour: if night { 23.0 } else { 12.0 }, ..Default::default() };
+            let c = SkillCtx { actor: a, night, dark: if night { 1.0 } else { 0.0 }, raining, season: season.into(), hour: if night { 23.0 } else { 12.0 }, ..Default::default() };
             if s.has("rates") {
                 let d = p.ctx("rates", &c)?;
-                super::NeedLaw::from_dynamic(d).map_err(|e| format!("install refused: {e} ({})", describe(&c)))?;
+                super::NeedLaw::from_dynamic(d, s.hour_ms).map_err(|e| format!("install refused: {e} ({})", describe(&c)))?;
             }
             if s.has("body_state") {
                 let d = p.ctx("body_state", &c)?;
@@ -234,17 +355,37 @@ fn needs(p: &mut Probe) -> Result<(), String> {
             }
             let d = p.ctx("motion", &c)?;
             super::decode_moves(d).map_err(|e| format!("install refused: {e} ({})", describe(&c)))?;
-            // Senses, with and without a torch in the pack: within the law's own reach.
-            for torch in [false, true] {
+            if s.has("pools") {
+                let d = p.ctx("pools", &c)?;
+                super::decode_pools(d).map_err(|e| format!("install refused: {e} ({})", describe(&c)))?;
+            }
+            if s.has("slowed") {
+                let d = p.ctx("slowed", &c)?;
+                d.into_string().map_err(|_| format!("install refused: slowed must return words (\"\" when not slowed) ({})", describe(&c)))?;
+            }
+            // Senses and glow, with and without a torch in the pack, in lamplight or not, and in
+            // twilight: within the law's own reach.
+            for (torch, lit, twilight) in [(false, false, false), (true, false, false), (false, true, false), (false, false, true), (true, true, true)] {
                 let mut c = c.clone();
                 if torch {
                     c.actor.inv.push(("torch".into(), 1));
                 }
+                c.actor.lit = lit;
+                if twilight {
+                    c.dark = 0.5;
+                }
                 let d = p.ctx("senses", &c)?;
                 let reach = s.reach();
-                let wide = super::decode_senses(d.clone(), &super::Reach { day: f32::MAX, night: f32::MAX, hearing: f32::MAX }, c.night).map_err(|e| format!("install refused: {e} ({})", describe(&c)))?;
-                if wide.sight > reach.sight(c.night) || wide.hearing > reach.hearing {
-                    return Err(format!("install refused: senses gives sight {} and hearing {} {}, beyond senses_law's reach ({} by {}, hearing {}): raise the reach with the law", wide.sight, wide.hearing, describe(&c), reach.sight(c.night), if c.night { "night" } else { "day" }, reach.hearing));
+                let wide = super::decode_senses(d.clone(), &super::Reach { day: f32::MAX, night: f32::MAX, hearing: f32::MAX, glow: f32::MAX, glow_day: f32::MAX }, c.dark, None).map_err(|e| format!("install refused: {e} ({})", describe(&c)))?;
+                if wide.sight > reach.sight(c.dark) || wide.hearing > reach.hearing {
+                    return Err(format!("install refused: senses gives sight {} and hearing {} {}, beyond senses_law's reach ({} by {}, hearing {}): raise the reach with the law", wide.sight, wide.hearing, describe(&c), reach.sight(c.dark), if c.dark >= 1.0 { "night" } else if c.dark <= 0.0 { "day" } else { "twilight" }, reach.hearing));
+                }
+                if s.has("glow") {
+                    let d = p.ctx("glow", &c)?;
+                    let g = super::decode_glow(d, &super::Reach { day: 0.0, night: 0.0, hearing: 0.0, glow: f32::MAX, glow_day: f32::MAX }).map_err(|e| format!("install refused: {e} ({})", describe(&c)))?;
+                    if g > reach.glow_at(c.dark) {
+                        return Err(format!("install refused: glow gives {g} m {}, beyond senses_law's reach.glow ({} m): raise the reach with the law", describe(&c), reach.glow));
+                    }
                 }
             }
         }
@@ -263,7 +404,7 @@ fn skills(p: &mut Probe) -> Result<(), String> {
     let targets = targets();
     let items = items();
     // Where an item is used: on nothing, a place, a person, and the structures items go into.
-    let item_targets: Vec<&TargetFacts> = targets.iter().filter(|t| matches!(t.class.as_str(), "none" | "place") || t.id == 9 || ["storage", "campfire", "remains"].contains(&t.kind.as_str())).collect();
+    let item_targets: Vec<&TargetFacts> = targets.iter().filter(|t| matches!(t.class.as_str(), "none" | "place") || t.id == 9 || ["storage", "campfire", "remains"].contains(&t.kind.as_str()) || (t.class == "structure" && s.structure(&t.kind).fire())).collect();
     for skill in &names {
         let takes_item = s.skills.get(skill).is_none_or(|k| k.needs_item) || ["build", "craft"].contains(&skill.as_str());
         let mut samples: Vec<SkillCtx> = Vec::new();
@@ -276,6 +417,15 @@ fn skills(p: &mut Probe) -> Result<(), String> {
             for item in &items {
                 for t in &item_targets {
                     samples.push(sample(skill, &actors[0], t, item));
+                }
+            }
+        }
+        // An answer (accept, decline) to an offer or a proposal it names, or to what stands.
+        let answers = s.skills.get(skill).is_some_and(|k| k.args.iter().any(|a| a == "offer" || a == "record"));
+        if answers {
+            for a in &actors[..2] {
+                for t in &targets {
+                    samples.extend(answer_samples(sample(skill, a, t, "")));
                 }
             }
         }
@@ -400,7 +550,8 @@ fn regard(p: &mut Probe) -> Result<(), String> {
     }
     for (observer, target) in [("person", "person"), ("wolf", "wolf"), ("wolf", "person"), ("person", "deer")] {
         for (known, revealed, own, night) in [(false, false, false, false), (true, false, false, true), (false, true, false, false), (true, true, true, false)] {
-            let r = RegardIn { observer_kind: observer.into(), knows: vec!["fire".into(), "wound_tending".into()], target_kind: target.into(), known, revealed: if revealed { vec!["health".into()] } else { vec![] }, own, night };
+            let dist = if night { 30 } else { 4 };
+            let r = RegardIn { observer_kind: observer.into(), knows: vec!["fire".into(), "wound_tending".into()], target_kind: target.into(), known, revealed: if revealed { vec!["health".into()] } else { vec![] }, own, night, dist };
             let d = p.raw("perceived_of", (super::regard_map(&r),), &|| format!("for a {observer} looking at a {target}"))?;
             super::decode_regard(d, &r).map_err(|e| format!("install refused: {e} (a {observer} looking at a {target})"))?;
         }
@@ -408,7 +559,58 @@ fn regard(p: &mut Probe) -> Result<(), String> {
     Ok(())
 }
 
-fn sample(skill: &str, a: &ActorFacts, t: &TargetFacts, item: &str) -> SkillCtx {
+/// How light it is, at every half hour of the day: a number from 0 to 1.
+fn daylight(p: &mut Probe) -> Result<(), String> {
+    if !p.s.has("daylight") {
+        return Ok(());
+    }
+    for half in 0..48 {
+        let h = half as f64 / 2.0;
+        let d = p.raw("daylight", (h,), &|| format!("at hour {h}"))?;
+        match super::number(&d) {
+            Some(v) if (0.0..=1.0).contains(&v) => {},
+            _ => return Err(format!("install refused: `daylight({h})` must return a number from 0 (night) to 1 (day), got {d}")),
+        }
+    }
+    Ok(())
+}
+
+/// What an answer can find at hand: the target's trade offer (standing, run out, addressed to
+/// someone else), the one named, gone or replaced, and records named (the sample proposal to the
+/// actor, its own, one gone), each with and without a name.
+fn answer_samples(c: SkillCtx) -> Vec<SkillCtx> {
+    let them = c.target.id as u32;
+    let offer = |id: u64, to: u32, open: bool| Some(super::OfferFacts { id, from: them, to, give: "fish".into(), give_qty: 2, want: "hide".into(), want_qty: 1, open, left_s: if open { 90.0 } else { 0.0 } });
+    let me = c.actor.id;
+    let mut out = Vec::new();
+    for (offer_id, record_id, at_hand) in [
+        (0, 0, offer(41, me, true)),
+        (41, 0, offer(41, me, true)),
+        (41, 0, offer(41, me, false)),
+        (41, 0, offer(41, me + 1, true)),
+        (41, 0, offer(42, me, true)),
+        (41, 0, None),
+        (0, 1, None),
+        (0, 2, None),
+        (0, 99, offer(41, me, true)),
+        (41, 1, offer(41, me, true)),
+    ] {
+        out.push(SkillCtx { offer_id, record_id, offer: at_hand, ..c.clone() });
+    }
+    out
+}
+
+/// A world's life table: the `life_years` law over a person's table (the shipped one's
+/// numbers; the engine gives it each species' own) gives ages in order within the lifespan.
+fn life_years(s: &Scripts) -> Result<(), String> {
+    let person = crate::life::Life { years: 70.0, infant: 0.03, child: 0.23, elder: 0.85, old_age: 0.87, gestation: 0.011, litter: 1, interbirth: 0.03, breeding_radius: 0.0 };
+    for (kind, base) in [("person", person), ("wolf", crate::life::Life::default())] {
+        s.life_law(kind, base).map_err(|e| format!("install refused: {e}"))?;
+    }
+    Ok(())
+}
+
+pub(super) fn sample(skill: &str, a: &ActorFacts, t: &TargetFacts, item: &str) -> SkillCtx {
     let mut c = SkillCtx { actor: a.clone(), target: t.clone(), item: item.into(), skill: skill.into(), season: "summer".into(), hour: 12.0, roll: 0.2, want: "wood".into(), want_qty: 2, ..Default::default() };
     // The actor's records come with it (the first body holds every kind).
     c.records = if a.id == 1 { records() } else { Vec::new() };
@@ -435,11 +637,11 @@ fn sample(skill: &str, a: &ActorFacts, t: &TargetFacts, item: &str) -> SkillCtx 
 /// People of each age and both animals, in the states the engine hands the laws.
 pub fn actors() -> Vec<ActorFacts> {
     let all_items: Vec<(String, u32)> = catalog::item_names().into_iter().map(|i| (i, 3)).collect();
-    let all_known: Vec<String> = catalog::TECHNIQUES.iter().map(|t| t.name.to_string()).collect();
-    let base = ActorFacts { id: 1, kind: "person".into(), hp: 70.0, hunger: 40.0, energy: 80.0, terrain: "grass".into(), age: 20.0, stage: "adult".into(), life: 0.3, kin_near: 2, pasture: 5.0, room: 25, ..Default::default() };
+    let all_known: Vec<String> = catalog::technique_names();
+    let base = ActorFacts { id: 1, kind: "person".into(), hp: 70.0, hunger: 40.0, energy: 80.0, terrain: "grass".into(), age: 20.0, stage: "adult".into(), life: 0.3, kin_near: 2, pasture: 5.0, room: 25, stamina: 100.0, focus: 100.0, ..Default::default() };
     vec![
         ActorFacts { inv: all_items, knows: all_known, practice: [("strike".to_string(), 30)].into(), community: crate::records::COMMUNITY | 2, home: "10,10".into(), ..base.clone() },
-        ActorFacts { id: 2, hp: 20.0, hunger: 100.0, energy: 0.0, terrain: "forest".into(), activity: "sleep".into(), stage: "elder".into(), age: 60.0, life: 0.95, near_shelter: true, hurt_by: 7, hurt_ago: Some(2_000.0), yielded_ago: Some(1_000.0), room: 12, ..base.clone() },
+        ActorFacts { id: 2, hp: 20.0, hunger: 100.0, energy: 0.0, stamina: 4.0, focus: 0.0, terrain: "forest".into(), activity: "sleep".into(), stage: "elder".into(), age: 60.0, life: 0.95, near_shelter: true, hurt_by: 7, hurt_ago: Some(2_000.0), yielded_ago: Some(1_000.0), room: 12, ..base.clone() },
         ActorFacts { id: 3, hunger: 60.0, energy: 50.0, terrain: "dirt".into(), activity: "rest".into(), stage: "child".into(), age: 6.0, life: 0.1, inv: vec![("berries".into(), 2)], ..base.clone() },
         ActorFacts { id: 4, energy: 30.0, stage: "infant".into(), age: 0.5, life: 0.01, near_fire: true, ..base.clone() },
         ActorFacts { id: 5, kind: "wolf".into(), hunger: 90.0, energy: 60.0, sensed: vec![("deer".into(), 1)], hurt_by: 9, hurt_ago: Some(5_000.0), activity: "block".into(), ..base.clone() },
@@ -463,23 +665,25 @@ pub fn targets() -> Vec<TargetFacts> {
         creature("deer", 13, 40.0, 40.0),
         TargetFacts { alive: false, hp: 0.0, ..creature("person", 14, 0.0, 100.0) },
     ];
-    for (kind, _) in catalog::RESOURCES {
+    for kind in catalog::resource_names() {
         v.push(TargetFacts { class: "resource".into(), id: 20, kind: kind.to_string(), amount: 5.0, dist: 1.0, ..Default::default() });
     }
-    for kind in catalog::STRUCTURES {
+    for kind in catalog::structure_names() {
         v.push(TargetFacts { class: "structure".into(), id: 30, kind: kind.to_string(), dist: 1.0, inv: vec![("berries".into(), 5), ("meat".into(), 2), ("wood".into(), 3)], ..Default::default() });
         // Someone's household store.
-        if *kind == "storage" {
+        if kind == "storage" {
             v.push(TargetFacts { class: "structure".into(), id: 31, kind: kind.to_string(), dist: 1.0, owner: 9, home: "40,12".into(), ..Default::default() });
         }
+        // A fire burning with some fuel left (the samples above are out, with none).
+        v.push(TargetFacts { class: "structure".into(), id: 32, kind: kind.to_string(), dist: 1.0, lit: true, fuel: 3.0, ..Default::default() });
     }
     v
 }
 
 /// Every item and technique, and the words the engine passes as items.
 pub fn items() -> Vec<String> {
-    let mut v: Vec<String> = catalog::item_names().into_iter().chain(catalog::TECHNIQUES.iter().map(|t| t.name.to_string())).collect();
-    v.extend(catalog::STRUCTURES.iter().chain(catalog::TERRAIN_BUILDS).map(|s| s.to_string()));
+    let mut v: Vec<String> = catalog::item_names().into_iter().chain(catalog::technique_names()).collect();
+    v.extend(catalog::structure_names().into_iter().chain(catalog::TERRAIN_BUILDS.iter().map(|s| s.to_string())));
     v.extend(["food", "top level", "retire", "tablet", "sign", "alarm"].map(String::from));
     v.sort();
     v.dedup();
@@ -506,6 +710,7 @@ mod tests {
         let s = Scripts::new(SKILLS).unwrap();
         let r = s.validate().unwrap();
         let (f, n) = r.heaviest().unwrap();
+        assert!(r.ops.contains_key("pools") && r.ops.contains_key("slowed"), "{r:?}");
         assert!(n * 2 <= LIMITS.operations, "{f} takes {n} operations; the limit is {}", LIMITS.operations);
         assert!(r.ops.contains_key("rates") && r.ops.contains_key("strike_done") && r.ops.contains_key("combat_cooldown") && r.ops.contains_key("perceived_of"), "{r:?}");
     }
@@ -575,7 +780,7 @@ mod tests {
         for (f, n) in &v {
             println!("  {f:24} {n}");
         }
-        let passes = |l: Limits| Scripts::new(SKILLS).ok().filter(|_| super::super::engine_with(l).compile(SKILLS).is_ok()).is_some_and(|s| validate(&s, l).is_ok());
+        let passes = |l: Limits| Scripts::new(SKILLS).ok().filter(|_| super::super::engine_with(l, &Default::default()).compile(SKILLS).is_ok()).is_some_and(|s| validate(&s, l).is_ok());
         let least = |set: &dyn Fn(usize) -> Limits, hi: usize| {
             let (mut lo, mut hi) = (1usize, hi);
             while lo < hi {

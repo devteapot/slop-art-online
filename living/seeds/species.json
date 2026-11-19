@@ -8,7 +8,8 @@
         "heard": "{name}, a baby, is crying",
         "kin_only": true,
         "range": 12,
-        "salience": 0.8
+        "salience": 0.8,
+        "loudness": 2.5
       }
     },
     "names": [],
@@ -143,13 +144,14 @@
       "follow",
       "signal",
       "dodge",
-      "conceive", "give", "take"
+      "conceive", "give", "take",
+      "keep_distance", "close_in", "circle", "back_off"
     ],
     "speaks": false,
     "signals": {
       "howl": {
         "sound": "a long howl",
-        "range": 18,
+        "loudness": 2,
         "salience": 0.5
       },
       "growl": {

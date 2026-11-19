@@ -21,6 +21,12 @@ that travel. Entries are generated in file order, so a pose must come from an ea
 first and last point, linearly between points (Kimodo's Root2DConstraintSet), so a move's travel
 follows a given profile: a dodge whose dash the authority performs at a set speed.
 
+`"heading": degrees` or `[[seconds, degrees], ...]` (needs `path`) also pins where the hips face
+on the path's frames (Root2DConstraintSet's global heading), linearly between points: 0 faces +Z,
+positive turns to the body's left (toward +X). A take that travels backward or sideways keeps
+facing ahead with `"heading": 0`; a turn on the spot ramps it. `"end_yaw": degrees` turns the end
+keyframe by that much (same sign), so a turn ends in the neutral pose facing its new way.
+
 Only the SOMA-RP model is used (NVIDIA Open Model License). Never point this at the SMPL-X model.
 """
 
@@ -55,7 +61,8 @@ def yaw(phi):
     return np.array([[c, 0, s], [0, 1, 0], [-s, 0, c]], dtype=np.float32)
 
 
-def pose_ref(spec, neutral, out_dir):
+def pose_ref(spec, neutral, out_dir, turn=0.0):
+    """Local rotations and hips height of a keyframe pose facing `turn` radians (0 is +Z)."""
     if spec == "neutral":
         spec = neutral
     name_seed, frame = spec.split("@")
@@ -74,6 +81,14 @@ def pose_ref(spec, neutral, out_dir):
             break
     else:
         raise SystemExit(f"could not face {spec} forward (heading {h})")
+    if turn:
+        for phi in (-turn, turn):
+            R2 = yaw(phi)
+            if abs(math.remainder(heading(q @ R2.T) - turn, 2 * math.pi)) < 1e-3:
+                break
+        else:
+            raise SystemExit(f"could not turn {spec} by {turn}")
+        R = R2 @ R
     local[HIPS] = R @ local[HIPS]
     return local, float(root[1])
 
@@ -84,7 +99,13 @@ def path_constraint(model, entry, frames, device):
     first, last = round(ts[0] * model.fps), min(round(ts[-1] * model.fps), frames - 1)
     idx = list(range(first, last + 1))
     xz = [[float(np.interp(f / model.fps, ts, [p[1] for p in pts])), float(np.interp(f / model.fps, ts, [p[2] for p in pts]))] for f in idx]
-    c = Root2DConstraintSet.from_dict(model.skeleton, {"frame_indices": idx, "smooth_root_2d": xz})
+    d = {"frame_indices": idx, "smooth_root_2d": xz}
+    if "heading" in entry:
+        hd = entry["heading"]
+        hd = [[ts[0], hd], [ts[-1], hd]] if isinstance(hd, (int, float)) else hd
+        th = [math.radians(float(np.interp(f / model.fps, [q[0] for q in hd], [q[1] for q in hd]))) for f in idx]
+        d["global_root_heading"] = [[math.cos(t), math.sin(t)] for t in th]
+    c = Root2DConstraintSet.from_dict(model.skeleton, d)
     return c.to(device)
 
 
@@ -92,14 +113,14 @@ def constraints(model, entry, frames, neutral, out_dir, device):
     keys = []
     path = [path_constraint(model, entry, frames, device)] if entry.get("path") else []
     if entry.get("start"):
-        keys.append((0, entry["start"], (0.0, 0.0)))
+        keys.append((0, entry["start"], (0.0, 0.0), 0.0))
     if entry.get("end"):
-        keys.append((frames - 1, entry["end"], tuple(entry.get("end_offset", (0.0, 0.0)))))
+        keys.append((frames - 1, entry["end"], tuple(entry.get("end_offset", (0.0, 0.0))), math.radians(entry.get("end_yaw", 0.0))))
     if not keys:
         return path
     locs, roots, idx = [], [], []
-    for f, spec, (ox, oz) in keys:
-        local, y = pose_ref(spec, neutral, out_dir)
+    for f, spec, (ox, oz), turn in keys:
+        local, y = pose_ref(spec, neutral, out_dir, turn)
         locs.append(local)
         roots.append([ox, y, oz])
         idx.append(f)

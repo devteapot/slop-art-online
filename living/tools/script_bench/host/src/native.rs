@@ -10,6 +10,7 @@ fn main() {
     let opt = |name: &str| args.iter().position(|a| a == name).map(|i| args[i + 1].clone());
     let dumps = opt("--dumps");
     let batches: usize = opt("--batches").map_or(3000, |v| v.parse().unwrap());
+    sb_bench::fix_hashing(0);
     let fx = sb_bench::fixtures::build();
     let mut cursor = 0usize;
     if args.iter().any(|a| a == "--rhai-ops") {

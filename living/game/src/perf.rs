@@ -1,6 +1,7 @@
 //! Measurement switches (`LIVING_GAME_PERF=<flag>,…`) that turn one rendering cost off at a time,
 //! to find where frame time goes. They are for measurement only:
 //! - `noedges`: the finishing pass's edge lines and rim;
+//! - `slivers`: crease lines on every step, however small (the old rule, `Style::crease_step` 0);
 //! - `nooutlines`: shell outlines (characters);
 //! - `noshadows`: the sun's shadow maps;
 //! - `noprepass`: depth and normal prepasses (also disables edges, which need them);
@@ -8,9 +9,12 @@
 //! - `nopeople`: no characters on the island;
 //! - `nosmall`: no small things (grass, flowers, props under 1.6 m) on the island;
 //! - `nostencil`: environment meshes and ground draw no outline stencil;
+//! - `nofar`: no coarse ground and sea past the island's 170 m, and no landmarks past 190 m
+//!   (`island::stream`, `live::lots`): the long view's cost;
 //! - `nohair`, `charopaque`: characters without hair, or with alpha-masked materials drawn opaque;
-//! - `shadowmap=N`, `cascades=N`, `shadowfar=M`: the sun's shadow map size, cascade count and
-//!   reach;
+//! - `shadowmap=N`, `cascades=N`, `firstcascade=M`, `shadowfar=M`: the sun's shadow map size,
+//!   cascade count, first cascade's far edge and reach; `sunstep=D`: how far (degrees) the sun
+//!   moves before its shadow light turns (`world::SHADOWS`; 0 turns it every frame);
 //! - `people=K`: K times the island's people per settlement;
 //! - `nodetail`: no painted detail on scenery models (style.rs); `detailonly=bark+leaves` keeps
 //!   it on only the surfaces named;
@@ -27,7 +31,24 @@
 //! - `diag`: every 2 s, Bevy's render diagnostics (per-pass CPU time; GPU time only where the
 //!   backend reports timestamps, so not on Metal) and what each view draws: meshes, distinct
 //!   meshes and materials, triangles, and the characters' share, for the camera and each
-//!   shadow cascade.
+//!   shadow cascade; every 10 s, what the loaded assets hold (`assets:`); with `matnames` too,
+//!   people's distinct materials in the camera's view by the file's material name;
+//! - `rebuild=S`: S seconds after the first load's cover lifts, every character's scene is
+//!   spawned again, as a changed scene asset would make Bevy do (`characters::force_rebuild`), to
+//!   check that they are fitted, shaped and animated again; `nokeep` skips that (what happened
+//!   before rebuild-keep, for comparison);
+//! - `genoutlines`: generate every mesh's outline directions, ignoring those a file brings
+//!   (`style::outline_normals`); `keeppixels`: character pictures keep their pixels on the CPU
+//!   (`characters::thumb_pictures`). Both are the way before types-1, for comparison.
+//! - `filestyles`: composed people's style files take a toon material a file and material
+//!   name, as before compose-1 shared them by what they draw (`characters/compose.rs`), to
+//!   compare the two.
+//! - `springfar`: spring chains are simulated for characters drawn with the far model too, as
+//!   before spring-near (`characters::springs`), to compare; `springwake`: log each woken
+//!   character's joint turns for its first frames (`springwake:` lines), to see the hand-off.
+//! - `seat`: every 3 s, each seated character's lowest cloth tail above its ground
+//!   (`characters::SeatAnchor`; `seat:` lines), with the contact on or off
+//!   (`LIVING_GAME_SEAT_CONTACT=0`).
 //!
 //! The frame is often limited by neither the GPU nor one system but by the render world's
 //! per-batch work: every distinct material and mesh slab is a batch set per view and pass, and
@@ -72,6 +93,9 @@ pub fn apply(
     if (has("noedges") || has("noprepass")) && style.edges {
         style.edges = false;
     }
+    if has("slivers") && style.crease_step != 0.0 {
+        style.crease_step = 0.0;
+    }
     if has("nooutlines") && style.outlines {
         style.outlines = false;
     }
@@ -113,7 +137,138 @@ pub fn diagnostics(app: &mut App) {
     if !has("diag") {
         return;
     }
-    app.add_plugins(bevy::render::diagnostic::RenderDiagnosticsPlugin).add_systems(Last, (log_diagnostics, log_views));
+    app.add_plugins(bevy::render::diagnostic::RenderDiagnosticsPlugin).add_systems(Last, (log_diagnostics, log_views, log_assets));
+    if let Some(render) = app.get_sub_app_mut(bevy::render::RenderApp) {
+        use bevy::render::{Render, RenderSystems};
+        render.add_systems(Render, log_batches.after(RenderSystems::PhaseSort).before(RenderSystems::Render));
+    }
+}
+
+/// `diag`, in the render world, every 2 s: how the binned phases batch (`batches:`), and the
+/// textures on the GPU. For each phase, summed over its views: multi-draw batch sets (one draw
+/// call each where the backend draws indirect lists natively; each of their meshes is one
+/// indirect draw within it), batchable bins (one instanced draw each) and unbatchable entities
+/// (one draw each: meshes with morph targets). The GPU preprocessing mode decides which a mesh
+/// is. Textures: every `GpuImage`'s bytes (mips included).
+#[allow(clippy::too_many_arguments)]
+fn log_batches(
+    support: Option<Res<bevy::render::batching::gpu_preprocessing::GpuPreprocessingSupport>>,
+    opaque: Res<bevy::render::render_phase::ViewBinnedRenderPhases<bevy::core_pipeline::core_3d::Opaque3d>>,
+    mask: Res<bevy::render::render_phase::ViewBinnedRenderPhases<bevy::core_pipeline::core_3d::AlphaMask3d>>,
+    prepass: Res<bevy::render::render_phase::ViewBinnedRenderPhases<bevy::core_pipeline::prepass::Opaque3dPrepass>>,
+    mask_prepass: Res<bevy::render::render_phase::ViewBinnedRenderPhases<bevy::core_pipeline::prepass::AlphaMask3dPrepass>>,
+    shadow: Res<bevy::render::render_phase::ViewBinnedRenderPhases<bevy::pbr::Shadow>>,
+    images: Res<bevy::render::render_asset::RenderAssets<bevy::render::texture::GpuImage>>,
+    mut last: Local<Option<std::time::Instant>>,
+) {
+    use bevy::render::render_phase::{BinnedPhaseItem, ViewBinnedRenderPhases};
+    if last.is_some_and(|t| t.elapsed().as_secs_f32() < 2.0) {
+        return;
+    }
+    *last = Some(std::time::Instant::now());
+    fn count<P: BinnedPhaseItem>(name: &str, phases: &ViewBinnedRenderPhases<P>) -> String {
+        let (mut sets, mut bins, mut lone) = (0, 0, 0);
+        for phase in phases.0.values() {
+            sets += phase.multidrawable_meshes.len();
+            bins += phase.batchable_meshes.len();
+            lone += phase.unbatchable_meshes.values().map(|u| u.entities.len()).sum::<usize>();
+        }
+        format!("{name} {sets} sets, {bins} bins, {lone} lone ({} views)", phases.0.len())
+    }
+    use bevy::render::batching::gpu_preprocessing::GpuPreprocessingMode as Mode;
+    let mode = match support.map(|s| s.max_supported_mode) {
+        Some(Mode::None) => "none",
+        Some(Mode::PreprocessingOnly) => "preprocessing only",
+        Some(Mode::Culling) => "culling (multi-draw)",
+        None => "?",
+    };
+    let bytes: u64 = images
+        .iter()
+        .map(|(_, g)| {
+            let d = &g.texture_descriptor;
+            let (bw, bh) = d.format.block_dimensions();
+            let block = d.format.block_copy_size(None).unwrap_or(4) as u64;
+            (0..d.mip_level_count.max(1))
+                .map(|m| {
+                    let (w, h) = ((d.size.width >> m).max(1), (d.size.height >> m).max(1));
+                    w.div_ceil(bw) as u64 * h.div_ceil(bh) as u64 * block * d.size.depth_or_array_layers as u64
+                })
+                .sum::<u64>()
+        })
+        .sum();
+    info!(
+        "batches: preprocessing {mode}; {}; {}; {}; {}; {}; textures {} on the GPU {:.1} MiB",
+        count("opaque", &opaque),
+        count("mask", &mask),
+        count("prepass", &prepass),
+        count("mask-prepass", &mask_prepass),
+        count("shadow", &shadow),
+        images.iter().count(),
+        bytes as f64 / (1024.0 * 1024.0)
+    );
+}
+
+/// `diag`: what the loaded assets hold, every 10 s: meshes (their vertex, index and morph-target
+/// data in the main world), images (their pixels), animation clips (and their curves), graphs and
+/// glTF files. Counts and sizes, not the process's memory: they don't move with the machine's
+/// load, so two builds or two sets of files compare exactly (crowd-1: clips stored once).
+fn log_assets(
+    time: Res<Time>,
+    mut since: Local<f32>,
+    meshes: Res<Assets<Mesh>>,
+    images: Res<Assets<Image>>,
+    clips: Res<Assets<AnimationClip>>,
+    graphs: Res<Assets<AnimationGraph>>,
+    gltfs: Res<Assets<bevy::gltf::Gltf>>,
+    assets: Res<AssetServer>,
+) {
+    *since += time.delta_secs();
+    if *since < 10.0 {
+        return;
+    }
+    *since = 0.0;
+    let mib = |b: usize| b as f32 / (1024.0 * 1024.0);
+    let (mut vb, mut ib, mut mb) = (0usize, 0usize, 0usize);
+    // `LIVING_GAME_PERF=meshfiles`: the CPU bytes by file, the largest first (where they are).
+    let mut by_file: std::collections::HashMap<String, (usize, usize, usize)> = Default::default();
+    for (id, m) in meshes.iter() {
+        // Meshes whose data went to the render world alone hold none here.
+        if m.try_indices_option().is_err() {
+            continue;
+        }
+        let (v, i, t) = (m.get_vertex_buffer_size(), m.get_index_buffer_bytes().map_or(0, |b| b.len()), m.morph_targets().map_or(0, |t| t.len() * std::mem::size_of::<bevy::mesh::morph::MorphAttributes>()));
+        vb += v;
+        ib += i;
+        mb += t;
+        if has("meshfiles") {
+            let file = assets.get_path(id).map_or_else(|| "(made in the client)".to_string(), |p| p.path().to_string_lossy().to_string());
+            let e = by_file.entry(file).or_default();
+            *e = (e.0 + v + i + t, e.1 + t, e.2 + 1);
+        }
+    }
+    if has("meshfiles") {
+        let mut files: Vec<_> = by_file.into_iter().collect();
+        files.sort_by(|a, b| b.1.0.cmp(&a.1.0));
+        let line: Vec<String> = files.iter().take(16).map(|(f, (b, t, n))| format!("{f} {:.1} MiB ({n} meshes, morph {:.1})", mib(*b), mib(*t))).collect();
+        info!("mesh files: {} files; {}", files.len(), line.join("; "));
+    }
+    let px: usize = images.iter().map(|(_, i)| i.data.as_ref().map_or(0, |d| d.len())).sum();
+    let curves: usize = clips.iter().map(|(_, c)| c.curves().values().map(|v| v.len()).sum::<usize>()).sum();
+    info!(
+        "assets: {} meshes {:.1} MiB (vertices {:.1}, indices {:.1}, morph targets {:.1}); {} images {:.1} MiB; {} clips ({curves} curves); {} graphs; {} glTF files; outline directions generated for {} meshes, brought by {}",
+        meshes.len(),
+        mib(vb + ib + mb),
+        mib(vb),
+        mib(ib),
+        mib(mb),
+        images.len(),
+        mib(px),
+        clips.len(),
+        graphs.len(),
+        gltfs.len(),
+        crate::style::OUTLINE_NORMALS.0.load(std::sync::atomic::Ordering::Relaxed),
+        crate::style::OUTLINE_NORMALS.1.load(std::sync::atomic::Ordering::Relaxed)
+    );
 }
 
 /// What entered the world in one frame: entities (net), meshes, models, characters, conversions.
@@ -238,6 +393,7 @@ pub fn log_views(
     children: Query<&Children>,
     mats: Query<&MeshMaterial3d<crate::style::Toon>>,
     toons: Res<Assets<crate::style::Toon>>,
+    names: Query<&bevy::gltf::GltfMaterialName>,
 ) {
     if !has("diag") {
         return;
@@ -262,7 +418,9 @@ pub fn log_views(
         }
         let distinct = |people_only: bool| list.iter().filter(|e| !people_only || people.contains(*e)).filter_map(|e| mats.get(*e).ok().map(|m| m.0.id())).collect::<std::collections::HashSet<_>>().len();
         let distinct_meshes = list.iter().filter_map(|e| mesh3d.get(*e).ok().map(|m| m.0.id())).collect::<std::collections::HashSet<_>>().len();
-        format!("{n} meshes ({distinct_meshes} distinct, {} materials) {:.0}k tris [people {pn}, {} materials, {:.0}k]", distinct(false), t as f32 / 1000.0, distinct(true), pt as f32 / 1000.0)
+        // People's meshes that could share an instanced draw: the same mesh in the same material.
+        let pairs = list.iter().filter(|e| people.contains(*e)).filter_map(|e| Some((mesh3d.get(*e).ok()?.0.id(), mats.get(*e).ok()?.0.id()))).collect::<std::collections::HashSet<_>>().len();
+        format!("{n} meshes ({distinct_meshes} distinct, {} materials) {:.0}k tris [people {pn}, {} materials, {:.0}k, {pairs} mesh-material pairs]", distinct(false), t as f32 / 1000.0, distinct(true), pt as f32 / 1000.0)
     };
     let id = std::any::TypeId::of::<Mesh3d>();
     for (cam, vis) in &cams {
@@ -275,6 +433,17 @@ pub fn log_views(
             }
         }
         info!("views: {} toon materials; {}", toons.len(), out.join("; "));
+        if has("matnames") {
+            // `matnames`: people's distinct materials in the camera's view by the file's material
+            // name, so a material that should be shared shows as one.
+            let mut by: std::collections::BTreeMap<&str, std::collections::HashSet<_>> = Default::default();
+            for e in vis.get(id).iter().filter(|e| people.contains(*e)) {
+                if let (Ok(m), Ok(n)) = (mats.get(*e), names.get(*e)) {
+                    by.entry(n.0.as_str()).or_default().insert(m.0.id());
+                }
+            }
+            info!("view materials: {}", by.iter().map(|(k, v)| format!("{k} ×{}", v.len())).collect::<Vec<_>>().join(", "));
+        }
     }
 }
 

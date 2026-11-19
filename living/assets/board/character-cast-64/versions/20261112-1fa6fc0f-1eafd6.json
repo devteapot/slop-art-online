@@ -1,0 +1,54 @@
+{
+ "schema": 1,
+ "family": "character:cast-64",
+ "id": "20261112-1fa6fc0f-1eafd6",
+ "published": "2026-11-12T00:24:43+01:00",
+ "imported": "2026-11-12T00:24:43+01:00",
+ "track": "char-4",
+ "maker": "Claude Fable 5.2",
+ "note": "Pass 3, step 4: Cullet's cast with designed shadows (each person's face normals from the type's planar proxy, the type's drawn shadow map). The people are step 3's.",
+ "source": {
+  "commit": "1fa6fc0f245cf46fa2b66fc2bad5501c77237dfc",
+  "branch": "char-4",
+  "dirty": false,
+  "generator": "living/tools/blender/person.py",
+  "generator_sha256": "dec17ef49933845b06e0f19f99f33a1daa265994098649a1b8a8be45102e695a",
+  "generator_state": "committed",
+  "seed": "cullet",
+  "params": {
+   "cast": "living/seeds/cullet.json",
+   "people": 64
+  }
+ },
+ "renderer": {
+  "method": "asset-view",
+  "commit": "",
+  "key": "asset-view",
+  "preset": "",
+  "note": "town.py: each person alone through the asset view; lineup from the front at 28 degrees down at one scale; faces close (the take with the eyes open); game is each person at 22 m through the game camera, pixels enlarged three times; tiled"
+ },
+ "preset": "",
+ "media": "media/character-cast-64/20261112-1fa6fc0f-1eafd6",
+ "members": [
+  {
+   "name": "cast",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "c97c403a11062e7b86c69ccbe323265b32cb09447abda38bd806527092cadaa9",
+   "shots": [
+    "faces",
+    "faces-24",
+    "game",
+    "lineup"
+   ],
+   "clips": []
+  }
+ ],
+ "delivered": [
+  {
+   "title": "town check page and town.json (who is who)",
+   "path": "delivered/index.html",
+   "from": ".local/town4/index.html"
+  }
+ ]
+}

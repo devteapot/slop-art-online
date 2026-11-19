@@ -61,6 +61,11 @@ def main():
         command('doctor', [str(HARNESS), 'doctor', '--run', args.run])
         command('player-join', [str(HARNESS), 'player', '--run', args.run, 'join', 'ClientPrimary'])
         command('drive', [str(SKILL / 'scripts/drive.py'), '--run', args.run])
+        # The cue event tables' row-level security is a perception boundary (frame-views): every
+        # suite run proves it, with three fresh identities (scripts/cues.py, features/perception.md).
+        command('cues', [str(SKILL / 'scripts/cues.py'), '--run', args.run])
+        # Those engaged with a player are first in its near tier, past the cap (near_tier.py).
+        command('near-tier', [str(SKILL / 'scripts/near_tier.py'), '--run', args.run])
         exit_code = 0
     except (RuntimeError, subprocess.SubprocessError, OSError) as error:
         print(str(error), file=sys.stderr)
@@ -70,8 +75,11 @@ def main():
         try:
             command('cleanup', [str(HARNESS), 'cleanup', '--run', args.run])
             state = json.loads(state_path.read_text())
+            # The shared cleanup's two confirmations: SQL answering 404, or (a run with a recorded
+            # database identity, `trial_archive.finish`) the name no longer resolving.
+            cleaned = (directory / 'cleanup.log').read_text()
             proof = {'database': database, 'cleanup_confirmed_sql_404':
-                     f'deleted {database} (SQL now 404)' in (directory / 'cleanup.log').read_text(),
+                     f'deleted {database} (SQL now 404)' in cleaned or f'deleted {database} (name no longer resolves)' in cleaned,
                      'published': state.get('published', False), 'player_token_removed': not any(key in V.load(args.run) for key in ('token', 'token2')),
                      'shared_container_running': V.container_up(),
                      'living_token_unchanged': token_digest() == before_token,

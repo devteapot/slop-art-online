@@ -1,0 +1,18 @@
+{
+ "extends": "strangers",
+ "title": "Strangers, without the two lives (arms C and S)",
+ "about": "The strangers trial with the six residents dc2ecfc8 redrafted (the Quill and Morrow households and Kenji Sato) taken from the seed before it (`world.residents_from`, dc2ecfc8^), so that these arms differ from the lives arms only in the lives; every other resident is byte-identical in both.",
+ "world": {
+  "residents_from": {
+   "ref": "dc2ecfc8^",
+   "names": [
+    "Aldous Quill",
+    "Mirren Quill",
+    "Sabine Quill",
+    "Ingrid Morrow",
+    "Lark Morrow",
+    "Kenji Sato"
+   ]
+  }
+ }
+}

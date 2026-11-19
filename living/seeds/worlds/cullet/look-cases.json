@@ -1,0 +1,343 @@
+{
+ "about": "Test cases for the look data (living/tools/characters/look_lines.py cases; docs/CHARACTERS.md, 'The look book'). Written with looks.json of the same generation.",
+ "generation": "c4-5d64f53e",
+ "key_hash": {
+  "rule": "lk_ + the first 16 hex digits of SHA-256 over the UTF-8 canonical JSON of the line's drawn fields: type, height, proportions, identity, colors, styles, belly, grey; keys sorted at every depth, separators ',' and ':', no spaces",
+  "cases": [
+   {
+    "line": {
+     "type": "adult-f-a",
+     "height": 1.6,
+     "name": "left out: not drawn",
+     "seed": 7
+    },
+    "canonical": "{\"height\":1.6,\"type\":\"adult-f-a\"}",
+    "key": "lk_18a5ac0df22ae845"
+   },
+   {
+    "line": {
+     "type": "adult-f-b",
+     "height": 1.67,
+     "proportions": {
+      "legs": 1.075,
+      "arms": 0.9,
+      "torso": 0.84,
+      "shoulders": 0.584,
+      "build": 1.058,
+      "hips": 0.92,
+      "hands": 0.75,
+      "feet": 0.9,
+      "head": 0.989
+     },
+     "identity": {
+      "cranium_width": -0.332,
+      "cranium_depth": 0.079,
+      "cranium_height": 0.131,
+      "forehead": 0.241,
+      "brow_ridge": 0.707,
+      "face_length": -0.221,
+      "face_width": -0.093,
+      "front_breadth": -0.278,
+      "cheekbones": -0.023,
+      "cheekbone_height": -0.002,
+      "cheeks": -0.099,
+      "jaw_width": -0.526,
+      "jaw_angle": 0.204,
+      "jaw_square": 0.041,
+      "chin_length": -0.345,
+      "chin_width": 0.12,
+      "chin_forward": -0.158,
+      "eye_spacing": -0.171,
+      "eye_height": 0.148,
+      "socket_depth": -0.188,
+      "eye_size": 0.114,
+      "eye_open": -0.505,
+      "eye_tilt": -0.284,
+      "iris_size": -0.191,
+      "brow_height": -0.18,
+      "brow_tilt": -0.323,
+      "brow_thickness": 0.309,
+      "brow_length": 0.131,
+      "nose_length": 0.152,
+      "nose_width": -0.037,
+      "nose_bridge": 0.327,
+      "nose_tip": -0.296,
+      "mouth_height": 0.174,
+      "mouth_width": -0.302,
+      "lip_fullness": -0.007,
+      "mouth_curve": -0.077,
+      "ear_size": 0.268,
+      "ear_out": -0.013
+     },
+     "colors": {
+      "skin": "#eac2aa",
+      "hair": "#131111",
+      "beard": "#131111",
+      "outfit": {
+       "smock_58-f": "#406766",
+       "smock_bands-f": "#928d82",
+       "jersey_smock-f": "#2c4e4c",
+       "apron_58-f": "#b6b3a5",
+       "trousers-f": "#2d2f36",
+       "boots-f": "#32271f",
+       "kerchief": "#576677"
+      },
+      "eyes": "#384247",
+      "eyes_natural": "#6b808a"
+     },
+     "styles": {
+      "hair": "kerchief",
+      "outfit": [
+       "smock_58-f",
+       "smock_bands-f",
+       "jersey_smock-f",
+       "apron_58-f",
+       "trousers-f",
+       "boots-f",
+       "kerchief"
+      ],
+      "overlays": []
+     },
+     "belly": 0.063
+    },
+    "canonical": "{\"belly\":0.063,\"colors\":{\"beard\":\"#131111\",\"eyes\":\"#384247\",\"eyes_natural\":\"#6b808a\",\"hair\":\"#131111\",\"outfit\":{\"apron_58-f\":\"#b6b3a5\",\"boots-f\":\"#32271f\",\"jersey_smock-f\":\"#2c4e4c\",\"kerchief\":\"#576677\",\"smock_58-f\":\"#406766\",\"smock_bands-f\":\"#928d82\",\"trousers-f\":\"#2d2f36\"},\"skin\":\"#eac2aa\"},\"height\":1.67,\"identity\":{\"brow_height\":-0.18,\"brow_length\":0.131,\"brow_ridge\":0.707,\"brow_thickness\":0.309,\"brow_tilt\":-0.323,\"cheekbone_height\":-0.002,\"cheekbones\":-0.023,\"cheeks\":-0.099,\"chin_forward\":-0.158,\"chin_length\":-0.345,\"chin_width\":0.12,\"cranium_depth\":0.079,\"cranium_height\":0.131,\"cranium_width\":-0.332,\"ear_out\":-0.013,\"ear_size\":0.268,\"eye_height\":0.148,\"eye_open\":-0.505,\"eye_size\":0.114,\"eye_spacing\":-0.171,\"eye_tilt\":-0.284,\"face_length\":-0.221,\"face_width\":-0.093,\"forehead\":0.241,\"front_breadth\":-0.278,\"iris_size\":-0.191,\"jaw_angle\":0.204,\"jaw_square\":0.041,\"jaw_width\":-0.526,\"lip_fullness\":-0.007,\"mouth_curve\":-0.077,\"mouth_height\":0.174,\"mouth_width\":-0.302,\"nose_bridge\":0.327,\"nose_length\":0.152,\"nose_tip\":-0.296,\"nose_width\":-0.037,\"socket_depth\":-0.188},\"proportions\":{\"arms\":0.9,\"build\":1.058,\"feet\":0.9,\"hands\":0.75,\"head\":0.989,\"hips\":0.92,\"legs\":1.075,\"shoulders\":0.584,\"torso\":0.84},\"styles\":{\"hair\":\"kerchief\",\"outfit\":[\"smock_58-f\",\"smock_bands-f\",\"jersey_smock-f\",\"apron_58-f\",\"trousers-f\",\"boots-f\",\"kerchief\"],\"overlays\":[]},\"type\":\"adult-f-b\"}",
+    "key": "lk_000f47c0d8aa4056"
+   },
+   {
+    "line": {
+     "type": "youth-m-a",
+     "height": 1.68,
+     "proportions": {
+      "legs": 0.971,
+      "arms": 0.974,
+      "torso": 0.995,
+      "neck": 0.939,
+      "head": 1.082,
+      "shoulders": 0.918,
+      "build": 0.972
+     },
+     "identity": {
+      "cranium_width": 0.093,
+      "cranium_depth": 0.055,
+      "cranium_height": 0.295,
+      "forehead": -0.054,
+      "brow_ridge": -0.248,
+      "face_length": -0.058,
+      "face_width": -0.068,
+      "front_breadth": -0.33,
+      "cheekbones": 0.158,
+      "cheekbone_height": -0.143,
+      "cheeks": -0.044,
+      "jaw_width": 0.122,
+      "jaw_angle": 0.023,
+      "jaw_square": 0.097,
+      "chin_length": -0.14,
+      "chin_width": 0.169,
+      "chin_forward": 0.418,
+      "eye_spacing": -0.173,
+      "eye_height": 0.083,
+      "socket_depth": -0.107,
+      "eye_size": 0.175,
+      "eye_open": 0.552,
+      "eye_tilt": 0.127,
+      "iris_size": 0.404,
+      "brow_height": 0.073,
+      "brow_tilt": -0.339,
+      "brow_thickness": 0.258,
+      "brow_length": -0.182,
+      "nose_length": 0.075,
+      "nose_width": -0.219,
+      "nose_bridge": 0.043,
+      "nose_tip": -0.109,
+      "mouth_height": 0.213,
+      "mouth_width": 0.232,
+      "lip_fullness": -0.642,
+      "mouth_curve": -0.064,
+      "ear_size": -0.176,
+      "ear_out": -0.544
+     },
+     "colors": {
+      "skin": "#d4a58a",
+      "hair": "#4a2b1a",
+      "beard": "#4a2b1a",
+      "outfit": {
+       "smock_74-m": "#ac904f",
+       "smock_bands-m": "#979387",
+       "jersey_smock-m": "#3f4b58",
+       "trousers-m": "#2d2f36",
+       "boots-m": "#32271f"
+      },
+      "eyes": "#2c3f2c",
+      "eyes_natural": "#547a54"
+     },
+     "styles": {
+      "hair": "short.3",
+      "outfit": [
+       "smock_74-m",
+       "smock_bands-m",
+       "jersey_smock-m",
+       "trousers-m",
+       "boots-m"
+      ],
+      "overlays": []
+     },
+     "belly": 0.033
+    },
+    "canonical": "{\"belly\":0.033,\"colors\":{\"beard\":\"#4a2b1a\",\"eyes\":\"#2c3f2c\",\"eyes_natural\":\"#547a54\",\"hair\":\"#4a2b1a\",\"outfit\":{\"boots-m\":\"#32271f\",\"jersey_smock-m\":\"#3f4b58\",\"smock_74-m\":\"#ac904f\",\"smock_bands-m\":\"#979387\",\"trousers-m\":\"#2d2f36\"},\"skin\":\"#d4a58a\"},\"height\":1.68,\"identity\":{\"brow_height\":0.073,\"brow_length\":-0.182,\"brow_ridge\":-0.248,\"brow_thickness\":0.258,\"brow_tilt\":-0.339,\"cheekbone_height\":-0.143,\"cheekbones\":0.158,\"cheeks\":-0.044,\"chin_forward\":0.418,\"chin_length\":-0.14,\"chin_width\":0.169,\"cranium_depth\":0.055,\"cranium_height\":0.295,\"cranium_width\":0.093,\"ear_out\":-0.544,\"ear_size\":-0.176,\"eye_height\":0.083,\"eye_open\":0.552,\"eye_size\":0.175,\"eye_spacing\":-0.173,\"eye_tilt\":0.127,\"face_length\":-0.058,\"face_width\":-0.068,\"forehead\":-0.054,\"front_breadth\":-0.33,\"iris_size\":0.404,\"jaw_angle\":0.023,\"jaw_square\":0.097,\"jaw_width\":0.122,\"lip_fullness\":-0.642,\"mouth_curve\":-0.064,\"mouth_height\":0.213,\"mouth_width\":0.232,\"nose_bridge\":0.043,\"nose_length\":0.075,\"nose_tip\":-0.109,\"nose_width\":-0.219,\"socket_depth\":-0.107},\"proportions\":{\"arms\":0.974,\"build\":0.972,\"head\":1.082,\"legs\":0.971,\"neck\":0.939,\"shoulders\":0.918,\"torso\":0.995},\"styles\":{\"hair\":\"short.3\",\"outfit\":[\"smock_74-m\",\"smock_bands-m\",\"jersey_smock-m\",\"trousers-m\",\"boots-m\"],\"overlays\":[]},\"type\":\"youth-m-a\"}",
+    "key": "lk_ffe91c28ad95ad0c"
+   }
+  ]
+ },
+ "bands": {
+  "stages": {
+   "infant_until": 2.1,
+   "child_until": 15.0,
+   "elder_from": 59.5
+  },
+  "youth": 12.0,
+  "adult": 18.0,
+  "cases": [
+   {
+    "resident": "Dory Tarn",
+    "age": 1.0,
+    "stage": 0,
+    "band": 0,
+    "look": "lp_6a54ed7b9470d0b9",
+    "line": "lk_eafffba048fa1ef7",
+    "bands": [
+     0,
+     1,
+     2,
+     3,
+     4
+    ]
+   },
+   {
+    "resident": "Ansel Tarn",
+    "age": 4.0,
+    "stage": 1,
+    "band": 1,
+    "look": "lp_894b4876929a0b36",
+    "line": "lk_4632c8c384232b78",
+    "bands": [
+     1,
+     2,
+     3,
+     4
+    ]
+   },
+   {
+    "resident": "Zeke Okoro",
+    "age": 11.0,
+    "stage": 1,
+    "band": 1,
+    "look": "lp_38e9cfdb7e3b6c8b",
+    "line": "lk_bccc4d5b50bb59c4",
+    "bands": [
+     1,
+     2,
+     3,
+     4
+    ]
+   },
+   {
+    "resident": "Edda Hollin",
+    "age": 12.0,
+    "stage": 1,
+    "band": 2,
+    "look": "lp_944f7b31609cf21f",
+    "line": "lk_436f798280bfba08",
+    "bands": [
+     2,
+     3,
+     4
+    ]
+   },
+   {
+    "resident": "Kit Calloway",
+    "age": 14.0,
+    "stage": 1,
+    "band": 2,
+    "look": "lp_a1eef8cca8d1a011",
+    "line": "lk_f56a06e69454dcb0",
+    "bands": [
+     2,
+     3,
+     4
+    ]
+   },
+   {
+    "resident": "Col Roon",
+    "age": 15.0,
+    "stage": 2,
+    "band": 2,
+    "look": "lp_5c8eaeb1f03bf958",
+    "line": "lk_dd9728d2af89c072",
+    "bands": [
+     2,
+     3,
+     4
+    ]
+   },
+   {
+    "resident": "Lark Morrow",
+    "age": 17.0,
+    "stage": 2,
+    "band": 2,
+    "look": "lp_cc4e97c4c2622305",
+    "line": "lk_03227398c21eec83",
+    "bands": [
+     2,
+     3,
+     4
+    ]
+   },
+   {
+    "resident": "Roos Achterberg",
+    "age": 18.0,
+    "stage": 2,
+    "band": 3,
+    "look": "lp_c17ffd55c0d02957",
+    "line": "lk_4b9f30856bcd37e0",
+    "bands": [
+     3,
+     4
+    ]
+   },
+   {
+    "resident": "Benedikt Orme",
+    "age": 59.0,
+    "stage": 2,
+    "band": 3,
+    "look": "lp_12933382040a88ac",
+    "line": "lk_c0314bf12a48f17e",
+    "bands": [
+     3,
+     4
+    ]
+   },
+   {
+    "resident": "Vessa Pontil",
+    "age": 61.0,
+    "stage": 3,
+    "band": 4,
+    "look": "lp_83a6864e460d7620",
+    "line": "lk_336a2c878c2d8589",
+    "bands": [
+     4
+    ]
+   },
+   {
+    "resident": "Halvard Dunmore",
+    "age": 70.0,
+    "stage": 3,
+    "band": 4,
+    "look": "lp_78efdb48a1db9621",
+    "line": "lk_7ef777ee17cad6e3",
+    "bands": [
+     4
+    ]
+   }
+  ]
+ }
+}

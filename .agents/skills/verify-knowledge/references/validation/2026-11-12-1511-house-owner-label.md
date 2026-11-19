@@ -1,0 +1,10 @@
+# verify-knowledge: house-owner-label
+
+Scoped maintain-verification-skill pass for `house-owner-label` (Spark, trial server `slop-trials-stdb` 2.14.1, private `CARGO_TARGET_DIR`; branch head `c367e043` = origin/main `e704ec0d` merged). Scope: the features this change touches, read from source by the coordinator (no subagent wave); every other feature of the skill is out of scope and unchanged. `just living-check` passed on the merged tree (all steps, 1702 s). Every scratch world was paused before deletion by `verify.py cleanup`.
+
+The change: `common::owner_label` names a structure's owner whenever the `owner_shown` law shows it (the viewer knows them, or the kind `shows_owner`), whatever the owner's distance (before: `label_for`, which read the owner's distance, so a known neighbour's house read "someone too far away to make out"'s when they were away). Lines about something owned (a notice line, a witnessed theft) carry the owner as subject or object only when they name them, by id, never by a far handle (`perceive::percept_owned`, `witnessed_owned`). docs/PERCEPTION.md "Whose a thing is".
+
+- New script `scripts/homes.py` (SKILL.md, features/recall.md "Homes", README row): `minds-homes3-155650` 4/4 PASS, Neo4j `slop-trials-neo4j`, the run's nodes deleted (0 left). M notices F's house "built by F" with F 40 m off; the fake consolidation's home is projected to M's `place` rows at the house; Neo4j holds the edge (stored type `RELATES`, `rel` `LIVES_AT`); F in sight brings "F —LIVES_AT→ F's house" into the think prompt's recall.
+- Harness note: an edge's verb is `r.rel`; its relationship type is `stored_type(rel)` (memory.rs), so Cypher must match on `r.rel` (`minds-homes2-155542` failed on `[r:LIVES_AT]`). Quiet spots can sit at the map's corner; the script tries several spots 40 m off (`minds-homes-155441`).
+
+Not covered: performance (no tick timings were read; the change adds no per-tick work: one `owner_label` per structure line as before), paid model runs, and the other features of this skill.

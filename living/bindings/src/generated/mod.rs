@@ -10,11 +10,21 @@ pub mod acquaintance_table;
 pub mod acquaintance_type;
 pub mod act_card_table;
 pub mod act_card_type;
+pub mod act_outcome_table;
+pub mod act_outcome_type;
 pub mod act_queue_table;
 pub mod activity_table;
 pub mod activity_type;
+pub mod admin_set_vitals_reducer;
+pub mod applied_gaze_table;
+pub mod applied_gaze_type;
 pub mod artifact_table;
 pub mod artifact_type;
+pub mod attention_table;
+pub mod attention_type;
+pub mod audience_table;
+pub mod audience_type;
+pub mod backfill_sex_reducer;
 pub mod background_table;
 pub mod background_type;
 pub mod belief_in_type;
@@ -26,6 +36,10 @@ pub mod bond_offer_table;
 pub mod bond_offer_type;
 pub mod brain_table;
 pub mod brain_type;
+pub mod character_earshot_table;
+pub mod character_earshot_type;
+pub mod character_senses_table;
+pub mod character_senses_type;
 pub mod character_table;
 pub mod character_type;
 pub mod chronicle_table;
@@ -40,21 +54,40 @@ pub mod community_table;
 pub mod community_type;
 pub mod connection_table;
 pub mod connection_type;
+pub mod cover_ground_table;
+pub mod cover_ground_type;
+pub mod cover_law_table;
+pub mod cover_law_type;
 pub mod create_floor_reducer;
 pub mod cry_prompt_type;
+pub mod cue_fire_type;
+pub mod cue_in_type;
+pub mod cue_table;
+pub mod cue_type;
 pub mod cursor_type;
 pub mod deliberation_table;
 pub mod deliberation_type;
+pub mod doing_near_table;
+pub mod doing_near_type;
 pub mod doing_seen_table;
 pub mod doing_seen_type;
 pub mod doing_table;
 pub mod doing_type;
+pub mod earshot_way_type;
 pub mod expecting_table;
 pub mod expecting_type;
 pub mod experience_table;
 pub mod experience_type;
 pub mod familiar_table;
 pub mod familiar_type;
+pub mod far_handle_table;
+pub mod far_handle_type;
+pub mod fast_ask_table;
+pub mod fast_ask_type;
+pub mod fight_seen_table;
+pub mod fight_seen_type;
+pub mod fighter_near_table;
+pub mod fighter_near_type;
 pub mod fighter_seen_table;
 pub mod fighter_seen_type;
 pub mod fighter_table;
@@ -73,18 +106,33 @@ pub mod genome_type;
 pub mod grant_items_reducer;
 pub mod grant_know_how_reducer;
 pub mod grant_repertoires_reducer;
+pub mod ground_edit_table;
+pub mod ground_edit_type;
 pub mod guest_table;
 pub mod guest_type;
+pub mod hear_salt_table;
+pub mod hear_salt_type;
+pub mod heard_asleep_table;
+pub mod heard_asleep_type;
+pub mod heard_sound_type;
+pub mod heard_sounds_table;
+pub mod heard_table;
+pub mod heard_type;
+pub mod hearer_type;
 pub mod housekeeping_reducer;
 pub mod human_act_reducer;
+pub mod human_face_reducer;
+pub mod human_gaze_reducer;
 pub mod human_move_reducer;
 pub mod human_say_reducer;
+pub mod human_speak_reducer;
 pub mod infant_cry_table;
 pub mod infant_cry_type;
 pub mod infant_need_type;
 pub mod install_script_reducer;
 pub mod inventory_table;
 pub mod inventory_type;
+pub mod join_as_reducer;
 pub mod join_reducer;
 pub mod join_request_table;
 pub mod join_request_type;
@@ -97,22 +145,49 @@ pub mod judgment_type;
 pub mod kill_reducer;
 pub mod know_how_table;
 pub mod know_how_type;
+pub mod knowledge_epoch_table;
+pub mod knowledge_epoch_type;
+pub mod known_ground_table;
+pub mod known_ground_type;
+pub mod known_name_type;
 pub mod land_info_type;
+pub mod land_plan_table;
+pub mod land_plan_type;
 pub mod land_table;
+pub mod last_look_table;
+pub mod last_look_type;
+pub mod law_change_table;
+pub mod law_change_type;
+pub mod law_override_table;
+pub mod law_override_type;
+pub mod law_revision_table;
+pub mod law_revision_type;
 pub mod leaf_result_type;
+pub mod line_heard_table;
+pub mod line_heard_type;
 pub mod line_seen_table;
 pub mod line_seen_type;
+pub mod look_line_table;
+pub mod look_line_type;
+pub mod look_table;
+pub mod look_type;
+pub mod look_words_type;
 pub mod lot_table;
 pub mod lot_type;
 pub mod mark_type;
 pub mod membership_table;
 pub mod membership_type;
+pub mod mind_act_checked_procedure;
 pub mod mind_act_reducer;
 pub mod mind_consolidated_reducer;
 pub mod mind_cursor_table;
 pub mod mind_cursor_type;
+pub mod mind_fast_done_reducer;
 pub mod mind_install_reducer;
+pub mod mind_install_way_reducer;
 pub mod mind_judged_reducer;
+pub mod mind_patch_reducer;
+pub mod mind_reach_procedure;
 pub mod mind_routines_reducer;
 pub mod mind_say_reducer;
 pub mod mind_skip_reducer;
@@ -120,24 +195,38 @@ pub mod mind_state_table;
 pub mod mind_state_type;
 pub mod mind_update_reducer;
 pub mod mind_update_type;
+pub mod mind_where_reducer;
 pub mod missile_table;
 pub mod missile_type;
+pub mod motion_near_table;
+pub mod motion_near_type;
 pub mod motion_seen_table;
 pub mod motion_seen_type;
 pub mod motion_type;
+pub mod moving_type;
+pub mod my_act_outcomes_table;
 pub mod my_body_table;
 pub mod my_characters_table;
 pub mod my_combat_table;
 pub mod my_deliberations_table;
 pub mod my_doing_table;
+pub mod my_earshot_table;
 pub mod my_experience_table;
 pub mod my_fighter_table;
+pub mod my_heard_table;
 pub mod my_inventory_table;
 pub mod my_know_how_table;
+pub mod my_known_names_table;
+pub mod my_offer_type;
+pub mod my_offers_table;
 pub mod my_places_table;
 pub mod my_readiness_table;
 pub mod my_record_type;
 pub mod my_records_table;
+pub mod my_senses_table;
+pub mod my_senses_v_2_table;
+pub mod my_sex_table;
+pub mod my_sex_type;
 pub mod my_skill_uses_table;
 pub mod my_vitals_table;
 pub mod own_habits_reducer;
@@ -151,6 +240,7 @@ pub mod persona_type;
 pub mod place_at_reducer;
 pub mod place_in_type;
 pub mod place_near_reducer;
+pub mod place_resource_reducer;
 pub mod place_structure_reducer;
 pub mod place_table;
 pub mod place_type;
@@ -164,6 +254,7 @@ pub mod presence_type;
 pub mod projected_table;
 pub mod projected_type;
 pub mod purge_dead_reducer;
+pub mod reach_type;
 pub mod readiness_table;
 pub mod readiness_type;
 pub mod ready_type;
@@ -179,6 +270,9 @@ pub mod relation_in_type;
 pub mod relation_table;
 pub mod relation_type;
 pub mod release_skill_reducer;
+pub mod relook_reducer;
+pub mod remembered_table;
+pub mod remembered_type;
 pub mod resource_node_table;
 pub mod resource_node_type;
 pub mod resume_genesis_reducer;
@@ -196,19 +290,40 @@ pub mod routine_type;
 pub mod script_table;
 pub mod script_type;
 pub mod seed_communities_reducer;
+pub mod seen_bodies_far_table;
+pub mod seen_bodies_near_table;
 pub mod seen_bodies_table;
+pub mod seen_body_cue_table;
+pub mod seen_body_cue_type;
 pub mod seen_character_type;
 pub mod seen_characters_table;
+pub mod seen_doing_cue_table;
+pub mod seen_doing_cue_type;
+pub mod seen_doing_far_table;
+pub mod seen_doing_near_table;
 pub mod seen_doing_table;
+pub mod seen_fighter_cue_table;
+pub mod seen_fighter_cue_type;
+pub mod seen_fighters_far_table;
+pub mod seen_fighters_near_table;
 pub mod seen_fighters_table;
+pub mod seen_stock_table;
+pub mod seen_stock_type;
+pub mod seen_structures_table;
+pub mod seen_structures_type;
 pub mod seen_type;
 pub mod set_background_reducer;
 pub mod set_behavior_reducer;
 pub mod set_paused_reducer;
 pub mod set_profile_reducer;
 pub mod set_weather_reducer;
+pub mod set_world_law_reducer;
 pub mod settlement_table;
 pub mod settlement_type;
+pub mod sex_row_type;
+pub mod sex_seen_table;
+pub mod sex_seen_type;
+pub mod sex_table;
 pub mod skill_card_table;
 pub mod skill_card_type;
 pub mod skill_code_table;
@@ -217,10 +332,16 @@ pub mod skill_use_table;
 pub mod skill_use_type;
 pub mod slow_timer_table;
 pub mod slow_timer_type;
+pub mod slumber_table;
+pub mod slumber_type;
 pub mod spawn_battle_reducer;
 pub mod spawn_crowd_reducer;
 pub mod spawn_newcomer_reducer;
 pub mod spawn_skirmish_reducer;
+pub mod speech_card_table;
+pub mod speech_card_type;
+pub mod standing_table;
+pub mod standing_type;
 pub mod stats_table;
 pub mod stats_type;
 pub mod steer_table;
@@ -258,11 +379,21 @@ pub use acquaintance_table::*;
 pub use acquaintance_type::Acquaintance;
 pub use act_card_table::*;
 pub use act_card_type::ActCard;
+pub use act_outcome_table::*;
+pub use act_outcome_type::ActOutcome;
 pub use act_queue_table::*;
 pub use activity_table::*;
 pub use activity_type::Activity;
+pub use admin_set_vitals_reducer::admin_set_vitals;
+pub use applied_gaze_table::*;
+pub use applied_gaze_type::AppliedGaze;
 pub use artifact_table::*;
 pub use artifact_type::Artifact;
+pub use attention_table::*;
+pub use attention_type::Attention;
+pub use audience_table::*;
+pub use audience_type::Audience;
+pub use backfill_sex_reducer::backfill_sex;
 pub use background_table::*;
 pub use background_type::Background;
 pub use belief_in_type::BeliefIn;
@@ -274,6 +405,10 @@ pub use bond_offer_table::*;
 pub use bond_offer_type::BondOffer;
 pub use brain_table::*;
 pub use brain_type::Brain;
+pub use character_earshot_table::*;
+pub use character_earshot_type::CharacterEarshot;
+pub use character_senses_table::*;
+pub use character_senses_type::CharacterSenses;
 pub use character_table::*;
 pub use character_type::Character;
 pub use chronicle_table::*;
@@ -288,21 +423,40 @@ pub use community_table::*;
 pub use community_type::Community;
 pub use connection_table::*;
 pub use connection_type::Connection;
+pub use cover_ground_table::*;
+pub use cover_ground_type::CoverGround;
+pub use cover_law_table::*;
+pub use cover_law_type::CoverLaw;
 pub use create_floor_reducer::create_floor;
 pub use cry_prompt_type::CryPrompt;
+pub use cue_fire_type::CueFire;
+pub use cue_in_type::CueIn;
+pub use cue_table::*;
+pub use cue_type::Cue;
 pub use cursor_type::Cursor;
 pub use deliberation_table::*;
 pub use deliberation_type::Deliberation;
+pub use doing_near_table::*;
+pub use doing_near_type::DoingNear;
 pub use doing_seen_table::*;
 pub use doing_seen_type::DoingSeen;
 pub use doing_table::*;
 pub use doing_type::Doing;
+pub use earshot_way_type::EarshotWay;
 pub use expecting_table::*;
 pub use expecting_type::Expecting;
 pub use experience_table::*;
 pub use experience_type::Experience;
 pub use familiar_table::*;
 pub use familiar_type::Familiar;
+pub use far_handle_table::*;
+pub use far_handle_type::FarHandle;
+pub use fast_ask_table::*;
+pub use fast_ask_type::FastAsk;
+pub use fight_seen_table::*;
+pub use fight_seen_type::FightSeen;
+pub use fighter_near_table::*;
+pub use fighter_near_type::FighterNear;
 pub use fighter_seen_table::*;
 pub use fighter_seen_type::FighterSeen;
 pub use fighter_table::*;
@@ -321,18 +475,33 @@ pub use genome_type::Genome;
 pub use grant_items_reducer::grant_items;
 pub use grant_know_how_reducer::grant_know_how;
 pub use grant_repertoires_reducer::grant_repertoires;
+pub use ground_edit_table::*;
+pub use ground_edit_type::GroundEdit;
 pub use guest_table::*;
 pub use guest_type::Guest;
+pub use hear_salt_table::*;
+pub use hear_salt_type::HearSalt;
+pub use heard_asleep_table::*;
+pub use heard_asleep_type::HeardAsleep;
+pub use heard_sound_type::HeardSound;
+pub use heard_sounds_table::*;
+pub use heard_table::*;
+pub use heard_type::Heard;
+pub use hearer_type::Hearer;
 pub use housekeeping_reducer::housekeeping;
 pub use human_act_reducer::human_act;
+pub use human_face_reducer::human_face;
+pub use human_gaze_reducer::human_gaze;
 pub use human_move_reducer::human_move;
 pub use human_say_reducer::human_say;
+pub use human_speak_reducer::human_speak;
 pub use infant_cry_table::*;
 pub use infant_cry_type::InfantCry;
 pub use infant_need_type::InfantNeed;
 pub use install_script_reducer::install_script;
 pub use inventory_table::*;
 pub use inventory_type::Inventory;
+pub use join_as_reducer::join_as;
 pub use join_reducer::join;
 pub use join_request_table::*;
 pub use join_request_type::JoinRequest;
@@ -345,22 +514,49 @@ pub use judgment_type::Judgment;
 pub use kill_reducer::kill;
 pub use know_how_table::*;
 pub use know_how_type::KnowHow;
+pub use knowledge_epoch_table::*;
+pub use knowledge_epoch_type::KnowledgeEpoch;
+pub use known_ground_table::*;
+pub use known_ground_type::KnownGround;
+pub use known_name_type::KnownName;
 pub use land_info_type::LandInfo;
+pub use land_plan_table::*;
+pub use land_plan_type::LandPlan;
 pub use land_table::*;
+pub use last_look_table::*;
+pub use last_look_type::LastLook;
+pub use law_change_table::*;
+pub use law_change_type::LawChange;
+pub use law_override_table::*;
+pub use law_override_type::LawOverride;
+pub use law_revision_table::*;
+pub use law_revision_type::LawRevision;
 pub use leaf_result_type::LeafResult;
+pub use line_heard_table::*;
+pub use line_heard_type::LineHeard;
 pub use line_seen_table::*;
 pub use line_seen_type::LineSeen;
+pub use look_line_table::*;
+pub use look_line_type::LookLine;
+pub use look_table::*;
+pub use look_type::Look;
+pub use look_words_type::LookWords;
 pub use lot_table::*;
 pub use lot_type::Lot;
 pub use mark_type::Mark;
 pub use membership_table::*;
 pub use membership_type::Membership;
+pub use mind_act_checked_procedure::mind_act_checked;
 pub use mind_act_reducer::mind_act;
 pub use mind_consolidated_reducer::mind_consolidated;
 pub use mind_cursor_table::*;
 pub use mind_cursor_type::MindCursor;
+pub use mind_fast_done_reducer::mind_fast_done;
 pub use mind_install_reducer::mind_install;
+pub use mind_install_way_reducer::mind_install_way;
 pub use mind_judged_reducer::mind_judged;
+pub use mind_patch_reducer::mind_patch;
+pub use mind_reach_procedure::mind_reach;
 pub use mind_routines_reducer::mind_routines;
 pub use mind_say_reducer::mind_say;
 pub use mind_skip_reducer::mind_skip;
@@ -368,24 +564,38 @@ pub use mind_state_table::*;
 pub use mind_state_type::MindState;
 pub use mind_update_reducer::mind_update;
 pub use mind_update_type::MindUpdate;
+pub use mind_where_reducer::mind_where;
 pub use missile_table::*;
 pub use missile_type::Missile;
+pub use motion_near_table::*;
+pub use motion_near_type::MotionNear;
 pub use motion_seen_table::*;
 pub use motion_seen_type::MotionSeen;
 pub use motion_type::Motion;
+pub use moving_type::Moving;
+pub use my_act_outcomes_table::*;
 pub use my_body_table::*;
 pub use my_characters_table::*;
 pub use my_combat_table::*;
 pub use my_deliberations_table::*;
 pub use my_doing_table::*;
+pub use my_earshot_table::*;
 pub use my_experience_table::*;
 pub use my_fighter_table::*;
+pub use my_heard_table::*;
 pub use my_inventory_table::*;
 pub use my_know_how_table::*;
+pub use my_known_names_table::*;
+pub use my_offer_type::MyOffer;
+pub use my_offers_table::*;
 pub use my_places_table::*;
 pub use my_readiness_table::*;
 pub use my_record_type::MyRecord;
 pub use my_records_table::*;
+pub use my_senses_table::*;
+pub use my_senses_v_2_table::*;
+pub use my_sex_table::*;
+pub use my_sex_type::MySex;
 pub use my_skill_uses_table::*;
 pub use my_vitals_table::*;
 pub use own_habits_reducer::own_habits;
@@ -399,6 +609,7 @@ pub use persona_type::Persona;
 pub use place_at_reducer::place_at;
 pub use place_in_type::PlaceIn;
 pub use place_near_reducer::place_near;
+pub use place_resource_reducer::place_resource;
 pub use place_structure_reducer::place_structure;
 pub use place_table::*;
 pub use place_type::Place;
@@ -412,6 +623,7 @@ pub use presence_type::Presence;
 pub use projected_table::*;
 pub use projected_type::Projected;
 pub use purge_dead_reducer::purge_dead;
+pub use reach_type::Reach;
 pub use readiness_table::*;
 pub use readiness_type::Readiness;
 pub use ready_type::Ready;
@@ -427,6 +639,9 @@ pub use relation_in_type::RelationIn;
 pub use relation_table::*;
 pub use relation_type::Relation;
 pub use release_skill_reducer::release_skill;
+pub use relook_reducer::relook;
+pub use remembered_table::*;
+pub use remembered_type::Remembered;
 pub use resource_node_table::*;
 pub use resource_node_type::ResourceNode;
 pub use resume_genesis_reducer::resume_genesis;
@@ -444,19 +659,40 @@ pub use routine_type::Routine;
 pub use script_table::*;
 pub use script_type::Script;
 pub use seed_communities_reducer::seed_communities;
+pub use seen_bodies_far_table::*;
+pub use seen_bodies_near_table::*;
 pub use seen_bodies_table::*;
+pub use seen_body_cue_table::*;
+pub use seen_body_cue_type::SeenBodyCue;
 pub use seen_character_type::SeenCharacter;
 pub use seen_characters_table::*;
+pub use seen_doing_cue_table::*;
+pub use seen_doing_cue_type::SeenDoingCue;
+pub use seen_doing_far_table::*;
+pub use seen_doing_near_table::*;
 pub use seen_doing_table::*;
+pub use seen_fighter_cue_table::*;
+pub use seen_fighter_cue_type::SeenFighterCue;
+pub use seen_fighters_far_table::*;
+pub use seen_fighters_near_table::*;
 pub use seen_fighters_table::*;
+pub use seen_stock_table::*;
+pub use seen_stock_type::SeenStock;
+pub use seen_structures_table::*;
+pub use seen_structures_type::SeenStructures;
 pub use seen_type::Seen;
 pub use set_background_reducer::set_background;
 pub use set_behavior_reducer::set_behavior;
 pub use set_paused_reducer::set_paused;
 pub use set_profile_reducer::set_profile;
 pub use set_weather_reducer::set_weather;
+pub use set_world_law_reducer::set_world_law;
 pub use settlement_table::*;
 pub use settlement_type::Settlement;
+pub use sex_row_type::SexRow;
+pub use sex_seen_table::*;
+pub use sex_seen_type::SexSeen;
+pub use sex_table::*;
 pub use skill_card_table::*;
 pub use skill_card_type::SkillCard;
 pub use skill_code_table::*;
@@ -465,10 +701,16 @@ pub use skill_use_table::*;
 pub use skill_use_type::SkillUse;
 pub use slow_timer_table::*;
 pub use slow_timer_type::SlowTimer;
+pub use slumber_table::*;
+pub use slumber_type::Slumber;
 pub use spawn_battle_reducer::spawn_battle;
 pub use spawn_crowd_reducer::spawn_crowd;
 pub use spawn_newcomer_reducer::spawn_newcomer;
 pub use spawn_skirmish_reducer::spawn_skirmish;
+pub use speech_card_table::*;
+pub use speech_card_type::SpeechCard;
+pub use standing_table::*;
+pub use standing_type::Standing;
 pub use stats_table::*;
 pub use stats_type::Stats;
 pub use steer_table::*;
@@ -510,6 +752,11 @@ pub use world_type::World;
 /// to indicate which reducer caused the event.
 
 pub enum Reducer {
+    AdminSetVitals {
+        id: u32,
+        hp: f32,
+    },
+    BackfillSex,
     ClientConnected,
     ClientDisconnected,
     CreateFloor {
@@ -534,6 +781,13 @@ pub enum Reducer {
     HumanAct {
         node: String,
     },
+    HumanFace {
+        dx: f32,
+        dy: f32,
+    },
+    HumanGaze {
+        band: u8,
+    },
     HumanMove {
         dx: f32,
         dy: f32,
@@ -543,11 +797,20 @@ pub enum Reducer {
         text: String,
         to: u32,
     },
+    HumanSpeak {
+        text: String,
+        to: u32,
+        way: String,
+    },
     InstallScript {
         source: String,
     },
     Join {
         name: String,
+    },
+    JoinAs {
+        name: String,
+        sex: String,
     },
     Kill {
         id: u32,
@@ -562,6 +825,11 @@ pub enum Reducer {
         actor: u32,
         upto: u64,
     },
+    MindFastDone {
+        actor: u32,
+        asked_ms: u64,
+        thought: ThoughtIn,
+    },
     MindInstall {
         actor: u32,
         graph: String,
@@ -571,9 +839,26 @@ pub enum Reducer {
         seen_ms: u64,
         thought: ThoughtIn,
     },
+    MindInstallWay {
+        actor: u32,
+        graph: String,
+        plan: String,
+        say: String,
+        say_to: u32,
+        way: String,
+        seen_ms: u64,
+        thought: ThoughtIn,
+    },
     MindJudged {
         actor: u32,
         items: Vec<JudgedIn>,
+    },
+    MindPatch {
+        actor: u32,
+        target: String,
+        graph: String,
+        asked_ms: u64,
+        thought: ThoughtIn,
     },
     MindRoutines {
         actor: u32,
@@ -583,6 +868,7 @@ pub enum Reducer {
         actor: u32,
         say: String,
         say_to: u32,
+        way: String,
         seen_ms: u64,
         thought: ThoughtIn,
     },
@@ -595,6 +881,9 @@ pub enum Reducer {
         actor: u32,
         update: MindUpdate,
     },
+    MindWhere {
+        actor: u32,
+    },
     OwnHabits,
     PlaceAt {
         id: u32,
@@ -605,6 +894,14 @@ pub enum Reducer {
         id: u32,
         near: u32,
     },
+    PlaceResource {
+        near: u32,
+        kind: String,
+        dx: f32,
+        dy: f32,
+        max: f32,
+        pool: u64,
+    },
     PlaceStructure {
         near: u32,
         kind: String,
@@ -612,6 +909,9 @@ pub enum Reducer {
     PurgeDead,
     ReleaseSkill {
         skill: String,
+    },
+    Relook {
+        generation: String,
     },
     ResumeGenesis,
     SeedCommunities,
@@ -632,6 +932,10 @@ pub enum Reducer {
     SetWeather {
         raining: bool,
         secs: u32,
+    },
+    SetWorldLaw {
+        name: String,
+        value: String,
     },
     SpawnBattle {
         n: u32,
@@ -666,6 +970,8 @@ impl __sdk::InModule for Reducer {
 impl __sdk::Reducer for Reducer {
     fn reducer_name(&self) -> &'static str {
         match self {
+            Reducer::AdminSetVitals { .. } => "admin_set_vitals",
+            Reducer::BackfillSex => "backfill_sex",
             Reducer::ClientConnected => "client_connected",
             Reducer::ClientDisconnected => "client_disconnected",
             Reducer::CreateFloor { .. } => "create_floor",
@@ -675,25 +981,35 @@ impl __sdk::Reducer for Reducer {
             Reducer::GrantRepertoires => "grant_repertoires",
             Reducer::Housekeeping { .. } => "housekeeping",
             Reducer::HumanAct { .. } => "human_act",
+            Reducer::HumanFace { .. } => "human_face",
+            Reducer::HumanGaze { .. } => "human_gaze",
             Reducer::HumanMove { .. } => "human_move",
             Reducer::HumanSay { .. } => "human_say",
+            Reducer::HumanSpeak { .. } => "human_speak",
             Reducer::InstallScript { .. } => "install_script",
             Reducer::Join { .. } => "join",
+            Reducer::JoinAs { .. } => "join_as",
             Reducer::Kill { .. } => "kill",
             Reducer::MindAct { .. } => "mind_act",
             Reducer::MindConsolidated { .. } => "mind_consolidated",
+            Reducer::MindFastDone { .. } => "mind_fast_done",
             Reducer::MindInstall { .. } => "mind_install",
+            Reducer::MindInstallWay { .. } => "mind_install_way",
             Reducer::MindJudged { .. } => "mind_judged",
+            Reducer::MindPatch { .. } => "mind_patch",
             Reducer::MindRoutines { .. } => "mind_routines",
             Reducer::MindSay { .. } => "mind_say",
             Reducer::MindSkip { .. } => "mind_skip",
             Reducer::MindUpdate { .. } => "mind_update",
+            Reducer::MindWhere { .. } => "mind_where",
             Reducer::OwnHabits => "own_habits",
             Reducer::PlaceAt { .. } => "place_at",
             Reducer::PlaceNear { .. } => "place_near",
+            Reducer::PlaceResource { .. } => "place_resource",
             Reducer::PlaceStructure { .. } => "place_structure",
             Reducer::PurgeDead => "purge_dead",
             Reducer::ReleaseSkill { .. } => "release_skill",
+            Reducer::Relook { .. } => "relook",
             Reducer::ResumeGenesis => "resume_genesis",
             Reducer::SeedCommunities => "seed_communities",
             Reducer::SetBackground { .. } => "set_background",
@@ -701,6 +1017,7 @@ impl __sdk::Reducer for Reducer {
             Reducer::SetPaused { .. } => "set_paused",
             Reducer::SetProfile { .. } => "set_profile",
             Reducer::SetWeather { .. } => "set_weather",
+            Reducer::SetWorldLaw { .. } => "set_world_law",
             Reducer::SpawnBattle { .. } => "spawn_battle",
             Reducer::SpawnCrowd { .. } => "spawn_crowd",
             Reducer::SpawnNewcomer { .. } => "spawn_newcomer",
@@ -714,6 +1031,15 @@ impl __sdk::Reducer for Reducer {
     #[allow(clippy::clone_on_copy)]
     fn args_bsatn(&self) -> Result<Vec<u8>, __sats::bsatn::EncodeError> {
         match self {
+            Reducer::AdminSetVitals { id, hp } => {
+                __sats::bsatn::to_vec(&admin_set_vitals_reducer::AdminSetVitalsArgs {
+                    id: id.clone(),
+                    hp: hp.clone(),
+                })
+            }
+            Reducer::BackfillSex => {
+                __sats::bsatn::to_vec(&backfill_sex_reducer::BackfillSexArgs {})
+            }
             Reducer::ClientConnected => {
                 __sats::bsatn::to_vec(&client_connected_reducer::ClientConnectedArgs {})
             }
@@ -750,6 +1076,15 @@ impl __sdk::Reducer for Reducer {
             Reducer::HumanAct { node } => {
                 __sats::bsatn::to_vec(&human_act_reducer::HumanActArgs { node: node.clone() })
             }
+            Reducer::HumanFace { dx, dy } => {
+                __sats::bsatn::to_vec(&human_face_reducer::HumanFaceArgs {
+                    dx: dx.clone(),
+                    dy: dy.clone(),
+                })
+            }
+            Reducer::HumanGaze { band } => {
+                __sats::bsatn::to_vec(&human_gaze_reducer::HumanGazeArgs { band: band.clone() })
+            }
             Reducer::HumanMove { dx, dy, run } => {
                 __sats::bsatn::to_vec(&human_move_reducer::HumanMoveArgs {
                     dx: dx.clone(),
@@ -763,6 +1098,13 @@ impl __sdk::Reducer for Reducer {
                     to: to.clone(),
                 })
             }
+            Reducer::HumanSpeak { text, to, way } => {
+                __sats::bsatn::to_vec(&human_speak_reducer::HumanSpeakArgs {
+                    text: text.clone(),
+                    to: to.clone(),
+                    way: way.clone(),
+                })
+            }
             Reducer::InstallScript { source } => {
                 __sats::bsatn::to_vec(&install_script_reducer::InstallScriptArgs {
                     source: source.clone(),
@@ -771,6 +1113,10 @@ impl __sdk::Reducer for Reducer {
             Reducer::Join { name } => {
                 __sats::bsatn::to_vec(&join_reducer::JoinArgs { name: name.clone() })
             }
+            Reducer::JoinAs { name, sex } => __sats::bsatn::to_vec(&join_as_reducer::JoinAsArgs {
+                name: name.clone(),
+                sex: sex.clone(),
+            }),
             Reducer::Kill { id, cause } => __sats::bsatn::to_vec(&kill_reducer::KillArgs {
                 id: id.clone(),
                 cause: cause.clone(),
@@ -790,6 +1136,15 @@ impl __sdk::Reducer for Reducer {
                     upto: upto.clone(),
                 })
             }
+            Reducer::MindFastDone {
+                actor,
+                asked_ms,
+                thought,
+            } => __sats::bsatn::to_vec(&mind_fast_done_reducer::MindFastDoneArgs {
+                actor: actor.clone(),
+                asked_ms: asked_ms.clone(),
+                thought: thought.clone(),
+            }),
             Reducer::MindInstall {
                 actor,
                 graph,
@@ -807,12 +1162,44 @@ impl __sdk::Reducer for Reducer {
                 seen_ms: seen_ms.clone(),
                 thought: thought.clone(),
             }),
+            Reducer::MindInstallWay {
+                actor,
+                graph,
+                plan,
+                say,
+                say_to,
+                way,
+                seen_ms,
+                thought,
+            } => __sats::bsatn::to_vec(&mind_install_way_reducer::MindInstallWayArgs {
+                actor: actor.clone(),
+                graph: graph.clone(),
+                plan: plan.clone(),
+                say: say.clone(),
+                say_to: say_to.clone(),
+                way: way.clone(),
+                seen_ms: seen_ms.clone(),
+                thought: thought.clone(),
+            }),
             Reducer::MindJudged { actor, items } => {
                 __sats::bsatn::to_vec(&mind_judged_reducer::MindJudgedArgs {
                     actor: actor.clone(),
                     items: items.clone(),
                 })
             }
+            Reducer::MindPatch {
+                actor,
+                target,
+                graph,
+                asked_ms,
+                thought,
+            } => __sats::bsatn::to_vec(&mind_patch_reducer::MindPatchArgs {
+                actor: actor.clone(),
+                target: target.clone(),
+                graph: graph.clone(),
+                asked_ms: asked_ms.clone(),
+                thought: thought.clone(),
+            }),
             Reducer::MindRoutines { actor, routines } => {
                 __sats::bsatn::to_vec(&mind_routines_reducer::MindRoutinesArgs {
                     actor: actor.clone(),
@@ -823,12 +1210,14 @@ impl __sdk::Reducer for Reducer {
                 actor,
                 say,
                 say_to,
+                way,
                 seen_ms,
                 thought,
             } => __sats::bsatn::to_vec(&mind_say_reducer::MindSayArgs {
                 actor: actor.clone(),
                 say: say.clone(),
                 say_to: say_to.clone(),
+                way: way.clone(),
                 seen_ms: seen_ms.clone(),
                 thought: thought.clone(),
             }),
@@ -847,6 +1236,11 @@ impl __sdk::Reducer for Reducer {
                     update: update.clone(),
                 })
             }
+            Reducer::MindWhere { actor } => {
+                __sats::bsatn::to_vec(&mind_where_reducer::MindWhereArgs {
+                    actor: actor.clone(),
+                })
+            }
             Reducer::OwnHabits => __sats::bsatn::to_vec(&own_habits_reducer::OwnHabitsArgs {}),
             Reducer::PlaceAt { id, x, y } => {
                 __sats::bsatn::to_vec(&place_at_reducer::PlaceAtArgs {
@@ -861,6 +1255,21 @@ impl __sdk::Reducer for Reducer {
                     near: near.clone(),
                 })
             }
+            Reducer::PlaceResource {
+                near,
+                kind,
+                dx,
+                dy,
+                max,
+                pool,
+            } => __sats::bsatn::to_vec(&place_resource_reducer::PlaceResourceArgs {
+                near: near.clone(),
+                kind: kind.clone(),
+                dx: dx.clone(),
+                dy: dy.clone(),
+                max: max.clone(),
+                pool: pool.clone(),
+            }),
             Reducer::PlaceStructure { near, kind } => {
                 __sats::bsatn::to_vec(&place_structure_reducer::PlaceStructureArgs {
                     near: near.clone(),
@@ -873,6 +1282,9 @@ impl __sdk::Reducer for Reducer {
                     skill: skill.clone(),
                 })
             }
+            Reducer::Relook { generation } => __sats::bsatn::to_vec(&relook_reducer::RelookArgs {
+                generation: generation.clone(),
+            }),
             Reducer::ResumeGenesis => {
                 __sats::bsatn::to_vec(&resume_genesis_reducer::ResumeGenesisArgs {})
             }
@@ -903,6 +1315,12 @@ impl __sdk::Reducer for Reducer {
                 __sats::bsatn::to_vec(&set_weather_reducer::SetWeatherArgs {
                     raining: raining.clone(),
                     secs: secs.clone(),
+                })
+            }
+            Reducer::SetWorldLaw { name, value } => {
+                __sats::bsatn::to_vec(&set_world_law_reducer::SetWorldLawArgs {
+                    name: name.clone(),
+                    value: value.clone(),
                 })
             }
             Reducer::SpawnBattle { n } => {
@@ -951,60 +1369,98 @@ impl __sdk::Reducer for Reducer {
 pub struct DbUpdate {
     acquaintance: __sdk::TableUpdate<Acquaintance>,
     act_card: __sdk::TableUpdate<ActCard>,
+    act_outcome: __sdk::TableUpdate<ActOutcome>,
     act_queue: __sdk::TableUpdate<PlannedAct>,
     activity: __sdk::TableUpdate<Activity>,
+    applied_gaze: __sdk::TableUpdate<AppliedGaze>,
     artifact: __sdk::TableUpdate<Artifact>,
+    attention: __sdk::TableUpdate<Attention>,
+    audience: __sdk::TableUpdate<Audience>,
     background: __sdk::TableUpdate<Background>,
     belief: __sdk::TableUpdate<Belief>,
     body: __sdk::TableUpdate<Body>,
     bond_offer: __sdk::TableUpdate<BondOffer>,
     brain: __sdk::TableUpdate<Brain>,
     character: __sdk::TableUpdate<Character>,
+    character_earshot: __sdk::TableUpdate<CharacterEarshot>,
+    character_senses: __sdk::TableUpdate<CharacterSenses>,
     chronicle: __sdk::TableUpdate<Chronicle>,
     clock: __sdk::TableUpdate<Clock>,
     combat_seen: __sdk::TableUpdate<CombatSeen>,
     community: __sdk::TableUpdate<Community>,
     connection: __sdk::TableUpdate<Connection>,
+    cover_ground: __sdk::TableUpdate<CoverGround>,
+    cover_law: __sdk::TableUpdate<CoverLaw>,
+    cue: __sdk::TableUpdate<Cue>,
     deliberation: __sdk::TableUpdate<Deliberation>,
     doing: __sdk::TableUpdate<Doing>,
+    doing_near: __sdk::TableUpdate<DoingNear>,
     doing_seen: __sdk::TableUpdate<DoingSeen>,
     expecting: __sdk::TableUpdate<Expecting>,
     experience: __sdk::TableUpdate<Experience>,
     familiar: __sdk::TableUpdate<Familiar>,
+    far_handle: __sdk::TableUpdate<FarHandle>,
+    fast_ask: __sdk::TableUpdate<FastAsk>,
+    fight_seen: __sdk::TableUpdate<FightSeen>,
     fighter: __sdk::TableUpdate<Fighter>,
+    fighter_near: __sdk::TableUpdate<FighterNear>,
     fighter_seen: __sdk::TableUpdate<FighterSeen>,
     floor_seed: __sdk::TableUpdate<FloorSeed>,
     gate: __sdk::TableUpdate<Gate>,
     genesis: __sdk::TableUpdate<Genesis>,
     genesis_timer: __sdk::TableUpdate<GenesisTimer>,
     genome: __sdk::TableUpdate<Genome>,
+    ground_edit: __sdk::TableUpdate<GroundEdit>,
     guest: __sdk::TableUpdate<Guest>,
+    hear_salt: __sdk::TableUpdate<HearSalt>,
+    heard: __sdk::TableUpdate<Heard>,
+    heard_asleep: __sdk::TableUpdate<HeardAsleep>,
+    heard_sounds: __sdk::TableUpdate<HeardSound>,
     infant_cry: __sdk::TableUpdate<InfantCry>,
     inventory: __sdk::TableUpdate<Inventory>,
     join_request: __sdk::TableUpdate<JoinRequest>,
     judged: __sdk::TableUpdate<Judged>,
     judgment: __sdk::TableUpdate<Judgment>,
     know_how: __sdk::TableUpdate<KnowHow>,
+    knowledge_epoch: __sdk::TableUpdate<KnowledgeEpoch>,
+    known_ground: __sdk::TableUpdate<KnownGround>,
     land: __sdk::TableUpdate<LandInfo>,
+    land_plan: __sdk::TableUpdate<LandPlan>,
+    last_look: __sdk::TableUpdate<LastLook>,
+    law_change: __sdk::TableUpdate<LawChange>,
+    law_override: __sdk::TableUpdate<LawOverride>,
+    law_revision: __sdk::TableUpdate<LawRevision>,
+    line_heard: __sdk::TableUpdate<LineHeard>,
     line_seen: __sdk::TableUpdate<LineSeen>,
+    look: __sdk::TableUpdate<Look>,
+    look_line: __sdk::TableUpdate<LookLine>,
     lot: __sdk::TableUpdate<Lot>,
     membership: __sdk::TableUpdate<Membership>,
     mind_cursor: __sdk::TableUpdate<MindCursor>,
     mind_state: __sdk::TableUpdate<MindState>,
     missile: __sdk::TableUpdate<Missile>,
+    motion_near: __sdk::TableUpdate<MotionNear>,
     motion_seen: __sdk::TableUpdate<MotionSeen>,
-    my_body: __sdk::TableUpdate<Motion>,
+    my_act_outcomes: __sdk::TableUpdate<ActOutcome>,
+    my_body: __sdk::TableUpdate<Moving>,
     my_characters: __sdk::TableUpdate<Character>,
     my_combat: __sdk::TableUpdate<CombatSeen>,
     my_deliberations: __sdk::TableUpdate<Deliberation>,
     my_doing: __sdk::TableUpdate<Doing>,
+    my_earshot: __sdk::TableUpdate<CharacterEarshot>,
     my_experience: __sdk::TableUpdate<Experience>,
     my_fighter: __sdk::TableUpdate<Fighter>,
+    my_heard: __sdk::TableUpdate<LineHeard>,
     my_inventory: __sdk::TableUpdate<Inventory>,
     my_know_how: __sdk::TableUpdate<KnowHow>,
+    my_known_names: __sdk::TableUpdate<KnownName>,
+    my_offers: __sdk::TableUpdate<MyOffer>,
     my_places: __sdk::TableUpdate<Place>,
     my_readiness: __sdk::TableUpdate<Readiness>,
     my_records: __sdk::TableUpdate<MyRecord>,
+    my_senses: __sdk::TableUpdate<CharacterSenses>,
+    my_senses_v_2: __sdk::TableUpdate<AppliedGaze>,
+    my_sex: __sdk::TableUpdate<MySex>,
     my_skill_uses: __sdk::TableUpdate<SkillUse>,
     my_vitals: __sdk::TableUpdate<Vitals>,
     pasture: __sdk::TableUpdate<Pasture>,
@@ -1021,6 +1477,7 @@ pub struct DbUpdate {
     record_clock: __sdk::TableUpdate<RecordClock>,
     record_party: __sdk::TableUpdate<RecordParty>,
     relation: __sdk::TableUpdate<Relation>,
+    remembered: __sdk::TableUpdate<Remembered>,
     resource_node: __sdk::TableUpdate<ResourceNode>,
     reveal: __sdk::TableUpdate<Reveal>,
     rhythm: __sdk::TableUpdate<Rhythm>,
@@ -1028,15 +1485,31 @@ pub struct DbUpdate {
     routine: __sdk::TableUpdate<Routine>,
     routine_stat: __sdk::TableUpdate<RoutineStat>,
     script: __sdk::TableUpdate<Script>,
-    seen_bodies: __sdk::TableUpdate<Motion>,
+    seen_bodies: __sdk::TableUpdate<Moving>,
+    seen_bodies_far: __sdk::TableUpdate<Moving>,
+    seen_bodies_near: __sdk::TableUpdate<Moving>,
+    seen_body_cue: __sdk::TableUpdate<SeenBodyCue>,
     seen_characters: __sdk::TableUpdate<SeenCharacter>,
     seen_doing: __sdk::TableUpdate<Doing>,
+    seen_doing_cue: __sdk::TableUpdate<SeenDoingCue>,
+    seen_doing_far: __sdk::TableUpdate<Doing>,
+    seen_doing_near: __sdk::TableUpdate<Doing>,
+    seen_fighter_cue: __sdk::TableUpdate<SeenFighterCue>,
     seen_fighters: __sdk::TableUpdate<Fighter>,
+    seen_fighters_far: __sdk::TableUpdate<Fighter>,
+    seen_fighters_near: __sdk::TableUpdate<Fighter>,
+    seen_stock: __sdk::TableUpdate<SeenStock>,
+    seen_structures: __sdk::TableUpdate<SeenStructures>,
     settlement: __sdk::TableUpdate<Settlement>,
+    sex: __sdk::TableUpdate<SexRow>,
+    sex_seen: __sdk::TableUpdate<SexSeen>,
     skill_card: __sdk::TableUpdate<SkillCard>,
     skill_code: __sdk::TableUpdate<SkillCode>,
     skill_use: __sdk::TableUpdate<SkillUse>,
     slow_timer: __sdk::TableUpdate<SlowTimer>,
+    slumber: __sdk::TableUpdate<Slumber>,
+    speech_card: __sdk::TableUpdate<SpeechCard>,
+    standing: __sdk::TableUpdate<Standing>,
     stats: __sdk::TableUpdate<Stats>,
     steer: __sdk::TableUpdate<Steer>,
     structure: __sdk::TableUpdate<Structure>,
@@ -1064,15 +1537,27 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "act_card" => db_update
                     .act_card
                     .append(act_card_table::parse_table_update(table_update)?),
+                "act_outcome" => db_update
+                    .act_outcome
+                    .append(act_outcome_table::parse_table_update(table_update)?),
                 "act_queue" => db_update
                     .act_queue
                     .append(act_queue_table::parse_table_update(table_update)?),
                 "activity" => db_update
                     .activity
                     .append(activity_table::parse_table_update(table_update)?),
+                "applied_gaze" => db_update
+                    .applied_gaze
+                    .append(applied_gaze_table::parse_table_update(table_update)?),
                 "artifact" => db_update
                     .artifact
                     .append(artifact_table::parse_table_update(table_update)?),
+                "attention" => db_update
+                    .attention
+                    .append(attention_table::parse_table_update(table_update)?),
+                "audience" => db_update
+                    .audience
+                    .append(audience_table::parse_table_update(table_update)?),
                 "background" => db_update
                     .background
                     .append(background_table::parse_table_update(table_update)?),
@@ -1091,6 +1576,12 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "character" => db_update
                     .character
                     .append(character_table::parse_table_update(table_update)?),
+                "character_earshot" => db_update
+                    .character_earshot
+                    .append(character_earshot_table::parse_table_update(table_update)?),
+                "character_senses" => db_update
+                    .character_senses
+                    .append(character_senses_table::parse_table_update(table_update)?),
                 "chronicle" => db_update
                     .chronicle
                     .append(chronicle_table::parse_table_update(table_update)?),
@@ -1106,12 +1597,24 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "connection" => db_update
                     .connection
                     .append(connection_table::parse_table_update(table_update)?),
+                "cover_ground" => db_update
+                    .cover_ground
+                    .append(cover_ground_table::parse_table_update(table_update)?),
+                "cover_law" => db_update
+                    .cover_law
+                    .append(cover_law_table::parse_table_update(table_update)?),
+                "cue" => db_update
+                    .cue
+                    .append(cue_table::parse_table_update(table_update)?),
                 "deliberation" => db_update
                     .deliberation
                     .append(deliberation_table::parse_table_update(table_update)?),
                 "doing" => db_update
                     .doing
                     .append(doing_table::parse_table_update(table_update)?),
+                "doing_near" => db_update
+                    .doing_near
+                    .append(doing_near_table::parse_table_update(table_update)?),
                 "doing_seen" => db_update
                     .doing_seen
                     .append(doing_seen_table::parse_table_update(table_update)?),
@@ -1124,9 +1627,21 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "familiar" => db_update
                     .familiar
                     .append(familiar_table::parse_table_update(table_update)?),
+                "far_handle" => db_update
+                    .far_handle
+                    .append(far_handle_table::parse_table_update(table_update)?),
+                "fast_ask" => db_update
+                    .fast_ask
+                    .append(fast_ask_table::parse_table_update(table_update)?),
+                "fight_seen" => db_update
+                    .fight_seen
+                    .append(fight_seen_table::parse_table_update(table_update)?),
                 "fighter" => db_update
                     .fighter
                     .append(fighter_table::parse_table_update(table_update)?),
+                "fighter_near" => db_update
+                    .fighter_near
+                    .append(fighter_near_table::parse_table_update(table_update)?),
                 "fighter_seen" => db_update
                     .fighter_seen
                     .append(fighter_seen_table::parse_table_update(table_update)?),
@@ -1145,9 +1660,24 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "genome" => db_update
                     .genome
                     .append(genome_table::parse_table_update(table_update)?),
+                "ground_edit" => db_update
+                    .ground_edit
+                    .append(ground_edit_table::parse_table_update(table_update)?),
                 "guest" => db_update
                     .guest
                     .append(guest_table::parse_table_update(table_update)?),
+                "hear_salt" => db_update
+                    .hear_salt
+                    .append(hear_salt_table::parse_table_update(table_update)?),
+                "heard" => db_update
+                    .heard
+                    .append(heard_table::parse_table_update(table_update)?),
+                "heard_asleep" => db_update
+                    .heard_asleep
+                    .append(heard_asleep_table::parse_table_update(table_update)?),
+                "heard_sounds" => db_update
+                    .heard_sounds
+                    .append(heard_sounds_table::parse_table_update(table_update)?),
                 "infant_cry" => db_update
                     .infant_cry
                     .append(infant_cry_table::parse_table_update(table_update)?),
@@ -1166,12 +1696,42 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "know_how" => db_update
                     .know_how
                     .append(know_how_table::parse_table_update(table_update)?),
+                "knowledge_epoch" => db_update
+                    .knowledge_epoch
+                    .append(knowledge_epoch_table::parse_table_update(table_update)?),
+                "known_ground" => db_update
+                    .known_ground
+                    .append(known_ground_table::parse_table_update(table_update)?),
                 "land" => db_update
                     .land
                     .append(land_table::parse_table_update(table_update)?),
+                "land_plan" => db_update
+                    .land_plan
+                    .append(land_plan_table::parse_table_update(table_update)?),
+                "last_look" => db_update
+                    .last_look
+                    .append(last_look_table::parse_table_update(table_update)?),
+                "law_change" => db_update
+                    .law_change
+                    .append(law_change_table::parse_table_update(table_update)?),
+                "law_override" => db_update
+                    .law_override
+                    .append(law_override_table::parse_table_update(table_update)?),
+                "law_revision" => db_update
+                    .law_revision
+                    .append(law_revision_table::parse_table_update(table_update)?),
+                "line_heard" => db_update
+                    .line_heard
+                    .append(line_heard_table::parse_table_update(table_update)?),
                 "line_seen" => db_update
                     .line_seen
                     .append(line_seen_table::parse_table_update(table_update)?),
+                "look" => db_update
+                    .look
+                    .append(look_table::parse_table_update(table_update)?),
+                "look_line" => db_update
+                    .look_line
+                    .append(look_line_table::parse_table_update(table_update)?),
                 "lot" => db_update
                     .lot
                     .append(lot_table::parse_table_update(table_update)?),
@@ -1187,9 +1747,15 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "missile" => db_update
                     .missile
                     .append(missile_table::parse_table_update(table_update)?),
+                "motion_near" => db_update
+                    .motion_near
+                    .append(motion_near_table::parse_table_update(table_update)?),
                 "motion_seen" => db_update
                     .motion_seen
                     .append(motion_seen_table::parse_table_update(table_update)?),
+                "my_act_outcomes" => db_update
+                    .my_act_outcomes
+                    .append(my_act_outcomes_table::parse_table_update(table_update)?),
                 "my_body" => db_update
                     .my_body
                     .append(my_body_table::parse_table_update(table_update)?),
@@ -1205,18 +1771,30 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "my_doing" => db_update
                     .my_doing
                     .append(my_doing_table::parse_table_update(table_update)?),
+                "my_earshot" => db_update
+                    .my_earshot
+                    .append(my_earshot_table::parse_table_update(table_update)?),
                 "my_experience" => db_update
                     .my_experience
                     .append(my_experience_table::parse_table_update(table_update)?),
                 "my_fighter" => db_update
                     .my_fighter
                     .append(my_fighter_table::parse_table_update(table_update)?),
+                "my_heard" => db_update
+                    .my_heard
+                    .append(my_heard_table::parse_table_update(table_update)?),
                 "my_inventory" => db_update
                     .my_inventory
                     .append(my_inventory_table::parse_table_update(table_update)?),
                 "my_know_how" => db_update
                     .my_know_how
                     .append(my_know_how_table::parse_table_update(table_update)?),
+                "my_known_names" => db_update
+                    .my_known_names
+                    .append(my_known_names_table::parse_table_update(table_update)?),
+                "my_offers" => db_update
+                    .my_offers
+                    .append(my_offers_table::parse_table_update(table_update)?),
                 "my_places" => db_update
                     .my_places
                     .append(my_places_table::parse_table_update(table_update)?),
@@ -1226,6 +1804,15 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "my_records" => db_update
                     .my_records
                     .append(my_records_table::parse_table_update(table_update)?),
+                "my_senses" => db_update
+                    .my_senses
+                    .append(my_senses_table::parse_table_update(table_update)?),
+                "my_senses_v_2" => db_update
+                    .my_senses_v_2
+                    .append(my_senses_v_2_table::parse_table_update(table_update)?),
+                "my_sex" => db_update
+                    .my_sex
+                    .append(my_sex_table::parse_table_update(table_update)?),
                 "my_skill_uses" => db_update
                     .my_skill_uses
                     .append(my_skill_uses_table::parse_table_update(table_update)?),
@@ -1274,6 +1861,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "relation" => db_update
                     .relation
                     .append(relation_table::parse_table_update(table_update)?),
+                "remembered" => db_update
+                    .remembered
+                    .append(remembered_table::parse_table_update(table_update)?),
                 "resource_node" => db_update
                     .resource_node
                     .append(resource_node_table::parse_table_update(table_update)?),
@@ -1298,18 +1888,57 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "seen_bodies" => db_update
                     .seen_bodies
                     .append(seen_bodies_table::parse_table_update(table_update)?),
+                "seen_bodies_far" => db_update
+                    .seen_bodies_far
+                    .append(seen_bodies_far_table::parse_table_update(table_update)?),
+                "seen_bodies_near" => db_update
+                    .seen_bodies_near
+                    .append(seen_bodies_near_table::parse_table_update(table_update)?),
+                "seen_body_cue" => db_update
+                    .seen_body_cue
+                    .append(seen_body_cue_table::parse_table_update(table_update)?),
                 "seen_characters" => db_update
                     .seen_characters
                     .append(seen_characters_table::parse_table_update(table_update)?),
                 "seen_doing" => db_update
                     .seen_doing
                     .append(seen_doing_table::parse_table_update(table_update)?),
+                "seen_doing_cue" => db_update
+                    .seen_doing_cue
+                    .append(seen_doing_cue_table::parse_table_update(table_update)?),
+                "seen_doing_far" => db_update
+                    .seen_doing_far
+                    .append(seen_doing_far_table::parse_table_update(table_update)?),
+                "seen_doing_near" => db_update
+                    .seen_doing_near
+                    .append(seen_doing_near_table::parse_table_update(table_update)?),
+                "seen_fighter_cue" => db_update
+                    .seen_fighter_cue
+                    .append(seen_fighter_cue_table::parse_table_update(table_update)?),
                 "seen_fighters" => db_update
                     .seen_fighters
                     .append(seen_fighters_table::parse_table_update(table_update)?),
+                "seen_fighters_far" => db_update
+                    .seen_fighters_far
+                    .append(seen_fighters_far_table::parse_table_update(table_update)?),
+                "seen_fighters_near" => db_update
+                    .seen_fighters_near
+                    .append(seen_fighters_near_table::parse_table_update(table_update)?),
+                "seen_stock" => db_update
+                    .seen_stock
+                    .append(seen_stock_table::parse_table_update(table_update)?),
+                "seen_structures" => db_update
+                    .seen_structures
+                    .append(seen_structures_table::parse_table_update(table_update)?),
                 "settlement" => db_update
                     .settlement
                     .append(settlement_table::parse_table_update(table_update)?),
+                "sex" => db_update
+                    .sex
+                    .append(sex_table::parse_table_update(table_update)?),
+                "sex_seen" => db_update
+                    .sex_seen
+                    .append(sex_seen_table::parse_table_update(table_update)?),
                 "skill_card" => db_update
                     .skill_card
                     .append(skill_card_table::parse_table_update(table_update)?),
@@ -1322,6 +1951,15 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "slow_timer" => db_update
                     .slow_timer
                     .append(slow_timer_table::parse_table_update(table_update)?),
+                "slumber" => db_update
+                    .slumber
+                    .append(slumber_table::parse_table_update(table_update)?),
+                "speech_card" => db_update
+                    .speech_card
+                    .append(speech_card_table::parse_table_update(table_update)?),
+                "standing" => db_update
+                    .standing
+                    .append(standing_table::parse_table_update(table_update)?),
                 "stats" => db_update
                     .stats
                     .append(stats_table::parse_table_update(table_update)?),
@@ -1393,14 +2031,26 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.act_card = cache
             .apply_diff_to_table::<ActCard>("act_card", &self.act_card)
             .with_updates_by_pk(|row| &row.skill);
+        diff.act_outcome = cache
+            .apply_diff_to_table::<ActOutcome>("act_outcome", &self.act_outcome)
+            .with_updates_by_pk(|row| &row.id);
         diff.act_queue = cache
             .apply_diff_to_table::<PlannedAct>("act_queue", &self.act_queue)
             .with_updates_by_pk(|row| &row.id);
         diff.activity = cache
             .apply_diff_to_table::<Activity>("activity", &self.activity)
             .with_updates_by_pk(|row| &row.id);
+        diff.applied_gaze = cache
+            .apply_diff_to_table::<AppliedGaze>("applied_gaze", &self.applied_gaze)
+            .with_updates_by_pk(|row| &row.id);
         diff.artifact = cache
             .apply_diff_to_table::<Artifact>("artifact", &self.artifact)
+            .with_updates_by_pk(|row| &row.id);
+        diff.attention = cache
+            .apply_diff_to_table::<Attention>("attention", &self.attention)
+            .with_updates_by_pk(|row| &row.id);
+        diff.audience = cache
+            .apply_diff_to_table::<Audience>("audience", &self.audience)
             .with_updates_by_pk(|row| &row.id);
         diff.background = cache
             .apply_diff_to_table::<Background>("background", &self.background)
@@ -1420,6 +2070,12 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.character = cache
             .apply_diff_to_table::<Character>("character", &self.character)
             .with_updates_by_pk(|row| &row.id);
+        diff.character_earshot = cache
+            .apply_diff_to_table::<CharacterEarshot>("character_earshot", &self.character_earshot)
+            .with_updates_by_pk(|row| &row.id);
+        diff.character_senses = cache
+            .apply_diff_to_table::<CharacterSenses>("character_senses", &self.character_senses)
+            .with_updates_by_pk(|row| &row.id);
         diff.chronicle = cache
             .apply_diff_to_table::<Chronicle>("chronicle", &self.chronicle)
             .with_updates_by_pk(|row| &row.id);
@@ -1435,11 +2091,23 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.connection = cache
             .apply_diff_to_table::<Connection>("connection", &self.connection)
             .with_updates_by_pk(|row| &row.id);
+        diff.cover_ground = cache
+            .apply_diff_to_table::<CoverGround>("cover_ground", &self.cover_ground)
+            .with_updates_by_pk(|row| &row.id);
+        diff.cover_law = cache
+            .apply_diff_to_table::<CoverLaw>("cover_law", &self.cover_law)
+            .with_updates_by_pk(|row| &row.id);
+        diff.cue = cache
+            .apply_diff_to_table::<Cue>("cue", &self.cue)
+            .with_updates_by_pk(|row| &row.id);
         diff.deliberation = cache
             .apply_diff_to_table::<Deliberation>("deliberation", &self.deliberation)
             .with_updates_by_pk(|row| &row.actor);
         diff.doing = cache
             .apply_diff_to_table::<Doing>("doing", &self.doing)
+            .with_updates_by_pk(|row| &row.id);
+        diff.doing_near = cache
+            .apply_diff_to_table::<DoingNear>("doing_near", &self.doing_near)
             .with_updates_by_pk(|row| &row.id);
         diff.doing_seen = cache
             .apply_diff_to_table::<DoingSeen>("doing_seen", &self.doing_seen)
@@ -1453,8 +2121,20 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.familiar = cache
             .apply_diff_to_table::<Familiar>("familiar", &self.familiar)
             .with_updates_by_pk(|row| &row.id);
+        diff.far_handle = cache
+            .apply_diff_to_table::<FarHandle>("far_handle", &self.far_handle)
+            .with_updates_by_pk(|row| &row.id);
+        diff.fast_ask = cache
+            .apply_diff_to_table::<FastAsk>("fast_ask", &self.fast_ask)
+            .with_updates_by_pk(|row| &row.actor);
+        diff.fight_seen = cache
+            .apply_diff_to_table::<FightSeen>("fight_seen", &self.fight_seen)
+            .with_updates_by_pk(|row| &row.id);
         diff.fighter = cache
             .apply_diff_to_table::<Fighter>("fighter", &self.fighter)
+            .with_updates_by_pk(|row| &row.id);
+        diff.fighter_near = cache
+            .apply_diff_to_table::<FighterNear>("fighter_near", &self.fighter_near)
             .with_updates_by_pk(|row| &row.id);
         diff.fighter_seen = cache
             .apply_diff_to_table::<FighterSeen>("fighter_seen", &self.fighter_seen)
@@ -1474,8 +2154,20 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.genome = cache
             .apply_diff_to_table::<Genome>("genome", &self.genome)
             .with_updates_by_pk(|row| &row.id);
+        diff.ground_edit = cache
+            .apply_diff_to_table::<GroundEdit>("ground_edit", &self.ground_edit)
+            .with_updates_by_pk(|row| &row.id);
         diff.guest = cache
             .apply_diff_to_table::<Guest>("guest", &self.guest)
+            .with_updates_by_pk(|row| &row.id);
+        diff.hear_salt = cache
+            .apply_diff_to_table::<HearSalt>("hear_salt", &self.hear_salt)
+            .with_updates_by_pk(|row| &row.id);
+        diff.heard = cache
+            .apply_diff_to_table::<Heard>("heard", &self.heard)
+            .with_updates_by_pk(|row| &row.key);
+        diff.heard_asleep = cache
+            .apply_diff_to_table::<HeardAsleep>("heard_asleep", &self.heard_asleep)
             .with_updates_by_pk(|row| &row.id);
         diff.infant_cry = cache
             .apply_diff_to_table::<InfantCry>("infant_cry", &self.infant_cry)
@@ -1495,11 +2187,41 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.know_how = cache
             .apply_diff_to_table::<KnowHow>("know_how", &self.know_how)
             .with_updates_by_pk(|row| &row.id);
+        diff.knowledge_epoch = cache
+            .apply_diff_to_table::<KnowledgeEpoch>("knowledge_epoch", &self.knowledge_epoch)
+            .with_updates_by_pk(|row| &row.id);
+        diff.known_ground = cache
+            .apply_diff_to_table::<KnownGround>("known_ground", &self.known_ground)
+            .with_updates_by_pk(|row| &row.id);
         diff.land = cache
             .apply_diff_to_table::<LandInfo>("land", &self.land)
             .with_updates_by_pk(|row| &row.id);
+        diff.land_plan = cache
+            .apply_diff_to_table::<LandPlan>("land_plan", &self.land_plan)
+            .with_updates_by_pk(|row| &row.id);
+        diff.last_look = cache
+            .apply_diff_to_table::<LastLook>("last_look", &self.last_look)
+            .with_updates_by_pk(|row| &row.id);
+        diff.law_change = cache
+            .apply_diff_to_table::<LawChange>("law_change", &self.law_change)
+            .with_updates_by_pk(|row| &row.id);
+        diff.law_override = cache
+            .apply_diff_to_table::<LawOverride>("law_override", &self.law_override)
+            .with_updates_by_pk(|row| &row.name);
+        diff.law_revision = cache
+            .apply_diff_to_table::<LawRevision>("law_revision", &self.law_revision)
+            .with_updates_by_pk(|row| &row.id);
+        diff.line_heard = cache
+            .apply_diff_to_table::<LineHeard>("line_heard", &self.line_heard)
+            .with_updates_by_pk(|row| &row.line);
         diff.line_seen = cache
             .apply_diff_to_table::<LineSeen>("line_seen", &self.line_seen)
+            .with_updates_by_pk(|row| &row.id);
+        diff.look = cache
+            .apply_diff_to_table::<Look>("look", &self.look)
+            .with_updates_by_pk(|row| &row.id);
+        diff.look_line = cache
+            .apply_diff_to_table::<LookLine>("look_line", &self.look_line)
             .with_updates_by_pk(|row| &row.id);
         diff.lot = cache
             .apply_diff_to_table::<Lot>("lot", &self.lot)
@@ -1515,6 +2237,9 @@ impl __sdk::DbUpdate for DbUpdate {
             .with_updates_by_pk(|row| &row.id);
         diff.missile = cache
             .apply_diff_to_table::<Missile>("missile", &self.missile)
+            .with_updates_by_pk(|row| &row.id);
+        diff.motion_near = cache
+            .apply_diff_to_table::<MotionNear>("motion_near", &self.motion_near)
             .with_updates_by_pk(|row| &row.id);
         diff.motion_seen = cache
             .apply_diff_to_table::<MotionSeen>("motion_seen", &self.motion_seen)
@@ -1561,6 +2286,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.relation = cache
             .apply_diff_to_table::<Relation>("relation", &self.relation)
             .with_updates_by_pk(|row| &row.id);
+        diff.remembered = cache
+            .apply_diff_to_table::<Remembered>("remembered", &self.remembered)
+            .with_updates_by_pk(|row| &row.id);
         diff.resource_node = cache
             .apply_diff_to_table::<ResourceNode>("resource_node", &self.resource_node)
             .with_updates_by_pk(|row| &row.id);
@@ -1582,8 +2310,23 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.script = cache
             .apply_diff_to_table::<Script>("script", &self.script)
             .with_updates_by_pk(|row| &row.name);
+        diff.seen_body_cue = self.seen_body_cue.into_event_diff();
+        diff.seen_doing_cue = self.seen_doing_cue.into_event_diff();
+        diff.seen_fighter_cue = self.seen_fighter_cue.into_event_diff();
+        diff.seen_stock = cache
+            .apply_diff_to_table::<SeenStock>("seen_stock", &self.seen_stock)
+            .with_updates_by_pk(|row| &row.id);
+        diff.seen_structures = cache
+            .apply_diff_to_table::<SeenStructures>("seen_structures", &self.seen_structures)
+            .with_updates_by_pk(|row| &row.id);
         diff.settlement = cache
             .apply_diff_to_table::<Settlement>("settlement", &self.settlement)
+            .with_updates_by_pk(|row| &row.id);
+        diff.sex = cache
+            .apply_diff_to_table::<SexRow>("sex", &self.sex)
+            .with_updates_by_pk(|row| &row.id);
+        diff.sex_seen = cache
+            .apply_diff_to_table::<SexSeen>("sex_seen", &self.sex_seen)
             .with_updates_by_pk(|row| &row.id);
         diff.skill_card = cache
             .apply_diff_to_table::<SkillCard>("skill_card", &self.skill_card)
@@ -1597,6 +2340,15 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.slow_timer = cache
             .apply_diff_to_table::<SlowTimer>("slow_timer", &self.slow_timer)
             .with_updates_by_pk(|row| &row.scheduled_id);
+        diff.slumber = cache
+            .apply_diff_to_table::<Slumber>("slumber", &self.slumber)
+            .with_updates_by_pk(|row| &row.actor);
+        diff.speech_card = cache
+            .apply_diff_to_table::<SpeechCard>("speech_card", &self.speech_card)
+            .with_updates_by_pk(|row| &row.name);
+        diff.standing = cache
+            .apply_diff_to_table::<Standing>("standing", &self.standing)
+            .with_updates_by_pk(|row| &row.actor);
         diff.stats = cache
             .apply_diff_to_table::<Stats>("stats", &self.stats)
             .with_updates_by_pk(|row| &row.id);
@@ -1636,8 +2388,14 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.world_law = cache
             .apply_diff_to_table::<WorldLaw>("world_law", &self.world_law)
             .with_updates_by_pk(|row| &row.name);
+        diff.heard_sounds = cache
+            .apply_diff_to_table::<HeardSound>("heard_sounds", &self.heard_sounds)
+            .with_updates_by_pk(|row| &row.key);
+        diff.my_act_outcomes = cache
+            .apply_diff_to_table::<ActOutcome>("my_act_outcomes", &self.my_act_outcomes)
+            .with_updates_by_pk(|row| &row.id);
         diff.my_body = cache
-            .apply_diff_to_table::<Motion>("my_body", &self.my_body)
+            .apply_diff_to_table::<Moving>("my_body", &self.my_body)
             .with_updates_by_pk(|row| &row.id);
         diff.my_characters = cache
             .apply_diff_to_table::<Character>("my_characters", &self.my_characters)
@@ -1648,17 +2406,29 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.my_doing = cache
             .apply_diff_to_table::<Doing>("my_doing", &self.my_doing)
             .with_updates_by_pk(|row| &row.id);
+        diff.my_earshot = cache
+            .apply_diff_to_table::<CharacterEarshot>("my_earshot", &self.my_earshot)
+            .with_updates_by_pk(|row| &row.id);
         diff.my_experience = cache
             .apply_diff_to_table::<Experience>("my_experience", &self.my_experience)
             .with_updates_by_pk(|row| &row.id);
         diff.my_fighter = cache
             .apply_diff_to_table::<Fighter>("my_fighter", &self.my_fighter)
             .with_updates_by_pk(|row| &row.id);
+        diff.my_heard = cache
+            .apply_diff_to_table::<LineHeard>("my_heard", &self.my_heard)
+            .with_updates_by_pk(|row| &row.line);
         diff.my_inventory = cache
             .apply_diff_to_table::<Inventory>("my_inventory", &self.my_inventory)
             .with_updates_by_pk(|row| &row.id);
         diff.my_know_how = cache
             .apply_diff_to_table::<KnowHow>("my_know_how", &self.my_know_how)
+            .with_updates_by_pk(|row| &row.id);
+        diff.my_known_names = cache
+            .apply_diff_to_table::<KnownName>("my_known_names", &self.my_known_names)
+            .with_updates_by_pk(|row| &row.id);
+        diff.my_offers = cache
+            .apply_diff_to_table::<MyOffer>("my_offers", &self.my_offers)
             .with_updates_by_pk(|row| &row.id);
         diff.my_places = cache
             .apply_diff_to_table::<Place>("my_places", &self.my_places)
@@ -1666,13 +2436,28 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.my_readiness =
             cache.apply_diff_to_table::<Readiness>("my_readiness", &self.my_readiness);
         diff.my_records = cache.apply_diff_to_table::<MyRecord>("my_records", &self.my_records);
+        diff.my_senses = cache
+            .apply_diff_to_table::<CharacterSenses>("my_senses", &self.my_senses)
+            .with_updates_by_pk(|row| &row.id);
+        diff.my_senses_v_2 = cache
+            .apply_diff_to_table::<AppliedGaze>("my_senses_v_2", &self.my_senses_v_2)
+            .with_updates_by_pk(|row| &row.id);
+        diff.my_sex = cache
+            .apply_diff_to_table::<MySex>("my_sex", &self.my_sex)
+            .with_updates_by_pk(|row| &row.id);
         diff.my_skill_uses =
             cache.apply_diff_to_table::<SkillUse>("my_skill_uses", &self.my_skill_uses);
         diff.my_vitals = cache
             .apply_diff_to_table::<Vitals>("my_vitals", &self.my_vitals)
             .with_updates_by_pk(|row| &row.id);
         diff.seen_bodies = cache
-            .apply_diff_to_table::<Motion>("seen_bodies", &self.seen_bodies)
+            .apply_diff_to_table::<Moving>("seen_bodies", &self.seen_bodies)
+            .with_updates_by_pk(|row| &row.id);
+        diff.seen_bodies_far = cache
+            .apply_diff_to_table::<Moving>("seen_bodies_far", &self.seen_bodies_far)
+            .with_updates_by_pk(|row| &row.id);
+        diff.seen_bodies_near = cache
+            .apply_diff_to_table::<Moving>("seen_bodies_near", &self.seen_bodies_near)
             .with_updates_by_pk(|row| &row.id);
         diff.seen_characters = cache
             .apply_diff_to_table::<SeenCharacter>("seen_characters", &self.seen_characters)
@@ -1680,8 +2465,20 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.seen_doing = cache
             .apply_diff_to_table::<Doing>("seen_doing", &self.seen_doing)
             .with_updates_by_pk(|row| &row.id);
+        diff.seen_doing_far = cache
+            .apply_diff_to_table::<Doing>("seen_doing_far", &self.seen_doing_far)
+            .with_updates_by_pk(|row| &row.id);
+        diff.seen_doing_near = cache
+            .apply_diff_to_table::<Doing>("seen_doing_near", &self.seen_doing_near)
+            .with_updates_by_pk(|row| &row.id);
         diff.seen_fighters = cache
             .apply_diff_to_table::<Fighter>("seen_fighters", &self.seen_fighters)
+            .with_updates_by_pk(|row| &row.id);
+        diff.seen_fighters_far = cache
+            .apply_diff_to_table::<Fighter>("seen_fighters_far", &self.seen_fighters_far)
+            .with_updates_by_pk(|row| &row.id);
+        diff.seen_fighters_near = cache
+            .apply_diff_to_table::<Fighter>("seen_fighters_near", &self.seen_fighters_near)
             .with_updates_by_pk(|row| &row.id);
 
         diff
@@ -1696,14 +2493,26 @@ impl __sdk::DbUpdate for DbUpdate {
                 "act_card" => db_update
                     .act_card
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "act_outcome" => db_update
+                    .act_outcome
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "act_queue" => db_update
                     .act_queue
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "activity" => db_update
                     .activity
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "applied_gaze" => db_update
+                    .applied_gaze
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "artifact" => db_update
                     .artifact
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "attention" => db_update
+                    .attention
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "audience" => db_update
+                    .audience
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "background" => db_update
                     .background
@@ -1723,6 +2532,12 @@ impl __sdk::DbUpdate for DbUpdate {
                 "character" => db_update
                     .character
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "character_earshot" => db_update
+                    .character_earshot
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "character_senses" => db_update
+                    .character_senses
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "chronicle" => db_update
                     .chronicle
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
@@ -1738,11 +2553,23 @@ impl __sdk::DbUpdate for DbUpdate {
                 "connection" => db_update
                     .connection
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "cover_ground" => db_update
+                    .cover_ground
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "cover_law" => db_update
+                    .cover_law
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "cue" => db_update
+                    .cue
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "deliberation" => db_update
                     .deliberation
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "doing" => db_update
                     .doing
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "doing_near" => db_update
+                    .doing_near
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "doing_seen" => db_update
                     .doing_seen
@@ -1756,8 +2583,20 @@ impl __sdk::DbUpdate for DbUpdate {
                 "familiar" => db_update
                     .familiar
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "far_handle" => db_update
+                    .far_handle
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "fast_ask" => db_update
+                    .fast_ask
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "fight_seen" => db_update
+                    .fight_seen
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "fighter" => db_update
                     .fighter
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "fighter_near" => db_update
+                    .fighter_near
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "fighter_seen" => db_update
                     .fighter_seen
@@ -1777,8 +2616,23 @@ impl __sdk::DbUpdate for DbUpdate {
                 "genome" => db_update
                     .genome
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "ground_edit" => db_update
+                    .ground_edit
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "guest" => db_update
                     .guest
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "hear_salt" => db_update
+                    .hear_salt
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "heard" => db_update
+                    .heard
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "heard_asleep" => db_update
+                    .heard_asleep
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "heard_sounds" => db_update
+                    .heard_sounds
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "infant_cry" => db_update
                     .infant_cry
@@ -1798,11 +2652,41 @@ impl __sdk::DbUpdate for DbUpdate {
                 "know_how" => db_update
                     .know_how
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "knowledge_epoch" => db_update
+                    .knowledge_epoch
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "known_ground" => db_update
+                    .known_ground
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "land" => db_update
                     .land
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "land_plan" => db_update
+                    .land_plan
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "last_look" => db_update
+                    .last_look
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "law_change" => db_update
+                    .law_change
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "law_override" => db_update
+                    .law_override
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "law_revision" => db_update
+                    .law_revision
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "line_heard" => db_update
+                    .line_heard
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "line_seen" => db_update
                     .line_seen
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "look" => db_update
+                    .look
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "look_line" => db_update
+                    .look_line
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "lot" => db_update
                     .lot
@@ -1819,8 +2703,14 @@ impl __sdk::DbUpdate for DbUpdate {
                 "missile" => db_update
                     .missile
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "motion_near" => db_update
+                    .motion_near
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "motion_seen" => db_update
                     .motion_seen
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "my_act_outcomes" => db_update
+                    .my_act_outcomes
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "my_body" => db_update
                     .my_body
@@ -1837,17 +2727,29 @@ impl __sdk::DbUpdate for DbUpdate {
                 "my_doing" => db_update
                     .my_doing
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "my_earshot" => db_update
+                    .my_earshot
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "my_experience" => db_update
                     .my_experience
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "my_fighter" => db_update
                     .my_fighter
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "my_heard" => db_update
+                    .my_heard
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "my_inventory" => db_update
                     .my_inventory
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "my_know_how" => db_update
                     .my_know_how
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "my_known_names" => db_update
+                    .my_known_names
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "my_offers" => db_update
+                    .my_offers
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "my_places" => db_update
                     .my_places
@@ -1857,6 +2759,15 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "my_records" => db_update
                     .my_records
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "my_senses" => db_update
+                    .my_senses
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "my_senses_v_2" => db_update
+                    .my_senses_v_2
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "my_sex" => db_update
+                    .my_sex
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "my_skill_uses" => db_update
                     .my_skill_uses
@@ -1906,6 +2817,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "relation" => db_update
                     .relation
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "remembered" => db_update
+                    .remembered
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "resource_node" => db_update
                     .resource_node
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
@@ -1930,17 +2844,56 @@ impl __sdk::DbUpdate for DbUpdate {
                 "seen_bodies" => db_update
                     .seen_bodies
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "seen_bodies_far" => db_update
+                    .seen_bodies_far
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "seen_bodies_near" => db_update
+                    .seen_bodies_near
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "seen_body_cue" => db_update
+                    .seen_body_cue
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "seen_characters" => db_update
                     .seen_characters
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "seen_doing" => db_update
                     .seen_doing
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "seen_doing_cue" => db_update
+                    .seen_doing_cue
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "seen_doing_far" => db_update
+                    .seen_doing_far
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "seen_doing_near" => db_update
+                    .seen_doing_near
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "seen_fighter_cue" => db_update
+                    .seen_fighter_cue
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "seen_fighters" => db_update
                     .seen_fighters
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "seen_fighters_far" => db_update
+                    .seen_fighters_far
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "seen_fighters_near" => db_update
+                    .seen_fighters_near
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "seen_stock" => db_update
+                    .seen_stock
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "seen_structures" => db_update
+                    .seen_structures
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "settlement" => db_update
                     .settlement
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "sex" => db_update
+                    .sex
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "sex_seen" => db_update
+                    .sex_seen
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "skill_card" => db_update
                     .skill_card
@@ -1953,6 +2906,15 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "slow_timer" => db_update
                     .slow_timer
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "slumber" => db_update
+                    .slumber
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "speech_card" => db_update
+                    .speech_card
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "standing" => db_update
+                    .standing
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "stats" => db_update
                     .stats
@@ -2012,14 +2974,26 @@ impl __sdk::DbUpdate for DbUpdate {
                 "act_card" => db_update
                     .act_card
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "act_outcome" => db_update
+                    .act_outcome
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "act_queue" => db_update
                     .act_queue
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "activity" => db_update
                     .activity
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "applied_gaze" => db_update
+                    .applied_gaze
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "artifact" => db_update
                     .artifact
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "attention" => db_update
+                    .attention
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "audience" => db_update
+                    .audience
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "background" => db_update
                     .background
@@ -2039,6 +3013,12 @@ impl __sdk::DbUpdate for DbUpdate {
                 "character" => db_update
                     .character
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "character_earshot" => db_update
+                    .character_earshot
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "character_senses" => db_update
+                    .character_senses
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "chronicle" => db_update
                     .chronicle
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -2054,11 +3034,23 @@ impl __sdk::DbUpdate for DbUpdate {
                 "connection" => db_update
                     .connection
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "cover_ground" => db_update
+                    .cover_ground
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "cover_law" => db_update
+                    .cover_law
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "cue" => db_update
+                    .cue
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "deliberation" => db_update
                     .deliberation
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "doing" => db_update
                     .doing
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "doing_near" => db_update
+                    .doing_near
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "doing_seen" => db_update
                     .doing_seen
@@ -2072,8 +3064,20 @@ impl __sdk::DbUpdate for DbUpdate {
                 "familiar" => db_update
                     .familiar
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "far_handle" => db_update
+                    .far_handle
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "fast_ask" => db_update
+                    .fast_ask
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "fight_seen" => db_update
+                    .fight_seen
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "fighter" => db_update
                     .fighter
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "fighter_near" => db_update
+                    .fighter_near
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "fighter_seen" => db_update
                     .fighter_seen
@@ -2093,8 +3097,23 @@ impl __sdk::DbUpdate for DbUpdate {
                 "genome" => db_update
                     .genome
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "ground_edit" => db_update
+                    .ground_edit
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "guest" => db_update
                     .guest
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "hear_salt" => db_update
+                    .hear_salt
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "heard" => db_update
+                    .heard
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "heard_asleep" => db_update
+                    .heard_asleep
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "heard_sounds" => db_update
+                    .heard_sounds
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "infant_cry" => db_update
                     .infant_cry
@@ -2114,11 +3133,41 @@ impl __sdk::DbUpdate for DbUpdate {
                 "know_how" => db_update
                     .know_how
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "knowledge_epoch" => db_update
+                    .knowledge_epoch
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "known_ground" => db_update
+                    .known_ground
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "land" => db_update
                     .land
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "land_plan" => db_update
+                    .land_plan
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "last_look" => db_update
+                    .last_look
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "law_change" => db_update
+                    .law_change
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "law_override" => db_update
+                    .law_override
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "law_revision" => db_update
+                    .law_revision
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "line_heard" => db_update
+                    .line_heard
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "line_seen" => db_update
                     .line_seen
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "look" => db_update
+                    .look
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "look_line" => db_update
+                    .look_line
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "lot" => db_update
                     .lot
@@ -2135,8 +3184,14 @@ impl __sdk::DbUpdate for DbUpdate {
                 "missile" => db_update
                     .missile
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "motion_near" => db_update
+                    .motion_near
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "motion_seen" => db_update
                     .motion_seen
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "my_act_outcomes" => db_update
+                    .my_act_outcomes
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "my_body" => db_update
                     .my_body
@@ -2153,17 +3208,29 @@ impl __sdk::DbUpdate for DbUpdate {
                 "my_doing" => db_update
                     .my_doing
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "my_earshot" => db_update
+                    .my_earshot
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "my_experience" => db_update
                     .my_experience
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "my_fighter" => db_update
                     .my_fighter
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "my_heard" => db_update
+                    .my_heard
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "my_inventory" => db_update
                     .my_inventory
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "my_know_how" => db_update
                     .my_know_how
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "my_known_names" => db_update
+                    .my_known_names
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "my_offers" => db_update
+                    .my_offers
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "my_places" => db_update
                     .my_places
@@ -2173,6 +3240,15 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "my_records" => db_update
                     .my_records
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "my_senses" => db_update
+                    .my_senses
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "my_senses_v_2" => db_update
+                    .my_senses_v_2
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "my_sex" => db_update
+                    .my_sex
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "my_skill_uses" => db_update
                     .my_skill_uses
@@ -2222,6 +3298,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "relation" => db_update
                     .relation
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "remembered" => db_update
+                    .remembered
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "resource_node" => db_update
                     .resource_node
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -2246,17 +3325,56 @@ impl __sdk::DbUpdate for DbUpdate {
                 "seen_bodies" => db_update
                     .seen_bodies
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "seen_bodies_far" => db_update
+                    .seen_bodies_far
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "seen_bodies_near" => db_update
+                    .seen_bodies_near
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "seen_body_cue" => db_update
+                    .seen_body_cue
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "seen_characters" => db_update
                     .seen_characters
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "seen_doing" => db_update
                     .seen_doing
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "seen_doing_cue" => db_update
+                    .seen_doing_cue
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "seen_doing_far" => db_update
+                    .seen_doing_far
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "seen_doing_near" => db_update
+                    .seen_doing_near
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "seen_fighter_cue" => db_update
+                    .seen_fighter_cue
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "seen_fighters" => db_update
                     .seen_fighters
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "seen_fighters_far" => db_update
+                    .seen_fighters_far
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "seen_fighters_near" => db_update
+                    .seen_fighters_near
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "seen_stock" => db_update
+                    .seen_stock
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "seen_structures" => db_update
+                    .seen_structures
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "settlement" => db_update
                     .settlement
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "sex" => db_update
+                    .sex
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "sex_seen" => db_update
+                    .sex_seen
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "skill_card" => db_update
                     .skill_card
@@ -2269,6 +3387,15 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "slow_timer" => db_update
                     .slow_timer
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "slumber" => db_update
+                    .slumber
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "speech_card" => db_update
+                    .speech_card
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "standing" => db_update
+                    .standing
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "stats" => db_update
                     .stats
@@ -2326,60 +3453,98 @@ impl __sdk::DbUpdate for DbUpdate {
 pub struct AppliedDiff<'r> {
     acquaintance: __sdk::TableAppliedDiff<'r, Acquaintance>,
     act_card: __sdk::TableAppliedDiff<'r, ActCard>,
+    act_outcome: __sdk::TableAppliedDiff<'r, ActOutcome>,
     act_queue: __sdk::TableAppliedDiff<'r, PlannedAct>,
     activity: __sdk::TableAppliedDiff<'r, Activity>,
+    applied_gaze: __sdk::TableAppliedDiff<'r, AppliedGaze>,
     artifact: __sdk::TableAppliedDiff<'r, Artifact>,
+    attention: __sdk::TableAppliedDiff<'r, Attention>,
+    audience: __sdk::TableAppliedDiff<'r, Audience>,
     background: __sdk::TableAppliedDiff<'r, Background>,
     belief: __sdk::TableAppliedDiff<'r, Belief>,
     body: __sdk::TableAppliedDiff<'r, Body>,
     bond_offer: __sdk::TableAppliedDiff<'r, BondOffer>,
     brain: __sdk::TableAppliedDiff<'r, Brain>,
     character: __sdk::TableAppliedDiff<'r, Character>,
+    character_earshot: __sdk::TableAppliedDiff<'r, CharacterEarshot>,
+    character_senses: __sdk::TableAppliedDiff<'r, CharacterSenses>,
     chronicle: __sdk::TableAppliedDiff<'r, Chronicle>,
     clock: __sdk::TableAppliedDiff<'r, Clock>,
     combat_seen: __sdk::TableAppliedDiff<'r, CombatSeen>,
     community: __sdk::TableAppliedDiff<'r, Community>,
     connection: __sdk::TableAppliedDiff<'r, Connection>,
+    cover_ground: __sdk::TableAppliedDiff<'r, CoverGround>,
+    cover_law: __sdk::TableAppliedDiff<'r, CoverLaw>,
+    cue: __sdk::TableAppliedDiff<'r, Cue>,
     deliberation: __sdk::TableAppliedDiff<'r, Deliberation>,
     doing: __sdk::TableAppliedDiff<'r, Doing>,
+    doing_near: __sdk::TableAppliedDiff<'r, DoingNear>,
     doing_seen: __sdk::TableAppliedDiff<'r, DoingSeen>,
     expecting: __sdk::TableAppliedDiff<'r, Expecting>,
     experience: __sdk::TableAppliedDiff<'r, Experience>,
     familiar: __sdk::TableAppliedDiff<'r, Familiar>,
+    far_handle: __sdk::TableAppliedDiff<'r, FarHandle>,
+    fast_ask: __sdk::TableAppliedDiff<'r, FastAsk>,
+    fight_seen: __sdk::TableAppliedDiff<'r, FightSeen>,
     fighter: __sdk::TableAppliedDiff<'r, Fighter>,
+    fighter_near: __sdk::TableAppliedDiff<'r, FighterNear>,
     fighter_seen: __sdk::TableAppliedDiff<'r, FighterSeen>,
     floor_seed: __sdk::TableAppliedDiff<'r, FloorSeed>,
     gate: __sdk::TableAppliedDiff<'r, Gate>,
     genesis: __sdk::TableAppliedDiff<'r, Genesis>,
     genesis_timer: __sdk::TableAppliedDiff<'r, GenesisTimer>,
     genome: __sdk::TableAppliedDiff<'r, Genome>,
+    ground_edit: __sdk::TableAppliedDiff<'r, GroundEdit>,
     guest: __sdk::TableAppliedDiff<'r, Guest>,
+    hear_salt: __sdk::TableAppliedDiff<'r, HearSalt>,
+    heard: __sdk::TableAppliedDiff<'r, Heard>,
+    heard_asleep: __sdk::TableAppliedDiff<'r, HeardAsleep>,
+    heard_sounds: __sdk::TableAppliedDiff<'r, HeardSound>,
     infant_cry: __sdk::TableAppliedDiff<'r, InfantCry>,
     inventory: __sdk::TableAppliedDiff<'r, Inventory>,
     join_request: __sdk::TableAppliedDiff<'r, JoinRequest>,
     judged: __sdk::TableAppliedDiff<'r, Judged>,
     judgment: __sdk::TableAppliedDiff<'r, Judgment>,
     know_how: __sdk::TableAppliedDiff<'r, KnowHow>,
+    knowledge_epoch: __sdk::TableAppliedDiff<'r, KnowledgeEpoch>,
+    known_ground: __sdk::TableAppliedDiff<'r, KnownGround>,
     land: __sdk::TableAppliedDiff<'r, LandInfo>,
+    land_plan: __sdk::TableAppliedDiff<'r, LandPlan>,
+    last_look: __sdk::TableAppliedDiff<'r, LastLook>,
+    law_change: __sdk::TableAppliedDiff<'r, LawChange>,
+    law_override: __sdk::TableAppliedDiff<'r, LawOverride>,
+    law_revision: __sdk::TableAppliedDiff<'r, LawRevision>,
+    line_heard: __sdk::TableAppliedDiff<'r, LineHeard>,
     line_seen: __sdk::TableAppliedDiff<'r, LineSeen>,
+    look: __sdk::TableAppliedDiff<'r, Look>,
+    look_line: __sdk::TableAppliedDiff<'r, LookLine>,
     lot: __sdk::TableAppliedDiff<'r, Lot>,
     membership: __sdk::TableAppliedDiff<'r, Membership>,
     mind_cursor: __sdk::TableAppliedDiff<'r, MindCursor>,
     mind_state: __sdk::TableAppliedDiff<'r, MindState>,
     missile: __sdk::TableAppliedDiff<'r, Missile>,
+    motion_near: __sdk::TableAppliedDiff<'r, MotionNear>,
     motion_seen: __sdk::TableAppliedDiff<'r, MotionSeen>,
-    my_body: __sdk::TableAppliedDiff<'r, Motion>,
+    my_act_outcomes: __sdk::TableAppliedDiff<'r, ActOutcome>,
+    my_body: __sdk::TableAppliedDiff<'r, Moving>,
     my_characters: __sdk::TableAppliedDiff<'r, Character>,
     my_combat: __sdk::TableAppliedDiff<'r, CombatSeen>,
     my_deliberations: __sdk::TableAppliedDiff<'r, Deliberation>,
     my_doing: __sdk::TableAppliedDiff<'r, Doing>,
+    my_earshot: __sdk::TableAppliedDiff<'r, CharacterEarshot>,
     my_experience: __sdk::TableAppliedDiff<'r, Experience>,
     my_fighter: __sdk::TableAppliedDiff<'r, Fighter>,
+    my_heard: __sdk::TableAppliedDiff<'r, LineHeard>,
     my_inventory: __sdk::TableAppliedDiff<'r, Inventory>,
     my_know_how: __sdk::TableAppliedDiff<'r, KnowHow>,
+    my_known_names: __sdk::TableAppliedDiff<'r, KnownName>,
+    my_offers: __sdk::TableAppliedDiff<'r, MyOffer>,
     my_places: __sdk::TableAppliedDiff<'r, Place>,
     my_readiness: __sdk::TableAppliedDiff<'r, Readiness>,
     my_records: __sdk::TableAppliedDiff<'r, MyRecord>,
+    my_senses: __sdk::TableAppliedDiff<'r, CharacterSenses>,
+    my_senses_v_2: __sdk::TableAppliedDiff<'r, AppliedGaze>,
+    my_sex: __sdk::TableAppliedDiff<'r, MySex>,
     my_skill_uses: __sdk::TableAppliedDiff<'r, SkillUse>,
     my_vitals: __sdk::TableAppliedDiff<'r, Vitals>,
     pasture: __sdk::TableAppliedDiff<'r, Pasture>,
@@ -2396,6 +3561,7 @@ pub struct AppliedDiff<'r> {
     record_clock: __sdk::TableAppliedDiff<'r, RecordClock>,
     record_party: __sdk::TableAppliedDiff<'r, RecordParty>,
     relation: __sdk::TableAppliedDiff<'r, Relation>,
+    remembered: __sdk::TableAppliedDiff<'r, Remembered>,
     resource_node: __sdk::TableAppliedDiff<'r, ResourceNode>,
     reveal: __sdk::TableAppliedDiff<'r, Reveal>,
     rhythm: __sdk::TableAppliedDiff<'r, Rhythm>,
@@ -2403,15 +3569,31 @@ pub struct AppliedDiff<'r> {
     routine: __sdk::TableAppliedDiff<'r, Routine>,
     routine_stat: __sdk::TableAppliedDiff<'r, RoutineStat>,
     script: __sdk::TableAppliedDiff<'r, Script>,
-    seen_bodies: __sdk::TableAppliedDiff<'r, Motion>,
+    seen_bodies: __sdk::TableAppliedDiff<'r, Moving>,
+    seen_bodies_far: __sdk::TableAppliedDiff<'r, Moving>,
+    seen_bodies_near: __sdk::TableAppliedDiff<'r, Moving>,
+    seen_body_cue: __sdk::TableAppliedDiff<'r, SeenBodyCue>,
     seen_characters: __sdk::TableAppliedDiff<'r, SeenCharacter>,
     seen_doing: __sdk::TableAppliedDiff<'r, Doing>,
+    seen_doing_cue: __sdk::TableAppliedDiff<'r, SeenDoingCue>,
+    seen_doing_far: __sdk::TableAppliedDiff<'r, Doing>,
+    seen_doing_near: __sdk::TableAppliedDiff<'r, Doing>,
+    seen_fighter_cue: __sdk::TableAppliedDiff<'r, SeenFighterCue>,
     seen_fighters: __sdk::TableAppliedDiff<'r, Fighter>,
+    seen_fighters_far: __sdk::TableAppliedDiff<'r, Fighter>,
+    seen_fighters_near: __sdk::TableAppliedDiff<'r, Fighter>,
+    seen_stock: __sdk::TableAppliedDiff<'r, SeenStock>,
+    seen_structures: __sdk::TableAppliedDiff<'r, SeenStructures>,
     settlement: __sdk::TableAppliedDiff<'r, Settlement>,
+    sex: __sdk::TableAppliedDiff<'r, SexRow>,
+    sex_seen: __sdk::TableAppliedDiff<'r, SexSeen>,
     skill_card: __sdk::TableAppliedDiff<'r, SkillCard>,
     skill_code: __sdk::TableAppliedDiff<'r, SkillCode>,
     skill_use: __sdk::TableAppliedDiff<'r, SkillUse>,
     slow_timer: __sdk::TableAppliedDiff<'r, SlowTimer>,
+    slumber: __sdk::TableAppliedDiff<'r, Slumber>,
+    speech_card: __sdk::TableAppliedDiff<'r, SpeechCard>,
+    standing: __sdk::TableAppliedDiff<'r, Standing>,
     stats: __sdk::TableAppliedDiff<'r, Stats>,
     steer: __sdk::TableAppliedDiff<'r, Steer>,
     structure: __sdk::TableAppliedDiff<'r, Structure>,
@@ -2444,31 +3626,65 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
             event,
         );
         callbacks.invoke_table_row_callbacks::<ActCard>("act_card", &self.act_card, event);
+        callbacks.invoke_table_row_callbacks::<ActOutcome>("act_outcome", &self.act_outcome, event);
         callbacks.invoke_table_row_callbacks::<PlannedAct>("act_queue", &self.act_queue, event);
         callbacks.invoke_table_row_callbacks::<Activity>("activity", &self.activity, event);
+        callbacks.invoke_table_row_callbacks::<AppliedGaze>(
+            "applied_gaze",
+            &self.applied_gaze,
+            event,
+        );
         callbacks.invoke_table_row_callbacks::<Artifact>("artifact", &self.artifact, event);
+        callbacks.invoke_table_row_callbacks::<Attention>("attention", &self.attention, event);
+        callbacks.invoke_table_row_callbacks::<Audience>("audience", &self.audience, event);
         callbacks.invoke_table_row_callbacks::<Background>("background", &self.background, event);
         callbacks.invoke_table_row_callbacks::<Belief>("belief", &self.belief, event);
         callbacks.invoke_table_row_callbacks::<Body>("body", &self.body, event);
         callbacks.invoke_table_row_callbacks::<BondOffer>("bond_offer", &self.bond_offer, event);
         callbacks.invoke_table_row_callbacks::<Brain>("brain", &self.brain, event);
         callbacks.invoke_table_row_callbacks::<Character>("character", &self.character, event);
+        callbacks.invoke_table_row_callbacks::<CharacterEarshot>(
+            "character_earshot",
+            &self.character_earshot,
+            event,
+        );
+        callbacks.invoke_table_row_callbacks::<CharacterSenses>(
+            "character_senses",
+            &self.character_senses,
+            event,
+        );
         callbacks.invoke_table_row_callbacks::<Chronicle>("chronicle", &self.chronicle, event);
         callbacks.invoke_table_row_callbacks::<Clock>("clock", &self.clock, event);
         callbacks.invoke_table_row_callbacks::<CombatSeen>("combat_seen", &self.combat_seen, event);
         callbacks.invoke_table_row_callbacks::<Community>("community", &self.community, event);
         callbacks.invoke_table_row_callbacks::<Connection>("connection", &self.connection, event);
+        callbacks.invoke_table_row_callbacks::<CoverGround>(
+            "cover_ground",
+            &self.cover_ground,
+            event,
+        );
+        callbacks.invoke_table_row_callbacks::<CoverLaw>("cover_law", &self.cover_law, event);
+        callbacks.invoke_table_row_callbacks::<Cue>("cue", &self.cue, event);
         callbacks.invoke_table_row_callbacks::<Deliberation>(
             "deliberation",
             &self.deliberation,
             event,
         );
         callbacks.invoke_table_row_callbacks::<Doing>("doing", &self.doing, event);
+        callbacks.invoke_table_row_callbacks::<DoingNear>("doing_near", &self.doing_near, event);
         callbacks.invoke_table_row_callbacks::<DoingSeen>("doing_seen", &self.doing_seen, event);
         callbacks.invoke_table_row_callbacks::<Expecting>("expecting", &self.expecting, event);
         callbacks.invoke_table_row_callbacks::<Experience>("experience", &self.experience, event);
         callbacks.invoke_table_row_callbacks::<Familiar>("familiar", &self.familiar, event);
+        callbacks.invoke_table_row_callbacks::<FarHandle>("far_handle", &self.far_handle, event);
+        callbacks.invoke_table_row_callbacks::<FastAsk>("fast_ask", &self.fast_ask, event);
+        callbacks.invoke_table_row_callbacks::<FightSeen>("fight_seen", &self.fight_seen, event);
         callbacks.invoke_table_row_callbacks::<Fighter>("fighter", &self.fighter, event);
+        callbacks.invoke_table_row_callbacks::<FighterNear>(
+            "fighter_near",
+            &self.fighter_near,
+            event,
+        );
         callbacks.invoke_table_row_callbacks::<FighterSeen>(
             "fighter_seen",
             &self.fighter_seen,
@@ -2483,7 +3699,20 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
             event,
         );
         callbacks.invoke_table_row_callbacks::<Genome>("genome", &self.genome, event);
+        callbacks.invoke_table_row_callbacks::<GroundEdit>("ground_edit", &self.ground_edit, event);
         callbacks.invoke_table_row_callbacks::<Guest>("guest", &self.guest, event);
+        callbacks.invoke_table_row_callbacks::<HearSalt>("hear_salt", &self.hear_salt, event);
+        callbacks.invoke_table_row_callbacks::<Heard>("heard", &self.heard, event);
+        callbacks.invoke_table_row_callbacks::<HeardAsleep>(
+            "heard_asleep",
+            &self.heard_asleep,
+            event,
+        );
+        callbacks.invoke_table_row_callbacks::<HeardSound>(
+            "heard_sounds",
+            &self.heard_sounds,
+            event,
+        );
         callbacks.invoke_table_row_callbacks::<InfantCry>("infant_cry", &self.infant_cry, event);
         callbacks.invoke_table_row_callbacks::<Inventory>("inventory", &self.inventory, event);
         callbacks.invoke_table_row_callbacks::<JoinRequest>(
@@ -2494,15 +3723,47 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         callbacks.invoke_table_row_callbacks::<Judged>("judged", &self.judged, event);
         callbacks.invoke_table_row_callbacks::<Judgment>("judgment", &self.judgment, event);
         callbacks.invoke_table_row_callbacks::<KnowHow>("know_how", &self.know_how, event);
+        callbacks.invoke_table_row_callbacks::<KnowledgeEpoch>(
+            "knowledge_epoch",
+            &self.knowledge_epoch,
+            event,
+        );
+        callbacks.invoke_table_row_callbacks::<KnownGround>(
+            "known_ground",
+            &self.known_ground,
+            event,
+        );
         callbacks.invoke_table_row_callbacks::<LandInfo>("land", &self.land, event);
+        callbacks.invoke_table_row_callbacks::<LandPlan>("land_plan", &self.land_plan, event);
+        callbacks.invoke_table_row_callbacks::<LastLook>("last_look", &self.last_look, event);
+        callbacks.invoke_table_row_callbacks::<LawChange>("law_change", &self.law_change, event);
+        callbacks.invoke_table_row_callbacks::<LawOverride>(
+            "law_override",
+            &self.law_override,
+            event,
+        );
+        callbacks.invoke_table_row_callbacks::<LawRevision>(
+            "law_revision",
+            &self.law_revision,
+            event,
+        );
+        callbacks.invoke_table_row_callbacks::<LineHeard>("line_heard", &self.line_heard, event);
         callbacks.invoke_table_row_callbacks::<LineSeen>("line_seen", &self.line_seen, event);
+        callbacks.invoke_table_row_callbacks::<Look>("look", &self.look, event);
+        callbacks.invoke_table_row_callbacks::<LookLine>("look_line", &self.look_line, event);
         callbacks.invoke_table_row_callbacks::<Lot>("lot", &self.lot, event);
         callbacks.invoke_table_row_callbacks::<Membership>("membership", &self.membership, event);
         callbacks.invoke_table_row_callbacks::<MindCursor>("mind_cursor", &self.mind_cursor, event);
         callbacks.invoke_table_row_callbacks::<MindState>("mind_state", &self.mind_state, event);
         callbacks.invoke_table_row_callbacks::<Missile>("missile", &self.missile, event);
+        callbacks.invoke_table_row_callbacks::<MotionNear>("motion_near", &self.motion_near, event);
         callbacks.invoke_table_row_callbacks::<MotionSeen>("motion_seen", &self.motion_seen, event);
-        callbacks.invoke_table_row_callbacks::<Motion>("my_body", &self.my_body, event);
+        callbacks.invoke_table_row_callbacks::<ActOutcome>(
+            "my_act_outcomes",
+            &self.my_act_outcomes,
+            event,
+        );
+        callbacks.invoke_table_row_callbacks::<Moving>("my_body", &self.my_body, event);
         callbacks.invoke_table_row_callbacks::<Character>(
             "my_characters",
             &self.my_characters,
@@ -2515,18 +3776,30 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
             event,
         );
         callbacks.invoke_table_row_callbacks::<Doing>("my_doing", &self.my_doing, event);
+        callbacks.invoke_table_row_callbacks::<CharacterEarshot>(
+            "my_earshot",
+            &self.my_earshot,
+            event,
+        );
         callbacks.invoke_table_row_callbacks::<Experience>(
             "my_experience",
             &self.my_experience,
             event,
         );
         callbacks.invoke_table_row_callbacks::<Fighter>("my_fighter", &self.my_fighter, event);
+        callbacks.invoke_table_row_callbacks::<LineHeard>("my_heard", &self.my_heard, event);
         callbacks.invoke_table_row_callbacks::<Inventory>(
             "my_inventory",
             &self.my_inventory,
             event,
         );
         callbacks.invoke_table_row_callbacks::<KnowHow>("my_know_how", &self.my_know_how, event);
+        callbacks.invoke_table_row_callbacks::<KnownName>(
+            "my_known_names",
+            &self.my_known_names,
+            event,
+        );
+        callbacks.invoke_table_row_callbacks::<MyOffer>("my_offers", &self.my_offers, event);
         callbacks.invoke_table_row_callbacks::<Place>("my_places", &self.my_places, event);
         callbacks.invoke_table_row_callbacks::<Readiness>(
             "my_readiness",
@@ -2534,6 +3807,17 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
             event,
         );
         callbacks.invoke_table_row_callbacks::<MyRecord>("my_records", &self.my_records, event);
+        callbacks.invoke_table_row_callbacks::<CharacterSenses>(
+            "my_senses",
+            &self.my_senses,
+            event,
+        );
+        callbacks.invoke_table_row_callbacks::<AppliedGaze>(
+            "my_senses_v_2",
+            &self.my_senses_v_2,
+            event,
+        );
+        callbacks.invoke_table_row_callbacks::<MySex>("my_sex", &self.my_sex, event);
         callbacks.invoke_table_row_callbacks::<SkillUse>(
             "my_skill_uses",
             &self.my_skill_uses,
@@ -2562,6 +3846,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
             event,
         );
         callbacks.invoke_table_row_callbacks::<Relation>("relation", &self.relation, event);
+        callbacks.invoke_table_row_callbacks::<Remembered>("remembered", &self.remembered, event);
         callbacks.invoke_table_row_callbacks::<ResourceNode>(
             "resource_node",
             &self.resource_node,
@@ -2577,23 +3862,79 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
             event,
         );
         callbacks.invoke_table_row_callbacks::<Script>("script", &self.script, event);
-        callbacks.invoke_table_row_callbacks::<Motion>("seen_bodies", &self.seen_bodies, event);
+        callbacks.invoke_table_row_callbacks::<Moving>("seen_bodies", &self.seen_bodies, event);
+        callbacks.invoke_table_row_callbacks::<Moving>(
+            "seen_bodies_far",
+            &self.seen_bodies_far,
+            event,
+        );
+        callbacks.invoke_table_row_callbacks::<Moving>(
+            "seen_bodies_near",
+            &self.seen_bodies_near,
+            event,
+        );
+        callbacks.invoke_table_row_callbacks::<SeenBodyCue>(
+            "seen_body_cue",
+            &self.seen_body_cue,
+            event,
+        );
         callbacks.invoke_table_row_callbacks::<SeenCharacter>(
             "seen_characters",
             &self.seen_characters,
             event,
         );
         callbacks.invoke_table_row_callbacks::<Doing>("seen_doing", &self.seen_doing, event);
+        callbacks.invoke_table_row_callbacks::<SeenDoingCue>(
+            "seen_doing_cue",
+            &self.seen_doing_cue,
+            event,
+        );
+        callbacks.invoke_table_row_callbacks::<Doing>(
+            "seen_doing_far",
+            &self.seen_doing_far,
+            event,
+        );
+        callbacks.invoke_table_row_callbacks::<Doing>(
+            "seen_doing_near",
+            &self.seen_doing_near,
+            event,
+        );
+        callbacks.invoke_table_row_callbacks::<SeenFighterCue>(
+            "seen_fighter_cue",
+            &self.seen_fighter_cue,
+            event,
+        );
         callbacks.invoke_table_row_callbacks::<Fighter>(
             "seen_fighters",
             &self.seen_fighters,
             event,
         );
+        callbacks.invoke_table_row_callbacks::<Fighter>(
+            "seen_fighters_far",
+            &self.seen_fighters_far,
+            event,
+        );
+        callbacks.invoke_table_row_callbacks::<Fighter>(
+            "seen_fighters_near",
+            &self.seen_fighters_near,
+            event,
+        );
+        callbacks.invoke_table_row_callbacks::<SeenStock>("seen_stock", &self.seen_stock, event);
+        callbacks.invoke_table_row_callbacks::<SeenStructures>(
+            "seen_structures",
+            &self.seen_structures,
+            event,
+        );
         callbacks.invoke_table_row_callbacks::<Settlement>("settlement", &self.settlement, event);
+        callbacks.invoke_table_row_callbacks::<SexRow>("sex", &self.sex, event);
+        callbacks.invoke_table_row_callbacks::<SexSeen>("sex_seen", &self.sex_seen, event);
         callbacks.invoke_table_row_callbacks::<SkillCard>("skill_card", &self.skill_card, event);
         callbacks.invoke_table_row_callbacks::<SkillCode>("skill_code", &self.skill_code, event);
         callbacks.invoke_table_row_callbacks::<SkillUse>("skill_use", &self.skill_use, event);
         callbacks.invoke_table_row_callbacks::<SlowTimer>("slow_timer", &self.slow_timer, event);
+        callbacks.invoke_table_row_callbacks::<Slumber>("slumber", &self.slumber, event);
+        callbacks.invoke_table_row_callbacks::<SpeechCard>("speech_card", &self.speech_card, event);
+        callbacks.invoke_table_row_callbacks::<Standing>("standing", &self.standing, event);
         callbacks.invoke_table_row_callbacks::<Stats>("stats", &self.stats, event);
         callbacks.invoke_table_row_callbacks::<Steer>("steer", &self.steer, event);
         callbacks.invoke_table_row_callbacks::<Structure>("structure", &self.structure, event);
@@ -3273,60 +4614,98 @@ impl __sdk::SpacetimeModule for RemoteModule {
     fn register_tables(client_cache: &mut __sdk::ClientCache<Self>) {
         acquaintance_table::register_table(client_cache);
         act_card_table::register_table(client_cache);
+        act_outcome_table::register_table(client_cache);
         act_queue_table::register_table(client_cache);
         activity_table::register_table(client_cache);
+        applied_gaze_table::register_table(client_cache);
         artifact_table::register_table(client_cache);
+        attention_table::register_table(client_cache);
+        audience_table::register_table(client_cache);
         background_table::register_table(client_cache);
         belief_table::register_table(client_cache);
         body_table::register_table(client_cache);
         bond_offer_table::register_table(client_cache);
         brain_table::register_table(client_cache);
         character_table::register_table(client_cache);
+        character_earshot_table::register_table(client_cache);
+        character_senses_table::register_table(client_cache);
         chronicle_table::register_table(client_cache);
         clock_table::register_table(client_cache);
         combat_seen_table::register_table(client_cache);
         community_table::register_table(client_cache);
         connection_table::register_table(client_cache);
+        cover_ground_table::register_table(client_cache);
+        cover_law_table::register_table(client_cache);
+        cue_table::register_table(client_cache);
         deliberation_table::register_table(client_cache);
         doing_table::register_table(client_cache);
+        doing_near_table::register_table(client_cache);
         doing_seen_table::register_table(client_cache);
         expecting_table::register_table(client_cache);
         experience_table::register_table(client_cache);
         familiar_table::register_table(client_cache);
+        far_handle_table::register_table(client_cache);
+        fast_ask_table::register_table(client_cache);
+        fight_seen_table::register_table(client_cache);
         fighter_table::register_table(client_cache);
+        fighter_near_table::register_table(client_cache);
         fighter_seen_table::register_table(client_cache);
         floor_seed_table::register_table(client_cache);
         gate_table::register_table(client_cache);
         genesis_table::register_table(client_cache);
         genesis_timer_table::register_table(client_cache);
         genome_table::register_table(client_cache);
+        ground_edit_table::register_table(client_cache);
         guest_table::register_table(client_cache);
+        hear_salt_table::register_table(client_cache);
+        heard_table::register_table(client_cache);
+        heard_asleep_table::register_table(client_cache);
+        heard_sounds_table::register_table(client_cache);
         infant_cry_table::register_table(client_cache);
         inventory_table::register_table(client_cache);
         join_request_table::register_table(client_cache);
         judged_table::register_table(client_cache);
         judgment_table::register_table(client_cache);
         know_how_table::register_table(client_cache);
+        knowledge_epoch_table::register_table(client_cache);
+        known_ground_table::register_table(client_cache);
         land_table::register_table(client_cache);
+        land_plan_table::register_table(client_cache);
+        last_look_table::register_table(client_cache);
+        law_change_table::register_table(client_cache);
+        law_override_table::register_table(client_cache);
+        law_revision_table::register_table(client_cache);
+        line_heard_table::register_table(client_cache);
         line_seen_table::register_table(client_cache);
+        look_table::register_table(client_cache);
+        look_line_table::register_table(client_cache);
         lot_table::register_table(client_cache);
         membership_table::register_table(client_cache);
         mind_cursor_table::register_table(client_cache);
         mind_state_table::register_table(client_cache);
         missile_table::register_table(client_cache);
+        motion_near_table::register_table(client_cache);
         motion_seen_table::register_table(client_cache);
+        my_act_outcomes_table::register_table(client_cache);
         my_body_table::register_table(client_cache);
         my_characters_table::register_table(client_cache);
         my_combat_table::register_table(client_cache);
         my_deliberations_table::register_table(client_cache);
         my_doing_table::register_table(client_cache);
+        my_earshot_table::register_table(client_cache);
         my_experience_table::register_table(client_cache);
         my_fighter_table::register_table(client_cache);
+        my_heard_table::register_table(client_cache);
         my_inventory_table::register_table(client_cache);
         my_know_how_table::register_table(client_cache);
+        my_known_names_table::register_table(client_cache);
+        my_offers_table::register_table(client_cache);
         my_places_table::register_table(client_cache);
         my_readiness_table::register_table(client_cache);
         my_records_table::register_table(client_cache);
+        my_senses_table::register_table(client_cache);
+        my_senses_v_2_table::register_table(client_cache);
+        my_sex_table::register_table(client_cache);
         my_skill_uses_table::register_table(client_cache);
         my_vitals_table::register_table(client_cache);
         pasture_table::register_table(client_cache);
@@ -3343,6 +4722,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         record_clock_table::register_table(client_cache);
         record_party_table::register_table(client_cache);
         relation_table::register_table(client_cache);
+        remembered_table::register_table(client_cache);
         resource_node_table::register_table(client_cache);
         reveal_table::register_table(client_cache);
         rhythm_table::register_table(client_cache);
@@ -3351,14 +4731,30 @@ impl __sdk::SpacetimeModule for RemoteModule {
         routine_stat_table::register_table(client_cache);
         script_table::register_table(client_cache);
         seen_bodies_table::register_table(client_cache);
+        seen_bodies_far_table::register_table(client_cache);
+        seen_bodies_near_table::register_table(client_cache);
+        seen_body_cue_table::register_table(client_cache);
         seen_characters_table::register_table(client_cache);
         seen_doing_table::register_table(client_cache);
+        seen_doing_cue_table::register_table(client_cache);
+        seen_doing_far_table::register_table(client_cache);
+        seen_doing_near_table::register_table(client_cache);
+        seen_fighter_cue_table::register_table(client_cache);
         seen_fighters_table::register_table(client_cache);
+        seen_fighters_far_table::register_table(client_cache);
+        seen_fighters_near_table::register_table(client_cache);
+        seen_stock_table::register_table(client_cache);
+        seen_structures_table::register_table(client_cache);
         settlement_table::register_table(client_cache);
+        sex_table::register_table(client_cache);
+        sex_seen_table::register_table(client_cache);
         skill_card_table::register_table(client_cache);
         skill_code_table::register_table(client_cache);
         skill_use_table::register_table(client_cache);
         slow_timer_table::register_table(client_cache);
+        slumber_table::register_table(client_cache);
+        speech_card_table::register_table(client_cache);
+        standing_table::register_table(client_cache);
         stats_table::register_table(client_cache);
         steer_table::register_table(client_cache);
         structure_table::register_table(client_cache);
@@ -3376,60 +4772,98 @@ impl __sdk::SpacetimeModule for RemoteModule {
     const ALL_TABLE_NAMES: &'static [&'static str] = &[
         "acquaintance",
         "act_card",
+        "act_outcome",
         "act_queue",
         "activity",
+        "applied_gaze",
         "artifact",
+        "attention",
+        "audience",
         "background",
         "belief",
         "body",
         "bond_offer",
         "brain",
         "character",
+        "character_earshot",
+        "character_senses",
         "chronicle",
         "clock",
         "combat_seen",
         "community",
         "connection",
+        "cover_ground",
+        "cover_law",
+        "cue",
         "deliberation",
         "doing",
+        "doing_near",
         "doing_seen",
         "expecting",
         "experience",
         "familiar",
+        "far_handle",
+        "fast_ask",
+        "fight_seen",
         "fighter",
+        "fighter_near",
         "fighter_seen",
         "floor_seed",
         "gate",
         "genesis",
         "genesis_timer",
         "genome",
+        "ground_edit",
         "guest",
+        "hear_salt",
+        "heard",
+        "heard_asleep",
+        "heard_sounds",
         "infant_cry",
         "inventory",
         "join_request",
         "judged",
         "judgment",
         "know_how",
+        "knowledge_epoch",
+        "known_ground",
         "land",
+        "land_plan",
+        "last_look",
+        "law_change",
+        "law_override",
+        "law_revision",
+        "line_heard",
         "line_seen",
+        "look",
+        "look_line",
         "lot",
         "membership",
         "mind_cursor",
         "mind_state",
         "missile",
+        "motion_near",
         "motion_seen",
+        "my_act_outcomes",
         "my_body",
         "my_characters",
         "my_combat",
         "my_deliberations",
         "my_doing",
+        "my_earshot",
         "my_experience",
         "my_fighter",
+        "my_heard",
         "my_inventory",
         "my_know_how",
+        "my_known_names",
+        "my_offers",
         "my_places",
         "my_readiness",
         "my_records",
+        "my_senses",
+        "my_senses_v_2",
+        "my_sex",
         "my_skill_uses",
         "my_vitals",
         "pasture",
@@ -3446,6 +4880,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "record_clock",
         "record_party",
         "relation",
+        "remembered",
         "resource_node",
         "reveal",
         "rhythm",
@@ -3454,14 +4889,30 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "routine_stat",
         "script",
         "seen_bodies",
+        "seen_bodies_far",
+        "seen_bodies_near",
+        "seen_body_cue",
         "seen_characters",
         "seen_doing",
+        "seen_doing_cue",
+        "seen_doing_far",
+        "seen_doing_near",
+        "seen_fighter_cue",
         "seen_fighters",
+        "seen_fighters_far",
+        "seen_fighters_near",
+        "seen_stock",
+        "seen_structures",
         "settlement",
+        "sex",
+        "sex_seen",
         "skill_card",
         "skill_code",
         "skill_use",
         "slow_timer",
+        "slumber",
+        "speech_card",
+        "standing",
         "stats",
         "steer",
         "structure",

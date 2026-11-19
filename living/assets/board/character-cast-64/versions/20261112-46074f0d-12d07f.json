@@ -1,0 +1,55 @@
+{
+ "schema": 1,
+ "family": "character:cast-64",
+ "id": "20261112-46074f0d-12d07f",
+ "published": "2026-11-12T15:25:32+01:00",
+ "imported": "2026-11-12T15:25:32+01:00",
+ "track": "char-4",
+ "maker": "Claude Fable 5.2",
+ "note": "Cullet's cast built again whole on the skeleton with the neck's and the head's joints at the reference's places. On the idle clip it should look as it did.",
+ "source": {
+  "commit": "46074f0d351aa99c38c5d121296d87e10f62b41e",
+  "branch": "char-4",
+  "dirty": false,
+  "generator": "living/tools/blender/person.py",
+  "generator_sha256": "6b9e977b54656fe4591536b4c629e882ed66d618f4cbc3b1e57b7bf6374fed09",
+  "generator_state": "committed",
+  "seed": "cullet",
+  "params": {
+   "cast": "living/seeds/cullet.json",
+   "people": 64
+  }
+ },
+ "renderer": {
+  "method": "asset-view",
+  "commit": "",
+  "key": "asset-view",
+  "preset": "",
+  "note": "town.py: each person alone through the asset view, through a recipe; lineup from the front at 28 degrees down at one scale; lineup-before-after: half the line-up from the version before above this one; faces close, on a frame of the idle clip, eyes held open by the photo tool; game is each person at 22 m through the game camera, pixels enlarged three times; tiled"
+ },
+ "preset": "",
+ "media": "media/character-cast-64/20261112-46074f0d-12d07f",
+ "members": [
+  {
+   "name": "cast",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "d69125fcdfd65b67c5fda029e2ae8f2943aa7f2ae5b9ca3a9bf5e8f1fda81908",
+   "shots": [
+    "faces",
+    "faces-24",
+    "game",
+    "lineup",
+    "lineup-before-after"
+   ],
+   "clips": []
+  }
+ ],
+ "delivered": [
+  {
+   "title": "town check page and town.json (who is who)",
+   "path": "delivered/index.html",
+   "from": ".local/town19/index.html"
+  }
+ ]
+}

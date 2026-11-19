@@ -13,6 +13,7 @@ The world's rules define social state on the engine's records (docs/WORLD_RULES.
   - terms never accepted: the proposer hears they were not taken up.
 - **Demands.** The target is told and onlookers see it. A give pays it (`met`, the demander told). Unpaid when it falls due, it is `unpaid` and both are told. A second demand of the same person while one stands is refused (Cargo).
 - **Bounds.** Closed records are dropped after their keep time.
+- **Answers by id** (`scenes.py answers`, any seed; since `rules-offers-2`, docs/WORLD_RULES.md "Answering"). `accept`/`decline` carry `"offer": id` (a `trade_offer`) or `"record": id` (a proposal). Named, exactly that is taken: an accept of the trade by id goes through while terms of the same person stand. Wrong references are refused with the rules' words: gone; changed (the maker offered again, or other terms stand: "they have changed their offer/terms: now …"); not addressed to you (someone else's, or one's own proposal); declined. `decline` ends an offer (the row goes) or closes a proposal as `declined`; the maker is told (kind `record`), an onlooker witnesses "turned down", and the decliner's outcome is the rules' line. Without a reference: a plain accept takes the terms first and leaves the trade standing, as before, and a plain decline then ends the trade; with nothing standing it is refused ("they have no standing offer for you").
 - **Regard.** The island seed's 13 regard records exist. A relation filter (`"relation": "rival town"`) picks the Kettlebridge resident by Brackenford's stance toward Kettlebridge, with no personal relation.
 - **Install checks (Cargo):** a hook may not move goods; a skill with rules needs a spec; `record_text` reads every sample record.
 
@@ -20,6 +21,7 @@ The world's rules define social state on the engine's records (docs/WORLD_RULES.
 
 - Engine: `living/authority/src/records.rs`. Context fields: `act.rs` `skill_ctx`. Post-skill hook: `act.rs` `complete`. Death hook: `act::die`. Due records: `tick.rs` housekeeping. Stance in relation filters: `brain.rs` `relation_ok`.
 - Rules side: `living/rules/src/records.rs`, `script.rs` (`hook`, `record_text`, the new effects), `script/check.rs` (`hooks`, `records`).
+- Answers: the act's reference is `graph::Action` `offer`/`record` (normalized in `normalize.rs` for skills whose spec lists the argument), carried on `activity.offer`/`activity.record`; `act.rs` `offer_at_hand` fills `a.offer`, `answered_offer` guards the `accept`/`decline` ops. Rules: `skills.rhai` `answer_refused`, `accept_done`, `decline_*`. Install probes: `script/check.rs` `answer_samples`.
 
 ## Driving it
 
@@ -33,10 +35,22 @@ python3 "$V" cleanup --run "$K" > ".local/living/verify/$K/cleanup.txt" 2>&1
 
 About 2–3 minutes. The scene installs the tree's rules with four short hours composed over them, as a floor's overlay would: `due_by_dark` 1, `proposal_h` 1.5, `demand_h` 1, `kept_h` 2. It reinstalls the tree's script at the end. The walkers are `spawn_crowd` people driven by admin `mind_act`, as a mind would decide. Snapshots: `dealings-kept.json`, `dealings-after.json` and `dealings-regard.json` (records); `dealings-regard-wave.json` (`skill_use`).
 
-Cargo: `agreements_and_demands_are_rules_on_records` (the whole content on fixed contexts), `a_stance_is_a_holder_toward_record_with_a_label`, `terms_are_small_maps_of_plain_values`.
+Cargo: `agreements_and_demands_are_rules_on_records` (the whole content on fixed contexts), `a_stance_is_a_holder_toward_record_with_a_label`, `terms_are_small_maps_of_plain_values`, `answers_take_what_they_name` (every refusal and effect of accept/decline), `answers_carry_what_they_name` (the act grammar), `ui::tests::an_act_toward_an_offer_names_it` (what the client sends).
+
+Answers (about 1 minute, any seed; 17 checks; snapshots `answers-standing.json`, `answers-after-named-accept.json`, `answers-records-after.json`):
+
+```bash
+A=$R-answers
+mkdir -p ".local/living/verify/$A"
+python3 "$V" launch --run "$A" > ".local/living/verify/$A/launch.txt" 2>&1
+python3 "$C/scenes.py" answers --run "$A" > ".local/living/verify/$A/answers.txt" 2>&1
+python3 "$V" cleanup --run "$A" > ".local/living/verify/$A/cleanup.txt" 2>&1
+```
 
 ## Gotchas
 
 - Walkers have no community or home: deliveries into a store count by the store's `owner`. The household match (`target.home`) is covered by Cargo, not the scene.
 - Regard needs the island seed: a default-seed world has no seeded records, and the regard checks fail there.
-- Players and minds are other surfaces: verify-player `deal.py` and verify-minds `dealings`.
+- Players and minds are other surfaces: verify-player `deal.py`, `answers.py` and verify-minds `dealings`, `answers`.
+- A refusal of an act reaches the actor as kind `act` ("What you had decided did not work out: accept → #N: that offer is gone."); the rules' line for a done decline is capitalized in the outcome ("… (Declined a stranger's offer of …)"), so match it without its first letter.
+- A record id that does not exist while other terms of the same person stand is refused as "they have changed their terms: now …", not "gone": the rules say what stands now.

@@ -1,0 +1,91 @@
+{
+ "schema": 1,
+ "family": "place:cullet-ladder",
+ "id": "20261111-7c6a92b6-ace3c9",
+ "published": "2026-11-11T21:57:24+01:00",
+ "imported": "2026-11-11T21:57:24+01:00",
+ "track": "layout-2",
+ "maker": "Claude Fable 5.2",
+ "note": "main with kit-2 (layout pass 1, the painted ground, the Crown's buildings): the before of layout pass 2, photographed by layout-2's client",
+ "source": {
+  "commit": "7c6a92b6c30f3b64cf81b2f3cc5c775941c1915b",
+  "branch": "main",
+  "generator": "living/tools/cullet_plan.py",
+  "generator_sha256": "521eff9f6f2d616689ebda7306806faa56a82afa9160e10ae2d9fea5d407e560",
+  "generator_state": "committed",
+  "seed": "83",
+  "params": {}
+ },
+ "renderer": {
+  "method": "look-dev tour (the game client of layout-2, headless; LIVING_GAME_START, 13:00 and 18:30)",
+  "commit": "",
+  "key": "look-dev tour (the game client of layout-2, headless; LIVING_GAME_START, 13:00 and 18:30)",
+  "preset": "",
+  "note": ""
+ },
+ "preset": "",
+ "media": "media/place-cullet-ladder/20261111-7c6a92b6-ace3c9",
+ "members": [
+  {
+   "name": "ladder_low",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "2a2d102183c150d178f67594a80f4ffe20f49ae0eb4bedf8058150a556e4d177",
+   "shots": [
+    "day-0_35_50",
+    "day-90_28_22",
+    "day-default",
+    "dusk-0_35_50",
+    "dusk-90_28_22",
+    "dusk-default"
+   ],
+   "clips": []
+  },
+  {
+   "name": "ladder_mid",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "88564651f0db8ea76c300772ed604c008bfe2f4a4bbea7b3764c4a0d7e849725",
+   "shots": [
+    "day-0_10_7_60",
+    "day-0_35_50",
+    "day-90_28_22",
+    "day-default",
+    "dusk-0_10_7_60",
+    "dusk-0_35_50",
+    "dusk-90_28_22",
+    "dusk-default"
+   ],
+   "clips": []
+  },
+  {
+   "name": "ladder_high",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "541024f734418da0204fb408ed964ad0a87e5cfe58054691c39c6b15df725e4e",
+   "shots": [
+    "day-0_35_50",
+    "day-180_28_40",
+    "day-default",
+    "dusk-0_35_50",
+    "dusk-180_28_40",
+    "dusk-default"
+   ],
+   "clips": []
+  },
+  {
+   "name": "ladder_top",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "b3f5bc4e9d6d3d1f1afb1a4f9a795fefe87feb89d54bbf0f189b43e50446195e",
+   "shots": [
+    "day-180_30_70",
+    "day-default",
+    "dusk-180_30_70",
+    "dusk-default"
+   ],
+   "clips": []
+  }
+ ],
+ "delivered": []
+}

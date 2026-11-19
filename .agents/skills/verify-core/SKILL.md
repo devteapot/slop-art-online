@@ -1,6 +1,6 @@
 ---
 name: verify-core
-description: Verify the living core authority's rules and scheduled loop. Use when changing ticks, behavior graphs, Rhai skills or laws (including skill specs and the world's records, hooks and stances), needs, life stages, wildlife, combat (including the starter skills, missiles and skill timing), town life (residents' daily rhythm, places, weather, gestures), steering, deliberate acts, or viewer display sync. Covers living/viewer/src/sync.rs display-sync tests only on the viewer. Runs offline Cargo checks and real scripted scenes on verify-core-* scratch databases.
+description: "Verify the living core authority's rules and its scheduled 60 Hz loop with offline Cargo checks and scripted scenes on verify-core-* scratch databases. Use when changing the tick, behavior graphs, deliberate acts, steering and movement, Rhai skills and specs, or a world law of any family: sight, senses and perception, speech, pools and breath, fights and combat, needs and the body, life and life stages, goods and recipes, wildlife and remains, attention and first sights, town life, a world's day, records and dealings. Also the viewer's display sync. features/README.md maps each law and feature to its scene."
 ---
 
 # Verify the core rules and loop
@@ -23,6 +23,8 @@ python3 "$V" launch --run "$R" > "$E/launch.txt" 2>&1
 python3 "$V" doctor --run "$R" > "$E/doctor.txt" 2>&1
 ```
 
+`scenes.py`, `town.py` and the other drivers call the authority directly, so they do not renew the harness's 10-minute lease (verify SKILL.md, "Launch"). For a batch of scenes or the town run, launch with `VERIFY_LEASE_SECONDS=2700`. Otherwise the world is paused partway and later scenes fail on a frozen world (a `sleeper` timeout, morning checks at 0).
+
 Stop driving if launch or doctor fails. Run cleanup and retain the error. The scenes use the in-container admin CLI. Do not mix a remote `LIVING_STDB_URL` with `stdb -s local`.
 
 ## Drive the baseline
@@ -31,13 +33,111 @@ Stop driving if launch or doctor fails. Run cleanup and retain the error. The sc
 python3 "$C/cargo_checks.py" --run "$R"
 python3 "$C/scenes.py" tick --run "$R" > "$E/tick.txt" 2>&1
 python3 "$C/scenes.py" needs --run "$R" > "$E/needs.txt" 2>&1
+python3 "$C/scenes.py" alarms --run "$R" > "$E/alarms.txt" 2>&1
+# A sleeper thinks only on what wakes it; other requests wait in `slumber` (features/needs.md, about 4 min).
+python3 "$C/scenes.py" sleeper --run "$R" > "$E/sleeper.txt" 2>&1
 python3 "$C/scenes.py" food --run "$R" > "$E/food.txt" 2>&1
 python3 "$C/scenes.py" refusal --run "$R" > "$E/refusal.txt" 2>&1
+python3 "$C/scenes.py" teach --run "$R" > "$E/teach.txt" 2>&1
 python3 "$C/scenes.py" seize --run "$R" > "$E/seize.txt" 2>&1
 python3 "$C/scenes.py" sight --run "$R" > "$E/sight.txt" 2>&1
 python3 "$C/scenes.py" senses --run "$R" > "$E/senses.txt" 2>&1
+python3 "$C/scenes.py" doing --run "$R" > "$E/doing.txt" 2>&1
+# What someone is visibly doing: the `doing` condition and the scene's `visibly`, by sight, field
+# and far label (features/doing.md, about 2 min).
+python3 "$C/scenes.py" doing_seen --run "$R" > "$E/doing_seen.txt" 2>&1
+# A continuous activity's row held to its renewal: no blink of doing nothing between two rests, the pacing unchanged, a real change still at once, the renew_in_place law (features/doing.md, about 2 min).
+python3 "$C/scenes.py" doing_renew --run "$R" > "$E/doing_renew.txt" 2>&1
+# Committed moves end early only by a wall or death (features/combat.md, about 30 s).
+python3 "$C/scenes.py" committed --run "$R" > "$E/committed.txt" 2>&1
+# A dodge over before the blow came, and a cooldown's refusals told once (features/combat.md, about 20 s).
+# The fast lane's triggers: the repeat at the law's N, never told; unseen moves not counted (features/fast.md, about 2 min).
+python3 "$C/scenes.py" seen_again --run "$R" > "$E/seen_again.txt" 2>&1
+python3 "$C/scenes.py" dodge_told --run "$R" > "$E/dodge_told.txt" 2>&1
+# First sights in a crowd: everyone in sight is told, several in one line (features/sight.md, about 30 s).
+python3 "$C/scenes.py" crowd_sight --run "$R" > "$E/crowd_sight.txt" 2>&1
+# A graph's "stranger" under the stranger_by_name law, off and on (features/graphs.md, about 30 s).
+python3 "$C/scenes.py" stranger_filter --run "$R" > "$E/stranger_filter.txt" 2>&1
+# Attention cues under the cues_on law: once per thing, the cooldown and the gap, never a far figure, nothing off (features/cues.md, about 1.5 min).
+python3 "$C/scenes.py" cues --run "$R" > "$E/cues.txt" 2>&1
+# First sights that ask for a thought under first_sight_thinks: refused then owed, the gap, never far or named, sleepers, with a cue (features/first-sight.md, about 4 min).
+python3 "$C/scenes.py" first_sight --run "$R" > "$E/first_sight.txt" 2>&1
+# Battle scale: familiarity never forgets what is in view, novelty once a second, bystanders'
+# wakes coalesced by witness_wake_ms, onlookers' fight lines folded by witness_fold_ms
+# (features/battle.md, about 9 min together).
+python3 "$C/scenes.py" familiar_dense --run "$R" > "$E/familiar_dense.txt" 2>&1
+python3 "$C/scenes.py" notice_rate --run "$R" > "$E/notice_rate.txt" 2>&1
+python3 "$C/scenes.py" witness_wake --run "$R" > "$E/witness_wake.txt" 2>&1
+python3 "$C/scenes.py" witness_fold --run "$R" > "$E/witness_fold.txt" 2>&1
+# The fighters' cheaper paths change nothing: each compared with the old way (features/battle.md, about 5 min together).
+python3 "$C/scenes.py" cheap_check_ctx --run "$R" > "$E/cheap_check_ctx.txt" 2>&1
+python3 "$C/scenes.py" cheap_alarms --run "$R" > "$E/cheap_alarms.txt" 2>&1
+python3 "$C/scenes.py" cheap_warmth --run "$R" > "$E/cheap_warmth.txt" 2>&1
+# The lazy scene gives the whole scene's answers, all round and by facing; off, the old path (features/battle.md, about 2.5 min).
+python3 "$C/scenes.py" scene_lazy --run "$R" > "$E/scene_lazy.txt" 2>&1
+# The chronicle's repeat check read newest first, and noticing read in place, give the full reads' answers; off, the old paths (features/battle.md, about 2 min each).
+python3 "$C/scenes.py" chronicle_recent --run "$R" > "$E/chronicle_recent.txt" 2>&1
+python3 "$C/scenes.py" notice_inplace --run "$R" > "$E/notice_inplace.txt" 2>&1
+# A look checks only what is new since the last; everything passed over is familiar (features/battle.md, about 2 min).
+python3 "$C/scenes.py" notice_delta --run "$R" > "$E/notice_delta.txt" 2>&1
+# Use a fresh run for the field fixture.
+python3 "$C/scenes.py" seen_remains --run "$R" > "$E/seen_remains.txt" 2>&1
+# On a Cullet run (--seed cullet): counted remains under the shipped cover and gaze laws, by day (waits for daylight).
+python3 "$C/scenes.py" seen_remains_gaze --run "$R" > "$E/seen_remains_gaze.txt" 2>&1
+# A mind's line waits when another spoke to its listener first, under heard_first_rethinks (features/speech.md, about 1.5 min).
+python3 "$C/scenes.py" heard_first --run "$R" > "$E/heard_first.txt" 2>&1
+# The shared answers equal fresh ones (regard_cache_check; features/cues.md#shared-answers, about 4 min;
+# on an island run it also drives the told lines of `outcomes`).
+python3 "$C/scenes.py" regard_check --run "$R" > "$E/regard_check.txt" 2>&1
+# A player's rows kept across sweeps under a law that reads distance, each equal to a fresh projection
+# (regard_cache_check; features/sight.md, about 1.5 min). Only on a run launched with --seed cullet.
+python3 "$C/scenes.py" sweep_kept --run "$R" > "$E/sweep_kept.txt" 2>&1
+# Nothing kept in module memory outlives a rolled-back transaction (the memory_test law: failing
+# ticks, a panicking tick, place_at, kill and join failing after their writes), and an introduction
+# outside the tick reaches the kept rows through committed data (features/sight.md, about 1 min each;
+# --seed cullet).
+python3 "$C/scenes.py" sweep_rollback --run "$R" > "$E/sweep_rollback.txt" 2>&1
+python3 "$C/scenes.py" sweep_marks --run "$R" > "$E/sweep_marks.txt" 2>&1
 python3 "$C/scenes.py" moves --run "$R" > "$E/moves.txt" 2>&1
+# A flight out of inside corners by open ground, from a threat standing and one walking after it, never cornered (features/steering.md#flight, about 3 min).
+python3 "$C/scenes.py" flee_wall --run "$R" > "$E/flee_wall.txt" 2>&1
+# Nothing followed out of sight: a pursuit to the last-seen place, a flight from it (features/steering.md#out-of-sight-last-seen-places, about 1.5 min).
+python3 "$C/scenes.py" pursue_last_seen --run "$R" > "$E/pursue_last_seen.txt" 2>&1
+# Known ground marked by every character, and walks planned over it under nav_belief (features/steering.md#known-ground-and-walking-over-belief, about 4 min together).
+python3 "$C/scenes.py" known_ground --run "$R" > "$E/known_ground.txt" 2>&1
+python3 "$C/scenes.py" nav_belief --run "$R" > "$E/nav_belief.txt" 2>&1
+# Breath, tiredness and focus (features/breath.md, about 2 min; it changes and restores world laws).
+python3 "$C/scenes.py" stamina --run "$R" > "$E/stamina.txt" 2>&1
+# Fight length and the wolf chase (features/breath.md, about 20 min; set run_share or wolf_run
+# with set_world_law first to measure another pairing; PURSUERS=wolf,person adds a person pursuer).
+python3 "$C/scenes.py" fights --run "$R" > "$E/fights.txt" 2>&1
+python3 "$C/scenes.py" chase --run "$R" > "$E/chase.txt" 2>&1
+python3 "$C/scenes.py" death-names --run "$R" > "$E/death-names.txt" 2>&1
+# Movement intents: band, close in, circle, back off, follow, out of sight, refusals (features/steering.md, about 3 min), and their cost on the tick.
+python3 "$C/scenes.py" intents --run "$R" > "$E/intents.txt" 2>&1
+python3 "$C/scenes.py" intents_cost --run "$R" > "$E/intents_cost.txt" 2>&1
+# Another's health in fight reports and health_of: the band, exact only while appraised (features/combat.md).
+python3 "$C/scenes.py" health_seen --run "$R" > "$E/health_seen.txt" 2>&1
+# Sight that depends on facing, switched by set_world_law (features/fov.md, about 3 min).
+python3 "$C/scenes.py" fov --run "$R" > "$E/fov.txt" 2>&1
+python3 "$C/scenes.py" say --run "$R" > "$E/say.txt" 2>&1
+# Admin placement on free walkable tiles (features/steering.md#admin-placement); last: its bodies stay.
+python3 "$C/scenes.py" placement --run "$R" > "$E/placement.txt" 2>&1
+# The doing condition's cost in a 100-fighter battle (features/doing.md; a measurement, about
+# 2 min; its fighters stay on the world, so it runs last).
+python3 "$C/scenes.py" doing_cost --run "$R" > "$E/doing_cost.txt" 2>&1
 python3 "$V" cleanup --run "$R" > "$E/cleanup.txt" 2>&1
+
+# Speech (features/speech.md): each scene on its own launched run (they spawn people named
+# Walker1..4, and a second spawn would repeat the names).
+for S in regress ways channels crowd; do
+  P=$R-$S; mkdir -p ".local/living/verify/$P"
+  python3 "$V" launch --run "$P" > ".local/living/verify/$P/launch.txt" 2>&1
+  python3 "$C/speech.py" $S --run "$P" > ".local/living/verify/$P/speech-$S.txt" 2>&1
+  python3 "$V" cleanup --run "$P" > ".local/living/verify/$P/cleanup.txt" 2>&1
+done
+# The regression proof: `regress --baseline` (and `crowd --baseline`) from a worktree at the
+# base commit, then `speech.py diff <base-run> $R-regress`.
 
 # The starter combat skills under graphs use the island seed (its newcomer kit, pack and
 # skill cards); see features/combat.md.
@@ -45,7 +145,22 @@ K=$R-skirmish
 mkdir -p ".local/living/verify/$K"
 python3 "$V" launch --run "$K" --seed island > ".local/living/verify/$K/launch.txt" 2>&1
 python3 "$C/scenes.py" skirmish --run "$K" > ".local/living/verify/$K/skirmish.txt" 2>&1
+# A blow's or a missile's outcome told to its maker, and the force_outcomes switch (about 1 min).
+python3 "$C/scenes.py" outcomes --run "$K" > ".local/living/verify/$K/outcomes.txt" 2>&1
+# The drop scene over low tiles (9: a cart, an open stall, a well, a building's overhang: open at eye height) on the same island world.
+python3 "$C/scenes.py" low --run "$K" > ".local/living/verify/$K/low.txt" 2>&1
 python3 "$V" cleanup --run "$K" > ".local/living/verify/$K/cleanup.txt" 2>&1
+
+# Drops between ground levels hide nothing and block the foot (features/sight.md, about 1 min)
+# on a planned settlement's land.
+P=$R-drop
+mkdir -p ".local/living/verify/$P"
+python3 "$V" launch --run "$P" --seed plan-test > ".local/living/verify/$P/launch.txt" 2>&1
+python3 "$C/scenes.py" drop --run "$P" > ".local/living/verify/$P/drop.txt" 2>&1
+# Whose a thing is and what places are called (features/sight.md#owners): the public land row
+# without names, land_plan with them; a newcomer told "house", the owner's community its name.
+python3 "$C/scenes.py" owners --run "$P" > ".local/living/verify/$P/owners.txt" 2>&1
+python3 "$V" cleanup --run "$P" > ".local/living/verify/$P/cleanup.txt" 2>&1
 
 # Dealings on the world's records on an island world (about 3 min): agreements, demands, regard
 # (features/dealings.md, docs/WORLD_RULES.md).
@@ -55,6 +170,14 @@ python3 "$V" launch --run "$D" --seed island > ".local/living/verify/$D/launch.t
 python3 "$C/scenes.py" dealings --run "$D" > ".local/living/verify/$D/dealings.txt" 2>&1
 python3 "$V" cleanup --run "$D" > ".local/living/verify/$D/cleanup.txt" 2>&1
 
+# Answers by id (about 1 min, any seed): accept/decline naming a trade offer or a proposal,
+# refusals, decline told and witnessed, the unnamed order (features/dealings.md).
+A=$R-answers
+mkdir -p ".local/living/verify/$A"
+python3 "$V" launch --run "$A" > ".local/living/verify/$A/launch.txt" 2>&1
+python3 "$C/scenes.py" answers --run "$A" > ".local/living/verify/$A/answers.txt" 2>&1
+python3 "$V" cleanup --run "$A" > ".local/living/verify/$A/cleanup.txt" 2>&1
+
 # Town life on an island world: the daily rhythm by the world's own hours (about 14 min),
 # rain, a wolf in town, gestures and making way (features/town.md, docs/TOWN_LIFE.md).
 T=$R-town
@@ -63,6 +186,18 @@ python3 "$V" launch --run "$T" --seed island > ".local/living/verify/$T/launch.t
 python3 "$C/town.py" --run "$T" > ".local/living/verify/$T/town.txt" 2>&1
 python3 "$V" cleanup --run "$T" > ".local/living/verify/$T/cleanup.txt" 2>&1
 
+# Rhythms at any hour and Cullet's trades (about 17 min): a night stoker rising at 14:00 and
+# working the night, the day watch feeding the furnace and making glass, a baker's second sleep,
+# Cullet's life stages, five trades at the places of the plan's open lots in their hours, and
+# two households cooking at their own hearth and using their own store inside the house (hearth-1)
+# (features/town.md, features/laws.md, docs/SEEDED_LIVES.md, docs/CULLET_LAYOUT.md pass 2).
+Y=$R-rhythm
+mkdir -p ".local/living/verify/$Y"
+python3 "$C/rhythm.py" seed --run "$Y" > ".local/living/verify/$Y/seed.txt" 2>&1
+python3 "$V" launch --run "$Y" --seed "$PWD/.local/living/verify/$Y/cullet-rhythm" > ".local/living/verify/$Y/launch.txt" 2>&1
+python3 "$C/rhythm.py" drive --run "$Y" > ".local/living/verify/$Y/rhythm.txt" 2>&1
+python3 "$V" cleanup --run "$Y" > ".local/living/verify/$Y/cleanup.txt" 2>&1
+
 # Seeded lives on an island world (about 25 min): placement, routes, the road, ties
 # (features/lives.md, docs/SEEDED_LIVES.md).
 L=$R-lives
@@ -70,6 +205,56 @@ mkdir -p ".local/living/verify/$L"
 python3 "$V" launch --run "$L" --seed island > ".local/living/verify/$L/launch.txt" 2>&1
 python3 "$C/lives.py" --run "$L" --minutes 24 > ".local/living/verify/$L/lives.txt" 2>&1
 python3 "$V" cleanup --run "$L" > ".local/living/verify/$L/cleanup.txt" 2>&1
+
+# Value-only law changes (about 3 min): the `law_override` row, law revision and audit, the script
+# kept, refusals rolled back, a client's first result, and the reducer's time (features/law-override.md,
+# docs/LAW_OVERRIDE.md). Needs the verify-client probe built (its SKILL.md).
+W=client-law-$(date +%H%M%S)   # a client-* name: its first-result checks drive verify-client's drive.py
+mkdir -p ".local/living/verify/$W"
+python3 "$V" launch --run "$W" --seed island > ".local/living/verify/$W/launch.txt" 2>&1
+python3 "$C/law_override.py" checks --run "$W" > ".local/living/verify/$W/law-checks.txt" 2>&1
+python3 "$C/law_override.py" time --run "$W" > ".local/living/verify/$W/law-time.txt" 2>&1
+python3 "$V" cleanup --run "$W" > ".local/living/verify/$W/cleanup.txt" 2>&1
+
+# Goods, fires that eat fuel and recipes over Cullet's goods (about 11 min), and a seeded
+# fishing ground's shared stock (features/goods.md, docs/WORLD_RULES.md).
+G=$R-goods
+mkdir -p ".local/living/verify/$G"
+python3 "$V" launch --run "$G" --seed "$PWD/$C/goods" > ".local/living/verify/$G/launch.txt" 2>&1
+python3 "$C/scenes.py" goods --run "$G" > ".local/living/verify/$G/goods.txt" 2>&1
+python3 "$C/scenes.py" stock --run "$G" > ".local/living/verify/$G/stock.txt" 2>&1
+# Crafting, cooking and smoking as recipes, by acts and by an old graph (features/goods.md).
+python3 "$C/scenes.py" making --run "$G" > ".local/living/verify/$G/making.txt" 2>&1
+# A hearth built from stone and clay, and a recipe that needs a tool held (goods-3).
+python3 "$C/scenes.py" workplace --run "$G" > ".local/living/verify/$G/workplace.txt" 2>&1
+python3 "$V" cleanup --run "$G" > ".local/living/verify/$G/cleanup.txt" 2>&1
+
+# A world's own day and laws (about 30 min; it waits for the world's own night):
+# day_minutes, the laws overlay, rates per game hour, sight, names, lamplight
+# (features/laws.md, docs/CULLET_RULES.md).
+W=$R-laws
+mkdir -p ".local/living/verify/$W"
+python3 "$V" launch --run "$W" --seed cullet-laws > ".local/living/verify/$W/launch.txt" 2>&1
+python3 "$C/scenes.py" laws --run "$W" > ".local/living/verify/$W/laws.txt" 2>&1
+python3 "$V" cleanup --run "$W" > ".local/living/verify/$W/cleanup.txt" 2>&1
+
+# Spoiling and regrowth in game time on a world's own day (features/laws.md#decay; a whole
+# Cullet game day is 48 real minutes, `--game-hours 2` about 5 minutes): raw fish carried and
+# stored, an emptied greens bed regrowing, both at the laws' per-hour numbers in real time.
+Y=$R-decay
+mkdir -p ".local/living/verify/$Y"
+python3 "$V" launch --run "$Y" --seed cullet-laws > ".local/living/verify/$Y/launch.txt" 2>&1
+python3 "$C/scenes.py" decay --run "$Y" > ".local/living/verify/$Y/decay.txt" 2>&1
+python3 "$V" cleanup --run "$Y" > ".local/living/verify/$Y/cleanup.txt" 2>&1
+
+# Regrowth by season (features/laws.md#winter; about 14 min, it waits for the world's own
+# winter): Cullet's laws on a 4-minute day and 4-day year; a fishing spot regrows at its winter
+# share, a root plot rests.
+Y=$R-winter
+mkdir -p ".local/living/verify/$Y"
+python3 "$V" launch --run "$Y" --seed "$PWD/$C/winter" > ".local/living/verify/$Y/launch.txt" 2>&1
+python3 "$C/scenes.py" winter --run "$Y" > ".local/living/verify/$Y/winter.txt" 2>&1
+python3 "$V" cleanup --run "$Y" > ".local/living/verify/$Y/cleanup.txt" 2>&1
 
 # Infant assertions use their own small, long-lived family fixture.
 I=$R-infant
@@ -97,7 +282,7 @@ cargo test --manifest-path living/Cargo.toml -p living-mind
 cargo test --manifest-path living/Cargo.toml -p living-viewer sync::tests
 ```
 
-The authority tests run on the host despite its WASM `cdylib` target and include infant cry routing and cadence. Rules includes infant appearance versus cold damage checks and one ignored reference printer. The mind's five ignored Neo4j tests stay skipped. Do not add `--ignored`. `just living-check` builds the authority WASM, the mind, and the native and WASM viewer targets. Only its test step runs rules tests. The commands above also run authority, mind and viewer sync tests. Viewer coverage is limited to `living/viewer/src/sync.rs`; no other viewer code is verified here.
+The authority tests run on the host despite its WASM `cdylib` target and include infant cry routing and cadence. Rules includes infant appearance versus cold damage checks and one ignored reference printer. The mind's five ignored Neo4j tests stay skipped. Do not add `--ignored`. `just living-check` builds the authority WASM, the mind, and the native and WASM viewer targets. Only its test step runs rules tests. It skips a step that already passed on this machine on identical inputs (docs/TOOLING.md); `just living-check-full` runs every step, and `LIVING_CHECK_SERIAL=1` shows cargo's output and the test counts on the terminal. The commands above also run authority, mind and viewer sync tests. Viewer coverage is limited to `living/viewer/src/sync.rs`; no other viewer code is verified here.
 
 ## Drive the existing mechanics and steering scripts
 
@@ -132,6 +317,35 @@ python3 "$V" doctor --run "$L" > ".local/living/verify/$L/doctor.txt" 2>&1
 python3 "$C/scenes.py" lifecycle --run "$L" > ".local/living/verify/$L/lifecycle.txt" 2>&1
 python3 "$V" cleanup --run "$L"
 
+# The laws of starting a family and of the longing for a child (about 2 min, longer if it
+# must wait for day): conceive_roof, conceive_food, longing_after_min, longing_food.
+F=$R-family-laws
+mkdir -p ".local/living/verify/$F"
+python3 "$V" launch --run "$F" --seed stage1-acts > ".local/living/verify/$F/launch.txt" 2>&1
+python3 "$V" doctor --run "$F" > ".local/living/verify/$F/doctor.txt" 2>&1
+python3 "$C/scenes.py" family_laws --run "$F" > ".local/living/verify/$F/family_laws.txt" 2>&1
+python3 "$V" cleanup --run "$F"
+
+# Body sex (features/sex.md, about 6 min): rows, the seed's and the world's pick, female_share,
+# kin words by sex, conceive_needs_pair on and off, births. Its own seed: stage1-acts with the
+# grown members' sexes given (written by `scenes.py sex-seed`).
+X=$R-sex
+python3 "$C/scenes.py" sex-seed
+python3 "$V" launch --run "$X" --seed "$PWD/.local/living/verify/sex-family" > ".local/living/verify/$X-launch.txt" 2>&1
+python3 "$V" doctor --run "$X" > ".local/living/verify/$X-doctor.txt" 2>&1
+python3 "$C/scenes.py" sex --run "$X" > ".local/living/verify/$X/sex.txt" 2>&1
+python3 "$V" cleanup --run "$X"
+
+# The wolves' spacing reflex (the pack_reflex law, on by default): every wolf's starting
+# graph with the law on, none with it off (features/wildlife.md; about 2 min each).
+for P in pack-reflex-on pack-reflex-off; do
+  K=$R-$P; mkdir -p ".local/living/verify/$K"
+  python3 "$V" launch --run "$K" --seed "$P" > ".local/living/verify/$K/launch.txt" 2>&1
+  python3 "$V" doctor --run "$K" > ".local/living/verify/$K/doctor.txt" 2>&1
+  python3 "$C/scenes.py" pack_reflex --run "$K" > ".local/living/verify/$K/pack_reflex.txt" 2>&1
+  python3 "$V" cleanup --run "$K"
+done
+
 W=$R-wildlife
 mkdir -p ".local/living/verify/$W"
 python3 "$V" launch --run "$W" --seed stage1-acts > ".local/living/verify/$W/launch.txt" 2>&1
@@ -140,7 +354,7 @@ python3 "$C/scenes.py" wildlife --run "$W" > ".local/living/verify/$W/wildlife.t
 python3 "$V" cleanup --run "$W"
 
 # Remains: every death leaves the carcass law's items, a kill feeds nobody by itself, two wolves
-# take from one kill, remains expire (remains_s shortened to 90 s here), wander keeps its heading.
+# take from one kill, remains expire (remains_h shortened to 3 game hours, 90 s on the 12-minute day), wander keeps its heading.
 M=$R-remains
 mkdir -p ".local/living/verify/$M"
 python3 "$V" launch --run "$M" --seed stage1-acts > ".local/living/verify/$M/launch.txt" 2>&1
@@ -159,7 +373,7 @@ Start lifecycle promptly after doctor while the seeded infant is still an infant
 
 ## Keep the evidence
 
-[features/README.md](features/README.md) maps the checks. [references/validation.md](references/validation.md) records the real runs and defects. Keep this map current with `maintain-verification-skill` when behavior changes.
+[features/README.md](features/README.md) maps the checks. [references/validation/](references/validation/README.md) holds one record per real run, with its defects; the newest files are the last validated runs. Keep this map current with `maintain-verification-skill` when behavior changes.
 
 `scenes.py` saves named snapshots, `<scene>-actions.jsonl` and `<scene>-results.json`. The recorder saves `stdb-actions.jsonl`, including the original drivers' before and after SQL. Cargo saves transcripts and `cargo-results.json`. `scenes.py` reads back the installed `brain` row after every graph replacement. The recorder captures complete `brain` rows after `set_behavior` and complete `routine` rows whenever the drivers probe an actor's routines. Compare those rows to the requested scene before interpreting results when normalization can change a graph or routine. Outputs belong under `.local/living/verify/`, never in this skill tree.
 

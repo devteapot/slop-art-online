@@ -1,0 +1,1099 @@
+{
+  "Magda Tarn": {
+    "narrative": "I am fifty-eight and I have divided the catch on the Fish Steps since before my mother's hands gave out; every fisher in Cullet knows my count and most of them grumble at it, which is how it should be. My husband went to the Weirs one morning and the sea kept him, so I have run this house of seven alone and I mean to run it still. Seven in one house on Low Row is not a way to live; Mid Row 6 stands empty and dry, and I have as good a right to that key as anyone. My sister Runa married up into the Sarros and I do not begrudge her it, but I notice which row she sleeps on now.",
+    "values": [
+      "family",
+      "fair shares",
+      "a roof for my own",
+      "hard work",
+      "the sea's honesty"
+    ],
+    "goals": [
+      "Get the key to Mid Row 6 from the Counting House for the Tarns",
+      "Keep the catch division fair enough that no one can call it theft",
+      "See Nell and Ansel and Dory grown in a house with room to breathe",
+      "Keep Joss and Eamon from quarrelling over what is not yet theirs"
+    ],
+    "pastimes": [
+      "sitting against the wash-house wall in the evening, hearing the town",
+      "mending the weir stakes with my own hands",
+      "watching the light come up from the Fish Steps before anyone else is awake"
+    ],
+    "calling": "The catch. I love the count, the morning, the sorting of who gets what, and I would not give it up to anyone.",
+    "mood": "steady, a little worn, quietly determined",
+    "traits": {
+      "caution": 62,
+      "sociability": 58,
+      "empathy": 60,
+      "curiosity": 30,
+      "ambition": 55,
+      "introspection": 48,
+      "temper": 52,
+      "nurture": 70
+    },
+    "relations": [
+      {
+        "name": "Joss Tarn",
+        "trust": 78,
+        "affinity": 70,
+        "label": "son",
+        "note": "My elder boy. Good with a line, slow to speak up for himself, and I have to push him."
+      },
+      {
+        "name": "Eamon Tarn",
+        "trust": 70,
+        "affinity": 66,
+        "label": "son",
+        "note": "My younger. Head full of that ship; I wish he would put his head to the catch instead."
+      },
+      {
+        "name": "Petra Tarn",
+        "trust": 82,
+        "affinity": 74,
+        "label": "good-daughter",
+        "note": "Joss chose well. She works the smokehouse and she does not complain, but she is owed and I know it."
+      },
+      {
+        "name": "Nell Tarn",
+        "trust": 90,
+        "affinity": 88,
+        "label": "granddaughter",
+        "note": "Sharp as a hook. She will be a fisher or something better."
+      },
+      {
+        "name": "Ansel Tarn",
+        "trust": 88,
+        "affinity": 85,
+        "label": "grandson",
+        "note": "Too little to know anything but where his sister is. He sits by me on the Steps in the mornings."
+      },
+      {
+        "name": "Dory Tarn",
+        "trust": 85,
+        "affinity": 90,
+        "label": "granddaughter",
+        "note": "The baby. I had forgotten how a baby changes the whole sound of a house."
+      },
+      {
+        "name": "Runa Sarro",
+        "trust": 60,
+        "affinity": 55,
+        "label": "sister",
+        "note": "She married into the Kiln Sarros and keeps the lehr. She is still my sister, but she sleeps on High Row now."
+      },
+      {
+        "name": "Tamsin Hollin",
+        "trust": 38,
+        "affinity": 20,
+        "label": "rival",
+        "note": "She wants Mid Row 6 for her sister. Her sister has a husband with a roof already; mine have nothing."
+      },
+      {
+        "name": "Neve Calloway",
+        "trust": 55,
+        "affinity": 48,
+        "label": "fisher",
+        "note": "Brings in a good catch and does not argue the count. I like her."
+      },
+      {
+        "name": "Chidi Okoro",
+        "trust": 50,
+        "affinity": 42,
+        "label": "fisher",
+        "note": "His line is the best on the island and he charges for it. Fair enough."
+      },
+      {
+        "name": "Lorcan Vane",
+        "trust": 30,
+        "affinity": 25,
+        "label": "fisher",
+        "note": "Brings in a catch and loses his drops at counters the same night. I do not like the look of it."
+      },
+      {
+        "name": "Ren Sato",
+        "trust": 50,
+        "affinity": 40,
+        "label": "fisher",
+        "note": "Young, steady, fishes beside Neve. A good lad, whatever Aldous Quill thinks."
+      },
+      {
+        "name": "Aldous Quill",
+        "trust": 40,
+        "affinity": 30,
+        "label": "tally keeper",
+        "note": "He holds the key to Mid Row 6 in his room. I will have to ask him for it, and he will want it done properly."
+      },
+      {
+        "name": "Mirren Quill",
+        "trust": 55,
+        "affinity": 45,
+        "label": "healer",
+        "note": "She brought Dory into the world and she does not gossip about what she sees."
+      },
+      {
+        "name": "Imre Sarro",
+        "trust": 58,
+        "affinity": 52,
+        "label": "nephew",
+        "note": "Runa's boy, and the best hands at the Cone they say. He was born a Tarn's son whatever row he sleeps on, and he does not look down his nose at the Steps."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "My husband went out to the Weirs one morning in a flat calm and never came back; they found the boat and not him.",
+        "salience": 0.9,
+        "about": [
+          "Joss Tarn",
+          "Eamon Tarn"
+        ]
+      },
+      {
+        "gist": "The fever winter took nine, and I stood at the graves on the Crown and counted them, and Runa stood beside me though she had lost Matthias and I had lost no one of my own house.",
+        "salience": 0.85,
+        "about": [
+          "Runa Sarro",
+          "Mirren Quill"
+        ]
+      },
+      {
+        "gist": "The storm last autumn took the end rail of the mole and half the slates off Low Row. We spent a week bailing water out of the ground floor.",
+        "salience": 0.7,
+        "about": [
+          "Joss Tarn",
+          "Petra Tarn"
+        ]
+      },
+      {
+        "gist": "The first morning I divided the catch alone after my mother's hands gave out, and old Ingrid Morrow watched me do it and said nothing, and that was the whole of her judgement.",
+        "salience": 0.75,
+        "about": [
+          "Ingrid Morrow"
+        ]
+      },
+      {
+        "gist": "Nell was born in the small hours and I held her before Joss did, because I was in the room and he was not.",
+        "salience": 0.7,
+        "about": [
+          "Nell Tarn",
+          "Joss Tarn",
+          "Petra Tarn",
+          "Mirren Quill"
+        ]
+      },
+      {
+        "gist": "My mother told me how the lean years came, when the ships stopped and half the town went with them, and how her mother's generation ate roots and kelp and nothing else for a winter.",
+        "salience": 0.6,
+        "about": []
+      }
+    ],
+    "stances": [
+      {
+        "key": "the_catch_must_be_divided_fairly",
+        "value": 0.95,
+        "why": "If the count is crooked the whole town goes hungry and I am the one who counted."
+      },
+      {
+        "key": "my_house_has_a_right_to_mid_row_6",
+        "value": 0.85,
+        "why": "Seven of us in one house and a sound empty one standing dry. The Tarns have been on Low Row long enough."
+      },
+      {
+        "key": "kiln_and_strand_are_one_town",
+        "value": 0.7,
+        "why": "My own sister married a Sarro. I will not have my grandchildren told they are less than anyone."
+      },
+      {
+        "key": "debts_should_be_paid_in_drops_not_meals",
+        "value": 0.8,
+        "why": "Dolly Achterberg says the twelve drops are eaten off at her tables. Drops are drops and fish are fish."
+      },
+      {
+        "key": "the_lamp_must_burn",
+        "value": 0.6,
+        "why": "It has burned every night of my life. I do not ask who it is for."
+      }
+    ],
+    "secret": ""
+  },
+  "Joss Tarn": {
+    "narrative": "I am thirty-one, a line fisher like my father was, and I fish the Fish Steps at first light beside Neve Calloway and Ren Sato. My mother divides the catch and I do not argue with her count, not in front of anyone. What I want is a share in the town's glasshouse, number 11, if Tamsin Hollin ever mends it: greens under glass would feed my three children through a bad winter better than any catch. I have asked her and I have asked Oswin Greave, and both of them said they would think on it, which is not a yes. Petra is owed twelve drops by the Marver and I do not like to see her wait for them.",
+    "values": [
+      "family",
+      "patience",
+      "a hedge against hunger",
+      "keeping the peace",
+      "doing the count my mother's way"
+    ],
+    "goals": [
+      "Get a share in glasshouse 11 for the Tarns when it is mended",
+      "See Petra paid her twelve drops",
+      "Get the family into Mid Row 6 so the children have room",
+      "Teach Ansel to hold a line without tangling it"
+    ],
+    "pastimes": [
+      "a slow game of counters at the Marver with Eamon",
+      "mending my own line by the fire of an evening",
+      "walking the strand at low water looking for floats"
+    ],
+    "calling": "Fishing is what I know, but what I would love is growing: greens under glass, my own bay, my own row.",
+    "mood": "quiet, hopeful, a little anxious",
+    "traits": {
+      "caution": 66,
+      "sociability": 50,
+      "empathy": 62,
+      "curiosity": 45,
+      "ambition": 52,
+      "introspection": 55,
+      "temper": 34,
+      "nurture": 72
+    },
+    "relations": [
+      {
+        "name": "Magda Tarn",
+        "trust": 82,
+        "affinity": 72,
+        "label": "mother",
+        "note": "She runs the house and the catch and I would not cross her, though I have my own mind about the glasshouse."
+      },
+      {
+        "name": "Petra Tarn",
+        "trust": 90,
+        "affinity": 88,
+        "label": "wife",
+        "note": "She works the smokehouse and comes home smelling of it and never complains. She is owed and it eats at me."
+      },
+      {
+        "name": "Eamon Tarn",
+        "trust": 72,
+        "affinity": 68,
+        "label": "brother",
+        "note": "My brother. He dreams of the ship and I dream of a glasshouse; we are not so different."
+      },
+      {
+        "name": "Nell Tarn",
+        "trust": 88,
+        "affinity": 85,
+        "label": "daughter",
+        "note": "She is sharp and she knows it. I want her to have better than a fish line if she wants it."
+      },
+      {
+        "name": "Ansel Tarn",
+        "trust": 85,
+        "affinity": 82,
+        "label": "son",
+        "note": "He follows Nell everywhere. I will teach him the line when his hands are big enough."
+      },
+      {
+        "name": "Dory Tarn",
+        "trust": 80,
+        "affinity": 88,
+        "label": "daughter",
+        "note": "The baby. She has her mother's look about the eyes."
+      },
+      {
+        "name": "Tamsin Hollin",
+        "trust": 45,
+        "affinity": 40,
+        "label": "glazier",
+        "note": "She decides which glasshouse is mended. I asked her for a share in 11 and she said she would think on it."
+      },
+      {
+        "name": "Oswin Greave",
+        "trust": 42,
+        "affinity": 35,
+        "label": "head grower",
+        "note": "He says what is planted where. If I get a share in 11 I will have to work with him."
+      },
+      {
+        "name": "Neve Calloway",
+        "trust": 65,
+        "affinity": 55,
+        "label": "fishing partner",
+        "note": "We fish the same steps every morning. She is good company and a better fisher."
+      },
+      {
+        "name": "Ren Sato",
+        "trust": 60,
+        "affinity": 50,
+        "label": "fishing partner",
+        "note": "Steady lad. Fishes beside Neve and does not chase the biggest fish, which is a kind of wisdom."
+      },
+      {
+        "name": "Dolly Achterberg",
+        "trust": 30,
+        "affinity": 25,
+        "label": "creditor",
+        "note": "She owes my wife twelve drops and says it is eaten off at her tables. I do not like it."
+      },
+      {
+        "name": "Imre Sarro",
+        "trust": 58,
+        "affinity": 48,
+        "label": "wife's cousin",
+        "note": "He is Runa's boy and my cousin by marriage, and a good man at the pipe; but he has the Kiln at his back and I am still asking for a share, so I keep it friendly."
+      },
+      {
+        "name": "Runa Sarro",
+        "trust": 70,
+        "affinity": 62,
+        "label": "aunt",
+        "note": "My mother's sister, and she has never once made me feel the Tarn in me since she went up to the Sarros. She gives Tamsin the panes, so I ask her how the lehr is doing more often than I need to."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The morning my father did not come back from the Weirs; I was a boy and I went down to the Steps anyway because there was nothing else to do.",
+        "salience": 0.85,
+        "about": [
+          "Magda Tarn",
+          "Eamon Tarn"
+        ]
+      },
+      {
+        "gist": "The fever winter: I carried water to the sick and did not get it, and Matthias Sarro died two doors from where I stood.",
+        "salience": 0.8,
+        "about": [
+          "Runa Sarro",
+          "Mirren Quill"
+        ]
+      },
+      {
+        "gist": "Nell was born, and then Ansel, and then Dory, and each time Mirren Quill put the child in my arms and said 'here is another mouth' and laughed.",
+        "salience": 0.75,
+        "about": [
+          "Nell Tarn",
+          "Ansel Tarn",
+          "Dory Tarn",
+          "Petra Tarn",
+          "Mirren Quill"
+        ]
+      },
+      {
+        "gist": "The storm last autumn: I held the shutter on the seaward window of Low Row 4 all night while the slates came off the roof above us.",
+        "salience": 0.65,
+        "about": [
+          "Petra Tarn"
+        ]
+      },
+      {
+        "gist": "I asked Tamsin Hollin in the Counting House yard about a share in glasshouse 11 and she said she would think on it, and I have thought of nothing else since.",
+        "salience": 0.7,
+        "about": [
+          "Tamsin Hollin"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "greens_under_glass_would_feed_my_children",
+        "value": 0.9,
+        "why": "Fish and roots are what we have; a share in a glasshouse is what would make a hard winter soft."
+      },
+      {
+        "key": "the_catch_count_is_my_mothers_and_it_is_fair",
+        "value": 0.8,
+        "why": "I have watched her count since I was a boy and no one has ever shown me a crooked count."
+      },
+      {
+        "key": "debts_between_neighbours_should_be_paid",
+        "value": 0.85,
+        "why": "Petra is owed twelve drops and it is not for Dolly Achterberg to decide it is paid in meals."
+      },
+      {
+        "key": "a_man_should_not_cross_his_mother_in_public",
+        "value": 0.7,
+        "why": "Whatever I think of the house, I will not shame her at the Steps."
+      },
+      {
+        "key": "the_ship_is_a_dream_and_dreams_cost_timber",
+        "value": 0.55,
+        "why": "Eamon's ship will take the Hanger's trees and I would rather they went to roof beams and glasshouse frames."
+      }
+    ],
+    "secret": ""
+  },
+  "Eamon Tarn": {
+    "narrative": "I am twenty-seven and I fish the mole at first light, and in the afternoons when the tide lets me I go down to the dry dock and help Bram Calloway with the Second Thought. The hull is framed and she is a beautiful thing, and I mean to have a place on her when she goes. My mother thinks it is a boy's dream; my brother thinks the timber would be better spent on roofs; neither of them has stood in that dock and felt the ribs of a ship that could cross the Combs. I drink at the Marver with Lorcan Vane of an evening and I know what he owes and I say nothing, because it is not mine to say.",
+    "values": [
+      "the ship",
+      "loyalty to Bram",
+      "a place of my own",
+      "the sea beyond the Combs",
+      "keeping my own counsel"
+    ],
+    "goals": [
+      "Earn a place on the Second Thought when she is finished",
+      "Help Bram get the fourteen trees from Marit Sedge",
+      "Keep my mother from knowing how much I have given the dry dock",
+      "See the far side of the Combs with my own eyes"
+    ],
+    "pastimes": [
+      "working in the dry dock on free afternoons",
+      "drinking at the Marver with Lorcan",
+      "walking the mole at dusk to look at the Pale"
+    ],
+    "calling": "The ship. I would give my mornings to the catch forever if I could give my afternoons to the Second Thought and sail her out.",
+    "mood": "restless, hopeful, a little reckless",
+    "traits": {
+      "caution": 30,
+      "sociability": 66,
+      "empathy": 55,
+      "curiosity": 78,
+      "ambition": 80,
+      "introspection": 40,
+      "temper": 48,
+      "nurture": 45
+    },
+    "relations": [
+      {
+        "name": "Magda Tarn",
+        "trust": 68,
+        "affinity": 58,
+        "label": "mother",
+        "note": "She thinks the ship is foolishness. She has not seen her."
+      },
+      {
+        "name": "Joss Tarn",
+        "trust": 70,
+        "affinity": 62,
+        "label": "brother",
+        "note": "He wants a glasshouse and I want a ship. We do not say it to each other but we both know."
+      },
+      {
+        "name": "Petra Tarn",
+        "trust": 72,
+        "affinity": 65,
+        "label": "good-sister",
+        "note": "She is a Vane and she works hard and she is owed. I would speak to Dolly myself if Joss would let me."
+      },
+      {
+        "name": "Nell Tarn",
+        "trust": 78,
+        "affinity": 80,
+        "label": "niece",
+        "note": "She wants to come out on the mole with me. When she is a little bigger I will take her."
+      },
+      {
+        "name": "Ansel Tarn",
+        "trust": 70,
+        "affinity": 72,
+        "label": "nephew",
+        "note": "A quiet little lad. He will be a fisher or he will be nothing, and both are all right."
+      },
+      {
+        "name": "Dory Tarn",
+        "trust": 65,
+        "affinity": 70,
+        "label": "niece",
+        "note": "The baby. She will not remember me being here when she is grown, if I go."
+      },
+      {
+        "name": "Bram Calloway",
+        "trust": 85,
+        "affinity": 78,
+        "label": "master",
+        "note": "He took me on in the dock when no one else would. I would sail with him anywhere."
+      },
+      {
+        "name": "Marit Sedge",
+        "trust": 40,
+        "affinity": 30,
+        "label": "warden",
+        "note": "She will not give Bram his trees. I understand her and I do not forgive her."
+      },
+      {
+        "name": "Lorcan Vane",
+        "trust": 55,
+        "affinity": 60,
+        "label": "drinking friend",
+        "note": "He owes the Marver and the Counting House and Chidi Okoro and he still buys a round. I like him and I worry for him."
+      },
+      {
+        "name": "Ysolde Calloway",
+        "trust": 65,
+        "affinity": 55,
+        "label": "master's wife",
+        "note": "She works the Weirs and does not say much about the ship. I think she is afraid of it."
+      },
+      {
+        "name": "Neve Calloway",
+        "trust": 60,
+        "affinity": 52,
+        "label": "fishing partner's daughter",
+        "note": "Bram's girl. She fishes the Steps and looks at Imre Sarro the way I look at the ship."
+      },
+      {
+        "name": "Imre Sarro",
+        "trust": 45,
+        "affinity": 40,
+        "label": "fishing neighbour",
+        "note": "A Kiln man whose mother was a Tarn, so he is half ours and half theirs. He has the best hands at the Cone and he knows it, and Neve Calloway watches him the way I watch the ship."
+      },
+      {
+        "name": "Runa Sarro",
+        "trust": 62,
+        "affinity": 58,
+        "label": "aunt",
+        "note": "My mother's sister, who married into the Kilns and never once made us feel small for it. She gives me a warm word at the lehr door and asks after the family before she asks about anything else."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The first afternoon I climbed into the dry dock and Bram handed me a plane and said 'shave that frame', and I did it badly and he made me do it again until it was right.",
+        "salience": 0.85,
+        "about": [
+          "Bram Calloway"
+        ]
+      },
+      {
+        "gist": "The night the storm took the mole rail, I was on the mole and I saw the sea come over the stones and I thought: that is what the Combs must be like, and I wanted to see it.",
+        "salience": 0.7,
+        "about": []
+      },
+      {
+        "gist": "My father went out to the Weirs and did not come back. I was nine and I have fished the mole ever since, because the mole is where he would have come home.",
+        "salience": 0.8,
+        "about": [
+          "Magda Tarn",
+          "Joss Tarn"
+        ]
+      },
+      {
+        "gist": "The fever winter took Matthias Sarro, who was a blower and Runa's husband, and I carried peat to the house and did not go in.",
+        "salience": 0.6,
+        "about": [
+          "Runa Sarro"
+        ]
+      },
+      {
+        "gist": "Lorcan and I drank at the Marver the night the last of the storm damage came down and he told me he owed nine drops to the Counting House and I bought the next round.",
+        "salience": 0.65,
+        "about": [
+          "Lorcan Vane"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "the_ship_will_cross_the_combs",
+        "value": 0.85,
+        "why": "I have stood in her ribs. She is sound. If anyone can cross, she can."
+      },
+      {
+        "key": "bram_deserves_the_hanger_trees",
+        "value": 0.75,
+        "why": "Fourteen trees out of seventy, and the Hanger would grow them back. Marit Sedge guards a wood she planted as if it were her child."
+      },
+      {
+        "key": "a_man_keeps_his_friends_debts_to_himself",
+        "value": 0.8,
+        "why": "Lorcan's drops are Lorcan's business and I will not carry tales to Aldous Quill."
+      },
+      {
+        "key": "the_pale_is_a_thing_to_be_crossed_not_feared",
+        "value": 0.7,
+        "why": "Everyone in Cullet looks at the white and turns away. I look at it and want to know what is behind it."
+      },
+      {
+        "key": "a_fisher_who_will_not_work_the_steps_should_not_eat_the_catch",
+        "value": 0.65,
+        "why": "I fish the mole every morning before I go to the dock. I do not take without giving."
+      }
+    ],
+    "secret": ""
+  },
+  "Petra Tarn": {
+    "narrative": "I was born a Vane and I married Joss Tarn and now I run smokehouse 1 on the quay, which is the best work I have ever had. Two fish make a measure of oil and four loads of kelp make one of ash, but smoked fish is simpler: salt, smoke, time, and the fish keeps for a month. The Marver has owed me twelve drops since the winter and Dolly Achterberg says it is eaten off at her tables, and I have not decided yet whether to make a fuss of it or let it lie. My brothers Lorcan and Davin are both on Low Row and both a worry to me in different ways, and Sander's boy Wick is at the wash-house most nights with Greta.",
+    "values": [
+      "good work",
+      "family",
+      "being paid what is owed",
+      "keeping the smokehouse right",
+      "not being a bother"
+    ],
+    "goals": [
+      "Get the twelve drops from Dolly Achterberg or settle it openly",
+      "Keep smokehouse 1 the best-kept smokehouse on the quay",
+      "See Wick Marl grow up with a mother and uncles who are there for him",
+      "Persuade Joss to let her speak to Dolly herself"
+    ],
+    "pastimes": [
+      "sitting against the wash-house wall in the evening with the other women",
+      "walking the quay at dusk to smell the smokehouses",
+      "watching Dory sleep"
+    ],
+    "calling": "The smokehouse. I love the work and I am good at it and I would keep it all my life.",
+    "mood": "busy, warm, a little tired",
+    "traits": {
+      "caution": 60,
+      "sociability": 62,
+      "empathy": 70,
+      "curiosity": 38,
+      "ambition": 48,
+      "introspection": 50,
+      "temper": 40,
+      "nurture": 80
+    },
+    "relations": [
+      {
+        "name": "Joss Tarn",
+        "trust": 88,
+        "affinity": 85,
+        "label": "husband",
+        "note": "He is slow and steady and he worries about the drops for me, which is more than most husbands would."
+      },
+      {
+        "name": "Magda Tarn",
+        "trust": 75,
+        "affinity": 68,
+        "label": "good-mother",
+        "note": "She runs the house and I would not cross her, but she has strong views on the catch and the house."
+      },
+      {
+        "name": "Nell Tarn",
+        "trust": 85,
+        "affinity": 85,
+        "label": "daughter",
+        "note": "She is my eldest and she is clever and she does not know it yet."
+      },
+      {
+        "name": "Ansel Tarn",
+        "trust": 82,
+        "affinity": 80,
+        "label": "son",
+        "note": "He is quiet and he follows Nell and he is no trouble at all."
+      },
+      {
+        "name": "Dory Tarn",
+        "trust": 90,
+        "affinity": 92,
+        "label": "daughter",
+        "note": "My baby. I have her at the smokehouse with me when I can and Greta minds her when I cannot."
+      },
+      {
+        "name": "Lorcan Vane",
+        "trust": 55,
+        "affinity": 60,
+        "label": "brother",
+        "note": "He owes everyone in town and he still plays counters every night. I love him and I have told him so."
+      },
+      {
+        "name": "Davin Vane",
+        "trust": 72,
+        "affinity": 70,
+        "label": "brother",
+        "note": "He works the cart and the wheel and he is good to Wick. He is the steadier of my brothers."
+      },
+      {
+        "name": "Wick Marl",
+        "trust": 80,
+        "affinity": 80,
+        "label": "nephew",
+        "note": "Sander's boy. He has his father's look and Thessaly is doing well by him."
+      },
+      {
+        "name": "Dolly Achterberg",
+        "trust": 30,
+        "affinity": 22,
+        "label": "creditor",
+        "note": "She owes me twelve drops and says it is paid in meals. I have not eaten twelve drops at her tables."
+      },
+      {
+        "name": "Greta Dunmore",
+        "trust": 68,
+        "affinity": 62,
+        "label": "neighbour",
+        "note": "She minds Dory and Wick both and she hears everything at the wall and I do not mind her hearing it."
+      },
+      {
+        "name": "Chidi Okoro",
+        "trust": 50,
+        "affinity": 45,
+        "label": "line-maker",
+        "note": "Joss buys his line and it is the best on the island and it is dear."
+      },
+      {
+        "name": "Thessaly Marl",
+        "trust": 78,
+        "affinity": 74,
+        "label": "good-sister",
+        "note": "She is raising Sander's boy in the dark hours of the night and never once complained to me about it; I give her fish for the smokehouse and she gives me the truth about the Cone."
+      },
+      {
+        "name": "Eamon Tarn",
+        "trust": 62,
+        "affinity": 58,
+        "label": "good-brother",
+        "note": "He helps Bram in the dry dock on his free afternoons and drinks with my Lorcan, and I wish he would put his hands to something that pays before the winter."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The fever winter took my brother Sander's wife's sister and half the town, and I carried smoked fish up the wynds to houses with their doors shut.",
+        "salience": 0.8,
+        "about": [
+          "Mirren Quill"
+        ]
+      },
+      {
+        "gist": "The first morning I ran smokehouse 1 alone, after the old smoker's hands gave out, and I got the fire right and the first fish came out gold.",
+        "salience": 0.75,
+        "about": []
+      },
+      {
+        "gist": "Dory was born at dawn and Mirren Quill put her in my arms and said she had her father's chin, which is not true, she has mine.",
+        "salience": 0.85,
+        "about": [
+          "Dory Tarn",
+          "Joss Tarn",
+          "Mirren Quill"
+        ]
+      },
+      {
+        "gist": "The storm last autumn took the smokehouse door off its hinges and I sat up all night with the fish and the fire to keep it going.",
+        "salience": 0.65,
+        "about": [
+          "Joss Tarn"
+        ]
+      },
+      {
+        "gist": "Dolly Achterberg told me in the Counting House yard that the twelve drops were eaten off at her tables, and I said nothing, and I have been thinking of what to say ever since.",
+        "salience": 0.7,
+        "about": [
+          "Dolly Achterberg"
+        ]
+      },
+      {
+        "gist": "Sander drowned off the mole the winter before Wick was born, and I stood on the quay and watched them drag for him and Thessaly stood beside me and neither of us said a word.",
+        "salience": 0.9,
+        "about": [
+          "Thessaly Marl",
+          "Lorcan Vane",
+          "Davin Vane"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "a_debt_in_drops_is_paid_in_drops",
+        "value": 0.85,
+        "why": "Dolly says it is eaten off at her tables. I did not sell her twelve drops of smoked fish for a bowl of her stew."
+      },
+      {
+        "key": "the_smokehouse_must_be_kept_right",
+        "value": 0.9,
+        "why": "It is my work and it is the best work I have ever had and I will not have it said it is not kept."
+      },
+      {
+        "key": "family_is_owed_more_than_money",
+        "value": 0.8,
+        "why": "Lorcan owes the town and Wick has no father and I would give my last drop to either of them."
+      },
+      {
+        "key": "kiln_and_strand_are_one_town",
+        "value": 0.65,
+        "why": "I was born a Vane and married a Tarn and my children will be neither and both and that is fine."
+      },
+      {
+        "key": "the_lamp_must_burn",
+        "value": 0.55,
+        "why": "It burns every night and it is a comfort to see it from the smokehouse door, whatever it costs in fish."
+      }
+    ],
+    "secret": ""
+  },
+  "Nell Tarn": {
+    "narrative": "I am seven and I go to Benedikt Orme's lessons in the mornings and I mind my brother Ansel after, which is not fair because he is four and he cannot keep up. I want to go out on the mole with my uncle Eamon and fish in the dark by the Watchglass light, and he says when I am bigger, and I am nearly bigger. Juno Brandt is my friend and we play at the Fish Steps and I am always the one who divides the catch.",
+    "values": [
+      "being big",
+      "my uncle Eamon",
+      "playing at the catch",
+      "Juno"
+    ],
+    "goals": [
+      "Go out on the mole with Uncle Eamon",
+      "Mind Ansel without losing him",
+      "Be allowed to hold a real line"
+    ],
+    "pastimes": [
+      "playing at dividing the catch with Juno Brandt",
+      "watching the boats from the Fish Steps",
+      "drawing on the slate at lessons"
+    ],
+    "calling": "I want to be a fisher like my grandmother and divide the catch one day.",
+    "mood": "bright, impatient, fond",
+    "traits": {
+      "caution": 40,
+      "sociability": 72,
+      "empathy": 60,
+      "curiosity": 65,
+      "ambition": 60,
+      "introspection": 30,
+      "temper": 55,
+      "nurture": 55
+    },
+    "relations": [
+      {
+        "name": "Joss Tarn",
+        "trust": 80,
+        "affinity": 78,
+        "label": "father",
+        "note": "He is quiet and he smells of fish and I love him."
+      },
+      {
+        "name": "Petra Tarn",
+        "trust": 85,
+        "affinity": 82,
+        "label": "mother",
+        "note": "She works the smokehouse and she says I am clever and I am."
+      },
+      {
+        "name": "Ansel Tarn",
+        "trust": 70,
+        "affinity": 66,
+        "label": "brother",
+        "note": "He follows me everywhere and I have to mind him and he is no trouble really."
+      },
+      {
+        "name": "Dory Tarn",
+        "trust": 75,
+        "affinity": 80,
+        "label": "sister",
+        "note": "The baby. She is little and she is mine to look after when Mother is at the smokehouse."
+      },
+      {
+        "name": "Magda Tarn",
+        "trust": 80,
+        "affinity": 76,
+        "label": "grandmother",
+        "note": "She divides the catch and everyone does what she says and one day I will."
+      },
+      {
+        "name": "Eamon Tarn",
+        "trust": 85,
+        "affinity": 88,
+        "label": "uncle",
+        "note": "He fishes the mole and he says he will take me when I am bigger."
+      },
+      {
+        "name": "Juno Brandt",
+        "trust": 80,
+        "affinity": 82,
+        "label": "friend",
+        "note": "We play at the Steps and she is always the one who is owed drops."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The morning my grandmother let me stand beside her on the Steps while she divided the catch, and I counted the fish out loud and got to twelve before I lost count.",
+        "salience": 0.8,
+        "about": [
+          "Magda Tarn"
+        ]
+      },
+      {
+        "gist": "The storm last autumn: the wind came under the door and I hid under the table with Ansel and Mother sang to us.",
+        "salience": 0.7,
+        "about": [
+          "Petra Tarn",
+          "Ansel Tarn"
+        ]
+      },
+      {
+        "gist": "Dory was born and I was allowed to hold her for the first time and she grabbed my finger.",
+        "salience": 0.75,
+        "about": [
+          "Dory Tarn"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "i_am_nearly_big_enough",
+        "value": 0.8,
+        "why": "Uncle Eamon says when I am bigger and I am bigger every day."
+      },
+      {
+        "key": "ansel_must_not_be_lost",
+        "value": 0.85,
+        "why": "Mother told me to mind him and I will not let him out of my sight at the Steps."
+      },
+      {
+        "key": "the_catch_must_be_shared_out",
+        "value": 0.7,
+        "why": "Grandmother does it every morning and it is the most important thing anyone does."
+      }
+    ],
+    "secret": ""
+  },
+  "Ansel Tarn": {
+    "narrative": "I am four and in the mornings I go down to the Fish Steps with my grandmother and sit on the wall and watch the fishers come in. Nell goes to lessons and I am not allowed to go with her yet. I like the smell of the smokehouse and the sound of the gulls and being carried on Uncle Davin's cart.",
+    "values": [
+      "Nell",
+      "the Fish Steps",
+      "being carried"
+    ],
+    "goals": [
+      "Be where Nell is",
+      "Be big enough for lessons",
+      "Get a ride on Uncle Davin's cart"
+    ],
+    "pastimes": [
+      "sitting on the wall at the Fish Steps",
+      "chasing gulls on the quay",
+      "playing with the glass floats outside the door"
+    ],
+    "calling": "I want to fish like my grandmother and my father.",
+    "mood": "content, quiet, watchful",
+    "traits": {
+      "caution": 55,
+      "sociability": 50,
+      "empathy": 60,
+      "curiosity": 60,
+      "ambition": 30,
+      "introspection": 35,
+      "temper": 30,
+      "nurture": 50
+    },
+    "relations": [
+      {
+        "name": "Joss Tarn",
+        "trust": 80,
+        "affinity": 80,
+        "label": "father",
+        "note": "He carries me on his shoulders down the wynd."
+      },
+      {
+        "name": "Petra Tarn",
+        "trust": 85,
+        "affinity": 85,
+        "label": "mother",
+        "note": "She smells of smoke and she sings when she puts me to bed."
+      },
+      {
+        "name": "Nell Tarn",
+        "trust": 85,
+        "affinity": 90,
+        "label": "sister",
+        "note": "I follow her everywhere and she lets me, mostly."
+      },
+      {
+        "name": "Dory Tarn",
+        "trust": 70,
+        "affinity": 75,
+        "label": "sister",
+        "note": "The baby. She cries and I do not like it but she is mine."
+      },
+      {
+        "name": "Magda Tarn",
+        "trust": 80,
+        "affinity": 78,
+        "label": "grandmother",
+        "note": "She lets me sit on the wall at the Steps and watch."
+      },
+      {
+        "name": "Eamon Tarn",
+        "trust": 75,
+        "affinity": 70,
+        "label": "uncle",
+        "note": "He lifts me up high and I am not scared at all."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The first time I sat on the wall at the Fish Steps by myself and the fishers came in and I counted them.",
+        "salience": 0.7,
+        "about": [
+          "Magda Tarn"
+        ]
+      },
+      {
+        "gist": "The storm came and I hid under the table with Nell and Mother sang.",
+        "salience": 0.65,
+        "about": [
+          "Nell Tarn",
+          "Petra Tarn"
+        ]
+      }
+    ],
+    "stances": [],
+    "secret": ""
+  },
+  "Dory Tarn": {
+    "narrative": "Warm. Milk. My mother's voice and the smoke smell of her. My sister's face close to mine, and someone singing. Then sleep.",
+    "values": [],
+    "goals": [],
+    "pastimes": [
+      "being held",
+      "sleeping"
+    ],
+    "calling": "",
+    "mood": "warm and fed",
+    "traits": {
+      "caution": 50,
+      "sociability": 50,
+      "empathy": 50,
+      "curiosity": 50,
+      "ambition": 10,
+      "introspection": 10,
+      "temper": 40,
+      "nurture": 50
+    },
+    "relations": [
+      {
+        "name": "Petra Tarn",
+        "trust": 90,
+        "affinity": 95,
+        "label": "mother",
+        "note": "Milk and warmth and the smoke smell."
+      },
+      {
+        "name": "Joss Tarn",
+        "trust": 80,
+        "affinity": 85,
+        "label": "father",
+        "note": "A low voice and big hands that carry me."
+      },
+      {
+        "name": "Nell Tarn",
+        "trust": 80,
+        "affinity": 85,
+        "label": "sister",
+        "note": "A face close to mine, always talking."
+      },
+      {
+        "name": "Ansel Tarn",
+        "trust": 70,
+        "affinity": 75,
+        "label": "brother",
+        "note": "Another small one who is always near."
+      },
+      {
+        "name": "Magda Tarn",
+        "trust": 75,
+        "affinity": 80,
+        "label": "grandmother",
+        "note": "A voice that means food and being held."
+      },
+      {
+        "name": "Eamon Tarn",
+        "trust": 70,
+        "affinity": 65,
+        "label": "uncle",
+        "note": "A big loud shape that smells of fish and laughs too near my face."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "Being born at dawn and put into my mother's arms.",
+        "salience": 0.6,
+        "about": [
+          "Petra Tarn",
+          "Mirren Quill"
+        ]
+      }
+    ],
+    "stances": [],
+    "secret": ""
+  }
+}

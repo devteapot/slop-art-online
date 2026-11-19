@@ -112,6 +112,10 @@ pub struct Weight {
     /// rhythm; without one, 18:00 to 22:00). 0 or 1.
     #[serde(default, skip_serializing_if = "is_zero")]
     pub evening: f32,
+    /// It is the body's own working hours (its rhythm's; with no set hours, any waking hour
+    /// outside its evening). 0 or 1.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub work_hours: f32,
     /// The character's own stances (judgment value 0..1) by key.
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub believes: std::collections::BTreeMap<String, f32>,
@@ -162,6 +166,9 @@ pub struct SayNode {
     pub text: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub to: Option<Target>,
+    /// The way of speaking (`<way>_speech()` in the script); none is `say`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub way: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -186,6 +193,41 @@ pub struct Action {
     pub want: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub want_qty: Option<u32>,
+    /// What an answer to someone (accept, decline) is about: the trade offer (its
+    /// `trade_offer` id) or the proposal (its record id) the one answering saw. Without
+    /// either, the rules pick what stands from that person.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub offer: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub record: Option<u64>,
+    /// Run instead of walk on the way (goto, follow, the approach to a target), at the cost of
+    /// breath, while it lasts (`pools(a)`). A flight runs unless this says false.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub run: Option<bool>,
+    /// The distances of a movement intent (`steer::Spacing`): a band (`keep_distance`), a
+    /// circle's radius and side (`circle`, +1 left as one faces it), how near or how far
+    /// (`close_in`, `follow`, `back_off`), in metres.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub min: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub radius: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub side: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub distance: Option<f32>,
+    /// `keep_distance`, `close_in`, `circle`: how far to keep from others of one's own kind
+    /// one sees while holding it (`steer::Spacing::apart`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub apart: Option<f32>,
+}
+
+impl Action {
+    /// The distances a movement intent names.
+    pub fn spacing(&self) -> crate::steer::Spacing {
+        crate::steer::Spacing { min: self.min, max: self.max, radius: self.radius, side: self.side, distance: self.distance, apart: self.apart }
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -209,6 +251,8 @@ pub enum Cond {
     Hunger(Cmp),
     Energy(Cmp),
     Health(Cmp),
+    /// Breath now (0 to its cap; `pools` law).
+    Stamina(Cmp),
     Has(HasCond),
     Sees(Target),
     Near(NearCond),
@@ -223,6 +267,8 @@ pub enum Cond {
     Bedtime(bool),
     /// It is my own evening (the hours before my bedtime).
     Evening(bool),
+    /// It is my own working hours (my rhythm's; with no set hours, waking and not my evening).
+    WorkHours(bool),
     /// It is raining (the world's weather, which falls everywhere at once).
     Raining(bool),
     /// Someone greeted me (a gesture made at me, such as a wave or a nod) within the last N
@@ -239,6 +285,10 @@ pub enum Cond {
     Count(CountCond),
     /// How healthy a creature in sight is, as a percentage of its full health.
     HealthOf(HealthOfCond),
+    /// Someone in sight is visibly doing something, and how far into it: what their body shows,
+    /// as a player sees it drawn (`living_rules::doing`), e.g. `{"doing": {"who": "person",
+    /// "is": "hostile", "phase": "about to release", "at_me": true}}`.
+    Doing(DoingCond),
     /// A judgment the mind maintains from its beliefs.
     Believes(Believes),
     /// A typed judgment of the character's own that its mind refreshes in the background (a
@@ -277,6 +327,28 @@ pub struct CountCond {
     pub at_least: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub at_most: Option<u32>,
+}
+
+/// `{"doing": {"who": "person", "is": "hostile", "phase": "winding up", "at_me": true, "within": 4}}`:
+/// holds while some creature in sight that fits `who` (a kind, or a kind and a relation;
+/// anyone by default) is visibly doing what `is` names (a skill's name, its label, or a kind
+/// word such as `hostile`, `melee`, `missile`, `guard`, `dash`, `gesture`, `work`), in `phase`
+/// (`living_rules::doing::Phase`), aimed at me (`at_me`), within `within` m. Every field is
+/// optional: `{"doing": {}}` holds while anyone in sight is visibly doing anything.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Default)]
+#[serde(deny_unknown_fields)]
+pub struct DoingCond {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub who: Option<Filter>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub is: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub phase: Option<String>,
+    /// It is aimed at me: at me as its target, or its aim points at me.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub at_me: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub within: Option<f32>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -375,6 +447,9 @@ pub enum Target {
     Hailer,
     /// Where a fight or a death is happening within sight (a point).
     Commotion,
+    /// Toward the nearest thing I hear and cannot see (a point in its direction; only while
+    /// sight depends on facing, the `fov_on` law). Who or what it is is not known.
+    Sound,
     Nearest(Filter),
     /// A perceived character by name.
     Named(String),
@@ -587,6 +662,11 @@ fn check_with(n: &Node, depth: usize, count: &mut usize, max_nodes: usize, max_d
             if s.text.trim().is_empty() || s.text.len() > MAX_TEXT {
                 return Err("say text must be 1..400 bytes".into());
             }
+            if let Some(w) = &s.way {
+                if w.is_empty() || w.len() > 32 || !w.chars().all(|c| c.is_ascii_lowercase() || c == '_') {
+                    return Err("say way must be the name of a way of speaking".into());
+                }
+            }
             if let Some(t) = &s.to {
                 check_target(t)?;
             }
@@ -648,6 +728,20 @@ fn check_cond(c: &Cond, depth: usize) -> Result<(), String> {
                 return Err("count needs at_least or at_most".into());
             }
         }
+        Cond::Doing(d) => {
+            if let Some(p) = &d.phase {
+                if crate::doing::Phase::parse(p).is_none() {
+                    let words: Vec<&str> = crate::doing::Phase::ALL.iter().map(|p| p.word()).collect();
+                    return Err(format!("doing: unknown phase `{p}`; phases are {}", words.join(", ")));
+                }
+            }
+            if d.is.as_ref().is_some_and(|s| s.trim().is_empty() || s.len() > 40) {
+                return Err("doing: `is` is 1..40 bytes".into());
+            }
+            if d.within.is_some_and(|w| !(w > 0.0)) {
+                return Err("doing: within must be above 0".into());
+            }
+        }
         Cond::Has(h) => {
             if h.item != "food" && crate::catalog::item(&h.item).is_none() {
                 return Err(format!("unknown item `{}`", h.item));
@@ -658,7 +752,7 @@ fn check_cond(c: &Cond, depth: usize) -> Result<(), String> {
                 return Err("hailed must be 0.5..=600 seconds".into());
             }
         }
-        Cond::Hunger(c) | Cond::Energy(c) | Cond::Health(c) | Cond::Hour(c) => {
+        Cond::Hunger(c) | Cond::Energy(c) | Cond::Health(c) | Cond::Stamina(c) | Cond::Hour(c) => {
             if c.above.is_none() && c.below.is_none() {
                 return Err("comparison needs above or below".into());
             }
@@ -744,13 +838,31 @@ pub fn describe(n: &Node) -> String {
             if let Some(q) = a.qty {
                 s.push_str(&format!(" x{q}"));
             }
+            match (a.min, a.max) {
+                (Some(n), Some(f)) => s.push_str(&format!(" {n}–{f} m")),
+                (Some(n), None) => s.push_str(&format!(" at least {n} m")),
+                (None, Some(f)) => s.push_str(&format!(" within {f} m")),
+                _ => {}
+            }
+            if let Some(r) = a.radius {
+                s.push_str(&format!(" at {r} m"));
+            }
+            if let Some(side) = a.side {
+                s.push_str(if side < 0.0 { " to the right" } else { " to the left" });
+            }
+            if let Some(d) = a.distance {
+                s.push_str(&format!(" {d} m"));
+            }
             if let Some(t) = &a.target {
                 s.push_str(" → ");
                 s.push_str(&describe_target(t));
             }
             s
         }
-        Node::Say(s) => format!("say \"{}\"", s.text),
+        Node::Say(s) => match s.way.as_deref() {
+            None | Some("say") => format!("say \"{}\"", s.text),
+            Some(w) => format!("{w} \"{}\"", s.text),
+        },
         Node::Wait(w) => format!("wait {w}s"),
         Node::Think(r) => format!("think: {r}"),
         Node::Routine(r) => format!("routine: {r}"),
@@ -761,7 +873,7 @@ pub fn describe(n: &Node) -> String {
 /// A desire's weight in words, e.g. "0.2 + hunger×1.5 + night×0.4".
 pub fn describe_weight(w: &Weight) -> String {
     let mut parts = vec![format!("{}", w.base)];
-    for (k, v) in [("hunger", w.hunger), ("tired", w.tired), ("hurt", w.hurt), ("night", w.night), ("day", w.day), ("threatened", w.threatened), ("alone", w.alone), ("company", w.company), ("winter", w.winter), ("longing", w.longing), ("courted", w.courted), ("starving", w.starving), ("exhausted", w.exhausted), ("rain", w.rain), ("hailed", w.hailed), ("commotion", w.commotion), ("bedtime", w.bedtime), ("evening", w.evening)] {
+    for (k, v) in [("hunger", w.hunger), ("tired", w.tired), ("hurt", w.hurt), ("night", w.night), ("day", w.day), ("threatened", w.threatened), ("alone", w.alone), ("company", w.company), ("winter", w.winter), ("longing", w.longing), ("courted", w.courted), ("starving", w.starving), ("exhausted", w.exhausted), ("rain", w.rain), ("hailed", w.hailed), ("commotion", w.commotion), ("bedtime", w.bedtime), ("evening", w.evening), ("work_hours", w.work_hours)] {
         if v != 0.0 {
             parts.push(format!("{k}×{v}"));
         }
@@ -788,6 +900,7 @@ pub fn describe_target(t: &Target) -> String {
         Target::Partner => "partner".into(),
         Target::Hailer => "whoever greeted me".into(),
         Target::Commotion => "the commotion".into(),
+        Target::Sound => "the sound".into(),
         Target::Nearest(f) => {
             let mut s = format!("nearest {}", f.kind);
             if let Some(r) = &f.relation {
@@ -820,6 +933,7 @@ pub fn describe_cond(c: &Cond) -> String {
         Cond::Hunger(x) => cmp("hunger", x),
         Cond::Energy(x) => cmp("energy", x),
         Cond::Health(x) => cmp("health", x),
+        Cond::Stamina(x) => cmp("stamina", x),
         Cond::Has(h) => format!("has {} {}", h.at_least, h.item),
         Cond::Sees(t) => format!("sees {}", describe_target(t)),
         Cond::Smells(t) => format!("smells {}", describe_target(t)),
@@ -845,6 +959,31 @@ pub fn describe_cond(c: &Cond) -> String {
                 None => format!("{n} {who} in sight"),
             }
         }
+        Cond::Doing(d) => {
+            let mut s = match &d.who {
+                Some(f) => match &f.relation {
+                    Some(r) => format!("{} ({r})", f.kind),
+                    None => f.kind.clone(),
+                },
+                None => "someone".into(),
+            };
+            s.push_str(" in sight is ");
+            match (&d.is, &d.phase) {
+                (Some(i), Some(p)) => s.push_str(&format!("{p}: {i}")),
+                (Some(i), None) => s.push_str(&format!("doing {i}")),
+                (None, Some(p)) => s.push_str(p),
+                (None, None) => s.push_str("visibly doing something"),
+            }
+            match d.at_me {
+                Some(true) => s.push_str(" at me"),
+                Some(false) => s.push_str(" not at me"),
+                None => {}
+            }
+            if let Some(w) = d.within {
+                s.push_str(&format!(" within {w}"));
+            }
+            s
+        }
         Cond::HealthOf(h) => {
             let mut s = format!("health of {}", describe_target(&h.target));
             if let Some(a) = h.above {
@@ -861,6 +1000,8 @@ pub fn describe_cond(c: &Cond) -> String {
         Cond::Bedtime(false) => "not my bedtime".into(),
         Cond::Evening(true) => "my evening".into(),
         Cond::Evening(false) => "not my evening".into(),
+        Cond::WorkHours(true) => "my working hours".into(),
+        Cond::WorkHours(false) => "not my working hours".into(),
         Cond::Raining(true) => "raining".into(),
         Cond::Raining(false) => "not raining".into(),
         Cond::Hailed(s) => format!("greeted in last {s}s"),
@@ -916,6 +1057,92 @@ pub fn outline(root: &Node) -> String {
     let mut id = 0;
     go(root, 0, &mut id, &mut out);
     out
+}
+
+// ---- labelled branches ----------------------------------------------------------------
+
+/// Replace the branch labelled `label` in a graph (as JSON) with `node`, keeping the rest: a
+/// mind's patch ("adapt how you fight mid-fight"), the fast lane's `combat` branch
+/// (docs/FAST_LANE.md). A graph wrapped in the `reflexes` branch is patched inside it. Not found,
+/// the new branch goes first, ahead of the existing behaviour.
+pub fn patch_branch(graph: serde_json::Value, label: &str, node: serde_json::Value) -> serde_json::Value {
+    use serde_json::{json, Value};
+    let inner = match &graph["first"] {
+        Value::Object(o) if o.get("label").and_then(|l| l.as_str()) == Some("reflexes") => o["children"].as_array().and_then(|c| c.last()).cloned().unwrap_or(json!({"wait": 3})),
+        _ => graph,
+    };
+    let labeled = label_node(node, label);
+    fn replace(v: &mut Value, label: &str, with: &Value) -> bool {
+        match v {
+            Value::Object(o) => {
+                for key in ["first", "seq"] {
+                    if let Some(Value::Object(c)) = o.get(key) {
+                        if c.get("label").and_then(|l| l.as_str()) == Some(label) {
+                            *v = with.clone();
+                            return true;
+                        }
+                    }
+                }
+                o.values_mut().any(|x| replace(x, label, with))
+            }
+            Value::Array(a) => a.iter_mut().any(|x| replace(x, label, with)),
+            _ => false,
+        }
+    }
+    let mut inner = inner;
+    if replace(&mut inner, label, &labeled) {
+        return inner;
+    }
+    // Not found: the new branch takes priority over the existing behavior.
+    match inner.get("first") {
+        Some(Value::Array(children)) => {
+            let mut c = vec![labeled];
+            c.extend(children.iter().cloned());
+            json!({"first": c})
+        }
+        Some(Value::Object(o)) => {
+            let mut c = vec![labeled];
+            c.extend(o.get("children").and_then(|x| x.as_array()).cloned().unwrap_or_default());
+            json!({"first": {"label": o.get("label").cloned().unwrap_or(json!("plan")), "children": c}})
+        }
+        _ => json!({"first": [labeled, inner]}),
+    }
+}
+
+/// Ensure a patched branch carries its label (wrapping non-composite nodes).
+pub fn label_node(node: serde_json::Value, label: &str) -> serde_json::Value {
+    use serde_json::{json, Value};
+    for key in ["first", "seq"] {
+        match node.get(key) {
+            Some(Value::Array(children)) => return json!({key: {"label": label, "children": children}}),
+            Some(Value::Object(o)) => {
+                let mut o = o.clone();
+                o.insert("label".into(), json!(label));
+                return json!({key: o});
+            }
+            _ => {}
+        }
+    }
+    json!({"first": {"label": label, "children": [node]}})
+}
+
+/// The branch labelled `label` in a graph (as JSON), as the node that carries the label.
+pub fn branch_of(graph: &serde_json::Value, label: &str) -> Option<serde_json::Value> {
+    use serde_json::Value;
+    match graph {
+        Value::Object(o) => {
+            for key in ["first", "seq"] {
+                if let Some(Value::Object(c)) = o.get(key) {
+                    if c.get("label").and_then(|l| l.as_str()) == Some(label) {
+                        return Some(graph.clone());
+                    }
+                }
+            }
+            o.values().find_map(|x| branch_of(x, label))
+        }
+        Value::Array(a) => a.iter().find_map(|x| branch_of(x, label)),
+        _ => None,
+    }
 }
 
 #[cfg(test)]
@@ -1095,5 +1322,89 @@ mod seed_repertoire_tests {
             }
             validate_compiled(expand(&top.root, &|n: &str| routines.get(n).cloned())).unwrap_or_else(|e| panic!("{kind}: {e}"));
         }
+    }
+}
+
+/// The wolves' spacing reflex (docs/PACK_MIND.md, decision 1; the `pack_reflex` law): a graph
+/// (an instinct, or a routine of the species' ways) in which every attack on the nearest person
+/// or deer, guarded or not, in either form (`{"do": {"skill": "attack", ...}}` or `{"do":
+/// "attack", ...}`), becomes two weighted desires: "keep apart from mates" (1.2), which acts while
+/// another wolf is within [`REFLEX_MATE_M`] and the prey within [`REFLEX_PREY_M`], holding
+/// [`REFLEX_BAND`] from the nearest prey at a run and [`REFLEX_APART_M`] from other wolves one
+/// sees; and the hunt as it was (1). It names a kind, as the hunt already does, never one
+/// creature or a role, and it is an ordinary part of the graph, which the wolf's mind may change.
+pub fn with_pack_reflex(graph: &serde_json::Value) -> serde_json::Value {
+    use serde_json::{json, Value};
+    fn keep_apart(prey: &str) -> Value {
+        json!({"want": "keep apart from mates", "weight": {"base": 1.2}, "do": {"if": {
+            "cond": {"all": [{"near": {"target": {"nearest": "wolf"}, "within": REFLEX_MATE_M}}, {"near": {"target": {"nearest": prey}, "within": REFLEX_PREY_M}}]},
+            "then": {"do": {"skill": "keep_distance", "target": {"nearest": prey}, "min": REFLEX_BAND.0, "max": REFLEX_BAND.1, "run": true, "apart": REFLEX_APART_M}}}}})
+    }
+    /// The prey of a hunt step: `{"do": {"skill": "attack", "target": {"nearest": K}}}` or
+    /// `{"do": "attack", "target": {"nearest": K}}`, K a person or a deer.
+    fn hunt(o: &serde_json::Map<String, Value>) -> Option<String> {
+        let d = o.get("do")?;
+        let (skill, target) = match d {
+            Value::Object(a) => (a.get("skill")?.as_str()?, a.get("target")?),
+            Value::String(k) => (k.as_str(), o.get("target")?),
+            _ => return None,
+        };
+        let prey = target.get("nearest")?.as_str()?;
+        (skill == "attack" && matches!(prey, "person" | "deer")).then(|| prey.to_string())
+    }
+    fn walk(n: &Value) -> Value {
+        match n {
+            Value::Object(o) => match hunt(o) {
+                Some(prey) => json!({"desires": [keep_apart(&prey), {"want": "hunt", "weight": {"base": 1.0}, "do": n}]}),
+                None => Value::Object(o.iter().map(|(k, v)| (k.clone(), walk(v))).collect()),
+            },
+            Value::Array(a) => Value::Array(a.iter().map(walk).collect()),
+            v => v.clone(),
+        }
+    }
+    walk(graph)
+}
+
+/// How near another wolf must be for the reflex to act (m).
+pub const REFLEX_MATE_M: f32 = 3.0;
+/// How near the prey must be (m).
+pub const REFLEX_PREY_M: f32 = 6.0;
+/// The band held from the prey (m).
+pub const REFLEX_BAND: (f32, f32) = (3.0, 5.0);
+/// How far it keeps from other wolves it sees (`apart`, m).
+pub const REFLEX_APART_M: f32 = 4.0;
+
+/// Whether a starting instinct named `name` (instincts.json) is a grown wolf's, which the
+/// reflex applies to (`wolf`, `wolf_bold`; not a pup's `wolf_young`).
+pub fn reflex_applies(name: &str) -> bool {
+    name == "wolf" || (name.starts_with("wolf_") && name != "wolf_young")
+}
+
+#[cfg(test)]
+mod pack_reflex_tests {
+    use super::*;
+
+    #[test]
+    fn the_reflex_sits_beside_every_hunt_and_the_graph_still_parses() {
+        let all: serde_json::Value = serde_json::from_str(include_str!("../../seeds/instincts.json")).unwrap();
+        for name in ["wolf", "wolf_bold"] {
+            let g = with_pack_reflex(&all[name]);
+            let text = g.to_string();
+            parse(&text).unwrap_or_else(|e| panic!("{name}: {e}"));
+            // One reflex per hunt, guarded or bare: two each (people and deer).
+            assert_eq!(text.matches("keep apart from mates").count(), 2, "{name}");
+            assert!(text.contains("\"apart\":4.0") || text.contains("\"apart\":4"), "{text}");
+        }
+        // A pup's instinct and a person's are left as they are.
+        assert!(!reflex_applies("wolf_young") && !reflex_applies("person") && reflex_applies("wolf") && reflex_applies("wolf_bold"));
+        assert_eq!(with_pack_reflex(&all["person"]).to_string().matches("keep apart").count(), 0);
+        // The species' ways (repertoire.json): the shorthand form, in the `hunt` routine.
+        let rep: serde_json::Value = serde_json::from_str(include_str!("../../seeds/repertoire.json")).unwrap();
+        let hunt = with_pack_reflex(&rep["species"]["wolf"]["routines"]["hunt"]);
+        assert_eq!(hunt.to_string().matches("keep apart from mates").count(), 2, "{hunt}");
+        parse(&hunt.to_string()).unwrap();
+        // An attack on whoever hurt it is not a hunt: left as it is.
+        let safe = with_pack_reflex(&rep["species"]["wolf"]["routines"]["stay safe"]);
+        assert_eq!(safe, rep["species"]["wolf"]["routines"]["stay safe"]);
     }
 }

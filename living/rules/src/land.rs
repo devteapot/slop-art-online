@@ -135,6 +135,77 @@ pub struct LandParams {
     /// arterials ([`crate::settle::MetroParams`]); the sites above stand outside it. None: no city.
     #[serde(default)]
     pub metro: Option<MetroParams>,
+    /// Hand-authored settlements ([`crate::settle::PlanSpec`], docs/AUTHORED_PLANS.md): laid out
+    /// as written; the generator steps aside for them. Empty: the land is as before.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub plans: Vec<settle::PlanSpec>,
+    #[serde(default, skip_serializing_if = "crate::cover::Spec::is_empty")]
+    pub cover: crate::cover::Spec,
+    /// What hides what is behind it where the land is hosted ([`Sight`]): the eye height, and
+    /// per kind of lot or prop how high it hides. Default: 1.6 m, and each model's own height.
+    #[serde(default, skip_serializing_if = "Sight::is_default")]
+    pub sight: Sight,
+}
+
+/// Which built things hide what is behind them, for sight lines on the hosted tiles
+/// (`host::hosted_map`, docs/ISLAND_AUTHORITY.md "Sight over low things" and "Sight through
+/// what is open at eye height"). A lot or prop that blocks walking hides only where it is solid
+/// at the eye: its footprint is `Low` (blocks the foot, not the eye) where it is not. A thing
+/// no higher than `eye_m` is `Low` throughout. Above it, where its model's footprint is measured
+/// at eye height (`eye_cells` in `data/buildings.json`, from the mesh), a tile is `Wall` when a
+/// square of the model in it blocks at least `solid` of the view, else `Low`; a model without
+/// the measure (or an eye outside the band it was measured in) is `Wall` throughout. A kind
+/// named in `hides_m` is all one or the other by that height instead.
+/// Why land data, not a Rhai law: which tiles block is decided when the land is hosted, in this
+/// crate, without the world's script; and the game client rebuilds the same hosted land for its
+/// own sight test (sight-2). The authority and the client must compute blocking from the same
+/// input, and the only input both have is the seed's land data. Defaults come from each kind's
+/// own definition (its model's height); `hides_m` only overrides them.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Sight {
+    /// Eye height (metres above the ground): what rises above it hides what is behind.
+    pub eye_m: f32,
+    /// Per kind (a lot kind's or a prop kind's id: `market_stall`, `well`, `cart`, `fountain`…),
+    /// how high it hides (metres), in place of its model's height: `{"market_stall": 0}` makes an
+    /// open-sided stall see-through, `{"well": 0.95}` sees over a well's rim under its roof.
+    /// Empty: every model hides up to its own height.
+    pub hides_m: std::collections::BTreeMap<String, f32>,
+    /// How much of the view through a square of a model's footprint at eye height must be
+    /// blocked for its tile to hide (0..1, against the model's measured `eye_cells`): 0.8,
+    /// nearly all of it, so a wall or a room hides, and a post, a beam, goods on a counter, or a
+    /// well's posts with its windlass across them (about 70%) do not: on the 1 m tiles a post's
+    /// square hides the whole tile it lands on, which can close the view across a turned well.
+    pub solid: f32,
+}
+
+impl Default for Sight {
+    fn default() -> Self {
+        Self { eye_m: 1.6, hides_m: Default::default(), solid: 0.8 }
+    }
+}
+
+impl Sight {
+    fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+
+    /// Whether a thing of `kind` whose model is `height_m` tall rises above the eye (so it may
+    /// hide what is behind it, where it is solid). A kind named in `hides_m` does by that value;
+    /// otherwise by its model's height, and a thing with no height known (0: no model) does, as
+    /// walls did before.
+    pub fn hides(&self, kind: &str, height_m: f32) -> bool {
+        match self.hides_m.get(kind) {
+            Some(&h) => h > self.eye_m,
+            None => height_m <= 0.0 || height_m > self.eye_m,
+        }
+    }
+
+    /// Whether a model's `eye_cells` decide where it hides: its kind is not named in `hides_m`,
+    /// and the eye lies in the band they were measured in.
+    pub fn by_cells(&self, kind: &str) -> bool {
+        !self.hides_m.contains_key(kind) && (settle::EYE_BAND_M.0..=settle::EYE_BAND_M.1).contains(&self.eye_m)
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -174,6 +245,108 @@ pub struct Relief {
     /// along one side only.
     #[serde(default)]
     pub land_shift: [f32; 2],
+    /// An authored coastline (land metres, x east, y south; docs/AUTHORED_PLANS.md): the land is
+    /// this polygon instead of the warped ellipse above, its edge still roughened by `coast_warp`
+    /// (here a fraction of half the side) at `coast_feature`. Inland the plain rises over
+    /// `outline_rise_m` from the coast. Empty: the generated shape.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub outline: Vec<[f32; 2]>,
+    pub outline_rise_m: f32,
+    /// Authored stamps on the relief and the regions, applied in order after the generated
+    /// relief, islets and lake basins and before the plans: a plateau, a gully, a beach, a reef.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub stamps: Vec<Stamp>,
+}
+
+/// An authored stamp ([`Relief::stamps`]): inside `area` (land metres) the coarse ground is
+/// `height_m`, fading into the ground round it over `blend_m`; and/or the ground inside is of
+/// region kind `region` (its trees, beach, rocks and dirt follow that kind's look). Lake basins
+/// keep off stamps.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Stamp {
+    /// For the author; the engine does not read it.
+    #[serde(default)]
+    pub id: String,
+    pub area: Vec<[f32; 2]>,
+    #[serde(default)]
+    pub height_m: Option<f32>,
+    #[serde(default = "stamp_blend")]
+    pub blend_m: f32,
+    #[serde(default)]
+    pub region: Option<RegionKind>,
+    /// The tiles inside are this ground (`grass`, `sand`, `dirt`, `rock`, `forest`), wherever
+    /// they are not water: a strand wider than the shore's own sand, a scree.
+    #[serde(default)]
+    pub ground: Option<String>,
+}
+
+fn stamp_blend() -> f32 {
+    40.0
+}
+
+impl Stamp {
+    fn poly(&self) -> Vec<(f32, f32)> {
+        self.area.iter().map(|q| (q[0], q[1])).collect()
+    }
+}
+
+fn stamp_ground(g: &str) -> Option<Terrain> {
+    match g {
+        "grass" => Some(Terrain::Grass),
+        "sand" => Some(Terrain::Sand),
+        "dirt" => Some(Terrain::Dirt),
+        "rock" => Some(Terrain::Rock),
+        "forest" => Some(Terrain::Forest),
+        _ => None,
+    }
+}
+
+/// Signed distance to a polygon's edge: positive inside, negative outside.
+fn poly_signed(poly: &[(f32, f32)], p: (f32, f32)) -> f32 {
+    let out = settle::poly_outside(poly, p);
+    if out > 0.0 {
+        return -out;
+    }
+    let n = poly.len();
+    (0..n)
+        .map(|i| {
+            let (a, b) = (poly[i], poly[(i + 1) % n]);
+            let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+            let u = (((p.0 - a.0) * dx + (p.1 - a.1) * dy) / (dx * dx + dy * dy).max(1e-9)).clamp(0.0, 1.0);
+            (p.0 - a.0 - u * dx).d_hypot(p.1 - a.1 - u * dy)
+        })
+        .fold(f32::MAX, f32::min)
+}
+
+/// Check authored relief: polygons of at least three finite points, finite heights and blends,
+/// and something for each stamp to do. The authority calls it with the plans' checks, before
+/// anything is generated.
+pub fn validate_relief(r: &Relief) -> Result<(), String> {
+    let ok = |p: &[[f32; 2]]| p.len() >= 3 && p.iter().all(|q| q[0].is_finite() && q[1].is_finite());
+    if !r.outline.is_empty() && !ok(&r.outline) {
+        return Err("relief.outline needs a polygon of at least 3 points".into());
+    }
+    if !(r.outline_rise_m.is_finite() && r.outline_rise_m > 0.0) {
+        return Err("relief.outline_rise_m must be above 0".into());
+    }
+    for (i, st) in r.stamps.iter().enumerate() {
+        let name = if st.id.is_empty() { format!("relief.stamps[{i}]") } else { format!("relief stamp {}", st.id) };
+        if !ok(&st.area) {
+            return Err(format!("{name} needs a polygon of at least 3 points"));
+        }
+        if st.height_m.is_some_and(|h| !h.is_finite()) || !(st.blend_m.is_finite() && st.blend_m >= 0.0) {
+            return Err(format!("{name}: height_m and blend_m must be numbers (blend_m at least 0)"));
+        }
+        if st.height_m.is_none() && st.region.is_none() && st.ground.is_none() {
+            return Err(format!("{name} sets neither a height, a region nor a ground"));
+        }
+        if let Some(g) = &st.ground {
+            if stamp_ground(g).is_none() {
+                return Err(format!("{name}: ground {g:?} is not grass, sand, dirt, rock or forest"));
+            }
+        }
+    }
+    Ok(())
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -274,7 +447,7 @@ pub struct SiteSpec {
 
 impl Default for LandParams {
     fn default() -> Self {
-        Self { cell_m: 8.0, relief: Relief::default(), water: Water::default(), regions: Regions::default(), sites: default_sites(), min_pocket_tiles: 60, settlements: SettleParams::default(), metro: None }
+        Self { cell_m: 8.0, relief: Relief::default(), water: Water::default(), regions: Regions::default(), sites: default_sites(), min_pocket_tiles: 60, settlements: SettleParams::default(), metro: None, plans: Vec::new(), cover: Default::default(), sight: Sight::default() }
     }
 }
 
@@ -301,6 +474,9 @@ impl Default for Relief {
             islets: 2,
             islet_radius_m: [25.0, 60.0],
             land_shift: [0.0, 0.0],
+            outline: Vec::new(),
+            outline_rise_m: 150.0,
+            stamps: Vec::new(),
         }
     }
 }
@@ -411,12 +587,18 @@ pub struct Site {
     /// town of its own.
     #[serde(skip)]
     pub(crate) ward: bool,
+    /// The id of the hand-authored plan laid out here ([`crate::settle::PlanSpec`]).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub plan: Option<String>,
 }
 
 impl Site {
-    /// What a seed calls this kind of site: the kind (`town`, `village`, ...), or
-    /// `<style>_<kind>` for a site with its own style (`steampunk_town`).
+    /// What a seed calls this kind of site: a plan's id; else the kind (`town`, `village`,
+    /// ...), or `<style>_<kind>` for a site with its own style (`steampunk_town`).
     pub fn id(&self) -> String {
+        if let Some(p) = &self.plan {
+            return p.clone();
+        }
         match &self.style {
             Some(st) => format!("{st}_{}", self.kind.id()),
             None => self.kind.id().to_string(),
@@ -510,6 +692,8 @@ pub struct Land {
     /// Street ornaments, stairs and retaining walls of every settlement, derived from the
     /// layout (not stored by the authority; see `docs/ISLAND_AUTHORITY.md`).
     pub props: Vec<Prop>,
+    /// Hand-authored settlements as laid out: their lots' and streets' names, for the authority.
+    pub plans: Vec<settle::Laid>,
     pub(crate) mods: settle::Mods,
     n: usize,
     cell: f32,
@@ -942,7 +1126,9 @@ struct Work {
 impl Gen {
     pub fn new(seed: u64, size_m: u32, p: LandParams) -> Self {
         assert!((256..=MAX_SIDE).contains(&size_m), "land side {size_m} m outside 256..={MAX_SIDE}");
-        Self { seed, size: size_m, p, next: Next::Hydro, hydro: None, work: None, land: None, plan: settle::Staged::default(), dispersed_done: 0 }
+        let mut plan = settle::Staged::default();
+        plan.specs = p.plans.clone();
+        Self { seed, size: size_m, p, next: Next::Hydro, hydro: None, work: None, land: None, plan, dispersed_done: 0 }
     }
 
     fn band_rows(&self) -> usize {
@@ -1104,6 +1290,9 @@ fn hydro_pass(seed: u64, size_m: u32, p: &LandParams) -> Hydro {
     // The city's centre and radius, if the land holds one: no ranges or lakes inside it, and its
     // ground is levelled.
     let city: Option<((f32, f32), f32, f32)> = p.metro.as_ref().map(|m| ((m.centre[0] * s, m.centre[1] * s), m.radius * s * 0.5, m.flatten));
+    // Hand-authored settlements: no islets or lakes on them, and the relief follows their levels.
+    let plans: Vec<settle::PlanResolved> = p.plans.iter().map(|sp| settle::resolve_plan(sp).unwrap_or_else(|e| panic!("{e}"))).collect();
+    let near_plan = |x: f32, y: f32, m: f32| plans.iter().any(|q| settle::plan_covers(q, (x, y), m));
 
     // Island shape and ranges.
     let centre = (s * 0.5 + (rng.f() - 0.5) * s * 0.04, s * 0.5 + (rng.f() - 0.5) * s * 0.04);
@@ -1115,7 +1304,15 @@ fn hydro_pass(seed: u64, size_m: u32, p: &LandParams) -> Hydro {
         (dx / l, dy / l)
     };
     let lc = (centre.0 + r.land_shift[0] * s, centre.1 + r.land_shift[1] * s);
+    let outline: Vec<(f32, f32)> = r.outline.iter().map(|q| (q[0], q[1])).collect();
     let landness = |x: f32, y: f32| {
+        if !outline.is_empty() {
+            // An authored coast: the distance inside it, roughened like the generated one.
+            let k = r.coast_warp * s * 0.5;
+            let wx = x + k * fbm(seed ^ 0x11, x, y, r.coast_feature * s, 4);
+            let wy = y + k * fbm(seed ^ 0x12, x, y, r.coast_feature * s, 4);
+            return poly_signed(&outline, (wx, wy)) / r.outline_rise_m;
+        }
         let u = (x - lc.0) / (s * 0.5) + r.coast_warp * fbm(seed ^ 0x11, x, y, r.coast_feature * s, 4);
         let v = (y - lc.1) / (s * 0.5) + r.coast_warp * fbm(seed ^ 0x12, x, y, r.coast_feature * s, 4);
         let (a, b) = ((u * axis.0 + v * axis.1) / r.elongation, (-u * axis.1 + v * axis.0) * r.elongation.sqrt());
@@ -1170,7 +1367,7 @@ fn hydro_pass(seed: u64, size_m: u32, p: &LandParams) -> Hydro {
             let k = (rng.f() * nn as f32) as usize % nn;
             let (x, y) = pos(k);
             let e = elev[k];
-            if !(-14.0..=-3.0).contains(&e) || x.min(y).min(s - x).min(s - y) < 150.0 {
+            if !(-14.0..=-3.0).contains(&e) || x.min(y).min(s - x).min(s - y) < 150.0 || near_plan(x, y, 150.0) {
                 continue;
             }
             let rad = rng.range(r.islet_radius_m);
@@ -1179,6 +1376,9 @@ fn hydro_pass(seed: u64, size_m: u32, p: &LandParams) -> Hydro {
             break;
         }
     }
+
+    // Authored stamps (applied below, after the lake basins, which keep off them).
+    let stamps: Vec<(Vec<(f32, f32)>, &Stamp)> = r.stamps.iter().map(|st| (st.poly(), st)).collect();
 
     // Lake basins: a bowl with a rim, on flat-ish ground away from coast and spine.
     let land_nodes = elev.iter().filter(|e| **e > 0.0).count();
@@ -1200,6 +1400,12 @@ fn hydro_pass(seed: u64, size_m: u32, p: &LandParams) -> Hydro {
         if city.is_some_and(|(cc, cr, _)| (x - cc.0).d_hypot(y - cc.1) < cr * 1.15 + rad * 1.9) {
             continue;
         }
+        if near_plan(x, y, rad * 1.9 + 120.0) {
+            continue;
+        }
+        if stamps.iter().any(|(q, st)| poly_signed(q, (x, y)) > -(rad * 1.9 + st.blend_m)) {
+            continue;
+        }
         if basins.iter().any(|b| (b.0 - x).d_hypot(b.1 - y) < 450.0) {
             continue;
         }
@@ -1214,6 +1420,27 @@ fn hydro_pass(seed: u64, size_m: u32, p: &LandParams) -> Hydro {
         });
         basins.push((x, y, rad));
     }
+
+    for (q, st) in &stamps {
+        let Some(h) = st.height_m else { continue };
+        let lo = q.iter().fold((f32::MAX, f32::MAX), |m, v| (m.0.min(v.0), m.1.min(v.1)));
+        let hi = q.iter().fold((f32::MIN, f32::MIN), |m, v| (m.0.max(v.0), m.1.max(v.1)));
+        let pad = st.blend_m + cell;
+        let (i0, j0) = ((((lo.0 - pad) / cell).floor().max(0.0)) as usize, (((lo.1 - pad) / cell).floor().max(0.0)) as usize);
+        let (i1, j1) = ((((hi.0 + pad) / cell).ceil().max(0.0)) as usize, (((hi.1 + pad) / cell).ceil().max(0.0)) as usize);
+        for j in j0..=j1.min(n - 1) {
+            for i in i0..=i1.min(n - 1) {
+                let k = j * n + i;
+                let d = -poly_signed(q, pos(k));
+                let w = if d <= 0.0 { 1.0 } else if st.blend_m <= 0.0 { 0.0 } else { 1.0 - smoothstep(0.0, st.blend_m, d) };
+                if w > 0.0 {
+                    elev[k] = lerp(elev[k], h, w);
+                }
+            }
+        }
+    }
+
+    settle::stamp_plans(&mut elev, n, cell, &plans);
 
     // Sea: below zero and connected to the border.
     let mut sea = vec![false; nn];
@@ -1652,12 +1879,24 @@ fn macro_pass(h: Hydro, p: &LandParams) -> Work {
             Region { id: g as u16, kind: kinds[g], centre: seeds[g], area_m2: st.nodes * cell * cell, land_m2: st.land * cell * cell, mean_height_m: mean(st, st.e) }
         })
         .collect();
-    let node_kind: Vec<RegionKind> = (0..nn)
+    let mut node_kind: Vec<RegionKind> = (0..nn)
         .map(|k| match kinds[region_of[k] as usize] {
             RegionKind::Sea if !sea[k] => RegionKind::Beach,
             kind => kind,
         })
         .collect();
+    // Authored region stamps, in order: the land inside each is of its kind.
+    for st in p.relief.stamps.iter().filter(|st| st.region.is_some()) {
+        let q = st.poly();
+        let lo = q.iter().fold((f32::MAX, f32::MAX), |m, v| (m.0.min(v.0), m.1.min(v.1)));
+        let hi = q.iter().fold((f32::MIN, f32::MIN), |m, v| (m.0.max(v.0), m.1.max(v.1)));
+        for k in 0..nn {
+            let c = pos(k);
+            if c.0 >= lo.0 && c.1 >= lo.1 && c.0 <= hi.0 && c.1 <= hi.1 && !sea[k] && settle::poly_contains(&q, c) {
+                node_kind[k] = st.region.unwrap();
+            }
+        }
+    }
 
     // Wetland pools are water sources at their own ground level.
     for k in 0..nn {
@@ -1692,7 +1931,21 @@ fn macro_pass(h: Hydro, p: &LandParams) -> Work {
     let mut still_d: Vec<f32> = (0..nn).map(|k| if sea[k] || lake_of[k] != NONE { 0.0 } else { f32::INFINITY }).collect();
     chamfer(n, n, cell, &mut still_d, None);
     let avoid = city.map(|(cc, cr, _)| (cc, cr));
-    let sites = place_sites(&SiteCtx { p, n, cell, s, elev: &elev, wd: &wd, still_d: &still_d, sea_d: &sea_d, node_kind: &node_kind, max_e, land_km2, seed, avoid }, &|k| slope_of(&elev, k));
+    // Planned settlements' fixed sites come first; generated sites keep their distance.
+    let fixed: Vec<Site> = p
+        .plans
+        .iter()
+        .map(|sp| {
+            let r = settle::resolve_plan(sp).unwrap_or_else(|e| panic!("{e}"));
+            let k = {
+                let i = ((r.centre.0 / cell).round() as isize).clamp(0, n as isize - 1) as usize;
+                let j = ((r.centre.1 / cell).round() as isize).clamp(0, n as isize - 1) as usize;
+                j * n + i
+            };
+            settle::plan_site(&r, node_kind[k])
+        })
+        .collect();
+    let sites = place_sites(&SiteCtx { p, n, cell, s, elev: &elev, wd: &wd, still_d: &still_d, sea_d: &sea_d, node_kind: &node_kind, max_e, land_km2, seed, avoid }, &|k| slope_of(&elev, k), fixed);
 
     let mut land = Land {
         ways: None,
@@ -1712,6 +1965,7 @@ fn macro_pass(h: Hydro, p: &LandParams) -> Work {
         roads: Vec::new(),
         crossings: Vec::new(),
         props: Vec::new(),
+        plans: Vec::new(),
         mods: settle::Mods::default(),
         n,
         cell,
@@ -1790,6 +2044,19 @@ fn tile_rows(wk: &mut Work, p: &LandParams, j0: usize, j1: usize) {
     let t: Vec<f32> = (lo * w..(hi + 1) * w).map(|k| land.terrain((k % w) as f32 + 0.5, (k / w) as f32 + 0.5)).collect();
     let rock_slope = 0.85;
     let treeline = rp.treeline_m;
+    // Authored ground stamps, with their boxes, for the rows of this band.
+    let grounds: Vec<(Vec<(f32, f32)>, (f32, f32), (f32, f32), Terrain)> = p
+        .relief
+        .stamps
+        .iter()
+        .filter_map(|st| {
+            let g = stamp_ground(st.ground.as_deref()?)?;
+            let q = st.poly();
+            let lo = q.iter().fold((f32::MAX, f32::MAX), |m, v| (m.0.min(v.0), m.1.min(v.1)));
+            let hi = q.iter().fold((f32::MIN, f32::MIN), |m, v| (m.0.max(v.0), m.1.max(v.1)));
+            (hi.1 >= j0 as f32 && lo.1 <= j1 as f32).then_some((q, lo, hi, g))
+        })
+        .collect();
     for j in j0..j1 {
         for i in 0..w {
             let k = j * w + i;
@@ -1830,6 +2097,7 @@ fn tile_rows(wk: &mut Work, p: &LandParams, j0: usize, j1: usize) {
                     Terrain::Grass
                 }
             };
+            let c = if c == Terrain::Water { c } else { grounds.iter().rev().find(|(q, lo, hi, _)| x >= lo.0 && y >= lo.1 && x <= hi.0 && y <= hi.1 && settle::poly_contains(q, (x, y))).map_or(c, |g| g.3) };
             tiles[k] = c as u8;
         }
     }
@@ -1888,7 +2156,9 @@ fn connect_pass(wk: &mut Work, p: &LandParams) {
             }
             site.facing = (-uy).d_atan2(-ux);
         }
-        let clear = if site.kind == SiteKind::Cave { 3.0 } else { r * 0.95 };
+        // A planned settlement opens its own levels (`settle::plan::paint`); a disc of its
+        // radius would also clear whatever lies between it and its outlying lots.
+        let clear = if site.kind == SiteKind::Cave { 3.0 } else if site.plan.is_some() { 0.0 } else { r * 0.95 };
         for j in (site.y - clear) as i32..=(site.y + clear) as i32 {
             for i in (site.x - clear) as i32..=(site.x + clear) as i32 {
                 if i < 0 || j < 0 || i >= w as i32 || j >= w as i32 || (i as f32 + 0.5 - site.x).d_hypot(j as f32 + 0.5 - site.y) > clear {
@@ -1946,7 +2216,7 @@ fn finish_tiles(wk: Work) -> Land {
     let Work { mut land, tiles, sd, .. } = wk;
     let size_m = land.size;
     land.sd = sd;
-    land.map = Map { w: size_m, h: size_m, tiles, blocked: Default::default(), opaque: Default::default(), nav: Default::default() };
+    land.map = Map { w: size_m, h: size_m, tiles, blocked: Default::default(), cover: None, opaque: Default::default(), nav: Default::default() };
     land
 }
 
@@ -2148,8 +2418,8 @@ impl Level {
 /// Placement relaxes its limits in these steps when a site does not fit.
 const RELAX: [f32; 4] = [1.0, 1.6, 2.5, 4.0];
 
-fn place_sites(c: &SiteCtx, slope: &dyn Fn(usize) -> f32) -> Vec<Site> {
-    let mut placed: Vec<Site> = Vec::new();
+fn place_sites(c: &SiteCtx, slope: &dyn Fn(usize) -> f32, fixed: Vec<Site>) -> Vec<Site> {
+    let mut placed: Vec<Site> = fixed;
     // Dispersed sites (hamlets) are placed in their own steps afterwards ([`Gen`]).
     let mut order: Vec<&SiteSpec> = c.p.sites.iter().filter(|sp| !sp.dispersed).collect();
     // Towns in their own style come after the villages, so the first sites stay where they were.
@@ -2345,7 +2615,7 @@ fn place_spec(c: &SiteCtx, slope: &dyn Fn(usize) -> f32, sp: &SiteSpec, placed: 
             }
             let Some((_, ci)) = best else { break };
             let (_, x, y, mean, kind) = level.cands[ci];
-            placed.push(Site { kind: sp.kind, x, y, radius_m: r, ground_m: mean, scale: sp.scale, facing: 0.0, region: kind, flatten: sp.flatten, style: sp.style.clone(), ward: false });
+            placed.push(Site { kind: sp.kind, x, y, radius_m: r, ground_m: mean, scale: sp.scale, facing: 0.0, region: kind, flatten: sp.flatten, style: sp.style.clone(), ward: false, plan: None });
             level.apply(placed.last().expect("placed"), sp, relax);
             level.seen = placed.len();
             *budget -= 1;
@@ -2362,6 +2632,8 @@ fn place_spec(c: &SiteCtx, slope: &dyn Fn(usize) -> f32, sp: &SiteSpec, placed: 
 fn connect(tiles: &mut [u8], w: usize, min_pocket: u32, keep: &[usize], walls_hold: bool) -> (u32, u32) {
     let n = tiles.len();
     let walk = |t: u8| Terrain::from_u8(t).walkable();
+    // Walls and drops (`walls_hold`) are never cut through: they are built, or the ground's own.
+    let holds = |t: u8| walls_hold && (t == Terrain::Wall as u8 || t == Terrain::Drop as u8);
     let nb4 = |k: usize| {
         let (x, y) = (k % w, k / w);
         [(x > 0).then(|| k - 1), (x + 1 < w).then(|| k + 1), (y > 0).then(|| k - w), (y + 1 < w).then(|| k + w)]
@@ -2426,7 +2698,7 @@ fn connect(tiles: &mut [u8], w: usize, min_pocket: u32, keep: &[usize], walls_ho
         let d = dist[k];
         for (dir, q) in nb4(k).into_iter().enumerate() {
             let Some(q) = q else { continue };
-            if walls_hold && tiles[q] == Terrain::Wall as u8 {
+            if holds(tiles[q]) {
                 continue;
             }
             let cost = (!walk(tiles[q])) as u16;
@@ -2472,7 +2744,7 @@ fn connect(tiles: &mut [u8], w: usize, min_pocket: u32, keep: &[usize], walls_ho
                             continue;
                         }
                         let b = by as usize * w + bx as usize;
-                        if !walk(tiles[b]) && !(walls_hold && tiles[b] == Terrain::Wall as u8) {
+                        if !walk(tiles[b]) && !holds(tiles[b]) {
                             tiles[b] = if tiles[b] == Terrain::Water as u8 { Terrain::Sand as u8 } else { Terrain::Dirt as u8 };
                             opened += 1;
                         }
@@ -2484,14 +2756,373 @@ fn connect(tiles: &mut [u8], w: usize, min_pocket: u32, keep: &[usize], walls_ho
     (opened, closed)
 }
 
-/// Link pockets that walls cut off, through water or rock but never through a wall.
+/// Link pockets that walls cut off, through water or rock but never through a wall or a drop.
 pub(crate) fn connect_walled(tiles: &mut [u8], w: usize) -> (u32, u32) {
     connect(tiles, w, 0, &[], true)
+}
+
+/// The land's parameters as any client may read them (the public `land` row's `params`): the
+/// same land, with none of what its people call things (owner-known, 2026-11-12). The full
+/// parameters stay with the authority (`land_plan`, private), for minds and records.
+///
+/// - Only what generation reads is kept: the params as given, less every key [`LandParams`]
+///   does not parse (a lot's address, household, keepsake, notes and causes). Values keep their
+///   given text, and defaults the params left out stay out (the typed form would write them
+///   all, the ~575 KB building catalogue among them), so the row is no bigger than given.
+/// - Lots lose their `name`; the keys that tie a plan together are renamed in step, so every
+///   reference still holds: levels `v0…`, lots `l0…`, a lot's spots `s0…`, streets `r0…`,
+///   stairs `w0…`, fixtures `f0…`, owners' household keys `household:o0…`, resource pools
+///   `p0…`, relief stamps `t0…`. A plan's own `id` (the seed's site name, which `match_seed`
+///   reads) and every kind, style, model and number stay.
+///
+/// The land a client builds from it is the one the authority built: the same digests (test
+/// `public_params_build_the_same_land`).
+pub fn public_params(full: &serde_json::Value) -> Result<serde_json::Value, String> {
+    use serde_json::{json, Value};
+    use std::collections::HashMap;
+    if full.is_null() || full.as_object().is_some_and(|o| o.is_empty()) {
+        return Ok(full.clone());
+    }
+    let typed: LandParams =
+        serde_json::from_value(full.clone()).map_err(|e| format!("map.params: {e}"))?;
+    // The params as given, less what the land does not read (notes, addresses, households,
+    // keepsakes): every key the typed form does not carry. The typed form itself is not used:
+    // it writes every default out (the building catalogue alone is ~575 KB) and f32s long.
+    let mut v = full.clone();
+    keep_given(
+        &mut v,
+        &serde_json::to_value(&typed).map_err(|e| format!("map.params: {e}"))?,
+    );
+    let rename = |map: &mut HashMap<String, String>, prefix: &str, old: &str| -> String {
+        let n = map.len();
+        map.entry(old.to_string())
+            .or_insert_with(|| format!("{prefix}{n}"))
+            .clone()
+    };
+    let mut owners: HashMap<String, String> = HashMap::new();
+    for plan in v
+        .get_mut("plans")
+        .and_then(Value::as_array_mut)
+        .into_iter()
+        .flatten()
+    {
+        let mut levels: HashMap<String, String> = HashMap::new();
+        let mut lots: HashMap<String, String> = HashMap::new();
+        let mut spots: HashMap<(String, String), String> = HashMap::new();
+        for l in plan
+            .get_mut("levels")
+            .and_then(Value::as_array_mut)
+            .into_iter()
+            .flatten()
+        {
+            if let Some(id) = l["id"].as_str().map(String::from) {
+                l["id"] = json!(rename(&mut levels, "v", &id));
+            }
+        }
+        // Only keys the params have are touched (indexing a missing key would add a null).
+        let level = |levels: &HashMap<String, String>, x: Option<&mut Value>| {
+            if let Some(x) = x {
+                if let Some(id) = x.as_str() {
+                    if let Some(n) = levels.get(id) {
+                        *x = json!(n);
+                    }
+                }
+            }
+        };
+        for l in plan
+            .get_mut("lots")
+            .and_then(Value::as_array_mut)
+            .into_iter()
+            .flatten()
+        {
+            let old = l["id"].as_str().unwrap_or_default().to_string();
+            if l.get("id").is_some() {
+                l["id"] = json!(rename(&mut lots, "l", &old));
+            }
+            if let Some(o) = l.as_object_mut() {
+                o.remove("name");
+            }
+            level(&levels, l.get_mut("level"));
+            for (k, sp) in l
+                .get_mut("spots")
+                .and_then(Value::as_array_mut)
+                .into_iter()
+                .flatten()
+                .enumerate()
+            {
+                if let Some(name) = sp["name"].as_str().map(String::from) {
+                    spots.insert((old.clone(), name), format!("s{k}"));
+                    sp["name"] = json!(format!("s{k}"));
+                }
+            }
+        }
+        for (k, st) in plan
+            .get_mut("streets")
+            .and_then(Value::as_array_mut)
+            .into_iter()
+            .flatten()
+            .enumerate()
+        {
+            if st["id"].as_str().is_some_and(|s| !s.is_empty()) {
+                st["id"] = json!(format!("r{k}"));
+            }
+            level(&levels, st.get_mut("level"));
+        }
+        for (k, st) in plan
+            .get_mut("stairs")
+            .and_then(Value::as_array_mut)
+            .into_iter()
+            .flatten()
+            .enumerate()
+        {
+            if st.get("id").is_some() {
+                st["id"] = json!(format!("w{k}"));
+            }
+            level(&levels, st.get_mut("from"));
+            level(&levels, st.get_mut("to"));
+        }
+        if let Some(sq) = plan.get_mut("square").filter(|q| q.is_object()) {
+            level(&levels, sq.get_mut("level"));
+        }
+        for (k, f) in plan
+            .get_mut("fixtures")
+            .and_then(Value::as_array_mut)
+            .into_iter()
+            .flatten()
+            .enumerate()
+        {
+            if f["id"].as_str().is_some_and(|s| !s.is_empty()) {
+                f["id"] = json!(format!("f{k}"));
+            }
+        }
+        // A resource's `pool` (the node whose stock several share) is a key too.
+        let mut pools: HashMap<String, String> = HashMap::new();
+        for r in plan
+            .get_mut("resources")
+            .and_then(Value::as_array_mut)
+            .into_iter()
+            .flatten()
+        {
+            if let Some(p) = r["pool"]
+                .as_str()
+                .filter(|p| !p.is_empty())
+                .map(String::from)
+            {
+                r["pool"] = json!(rename(&mut pools, "p", &p));
+            }
+        }
+        for st in plan
+            .get_mut("structures")
+            .and_then(Value::as_array_mut)
+            .into_iter()
+            .flatten()
+        {
+            let lot = st["lot"].as_str().map(String::from);
+            if let (Some(lot), Some(spot)) = (lot.clone(), st["spot"].as_str().map(String::from)) {
+                if let Some(n) = spots.get(&(lot, spot)) {
+                    st["spot"] = json!(n);
+                }
+            }
+            if let Some(n) = lot.and_then(|l| lots.get(&l).cloned()) {
+                st["lot"] = json!(n);
+            }
+            // An owner is `household:<key>` (the key is a family's name): only the key is renamed.
+            if let Some(o) = st["owner"].as_str().map(String::from) {
+                let (head, key) = o.split_once(':').map_or(("", o.as_str()), |(h, k)| (h, k));
+                let n = rename(&mut owners, "o", key);
+                st["owner"] = json!(if head.is_empty() {
+                    n
+                } else {
+                    format!("{head}:{n}")
+                });
+            }
+        }
+    }
+    for (k, st) in v
+        .pointer_mut("/relief/stamps")
+        .and_then(Value::as_array_mut)
+        .into_iter()
+        .flatten()
+        .enumerate()
+    {
+        if st["id"].as_str().is_some_and(|s| !s.is_empty()) {
+            st["id"] = json!(format!("t{k}"));
+        }
+    }
+    Ok(v)
+}
+
+/// Drop from `out` every object key that `known` does not have, element by element through
+/// arrays.
+fn keep_given(out: &mut serde_json::Value, known: &serde_json::Value) {
+    use serde_json::Value;
+    match (out, known) {
+        (Value::Object(o), Value::Object(g)) => {
+            o.retain(|k, _| g.contains_key(k));
+            for (k, x) in o.iter_mut() {
+                keep_given(x, &g[k]);
+            }
+        }
+        (Value::Array(o), Value::Array(g)) => {
+            for (x, y) in o.iter_mut().zip(g) {
+                keep_given(x, y);
+            }
+        }
+        _ => {}
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn public_params_build_the_same_land() {
+        for (name, src) in [
+            ("cullet", include_str!("../../seeds/cullet.json")),
+            ("plan-test", include_str!("../../seeds/plan-test.json")),
+        ] {
+            let seed: serde_json::Value = serde_json::from_str(src).unwrap();
+            let full = &seed["map"]["params"];
+            let size = seed["map"]["size"].as_u64().unwrap() as u32;
+            let public = public_params(full).unwrap();
+            let text = public.to_string();
+            // What the people call things is not in it: lot names, spot names, street names,
+            // notes, households.
+            for lot in full["plans"][0]["lots"].as_array().unwrap() {
+                if let Some(n) = lot["name"].as_str() {
+                    assert!(
+                        !text.contains(&format!("\"{n}\"")),
+                        "{name}: lot name {n:?} in the public params"
+                    );
+                }
+                for sp in lot["spots"].as_array().into_iter().flatten() {
+                    let n = sp["name"].as_str().unwrap();
+                    assert!(
+                        !text.contains(&format!("\"{n}\"")),
+                        "{name}: spot name {n:?} in the public params"
+                    );
+                }
+            }
+            for word in [
+                "note",
+                "household_name",
+                "address",
+                "keepsake",
+                "district",
+                "Cinder Row",
+                "the Heron",
+                "arcade bay 1",
+            ] {
+                assert!(
+                    !text.contains(word),
+                    "{name}: {word:?} in the public params"
+                );
+            }
+            // Households are named by their families: no original key is left.
+            for st in full["plans"][0]["structures"]
+                .as_array()
+                .into_iter()
+                .flatten()
+            {
+                if let Some(o) = st["owner"].as_str() {
+                    assert!(
+                        !text.contains(&format!("\"{o}\"")),
+                        "{name}: owner {o:?} in the public params"
+                    );
+                }
+            }
+            // No bigger than what was given (no defaults written out).
+            assert!(
+                text.len() <= full.to_string().len(),
+                "{name}: public params {} bytes, given {}",
+                text.len(),
+                full.to_string().len()
+            );
+            // And the land built from it is the same land.
+            let a: LandParams = serde_json::from_value(full.clone()).unwrap();
+            let b: LandParams = serde_json::from_value(public.clone()).unwrap();
+            crate::settle::validate_plans(&b.plans, size).unwrap();
+            let (la, lb) = (generate(7, size, &a), generate(7, size, &b));
+            let (ma, _) = crate::host::hosted_map(&la, &a);
+            let (mb, _) = crate::host::hosted_map(&lb, &b);
+            let (da, db) = (
+                crate::host::digests(&la, &ma),
+                crate::host::digests(&lb, &mb),
+            );
+            assert!(
+                da.tiles == db.tiles && da.heights == db.heights && da.layout == db.layout,
+                "{name}: the public params build another land"
+            );
+            // What a client derives besides the digests: lots (models, frontage, landmarks) and
+            // props, drawn from the regenerated land and never sent as rows.
+            assert_eq!(serde_json::to_string(&la.lots).unwrap(), serde_json::to_string(&lb.lots).unwrap(), "{name}: other lots");
+            assert_eq!(serde_json::to_string(&la.props).unwrap(), serde_json::to_string(&lb.props).unwrap(), "{name}: other props");
+        }
+        assert_eq!(
+            public_params(&serde_json::json!({})).unwrap(),
+            serde_json::json!({})
+        );
+        // The megacity floor's params (too big a land to build here): public, parsed, its plans
+        // valid, and no bigger than given.
+        let seed: serde_json::Value =
+            serde_json::from_str(include_str!("../../seeds/floor-megacity.json")).unwrap();
+        let full = &seed["map"]["params"];
+        let public = public_params(full).unwrap();
+        let b: LandParams = serde_json::from_value(public.clone()).unwrap();
+        crate::settle::validate_plans(&b.plans, seed["map"]["size"].as_u64().unwrap() as u32)
+            .unwrap();
+        assert!(public.to_string().len() <= full.to_string().len());
+    }
+
+    /// An authored coastline replaces the generated island, and stamps set the ground's height,
+    /// region and tiles where they say; lake basins keep off them. Lands without either are
+    /// unchanged (`host::tests::pinned_digests_hold`).
+    #[test]
+    fn an_authored_outline_and_stamps_shape_the_land() {
+        let sq = |x0: f32, y0: f32, x1: f32, y1: f32| vec![[x0, y0], [x1, y0], [x1, y1], [x0, y1]];
+        let mut p = LandParams { sites: Vec::new(), ..LandParams::default() };
+        p.relief = Relief { outline: sq(250.0, 300.0, 774.0, 700.0), coast_warp: 0.02, hills_m: 2.0, peak_m: [1.0, 1.0], foothills_m: 0.0, islets: 0, ..Relief::default() };
+        p.relief.stamps = vec![
+            Stamp { id: "a hill".into(), area: sq(440.0, 420.0, 520.0, 480.0), height_m: Some(40.0), blend_m: 40.0, region: Some(RegionKind::Highland), ground: None },
+            Stamp { id: "a strand".into(), area: sq(300.0, 640.0, 420.0, 712.0), height_m: Some(0.8), blend_m: 10.0, region: Some(RegionKind::Beach), ground: Some("sand".into()) },
+        ];
+        validate_relief(&p.relief).unwrap();
+        let l = generate(9, 1024, &p);
+        for (x, y) in [(120.0, 512.0), (900.0, 512.0), (512.0, 160.0), (512.0, 860.0)] {
+            assert_eq!(l.map.at(x, y), Terrain::Water, "sea at ({x}, {y})");
+        }
+        assert!(l.height(600.0, 600.0) > 2.0 && l.map.at(600.0, 600.0) != Terrain::Water, "land inside the outline");
+        let h = l.height(480.0, 450.0);
+        assert!((h - 40.0).abs() < 5.0, "the hill at {h} m");
+        assert_eq!(l.kind_at(480.0, 450.0), RegionKind::Highland);
+        let (mut sand, mut other) = (0, 0);
+        for y in 645..705 {
+            for x in 305..415 {
+                match l.map.at(x as f32 + 0.5, y as f32 + 0.5) {
+                    Terrain::Water => {}
+                    Terrain::Sand => sand += 1,
+                    _ => other += 1,
+                }
+            }
+        }
+        assert!(sand > 3000 && other == 0, "the strand: {sand} sand, {other} other");
+        for lake in &l.lakes {
+            for st in &p.relief.stamps {
+                assert!(poly_signed(&st.poly(), lake.centre) < -st.blend_m, "a lake at {:?} on {}", lake.centre, st.id);
+            }
+        }
+        let refused = |f: &dyn Fn(&mut Relief), want: &str| {
+            let mut r = p.relief.clone();
+            f(&mut r);
+            let e = validate_relief(&r).expect_err(want);
+            assert!(e.contains(want), "{want:?} not in {e:?}");
+        };
+        refused(&|r| r.outline = vec![[0.0, 0.0], [1.0, 1.0]], "outline needs a polygon");
+        refused(&|r| (r.stamps[0].height_m, r.stamps[0].region) = (None, None), "sets neither");
+        refused(&|r| r.stamps[1].ground = Some("lava".into()), "is not grass");
+        refused(&|r| r.stamps[0].height_m = Some(f32::NAN), "must be numbers");
+    }
 
     /// Dispersed sites (hamlets) are placed a bounded number per step of [`Gen`]: a land asking
     /// for many takes several steps, none places more than its budget, and they keep their

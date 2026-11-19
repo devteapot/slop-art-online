@@ -15,7 +15,7 @@ removes what the run started and keeps the evidence.
   verify.py player  --run R say TEXT [--to ID]
   verify.py sql     --run R QUERY [--as-player | --anonymous] [--save NAME]
                                             as the database owner unless told otherwise
-  verify.py call    --run R REDUCER ARGS_JSON [--as-player | --as-admin] [--expect-refusal TEXT]
+  verify.py call    --run R REDUCER ARGS_JSON|@FILE [--as-player | --as-admin] [--expect-refusal TEXT]
   verify.py observer --run R start|shot NAME|stop
   verify.py cleanup --run R [--keep-db]
 
@@ -23,10 +23,12 @@ Paths and ports: SpacetimeDB http://127.0.0.1:3300, the local container's port (
 only name that port, so publishing and HTTP calls always reach the same server); observer
 http://127.0.0.1:8330 (VERIFY_OBSERVER_PORT); Chromium from Playwright's cache (VERIFY_CHROME).
 A worker with its own server sets LIVING_STDB_CONTAINER to that container's name and
-LIVING_STDB_URL to its published port on 127.0.0.1; the helper never starts or stops such a container.
+LIVING_STDB_URL to its published port on 127.0.0.1 (bound to 127.0.0.1 or 0.0.0.0); the helper never starts or stops such a container.
+VERIFY_LEASE_SECONDS sets the scratch world's inactivity limit at launch (default 600).
 """
 import argparse
 import glob
+import hashlib
 import json
 import os
 import re
@@ -40,8 +42,13 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[4]
 LIVING = ROOT / "living"
+# The seed's script, composed as the authority composes a seed's laws at creation (one Python
+# copy of `floors::compose`, shared with living/tools/trials.py).
 sys.path.insert(0, str(LIVING / "tools"))
-from verify_credentials import private_dir, redact, write_private
+import trial_archive  # noqa: E402
+import world_guard  # noqa: E402
+from install_script import OVERLAY_MARK, installed, same_script, seed_json, seed_script, without_world_laws  # noqa: E402
+from verify_credentials import private_dir, redact, write_private  # noqa: E402
 
 STDB = str(LIVING / "tools/stdb")
 URL = os.environ.get("LIVING_STDB_URL", "http://127.0.0.1:3300").rstrip("/")
@@ -54,6 +61,9 @@ OBSERVER = ROOT / ".local/living/verify/observer.json"
 COMPOSE = ["docker", "compose", "--env-file", str(ROOT / ".local/living/neo4j.env"), "-f", str(LIVING / "deploy/compose.yml"), "-p", "sao-living"]
 # Worlds kept for reference. The helper only ever publishes or deletes `verify-*`.
 PREFIX = "verify-"
+KEPT_PREFIXES = ("verify-play-", "verify-play2-", "verify-play3-", "verify-walk-",
+                 "verify-play8-", "verify-play9-", "verify-play10-")
+DEFAULT_LEASE_SECONDS = 600
 
 
 def local_urls():
@@ -62,7 +72,9 @@ def local_urls():
     if CONTAINER == SHARED:
         return {"http://127.0.0.1:3300", "http://localhost:3300"}
     r = subprocess.run(["docker", "port", CONTAINER, "3000/tcp"], capture_output=True, text=True)
-    ports = {line.rsplit(":", 1)[-1].strip() for line in r.stdout.splitlines() if line.startswith("127.0.0.1:")}
+    # A port published on every interface (the Spark's trial server, for LAN observers) is
+    # reachable on loopback too.
+    ports = {line.rsplit(":", 1)[-1].strip() for line in r.stdout.splitlines() if line.startswith(("127.0.0.1:", "0.0.0.0:", "[::]:"))}
     return {f"http://{h}:{p}" for p in ports for h in ("127.0.0.1", "localhost")}
 
 
@@ -94,6 +106,13 @@ def load(run):
     return st
 
 
+def require_scratch_name(run, db):
+    if db != PREFIX + run or not re.fullmatch(r"verify-[a-z0-9]+(?:-[a-z0-9]+)*", db):
+        sys.exit(f"refusing {db}: database name must match the scratch run")
+    if db.startswith(KEPT_PREFIXES):
+        sys.exit(f"refusing {db}: kept verification world")
+
+
 def save(st):
     evidence = run_dir(st["run"]) / "state.json"
     credentials = private_dir(ROOT) / f"{st['run']}-players.json"
@@ -106,6 +125,37 @@ def save(st):
                                tokens.values()))
 
 
+def refresh_lease(st):
+    if (st.get("lease_seconds") and st.get("published")
+            and st.get("server_url") == URL and st["db"].startswith(PREFIX)):
+        world_guard.refresh(run_dir(st["run"]), URL, st["db"], st["database_identity"])
+
+
+def require_running(st, token):
+    """Read the authority's live clock, which only advances after a completed tick."""
+    def read(query):
+        code, body = http(f"/v1/database/{st['db']}/sql", query, token, raw=True, timeout=5)
+        if code != 200:
+            sys.exit(f"cannot check scratch world {st['db']} (SQL HTTP {code}): {redact(body, (token,))[:200]}")
+        return json.loads(body)[0]["rows"]
+
+    def sample():
+        world = read("SELECT paused FROM world WHERE id = 0")
+        if world == [[True]]:
+            sys.exit(f"scratch world is paused ({st['db']})")
+        clock = read("SELECT tick FROM clock WHERE id = 0")
+        if not world or not clock:
+            sys.exit(f"scratch world tick stationary ({st['db']}: missing world or clock row)")
+        return clock[0][0]
+
+    refresh_lease(st)
+    first = sample()
+    time.sleep(1)
+    last = sample()
+    if last <= first:
+        sys.exit(f"scratch world tick stationary ({st['db']}: {first} -> {last} in 1 s)")
+
+
 def log(st, line, out=sys.stdout, *, secrets=()):
     line = redact(line, (*secrets, st.get("token"), st.get("token2")))
     with open(run_dir(st["run"]) / "actions.log", "a") as f:
@@ -113,7 +163,7 @@ def log(st, line, out=sys.stdout, *, secrets=()):
     print(line, file=out, flush=True)
 
 
-def http(path, body=None, token=None, raw=False):
+def http(path, body=None, token=None, raw=False, timeout=30):
     data = body.encode() if raw else (json.dumps(body).encode() if body is not None else b"")
     req = urllib.request.Request(URL + path, data=data, method="POST" if body is not None or path == "/v1/identity" else "GET")
     if not raw:
@@ -121,7 +171,7 @@ def http(path, body=None, token=None, raw=False):
     if token:
         req.add_header("Authorization", f"Bearer {token}")
     try:
-        with urllib.request.urlopen(req, timeout=30) as r:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
             return r.status, r.read().decode()
     except urllib.error.HTTPError as e:
         return e.code, e.read().decode()
@@ -152,8 +202,22 @@ def wait_ping(seconds):
 
 def launch(a):
     st = load(a.run)
-    if not st["db"].startswith(PREFIX):
-        sys.exit(f"refusing to publish {st['db']}: verification databases start with {PREFIX}")
+    driver_pid = getattr(a, "driver_pid", None)
+    idle_seconds = None
+    if driver_pid is None:
+        try:
+            idle_seconds = int(os.environ.get("VERIFY_LEASE_SECONDS", DEFAULT_LEASE_SECONDS))
+            if idle_seconds < 2:
+                raise ValueError
+        except ValueError:
+            sys.exit("VERIFY_LEASE_SECONDS must be an integer of at least 2 seconds")
+    elif driver_pid < 1 or world_guard.process_stamp(driver_pid) is None:
+        sys.exit("--driver-pid must identify the running supervisor")
+    require_scratch_name(a.run, st["db"])
+    if len(st["db"]) > 63:
+        # SpacetimeDB 2.14.1 publishes it, but its `/names` route then fails and with it
+        # `spacetime list` for every database on the server (2026-11-12, docs/TRIAL_DISK.md).
+        sys.exit(f"refusing to publish {st['db']}: database names over 63 characters break the server's listing; use a shorter run name")
     st["seed"] = a.seed
     # Which tables players may read (docs/PERCEPTION.md): the build's LIVING_PERCEPTION.
     st["perception"] = os.environ.get("LIVING_PERCEPTION", "scoped")
@@ -184,22 +248,58 @@ def launch(a):
     mount = wasm_mount()
     if tdir or built.parent.resolve() != mount.resolve():
         wasm = f"living_authority_verify_{a.run.replace('-', '_')}.wasm"
-        (mount / wasm).write_bytes(built.read_bytes())
+        module_copy = mount / wasm
+        module_copy.write_bytes(built.read_bytes())
+        # The container's CLI can run under a different UID from the host launcher.
+        module_copy.chmod(0o644)
     st["wasm"] = wasm
-    # Record the database before publishing: a publish or script install that fails halfway
-    # still leaves a database for cleanup to delete.
-    st["published"] = True
-    save(st)
-    # --keep-data updates the module in place (as `just living-publish` does for the active
-    # world), so a mind's reconnect and recovery across a module update can be proven.
     keep = getattr(a, "keep_data", False)
-    fresh = [] if keep else ["--delete-data"]
-    stdb("publish", "-s", "local", "-b", f"/wasm/{wasm}", st["db"], *fresh, "-y")
-    stdb("call", "-s", "local", st["db"], "install_script", json.dumps((LIVING / "scripts/skills.rhai").read_text()))
+    owner = admin_token(initialize=True)
+    current = world_guard.lookup(URL, st["db"], owner)
+    if current is not None and (st.get("database_identity"), st.get("server_url")) != (current, URL):
+        sys.exit(f"refusing to overwrite {st['db']}: use a new run name")
+    fresh = ["--delete-data"] if current and not keep else []
+    command = [STDB, "publish", "-s", "local", "-b", f"/wasm/{wasm}", st["db"], *fresh, "-y"]
+    published = world_guard.arm(run_dir(a.run), URL, st["db"], owner, driver_pid=driver_pid, command=command,
+                                expected=current, expected_epoch=st.get("world_epoch"),
+                                idle_seconds=idle_seconds)
+    st["database_identity"], st["world_epoch"] = published["identity"], published["epoch"]
+    st["server_url"] = URL
+    st["archive_commitlog"] = getattr(a, "archive_commitlog", False) or st.get("archive_commitlog", False)
+    st["published"] = True
+    st["lease_seconds"] = idle_seconds
+    save(st)
+    # A seed with its own laws (`laws` or `laws_file`, a Rhai overlay) had them composed over the
+    # shipped script and installed when its world was created; installing the plain script now
+    # would drop them. Every other world gets the working tree's script, as before. `none` (a
+    # floor module) gets it too; `create_floor` composes the laws of the seed it is given.
+    # `seed_script` is the seed's script as the authority composes it (install_script.py, the one
+    # Python copy of `floors::compose`, shared with trials.py): the read-back below checks it.
+    source, overlay = seed_script(a.seed)
+    st["seed_laws"] = bool(overlay)
+    if st["seed_laws"]:
+        how = "the seed carries its own laws: kept as installed at creation (no install_script)"
+    else:
+        # Over HTTP: the script is past the 128 KiB a command-line argument may hold.
+        code, body = http(f"/v1/database/{st['db']}/call/install_script", [source], owner, timeout=180)
+        if code != 200:
+            save(st)
+            sys.exit(f"install_script failed: {code} {body.strip()[-4000:]}")
+        how = "installed skills.rhai"
+    # Read back what the world runs: the seed's laws composed over the working tree's script (or
+    # that script alone). A fresh world with laws that fails this composed them otherwise than
+    # install_script.compose_laws; a --keep-data world keeps the script of its creation, which an
+    # edit of skills.rhai or the laws since makes stale (install_script.py DB --seed SEED renews it).
+    if not same_script(installed(st["db"], owner), source):
+        save(st)
+        sys.exit(f"{st['db']} does not run seed {a.seed}'s script ({'its laws composed over ' if overlay else ''}living/scripts/skills.rhai) read back from its `script` row"
+                 + ("; with --keep-data run `python3 living/tools/install_script.py " + st["db"] + " --seed " + a.seed + "`" if overlay and keep else ""))
+    st["script_sha256"] = hashlib.sha256(source.encode()).hexdigest()
     st["commit"] = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=ROOT, capture_output=True, text=True).stdout.strip()
     st["dirty"] = bool(subprocess.run(["git", "status", "--porcelain", "living"], cwd=ROOT, capture_output=True, text=True).stdout.strip())
     save(st)
-    log(st, f"published {st['db']} from {wasm} ({'updated in place, data kept' if keep else 'fresh'}; seed {a.seed}, perception {st['perception']}, commit {st['commit']}{' + uncommitted living/ changes' if st['dirty'] else ''})")
+    refresh_lease(st)
+    log(st, f"published {st['db']} from {wasm} ({'updated in place, data kept' if keep else 'fresh'}; seed {a.seed}, perception {st['perception']}, commit {st['commit']}{' + uncommitted living/ changes' if st['dirty'] else ''}); {how}; the `script` row read back is the seed's script (sha256 {st['script_sha256'][:12]})")
 
 
 def doctor(a):
@@ -227,6 +327,7 @@ def doctor(a):
         time.sleep(4)
         t1 = ticks()
         checks[f"world is ticking (paused={paused}, ticks {t0} -> {t1} in 4 s)"] = not paused and None not in (t0, t1) and t1 > t0
+        laws_check(st, owner, checks)
     wasm = wasm_mount() / st.get("wasm", "living_authority.wasm")
     src = max((p.stat().st_mtime for d in ("authority/src", "rules/src") for p in (LIVING / d).rglob("*.rs")), default=0)
     checks["published module is newer than authority and rules sources"] = wasm.exists() and wasm.stat().st_mtime >= src
@@ -235,6 +336,39 @@ def doctor(a):
     for k, v in checks.items():
         print(("ok   " if v else "FAIL ") + k)
     sys.exit(0 if all(checks.values()) else 1)
+
+
+def laws_check(st, owner, checks):
+    """Whether the world runs its seed's laws: the installed `script` row read back ends with the
+    seed's overlay (worlds/cullet/laws.rhai on Cullet), or, for a seed without laws, carries no
+    overlay; and a seed's `day_minutes` is the world's day. A scene that installed its own script
+    since launch fails this on purpose: the world no longer runs its seed's laws."""
+    seed = st.get("seed", "world")
+    if seed == "none":
+        checks["seed laws: a floor module (seed none) gets its laws from create_floor; not checked"] = True
+        return
+    sj = seed_json(seed)
+    if sj is None:
+        checks[f"seed {seed} found under living/seeds"] = False
+        return
+    _, overlay = seed_script(sj)
+    made = installed(st["db"], owner)
+    body = without_world_laws(made or "").rstrip("\n")
+    if overlay:
+        laws = sj.get("laws_file") or "laws"
+        ok = OVERLAY_MARK in body and body.endswith(overlay.rstrip("\n"))
+        checks[f"installed script carries seed {seed}'s laws ({laws}, {len(overlay)} bytes)"] = ok
+    else:
+        checks[f"installed script is the shipped one without a floor overlay (seed {seed} has no laws)"] = made is not None and OVERLAY_MARK not in body
+    if sj.get("day_minutes") is not None:
+        day = q_rows(st["db"], owner, "SELECT day_ms FROM world")
+        got = day[0][0] if day else None
+        checks[f"world day is the seed's day_minutes {sj['day_minutes']} (day_ms {got})"] = got == round(float(sj["day_minutes"]) * 60000)
+
+
+def q_rows(db, token, text):
+    code, body = http(f"/v1/database/{db}/sql", text, token, raw=True)
+    return json.loads(body)[0]["rows"] if code == 200 else []
 
 
 def player(a):
@@ -257,14 +391,19 @@ def player(a):
     if "token" not in st:
         sys.exit("no player yet: run `player join NAME` first")
     reducer = "join" if a.action == "join" else f"human_{a.action}"
+    refresh_lease(st)
     code, body = http(f"/v1/database/{st['db']}/call/{reducer}", args, st["token"])
     log(st, f"player {reducer}{json.dumps(args)} -> {code} {body.strip()}")
     sys.exit(0 if code == 200 else 1)
 
 
-def admin_token():
+def admin_token(*, initialize=False):
     """The world admin's token (the in-container CLI identity). Kept in memory only."""
-    out = stdb("login", "show", "--token").stdout
+    result = stdb("login", "show", "--token", check=False)
+    if initialize and "not logged in" in (result.stdout + result.stderr).lower():
+        stdb("login", "--server-issued-login", "local")
+        result = stdb("login", "show", "--token")
+    out = result.stdout
     for line in out.splitlines():
         if "auth token" in line and " is " in line:
             return line.rsplit(" is ", 1)[1].strip()
@@ -275,8 +414,14 @@ def sql(a):
     st = load(a.run)
     # The owner by default: most tables are private developer truth (docs/PERCEPTION.md).
     # `--anonymous` reads as a client with no identity, `--as-player` as the run's player.
-    token = None if getattr(a, "anonymous", False) else st.get("token") if getattr(a, "as_player", False) else admin_token()
-    code, body = http(f"/v1/database/{st['db']}/sql", a.query, token, raw=True)
+    anonymous, as_player = getattr(a, "anonymous", False), getattr(a, "as_player", False)
+    token = None if anonymous else st.get("token") if as_player else admin_token()
+    refresh_lease(st)
+    epoch = re.fullmatch(r"UPDATE world SET epoch_ms = (\d+)(?: WHERE id = 0)?", a.query, re.IGNORECASE)
+    if epoch and not (anonymous or as_player):
+        code, body = set_scene_epoch(st, token, a.query, int(epoch[1]))
+    else:
+        code, body = http(f"/v1/database/{st['db']}/sql", a.query, token, raw=True)
     if code != 200:
         sys.exit(f"sql: {code} {redact(body, (token,))}")
     res = json.loads(body)[-1]
@@ -289,18 +434,50 @@ def sql(a):
     print(out)
 
 
+def set_scene_epoch(st, token, query, epoch):
+    """Keep the ownership check consistent when a scene fixture sets the time of day."""
+    db = st["db"]
+    require_scratch_name(st["run"], db)
+    path = world_guard.lease(run_dir(st["run"]))
+    with world_guard.world_lock(URL, db):
+        st = load(st["run"])
+        state = world_guard.read_lease(path)
+        identity = st.get("database_identity")
+        if (st["db"] != db or not st.get("published") or st.get("server_url") != URL or not identity
+                or not state or state.get("url", URL) != URL or state["identity"] != identity
+                or world_guard.lookup(URL, db, token) != identity):
+            sys.exit(f"refusing to change the clock of {db}: database identity differs from run record")
+        endpoint = f"{URL}/v1/database/{identity}"
+        _, prior = world_guard.world(endpoint, token)
+        if not prior or (state["epoch"] is not None and prior[0] != state["epoch"]):
+            sys.exit(f"refusing to change the clock of {db}: world epoch differs from run record")
+        code, body = http(f"/v1/database/{identity}/sql", query, token, raw=True)
+        if code == 200:
+            st["world_epoch"] = epoch
+            save(st)
+            state["epoch"] = epoch
+            if "activity" in state:
+                state["activity"] = time.monotonic()
+            world_guard.write_json(path, state)
+        return code, body
+
+
 def call(a):
     """Call one reducer over HTTP as the player, the admin or (default) an anonymous identity."""
     st = load(a.run)
     token = admin_token() if a.as_admin else st.get("token") if a.as_player else None
     if a.as_player and not token:
         sys.exit("no player yet: run `player join NAME` first")
-    args = json.loads(a.args)
+    # `@FILE` reads the arguments from a file (a script is past what one command-line argument
+    # may hold).
+    args = json.loads(Path(a.args[1:]).read_text() if a.args.startswith("@") else a.args)
     if not isinstance(args, list):
         sys.exit("ARGS_JSON must be a JSON array of the reducer's arguments")
     who = "admin" if a.as_admin else "player" if a.as_player else "anonymous"
-    code, body = http(f"/v1/database/{st['db']}/call/{a.reducer}", args, token)
-    log(st, f"call {a.reducer}{json.dumps(args)} as {who} -> {code} {body.strip()}", secrets=(token,))
+    refresh_lease(st)
+    code, body = http(f"/v1/database/{st['db']}/call/{a.reducer}", args, token, timeout=180)
+    shown = redact(json.dumps(args), (token, st.get("token"), st.get("token2")))
+    log(st, f"call {a.reducer}{shown if len(shown) < 4000 else shown[:200] + f'... ({len(shown)} bytes)'} as {who} -> {code} {body.strip()}", secrets=(token,))
     if a.expect_refusal is not None:
         ok = code != 200 and a.expect_refusal in body
         log(st, f"expected refusal containing {a.expect_refusal!r}: {'yes' if ok else 'NO'}", secrets=(token,))
@@ -400,25 +577,44 @@ def observer(a):
 
 def cleanup(a):
     st = load(a.run)
+    db = st["db"]
+    require_scratch_name(a.run, db)
+    if "published" not in st and not st.get("started_container"):
+        sys.exit(f"refusing cleanup of {db}: no launch record")
+    if st.get("published"):
+        if not st.get("database_identity"):
+            sys.exit(f"refusing cleanup of {db}: no database identity in launch record")
+        if st.get("server_url") != URL:
+            sys.exit(f"refusing cleanup of {db}: server differs from run record")
     if st.get("observer"):
         observer(argparse.Namespace(run=a.run, action="stop"))
         st = load(a.run)
-    if st.get("published") and not getattr(a, "keep_db", False) and st["db"].startswith(PREFIX):
-        stdb("delete", "-s", "local", st["db"], "-y", check=False)
-        # Trust the server, not the CLI's exit status: a deleted database answers SQL with 404.
-        code, body = http(f"/v1/database/{st['db']}/sql", "SELECT 1 FROM world", raw=True)
-        if code == 404:
-            st["published"] = False
-            log(st, f"deleted {st['db']} (SQL now 404)")
-        else:
-            save(st)
-            sys.exit(f"{st['db']} still answers SQL after delete (HTTP {code}); rerun cleanup or delete it with living/tools/stdb")
+    if st.get("published"):
+        keep_db = getattr(a, "keep_db", False)
+        record = trial_archive.finish(
+            run_dir(a.run), URL, CONTAINER, db, st["database_identity"], admin_token(),
+            delete=not keep_db, archive_commitlog=st.get("archive_commitlog", False), expected_epoch=st.get("world_epoch"),
+        )
+        st["published"] = keep_db
+        if record:
+            log(st, f"commitlog archive: {record}")
+        if not keep_db:
+            log(st, f"deleted {db} (name no longer resolves)")
+        save(st)
+    if not st.get("published"):
+        world_guard.stop(run_dir(a.run))
     if st.get("wasm", "").startswith("living_authority_verify_"):
         (wasm_mount() / st["wasm"]).unlink(missing_ok=True)
         log(st, f"removed module copy {st['wasm']}")
     if st.get("started_container"):
         # Other runs may share the server. Leave it up while any other verify-* database lives.
-        others = [l.split("|")[0].strip() for l in stdb("list", check=False).stdout.splitlines() if l.strip().startswith(PREFIX)]
+        listing = stdb("list", check=False)
+        if listing.returncode != 0 or "Error" in (listing.stderr or "") + listing.stdout:
+            # A failed listing (a database name of 64 characters or more breaks it on 2.14.1) is
+            # not "no other databases": keep the server up.
+            others = ["(unknown: spacetime list failed)"]
+        else:
+            others = [l.split("|")[0].strip() for l in listing.stdout.splitlines() if l.strip().startswith(PREFIX)]
         others = [d for d in others if d != st["db"]]
         if others:
             log(st, f"left SpacetimeDB running: other verification databases are live ({', '.join(others)})")
@@ -446,6 +642,8 @@ def main():
     p = sub.add_parser("launch"); p.add_argument("--run", required=True); p.add_argument("--seed", default="world")
     p.add_argument("--keep-data", action="store_true", help="update the run's existing database in place instead of publishing it fresh")
     p.add_argument("--target-dir", help="cargo target directory for the module build, e.g. under .local/living/verify/<run>/")
+    p.add_argument("--driver-pid", type=int, help="watch the supplied long-lived supervisor instead of using an inactivity lease")
+    p.add_argument("--archive-commitlog", action="store_true", help="archive this run's commitlog before cleanup deletes it")
     p.set_defaults(f=launch)
     p = sub.add_parser("doctor"); p.add_argument("--run", required=True); p.set_defaults(f=doctor)
     p = sub.add_parser("player"); p.add_argument("--run", required=True); p.add_argument("action", choices=["join", "move", "act", "say"]); p.add_argument("args", nargs="+")

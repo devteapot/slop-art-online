@@ -25,7 +25,7 @@ def main():
     directory = ROOT / '.local/living/verify' / args.run
     directory.mkdir(parents=True, exist_ok=False)
     results = []
-    for scenario in ('valid', '429', '500', 'malformed', 'repair', 'delay', 'timeout', 'outage', 'script'):
+    for scenario in ('valid', '429', 'capacity', '500', 'malformed', 'repair', 'delay', 'timeout', 'outage', 'script'):
         with socket.socket() as sock:
             sock.bind(('127.0.0.1', 0))
             port = sock.getsockname()[1]
@@ -62,6 +62,13 @@ def main():
                         raise AssertionError('status injection did not fail')
                     except urllib.error.HTTPError as error:
                         assert error.code == int(scenario)
+                elif scenario == 'capacity':
+                    try:
+                        post('consolidate')
+                        raise AssertionError('capacity injection did not fail')
+                    except urllib.error.HTTPError as error:
+                        body = json.loads(error.read().decode())
+                        assert error.code == 429 and body['type'] == 'backend_out_of_capacity' and body['code'] == '3505', body
                 elif scenario in ('delay', 'timeout'):
                     started = time.monotonic()
                     try:

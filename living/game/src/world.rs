@@ -9,7 +9,6 @@
 
 use crate::net::Net;
 use crate::style::{outline, Outlined, Style, Toon};
-use bevy_mod_outline::OutlineMeshExt;
 use crate::sync::{ServerClock, Tracks};
 use bevy::asset::RenderAssetUsages;
 use bevy::mesh::{Indices, PrimitiveTopology};
@@ -25,15 +24,33 @@ const CHUNKS_PER_FRAME: usize = 3;
 /// Ground samples per metre.
 const RES: u32 = 2;
 
-/// How far (metres) terrain is drawn.
+/// How far (metres) terrain is drawn on a tile world, and the current environment's fog.
 #[derive(Resource)]
 pub struct Draw {
     pub radius: f32,
+    /// The current environment's mood fog (start, end), metres for an ordinary adult: the camera
+    /// fogs by it (`camera::follow`), and landmarks and the ground under them are drawn out to its
+    /// end ([`Draw::landmark_reach`]). None (tile worlds, the character line-up): the camera's own
+    /// fog round its draw radius.
+    pub fog: Option<(f32, f32)>,
 }
 
 impl Default for Draw {
     fn default() -> Self {
-        Self { radius: 110.0 }
+        Self { radius: 110.0, fog: None }
+    }
+}
+
+impl Draw {
+    /// Take an environment's mood: its fog distances.
+    pub fn mood(&mut self, md: &crate::envs::Mood) {
+        self.fog = Some((md.fog_start.max(0.0), md.fog_end.max(md.fog_start + 1.0)));
+    }
+
+    /// How far landmarks, and the coarse ground and sea under them, are drawn (m): where the
+    /// mood's fog is complete, so nothing appears at that distance. 0 without a mood.
+    pub fn landmark_reach(&self) -> f32 {
+        self.fog.map_or(0.0, |f| f.1)
     }
 }
 
@@ -162,6 +179,12 @@ impl Scene {
 #[derive(Component)]
 pub struct Thing(pub Vec2);
 
+/// A structure standing inside a planned lot's building, on its blocked floor (the lot's id,
+/// [`crate::island::indoors_of`]): drawn only while the cutaway has that building open
+/// (`live::indoors`), so a hearth inside a house does not show through its front wall.
+#[derive(Component)]
+pub struct Indoors(pub u32);
+
 /// A tree that fades when it stands between the camera and the player.
 #[derive(Component)]
 pub struct Tree;
@@ -184,9 +207,7 @@ pub fn setup(mut commands: Commands, mut waters: ResMut<Assets<crate::water::Wat
     commands.spawn((
         DirectionalLight { color: Color::srgb(1.0, 0.96, 0.88), illuminance: 9_000.0, shadow_maps_enabled: true, ..default() },
         Transform::from_xyz(-30.0, 60.0, 20.0).looking_at(Vec3::ZERO, Vec3::Y),
-        // Shadows were the largest single cost (12–18 ms of 19–29 ms on the island): three
-        // cascades to 90 m, where the fog has mostly taken over, instead of four to 160 m.
-        bevy::light::CascadeShadowConfigBuilder { num_cascades: crate::perf::value("cascades").map_or(3, |n| n as usize), first_cascade_far_bound: 18.0, maximum_distance: crate::perf::value("shadowfar").unwrap_or(90.0), ..default() }.build(),
+        SHADOWS.cascades(),
     ));
 }
 
@@ -236,11 +257,7 @@ pub fn terrain(mut commands: Commands, net: NonSend<Net>, mut scene: NonSendMut<
 
 /// Cheap deterministic hash for per-object variation.
 pub fn hash(x: u32, y: u32) -> f32 {
-    let mut h = x.wrapping_mul(0x9E37_79B1) ^ y.wrapping_mul(0x85EB_CA77);
-    h ^= h >> 15;
-    h = h.wrapping_mul(0x2C1B_3C6D);
-    h ^= h >> 12;
-    (h & 0xFFFF) as f32 / 65535.0
+    living_rules::cover::placement_sample(x, y)
 }
 
 /// Vertex-coloured, flat-shaded mesh building.
@@ -379,6 +396,10 @@ fn ground_color(t: Terrain) -> [f32; 4] {
         Terrain::Dirt => rgb(150, 118, 82),
         Terrain::Road => rgb(176, 156, 120),
         Terrain::Wall => rgb(140, 120, 90),
+        // A drop between levels: a bank, open to the eye (no block is raised on it).
+        Terrain::Drop => rgb(132, 112, 84),
+        // Under a low thing (a cart, a low well): drawn as wall ground, with no block raised.
+        Terrain::Low => rgb(140, 120, 90),
     }
 }
 
@@ -473,7 +494,7 @@ fn build_chunk(commands: &mut Commands, meshes: &mut Assets<Mesh>, palette: &Pal
                 Terrain::Water => water = true,
                 // A real forest: a tree on about one forest tile in ten (3–4 m apart, crowns
                 // 4–7 m wide), bushes and undergrowth between.
-                Terrain::Forest if v < 0.1 => {
+                Terrain::Forest if living_rules::cover::forest_tree(tx, ty) => {
                     let p = Vec3::new(px, g(px, py) - 0.1, py);
                     let size = 4.0 + 2.5 * hash(tx + 7, ty + 3);
                     let broad = hash(tx + 1, ty + 9) < 0.3;
@@ -519,8 +540,35 @@ fn rock_inside(map: &Map, x: i32, y: i32) -> bool {
     (-1..=1).all(|j| (-1..=1).all(|i| map.get(x + i, y + j) == Terrain::Rock))
 }
 
+/// What a structure is drawn as: its own kind when the client has a shape for it, else the kind
+/// it is `like` in the world's rules (`structures()`: a world's own store `like: "storage"` is
+/// drawn as a storage), else its own (the generic marker). None while the rules are not compiled
+/// here and the kind has no shape of its own: it waits for them, so it is not drawn (and kept)
+/// as the marker. Resources pass `None` for the rules and are drawn as themselves.
+fn drawn_as(kind: &str, rules: Option<Option<&living_rules::script::Scripts>>) -> Option<String> {
+    if thing_mesh(kind).is_some() {
+        return Some(kind.to_string());
+    }
+    match rules {
+        None => Some(kind.to_string()),
+        Some(None) => None,
+        Some(Some(sc)) => {
+            let like = &sc.structure(kind).like;
+            Some(if !like.is_empty() && thing_mesh(like).is_some() { like.clone() } else { kind.to_string() })
+        }
+    }
+}
+
+/// The generic marker for a kind the client has no shape for.
+fn marker_mesh() -> (Mesh, Option<(Mesh, [u8; 3])>) {
+    let mut m = MeshBuf::default();
+    m.boulder(Vec3::Y * 0.25, 0.25, 1.0, 1, rgb(200, 200, 200));
+    (m.build(), None)
+}
+
 /// A resource or structure model, at real size (metres), vertex-coloured; glowing parts apart.
-fn thing_mesh(kind: &str) -> (Mesh, Option<(Mesh, [u8; 3])>) {
+/// None for a kind without a shape of its own ([`drawn_as`] picks another, or [`marker_mesh`]).
+fn thing_mesh(kind: &str) -> Option<(Mesh, Option<(Mesh, [u8; 3])>)> {
     let mut m = MeshBuf::default();
     let mut glow = None;
     match kind {
@@ -578,9 +626,20 @@ fn thing_mesh(kind: &str) -> (Mesh, Option<(Mesh, [u8; 3])>) {
             m.roof(Vec3::new(-0.9, 1.6, -0.9), Vec3::new(0.9, 1.6, 0.9), 0.2, 0.7, rgb(100, 80, 54));
         }
         "gate" => m.block(Vec3::new(-0.5, -0.2, -0.15), Vec3::new(0.5, 2.4, 0.15), rgb(110, 80, 50), rgb(96, 70, 44)),
-        _ => m.boulder(Vec3::Y * 0.25, 0.25, 1.0, 1, rgb(200, 200, 200)),
+        _ => return None,
     }
-    (m.build(), glow)
+    Some((m.build(), glow))
+}
+
+/// Whether a structure burns at `now` (authority ms): one whose kind `burns` fuel while its
+/// `lit_until_ms` is ahead, any other always; `burns` None while the world's rules are not
+/// compiled here yet, when one never lit (0) or lit till later counts as burning.
+fn burning(burns: Option<bool>, until: u64, now: u64) -> bool {
+    match burns {
+        Some(true) => living_rules::fire::lit(until, now),
+        Some(false) => true,
+        None => until == 0 || living_rules::fire::lit(until, now),
+    }
 }
 
 /// On a land world the island draws these itself: buildings as lots, gates in its walls, and
@@ -591,36 +650,104 @@ const LAND_DRAWS: &[&str] = &["tree", "house", "hall", "inn", "workshop", "marke
 /// ground under them is known): on tile worlds all of them; on a land world (the island) what it
 /// does not draw itself, standing on its ground (what `verbs.rs` lets F act on).
 #[allow(clippy::too_many_arguments)]
-pub fn things(mut commands: Commands, net: NonSend<Net>, mut scene: NonSendMut<Scene>, mut meshes: ResMut<Assets<Mesh>>, mut mats: ResMut<Assets<Toon>>, mut palette: ResMut<Palette>, style: Res<Style>, island: Option<Res<crate::island::Island>>) {
+pub fn things(
+    mut commands: Commands,
+    net: NonSend<Net>,
+    mut scene: NonSendMut<Scene>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut mats: ResMut<Assets<Toon>>,
+    mut palette: ResMut<Palette>,
+    style: Res<Style>,
+    island: Option<Res<crate::island::Island>>,
+    (assets, rules, live): (Res<AssetServer>, Option<NonSend<crate::verbs::Rules>>, Option<Res<crate::live::Live>>),
+    mut shown_lit: Local<HashMap<(u8, u64), bool>>,
+) {
     let Some(conn) = &net.conn else { return };
     let mut seen: HashSet<(u8, u64)> = HashSet::new();
     let (resources, structures) = (conn.db.resource_node(), conn.db.structure());
+    // Whether a structure burns now: a kind that `burns` fuel while `lit_until_ms` is ahead of
+    // the authority's clock, any other always (a plain campfire). Before the world's rules have
+    // compiled here, one never lit (0) or lit till later counts as burning.
+    let now = scene.now_ms.max(0.0) as u64;
+    let sc = rules.as_ref().and_then(|r| r.scripts.as_ref());
+    let lit = |kind: &str, until: u64| burning(sc.map(|sc| sc.structure(kind).burns.is_some()), until, now);
     let rows = resources
         .iter()
-        .map(|r| ((0u8, r.id), r.kind, r.x, r.y, (r.amount / r.max.max(1.0)).clamp(0.4, 1.0)))
-        .chain(structures.iter().map(|s| ((1u8, s.id), s.kind, s.x, s.y, 1.0)))
+        .map(|r| ((0u8, r.id), r.kind, r.x, r.y, (r.amount / r.max.max(1.0)).clamp(0.4, 1.0), true))
+        .chain(structures.iter().map(|s| {
+            let on = lit(&s.kind, s.lit_until_ms);
+            ((1u8, s.id), s.kind, s.x, s.y, 1.0, on)
+        }))
         .filter(|r| island.is_none() || !LAND_DRAWS.contains(&r.1.as_str()));
     let ready = scene.ready() || island.is_some();
     let scene = &mut *scene;
-    for (key, kind, x, y, fill) in rows {
+    for (key, kind, x, y, fill, lit) in rows {
         seen.insert(key);
+        // A kit's fire is drawn again when it is lit or goes out (its glow is in its materials).
+        if shown_lit.get(&key).is_some_and(|was| *was != lit) {
+            if let Some(e) = scene.things.remove(&key) {
+                commands.entity(e).despawn();
+            }
+            shown_lit.remove(&key);
+        }
         if !ready || scene.things.contains_key(&key) {
             continue;
         }
+        // A structure kind the client has no shape or model for takes those of the kind it is
+        // `like` in the world's rules (a world's own stores are drawn as storage).
+        let Some(shape) = drawn_as(&kind, (key.0 == 1).then_some(sc)) else { continue };
+        let like = (key.0 == 1).then(|| sc.map(|sc| sc.structure(&kind).like.clone())).flatten().unwrap_or_default();
         let (mesh, glow) = palette
             .things
-            .entry(kind.clone())
+            .entry(shape.clone())
             .or_insert_with(|| {
-                let (mut m, g) = thing_mesh(&kind);
-                let _ = m.generate_outline_normals(&Default::default());
+                let (mut m, g) = thing_mesh(&shape).unwrap_or_else(marker_mesh);
+                crate::style::outline_normals(&mut m);
                 (meshes.add(m), g.map(|(g, c)| (meshes.add(g), c)))
             })
             .clone();
         let at = island.as_ref().map_or_else(|| scene.at3(x, y), |i| Vec3::new(x, i.height(x, y), y));
+        let hosted = live.as_ref().and_then(|l| l.hosted_map());
+        let indoors = island.as_ref().zip(hosted.as_deref()).filter(|_| key.0 == 1).and_then(|(i, map)| crate::island::indoors_of(&i.land, map, Vec2::new(x, y)));
+        if let Some(lot) = indoors {
+            debug!("things: {kind} #{} stands inside lot {lot}: drawn while the cutaway opens it", key.1);
+        }
+        // A planned settlement's kit may model the structure (`island::structure_model`): drawn
+        // at its real size, fitted and converted like a lot's model. A lit fire's own glowing
+        // materials are damped by daylight as a lot's lit panes are (`lookdev::NightGlow`); one
+        // that is out has none (`lookdev::Unlit`). A model without glow keeps the drawn flame
+        // while it burns.
+        let model = |k: &str| island.as_ref().filter(|_| key.0 == 1 && !k.is_empty()).and_then(|i| crate::island::structure_model(&i.land, k, Vec2::new(x, y)));
+        if let Some((file, yaw)) = model(&kind).or_else(|| model(&like)) {
+            let model = crate::lookdev::Model { vrm: false, file: file.clone(), height: 0.0, ground_y: at.y, glow: None };
+            let root = assets.load(GltfAssetLabel::Scene(0).from_asset(file.clone()));
+            let e = commands.spawn((Thing(Vec2::new(x, y)), model, bevy::world_serialization::WorldAssetRoot(root), Transform::from_translation(at).with_rotation(Quat::from_rotation_y(yaw)), Visibility::Hidden)).id();
+            if let Some(lot) = indoors {
+                commands.entity(e).insert(Indoors(lot));
+            }
+            if lit {
+                commands.entity(e).insert(crate::lookdev::NightGlow);
+            } else {
+                commands.entity(e).insert(crate::lookdev::Unlit);
+            }
+            shown_lit.insert(key, lit);
+            if let (Some((g, color)), false, true) = (glow, crate::lookdev::has_glow(&file), lit) {
+                let mat = palette.color(&mut mats, &style, color, true);
+                commands.entity(e).with_children(|c| {
+                    c.spawn((Mesh3d(g), MeshMaterial3d(mat), Transform::default()));
+                });
+            }
+            debug!("things: {kind} #{} drawn as {file}{}", key.1, if lit { "" } else { " (out)" });
+            scene.things.insert(key, e);
+            continue;
+        }
         let turn = Quat::from_rotation_y(hash(x.to_bits(), y.to_bits()) * std::f32::consts::TAU);
         let e = commands
             .spawn((Thing(Vec2::new(x, y)), Mesh3d(mesh), MeshMaterial3d(palette.vertex.clone()), Transform::from_translation(at).with_rotation(turn).with_scale(Vec3::splat(fill)), crate::style::stencil()))
             .id();
+        if let Some(lot) = indoors {
+            commands.entity(e).insert((Indoors(lot), Visibility::Hidden));
+        }
         // Outlines on structures only; small resources stay unlined so the scene stays calm.
         if key.0 == 1 {
             commands.entity(e).insert(outline(Outlined::Thing, &style));
@@ -633,6 +760,7 @@ pub fn things(mut commands: Commands, net: NonSend<Net>, mut scene: NonSendMut<S
         }
         scene.things.insert(key, e);
     }
+    shown_lit.retain(|k, _| seen.contains(k));
     scene.things.retain(|k, e| {
         let keep = seen.contains(k);
         if !keep {
@@ -651,9 +779,10 @@ pub fn fade_trees(
     target: Res<crate::controls::Target>,
     palette: Res<Palette>,
     sight: Res<crate::sight::Sight>,
+    rig: Res<crate::camera::Cam>,
     me_size: Res<crate::bodies::MySize>,
     cam: Query<&Transform, (With<Camera3d>, Without<Tree>)>,
-    mut trees: Query<(&Transform, &mut MeshMaterial3d<Toon>, &mut Visibility), With<Tree>>,
+    mut trees: Query<(&Transform, &mut MeshMaterial3d<Toon>, &mut Visibility, Option<&bevy::camera::primitives::Aabb>), With<Tree>>,
 ) {
     let (Some(me), Ok(cam)) = (target.0, cam.single()) else { return };
     let head = me + Vec3::Y * 1.6 * me_size.0;
@@ -664,7 +793,7 @@ pub fn fade_trees(
     // The camera's side of the player, on the ground.
     let toward_cam = Vec2::new(a.x - me.x, a.z - me.z).normalize_or_zero();
     let cut_r = 5.0 * me_size.0.max(0.6);
-    for (t, mut mat, mut vis) in &mut trees {
+    for (t, mut mat, mut vis, bounds) in &mut trees {
         let state = sight.state_at(me2, Vec2::new(t.translation.x, t.translation.z));
         let crown = t.translation + Vec3::Y * 1.3 * t.scale.y;
         let reach = 0.55 * t.scale.x + 0.5;
@@ -677,13 +806,112 @@ pub fn fade_trees(
             let near_side = flat.length() < cut_r + reach && flat.dot(toward_cam) > -1.0;
             cut = if (off < reach && s < 0.97) || near_side { 2 } else if off < reach + 2.5 && s < 0.97 { 1 } else { 0 };
         }
+        if rig.mode == crate::camera::Mode::TopDown {
+            let blocks = bounds.is_some_and(|bounds| {
+                let inv = t.rotation.inverse();
+                let centre = t.translation + t.rotation * (Vec3::from(bounds.center) * t.scale);
+                let half = Vec3::from(bounds.half_extents) * t.scale.abs();
+                let local = |point| inv * (point - centre);
+                [head, me + Vec3::Y * 0.25].into_iter().any(|p| crate::envs::segment_hits_box(local(a), local(p), half, 0.35))
+            });
+            cut = u8::from(blocks);
+        }
         let want_vis = if cut == 2 { Visibility::Hidden } else { Visibility::Inherited };
         if *vis != want_vis {
             *vis = want_vis;
         }
-        let want = if state > 0 { &palette.tree_dim[state as usize - 1] } else if cut == 1 { &palette.tree_faded } else { &palette.tree };
+        let want = if cut == 1 && rig.mode == crate::camera::Mode::TopDown { &palette.tree_faded } else if state > 0 { &palette.tree_dim[state as usize - 1] } else if cut == 1 { &palette.tree_faded } else { &palette.tree };
         if &mat.0 != want {
             mat.0 = want.clone();
         }
+    }
+}
+
+#[cfg(test)]
+mod fire_tests {
+    use super::burning;
+
+    #[test]
+    fn a_fire_that_eats_fuel_burns_only_until_its_fuel_runs_out() {
+        assert!(burning(Some(true), 2_000, 1_000));
+        assert!(!burning(Some(true), 1_000, 1_000));
+        assert!(!burning(Some(true), 0, 1_000), "never lit");
+        // A plain campfire always burns.
+        assert!(burning(Some(false), 0, 1_000));
+        // Before the rules are known: never lit, or lit till later, burns; run out does not.
+        assert!(burning(None, 0, 1_000) && burning(None, 2_000, 1_000) && !burning(None, 500, 1_000));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use living_rules::script::Scripts;
+
+    fn with(overlay: &str) -> Scripts {
+        let src = living_rules::floors::compose(include_str!("../../scripts/skills.rhai"), overlay).unwrap();
+        Scripts::new(&src).unwrap()
+    }
+
+    /// A structure kind the client has no shape for is drawn as the kind it is `like` in the
+    /// world's rules (rules-3: Cullet's four stores are `like: "storage"`), read from the compiled
+    /// script, never from a list of names here.
+    #[test]
+    fn a_kind_without_a_shape_is_drawn_as_the_kind_it_is_like() {
+        let w = with(r#"fn structures() { base_structures() + [#{ name: "crib", like: "storage", holds: 40 }, #{ name: "plinth" }] }"#);
+        assert!(thing_mesh("crib").is_none() && thing_mesh("storage").is_some());
+        assert_eq!(drawn_as("crib", Some(Some(&w))).as_deref(), Some("storage"));
+        // Its own shape first; no `like` and no shape: the marker, as before.
+        assert_eq!(drawn_as("storage", Some(Some(&w))).as_deref(), Some("storage"));
+        assert_eq!(drawn_as("campfire", Some(Some(&w))).as_deref(), Some("campfire"));
+        assert_eq!(drawn_as("plinth", Some(Some(&w))).as_deref(), Some("plinth"));
+        // Before the world's rules are compiled here, it waits instead of being kept as the marker.
+        assert_eq!(drawn_as("crib", Some(None)), None);
+        assert_eq!(drawn_as("storage", Some(None)).as_deref(), Some("storage"));
+        // Resources are drawn as themselves.
+        assert_eq!(drawn_as("berry_bush", None).as_deref(), Some("berry_bush"));
+        // Cullet's stores, from its laws.
+        let cullet = with(include_str!("../../seeds/worlds/cullet/laws.rhai"));
+        for k in ["store", "peat_barn", "yard_store", "house_store"] {
+            assert_eq!(cullet.structure(k).like, "storage", "{k}");
+            let shape = drawn_as(k, Some(Some(&cullet))).unwrap();
+            assert!(shape == "storage" || thing_mesh(k).is_some(), "{k} is drawn as {shape}");
+        }
+        assert_eq!(drawn_as("house_store", Some(Some(&cullet))).as_deref(), Some("storage"));
+    }
+}
+
+/// The sun's shadows. `LIVING_GAME_PERF` overrides each for measurement: `cascades=`,
+/// `firstcascade=`, `shadowfar=`, `sunstep=` (and `shadowmap=`, the map's size, in
+/// `perf::diagnostics`).
+pub struct Shadows {
+    /// Shadows were the largest single cost (12–18 ms of 19–29 ms on the island): three
+    /// cascades to 90 m, where the fog has mostly taken over, instead of four to 160 m. The
+    /// top-down stops see ground from about 9 m (Near) to 31 m (Far) along the view, so the first
+    /// cascade covers Near and most of Middle, the second Far; the last reaches the far views
+    /// of context framing (a fight, a greeting), which look toward the horizon.
+    pub cascades: usize,
+    /// The first cascade's far edge and the last's, along the view (m).
+    pub first_far: f32,
+    pub far: f32,
+    /// The key light turns only when the sun has moved this far (degrees; `daylight::apply`):
+    /// once every 0.75 s with a 12-minute day, every 3 s with Cullet's 48. A step re-draws the
+    /// shadow map once, no more visibly than one frame of a turning sun (flicker-2), instead
+    /// of every frame.
+    pub sun_step_deg: f32,
+}
+
+pub const SHADOWS: Shadows = Shadows { cascades: 3, first_far: 18.0, far: 90.0, sun_step_deg: 0.25 };
+
+impl Shadows {
+    pub fn cascades(&self) -> bevy::light::CascadeShadowConfig {
+        let v = |name: &str, d: f32| crate::perf::value(name).unwrap_or(d);
+        bevy::light::CascadeShadowConfigBuilder {
+            num_cascades: crate::perf::value("cascades").map_or(self.cascades, |n| n as usize),
+            first_cascade_far_bound: v("firstcascade", self.first_far),
+            maximum_distance: v("shadowfar", self.far),
+            ..default()
+        }
+        .build()
     }
 }

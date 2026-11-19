@@ -191,7 +191,7 @@ mod tests {
     }
 
     fn request(reason: &str, scene: &str, updated_ms: u64) -> Deliberation {
-        Deliberation { actor: 1, controller: Identity::ZERO, reason: reason.into(), requested_ms: 1, updated_ms, scene: scene.into(), revision: 1 }
+        Deliberation { actor: 1, controller: Identity::ZERO, reason: reason.into(), requested_ms: 1, updated_ms, scene: scene.into(), revision: 1, arrived: String::new() }
     }
 
     #[tokio::test]

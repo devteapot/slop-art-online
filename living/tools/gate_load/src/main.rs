@@ -19,6 +19,12 @@
 //!   tick's delivery is timed with and without the commitlog's fsync.
 //! - `observe`: the lab observer's subscriptions (living/viewer/src/net.rs) as the owner, with
 //!   one character inspected.
+//! - `mind`: the mind service's subscriptions (living/mind/src/main.rs, the default switches:
+//!   player memory on) as the owner, through an in-process relay that counts the WebSocket
+//!   messages and bytes the server sends this connection; the rows of each table (inserted,
+//!   updated, deleted); and how late rows that carry a time arrive (`experience.at_ms`,
+//!   `fast_ask.issued_ms`, `audience.at_ms`: receipt here less the authority's time). Callbacks
+//!   only count, as the mind service's only forward to its threads (tick-rate, docs/TICK_RATE.md).
 //!
 //! Times are the host's wall clock in microseconds (`SystemTime`); the server container shares
 //! the host's kernel clock, and the namespaced clients do too.
@@ -32,7 +38,7 @@ mod soak;
 
 use living_bindings::*;
 use serde_json::{json, Value};
-use spacetimedb_sdk::{DbContext, Event, Identity, Table, TableWithPrimaryKey};
+use spacetimedb_sdk::{DbContext, Event, EventTable, Identity, Table, TableWithPrimaryKey};
 use std::collections::{BTreeMap, HashMap};
 use std::io::{BufRead, Read, Write};
 use std::net::{Shutdown, TcpListener, TcpStream};
@@ -147,6 +153,7 @@ fn counts_json(c: &Counts) -> Value {
 #[derive(Clone, Copy, PartialEq, Debug)]
 enum Role {
     Battle,
+    Duel,
     Walk,
 }
 
@@ -169,6 +176,64 @@ struct St {
     release_block_at: Option<Instant>,
     /// Until when my own last move holds me, as my client knows it (no skill is tried before).
     held_until: Option<Instant>,
+    /// How fresh others' new motion segments are when they reach me (sampled players only).
+    fresh: Fresh,
+}
+
+/// For each other body, the newest motion segment start (`t_ms`) received, by its view or a cue;
+/// and, for each newer one received, how late it came (receipt less `t_ms`, ms), by distance from
+/// me then (within 8 m: near), with how it came first.
+#[derive(Default)]
+struct Fresh {
+    last_t: HashMap<u32, u64>,
+    near: BTreeMap<u64, u32>,
+    all: BTreeMap<u64, u32>,
+    by_cue: u32,
+    by_view: u32,
+}
+
+const NEAR_M: f32 = 8.0;
+/// Freshness is recorded between a `fresh on` line and a `fresh off` line (the profiled window).
+static FRESH_ON: AtomicBool = AtomicBool::new(false);
+
+fn fresh_sample(ctx: &EventContext, st: &Mutex<St>, m: &Moving, cue: bool, first: bool) {
+    let now = now_ms();
+    let mut s = st.lock().unwrap();
+    let Some(me) = s.me else { return };
+    let newer = s.fresh.last_t.get(&m.id).is_none_or(|t| m.t_ms > *t);
+    if !newer {
+        return;
+    }
+    s.fresh.last_t.insert(m.id, m.t_ms);
+    if first || !FRESH_ON.load(Ordering::Relaxed) {
+        return;
+    }
+    let late = now.saturating_sub(m.t_ms);
+    let near = ctx.db.my_body().id().find(&me).is_some_and(|b| dist(pos(&b, now), pos(m, now)) <= NEAR_M);
+    *s.fresh.all.entry(late).or_default() += 1;
+    if near {
+        *s.fresh.near.entry(late).or_default() += 1;
+    }
+    if cue {
+        s.fresh.by_cue += 1;
+    } else {
+        s.fresh.by_view += 1;
+    }
+}
+
+/// A perceived body's motion row from whichever of `seen_bodies` or its two tiers
+/// (`seen_bodies_near`, `seen_bodies_far`; frame-views) the connection subscribed.
+fn seen_body(db: &RemoteTables, id: u32) -> Option<Moving> {
+    db.seen_bodies().id().find(&id).or_else(|| db.seen_bodies_near().id().find(&id)).or_else(|| db.seen_bodies_far().id().find(&id))
+}
+
+fn seen_body_count(db: &RemoteTables) -> u64 {
+    db.seen_bodies().count() + db.seen_bodies_near().count() + db.seen_bodies_far().count()
+}
+
+fn fresh_json(f: &Fresh) -> Value {
+    let hist = |h: &BTreeMap<u64, u32>| h.iter().map(|(k, v)| (k.to_string(), json!(v))).collect::<serde_json::Map<_, _>>();
+    json!({"near": hist(&f.near), "all": hist(&f.all), "by_cue": f.by_cue, "by_view": f.by_view})
 }
 
 struct Player {
@@ -180,6 +245,8 @@ struct Player {
     st: Arc<Mutex<St>>,
     applied: Arc<Mutex<u32>>,
     errors: Arc<Mutex<Vec<String>>>,
+    /// Sampled for motion freshness (`Fresh`).
+    fresh: bool,
 }
 
 fn status(res: &Result<Result<(), String>, spacetimedb_sdk::__codegen::InternalError>) -> String {
@@ -308,6 +375,12 @@ fn hook(p: &Player, log: &Log) {
     count!(conn, p.counts, seen_characters);
     count!(conn, p.counts, seen_fighters);
     count!(conn, p.counts, seen_doing);
+    count!(conn, p.counts, seen_bodies_near);
+    count!(conn, p.counts, seen_bodies_far);
+    count!(conn, p.counts, seen_fighters_near);
+    count!(conn, p.counts, seen_fighters_far);
+    count!(conn, p.counts, seen_doing_near);
+    count!(conn, p.counts, seen_doing_far);
     count!(conn, p.counts, my_vitals);
     count!(conn, p.counts, my_experience);
     count!(conn, p.counts, my_characters);
@@ -347,6 +420,96 @@ fn hook(p: &Player, log: &Log) {
             lg.put(json!({"k": "alive", "p": idx, "id": c.id, "name": c.name, "ts": unix_us()}));
         }
     });
+    // The cue event tables (frame-views; docs/PERCEPTION.md, "Cues"), counted as inserts. They are
+    // subscribed only when the request says `cues` (a module without them refuses the query).
+    for (table, c) in [("seen_body_cue", p.counts.clone()), ("seen_fighter_cue", p.counts.clone()), ("seen_doing_cue", p.counts.clone())] {
+        let bump = move || c.lock().unwrap().entry(table).or_default()[0] += 1;
+        match table {
+            "seen_body_cue" => {
+                EventTable::on_insert(&conn.db.seen_body_cue(), move |_, _| bump());
+            }
+            "seen_fighter_cue" => {
+                EventTable::on_insert(&conn.db.seen_fighter_cue(), move |_, _| bump());
+            }
+            _ => {
+                EventTable::on_insert(&conn.db.seen_doing_cue(), move |_, _| bump());
+            }
+        }
+    }
+    if p.fresh {
+        macro_rules! sample_view {
+            ($table:ident) => {{
+                let st = p.st.clone();
+                conn.db.$table().on_insert(move |ctx, m| fresh_sample(ctx, &st, m, false, true));
+                let st = p.st.clone();
+                conn.db.$table().on_update(move |ctx, _, m| fresh_sample(ctx, &st, m, false, false));
+            }};
+        }
+        sample_view!(seen_bodies);
+        sample_view!(seen_bodies_near);
+        sample_view!(seen_bodies_far);
+        let st = p.st.clone();
+        EventTable::on_insert(&conn.db.seen_body_cue(), move |ctx, c| {
+            // A cue of a body not yet in my view is not a new segment of one I see.
+            if seen_body(&ctx.db, c.motion.id).is_some() {
+                fresh_sample(ctx, &st, &c.motion, true, false);
+            }
+        });
+    }
+    if p.role == Role::Duel {
+        let (lg, idx) = (log.clone(), p.idx);
+        let fighter = move |f: &Fighter, via: &str| {
+            if f.act != 0 && f.release_ms > f.act_ms {
+                lg.put(json!({"k": "seen_windup", "p": idx, "actor": f.id, "target": f.target,
+                              "start_ms": f.act_ms, "release_ms": f.release_ms, "via": via, "ts": unix_us()}));
+            }
+        };
+        macro_rules! windups {
+            ($table:ident) => {{
+                let inserted = fighter.clone();
+                conn.db.$table().on_insert(move |_, f| inserted(f, "view"));
+                let updated = fighter.clone();
+                conn.db.$table().on_update(move |_, a, b| {
+                    if a.act != b.act || a.act_ms != b.act_ms {
+                        updated(b, "view");
+                    }
+                });
+            }};
+        }
+        windups!(seen_fighters);
+        windups!(seen_fighters_near);
+        windups!(seen_fighters_far);
+        EventTable::on_insert(&conn.db.seen_fighter_cue(), move |_, c| {
+            if let Some(f) = &c.fighter {
+                fighter(f, "cue");
+            }
+        });
+        let (lg, idx) = (log.clone(), p.idx);
+        let doing = move |d: &Doing, via: &str| {
+            lg.put(json!({"k": "seen_doing", "p": idx, "actor": d.id, "target": d.target,
+                          "start_ms": d.since_ms, "via": via, "ts": unix_us()}));
+        };
+        macro_rules! acts {
+            ($table:ident) => {{
+                let inserted = doing.clone();
+                conn.db.$table().on_insert(move |_, d| inserted(d, "view"));
+                let updated = doing.clone();
+                conn.db.$table().on_update(move |_, a, b| {
+                    if a.code != b.code || a.since_ms != b.since_ms {
+                        updated(b, "view");
+                    }
+                });
+            }};
+        }
+        acts!(seen_doing);
+        acts!(seen_doing_near);
+        acts!(seen_doing_far);
+        EventTable::on_insert(&conn.db.seen_doing_cue(), move |_, c| {
+            if let Some(d) = &c.doing {
+                doing(d, "cue");
+            }
+        });
+    }
     // My own motion row changed by my own call.
     let st = p.st.clone();
     let mine = move |ctx: &EventContext, id: u32, st: &Arc<Mutex<St>>| {
@@ -466,7 +629,7 @@ impl Rng {
     }
 }
 
-fn pos(m: &Motion, at_ms: u64) -> (f32, f32) {
+fn pos(m: &Moving, at_ms: u64) -> (f32, f32) {
     let dt = (at_ms.saturating_sub(m.t_ms) as f32 / 1000.0).min(2.0);
     (m.x + m.vx * dt, m.y + m.vy * dt)
 }
@@ -519,7 +682,7 @@ fn fight(p: &Player, log: &Log, cards: &HashMap<String, Card>, center: (f32, f32
         if c.own || c.id == me || c.kind != "person" {
             continue;
         }
-        let Some(b) = db.seen_bodies().id().find(&c.id) else { continue };
+        let Some(b) = seen_body(db, c.id) else { continue };
         let at = pos(&b, now);
         let d = dist(here, at) * if c.id == current { 0.7 } else { 1.0 };
         if best.is_none_or(|(_, _, bd)| d < bd) {
@@ -624,22 +787,42 @@ fn players_mode() {
     let cfg = req["behaviour"].clone();
     let center = (req["battle"][0].as_f64().unwrap() as f32, req["battle"][1].as_f64().unwrap() as f32);
     let client = Client::from(&req["client"]);
+    // Subscribe the cue event tables (a module with them), and sample every Nth player's motion
+    // freshness (0: none).
+    let cues = req["cues"].as_bool().unwrap_or(false);
+    let tiers = req["tiers"].as_bool().unwrap_or(false);
+    let fresh_every = req["fresh_every"].as_u64().unwrap_or(0) as usize;
     let started = Instant::now();
     let mut players = Vec::new();
     for (idx, p) in req["players"].as_array().unwrap().iter().enumerate() {
         let role = match p["role"].as_str() {
             Some("battle") => Role::Battle,
+            Some("duel") => Role::Duel,
             Some("walk") => Role::Walk,
             r => panic!("role {r:?}"),
         };
         let t = unix_us();
         let (conn, identity) = connect(&uri, &db, p["token"].as_str().unwrap(), client.confirmed());
         log.put(json!({"k": "conn", "p": idx, "role": format!("{role:?}"), "identity": identity.to_hex().to_string(), "ts": t, "connected": unix_us()}));
-        let pl = Player { idx, role, name: p["name"].as_str().unwrap().to_string(), conn, counts: Arc::default(), st: Arc::default(), applied: Arc::default(), errors: Arc::default() };
+        let fresh = fresh_every > 0 && idx % fresh_every == 0;
+        let pl = Player { idx, role, name: p["name"].as_str().unwrap().to_string(), conn, counts: Arc::default(), st: Arc::default(), applied: Arc::default(), errors: Arc::default(), fresh };
         hook(&pl, &log);
-        subscribe(&pl, client.base());
+        let mut queries = client.base();
+        // What the game client subscribes with the tiers (frame-views): the two tiers of each
+        // perception view in place of the view; with cues, also the three cue event tables.
+        // Separate switches, so the cue subscriptions' own cost can be measured.
+        if tiers {
+            queries.retain(|q| !["SELECT * FROM seen_bodies", "SELECT * FROM seen_fighters", "SELECT * FROM seen_doing"].contains(&q.as_str()));
+            queries.extend(["seen_bodies_near", "seen_bodies_far", "seen_fighters_near", "seen_fighters_far", "seen_doing_near", "seen_doing_far"].map(|t| format!("SELECT * FROM {t}")));
+        }
+        if cues {
+            queries.extend(["seen_body_cue", "seen_fighter_cue", "seen_doing_cue"].map(|t| format!("SELECT * FROM {t}")));
+        }
+        subscribe(&pl, queries);
         players.push(pl);
     }
+    let duel: Vec<_> = players.iter().filter(|p| p.role == Role::Duel).collect();
+    assert!(duel.is_empty() || duel.len() == 2, "a duel needs two players");
     wait_applied(&players, 1, "base", Duration::from_secs(120));
     for p in &players {
         if p.st.lock().unwrap().me.is_none() {
@@ -671,7 +854,7 @@ fn players_mode() {
     }
     wait_applied(&players, 2, "windows", Duration::from_secs(180));
     let cards: HashMap<String, Card> = players[0].conn.db.skill_card().iter().map(|c| (c.skill.clone(), Card { cost: c.cost, reach: c.reach, hold_ms: (c.windup_ms + c.recover_ms) as u64 })).collect();
-    let held: Vec<Value> = players.iter().map(|p| json!({"bodies": p.conn.db.seen_bodies().count(), "characters": p.conn.db.seen_characters().count()})).collect();
+    let held: Vec<Value> = players.iter().map(|p| json!({"bodies": seen_body_count(&p.conn.db), "characters": p.conn.db.seen_characters().count()})).collect();
     println!("{}", json!({"event": "ready", "after_s": started.elapsed().as_secs_f32(), "cards": cards.keys().collect::<Vec<_>>(), "held": held}));
     let _ = std::io::stdout().flush();
     wait_for(&lines, "go");
@@ -691,7 +874,12 @@ fn players_mode() {
                 f2.store(l == "battle", Ordering::SeqCst);
                 lg.put(json!({"k": l, "ts": unix_us()}));
             }
+            "fresh on" | "fresh off" => {
+                FRESH_ON.store(l == "fresh on", Ordering::SeqCst);
+                lg.put(json!({"k": l, "ts": unix_us()}));
+            }
             "stop" | "eof" => {
+                FRESH_ON.store(false, Ordering::SeqCst);
                 s2.store(true, Ordering::SeqCst);
                 return;
             }
@@ -706,11 +894,13 @@ fn players_mode() {
         .iter()
         .map(|p| Instant::now() + Duration::from_millis(match p.role {
             Role::Battle => fight_ms * p.idx as u64 / n as u64,
+            Role::Duel => 1_500 * u64::from(p.idx == duel[1].idx),
             Role::Walk => walk_ms * p.idx as u64 / n as u64,
         }))
         .collect();
     let mut rngs: Vec<Rng> = (0..n).map(|i| Rng(0x9E37_79B9_7F4A_7C15 ^ (i as u64 + 1).wrapping_mul(0xBF58_476D_1CE4_E5B9))).collect();
     let mut late = 0u64;
+    let mut duel_turns = [0; 2];
     while !stop.load(Ordering::SeqCst) {
         let now = Instant::now();
         for (i, p) in players.iter().enumerate() {
@@ -724,6 +914,23 @@ fn players_mode() {
                 Role::Battle if fighting.load(Ordering::Relaxed) => {
                     fight(p, &log, &cards, center, &mut rngs[i], &cfg);
                     fight_ms
+                }
+                Role::Duel => {
+                    if fighting.load(Ordering::Relaxed) {
+                        let side = usize::from(p.idx == duel[1].idx);
+                        let target = duel[1 - side].st.lock().unwrap().me;
+                        if let Some(b) = target.and_then(|id| seen_body(&p.conn.db, id)) {
+                            let (x, y) = pos(&b, now_ms());
+                            if duel_turns[side] % 2 == 0 {
+                                send_skill(p, &log, "strike", b.id, x, y, 0);
+                            } else {
+                                let node = json!({"do": {"skill": "wave", "target": {"id": b.id}}}).to_string();
+                                p.conn.reducers.human_act(node).expect("send duel wave");
+                            }
+                            duel_turns[side] += 1;
+                        }
+                    }
+                    3_000
                 }
                 Role::Battle | Role::Walk => {
                     walk(p, &log, &cfg);
@@ -743,7 +950,7 @@ fn players_mode() {
         .map(|p| {
             let s = p.st.lock().unwrap();
             json!({"p": p.idx, "role": format!("{:?}", p.role), "lives": s.lives, "alive": s.me.is_some(), "calls": s.seq, "unanswered": s.pending,
-                   "events": counts_json(&p.counts), "held": {"bodies": p.conn.db.seen_bodies().count(), "characters": p.conn.db.seen_characters().count()},
+                   "events": counts_json(&p.counts), "fresh": p.fresh.then(|| fresh_json(&s.fresh)), "held": {"bodies": seen_body_count(&p.conn.db), "characters": p.conn.db.seen_characters().count()},
                    "errors": *p.errors.lock().unwrap()})
         })
         .collect();
@@ -946,6 +1153,187 @@ fn observe_mode() {
     std::process::exit(0);
 }
 
+// ---- mind ------------------------------------------------------------------------------------
+
+/// The mind service's whole-table subscriptions (living/mind/src/main.rs), besides the
+/// `experience` filters and its own `cue`, `fast_ask` and `audience` subscriptions.
+const MIND: &[&str] = &[
+    "settlement", "mind_cursor", "world", "character", "brain", "persona", "relation", "judgment", "place", "seen_stock", "standing", "know_how", "community", "membership",
+    "background", "routine", "routine_stat", "genome", "script", "bond_offer", "trade_offer", "record", "record_party", "my_deliberations", "presence", "rhythm", "acquaintance",
+    "line_heard", "sex", "sex_seen",
+];
+
+/// Server-to-client WebSocket frames on one connection: after the HTTP upgrade's headers, each
+/// frame's header gives its length (server frames are not masked). Counts finished messages and
+/// all bytes.
+fn ws_count(mut from: TcpStream, mut to: TcpStream, msgs: Arc<AtomicU64>, bytes: Arc<AtomicU64>) {
+    let mut buf = vec![0u8; 1 << 16];
+    let mut pending: Vec<u8> = Vec::new();
+    let mut headers = true;
+    loop {
+        let n = match from.read(&mut buf) {
+            Ok(0) | Err(_) => break,
+            Ok(n) => n,
+        };
+        if to.write_all(&buf[..n]).is_err() {
+            break;
+        }
+        bytes.fetch_add(n as u64, Ordering::Relaxed);
+        pending.extend_from_slice(&buf[..n]);
+        if headers {
+            let Some(end) = pending.windows(4).position(|w| w == b"\r\n\r\n") else { continue };
+            pending.drain(..end + 4);
+            headers = false;
+        }
+        loop {
+            if pending.len() < 2 {
+                break;
+            }
+            let (b0, b1) = (pending[0], pending[1]);
+            let (len, mut at) = match b1 & 0x7f {
+                126 if pending.len() >= 4 => (u16::from_be_bytes([pending[2], pending[3]]) as usize, 4),
+                127 if pending.len() >= 10 => (u64::from_be_bytes(pending[2..10].try_into().unwrap()) as usize, 10),
+                126 | 127 => break,
+                l => (l as usize, 2),
+            };
+            if b1 & 0x80 != 0 {
+                at += 4;
+            }
+            if pending.len() < at + len {
+                break;
+            }
+            // A finished data message: FIN set on a text, binary or continuation frame.
+            if b0 & 0x80 != 0 && matches!(b0 & 0x0f, 0 | 1 | 2) {
+                msgs.fetch_add(1, Ordering::Relaxed);
+            }
+            pending.drain(..at + len);
+        }
+    }
+    let _ = to.shutdown(Shutdown::Both);
+}
+
+type Lags = Arc<Mutex<BTreeMap<&'static str, Vec<i64>>>>;
+
+fn lag(l: &Lags, table: &'static str, at_ms: u64) {
+    if at_ms > 0 {
+        l.lock().unwrap().entry(table).or_default().push(now_ms() as i64 - at_ms as i64);
+    }
+}
+
+fn quantiles(v: &mut [i64]) -> Value {
+    v.sort_unstable();
+    let q = |f: f64| v.get(((v.len() as f64 * f) as usize).min(v.len().saturating_sub(1))).copied();
+    json!({"n": v.len(), "p50": q(0.5), "p90": q(0.9), "p99": q(0.99), "max": v.last()})
+}
+
+fn mind_mode() {
+    let lines = stdin_lines();
+    let req: Value = serde_json::from_str(&lines.recv().expect("request line")).expect("request JSON");
+    let (uri, db, token) = (req["uri"].as_str().unwrap(), req["db"].as_str().unwrap(), req["token"].as_str().unwrap());
+    let upstream = uri.trim_start_matches("http://").trim_start_matches("ws://").trim_end_matches('/').to_string();
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+    let local = listener.local_addr().unwrap();
+    let (msgs, bytes) = (Arc::new(AtomicU64::new(0)), Arc::new(AtomicU64::new(0)));
+    let (m2, b2) = (msgs.clone(), bytes.clone());
+    std::thread::spawn(move || {
+        for s in listener.incoming() {
+            let Ok(client) = s else { continue };
+            let up = TcpStream::connect(&upstream).expect("upstream");
+            let _ = client.set_nodelay(true);
+            let _ = up.set_nodelay(true);
+            let (c2, u2) = (client.try_clone().unwrap(), up.try_clone().unwrap());
+            let (m, b) = (m2.clone(), b2.clone());
+            std::thread::spawn(move || ws_count(up, client, m, b));
+            std::thread::spawn(move || {
+                let (mut a, mut b) = (c2, u2);
+                let _ = std::io::copy(&mut a, &mut b);
+                let _ = b.shutdown(Shutdown::Both);
+            });
+        }
+    });
+    let (conn, me) = connect(&format!("http://{local}"), db, token, None);
+    let counts: Counts = Arc::default();
+    let lags: Lags = Arc::default();
+    macro_rules! timed {
+        ($table:ident, $field:ident) => {{
+            count!(conn, counts, $table);
+            let l = lags.clone();
+            conn.db.$table().on_insert(move |_, r| lag(&l, stringify!($table), r.$field));
+        }};
+    }
+    timed!(experience, at_ms);
+    timed!(fast_ask, issued_ms);
+    timed!(audience, at_ms);
+    let l = lags.clone();
+    conn.db.fast_ask().on_update(move |_, _, r| lag(&l, "fast_ask", r.issued_ms));
+    count!(conn, counts, cue);
+    count!(conn, counts, vitals);
+    count!(conn, counts, settlement);
+    count!(conn, counts, mind_cursor);
+    count!(conn, counts, world);
+    count!(conn, counts, character);
+    count!(conn, counts, brain);
+    count!(conn, counts, persona);
+    count!(conn, counts, relation);
+    count!(conn, counts, judgment);
+    count!(conn, counts, place);
+    count!(conn, counts, seen_stock);
+    count!(conn, counts, standing);
+    count!(conn, counts, know_how);
+    count!(conn, counts, community);
+    count!(conn, counts, membership);
+    count!(conn, counts, background);
+    count!(conn, counts, routine);
+    count!(conn, counts, routine_stat);
+    count!(conn, counts, genome);
+    count!(conn, counts, script);
+    count!(conn, counts, bond_offer);
+    count!(conn, counts, trade_offer);
+    count!(conn, counts, record);
+    count!(conn, counts, record_party);
+    count_plain!(conn, counts, my_deliberations);
+    count!(conn, counts, presence);
+    count!(conn, counts, rhythm);
+    count!(conn, counts, acquaintance);
+    count!(conn, counts, line_heard);
+    count!(conn, counts, sex);
+    count!(conn, counts, sex_seen);
+    let t0 = Instant::now();
+    let applied = Arc::new(Mutex::new(0u32));
+    let hex = me.to_hex();
+    let mut queries: Vec<String> = vec![
+        format!("SELECT * FROM experience WHERE controller = 0x{hex}"),
+        format!("SELECT vitals.* FROM vitals JOIN character ON vitals.id = character.id WHERE character.controller = 0x{hex} AND character.ai = true"),
+        format!("SELECT * FROM experience WHERE controller != 0x{hex}"),
+    ];
+    queries.extend(MIND.iter().map(|t| format!("SELECT * FROM {t}")));
+    for q in ["cue", "fast_ask", "audience"] {
+        let a = applied.clone();
+        conn.subscription_builder().on_applied(move |_| *a.lock().unwrap() += 1).on_error(move |_, e| eprintln!("no {q}: {e:?}")).subscribe([format!("SELECT * FROM {q}")]);
+    }
+    let a2 = applied.clone();
+    conn.subscription_builder().on_applied(move |_| *a2.lock().unwrap() += 1).on_error(|_, e| panic!("mind: {e}")).subscribe(queries);
+    while *applied.lock().unwrap() < 4 {
+        assert!(t0.elapsed() < Duration::from_secs(120), "mind subscriptions");
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    println!("{}", json!({"event": "ready", "after_s": t0.elapsed().as_secs_f32()}));
+    let _ = std::io::stdout().flush();
+    // `go` starts the window, `stop` ends it.
+    wait_for(&lines, "go");
+    counts.lock().unwrap().clear();
+    lags.lock().unwrap().clear();
+    let (m0, b0, w0) = (msgs.load(Ordering::Relaxed), bytes.load(Ordering::Relaxed), Instant::now());
+    wait_for(&lines, "stop");
+    let secs = w0.elapsed().as_secs_f64();
+    let (m1, b1) = (msgs.load(Ordering::Relaxed), bytes.load(Ordering::Relaxed));
+    let lag_json: serde_json::Map<String, Value> = lags.lock().unwrap().iter_mut().map(|(k, v)| (k.to_string(), quantiles(v))).collect();
+    println!("{}", json!({"event": "done", "seconds": secs, "messages": m1 - m0, "bytes": b1 - b0, "events": counts_json(&counts), "lag_ms": lag_json}));
+    let _ = std::io::stdout().flush();
+    let _ = conn.disconnect();
+    std::process::exit(0);
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     match args.get(1).map(String::as_str) {
@@ -953,9 +1341,10 @@ fn main() {
         Some("relay") => relay_mode(&args[2..]),
         Some("watch") => watch_mode(),
         Some("observe") => observe_mode(),
+        Some("mind") => mind_mode(),
         Some("soak") => soak::run(),
         m => {
-            eprintln!("usage: gate-load players|relay|watch|observe|soak (got {m:?})");
+            eprintln!("usage: gate-load players|relay|watch|observe|mind|soak (got {m:?})");
             std::process::exit(2);
         }
     }

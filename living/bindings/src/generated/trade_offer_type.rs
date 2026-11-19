@@ -15,6 +15,7 @@ pub struct TradeOffer {
     pub want_item: String,
     pub want_qty: u32,
     pub at_ms: u64,
+    pub until_ms: u64,
 }
 
 impl __sdk::InModule for TradeOffer {
@@ -33,6 +34,7 @@ pub struct TradeOfferCols {
     pub want_item: __sdk::__query_builder::Col<TradeOffer, String>,
     pub want_qty: __sdk::__query_builder::Col<TradeOffer, u32>,
     pub at_ms: __sdk::__query_builder::Col<TradeOffer, u64>,
+    pub until_ms: __sdk::__query_builder::Col<TradeOffer, u64>,
 }
 
 impl __sdk::__query_builder::HasCols for TradeOffer {
@@ -47,6 +49,7 @@ impl __sdk::__query_builder::HasCols for TradeOffer {
             want_item: __sdk::__query_builder::Col::new(table_name, "want_item"),
             want_qty: __sdk::__query_builder::Col::new(table_name, "want_qty"),
             at_ms: __sdk::__query_builder::Col::new(table_name, "at_ms"),
+            until_ms: __sdk::__query_builder::Col::new(table_name, "until_ms"),
         }
     }
 }
@@ -57,6 +60,7 @@ impl __sdk::__query_builder::HasCols for TradeOffer {
 pub struct TradeOfferIxCols {
     pub from: __sdk::__query_builder::IxCol<TradeOffer, u32>,
     pub id: __sdk::__query_builder::IxCol<TradeOffer, u64>,
+    pub to: __sdk::__query_builder::IxCol<TradeOffer, u32>,
 }
 
 impl __sdk::__query_builder::HasIxCols for TradeOffer {
@@ -65,6 +69,7 @@ impl __sdk::__query_builder::HasIxCols for TradeOffer {
         TradeOfferIxCols {
             from: __sdk::__query_builder::IxCol::new(table_name, "from"),
             id: __sdk::__query_builder::IxCol::new(table_name, "id"),
+            to: __sdk::__query_builder::IxCol::new(table_name, "to"),
         }
     }
 }

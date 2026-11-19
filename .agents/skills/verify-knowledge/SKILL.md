@@ -1,6 +1,6 @@
 ---
 name: verify-knowledge
-description: Verify living-core know-how, teaching, experimentation, tablets, signs, practice, death cleanup, truthful feedback, personal memory graphs, recall, projection and fading, and player memory (a human-played character internalizing what it lived). Use when changing knowledge rules, artifacts, memory.rs, mind recall, authored pasts, mind projections or mind/lived.rs.
+description: "Verify living-core know-how and memory: techniques taught, practised and experimented with, tablets and signs, death cleanup, truthful feedback, the personal memory graph (scratch Neo4j), recall, projection and fading, names and strangers in memory, and player memory. Use when changing knowledge rules, artifacts, memory.rs, mind recall or projections, authored pasts or mind/lived.rs."
 ---
 
 # Verify knowledge and memory
@@ -32,6 +32,16 @@ The database is `verify-$R`. The container is `sao-verify-neo4j-$R`, labeled wit
 
 Never use Neo4j A on 7689 or Neo4j B on 7690. Never change the shared fake model server or runner. All model profiles in this proof point to the run's loopback fake endpoint.
 
+## A world's own technique
+
+Teaching a technique only a world's laws add (Cullet's glassmaking) has its own action, authority only, on a `cullet-laws` world ([feature](features/know-how.md)); it uses no Neo4j and no mind, and cleans up the same way:
+
+```bash
+.agents/skills/verify-knowledge/scripts/verify_knowledge.py world-know-how --run knowledge-glass-$(date +%Y%m%d-%H%M%S)
+```
+
+`--target-dir DIR` builds the module in `DIR` (the shared harness's option), for both actions. With `CARGO_TARGET_DIR` set, both actions build the module there and `run` builds the mind and its tests there too (otherwise in `.local/living/verify/build-knowledge`), so a worker keeps one build tree (recipes-1). Both actions read `LIVING_STDB_URL` (and the shared harness `LIVING_STDB_CONTAINER`) for a worker's own server.
+
 ## Player memory
 
 What a human-played character lives, internalized into its own graph (player memory, on by default) ([feature](features/player-memory.md), design in `docs/PLAYER_MEMORY.md`), has its own runner on an island world, with the same scratch Neo4j, fake model and cleanup:
@@ -51,6 +61,30 @@ A resident's mind made from the world's facts (docs/SEEDED_LIVES.md; every perso
 
 Its paid tier, `scripts/residents_real.py --allow-live --run knowledge-residents-real-<name>`, runs only after the user authorizes that run (the models file as shipped; the key from the main checkout's `.env`, into the mind's environment only).
 
+Names learned from a lived line, down to the memory graph ([features/names.md](features/names.md)), on any Neo4j given by `LIVING_PRIVACY_NEO4J=container:host:port` and `LIVING_PRIVACY_NEO4J_ENV` (a file with `LIVING_NEO4J_PASSWORD=`; on the Spark, the trial stack's `slop-trials-neo4j:127.0.0.1:7699`), nodes under the run's own name and deleted after:
+
+```bash
+.agents/skills/verify-knowledge/scripts/names.py --run minds-names-$(date +%Y%m%d-%H%M%S)
+```
+
+Someone's home, learned while they are away and recalled when they come by ([features/recall.md](features/recall.md#homes)): an overlay makes anyone past 4 m too far away to make out; a resident F puts up a house, tells the mind's character M its name and goes 40 m off; M notices the house "built by F"; the fake consolidation keeps "<F>'s house" as a place and `person:F -LIVES_AT->` it; F comes within 2 m and M's think prompt recalls it. Same environment as `names.py`:
+
+```bash
+.agents/skills/verify-knowledge/scripts/homes.py --run minds-homes-$(date +%Y%m%d-%H%M%S)
+```
+
+Two strangers stay two people in memory ([features/strangers.md](features/strangers.md)): two players the mind does not know by name say different things, the fake model folds both under one description, and the graph, recall and a later introduction keep them apart. Same environment as `names.py`, plus a `CARGO_TARGET_DIR` holding a release `living-mind` (the recall replay is built there):
+
+```bash
+.agents/skills/verify-knowledge/scripts/strangers.py --run minds-strangers-$(date +%Y%m%d-%H%M%S)
+```
+
+Resources as last seen ([features/remembered.md](features/remembered.md), since `talk-places`): a player's character remembers berry bushes it saw, keeps believing them while they are stripped out of its sight, and finds them gone when it looks again. Authority only, on any launched run:
+
+```bash
+.agents/skills/verify-knowledge/scripts/remembered.py --run "$R"
+```
+
 ## Doctor
 
 The run records the shared doctor result in `actions.log`, confirms `RETURN 1` against its scratch graph, records the image and mounts in `neo4j-doctor.log`, and checks the fake's `/health`. It requires the real mind's subscription and scratch Neo4j connection log before checking memory effects.
@@ -63,11 +97,11 @@ For a running attempt:
 
 ## Drive and evidence
 
-[features/README.md](features/README.md) lists every proof. [references/design.md](references/design.md) records source ownership and documentation implications. [references/validation.md](references/validation.md) records actual runs.
+[features/README.md](features/README.md) lists every proof. [references/design.md](references/design.md) records source ownership and documentation implications. [references/validation/](references/validation/README.md) holds one record per actual run; the newest files are the last validated runs.
 
 The runner asserts table changes, exact knowledge sources, preserved row IDs and acquisition times, negative effects for blocked actions, successful practice counts, graph content, projected rows and recalled prompt content. Admin reducers prepare and drive deterministic authority scenes. They do not prove player permissions.
 
-Seven ignored memory tests create and delete graphs inside this scratch Neo4j. `recall_replay` requires `LIVING_RECALL_CASES`; the runner generates nonempty cases against the real mind's graph and asserts budgets and recalled content from its output. It also runs the two focused truthful-feedback rules tests.
+Eleven ignored memory tests (`TESTS` in the runner, `strangers_stay_apart` and `a_far_figure_joins_the_person` among them) create and delete graphs inside this scratch Neo4j. `recall_replay` requires `LIVING_RECALL_CASES`; the runner generates nonempty cases against the real mind's graph and asserts budgets and recalled content from its output. It also runs the two focused truthful-feedback rules tests.
 
 Evidence remains in `.local/living/verify/$R/`. Inspect `results.json`, the recorded SQL snapshots, `graph-*.cypher` and `graph-*.txt`, `recalled-deliberation.json`, Cargo test logs, `requests.jsonl`, `journal/` and `cleanup.json`.
 

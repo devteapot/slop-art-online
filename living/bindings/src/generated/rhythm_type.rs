@@ -12,6 +12,10 @@ pub struct Rhythm {
     pub bed_h: f32,
     pub evening_h: f32,
     pub last_day: u32,
+    pub work_from_h: f32,
+    pub work_to_h: f32,
+    pub nap_from_h: f32,
+    pub nap_to_h: f32,
 }
 
 impl __sdk::InModule for Rhythm {
@@ -27,6 +31,10 @@ pub struct RhythmCols {
     pub bed_h: __sdk::__query_builder::Col<Rhythm, f32>,
     pub evening_h: __sdk::__query_builder::Col<Rhythm, f32>,
     pub last_day: __sdk::__query_builder::Col<Rhythm, u32>,
+    pub work_from_h: __sdk::__query_builder::Col<Rhythm, f32>,
+    pub work_to_h: __sdk::__query_builder::Col<Rhythm, f32>,
+    pub nap_from_h: __sdk::__query_builder::Col<Rhythm, f32>,
+    pub nap_to_h: __sdk::__query_builder::Col<Rhythm, f32>,
 }
 
 impl __sdk::__query_builder::HasCols for Rhythm {
@@ -38,6 +46,10 @@ impl __sdk::__query_builder::HasCols for Rhythm {
             bed_h: __sdk::__query_builder::Col::new(table_name, "bed_h"),
             evening_h: __sdk::__query_builder::Col::new(table_name, "evening_h"),
             last_day: __sdk::__query_builder::Col::new(table_name, "last_day"),
+            work_from_h: __sdk::__query_builder::Col::new(table_name, "work_from_h"),
+            work_to_h: __sdk::__query_builder::Col::new(table_name, "work_to_h"),
+            nap_from_h: __sdk::__query_builder::Col::new(table_name, "nap_from_h"),
+            nap_to_h: __sdk::__query_builder::Col::new(table_name, "nap_to_h"),
         }
     }
 }

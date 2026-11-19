@@ -1,0 +1,407 @@
+{
+ "schema": 1,
+ "family": "building:net-loft",
+ "id": "20261111-368e2af4-297397",
+ "published": "2026-11-11T17:48:27+01:00",
+ "track": "kit-1",
+ "maker": "Claude Fable 5.2",
+ "note": "kit-1 pass 1: built for its lot from the plan (footprint, height, wear and seed from plan.json); glow set in the game at 21:30 against 13:00",
+ "source": {
+  "commit": "368e2af4b14033a9e8da023fcc63b95c27a5a9bb",
+  "branch": "kit-1",
+  "dirty": false,
+  "generator": "living/tools/blender/cullet.py",
+  "generator_sha256": "5f70615004be4033b28a542e829eaf40b0eef97ddcc9c31bb4e4b906c7bd9803",
+  "generator_state": "committed",
+  "seed": "83",
+  "params": {
+   "plan": "living/seeds/worlds/cullet/plan.json"
+  }
+ },
+ "renderer": {
+  "method": "asset-view",
+  "commit": "86fae680d923921d2c41e9dffc8d39c75cc88752",
+  "dirty": false,
+  "key": "86fae680",
+  "env": "cullet",
+  "hours": {
+   "day": 15.0,
+   "night": 22.0
+  },
+  "weather": "clear",
+  "day_curve": true,
+  "preset": "2947e3c0",
+  "repo": "/home/carlid/.t3/worktrees/slop-art-online/t3-e14baa97-22eef9c68b78d643"
+ },
+ "preset": "building",
+ "media": "media/building-net-loft/20261111-368e2af4-297397",
+ "members": [
+  {
+   "name": "loft_end",
+   "role": "subject",
+   "token_kind": "file",
+   "source_path": ".local/kit-1/board/net_loft/net_loft_1.glb",
+   "sha256": "b4ee4585bb1bf8a64af710ba7e8d8691a98b7c06e4a10fcd39fc9b6be3d007ad",
+   "stats": {
+    "file": "net_loft_1.glb",
+    "sha256": "b4ee4585bb1bf8a64af710ba7e8d8691a98b7c06e4a10fcd39fc9b6be3d007ad",
+    "bytes": 93476,
+    "triangles": 1326,
+    "vertices": 2636,
+    "parts": {
+     "net_loft_1": 1326
+    },
+    "nodes": 1,
+    "bones": 0,
+    "spring_bones": 0,
+    "materials": [
+     "Body"
+    ],
+    "textures": 0,
+    "texture_bytes": 0,
+    "morph_targets": 0,
+    "spring_groups": 0,
+    "vertex_colours": true,
+    "clips": [],
+    "glow": false,
+    "glow_triangles": 0,
+    "palette": [
+     {
+      "hex": "#232121",
+      "share": 0.4054
+     },
+     {
+      "hex": "#383c43",
+      "share": 0.3703
+     },
+     {
+      "hex": "#565d63",
+      "share": 0.1391
+     },
+     {
+      "hex": "#464f5d",
+      "share": 0.0305
+     },
+     {
+      "hex": "#32302e",
+      "share": 0.0229
+     },
+     {
+      "hex": "#647184",
+      "share": 0.013
+     },
+     {
+      "hex": "#857e73",
+      "share": 0.0105
+     },
+     {
+      "hex": "#6b654d",
+      "share": 0.0025
+     },
+     {
+      "hex": "#596478",
+      "share": 0.0024
+     },
+     {
+      "hex": "#686c6c",
+      "share": 0.0009
+     },
+     {
+      "hex": "#774227",
+      "share": 0.0008
+     },
+     {
+      "hex": "#88989d",
+      "share": 0.0004
+     },
+     {
+      "hex": "#326749",
+      "share": 0.0004
+     },
+     {
+      "hex": "#dbd1b3",
+      "share": 0.0004
+     },
+     {
+      "hex": "other",
+      "share": 0.0004
+     }
+    ]
+   },
+   "file": "files/loft_end.glb",
+   "report": {
+    "file": "net_loft/net_loft_1.glb",
+    "what": "lot",
+    "kind": "net_loft",
+    "size_m": [
+     3.5,
+     8
+    ],
+    "plan_height_m": 8.5,
+    "seed": 90582,
+    "above_floor_m": [
+     [
+      -1.788,
+      -3.933
+     ],
+     [
+      1.785,
+      4.06
+     ]
+    ],
+    "height_m": 8.5,
+    "foundation_m": 1.8,
+    "tris": 1326,
+    "materials": {
+     "Body": 1326
+    },
+    "surface_tagged_share": 1.0,
+    "palette_share": 0.9638,
+    "palette_wear_blend_share": 0.0362,
+    "budget_tris": 2500,
+    "doors": [
+     {
+      "at": [
+       -0.45,
+       -3.55,
+       1.16
+      ],
+      "along": [
+       1,
+       0,
+       0
+      ],
+      "width_m": 0.9,
+      "height_m": 2.0
+     },
+     {
+      "at": [
+       0.45,
+       -3.55,
+       1.16
+      ],
+      "along": [
+       1,
+       0,
+       0
+      ],
+      "width_m": 0.9,
+      "height_m": 2.0,
+      "open": true
+     }
+    ],
+    "sha256": "b4ee4585bb1bf8a64af710ba7e8d8691a98b7c06e4a10fcd39fc9b6be3d007ad",
+    "ridge_m": 8.5,
+    "bare_planks": 3
+   },
+   "shots": [
+    "front",
+    "three-quarter",
+    "side",
+    "back",
+    "close",
+    "game"
+   ],
+   "clips": [],
+   "view": {
+    "size_m": [
+     3.573486328125,
+     10.300000190734863,
+     7.992725372314453
+    ],
+    "triangles": 1326,
+    "vertices": 2636,
+    "meshes": 1,
+    "materials": [
+     "Body"
+    ],
+    "glow": false,
+    "vertex_colours": true
+   }
+  },
+  {
+   "name": "loft_mid",
+   "role": "subject",
+   "token_kind": "file",
+   "source_path": ".local/kit-1/board/net_loft/net_loft_3.glb",
+   "sha256": "3e87df489efa827fbf05c2ae5ed4bf457dc0cc732521cb3d7db8643d900a2648",
+   "stats": {
+    "file": "net_loft_3.glb",
+    "sha256": "3e87df489efa827fbf05c2ae5ed4bf457dc0cc732521cb3d7db8643d900a2648",
+    "bytes": 91796,
+    "triangles": 1302,
+    "vertices": 2588,
+    "parts": {
+     "net_loft_3": 1302
+    },
+    "nodes": 1,
+    "bones": 0,
+    "spring_bones": 0,
+    "materials": [
+     "Body"
+    ],
+    "textures": 0,
+    "texture_bytes": 0,
+    "morph_targets": 0,
+    "spring_groups": 0,
+    "vertex_colours": true,
+    "clips": [],
+    "glow": false,
+    "glow_triangles": 0,
+    "palette": [
+     {
+      "hex": "#3c3f46",
+      "share": 0.4061
+     },
+     {
+      "hex": "#222020",
+      "share": 0.3435
+     },
+     {
+      "hex": "#565b65",
+      "share": 0.1618
+     },
+     {
+      "hex": "#33302d",
+      "share": 0.0339
+     },
+     {
+      "hex": "#464f5d",
+      "share": 0.0267
+     },
+     {
+      "hex": "#657284",
+      "share": 0.0118
+     },
+     {
+      "hex": "#857d74",
+      "share": 0.0073
+     },
+     {
+      "hex": "#5c687a",
+      "share": 0.0035
+     },
+     {
+      "hex": "#666047",
+      "share": 0.0027
+     },
+     {
+      "hex": "#774227",
+      "share": 0.0009
+     },
+     {
+      "hex": "#8b979d",
+      "share": 0.0005
+     },
+     {
+      "hex": "#34694b",
+      "share": 0.0004
+     },
+     {
+      "hex": "#dbd1b3",
+      "share": 0.0004
+     },
+     {
+      "hex": "#c57d25",
+      "share": 0.0003
+     },
+     {
+      "hex": "other",
+      "share": 0.0002
+     }
+    ]
+   },
+   "file": "files/loft_mid.glb",
+   "report": {
+    "file": "net_loft/net_loft_3.glb",
+    "what": "lot",
+    "kind": "net_loft",
+    "size_m": [
+     3.5,
+     8
+    ],
+    "plan_height_m": 8.5,
+    "seed": 94106,
+    "above_floor_m": [
+     [
+      -1.784,
+      -3.933
+     ],
+     [
+      1.788,
+      4.06
+     ]
+    ],
+    "height_m": 8.5,
+    "foundation_m": 1.8,
+    "tris": 1302,
+    "materials": {
+     "Body": 1302
+    },
+    "surface_tagged_share": 1.0,
+    "palette_share": 0.9616,
+    "palette_wear_blend_share": 0.0384,
+    "budget_tris": 2500,
+    "doors": [
+     {
+      "at": [
+       -0.45,
+       -3.55,
+       1.16
+      ],
+      "along": [
+       1,
+       0,
+       0
+      ],
+      "width_m": 0.9,
+      "height_m": 2.0
+     },
+     {
+      "at": [
+       0.45,
+       -3.55,
+       1.16
+      ],
+      "along": [
+       1,
+       0,
+       0
+      ],
+      "width_m": 0.9,
+      "height_m": 2.0,
+      "open": true
+     }
+    ],
+    "sha256": "3e87df489efa827fbf05c2ae5ed4bf457dc0cc732521cb3d7db8643d900a2648",
+    "ridge_m": 8.5,
+    "bare_planks": 2
+   },
+   "shots": [
+    "front",
+    "three-quarter",
+    "side",
+    "back",
+    "close",
+    "game"
+   ],
+   "clips": [],
+   "view": {
+    "size_m": [
+     3.5717031955718994,
+     10.300000190734863,
+     7.992725372314453
+    ],
+    "triangles": 1302,
+    "vertices": 2588,
+    "meshes": 1,
+    "materials": [
+     "Body"
+    ],
+    "glow": false,
+    "vertex_colours": true
+   }
+  }
+ ],
+ "delivered": []
+}

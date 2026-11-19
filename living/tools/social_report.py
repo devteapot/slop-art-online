@@ -23,13 +23,24 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import trials  # noqa: E402  (prices: trials.cost)
 from journal_io import restore  # noqa: E402
 
+# The speaker's `silence` row: the one a line was said to could not have heard it. Its words since
+# `speech_truth` ("Bram is too far away: they could not have heard you.", "… is out of earshot: …",
+# a planned line not said, and "Nobody was near enough to hear you." for a line to the room), speech-2's ("… is too far to hear you; …") and the first ("No answer from …").
+UNHEARD = re.compile(r"^No answer from|could not have heard you|^Nobody was near enough to hear you|is too far to hear you")
+
 OUT = Path(__file__).resolve().parents[2] / ".local/living/trials"
 ASK = {
     "food": re.compile(r"\b(food|eat|hungry|starv|berr|bread|meal|share|spare)", re.I),
     "lesson": re.compile(r"\b(teach|show me|learn|how (do|to)|lesson)", re.I),
     "bed": re.compile(r"\b(bed|sleep|shelter|roof|the night|lodg|hearth|put me up|corner)", re.I),
 }
-HELP = ("give", "teach", "host")
+HELP = ("give", "teach", "host", "offer_terms", "demand", "accept")
+# What the world tells a party of its dealings (rules-2, skills.rhai: offer_terms, accept, demand).
+TOLD = {
+    "proposed_to_it": r"proposes an agreement", "it_proposed": r"^proposed to ", "agreed": r"accepted your terms|^agreed with ",
+    "kept": r"kept on both sides", "broken": r"broke your agreement", "lapsed": r"has lapsed at dusk|did not take up your terms",
+    "demanded_of_it": r"demand(s|ed) .* of you|you demanded", "paid": r"paid (the|what)",
+}
 
 
 def jl(p):
@@ -67,7 +78,7 @@ def run(d):
     S = int(s["subject"].split("#")[1])
     chron = jl(d / "chronicle.jsonl")
     exps = jl(d / "experiences.jsonl")
-    silence = [e for e in exps if e.get("text", "").startswith("No answer from")]
+    silence = [e for e in exps if UNHEARD.search(e.get("text", ""))]
     asks = heard = 0
     for c in chron:
         if c.get("kind") != "speech" or c.get("a") != S or not c.get("b"):
@@ -96,19 +107,23 @@ def run(d):
                     decided[a["do"]] += 1
             if r.get("purpose") in ("think", "deliberate"):
                 text += request_text(r)
-        for m in set(re.findall(r"did not work out: ((give|teach|host)[^:\n]*?→ #%d: [^.\n\\]*)" % S, text)):
+        for m in set(re.findall(r"did not work out: ((give|teach|host|offer_terms|demand|accept)[^:\n]*?→ #%d: [^.\n\\]*)" % S, text)):
             refused[m[1]] += 1
             why[re.sub(r"\d+", "#", m[0].split(": ", 1)[1])[:70]] += 1
     reached = [e["text"] for e in exps if e.get("kind") not in ("said", "repeat") and re.search(r"gave you|takes you in as their guest|taught you", e.get("text", ""))]
     for e in reached:
         done["food" if "gave you" in e else "lodging" if "guest" in e else "lesson"] += 1
     # Techniques the newcomer was taught by someone (not worked out alone by experimenting).
+    told = Counter(k for e in exps if e.get("kind") not in ("said", "repeat", "speech") for k, rx in TOLD.items() if re.search(rx, e.get("text", "")))
+    own = Counter(a.get("do") for r in jl(d / "journal" / f"{s['subject'].split('#')[0]}.jsonl") for a in (reply(r).get("acts") or []) if isinstance(a, dict) and a.get("do") in ("offer_terms", "demand", "accept", "give", "teach"))
     learned = [c["text"] for c in chron if c.get("kind") == "learn" and c.get("a") == S and "worked out" not in c["text"]]
     return {
         "run": d.name, "variant": s["variant"], "min": round(s["minutes_run"]), "tokens": s["tokens"],
         "residents_thinking": s.get("residents_thinking"), "cost": round(sum(trials.cost(m, b["prompt"], b["completion"], b["cached"]) or 0 for m, b in (s.get("by_model") or {}).items()), 2),
         "asks": asks, "heard": heard,
         "decided_give": decided["give"], "decided_teach": decided["teach"], "decided_host": decided["host"],
+        "decided_terms": decided["offer_terms"], "decided_demand": decided["demand"], "decided_accept": decided["accept"],
+        "it_offered_terms": own["offer_terms"], "it_accepted": own["accept"], **{k: told[k] for k in TOLD},
         "refused": sum(refused.values()), "got_food": done["food"], "got_lodging": done["lodging"], "got_lesson": done["lesson"],
         "taught_to_it": len(learned), "talk_turns": talk_turns, "talk_with_means": talk_with_means,
         "_why": why, "_reached": reached[:3], "_learned": learned[:3],

@@ -1,0 +1,77 @@
+{
+ "schema": 1,
+ "family": "character:fringe-per-type",
+ "id": "20261113-f18c28db-27db6d",
+ "published": "2026-11-13T04:54:45+01:00",
+ "imported": "2026-11-13T04:54:45+01:00",
+ "track": "char-4",
+ "maker": "Claude Fable 5.2",
+ "note": "The fringe hangs from J_Hair_Fringe, which each type's file stands at its own line (3 mm above its brows' top). The fullest fringe ends 1.2 to 1.3 mm above the brows' top on all 21 types (was 1.3 below to 11.2 above); fringed styles come down to the line (the middle one ended 34 to 43 mm above the brows, now 16 to 19).",
+ "source": {
+  "commit": "f18c28db43950a9760d6297ddb94f1ded60925db",
+  "branch": "char-4-fringe",
+  "dirty": false,
+  "generator": "living/tools/blender/hair.py",
+  "generator_sha256": "cee3b351f9fcc653a55f85d5fba75d853d9cd4c637d1b4eff4b9dca6245ecde5",
+  "generator_state": "committed",
+  "params": {}
+ },
+ "renderer": {
+  "method": "asset-view",
+  "commit": "",
+  "key": "asset-view",
+  "preset": "",
+  "note": "composed people from lines through recipes (a type's file, a shared hair file, outfit pieces), drawn by the client with no change to it; rows: bob.2, tousled.2, braids, short, shag, tail.3; columns: child-u-b, child-u-a, elder-f-b, adult-f-b, youth-m-b, adult-f-a, adult-m-a, elder-m-c (brows' top 1.2 to 13.0 mm above the head's origin); front and three-quarter 4 degrees down, above 24 degrees down"
+ },
+ "preset": "",
+ "media": "media/character-fringe-per-type/20261113-f18c28db-27db6d",
+ "members": [
+  {
+   "name": "after",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "833d64ef0802edb5733700cecb70c99ef102701fd76ef8d370c034ad5d658633",
+   "shots": [
+    "above",
+    "front",
+    "three-quarter"
+   ],
+   "clips": []
+  },
+  {
+   "name": "before",
+   "role": "control",
+   "token_kind": "import",
+   "sha256": "9640395d7a75d7ab6b916cc1a495582d19fb85cc7b768bafa69ba28eb481df1c",
+   "shots": [
+    "above",
+    "front",
+    "three-quarter"
+   ],
+   "clips": []
+  },
+  {
+   "name": "vroid",
+   "role": "control",
+   "token_kind": "import",
+   "sha256": "b7feccb9b34a0066d3588daec23c718a1ddcc18fcc7dc62d32466011d21503dd",
+   "shots": [
+    "above",
+    "front",
+    "three-quarter"
+   ],
+   "clips": []
+  },
+  {
+   "name": "blue-protocol",
+   "role": "control",
+   "token_kind": "import",
+   "sha256": "9384297436aa23a1681cfb02213f3b2fe79138bc78187465a3e214d4da39c981",
+   "shots": [
+    "front"
+   ],
+   "clips": []
+  }
+ ],
+ "delivered": []
+}

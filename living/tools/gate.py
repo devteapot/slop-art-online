@@ -47,6 +47,8 @@ import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import world_delete  # noqa: E402  (pause a world before deleting it)
 
 from verify_credentials import write_private
 
@@ -550,8 +552,10 @@ def _run(a, procs, token_file):
     with gzip.open(r.dir / "module.log.gz", "wt") as f:
         f.write(stdb("logs", "-s", "local", db, "-n", str(int((marks["end"] - marks["go"]) * 60 * 20 + 100_000)), timeout=1800))
     if a.delete:
-        stdb("delete", "-s", "local", db, "-y", check=False)
-        r.log(f"deleted {db}")
+        # Paused and read back as paused before the delete (world_delete.py: a busy world's delete
+        # can take SpacetimeDB 2.14.1 down).
+        deleted, why = world_delete.cli_pause_and_delete(lambda *a: subprocess.run(["docker", "exec", "-i", CONTAINER, "spacetime", *a], capture_output=True, text=True), db)
+        r.log(f"{db}: {why}")
     analyze(r.dir)
 
 

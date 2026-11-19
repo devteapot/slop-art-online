@@ -1,0 +1,6 @@
+{
+ "extends": "strangers-pre",
+ "title": "Strangers arm C (without the two lives, filter off), for runs of C, L and LS in one batch",
+ "about": "strangers-pre with its control variant only, so that one batch of `strangers-c strangers` with both variants runs exactly the arms C, L and LS of docs/STRANGERS.md (stage 2), C in the same batch as the others.",
+ "variants": ["strangers-control"]
+}

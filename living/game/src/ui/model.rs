@@ -44,14 +44,30 @@ pub struct VerbsView {
 
 pub struct MenuView {
     pub title: String,
-    pub rows: Vec<String>,
+    pub rows: Vec<MenuRowView>,
+    /// An open sub-list (a skill with many items: "Give ›"), beside the list.
+    pub sub: Option<(String, Vec<MenuRowView>)>,
+    /// Toward whom (an icon and the place beside their head), or where the UI put it.
+    pub person: Option<u32>,
+    pub at: Option<Vec2>,
+}
+
+pub struct MenuRowView {
+    pub label: String,
+    /// The rules' skill (or `talk`, `window`), for its icon and key.
+    pub skill: String,
+    pub group: bool,
+    /// How many of its item I carry, for a sub-list's count.
+    pub have: u32,
 }
 
 pub struct InventoryView {
     /// Item, how many, and a short note from the rules (food value).
     pub rows: Vec<(String, u32, String)>,
-    pub carried: u32,
-    pub limit: u32,
+    /// How much is carried against the rules' limit (fractional once goods count by their own
+    /// weight); a limit of 0 is none.
+    pub carried: f32,
+    pub limit: f32,
 }
 
 pub struct KnowHowView {
@@ -77,10 +93,17 @@ pub struct Me {
     pub name: String,
     pub hp: f32,
     pub max_hp: f32,
-    /// The rules' `energy` need, 0..100: the resource bar.
+    /// The rules' `energy` need, 0..100 (what a skill's cost is checked against today).
     pub energy: f32,
     pub max_energy: f32,
-    pub statuses: Vec<Status>,
+    /// The bars, as the world's `meters()` lists them (shown ones, in order): each value moved
+    /// along its rate since its row was written, so a bar refills between updates.
+    pub meters: Vec<MeterView>,
+    /// How the body is, as the world's `status_of` says (the pills).
+    pub statuses: Vec<StatusView>,
+    /// Every meter now, named by the field it shows (a skill card's `pool`): what a bar slot's
+    /// cost is checked against.
+    pub pools: Vec<MeterView>,
     /// 1 just after being hurt, fading to 0 (a flash on the health bar).
     pub hurt: f32,
 }
@@ -102,6 +125,36 @@ pub enum Tone {
     Good,
     Warn,
     Bad,
+    Plain,
+}
+
+impl Tone {
+    /// A status's tone as the rules name it (`TONES`: good, warn, bad, plain).
+    pub fn parse(s: &str) -> Tone {
+        match s {
+            "good" => Tone::Good,
+            "warn" => Tone::Warn,
+            "bad" => Tone::Bad,
+            _ => Tone::Plain,
+        }
+    }
+}
+
+/// One bar of my body (`meters()`): its words and where it stands now.
+#[derive(Clone, Debug, PartialEq)]
+pub struct MeterView {
+    pub name: String,
+    pub label: String,
+    pub value: f32,
+    pub max: f32,
+}
+
+/// One status pill (`status_of`): its name, how it reads and its words.
+#[derive(Clone, Debug, PartialEq)]
+pub struct StatusView {
+    pub name: String,
+    pub tone: Tone,
+    pub text: String,
 }
 
 pub struct Status {
@@ -144,6 +197,7 @@ pub enum SkillIcon {
     Shield,
     Dodge,
     Heal,
+    Jump,
     Empty,
 }
 
@@ -163,6 +217,11 @@ pub struct Skill {
     pub key: Key,
     pub icon: SkillIcon,
     pub state: SkillState,
+    /// The rules' skill on this place of the bar, its energy cost, and how many of what it
+    /// spends I carry (arrows), if it spends something.
+    pub name: String,
+    pub cost: f32,
+    pub count: Option<u32>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -174,6 +233,7 @@ pub enum Stance {
 pub struct Actor {
     pub id: u64,
     pub name: String,
+    pub compact_plate: Option<String>,
     /// Just above the head, in world space.
     pub head: Vec3,
     pub distance: f32,
@@ -187,6 +247,14 @@ pub struct Actor {
     pub hp: Option<f32>,
     /// Exact health and its maximum, only while I perceive it exactly (an appraisal holds).
     pub exact: Option<(f32, f32)>,
+    /// A person (not an animal).
+    pub kind_person: bool,
+}
+
+impl Actor {
+    pub fn plate_name(&self) -> &str {
+        self.compact_plate.as_deref().unwrap_or(&self.name)
+    }
 }
 
 pub struct TargetInfo {
@@ -288,11 +356,14 @@ pub struct MapInfo {
     /// View yaw, degrees (0 = north up, clockwise).
     pub yaw: f32,
     pub pois: Vec<Poi>,
+    /// The name of where I am: the nearest place my character knows, if near enough.
+    pub place: Option<String>,
 }
 
 /// What the player asked of the UI this frame; the active source carries it out.
 #[derive(Resource, Default)]
 pub struct Outbox {
-    pub say: Vec<String>,
+    /// Lines to say, and to whom (a character id; 0 for no one in particular).
+    pub say: Vec<(String, u32)>,
     pub rejoin: bool,
 }

@@ -1,0 +1,54 @@
+{
+ "schema": 1,
+ "family": "character:cast-64",
+ "id": "20261112-d11b32d5-85daa8",
+ "published": "2026-11-12T05:44:21+01:00",
+ "imported": "2026-11-12T05:44:21+01:00",
+ "track": "char-4",
+ "maker": "Claude Fable 5.2",
+ "note": "Pass 3, step 6: Cullet's cast with the new eyes, lips and blush as their own layer, and hair as sheets. Built again whole, each person their own file, idle clip baked from the completed library.",
+ "source": {
+  "commit": "d11b32d5dacca05cf14dab37c48b10640b198585",
+  "branch": "char-4",
+  "dirty": false,
+  "generator": "living/tools/blender/person.py",
+  "generator_sha256": "ea3bfd02a41b36a2496a581700aa5666503d04c5886a8241dfe2fd92a488ccde",
+  "generator_state": "committed",
+  "seed": "cullet",
+  "params": {
+   "cast": "living/seeds/cullet.json",
+   "people": 64
+  }
+ },
+ "renderer": {
+  "method": "asset-view",
+  "commit": "",
+  "key": "asset-view",
+  "preset": "",
+  "note": "town.py: each person alone through the asset view; lineup from the front at 28 degrees down at one scale; faces close, eyes held open by the photo tool; game is each person at 22 m through the game camera, pixels enlarged three times; tiled"
+ },
+ "preset": "",
+ "media": "media/character-cast-64/20261112-d11b32d5-85daa8",
+ "members": [
+  {
+   "name": "cast",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "7351fb3201f3033ec6a292059ce819eb7754edd6f245fac9b22f89572e158d88",
+   "shots": [
+    "faces",
+    "faces-24",
+    "game",
+    "lineup"
+   ],
+   "clips": []
+  }
+ ],
+ "delivered": [
+  {
+   "title": "town check page and town.json (who is who)",
+   "path": "delivered/index.html",
+   "from": ".local/town11/index.html"
+  }
+ ]
+}

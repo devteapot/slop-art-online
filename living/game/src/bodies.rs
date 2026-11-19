@@ -11,7 +11,7 @@
 
 use crate::net::Net;
 use crate::style::{outline, Outlined, Style};
-use bevy_mod_outline::{OutlineMeshExt, PropagateOutline};
+use bevy_mod_outline::PropagateOutline;
 use crate::world::{hash, rgb, scale, MeshBuf, Scene};
 use bevy::prelude::*;
 use living_bindings::*;
@@ -237,14 +237,15 @@ pub fn beast_file(kind: &str) -> Option<&'static str> {
 /// (0 = +Z), `size` times its real size. None: draw the box creature ([`spawn`]).
 pub fn spawn_beast(commands: &mut Commands, assets: &AssetServer, kind: &str, at: Vec3, yaw: f32, size: f32) -> Option<Entity> {
     let file = beast_file(kind)?;
-    let scene = assets.load(bevy::gltf::GltfAssetLabel::Scene(0).from_asset(file));
     let model = crate::lookdev::Model { vrm: false, file: file.to_string(), height: 0.0, ground_y: at.y, glow: None };
+    // The root alone, once: its scene follows (`characters::SceneOf`).
+    let root = crate::characters::kept(assets, file);
     Some(
         commands
             .spawn((
                 model,
                 Beast,
-                bevy::world_serialization::WorldAssetRoot(scene),
+                crate::characters::SceneOf(root),
                 crate::characters::FileHandle::kept(assets, file),
                 Transform::from_translation(at).with_rotation(Quat::from_rotation_y(yaw)).with_scale(Vec3::splat(size)),
                 Visibility::Hidden,
@@ -436,7 +437,7 @@ pub fn update(
 pub fn spawn(commands: &mut Commands, meshes: &mut Assets<Mesh>, palette: &crate::world::Palette, style: &Style, kind: &str, id: u32, mine: bool, tf: Transform, p: Vec2) -> Entity {
     let parts = parts(kind, id, mine);
     let smooth = |mut m: Mesh| {
-        let _ = m.generate_outline_normals(&Default::default());
+        crate::style::outline_normals(&mut m);
         m
     };
     let body = meshes.add(smooth(parts.body));

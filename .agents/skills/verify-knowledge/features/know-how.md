@@ -8,7 +8,8 @@
 - Experimenting with hide writes `worked it out` for tanning.
 - Missing cloak know-how blocks crafting, consumes no materials and earns no practice. The refusal names teaching, writing and experimenting with fiber or hide as learning routes.
 - Granting cloak enables the same craft. Two successful crafts increment `practice.uses` from one to two.
-- Teaching leather names tanning. An unknown technique lists real techniques. Teaching a technique the teacher lacks reports that fact.
+- Teaching leather names tanning. An unknown technique lists real techniques (the world's know-how table, in its order). Teaching a technique the teacher lacks reports that fact.
+- **A world's own technique** (`world-know-how`, 2026-11-11): on a world made with Cullet's laws, glassmaking (a technique only its `know_how()` adds) is taught like the shipped ones: refused while the student lacks fire ("they must first learn fire"), then written as `taught by Walker1`, then refused as already known; teaching `glass` lists the world's techniques, glassmaking and fire_bolt among them. Before goods-2 the teach rule checked what experimenting can reveal, so glassmaking, fire_bolt and wound_tending could not be taught.
 
 Sources: `living/authority/src/tables.rs:436`, `common.rs:603`, `act.rs:953`, `act.rs:968`; `living/scripts/skills.rhai:590`, `skills.rhai:637`. Rules tests are `missing_know_how_says_how_to_learn_it` and `teaching_names_real_techniques` in `living/rules/src/script.rs:622`.
 
@@ -23,6 +24,14 @@ A character learns by being taught, reading or experimenting, then uses a skill 
 ```
 
 The runner spawns five idle walkers and installs focused behavior graphs. Read `seed-knowledge.json`, `grant-*.json`, `gate-*.json`, `practice-*.json`, `taught-*.json`, `teach-*-feedback.json`, `teach-feedback-*.json`, `experiment-*.json` and the focused rules-test logs. Calls and acceptance statuses are in `actions.log`.
+
+A world's own technique, authority only (no Neo4j, no mind), on a `cullet-laws` world:
+
+```bash
+.agents/skills/verify-knowledge/scripts/verify_knowledge.py world-know-how --run knowledge-glass-$(date +%Y%m%d-%H%M%S)
+```
+
+Read `world.json` (the 48-minute day), `teach-feedback-glass.json`, `teach-feedback-requires.json`, `student-refused.json`, `student-taught.json` and `teach-feedback-repeat.json`. Rules test: `teaching_takes_the_worlds_know_how`.
 
 ## Gotchas
 

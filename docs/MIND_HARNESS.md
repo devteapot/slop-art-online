@@ -6,10 +6,11 @@ How the mind service chooses models, schedules sleep, thinks for animals, keeps 
 | --- | --- | --- | --- |
 | 1. Model mixes | per-purpose and per-stage model choice; effort per purpose | `mixes` in `models.json` | defined; Brandholm uses `deepseek-people` |
 | 2. Sleep at night | purpose `reorganize`; night scheduling; night batches, uploaded above 2.4 MB | `LIVING_REORGANIZE` | `night-batch` |
-| 3. Cheaper animal minds | pick among built options; one mind per pack; think on salient change | `LIVING_ANIMAL_MINDS` | off |
+| 3. Cheaper animal minds | pick among built options; think on salient change (one mind per pack retired 2026-11-12) | `LIVING_ANIMAL_MINDS` | off |
 | 4. Jev judgments | `judged` graph condition; background refresh through TypeSafe | `LIVING_JEV` | off |
 | 5. Recall budget | token budget on recalled lines; no repeated `rel` property | `LIVING_RECALL_TOKENS` | `decide=800` |
 | 6. Rethink gate | a fast judge (Jev, or a cheap LLM) in front of non-urgent deliberations decides when the slow mind thinks | `LIVING_RETHINK` (`jev`, `llm`) | off |
+| 7. Conversation switches | who answers a stranger's line to the room, and whether a line waits out a running deliberation ([LIVING_CORE.md, Conversations](LIVING_CORE.md#conversations-checkpoint-4-item-6-first-part); [gr1/gr2](TRIALS.md#greeting-batches-gr1gr2-2026-11-11)) | `LIVING_GREET` (`nearest`, `off`, `curious`, `facing`), `LIVING_PARK` (`concurrent`, `wait`); the world's `speech_audience` law | `nearest`, `concurrent`, law on (since 2026-11-11) |
 
 ## 1. Per-purpose model mixes
 
@@ -100,7 +101,7 @@ How the mind service chooses models, schedules sleep, thinks for animals, keeps 
 ## 3. Cheaper animal minds
 
 **Built** ([animal.rs](../living/mind/src/mind/animal.rs)). Three switches in `LIVING_ANIMAL_MINDS`, any combination:
-- **(a) `pack`:** the animal that thinks decides for the others of its kind it sees. For `LIVING_ANIMAL_PACK_S` (60 s), their requests reuse that decision without a call, each weighed by its own temperament (0.6× to 1.4× by the trait that drives the option).
+- **(a) `pack` (retired 2026-11-12):** the animal that thought decided for the others of its kind it saw: for `LIVING_ANIMAL_PACK_S` (60 s) their requests reused that decision without a call, each weighed by its own temperament. The others perceived nothing of it, so it was shared hidden state, and it was removed ([pack mind](PACK_MIND.md#14-minds)); the word in `LIVING_ANIMAL_MINDS` is now ignored with a warning, and verify-minds `animals` checks that each animal of a herd makes its own `choose` call. The measurements below are kept as history.
 - **(b) `salient`:** the animal thinks only on a salient change since its last thought: a new kind of creature seen or smelled, being attacked or threatened, a wound band crossed, a death among its kind, or hunger crossing a band. Otherwise the request is answered by instinct, with no call.
 - **(c) `choose`:** one call, not two. The model picks a numbered option built from the scene and the species' skills (carry on; flee from, hunt or attack the nearest other creatures; keep close to its kind; rest; roam; signal), with a strength. The graph comes from a template, so it is valid by construction, and it still goes through `from_value_for` and `mind_install`.
 - **The rules are not touched.**
@@ -159,7 +160,7 @@ Real model, GLM Flash (the project's profile, `deliberate: high`). `today` again
 
 *The mind ([judge.rs](../living/mind/src/mind/judge.rs)).*
 - **Declarations** live in [judgments.json](../living/configs/judgments.json): question, type, criteria, `refresh_s` 4, `ttl_s` 15, `when: fighting`.
-- **Who is asked:** a character whose installed graph reads the question and which fought in the last 20 s. Its due questions go in one `POST https://api.typesafe.ai/v1/systemone` (TypeSafe's docs, read 2026-11-09: Bearer key, `{"model", "state", "questions"}`; model pinned `jev-1.14.0`; $0.042 per million input tokens; output free).
+- **Who is asked:** a character whose installed graph reads the question and which fought in the last 20 s. Its due questions go in one `POST https://api.typesafe.ai/v1/systemone` (TypeSafe's docs, read 2026-11-09: Bearer key, `{"model", "state", "questions"}`; model pinned `jev-1.14.0`; priced per input token, output free. The price is not committed: it lives in the local prices file, `living/configs/prices.example.json`).
 - **What the state holds:** the character's own goals, plan and temperament; its body as last felt in a deliberation scene, with its age (the service does not subscribe to `vitals`); its last ten experiences; and its feelings about who is in them.
 - **Bounds:** one request in flight per character, everything off the tick.
 - **Journal:** every exchange is journaled with purpose `judge`, latency, input tokens and cost.
@@ -185,7 +186,7 @@ Real model, GLM Flash (the project's profile, `deliberate: high`). `today` again
 
 - **The judgment works as built.** It stays low in a fight the defender is winning and rises with its wounds, and the graph reacts within one tick of the cache changing.
 - **It changed outcomes, for the worse.** Against two attackers, fleeing on foot gets the defender cut down from behind: 2/3 survived without Jev, 0/3 and 1/3 with it. The fault is the response the graph gives the judgment, not the judgment: here fleeing stops the strikes back while the attackers keep reach.
-- **Cost:** about 900 input tokens per judgment, about $0.00004 each. The 18 real fights cost $0.0012 in all.
+- **Cost:** about 900 input tokens per judgment, a fraction of a cent each (Jev's price is not committed).
 - **Not established:** with n = 3 per arm and random hits (none-arm survival swung from 7 to 84 hp), these runs show the mechanism and its latency, not an effect size.
 - **Evidence:** `.local/living/jev/r1/`, `.local/living/jev/r2/` and `.local/living/verify/jev-r*-*/`. Earlier tries `f1`–`f4` had setup faults and are not used: the mind's needs repair replaced a non-desires test graph; the release binary predated Jev; with three attackers the defender died in 7 s, before a judgment could refresh; and a seq-graph attacker stopped after one blow.
 
@@ -224,7 +225,7 @@ Decided 2026-11-09 with the user: Jev (about 150 ms) is not real-time, so it nev
 
 **Why.** Every trigger the authority raises becomes a full deliberation (think, then compile): a plan that finished, a plan with no applicable branch, failing actions, a quiet moment, dawn, a feeling, a call. The trials ([TRIALS.md](TRIALS.md) on `trials-1`) found the waste there: subjects re-deliberating every 25–60 s to re-ask residents who never answer, and plans resting on remembered things that are gone. In the replay below, the theft subjects deliberated back to back every 6–8 s.
 
-**Built** ([rethink.rs](../living/mind/src/mind/rethink.rs), [rethink.json](../living/configs/rethink.json)). The switch is `LIVING_RETHINK=jev` or `llm` (alias `glm`); it is off by default.
+**Built** ([rethink.rs](../living/mind/src/mind/rethink.rs), [rethink.json](../living/configs/rethink.json)). The switch is `LIVING_RETHINK=jev` or `llm` (alias `glm`); it is off by default. Jev's price is not in `rethink.json` or `judgments.json`: the mind reads it from a local, untracked prices file ([prices.rs](../living/mind/src/prices.rs): `LIVING_PRICES`, else `living/configs/prices.local.json`, else `~/.config/slop-living/prices.local.json`; shape in [prices.example.json](../living/configs/prices.example.json)). Without one, Jev's `cost_usd` is null and its cost unknown, never 0.
 
 - **Where:** in `schedule`, after the level of detail lets a request go and before `deliberate`. Only `kinds` (people) are gated.
 - **Never gated:**
@@ -262,8 +263,8 @@ Decided 2026-11-09 with the user: Jev (about 150 ms) is not real-time, so it nev
 | --- | ---: | ---: |
 | Latency p50 / p95 | 135 / 171 ms | 1,436 / 3,956 ms |
 | Input tokens per question | 1,420 | about 910 (+43 output) |
-| Cost per question | $0.00006 | $0.00016 |
-| All 650 questions | $0.039 | about $0.10 |
+| Cost per question | not committed | $0.00016 |
+| All 650 questions | not committed | about $0.10 |
 | Held at the replay's threshold of 0.5 | 450 (69%) | 158 (24%) |
 
 The two arms agree on 48% of triggers. The disagreements run one way: 313 triggers that Jev holds and GLM lets through, against 22 the other way.
@@ -317,7 +318,7 @@ The two arms agree on 48% of triggers. The disagreements run one way: 313 trigge
 | Asking loops (3+ unanswered lines to one person in 10 min) | 0, 1, 0 | 0, 0, 1 | 1, 1, 0 |
 
 - **The saving holds out of sample.** Jev held 49% of what it judged live (38 of 77), against 46% in the replay. GLM held 36% (40 of 111), against 41%. Re-raised triggers with nothing new were held without a call, beyond these counts.
-- **Jev's cost:** about $0.003 per real hour, under 6% of what the gate saves.
+- **Jev's cost:** a small share of what the gate saves (the figure is not committed, since it carries Jev's price).
 - **The deaths are not the gate's.** All three were a wolf on the town road (Rook twice, Frost once) attacking from 5–10 tiles and killing in about 10 s. In the two Jev runs the attack went through as `urgent` within a second. The last holds before it were unrelated triggers ("no branch applies", "you feel something") 80–160 s earlier. The same wolf killed a b1 subject with no gate. A deliberation takes seconds and could not have changed those fights.
 - **Quality is not established.** Both gated arms gathered less food per game hour (0.15 against 0.25), and the Jev runs learned and built nothing (the off and GLM arms each had one run that learned 4 techniques and built 2 structures). With 3 runs per arm, 2 of them shortened by deaths, this is a possible cost, not an effect size. Asking loops were rare in these life runs in every arm; the replay, where they were common, is the better evidence for them.
 - **Evidence:** dev-box `~/dev/slop-rethink/.local/living/rethink/rlive/`, which holds each instance's journal (with every `rethink-gate` decision), `mind.log`, samples, experiences, `summary.json` and `rethink-report.json`. *(Removed by mistake on 2026-11-10 when the coordinator cleaned up the dev-box worktree; the raw journals are gone and the figures in this document are the remaining record.)*
@@ -326,17 +327,17 @@ The two arms agree on 48% of triggers. The disagreements run one way: 313 trigge
 
 - **Speed does not matter here.** The gate is off the real-time path: a held trigger waits by design, and GLM's 1.4 s (4 s at p95) is still small next to a deliberation.
 - **Typed, calibrated answers matter somewhat.** In the blind replay, Jev separated waste from harmful skips better at the same hold rate, 8.4 against 4.7 wasted caught per harmful held. A random gate scores 2.6.
-- **Cost:** Jev's question costs a third of GLM's. Its three nouls cost 1.5× GLM's input tokens and nothing for output.
+- **Cost:** Jev's question costs less than GLM's. Its three nouls cost 1.5× GLM's input tokens and nothing for output.
 - **Any cheap classifier gets most of the saving:** GLM saved 24% live and Jev 40%. The difference is mostly where each was set, Jev holding more, and part of Jev's extra holds are the harmful ones.
 
 ### Recommendation: iterate, not adopt yet
 
-The gate does what it was built for. It cuts deliberations by 37–50% and cost by 24–40%, it costs little (Jev under 6% of what it saves), urgent paths are untouched, and every skip is journaled. Adopting it as a default needs evidence that the held thoughts are not costing the minds. Next steps:
+The gate does what it was built for. It cuts deliberations by 37–50%, it costs little (Jev's share of what it saves is small; Jev-mixed cost figures are not committed), urgent paths are untouched, and every skip is journaled. Adopting it as a default needs evidence that the held thoughts are not costing the minds. Next steps:
 
 1. **Narrow `would_repeat`.** The replay's harmful holds came from it overriding a plainly broken plan ("turning back and forth", an empty pack at nightfall). Try `unless` only when `plan_broken` is low, or a weight of 0.5 (34% held, 51% of waste caught, 19% of harmful skips held, 14% of useful).
 2. **Test quality with power.** Run the Spark trials with more replicates, longer lives and a preset without the road wolves, so food, learning and building can be compared. Add the gate to the hungry, theft and teacher trials, where the asking loops were.
-3. **Keep Jev over GLM** for this gate: better separation at a third of the price per question. Revisit if the TypeSafe dependency matters more than about $0.003 per person-hour.
-4. **The cost at scale is small.** 2,000 people at the live rate (about 47 Jev calls per person-hour at about 1,450 tokens) come to about $5.7 per hour of Jev. On TypeSafe's rate limits, that is 26 requests per second.
+3. **Keep Jev over GLM** for this gate: better separation at a lower price per question. Revisit if the TypeSafe dependency matters more than its cost per person-hour.
+4. **The cost at scale is small.** 2,000 people at the live rate (about 47 Jev calls per person-hour at about 1,450 tokens) come to a few dollars an hour of Jev (the figure is not committed). On TypeSafe's rate limits, that is 26 requests per second.
 
 ### Verification (rethink-1)
 
@@ -364,11 +365,11 @@ Dev-box worktree `~/dev/slop-rethink`, private SpacetimeDB 2.14.1 container `ret
 
 | What | Provider | Calls | $ |
 | --- | --- | ---: | ---: |
-| Replay, Jev arm (650 questions) | TypeSafe | 650 | 0.039 |
+| Replay, Jev arm (650 questions) | TypeSafe | 650 | not committed |
 | Replay, GLM arm (650 questions; 222 journaled, priced from those) | Mistral | 650 | about 0.10 |
 | Live, 9 runs of up to 45 min (minds) | Mistral | – | 0.61 |
-| Live, gate calls | TypeSafe / Mistral | 77 / 112 | 0.005 / 0.020 |
-| **Total** | | | **about $0.78** |
+| Live, gate calls | TypeSafe / Mistral | 77 / 112 | not committed / 0.020 |
+| **Total** | | | **Mistral about $0.73; TypeSafe not committed** |
 
 Claude side, not billed to a provider here: two blind judges (about 120k tokens each).
 
@@ -398,7 +399,7 @@ Reviewers measured the `rules2-r2` trial journals (1,129 real calls, `.local/liv
 | --- | --- | --- |
 | One output cap (24,000 on GLM Flash) for every purpose | A compile ran 24,000 tokens of `"places", …` for 166 s; one DeepSeek compile ran to 8,000. Normal p99: think 465, compile 1,008 (DeepSeek `low` 3,857), consolidate 2,388, reorganize 11,879. The longest usable compile was 4,547 tokens (GLM `low`, about 4,100 of them reasoning). | `purpose_max_tokens` on every profile: think 1,500; talk and rethink 1,000; deliberate, consolidate and internalize 6,000; reorganize 24,000. A test keeps every profile capped. |
 | A timeout gated the whole base URL | Two GLM compiles hit the 180 s timeout; GLM and DeepSeek share `api.mistral.ai`, so both were held. | Only a failed connection marks a host unreachable. verify-llm `timeout` asserts no gate. |
-| Background work overflowed to the other profile at that profile's settings | `deepseek-flash` mapped only think and deliberate, so a failed consolidation, integration or reorganization went to DeepSeek with thinking off (reorganize judged 4/21). | `Lane::Background` never overflows; its caller retries later with a backoff on its own model. A 429 keeps its one paced retry. Startup logs each purpose a route can send without an effort entry; `null` says "none on purpose" (DeepSeek's talk, consolidate, internalize). The project file has no gaps (a test). |
+| Background work overflowed to the other profile at that profile's settings | `deepseek-flash` mapped only think and deliberate, so a failed consolidation, integration or reorganization went to DeepSeek with thinking off (reorganize judged 4/21). | `Lane::Background` never overflows; its caller retries later with a backoff on its own model. A 429 keeps its one paced retry. Startup logs each purpose a route can send without an effort entry; `null` says "none on purpose" (DeepSeek's talk, consolidate, internalize). The project file has no gaps (a test). Since 2026-11-11 a 429 out of capacity (`backend_out_of_capacity`) sends the purposes a profile lists in `capacity_overflow` to its overflow; `glm-flash` lists `consolidate` (DeepSeek Flash, thinking off, judged 8/8 for person consolidation; play-test 5 had 41 such 429s in 6 minutes). |
 | A failed batch poll lost the whole batch and paid twice | Poll and download used `?`; one error failed every member, the night's people went direct at full price, and the orphaned job still billed. | Up to 5 failed polls or reads in a row are tolerated; an abandoned job is cancelled; each sent job is kept in `<journal>/batches/<job>.json` and collected at the next start (reorganizations applied, player memory journaled). Fake provider: `batch.poll_errors`. |
 | The compile wrote fields the mind discards, and lost speech | `keep()` replaces the compiler's `thought`, `say`, `judgments` and `places` with the think step's, but the format asked for them (30% of compile reply characters). 13 of 434 compiles put speech in a `{"do": "say"}` act, which the authority refuses. | Code: a compiled say act becomes the turn's speech when the decision has none, and never reaches the authority. Prompt: the compile format asks for acts, plan, intent and graph or patch only. |
 | The persona listed every community member | 77 names, 11–20% of think and consolidation input, growing with the town. | A count, and by name only the members one has feelings about (at most 12). |
@@ -451,8 +452,8 @@ Skills changed (`maintain-verification-skill`, scoped to the features whose shap
 | Real animal minds, `real1` (killed at 20:51, not used) | Mistral | about 150 | 0.08 |
 | Recall: `mistral-embed` relevance test (800k tokens) | Mistral | 200 batches of 64 | $0.08 (€0.07) |
 | Recall: 10 think prompts × 2 on GLM `low` | Mistral | 20 | 0.02 |
-| Jev: 18 real fights | TypeSafe | 98 | $0.0012 |
-| **Total** | | | **Mistral about €0.62 (€0.98 at list); TypeSafe $0.0012** |
+| Jev: 18 real fights | TypeSafe | 98 | not committed |
+| **Total** | | | **Mistral about €0.62 (€0.98 at list); TypeSafe not committed** |
 
 Claude side, not billed to a provider here: one blind judge (about 130k tokens) and three documentation fetches (about 165k tokens).
 

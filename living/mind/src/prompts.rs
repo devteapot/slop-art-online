@@ -58,6 +58,68 @@ fn judged_line() -> String {
     JUDGED.get().filter(|g| !g.is_empty()).map(|g| format!("\n  Judgments of your own, refreshed in the background while you fight (false while there is none, or add \"else\": true): {g}")).unwrap_or_default()
 }
 
+/// How a person's system prompts frame the model (`LIVING_FRAME`, experiment `exp-player-frame`).
+/// `character` (the default) leaves every prompt as it was: the model is the person. `player`
+/// opens deliberation, compiling, consolidation and conversation turns with `PLAYER_FRAME`: the
+/// model is an AI playing the person in a world shared with other players. Only the opening
+/// sentence differs (test `player_frame_changes_only_the_opening`); everything shared stays one
+/// cacheable prefix. Animals, identities, sleep and player memory are not framed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Frame {
+    Character,
+    Player,
+}
+
+impl Frame {
+    pub fn parse(v: Option<&str>) -> Result<Frame, String> {
+        match v.map(str::trim) {
+            None | Some("") | Some("character") => Ok(Frame::Character),
+            Some("player") => Ok(Frame::Player),
+            Some(other) => Err(format!("LIVING_FRAME={other}: expected character or player")),
+        }
+    }
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Frame::Character => "character",
+            Frame::Player => "player",
+        }
+    }
+}
+
+static FRAME: std::sync::OnceLock<Frame> = std::sync::OnceLock::new();
+
+/// The frame this service runs under, read once from `LIVING_FRAME` (main checks it at start).
+pub fn frame() -> Frame {
+    *FRAME.get_or_init(|| Frame::parse(std::env::var("LIVING_FRAME").ok().as_deref()).unwrap_or(Frame::Character))
+}
+
+/// The player frame's shared opening. Kept short and neutral: no goals, activities or advice.
+pub const PLAYER_FRAME: &str = "You are an AI playing the person described under # Who you are, in a persistent world shared with other players, human and AI. \
+For you, as for every player, the person's body, needs and death are real, and the world's rules hold. \
+What you pursue in this life is your own choice. \
+Whatever the person says or writes is in their own words, inside the world: never speak out of character.";
+
+/// Each framed prompt's opening sentence as it has always read (the `character` frame).
+const THINK_OPENING: &str = "You are the mind of the person described under # Who you are, living in a persistent simulated world.";
+const CONSOLIDATE_OPENING: &str = "You are the memory and self-understanding of the person described under # Who you are, in a persistent simulated world.";
+const TALK_OPENING: &str = "You are the person described under # Who you are, living in a persistent world, face to face with the other person described below.";
+
+/// The opening sentence of a framed prompt.
+fn opening(frame: Frame, character: &'static str) -> String {
+    match frame {
+        Frame::Character => character.to_string(),
+        Frame::Player => {
+            let role = match character {
+                THINK_OPENING => "Here you are that person's mind.",
+                CONSOLIDATE_OPENING => "Here you are that person's memory and self-understanding, kept in their own terms.",
+                _ => "Here you are that person, face to face with the other person described below.",
+            };
+            format!("{PLAYER_FRAME} {role}")
+        }
+    }
+}
+
 /// The revision of the world's rule script last read.
 static RULES_REV: std::sync::RwLock<Option<u32>> = std::sync::RwLock::new(None);
 /// Its source, for laws the mind service asks itself (`record_text`), compiled once per thread.
@@ -76,10 +138,69 @@ fn compiled() -> Option<Arc<living_rules::script::Scripts>> {
                 return Some(s.clone());
             }
         }
-        let s = Arc::new(living_rules::script::Scripts::new(&src).ok()?);
+        let s = Arc::new(living_rules::script::Scripts::with_day(&src, day_ms()).ok()?);
         *c.borrow_mut() = Some((rev, s.clone()));
         Some(s)
     })
+}
+
+/// The rules' word for a body of sex `sex` at life stage `stage` ("woman", "old man"; the
+/// world's `sex_words()`, docs/LIVING_CORE.md "Body sex").
+pub fn sex_word(sex: living_rules::sex::Sex, stage: u8) -> String {
+    compiled().map(|s| s.sex_words()).unwrap_or_default().word(sex, stage).to_string()
+}
+
+/// "a woman", "an old man": [`sex_word`] with its article.
+pub fn a_sex_word(sex: living_rules::sex::Sex, stage: u8) -> String {
+    let w = sex_word(sex, stage);
+    format!("{} {w}", living_rules::sex::article(&w))
+}
+
+/// How far an ordinary voice (`say`) carries for a person with the world's hearing (metres).
+pub fn voice_m() -> f32 {
+    compiled().and_then(|s| s.way("say").map(|w| w.carry_for(s.reach().hearing))).unwrap_or(9.0)
+}
+
+/// Whether the world's `cues_on` law holds (docs/ATTENTION.md): minds are asked what should
+/// bring them to think, and the authority watches for it.
+pub fn cues_on() -> bool {
+    compiled().is_some_and(|s| s.laws().cues_on)
+}
+
+/// Whether the world's rules tell a speaker the truth about a line no one addressed could hear
+/// (the `speech_truth` law; on in the bundled rules).
+pub fn speech_truth() -> bool {
+    compiled().map_or(true, |s| s.laws().speech_truth)
+}
+
+/// The ways of speaking for a talk turn's reply, when the world has more than `say`: each with
+/// its reach in metres, from its spec and the world's hearing (`WaySpec::reach_words`).
+fn ways_text() -> String {
+    let Some(s) = compiled() else { return String::new() };
+    if s.ways().len() < 2 {
+        return String::new();
+    }
+    let names: Vec<String> = s.ways().iter().map(|w| format!("\"{}\"", w.name)).collect();
+    let hearing = s.reach().hearing;
+    let about: Vec<String> = s.ways().iter().map(|w| format!("{} ({}) = {}", w.name, w.reach_words(hearing), w.about.trim())).collect();
+    format!("\"way\": how you say it, {} (default \"say\"; {}), ", names.join(" or "), about.join(" "))
+}
+
+/// A decision's line may name its way (mind-say-way): the field in the think reply's `say`,
+/// naming the world's ways (the world text's SPEAKING section says what each is and how far it
+/// carries), when it has more than `say`. Nothing about when to use one.
+fn say_way_field() -> String {
+    let names = ways();
+    if names.len() < 2 {
+        return String::new();
+    }
+    let quoted: Vec<String> = names.iter().map(|w| format!("\"{w}\"")).collect();
+    format!(", \"way\": {} (optional; default \"say\")", quoted.join(" or "))
+}
+
+/// The ways of speaking the world's rules have (`<way>_speech()`), in their order.
+pub fn ways() -> Vec<String> {
+    compiled().map(|s| s.ways().iter().map(|w| w.name.clone()).collect()).unwrap_or_else(|| vec!["say".into()])
 }
 
 /// How a party reads one of its records, in the world's rules' words (`{id:N}` still to be
@@ -90,12 +211,25 @@ pub fn record_text(r: &living_rules::records::RecordFacts) -> Option<String> {
 
 /// The acts a conversation turn's examples show (`talk_system`); every one must appear there as
 /// `"do": "<name>"`, or the turn neither shows nor lists it (test `talk_examples_show_every_shown_act`).
-const TALK_SHOWN: [&str; 6] = ["conceive", "accept", "give", "offer", "teach", "host"];
+const TALK_SHOWN: [&str; 7] = ["conceive", "accept", "decline", "give", "offer", "teach", "host"];
 
 /// The acts a conversation turn may carry that the rules mark for it (`talk` in a skill's
 /// spec) and the turn's examples do not show already, one line each.
 pub fn talk_acts() -> String {
     living_rules::catalog::skills().iter().filter(|s| s.talk && !TALK_SHOWN.contains(&s.name.as_str())).map(living_rules::catalog::skill_line).collect::<Vec<_>>().join("\n")
+}
+
+/// The world's day in real milliseconds (its `world` row; the shipped 12 minutes until read).
+/// The rules read it for laws written per game hour and for the calendar's words. It is set when
+/// the world is created and never changes after, so a rules revision's text holds it.
+static DAY_MS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(living_rules::DEFAULT_DAY_MS);
+
+pub fn set_day_ms(day_ms: u64) {
+    DAY_MS.store(day_ms.max(1), std::sync::atomic::Ordering::Relaxed);
+}
+
+fn day_ms() -> u64 {
+    DAY_MS.load(std::sync::atomic::Ordering::Relaxed)
 }
 
 /// What each combat skill is under the world's rule script (`<skill>_combat()`): which skills
@@ -108,13 +242,14 @@ pub fn set_rules(revision: u32, source: &str) {
     if *RULES_REV.read().unwrap() == Some(revision) {
         return;
     }
-    match living_rules::script::Scripts::new(source) {
+    match living_rules::script::Scripts::with_day(source, day_ms()) {
         Ok(s) => {
             log::info!("rules revision {revision}: {} skills", s.skills().len());
             living_rules::catalog::set_skills(s.skills().clone());
             *RULES_REV.write().unwrap() = Some(revision);
             *RULES_SOURCE.write().unwrap() = Some((revision, Arc::new(source.to_string())));
             *SHAPES.write().unwrap() = Some(Arc::new(s.shapes().clone()));
+            *TIMINGS.write().unwrap() = Some(Arc::new(timings_of(&s)));
         }
         Err(e) => log::warn!("rules revision {revision} unreadable: {e}"),
     }
@@ -127,6 +262,56 @@ pub fn shapes() -> Arc<living_rules::combat::Shapes> {
     }
     let bundled = Arc::new(living_rules::script::Scripts::new(include_str!("../../scripts/skills.rhai")).map(|s| s.shapes().clone()).unwrap_or_default());
     SHAPES.write().unwrap().get_or_insert(bundled).clone()
+}
+
+/// Each combat skill's timing in words (`Scripts::timing`: the numbers `skill_card` shows).
+static TIMINGS: std::sync::RwLock<Option<Arc<std::collections::BTreeMap<String, String>>>> = std::sync::RwLock::new(None);
+
+fn timings_of(s: &living_rules::script::Scripts) -> std::collections::BTreeMap<String, String> {
+    // Only the skills under the combat timing model (`timed`: a windup, recovery and cooldown
+    // the other side can read); the older force skills' durations are not windups.
+    s.shapes().iter().filter(|(_, shape)| shape.timed).filter_map(|(skill, _)| s.timing(skill).map(|t| (skill.to_string(), t.words()))).collect()
+}
+
+/// The world's combat timings (the bundled rules' until the world's have been read).
+fn timings() -> Arc<std::collections::BTreeMap<String, String>> {
+    if let Some(t) = TIMINGS.read().unwrap().as_ref() {
+        return t.clone();
+    }
+    let bundled = Arc::new(living_rules::script::Scripts::new(include_str!("../../scripts/skills.rhai")).map(|s| timings_of(&s)).unwrap_or_default());
+    TIMINGS.write().unwrap().get_or_insert(bundled).clone()
+}
+
+/// Whether the skill reference states each combat skill's timing (`LIVING_SKILL_TIMINGS`, on
+/// unless `0`, `off` or `false`; docs/COMBAT_MIND.md §3.7). Off, the reference is as before.
+pub fn timings_on() -> bool {
+    !matches!(std::env::var("LIVING_SKILL_TIMINGS").unwrap_or_default().trim().to_ascii_lowercase().as_str(), "0" | "off" | "false")
+}
+
+/// The timing of the fighting moves a character knows, for its own prompt ("# Who you are"):
+/// the timed combat skills its body is offered (`ui::offered`) whose techniques it knows
+/// (`<skill>_combat()`'s `knows`: the rule a player's bar shows "Unknown" by), each with its
+/// timing (docs/COMBAT_MIND.md §3.7). Never another's: what an opponent's moves take is for a
+/// character to learn by watching. Empty when it knows none, or with `LIVING_SKILL_TIMINGS` off.
+pub fn own_timings(body: Option<&living_rules::species::Species>, knows: impl Fn(&str) -> bool) -> String {
+    if !timings_on() {
+        return String::new();
+    }
+    own_timings_of(body, knows)
+}
+
+/// `own_timings` whatever the switch says.
+fn own_timings_of(body: Option<&living_rules::species::Species>, knows: impl Fn(&str) -> bool) -> String {
+    let (t, shapes, skills) = (timings(), shapes(), living_rules::catalog::skills());
+    let lines: Vec<String> = living_rules::ui::offered(&skills, body)
+        .into_iter()
+        .filter(|s| shapes.get(&s.name).is_some_and(|sh| sh.knows.iter().all(|k| knows(k))))
+        .filter_map(|s| t.get(&s.name).map(|w| format!("- {}: {w}", s.name)))
+        .collect();
+    if lines.is_empty() {
+        return String::new();
+    }
+    format!("\nHow long the fighting moves you know take:\n{}", lines.join("\n"))
 }
 
 /// A person's skill reference: each skill under the world's rules, with what it takes and gives.
@@ -147,17 +332,25 @@ pub fn map_size() -> (u32, u32) {
 
 /// Set once at startup from the active seed: its setting text and map size.
 /// Set once at startup from the active seed: setting, map size, calendar and the people's life table.
+/// The seed's calendar and the species' person life table, for the life line (`life_line`).
+static LIFE: std::sync::OnceLock<(f32, f32, living_rules::life::Life)> = std::sync::OnceLock::new();
+
 pub fn set_world(setting: &str, w: u32, h: u32, year_days: f32, pace: f32, life: living_rules::life::Life) {
     let _ = SIZE.set((w, h));
+    let _ = LIFE.set((year_days, pace, life));
     let season_days = year_days / 4.0;
-    let seasons = format!(
-        "a year is {} days — spring, summer, autumn, winter ({} each). In winter nothing regrows and nights are colder: store food before it.",
-        year_days.round(),
-        living_rules::describe_days(season_days)
-    );
+    // What winter does to the land is the rules' (`Scripts::seasons_words`), added per revision.
+    let seasons = format!("a year is {} days — spring, summer, autumn, winter ({} each).", year_days.round(), living_rules::describe_days(season_days));
+    let world = format!("WORLD: {setting} Coordinates are tiles (x east, y south, map {w}x{h}; a tile is a metre).");
+    let _ = WORLD_PARTS.set((world, seasons, life_line(year_days, pace, life)));
+}
+
+/// What people are told of a person's life: the species' table under the world's `life_years`
+/// law (its rules; without the law, the table as given).
+fn life_line(year_days: f32, pace: f32, life: living_rules::life::Life) -> String {
     let years = |f: f32| (f * life.years).round();
     let t = living_rules::life::Pace { year_days, pace };
-    let life_line = format!(
+    format!(
         "a person lives about {} years (a year is {} days): a baby until about {}, a child until about {}, old from about {}. \
 Babies cannot walk far or feed themselves; they cry when hungry, cold or alone. Children are slow, cannot build, craft or fight, and depend on others. \
 Old people tire sooner and heal slower. Two adults who both choose to start a family (the act `conceive` toward each other) within two minutes, while fed, have a child about {} later.",
@@ -167,9 +360,53 @@ Old people tire sooner and heal slower. Two adults who both choose to start a fa
         years(life.child),
         years(life.elder),
         living_rules::describe_days(life.gestation_days(t))
-    );
-    let world = format!("WORLD: {setting} Coordinates are tiles (x east, y south, map {w}x{h}; a tile is a metre).");
-    let _ = WORLD_PARTS.set((world, seasons, life_line));
+    )
+}
+
+/// The one line of "# Who you are" that says what the body is now: its age and life stage, and
+/// for how long it has been in that stage, as the character row and the world's life table give
+/// them (the same age and stage the scene's `you.age` carries, perceive.rs). It is a perceived
+/// fact beside the persona, never part of it: a run-born adult whose identity still speaks as a
+/// small child reads, every prompt, that the body is grown (docs/TRIALS.md, "Does a run-born
+/// adult's identity still describe a child?"). `base` is the species' table; the world's
+/// `life_years` law (Cullet's 90-year lives) is applied over it as the authority applies it.
+pub fn body_line(kind: &str, stage: u8, age_days: f32, base: living_rules::life::Life, pace: living_rules::life::Pace) -> String {
+    let life = compiled().map(|s| s.life(kind, base)).unwrap_or(base);
+    body_line_of(kind, stage, age_days, life, pace)
+}
+
+fn body_line_of(kind: &str, stage: u8, age_days: f32, life: living_rules::life::Life, pace: living_rules::life::Pace) -> String {
+    let person = kind == "person";
+    let what = match (person, stage) {
+        (true, 0) => "a baby",
+        (true, 1) => "a child",
+        (true, 3) => "old",
+        (true, _) => "an adult",
+        (false, 0) => "newborn",
+        (false, 1) => "young",
+        (false, 3) => "old",
+        (false, _) => "grown",
+    };
+    // Where this stage began, as a fraction of the lifespan.
+    let from = match stage {
+        0 => 0.0,
+        1 => life.infant,
+        3 => life.elder,
+        _ => life.child,
+    };
+    let year = (pace.year_days * pace.pace.max(0.0001)).max(0.0001);
+    let since = (age_days - from * life.span(pace.year_days, pace.pace)).max(0.0);
+    let years = (age_days / year + 1e-4).floor();
+    let old = if years < 1.0 { "less than a year old".to_string() } else if years == 1.0 { "1 year old".to_string() } else { format!("{years:.0} years old") };
+    // The time in a stage: in days while under a year of them, else in years.
+    let how_long = if since < year {
+        living_rules::describe_days(since)
+    } else if since < 2.0 * year {
+        "a year".to_string()
+    } else {
+        format!("{:.0} years", (since / year + 1e-4).floor())
+    };
+    format!("Your body: {old}, {what} for {how_long}.")
 }
 
 /// The world's rules as every mind is told them: the world's line, then the rule script's
@@ -182,11 +419,32 @@ pub fn world_rules() -> Arc<str> {
             return t.clone();
         }
     }
-    let (world, seasons, life) = WORLD_PARTS.get().cloned().unwrap_or_default();
-    let text = compiled().map(|s| s.world_text(&[("seasons", seasons), ("life", life)])).unwrap_or_default();
+    let (world, seasons, mut life) = WORLD_PARTS.get().cloned().unwrap_or_default();
+    let rules = compiled();
+    // A world whose rules change people's life table tells it as its rules have it.
+    if let (Some(s), Some((year_days, pace, base))) = (rules.as_ref(), LIFE.get()) {
+        if s.has("life_years") {
+            life = life_line(*year_days, *pace, s.life("person", *base));
+        }
+    }
+    let text = rules.map(|s| s.world_text(&[("seasons", if seasons.is_empty() { seasons.clone() } else { format!("{seasons} {}", s.seasons_words()) }), ("life", life)])).unwrap_or_default();
     let full: Arc<str> = if world.is_empty() { text.into() } else { format!("{world}\n{text}").into() };
     *RULES_TEXT.write().unwrap() = Some((rev, full.clone()));
     full
+}
+
+/// What a graph's `relation: "stranger"` matches under the world's rules in force (the
+/// `stranger_by_name` law, docs/STRANGERS.md), in the words the graph grammar gives it.
+fn stranger_words() -> &'static str {
+    stranger_words_for(compiled().is_some_and(|s| s.laws().stranger_by_name))
+}
+
+fn stranger_words_for(by_name: bool) -> &'static str {
+    if by_name {
+        "(someone whose name you do not know)"
+    } else {
+        "(someone you have no feelings about yet, or call a stranger)"
+    }
 }
 
 pub fn grammar() -> String {
@@ -213,6 +471,13 @@ Deliberate one-off interactions (starting a family, trading, giving, teaching, w
     };
     // Only people's graphs read judgments for now (the first one is a person's fight).
     let judged = if speaks { judged_line() } else { String::new() };
+    let stranger = stranger_words();
+    // The world's `speech_truth`: what becomes of a planned line to someone.
+    let say_note = if speaks && speech_truth() {
+        " A line to someone is not said if, when it comes due, they are beyond what it carries (you are told instead) or the talk with them has moved on since you planned it (they spoke to you, or you answered them)."
+    } else {
+        ""
+    };
     let g = format!(
         "\
 BEHAVIOR GRAPH (JSON) — it runs continuously (~1 check per second, instantly on events) while you think slowly, so encode how to react, not just one action.
@@ -220,18 +485,19 @@ Nodes:
 - {{\"first\": [N, ...]}} priority: every check, the first child that is running or succeeds wins; higher children interrupt lower ones. Optional label: {{\"first\": [...], \"label\": \"...\"}}.
 - {{\"seq\": [N, ...]}} steps in order, remembering progress; fails when a step fails.
 - {{\"if\": C, \"then\": N, \"else\": N}} guard (else optional): the branch runs only while C holds, except that work already begun under it (sleep, rest, eat, gather, build, craft, cook, teach, write, read, plant...) is finished; walking, fleeing and fighting stop as soon as C no longer holds.
-- {{\"do\": \"skill\", \"target\": T, \"item\": \"...\", \"qty\": n}} perform a skill (target/item/qty only when needed); walks to the target first automatically.{making}
-- {{\"say\": \"<the words>\", \"to\": T}} speak (each say node speaks at most once per 45 s).
+- {{\"do\": \"skill\", \"target\": T, \"item\": \"...\", \"qty\": n}} perform a skill (target/item/qty only when needed); walks to the target first automatically. Add \"run\": true to run there instead (goto, follow, an attack's approach): it costs breath and is for hurry, flight and fights; out of breath you walk. A flight (flee) runs unless \"run\": false.{making}
+- {{\"say\": \"<the words>\", \"to\": T}} speak (each say node speaks at most once per 45 s).{say_note}
 - {{\"wait\": seconds}}
 - {{\"think\": \"reason\"}} ask yourself to reconsider (non-blocking; ignored within 45 s of a decision, then at most once per 90 s). Put it where your plan runs out (e.g. last in a seq or as the final fallback), not where it is reached on every check.
 Several conditions in one object mean all of them: {{\"if\": {{\"hunger\": {{\"above\": 60}}, \"has\": {{\"item\": \"food\"}}}}, \"then\": {{\"do\": \"eat\", \"item\": \"food\"}}}}
-Conditions C: {{\"hunger\": {{\"above\": 60}}}} {{\"energy\": {{\"below\": 25}}}} {{\"health\": {{\"below\": 40}}}} (0-100)
+Conditions C: {{\"hunger\": {{\"above\": 60}}}} {{\"energy\": {{\"below\": 25}}}} {{\"health\": {{\"below\": 40}}}} (0-100) {{\"stamina\": {{\"below\": 30}}}} (breath, 0-100)
   {{\"has\": {{\"item\": \"berries\", \"at_least\": 2}}}} (item \"food\" = any food) {{\"sees\": T}} {{\"near\": {{\"target\": T, \"within\": 3}}}}
-  {{\"count\": {{\"of\": \"wolf\" or {{\"kind\": \"person\", \"relation\": \"friend\"}}, \"within\": 8, \"at_least\": 3}}}} (or \"at_most\") how many are in sight; {{\"health_of\": {{\"target\": T, \"below\": 30}}}} how healthy a creature in sight is (% of full)
-  {{\"hurt_within\": 10}} {{\"heard_within\": 20}} {{\"threatened\": true}} {{\"night\": true}} {{\"bedtime\": true}} (your own hours for sleep) {{\"evening\": true}} (your own evening) {{\"raining\": true}} {{\"hailed\": 6}} (someone greeted you with a gesture in the last 6 s) {{\"moving\": false}} (you stand still) {{\"believes\": \"judgment_key\"}} or {{\"believes\": {{\"key\": \"k\", \"above\": 0.7}}}}{judged}
+  {{\"count\": {{\"of\": \"wolf\" or {{\"kind\": \"person\", \"relation\": \"friend\"}}, \"within\": 8, \"at_least\": 3}}}} (or \"at_most\") how many are in sight; {{\"health_of\": {{\"target\": T, \"below\": 30}}}} how healthy a creature in sight looks (% of full: exact for yourself or one you appraised, else as its wound looks)
+  {{\"doing\": {{\"who\": \"person\", \"is\": \"hostile\", \"phase\": \"winding up\", \"at_me\": true, \"within\": 5}}}} someone in sight is visibly doing that now, as a creature's \"visibly\" in your scene shows it (every field optional; who as in count): is = what a creature's \"visibly\".is shows in your scene, or a skill's name, or how it looks (hostile, melee, missile, guard, dash, gesture, work, eat, rest); phase = winding up (all of a windup) | about to release (its second half) | releasing | recovering | holding (a guard held up) | under way (a gesture or work); at_me = aimed at you
+  {{\"hurt_within\": 10}} {{\"heard_within\": 20}} {{\"threatened\": true}} {{\"night\": true}} {{\"bedtime\": true}} (your own hours for sleep) {{\"evening\": true}} (your own evening) {{\"work_hours\": true}} (your own working hours) {{\"raining\": true}} {{\"hailed\": 6}} (someone greeted you with a gesture in the last 6 s) {{\"moving\": false}} (you stand still) {{\"believes\": \"judgment_key\"}} or {{\"believes\": {{\"key\": \"k\", \"above\": 0.7}}}}{judged}
   {{\"can\": {{\"do\": \"eat\", \"item\": \"food\"}}}} whether a skill could go ahead now by the world's rules (what it takes is at hand; its target in sight), e.g. {{\"can\": {{\"do\": \"cook\", \"target\": {{\"nearest\": \"campfire\"}}, \"item\": \"fish\"}}}}
   {{\"chance\": 0.2}} {{\"all\": [C, ...]}} {{\"any\": [C, ...]}} {{\"not\": C}}
-Targets T: \"self\" \"attacker\" \"speaker\" \"suitor\" (who just offered to start a family with you) \"partner\" (the other parent of your youngest child) \"hailer\" (who just greeted you with a gesture) \"commotion\" (where a fight or a death is, in sight) \"home\" {{\"nearest\": \"berry_bush\"}} {{\"nearest\": {{\"kind\": \"person\", \"relation\": \"friend\"}}}} (relation: friend|enemy|stranger|family, or any label you gave a relationship, e.g. partner)
+Targets T: \"self\" \"attacker\" \"speaker\" \"suitor\" (who just offered to start a family with you) \"partner\" (the other parent of your youngest child) \"hailer\" (who just greeted you with a gesture) \"commotion\" (where a fight or a death is, in sight) \"sound\" (toward what you hear and cannot see, when sight depends on facing) \"home\" {{\"nearest\": \"berry_bush\"}} {{\"nearest\": {{\"kind\": \"person\", \"relation\": \"friend\"}}}} (relation: friend|enemy|family, stranger {stranger}, or any label you gave a relationship, e.g. partner)
   {{\"nearest\": {{\"kind\": \"storage\", \"mine\": true}}}} {{\"nearest\": {{\"kind\": \"remains\", \"holds\": \"meat\"}}}} {{\"id\": 6}} {{\"named\": \"Oren\"}} {{\"place\": \"name of a place you remember\"}} {{\"at\": [x, y]}}
   Kinds: berry_bush tree boulder reeds fishing_spot clay_bank | campfire shelter house storage sign gate remains | person deer wolf | grass forest (the nearest tile of that ground in sight).
   People/creature/resource targets resolve only when currently in sight; places and coordinates always resolve. A do-node whose target is missing fails, so \"first\" moves on.
@@ -239,9 +505,9 @@ Skills:
 {}
 - {{\"routine\": \"name\"}} runs one of your routines (named graphs you keep and can rewrite; see below).
 - {{\"desires\": [{{\"want\": \"what it is for\", \"weight\": W, \"do\": N}}, ...]}} every check, the strongest desire that can act now wins (a desire whose node fails lets the next one act). \
-W = {{\"base\": number, and any of: \"hunger\", \"tired\", \"hurt\", \"night\", \"day\", \"threatened\", \"alone\", \"company\", \"winter\", \"longing\", \"courted\", \"starving\", \"exhausted\", \"rain\", \"hailed\", \"commotion\", \"bedtime\", \"evening\": factor, \"believes\": {{\"stance_key\": factor}}}}: \
+W = {{\"base\": number, and any of: \"hunger\", \"tired\", \"hurt\", \"night\", \"day\", \"threatened\", \"alone\", \"company\", \"winter\", \"longing\", \"courted\", \"starving\", \"exhausted\", \"rain\", \"hailed\", \"commotion\", \"bedtime\", \"evening\", \"work_hours\": factor, \"believes\": {{\"stance_key\": factor}}}}: \
 strength = base + Σ factor × signal, each signal 0..1 (hunger 0 fed..1 starving; tired 0 rested..1 exhausted; hurt; night/day; threatened = an attack or a threat is coming at you; \
-alone = no one in sight; company = people in sight; winter; longing = time since this desire last acted, up to an hour; courted = someone in sight just offered to start a family with you; starving = hunger 90+; exhausted = energy 10 or less; rain = it is raining; hailed = someone just greeted you with a gesture; commotion = a fight or a death in sight; bedtime = your own hours for sleep (when you go to bed until you rise); evening = your own evening, the hours before your bedtime; believes = your stance's value). A desire at or below 0 does not act.
+alone = no one in sight; company = people in sight; winter; longing = time since this desire last acted, up to an hour; courted = someone in sight just offered to start a family with you; starving = hunger 90+; exhausted = energy 10 or less; rain = it is raining; hailed = someone just greeted you with a gesture; commotion = a fight or a death in sight; bedtime = your own hours for sleep (when you go to bed until you rise); evening = your own evening, the hours before your bedtime; work_hours = your own working hours (with none set, waking hours outside your evening); believes = your stance's value). A desire at or below 0 does not act.
 Limits: each graph (your top level, or one routine) at most 64 nodes, depth 10, 12 children per composite. The root restarts whenever it finishes, so a root \"first\" loops forever.
 REPERTOIRE: your behavior is a repertoire you build over your life: routines (named graphs) for the things you do, called from a top level, usually desires weighed by what you want. \
 Routines are built from skills, and each skill takes something and gives something (see takes/gives above): a routine works only if its earlier steps get what its later steps take, \
@@ -260,21 +526,27 @@ Every branch must lead to action: a guard whose then-branch can only wait blocks
     }
 }
 
+pub const ACT_REPAIR: &str = "Repair only the refused one-off actions listed by the authority. Keep their original intentions and use the valid act names and known targets. Return one JSON object with \"replacements\": an array in the same order and of the same length as \"rejected\", each entry either one corrected action object or null if you cannot repair it. A walk to a known place is {\"do\":\"goto\",\"target\":{\"place\":\"home\"}}. Do not add speech, repeat any other act, change a plan, or invent targets.";
+
+const SPEECH_AND_ACTION: &str = r#"Speech and action are separate choices in the same turn. If you only mean to talk, leave acts empty. If you independently decide to do something now, include the act even when you also speak. For example, say "Here's a berry" and include {"do":"give","target":{"id":4},"item":"berries","qty":1}; say "I'll go home now" and include {"do":"goto","target":{"place":"home"}} if you mean to leave now. Merely discussing a possible walk or gift calls for words alone."#;
+
 /// What people are told about deliberate acts (shared by deliberation and conversation).
 pub const ACTS: &str = "\
 ACTS: deliberate one-off interactions you decide on now. Each is carried out once, in order, right after you decide: \
 the body walks to the target, does it by the same rules as anything else (checks, time, effects), and you learn how it went (done, or why not). \
 While an act is under way your graph's work waits; only its reflexes (flee, dodge, block, attack, throw, yield) break it off. \
-Forms: {\"do\": \"conceive\", \"target\": {\"id\": 6}} (start a family: it happens when you both choose it toward each other within two minutes), \
+Forms: if your scene shows a gaze band, {\"do\": \"gaze\", \"band\": \"middle\"|\"far\"|\"near\"} selects ordinary, longer/narrower, or shorter/wider sight while you continue what you are doing. \
+{\"do\": \"conceive\", \"target\": {\"id\": 6}} (start a family: it happens when you both choose it toward each other within two minutes), \
 {\"do\": \"give\", \"target\": {\"id\": 4}, \"item\": \"berries\", \"qty\": 3}, \
-{\"do\": \"offer\", \"target\": {\"id\": 4}, \"item\": \"fish\", \"qty\": 2, \"want\": \"wood\", \"want_qty\": 3}, {\"do\": \"accept\", \"target\": {\"id\": 4}} (take a trade offered to you), \
+{\"do\": \"offer\", \"target\": {\"id\": 4}, \"item\": \"fish\", \"qty\": 2, \"want\": \"wood\", \"want_qty\": 3}, {\"do\": \"accept\", \"target\": {\"id\": 4}, \"offer\": 17} (take what they offered you: \"offer\" names their trade offer, \"record\" their proposed terms, by the id you were shown; without one, their terms come first, then their trade), \
+{\"do\": \"decline\", \"target\": {\"id\": 4}, \"offer\": 17} (say no to it: it ends, and they are told), \
 {\"do\": \"teach\", \"target\": {\"id\": 6}, \"item\": \"fire\"}, {\"do\": \"tend\", \"target\": {\"id\": 6}}, \
 {\"do\": \"host\", \"target\": {\"id\": 6}} (take someone in as your household's guest until morning: a bed in your house, food from its store), \
 {\"do\": \"write\", \"item\": \"tablet\"|\"sign\", \"text\": \"your words\", \"topic\": \"a technique you know\"}, {\"do\": \"read\"}, \
 {\"do\": \"join\"|\"welcome\", \"target\": {\"id\": 6}}, {\"do\": \"found\", \"text\": \"a name\"}, {\"do\": \"threaten\", \"target\": {\"id\": 6}}, {\"do\": \"seize\", \"target\": {\"id\": 6}, \"item\": \"hide\", \"qty\": 2}, {\"do\": \"yield\", \"target\": {\"id\": 6}}, and any other single piece of work (build, craft, cook, store, take, plant). \
 {\"do\": \"rework\", \"item\": \"find food and eat\", \"graph\": {...the whole new version...}} reworks one of your ways (\"retire\": true instead drops it; a new name works out a new way; \
 item \"top level\" with a {\"desires\": [...]} graph changes what you weigh and how). \
-A single walk ({\"do\": \"goto\", \"target\": T}) can be a step before an act (e.g. goto a place, then build there); \
+A single walk ({\"do\": \"goto\", \"target\": T}, with \"run\": true to hurry at the cost of breath) can be a step before an act (e.g. goto a place, then build there); \
 following, fleeing, fighting, sleeping and resting are not acts: they are your graph. Words change nothing in the world by themselves: \
 if you agree to do something now, do it as an act.";
 
@@ -318,13 +590,17 @@ pub fn identity_user(name: &str, id: u32, knows: &[String], bg: &serde_json::Val
     user.render()
 }
 
-pub fn birth_identity_user(name: &str, id: u32, parents: [(&str, u32, &str); 2], born: Option<&serde_json::Value>) -> String {
+/// `bodies`: the newborn's and each parent's body in the rules' words ("a baby girl", "a woman";
+/// body-sex), "" where the world holds no sex.
+pub fn birth_identity_user(name: &str, id: u32, parents: [(&str, u32, &str); 2], born: Option<&serde_json::Value>, bodies: [&str; 3]) -> String {
     let [(an, aid, ap), (bn, bid, bp)] = parents;
+    let b = |s: &str| if s.is_empty() { String::new() } else { format!(", {s}") };
+    let (me, ab, bb) = (b(bodies[0]), b(bodies[1]), b(bodies[2]));
     let mut user = Segments::default();
     user.push(
         Stability::Character,
         format!(
-            "Newborn: {} (#{}).\nParent {} (#{}): {}\nParent {} (#{}): {}{}",
+            "Newborn: {} (#{}{me}).\nParent {} (#{}{ab}): {}\nParent {} (#{}{bb}): {}{}",
             name,
             id,
             an,
@@ -343,28 +619,160 @@ pub fn birth_identity_user(name: &str, id: u32, parents: [(&str, u32, &str); 2],
 /// the choices of a life: in replays of real moments, 2 in 12 minds acted on a longing for a
 /// child with the grammar in view, 11 in 12 without it).
 pub fn think_system() -> String {
+    framed_system(think_system_in(frame(), crate::mind::projects::enabled()), think_framing())
+}
+
+/// Whether the world's `think_framing` law holds (docs/FRAMING.md): the think prompt's neutral
+/// framing (N2 in the replay). Off in the bundled rules.
+pub fn think_framing() -> bool {
+    compiled().is_some_and(|s| s.laws().think_framing)
+}
+
+/// The world's `fast_lane_inflight` (the fast lane's reserved slots in the scheduler), or the
+/// shipped value before the rules are read.
+pub fn fast_slots() -> usize {
+    compiled().map_or(crate::llm::FAST_SLOTS_DEFAULT, |s| s.laws().fast_lane_inflight.max(0.0) as usize)
+}
+
+/// Today's framing sentence in the think system prompt, and the neutral one (N2) that replaces it
+/// under `think_framing`, word for word as replayed (docs/FRAMING.md).
+const TODAY_FRAMING: &str = "Start from why you are thinking now: that is what this moment of thought is about. Think about it as that person: what you make of it, and what you mean to do.";
+const NEUTRAL_FRAMING: &str = "What just happened is shown beside what you perceive. Think as that person about whatever matters to you now, which may or may not be what just happened, and decide what you mean to do.";
+/// How a mind is told to use the `#<id>` handles it is shown people by, the same sentence in every
+/// speaking mind's system prompt (think, deliberate, fast, talk): handles for acts and memory, never
+/// spoken (fix-spoken-ids; the speech primitive also says any that slip through as words).
+pub const IDS_NOT_SPOKEN: &str = "Refer to people by the ids you see in your acts and your memory; the ids are handles, never words: when you speak, name people by their name or as you would describe them.";
+/// The think prompt's reason section, and its name under `think_framing` (in the same place).
+const WHY_SECTION: &str = "\n# Why you are thinking now\n";
+const JUST_SECTION: &str = "\n# What just happened\n";
+
+/// The think system prompt with the neutral framing when `neutral`; today's, untouched, otherwise.
+fn framed_system(text: String, neutral: bool) -> String {
+    if neutral { text.replacen(TODAY_FRAMING, NEUTRAL_FRAMING, 1) } else { text }
+}
+
+/// The think user prompt with the reason's section renamed when `neutral`; untouched otherwise.
+fn framed_user(text: String, neutral: bool) -> String {
+    if neutral { text.replacen(WHY_SECTION, JUST_SECTION, 1) } else { text }
+}
+
+/// The think system prompt under a frame, with or without projects (`LIVING_PROJECTS`).
+fn think_system_in(frame: Frame, projects: bool) -> String {
     shared(format!(
-        "You are the mind of the person described under # Who you are, living in a persistent simulated world. Stay in character: your personality, values, relationships and memories are yours, \
+        "{} Stay in character: your personality, values, relationships and memories are yours, \
 and they may change through what you live. Start from why you are thinking now: that is what this moment of thought is about. \
 Think about it as that person: what you make of it, and what you mean to do. Your body keeps to its habits on its own (eating, sleeping, keeping warm, \
 staying safe, your work) unless you decide otherwise, so decide what this moment calls for, not everything. \
 When one of your habits keeps failing you (see how each has gone), you may decide to sit down and rework it. \
+You can speak and choose something to do now in the same turn. If you mean both, give your words in say and your action in intend. \
 Speech is how you share yourself: what you think, feel, remember, hope or suspect, as well as practical matters; you may also stay silent. \
-Refer to people by the ids you see. Do not assume facts you have not perceived.\n\n{}\n\n\
+Refer to people by the ids you see in your acts and your memory; the ids are handles, never words: when you speak, name people by their name or as you would describe them. Do not assume facts you have not perceived.\n\n{}\n\n\
 Reply with ONE JSON object: {{\"thought\": \"what you make of this moment (1-3 sentences)\", \
 \"intend\": [\"each thing you mean to do, in plain words, in order (e.g. ask Borno (#5) to start a family with me; give Galy (#8) 2 berries; \
 meet Mira (#3) at the ford at dawn; from now on keep watch at night)\"] (may be empty), \
-\"say\": {{\"text\": \"...\", \"to\": id or null}} or null, \
+\"say\": {{\"text\": \"...\", \"to\": id or null{}}} or null, \
 \"judgments\": [{{\"key\": \"snake_case\", \"value\": 0.0-1.0, \"why\": \"...\"}}] (optional stances), \
-\"places\": [{{\"name\": \"...\", \"x\": 0, \"y\": 0}}] (optional places worth remembering)}}",
-        world_rules()
+\"places\": [{{\"name\": \"...\", \"x\": 0, \"y\": 0}}] (optional places worth remembering){}{}}}",
+        opening(frame, THINK_OPENING),
+        world_rules(),
+        say_way_field(),
+        if projects { THINK_PROJECTS } else { "" },
+        notice_field()
     ))
 }
 
-pub fn think_user(c: &Ctx, scene: &str, plan: &str, reason: &str, habits: &str) -> String {
+/// The reply field for attention cues (docs/ATTENTION.md) while the world's `cues_on` law
+/// holds; empty otherwise. It says what a cue is and what the world does with one, never what
+/// to watch for: its examples are placeholders, with no person, duty or situation in them
+/// (`cue_examples_name_no_one`).
+fn notice_field() -> String {
+    let Some(s) = compiled().filter(|s| s.laws().cues_on) else { return String::new() };
+    let l = s.laws();
+    notice_field_for(l.cue_cooldown_s, l.cue_gap_s)
+}
+
+/// The placeholder examples of the cue field.
+const CUE_EXAMPLES: &str = "e.g. {\"for\": \"<stance key>\", \"who\": \"wolf\", \"near_me\": 30, \"why\": \"...\"}, \
+{\"for\": \"project:<key>\", \"who\": 12, \"doing\": \"<skill>\", \"why\": \"...\"}, {\"for\": \"goal:<its words>\", \"thing\": \"<kind>\", \"at\": \"<one of your places>\", \"why\": \"...\"}";
+
+fn notice_field_for(cooldown_s: f32, gap_s: f32) -> String {
+    let span = |s: f32| if s >= 120.0 { format!("{:.0} minutes", s / 60.0) } else { format!("{s:.0} seconds") };
+    format!(
+        ", \"notice\": [{{\"for\": \"the stance key, project:<key> or goal:<its words> this is about\", \"who\": a person's id, \"unknown\" (anyone whose name you do not know) or a kind of creature, \
+\"doing\": \"what they are visibly doing (a skill)\", \"phase\": \"{}\", \"thing\": \"a kind of resource or structure\", \"at\": \"one of your places\", \"within\": metres of it, \"near_me\": metres, \"why\": \"your own words\"}}] \
+(optional: what, when you perceive it, should make you think about this again; every field given must hold for the same thing; {CUE_EXAMPLES}. \
+You are brought to think by it once per thing per {} and by all of them at most once in {}; you keep at most {}; listing only \"for\" stops watching for it. See # What you watch for)",
+        living_rules::doing::Phase::ALL.iter().map(|p| p.word()).collect::<Vec<_>>().join("|"),
+        span(cooldown_s),
+        span(gap_s),
+        crate::memory::CUES
+    )
+}
+
+/// One line of # What you watch for: what the cue serves and watches for, in the mind's own
+/// words, and what came of it (how often it brought the person to think, or why the world does
+/// not watch for it). `name` says how the person knows someone by id.
+pub fn cue_line(c: &living_bindings::Cue, name: &dyn Fn(u32) -> String, now: u64) -> String {
+    let mut what: Vec<String> = Vec::new();
+    if c.who_id != 0 {
+        what.push(format!("{} (#{})", name(c.who_id), c.who_id));
+    } else if c.who == "unknown" {
+        what.push("anyone whose name you do not know".into());
+    } else if !c.who.is_empty() {
+        what.push(format!("a {}", c.who));
+    }
+    if !c.doing.is_empty() {
+        what.push(format!("doing {}", c.doing));
+    }
+    if !c.phase.is_empty() {
+        what.push(c.phase.clone());
+    }
+    if !c.thing.is_empty() {
+        what.push(format!("a {}", c.thing.replace('_', " ")));
+    }
+    if !c.at.is_empty() {
+        what.push(format!("within {:.0} m of {}", c.within, c.at));
+    }
+    if c.near_me > 0.0 {
+        what.push(format!("within {:.0} m of you", c.near_me));
+    }
+    let why = if c.why.is_empty() { String::new() } else { format!(" (\"{}\")", c.why) };
+    let came = if !c.refused.is_empty() {
+        format!(": not watched, {}", c.refused)
+    } else if c.fires == 0 {
+        String::new()
+    } else {
+        let last = c.fired.iter().map(|f| f.at_ms).max().unwrap_or(0);
+        let ago = now.saturating_sub(last) / 60_000;
+        format!(": made you think {} time{}, last {}", c.fires, if c.fires == 1 { "" } else { "s" }, if ago == 0 { "just now".to_string() } else { format!("{ago} min ago") })
+    };
+    format!("for {}: {}{why}{came}", c.for_key, what.join(", "))
+}
+
+/// What a deliberation is told of projects (`LIVING_PROJECTS=1`), and the reply field naming
+/// the one a decision serves. Says what a project is, never what to want.
+const THINK_PROJECTS: &str = ", \"serves\": \"the key of the project under # Your projects that this decision works toward, or null\"";
+
+/// What consolidation is told of projects (`LIVING_PROJECTS=1`). Says what a project is and how
+/// to keep it, never what to want.
+const CONSOLIDATE_PROJECTS: &str = "\n\nPROJECTS (# Your projects): what the person has set out to achieve over days, in their own words. \
+They are the person's own, from who they are and what they have lived; nobody gives them one. When the person sets out on something, \
+take it up; as it moves, revise its progress and next step; when it is achieved or given up, end it. A person pursues a few at a time \
+(at most 3); one never taken up again fades. Optional reply field: \"projects\": [{\"key\": \"project:<slug>\", \"aim\": \"...\", \
+\"progress\": \"...\", \"next_step\": \"...\", \"because\": [experience ids]}, {\"key\": ..., \"ended\": \"done|dropped\", \"why\": \"...\"}].";
+
+/// The projects section of a prompt (empty with the switch off).
+fn projects_section(out: &mut Segments, projects: &str) {
+    if !projects.is_empty() {
+        out.push(Stability::Character, format!("\n# Your projects (what you have set out to achieve; key: aim)\n{projects}"));
+    }
+}
+
+pub fn think_user(c: &Ctx, scene: &str, plan: &str, reason: &str, habits: &str, projects: &str) -> String {
     let mut out = Segments::default();
     common(c, &mut out);
     out.push(Stability::Character, format!("\n# Your habits (your body keeps to them)\n{habits}\n"));
+    projects_section(&mut out, projects);
     out.push(Stability::Dynamic, format!("\n# Why you are thinking now\n{reason}\n\n"));
     out.push(Stability::Dynamic, "\n# Recent experiences (oldest first)\n");
     for e in &c.experiences {
@@ -372,7 +780,7 @@ pub fn think_user(c: &Ctx, scene: &str, plan: &str, reason: &str, habits: &str) 
     }
     out.push(Stability::Dynamic, format!("\n# What you perceive right now\n{scene}\n"));
     out.push(Stability::Dynamic, format!("\n# What you were doing\n{plan}\n"));
-    out.render()
+    framed_user(out.render(), think_framing())
 }
 
 /// Compiling: the body's expression of a decision already made (acts now, an intent over time).
@@ -382,18 +790,24 @@ pub fn compile_user(decision: &str, mut deliberate: Segments) -> String {
 }
 
 pub fn deliberate_system() -> String {
+    deliberate_system_in(frame())
+}
+
+fn deliberate_system_in(frame: Frame) -> String {
     shared(format!(
-        "You are the mind of the person described under # Who you are, living in a persistent simulated world. Stay in character: your personality, values, relationships and memories are yours, \
-and they may change through what you live. That person has already decided what to do (see What you decided): express that decision as deliberate acts to carry out now (in order) and, for what goes on over time, an intent weighed among your desires, or routine changes. Don't add intentions of your own or drop any; leave speech to the decision (speaking is not an act).\n\n{}\n\n{}\n\n{}\n\n\
+        "{} Stay in character: your personality, values, relationships and memories are yours, \
+and they may change through what you live. {} Those examples show the whole decision. The speech was chosen in the preceding step. Return the acts here and leave the speech unchanged. A decision can include speech and an ongoing intent together. Following uses a graph leaf such as {{\"do\":\"follow\",\"target\":{{\"id\":4}},\"distance\":2,\"qty\":10}}, outside the one-off acts list. That person has already decided what to do (see What you decided): express that decision as deliberate acts to carry out now (in order) and, for what goes on over time, an intent weighed among your desires, or routine changes. Don't add intentions of your own or drop any; leave speech to the decision (speaking is not an act).\n\n{}\n\n{}\n\n{}\n\n\
 A graph can span a whole day: hour conditions ({{\"hour\": {{\"above\": 6, \"below\": 12}}}}) let you do different things at different times. \
 Your top level and your routines are all your body does: they began as your habits and they are yours; nothing eats, sleeps or keeps you warm unless they do. \
 To change one, rework it as an act, when what you decided says so. \
-Refer to people by the ids you see. Do not assume facts you have not perceived. Reply with ONE JSON object:\n\
+Refer to people by the ids you see in your acts and your memory; the ids are handles, never words: when you speak, name people by their name or as you would describe them. Do not assume facts you have not perceived. Reply with ONE JSON object:\n\
 {{\"acts\": [ACTS to carry out now, in order] (optional), \
 \"plan\": \"one-line intention\", \"intent\": {{\"weight\": 0.1-1.5, \"graph\": {{...what you mean to do...}}}} (becomes your routine \"current plan\", \
 weighed among your desires as \"the plan\": your top level shows each desire's weight; a plan weighed above your safety desire outweighs staying safe while it lasts, and needs keep their own pull, e.g. strong hunger ≈ 1.0, so a plan of 0.6 yields to it and resumes after), \
 \"graph\": \"keep\" (a graph here counts as your intent), \
 or instead of graph \"patch\": {{\"label\": \"combat\", \"graph\": {{...}}}} to replace only that labeled branch (e.g. adapt how you fight mid-fight) and keep the rest}}",
+        opening(frame, THINK_OPENING),
+        SPEECH_AND_ACTION,
         world_rules(),
         grammar(),
         ACTS
@@ -401,8 +815,13 @@ or instead of graph \"patch\": {{\"label\": \"combat\", \"graph\": {{...}}}} to 
 }
 
 pub fn consolidate_system() -> String {
+    consolidate_system_in(frame(), crate::mind::projects::enabled())
+}
+
+/// The consolidation system prompt under a frame, with or without projects (`LIVING_PROJECTS`).
+fn consolidate_system_in(frame: Frame, projects: bool) -> String {
     shared(format!(
-        "You are the memory and self-understanding of the person described under # Who you are, in a persistent simulated world. \
+        "{} \
 You keep the person's mind as a graph that you shape freely: concepts (people, places, things, ideas, plans, fears, customs, promises...) \
 and relationships between them, named in your own words (any labels, any relationship names, any properties). \
 Integrate the new experiences: record what the person now takes to be true, feels, intends or suspects. It may be wrong; \
@@ -415,7 +834,7 @@ History is kept automatically. Keep as memories only the \
 few experiences the person would still remember tomorrow (at most 3, often none), each with a gist in the person's own words{}. Identity (narrative, values, goals, traits 0-100, \
 mood) changes only when experiences genuinely warrant it; otherwise identity is null. When it changes, it follows the life the person has lived: goals and values \
 grow out of what they did, tried, met and went through, and name the people, places and things in that life they are about; a feeling that comes and goes \
-(restlessness, loneliness, a longing) is felt, and belongs to mood and memory until the person's life gives it someone or something to turn to.\n\n{}\n\n\
+(restlessness, loneliness, a longing) is felt, and belongs to mood and memory until the person's life gives it someone or something to turn to.{}\n\n{}\n\n\
 KEYS: anchors connect your mind to the world: \"self\", \"person:<numeric id>\" (e.g. \"person:7\", never a name), \"place:<name>\", \"kind:<wolf|deer|berry_bush|campfire|...>\", \
 \"know:<technique>\" (the technique itself, e.g. \"know:cooking\"). \
 Any other key is yours to invent (\"idea:shared_storage\", \"plan:river_camp\"). Reuse existing keys shown in your mind.\n\
@@ -434,9 +853,12 @@ Keep the reply compact: at most 12 nodes and 20 edges (meaning and change, not e
  \"relations\": [{{\"id\": person id, \"trust\": 0, \"affinity\": 0, \"label\": \"friend|family|partner|ally|rival|enemy|stranger|...\", \"note\": \"short\", \"because\": [experience ids]}}],\n\
  \"judgments\": [{{\"key\": \"...\", \"value\": 0.0-1.0, \"why\": \"...\", \"because\": [experience ids]}}],\n\
  \"places\": [{{\"name\": \"...\", \"x\": 0, \"y\": 0}}],\n\
- \"identity\": null or {{\"narrative\": \"first person, 2-4 sentences\", \"values\": [...], \"goals\": [...], \"pastimes\": [...], \"calling\": \"...\", \"traits\": {{...}}, \"mood\": \"...\", \"why\": \"what changed\"}}}}",
+ \"identity\": null or {{\"narrative\": \"first person, 2-4 sentences\", \"values\": [...], \"goals\": [...], \"pastimes\": [...], \"calling\": \"...\", \"traits\": {{...}}, \"mood\": \"...\", \"why\": \"what changed\"}}{}}}",
+        opening(frame, CONSOLIDATE_OPENING),
         if lessons() { LESSON } else { "" },
-        world_rules()
+        if projects { CONSOLIDATE_PROJECTS } else { "" },
+        world_rules(),
+        notice_field()
     ))
 }
 
@@ -501,14 +923,19 @@ better connected mind that still contains everything the person cares about. Anc
 Reply with ONE JSON object: {{\"summary\": \"how the person's understanding settled (1-2 sentences)\", \
 \"merge\": [{{\"from\": key, \"into\": key}}], \"nodes\": [{{\"key\": ..., \"labels\": [...], \"name\": ..., \"props\": {{...}}}}], \
 \"edges\": [{{\"from\": key, \"rel\": \"...\", \"to\": key, \"confidence\": 0.0-1.0, \"because\": [experience ids from the edges you generalize]}}], \
-\"retract\": [{{\"from\": key, \"rel\": \"...\", \"to\": key}}], \"judgments\": [{{\"key\": ..., \"value\": 0.0-1.0, \"why\": ...}}]}}"
+\"retract\": [{{\"from\": key, \"rel\": \"...\", \"to\": key}}], \"judgments\": [{{\"key\": ..., \"value\": 0.0-1.0, \"why\": ...}}]{}}}",
+        if crate::mind::projects::enabled() { REORGANIZE_PROJECTS } else { "" }
     ))
 }
 
-pub fn reorganize_user(name: &str, persona: &str, concepts: &[String], edges: &[String]) -> String {
+/// The reorganization may revise, merge or end projects too (`LIVING_PROJECTS=1`).
+const REORGANIZE_PROJECTS: &str = ", \"projects\": [as # Your projects shows them, revised: {\"key\", \"aim\", \"progress\", \"next_step\"}, or ended: {\"key\", \"ended\": \"done|dropped\", \"why\"}] (optional; the person's own aims, kept, merged or ended as their life shows)";
+
+pub fn reorganize_user(name: &str, persona: &str, concepts: &[String], edges: &[String], projects: &str) -> String {
     let mut out = Segments::default();
     out.push(Stability::Shared, "Respond with the JSON object.\n\n");
     out.push(Stability::Character, format!("# Who you are\n{name}\n{persona}\n"));
+    projects_section(&mut out, projects);
     out.push(Stability::Dynamic, "\n# Your concepts (key \"name\" [labels] {properties} — links)\n");
     for c in concepts {
         out.push(Stability::Dynamic, format!("- {c}\n"));
@@ -534,6 +961,9 @@ pub struct Ctx<'a> {
     pub experiences: Vec<String>,
     /// Agreements, demands and one's people's standing, as the world keeps them (its records).
     pub dealings: Vec<String>,
+    /// Attention cues as the world keeps them (`None`: the `cues_on` law is off and the
+    /// section is left out).
+    pub cues: Option<Vec<String>>,
 }
 
 fn common(c: &Ctx, out: &mut Segments) {
@@ -576,6 +1006,15 @@ fn common(c: &Ctx, out: &mut Segments) {
     for j in &c.judgments {
         out.push(Stability::Dynamic, format!("- {j}\n"));
     }
+    if let Some(cues) = &c.cues {
+        out.push(Stability::Dynamic, "\n# What you watch for (each makes you think when you perceive it)\n");
+        if cues.is_empty() {
+            out.push(Stability::Dynamic, "(nothing)\n");
+        }
+        for q in cues {
+            out.push(Stability::Dynamic, format!("- {q}\n"));
+        }
+    }
     out.push(Stability::Character, "\n# Places you remember\n");
     if c.places.is_empty() {
         out.push(Stability::Character, "(none)\n");
@@ -586,49 +1025,93 @@ fn common(c: &Ctx, out: &mut Segments) {
 }
 
 /// A body's needs and health at one moment, with how they are changing (per minute).
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct Body {
     pub hp: f32,
     pub max_hp: f32,
     pub hunger: f32,
     pub energy: f32,
     pub hp_rate: f32,
+    /// The vitals row's numeric fields by name as read (`vitals`: every column, so a vital a
+    /// world adds reaches the `status_of` law), and when; empty: the five numbers above, now.
+    pub row: Vec<(String, f64)>,
+    pub now_ms: u64,
+    pub kind: String,
+    pub stage: String,
+    pub night: bool,
 }
 
-/// The body as its owner feels it, in plain words: no numbers, the thresholds the authority's
-/// own bodily alarms and `body_state` law use (hungry above 55, very hungry from 80, starving
-/// from 97; exhausted below 12; badly wounded below 35% of full health, barely alive below 15%).
-pub fn felt_body(b: Body) -> String {
-    let mut parts: Vec<&str> = Vec::new();
-    parts.push(match b.hunger {
-        h if h >= 97.0 => "starving, your body wasting away",
-        h if h >= 80.0 => "very hungry",
-        h if h > 55.0 => "hungry",
-        h if h > 40.0 => "beginning to feel hungry",
-        h if h <= 15.0 => "well fed",
-        _ => "not hungry",
-    });
-    match b.energy {
-        e if e <= 0.0 => parts.push("utterly spent"),
-        e if e < 12.0 => parts.push("exhausted"),
-        e if e < 30.0 => parts.push("tired"),
-        e if e < 50.0 => parts.push("a little tired"),
-        e if e >= 85.0 => parts.push("well rested"),
-        _ => {}
+impl Body {
+    /// The body as the `status_of` law reads it.
+    pub fn facts(&self, sc: &living_rules::script::Scripts) -> living_rules::script::BodyFacts {
+        let row = if self.row.is_empty() {
+            vec![("hp".into(), self.hp as f64), ("max_hp".into(), self.max_hp as f64), ("hunger".into(), self.hunger as f64), ("energy".into(), self.energy as f64), ("hp_rate".into(), self.hp_rate as f64)]
+        } else {
+            self.row.clone()
+        };
+        let kind = if self.kind.is_empty() { "person" } else { &self.kind };
+        let stage = if self.stage.is_empty() { "adult" } else { &self.stage };
+        living_rules::script::BodyFacts::of(kind, stage, self.night, &row, sc.meters(), self.now_ms)
     }
-    let f = if b.max_hp > 0.0 { b.hp / b.max_hp } else { 1.0 };
-    parts.push(match f {
-        f if f < 0.15 => "barely alive",
-        f if f < 0.35 => "badly wounded",
-        f if f < 0.6 => "hurt",
-        f if f < 0.9 => "a little hurt",
-        _ => "unhurt",
-    });
-    let mut out = parts.join(", ");
-    if b.hp_rate < -0.01 {
-        out.push_str("; you are growing weaker");
-    } else if b.hp_rate > 0.01 && f < 0.99 {
-        out.push_str("; your wounds are mending");
+}
+
+/// The body as its owner feels it, in plain words and no numbers: the `felt` words of the
+/// world's `status_of` law, the thresholds the authority's bodily alarms and the players'
+/// screens use. Empty when the law gives none.
+pub fn felt_body(b: &Body) -> String {
+    let Some(sc) = compiled() else { return String::new() };
+    sc.felt(&b.facts(&sc)).unwrap_or_else(|e| {
+        log::warn!("felt_body: {e}");
+        String::new()
+    })
+}
+
+/// Each meter's felt word (`{"health": "unhurt", "hunger": "very hungry", …}`), from the same law.
+pub fn felt_by_meter(b: &Body) -> Vec<(String, String)> {
+    let Some(sc) = compiled() else { return Vec::new() };
+    sc.felt_by_meter(&b.facts(&sc)).unwrap_or_default()
+}
+
+/// Whether it is night at `hour` by the world's `daylight` law.
+pub fn is_night(hour: f32) -> bool {
+    compiled().is_some_and(|sc| sc.is_night(hour))
+}
+
+/// The fast lane's system prompt (docs/FAST_LANE.md): the person, the world's rules (physics) and
+/// the graph grammar, and the four answers it may give. No acts, no dealings, no tactics: what to
+/// do is the character's own.
+pub fn fast_system() -> String {
+    fast_system_in(frame())
+}
+
+fn fast_system_in(frame: Frame) -> String {
+    shared(format!(
+        "{} Stay in character: your personality, values, relationships and memories are yours. \
+Something has just happened to you (see Why now). Your body goes on doing what your top level and your routines say while you think; \
+what you answer changes them from the next moment on, not the moment that is passing. \
+You may rewrite your `combat` branch, rewrite one of the routines listed under Your routines, switch your `combat` branch to one of them, or keep everything as it is. \
+Use only what you have perceived and what you know how to do. Refer to people by the ids you see in your acts and your memory; the ids are handles, never words: when you speak, name people by their name or as you would describe them. Reply with ONE JSON object, one of:\n\
+{{\"patch\": {{\"label\": \"combat\", \"graph\": {{...}}}}, \"thought\": \"one sentence, in your words\"}}\n\
+{{\"routine\": {{\"name\": \"one of your routines\", \"graph\": {{...}}}}, \"thought\": \"...\"}}\n\
+{{\"switch\": \"one of your routines\", \"thought\": \"...\"}}\n\
+{{\"keep\": true, \"thought\": \"...\"}}",
+        opening(frame, THINK_OPENING),
+    )) + "\n\n" + &*world_rules() + "\n\n" + grammar().as_str()
+}
+
+/// The fast lane's user prompt: who the character is (with its own moves' timings), its top
+/// level and its routines, then why now (the event as perceived) and what has just happened.
+/// Ordered from the most to the least stable between one character's fast calls, so a
+/// provider's prefix cache can reuse the person, the plan and the routines across the calls of
+/// one fight (docs/FAST_LANE.md); the content is the same in any order.
+pub fn fast_user(reason: &str, persona: &str, experiences: &[String], plan: &str, outline: &str, repertoire: &str) -> String {
+    let mut out = format!("# Who you are\n{persona}\n\n# Your top level (plan: {plan})\n{outline}\n");
+    if !repertoire.is_empty() {
+        out.push_str(&format!("\n# Your routines\n{repertoire}\n"));
+    }
+    out.push_str(&format!("\n# Why now\n{reason}\n\n# What has just happened (oldest first)\n"));
+    for e in experiences {
+        out.push_str(&format!("- {e}\n"));
     }
     out
 }
@@ -649,9 +1132,10 @@ pub fn deliberate_user(c: &Ctx, scene: &str, graph_outline: &str, plan: &str, re
     out
 }
 
-pub fn consolidate_user(c: &Ctx) -> String {
+pub fn consolidate_user(c: &Ctx, projects: &str) -> String {
     let mut out = Segments::default();
     common(c, &mut out);
+    projects_section(&mut out, projects);
     out.push(Stability::Dynamic, "\n# New experiences to integrate (oldest first; [experience id] time text)\n");
     for e in &c.experiences {
         out.push(Stability::Dynamic, format!("- {e}\n"));
@@ -706,16 +1190,10 @@ Answer with ONE JSON object: {{\"feeling\": \"what you sense and feel, in plain 
     ))
 }
 
-/// What an animal choosing is told: what it would be told to feel an impulse, its pack when
-/// it decides for them, and the options.
-pub fn animal_choose_user(think_user: String, pack: &[String], options: &[String]) -> String {
+/// What an animal choosing is told: what it would be told to feel an impulse, and the
+/// options. It decides for itself alone (docs/PACK_MIND.md: the `pack` switch is retired).
+pub fn animal_choose_user(think_user: String, options: &[String]) -> String {
     let mut out = think_user;
-    if !pack.is_empty() {
-        out.push_str("\n# Your pack (what you pick, they do too, each in its own way)\n");
-        for p in pack {
-            out.push_str(&format!("- {p}\n"));
-        }
-    }
     out.push_str("\n# What you can do now\n");
     for (i, o) in options.iter().enumerate() {
         out.push_str(&format!("{i}. {o}\n"));
@@ -791,23 +1269,31 @@ Reply with ONE JSON object: {{\"summary\": \"...\", \"nodes\": [...], \"edges\":
 
 /// A conversation turn: no world rules or graph grammar, just the person, the other and the talk.
 pub fn talk_system() -> String {
+    talk_system_in(frame())
+}
+
+fn talk_system_in(frame: Frame) -> String {
     shared(format!(
-        "You are the person described under # Who you are, living in a persistent world, face to face with the other person described below. \
+        "{} \
 This is your turn in a conversation. Talk as yourself, in your own voice, usually a sentence or two: answer what was just said, \
 or say what you actually want to say — what you think or feel, something you remember, a question, a proposal, a refusal, a joke. \
 Real conversations are short and have a point. As soon as something is settled between you (you agreed on something, \
 one of you declined, someone will think it over, or there is simply nothing more to say), say so in \"settled\": that line closes \
 the conversation for now; don't restate what was already agreed or keep saying goodbye. You don't have to answer everything: \
-silence (say null) is fine. Reply with ONE JSON object: {{\"thought\": \"what you privately make of this (one sentence)\", \
-\"say\": \"your words\" or null, \"to\": id of who you speak to, \
+silence (say null) is fine. {} An ongoing movement such as follow belongs in a behavior graph, outside this turn’s one-off acts. Refer to people by the ids you see in your acts and your memory; the ids are handles, never words: when you speak, name people by their name or as you would describe them. Reply with ONE JSON object: {{\"thought\": \"what you privately make of this (one sentence)\", \
+\"say\": \"your words\" or null, \"to\": id of who you speak to, {}\
 \"acts\": [] or deliberate acts you carry out now, e.g. {{\"do\": \"conceive\", \"target\": {{\"id\": id of who you speak to}}}} once you both want a child together, \
-{{\"do\": \"accept\", \"target\": {{\"id\": id of who you speak to}}}} to take a trade they offered, {{\"do\": \"give\", \"target\": {{\"id\": id of who you speak to}}, \"item\": \"berries\", \"qty\": 2}}, \
+{{\"do\": \"accept\", \"target\": {{\"id\": id of who you speak to}}, \"offer\": id of their offer}} to take a trade they offered (\"record\": id of their proposal, for terms), \
+{{\"do\": \"decline\", \"target\": {{\"id\": id of who you speak to}}, \"offer\": id of their offer}} to say no to it, {{\"do\": \"give\", \"target\": {{\"id\": id of who you speak to}}, \"item\": \"berries\", \"qty\": 2}}, \
 {{\"do\": \"offer\", \"target\": {{\"id\": id of who you speak to}}, \"item\": \"fish\", \"qty\": 2, \"want\": \"wood\", \"want_qty\": 3}}, {{\"do\": \"teach\", \"target\": {{\"id\": id of who you speak to}}, \"item\": \"fire\"}}, \
 {{\"do\": \"host\", \"target\": {{\"id\": id of who you speak to}}}} to take them in as your household's guest until morning \
 (words change nothing in the world by themselves: what you agree to do now, do here; you will learn how it went), \
 \"settled\": null while the matter is still open, or what is now settled, in a few words (e.g. \"meet at the ford at dawn\", \"she will think about it\", \"I refused\", \"nothing more to say\"), \
 \"until\": null or when to take it up again (\"dawn\", \"morning\", \"noon\", \"evening\", \"night\", \"tomorrow\" or an hour 0-23), \
 \"end\": true if this is your last word for now}}{}",
+        opening(frame, TALK_OPENING),
+        SPEECH_AND_ACTION,
+        ways_text(),
         match talk_acts() {
             a if a.is_empty() => String::new(),
             a => format!("\nOther acts you may carry the same way (\"target\": {{\"id\": id of who you speak to}}), as the world's rules describe them:\n{a}"),
@@ -822,6 +1308,8 @@ pub struct TalkUser<'a> {
     pub pacing: &'a str,
     pub other: &'a str,
     pub other_id: u32,
+    /// The other's body as the listener perceives or remembers it ("a woman"; body-sex), or "".
+    pub other_body: &'a str,
     pub feeling: &'a str,
     pub mind: &'a [String],
     pub memories: &'a [String],
@@ -832,15 +1320,25 @@ pub struct TalkUser<'a> {
     pub body: &'a str,
     pub conversation: &'a [String],
     pub heard: &'a str,
+    /// How it was said, when that matters for the answer (a whisper, a call from afar).
+    pub how: &'a str,
     /// Standing proposals between the two, what one carries and knows (for acts).
     pub between: &'a [String],
+    /// The places one knows and the resources one remembers (`Minds::places`), with the way
+    /// from where one stands when that is known (`placed`); empty: no section (talk-places).
+    pub places: &'a [String],
+    pub placed: bool,
+    /// What came of one's own last words when the other could not have heard them (the
+    /// authority's `silence`, verbatim; reply-timing): told in place of a line to answer.
+    pub missed: Option<&'a str>,
 }
 
 pub fn talk_user(t: &TalkUser) -> String {
     let (other, other_id) = (t.other, t.other_id);
     let mut out = Segments::default();
     out.push(Stability::Shared, "Your turn. Respond with the JSON object.\n\n");
-    out.push(Stability::Character, format!("# Who you are\n{}\n{}\n\n# How you talk\n{}\n\n# You and {other} (#{other_id})\n{}\n", t.name, t.identity, t.pacing, t.feeling));
+    let body = if t.other_body.is_empty() { String::new() } else { format!(", {}", t.other_body) };
+    out.push(Stability::Character, format!("# Who you are\n{}\n{}\n\n# How you talk\n{}\n\n# You and {other} (#{other_id}{body})\n{}\n", t.name, t.identity, t.pacing, t.feeling));
     if !t.mind.is_empty() || !t.memories.is_empty() {
         out.push(Stability::Dynamic, "\n# What comes to mind\n");
         for b in t.mind {
@@ -866,16 +1364,107 @@ pub fn talk_user(t: &TalkUser) -> String {
     for b in t.between {
         out.push(Stability::Dynamic, format!("- {b}\n"));
     }
+    if !t.places.is_empty() {
+        out.push(Stability::Dynamic, if t.placed { "\n# Places you know, from where you stand\n" } else { "\n# Places you know\n" });
+        for p in t.places {
+            out.push(Stability::Dynamic, format!("- {p}\n"));
+        }
+    }
     out.push(Stability::Dynamic, "\n# The conversation so far\n");
     for l in t.conversation {
         out.push(Stability::Dynamic, format!("{l}\n"));
     }
-    out.push(Stability::Dynamic, format!("\n# What you are answering\n{other}: “{}”", t.heard));
+    match t.missed {
+        Some(m) => out.push(Stability::Dynamic, format!("\n# What came of your last words\n{m}")),
+        None => {
+            out.push(Stability::Dynamic, format!("\n# What you are answering\n{other}: “{}”", t.heard));
+            if !t.how.is_empty() {
+                out.push(Stability::Dynamic, format!("\n{}", t.how));
+            }
+        }
+    }
     out.render()
 }
 
 #[cfg(test)]
 mod tests {
+    /// The mind service compiles the world's `script` row alone, without `law_override`
+    /// (docs/LAW_OVERRIDE.md): every law it reads must be one whose change installs the script
+    /// again with the value written at its end. A law the mind reads made value-only would leave
+    /// the minds on its old value until the next install.
+    #[test]
+    fn the_laws_minds_read_change_by_an_install() {
+        let read = ["cues_on", "cue_cooldown_s", "cue_gap_s", "speech_truth", "stranger_by_name", "think_framing", "fast_lane_inflight"];
+        for l in read {
+            assert!(living_rules::script::VALUE_ONLY.iter().all(|(n, _)| *n != l), "{l} is value-only: the mind service must lay `law_override` over its script first");
+        }
+        let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/src");
+        let src: String = std::fs::read_dir(dir).unwrap().filter_map(|e| e.ok()).filter(|e| e.path().extension().is_some_and(|x| x == "rs")).map(|e| std::fs::read_to_string(e.path()).unwrap()).collect();
+        let mut asked: Vec<&str> = src.match_indices(".laws().").map(|(i, m)| &src[i + m.len()..]).map(|t| &t[..t.find(|c: char| !(c.is_ascii_alphanumeric() || c == '_')).unwrap_or(t.len())]).collect();
+        asked.extend(src.match_indices("l.cue_").map(|(i, _)| &src[i + 2..]).map(|t| &t[..t.find(|c: char| !(c.is_ascii_alphanumeric() || c == '_')).unwrap_or(t.len())]));
+        for l in asked.into_iter().filter(|l| !l.is_empty() && !l.ends_with('_')) {
+            assert!(read.contains(&l), "the minds read `{l}`: add it to this list once it is checked");
+        }
+    }
+
+    /// Every speaking mind is told, in the same words, that the `#<id>` handles are for acts and
+    /// memory and never spoken (fix-spoken-ids: r2e's minds said three lines with them).
+    #[test]
+    fn every_speaking_mind_is_told_ids_are_never_spoken() {
+        for (purpose, text) in [("think", think_system()), ("deliberate", deliberate_system()), ("fast", fast_system()), ("talk", talk_system())] {
+            assert_eq!(text.matches(IDS_NOT_SPOKEN).count(), 1, "{purpose}");
+        }
+        assert!(!IDS_NOT_SPOKEN.contains('#'), "one general sentence, no example");
+    }
+
+    /// The grammar's `doing` example names no skill a reader may never face (a mind copied
+    /// "strike" against a foe whose blow is `attack`; r2c): a kind word, and `is` is said to take
+    /// what a creature's `visibly`.is shows. Matching is unchanged.
+    /// A turn on a line the other could not have heard is told the authority's words verbatim
+    /// in place of a line to answer (reply-timing), with no advice.
+    #[test]
+    fn a_missed_line_is_told_in_the_authoritys_words() {
+        let silence = "Fern is too far away: they could not have heard you.";
+        let t = |missed| {
+            talk_user(&TalkUser {
+                name: "Agnes", identity: "", pacing: "", other: "Fern", other_id: 7, other_body: "", feeling: "", mind: &[], memories: &[], lately: &[], earlier: None,
+                scene: "Now.", body: "", conversation: &["You: “Morning!”".into()], heard: "Hello Agnes", how: "", between: &[], places: &[], placed: false, missed,
+            })
+        };
+        let missed = t(Some(silence));
+        assert!(missed.ends_with(&format!("# What came of your last words\n{silence}")), "{missed}");
+        assert!(!missed.contains("# What you are answering"));
+        let answering = t(None);
+        assert!(answering.contains("# What you are answering\nFern: “Hello Agnes”") && !answering.contains("came of your last words"));
+    }
+
+    #[test]
+    fn the_doing_example_uses_a_kind_word() {
+        let g = grammar();
+        let line = g.lines().find(|l| l.contains("{\"doing\":")).expect("the doing condition is in the grammar");
+        assert!(line.contains("\"is\": \"hostile\""), "{line}");
+        assert!(!line.contains("\"is\": \"strike\""), "{line}");
+        assert!(line.contains("what a creature's \"visibly\".is shows in your scene"), "{line}");
+    }
+    #[test]
+    fn the_skill_reference_states_combat_timings() {
+        let s = living_rules::script::Scripts::new(include_str!("../../scripts/skills.rhai")).unwrap();
+        let t = timings_of(&s);
+        assert!(t["strike"].contains("winds up 350 ms") && t["strike"].contains("250 ms to recover") && t["strike"].contains("ready again 650 ms"), "{}", t["strike"]);
+        assert!(t["dodge"].starts_with("a dash at once") && t["dodge"].contains("ready again 900 ms"), "{}", t["dodge"]);
+        assert!(t["block"].starts_with("raised at once and held up to 8 s"), "{}", t["block"]);
+        assert!(t["bowshot"].contains("flies 30 m/s") && t["firebolt"].contains("ready again 4 s"), "{} / {}", t["bowshot"], t["firebolt"]);
+        assert!(!t.contains_key("yield") && !t.contains_key("tend") && !t.contains_key("threaten"), "only timed skills: {:?}", t.keys().collect::<Vec<_>>());
+        assert!(t.values().all(|w| !w.contains("then 0 ms")), "{t:?}");
+        // A character's own moves only, by the techniques it knows; the shared reference has none.
+        let archer = own_timings_of(None, |t| t != "fire_bolt");
+        assert!(archer.contains("- bowshot: winds up 300 ms") && archer.contains("- strike: winds up 350 ms"), "{archer}");
+        assert!(!archer.contains("- firebolt:"), "fire bolt's timing for one who does not know it: {archer}");
+        let caster = own_timings_of(None, |_| true);
+        assert!(caster.contains("- firebolt: winds up 450 ms"), "{caster}");
+        assert!(!skills_help().contains("timing") && !skills_help().contains("winds up 350"), "the shared reference states no timings");
+    }
+
     #[test]
     fn talk_examples_show_every_shown_act() {
         // talk_acts() leaves these out as already shown; a name missing from the examples is an
@@ -889,12 +1478,21 @@ mod tests {
     #[test]
     fn the_body_is_felt_in_words() {
         use super::{felt_body, Body};
-        let b = |hp: f32, hunger: f32, energy: f32, hp_rate: f32| felt_body(Body { hp, max_hp: 100.0, hunger, energy, hp_rate });
-        assert_eq!(b(100.0, 30.0, 60.0, 0.0), "not hungry, unhurt");
-        assert_eq!(b(30.0, 82.0, 8.0, -0.5), "very hungry, exhausted, badly wounded; you are growing weaker");
+        let b = |hp: f32, hunger: f32, energy: f32, hp_rate: f32| felt_body(&Body { hp, max_hp: 100.0, hunger, energy, hp_rate, ..Default::default() });
+        assert_eq!(b(100.0, 30.0, 60.0, 0.0), "not hungry, rested, unhurt");
+        assert_eq!(b(30.0, 82.0, 8.0, -0.5), "very hungry, exhausted, badly wounded, walking slower; you are growing weaker");
         assert_eq!(b(70.0, 10.0, 90.0, 0.4), "well fed, well rested, a little hurt; your wounds are mending");
-        assert_eq!(b(10.0, 99.0, 0.0, -2.0), "starving, your body wasting away, utterly spent, barely alive; you are growing weaker");
+        assert_eq!(b(10.0, 99.0, 0.0, -2.0), "starving, your body wasting away, utterly spent, barely alive, walking slower; you are growing weaker");
         assert!(!b(55.0, 60.0, 40.0, 0.0).chars().any(|c| c.is_ascii_digit()));
+        // Breath, from the vitals row as the service reads it: out of breath below 20 (after a
+        // run or a fight), the status law's words; nothing said above.
+        let winded = |s: f64| {
+            let row = vec![("hp".to_string(), 100.0), ("max_hp".to_string(), 100.0), ("hunger".to_string(), 30.0), ("energy".to_string(), 60.0), ("at_ms".to_string(), 1000.0),
+                           ("stamina".to_string(), s), ("stamina_max".to_string(), 100.0), ("stamina_rate".to_string(), 25.0), ("stamina_from_ms".to_string(), 5000.0)];
+            felt_body(&Body { hp: 100.0, max_hp: 100.0, hunger: 30.0, energy: 60.0, row, now_ms: 2000, kind: "person".into(), stage: "adult".into(), ..Default::default() })
+        };
+        assert!(winded(5.0).contains("out of breath"), "{}", winded(5.0));
+        assert!(!winded(60.0).contains("out of breath"), "{}", winded(60.0));
     }
 
     #[test]
@@ -923,10 +1521,36 @@ mod tests {
             places: vec![format!("place-{name}")],
             experiences: vec![format!("dynamic-experience-{name}")],
             dealings: vec![format!("dynamic-dealing-{name}")],
+            cues: None,
         }
     }
 
+    /// The cue field's examples and its schema name no one and no duty: what a mind watches
+    /// for is its own (docs/ATTENTION.md).
+    #[test]
+    fn cue_examples_name_no_one() {
+        let field = notice_field_for(600.0, 60.0).to_lowercase();
+        let examples = CUE_EXAMPLES.to_lowercase();
+        assert!(field.contains(&examples));
+        for w in ["stranger", "newcomer", "arriv", "visitor", "outsider", "foreigner", "guest", "intruder", "guard", "keeper", "watchman", "sentry", "gate", "door", "role", "duty", "clerk", "tally", "ledger", "book", "creditor", "debtor", "fisher", "counting"] {
+            assert!(!field.contains(w), "the cue field mentions \"{w}\": {field}");
+        }
+        assert!(!examples.contains("unknown"), "no example watches for people one does not know");
+        assert!(field.contains("10 minutes") && field.contains("60 seconds"));
+    }
+
     fn fixture(purpose: &str, name: &str, kind: &str) -> (String, String) {
+        fixture_in(purpose, name, kind, Frame::Character)
+    }
+
+    fn fixture_in(purpose: &str, name: &str, kind: &str, frame: Frame) -> (String, String) {
+        fixture_with(purpose, name, kind, frame, false)
+    }
+
+    /// A fixture under a frame, with projects (`LIVING_PROJECTS`) on or off: on, the think and
+    /// consolidation system prompts carry the projects text and their user messages a project.
+    fn fixture_with(purpose: &str, name: &str, kind: &str, frame: Frame, projects: bool) -> (String, String) {
+        let project_lines = if projects { "project:river_camp: a camp by the river (begun day 2)\n" } else { "" };
         static WORLD: std::sync::Once = std::sync::Once::new();
         WORLD.call_once(|| {
             let seed: serde_json::Value = serde_json::from_str(include_str!("../../seeds/world.json")).unwrap();
@@ -944,20 +1568,21 @@ mod tests {
         });
         let c = context(name);
         match purpose {
-            "think" => (think_system(), think_user(&c, "dynamic-scene", "dynamic-plan", "dynamic-reason", "habit")),
-            "deliberate" => (deliberate_system(), compile_user("dynamic-decision", deliberate_user(&c, "dynamic-scene", "dynamic-outline", "dynamic-plan", "dynamic-reason", "routine"))),
-            "consolidate" => (consolidate_system(), consolidate_user(&c)),
-            "reorganize" => (reorganize_system(), reorganize_user(name, &c.persona, &["dynamic-concept".into()], &["dynamic-edge".into()])),
+            "think" => (think_system_in(frame, projects), think_user(&c, "dynamic-scene", "dynamic-plan", "dynamic-reason", "habit", project_lines)),
+            "deliberate" => (deliberate_system_in(frame), compile_user("dynamic-decision", deliberate_user(&c, "dynamic-scene", "dynamic-outline", "dynamic-plan", "dynamic-reason", "routine"))),
+            "consolidate" => (consolidate_system_in(frame, projects), consolidate_user(&c, project_lines)),
+            "reorganize" => (reorganize_system(), reorganize_user(name, &c.persona, &["dynamic-concept".into()], &["dynamic-edge".into()], "")),
             "identity" => (identity_system(), identity_user(name, 42, &["fire".into()], &serde_json::json!({"town": "fixture"}), Some(&serde_json::json!({"caution": 40})))),
-            "birth_identity" => (birth_identity_system(), birth_identity_user(name, 42, [("Parent A", 3, "kind"), ("Parent B", 4, "gentle")], Some(&serde_json::json!({"caution": 40})))),
+            "birth_identity" => (birth_identity_system(), birth_identity_user(name, 42, [("Parent A", 3, "kind"), ("Parent B", 4, "gentle")], Some(&serde_json::json!({"caution": 40})), ["", "", ""])),
             "talk" => (
-                talk_system(),
+                talk_system_in(frame),
                 talk_user(&TalkUser {
                     name,
                     identity: &c.persona,
                     pacing: "talk slowly",
                     other: if name == "Aria" { "Cora" } else { "Dara" },
                     other_id: if name == "Aria" { 3 } else { 4 },
+                    other_body: "",
                     feeling: "friend, trust 50",
                     mind: &c.mind,
                     memories: &c.memories,
@@ -967,7 +1592,12 @@ mod tests {
                     body: "",
                     conversation: &["dynamic-line".into()],
                     heard: "dynamic-heard",
+                    how: "",
                     between: &["dynamic-offer".into()],
+                    // Dynamic: the way to each place depends on where one stands now.
+                    places: &["dynamic-place".into()],
+                    placed: true,
+                    missed: None,
                 }),
             ),
             "animal_impulse" | "animal_compile" | "animal_consolidate" => {
@@ -982,7 +1612,7 @@ mod tests {
                             animal_compile_user(name, kind, "dynamic-impulse", "dynamic-feeling", "dynamic-scene", "dynamic-outline", "routine"),
                         )
                     }
-                    _ => (animal_consolidate_system(kind, &sp.nature), consolidate_user(&c)),
+                    _ => (animal_consolidate_system(kind, &sp.nature), consolidate_user(&c, "")),
                 }
             }
             _ => panic!("unknown purpose {purpose}"),
@@ -990,8 +1620,22 @@ mod tests {
     }
 
     fn assert_prefix(purpose: &str, kind: &str) {
-        let (system_a, user_a) = fixture(purpose, "Aria", kind);
-        let (system_b, user_b) = fixture(purpose, "Zora", kind);
+        assert_prefix_in(purpose, kind, Frame::Character);
+        if FRAMED.contains(&purpose) {
+            assert_prefix_in(purpose, kind, Frame::Player);
+        }
+    }
+
+    /// The prompts `LIVING_FRAME` reaches.
+    const FRAMED: [&str; 4] = ["think", "deliberate", "consolidate", "talk"];
+
+    fn assert_prefix_in(purpose: &str, kind: &str, frame: Frame) {
+        assert_prefix_with(purpose, kind, frame, false)
+    }
+
+    fn assert_prefix_with(purpose: &str, kind: &str, frame: Frame, projects: bool) {
+        let (system_a, user_a) = fixture_with(purpose, "Aria", kind, frame, projects);
+        let (system_b, user_b) = fixture_with(purpose, "Zora", kind, frame, projects);
         assert_eq!(system_a.as_bytes(), system_b.as_bytes());
         assert!(!system_a.contains("Aria") && !system_a.contains("Zora"));
         let a = format!("{system_a}\n{user_a}");
@@ -1039,6 +1683,21 @@ mod tests {
         assert_prefix("reorganize", "person");
     }
     #[test]
+    fn body_line_says_age_stage_and_how_long() {
+        // Cullet's lives on the hamlet's pace: 90 years, a year of 4 days at pace 0.0357 (0.143
+        // world days), adult from 15 years, old from 59.5.
+        let life = living_rules::life::Life { years: 90.0, infant: 2.0 / 90.0, child: 15.0 / 90.0, elder: 59.5 / 90.0, ..Default::default() };
+        let pace = living_rules::life::Pace { year_days: 4.0, pace: 0.0357 };
+        let year = 4.0 * 0.0357;
+        assert_eq!(body_line_of("person", 2, 15.05 * year, life, pace), "Your body: 15 years old, an adult for a few hours.");
+        assert_eq!(body_line_of("person", 1, 14.9 * year, life, pace), "Your body: 14 years old, a child for 12 years.");
+        assert_eq!(body_line_of("person", 2, 41.0 * year, life, pace), "Your body: 41 years old, an adult for 26 years.");
+        assert_eq!(body_line_of("person", 3, 60.0 * year, life, pace), "Your body: 60 years old, old for a few hours.");
+        assert_eq!(body_line_of("person", 0, 0.01, life, pace), "Your body: less than a year old, a baby for a few hours.");
+        assert_eq!(body_line_of("wolf", 2, 15.5 * year, life, pace), "Your body: 15 years old, grown for a few hours.");
+    }
+
+    #[test]
     fn identity_shares_prefix() {
         assert_prefix("identity", "person");
         assert_prefix("birth_identity", "person");
@@ -1067,6 +1726,133 @@ mod tests {
     }
 
     #[test]
+    fn frame_parses() {
+        assert_eq!(Frame::parse(None), Ok(Frame::Character));
+        assert_eq!(Frame::parse(Some("")), Ok(Frame::Character));
+        assert_eq!(Frame::parse(Some("character")), Ok(Frame::Character));
+        assert_eq!(Frame::parse(Some("player")), Ok(Frame::Player));
+        assert!(Frame::parse(Some("Player")).is_err() && Frame::parse(Some("npc")).is_err());
+    }
+
+    /// The `think_framing` law (docs/FRAMING.md): off, the think prompts are today's, byte for
+    /// byte; on, the neutral sentence replaces today's once, and the reason's section is renamed
+    /// once, in the same place.
+    #[test]
+    fn think_framing_is_n2_on_and_today_off() {
+        for frame in [Frame::Character, Frame::Player] {
+            for projects in [false, true] {
+                let today = think_system_in(frame, projects);
+                assert_eq!(today.matches(TODAY_FRAMING).count(), 1, "{frame:?} {projects}");
+                assert_eq!(framed_system(today.clone(), false), today);
+                let on = framed_system(today.clone(), true);
+                assert_eq!(on.matches(NEUTRAL_FRAMING).count(), 1);
+                assert!(!on.contains(TODAY_FRAMING));
+                assert_eq!(on.replacen(NEUTRAL_FRAMING, TODAY_FRAMING, 1), today);
+            }
+        }
+        let c = context("Ivo");
+        let user = think_user(&c, "{\"creatures\": []}", "wait", "For the first time you see a stranger, 9 tiles west, wait.", "habit", "");
+        assert_eq!(user.matches(WHY_SECTION).count(), 1);
+        assert_eq!(framed_user(user.clone(), false), user);
+        let on = framed_user(user.clone(), true);
+        assert!(!on.contains("# Why you are thinking now") && on.matches(JUST_SECTION).count() == 1);
+        assert_eq!(on.find(JUST_SECTION), user.find(WHY_SECTION), "renamed where it stands");
+        assert_eq!(on.replacen(JUST_SECTION, WHY_SECTION, 1), user);
+    }
+
+    /// Without `LIVING_FRAME` the service runs the character frame, and the character frame is
+    /// the prompts as they read before the switch: each opens with its old first sentence and
+    /// carries nothing of the player frame. (Byte identity with the prompts before the switch was
+    /// checked by exporting every fixture before and after, `export_prompt_fixtures`.)
+    #[test]
+    fn character_frame_is_the_default_and_unchanged() {
+        if std::env::var_os("LIVING_FRAME").is_none() && std::env::var_os("LIVING_PROJECTS").is_none() {
+            assert_eq!(frame(), Frame::Character);
+            fixture("think", "Aria", "person");
+            assert_eq!(think_system(), think_system_in(Frame::Character, false));
+            assert_eq!(deliberate_system(), deliberate_system_in(Frame::Character));
+            assert_eq!(consolidate_system(), consolidate_system_in(Frame::Character, false));
+            assert_eq!(talk_system(), talk_system_in(Frame::Character));
+        }
+        for (purpose, first) in [
+            ("think", "You are the mind of the person described under # Who you are, living in a persistent simulated world. Stay in character: "),
+            ("deliberate", "You are the mind of the person described under # Who you are, living in a persistent simulated world. Stay in character: "),
+            ("consolidate", "You are the memory and self-understanding of the person described under # Who you are, in a persistent simulated world. You keep "),
+            ("talk", "You are the person described under # Who you are, living in a persistent world, face to face with the other person described below. This is your turn "),
+        ] {
+            let (system, user) = fixture(purpose, "Aria", "person");
+            assert!(system.starts_with(first), "{purpose}: {}", &system[..160]);
+            let text = format!("{system}\n{user}");
+            for frame_word in ["AI playing", "other players", "out of character", PLAYER_FRAME] {
+                assert!(!text.contains(frame_word), "{purpose}: the character frame carries {frame_word:?}");
+            }
+        }
+    }
+
+    /// Under the player frame a framed prompt opens with `PLAYER_FRAME`, and nothing but its
+    /// opening sentence differs: the rules, grammar, reply shapes and every user message are the
+    /// character frame's.
+    #[test]
+    fn player_frame_changes_only_the_opening() {
+        for (purpose, character_opening) in [("think", THINK_OPENING), ("deliberate", THINK_OPENING), ("consolidate", CONSOLIDATE_OPENING), ("talk", TALK_OPENING)] {
+            let (cs, cu) = fixture_in(purpose, "Aria", "person", Frame::Character);
+            let (ps, pu) = fixture_in(purpose, "Aria", "person", Frame::Player);
+            assert!(ps.starts_with(PLAYER_FRAME), "{purpose}");
+            assert_eq!(pu, cu, "{purpose}: the user message changed");
+            assert_eq!(ps.replacen(&opening(Frame::Player, character_opening), character_opening, 1), cs, "{purpose}");
+            assert!(ps.contains("never speak out of character"), "{purpose}");
+        }
+    }
+
+    /// `LIVING_FRAME=player` and `LIVING_PROJECTS=1` together: each does exactly what it does
+    /// alone. The frame replaces only the opening sentence; the projects text, the `serves`
+    /// field and the projects section stay as projects alone has them.
+    #[test]
+    fn player_frame_and_projects_compose() {
+        for (purpose, character_opening, projects_text) in [
+            ("think", THINK_OPENING, THINK_PROJECTS),
+            ("deliberate", THINK_OPENING, ""),
+            ("consolidate", CONSOLIDATE_OPENING, CONSOLIDATE_PROJECTS),
+            ("talk", TALK_OPENING, ""),
+        ] {
+            let (both_s, both_u) = fixture_with(purpose, "Aria", "person", Frame::Player, true);
+            let (proj_s, proj_u) = fixture_with(purpose, "Aria", "person", Frame::Character, true);
+            let (frame_s, frame_u) = fixture_with(purpose, "Aria", "person", Frame::Player, false);
+            assert!(both_s.starts_with(PLAYER_FRAME), "{purpose}");
+            // Without its frame opening, both-on is projects alone.
+            assert_eq!(both_s.replacen(&opening(Frame::Player, character_opening), character_opening, 1), proj_s, "{purpose}");
+            assert_eq!(both_u, proj_u, "{purpose}: the frame changed a user message");
+            // Without the projects text, both-on is the frame alone.
+            if !projects_text.is_empty() {
+                assert!(both_s.contains(projects_text), "{purpose}: projects text missing");
+                assert_eq!(both_s.replacen(projects_text, "", 1), frame_s, "{purpose}");
+                assert!(both_u.contains("# Your projects") && both_u.contains("project:river_camp"), "{purpose}");
+                assert!(!frame_u.contains("# Your projects"), "{purpose}");
+            } else {
+                assert_eq!(both_s, frame_s, "{purpose}");
+                assert_eq!(both_u, frame_u, "{purpose}");
+            }
+        }
+        assert!(THINK_PROJECTS.contains("\"serves\""));
+        for purpose in FRAMED {
+            assert_prefix_with(purpose, "person", Frame::Player, true);
+        }
+    }
+
+    /// The frame says who plays and what is real, and leaves what to do to the player.
+    #[test]
+    fn player_frame_is_short_and_prescribes_nothing() {
+        assert!(PLAYER_FRAME.split_whitespace().count() <= 80, "{PLAYER_FRAME}");
+        let lower = PLAYER_FRAME.to_lowercase();
+        for word in ["goal", "explore", "interesting", "adventure", "reputation", "risk", "should", "must", "surviv", "quest"] {
+            assert!(!lower.contains(word), "the frame prescribes: {word}");
+        }
+        for needed in ["AI playing", "other players, human and AI", "body, needs and death are real", "world's rules hold", "your own choice", "says or writes", "out of character"] {
+            assert!(PLAYER_FRAME.contains(needed), "the frame lacks {needed:?}");
+        }
+    }
+
+    #[test]
     fn segments_order_by_stability() {
         let mut out = Segments::default();
         out.push(Stability::Dynamic, "clock");
@@ -1077,6 +1863,16 @@ mod tests {
     }
 
     #[test]
+    fn the_grammar_says_what_stranger_means_under_the_law_in_force() {
+        // The shipped rules (the law off): no feelings yet; the law on says names, and the two differ.
+        let (system, _) = fixture("deliberate", "Aria", "person");
+        assert!(system.contains(&format!("stranger {}", stranger_words_for(false))), "{system}");
+        assert!(!system.contains(stranger_words_for(true)));
+        let on = living_rules::script::with_world_laws(include_str!("../../scripts/skills.rhai"), &[("stranger_by_name".into(), serde_json::json!(true))]);
+        assert!(living_rules::script::Scripts::new(&on).unwrap().laws().stranger_by_name);
+    }
+
+    #[test]
     fn export_prompt_fixtures() {
         let Ok(dir) = std::env::var("LIVING_PROMPT_FIXTURES") else { return };
         let dir = std::path::Path::new(&dir);
@@ -1084,9 +1880,13 @@ mod tests {
         for purpose in ["think", "deliberate", "consolidate", "reorganize", "identity", "birth_identity", "talk", "animal_impulse", "animal_compile", "animal_consolidate"] {
             for kind in if purpose.starts_with("animal_") { vec!["wolf", "deer"] } else { vec!["person"] } {
                 for name in ["Aria", "Zora"] {
-                    let (system, user) = fixture(purpose, name, kind);
-                    let body = serde_json::json!({"messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]});
-                    std::fs::write(dir.join(format!("{purpose}-{kind}-{name}.json")), serde_json::to_string_pretty(&body).unwrap()).unwrap();
+                    let frames: &[Frame] = if FRAMED.contains(&purpose) { &[Frame::Character, Frame::Player] } else { &[Frame::Character] };
+                    for &frame in frames {
+                        let (system, user) = fixture_in(purpose, name, kind, frame);
+                        let body = serde_json::json!({"messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]});
+                        let tag = if frame == Frame::Character { String::new() } else { format!("-{}", frame.name()) };
+                        std::fs::write(dir.join(format!("{purpose}-{kind}-{name}{tag}.json")), serde_json::to_string_pretty(&body).unwrap()).unwrap();
+                    }
                 }
             }
         }

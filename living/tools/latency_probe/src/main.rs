@@ -155,7 +155,7 @@ fn main() {
             }
         });
         let body = |me: Arc<Mutex<Option<u32>>>, lg: Log| {
-            move |ctx: &EventContext, b: &Motion, prev: Option<u64>| {
+            move |ctx: &EventContext, b: &Moving, prev: Option<u64>| {
                 let ts = unix_us();
                 let srv = match &ctx.event {
                     Event::Reducer(ev) => Some(ev.timestamp.to_micros_since_unix_epoch()),

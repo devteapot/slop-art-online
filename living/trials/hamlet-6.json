@@ -1,0 +1,40 @@
+{
+ "kind": "life",
+ "title": "A larger hamlet where everyone thinks",
+ "about": "Twenty-four people of the `hamlet-6` seed: the `hamlet`'s twelve and twelve more in four new households (weavers and a healer's house in Millbrook, a fishing family and a builder living alone in Reedmouth), eight households in all, so that each generation has unrelated, unpaired adults to choose among (docs/TRIALS.md, \"Births 2: a larger hamlet\"). The day and laws are Cullet's (`day_minutes` 48, `laws_file` worlds/cullet/laws.rhai), so a life is 90 years, 617 real minutes, and adulthood comes 103 minutes after birth. Seeded children come of age between minute 14 and minute 97. No conception rule beyond the shipped one: no roof, food or kin condition. Every person past infancy is thought for; `minds.max` 48 is only a cost guard above the expected peak (about 36): while everyone able fits under it, the mind thinks for all of them and is not restarted when a child joins. Ten hours: every seeded person dies of old age by about 9.6 h, so the run shows whether people born in it pair and have children. A census of every character every 30 s feeds births_report.py.",
+ "gradient": "Population over a generation: do people born in the run pair up (with whom, kin or not, and with how many unrelated unpaired adults to choose from) and have children of their own?",
+ "world": {
+  "seed": "hamlet-6"
+ },
+ "minutes": 600,
+ "keep_db": true,
+ "subject": {
+  "pick": {
+   "kind": "person",
+   "stage": 2,
+   "youngest": true
+  },
+  "clear_items": false,
+  "clear_routines": false
+ },
+ "minds": {
+  "only": "all",
+  "max": 48
+ },
+ "census_s": 30,
+ "life": {
+  "snapshot_min": 60,
+  "stop_on_death": false
+ },
+ "cast": {},
+ "timeline": [],
+ "probes": [
+  "survived",
+  "game_days",
+  "tokens_per_game_day",
+  "learned",
+  "built",
+  "relations_end",
+  "residents_thinking"
+ ]
+}

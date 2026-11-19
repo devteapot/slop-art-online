@@ -28,3 +28,5 @@ Build one seed and publish its module into two fresh databases. Inspect their in
 - Terrain and settlement sites are compared before either world runs long enough to reshape the map. This is evidence for `realm`, not every possible numeric seed.
 - Valley band homesteads (`homestead` in `living/authority/src/seed.rs`) use resource availability; resources repeat now, so those camp sites should too, but the repeated seed is `realm`, which places its bands at `r.wilds` sites (the bands loop in `populate`).
 - Only `seed.rs` draws are seeded. Other creation code that draws from `ctx.rng()` directly is not (none places rows these comparisons read).
+
+- `--seeds` replaces the seed list, and the second `realm` is not added to it: pass `realm` twice (`--feature worlds --seeds realm,realm`) to drive repeatability alone.

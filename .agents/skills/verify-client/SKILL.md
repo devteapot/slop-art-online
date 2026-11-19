@@ -1,6 +1,6 @@
 ---
 name: verify-client
-description: Verify the living core client protocol through real Rust SDK WebSocket connections. Use when changing subscriptions, public or private tables, identity-scoped views, reducer permissions, or reconnect behavior, or when a program receives unexpected authority data.
+description: "Verify what a connecting client receives and may call, through real Rust SDK WebSocket connections under each identity. Use when changing tables (public or private), views (identity-scoped and perception views), subscriptions, reducers and their permissions, reconnect, the game client's connection to the authority, or when a program receives authority data it should not."
 ---
 
 # Verify the client protocol
@@ -28,6 +28,8 @@ The probe is outside the `living/` workspace. Build it separately with:
 CARGO_TARGET_DIR="$PWD/.local/living/verify/target-client" cargo build --locked --manifest-path .agents/skills/verify-client/scripts/probe/Cargo.toml
 ```
 
+The probe connects only to scratch worlds: `verify-client-*`, and `verify-player-*` and `verify-core-*` for the other skills' streams (verify-player's `rest_seen.py`, verify-core's `doing_deltas.py`).
+
 To drive a database you already launched through the shared harness:
 
 ```bash
@@ -41,6 +43,26 @@ $V cleanup --run "$R"
 ```
 
 Run cleanup after a failed manual attempt too. The automatic recipe is preferred because it keeps cleanup and proof together.
+
+## Someone too far away to make out
+
+On a launched and doctored `client-*` run (any seed), `scripts/earshot.py --run "$R"` joins a player, spawns three strangers and puts them 3 m, 10 m and 15 m from it on a quiet open line, turns the `earshot` law on, and reads the player's `my_earshot` through the SDK probe: the one at 3 m at say, the one at 10 m added at call by day, the unseen one at 15 m never listed or named. The player then says a line and calls one (`human_say`, `human_speak`), and who receives each must match the row. It turns the law off at the end ([features/perception.md](features/perception.md)). Run it on its own launch: it joins the run's player identity.
+
+On a launched and doctored `client-*` run (any seed), `scripts/room_address.py --run "$R"` joins a player, spawns two strangers K and S beside it and has S say lines to the room (admin `mind_say`). It reads the player's `my_experience` through the SDK probe: "naming a stranger and you" before K tells their name, "naming <K>" after, then "while talking with <K>" after a line to K, with no name the player does not know ([features/perception.md](features/perception.md)).
+
+On a launched and doctored `client-*` run (any seed), `scripts/house_label.py --run "$R"` joins a player, has a spawned F tell it its name (`mind_say`), installs an overlay (anyone past 4 m `far`; the `storage` kind `shows_owner`), has F put up a house and a stranger X a house and a storage with the player 40 m off, sends F and X 30 m off and brings the player beside them. F also stores berries in its own storage and goes off, and X takes some in the player's sight. Through the SDK probe it reads `my_known_names` (F, not X), the public `structure` rows (the owners) and `my_experience`: F's house is "<F>'s house" by the client's own rule (`looks::structure_name`), X's "house"; the player sees the theft "from <F>'s storage" though F is too far away to make out; the player's character gets no "You notice" lines (those are for minds) ([features/perception.md](features/perception.md)). Build the probe first (above). It installs the shipped script again at the end; run cleanup after it.
+
+On a launched and doctored `client-*` run (any seed), `scripts/far_label.py --run "$R"` joins a player, installs an overlay that makes everyone past 4 m `far` (as Cullet's law does past 24 m), places two strangers at 2 m and 6 m, and reads the player's `seen_characters` through the SDK probe: `a stranger` near, `someone too far away to make out` far, then `a stranger` once the far one is brought close ([features/perception.md](features/perception.md)). Admin calls set the scene. It installs the shipped script again at the end; run cleanup after it.
+
+On a launched and doctored `client-*` run with `--seed cullet` (a `perceived_of` that reads distance), `scripts/sweep_rows.py --run "$R" [--expect-kept]` records a player's `seen_characters` rows of a fixed scene step by step: strangers across the 24 m cut, an introduction, a known person going too far away to make out and back, new know-how, a death. Run it once on main's module and once on a branch's, then `scripts/sweep_rows.py --compare <run-a>/sweep_rows.json <run-b>/sweep_rows.json` must find the same rows at every step ([features/perception.md](features/perception.md)). It turns the `regard_cache_check` law on for the scene and off at the end.
+
+## Cues and tiers
+
+On a launched and doctored `client-*` run (any seed; build the probe first), `scripts/cues.py --run "$R"` proves the near and far tiers of `seen_bodies`, `seen_fighters` and `seen_doing` and the cue event tables (`seen_body_cue`, `seen_fighter_cue`, `seen_doing_cue`, docs/PERCEPTION.md "Cues and tiers"): three players with their own identities and an anonymous connection stream them while one player steps, waves and strikes beside another; row-level security keeps each cue to its viewer, a near opponent's windup arrives first by a cue, a far stranger is never cued, the tiers partition each view, and the client's rule (a cue until the creature's next tier row) ends on the views' rows; with the `cue_transport_on` law off, nothing is cued and the near tier carries the windups ([features/perception.md](features/perception.md)). The merge's scene gate runs it as case `cues`. `scripts/near_tier.py --run "$R"` (any seed, by day) proves the near tier's order: `NEAR_MAX` + 1 held strangers within 7.5 m of a player and a second player 10 m off; the `NEAR_MAX` nearest strangers are near, then the second player waves at the first and is in its near tier at once, past the cap, and first at the next sweep (it and the `NEAR_MAX` − 1 nearest), far again after the wave. `run.py` runs both after the fixed suite, and the gate's case `cues` runs both. Run it on its own launch: it joins the run's player identity.
+
+## Looks
+
+On a launched and doctored `client-*` run whose seed has looks (`--seed plan-test` or `--seed cullet`), `scripts/look_rows.py --run "$R"` checks the look key a real client receives: `look` and `look_line` refused, an `lk_` key on every seen person row, far rows included, none for the unseen, the same after a reconnect ([features/looks.md](features/looks.md)).
 
 ## Check one query during triage
 
@@ -70,11 +92,11 @@ Add `--as-player` to subscribe with the harness player's identity after joining,
 
 The suite also drives presence ([features/presence.md](features/presence.md)): it holds real WebSocket connections for `ClientSecond`, waits for the takeover after the `takeover_s` law (about 30 s, so the suite takes that much longer) and reconnects for the handback.
 
-The suite above drives the observer's query set (`living/viewer/src/net.rs`) as the owner, and a player's perception views ([features/perception.md](features/perception.md)). The game client (`living/game/src/net.rs`) subscribes differently on a land world. It subscribes static tables and the perception views (`seen_*`, `my_*`) once per connection, and two chunk windows of public world data (`terrain_chunk`, `lot`) that it moves as it walks. [features/game-client.md](features/game-client.md) runs the real game client headless (`LIVING_GAME_LIVE`), sends each of its queries through `drive.py`, and measures bytes per query from the server's metrics.
+The suite above drives the observer's query set (`living/viewer/src/net.rs`) as the owner, and a player's perception views ([features/perception.md](features/perception.md)). The game client (`living/game/src/net.rs`) subscribes differently on a land world. It subscribes static tables and the perception views (`seen_*`, `my_*`) once per connection, and two chunk windows of public world data (`terrain_chunk`, `lot`) that it moves as it walks. [features/game-client.md](features/game-client.md) runs the real game client headless (`LIVING_GAME_LIVE`), sends each of its queries through `drive.py`, and measures bytes per query from the server's metrics. Its [tile classes](features/game-client.md#tile-classes) check counts the classes a client receives in `terrain_chunk` (`scripts/tile_classes.py`, drops 8 and low 9 included) against the rules' count for the land.
 
 ## Checks and evidence
 
-[features/README.md](features/README.md) indexes every check. [references/validation.md](references/validation.md) records the real runs.
+[features/README.md](features/README.md) indexes every check. [references/validation/](references/validation/README.md) holds one record per real run; the newest files are the last validated runs.
 
 The driver compares its copied base queries against `living/viewer/src/net.rs` and checks the private-table and reducer inventories against the authority source. A changed inventory stops the run so the map cannot silently omit a new permission path.
 

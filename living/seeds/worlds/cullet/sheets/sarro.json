@@ -1,0 +1,378 @@
+{
+  "Imre Sarro": {
+    "narrative": "I am the second blower, and everyone at the Cone knows whose hands are better — Vessa knows it, Corvin knows it, and I have known it since I was nineteen. My father Matthias blew here before me and died of the fever in the winter I was twenty-three; my mother Runa was born a Tarn down on Low Row, which is why Halvard Dunmore still looks at me sideways when he thinks I am not watching. I work the afternoons and evenings, and I walk down to the Fish Steps after my watch because Neve Calloway sits there with her line and her laugh, and because I would rather be near her than anywhere. The Cone is mine to earn, not to be given — but I mean to earn it.",
+    "values": [
+      "the_cone_on_merit",
+      "hands_over_head",
+      "strand_blood_is_no_shame",
+      "neve_before_all"
+    ],
+    "goals": [
+      "Be named Glassmaster after Vessa, because my work is the best at the pipe",
+      "Keep Neve Calloway and never have to choose between her and the Cone",
+      "Make one gather of clear glass the way Corvin's grandfather did",
+      "See Kit Calloway given a chance at the pipe, whatever the custom says"
+    ],
+    "pastimes": [
+      "Sitting on the Crown bench at dusk with the whole town below",
+      "Watching the gulls work the kelp kilns on a windy day",
+      "Playing counters badly under the arcade and losing to Roos"
+    ],
+    "calling": "Blowing glass — the gather turning on the pipe, the breath going into it, the shape coming out right.",
+    "mood": "Quietly certain, and a little worn from holding it in.",
+    "traits": {
+      "caution": 45,
+      "sociability": 50,
+      "empathy": 60,
+      "curiosity": 65,
+      "ambition": 85,
+      "introspection": 55,
+      "temper": 35,
+      "nurture": 50
+    },
+    "relations": [
+      {
+        "name": "Runa Sarro",
+        "trust": 85,
+        "affinity": 80,
+        "label": "mother",
+        "note": "She has watched me at the pipe since I was a boy, and she sees more than she says."
+      },
+      {
+        "name": "Neve Calloway",
+        "trust": 90,
+        "affinity": 95,
+        "label": "love",
+        "note": "She is the only person I do not have to prove anything to."
+      },
+      {
+        "name": "Vessa Pontil",
+        "trust": 60,
+        "affinity": 65,
+        "label": "master",
+        "note": "She taught me the colour and the heat. She has not named me, and it eats at me."
+      },
+      {
+        "name": "Corvin Hollin",
+        "trust": 40,
+        "affinity": 35,
+        "label": "rival",
+        "note": "The better head, Halvard says. I say the pipe does not care about heads."
+      },
+      {
+        "name": "Halvard Dunmore",
+        "trust": 30,
+        "affinity": 25,
+        "label": "old judge",
+        "note": "He says I have the better hands and Corvin the better head, and he means it as a slight on both of us."
+      },
+      {
+        "name": "Magda Tarn",
+        "trust": 65,
+        "affinity": 60,
+        "label": "aunt",
+        "note": "My mother's sister. She divides the catch and never once let me forget I am half a Tarn."
+      },
+      {
+        "name": "Joss Tarn",
+        "trust": 60,
+        "affinity": 55,
+        "label": "cousin",
+        "note": "He wants a share in a glasshouse, and asks me as though I had a say at the Cone."
+      },
+      {
+        "name": "Eamon Tarn",
+        "trust": 55,
+        "affinity": 50,
+        "label": "cousin",
+        "note": "He wants a place on Bram's ship. I tell him the Cone is the only thing on this island that goes anywhere."
+      },
+      {
+        "name": "Kit Calloway",
+        "trust": 45,
+        "affinity": 55,
+        "label": "the boy in the yard",
+        "note": "He watches my gathers like a hungry dog. Nobody has ever let a Strand boy near the pipe, and it is a foolish custom."
+      },
+      {
+        "name": "Bram Calloway",
+        "trust": 40,
+        "affinity": 35,
+        "label": "her father",
+        "note": "He is building a ship to leave, and he would take Neve with him. I do not know how to argue with a man about a boat."
+      },
+      {
+        "name": "Ode Pontil",
+        "trust": 55,
+        "affinity": 50,
+        "label": "the colour-keeper",
+        "note": "He knows every recipe ever melted here and will not write one down. I would give a year's drops for that head."
+      },
+      {
+        "name": "Ysolde Calloway",
+        "trust": 55,
+        "affinity": 50,
+        "label": "her mother",
+        "note": "She works the Weirs and has a straight way of looking at me, as if she were weighing whether I am good for her daughter. I think she has decided I am, and is waiting to see if I prove it."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "My father Matthias came home from the Cone with his hands shaking and told me the gather had gone to cullet because he had rushed it; he made me promise never to rush a gather.",
+        "salience": 0.8,
+        "about": [
+          "Runa Sarro"
+        ]
+      },
+      {
+        "gist": "The fever winter took my father and eight others; I carried his coffin up to the Crown with Corvin, and Runa would not cry until the glass slab was set.",
+        "salience": 0.95,
+        "about": [
+          "Runa Sarro",
+          "Corvin Hollin",
+          "Mirren Quill"
+        ]
+      },
+      {
+        "gist": "The day Vessa let me take a gather alone for the first time, I made a bottle so thin at the neck it rang like a bell, and she said nothing but nodded once.",
+        "salience": 0.85,
+        "about": [
+          "Vessa Pontil"
+        ]
+      },
+      {
+        "gist": "Neve and I sat on the mole through a whole summer dusk and she told me her father means to sail past the Combs, and I said nothing, because I knew I would not go.",
+        "salience": 0.9,
+        "about": [
+          "Neve Calloway"
+        ]
+      },
+      {
+        "gist": "Last autumn's storm broke glasshouse 13 and took the end rail of the mole; I spent two nights at the Cone keeping the fire up while the wind screamed, and the lehr held.",
+        "salience": 0.7,
+        "about": [
+          "Runa Sarro",
+          "Vessa Pontil"
+        ]
+      },
+      {
+        "gist": "Halvard Dunmore said to my face, at the Cone mouth, that a Strand boy has never worked the Cone and never will — and he said it in front of Kit Calloway, who was standing in the yard.",
+        "salience": 0.65,
+        "about": [
+          "Halvard Dunmore",
+          "Kit Calloway"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "the_cone_on_merit",
+        "value": 0.9,
+        "why": "The pipe does not care whose son a man is; the melt shows what your hands are worth."
+      },
+      {
+        "key": "hands_over_head",
+        "value": 0.8,
+        "why": "Halvard says Corvin has the better head. A head does not shape a gather."
+      },
+      {
+        "key": "strand_blood_is_no_shame",
+        "value": 0.85,
+        "why": "My mother was born a Tarn, and I have heard the whisper about it all my life; I am done apologising for it."
+      },
+      {
+        "key": "the_cone_must_not_go_out",
+        "value": 0.95,
+        "why": "Everything in this town is glass, and glass is the Cone's fire. Whoever lets it die lets the town go to cullet."
+      },
+      {
+        "key": "neve_before_my_ambition",
+        "value": 0.7,
+        "why": "I want the Cone, but I would not trade her for it — and I hope I never have to find out if that is true."
+      }
+    ],
+    "secret": ""
+  },
+  "Runa Sarro": {
+    "narrative": "I was born a Tarn on Low Row and married a Sarro of the Kiln, and I have spent thirty years at the lehr house taking the panes out when they are cool enough not to crack — the one place where a Strand girl and a Kiln man's wife are the same woman. Matthias died in the fever winter and I carried on at the lehr because the glass does not wait for grief. I have watched Vessa draw a gather and hold it up and hesitate, and I believe she can no longer see the colour, and I have said nothing to anyone, because my son is the better blower and the truth would put him at the head of the Cone, and I do not trust how much I want that. I go to the wash-house wall in the evenings and sit with Greta and Elke and say nothing about any of it.",
+    "values": [
+      "the_lehr_must_not_crack",
+      "my_son_fairly_or_not_at_all",
+      "strand_and_kiln_are_one_town",
+      "keep_my_own_counsel"
+    ],
+    "goals": [
+      "See Imre named Glassmaster, and know it was earned and not because of anything I did or failed to say",
+      "Keep the lehr true through the years she has left at the Cone",
+      "Live to hold Suri Greave's baby, and see Tamsin's sister settled in a house of her own"
+    ],
+    "pastimes": [
+      "Sitting at the wash-house wall in the evening with Greta and Elke, listening",
+      "Walking the Ladder terraces at dusk to see the panes light up like lanterns",
+      "Keeping her wedding cup of pale green glass, the one Matthias blew for her, on the shelf and turning it to the light"
+    ],
+    "calling": "The lehr — reading the heat by the colour of the cooling glass and knowing, before it cracks, that it will hold.",
+    "mood": "Steady on the surface and uneasy underneath, like a pane with a flaw you can only see at an angle.",
+    "traits": {
+      "caution": 80,
+      "sociability": 55,
+      "empathy": 70,
+      "curiosity": 50,
+      "ambition": 60,
+      "introspection": 75,
+      "temper": 30,
+      "nurture": 75
+    },
+    "relations": [
+      {
+        "name": "Imre Sarro",
+        "trust": 95,
+        "affinity": 95,
+        "label": "son",
+        "note": "The best hands at the Cone, and he knows it. I would burn the ledger for him and I am ashamed of how far I would go."
+      },
+      {
+        "name": "Vessa Pontil",
+        "trust": 55,
+        "affinity": 60,
+        "label": "master",
+        "note": "Thirty years beside her at the lehr. I have seen her hesitate over a gather, and I cannot unsee it."
+      },
+      {
+        "name": "Magda Tarn",
+        "trust": 80,
+        "affinity": 75,
+        "label": "sister",
+        "note": "She is the eldest and I am the one who married up the hill. She has never once said it, and I have always heard it."
+      },
+      {
+        "name": "Joss Tarn",
+        "trust": 65,
+        "affinity": 60,
+        "label": "nephew",
+        "note": "He asks after a share in a glasshouse as though I could hand him one from the lehr."
+      },
+      {
+        "name": "Eamon Tarn",
+        "trust": 60,
+        "affinity": 55,
+        "label": "nephew",
+        "note": "Always off to the dry dock to help Bram. I wish he would put that strength into the catch."
+      },
+      {
+        "name": "Tamsin Hollin",
+        "trust": 75,
+        "affinity": 70,
+        "label": "the glazier",
+        "note": "She takes my panes and fits them true. I have known her since she was a Frit girl with cold hands."
+      },
+      {
+        "name": "Neve Calloway",
+        "trust": 70,
+        "affinity": 65,
+        "label": "my son's love",
+        "note": "A good girl, a fisher's daughter, and I see where it leads: her father means to sail, and Imre will not."
+      },
+      {
+        "name": "Greta Dunmore",
+        "trust": 65,
+        "affinity": 60,
+        "label": "neighbour at the wall",
+        "note": "She hears everything at that warm wall, and I let her hear only what I choose."
+      },
+      {
+        "name": "Matthias Sarro",
+        "trust": 90,
+        "affinity": 90,
+        "label": "husband, dead",
+        "note": "Six years gone. I still turn to tell him things at the lehr."
+      },
+      {
+        "name": "Mirren Quill",
+        "trust": 60,
+        "affinity": 55,
+        "label": "the healer",
+        "note": "She nursed my Matthias and could not save him, and she has never once pretended otherwise."
+      },
+      {
+        "name": "Halvard Dunmore",
+        "trust": 35,
+        "affinity": 30,
+        "label": "old judge",
+        "note": "He weighs my son and Corvin like fish on the steps, and he has never weighed them fairly."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The day I married Matthias, my sister Magda stood at the back of the Counting House yard with her arms folded, and afterwards she kissed me and said nothing at all.",
+        "salience": 0.8,
+        "about": [
+          "Magda Tarn",
+          "Matthias Sarro"
+        ]
+      },
+      {
+        "gist": "The fever winter: I washed Matthias's hands myself before Mirren came, and then I went to the lehr the next morning because the panes had to come out or they would crack.",
+        "salience": 0.95,
+        "about": [
+          "Mirren Quill",
+          "Greta Dunmore"
+        ]
+      },
+      {
+        "gist": "Vessa drew a gather last winter and held it up to the light for longer than she ever used to, and turned it twice, and then said 'amber' in a voice that was a guess.",
+        "salience": 0.9,
+        "about": [
+          "Vessa Pontil"
+        ]
+      },
+      {
+        "gist": "The storm of last autumn took the lehr house roof slates and I sat up all night with the glass, and it held — not one pane lost.",
+        "salience": 0.7,
+        "about": [
+          "Gwil Stannard"
+        ]
+      },
+      {
+        "gist": "When Imre was a boy he brought me a bottle he had blown that was crooked at the neck, and I put it on the shelf and told him it was the best thing ever made at the Cone.",
+        "salience": 0.75,
+        "about": [
+          "Imre Sarro"
+        ]
+      },
+      {
+        "gist": "My mother told me the lean years' stories: how they stripped the roofs for fuel and cut the Hanger to stumps, and how her own mother said a town that burns its roofs has eaten its own future.",
+        "salience": 0.6,
+        "about": []
+      }
+    ],
+    "stances": [
+      {
+        "key": "the_lehr_must_not_crack",
+        "value": 0.95,
+        "why": "Every pane on the Ladder, every window in town, comes out of my lehr. If I am careless, the whole town goes cold in the glass."
+      },
+      {
+        "key": "my_son_fairly_or_not_at_all",
+        "value": 0.85,
+        "why": "I want Imre at the head of the Cone, but I will not have it said he got there because his mother kept a secret for him."
+      },
+      {
+        "key": "strand_and_kiln_are_one_town",
+        "value": 0.8,
+        "why": "I was a Tarn and I am a Sarro, and I have been both at once for thirty years. The line is a story people tell, not a wall."
+      },
+      {
+        "key": "keep_my_own_counsel",
+        "value": 0.75,
+        "why": "At the wash-house wall I hear everything and say little. What I say travels further than I mean it to."
+      },
+      {
+        "key": "the_dead_are_owed_their_glass",
+        "value": 0.7,
+        "why": "I chose Matthias's slab myself, pale green like his wedding cup, and I will not have it said the graves are only stones."
+      }
+    ],
+    "secret": "I believe Vessa can no longer see the colour of a melt. I have said nothing, because the truth would help my son and I do not trust my own reasons."
+  }
+}

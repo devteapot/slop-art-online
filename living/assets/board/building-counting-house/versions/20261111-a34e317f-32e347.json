@@ -1,0 +1,237 @@
+{
+ "schema": 1,
+ "family": "building:counting-house",
+ "id": "20261111-a34e317f-32e347",
+ "published": "2026-11-11T21:02:46+01:00",
+ "track": "kit-2",
+ "maker": "Claude Fable 5.2",
+ "note": "kit-2 pass 2: lit windows and parapets from the plan; no two faces in one plane (the flicker of the owner's walk); every lot's eye-height cells. Unchanged in design",
+ "source": {
+  "commit": "a34e317f2de27101929fa770388a37f1d1b6d62e",
+  "branch": "kit-2",
+  "dirty": false,
+  "generator": "living/tools/blender/cullet.py",
+  "generator_sha256": "2a1d98999573e7816cef047ccc6c3aab5e04b0911d1071f1054acf8f7a29a287",
+  "generator_state": "committed",
+  "seed": "83",
+  "params": {
+   "plan": "living/seeds/worlds/cullet/plan.json"
+  }
+ },
+ "renderer": {
+  "method": "asset-view",
+  "commit": "a34e317f2de27101929fa770388a37f1d1b6d62e",
+  "dirty": false,
+  "key": "bin:cbdab2a8",
+  "env": "cullet",
+  "hours": {
+   "day": 15.0,
+   "night": 22.0
+  },
+  "weather": "clear",
+  "day_curve": true,
+  "preset": "2947e3c0",
+  "binary": "/home/carlid/.t3/worktrees/slop-art-online/t3-2190f8f1-741aca404e5ab819/.local/kit2-target/release/living-game",
+  "commit_assumed": "a34e317f2de27101929fa770388a37f1d1b6d62e",
+  "repo": "/home/carlid/.t3/worktrees/slop-art-online/t3-2190f8f1-741aca404e5ab819"
+ },
+ "preset": "building",
+ "media": "media/building-counting-house/20261111-a34e317f-32e347",
+ "members": [
+  {
+   "name": "counting_house",
+   "role": "subject",
+   "token_kind": "file",
+   "source_path": ".local/kit-2/board/counting_house/counting_house.glb",
+   "sha256": "a0c32308b2fe0f1068b7be49363f071fed406cea805ccccec0033b9bc57dc379",
+   "stats": {
+    "file": "counting_house.glb",
+    "sha256": "a0c32308b2fe0f1068b7be49363f071fed406cea805ccccec0033b9bc57dc379",
+    "bytes": 802752,
+    "triangles": 11460,
+    "vertices": 22868,
+    "parts": {
+     "counting_house": 11460
+    },
+    "nodes": 1,
+    "bones": 0,
+    "spring_bones": 0,
+    "materials": [
+     "Body",
+     "Glow"
+    ],
+    "textures": 0,
+    "texture_bytes": 0,
+    "morph_targets": 0,
+    "spring_groups": 0,
+    "vertex_colours": true,
+    "clips": [],
+    "glow": true,
+    "glow_triangles": 46,
+    "palette": [
+     {
+      "hex": "#393e45",
+      "share": 0.3903
+     },
+     {
+      "hex": "#5d5e64",
+      "share": 0.3258
+     },
+     {
+      "hex": "#211f1f",
+      "share": 0.0921
+     },
+     {
+      "hex": "#c8cabb",
+      "share": 0.0701
+     },
+     {
+      "hex": "#49515c",
+      "share": 0.0675
+     },
+     {
+      "hex": "#343131",
+      "share": 0.0213
+     },
+     {
+      "hex": "#637082",
+      "share": 0.0117
+     },
+     {
+      "hex": "#a6a89f",
+      "share": 0.0049
+     },
+     {
+      "hex": "#9eccc7",
+      "share": 0.0038
+     },
+     {
+      "hex": "#569684",
+      "share": 0.0024
+     },
+     {
+      "hex": "#566676",
+      "share": 0.0024
+     },
+     {
+      "hex": "#c3bead",
+      "share": 0.0023
+     },
+     {
+      "hex": "#8c999e",
+      "share": 0.0019
+     },
+     {
+      "hex": "#527870",
+      "share": 0.0012
+     },
+     {
+      "hex": "other",
+      "share": 0.0022
+     }
+    ]
+   },
+   "file": "files/counting_house.glb",
+   "report": {
+    "file": "counting_house/counting_house.glb",
+    "what": "lot",
+    "kind": "counting_house",
+    "size_m": [
+     30,
+     12
+    ],
+    "plan_height_m": 15.0,
+    "seed": 77922,
+    "above_floor_m": [
+     [
+      -15.057,
+      -6.057
+     ],
+     [
+      15.057,
+      6.057
+     ]
+    ],
+    "height_m": 15.0,
+    "foundation_m": 1.8,
+    "tris": 11460,
+    "materials": {
+     "Body": 11414,
+     "Glow": 46
+    },
+    "surface_tagged_share": 1.0,
+    "palette_share": 0.9055,
+    "palette_wear_blend_share": 0.0945,
+    "budget_tris": 14000,
+    "hidden_faces_removed": 11,
+    "coplanar_sheets_parted": 86,
+    "doors": [
+     {
+      "at": [
+       -4.134,
+       -2.1,
+       1.18
+      ],
+      "along": [
+       1.0,
+       0.0,
+       0.0
+      ],
+      "width_m": 0.9,
+      "height_m": 2.0
+     },
+     {
+      "at": [
+       4.134,
+       -2.1,
+       1.18
+      ],
+      "along": [
+       1.0,
+       0.0,
+       0.0
+      ],
+      "width_m": 0.9,
+      "height_m": 2.0
+     }
+    ],
+    "sha256": "a0c32308b2fe0f1068b7be49363f071fed406cea805ccccec0033b9bc57dc379",
+    "ridge_m": 15.0,
+    "arches": 7,
+    "bay_m": 4.134,
+    "arch_crown_m": 4.14,
+    "clock": "ten past four",
+    "eye_solid": 0.708,
+    "eye_cells": "60:2k6a3k5a3k6a2k6a2k6a3k5a3k6a4k6a3k5a3k6a2k6a2k6a3k5a3k6a2k240a1i1k56a1k1i1020k"
+   },
+   "shots": [
+    "front",
+    "three-quarter",
+    "side",
+    "back",
+    "close",
+    "game",
+    "night-three-quarter",
+    "night-game"
+   ],
+   "clips": [],
+   "view": {
+    "size_m": [
+     30.113805770874023,
+     16.799999237060547,
+     12.113805770874023
+    ],
+    "triangles": 11460,
+    "vertices": 22868,
+    "meshes": 2,
+    "materials": [
+     "Body",
+     "Glow"
+    ],
+    "glow": true,
+    "vertex_colours": true
+   }
+  }
+ ],
+ "delivered": []
+}

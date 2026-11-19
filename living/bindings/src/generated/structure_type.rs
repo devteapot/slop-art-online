@@ -14,6 +14,7 @@ pub struct Structure {
     pub chunk: u32,
     pub owner: u32,
     pub built_ms: u64,
+    pub lit_until_ms: u64,
 }
 
 impl __sdk::InModule for Structure {
@@ -31,6 +32,7 @@ pub struct StructureCols {
     pub chunk: __sdk::__query_builder::Col<Structure, u32>,
     pub owner: __sdk::__query_builder::Col<Structure, u32>,
     pub built_ms: __sdk::__query_builder::Col<Structure, u64>,
+    pub lit_until_ms: __sdk::__query_builder::Col<Structure, u64>,
 }
 
 impl __sdk::__query_builder::HasCols for Structure {
@@ -44,6 +46,7 @@ impl __sdk::__query_builder::HasCols for Structure {
             chunk: __sdk::__query_builder::Col::new(table_name, "chunk"),
             owner: __sdk::__query_builder::Col::new(table_name, "owner"),
             built_ms: __sdk::__query_builder::Col::new(table_name, "built_ms"),
+            lit_until_ms: __sdk::__query_builder::Col::new(table_name, "lit_until_ms"),
         }
     }
 }

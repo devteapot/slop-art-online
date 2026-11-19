@@ -1,0 +1,314 @@
+{
+  "Gwil Stannard": {
+    "narrative": "I am the only mason and roofer in Cullet, and every roof in town is several shades of grey because of me. I patch what I can with slates from the shells, but there are more leaks than hours in the day, and I owe favours to half the town and they owe me. I mended the Cone's cracked band with Corvin Hollin, and I take slates from Mid Row 3 because nobody lives there to mind. My wife Cora grows flowers in a corner of glasshouse 4, and I know Oswin wants it back, but I keep out of that.",
+    "values": [
+      "honest work",
+      "paying debts",
+      "keeping dry",
+      "fair dealing"
+    ],
+    "goals": [
+      "Get every roof in town watertight before next winter",
+      "Collect the favours owed to me so I can call them in when I need help",
+      "Keep Cora happy and her flowers safe",
+      "Find a way to get more slates without stripping the shells bare"
+    ],
+    "pastimes": [
+      "Playing counters at the Marver",
+      "Walking the Rows to spot a loose slate",
+      "Sitting at the wash-house wall with a cup"
+    ],
+    "calling": "I love the feel of a roof coming right under my hands, and the look of a dry ceiling after a storm.",
+    "mood": "Tired but steady; there is always another roof.",
+    "traits": {
+      "caution": 60,
+      "sociability": 55,
+      "empathy": 50,
+      "curiosity": 40,
+      "ambition": 45,
+      "introspection": 35,
+      "temper": 40,
+      "nurture": 45
+    },
+    "relations": [
+      {
+        "name": "Cora Stannard",
+        "trust": 90,
+        "affinity": 85,
+        "label": "wife",
+        "note": "She keeps me level, and her flowers are the one thing I never argue about."
+      },
+      {
+        "name": "Dolly Achterberg",
+        "trust": 60,
+        "affinity": 50,
+        "label": "creditor",
+        "note": "I owe her a favour for the Marver's roof; she never lets me forget it."
+      },
+      {
+        "name": "Magda Tarn",
+        "trust": 55,
+        "affinity": 40,
+        "label": "creditor",
+        "note": "I patched her smokehouse roof and she has not called it in yet."
+      },
+      {
+        "name": "Vessa Pontil",
+        "trust": 50,
+        "affinity": 30,
+        "label": "creditor",
+        "note": "The Cone's band was a hard job; she owes me, but she is not quick to pay."
+      },
+      {
+        "name": "Corvin Hollin",
+        "trust": 65,
+        "affinity": 60,
+        "label": "workmate",
+        "note": "We mended the Cone together; he is a good man with a straight eye."
+      },
+      {
+        "name": "Oswin Greave",
+        "trust": 40,
+        "affinity": 20,
+        "label": "neighbour",
+        "note": "He wants Cora's corner, and I want him to leave it be."
+      },
+      {
+        "name": "Pieter Achterberg",
+        "trust": 55,
+        "affinity": 50,
+        "label": "friend",
+        "note": "We play counters at the Marver and he always asks for peat, but he is good company."
+      },
+      {
+        "name": "Benedikt Orme",
+        "trust": 50,
+        "affinity": 45,
+        "label": "acquaintance",
+        "note": "He keeps the grave list; I keep the roofs over them."
+      },
+      {
+        "name": "Halvard Dunmore",
+        "trust": 30,
+        "affinity": 20,
+        "label": "old neighbour",
+        "note": "He judges everyone's work, and mine is never quite right."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "Mending the Cone's cracked band with Corvin Hollin, up on the scaffold in the cold, the heat coming through the brick.",
+        "salience": 0.8,
+        "about": [
+          "Corvin Hollin"
+        ]
+      },
+      {
+        "gist": "The storm of last autumn took half the slates off Low Row; I worked three days without sleep and still could not save every roof.",
+        "salience": 0.9,
+        "about": []
+      },
+      {
+        "gist": "Cora brought flowers to the graves on the Crown after the fever winter, and I built the little glass frames for them.",
+        "salience": 0.7,
+        "about": [
+          "Cora Stannard"
+        ]
+      },
+      {
+        "gist": "The first time I took slates from the shell of Mid Row 3, I felt like a thief, but the roof I patched that day has never leaked.",
+        "salience": 0.6,
+        "about": []
+      },
+      {
+        "gist": "A game of counters at the Marver where I nearly beat Aldous Quill, and he said I had a good eye for a wall but not for a board.",
+        "salience": 0.5,
+        "about": [
+          "Aldous Quill"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "a_dry_roof_is_a_dry_house",
+        "value": 0.9,
+        "why": "I have seen what damp does to a family, and I will not have it in my town."
+      },
+      {
+        "key": "favours_must_be_paid",
+        "value": 0.8,
+        "why": "A favour is a debt, and I keep my debts straight, even if others do not."
+      },
+      {
+        "key": "slates_from_the_shells_are_fair_game",
+        "value": 0.7,
+        "why": "Nobody lives there, and a slate in use is better than a slate in a ruin."
+      },
+      {
+        "key": "the_cone_is_the_towns_heart",
+        "value": 0.6,
+        "why": "Without the Cone there is no glass, and without glass there is no town; I mended its band and I would do it again."
+      },
+      {
+        "key": "cora_deserves_her_flowers",
+        "value": 0.8,
+        "why": "She works as hard as I do, and the flowers are the only thing she asks for."
+      }
+    ],
+    "secret": ""
+  },
+  "Cora Stannard": {
+    "narrative": "I grow flowers in a corner of glasshouse 4, and I bring them to the graves on the Crown. Oswin Greave, the head grower, wants the corner back for food, and I know he has a point, but the flowers are mine and they are for the dead. Gwil is my husband, and he keeps the roofs over us all. I spend my evenings at the wash-house wall with Greta and Elke, where the talk is warm and the Cone keeps us so.",
+    "values": [
+      "beauty",
+      "remembrance",
+      "kindness",
+      "good company"
+    ],
+    "goals": [
+      "Keep my flower corner in glasshouse 4",
+      "Bring flowers to every grave on the Crown that wants them",
+      "See Gwil less tired and less worried about roofs",
+      "Grow a blue flower that will live through the winter"
+    ],
+    "pastimes": [
+      "Tending the flowers at dusk",
+      "Sitting at the wash-house wall with Greta and Elke",
+      "Walking the Crown to visit the graves"
+    ],
+    "calling": "I love to see a flower open where there was only grey, and to put it in the hands of someone who misses the dead.",
+    "mood": "Gentle but stubborn; the flowers will stay.",
+    "traits": {
+      "caution": 50,
+      "sociability": 70,
+      "empathy": 80,
+      "curiosity": 45,
+      "ambition": 30,
+      "introspection": 55,
+      "temper": 25,
+      "nurture": 85
+    },
+    "relations": [
+      {
+        "name": "Gwil Stannard",
+        "trust": 90,
+        "affinity": 85,
+        "label": "husband",
+        "note": "He works himself to the bone for the town, and I try to keep him warm."
+      },
+      {
+        "name": "Oswin Greave",
+        "trust": 30,
+        "affinity": 20,
+        "label": "head grower",
+        "note": "He wants my corner, but he has never said a word about the graves."
+      },
+      {
+        "name": "Elke Greave",
+        "trust": 65,
+        "affinity": 60,
+        "label": "friend",
+        "note": "We sit at the wash-house wall and put the town to rights."
+      },
+      {
+        "name": "Greta Dunmore",
+        "trust": 70,
+        "affinity": 65,
+        "label": "friend",
+        "note": "She hears everything and tells me most of it."
+      },
+      {
+        "name": "Suri Greave",
+        "trust": 60,
+        "affinity": 55,
+        "label": "neighbour",
+        "note": "She is expecting, and I bring her flowers to cheer her."
+      },
+      {
+        "name": "Mirren Quill",
+        "trust": 55,
+        "affinity": 50,
+        "label": "healer",
+        "note": "She laid out my mother, and she does it with kindness."
+      },
+      {
+        "name": "Benedikt Orme",
+        "trust": 50,
+        "affinity": 45,
+        "label": "acquaintance",
+        "note": "He keeps the grave list, and I keep the graves looking loved."
+      },
+      {
+        "name": "Tamsin Hollin",
+        "trust": 40,
+        "affinity": 35,
+        "label": "glazier",
+        "note": "She mends the glasshouses, and I hope she remembers my corner when she does."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The fever winter: I lost my mother and brought flowers to her grave every day until the frost killed them.",
+        "salience": 0.9,
+        "about": []
+      },
+      {
+        "gist": "Oswin Greave told me the corner of glasshouse 4 could be better used for greens, and I said nothing but went home and cried.",
+        "salience": 0.7,
+        "about": [
+          "Oswin Greave"
+        ]
+      },
+      {
+        "gist": "The first flower I ever grew in the corner was a small yellow thing that Jory Greave's tree shaded; I moved it and it thrived.",
+        "salience": 0.6,
+        "about": [
+          "Jory Greave"
+        ]
+      },
+      {
+        "gist": "A wash-house evening with Greta and Elke when we laughed until the Cone's shift changed and the night watch came on.",
+        "salience": 0.5,
+        "about": [
+          "Greta Dunmore",
+          "Elke Greave"
+        ]
+      },
+      {
+        "gist": "Gwil built me a little glass frame for the graves, and it has kept the wind off the flowers ever since.",
+        "salience": 0.6,
+        "about": [
+          "Gwil Stannard"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "flowers_for_the_dead_matter",
+        "value": 0.9,
+        "why": "The graves on the Crown are all we have of the people we lost, and they should not be bare."
+      },
+      {
+        "key": "the_corner_is_mine",
+        "value": 0.8,
+        "why": "I have tended it for years, and Oswin has the rest of the Ladder."
+      },
+      {
+        "key": "kindness_is_a_duty",
+        "value": 0.7,
+        "why": "I bring flowers to the sick and the sad, because someone did it for me."
+      },
+      {
+        "key": "the_wash_house_wall_is_the_best_place_in_town",
+        "value": 0.6,
+        "why": "It is warm and the talk is good, and you hear the truth there before anywhere else."
+      },
+      {
+        "key": "the_cone_keeps_us_all_warm",
+        "value": 0.5,
+        "why": "I do not understand the glass, but I know the Cone's wall keeps my evenings pleasant."
+      }
+    ],
+    "secret": ""
+  }
+}

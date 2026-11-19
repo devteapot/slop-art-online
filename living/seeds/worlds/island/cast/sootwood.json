@@ -56,7 +56,7 @@
      "knows": [
       "carpentry",
       "fire",
-      "mending"
+      "wound_tending"
      ],
      "parents": [
       "Orvin Hollis",
@@ -125,7 +125,7 @@
      "knows": [
       "carpentry",
       "fire",
-      "mending",
+      "wound_tending",
       "basketry"
      ],
      "parents": [],

@@ -1,0 +1,119 @@
+{
+ "jersey_coat-f|coat_2-f|rest": {
+  "most": -1.0,
+  "frames": 0,
+  "of": 1
+ },
+ "jersey_coat-f|trousers-f|rest": {
+  "most": -1.0,
+  "frames": 0,
+  "of": 1
+ },
+ "trousers-f|coat_2-f|rest": {
+  "most": -1.0,
+  "frames": 0,
+  "of": 1
+ },
+ "jersey_coat-f|coat_2-f|idle": {
+  "most": -1.0,
+  "frames": 0,
+  "of": 12
+ },
+ "jersey_coat-f|trousers-f|idle": {
+  "most": -1.0,
+  "frames": 0,
+  "of": 12
+ },
+ "trousers-f|coat_2-f|idle": {
+  "most": -1.0,
+  "frames": 0,
+  "of": 12
+ },
+ "jersey_coat-f|coat_2-f|walk": {
+  "most": -1.0,
+  "frames": 0,
+  "of": 12
+ },
+ "jersey_coat-f|trousers-f|walk": {
+  "most": -1.0,
+  "frames": 0,
+  "of": 12
+ },
+ "trousers-f|coat_2-f|walk": {
+  "most": -1.0,
+  "frames": 0,
+  "of": 12
+ },
+ "jersey_coat-f|coat_2-f|run": {
+  "most": -1.0,
+  "frames": 0,
+  "of": 12
+ },
+ "jersey_coat-f|trousers-f|run": {
+  "most": -1.0,
+  "frames": 0,
+  "of": 12
+ },
+ "trousers-f|coat_2-f|run": {
+  "most": -1.0,
+  "frames": 0,
+  "of": 12
+ },
+ "jersey_coat-f|coat_2-f|sit_idle": {
+  "most": -1.0,
+  "frames": 0,
+  "of": 12
+ },
+ "jersey_coat-f|trousers-f|sit_idle": {
+  "most": -1.0,
+  "frames": 0,
+  "of": 12
+ },
+ "trousers-f|coat_2-f|sit_idle": {
+  "most": -1.0,
+  "frames": 0,
+  "of": 12
+ },
+ "jersey_coat-f|coat_2-f|sit_ground": {
+  "most": -0.925131823884773,
+  "frames": 0,
+  "of": 12,
+  "at": 6.64,
+  "bone": "J_Bip_C_UpperChest",
+  "out": 0
+ },
+ "jersey_coat-f|trousers-f|sit_ground": {
+  "most": 14.879938901938935,
+  "frames": 12,
+  "of": 12,
+  "at": 5.98,
+  "bone": "J_Bip_C_Hips",
+  "out": 9
+ },
+ "trousers-f|coat_2-f|sit_ground": {
+  "most": 36.086386458432685,
+  "frames": 12,
+  "of": 12,
+  "at": 0.0,
+  "bone": "J_Bip_C_Hips",
+  "out": 9
+ },
+ "coat_2-f|chair|sit_idle": {
+  "most": 116.55473345663376,
+  "below": 90.78848048470189,
+  "behind": 116.55473345663376,
+  "vertices": 747
+ },
+ "coat_2-f|terrain|sit_ground": {
+  "most": 0.0,
+  "below": 0.0,
+  "behind": 0.0,
+  "vertices": 0
+ },
+ "coat_2-f|ground|sit_ground": {
+  "most": 6.319277211708382,
+  "below": 6.319277211708382,
+  "behind": 0.0,
+  "vertices": 4
+ }
+}

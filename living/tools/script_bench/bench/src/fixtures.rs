@@ -145,12 +145,18 @@ fn actor(r: &mut Rng, id: u32) -> ActorFacts {
         pasture: r.range(0.0, 3.0),
         hurt_by: if hurt { r.n(1, 40) } else { 0 },
         hurt_ago: hurt.then(|| r.range(0.0, 20_000.0)),
+        hurt_by_near: hurt && r.range(0.0, 1.0) < 0.5,
         yielded_ago: r.chance(0.1).then(|| r.range(0.0, 30_000.0)),
         sensed,
         bold: r.chance(0.05),
         room: r.n(8, 25),
         community: 0,
         home: String::new(),
+        lit: false,
+        // Rested breath and focus (no extra draws, so the samples before stamina-1 stay the same).
+        stamina: 100.0,
+        focus: 100.0,
+        sex: String::new(),
     }
 }
 
@@ -185,6 +191,9 @@ fn target(r: &mut Rng, actor_id: u32) -> TargetFacts {
         owner: 0,
         home: String::new(),
         hosts: false,
+        lit: false,
+        fuel: 0.0,
+        sex: String::new(),
     }
 }
 
@@ -230,6 +239,7 @@ pub fn build() -> Fixtures {
             revealed: if r.chance(0.3) { vec!["health".into()] } else { vec![] },
             own: i == 5,
             night: r.chance(0.4),
+            dist: 0,
         });
     }
     let mut hooks = Vec::new();

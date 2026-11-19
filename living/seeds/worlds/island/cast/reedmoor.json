@@ -29,7 +29,7 @@
       "fishing",
       "smoking",
       "fire",
-      "mending",
+      "wound_tending",
       "basketry"
      ],
      "parents": [
@@ -55,7 +55,7 @@
       "fire",
       "storage",
       "smoking",
-      "mending"
+      "wound_tending"
      ],
      "parents": [
       "Cuthbert Stave",
@@ -77,7 +77,7 @@
      "role": "Nell's son; cuts reeds and learns the boat and the tally",
      "knows": [
       "basketry",
-      "mending"
+      "wound_tending"
      ],
      "parents": [
       "Nell Sedge"
@@ -96,7 +96,7 @@
      "occupation": "child",
      "role": "Eadric and Hilda's daughter; gathers reeds and helps at the cook-fire",
      "knows": [
-      "mending"
+      "wound_tending"
      ],
      "parents": [
       "Eadric Sedge",
@@ -146,7 +146,7 @@
      "occupation": "child",
      "role": "Jem and Morwen's daughter; helps with the goats and the fence",
      "knows": [
-      "mending"
+      "wound_tending"
      ],
      "parents": [
       "Jem Coombe",
@@ -189,7 +189,7 @@
      "role": "fishes the shore and the reed channels; keeps the village's nets and traps",
      "knows": [
       "fishing",
-      "mending",
+      "wound_tending",
       "fire",
       "smoking",
       "basketry"
@@ -241,7 +241,7 @@
       "fishing",
       "smoking",
       "fire",
-      "mending",
+      "wound_tending",
       "shelter"
      ],
      "parents": [

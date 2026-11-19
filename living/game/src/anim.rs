@@ -21,7 +21,8 @@
 //! added over a walk would turn the arms twice.
 //!
 //! **Locomotion.** [`gait::Gaits::blend`] gives up to two gaits and their weights from the drawn
-//! speed. All gait clips are paused and set to the same normalised phase every frame, which
+//! speed; travelling off where the legs face ([`Motion::travel`]), [`gait::Gaits::blend_toward`]
+//! gives up to four: two directions' takes, each its walk and run. All gait clips are paused and set to the same normalised phase every frame, which
 //! advances at `speed / (stride × cycle metres)`; their markers start at the same footfall, so
 //! no foot mixes with its opposite. A body steps whenever it moves (above [`STEP_ON`], down to
 //! [`STEP_OFF`]): at a slow walk's rate its feet still keep still, where standing would glide.
@@ -46,6 +47,15 @@
 //! **For foot IK** (`ik.rs`) this module also gives each foot's contact (0–1) from the markers of
 //! the clips the legs show, weighted as they are, and how much of the legs' pose comes from clips
 //! where IK applies ([`Anim::ik`]; `ik: false` in the sidecar for sitting and lying).
+//!
+//! **Shared clips.** A body's clips come from its [`clip_file`]: its own file, or for generated
+//! people (`own-*` bases, who all have the same skeleton) the one shared clip file
+//! [`SHARED_CLIPS`] when it is there, so 64 people hold one copy of each clip and one graph
+//! (`Sets` is keyed by the clip file). Clips bind to bones by their name path from the scene's
+//! root (`AnimationTargetId`), which is the same in every generated file. A file without clips of
+//! its own gets no `AnimationPlayer` or targets from Bevy's loader; [`bind`] adds them as the
+//! loader would. The clip file's sidecar (`gait::of`) times the gaits, and `Character::stride` is
+//! measured against the clip file's figure (`characters::shape`).
 
 use crate::combat::Action;
 use crate::gait::{self, Gaits};
@@ -102,6 +112,15 @@ pub struct Motion {
     /// How far the upper body turns from the legs toward where the body looks (radians, sim
     /// sense: counter-clockwise seen from above is positive), spread over the spine (`twist.rs`).
     pub twist: f32,
+    /// The part of [`Motion::twist`] the neck and head take (head first, `twist::LookWalk`); the
+    /// spine and chest take the rest.
+    pub neck: f32,
+    /// How far the eyes turn beyond the head (radians, sim sense), where the file has eye bones.
+    pub eyes: f32,
+    /// Looking at something: the neck and head hold the look ([`Motion::neck`] from the chest)
+    /// instead of adding it to the clip's own turn of the head (a diagonal take's head turns
+    /// about 30° by itself).
+    pub aim: bool,
     /// How much faster than its own pace the ground makes the body go (the rules' road speed on
     /// a road; 1 elsewhere). The gait is chosen at `speed / pace`, so a walk on a road stays a
     /// walk, and steps at the body's real speed, so its feet stay planted.
@@ -109,15 +128,192 @@ pub struct Motion {
     /// The gait holds its stride where it is (in a jump's flight: legs that kept cycling ran in
     /// the air).
     pub freeze: bool,
+    /// Where the body travels from where its legs face (radians, the game's sense: positive to
+    /// the right, ±π behind). Off the forward, the file's directional takes play when it has
+    /// them on both sides ([`gait::Gaits::blend_toward`]; `live.rs` asks only then).
+    pub travel: f32,
+    pub cursor_facing: bool,
+    /// Walking or running clips ([`gait::Family`]: the authority's word, else the laws' split;
+    /// `live.rs` sets it, look-dev leaves the clips' own).
+    pub family: crate::gait::Family,
 }
 
 impl Default for Motion {
     fn default() -> Self {
-        Self { speed: 0.0, stride: 1.0, stand: "idle", action: None, now_ms: 0.0, reverse: false, twist: 0.0, pace: 1.0, freeze: false }
+        Self { speed: 0.0, stride: 1.0, stand: "idle", action: None, now_ms: 0.0, reverse: false, twist: 0.0, neck: 0.0, eyes: 0.0, aim: false, pace: 1.0, freeze: false, travel: 0.0, cursor_facing: false, family: crate::gait::Family::Clips }
     }
 }
 
-/// One file's graph and what each node plays.
+/// Generated people's shared clip file: the library baked once on one figure (gen_person.sh).
+pub const SHARED_CLIPS: &str = "lookdev/anim/own-clips.glb";
+
+/// The file a character file's clips come from (paths under the asset folder): the shared
+/// clip file for a generated person (an `own-*` file, or a character type under
+/// `lookdev/types/`, docs/CHARACTERS.md "The client format") when it exists and
+/// `LIVING_GAME_SHARED_CLIPS` is not `0`, else the file itself.
+pub fn clip_file(file: &str) -> String {
+    use std::sync::OnceLock;
+    static SHARED: OnceLock<bool> = OnceLock::new();
+    let shared = *SHARED.get_or_init(|| {
+        let on = std::env::var("LIVING_GAME_SHARED_CLIPS").map_or(true, |v| v != "0");
+        let there = std::path::Path::new(&crate::lookdev::asset_root()).join(SHARED_CLIPS).exists();
+        if on && there {
+            info!("anim: generated people take their clips from {SHARED_CLIPS}");
+        }
+        on && there
+    });
+    let own = file.starts_with("lookdev/types/") || std::path::Path::new(file).file_name().is_some_and(|n| n.to_string_lossy().starts_with("own-"));
+    if shared && own && file != SHARED_CLIPS {
+        SHARED_CLIPS.to_string()
+    } else {
+        file.to_string()
+    }
+}
+
+/// A body's clip variants: each logical clip it plays another animation for, and that animation
+/// ([`variants`]). Everything that keys off a clip keeps the logical name (the cloth's ground
+/// contact [`seat_of`], [`Anim::ground_share`], `live.rs`' seat anchor, `town::Show`, the
+/// recordings' [`Anim::showing`]); only the node played, its length and its foot contacts are
+/// the variant's ([`resolve`]).
+pub type Plays = Vec<(&'static str, &'static str)>;
+
+/// The variant families (`assets/characters/clip_variants.json`, which `cloth_check.py
+/// --ground-clips select` reads too): for a generated person whose type starts with one of
+/// `types` and who wears every piece in `wears`, `clips` maps logical clips to the animations
+/// played. Today one family: the female ground sit (docs/seat-contact/female-ground-bake/README.md,
+/// "Laptop playback selector"): adult types wearing `trousers-f` and `boots-f` sit, rest and get
+/// up on `*_f` clips baked on that trouser and boot; elders, youths, children and the male family
+/// keep the originals.
+#[derive(serde::Deserialize)]
+struct Family {
+    types: Vec<String>,
+    wears: Vec<String>,
+    clips: std::collections::BTreeMap<String, String>,
+}
+
+fn families() -> &'static [Family] {
+    use std::sync::OnceLock;
+    static FAMILIES: OnceLock<Vec<Family>> = OnceLock::new();
+    FAMILIES.get_or_init(|| {
+        let doc: serde_json::Value = serde_json::from_str(include_str!("../assets/characters/clip_variants.json")).expect("clip_variants.json");
+        serde_json::from_value(doc["families"].clone()).expect("clip_variants.json families")
+    })
+}
+
+/// The clip variants of a generated person of type `kind` (`adult-f-b`) wearing the pieces
+/// `worn` (style file names: `trousers-f`), by the families in `clip_variants.json`.
+pub fn variants<'a>(kind: &str, worn: impl IntoIterator<Item = &'a str>) -> Plays {
+    let worn: Vec<&str> = worn.into_iter().collect();
+    families()
+        .iter()
+        .filter(|f| f.types.iter().any(|t| kind.starts_with(t.as_str())) && f.wears.iter().all(|w| worn.contains(&w.as_str())))
+        .flat_map(|f| f.clips.iter().map(|(l, v)| (intern(l), intern(v))))
+        .collect()
+}
+
+/// A character's clip variants: by its person line's type and the pieces it is composed wearing
+/// (`compose::Styled`, so the actual geometry, form overrides included). None for a body that
+/// is not composed (a whole file, a VRoid base, an animal).
+pub fn variants_of(ch: Option<&crate::characters::Character>, styled: Option<&crate::characters::compose::Styled>) -> Plays {
+    match (ch.and_then(|c| c.recipe.person.as_ref()).filter(|_| variants_on()), styled) {
+        (Some(p), Some(s)) => variants(&p.kind, s.worn.iter().filter_map(|w| w.slot.as_deref())),
+        _ => Plays::new(),
+    }
+}
+
+/// Whether characters play their clip variants: on unless `LIVING_GAME_CLIP_VARIANTS=0` (every
+/// body then plays the logical clips, as before sit-f-select; for A/B runs on one binary).
+pub fn variants_on() -> bool {
+    use std::sync::OnceLock;
+    static ON: OnceLock<bool> = OnceLock::new();
+    *ON.get_or_init(|| {
+        let on = std::env::var("LIVING_GAME_CLIP_VARIANTS").map_or(true, |v| v.trim() != "0");
+        if !on {
+            info!("anim: LIVING_GAME_CLIP_VARIANTS=0: every body plays the logical clips");
+        }
+        on
+    })
+}
+
+/// The animation a body with these variants plays for the logical `clip` (itself when it has
+/// none for it).
+pub fn resolve(plays: &[(&'static str, &'static str)], clip: &'static str) -> &'static str {
+    plays.iter().find(|p| p.0 == clip).map_or(clip, |p| p.1)
+}
+
+/// The logical clip an animation stands for: a variant's original, else itself.
+pub fn logical(name: &str) -> &str {
+    families().iter().flat_map(|f| f.clips.iter()).find(|(_, v)| v.as_str() == name).map_or(name, |(l, _)| l.as_str())
+}
+
+/// Whether a character file's clips exist: its [`clip_file`] has animations (cached).
+pub fn has_clips(file: &str) -> bool {
+    use std::sync::{Mutex, OnceLock};
+    static CACHE: OnceLock<Mutex<HashMap<String, bool>>> = OnceLock::new();
+    let clips = clip_file(file);
+    let cache = CACHE.get_or_init(Default::default);
+    if let Some(v) = cache.lock().unwrap().get(&clips) {
+        return *v;
+    }
+    let v = crate::lookdev::glb_json(&clips).is_some_and(|j| j["animations"].as_array().is_some_and(|a| !a.is_empty()));
+    cache.lock().unwrap().insert(clips, v);
+    v
+}
+
+/// The name of a clip file's animation root: the first node of its scene (`Armature` in a
+/// generated person).
+fn clip_root(clips: &str) -> Option<String> {
+    let j = crate::lookdev::glb_json(clips)?;
+    let scene = j["scene"].as_u64().unwrap_or(0) as usize;
+    let root = j["scenes"][scene]["nodes"][0].as_u64()? as usize;
+    j["nodes"][root]["name"].as_str().map(String::from)
+}
+
+/// A character checked by [`bind`] (given a player, needing none, or warned that it can't be).
+#[derive(Component)]
+pub struct Bound;
+
+/// Give a character whose clips come from another file, and whose own file brought no
+/// `AnimationPlayer`, the player and targets Bevy's loader gives a file with clips: the player on
+/// the node named as the clip file's animation root, and on that node and every node below it its
+/// name path from there and the player that animates it.
+#[allow(clippy::type_complexity)]
+fn bind(
+    mut commands: Commands,
+    new: Query<(Entity, &Model), (With<crate::characters::Character>, With<Fitted>, Without<Bound>)>,
+    children: Query<&Children>,
+    names: Query<&Name>,
+    players: Query<(), With<AnimationPlayer>>,
+) {
+    for (e, model) in &new {
+        let clips = clip_file(&model.file);
+        if clips == model.file || children.iter_descendants(e).any(|d| players.contains(d)) {
+            commands.entity(e).insert(Bound);
+            continue;
+        }
+        let root = clip_root(&clips).and_then(|r| children.iter_descendants(e).find(|d| names.get(*d).is_ok_and(|n| n.as_str() == r)));
+        let Some(root) = root else {
+            warn!("anim: {} has no node named as {clips}'s root; it does not play the shared clips", model.file);
+            commands.entity(e).insert(Bound);
+            continue;
+        };
+        fn tag(commands: &mut Commands, at: Entity, root: Entity, path: &mut Vec<Name>, children: &Query<&Children>, names: &Query<&Name>) {
+            let Ok(n) = names.get(at) else { return };
+            path.push(n.clone());
+            commands.entity(at).insert((AnimationTargetId::from_names(path.iter()), bevy::animation::AnimatedBy(root)));
+            for c in children.get(at).into_iter().flatten() {
+                tag(commands, *c, root, path, children, names);
+            }
+            path.pop();
+        }
+        tag(&mut commands, root, root, &mut Vec::new(), &children, &names);
+        commands.entity(root).insert(AnimationPlayer::default());
+        commands.entity(e).insert(Bound);
+        debug!("anim: {} bound to {clips}", model.file);
+    }
+}
+
+/// One clip file's graph and what each node plays.
 struct Set {
     graph: Handle<AnimationGraph>,
     full: HashMap<String, AnimationNodeIndex>,
@@ -187,8 +383,10 @@ pub struct Anim {
     spent: Option<(&'static str, f64)>,
     /// Nodes this module has playing.
     active: Vec<AnimationNodeIndex>,
-    /// The clip that shows most.
+    /// The clip that shows most (its logical name).
     showing: &'static str,
+    /// Its clip variants ([`Plays`]), only those its clip file has.
+    plays: Plays,
     /// Each foot's contact (people: left, right) from the markers, and how much of the legs'
     /// pose comes from clips where foot IK applies.
     pub feet: [f32; 2],
@@ -210,9 +408,14 @@ impl Anim {
         }
     }
 
-    /// The clip that shows most (for recordings).
+    /// The clip that shows most (for recordings; its logical name).
     pub fn showing(&self) -> &'static str {
         self.showing
+    }
+
+    /// The animation this body plays for the logical `clip` (its variant's, [`Plays`]).
+    pub fn played(&self, clip: &'static str) -> &'static str {
+        resolve(&self.plays, clip)
     }
 
     /// The gaits playing now and their weights (for recordings).
@@ -220,9 +423,89 @@ impl Anim {
         let g = self.set.gaits.gaits();
         self.blend.parts().iter().map(|&(i, w)| (g[i].clip, w * self.moving)).collect()
     }
+
+    /// How far the body is down on the ground by the clips it shows (0–1): what a seated
+    /// character's cloth contact is weighted by (`characters::SeatAnchor`). From the played
+    /// clip times ([`seat_of`]) and the clips' weights as `play` blends them: one-shots over the
+    /// standing loop (an upper-body one as far as the body stands, where it takes the whole
+    /// body), the standing loop as far as the body is not in its gait.
+    pub fn ground_seat(&self) -> f32 {
+        self.by_clips(seat_of)
+    }
+
+    /// How much of the body's pose comes from the ground seat's clips (0–1), whatever their
+    /// time: weighted as [`Anim::ground_seat`] is. `characters::hips` scales the hips' height in
+    /// that share by [`ground_hips`] (sit-hips).
+    pub fn ground_share(&self) -> f32 {
+        self.by_clips(|clip, _, _| seat_of(clip, 0.0, 1.0).map(|_| 1.0))
+    }
+
+    /// A value of the played clips (`of(clip, t, rate)`, 0 for `None`) weighted as `play` blends
+    /// them: one-shots over the standing loop, the standing loop as far as the body is not in its
+    /// gait.
+    fn by_clips(&self, of: impl Fn(&str, f32, f32) -> Option<f32>) -> f32 {
+        let (mut covered, mut sum) = (0.0f32, 0.0f32);
+        for o in &self.onces {
+            let w = (o.w * if o.upper { 1.0 - self.moving } else { 1.0 }).min(1.0 - covered).max(0.0);
+            covered += w;
+            sum += w * of(o.clip, o.t, o.rate).unwrap_or(0.0);
+        }
+        let total: f32 = self.stands.iter().map(|s| s.1).sum();
+        if total > 0.0 {
+            let stand: f32 = self.stands.iter().map(|&(c, w)| w * of(c, 0.0, 1.0).unwrap_or(0.0)).sum::<f32>() / total;
+            sum += (1.0 - covered).max(0.0) * (1.0 - self.moving).clamp(0.0, 1.0) * stand;
+        }
+        sum.clamp(0.0, 1.0)
+    }
 }
 
-/// The glTF file a body's clips come from, held so the load isn't dropped.
+/// The hips' heights, as fractions of their rest height, between which a ground seat's clip
+/// takes a short- or long-legged body's hips from the seat's scale (1: the pelvis rests on the
+/// ground, and the seat below it is not scaled with the legs) back to the legs' (`hips_k`: the
+/// feet carry the body). The shared clips' seated loop has the hips at 0.160 of rest; the lower
+/// bound clears it. The upper one was chosen with `cloth_check.py --ground-hips-band` on the
+/// 1.19 m child (docs/seat-contact/sit-hips.md): higher keeps the rise's smock out of the ground
+/// longer but lifts the feet off it while they carry the body (0.70: +20 mm; the clip-time
+/// weight of the cloth contact: +26 mm).
+pub const GROUND_HIPS: (f32, f32) = (0.17, 0.45);
+
+/// How far a ground seat's clip with the hips at `y` (file units) over a rest height `rest` has
+/// the pelvis resting on the ground (0–1): 1 at or below [`GROUND_HIPS`]`.0` of `rest`, 0 at or
+/// above `.1`, smooth between. By the clip's own pose, not its time, so it is 0 wherever the
+/// clips begin and end standing and nothing jumps as they blend in or out.
+pub fn ground_hips(y: f32, rest: f32) -> f32 {
+    let (lo, hi) = GROUND_HIPS;
+    let x = ((hi * rest - y) / ((hi - lo) * rest).max(1e-6)).clamp(0.0, 1.0);
+    x * x * (3.0 - 2.0 * x)
+}
+
+/// The ground seat's clips and their contact frames (clip seconds): `sit_ground_down`'s cloth
+/// reaches the ground at [`SEAT_DOWN_S`], `sit_ground` is down throughout, and
+/// `stand_up_ground`'s cloth leaves it at [`SEAT_UP_S`] (cloth_check on the coats and smocks:
+/// the hem comes within 20 mm of the ground at 1.17–1.33 s going down, and is 46–126 mm clear at
+/// 1.4 s getting up, after pressing deepest at 0.8–1.2 s as the body rocks forward).
+pub const SEAT_DOWN_S: f32 = 1.2;
+pub const SEAT_UP_S: f32 = 1.3;
+/// The contact comes in and goes over this (s of display time: the clip's rate stretches it).
+pub const SEAT_RAMP_S: f32 = 0.2;
+
+/// How far a clip at time `t` (s), played at `rate`, has the body down on the ground (0–1), or
+/// `None` for a clip that is not a ground seat's.
+pub fn seat_of(clip: &str, t: f32, rate: f32) -> Option<f32> {
+    let ramp = SEAT_RAMP_S * rate.max(0.01);
+    let smooth = |x: f32| {
+        let x = x.clamp(0.0, 1.0);
+        x * x * (3.0 - 2.0 * x)
+    };
+    match clip {
+        "sit_ground_down" => Some(smooth((t - (SEAT_DOWN_S - ramp)) / ramp)),
+        "sit_ground" => Some(1.0),
+        "stand_up_ground" => Some(1.0 - smooth((t - SEAT_UP_S) / ramp)),
+        _ => None,
+    }
+}
+
+/// The glTF file a body's clips come from ([`clip_file`]), held so the load isn't dropped.
 #[derive(Component)]
 struct ClipFile(Handle<Gltf>);
 
@@ -232,7 +515,7 @@ impl Plugin for AnimPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Sets>()
             .init_resource::<Cost>()
-            .add_systems(PostUpdate, (build, play, sampling).chain().before(bevy::app::AnimationSystems))
+            .add_systems(PostUpdate, (bind, build, play, sampling).chain().before(bevy::app::AnimationSystems))
             .add_systems(PostUpdate, sampled.after(bevy::app::AnimationSystems))
             .add_systems(Last, report);
     }
@@ -291,7 +574,7 @@ fn report(mut cost: ResMut<Cost>, time: Res<Time>, ik: Option<Res<crate::ik::IkS
     }
 }
 
-/// Give each new animated body its file's graph (built once per file) and its state.
+/// Give each new animated body its clip file's graph (built once per clip file) and its state.
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
 fn build(
     mut commands: Commands,
@@ -300,31 +583,33 @@ fn build(
     clips: Res<Assets<AnimationClip>>,
     mut graphs: ResMut<Assets<AnimationGraph>>,
     mut sets: ResMut<Sets>,
-    new: Query<(Entity, &Model, &Motion, Option<&ClipFile>), (With<Fitted>, Without<Anim>)>,
+    new: Query<(Entity, &Model, &Motion, Option<&ClipFile>, Option<&crate::characters::Character>, Option<&crate::characters::compose::Styled>), (With<Fitted>, Without<Anim>)>,
     children: Query<&Children>,
     players: Query<(), With<AnimationPlayer>>,
     targets: Query<(&AnimationTargetId, Option<&Name>)>,
     names: Query<&Name>,
     mut has: Local<HashMap<String, bool>>,
 ) {
-    for (e, model, motion, file) in &new {
-        let any = *has.entry(model.file.clone()).or_insert_with(|| crate::lookdev::glb_json(&model.file).is_some_and(|j| j["animations"].as_array().is_some_and(|a| !a.is_empty())));
+    for (e, model, motion, file, ch, styled) in &new {
+        let any = *has.entry(model.file.clone()).or_insert_with(|| has_clips(&model.file));
         if !any {
             continue;
         }
+        let clip_file = clip_file(&model.file);
         let Some(file) = file else {
-            commands.entity(e).insert(ClipFile(assets.load::<Gltf>(model.file.clone())));
+            commands.entity(e).insert(ClipFile(crate::characters::kept(&assets, &clip_file)));
             continue;
         };
         let Some(gltf) = gltfs.get(&file.0) else { continue };
+        // Its own file's player, or the one `bind` gave it.
         let Some(p) = children.iter_descendants(e).find(|d| players.contains(*d)) else { continue };
-        let set = match sets.0.get(&model.file) {
+        let set = match sets.0.get(&clip_file) {
             Some(s) => s.clone(),
             None => {
                 // Every clip's length; wait until all are loaded.
                 let lens: Option<HashMap<String, f32>> = gltf.named_animations.iter().map(|(n, h)| clips.get(h).map(|a| (n.to_string(), a.duration()))).collect();
                 let Some(lens) = lens else { continue };
-                let gaits = gait::of(&model.file);
+                let gaits = gait::of(&clip_file);
                 // The upper body: the spine and everything below it.
                 let spine = children.iter_descendants(p).find(|d| names.get(*d).is_ok_and(|n| n.as_str() == "J_Bip_C_Spine"));
                 let upper_bones: HashSet<Entity> = spine.map(|s| std::iter::once(s).chain(children.iter_descendants(s)).collect()).unwrap_or_default();
@@ -348,14 +633,20 @@ fn build(
                     }
                 }
                 let gait_nodes = gaits.gaits().iter().map(|g| full.get(g.clip).map(|&n| (n, g.seconds.unwrap_or_else(|| lens.get(g.clip).copied().unwrap_or(1.0))))).collect();
-                debug!("anim: {}: {} clips, {} upper, {} lower bones masked", model.file, full.len(), upper.len(), graph.mask_groups.len());
+                debug!("anim: {clip_file}: {} clips, {} upper, {} lower bones masked", full.len(), upper.len(), graph.mask_groups.len());
                 let set = Arc::new(Set { graph: graphs.add(graph), full, upper, lens, gaits, gait_nodes });
-                sets.0.insert(model.file.clone(), set.clone());
+                sets.0.insert(clip_file.clone(), set.clone());
                 set
             }
         };
         commands.entity(p).insert(AnimationGraphHandle(set.graph.clone()));
         let stand = if set.full.contains_key(motion.stand) { motion.stand } else { "idle" };
+        // Its variants, bound once with its clips: a clip file that predates one plays the
+        // original (no warning: older bundles lack them).
+        let plays: Plays = variants_of(ch, styled).into_iter().filter(|(_, v)| set.full.contains_key(*v)).collect();
+        if !plays.is_empty() {
+            debug!("anim: {} plays {plays:?}", model.file);
+        }
         commands.entity(e).insert(Anim {
             player: p,
             set,
@@ -365,12 +656,13 @@ fn build(
             moving: 0.0,
             starting: false,
             settle: None,
-            blend: gait::Blend { parts: [(0, 1.0), (0, 0.0)], n: 1, cycle_m: 1.0 },
+            blend: gait::Blend::one(0, 1.0),
             stands: vec![(stand, 1.0)],
             onces: vec![],
             spent: None,
             active: vec![],
             showing: stand,
+            plays,
             feet: [1.0, 1.0],
             ik: 0.0,
         });
@@ -413,8 +705,9 @@ fn play(mut commands: Commands, time: Res<Time>, mut q: Query<(Entity, &Motion, 
     let dt = time.delta_secs().min(0.1);
     for (e, m, mut a) in &mut q {
         let Ok(mut player) = players.get_mut(a.player) else {
-            // The scene was rebuilt: find its player again.
-            commands.entity(e).remove::<Anim>();
+            // The scene was rebuilt: find its player again (a file without clips of its own is
+            // given one again by `bind`).
+            commands.entity(e).remove::<(Anim, Bound)>();
             continue;
         };
         let set = a.set.clone();
@@ -436,23 +729,25 @@ fn play(mut commands: Commands, time: Res<Time>, mut q: Query<(Entity, &Motion, 
         let stand_sum: f32 = a.stands.iter().map(|s| s.1).sum::<f32>().max(1e-6);
         for &(clip, sw) in &a.stands {
             let w = base * (1.0 - a.moving) * sw / stand_sum;
-            if let (Some(&node), true) = (set.full.get(clip), w > 0.0) {
+            let played = resolve(&a.plays, clip);
+            if let (Some(&node), true) = (set.full.get(played), w > 0.0) {
                 // Each body's own offset into the loop (the golden ratio spreads entity indices).
-                let offset = (e.index_u32() as f32 * 0.618_034).fract() * set.len(clip);
+                let offset = (e.index_u32() as f32 * 0.618_034).fract() * set.len(played);
                 want.push((node, w, Play::Loop(offset)));
-                let t = player.animation(node).map_or(0.0, |x| x.seek_time()) / set.len(clip);
+                let t = player.animation(node).map_or(0.0, |x| x.seek_time()) / set.len(played);
                 legs.push((clip, w, t, true));
             }
         }
         let ups: f32 = a.onces.iter().filter(|o| o.upper).map(|o| o.w * a.moving).sum::<f32>().min(0.999);
         for o in &a.onces {
             let full = o.w * if o.upper { 1.0 - a.moving } else { 1.0 };
-            if let (Some(&node), true) = (set.full.get(o.clip), full > 0.0) {
+            let played = resolve(&a.plays, o.clip);
+            if let (Some(&node), true) = (set.full.get(played), full > 0.0) {
                 want.push((node, full, Play::At(o.t)));
-                legs.push((o.clip, full, o.t / set.len(o.clip), false));
+                legs.push((o.clip, full, o.t / set.len(played), false));
             }
             let up = if o.upper { o.w * a.moving } else { 0.0 };
-            if let (Some(&node), true) = (set.upper.get(o.clip), up > 0.0) {
+            if let (Some(&node), true) = (set.upper.get(played), up > 0.0) {
                 want.push((node, up / (1.0 - ups), Play::At(o.t)));
             }
         }
@@ -487,11 +782,13 @@ fn play(mut commands: Commands, time: Res<Time>, mut q: Query<(Entity, &Motion, 
         let (mut feet, mut ik, mut all) = ([0.0f32; 2], 0.0f32, 0.0f32);
         for &(clip, w, t, cyclic) in &legs {
             all += w;
-            let Some(info) = set.gaits.info(clip) else { continue };
+            // The feet's contacts are the animation's own (a variant's are its bake's).
+            let played = resolve(&a.plays, clip);
+            let Some(info) = set.gaits.info(played) else { continue };
             if !info.ik || info.contacts.feet() != 2 {
                 continue;
             }
-            let ramp = CONTACT_RAMP_S / set.len(clip);
+            let ramp = CONTACT_RAMP_S / set.len(played);
             for (f, c) in feet.iter_mut().enumerate() {
                 *c += w * info.contacts.weight(f, t, ramp, cyclic);
             }
@@ -511,7 +808,7 @@ fn step(a: &mut Anim, set: &Set, m: &Motion, dt: f32) {
     // confirmed) carries on; a new start replays it.
     let want = m.action.filter(|x| set.full.contains_key(x.clip));
     if let Some(x) = want {
-        let carry = a.onces.last().is_some_and(|o| o.clip == x.clip && (o.key == x.start_ms || (o.w > 0.0 && (o.hold.is_some() || o.t < set.len(o.clip)))));
+        let carry = a.onces.last().is_some_and(|o| o.clip == x.clip && (o.key == x.start_ms || (o.w > 0.0 && (o.hold.is_some() || o.t < set.len(resolve(&a.plays, o.clip))))));
         if carry {
             let o = a.onces.last_mut().unwrap();
             o.rate = x.rate;
@@ -526,8 +823,9 @@ fn step(a: &mut Anim, set: &Set, m: &Motion, dt: f32) {
         }
     }
     let last = a.onces.len().saturating_sub(1);
+    let plays = &a.plays;
     for (i, o) in a.onces.iter_mut().enumerate() {
-        let len = set.len(o.clip);
+        let len = set.len(resolve(plays, o.clip));
         let end = o.cut.map_or(len, |c| c.min(len) + FADE_OUT * o.rate).min(len);
         let requested = i == last && want.is_some_and(|x| x.clip == o.clip && x.start_ms == o.key);
         o.t = o.from + (((m.now_ms - o.start_ms) / 1000.0) as f32 * o.rate).max(0.0);
@@ -541,7 +839,8 @@ fn step(a: &mut Anim, set: &Set, m: &Motion, dt: f32) {
     }
     let mut spent = a.spent;
     a.onces.retain(|o| {
-        let end = o.cut.map_or(set.len(o.clip), |c| (c + FADE_OUT * o.rate).min(set.len(o.clip)));
+        let len = set.len(resolve(plays, o.clip));
+        let end = o.cut.map_or(len, |c| (c + FADE_OUT * o.rate).min(len));
         let keep = o.w > 0.0 || want.is_some_and(|x| x.clip == o.clip && x.start_ms == o.key && o.t < end);
         if !keep {
             spent = Some((o.clip, o.key));
@@ -562,10 +861,20 @@ fn step(a: &mut Anim, set: &Set, m: &Motion, dt: f32) {
     // under it, so its first frames don't show a sprint while it fades in.
     // My own body is drawn ahead of the display clock that times one-shots, so its dash can
     // move before its clip starts: asked for is enough.
-    let covered = want.is_some_and(|x| !set.upper.contains_key(x.clip));
+    // A moving jump's take lets the gait step on under it (`Action::gait`).
+    let covered = want.is_some_and(|x| !set.upper.contains_key(x.clip) && !x.gait);
     let stepping = !covered && if a.moving > 0.0 && a.settle.is_none() { m.speed > STEP_OFF } else { m.speed > STEP_ON };
     let moving = if stepping {
-        let b = set.gaits.blend(m.speed / m.pace.max(0.5), m.stride, |i| set.gait_len(i));
+        let pace = m.speed / m.pace.max(0.5);
+        let len = |i| set.gait_len(i);
+        let b = if m.travel.abs() <= 1e-3 {
+            None
+        } else if m.cursor_facing {
+            set.gaits.blend_cursor(pace, m.stride, m.family, m.travel, len)
+        } else {
+            set.gaits.blend_toward(pace, m.stride, m.family, m.travel, len)
+        }.unwrap_or_else(|| set.gaits.blend(pace, m.stride, m.family, len));
+        let rate = m.speed / (m.stride.max(0.05) * b.cycle_m.max(0.05));
         if a.moving <= 0.0 {
             // From standing: the leading gait's right mid-stance (its pose nearest standing: the
             // planted foot under the hips, the other one stepping off).
@@ -576,7 +885,7 @@ fn step(a: &mut Anim, set: &Set, m: &Motion, dt: f32) {
         }
         a.settle = None;
         a.blend = b;
-        a.rate = m.speed / (m.stride.max(0.05) * b.cycle_m.max(0.05));
+        a.rate = rate;
         if !m.freeze {
             a.phase += a.rate * dt;
         }
@@ -649,12 +958,13 @@ mod tests {
             moving: 0.0,
             starting: false,
             settle: None,
-            blend: gait::Blend { parts: [(0, 1.0), (0, 0.0)], n: 1, cycle_m: 1.0 },
+            blend: gait::Blend::one(0, 1.0),
             stands: vec![("idle", 1.0)],
             onces: vec![],
             spent: None,
             active: vec![],
             showing: "idle",
+            plays: Plays::new(),
             feet: [1.0; 2],
             ik: 0.0,
         }
@@ -737,5 +1047,98 @@ mod tests {
         assert!(a.onces.is_empty(), "it ended and does not play again while still listed");
         step(&mut a, &s, &Motion { action: Some(act(1500.0)), now_ms: 1500.0, ..default() }, 0.1);
         assert_eq!(a.onces.last().unwrap().start_ms, 1500.0);
+    }
+    #[test]
+    fn the_ground_seat_follows_the_clips_times() {
+        assert_eq!(seat_of("walk", 1.0, 1.0), None);
+        assert_eq!(seat_of("sit_ground_down", SEAT_DOWN_S - SEAT_RAMP_S - 0.01, 1.0), Some(0.0));
+        assert_eq!(seat_of("sit_ground_down", SEAT_DOWN_S, 1.0), Some(1.0));
+        assert_eq!(seat_of("sit_ground", 3.0, 1.0), Some(1.0));
+        assert_eq!(seat_of("stand_up_ground", SEAT_UP_S, 1.6), Some(1.0));
+        // Getting up plays at 1.6: the fade is 0.2 s of display time, 0.32 s of the clip.
+        let mid = seat_of("stand_up_ground", SEAT_UP_S + 0.16, 1.6).unwrap();
+        assert!((mid - 0.5).abs() < 1e-3, "{mid}");
+        assert_eq!(seat_of("stand_up_ground", SEAT_UP_S + 0.33, 1.6), Some(0.0));
+        let s = Arc::new(set());
+        let mut a = anim(&s);
+        assert_eq!(a.ground_seat(), 0.0, "standing idle is not seated");
+        a.stands = vec![("sit_ground", 1.0)];
+        assert_eq!(a.ground_seat(), 1.0, "the seated loop is down");
+        a.moving = 1.0;
+        assert_eq!(a.ground_seat(), 0.0, "walking off is not");
+        a.moving = 0.0;
+        let once = |clip, t, w, upper| Once { clip, rate: 1.6, from: 0.0, cut: None, start_ms: 0.0, key: 0.0, hold: None, w, t, upper };
+        a.onces = vec![once("stand_up_ground", 1.0, 1.0, false)];
+        assert_eq!(a.ground_seat(), 1.0, "early in getting up the cloth stays down");
+        a.onces = vec![once("stand_up_ground", 2.0, 1.0, false)];
+        assert_eq!(a.ground_seat(), 0.0, "late in it, it has left the ground");
+        a.onces = vec![once("stand_up_ground", 2.0, 0.5, false)];
+        assert!((a.ground_seat() - 0.5).abs() < 1e-6, "a one-shot fading in over the seated loop shares it");
+        a.onces = vec![once("wave", 0.5, 1.0, true)];
+        assert_eq!(a.ground_seat(), 0.0, "a gesture standing still takes the whole body (`play`)");
+    }
+
+    #[test]
+    fn the_ground_hips_come_from_the_clips_and_their_pose() {
+        let s = Arc::new(set());
+        let mut a = anim(&s);
+        assert_eq!(a.ground_share(), 0.0, "standing idle has no ground seat");
+        a.stands = vec![("sit_ground", 1.0)];
+        assert_eq!(a.ground_share(), 1.0);
+        let once = |clip, t, w| Once { clip, rate: 1.6, from: 0.0, cut: None, start_ms: 0.0, key: 0.0, hold: None, w, t, upper: false };
+        // Late in getting up the cloth has left the ground, but the clip still has the body.
+        a.onces = vec![once("stand_up_ground", 2.0, 1.0)];
+        assert_eq!(a.ground_seat(), 0.0);
+        assert_eq!(a.ground_share(), 1.0);
+        a.stands = vec![("idle", 1.0)];
+        a.onces = vec![once("stand_up_ground", 2.3, 0.25)];
+        assert!((a.ground_share() - 0.25).abs() < 1e-6, "fading out over standing, it shares the body");
+        // The pose: seated (0.157 of 0.985) all the way, standing (0.97) not at all.
+        assert_eq!(ground_hips(0.1572, 0.985), 1.0);
+        assert_eq!(ground_hips(0.972, 0.985), 0.0);
+        let mid = ground_hips(0.985 * (GROUND_HIPS.0 + GROUND_HIPS.1) / 2.0, 0.985);
+        assert!((mid - 0.5).abs() < 1e-5, "{mid}");
+    }
+
+    #[test]
+    fn the_female_ground_sit_variants_go_to_adults_in_the_female_trousers_and_boots() {
+        let outfit = ["smock_58-f", "apron_58-f", "jersey_smock-f", "trousers-f", "boots-f"];
+        let f = variants("adult-f-b", outfit);
+        assert_eq!(resolve(&f, "sit_ground_down"), "sit_ground_down_f");
+        assert_eq!(resolve(&f, "sit_ground"), "sit_ground_f");
+        assert_eq!(resolve(&f, "stand_up_ground"), "stand_up_ground_f");
+        assert_eq!(resolve(&f, "walk"), "walk", "other clips are their own");
+        assert_eq!(f.len(), 3);
+        // The pieces decide the geometry, whatever the type's form.
+        assert_eq!(variants("adult-m-a", ["trousers-f", "boots-f"]).len(), 3);
+        // Elders (the spec's exception), youths, children and the male family keep the originals.
+        for kind in ["elder-f-b", "youth-f-a", "child-u-c"] {
+            assert!(variants(kind, outfit).is_empty(), "{kind}");
+        }
+        assert!(variants("adult-f-b", ["smock_58-f", "trousers-m", "boots-m"]).is_empty());
+        assert!(variants("adult-f-b", ["trousers-f", "boots-m"]).is_empty(), "both pieces");
+        assert!(variants("adult-f-b", ["trousers-f"]).is_empty(), "both pieces");
+        // The logical name of each variant, for a shot that names one.
+        assert_eq!((logical("sit_ground_f"), logical("sit_ground"), logical("walk")), ("sit_ground", "sit_ground", "walk"));
+    }
+
+    #[test]
+    fn a_variant_plays_with_its_own_length_and_keeps_the_logical_name() {
+        let mut s = set();
+        // A clip file with a variant twice the original's length: the one-shot runs on the variant's.
+        for (n, len, i) in [("stand_up_ground", 1.0, 40), ("stand_up_ground_f", 2.0, 41)] {
+            s.full.insert(n.into(), AnimationNodeIndex::new(i));
+            s.lens.insert(n.into(), len);
+        }
+        let s = Arc::new(s);
+        let mut a = anim(&s);
+        a.plays = vec![("stand_up_ground", "stand_up_ground_f")];
+        let up = Action { clip: "stand_up_ground", rate: 1.0, start_ms: 0.0, ..Default::default() };
+        let m = Motion { action: Some(up), now_ms: 1500.0, ..default() };
+        step(&mut a, &s, &m, 0.1);
+        assert_eq!(a.onces.len(), 1);
+        assert_eq!(a.onces[0].clip, "stand_up_ground", "the logical name stays");
+        assert!((a.onces[0].t - 1.5).abs() < 1e-5, "not cut at the original's 1 s: {}", a.onces[0].t);
+        assert_eq!(a.ground_share(), a.onces[0].w, "the ground share keys off the logical clip");
     }
 }

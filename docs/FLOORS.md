@@ -250,6 +250,7 @@ Most of a per-character call is building the facts map (`script.rs:690-694`), no
   fn sight_in(light) { if light == "day" { 7.0 } else { base_sight_in(light) } }
   ```
 
+- **From the seed (built 2026-11-11, `rules-1`).** A seed's `laws` (Rhai source) or `laws_file` (a path under `living/seeds`) is the floor's overlay: composed, validated for the world's day and installed when the world is created, by `init` or `create_floor`, whose signature is unchanged ([Cullet's rules](CULLET_RULES.md#a-seeds-own-laws)). Cullet's is `living/seeds/worlds/cullet/laws.rhai`.
 - **Test** (`floors::tests::one_build_two_floors_two_sets_of_laws`): one build, two composed scripts.
   - Laws: fire warmth 3.5 → 5, day sight 11 → 7 (night sight unchanged); untouched laws keep the base's values.
   - The base's `rates(a)` reaches the floor's `cold(a)`: a person away from fire by day heals on the base and loses health on the frozen floor; by a fire the two agree.
@@ -276,7 +277,7 @@ Know-how that travels still exists; it just fails its checks honestly where its 
 ### Five laws wired end to end on paper
 
 1. **Sky islands where falls hurt.**
-   - **Today.** No rule reads height (movement is flat; `Land::height` is presentation), and terraces wall drops over 0.8 m.
+   - **Today.** No rule reads height (movement is flat; `Land::height` is presentation), and terraces close drops over 0.8 m to walking (`Drop` tiles, see-through since 2026-11-11).
    - **Needed:**
      - a primitive in the authority, `fall(a, drop_m)`, called when a move segment crosses an edge whose height difference exceeds `laws().climb_m`. The authority keeps the `Land`'s heights, about 9 MB at 2048 m (ISLAND_AUTHORITY);
      - an event law, `fall_hurt(a, drop_m)`, returning damage;
@@ -499,7 +500,7 @@ Tick time and frame time do not bind: both depend on what is near, not on the la
 **A staged path:**
 1. **Street level plus visual vertical structure** (where the megacity is now). Towers up to 112 m, megatowers when assets exist, elevated highways drawn as presentation over a street-level road, sky bridges and walkways as props.
 
-   The rules see only the street. Movement, sight and missiles use the 2D tiles. Sight lines ignore height, an honest simplification that `docs/GAME_BRIEF.md`'s perception view must state.
+   The rules see only the street. Movement, sight and missiles use the 2D tiles. Sight lines ignore height, an honest simplification that `docs/GAME_BRIEF.md`'s perception view must state. A drop between terrace or plan levels is a `Drop` tile: closed to walking, open to sight and missiles both ways (docs/PERCEPTION.md, "Drops").
 2. **The smallest real multi-level step: levels as separate tile layers, joined by stairs.**
    - A `level` (0 = ground) on `body`, `lot` and `terrain_chunk` (id `(level << 28) | (cy << 16) | cx`).
    - Level 1 covers only where a structure provides it: a rooftop, an elevated walkway, a highway deck.

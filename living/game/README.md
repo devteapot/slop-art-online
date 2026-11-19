@@ -21,6 +21,7 @@ python3 $V cleanup --run game-1                          # when done
 | `LIVING_GAME_NAME` | `Wanderer` | your character's name on first join |
 | `LIVING_GAME_TOKEN` | `.local/living/game/<db>.token` | where your identity token is kept, so you return to the same character |
 | `LIVING_GAME_DEMO` | unset | a directory: run the scripted demo, write screenshots there, then quit |
+| `LIVING_GAME_CONTROL` | `travel` | the control scheme to start in: `travel` (face where you walk) or `cursor` (face the cursor); F3 switches |
 
 ## Look-dev mode
 
@@ -98,10 +99,14 @@ The file also holds folk ranges (`adult`, `giant`, `small`) and palettes for see
 | Variable | Meaning |
 |---|---|
 | `LIVING_GAME_CROWD=N[:seed]` | the line-up gets N random characters in rows to its south: small folk in front, then adults, then giants. Photograph them with `LIVING_GAME_TOUR_SHOTS=0:10:36:40` |
-| `LIVING_GAME_PLAYER=<recipe>` | your character: a recipe name or `<folk>:<seed>` |
+| `LIVING_GAME_PLAYER=<recipe>` | your character in look-dev: a recipe name or `<folk>:<seed>` (`beast:<kind>` for an animal). Connected, your character is drawn from your own row's look, as anyone's is (docs/LOOK.md) |
+| `LIVING_GAME_COMPOSE=0` | draw people with a person line from their whole files instead of composing them from shared type and style files (composing is the default) |
+| `LIVING_GAME_LOOK_BOOK=<path>` | read the look book from that file instead of `assets/characters/looks.json` (a test's copy) |
 | `LIVING_GAME_VIEW=recipe:<name>` or `recipe:<folk>:<seed>` | the asset view shows a recipe |
 | `LIVING_GAME_SPRINGS=0` | springs off |
 | `LIVING_GAME_SPRING_BUDGET` / `LIVING_GAME_SPRING_NEAR` | the most characters simulated in a frame (nearest first; default 48), and the distance limit in metres for a 1.75 m character (default 40, scaled by height) |
+| `LIVING_GAME_FAR` / `LIVING_GAME_FAR_BAND` | a character whose file holds a far model (`Far*` mesh nodes, `person.py --lod both`) shows it beyond this many metres from the camera (default 10, for a 1.75 m character, scaled by height; `0` never), and its full model again once it is the band nearer (default 1.5 m), so it does not flicker at the edge (`lookdev::far_models`) |
+| `LIVING_GAME_SHARED_CLIPS=0` | generated people (`own-*` files, `lookdev/types/`) play their own file's clips instead of the shared clip file `lookdev/anim/own-clips.glb` (`anim::clip_file`) |
 
 Environment slots of kind `person` with no asset folder are filled with random recipes of the slot's height.
 
@@ -114,14 +119,15 @@ The simulation logs its cost every 3 s. A 78-joint character costs about 9 µs o
 | A click in the window | captures the cursor: the system cursor is locked and hidden and the game draws its own (`pointer.rs`); the click does nothing else |
 | Esc | closes the text box, a list (a sub-list first) or the panels; with nothing open, gives the cursor back. Losing focus gives it back too |
 | WASD, Shift | move relative to the camera, run (`human_move`). Shift is also the dodge (an open question) |
-| Mouse or one finger on a trackpad | the cursor: where you face and aim. Moving, your legs keep to your travel (backwards beyond 110°) and your upper body turns toward it (`twist.rs`) |
-| Left click (tap) / left held | the strike (on release for a tap, after 0.22 s held for aiming) |
+| Mouse or one finger on a trackpad | the cursor: where you aim. Facing where you walk (the default), you turn to it only while a skill key is held on an aimed skill, a guard is up or a move is under way. Facing the cursor (F3), you face it always: moving, your legs keep to your travel (backwards beyond 110°) and your upper body turns toward it (`twist.rs`); standing, your upper body turns first and your legs follow beyond 55° |
+| F3 | switch the control scheme: facing where you walk, or facing the cursor (a note names it; a first-time hint names it on arrival) |
+| Left click (tap) / left held | the strike (on release for a tap, after 0.22 s held for aiming). A tap on a person who is not hostile to you (not hurting you in the last 15 s, no move aimed at you) does not strike: you turn to them and the text box opens to them. Striking them takes a held press |
 | Left drag (mouse or trackpad press-and-move), two-finger pan, middle drag, `[` / `]` | turn the view; the cursor stays on its ground point, so where you face doesn't change |
 | Pinch, mouse wheel | zoom, within 0.6–1.4 of the view's distance |
 | Two-finger double tap, middle tap | turn the view until the direction you face is straight ahead |
 | Right click (two-finger click), Q, E, R, Shift | the bow shot, fire bolt, block, heal, dodge |
 | Space | jump (a 1.6 m hop; `jump.rs`, the rules' `jump`) |
-| Enter | say something; only characters within earshot hear it (`human_say`). Enter says it, Esc cancels |
+| Enter | say something; only characters within earshot hear it (`human_say`). The box says whom it is to ("Say to a stranger"): the person under the cursor, else the nearest within earshot by the rules' hearing (`talk.rs`); Tab picks the next one. Enter says it to them, Esc cancels |
 | Alt + mouse | glance around; the view eases back on release |
 | F | act on what is under the cursor or within 3 m: a tap does the likely act (never a gesture), holding opens the list of what the rules allow (`verbs.rs`) |
 | C | the list of acts on yourself (eat, sleep, craft, build, write, …) |

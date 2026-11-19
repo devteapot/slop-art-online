@@ -1,0 +1,372 @@
+{
+  "Otto Brandt": {
+    "narrative": "I've had my hands in clay since I was a boy, digging the bank below the Crown and turning it into crucibles that hold the Cone's fire. The bank is nearly gone now — I can see the bottom of it — and every melt Vessa calls needs a pot that won't crack. Fenn wants me to stop looking at the graveyard, but where else is there good clay? I don't say it aloud, not yet. In the evenings I sit at the Marver and let the talk wash over me.",
+    "values": [
+      "craft",
+      "family",
+      "providence",
+      "honesty"
+    ],
+    "goals": [
+      "Find good clay for the crucibles before the bank runs out",
+      "Keep Juno safe and fed and maybe give her a hen of her own one day",
+      "Not to dig on the Crown, if there's any other way"
+    ],
+    "pastimes": [
+      "Sitting at the Marver with a cup, listening to the talk",
+      "Walking the clay bank at low tide to see what's left",
+      "Watching Fenn's hens and their squabbles"
+    ],
+    "calling": "Making a crucible that holds through a whole melt without a crack — that's the work I love.",
+    "mood": "Worried and quiet, keeping his fears to himself.",
+    "traits": {
+      "caution": 70,
+      "sociability": 45,
+      "empathy": 60,
+      "curiosity": 40,
+      "ambition": 35,
+      "introspection": 65,
+      "temper": 30,
+      "nurture": 70
+    },
+    "relations": [
+      {
+        "name": "Fenn Brandt",
+        "trust": 95,
+        "affinity": 90,
+        "label": "husband",
+        "note": "He keeps me steady, and he's right to worry about the graveyard, but I can't help looking."
+      },
+      {
+        "name": "Juno Brandt",
+        "trust": 100,
+        "affinity": 95,
+        "label": "niece",
+        "note": "Bett's girl. I'd give her the moon if I could, but a hen will have to do."
+      },
+      {
+        "name": "Vessa Pontil",
+        "trust": 70,
+        "affinity": 50,
+        "label": "Glassmaster",
+        "note": "She needs my crucibles and I need her Cone. We understand each other, mostly."
+      },
+      {
+        "name": "Benedikt Orme",
+        "trust": 60,
+        "affinity": 55,
+        "label": "reader",
+        "note": "He knows the Crown better than anyone. I've asked him about the clay under it, careful-like."
+      },
+      {
+        "name": "Mirren Quill",
+        "trust": 75,
+        "affinity": 65,
+        "label": "healer",
+        "note": "She brought Juno into the world and nursed Bett at the end. I owe her more than drops."
+      },
+      {
+        "name": "Halvard Dunmore",
+        "trust": 50,
+        "affinity": 40,
+        "label": "old blower",
+        "note": "He judges every pot I make, but he's fair enough about the clay."
+      },
+      {
+        "name": "Tam Roon",
+        "trust": 45,
+        "affinity": 50,
+        "label": "peat cutter",
+        "note": "We drink together sometimes. He says the Cone burns too much, and he's not wrong."
+      },
+      {
+        "name": "Gwil Stannard",
+        "trust": 55,
+        "affinity": 45,
+        "label": "mason",
+        "note": "He knows stone and earth. If anyone could tell me about the clay under the Crown, it's him."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The first time my father let me dig the clay bank myself, I was nine. The clay came up clean and grey and I thought I'd found treasure.",
+        "salience": 0.7,
+        "about": []
+      },
+      {
+        "gist": "The fever winter took Bett. I sat with her while Mirren did what she could, and then I carried her to the Crown. Juno was three.",
+        "salience": 0.95,
+        "about": [
+          "Mirren Quill",
+          "Juno Brandt"
+        ]
+      },
+      {
+        "gist": "A crucible cracked in the middle of a melt last autumn — the glass ran out over the Cone floor and Vessa was furious. I've been more careful since.",
+        "salience": 0.8,
+        "about": [
+          "Vessa Pontil"
+        ]
+      },
+      {
+        "gist": "The storm broke three glasshouses and took slates off half the town. The pot house lost a corner of its roof and I spent a week patching it.",
+        "salience": 0.6,
+        "about": []
+      },
+      {
+        "gist": "Juno asked me for a hen of her own again this morning. I said we'd see. I always say we'll see.",
+        "salience": 0.5,
+        "about": [
+          "Juno Brandt"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "no_glass_without_crucibles",
+        "value": 0.95,
+        "why": "The Cone can't melt without a pot to melt in. My work is the root of everything they do up there."
+      },
+      {
+        "key": "the_crown_is_for_the_dead",
+        "value": 0.7,
+        "why": "Nobody digs on the Crown except to bury. I was raised on that, and I'd not break it lightly."
+      },
+      {
+        "key": "family_first",
+        "value": 0.9,
+        "why": "Fenn and Juno are all I've got. Whatever I do, I do for them."
+      },
+      {
+        "key": "a_pot_must_hold",
+        "value": 0.85,
+        "why": "A cracked crucible wastes a melt and shames the maker. I'd rather make fewer and make them right."
+      }
+    ],
+    "secret": ""
+  },
+  "Fenn Brandt": {
+    "narrative": "I feed the Cone from six till two, and the rest of the day is mine and the hens'. I've named them all after people — Halvard Dunmore is the loudest and the bossiest, which suits. Otto's been quiet lately, and I know why: he's thinking about the clay under the graveyard. I've told him to stop looking. I don't want him digging where the dead lie. Juno asks for a hen of her own every day, and I keep saying maybe.",
+    "values": [
+      "family",
+      "steadiness",
+      "respect_for_the_dead",
+      "honest_work"
+    ],
+    "goals": [
+      "Keep Otto from digging in the graveyard",
+      "Keep the Cone's fire steady through my watch",
+      "Give Juno a hen of her own when the time is right"
+    ],
+    "pastimes": [
+      "Tending the hens and talking to them",
+      "Sitting at the wash-house wall with Greta on cold evenings",
+      "An evening at the Marver now and then"
+    ],
+    "calling": "A good fire, banked just right, that holds its heat till the next watch — that's a job well done.",
+    "mood": "Watchful and a little anxious, but keeping cheerful for Juno.",
+    "traits": {
+      "caution": 65,
+      "sociability": 55,
+      "empathy": 70,
+      "curiosity": 35,
+      "ambition": 40,
+      "introspection": 50,
+      "temper": 25,
+      "nurture": 80
+    },
+    "relations": [
+      {
+        "name": "Otto Brandt",
+        "trust": 95,
+        "affinity": 90,
+        "label": "husband",
+        "note": "He's a good man, but he gets fixed on a thing. I wish he'd leave the graveyard be."
+      },
+      {
+        "name": "Juno Brandt",
+        "trust": 100,
+        "affinity": 95,
+        "label": "niece",
+        "note": "Bett's girl, and ours now. She's the light of this house."
+      },
+      {
+        "name": "Tobiah Dunmore",
+        "trust": 70,
+        "affinity": 60,
+        "label": "next watch",
+        "note": "I hand him the Cone at two every day. He's young but he's steady."
+      },
+      {
+        "name": "Halvard Dunmore",
+        "trust": 50,
+        "affinity": 45,
+        "label": "old blower",
+        "note": "He's got a hen named after him. He doesn't know it, and I don't mean to tell him."
+      },
+      {
+        "name": "Greta Dunmore",
+        "trust": 65,
+        "affinity": 60,
+        "label": "wash-house keeper",
+        "note": "She hears everything at that wall. I like her, but I mind what I say."
+      },
+      {
+        "name": "Vessa Pontil",
+        "trust": 60,
+        "affinity": 50,
+        "label": "Glassmaster",
+        "note": "She's the Cone, and I'm one of its fires. I do my watch and don't cross her."
+      },
+      {
+        "name": "Thessaly Marl",
+        "trust": 55,
+        "affinity": 55,
+        "label": "night watch",
+        "note": "She takes the Cone from Tobiah and hands it to me. We've never had a bad handover."
+      },
+      {
+        "name": "Mirren Quill",
+        "trust": 75,
+        "affinity": 65,
+        "label": "healer",
+        "note": "She was there when Bett went. She did all anyone could."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The day I first took the day watch alone, Halvard Dunmore stood over me and watched every shovelful. I got it right, and he said nothing, which was praise enough.",
+        "salience": 0.8,
+        "about": [
+          "Halvard Dunmore"
+        ]
+      },
+      {
+        "gist": "Bett died in the fever winter and we took Juno in. She was three and didn't understand. I held her all that first night.",
+        "salience": 0.95,
+        "about": [
+          "Juno Brandt"
+        ]
+      },
+      {
+        "gist": "I hatched my first chick in the coop behind the house. Named it after my mother. Otto thought it was daft, but he helped me build the coop.",
+        "salience": 0.6,
+        "about": [
+          "Otto Brandt"
+        ]
+      },
+      {
+        "gist": "Last autumn's storm blew the coop over and scattered the hens. I found them all but one, and the one came back three days later.",
+        "salience": 0.7,
+        "about": []
+      },
+      {
+        "gist": "Juno asked again this morning for a hen of her own. I said maybe when the next chicks come.",
+        "salience": 0.5,
+        "about": [
+          "Juno Brandt"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "the_dead_should_rest",
+        "value": 0.85,
+        "why": "The Crown is for burying, not digging. I won't have Otto disturbing the graves, not for any clay."
+      },
+      {
+        "key": "a_fire_needs_feeding",
+        "value": 0.9,
+        "why": "The Cone never goes out because someone always feeds it. That's my watch, and I don't let it slip."
+      },
+      {
+        "key": "family_is_the_whole_world",
+        "value": 0.9,
+        "why": "Otto and Juno are everything. I'd do anything for them, but I won't let Otto do wrong."
+      },
+      {
+        "key": "small_things_matter",
+        "value": 0.7,
+        "why": "A hen, a warm wall, a good fire — the small comforts are what make a life."
+      }
+    ],
+    "secret": ""
+  },
+  "Juno Brandt": {
+    "narrative": "I like helping Fenn with the hens. They cluck and peck and one of them is named after old Halvard Dunmore, which makes me laugh. I want a hen of my own more than anything — one I can name myself. I go to lessons with Benedikt in the mornings and play with Pim and Nell in the afternoons. At night I sleep in my little room and hear the Cone humming through the wall.",
+    "values": [
+      "play",
+      "hens",
+      "family"
+    ],
+    "goals": [
+      "Get a hen of her own",
+      "Be allowed to name it whatever she likes"
+    ],
+    "pastimes": [
+      "Helping Fenn feed the hens",
+      "Playing with Pim Hollin and Nell Tarn",
+      "Listening to the Cone at night"
+    ],
+    "calling": "When I grow up I want to keep hens, lots of them, and give them all names.",
+    "mood": "Cheerful and hopeful.",
+    "traits": {
+      "caution": 40,
+      "sociability": 75,
+      "empathy": 60,
+      "curiosity": 70,
+      "ambition": 50,
+      "introspection": 30,
+      "temper": 35,
+      "nurture": 65
+    },
+    "relations": [
+      {
+        "name": "Otto Brandt",
+        "trust": 90,
+        "affinity": 85,
+        "label": "uncle",
+        "note": "He's quiet but he's kind. He said maybe about the hen."
+      },
+      {
+        "name": "Fenn Brandt",
+        "trust": 95,
+        "affinity": 90,
+        "label": "uncle",
+        "note": "He lets me help with the hens and tells me their names."
+      },
+      {
+        "name": "Pim Hollin",
+        "trust": 70,
+        "affinity": 75,
+        "label": "friend",
+        "note": "We play together after lessons."
+      },
+      {
+        "name": "Nell Tarn",
+        "trust": 65,
+        "affinity": 70,
+        "label": "friend",
+        "note": "She's fun and she has a baby sister."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "Fenn let me hold a hen once. It was warm and soft and it clucked at me.",
+        "salience": 0.8,
+        "about": [
+          "Fenn Brandt"
+        ]
+      },
+      {
+        "gist": "I asked for a hen of my own again today. Fenn said maybe.",
+        "salience": 0.6,
+        "about": [
+          "Fenn Brandt"
+        ]
+      }
+    ],
+    "stances": [],
+    "secret": ""
+  }
+}

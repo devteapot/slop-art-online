@@ -26,10 +26,17 @@ use spacetimedb::{ReducerContext, Table};
 pub struct Hosted {
     pub map: Map,
     pub info: LandInfo,
+    pub cover_ground: std::sync::Arc<[i16]>,
+    pub cover_candidates: Vec<u32>,
     pub settlements: Vec<Planned>,
     pub lots: Vec<PlannedLot>,
     /// The roads as a graph, for the stages of a known way (`town::seat`); dropped with the rest.
     pub ways: living_rules::ways::Ways,
+    /// Planned settlements' authored resources (`PlanSpec::resources`), on the land.
+    pub resources: Vec<living_rules::settle::LaidResource>,
+    /// Planned settlements' authored structures and lot stores (`PlanSpec::structures`,
+    /// `LotSpec::contents`), on the land.
+    pub structures: Vec<living_rules::settle::LaidStructure>,
 }
 
 pub struct Planned {
@@ -52,6 +59,9 @@ pub struct Planned {
     /// Where one stands on the square: its middle, or, when that is built on, walkable points
     /// round its edge (each resident takes the nearest it can reach).
     pub square: Vec<(f32, f32)>,
+    /// A planned settlement's lots by their plan ids, with their door points (seed `homes`,
+    /// `buildings[].lot`).
+    pub lots: Vec<(String, (f32, f32))>,
 }
 
 pub struct PlannedLot {
@@ -65,6 +75,15 @@ pub struct PlannedLot {
     pub height_m: f32,
     pub model: String,
     pub door: (f32, f32),
+    /// A planned lot's id in its plan (`living_rules::settle::LotSpec::id`), "" for generated
+    /// lots: what a seed's `homes` and `buildings[].lot` and a `lot:<id>` place name. In memory
+    /// only, like the rest of `Hosted`.
+    pub key: String,
+    /// Its named spots (seats, a stall's sides), walkable points on the land.
+    pub spots: Vec<(String, (f32, f32))>,
+    /// The structure kind at its door: a planned lot's own (`LotSpec::structure`), else its lot
+    /// kind's ([`structure_kind`]); none: nothing stands there.
+    pub structure: Option<String>,
 }
 
 /// The structure that stands at a lot's door: what the building does in the rules.
@@ -96,6 +115,9 @@ pub fn params_of(m: &SeedMap) -> Result<(u32, LandParams), String> {
         return Err(format!("map.size {size}: a land's side is a multiple of 16 from 256 to {LAND_MAX_M} m"));
     }
     let params: LandParams = if m.params.is_null() { LandParams::default() } else { serde_json::from_value(m.params.clone()).map_err(|e| format!("map.params: {e}"))? };
+    // Hand-authored plans are refused here, before anything is generated or written.
+    living_rules::settle::validate_plans(&params.plans, size).map_err(|e| format!("map.params.plans: {e}"))?;
+    living_rules::land::validate_relief(&params.relief).map_err(|e| format!("map.params.relief: {e}"))?;
     Ok((size, params))
 }
 
@@ -107,14 +129,18 @@ pub fn generate(seed: u64, m: &SeedMap) -> Result<Hosted, String> {
         landgen::generate(seed, size, &params)
     };
     let _t = spacetimedb::log_stopwatch::LogStopwatch::new("init.land.host");
-    Ok(host(seed, m, &land, &params))
+    host(seed, m, &land, &params)
 }
 
 /// Plan what the world keeps of a generated land: the hosted tiles, digests, settlements and
-/// lots.
-pub fn host(seed: u64, m: &SeedMap, land: &landgen::Land, params: &LandParams) -> Hosted {
+/// lots. Refused when a planned settlement has a building whose door no one can reach.
+pub fn host(seed: u64, m: &SeedMap, land: &landgen::Land, params: &LandParams) -> Result<Hosted, String> {
     let size = land.size;
     let (map, hosted) = host::hosted_map(land, params);
+    let stranded = living_rules::settle::stranded_doors(land, &map, &hosted.reachable);
+    if !stranded.is_empty() {
+        return Err(format!("map.params.plans: no one can reach the doors of {}", stranded.join(", ")));
+    }
     let d = host::digests(land, &map);
     log::info!(
         "land {seed} at {size} m: {} settlements, {} lots, {} roads, {} props (derived, not stored); buildings block {} tiles and cut off {}; digests tiles {:016x} heights {:016x} layout {:016x}",
@@ -179,6 +205,7 @@ pub fn host(seed: u64, m: &SeedMap, land: &landgen::Land, params: &LandParams) -
             }
         }
         homes.sort_by(|a, b| a.0.total_cmp(&b.0));
+        let keyed_lots: Vec<(String, (f32, f32))> = land.plans.iter().filter(|p| p.settlement as usize == si).flat_map(|p| p.lots.iter().map(|l| (l.key.clone(), near(host::door(&land.lots[l.lot as usize]))))).collect();
         settlements.push(Planned {
             kind: s.kind,
             site_id: land.sites[s.site as usize].id(),
@@ -192,12 +219,21 @@ pub fn host(seed: u64, m: &SeedMap, land: &landgen::Land, params: &LandParams) -
             fields,
             homes: homes.into_iter().map(|h| h.1).collect(),
             square,
+            lots: keyed_lots,
         });
+    }
+    // Planned lots' ids and spots, by lot index.
+    let mut keyed: std::collections::HashMap<u32, (&str, &[(String, (f32, f32))], Option<&str>)> = std::collections::HashMap::new();
+    for p in &land.plans {
+        for l in &p.lots {
+            keyed.insert(l.lot, (l.key.as_str(), l.spots.as_slice(), l.structure.as_deref()));
+        }
     }
     let lots = land
         .lots
         .iter()
-        .map(|l| PlannedLot {
+        .enumerate()
+        .map(|(i, l)| PlannedLot {
             settlement: l.settlement,
             kind: l.kind,
             centre: l.centre,
@@ -208,6 +244,9 @@ pub fn host(seed: u64, m: &SeedMap, land: &landgen::Land, params: &LandParams) -
             height_m: l.height_m,
             model: l.model_file.clone().unwrap_or_default(),
             door: near(host::door(l)),
+            key: keyed.get(&(i as u32)).map_or(String::new(), |k| k.0.to_string()),
+            spots: keyed.get(&(i as u32)).map_or(Vec::new(), |k| k.1.iter().map(|(n, q)| (n.clone(), near(*q))).collect()),
+            structure: keyed.get(&(i as u32)).and_then(|k| k.2).or_else(|| structure_kind(l.kind)).map(String::from),
         })
         .collect();
     // Newcomers arrive on the first town's square, where its people are (`host::arrival`).
@@ -225,7 +264,13 @@ pub fn host(seed: u64, m: &SeedMap, land: &landgen::Land, params: &LandParams) -
     };
     // Built by the planner's last step; a land made otherwise (none today) builds it here.
     let ways = land.ways.clone().unwrap_or_else(|| living_rules::ways::Ways::of(land));
-    Hosted { map, info, settlements, lots, ways }
+    let resources = land.plans.iter().flat_map(|p| p.resources.iter().cloned()).collect();
+    // A household's own structures stand inside its lot, within reach of where one can stand.
+    let structures = living_rules::settle::placed_structures(land, &map, &hosted.reachable).map_err(|e| format!("map.params.plans: {e}"))?;
+    let _cover = spacetimedb::log_stopwatch::LogStopwatch::new("genesis.cover_ground");
+    let cover_ground = living_rules::cover::ground(land);
+    let cover_candidates = living_rules::cover::candidates(&map);
+    Ok(Hosted { map, info, cover_ground, cover_candidates, settlements, lots, ways, resources, structures })
 }
 
 /// The seed's settlement entry for each planned settlement. An entry of a site kind (`site`, or
@@ -270,13 +315,61 @@ pub fn match_seed<'a>(h: &Hosted, towns: &'a [SeedTown], villages: &'a [SeedTown
 
 /// The layout `seed::town` builds a seeded settlement from.
 pub fn layout(p: &Planned) -> Layout {
-    Layout { center: p.centre, gates: p.gates.clone(), houses: p.homes.clone(), market: p.market.clone(), fields: p.fields.clone() }
+    Layout { center: p.centre, gates: p.gates.clone(), houses: p.homes.clone(), market: p.market.clone(), fields: p.fields.clone(), lots: p.lots.clone() }
+}
+
+/// Write the `land` row with its public parameters (`living_rules::land::public_params`: no
+/// names) and keep the full ones in the private `land_plan` (owner-known).
+pub fn keep_land(ctx: &ReducerContext, mut info: LandInfo) {
+    let full = std::mem::take(&mut info.params);
+    info.params = public_of(&full);
+    ctx.db.land().insert(info);
+    ctx.db.land_plan().id().delete(0);
+    ctx.db.land_plan().insert(LandPlan { id: 0, params: full });
+}
+
+/// The public form of a land's parameters as JSON text. Parameters the world was made from parse;
+/// should they not, the public row gets the defaults' `{}` rather than anyone's names.
+fn public_of(full: &str) -> String {
+    serde_json::from_str::<serde_json::Value>(full)
+        .ok()
+        .and_then(|v| living_rules::land::public_params(&v).ok())
+        .map_or_else(|| "{}".to_string(), |v| v.to_string())
+}
+
+/// A world made before owner-known keeps its names in the public row: the next script install
+/// (every `living-publish`) moves them to `land_plan` and leaves the public row without them. Once.
+pub fn scrub_land(ctx: &ReducerContext) {
+    if ctx.db.land_plan().id().find(0).is_some() {
+        return;
+    }
+    if let Some(mut row) = ctx.db.land().id().find(0) {
+        let full = row.params.clone();
+        row.params = public_of(&full);
+        ctx.db.land().id().update(row);
+        ctx.db.land_plan().insert(LandPlan { id: 0, params: full });
+        log::info!("scrub_land: the public land row no longer carries names (kept in land_plan)");
+    }
 }
 
 /// The `land` row, lot rows and the structures at their doors (owners are set as households
 /// move in).
+pub const COVER_BAND: usize = 16_384;
+pub fn keep_cover_band(ctx: &ReducerContext, h: &Hosted, i: usize) {
+    let from = i * COVER_BAND;
+    if from >= h.cover_ground.len() || ctx.db.cover_ground().id().find(i as u32).is_some() { return; }
+    let band = |v: &u32| ((v & !(1 << 31)) as usize) / COVER_BAND;
+    let a = h.cover_candidates.partition_point(|v| band(v) < i);
+    let b = h.cover_candidates.partition_point(|v| band(v) <= i);
+    ctx.db.cover_ground().insert(CoverGround { id: i as u32, candidates: h.cover_candidates[a..b].to_vec(),
+        heights: h.cover_ground[from..(from + COVER_BAND).min(h.cover_ground.len())].to_vec() });
+}
+
 pub fn build(ctx: &ReducerContext, h: &Hosted, now: u64) {
-    ctx.db.land().insert(h.info.clone());
+    for i in 0..h.cover_ground.len().div_ceil(COVER_BAND) {
+        keep_cover_band(ctx, h, i);
+    }
+    keep_land(ctx, h.info.clone());
     build_lots(ctx, h, 0..h.lots.len(), now);
 }
 
@@ -284,9 +377,9 @@ pub fn build(ctx: &ReducerContext, h: &Hosted, now: u64) {
 /// batches; ids follow the order either way).
 pub fn build_lots(ctx: &ReducerContext, h: &Hosted, range: std::ops::Range<usize>, now: u64) {
     for (i, l) in h.lots.iter().enumerate().skip(range.start).take(range.len()) {
-        let structure = structure_kind(l.kind).map_or(0, |k| {
+        let structure = l.structure.as_deref().map_or(0, |k| {
             common::invalidate_structures(ctx);
-            ctx.db.structure().insert(Structure { id: 0, kind: k.into(), x: l.door.0, y: l.door.1, chunk: chunk_of(l.door.0, l.door.1), owner: 0, built_ms: now }).id
+            ctx.db.structure().insert(Structure { id: 0, kind: k.into(), x: l.door.0, y: l.door.1, chunk: chunk_of(l.door.0, l.door.1), owner: 0, built_ms: now, lit_until_ms: 0 }).id
         });
         ctx.db.lot().insert(Lot {
             id: i as u32,

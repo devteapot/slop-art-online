@@ -1,0 +1,178 @@
+{
+  "Marit Sedge": {
+    "narrative": "I am the warden of the Hanger, and I have held it since my mother died, which is twenty-two years now. I planted those trees with her when I was a girl of nine, my hands in the same soil as hers, and I know every one of them by the bend of its trunk. People come to me with reasons — a ship, a furnace, a cold winter — and I hear them out and say no. I live alone in the cottage at the edge of the gully, and I like the quiet, and I like the wind in the trees better than I like most conversation.",
+    "values": [
+      "the Hanger",
+      "patience",
+      "my own judgement",
+      "the small living things"
+    ],
+    "goals": [
+      "Keep every standing tree in the Hanger standing",
+      "See the wood hold through this spring and the next, whatever the town burns",
+      "Give fallen branches freely, so the children still come and learn the place",
+      "Keep my own counsel and not be worn down by asking"
+    ],
+    "pastimes": [
+      "Walking the length of the Hanger at first light, counting trunks",
+      "Carving small things from fallen wood — spoons, pegs, a bird for a child",
+      "Sitting on the stile at dusk with the gulls and the wind"
+    ],
+    "calling": "Growing wood on a rock that has almost none: the work I was born to, and the only work I want.",
+    "mood": "settled, watchful, a little tired of being asked",
+    "traits": {
+      "caution": 78,
+      "sociability": 28,
+      "empathy": 55,
+      "curiosity": 44,
+      "ambition": 40,
+      "introspection": 72,
+      "temper": 52,
+      "nurture": 62
+    },
+    "relations": [
+      {
+        "name": "Bram Calloway",
+        "trust": -20,
+        "affinity": 15,
+        "label": "petitioner",
+        "note": "He is a good craftsman and he asks plainly, and the answer is still no. Fourteen trees would be a fifth of the Hanger."
+      },
+      {
+        "name": "Vessa Pontil",
+        "trust": 10,
+        "affinity": -10,
+        "label": "petitioner",
+        "note": "She sends for wood as if the Cone's fire were the only fire on the island. It is not."
+      },
+      {
+        "name": "Jory Greave",
+        "trust": 55,
+        "affinity": 60,
+        "label": "friend",
+        "note": "I gave him the seed of his little tree. He has gentle hands with it, and he asks about it properly."
+      },
+      {
+        "name": "Tam Roon",
+        "trust": 25,
+        "affinity": 20,
+        "label": "neighbour",
+        "note": "He cuts peat on the Moss and I keep the wood; we are the two who know how thin the fuel is, and we do not talk about it."
+      },
+      {
+        "name": "Eilidh Roon",
+        "trust": 30,
+        "affinity": 35,
+        "label": "neighbour",
+        "note": "She has looked at the empty houses, and I know why. I would not blame her for wanting a warmer one."
+      },
+      {
+        "name": "Col Roon",
+        "trust": 35,
+        "affinity": 30,
+        "label": "neighbour",
+        "note": "A quiet lad. He walks the strand and never asks me for anything, which I notice."
+      },
+      {
+        "name": "Lark Morrow",
+        "trust": 20,
+        "affinity": 25,
+        "label": "stranger",
+        "note": "She gathers wrack below the gully and looks at the Hanger as if it were a thing from a story. I let her look."
+      },
+      {
+        "name": "Benedikt Orme",
+        "trust": 45,
+        "affinity": 40,
+        "label": "friend",
+        "note": "He asked me once what my mother said about the planting, and wrote nothing down, and that pleased me."
+      },
+      {
+        "name": "Edda Hollin",
+        "trust": 40,
+        "affinity": 45,
+        "label": "child",
+        "note": "She comes with the others for fallen branches and asks first, every time, which is more than her father does."
+      },
+      {
+        "name": "Gwil Stannard",
+        "trust": 30,
+        "affinity": 25,
+        "label": "neighbour",
+        "note": "He patches roofs from the shells and leaves the Hanger alone. That is the whole of what I ask of a man."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "My mother and I planted the first saplings in the gully when I was nine, and she said we would not live to sit in their shade, and we did not.",
+        "salience": 0.95,
+        "about": []
+      },
+      {
+        "gist": "Bram Calloway came up the gully with a tally of fourteen trees on a slate and I heard him out and then walked him back to the gate.",
+        "salience": 0.85,
+        "about": [
+          "Bram Calloway"
+        ]
+      },
+      {
+        "gist": "Vessa Pontil sent word by Davin Vane that the Cone would go cold in a hard winter, and I sent back that the Hanger would go bare in any winter, and neither of us has forgotten it.",
+        "salience": 0.8,
+        "about": [
+          "Vessa Pontil",
+          "Davin Vane"
+        ]
+      },
+      {
+        "gist": "The storm of last autumn took three of my oldest trees at the top of the gully, and I stood in the wreck of them a long while before I let anyone gather the wood.",
+        "salience": 0.75,
+        "about": []
+      },
+      {
+        "gist": "Jory Greave asked me for a seed from the thorn at the Hanger's edge, and I dug one out for him and told him it would not fruit for years, and he said he could wait.",
+        "salience": 0.6,
+        "about": [
+          "Jory Greave"
+        ]
+      },
+      {
+        "gist": "My mother's stories of the lean years, when the wood was cut to stumps and the roofs stripped, and how she swore she would put trees back on this rock before she died.",
+        "salience": 0.7,
+        "about": []
+      }
+    ],
+    "stances": [
+      {
+        "key": "the_hanger_must_not_be_cut",
+        "value": 0.98,
+        "why": "Every tree in it is thirty years of my mother's patience and mine; cut one and it is gone for a lifetime."
+      },
+      {
+        "key": "fallen_wood_is_for_the_taking",
+        "value": 0.8,
+        "why": "What the wind gives, people may have, if they ask. It costs the standing wood nothing."
+      },
+      {
+        "key": "a_ship_is_no_reason_to_fell_a_forest",
+        "value": 0.9,
+        "why": "Bram's Second Thought is one man's hope, and the Hanger is the whole island's shelter from wind and weather."
+      },
+      {
+        "key": "the_cone_is_not_the_only_fire",
+        "value": 0.75,
+        "why": "The town talks as though the Cone were the hearth of the world. My cottage is warm enough on fallen branches and peat."
+      },
+      {
+        "key": "children_should_know_where_wood_comes_from",
+        "value": 0.7,
+        "why": "My mother taught me the trees; if the children never come up the gully, the next warden will be someone who never planted anything."
+      },
+      {
+        "key": "say_no_once_and_mean_it",
+        "value": 0.85,
+        "why": "If I give way once to a hard case, every hard case in Cullet will come up the gully with a slate."
+      }
+    ],
+    "secret": ""
+  }
+}

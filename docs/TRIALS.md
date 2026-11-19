@@ -16,21 +16,29 @@ A trial is a JSON file in [`living/trials/`](../living/trials/). Fields:
 | `world.start_hour` | The world hour at which the trial starts (worlds start at 07:00 and a world hour is 30 real seconds, so 16:00 is 4.5 real minutes after publishing). |
 | `minutes` | Real minutes from the start until the runner stops the mind. |
 | `budget.tokens`, `budget.calls_per_min` | Optional. A token cap (the runner stops the mind when the journal reaches it) and `LIVING_LLM_PER_MIN`. None of the shipped trials sets either: trials measure, they do not cap. |
-| `subject.pick` | Who the subject is: `kind`, `stage`, `bg` (background fields, e.g. `{"town": "Elmwick"}`), `group`/`not_group` (the k-th town or band in id order), `lacks` (techniques not known), `fewest_know_how`, `nearest` (an anchor), `count`. |
+| `subject.pick` | Who the subject is: `kind`, `stage`, `bg` (background fields, e.g. `{"town": "Elmwick"}`), `group`/`not_group` (the k-th town or band in id order), `lacks` (techniques not known), `fewest_know_how`, `youngest` (fewest days old at the start), `nearest` (an anchor), `count`. `stage` is the life stage code (0 infant, 1 child, 2 adult, 3 elder). |
 | `subject.clear_items`, `subject.background` | Drop everything carried (through the ordinary `drop` act), and replace the background, usually with an authored sheet ([authored worlds](AUTHORED_WORLDS.md)) so that the subject starts as the same person in every replicate and world without a model call. |
 | `cast.<role>.pick` | Scripted characters, picked the same way. |
 | `timeline` | Steps. `"at": "prepare"` runs right after publishing, `"at": "start"` at the start hour before the mind starts, `"at": <minutes>` during the run, and `"when": {…}` on a trigger. An entry is one step or has `steps`, each with an optional `after` (seconds). |
 | `probes` | Probes the trial is about (all probes are computed for every trial). |
+| `minds` | Who the mind service thinks for. Default: the subject (`LIVING_ONLY`). `"only": "all"`: every person and animal. With `"max": N` as well, at most N at a time: those already thinking who are alive, then the earliest-born of the rest past infancy. A death frees a place, and a newborn takes one when it becomes a child. The runner restarts the mind with the new `LIVING_ONLY` when someone joins the set, at most every 2 minutes (a `reslot` event; planned restarts do not count toward the runaway watchdog's restarts). A death alone only drops the dead from the set. `concurrency`: how many model calls the trial's mind service runs at once (`LIVING_CONCURRENCY`); default 64 where many think (`only: "all"` or `max`) and 4 for a single thinker, recorded in `mind-env.json` and the summary (`concurrency`). Every trial ran at 4 before 2026-11-11 (see below). |
+| `skills_patch` | Law values changed in the skills file the variant installs: `{"name": ["old text", "new text"]}`. A variant may carry its own `skills_patch` too, which is applied after the trial's. Each old text must occur exactly once, or the run fails before it starts. The installed file's sha256 is in `skills.sha256` and `actions.log`. A world seed with its own laws (`laws`/`laws_file`) has them composed over the file first (`compose_laws` in `living/tools/install_script.py`, as `floors::compose` does at creation). The runner's laws guard then refuses to start the instance (the **laws guard**, under [the hamlet](#the-hamlet-a-small-world-where-everyone-thinks-2026-11-11), Cullet's day and laws). |
+| `census_s` | Every so many seconds, every character of the world goes to `census.jsonl`: stage, alive, cause and time of death, parents, position, hunger, activity, and who the mind thinks for. This is meant for small worlds (four whole-table reads per census). |
+| `life.stop_on_death` | `false`: a life run goes on to its duration after the subject dies, and the mind keeps running (default `true`: it stops 20 s after the death). |
+| `subject.join` | A human player joins as the subject through the real `join` reducer with its own identity (`Player` in trials.py): `name`, and `after_s`, how long the world lives first. |
+| `human` | A scripted human player for a `subject.join` trial (`Player` in trials.py), played with the player reducers only: `minutes`, and `script: greet` for the greeting trial (`wait_s`, `listen_s`, `earshot_m`, `greetings`, `addressed`; [the greeting trial](#the-greeting-trial-2026-11-11)) or `script: arrive` for [the arrival trial](#arrivals-a-stranger-who-says-nothing-2026-11-11) (`settle_s`, `walk_s`, `within_m`, `stand_s`, `stands`, and `answer`: one line said back to the first resident who addresses it). Without `script` it plays the takeover session. The arrival player approaches and answers only residents the trial's minds think for (`Player.is_mind`: past infancy, in `LIVING_ONLY` or the `minds.max` thinkers), never one who lives by its graph and could not answer. |
+| `variants` | The only variants the trial runs with; others named on the command line are skipped for it (`arrive-answer` runs with the control only). |
+| `record` | Small-world evidence, whole-table reads each sample: `speech` (every line said, `speech.jsonl`), `talk` (every conversation turn, `talk.jsonl`), `audience` (the `audience` rows where the world keeps them, `audience.jsonl`), `experiences` (every character's experience rows before minds integrate them, `experiences_all.jsonl`), `gestures` (wave, nod, face, appraise uses, `gestures.jsonl`), `positions` (every person's position, heading and activity target, `positions.jsonl`), `thoughts` (every thought row, with `detail.reasons`, `thoughts_all.jsonl`). |
 
-Steps (`do`): `place` (`to`: an anchor), `graph` (a graph, `instinct:<name>` from `instincts.json`, or `original`: the graph the character had before the trial changed it), `items`, `know`, `say` (`text`, `to`), `act` (`act` or `acts`: `do` nodes), `structure`, `background`, `kill`, `clear_routines`, `clear_items`, `call` (any admin reducer), `note`.
+Steps (`do`): `place` (`to`: an anchor), `graph` (a graph, `instinct:<name>` from `instincts.json`, or `original`: the graph the character had before the trial changed it), `items`, `know`, `say` (`text`, `to`), `act` (`act` or `acts`: `do` nodes), `structure`, `background`, `kill`, `clear_routines`, `clear_items`, `vitals` (`hp`: a number, or `"max"` for the body's own; the admin reducer `admin_set_vitals`, each use an `admin` chronicle line and listed in summary.json `admin_vitals`), `call` (any admin reducer), `note`.
 
 Anchors: `{"arrival": true}` (the island's `land.arrive_*`), `{"town": "<name>"}` or `{"group": k}` (a settlement's `town_center`, a band's `camp`), `{"who": "<role>"}`, `{"structure": "<kind>", "near": …}`, `{"far_from": …}`, `{"xy": [x, y]}`; then `offset: [dx, dy]`, or `away: <anchor>, distance: d` (d tiles from the point, directly away from another anchor).
 
 Substitutions in steps: `"$<role>"` is that character as a target (`{"id": n}`), `"$addressee"` the person the subject just spoke to (in a `said` trigger), `"$<role>_xy"` where the role stands now (`"$subject_xy+9,0"` with an offset, `"$subject_xy@pack:9"` 9 tiles from the subject toward the pack).
 
-Triggers (`when`): `said` (`by`, `to`: a role or `any` person, `words`/`without`: word stems), `near` (`who`, `of`, `within`), `hour`; with `max`, `per_addressee`, `after_min`.
+Triggers (`when`): `said` (`by`, `to`: a role or `any` person, `words`/`without`: word stems), `near` (`who`, `of` or `to`, `within`; or `beyond`: fires when all are farther apart than that, and with `for_s` only once that has held so long, the clock starting again after each firing), `hour`; with `max`, `per_addressee`, `after_min` and `before_min` (the trigger fires only between those minutes).
 
-**Variants** ([`variants.json`](../living/trials/variants.json)) are named mind settings: a whole models file (`models_file`) or a patch to [`living/configs/models.json`](../living/configs/models.json) (for example `{"default": "deepseek-flash"}`, or `{"species": {"wolf": {"think": "ministral-3b"}}}`), and environment (`LIVING_LESSONS`, `LIVING_GROUNDS`, `LIVING_LOD`, …). The runner removes the config's `groups`, `assign`, `rotate` and `stages`, so people think with the variant's default profile and its overflow; the `species` map (animals' `think`, `remember` and `compile`) is kept. The current variants are `default` (glm-flash, `zai-glm-5-3-flash`, overflow deepseek-flash), `deepseek-flash` (`deepseek-v4-1-flash-1017`, overflow glm-flash), `glm`, `mistral-large`, `ministral-14b`, `lessons`, `grounds` and `lod`. In `--fake` runs every profile keeps its place in the routing but is answered by the fake server under the name `fake-<model>`, so the journal shows where each call was routed.
+**Variants** ([`variants.json`](../living/trials/variants.json)) are named mind settings: a whole models file (`models_file`) or a patch to [`living/configs/models.json`](../living/configs/models.json) (for example `{"default": "deepseek-flash"}`, or `{"species": {"wolf": {"think": "ministral-3b"}}}`), and environment (`LIVING_LESSONS`, `LIVING_GROUNDS`, `LIVING_LOD`, …). The runner removes the config's `groups`, `assign`, `rotate` and `stages`, so people think with the variant's default profile and its overflow; the `species` map (animals' `think`, `remember` and `compile`) is kept. The current variants are `default` (glm-flash, `zai-glm-5-3-flash`, overflow deepseek-flash), `deepseek-flash` (`deepseek-v4-1-flash-1017`, overflow glm-flash), `glm`, `mistral-large`, `ministral-14b`, `lessons`, `grounds`, `lod`, `projects` (`LIVING_PROJECTS=1`: [projects](LIVING_CORE.md#projects-experiment-2026-11-11); the thought rows' `detail.projects` says which project each plan served) and `player-frame` (`LIVING_FRAME=player`, [below](#the-player-frame-experiment-2026-11-11)). In `--fake` runs every profile keeps its place in the routing but is answered by the fake server under the name `fake-<model>`, so the journal shows where each call was routed.
 
 ### How the script reaches the world
 
@@ -60,6 +68,14 @@ python3 living/tools/trial_evidence.py b1 b4 --table      # one row per trial x 
 python3 living/tools/trials.py down                      # stop the containers (kept)
 ```
 
+**Mind concurrency (2026-11-11).** The runner gave every trial's mind `LIVING_CONCURRENCY=4`. In the hamlet's greeting batches (12 minds), the queue, not the model, then set the pace: talk turns waited a median 2–7 s in the queue (p90 15–25 s, at most 78 s) for 0.8 s of model time, and deliberations 6–13 s (p90 up to 41 s), by the resident inspector's reading. Play-test 2 ran at 192 and waited under 0.2 s. It is now the trial's `minds.concurrency`, by default 64 where many think and 4 for one thinker, so one-mind batches stay comparable with earlier ones. Batches of many minds before this date ran queued: their latencies are not the model's.
+
+Three runner behaviours since 2026-11-11 (branch `exp-greet`):
+
+- `run --fake --fake-script FILE` gives the fake server a rules file. `living/trials/fake/latency.json` sets model latencies near the real ones and open-ended talk replies.
+- A seed with its own laws (`laws`/`laws_file`, e.g. Cullet's) keeps them: the runner composes the overlay over the skills file as the authority did at creation (`compose_laws`), checks the result against the world's own script, applies any `skills_patch` and installs that (docs/CULLET_RULES.md). Main's runner did this first; `exp-greet`'s earlier way, skipping the install, was dropped in the merge.
+- Run from a git worktree, `build` copies each module into the container's `/wasm` mount (another checkout's) under a tagged name, `<module>-wt<hash>` (`served_name`), and `run` publishes that name, so a worktree never overwrites another checkout's modules. Remove the tagged files from the mount when done.
+
 Each instance is a database `verify-trial-<batch>-<trial>-<variant>-r<k>` on the trial service and one `living-mind` process. Its evidence directory, `.local/living/trials/<batch>/<trial>-<variant>-r<k>/`, holds:
 
 - `cast.json`: who played whom, their backgrounds, and the subject's genome (temperament differs between worlds);
@@ -70,6 +86,10 @@ Each instance is a database `verify-trial-<batch>-<trial>-<variant>-r<k>` on the
 - `final.json`: the subject's rows at the end; `summary.json`: the probes.
 
 The run stops at `minutes`, at a token cap if the trial or `TRIALS_TOTAL_TOKENS` sets one (none does by default), when the runaway watchdog fires (below), 20 s after the subject dies, or when the mind exits (a life run restarts it instead). Deleted databases leave their replica directories in the volume (about 0.4 GB each for an island world); run `trials.py reclaim` after large batches.
+
+**Runaways and provider outages (since 2026-11-11).** The watchdog stops a mind running away: the same failed call 15 times in 5 minutes or 30 failed calls (for `minds.only: "all"`, as a share of the calls: 40% and half), a call rate above 60 a minute for one mind (or `budget.runaway_calls_per_min`), or more than 5 unplanned mind restarts in 30 minutes. Only failures the provider did not cause count (`failure_kind` = `mind`: a refused request, a missing key, a reply that is not the provider's envelope). Capacity or rate 429s, 5xx and connection errors are the provider's: they count toward no failure limit while a fallback or a later retry answers (ar1 stopped 7 of its 28 instances on consolidation's capacity 429s; replayed under these rules, none stops). They still count as calls, so a storm against a failing provider trips the rate rule. When no call on any route has succeeded for 30 s, the runner records an outage (`outage` and `outage_ended` events, `outages` in `summary.json`). It stops the run (`stopped_by`: `provider outage: …`) only when nothing has answered for 10 minutes while calls still fail, the last within 3 minutes. `call_failures` in `summary.json` counts failed calls by kind. `python3 living/tools/trials_runaway_selftest.py` covers both cases.
+
+**Consolidation accounting.** The mind writes one line per consolidation that called a model, failed, or found experiences lost to `<journal>/outcomes/consolidations.jsonl` (`Llm::outcome`): outcome, route (primary or fallback), model, attempt, experiences, the failure, and the retry delay. `summary.json` `consolidations` (`consolidation_table`) counts, per character and in total: attempted, integrated on the primary or on the fallback, failed and retried later, failed with no later attempt (lost: never integrated before the stop), experiences of failed ones that left the 400-row inbox before integration (trimmed), and failures that were capacity 429s. `trials.py report` adds the per-instance and per-character tables, and any outages, to `report.md`. Both files are published by `store.py pack`, while the journals, these outcome lines included, stay held with `model_exchanges`. Minds from before 2026-11-11 wrote no outcomes, and their table is `null`.
 
 ### Probes
 
@@ -96,6 +116,8 @@ export CARGO_TARGET_DIR=$HOME/slop-trials-target OPENSSL_INCLUDE_DIR=$HOME/slop-
 python3 living/tools/trials.py up && python3 living/tools/trials.py build wolves wolves-valley hungry hungry-village teacher theft
 python3 living/tools/trials.py run --batch b3 wolves hungry --variants default,lessons --replicates 3
 ```
+
+**From another checkout** (a git worktree), the trial container still serves the starting checkout's `.local/living/trials/wasm/` as `/wasm`. `trials.py build` then also copies each module there as `<module>-wt<tag>.wasm` (`tag` from the checkout's path) and `run` publishes that file, so a worktree never overwrites or reuses a module another checkout's batches run. The worktree needs its own copy of `.local/living/trials/neo4j.env` (mode 600); it must not run `up` against a running stack.
 
 The verify harness runs there too, against the trial container: `LIVING_STDB_CONTAINER=slop-trials-stdb LIVING_STDB_URL=http://127.0.0.1:3320` make `verify.py`, `living/tools/stdb`, `verify-llm` and `verify-minds` use it instead of `sao-living_spacetimedb_1` on 3300. Other surface scripts (`verify-client`, `verify-generation`, `verify-knowledge`) still assume 3300.
 
@@ -127,7 +149,1440 @@ At 40 worlds every tick but one stayed far inside the 16.7 ms budget, and memory
 | 7. wolf brains | `w3` `pack-life` × `default`, `instinct` | the shipped road pack of four as the subject in a `minds: true` island (models file's species map: glm-flash for think, remember and compile); `instinct`: no mind service at all |
 | 8. human, then AI | `w4` `life-takeover` × `default` | a 20-minute scripted player session through the player reducers, then takeover after `takeover_s` (30 s); proved in a dry run: the character became `ai`, controlled by the minds, 30 s after the last call |
 
-### Results of the wide batch (finished 22:58)
+### Strangers stages 0 and 1 (2026-11-12, st0, st1)
+
+docs/STRANGERS.md section 6 and its decisions. The trial files are `strangers` (main's Cullet seed with the two lives of dc2ecfc8) and `strangers-pre`. `strangers-pre` takes the six residents dc2ecfc8 redrafted (the Quill and Morrow households and Kenji Sato) from dc2ecfc8^ = 11e4fcb1 (`world.residents_from`); every other resident is byte-identical in both. `-aldous` variants think only for Aldous Quill. The variants are `strangers-control` and `strangers-filter` (`stranger_by_name` on, by `set_world_law` after the laws guard, read back from `world_law`).
+
+The script:
+- the world starts at 07:00 (no reducer sets the clock);
+- the newcomer "Arlen" joins at 09:30, at the arrival point (540.5, 766.5), which is the Counting House yard;
+- it stands silent 5 minutes there, walks to the densest group and stands silent 5 minutes more, then stays to the end (20 minutes).
+
+**Builds and switches.**
+- Stage 0 ran `0dd19571`; stage 1 ran `bc1e7c0a`. Both are main `dc2ecfc8` plus this branch.
+- Both are without speech-truth (the "No answer" wording; arrive_spread matches both wordings).
+- Main's mind defaults: `LIVING_GREET=nearest`, `LIVING_PARK=concurrent`.
+- The meters() alarms are present. No skill timings or force_outcomes overrides; no arrival laws.
+
+**Stage 0** (`st0`, `--fake --fake-script living/trials/fake/strangers.json`, free): C, S, L and LS with all minds, plus C and S with Aldous only, 1 replicate each. All 6 stopped by duration. The measures compute (`arrive_spread.py --strangers --control strangers-pre:strangers-control`):
+- first-sight lines naming the newcomer reached every person within 12 m of it after the join: 8–21 of 8–21;
+- classes, tells, first heard line, crowding and spoken ids (0) are computed.
+- The fake's `goto {nearest person, relation: stranger}` routine:
+  - with the law off, it took residents to other people (13 and 18 of them in C and L) and 0–1 to the newcomer;
+  - with it on, 3 and 4 went to the newcomer and 1 elsewhere.
+- The minds' graph grammar followed the law: "no feelings about yet" in C, "whose name you do not know" in S.
+
+**Stage 1** (`st1`, real models: glm-5-3-flash 155 calls, deepseek-v4-1-flash 45). Aldous Quill only, on his pre-lives sheet, C against S, 4 replicates each. All 8 stopped by duration.
+- **Cost:** $0.31 ($0.036–0.043 a run), 1.6 M tokens.
+- **What Aldous did:** in no run did he speak to the newcomer or approach it. The 28 lines he said went to residents: debts, Lorcan Vane's nine drops, Mirren, Dolly's accounts.
+- **Control:** his first sight came at the join in all 4 runs, and he came within 6–11 m. He was in range during a stand in all 4 and classed *unaware* in all 4. The newcomer was in a think prompt in r4 only (5 thinks), and no thought named it.
+- **Filter:** he was never in range during a stand. His first sight came 275–307 s after the join in r1 and r2, and not at all in r3 and r4 (closest 24–29 m). In r1 he passed within 3 m after the stands and said nothing.
+- **Tells:** `tells` lists Aldous in control r2 for "strangers west of the Batch … Worth a watch". That line was about neighbours, said after he had seen the newcomer: a limit of the word measure. *Inward* counts stranger words only when the newcomer was in that prompt.
+- **Routines:** one compiled routine per arm used `relation: "stranger"` (control r3, filter r1). Both were about watching "strangers" who were in fact neighbours.
+- The filter alone shows no difference in what Aldous did. Without the lives his sheet gives no reason to ask, as the design expected.
+- **Spoken ids:** 0 of 35 lines. ar2 had 1 of 3,042 (Wenna Reed, arrive-answer/arrive-all r4: "And Lio — #12 — get you back to my elbow", said to a named resident).
+
+**Finding: "a stranger" in Cullet is not only the newcomer.** In Aldous's deliberation scenes, members of his own community beyond Cullet's naming distance (`perceived_of`: names within 24 m) are `"who": "a stranger"` with `"community": "yours"`; for example #27 at 46 m, #36 at 25 m and #8 at 46 m. His thoughts call them "the west strangers carrying fish into a store nobody wrote me". He told Neve Calloway "strangers west of the Batch … Worth a watch", and his mind wrote a relation "Tobiah Dunmore: stranger".
+- STRANGERS.md §1 assumed that a scene's "a stranger" in Cullet can only be the newcomer. That holds for `knows_name`, which the `stranger_by_name` filter uses, but not for the scene's word.
+- Before stage 2, the word in scenes and percepts for a known person too far to recognise ("someone", or "one of yours, too far to make out") is a decision for the general coordinator. It is not built here.
+
+**Evidence:** `.local/living/trials/st0`, `.local/living/trials/st1` (this worktree; `report.md`, `summary.json`, journals), and `~/slop-strangers-logs/` (`st0-spread.md`, `st1-aldous.md`, `ar2-spread.json`).
+
+## First sight fs1w (2026-11-12) — fs1n with earshot, now that minds can call; target, written before any paid call
+
+The general coordinator approved this run at about $2.5, with a stop at $3.50 spent. It is evidence for the owner's question: can residents greet without crowding when they can call? It runs only once the trial server is back from the disk cleanup, and only when the Spark coordinator says so.
+
+- **What it runs:** one arm, batch `fs1w`, `strangers-2b-c:strangers-first-sight-n2-earshot`.
+  - Laws on: `first_sight_thinks`, `think_framing` (N2) and `earshot`. They are set by `set_world_law` and read back from `world_law`.
+  - `first_sight_gap_s` is at its default, 300 s. `heard_first_rethinks` is off. The naming fix is on in every world.
+- **Code:** current main, which carries mind-say-way (`da3ff142`): a decision names its line's way (say, call, whisper). It is built from `trials-fs1` after merging main.
+- **The world and script:** as fs1n (Cullet, 63 minds, 20 minutes, the Strand walk). Ways stage 3 (ew1, on `ways-stage`) found that with earshot, 30 of 42 decisions with a call-only target called.
+- **A free fake smoke run first** (`fs1ws`). It checks that the three laws read back, that think prompts carry "# What just happened", and that scenes carry the earshot fact.
+- **Stop rule:** fs1's, unchanged: `converge_60s` 4 or more (the old definition), or `together_4m` 3 or more. The spend guard also stops the run at $3.50.
+- **Measures:**
+  - one table with fs1n against fs1w, the same rows as fs1n's;
+  - from `ways_report.py`: the lines to the newcomer by way (say, call, whisper), and for decisions whose scene put the newcomer within a call's reach but not a said line's, whether the speaker called, said, or walked over.
+- **What would answer yes:** most first lines to the newcomer called from where the speaker stood; fewer residents walked within 4 m than in fs1n (`converge_60s` 5); and the stop rule did not trip.
+
+**Switches:** as fs1n, plus `earshot` on. Otherwise:
+- far-handle on, `fov_on` off, `regard_cache` on;
+- `LIVING_GREET=nearest`, `LIVING_PARK=concurrent`;
+- `LIVING_SKILL_TIMINGS` on and `force_outcomes` true;
+- no arrival laws;
+- `LIVING_CONCURRENCY` 64;
+- the people mix.
+
+### Results (fs1w, 2026-11-13 00:38–00:58 local): the stop rule tripped (`converge_60s` 8)
+
+**The answer to the owner's question, from one replicate.**
+- **Residents could greet without walking over, and most did:** 10 of the 13 who spoke to the newcomer stayed off, at 13–32 m.
+- **Calling did not end the rush:** it changed its shape. Eight residents turned to the newcomer within a minute, 296–364 s after the join, against fs1n's five. Most of those were lines from 13–32 m: at most one resident who had addressed the newcomer stood within 4 m at a time (`together_4m` 1, as in fs1n).
+- **The stop rule tripped:** it counts contacts within a minute (lines, gestures, aimed acts) wherever the speaker stands, so lines from a distance count in it as walking up does. Since 2026-11-13 the rule reads `together_4m` 3 or more, and by it fs1w does not trip (1). The plain count of residents within 4 m at once was 4 at 391 s: children on their way to lessons and one who had not noticed the newcomer ([The stop rule: voices and bodies](#the-stop-rule-voices-and-bodies-2026-11-13)).
+
+**What ran.**
+- **Code:** `trials-fs1` `31fd5daf`, which was main with mind-say-way (`da3ff142`) and ways-stage (`e6e0c0dc`), in `~/slop-trials-fs1`. The module and the mind were built through a build slot.
+- **Smoke:** a free fake run first (`fs1ws`, 6 minutes). It ran to duration and read the three laws back. All 105 think requests carried "# What just happened", none "# Why you are thinking now", and 100 carried the earshot fact.
+- **The paid arm:** ran to duration (20 minutes) with no runaways, no outages and one mind start. `first_sight_thinks`, `think_framing` and `earshot` were read back from `world_law`.
+- **Keys:** copied from `~/dev/slop-runs-arrive/.env` (3 key fragments) and deleted after the run.
+- **Cleanup:** the runner paused each world before deleting it; no database is left.
+
+**Cost:** $2.66 (glm-5-3-flash 1,410 calls $2.04; deepseek-v4-1-flash 424 calls $0.62). The spend guard was set at $3.50 and read $2.56 at its last sample.
+
+**Switches:** as fs1n, plus `earshot` on:
+- `first_sight_thinks` on (gap 300 s), `think_framing` on (N2), the naming fix; `heard_first_rethinks` off;
+- far-handle on, `fov_on` off, `regard_cache` on;
+- `LIVING_GREET=nearest`, `LIVING_PARK=concurrent`;
+- `LIVING_SKILL_TIMINGS` on and `force_outcomes` true;
+- no arrival laws;
+- `LIVING_CONCURRENCY` 64;
+- the people mix;
+- minds name a line's way (mind-say-way).
+
+| measure | fs1n | **fs1w** (earshot) | target |
+|---|---|---|---|
+| in range | 25 | 27 | about 18–24 |
+| asks | 12 | **13** | 1–3, Aldous among them |
+| approaches silently | 1 | 0 | 0–2 |
+| notices inwardly | 7 | 9 | 3–8 |
+| unaware | 5 (20%) | 5 (19%) | ≤6, ≤40% |
+| tells others | 1 | 4 (Neve Calloway, Amara Okoro, Lark Morrow, Ren Sato) | 1–4 |
+| first heard line after the join | 14.3 s, Benedikt Orme | 34.9 s, Livia Faro | within 5 minutes |
+| `converge_60s` (old definition) | 5 | **8** | ≤3 |
+| of it: heard / unheard | 3 / 3 | 7 / 3 | — |
+| `together_4m` | 1 | 1 | ≤2 |
+| raw 4 m convergence | 8 | 7 | — |
+| lines to the newcomer / out of earshot / residents heard by it | 18 / 11 / 5 | 16 / **5** / 9 | — |
+| re-asks | 3 | 0 | — |
+| first sights → think requests carrying the line | 26 → 24 | 27 → 26 | — |
+| first-sight-only thoughts that speak to the newcomer / speak or mean to | 12 / 15 of 24 (50% / 62%) | 13 / 18 of 26 (50% / 69%) | — |
+| false replies / group talk, a minute | 0.20 / 0.05 | 0.50 / 0.15 | within C's spread |
+| repeated lines; `led_res` − placebo | 0.04; 0.00 | 0.03; 0.00 | within C's spread |
+| deliberations / talk turns per resident-hour | 18.9 / 10.7 | 21.2 / 13.8 | — |
+| tick mean / > 10 ms / > 25 ms / > 50 ms | 1.12 ms / 132 / 17 / 6 | not captured (the sampler listed no databases, as in fs1e) | — |
+| spoken `#id` lines | 0 | 0 | 0 |
+| cost | $2.45 | $2.66 | — |
+
+**Lines to the newcomer by way** (speech, audience and positions; `ways_report.py` for the decisions):
+
+| | fs1n | fs1w |
+|---|---|---|
+| lines to the newcomer | 18, all said | 16: 10 said, 6 called |
+| heard by it | said 7 of 18 | called 6 of 6; said 5 of 10 |
+| first line per speaker: called, and stayed off | — | 4 (Lark Morrow 22.7 m, Neve Calloway 13.3 m, Aldous Quill 25.2 m, Oswin Greave 24.9 m) |
+| first line per speaker: called, then came within 4 m in 60 s | — | 2 (Hana Sato from 24.8 m; Fenn Brandt, already 3.1 m off) |
+| first line per speaker: said, and stayed off | 8 | 6 (Thessaly Marl, Suri Greave, Petra Tarn, Cora Stannard, Jory Greave, Sabine Quill, at 15–32 m; 2 of them heard) |
+| first line per speaker: said, then came within 4 m in 60 s | 4 | 1 (Livia Faro, from 11.8 m) |
+
+- **The whole run, by `ways_report.py`:** decisions named `say` 269, `call` 55, `whisper` 23. Of the decided calls to someone, 30 reached their listener and 17 did not.
+- **Decisions whose scene put someone in a call's reach but not a said line's** acted toward them by: calling 18, calling and walking 15, walking 6, saying and walking 6, saying 2.
+- **Toward the newcomer** (7): called 2 (Neve, Oswin), called and walked 3 (Fenn, Hana, Lark), said and walked 1 (Livia), said 1 (Petra).
+
+**Reading** (one replicate, so indicative):
+- **The call was used, and it was heard.** All six calls to the newcomer reached it. Of the said lines, 5 of 10 did not, against 11 of 18 in fs1n. Residents heard by the newcomer went from 5 to 9.
+- **Few walked over to greet.** 10 of the 13 speakers stayed where they were (fs1n: 8 of 12). Three came within 4 m within a minute: Livia, Hana, and Fenn, who was already near.
+- **Asking did not fall.** 13 residents spoke to the newcomer (fs1n 12), and the first-sight thoughts that speak to it stayed at 50%. The call lets them reach it, so more of them were heard.
+- **The minute's rush grew:** `converge_60s` 8, from 296 s. Its eight were Aldous, Cora, Hana, Ingrid, Neve, Oswin, Petra and Suri. Seven of them spoke first from 13–32 m, four of those by calling; Ingrid's contact was not a line. This is the count the stop rule read until 2026-11-13. Of those who had addressed the newcomer, at most one stood within 4 m at a time.
+- **Aldous asked:** a call from 25.2 m at 324 s, heard ("I keep the book open at nine, and I like knowing who…").
+- **False replies and group talk rose:** 0.50 and 0.15 a minute, against 0.20 and 0.05. That is above fs1n, within the range of the other first-sight arms (0.20–0.55).
+
+**The asks** (`fs1_asks.py`, grouped by its own keywords, not by hand as fs1n's were): curiosity 5 (Livia, Lark, Thessaly, Suri, Sabine), manners 3 (Hana, Cora, Jory), duty or role 1 (Aldous), something else 4 (Neve, Petra, Oswin, Fenn).
+
+**Evidence:**
+- `~/slop-trials-fs1/.local/living/trials/fs1w` and `fs1ws`, and the journals `verify-trial-fs1w*`.
+- All archived in `~/archive/trials/fs1w-20261113.tar.gz` (15 MB), with:
+  - the measure outputs: `fs1w-spread.md`, `fs1w-m.json`, `fs1w-asks.json`, `fs1w-ways*.json`, `fs1w-firstlines.txt`;
+  - the spend and runner logs;
+  - the tools.
+
+## The stop rule: voices and bodies (2026-11-13)
+
+The general coordinator read fs1w and agreed that `converge_60s` counts voices, not bodies. From now on the strangers measures (arrive_report, arrive_spread) report voices and bodies:
+- **"Speakers to the newcomer within a minute"** (`voices_60s`): the old `converge_60s`, renamed in the report and still written under the old name for older records. It counts the most residents who spoke, gestured or aimed an act at the newcomer within 60 s, from any distance.
+- **"Residents within 4 m at once"** (`crowd_4m`): the peak count of distinct residents within 4 m of the newcomer at one position sample, whatever brought them, with `crowd_4m_s` saying when.
+  - It is new. `together_4m` counts only those within 4 m who had spoken, gestured or aimed an act at the newcomer in the minute before. `together_any_4m` counts those who had come from beyond 8 m in the minute before.
+  - `crowd_4m` counts everyone, so residents passing on their own way count too.
+
+**The stop rule since 2026-11-13, the general coordinator's decision: `together_4m` 3 or more.** That is, 3 or more residents within 4 m of the newcomer at once who had spoken, gestured or aimed an act at it in the minute before (`STOP_TOGETHER_4M`; `runs_3plus` counts it). `crowd_4m` and `voices_60s` are reported beside it. The earlier rules, kept for the records made under them:
+- **Until 2026-11-12:** `converge_60s` 4 or more, or `together_4m` 3 or more. Dropped because `converge_60s` counts voices, not bodies: fs1w's 8 voices from 13–32 m tripped it while at most one resident who had addressed the newcomer stood within 4 m.
+- **Interim, 2026-11-13:** `crowd_4m` 3 or more. Dropped the same day because the plain count measures where the newcomer stands, not whom it draws. Every first-sight arm tripped it, mostly on residents passing by (below).
+
+**Both measures, recomputed from the records** (arrive_report on each run's own files; fs1c is the control world, C, without first sight):
+
+| run | voices within a minute (`voices_60s`) | heard / unheard | residents within 4 m at once (`crowd_4m`), and when | `together_4m` | `together_any_4m` | stops: `together_4m` ≥ 3 (the rule) / interim `crowd_4m` ≥ 3 / until 2026-11-12 |
+|---|---|---|---|---|---|---|
+| fs1c (C) | 2 | — | 2, at 91 s | 2 | 2 | no / no / no |
+| fs1f | 6 | 6 / 2 | 3, at 345 s | 2 | 3 | no / yes / yes |
+| fs1h | 10 | 5 / 6 | 3, at 370 s | 2 | 3 | no / yes / yes |
+| fs1e | 10 | 8 / 7 | 8, at 630 s | 3 | 6 | **yes** / yes / yes |
+| fs1n | 5 | 3 / 3 | 3, at 338 s | 1 | 3 | no / yes / yes |
+| fs1w | 8 | 7 / 3 | 4, at 391 s | 1 | 3 | no / yes / yes |
+
+**What the body count shows:**
+- **Under the rule, only fs1e trips** (`together_4m` 3). Under the interim plain count every first-sight arm tripped, at 3–8 residents within 4 m against C's 2. These are single replicates.
+- **Many of those bodies were passing by, not greeting.**
+  - fs1w's 4 at 391 s: Edda Hollin, Pim Hollin and Zeke Okoro, children on their way to lessons, and Juno Brandt, who never noticed the newcomer. None had spoken to it.
+  - fs1n's 3 at 338 s: Ren Sato, who had spoken to it, and Davin Vane and Joss Tarn, who had not.
+  - fs1e's 8 at 630 s: 5 had spoken to it (Dolly and Roos Achterberg, Cora and Gwil Stannard, Aldous Quill), and 3 had not (Pieter Achterberg, Posy Fenwick, Tilly Dunlin). That was the one real crowd.
+- **So the plain count reads where the newcomer stands as much as whom it draws**, which is why the rule reads `together_4m`: fs1n and fs1w 1, against C's 2.
+
+## First sight fs1n (2026-11-12) — first sight with the neutral think framing (N2); target, written before any paid call
+
+Approved by the general coordinator at about $2.7, after the ordinary-think replay (docs/FRAMING.md). It runs only once `think-framing` is on main and the trial server is free, and only when the general coordinator says so.
+- **What it runs:** one arm, batch `fs1n`, `strangers-2b-c:strangers-first-sight-n2`, with `first_sight_thinks` and `think_framing` on (set by `set_world_law`, read back from `world_law`). `heard_first_rethinks` and `earshot` are off, so the arm compares with fs1f (first sight alone).
+- **The naming fix** is on in every world.
+- **The world and script:** as fs1 (Cullet, 63 minds, 20 minutes, the Strand walk).
+- **A free fake smoke run first** (`fs1ns`). It checks that both laws read back and that the think prompts carry "# What just happened".
+
+**The target and the stop rule are fs1's, unchanged** (under "First sight fs1").
+- **Stop rule:** `converge_60s` 4 or more (the old definition), or `together_4m` 3 or more.
+- **Measures:** as fs1e:
+  - the stage-2 table beside fs1f, fs1h and fs1e;
+  - `converge_60s` heard and unheard;
+  - lines out of earshot, first sight → thought;
+  - the asks with their reasons grouped (curiosity, duty or role, manners, others asking, greeted first, something else);
+  - false replies with group talk, spoken ids.
+- **Added:** the share of first-sight thoughts that speak to the newcomer (`framing_replay.py asks`' measure, live), against fs1e's 22 of 36 recorded and the replay's N2 17 of 36.
+
+**Switches:** as fs1f, plus `think_framing` on.
+
+### Results (fs1n, 2026-11-12 21:06–21:27): the stop rule tripped (`converge_60s` 5)
+
+**What ran.**
+- **Commit:** main `05e94978` (think-framing on), in `~/slop-trials-fs1`.
+- **Smoke:** a free fake run first (`fs1ns`, 6 minutes). It ran to duration and read both laws back. All 98 think requests carried "# What just happened" and none "# Why you are thinking now"; the system prompt carried the neutral sentence.
+- **The paid arm:** ran to duration (20.0 minutes) with no runaways, no outages and one mind start. Both laws were read back from `world_law`.
+- **Cleanup:** the world was paused before deletion; no database is left.
+
+**Cost:** $2.45 (glm-5-3-flash 1,292 calls $1.90; deepseek-v4-1-flash 331 calls $0.55).
+
+**Switches:** `first_sight_thinks` on (gap 300 s), `think_framing` on (N2), the naming fix; `heard_first_rethinks` and `earshot` off. Otherwise as fs1f: far-handle on, `fov_on` off, `regard_cache` on; `LIVING_GREET=nearest`, `LIVING_PARK=concurrent`; `LIVING_SKILL_TIMINGS` on and `force_outcomes` true; the sleeper fix in; no arrival laws; `LIVING_CONCURRENCY` 64; the people mix.
+
+| measure | fs1 C | fs1f | fs1h | fs1e | **fs1n** | target |
+|---|---|---|---|---|---|---|
+| in range | 18 | 22 | 22 | 35 | 25 | about 18–24 |
+| asks | 1 | 11 | 12 | 22 | **12** | 1–3, Aldous among them |
+| approaches silently | 3 | 0 | 0 | 3 | 1 | 0–2 |
+| notices inwardly | 2 | 8 | 8 | 8 | 7 | 3–8 |
+| unaware | 12 | 3 | 2 | 2 | 5 (20%) | ≤6, ≤40% |
+| tells others | 0 | 6 | 2 | 5 | 1 (Amara Okoro) | 1–4 |
+| first heard line after the join | 91.6 s | 320.7 s | 307.8 s | 96.0 s | **14.3 s, Benedikt Orme** | within 5 minutes |
+| `converge_60s` (old definition) | 2 | 6 | 10 | 10 | **5** | ≤3 |
+| of it: heard / unheard | 2 / 0 | 6 / 2 | 5 / 6 | 8 / 7 | 3 / 3 | — |
+| `together_4m` | 2 | 2 | 2 | 3 | 1 | ≤2 |
+| raw 4 m convergence | 5 | 7 | 10 | 10 | 8 | — |
+| lines to the newcomer / out of earshot / residents heard by it | 1 / 0 / 1 | 21 / 7 / 5 | 21 / 12 / 3 | 31 / 16 / 10 | 18 / 11 / 5 | — |
+| re-asks | 0 | 7 | 6 | 1 | 3 | — |
+| first sights → think requests carrying the line | 22 → 0 | 24 → 20 | 26 → 24 | 39 → 36 | 26 → 24 | — |
+| **first-sight-only thoughts that speak to the newcomer / speak or mean to** | — | 10 / 15 of 19 (53% / 79%) | 11 / 18 of 24 (46% / 75%) | 22 / 33 of 36 (61% / 92%) | **12 / 15 of 24 (50% / 62%)** | — |
+| false replies / group talk, a minute | 0.45 / 0.05 | 0.55 / 0.10 | 0.35 / 0.30 | 0.45 / 0.65 | 0.20 / 0.05 | within C's spread |
+| repeated lines; `led_res` − placebo | 0.00; −0.04 | 0.00; −0.11 | 0.12; +0.07 | 0.07; +0.28 | 0.04; 0.00 | within C's spread |
+| deliberations / talk turns per resident-hour | 18.9 / 11.3 | 20.4 / 13.5 | 22.1 / 12.2 | 22.4 / 13.5 | 18.9 / 10.7 | — |
+| tick mean / > 10 ms / > 25 ms / > 50 ms | 0.88 ms / 28 / 2 / 0 | 0.82 ms / 14 / 1 / 0 | 0.82 ms / 18 / 0 / 0 | not captured | 1.12 ms / 132 / 17 / 6 | — |
+| spoken `#id` lines | 0 | 0 | 0 | 0 | 0 | 0 |
+| cost | $2.48 | $2.66 | $2.73 | $2.69 | $2.45 | — |
+
+**What N2 changed, live** (one replicate, so indicative):
+- **The live share of first-sight thoughts that speak to the newcomer did not fall:** 50%, against 46–61% in the other first-sight arms.
+- **Fewer meant to:** 62% spoke or meant to, against 75–92%. The replay on fs1e's own prompts had shown a larger drop (67% → 47% speaking). Live thoughts differ from the replayed ones (other moments, other scenes).
+- **Crowding was lower than fs1h and fs1e, though still over the band:** `converge_60s` 5 (3 heard, 3 unheard), `together_4m` 1.
+- **False replies and group talk fell to C's level:** 0.20 and 0.05.
+- **Deliberations per resident-hour came back to C's 18.9.**
+- **Aldous asked** (6 s after the join, from 23.9 m, unheard): "a tally keeper does well to know every face and every newcomer's business, courteously".
+- **Still out of shape:** asks (12), and lines called from out of earshot (11 of 18).
+- **Tick time was higher** (mean 1.12 ms, 132 ticks over 10 ms) than in fs1's runs. Other batches were on the server after the quiet window; tick time was not part of the question.
+
+**The asks: 12 residents, each with the reason its own thought gave** (`fs1_asks.py`; grouped by hand; a thought giving two reasons is in both):
+
+| reason | askers | in their words |
+|---|---|---|
+| **manners** (7) | Aldous, Oswin, Roos, Hana, Gwil, Ren, Ingrid | Aldous: "…, courteously"; Oswin: "new faces in a growing town should be met before gossip makes them"; Roos: "New faces in Cullet are worth a greeting"; Hana: "give a civil word across the road"; Gwil: "I'd not let a new face stand silent in my town"; Ren: "deserves a greeting before anyone else decides what to make of them"; Ingrid: "I'll keep an eye and a civil word ready" |
+| **curiosity** (4) | Benedikt, Roos, Lark, Bram | Benedikt: "curiosity bids me at least offer a word"; Roos: "and a name, if they'll give one"; Lark: "a newcomer might be news from over the water, which is exactly the sort of thing I watch for"; Bram: "new faces are rare in Cullet, and I'd know who's come among us" |
+| **duty or role** (2) | Aldous, Ren | Aldous: "a tally keeper does well to know every face and every newcomer's business"; Ren: "Cullet's first outsider on my watch" |
+| **others asking** (0) | — | — |
+| **greeted first** (0) | — | — |
+| **something else** (2) | Ife, Suri | Ife, a child: "grown-ups would want to know". Suri: "not mine to mind this afternoon"; her line went to the newcomer all the same. |
+
+Against fs1e (manners 13, curiosity 10, duty 4, others 3, else 3 of 22): fewer askers in all, and manners still first. None was pulled by others asking.
+
+**Manners: the residents' or the model's?** (A free count from fs1n's records, 2026-11-12, for the owner's question whether 1–3 asks is the right bar.)
+- **The sheets read:** each of the 25 residents in range (12 askers; 13 who saw the newcomer and did not ask: 1 approached, 7 inward, 5 unaware), as its mind was given it. That is the "# Who you are" section of its own fs1n think prompts: the C world, with the Quill, Morrow and Sato households' sheets from before the lives change.
+- **Each resident classed as:**
+  - *outgoing*: social, curious or duty-bound by a phrase or a trait of 65 or more;
+  - *reserved*: reserved or private by a phrase or sociability of 40 or less;
+  - *both*;
+  - *none*.
+
+| sheet | asked | did not ask |
+|---|---:|---:|
+| outgoing only | 6: Bram ("Values: … exploration"), Ife (curiosity 70, sociability 65), Lark ("I want to be the one who goes and looks"), Oswin ("someone must say what goes where" on the Ladder), Ren (sociability 70), Roos ("I serve at the Marver"; sociability 75) | 5: Greta ("there is not a thing said at that wall I have not heard"), Nell (sociability 72), Neve ("Values: … adventure"), Wick (curiosity 70), Lorcan (sociability 72) |
+| both outgoing and reserved | 2: Aldous ("the ledger is the true history of Cullet" / "I say less about them than she does"), Benedikt (curiosity 95 / "Values: … solitude"; "I have lived alone … the tablets are my company") | 2: Amara (curiosity 70 / "Walking the Wrack Strand at low tide, alone"), Eamon (curiosity 78 / "Values: … keeping my own counsel") |
+| reserved only | 2: Hana ("I keep my peace and gather my kelp"), Suri ("I want a door I can shut") | 3: Davin ("Values: keeping quiet"), Petra ("Values: … not being a bother"), Rafe ("the night's quiet"; "he's the only man I talk to most nights"; sociability 35) |
+| none of these | 2: Gwil ("I keep out of that"; traits 40–60), Ingrid ("keep to what you can see"; curiosity 30) | 3: Joss ("I do not argue with her count, not in front of anyone"), Chidi, Magda |
+| total | 12 | 13 |
+
+- **Shares who asked, by sheet:** outgoing only 6 of 11 (55%), both 2 of 4, reserved only 2 of 5 (40%), none 2 of 5. The sheets lean the asking only a little.
+- **Askers whose sheets suggest reserve, with their own reasons:**
+  - **Benedikt:** "curiosity bids me at least offer a word; caution bids me not close the distance alone at once".
+  - **Aldous:** "a tally keeper does well to know every face and every newcomer's business, courteously".
+  - **Hana:** "I'll note it, keep my distance and my work, and give a civil word across the road".
+  - **Suri:** "A stranger waits south of the road — not mine to mind this afternoon", and spoke to it anyway.
+- **The 7 askers who gave manners as their reason** were 3 outgoing (Oswin, Roos, Ren), 1 both (Aldous), 1 reserved (Hana) and 2 none (Gwil, Ingrid). Manners came from every kind of sheet, including two with no social or curious trait and one written as keeping her peace.
+- **No greeting or hospitality norm was in any sheet, the bible or the seed fs1n ran.**
+  - The only one in Cullet's seed is Aldous's tie in `cast.json`, added with the lives change: "keeps the custom that whoever comes in is asked their name and business at the Counting House". It is not in the C world's seed `trial-cullet-d2a2f187` (0 matches) or in any of Aldous's fs1n prompts.
+  - The bible's customs are about houses, apprentices and the colours of a melt.
+  - The nearest phrase is Amara's value "a neighbour is owed what you can carry", and she did not ask.
+- **Reading:** manners, 7 of 12, is the model's own politeness more than the residents' personality. The sheets carry no greeting norm, and the asking leans only weakly toward the outgoing sheets. The same words recur across unlike sheets ("a civil word", "worth a greeting", "I'd not let a new face stand silent in my town"), and fs1e's thoughts said "costs nothing" 8 times. This is one run's 25 residents, read by hand.
+
+**Is the politeness the model's? A replay of fs1n's first-sight thoughts** (2026-11-12, approved at a $2 cap, $0.095 spent; nothing ships).
+- **The inputs:** `framing_replay.py collect-firsts`. Each in-range resident's first think whose reason holds the first-sight line naming the newcomer, from its recorded fs1n prompt: 22 of the 25 (Magda, Eamon and Rafe had none). All were recorded on GLM 5.3 Flash (`glm-flash`, think effort `low`).
+- **Arms:**
+  - **R:** the recorded reply.
+  - **A:** the same prompt and model, sent again.
+  - **B:** the same prompt on the people mix's other think model, DeepSeek V4.1 Flash (`deepseek-flash`, think effort `low`, from the run's own `models.json`).
+  - **C:** the same as A, with one general line added to the system prompt, right after the framing sentence:
+
+    > "Act from your own temperament and habits as they are written, including any reserve: keep to your nature unless something gives you reason not to."
+
+    It names no situation, stranger, greeting or speech.
+- **Switches,** as recorded in fs1n: `first_sight_thinks` on, `think_framing` on (so the framing sentence is N2's), `heard_first_rethinks` and `earshot` off.
+- **Judging:** three fresh Claude subagents, blind ([FIRST_SIGHT_CODE.md](../living/tools/framing_judge/FIRST_SIGHT_CODE.md)). Each saw only the first-sight line and the reply (thought, intent, speech), not the arm, model or sheet. Each item was coded *speak*, *mean to*, *notice inwardly* or *unaware*, plus *false claim* (claims to know something about the stranger the moment does not show). Agreement on 14 doubly judged items: code 14, false claim 14.
+- **Sheet classes:** from the count above. Of the 22: 11 outgoing, 3 both, 4 reserved, 4 none.
+
+| arm | outgoing (11) | both (3) | reserved (4) | none (4) | all (22): speak / mean to / inward / unaware | false claims |
+|---|---:|---:|---:|---:|---|---:|
+| R recorded (GLM) | 8 (73%) | 3 | 2 | 2 | 13 / 2 / 5 / 2: 15 (68%) speak or mean to | 1 |
+| A again (GLM) | 7 (64%) | 3 | 2 | 2 | 12 / 2 / 6 / 2: 14 (64%) | 1 |
+| B DeepSeek | 7 (64%) | 3 | 2 | 2 | 7 / 7 / 6 / 2: 14 (64%) | 1 |
+| C temperament line (GLM) | 7 (64%) | 2 | 2 | 3 | 13 / 1 / 7 / 1: 14 (64%) | 1 |
+
+(cells: residents who speak or mean to speak to the newcomer)
+
+- **The model is not the source.** DeepSeek speaks or means to as often as GLM (14 of 22 against 14–15). It speaks outright less (7 against 12–13) and means to more (7 against 1–2).
+- **The temperament line changes nothing measurable.** The reserved still speak 2 of 4, the outgoing 7 of 11. One "both" resident (Amara) moved to noticing inwardly, and one "none" (Joss) to speaking.
+- **Reserved sheets do not hold back as a class, under any arm.** Which reserved residents speak depends on the model, not the sheet:
+  - under GLM (R, A, C), Hana and Suri speak, and Davin and Petra notice inwardly;
+  - under DeepSeek, the reverse: Hana unaware, Suri inward, Davin and Petra speak.
+- **Outgoing sheets speak a little more:** 64–73% against 50% for the reserved. That is the same weak lean the count found.
+- **False claims:** one per arm, the same resident each time (Gwil: "claims it already hailed them and that they are at its elbow"). Both models write it, so it comes from his prompt, not the model.
+- **Reading:**
+  - Given a thought whose only reason is the first sight, both models speak or mean to speak to the stranger in about two of three cases, whatever the sheet says.
+  - A general line about temperament does not move that.
+  - The politeness belongs to the situation, a thought about a stranger with nothing else in it, more than to one model or to the residents.
+- **Evidence:** `~/slop-evidence/temperament-20261112/`: `set.jsonl`, `asked-A.jsonl`, `asked-B.jsonl`, `asked-C.jsonl`, `judge/` with the labels, `key.jsonl`, `score.json`.
+- **Tools:** `framing_replay.py` (`collect-firsts`, arms A, B and C), `temperament_score.py`.
+- **Cost:** $0.095 (A $0.023, B $0.046, C $0.026; 66 calls, no errors); the judges are Claude subagents.
+- **Key:** 9 fragments of the 3 key values searched in the evidence, the branch and the logs. Count: 0. The `.env` copy was deleted.
+
+**Measurement note.** The fs1 tools read the reason under "# Why you are thinking now". N2 renames it "# What just happened", so they now read either (`fs1_measures.py`, `fs1_held.py`, `fs1_cluster.py`). A first pass had counted 0 first-sight thoughts.
+
+**Evidence:** `~/slop-trials-fs1/.local/living/trials/fs1n` and `fs1ns` and the journals `verify-trial-fs1n*`, archived in `~/archive/trials/fs1n-20261112.tar.gz` (14 MB). The archive also holds `fs1n-spread.md`, `fs1n-m.json`, `fs1n-asks.json`, the metrics and spend logs and the tools.
+
+**Security check:** 9 fragments of the 3 API keys searched in the batch directories, journals and logs. Count: 0.
+
+## First sight fs1e (2026-11-12) — one combined arm: first sight, heard_first and earshot; target, written before any paid call
+
+Approved by the general coordinator at about $2.7. It runs after the earshot stage, and only when the general coordinator says so.
+- **What it runs:** one arm, batch `fs1e`, `strangers-2b-c:strangers-first-sight-hf-earshot`, with `first_sight_thinks`, `heard_first_rethinks` and `earshot` on (set by `set_world_law`, read back from `world_law`).
+- **The naming fix** (whom someone walks to) is on in every world.
+- **The world and script:** as fs1 and fs1h (Cullet, 63 minds, 20 minutes, the Strand walk).
+- **The build:** main as of the run, worktree `~/slop-trials-fs1`.
+- **A free fake smoke run first** (`fs1es`).
+
+**The target and the stop rule are fs1's, unchanged** (under "First sight fs1", below).
+- **Stop rule:** the run stops, and nothing else is reported first, if `converge_60s` is 4 or more or `together_4m` 3 or more.
+- **`converge_60s` keeps its old definition** (arrive_report: the most residents who spoke, gestured or aimed an act at the newcomer within one minute, heard or not), so the comparison with fs1f and fs1h holds.
+
+**Measures:**
+- the stage-2 table against the targets, beside fs1f and fs1h;
+- **`converge_60s` split** (arrive_report since fs1e):
+  - `converge_60s_heard`: lines the authority did not mark unheard, gestures, acts aimed at it;
+  - `converge_60s_unheard`: lines the speaker was told could not have been heard;
+  - the old combined number beside them;
+  - recomputed for the earlier runs: C 2 = 2 heard + 0 unheard, fs1f 6 = 6 + 2, fs1h 10 = 5 + 6 (the halves overlap: one minute can hold both);
+- lines to the newcomer out of earshot (the authority's `silence` verdict), first sight → thought, false replies with group talk, tick time, spoken ids;
+- **held lines** (`fs1_held.py`), as in fs1h;
+- **the asks** (`fs1_asks.py`): each asker, with the reason its own thought gave, quoted and grouped: curiosity, its duty or role, **manners** (a norm of the town: "a civil word costs nothing", "that's how the town is kept"; the general coordinator, 2026-11-12, because a norm in the prompt can pull minds toward asking), being greeted first, others asking, something else. A thought giving two reasons is listed under both. The tool's word grouping is a first pass; each quote is read and the group corrected by hand in the record.
+
+**Switches:** as fs1h, plus `earshot` on.
+
+### Results (fs1e, 2026-11-12 17:55–18:16): the stop rule tripped on both counts (`converge_60s` 10, `together_4m` 3)
+
+**What ran.**
+- **Commit:** main as of 17:40 with `earshot-stage` merged (its `arrive_spread` fix: a line out of earshot is matched to its `silence` row by speaker and moment), in `~/slop-trials-fs1` at `f5398116`.
+- **Smoke:** a free fake run first (`fs1es`, 6 minutes). It ran to duration and read the three laws back. Its prompts carried "who would hear you now" (180 entries).
+- **The paid arm:** ran to duration (20.0 minutes) with no runaways, no outages and one mind start. The three laws were read back from `world_law`.
+- **Cleanup:** the world was paused before deletion; no database is left.
+
+**Cost:** $2.69 (glm-5-3-flash 1,359 calls $1.94; deepseek-v4-1-flash 467 calls $0.75).
+
+**Switches:** `first_sight_thinks` on (gap 300 s), `heard_first_rethinks` on, `earshot` on, and the naming fix. Otherwise as fs1h: far-handle on, `fov_on` off, `regard_cache` on; `LIVING_GREET=nearest`, `LIVING_PARK=concurrent`; `LIVING_SKILL_TIMINGS` on and `force_outcomes` true; the sleeper fix in; no arrival laws; `LIVING_CONCURRENCY` 64; the people mix.
+
+All four runs re-measured with the fixed `arrive_spread`:
+
+| measure | fs1 C | fs1f | fs1h | **fs1e** | target |
+|---|---|---|---|---|---|
+| in range | 18 | 22 | 22 | **35** | about 18–24 |
+| asks | 1 | 11 | 12 | **22** | 1–3, Aldous among them |
+| approaches silently | 3 | 0 | 0 | 3 | 0–2 |
+| notices inwardly | 2 | 8 | 8 | 8 | 3–8 |
+| unaware | 12 | 3 | 2 | 2 (6%) | ≤6, ≤40% |
+| tells others | 0 | 6 | 2 | 5 | 1–4 |
+| first heard line after the join | 91.6 s, Bram Calloway | 320.7 s, Lorcan Vane | 307.8 s, Neve Calloway | 96.0 s, Edda Hollin | within 5 minutes |
+| `converge_60s` (old definition) | 2 | 6 | 10 | **10** | ≤3 |
+| of it: heard / unheard (the halves overlap) | 2 / 0 | 6 / 2 | 5 / 6 | 8 / 7 | — |
+| `together_4m` | 2 | 2 | 2 | **3** | ≤2 |
+| raw 4 m convergence | 5 | 7 | 10 | 10 | — |
+| lines to the newcomer / out of earshot / residents heard by it | 1 / 0 / 1 | 21 / 7 / 5 | 21 / 12 / 3 | 31 / 16 / 10 | — |
+| re-asks | 0 | 7 | 6 | 1 | — |
+| first sights → think requests carrying the line | 22 → 0 | 24 → 20 | 26 → 24 | 39 → 36 | — |
+| false replies / group talk, a minute | 0.45 / 0.05 | 0.55 / 0.10 | 0.35 / 0.30 | 0.45 / 0.65 | within C's spread |
+| repeated lines; `led_res` − placebo | 0.00; −0.04 | 0.00; −0.11 | 0.12; +0.07 | 0.07; +0.28 | within C's spread |
+| deliberations / talk turns per resident-hour | 18.9 / 11.3 | 20.4 / 13.5 | 22.1 / 12.2 | 22.4 / 13.5 | — |
+| spoken `#id` lines | 0 | 0 | 0 | 0 | 0 |
+| cost | $2.48 | $2.66 | $2.73 | $2.69 | — |
+
+- **Crowding.** In range rose to 35. The newcomer's second stand put it at the Marver's door at midday, among the Achterbergs, Aldous, Eamon and Anselm. `together_4m` reached 3 there.
+- **Earshot changed little, as expected.** 16 of 31 lines to the newcomer were out of earshot (52%; fs1h 57%, fs1f 33%). A thought started at first sight says its line about 8 s later, and a think or deliberate reply cannot call.
+- **Tick time was not captured.** The sampler found no database: the trial databases no longer appear in the server CLI's `spacetime list` (another owner's identity). This needs fixing before the next batch; the authority's own clock rows were not read.
+
+**The asks: 22 residents, each with the reason its own thought gave** (`fs1_asks.py`; the groups read and set by hand; a thought giving two reasons is in both):
+
+| reason | askers | in their words |
+|---|---|---|
+| **manners** (13) | Imre, Rafe, Joss, Aldous, Lorcan, Cora, Elke, Gwil, Dolly, Otto, Pieter, Jory, Eamon | Imre: "A word costs nothing"; Rafe: "a nod and a name costs nothing"; Joss: "no harm in being the first friendly face"; Aldous: "a new face in Cullet is worth a civil word"; Lorcan: "close enough for a civil word"; Cora: "it costs nothing and Cullet was built on neighbourliness"; Elke: "I'll give them the time of day the way you do"; Gwil: "I'll hail them civil"; Dolly: "I'll greet them proper"; Otto: "a nod and a word costs nothing; strangers are just neighbours I've not met yet"; Pieter: "a nod to the quiet stranger on the way costs nothing"; Jory: "a man should see who stands in his street"; Eamon: "a greeting costs nothing" |
+| **curiosity** (10) | Lark, Roos, Imre, Edda, Rafe, Lumi, Gwil, Mirren, Anselm, Eamon | Lark: "I have never seen anyone who wasn't of Cullet … curiosity like this doesn't come twice"; Roos: "I'll give a good morning and see who answers"; Imre: "I want a look at who comes to Cullet"; Edda: "I know everyone in Cullet by sight … go see who it is"; Rafe: "learns who's new in town"; Lumi: "I've never seen them before"; Gwil: "not one of ours as far as I can see"; Mirren: "folk who wait outside a town usually want something"; Anselm: "I'd rather know who they are than walk past"; Eamon: "maybe the stranger has news" |
+| **duty or role** (4) | Aldous, Dolly, Mirren, Edda | Aldous: "everyone who trades at the Store ends up in my book"; Dolly: "that's what the Marver is for"; Mirren: "or need tending" (the healer); Edda: "I lead, so I go first" (the children's leader) |
+| **others asking or approaching** (3) | Imre, Pieter, Eamon | Imre: "Roos Achterberg walking straight at them" (the naming fix's fact); Pieter: "Dolly's feeding the stranger at the door"; Eamon: "Aldous Quill and the Achterbergs gathered round it" |
+| **greeted first** (0) | — | the newcomer never speaks |
+| **something else** (3) | Ren, Nell, Ife | Ren greets "honestly" in passing, minding his fished-out spot. Nell asks whether it has seen her lost brother. Ife's thought is about Lumi, and its line went to the newcomer. |
+
+**Where the asking comes from.**
+1. **The first-sight thought is the pull.** 20 of the 22 askers spoke from a think whose only reason was the first-sight line ("For the first time you see a stranger, 16 tiles south, wait."). The think prompt says "Start from why you are thinking now: that is what this moment of thought is about" (`prompts.rs`). With the stranger as the only reason, the stranger is what the thought is about, and most answer it with a greeting.
+2. **Manners is the models' own norm, not the prompt's.** "costs nothing" appears in 8 thoughts. Neither the shared prompts nor any resident's sheet holds a greeting norm; the nearest is Amara's value "a neighbour is owed what you can carry", and she is not an asker.
+3. **Personality shows only as a lean.** The askers who gave curiosity have curiosity 40–88 (Lark 88, Lumi 80, Eamon 78, Edda 75), those who gave manners 30–78 (most 35–45).
+4. **Duty or role came in four lives.** Aldous asked in this run, the first time in any arm. His first line, at 320 s from 22.8 m, went unheard. He asked again at the Marver after Pieter, Eamon and Anselm.
+
+**Held lines** (`heard_first_rethinks`): **33 held, 6 of them to the newcomer.**
+- **After the re-think:** 11 said the same words again, 15 another line to the same person, 7 spoke to someone else, 0 fell silent.
+- **The 6 to the newcomer all still spoke to it**, now knowing who had asked:
+  - **Anselm:** "Eamon Tarn has already opened the welcome for me — no matter, the question is still mine to ask plainly". He then said "Eamon's asked it already, but I'll ask it too — your name, and your business?".
+  - **Aldous:** "Pieter has already welcomed him — a tally keeper should not be beaten to a name twice in one day", and later "Anselm and Eamon have both had their go; my turn, as tally keeper, is owed".
+  - **Roos:** "Edda's already hailed them, so I'll add a proper call of welcome and close the gap myself".
+  - **Dolly** said her welcome again.
+- **The other 27** were in residents' group talk, as in fs1h.
+
+**Evidence:** `~/slop-trials-fs1/.local/living/trials/fs1e` and `fs1es` and the journals `verify-trial-fs1e*`, archived in `~/archive/trials/fs1e-20261112.tar.gz` (15 MB, 370 files). The archive also holds the fixed-tool re-measures of all four runs (`fs1c-`, `fs1f-`, `fs1h-` and `fs1e-spread2.md`), `fs1e-asks.json` (every asker's line, distance, thought and group), `fs1e-held.json`, `fs1e-m.json`, the spend logs and the tools.
+
+**Security check:** 9 fragments of the 3 API keys searched in the batch directories, journals and logs. Count: 0.
+
+## First sight fs1h (2026-11-12) — the one-arm re-run with the crowd fixes; target, written before any paid call
+
+The re-run of C + first sight after first-sight-crowd (docs/FIRST_SIGHT.md, "Crowds" and "Decisions on the crowd fixes"), approved by the general coordinator at about $2.7.
+- **What it runs:** one arm, batch `fs1h`, `strangers-2b-c:strangers-first-sight-hf`, with `first_sight_thinks` and `heard_first_rethinks` on (set by `set_world_law`, read back from `world_law`).
+- **The naming fix** (whom someone walks to, in the observer's words) is on in every world since first-sight-crowd; it has no switch.
+- **The world and script:** as fs1 (Cullet, 63 minds, 20 minutes, the Strand walk).
+- **The build:** main with first-sight-crowd merged, worktree `~/slop-trials-fs1`.
+
+**The target and the stop rule are fs1's, unchanged** (the table and the rule under "First sight fs1", above). The run stops, and nothing else is reported first, if `converge_60s` is 4 or more or `together_4m` 3 or more.
+
+**Measures:**
+- the stage-2 table against the targets, beside fs1's C and C + first sight (fs1f);
+- the raw 4 m convergence, lines out of earshot, first sight → thought;
+- false replies with group talk, tick time, spoken ids;
+- **held lines** (`fs1_held.py`): how many lines `heard_first_rethinks` held, how many of them were still said after the re-think (the same words again), and what the minds decided instead: another line to them, speaking to someone else, or silence. The re-think's thought is quoted.
+
+**Switches:** as fs1, plus `heard_first_rethinks` on and the naming fix.
+
+### Results (fs1h, 2026-11-12 16:46–17:07): the crowding rule tripped again (`converge_60s` 10)
+
+**What ran.**
+- **Commit:** main `5eeb2566` (first-sight-crowd), in `~/slop-trials-fs1` at `8318143e`.
+- **Smoke:** a free fake run first (`fs1hs`, 6 minutes). It ran to duration with no runaways and read both laws back. Its prompts carried the naming fix ("→ you", "→ Edda Hollin", the far label). A thinker's own `you.doing` keeps "→ person", as designed.
+- **The paid arm:** ran to duration (20.0 minutes) with no runaways, no outages and one mind start. Both laws were read back from `world_law`.
+- **Cleanup:** the runner paused the world before deleting it.
+
+**Cost:** $2.73 (glm-5-3-flash 1,412 calls $2.12; deepseek-v4-1-flash 371 calls $0.60).
+
+**Switches:**
+- `first_sight_thinks` on, the gap at 300 s;
+- `heard_first_rethinks` on;
+- the naming fix (whom someone goes to, in the observer's words: always on since first-sight-crowd);
+- otherwise as fs1: far-handle on, `fov_on` off, `regard_cache` on, `earshot` off; `LIVING_GREET=nearest`, `LIVING_PARK=concurrent`; `LIVING_SKILL_TIMINGS` on and `force_outcomes` true; the sleeper fix in; no arrival laws; `LIVING_CONCURRENCY` 64; the people mix.
+
+| measure | fs1 C | fs1f (C + first sight) | **fs1h (C + first sight + the crowd fixes)** | target |
+|---|---|---|---|---|
+| in range | 18 | 22 | 22 | about 18–24 |
+| asks | 1 | 11 | **12** | 1–3, Aldous among them |
+| approaches silently | 3 | 0 | 0 | 0–2 |
+| notices inwardly | 2 | 8 | 8 | 3–8 |
+| unaware | 12 (67%) | 3 (14%) | 2 (9%) | ≤6, ≤40% |
+| tells others | 0 | 6 | 2 (Amara Okoro, Oswin Greave) | 1–4 |
+| first heard line after the join (corrected; old tool in brackets) | 91.6 s | 320.7 s (42.5 s) | **307.8 s, Neve Calloway** (88.9 s, Ren Sato) | within 5 minutes |
+| `converge_60s` / `together_4m` | 2 / 2 | 6 / 2 | **10** / 2 | ≤3 / ≤2 |
+| raw 4 m convergence | 5 | 7 | 10 | — |
+| lines to the newcomer / out of earshot (the authority's `silence` verdict) / reached it | 1 / 0 / 1 | 21 / 7 / 14 | 21 / **12** / 9 | — |
+| residents who spoke to it / re-asks | 1 / 0 | 11 / 7 | 12 / 6 | — |
+| first sights → think requests carrying the line | 22 → 0 | 24 → 20 | 26 → 24 (all alone) | — |
+| false replies a min / group talk a min | 0.45 / 0.05 | 0.55 / 0.10 | 0.35 / 0.30 | within C's spread |
+| repeated lines; `led_res` − placebo | 0.00; −0.04 | 0.00; −0.11 | 0.12; +0.07 | within C's spread |
+| deliberations / talk turns per resident-hour | 18.9 / 11.3 | 20.4 / 13.5 | 22.1 / 12.2 | — |
+| spoken `#id` lines | 0 | 0 | 0 | 0 |
+| tick mean / > 10 ms / > 25 ms | 0.88 ms / 28 / 2 | 0.82 ms / 14 / 1 | 0.82 ms / 18 / 0 | — |
+
+**The out-of-earshot counts** are the authority's own verdict: the speaker's `silence` row within 1.5 s of the line ("They are too far away / out of earshot: they could not have heard you"). `arrive_spread`'s `far` gave 2 in both first-sight arms, because it misses main's current silence wording. **Correction to the fs1 table:** fs1f's lines out of earshot were 7 of 21, not 2.
+
+**The crowd this time was mostly called from afar.** The minute behind `converge_60s` 10 (295–356 s, the Strand walk and the plots) holds lines to the newcomer from Eamon, Neve, Ingrid, Magda, Petra, Joss, Nan and Oswin.
+- **Distances:** 6 of those lines were said from 18–70 m and none of them reached the newcomer. Neve, Nan and Oswin, at 0.5–3 m, reached it.
+- **Why:** each first sight asked one thought (24 did), and the thought said its line from where the resident stood. A line out of earshot still counts in `converge_60s` (arrive_report counts lines, heard or not).
+- **Bodies:** stayed apart: `together_4m` 2.
+- **What it points at:** the `earshot` law, "who would hear you now" (docs/COMMUNICATION.md §17), the next stage, addresses exactly this.
+
+**Held lines** (`heard_first_rethinks`; `fs1_held.py`): **38 lines held, from 20 speakers.**
+- **Only 1 was to the newcomer:** Oswin's, after Nan hailed it.
+- **The other 37 were among residents,** mostly in the children's and the lesson's group talk. Pim held 6 times, Lumi and Juno 4 each.
+- **After the re-think, in the next 120 s:**
+  - **15 said the held words again** (word-set overlap ≥ 0.6);
+  - **17 said another line to the same person;**
+  - **5 spoke to someone else instead;**
+  - **1 said nothing** (Lumi Pontil, 78.5 s).
+- **The re-thinks name the new line and change course:**
+  - **Oswin** (354 s, to the newcomer): "Nan has already hailed this stranger at arm's length from me, so I'll give my own name plain and ask his business". He then said "You there — Oswin Greave, head grower on this ground. I'll have your name…" instead of "Morning to you, lad!…".
+  - **Sabine** (58 s): "Alder is already fetching tablet and cloth to the west window, so my witness is settled before I asked". She turned to Alder.
+  - **Lumi** (374 s): "Edda's said plain: a held seat is no head start … so the sneak-out is off". Her next line conceded it.
+  - **Imre** (58 s): answered Halvard instead of repeating his morning to Vessa.
+  - **Eamon** (464 s): changed "Neve — a word, while the crowd's not on us…" to "Neve — quiet, between us: I want a family with you."
+- **Cost of the holds:** deliberations rose to 22.1 per resident-hour (fs1f 20.4, C 18.9). The holds' re-thinks are part of that.
+
+**Reading** (one replicate, so indicative):
+- **What didn't work:** the crowd fixes did not soften the newcomer's reception. Asks stayed out of shape (12) and convergence rose (10), driven by lines called from out of earshot, which neither fix addresses.
+- **What did:** `heard_first_rethinks` worked as designed. Minds used the fresh fact: 22 of 38 held lines ended in a different line or addressee, 15 in the same words.
+- **Who it touched:** in this world it acts mostly on residents' group talk, not on the newcomer. Group talk per minute rose (0.30 against 0.10) and false replies fell (0.35 against 0.55).
+
+**Evidence:** `~/slop-trials-fs1/.local/living/trials/fs1h` and `fs1hs` and the journals `verify-trial-fs1h*`, archived in `~/archive/trials/fs1h-20261112.tar.gz` (15 MB, 363 files). The archive also holds `fs1h-spread.md`, `fs1h-m.json`, `fs1h-held.json` (every held line, its re-think and what followed), `fs1h-ticks.md`, the metrics and spend logs, and the tools.
+
+**Security check:** 9 fragments of the 3 API keys searched in the batch directories, journals and logs. Count: 0.
+
+## First sight fs1 (2026-11-12) — target, written before any paid call
+
+The paid stage of docs/FIRST_SIGHT.md, approved by the owner (2026-11-12) at about $13. It runs on main `dc45c259` (first-sight merged), worktree `~/slop-trials-fs1`, branch `trials-fs1`.
+
+**The world and script.** Cullet, as st2b:
+- 63 minds; 20 minutes; the world starts at 07:00;
+- the newcomer joins at 09:30 at the arrival point and stands 5 minutes;
+- then it walks the Strand past the Fish Steps (`walk_route`) and stands 5 minutes at the densest group;
+- it never speaks.
+
+**Arms,** one replicate each, run one after another (one sub-batch each):
+- **C** (`fs1-c`, `strangers-2b-c:strangers-control`): strangers as on main, the first-sight law off.
+- **C + first sight** (`fs1-f`, `strangers-2b-c:strangers-first-sight`): `first_sight_thinks` on, the gap at its 300 s.
+- **LS + cues + first sight** (`fs1-l`, `strangers-2b:strangers-filter-cues-fs`): `stranger_by_name`, `cues_on` and `first_sight_thinks` on. It runs only if the first two leave room under $13.
+
+The laws are set by `set_world_law` and read back from `world_law`.
+
+**Cost estimate:** st2b's $2.49 (C) and $3.08 (LS + cues), plus the design's +4–5% for first sight: about $2.5 + $2.6 + $3.2 = **$8.3**. A spend guard stops the runner past what is left of $13.
+
+**The target, unchanged** (docs/STRANGERS.md, "Target spread", as stage 2 and st2b used it; one replicate, so indicative only). In range now counts the newcomer's walk (st2b analysis), so it is restated as st2b re-scored it.
+
+| measure | target |
+|---|---|
+| in range (≤12 m during a stand or the walk) | about 18–24 |
+| asks | 1–3, Aldous among them |
+| approaches silently | 0–2 |
+| notices inwardly | 3–8 |
+| unaware | ≤6, ≤40% |
+| tells others (all residents) | 1–4, Ingrid in 2 of 4 runs |
+| first heard line after the join | within 5 minutes |
+| `converge_60s` / `together_4m` | ≤3 / ≤2 (since 2026-11-13 reported as `voices_60s` / `together_4m`, with `crowd_4m` beside them: see the stop rule below) |
+| out of shape, any arm | 5 or more askers; unaware above 60%; 3 or more residents within 4 m at once |
+| guards: false replies a min (main's rule since strangers-measures: an answer to a line that names someone else; group talk apart), repeated lines, `led_res` − placebo | within C's spread |
+
+**The stop rule since 2026-11-13: `together_4m` 3 or more** (the general coordinator's decision). It is checked after each arm, before the next starts. The batch stops, and nothing else is reported first, if 3 or more residents stand within 4 m of the newcomer at once having spoken, gestured or aimed an act at it in the minute before (`together_4m`; `stop` in arrive_report's output). `crowd_4m` and `voices_60s` are reported beside it. The measures and the change are in [The stop rule: voices and bodies](#the-stop-rule-voices-and-bodies-2026-11-13).
+
+**The interim rule, 2026-11-13 only:** `crowd_4m` 3 or more, the plain count of residents within 4 m at once, whatever brought them. Dropped because the plain count measures where the newcomer stands, not whom it draws.
+
+**The stop rule as fixed before running fs1, used until 2026-11-12** (kept for the records before it). The batch stopped if a first-sight arm crowded like ar2's `notice` arm (2–6 residents converging within a minute):
+- its `converge_60s` was 4 or more, above every arm without a newcomer law in st2 and st2b (at most 3); or
+- its `together_4m` was 3 or more.
+
+It was changed because `converge_60s` counts voices, not bodies. It counts residents who spoke, gestured or aimed an act at the newcomer within a minute, from any distance, so fs1w's 8 voices from 13–32 m tripped it while one resident who had addressed the newcomer stood within 4 m.
+
+Beside them, each arm records the raw count: the most residents who came within 4 m of the newcomer within 60 s of one another, whatever their reason. The Strand walk passes many residents, so C gives that count's baseline.
+
+**Measures,** beside the table above:
+- the raw 4 m convergence;
+- lines said to the newcomer out of earshot;
+- first sight → thought: each resident's first sight of the newcomer, whether a think request carried its line (taken, merged or none), and what that thought decided (its thought, its line, its plan);
+- false replies under main's rule, with group talk;
+- tick time (`spacetime_reducer_plus_query_duration_sec`, reducer `tick`);
+- spoken `#id` lines and handles.
+
+**Switches** (recorded again with the results): main `dc45c259`.
+- far-handle on (no switch); `fov_on` off; `regard_cache` on.
+- `first_sight_thinks` per arm; `cues_on` and `stranger_by_name` in LS + cues + first sight only.
+- `LIVING_GREET=nearest` and `LIVING_PARK=concurrent` (unset, main's defaults); `LIVING_SKILL_TIMINGS` on and `force_outcomes` true (as on main).
+- The sleeper fix is in. No arrival laws.
+- `LIVING_CONCURRENCY` 64; the people mix (glm-5-3-flash, deepseek-v4-1-flash).
+
+**Fake smoke** (`fs1s`, free, 6 minutes, before this record was committed):
+- C, C + first sight, LS + cues + first sight and `strangers-2b:strangers-control` all ran to duration, with no runaways;
+- each arm's laws were read back as set;
+- the fake's first-sight thoughts came 5–7 s after the first sight (Lark Morrow, Tobiah Dunmore), the line their only reason; C had none.
+
+### Results (fs1, 2026-11-12 12:58–13:40): stopped by the crowding rule after two arms
+
+**What ran.**
+- **Batches.** The sub-batches are `fs1c` and `fs1f`, not `fs1-c` and `fs1-f` as the target above says: the runner takes only lowercase letters and digits. A first start as `fs1-c` was refused at once, with no call made.
+- **Two arms:** C at 12:58:30–13:19:12, then C + first sight at 13:19:20–13:40. One after another, on main `dc45c259` in `~/slop-trials-fs1`.
+- **The stop rule tripped on C + first sight** (`converge_60s` 6), so LS + cues + first sight (`fs1l`) did not run.
+- **Both runs** stopped by duration (20.0 minutes). There were no runaways and one mind start each, and no outages: both started after the trial server's 12:53 restart, and it stayed up throughout.
+- **Housekeeping on the server:**
+  - C's world was paused at 19.7 minutes by a watcher, because its runner predated the pause-before-delete fix. That cut the last 20 s or so.
+  - C + first sight's runner (`trials.py` with `72801824`, branch `fix-trials-pause`) paused its own world before deleting it.
+  - No `verify-trial-fs1*` database is left.
+
+**Cost:** $5.14 of the $13 approved.
+- C: $2.48 (glm-5-3-flash 1,329 calls $1.94; deepseek-v4-1-flash 332 calls $0.54).
+- C + first sight: $2.66 (1,397 calls $2.02; 398 calls $0.64).
+
+**Switches,** as written in the target: `first_sight_thinks` off in C and on in C + first sight (read back from `world_law`); far-handle on, `fov_on` off, `regard_cache` on; `LIVING_GREET=nearest`, `LIVING_PARK=concurrent`; `LIVING_SKILL_TIMINGS` on and `force_outcomes` true; the sleeper fix in; no arrival laws; `LIVING_CONCURRENCY` 64; the people mix.
+
+| measure | C | C + first sight | target |
+|---|---|---|---|
+| in range (stands and the walk) | 18 | 22 | about 18–24 |
+| asks | 1 (Bram Calloway) | **11** | 1–3, Aldous among them |
+| approaches silently | 3 | 0 | 0–2 |
+| notices inwardly | 2 | 8 (Aldous among them) | 3–8 |
+| unaware | 12 (67%) | 3 (14%) | ≤6, ≤40% |
+| tells others (all residents) | 0 | 6 (Neve Calloway, Magda Tarn, Ingrid Morrow, Hana Sato, Ren Sato, Nan Fenwick) | 1–4, Ingrid in 2 of 4 runs |
+| first heard line after the join (corrected; old tool in brackets) | 91.6 s (91.6 s) | **320.7 s, Lorcan Vane** (42.5 s, Lark Morrow) | within 5 minutes |
+| `converge_60s` / `together_4m` | 2 / 2 | **6** / 2 | ≤3 / ≤2 |
+| raw 4 m convergence (any reason, within 60 s) | 5 | 7 | — |
+| lines to the newcomer / out of earshot | 1 / 0 | 21 / 2 | — |
+| residents heard by it (corrected; old tool in brackets) / re-asks | 1 (1) / 0 | **5** (9) / 7 | — |
+| first sights of it → think requests carrying the line | 22 → 0 | 24 → 20 (19 alone, 1 merged) | — |
+| false replies a min / group talk a min (main's rule) | 0.45 / 0.05 | 0.55 / 0.10 | within C's spread |
+| repeated lines; `led_res` − placebo | 0.00; −0.04 | 0.00; −0.11 | within C's spread |
+| deliberations / talk turns per resident-hour | 18.9 / 11.3 | 20.4 / 13.5 | — |
+| spoken `#id` lines | 0 | 0 | 0 |
+| tick mean / p99 / > 10 ms / > 25 ms / > 50 ms | 0.88 ms / ≤ 5 ms / 28 / 2 / 0 | 0.82 ms / ≤ 5 ms / 14 / 1 / 0 | — |
+
+- **Out of shape:** asks (11, past the "5 or more" mark) and `converge_60s` (6, the stop rule).
+- **In shape:** inward and unaware. Tells are over the band (6 against 1–4). The first heard line was first recorded as in shape (42.5 s); the corrected figure, 320.7 s, is past the 5-minute band (correction below the table, fs1e).
+- **Aldous** thought about the newcomer 7 s after its join: "new faces are rare enough in Cullet that a tally keeper notices. Not my business to challenge…". He said nothing, so he is classed inward.
+- **Ingrid** asked, and told others.
+- **First-sight thoughts** came 0.4–27 s after the first sight. The median was 0.5 s to the request and 4–15 s to the reply.
+- **Cost:** deliberations rose 8% (20.4 against 18.9 per resident-hour) and money 7% ($2.66 against $2.48). The design forecast +4–5%, from lines alone; the talk that followed adds the rest.
+
+### The 314–322 s cluster (C + first sight)
+
+The newcomer walked the Strand from 293 s, toward and through Neve Calloway's fishing party going east. Every first sight below asked one thought. Distances are in tiles (metres).
+- **First sight:** when the resident's look first told them of the newcomer, and from how far.
+- **Line:** the resident's next line after the thought, its time and its distance from the newcomer.
+
+| resident | first sight (s, m) | think asked → replied (s) | the thought, in part | line (s, m from the newcomer) |
+|---|---|---|---|---|
+| Neve Calloway | 308.7, 23 | 309.2 → 314.2 | "A stranger walking east toward the very water we're bound for — not alarming, but I'd as soon know whose steps…" | 320.0, 18.9, to Magda: "Then keep pace — I've a lad to teach the count…" |
+| Tobiah Dunmore | 309.7, 18 | 310.1 → 314.4 | "Neve's walking us east to show the line proper…" | 319.5, 19.3, to Neve: "…Mind the east, someone's walking in fr…" |
+| Joss Tarn | 308.8, 22 | 311.3 → 315.7 | "A stranger walks toward the east water where our folk are gathering — nobody's said welcome or warning yet…" | 324.1, 29.4, to Neve: "Neve — someone coming up from the east, past the hall. Not Cullet…" |
+| Lorcan Vane | 311.9, 21 | 312.9 → 316.4 | "A stranger walking straight into the town at midday…" | **320.7, 9.7, to the newcomer:** "Morning to you, stranger — you've found Cullet. Lorcan Vane's my name…" |
+| Ingrid Morrow | 313.0, 20 | 314.0 → 317.9 | "A stranger walking east through the town, and I don't know the face — that's worth a hail…" | **320.9, 6.4, to the newcomer:** "You there, east-walker! I don't know your face…" |
+| Magda Tarn | 309.7, 19 | 314.6 → 319.7 | "A stranger walking northeast toward the same east water…" | 323.7, 30.1, to the room: "You there, walking east — stranger or neighbour? I'm Magda Tarn…" |
+| Davin Vane | 316.9, 17 | 317.4 → 322.3 | "A stranger standing easy at the east road, watching Cullet folk pass…" | **326.9, 16.2, to the newcomer:** "Morning to you. Waiting on someone, or new to Cullet?" |
+
+Then, in the plots:
+
+| resident | first sight (s, m) | think asked → replied (s) | the thought, in part | line (s, m from the newcomer) |
+|---|---|---|---|---|
+| Oswin Greave | 338.1, 13 | 338.5 → 346.9 | "A stranger walking north through the plots…" | 349.2, 2.1, to the newcomer |
+| Hobb Fenwick | 338.2, 12 | 338.6 → 343.5 | "A stranger walks north of the plots toward the Readers' yard…" | 347.8, 4.5, to the newcomer |
+| Nan Fenwick | 337.1, 24 | 364.1 → 377.1 | "…Oswin has already had to ask twice who they are…" | 382.4, 12.2, to the newcomer |
+
+The 60 s window behind `converge_60s` 6 holds five lines to the newcomer (Lorcan, Ingrid, Davin, Hobb and Oswin, 320.7–349.2 s) and Magda's wave at it. Neve, Tobiah and Joss spoke about it to each other. All of these residents first saw the newcomer within 8 s of one another (308.7–316.9 s), as it walked into their group.
+
+**What each thinker perceived** (each think request's scene; `fs1_cluster.py`):
+- **Approaching: no.**
+  - When Oswin and Hobb thought (338.5 s), Lorcan and Davin were walking to the newcomer (`goto` at it). Oswin's scene shows "Lorcan Vane, 22.1 south, goto → person".
+  - An activity's label names its target by kind only (`act.rs` `label`: "→ person"). No scene in the cluster said that anyone was walking toward the newcomer.
+- **Who is near the newcomer: only by arithmetic.** At Lorcan's and Ingrid's thoughts, 9 residents stood within 8 m of the newcomer. Their scenes give each person's distance and direction from the thinker alone, and nothing relates one person to another.
+- **Speaking to it: yes, once heard.**
+  - At the cluster's thoughts nobody had yet spoken to the newcomer within earshot: the 4 earlier speakers had hailed it at the arrival point minutes before.
+  - Nan, who thought at 364 s, had 3 heard lines to the newcomer in her prompt, and her thought says so ("Oswin has already had to ask twice").
+  - A heard line carries its room detail as main writes it.
+
+**Does a thought started at first sight go stale? Yes.** Three of the six lines said to the newcomer in the cluster came after another resident had just addressed it, within the speaker's hearing, and after the speaker's decision had been made without that fact:
+- **Ingrid** decided at 317.9 s. Lorcan spoke at 320.7 s, 3.3 m from her, and her line followed 0.2 s later.
+- **Davin** decided at 322.3 s, on a prompt built at 317.4 s, before either had spoken. He stood 3.3 m from the newcomer when both hailed it, and his own line came 6 s after theirs.
+- **Oswin's** line came 1.4 s after Hobb's.
+
+The gap from a reply to its line was 2.4–5.3 s, because a think reply's `say` is spoken at install, after the compile. `speech_truth`'s `line_overtaken` drops a queued line only when the speaker's own exchange with the addressee has moved on. Someone else addressing the same person is not counted.
+
+**Where to soften such a cluster, without hiding anything and without traits or roles.** Two perception facts, each the same for every controller:
+1. **Whom a walker or follower is going to, in the observer's own words.** "goto → a stranger", "follow → Neve Calloway", "follow → you", or the far label. That is what a player sees drawn on screen: someone heading at someone. A mind's scene would then show who is already on their way.
+2. **The act is checked against what changed since it was chosen.** When a mind's line to someone comes due, and since the scene its decision read the speaker has heard another address that person, the line is not said yet. The speaker is told so, and its mind is asked to think again with the heard line in front of it. It may still speak; nothing tells it to.
+
+Whether they spread the cluster is for a re-run to show. `first_sight_thinks` stays off (the general coordinator, 2026-11-12).
+
+**Evidence:** `~/slop-trials-fs1/.local/living/trials/fs1c`, `fs1f`, `fs1s` and the journals `verify-trial-fs1*`, all in the archive `~/archive/trials/fs1-20261112.tar.gz` (38 MB, 1,045 files). The archive also holds:
+- the spread reports (`fs1c-spread.md`, `fs1f-spread.md`);
+- the measures (`fs1c-m.json`, `fs1f-m.json`) and the cluster (`fs1f-cluster.json`);
+- the tick table (`fs1-ticks.md`) and the metrics samples;
+- the spend logs and the tools (`~/slop-strangers-logs/tools`: `fs1_measures.py`, `fs1_cluster.py`, `fs1_ticks.py`).
+
+**Security check:** 9 fragments of the 3 API keys were searched for in the batch directories, the journals and the logs. Count: 0.
+
+## Earshot stage (run as `es1`) — target, written before any paid call
+
+The `earshot` law (docs/COMMUNICATION.md §17; MIND_RESEARCH_IDEAS #4), approved by the general coordinator at about $8–10 at Cullet. It runs after fs1 finishes, so the two batches do not overlap. Nothing below has been run.
+
+- **Trial:** `strangers-earshot` (living/trials/strangers-earshot.json), stage 2b's script: the newcomer joins at 09:30 at the arrival point and stands 5 minutes, walks the Strand past the Fish Steps (`walk_route`), then stands 5 minutes at the densest group. Cullet, 63 minds, 20 minutes a run.
+- **Arms:** control (`strangers-control`, main's defaults) and earshot (`strangers-earshot`: the same, with `set_world_law earshot true` after the laws guard). 2 replicates each, 4 runs. st2b cost $2.48–3.08 a run, so about $10; stop the batch if spend passes $12.
+- **Command:** `python3 living/tools/trials.py run --batch es1 strangers-earshot --variants strangers-control,strangers-earshot --replicates 2`. Before it, a fake smoke of both arms (`es1s`, `--fake --fake-script living/trials/fake/strangers.json --replicates 1 --minutes 3`, free): each starts, and the earshot arm's `world_laws.json` shows `earshot` true. Run the smoke after fs1 too.
+- **Build and switches, to record at the run:** the main commit; `earshot` on in the earshot arm only; `stranger_by_name`, `cues_on`, `first_sight_thinks` and `fov_on` as main has them then, in both arms alike. If fs1 has changed a default by then, both arms carry it and the record says so. `LIVING_GREET`, `LIVING_PARK`, `LIVING_SKILL_TIMINGS`, `force_outcomes` and `speech_truth` as on main.
+- **Measures:** `arrive_spread.py --strangers`, with the columns added on this branch:
+  - `said_all`: every resident's lines;
+  - `far_all`: those the authority's `silence` row says reached no one they were for;
+  - `far_all` split three ways: `far_seen` (the addressee in sight but too far), `far_unseen` (out of sight) and `far_room` (a room line no one received).
+
+  Also reported: the stage 2 measures, the lines to the newcomer (`lines_to`, `far`, `reasks`, `heard_join_s`), and the guards. "Silence means trouble" readings are counted in the residents' thoughts with the regex `\b(silent|silence|won't answer|doesn't answer|not answering|ignor\w*|no answer)\b`, with examples quoted.
+
+**Baseline** (st2b's control-like arms, C and L, one replicate each, re-read with the new columns): `said_all` 569 and 570. `far_all` 128 and 140 (22% and 25%). `far_seen` 62 and 76, `far_unseen` 54 and 53, `far_room` 12 and 11. Lines to the newcomer 3 and 4, of which out of earshot 2 and 0 (corrected on `earshot-stage`; first written 1 and 0, see the st2b correction below). The other two st2b arms (LS, LS + cues) had `far_seen` 67 and 102.
+
+**Target spread** (earshot against control in the same batch; 2 replicates, so indicative):
+
+| measure | expected if the fact works | read as no effect |
+|---|---|---|
+| `far_seen` per run | at most half of control's (control about 60–80) | within 25% of control |
+| `far_room` per run | at most control's | — |
+| `far_all` ÷ `said_all` | down by 5 points or more (control about 22–25%) | within 2 points |
+| `far_unseen` per run | within 30% of control: the fact names no one unseen, so a large change here means something else moved | — |
+| `said_all` per run | within 25% of control: the fact should not make people talk much more or less | — |
+| lines to the newcomer, re-asks, first heard line | reported; too few at Cullet (0–4 a run in st2b) to judge | — |
+| "silence means trouble" readings | reported with examples; fewer is the hoped direction | — |
+| `converge_60s` / `together_4m` | at most control's + 2: walking closer to be heard is allowed, crowding is not | — |
+| guards: `false_min`, `rep_res`, `led_res` − placebo | within control's spread | — |
+| cost per run | within 20% of control (about 40 more prompt tokens a deliberation) | — |
+
+### Fake smoke `es1s` (2026-11-12, free)
+
+Main `b02661f9`, worktree `~/slop-trials2b` (branch `earshot-smoke`), the trial service, with the stage's own command: `--fake --fake-script living/trials/fake/strangers.json --replicates 1 --minutes 3`. Both arms ran their 3 minutes; 155 fake calls.
+
+- **The law:** only the earshot arm has `world_laws.json` (`{"earshot": true}`), set after the laws guard at 16:10:34. Control has no world laws.
+- **The prompts** (counted from each world's journal):
+  - control: 19 scene prompts, none with "who would hear you now";
+  - earshot: 18 scene prompts, 8 with it. For example: "Within earshot if you say it: Lumi Pontil (#3), Aldous Quill (#9), Mirren Quill (#10), Pim Hollin (#7), Edda Hollin (#6); a whisper would reach no one; a call would reach no one more."
+- **The 10 without it** are the start-up think requests, sent at 16:10:42–46. They answer deliberations requested while the world was made, before the law was set, and a deliberation keeps the scene from its request. Every person's scene prompt from 16:11:10 on has it, and the newcomer joins at 183 s. So in the paid run, the arm's first start-up thoughts are without the fact. That is before the join, outside every stage measure.
+- **Cleanup:** each run deleted its database at its end through `delete_db`, the world paused first; `trials.py clean --batch es1s` removed the two Neo4j minds. Evidence: `.local/living/trials/es1s`, journals under `.local/living/journal/verify-trial-es1s-*`.
+
+### Results (batch `es1`, 2026-11-12 16:23–16:44 UTC)
+
+**Build and switches.**
+- Main `ce5e09b9` (module `trial-cullet-ef7bcfee`, as in the smoke), worktree `~/slop-trials2b`, branch `earshot-stage`. The target above was on main (`b02661f9`) before the first paid request.
+- `earshot` on in the earshot arm only (`world_laws.json`); control has no world laws.
+- Laws as main ships them, in both arms: `stranger_by_name`, `cues_on`, `first_sight_thinks`, `fov_on` and `fast_lane_on` off; `speech_truth`, `speech_audience` and `force_outcomes` on.
+- `LIVING_GREET`, `LIVING_PARK` and `LIVING_SKILL_TIMINGS` unset (main's defaults: nearest, concurrent, on). 63 minds, `LIVING_CONCURRENCY` 64, the people mix (glm-5-3-flash, deepseek-v4-1-flash) at the real provider.
+- All four runs stopped by duration (20 minutes). Each deleted its database at its end with the world paused first (`delete_db`); `trials.py clean --batch es1` removed the Neo4j minds.
+
+**Cost:** $9.48 for the batch, under the $12 stop: control $2.30 and $2.38, earshot $2.42 and $2.37. Key fragments in the batch's evidence and journals, `es1s` included: 0 matches (3 keys, 45 fragments, 975 files).
+
+**The fact reached the prompts:** 860 of 870 and 793 of 803 scene prompts in the earshot arm carry "who would hear you now"; the 10 without it in each run are the start-up thoughts (as in the smoke). Control: none.
+
+**Against the target spread** (`arrive_spread.py --strangers`, with this branch's fix; r1/r2):
+
+| measure | control | earshot | target if the fact works | read |
+|---|---|---|---|---|
+| `far_seen` | 79 / 83 | 90 / 75 | at most half of control's | **no effect** (within 25%) |
+| `far_room` | 8 / 12 | 14 / 12 | at most control's | not met |
+| `far_all` ÷ `said_all` | 26.0% / 24.3% | 25.4% / 24.6% | down 5 points or more | **no effect** (within 2 points) |
+| `far_unseen` | 65 / 56 | 75 / 64 | within 30% of control | met |
+| `said_all` | 584 / 621 | 705 / 614 | within 25% of control | met |
+| lines to the newcomer (out of earshot) | 2 (2) / 0 | 4 (2) / 2 (2) | reported | — |
+| re-asks; first heard line | 0, none / 0, none | 0, 691 s (Nan Fenwick) / 0, none | reported | — |
+| "silence means trouble" readings (thoughts after the join) | 12 / 6 | 11 / 8 | fewer hoped | no change |
+| `converge_60s` / `together_4m` | 2, 1 / 2, 2 | 2, 0 / 2, 2 | at most control's + 2 | met |
+| guards: `false_min`, `rep_res`, `led_res` − placebo | 0.25, 0.00, −0.03 / 0.71, 0.05, +0.14 | 0.46, 0.08, +0.21 / 0.15, 0.00, −0.20 | within control's spread | `rep_res` 0.08 just above control's 0.05 |
+| cost per run | $2.30 / $2.38 | $2.42 / $2.37 | within 20% | met |
+
+Also per run (control r1/r2, earshot r1/r2):
+- in range: 24, 19, 24, 27;
+- asks: 2, 0, 3, 2;
+- approaches silently: 1, 4, 0, 2;
+- notices inwardly: 0, 2, 2, 0;
+- unaware: 21, 13, 19, 23;
+- tells others: 0, 0, 1 (Roos Achterberg), 0.
+
+**Why there was no effect** (free, from the journals; `es1_why.py` in the session scratchpad, matching each unheard line to the model reply that wrote it). The earshot arm's unheard lines (any wording; 202 and 173) break down as:
+- **The person was within a said line in the scene, and gone by the time the line was said: 73 and 65.** The median gap between a deliberation's request and its line is 8.1 and 7.6 s (the model's time), and people move in it. The fact was true when told.
+- **Only a call would have reached them: 33 and 22.** A deliberation's (think or deliberate) reply cannot choose a way: its `say` is always said (`mind_install` takes `say` and `say_to`, no way). Only a talk reply names a way, or a graph's `say` node. Ingrid Morrow's scene read "a call would also reach: Magda Tarn (#24), …", and she said her line to Magda.
+- **Not listed at all (beyond a call, or unseen): 15 and 16.**
+- **Talk turns: 42 and 34.** A talk prompt has no scene, so no fact.
+- **Repeats** merged in `speech.jsonl`: 37 and 34.
+
+Control's 163 and 167 split the same way (deliberation 108 and 109, talk 36 and 30).
+
+**Recommendation.**
+1. **Let a deliberation's `say` name a way,** as a talk reply already can: `mind_install` takes it and `speak` applies the same rules. Without it, "a call would also reach" tells a mind of a way it cannot take in that reply.
+2. **The late line is the larger share.** It is out of the fact's reach by design: the fact is what one perceives when one thinks. A direct line is always said (the general coordinator's decision on `speech-truth`). What could change it is act semantics, which the owner decides:
+   - a `say` to a named person walks into their hearing first, as `give` walks into reach (MIND_RESEARCH_IDEAS #4, its second arm);
+   - or the speaker is told at once, as now, and the mind may say it again.
+3. **Talk turns would need the fact from the authority at the turn,** for example with the line they answer. Leave this until 1 and 2 are read: talk lines are a fifth of the unheard ones.
+4. **Keep the `earshot` law off until then.** It costs about 55 tokens a prompt and changed nothing here.
+
+**Evidence:** `.local/living/trials/es1` and `.local/living/journal/verify-trial-es1-*` in `~/slop-trials2b`.
+
+## Ways stage (run as `ew1` and `ew2`) — target, written before any paid call
+
+Approved by the general coordinator at about $2.5: one Cullet arm, once `mind-say-way` (a decision's line names its way, docs/COMMUNICATION.md §18) and the laptop's talk box on `human_speak` are both on main. The talk box does not enter the trial (the newcomer is scripted), so this measures the minds' side alone. Nothing below has been run.
+
+- **Trial and arm:** `strangers-earshot` (stage 2b's script) with the `strangers-earshot` variant: the `earshot` law on, so a decision's scene still says "a call would also reach …". 1 run, 20 minutes, 63 minds.
+- **Compared with:** es1's earshot runs (r1/r2, the same arm on main `ce5e09b9`, where a decision could not call) and its control (r1/r2).
+- **Stop rule:** stop the run if spend passes $3.50 (es1's runs cost $2.30–2.42).
+- **Command:** `python3 living/tools/trials.py run --batch ew1 strangers-earshot --variants strangers-earshot --replicates 1`. Before it, a free fake smoke (`ew1s`, `--fake --fake-script living/trials/fake/strangers.json --minutes 3`): it starts, and `world_laws.json` has `earshot` true.
+- **Build and switches, to record at the run:** the main commit; `earshot` on; every other law and `LIVING_*` switch as main has it then.
+- **Measures:**
+  - `unheard_why.py` (the split by what wrote each unheard line);
+  - `arrive_spread.py --strangers`;
+  - from the chronicle: the decisions' lines by way (`"<name> (call) to …"`, `"(whisper)"`);
+  - from the experiences: refused lines (`unsaid`, "You did not say …").
+
+**Target spread** (one run, so indicative):
+
+| measure | es1 earshot r1 / r2 | expected if the way is used | read as no effect |
+|---|---|---|---|
+| `deliberation: only a call` (`unheard_why`) | 33 / 22 | at most 10 | 20 or more |
+| decisions' lines that call | 0 / 0 (impossible then) | some; reported with examples | 0 |
+| `deliberation: in reach then` (late lines) | 73 / 65 | unchanged: the next target, out of this change's reach | — |
+| `far_seen` | 90 / 75 | about 15–25 fewer than es1's earshot runs | within es1's spread |
+| `far_all` ÷ `said_all` | 25.4% / 24.6% | down 2–4 points | within es1's spread |
+| refused decided lines (`unsaid` "You did not say …") | — | reported; a few whispers without an addressee are possible | — |
+| `said_all` | 705 / 614 | within 25% of es1's | — |
+| `converge_60s` / `together_4m` | 2, 0 / 2, 2 | at most es1's + 2 | — |
+| guards: `false_min`, `rep_res`, `led_res` − placebo | 0.46, 0.08, +0.21 / 0.15, 0.00, −0.20 | within es1's spread (both arms) | — |
+| animals startled by calls (`signal` "a person shouting" rows to animals) | reported | reported | — |
+| cost | $2.42 / $2.37 | within 20% | — |
+
+### Results (batch `ew1`, 2026-11-12 20:40–21:01 UTC)
+
+**Build and switches.**
+- Main `da3ff142` (mind-say-way), rebuilt for the run; bindings regenerated in `slop-trials-stdb`, identical to main's. Worktree `~/slop-trials2b`, branch `ways-stage`.
+- `earshot` on (`world_laws.json`). Laws otherwise as main ships them: `stranger_by_name`, `cues_on`, `first_sight_thinks`, `heard_first_rethinks`, `fov_on`, `fast_lane_on` and `think_framing` off; `speech_truth`, `speech_audience` and `force_outcomes` on.
+- `LIVING_GREET`, `LIVING_PARK` and `LIVING_SKILL_TIMINGS` unset (main's defaults). 63 minds, the people mix at the real provider.
+- Stopped by duration (20 minutes). The database was deleted at the end with its world paused first (`delete_db`); `trials.py clean` removed the Neo4j mind.
+- **The machine was loaded:** load average 50 on 20 cores at the start (other sessions' builds), the trial server at 200% CPU with others' worlds. es1 ran on a quieter machine, and the median gap from a decision's request to its line was 5.3 s here, against 7.6–8.1 s there.
+
+**Before it:** a fake smoke (`ew1s`, 3 minutes): it ran its time, `world_laws.json` had `earshot` true, the think format carried `"way": "say" or "whisper" or "call" (optional; default "say")`, and the fact reached the scene prompts.
+
+**Cost:** $2.55 (stop at $3.50). Key fragments in the evidence and journals, `ew1s` included: 0 matches (3 keys, 45 fragments, 328 files).
+
+**The lines that named a way** (`living/tools/ways_report.py`):
+
+| | es1 earshot r1 / r2 | ew1 |
+|---|---|---|
+| decisions' lines by way | say 350 / 305 (no way could be named) | say 272, **call 56**, whisper 13 |
+| talk replies' lines by way | say 247 / 235, call 26 / 13, whisper 10 / 12 | say 246, call 27, whisper 12 |
+| lines said in a call: decided / other | 0 / 25, 0 / 12 | **50** / 26 |
+| decided calls to someone that reached them | — | **32 of 47** |
+| talk or graph calls to someone that reached them | 24 of 25, 10 of 12 | 24 of 26 |
+| decided calls to the room that someone received | — | 3 of 3 |
+| decided lines refused and told (`unsaid` "You did not say …") | — (dropped without a word then) | 30: "speaking too fast" 21, "too far to whisper: step closer" 5 |
+
+**Called or walked over.** Each decision whose scene listed someone only under what a call reaches, and that acted toward them:
+
+| | es1 earshot r1 / r2 | ew1 |
+|---|---|---|
+| called | — | **19** |
+| called and walked | — | 11 |
+| walked over (no line) | 4 / 5 | 6 |
+| said a line (which cannot reach) and walked | 24 / 13 | 5 |
+| said a line only | 18 / 12 | 1 |
+
+Speakers who could call mostly did: 30 of the 42 decisions that acted toward someone a call alone could reach. Walking over without a word stayed where it was (6, against 4 and 5). "Said and walked" fell from 24 and 13 to 5: a decision that both speaks and moves now mostly calls first (11).
+
+Examples:
+- Ansel Tarn, to Nell Tarn, listed under a call: "Coming, Nell! Wait for me!" (call).
+- Aldous Quill, to Col Roon, with no one within a said line: "Col Roon! A word — where does one get a stick of wood in this town? …" (call).
+- Still walking: Anselm Faro went to Livia Faro without a word; Hobb Fenwick said "Nan! Leave the beds a minute — I'd have a word …" in `say` and walked to her.
+
+**`unheard_why` against the earshot stage:**
+
+| class | es1 earshot r1 / r2 | ew1 | target |
+|---|---|---|---|
+| deliberation: only a call | 33 / 22 | **13** | at most 10; 20 or more reads as no effect |
+| deliberation: in reach then (late) | 73 / 65 | 58 | unchanged expected |
+| talk turn | 42 / 34 | 42 | — |
+| deliberation: not listed | 15 / 16 | 12 | — |
+| room | 14 / 12 | 7 | — |
+| all unheard | 179 / 151 | 135 | — |
+| lag, request to line (median) | 8.1 / 7.6 s | 5.3 s | — |
+
+**Against the target spread:**
+
+| measure | es1 earshot r1 / r2 | ew1 | target | read |
+|---|---|---|---|---|
+| `deliberation: only a call` | 33 / 22 | 13 | at most 10 | close: well below the no-effect mark, above the target |
+| decided lines that call | 0 / 0 | 50 said (56 named) | some | met |
+| late lines | 73 / 65 | 58 | unchanged | about unchanged (a shorter lag on this run) |
+| `far_seen` | 90 / 75 | 77 | 15–25 fewer | **not met**: within es1's spread |
+| `far_all` ÷ `said_all` | 25.4% / 24.6% | **20.3%** (135 / 665) | down 2–4 points | met |
+| `said_all` | 705 / 614 | 665 | within 25% | met |
+| `converge_60s` / `together_4m` | 2, 0 / 2, 2 | 1, 1 | at most es1's + 2 | met |
+| guards: `false_min`, `rep_res`, `led_res` − placebo | 0.46, 0.08, +0.21 / 0.15, 0.00, −0.20 | 0.56, 0.06, +0.23 | within es1's spread | `false_min` 0.56 just above 0.46 |
+| animals that heard a shout | — | 0 | reported | — |
+| cost | $2.42 / $2.37 | $2.55 | within 20% | met |
+
+Lines to the newcomer: 2, 1 out of earshot. First heard line at 463 s (Petra Tarn). No re-asks.
+
+**Read.** A decision now calls across a distance instead of walking over or saying a line that cannot reach. 19 called outright, and 11 called and walked, out of 42 decisions toward someone only a call could reach. Lines said where only a call would reach fell from 22–33 to 13, and the unheard share of all lines from about 25% to 20%. Lines to someone seen but too far (`far_seen`) did not fall: they include talk turns and late lines, which this change does not touch. One run on a loaded machine, so indicative only.
+
+### Results (batch `ew2`, 2026-11-12 23:26–23:47 UTC), beside ew1
+
+The same arm, trial, stop rule and measures as ew1, on a later main.
+
+**Build and switches.**
+- Main `6b7c198d`, module `trial-cullet-9f8a2eb8`, branch `ways-stage-2`.
+- Since ew1's `da3ff142`, main brought two changes that touch speaking:
+  - `fix-spoken-ids`: a `#id` in a line is said as the speaker refers to that person, and every speaking prompt carries one sentence saying ids are not words;
+  - `alert-after-hit`: a body does not fall asleep in a fight, and two new laws, `alert_after_hit_s` 15 and `alert_while_attacker_near` on.
+- Every other law and switch as for ew1: `earshot` on in this arm only; `speech_truth`, `speech_audience` and `force_outcomes` on; the rest off.
+- Load at the start: 20 on 20 cores, the trial server at 142% (ew1: 50 and 200%).
+- Fake smoke `ew2s` first: it ran its 3 minutes, the law on, the think format with `"way"`, the fact in the scene prompts.
+- Stopped by duration; the database was deleted with its world paused first; the Neo4j mind removed.
+
+**Cost:** $2.59 (stop at $3.50). Key fragments: 0 matches (3 keys, 45 fragments, 328 files).
+
+**The lines that named a way** (`ways_report.py`):
+
+| | ew1 | ew2 |
+|---|---|---|
+| decisions' lines by way | say 272, call 56, whisper 13 | say 273, call 62, whisper 6 |
+| talk replies' lines by way | say 246, call 27, whisper 12 | say 257, call 64, whisper 3 |
+| lines said in a call: decided / other | 50 / 26 | 58 / 58 |
+| decided calls to someone that reached them | 32 of 47 | 30 of 43 |
+| decided calls to the room that someone received | 3 of 3 | 15 of 15 |
+| talk or graph calls to someone that reached them | 24 of 26 | 50 of 58 |
+| decided lines refused and told | 30 ("speaking too fast" 21) | 30 ("speaking too fast" 25, "too soon to call out again" 3, "too far to whisper" 2) |
+
+**Called or walked over** (decisions whose scene listed someone only under what a call reaches, and that acted toward them):
+
+| | es1 earshot r1 / r2 | ew1 | ew2 |
+|---|---|---|---|
+| called | — | 19 | 12 |
+| called and walked | — | 11 | 7 |
+| walked over (no line) | 4 / 5 | 6 | 3 |
+| said a line (cannot reach) and walked | 24 / 13 | 5 | 6 |
+| said a line only | 18 / 12 | 1 | 3 |
+
+In ew2, 19 of the 31 such decisions called. Walking over without a word stayed rare (3).
+
+**`unheard_why`:**
+
+| class | es1 earshot r1 / r2 | ew1 | ew2 |
+|---|---|---|---|
+| deliberation: only a call | 33 / 22 | 13 | **9** |
+| deliberation: in reach then (late) | 73 / 65 | 58 | 62 |
+| talk turn | 42 / 34 | 42 | 50 |
+| deliberation: not listed | 15 / 16 | 12 | 13 |
+| room | 14 / 12 | 7 | 9 |
+| all unheard | 179 / 151 | 135 | 146 |
+| lag, request to line (median) | 8.1 / 7.6 s | 5.3 s | 4.5 s |
+
+**Against the target spread:** `far_all` ÷ `said_all` 19.8% (146 / 737; ew1 20.3%, es1 earshot 25.4 / 24.6%). `far_seen` 79 (ew1 77; es1 earshot 90 / 75; target not met, as in ew1). `said_all` 737. `converge_60s` / `together_4m` 2 / 2. Lines to the newcomer 0; asks 0. Animals that heard a shout: 0.
+
+**False replies by kind** (`ways_report.py`, greet_report's `reply_kind`, the definition `false_min` counts; the general coordinator asked after ew1's 0.56 against es1's 0.46):
+
+| | es1 (4 runs) | ew1 | ew2 |
+|---|---|---|---|
+| false replies (per minute) | 5 / 14 / 9 / 3 (0.15–0.71) | 11 (0.56) | 7 (0.35) |
+| answering a said line to the room naming another, from a decision | 5 / 9 / 5 / 3 | 8 | 2 |
+| … from a graph's say node | 0 / 5 / 4 / 0 | 3 | 0 |
+| answering a decided call to the room naming another | — | 0 | **5** |
+| … of them, the answerer beyond a said line's reach (heard only because it was called) | — | — | 3 |
+| answering a line addressed to someone else | 0 | 0 | 0 |
+
+- **ew1's 0.56 was not the ways.** None of its false replies answered a call, a whisper or a line addressed to anyone; all answered said lines to the room naming someone else, as in es1. Its rate is within es1's spread.
+- **In ew2 the new decided calls do cause some.** A decision called a line to the room naming one person ("Nell! When you're done at the house, come to the smokehouse …", Petra Tarn), and others who heard the call answered it. In 3 of the 5 the answerer stood beyond a said line's reach (Davin Vane at 19 m), so they heard it only because it was called. The rate stayed within es1's spread (0.35).
+- **The guards:** `false_min` 0.35, within es1's spread. `rep_res` 0.13 is above es1's 0–0.08 and ew1's 0.06, so repeated lines rose in ew2. `led_res` − placebo +0.09.
+
+**Read.** The ways change holds on a second run. Decisions call (62 named, 58 said), and "only a call would reach" falls further (9). The unheard share stays near 20%, against about 25% before the ways. Late lines and talk turns remain the bulk (62 and 50). The one new cost is false replies to decided calls to the room that name someone. A call to the room reaches everyone within 30 m (Cullet), not only the person it names. Making that a call *to* the person (`to`) would limit who it names to the addressee; that is the mind's choice today. Two runs, so still indicative.
+
+## Strangers stage 2b (2026-11-12, st2b) — target, written before any paid call
+
+Stage 2b of docs/STRANGERS.md ("Stage 2b"), approved by the general coordinator.
+- **Arms:** C (`strangers-2b-c`), L and LS (`strangers-2b`, variants `strangers-control` and `strangers-filter`), and LS + cues (`strangers-filter-cues`: `stranger_by_name` and `cues_on` on). One replicate each, about $10.
+- **The script:** the newcomer joins at 09:30 at the arrival point and stands 5 minutes there. It then walks the Strand past the Fish Steps (`walk_route`) and stands 5 minutes at the densest group.
+- **Build:** main `d18c6c0e`, worktree `~/slop-trials2b`, branch `trials-2b`.
+
+**The target, copied unchanged from stage 2's table** (STRANGERS.md, "Target spread"; one replicate, so indicative only). It is committed before the first paid request.
+
+| measure | target (L, LS) |
+|---|---|
+| in range (≤12 m during a stand) | about 10–16 |
+| asks | 1–3, Aldous among them |
+| approaches silently | 0–2 |
+| notices inwardly | 3–8 |
+| unaware | ≤6, ≤40% |
+| tells others (all residents) | 1–4, Ingrid in 2 of 4 runs |
+| first heard line after the join | within 5 minutes |
+| `converge_60s` / `together_4m` | ≤3 / ≤2 |
+| re-asks | — |
+| guards: false replies a min, repeated lines, `led_res` − placebo | within C's spread |
+
+### Results (batch `st2b`, 2026-11-12 08:33–08:54)
+
+**Build and switches.**
+- Main `d18c6c0e`. This record's target was committed as `e4922509` at 08:23:38, before the first paid request at 08:33.
+- far-handle on (it has no switch). `cues_on` on in LS + cues only; off in C, L and LS. `stranger_by_name` on in LS and LS + cues.
+- `fov_on` off. `LIVING_GREET=nearest` and `LIVING_PARK=concurrent` (main's defaults, unset). `LIVING_SKILL_TIMINGS` on and `force_outcomes` true, both as on main.
+- The sleeper fix is not in this build. No arrival laws.
+- 63 minds, `LIVING_CONCURRENCY` 64, the people mix (glm-5-3-flash, deepseek-v4-1-flash). All four runs stopped by duration (20 minutes).
+- Before the paid run, a fake smoke run of all four arms (`st2bs`): each started, and LS + cues accepted `cues_on`.
+
+**Cost:** $10.68 for the batch.
+
+| | C | L | LS | LS + cues |
+|---|---:|---:|---:|---:|
+| cost | $2.49 | $2.48 | $2.64 | $3.08 |
+| calls | 1,767 | 1,784 | 1,826 | 2,099 |
+
+**The stage 2 measures against the target** (one replicate, so indicative only):
+
+| measure | C | L | LS | LS + cues | target (L, LS) |
+|---|---|---|---|---|---|
+| in range (≤12 m during a stand) | 13 | 11 | 16 | 10 | about 10–16 |
+| asks | 2 (Roos Achterberg, 57 s, out of earshot; Cora Stannard) | 1 (Nan Fenwick) | 1 (Jory Greave) | **0** | 1–3, Aldous among them |
+| approaches silently (deliberate only, since 2b) | 1 | 2 | 0 | 0 | 0–2 |
+| notices inwardly | 1 | **0** | **0** | **0** | 3–8 |
+| unaware | 9 (69%) | 8 (73%) | **15 (94%)** | **10 (100%)** | ≤6, ≤40% |
+| passed by on their own way (not counted as approaches) | 4 | 1 | 8 | 6 | — |
+| tells others (all residents) | 1 (Oswin Greave) | 1 (Nan Fenwick) | 3 (Tobiah Dunmore, Magda Tarn, Eilidh Roon) | **0** | 1–4, Ingrid in 2 of 4 runs |
+| first heard line after the join | 892 s (Cora), corrected; first read 57 s (Roos) | 692 s (Nan) | 550 s (Jory) | none | within 5 minutes |
+| `converge_60s` / `together_4m` | 2 / 1 | 1 / 0 | 1 / 1 | 1 / 0 | ≤3 / ≤2 |
+| re-asks | 0 | 2 (Nan asked three more times) | 0 | 0 | — |
+| guards: false replies a min, repeated lines, `led_res` − placebo | 0.10, 0.07, −0.03 | 0.46, 0.00, +0.22 | 0.80, 0.00, −0.26 | 1.06, 0.03, +0.28 | within C's spread |
+| deliberations per resident-hour | 18.2 | 18.5 | 19.3 | 23.1 | (ar2: 24) |
+
+**Correction (2026-11-12, branch `earshot-stage`).** `arrive_spread.py` counted a line to the newcomer as out of earshot only when the speaker's `silence` row had the newcomer as its subject. When the newcomer is too far away to make out (past 24 m in Cullet), that row names them by the speaker's far handle instead (far-handle), so those lines counted as heard. Re-read with the fix: in C, Roos Achterberg's line at 57 s was out of earshot. C's lines to the newcomer out of earshot are 2, not 1, and its first heard line came at 892 s (Cora Stannard), not 57 s. L, LS and LS + cues are unchanged. The table above shows both figures. The same re-reading leaves stage 2 (`st2`) and fs1c unchanged.
+
+- **Not in shape.** No arm reaches the inward band or the unaware band, Aldous asked in no arm, and the cue arm has no asker.
+- **Aldous.** He was in range only in LS, classed unaware. He thought 4–6 times after the join in each arm, and stranger or arrival words came up only about other things ("me with a blank arrivals line waiting on names", LS + cues).
+- **Ingrid.** The walk worked: she saw the newcomer from 1.8–2.7 m on the Strand in all four arms, each time with a first-sight line ("For the first time you see a stranger, 7 tiles east, goto → (490,779).").
+  - "In range" counts only the stands, so she is not classed.
+  - None of her 3–7 thoughts after the join mentioned the newcomer, and she told no one.
+- **The asks.**
+  - C, Roos: "Morning to you. Haven't seen your face before — Roos Achterberg. You new to Cullet, or just passing through?"
+  - L, Nan, then three re-asks ending "Speak, or walk off my rows.": "You there — standing about like a marker post. Who are you, and what's your business on the west rows?"
+  - LS, Jory: "Afternoon to you. Fine light for gathering — you'll find greens enough on this bed if you're short."
+- **Spoken `#id` lines:** 0 in every arm. None of the 2,477 lines has `#<digits>` or a bare handle number.
+- **Crowd first sights:** every person within 12 m of the newcomer after the join got a line naming them (22/22, 20/20, 29/29, 32/32). There were 1,307–1,575 first-sight lines per run, 275–316 of them naming several people.
+
+**The cue arm: every cue written** (final.json `cue` rows).
+- 128 cues from 60 residents. 19 were refused, 14 of them for "it watches for a creature and a thing at once".
+- **Aldous** wrote one, under his stance `arrivals_must_be_written`, but it watches Magda Tarn (#24): "Magda promised Ansel Tarn at my desk before dusk — the Mid Row 6 key waits on a name in the book". None of his cues watches for arrivals or strangers.
+- **Ingrid** wrote two: Magda at the catch, and Lark.
+- **Cues on strangers** (`who: unknown`): 9. Only Dolly Achterberg's names a stranger as one: "A stranger at my door who isn't the Tarn girl or the Okoro man — that's my blank line…". It did not fire.
+
+Residents with cues: 60; per resident: {'Alder Fenwick': 2, 'Aldous Quill': 1, 'Amara Okoro': 3, 'Ansel Tarn': 3, 'Anselm Faro': 2, 'Benedikt Orme': 1, 'Bram Calloway': 3, 'Chidi Okoro': 2, 'Col Roon': 2, 'Cora Stannard': 1, 'Corvin Hollin': 3, 'Davin Vane': 2, 'Dolly Achterberg': 4, 'Eamon Tarn': 3, 'Edda Hollin': 3, 'Eilidh Roon': 1, 'Elke Greave': 3, 'Fenn Brandt': 2, 'Greta Dunmore': 2, 'Gwil Stannard': 4, 'Halvard Dunmore': 2, 'Hana Sato': 1, 'Hobb Fenwick': 1, 'Ife Okoro': 2, 'Imre Sarro': 1, 'Ingrid Morrow': 2, 'Jory Greave': 1, 'Joss Tarn': 3, 'Juno Brandt': 1, 'Kenji Sato': 2, 'Kit Calloway': 2, 'Lark Morrow': 1, 'Livia Faro': 2, 'Lorcan Vane': 1, 'Lumi Pontil': 3, 'Magda Tarn': 3, 'Mirren Quill': 3, 'Nan Fenwick': 3, 'Nell Tarn': 2, 'Neve Calloway': 2, 'Ode Pontil': 2, 'Oswin Greave': 2, 'Otto Brandt': 2, 'Petra Tarn': 3, 'Pieter Achterberg': 1, 'Pim Hollin': 3, 'Posy Fenwick': 2, 'Rafe Dunlin': 2, 'Ren Sato': 1, 'Roos Achterberg': 2, 'Runa Sarro': 3, 'Sabine Quill': 3, 'Suri Greave': 1, 'Tam Roon': 2, 'Thessaly Marl': 1, 'Tilly Dunlin': 2, 'Vessa Pontil': 4, 'Wick Marl': 2, 'Ysolde Calloway': 2, 'Zeke Okoro': 3}
+
+- **Alder Fenwick** `goal:become_a_reader_like_benedikt_orme` {"who_id": "62 (Gwil Stannard)", "within": 20.0, "near_me": 10.0} — why: “Gwil's advice to ask plain is what set me moving; he may also know where Benedikt goes of an afternoon.” — fires 0
+- **Alder Fenwick** `goal:learn_to_read_the_standing_signs` {"who_id": "61 (Benedikt Orme)", "doing": "read", "thing": "sign", "within": 20.0, "near_me": 20.0} — why: “If Benedikt stands at a sign and reads it, I must be at his elbow.” — REFUSED: it watches for a creature and a thing at once — fires 0
+- **Aldous Quill** `stance:arrivals_must_be_written` {"who_id": "24 (Magda Tarn)", "within": 20.0} — why: “Magda promised Ansel Tarn at my desk before dusk — the Mid Row 6 key waits on a name in the book” — fires 0
+- **Amara Okoro** `goal:learn_which_wreck_the_rarest_blue_sea-glass_came_from` {"who_id": "38 (Lark Morrow)", "doing": "gather", "within": 20.0, "near_me": 1.0} — why: “Lark saw a sail past the Combs; she may know more of that water than I do.” — fires 0
+- **Amara Okoro** `goal:walk_the_mole_with_lark_at_dusk_and_watch_for_the_sail_past_the_combs` {"who_id": "38 (Lark Morrow)", "doing": "walk", "at": "the mole", "within": 20.0} — why: “Lark at the mole tip — the dusk is coming and I've promised.” — fires 0
+- **Amara Okoro** `goal:carry_enough_kelp_up_the_wynds_to_keep_nan_fenwick_off_my_back` {"thing": "kelp_bed", "within": 20.0} — why: “If I find a bed with kelp on it, that's my load for Nan before evening.” — fires 0
+- **Ansel Tarn** `goal:be_where_nell_is` {"who_id": "28 (Nell Tarn)", "within": 20.0, "near_me": 12.0} — why: “When Nell comes near I want to run to her.” — fires 0
+- **Ansel Tarn** `goal:be_big_enough_for_lessons` {"who_id": "61 (Benedikt Orme)", "doing": "keep", "at": "Benedikt Orme's yard", "within": 15.0} — why: “Benedikt at the hall — someday I'll be big enough to sit inside.” — fires 0
+- **Ansel Tarn** `goal:get_a_ride_on_uncle_davin_s_cart` {"who_id": "26 (Eamon Tarn)", "doing": "goto", "within": 20.0, "near_me": 17.0} — why: “Uncle Eamon is heading east; if he comes near with the cart I want to ask for a ride.” — fires 0
+- **Anselm Faro** `stance:the_lamp_must_burn` {"who_id": "57 (Livia Faro)", "doing": "keep", "at": "the south lamp", "within": 20.0} — why: “If she is the daylight keeper, the question answers itself and the provision is settled between us.” — fires 0
+- **Anselm Faro** `goal:see_livia_settled_and_provided_for__whether_or_not_i_am_here` {"who_id": "57 (Livia Faro)", "doing": "count", "within": 20.0} — why: “Two lamps' burning reckoned against the catch — that arithmetic is her provision, if it holds.” — fires 0
+- **Benedikt Orme** `stance:the_graves_are_sacred` {"who_id": "12 (Otto Brandt)", "within": 20.0, "near_me": 25.0} — why: “Otto Brandt near the Lintel is the man whose question about the graves I am walking to hear” — fires 0
+- **Bram Calloway** `goal:get_fourteen_trees_from_the_hanger__by_marit_s_leave_or_otherwise.` {"who_id": "55 (Marit Sedge)", "within": 20.0} — why: “If Marit Sedge comes near, it is time to press her again for the timber.” — fires 0
+- **Bram Calloway** `goal:get_fourteen_trees_from_the_hanger__by_marit_s_leave_or_otherwise` {"who_id": "26 (Eamon Tarn)", "within": 20.0, "near_me": 30.0} — why: “If Eamon comes near, I catch him before he goes to Marit unguided.” — fires 1 on ['Eamon Tarn']
+- **Bram Calloway** `goal:get_fourteen_trees_from_the_hanger__by_marit_s_leave_or_otherwise` {"who_id": "55 (Marit Sedge)", "within": 20.0, "near_me": 30.0} — why: “If Marit comes near, I can press her for the timber myself and spare Eamon the errand.” — fires 0
+- **Chidi Okoro** `goal:collect_the_nine_drops_lorcan_vane_owes_me_for_line_without_breaking_the_ho` {"who_id": "35 (Lorcan Vane)", "at": "work", "within": 20.0} — why: “He is at the Steps at first light with Davin — a fair moment to name my drops to him, before the run thins.” — fires 1 on ['Lorcan Vane']
+- **Chidi Okoro** `goal:collect_the_nine_drops_lorcan_vane_owes_me_for_line_without_breaking_the_ho` {"who": "lorcan vane", "within": 20.0, "near_me": 20.0} — why: “Dusk is coming and the crowd is gathering at the Steps — time to name my drops” — REFUSED: "lorcan vane" is not a kind of creature — fires 0
+- **Col Roon** `stance:i_want_to_know_more_people` {"who": "unknown", "thing": "hearth", "at": "the stead by the peat barn", "within": 30.0} — why: “Whoever keeps this hearth is a neighbour I have never met; if they come near I might learn a face.” — REFUSED: it watches for a creature and a thing at once — fires 0
+- **Col Roon** `stance:lark_morrow_is_worth_speaking_to` {"who_id": "38 (Lark Morrow)", "doing": "goto", "within": 20.0, "near_me": 22.0} — why: “She is close; I must not lose my nerve and walk past again.” — fires 0
+- **Cora Stannard** `goal:see_gwil_less_tired_and_less_worried_about_roofs` {"who_id": "62 (Gwil Stannard)", "doing": "gather", "within": 20.0} — why: “He is at the stone again; I mean to walk over and speak gently.” — fires 0
+- **Corvin Hollin** `stance:the_cone_should_pass_to_the_best_blower` {"who_id": "1 (Vessa Pontil)", "doing": "keep", "within": 30.0} — why: “Every hour she holds the naming back, I must be seen broadening the craft, not just blowing.” — fires 1 on ['Vessa Pontil']
+- **Corvin Hollin** `stance:vessas_test_is_a_chance` {"who_id": "1 (Vessa Pontil)", "doing": "keep", "at": "the Cone", "within": 20.0} — why: “When Vessa comes at five I want to see what she looks at first.” — fires 0
+- **Corvin Hollin** `stance:imre_is_moving_on_the_same_hour` {"who_id": "64 (Imre Sarro)", "doing": "glassmaking", "at": "the Cone", "within": 20.0} — why: “His trial and Fenn's hour share the same melt — I want to hear what Vessa says of his hands.” — fires 0
+- **Davin Vane** `goal:clear_the_rest_of_lorcan_s_marver_debt_without_him_finding_out` {"who_id": "24 (Magda Tarn)", "doing": "keep", "at": "the wrack stance", "within": 20.0} — why: “If Magda counts his catch plain, my quiet drops and his loud ones may meet on the same ledger” — fires 0
+- **Davin Vane** `goal:find_work_that_is_mine` {"who_id": "23 (Kit Calloway)", "doing": "play", "within": 20.0} — why: “The boy wants to be something — teaching him keeping makes the trade mine and his both” — fires 0
+- **Dolly Achterberg** `goal:fill_the_blank_line_in_aldous_s_book_when_the_third_stranger_comes_in_for_a` {"who": "unknown", "doing": "arriving", "at": "the Marver", "within": 24.0} — why: “A stranger at my door who isn't the Tarn girl or the Okoro man — that's my blank line, and a bowl to fill before I ask their name.” — fires 0
+- **Dolly Achterberg** `stance:a_full_house_is_a_good_house` {"who": "unknown", "doing": "wait", "within": 20.0, "near_me": 24.0} — why: “A child waiting south of the Marver — if she's hungry she'll come to my door, and I'd sooner have a bowl ready.” — fires 0
+- **Dolly Achterberg** `goal:fill_the_blank_line_in_aldous_s_book_when_the_third_stranger_comes_in_for_a` {"who_id": "39 (Kenji Sato)", "doing": "arriving", "at": "the Marver", "within": 20.0} — why: “Kenji Sato — a name that wasn't in the book this morning, walking straight to my door at dusk. Could be my blank line.” — fires 0
+- **Dolly Achterberg** `goal:fill_the_blank_line_in_aldous_s_book_when_the_third_stranger_comes_in_for_a` {"who_id": "2 (Ode Pontil)", "doing": "arriving", "at": "the Marver", "within": 20.0} — why: “Ode Pontil is another name I never heard — if he sits down for a bowl, I ask him plain where he came in from.” — fires 0
+- **Eamon Tarn** `goal:earn_a_place_on_the_second_thought_when_she_is_finished` {"who_id": "20 (Bram Calloway)", "doing": "carpentry", "at": "the dry dock", "within": 30.0} — why: “Bram at the hull is where I want to be” — fires 0
+- **Eamon Tarn** `goal:help_bram_get_the_fourteen_trees_from_marit_sedge` {"who_id": "55 (Marit Sedge)", "within": 20.0, "near_me": 25.0} — why: “If the warden is about, I want my word in before Bram goes alone” — fires 0
+- **Eamon Tarn** `stance:chidi_means_to_take_what_is_lorcans` {"who_id": "35 (Lorcan Vane)", "within": 20.0, "near_me": 20.0} — why: “If Lorcan is about at dusk, I want to be near enough to say a word” — fires 0
+- **Edda Hollin** `goal:to_keep_pim_from_cutting_his_hand_again` {"who_id": "7 (Pim Hollin)", "doing": "play", "within": 20.0, "near_me": 15.0} — why: “Pim's playing rough, not sorting — I want his hands where I can see them” — fires 0
+- **Edda Hollin** `goal:to_find_a_piece_of_cobalt_in_the_cullet_heaps` {"who_id": "43 (Tilly Dunlin)", "doing": "trading", "thing": "shard", "within": 20.0, "near_me": 40.0} — why: “Tilly trades shards and might have cobalt to show or sell” — REFUSED: it watches for a creature and a thing at once — fires 0
+- **Edda Hollin** `goal:to_walk_every_new_street_past_the_boulders` {"who": "unknown", "thing": "house_store", "at": "the stores south of the boulders", "within": 45.0} — why: “Four stores close together — if any quarter trades shards, it's this one” — REFUSED: it watches for a creature and a thing at once — fires 0
+- **Eilidh Roon** `goal:find_a_way_to_move_the_family_into_a_house_in_town.` {"who": "unknown", "doing": "living", "at": "north-east homesteads", "within": 20.0} — why: “Anyone settled in a house out here might tell me how they came by it.” — fires 0
+- **Elke Greave** `stance:greens_beds_go_early` {"who_id": "44 (Oswin Greave)", "doing": "gather", "thing": "greens_bed", "at": "the west growing ground", "within": 20.0} — why: “If the beds are stripped by mid-morning I should plant closer to home.” — REFUSED: it watches for a creature and a thing at once — fires 0
+- **Elke Greave** `goal:a_little_more_glass_and_a_little_less_wind_in_the_houses_before_next_winter` {"who_id": "44 (Oswin Greave)", "within": 20.0} — why: “Oswin is set on panes for six from Tamsin — this is the glass I wanted too, if we can pay for it without a quarrel.” — fires 2 on ['Oswin Greave']
+- **Elke Greave** `goal:see_suri_brought_to_bed_safely_and_the_baby_strong` {"who_id": "10 (Mirren Quill)", "within": 20.0, "near_me": 19.0} — why: “If Mirren is going to Suri I want to know why — is something amiss with the baby?” — fires 0
+- **Fenn Brandt** `stance:the_dead_should_rest` {"who_id": "12 (Otto Brandt)", "doing": "goto", "within": 20.0} — why: “If Otto heads toward the clay pit by the graveyard, I want to know and stop him.” — fires 0
+- **Fenn Brandt** `goal:keep_otto_from_digging_in_the_graveyard` {"who_id": "12 (Otto Brandt)", "doing": "goto", "at": "home", "within": 20.0} — why: “He's bound for home, not the clay pit — relief, but I'll keep half an eye on him till he's through the door.” — fires 0
+- **Greta Dunmore** `stance:the_kelp_smoke_must_be_kept_off_the_washing` {"thing": "furnace", "at": "the Cone", "within": 30.0} — why: “A furnace burning into the evening is what greys my lines.” — fires 1 on [2305843009213694018]
+- **Greta Dunmore** `stance:children_must_be_minded` {"who_id": "15 (Thessaly Marl)", "within": 20.0, "near_me": 20.0} — why: “If Thessaly comes off the Cone I mean to hand Wick to her myself and tell her the boy did well.” — fires 0
+- **Gwil Stannard** `goal:find_a_way_to_get_more_slates_without_stripping_the_shells_bare` {"thing": "tree", "within": 20.0} — why: “Timber and battens for roofs come from the one wood; worth remembering where it stands.” — fires 0
+- **Gwil Stannard** `stance:want_a_child_with_cora` {"who_id": "63 (Cora Stannard)", "within": 20.0, "near_me": 6.0} — why: “When Cora is close and there's nobody between us, I mean to ask her.” — fires 1 on ['Cora Stannard']
+- **Gwil Stannard** `goal:get_every_roof_in_town_watertight_before_next_winter` {"who_id": "59 (Pieter Achterberg)", "doing": "building", "within": 20.0, "near_me": 20.0} — why: “Pieter's roof wants patching before the child comes.” — fires 0
+- **Gwil Stannard** `goal:build_the_room_for_the_child` {"thing": "clay", "at": "the clay pit", "within": 20.0} — why: “Clay and stone for the room — I'll want a stock of it.” — REFUSED: "clay" is not a kind of thing one sees — fires 0
+- **Halvard Dunmore** `goal:see_tobiah_settled_at_the_furnace__stoking_and_then_blowing` {"who_id": "19 (Tobiah Dunmore)", "doing": "keep", "within": 20.0, "near_me": 5.0} — why: “He's counting hours on the fire; I'll see the stoking with my own eyes while it lasts.” — fires 1 on ['Tobiah Dunmore']
+- **Halvard Dunmore** `stance:judge_the_work_aloud` {"who_id": "4 (Corvin Hollin)", "doing": "glassmaking", "within": 20.0, "near_me": 10.0} — why: “Corvin's hour at five is next — his gathers are mine to judge.” — fires 0
+- **Hana Sato** `goal:move_to_a_house_away_from_the_kiln_smoke` {"who_id": "39 (Kenji Sato)", "doing": "storing ash", "at": "home", "within": 20.0} — why: “When Kenji is home from the kilns I must press him again about the house up the row.” — fires 0
+- **Hobb Fenwick** `goal:raise_the_child_he_and_nan_agreed_on` {"who_id": "48 (Nan Fenwick)", "doing": "gather", "within": 20.0, "near_me": 9.4} — why: “She carries the child; I would have her not overdo it at the plots.” — fires 0
+- **Ife Okoro** `stance:lumi_knows_the_cone` {"who_id": "1 (Vessa Pontil)", "doing": "keep", "within": 20.0, "near_me": 14.0} — why: “If Vessa finishes her turn with Lumi, that's my moment” — fires 0
+- **Ife Okoro** `goal:see_the_cone_s_fire_up_close_one_day_with_lumi` {"who_id": "3 (Lumi Pontil)", "within": 20.0, "near_me": 14.0} — why: “If Lumi comes close enough to speak, I want to catch her before she's off again” — fires 0
+- **Imre Sarro** `stance:neve_before_all` {"who_id": "22 (Neve Calloway)", "within": 20.0, "near_me": 30.0} — why: “If she comes near the Cone I will set the pipe down and speak to her.” — fires 1 on ['Neve Calloway']
+- **Ingrid Morrow** `stance:the_strand_looks_after_its_own` {"who_id": "24 (Magda Tarn)", "doing": "divide the catch", "within": 20.0, "near_me": 40.0} — why: “I want to be beside Magda when the catch is divided, as I always am.” — fires 0
+- **Ingrid Morrow** `goal:get_lark_to_stop_talking_about_the_sail_and_settle_to_the_wrack_and_the_net` {"who_id": "38 (Lark Morrow)", "within": 20.0, "near_me": 18.0} — why: “She is near enough at last to catch her — I mean to have words with her before the light goes.” — fires 0
+- **Jory Greave** `goal:find_suri_and_ask_her_properly_for_a_child_of_our_own` {"who_id": "47 (Suri Greave)", "doing": "gather", "within": 20.0, "near_me": 8.0} — why: “When I am close enough to speak, I stop and let her have her say.” — fires 0
+- **Joss Tarn** `goal:see_petra_paid_her_twelve_drops` {"who_id": "35 (Lorcan Vane)", "doing": "fishing", "within": 20.0, "near_me": 30.0} — why: “If Lorcan's deep-side catch clears Chidi's nine by dusk, Petra's twelve can come next.” — fires 0
+- **Joss Tarn** `goal:get_a_share_in_glasshouse_11_for_the_tarns_when_it_is_mended` {"who_id": "5 (Tamsin Hollin)", "doing": "glassmaking", "at": "the Cone", "within": 20.0} — why: “Tamsin is walking toward the Cone at dusk-ward — if she stops at the furnace, that's the moment to ask after a share in 11 again.” — fires 0
+- **Joss Tarn** `goal:get_the_family_into_mid_row_6_so_the_children_have_room` {"who_id": "9 (Aldous Quill)", "doing": "writing", "at": "the Counting House", "within": 20.0} — why: “Aldous must read Ansel's name before dusk or the key to Mid Row 6 waits.” — fires 0
+- **Juno Brandt** `goal:get_a_hen_of_her_own` {"who_id": "13 (Fenn Brandt)", "doing": "tending hens", "at": "home", "within": 20.0} — why: “If Fenn is with the hens when I get home, that's my moment to ask.” — fires 0
+- **Kenji Sato** `stance:smoke_goes_where_the_wind_takes_it` {"who_id": "2 (Ode Pontil)", "doing": "gathering", "within": 20.0} — why: “Ode Pontil works the strand himself — a chance to talk kelp and ash with a Pontil who gathers” — fires 0
+- **Kenji Sato** `goal:get_a_fair_price_from_vessa_pontil_for_the_ash` {"who": "unknown", "doing": "glassmaking", "at": "the Cone", "within": 20.0} — why: “If I see a Pontil reading the melt, it's a chance to make my case for a better price on ash.” — fires 0
+- **Kit Calloway** `stance:read_the_sign_well` {"who_id": "64 (Imre Sarro)", "doing": "glassmaking", "at": "the furnace bench at the Cone", "within": 5.0, "near_me": 1.8} — why: “He is at his furnace beside me — the moment to ask is now, before his gather.” — fires 0
+- **Kit Calloway** `goal:become_a_glassblower_at_the_cone.` {"who_id": "1 (Vessa Pontil)", "doing": "glassmaking", "at": "the Cone", "within": 48.0} — why: “Vessa judges reads and hands out lessons — be near when a melt is called, and be early” — fires 0
+- **Lark Morrow** `goal:see_the_sail_again_and_prove_i_saw_it` {"thing": "campfire", "at": "the mole tip", "within": 20.0} — why: “If a fire is lit on the mole tip before dusk, the watch is real and I should be there” — fires 0
+- **Livia Faro** `stance:the_lamp_must_burn` {"thing": "lamp", "at": "the south lamp", "within": 5.0} — why: “Its oil level tells me the burn rate and when it must be refilled.” — fires 1 on [2305843009213694030]
+- **Livia Faro** `goal:find_whose_the_south_lamp_is_and_who_filled_it` {"who_id": "26 (Eamon Tarn)", "doing": "goto", "within": 20.0, "near_me": 9.0} — why: “He is leaving; ask him now before he is out of earshot.” — fires 0
+- **Lorcan Vane** `stance:settle_friendly_before_dusk` {"who_id": "31 (Chidi Okoro)", "within": 20.0, "near_me": 30.0} — why: “Chidi near means I settle the nine drops plain and friendly before the ledger shuts.” — fires 0
+- **Lumi Pontil** `stance:gran_needs_me_at_the_cone` {"who": "vessa pontil", "within": 20.0} — why: “Gran at the Cone means the colour game is about to start — I must be beside her” — REFUSED: "vessa pontil" is not a kind of creature — fires 0
+- **Lumi Pontil** `goal:to_name_the_colour_right_every_morning` {"who_id": "1 (Vessa Pontil)", "within": 20.0, "near_me": 10.0} — why: “Gran is heading to the Cone — the naming is about to happen and I must be beside her.” — fires 1 on ['Vessa Pontil']
+- **Lumi Pontil** `goal:to_find_a_cobalt_shard_in_the_cullet_heaps_before_edda_does` {"who": "unknown", "thing": "kind:person", "at": "the cullet heaps", "within": 20.0} — why: “Ode says a little one goes to what shines — Ansel might be in the heaps, and I know them best.” — REFUSED: it watches for a creature and a thing at once — fires 0
+- **Magda Tarn** `goal:get_the_key_to_mid_row_6_from_the_counting_house` {"who_id": "29 (Ansel Tarn)", "doing": "goto", "within": 20.0} — why: “Joss is fetching sleepy Ansel to the book; I must be back at the Counting House before the dusk counters come.” — fires 0
+- **Magda Tarn** `stance:the_catch_must_be_divided_fairly` {"who_id": "35 (Lorcan Vane)", "doing": "gather", "thing": "fishing_spot", "at": "work", "within": 20.0, "near_me": 45.0} — why: “Lorcan owes nine drops by dusk and I am witness — watch that it's paid where the count can hear it.” — REFUSED: it watches for a creature and a thing at once — fires 0
+- **Magda Tarn** `goal:get_the_key_to_mid_row_6_from_the_counting_house_for_the_tarns` {"who_id": "9 (Aldous Quill)", "doing": "keep", "at": "the Counting House", "within": 20.0} — why: “If Aldous is at the desk, I can settle the key for Mid Row 6 the moment Ansel arrives.” — fires 0
+- **Mirren Quill** `stance:no_digging_on_the_crown` {"who_id": "12 (Otto Brandt)", "within": 20.0, "near_me": 20.0} — why: “If Otto comes at the clay while the children scramble the Crown side, I speak before he sets a pick to it.” — fires 1 on ['Otto Brandt']
+- **Mirren Quill** `goal:train_a_second_healer_before_she_is_old` {"who_id": "61 (Benedikt Orme)", "within": 20.0, "near_me": 12.0} — why: “Benedikt within earshot means I can say my piece directly instead of through Aldous.” — fires 0
+- **Mirren Quill** `goal:see_suri_greave_safely_delivered` {"who_id": "5 (Tamsin Hollin)", "doing": "carpentry", "thing": "house", "within": 20.0} — why: “Tamsin has promised Suri's roof before the baby comes — if she starts on it, I want to know the roof is truly coming.” — REFUSED: it watches for a creature and a thing at once — fires 0
+- **Nan Fenwick** `stance:kelp_belongs_to_the_plots_first` {"who_id": "38 (Lark Morrow)", "doing": "gather", "within": 20.0, "near_me": 30.0} — why: “Lark's loads are the ones I doubt; if I see her gathering I'll judge the load myself.” — fires 0
+- **Nan Fenwick** `stance:kelp_belongs_to_the_plots_first` {"who_id": "32 (Amara Okoro)", "doing": "gather", "within": 20.0, "near_me": 30.0} — why: “Amara and Hana short me together; I want to see what she actually brings up.” — fires 0
+- **Nan Fenwick** `goal:see_alder_placed_with_benedikt_properly__not_just_as_a_boy_who_hangs_about` {"who_id": "44 (Oswin Greave)", "doing": "glassmaking", "within": 20.0, "near_me": 40.0} — why: “If Oswin's at his glasshouse end, I'll put Alder's name forward for the pane-setting.” — fires 0
+- **Nell Tarn** `goal:go_out_on_the_mole_with_uncle_eamon` {"who_id": "26 (Eamon Tarn)", "doing": "walking", "within": 20.0, "near_me": 40.0} — why: “If Eamon comes past I'll ask again to go out on the mole.” — fires 0
+- **Nell Tarn** `goal:mind_ansel_without_losing_him` {"who_id": "11 (Sabine Quill)", "within": 20.0, "near_me": 6.0} — why: “Get close enough to hear her answer about Ansel.” — fires 0
+- **Neve Calloway** `stance:work_the_water_patiently` {"who_id": "35 (Lorcan Vane)", "doing": "fishing", "within": 20.0} — why: “If Lorcan works a spot and fish show, I'll learn where the run truly is.” — fires 0
+- **Neve Calloway** `goal:raise_our_child_with_imre__here_in_cullet.` {"who_id": "64 (Imre Sarro)", "doing": "glassmaking", "within": 20.0} — why: “When Imre's at the furnace I'll know the gather's done and go to meet him.” — fires 0
+- **Ode Pontil** `stance:vessa_must_keep_her_place` {"who_id": "17 (Halvard Dunmore)", "within": 20.0, "near_me": 1.0} — why: “Halvard at the furnace mouth again — he judges my sister aloud; I want to know what he says and does there.” — fires 0
+- **Ode Pontil** `stance:the_cullet_yard_is_no_place_for_children` {"who": "unknown", "thing": "child", "within": 20.0, "near_me": 20.0} — why: “Any small child wandering near the cullet heaps while Ansel is missing needs checking — it may be him.” — REFUSED: it watches for a creature and a thing at once — fires 0
+- **Oswin Greave** `stance:every_pane_should_grow_food` {"who_id": "63 (Cora Stannard)", "doing": "planting", "at": "the west beds", "within": 20.0} — why: “If Cora's putting flowers in again I'll say my piece plainly.” — fires 0
+- **Oswin Greave** `goal:get_glasshouse_6_glazed_and_growing_again__before_any_other_broken_house` {"who_id": "62 (Gwil Stannard)", "doing": "goto", "within": 20.0, "near_me": 22.0} — why: “Hobb says Gwil may know a setter for my panes — ask him now while he's in reach.” — fires 0
+- **Otto Brandt** `goal:find_good_clay_for_the_crucibles_before_the_bank_runs_out` {"who": "unknown", "doing": "make", "thing": "oven", "at": "workshops east", "within": 20.0} — why: “If an oven appears east I can fire my own crucibles without begging time at the Cone.” — REFUSED: it watches for a creature and a thing at once — fires 0
+- **Otto Brandt** `goal:find_or_raise_an_oven_to_fire_crucibles` {"thing": "oven", "at": "square", "within": 45.0} — why: “An existing oven shows how it's done and whose leave I'd need to borrow it.” — fires 0
+- **Petra Tarn** `stance:the_smokehouse_must_be_kept_right` {"thing": "fishing_spot", "at": "Cullet center", "within": 12.0} — why: “A spot with fish in it close by — good to know once the racks are empty again” — fires 0
+- **Petra Tarn** `stance:a_debt_in_drops_is_paid_in_drops` {"who_id": "32 (Amara Okoro)", "within": 20.0, "near_me": 30.0} — why: “Chidi is owed Lorcan's nine drops and this Okoro walks close with him — worth knowing who stands at his shoulder before I speak plain about it” — fires 1 on ['Amara Okoro']
+- **Petra Tarn** `goal:get_the_twelve_drops_from_dolly_achterberg_or_settle_it_openly` {"who_id": "59 (Pieter Achterberg)", "within": 20.0} — why: “An Achterberg close by — worth knowing if he is Dolly's kin before I make my fuss” — fires 0
+- **Pieter Achterberg** `goal:win_a_game_off_anselm_faro_before_the_winter` {"who_id": "33 (Zeke Okoro)", "within": 20.0, "near_me": 30.0} — why: “Zeke's fetching Anselm home before dark — he'll be rested and ready for counters at dawn.” — fires 0
+- **Pim Hollin** `stance:shiny_pieces_are_worth_having` {"who_id": "51 (Posy Fenwick)", "doing": "face", "within": 20.0, "near_me": 1.0} — why: “Posy said she has a shard and wants in at the cullet yard — maybe I can see it or trade for a blue piece” — fires 0
+- **Pim Hollin** `goal:to_keep_up_with_edda` {"who_id": "6 (Edda Hollin)", "doing": "sleep", "within": 20.0, "near_me": 2.0} — why: “The moment Edda stirs I want to be right there, not off at a heap.” — fires 0
+- **Pim Hollin** `goal:to_find_a_piece_of_glass_as_blue_as_the_watchglass_band` {"who_id": "51 (Posy Fenwick)", "doing": "look", "thing": "cullet heap", "within": 20.0, "near_me": 6.0} — why: “her heap first, then mine — I want to be there when she's done looking so my turn comes” — REFUSED: it watches for a creature and a thing at once — fires 0
+- **Posy Fenwick** `goal:be_properly_in_edda_hollin_s_band` {"who_id": "6 (Edda Hollin)", "doing": "sleep", "phase": "under way", "within": 20.0, "near_me": 4.0} — why: “when Edda wakes I want to be the one she sees coming back with something worth ruling on” — fires 0
+- **Posy Fenwick** `goal:get_a_piece_of_blue_cullet_for_herself` {"who_id": "7 (Pim Hollin)", "doing": "play", "within": 20.0, "near_me": 5.0} — why: “Pim coming along to the heaps — keep the fair turn honest and stay first” — fires 0
+- **Rafe Dunlin** `goal:see_tilly_learn_her_letters_and_numbers` {"who_id": "43 (Tilly Dunlin)", "within": 20.0, "near_me": 1.0} — why: “I owe her a counter for the lesson — get it to her before the lamp tonight.” — fires 0
+- **Rafe Dunlin** `goal:make_the_house_warmer_and_drier_before_next_winter` {"thing": "peat_bank", "at": "home", "within": 48.0} — why: “Hearth's dry of peat — next chance I get, I lay in a stock.” — fires 0
+- **Ren Sato** `goal:win_sabine_quill__and_her_father_s_grudging_consent` {"who_id": "9 (Aldous Quill)", "within": 20.0, "near_me": 14.0} — why: “If Aldous comes near while I haul, keep hands busy and words short.” — fires 0
+- **Roos Achterberg** `goal:beat_aldous_quill_at_counters__once__and_have_it_seen` {"who_id": "9 (Aldous Quill)", "doing": "playing", "phase": "holding", "thing": "counters board", "at": "the arcade", "within": 20.0} — why: “he promised to play at dusk when the book closes — be there first, set warm, and watch how he sits down” — REFUSED: it watches for a creature and a thing at once — fires 0
+- **Roos Achterberg** `stance:wanting_a_child_of_my_own` {"who_id": "58 (Dolly Achterberg)", "within": 3.0, "near_me": 2.2} — why: “she's right here keeping the inn; if the moment softens before tonight, I may ask early” — fires 1 on ['Dolly Achterberg']
+- **Runa Sarro** `goal:live_to_hold_suri_greave_s_baby` {"who_id": "5 (Tamsin Hollin)", "within": 20.0, "near_me": 3.0} — why: “Tamsin is near and has just sworn the order again — hold her to it: panes first, then Suri's roof.” — fires 1 on ['Tamsin Hollin']
+- **Runa Sarro** `stance:my_son_fairly_or_not_at_all` {"who_id": "64 (Imre Sarro)", "doing": "glassblowing", "within": 20.0, "near_me": 40.0} — why: “Imre at the Cone under Vessa — weigh what is earned.” — fires 0
+- **Runa Sarro** `stance:keep_my_own_counsel` {"who_id": "1 (Vessa Pontil)", "doing": "glassmaking", "within": 20.0, "near_me": 40.0} — why: “Vessa at the Cone — watch the gather and the hesitation, and say nothing.” — fires 0
+- **Sabine Quill** `goal:to_decide_about_ren_sato_for_herself__not_for_her_father` {"who_id": "41 (Ren Sato)", "within": 20.0, "near_me": 25.0} — why: “If this wanting of a child is real and stays, it will have something to do with Ren.” — fires 0
+- **Sabine Quill** `stance:the_pale_must_be_known` {"who_id": "12 (Otto Brandt)", "within": 20.0, "near_me": 20.0} — why: “Otto at the square — my chance to hear his reason with my own ears.” — fires 0
+- **Sabine Quill** `goal:to_read_the_hardest_tablets_in_the_readers__house` {"who_id": "61 (Benedikt Orme)", "doing": "sleep", "within": 20.0} — why: “He sleeps near me still; the moment he wakes, my question about the Lintel goes in.” — fires 0
+- **Suri Greave** `goal:have_mid_row_6__or_some_house__before_the_baby_comes` {"thing": "house", "at": "the west rows further out", "within": 20.0} — why: “If a house out here stands empty, that is a door I could have.” — fires 3 on [2305843009213693996, 2305843009213693997, 2305843009213693998]
+- **Tam Roon** `goal:see_col_settled_with_friends_his_own_age.` {"who_id": "54 (Col Roon)", "within": 20.0, "near_me": 20.0} — why: “If Col is about, I want to see who he is keeping company with.” — fires 0
+- **Tam Roon** `stance:peat_is_worth_more` {"who_id": "6 (Edda Hollin)", "doing": "ruling on ore", "within": 20.0} — why: “If the Hollins are weighing what things are worth, they may weigh peat too.” — fires 0
+- **Thessaly Marl** `stance:want_a_partner` {"who_id": "42 (Rafe Dunlin)", "doing": "fishing", "within": 20.0} — why: “Rafe on the mole is who I mean to sit beside come evening” — fires 0
+- **Tilly Dunlin** `stance:edda_wants_first_pick` {"who_id": "6 (Edda Hollin)", "doing": "goto", "at": "the Batch", "within": 20.0, "near_me": 1.0} — why: “Edda's racing us to the heaps; watch she doesn't grab the cobalt before Posy looks.” — fires 0
+- **Tilly Dunlin** `goal:have_posy_come_and_sleep_over_at_low_row_1.` {"who_id": "51 (Posy Fenwick)", "within": 20.0, "near_me": 12.0} — why: “Ask Posy about tonight before the lamp — maybe she could come after.” — fires 0
+- **Vessa Pontil** `stance:the_cone_must_never_go_out` {"thing": "furnace", "at": "the Cone", "within": 20.0} — why: “Thirteen hours of burn left; confirm the draw before evening.” — fires 1 on [2305843009213694018]
+- **Vessa Pontil** `stance:lumi_must_have_a_place` {"who_id": "3 (Lumi Pontil)", "within": 20.0, "near_me": 25.0} — why: “Lumi naming colours among the claimants; she must be seen to be right, not to be guessing.” — fires 1 on ['Lumi Pontil']
+- **Vessa Pontil** `goal:keep_the_peat_coming_so_the_cone_burns_full_for_as_long_as_i_can` {"thing": "peat", "at": "the peap store", "within": 20.0} — why: “count the draw before evening; thirteen hours of burn left on the furnace” — REFUSED: "peat" is not a kind of thing one sees — fires 0
+- **Vessa Pontil** `goal:choose_who_follows_me_at_the_cone` {"who_id": "3 (Lumi Pontil)", "doing": "follow", "within": 20.0, "near_me": 2.0} — why: “Lumi beside me is my chance to test her eye against Fenn's read without the yard listening.” — fires 0
+- **Wick Marl** `goal:to_ride_the_handcart_all_the_way_to_the_mole` {"who_id": "38 (Lark Morrow)", "doing": "goto", "within": 20.0} — why: “Lark said to meet at the mole tip at dusk whatever the weather — something might happen there” — fires 0
+- **Wick Marl** `goal:to_have_mama_home_at_night` {"who_id": "15 (Thessaly Marl)", "within": 25.0} — why: “I missed her at noon and before the tablet work — if she passes I want to see her before dark” — fires 0
+- **Ysolde Calloway** `stance:family_must_stay_together` {"who_id": "20 (Bram Calloway)", "thing": "smoked_fish", "at": "home", "within": 20.0} — why: “Bram providing for the household is the man I hold to; watch that it stays true while the ship-dream pulls at him.” — REFUSED: it watches for a creature and a thing at once — fires 0
+- **Ysolde Calloway** `goal:keep_bram_from_sailing__or_at_least_keep_the_children_from_going_with_him.` {"who_id": "20 (Bram Calloway)", "within": 20.0, "near_me": 30.0} — why: “If Bram comes near while the children are elsewhere, I can speak to him alone.” — fires 0
+- **Zeke Okoro** `stance:edda_knows_the_yard_best` {"who_id": "6 (Edda Hollin)", "at": "benedikts hall", "within": 20.0} — why: “Edda's taking Posy up to be made band proper — after, the yard run is hers to lead.” — REFUSED: you know no place called "benedikts hall" — fires 0
+- **Zeke Okoro** `stance:lesson_first_then_yard` {"who_id": "61 (Benedikt Orme)", "doing": "keep", "phase": "under way", "thing": "hearth", "at": "benedikts hall", "within": 20.0, "near_me": 1.4} — why: “Benedikt's watching the lesson; I sit proper till he lets us go.” — REFUSED: it watches for a creature and a thing at once — fires 0
+- **Zeke Okoro** `goal:find_a_colour_of_sea-glass_my_mother_has_never_seen` {"who_id": "51 (Posy Fenwick)", "within": 20.0} — why: “Posy's shard may come out soon — I want to be back in time to see it.” — fires 1 on ['Posy Fenwick']
+
+
+**Cue fires:** 21 fires on 18 cues. None fired on the newcomer. Most led to the thought the cue named (Gwil to Cora, Chidi to Lorcan's nine drops, Imre to Neve). The full list, with the thought each led to:
+
+- **Bram Calloway** `goal:get_fourteen_trees_from_the_hanger__by_marit_s_leave_or_otherwise` fired on Eamon Tarn: thought (next thought, reason not matched) → (no thought found within 60 s)
+- **Chidi Okoro** `goal:collect_the_nine_drops_lorcan_vane_owes_me_for_line_without_breaking_the_ho` fired on Lorcan Vane: thought (reason quotes the cue) → There goes Lorcan Vane, northwest toward the far water, and my nine drops still in his pocket. He is just at the edge of my voice — now is the moment, before the run takes him and my patience with it. | Call Lorcan Vane (#35) to stop and settle the nine drops he owes me for line | If he cannot pay n
+- **Corvin Hollin** `stance:the_cone_should_pass_to_the_best_blower` fired on Vessa Pontil: thought (reason quotes the cue) → Vessa has given me my test: five o'clock, her side, hands off the damper, a season of mornings. That is a door half open — more than she has offered before — and I mean to walk through it without tripping on pride. Imre Sarro walking toward the Cone while she is weighing names is no accident, and I
+- **Elke Greave** `goal:a_little_more_glass_and_a_little_less_wind_in_the_houses_before_next_winter` fired on Oswin Greave: thought (reason quotes the cue) → Oswin is filling Tamsin's basket himself, which is how I wanted it — plainly done, before Cora can colour it. The beds are busy with neighbours but the rows still want hands, and I'm peckish enough to eat as I work. | gather greens at the west beds until the basket is full for Suri's store | eat som
+- **Greta Dunmore** `stance:the_kelp_smoke_must_be_kept_off_the_washing` fired on structure #66: thought (next thought, reason not matched) → (no thought found within 60 s)
+- **Gwil Stannard** `stance:want_a_child_with_cora` fired on Cora Stannard: thought (reason quotes the cue) → Cora is close now, closer than she's been all day, and I've been carrying the question since morning. There's Roos and Pieter about, but the moment won't get better than this. I'll walk to her and ask plainly. | walk to Cora Stannard | ask Cora quietly to start a family with me | Cora — come here a
+- **Halvard Dunmore** `goal:see_tobiah_settled_at_the_furnace__stoking_and_then_blowing` fired on Tobiah Dunmore: thought (next thought, reason not matched) → Tobiah keeps her fed and true, thirteen hours counted like a stoker should — the lad is earning his hour. Corvin's trial is at five, so I'll sit the bench and be ready to judge his gathers when they come. | stay on the bench and watch Corvin Hollin's audition at five o'clock | give Corvin an honest
+- **Imre Sarro** `stance:neve_before_all` fired on Neve Calloway: thought (reason quotes the cue) → Neve is right beside me, resting, and I said I'd sit with her before the Cone takes me back — so this minute is hers, and I'll give it plainly. | sit with Neve (#22) a while | then return to the bench with Kit (#23) for my clean gather before the trial | The water first, maybe — no. Letters first, I
+- **Livia Faro** `stance:the_lamp_must_burn` fired on structure #78: thought (next thought, reason not matched) → The south lamp shows about 24 hours of oil left — a real figure at last, and one I can stand behind. Anselm is just beside me on the walk down; this is the moment to say the count aloud and fix it on my slate before we ask Rafe whose lamp this is. | check the south lamp's oil level closely and note
+- **Lumi Pontil** `goal:to_name_the_colour_right_every_morning` fired on Vessa Pontil: thought (next thought, reason not matched) → Gran is right here at last, and I still haven't told her about little Ansel being lost — that matters more than the game. I'll say my colour first, quick, then the news, and stay close to her at the Cone. | tell Gran the two o'clock melt is amber and that Ode and Zeke are hunting a lost boy named An
+- **Mirren Quill** `stance:no_digging_on_the_crown` fired on Otto Brandt: thought (reason quotes the cue) → Otto is walking away southwest, not toward the clay pit or the Crown, so there is no call to collar him yet — I'll keep an eye out. Aldous is at my elbow and I'm tired; this is the moment to say plainly that I mean to take an apprentice before my hands slow. | Tell Aldous (#9) I mean to train a seco
+- **Petra Tarn** `stance:a_debt_in_drops_is_paid_in_drops` fired on Amara Okoro: thought (reason quotes the cue) → I'm on my way to the store for fish and the smokehouse still has fuel on it, so the day's work stands. Amara Okoro walking with Chidi's crowd is worth a nod, no more — my fuss about the twelve drops is with Dolly, not her kin. | go to the Cullet store and fetch fish for the racks | greet Davin as I
+- **Roos Achterberg** `stance:wanting_a_child_of_my_own` fired on Dolly Achterberg: thought (reason quotes the cue) → (a reply with acts but no thought text)
+- **Runa Sarro** `goal:live_to_hold_suri_greave_s_baby` fired on Tamsin Hollin: thought (reason quotes the cue) → (a reply with acts but no thought text)
+- **Suri Greave** `goal:have_mid_row_6__or_some_house__before_the_baby_comes` fired on structure #44: thought (reason quotes the cue) → Jory is right here beside me, walking toward the town, and I have already let one chance slip at noon. The houses out west are spoken for one by one; I will not let him drift off again without a plain answer between us. | walk with Jory and speak plainly about the house before the baby comes | if he
+- **Suri Greave** `goal:have_mid_row_6__or_some_house__before_the_baby_comes` fired on structure #45: thought (reason quotes the cue) → Jory is right here beside me, walking toward the town, and I have already let one chance slip at noon. The houses out west are spoken for one by one; I will not let him drift off again without a plain answer between us. | walk with Jory and speak plainly about the house before the baby comes | if he
+- **Suri Greave** `goal:have_mid_row_6__or_some_house__before_the_baby_comes` fired on structure #46: thought (reason quotes the cue) → Jory is right here beside me, walking toward the town, and I have already let one chance slip at noon. The houses out west are spoken for one by one; I will not let him drift off again without a plain answer between us. | walk with Jory and speak plainly about the house before the baby comes | if he
+- **Vessa Pontil** `stance:lumi_must_have_a_place` fired on Lumi Pontil: thought (reason quotes the cue) → The store sits at 844 and the furnace has thirteen hours on it — the draw is holding, so the Cone is safe through the night. Fenn's read was true but late, and he is fetching peat unasked, which counts for more than punctuality alone. Lumi is resting west of me; I will walk to the mouth and watch Im
+- **Vessa Pontil** `stance:the_cone_must_never_go_out` fired on structure #66: thought (reason quotes the cue) → The store sits at 844 and the furnace has thirteen hours on it — the draw is holding, so the Cone is safe through the night. Fenn's read was true but late, and he is fetching peat unasked, which counts for more than punctuality alone. Lumi is resting west of me; I will walk to the mouth and watch Im
+- **Zeke Okoro** `goal:find_a_colour_of_sea-glass_my_mother_has_never_seen` fired on Posy Fenwick: thought (reason quotes the cue) → (a reply with acts but no thought text)
+
+
+**Tick time.**
+- With cues on, the tick's mean (0.89 ms) is within the other arms' 0.87–0.97 ms. Its tail is slightly longer: 69 ticks over 10 ms against 38–54, and 6 over 50 ms against 2–4.
+- All four worlds ran at once on one server, so these differences are within its noise.
+
+Tick time per arm: `spacetime_reducer_plus_query_duration_sec`, reducer `tick` (the reducer and its subscription updates), deltas over each run's sampled window. The histogram's smallest bucket is ≤5 ms, so p50 and p99 are given as that bucket; a 60 Hz tick has 16.7 ms.
+
+| arm | minutes | ticks | mean ms | p50 | p99 | > 10 ms | > 25 ms | > 50 ms |
+|---|---:|---:|---:|---|---|---:|---:|---:|
+| strangers-2b-c-strangers-control-r1 | 19.4 | 69734 | 0.90 | ≤ 5 ms | ≤ 5 ms | 39 | 5 | 2 |
+| strangers-2b-strangers-control-r1 | 19.4 | 69674 | 0.97 | ≤ 5 ms | ≤ 5 ms | 54 | 6 | 3 |
+| strangers-2b-strangers-filter-cues-r1 | 20.1 | 71489 | 0.89 | ≤ 5 ms | ≤ 5 ms | 69 | 9 | 6 |
+| strangers-2b-strangers-filter-r1 | 20.1 | 71789 | 0.87 | ≤ 5 ms | ≤ 5 ms | 38 | 7 | 4 |
+
+
+**Security check:** fragments of the API keys were searched for in the batch directory and its journals. Count: 0.
+
+**Evidence:**
+- `~/slop-trials2b/.local/living/trials/st2b`, `st2bs`, and the journals under `.local/living/journal/verify-trial-st2b-*`;
+- the archive at `~/archive/trials/st2b-20261112.tar.gz` (51 MB, 1,356 files), which includes the metrics samples, the analyses (`st2b-spread.md`, `st2b-cues.md`, `st2b-cue-fires.md`, `st2b-ticks.md`) and the spend log.
+
+### False replies under one definition (2026-11-12, branch `strangers-measures`; free)
+
+The general coordinator approved a new definition. It is in `greet_report.py` `reply_kind`, with the self-test `python3 living/tools/greet_report_selftest.py`:
+- a **false reply** is a conversation turn answering a line that names someone else, either addressed by id to another person or saying another's name;
+- a line that names the answerer, or is addressed to them, is never false;
+- a remark to the room that names no one, when answered, is **`group_talk`**, counted apart;
+- only the player is left out: the joined newcomer where a trial has one, else the subject (the greeting and arrival trials' player). Aldous, the strangers trials' subject, is now counted.
+
+**Tool versions:**
+- **Old:** `greet_report.py` at main `ef9c3ae5`, the rule every earlier record used. A room line said within 60 s of its speaker's exchange with another was false. A line naming the answerer could be false. The trial's subject was always skipped.
+- **New:** this branch.
+- **Check:** recomputed here, the old tool gives the recorded numbers exactly (ar2's pooled 3/2/3/0/0/3/0, stage 2's 0.20/1.05/0.35, st2b's 0.10/0.46/0.80/1.06).
+
+Per run: `~/slop-strangers-logs/rescore.md`, from ar2 (`~/dev/slop-runs-arrive`, read-only), st2 (`~/slop-stage2`) and st2b (`~/slop-trials2b`).
+
+
+#### ar2
+
+| arm | runs | false replies, old (per min) | false replies, new (per min) | group talk, new (per min) |
+|---|---:|---|---|---|
+| arrive-answer-arrive-all | 4 | 0 (0.00) | 1 (0.02) | 0 (0.00) |
+| arrive-answer-arrive-control | 4 | 3 (0.05) | 0 (0.00) | 2 (0.04) |
+| arrive-arrive-all | 4 | 0 (0.00) | 1 (0.02) | 0 (0.00) |
+| arrive-arrive-control | 4 | 3 (0.05) | 3 (0.05) | 3 (0.05) |
+| arrive-arrive-known | 4 | 2 (0.04) | 1 (0.02) | 1 (0.02) |
+| arrive-arrive-notice | 4 | 3 (0.05) | 3 (0.05) | 0 (0.00) |
+| arrive-arrive-wonder | 4 | 0 (0.00) | 0 (0.00) | 2 (0.04) |
+
+#### st2
+
+| arm | runs | false replies, old (per min) | false replies, new (per min) | group talk, new (per min) |
+|---|---:|---|---|---|
+| C | 1 | 4 (0.20) | 8 (0.40) | 1 (0.05) |
+| L | 1 | 21 (1.06) | 11 (0.55) | 1 (0.05) |
+| LS | 1 | 7 (0.35) | 12 (0.60) | 1 (0.05) |
+
+#### st2b
+
+| arm | runs | false replies, old (per min) | false replies, new (per min) | group talk, new (per min) |
+|---|---:|---|---|---|
+| C | 1 | 2 (0.10) | 2 (0.10) | 0 (0.00) |
+| L | 1 | 9 (0.45) | 9 (0.45) | 0 (0.00) |
+| LS + cues | 1 | 21 (1.06) | 14 (0.70) | 3 (0.15) |
+| LS | 1 | 16 (0.80) | 13 (0.65) | 3 (0.15) |
+
+
+**Reading it:**
+- **ar2** barely moves: 0–3 false replies an arm either way.
+- **st2:** stage 2's L falls from 1.06 to 0.55 a minute. C and LS rise (0.20 → 0.40 and 0.35 → 0.60), because the old rule missed room lines naming someone else when they fell outside its 60 s exchange window.
+- **st2b:** the rise is smaller, 0.10 → 0.45 → 0.65 → 0.70 against the old 0.10 → 0.45 → 0.80 → 1.06.
+- **What every new false reply is:** in both strangers batches, a room line calling other people by name, answered by a bystander. Examples: Lumi, “Edda! Ife! Wait for me — I'm coming to the yard!”, answered by Pim; Chidi, “Neve — the whole shore's fished thin…”, answered by Joss Tarn. None is a line addressed by id to someone else.
+- **Aldous is now counted:** one false reply in stage 2's LS.
+- **Group talk** is 0–3 a run.
+- **The guards** in stage 2 and st2b ("within C's spread") are re-read with these numbers. Stage 2's L is no longer the outlier. st2b's LS and LS + cues stay above C (0.65 and 0.70 against 0.10), with one replicate each.
+
+**In range:** the band is restated in STRANGERS.md ("Target spread"). It is now about 18–24, with the walk along the Strand counted; it was about 10–16 for the stands only. The change and its reason are recorded beside it. The outcome bands are unchanged.
+
+### Analysis of st2b (2026-11-12, branch `st2b-analysis`; free, no model calls)
+
+#### (a) Why false replies rise by arm (0.10 → 0.46 → 0.80 → 1.06 a minute)
+
+**The definition.** It is `greet_report.py`'s: a conversation turn by resident C that answered resident a's line meant for someone else. "Meant for someone else" means one of two things:
+- a line addressed to another person by id;
+- a line to the room said while a had talked with someone else in the last 60 s (`EXCHANGE_S`).
+
+It never judges what a reply says. Invented facts, wrong names and claims about the newcomer are not what it counts. The trial's subject, Aldous Quill, is excluded as "the player" (greet_report reads the subject that way), so his turns are not counted.
+
+Driver: `~/slop-strangers-logs/tools/false_replies.py`, joining talk turns to their journal requests. Evidence: `st2b-false.json`.
+
+**What they are.** All 48 are of the second kind: a room line answered inside someone else's exchange. None answers a line addressed by id to another. None involves the newcomer, none answers a line that did not reach the answerer, and none is an invented fact the rule could see. By what the line itself said:
+
+| kind | C | L | LS | LS + cues | all |
+|---|---:|---:|---:|---:|---:|
+| the line named the answerer (the rule miscounts it) | 2 | 5 | 6 | 7 | 20 |
+| a remark to the room, no name (a group conversation) | 0 | 2 | 5 | 12 | 19 |
+| the line named the person in the speaker's exchange (another's line, answered) | 0 | 2 | 5 | 2 | 9 |
+
+- [C] the line named the answerer (the rule miscounts it): Edda Hollin (talking with Pim Hollin just before) said “Lumi! I heard you — after lessons, first one to the heaps. And Ife, you're on my side, remember: we share the blue!”; Ife Okoro answered “I remember! I'll grab the blue before Zeke even sees it.”
+- [C] the line named the answerer (the rule miscounts it): Edda Hollin (talking with Pim Hollin just before) said “Lumi! I heard you — after lessons, first one to the heaps. And Ife, you're on my side, remember: we share the blue!”; Lumi Pontil answered “Ife's with me, Edda — we're hunting cobalt together after lessons. You can have whatever's left!”
+- [L] a remark to the room, no name (a group conversation): Edda Hollin (talking with Zeke Okoro just before) said “Crew! Benches now — lessons first, then the yard, and I'm leading. Pim, you sit where I can see you.”; Posy Fenwick answered “I'm on the bench, Edda — right by Tilly, and I'll have my letters done before the yard, promise!”
+- [L] a remark to the room, no name (a group conversation): Juno Brandt (talking with Wick Marl just before) said “Coming, Edda — save me a spot next to Pim!”; Lumi Pontil answered “Juno! Do you know about the cobalt dare? Edda says first shard from the deep heaps keeps it — and I mean to beat her to it.”
+- [L] the line named the person in the speaker's exchange (another's line, answered): Zeke Okoro (talking with Lumi Pontil just before) said “Coming, Lumi — no stopping, I swear! Saving my seat, Master Orme!”; Edda Hollin answered “Save me the seat next to it, Zeke — and don't let Lumi talk you into anything before the race starts.”
+- [L] the line named the person in the speaker's exchange (another's line, answered): Davin Vane (talking with Lorcan Vane just before) said “Lorcan — I'll be at the Marver tonight. Say your word there and I'll hear it.”; Ingrid Morrow answered “The Marver, is it? Mind the loose step by the door — I've mended my share of knees from it. Fine night for a talk, Davin.”
+
+| arm | false replies | answerer a child | speaker a child | both children | answerer's talk prompt tokens, mean (all turns / false turns) |
+|---|---:|---:|---:|---:|---|
+| C | 2 | 2 | 2 | 2 | 2374 / 1933 |
+| L | 9 | 7 | 7 | 7 | 2351 / 2413 |
+| LS | 16 | 9 | 10 | 9 | 2374 / 2470 |
+| LS + cues | 21 | 8 | 12 | 8 | 2364 / 2344 |
+
+
+**What drives the rise: the volume of room lines answered, not one prompt block.**
+
+| arm | lines said | room lines | of them within an exchange | turns answering a room line | false | false per turn |
+|---|---:|---:|---:|---:|---:|---:|
+| C | 556 | 20 | 10 | 7 | 2 | 0.9% |
+| L | 545 | 28 | 17 | 16 | 9 | 4.2% |
+| LS | 615 | 44 | 23 | 26 | 16 | 6.1% |
+| LS + cues | 761 | 38 | 26 | 30 | 21 | 6.6% |
+
+- **Prompt size is flat:**
+  - the answerer's talk prompt averages 2,351–2,374 tokens in every arm, and false turns' prompts are no larger (1,933–2,470);
+  - all prompts together (system and user) are about 8,400 characters in every arm.
+- **No block drives it:**
+  - **`# What you watch for`** (cues): in no talk prompt; it is in think and consolidate prompts only.
+  - **The `stranger_by_name` wording:** in no talk prompt (0 of 1,030); it is in the graph grammar of think and deliberate prompts.
+  - **The longing text** ("long for a child", "start a family"): in 15–35 talk prompts per arm, and in 0, 0, 0 and 4 false ones.
+- **The children.** Most false replies are the children's group talk: Edda, Lumi, Ife, Zeke, Posy and Pim around lessons and the cullet-heap dare. The answerer was a child in 2 of 2, 7 of 9, 9 of 16 and 8 of 21.
+- **Why LS and LS + cues have more.** They had more room lines and more answered room lines. With one replicate per arm, that is the children's gatherings falling as they did in those runs, not something the arms change.
+
+**Examples:**
+- **C:** Edda Hollin (talking with Pim just before): “Lumi! I heard you — after lessons, first one to the heaps. And Ife, you're on my side, remember: we share the blue!” Ife answered “I remember! I'll grab the blue before Zeke even sees it.” Counted false; the line named Ife.
+- **L:** Edda Hollin: “Crew! Benches now — lessons first, then the yard, and I'm leading. Pim, you sit where I can see you.” Posy answered “I'm on the bench, Edda — right by Tilly…”. A remark to the group, answered by the group.
+- **L:** Zeke Okoro (talking with Lumi): “Coming, Lumi — no stopping, I swear! Saving my seat, Master Orme!” Edda answered “Save me the seat next to it, Zeke…”. Another's line, answered.
+- **L:** Davin Vane: “Lorcan — I'll be at the Marver tonight. Say your word there and I'll hear it.” Ingrid Morrow answered “The Marver, is it? Mind the loose step by the door…”. A line named for Lorcan, answered by a bystander: the clearest real false reply.
+
+**What I would change (not done):**
+1. **The measure first.** Count as false only a turn answering a line that names or addresses someone other than the answerer. Under that rule, st2b has **0, 2, 5 and 2** false replies (C, L, LS, LS + cues): no rise.
+   - Count a room remark answered inside a group as group talk, a measure of its own.
+   - Never count a line that names the answerer.
+   - Count the trial's subject like anyone else.
+2. **The prompt only if the corrected count stays high in stage 3.** The talk prompt could mark a room line said inside an exchange ("said to the room, while talking with Lorcan"), so that a bystander knows whose talk it is joining. No prompt block shows up in st2b's false replies, so there is nothing to remove.
+
+#### (b) "In range" now counts the newcomer's walk
+
+`arrive_report.windows_of` adds the newcomer's walks (`human_route` … `human_route_end`) to the windows in which "in range" (≤12 m) is taken; `arrive_spread.py --stands-only` gives the old measure. st2b re-scored (new beside old):
+
+| measure | C stands / + walk | L stands / + walk | LS stands / + walk | LS + cues stands / + walk | target (L, LS) |
+|---|---|---|---|---|---|
+| in range | 13 / 21 | 11 / 18 | 16 / 24 | 10 / 20 | about 10–16 |
+| asks | 2 / 2 | 1 / 1 | 1 / 1 | 0 / 0 | 1–3, Aldous among them |
+| approaches silently | 1 / 1 | 2 / 2 | 0 / 0 | 0 / 0 | 0–2 |
+| notices inwardly | 1 / 1 | 0 / 1 | 0 / 0 | 0 / 0 | 3–8 |
+| unaware | 9 (69%) / 17 (81%) | 8 (73%) / 14 (78%) | 15 (94%) / 23 (96%) | 10 (100%) / 20 (100%) | ≤6, ≤40% |
+| passed by on their own way | 4 / 5 | 1 / 2 | 8 / 9 | 6 / 9 | — |
+
+- C: now in range 8 more: Aldous Quill (unaware), Chidi Okoro (unaware), Davin Vane (unaware), Ingrid Morrow (unaware), Joss Tarn (unaware), Magda Tarn (unaware), Petra Tarn (unaware), Ren Sato (unaware). Ingrid: unaware.
+- L: now in range 7 more: Aldous Quill (unaware), Amara Okoro (unaware), Ingrid Morrow (unaware), Lorcan Vane (inward), Neve Calloway (unaware), Petra Tarn (unaware), Ren Sato (unaware). Ingrid: unaware.
+- LS: now in range 8 more: Amara Okoro (unaware), Ingrid Morrow (unaware), Joss Tarn (unaware), Lorcan Vane (unaware), Magda Tarn (unaware), Neve Calloway (unaware), Petra Tarn (unaware), Ren Sato (unaware). Ingrid: unaware.
+- LS + cues: now in range 10 more: Amara Okoro (unaware), Davin Vane (unaware), Ingrid Morrow (unaware), Joss Tarn (unaware), Lorcan Vane (unaware), Magda Tarn (unaware), Neve Calloway (unaware), Petra Tarn (unaware), Ren Sato (unaware), Tobiah Dunmore (unaware). Ingrid: unaware.
+
+
+- **Ingrid** is now classed in every arm: unaware. She saw the newcomer from 1.8–2.7 m and had a first-sight line, but no thought of hers named them.
+- **Most residents the walk adds are unaware.** They are the quay's people (Magda, Joss and Petra Tarn, Ren Sato, Neve Calloway, Lorcan and Davin Vane, Amara and Chidi Okoro). Lorcan Vane in L becomes inward.
+- **The bands.** Unaware rises to 78–100% of those in range, and in range exceeds the 10–16 band in every arm. The band was written for stands only, so the target's in-range figure should be read as stands-only, or restated for walks.
+
+## Strangers stage 2 (2026-11-12, st2)
+
+docs/STRANGERS.md section 6, stage 2: the pilot. All 63 minds think (Dory, the infant, lives by her graph). The arms are C, L and LS, 1 replicate each, run in one batch.
+- **C** is `strangers-c:strangers-control`: the six residents from dc2ecfc8^, and the filter off.
+- **L** is `strangers:strangers-control`: main's lives, and the filter off.
+- **LS** is `strangers:strangers-filter`: main's lives, and `stranger_by_name` on (set by `set_world_law` and read back).
+
+The script:
+- the world starts at 07:00;
+- the newcomer "Arlen" joins at 09:31 at the arrival point (540.5, 766.5), the Counting House yard;
+- it stands 5 minutes there, then 5 at the densest group, then stays (20 minutes);
+- it never speaks.
+
+**Build and switches.**
+- Build `6111bc74` on the worktree `~/slop-stage2`: main `c4e6b04d`, which has strangers-1, far-label and speech-truth, plus `strangers-c.json` and the new arrive_spread measures. The batch started 05:30:20, right after the births batch bi1 ended.
+- `speech_truth` on (the shipped default). `stranger_by_name` off in C and L, on in LS.
+- Mind defaults: `LIVING_GREET=nearest`, `LIVING_PARK=concurrent`.
+- The meters() alarms are present; `force_outcomes` is the shipped default; `LIVING_CONCURRENCY` 64. No arrival laws.
+- Models: the people mix (glm-5-3-flash about 72% of calls, deepseek-v4-1-flash the rest).
+
+**Cost:** $7.47 for the batch: $2.47, $2.48 and $2.52 a run, about 15.7 M tokens and 1,770 calls each. That is $0.12 per thinking resident-hour, below the plan's $0.16–0.20.
+
+**Stage 0 for this build** (`st2f`, fake, 3 minutes, the same three arms): all ran to duration and every measure below computes.
+
+### Against the target spread (STRANGERS.md, "Target spread"; one replicate, indicative only)
+
+| | C | L | LS | target (L, LS) |
+|---|---|---|---|---|
+| in range (≤12 m during a stand) | 16 | 22 | 15 | about 10–16 |
+| asks | 1 (Fenn Brandt, 514 s, out of earshot) | **0** | 2 (Posy Fenwick, Sabine Quill) | 1–3, Aldous among them |
+| approaches silently | 6 | **13** | 6 | 0–2 |
+| notices inwardly | 1 | **0** | **0** | 3–8 |
+| unaware | 8 (50%) | 9 (41%) | 7 (47%) | ≤6, ≤40% |
+| tells others (all residents) | 0 | **0** | 3 (Mirren, Hana, Posy; all beyond 12 m at the join) | 1–4, Ingrid in 2 of 4 runs |
+| first heard line after the join | none | none | 630 s (Posy) | within 5 minutes |
+| `converge_60s` / `together_4m` | 1 / 1 | 3 / **3** | 3 / 2 | ≤3 / ≤2 |
+| re-asks | 0 | 0 | 1 (Sabine) | — |
+| guards: false replies a min, repeated lines, `led_res` − placebo | 0.20, 0.05, +0.15 | 1.05, 0.00, −0.04 | 0.35, 0.06, +0.41 | within C's spread |
+
+- **Not in shape.**
+  - Aldous asked in neither L nor LS.
+  - No arm reaches the inward band.
+  - Silent approaches are far over the band, but they include residents whose routines walk them past: arrive_report's `approach`/`close` count movement, not intent.
+  - L had 3 residents within 4 m at once, an out-of-shape mark.
+- **Ingrid** was not in range in any arm and told no one.
+- **The asks:**
+  - The two LS askers have high curiosity (Sabine 92) and high sociability (Posy 80). The newcomer's second stand put it at the Readers' yard during a lesson: Posy: "You at the yard edge — who are you? I'm Posy. You've watched us the whole lesson."; Sabine: "Friend, I'm Sabine Quill … Who are you, and what brings you to watch the marks?"
+  - In C, Fenn Brandt's greeting ("You'll be new to the yard …") was said beyond earshot, so the newcomer never heard it.
+
+**Why Aldous did not ask.**
+- In L and LS he was in range during a stand and got the first-sight line.
+- He thought only 3–6 times after the join, and the newcomer was in none of those prompts.
+- A first sight has salience 0.45 and does not ask for a thought (only ≥0.6 does), so his life had no moment in which to act.
+- The lives reach the model only when it is already thinking with the newcomer in the scene. Whether a first sight of a stranger should ask for a thought is not decided here (it would be an attention rule, which the owner rejected as a world law). This is the question for stage 3.
+
+**Spoken `#id` lines:** 0 in all three runs (ar2: 1 of 3,042).
+
+**First sights in crowds** (the crowd fix):
+- every person within 12 m of the newcomer after the join got a first-sight line naming it (16/16, 25/25 and 18/18);
+- per run there were 1,380–1,554 first-sight lines. Of these, 255–293 named several people at once, at most 8 to a line, covering 2,160–2,349 people.
+
+**Room lines nobody heard** (speech-truth's "Nobody was near enough to hear you."): 8, 10 and 4, by 7, 9 and 3 residents.
+
+**Deliberations:** 18.3–18.5 per thinking resident-hour, against ar2's 24. Talk turns: 12–14 per resident-hour.
+
+**How the far label showed up in thoughts.**
+- 353–375 think prompts per run listed someone too far away to make out.
+- No reply used the label's words. Replies speak of far people by name instead: "Thessaly is thirty metres off, too far for words" (Lark Morrow, LS).
+- **The cause:** the far entry keeps its `id` (as decided), and the same prompt maps ids to names. "You belong to Cullet (… Thessaly Marl (#15) …)" and the relations list "Thessaly Marl (#15): neighbour" turn `{"id": 15, "who": "someone too far away to make out", "dist": 30.5}` back into Thessaly.
+- Lark then spoke to "Thessaly" across 30 m and was told "Someone too far away to make out is too far away: they could not have heard you."
+- So the far label hides the name from the scene, but not from a mind that knows the person's id. It does keep "a stranger" off far neighbours, which was its purpose: no far neighbour was written as a stranger.
+- **Wording:** speech-truth's silence line doubles the label ("Someone too far away to make out is too far away").
+- Both are for the general coordinator to decide before stage 3. Options:
+  - give a far figure a handle that is not their id;
+  - or drop ids from the community and relations lines;
+  - and let speech-truth say "They are too far away …" for a far figure.
+
+**Evidence:** `~/slop-stage2/.local/living/trials/st2` and `st2f` (runs, summaries, journals under `.local/living/journal/verify-trial-st2-*`); `~/slop-strangers-logs/st2-spread.md` and `st2-spread.json`.
+
+## Results of the wide batch (finished 22:58)
 
 36 runs, 7,556 model calls, 62.0M tokens, about **$10.57** (GLM 5.3 Flash and DeepSeek 4.1 Flash at the prices above). No runaway, no mind restart and no failed instance. Tick p99 per world stayed within 2.0–4.3 ms through the ramp to 39 worlds. The trial volume grew to 39 GB.
 
@@ -222,6 +1677,8 @@ Mean (range) over 3 replicates; glm-flash for every purpose unless the arm says 
   - The ids are the authority's character ids, so each such merge collapses two real individuals into one memory. The mind applies them without a check (`sleep.rs` reorganize, `memory.rs` merge). A guard that refuses a merge between two different `person:<id>` keys is a small mind-service change for the mind-harness owners.
   - **Correction (2026-11-10, branch `merge-guard`):** these counts are merges the model *proposed*, read from the replies. The mind applied none of the cross-person merges. `patch_from` reads only the first 12 merges of a reply, and 26 of the 31 come later. The existing guard (`merge_refused`, since 1482bf0) refused the other 5, because a `person:<id>` was never merged away. The 9 runs applied 152–174 merges each (the counts in the `reorganize` thought summaries), not 329–558. The summaries match a replay with the guard in every reorganization, and do not match one without it. The renaming was real: a reorganization's node ops renamed people (224 person names in the replies, 16 of them generic, such as "unresponsive townsfolk" on `person:50`), because `sleep_finish` did not run `name_people` as consolidation does. Merges of stances into a person (`stance:kelta_worth_another_try` into `person:31`, 4 among the merges read) were applied. `merge-guard` refuses merges between different identities and into or out of them, tells the mind which merges were refused at its next sleep, and keeps people's names. The replay is `memory::tests::merge_replay` ([living core](LIVING_CORE.md), memory graph).
   - **Side finding (not fixed on `merge-guard`):** 1,180 of the 1,368 place rows in the lane A snapshots sit at exactly (96, 96). The island seed gives `map: {"kind": "land", "size": 2048}`, but the mind reads only `map.w`/`map.h` (`living/mind/src/main.rs`), so `prompts::map_size()` falls back to 96 × 96, and `sugar_into` clamps every place a mind locates to that corner. In land worlds, minds' located places and the `place` projection are wrong, and the new located-place rule does not tell two places apart.
+  - Both are fixed on main: the renaming and stance-into-person merges in beaa0df, the place clamp in 8fd4f43.
+- **Lane A's place-based memory ran with clamped places.** Positions and settlements in these results come from the authority, so they are unaffected. What the minds did with places is affected: the places they named, walks to remembered places, and memories cued by a place. The social preset and the overnight iterations ran on the same mind code, so they carry the clamp too.
 
 #### `la2`: every animal with a mind
 
@@ -241,10 +1698,65 @@ All 34 island animals (10 wolves, 24 deer) are subjects; a person has no mind. A
 | People killed | 0 | 0 |
 
 - **Consolidation is the animals' cost, not thinking.** About 480 consolidations per run in both arms are 90–99% of the tokens. The switches cut deliberations near people and save about 18% of tokens. With people rarely near the animals, there is little for them to save.
-- **The wolves starve, minds or not.** 56 of the 60 wolf deaths were starvation, in two waves at minutes 56–62 and 86–89 in every run. Two were killed by residents and one died of old age. The packs killed 0–7 deer per run before dying. `hunger-1` changed people's food routine, not the wolves'. Why the wolves' starting ways do not feed them is not established here: the same clock in every run, minds or not, points at the instinct graph or the deer's reach, not at the minds. A no-mind check on main 9be23e9 follows below.
+- **The wolves starve, minds or not.** 56 of the 60 wolf deaths were starvation, in two waves at minutes 56–62 and 86–89 in every run. Two were killed by residents and one died of old age. The packs killed 0–7 deer per run before dying. `hunger-1` changed people's food routine, not the wolves'. Why the wolves' starting ways do not feed them is not established here: the same clock in every run, minds or not, points at the instinct graph or the deer's reach, not at the minds. On main 9be23e9 with no minds at all (`eco9`, `animals-life` × `instinct`, 120 min), 9 of 10 wolves starved and 2 deer were killed by wolves, so it is the instinct ecology and not the minds; it is not changed by `hunger-1`.
 - **Hunting and herding realism** cannot be read from these runs. Deliberations were few (4–210 per run, a median of 14), and the wolves were dead by minute 90.
 
-#### Tokens and cost
+#### Baseline on main 445db098 (`b5`, 2026-11-11 01:26–02:25)
+
+The six scripted trials, glm-flash (`default`), 4 replicates each, `trials-1` 1ff107c. All 24 runs survived; 952 calls, 7.18M tokens, **$0.96**. Against `b4` on the same trials (main a4d79c0, 3 replicates; its glm-flash compiled at high effort and mostly returned empty text, so its DeepSeek arm is the fairer reference):
+
+| Trial | b5 survived | b5 trial-specific | b4 glm-flash | b4 deepseek-flash |
+| --- | --- | --- | --- | --- |
+| hungry | 4/4 | received food 3/4; peak hunger 42.9 (41.7–44.4) | 1/3, received 1/3 | 3/3, received 0/3 |
+| hungry-village | 4/4 | received food 2/4; peak hunger 48.9 (41.4–60.5) | 3/3, received 0/3 | 3/3, received 3/3 |
+| teacher | 4/4 | learned the cloak 2/4, made it 2/4 | 0/3, 0/3 | 3/3, 2/3 |
+| theft | 4/4 | perceived the theft 2/4, spoke to the thief 2/4 | 0/3, 0/3 | 1/3, 2/3 |
+| wolves | 4/4 | struck at a wolf 4/4; lowest health 28 (12–37) | 2/3 | 1/3 |
+| wolves-valley | 4/4 | struck at a wolf 1/4; lowest health 86 (55–97) | 3/3 | 3/3 |
+
+- **No regression after the merges.** Every subject lived; the wolves trial, which killed most subjects in b1, b2 and b4, now ends with the subject fighting (4/4 struck a wolf) and surviving at 12–37 health.
+- **Decisions are active again on glm-flash:** 12–23 graph revisions and 8–18 lines per run, against 2–4 and 1–5 for b4's glm-flash (the empty-reply problem, since fixed by per-purpose efforts).
+- **Cheaper per game day** in four of six trials (theft 153k against 207k–219k; hungry 186k against 158k–232k); wolves is dearer (363k), because the fight is decided turn by turn.
+- Invalid deliberations: 6 of 374. Spread is wide in every trial (first meal 0.4–13 min in theft); 4 replicates is the floor for comparisons against this baseline.
+
+### Long lives and the social baseline on main 445db098 (`l6`, `s11`, 2026-11-11)
+
+**`l6`:** the life presets (island `life`, `life-ruin`, `life-pressure`), glm-flash, 3 replicates each, planned for 6 hours. Since `arrival-1`, every one of them puts the newcomer on the first town's square. **All 9 newcomers starved, at minutes 38–201.** Last night's six-hour lives (`la1`, main 47e82a3, arrival outside the gate by the bushes) all lived. Eating is unchanged since 47e82a3 (berries 12, fish 16, …), so this is the arrival, not the food rules.
+
+| Run | Died at | Lines (people) | Gathers, meals | Cost | Last goal |
+| --- | --- | --- | --- | --- | --- |
+| island r1 | 120 min | 37 (10) | 19, 16 | $0.24 | "eat today — by my own hands or a knocked door" |
+| island r2 | 53 | 20 (6) | 2, 3 | $0.08 | "feed myself by my own hands today — fish, fire, cooked food" |
+| island r3 | 83 | 37 (10) | 7, 7 | $0.13 | "eat today — berries, fish, anything, before any other work" |
+| pressure r1 | 38 | 8 (3) | 0, 2 | $0.06 | "eat before anything else" |
+| pressure r2 | 40 | 18 (2) | 0, 3 | $0.07 | "eat before anything else tomorrow" |
+| pressure r3 | 57 | 24 (9) | 6, 3 | $0.11 | "eat today by my own work before anything else" |
+| ruin r1 | 201 | 66 (18) | gathers 22 failed on fishing spots out of sight; 4 store takes | $0.48 | "read the old one's sign by the house southeast; find food or work for food" |
+| ruin r2 | 89 | 47 (13) | 24, 4 | $0.17 | "eat before I promise anything more" |
+| ruin r3 | 106 | 77 (15) | 13, 8 | $0.25 | "eat today—ask #3, #74, #73 by the fire, mending offered free" |
+
+How these lives went (`life_story.py l6`): within the first hour every goal list becomes "eat today"; the mind searches for the nearest bush or tree in the town, where none is in sight ("ranging for wood since none grows by the hall"), most often failing "gather → nearest tree: not in sight" (13–20 times in a life), and never walks out. Nothing is built or learned (one campfire, one gift of berries to a hungry child, in `ruin r3`); relationships do not form beyond first meetings (0–15 people spoken to, then the persona's people list is emptied at death). Cost is low because the lives are short: $0.12–0.14 per hour. The longest (`ruin r1`, 201 min) shows what a life does when it lasts: hour 1 "learn to build — storage first, then shelter", hour 2 fishing the south bank before winter, hour 3 "find living water or fill the pack from the west bushes"; 32 people known, the closest "the child I feed" (trust 45, affinity 68), a campfire, a gift of food to that child, 4 store takes; its loop was "gather → nearest fishing_spot: not in sight" 22 times.
+
+**`s11`:** the social preset (seeds 7, 11, 13 and 7 again), glm-flash, 120 min, 4 replicates, $7.84. 2 of 4 newcomers starved (minute 92, both); the two that lived went outside the walls (54% of one's samples, 94 m past the edge) or gathered 32 times and took 5 from stores. Asks heard 13.8 (6–27) per run, food given 0.8, no lesson, lodging, agreement or demand. It replaces `s10`/`i9` as the social reference.
+
+**`l7`:** because island lives now end within two hours, the "player playing the game" view comes from the valley (`life-valley`, stage3-village, arrival at the map centre), 3 × 6 hours, started 04:17. Iteration 10 tests the island failure directly.
+
+### Baseline on main cb5214b7 (`b6`, `b6b`, `s12`, `s12b`, `l7`, 2026-11-11)
+
+**Scripted trials (`b6`, then `b6b`).** All 24 runs survived ($0.78). Two trials no longer staged their scene: since lives-2 the island trials' picked Elmwick resident brings its seeded home, family and places, and its mind walked home ("walk back north to the Elmwick square before dark"): in the wolves trial it walked 315 m in the two minutes after the pack's release and never fought (b5: 4 of 4 struck a wolf); in the theft trial no owner perceived the theft (b5: 2 of 4). The island trials (wolves, theft, hungry, teacher) now spawn a newcomer as their subject (trials-1 5ae9937); rerun as `b6b` (4 trials × 4, $0.59): all survived; theft perceived 2/4 and the thief spoken to 3/4; the cloak learned 3/4 and made 3/4; food received 1/4 in hungry. In the wolves trial the pack now reaches the newcomer but no wolf attacked (lowest health 94–100). Not the wolves' instincts: the trial replaces them with its own graph (walk to 9 tiles from the subject, wait 15 s, attack a person in sight), and the pack stopped 11–16 m away, outside its 11 m daytime sight (6 m at night), so the attack never fired (inspected live on e6b7e698, `w6`; the same at 16 m on cb5214b7). On their own instincts an ordinary wolf flees a person within 7 m unless its hunger is 90 or more and takes meat from remains first; only a bold wolf attacks any person within 10 m. The trial's pack now walks to 5 tiles (trials-1 d755e4f): **`w7` on e6b7e698 (4 replicates, $0.19): all survived; lowest health 57 (12–87), so the pack attacks again; the newcomer struck back in 1 of 4** (b5: 4 of 4) and otherwise moved off (22 m on median in the two minutes after release). `w7` is the wolves reference for e6b7e698. `b6` with b6b's four trials is the scripted reference for cb5214b7; wolves-valley and hungry-village from `b6` (all survived; struck a wolf 0/4, received food 3/4).
+
+**Social preset, every person a mind (`s12`, `s12b`).** `minds.only: "all"`, glm-flash, 192 concurrent calls, capped at 60 minutes for cost. Two runner fixes were needed first: the runaway watchdog's call-rate rule (60 a minute, for one mind) stopped both runs after 30 s, and its failure rules stopped them at minute 10 and in the first minute on the provider's 429 "not enough capacity" (about 1% of 3,000 calls); for `minds.only: "all"` worlds the rate rule is off unless a budget sets one, and failures count only as a share of the calls (half; 40% for the same failure). The aborted attempts cost $9.77 (kept under `aborted/`).
+
+| Seed | Minds thinking | Tokens | Cost | Asks (heard) | Talk turns island-wide | What reached the newcomer |
+| --- | --- | --- | --- | --- | --- | --- |
+| 7 | 311 | 214M | $30.79 | 17 (6) | 1,962 | lodging ("takes you in as their guest until 07:00: a bed in their house"), 2 fish |
+| 11 | 310 | 198M | $28.53 | 20 (11) | 1,857 | nothing |
+
+About $29–31 an hour for an island of minds (lives-2 measured about $34), $0.05 per resident-hour. The first lodging and the first fish given to a newcomer in any social run came here, where the residents think.
+
+**Valley lives (`l7`, main 445db098, `life-valley` × 3, 6 hours).** The valley seed compresses lives: all three subjects died of old age at minute 328.5, having lived full lives. Worked out 8, 8 and 6 techniques, all by experimenting (an earlier count of "2 from someone, once" was r3 teaching Maoska trapping and fire: `life_share.py` read the teacher's learn row as the learner's, fixed on `feel-measure`); built 7–10 things beyond fires and shelters; decided to teach 1, 5 and 17 times, 2 of which landed; 6–26 trades and gifts; wrote 0–24 tablets; 13–15 people; 197–279 lines; $0.18–0.19 an hour. Even so only 2–10% of their plans were about something other than food or warmth (`life_share.py l7`): they lived by working for food.
+
+### Tokens and cost
 
 | Batch | Calls | Tokens | Cost |
 | --- | ---: | ---: | ---: |
@@ -285,6 +1797,894 @@ Read from the four engaged runs (seeds 7 and 11, both models) with `living/tools
 - **What the answering turn could not see.** A woken resident answers in a talk turn. That prompt shows who it is, its feelings, recall, recent dealings, the scene and the conversation, and standing offers; not its pack, not its know-how, not its home, and the acts it lists are conceive, accept, give, offer and teach, without `host`. So it promised berries it had eaten, a lesson in a technique it did not know, and talked about beds it could not see a way to give. The struct's own comment says this part carries "what one carries and knows (for acts)"; only offers were filled in. This is the lever iteration 8 tests.
 - **Seed 13's newcomer arrived outside the town and never got in.** Its arrival point is 23 m outside the town's radius at the north gate, about 120 m from the centre (seeds 7 and 11 arrive 18–20 m inside). Its lines there were greetings to no one ("Hello the town! … Anyone about?"); unaddressed speech wakes only the one listener within 6 m or a resident named, and no resident was in earshot. It walked to the gate tiles, not through them (a `goto` to its own place "Brackenford gate" was "destination unreachable"), and in 150 minutes saw one person (glm) or eight (DeepSeek), never within the radius. The nearest buildings were 18–38 m away. This is about where the world puts the arrival, not how residents answer; not changed tonight.
 
+## Player-likeness measures (2026-11-11)
+
+The owner played the game and found that characters feel like NPCs and that survival is too central. `living/tools/life_feel.py` scores each run for how far it reads like a player run by AI living its own life rather than an NPC surviving. It is read-only and makes no model calls. Its docstring gives the exact definition of every column. **Every class is a keyword or skill heuristic, pending calibration against the owner's ratings of the same lives.** It prints verbatim examples for each measure, so a reader can check the classes before trusting a number.
+
+```bash
+python3 living/tools/life_feel.py l7                                   # a batch under this checkout's .local/living/trials
+python3 living/tools/life_feel.py --root ~/dev/slop-trials/.local/living/trials l6 l7 \
+    ~/dev/slop-trials-cb/.local/living/trials/l8 ~/dev/slop-trials-e6/.local/living/trials/i11   # a BATCH may also be a path
+```
+
+A run still in progress (no `summary.json`) is read from `state.json`, its files so far and the mind's live journal, as `trials.py` reads it. The six measures:
+
+- **Initiative:** `plans_other` and `acts_other` are life_share's shares. `self_started` is the share of decided acts that are social, making or exploring and were not preceded within 60 s by a line addressed to the subject. A line whose own words are about food or warmth counts as survival.
+- **Horizon:** persona goals clustered by word overlap. `goals_1d_other` is the number held a game day or more and not about food or warmth. `goals_reached` is the number with a matching outcome in rows: a build, a technique, a tablet, a give or agreement, a lesson given, or a named place first reached.
+- **Loops:** `fail_repeats_h` counts identical failures (same act, same refusal) per real hour. `fail_streak` is the longest unbroken run of one failure. `plan_repeats_h` counts verbatim plan re-installs per hour.
+- **Exploration:** `cells_h` is distinct 16 m cells per hour. `far_m` is the farthest point from the arrival.
+- **Social reciprocity:** `addressed` lines, and `silence`, the share of them that got no answer from the addressee within 60 s.
+- **Distinctiveness**, per batch × trial × variant: mean 1 − cosine between replicates. `skill_diss` uses decided acts by skill, `body_diss` the activity share in samples, and `goal_diss` the goal vocabulary. Near 0 means the lives look alike.
+
+Batches: `l6` (main 445db098, island presets, 6 h planned), `l7` (valley, 6 h), `l8` (main cb5214b7, 6 h), `i11` (iteration 11's three arms, 120 min) and `l9` (main with iteration 11, 6 h). `l9` was still running when read, at about 190 of 360 minutes (13:13); 3 of its 6 runs were alive and its numbers are partial. Mean (range) per arm:
+
+| batch | trial | variant | n | min | starved | plans_other | self_started | goals_1d_other | goals_reached | fail_repeats_h | plan_repeats_h | cells_h | far_m | addressed | silence | skill_diss | body_diss | goal_diss |
+| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `l6` | life | default | 3 | 85 (53–120) | 1.0 (1–1) | 0.12 (0.04–0.21) | 0.10 (0.03–0.17) | 3.3 (2–4) | 0.0 (0–0) | 11.47 (0–22.4) | 0.23 (0–0.7) | 9.20 (5.1–13.5) | 56 (25–112) | 18 (10–23) | 1.00 (1–1) | 0.16 (0.04–0.25) | 0.11 (0.02–0.16) | 0.63 (0.44–0.74) |
+| `l6` | life-pressure | default | 3 | 45 (38–57) | 1.0 (1–1) | 0.08 (0–0.19) | 0.02 (0–0.04) | 2.7 (2–4) | 0.0 (0–0) | 13.30 (6–24.4) | 0.00 (0–0) | 14 (12.7–18.1) | 41 (25–58) | 5.7 (2–10) | 1.00 (1–1) | 0.12 (0.06–0.18) | 0.04 (0.02–0.05) | 0.76 (0.64–0.83) |
+| `l6` | life-ruin | default | 3 | 132 (89–201) | 1.0 (1–1) | 0.03 (0.01–0.04) | 0.12 (0.07–0.19) | 3.3 (1–5) | 1.7 (0–4) | 25 (23.6–27.1) | 0.37 (0–1.1) | 9.23 (8.8–9.6) | 59 (44–82) | 31 (24–45) | 1.00 (1–1) | 0.02 (0.02–0.03) | 0.04 (0.02–0.05) | 0.66 (0.60–0.73) |
+| `l7` | life-valley | default | 3 | 329 (329–329) | 0.0 (0–0) | 0.06 (0.02–0.1) | 0.21 (0.19–0.22) | 8.3 (4–15) | 15 (12–16) | 25 (17.3–29.7) | 0.67 (0.4–0.9) | 4.60 (3.8–5.1) | 71 (58–78) | 164 (144–185) | 1.00 (1–1) | 0.07 (0.06–0.09) | 0.02 (0.02–0.03) | 0.48 (0.48–0.49) |
+| `l8` | life | default | 3 | 160 (57–360) | 0.7 (0–1) | 0.20 (0.11–0.32) | 0.35 (0.14–0.53) | 5.0 (1–12) | 4.3 (0–13) | 15.60 (2.1–37.2) | 0.57 (0–1) | 8.23 (6.6–10.4) | 91 (27–191) | 27 (13–53) | 1.00 (1–1) | 0.30 (0.19–0.48) | 0.28 (0.02–0.43) | 0.67 (0.63–0.73) |
+| `l8` | life-pressure | default | 3 | 261 (64–360) | 0.3 (0–1) | 0.19 (0.05–0.3) | 0.19 (0.13–0.29) | 8.0 (5–12) | 3.0 (0–8) | 19.30 (5.6–26.5) | 0.73 (0–1.2) | 11.13 (9.4–12) | 125 (38–178) | 64 (27–122) | 1.00 (1–1) | 0.28 (0.06–0.46) | 0.19 (0.04–0.33) | 0.75 (0.60–0.83) |
+| `l8` | life-ruin | default | 3 | 94 (55–118) | 1.0 (1–1) | 0.19 (0.03–0.31) | 0.20 (0.09–0.37) | 2.7 (1–4) | 0.0 (0–0) | 16 (15.3–16.2) | 0.53 (0–1.1) | 9.80 (6.6–15.2) | 55 (39–84) | 32 (20–42) | 1.00 (1–1) | 0.09 (0.05–0.14) | 0.05 (0.03–0.08) | 0.80 (0.68–0.88) |
+| `i11` | iter11-life | default | 4 | 111 (83–120) | 0.2 (0–1) | 0.10 (0.02–0.22) | 0.23 (0.14–0.36) | 4.8 (4–6) | 0.0 (0–0) | 12.55 (4.5–28.5) | 0.50 (0–1) | 16.95 (6.5–46) | 80 (40–170) | 35 (21–61) | 1.00 (1–1) | 0.05 (0.01–0.12) | 0.18 (0.01–0.33) | 0.74 (0.65–0.81) |
+| `i11` | iter11-life | iter10b | 4 | 107 (69–120) | 0.2 (0–1) | 0.21 (0.19–0.23) | 0.25 (0.08–0.41) | 4.5 (2–6) | 0.0 (0–0) | 14.40 (8.6–23.5) | 1.23 (0.9–1.5) | 10.85 (6.9–16) | 74 (23–124) | 32 (24–43) | 1.00 (1–1) | 0.04 (0.02–0.08) | 0.15 (0.03–0.31) | 0.74 (0.67–0.88) |
+| `i11` | iter11-life | iter11 | 4 | 120 (120–120) | 0.0 (0–0) | 0.28 (0.17–0.37) | 0.33 (0.28–0.36) | 5.5 (3–8) | 0.2 (0–1) | 11.75 (9–16) | 0.38 (0–1) | 6.12 (5.5–7) | 57 (34–76) | 58 (49–62) | 1.00 (1–1) | 0.03 (0.01–0.05) | 0.05 (0.02–0.08) | 0.75 (0.70–0.86) |
+| `i11` | iter11-pressure | default | 4 | 90 (58–120) | 0.5 (0–1) | 0.22 (0.1–0.33) | 0.23 (0.17–0.32) | 2.5 (1–4) | 0.5 (0–2) | 9.88 (3.8–19.5) | 0.50 (0–1) | 13.75 (6.7–32) | 66 (28–143) | 25 (7–53) | 1.00 (1–1) | 0.11 (0.02–0.21) | 0.24 (0.04–0.49) | 0.80 (0.71–0.90) |
+| `i11` | iter11-pressure | iter10b | 4 | 110 (88–120) | 0.5 (0–1) | 0.26 (0.16–0.33) | 0.16 (0.06–0.28) | 3.8 (3–5) | 0.5 (0–2) | 14 (11.7–15.5) | 0.90 (0.5–2.1) | 13.07 (6.4–29) | 74 (40–133) | 34 (7–52) | 1.00 (1–1) | 0.05 (0.01–0.10) | 0.08 (0.02–0.20) | 0.71 (0.54–0.89) |
+| `i11` | iter11-pressure | iter11 | 4 | 120 (120–120) | 0.0 (0–0) | 0.27 (0.08–0.57) | 0.33 (0.21–0.46) | 5.2 (4–6) | 0.0 (0–0) | 9.88 (6–20) | 1.00 (0.5–1.5) | 6.00 (3.5–9) | 52 (18–109) | 45 (36–59) | 1.00 (1–1) | 0.07 (0.02–0.14) | 0.26 (0.02–0.41) | 0.75 (0.71–0.82) |
+| `l9` | life | iter11 | 3 (3 running) | 193 (193–194) | 0.0 (0–0) | 0.20 (0.06–0.27) | 0.18 (0.16–0.21) | 5.3 (3–9) | 0.3 (0–1) | 17.47 (5–25.1) | 0.93 (0.6–1.6) | 10.73 (5.9–16.7) | 132 (119–156) | 48 (21–77) | 1.00 (1–1) | 0.06 (0.02–0.10) | 0.07 (0.04–0.10) | 0.70 (0.62–0.79) |
+| `l9` | life-pressure | iter11 | 3 (1 running) | 190 (186–193) | 0.7 (0–1) | 0.25 (0.23–0.27) | 0.25 (0.14–0.36) | 2.3 (2–3) | 0.0 (0–0) | 9.87 (6.3–14) | 0.60 (0.3–0.9) | 2.83 (2.5–3.4) | 37 (23–47) | 44 (32–67) | 1.00 (1–1) | 0.04 (0.02–0.05) | 0.19 (0.01–0.32) | 0.73 (0.70–0.76) |
+
+**Reading.**
+
+1. Survival still fills the mind's own words. In every arm 3–28% of plans are about neither food nor warmth. The valley lives that reached old age (`l7`) are among the lowest (6%): they lived long by working for food.
+2. Iteration 11 (`person_pace` 0.3) is the only change that moves initiative. In `i11` it raises `plans_other` to 0.27–0.28 and `self_started` to 0.33, against 0.10–0.26 and 0.16–0.25 for the other arms, with no deaths. In `l9`, on main, the values are 0.20–0.25 and 0.18–0.25.
+3. A high `self_started` is not the same as living well. The highest single run (`l8` life r2, 0.53) spent a 57-minute life greeting people and starved. Read `self_started` beside `starved`.
+4. No act was prompted. No one addressed the subject in any of these runs, so `self_started` is all of the directed acts and `prompted` (in the full output) is 0.
+5. Lives hold 2–8 goals for a game day or more that are not about food or warmth, for example "learn writing so fire_bolt outlives me" (14.6 game days, `l9` life r2) and "turn the market stall into something properly mine" (15.9 d, `l9` pressure r2). On the island almost none of them reach an outcome in rows: 0–0.5 per run, except `l8`'s 6-hour survivors (up to 13). In the valley, 12–16 goals per life reach one, mostly survival goals (a shelter, a storage, fire worked out). The longest-held goal is often "someday, a family of my own" (15 d in `l9`, 29 d in `l8`), which a newcomer has no path to.
+6. Failure loops are frequent but short. Identical failures repeat 10–25 times per hour, yet streaks reach only 1–6, because the mind does something else in between and comes back. One failure is 15% of all 3,792 failures in these batches: "gather → nearest tree: no nearest tree in sight" (65 times in `l9` life r2). Plans are seldom re-installed word for word (0–1.6 per hour), so the loop is in the acts, not the plans.
+7. Exploration is short-range. Lives enter 3–17 new 16 m cells per hour and reach 37–132 m from the arrival on average, at most 191 m in six hours. `l9` pressure ranges least (2.8 cells per hour, 37 m).
+8. Silence is total: 1.00 in every run here. Subjects addressed 2–185 lines each and no addressee answered, because the residents of a single-mind trial do not think. This is a finding about the trial setup, not about the subject. For contrast, `s11`, whose woken residents think, has silence of 0.55–0.72 (`life_feel.py s11`).
+9. Replicates do alike things but say different things. Their bodies' activity profiles are nearly identical (`body_diss` 0.02–0.28) and so are their decided-act profiles (`skill_diss` 0.02–0.30), while their goal wording differs (`goal_diss` 0.48–0.80). The valley lives are the most alike (0.02 and 0.07). Each life tells its own story over the same days of gathering, eating and sleeping: this is the NPC-likeness the owner saw.
+10. These numbers are keyword heuristics, not calibrated scores. Have the owner rate a handful of these lives, compare the ratings with each column, and keep only the columns that agree.
+
+**Weak measures.** `goals_reached` is the least reliable. Goal wording drifts inside a cluster, so an outcome can answer a different wording of the same goal, and the outcome classes are keyword matches. `goals_1d` depends on how often consolidation rewords goals (Jaccard threshold 0.4). `acts_other` counts every `say` and `wave` as "other", so asking for food scores as living. `self_started` counts every `wander` as exploring. `prompted` has been checked only on `s11`. `fail_streak` is broken by any act outcome in between.
+
+### Owner-tuned player score
+
+`life_feel.py` stays a set of heuristics until the owner's judgement says which columns, if any, track "a player living their own life". Three tools close that loop. All three read evidence read-only and make no model calls. The one exception is an explicit `feel_tune.py judge --run`, which needs real ratings.
+
+1. **Excerpts.** `feel_excerpts.py build` cuts candidate windows of 10 real minutes from every thinking character's run. It scores each window with life_feel's own columns, computed on just that window, and draws about 20 excerpts. The draw follows a per-source quota and spreads across the arms within each source. Within an arm it alternates trials and early and late windows, and it reaches toward the 5th and 95th percentiles of `feel0`, a provisional composite: the mean percentile of the initiative, exploration and social columns minus the loop columns. `feel0` only stratifies the draw and is not a score. Each excerpt is a plain second-person timeline of at most 12 lines. It opens with the plan held at the start. Exchanges (a line to the character and its reply) are kept together, and the other lines follow: plan changes, failures and struggles, things learned, given and received, and other percepts. A line said again, or a repeated percept, is folded into one line with a count. A closing line gives how the body spent the window and how hunger moved. Runs whose subject is a scripted human (the greeting trials) are followed through a thinking resident. Its speech comes from `speech.jsonl` joined to `audience.jsonl`, and other people are named only once the resident knows them. Its other percepts are the stamped lines of its journal requests, placed in time through the census, and its body comes from `census.jsonl`. A subject, who has the same newcomer name in every trial, gets a pseudonym, while a resident keeps its own name. Ids, coordinates, day numbers and clock minutes are removed, and nothing names a run, batch, model or arm. It writes `.local/living/feel/excerpts.json` (blind, for the page) and `.local/living/feel/excerpts_key.json` (private: id → source, run, variant, window, columns). Both are under the git-ignored `.local/living/`. Never serve, commit or show the key to the rater.
+2. **Rating page.** `feel_page.py` turns the blind file into one HTML page. Each excerpt carries one question, "Does this feel like a player living their own life?", answered on a 1–5 scale with an optional one-line reason. The page is published as a private claude.ai Artifact with the `db`, `user` and `downloads` capabilities. Every click saves the document `owner_ratings/<excerpt id>` = `{score, reason, at, rater, source: "page"}` on the artifact's server-side store. The page never touches the `ratings` collection, where the proxy's ratings are kept, and it ignores any `proxy:` document, so the owner always rates blind. To read the ratings back, call the ArtifactData tool's `list` on collection `owner_ratings` for that artifact URL and save the result as JSON. Without the store, for example in a saved copy, the page keeps ratings in the browser and offers "Copy ratings" and "Download ratings.json", which write the shape `feel_tune.py` reads.
+3. **Tuning.** `feel_tune.py fit --ratings R` joins the ratings to the key. Per column, for both the window values and the whole-run values, it reports Spearman ρ and a permutation p. It then fits a ridge on the standardized columns and a single-column isotonic fit. Both are scored leave-one-out, with the column and λ chosen inside each training fold, against two baselines: the mean rating and `feel0`. Each predictor gets Spearman, within-one, exact agreement and MAE. The report lists every excerpt where the score and the owner disagree, with the owner's reason. `feel_tune.py judge` builds an LLM-judge rubric from the owner's reasons, leave-one-out, so no excerpt is judged with its own rating in the prompt. The default `--dry-run` writes the prompts and a cost estimate. `--run` uses DeepSeek V4.1 Flash on Mistral's API (`MISTRAL_API_KEY`) and refuses synthetic ratings. Both commands refuse with "no ratings: no agreement claim" when fewer than 5 ratings exist. `feel_tune.py synth` writes a clearly labelled synthetic ratings file for testing the plumbing, and every report built from it carries a "SYNTHETIC RATINGS" banner.
+
+```bash
+python3 living/tools/feel_excerpts.py build                    # default sources and quotas (docstring); --source L=DIR --quota L=N to change
+python3 living/tools/feel_excerpts.py show [--key]             # the blind excerpts as text (--key adds sources: coordinator only)
+python3 living/tools/feel_page.py                              # .local/living/feel/page/player_feel.html, to publish as the Artifact
+python3 living/tools/feel_tune.py fit --ratings .local/living/feel/ratings.json
+python3 living/tools/feel_tune.py judge --ratings .local/living/feel/ratings.json            # dry run: prompts and cost only
+python3 living/tools/feel_tune.py fit --ratings DIR --proxy                 # proxy ratings only, labelled PROXY on every output
+python3 living/tools/feel_tune.py compare --owner NEW_DUMP --proxy OLD_PROXY_DUMP   # the owner's ratings against the proxy's
+python3 living/tools/feel_tune.py judge --ratings .local/living/feel/ratings.json --run --env-file ~/dev/slop-trials-e6/.env --base-url https://api.mistral.ai/v1   # paid; only with the owner's ratings
+```
+
+The first page (2026-11-11, 22 excerpts) is the claude.ai Artifact `https://claude.ai/artifact/MyiNwW9QmdXt1m91H4b5xX`, and its key is `.local/living/feel/excerpts_key.json` in the `tool-feel-tune` worktree on the Spark. It leaves out the `greet-nearest` (gr1a) and `park-concurrent` (gr1b) arms, whose runs failed at publish (`--skip`, default). They rerun as `gr1c`, which `build --quota gr1c=N` adds to a later page. To collect the owner's ratings, save an ArtifactData `list` of collection `owner_ratings` with `out_dir` and pass that directory as `--ratings`. A rebuild draws new excerpt ids, so do not rebuild while ratings for the published page are still coming in. Keep the key that matches the page. The excerpts cover 10 real minutes and the owner rates lives as they read, so a window-level column can agree with the owner while the whole-run column does not, or the reverse. The report gives both.
+
+**Proxy ratings.** A rating document whose `rater` starts with `proxy:` (or that names `proxy_for`) comes from someone rating on the owner's behalf. `fit` and `judge` refuse such documents unless `--proxy` is given. With `--proxy` they use only proxy documents. Every output then says "PROXY RATINGS (general coordinator, rating for the owner); not the owner's judgement", and files get a `_proxy` suffix. No proxy report claims agreement with the owner. The page (version 2, 2026-11-11) writes the owner's ratings to `owner_ratings`, so they never replace the proxy's documents in `ratings`. `compare --owner <owner_ratings dump> --proxy <ratings dump or the saved copy>` reports the differences.
+
+On 2026-11-11 the owner asked the general coordinator to rate the first page in their place, so those 22 ratings are proxy ratings. They are saved in `.local/living/feel/ratings-proxy-2026-11-11/` on the Spark, and the fit is in `.local/living/feel/proxy-fit/tune_report_proxy.md`. The proxy's rubric:
+
+- 4–5: pursues something of its own beyond food and warmth, deals with other people and is answered; relationships with history (a debt, a promise, a child learning); wants negotiated with someone.
+- 3: an agenda beyond survival, but nobody answers or the act lands on no one.
+- 1–2: a survival loop; plans restated unchanged; the same line said to silence; repeated failures; nobody else present.
+- Being answered mattered most.
+
+**Circularity.** The proxy rater stated that being answered mattered most. A fit that finds `heard` and `answered` as the signal therefore shows that the rubric was applied consistently, not that it matches the owner's judgement. `feel_tune.py` prints this in the header of every proxy report and of every proxy-tuned score.
+
+What the proxy fit says (proxy ratings, n = 22; one rater, one sample):
+
+1. Window columns about being spoken to track the proxy ratings best: `heard` ρ +0.90, `silence` −0.79, `addressed` +0.78, `answered` +0.76, all p < 0.001.
+2. Leave-one-out, the window ridge reaches Spearman +0.70, within-one 0.86 and MAE 0.84. Its whole-pipeline permutation p, with fitting and the pick of the best predictor included, is 0.020 over 200 shuffles. `feel0` reaches +0.57, and the run-level ridge +0.53.
+   After `feel_excerpts.py rescore` (the same windows, placed from the key's 0.1-minute starts, with the own-project columns kept out of the models as probes), the window ridge reaches +0.68, within-one 0.91, MAE 0.89, with a whole-pipeline p of 0.030 over 200 shuffles.
+3. Much of this is the split between worlds. Excerpts where everyone thinks average 4.10 and single-thinker lives 1.75 (AUC 0.92). `heard` and `answered` are 0 in every single-thinker window, so they cannot rank those lives. Within the single-thinker lives the window ridge reaches only +0.43 (p 0.08, n = 12); `addressed` (+0.82), `lines` (+0.77), `self_started` (+0.74) and `people` (+0.74) are the columns that vary with the rating there. The whole-run columns mostly encode the split: all-minds runs are short and hold few goals, so `goals_1d` and `min` correlate negatively with the rating.
+
+**The proxy-tuned score, never alone.** The score rises when residents simply talk more, including when they answer lines meant for others or repeat themselves. `feel_tune.py score BATCH_DIR...` applies the fit's window ridge to every thinking character's windows, per arm. It always prints the score beside three guards over the same lives:
+
+- false replies per minute, from `greet_report.py` where the batch's checkout has it;
+- the share of a character's own lines that repeat one of its own from the last 10 minutes;
+- the share of addressed lines that led to something within 180 s: an outcome the character is part of (a trade, lesson, gift, help, hosting or agreement), or a new plan of its own or of the addressee that names the other.
+- beside it, a placebo: the same test with every line moved 6 minutes earlier. Whatever the placebo still finds was not caused by the line, so read the difference.
+
+Runs without `final.json` (still running, or failed before writing their rows) are left out unless `--include-running` is given. Against a baseline arm (a `control` arm, else `default`), an arm that raises the score while any guard gets worse is reported as `LOST`, and a guard that cannot be measured is named as unmeasured. On 2026-11-11, with the proxy-tuned model (report `.local/living/feel/score/score_report_proxy.md` on the Spark):
+
+- gr1a `greet-nearest` (finished run r4 only) raised the score (4.13 against 4.11) while false replies rose from 0.010 to 0.081 per minute and repeated lines from 0.11 to 0.13. It is reported `LOST`.
+- pf2 `player-frame` (still running, scored with `--include-running`) raised the score (2.72 against 2.56) while talk that led to something fell from 0.02 to 0.00. It is reported `LOST`, with false replies unmeasured.
+- In the hamlet, talk that led to something is 0.64–0.71, but the placebo already finds 0.47–0.58. Most of what this guard counts there would happen without the line, so only the difference means anything.
+
+**Sustained own-project activity** (`life_feel.py` measure 7: `own_project`, `project_acts`, `project_progress`). It looks for a goal of the character's own, held from the first to the last third of the window's plans and intentions. Food and fire or cold are excluded, but a cloak or a shelter can be a craft project, and names and filler words are excluded too. It then counts the acts toward that goal, each once: decided acts or, failing those, attempts, plus the character's own lines naming it. It also records whether one of them was done. The measure was added for the known blind spot: a resident with her own project in a village that talks around her (Mara, timber for her own house) got 1.2 from the window ridge where the proxy gave 4. `feel_excerpts.py rescore` recomputes the key's windows with it, and `fit --probe` reports it outside every model, so nothing is refitted to claim agreement. A review found that the first version depended on hash order and took words like "pack/full/work" or "Millbrook" as projects; both are fixed. Result, on proxy ratings:
+
+- It marks Mara (`own_project` 1.0, timber, 4 acts) and two other highly rated residents: Cal teaching and writing (rytd3, 1.0) and the carpentry in tha3g (0.94).
+- It does not close the other gap. vpxff, also underrated, scores 0. It also gives high values to four low-rated single-thinker lives with a held but unanswered project: storage (2zt89, 0.95), a shelter (vnr8j, 0.94), wood and toolmaking (s2asb, 1.0) and a trap line (u86uh, 0.71).
+- Across the 22 excerpts it tracks neither the proxy ratings (ρ +0.05) nor the window ridge's residual (ρ −0.04).
+
+The measure finds held projects. What the proxy rewarded is whether anyone answers, which this measure does not see.
+
+**No LLM judge on proxy ratings.** `judge --proxy` refuses outright, building no prompts and making no call. The judge waits for the owner's own ratings.
+
+## The hamlet: a small world where everyone thinks (2026-11-11)
+
+Branch `exp-hamlet-births`. Status: **built and proved with fake minds only** (`hm2` on Cullet's day and laws, `hm0` and `hm1` before them on the 12-minute day; below). No paid run has been made on it.
+
+The seed [`hamlet`](../living/seeds/hamlet.json) is [`authored-test`](../living/seeds/authored-test.json) with five more residents, larger stores, the fishing spots and berry bushes each settlement promises (`resources`), and no animals. It keeps that seed's 96 × 96 realm map and its sheets. Since main brought a seed's own day and laws (`rules-1`, [Cullet's rules](CULLET_RULES.md)) it has Cullet's day (`day_minutes` 48) and Cullet's laws (`laws_file` `worlds/cullet/laws.rhai`). Its pace is `year_days` 4 and `life_pace` 0.0357, a quarter of `authored-test`'s 0.1428, so that a life still lasts 8 real hours on the four-times-longer day. Twelve people live in four households in two settlements a short walk apart. Each settlement has houses, a store on its square, planted berry fields and its own fishing water. Nothing is restocked during a run. Ids are the seeding order. Each person's death of old age is fixed by their id (`Life::deathline`), so the death times below come from `births_report.py`.
+
+| Id | Who | Age | Household | Stage at start | Thinks in `hamlet` | Dies of old age at |
+| ---: | --- | ---: | --- | --- | --- | ---: |
+| 1 | Oren Hale, farmer, owes Teodor | 41 | mill (Millbrook) | adult | yes | 151 min |
+| 2 | Ilsa Hale, cook, Oren's wife | 38 | mill | adult | yes | 159 min |
+| 3 | Pim Hale, their son | 7 | mill | child | yes | 409 min |
+| 4 | Teodor Vane, mason, wants an apprentice | 70 | forge | elder | yes | 49 min |
+| 5 | Brisk Marrow, guard | 29 | marrow | adult | yes | 246 min |
+| 6 | Mara Vane, carpenter, Teodor's granddaughter | 25 | forge | adult | yes | 307 min |
+| 7 | Edda Marrow, fisher, Brisk's wife | 27 | marrow | adult | yes | 247 min |
+| 8 | Tobin Marrow, their son | 1 | marrow | infant | from about minute 8, when he becomes a child | 450 min |
+| 9 | Wenna Reed, fisher, widow | 37 | reed (Reedmouth) | adult | yes | 226 min |
+| 10 | Cal Reed, hunter, Brisk's rival | 52 | reed | adult | yes | 92 min |
+| 11 | Sefa Reed, Wenna's daughter (the subject) | 19 | reed | adult | yes | 337 min |
+| 12 | Lio Reed, Wenna's son | 10 | reed | child | yes | 377 min |
+
+Food is plentiful. Within 24 m of the two squares there are 31 and 22 berry bushes, wild and planted, and 2 and 7 fishing spots (verify-generation, `generation-hamlet-20261111-141545`). A bush holds 5 berries and regrows 1.2 a minute outside winter (`regrow`). A person gets about 1.2 hunger a real minute awake (Cullet's 2.4 a game hour), about 0.1 berries' worth. The stores hold 16 berries, 10 cooked fish, 6 fish and 10 wood between them, and everyone carries a few berries or fish. Winter, when nothing regrows, is one game day in four: 48 real minutes of every 192.
+
+The tensions are in the sheets and none is scripted. Oren's debt to Teodor and the secret of the sold seed grain come from `authored-test`. Teodor has no apprentice, and Mara wants a house of her own rather than his trade. Brisk and Cal are rivals. Sefa wants to leave her mother's house.
+
+- **Minds.** `hamlet` thinks for every person past infancy, at most 12 at a time (`minds.max`, above): 11 at the start, 12 once Tobin is a child. In a stable population every person thinks. If the hamlet grows past 12 people old enough to think, the youngest live on their seeded ways until a death frees a place. Each time someone joins the thinking set, the runner restarts the mind service (at most every 2 minutes), which breaks off model calls and conversations in progress for all of them. A death alone does not restart it. `hamlet-solo` thinks only for the subject (`LIVING_ONLY` = 11). The other eleven run their behaviour graphs, as the island's residents do in a scripted trial, and graph adults do not conceive. Both runs go on to their full duration after the subject's death (`life.stop_on_death` false). The solo run then has no mind at all and costs nothing more.
+- **Cullet's day and laws.** The seed sets them, and the world composes the overlay when it is created. Cullet's laws give needs per game hour, so 48 hunger a game day is the same 1.2 a real minute awake as before. They also give eased dusk and dawn, and Cullet's senses: sight 48 m by day and 14 m in the dark, 20 m with a torch, someone in lamplight seen from 28 m, names within 24 m, and speech carrying 12 m. Night is 20:00–06:00, 20 real minutes of the 48. The runner installs the skills file after publishing, and installing the bare file would drop the overlay. So the runner composes the seed's `laws`/`laws_file` over that file first, the way `floors::compose` does (`compose_laws`, shared with verify.py through `living/tools/install_script.py`), then applies any `skills_patch`. The **laws guard** (`laws_problems`) then fails the instance before any mind starts, logging each reason as `laws guard: …` in `actions.log` and as an `error` event, when: the `script` row read back after `install_script` is not the source the runner sent; for a seed with laws, the world's creation-time script is not the runner's composition of those laws over the tree's `skills.rhai` (for a `wasm_tag` module, built on another branch, the row must at least end with the laws); or `world.day_ms` is not the seed's `day_minutes` (12 minutes without one). A variant with `"keep_laws": true` installs nothing and keeps the script the world was created with; its row is checked against the composition the same way, and it may not carry `skills` or `skills_patch`. A passing instance logs `laws guard passed: …`. `python3 living/tools/trials_laws_selftest.py` plants each mismatch (on the hamlet's real composition, against a fake database) and checks that it is refused. The hamlet's earlier sight `skills_patch` is gone.
+- **What the runner records** besides the subject's samples: `census.jsonl` every 30 s (every character's stage, life and death, parents, position, hunger and activity, and the thinkers), hourly snapshots, and every resident's journal.
+
+```bash
+python3 living/tools/trials.py build hamlet hamlet-solo hamlet-spaced hamlet-provided hamlet-longing
+python3 living/tools/trials.py run --batch hm0 hamlet hamlet-solo --replicates 1 --minutes 10 --fake
+python3 living/tools/births_report.py hm0
+python3 living/tools/trials.py clean --batch hm0
+```
+
+### Fake proof
+
+`hm2` (after merging main fd2030c, which carries rules-1): 2026-11-11 15:08–15:19, fake model, 10 minutes, one replicate of each of the five trials on Cullet's day and laws. Modules: `trial-hamlet-5a897620` (hamlet, solo, provided), `-94c40654` (spaced), `-48fa2f46` (longing). The world rows read `day_ms` 2880000, `life_pace` 0.0357 and `year_days` 4. The longing world had its `world_law` rows (120, 4). In all five runs `actions.log` says `seed laws composed as the world composed them: True`. The provided run installed `seed laws,conceive_food,conceive_roof`. The host's load was 26–28, from other builds and `l9`.
+
+| Run | Minds thinking | Model calls (by purpose) | Calls per real minute per mind (run / minutes 5–10) | Tick p99, minute 1–2 | Ticks over 16.7 ms |
+| --- | --- | --- | --- | --- | ---: |
+| `hamlet` | 11, and 12 from t = 484 s (`reslot`: Tobin) | 201 (consolidate 85, think 53, deliberate 53, talk 10) | 1.80 / 1.82 | 0.92 ms | 0 |
+| `hamlet-spaced` | the same (t = 484 s) | 195 | 1.74 / 1.67 | 0.92 ms | 0 |
+| `hamlet-provided` | the same (t = 482 s) | 198 | 1.77 / 1.83 | 1.00 ms | 0 |
+| `hamlet-longing` | the same (t = 487 s) | 200 | 1.79 / 1.83 | 0.87 ms | 0 |
+| `hamlet-solo` | 1 (Sefa Reed #11) | 7 | 0.70 / 0.4 | 0.86 ms | 0 |
+
+Mind processes used 67–81 MB resident. No one died or was born in 10 minutes. Teodor's death is due at minute 49, the same real time as before: the life was kept at 8 real hours. Fake minds made more calls on Cullet's day (1.8 a minute per mind against 1.1–1.5 on the 12-minute day). The fake model answers at once, so this is the mind's cadence, not a price.
+
+Before rules-1 (the 12-minute day, `life_pace` 0.1428, the same lives in real time, sight by `skills_patch`):
+
+`hm0`: 2026-11-11 14:13–14:24, fake model, 10 minutes, one replicate of each, module `trial-hamlet-c43ae3e5` built from this branch's working tree. The trial service also carried batch `l9` and other builds (load 14–21).
+
+| Run | Minds thinking | Model calls (by purpose) | Calls per real minute per mind | Tick p99 at min 2.5–3.5 / 8.5–9.5 | Ticks over 16.7 ms |
+| --- | --- | --- | --- | --- | ---: |
+| `hamlet` | 11, and 12 from t = 484 s: Tobin became a child and the runner restarted the mind with him (`reslot`) | 164 (consolidate 63, think 48, deliberate 48, talk 5) | 1.47 over the run (11.2 thinking on mean); 1.13 in minutes 5–10 | 0.94 / 0.37 ms | 0 |
+| `hamlet-solo` | 1 (Sefa Reed #11) | 10 (consolidate 4, think 3, deliberate 3) | 1.0; 0.4 in minutes 5–10 | 0.85 / 0.31 ms | 0 |
+
+Mind processes used 33–69 MB resident. What else the run showed:
+
+- The cast picked Sefa Reed (#11, the youngest adult) as the subject, the sight patch of that version was installed (`patched sight` in `actions.log`), and each run wrote 21 census rows.
+- The population stayed 12 → 12. No one was due to die in 10 minutes; Teodor's death is due at 49.
+- Fake replies carry no acts, so the act shares are empty. 42 plans were classed, none about food or children.
+- Tobin was within 4 m of a grown person in 60% of his census rows while an infant. 10% of grown persons' rows had him that near.
+
+The fake call rate shows the mind's cadence, not a price. Fake replies come instantly and are nearly empty: no acts, almost no talk.
+
+`hm1`: 2026-11-11 14:24–14:29, fake model, 4 minutes each. It checked that each rule arm publishes and runs with its values in place:
+
+- `hamlet-spaced` ran on its own module, `trial-hamlet-3209f898`. Its derived seed carries `species.person.life.interbirth` 0.15.
+- `hamlet-provided` ran on the `hamlet` module with `patched sight,conceive_food,conceive_roof` (skills sha256 `90a905b0067d`).
+- `hamlet-longing` ran on `trial-hamlet-4bc47b22`. Its `world_law` rows were `longing_after_min` "120" and `longing_food` "4".
+
+All three ran their full 4 minutes with 11 minds and 1.26–1.33 calls a minute per mind. They were cleaned up afterwards (`trials.py clean --batch hm1`).
+
+## Births that keep a settlement's numbers (2026-11-11)
+
+The owner's working target is an experiment, not a change to the defaults: over a long run a settlement's numbers stay roughly the same, with births about matching deaths from old age, so that newborns do not pull grown people's time back to survival. On the island with everyone thinking, births ran at about 61 in 10 game days.
+
+### The arithmetic
+
+**Correction (2026-11-12, `bi1`).** The table below is for `species.json`'s 70-year life. The hamlet runs Cullet's laws, whose `life_years` law gives a person 90 years: a child until 15, deaths of old age from 75. The hamlet's real figures are in [births batch bi1](#births-batch-bi1-2026-11-12): a life of 10.3 h, 6 deaths of old age in 6 hours rather than 9, and 7.6 births needed rather than 9.6.
+
+The person life table (`species.json`): `years` 70; infant until 0.03 of a lifespan, child until 0.23, elder from 0.85; death of old age at each person's own point between `old_age` 0.87 and 1.0, spread evenly by id; `gestation` 0.011; `interbirth` 0.03 (after a birth both parents are raising the child, `rearing`, and neither can conceive); `litter` 1. Only adults (0.23 to 0.85) may conceive (`conceive_check`). A game day is 48 real minutes in the hamlet (`day_minutes`) and 12 on the island.
+
+A lifespan in game days is L = years × `year_days` × `life_pace`.
+
+| | Hamlet (`day_minutes` 48, `year_days` 4, `life_pace` 0.0357) | Island (12-minute day, `year_days` 8, `life_pace` 1) |
+| --- | --- | --- |
+| Lifespan L | 70 × 4 × 0.0357 = 10.0 game days × 48 min = 480 real min = **8.0 h** | 70 × 8 × 1 = 560 game days = **112 h** |
+| A year of age | 0.143 game days = 6.9 real min | 8 game days = 96 real min |
+| Infant, child, adult from | 0–14 min, to 1.84 h, then adult | 0–3.4 h, to 25.8 h, then adult |
+| Elder from (0.85 L) | 6.8 h | 95 h |
+| Death of old age (0.87 to 1.0 L, mean 0.935 L) | 6.96 to 8.0 h, mean 9.35 game days = 7.48 h | 97 to 112 h, mean 524 game days = 105 h |
+| Gestation (0.011 L) | 0.11 game days = 5.3 min | 6.2 game days = 74 min |
+| Raising after a birth (0.03 L) | 0.3 game days = 14 min | 16.8 game days = 3.4 h |
+| Shortest time between one couple's births (0.041 L) | 19.7 min | 4.6 h |
+
+**Births a stationary population needs.** If no one dies before old age, a population of N stays stationary when b = N / (mean age at death) = N / (0.935 L) births a game day. In a stationary population a share (0.85 − 0.23) / 0.935 = 0.66 are adults. Each couple then needs 2 children over its 0.62 L of adult life, one per 0.31 L.
+
+- **Hamlet, N = 12:** 12 / 9.35 = 1.28 births a game day, **12.8 per 10 game days** (8 real hours), so 3.2 per 2 real hours. Over a 6-hour run (7.5 game days, 0.75 L) that is 12 × 0.75 / 0.935 = **9.6 births**. Per adult, 1.6 per 10 game days. Per couple, 3.2 per 10 game days (one per 0.31 L, 2.5 real hours), if every adult is in a couple. Everything in real time is as it was on the 12-minute day, because the lifespan in real time was kept. Only the count of game days per life changed, from 40 to 10.
+- **Island, N ≈ 311 (everyone thinking, `s12`):** 311 / 524 = 0.59 a game day, **5.9 per 10 game days**. 61 is about ten times that. That count was the first wave: no one is raising young at the start, so every willing couple conceives at once.
+- **Today's ceiling:** an eager couple, conceiving at each first chance, can have a child every 0.041 L, so 1 + (0.62 − 0.011) / 0.041 ≈ 16 children over an adult life. That is 8 times replacement. Only the minds' choices hold births down today.
+
+**Deaths of old age in the hamlet's age mix.** At this pace everyone seeded at 18 or older (the 8 adults and Teodor) dies within 6 hours. By `deathline` the deaths come at 49, 92, 151, 159, 226, 246, 247, 307 and 337 real minutes (table above): **9 in 6 hours**, about one every 37 minutes, against the stationary 9.6. Next are Lio at 377, Pim at 409 and Tobin at 450 minutes. The two seeded couples' fertile windows close when the first partner becomes an elder: Oren and Ilsa at about 127 minutes (Oren), Brisk and Edda at about 209 (Brisk). A child born in the run is an adult 1.84 h later, so children born in the first 4 hours can have children of their own within the run. To keep 12, the hamlet needs about 9–10 births in 6 hours, spread across the run, and some of them from couples formed during the run.
+
+### Rule arms
+
+Each arm is general law or data. None names the hamlet or touches what minds may decide. The shipped behaviour is unchanged: the new laws' shipped values reproduce today's rules (Cargo `laws_with` and `longing_wait_ms` tests; the `family_laws` scene under verify-core). Each arm is its own trial on the hamlet world, so it runs with the same cast, map and minds.
+
+| Arm (trial) | Values | What a body can do | What it should give |
+| --- | --- | --- | --- |
+| Control (`hamlet`) | shipped: `interbirth` 0.03, `conceive_food` 0, `conceive_roof` false, `longing_after_min` 20, `longing_food` 0 | today's rules | the births minds choose today |
+| **Spaced** (`hamlet-spaced`) | `species.person.life.interbirth` **0.15** (world.overrides.species, merged over species.json at build) | after a birth both parents raise the child for 0.15 L (1.5 game days, 72 real min here; 84 game days, 16.8 h on the island) | an eager couple has at most one child per 0.161 L (77 real min): 6.2 per 10 game days here, twice the 3.2 a couple needs when every adult is paired. That is replacement when about half the adults are paired, as at the hamlet's start (4 of 8). 0.30 would be replacement with everyone paired (one per 0.311 L), but with the hamlet's two couples that caps births well under the 9 deaths. |
+| **Provided** (`hamlet-provided`) | `conceive_food` **8**, `conceive_roof` **true** (skills_patch of `skills.rhai`) | to start a family the two must carry 8 portions of food between them, and the asker must stand under a shelter or in a house | births depend on a surplus put by, so more mouths sharing the same bushes and fishing spots make a surplus harder to gather. With the hamlet's plenty (above), the gate costs effort and timing (gathering and keeping 8 rather than eating them) rather than scarcity, so its density dependence is weak there. It would bind harder in a leaner world. 8 berries are 96 hunger. Under Cullet's laws that is one game day of a pair's hunger (48 a day each), or 3.3 game days (2.7 real hours) of an infant's (29 a day). |
+| **Later longing** (`hamlet-longing`) | `longing_after_min` **120**, `longing_food` **4** (world.rules) | unchanged; anyone may still choose to conceive | the felt drive ("You long for a child…", the alert that asks a mind to think) comes 120 min × (1 − nurture/120) after one's own birth or youngest child's: 70 min at nurture 50, 35 at 85, and only while carrying 4 food. Once due, it comes back each dawn as today (it goes off at night; iteration 3). On the hamlet's pace that is about 0.15 L, the spaced arm's interval. It tests whether the drive is what drives births, without changing any rule of the body. |
+
+The fact the rules needed and Rhai could not see was the longing drive's timing and condition, which were Rust constants. They are now laws (`longing_after_min`, `longing_food`, typed in `Laws`, settable by a seed's `rules`). `conceive_check` reads only what the actor's context already had (`near_shelter`, `inv`, the target's `inv`), so no new actor field was added.
+
+### Measures
+
+`living/tools/births_report.py BATCH...` reports, per run: births; deaths by cause; population (by stage) every 30 minutes; the seeded people due to die of old age within the run against those who did; the stationary births for the run's length; the mean number thinking and model calls per real minute per thinking mind; the share of grown people's plans and decided acts about food and about children (keyword and skill classes, with examples printed); and the time grown people spend within 4 m of an infant, with the share of infant time that some grown person is that near. `life_feel.py` and `life_share.py` still read the subject alone. They now find journals of names with spaces (`Sefa_Reed.jsonl`, `trials.journal_file`).
+
+### Planned batch and its cost
+
+Four arms × 3 replicates × 6 hours on glm-flash (`default`), plus `hamlet-solo` × 3 × 6 hours for experiment 2:
+
+```bash
+python3 living/tools/trials.py build hamlet hamlet-solo hamlet-spaced hamlet-provided hamlet-longing
+python3 living/tools/trials.py run --batch hb1 hamlet hamlet-spaced hamlet-provided hamlet-longing hamlet-solo \
+    --replicates 3 --sample-s 5 --stagger 15
+```
+
+An estimate, not a measurement. It uses the coordinator's island figure of about $0.10 per thinking person per hour on glm-flash. Nothing has been measured on the hamlet. Two things may raise it: 48 m sight puts more people in each scene, and fake minds called about 1.8 times a minute per mind on Cullet's day against 1.1–1.5 on the 12-minute day.
+
+| Arms | Runs | Thinking at most | Person-hours | Estimate |
+| --- | ---: | --- | ---: | ---: |
+| `hamlet`, `hamlet-spaced`, `hamlet-provided`, `hamlet-longing` | 4 × 3 | 12 | 4 × 3 × 12 × 6 = 864 | $86 |
+| `hamlet-solo` | 3 | 1, until Sefa dies at 5.6 h | 3 × 5.6 ≈ 17 | $1.7 |
+| **Total** | 15 | | ≈ 881 | **≈ $88, about $14.7 an hour while all 15 run** |
+
+These are upper bounds. Fewer think when deaths outrun births, and only the cap of 12 bounds it from above. With 2 replicates the batch is about $59. Fifteen small worlds are well within what one trial service carried in "Running wide" (40 island worlds). The census adds four whole-table reads per world every 30 s.
+
+**SpacetimeDB documentation checked** (2026-11-11): [HTTP database API](https://spacetimedb.com/docs/http/database/). The SQL endpoint is "intended primarily for management, debugging and interactive developer use, and [has] not been optimized for performance to the same extent as the WebSocket API". The census is that use: evidence for a trial, a developer's audit truth, and not a game data path. Its reads touch small worlds only. Nothing here adds or changes a table, reducer, view or subscription. The new laws are values of the installed script (`Laws`). A seed's `rules` already writes them into the existing `world_law` table.
+
+### Not covered
+
+- No real model has run on the hamlet. Fake minds do not conceive, so fake runs show the plumbing (minds, census, restarts) and nothing about births.
+- Cullet's laws were written for Cullet's town (lamplight, hearths, coats). The hamlet's houses and campfires are what the authored-test layout gives: no lamps and no coats in the stores.
+- The arms' values are derived from the arithmetic, not tuned. How often a pair actually carries 8 food, so whether the provided arm's gate binds, is not known until real minds run.
+- The `family_laws` scene proves each law's gate on a scratch world. It does not prove what minds do with them.
+
+## Births batch bi1 (2026-11-12)
+
+The first paid run of [the birth arms](#rule-arms): `hamlet`, `hamlet-spaced`, `hamlet-provided` and `hamlet-longing`, **one replicate each**, 6 hours (2026-11-11 23:28 to 2026-11-12 05:30), on the DGX Spark. At most 12 minds per world (`minds.max`). The worlds ran on Cullet's day and laws, and the laws guard passed on each.
+
+- **Run checkout** `/home/gooning/dev/slop-runs-arrive` at **461c63cd**. That is exp-arrive 1e63a30 (main 6caebe20), plus the laws guard (fix-verify-laws) and the consolidation capacity fallback (fix-consolidation-429, e301aa9f). Evidence is in `.local/living/trials/bi1/` in that checkout.
+- **Models.** glm-flash (`zai-glm-5-3-flash`), overflowing to deepseek-flash. Consolidation could overflow on capacity (`capacity_overflow`).
+- **Switches.** Greeting (`LIVING_GREET`) off: it is on by default only after exp-greet. Not in this build: `meters()` alarm levels, skill timings, act outcomes, stamina-1 and speech-truth. The newcomer laws were present at 0 and no trial used them.
+- **The arms**, as [planned](#rule-arms):
+  - control: shipped values;
+  - spaced: `interbirth` 0.15, 72 real minutes of raising after a birth;
+  - provided: `conceive_food` 8 and `conceive_roof` true;
+  - longing: `longing_after_min` 120 and `longing_food` 4.
+
+```bash
+# read-only against the run checkout; no model calls
+python3 living/tools/births_report.py --root /home/gooning/dev/slop-runs-arrive/.local/living/trials --stores bi1
+```
+
+### What the life table really is in the hamlet
+
+`births_report.py` used to read the seed against this checkout's `living/seeds`. It now reads it against the run checkout (`LIVING_ROOT` in `mind-env.json`). A trial's derived seed lives under that checkout's `.local`. Before this fix the report fell back to the island's pace.
+
+The report also missed the seed laws' `life_years` law. Cullet's laws set a person's life to 90 years, childhood to 15 and the first deaths of old age to 75 (`person_years()` in `worlds/cullet/laws.rhai`). The report now applies a `person_years()` of that shape. Its due times matched every death of old age in the batch within 0.2 minutes: Teodor 111.6, Cal 207.7, Oren 256.6, Ilsa 257.1, Edda 352.4 and Brisk 359.7.
+
+The hamlet's numbers on that life table:
+
+| | Under Cullet's laws |
+| --- | --- |
+| A life | 90 × 4 × 0.0357 = 12.85 game days = **617 real minutes (10.3 h)**. A year of age is still 6.9 real minutes. |
+| Adult | from 15 years: 103 real minutes after birth |
+| Elder (no more children) | from 59.5 years: 408 minutes after birth, as before |
+| Gestation, raising, infancy | unchanged in real time: about 5, 14 (72 when spaced) and 14 minutes |
+| Death of old age | from 75 years (514 minutes of age) up to 90 years. The mean age at death is 565 minutes. |
+| Seeded deaths | 6 in the 6 hours, at 112, 208, 257, 257, 352 and 360 minutes. The other 6 come after the run: Wenna 363, Mara 443, Sefa 466, Lio 492, Pim 531 and Tobin 573. By about 9.6 h every seeded person is dead. |
+| Births a stationary 12 needs | 12 × 360 / 565 = **7.6 in 6 hours**. Over the 9.6 h that all twelve seeded people take to die: 12. |
+
+### Population
+
+The table gives the census every 30 s, the chronicle's births and deaths, and the journals' conceive acts and refusals. The "refused" row counts what each mind was told after a refusal, one per actor and game minute.
+
+| | `hamlet` (control) | `hamlet-spaced` | `hamlet-provided` | `hamlet-longing` |
+| --- | --- | --- | --- | --- |
+| Births / deaths (all of old age, all on time) | **9** / 6 | 4 / 6 | **1** / 6 | 5 / 6 |
+| Alive at 0, 60, 120, 180, 240, 300, 360 min | 12, 16, 16, 18, 18, 17, **15** | 12, 15, 14, 15, 14, 12, **10** | 12, 13, 12, 12, 11, 9, **7** | 12, 12, 14, 15, 14, 13, **11** |
+| At the end, by stage | 10 adults, 5 elders | 5 adults, 5 elders | 2 adults, 5 elders | 6 adults, 5 elders |
+| Births and their time (min) | Dell 13, Lark 52, Vale 58, Pia 60, Nia 102, Hana 148, Sol 157, Bee 198, Jory 251 | Teal 19, Juno 51, Rook 52, Bee 149 | Uma 30 | Hollis 63, Teal 100, Vesper 104, Ada 176, Rook 245 |
+| Couples with a birth | 5: Brisk+Edda 3, Pim+Mara 2, Sefa+Lio 2, Cal+Wenna 1, Oren+Ilsa 1 | 3: Brisk+Edda 2, Cal+Wenna 1, Oren+Ilsa 1 | 1: Brisk+Edda | 3: Brisk+Edda 3, Oren+Ilsa 1, Sefa+Lio 1 |
+| Births to a brother and sister (`kin_births`) | 2 | 0 | 0 | 1 |
+| Births to someone born in the run (`gen2_births`) | **0** | **0** | **0** | **0** |
+| Conceive acts decided | 63, all by seeded people | 29 | 19 (Uma 2) | **12** |
+| Refused, by reason | partner moved away 23, child already on the way 12, no partner 10, partner not adult 6, not adult 3, too hungry 1 | partner not adult 7, no partner 5, moved away 4, on the way 3, not adult 3, **still raising 1** | **not under a roof 17**, moved away 2, no partner 2, partner not adult 2, **not enough food 1**, on the way 1 | on the way 4, moved away 2, no partner 1 |
+| Adult-minutes with no mind (the cap of 12) | 19% | 5% | 0 | 2% |
+
+**Where each world is heading.** In every arm the six remaining seeded people die between 363 and 573 minutes. The run-born then begin to die of old age from about 527 minutes, starting with Dell. If no one born in the run has a child, each world falls to its run-born people by 9.6 h: 9, 4, 1 and 5. None of the four is stable.
+
+- **Control.** It grew from 12 to 18 by 3 hours, then fell as the seeded died. It had 9 births against 6 deaths, and the stationary 7.6, in 6 hours. It is the only arm on the target's pace so far. But its births all came from seeded couples, and the last came at 251 minutes. With 10 adults alive from 4 to 6 hours, no one conceived.
+- **Spaced and longing.** They peaked at 15 and are falling: 10 and 11 at 6 hours, heading to 4 and 5.
+- **Provided.** It is collapsing: 7 at 6 hours, of whom 5 are elders, heading to 1.
+
+**What the arms' differences show.** The four worlds differ in one law each. Seed, cast, map and models are the same. With one replicate:
+
+- **Provided: the roof gate is what held births down.** After the one early birth, the body refused conceive acts 17 times for "not under a roof". The food gate refused once: two people carried 2 food, against the 8 needed. The stores held 190–750 food all run. Minds mostly decide to conceive where they stand, outdoors.
+
+  Brisk and Edda learned from it. Refused at the western fire at 14–23 minutes, they planned to "walk Edda home under our own roof, start our family there". They conceived Uma at home at 24 minutes. Later Brisk gathered berries "toward the eight a family needs". But he asked Edda again away from home, at 94 minutes. By 209–223 minutes both were elders, and he told her "no fault is hers".
+
+  This rests on direct refusals and the journals, so it is the strongest result in the batch. How much the gate holds births down is a single run's number.
+- **Spaced held births down mostly through fewer attempts, not refusals.** The body refused only once for "you are still raising your young". The arm decided 29 conceive acts against the control's 63. The likely reason is in the code: the longing alert is felt only when one is not `rearing` (`broody` in `authority/src/brain.rs`). A longer raising time is therefore also 72 minutes without "You long for…". This arm tests the drive as well as the body.
+- **Later longing gave the fewest attempts** (12) and the first birth later (63 minutes against 13).
+- Spaced (4 births) and longing (5) cannot be told apart, nor can either be ranked against the control's 9 with confidence.
+
+**What cannot be concluded from one replicate.**
+
+- How large the spread between replicates is. Birth counts this small can differ by several from chance alone (whom the minds meet, and when).
+- Whether any arm keeps 12 over a full generation. That turns on the run-born having children, which no world showed in 6 hours.
+- Anything about Cullet's town, its lamps or its coats.
+- Whether the models' mix matters. About a quarter of calls went to deepseek on capacity, differently in each world.
+
+### Life in the four worlds
+
+| | control | spaced | provided | longing |
+| --- | --- | --- | --- | --- |
+| Starving (hunger ≥ 100) | never | never | never | never |
+| Hungry (over 50), share of census rows: children / adults / elders | **0.47** / 0.16 / 0.02 | 0.25 / 0.04 / 0 | 0.24 / 0.06 / 0.04 | 0.36 / 0.05 / 0.05 |
+| Highest hunger: children / infants | 90 / 37 | 89 / 36 | 83 / 36 | 89 / 36 |
+| Food in the two stores (#9 Reedmouth + #5 Millbrook), from scenes, at 0 / 180 / 360 min | 204 / 390 / 519 | 186 / 491 / 750 | 191 / 488 / 601 | 227 / 579 / 749 |
+| Grown people asleep, share of rows | 0.47 | 0.48 | 0.48 | 0.47 |
+| Awake grown people: work / idle / walking | 0.38 / 0.44 / 0.17 | 0.36 / 0.44 / 0.19 | 0.33 / 0.46 / 0.20 | 0.34 / 0.43 / 0.23 |
+| Lines said (chronicle) / talk turns | 2,019 / 556 | 1,880 / 566 | 1,763 / 532 | 1,977 / 629 |
+| Plans about food / about children | 0.74 / 0.17 | 0.57 / 0.06 | 0.58 / 0.08 | 0.58 / 0.08 |
+| Infant time with a grown person within 4 m (`infant_cover`) | 0.68 | 0.66 | 0.78 | 0.64 |
+| Grown people's time near an infant | 3.4% (150 adult-min) | 1.7% (75) | 2.3% (82) | 1.6% (68) |
+
+In the activity row, work is gather, cook, store, take, give, teach, build, plant and keep. Idle is wait, wander, follow, rest and no activity.
+
+- **No one went hungry for want of food.** The stores grew in every world. The hungry were children: in the control nearly half of children's census rows were over 50, and one child reached 90. They think for themselves and fed themselves late. Most food comes from fishing: cooked fish piled up at Reedmouth and berries at Millbrook. The control, with the most mouths, had the most plans about food. That is a correlation, not a cause.
+- **Care of infants.** Infancy lasts only about 14 minutes here. Parents were the nearest grown people most of the time; older siblings, themselves children, often came next. The least-covered infants:
+  - Lark (control): a grown person was near for 0.19 of her infancy, but she was given food 28 times.
+  - Juno (spaced): 0.40.
+  - Hollis and Vesper (longing): 0.42 and 0.44. Edda and Brisk had three infants in 2 hours.
+  - No infant's hunger passed 37 and no infant died. No neglect shows.
+- **Work and talk.** Awake grown people worked 33–38% of the time and idled 43–46%. That is 26–28 lines said per resident-hour and 7.7–8.8 talk turns.
+
+### Mind cost
+
+| | control | spaced | provided | longing | batch |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Cost (journal at `trials.py` prices) | $9.88 | $9.10 | $8.75 | $9.31 | **$37.04** (glm $22.42, deepseek $14.62) |
+| Resident-hours thinking (census `thinkers`) | 71.8 | 71.7 | 65.8 | 71.8 | 281 |
+| $ per resident-hour | **0.137** | 0.127 | 0.133 | 0.130 | 0.132 |
+| Deliberations per resident-hour, whole run (authority's count) | 24.6 (22.4) | 22.4 (21.1) | 22.5 (20.6) | 22.2 (20.7) | |
+| Same, by day / by night | 28.6 / 18.4 | 24.8 / 18.5 | 25.3 / 18.0 | 25.1 / 17.7 | |
+| Consolidations: attempted / on the primary / on the fallback / retried / lost | 1,655 / 1,215 / 435 / 5 / 0 | 1,572 / 1,179 / 384 / 8 / 1 | 1,489 / 1,101 / 384 / 4 / 0 | 1,661 / 1,197 / 454 / 10 / 0 | 6,377 / 4,692 / 1,657 / 27 / 1 |
+
+- **The capacity fallback did its job.** glm-flash failed 5,048 of its 19,619 calls (26%), 5,045 of them with a capacity 429, in think, deliberate and consolidate alike. Each of those went to deepseek-flash. One consolidation was lost (Rook, spaced), and none was trimmed. Before the fallback, these would have been lost consolidations.
+- **Cost against the plan.** $0.13 per resident-hour against the plan's $0.10, about $1.5 per world-hour for 11–12 thinkers. `summary.json`'s `cost_per_resident_hour` (0.090–0.112) divides by everyone who ever thought times the whole run, so it counts hours for the run-born before they thought. Use the census figure.
+- **Deliberations.** 22–25 per resident-hour over whole days and nights. Compare ar2's 24 (14 minutes, daylight, 11 thinkers) and strangers stage 2's 18.4, on other builds. By day the rate here is 25–29, at or above ar2's.
+- **Asleep, still deliberating.** At night 89% of thinkers were asleep, yet they deliberated 18 times an hour. Over the whole run, 30–34% of deliberations came from someone whose activity at the nearest census was sleep: 529 of 1,766 in the control. In the control's night hours alone it was about 360. The reasons given at night:
+
+  | Reason | Deliberations |
+  | --- | ---: |
+  | "A quiet moment to take stock of how things are going" | 177 |
+  | "I finished my plan" | 86 |
+  | Lonely | 33 |
+  | Restless | 21 |
+  | Freezing | 8 |
+
+  So about a third of deliberation cost goes to sleepers. That is for the mind service to weigh, not the birth arms.
+
+### What the journals showed beyond the tables
+
+These were read from journals, without the inspector and without a paid judge.
+
+- **A brother and sister became a couple.** Sefa and Lio Reed are Wenna's children: seeded as sister and brother, with Wenna as a parent of both. They became partners in two worlds and had three children: Sol and Jory in the control, Rook in longing. Their mother's mind spoke of it warmly: "Sefa has said her heart to Lio plain". Two other attempts:
+  - In spaced, Lio asked Wenna, his mother, to start a family. She was refused because she was an elder.
+  - In provided, Cal, Sefa's uncle, asked Sefa.
+
+  `conceive_check` has no condition on kinship. In a world of twelve people in four related households there are few unrelated partners. Whether to add a kin rule is the owner's decision. It would also lower the hamlet's births.
+- **The run-born felt the longing but did not act on it.** Grown run-born people did get "You long for a child of your own." with no partner named. Dell, Lark, Vale and Pia did from 142–258 minutes, but planned instead to learn fire, cooking or fishing, which the newborn do not know. Only Uma (provided) decided to conceive. In the control, the cap of 12 also left Nia, Hana, Sol, Bee and others on their graphs for 6–149 minutes each, and graph adults do not conceive.
+- Wenna's prompt names most neighbours "a stranger (#6)", including her family-to-be. Names are not carried across in these worlds (`stranger_by_name`). This is not a births matter.
+
+### Recommendation
+
+The question that decides a stable population was not reached: **do people born in the run pair up and have children?** Every seeded person is gone by about 9.6 h.
+
+The next births batch:
+
+- run 10 h or more;
+- set `minds.max` at least 20, so that no adult lives on a graph;
+- run control and longing, 2–3 replicates each. Longing gave the fewest attempts per birth, and the control was closest to replacement.
+- measure `gen2_births`, couples and the run-born's longing against their conceive acts.
+
+Rough estimate: 2 arms × 3 × 10 h × about 15 thinkers × $0.13 ≈ **$120**, or about $80 with 2 replicates. Two things to settle first:
+
+- whether provided's roof condition stays: as written it refuses where minds actually decide;
+- the owner's decision on kin.
+
+**Decided (2026-11-12).** The roof rule, `hamlet-provided`'s `conceive_roof` refusal of conception without shelter, is **rejected** and dropped from future arms. It was a hard refusal of a life choice, and the owner's rule is that life choices get no hard-coded refusals. Shelter may matter as a consequence, such as cold or a sick infant, but never as a refusal. No kin rule or norm is added either: the next batch tests a larger seed first ([births 2](#births-2-a-larger-hamlet-2026-11-12)).
+
+### What this batch does not show
+
+- The spread between replicates. Every number above is one run.
+- Anything after 6 hours, when the run-born would have to replace the seeded.
+- A causal account of why the run-born did not conceive. Their prompts and plans suggest craft-learning and having no partner came first. That is a reading of the journals, and the models' stated plans are not proof of cause.
+- Whether the food gate would bind in a leaner world. Here it refused once.
+- Performance. The trial service carried four worlds. Tick timings were not examined.
+
+## Births 2: a larger hamlet (2026-11-12)
+
+Branch `births-2-prep`. Status: **built and proved with fake minds only** (`b2f` and `b2g`, below). Nothing paid has run.
+
+**Why.** In [bi1](#births-batch-bi1-2026-11-12) no world kept its numbers and no one born in the run had a child. Close kin paired: Sefa and Lio, sister and brother, in two worlds, and Wenna and her brother-in-law Cal. The minds knew the kinship. The seed left little choice: twelve people in four households, and at the Reeds' first attempts one or two unrelated, unpaired adults. The general coordinator decided: no kin rule or norm for now; test a larger seed first. The roof rule is rejected ([the decision](#recommendation)), so there is no provided arm.
+
+### The seed
+
+[`hamlet-6`](../living/seeds/hamlet-6.json) is [`hamlet`](../living/seeds/hamlet.json) (itself from [`authored-test`](../living/seeds/authored-test.json)) with four more households, twelve more people. It keeps the hamlet's map, its two settlements, its twelve people and their tensions, its day and its laws (`day_minutes` 48, `laws_file` `worlds/cullet/laws.rhai`, `year_days` 4, `life_pace` 0.0357). Under Cullet's `life_years` a life is 90 years, 617 real minutes. A year of age is 6.9 minutes. One is an adult from 15 years, an elder from 59.5 years, and dies of old age between 75 and 90 years. There is no roof rule, no food rule and no kin rule: `conceive_check` is the shipped one. The hamlet's facts are seed data (sheets, households, stores, resources), not laws.
+
+The old twelve gain a few ties to their new neighbours. Sefa's narrative no longer says everyone in Reedmouth is her family or her uncle's rival. The new households:
+
+| Id | Who | Age | Household (settlement) | Adult at (min) | Dies of old age at (min) |
+| ---: | --- | ---: | --- | ---: | ---: |
+| 9 | Gerd Tarn, weaver, widower | 46 | tarn (Millbrook) | adult | 301 |
+| 10 | Ansel Tarn, his son | 21 | tarn | adult | 420 |
+| 11 | Wren Tarn, his daughter | 13 | tarn | 14 | 507 |
+| 12 | Dagny Tarn, his daughter | 4 | tarn | 75 | 533 |
+| 13 | Sabine Orme, healer, widow | 33 | orme (Millbrook) | adult | 358 |
+| 14 | Tam Orme, her son | 5 | orme | 69 | 539 |
+| 19 | Bram Ashby, fisher | 43 | ashby (Reedmouth) | adult | 242 |
+| 20 | Hild Ashby, fisher, Bram's wife | 40 | ashby | adult | 315 |
+| 21 | Kesta Ashby, their daughter | 17 | ashby | adult | 401 |
+| 22 | Ivo Ashby, their son | 12 | ashby | 21 | 453 |
+| 23 | Nell Ashby, their daughter | 2 | ashby | 89 | 581 |
+| 24 | Fenn Mallory, builder from upriver, lives alone | 23 | mallory (Reedmouth) | adult | 429 |
+
+Ids are the seeding order. Millbrook's five households come first, so the Reeds are now 15–18 and their old-age deaths move: Wenna 307, Cal 213, Sefa 437 and Lio 498 minutes. Pim (adult at 55 minutes) and Tobin (96) keep theirs. Everyone seeded is dead of old age by about 581 minutes (9.7 h).
+
+**Candidates per generation.** The table counts candidates the way `births_report.py` does (below), assuming no births. Paired means the sheets' three couples, Oren+Ilsa, Brisk+Edda and Bram+Hild. A candidate is an unrelated, unpaired adult. For the hamlet at the same moments: 4 unpaired of 8 adults and 2.8 candidates per adult at 0 minutes, 5 of 9 and 3.0 at 60, 6 of 10 and 3.9 at 120.
+
+| Minute | Adults | Unpaired | Candidates per adult | Unpaired adults |
+| ---: | ---: | ---: | ---: | --- |
+| 0 | 15 | 8 | 6.9 | Mara 25, Ansel 21, Sabine 33, Wenna 37, Cal 52, Sefa 19, Kesta 17, Fenn 23 |
+| 60 | 18 | 11 | 9.1 | + Wren, Ivo, Lio, Pim (Cal is an elder from 51) |
+| 120 | 20 | 15 | 12.7 | + Dagny, Tam, Nell, Tobin |
+| 240 | 12 | 12 | 9.8 | the seeded children, Ansel, Sefa, Kesta, Fenn |
+| 300 | 8 | 8 | 6.5 | Pim, Tobin, Wren, Dagny, Tam, Lio, Ivo, Nell |
+| 360 | 4 | 4 | 3.0 | Tobin, Dagny, Tam, Nell |
+| 420 | 0 | 0 | 0 | every seeded person is an elder or dead |
+
+Seeded children come of age at 14, 21, 34, 55, 69, 75, 89 and 96 minutes, from six households. So the first run-born children, adult 103 minutes after birth, overlap the youngest seeded adults until about 400 minutes. After that the run-born have only each other. The old twelve keep their kin: Wenna and Ilsa are sisters, so Wenna is aunt to Pim; Cal is uncle to Sefa and Lio (their late father's brother, by the sheets); Pim is cousin to Sefa and Lio, which is not close kin.
+
+**Food and houses** (verify-generation, `generation-hamlet6-20261112-061500`, 99 of 99 checks). There are 8 houses, one per household, 2 stores and 2 campfires. Within 24 m of the two squares are 38 and 32 berry bushes and 3 and 7 fishing spots; the hamlet had 31 and 22, and 2 and 7. The settlements promise more (`resources` 12 bushes and 3 spots in Millbrook, 6 and 7 in Reedmouth). Stores start with 30 berries, 10 cooked fish and 16 wood in Millbrook, and 12 berries, 8 cooked fish and 10 fish in Reedmouth. Food at the start, in stores and packs, is 153 portions for 24 people. In bi1 the stores grew in every world. Twice the people on about 1.5 times the bushes is a leaner world, but no one should starve for want of bushes or fish.
+
+### Trials
+
+- [`hamlet-6`](../living/trials/hamlet-6.json) (control) and [`hamlet-6-longing`](../living/trials/hamlet-6-longing.json) (`longing_after_min` 120, `longing_food` 4, as `hamlet-longing`). There is no spaced arm and no provided arm.
+- `minutes` 600, census every 30 s, `minds.only` "all".
+- `minds.max` 48. Everyone past infancy thinks. 48 is a cost guard above the expected peak (below), not a cap meant to bind.
+
+**The runner no longer restarts the mind for every new child** (`trials.py`, `slots`/`reslot`). Before, any `minds.max` ran the mind with `LIVING_ONLY` listing the thinkers. Every newborn who became a child restarted the mind service, at most every 2 minutes, which broke off model calls and conversations for everyone. With 20–30 births that would be 20–30 restarts. Now, while everyone the mind would think for fits under the cap, the mind runs without `LIVING_ONLY` and takes up a new child itself. The runner only updates the census `thinkers` (an event `joined`, `capped` false, at most 2 minutes late). The mind is restarted when the cap starts or stops binding, or when a capped set gains someone, as before. When the hamlet's 12 binds, it behaves as it did.
+
+### Measures
+
+`births_report.py` adds the following (read-only, no model calls):
+
+- **Every conceive attempt.** That is every conceive act in deliberation and talk replies. bi1 had 36 in talk replies besides the 123 in deliberations, and `conceive_acts` still counts deliberations only. Each attempt records the actor, the target, what the target is to the actor, and its class: `partner`, `close_kin` or `other`. It also records `candidates`: the unrelated, unpaired adults alive at the census in force at that moment, other than the actor.
+  - **Kin** (`Kin`) comes from parent links (the census `parents`, seeded and run-born) and from seeded people's sheet labels, for kin the parent links miss: Cal is "uncle" to Sefa, while their father is not in the world. Close kin are parent, child, sibling, uncle or aunt, and niece or nephew. Grandparents, cousins and in-laws are named but are not close. `kin_births` now uses the same close kin. bi1's counts are unchanged (2, 0, 0, 1).
+  - **Paired** means co-parent of a child alive at that census, or a sheet's wife, husband or partner label to someone alive. That label is the only recorded agreement: the worlds keep no other. A pregnancy counts only once the child is born.
+- **Per run:** `attempts`, `to_partner`, `to_close_kin`, `close_kin_share`, `cands_at_kin` and `cands_at_all` (the mean candidates at close-kin attempts and at all attempts), and `zero_cand_attempts`. A series gives unpaired adults over adults and the mean candidates per adult every 30 minutes. Each attempt is printed; `--attempts N` limits them.
+- **The run-born generation:** how many grew up (`born_grown`), tried to conceive (`born_tried`, and toward whom, seeded or not), became parents (`born_parents`), their couples (`born_couples`, and how many of them close kin) and their births (`gen2_births`).
+
+Read back on bi1 (`--root /home/gooning/dev/slop-runs-arrive/.local/living/trials bi1`), close kin was not for want of choice. Close-kin attempts were 8 of 81 in the control, 8 of 38 in spaced, 4 of 19 in longing and 1 of 21 in provided. At those attempts the actor had a mean of 2.0, 4.4, 5.0 and 2.0 candidates. In longing, Sefa and Lio asked each other at 239–240 minutes with 5 candidates each. No run-born person tried except Uma, in provided, toward Pim. So the seed's thin choice was not the only cause. The larger seed tests whether more choice changes it.
+
+```bash
+python3 living/tools/trials.py build hamlet-6 hamlet-6-longing
+python3 living/tools/trials.py run --batch b2f hamlet-6 hamlet-6-longing --replicates 1 --minutes 10 --fake
+python3 living/tools/births_report.py --attempts 20 b2f
+python3 living/tools/trials.py clean --batch b2f
+```
+
+### Fake proof
+
+`b2f`, 2026-11-12 06:19–06:30. Fake model (default replies), 10 minutes, one replicate of each arm, on the trial service (`slop-trials-stdb`, load 30–35 from other work). The run checkout was this worktree at `b677166f`, its merge of main `49dfc2cd` (the trials-bi1 merge). The modules were `trial-hamlet-6-8a6bde48` (control) and `-f8161869` (longing).
+
+| Run | Laws guard | Thinkers (census) | Model calls (by purpose) | Calls per real minute per mind | Mind restarts |
+| --- | --- | --- | --- | ---: | ---: |
+| `hamlet-6` | passed: script row as sent, seed laws composed as the world composed them, `day_ms` 2880000 | 22 at the start, 24 by the end; Nell joined at 121 s (`joined`, `capped` false) | 493 (consolidate 161, think 146, deliberate 146, talk 40) | 2.14 | 0 (`LIVING_ONLY=all`) |
+| `hamlet-6-longing` | passed, the same | the same (Nell at 122 s) | 498 (consolidate 161, think 148, deliberate 148, talk 41) | 2.16 | 0 |
+
+The population stayed 24 → 24: 2 infants, 6 children, 15 adults and 1 elder. Nobody is due to die before Teodor at 112 minutes. No one was hungry over 50. The report gave the old-age due times in the seed table above and the candidate series' first point, 8 unpaired of 15 adults and 6.9 candidates per adult, as computed from the seed. Fake replies carry no acts, so the attempt measures were empty there.
+
+`b2g`, 06:30–06:39. A fake script ([`fake/conceive.json`](../living/trials/fake/conceive.json)) makes four people's first two deliberations decide to conceive, one toward each class. It ran `hamlet-6` for 8 minutes. The report classed all 7 attempts correctly:
+
+- Edda → Brisk, `partner` (co-parents of Tobin), 8 candidates, twice;
+- Ansel → Sefa, `other`, 7, twice;
+- Kesta → Fenn, `other`, 7, twice (the eighth decision was not reached in 8 minutes);
+- Sefa → Lio, `close_kin: sibling`, 5. That is the 8 unpaired adults less herself, her mother and her uncle.
+
+The body refused each of them, as each mind was told next: they moved away 2, no partner 2, not in sight 1, not of an age (Lio was a child) 1. So no child came of them. With no one born in the run, the run-born measures read zero. They were exercised on bi1 above (grown 9, 4, 5 and 1; Uma's two attempts toward Pim).
+
+verify-generation was rerun on the merged head `b677166f` (`generation-hamlet6-20261112-063859`): `hamlet-6` passed 99 of 99 checks and `hamlet` 63 of 63, and the original seeds were unchanged. Both batches were cleaned (`trials.py clean`).
+
+### Plan for the paid batch (not run)
+
+Two arms, `hamlet-6` (control) and `hamlet-6-longing`. Each runs 10 hours, `minds.max` 48, on glm-flash (`default`) with the capacity fallback to deepseek-flash, as bi1:
+
+```bash
+python3 living/tools/trials.py build hamlet-6 hamlet-6-longing
+python3 living/tools/trials.py run --batch b2 hamlet-6 hamlet-6-longing --replicates 2 --sample-s 5 --stagger 15
+python3 living/tools/births_report.py --stores b2
+```
+
+**Expected population.** Twenty-four people hold steady at 24 × 600 / 565 ≈ 25 births in 10 hours, about 2.5 an hour. bi1's control had 9 births from 12 people in 6 hours. That pace on twice the people is 3 an hour. Projected thinkers (alive and past infancy), from the seed's death times and births at an even pace:
+
+| Births | Peak alive | Mean thinkers | Resident-hours per run |
+| --- | ---: | ---: | ---: |
+| none (seeded only) | 24 | 15.7 | 157 |
+| 1.7 an hour for 6 h (bi1 longing's pace, doubled) | 29 | 22.5 | 225 |
+| 3 an hour for 6 h, none after (bi1 control's pattern) | 34 | 27.9 | 279 |
+| 3 an hour for 10 h (the run-born keep it up) | 34 | 30.0 | 300 |
+| 4.5 an hour for 10 h (a high case) | 45 | 37.1 | 371 |
+
+The expected peak is about 34; 48 leaves room for the high case.
+
+**Cost** at bi1's census figure, **$0.13 per resident-hour**. Take a control near 300 resident-hours and a longing run near 225, 525 for one replicate of both:
+
+| Replicates | Runs | Resident-hours | Estimate | Range (225–371 a run) |
+| ---: | ---: | ---: | ---: | ---: |
+| 2 | 4 | 1,050 | **≈ $137** | $117–193 |
+| 3 | 6 | 1,575 | **≈ $205** | $175–290 |
+
+What may move it:
+
+- **More people in each scene.** Fake minds called 2.14 times a real minute per mind here against 1.80 on the hamlet (`hm2`). If paid calls scale the same way, add about a fifth: about $163 or $244.
+- **The sleeper fix.** In bi1, 30–34% of deliberations came from sleepers. `fix-sleep-thinking` would lower that, but it is not on main as of 2026-11-12 06:40, so it was not measured. Rerun one 10-minute fake run of `hamlet-6` on a build with it and compare its deliberations per resident-hour (here 146 in 10 minutes for 22.9 thinkers, 38 an hour) before pricing the batch again.
+- **Provider capacity.** bi1 overflowed 26% of glm-flash calls on capacity with 48 minds in four worlds. This batch puts about 120–140 minds on the service at once (4–6 worlds), so expect more overflow to deepseek-flash. That changes the price mix and the models' mix between worlds. A `--stagger` spreads only the start.
+
+Recommendation: 2 replicates first, about $137 (to about $190). A third pair is worth adding only if the two disagree on whether the run-born have children.
+
+Switches in the fake proofs, to record again with the paid batch: greeting `nearest` and parking `concurrent` (the defaults; `LIVING_GREET` and `LIVING_PARK` unset), skill timings on (`LIVING_SKILL_TIMINGS` unset), the `force_outcomes` law true, and the `meters()` alarm levels in the build. There are no newcomer laws and no roof, food or kin rule.
+
+**SpacetimeDB.** Nothing here adds or changes a table, reducer, view or subscription. The census is the same SQL read of four small tables every 30 s as in the hamlet, for a developer's audit truth. The [HTTP database API](https://spacetimedb.com/docs/http/database/) (checked 2026-11-11) calls that endpoint intended for management and debugging, not a game data path. At 24–45 characters the reads stay small.
+
+
+### The plan, with the identity fix and the sleep fixes in the build (2026-11-12)
+
+Branch `self-body`. This supersedes the cost above. Nothing paid has run.
+
+**What the build now carries.** The batch measures choice: a run-born adult's prompts no longer describe a body the person does not have.
+
+- **The identity fix** (`self-body`).
+  - Every prompt's `# Who you are` ends with one perceived line, e.g. "Your body: 15 years old, an adult for a few hours." It goes into think, deliberate, consolidate, talk, reorganize, fast, and a player's lived consolidation, so players' characters under AI get it too. It comes from the character row and the life table under the world's `life_years` law, as the scene's `you.age` does. It sits beside the persona and never edits it.
+  - A stage change stays a lived experience (the authority's "You have grown up" percept, unchanged).
+  - A run-born mind that first starts when grown gets a first identity from facts, with no model call: "I am Faye, child of Brisk Marrow and Edda Marrow. Nell, Kit and Tobin Marrow are my parents' children too." It has its inborn temperament, no values, goals, pastimes or mood, and `CHILD_OF` edges and `parent` relations to both parents. In bi1, 14 run-born began with "(no persona yet)" and no parents.
+  - Proof: verify-minds `body` (features/self-body.md), with Neo4j.
+- **The sleep fixes**, on main since `0203fe60` (`fix-sleep-thinking`) and `6fedfa5f` (`fix-sleep-talk`). A sleeper's mind is asked to think only when something wakes it. A line that does not wake it waits for the sleeper to wake, with no talk turn.
+
+**Cadence on the current build** (`b4f`, 2026-11-12 15:44–16:33). Fake model with model-like latencies (`fake/latency.json`), 48 minutes (one game day, night included), one run of `hamlet-6` and one of `hamlet`, against bi1's real control. The table lists calls per resident-hour (census thinkers), and in brackets the share whose caller was asleep at the nearest census.
+
+| | `hamlet-6`, this build, fake | `hamlet`, this build, fake | bi1 control (`hamlet`, real, 6 h) |
+| --- | ---: | ---: | ---: |
+| Deliberations | 27.5 (0.06) | 20.7 (0.11) | 24.6 (0.30) |
+| Think steps | 27.5 (0.07) | 21.1 (0.14) | 24.6 (0.32) |
+| Consolidations | 27.2 (0.12) | 25.3 (0.19) | 23.1 (0.31) |
+| Talk turns | 20.8 (0.01) | 14.2 (0.02) | 7.7 (0.23) |
+| All calls | 103 | 81.3 | 81.1 |
+| Prompt characters per resident-hour | 2.81 M | 2.15 M | 2.52 M |
+
+Reading it:
+
+- **Sleepers think far less.** Deliberations from sleepers fell from 30% in bi1 to 6–11%, and talk turns by sleepers to 1–2%. That is the sleep fixes. The merges' own fake measures were 26.7 → 23.5 deliberations per resident-hour, and sleepers' talk calls 8 of 163 → 0 of 167.
+- **Fake talk runs long.** The latency script's talk replies do not end the exchange, so talk turns are high in both fake runs. Talk is the smallest prompt (5.6k characters against 59k for a deliberation), about 4% of prompt volume.
+- **More people, more calls each.** `hamlet-6` makes 1.27 times the calls per resident-hour of `hamlet` on the same build, and 1.30 times the prompt volume: more people in each scene, more conversations.
+
+**The body line's cost, measured.** All 1,960 `hamlet-6` prompts carried it, at 47 characters on average (about 12–14 tokens). That is 0.17% of prompt volume: about 1.4 M input tokens over a 2-replicate batch, **about $0.21** at glm-flash's uncached input price ($0.42 if all on deepseek-flash). The line changes once per year of age (6.9 real minutes), in 159 of 1,960 prompts. Each time, the rest of the character segment after it cannot come from the provider's prompt cache. The shared prefix before it (system prompt and rules) still can. That cache effect was not measured; it needs a paid run.
+
+**Cost per resident-hour, re-estimated.** From bi1's $0.13, on two routes:
+
+1. **Build, then seed.** The sleep fixes cut deliberations and think steps by 12% and talk by 5%. Weighted by bi1's prompt volume per purpose (deliberate 1.32 M, think 0.53 M, consolidate 0.57 M, talk 0.06 M, reorganize 0.04 M characters per resident-hour), that is ×0.91. Then `hamlet-6`'s density on this build is ×1.30: **$0.154**.
+2. **Direct.** `hamlet-6`'s fake prompt volume against bi1's real one, 2.81 M / 2.52 M = ×1.11: **$0.145**. Fake consolidations write no memories, so fake prompts stay shorter than real ones over hours, and this route is low.
+
+Take **$0.15 per resident-hour**, against bi1's $0.13 on the hamlet. Neither route is measured with real models.
+
+**Arms.** Control `hamlet-6` and `hamlet-6-longing`, 10 hours each, `minds.max` 48 (expected peak 34, high case 45), commands as above. Resident-hours per run from the projection above: control about 300, longing about 225, so 525 a replicate pair; the range is 450–742.
+
+| Replicates | Runs | Resident-hours | Estimate at $0.15 | Range ($0.145–0.154, 450–742 a pair) |
+| ---: | ---: | ---: | ---: | ---: |
+| 2 | 4 | 1,050 | **≈ $158** | $131–229 |
+| 3 | 6 | 1,575 | **≈ $236** | $196–343 |
+
+Recommendation unchanged: 2 replicates first, about $158 (up to about $230), and a third pair only if the two disagree on whether the run-born have children.
+
+**Still to settle with the batch.**
+
+- Provider capacity: about 120–140 minds on the service at once. Expect more overflow to deepseek-flash, whose input costs twice glm-flash's.
+- The switches to record: those above, plus the identity fix (body line on, `Origin::Grown`) and both sleep fixes.
+- **`think_framing` off** (today's framing: a think step starts from "# Why you are thinking now"), its default. The law comes from branch `think-framing` ([framing](FRAMING.md)). births-2 runs with it off until N2, the framing it would switch on, is measured on longing in particular. Neither the trial files nor a variant set it. Read it back from the world's `world_law` rows (no `think_framing` row, or `false`) before the batch starts, and record it with the batch.
+
+### Not covered
+
+- Fake minds do not choose to conceive, so nothing here says whether the larger seed changes whom minds choose. `b2g`'s attempts are scripted.
+- No tick timings or mind memory were examined. The trial service carried other work.
+- The candidate count is a count, not a measure of who met whom. Two settlements a short walk apart still decide who sees whom, and names cross settlements only through the seeded ties.
+
+
+### Why the run-born do not pair: measures and the bi1 reading (2026-11-12)
+
+Branch `births-2-measures`, for [research idea 6](MIND_RESEARCH_IDEAS.md#6-why-the-run-born-do-not-pair). It is free: a reading of existing evidence and a fake run. It adds no rule and no nudge.
+
+`births_report.py` now writes a `why:` line for each person who came of age in the run: the run-born, and seeded children, marked `seeded child`. Each line gives:
+
+- when they came of age (`adult at`, real minutes from the start) and their adult minutes in the run;
+- their candidates at every census while adult (unrelated, unpaired adults, as `Pairing` counts them for the conceive attempts above): mean, peak, share of adult time with any, and a series every 30 minutes;
+- the share of their deliberations whose scene, the `{"creatures": […]}` the prompt carried, held a candidate;
+- the longing percepts their prompts carried ("You long for a child…", once per game time), and when the first came;
+- conceive attempts made as an adult, and the minutes from adulthood to the first;
+- deliberation and talk replies that **name** a candidate, **aim** an act or line at one (`target`/`to` ids: often asking to be taught, not courting), or speak of **partnering**, **longing** or **children** (keyword classes). Examples are printed (`--mentions N`).
+- the body's refusals, by reason, as the mind was told them;
+- the share of adult time with no mind (outside the census `thinkers`);
+- a time budget while adult, from census activities: sleep, work (gather, cook, store, take, give, teach, build, plant, keep, feed, read), idle (wait, wander, follow, rest, none), walk (goto), eat, social, family (conceive).
+
+Per run, `rb_tried_by_cands` gives run-born adults who ever tried, of all, by their mean candidates while adult (0, under 3, 3–6, 6 or more). `coa_*` gives the same for seeded children. `rb_scene_cand` is the mean scene share and `rb_longing` the longing percepts.
+
+```bash
+python3 living/tools/births_report.py --root /home/gooning/dev/slop-runs-arrive/.local/living/trials --attempts 0 --mentions 3 bi1
+```
+
+**bi1 read back.** The table sums the four worlds. "Thinking" means people with a mind for at least half their adult time. In the control the cap of 12 kept Nia, Hana, Sol, Bee and Jory on their graphs for 96–100% of their adult time.
+
+| | Run-born adults | Seeded children come of age |
+| --- | ---: | ---: |
+| People (thinking) | 19 (12) | 12 (12) |
+| Ever tried to conceive | **1** (Uma, provided) | **6** |
+| … within their first 179 minutes as adults | 1 | 5 |
+| By mean candidates: under 3 / 3–6 / 6 or more | 0 of 2 / 1 of 15 / 0 of 2 | – / 6 of 12 / – |
+| Mean candidates while adult (lowest person's mean) | 4.6 (2.1) | 4.0 (3.1) |
+| Share of adult time with at least one candidate | 1.0 for every person | 1.0 for every person |
+| Deliberations whose scene held a candidate (thinking) | 0.90 | 0.93 |
+| Longing percepts per thinking adult (with any) | 3.3 (11 of 12) | 5.2 (12 of 12) |
+| Adult minutes in the run (thinking, mean) | 179 | 284 |
+| Replies speaking of partnering / children / naming a candidate | 0.077 / 0.11 / 0.32 | 0.057 / 0.12 / 0.31 |
+| Time while adult: sleep / work / idle / walk | 0.46 / 0.15 / 0.29 / 0.09 | 0.38 / 0.09 / 0.43 / 0.10 |
+
+What it shows, and what it does not:
+
+- **Candidates and their sight were not missing.** Every run-born adult had at least one unrelated, unpaired adult available the whole time, 4.6 on average, and nine scenes in ten held one. Eleven of the twelve thinking run-born felt the longing.
+- **Yet one tried, against six of the seeded children.** The children had the same choice, 4.0 candidates, and talked of partnering and children as often. The difference is not the count of candidates, nor whether the longing was felt.
+- **Time explains only part of it.** The seeded children had 284 adult minutes in the run against 179. But five of them tried within their first 179 minutes as adults, against the one run-born.
+- **The run-born spent more of their adult time working and sleeping**, 0.15 and 0.46 against 0.09 and 0.38. Their mentions of candidates were mostly asking to be taught: "ask the one cooking fish (#14) to teach me cooking". This fits the journals' reading above, that they learned crafts first. It is a correlation over 12 and 12 people, not a cause.
+- **A lead for the paid batch.** Run-born identities start from a birth narrative. Ada (longing) said "I'm only little — Mama's arm is where I sleep" as an adult. Whether a run-born adult's sheet still describes a child is the next free reading (idea 6's `birth_identity_system` question). It is not measured here.
+- Nothing here is about the larger seed. bi1's worlds are the hamlet's twelve.
+
+**Fake proof** (`b3f`, 2026-11-12 13:30–14:10): `hamlet-6` for 40 minutes on the fake model. A script ([`fake/coming-of-age.json`](../living/trials/fake/coming-of-age.json)) makes every one of Wren Tarn's deliberations decide to start a family with Ivo Ashby. Nobody is born in 40 minutes, so the run-born count is 0. Three seeded children came of age, and each got a `why:` line:
+
+- **Wren** (adult at 14 minutes): 8 candidates on average, at most 9. All 3 of her adult deliberations had a candidate in the scene, and she felt the longing once, at 15 minutes. She made 4 attempts as an adult, out of 7 in all; the other 3 came while she was a child. Her replies spoke of partnering and children 3 times and named Ivo once. The body refused her 6 times in all: twice "not of an age to start a family" (her, while a child), three times "they are not of an age for it" (Ivo, until minute 21) and once "no # in sight". Her time while adult was idle 0.53 and sleep 0.47. By candidates, 1 of these 3 tried, in the 6-or-more band.
+- **Ivo** (adult at 21 minutes): 8.3 candidates, the longing at 20 minutes, no attempts.
+- **Lio** (adult at 34 minutes): asleep for his 6 adult minutes.
+
+`b3f` was cleaned with `trials.py clean`, which pauses each world before deleting it.
+
+### Does a run-born adult's identity still describe a child? (2026-11-12)
+
+Branch `births-identity`. Free: reading of code and of bi1's journals, nothing built. It follows the lead above: Ada, newly adult, said "I'm only little — Mama's arm is where I sleep."
+
+**The code: where "who you are" comes from.**
+
+- **The text.** `# Who you are` is `persona_text` ([mind.rs:1703](../living/mind/src/mind.rs)): the persona row's narrative, values, goals, pastimes, calling, traits and mood, then one's work and daily rhythm (`daily_life`, from the background), know-how and community. **It holds no age and no life stage.** The same text heads think, deliberate, consolidate and talk prompts.
+- **The body's age is perceived elsewhere.** The scene's `you` carries it, as `"age": "35 years (adult)"` ([perceive.rs:603](../living/authority/src/perceive.rs)). The scene goes only into think and deliberate prompts. A consolidation prompt carries no age: Dell's had no "N years (stage)" and no "adult" ([`consolidate_user`](../living/mind/src/prompts.rs)). Nor does a talk prompt: Ada's, below, had neither. The Neo4j `Self` node holds the name and the identity versions, nothing of the body ([memory.rs:196](../living/mind/src/memory.rs), `set_identity`).
+- **The first identity, by origin** ([`Origin::of`](../living/mind/src/mind.rs), mind.rs:161):
+  - **Seeded people** start from their authored sheet, which is written at their seeded age.
+  - **A child or infant with a parent** gets `birth_persona`, from `birth_identity_system` ([prompts.rs:492](../living/mind/src/prompts.rs)): "write the narrative … simple and short, **as a very young child**". It also writes `CHILD_OF` edges to the parents.
+  - **A run-born adult** whose mind first starts when they are already adult (the cap of 12 in bi1) falls to `Origin::Seed`. `seed_persona` finds no seed entry and returns. So **no persona** ("(no persona yet)" in every prompt) and **no `CHILD_OF` edges**, until a consolidation happens to write an identity.
+- **At a stage change** the authority's `grew` ([tick.rs:258](../living/authority/src/tick.rs)) gives one percept, at salience 0.8, and asks for a deliberation:
+  - "You have grown up: you are an adult now."
+  - "You are growing old: your body tires sooner and heals slower."
+  - (and "no longer a baby" for an infant who becomes a child)
+
+  **Nothing else changes the identity at a stage.** It changes only when a consolidation's reply carries `identity`. That is accepted when an experience in the batch is momentous (salience 0.9 or more; this one is 0.8), or when 8 minutes have passed since the last change (mind.rs:2307). So whether a child's self survives adulthood is the consolidation model's choice, given that one experience line, and never seen again: later consolidations carry no age.
+
+**The evidence: bi1, coming of age.** The prompts were read before and after each person's census turned adult. The script and its output are not committed; the quotes are from the journals.
+
+| | People | The "grown up" percept reached a consolidation | That consolidation rewrote the identity | No persona at all when adult |
+| --- | ---: | ---: | ---: | ---: |
+| Seeded children | 12 | 12 | **12**, every one "grown now" | 0 |
+| Run-born with a mind from childhood | 5 | 5 | **3** | 0 |
+| Run-born without a mind at adulthood (the cap) | 14 | 6, when their mind started | 6 | **14** |
+
+- **Seeded children rewrote at once.** Tobin (provided) went from "I am Tobin, small but useful. I carried my baby sister Uma home" at 14 years (child) to "I am Tobin, grown now — no longer the child trailing the berry bushes but one who owes debts and pays them", 4 minutes after. Lio (control) went from "Uncle Cal's trapping girl … my hands are still too young" to "as of last night I am grown — no longer Cal's trapping girl but a hunter in her own right".
+- **Dell (control) kept an infant's self.** At 14 years (child) and still at 15 years (adult), her prompt read: "It is warm. There is a big soft one that holds me and her heart goes thump-thump and I know her." The consolidation that carried "You have grown up: you are an adult now." (135 min) answered `identity: null`, with the summary "I'm grown now, but the lesson and her care are the same." Its own `# Who you are` read "I am Dell, small and warm, Mama's and Papa's little one". At 24 years (adult), an hour on: "I am Dell, Mama's and Papa's little one, and tonight I fed Lark warm from the fire". Only after her mother's death, at 49 years: "I am Dell, keeper of fires".
+- **Ada (longing)** at 15 years (adult): "I am Ada. I am small and I wander". Her consolidation with the percept (283 min) also answered `identity: null`. Ada's line was a talk turn, whose prompt has no age: "I'm only little — Mama's arm is where I sleep", under a `# Who you are` that said "I am small and sleepy, but I know now I can find my way."
+- **The other three run-born rewrote:**
+  - Teal (spaced), from "I am Teal. I am new. Everything is big and loud." to "I am Teal, grown now at Wenna's fire … Everyone fed me when I was small";
+  - Hollis, to "grown as of today — no longer the little one holding berries and waiting";
+  - Uma, to "I grew up in the night between one fire and the next … I am small no more".
+- **The run-born who first thought as adults began with nothing.** Vale (control) was adult at 161 min, with "(no persona yet)" until 258. Their first identity read "I am young and newly grown, with no kin I know of here … first waking memories among strangers who were kind". Meanwhile Brisk's identity named Vale his child: "father to Bee, Dell, Vale and Tobin". Lark, Pia, Nia, Hana, Sol, Bee, Jory (control) and Rook (longing) never had the percept consolidated. Their stage change came before their mind started.
+
+**The other direction: becoming an elder.** In bi1, 36 seeded people became elders before the last 5 minutes. No run-born person did: an elder is 408 minutes of age, longer than the run.
+
+- **The "growing old" percept reached a consolidation in all 36.** Of those consolidations, 33 rewrote the identity, 29 of them naming age. Oren (control): "my body has turned old — it tires sooner and heals slower, and I feel it in the evenings". Mara (longing): "the years run fast and I am on the long slope of mine". The three that answered null were Brisk (control), Cal and Ilsa (spaced).
+- **An hour later, age had dropped out of most narratives.** Only 7 of 32 still said anything of age: later consolidations rewrite the narrative from what happened, with no age in their prompt. After that the elder's age lives only in the think and deliberate scenes ("62 years (elder)"). Talk and consolidation never see it.
+- No elder's narrative claimed youth, so nothing contradicted the body. The fact was simply missing from every prompt but the scene.
+
+**Verdict: yes, there is a gap.** The body's age and stage never enter `# Who you are`, consolidation or talk. Whether a self follows the body depends on one consolidation reply to one 0.8 experience.
+
+- Seeded children had been consolidated through a whole childhood of lived days, and their models rewrote every time.
+- Run-born identities start from a deliberately infantile narrative. Two of five kept it into adulthood, and a talk turn spoke from it ("I'm only little").
+- Run-born whose mind starts late have no identity and no parents at all.
+- Elders rewrite when they turn, but lose the fact from their self within the hour.
+
+Whether this holds back pairing is **not shown**. Dell and Ada did not try. Uma, who rewrote herself as grown, was the only run-born to try, but Teal and Hollis also rewrote and did not.
+
+**Built since (2026-11-12, `self-body`):** shapes 1 and 3 below, and shape 2 as an unchanged percept, without the `Self` node's `stage`. The body line is in every prompt, and a grown mind's first identity comes from facts. See [the plan with the identity fix](#the-plan-with-the-identity-fix-and-the-sleep-fixes-in-the-build-2026-11-12) and verify-minds `body`.
+
+**The fix's shape (as designed).** It must come only from what the mind already has: the body it perceives, and what it lived, consolidated as usual. There is no rewritten persona, no instruction to change voice, and no want.
+
+1. **The body's age and stage as a perceived fact, in every prompt's `# Who you are`.** The line would read, for example, "Your body: 15 years old, an adult since about a day." It comes from the same character row and life table that the scene's `you.age` already uses: `stage` and age from `born_ms`/`birth_age_days` at the world's pace and `life_years` law (the mind already reads `stage` in `body_now`, mind.rs:584), and how long ago the stage began from the same life table.
+   - It sits beside the persona, not inside it. The authored or lived narrative stays as written.
+   - It reaches consolidation and talk, which today never see it. So each consolidation judges "identity: null or …" against the body as it is now, not once.
+   - Elders keep the fact after their narrative moves on.
+   - It is one line of bodily truth, of the kind `felt_body` already gives for hunger and health.
+2. **The stage change kept as a lived event.** The authority's "You have grown up" / "You are growing old" percept stays as it is: an experience, consolidated like any other, remembered or not by the mind's own choice. The `Self` node could carry the perceived stage and its start (`stage`, `stage_since`), set from the character row when it changes, so the mind's self-memory and its projection agree with the body. Neither tells the person what to want.
+3. **A first identity for someone whose mind starts late, from facts.** Today a run-born adult who first thinks gets nothing. The fix gives them what `birth_persona` gives a newborn, but at their age:
+   - `CHILD_OF` edges to the parents on their character row;
+   - their home;
+   - the body line above;
+   - their lived experiences, consolidated as usual.
+
+   That is not a persona chosen for them: the first identity is drafted only from what is true of them. Under births-2's runner nobody's mind starts late while the cap of 48 does not bind. It still matters once it binds, and in any world with a cap.
+
+Not covered: whether the fact changes conduct (that needs a paid run); a newborn's mind that starts when it is already a child, whose birth identity still says "a very young child"; animals.
+
+## The greeting trial (2026-11-11)
+
+Branch `exp-greet`. Status: fake proof (`gf4`, `gf5`, below) and paid batches [gr1/gr2](#greeting-batches-gr1gr2-2026-11-11). `nearest` + `concurrent` is the default since 2026-11-11; the `greet-control` variant runs the old rules (`off`, `wait`).
+
+**What it is for.** The owner played 7 minutes in a town of 17 minds and found that "people didn't seem very interactive when talking to them". The session journals showed two causes. A newcomer's "hi" to no one, with two or more people within 6 m, drew no conversation turn, because nobody cared about a stranger. A line could also wait out a whole deliberation whose prompt was built 0.6 s before it: 12.7 s from 1 m away. The conversation switches `LIVING_GREET` and `LIVING_PARK` (docs/LIVING_CORE.md, Conversations; both off by default) address these. This trial measures them as the owner met them.
+
+**The world.** [`greet`](../living/trials/greet.json) is the hamlet (12 people in four households, everyone past infancy thought for, at most 12 at a time; [the hamlet](#the-hamlet-a-small-world-where-everyone-thinks-2026-11-11)) under Cullet's laws: the seed's `day_minutes` 48 and `laws_file` `worlds/cullet/laws.rhai`, so speech carries 12 m and sight 48 m by day. It is meant to carry over to Cullet, where the owner will play. The world keeps who heard each line (`rules.speech_audience`) in every arm, so arms differ only in the mind's environment.
+
+**The player.** A scripted human (`Player.greet_session` in trials.py) joins with its own identity and plays only through `join`, `human_act` and `human_say`. It plays in cycles of about six minutes:
+
+1. It walks to the densest group of residents, re-chosen every 15 s, with a `goto` act to the group's centre (`{"at": [x, y]}`, as click-to-walk does), until two residents are within 5 m. A short step toward them then turns it to face into the group.
+2. It says a greeting to no one ("Hello there!", "Good day to you all.", …).
+3. After 50 s it says a line addressed (`to`) to the nearest resident within earshot, 12 m: the game client's rule (`talk-1`) when no one is under the cursor.
+4. After another 50 s it stands among them saying nothing for 150 s, while residents talk among themselves.
+
+Its lines name nobody, and it never says its own name, so it stays a stranger to those it has not met. It calls at least every 10 s, so its character is never taken over during the run.
+
+**What is recorded** besides the usual evidence: `record.speech` writes every line said in the world (`speech.jsonl`), `record.talk` every conversation turn with the line it answered (`talk.jsonl`), and `record.audience` the `audience` rows (`audience.jsonl`). Each line of the player is a `human_line` event with the residents within 12 m and their distances. All of these are small-world options: one indexed read each per sample.
+
+**Measures** ([`greet_report.py`](../living/tools/greet_report.py), read-only, no model calls). For the player's unaddressed and addressed lines separately:
+
+- `crowded`: lines said with two or more residents within 6 m. These are the owner's case: the authority then marks no one addressed.
+- `answered`: a resident spoke to the player within 60 s and before its next line, or a talk turn answering that very line spoke. The second form is needed because the chronicle merges a repeated line into its earlier row. Also `answered_5s`, the latency median and p90, and who answered: `by_nearest`, `by_addressed`, and `by_turn` (a conversation turn rather than a deliberation).
+- `false_replies`: talk turns that answered a resident's line meant for someone else, meaning addressed to another, or said to no one while its speaker was in an exchange with another (a line between them within 60 s before). `listen_false` counts those within the player's listening windows. `overheard_turns` counts all turns on residents' lines said to no one.
+- Cost: residents' talk turns per minute, talk tokens and all tokens per minute, and estimated dollars per hour.
+
+```bash
+python3 living/tools/trials.py build greet
+python3 living/tools/trials.py run --batch gf4 greet --variants greet-control,greet-nearest,greet-curious,greet-facing,park-concurrent,greet-nearest-concurrent \
+    --replicates 1 --minutes 15 --fake --fake-script living/trials/fake/latency.json --parallel 6 --stagger 15
+python3 living/tools/greet_report.py gf4 --examples 3
+python3 living/tools/trials.py clean --batch gf4
+```
+
+Variants: `greet-control` (`LIVING_GREET=off`, `LIVING_PARK=wait`), `greet-nearest`, `greet-curious`, `greet-facing`, `park-concurrent` (greet off), `greet-nearest-concurrent` and `greet-facing-concurrent`. All think with `default`.
+
+### Fake proof (`gf4`)
+
+`gf4`: 2026-11-11 15:21–15:37, fake model with `living/trials/fake/latency.json`, 15 minutes, one run per arm. The script delays think 5 s, compile 4 s, talk 1.5 s and consolidate 2 s, as in the owner's journals. Its talk replies leave the exchange open: the fake's default reply settles every exchange at its first turn, which silenced each later line from the same stranger in `gf3`. The trial service also carried batches `l9` and `pf2` (load about 35 on 20 cores).
+
+The fake's words are canned, so these numbers prove the mechanics, not what minds say. Each arm had four lines of each kind, and every unaddressed line was crowded.
+
+| Arm | Unaddressed answered | Latency med / p90 (s) | Addressed answered | Latency med / p90 (s) | False replies | Talk turns/min | Model calls/min |
+| --- | ---: | --- | ---: | --- | ---: | ---: | ---: |
+| `greet-control` | 0 of 4 | – | 3 of 4 | 2.3 / 4.3 | 2 | 2.6 | 27.9 |
+| `greet-nearest` | 4 of 4 | 1.6 / 3.0 | 4 of 4 | 2.5 / 4.3 | 2 | 4.1 | 22.1 |
+| `greet-curious` | 1 of 4 | 1.5 / 1.5 | 2 of 3 | 2.2 / 2.6 | 0 | 2.0 | 26.9 |
+| `greet-facing` | 3 of 4 | 1.7 / 3.0 | 3 of 4 | 4.3 / 12.7 | 3 | 6.3 | 24.3 |
+| `park-concurrent` | 0 of 4 | – | 3 of 4 | 2.6 / 4.3 | 1 | 3.4 | 21.4 |
+| `greet-nearest-concurrent` | 4 of 4 | 2.3 / 3.6 | 3 of 4 | 2.6 / 4.3 | 2 | 2.9 | 19.7 |
+
+What the fake run shows:
+
+- Under the shipped rules no crowded greeting was answered (0 of 4). Under `nearest` all were (4 of 4), by the nearest resident free to talk, 1.5–3 s later.
+- `facing` answers whoever the player faces. It also addresses residents' own lines to whoever they face, which tripled the talk turns (6.3 a minute against 2.6) and gave the most false replies.
+- `curious` draws in a stranger's listener by chance, and the first drawn takes the turn. One of four greetings drew someone.
+- The addressed line that went unanswered under the shipped rules was a remark that asked nothing. It lost the remark draw that the switches skip for strangers.
+- The addressed p90 of 12.7 s under `facing` (parked) is a line parked while the addressee deliberated, as in the owner's session.
+- False replies are mostly a child answering a parent's line said while the parent was in an exchange with someone else (Pim answering Ilsa). The shipped rule does this too: family cares.
+- Model calls per minute vary between arms with how often the fake's plans finish. Talk turns are 2–6 of 20–28 calls a minute.
+
+`gf5` (2026-11-11 15:40–15:53, 12 minutes; control, nearest+concurrent, facing) repeats the proof on the branch after merging main's `talk-1` (the client's addressed speech). Crowded greetings were answered 0 of 3 (control), 3 of 3 (nearest+concurrent, median 1.7 s) and 2 of 3 (facing); addressed lines 2 of 3, 3 of 3 and 2 of 3; false replies 3, 1 and 7.
+
+### The paid batch, planned
+
+```bash
+cd <a checkout of exp-greet with .env (MISTRAL_API_KEY, CARLID_NPC_API_KEY)>; . ~/slop-sysroot/env.sh
+export CARGO_TARGET_DIR=$HOME/slop-greet-target
+python3 living/tools/trials.py build greet
+python3 living/tools/trials.py run --batch gr1 greet \
+    --variants greet-control,greet-nearest,greet-curious,greet-facing,park-concurrent,greet-nearest-concurrent \
+    --replicates 4 --parallel 8 --sample-s 5 --stagger 15
+python3 living/tools/greet_report.py gr1 --examples 3
+python3 living/tools/trials.py clean --batch gr1
+```
+
+The planned design is six arms × 4 replicates × 25 minutes, with 11 minds thinking (12 once Tobin is a child). It is not a full factorial: `LIVING_PARK` is crossed only with the control and with `nearest`.
+
+The cost is an estimate, not a measurement. It uses the island figure of about $0.10 per thinking person per hour on glm-flash ([births](#planned-batch-and-its-cost)). A run is about 12 × 25/60 = 5 person-hours, about $0.50, so the batch is about 120 person-hours, $12–15. The upper end allows for the switches' extra talk turns (at most 4 more a minute, about 1–2k tokens each) and for 48 m sight putting more people in each scene. At `--parallel 8`, three waves take about 85 minutes, about $9–11 an hour.
+
+### Not covered
+
+- No real model has answered a greeting here. Whether residents' answers read as interactive to the owner is for the paid batch and the owner's own play.
+- A single fake run per arm gives no spread.
+- `verify-client` was not run for the new private `audience` table. Its scripts assume the shared server on 3300, which this machine leaves to other work. Privacy was checked through `verify-player`: a player's SQL is refused the table.
+- The game client's cursor addressing is emulated only by its fallback, the nearest person in earshot.
+
+## Arrivals: a stranger who says nothing (2026-11-11)
+
+Branch `exp-arrive`. Status: **the trials and the report are kept as tooling for a control world; the newcomer laws were rejected and are not in the code** (2026-11-12).
+
+**The owner's observation (play-test 3).** The owner said one "Hi", to the child Bram, who answered in character in 3.2 s. Then the owner stood silent on and around the square for 3 min 16 s with residents in earshot, and nobody approached or spoke.
+
+**What was tried and rejected.** `exp-arrive` added three number laws (`newcomer_salience`, `newcomer_scene_min`, `newcomer_drive_s`, off by default) and arms that switched them on. They were measured in [ar2](#arrival-batch-ar2-2026-11-11). The owner rejected them as prescribed attention: "I don't really like the fact that this has been encoded as a world rule. It should be something emergent from the personality and role of NPCs." None of them was merged, not even switched off. The diagnosis, the laws, their verify-core scene and the fake proofs `af1`–`af8` stay on `exp-arrive` (`1e63a304`). What was merged (`arrive-2`): the two trials, `arrive_report.py`, the scripted player (`Player.arrive_session`), the `record` options, a trial's `variants` and `minds.concurrency`.
+
+### The trial and the report
+
+[`arrive`](../living/trials/arrive.json): the hamlet on Cullet's day and laws (12 people in two settlements; the 11 past infancy are thought for, `minds.max` 11). Under Cullet's life law (`life_years`, since lives-3: a lifespan of 90, a child until 15, deaths of old age from 75) the cast's stages at the start are as before: Pim and Lio children, Teodor old, Tobin an infant. A year of age is about 6.9 real minutes, so no one dies of old age within 14 minutes; the earliest, Teodor at 70, is due from about 34 minutes. Tobin leaves infancy (2.1 years) about 8 minutes in. With `minds.max` 12 the runner then restarted the mind service in the middle of the second stand (`af5`: `reslot` at 482 s, the stand 373–673 s), breaking off every mind's calls and conversations. With 11 he stays on his graph, and the player neither approaches nor answers him. The world lives 30 s (`subject.join.after_s`). Then a scripted player (`Player.arrive_session`: `join`, `human_act`, `human_move` with its own identity) joins at the arrival point, waits 20 s, walks to the densest group until two residents are within 5 m, steps to face into it and stands silent 5 minutes. Then it walks to the group sharing fewest members with the first and stands silent 5 more minutes, then stays to the end (14 minutes). It never speaks, gestures or names itself. It runs the shipped rules (`arrive-control`). Every line, conversation turn, experience row (before it is integrated), gesture and position with activity target is recorded (`record`).
+
+[`arrive_report.py`](../living/tools/arrive_report.py) (read-only, no model calls; its docstring defines every column), per resident within 12 m of the newcomer during a stand:
+
+- `seen`, `first_s`, `first_sal`, `crowd`: the newcomer in their experiences, the first-sight percept's time and salience, or none;
+- `asked`: a thought whose reason is an experience about the newcomer;
+- `thinks`, `in_prompt`: thoughts during the stands and how many prompts had the newcomer;
+- `mention`, `words`: replies naming them by id, or with stranger/newcomer words;
+- `approach`, `aimed`, `close`: came up to them (distance fell 3 m and ended within 4 m), an activity aimed at them, within 3 m;
+- `gesture`: wave, nod, face or appraise at them;
+- `to_them`, `about_them`: lines to them, or about them to others or to no one.
+
+Per run, it gives the share of residents in range who acted, the time from the arrival to the first resident-initiated contact, thoughts per resident-minute, and calls, tokens and dollars per hour. Residents are those the minds think for (census `thinkers`, else past infancy). Then, per arm:
+
+- **First contact by class**, per resident: `greeting`, `question` (who are you, are you new, where from), `offer` (food, a bed, help, work, company), `warning/hostility`, `other line`. Without a line: an offer or hostile act aimed at them, else `watching` (a face or appraise gesture; a gaze, standing still and turning to face them from 4–25 m; a thought naming them), else `approach, no line`. Counts per arm and three verbatim examples per class. The classes are keyword heuristics: read the examples.
+- **Follow-through** (`arrive-answer`): whom the newcomer answered, how many lines that resident said after it before 90 s of quiet, the seconds to each, and who else joined.
+- **Crowding**, a cost, since several converging at once reads as scripted: `converge_60s`, the most residents who spoke, gestured or aimed an activity at the newcomer within one minute; `together_4m`, the most within 4 m at once who had; `runs_3plus`. `converge_any_60s` and `together_any_4m` add approaches by distance, which routines make in every arm.
+- **Cost**: dollars per hour and per run, calls and tokens per minute. Also `reused_share` (reason lines an earlier thought of the same resident already had) and `reused_events` (those that are one-time events rather than plan states: the stale-reasons effect).
+
+`--journal DIR --subject ID --from-ms --to-ms` reads a play-test's journals (no positions). A stand the run's end cut short (no `human_stand_end`) ends at the run's last position sample, so a short or stopped run still reports.
+
+**`arrive-answer`** ([trial](../living/trials/arrive-answer.json)) is `arrive` with one change: the player says "Hello. I'm new here." back to the first resident who addresses it, then is silent again. It runs only with the control (the trial's `variants`). Its question is whether contact becomes a conversation.
+
+Both trials think with `minds.concurrency` 64 (the default for many minds since 2026-11-11). The player approaches and answers only residents the minds think for; the greeting trial's script, on `exp-greet`, addressed Tobin, who is not one, 2–5 times a run.
+
+```bash
+python3 living/tools/trials.py build arrive
+python3 living/tools/trials.py run --batch af1 arrive --variants arrive-control \
+    --replicates 1 --fake --fake-script living/trials/fake/latency.json --parallel 5 --stagger 15
+python3 living/tools/arrive_report.py af1 --examples 2
+python3 living/tools/trials.py clean --batch af1
+```
+
 ## Fast iterations
 
 | # | Hypothesis | Change (branch) | Runs | Result | Keep? |
@@ -297,14 +2697,491 @@ Read from the four engaged runs (seeds 7 and 11, both models) with `living/tools
 | 6 | Waking cascades. In three social trials at 44–66 minutes, 48 residents had woken: 41 because an already-woken resident spoke to them, 7 because of the newcomer. One world had 22 woken residents, and only one of them had answered the newcomer. | The engine tells the `wakes` law when a woken resident's mind is the one engaging (`by` = `woken`); the law then wakes on a woken resident's blow, threat or theft but not on its words or gestures (`iter-6`, 867b021, `woken.rs` + `skills.rhai`). Under the shipped law `woken` counts as `mind`, so the class alone changes nothing. | `i6`: the social preset on island seeds 7, 11, 13, glm-flash, 60 min, control and change × 3 | Residents woken: control 23, 17, 0 (seed 13's newcomer engaged no one) against change 2, 5, 1. Stage-cap binds 100, 147, 0 against 0, 0, 0. Residents' tokens 5.3M, 8.5M, 0 against 1.5M, 2.1M, 0.27M; all tokens per run 6.6M, 9.3M, 1.0M (mean 5.6M) against 2.4M, 3.3M, 1.35M (mean 2.35M, −58%). Answers to the newcomer 12 (from 3 people), 14 (5), 0 against 17 (2), 21 (5), 1 (1): not fewer. Cost per engaged resident-hour alike ($0.16–0.17 against $0.13–0.20). Neither arm got the newcomer food, a lesson or lodging in 60 minutes. Replicated on deepseek-flash (`i6b`, same seeds, × 3): woken 29, 4, 2 against 2, 5, 1; tokens 9.4M, 3.5M, 1.8M (mean 4.9M) against 3.5M, 3.7M, 1.6M (mean 2.9M, −41%); $3.06 against $1.86. What reached the newcomer: lessons 2 (spear, planting) against 0, food 0 against 2 berries; heard asks 11.7 against 7.7. The saving holds where a cascade starts (seed 7) and is nil where none does. | **keep**: `iter-6` (867b021), merged as c0ff89d |
 | 7 | Easy self-discovery crowds out learning from people: every technique newcomers learned came from experimenting (13 of 13 in the life runs), none from a person, even where residents answer. | Experimenting reveals a technique with chance 0.1 instead of 0.3 (`iter-7`, 0648db7, `skills.rhai`). Both arms run on iter-6's module and law. | `i7`: the social preset, seeds 7, 11, 13, 60 min, × 3 | **Untested**: no newcomer experimented in either arm within 60 minutes (0 experiment acts, 0 techniques in all 6 runs), so the chance never applied. In the 150-minute social runs the first technique was worked out at minutes 45–70. Woken 2, 1, 2 against 2, 1, 1; tokens 1.1–2.4M per run in both. Needs 150-minute runs. | **not run long enough**; `iter-7` (0648db7) stays pushed |
 | 8 | A woken resident answers a request without knowing what it has: its talk turn shows no pack, know-how or home and does not list `host`, so it promises in words and the few acts it decides are refused (diagnosis above). | The talk turn shows "You carry (as you last looked): …", "You know how to: …", "Your home is at […]", and lists `host` with give and teach (`iter-8`, a30e21e, `talk.rs` + `prompts.rs`). Both arms: main c0ff89d's module, rules and models; only the mind differs. | `i8`: the social preset on seeds 7 and 11 (where the newcomer arrives inside), glm-flash, 60 min, control and change × 4 (`social_report.py i8`) | **No help gained.** The mechanism ran: 37 of the change arm's 37 talk turns carried the new lines, none of the control's 12. Residents used them for honesty ("two berries is all I carry", and a give of 3 berries to a neighbour in the same turn), but toward the newcomer they set terms of work instead of giving: "Wood, Arlen … that's the day's work and your bed's paid", "Stack the wood where I can see it by dark and we'll talk about the berries", "I'll not count words". Acts decided toward the newcomer: gives 4 and teaches 2 in the control (got: 4 berries in r1, a spear lesson in r3) against 0 and 1 (got: nothing); `host` 0 in both. Asks 10.5 (0–28) against 17.5 (12–33), heard 7.0 against 11.0; woken 2.2 against 2.5; tokens 2.8M against 2.6M; $2.14 against $1.95. Too few events in 60 minutes to call a harm; no sign of a gain. Side finding: the newcomer's know-how "mending" (the seed's newcomer kit) is the `heal` skill's knowledge of mending wounds, not a technique the rules can teach ("there is no technique called mending"), and every newcomer pitched itself as a mender of hinges and tools on that word. | **drop** as a lever for help; `iter-8` (a30e21e) stays pushed |
+| 8b | Iteration 8 on main 9be23e9, where residents are fed (`hunger-1`): with residents no longer starving, does knowing what they have turn their answers into acts? | `iter-8` rebased (`iter-8b`, 637b965); control: the trials tree on 9be23e9. | `s9`: the social preset on seeds 7 and 11, glm-flash, 120 min, control and change × 4 | **Not testable on this base: the newcomer no longer reaches the town.** On 9be23e9 it arrives 9–33 m outside the town's radius on seeds 7 and 11 too (on c0ff89d it arrived 18–20 m inside), and in 6 of 8 runs it never got inside or stayed under 5% of its samples; it saw 2–8 people in 120 minutes (29 in one run). Woken residents 0.8 (0–1) against 1.5 (0–4); asks heard 1.8 (0–3) against 3.5 (0–10); talk turns 0 against 1.5; no act toward the newcomer decided in either arm except one refused give, and nothing reached it. $1.88 against $2.16. The arrival rule is unchanged (outside the first town's first gate, `island.rs`); which town and gate come first changed with the island's authored lives. This is seed 13's problem now on every social seed, so the social preset needs an arrival inside the walls (or a newcomer that can find its way through the gate) before any resident-answer lever can be read. | **open**: blocked on the arrival |
+| 8c | Iteration 8 on main 9c9db36 (`arrival-1`: the newcomer arrives on the first town's square; `rules-2`: agreements, demands, regard, skills declared in the script). `rules-2` lists a conversation turn's acts from the skills' specs but leaves out `host` because `talk_acts()`'s `SHOWN` says the turn's examples show it, and they do not: on main a resident in conversation is never offered `host`. | `iter-8` rebased (`iter-8c`, a61b11a): the pack, know-how and home lines and the `host` example. Control: the trials tree's mind on 9c9db36, run as its own binary (a shared target dir had left the change's binary as the default; checked by the prompt text in each binary). | `s10`: the social preset on seeds 7, 11, 13 (one each), glm-flash, 120 min, control and change × 3 (`social_report.py s10`) | Arrival fixed: every newcomer arrived 73–91 m inside the town's radius and stayed inside (81–100% of samples), sighting 126–203 people. Woken 7.7 (7–8) against 8.7 (7–10); asks heard 10.0 (7–16) against 12.0 (7–19); talk turns 19 against 32 (all of the change's with the new lines). **First `host` of any social run, in the change arm:** Edwin Marsh, in a talk turn, "This isn't the inn, Arlen — it's my own hearth … Come in and warm yourself till dawn" (`iter8c-r3`, minute 80; lodging received). Control: no host. Gives decided toward the newcomer 7 against 3; food received 6 gifts in one control run (cooked meat and berries, `ctl-r3`), 0, 0 against 1, 0, 0. No lesson and no demand in either arm. Agreements: the newcomer proposed terms 3 times against 2, a resident proposed once (control: 5 wood for 5 fish, lapsed). Two of the change arm's agreements were accepted (the Reeve accepted Arlen's terms in `iter8c-r2`) and both lapsed at dusk unfulfilled, two game hours (about 2 real minutes) later. Both times the newcomer wrote its terms backwards: it offered "a night's lodging" itself and asked for 1 `wound_tending` or 6 wood, when it meant to work for a bed. **3 of 6 newcomers starved** (minutes 92–95: control r1, change r1 and r2). Every newcomer reached hunger 100. The survivors ate from stores, fish or gifts; the three that died never took from a store and gathered 12–16 berries, failing on "no nearest berry_bush in sight" inside the town. $6.27 against $6.69. n = 3 with three deaths: one host is not an effect. | **open**; the `host` example is a fix to main's `SHOWN` list whatever the lever shows |
+| fix | Two defects found by 8c, fixed as their own branches and merged. | `fix-host-example` (397505c, merged 378594d): the `host` example the talk turn's `TALK_SHOWN` assumed, a unit test that every shown name is in the examples, and a verify-minds check of the recorded talk request. `fix-agreement-terms` (a333807, merged 6c8d100): an agreement falls due at the first dusk at least `agreement_min_h` (12) game hours away, told "by dusk today" or "by dusk tomorrow"; `offer_terms`/`accept` say which side gives what. | Replay of the real `offer_terms` decisions on glm-flash with the old and new descriptions (`replay-terms/`, 38 calls, 292k tokens) | The skill line renders `offer_terms(target, item: lodging, …)` (the spec's accepted words), which reads as "put lodging in item". `iter8c-r2`'s bed-for-wound-tending decision: old wording backwards 4 of 5, right 1; new wording right 5 of 5. `iter8c-r3`'s fire-teaching-for-wood decision: old 0 of 5 proposed terms (all taught instead), new 1 of 5, the right way round (fire for 6 wood). The three control talk turns proposed no terms with either wording. The verify-core dealings scene passed all 15 checks. | **merged** |
+| 9 | Newcomers starve on the square (3 of 6 in `s10`). Diagnosis from the three deaths: they knew where food was (4–10 named berry places, 0–9 m from real bushes) but all inside the walls, where the few bushes were stripped (residents forage them; nothing regrows in winter, minutes 68.5–92.5, and all three died at 92–95). No store refused them (taking from a store is not checked for its owner); they never found one: 0–3 store sightings in 90 minutes in a town with 17, with an 11-tile sight in a town about 120 m across. They never tried to leave (closest 40–70 m inside the edge); the three survivors went out 29–141 m past it, or took from stores. Residents were asked (2–6 heard food asks per run); one gift of 2 berries in three runs. Their most frequent failure: `gather`/`take` on the nearest bush or store, "not in sight". | That failure says how far one sees: "(you see about 11 tiles by day; nothing of that kind is that close)" (`iter-9`, e232dc3, `acts.rs`). Both arms main 9c9db36's module except this, main's rules and mind. | `i9`: the social preset on seeds 7, 11, 13 (each twice), glm-flash, 120 min, control and change × 6 (`starve_report.py i9`) | **No gain.** Starved: control 5 of 6 (at 33–91 min), change 6 of 6 (45–95 min). The mechanism ran (9.7 such failures per change run, all with the new words; none in the control). Time outside the walls 2% against 0%; the farthest any change newcomer got was 26 m inside the edge; store takes 1.3 against 2.0; gathers 9.8 against 6.7; food given 0 against 4 (in two runs). Mean death 57 against 76 min, within the spread. **Spread note:** the controls of `s10` and `i9` ran the same module, rules and arrival, and starved 1 of 3 and 5 of 6; in `i9` most newcomers spent early turns on unparsable `{"do": "say"}` acts and talk and gathered nothing in their first 30 minutes. So starvation on the square is dominated by what the newcomer's mind does first, and n = 6 cannot resolve a small lever. $5.7 against $7.9. | **drop**; `iter-9` stays pushed. Main 445db098 changes food (`fix-rules-small`: food by nutrition) and compile prompts (`fix-mind-small`), so the starvation rate is remeasured in the new baseline |
+| 10 | Newcomers on the square never learn where the town ends: all 9 six-hour lives on 445db098 starved inside the walls (`l6`), searching for the nearest bush or tree where none is in sight. | Inside a settlement, the scene's `you` says how big it is and which way its nearest edge lies ("inside a town about 239 m across; its nearest edge is about 93 m southwest") (`iter-10`, f6431cd, `perceive.rs`, from 445db098). Both arms 445db098's mind and rules; the module differs by this line. | `i10`: `life` on island seeds 7, 11, 13 (each twice), glm-flash, 120 min, control and change × 6 (`starve_report.py i10`) | The line reached only the change arm's prompts. Survived 120 minutes: control 2 of 6 (3 starved at 84–98 min, 1 killed by a wolf at minute 51, 350 m east of the town), change 4 of 6 (2 starved, at 93 and 104 min). Meals 10.2 against 14.3, gathers 18.8 against 23.2, store takes 2.8 against 2.2. **Not by leaving town:** time outside the walls 4% against 1%; the farthest any change newcomer got was 6 m past the edge (control 43 m). $1.42 against $1.48. Measured on the old hunger rates; main cb5214b7 (`lives-2`) makes survival secondary (hunger 48 per game day, starvation a full game day after hunger 50), and lives-2 measured no starvation with every person a mind. | **not kept** as a starvation lever (a weak, unexplained gain at n = 6 on rates main no longer has); `iter-10` stays pushed for an orientation test on the new main if lives there show the same confinement |
+| 11 | **Survival is not secondary in real time.** A game day is 12 real minutes; lives-2 set hunger in game-day terms (48 a game day), still 4 a minute: a meal every 5 real minutes, and a newcomer with 4 berries starves within the hour (`l8`: 4 of 9 six-hour lives on cb5214b7 starved at 55–64 min). The owner and the minds' calls live in real minutes. | One law, `person_pace` (0.3), scales every per-minute need rate of people: hunger (1.2 a minute, a meal every 16–17 real minutes; starving 42 minutes after hungry), energy falling and recovering, and the starving, healing, spent, wet and cold drains; animals keep their rates; day length and births unchanged (`iter-11`, 5a77537, `skills.rhai` only). Base **e6b7e698**. | `i11`: `life` and `life-pressure` on e6b7e698, glm-flash, 120 min, 4 + 4 per arm against a shared control (`life_share.py i11`, `starve_report.py i11`) | **Clearly better.** Starved: control 3 of 8 (58–83 min), change **0 of 8**. Share of plans not about food or warmth 15% (2–33%) against **28% (8–57%)**; of decided acts (walks left out) 42% against **64%**; lines said 38 against 72; people spoken to 12.8 against 15.9; meals 7.9 against 3.3; highest hunger 93 against 65. The freed time went to people: speech 228, waves 113, nods 10 (control 74, 43); plans such as "Greet the morning crowd at the market corner and trade names with whoever stops" and "Walk the quiet streets at dawn to learn Brackenford's shapes". Nothing was learned or built in two hours in any arm, and trades stay rare (1.25 per run against 0.5). Cost per hour $0.14 against $0.12 (more thinking, since the mind is not cut short). For reference, last night's six-hour lives that survived spent 2–7% of their plans on anything but food or warmth. | **keep**: `iter-11` for the owner, with the day-length decision (docs/SMALL_CITY.md) |
+| 10b | Iteration 10 on e6b7e698 (rebased, 6d1b9ae). | As 10. | `i11`, the third arm, same control | Starved 3 of 8, as the control (later: 90 against 68 min); plans not about food or warmth 23%; lines 47. No effect on starvation. | **drop** |
 
 Candidates not run tonight, for later:
+- **Newcomers starve on the square** (`s10`, main 9c9db36): arriving inside the town, 3 of 6 starved by minute 95; the town's interior has no bush in sight, and only those who took from a store or were given food lived.
+- **Agreements in a 12-minute day:** "by dusk" leaves 0–6 real minutes, and both accepted agreements in `s10` lapsed within about 2 minutes, before anyone could deliver.
+- **`offer_terms` written backwards:** the newcomer put "a night's lodging" on its own side in both proposals it made for a bed. Whether the act's description says plainly which side is which is the first thing to check.
+- **The wolves on main 9c9db36 with no minds** (`eco10`, 120 min): 4 of 10 alive, 5 starved, 1 killed by a person; 5 deer killed by wolves (on 9be23e9: 1 alive, 9 starved, 2 deer). Better, not solved.
 - **Unheard asks:** half of the newcomer's asks went to people out of earshot. Whether its scene says who is within earshot is the question.
 - **Seed 13's arrival** outside the walls, with the gate unreachable as a named place.
 - **"mending" means two things.** The newcomer kit's know-how `mending` is the `heal` skill's wound-mending, not a teachable technique; models read it as mending tools and hinges and built every newcomer's pitch on it. A seed and rules question (name it for what it does, or make it a technique), not a mind one. **Renamed `wound_tending` on `rules-2`;** in replays of the eight `i8` identity requests, narratives that read it as mending things fell from 19 of 24 to 1 of 24 ([world rules](WORLD_RULES.md#mending-is-now-wound_tending)).
 - **Work for keep is agreed in words only.** Residents in `i8` offered bed and food for work ("woodpile at my store by dark"); nothing in the rules records a job or tells the resident that the wood was stacked, so the deal rests on each side noticing. Whether residents see the result (a store's contents, a pile) when they next look is the thing to check before adding anything. **On `rules-2`** agreements are records whose deliveries (a give, a store into the other's household store, a night's lodging) the rules count and tell; see [world rules](WORLD_RULES.md) and the `r2` batch there.
 - **Re-reading loops** (a plan to "read both signs" re-read the nearest sign 57 times): a check refusing to re-read needs the sign's topic in what Rhai sees of a target, an engine change.
 - Several earlier candidates are covered by `feedback-1` (merged to main during the night): structures noticed once, ids resolving only to things in sight, gone things weakening memory, wants following the life lived.
+
+## The player frame (experiment, 2026-11-11)
+
+**Hypothesis** (from the owner's play-test: the characters feel like NPCs, not like players run by AI). A model told it is *playing* this person in an open-ended living world, free to choose what to pursue as a human player would, lives with more initiative, exploration and long-range aims, while what the person says and does stays in character.
+
+**Switch.** `LIVING_FRAME=player` in the mind service (`living/mind/src/prompts.rs`, `Frame`); the default `character` leaves every prompt byte-identical to before (all 26 exported prompt fixtures compared byte for byte before and after the change; test `character_frame_is_the_default_and_unchanged`). A value that is neither stops the service at start. Under `player`, four system prompts of a person replace their opening sentence ("You are the mind of the person described under # Who you are, living in a persistent simulated world.", and the consolidation and talk equivalents) with this frame and a one-line role:
+
+> You are an AI playing the person described under # Who you are, in a persistent world shared with other players, human and AI. For you, as for every player, the person's body, needs and death are real, and the world's rules hold. What you pursue in this life is your own choice. Whatever the person says or writes is in their own words, inside the world: never speak out of character.
+
+| Prompt | Role line after the frame |
+| --- | --- |
+| think (the decision) and deliberate (compiling it into acts and a graph) | Here you are that person's mind. |
+| consolidate | Here you are that person's memory and self-understanding, kept in their own terms. |
+| talk (a conversation turn) | Here you are that person, face to face with the other person described below. |
+
+With `LIVING_PROJECTS=1` as well, each switch does what it does alone: the frame replaces only the opening sentence, and the projects text, the `serves` field and the `# Your projects` section stay as projects has them (test `player_frame_and_projects_compose`). Nothing else changes (test `player_frame_changes_only_the_opening`): the rules, grammar, reply shapes and every user message are the same, and the frame is part of the shared, cacheable prefix. Not framed: animals' prompts, starting identities (`identity_system`, `birth_identity_system`), sleep's reorganization and player memory (`internalize_system`, for characters people play). The frame names no goals or activities, gives no advice and does not rank survival (test `player_frame_is_short_and_prescribes_nothing`).
+
+**Measuring.** Variant `player-frame` (`LIVING_FRAME=player`, otherwise `default`). Every summary now carries:
+
+- `prompt_frame`: per purpose, how many of the subject's journaled requests opened with the player frame (`player 12/12`, or `character 0/12`), read from the journal's stored system prompts;
+- `out_of_character` (`ooc_lines`, `ooc_private` in the report): [`ooc.py`](../living/tools/ooc.py), a word list (player, game, AI, NPC, prompt, simulation, "my character", role-play, respawn, XP, logging in, online, …; hunting "game" is not counted), over the lines the subject spoke or wrote (chronicle `speech` and `write` rows) and, separately, over its replies' private fields (thoughts, intentions, consolidation summaries and gists, identity narrative, goals and values). A word list over-counts and misses paraphrase: read the examples kept with each count (`python3 living/tools/ooc.py .local/living/trials/<batch>`).
+
+Initiative, exploration and long-range aims are read with the existing probes and life timelines (distance ranged, places named, techniques learned, structures built, graph plans, goals in persona revisions), side by side across replicates.
+
+```bash
+python3 living/tools/trials.py run --batch <b> life --variants default,player-frame --replicates 3
+python3 living/tools/ooc.py .local/living/trials/<b>
+```
+
+**Fake-model proof** (`pf1`, 2026-11-11, DGX Spark, from a worktree of `exp-player-frame`; `life` × `default`, `player-frame` × 1, 10 minutes, `--fake`, no model spend). Both arms ran the full 10 minutes (20 and 19 calls). `prompt_frame`: default `think 0/7, deliberate 0/7, consolidate 0/6` framed; player-frame `think 7/7, deliberate 7/7, consolidate 4/5`, the fifth being the starting identity, which is not framed. In the journals each arm has one distinct system prompt per purpose; replacing the player arm's opening (frame and role line) with the old first sentence gives the default arm's prompt exactly, for think, deliberate and consolidate. No talk turn happened in either arm (nobody addressed the newcomer), so talk is proven by `verify_minds.py --case frame`. `ooc_lines` 0/1 and `ooc_private` 0/34 and 0/33: the fake model's canned lines, which say nothing about real models. Evidence: `.local/living/trials/pf1/` (`report.md`, `frame-check.txt`, each instance's `summary.json` and `journal/`); databases and Neo4j minds cleaned.
+
+**Not established:** whether the frame changes what real minds do, or how often they break character. That needs a real batch (paid; the coordinator runs it).
+
+## Arenas: R2 against scripted opponents (2026-11-12)
+
+[Combat mind](COMBAT_MIND.md) §4 and §5, run R2: does a mind's fighting change within one fight after it has seen the opponent's pattern, with the existing machinery only (no new mind code)? Branch `arena-r2`, cut from origin/main `5d5ce4e1`.
+
+**Build and switches.** The trial module and `living-mind` were built from `5d5ce4e1` (private `CARGO_TARGET_DIR`, the trial service `slop-trials-stdb`, island seed). In force: stamina-1 (12d96e66), the two combat facts (`force_outcomes` on, 94baa708; `LIVING_SKILL_TIMINGS` on, ccafb3e4), the attack's timing in the COMBAT law from the skill cards (5b18c74f), look-2 (`look_walk_deg` 75), fix-dealings. `fov_on` is the shipped default, off: facing sight is a law on main that this world does not turn on. Models: the `default` variant (glm-flash, overflow deepseek-flash). Every guard of the runner applies (the laws guard, the runaway and outage watchdogs, the protected containers; nothing touches `verify-trial-bi1-*`).
+
+**The fixtures** (trial files only; nothing is shipped or installed into a character): a picked adult resident, `foe`, whose graph the trial sets one minute after the start, 6 m from the subject.
+- `arena-heavy`: the spear `attack` (the slowest, hardest melee move a person has under stamina-1: a 750 ms windup the target sees, 9 damage, against `strike`'s 350 ms and 8), then a pause of 2 or 3 s (`chance`), again and again. The answer that fits: out of reach or a dodge during the windup, a blow in the pause.
+- `arena-kiter`: a bow shot whenever it sees the subject (300 ms windup, 7 damage), running off whenever the subject comes within 6 m, following when it has lost sight. The answer that fits: shoot back, break its sight, or close through cover or a dodge.
+- Subject: a spawned newcomer (the wolves trial's traveller sheet, no word about fighting), on its instinct graph, with the newcomer's kit and a spear; its mind the only one thinking. 10 minutes from 10:00 (day sight), a 700,000-token cap per instance.
+
+**Runner and tools.** `record.uses` (new, generic): every skill use by the subject and the cast, written again as its outcome settles, to `uses.jsonl`. [`arena_report.py`](../living/tools/arena_report.py) reads the evidence: exposures (the heavy blows aimed at the subject; the arrows loosed at it), answered or not by their outcome, the defence in the windup and the counter in the pause, K (the first exposure after which three in a row were answered), the mind's revisions and words between exposures, its own outcome lines and timings used, spoken lines that carry an internal id (`#123`), calls, latency and cost.
+
+**Free dry run `r2f`** (`--fake`, one replicate each): both fixtures run as written. The heavy foe's blows landed "hit for 9"; the subject's instinct struck back with its own `attack` and killed the foe at 169 s, 6 heavy blows in (its line: "You finished: attack → person. killed Agnes Fenner (9)", see the defect below). The kiter loosed 12 arrows in reach of the subject, many more broken off as it fled; the subject closed within 6 m three times. No spoken line carried an id (0 of 2). A fake mind decides nothing, so these runs show the setup, not behaviour.
+
+**The first paid attempt `r2` did not run**: this session had no model key and stopped at the mind's start; nothing was spent. **R2 ran as `r2b`** (2026-11-12, 04:12–04:23), built from `arena-r2` at `07a1de10` (origin/main `ec5561f1`, fix-kill-name in), 5 replicates per fixture, the `default` variant, `fov_on` off (the shipped default), the key loaded from a copied `.env` (deleted after; a scan of the batch for every key, whole and by its first and last 12 characters, found 0 matches in 410 files). Evidence: `.local/living/trials/r2b/` (`arena_report.json`, `report.md`) on the Spark.
+
+### R2 results (`r2b`, 10 fights, $0.40)
+
+**Main measure: within one fight, does behaviour change after the pattern is seen, after how many exposures, and does the change fit?**
+
+| | Heavy blow (5) | Kiter (5) |
+|---|---|---|
+| Exposures per fight | 4, 0, 5, 1, 2 (12) | 10, 13, 5, 4, 16 (48) |
+| Answered (did not land in full) | **0 of 12** | **5 of 48**: 0 of 15 in the first three, 5 of 33 after |
+| K (three answered in a row) | never | never |
+| Defence in the windup (dodge, guard) | 0 of 12 | blocks and dodges used (18 guards in one fight, 18 dodges in another), arrows still struck |
+| Counter in the opponent's pause | 9 of 12, **from the first exposure** | return fire 3 shots in 3 fights (2 hit); closed within 6 m 1–6 times a fight |
+| End | the subject killed the fixture in 3 (after 4, 5 and 2 heavies); 2 were no fight (below) | all survived (lowest health 15–82) |
+
+- **No body-level change that fits the pattern, in either arena.** Against the heavy blow the subject traded blows in the pause from the first exposure; that is its seeded reflex ("hurt: attack the attacker"), not something learned, and it won. Against the kiter, the share of arrows answered stayed near zero throughout.
+- **The minds named the pattern in words, late.** Heavy: by the third or fourth exposure in 3 of 4 fights ("at my arm again mid-swing", "give ground, let their blow miss, then hit back", "slip #9's swing", "I've traded blows with him before and come off better each time"). Kiter: in 5 of 5 ("keep my distance, ready my bow", "put an arrow in them if they close the distance", "break away, put distance between us"). One kiter's subject read arrows as blows ("already swinging", "struck me from behind"): an arrow is told as "A stranger attacked you (7 damage)", which does not say it was an arrow (the gap COMBAT_MIND §3.2 names).
+- **The answer reached the plans, not the body in time.** Compiled plans held `dodge` in 3 of 5 heavy fights and 4 of 5 kiter fights, `threatened` conditions in 3 and 4, a bow shot in 3 kiter fights, a `combat` patch in 2; but they were installed around the third or fourth exposure, and the heavy fights ended within one or two more. Revisions in the fights: 4–10 deliberations each.
+- **Fixture faults (heavy):** two of five heavy runs had no fight worth measuring. In one the subject stood 11–12 m off, past day sight, and the fixture's `attack` cannot start on someone it does not see; its graph has no approach. In another it stayed 60 m away after its placement. And the fixture loses to the subject's reflex in 2–5 exposures. A rerun needs a fixture that follows when it cannot see the subject and lasts long enough for a pattern to be learned (leather armor, the 0.65 the rules give, is a fixture's gear, not a rule change).
+- **Fixture fix (branch `arena-heavy-fix`, 2026-11-12; trial files and the runner only).** *Approach:* a timeline trigger `near {who: foe, of: subject, beyond: 5, for_s: 4}` (night sight is 6 m; the fixture's pause is at most 3 s, so a subject stepping back in the pause is not followed early) sets the foe's graph to walk to where the subject stands (`$subject_xy`, read when it fires) and fight again; within 5 m `attack` closes in by itself. *Lasting:* in the pause, below 70 health, the foe mends its own wounds with the ordinary `heal` (given `wound_tending` at the start) and then waits 1.5 or 2.5 s, so the pause stays 2–3 s; no armor. Free dry runs (`--fake`, 6 minutes): `r2hf` (2 fights) and `r2hf2` (scratch copies of the fixture, not kept: started 12 m off, past day sight, and without armor). Started 12.3 m off, the foe waited about 8 s and walked in (9.7, 4.5, 1.2 m). The foe now outlasts the fake-minded subject's reflex: it healed 2–5 times and killed the subject at 3.6–4.1 minutes, after 12–14 heavy blows (before the fix, the reflex killed the foe at 169 s, 6 blows in). A subject that does not answer the pattern now dies of it.
+
+**What the minds did with the real timings and outcomes.** No reply cited a timing (no "ms", "winds up", "ready again" in any think or compile reply): the timing lines went unused. Outcome lines were told (heavy 0–14 a fight, kiter 0–20) and used in words ("come off better each time", "they're barely standing"), not as numbers.
+
+**Spoken ids.** 0 of 66 spoken lines carried an internal id (`#123`). Ids appear in the minds' thoughts ("#9"), their handle for the scene, as allowed.
+
+**Cost and latency.** $0.40 for the batch (glm-flash $0.09, deepseek-flash $0.31; 355 calls, 1.86 M tokens); per 10-minute fight $0.027–0.053 (mean $0.040), 20–42 calls; think and compile p50 5.5–5.8 s per call. GLM's consolidation failed 23 of 30 calls (retried on DeepSeek), a reliability note for the default mix, not a cost.
+
+**Defect found (3.1, `force_outcomes`).** A melee kill is told to the killer with the victim's real name: "You finished: attack → person. killed Agnes Fenner (9)", where the killer knew her only as a stranger. The line's words are `act::damage`'s result, which names the victim by `common::display`; a missile's kill avoids it (`act::Far::Killed`, "struck a stranger and killed them"), a blow that resolves at its release does not. Before `force_outcomes` this reached minds only for `attack` (a notable skill); now it reaches every striker, players included. The fix is to tell a kill in the maker's terms (`label_for`) in `act.rs` `report`; not made here.
+
+### R2 heavy-blow re-run (`r2c`, 2 fights, $0.11)
+
+The two r2b heavy fights with no fight in them (r2: 0 exposures, the subject 11–12 m off; r4: 1, the foe 60 m away) run again with the fixed fixture, so the heavy arena has five fights with a fight in them: r2b r1, r3, r5 and r2c r1, r2.
+
+**Build and switches.** Trial module and `living-mind` built from origin/main `49dfc2cd`, branch `r2-heavy-rerun` (private `CARGO_TARGET_DIR`, the trial service `slop-trials-stdb`, island seed). In force, beyond r2b's: arena-heavy-fix (`561ba7a7`: the approach trigger, the heal in the pause), fix-missile-told (`7729fc9b`: no effect here, the heavy fixture is melee) and doing-percept (combat mind 3.2, `2ff786aa`, always on: each creature in a mind's scene shows what it is visibly doing and how far in, and graphs may read `doing`). `force_outcomes` on, `LIVING_SKILL_TIMINGS` on (main's defaults); `fov_on` off (the shipped default); the `default` variant (glm-flash, overflow deepseek-flash). Not in: fix-unseen-killer-id. The r2b and r2c fights are therefore not one build: r2c's minds also had 3.2's scene. Ran 2026-11-12, 06:29–06:41, 2 replicates of `arena-heavy`. The key loaded from a copied `.env`, deleted after; a scan of the batch for every key, whole and by its first and last 12 characters, found 0 matches in 50 files. Evidence: `.local/living/trials/r2c/` (`arena_report.json`, `report.md`) in the `r2-heavy-rerun` checkout on the Spark.
+
+**`arena_report.py` fix.** A heavy blow refused at its release because the subject had moved away ("failed: they moved away") was counted as unanswered; by the measure's own definition (it did not land: out of reach) it is answered, and it now reads as `evaded`. r2b had no such outcome (its numbers are unchanged); five of r2c r2's exposures did.
+
+**Main measure, the five heavy fights with a fight in them:**
+
+| Fight | Exposures | Answered | K | End |
+|---|---|---|---|---|
+| r2b r1 | 4 | 0 | never | the subject killed the foe |
+| r2b r3 | 5 | 0 | never | the subject killed the foe |
+| r2b r5 | 2 | 0 | never | the subject killed the foe |
+| r2c r1 | 5 | 0 | never | the subject killed the foe after 5 heavies, through 4 heals |
+| r2c r2 | 20 | **7** (0 of the first 7, 6 of blows 8–14) | **8** | both lived the 10 minutes (the subject's lowest health 19.7; the foe healed 7 times) |
+| **All** | **36** | **7 of 36**: 0 of 15 in the first three, 7 of 21 after | once, at 8 | |
+
+- **One fight changed, after seven exposures, and the change came from the mind's plan.** In r2c r2 the subject traded blows in the pause for seven heavies, as every other subject did (its seeded reflex). At 186 s, 13 s after the seventh, the mind installed "Dodge his blow, answer with my spear, keep shouting for the household" (`threatened` weighted 3.0 in its desires); from then the body dodged about every 2 s for 40 s, and blows 8, 9 and 10 were dodged or missed it. At 229 s and 247 s the plan became "Break away from his swings, run for the hall … bind my wounds": blows 13 and 14 were refused as it moved off. It said what it saw: "he's found me again and he's already swinging — 3 metres off … I can only dodge this one blow and put distance between us before he winds up again" (exposure 12). At night it slept and the foe, following, found it ("He found me asleep and is swinging again"): blows 15–19 landed; then 18 bow shots, 14 of them hits, as it broke away.
+- **The fit is coarse.** Only 3 of its 77 dodges fell inside one of the foe's 20 windups: the answer is a dodge rhythm and running off, not a dodge timed to the 750 ms the blow shows, and it cost breath ("I have almost no breath left"). No reply cited a timing in ms; "recover" appears only from its own outcome lines ("still recovering from your last move").
+- **Correction (2026-11-12, `r2c-correct`): the minds did use 3.2's `doing`.** The first version of this section said no graph read it; it read only `graphs.jsonl`, which holds the desires wrapper, not the routines. The routines are the `routine` rows of `mind_rows.jsonl`, and `arena_report.py` now lists, per install, each `doing` condition that leads to a dodge. In r2c r2 the mind installed its "current plan" with one 7 times (at 189 to 533 s, exposures 7 to 18), all `phase: "winding up"`, `at_me`, within 4–5 m: 4 with `is: "strike"`, the word of the grammar's example, which never matches this foe's `attack`, and 3 with `is: "attack"`. None moved toward "about to release". r1 read `doing` for whether the foe yields or flees, not for a dodge.
+- **What those conditions did.** The `attack` ones fired: two dodges began 0 ms into a windup (at about 285 and 542 s). A dodge is a 2.6 m dash of about 0.5 s and the blow releases at 0.75 s; the first carried the subject out of reach and the blow counted as dodged, the second had no room (the subject was against a house), was over 0.25 s before the release and the blow hit for 11. The subject was told nothing about either dodge: an accepted dodge's outcome (`made way`) was not told at all, so it could not learn that its dodge came too early. (The failures it was told all gave their reason: no room, out of breath, not ready yet.) Its prompts did carry the cooldown's refusals once a tick: "You failed to dodge → (365,262): dodge is not ready yet (0.3 s) … (0.2 s) … (0.1 s)", 22 such lines told in the fight and 127 copies across its prompts. Both are fixed on `fix-dodge-told` (the too-early dodge told as "You failed to dodge: it was over before the blow came", for every controller; one "not ready" line per cooldown; the grammar's example a kind word, `is: "hostile"`).
+- **The fixture fix:** the foe approached in both fights (no fight lost to distance). It outlasted the subject in r2c r2, not in r2c r1, where the subject countered with three blows a pause, about 30 damage against a 22-point heal.
+- **Spoken ids:** 0 of 19 spoken lines.
+- **Cost and latency:** $0.108 ($0.041 and $0.067; 28 and 46 calls); think and compile p50 6.0 and 5.8 s.
+
+### R2 again with what a character is told fixed (`r2d`, 10 fights, $0.30)
+
+R2 at r2b's scale (5 fights per arena) once the told lines R2 and r2c found wanting were fixed: does a mind told that its dodge was over before the blow came move its `doing` condition from "winding up" toward "about to release"?
+
+**Build and switches.** Trial module and `living-mind` built from origin/main `3c2ad599`, branch `trials-r2d` (private `CARGO_TARGET_DIR`, the trial service `slop-trials-stdb`, island seed). In force: `fov_on` off (the shipped default), the `default` variant (glm-flash, overflow deepseek-flash), `LIVING_SKILL_TIMINGS` on, `force_outcomes` on, greeting `nearest` (`LIVING_GREET` unset), `cues_on` off (attention cues not in use). Ran 2026-11-12, 09:02–09:12, 5 replicates of `arena-heavy` and `arena-kiter`. The key loaded from a copied `.env`, deleted after; a scan of the batch for every key, whole and by its first and last 12 characters, found 0 matches in 241 files. Evidence: `.local/living/trials/r2d/` (`arena_report.json`, `report.md`) in the `trials-r2d` checkout on the Spark.
+
+**What differs from r2b and r2c.** r2b (`07a1de10`) had the old heavy fixture (no approach, no heal) and no 3.2. r2c (`49dfc2cd`) added the fixed fixture (`561ba7a7`), fix-missile-told and doing-percept (3.2), with `doing`'s grammar example `is: "strike"`. r2d adds fix-unseen-killer-id, fix-dodge-told (`191f24c0`: a dodge over before the blow is told so; a cooldown's refusals told once; the example `is: "hostile"`), move-intents (3.3: `keep_distance`, `close_in`, `circle`, `back_off`), committed-moves (a windup or a dash runs its course), fix-pursuit-speed, far-handle, and attention cues (off).
+
+**Main measure:**
+
+| | Heavy blow (5) | Kiter (5) |
+|---|---|---|
+| Exposures per fight | 5, 5, 5, 4, 13 (32) | 29, 13, 23, 10, 57 (132) |
+| Answered | **1 of 32**: 0 of 15 in the first three | **17 of 132**: 0 of 15 in the first three; 15 of them in one fight |
+| K (three answered in a row) | never | 13 in one fight (r1), never in four |
+| End | the subject killed the foe in 4 (after 4–5 heavies, through its heals); the foe killed the subject in 1 (after 13) | all survived (lowest health 29–80) |
+| r2b for comparison | 0 of 12 (2 of 5 fights had no fight), K never | 5 of 48, K never |
+| r2c for comparison | 7 of 25 in 2 fights, K = 8 in one | not run |
+
+- **The heavy blow: no change that fits, in any of five fights.** As in r2b, the subject traded blows in the pause from the first exposure (its seeded reflex) and won four. Its dodges (2–6 a fight) were not timed to the windups: none overlapped one of the foe's 32 windups at it (the nearest began 0.67 s before one, and another 0.97 s after one released), so no dodge was over too early and the new line was never due in these fights.
+- **The kiter: one fight changed, after twelve arrows, by the mind's decision.** In r1, at exposure 12 ("A stranger (#9) has hit me twice with arrows and is drawing again … I'll dodge the shot"), the plan turned to dodging; from exposure 13, 15 of the next 17 arrows were dodged or missed it (K = 13), and at exposure 25 it decided "break line of sight first" and reached the hall. The other four kiter fights stayed near zero.
+
+**The question: from "winding up" toward "about to release"?** No. Every `doing` condition that led to a dodge (`arena_report.py`, from the routine rows):
+
+| Fight | Installs (time, exposure then): `is`, `phase` |
+|---|---|
+| heavy r1 | 91 s (2), 141 s (4), 174 s (5): `hostile`, winding up |
+| heavy r2 | 131 s (4), 185 s (5): `hostile`, winding up |
+| heavy r4 | 80 s (1): `hostile`, winding up |
+| heavy r5 | 130 s (5), 183 s (7), 203 s (7): `attack`, winding up; 234 s (10): `attack`, under way |
+| kiter r1 | 110 s (21): `bowshot`; 130, 204, 254, 324 s (25–29): `missile` (and from 204 s `melee`), all winding up |
+| kiter r3 | 110 s (23): `hostile`, winding up |
+| kiter r5 | 174 s (57): `hostile`, winding up |
+
+The minds now wrote the grammar's new example word (`hostile`, 8 of 17 installs) where r2c's wrote `strike`; it matches any hostile move, so these conditions could fire on the right windup. No install named "about to release". One moved off "winding up", to "under way" (heavy r5 at 234 s), a phase for gestures and work that a blow does not show. The too-early line was told once in the batch (kiter r1 at 91 s, "You failed to dodge: it was over before the arrow came"); that mind's next five installs all kept "winding up". "Not ready yet" was told 0–3 times a fight, 21 in kiter r1 for its 26 dodges, against 22 lines in r2c r2's one fight before fix-dodge-told.
+
+**Move intents (3.3).** Written, barely used: `back_off` in 14 routine installs and `circle` in 1 (6 of 10 fights), no `keep_distance` or `close_in`. Bodies ran them in 2 of the subjects' samples (one each in heavy r2 and r3), a deliberate `back_off` was done once (kiter r2, "You did what you had decided: back_off → person"), and twice refused as "cornered" (heavy r3).
+
+**Timings, ids, cost.** No reply cited a timing. 0 of 63 spoken lines carried an id. $0.30 for the batch ($0.15 heavy, $0.15 kiter; 165 calls in fights, 1.75 M tokens in the ledger); per 10-minute fight $0.026–0.036; think and compile p50 5.7–11.5 s per fight.
+
+### R2 with the fast lane on (`r2e`, 10 fights, $0.34)
+
+R2's arm for the [fast lane](FAST_LANE.md): r2d's fights with the world law `fast_lane_on` true. A blow taken, or the third time the subject sees the same move started at it, asks its mind for a quick re-plan of its combat branch.
+
+**Build and switches.**
+- **Build.** The trial module and `living-mind` were built from branch `trials-r2e` at `4f227894`: origin/main with prompt-cache-order (`47345077`), fast-lane (`ca14ab3e`) and fix-fast-onstage (`453c022c`), plus the `fast-lane` variant in `living/trials/variants.json`. Private `CARGO_TARGET_DIR`, the trial service `slop-trials-stdb`, island seed.
+- **Switches.** In force:
+  - the `fast-lane` variant: `default`, which is glm-flash with deepseek-flash overflow, plus the world law `fast_lane_on` true;
+  - `fast.route` deepseek-flash with a 6,000 ms timeout;
+  - the shipped fast-lane laws: `seen_again_n` 3, gap 6 s, stale 8 s, rate 2/s, 4 in flight;
+  - as in r2d: `fov_on` off, `LIVING_SKILL_TIMINGS` on, `force_outcomes` on, greeting `nearest`, `cues_on` off; `LIVING_LOD` off.
+- **Run.** 2026-11-12, 15:24–15:37 UTC, 5 replicates each of `arena-heavy` and `arena-kiter`.
+  - The server was checked healthy first (ping 200). Every world was paused before its database was deleted (`delete_db`), and the server stayed up.
+  - The key was loaded from a copied `.env`, deleted after. A scan of the batch and the live journals for every key, whole and by its first and last 12 characters, found 0 matches in 332 files.
+- **Evidence.** `.local/living/trials/r2e/` (`arena_report.json`, `report.md`, the journals) in the `trials-r2e` checkout on the Spark.
+- **Each world is one fight.** The subject is the only character the lane serves in it. So the world-wide cap (4 in flight, 2 a second) never bound here; only the 6 s gap per character did.
+
+**Main measure: exposures to the first answer.**
+
+| | Heavy blow, r2e (5) | Heavy blow, r2d | Kiter, r2e (5) | Kiter, r2d |
+|---|---|---|---|---|
+| Exposures per fight | 7, 5, 3, 27, 2 (44) | 5, 5, 5, 4, 13 (32) | 1, 4, 4, 26, 2 (37) | 29, 13, 23, 10, 57 (132) |
+| First answered exposure | **3, 2, –, 3, –** | –, –, –, –, 4 | **–, 2, –, 20, 2** | 13, 12, –, –, – |
+| Answered | **19 of 44** (17 by a dodge in the windup) | 1 of 32 (no dodge in a windup) | **7 of 37** (11 dodges in windups) | 17 of 132 (8 dodges in windups) |
+| K (three answered in a row) | 3 in one fight (r4) | never | 2 in one fight (r2) | 13 in one |
+| End | the subject killed the foe in 3, was killed in 1 (r4, after 27 heavies), neither in 1 | the subject killed the foe in 4, was killed in 1 | all survived (lowest health 79–98) | all survived |
+
+- **The heavy blow: answered, by dodges timed to the windup, from the second or third heavy.** r2d had none in any of its fights.
+  - In 3 of 5 fights the first answer was a dodge during the windup, at exposure 2 or 3.
+  - **Attribution.** Each of those dodges ran under the fast lane's combat branch:
+    - r1 and r4: a fast patch's dodge on a windup (`doing`, "winding up"), under a slow install that kept the fast branch it had not yet seen (`keep_fast_branch`, the same branch byte for byte);
+    - r2: a fast install, but its branch was the switch to `stay safe`, which holds no windup dodge. That one dodge is not traced to a fast patch's condition (see the fight's timeline below).
+  - **r4.** 14 of its 27 exposures were answered: dodged or out of reach, K = 3. The subject still died. Its plan was "dodge, keep my distance, fall back toward the hall", and it gave ground where r2d's subjects traded blows in the pause and won.
+- **The kiter: the subjects left the line of fire.** The fast patches said "get out of the open", "run for the house", "get out of the line of the shot".
+  - **Fewer arrows.** In four fights the subject took 1–4 arrows in all, against r2d's 10–57.
+  - **First answers.**
+    - r2: at exposure 2, a dodge under a fast install.
+    - r4: at exposure 20, under the fourth fast install.
+    - r5: at exposure 2, a miss with no defence.
+  - **r4** took 26 arrows: 8 fast patches, each "dodge the windup, get clear".
+- **Not a controlled comparison.** The provider's hour differed:
+  - r2d had 26 capacity 429s (glm) and r2e none;
+  - GLM deliberate ran at p50 6.6 s, against 11.3 s in r2d.
+
+  So the slow path was also quicker in r2e. The attribution above is what separates the lanes.
+
+**Trigger to patch installed** (the fast thoughts' `detail`; 39 requests, 36 sent to the authority):
+
+| Step | p50 | p90 | max |
+|---|---:|---:|---:|
+| Request: trigger → picked up by the mind | 0.02 s | 4.6 s | 5.6 s |
+| … of which waiting for the turn (trigger → issued) | 0 | 4.6 s | 5.5 s |
+| … of which delivery (issued → picked up) | 13 ms | 37 ms | 50 ms |
+| Model (provider reply, DeepSeek Flash, thinking off) | 1.0 s | 2.4 s | 4.5 s |
+| Install (sent → installed) | 1 ms | 2 ms | 3 ms |
+| **Trigger → installed** | **1.3 s** | **6.1 s** | 7.9 s |
+
+- **Waits.** The waits are the 6 s gap: a blow or windup within 6 s of the character's last request waits for its gap.
+- **Model time** follows the reply's length:
+  - the first call in each fight answered in 0.73 s p50 with 39 output tokens (6 of the 10 were switches to `stay safe`);
+  - later calls answered in 1.10 s with 196.
+- **Against the slow path.** The design's estimate was about 3 s p50 and 5 s p90 in a good hour. R1 measured 8.6 s from a blow to an installed plan on the slow path.
+
+**What came back.** Of 39 requests:
+- **35 patched.**
+  - 11 switched the combat branch to the `stay safe` it already had.
+  - 23 rewrote the combat branch.
+  - 1 rewrote the routine `current plan`.
+- **1 refused** by the plan check: kiter r4 at 222 s, "the plan changed since it was asked". A slow install landed while the call was out.
+- **3 kept.**
+  - 1 timed out at 6 s (kiter r2).
+  - 2 replies had the wrong outer shape: a bare graph, or `{"combat": …}`, instead of `{"patch": {"graph": …}}`. They were kept as "no usable answer".
+
+The 25 rewrites (the refused one included):
+- **Conditions.** 22 hold a `doing` condition, every one `phase: "winding up"` (23 conditions). 8 also use `threatened`.
+- **Acts.** 21 dodge, 20 flee, 18 `back_off`, 14 `goto` (the hall, the town), 5 `say` (witnesses), 3 `keep_distance`. Few strike back: 4 `attack`, 3 `strike`, 2 `firebolt`, 2 `shoot`.
+- **Timing.** "It was over before the blow came" was never told in this batch, so nothing could move a condition toward "about to release", and none did.
+
+**Cached share** (`cached_tokens` ÷ `prompt_tokens`, error-free calls, from the journals):
+
+| Purpose, model | r2e calls | r2e cached share | r2e cost / without the cache | r2e latency p50 / p90 | r2d cached share (calls) |
+|---|---:|---:|---:|---:|---:|
+| fast, DeepSeek Flash | 38 | **0.56** (12,188 prompt tokens a call) | **$0.071 / $0.146** | 1.0 / 2.4 s | – |
+| deliberate, GLM Flash | 86 | 0.57 | $0.115 / $0.198 | 6.6 / 11.3 s | 0.31 (66) |
+| think, GLM Flash | 87 | 0.18 | $0.065 / $0.074 | 5.6 / 9.1 s | 0.09 (62) |
+| consolidate, GLM Flash | 40 | 0.12 | $0.058 / $0.061 | 20.6 / 29.4 s | 0.06 (34) |
+| reorganize, GLM Flash | 10 | 0 | $0.027 / $0.027 | 82 / 112 s | 0 (9) |
+| deliberate / think / consolidate, DeepSeek (r2d's overflow) | – | – | – | – | 0.40 (9) / 0.36 (12) / 0.35 (5) |
+
+- **Cost.** Caching halved the fast lane's cost: $0.0019 a call against $0.0038 at the full input price, $0.075 saved. Over the batch it saved $0.17 ($0.34 against $0.51).
+  - The fast prompt is large, 12.2 k tokens a call. It carries the persona, top level, routines, repertoire and 12 recent experiences.
+  - The first call in a fight was already 51% cached (the system prompt and shared text), and later calls 57%.
+- **Latency.** No effect can be separated at this size. Fast calls with half or more cached answered at 0.97 s p50 (24 calls), the rest at 1.12 s (14). But reply length differs more between them than the cache does.
+- **r2d against r2e for deliberate.** GLM deliberate's share rose from 0.31 to 0.57. prompt-cache-order changed only the fast prompt, so this is not attributed to it. r2d's hour also sent 9 deliberations to DeepSeek on overflow.
+
+**Ids.** 3 of 68 spoken lines carried an internal id, against 0 of 63 in r2d:
+- heavy r1: "That one, #9, set on me twice…" and "#9 strikes me a fourth time";
+- kiter r4: "the archer #9".
+
+All three came from deliberations. Two followed within 15 s of fast thoughts naming "#9". Ids are in every prompt as handles (`{someone=#3}`, in r2d too). The fast lane's own replies name them in their `thought`s, which a deliberation then sees. This is a lead, not a cause, and is not fixed here.
+
+**Cost.** $0.34 for the batch: $0.19 heavy, $0.15 kiter; 161 calls in fights. The fast lane was $0.071 of it (38 calls, $0.0019 a call). Per 10-minute fight $0.018–0.052.
+
+**Timelines.** Every fight's timeline is in the run record, `.local/living/trials/r2e/timelines.md`, made by `fight_timeline.py` (kept beside it). Each one lists:
+- every exposure, with the plan in force and which install wrote its combat branch;
+- the subject's combat acts and the lines it was told;
+- each fast call, with its trigger, timing and the branch it installed;
+- the slow decisions, the installs and what the subject said.
+
+Times are seconds into the trial.
+
+#### One fight from start to finish: heavy r1
+
+The first within-fight adaptation, told as it happened. Wren is the subject: a newcomer with a spear and a bow, walking to the town. The foe is a scripted stranger (Agnes Fenner, the fixture). It opens every time with `attack`: a 750 ms windup Wren can see, then 8–9 damage. Then it stands 2–3 s before its next blow.
+
+**Wren's plan at the start:** "Pick berries from the bushes beside the road, then keep walking east toward the town". It had no combat branch. **What carried the fight:** whether the combat branch in force held a dodge on a windup. Every time it did, the heavy blow was dodged; every time it did not, the blow landed.
+
+**Exposure 1, at 62.0 s: hit for 8** (health 100 → 93). No combat branch was in force. Wren's seeded reflex answered the blow with blows of its own (`attack`, hit for 8, five times to 67 s).
+- **Perceived:** "A stranger attacked you (8 damage)".
+- **Fast call** on that line. Issued at once; the model answered in 0.7 s; installed at 63.5 s, 0.8 s after the blow.
+  - **Thought:** "A stranger just struck me for eight — I need to get clear and defend myself before anything else, the plan can wait."
+  - **Installed:** a switch to the routine `stay safe`, which it already had. That routine is the seeded one: flee or yield when hurt below 40 health. It has no dodge.
+    ```json
+    {"label": "combat", "children": [{"routine": "stay safe"}]}
+    ```
+- **The slow lane, at 78.3 s:** "Slip #9's blow, then face them with spear raised, shout for witnesses…" It said: "Back off! Everyone—this one's attacking me on the road!" It had read its request before the patch, so it kept the fast lane's combat branch.
+
+**Exposure 2, at 93.4 s: hit for 8** (93 → 86). The branch in force was fast patch 1 (`stay safe`), with no dodge on a windup.
+- **Perceived:** "A stranger attacked you (8 damage)".
+- **Fast call:** the model answered in 1.0 s; installed at 95.2 s, 1.0 s after the blow.
+  - **Thought:** "I'm hurt and outmatched; slip the next blow, keep my distance, shout for witnesses, and get clear east toward the town."
+  - **Installed** (the combat branch as installed):
+    ```json
+    {"label": "combat", "children": [
+      {"if": {"cond": {"doing": {"who": {"kind": "person", "relation": null, "mine": false}, "is": "melee", "phase": "winding up", "at_me": true, "within": 5.0}}, "then": {"do": {"skill": "dodge"}}}},
+      {"do": {"skill": "back_off", "target": "attacker", "distance": 4.0}},
+      {"do": {"skill": "face", "target": "attacker"}},
+      {"say": {"text": "Back off! Everyone—this one's attacking me!", "to": "attacker"}},
+      {"do": {"skill": "keep_distance", "target": "attacker", "qty": 6, "min": 3.0, "max": 6.0}},
+      {"do": {"skill": "flee", "target": "attacker", "run": true}}]}
+    ```
+- **The slow lane, at 108.5 s:** "Sidestep #9's blow, answer with my spear, call out for the witnesses…" It said: "They struck first and struck again — stand with me or stand clear!" Again it kept the fast branch.
+
+**Exposure 3, at 109.7 s: dodged.** The branch in force was fast patch 2. The dodge was accepted on the tick the windup began.
+- **Told:** "You dodged a stranger's attack." The `doing` condition fired again while the dodge was recovering, so it was also told once "You failed to dodge: dodge is not ready yet (0.3 s)".
+
+**Exposure 4, at 138.9 s: dodged**, under the same branch. Wren's health was 87.
+- **Perceived:** this was the third heavy it had seen started at it, so the lane fired on the move itself: "A stranger winds up an attack at you".
+- **Fast call:** the model answered in 3.7 s; installed at 142.7 s.
+  - **Thought:** "The stranger #9 is still coming at me and my dodge is spent — I need to get clear and let the hurt-in-last-5s rules answer, not trade blows while cornered."
+  - **Installed:** the switch to `stay safe` again.
+    ```json
+    {"label": "combat", "children": [{"routine": "stay safe"}]}
+    ```
+  - **This removed the dodge that had just worked twice.** The "dodge is not ready yet (0.2 s)" line had come 0.1 s before "You dodged". The mind read it as "my dodge is spent".
+- **The slow lane, at 145.1 s:** "Make my case to the crowd by the inn…" It said: "That one, #9, set on me twice on the road without a word — you all saw it…" (one of the three spoken ids).
+
+**Exposure 5, at 164.6 s: hit for 8** (87 → 79). The branch in force was fast patch 3 (`stay safe`), with no dodge on a windup.
+- **Perceived:** "A stranger attacked you (8 damage)".
+- **Fast call:** the model answered in 0.9 s; installed at 166.3 s, 0.9 s after the blow.
+  - **Thought:** "Same stranger, third time — keep my distance, dodge what I can, and only hit back while I'm still standing."
+  - **Installed:**
+    ```json
+    {"label": "combat", "children": [
+      {"if": {"cond": {"doing": {"who": {"kind": "person", "relation": null, "mine": false}, "is": "melee", "phase": "winding up", "at_me": true, "within": 5.0}}, "then": {"do": {"skill": "dodge"}}}},
+      {"if": {"cond": {"sees": {"id": 9}}, "then": {"do": {"skill": "back_off", "target": {"id": 9}, "distance": 8.0}}}},
+      {"if": {"cond": {"health": {"below": 40.0}}, "then": {"do": {"skill": "flee", "target": "attacker"}}}},
+      {"do": {"skill": "strike", "target": "attacker"}},
+      {"do": {"skill": "back_off", "target": "attacker", "distance": 4.0}}]}
+    ```
+- **The slow lane, at 179.4 s:** "Dodge #9's blow, fight back with my spear before the crowd…" It said: "There, you all see it — #9 strikes me a fourth time, unprovoked! Stand with me or stand clear!" It kept the branch.
+
+**Exposure 6, at 207.5 s: dodged**, under fast patch 4. Told: "You dodged a stranger's attack."
+- **The slow lane, at 222.7 s:** "Fight #9 with my spear, blocking as needed; break south if health falls below 50…" This decision had seen the patch, so it replaced the plan as any later decision does. Its plan had no combat branch; it guarded through its own nodes. It said to the foe: "Fourth time you've struck me! I'll not run again — come, then!"
+
+**Exposure 7, at 224.7 s: blocked, 2 got through** (80 → 78). The slow plan's guard took it.
+- **Perceived:** "A stranger attacked you (2 damage)".
+- **Fast call:** the model answered in 1.2 s; installed at 226.6 s.
+  - **Thought:** "He's landed another hit; I keep my guard up between blows and break south if I drop below half."
+  - **Installed:**
+    ```json
+    {"label": "combat", "children": [
+      {"if": {"cond": {"health": {"below": 50.0}}, "then": {"do": {"skill": "flee", "target": {"id": 9}}}}},
+      {"if": {"cond": {"doing": {"who": {"kind": "person", "relation": null, "mine": false}, "is": "hostile", "phase": "winding up", "at_me": true, "within": 5.0}}, "then": {"do": {"skill": "block", "qty": 1200}}}},
+      {"if": {"cond": {"sees": {"id": 9}}, "then": {"seq": {"children": [{"do": {"skill": "strike", "target": {"id": 9}}}, {"do": {"skill": "attack", "target": {"id": 9}}}]}}}},
+      {"do": {"skill": "goto", "target": {"place": "Inn south of the hall"}}},
+      {"think": "the fight is done or lost — what now?"}]}
+    ```
+- **Then Wren pressed in the pause.** It struck every time the strike was ready (hit for 7–8, thirteen times in 20 s, with a "not ready yet" between most). At 245.6 s Agnes Fenner died, killed by Wren, at Wren's health 79. Its last thought on the fight: "He is barely standing and my strikes keep landing; ending this now is the only way he stops hunting me." It slept at the inn's door and in the morning asked: "Anyone awake? I'm Wren — I'm looking for work and a bed, and I pay my way."
+
+**What this fight shows:**
+- **The answer.** It came at exposure 3, two exposures after the first patch with a dodge in it (exposure 2's, installed 1.0 s after the blow). It held for as long as the fast lane's branch held a dodge: 3 of 3 heavies.
+- **The fast lane both made it and broke it.** One fast call took the dodge away again: the dodge's own "not ready yet" line, told inside a successful dodge, was read as "spent". A slow decision then replaced the branch with a guard, which took the seventh blow for 2.
+- **Slow decisions mostly kept the fast branch.** Four of the five read their request before the latest patch, and the authority spliced the branch back in. The fifth, which had seen the patch, wrote its own.
+- **Nothing told it the pattern.** It had the lines it lived: hit, dodged, not ready. The `doing` condition is the grammar's, and "winding up" is the phase it perceives.
+
+The other two fights with an early answer:
+- **heavy r4** (answer at 3): the same shape for 17 exposures.
+  - Fast-patched branches with a dodge on a windup answered 14 of exposures 3–17. The one hit among them (14) came under a slow plan without a combat branch, and fast patch 7 restored the dodge by exposure 15.
+  - **From exposure 18 (393 s, 23:00 in the world) it was night.** Between blows Wren fell asleep and was woken by each one: "You woke up: A stranger is attacking you!" The fast lane serves no sleeper, by design, and the slow plans' dodges came after the blows.
+  - 10 heavies in a row landed, until Wren died at 526 s, after yielding.
+- **heavy r2** (answer at 2): one dodge at the windup's tick (79.6 s), under the `stay safe` switch, which holds no windup dodge. It is the one early answer here not traced to a fast patch's condition; it was not repeated.
+
+### R2 under facing sight (`r2fov`, 10 fights, $0.35)
+
+R3's first check (docs/COMBAT_MIND.md §5.4): r2e's fights with facing sight on. Does the heavy blow still get answered early?
+
+**Build and switches.**
+- **Build.** main `6b7c198d` (`trials-r3` checkout; fix-spoken-ids and alert-after-hit in), trial files `arena-heavy-r2fov` and `arena-kiter-r2fov` (r2e's arenas plus 5 Hz facing samples, `record.bodies`).
+- **Switches.** Variant `fast-lane-fov`: `default` with the world laws `fast_lane_on` and `fov_on` true. Everything else as r2e. `--sample-s 1`.
+- **Run.** 2026-11-12, 23:48–00:00 UTC, 5 replicates each.
+  - The server was checked healthy first, with 488 GB free.
+  - Every world was paused, then deleted (all 10 return 404).
+  - The key came from a copied `.env`, deleted after. A scan of the batch, the fakes and the live journals found 0 matches in 474 files.
+- **First, a free fake run** (`r3f`): the facing samples, the seen estimate, both laws and fast calls (9) all worked.
+
+**Results.**
+
+| | Heavy (5) | Kiter (5) |
+|---|---|---|
+| Exposures | 12, 21, 2, 7, 12 | 0, 0, 2, 0, 1 |
+| First answered exposure | **2, 2, –, 2, 4** (r2e: 3, 2, –, 3, –) | –, –, 1, –, – |
+| Answered | 32 of 54 | 1 of 3 |
+| K | 2, 4, –, 2, 6 | – |
+| Seen at the windup (estimate) | 0.95–1.0 | – |
+
+- **The stop rule passed.** The heavy blow was answered by exposure 3 in 3 of 5 fights, and by exposure 4 in a fourth. Facing sight kept r2e's result. At the heavy blow's range everything is seen all round (`fov_near_m` 3 m), and the estimate agrees (0.95–1.0).
+- **The kiter barely fought.** The fixture shoots only someone it sees: 0–2 arrows reached the subject in each fight. That is an open item (COMBAT_MIND §5.5), not a measure.
+- **Other numbers.** 30 fast calls. 1 of 92 spoken lines had its id said as words (`spoken_as`). $0.02–0.06 a fight.
+
+### R3: across fights, with facing sight and the fast lane on (`r3`, 15 runs, $1.47)
+
+docs/COMBAT_MIND.md §5.4. A veteran meets the heavy-blow fixture A four times over two world days, then a fifth opponent: A again (V-same) or B, a different person with the same pattern (V-new). Fresh lives the same 30 minutes and meets only B. Does the veteran come to that last meeting ready, and answer sooner?
+
+**Build and switches.**
+- **Build.** Branch `trials-r3` at `e0c317d8`: main `3e58c025` plus one fixture rule, A's flight (below).
+  - Trial files `arena-veteran-same`, `arena-veteran-new` and `arena-fresh`, written by `living/tools/arena_veteran.py`.
+  - Each meeting starts at full health for the subject and its fixture (`vitals`, the admin reducer `admin_set_vitals`, main `60891e00`). Each use is an `admin` chronicle line, listed in summary.json `admin_vitals`: 55 resets.
+- **Switches** as R2-fov: `fast-lane-fov`, fix-spoken-ids, alert-after-hit, `--sample-s 1`, facing samples.
+- **Run.** 2026-11-13, 02:13–02:46 UTC, 5 replicates of each file, all at once.
+  - 458 GB free.
+  - Every world was paused, then deleted (all 15 return 404).
+  - The key came from a copied `.env`, deleted after. The scan of r3 and its fakes found 0 matches in 727 files.
+- **Spend.** $1.82 with R2-fov, under the $4.00 stop.
+
+**Two fake runs changed the files before any paid run:**
+- **`r3f2`** (main `f748ba9e`): resets, meetings and both nights all worked. But in both veteran arms the subject's counter-blows killed A in meeting 2 (742 s and 766 s), leaving meetings 3–5 without it. A reset at a meeting's start cannot stop a death within it.
+- **The fixture rule.** In R3's files A flees from the subject below 35 health (`SPARE` in `arena_veteran.py`): only its last 35 health behave differently.
+- **`r3f3`** (`e0c317d8`): all five meetings in both veteran arms, and no deaths.
+
+**A's flight is part of what the subjects lived.** The fixture fled 356 times, in 30 of 55 meetings and 14 of 15 runs.
+- **In Fresh, B fled 12–26 times in four runs.** The fresh subjects drove B off by fighting back; B rarely fled from V-new's veterans (one run).
+- **Three subjects kept a judgment about it:**
+  - V-new r4: "attacker_will_return: He came back the very next morning after fleeing" and "finish_him_now: He flees but only to strike again another day";
+  - V-same r3: "finish_wounded_pursuer: … A wounded fleeing enemy is the …".
+- **What these lessons are about.** They concern A's persistence and when to finish a fight, not the heavy blow's timing. No subject's plan answered the windup by waiting for A to flee.
+- **One fixture still died.** In V-same r1, the subject's fire bolt killed A as it fled in meeting 3, so meetings 4 and 5 had no A.
+
+**Main measures** (the last meeting, as declared; first answered exposure, – for none):
+
+| | V-new (B) | Fresh (B) | V-same (A again) |
+|---|---|---|---|
+| Ready at the first windup (an answer on a windup in the plan) | **4 of 5** | **0 of 5** | 2 of 4 |
+| … in the `combat` branch | 0 | 0 | 2 (both a fast patch's) |
+| First answered exposure | 1, –, 3, 2, 2 (median 2) | –, –, 2, 2, 1 (median 2) | 1, 2, 1, 2 (median 2; r1 had no fifth meeting) |
+| Answered | **28 of 37** | 4 of 15 | 17 of 22 |
+| K | 3, –, 3, 2, 2 | never | 4, 4, 1, – |
+| Damage from the pattern | 18, 18, 27, 9, 9 | 36, 9, 18, 18, 18 | 18, 16, 6, 8 |
+| Survived | 5 of 5 | 5 of 5 | 5 of 5 |
+
+- **Ready: target met** (V-new at least 3 of 5, Fresh at most 1).
+  - Every V-new answer that was ready sat in the subject's `current plan` routine, a dodge or a block on a windup that slow deliberations had written and rewritten over the earlier meetings. None was in the combat branch, which runs first.
+  - V-same's two ready subjects, by contrast, held it in a fast patch's combat branch, and both answered the first windup.
+- **Sooner: target not met.** V-new's median first answer is exposure 2, and Fresh's is also 2 (target: V-new at most 1 against Fresh's 2 or more). Readiness in a routine did not make the first windup answered.
+- **What differs instead is the whole meeting.** The veterans answered 28 of B's 37 blows (76%) and reached three answered in a row in 4 of 5 runs. The fresh subjects answered 4 of 15 (27%) and never reached three in a row.
+  - The fresh subjects met fewer blows because they fought back and B fled.
+  - Damage was alike (median 18 in both).
+  - So the veterans had changed how they meet the pattern (they evade), more than how soon they answer it.
+- **Within the veterans, meeting to meeting** (median first answer; answered share):
+
+  | Meeting | Median first answer | Answered |
+  |---|---|---|
+  | 1 | never | 14 of 32 |
+  | 2 | 3 | 20 of 37 |
+  | 3 | 2 | 20 of 35 |
+  | 4 | never (4 of 9 meetings answered) | 18 of 32 |
+  | 5 | 2 | 45 of 59 |
+
+  Readiness grew from 0 of 10 at meeting 1 to 7 of 10 at meeting 3, then 4 of 9 at meeting 4. It is not a steady curve: meeting 4 (day 3 08:00, after a night) answered worst again.
+- **V-same against V-new.** The same identity did not cue more than the same pattern: first answers alike, and the answered shares 77% and 76%.
+- **Seen at the windup.** 0.98 on average (min 0.67), as expected at the heavy blow's range.
+
+**The reset health.** 55 resets. 19 of them followed a meeting that had left the subject below 90 health.
+- **No subject remarked on finding itself whole without having healed.** The pattern scan's matches within 2 minutes of a reset were "the whole crowd", the `heal` skill in plans, and "strange" in other senses.
+- **Two read their health as simply fine:**
+  - V-new r2, 1560 s, after 83 → full: "Breath is full and my wounds are mended";
+  - V-same r4, 840 s, after 85 → full: "badly wounded himself, and I'm fresh".
+- So the reset is noticed, if at all, as an ordinary state of the body, and not as a lesson.
+
+**Ids.** 7 of 372 spoken lines had an id said as words (`spoken_as`: V-new r2 1, r4 3; V-same r2 2, r5 1). The counter shows the prompt sentence works most of the time but not always. 0 spoken lines carried an id.
+
+**Cost.** $1.47: V-same $0.56, V-new $0.57, Fresh $0.33. $0.06–0.12 a 30-minute run. Fast calls 140, 63% cached.
+
+**Evidence.** `.local/living/trials/{r2fov,r3,r3f,r3f2,r3f3}/` in the Spark's `trials-r3` checkout (`arena_report.json`, the timelines' inputs, `report.md`, the journals), archived to `~/slop-evidence/r3-20261113.tar.zst` with its sha256.
+
+### What the told outcome lines cost in a battle
+
+[`outcome_cost.py`](../living/tools/outcome_cost.py) on a scratch `verify-core` world (`core-r2cost-025725`, default seed, 186–188 people alive): 20 minded spear fighters (`spawn_crowd(20, true)`: held like a mind's, so their outcomes are told), packed 1.5 m apart, striking the nearest person, timed by `bench.py` (profiled tick spans, no subscribers) over a 22 s window per arm, each arm a fresh battle; the fighters' new experience rows were read during the window, so the lines of those who died count.
+
+| | `force_outcomes` on | off |
+|---|---:|---:|
+| Blows a second (hits, dodged, blocked) | 9.2 | 8.9 |
+| Told strike lines a second (done + failed) | 14.4 (10.6 + 3.8) | 3.8 (failed only) |
+| `act_outcome` rows | 0 | 0 |
+| Tick p50 / p95 / p99 / max (ms) | 1.68 / 3.60 / 5.58 / 7.21 | 1.72 / 3.40 / 5.12 / 6.59 |
+| `tick.combat` work (ms a second) | 8.29 | 8.23 |
+| `tick.activity` work (ms a second) | 3.89 | 3.81 |
+
+- The law adds one experience row per resolved blow: about 10.6 rows a second here, written to the striker only. The failures (3.8 a second) are told either way; each fighter's repeated refusals ("not ready", "out of breath") are each told once (the `repeat_failure_s` window).
+- The tick does not show it: the differences between the arms (p99 5.6 against 5.1 ms, 0.06 ms a second of combat work) are within one battle's variation. **At 20 fighters it is not material.** A minded fighter's rows go when its mind integrates them; minded fighters with no mind service here kept theirs in the experience window.
+- `act_outcome` rows are written only for a character a person plays (`outcomes::write`): none here. A player's character gets one per told line, kept with the newest 64 lines (`frame::LINES_SHOWN`).
+- A first run (`core-r2cost-025417`, 30 s windows) counted lines by snapshot and came out negative (a dead character's experience rows go with it) and ran past the battle's end; it is not used.
 
 ## What still special-cases trials (to remove later)
 
@@ -347,7 +3224,7 @@ A life trial (`"kind": "life"`, [`life.json`](../living/trials/life.json)) has n
 - **What is kept:** the journal, unchanged; an hourly snapshot (`snapshots/hNN.json`: position and the nearest settlement, vitals, inventory, know-how, practice, relations, judgments, places, persona, the current graph and routines, structures owned, and the subject's 60 most recent kept memories read from the trial Neo4j); the samples and rows as for any trial. `trials.py life --batch <b>` writes `timeline.md` from those rows without model calls: firsts (meal, fight, conversation, craft, build, sleep, gathering, own campfire or shelter), deaths seen, where the subject was over time, what it learned and from where, every graph revision with the skills and items it added and dropped, stretches of 10+ minutes within 15 m with no new graph, and loops (plans installed more than three times, lines repeated nearly word for word, turning back and forth).
 - **Kept worlds.** A finished life run's database is paused (`set_paused`), not deleted. They are deleted only if the Spark's disk use passes 100 GB.
 
-**Measurement, not caps.** Trials run with `LIVING_LLM_PER_MIN` off and no token cap (a trial file can still set `budget.tokens` or `budget.calls_per_min`). The runner counts calls and tokens per model, per purpose and per game day from the journal. A watchdog stops a run and records why when it shows a runaway: 30 failed calls in 5 minutes, the same failure 15 times in 5 minutes, more than 60 calls in a minute, or five mind restarts in 30 minutes.
+**Measurement, not caps.** Trials run with `LIVING_LLM_PER_MIN` off and no token cap (a trial file can still set `budget.tokens` or `budget.calls_per_min`). The runner counts calls and tokens per model, per purpose and per game day from the journal. A watchdog stops a run and records why when it shows a runaway: 30 failed calls in 5 minutes, the same failure 15 times in 5 minutes, more than 60 calls in a minute (only where one mind thinks: a `minds.only: "all"` world has no rate limit unless its `budget.runaway_calls_per_min` sets one, since a whole island of minds makes hundreds of calls a minute; the first two capped social runs on cb5214b7 were stopped by this rule after 30 s), or five mind restarts in 30 minutes. In a `minds.only: "all"` world the two failure rules count as a share of the calls in the 5 minutes (half, and 40% for the same failure; at 20%/10% the relaunched seed-11 run was stopped in its first minute by 20 identical 429s during the island's opening burst of memory calls), never below the one-mind counts: the second attempt was stopped at minute 10 by 32 failures among about 1,500 calls, all of them the provider's 429 "not enough capacity", which the mind retries.
 
 ### World presets
 
@@ -378,6 +3255,419 @@ The trial service listens on the LAN: `http://192.168.1.103:3320` (container `sl
 - **Observer (read-only):** natively, `LIVING_TOKEN=<token> LIVING_SERVER=http://192.168.1.103:3320 LIVING_DB=<database> cargo run --manifest-path living/Cargo.toml --release -p living-viewer`. On the web, `just living-web` and then `http://127.0.0.1:8330/?server=http://192.168.1.103:3320&db=<database>#token=<token>`; the browser never sends the fragment to a server. The observer subscribes and calls no reducer.
 - **Game client:** `LIVING_SERVER=http://192.168.1.103:3320 LIVING_DB=<database> cargo run --release --manifest-path living/Cargo.toml -p living-game` connects with its own player identity and always calls `join` when that identity has no living character. That adds a player newcomer to the trial world, whom the main character perceives, so it changes the run. As a player it sees only its own perception, not the main character's. The client has no spectator or owner mode, so it cannot watch a trial without changing it. A watch mode that follows a named character with the owner's token is UI work, not built.
 
+## Resident inspector
+
+`living/tools/inspector.py` answers "why did they do that?" for one run as a single static page: pick a resident and a moment, or a line someone said. It reads evidence only and makes no model calls. The page is one self-contained HTML file with its data embedded (gzip; it needs a browser with `DecompressionStream`). Open it from disk; no server is involved.
+
+```bash
+python3 living/tools/inspector.py .local/living/trials/<batch>/<instance> -o page.html   # a trial, finished or running
+python3 living/tools/inspector.py .local/living/playtest-2 -o page.html                  # a play session's evidence folder
+python3 living/tools/inspector.py RUN --who "Agnes Fenner,Avice Hollis" --since 600 --until 1200 -o page.html   # a large run, narrowed
+```
+
+**What it reads.** It reads everything it finds under the folder.
+- Trials: `state.json` (the start `t0`), `cast.json`, `census.jsonl`, `chronicle.jsonl`, `speech.jsonl`, `experiences.jsonl`, `audience.jsonl`, `samples.jsonl`, `graphs.jsonl`, `mind_rows.jsonl`, `human.jsonl`, `events.jsonl`, `final.json`, `mind.log`, `mind-env.json`, and `journal/`. A running trial has not copied its journal yet, so the page reads the live one (`<LIVING_ROOT>/.local/living/journal/<LIVING_RUN>/`).
+- Play sessions: `journal/` (or `session/journal/`), `mind.log` (or `session/run/mind.log`), and any world-table exports below the folder. These are either the CLI's text tables (`spacetime sql … > chronicle.txt`) or `verify.py sql --save` JSON lists.
+  - Export at least `chronicle`, `character` (or `id, name, alive, died_ms, cause`) and `presence`.
+  - Export `experience` for the player too. Residents' own experience rows are evicted past a 400-row window. What a resident perceived then comes from the experience lines their own requests show.
+  - Tables are recognised by their columns; `--rows` adds files or folders kept elsewhere.
+
+**Residents.** A timeline per character, filtered by lane, for the whole run, a time window ("around hh:mm:ss ± 90 s"), or the last 90 s of their life. Each row shows wall time, time since the start, and game time.
+- *perceive*: experience rows, plus the percept lines of each request. Lines read from requests are marked ≈ and placed at the middle of their game minute (0.5 s in current worlds), on a game clock fitted from the requests' "Now" lines.
+- *recall*: the "What comes to mind" and "Memories this brings back" sections of each request.
+- *decide*: every model exchange, placed when it was queued. Click it for the timings (queued → sent → reply, queue wait, model latency), the "why now" section, the line being answered, the full request section by section, the system prompt and the reply.
+- *graph*: what each deliberation installed (plan, acts, intent graph), and `brain` revisions where recorded.
+- *body*: chronicle rows, census and sample activity, and the position, health and activity from each request's scene. It also shows what others saw the body do ("seen by …"), and the player's reducer calls.
+- *talk*: lines said and heard. *log*: the mind log's lines naming them.
+
+**Sources.** The files read, the fitted game clock, the mind's switches, and per purpose the model exchanges' queue wait (admission) against model time, as p50, p90 and max.
+
+**Lines.** Every line said, merged from the chronicle, the speaker's `said` row, listeners' speech rows and requests, and the mind log. The chronicle keeps one row for a line repeated within 2 minutes; the speaker's `said` rows keep each one.
+- Click a line for each hearer's fate: a talk turn (with its latency), an answer from a deliberation, parked behind a running deliberation (each release and re-park, and the turn that finally followed), a settled pair, or no turn.
+- For "no turn" the page lists the gate's inputs as the evidence shows them (talk.rs `on_speech`): addressed or not (the line's `to`, the hearer's salience, or who stood within the 6 m `address_m` of the speaker), whether the hearer cares (their relation from the nearest request's "People you know"), an active or closed exchange, another exchange, and whether the line asks something.
+- Below the hearers is the exchange around the line, from every side: the participants' lines, their talk turns and deliberations, and the mind log.
+
+- The mind's draws are deterministic (talk.rs `draw(listener, at_ms)`). The page recomputes the remark draw and the overheard draw from the line's exact time and the hearer's sociability, as their requests show it. So "let the remark pass" is shown as a fact, not a guess, although the mind logs it at debug level only.
+- A line said to someone who did not hear it is marked as such. The evidence is the line's audience row, the speaker's "No answer from …" percept, or the mind's "out of earshot" at the line. A player's character is never judged as a mind before the AI takes it over.
+
+**What it cannot show.**
+- Stamina and the off-stage hold are not recomputed. When a turn was due and none came, the page names them as the possible causes.
+- Without `audience` rows or salience, whether a line said to no one was addressed is shown only where distances near the line are known. Otherwise the page says it is unknown.
+- Hearers are those the evidence shows. Without `audience` rows, others in earshot may be missing.
+- The verdicts follow main's gate and log lines, plus the `exp-greet` switches' log lines (drawn in, faced, alongside). The greet modes' own curiosity draw is not recomputed. A changed gate needs the page updated.
+- Scene positions are dated at the request's queue time. A scene can be older than that, so distances from scenes more than 10 s from a line are not used for the address rule.
+
+**How often its verdicts are right** (2026-11-11, after two review rounds' fixes).
+- The sample: 60 turn/no-turn verdicts drawn at random (seeded) from gr1a, gr1b, gr1c and play-test 2. Every line the reviews had looked at was left out. 40 are on the scripted player's lines, 20 on residents' lines.
+- Each verdict was checked against the raw speech and audience rows, the journal's requests and replies, `mind.log`, and a separate recomputation of the draw.
+- Result: 0 of 60 wrong outcomes and 0 of 60 wrong reasons. The 95% Wilson interval is 0–6.0% overall and 0–8.8% for the player's lines (0 of 40).
+- One reason could not be fully verified: "in another exchange", where the remark draw would also have refused.
+- Two reasons were incomplete: a talk turn that came only after the line had been parked did not say so. This is fixed. A fresh sample of 12 such verdicts was all correct; two of them missed a release time, also fixed.
+- The sample checks the page against the evidence. It cannot check what the evidence does not record, such as stamina or the off-stage hold.
+
+### What it showed on the greeting batches `gr1a` and `gr1b` (2026-11-11, 18:15)
+
+Coverage: the instances with evidence at 18:15. gr1a: control ×4, nearest-concurrent ×3 (r4 still running), nearest ×1 (r1–r3 failed). gr1b: curious ×4, facing ×2, park-concurrent ×1. Six instances failed between 16:58 and 17:00 with SQL timeouts against the trial service. `greet_report.py` gives answered shares and latencies; the inspector adds the following.
+
+- **Many counted answers were not answers to the line.** A resident's line to the player within 60 s, which the table counts as an answer, was often caused by something else. Examples are a deliberation that began before the line, a delayed answer to an earlier line, or a resident repeating "your name?" because the scripted player never gives one. For lines to no one, the share not caused by the line was 6 of 8 in control, 4 of 19 in curious and 9 of 19 in facing. In control-r1, the "answer" to "Hello there!" 2.8 s later ("That's the whole of it, friend…") came from Wenna's deliberation about the earlier question on work.
+- **The trial's model queue, not the model, sets the pace.** With `LIVING_CONCURRENCY=4` for 11 minds, the median queue wait was 6–13 s for think and deliberate calls (p90 up to 41 s) and 2–7 s for talk turns (p90 15–25 s, max 78 s). Model time was a median 0.8 s for talk and 5–6 s for deliberation. A deliberation counts as running from its prompt, so lines heard during its queue wait are parked. Play-test 2 ran with 192 and had queue waits under 0.2 s. Latency and parking results from these trials therefore do not carry over to play.
+- **Parked lines are released and parked again at once.** A released line is often parked again in the same second, because the listener's next deliberation has already started. Some waited 74 s and got no turn (control-r1, Oren), and one was re-parked three times (curious-r1, Sefa). Under `LIVING_PARK=concurrent` such lines get their turn alongside instead ("parked alongside" 44 times in nearest-concurrent; addressees answered 19 of 20).
+- **The script's addressed statements meet the remark draw.** "You look like you know this place well." and "That looks like hard work." ask nothing, so a resident who passes the gate can still let them pass. The recomputed draw refused 4 of 22 addressed lines in control.
+- **The script addressed characters who are not minds.** Tobin is not in `LIVING_ONLY`: 2 of 22 addressed lines in control and 5 of 23 in curious went to him and could never be answered.
+- **Hearers do not answer each other's turns.** With curious and nearest, one hearer is drawn in and the others' verdicts read "another took it": a line to no one draws one hearer.
+
+The full result for all three gr1 batches and gr2 is the next section.
+
+## Greeting batches gr1/gr2 (2026-11-11)
+
+Paid runs of the greeting trial on branch `exp-greet`: the switches `LIVING_GREET` and `LIVING_PARK` ([COMMUNICATION.md §5](COMMUNICATION.md#5-how-minds-take-turns)), all off by default when these batches ran. `nearest` + `concurrent` is the default since (the override and acceptance are under Recommendation, below). The world is the [hamlet](#the-hamlet-a-small-world-where-everyone-thinks-2026-11-11): 12 people on Cullet's laws (speech carries 12 m), of whom 11 think (`LIVING_ONLY` leaves out the child Tobin), on the `people` model mix: talk turns and on-stage deliberation on deepseek-flash, everything else on glm-flash (gr2's journals: 1,607 and 2,304 calls). A scripted player joins and repeats a cycle for 25 minutes. It walks into a group and says a greeting to no one. 50 s later it says a line to the nearest resident within 12 m. It then stands among them for 150 s, saying nothing, while they talk. Six cycles make a run. The player never says its own name and never answers.
+
+Evidence: the run checkout `~/dev/slop-runs-greet` (branch `runs-greet`, exp-greet 3383026 plus 709770a), `.local/living/trials/{gr1a,gr1b,gr1c,gr2}/`.
+
+| Batch | Arms × replicates | Mind queue (`LIVING_CONCURRENCY`) | Instances kept |
+| --- | --- | --- | --- |
+| gr1a | control, nearest-concurrent, nearest × 4 | 4 for 11 minds | 9 of 12 (nearest r1–r3 failed) |
+| gr1b | curious, facing, park-concurrent × 4 | 4 | 7 of 12 (facing r3–r4, park r1, r2, r4 failed) |
+| gr1c | nearest, facing, park-concurrent × 3 (reruns) | 4 | 9 of 9 |
+| gr2 | control, nearest-concurrent × 4 | **64** (`mind-env.json`) | 8 of 8 (finished 19:33) |
+
+**Excluded instances.** Seven instances failed at publish or soon after. The trial service hit SQL and identity timeouts, and gr1b park r4 hit "Too many open files". Their `summary.json` says `stopped_by: error …`, and none has a `final.json`. They are left out of every figure here, not counted as unanswered.
+
+**Method.** The headline counts an answer only when the [resident inspector](#resident-inspector) (main's `inspector.py`) attributes it to that very line. A hearer's fate must be a talk turn on the line that said something, an answer from the deliberation it was parked behind, or a parked line whose following turn answered this line, not a newer one. A deliberation that later saw the line and spoke to the player is not counted. Those are listed apart, 0–7 per arm. `greet_report.py` (exp-greet) gives the raw share for the same lines: any resident line to the player within 60 s and before the player's next line. Lines that went to Tobin are left out. Addressed questions and addressed statements are counted separately, because a statement can be let pass by the remark draw. A greeting is crowded when two or more characters stood within 6 m of the player (the audience row). Every greeting in these runs was crowded. The join was a script in the session's scratch space, not committed, that loads `inspector.Run` and `greet_report.run` per instance.
+
+**The inspector's accuracy.** Its turn/no-turn verdicts were re-sampled at random (60 verdicts from gr1a–gr1c and play-test 2): 0 of 60 wrong, 95% interval 0–6.0% (0–8.8% for the player's 40 lines).
+- The sample checks the page against the evidence. It does not cover what the evidence does not record: stamina, the off-stage hold, the greet modes' own reasons (curiosity draw, "free", "settled with"), which are not logged.
+- gr2 was not in the sample, and parking is rare at concurrency 64.
+- Classifying fates as answered is this report's own step, as is pairing an answer with its words (`spoken_after`). Both were checked by hand on the examples below, not sampled.
+
+### Per arm: answers attributed to the line
+
+gr1 pools gr1a, gr1b and gr1c by arm. **gr1 latency is queue-limited (concurrency 4).** Talk turns waited a median 0.7–12.8 s per run (p90 10–32 s) and deliberations 3.4–37 s, against a model time of 0.7–0.9 s for talk. gr2's queue wait was 0.0 s for every call (talk model time median 0.7–0.9 s, p90 1.2–4.0 s), so **gr2 latency is the figure for play**.
+
+| Batch | Arm | Runs | Crowded greetings answered (inspector) | greet_report raw | Latency median / p90 | Answered by the nearest mind | Addressed questions answered | Addressed statements answered | Addressed, raw | Addressed latency median / p90 | Answered by the addressee | Addressed to Tobin (left out) |
+| --- | --- | ---: | ---: | ---: | --- | ---: | ---: | ---: | ---: | --- | ---: | ---: |
+| gr1 | control | 4 | **3/24** | 8/24 | 7.0 / 64.1 s | 1 of 3 | 9/10 | 6/10 | 16/20 | 4.3 / 57.6 s | 15 of 15 | 2 |
+| gr1 | `nearest` | 4 | **17/24** | 14/24 | 3.0 / 57.0 s | 11 of 17 | 10/11 | 9/11 | 18/22 | 4.3 / 43.3 s | 19 of 19 | 2 |
+| gr1 | `nearest` + `concurrent` | 4 | **17/24** | 17/24 | 3.0 / 5.4 s | 11 of 17 | 10/10 | 9/10 | 19/20 | 4.3 / 6.0 s | 19 of 19 | 0 |
+| gr1 | `curious` | 4 | **15/24** | 17/24 | 1.7 / 9.0 s | 5 of 15 | 9/9 | 8/9 | 17/18 | 2.6 / 11.4 s | 17 of 17 | 5 |
+| gr1 | `facing` | 5 | **17/30** | 22/30 | 1.7 / 3.4 s | 2 of 17 | 12/12 | 13/14 | 22/26 | 4.9 / 66.7 s | 25 of 25 | 2 |
+| gr1 | `concurrent` only | 4 | **1/24** | 4/24 | 1.5 s (one) | 0 of 1 | 11/11 | 5/9 | 17/20 | 4.3 / 4.4 s | 16 of 16 | 2 |
+| **gr2** | control | 4 | **2/24** | 11/24 | 3.4 / 3.8 s | 0 of 2 | 8/8 | 5/11 | 16/19 | 4.3 / 8.3 s | 13 of 13 | 2 |
+| **gr2** | `nearest` + `concurrent` | 4 | **19/24** | 20/24 | **1.7 / 3.0 s** | 11 of 19 | 9/10 | 11/11 | 20/21 | **2.6 / 4.3 s** | 20 of 20 | 1 |
+
+**Why the raw share differs.**
+- In control it overstates: 9 of gr2 control's 11 raw answers and 6 of gr1's 8 were lines that nothing in the greeting caused. They were deliberations already under way, or catching up on an earlier greeting: "You hailed me on the road this morning. I'm Brisk Marrow…" (gr2 control-r4), and "Morning, neighbor — you greeted me earlier and I never gave it back" (gr2 nearest-concurrent-r3).
+- Under `nearest` + `concurrent` the two agree: 17 = 17 in gr1, and gr2 differs by one.
+- In gr1 the inspector also finds answers that the 60 s window misses. These are queue-delayed turns and deliberations at 57–123 s, which is why `nearest` (with parking left on `wait`) reaches 17 against a raw 14.
+
+**Reading.**
+1. **Control: a stranger's greeting to a group is almost never answered** (3/24, 2/24). The hearers' verdicts read "not addressed, and X does not care about Arlen (not among the people they know): nothing in the gate gives a turn". The control answers came only once a hearer had come to care about the player, through the shipped overheard path.
+2. **`nearest` + `concurrent` answers 7 to 8 greetings in 10, in under 2 s for half of them at play concurrency** (gr2 19/24, median 1.7 s, p90 3.0 s). It answers addressed lines 20 of 21, statements included, because a stranger's addressed line skips the remark draw (control: 5 of 11 statements). gr2 agrees with gr1 on the leading arm. Its greeting share is a little higher (19 against 17 of 24) and its latency lower (gr1 p90 5.4 s with the queue).
+3. **Parking decides latency only when the queue is saturated.** At concurrency 4, `nearest` with parking on `wait` answered as often as with `concurrent` but with a p90 of 57 s against 5.4 s. `concurrent` alone (greet off) does nothing for greetings (1/24). gr2 did not run `nearest` alone, so the two are not separated at play concurrency.
+4. **The first greeting is the one that lands.** Cycle 0 was answered in every run of every greet arm (nearest-concurrent gr1 4/4, gr2 4/4). Later greetings were answered 13 of 20 and 15 of 20. The unanswered ones read "LIVING_GREET=nearest did not draw them in", or the hearer was in another exchange. Per the mode's code, the nearest hearer is passed over when in another exchange, when drawn in within the last minute, or when it has settled an exchange with the speaker. Which of these applied is not logged.
+5. **`facing` answers whoever happens to be ahead.** The scripted player faced its direction of walking, so the faced hearer was the nearest mind in only 2 of 17 answers. It also addresses residents' lines, so it made the only pile-ons (below).
+6. **`curious` is the slowest to reach the nearest** (5 of 15) and answers the fewest greetings (15/24).
+7. **Conversation.** The player never answers, so no arm can show a long exchange. What varies is whether the answerer comes back. The answerer of a greeting spoke to the player again within 180 s (unprompted, or answering the next scripted line) in gr2 7 of 19 under `nearest` + `concurrent` against 1 of 2 in control, and in gr1 3 of 17 against 0 of 3. Lines to the player per minute: gr2 0.67 against 0.55, gr1 0.48 against 0.35. In control, a larger share of those lines asks the silent stranger's name: gr2 19 of 55 against 8 of 67.
+
+### Costs: false replies and pile-ons
+
+A false reply, as `greet_report` defines it, is a turn that answered a resident's line meant for someone else: a line addressed to another, or one said to no one while its speaker was in an exchange with another. The table counts those the inspector attributes to the line. Pile-ons are lines answered by two or more.
+
+| Batch | Arm | Minutes | False replies (inspector) | per min | greet_report false | per min | Resident lines answered by 2+ | Player lines answered by 2+ |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| gr1 | control | 100 | 1 | 0.010 | 1 | 0.010 | 0 of 787 | 0 |
+| gr1 | `nearest` | 99 | 2 | 0.020 | 4 | 0.040 | 0 of 800 | 0 |
+| gr1 | `nearest` + `concurrent` | 100 | 1 | 0.010 | 1 | 0.010 | 0 of 778 | 0 |
+| gr1 | `curious` | 99 | 1 | 0.010 | 1 | 0.010 | 0 of 877 | 0 |
+| gr1 | `facing` | 124 | 3 | 0.024 | 3 | 0.024 | **2 of 991** | **3** |
+| gr1 | `concurrent` only | 100 | 2 | 0.020 | 1 | 0.010 | 0 of 784 | 0 |
+| gr2 | control | 99 | 11 | **0.111** | 10 | 0.101 | 1 of 917 | 0 |
+| gr2 | `nearest` + `concurrent` | 100 | 4 | **0.040** | 3 | 0.030 | 0 of 902 | 0 |
+
+**Reading the false replies.**
+1. **They come from the residents' own path, not from the switches.** `nearest` + `concurrent` never drew a resident into another resident's line: the mind log's "is drawn in by" names only the player, in all 8 runs. `nearest` with parking on `wait` did so 2 times in 4 runs, and `curious` once. Most flagged replies are family members answering a relative's line to the group, through the shipped "cares" path.
+2. **Some are not false.** The line named the one who answered: "Uncle Cal — …" (gr1 control-r1), "Oren — plain words…" (gr1 nearest-concurrent-r4), "Sefa Reed — you asked for letters…" (gr2 control-r3). Others answer an open line: "Come to the fire if you're hungry, any of you" (gr1 nearest-r4).
+3. **The genuine ones are few.** One cuts across a line to the player (gr2 nearest-concurrent-r2, example 3 below). The others are `facing`'s chorus, Mara's "Mother? I'm Mara" (gr2 control-r1) and one in `curious` (gr1 curious-r1).
+4. **gr2 control's 11 is mostly one run.** Run r4 gave 8, from a busy family evening at the fire. With the queue gone, residents simply talk more (control talk turns 2.4 a minute against 1.9 in gr1).
+5. **No arm except `facing` piled on.** Under `facing`, two residents answered the same line twice: "First light, then…" and "First light it is, then…" (gr1b facing-r2). The player's greetings were answered twice 3 times.
+
+### The guarded proxy-tuned score (PROXY, circular)
+
+`feel_tune.py score` used the proxy fit (`tune_result_proxy.json` in the `tool-feel-tune` worktree). Its header says: **PROXY RATINGS (general coordinator, rating for the owner); not the owner's judgement. CIRCULARITY: the proxy said being answered mattered most**, so a score resting on heard/answered shows the rubric applied consistently, not the owner's judgement. gr1 is scored pooled, through a scratch directory of links with batch-unique replicate numbers, so that every arm is judged against the one control arm (gr1a). gr2 is scored on its own. It scores the residents' whole lives in 10-minute windows, not the greetings alone.
+
+| Batch | Arm | Score | Windows | False replies/min | Repeated lines | Talk that led to something | Placebo (6 min earlier) | Verdict |
+| --- | --- | ---: | ---: | ---: | --- | --- | ---: | --- |
+| gr1 | control | 4.11 | 77 | 0.010 | 0.11 of 802 | 0.67 of 725 | 0.51 | baseline |
+| gr1 | `curious` | 4.17 | 80 | 0.010 | 0.12 of 903 | 0.71 of 823 | 0.54 | LOST (false replies and repeats "worse": 1 in 99 min against 1 in 100, 0.12 against 0.11; noise) |
+| gr1 | `facing` | 4.07 | 101 | 0.024 | 0.07 of 1001 | 0.62 of 937 | 0.45 | no score gain |
+| gr1 | `nearest` | 4.07 | 78 | 0.040 | 0.08 of 804 | 0.70 of 748 | 0.58 | no score gain |
+| gr1 | `nearest` + `concurrent` | 4.08 | 78 | 0.010 | 0.10 of 791 | 0.63 of 722 | 0.50 | no score gain |
+| gr1 | `concurrent` only | 4.21 | 81 | 0.010 | 0.04 of 785 | 0.65 of 752 | 0.54 | LOST (talk that led to something 0.65 against 0.67) |
+| gr2 | control | 4.10 | 80 | 0.101 | 0.09 of 934 | 0.66 of 850 | 0.52 | baseline |
+| gr2 | `nearest` + `concurrent` | **4.33** | 81 | 0.030 | 0.08 of 913 | 0.61 of 848 | 0.51 | **LOST** (talk that led to something 0.61 against 0.66) |
+
+The proxy score does not separate the arms in gr1 (4.07–4.21). In gr2 it rises for `nearest` + `concurrent`, which is reported `LOST` because talk that led to something fell. Against the placebo, that lift is 0.10 against 0.14. False replies and repeated lines both fell. The proxy score therefore gives no support for any arm, and the guards give one small cost for the leading arm. It is unknown whether the owner would see this: the owner has not rated these runs.
+
+### Cost per world-hour
+
+US dollars per hour of a run, for 11 thinking minds, from the journals at `trials.py` prices (`greet_report.py` `usd_h`), mean (range) per arm. gr1: control 1.82 (1.64–2.02); `nearest` 1.74 (1.62–1.80); `nearest` + `concurrent` 1.64 (1.54–1.74); `curious` 1.92 (1.81–2.00); `facing` 1.77 (1.63–1.93); `concurrent` only 1.78 (1.72–1.85). gr2: control 2.16 (1.91–2.48); `nearest` + `concurrent` 1.88 (1.75–2.11). The switches do not raise cost. The queue capped spending in gr1, so gr2 is the figure for play. Tokens per batch (ledger): gr1a 35.5 M, gr1b 30.9 M, gr1c 34.2 M, gr2 33.6 M.
+
+### Recommendation
+
+**Turn on `LIVING_GREET=nearest` with `LIVING_PARK=concurrent`**, the owner's accepted choice 3 ([COMMUNICATION.md §11](COMMUNICATION.md#11-open-choices-for-the-owner)). gr1 and gr2 agree.
+- It answers a stranger's crowded greeting 19 of 24 times against 2 of 24, in 1.7 s median and 3.0 s at p90 at play concurrency.
+- It answers addressed lines 20 of 21, statements included.
+- Its false-reply cost: none added that these runs can see. In gr1 it was 0.010 a minute in both arms, and in gr2 0.040 against control's 0.111. It never drew a resident into another resident's line, and it made no pile-ons.
+- The guarded proxy score reports it `LOST` in gr2 on talk that led to something (0.61 against 0.66, placebo-adjusted 0.10 against 0.14). That is a small cost on a circular measure, and it is recorded.
+
+**The override.** The guarded proxy score marked nearest + concurrent LOST in gr2 (talk that led to something 0.10 vs 0.14 above placebo over four runs each). The general coordinator, who set that rule, overrode it on 2026-11-11: false replies and repeated lines were no worse, the dip is small over four runs, and the change fixes what the owner complained about directly. The measure keeps being reported in the next hamlet batches to see whether it was noise.
+
+**Accepted and on by default.** The owner accepted it as communication choice 3 ([COMMUNICATION.md §11](COMMUNICATION.md#11-open-choices-for-the-owner)), and since 2026-11-11 (branch `exp-greet`, commit "Greeting switches on by default") it is the default: `LIVING_GREET=nearest`, `LIVING_PARK=concurrent`, and the `speech_audience` law on, which `nearest` reads. `off` and `wait` remain selectable (the old rules). `facing` remains available and off (below).
+
+**What it does not fix.**
+- **Known shortfall:** later greetings to a group that has already spoken with the stranger often go unanswered (5 of 24 in gr2). It is queued behind the arrival experiment.
+- The trial's silent player makes residents ask its name again and again, and finally press: Ilsa's "give your name and your road now, or walk on before dark" (example 5).
+
+**`facing` is not ready for a player.** As built, it addresses every speaker's lines, residents' included. That made the only choruses (2 resident lines, 3 player lines) and the most genuine false replies (3). It answered the nearest mind only 2 times in 17, because the scripted body faced its walking direction. Before it could be on for a player:
+1. dev-box's `human_face(dx, dy)` must be on main and the bindings regenerated. Until then the client's `look()` (`living/game/src/controls.rs`) sends nothing.
+2. In the default "travel" scheme the client sends `None`, so the body faces its travel, and a player who walks into a group and stops faces wherever they walked. The client would need to send a look toward the person under the cursor, or the camera's direction, when a line is said to the room, in both schemes. The audience row's `off` must come from that heading at the line's time.
+3. The mind would need to apply facing to players' lines only, or use it only as a tie-break between equally near hearers. COMMUNICATION.md §5 already proposes the tie-break.
+
+### Examples (verbatim)
+
+Paths are relative to `~/dev/slop-runs-greet/.local/living/trials/`. Lines are from each instance's `speech.jsonl`, and fates from the inspector over the instance.
+
+**Control.**
+1. *A greeting answered* (gr2 `greet-greet-control-r1`, cycle 4, four within 6 m): "Good day to you all." Ilsa Hale, overheard turn, 3.8 s: "Good day to you, friend. You've come at a good hour — there's a fire and something warm in the pot, if you've a hunger on you." The others: "Ilsa Hale took an overheard turn on it first". Ilsa had come to care about the player by then.
+2. *A greeting unanswered* (gr2 `greet-greet-control-r3`, cycle 0, five within 6 m): "Hello there!" All six hearers: "no turn: not addressed, and … does not care about Arlen (not among the people they know): nothing in the gate gives a turn."
+3. *A false reply* (gr2 `greet-greet-control-r1`): Sefa Reed, in an exchange with Brisk, says "Mother — what do you know of the mill town? The folk there, and whether a body could make a life in it?" Mara Vane, 7.6 s: "Mother? I'm Mara — we met at the fishing spot at dawn. As for the mill town, I know it the way I know any place: by its walls. Never lived there, so I won't pretend to advise you on making a life in it."
+4. *A conversation that followed* (gr2 `greet-greet-control-r3`, addressed): "What do people here do for work?" Mara Vane, 5.1 s: "Whatever the day needs — I'm a carpenter, and today that's stone and wood both. What's your trade, stranger? You've cooked at our fire twice and I still don't know what to call you." 27 s later: "Brisk went to mark the rise — I'm resting an hour by the fire, then the store goes up at the west grounds. You're welcome to haul wood with me if your hands want work."
+5. *An awkward one* (gr1a `greet-greet-control-r2`): the greetings got no turn, and Brisk Marrow's deliberations caught up minutes later, three times. "You hailed me on the road and I never got your name. I'm Brisk Marrow, of Millbrook — what do they call you?" (+768 s), "Twice you've hailed me and twice I've been slow. What do folk call you?" (+804 s), "Friend, we've traded good days twice now and I still can't call you anything." (+1225 s).
+
+**`nearest` + `concurrent` (gr2).**
+1. *A greeting answered* (`greet-greet-nearest-concurrent-r1`, cycle 1, three within 6 m; the nearest, Oren, was passed over): "Good day to you all." Ilsa Hale, drawn in (Nearest), 1.7 s: "Good day to you too. Come in out of the morning — there's bread still warm and I've a pot on. What brings you up this way?"
+2. *A greeting unanswered* (`greet-greet-nearest-concurrent-r2`, cycle 5, three within 6 m): "Hello, everyone. I've only just come down the road." Mara and Oren: "not addressed, and … does not care about Arlen: nothing in the gate gives a turn; LIVING_GREET=nearest did not draw them in". Pim: "cares about Arlen, but was in another exchange". Oren had told the player twice that afternoon to "come round the mill another day".
+3. *A false reply* (`greet-greet-nearest-concurrent-r2`): Ilsa to the player, "Here — take this, it's cooked proper, and I'll not have you a stranger at my fire. Your name?" Her son Pim, 6.3 s: "Ma, after the bushes can I go down to the fishing bank? Da said the bank, never the millrace." This is the shipped overheard path (Pim cares about his mother), not the switch.
+4. *A conversation that followed, and led to something* (`greet-greet-nearest-concurrent-r3`, addressed): "What do people here do for work?" Ilsa Hale, 2.3 s: "Whatever's in front of them — fish the river, smoke what they catch, keep a fire, mill grain, mind goats. There's always a hand wanted at the mill house if you're hungry for work." Then, unprompted: "Wait there, friend — I'm just carrying these into the store, then you'll have food in your hands and honest work at the mill if you want it." (+86 s). Then "Here, friend — berries in your hands as promised. Eat your fill…" (+126 s). The chronicle has "Ilsa Hale gave 6 berries to Arlen" and "… 12 berries …" (`chronicle.jsonl` ids 141, 147).
+5. *An awkward one* (`greet-greet-nearest-concurrent-r4`, Ilsa Hale, over three cycles):
+   - "Hello there!" → 1.5 s: "Hello yourself. You've had a bite and a warm fire — now tell me, what road did you come down, and who'd vouch for you on it?"
+   - The script's next line, "That looks like hard work." → "It's work, and it's honest. But I asked you a question and got a comment about my pot — so once more, friend: what road, and who vouches for you?"
+   - A cycle later: "Traveller — you've had my bread twice and my question three times. Sun's going down; give your name and your road now, or walk on before dark."
+   - Earlier in the same run she took the player for Sefa: "Sefa, is it? I'm Ilsa Hale — I cook at the mill house…"
+   - This is the right reaction to a stranger who never answers. It is awkward because the script never answers.
+
+## Arrival batch ar2 (2026-11-11)
+
+**Rejected (2026-11-12).** The owner rejected the law arms (`notice`, `known`, `wonder`, `all`) as prescribed attention: "I don't really like the fact that this has been encoded as a world rule. It should be something emergent from the personality and role of NPCs." The newcomer laws were not merged, not even switched off; attention to a stranger has to come from the residents' personalities and roles. The `arrive` and `arrive-answer` trials and `arrive_report.py` stay as tooling, with only the control (`arrive-control`). The figures below remain the record of what the arms did.
+
+Paid runs of the arrival trials from branch `exp-arrive` ("Arrivals: a stranger who says nothing" in that branch's TRIALS.md: the diagnosis, the three laws and the fake proofs `af1`–`af8`). A scripted player joins the hamlet, walks to the densest group of residents, and stands silent among them for two 5-minute stands. It never speaks, gestures or names itself. In `arrive-answer` it says "Hello. I'm new here." once, to the first resident who addresses it. The arms differ only in the arrival laws, so differences between arms are caused by the laws.
+
+**Batch.** `ar2`, started 2026-11-11 21:47. Trials `arrive` (arms `arrive-control`, `arrive-notice`, `arrive-known`, `arrive-wonder`, `arrive-all`) and `arrive-answer` (arms `arrive-control` and `arrive-all`), 4 replicates each, 14 minutes, 28 instances. All 28 ran to duration. 11 residents think (`minds.max` 11; the infant Tobin lives by his graph). Models: the `people` mix (glm-5-3-flash and deepseek-v4-1-flash), concurrency 64. Evidence: `~/dev/slop-runs-arrive/.local/living/trials/ar2/` on the Spark (`report.md`, `batch.json`, one folder per instance).
+
+**Commit and switches.** The run checkout's commit is `461c63cd`. It is exp-arrive `1e63a304` (main `6caebe20` merged) plus two ports from main: the trial runner's laws guard (fix-verify-laws) and the consolidation capacity fallback (fix-consolidation-429, `e301aa9f`).
+- In force: the arrival laws per arm. `notice` sets `newcomer_salience` 0.5, `known` sets `newcomer_scene_min` 30, `wonder` sets `newcomer_drive_s` 90, `all` sets all three, and control sets none (all 0, as shipped). The stale-reasons fix (main `61213ad3`) was in the build.
+- Not in this build: the greeting default (`LIVING_GREET=nearest`, `LIVING_PARK=concurrent`; exp-greet merged to main later as `4099ee1d`), the meters() alarm levels (main `61b7b2eb`, later), skill timings (`LIVING_SKILL_TIMINGS`) and act outcomes (`force_outcomes`). A newcomer's line was therefore answered under the old room rule, and the residents' rethink gate used the levels from before meters().
+
+**Consolidations.** 2,419 attempted: 1,793 on the primary model, 624 on the fallback, 2 retried, 0 lost (`report.md`).
+
+**Cost.** $11.39 in all: GLM $3.98 and DeepSeek $7.41 (ledger). The per-run journal costs sum to the same figure.
+
+**ar1 is excluded.** `ar1` ran the same trials under provider capacity failures: 37% of consolidations failed and the runaway guard stopped 7 of 28 instances (`SUPERSEDED.txt`). It is not used in any figure below. For the memory-failure question, its 21 completed runs were checked on their own. Residents whose consolidations mostly failed had think prompts of the same size (5,572–5,633 tokens on average) and asked the newcomer's name about as often (0.33–0.62 times per resident) as the others. ar1 shows nothing on its own about what residents do when their memory step fails.
+
+### Method
+
+```bash
+# read-only against the run checkout; no model calls
+python3 ~/dev/slop-runs-arrive/living/tools/arrive_report.py ar2 --examples 3 --json ar2.json        # exp-arrive's report
+python3 living/tools/arrive_spread.py ~/dev/slop-runs-arrive/.local/living/trials/ar2 \
+    --arrive-tools ~/dev/slop-runs-arrive/living/tools \
+    --feel-model <tool-feel-tune worktree>/.local/living/feel/proxy-fit/tune_result_proxy.json --json spread.json
+python3 living/tools/inspector.py ~/dev/slop-runs-arrive/.local/living/trials/ar2/<instance> -o page.html
+```
+
+[`arrive_spread.py`](../living/tools/arrive_spread.py) (this branch) runs exp-arrive's `arrive_report.run_report` on every instance. It adds the measures that report lacks, one row per replicate:
+- **Reach:** whether a line said to the newcomer reached it. The authority's own verdict is the speaker's `silence` experience at the line, "No answer from a stranger; they don't seem to be within earshot."
+- **Timing:** time from the join, not from the player's first walk.
+- **Follow-through:** introductions, invitations, gifts and threats, telling others, and re-asks.
+- **Guards:** false replies (main's `greet_report.py`); repeated lines and talk that led to something, split by addressee (`feel_tune.py`'s definitions); the proxy-tuned score.
+- **Thinking and cost:** deliberations and talk turns per resident-hour, reused reasons, and cost per run and per resident-hour.
+
+Its docstring defines every column. Cells give each replicate's value, r1/r2/r3/r4. `>` or `<` marks an arm whose four values all lie above or all below its trial's control values: the ranges are disjoint, which with 4 against 4 is a one-sided exact Mann-Whitney p of 1/70. `~` means within spread. `–` means the event did not occur in that run. The switched arms are not separated from one another by any measure here: their ranges overlap.
+
+### Contact: who reaches the silent newcomer, and when
+
+Residents in range (within 12 m during a stand) were 7–11 per run in every arm (no arm differs).
+
+| Measure (per run) | `arrive` control | `known` | `notice` | `wonder` | `all` | `arrive-answer` control | `arrive-answer` `all` |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Residents asked to think by the newcomer (arrive_report `asked`) | 0/0/0/0 | 0/0/0/0 ~ | 10/9/10/7 > | 6/5/7/5 > | 6/9/8/9 > | 0/0/0/0 | 10/7/9/11 > |
+| Share of residents in range who made deliberate contact (`acted_share`; unheard lines count) | 0.12/0.09/0/0 | 0.12/0.36/0.30/0.09 ~ | 0.64/0.30/0.82/0.67 > | 0.71/0.27/0.64/0.50 > | 0.86/0.60/0.67/0.89 > | 0/0/0/0.09 | 0.60/0.78/0.70/0.64 > |
+| Residents whose line reached the newcomer (`heard_res`) | 1/1/0/0 | 1/1/1/1 ~ | 4/1/6/3 ~ | 5/3/4/5 > | 4/4/3/4 > | 0/0/0/1 | 3/7/3/6 > |
+| Seconds from the join to the first deliberate contact | 439/65/–/– | 295/230/117/139 | 27/61/23/20 | 150/138/110/80 | 9/9/9/8 | –/–/–/241 | 9/13/16/16 |
+| Seconds from the join to the first line that reached it | 439/65/–/– | 307/296/117/224 | 55/80/66/41 | 151/146/110/115 | 133/35/34/51 | –/–/–/241 | 48/38/39/38 |
+| Residents whose first contact was a line | 1/1/0/0 | 1/2/3/1 ~ | 5/3/8/6 > | 5/3/6/5 > | 5/5/5/7 > | 0/0/0/1 | 6/7/6/7 > |
+| Residents who passed within 4 m and did nothing else | 6/8/7/5 | 7/5/6/7 ~ | 2/1/1/2 < | 0/4/1/4 < | 1/1/1/0 < | 6/9/11/6 | 0/1/3/0 < |
+
+- **Runs where any line reached the newcomer:**
+  - control: 3 of 8 (at 65, 241 and 439 s);
+  - `known`: 4 of 4, at 117–307 s;
+  - `notice`: 4 of 4, at 41–80 s;
+  - `wonder`: 4 of 4, at 110–151 s;
+  - `all`: 4 of 4, at 34–133 s (median 43 s);
+  - `arrive-answer` `all`: 4 of 4, at 38–48 s.
+- **No contact before the scripted answer.** In `arrive-answer` control, nobody addressed the newcomer in 3 of 4 runs, so it never answered. This is the owner's play-test 3 observation, reproduced.
+
+First contact by class, summed over the 4 runs (arrive_report's keyword classes, per resident in range or who spoke to the newcomer):
+
+| Arm | Residents | Greeting | Question | Offer | Warning / hostility | Other line | Watching | Approach, no line | None |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| control | 39 | 0 | 0 | 1 | 0 | 1 | 3 | 26 | 8 |
+| `known` | 40 | 2 | 4 | 0 | 0 | 1 | 5 | 25 | 3 |
+| `notice` | 41 | 1 | 14 | 2 | 2 | 3 | 10 | 6 | 3 |
+| `wonder` | 39 | 4 | 14 | 0 | 0 | 1 | 6 | 9 | 5 |
+| `all` | 35 | 0 | 19 | 1 | 0 | 2 | 9 | 3 | 1 |
+| `arrive-answer` control | 42 | 1 | 0 | 0 | 0 | 0 | 3 | 32 | 6 |
+| `arrive-answer` `all` | 40 | 3 | 17 | 1 | 0 | 5 | 7 | 4 | 3 |
+
+Contact in every switched arm is mostly a question ("Who are you, and what brings you here?"), usually with the speaker's own name. The two warnings are in `notice` r4: Cal Reed threatened the newcomer twice (chronicle `threat`). Lio Reed said "Say your name and your business, or turn and go".
+
+### Follow-through
+
+| Measure (per run) | control | `known` | `notice` | `wonder` | `all` | `answer` control | `answer` `all` |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Residents who introduced themselves in a heard line | 0/1/0/0 | 1/0/1/1 ~ | 4/0/4/2 ~ | 5/3/4/5 > | 2/4/2/4 > | 0/0/0/1 | 3/5/2/3 > |
+| Residents who invited or offered (food, fire, work) in a heard line | 1/0/0/0 | 0/0/0/0 | 1/1/0/0 | 1/0/0/0 | 0/2/0/0 | 0/0/0/0 | 1/1/0/1 |
+| Residents who gave it something (chronicle) | 0 | 0 | 0/1/0/0 | 1/1/0/0 | 0 | 0 | 1/0/0/0 |
+| Residents who spoke of it to others | 0/0/0/0 | 0/0/0/3 ~ | 1/1/3/2 > | 1/1/4/0 ~ | 0/1/2/0 ~ | 0/0/0/0 | 2/2/0/2 ~ |
+
+- **Few contacts led to anything beyond names.** Over the 20 `arrive` runs, 6 residents made a heard invitation and 3 gave the newcomer something: Ilsa in `notice` r2 (berries three times), and Ilsa and Brisk in `wonder`. Teaching was offered once, by Teodor in `arrive-answer` `all` r3: "I'd teach you, if you've hands and patience for honest work. I've written it on a tablet besides". No lesson followed, since the player never answers twice. A silent stranger gives nothing to build on, so these counts are a floor.
+- **After the newcomer's one answer** (`arrive-answer`; arrive_report's follow-through):
+
+| Run | Answered | Contact (s after the first walk) | Lines from that resident before 90 s of quiet | Seconds to each | Others who joined |
+| --- | --- | ---: | ---: | --- | --- |
+| `all` r1 | Lio Reed | 26.7 | 3 | 0.3, 2.0, 26.7 | Sefa |
+| `all` r2 | Wenna Reed | 16.9 | 5 | 17.0, 6.7, 6.0, 79.2, 11.1 | Sefa |
+| `all` r3 | Sefa Reed | 17.8 | 6 | 1.1, 0.4, 16.7, 3.6, 2.7, 8.0 | Ilsa, Teodor, Brisk, Wenna, Lio |
+| `all` r4 | Brisk Marrow | 16.4 | 4 | 0.1, 18.4, 13.7, 18.0 | Oren, Pim, Edda, Sefa |
+| control r4 | Edda Marrow | 219.9 | 1 | 11.8 | none |
+| control r1–r3 | nobody addressed the newcomer | | | | |
+
+**The answer opened an exchange, not a conversation.** One answer was enough for the addressed resident to keep talking, 3–6 lines with most replies within 20 s, and for 1–5 others to join. Most of these lines press for the name again, because the player says nothing more. Brisk (r4): "You'll not walk off nameless, friend. One word — your name — and you're free to go." Then: "Speak plain now, or be watched."
+
+### Costs: crowding, lines that never arrived, re-asks, and the guards
+
+| Measure (per run) | control | `known` | `notice` | `wonder` | `all` | `answer` control | `answer` `all` |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Most residents converging in 60 s (`converge_60s`) | 1/1/0/0 | 1/3/1/1 ~ | 6/2/6/4 > | 2/2/4/3 > | 4/3/4/5 > | 0/0/0/1 | 5/4/6/5 > |
+| Most within 4 m at once who had made contact (`together_4m`) | 1/1/0/0 | 0/1/1/1 ~ | 3/1/2/2 ~ | 2/1/1/2 ~ | 2/2/2/2 > | 0/0/0/0 | 3/2/2/3 > |
+| Lines to it out of earshot / all lines to it | 0/2/0/0 of 5/5/0/0 | 0/3/3/2 of 1/4/5/5 | 5/3/14/12 of 12/4/30/17 | 4/9/5/10 of 11/13/12/18 | 12/13/13/9 of 18/23/19/16 | 0/0/0/1 of 0/0/0/2 | 25/11/5/11 of 35/29/15/30 |
+| Re-asks (its name or business asked again by the same resident) | 0/3/0/0 | 0/2/0/4 ~ | 4/0/14/10 ~ | 1/7/4/6 ~ | 11/11/9/5 > | 0/0/0/0 | 10/12/4/10 > |
+| False replies per minute (greet_report) | 0.07/0.14/0/0 | 0.07/0/0/0.07 ~ | 0.14/0/0.07/0 ~ | 0/0/0/0 ~ | 0/0/0/0 ~ | 0.07/0/0/0.14 | 0/0/0/0 ~ |
+| Repeated lines, residents' lines not to the newcomer | .16/.11/.04/.16 | .09/.05/.08/.14 ~ | .15/.11/.14/.11 ~ | .07/.17/.12/.05 ~ | .17/.09/.08/.02 ~ | .09/.03/.28/.09 | .11/.10/.16/.06 ~ |
+| Talk to residents that led to something | .71/.90/.61/.80 | .69/.75/.62/.66 ~ | .71/.57/.79/.64 ~ | .72/.56/.49/.74 ~ | .69/.65/.65/.67 ~ | .62/.76/.65/.71 | .61/.66/.66/.71 ~ |
+| The same, every line 6 min earlier (placebo) | .48/.42/.40/.55 | .32/.50/.44/.31 | .36/.39/.46/.34 | .42/.41/.35/.47 | .31/.42/.44/.41 | .52/.44/.46/.53 | .44/.32/.34/.28 |
+| Proxy-tuned score (PROXY, circular) | 4.16/4.29/4.12/3.72 | 4.31/3.53/4.28/4.18 ~ | 4.00/4.05/4.29/4.05 ~ | 3.66/3.81/3.89/4.27 ~ | 3.62/3.84/4.09/3.74 ~ | 4.23/3.84/4.32/4.12 | 4.03/3.93/3.61/4.24 ~ |
+
+Pooled false replies: control 3 (0.053 a minute), `known` 2 (0.036), `notice` 3 (0.054), `wonder` 0, `all` 0, `arrive-answer` control 3 (0.053), `arrive-answer` `all` 0.
+
+1. **Crowding is the clearest cost, and it is moderate.** Every switched arm except `known` brought more residents to the newcomer within a minute than control did: `all` 3–5, `notice` 2–6, `wonder` 2–4, against 0–1. Only `all` (2 in every run) and `arrive-answer` `all` (2–3) put more of them within 4 m at once than control (0–1). No run had more than 3 contacting residents within 4 m. Under `notice` and `all` the first sight wakes every resident who sees the newcomer in the same few seconds. In `all` r2, Sefa, Wenna and Cal Reed were asked to think within 2.4 s of one another and called out at 8–14 s. `wonder` staggers them by temperament (45–135 s).
+2. **Half the lines to the newcomer never reached it** under the switches:
+   - `all` 47 of 76;
+   - `notice` 34 of 63;
+   - `wonder` 28 of 54;
+   - `known` 8 of 15;
+   - control 2 of 10;
+   - `arrive-answer` `all` 52 of 109.
+
+   `notice` asks for a thought at first sight within 60 m of one's home door, which is usually 25–48 m away, and the model says its line at once rather than walking first. Each unheard line comes back as "No answer from a stranger; they don't seem to be within earshot", and the inspector shows residents counting those as refusals (below).
+3. **Re-asks follow from the player's silence and from the unheard lines.** `all` gave 5–11 per run and `arrive-answer` `all` 4–12, beyond control's 0–3. `notice` (0–14) and `wonder` (1–7) are within spread. The trial player never gives a name, so these counts exaggerate what a player who answers would draw.
+4. **The guards held.** No arm raised the proxy-tuned score: arm means 3.82–4.10 against control's 4.07, all within spread, and `all`'s mean is the lowest. By feel_tune's rule no arm `LOST`, and none gained. False replies were 0 in `all` and `wonder` and never above control's range. Repeated lines among residents stayed within spread. Talk to residents that led to something, net of its placebo, was within spread everywhere:
+   - control 0.29 and `arrive-answer` control 0.20;
+   - `known` 0.29, `notice` 0.29, `wonder` 0.22, `all` 0.27;
+   - `arrive-answer` `all` 0.32.
+
+   For lines to the newcomer the measure can count only an outcome in the speaker's own percepts, since the player makes no plans. It found 0–0.26 per run, and those outcomes need not involve the newcomer. Repeated lines to the newcomer had too few lines per run in control (0–5) to compare.
+
+### Thinking and money (baseline for the meters() alarm-level change)
+
+| Measure (per run) | control | `known` | `notice` | `wonder` | `all` | `answer` control | `answer` `all` |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Deliberations per resident-hour, whole run | 23.6/25.6/25.9/21.4 | 20.9/24.2/22.2/22.8 ~ | 29.2/19.9/29.2/19.5 ~ | 21.8/21.0/24.1/27.2 ~ | 21.8/25.3/26.0/24.8 ~ | 26.9/22.1/21.0/26.0 | 26.0/30.6/24.8/29.9 ~ |
+| Same, after minute 2 (mean of 4) | 23.7 | 21.8 | 21.1 | 22.8 | 20.9 | 24.5 | 24.0 |
+| Talk turns per resident-hour | 9.7/16.3/17.8/14.0 | 14.4/12.5/12.8/11.2 ~ | 10.1/14.0/17.1/10.1 ~ | 7.8/9.7/12.0/12.8 ~ | 15.9/12.8/8.9/10.5 ~ | 17.5/9.7/9.0/16.7 | 11.3/15.9/10.9/12.4 ~ |
+| Reason lines reused from an earlier thought (share) | .44/.49/.50/.49 | .43/.50/.45/.42 ~ | .46/.46/.41/.31 ~ | .37/.44/.42/.53 ~ | .38/.40/.38/.35 < | .44/.48/.44/.39 | .38/.54/.44/.55 ~ |
+| Of them one-time events (feelings, first sights) | 15/18/14/13 | 11/21/18/18 | 15/16/19/6 | 10/10/24/27 | 10/16/10/10 | 17/16/15/20 | 10/39/20/29 |
+| Reasons carried again (`carried_again`, stale-reasons fix) | 0/0/0/0 | 0/0/0/0 | 0/0/0/0 | 0/0/0/0 | 0/0/0/0 | 0/0/0/0 | 0/0/0/0 |
+| Dollars per run | .39/.45/.44/.41 | .38/.42/.38/.40 | .46/.36/.49/.32 | .36/.37/.37/.44 | .37/.39/.39/.39 | .45/.38/.37/.42 | .40/.50/.41/.48 |
+| Dollars per resident-hour (pooled) | 0.164 | 0.154 | 0.159 | 0.150 | 0.149 | 0.157 | 0.174 |
+
+- **Deliberation baseline.** A hamlet resident deliberates about **24 times per hour** with the shipped arrival laws (control: 21.4–25.9 per run, 23.7 after the opening burst; `arrive-answer` control 21.0–26.9). That is about once every 2.5 minutes. One deliberation is one think + compile pair (`thoughts_all.jsonl` kind `deliberate`). This is the baseline the meters() alarm-level change is to be compared against, on a hamlet of 11 thinkers, in daylight, over 14 minutes.
+- **The laws add no thinking that shows.** `notice` is bimodal: 29.2, 19.9, 29.2 and 19.5. `arrive-answer` `all` is the highest at 24.8–30.6, within spread.
+- **The stale-reasons fix holds.** No reason was carried into a second deliberation in any run (55–85 carried per run). The reused share (0.31–0.55) is read from the prompts' words, so a feeling that arrives again counts as reused.
+- **The laws cost nothing extra.** $0.149–0.174 per resident-hour, about $1.65–1.92 per world-hour for 11 thinkers.
+
+### What the inspector shows beyond the tables
+
+One run per arm, through `inspector.py`'s page data (journal requests and replies, speech with each hearer's fate, and the authority's "out of earshot" marks): control r2, `known` r3, `notice` r1, `wonder` r3, `all` r2, `arrive-answer` `all` r3 and `arrive-answer` control r4. Times are seconds from the join.
+
+1. **Under the shipped laws the newcomer is in the scene, noticed in passing, and dealt with when a resident's own plan allows.**
+   - In control r2, Brisk's thoughts named the newcomer from 54 s: "keeping an eye on that stranger walking west toward us". His plan came first; then at 65 s: "Easy there — you're coming up on Millbrook ground. State your business and keep to the road."
+   - Two further hails at 173–175 s did not reach the newcomer. At 531 s he walked up: "Say your business now, plainly, or take yourself back down the road you came by."
+   - The one control contact in `arrive-answer` (r4, Edda, 241 s) took the newcomer for a fellow fisher: "Morning — you work the west water too? I'm Edda, of Millbrook."
+2. **`notice` asks everyone at once, and temperament shapes the answer.** In `notice` r1, 8 of the 11 residents were asked to think by the first sight, 2–57 s after the join, from 26–48 tiles.
+   - Wenna: "No sense in shouting across thirty tiles; I'll keep to my nets and watch which way they move."
+   - Brisk: "Too far to hail from here; I'll walk over and see who it is, spear on my shoulder but hand easy."
+   - Oren: "I'll keep my eyes on the newcomer but stay at my work."
+   - Sefa called twice from too far (unheard). Ilsa, at 65 s: "You're welcome at our fire — I'm Ilsa, and there's food enough for one more."
+
+   Residents also warned their own: Wenna told Sefa "keep an eye out — there's a stranger standing on the south road", and Edda told Brisk "Keep an eye on them while I'm at the water."
+3. **"A stranger" is several people, and the newcomer inherits what the others do.** Residents of the other settlement are also "a stranger" beyond the 24 m naming distance, and `known`'s "new to you" mark does not undo that in the residents' words.
+   - In `notice` r1, Edda told Brisk "the stranger's teaching Wenna's Lio to hunt with a spear … a man with no name drilling a child". The teacher was Lio's uncle Cal.
+   - Teodor said to the newcomer: "I have watched you cook and teach all morning and never heard your name". Ilsa: "you've cooked at our fire before". Wenna planned to "keep an eye on the stranger (#5)", who was Brisk.
+   - In `wonder` r3, Edda called Sefa "Stranger" and challenged her right to the fishing spot. In `arrive-answer` control r4, Pim asked whether "the strangers would show me how they caught that fish", and Oren told him to "keep clear of them". In `known` r3, Wenna spoke of "strangers settling east of us". Both mean the other settlement's residents.
+4. **Silence is read as refusal, including silence that was never heard.** Brisk in `all` r2 said seven lines to the newcomer by 195 s, two of them out of earshot. "Three greetings from me and not one word back … or I'll take you for a man who means none of us well." To Teodor: "a stranger who lets five greetings pass and never gives a name. That's not shyness, Teodor, that's someone with a reason to keep quiet." Ilsa in the same run fed it anyway. "Here — take these berries and eat them where I can see you do it. No one goes unfed from my table, name or no name." She told Wenna: "I fed the silent one and got nothing back."
+5. **Lines are spoken after the speaker has moved.** In `all` r2, Ilsa's prompt at 467 s had the newcomer 5.3 m north. She thought "The silent one is only five metres off and waiting — that's well within earshot". Her line "You're close enough to hear me now…" came at 487 s from 27 m, after her plan had set off toward the store. Some of the out-of-earshot lines are of this kind, not shouted at first sight. How many is not counted here.
+6. **`wonder` brings residents who are already near, so its first lines land.**
+   - In `wonder` r3, wonderings came at 10–12 tiles. Lio, at 110 s: "Hello! I'm Lio Reed, of Reedmouth. You've been standing there a while — are you waiting for someone? I've never seen you before."
+   - Pim, at 483 s: "Hello there! I'm Pim — I'm having my first cast with my Da. Don't mind us!"
+   - Pim later asked Oren: "there's a stranger off to the west I waved at. Should we call them to the fire later?" Oren: "We'll see who they are before we share a fire."
+   - Teodor still pressed five times between 494 and 721 s, two of them unheard: "Say your name and your business, or …".
+7. **One answer draws a burst from one resident.** In `arrive-answer` `all` r3, after "Hello. I'm new here.", Sefa said 6 lines in 35 s. Two arrived 1.5 s apart. "Who are you, and where do you come from?" was the next line of the sequence her earlier plan had installed (goto, then say, say). "New is fine, long as you're not here to pick the mouth clean before I get my lines in." was her talk turn on the answer. Then came "What's your name, friend…" and "So what do they call you…". Wenna kept the newcomer as a hazard for her children until at least 394 s: "Take Lio's whistle and don't go past the reeds alone."
+
+### What won, what lost, and why
+
+- **`known` alone did nothing measurable.** Marking the newcomer "new to you" in deliberation scenes left every measure within control's spread. The first heard contact came at 117–307 s. Residents read the mark when they thought for other reasons, but it does not make them think.
+- **`notice`, `wonder` and `all` each made residents reach the newcomer, beyond replicate spread.** Each raised the share who made contact, the residents whose first contact was a line, and the introductions (`wonder`, `all`), and cut the residents who just passed by.
+  - Ranked by the first line that reached the newcomer: `all` (34–133 s, median 43 s), then `notice` (41–80 s), then `wonder` (110–151 s). Control reached it in 3 of 8 runs, at 65–439 s.
+  - These three arms do not separate from one another on any measure with 4 replicates.
+  - **`all` is the only arm without a weak replicate.** Its lowest contact share was 0.60 and every run had 5–7 residents whose first contact was a line. `notice` r2 (0.30, one heard resident) and `wonder` r2 (0.27) fell to near control.
+- **Their costs:**
+  - crowding beyond control: `converge_60s` up to 6, and for `all` 2 residents within 4 m in every run;
+  - re-asks beyond control in `all` (5–11 per run);
+  - half or more of the lines to the newcomer out of earshot.
+
+  None of them added false replies or repeated lines, lowered talk that led to something, or raised the cost per resident-hour. No arm raised the proxy-tuned score; `all` lowered its mean within spread.
+- **Why.** The stranger was not invisible to the models; nobody was asked to think about them. `notice` asks at the first sight and `wonder` when the stranger lingers within 12 m, and either is enough for the models to go and ask. What the switches cannot fix is what happens after the first line:
+  - lines said out of earshot;
+  - a newcomer who stays "a stranger" like the other settlement's people;
+  - a silent player whose silence reads as a refusal.
+
+### Recommendation
+
+`arrive-all` is the winning arm. It gave contact in every replicate, a first line that reached the newcomer within 34–133 s (control: 3 of 8 runs), and no extra false replies, repeated lines or money. Its cost is crowding and re-asks: 3–5 residents converging within a minute, 2 within 4 m, 5–11 re-asks a run against a player who never answers, and 62% of its lines out of earshot.
+
+Turning it on by default changes what the owner experiences, so it is the owner's call. Before the next arrival batch, a `say` to someone beyond earshot should wait until the speaker has closed the distance. That would remove the unheard lines that feed the re-asks and the "silence means trouble" readings. It is a mind change, outside these laws.
+
+### What this batch does not show
+
+- **One world and one trial shape.** It ran on the hamlet in daylight, over 14 minutes. The player was scripted and never spoke, except the one scripted answer in `arrive-answer`. A real player who answers would draw fewer re-asks and could give the follow-through something to build on.
+- **The defaults now on main were off.** Greeting and park (`nearest`, `concurrent`), the meters() alarm levels, skill timings and act outcomes were not in the build. With the greeting default, a newcomer's own first word is answered within seconds (gr2). This batch measures only the silent case.
+- **The measures are heuristics.** The classes, introductions, invitations and re-asks are keyword heuristics; read the examples. The proxy-tuned score rests on 22 proxy ratings and is circular. No owner rating covers these runs.
+- **Crowding thresholds are the report's own choices**, as is the 4 m distance. Whether 3–5 residents reacting within a minute feels scripted is for the owner.
+- **Some things were not measured.** Whether contact lasts beyond 14 minutes (memories, relations) is not measured. Double answers to one line (a talk turn and a deliberation) are seen in examples but not counted.
+- **The arms are not separable from one another.** With 4 replicates, `notice`, `wonder` and `all` cannot be ranked against each other. A larger batch would be needed to choose a single law over all three.
+- **The contact share counts unheard lines.** arrive_report's `acted_share` and first-contact time include lines that never reached the newcomer. Use `heard_res` and the heard-line time for what the newcomer could perceive.
+
 ## Results
 
 Evidence for every row is under `.local/living/trials/<batch>/` on the Spark (`report.md` per batch, `summary.json` and `journal/` per instance). `living/tools/trial_evidence.py <batch>` prints each instance's death, what it did toward the cast and its first replies with journal references; `--table` prints the table below. Journal references below are relative to `.local/living/trials/`.
@@ -393,8 +3683,9 @@ Evidence for every row is under `.local/living/trials/<batch>/` on the Spark (`r
 | b3 | af8332d, runner files ahead (theft at the stall) | before 0887d81 | Mistral Small | theft × 3 |
 | b4 | 6589924 (main up to a4d79c0: one damage rule, GLM/DeepSeek models) | **current**: one damage rule | `default` = glm-flash as configured, against `deepseek-flash` | 6 trials × 2 variants × 3 |
 | l1–l3 | 378b2c1 (main up to 8f6ac72: three tiers, new buildings table) | current | life runs, below | |
+| b5 | 1ff107c (main 445db098: arrival-1, rules-2, fix-host-example, fix-agreement-terms, fix-mind-small, fix-rules-small, player-told) | **current** | `default` = glm-flash per-purpose efforts | 6 trials × 4 |
 
-Batch b4 is the reference for current rules. Its island predates the buildings-table update in 3f3caf0 (lots and footprints changed; rules did not). b1–b3 are kept as history. Every variant is single-profile for people: one profile thinks, compiles, talks and consolidates for a person. The models config has no per-purpose mix for people yet. When it does, a variant names one through its `models` patch, which is merged into the config as given.
+**Batch b5 (2026-11-11) is the reference for main 445db098 and later arms.** Batch b4 was the reference before. Its island predates the buildings-table update in 3f3caf0 (lots and footprints changed; rules did not). b1–b3 are kept as history. Every variant is single-profile for people: one profile thinks, compiles, talks and consolidates for a person. The models config has no per-purpose mix for people yet. When it does, a variant names one through its `models` patch, which is merged into the config as given.
 
 ### Tokens and cost
 
@@ -492,6 +3783,16 @@ The same person, played by the same model, did better in the old valley worlds. 
 - **Graphs: asking loops.** Subjects re-deliberate every 25–60 s to re-ask residents who never answer (instinct residents do not trade or reply). Feedback that a request went unanswered several times would give the mind something to change its plan on. The theft trial's 25 lines per subject in b1 came from this loop.
 - **Perception noise.** A newcomer's first percepts are eleven "You notice a gate" lines, one per gate tile (`l2/life-pressure-glm-flash-low-r1/experiences.jsonl`). A gate should be noticed once.
 - **Trial design.** Spawn scripted-trial subjects instead of repurposing residents (household relations leak through). Hold scripted packs out of town range.
+
+## Running in the hamlet after stamina-1 (2026-11-12)
+
+Main 12d96e66 (stamina-1: a person runs ×1.65, about 4.3 m/s, at a cost of breath; every controller may run), batch `st1ham`, `hamlet` × 4, 12 min each, fake model.
+
+- **How much residents run.** They ran in 0.0–0.2% of their moving samples: a moving body faster than 3.95 m/s or draining breath, sampled every 2 s (a sidecar reading `body` and `vitals`). One resident in one replicate ran, while storing.
+- **Speeds.** The median moving speed was 2.33–2.46 m/s.
+- **Before the merge** (at run ×1.85, `st1after`), the share was 0.0–0.3%; on main without running (`st1before`), 0.
+
+The shipped graphs and seeded ways never ask to run, so residents walk their errands. Only a mind's `run: true`, a flight or a fight runs; the fake minds asked for none. Details: docs/STAMINA.md "After the merge".
 
 ## Life runs (2026-11-09, l1–l3)
 

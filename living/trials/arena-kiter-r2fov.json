@@ -1,0 +1,10 @@
+{
+ "extends": "arena-kiter",
+ "title": "Arena: a ranged kiter (R2-fov)",
+ "about": "`arena-kiter` as r2e ran it, with 5 Hz facing samples for the windup-seen estimate (docs/COMBAT_MIND.md §5.4, R2-fov); written by living/tools/arena_veteran.py.",
+ "record": {
+  "bodies": {
+   "hz": 5
+  }
+ }
+}

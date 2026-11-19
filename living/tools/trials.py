@@ -13,7 +13,9 @@ subject's rows, and stops at the trial's duration, its token cap or the batch's 
   trials.py run --batch B TRIAL... [--variants default,...] [--replicates 3] [--minutes M]
                 [--fake] [--parallel N] [--keep-db]
   trials.py report --batch B            per-instance summaries and the comparison table
-  trials.py clean --batch B             delete the batch's databases and Neo4j minds (evidence kept)
+  trials.py clean --batch B             delete the batch's databases (its own records; each paused first) and Neo4j minds (evidence kept)
+  trials.py dbs --batch B [--json]      the batch's databases from its runner's records: name, identity, replica
+  trials.py reclaim [--json FILE]       classify the trial volume's replica directories (live, paid, no-model, fake, verify); removes nothing
   trials.py ledger                      real tokens spent per batch against the total cap
 
 Defaults are the Spark setup: container slop-trials-stdb on 127.0.0.1:3320 and Neo4j
@@ -22,8 +24,12 @@ TRIALS_NEO4J_CONTAINER, TRIALS_NEO4J_PORT). Databases are always `verify-trial-<
 the runner never publishes or deletes anything else. Evidence: .local/living/trials/<batch>/.
 """
 import argparse
+import bisect
+import concurrent.futures
+import datetime
 import hashlib
 import json
+import math
 import os
 import re
 import secrets
@@ -39,6 +45,12 @@ import urllib.error
 import urllib.request
 from collections import Counter, defaultdict
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import ooc  # noqa: E402
+import trial_archive  # noqa: E402
+import world_guard  # noqa: E402
+from journal_io import restore  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
 TRIALS = ROOT / "living/trials"
@@ -61,6 +73,8 @@ TOTAL_CAP = int(os.environ["TRIALS_TOTAL_TOKENS"]) if os.environ.get("TRIALS_TOT
 FAKE = ROOT / ".agents/skills/verify-llm/scripts/fake_llm.py"
 FOOD = {"berries", "meat", "fish", "cooked_meat", "cooked_fish", "smoked_meat", "smoked_fish", "bread"}
 SAMPLE_S = 2.0
+# How a player-framed system prompt opens (LIVING_FRAME=player; prompts.rs PLAYER_FRAME).
+PLAYER_FRAME_HEAD = "You are an AI playing the person described under # Who you are"
 # Estimated USD per million tokens: (input, output, cached input), for the report only, not an
 # invoice. Mistral's model pages, read 2026-11-09 (docs.mistral.ai/models/...): DeepSeek V4.1
 # Flash 0.30 / 1.20 / 0.007; GLM 5.3 Flash 0.15 / 0.50 / 0.03; Ministral 3 3B, 8B and 14B
@@ -183,11 +197,112 @@ def world_key(t, rep):
     return f"{t['name']}#{seeds[(rep - 1) % len(seeds)]}" if seeds else t["name"]
 
 
+def journal_file(name):
+    """A character's journal file name, as the mind writes it (llm.rs: every character that is
+    not a letter or digit becomes `_`, so "Sefa Reed" is Sefa_Reed.jsonl)."""
+    return "".join(c if c.isalnum() else "_" for c in name) + ".jsonl"
+
+
+# A seed's laws (`laws`/`laws_file`) composed over the shipped script as the authority composes
+# them at creation (`living_rules::floors::compose`): one Python copy, in install_script.py.
+from install_script import OVERLAY_MARK, compose_laws, same_script, seed_laws, without_world_laws  # noqa: E402
+from law_values import own_laws  # noqa: E402
+
+DEFAULT_DAY_MS = 12 * 60 * 1000  # living_rules::DEFAULT_DAY_MS: a seed without `day_minutes`
+
+
+def laws_problems(seed, overlay, built, creation, sent, readback, day_ms):
+    """Why an instance must not start with the script its world runs; [] when it may.
+
+    `seed` is the parsed world seed and `overlay` its laws ("" without). `built` is the runner's
+    composition of the script the world was created with (its laws over the tree's skills.rhai;
+    None for a module built elsewhere, a variant's `wasm_tag`, whose overlay is then looked for
+    at the row's end). `creation` is the `script` row before any install, `sent` the source
+    installed (None for a variant that keeps the world's own laws), `readback` the row after,
+    and `day_ms` the world's day."""
+    bad = []
+    if sent is not None and not same_script(readback, sent):
+        bad.append("the `script` row read back after install_script is not the source the runner sent")
+    if sent is None and built is not None and not same_script(readback, built):
+        bad.append("the world keeps its own laws (no install), but its `script` row is not the seed's laws composed over skills.rhai")
+    if overlay:
+        if built is not None and not same_script(creation, built):
+            bad.append("the world's creation-time composition of the seed's laws differs from the runner's")
+        if built is None and not without_world_laws(creation or "").rstrip("\n").endswith(OVERLAY_MARK + overlay.rstrip("\n")):
+            bad.append("the world's creation-time script does not end with the seed's laws")
+        want = round(float(seed["day_minutes"]) * 60000) if seed.get("day_minutes") is not None else DEFAULT_DAY_MS
+        if day_ms != want:
+            bad.append(f"world.day_ms is {day_ms}, not the seed's day_minutes ({want})")
+    return bad
+
+
+def mind_concurrency(trial):
+    """How many model calls the trial's mind service runs at once (`LIVING_CONCURRENCY`):
+    `minds.concurrency`, else 64 where many think (`minds.only` "all" or `minds.max`) and 4 for a
+    single thinker. Before 2026-11-11 every trial ran at 4: in the hamlet's greeting batches the
+    queue, not the model, set the pace (talk turns waited a median 2-7 s, p90 15-25 s, against
+    0.8 s of model time; deliberations 6-13 s). One-mind trials keep 4, so their batches stay
+    comparable."""
+    m = trial.get("minds", {})
+    if m.get("concurrency"):
+        return int(m["concurrency"])
+    return 64 if m.get("only") == "all" or m.get("max") else 4
+
+
+def residents_from(seed, spec):
+    """A seed with some residents' authored entries (sheet, rhythm, places, kit: the whole
+    resident) taken from another commit's version of the same seed (`world.residents_from`:
+    `ref`, a git revision, and `names`). For arms that must differ only in some lives: the
+    strangers trial's C and S run the Quill, Morrow and Sato entries from before the lives were
+    written (dc2ecfc8^), L and LS main's (docs/STRANGERS.md). Every name must exist in both; the
+    resolved commit goes in the seed's `trial_residents_from` (read by trials, not the authority)."""
+    ref, names = spec["ref"], list(spec["names"])
+    sha = sh("git", "-C", ROOT, "rev-parse", "--short", ref).stdout.strip()
+    old = json.loads(sh("git", "-C", ROOT, "show", f"{sha}:living/seeds/{spec.get('seed', seed['run'])}.json").stdout)
+
+    def residents(x, acc):
+        if isinstance(x, dict):
+            if "sheet" in x and "name" in x:
+                acc[x["name"]] = x
+            for v in x.values():
+                residents(v, acc)
+        elif isinstance(x, list):
+            for v in x:
+                residents(v, acc)
+        return acc
+    then, now = residents(old, {}), residents(seed, {})
+    missing = [n for n in names if n not in then or n not in now]
+    if missing:
+        raise RuntimeError(f"residents_from {ref}: {missing} not in both seeds")
+    for n in names:
+        now[n].clear()
+        now[n].update(json.loads(json.dumps(then[n])))
+    seed["trial_residents_from"] = {"ref": ref, "commit": sha, "names": names}
+    return seed
+
+
+def patch_skills(text, trial, variant):
+    """A skills file with the trial's `skills_patch`, then the variant's, applied: each entry is
+    name -> [old, new], a law value changed in place. An old text that does not occur exactly
+    once is an error: a rules file that moved on must not silently run unpatched."""
+    names = []
+    for owner, patches in (("trial", trial.get("skills_patch") or {}), ("variant", variant.get("skills_patch") or {})):
+        for name, (old, new) in patches.items():
+            n = text.count(old)
+            if n != 1:
+                raise RuntimeError(f"{owner} skills_patch {name}: {old[:80]!r} occurs {n} times in the skills file")
+            text = text.replace(old, new)
+            names.append(name)
+    return text, names
+
+
 def world_seed(world):
     """A trial world is a seed plus overrides, written as a derived seed the module and the
     mind both read (LIVING_SEED is resolved under living/seeds/, so a relative path works)."""
     base = json.loads((ROOT / "living/seeds" / f"{world['seed']}.json").read_text())
     merged = deep_merge(base, {"rules": world.get("rules", {}), **world.get("overrides", {})})
+    if world.get("residents_from"):
+        merged = residents_from(merged, world["residents_from"])
     text = json.dumps(merged, indent=1)
     name = f"trial-{world['seed']}-{hashlib.sha256(text.encode()).hexdigest()[:8]}"
     path = OUT / "seeds" / f"{name}.json"
@@ -252,7 +367,11 @@ def up(_a=None):
 
 def down(_a=None):
     guard()
-    live = [d for d in databases() if d.startswith(PREFIX)]
+    try:
+        live = [d for d in databases() if d.startswith(PREFIX)]
+    except RuntimeError as e:
+        live = []
+        print(f"note: {e}")
     if live:
         print(f"note: {len(live)} trial databases are still published; they pause with the server")
     for name in (CONTAINER, NEO4J):
@@ -265,8 +384,72 @@ def down(_a=None):
 
 
 def databases():
+    """The trial databases `spacetime list` shows (the container CLI's identity owns them). A
+    backstop only: deleting a database removes it from the list but not from disk, and a run's
+    own records (`state.json`, `batch_databases`) are what clean, reclaim and samplers use."""
     r = sh("docker", "exec", CONTAINER, "spacetime", "list", check=False)
+    if r.returncode != 0 or "Error" in (r.stderr or "") or "Error" in r.stdout:
+        # One database whose name is 64 characters or more makes the server's `/names` answer
+        # 500 and the whole listing fail (2026-11-12, fs1e): an empty list is not "none".
+        raise RuntimeError(f"spacetime list failed: {(r.stderr or r.stdout).strip()[-300:]}")
     return [l.split("|")[0].strip() for l in r.stdout.splitlines() if l.strip().startswith(PREFIX)]
+
+
+# SpacetimeDB 2.14.1 accepts a longer database name at publish, but its `/names` route then
+# fails ("Domain name parts must be shorter than 64 characters"), and with it `spacetime list`.
+MAX_DB_NAME = 63
+
+
+REPLICAS = "/home/spacetime/.local/share/spacetime/data/replicas"
+
+
+def database_identity(db):
+    """A database's identity by its name (`GET /v1/database/<name>`), or None when it is gone."""
+    code, body = http(f"/v1/database/{db}")
+    if code != 200:
+        return None
+    try:
+        return json.loads(body)["database_identity"]["__identity__"].removeprefix("0x")
+    except (ValueError, KeyError, TypeError):
+        return None
+
+
+def replica_of(db, token, newer_than=None):
+    """The replica directory holding a database, found by its module log: the last line's
+    microsecond timestamp appears in that replica's log file only (SpacetimeDB 2.14.1 gives no
+    API for it). `newer_than` (a `find -newermt` time) limits the search to recent replicas."""
+    code, body = http(f"/v1/database/{db}/logs?num_lines=20", token=token)
+    ts = None
+    for line in reversed(body.strip().splitlines() if code == 200 else []):
+        try:
+            ts = json.loads(line)["ts"]
+            break
+        except (ValueError, KeyError):
+            continue
+    if ts is None:
+        return None
+    where = f"$(find . -mindepth 1 -maxdepth 1 -type d -newermt '{newer_than}')" if newer_than else "*"
+    hit = sh("docker", "exec", CONTAINER, "sh", "-c", f"cd {REPLICAS} && grep -l '\"ts\":{ts},' $(for r in {where}; do echo $r/module_logs/*.log; done) 2>/dev/null", check=False).stdout.split()
+    owners = {h.lstrip("./").split("/")[0] for h in hit}
+    return next(iter(owners)) if len(owners) == 1 else None
+
+
+def batch_databases(batch):
+    """The databases a batch's runner published, from its own records: {name: {"identity",
+    "replica", "instance"}} (state.json, or summary.json's `db` for batches older than these
+    records)."""
+    out = {}
+    for d in sorted((OUT / batch).glob("*/")):
+        rec = {}
+        for f in ("summary.json", "state.json"):
+            try:
+                rec.update(json.loads((d / f).read_text()))
+            except (OSError, ValueError):
+                pass
+        db = rec.get("db") or (f"{PREFIX}{batch}-{d.name}" if (d / "state.json").exists() else None)
+        if db:
+            out[db] = {"identity": rec.get("database_identity"), "replica": rec.get("replica"), "instance": d.name}
+    return out
 
 
 def build(a):
@@ -283,14 +466,38 @@ def build(a):
     print("built:", TARGET / "release/living-mind", *[OUT / "wasm" / f"{n}.wasm" for n in seeds])
 
 
+def wasm_mount():
+    """The host directory the trial container serves as /wasm (read-only inside it). It is this
+    checkout's `OUT/wasm` when this checkout started the container; from another checkout (a git
+    worktree) it is the starting checkout's, and modules go there under this checkout's name."""
+    r = sh("docker", "inspect", CONTAINER, "--format", '{{range .Mounts}}{{if eq .Destination "/wasm"}}{{.Source}}{{end}}{{end}}', check=False)
+    src = r.stdout.strip() if r.returncode == 0 else ""
+    return Path(src) if src else OUT / "wasm"
+
+
+def served_name(name):
+    """A module's name under the container's /wasm: as built, or, when the mount is another
+    checkout's, with this checkout's tag, so a worktree never overwrites or reuses a module
+    another checkout's batches run (`trial-<seed>-<hash>-wt<tag>`)."""
+    if wasm_mount().resolve() == (OUT / "wasm").resolve():
+        return name
+    return f"{name}-wt{hashlib.sha256(str(ROOT).encode()).hexdigest()[:6]}"
+
+
 def build_module(name, rel):
     # One target dir for every trial world: a seed change rebuilds only the authority crate.
     env = dict(os.environ, CARGO_TARGET_DIR=str(TARGET / "trials-wasm"), LIVING_SEED=rel)
     sh("cargo", "build", "--manifest-path", ROOT / "living/Cargo.toml", "-p", "living-authority",
        "--target", "wasm32-unknown-unknown", "--release", env=env, timeout=3600)
     out = OUT / "wasm" / f"{name}.wasm"
+    out.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(TARGET / "trials-wasm/wasm32-unknown-unknown/release/living_authority.wasm", out)
     os.chmod(out, 0o644)
+    served = served_name(name)
+    if served != name:
+        shutil.copyfile(out, wasm_mount() / f"{served}.wasm")
+        os.chmod(wasm_mount() / f"{served}.wasm", 0o644)
+        print(f"module {name} served to the container as /wasm/{served}.wasm")
 
 
 # ---- one trial instance ----------------------------------------------------------------
@@ -327,9 +534,14 @@ class Player:
         rows = [c for c in self.inst.rows(f"SELECT * FROM character WHERE name = '{self.name}'") if c["alive"]]
         return max(c["id"] for c in rows)
 
+    @property
+    def pid(self):
+        """The player's character: the trial's subject, or the newcomer once it joined (`newcomer`)."""
+        return getattr(self, "id", None) or self.inst.subject
+
     def me(self):
-        b = self.inst.bodies([self.inst.subject])
-        return b.get(self.inst.subject)
+        b = self.inst.bodies([self.pid])
+        return b.get(self.pid)
 
     def walk_toward(self, target, seconds):
         """Steer toward a point in 3 s pulses (a held direction key)."""
@@ -346,9 +558,22 @@ class Player:
             time.sleep(3)
         self.call("human_move", 0.0, 0.0, False)
 
-    def residents_near(self, within):
+    def is_mind(self, c):
+        """Whether a resident is thought for by the trial's mind service: past infancy, and in its
+        `LIVING_ONLY` set when it has one (`thinkers` under `minds.max`, the subject alone for a
+        one-mind trial, every person under `minds.only: "all"` without `max`). Infants and
+        residents beyond `minds.max` live by their graphs and can never answer."""
+        if c.get("stage", 2) == 0:
+            return False
+        only = self.inst.trial.get("minds", {}).get("only")
+        thinkers = getattr(self.inst, "thinkers", None)
+        if only == "all":
+            return thinkers is None or c["id"] in thinkers
+        return c["id"] in self.inst.roles.get("subject", [])
+
+    def residents_near(self, within, minds=False):
         here = self.me()
-        people = [c for c in self.inst.rows("SELECT * FROM character WHERE kind = 'person' AND alive = true") if c["id"] != self.inst.subject]
+        people = [c for c in self.inst.rows("SELECT * FROM character WHERE kind = 'person' AND alive = true") if c["id"] not in (self.inst.subject, self.pid) and (not minds or self.is_mind(c))]
         pos = self.inst.bodies([c["id"] for c in people])
         near = sorted(((dist(here, pos[c["id"]]), c) for c in people if c["id"] in pos and here), key=lambda x: x[0])
         return [(d, c) for d, c in near if d <= within]
@@ -356,9 +581,296 @@ class Player:
     def act(self, node):
         return self.call("human_act", json.dumps(node))
 
+    def body(self):
+        rows = self.inst.rows(f"SELECT * FROM body WHERE id = {self.pid}")
+        return rows[0] if rows else None
+
+    def hold(self, seconds):
+        """Stand still for a while, still present: a call at least every 10 s (an idle player
+        whose client keeps its connection). From exp-greet. While an answer is due (`answer`
+        in the arrival script), it listens every 2 s."""
+        end = time.time() + seconds
+        while time.time() < end:
+            self.call("human_move", 0.0, 0.0, False)
+            step_end = min(end, time.time() + 10.0)
+            while time.time() < step_end:
+                if getattr(self, "answer_due", None):
+                    self.listen()
+                    time.sleep(min(2.0, max(0.0, step_end - time.time())))
+                else:
+                    time.sleep(max(0.0, step_end - time.time()))
+
+    def listen(self):
+        """The arrival script's one answer: the first line a resident thought for by the minds
+        (`is_mind`) addresses to the player (its own `speech` experience with the player as
+        `object`) gets `answer_due`, said back to that resident; then the player is silent again. The answer is a `human_answer` event
+        with the line it answers."""
+        inst = self.inst
+        rows = sorted(inst.rows(f"SELECT * FROM experience WHERE observer = {self.pid} AND id > {getattr(self, 'heard_cursor', 0)}"), key=lambda r: r["id"])
+        for r in rows:
+            self.heard_cursor = max(getattr(self, "heard_cursor", 0), r["id"])
+            if r["kind"] == "speech" and r["object"] == self.pid and r["subject"] != self.pid and \
+                    any(self.is_mind(c) for c in inst.rows(f"SELECT * FROM character WHERE id = {r['subject']}")):
+                text = self.answer_due
+                self.answer_due = None
+                ok = self.call("human_say", text, r["subject"])
+                inst.emit("events", {"t": inst.t(), "human_answer": {"to": r["subject"], "text": text, "ok": ok, "at_ms": inst.now_ms(),
+                                                                     "heard": {"id": r["id"], "at_ms": r["at_ms"], "text": r["text"][:300]}}})
+                return
+
+    def group(self, avoid=(), minds=False):
+        """The densest group of residents: the resident with the most others within 6 m (at
+        least two, else the most within 10 m). The greeting trial (`minds` false) counts every
+        resident and avoids a group led by one in `avoid` when another will do; the arrival
+        trial (`minds`) counts only residents a mind thinks for (a group of graph-run residents
+        could never answer) and shares as few members with `avoid` as can be.
+        Returns (centre, member ids)."""
+        people = [c for c in self.inst.rows("SELECT * FROM character WHERE kind = 'person' AND alive = true") if c["id"] not in (self.inst.subject, self.pid) and (not minds or self.is_mind(c))]
+        pos = self.inst.bodies([c["id"] for c in people])
+        ids = [c["id"] for c in people if c["id"] in pos]
+        best = None
+        for r in (6.0, 10.0):
+            for i in ids:
+                members = [j for j in ids if dist(pos[i], pos[j]) <= r]
+                key = (len(members) >= 3, -sum(1 for j in members if j in avoid) if minds else i not in avoid, len(members))
+                if best is None or key > best[0]:
+                    best = (key, members)
+            if best and best[0][0]:
+                break
+        if not best:
+            return None, []
+        members = best[1]
+        cx = sum(pos[j][0] for j in members) / len(members)
+        cy = sum(pos[j][1] for j in members) / len(members)
+        return (cx, cy), members
+
+    def approach(self, members=None, seconds=150, within=5.0, minds=False):
+        """Walk up to a group as a player would: a `goto` act (a walk along a route, as the
+        client's click-to-walk does) to the centre of the densest group (`group`, with `minds`
+        and the arrival trial's `avoid`), re-chosen and re-aimed every 15 s while people move,
+        until two residents are within `within` m (or, after 90 s, the nearest is within 3 m);
+        then a short step toward the group's centre, so that the player faces into it. While an
+        answer is due (the arrival trial's `answer`) it listens. Returns the group's members
+        when it stopped."""
+        start, end, last = time.time(), time.time() + seconds, 0.0
+        members = members or []
+        while time.time() < end:
+            if len(self.residents_near(within, minds=minds)) >= 2:
+                break
+            if time.time() - start > 90 and self.residents_near(3, minds=minds):
+                break
+            if time.time() - last >= 15:
+                centre, members = self.group(avoid=getattr(self, "avoid", ()), minds=minds)
+                if centre:
+                    # A point, not a person: `goto` aims only at someone in sight.
+                    self.act({"do": "goto", "target": {"at": [round(centre[0], 1), round(centre[1], 1)]}})
+                last = time.time()
+            if getattr(self, "answer_due", None):
+                self.listen()
+            time.sleep(2.0)
+        here = self.me()
+        pos = self.inst.bodies([c["id"] for _, c in self.residents_near(8, minds=minds)])
+        if here and pos:
+            cx = sum(p[0] for p in pos.values()) / len(pos)
+            cy = sum(p[1] for p in pos.values()) / len(pos)
+            dx, dy = cx - here[0], cy - here[1]
+            n = (dx * dx + dy * dy) ** 0.5 or 1.0
+            self.call("human_move", dx / n, dy / n, False)
+            time.sleep(0.4)
+        self.call("human_move", 0.0, 0.0, False)
+        return members
+
+    def arrive_session(self, spec):
+        """The arrival trial (docs/TRIALS.md, "Arrivals"): a newcomer who says and does nothing.
+        After `settle_s` at the arrival point, walk (`goto`) to the densest group of residents
+        until two are within `within_m`, stand there silent for `stand_s`; then walk to the
+        group that shares fewest members with the first and stand silent `stand_s` more; then
+        stay where it is to the end of the run. It never speaks, gestures or acts toward anyone,
+        and its name is never said, so it stays a stranger. With `answer`, it says that one line
+        back to the first resident who addresses it (`listen`), then is silent again. Each stand is a `human_stand` event
+        (from/to ms, who was within 12 m at its start) for arrive_report.py."""
+        inst, end = self.inst, time.time() + spec.get("minutes", 14) * 60
+        stands = spec.get("stands", 2)
+        # `answer`: the one line said back to the first resident who addresses the player.
+        self.answer_due = spec.get("answer")
+        try:
+            self.hold(spec.get("settle_s", 20))
+            self.avoid = ()
+            for k in range(stands):
+                inst.emit("events", {"t": inst.t(), "human_walk": {"stand": k, "from_ms": inst.now_ms()}})
+                members = self.approach(seconds=spec.get("walk_s", 150), within=spec.get("within_m", 5.0), minds=True)
+                near = [(round(d, 1), c["id"], c["name"]) for d, c in self.residents_near(12)]
+                start = inst.now_ms()
+                inst.emit("events", {"t": inst.t(), "human_stand": {"stand": k, "from_ms": start, "s": spec.get("stand_s", 300), "group": members, "near": near, "at": [round(x, 1) for x in (self.me() or (0, 0))]}})
+                self.hold(min(spec.get("stand_s", 300), max(0, end - time.time() - 5)))
+                inst.emit("events", {"t": inst.t(), "human_stand_end": {"stand": k, "to_ms": inst.now_ms()}})
+                self.avoid = tuple(members) + tuple(i for _, i, _ in near)
+            self.hold(max(0, end - time.time()))
+        except Exception as e:  # recorded, never raised into the run
+            inst.emit("events", {"t": inst.t(), "human_error": repr(e)[:300]})
+        inst.emit("events", {"t": inst.t(), "human_left": True, "takeover_due_s": 30})
+
+    def line(self, kind, text, to, cycle):
+        """Say a line, recording who stood within earshot (12 m) and how far (`human_line`)."""
+        near = [(round(d, 1), c["id"], c["name"]) for d, c in self.residents_near(12)]
+        b = self.body()
+        ok = self.call("human_say", text, to)
+        self.inst.emit("events", {"t": self.inst.t(), "human_line": {"kind": kind, "text": text, "to": to, "cycle": cycle, "ok": ok, "at_ms": self.inst.now_ms(),
+                                  "near": near, "heading": b and b.get("heading")}})
+
+    def greet_session(self, spec):
+        """The greeting trial (docs/TRIALS.md, "The greeting trial"): for `minutes`, in cycles,
+        walk into a group of residents, (1) say a greeting to no one in particular, (2) 50 s
+        later say a line addressed (`to`) to the nearest resident within earshot, as the game
+        client does when no one is under the cursor, (3) then stand among them for
+        `listen_s` saying nothing, while they talk among themselves; then the next group. The
+        lines name nobody and the player never says its own name, so it stays a stranger to
+        those it has not met."""
+        inst, end = self.inst, time.time() + spec.get("minutes", 25) * 60
+        greetings = spec.get("greetings", ["Hello there!", "Good day to you all.", "Hello, everyone. I've only just come down the road."])
+        addressed = spec.get("addressed", ["Is there somewhere a traveller could get a bite to eat around here?", "You look like you know this place well.",
+                                           "What do people here do for work?", "That looks like hard work."])
+        wait_s, listen_s = spec.get("wait_s", 50), spec.get("listen_s", 150)
+        led = []
+        try:
+            cycle = 0
+            while time.time() < end - 60:
+                centre, members = self.group(avoid=led[-1:])
+                if not members:
+                    self.hold(10)
+                    continue
+                led.append(members[0])
+                inst.emit("events", {"t": inst.t(), "human_group": {"cycle": cycle, "members": members, "centre": [round(x, 1) for x in centre]}})
+                self.approach(members)
+                self.line("unaddressed", greetings[cycle % len(greetings)], 0, cycle)
+                self.hold(wait_s)
+                # As the game client addresses a line with nothing under the cursor (talk-1): to
+                # the nearest person within earshot (`earshot_m`; Cullet's speech carries 12 m).
+                near = self.residents_near(spec.get("earshot_m", 12))
+                if near:
+                    self.line("addressed", addressed[cycle % len(addressed)], near[0][1]["id"], cycle)
+                self.hold(wait_s)
+                inst.emit("events", {"t": inst.t(), "human_listen": {"cycle": cycle, "from_ms": inst.now_ms(), "s": listen_s}})
+                self.hold(min(listen_s, max(0, end - time.time() - 5)))
+                inst.emit("events", {"t": inst.t(), "human_listen_end": {"cycle": cycle, "to_ms": inst.now_ms()}})
+                cycle += 1
+            # Stay present to the end of the run: no takeover inside it.
+            self.hold(max(0, end - time.time()))
+        except Exception as e:  # recorded, never raised into the run
+            inst.emit("events", {"t": inst.t(), "human_error": repr(e)[:300]})
+        inst.emit("events", {"t": inst.t(), "human_left": True, "takeover_due_s": 30})
+
+    def join_newcomer(self, spec):
+        """A newcomer who joins later (`newcomer`: `name`, and `at_hour`, the world hour it joins
+        at, or `after_s`): the world and its minds live first, so the residents have seen each
+        other and may have written routines; the newcomer is the one first seen later
+        (docs/STRANGERS.md). The join is a `newcomer_join` event, and the newcomer a cast role."""
+        inst = self.inst
+        while not inst.stopped_by:
+            hour = hour_of(inst.now_ms(), inst.rows("SELECT * FROM world")[0])
+            if ("at_hour" in spec and hour >= spec["at_hour"]) or ("at_hour" not in spec and inst.t() >= spec.get("after_s", 0)):
+                break
+            time.sleep(2)
+        self.id = self.join()
+        inst.roles.setdefault("newcomer", []).append(self.id)
+        here = self.me()
+        land = getattr(inst, "land", None) or {}
+        inst.emit("events", {"t": inst.t(), "newcomer_join": {"id": self.id, "name": self.name, "at_ms": inst.now_ms(), "hour": round(hour_of(inst.now_ms(), inst.rows("SELECT * FROM world")[0]), 2),
+                                                              "at": [round(x, 1) for x in here] if here else None,
+                                                              "arrival_point": [land.get("arrive_x"), land.get("arrive_y")] if land else None}})
+        inst.note_role("newcomer", self.id)
+        inst.log(f"newcomer {self.name}#{self.id} joined at {here}")
+        return self.id
+
+    def approach_group(self, seconds=150, within=5.0, avoid=()):
+        """Walk to the densest group of residents thought for by the minds (`group`, re-chosen
+        and re-aimed every 15 s, a `goto` to a point as the client's click-to-walk does) until two
+        of them are within `within` m (or, after 90 s, one within 3 m); then a short step toward
+        them, so that the player faces into the group (from exp-arrive). Returns its members."""
+        start, end, last = time.time(), time.time() + seconds, 0.0
+        members = []
+        while time.time() < end:
+            if len(self.residents_near(within, minds=True)) >= 2:
+                break
+            if time.time() - start > 90 and self.residents_near(3, minds=True):
+                break
+            if time.time() - last >= 15:
+                centre, members = self.group(avoid=avoid, minds=True)
+                if centre:
+                    self.act({"do": "goto", "target": {"at": [round(centre[0], 1), round(centre[1], 1)]}})
+                last = time.time()
+            time.sleep(2.0)
+        here = self.me()
+        pos = self.inst.bodies([c["id"] for _, c in self.residents_near(8)])
+        if here and pos:
+            cx = sum(p[0] for p in pos.values()) / len(pos)
+            cy = sum(p[1] for p in pos.values()) / len(pos)
+            dx, dy = cx - here[0], cy - here[1]
+            n = (dx * dx + dy * dy) ** 0.5 or 1.0
+            self.call("human_move", dx / n, dy / n, False)
+            time.sleep(0.4)
+        self.call("human_move", 0.0, 0.0, False)
+        return members
+
+    def walk_route(self, points, name, per_point_s=45):
+        """Walk through `points` (world metres) in turn, a `goto` to each as the client's
+        click-to-walk sends it, on to the next once within 3 m or after `per_point_s`; silent. A
+        `human_route` event marks the start and the end, with where the player was."""
+        inst = self.inst
+        inst.emit("events", {"t": inst.t(), "human_route": {"name": name, "from_ms": inst.now_ms(), "points": points, "at": [round(x, 1) for x in (self.me() or (0, 0))]}})
+        for p in points:
+            self.act({"do": "goto", "target": {"at": [round(p[0], 1), round(p[1], 1)]}})
+            end = time.time() + per_point_s
+            while time.time() < end:
+                here = self.me()
+                if here and dist(here, p) <= 3.0:
+                    break
+                time.sleep(2.0)
+        self.call("human_move", 0.0, 0.0, False)
+        inst.emit("events", {"t": inst.t(), "human_route_end": {"name": name, "to_ms": inst.now_ms(), "at": [round(x, 1) for x in (self.me() or (0, 0))]}})
+
+    def stands_session(self, spec):
+        """The strangers trial (docs/STRANGERS.md section 6; `script: arrive` with `stands` a list): a newcomer
+        who says and does nothing. It joins (`newcomer`) at the arrival point, then stands
+        silent at each of `stands` in turn: `{"at": "arrival", "s": 300}` where it is (the arrival
+        point, as at a gate), `{"at": "group", "s": 300}` after walking to the densest group of
+        residents (`approach_group`); an entry `{"walk": [[x, y], ...], "name": ...}` walks through
+        the town instead (`walk_route`, stage 2b: along the Strand past the Fish Steps). Then it stays where it is to the end of the run. It never
+        speaks, gestures or names itself, so it stays a stranger. Each stand is a `human_stand`
+        event (from/to ms, who was within 12 m at its start) for arrive_report.py; `human_walk`
+        marks the arrival (its join) and each walk."""
+        inst, end = self.inst, time.time() + spec.get("minutes", 20) * 60
+        try:
+            if inst.trial.get("newcomer"):
+                self.join_newcomer(inst.trial["newcomer"])
+            avoid = ()
+            for k, st in enumerate(spec.get("stands") or []):
+                if st.get("walk"):
+                    # A walk through the town, as a player clicks along a street: no stand.
+                    self.walk_route(st["walk"], st.get("name", "a walk"), per_point_s=st.get("per_point_s", 45))
+                    continue
+                inst.emit("events", {"t": inst.t(), "human_walk": {"stand": k, "from_ms": inst.now_ms(), "to": st.get("at")}})
+                members = self.approach_group(seconds=spec.get("walk_s", 150), within=spec.get("within_m", 5.0), avoid=avoid) if st.get("at") == "group" else []
+                near = [(round(d, 1), c["id"], c["name"]) for d, c in self.residents_near(12)]
+                inst.emit("events", {"t": inst.t(), "human_stand": {"stand": k, "at_kind": st.get("at"), "from_ms": inst.now_ms(), "s": st.get("s", 300), "group": members, "near": near,
+                                                                    "at": [round(x, 1) for x in (self.me() or (0, 0))]}})
+                self.hold(min(st.get("s", 300), max(0, end - time.time() - 5)))
+                inst.emit("events", {"t": inst.t(), "human_stand_end": {"stand": k, "to_ms": inst.now_ms()}})
+                avoid = tuple(members) + tuple(i for _, i, _ in near)
+            self.hold(max(0, end - time.time()))
+        except Exception as e:  # recorded, never raised into the run
+            inst.emit("events", {"t": inst.t(), "human_error": repr(e)[:300]})
+        inst.emit("events", {"t": inst.t(), "human_left": True, "takeover_due_s": 30})
+
     def session(self, spec):
         """About `minutes` of play: walk to the town, forage, meet people and tell them a plan,
-        make a camp by the gate, then leave (stop calling)."""
+        make a camp by the gate, then leave (stop calling). `script: greet` plays the greeting
+        trial instead (`greet_session`), `script: arrive` the arrival trial (`arrive_session`, or
+        `stands_session` when `stands` lists the stands)."""
+        if spec.get("script") == "greet":
+            return self.greet_session(spec)
+        if spec.get("script") == "arrive":
+            return self.stands_session(spec) if isinstance(spec.get("stands"), list) else self.arrive_session(spec)
         inst, end = self.inst, time.time() + spec.get("minutes", 20) * 60
         try:
             centre = inst.anchor({"town": spec.get("town", "Brackenford")})
@@ -437,6 +949,102 @@ class Mind:
             pass
 
 
+def out_of_capacity(error):
+    """A provider's 429 that says it has no capacity for the model (Mistral: "Not enough
+    capacity available", `backend_out_of_capacity`, code 3505). The mind sends listed memory
+    work to the overflow and retries a failed consolidation later (llm.rs `capacity_overflow`,
+    mind.rs `retry_after`)."""
+    return bool(error) and "429" in error and ("Not enough capacity" in error or "out_of_capacity" in error)
+
+
+def failure_kind(error):
+    """What a journaled call's error says about who failed: None (it succeeded), a provider
+    kind (`capacity_429`, `rate_429`, `http_5xx`, `connection`: the provider out of capacity,
+    limiting the rate, failing or unreachable; the mind falls back, retries or holds its calls)
+    or `mind` (anything else: a request the provider refused, a missing key, a reply that was
+    not JSON; the same act failing again and again is a runaway)."""
+    if not error:
+        return None
+    if out_of_capacity(error):
+        return "capacity_429"
+    if error.startswith("HTTP 429"):
+        return "rate_429"
+    if re.match(r"HTTP 5\d\d", error):
+        return "http_5xx"
+    # llm.rs `chat_once`: the request could not be sent or answered (connect, timeout), or
+    # its body was cut off or was not the provider's JSON envelope.
+    if error.startswith(("request", "body", "response json")):
+        return "connection"
+    return "mind"
+
+
+CONSOLIDATION_COLUMNS = ("attempted", "primary", "fallback", "retried", "lost", "trimmed", "capacity_429")
+
+
+def spoken_as_table(jdir):
+    """Lines whose `#<id>` handles the world said as words (fix-spoken-ids), from the mind's
+    outcome lines (`<journal>/outcomes/spoken_as.jsonl`, each with what the model wrote and what
+    was said): {total, by_character, examples}. A high count means the prompts' sentence on ids is
+    not doing its work. 0 when the mind wrote none."""
+    path = Path(jdir) / "outcomes" / "spoken_as.jsonl"
+    lines = []
+    if path.exists():
+        for line in path.read_text().splitlines():
+            try:
+                lines.append(json.loads(line))
+            except ValueError:
+                pass
+    by = {}
+    for r in lines:
+        by[r.get("name") or r.get("actor")] = by.get(r.get("name") or r.get("actor"), 0) + 1
+    return {"total": len(lines), "by_character": by, "examples": [r.get("line", "")[:300] for r in lines[:5]]}
+
+
+def consolidation_table(jdir):
+    """What each character's consolidations came to, from the mind's outcome lines
+    (`<journal>/outcomes/consolidations.jsonl`, one per consolidation that called a model,
+    failed or found experiences lost): attempted; integrated on the primary model or on the
+    fallback (its overflow); failed and retried later; failed with no later attempt (lost: its
+    experiences were never integrated before the run stopped); experiences of failed ones that
+    left the inbox before they were integrated (trimmed: the authority keeps a character's last
+    400); failures that were a capacity 429. None when the mind wrote no outcomes (before
+    2026-11-11)."""
+    path = Path(jdir) / "outcomes" / "consolidations.jsonl"
+    if not path.exists():
+        return None
+    lines = []
+    for line in path.read_text().splitlines():
+        try:
+            lines.append(json.loads(line))
+        except ValueError:
+            pass
+    by = {}
+    for name in dict.fromkeys(r.get("actor") for r in lines):
+        mine = sorted((r for r in lines if r.get("actor") == name), key=lambda r: r.get("at_ms") or 0)
+        tried = [r for r in mine if r.get("model_call") or r.get("outcome") == "failed"]
+        row = dict.fromkeys(CONSOLIDATION_COLUMNS, 0)
+        row["attempted"] = len(tried)
+        for i, r in enumerate(tried):
+            if r.get("outcome") == "integrated":
+                row["fallback" if r.get("route") == "fallback" else "primary"] += 1
+            else:
+                row["retried" if i + 1 < len(tried) else "lost"] += 1
+                row["capacity_429"] += 1 if out_of_capacity(r.get("failure")) else 0
+        row["trimmed"] = sum(r.get("trimmed") or 0 for r in mine)
+        by[name] = row
+    total = {k: sum(r[k] for r in by.values()) for k in CONSOLIDATION_COLUMNS}
+    return {"total": total, "by_character": by}
+
+
+# A provider is down for every route when no call has succeeded for this long while calls are
+# still failing on it (the last within OUTAGE_LIVE_S): only then does an outage stop a run.
+OUTAGE_STOP_S = 600
+OUTAGE_LIVE_S = 180
+# Provider failures with no success on any route for this long are recorded as an outage; a
+# shorter gap (a capacity 429 the fallback answers a second later) is counted, not recorded.
+OUTAGE_RECORD_S = 30
+
+
 class Instance:
     def __init__(self, batch, trial, variant, rep, opts, shared):
         self.trial, self.variant, self.rep, self.opts, self.shared = trial, variant, rep, opts, shared
@@ -446,13 +1054,14 @@ class Instance:
         self.dir.mkdir(parents=True, exist_ok=True)
         self.journal = ROOT / ".local/living/journal" / self.db
         self.roles, self.saved_graphs, self.mind, self.t0 = {}, {}, None, None
-        self.cursor = {"thought": 0, "experience": 0, "chronicle": 0}
+        self.cursor = {"thought": 0, "experience": 0, "chronicle": 0, "talk": 0, "audience": 0, "all_experience": 0, "gesture": 0, "all_thought": 0}
         self.jpos = {}
         self.tokens = Counter()
         self.calls = Counter()
         self.latency = defaultdict(list)
         self.pending = []
         self.fired = Counter()
+        self.held = {}  # a `near … beyond … for_s` trigger: since when its condition has held
         self.status = "starting"
         self.stopped_by = None
         self.last_rows = {}
@@ -464,7 +1073,12 @@ class Instance:
         self.died = None
         self.snapshots = 0
         self.runaway_seen = []
+        self.provider_fails = []
+        self.last_ok = None
+        self.outage_since = None
+        self.outages = []
         self.published = False
+        self.cleanup_error = None
 
     # -- plumbing
     def log(self, line):
@@ -509,15 +1123,79 @@ class Instance:
         tag = self.shared["variants"][self.variant].get("wasm_tag")
         if tag:
             wasm = f"{wasm}-{tag}"
-        sh("docker", "exec", CONTAINER, "spacetime", "publish", "-s", "local", "-b", f"/wasm/{wasm}.wasm", self.db, "--delete-data", "-y", timeout=300)
+        wasm = served_name(wasm)
+        started = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime(time.time() - 5))
+        command = ["docker", "exec", CONTAINER, "spacetime", "publish", "-s", "local",
+                   "-b", f"/wasm/{wasm}.wasm", self.db, "-y"]
+        owner = world_guard.arm(self.dir, URL, self.db, self.shared["token"], os.getpid(), command=command)
+        self.database_identity, self.world_epoch = owner["identity"], owner["epoch"]
         self.published = True
+        # The replica remains on disk after logical deletion in SpacetimeDB 2.14.1.
+        try:
+            self.replica = replica_of(self.db, self.shared["token"], newer_than=started)
+        except Exception as e:  # noqa: BLE001 - a missing record never stops a run
+            self.replica = None
+            self.log(f"replica not recorded: {e}")
+        self.log(f"database {self.db}: identity {self.database_identity}, replica {self.replica}")
         self.save()
+        variant = self.shared["variants"][self.variant]
         # A variant may name another skills file (a rules change under test); the default is the tree's.
-        skills = ROOT / self.shared["variants"][self.variant].get("skills", "living/scripts/skills.rhai")
-        code, body = http(f"/v1/database/{self.db}/call/install_script", [skills.read_text()], self.shared["token"])
-        if code != 200:
-            raise RuntimeError(f"install_script {code}: {body[:300]}")
-        self.log(f"published {self.db} from {wasm}.wasm; skills installed from {skills.relative_to(ROOT)} (sha256 {hashlib.sha256(skills.read_bytes()).hexdigest()[:12]})")
+        skills = ROOT / variant.get("skills", "living/scripts/skills.rhai")
+        # The trial's and then the variant's `skills_patch` change law values in that file
+        # (name -> [old text, new text]; each old text must occur exactly once).
+        # A seed's own laws (`laws`/`laws_file`, docs/CULLET_RULES.md) are composed over it first, as
+        # the authority did at creation: installing the bare file would drop them.
+        seed = world_seed(worlds_of(self.trial)[world_key(self.trial, self.rep)])[2]
+        overlay = seed_laws(seed)
+        base = compose_laws(skills.read_text(), overlay) if overlay else skills.read_text()
+        # What the world was created with: its laws over the tree's skills.rhai, which the module
+        # compiled in. A module built on another branch (`wasm_tag`) compiled that branch's.
+        tree = (ROOT / "living/scripts/skills.rhai").read_text()
+        built = None if tag else (compose_laws(tree, overlay) if overlay else tree)
+        script_row = lambda: next(iter(self.rows("SELECT * FROM script WHERE name = 'skills'")), {}).get("source")
+        creation = script_row()
+        if variant.get("keep_laws"):
+            # The world keeps the script it was created with (its seed's laws), uninstalled.
+            if variant.get("skills") or variant.get("skills_patch") or self.trial.get("skills_patch"):
+                raise RuntimeError("a keep_laws variant installs nothing, so it takes no `skills` or `skills_patch`")
+            source, patched, readback = None, [], creation
+        else:
+            source, patched = patch_skills(base, self.trial, variant)
+            if overlay:
+                patched = ["seed laws"] + patched
+            code, body = http(f"/v1/database/{self.db}/call/install_script", [source], self.shared["token"])
+            if code != 200:
+                raise RuntimeError(f"install_script {code}: {body[:300]}")
+            readback = script_row()
+        day_ms = (next(iter(self.rows("SELECT day_ms FROM world")), {}) or {}).get("day_ms")
+        problems = laws_problems(seed, overlay, built, creation, source, readback, day_ms)
+        # The instance does not start (no mind, no timeline) on a world whose laws are not its seed's.
+        for why in problems:
+            self.log(f"laws guard: {why}")
+            self.emit("events", {"t": self.t(), "error": f"laws guard: {why}"})
+        if problems:
+            raise RuntimeError("laws guard: " + "; ".join(problems))
+        ran = source if source is not None else readback
+        (self.dir / "skills.sha256").write_text(hashlib.sha256(ran.encode()).hexdigest() + "\n")
+        # A variant's world laws (`world_laws`, name -> value), set as an admin sets them on a live
+        # world (`set_world_law`), after the laws guard; read back as the world's own values
+        # (`law_override` over `world_law`: an older module has only the latter; law_values.py).
+        wl = variant.get("world_laws") or {}
+        for name, value in wl.items():
+            code, body = http(f"/v1/database/{self.db}/call/set_world_law", [name, json.dumps(value)], self.shared["token"])
+            if code != 200:
+                raise RuntimeError(f"set_world_law {name} {value}: {code} {body[:300]}")
+        if wl:
+            got = {k: json.loads(v) for k, v in own_laws(self.rows).items()}
+            if any(got.get(k) != v for k, v in wl.items()):
+                raise RuntimeError(f"world laws not in force: wanted {wl}, the world's own values are {got}")
+            (self.dir / "world_laws.json").write_text(json.dumps(got, indent=1))
+            self.log(f"world laws set (set_world_law): {wl}; the world's own values now {got}")
+        self.log(f"laws guard passed: the `script` row read back is the {'source sent' if source is not None else 'creation-time script, kept'}"
+                 f"{'; the seed laws are composed as the world composed them' + (' (overlay found; module from ' + tag + ')' if built is None else '') + f'; day_ms {day_ms}' if overlay else ''}")
+        how = "kept the world's own laws (keep_laws, no install)" if source is None else f"skills installed from {skills.relative_to(ROOT)}"
+        self.log(f"published {self.db} from {wasm}.wasm; {how}"
+                 f"{' patched ' + ','.join(patched) if patched else ''} (sha256 {hashlib.sha256(ran.encode()).hexdigest()[:12]})")
         end = time.time() + 60
         while time.time() < end:
             st = self.rows("SELECT * FROM stats")
@@ -568,6 +1246,8 @@ class Instance:
                 continue
             if "stage" in spec and c["stage"] != spec["stage"]:
                 continue
+            if "name" in spec and c["name"] != spec["name"]:
+                continue
             if any(bg.get(k) != v for k, v in spec.get("bg", {}).items()):
                 continue
             grp = bg.get("town") or bg.get("band")
@@ -584,6 +1264,9 @@ class Instance:
             out.sort(key=lambda c: (dist(pos.get(c["id"], (1e9, 1e9)), at), c["id"]))
         elif spec.get("fewest_know_how"):
             out.sort(key=lambda c: (know[c["id"]], c["id"]))
+        elif spec.get("youngest"):
+            # Seeded characters share a birth time, so the youngest has the fewest days at birth.
+            out.sort(key=lambda c: (c["birth_age_days"], c["id"]))
         n = len(out) if spec.get("count") == "all" else spec.get("count", 1)
         if len(out) < n:
             raise RuntimeError(f"pick {spec}: only {len(out)} match")
@@ -608,6 +1291,15 @@ class Instance:
         self.cast_info = {r: [{"id": i, "name": chars[i]["name"], "kind": chars[i]["kind"], "background": self.census_cache[1].get(i, {})} for i in ids] for r, ids in self.roles.items()}
         (self.dir / "cast.json").write_text(json.dumps({"roles": self.cast_info, "subject_genome": genome}, indent=1))
         self.log("cast: " + ", ".join(f"{r}={[chars[i]['name'] + '#' + str(i) for i in ids]}" for r, ids in self.roles.items()))
+
+    def note_role(self, role, cid):
+        """Add a character who came later (a newcomer who joined) to cast.json's roles."""
+        path = self.dir / "cast.json"
+        cast = json.loads(path.read_text()) if path.exists() else {"roles": {}}
+        row = next(iter(self.rows(f"SELECT * FROM character WHERE id = {cid}")), {})
+        cast["roles"].setdefault(role, []).append({"id": cid, "name": row.get("name"), "kind": row.get("kind")})
+        path.write_text(json.dumps(cast, indent=1))
+        self.save()
 
     def anchor(self, a, member=0):
         w, h = self.world["width"], self.world["height"]
@@ -640,6 +1332,12 @@ class Instance:
         elif "home_of" in a:
             c = self.rows(f"SELECT * FROM character WHERE id = {self.roles[a['home_of']][0]}")[0]
             p = (c["home_x"], c["home_y"])
+        elif "farthest_town" in a:
+            # The centre of the settlement farthest from another anchor: always walkable ground
+            # (a map corner can be sea), used to clear an arena of animals (docs/PACK_MIND.md).
+            ref = self.anchor(a["farthest_town"])
+            groups = self.census_cache[-1]
+            p = max((self.anchor({"town": g}) for g in groups), key=lambda c: dist(c, ref))
         elif "far_from" in a:
             ref = self.anchor(a["far_from"])
             corners = [(8, 8), (w - 8, 8), (8, h - 8), (w - 8, h - 8)]
@@ -653,8 +1351,14 @@ class Instance:
             n = max(1e-6, (vx * vx + vy * vy) ** 0.5)
             p = (p[0] + vx / n * a["distance"], p[1] + vy / n * a["distance"])
         dx, dy = a.get("offset", (0, 0))
-        # Members of a group stand a little apart.
-        p = (p[0] + dx + 1.5 * member, p[1] + dy + 0.8 * member)
+        if "spread" in a:
+            # Each member at its own offset from the point (a formation: docs/PACK_MIND.md, the
+            # arena's starts), in order; past the list's end, the last offsets again.
+            sx, sy = a["spread"][min(member, len(a["spread"]) - 1)]
+            p = (p[0] + dx + sx, p[1] + dy + sy)
+        else:
+            # Members of a group stand a little apart.
+            p = (p[0] + dx + 1.5 * member, p[1] + dy + 0.8 * member)
         return (min(max(p[0], 3), w - 3), min(max(p[1], 3), h - 3))
 
     # -- the script
@@ -709,7 +1413,7 @@ class Instance:
         kind = s["do"]
         who = self.ids(s.get("who"))
         self.emit("events", {"t": self.t(), "do": kind, "who": who, **{k: v for k, v in s.items() if k not in ("do", "who", "when", "at", "steps")}})
-        if who and kind in ("place", "graph", "say", "act", "items", "know", "structure"):
+        if who and kind in ("place", "graph", "say", "act", "items", "know", "structure", "vitals"):
             # Members who died (or were removed) since the cast was picked are skipped, and said so.
             have = set(self.bodies(who))
             gone = [x for x in who if x not in have]
@@ -727,7 +1431,18 @@ class Instance:
                     b = self.rows(f"SELECT * FROM brain WHERE id = {actor}")
                     if b:
                         self.saved_graphs[actor] = json.loads(b[0]["graph"])
-                self.call("set_behavior", actor, json.dumps(self.graph_of(s["graph"], actor)))
+                # `graphs`: one graph per member, in order (cycling), for fixtures whose members
+                # differ (docs/PACK_MIND.md §5.6, the calibration "sides").
+                g = s["graphs"][i % len(s["graphs"])] if "graphs" in s else s["graph"]
+                self.call("set_behavior", actor, json.dumps(self.graph_of(g, actor)))
+            elif kind == "vitals":
+                # An admin body-state set (`admin_set_vitals`; its own chronicle line, and every use
+                # listed in summary.json `admin_vitals`): `hp` a number, or "max" for the body's own.
+                hp = s.get("hp", "max")
+                if hp == "max":
+                    v = self.rows(f"SELECT * FROM vitals WHERE id = {actor}")
+                    hp = v[0]["max_hp"] if v else 100.0
+                self.call("admin_set_vitals", actor, float(hp))
             elif kind == "items":
                 for item, qty in s["items"].items():
                     self.call("grant_items", actor, item, qty)
@@ -736,7 +1451,7 @@ class Instance:
                     self.call("grant_know_how", actor, t)
             elif kind == "say":
                 to = self.ids(s.get("to"))[0] if s.get("to") else 0
-                self.call("mind_say", actor, s["text"], to, 0, {"kind": "trial", "summary": f"scripted line (trial fixture): {s['text'][:200]}",
+                self.call("mind_say", actor, s["text"], to, s.get("way", ""), 0, {"kind": "trial", "summary": f"scripted line (trial fixture): {s['text'][:200]}",
                           "detail": "", "latency_ms": 0, "tokens": 0, "model": "", "reference": f"trial:{self.trial['name']}"})
             elif kind == "act":
                 acts = s["acts"] if "acts" in s else [s["act"]]
@@ -744,7 +1459,9 @@ class Instance:
             elif kind == "structure":
                 self.call("place_structure", actor, s["kind"])
             elif kind == "background":
-                self.call("set_background", actor, json.dumps(s["background"]))
+                # Compact, as the seed writes it: the authority reads a pack's `"bold":true` from
+                # the text itself (act.rs), so `"bold": true` would never take effect.
+                self.call("set_background", actor, json.dumps(s["background"], separators=(",", ":")))
             elif kind == "kill":
                 self.call("kill", actor, s.get("cause", "trial"))
             elif kind == "clear_routines":
@@ -785,7 +1502,9 @@ class Instance:
     def triggers(self, new_chron, positions, hour):
         for k, e in enumerate(self.trial.get("timeline", [])):
             w = e.get("when")
-            if not w or self.fired[k] >= e.get("max", 1) or self.t() < e.get("after_min", 0) * 60:
+            # `after_min` and `before_min` bound when a trigger may fire (a fixture that meets the
+            # subject in windows: docs/COMBAT_MIND.md §5.4).
+            if not w or self.fired[k] >= e.get("max", 1) or self.t() < e.get("after_min", 0) * 60 or ("before_min" in e and self.t() > e["before_min"] * 60):
                 continue
             if "said" in w:
                 spec = w["said"]
@@ -815,14 +1534,26 @@ class Instance:
                     self.schedule(self.subst_addressee(e, c["b"]), self.t())
                     break
             elif "near" in w:
-                a = self.ids(w["near"].get("who", "subject"))
-                if "to" in w["near"]:
-                    spot = self.anchor(w["near"]["to"])
-                    close = any(dist(positions.get(x, (1e9, 1e9)), spot) <= w["near"]["within"] for x in a)
+                n = w["near"]
+                a = self.ids(n.get("who", "subject"))
+                if "to" in n:
+                    spot = self.anchor(n["to"])
+                    ds = [dist(positions[x], spot) for x in a if x in positions]
                 else:
-                    b = self.ids(w["near"]["of"])
-                    close = any(dist(positions.get(x, (1e9, 1e9)), positions.get(y, (-1e9, -1e9))) <= w["near"]["within"] for x in a for y in b)
-                if close:
+                    b = self.ids(n["of"])
+                    ds = [dist(positions[x], positions[y]) for x in a for y in b if x in positions and y in positions]
+                # `within`: fires when any is that close; `beyond`: when all are farther than that
+                # (both placed), and with `for_s` only once it has held that long (then the clock
+                # starts again).
+                hit = bool(ds) and (all(d > n["beyond"] for d in ds) if "beyond" in n else any(d <= n["within"] for d in ds))
+                if hit and n.get("for_s"):
+                    since = self.held.setdefault(k, self.t())
+                    hit = self.t() - since >= n["for_s"]
+                    if hit:
+                        self.held.pop(k, None)
+                elif not hit:
+                    self.held.pop(k, None)
+                if hit:
                     self.fired[k] += 1
                     self.schedule(e, self.t())
             elif "hour" in w and hour >= w["hour"] and self.t() > 0:
@@ -854,11 +1585,11 @@ class Instance:
             # `fake-<model>`, so the journal shows which profile each call was routed to.
             port = self.shared["fake_port"]
             m["profiles"] = {name: {"base_url": f"http://127.0.0.1:{port}/v1", "model": f"fake-{p['model']}", "key_env": "LIVING_VERIFY_FAKE_KEY",
-                                    "max_tokens": 512, "requests_per_minute": 6000, **({"overflow": p["overflow"]} if p.get("overflow") else {})}
+                                    "max_tokens": 512, "requests_per_minute": 6000, **{k: p[k] for k in ("overflow", "capacity_overflow") if p.get(k)}}
                              for name, p in m["profiles"].items()}
         return m
 
-    def start_mind(self):
+    def start_mind(self, planned=False):
         v = self.shared["variants"][self.variant]
         if v.get("mind") is False:
             # Instinct-only control: no mind service; the subject lives on its graph.
@@ -875,17 +1606,31 @@ class Instance:
                    LIVING_TOKEN=self.shared["token"],
                    LIVING_NEO4J_URI=f"127.0.0.1:{NEO4J_PORT}", LIVING_NEO4J_PASSWORD=self.shared["neo4j_pw"],
                    # Off (0) unless a trial asks for a rate: trials measure, they do not cap.
-                   LIVING_LLM_PER_MIN=str(budget.get("calls_per_min", 0)), LIVING_CONCURRENCY="4",
+                   LIVING_LLM_PER_MIN=str(budget.get("calls_per_min", 0)), LIVING_CONCURRENCY=str(mind_concurrency(self.trial)),
                    LIVING_VERIFY_FAKE_KEY="dummy-local-only", NO_PROXY="127.0.0.1,localhost",
                    RUST_LOG="info,neo4rs=warn,spacetimedb_sdk=warn")
-        # `minds.only: "all"`: the service thinks for every person and animal (no LIVING_ONLY).
+        # `minds.only: "all"`: the service thinks for every person and animal (no LIVING_ONLY);
+        # with `minds.max` for at most that many at a time (`thinkers`, kept by `slots`).
+        # `minds.roles`: the service thinks for every member of these roles (an arena where both
+        # sides have minds: docs/PACK_MIND.md), not the subject alone.
+        if self.trial.get("minds", {}).get("roles"):
+            env["LIVING_ONLY"] = ",".join(str(i) for r in self.trial["minds"]["roles"] for i in self.roles.get(r, []))
         if self.trial.get("minds", {}).get("only") == "all":
             env.pop("LIVING_ONLY")
+            if self.trial["minds"].get("max"):
+                self.thinkers, self.capped = self.slots()
+                if self.capped:
+                    env["LIVING_ONLY"] = ",".join(map(str, self.thinkers))
         if self.opts.fake:
             # A fake run must never reach a provider: no provider keys in its environment.
             for k in ("MISTRAL_API_KEY", "CARLID_NPC_API_KEY", "TYPESAFE_API_KEY"):
                 env[k] = ""
         env.update({k: str(x) for k, x in v.get("env", {}).items()})
+        if self.opts.fake and env.get("LIVING_RETHINK") == "jev":
+            # The gate's Jev judge goes to the fake server's `/v1/systemone` too (fake_llm.py), never to TypeSafe.
+            env["LIVING_RETHINK_URL"] = f"http://127.0.0.1:{self.shared['fake_port']}/v1/systemone"
+            env["TYPESAFE_API_KEY"] = "fake-only"
+        self.concurrency = int(env["LIVING_CONCURRENCY"])
         logged_env = {k: env[k] for k in sorted(env) if k.startswith("LIVING_")}
         for key in logged_env:
             if re.search(r"(?:^|_)(?:TOKEN|PASSWORD|SECRET|KEY|AUTH|AUTHORIZATION)$", key):
@@ -899,9 +1644,184 @@ class Instance:
         p = subprocess.Popen([str(binary)], cwd=ROOT, env=env, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
         log.close()
         self.mind = Mind(p.pid, p)
-        self.starts.append(time.time())
-        self.log(f"mind pid {p.pid} LIVING_ONLY={self.subject} variant {self.variant} (start {len(self.starts)}) from {binary}")
+        world_guard.set_mind(self.dir, p.pid)
+        # A planned restart (new thinkers) is not a crash: the runaway watchdog counts the others.
+        if not planned:
+            self.starts.append(time.time())
+        self.log(f"mind pid {p.pid} LIVING_ONLY={env.get('LIVING_ONLY', 'all')} variant {self.variant} (start {len(self.starts)}) from {binary}")
         self.save()
+
+    def slots(self):
+        """Who thinks under `minds.max` N, and whether the cap binds. While everyone the mind would
+        think for (alive, past infancy) fits under N, all of them think and the mind runs without
+        LIVING_ONLY, so it takes up a newborn turned child itself, with no restart. Once they are
+        more than N: those already thinking who are alive, then the earliest-born of the rest, up
+        to N. A death frees a slot; a newborn takes one when it becomes a child and one is free."""
+        n = self.trial["minds"]["max"]
+        cs = {c["id"]: c for c in self.rows("SELECT * FROM character WHERE alive = true")}
+        admin = self.world["admin"]
+        able = [c for c in cs.values() if c["ai"] and c["controller"] == admin and c["stage"] != 0]
+        if len(able) <= n:
+            return sorted(c["id"] for c in able), False
+        keep = [i for i in (getattr(self, "thinkers", None) or []) if i in cs]
+        for c in sorted(able, key=lambda c: (c["born_ms"], c["id"])):
+            if len(keep) >= n:
+                break
+            if c["id"] not in keep:
+                keep.append(c["id"])
+        return keep, True
+
+    def reslot(self):
+        """Restart the mind when the thinkers under `minds.max` change (at most every 2 minutes):
+        the mind reads LIVING_ONLY when it starts. While the cap does not bind (no LIVING_ONLY) the
+        mind already thinks for everyone able, so only the census's list is brought up to date;
+        it is restarted when the cap starts or stops binding, or a capped set gains someone."""
+        if not self.trial.get("minds", {}).get("max") or not self.mind or time.time() - getattr(self, "reslot_at", 0) < 120:
+            return
+        self.reslot_at = time.time()
+        want, capped = self.slots()
+        # A state saved before this flag ran capped whenever it had a `minds.max`.
+        was = True if getattr(self, "capped", None) is None else self.capped
+        gone, new = sorted(set(self.thinkers or []) - set(want)), sorted(set(want) - set(self.thinkers or []))
+        if capped != was or (capped and new):
+            self.emit("events", {"t": self.t(), "reslot": want, "left": gone, "joined": new, "capped": capped})
+            self.stop_mind()
+            self.start_mind(planned=True)
+        elif gone or new:
+            # Deaths (the mind leaves the dead alone), or children the uncapped mind took up itself.
+            if new:
+                self.emit("events", {"t": self.t(), "joined": new, "capped": False})
+            self.thinkers = want
+
+    def take_census(self, row):
+        """Every character of a small world (`census_s`): stage, life and death, parents, where
+        it is, what it does and its hunger, and who the mind thinks for. For worlds of a few dozen."""
+        chars = self.rows("SELECT * FROM character")
+        pos = {b["id"]: self.pos(b) for b in self.rows("SELECT * FROM body")}
+        act = {a["id"]: a for a in self.rows("SELECT * FROM activity")}
+        vit = {v["id"]: v for v in self.rows("SELECT * FROM vitals")}
+        now = self.now_ms()
+        people = []
+        for c in chars:
+            v, a = vit.get(c["id"]), act.get(c["id"])
+            hunger = round(min(100.0, max(0.0, v["hunger"] + v["hunger_rate"] * (now - v["at_ms"]) / 60000)), 1) if v else None
+            people.append({"id": c["id"], "name": c["name"], "kind": c["kind"], "stage": c["stage"], "alive": c["alive"], "cause": c["cause"],
+                           "born_ms": c["born_ms"], "died_ms": c["died_ms"], "age0": round(c["birth_age_days"], 3), "parents": [c["parent_a"], c["parent_b"]],
+                           "pos": [round(x, 1) for x in pos[c["id"]]] if c["alive"] and c["id"] in pos else None, "hunger": hunger if c["alive"] else None,
+                           "activity": [a["skill"], a["target"]] if a and c["alive"] else None})
+        self.emit("census", {"t": self.t(), "hour": row.get("hour"), "now_ms": now, "thinkers": getattr(self, "thinkers", None), "people": people})
+
+    def record_world(self):
+        """Small-world evidence (`record`; whole-table reads, meant for worlds of a few dozen
+        bodies): `talk`, every conversation turn (thought rows of kind `talk`) to `talk.jsonl`
+        (from exp-greet); `experiences`, every character's experience rows as they arrive, before
+        minds integrate and delete them, to `experiences_all.jsonl`; `gestures`, every use of a
+        gesture or turn (`wave`, `nod`, `face`, `appraise`; `skill_use`) to `gestures.jsonl`;
+        `positions`, every person's position, heading and activity (its skill, and whom it is aimed
+        at) each sample to `positions.jsonl`; `uses`, every skill use by the subject and the cast
+        (`skill_use`: the attempt, acceptance, release and outcome), written again each time its
+        outcome changes (a missile "in flight", then what it struck), to `uses.jsonl`; `thoughts`, every character's thought rows (with
+        `detail.reasons`, what each deliberation carried) to `thoughts_all.jsonl`; `audience`,
+        who heard each line and how they stood (the `audience` table, where the world keeps it)
+        to `audience.jsonl` (greet_report.py)."""
+        rec = self.trial.get("record", {})
+        for k in ("talk", "audience", "all_experience", "gesture"):
+            self.cursor.setdefault(k, 0)
+        if rec.get("talk") or rec.get("thoughts"):
+            for r in sorted(self.rows(f"SELECT * FROM thought WHERE id > {self.cursor['talk']}"), key=lambda r: r["id"]):
+                self.cursor["talk"] = max(self.cursor["talk"], r["id"])
+                if rec.get("talk") and r.get("kind") == "talk":
+                    self.emit("talk", {"t": self.t(), **r})
+                if rec.get("thoughts"):
+                    self.emit("thoughts_all", {"t": self.t(), **r})
+        if rec.get("experiences"):
+            for r in sorted(self.rows(f"SELECT * FROM experience WHERE id > {self.cursor['all_experience']}"), key=lambda r: r["id"]):
+                self.cursor["all_experience"] = max(self.cursor["all_experience"], r["id"])
+                self.emit("experiences_all", {"t": self.t(), **r})
+        if rec.get("gestures"):
+            for r in sorted(self.rows(f"SELECT * FROM skill_use WHERE id > {self.cursor['gesture']}"), key=lambda r: r["id"]):
+                self.cursor["gesture"] = max(self.cursor["gesture"], r["id"])
+                if r.get("skill") in ("wave", "nod", "face", "appraise"):
+                    self.emit("gestures", {"t": self.t(), **r})
+        if rec.get("uses"):
+            # `skill_use` keeps each character's last 24 uses; read them per role each sample and
+            # write a row again when its outcome has changed, so the last copy per id is final.
+            seen = self.cursor.setdefault("uses_seen", {})
+            actors = sorted({i for ids in self.roles.values() for i in ids})
+            for actor in actors:
+                for r in self.rows(f"SELECT * FROM skill_use WHERE actor = {actor}"):
+                    key = str(r["id"])
+                    state = (r.get("accepted_ms"), r.get("released_ms"), r.get("outcome"), r.get("outcome_ms"))
+                    if seen.get(key) != list(state):
+                        seen[key] = list(state)
+                        self.emit("uses", {"t": self.t(), **r})
+        if rec.get("positions"):
+            people = {c["id"] for c in self.rows("SELECT * FROM character WHERE kind = 'person' AND alive = true")}
+            now = self.now_ms()
+            pos = {str(b["id"]): [round(v, 2) for v in self.pos(b)] + [round(b.get("heading") or 0.0, 3)] for b in self.rows("SELECT * FROM body") if b["id"] in people}
+            # What each is doing, and at whom when it is aimed at a creature (target class 3).
+            act = {str(a["id"]): [a["skill"], a["target"][1] if isinstance(a.get("target"), list) and a["target"] and a["target"][0] == 3 else 0]
+                   for a in self.rows("SELECT * FROM activity") if a["id"] in people}
+            self.emit("positions", {"t": self.t(), "ms": now, "pos": pos, "act": act})
+        if rec.get("audience"):
+            for r in sorted(self.rows(f"SELECT * FROM audience WHERE id > {self.cursor['audience']}"), key=lambda r: r["id"]):
+                self.cursor["audience"] = max(self.cursor["audience"], r["id"])
+                self.emit("audience", {"t": self.t(), **r})
+
+    def watch_bodies(self, spec):
+        """`record.bodies` ({"hz": 5}): every member of every role, `hz` times a second, to
+        `bodies.jsonl` (docs/PACK_MIND.md, the arena): position projected to the sample time
+        along its row's motion (to `next_ms`), facing (heading and held look, with their turns,
+        as `common::facing_at`), `running`, alive, the fighter row (band, move code, start,
+        release, end, target) and the activity (skill, creature target). Read-only, on its own
+        thread, until the instance stops. Also ends the run (`stopped_by` "side down") when a
+        role listed in `trial.end.side_down` has had no living member for `end.after_s` (30)."""
+        hz = float(spec.get("hz", 5)) if isinstance(spec, dict) else 5.0
+        end = self.trial.get("end", {})
+        down_roles, after_s = end.get("side_down", []), float(end.get("after_s", 30))
+        down_since = {}
+        ids = sorted({i for ids in self.roles.values() for i in ids})
+        if not ids:
+            return
+        where = " OR ".join(f"id = {i}" for i in ids)
+        (self.dir / "arena.json").write_text(json.dumps({"trial": self.trial["name"], "variant": self.variant, "replicate": self.rep,
+                                                         "arena": self.trial.get("arena", {}), "roles": self.roles, "end": end}, indent=1))
+        pool = concurrent.futures.ThreadPoolExecutor(6)
+        while not getattr(self, "_bodies_stop", False):
+            tick = time.time()
+            try:
+                # The five reads at once (2.14.1's SQL endpoint takes one statement a request), so
+                # a sample costs about one round trip.
+                chars, bodies, fighters, acts, vitals, clock = pool.map(self.rows, [f"SELECT {cols} FROM {t} WHERE {where}" for t, cols in (
+                    ("character", "id, alive, cause"), ("body", "*"), ("fighter", "*"), ("activity", "*"), ("vitals", "*"))] + ["SELECT * FROM clock"])
+                now = self.now_ms()
+                alive = {c["id"]: c["alive"] for c in chars}
+                out = {}
+                for b in bodies:
+                    dt = max(0.0, (min(now, b["next_ms"]) - b["t_ms"]) / 1000)
+                    head = b.get("heading") or 0.0
+                    head += (b.get("turn") or 0.0) * min(dt, b.get("turn_s") or 0.0)
+                    face = head + (b.get("face_off") or 0.0) + (b.get("face_turn") or 0.0) * min(dt, b.get("face_turn_s") or 0.0)
+                    out[str(b["id"])] = [round(b["x"] + b["vx"] * dt, 2), round(b["y"] + b["vy"] * dt, 2), round(math.atan2(math.sin(face), math.cos(face)), 3), bool(b.get("running"))]
+                fighter = {str(f["id"]): [f["band"], f["act"], f["act_ms"], f["release_ms"], f["until_ms"], f["target"]] for f in fighters}
+                act = {str(a["id"]): [a["skill"], a["target"][1] if isinstance(a.get("target"), list) and a["target"] and a["target"][0] == 3 else 0]
+                       for a in acts}
+                hp = {str(v["id"]): [round(v["hp"] + v.get("hp_rate", 0.0) * max(0.0, (now - v["at_ms"]) / 60000), 2), v["max_hp"], round(v["hunger"], 1)]
+                      for v in vitals}
+                # The world's last tick against the wall clock (ms; includes the read's latency) and
+                # the longest gap between ticks it has seen: how far a loaded host slowed it.
+                lag = [now - clock[0]["last_ms"], clock[0].get("max_gap_ms")] if clock else None
+                self.emit("bodies", {"t": self.t(), "ms": now, "b": out, "hp": hp, "lag": lag, "dead": {str(c["id"]): c.get("cause", "") for c in chars if not c["alive"]}, "f": fighter, "act": act})
+                for r in down_roles:
+                    if not any(alive.get(i) for i in self.roles.get(r, [])):
+                        down_since.setdefault(r, time.time())
+                        if time.time() - down_since[r] >= after_s:
+                            self.side_down = r
+                    else:
+                        down_since.pop(r, None)
+            except Exception as e:  # a failed read is a gap in the samples, not a failed run
+                self.emit("events", {"t": self.t(), "bodies_error": str(e)[:200]})
+            time.sleep(max(0.0, 1.0 / hz - (time.time() - tick)))
 
     def stop_mind(self):
         if self.mind and self.mind.alive():
@@ -909,8 +1829,8 @@ class Instance:
             self.log(f"mind stopped (pid {self.mind.pid})")
 
     # -- state kept for `resume`
-    STATE = ("status", "subject", "roles", "t0", "cursor", "jpos", "brain_rev", "done_at", "saved_graphs", "nsample",
-             "died", "published", "snapshots", "stopped_by", "starts", "runaway_seen")
+    STATE = ("database_identity", "world_epoch", "replica", "status", "subject", "roles", "t0", "cursor", "jpos", "brain_rev", "done_at", "saved_graphs", "nsample",
+             "died", "published", "cleanup_error", "snapshots", "stopped_by", "starts", "runaway_seen", "thinkers", "capped", "census_at", "outages")
 
     def save(self):
         st = {k: getattr(self, k, None) for k in self.STATE}
@@ -928,10 +1848,14 @@ class Instance:
         for k in self.STATE:
             if k in st and st[k] is not None:
                 setattr(self, k, st[k])
+        if not getattr(self, "database_identity", None) or database_identity(self.db) != self.database_identity:
+            self.published = False
+            raise RuntimeError("resume database identity differs from the run record")
         self.saved_graphs = {int(k): v for k, v in (st.get("saved_graphs") or {}).items()}
         if not self.subject:
             raise RuntimeError("no subject in state.json: the run had not started; run it again instead")
         self.fired = Counter({tuple(json.loads(k)) if k.startswith("[") else json.loads(k): v for k, v in st.get("fired", {}).items()})
+        self.held = {}
         self.done_at = set(self.done_at or [])
         pid = st.get("mind_pid")
         if pid and proc_start(pid) == st.get("mind_start") and proc_start(pid) is not None:
@@ -961,8 +1885,7 @@ class Instance:
                         continue
                     tok = r.get("tokens") or 0
                     key = (r.get("purpose"), r.get("model"))
-                    # The call's own time: a resumed runner re-reads the whole journal.
-                    self.recent.append(((r.get("at_ms") or 0) / 1000, r.get("purpose"), (r.get("error") or "")[:100]))
+                    self.note_call(r)
                     self.tokens[key] += tok
                     self.calls[key] += 1
                     if r.get("latency_ms"):
@@ -970,6 +1893,17 @@ class Instance:
                     if not self.opts.fake:
                         with _lock:
                             self.shared["spent"] += tok
+
+    def note_call(self, r):
+        """One journaled call for the runaway and outage guards, at the call's own time (a
+        resumed runner re-reads the whole journal)."""
+        at = (r.get("at_ms") or 0) / 1000
+        kind = failure_kind(r.get("error"))
+        self.recent.append((at, r.get("purpose"), (r.get("error") or "")[:100], kind))
+        if kind is None:
+            self.last_ok = at if self.last_ok is None else max(self.last_ok, at)
+        elif kind != "mind":
+            self.provider_fails.append((at, kind))
 
     # -- sampling
     def sample(self):
@@ -1026,10 +1960,15 @@ class Instance:
                 self.cursor[key] = max(self.cursor[key], r["id"])
         mine = set(everyone)
         new_chron = sorted(chron, key=lambda r: r["id"])
+        # `record.speech`: every line said in the world (small worlds; greet_report.py, arrive_report.py).
+        speech_all = self.trial.get("record", {}).get("speech")
         for r in new_chron:
             self.cursor["chronicle"] = max(self.cursor["chronicle"], r["id"])
             if r["a"] in mine or r["b"] in mine:
                 self.emit("chronicle", {"t": self.t(), **r})
+            if speech_all and r.get("kind") == "speech":
+                self.emit("speech", {"t": self.t(), **r})
+        self.record_world()
         for name, rows in (("know_how", know), ("relation", rel), ("judgment", jud), ("persona", persona), ("structure", structs), ("place", places), ("routine", routines)):
             if rows is None:
                 continue
@@ -1050,7 +1989,9 @@ class Instance:
                         ("skill_use", f"SELECT * FROM skill_use WHERE actor = {S}"), ("deliberation", f"SELECT * FROM deliberation WHERE actor = {S}"),
                         ("structure", f"SELECT * FROM structure WHERE owner = {S}"), ("chronicle", "SELECT * FROM chronicle"),
                         ("character", "SELECT * FROM character WHERE " + " OR ".join(f"id = {i}" for ids in self.roles.values() for i in ids)),
-                        ("stats", "SELECT * FROM stats")):
+                        ("stats", "SELECT * FROM stats"),
+                        # Every attention cue in the world (at most 8 per character; docs/ATTENTION.md).
+                        ("cue", "SELECT * FROM cue")):
             try:
                 snap[name] = self.rows(q)
             except RuntimeError as e:
@@ -1060,21 +2001,44 @@ class Instance:
             shutil.copytree(self.journal, self.dir / "journal", dirs_exist_ok=True)
 
     # -- runaways: loops that cost calls without changing anything
+    def rate_limit(self):
+        limit = self.trial.get("budget", {}).get("runaway_calls_per_min")
+        if limit is not None:
+            return limit
+        return float("inf") if self.trial.get("minds", {}).get("only") == "all" else 60
+
     def runaway(self):
         """A retry storm or one failure repeated: recorded, and the run stopped, so that its
         cause is fixed rather than hidden behind a cap."""
         now = time.time()
         self.recent = [r for r in self.recent if now - r[0] <= 300]
-        errors = [r for r in self.recent if r[2]]
+        # A provider outage is not a loop: its failures (capacity or rate 429s, 5xx, no
+        # connection) count toward no failure limit (ar1: 7 of 28 instances stopped over
+        # consolidation's capacity 429s while the mind retried them, most within a minute).
+        # They still count as calls, so a mind that storms a failing provider trips the call
+        # rate; the outage itself stops a run only when no route answers (`outage`).
+        errors = [r for r in self.recent if r[3] == "mind"]
         same = Counter((r[1], r[2]) for r in errors).most_common(1)
         last_min = sum(1 for r in self.recent if now - r[0] <= 60)
         why = None
-        if len(errors) >= 30:
+        # Where a whole island thinks (`minds.only: "all"`, thousands of calls in 5 minutes), a
+        # provider's 429s at about 1% are noise the mind retries: failures count as a runaway
+        # only as a share of the calls (half, the same one 40%: the island's first minutes are a
+        # burst of identity and memory calls the provider answers with 429s), never below the
+        # one-mind counts.
+        many = self.trial.get("minds", {}).get("only") == "all"
+        fail_limit = max(30, 0.5 * len(self.recent)) if many else 30
+        same_limit = max(15, 0.4 * len(self.recent)) if many else 15
+        if len(errors) >= fail_limit:
             why = f"{len(errors)} failed model calls in 5 minutes"
-        elif same and same[0][1] >= 15:
+        elif same and same[0][1] >= same_limit:
             why = f"the same failure {same[0][1]} times in 5 minutes ({same[0][0][0]}: {same[0][0][1]})"
-        elif last_min > 60:
+        # A call rate is a loop signal only when one mind thinks: with `minds.only: "all"` a whole
+        # island thinks (lives-2: hundreds of calls a minute is its normal), so only a trial's
+        # `budget.runaway_calls_per_min` limits it; failures and restarts above still apply.
+        elif last_min > self.rate_limit():
             why = f"{last_min} model calls in one minute"
+        why = why or self.outage(now)
         recent_starts = [t for t in self.starts if now - t <= 1800]
         if len(recent_starts) > 5:
             why = f"the mind was restarted {len(recent_starts)} times in 30 minutes"
@@ -1082,6 +2046,37 @@ class Instance:
             self.emit("events", {"t": self.t(), "runaway": why})
             self.runaway_seen.append([self.t(), why])
         return why
+
+    def outage(self, now):
+        """Provider failures since the last call that succeeded on any route: recorded as an
+        outage (an `outage` event when it starts, one in `outages` and the events when a call
+        succeeds again), and the run's stop only when nothing has answered for OUTAGE_STOP_S
+        while calls still fail (the last within OUTAGE_LIVE_S)."""
+        if self.last_ok is not None:
+            self.provider_fails = [f for f in self.provider_fails if f[0] > self.last_ok]
+        rel = lambda at: None if self.t0 is None else round(at - self.t0, 1)
+        if self.outage_since is not None and self.last_ok is not None and self.last_ok > self.outage_since:
+            ended = {"since_t": rel(self.outage_since), "until_t": rel(self.last_ok), "seconds": round(self.last_ok - self.outage_since, 1),
+                     "failed": self.outage_failed, "kinds": dict(self.outage_kinds)}
+            if not any(o.get("since_t") == ended["since_t"] for o in self.outages):
+                self.outages.append(ended)
+                self.emit("events", {"t": self.t(), "outage_ended": ended})
+            self.outage_since = None
+        if not self.provider_fails:
+            return None
+        since = min(f[0] for f in self.provider_fails)
+        if now - since < OUTAGE_RECORD_S:
+            return None
+        if self.outage_since is None:
+            self.emit("events", {"t": self.t(), "outage": {"since_t": rel(since), "kind": self.provider_fails[0][1]}})
+        self.outage_since = since
+        self.outage_failed = len(self.provider_fails)
+        self.outage_kinds = Counter(k for _, k in self.provider_fails)
+        last = max(f[0] for f in self.provider_fails)
+        if now - since >= OUTAGE_STOP_S and now - last <= OUTAGE_LIVE_S:
+            kinds = ", ".join(f"{k} {n}" for k, n in self.outage_kinds.most_common())
+            return f"provider outage: no route answered for {(now - since) / 60:.0f} minutes ({self.outage_failed} failed calls: {kinds})"
+        return None
 
     # -- hourly snapshots (life runs)
     def snapshot(self, row):
@@ -1138,6 +2133,9 @@ class Instance:
         self.publish()
         subj = self.trial["subject"]
         if subj.get("join"):
+            # `after_s`: the world lives that long before the player joins (the residents have
+            # seen each other first, and the player is the one stranger among them).
+            time.sleep(subj["join"].get("after_s", 0))
             self.player = Player(self, subj["join"]["name"])
             self.roles["subject"] = [self.player.join()]
         elif subj.get("spawn"):
@@ -1145,6 +2143,10 @@ class Instance:
             self.call("spawn_newcomer", name)
             self.roles["subject"] = [max(c["id"] for c in self.rows(f"SELECT * FROM character WHERE name = '{name}'"))]
         self.cast()
+        if self.trial.get("newcomer"):
+            # A newcomer joins later, in the human session (`Player.join_newcomer`).
+            self.player = Player(self, self.trial["newcomer"]["name"])
+            self.roles.setdefault("newcomer", [])
         self.status = "preparing"
         # A repurposed resident starts empty-handed and without its old routines. A spawned
         # newcomer, a joined player (whose rows only the player may act on) and an animal do not.
@@ -1167,6 +2169,8 @@ class Instance:
         self.status = "starting"
         self.run_phase("start")
         self.t0 = time.time()
+        if self.trial.get("record", {}).get("bodies"):
+            threading.Thread(target=self.watch_bodies, args=(self.trial["record"]["bodies"],), daemon=True).start()
         self.start_mind()
         if self.trial.get("human"):
             self.human = threading.Thread(target=self.player.session, args=(self.trial["human"],), daemon=True)
@@ -1195,10 +2199,15 @@ class Instance:
                 self.step(s)
             if life and self.t() >= self.snapshots * snap_s:
                 self.snapshot(row)
+            census_s = self.trial.get("census_s")
+            if census_s and self.t() >= (getattr(self, "census_at", None) or 0):
+                self.take_census(row)
+                self.census_at = self.t() + census_s
+            self.reslot()
             if row["alive"] is False and self.died is None:
                 self.died = self.t()
             mind_down = self.mind is not None and not self.mind.alive()
-            if mind_down and life and row["alive"] is not False:
+            if mind_down and life and (row["alive"] is not False or not self.trial.get("life", {}).get("stop_on_death", True)):
                 # A life run keeps its world: the mind is restarted (as run-mind.sh does).
                 self.emit("events", {"t": self.t(), "mind_exit": self.mind.exit_code() if self.mind else None})
                 self.start_mind()
@@ -1209,13 +2218,15 @@ class Instance:
             elif cap and sum(self.tokens.values()) >= cap:
                 self.stopped_by = "trial token cap"
             elif why:
-                self.stopped_by = f"runaway: {why}"
-            elif self.died is not None and self.t() - self.died >= 20:
+                self.stopped_by = why if why.startswith("provider outage") else f"runaway: {why}"
+            elif self.died is not None and self.t() - self.died >= 20 and self.trial.get("life", {}).get("stop_on_death", True):
                 self.stopped_by = "subject died"
             elif mind_down:
                 self.stopped_by = f"mind exited ({self.mind.exit_code() if self.mind else None})"
             elif self.shared.get("abort"):
                 self.stopped_by = "aborted"
+            elif getattr(self, "side_down", None):
+                self.stopped_by = f"side down: {self.side_down}"
             if self.stopped_by or time.time() - last_save > 30:
                 self.save()
                 last_save = time.time()
@@ -1223,10 +2234,13 @@ class Instance:
                 break
             time.sleep(max(0.0, (getattr(self.opts, "sample_s", None) or SAMPLE_S) - (time.time() - tick)))
         self.status = "collecting"
+        self._bodies_stop = True
         self.stop_mind()
         self.read_journal()
         if life:
             self.snapshot(row)
+        if self.trial.get("census_s"):
+            self.take_census(row)
         self.final()
         self.status = "done"
 
@@ -1234,6 +2248,15 @@ class Instance:
         try:
             if resume:
                 self.restore()
+                owner = world_guard.arm(self.dir, URL, self.db, self.shared["token"], os.getpid(),
+                                        expected=self.database_identity, expected_epoch=getattr(self, "world_epoch", None))
+                self.world_epoch = owner["epoch"]
+                if self.mind:
+                    world_guard.set_mind(self.dir, self.mind.pid)
+                if self.world["paused"] and not self.call("set_paused", False):
+                    raise RuntimeError("could not resume the paused world")
+                if self.trial.get("record", {}).get("bodies"):
+                    threading.Thread(target=self.watch_bodies, args=(self.trial["record"]["bodies"],), daemon=True).start()
                 if (not self.mind or not self.mind.alive()) and self.shared["variants"][self.variant].get("mind") is not False:
                     self.start_mind()
                 self.loop()
@@ -1246,23 +2269,59 @@ class Instance:
             self.log(f"FAILED: {e!r}")
             self.stop_mind()
         finally:
+            if self.outage_since is not None and not any(o.get("since_t") == round(self.outage_since - (self.t0 or 0), 1) for o in self.outages):
+                self.outages.append({"since_t": round(self.outage_since - (self.t0 or 0), 1), "until_t": None, "failed": self.outage_failed,
+                                     "kinds": dict(self.outage_kinds)})
             self.save()
-            summary = summarize(self.dir, self.trial, extra={"db": self.db, "variant": self.variant, "replicate": self.rep,
+            summary = summarize(self.dir, self.trial, extra={"db": self.db, "database_identity": getattr(self, "database_identity", None), "replica": getattr(self, "replica", None), "variant": self.variant, "replicate": self.rep,
                                 "stopped_by": self.stopped_by, "fake": bool(self.opts.fake), "minutes_planned": self.opts.minutes or self.trial.get("minutes", 15),
-                                "runaways": self.runaway_seen, "mind_starts": len(self.starts),
-                                "day_ms": (getattr(self, "world", None) or {}).get("day_ms")})
+                                "runaways": self.runaway_seen, "mind_starts": len(self.starts), "outages": self.outages,
+                                "day_ms": (getattr(self, "world", None) or {}).get("day_ms"),
+                                "concurrency": getattr(self, "concurrency", None) or mind_concurrency(self.trial), "world_laws": self.shared["variants"][self.variant].get("world_laws") or {}})
             (self.dir / "summary.json").write_text(json.dumps(summary, indent=1))
             keep = self.opts.keep_db or self.trial.get("keep_db")
-            if self.published and not keep and self.status != "failed-keep":
-                delete_db(self.db)
-            elif self.published and self.trial.get("kind") == "life":
-                # Kept, but stopped: a paused world does not tick or grow.
-                self.call("set_paused", True)
+            if self.published:
+                try:
+                    delete = not keep and self.status != "failed-keep"
+                    record = trial_archive.finish(
+                        self.dir, URL, CONTAINER, self.db, self.database_identity, self.shared["token"],
+                        delete=delete, expected_epoch=getattr(self, "world_epoch", None),
+                    )
+                    self.log(f"commitlog archive: {record}")
+                    self.published = bool(record and not delete)
+                    self.save()
+                except Exception as error:
+                    self.status = "failed-keep"
+                    self.cleanup_error = str(error)
+                    self.save()
+                    self.log(f"CLEANUP FAILED for {self.db}: {error}")
+                    print(f"CLEANUP FAILED for {self.db}: {error}", file=sys.stderr, flush=True)
 
 
 def delete_db(db):
+    """Delete a trial database, its world paused first: SpacetimeDB 2.14.1 can panic, and take
+    the whole trial server down, when a database is deleted while its world still ticks (the
+    trial service went down that way on 2026-11-12 at 12:52). A world that cannot be paused and
+    read back as paused is not deleted."""
     if not db.startswith(PREFIX):
         raise RuntimeError(f"refusing to delete {db}")
+    tok = admin_token()
+    code, body = http(f"/v1/database/{db}/call/set_paused", [True], tok)
+    if code == 404:
+        return True
+    paused = False
+    for _ in range(10):
+        c, b = http(f"/v1/database/{db}/sql", "SELECT paused FROM world", tok, raw=True)
+        if c == 404:
+            return True
+        if c == 200 and "true" in b.lower():
+            paused = True
+            break
+        time.sleep(1)
+    if not paused:
+        print(f"not deleting {db}: its world could not be paused ({code} {body.strip()[:160]})", file=sys.stderr)
+        return False
+    time.sleep(2)
     sh("docker", "exec", CONTAINER, "spacetime", "delete", "-s", "local", db, "-y", check=False)
     return http(f"/v1/database/{db}/sql", "SELECT 1 FROM world", raw=True)[0] == 404
 
@@ -1279,6 +2338,21 @@ def jsonl(path):
         except ValueError:
             pass
     return out
+
+
+SPOKEN_ID = re.compile(r"#\d+")
+
+
+def spoken_ids(speech):
+    """Lines said aloud whose words hold a `#<digits>` id (`record.speech`): an id is for acts and
+    memory ("a stranger #77" is a memory handle), never for speech, so this should be 0. Per
+    speaker id; the words are the quoted part of the chronicle line ("A to B: “...”")."""
+    by = Counter()
+    for r in speech:
+        m = re.search(r"“(.*)”", r.get("text") or "", re.S)
+        if SPOKEN_ID.search(m[1] if m else (r.get("text") or "").split(": ", 1)[-1]):
+            by[str(r.get("a"))] += 1
+    return {"lines": sum(by.values()), "by_speaker": dict(by), "of": len(speech)} if speech else None
 
 
 def summarize(d, trial, extra):
@@ -1380,15 +2454,21 @@ def summarize(d, trial, extra):
     # reopen), else the instance's copy.
     live = ROOT / ".local/living/journal" / f"{PREFIX}{d.parent.name}-{d.name}"
     jdir = live if live.exists() else d / "journal"
+    s["consolidations"] = consolidation_table(jdir)
+    s["spoken_as"] = spoken_as_table(jdir)
+    # Every admin body-state set the timeline made (`vitals` steps): when, whom, to what.
+    s["admin_vitals"] = [{"t": e.get("t"), "who": e.get("who"), "hp": e.get("hp", "max")} for e in jsonl(d / "events.jsonl") if e.get("do") == "vitals"]
     for f in sorted(jdir.glob("*.jsonl")) if jdir.exists() else []:
         for n, line in enumerate(f.read_text().splitlines(), 1):
             try:
-                r = json.loads(line)
+                r = restore(json.loads(line), f.parent)
                 r["_ref"] = f"{d.name}/journal/{f.name}:{n}"
                 j.append(r)
             except ValueError:
                 pass
     j.sort(key=lambda r: r.get("at_ms", 0))
+    # Failed calls by who failed (`failure_kind`): the provider's kinds, and `mind`.
+    s["call_failures"] = dict(Counter(k for k in (failure_kind(r.get("error")) for r in j) if k))
     by_purpose = defaultdict(lambda: {"calls": 0, "tokens": 0, "errors": 0, "latency_ms": []})
     by_model = defaultdict(lambda: {"calls": 0, "tokens": 0, "prompt": 0, "completion": 0, "cached": 0})
     remembered = 0
@@ -1397,14 +2477,22 @@ def summarize(d, trial, extra):
         p["calls"] += 1
         p["tokens"] += r.get("tokens") or 0
         p["errors"] += 1 if r.get("error") else 0
+        p["capacity_429"] = p.get("capacity_429", 0) + (1 if out_of_capacity(r.get("error")) else 0)
         if r.get("latency_ms"):
             p["latency_ms"].append(r["latency_ms"])
-        m = by_model[r.get("model")]
-        m["calls"] += 1
-        m["tokens"] += r.get("tokens") or 0
-        m["prompt"] += r.get("prompt_tokens") or 0
-        m["completion"] += r.get("completion_tokens") or 0
-        m["cached"] += r.get("cached_tokens") or 0
+        # The rethink gate's decisions (`rethink-gate`) are journaled beside the calls but are not
+        # model calls; its judge's calls are (`rethink`), priced by the mind (`cost_usd`, from the
+        # local prices file for Jev).
+        if r.get("purpose") != "rethink-gate":
+            m = by_model[r.get("model")]
+            m["calls"] += 1
+            m["tokens"] += r.get("tokens") or 0
+            m["prompt"] += r.get("prompt_tokens") or 0
+            m["completion"] += r.get("completion_tokens") or 0
+            m["cached"] += r.get("cached_tokens") or 0
+            if r.get("cost_usd") is not None:
+                m["cost_usd"] = m.get("cost_usd", 0.0) + float(r["cost_usd"])
+                m["cost_known"] = m.get("cost_known", 0) + 1
         if r.get("purpose") == "consolidate":
             rep = parse_reply(r.get("reply"))
             if isinstance(rep, dict) and isinstance(rep.get("remember"), list):
@@ -1447,9 +2535,34 @@ def summarize(d, trial, extra):
                 per_day[day]["tokens"] += r.get("tokens") or 0
         s["by_game_day"] = {k: dict(v) for k, v in sorted(per_day.items())}
     s["memories_remembered"] = remembered
+    s["spoken_ids"] = spoken_ids(jsonl(d / "speech.jsonl"))
+    frame_probes(s, S, chron, j)
     s["exchanges"] = [{"ref": r["_ref"], "purpose": r.get("purpose"), "model": r.get("model"), "tokens": r.get("tokens"),
                        "reply": excerpt(r.get("reply"))} for r in j if r.get("purpose") in ("deliberate", "think", "talk")][:40]
     return s
+
+
+def frame_probes(s, S, chron, j):
+    """The player-frame experiment's probes. `prompt_frame`: per purpose, how many of the
+    subject's recorded requests opened with the player frame, of all its requests ("player
+    3/3"; "character" when none did). `out_of_character`: lines the subject spoke or wrote that
+    step outside the world (ooc.py), and the same count over its replies' private fields."""
+    sub_name = (s.get("subject") or "").split("#")[0]
+    mine = [r for r in j if sub_name and r.get("_ref", "").split("/journal/")[-1].startswith(sub_name + ".jsonl")]
+    framed, total = Counter(), Counter()
+    for r in mine:
+        msgs = (r.get("request") or {}).get("messages") or []
+        system = next((m.get("content") for m in msgs if isinstance(m, dict) and m.get("role") == "system"), None)
+        if not isinstance(system, str):
+            continue
+        total[r.get("purpose")] += 1
+        framed[r.get("purpose")] += system.startswith(PLAYER_FRAME_HEAD)
+    s["prompt_frame"] = {p: f"{'player' if framed[p] else 'character'} {framed[p]}/{n}" for p, n in sorted(total.items(), key=lambda x: str(x[0]))}
+    spoken = [re.sub(r"^[^“]*“|”$", "", c.get("text", "")) for c in chron if c.get("a") == S and c.get("kind") in ("speech", "write")]
+    private = [x for r in mine for x in ooc.private_texts(parse_reply(r.get("reply")))]
+    s["out_of_character"] = {"spoken": ooc.scan(spoken), "private": ooc.scan(private)}
+    s["ooc_lines"] = s["out_of_character"]["spoken"]["flagged"]
+    s["ooc_private"] = s["out_of_character"]["private"]["flagged"]
 
 
 def social(s, d, S, chron, exps, samples, j, extra):
@@ -1469,7 +2582,7 @@ def social(s, d, S, chron, exps, samples, j, extra):
     inside = [x for x in sleeps if any(dist((t["x"], t["y"]), x["pos"]) <= t["radius_m"] for t in setts)] if setts else []
     s["slept_inside_walls"] = f"{len(inside)}/{len(sleeps)} sleep samples" if sleeps else None
     sub_name = (s.get("subject") or "").split("#")[0]
-    res = [r for r in j if not r.get("_ref", "").split("/journal/")[-1].startswith(sub_name + ".jsonl")]
+    res = [r for r in j if not r.get("_ref", "").split("/journal/")[-1].startswith(journal_file(sub_name))]
     thinking = {r.get("_ref", "").split("/journal/")[-1].split(".jsonl")[0] for r in res}
     s["residents_thinking"] = len(thinking)
     if res:
@@ -1538,6 +2651,10 @@ def purpose_model(j, thoughts):
                   "errors": o["errors"], "empty": o["empty"], "repaired": o["repaired"], "invalid": o["invalid"], "profiles": dict(o["profiles"]),
                   "cached": o["cached"], "cost_usd": round(c, 4) if c is not None else None}
     retries = pruned = rejected = 0
+    # Reasons each deliberation carried (`detail.reasons`, since 2026-11-11): `reused` counts
+    # reasons an earlier deliberation of the same service already carried (same words, same
+    # arrival), which should be 0 since the stale-reasons fix.
+    carried = reused = max_before = 0
     for t in thoughts:
         if t.get("kind") == "error":
             rejected += 1
@@ -1548,7 +2665,12 @@ def purpose_model(j, thoughts):
         if isinstance(det, dict):
             retries += max(0, (det.get("attempts") or 1) - 1)
             pruned += 1 if det.get("pruned") else 0
-    res["deliberations"] = {"retried_attempts": retries, "pruned_graphs": pruned, "rejected": rejected}
+            for r in det.get("reasons") or []:
+                carried += 1
+                reused += 1 if r.get("carried_before") else 0
+                max_before = max(max_before, r.get("carried_before") or 0)
+    res["deliberations"] = {"retried_attempts": retries, "pruned_graphs": pruned, "rejected": rejected,
+                            "reasons_carried": carried, "reasons_reused": reused, "max_carried_before": max_before}
     return res
 
 
@@ -1583,7 +2705,7 @@ def shared_for(trials, a, bdir):
     for t in trials:
         for key, w in worlds_of(t).items():
             name, rel, _ = world_seed(w)
-            if not (OUT / "wasm" / f"{name}.wasm").exists():
+            if not (wasm_mount() / f"{served_name(name)}.wasm").exists():
                 sys.exit(f"module for {key} ({name}) is not built: run `trials.py build {t['name']}`")
             shared["wasm"][key], shared["seed_rel"][key] = name, rel
     if not (TARGET / "release/living-mind").exists():
@@ -1593,7 +2715,9 @@ def shared_for(trials, a, bdir):
         s.bind(("127.0.0.1", 0))
         shared["fake_port"] = s.getsockname()[1]
         s.close()
-        shared["fake"] = subprocess.Popen([sys.executable, str(FAKE), "--port", str(shared["fake_port"]), "--log", str(bdir / "fake-requests.jsonl")],
+        # `--fake-script`: the fake server's script (fake-llm.md), e.g. capacity 429s on consolidation, or living/trials/fake/latency.json (model latencies like the real ones).
+        script = ["--script", str(Path(a.fake_script).resolve())] if getattr(a, "fake_script", None) else []
+        shared["fake"] = subprocess.Popen([sys.executable, str(FAKE), "--port", str(shared["fake_port"]), "--log", str(bdir / "fake-requests.jsonl"), *script],
                                           stdout=open(bdir / "fake.log", "a"), stderr=subprocess.STDOUT, start_new_session=True)
         time.sleep(1)
     return shared
@@ -1627,6 +2751,8 @@ def execute(a, instances, shared, resume=False):
         led["batches"][a.batch] = {"tokens": sum(x.get("tokens", 0) for x in sums), "instances": len(sums), "at": time.strftime("%Y-%m-%dT%H:%M:%S")}
         LEDGER.write_text(json.dumps(led, indent=1))
     report(argparse.Namespace(batch=a.batch))
+    if any(inst.cleanup_error for inst in instances):
+        sys.exit("trial cleanup failed; inspect the affected run logs before deleting any worlds")
 
 
 def run(a):
@@ -1638,7 +2764,16 @@ def run(a):
     for v in names:
         if v not in variants():
             sys.exit(f"unknown variant {v}; see living/trials/variants.json")
-    plan = [(t, v, r) for t in trials for v in names for r in range(1, a.replicates + 1)]
+    # A trial may name the only variants it runs with (`variants`): others are skipped for it.
+    plan = [(t, v, r) for t in trials for v in names if not t.get("variants") or v in t["variants"] for r in range(1, a.replicates + 1)]
+    if getattr(a, "interleave", False):
+        # Replicate by replicate, the arms side by side (r1 of every variant, then r2, …): with
+        # --parallel equal to the number of variants, the arms share each window of provider load.
+        plan.sort(key=lambda p: (p[2], names.index(p[1])))
+    # Instance names follow Instance.__init__ (`<trial>-<variant>-r<rep>`).
+    long = [n for n in (f"{PREFIX}{a.batch}-{t['name']}-{v}-r{r}" for t, v, r in plan) if len(n) > MAX_DB_NAME]
+    if long:
+        sys.exit(f"refusing: database names over {MAX_DB_NAME} characters break the server's listing: {long[0]} ({len(long[0])}); use a shorter batch name")
     led = ledger()
     spent = sum(b.get("tokens", 0) for b in led["batches"].values())
     print(f"batch {a.batch}: {len(plan)} instances; real tokens so far {spent:,}{f' of a cap of {TOTAL_CAP:,}' if TOTAL_CAP else ' (no cap)'}{' (fake: not counted)' if a.fake else ''}")
@@ -1875,7 +3010,41 @@ def spread(vals):
 
 ROWS = ["subject", "stopped_by", "minutes_run", "game_days", "tokens_per_game_day", "survived", "died_min", "hp_min", "hunger_start", "hunger_max", "hunger_end",
         "first_eat_min", "food_gained", "skills", "min_dist", "fled_m", "lines_said", "said_to", "talk_turns", "graph_revisions",
-        "refusals", "learned", "built", "relations_end", "judgments_end", "memories_remembered", "calls", "tokens"]
+        "refusals", "learned", "built", "relations_end", "judgments_end", "memories_remembered", "prompt_frame", "ooc_lines", "ooc_private", "calls", "tokens"]
+
+
+def consolidation_report(sums):
+    """report.md's consolidation tables: per instance, then per character (summary.json
+    `consolidations`, from the mind's outcome lines; see `consolidation_table`)."""
+    have = [s for s in sums if s.get("consolidations")]
+    if not have:
+        return []
+    head = " | ".join(c.replace("_", " ") for c in CONSOLIDATION_COLUMNS)
+    rule = " ---: |" * len(CONSOLIDATION_COLUMNS)
+    name = lambda s: f"{s.get('trial')}/{s.get('variant')}/r{s.get('replicate')}"
+    out = ["## Consolidations\n",
+           "Per character: attempted; integrated on the primary model or on the fallback; failed and retried later; failed with no later attempt "
+           "(lost: never integrated before the stop); experiences of failed ones that left the inbox unintegrated (trimmed); failures that were capacity 429s.\n",
+           f"| Instance | {head} |\n| --- |{rule}"]
+    for s in have:
+        t = s["consolidations"]["total"]
+        out.append(f"| {name(s)} | " + " | ".join(str(t[c]) for c in CONSOLIDATION_COLUMNS) + " |")
+    out += ["", f"| Instance | Character | {head} |\n| --- | --- |{rule}"]
+    for s in have:
+        for who, r in sorted(s["consolidations"]["by_character"].items(), key=lambda kv: str(kv[0])):
+            out.append(f"| {name(s)} | {str(who).replace('|', '/')} | " + " | ".join(str(r[c]) for c in CONSOLIDATION_COLUMNS) + " |")
+    missing = [name(s) for s in sums if not s.get("consolidations")]
+    if missing:
+        out.append(f"\nNo consolidation outcomes (a mind before 2026-11-11, or none ran): {', '.join(missing)}.")
+    out.append("")
+    if any(s.get("outages") for s in sums):
+        out.append("## Provider outages\n\n| Instance | From (s) | Until (s) | Failed calls | Kinds |\n| --- | ---: | ---: | ---: | --- |")
+        for s in sums:
+            for o in s.get("outages") or []:
+                kinds = ", ".join(f"{k} {n}" for k, n in (o.get("kinds") or {}).items())
+                out.append(f"| {name(s)} | {o.get('since_t')} | {o.get('until_t') if o.get('until_t') is not None else 'still down at the stop'} | {o.get('failed')} | {kinds} |")
+        out.append("")
+    return out
 
 
 def report(a):
@@ -1895,9 +3064,13 @@ def report(a):
             tok[m]["prompt"] += v["prompt"]
             tok[m]["completion"] += v["completion"]
             tok[m]["cached"] += v["cached"]
+            tok[m]["cost_usd"] += v.get("cost_usd", 0.0)
+            tok[m]["cost_known"] += v.get("cost_known", 0)
     out.append("| Model | Calls | Tokens | Prompt | Completion | Cached | Est. cost (USD) |\n| --- | ---: | ---: | ---: | ---: | ---: | ---: |")
     for m, v in tok.items():
         c = cost(m, v["prompt"], v["completion"], v["cached"])
+        if c is None and v["calls"] and v["cost_known"] == v["calls"]:
+            c = v["cost_usd"]  # priced by the mind on every call (Jev, from the local prices file)
         out.append(f"| {m} | {v['calls']} | {v['tokens']:,} | {v['prompt']:,} | {v['completion']:,} | {v['cached']:,} | {f'{c:.2f}' if c is not None else 'unknown'} |")
     out.append("")
     pm = defaultdict(lambda: Counter())
@@ -1916,6 +3089,16 @@ def report(a):
             l50 = sorted(x for x, _ in lats[k])
             out.append(f"| {k} | {v['calls']} | {v['tokens']:,} | {l50[len(l50) // 2] if l50 else '–'} | {max((y for _, y in lats[k]), default='–')} | {v['errors']} | {v['empty']} | {v['repaired']} | {v['invalid']} |")
         out.append("")
+    out += consolidation_report(sums)
+    # Lines whose ids were said as words (fix-spoken-ids): per instance, with the batch's total.
+    sa = [(f"{x.get('trial')}/{x.get('variant')}/r{x.get('replicate')}", x["spoken_as"]) for x in sums if x.get("spoken_as") is not None]
+    if sa:
+        out.append(f"## Ids said as words\n\nLines whose `#id` handles the world said as words (`spoken_as`, the mind's outcome lines): **{sum(t['total'] for _, t in sa)}** in the batch.\n")
+        out.append("| Instance | Lines | By character | First example |\n| --- | ---: | --- | --- |")
+        for n, t in sa:
+            ex = (t["examples"][0] if t["examples"] else "").replace("|", "/")
+            out.append(f"| {n} | {t['total']} | {', '.join(f'{k} {v}' for k, v in t['by_character'].items()) or '–'} | {ex} |")
+        out.append("")
     for (trial, variant), ss in sorted(groups.items()):
         ss.sort(key=lambda s: s["replicate"])
         out.append(f"## {trial} / {variant}\n")
@@ -1930,51 +3113,147 @@ def report(a):
     print(f"\nwritten {bdir / 'report.md'}")
 
 
-def reclaim(a):
-    """Remove the replica directories that deleted databases leave in the trial volume (as
-    living/tools/reclaim_disk.sh does for the lab container). A live world writes every
-    second, so its replica is recently modified. A paused (kept) world does not: its replica
-    is found by its module log, whose last line's microsecond timestamp appears in that
-    replica's log file only. Refuses unless every database maps to exactly one kept replica."""
-    guard()
-    dbs = databases()
-    token = admin_token()
-    base = "/home/spacetime/.local/share/spacetime/data/replicas"
-    listing = sh("docker", "exec", CONTAINER, "sh", "-c", f"cd {base} && for r in *; do if [ -n \"$(find $r -type f -mmin -{a.idle} -print -quit)\" ]; then echo live $r; else echo idle $r; fi; done").stdout.split("\n")
-    live = {l.split()[1] for l in listing if l.startswith("live ")}
-    idle = {l.split()[1] for l in listing if l.startswith("idle ")}
-    keep, unpaused = set(), 0
-    for db in dbs:
-        code, body = http(f"/v1/database/{db}/sql", "SELECT paused FROM world", token, raw=True)
-        if not (code == 200 and json.loads(body)[0]["rows"][0][0]):
-            unpaused += 1
-            continue
-        ts = None
-        for line in reversed(sh("docker", "exec", CONTAINER, "spacetime", "logs", "-s", "local", db, "-n", "20", "--format", "json").stdout.strip().splitlines()):
+def record_roots():
+    """Every checkout's trial and verification records on this machine (as docs/STORE.md's
+    manifest scans them)."""
+    home = Path.home()
+    roots = [p for pat in ("dev/*", ".t3/worktrees/*/*", "slop*") for p in home.glob(pat) if (p / ".local/living").is_dir()]
+    return sorted({p / ".local/living" for p in roots})
+
+
+def recorded_replicas():
+    """{replica: {"batch", "instance", "db", "paid", "root"}} from every checkout's run records
+    (state.json `replica`) and, for runs older than that field, from the publish time in each
+    instance's actions.log matched to a replica's `db.lock` time (within 40 s) by the caller."""
+    rec, pubs = {}, []
+    for root in record_roots():
+        for bj in (root / "trials").glob("*/batch.json"):
             try:
-                ts = json.loads(line)["ts"]
-                break
-            except (ValueError, KeyError):
-                continue  # e.g. a server line after a restart
-        hit = sh("docker", "exec", CONTAINER, "sh", "-c", f"cd {base} && grep -l '\"ts\":{ts},' */module_logs/*.log", check=False).stdout.split()
-        owners = {h.split("/")[0] for h in hit}
-        if ts is None or len(owners) != 1:
-            sys.exit(f"refusing: cannot tell which replica holds the paused database {db}")
-        keep |= owners
-        print(f"keeping replica {next(iter(owners))} of paused {db}")
-    print(f"{len(dbs)} trial databases ({unpaused} live); {len(live)} replicas written in the last {a.idle} min; {len(idle)} idle")
-    if len(live - keep) != unpaused:
-        sys.exit("refusing: recently written replicas do not match the live databases")
-    gone = sorted(idle - keep)
-    for r in gone:
-        sh("docker", "exec", CONTAINER, "rm", "-rf", f"{base}/{r}")
-    print(f"removed {len(gone)} orphaned replicas; volume now {sh('docker', 'exec', CONTAINER, 'du', '-sh', base).stdout.split()[0]}")
+                b = json.loads(bj.read_text())
+            except (OSError, ValueError):
+                continue
+            bdir = bj.parent
+            for inst in bdir.glob("*/"):
+                st = {}
+                for f in ("summary.json", "state.json"):
+                    try:
+                        st.update(json.loads((inst / f).read_text()))
+                    except (OSError, ValueError):
+                        pass
+                paid = any(not str(m).startswith("fake") and m != "jev" and (v or {}).get("tokens") for m, v in (st.get("by_model") or {}).items())
+                info = {"batch": bdir.name, "instance": inst.name, "db": st.get("db"), "paid": paid, "fake": bool(b.get("fake")), "root": str(bdir), "module": None}
+                if st.get("replica"):
+                    rec[str(st["replica"])] = info
+                started = b.get("started")
+                al = inst / "actions.log"
+                if started and al.exists():
+                    day = datetime.datetime.fromisoformat(started)
+                    for line in al.read_text(errors="replace").splitlines():
+                        m = re.match(r"(\d\d):(\d\d):(\d\d) published (\S+) from (\S+?)\.wasm", line) or re.match(r"(\d\d):(\d\d):(\d\d) published (\S+)", line)
+                        if m:
+                            if m.lastindex >= 5:
+                                info = {**info, "module": m[5]}
+                            t = day.replace(hour=int(m[1]), minute=int(m[2]), second=int(m[3]))
+                            if t < day - datetime.timedelta(hours=1):
+                                t += datetime.timedelta(days=1)
+                            pubs.append((t.astimezone(datetime.timezone.utc).timestamp(), info))
+        # Verification runs (verify.py launch): "HH:MM:SS published <db> from …" in each case's
+        # actions.log, dated by the file (a scene runs within a day).
+        for al in (root / "verify").glob("*/actions.log"):
+            try:
+                text = al.read_text(errors="replace")
+                day = datetime.datetime.fromtimestamp(al.stat().st_mtime)
+            except OSError:
+                continue
+            for line in text.splitlines():
+                m = re.match(r"(\d\d):(\d\d):(\d\d) published (\S+)", line)
+                if m:
+                    t = day.replace(hour=int(m[1]), minute=int(m[2]), second=int(m[3]), microsecond=0)
+                    if t > day + datetime.timedelta(minutes=5):
+                        t -= datetime.timedelta(days=1)
+                    pubs.append((t.astimezone(datetime.timezone.utc).timestamp(),
+                                 {"batch": "verify:" + al.parent.name, "instance": "", "db": m[4], "paid": False, "fake": False, "verify": True, "root": str(al.parent)}))
+    return rec, sorted(pubs, key=lambda p: p[0])
+
+
+def reclaim(a):
+    """Classify every replica directory in the trial volume; remove nothing by default.
+
+    SpacetimeDB 2.14.1 does not remove a deleted database's replica directory
+    (`standalone/src/lib.rs` `on_delete_replica`: "will not remove them from disk"; docs/STORE.md).
+    Each directory is one of: `live` (a database the server still hosts, found by its module log),
+    `paid` (a deleted trial run that made real model calls: its commitlog is evidence, archived
+    before anything is removed), `no-model` (a deleted real run without model calls), `fake`,
+    `verify` (scratch), or `unknown`. `--dry-run` (the default) prints the table and totals and
+    writes it as JSON with `--json`. Removal is not implemented here: it is the owner's decision,
+    with the server stopped and the paid commitlogs archived first."""
+    guard()
+    token = admin_token()
+    lines = sh("docker", "exec", CONTAINER, "sh", "-c", f"cd {REPLICAS} && for r in *; do echo \"$r $(du -sk $r | cut -f1) $(du -sk $r/clog 2>/dev/null | cut -f1) $(cut -d';' -f2 $r/db.lock 2>/dev/null | cut -d= -f2) $(find $r -type f -printf '%T@\\n' | sort -n | tail -1 | cut -d. -f1)\"; done", timeout=1800).stdout.splitlines()
+    now_s = time.time()
+    owner = sh("docker", "exec", CONTAINER, "spacetime", "login", "show").stdout.split()[-1]
+    code, body = http(f"/v1/identity/{owner}/databases")
+    live_ids = json.loads(body).get("identities", []) if code == 200 else []
+    live = {}
+    for ident in live_ids:
+        c, b = http(f"/v1/database/{ident}/names")
+        name = (json.loads(b).get("names") or [ident])[0] if c == 200 else ident
+        r = replica_of(name, token)
+        if r:
+            live[r] = name
+        else:
+            sys.exit(f"refusing: the live database {name} ({ident}) cannot be mapped to its replica directory")
+    rec, pubs = recorded_replicas()
+    ptimes = [p[0] for p in pubs]
+    rows = []
+    for line in lines:
+        parts = line.split()
+        if len(parts) < 4:
+            continue
+        r, kb, clog_kb, lock = parts[0], int(parts[1]), int(parts[2] or 0), parts[3]
+        last_write = int(parts[4]) if len(parts) > 4 and parts[4].isdigit() else 0
+        if r in live or now_s - last_write < 15 * 60:
+            # Hosted, or written in the last 15 minutes (a world that may still be running): kept.
+            rows.append({"replica": r, "kb": kb, "clog_kb": clog_kb, "lock": lock, "class": "live",
+                         "what": live.get(r, "written in the last 15 minutes"), "last_write": last_write})
+            continue
+        info = rec.get(r)
+        if info is None:
+            t = datetime.datetime.fromisoformat(lock.replace("Z", "+00:00")).timestamp()
+            k = bisect.bisect_left(ptimes, t)
+            near = sorted((abs(pubs[j][0] - t), j) for j in range(max(0, k - 6), min(len(pubs), k + 6)) if abs(pubs[j][0] - t) <= 40)
+            # Conservative: a real trial run's publish within the window wins (its commitlog is
+            # archived); otherwise the nearest publish.
+            real = [j for _, j in near if not pubs[j][1].get("verify") and not pubs[j][1]["fake"]]
+            info = pubs[real[0]][1] if real else (pubs[near[0][1]][1] if near else None)
+        if info and info.get("verify"):
+            cls, what = "verify", info["batch"]
+        elif info:
+            cls = "paid" if info["paid"] else "fake" if info["fake"] else "no-model"
+            what = f"{info['batch']}/{info['instance']}"
+        else:
+            cls, what = "unknown", ""
+        rows.append({"replica": r, "kb": kb, "clog_kb": clog_kb, "lock": lock, "class": cls, "what": what,
+                     "module": (info or {}).get("module"), "root": (info or {}).get("root")})
+    action = {"live": "keep", "paid": "archive commitlog, then remove", "no-model": "archive commitlog, then remove",
+              "fake": "remove", "verify": "remove", "unknown": "hold"}
+    for x in rows:
+        x["action"] = action[x["class"]]
+    tot = Counter()
+    for x in rows:
+        tot[x["class"]] += x["kb"]
+    for x in sorted(rows, key=lambda x: (x["class"], x["what"], x["replica"])):
+        print(f"{x['class']:9} {x['replica']:>9} {x['kb'] / 1048576:7.2f} GB  clog {x['clog_kb'] / 1048576:6.2f} GB  {x['lock'][:19]}  {x['action']:31} {x['what']}")
+    print("totals: " + ", ".join(f"{k} {v / 1048576:.1f} GB ({sum(1 for x in rows if x['class'] == k)})" for k, v in sorted(tot.items())))
+    print("nothing removed (dry run)")
+    if a.json:
+        Path(a.json).write_text(json.dumps(rows, indent=1))
 
 
 def resummarize(a):
     """Recompute every instance's summary from its kept evidence (after a probe changes)."""
     bdir = OUT / a.batch
-    keep = ("db", "variant", "replicate", "stopped_by", "fake", "minutes_planned", "runaways", "mind_starts", "day_ms")
+    keep = ("db", "variant", "replicate", "stopped_by", "fake", "minutes_planned", "runaways", "mind_starts", "day_ms", "outages", "concurrency", "world_laws")
     for p in sorted(bdir.glob("*/summary.json")):
         old = json.loads(p.read_text())
         extra = {k: old.get(k) for k in keep}
@@ -1987,8 +3266,15 @@ def resummarize(a):
 def clean(a):
     guard()
     bdir = OUT / a.batch
-    dbs = [d for d in databases() if d.startswith(f"{PREFIX}{a.batch}-")]
+    # The batch's own records first (the runner's names), the server's list as a backstop.
+    try:
+        listed = {d for d in databases() if d.startswith(f"{PREFIX}{a.batch}-")}
+    except RuntimeError as e:
+        listed = set()
+        print(f"note: {e}; deleting from the batch's records only")
+    dbs = sorted(set(batch_databases(a.batch)) | listed)
     for db in dbs:
+        # delete_db pauses the world first and treats 404 as already deleted
         print(f"delete {db}: {'ok (SQL 404)' if delete_db(db) else 'STILL ANSWERS'}")
     runs = [json.loads(p.read_text())["db"] for p in bdir.glob("*/summary.json")]
     if runs and docker_state(NEO4J) == "running":
@@ -1999,6 +3285,20 @@ def clean(a):
         if p.stat().st_size > 1 << 30:
             p.unlink()
             print(f"removed {p} (> 1 GB)")
+
+
+def show_dbs(a):
+    """A batch's databases from its own records (for samplers: no `spacetime list`). An identity
+    missing from older records is looked up by name while the database exists."""
+    dbs = batch_databases(a.batch)
+    for name, v in dbs.items():
+        if not v["identity"]:
+            v["identity"] = database_identity(name)
+    if a.json:
+        print(json.dumps(dbs))
+    else:
+        for name, v in dbs.items():
+            print(f"{name} | {v['identity'] or '(gone)'} | replica {v['replica'] or '?'}")
 
 
 def show_ledger(_a):
@@ -2018,12 +3318,14 @@ def main():
     p.add_argument("trials", nargs="*")
     p.set_defaults(f=build)
     p = sub.add_parser("run")
+    p.add_argument("--interleave", action="store_true", help="order instances replicate by replicate, the variants side by side")
     p.add_argument("--batch", required=True)
     p.add_argument("trials", nargs="+")
     p.add_argument("--variants", default="default")
     p.add_argument("--replicates", type=int, default=3)
     p.add_argument("--minutes", type=float)
     p.add_argument("--fake", action="store_true", help="answer every model call from the local fake server (no provider keys)")
+    p.add_argument("--fake-script", help="with --fake: the fake server's script (fake-llm.md), e.g. capacity 429s, or living/trials/fake/latency.json")
     p.add_argument("--parallel", type=int, default=18)
     p.add_argument("--keep-db", action="store_true")
     p.add_argument("--stagger", type=float, default=2, help="seconds between instance starts")
@@ -2040,9 +3342,14 @@ def main():
     p = sub.add_parser("resume")
     p.add_argument("--batch", required=True)
     p.set_defaults(f=resume)
-    p = sub.add_parser("reclaim")
-    p.add_argument("--idle", type=int, default=5)
+    p = sub.add_parser("reclaim", help="classify the trial volume's replica directories (a dry run; removes nothing)")
+    p.add_argument("--dry-run", action="store_true", default=True, help="the only mode: print and classify, remove nothing")
+    p.add_argument("--json", help="also write the table as JSON")
     p.set_defaults(f=reclaim)
+    p = sub.add_parser("dbs", help="a batch's databases from its runner's records: name, identity, replica")
+    p.add_argument("--batch", required=True)
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(f=show_dbs)
     p = sub.add_parser("resummarize")
     p.add_argument("--batch", required=True)
     p.set_defaults(f=resummarize)

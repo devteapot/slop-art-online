@@ -1,0 +1,926 @@
+//! People in interface D: a window per person, keyed by character id, and the log and people.
+//!
+//! - **A person's window** (left anchor) opens by talking to them (Enter, a tap on them, F),
+//!   from the list of acts ("Their window") or from Log › People. It holds how I name them and
+//!   how they look (`looks.rs`), how we met, the acts toward them (Give ›, Trade…, Wave, Look
+//!   over, Introduce yourself), our conversation, and the words I am typing to them.
+//! - **The conversation** comes from my experience rows (`heard.rs`): my `said` lines to them
+//!   and every line of theirs I heard (marked "to you" when addressed to me). Under my line: who
+//!   heard it among the people I could see, once the authority reports it (`heard_by`, not built
+//!   yet: nothing shows), and "they did not hear you" when a `silence` row says so.
+//! - **Introduce yourself** puts an ordinary editable line in the box ("I'm Diego."), sent with
+//!   `human_say` to them like any other. Whether they learn the name is the rules' affair.
+//! - **Log and people** (L): Heard (every line heard and said), People (everyone met; a click
+//!   opens their window) and Events (what the authority told me of my acts, introductions, no
+//!   answers). Its box speaks to the room (`to = 0`).
+//!
+//! The store keeps what this session received: `my_experience` holds only the authority's
+//! newest rows, so lines older than the session are not in it.
+
+use super::hit::{Block, Hot, Tag, UiPointer};
+use super::icons::{Glyph, Icons, Mark};
+use super::kit::{self, Lit};
+use super::theme::Fonts;
+use super::win::{Win, WinBody, WinTitle, Windows};
+use super::{set_text, show, wood};
+use crate::heard;
+use crate::looks::Looks;
+use crate::net::Net;
+use bevy::prelude::*;
+use bevy::ui::{BackgroundGradient, ScrollPosition};
+use living_bindings::*;
+use spacetimedb_sdk::Table;
+use std::collections::{BTreeMap, HashMap, HashSet};
+
+const THREAD: usize = 24;
+const HEARD_ROWS: usize = 30;
+const PEOPLE_ROWS: usize = 16;
+const EVENT_ROWS: usize = 24;
+const GIVE_ROWS: usize = 10;
+
+#[derive(Clone, Debug)]
+pub struct Line {
+    pub at_ms: u64,
+    pub speaker: u32,
+    pub to: u32,
+    pub text: String,
+    pub mine: bool,
+    pub heard_by: Option<Vec<u32>>,
+    /// The one addressed was out of earshot ("… could not have heard you.").
+    pub unheard: bool,
+    /// How a line to the room was said (speech-address: "to the room, naming you and Ife"),
+    /// shown beside the speaker in the Log and their window; the bubble keeps the words only.
+    pub how: Option<String>,
+}
+
+#[derive(Default, Clone, Debug)]
+pub struct Met {
+    /// When I first perceived them, or first had a row about them (authority ms).
+    pub first_ms: u64,
+    /// When they told me their name (`introduced`), once the authority reports it.
+    pub introduced_ms: Option<u64>,
+    pub last_line: Option<String>,
+}
+
+/// What this session has received of talk and people.
+#[derive(Resource, Default)]
+pub struct Talks {
+    /// Lines by experience id, oldest first.
+    pub lines: BTreeMap<u64, Line>,
+    pub met: HashMap<u32, Met>,
+    /// Events: (authority ms, text).
+    pub events: Vec<(u64, String)>,
+    /// Proposals already noted.
+    noted: HashSet<Standing>,
+    /// The offer cards shown now: (whose window, card, its words), for the UI dump.
+    pub cards: Vec<(u32, usize, String)>,
+    seen: HashSet<u64>,
+    me: Option<u32>,
+}
+
+impl Talks {
+
+    /// Our conversation, oldest first.
+    pub fn with(&self, id: u32) -> impl Iterator<Item = &Line> {
+        self.lines.values().filter(move |l| (l.mine && l.to == id) || (!l.mine && l.speaker == id))
+    }
+}
+
+/// Take in the experience rows that arrived (Present phase).
+pub fn ingest(net: NonSend<Net>, scene: NonSend<crate::world::Scene>, looks: Res<Looks>, mut t: ResMut<Talks>, mut hints: ResMut<Hints>) {
+    let (Some(conn), Some(me)) = (net.conn.as_ref(), net.my_id) else { return };
+    if t.me != Some(me) {
+        *t = Talks { me: Some(me), ..default() };
+    }
+    let now = scene.now_ms as u64;
+    for c in conn.db.seen_characters().iter().filter(|c| c.id != me && c.kind == "person") {
+        t.met.entry(c.id).or_insert(Met { first_ms: now, ..default() });
+    }
+    let mut fresh: Vec<Experience> = conn.db.my_experience().iter().filter(|e| e.observer == me && !t.seen.contains(&e.id)).collect();
+    fresh.sort_by_key(|e| e.id);
+    let mut unheard: Vec<(u32, u64)> = Vec::new();
+    for e in fresh {
+        t.seen.insert(e.id);
+        // Someone I have talked with, or who is in my scene now, counts as met.
+        let talkish = matches!(e.kind.as_str(), "said" | "speech" | "introduced" | "silence");
+        let other = if e.kind == "said" { e.object } else { e.subject };
+        if other != 0 && other != me && (talkish || t.met.contains_key(&other)) {
+            let m = t.met.entry(other).or_insert(Met { first_ms: e.at_ms, ..default() });
+            m.first_ms = m.first_ms.min(e.at_ms);
+        }
+        if let Some(to) = heard::said(&e) {
+            if e.at_ms as f64 + 10_000.0 >= scene.now_ms {
+                hints.said = true;
+            }
+            t.lines.insert(e.id, Line { at_ms: e.at_ms, speaker: me, to, text: heard::words(&e.text).to_string(), mine: true, heard_by: heard::heard_by(&e), unheard: false, how: None });
+        } else if let Some((who, to)) = heard::heard(&e) {
+            let text = heard::words(&e.text).to_string();
+            t.met.entry(who).or_default().last_line = Some(text.clone());
+            // The room's detail whole; a line to someone's from its comma (the window names the
+            // addressee itself, in my labels).
+            let how = if to == 0 { heard::how(&e.text) } else { heard::detail_to(&e.text) }.map(String::from);
+            t.lines.insert(e.id, Line { at_ms: e.at_ms, speaker: who, to, text, mine: false, heard_by: None, unheard: false, how });
+        } else if let Some(to) = heard::unheard(&e) {
+            // The authority's words show once, as a note (`talk.rs`); here only my line's mark
+            // (after the loop: the silence row can come before my `said` row). A room line nobody
+            // heard needs no mark: its `heard_by` is empty.
+            if to != 0 {
+                unheard.push((to, e.at_ms));
+            }
+        } else if let Some(who) = heard::introduced(&e) {
+            t.met.entry(who).or_default().introduced_ms = Some(e.at_ms);
+            t.events.push((e.at_ms, wood::readable(&e.text)));
+        } else if matches!(e.kind.as_str(), "act" | "record") {
+            t.events.push((e.at_ms, net.conn.as_ref().map_or_else(|| crate::verbs::outcome_text(&e.text).1, |c| crate::verbs::outcome_of(c, &e).1)));
+        }
+    }
+    for (to, at) in unheard {
+        if let Some(l) = t.lines.values_mut().rev().find(|l| l.mine && l.to == to && l.at_ms == at) {
+            l.unheard = true;
+        }
+    }
+    // A name the rules gave since: an event too.
+    let _ = &looks;
+    while t.lines.len() > 400 {
+        t.lines.pop_first();
+    }
+    let n = t.events.len();
+    if n > 80 {
+        t.events.drain(..n - 80);
+    }
+    if t.seen.len() > 4096 {
+        let live: HashSet<u64> = conn.db.my_experience().iter().map(|e| e.id).collect();
+        t.seen.retain(|id| live.contains(id));
+    }
+}
+
+// ---- the person window ------------------------------------------------------------------------
+
+#[derive(Component)]
+pub struct Portrait(u32);
+#[derive(Component)]
+pub struct PortraitRing(u32);
+#[derive(Component)]
+pub struct WhoText(u32);
+#[derive(Component)]
+pub struct MetText(u32);
+#[derive(Component)]
+pub struct GiveList(u32);
+/// Offer cards in a person's window, one per standing proposal (at most this many shown).
+const OFFER_CARDS: usize = 3;
+/// The rules' acts on a card (skills on `On::Offer`), at most this many.
+const OFFER_ACTS: usize = 2;
+#[derive(Component)]
+pub struct OfferCard(u32, usize);
+#[derive(Component)]
+pub struct OfferText(u32, usize);
+#[derive(Component)]
+pub struct OfferAct(u32, usize, usize);
+#[derive(Component)]
+pub struct OfferActText(u32, usize, usize);
+#[derive(Component)]
+pub struct GiveRow(u32, usize);
+#[derive(Component)]
+pub struct GiveText(u32, usize);
+#[derive(Component)]
+pub struct Thread(Win);
+#[derive(Component)]
+pub struct Msg(Win, usize);
+#[derive(Component)]
+pub struct MsgName(Win, usize);
+#[derive(Component)]
+pub struct MsgText(Win, usize);
+#[derive(Component)]
+pub struct MsgHeard(Win, usize);
+/// The words-being-typed row of a window, its "to" chip and its text.
+#[derive(Component)]
+pub struct InputRow(Win);
+#[derive(Component)]
+pub struct ToChip(Win);
+/// The box's way of speaking: its chip (a click moves to the next way) and its label.
+#[derive(Component)]
+pub struct WayChip(Win);
+#[derive(Component)]
+pub struct WayText(Win);
+#[derive(Component)]
+pub struct InputText(Win);
+#[derive(Component)]
+pub struct Empty(Win);
+/// A help line shown until it has been used (`Hints`).
+#[derive(Component)]
+/// The box's hint line, with its own words (the earshot sentence takes their place while the
+/// authority gives one).
+pub struct Hint(pub String);
+
+/// One-time help: the box's line goes once a line has been said.
+#[derive(Resource, Default)]
+pub struct Hints {
+    pub said: bool,
+}
+/// The log's tabs' bodies.
+#[derive(Component)]
+pub struct LogTab(u8);
+#[derive(Component)]
+pub struct PersonRow(usize);
+#[derive(Component)]
+pub struct PersonRowText(usize);
+#[derive(Component)]
+pub struct PersonRowNote(usize);
+#[derive(Component)]
+pub struct EventRow(usize);
+
+/// The log's open tab (0 heard, 1 people, 2 events).
+#[derive(Resource, Default)]
+pub struct LogPage(pub u8);
+
+/// Consecutive lines with the same speaker, listener and words, as one line (the latest, so its
+/// "heard by" is the newest) and how many times it was said.
+fn collapse<'a>(lines: impl Iterator<Item = &'a Line>) -> Vec<(&'a Line, usize)> {
+    let mut out: Vec<(&'a Line, usize)> = Vec::new();
+    for l in lines {
+        match out.last_mut() {
+            Some((p, n)) if p.speaker == l.speaker && p.to == l.to && p.text == l.text => {
+                *p = l;
+                *n += 1;
+            }
+            _ => out.push((l, 1)),
+        }
+    }
+    out
+}
+
+fn bubble(p: &mut ChildSpawnerCommands, f: &Fonts, w: Win, i: usize) {
+    p.spawn((Msg(w, i), Node { flex_direction: FlexDirection::Column, padding: UiRect::new(Val::Px(9.0), Val::Px(9.0), Val::Px(5.0), Val::Px(6.0)), border: wood::b(2.0), border_radius: wood::r(10.0), max_width: Val::Px(330.0), display: Display::None, flex_shrink: 0.0, ..default() }, BackgroundColor(wood::field()), BorderColor::all(wood::edge()), Pickable::IGNORE)).with_children(|m| {
+        m.spawn((MsgName(w, i), Text::new(""), f.body(12.0, 900), TextColor(wood::talk_ink()), Pickable::IGNORE));
+        m.spawn((MsgText(w, i), Text::new(""), f.body(14.0, 600), TextColor(wood::text()), TextLayout::new(Justify::Left, LineBreak::WordBoundary), Pickable::IGNORE));
+        m.spawn((MsgHeard(w, i), Text::new(""), f.body(11.5, 700), TextColor(wood::muted()), TextLayout::new(Justify::Left, LineBreak::WordBoundary), Node { display: Display::None, margin: UiRect::top(Val::Px(2.0)), ..default() }, Pickable::IGNORE));
+    });
+}
+
+fn input_row(p: &mut ChildSpawnerCommands, f: &Fonts, icons: &Icons, w: Win, hint: &str) {
+    p.spawn((InputRow(w), Hot, Tag(format!("input:{}", w.name())), Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: Val::Px(8.0), padding: UiRect::axes(Val::Px(8.0), Val::Px(6.0)), border: wood::b(2.0), border_radius: wood::r(8.0), flex_shrink: 0.0, ..default() }, BackgroundColor(wood::field()), BorderColor::all(wood::edge()), bevy::ui::Outline { width: Val::Px(0.0), offset: Val::Px(0.0), color: wood::alpha(wood::talk(), 0.5) }))
+        .with_children(|r| {
+            r.spawn((Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: Val::Px(3.0), padding: UiRect::axes(Val::Px(7.0), Val::Px(2.0)), border_radius: wood::r(6.0), flex_shrink: 0.0, ..default() }, BackgroundColor(wood::talk()), Pickable::IGNORE)).with_children(|c| {
+                c.spawn((ToChip(w), Text::new(""), f.body(12.0, 900), TextColor(Color::WHITE), Pickable::IGNORE));
+                c.spawn(wood::icon(icons, Glyph::Ui(Mark::Caret), 9.0, Color::WHITE));
+            });
+            r.spawn((InputText(w), Text::new(""), f.body(14.0, 650), TextColor(wood::muted()), TextLayout::new(Justify::Left, LineBreak::WordBoundary), Node { flex_grow: 1.0, flex_shrink: 1.0, min_width: Val::Px(90.0), ..default() }, Pickable::IGNORE));
+            // The way of speaking (the world's, `speech_card`): the one the box has; a click, or
+            // the Way key, moves to the next; greyed while its gap runs (`gap_ms`).
+            r.spawn((WayChip(w), Hot, Tag(format!("talk:way:{}", w.name())), Node { padding: UiRect::axes(Val::Px(6.0), Val::Px(1.0)), border: wood::b(1.5), border_radius: wood::r(6.0), flex_shrink: 0.0, ..default() }, BorderColor::all(wood::alpha(wood::muted(), 0.6))))
+                .with_child((WayText(w), Text::new(""), f.body(11.0, 800), TextColor(wood::alpha(wood::muted(), 0.9)), Pickable::IGNORE));
+            if wood::t().chips {
+                wood::chip(r, f, "Enter", ());
+            }
+        });
+    // How the box works: shown until the first line is said (always in a dense theme).
+    p.spawn((Hint(hint.to_string()), Text::new(hint), f.body(12.0, 600), TextColor(wood::muted()), TextLayout::new(Justify::Left, LineBreak::WordBoundary), Pickable::IGNORE));
+}
+
+fn thread(p: &mut ChildSpawnerCommands, f: &Fonts, w: Win, n: usize, empty: &str) {
+    p.spawn((Thread(w), Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(7.0), padding: UiRect::top(Val::Px(8.0)), border: UiRect::top(Val::Px(1.5)), overflow: Overflow::scroll_y(), flex_grow: 1.0, flex_shrink: 1.0, min_height: Val::Px(0.0), ..default() }, BorderColor::all(wood::line()), ScrollPosition::default(), Block)).with_children(|t| {
+        t.spawn((Empty(w), Text::new(empty), f.body(13.0, 600), TextColor(wood::muted()), TextLayout::new(Justify::Left, LineBreak::WordBoundary), Pickable::IGNORE));
+        for i in 0..n {
+            bubble(t, f, w, i);
+        }
+    });
+}
+
+pub fn spawn(mut commands: Commands, bodies: Query<(Entity, &WinBody), Added<WinBody>>, fonts: Res<Fonts>, icons: Res<Icons>, binds: Res<crate::keys::Binds>) {
+    let f = &*fonts;
+    for (e, b) in &bodies {
+        match b.0 {
+            Win::Person(id) => {
+                let w = b.0;
+                commands.entity(e).with_children(|body| {
+                    body.spawn((Node { flex_direction: FlexDirection::Row, column_gap: Val::Px(12.0), align_items: AlignItems::Center, flex_shrink: 0.0, ..default() }, Pickable::IGNORE)).with_children(|h| {
+                        h.spawn((PortraitRing(id), Node { width: Val::Px(58.0), height: Val::Px(58.0), border: wood::b(3.0), border_radius: BorderRadius::all(Val::Percent(50.0)), justify_content: JustifyContent::Center, align_items: AlignItems::Center, flex_shrink: 0.0, ..default() }, BackgroundColor(wood::surface_lo()), BorderColor::all(wood::edge()), Pickable::IGNORE))
+                            .with_child((Portrait(id), Node { width: Val::Px(40.0), height: Val::Px(40.0), ..default() }, ImageNode::new(icons.get(Glyph::Ui(Mark::Person))).with_color(wood::heading()), Pickable::IGNORE));
+                        h.spawn((Node { flex_direction: FlexDirection::Column, flex_shrink: 1.0, ..default() }, Pickable::IGNORE)).with_children(|c| {
+                            c.spawn((WhoText(id), Text::new(""), wood::ink(f, 15.0, 900), TextLayout::new(Justify::Left, LineBreak::WordBoundary), Pickable::IGNORE));
+                            c.spawn((MetText(id), Text::new(""), f.body(12.5, 600), TextColor(wood::muted()), TextLayout::new(Justify::Left, LineBreak::WordBoundary), Pickable::IGNORE));
+                        });
+                    });
+                    // The acts wanted in the moment; the rest (Trade…, Introduce yourself, every act
+                    // the rules allow) behind More….
+                    body.spawn((Node { flex_direction: FlexDirection::Row, flex_wrap: FlexWrap::Wrap, column_gap: Val::Px(6.0), row_gap: Val::Px(6.0), flex_shrink: 0.0, ..default() }, Pickable::IGNORE)).with_children(|a| {
+                        kit::button(a, f, "Give ›", &format!("person:give:{id}"), false);
+                        let wave = kit::button(a, f, "Wave", &format!("person:wave:{id}"), true);
+                        let look = kit::button(a, f, "Look over", &format!("person:appraise:{id}"), true);
+                        if wood::t().chips {
+                            a.commands().entity(wave).with_children(|b| {
+                                wood::chip(b, f, &binds.first(crate::keys::Act::Wave), ());
+                            });
+                            a.commands().entity(look).with_children(|b| {
+                                wood::chip(b, f, &binds.first(crate::keys::Act::LookOver), ());
+                            });
+                        }
+                        kit::button(a, f, "More…", &format!("person:more:{id}"), true);
+                    });
+                    // What they propose to me, a card each: their words, the rules' acts on an offer
+                    // (`On::Offer`: Accept, Decline; `offers`).
+                    for i in 0..OFFER_CARDS {
+                        body.spawn((OfferCard(id, i), Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(6.0), padding: UiRect::all(Val::Px(10.0)), border: wood::b(2.0), border_radius: wood::r(8.0), display: Display::None, flex_shrink: 0.0, ..default() }, BackgroundColor(wood::t().hot.0), BorderColor::all(wood::edge()), Pickable::IGNORE)).with_children(|o| {
+                            o.spawn((OfferText(id, i), Text::new(""), wood::ink(f, 14.0, 700), TextLayout::new(Justify::Left, LineBreak::WordBoundary), Pickable::IGNORE));
+                            o.spawn((Node { flex_direction: FlexDirection::Row, column_gap: Val::Px(6.0), ..default() }, Pickable::IGNORE)).with_children(|b| {
+                                for j in 0..OFFER_ACTS {
+                                    kit::button_with(b, f, "", &format!("person:offer:{id}:{i}:{j}"), j > 0, OfferAct(id, i, j), OfferActText(id, i, j));
+                                }
+                            });
+                        });
+                    }
+                    // What I can give them, from my pack and the rules (opened by Give ›).
+                    body.spawn((GiveList(id), Node { flex_direction: FlexDirection::Column, border: wood::b(2.0), border_radius: wood::r(8.0), overflow: Overflow::clip(), display: Display::None, flex_shrink: 0.0, ..default() }, BackgroundColor(wood::surface_hi()), BorderColor::all(wood::edge()), Pickable::IGNORE)).with_children(|g| {
+                        for i in 0..GIVE_ROWS {
+                            g.spawn((GiveRow(id, i), Hot, Tag(format!("person:gift:{id}:{i}")), kit::Paint::Row, Lit(false), Node { padding: UiRect::axes(Val::Px(10.0), Val::Px(5.0)), display: Display::None, ..default() }, BackgroundGradient::default()))
+                                .with_child((GiveText(id, i), Text::new(""), wood::ink(f, 14.0, 800), Pickable::IGNORE));
+                        }
+                    });
+                    thread(body, f, w, THREAD, "Nothing said between you yet.");
+                    input_row(body, f, &icons, w, "Everyone in earshot hears it. Tab: someone else, or the room.");
+                });
+            }
+            Win::Log => {
+                let w = b.0;
+                commands.entity(e).with_children(|body| {
+                    body.spawn((Node { flex_direction: FlexDirection::Row, column_gap: Val::Px(6.0), flex_shrink: 0.0, ..default() }, Pickable::IGNORE)).with_children(|tabs| {
+                        for (label, i) in [("Heard", 0), ("People", 1), ("Events", 2)] {
+                            tabs.spawn((Hot, Tag(format!("log:tab:{i}")), kit::Paint::Choice, Lit(false), Node { padding: UiRect::axes(Val::Px(12.0), Val::Px(4.0)), border: wood::b(2.0), border_radius: wood::r(8.0), ..default() }, BackgroundGradient::default(), BorderColor::all(wood::edge()), wood::hard_shadow(2.0, 0.4)))
+                                .with_child((Text::new(label), wood::ink(f, 13.5, 800), Pickable::IGNORE));
+                        }
+                    });
+                    body.spawn((LogTab(0), Node { flex_direction: FlexDirection::Column, flex_grow: 1.0, flex_shrink: 1.0, min_height: Val::Px(0.0), ..default() }, Pickable::IGNORE)).with_children(|t| thread(t, f, w, HEARD_ROWS, "Nothing heard yet. Lines you hear and say gather here."));
+                    body.spawn((LogTab(1), Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(2.0), flex_grow: 1.0, flex_shrink: 1.0, min_height: Val::Px(0.0), overflow: Overflow::scroll_y(), display: Display::None, ..default() }, ScrollPosition::default(), Block)).with_children(|t| {
+                        t.spawn((Empty(Win::Settings), Text::new("No one met yet."), f.body(13.0, 600), TextColor(wood::muted()), Pickable::IGNORE));
+                        for i in 0..PEOPLE_ROWS {
+                            t.spawn((PersonRow(i), Hot, Tag(format!("log:person:{i}")), kit::Paint::Row, Lit(false), Node { flex_direction: FlexDirection::Column, padding: UiRect::axes(Val::Px(8.0), Val::Px(4.0)), border_radius: wood::r(6.0), display: Display::None, flex_shrink: 0.0, ..default() }, BackgroundGradient::default())).with_children(|r| {
+                                r.spawn((PersonRowText(i), Text::new(""), wood::ink(f, 14.0, 800), Pickable::IGNORE));
+                                r.spawn((PersonRowNote(i), Text::new(""), f.body(12.0, 600), TextColor(wood::muted()), TextLayout::new(Justify::Left, LineBreak::WordBoundary), Pickable::IGNORE));
+                            });
+                        }
+                    });
+                    body.spawn((LogTab(2), Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(3.0), flex_grow: 1.0, flex_shrink: 1.0, min_height: Val::Px(0.0), overflow: Overflow::scroll_y(), display: Display::None, ..default() }, ScrollPosition::default(), Block)).with_children(|t| {
+                        for i in 0..EVENT_ROWS {
+                            t.spawn((EventRow(i), Text::new(""), f.body(13.0, 600), TextColor(wood::text()), TextLayout::new(Justify::Left, LineBreak::WordBoundary), Node { display: Display::None, flex_shrink: 0.0, ..default() }, Pickable::IGNORE));
+                        }
+                    });
+                    input_row(body, f, &icons, w, "Everyone in earshot hears it. Point at someone first to speak to them.");
+                });
+            }
+            _ => {}
+        }
+    }
+}
+
+/// The people listed under Log › People, most recent first.
+fn people_list(t: &Talks, me: Option<u32>, looks: &Looks) -> Vec<u32> {
+    let mut v: Vec<(u64, u32)> = t.met.iter().filter(|(id, _)| Some(**id) != me && looks.of(**id).is_some()).map(|(id, m)| (t.with(*id).last().map_or(m.first_ms, |l| l.at_ms.max(m.first_ms)), *id)).collect();
+    v.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
+    v.into_iter().map(|(_, id)| id).collect()
+}
+
+fn ago(now_ms: f64, at_ms: u64) -> String {
+    let s = ((now_ms - at_ms as f64) / 1000.0).max(0.0);
+    if s < 60.0 {
+        "just now".into()
+    } else if s < 3600.0 {
+        format!("{} min ago", (s / 60.0).round() as u32)
+    } else {
+        format!("{} h ago", (s / 3600.0).round() as u32)
+    }
+}
+
+/// Clicks in the people windows: acts toward a person, Give rows, the log's tabs and people.
+#[allow(clippy::too_many_arguments)]
+pub fn clicks(ui: Res<UiPointer>, tags: Query<&Tag>, mut ws: ResMut<Windows>, mut page: ResMut<LogPage>, (looks, time, offers, rules, scene): (Res<Looks>, Res<Time>, Res<Talks>, NonSend<crate::verbs::Rules>, NonSend<crate::world::Scene>), net: NonSend<Net>, mut verbs: ResMut<crate::verbs::Verbs>, mut gestures: ResMut<crate::town::Scripted>, mut talk: ResMut<crate::talk::Talk>, mut input: ResMut<crate::controls::Input>, mut open_give: Local<Option<u32>>, mut give: Query<(&GiveList, &mut Node)>) {
+    if let Some(t) = kit::clicked(&ui, &tags) {
+        let parts: Vec<&str> = t.split(':').collect();
+        match parts.as_slice() {
+            ["log", "tab", i] => page.0 = i.parse().unwrap_or(0),
+            // The box's way chip: the next of the world's ways of speaking.
+            ["talk", "way", _] => talk.next_way = true,
+            ["log", "person", i] => {
+                if let Some(id) = i.parse::<usize>().ok().and_then(|i| people_list(&offers, net.my_id, &looks).get(i).copied()) {
+                    ws.open(Win::Person(id));
+                }
+            }
+            ["input", w] => {
+                // A click in a window's box: type to whom it names.
+                match w.strip_prefix("Person").and_then(|n| n.parse::<u32>().ok()) {
+                    Some(id) => talk.want = Some(Some(id)),
+                    None => talk.want = Some(None),
+                }
+            }
+            // An offer card's act (`person:offer:ID:CARD:ACT`: the ACT-th skill on `offer`).
+            ["person", "offer", id, i, j] => {
+                let (Ok(id), Ok(i), Ok(j), Some(conn)) = (id.parse::<u32>(), i.parse::<usize>(), j.parse::<usize>(), net.conn.as_ref()) else { return };
+                let ps = proposals(conn, scene.now_ms.max(0.0) as u64);
+                let (Some(p), Some((skill, label))) = (of_person(&ps, id).get(i).copied(), offer_acts(&rules).get(j).cloned()) else { return };
+                // My own offer's card has no answers.
+                if matches!(p.key, Standing::Mine(_)) {
+                    return;
+                }
+                info!("ui: {skill} {:?} from #{id}", p.key);
+                answer_offer(&skill, label, p, &mut verbs);
+            }
+            // `person:ACT:ID` (ACT first, so a script finds `@person:intro`).
+            ["person", act, id] => {
+                let Ok(id) = id.parse::<u32>() else { return };
+                match *act {
+                    "give" => {
+                        *open_give = if *open_give == Some(id) { None } else { Some(id) };
+                        verbs.want_toward = Some(id);
+                    }
+                    "trade" => verbs.open_group = Some((id, "offer".into())),
+                    "more" if net.conn.as_ref().is_some_and(|c| c.db.seen_characters().id().find(&id).is_none()) => {
+                        verbs.toasts.push(crate::verbs::Toast { text: format!("{} is not in sight", looks.cap(id)), ok: None, at: time.elapsed_secs_f64() });
+                    }
+                    "more" => {
+                        // Beside the window.
+                        let at = ws.anchor_of(Win::Person(id)).map(|a| if a == super::win::Anchor::Left { Vec2::new(462.0, 60.0) } else { Vec2::new(880.0, 280.0) });
+                        verbs.open_list = Some((id, at));
+                    }
+                    "wave" => gestures.press.push(("wave".into(), id.to_string())),
+                    "appraise" => gestures.press.push(("appraise".into(), id.to_string())),
+                    "intro" => {
+                        let name = net.conn.as_ref().zip(net.my_id).and_then(|(c, me)| c.db.my_characters().id().find(&me)).map(|c| c.name).unwrap_or_else(|| net.name.clone());
+                        talk.want = Some(Some(id));
+                        input.chat = format!("I'm {name}.");
+                        input.keep_words = true;
+                    }
+                    _ => {}
+                }
+            }
+            ["person", "gift", id, i] => {
+                if let (Ok(id), Ok(i)) = (id.parse::<u32>(), i.parse::<usize>()) {
+                    if let Some(c) = verbs.toward.as_ref().filter(|t| t.0 == id).and_then(|t| super::people::gifts(&t.1).get(i).cloned().cloned()) {
+                        verbs.send.push((crate::verbs::Aim::Creature { id }, c));
+                    }
+                    *open_give = None;
+                }
+            }
+            _ => {}
+        }
+    }
+    // Introduce yourself from the list of acts (`verbs.rs`).
+    if let Some(id) = verbs.want_intro.take() {
+        let name = net.conn.as_ref().zip(net.my_id).and_then(|(c, me)| c.db.my_characters().id().find(&me)).map(|c| c.name).unwrap_or_else(|| net.name.clone());
+        talk.want = Some(Some(id));
+        input.chat = format!("I'm {name}.");
+        input.keep_words = true;
+    }
+    for (g, mut n) in &mut give {
+        show(&mut n, *open_give == Some(g.0) && ws.is_open(Win::Person(g.0)));
+    }
+}
+
+/// The rules' choices toward a person that hand over something I carry (no return asked).
+pub fn gifts(choices: &[crate::verbs::Choice]) -> Vec<&crate::verbs::Choice> {
+    choices.iter().filter(|c| c.item.is_some() && c.have > 0 && c.want.is_none() && c.say.is_none() && !c.words).collect()
+}
+
+/// Fill the people windows from the store, the projection and the words being typed.
+#[allow(clippy::too_many_arguments, clippy::type_complexity)]
+pub fn update(
+    (talks, looks, ws, input, talk, typing, page, verbs, time, pointer, ui): (Res<Talks>, Res<Looks>, Res<Windows>, Res<crate::controls::Input>, Res<crate::talk::Talk>, Res<super::say::Typing>, Res<LogPage>, Res<crate::verbs::Verbs>, Res<Time>, Res<crate::pointer::Pointer>, Res<UiPointer>),
+    net: NonSend<Net>,
+    scene: NonSend<crate::world::Scene>,
+    mut texts: ParamSet<(
+        Query<(&WhoText, &mut Text)>,
+        Query<(&MetText, &mut Text)>,
+        Query<(&MsgName, &mut Text, &mut TextColor)>,
+        Query<(&MsgText, &mut Text)>,
+        Query<(&MsgHeard, &mut Text, &mut Node)>,
+        Query<(&ToChip, &mut Text)>,
+        Query<(&InputText, &mut Text, &mut TextColor)>,
+        ParamSet<(Query<(&WinTitle, &mut Text)>, Query<(&PersonRowText, &mut Text)>, Query<(&PersonRowNote, &mut Text)>, Query<(&EventRow, &mut Text, &mut Node)>, Query<(&GiveText, &mut Text)>, Query<(&WayText, &mut Text, &mut TextColor)>)>,
+    )>,
+    (mut msgs, mut tabs, mut rows, mut gives, mut empties): (
+        Query<(&Msg, &mut Node, &mut BackgroundColor, &mut BorderColor), (Without<MsgHeard>, Without<EventRow>, Without<LogTab>, Without<PersonRow>, Without<GiveRow>, Without<Empty>)>,
+        Query<(&LogTab, &mut Node), (Without<Msg>, Without<MsgHeard>, Without<EventRow>, Without<PersonRow>, Without<GiveRow>, Without<Empty>)>,
+        Query<(&PersonRow, &mut Node), (Without<Msg>, Without<MsgHeard>, Without<EventRow>, Without<LogTab>, Without<GiveRow>, Without<Empty>)>,
+        Query<(&GiveRow, &mut Node), (Without<Msg>, Without<MsgHeard>, Without<EventRow>, Without<LogTab>, Without<PersonRow>, Without<Empty>)>,
+        Query<(&Empty, &mut Node), (Without<Msg>, Without<MsgHeard>, Without<EventRow>, Without<LogTab>, Without<PersonRow>, Without<GiveRow>)>,
+    ),
+    (mut lit, mut inputs, mut portraits, mut threads): (Query<(&Tag, &mut Lit)>, Query<(&InputRow, &mut bevy::ui::Outline)>, Query<(&Portrait, &mut ImageNode)>, Query<(&Thread, &mut ScrollPosition, &bevy::ui::ComputedNode, &bevy::ui::UiGlobalTransform)>),
+    mut counts: Local<HashMap<Win, usize>>,
+) {
+    let me = net.my_id;
+    let now = scene.now_ms;
+    let lower = |id: u32| if Some(id) == me { "you".to_string() } else { looks.of(id).unwrap_or("someone").to_string() };
+    let perceived = |id: u32| net.conn.as_ref().is_some_and(|c| c.db.seen_characters().id().find(&id).is_some());
+    // Each open window's lines (the log: everything heard and said).
+    // The same words said again by the same speaker to the same one, in a row, are one bubble
+    // with a count (the owner's coordinator: ten "Good evening" bubbles filled the window).
+    let mut shown: HashMap<Win, Vec<(&Line, usize)>> = HashMap::new();
+    for o in &ws.open {
+        match o.win {
+            Win::Person(id) => {
+                let v = collapse(talks.with(id));
+                shown.insert(o.win, v[v.len().saturating_sub(THREAD)..].to_vec());
+            }
+            Win::Log => {
+                let v = collapse(talks.lines.values());
+                shown.insert(o.win, v[v.len().saturating_sub(HEARD_ROWS)..].to_vec());
+            }
+            _ => {}
+        }
+    }
+    let line_of = |w: &Win, i: usize| shown.get(w).and_then(|v| v.get(i)).map(|(l, _)| *l);
+    let times_of = |w: &Win, i: usize| shown.get(w).and_then(|v| v.get(i)).map_or(1, |(_, n)| *n);
+    for (m, mut n, mut bg, mut border) in &mut msgs {
+        let l = line_of(&m.0, m.1);
+        show(&mut n, l.is_some());
+        if let Some(l) = l {
+            let (col, align) = if l.mine { (wood::mine(), AlignSelf::FlexEnd) } else { (wood::field(), AlignSelf::FlexStart) };
+            if bg.0 != col {
+                bg.0 = col;
+            }
+            let edge = if l.mine { wood::mine_edge() } else { wood::edge() };
+            if border.top != edge {
+                *border = BorderColor::all(edge);
+            }
+            if n.align_self != align {
+                n.align_self = align;
+            }
+        }
+    }
+    for (e, mut n) in &mut empties {
+        show(&mut n, match e.0 {
+            Win::Settings => people_list(&talks, me, &looks).is_empty(),
+            w => shown.get(&w).is_none_or(|v| v.is_empty()),
+        });
+    }
+    {
+        let mut q = texts.p2();
+        for (m, mut t, mut c) in &mut q {
+            if let Some(l) = line_of(&m.0, m.1) {
+                let s = line_head(l, matches!(m.0, Win::Person(_)), me, &looks);
+                let times = times_of(&m.0, m.1);
+                let s = if times > 1 { format!("{s}  ×{times}") } else { s };
+                set_text(&mut t, &s);
+                super::set_color(&mut c, if l.mine { wood::name_mine() } else { wood::talk_ink() });
+            }
+        }
+    }
+    for (m, mut t) in &mut texts.p3() {
+        if let Some(l) = line_of(&m.0, m.1) {
+            set_text(&mut t, &wood::readable(&l.text));
+        }
+    }
+    for (m, mut t, mut n) in &mut texts.p4() {
+        // Under my line: who heard it, once the authority reports it; a known "not heard" (why is
+        // the authority's note, `talk.rs`: not repeated here in other words).
+        let note = line_of(&m.0, m.1).filter(|l| l.mine).and_then(|l| {
+            if l.unheard {
+                return Some(format!("addressed {}, not heard by them", lower(l.to)));
+            }
+            let by = l.heard_by.as_ref()?;
+            let seen: Vec<String> = by.iter().filter(|id| looks.of(**id).is_some()).map(|id| lower(*id)).collect();
+            let missed = l.to != 0 && !by.contains(&l.to);
+            Some(match (seen.is_empty(), missed) {
+                (_, true) => format!("addressed {}, not heard by them", lower(l.to)),
+                (true, false) => "heard by no one you could see".into(),
+                (false, false) => format!("heard by {}: the people you could see", seen.join(", ")),
+            })
+        });
+        show(&mut n, note.is_some());
+        if let Some(s) = note {
+            set_text(&mut t, &s);
+        }
+    }
+    for (w, mut t) in &mut texts.p0() {
+        let named = net.conn.as_ref().and_then(|c| c.db.seen_characters().id().find(&w.0)).is_some_and(|c| !c.name.is_empty());
+        let colour = looks.colours.get(&w.0).and_then(|(t, _)| t.as_deref()).and_then(crate::looks::colour_name);
+        // The title names them; this line adds only what the title lacks (a named person's
+        // clothes), and is empty otherwise.
+        let s = match (named, colour) {
+            (true, Some(c)) => format!("{} · in {c}", looks.cap(w.0)),
+            _ => String::new(),
+        };
+        set_text(&mut t, &s);
+    }
+    for (w, mut t) in &mut texts.p1() {
+        let m = talks.met.get(&w.0);
+        // Kept short: when we met, and whether they are in sight.
+        let mut s = m.map_or_else(String::new, |m| format!("First seen {}", ago(now, m.first_ms)));
+        if m.and_then(|m| m.introduced_ms).is_some() {
+            s.push_str(" · told you their name");
+        }
+        if !perceived(w.0) {
+            s.push_str(" · not in sight");
+        }
+        set_text(&mut t, &s);
+    }
+    for (w, mut t) in &mut texts.p7().p0() {
+        if let Win::Person(id) = w.0 {
+            set_text(&mut t, &wood::fit(&looks.cap(id), 34));
+        }
+    }
+    // The box: whom it speaks to, the words, a caret.
+    let typing_in = typing.window.filter(|_| input.chat_open && input.compose.is_none());
+    let to_label = |w: Win| match w {
+        Win::Person(id) => format!("to {}", lower(id)),
+        _ => "to the room".into(),
+    };
+    // The way chip: the box's way, by the world's label; greyed while its gap runs.
+    {
+        let card = talk.card.as_ref();
+        let resting = card.is_some_and(|c| c.gap_ms > 0 && talk.used_at.get(&c.name).is_some_and(|t| (time.elapsed_secs_f64() - t) * 1000.0 < c.gap_ms as f64));
+        let label = card.map_or(String::new(), |c| c.label.to_lowercase());
+        let colour = if resting { wood::alpha(wood::muted(), 0.45) } else { wood::alpha(wood::muted(), 0.9) };
+        for (_, mut t, mut col) in &mut texts.p7().p5() {
+            set_text(&mut t, &label);
+            if col.0 != colour {
+                col.0 = colour;
+            }
+        }
+    }
+    for (c, mut t) in &mut texts.p5() {
+        // Short, so the box keeps its room: "to a stranger in gr…".
+        let s = wood::fit(&if typing_in == Some(c.0) { talk.to.map_or_else(|| "to the room".into(), |id| format!("to {}", lower(id))) } else { to_label(c.0) }, 22);
+        set_text(&mut t, &s);
+    }
+    let caret = if crate::capture::scripted() || (time.elapsed_secs() * 1.8).fract() < 0.6 { "|" } else { " " };
+    for (c, mut t, mut col) in &mut texts.p6() {
+        if typing_in == Some(c.0) {
+            set_text(&mut t, &format!("{}{caret}", input.chat));
+            super::set_color(&mut col, wood::text());
+        } else {
+            set_text(&mut t, "Enter to talk");
+            super::set_color(&mut col, wood::muted());
+        }
+    }
+    for (r, mut o) in &mut inputs {
+        let w = if typing_in == Some(r.0) { Val::Px(3.0) } else { Val::Px(0.0) };
+        if o.width != w {
+            o.width = w;
+        }
+    }
+    for (p, mut img) in &mut portraits {
+        let col = looks.colours.get(&p.0).and_then(|(t, _)| t.as_deref()).and_then(|h| Srgba::hex(h).ok()).map_or(wood::heading(), Color::from);
+        if img.color != col {
+            img.color = col;
+        }
+    }
+    // The log's tabs.
+    for (t, mut n) in &mut tabs {
+        show(&mut n, t.0 == page.0);
+    }
+    let pg = page.0;
+    kit::light(&mut lit, |t| t.strip_prefix("log:tab:").map(|i| i.parse::<u8>().ok() == Some(pg)));
+    let list = people_list(&talks, me, &looks);
+    for (r, mut n) in &mut rows {
+        show(&mut n, r.0 < list.len());
+    }
+    for (r, mut t) in &mut texts.p7().p1() {
+        if let Some(id) = list.get(r.0) {
+            let here = if perceived(*id) { "  · here now" } else { "" };
+            set_text(&mut t, &format!("{}{here}", looks.cap(*id)));
+        }
+    }
+    for (r, mut t) in &mut texts.p7().p2() {
+        if let Some(id) = list.get(r.0) {
+            let m = talks.met.get(id);
+            let s = m.and_then(|m| m.last_line.clone()).map_or_else(|| format!("First seen {}", m.map_or_else(String::new, |m| ago(now, m.first_ms))), |l| format!("“{}”", wood::readable(&l)));
+            set_text(&mut t, &s);
+        }
+    }
+    let ev = &talks.events[talks.events.len().saturating_sub(EVENT_ROWS)..];
+    for (r, mut t, mut n) in &mut texts.p7().p3() {
+        show(&mut n, r.0 < ev.len());
+        if let Some((at, text)) = ev.get(r.0) {
+            set_text(&mut t, &format!("{}  ·  {}", text, ago(now, *at)));
+        }
+    }
+    let gifts_now: Vec<String> = verbs.toward.as_ref().map(|(_, c)| gifts(c).iter().map(|c| super::label(&c.label)).collect()).unwrap_or_default();
+    for (g, mut n) in &mut gives {
+        let ok = verbs.toward.as_ref().is_some_and(|t| t.0 == g.0) && g.1 < gifts_now.len();
+        show(&mut n, ok || (g.1 == 0 && verbs.toward.as_ref().is_none_or(|t| t.0 != g.0)));
+    }
+    for (g, mut t) in &mut texts.p7().p4() {
+        let s = if verbs.toward.as_ref().is_some_and(|t| t.0 == g.0) { gifts_now.get(g.1).cloned().unwrap_or_else(|| if g.1 == 0 { "Nothing in your pack to give".into() } else { String::new() }) } else { "…".into() };
+        set_text(&mut t, &s);
+    }
+    // New lines scroll a thread to its end; two fingers over it scroll it.
+    for (th, mut sp, node, tf) in &mut threads {
+        let n = shown.get(&th.0).map_or(0, |v| v.len()) + talks.lines.len();
+        if counts.get(&th.0) != Some(&n) {
+            counts.insert(th.0, n);
+            sp.0.y = 1.0e6;
+        }
+        let over = ui.pos.is_some_and(|p| node.contains_point(*tf, p * ui.scale));
+        if over && pointer.scroll_px != 0.0 {
+            sp.0.y = (sp.0.y.min(node.content_size().y) - pointer.scroll_px).max(0.0);
+        }
+    }
+}
+
+/// One-time help lines, and the person window's second line only when it says something.
+pub fn hints(hints: Res<Hints>, talk: Option<Res<crate::talk::Talk>>, input: Res<crate::controls::Input>, mut lines: Query<(&Hint, &mut Node, &mut Text), Without<WhoText>>, mut who: Query<(&Text, &mut Node), (With<WhoText>, Without<Hint>)>) {
+    // The authority's earshot sentence (the `earshot` law), as it is, while the box is open; else
+    // the box's own words until the first line is said (always in a dense theme).
+    let told = talk.as_ref().and_then(|t| t.told.as_ref()).filter(|_| input.chat_open).map(|t| t.text.clone()).filter(|t| !t.is_empty());
+    let on = told.is_some() || wood::t().help || !hints.said;
+    for (h, mut n, mut t) in &mut lines {
+        show(&mut n, on);
+        set_text(&mut t, told.as_deref().unwrap_or(&h.0));
+    }
+    for (t, mut n) in &mut who {
+        show(&mut n, !t.0.is_empty());
+    }
+}
+
+
+/// The rules' acts on an offer, in the script's order: each skill whose `_ui()` puts it `on`
+/// `offer` (Accept, Decline), as (skill, label).
+fn offer_acts(rules: &crate::verbs::Rules) -> Vec<(String, String)> {
+    rules.scripts.as_ref().map(|sc| sc.ui_specs().filter(|u| u.is_on(living_rules::ui::On::Offer)).map(|u| (u.name.clone(), u.label.clone())).collect()).unwrap_or_default()
+}
+
+/// Answering a card, the one place an offer's acts are built: the rules' own node toward the
+/// offer (`ActTarget::Offer`, its `trade_offer` id) or the proposal (`ActTarget::Record`, its
+/// record id), so the act takes exactly that card's. What it does is the rules'; a refusal
+/// ("that offer is gone") comes back as a note in their words, and the card stays while its row
+/// does.
+fn answer_offer(skill: &str, label: String, p: &Proposal, verbs: &mut crate::verbs::Verbs) {
+    use living_rules::ui::{act_node, ActTarget, Picked};
+    let target = match p.key {
+        Standing::Offer(offer) => ActTarget::Offer { from: p.from, offer },
+        Standing::Terms(record) => ActTarget::Record { from: p.from, record },
+        // My own offer has no answers (its card shows none).
+        Standing::Mine(_) => return,
+    };
+    let node = act_node(skill, &target, &Picked::default());
+    let choice = crate::verbs::Choice { skill: skill.to_string(), item: None, want: None, words: false, say: None, label, have: 0 };
+    verbs.send_node.push((crate::verbs::Aim::Creature { id: p.from }, choice, node));
+}
+
+/// A proposal standing between me and someone: a swap offered to me (`my_offers`), terms
+/// proposed to me (`my_records`), or my own standing swap offer to them.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, PartialOrd, Ord)]
+pub enum Standing {
+    Offer(u64),
+    Terms(u64),
+    Mine(u64),
+}
+
+/// One proposal, and its words as the card and the note say them.
+pub struct Proposal {
+    pub key: Standing,
+    /// The other party: its maker, or for my own offer whom it is to (whose window shows it).
+    pub from: u32,
+    pub at_ms: u64,
+    /// Until when it can be answered (authority ms): an offer's `until_ms`, terms' `due_ms`.
+    pub until_ms: u64,
+    /// The goods on each side: (theirs, mine).
+    pub goods: (String, String),
+    pub said: String,
+}
+
+fn goods(item: &str, n: u64) -> String {
+    if item == "lodging" { "a night's lodging".into() } else { format!("{} {}", n.max(1), item.replace('_', " ")) }
+}
+
+/// What stands between me and others: swaps offered to me, terms proposed to me (an open
+/// `agreement` record, `offered`, where I am `to`) and my own standing offer, as the rules keep
+/// them; one whose time is up (`now_ms` past it) is hidden here before its row goes (about 1 s).
+pub fn proposals(conn: &DbConnection, now_ms: u64) -> Vec<Proposal> {
+    let mut out: Vec<Proposal> = conn
+        .db
+        .my_offers()
+        .iter()
+        .map(|o| {
+            let (key, with) = if o.incoming { (Standing::Offer(o.id), o.from) } else { (Standing::Mine(o.id), o.to) };
+            Proposal { key, from: with, at_ms: o.at_ms, until_ms: o.until_ms, goods: (goods(&o.give_item, o.give_qty as u64), goods(&o.want_item, o.want_qty as u64)), said: String::new() }
+        })
+        .collect();
+    for r in conn.db.my_records().iter().filter(|r| r.open && r.kind == "agreement" && r.status == "offered" && r.role == "to") {
+        let Some(from) = r.others.split(',').find_map(|p| p.strip_prefix("from=")).and_then(|v| v.parse::<u32>().ok()) else { continue };
+        let t: serde_json::Value = serde_json::from_str(&r.terms).unwrap_or_default();
+        let side = |k: &str, q: &str| goods(t[k].as_str().unwrap_or("?"), t[q].as_u64().unwrap_or(1));
+        out.push(Proposal { key: Standing::Terms(r.id), from, at_ms: r.made_ms, until_ms: r.due_ms, goods: (side("from_gives", "from_qty"), side("to_gives", "to_qty")), said: t["words"].as_str().unwrap_or("").to_string() });
+    }
+    out.retain(|p| p.until_ms == 0 || now_ms <= p.until_ms);
+    out
+}
+
+/// One person's proposals, the cards of their window in order: those I can answer first, oldest
+/// first, then my own offer to them.
+fn of_person(ps: &[Proposal], from: u32) -> Vec<&Proposal> {
+    let mut v: Vec<&Proposal> = ps.iter().filter(|p| p.from == from).collect();
+    v.sort_by_key(|p| (matches!(p.key, Standing::Mine(_)), p.at_ms, p.key));
+    v
+}
+
+/// A card's words: the swap or the terms, as the rules keep them, and the time left to answer.
+fn card_words(p: &Proposal, who: &str, now_ms: u64) -> String {
+    let left = p.until_ms.saturating_sub(now_ms) / 1000;
+    let left = if p.until_ms == 0 { String::new() } else if left >= 3600 { format!("  ·  {} h left", left / 3600) } else { format!("  ·  {}:{:02} left", left / 60, left % 60) };
+    format!("{}{left}", offer_words(p, who))
+}
+
+/// What a proposal says.
+fn offer_words(p: &Proposal, who: &str) -> String {
+    match p.key {
+        Standing::Mine(_) => format!("You offer {} {} for {}.", who.to_lowercase(), p.goods.0, p.goods.1),
+        Standing::Terms(_) => {
+            let said = if p.said.is_empty() { String::new() } else { format!(" (\"{}\")", p.said) };
+            format!("{who} proposes terms: they give {}, you give {}{said}. The world keeps count of what each owes.", p.goods.0, p.goods.1)
+        }
+        Standing::Offer(_) => format!("{who} offers you {} for {}.", p.goods.0, p.goods.1),
+    }
+}
+
+/// Proposals to me (swaps in `my_offers`, terms in `my_records`): a note when one arrives, and
+/// the card in that person's window while one stands (it goes when the rules take, withdraw,
+/// replace, decline or time it out).
+#[allow(clippy::type_complexity)]
+pub fn offers(mut talks: ResMut<Talks>, looks: Res<Looks>, mut ws: ResMut<Windows>, (net, rules, scene): (NonSend<Net>, NonSend<crate::verbs::Rules>, NonSend<crate::world::Scene>), mut verbs: ResMut<crate::verbs::Verbs>, time: Res<Time>, mut cards: Query<(&OfferCard, &mut Node), Without<OfferAct>>, mut texts: Query<(&OfferText, &mut Text), Without<OfferActText>>, mut acts: Query<(&OfferAct, &mut Node), Without<OfferCard>>, mut act_texts: Query<(&OfferActText, &mut Text), Without<OfferText>>) {
+    let Some(conn) = net.conn.as_ref() else { return };
+    let now = scene.now_ms.max(0.0) as u64;
+    let ps = proposals(conn, now);
+    for p in &ps {
+        // My own offer: its card is in their window, with no note (I just made it).
+        if matches!(p.key, Standing::Mine(_)) {
+            talks.noted.insert(p.key);
+            continue;
+        }
+        if talks.noted.insert(p.key) {
+            let words = offer_words(p, &looks.cap(p.from));
+            // Their window, with the card in it, if the left anchor is free (or only the log is).
+            let free = matches!(ws.at(super::win::Anchor::Left), None | Some(Win::Log));
+            if free {
+                ws.open(Win::Person(p.from));
+            }
+            let more = if free { "" } else { " Their window has it." };
+            info!("ui: proposal {:?} from #{}: {words}", p.key, p.from);
+            // Terms are told by the rules themselves (a `record` experience, `verbs.rs` notes it).
+            if matches!(p.key, Standing::Offer(_)) {
+                verbs.toasts.push(crate::verbs::Toast { text: format!("{words}{more}"), ok: None, at: time.elapsed_secs_f64() });
+            }
+        }
+    }
+    if talks.noted.len() > 256 {
+        let live: HashSet<Standing> = proposals(conn, now).into_iter().map(|p| p.key).collect();
+        talks.noted.retain(|k| live.contains(k));
+    }
+    let shown = |id: u32| of_person(&ps, id);
+    for (c, mut n) in &mut cards {
+        show(&mut n, c.1 < shown(c.0).len());
+    }
+    talks.cards.clear();
+    for (c, mut t) in &mut texts {
+        if let Some(p) = shown(c.0).get(c.1) {
+            let w = wood::readable(&card_words(p, &looks.cap(c.0), now));
+            set_text(&mut t, &w);
+            talks.cards.push((c.0, c.1, w));
+        }
+    }
+    let skills = offer_acts(&rules);
+    for (a, mut n) in &mut acts {
+        let mine = shown(a.0).get(a.1).is_some_and(|p| matches!(p.key, Standing::Mine(_)));
+        show(&mut n, a.2 < skills.len() && !mine);
+    }
+    for (a, mut t) in &mut act_texts {
+        if let Some((_, label)) = skills.get(a.2) {
+            set_text(&mut t, label);
+        }
+    }
+}
+
+/// A line's head as a window shows it (`person`: the speaker's own window; else the Log): who
+/// said it, to whom, and how when the authority told more (a room line's detail, "to the room,
+/// naming you and Ife"; a line to someone's, "to a stranger, naming you"), in my own labels.
+pub fn line_head(l: &Line, person: bool, me: Option<u32>, looks: &crate::looks::Looks) -> String {
+    let name = |id: u32| if Some(id) == me { "You".to_string() } else { looks.cap(id) };
+    let lower = |id: u32| if Some(id) == me { "you".to_string() } else { looks.of(id).unwrap_or("someone").to_string() };
+    match (person, l.mine) {
+        (true, true) => "You, to them".to_string(),
+        (_, false) if l.how.is_some() => {
+            let how = l.how.as_deref().unwrap_or_default();
+            if l.to == 0 { format!("{} ({how})", name(l.speaker)) } else { format!("{} (to {}{how})", name(l.speaker), lower(l.to)) }
+        }
+        (true, false) => {
+            let to = if Some(l.to) == me { ", to you".to_string() } else if l.to != 0 { format!(", to {}", lower(l.to)) } else { String::new() };
+            format!("{}{to}", name(l.speaker))
+        }
+        (false, _) => format!("{} › {}", name(l.speaker), if l.to == 0 { "the room".to_string() } else { lower(l.to) }),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{collapse, Line};
+
+    fn line(speaker: u32, to: u32, text: &str) -> Line {
+        Line { at_ms: 0, speaker, to, text: text.into(), mine: false, heard_by: None, unheard: false, how: None }
+    }
+
+    #[test]
+    fn the_same_words_again_are_one_line_with_a_count() {
+        let v = [line(1, 2, "Good evening"), line(1, 2, "Good evening"), line(1, 2, "Good evening"), line(2, 1, "Good evening"), line(1, 2, "Bread?"), line(1, 2, "Good evening")];
+        let c: Vec<(u32, &str, usize)> = collapse(v.iter()).into_iter().map(|(l, n)| (l.speaker, l.text.as_str(), n)).collect();
+        assert_eq!(c, vec![(1, "Good evening", 3), (2, "Good evening", 1), (1, "Bread?", 1), (1, "Good evening", 1)]);
+    }
+}

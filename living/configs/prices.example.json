@@ -1,0 +1,6 @@
+{
+  "_doc": "Model prices that are not committed (living/mind/src/prices.rs; docs/STORE.md, Model terms). Copy this to living/configs/prices.local.json (gitignored) or ~/.config/slop-living/prices.local.json, or point LIVING_PRICES at a copy, and fill in the prices. Without a file, or with null, a model's cost is unknown: journals record cost_usd null, never 0.",
+  "models": {
+    "jev-1.14.0": {"input_usd_per_m": null}
+  }
+}

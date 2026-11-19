@@ -173,7 +173,7 @@ impl Engine for RhaiLean {
         // Since rates(a) returns parameters (rules/src/script.rs `NeedLaw`), decode them the
         // authority's way.
         let d = self.call("rates", lean_rates(c)).expect("rates");
-        living_rules::script::NeedLaw::from_dynamic(d).expect("rates").rates(&c.actor)
+        living_rules::script::NeedLaw::from_dynamic(d, living_rules::DEFAULT_DAY_MS as f64 / 24.0).expect("rates").rates(&c.actor)
     }
     fn strike(&mut self, c: &SkillCtx) -> StrikeOut {
         let why = self.call("strike_check", lean_strike(c))?.into_string().map_err(|t| format!("strike_check returned {t}"))?;

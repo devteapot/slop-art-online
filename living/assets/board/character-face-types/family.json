@@ -1,0 +1,8 @@
+{
+ "schema": 1,
+ "family": "character:face-types",
+ "kind": "character",
+ "title": "Face types and the identity rig",
+ "description": "Pass 3, step 2: the designed face types (three for each sex and age band) as landmark and plane diagrams from the front and the side, people drawn from each, the identity rig, and the proof in the game that bones under the head hold a face through the clips. Diagrams from living/tools/characters/types.json; meshes come in step 3.",
+ "target": "vroid"
+}

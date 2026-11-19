@@ -2,7 +2,8 @@
 // - lines from depth and normal discontinuities, drawn on the far side of a silhouette so thin
 //   or small things don't get thinner, fading with distance;
 // - a rim of light on the side of silhouettes facing the sun (screen-space, from depth);
-// - an anime "film" finish: a soft sky-coloured gradient from the top of the frame;
+// - an anime "film" finish: a soft sky-coloured gradient from the top of the frame, sparing dark
+//   pixels by default (post.rs `Film`);
 // - with the atmosphere (daylight.rs): fog banks lying in the low ground round you, drifting with
 //   the wind (marched through the depth along each pixel's ray), and rain: streaks in three
 //   layers at set distances, each drawn only where the scene lies beyond it.
@@ -23,7 +24,8 @@ struct Edges {
     fade: vec4<f32>,
     // rgb: rim colour, a: unused.
     rim: vec4<f32>,
-    // xy: sun direction on screen (unit, y down), zw: unused.
+    // xy: sun direction on screen (unit, y down), z: the smallest step a crease line marks (m;
+    // 0 marks every crease), w: unused.
     sun: vec4<f32>,
     // rgb: gradient colour, a: gradient strength.
     grade: vec4<f32>,
@@ -38,9 +40,170 @@ struct Edges {
     bank_color: vec4<f32>,
     // x: amount, y: slant, z: brightness, w: drift z.
     rain: vec4<f32>,
+    // xy: where my character stands (world x, z), z: sight radius (m), w: mode (0 none,
+    // 1 not seen now, 2 limited view).
+    sight: vec4<f32>,
+    // x, y: soft band inside and beyond the radius (m), z: dimming, w: desaturation.
+    sight_look: vec4<f32>,
+    // rgb: fog colour (linear), a: flattening toward it (not seen now).
+    sight_fog: vec4<f32>,
+    // x: fully fogged at this multiple of the radius (limited view), y: how far what lies
+    // behind something fogs (limited view).
+    sight_far: vec4<f32>,
+    // The sight field (sightfield.rs): xy the world x, z of its corner, z one over its size in
+    // metres, w 1 when it holds a field.
+    sight_field: vec4<f32>,
+    // x: how not seen now is drawn (sightedge::Look: 0 grey, 1 wash, 2 lantern, 3 shadows,
+    // 4 hatch, 5 memory, 6 shade), y: how light the scene is (0 night, 1 day), z: 1 when the
+    // memory texture is current.
+    sight_extra: vec4<f32>,
+    // The scene's shadow tone, as the toon shader makes it (style.rs, daylight.rs): x the target
+    // hue (the sky fill's, else the style's), y how far hues move toward it, z the saturation
+    // factor, w how much a shadow darkens.
+    sight_shade: vec4<f32>,
+    // rgb: the style's shadow tint, a: unused.
+    sight_tint: vec4<f32>,
+    // The film (post.rs `Film`): x 0 screen, 1 soft; y, z: the luminance over which soft goes
+    // from none of the film to all of it; w how much soft spares dark pixels now (1 day, 0 night).
+    film: vec4<f32>,
 }
 
 @group(0) @binding(4) var<uniform> edges: Edges;
+// Where my sight lines reach: 1 seen, 0 behind something (two texels a tile, filtered).
+@group(0) @binding(5) var field_texture: texture_2d<f32>;
+@group(0) @binding(6) var field_sampler: sampler;
+// How recently each texel was seen (the memory look): 1 now, 0 long ago or never.
+@group(0) @binding(7) var memory_texture: texture_2d<f32>;
+
+// How far a ground point (world x, z) lies behind something my sight lines don't pass: 0 seen,
+// 1 hidden; 0 outside the field (the radius covers that). The filtered texels give a soft edge
+// of about half a tile; the smoothstep keeps its middle where the authority's test flips.
+fn behind(xz: vec2<f32>) -> f32 {
+    if (edges.sight_field.w < 0.5) {
+        return 0.0;
+    }
+    let uv = (xz - edges.sight_field.xy) * edges.sight_field.z;
+    if (any(uv < vec2<f32>(0.0)) || any(uv > vec2<f32>(1.0))) {
+        return 0.0;
+    }
+    let seen = textureSampleLevel(field_texture, field_sampler, uv, 0.0).r;
+    return 1.0 - smoothstep(0.2, 0.8, seen);
+}
+
+// The sight field at a ground point, filtered: 1 seen, 0 behind something or outside my field
+// of view; 1 outside the texture (the radius covers that).
+fn seen_at(xz: vec2<f32>) -> f32 {
+    if (edges.sight_field.w < 0.5) {
+        return 1.0;
+    }
+    let uv = (xz - edges.sight_field.xy) * edges.sight_field.z;
+    if (any(uv < vec2<f32>(0.0)) || any(uv > vec2<f32>(1.0))) {
+        return 1.0;
+    }
+    return textureSampleLevel(field_texture, field_sampler, uv, 0.0).r;
+}
+
+fn hsv_of(c: vec3<f32>) -> vec3<f32> {
+    let mx = max(c.r, max(c.g, c.b));
+    let mn = min(c.r, min(c.g, c.b));
+    let d = mx - mn;
+    var h = 0.0;
+    if (d > 1e-5) {
+        if (mx == c.r) {
+            h = (c.g - c.b) / d + select(0.0, 6.0, c.g < c.b);
+        } else if (mx == c.g) {
+            h = (c.b - c.r) / d + 2.0;
+        } else {
+            h = (c.r - c.g) / d + 4.0;
+        }
+        h = h / 6.0;
+    }
+    return vec3(h, select(0.0, d / mx, mx > 1e-5), mx);
+}
+
+fn rgb_of(c: vec3<f32>) -> vec3<f32> {
+    let k = vec3(1.0, 2.0 / 3.0, 1.0 / 3.0);
+    let p = abs(fract(vec3(c.x) + k) * 6.0 - 3.0);
+    return c.z * mix(vec3(1.0), clamp(p - 1.0, vec3(0.0), vec3(1.0)), c.y);
+}
+
+// How deep the shade goes (the lit value's share, linear light) by day and by night, and how
+// far it cools by night.
+const SHADE_DAY: f32 = 0.30;
+const SHADE_NIGHT: f32 = 0.22;
+const SHADE_NIGHT_COOL: f32 = 0.5;
+// By night, how much brighter it is round me, and out to where (m).
+const NIGHT_LIFT: f32 = 1.6;
+const NIGHT_LIFT_M: f32 = 3.0;
+
+// Shade (the default since play-test 5: "more similar to the shadows than this grey overlay"):
+// what I don't see lies in shadow, in the scene's own shadow tone (the toon shader's hue shift,
+// saturation and depth, toward the sky fill's hue), with no grey. Every edge is a gradient: the
+// field is averaged over a footprint across and along the line from my eye that widens with
+// distance, like a penumbra (about 0.7 m by me, 3 m at 30 m), so sight shadows and facing
+// sight's zones (focal, side, near) fade in rather than band; the radius fades over 6 m. By
+// night, when the scene's shadows are already dark, the shade darkens less and leans to the
+// cool hue, so unseen ground still reads as shadow rather than black.
+// How far in shade this pixel is (the shade look), for the fog banks laid over it after.
+var<private> shade_amount: f32 = 0.0;
+
+// The darkening the shade gives at this light (linear share of the lit value).
+fn shade_depth(light: f32) -> f32 {
+    return mix(SHADE_NIGHT, SHADE_DAY, light);
+}
+
+fn look_shade(color: vec3<f32>, p: vec3<f32>, reach: f32, r: f32, ground: f32, light: f32) -> vec3<f32> {
+    let d = p.xz - edges.sight.xy;
+    let dl = max(length(d), 1e-3);
+    let along = d / dl;
+    let across = vec2<f32>(-along.y, along.x);
+    let w = 0.35 + 0.09 * dl;
+    var seen = 0.0;
+    var total = 0.0;
+    for (var i = -2; i <= 2; i++) {
+        for (var j = -1; j <= 1; j++) {
+            let k = (3.0 - f32(abs(i))) * (2.0 - f32(abs(j)));
+            seen = seen + seen_at(p.xz + across * (f32(i) * 0.5 * w) + along * (f32(j) * 0.5 * w)) * k;
+            total = total + k;
+        }
+    }
+    let hid = 1.0 - smoothstep(0.05, 0.95, seen / total);
+    let s = max(hid, smoothstep(r - 2.0, r + 4.0, reach)) * ground;
+    shade_amount = s;
+    if (s <= 0.001) {
+        return color;
+    }
+    var hsv = hsv_of(color);
+    // The toon shadow's own move (`shadow_of`): hues toward the shadow hue by the style's shift
+    // (reds and oranges less), its saturation kept, so unseen ground takes the tone the scene's
+    // cast shadows have (measured on Brackenford's paving: rosy brown, green dropping most).
+    // Deeper than a cast shadow, as asked: to about 0.3 of the lit value in linear light, which
+    // is 0.55-0.6 on screen, so the pool I see reads as the lit place. No grey over it: a grey
+    // laid over the distance fog read as a haze. By night, when everything is already dark, a
+    // little less deep but clearly cooler, so the pool still reads as where I see.
+    let red = 1.0 - smoothstep(0.05, 0.12, abs(hsv.x - round(hsv.x)));
+    let shift = edges.sight_shade.y * (1.0 - 0.75 * red);
+    var dh = edges.sight_shade.x - hsv.x;
+    dh = dh - round(dh);
+    hsv.x = fract(hsv.x + dh * shift);
+    hsv.y = clamp(hsv.y * edges.sight_shade.z, 0.0, 1.0);
+    hsv.z = hsv.z * shade_depth(light);
+    var shade = rgb_of(hsv) * edges.sight_tint.rgb;
+    shade = mix(shade, vec3<f32>(0.62, 0.74, 1.1) * luma(shade), SHADE_NIGHT_COOL * (1.0 - light));
+    return mix(color, shade, s);
+}
+
+// How recently a ground point was seen (memory look): 1 now, 0 long ago, never, or outside.
+fn remembered(xz: vec2<f32>) -> f32 {
+    if (edges.sight_extra.z < 0.5 || edges.sight_field.w < 0.5) {
+        return 0.0;
+    }
+    let uv = (xz - edges.sight_field.xy) * edges.sight_field.z;
+    if (any(uv < vec2<f32>(0.0)) || any(uv > vec2<f32>(1.0))) {
+        return 0.0;
+    }
+    return textureSampleLevel(memory_texture, field_sampler, uv, 0.0).r;
+}
 
 // Distance from the camera (m) at a pixel; reverse-Z infinite perspective: depth = near / z.
 fn dist(px: vec2<i32>) -> f32 {
@@ -54,6 +217,27 @@ fn normal(px: vec2<i32>) -> vec3<f32> {
     let size = vec2<i32>(edges.screen.xy);
     let p = clamp(px, vec2(0), size - vec2(1));
     return textureLoad(normal_texture, p, 0).xyz * 2.0 - 1.0;
+}
+
+// The world point at a pixel.
+fn world_at(px: vec2<i32>) -> vec3<f32> {
+    let size = vec2<i32>(edges.screen.xy);
+    let p = clamp(px, vec2(0), size - vec2(1));
+    let d = textureLoad(depth_texture, p, 0);
+    return unproject((vec2<f32>(p) + 0.5) * edges.screen.zw, max(d, 1e-7));
+}
+
+// Walking from `start` along `dir` for a few samples: the first face parallel to the one at `a`
+// (normal `na`) lies within `sun.z` metres of its plane.
+fn small_step(a: vec2<i32>, na: vec3<f32>, start: vec2<i32>, dir: vec2<i32>) -> bool {
+    let pa = world_at(a);
+    for (var k = 0; k < 6; k++) {
+        let s = start + dir * k;
+        if (1.0 - dot(na, normal(s)) < edges.params.y * 0.5) {
+            return abs(dot(na, world_at(s) - pa)) < edges.sun.z;
+        }
+    }
+    return false;
 }
 
 fn hash2(p: vec2<f32>) -> f32 {
@@ -71,6 +255,143 @@ fn noise2(p: vec2<f32>) -> f32 {
     let c = hash2(i + vec2<f32>(0.0, 1.0));
     let d = hash2(i + vec2<f32>(1.0, 1.0));
     return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+}
+
+fn luma(c: vec3<f32>) -> f32 {
+    return dot(c, vec3<f32>(0.2126, 0.7152, 0.0722));
+}
+
+fn fbm(p: vec2<f32>) -> f32 {
+    return noise2(p) * 0.5 + noise2(p * 2.03 + 7.1) * 0.3 + noise2(p * 4.1 + 3.7) * 0.2;
+}
+
+// The paper the looks draw on: warm by day, a dark blue-grey at night (light 0 night, 1 day).
+fn paper(light: f32) -> vec3<f32> {
+    return mix(vec3<f32>(0.030, 0.034, 0.055), vec3<f32>(0.78, 0.71, 0.56), light);
+}
+
+// Wash: a faded watercolour over what isn't seen: its hues kept faintly and its values softened
+// toward warm paper, in long slanted brush strokes; the edge is a dry brush, with pigment pooling
+// darker along it.
+fn look_wash(color: vec3<f32>, p: vec3<f32>, t0: f32, light: f32) -> vec3<f32> {
+    let q = vec2<f32>(p.x * 0.8 + p.z * 0.6, -p.x * 0.6 + p.z * 0.8);
+    let n = fbm(q * vec2<f32>(0.9, 3.5));
+    let ragged = t0 + (n - 0.5) * 0.8;
+    let t = smoothstep(0.42, 0.58, ragged);
+    if (t <= 0.0) {
+        return color;
+    }
+    let pap = paper(light);
+    let l = luma(color);
+    let hue = mix(vec3<f32>(l), color, 0.4);
+    var g = mix(hue, pap * (0.6 + 0.4 * clamp(l / max(luma(pap), 1e-3), 0.0, 1.5)), 0.55);
+    // Strokes: the wash laid on in bands, a little uneven.
+    let stroke = fbm(q * vec2<f32>(0.35, 2.6) + 11.0);
+    g = g * (0.86 + 0.26 * stroke) * (0.96 + 0.08 * noise2(p.xz * 7.0));
+    let pool = smoothstep(0.5, 0.58, ragged) * (1.0 - smoothstep(0.58, 0.9, ragged));
+    g = g * (1.0 - 0.4 * pool);
+    return mix(color, g, t);
+}
+
+// Lantern: my sight as light. A pool round me that falls off toward the radius, a wide
+// penumbra behind what blocks (the field taken over five points 0.9 m apart), darkness beyond
+// (cooler and greyer, lighter by day), and a warm rim where the light ends.
+fn look_lantern(color: vec3<f32>, p: vec3<f32>, reach: f32, r: f32, sky: f32, light: f32) -> vec3<f32> {
+    let s = 1.4;
+    let h = (behind(p.xz) * 2.0 + behind(p.xz + vec2<f32>(s, 0.0)) + behind(p.xz - vec2<f32>(s, 0.0)) + behind(p.xz + vec2<f32>(0.0, s)) + behind(p.xz - vec2<f32>(0.0, s))) / 6.0;
+    let pool = 1.0 - smoothstep(r - 7.0, r + 2.0, reach);
+    let lit = mix(1.0, pool * (1.0 - h), sky);
+    let dark = mix(0.06, 0.24, light);
+    let l = luma(color);
+    let night = mix(vec3<f32>(l), color, 0.3) * vec3<f32>(0.62, 0.78, 1.25) * dark;
+    let rim = smoothstep(0.1, 0.5, lit) * (1.0 - smoothstep(0.5, 0.9, lit));
+    let warm = color * (vec3<f32>(1.0) + rim * vec3<f32>(0.55, 0.28, 0.0));
+    return mix(night, warm, smoothstep(0.0, 1.0, lit));
+}
+
+// Shadows: sight shadows cast from my eye by what blocks it, in the toon shadow's way (hue
+// shifted toward blue-violet, saturation kept): sharp by the blocker, the penumbra widening with
+// distance from me (the field taken across the shadow's direction). Beyond my sight the light
+// has fallen off: the same shadow.
+fn look_shadows(color: vec3<f32>, p: vec3<f32>, reach: f32, r: f32, sky: f32, light: f32) -> vec3<f32> {
+    let d = p.xz - edges.sight.xy;
+    let dl = max(length(d), 1e-3);
+    let across = vec2<f32>(-d.y, d.x) / dl;
+    let w = 0.1 + 0.045 * dl;
+    var h = 0.0;
+    for (var i = 0; i < 5; i++) {
+        let o = (f32(i) - 2.0) * 0.5 * w;
+        h = h + behind(p.xz + across * o);
+    }
+    h = smoothstep(0.4, 0.6, h / 5.0);
+    let s = max(h, smoothstep(r - 1.5, r + 4.0, reach)) * sky;
+    // Half the colour kept, half its value in the shadow hue, dimmer (darker at night).
+    let l = luma(color);
+    let tint = vec3<f32>(0.40, 0.42, 0.72) * l * 1.5;
+    let shade = mix(color, tint, 0.55) * mix(0.42, 0.6, light);
+    return mix(color, shade, s);
+}
+
+// A pencil line every unit of x, fading to its average where it would be finer than a pixel
+// (`px`: the period's size in pixels).
+fn hatch_line(x: f32, px: f32) -> f32 {
+    let f = abs(fract(x) - 0.5);
+    let soft = 1.0 / max(px, 1.0);
+    let line = 1.0 - smoothstep(0.13, 0.13 + soft, 0.5 - f);
+    return mix(line, 0.26, 1.0 - smoothstep(2.5, 5.0, px));
+}
+
+// Hatch: what isn't seen is paper with pencil hatching, denser where the scene is darker
+// (one, two, then three directions), on the surface's own plane; the strokes come in ragged at
+// the edge before the paper does. By night the paper is dark and the strokes are chalk.
+fn look_hatch(color: vec3<f32>, p: vec3<f32>, n: vec3<f32>, t0: f32, d0: f32, light: f32) -> vec3<f32> {
+    let t = clamp(t0 + (noise2(p.xz * 1.3) - 0.5) * 0.5, 0.0, 1.0);
+    if (t <= 0.001) {
+        return color;
+    }
+    var uv = p.xz;
+    let an = abs(n);
+    if (an.y < 0.6) {
+        if (an.x > an.z) {
+            uv = p.zy;
+        } else {
+            uv = p.xy;
+        }
+    }
+    let pap = paper(light) * vec3<f32>(0.92, 0.86, 0.74);
+    let tone = clamp(luma(color) / max(luma(pap) * 1.15, 1e-3), 0.0, 1.0);
+    let spacing = 0.16;
+    // The period's size on screen (px), from the distance and how much the surface faces me.
+    let view = normalize(edges.eye.xyz - p);
+    let px = spacing / max(d0 * edges.screen.w * 0.9 / max(abs(dot(n, view)), 0.25), 1e-4);
+    let wob = noise2(uv * 2.5) * 0.35;
+    let h1 = hatch_line(dot(uv, vec2<f32>(0.7071, 0.7071)) / spacing + wob, px);
+    let h2 = hatch_line(dot(uv, vec2<f32>(0.7071, -0.7071)) / spacing + wob * 1.3, px);
+    let h3 = hatch_line(uv.x / (spacing * 0.8) + wob, px * 0.8);
+    var ink = h1 * (1.0 - smoothstep(0.85, 1.0, tone)) * smoothstep(0.1, 0.4, t);
+    ink = max(ink, h2 * (1.0 - smoothstep(0.5, 0.7, tone)) * smoothstep(0.3, 0.6, t));
+    ink = max(ink, h3 * (1.0 - smoothstep(0.2, 0.4, tone)) * smoothstep(0.5, 0.8, t));
+    let lead = mix(pap * 2.6 + vec3<f32>(0.05), pap * vec3<f32>(0.42, 0.30, 0.22), light);
+    var g = mix(pap * (0.85 + 0.15 * tone), color, 0.1);
+    g = g * (0.95 + 0.1 * noise2(p.xz * 9.0));
+    let washed = mix(color, g, smoothstep(0.45, 0.8, t));
+    return mix(washed, lead, ink * 0.8);
+}
+
+// Memory: ground seen now is in colour; ground seen recently keeps its colour and drains of it as
+// the memory fades (remembered()); ground not seen for a while, or never, is a pencil sketch on
+// paper (its lines and a hint of its values).
+fn look_memory(color: vec3<f32>, p: vec3<f32>, t0: f32, ground: f32, line: f32, light: f32) -> vec3<f32> {
+    let c = max(1.0 - t0, remembered(p.xz) * ground);
+    if (c >= 0.999) {
+        return color;
+    }
+    let pap = mix(paper(light), vec3<f32>(luma(paper(light))) * 1.08, 0.7) * mix(0.6, 1.0, light);
+    let l = luma(color);
+    var sk = pap * (0.8 + 0.2 * clamp(l / max(luma(pap), 1e-3), 0.0, 1.2));
+    sk = mix(sk, sk * mix(2.2, 0.4, light), line);
+    let drained = mix(vec3<f32>(l), color, smoothstep(0.35, 1.0, c));
+    return mix(sk, drained, smoothstep(0.0, 0.55, c));
 }
 
 fn unproject(uv: vec2<f32>, depth: f32) -> vec3<f32> {
@@ -124,11 +445,23 @@ fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
             edge = 1.0;
             near_d = min(near_d, d);
         }
-        // Normals: a crease, where depths are similar.
+        // Normals: a crease, where depths are similar. Both faces must go on for another sample
+        // (mine behind me, theirs beyond them): a face a pixel or so wide, such as a slate's
+        // lower edge or a sill seen from afar, comes and goes between pixels as the view moves,
+        // and its lines beaded and crawled along every row of a roof (the owner's Cullet walk).
         if (abs(d0 - d) / d0 < edges.params.x && d0 < 1e6) {
-            let c = 1.0 - dot(n0, normal(q));
+            let nq = normal(q);
+            let c = 1.0 - dot(n0, nq);
             if (c > edges.params.y) {
-                edge = max(edge, 0.7);
+                // Not a step smaller than `sun.z` between two parallel faces (a slate's lower
+                // edge, a sill): either the face past my neighbour is parallel to mine and near my
+                // plane, or I am the step and the face behind me is parallel to my neighbour's.
+                // World-sized, so the same at every distance.
+                let o = offsets[i];
+                let small = edges.sun.z > 0.0 && (small_step(px, n0, q + o, o) || small_step(q, nq, px - o, -o));
+                if (!small) {
+                    edge = max(edge, 0.7);
+                }
             }
         }
     }
@@ -145,8 +478,61 @@ fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
         color = color + edges.rim.rgb * edges.fade.w * rf;
     }
 
-    // Fog banks: march from the camera to what this pixel sees (or the march distance).
     let raw_depth = textureLoad(depth_texture, clamp(px, vec2(0), vec2<i32>(edges.screen.xy) - vec2(1)), 0);
+
+    // The edge of my character's sight (sightedge.rs): a radius round me on the ground plane,
+    // and what my sight lines don't reach within it (the sight field).
+    // Not seen now: there, dimmer, greyer, flatter and a little cooler (the sky is left alone).
+    // Limited view: beyond the radius, into the fog's colour by sight_far × the radius, and
+    // behind things most of the way; nothing is drawn past that, so the sky and what was not
+    // drawn are fog too.
+    if (edges.sight.w > 0.5) {
+        var reach = 1e9;
+        var hid = 0.0;
+        var p = vec3<f32>(0.0);
+        if (raw_depth > 1e-7) {
+            p = unproject(in.uv, raw_depth);
+            reach = length(p.xz - edges.sight.xy);
+            hid = behind(p.xz);
+        }
+        let r = edges.sight.z;
+        let look = i32(round(edges.sight_extra.x));
+        let ground = step(1e-7, raw_depth);
+        let t0 = max(smoothstep(r - edges.sight_look.x, r + edges.sight_look.y, reach), hid) * ground;
+        let light = edges.sight_extra.y;
+        if (edges.sight.w < 1.5 && look == 1) {
+            color = look_wash(color, p, t0, light);
+        } else if (edges.sight.w < 1.5 && look == 2) {
+            color = look_lantern(color, p, reach, r, ground, light);
+        } else if (edges.sight.w < 1.5 && look == 3) {
+            color = look_shadows(color, p, reach, r, ground, light);
+        } else if (edges.sight.w < 1.5 && look == 4) {
+            color = look_hatch(color, p, n0, t0, d0, light);
+        } else if (edges.sight.w < 1.5 && look == 6) {
+            color = look_shade(color, p, reach, r, ground, light);
+            // By night, a little more light round where I stand (my body and the ground at my
+            // feet), so I'm the easiest thing to find in my pool. Presentation only: nothing
+            // is lit for the world.
+            let near = (1.0 - smoothstep(0.6, NIGHT_LIFT_M, length(p.xz - edges.sight.xy))) * ground * (1.0 - light);
+            color = color * (1.0 + NIGHT_LIFT * near);
+        } else if (edges.sight.w < 1.5 && look == 5) {
+            color = look_memory(color, p, t0, ground, edge * edges.line.a * fade, light);
+        } else if (edges.sight.w < 1.5) {
+            let t = max(smoothstep(r - edges.sight_look.x, r + edges.sight_look.y, reach), hid) * step(1e-7, raw_depth);
+            let l = dot(color, vec3<f32>(0.2126, 0.7152, 0.0722));
+            // Greyer; flatter toward the fog's colour (it follows the light, so night stays
+            // dark); dimmer and a little cooler.
+            var g = mix(color, vec3<f32>(l), edges.sight_look.w);
+            g = mix(g, edges.sight_fog.rgb, edges.sight_fog.a);
+            g = g * (1.0 - edges.sight_look.z) * vec3<f32>(0.95, 0.98, 1.05);
+            color = mix(color, g, t);
+        } else {
+            let t = max(smoothstep(r, r * edges.sight_far.x, reach), hid * edges.sight_far.y);
+            color = mix(color, edges.sight_fog.rgb, t);
+        }
+    }
+
+    // Fog banks: march from the camera to what this pixel sees (or the march distance).
     if (edges.bank.x > 0.005) {
         let eye = edges.eye.xyz;
         let far_p = unproject(in.uv, max(raw_depth, 1e-6));
@@ -154,7 +540,8 @@ fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
         let len = min(length(to), edges.bank.w);
         let dir = normalize(unproject(in.uv, 0.5) - eye);
         let steps = 6;
-        let jitter = hash2(in.position.xy + fract(edges.eye.w) * 17.0);
+        // Stagger neighbouring rays with an offset that stays stable between frames.
+        let jitter = hash2(in.position.xy);
         var acc = 0.0;
         for (var i = 0; i < steps; i++) {
             let s = (f32(i) + jitter) / f32(steps) * len;
@@ -162,7 +549,10 @@ fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
         }
         let thick = acc / f32(steps) * len * 0.045 * edges.bank.x;
         let a = (1.0 - exp(-thick)) * 0.85;
-        color = mix(color, edges.bank_color.rgb, a);
+        // Mist over unseen ground lies in the same shade (the shade look): a bright bank over it
+        // read as a haze, not as shadow.
+        let bank = edges.bank_color.rgb * mix(1.0, shade_depth(edges.sight_extra.y), shade_amount);
+        color = mix(color, bank, a);
     }
 
     // Rain: four layers at set distances, near ones larger, faster and brighter, far ones finer
@@ -182,8 +572,17 @@ fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
         color = mix(color, vec3<f32>(dot(color, vec3<f32>(0.3, 0.5, 0.2))), 0.06 * min(edges.rain.x, 1.0));
     }
 
-    // Film finish: a soft gradient from the top (screen blend).
+    // Film finish: a soft gradient from the top (screen blend). The screen adds as much light to
+    // a dark pixel as to a light one, several times dark hair's or cloth's own; soft weighs it by
+    // the pixel's own light, so the sky and lit things take it as before and dark ones keep
+    // their colour; by night (film.w 0) it is the screen, the night's moonlit haze.
     let g = edges.grade.rgb * edges.grade.a * pow(1.0 - in.uv.y, 2.0);
-    color = 1.0 - (1.0 - color) * (1.0 - g);
+    let screened = 1.0 - (1.0 - color) * (1.0 - g);
+    if (edges.film.x < 0.5) {
+        color = screened;
+    } else {
+        let lum = dot(color, vec3<f32>(0.2126, 0.7152, 0.0722));
+        color = mix(color, screened, mix(1.0, smoothstep(edges.film.y, edges.film.z, lum), edges.film.w));
+    }
     return vec4<f32>(color, 1.0);
 }

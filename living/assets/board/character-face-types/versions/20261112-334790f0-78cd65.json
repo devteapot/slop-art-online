@@ -1,0 +1,67 @@
+{
+ "schema": 1,
+ "family": "character:face-types",
+ "id": "20261112-334790f0-78cd65",
+ "published": "2026-11-12T03:14:49+01:00",
+ "imported": "2026-11-12T03:14:49+01:00",
+ "track": "char-4",
+ "maker": "Claude Fable 5.2",
+ "note": "Pass 3, hair finish: a finer fringe to one line, hanging ends cut to one hem, the temple covered on a type's head; three cuts of every style (50 hair files, 17.0 MB; Cullet's 64 wear 30); a far beard mesh for the far head. Judged with hair normals turned to the camera, since the client's rim light on hair is being fixed separately.",
+ "source": {
+  "commit": "334790f0e0d8306c17372c24ec0aabaae8c5203e",
+  "branch": "char-4",
+  "dirty": false,
+  "generator": "living/tools/blender/hair.py",
+  "generator_sha256": "36ae9c3f3649c072792b55343bbc8a90e7ab5796a150fe8c79d4c3f6b0973e3b",
+  "generator_state": "committed",
+  "params": {}
+ },
+ "renderer": {
+  "method": "asset-view (the game)",
+  "commit": "",
+  "key": "asset-view (the game)",
+  "preset": "",
+  "note": "hair-finish: six type and style pairs before and after from the front, three-quarter and side and at the game camera, each a type's file with the style's file attached, hair normals turned to the camera for that view (compose.py --hair-toward), a stand-in for a client without the rim light on hair; hair-cuts: the three cuts of six styles; far-beards: far heads without and with a beard's far mesh; the vroid member is the reference with its own normals under the client's rim light; the blue-protocol member is published CEDEC slides, for comparison only"
+ },
+ "preset": "",
+ "media": "media/character-face-types/20261112-334790f0-78cd65",
+ "members": [
+  {
+   "name": "types",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "48b72a3d2eb473afbd364bfbaceb3c88db2d783e7c96bdb34f49e9b35e5b7360",
+   "shots": [
+    "far-beards",
+    "hair-cuts",
+    "hair-finish"
+   ],
+   "clips": []
+  },
+  {
+   "name": "vroid",
+   "role": "control",
+   "token_kind": "import",
+   "sha256": "e5cf94c8fb90c70bccc60ac992e80c8bb5c9c04d4d9bbbbe84843a97d04638bd",
+   "shots": [
+    "far-beards",
+    "hair-cuts",
+    "hair-finish"
+   ],
+   "clips": []
+  },
+  {
+   "name": "blue-protocol",
+   "role": "control",
+   "token_kind": "import",
+   "sha256": "5bd68617d6bc3ec9811fdfa29021adbf7a30a68c7e5bd5559049812e0372468b",
+   "shots": [
+    "far-beards",
+    "hair-cuts",
+    "hair-finish"
+   ],
+   "clips": []
+  }
+ ],
+ "delivered": []
+}

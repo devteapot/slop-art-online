@@ -1,0 +1,13 @@
+{
+ "schema": 1,
+ "family": "building:row-low",
+ "version": "20261111-80b4ec94-47f626",
+ "verdict": "accept",
+ "date": "2026-11-11",
+ "by": "owner",
+ "words": "they like Fable's results more in general",
+ "note": "The owner chose Fable's A/B arm (ab-arm1) after the Fable/Opus head-to-head (docs/SMALL_CITY.md decision 12). A general preference for the whole building kit, not sheet-by-sheet scores. Fable builds the kit from this arm (track kit-1); later passes are compared with it.",
+ "scope": "base",
+ "recorded": "2026-11-11T16:46:11.540542+01:00",
+ "recorded_by": "tool-6, for the dev-box coordinator"
+}

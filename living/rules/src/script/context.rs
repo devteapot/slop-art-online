@@ -7,12 +7,12 @@ use super::SkillCtx;
 use rhai::{Array, Dynamic, Map};
 
 /// Fields of `a`. The order is the bit order of [`Plan::top`].
-pub const TOP: [&str; 17] = ["actor", "target", "routine", "item", "qty", "night", "hour", "season", "text", "topic", "roll", "raining", "skill", "want", "want_qty", "records", "record"];
+pub const TOP: [&str; 22] = ["actor", "target", "routine", "item", "qty", "night", "hour", "season", "text", "topic", "roll", "raining", "skill", "want", "want_qty", "records", "record", "daylight", "offer_id", "record_id", "offer", "gaze_band"];
 /// Fields of `a.actor` (the body genes are `genes::BODY`; `factor` is the skill factor).
-pub const ACTOR: [&str; 29] = [
-    "id", "kind", "hp", "hunger", "energy", "near_fire", "near_shelter", "terrain", "activity", "age", "stage", "life", "knows", "inv", "kin_near", "pasture", "hurt_by", "hurt_ago", "yielded_ago", "sensed", "bold", "room", "community", "home", "speed", "strength", "endurance", "vitality", "factor",
+pub const ACTOR: [&str; 34] = [
+    "id", "kind", "hp", "hunger", "energy", "near_fire", "near_shelter", "terrain", "activity", "age", "stage", "life", "knows", "inv", "kin_near", "pasture", "hurt_by", "hurt_ago", "hurt_by_near", "yielded_ago", "sensed", "bold", "room", "community", "home", "speed", "strength", "endurance", "vitality", "factor", "lit", "stamina", "focus", "sex",
 ];
-pub const TARGET: [&str; 23] = ["class", "id", "kind", "name", "amount", "hp", "max_hp", "stage", "hurt_ago", "alive", "dist", "inv", "knows", "activity", "yielded_ago", "near_fire", "company", "bearing", "closing", "community", "owner", "home", "hosts"];
+pub const TARGET: [&str; 26] = ["class", "id", "kind", "name", "amount", "hp", "max_hp", "stage", "hurt_ago", "alive", "dist", "inv", "knows", "activity", "yielded_ago", "near_fire", "company", "bearing", "closing", "community", "owner", "home", "hosts", "lit", "fuel", "sex"];
 pub const ROUTINE: [&str; 4] = ["exists", "ok", "failed", "changed_s"];
 
 const _: () = assert!(crate::genes::BODY.len() == 4);
@@ -45,7 +45,8 @@ impl Keys {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Plan {
     pub top: u32,
-    pub actor: u32,
+    /// One bit per `ACTOR` field (more than 32 of them since `hurt_by_near`).
+    pub actor: u64,
     pub target: u32,
     pub routine: u8,
     pub actor_inv: Keys,
@@ -55,7 +56,7 @@ pub struct Plan {
 
 impl Plan {
     pub fn all() -> Plan {
-        Plan { top: u32::MAX, actor: u32::MAX, target: u32::MAX, routine: u8::MAX, actor_inv: Keys::All, actor_sensed: Keys::All, target_inv: Keys::All }
+        Plan { top: u32::MAX, actor: u64::MAX, target: u32::MAX, routine: u8::MAX, actor_inv: Keys::All, actor_sensed: Keys::All, target_inv: Keys::All }
     }
 
     /// The plan for a law reading `u` of its context. `strict` refuses a field the engine does not
@@ -80,7 +81,7 @@ impl Plan {
             match k.as_str() {
                 "actor" => {
                     if whole {
-                        (p.actor, p.actor_inv, p.actor_sensed) = (u32::MAX, Keys::All, Keys::All);
+                        (p.actor, p.actor_inv, p.actor_sensed) = (u64::MAX, Keys::All, Keys::All);
                         continue;
                     }
                     for (f, w) in &v.keys {
@@ -88,7 +89,7 @@ impl Plan {
                             unknown("actor.", f, &ACTOR)?;
                             continue;
                         };
-                        p.actor |= 1 << j;
+                        p.actor |= 1u64 << j;
                         match f.as_str() {
                             "inv" => p.actor_inv = Keys::of(w),
                             "sensed" => p.actor_sensed = Keys::of(w),
@@ -146,7 +147,7 @@ impl Plan {
                 continue;
             }
             match *t {
-                "actor" => out.extend(ACTOR.iter().enumerate().filter(|(j, _)| self.actor & (1 << j) != 0).map(|(_, f)| match *f {
+                "actor" => out.extend(ACTOR.iter().enumerate().filter(|(j, _)| self.actor & (1u64 << j) != 0).map(|(_, f)| match *f {
                     "inv" => format!("actor.inv{}", keys(&self.actor_inv)),
                     "sensed" => format!("actor.sensed{}", keys(&self.actor_sensed)),
                     f => format!("actor.{f}"),
@@ -171,6 +172,7 @@ enum Val<'a> {
     Inv(&'a [(String, u32)], &'a Keys),
     Records(&'a [crate::records::RecordFacts]),
     Record(Option<&'a crate::records::RecordFacts>),
+    Offer(Option<&'a super::OfferFacts>),
 }
 
 /// A record as the rules see it: `#{ id, kind, status, open, terms, parties, me, by, age_s,
@@ -207,6 +209,21 @@ pub(crate) fn record_map(r: &crate::records::RecordFacts) -> Dynamic {
     m.into()
 }
 
+/// A trade offer as the rules see it (`a.offer`).
+fn offer_map(o: &super::OfferFacts) -> Dynamic {
+    let mut m = Map::new();
+    m.insert("id".into(), Dynamic::from_int(o.id as i64));
+    m.insert("from".into(), Dynamic::from_int(o.from as i64));
+    m.insert("to".into(), Dynamic::from_int(o.to as i64));
+    m.insert("give".into(), o.give.clone().into());
+    m.insert("give_qty".into(), Dynamic::from_int(o.give_qty as i64));
+    m.insert("want".into(), o.want.clone().into());
+    m.insert("want_qty".into(), Dynamic::from_int(o.want_qty as i64));
+    m.insert("open".into(), o.open.into());
+    m.insert("left_s".into(), Dynamic::from_float(o.left_s as f64));
+    m.into()
+}
+
 /// A record's bytes for a memo key: its id and every value the rules can read.
 fn record_key(r: &crate::records::RecordFacts, out: &mut Vec<u8>) {
     out.extend(r.id.to_le_bytes());
@@ -233,6 +250,7 @@ impl Val<'_> {
             },
             Val::Records(v) => v.iter().map(record_map).collect::<Array>().into(),
             Val::Record(r) => r.map_or(Dynamic::UNIT, record_map),
+            Val::Offer(o) => o.map_or(Dynamic::UNIT, offer_map),
         }
     }
 
@@ -279,6 +297,21 @@ impl Val<'_> {
                 Some(r) => record_key(r, out),
                 None => out.push(0),
             },
+            Val::Offer(o) => match o {
+                Some(o) => {
+                    out.push(1);
+                    out.extend(o.id.to_le_bytes());
+                    out.extend(o.from.to_le_bytes());
+                    out.extend(o.to.to_le_bytes());
+                    s(out, &o.give);
+                    out.extend(o.give_qty.to_le_bytes());
+                    s(out, &o.want);
+                    out.extend(o.want_qty.to_le_bytes());
+                    out.push(o.open as u8);
+                    out.extend(o.left_s.to_bits().to_le_bytes());
+                },
+                None => out.push(0),
+            },
         }
     }
 }
@@ -294,7 +327,7 @@ enum Level {
 /// Every field the plan includes, in a fixed order.
 fn visit(c: &SkillCtx, knack: &str, p: &Plan, mut f: impl FnMut(Level, &'static str, Val)) {
     let a = &c.actor;
-    let has = |mask: u32, i: usize| mask & (1 << i) != 0;
+    let has = |mask: u64, i: usize| mask & (1u64 << i) != 0;
     for (i, name) in ACTOR.iter().enumerate() {
         if p.top & 1 == 0 || !has(p.actor, i) {
             continue;
@@ -318,12 +351,17 @@ fn visit(c: &SkillCtx, knack: &str, p: &Plan, mut f: impl FnMut(Level, &'static 
             "pasture" => Val::F(a.pasture),
             "hurt_by" => Val::I(a.hurt_by as i64),
             "hurt_ago" => Val::Ago(a.hurt_ago),
+            "hurt_by_near" => Val::B(a.hurt_by_near),
             "yielded_ago" => Val::Ago(a.yielded_ago),
             "sensed" => Val::Inv(&a.sensed, &p.actor_sensed),
             "bold" => Val::B(a.bold),
             "room" => Val::I(a.room as i64),
             "community" => Val::I(a.community as i64),
             "home" => Val::Str(&a.home),
+            "lit" => Val::B(a.lit),
+            "stamina" => Val::F(a.stamina),
+            "focus" => Val::F(a.focus),
+            "sex" => Val::Str(&a.sex),
             // How good the actor is at the skill being performed (knack × practice).
             "factor" => Val::F(crate::genes::skill_factor(&a.genes, &a.practice, &c.skill, knack)),
             gene => Val::F(crate::genes::gene(&a.genes, gene)),
@@ -332,7 +370,7 @@ fn visit(c: &SkillCtx, knack: &str, p: &Plan, mut f: impl FnMut(Level, &'static 
     }
     let t = &c.target;
     for (i, name) in TARGET.iter().enumerate() {
-        if p.top & 2 == 0 || !has(p.target, i) {
+        if p.top & 2 == 0 || !has(p.target as u64, i) {
             continue;
         }
         let v = match *name {
@@ -358,6 +396,9 @@ fn visit(c: &SkillCtx, knack: &str, p: &Plan, mut f: impl FnMut(Level, &'static 
             "owner" => Val::I(t.owner as i64),
             "home" => Val::Str(&t.home),
             "hosts" => Val::B(t.hosts),
+            "lit" => Val::B(t.lit),
+            "fuel" => Val::F(t.fuel),
+            "sex" => Val::Str(&t.sex),
             _ => Val::F(t.closing),
         };
         f(Level::Target, name, v);
@@ -393,6 +434,11 @@ fn visit(c: &SkillCtx, knack: &str, p: &Plan, mut f: impl FnMut(Level, &'static 
             "want_qty" => Val::I(c.want_qty as i64),
             "records" => Val::Records(&c.records),
             "record" => Val::Record(c.record.as_ref()),
+            "daylight" => Val::F(1.0 - c.dark),
+            "gaze_band" => Val::I(i64::from(c.gaze_band as u8)),
+            "offer_id" => Val::I(c.offer_id as i64),
+            "record_id" => Val::I(c.record_id as i64),
+            "offer" => Val::Offer(c.offer.as_ref()),
             _ => Val::Str(&c.skill),
         };
         f(Level::Top, name, v);

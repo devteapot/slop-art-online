@@ -1,0 +1,86 @@
+{
+  "main": {
+    "woman": {
+      "outer_px": 421,
+      "jersey_px": 1,
+      "figure_px": 1309,
+      "outer": 0.29439778470555267,
+      "jersey": null,
+      "grass": 0.40604416775005087,
+      "layer_ratio": null,
+      "figure_ratio": 1.3436826713581704
+    },
+    "man": {
+      "outer_px": 1097,
+      "jersey_px": 64,
+      "figure_px": 1838,
+      "outer": 0.4353519293446559,
+      "jersey": 0.2572275843250007,
+      "grass": 0.4058657819784195,
+      "layer_ratio": 1.5797797922703007,
+      "figure_ratio": 1.2279786518537539
+    },
+    "elder": {
+      "outer_px": 1198,
+      "jersey_px": 79,
+      "figure_px": 1857,
+      "outer": 0.12079523513623217,
+      "jersey": 0.1598247534491612,
+      "grass": 0.4058657819784195,
+      "layer_ratio": 1.228516435378292,
+      "figure_ratio": 2.540869562422314
+    },
+    "girl": {
+      "outer_px": 349,
+      "jersey_px": 2,
+      "figure_px": 709,
+      "outer": 0.1439013330049881,
+      "jersey": null,
+      "grass": 0.40604416775005087,
+      "layer_ratio": null,
+      "figure_ratio": 2.3751329410218687
+    }
+  },
+  "port": {
+    "woman": {
+      "outer_px": 613,
+      "jersey_px": 41,
+      "figure_px": 1174,
+      "outer": 0.08785721195896128,
+      "jersey": 0.5466699782773988,
+      "grass": 0.40595497486423515,
+      "layer_ratio": 4.32817383870364,
+      "figure_ratio": 2.8049936123194485
+    },
+    "man": {
+      "outer_px": 1087,
+      "jersey_px": 59,
+      "figure_px": 1831,
+      "outer": 0.2905256596407898,
+      "jersey": 0.0794747277946951,
+      "grass": 0.4058657819784195,
+      "layer_ratio": 2.630055034220678,
+      "figure_ratio": 1.665812897365184
+    },
+    "elder": {
+      "outer_px": 1211,
+      "jersey_px": 73,
+      "figure_px": 1850,
+      "outer": 0.08976953882231425,
+      "jersey": 0.4125701418738287,
+      "grass": 0.4058657819784195,
+      "layer_ratio": 3.309520413184473,
+      "figure_ratio": 2.7920760477172557
+    },
+    "girl": {
+      "outer_px": 299,
+      "jersey_px": 9,
+      "figure_px": 689,
+      "outer": 0.11441232261735958,
+      "jersey": 0.5245822128294839,
+      "grass": 0.40604416775005087,
+      "layer_ratio": 3.4947636751456996,
+      "figure_ratio": 2.716422273160452
+    }
+  }
+}

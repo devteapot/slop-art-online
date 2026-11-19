@@ -1,0 +1,91 @@
+{
+ "schema": 1,
+ "family": "place:cullet-ladder",
+ "id": "20261111-67f9e733-1ea738",
+ "published": "2026-11-11T21:57:59+01:00",
+ "imported": "2026-11-11T21:57:59+01:00",
+ "track": "layout-2",
+ "maker": "Claude Fable 5.2",
+ "note": "layout pass 2: the graveyard on three terraces over the quarry and the clay pit, the cistern's apron and runnel, the Readers' yard, the dyke; the quarry's raw face, bay, crane and stones; the boatyard, wrack stance, peat stance, creel stand, working quay and kiln road; walls that block and courts as open lots (not visible in stills)",
+ "source": {
+  "commit": "67f9e733057690e16f7f703e83d6771e3bb14817",
+  "branch": "layout-2",
+  "generator": "living/tools/cullet_plan.py",
+  "generator_sha256": "ba8a3208b6de4ec07d414f3f8336f9b6c321cfd45d56675f5df73ea3dff0d2ee",
+  "generator_state": "committed",
+  "seed": "83",
+  "params": {}
+ },
+ "renderer": {
+  "method": "look-dev tour (the game client of layout-2, headless; LIVING_GAME_START, 13:00 and 18:30)",
+  "commit": "",
+  "key": "look-dev tour (the game client of layout-2, headless; LIVING_GAME_START, 13:00 and 18:30)",
+  "preset": "",
+  "note": ""
+ },
+ "preset": "",
+ "media": "media/place-cullet-ladder/20261111-67f9e733-1ea738",
+ "members": [
+  {
+   "name": "ladder_low",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "3ecdc0ac3e7c429f343fd1527b2d7be37ea4e5b70afb590963bad7c8a581bf3c",
+   "shots": [
+    "day-0_35_50",
+    "day-90_28_22",
+    "day-default",
+    "dusk-0_35_50",
+    "dusk-90_28_22",
+    "dusk-default"
+   ],
+   "clips": []
+  },
+  {
+   "name": "ladder_mid",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "3f6a233e8cd9e74822c4222c74843082f8f4c6f3694506de679fc3be410f2f3a",
+   "shots": [
+    "day-0_10_7_60",
+    "day-0_35_50",
+    "day-90_28_22",
+    "day-default",
+    "dusk-0_10_7_60",
+    "dusk-0_35_50",
+    "dusk-90_28_22",
+    "dusk-default"
+   ],
+   "clips": []
+  },
+  {
+   "name": "ladder_high",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "c0ed38bdb84f0721da6eca76e281a6f63946b8903cac2fbc66656bca22c60961",
+   "shots": [
+    "day-0_35_50",
+    "day-180_28_40",
+    "day-default",
+    "dusk-0_35_50",
+    "dusk-180_28_40",
+    "dusk-default"
+   ],
+   "clips": []
+  },
+  {
+   "name": "ladder_top",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "f5e180c696d10c481ebc269920b7f37c7a46e31cd783d71084ba5d567d99b862",
+   "shots": [
+    "day-180_30_70",
+    "day-default",
+    "dusk-180_30_70",
+    "dusk-default"
+   ],
+   "clips": []
+  }
+ ],
+ "delivered": []
+}

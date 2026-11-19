@@ -2,7 +2,7 @@
 
 ## Sub-features
 
-- All five `seed::tests::` native tests run, including legacy and authored seeds.
+- All six `seed::tests::` native tests run, including legacy and authored seeds.
 - A valid JSON copy missing required `animals` builds and reaches module publication.
 - Publication output and the filtered server records show the initializer's failure: `init` returns `seed: missing field ...` (no panic since `megacity-1`).
 - SQL records whether any world state remains. Cleanup confirms database absence.
@@ -19,7 +19,7 @@ Build and publish a seed. Invalid JSON fails during the build; valid JSON with a
 .agents/skills/verify-generation/scripts/generation.py --run generation-guards-$(date +%Y%m%d-%H%M%S) --feature guards
 ```
 
-Read `seed-tests.log` for five passing tests. The malformed child keeps `seed.json`, `launch.log`, `actions.log`, `module.log`, `publication.json`, `server-init.log`, `init-state.log`, `init-state.json`, `guards.json` and `cleanup.json`. Rejection is a required pass and does not require a panic or HTTP 500. The driver requires a publication attempt, a failed launch and SQL 404 with no usable world. The check asserts rejection only, so it is a plain pass. Error readability is an observation, not an assertion. The shared harness truncates publication stderr, so this check cannot certify the complete diagnostic. `docs/LIVING_HANDOFF.md`, "Still open", records the old defect (a panic that did not name the field). `guards.json` records `missing_field_diagnostic_visible` and `panic_reported` (expected false now) for diagnosis.
+Read `seed-tests.log` for six passing tests. The malformed child keeps `seed.json`, `launch.log`, `actions.log`, `module.log`, `publication.json`, `server-init.log`, `init-state.log`, `init-state.json`, `guards.json` and `cleanup.json`. Rejection is a required pass and does not require a panic or HTTP 500. The driver requires a publication attempt, a failed launch and SQL 404 with no usable world. The check asserts rejection only, so it is a plain pass. Error readability is an observation, not an assertion. The shared harness truncates publication stderr, so this check cannot certify the complete diagnostic. `docs/LIVING_HANDOFF.md`, "Still open", records the old defect (a panic that did not name the field). `guards.json` records `missing_field_diagnostic_visible` and `panic_reported` (expected false now) for diagnosis.
 
 ## Gotchas
 

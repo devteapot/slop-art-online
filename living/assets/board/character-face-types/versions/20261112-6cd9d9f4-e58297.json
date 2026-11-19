@@ -1,0 +1,70 @@
+{
+ "schema": 1,
+ "family": "character:face-types",
+ "id": "20261112-6cd9d9f4-e58297",
+ "published": "2026-11-12T01:43:52+01:00",
+ "imported": "2026-11-12T01:43:52+01:00",
+ "track": "char-4",
+ "maker": "Claude Fable 5.2",
+ "note": "Pass 3, hair: 13 shared hair style files built on one standard head, a fit in each type's file, and a head composed from a type file plus a style file the client's way (0.000 mm against the rule). The wash close up is the client's rim light on dark hair and the film gradient; the hair's own finish is unchanged.",
+ "source": {
+  "commit": "6cd9d9f498d9927d18a101f3e2122eb04eb4ec6b",
+  "branch": "char-4",
+  "dirty": false,
+  "generator": "living/tools/blender/person.py",
+  "generator_sha256": "1881c8f1fdc36545aa1fefb64080c37118a92dc6b46a4fdc702bb78e496050e4",
+  "generator_state": "committed",
+  "params": {}
+ },
+ "renderer": {
+  "method": "asset-view (the game)",
+  "commit": "",
+  "key": "asset-view (the game)",
+  "preset": "",
+  "note": "styles-on-types: six shared hair style files on five type files, each attached by compose.py --hair (joints by name, the type's hair_fit); hair-before-and-after: four presets with their own hair above the same head made from a type file and a style file, close up and at the game camera; hair-wash-tests: the woman preset with one thing changed at a time; hair-composed: a man of adult-m-a with identity values and the style long; the vroid member is the reference in the same views; the blue-protocol member is published CEDEC slides, for comparison only"
+ },
+ "preset": "",
+ "media": "media/character-face-types/20261112-6cd9d9f4-e58297",
+ "members": [
+  {
+   "name": "types",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "df508f0da3c176c04ba01cfdd06e75bfd4337befbf7f0397b52c86f7d3d1179e",
+   "shots": [
+    "hair-before-and-after",
+    "hair-composed",
+    "hair-wash-tests",
+    "styles-on-types"
+   ],
+   "clips": []
+  },
+  {
+   "name": "vroid",
+   "role": "control",
+   "token_kind": "import",
+   "sha256": "5dba93bf7c6d0fe083853608ba9bf3b7142ca789c1f89b4c56f1fd20851bc68f",
+   "shots": [
+    "hair-before-and-after",
+    "hair-composed",
+    "hair-wash-tests",
+    "styles-on-types"
+   ],
+   "clips": []
+  },
+  {
+   "name": "blue-protocol",
+   "role": "control",
+   "token_kind": "import",
+   "sha256": "2d2191144e5a59a236283a78a792ebebfac0bf27b53070cf04811ac1e362fd10",
+   "shots": [
+    "hair-before-and-after",
+    "hair-composed",
+    "hair-wash-tests",
+    "styles-on-types"
+   ],
+   "clips": []
+  }
+ ],
+ "delivered": []
+}

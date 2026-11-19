@@ -14,7 +14,7 @@
       "planting",
       "fire",
       "cooking",
-      "mending",
+      "wound_tending",
       "shelter"
      ],
      "parents": [
@@ -64,7 +64,7 @@
      "role": "Orla's son; knows every path of the clearing and the names of his grandmother's herbs, and is being taught his letters from a chapel psalter",
      "knows": [
       "planting",
-      "mending"
+      "wound_tending"
      ],
      "parents": [
       "Orla Fenwick"

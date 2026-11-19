@@ -1,0 +1,596 @@
+{
+  "Corvin Hollin": {
+    "narrative": "I am the first blower at the Cone, and a Hollin of High Row 2. My grandfather was the last man to make clear glass, and I have his hands and his name, if not yet his trick. Vessa is sixty-one and has named no one; I do not need her to name me, because the Cone is mine by right of the pipe. I work the mornings, and in the evenings I play counters under the arcade, though Aldous Quill has never once let me win.",
+    "values": [
+      "the Cone belongs to the best blower",
+      "clear glass can be made again",
+      "a Hollin does not stand aside"
+    ],
+    "goals": [
+      "To succeed Vessa as Glassmaster, and to be seen to deserve it",
+      "To make clear glass as his grandfather did",
+      "To beat Aldous Quill at counters, just once",
+      "To see Edda and Pim grow up in a house that holds the Cone"
+    ],
+    "pastimes": [
+      "playing counters under the Counting House arcade",
+      "watching the gather come off the pipe at the Cone's mouth",
+      "walking the mole at dusk to clear his head"
+    ],
+    "calling": "To blow glass at the Cone, and one day to draw a gather clear as water.",
+    "mood": "Certain, and a little impatient with everyone who has not noticed.",
+    "traits": {
+      "caution": 40,
+      "sociability": 65,
+      "empathy": 45,
+      "curiosity": 60,
+      "ambition": 85,
+      "introspection": 35,
+      "temper": 55,
+      "nurture": 50
+    },
+    "relations": [
+      {
+        "name": "Tamsin Hollin",
+        "trust": 85,
+        "affinity": 80,
+        "label": "wife",
+        "note": "She fits the panes the town sees through, and she sees through me too. I would not have another."
+      },
+      {
+        "name": "Edda Hollin",
+        "trust": 80,
+        "affinity": 75,
+        "label": "daughter",
+        "note": "She has my stubbornness and her mother's hands. I am proud of her, and I wish she would stay out of the cullet heaps."
+      },
+      {
+        "name": "Pim Hollin",
+        "trust": 80,
+        "affinity": 70,
+        "label": "son",
+        "note": "He follows Edda into everything. I was the same with my brothers, though none of them had her nerve."
+      },
+      {
+        "name": "Vessa Pontil",
+        "trust": 50,
+        "affinity": 40,
+        "label": "Glassmaster",
+        "note": "She has not named me, and she will. She knows my grandfather's glass as well as I do."
+      },
+      {
+        "name": "Imre Sarro",
+        "trust": 20,
+        "affinity": -30,
+        "label": "rival",
+        "note": "He has the better hands, they say. Hands are not a claim, and a Sarro is not a Hollin."
+      },
+      {
+        "name": "Halvard Dunmore",
+        "trust": 70,
+        "affinity": 55,
+        "label": "old master",
+        "note": "He taught me the pipe and now he sits at the mouth judging my gathers. I owe him, and I would rather he praised me."
+      },
+      {
+        "name": "Runa Sarro",
+        "trust": 55,
+        "affinity": 40,
+        "label": "lehr keeper",
+        "note": "She cools what I blow, and she does it well. She is Imre's mother, which I try to forget at the lehr house door."
+      },
+      {
+        "name": "Aldous Quill",
+        "trust": 40,
+        "affinity": -10,
+        "label": "counters rival",
+        "note": "The best player in Cullet, and he knows it. One day the board will turn."
+      },
+      {
+        "name": "Ode Pontil",
+        "trust": 55,
+        "affinity": 45,
+        "label": "the colour man",
+        "note": "He keeps every colour on his sill and none of the recipes written. I would have him tell me how the clear was made."
+      },
+      {
+        "name": "Roos Achterberg",
+        "trust": 50,
+        "affinity": 40,
+        "label": "counters player",
+        "note": "She runs the game fairly and takes my drops cheerfully. I like her better than her board."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "My grandfather showed me a little clear glass, kept in a cloth, and said it was the last of its kind and would not be made again in his lifetime.",
+        "salience": 0.9,
+        "about": [
+          "Halvard Dunmore"
+        ]
+      },
+      {
+        "gist": "Halvard Dunmore put the pipe in my hands when I was twelve and told me to keep the gather turning or it would run.",
+        "salience": 0.8,
+        "about": [
+          "Halvard Dunmore"
+        ]
+      },
+      {
+        "gist": "The fever winter took Matthias Sarro, and Imre came back to the Cone too soon after, and his gathers were better than mine even then.",
+        "salience": 0.7,
+        "about": [
+          "Imre Sarro",
+          "Runa Sarro"
+        ]
+      },
+      {
+        "gist": "Last autumn's storm broke glasshouse 6 and glasshouse 13 and took slates off our roof, and I spent three days helping Gwil Stannard patch it.",
+        "salience": 0.6,
+        "about": [
+          "Tamsin Hollin",
+          "Gwil Stannard"
+        ]
+      },
+      {
+        "gist": "I played Aldous Quill at counters for the hundredth time and lost by two counters, and he wrote nothing in the ledger because I paid in drops.",
+        "salience": 0.5,
+        "about": [
+          "Aldous Quill"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "the_cone_should_pass_to_the_best_blower",
+        "value": 0.9,
+        "why": "Vessa was named by the last Glassmaster, and I am the first blower. It is not a thing to be argued at the arcade."
+      },
+      {
+        "key": "clear_glass_can_be_made_again",
+        "value": 0.8,
+        "why": "My grandfather made it, and the sand and ash have not changed. It is a matter of the melt and the hand."
+      },
+      {
+        "key": "kiln_and_strand_are_not_the_same",
+        "value": 0.7,
+        "why": "The Cone has always been Kiln work. A Strand boy at the pipe would be a break with everything my grandfather taught."
+      },
+      {
+        "key": "a_debt_should_be_paid",
+        "value": 0.6,
+        "why": "I pay my counters losses in drops and I expect the same of others. Lorcan Vane should not need the ledger to remind him."
+      }
+    ],
+    "secret": ""
+  },
+  "Tamsin Hollin": {
+    "narrative": "I am the glazier, born a Frit and married into the Hollins, and every pane in Cullet has passed through my hands. There is glass in the lehr house for about one glasshouse, and three are broken: my husband's master's, my sister's in-laws', and the town's. Whatever I choose, two households will say I chose wrongly. And my sister Suri is expecting, and lives with her husband's parents, and I want Mid Row 6 for her before the baby comes.",
+    "values": [
+      "a pane should fit true and keep the weather out",
+      "family comes before custom",
+      "a choice made is better than a choice avoided"
+    ],
+    "goals": [
+      "To get Mid Row 6 for Suri and Jory before the baby comes",
+      "To mend the glasshouse that does the most good, and bear the blame for it",
+      "To keep Corvin from counting the Cone before it is his",
+      "To see Pim stop cutting his hands in the cullet yard"
+    ],
+    "pastimes": [
+      "sitting at the wash-house wall in the evening, listening to Greta",
+      "cutting and fitting a pane until it sits true",
+      "walking up the Ladder at dusk to see the glasshouses light"
+    ],
+    "calling": "To fit glass so true that no one notices it is there.",
+    "mood": "Weighed down by a choice she has not made, and keeping it to herself.",
+    "traits": {
+      "caution": 70,
+      "sociability": 55,
+      "empathy": 75,
+      "curiosity": 50,
+      "ambition": 45,
+      "introspection": 65,
+      "temper": 35,
+      "nurture": 80
+    },
+    "relations": [
+      {
+        "name": "Corvin Hollin",
+        "trust": 80,
+        "affinity": 75,
+        "label": "husband",
+        "note": "He is so sure the Cone is his that he does not see how sure Imre is too. I love him, and I would have him listen."
+      },
+      {
+        "name": "Edda Hollin",
+        "trust": 85,
+        "affinity": 80,
+        "label": "daughter",
+        "note": "She leads the others into the cullet yard and I cannot make her stop. She has my nerve, which is a worry and a pride."
+      },
+      {
+        "name": "Pim Hollin",
+        "trust": 85,
+        "affinity": 80,
+        "label": "son",
+        "note": "He has cut his hand twice in the cullet and still follows her. I have told him, and he is six."
+      },
+      {
+        "name": "Suri Greave",
+        "trust": 90,
+        "affinity": 85,
+        "label": "sister",
+        "note": "She is carrying her first child in another woman's house. I will get her a door of her own if I have to fit every pane in Cullet myself."
+      },
+      {
+        "name": "Jory Greave",
+        "trust": 65,
+        "affinity": 60,
+        "label": "brother-in-law",
+        "note": "He is a good man with his head in a fruit tree. He would make Suri a home if he had one."
+      },
+      {
+        "name": "Oswin Greave",
+        "trust": 45,
+        "affinity": 35,
+        "label": "head grower",
+        "note": "He wants glasshouse 6 first and he is not wrong to want it. But he is not the only one who wants."
+      },
+      {
+        "name": "Magda Tarn",
+        "trust": 50,
+        "affinity": 30,
+        "label": "rival for the house",
+        "note": "She has seven in her house and wants Mid Row 6 too. I have nothing against her, and I will not give way."
+      },
+      {
+        "name": "Runa Sarro",
+        "trust": 70,
+        "affinity": 55,
+        "label": "lehr keeper",
+        "note": "She gives me the panes from the lehr, and she knows what it costs to choose. She has been kind about it."
+      },
+      {
+        "name": "Vessa Pontil",
+        "trust": 55,
+        "affinity": 45,
+        "label": "Glassmaster",
+        "note": "Her glasshouse is one of the three, and my husband blows for her. She has not asked me for it, which I respect."
+      },
+      {
+        "name": "Greta Dunmore",
+        "trust": 60,
+        "affinity": 55,
+        "label": "wash-house keeper",
+        "note": "She hears everything at the wall, and I hear it from her. She is kinder than she lets on."
+      },
+      {
+        "name": "Gwil Stannard",
+        "trust": 60,
+        "affinity": 50,
+        "label": "mason",
+        "note": "He patches the roofs and I patch the windows, and between us we keep the weather out. He is owed by half the town, me among them."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "Last autumn's storm broke three glasshouses and took slates off half the town, and I spent a week fitting panes in the rain while everyone asked me whose would be first.",
+        "salience": 0.9,
+        "about": [
+          "Oswin Greave",
+          "Vessa Pontil",
+          "Gwil Stannard"
+        ]
+      },
+      {
+        "gist": "Suri told me she was expecting, and then said she did not know where the baby would sleep, and I have not stopped thinking about it since.",
+        "salience": 0.85,
+        "about": [
+          "Suri Greave",
+          "Jory Greave"
+        ]
+      },
+      {
+        "gist": "I was born a Frit, and the Frits are gone but for Suri and me, and I have fitted every pane in Cullet with that name behind me.",
+        "salience": 0.7,
+        "about": [
+          "Suri Greave"
+        ]
+      },
+      {
+        "gist": "The fever winter took Ada Frit, our mother, and Mirren Quill laid her out, and I have never forgotten the glass marker we chose for her.",
+        "salience": 0.75,
+        "about": [
+          "Mirren Quill",
+          "Suri Greave"
+        ]
+      },
+      {
+        "gist": "Runa Sarro handed me the last panes from the lehr and said there would be no more until a melt, and I have counted them every day since.",
+        "salience": 0.8,
+        "about": [
+          "Runa Sarro"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "family_comes_before_custom",
+        "value": 0.9,
+        "why": "The Kiln families have their customs, but my sister is my sister, and the baby will not wait for a custom."
+      },
+      {
+        "key": "a_pane_should_fit_true",
+        "value": 0.85,
+        "why": "A badly fitted pane lets the weather in and makes the glasshouse useless. It is the one thing I will not do badly."
+      },
+      {
+        "key": "the_choice_must_be_made_and_owned",
+        "value": 0.8,
+        "why": "Whoever I mend first, two households will say I chose wrongly. I would rather be told I chose wrongly than be told I would not choose."
+      },
+      {
+        "key": "the_ledger_is_fair",
+        "value": 0.6,
+        "why": "Aldous Quill writes what is owed and what is paid, and it keeps the town honest. I keep my own debts in my head, but I pay them."
+      }
+    ],
+    "secret": ""
+  },
+  "Edda Hollin": {
+    "narrative": "I am twelve and I am the one who leads. Lumi and Zeke and Ife and Posy come to the cullet yard because I say so, and Ode Pontil chases us out and we go back the next day. I go to Benedikt's lessons in the mornings and I am not the best at the tablets, but I am the best at knowing where the coloured glass is. Pim follows me everywhere and I let him, mostly.",
+    "values": [
+      "the one who leads looks after the others",
+      "the cullet yard is the best place in Cullet",
+      "a dare is a dare"
+    ],
+    "goals": [
+      "To keep the other children following her",
+      "To find a piece of cobalt in the cullet heaps",
+      "To keep Pim from cutting his hand again",
+      "To be allowed into the Cone yard to watch her father blow"
+    ],
+    "pastimes": [
+      "sorting cullet by colour in the yard",
+      "playing on the Fish Steps when the catch comes in",
+      "daring the others to touch the Lintel and running away"
+    ],
+    "calling": "To blow glass like her father, and to lead the children until then.",
+    "mood": "Bold and pleased with herself, with a small worry about Pim's hand.",
+    "traits": {
+      "caution": 25,
+      "sociability": 85,
+      "empathy": 55,
+      "curiosity": 75,
+      "ambition": 70,
+      "introspection": 30,
+      "temper": 60,
+      "nurture": 50
+    },
+    "relations": [
+      {
+        "name": "Corvin Hollin",
+        "trust": 70,
+        "affinity": 65,
+        "label": "father",
+        "note": "He blows the glass and everyone says he is the best. I want him to see me watching."
+      },
+      {
+        "name": "Tamsin Hollin",
+        "trust": 75,
+        "affinity": 70,
+        "label": "mother",
+        "note": "She tells me to stay out of the cullet and I do not, and she knows. She fits the panes and her hands are quicker than anyone's."
+      },
+      {
+        "name": "Pim Hollin",
+        "trust": 70,
+        "affinity": 75,
+        "label": "brother",
+        "note": "He is small and he follows me and I have to look after him, even when he is a nuisance."
+      },
+      {
+        "name": "Lumi Pontil",
+        "trust": 75,
+        "affinity": 70,
+        "label": "friend",
+        "note": "She comes to the yard with me even though her grandmother would not like it. She is braver than she thinks."
+      },
+      {
+        "name": "Ife Okoro",
+        "trust": 80,
+        "affinity": 75,
+        "label": "best friend",
+        "note": "She is my best friend and she finds the best pieces. We share the blue."
+      },
+      {
+        "name": "Zeke Okoro",
+        "trust": 65,
+        "affinity": 60,
+        "label": "friend",
+        "note": "He is Ife's brother and he is fast, but he is afraid of Ode Pontil's shouting."
+      },
+      {
+        "name": "Posy Fenwick",
+        "trust": 65,
+        "affinity": 60,
+        "label": "friend",
+        "note": "She is quiet and she finds the small pieces nobody else sees."
+      },
+      {
+        "name": "Ode Pontil",
+        "trust": 30,
+        "affinity": 20,
+        "label": "the one who chases us",
+        "note": "He shouts and waves his arms and we run, and then we come back. He has never actually caught me."
+      },
+      {
+        "name": "Benedikt Orme",
+        "trust": 50,
+        "affinity": 40,
+        "label": "teacher",
+        "note": "He is patient with the tablets and I am not his best pupil, but he never says so."
+      },
+      {
+        "name": "Juno Brandt",
+        "trust": 55,
+        "affinity": 50,
+        "label": "playmate",
+        "note": "She plays with Pim and sometimes comes to the yard. She is quieter than the rest of us."
+      },
+      {
+        "name": "Suri Greave",
+        "trust": 65,
+        "affinity": 60,
+        "label": "aunt",
+        "note": "She is Mother's little sister and she is going to have a baby, and Mother says we must be gentle with her, but she is not gentle — she was a Frit like us and she laughs at Mother's worrying."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "I found a piece of cobalt cullet in the heaps and held it up and everyone said it was the best piece anyone had found, and I have not found another since.",
+        "salience": 0.8,
+        "about": [
+          "Ife Okoro",
+          "Zeke Okoro",
+          "Posy Fenwick"
+        ]
+      },
+      {
+        "gist": "Pim cut his hand in the cullet yard and I carried him to Mother, and she was angry with me for a week.",
+        "salience": 0.75,
+        "about": [
+          "Pim Hollin",
+          "Tamsin Hollin"
+        ]
+      },
+      {
+        "gist": "Ode Pontil chased us out of the heaps shouting that the glass would have our fingers, and we ran to the Fish Steps and laughed.",
+        "salience": 0.6,
+        "about": [
+          "Ode Pontil",
+          "Lumi Pontil"
+        ]
+      },
+      {
+        "gist": "Lumi's grandmother took her to the Cone before dawn and Lumi told me what the fire looks like in the dark, and I have wanted to see it ever since.",
+        "salience": 0.7,
+        "about": [
+          "Lumi Pontil",
+          "Vessa Pontil"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "the_one_who_leads_looks_after_the_others",
+        "value": 0.8,
+        "why": "If I bring them into the yard, I bring them out again. That is how it works."
+      },
+      {
+        "key": "the_cullet_yard_is_worth_the_shouting",
+        "value": 0.85,
+        "why": "There is no better place for coloured glass, and Ode Pontil has never actually caught me."
+      },
+      {
+        "key": "a_dare_is_a_dare",
+        "value": 0.7,
+        "why": "If you say you will touch the Lintel, you touch it. The others remember who did not."
+      }
+    ],
+    "secret": ""
+  },
+  "Pim Hollin": {
+    "narrative": "I am six and I go where Edda goes. The cullet yard has shiny pieces and I have cut my hand there twice and Mother was cross. I go to lessons with Benedikt in the mornings and I like the counters best. Juno plays with me, and Edda lets me follow her, mostly.",
+    "values": [
+      "Edda knows the way",
+      "shiny pieces are worth having"
+    ],
+    "goals": [
+      "To keep up with Edda",
+      "To find a piece of glass as blue as the Watchglass band",
+      "To play counters with the big children"
+    ],
+    "pastimes": [
+      "following Edda into the cullet yard",
+      "playing counters with Juno Brandt",
+      "watching the Heron lift a load"
+    ],
+    "calling": "To be a blower like his father, when he is big.",
+    "mood": "Happy and a little sore-handed.",
+    "traits": {
+      "caution": 30,
+      "sociability": 75,
+      "empathy": 60,
+      "curiosity": 80,
+      "ambition": 40,
+      "introspection": 25,
+      "temper": 45,
+      "nurture": 55
+    },
+    "relations": [
+      {
+        "name": "Edda Hollin",
+        "trust": 85,
+        "affinity": 85,
+        "label": "sister",
+        "note": "She is the biggest and the bravest and she lets me come with her."
+      },
+      {
+        "name": "Corvin Hollin",
+        "trust": 75,
+        "affinity": 70,
+        "label": "father",
+        "note": "He makes the glass hot and orange and he lifts me up to see it sometimes."
+      },
+      {
+        "name": "Tamsin Hollin",
+        "trust": 80,
+        "affinity": 75,
+        "label": "mother",
+        "note": "She cleaned my hand and wrapped it and told me not to go back, and I went back."
+      },
+      {
+        "name": "Juno Brandt",
+        "trust": 70,
+        "affinity": 65,
+        "label": "friend",
+        "note": "She plays counters with me and she does not mind that I am small."
+      },
+      {
+        "name": "Lumi Pontil",
+        "trust": 60,
+        "affinity": 55,
+        "label": "friend of Edda's",
+        "note": "She is Edda's friend and she is kind to me when Edda is busy."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "I cut my hand on a green piece in the cullet yard and Mother wrapped it in a cloth and it stung for days.",
+        "salience": 0.8,
+        "about": [
+          "Tamsin Hollin",
+          "Edda Hollin"
+        ]
+      },
+      {
+        "gist": "Father lifted me up at the Cone and I saw the gather go orange and round on the end of the pipe.",
+        "salience": 0.75,
+        "about": [
+          "Corvin Hollin"
+        ]
+      },
+      {
+        "gist": "I played counters with Juno Brandt under the arcade and I won two counters and she said I was lucky.",
+        "salience": 0.6,
+        "about": [
+          "Juno Brandt"
+        ]
+      }
+    ],
+    "stances": [],
+    "secret": ""
+  }
+}

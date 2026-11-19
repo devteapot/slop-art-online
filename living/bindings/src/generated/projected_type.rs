@@ -20,6 +20,7 @@ pub struct Projected {
     pub band: u8,
     pub hp: f32,
     pub max_hp: f32,
+    pub look: String,
 }
 
 impl __sdk::InModule for Projected {
@@ -43,6 +44,7 @@ pub struct ProjectedCols {
     pub band: __sdk::__query_builder::Col<Projected, u8>,
     pub hp: __sdk::__query_builder::Col<Projected, f32>,
     pub max_hp: __sdk::__query_builder::Col<Projected, f32>,
+    pub look: __sdk::__query_builder::Col<Projected, String>,
 }
 
 impl __sdk::__query_builder::HasCols for Projected {
@@ -62,6 +64,7 @@ impl __sdk::__query_builder::HasCols for Projected {
             band: __sdk::__query_builder::Col::new(table_name, "band"),
             hp: __sdk::__query_builder::Col::new(table_name, "hp"),
             max_hp: __sdk::__query_builder::Col::new(table_name, "max_hp"),
+            look: __sdk::__query_builder::Col::new(table_name, "look"),
         }
     }
 }

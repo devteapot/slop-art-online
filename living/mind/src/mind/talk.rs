@@ -40,6 +40,11 @@ use tokio::sync::oneshot;
 
 /// Reply turns in one conversation (both sides together); stamina usually ends it sooner.
 const MAX_TURNS: u32 = 12;
+/// How long a talk turn waits for the authority to say where its character stands and how it
+/// perceives the other (`mind_reach`; talk-places, reply-timing).
+const STANDING_WAIT_MS: u64 = 2_000;
+/// A `silence` this soon after a reply turn's line is about that line (reply-timing).
+const MISSED_MS: u64 = 10_000;
 /// A conversation that has been quiet this long is over; the next line starts a new one.
 const QUIET_MS: u64 = 90_000;
 /// Speech older than this (e.g. replayed when the service starts) gets no turn.
@@ -50,6 +55,221 @@ const OVERHEARD_GAP_MS: u64 = 60_000;
 const SPEECH_GAP_MS: u64 = 2_100;
 /// Share of a line's words that must be new to the exchange for it to count as a new matter.
 const NEW_MATTER: f64 = 0.5;
+/// `LIVING_GREET`: a line said to no one in particular within this many metres of a hearer
+/// can draw that hearer in (`nearest`, `curious`), and the speaker faces a hearer at most this
+/// far away (`facing`). The authority's own `address_m` law is 6 m by default.
+const GREET_NEAR_M: f32 = 6.0;
+/// `LIVING_GREET=facing`: a hearer within this many radians of the speaker's facing is faced.
+const FACE_CONE: f32 = 0.6;
+/// `LIVING_PARK=concurrent`: a line heard within this long after a deliberation's prompt was
+/// built (so it never saw the line) gets its turn while the deliberation runs.
+const FRESH_MS: u64 = 2_000;
+/// How long a line said to someone else that names hearers waits for every named hearer's row
+/// before the nearest of them takes the one turn (talk-turns; the rows of one line arrive in one
+/// transaction).
+const NAMED_PICK_MS: u64 = 300;
+
+/// What draws a listener into a line said to no one in particular by someone they have not met
+/// or barely know (`LIVING_GREET`; `nearest` by default since 2026-11-11, the owner's choice
+/// after the paid greeting batches gr1/gr2, docs/TRIALS.md). Under every mode other than `off`, an
+/// addressed line from such a speaker always gets a turn (the turn may still say nothing),
+/// and hostility no longer counts as caring: a listener who feels strongly against the
+/// speaker answers only lines addressed to them.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Greet {
+    /// The rule before 2026-11-11: only a listener who cares about the speaker may be drawn in.
+    Off,
+    /// The default. The nearest hearer within `GREET_NEAR_M` who is free to talk takes the one
+    /// turn.
+    Nearest,
+    /// A hearer within `GREET_NEAR_M` is drawn in by curiosity, paced by curiosity and
+    /// sociability; the first drawn takes the one turn.
+    Curious,
+    /// The hearer the speaker faces (within `GREET_NEAR_M` and `FACE_CONE`) is addressed,
+    /// whoever the speaker is. Not for players yet: a player's facing is where they last
+    /// walked until the client sends a look (`human_face`), and then it belongs to players'
+    /// lines only, or as a tie-break.
+    Facing,
+}
+
+/// What happens to a line addressed to a listener whose deliberation is running
+/// (`LIVING_PARK`; `concurrent` by default since 2026-11-11).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Park {
+    /// The rule before 2026-11-11: it waits for the deliberation to end (and gets no turn if
+    /// the deliberation spoke to the speaker after hearing it).
+    Wait,
+    /// The default. It gets its turn alongside the deliberation when the deliberation's prompt was built
+    /// just before the line (within `FRESH_MS`), or as soon as the deliberation has decided and
+    /// its words are not for the speaker. Whichever of the two speaks to the speaker first
+    /// is the answer; the other's words to them are not said.
+    Concurrent,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct Config {
+    pub greet: Greet,
+    pub park: Park,
+}
+
+impl Config {
+    pub fn from_env() -> Result<Self> {
+        Self::parse(std::env::var("LIVING_GREET").ok().as_deref(), std::env::var("LIVING_PARK").ok().as_deref())
+    }
+
+    fn parse(greet: Option<&str>, park: Option<&str>) -> Result<Self> {
+        let greet = match greet.map(|s| s.trim().to_lowercase()).as_deref() {
+            None | Some("") | Some("nearest") => Greet::Nearest,
+            Some("off") | Some("0") => Greet::Off,
+            Some("curious") => Greet::Curious,
+            Some("facing") => Greet::Facing,
+            Some(x) => return Err(anyhow!("LIVING_GREET={x}: expected off, nearest, curious or facing")),
+        };
+        let park = match park.map(|s| s.trim().to_lowercase()).as_deref() {
+            None | Some("") | Some("concurrent") => Park::Concurrent,
+            Some("wait") => Park::Wait,
+            Some(x) => return Err(anyhow!("LIVING_PARK={x}: expected wait or concurrent")),
+        };
+        Ok(Self { greet, park })
+    }
+
+    /// Whether the modes read who heard a line and how they stood (the `audience` table,
+    /// written where the world's `speech_audience` law is on).
+    pub fn audience(&self) -> bool {
+        matches!(self.greet, Greet::Nearest | Greet::Curious | Greet::Facing)
+    }
+}
+
+/// How a listener stands toward a speaker, for `LIVING_GREET`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Familiarity {
+    /// Family, one community, or a warm or trusting relation.
+    Known,
+    /// They feel strongly against the speaker (affinity <= -40).
+    Hostile,
+    /// Not met: the speaker's name is not known to them.
+    Stranger,
+    /// Met (the name is known) but no bond to speak of.
+    Barely,
+}
+
+impl Familiarity {
+    fn unfamiliar(self) -> bool {
+        matches!(self, Self::Stranger | Self::Barely)
+    }
+}
+
+/// What is known of a heard line when deciding whether it draws the listener in.
+#[derive(Clone, Copy, Debug)]
+struct Facts {
+    /// Said to the listener (`to`).
+    to_me: bool,
+    /// Said to no one in particular.
+    to_none: bool,
+    /// The authority marked it addressed to the listener (named, or the only one close by).
+    marked: bool,
+    /// `LIVING_GREET=facing`: the listener is the hearer the speaker faced.
+    faced: bool,
+    /// Said to no one, and the listener is free to be drawn in (in no other exchange, not drawn
+    /// in within the last minute, the line not yet claimed by another listener).
+    free: bool,
+    /// The listener cares about the speaker (family, a close label, strong feelings).
+    cares: bool,
+    /// The listener's draw for this line, and how likely they answer a remark / are drawn in
+    /// by curiosity.
+    draw: f64,
+    answers: f64,
+    curious: f64,
+    familiarity: Familiarity,
+    /// Within `GREET_NEAR_M` of the speaker.
+    near: bool,
+    /// `LIVING_GREET=nearest`: the listener is the nearest hearer free to take the turn.
+    nearest_is_me: bool,
+    /// The listener settled an exchange with the speaker and its time has not come.
+    settled: bool,
+}
+
+impl Default for Facts {
+    fn default() -> Self {
+        Facts { to_me: false, to_none: false, marked: false, faced: false, free: false, cares: false, draw: 1.0, answers: 0.0, curious: 0.0, familiarity: Familiarity::Known, near: false, nearest_is_me: false, settled: false }
+    }
+}
+
+/// What a heard line draws from the listener.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Drawn {
+    /// Drawn into a remark not addressed to them (cares, or `LIVING_GREET`).
+    overheard: bool,
+    /// Drawn in by `LIVING_GREET` (nearest or curious).
+    greeted: bool,
+    /// The turn is taken without the remark draw (a stranger's line that drew them in or was
+    /// addressed to them).
+    no_remark_draw: bool,
+}
+
+impl Facts {
+    fn addressed(&self) -> bool {
+        self.to_me || (self.to_none && self.marked) || self.faced
+    }
+
+    fn drawn(&self, greet: Greet) -> Drawn {
+        let addressed = self.addressed();
+        // With `LIVING_GREET`, hostility is not caring.
+        let cares = self.cares && (greet == Greet::Off || self.familiarity == Familiarity::Known);
+        let overheard = self.free && cares && self.draw < self.answers;
+        let stranger = greet != Greet::Off && self.familiarity.unfamiliar();
+        let greeted = self.free
+            && !addressed
+            && !overheard
+            && stranger
+            && !self.settled
+            && match greet {
+                Greet::Nearest => self.nearest_is_me,
+                Greet::Curious => self.near && self.draw < self.curious,
+                Greet::Off | Greet::Facing => false,
+            };
+        Drawn { overheard: overheard || greeted, greeted, no_remark_draw: greeted || (addressed && stranger) }
+    }
+}
+
+/// The hearer a speaker faces: within `GREET_NEAR_M` and `FACE_CONE` of the facing, the one
+/// most nearly straight ahead (the nearer on a tie).
+fn faced(hearers: &[Hearer]) -> Option<u32> {
+    hearers
+        .iter()
+        .filter(|h| h.d <= GREET_NEAR_M && h.off <= FACE_CONE)
+        .min_by(|a, b| a.off.total_cmp(&b.off).then(a.d.total_cmp(&b.d)))
+        .map(|h| h.id)
+}
+
+/// A running deliberation, as conversation turns see it (`LIVING_PARK=concurrent`).
+#[derive(Default, Clone, Debug)]
+struct Deliberating {
+    /// When its prompt read the experiences (lines heard later were not in it).
+    prompt_ms: Option<u64>,
+    /// Whom its words are for, once it has decided (empty: nobody it is waiting to answer).
+    decided: Option<Vec<u32>>,
+    /// Lines its character said in turns taken alongside it: (to, at_ms, words).
+    answered: Vec<(u32, u64, String)>,
+}
+
+impl Deliberating {
+    /// Whether a line from `other` heard at `heard_ms` gets its turn alongside: never before
+    /// the prompt is built (it will see the line); once decided, unless its words are for
+    /// `other`; before that, when the line came within `FRESH_MS` after the prompt.
+    fn alongside(&self, other: u32, heard_ms: u64) -> bool {
+        let Some(prompt) = self.prompt_ms else { return false };
+        match &self.decided {
+            Some(targets) => !targets.contains(&other),
+            None => heard_ms > prompt && heard_ms - prompt <= FRESH_MS,
+        }
+    }
+
+    /// The people its character answered alongside it since its prompt.
+    fn answered_since_prompt(&self) -> Vec<u32> {
+        self.answered.iter().filter(|(_, at, _)| self.prompt_ms.is_some_and(|p| *at >= p)).map(|(o, _, _)| *o).collect()
+    }
+}
 
 #[derive(Clone, Debug)]
 struct Line {
@@ -84,9 +304,28 @@ struct Conversation {
     settled: Option<Settled>,
     /// What an exchange reopened after being settled starts from.
     reopened: Option<(Settled, String)>,
+    /// The turn (`turns`) in which a plan or promise between the two was made: a reply that
+    /// settled something, or an act toward the other (talk-turns).
+    promised: Option<u32>,
+    /// A reply turn's line the other could not have heard (its `silence`, in the authority's
+    /// words, and when it came): the speaker's next turn weighs it (reply-timing).
+    missed: Option<(String, u64)>,
+    /// A missed line already had its follow-up turn: another silence before the other is heard
+    /// again ends the exchange (one follow-up per missed line, no loop).
+    followed: bool,
 }
 
 impl Conversation {
+    /// Something is still open between the two (talk-turns): the line being answered asks
+    /// something, or a plan or promise was made in the last two turns, or the exchange was
+    /// reopened on something settled and has not yet had two turns. The turn budget then does
+    /// not close it (`MAX_TURNS` still does).
+    fn open(&self, heard: &str) -> bool {
+        heard.contains('?')
+            || self.promised.is_some_and(|t| self.turns.saturating_sub(t) < 2)
+            || self.reopened.as_ref().is_some_and(|(s, _)| !s.outcome.is_empty() && self.turns < 2)
+    }
+
     /// Share of the line's words that nothing in this exchange (or what was settled) said.
     fn novelty(&self, text: &str) -> f64 {
         self.novelty_without(text, &[])
@@ -115,8 +354,13 @@ pub struct Talks {
     overheard: HashMap<u32, u64>,
     /// Speech not addressed to anyone gets at most one reply: (speaker, at_ms) → listener.
     claimed: HashMap<(u32, u64), u32>,
-    /// When each character last spoke through a reply turn.
+    /// When each character's last reply-turn line stands in the exchange's rhythm (`Pace`'s
+    /// `paced_ms`: when it would have been said before reply-timing). Its next line keeps the
+    /// gap from this time, not from when the line was actually said.
     spoke: HashMap<u32, u64>,
+    /// Each character's last reply-turn line: when it was said and when, at speaking pace, it
+    /// is done being said (`paced_ms` + `saying_ms`). A turn answering it paces from there.
+    voice: HashMap<u32, (u64, u64)>,
     /// Recent reply-turn lines per character (for "you have talked a lot lately").
     said: HashMap<u32, Vec<u64>>,
     /// Lines that came while the listener's deliberation was running (its prompt already
@@ -124,7 +368,17 @@ pub struct Talks {
     parked: HashMap<u32, Vec<(u32, u64)>>,
     /// When a deliberation last spoke to someone: (speaker, listener) → at_ms.
     deliberated_to: HashMap<(u32, u32), u64>,
+    /// Running deliberations (`LIVING_PARK=concurrent` only).
+    deliberating: HashMap<u32, Deliberating>,
+    /// Whether a missing `audience` row was reported (once).
+    no_audience_logged: bool,
+    /// Lines said to someone else that name some of this service's characters, waiting for the
+    /// nearest named hearer to be picked: (speaker, at_ms) → each named hearer's row.
+    named: HashMap<(u32, u64), Vec<Experience>>,
 }
+
+/// Relation labels that are a close bond.
+const CLOSE: &[&str] = &["family", "partner", "friend", "parent", "mother", "father", "child", "son", "daughter", "sibling", "brother", "sister", "spouse", "wife", "husband", "lover"];
 
 fn pair(a: u32, b: u32) -> (u32, u32) {
     (a.min(b), a.max(b))
@@ -152,6 +406,7 @@ fn draw(listener: u32, at_ms: u64) -> f64 {
 struct Temper {
     sociability: f64,
     introspection: f64,
+    curiosity: f64,
     mood: String,
 }
 
@@ -159,7 +414,7 @@ impl Temper {
     fn from(traits: &str, mood: &str) -> Self {
         let t: Value = serde_json::from_str(traits).unwrap_or_default();
         let num = |k: &str| t[k].as_f64().or_else(|| t[k].as_str().and_then(|s| s.parse().ok())).unwrap_or(50.0).clamp(0.0, 100.0);
-        Temper { sociability: num("sociability"), introspection: num("introspection"), mood: mood.to_string() }
+        Temper { sociability: num("sociability"), introspection: num("introspection"), curiosity: num("curiosity"), mood: mood.to_string() }
     }
 
     /// Own turns in one exchange before wanting to move on: 1 for the most reserved, up to 6
@@ -176,6 +431,12 @@ impl Temper {
     /// How likely a remark that asks nothing draws an answer.
     fn answers_remarks(&self) -> f64 {
         0.3 + 0.65 * self.sociability / 100.0
+    }
+
+    /// `LIVING_GREET=curious`: how likely an unfamiliar person's remark close by draws them
+    /// in: the remark draw, scaled from half (incurious) to whole (most curious).
+    fn curious_of_strangers(&self) -> f64 {
+        self.answers_remarks() * (0.5 + 0.5 * self.curiosity / 100.0)
     }
 
     fn describe(&self) -> String {
@@ -240,6 +501,28 @@ fn until_ms(until: &Value, now: u64, epoch: u64, day_ms: u64) -> Option<u64> {
 }
 
 impl Talks {
+    /// Whether a listener is in a live exchange with anyone but the other of `key`.
+    fn in_other(&self, listener: u32, key: (u32, u32), now: u64) -> bool {
+        self.pairs.iter().any(|(k, c)| *k != key && (k.0 == listener || k.1 == listener) && !c.ended && now.saturating_sub(c.last_ms) < QUIET_MS)
+    }
+
+    /// `in_other`, a conversation settled with someone else not counting (a named hearer's turn,
+    /// talk-turns: Agnes had settled with Baldwin and was free to answer her daughter's line).
+    fn in_other_open(&self, listener: u32, key: (u32, u32), now: u64) -> bool {
+        self.pairs.iter().any(|(k, c)| *k != key && (k.0 == listener || k.1 == listener) && !c.ended && c.settled.is_none() && now.saturating_sub(c.last_ms) < QUIET_MS)
+    }
+
+    /// Whether a listener has settled an exchange with a speaker and its time has not come
+    /// (a remark to no one does not reopen it).
+    fn settled_with(&self, listener: u32, speaker: u32, now: u64) -> bool {
+        self.pairs.get(&pair(listener, speaker)).and_then(|c| c.settled.as_ref()).is_some_and(|s| now < s.until_ms)
+    }
+
+    /// Whether a listener may be drawn in by a remark not addressed to them now.
+    fn overhear_free(&self, listener: u32, now: u64) -> bool {
+        self.overheard.get(&listener).map_or(true, |at| now.saturating_sub(*at) > OVERHEARD_GAP_MS)
+    }
+
     fn prune(&mut self, now: u64) {
         self.pairs.retain(|_, c| now.saturating_sub(c.last_ms) < QUIET_MS * 2 || c.settled.as_ref().map_or(false, |s| now < s.until_ms));
         self.claimed.retain(|(_, at), _| now.saturating_sub(*at) < STALE_MS * 2);
@@ -263,7 +546,7 @@ impl Minds {
     fn happened_since(&self, listener: u32, other: u32, since: u64) -> Vec<String> {
         self.experiences(listener)
             .into_iter()
-            .filter(|x| x.at_ms > since && !matches!(x.kind.as_str(), "speech" | "silence" | "repeat"))
+            .filter(|x| x.at_ms > since && !matches!(x.kind.as_str(), "speech" | "whisper" | "silence" | "repeat"))
             .filter(|x| ((x.subject == other || x.object == other) && x.salience >= 0.4) || x.salience >= 0.7)
             .map(|x| x.text)
             .collect()
@@ -271,15 +554,67 @@ impl Minds {
 
     /// A speech or silence experience of one of this service's characters.
     pub(super) fn on_speech(self: Arc<Self>, e: Experience) {
+        self.hear(e, false)
+    }
+
+    /// A line said to someone else that names this hearer (its row says ", naming … you …"):
+    /// the hearers it names wait a moment, and the nearest of them (by the line's `audience`
+    /// row) takes one turn on it as if addressed (talk-turns).
+    fn named_pick(self: Arc<Self>, e: Experience) {
+        let key = (e.subject, e.at_ms);
+        let first = {
+            let mut t = self.talk.lock().unwrap();
+            let v = t.named.entry(key).or_default();
+            v.push(e.clone());
+            v.len() == 1
+        };
+        if !first {
+            return;
+        }
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(NAMED_PICK_MS)).await;
+            let rows = self.talk.lock().unwrap().named.remove(&key).unwrap_or_default();
+            let hs = self.audience_of(key.0, key.1);
+            let dist = |id: u32| hs.iter().flatten().find(|h| h.id == id).map_or(f32::MAX, |h| h.d);
+            if let Some(best) = rows.into_iter().min_by(|a, b| dist(a.observer).total_cmp(&dist(b.observer))) {
+                log::info!("{} is named in {}'s line to {} and is the nearest named: a turn", self.name(best.observer), self.name(best.subject), self.name(best.object));
+                self.hear(best, true);
+            }
+        });
+    }
+
+    /// A heard line, and whether this listener takes a turn on it. `named`: picked as the
+    /// nearest hearer a line to someone else names (`named_pick`).
+    fn hear(self: Arc<Self>, e: Experience, named: bool) {
         let now = llm::now_ms();
         if now.saturating_sub(e.at_ms) > STALE_MS || !self.allowed(e.observer) {
             return;
         }
         if e.kind == "silence" {
-            // Called someone who is out of earshot: that conversation is over.
-            if let Some(c) = self.talk.lock().unwrap().pairs.get_mut(&pair(e.observer, e.subject)) {
-                c.ended = true;
-                log::info!("{} and {}: out of earshot, conversation over", self.name(e.observer), self.name(e.subject));
+            // A reply turn's line the other could not have heard: the speaker's next turn is
+            // told so, in the authority's words, and weighs it (reply-timing). Once per missed
+            // line: a silence after that follow-up, or after any other line, ends the exchange.
+            let follow = {
+                let mut t = self.talk.lock().unwrap();
+                match t.pairs.get_mut(&pair(e.observer, e.subject)) {
+                    Some(c) => {
+                        let ours = c.lines.last().is_some_and(|l| l.turn && l.speaker == e.observer && l.to == e.subject && e.at_ms.abs_diff(l.at_ms) <= MISSED_MS);
+                        if ours && !c.ended && !c.followed {
+                            c.missed = Some((e.text.clone(), e.at_ms));
+                            c.followed = true;
+                            log::info!("{} and {}: out of earshot; {}'s next turn weighs it", self.name(e.observer), self.name(e.subject), self.name(e.observer));
+                            true
+                        } else {
+                            c.ended = true;
+                            log::info!("{} and {}: out of earshot, conversation over", self.name(e.observer), self.name(e.subject));
+                            false
+                        }
+                    }
+                    None => false,
+                }
+            };
+            if follow {
+                self.claim_turn(e.observer, e.subject);
             }
             return;
         }
@@ -293,12 +628,49 @@ impl Minds {
             return;
         }
         let text = quoted(&e.text);
-        // Addressed by name, by `to`, or as the only person close by (the authority marks these).
-        let addressed = to == listener || (to == 0 && e.salience >= 0.8);
+        let greet = self.talk_cfg.greet;
+        // With `LIVING_GREET`, who heard a line said to no one in particular and how they stood
+        // (the authority's `audience` row, where the world keeps it).
+        let audience = if to == 0 && self.talk_cfg.audience() { self.audience_of(speaker, e.at_ms) } else { None };
+        let familiarity = if greet == Greet::Off { Familiarity::Known } else { self.familiarity(listener, speaker) };
+        let faced_me = greet == Greet::Facing && audience.as_deref().and_then(faced) == Some(listener);
+        // Addressed by name, by `to`, or as the only person close by (the authority marks these);
+        // with `LIVING_GREET=facing`, also as the hearer the speaker faces.
+        let addressed = Facts { to_me: to == listener, to_none: to == 0, marked: e.salience >= 0.8, faced: faced_me, ..Default::default() }.addressed();
+        // Named in a line said to someone else (by name or by a kin word, the authority's own
+        // words): the nearest named hearer takes one turn, as if addressed (talk-turns).
+        if !named && !addressed && to != 0 && to != listener && names_me(&e.text) {
+            self.named_pick(e);
+            return;
+        }
+        let addressed = addressed || named;
+        // A line to the room that names exactly one person, and not this hearer, is that
+        // person's to answer (talk-named-room, after ew2): others hear it and may overhear it,
+        // but take no turn on it, whether drawn in, greeting, or already talking with the speaker.
+        if to == 0 && !addressed && room_names_one_other(&e.text) {
+            log::debug!("{} hears {}'s line naming someone else — no turn", me.name, self.name(speaker));
+            return;
+        }
         let asks = text.contains('?');
         let temper = self.temper(listener);
         let stamina = temper.stamina(self.affinity(listener, speaker));
+        // (With `LIVING_GREET`, hostility is not caring: `Facts::drawn`.)
         let cares = || self.cares(listener, speaker);
+        // `LIVING_GREET=nearest`: the hearers free to take the turn, nearest first (decided under
+        // the lock below, from what each finds of the speaker).
+        let candidates: Vec<(u32, f32)> = match (&audience, greet) {
+            (Some(hs), Greet::Nearest) if !addressed && familiarity.unfamiliar() => {
+                let mut v: Vec<(u32, f32)> = hs
+                    .iter()
+                    .filter(|h| h.d <= GREET_NEAR_M && self.thinks_for(h.id) && self.familiarity(h.id, speaker).unfamiliar())
+                    .map(|h| (h.id, h.d))
+                    .collect();
+                v.sort_by(|a, b| a.1.total_cmp(&b.1));
+                v
+            }
+            _ => Vec::new(),
+        };
+        let near_me = audience.as_deref().and_then(|hs| hs.iter().find(|h| h.id == listener)).map_or(false, |h| h.d <= GREET_NEAR_M);
         let key = pair(listener, speaker);
         let settled_at = self.talk.lock().unwrap().pairs.get(&key).and_then(|c| c.settled.as_ref().map(|s| s.at_ms));
         let names: Vec<String> = [listener, speaker].iter().flat_map(|id| memory::cue_words(&self.name(*id))).collect();
@@ -309,13 +681,39 @@ impl Minds {
             let mut t = self.talk.lock().unwrap();
             t.prune(now);
             let active = t.pairs.get(&key).map_or(false, |c| !c.ended && now.saturating_sub(c.last_ms) < QUIET_MS);
-            let in_other = t.pairs.iter().any(|(k, c)| *k != key && (k.0 == listener || k.1 == listener) && !c.ended && now.saturating_sub(c.last_ms) < QUIET_MS);
-            let overheard_ok = to == 0
-                && !in_other
-                && t.overheard.get(&listener).map_or(true, |at| now.saturating_sub(*at) > OVERHEARD_GAP_MS)
-                && !t.claimed.contains_key(&(speaker, e.at_ms))
-                && cares()
-                && draw(listener, e.at_ms) < temper.answers_remarks();
+            let in_other = t.in_other(listener, key, now);
+            let free = to == 0 && !in_other && t.overhear_free(listener, now) && !t.claimed.contains_key(&(speaker, e.at_ms));
+            let facts = Facts {
+                to_me: to == listener,
+                to_none: to == 0,
+                marked: e.salience >= 0.8,
+                faced: faced_me,
+                free,
+                // Read only when it can matter (a relation scan), as before.
+                cares: free && cares(),
+                draw: draw(listener, e.at_ms),
+                answers: temper.answers_remarks(),
+                curious: temper.curious_of_strangers(),
+                familiarity,
+                near: near_me,
+                // The first hearer, nearest first, who would take the turn: free to talk and not
+                // settled with the speaker.
+                nearest_is_me: greet == Greet::Nearest
+                    && candidates
+                        .iter()
+                        .find(|(h, _)| (*h == listener || (t.overhear_free(*h, now) && !t.in_other(*h, pair(*h, speaker), now))) && !t.settled_with(*h, speaker, now))
+                        .map(|(h, _)| *h)
+                        == Some(listener),
+                settled: t.settled_with(listener, speaker, now),
+            };
+            let drawn = facts.drawn(greet);
+            if drawn.greeted {
+                log::info!("{} is drawn in by {}'s remark ({greet:?})", me.name, self.name(speaker));
+            } else if faced_me && e.salience < 0.8 {
+                log::info!("{} is faced by {} and takes the remark as addressed", me.name, self.name(speaker));
+            }
+            let overheard_ok = drawn.overheard;
+            let greeted = drawn.no_remark_draw;
             if !(addressed || (active && to == 0) || overheard_ok) {
                 return;
             }
@@ -323,6 +721,9 @@ impl Minds {
                 t.overheard.insert(listener, now);
                 t.claimed.insert((speaker, e.at_ms), listener);
             }
+            // A named hearer answers only when free: not in another exchange still going (one
+            // settled with someone else does not count).
+            let busy_elsewhere = named && t.in_other_open(listener, key, now);
             let c = t.pairs.entry(key).or_default();
             if now.saturating_sub(c.last_ms) >= QUIET_MS && c.settled.is_none() {
                 *c = Conversation::default();
@@ -367,6 +768,9 @@ impl Minds {
             }
             if !known {
                 c.lines.push(Line { speaker, to, text: text.clone(), at_ms: e.at_ms, at: (e.x, e.y), turn: false, exp: e.id });
+                // Heard from them again: a later missed line gets its own follow-up.
+                c.followed = false;
+                c.missed = None;
                 // A line from outside the exchange (a decision, a human) reopens a finished one
                 // only when it says something new.
                 if (c.ended || c.turns >= MAX_TURNS) && novelty >= NEW_MATTER {
@@ -378,14 +782,19 @@ impl Minds {
             if c.ended || c.turns >= MAX_TURNS {
                 return;
             }
-            // They have said their piece for this exchange (their last turn wrapped up).
-            if c.own.get(&listener).copied().unwrap_or(0) >= stamina {
+            if busy_elsewhere {
+                log::info!("{} is named but busy in another conversation — no turn", me.name);
+                return;
+            }
+            // They have said their piece for this exchange (their last turn wrapped up), unless
+            // something is still open between them (talk-turns).
+            if c.own.get(&listener).copied().unwrap_or(0) >= stamina && !c.open(&text) {
                 log::debug!("{} has said enough to {} for now", me.name, self.name(speaker));
                 return;
             }
             // A remark that asks nothing does not always draw an answer: the talkative answer
             // more often than the reserved.
-            if !asks && draw(listener, e.at_ms ^ 0x5EED) >= temper.answers_remarks() {
+            if !asks && !greeted && draw(listener, e.at_ms ^ 0x5EED) >= temper.answers_remarks() {
                 log::debug!("{} lets {}'s remark pass", me.name, self.name(speaker));
                 return;
             }
@@ -429,9 +838,12 @@ impl Minds {
                 let next = {
                     let mut t = self.talk.lock().unwrap();
                     let waiting = t.busy.get_mut(&listener).and_then(|w| w.take());
-                    // Someone else spoke to them meanwhile and is still waiting for an answer.
+                    // Someone else spoke to them meanwhile and is still waiting for an answer, or
+                    // their own line just said was missed (its silence came during the turn).
                     let due = waiting.filter(|s| {
-                        t.pairs.get(&pair(listener, *s)).map_or(false, |c| !c.ended && c.settled.is_none() && c.turns < MAX_TURNS && c.lines.last().map_or(false, |l| l.speaker == *s))
+                        t.pairs.get(&pair(listener, *s)).map_or(false, |c| {
+                            !c.ended && c.settled.is_none() && c.turns < MAX_TURNS && (c.missed.is_some() || c.lines.last().map_or(false, |l| l.speaker == *s))
+                        })
                     });
                     if due.is_none() {
                         t.busy.remove(&listener);
@@ -446,12 +858,52 @@ impl Minds {
         });
     }
 
+    /// Who heard a line and how they stood (`audience`, kept by the authority where the world's
+    /// `speech_audience` law is on). `None` (and the line is treated as without the modes that
+    /// need it) when the world does not keep it.
+    fn audience_of(&self, speaker: u32, at_ms: u64) -> Option<Vec<Hearer>> {
+        let found = self.conn.db.audience().iter().find(|a| a.speaker == speaker && a.at_ms == at_ms).map(|a| a.hearers);
+        if found.is_none() {
+            let mut t = self.talk.lock().unwrap();
+            if !t.no_audience_logged {
+                t.no_audience_logged = true;
+                log::warn!("LIVING_GREET={:?} needs who heard each line, and this world does not keep it (set the `speech_audience` law in the seed's rules)", self.talk_cfg.greet);
+            }
+        }
+        found
+    }
+
+    /// A person this service takes conversation turns for.
+    fn thinks_for(&self, id: u32) -> bool {
+        self.allowed(id) && self.conn.db.character().id().find(&id).is_some_and(|c| c.kind == "person" && c.alive && c.ai && c.stage != 0 && c.controller == self.me)
+    }
+
+    /// How a listener stands toward a speaker (`LIVING_GREET`): hostile when they feel strongly
+    /// against them; known through family, one community or a warm, trusting or close bond; a
+    /// stranger while the speaker's name is unknown to them; otherwise barely known.
+    fn familiarity(&self, listener: u32, speaker: u32) -> Familiarity {
+        let r = self.conn.db.relation().iter().find(|r| r.actor == listener && r.other == speaker);
+        if r.as_ref().is_some_and(|r| r.affinity <= -40.0) {
+            return Familiarity::Hostile;
+        }
+        let close = r.as_ref().is_some_and(|r| CLOSE.iter().any(|w| r.label.to_lowercase().contains(w)) || r.affinity >= 40.0 || r.trust >= 60.0);
+        let (Some(a), Some(b)) = (self.conn.db.character().id().find(&listener), self.conn.db.character().id().find(&speaker)) else { return Familiarity::Stranger };
+        let family = a.parent_a == b.id || a.parent_b == b.id || b.parent_a == a.id || b.parent_b == a.id;
+        let community = |id: u32| self.conn.db.membership().iter().find(|m| m.member == id).map(|m| m.community);
+        if close || family || community(listener).is_some_and(|k| community(speaker) == Some(k)) {
+            Familiarity::Known
+        } else if self.known_as(listener, speaker) == b.name {
+            Familiarity::Barely
+        } else {
+            Familiarity::Stranger
+        }
+    }
+
     /// Whether a listener cares enough about a speaker to answer a remark not meant for them:
     /// family and close bonds, and strong feelings either way.
     fn cares(&self, listener: u32, speaker: u32) -> bool {
         self.conn.db.relation().iter().find(|r| r.actor == listener && r.other == speaker).map_or(false, |r| {
             let label = r.label.to_lowercase();
-            const CLOSE: &[&str] = &["family", "partner", "friend", "parent", "mother", "father", "child", "son", "daughter", "sibling", "brother", "sister", "spouse", "wife", "husband", "lover"];
             CLOSE.iter().any(|w| label.contains(w)) || r.affinity.abs() >= 40.0 || r.trust >= 60.0
         })
     }
@@ -465,27 +917,144 @@ impl Minds {
         self.actors.lock().unwrap().get(&actor).map_or(false, |m| m.running)
     }
 
+    /// Whom a deliberation's words are for: `to`, or for unaddressed words a waiting speaker
+    /// they name, or the only one waiting (the authority hears such words as addressed to the
+    /// only person close by). `waiting` are the speakers whose lines wait on it.
+    fn say_targets(&self, say: &str, to: u32, waiting: Vec<u32>) -> Vec<u32> {
+        if say.trim().is_empty() {
+            return Vec::new();
+        }
+        if to != 0 {
+            return vec![to];
+        }
+        let words = memory::cue_words(say);
+        let named: Vec<u32> = waiting.iter().copied().filter(|s| memory::cue_words(&self.name(*s)).iter().any(|w| words.contains(w))).collect();
+        if named.is_empty() && waiting.len() == 1 { waiting } else { named }
+    }
+
     /// A deliberation is about to speak (to `to`, or to nobody in particular).
     pub(super) fn deliberation_says(&self, actor: u32, say: &str, to: u32) {
         if say.trim().is_empty() {
             return;
         }
         let now = llm::now_ms();
+        let waiting: Vec<u32> = self.talk.lock().unwrap().parked.get(&actor).map(|v| v.iter().map(|(s, _)| *s).collect()).unwrap_or_default();
+        let named = self.say_targets(say, to, waiting);
         let mut t = self.talk.lock().unwrap();
-        let named: Vec<u32> = if to != 0 {
-            vec![to]
-        } else {
-            // Unaddressed words count as speaking to a waiting speaker they name, or to the only
-            // one waiting (the authority hears such words as addressed to the only person close by).
-            let words = memory::cue_words(say);
-            let waiting: Vec<u32> = t.parked.get(&actor).map(|v| v.iter().map(|(s, _)| *s).collect()).unwrap_or_default();
-            let named: Vec<u32> = waiting.iter().copied().filter(|s| memory::cue_words(&self.name(*s)).iter().any(|w| words.contains(w))).collect();
-            if named.is_empty() && waiting.len() == 1 { waiting } else { named }
-        };
         for o in named {
             t.deliberated_to.insert((actor, o), now);
         }
         t.deliberated_to.retain(|_, at| now.saturating_sub(*at) < QUIET_MS * 2);
+    }
+
+    /// `LIVING_PARK=concurrent`: a deliberation's prompt has just read the experiences.
+    pub(super) fn deliberation_prompt(&self, actor: u32) {
+        if self.talk_cfg.park != Park::Concurrent {
+            return;
+        }
+        self.talk.lock().unwrap().deliberating.insert(actor, Deliberating { prompt_ms: Some(llm::now_ms()), ..Default::default() });
+    }
+
+    /// `LIVING_PARK=concurrent`: a deliberation has decided (its think step answered). Lines
+    /// waiting on it whose speaker its words are not for get their turn now.
+    pub(super) fn deliberation_decided(self: &Arc<Self>, actor: u32, decision: &Value) {
+        if self.talk_cfg.park != Park::Concurrent {
+            return;
+        }
+        let (say, to) = match &decision["say"] {
+            Value::String(s) => (s.clone(), 0),
+            Value::Object(o) => (o.get("text").and_then(|t| t.as_str()).unwrap_or_default().to_string(), o.get("to").and_then(living_rules::normalize::reply_id).unwrap_or(0) as u32),
+            _ => (String::new(), 0),
+        };
+        let say = if living_rules::normalize::placeholder_words(&say) { String::new() } else { say };
+        let waiting: Vec<u32> = self.talk.lock().unwrap().parked.get(&actor).map(|v| v.iter().map(|(s, _)| *s).collect()).unwrap_or_default();
+        let targets = self.say_targets(&say, to, waiting);
+        let now = llm::now_ms();
+        let due: Vec<u32> = {
+            let mut t = self.talk.lock().unwrap();
+            t.deliberating.entry(actor).or_default().decided = Some(targets.clone());
+            let lines = t.parked.remove(&actor).unwrap_or_default();
+            let (keep, go): (Vec<(u32, u64)>, Vec<(u32, u64)>) = lines.into_iter().partition(|(s, _)| targets.contains(s));
+            if !keep.is_empty() {
+                t.parked.insert(actor, keep);
+            }
+            let mut due = Vec::new();
+            for (speaker, at) in go {
+                if !due.contains(&speaker) && now.saturating_sub(at) <= QUIET_MS {
+                    due.push(speaker);
+                }
+            }
+            due
+        };
+        for speaker in due {
+            log::info!("{}'s deliberation has decided, and not to speak to {}: the line gets its turn now", self.name(actor), self.name(speaker));
+            self.clone().claim_turn(actor, speaker);
+        }
+    }
+
+    /// Start a reply turn for a listener, or leave the speaker waiting for the one in flight.
+    fn claim_turn(self: Arc<Self>, listener: u32, speaker: u32) {
+        let go = {
+            let mut t = self.talk.lock().unwrap();
+            match t.busy.get_mut(&listener) {
+                Some(waiting) => {
+                    *waiting = Some(speaker);
+                    false
+                }
+                None => {
+                    t.busy.insert(listener, None);
+                    true
+                }
+            }
+        };
+        if go {
+            self.spawn_turns(listener, speaker);
+        }
+    }
+
+    fn park_concurrent(&self) -> bool {
+        self.talk_cfg.park == Park::Concurrent
+    }
+
+    /// `LIVING_PARK=concurrent`: whether a line heard at `heard_ms` from `other` gets its turn
+    /// while `me`'s deliberation runs. Not while the prompt is still to be built (it will see
+    /// the line); once the deliberation has decided, unless its words are for `other`; before
+    /// that, when the line came just after the prompt was built (within `FRESH_MS`).
+    fn turn_alongside(&self, me: u32, other: u32, heard_ms: u64) -> bool {
+        self.talk_cfg.park == Park::Concurrent && self.talk.lock().unwrap().deliberating.get(&me).is_some_and(|d| d.alongside(other, heard_ms))
+    }
+
+    /// `LIVING_PARK=concurrent`: a deliberation's words for someone its character already
+    /// answered in a turn taken alongside it are not said (the plan and acts stand).
+    pub(super) fn unanswered_say(&self, actor: u32, say: String, to: u32) -> String {
+        if self.talk_cfg.park != Park::Concurrent || say.trim().is_empty() {
+            return say;
+        }
+        let t = self.talk.lock().unwrap();
+        let Some(d) = t.deliberating.get(&actor) else { return say };
+        let answered = d.answered_since_prompt();
+        drop(t);
+        let targets = self.say_targets(&say, to, answered.clone());
+        if let Some(o) = targets.iter().find(|o| answered.contains(o)) {
+            log::info!("{} already answered {} in conversation while deliberating: the deliberation's words “{say}” are not said", self.name(actor), self.name(*o));
+            return String::new();
+        }
+        say
+    }
+
+    /// `LIVING_PARK=concurrent`: what a character said in turns taken alongside its running
+    /// deliberation, for the deliberation's compile step.
+    pub(super) fn said_alongside(&self, actor: u32) -> Option<String> {
+        if self.talk_cfg.park != Park::Concurrent {
+            return None;
+        }
+        let t = self.talk.lock().unwrap();
+        let d = t.deliberating.get(&actor)?;
+        if d.answered.is_empty() {
+            return None;
+        }
+        let lines: Vec<String> = d.answered.iter().map(|(o, _, w)| format!("to {}: “{w}”", self.known_as(actor, *o))).collect();
+        Some(format!("While you were thinking this over, you also answered in conversation: {}.", lines.join("; ")))
     }
 
     /// A deliberation ended: lines that came while it ran get their turn, unless it spoke to
@@ -494,6 +1063,7 @@ impl Minds {
         let now = llm::now_ms();
         let due: Vec<u32> = {
             let mut t = self.talk.lock().unwrap();
+            t.deliberating.remove(&actor);
             let lines = t.parked.remove(&actor).unwrap_or_default();
             let mut due = Vec::new();
             for (speaker, at) in lines {
@@ -533,7 +1103,14 @@ impl Minds {
     }
 
     async fn reply_turn(&self, me: u32, other: u32) -> Result<()> {
-        if self.thinking(me) {
+        let thinking = self.thinking(me);
+        let alongside = thinking && self.park_concurrent() && {
+            let heard = self.talk.lock().unwrap().pairs.get(&pair(me, other)).and_then(|c| c.lines.iter().rev().find(|l| l.speaker == other).map(|l| l.at_ms)).unwrap_or_else(llm::now_ms);
+            self.turn_alongside(me, other, heard)
+        };
+        if alongside {
+            log::info!("{} is deliberating; the line from {} gets its turn alongside", self.name(me), self.name(other));
+        } else if thinking {
             // Its prompt may already be built: the line waits for the deliberation to end.
             log::info!("{} is deliberating; the line from {} waits for it to end", self.name(me), self.name(other));
             let heard = self.talk.lock().unwrap().pairs.get(&pair(me, other)).and_then(|c| c.lines.iter().rev().find(|l| l.speaker == other).map(|l| l.at_ms)).unwrap_or_else(llm::now_ms);
@@ -548,21 +1125,31 @@ impl Minds {
         let Some(c) = self.conn.db.character().id().find(&me) else { return Ok(()) };
         let temper = self.temper(me);
         let stamina = temper.stamina(self.affinity(me, other));
-        let (lines, own, reopened, lately_said) = {
+        let (lines, own, reopened, lately_said, open, missed) = {
             let mut t = self.talk.lock().unwrap();
             let now = llm::now_ms();
             let lately_said = t.said.get(&me).map_or(0, |v| v.iter().filter(|x| now.saturating_sub(**x) < 5 * 60_000).count());
             let conv = t.pairs.entry(pair(me, other)).or_default();
-            (conv.lines.clone(), conv.own.get(&me).copied().unwrap_or(0), conv.reopened.clone(), lately_said)
+            let heard_text = conv.lines.iter().rev().find(|l| l.speaker == other).map(|l| l.text.clone()).unwrap_or_default();
+            (conv.lines.clone(), conv.own.get(&me).copied().unwrap_or(0), conv.reopened.clone(), lately_said, conv.open(&heard_text), conv.missed.take())
         };
-        let Some(heard) = lines.iter().rev().find(|l| l.speaker == other).cloned() else { return Ok(()) };
+        // A turn on a missed line (reply-timing) answers what came of its own words; the other's
+        // last line, if any, is still what the exchange was about.
+        let heard = match (lines.iter().rev().find(|l| l.speaker == other).cloned(), &missed) {
+            (Some(h), _) => h,
+            (None, Some((_, at_ms))) => Line { speaker: other, to: me, text: String::new(), at_ms: *at_ms, at: lines.last().map_or((0.0, 0.0), |l| l.at), turn: false, exp: 0 },
+            (None, None) => return Ok(()),
+        };
         let lane = if self.is_player(me) || self.is_player(other) || lines.iter().any(|l| self.is_player(l.speaker) || self.is_player(l.to)) {
             Lane::Interactive
         } else {
             Lane::Routine
         };
-        let last_word = own + 1 >= stamina;
-        let ctx = TalkCtx { temper: &temper, lately_said, own, last_word, reopened: reopened.as_ref() };
+        // The turn budget closes an exchange only when nothing is open between them: a question
+        // to answer, or a plan or promise just made, leaves `end` to the mind (talk-turns).
+        let last_word = own + 1 >= stamina && !open;
+        let enough = own + 1 >= stamina && open;
+        let ctx = TalkCtx { temper: &temper, lately_said, own, last_word, enough, reopened: reopened.as_ref(), missed: missed.as_ref().map(|m| m.0.as_str()) };
         let (system, user) = self.talk_prompt(&c, other, &lines, &heard, &ctx).await;
         let mut profile = self.profile(&c);
         let messages = [Msg { role: "system", content: system }, Msg { role: "user", content: user }];
@@ -587,6 +1174,9 @@ impl Minds {
             _ => (String::new(), 0),
         };
         let say = if say.eq_ignore_ascii_case("null") || living_rules::normalize::placeholder_words(&say) { String::new() } else { say };
+        // The way it is said (`"way": "whisper"`, or inside `say`); one the world does not have
+        // is said aloud. A whisper is answered in a whisper unless the reply says otherwise.
+        let way = way_of(&v).unwrap_or_else(|| if self.how_heard(&heard) == "whisper" && prompts::ways().iter().any(|w| w == "whisper") { "whisper".into() } else { "say".into() });
         let to = if to != 0 && to != me && self.conn.db.character().id().find(&to).map_or(false, |c| c.kind == "person") { to } else { other };
         // What the speaker says is now settled closes the exchange (their own judgment).
         let outcome = flat(if v["settled"].is_null() || v["settled"] == json!(false) { &v["outcome"] } else { &v["settled"] }).trim().to_string();
@@ -619,10 +1209,10 @@ impl Minds {
                 _ => String::new(),
             }
         );
-        let t = ThoughtIn {
+        let mut t = ThoughtIn {
             kind: "talk".into(),
             summary,
-            detail: json!({"with": other, "heard": heard.text, "reply": v, "stamina": stamina, "own_turns": own + 1, "last_word": last_word,
+            detail: json!({"with": other, "heard": heard.text, "missed": missed.as_ref().map(|m| &m.0), "reply": v, "stamina": stamina, "own_turns": own + 1, "last_word": last_word,
                            "settled": settled.as_ref().map(|s| json!({"outcome": s.outcome, "until_ms": s.until_ms})),
                            "conversation": lines.iter().map(|l| json!({"speaker": l.speaker, "to": l.to, "text": l.text})).collect::<Vec<_>>()})
             .to_string(),
@@ -631,13 +1221,31 @@ impl Minds {
             model: reply.model.clone(),
             reference: reference(me, "talk"),
         };
-        // Answer once the other has had time to say their line (and no faster than the
-        // authority allows one to speak).
-        let last = self.talk.lock().unwrap().spoke.get(&me).copied().unwrap_or(0);
-        let wait = (last + SPEECH_GAP_MS).max(heard.at_ms + saying_ms(&heard.text)).saturating_sub(llm::now_ms());
+        // Said as soon as it is ready (reply-timing): whether the other receives it is judged
+        // when it is said, and waiting for the other's line to be done being said let the two
+        // walk apart (play-test 10: a reply ready in 572 ms waited 1.98 s, and its speaker had
+        // walked out of reach). Only the gap after one's own previous line is kept, on the
+        // exchange's rhythm (`Pace`); the rest of today's pacing moves the line's place in that
+        // rhythm (`spoke`, `voice`), which the next turn paces from.
+        let pace = {
+            let t = self.talk.lock().unwrap();
+            let last = t.spoke.get(&me).copied().unwrap_or(0);
+            let until = t.voice.get(&heard.speaker).filter(|(said, _)| said.abs_diff(heard.at_ms) <= 5_000).map_or(0, |v| v.1);
+            Pace::of(llm::now_ms(), last, heard.at_ms, &heard.text, until)
+        };
+        let wait = pace.say_ms.saturating_sub(llm::now_ms());
         if wait > 0 {
             tokio::time::sleep(Duration::from_millis(wait)).await;
         }
+        // `LIVING_PARK=concurrent`: a turn taken alongside a deliberation that has meanwhile
+        // spoken to them says nothing and acts on nothing (that deliberation was the answer).
+        let (say, acts) = if alongside && self.talk.lock().unwrap().deliberated_to.get(&(me, other)).is_some_and(|at| *at >= heard.at_ms) {
+            log::info!("{}'s deliberation spoke to {} first: the turn taken alongside says nothing", c.name, other_name);
+            t.summary = format!("{} (not said: the deliberation answered first)", t.summary);
+            (String::new(), Vec::new())
+        } else {
+            (say, acts)
+        };
         // Record the turn before speaking: the listener's experience of this line can arrive
         // before the reducer's reply, and must be recognized as part of this exchange.
         let text: String = say.chars().take(400).collect();
@@ -645,12 +1253,23 @@ impl Minds {
         {
             let mut tk = self.talk.lock().unwrap();
             if !say.is_empty() {
-                tk.spoke.insert(me, now);
+                let paced = pace.paced_ms.max(now);
+                tk.spoke.insert(me, paced);
+                tk.voice.insert(me, (now, paced + saying_ms(&text)));
                 tk.said.entry(me).or_default().push(now);
+                if alongside {
+                    if let Some(d) = tk.deliberating.get_mut(&me) {
+                        d.answered.push((to, now, text.clone()));
+                    }
+                }
             }
             let c = tk.pairs.entry(pair(me, other)).or_default();
             c.turns += 1;
             *c.own.entry(me).or_default() += 1;
+            // A plan or promise between them: something settled, or an act toward the other.
+            if !outcome.is_empty() || acts.iter().any(|a| act_toward(a, other)) {
+                c.promised = Some(c.turns);
+            }
             c.ended |= end || (to != other && !say.is_empty());
             c.last_ms = now;
             if let Some(s) = &settled {
@@ -669,7 +1288,20 @@ impl Minds {
                 }
             }
         }
-        // What was settled is the speaker's own conclusion: it goes into their mind.
+        let turn_reference = t.reference.clone();
+        let mut result = self.say(me, say.clone(), to, way.clone(), t.clone()).await;
+        if matches!(&result, Err(e) if e.to_string().contains("too fast")) {
+            tokio::time::sleep(Duration::from_millis(SPEECH_GAP_MS)).await;
+            result = self.say(me, say.clone(), to, way.clone(), t).await;
+        }
+        if result.is_err() && !say.is_empty() {
+            let mut tk = self.talk.lock().unwrap();
+            if let Some(c) = tk.pairs.get_mut(&pair(me, to)) {
+                c.lines.retain(|l| !(l.turn && l.speaker == me && l.at_ms == now));
+            }
+        }
+        // What was settled is the speaker's own conclusion: it goes into their mind (after the
+        // line is said, so the write does not hold it back).
         if let (Some(s), Some(store)) = (&settled, &self.store) {
             if !s.outcome.is_empty() {
                 let key = format!("agreement:person_{other}");
@@ -688,23 +1320,12 @@ impl Minds {
                     ],
                     ..Default::default()
                 };
-                if let Err(e) = store.apply(me, &patch, &t.reference, now).await {
+                if let Err(e) = store.apply(me, &patch, &turn_reference, now).await {
                     log::warn!("{}: agreement not remembered: {e:#}", c.name);
                 }
             }
         }
-        let mut result = self.say(me, say.clone(), to, t.clone()).await;
-        if matches!(&result, Err(e) if e.to_string().contains("too fast")) {
-            tokio::time::sleep(Duration::from_millis(SPEECH_GAP_MS)).await;
-            result = self.say(me, say.clone(), to, t).await;
-        }
-        if result.is_err() && !say.is_empty() {
-            let mut tk = self.talk.lock().unwrap();
-            if let Some(c) = tk.pairs.get_mut(&pair(me, to)) {
-                c.lines.retain(|l| !(l.turn && l.speaker == me && l.at_ms == now));
-            }
-        }
-        if let Err(e) = self.act(me, acts, "talk").await {
+        if let Err(e) = self.act(me, acts, "talk", &turn_reference, lane).await {
             log::warn!("{}: acts from a conversation not taken: {e:#}", c.name);
         }
         log::info!(
@@ -727,12 +1348,59 @@ impl Minds {
         result
     }
 
-    async fn say(&self, actor: u32, say: String, to: u32, t: ThoughtIn) -> Result<()> {
+    /// Where `actor` stands and moves now, and how it perceives `other` (talk-places,
+    /// reply-timing): the authority's answer to `mind_reach`, since this service does not follow
+    /// bodies. None if the ask fails or takes over [`STANDING_WAIT_MS`]; the turn then lists its
+    /// places without the way to them and says nothing of the moment's distances.
+    async fn reach_now(&self, actor: u32, other: u32) -> Option<Reach> {
         let (tx, rx) = oneshot::channel();
-        self.conn.reducers.mind_say_then(actor, say, to, 0, t, move |_, r| {
+        self.conn.procedures.mind_reach_then(actor, other, move |_, r| {
+            let _ = tx.send(r);
+        });
+        match tokio::time::timeout(Duration::from_millis(STANDING_WAIT_MS), rx).await {
+            Ok(Ok(Ok(Ok(r)))) => Some(r),
+            Ok(Ok(Ok(Err(e)))) => {
+                log::warn!("{}: mind_reach: {e}", self.name(actor));
+                None
+            }
+            Ok(Ok(Err(e))) => {
+                log::warn!("{}: mind_reach transport: {e:?}", self.name(actor));
+                None
+            }
+            _ => {
+                log::warn!("{}: mind_reach gave no answer within {STANDING_WAIT_MS} ms", self.name(actor));
+                None
+            }
+        }
+    }
+
+    async fn say(&self, actor: u32, say: String, to: u32, way: String, t: ThoughtIn) -> Result<()> {
+        let (tx, rx) = oneshot::channel();
+        self.conn.reducers.mind_say_then(actor, say, to, way, 0, t, move |_, r| {
             let _ = tx.send(flatten(r));
         })?;
         rx.await?.map_err(|e| anyhow!("mind_say: {e}"))
+    }
+
+    /// How the line being answered was said: its way (`whisper`, `call`, `say`), from the
+    /// listener's row and the speaker's `heard` row. (How far away the speaker stood is in the
+    /// row's own words when the way says it, "calls out to you from about 25 m": this service
+    /// does not follow bodies.)
+    fn how_heard(&self, heard: &Line) -> String {
+        self.how_heard_told(heard).0
+    }
+
+    /// The way it was said, and how the listener's own row tells it, without the words ("Bram
+    /// calls out to you from about 25 m").
+    fn how_heard_told(&self, heard: &Line) -> (String, String) {
+        let e = self.conn.db.experience().id().find(&heard.exp);
+        let told = e.as_ref().map(|e| e.text.split_once(": “").map_or(e.text.as_str(), |(head, _)| head).to_string()).unwrap_or_default();
+        let way = match &e {
+            Some(e) if e.kind == "whisper" => "whisper".to_string(),
+            Some(e) => self.conn.db.line_heard().iter().find(|h| h.speaker == heard.speaker && h.at_ms == e.at_ms).map(|h| h.way).unwrap_or_else(|| "say".into()),
+            None => "say".into(),
+        };
+        (way, told)
     }
 
     /// Who they are and how they talk, how they feel about the other, what the moment brings
@@ -748,6 +1416,9 @@ impl Minds {
             Some(p) => format!("{}\nValues: {}\nGoals: {}", p.narrative, p.values.join("; "), p.goals.join("; ")),
             None => format!("You are {}.", c.name),
         };
+        // What the body is now, as every prompt's "# Who you are" says it (`body_line`).
+        let body = self.body_line(me);
+        let identity = if body.is_empty() { identity } else { format!("{identity}\n{body}") };
         let feeling = self
             .conn
             .db
@@ -757,7 +1428,7 @@ impl Minds {
             .map(|r| format!("{}: trust {:.0}, affinity {:.0}{}", if r.label.is_empty() { "no word for it yet" } else { &r.label }, r.trust, r.affinity, if r.note.is_empty() { String::new() } else { format!(" — {}", r.note) }))
             .unwrap_or_else(|| "You have no settled feelings about them yet.".into());
         let lately: Vec<String> = {
-            let all: Vec<Experience> = self.experiences(me).into_iter().filter(|e| (e.subject == other || e.object == other) && !matches!(e.kind.as_str(), "speech" | "repeat")).collect();
+            let all: Vec<Experience> = self.experiences(me).into_iter().filter(|e| (e.subject == other || e.object == other) && !matches!(e.kind.as_str(), "speech" | "whisper" | "repeat")).collect();
             let n = all.len();
             all.iter().skip(n.saturating_sub(5)).map(|e| self.exp_line(e, &fmt, false)).collect()
         };
@@ -770,19 +1441,30 @@ impl Minds {
             17..=19 => "evening",
             _ => "night",
         };
+        // Where one stands and moves now and how one perceives the other, asked of the authority
+        // (talk-places, reply-timing); else where the line was said.
+        let reach = self.reach_now(me, other).await;
+        let standing = reach.as_ref().map(|r| (r.x, r.y));
+        let here = standing.unwrap_or(heard.at);
+        let places = self.places(me, standing, true);
         let near = self
             .conn
             .db
             .place()
             .iter()
             .filter(|p| p.actor == me)
-            .map(|p| (((p.x - heard.at.0).powi(2) + (p.y - heard.at.1).powi(2)).sqrt(), p.name))
+            .map(|p| (((p.x - here.0).powi(2) + (p.y - here.1).powi(2)).sqrt(), p.name))
             .filter(|(d, _)| *d <= 15.0)
             .min_by(|a, b| a.0.total_cmp(&b.0));
         let place = near.as_ref().map(|(d, n)| if *d <= 4.0 { format!("at \"{n}\"") } else { format!("near \"{n}\"") }).unwrap_or_else(|| "away from the places you know".into());
         let plan = self.conn.db.brain().id().find(&me).map(|b| b.plan).filter(|p| !p.is_empty());
         let doing = plan.clone().unwrap_or_else(|| "going about your day".into());
-        let scene = format!("{} ({part}), {place}. What you are doing: {doing}.", fmt(now));
+        let mut scene = format!("{} ({part}), {place}. What you are doing: {doing}.", fmt(now));
+        if let Some(r) = &reach {
+            // The place one is walking to, as one knows it (one's own places, within 6 m).
+            let goal_place = r.goal.then(|| self.conn.db.place().iter().filter(|p| p.actor == me).map(|p| (((p.x - r.gx).powi(2) + (p.y - r.gy).powi(2)).sqrt(), p.name)).filter(|(d, _)| *d <= 6.0).min_by(|a, b| a.0.total_cmp(&b.0)).map(|(_, n)| n)).flatten();
+            scene.push_str(&format!("\n{}", reach_words(&other_name, r, goal_place.as_deref()).join(" ")));
+        }
         let body = self.body_text(c.id);
         // What this exchange brings to mind: the other person, what was said, the place, the hour.
         let mut cues = Cues::default();
@@ -791,7 +1473,7 @@ impl Minds {
         for l in lines.iter().rev().skip(1).take(4) {
             cues.text(&l.text, 0.5);
         }
-        for id in self.named_people(&lines.iter().rev().take(3).map(|l| l.text.as_str()).collect::<Vec<_>>().join(" ")) {
+        for id in self.named_people(me, &lines.iter().rev().take(3).map(|l| l.text.as_str()).collect::<Vec<_>>().join(" ")) {
             if id != me && id != other {
                 cues.key(format!("person:{id}"), 0.8);
             }
@@ -808,7 +1490,12 @@ impl Minds {
         let recalled = self.recall_for(me, &cues.bounded(), 8, 3, "talk").await;
         let mut mind = recalled.mind;
         mind.extend(recalled.cued_stances.into_iter().take(3).map(|s| format!("you hold: {s}")));
-        let convo: Vec<String> = lines
+        // The conversation up to the line being answered: that line is given once, under "What you
+        // are answering" (talk-turns; before, it ended the transcript too). Lines after it, if
+        // any, are not part of what this turn answers.
+        // A turn on a missed line shows the whole exchange, up to its own unheard words.
+        let upto = if ctx.missed.is_some() { lines.len() } else { lines.iter().rposition(|l| l.speaker == heard.speaker && l.at_ms == heard.at_ms).unwrap_or(lines.len()) };
+        let convo: Vec<String> = lines[..upto]
             .iter()
             .rev()
             .take(12)
@@ -828,6 +1515,8 @@ impl Minds {
         );
         if ctx.last_word {
             pacing.push_str(" You have said about as much as you want to for now: make this your last word (end: true), and say what was settled, if anything.");
+        } else if ctx.enough {
+            pacing.push_str(" You have said about as much as you usually do.");
         }
         let earlier = ctx.reopened.map(|(s, why)| format!("Earlier you two settled{} ({}). Now {why}.", if s.outcome.is_empty() { " nothing in particular and parted".to_string() } else { format!(": “{}”", s.outcome) }, fmt(s.at_ms)));
         // What stands between them now: proposals either way (answerable with an act).
@@ -841,19 +1530,35 @@ impl Minds {
         }
         for o in self.conn.db.trade_offer().iter().filter(|o| now.saturating_sub(o.at_ms) <= 180_000) {
             if o.from == other && o.to == me {
-                between.push(format!("{other_name} offers you {} {} for {} {} (accept to exchange).", o.give_qty, o.give_item, o.want_qty, o.want_item));
+                between.push(format!("{other_name} offers you {} {} for {} {} (offer {}: accept to exchange, or decline).", o.give_qty, o.give_item, o.want_qty, o.want_item, o.id));
             } else if o.from == me && o.to == other {
                 between.push(format!("You offered {other_name} {} {} for {} {}; they have not accepted yet.", o.give_qty, o.give_item, o.want_qty, o.want_item));
             }
         }
         // Agreements and demands between the two, as the world keeps them.
         between.extend(self.dealings_with(me, other));
+        // How it was said: a whisper is between the two; a call came from beyond a voice.
+        let voice = prompts::voice_m();
+        let (way, told) = self.how_heard_told(heard);
+        let how = match way.as_str() {
+            // Said to someone else, naming this hearer (talk-turns): how it reached them, in the
+            // authority's words ("Sissly Fenner said to a stranger, naming you").
+            _ if heard.to != 0 && heard.to != c.id && names_me(&format!("{told}: “")) => format!("{told}."),
+            "whisper" => "They whispered this to you; only you heard the words. To keep it between you, whisper back (\"way\": \"whisper\"); a whisper reaches only someone beside you.".to_string(),
+            "call" => format!("{}. An ordinary voice carries {voice:.0} m: if they are farther than that, call back (\"way\": \"call\") or go over to them.", if told.is_empty() { "They called this out".to_string() } else { told }),
+            _ => String::new(),
+        };
+        // The other's body (body-sex), only as one remembers it: made out once at full sight (the
+        // authority's `sex_seen`; someone face to face has been). A voice from someone one has
+        // never made out gives none.
+        let other_body = self.known_sex(me, other).unwrap_or_default();
         let t = prompts::TalkUser {
             name: &c.name,
             identity: &identity,
             pacing: &pacing,
             other: &other_name,
             other_id: other,
+            other_body: &other_body,
             feeling: &feeling,
             mind: &mind,
             memories: &recalled.memories,
@@ -863,7 +1568,11 @@ impl Minds {
             body: &body,
             conversation: &convo,
             heard: &heard.text,
+            how: &how,
             between: &between,
+            places: &places,
+            placed: standing.is_some(),
+            missed: ctx.missed,
         };
         (prompts::talk_system(), prompts::talk_user(&t))
     }
@@ -875,12 +1584,84 @@ struct TalkCtx<'a> {
     lately_said: usize,
     own: u32,
     last_word: bool,
+    /// The turn budget is reached but something is open between them: told as a fact, `end`
+    /// left to the mind (talk-turns).
+    enough: bool,
     reopened: Option<&'a (Settled, String)>,
+    /// What came of its own last words, when the other could not have heard them (the
+    /// authority's `silence`, reply-timing).
+    missed: Option<&'a str>,
 }
 
 /// About how long a line takes to say aloud (people speak ~3 words a second).
 fn saying_ms(text: &str) -> u64 {
     (text.split_whitespace().count() as u64 * 330).clamp(1_500, 8_000)
+}
+
+/// When a reply turn's line is said, and its place in the exchange's rhythm (reply-timing).
+///
+/// Before, a reply was held until the line it answered was done being said (`saying_ms` from
+/// when it was heard) and `SPEECH_GAP_MS` after the speaker's own previous line, and the
+/// authority judged earshot when it was finally said. Now it is said when ready, so earshot is
+/// judged when the speaker starts speaking; the old time is kept as `paced_ms`, which the
+/// speaker's next line keeps its gap from. A speaker's lines are therefore never closer
+/// together than before on that rhythm, and when nobody's line comes sooner `paced_ms` is the
+/// old said time exactly.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Pace {
+    /// When it is said: once ready, and not before `SPEECH_GAP_MS` after one's previous line's
+    /// `paced_ms` (which also keeps the authority's 2 s speaking gap).
+    say_ms: u64,
+    /// When it was said before reply-timing: also not before the line answered is done being
+    /// said (`saying_ms` from when it was heard, or from where its own speaker's rhythm put it,
+    /// `heard_until_ms`, for a line this service said).
+    paced_ms: u64,
+}
+
+impl Pace {
+    fn of(ready_ms: u64, last_paced_ms: u64, heard_at_ms: u64, heard_text: &str, heard_until_ms: u64) -> Pace {
+        let say_ms = ready_ms.max(last_paced_ms + SPEECH_GAP_MS);
+        let paced_ms = say_ms.max(heard_at_ms + saying_ms(heard_text)).max(heard_until_ms);
+        Pace { say_ms, paced_ms }
+    }
+}
+
+/// What a talk turn's frame says of the moment from the replier's own perception
+/// (`mind_reach`, reply-timing): how far the other is when it sees or hears them, and whether
+/// and where it is walking, and whether that takes it toward or away from them. Facts only, no
+/// advice: whether to stop, turn, call out or walk on is the mind's. `goal_place`: the name of
+/// the replier's own known place it is walking to, if it knows one there.
+fn reach_words(other: &str, r: &Reach, goal_place: Option<&str>) -> Vec<String> {
+    let mut out = Vec::new();
+    let cap = |s: String| s.chars().next().map_or(String::new(), |c| c.to_uppercase().chain(s.chars().skip(1)).collect());
+    out.push(match r.other.as_str() {
+        "seen" if r.other_m < 1.5 => cap(format!("{other} is right beside you.")),
+        "seen" => cap(format!("{other} is {:.0} m {} of you.", r.other_m, r.other_where)),
+        "heard" => format!("You cannot see {other} now; you hear them {}.", r.other_where),
+        _ => format!("You neither see nor hear {other} now."),
+    });
+    let gait = if r.speed >= 3.0 { "running" } else { "walking" };
+    let motion = if r.speed <= 0.0 {
+        "You are standing still".to_string()
+    } else {
+        let to = match (r.goal, goal_place) {
+            (true, Some(p)) => format!(" to \"{p}\""),
+            (true, None) => match living_rules::bearing::from_here((r.x, r.y), (r.gx, r.gy)) {
+                h if h == "here" => " to a spot just here".to_string(),
+                h => format!(" to a spot {h}"),
+            },
+            _ => String::new(),
+        };
+        let way = match (r.other.as_str(), r.toward) {
+            ("seen", 1) => format!(", toward {other}"),
+            ("seen", -1) => format!(", away from {other}"),
+            ("seen", _) => format!(", past {other}"),
+            _ => String::new(),
+        };
+        format!("You are {gait}{to}{way}")
+    };
+    out.push(if r.doing.is_empty() { format!("{motion}.") } else { format!("{motion} ({}).", r.doing) });
+    out
 }
 
 fn id_of(v: &Value) -> u32 {
@@ -893,6 +1674,38 @@ fn flat(v: &Value) -> String {
         Value::Null => String::new(),
         other => other.to_string().chars().take(300).collect(),
     }
+}
+
+/// Whom a line to the room names, in the hearer's own row ("Petra Tarn calls out to the room,
+/// naming Nell Tarn, from about 19 m: “…”"): the labels, or `None` when it names no one.
+fn room_naming(row: &str) -> Option<Vec<String>> {
+    let head = row.split('“').next().unwrap_or(row);
+    let (_, rest) = head.split_once("to the room, naming ")?;
+    let list = [", while talking with", ", from about"].iter().fold(rest, |r, cut| r.split(cut).next().unwrap_or(r));
+    let list = list.trim_end().trim_end_matches(':').trim_end().trim_end_matches(',');
+    Some(list.split(", ").flat_map(|p| p.split(" and ")).map(|w| w.trim().to_string()).filter(|w| !w.is_empty()).collect())
+}
+
+/// A line to the room that names exactly one person, not this hearer (talk-named-room).
+fn room_names_one_other(row: &str) -> bool {
+    room_naming(row).is_some_and(|n| n.len() == 1 && n[0] != "you")
+}
+
+/// Whether a line's row (the hearer's own words of it, the authority's) names the hearer in a
+/// line said to someone else: "Sissly Fenner said to a stranger, naming you: “…”" (talk-turns).
+fn names_me(row: &str) -> bool {
+    let head = row.split('“').next().unwrap_or(row);
+    head.split_once(", naming ").is_some_and(|(_, list)| {
+        list.trim_end().trim_end_matches(':').split(", ").flat_map(|p| p.split(" and ")).any(|w| w.trim() == "you")
+    })
+}
+
+/// Whether a deliberate act (as JSON) is aimed at `other` (its target's id).
+fn act_toward(act: &str, other: u32) -> bool {
+    serde_json::from_str::<Value>(act).ok().is_some_and(|v| {
+        let t = &v["target"];
+        t["id"].as_u64() == Some(other as u64) || t.as_u64() == Some(other as u64)
+    })
 }
 
 #[cfg(test)]
@@ -908,6 +1721,44 @@ mod tests {
         assert_eq!(id_of(&Value::Null), 0);
         assert_eq!(saying_ms("Hi."), 1_500);
         assert_eq!(saying_ms(&"word ".repeat(12)), 3_960);
+    }
+
+    #[test]
+    fn a_line_to_someone_else_names_the_hearer_only_in_its_own_row() {
+        assert!(names_me("Sissly Fenner said to a stranger, naming you: “ask Mother first”"));
+        assert!(names_me("Sissly Fenner said to a stranger, naming Agnes Fenner and you: “…”"));
+        assert!(names_me("A stranger calls out to Bram from about 20 m, naming you: “…”"));
+        assert!(!names_me("Sissly Fenner said to a stranger, naming Agnes Fenner: “you there”"), "a name in the words is not the detail");
+        assert!(!names_me("Sissly Fenner said to a stranger: “naming you”"));
+        assert!(act_toward(r#"{"do":"give","target":{"id":26},"item":"pie"}"#, 26));
+        assert!(!act_toward(r#"{"do":"goto","target":{"place":"inn"}}"#, 26));
+    }
+
+    #[test]
+    fn a_room_line_naming_one_other_is_theirs_to_answer() {
+        assert!(room_names_one_other("Petra Tarn calls out to the room, naming Nell Tarn, from about 19 m: “Nell! Come to the smokehouse”"));
+        assert!(room_names_one_other("A stranger said to the room, naming a stranger: “Edda!”"));
+        assert!(room_names_one_other("Bram said to the room, naming Lorcan Vane, while talking with Ife Okoro: “Lorcan, look”"));
+        assert!(!room_names_one_other("Petra Tarn calls out to the room, naming you, from about 5 m: “Nell!”"), "the named hearer answers");
+        assert!(!room_names_one_other("A stranger said to the room, naming Edda Hollin and a stranger: “Edda! Ife!”"), "two named: not one person's");
+        assert!(!room_names_one_other("Bram said to the room while talking with Lorcan Vane: “Has anyone seen the cart?”"), "naming no one");
+        assert!(!room_names_one_other("Sissly Fenner said to a stranger, naming Agnes Fenner: “ask Mother”"), "a line to someone is the other rule");
+    }
+
+    #[test]
+    fn the_turn_budget_does_not_close_an_open_exchange() {
+        let mut c = Conversation::default();
+        assert!(c.open("crust, can you bring me there ?"), "a question is open");
+        assert!(!c.open("crust"));
+        c.turns = 3;
+        c.promised = Some(3);
+        assert!(c.open("thanks"), "a promise in the last turn is open");
+        c.turns = 5;
+        assert!(!c.open("thanks"), "two turns later it is not");
+        let mut r = Conversation { reopened: Some((Settled { outcome: "I'm bringing the stranger to the inn".into(), until_ms: 1, at_ms: 0 }, "they bring up something new".into())), ..Default::default() };
+        assert!(r.open("is this the place"), "an exchange reopened on a promise is open at first");
+        r.turns = 2;
+        assert!(!r.open("ok"));
     }
 
     #[test]
@@ -933,6 +1784,139 @@ mod tests {
     }
 
     #[test]
+    fn the_defaults_are_nearest_and_concurrent() {
+        for (g, p) in [(None, None), (Some(""), Some("")), (Some(" Nearest "), Some("CONCURRENT"))] {
+            let c = Config::parse(g, p).unwrap();
+            assert_eq!((c.greet, c.park), (Greet::Nearest, Park::Concurrent));
+            assert!(c.audience());
+        }
+    }
+
+    #[test]
+    fn the_old_rules_stay_selectable_and_typos_are_refused() {
+        for (g, p) in [(Some("off"), Some("wait")), (Some(" OFF "), Some("Wait")), (Some("0"), Some("wait"))] {
+            let c = Config::parse(g, p).unwrap();
+            assert_eq!((c.greet, c.park), (Greet::Off, Park::Wait));
+            assert!(!c.audience());
+        }
+        assert_eq!(Config::parse(Some("nearest"), Some("concurrent")).unwrap().park, Park::Concurrent);
+        assert!(Config::parse(Some("curious"), None).unwrap().audience());
+        assert!(Config::parse(Some("facing"), None).unwrap().audience());
+        assert!(Config::parse(Some("nearst"), None).is_err());
+        assert!(Config::parse(None, Some("concurent")).is_err());
+    }
+
+    /// Every combination of what a heard line can be, as `Facts`.
+    fn every_line() -> Vec<Facts> {
+        let mut out = Vec::new();
+        let fams = [Familiarity::Known, Familiarity::Hostile, Familiarity::Stranger, Familiarity::Barely];
+        for bits in 0u32..1 << 9 {
+            let b = |i: u32| bits & (1 << i) != 0;
+            for familiarity in fams {
+                for draw in [0.0, 0.29, 0.5, 0.71, 0.99] {
+                    out.push(Facts {
+                        to_me: b(0),
+                        to_none: b(1),
+                        marked: b(2),
+                        faced: false,
+                        free: b(3),
+                        cares: b(4),
+                        draw,
+                        answers: if b(5) { 0.3 } else { 0.7 },
+                        curious: 0.6,
+                        familiarity,
+                        near: b(6),
+                        nearest_is_me: b(7),
+                        settled: b(8),
+                    });
+                }
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn greet_off_is_the_old_rule() {
+        // `LIVING_GREET=off`, selected explicitly (the default is `nearest`).
+        // Before LIVING_GREET: addressed by `to` or by the authority's mark; drawn into a remark
+        // only when free, caring (hostility included) and the remark draw passes; the remark
+        // draw always applies. Whatever else is known of a line changes nothing.
+        for f in every_line() {
+            assert_eq!(f.addressed(), f.to_me || (f.to_none && f.marked), "{f:?}");
+            let d = f.drawn(Greet::Off);
+            assert_eq!(d, Drawn { overheard: f.free && f.cares && f.draw < f.answers, greeted: false, no_remark_draw: false }, "{f:?}");
+        }
+    }
+
+    #[test]
+    fn greet_modes_draw_in_one_stranger_and_not_the_hostile() {
+        for f in every_line() {
+            for greet in [Greet::Nearest, Greet::Curious, Greet::Facing] {
+                let d = f.drawn(greet);
+                // Hostility never draws one into a remark, and an addressed line from someone
+                // one hates keeps the remark draw.
+                if f.familiarity == Familiarity::Hostile {
+                    assert!(!d.overheard && !d.greeted && !d.no_remark_draw, "{greet:?} {f:?}");
+                }
+                // Only strangers and the barely known are greeted, and only remarks to no one
+                // that the listener is free to take, not settled with the speaker.
+                if d.greeted {
+                    assert!(f.familiarity.unfamiliar() && f.free && !f.addressed() && !f.settled, "{greet:?} {f:?}");
+                }
+                // Known people are drawn in exactly as before.
+                if f.familiarity == Familiarity::Known {
+                    assert_eq!(d, f.drawn(Greet::Off), "{greet:?} {f:?}");
+                }
+            }
+        }
+        let stranger = Facts { to_none: true, free: true, familiarity: Familiarity::Stranger, draw: 0.5, answers: 0.6, curious: 0.4, ..Default::default() };
+        assert!(Facts { nearest_is_me: true, ..stranger }.drawn(Greet::Nearest).greeted);
+        assert!(!stranger.drawn(Greet::Nearest).greeted);
+        // Curious: close by and the curiosity draw passes.
+        assert!(!Facts { near: true, ..stranger }.drawn(Greet::Curious).greeted);
+        assert!(Facts { near: true, draw: 0.3, ..stranger }.drawn(Greet::Curious).greeted);
+        assert!(!Facts { near: false, draw: 0.3, ..stranger }.drawn(Greet::Curious).greeted);
+        // A stranger's addressed line is answered without the remark draw.
+        assert!(Facts { to_me: true, ..stranger }.drawn(Greet::Facing).no_remark_draw);
+        assert!(!Facts { to_me: true, ..stranger }.drawn(Greet::Off).no_remark_draw);
+        // Facing: the faced hearer is addressed, whoever spoke.
+        assert!(Facts { faced: true, ..Default::default() }.addressed());
+        // Hatred counted as caring before; with the switch it does not.
+        let hated = Facts { to_none: true, free: true, cares: true, familiarity: Familiarity::Hostile, draw: 0.1, answers: 0.6, ..Default::default() };
+        assert!(hated.drawn(Greet::Off).overheard && !hated.drawn(Greet::Nearest).overheard);
+    }
+
+    #[test]
+    fn the_faced_hearer_is_the_one_straight_ahead() {
+        let h = |id, d, off| Hearer { id, d, off };
+        assert_eq!(faced(&[h(1, 2.0, 0.5), h(2, 3.0, 0.1), h(3, 1.0, 2.5)]), Some(2));
+        // Too far, or outside the cone: nobody.
+        assert_eq!(faced(&[h(1, 7.0, 0.0), h(2, 2.0, 0.9)]), None);
+        // A tie in the angle goes to the nearer.
+        assert_eq!(faced(&[h(1, 4.0, 0.2), h(2, 2.0, 0.2)]), Some(2));
+        assert_eq!(faced(&[]), None);
+    }
+
+    #[test]
+    fn a_line_gets_its_turn_alongside_only_when_the_deliberation_cannot_answer_it() {
+        // The prompt is not built yet: it will see the line.
+        assert!(!Deliberating::default().alongside(7, 1_000));
+        let d = Deliberating { prompt_ms: Some(10_000), ..Default::default() };
+        // Heard before the prompt (it is in it), just after (it is not, and the deliberation
+        // has most of its run ahead), and well after (it may be about to decide).
+        assert!(!d.alongside(7, 9_500));
+        assert!(d.alongside(7, 10_600));
+        assert!(d.alongside(7, 12_000));
+        assert!(!d.alongside(7, 12_001));
+        // Decided: alongside unless its words are for that speaker.
+        let d = Deliberating { decided: Some(vec![7]), ..d };
+        assert!(!d.alongside(7, 20_000));
+        assert!(d.alongside(8, 20_000));
+        let d = Deliberating { prompt_ms: Some(10_000), answered: vec![(7, 9_000, "earlier".into()), (8, 11_000, "hello".into())], ..Default::default() };
+        assert_eq!(d.answered_since_prompt(), vec![8]);
+    }
+
+    #[test]
     fn echoes_are_not_new_matter() {
         let mut c = Conversation::default();
         c.lines.push(Line { speaker: 1, to: 2, text: "Let's meet at the ford at dawn to check the traps.".into(), at_ms: 0, at: (0.0, 0.0), turn: true, exp: 0 });
@@ -943,4 +1927,122 @@ mod tests {
         c.lines.push(Line { speaker: 2, to: 1, text: "Three berries for one wood, then.".into(), at_ms: 0, at: (0.0, 0.0), turn: true, exp: 0 });
         assert!(c.novelty_without("Iseisevik offers you 3 berries for 1 wood.", &["iseisevik".to_string()]) < NEW_MATTER);
     }
+
+    /// The rule before reply-timing: a reply was said once ready, the line it answers done being
+    /// said, and `SPEECH_GAP_MS` after one's own previous line.
+    fn said_before(ready: u64, last_said: u64, heard_at: u64, heard: &str) -> u64 {
+        ready.max(last_said + SPEECH_GAP_MS).max(heard_at + saying_ms(heard))
+    }
+
+    const T: u64 = 1_800_000_000_000;
+
+    /// Play-test 10: Fern's six words, Agnes's reply ready in 572 ms. It was said 1.98 s after
+    /// the greeting; now it is said when ready, and its place in the rhythm is the old time.
+    #[test]
+    fn a_reply_is_said_when_ready_and_keeps_its_old_place_in_the_rhythm() {
+        let fern = "Good morning to you, Agnes Fenner.";
+        assert_eq!(said_before(T + 572, 0, T, fern), T + 1_980);
+        let p = Pace::of(T + 572, 0, T, fern, 0);
+        assert_eq!(p, Pace { say_ms: T + 572, paced_ms: T + 1_980 });
+        // A reply ready after the line is done is said when ready, as before.
+        assert_eq!(Pace::of(T + 2_500, 0, T, fern, 0), Pace { say_ms: T + 2_500, paced_ms: T + 2_500 });
+    }
+
+    /// The speaker's next line is never sooner than the gap after where its previous line stands
+    /// in the rhythm, and so never closer to its previous line than before; however soon the
+    /// other answers (seeing the reply sooner), the gap holds.
+    #[test]
+    fn the_next_line_is_not_sooner_than_before() {
+        let fern = "Good morning to you, Agnes Fenner.";
+        let first = Pace::of(T + 572, 0, T, fern, 0);
+        let old_first = said_before(T + 572, 0, T, fern);
+        // Fern answers at once, 300 ms after the reply is said; Agnes is ready 400 ms later.
+        let fern2 = "Lovely day.";
+        let heard2 = first.say_ms + 300;
+        let second = Pace::of(heard2 + 400, first.paced_ms, heard2, fern2, 0);
+        assert!(second.say_ms >= old_first + SPEECH_GAP_MS, "{second:?} vs the old first line at {old_first}");
+        assert_eq!(second.say_ms, first.paced_ms + SPEECH_GAP_MS);
+        assert!(second.paced_ms >= second.say_ms);
+        // With the same lines at the same times, the rhythm is the old one exactly.
+        let mut last_old = 0;
+        let mut last_paced = 0;
+        for (i, words) in ["Hello.", "How is the bread today, and the oven?", "Fine.", "We should talk about the roof before the rain comes."].iter().enumerate() {
+            let heard = T + i as u64 * 9_000;
+            let ready = heard + 600;
+            let old = said_before(ready, last_old, heard, words);
+            let p = Pace::of(ready, last_paced, heard, words, 0);
+            assert_eq!(p.paced_ms, old, "line {i}");
+            assert!(p.say_ms <= old && p.say_ms >= ready, "line {i}: {p:?}");
+            (last_old, last_paced) = (old, p.paced_ms);
+        }
+    }
+
+    /// Two of this service's characters talking: each line's place in the rhythm comes from the
+    /// other's (`voice`), so the exchange keeps the old rhythm though each line is said when
+    /// ready, and neither speaker's lines come closer together than before.
+    #[test]
+    fn two_minds_keep_the_old_rhythm() {
+        let lines = ["Morning, Bram.", "Morning. Is the ford still high?", "Higher than yesterday.", "Then I'll wait until noon.", "Wise."];
+        // Before: each said once the other's line was done being said (ready 600 ms after hearing).
+        let mut old = vec![T];
+        for i in 1..lines.len() {
+            let own_last = if i >= 2 { old[i - 2] } else { 0 };
+            old.push(said_before(old[i - 1] + 600, own_last, old[i - 1], lines[i - 1]));
+        }
+        // Now: said when ready; heard at the time said; paced from the other's voice.
+        let (mut said, mut paced) = (vec![T], vec![T]);
+        for i in 1..lines.len() {
+            let own_last = if i >= 2 { paced[i - 2] } else { 0 };
+            let until = paced[i - 1] + saying_ms(lines[i - 1]);
+            let p = Pace::of(said[i - 1] + 600, own_last, said[i - 1], lines[i - 1], until);
+            said.push(p.say_ms);
+            paced.push(p.paced_ms);
+        }
+        for i in 1..lines.len() {
+            assert!(paced[i] >= old[i], "line {i}: paced {} before the old {}", paced[i], old[i]);
+            assert!(said[i] <= paced[i]);
+            if i >= 2 {
+                assert!(said[i] >= old[i - 2] + SPEECH_GAP_MS, "line {i}: the speaker's lines closer than before");
+            }
+        }
+        assert_eq!(paced, old, "the rhythm is the old one");
+    }
+
+    fn reach(other: &str, m: f32, toward: i8, speed: f32) -> Reach {
+        Reach { x: 10.0, y: 10.0, other: other.into(), other_m: m, other_where: if other == "heard" { "behind you, to the south; close".into() } else { "east".into() }, speed, toward, doing: String::new(), goal: false, gx: 0.0, gy: 0.0 }
+    }
+
+    /// The frame's two facts, from the replier's own perception, with no advice.
+    #[test]
+    fn the_frame_says_how_far_they_are_and_where_one_is_walking() {
+        let mut r = reach("seen", 9.0, -1, 1.4);
+        r.goal = true;
+        (r.gx, r.gy) = (10.0, 40.0);
+        assert_eq!(reach_words("Fern", &r, Some("the bakery")), vec!["Fern is 9 m east of you.", "You are walking to \"the bakery\", away from Fern."]);
+        assert_eq!(reach_words("Fern", &r, None)[1], "You are walking to a spot 30 m south, away from Fern.");
+        r.doing = "walking to the bakery".into();
+        assert_eq!(reach_words("Fern", &r, Some("the bakery"))[1], "You are walking to \"the bakery\", away from Fern (walking to the bakery).");
+        assert_eq!(reach_words("Fern", &reach("seen", 4.0, 1, 1.4), None), vec!["Fern is 4 m east of you.", "You are walking, toward Fern."]);
+        assert_eq!(reach_words("Fern", &reach("seen", 1.0, 0, 0.0), None), vec!["Fern is right beside you.", "You are standing still."]);
+        // Heard, not seen: where the sound is, in the world's words; no distance, no way.
+        assert_eq!(reach_words("Fern", &reach("heard", 0.0, 0, 1.4), None), vec!["You cannot see Fern now; you hear them behind you, to the south; close.", "You are walking."]);
+        assert_eq!(reach_words("a stranger", &reach("", 0.0, 0, 0.0), None), vec!["You neither see nor hear a stranger now.", "You are standing still."]);
+        assert_eq!(reach_words("a stranger", &reach("seen", 9.0, -1, 1.4), None)[0], "A stranger is 9 m east of you.");
+        for w in [reach_words("Fern", &r, None), reach_words("Fern", &reach("", 0.0, 0, 1.0), None)].concat() {
+            assert!(!w.contains("should") && !w.contains("stop") && !w.to_lowercase().contains("call"), "advice in {w}");
+        }
+    }
+}
+
+/// The way of speaking a reply names (`"way"` beside or inside `say`): `None` when it names
+/// none, `say` when it names one the world's rules do not have.
+pub(crate) fn way_of(v: &Value) -> Option<String> {
+    let named = v["way"].as_str().or_else(|| v["say"]["way"].as_str())?.trim().to_lowercase().replace([' ', '-'], "_");
+    if named.is_empty() {
+        return None;
+    }
+    Some(match crate::prompts::ways() {
+        ways if ways.iter().any(|w| *w == named) => named,
+        _ => "say".into(),
+    })
 }

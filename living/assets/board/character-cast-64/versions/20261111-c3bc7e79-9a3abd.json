@@ -1,0 +1,51 @@
+{
+ "schema": 1,
+ "family": "character:cast-64",
+ "id": "20261111-c3bc7e79-9a3abd",
+ "published": "2026-11-11T14:37:20+01:00",
+ "imported": "2026-11-11T16:46:04+01:00",
+ "track": "char-spike",
+ "maker": "Claude Opus 5.5",
+ "note": "64 people drawn from seeds in the cast's numbers (22 men, 22 women, 3 old men, 3 old women, 7 boys, 7 girls), unreviewed. Line-up rows: 16 men; 6 men, 3 old men, 7 boys; 16 women; 6 women, 3 old women, 7 girls.",
+ "source": {
+  "commit": "c3bc7e79fe205da41c0acc484aff67ade5ce6ad1",
+  "branch": "char-spike",
+  "generator": "living/tools/blender/person.py",
+  "generator_sha256": "4ebf25ba2dc894fbfc480892e055cf254c9f3c2a2d3a46faef1096032558c41f",
+  "generator_state": "committed",
+  "seed": "64",
+  "params": {
+   "cast": "living/tools/char_spike/cast.py",
+   "people": 64
+  }
+ },
+ "renderer": {
+  "method": "asset-view",
+  "commit": "c3bc7e79",
+  "key": "c3bc7e79",
+  "preset": "",
+  "note": "cast.py: each figure alone through the asset view, from the front at 24 degrees down at one scale, and close on the face; tiled"
+ },
+ "preset": "",
+ "media": "media/character-cast-64/20261111-c3bc7e79-9a3abd",
+ "members": [
+  {
+   "name": "cast",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "3d8eec7f46a0988c9df008963d3f22e877417fa350715c03182aaf576d2d11a7",
+   "shots": [
+    "faces",
+    "lineup"
+   ],
+   "clips": []
+  }
+ ],
+ "delivered": [
+  {
+   "title": "cast.json (who is who)",
+   "path": "delivered/cast.json",
+   "from": ".local/char-spike-src/char-spike/cast.json"
+  }
+ ]
+}

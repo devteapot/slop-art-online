@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>__TITLE__</title>
+<style>
+:root { --bg:#fbfaf7; --fg:#1d1d1b; --mut:#6b6a66; --line:#e2dfd8; --card:#ffffff; --acc:#2f5d8a;
+  --perceive:#3b7d4f; --recall:#8a5a9e; --decide:#2f5d8a; --graph:#a0612b; --body:#5d6b75; --talk:#b03a48; --log:#7a7a7a;
+  --ok:#2e7d32; --warn:#b26a00; --bad:#b3261e; }
+@media (prefers-color-scheme: dark) { :root { --bg:#17181a; --fg:#e8e6e1; --mut:#9b9893; --line:#33352f; --card:#1f2124; --acc:#7fb0e0;
+  --perceive:#7cc28f; --recall:#c69ad8; --decide:#7fb0e0; --graph:#e0a16b; --body:#a7b4bd; --talk:#ec8592; --log:#aaa;
+  --ok:#7cc28f; --warn:#e0b04f; --bad:#f28b82; } }
+* { box-sizing:border-box; }
+body { margin:0; font:14px/1.45 system-ui, -apple-system, Segoe UI, sans-serif; background:var(--bg); color:var(--fg); }
+header { padding:10px 16px; border-bottom:1px solid var(--line); display:flex; gap:16px; align-items:baseline; flex-wrap:wrap; }
+header h1 { font-size:16px; margin:0; }
+header .meta { color:var(--mut); font-size:12px; }
+nav { display:flex; gap:4px; padding:6px 16px; border-bottom:1px solid var(--line); }
+nav a { padding:4px 10px; border-radius:6px; text-decoration:none; color:var(--fg); }
+nav a.on { background:var(--acc); color:var(--bg); }
+#wrap { display:flex; min-height:calc(100vh - 90px); }
+#side { width:250px; flex:none; border-right:1px solid var(--line); overflow:auto; max-height:calc(100vh - 90px); position:sticky; top:0; }
+#side input { width:calc(100% - 16px); margin:8px; padding:5px; background:var(--card); color:var(--fg); border:1px solid var(--line); border-radius:4px; }
+#side .p { padding:4px 10px; cursor:pointer; display:flex; justify-content:space-between; gap:6px; }
+#side .p:hover, #side .p.on { background:var(--line); }
+#side .p small { color:var(--mut); }
+main { flex:1; padding:12px 16px; min-width:0; }
+.mut { color:var(--mut); } .small { font-size:12px; }
+.bar { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:10px; }
+button, select, .bar input { font:inherit; padding:3px 9px; border:1px solid var(--line); background:var(--card); color:var(--fg); border-radius:5px; cursor:pointer; }
+button.on { background:var(--acc); color:var(--bg); }
+.lane { display:inline-block; min-width:62px; text-align:center; font-size:11px; padding:1px 5px; border-radius:9px; color:#fff; }
+.l-perceive{background:var(--perceive)} .l-recall{background:var(--recall)} .l-decide{background:var(--decide)} .l-graph{background:var(--graph)}
+.l-body{background:var(--body)} .l-talk{background:var(--talk)} .l-log{background:var(--log)}
+table { border-collapse:collapse; width:100%; }
+td, th { padding:4px 6px; border-bottom:1px solid var(--line); vertical-align:top; text-align:left; }
+th { font-weight:600; font-size:12px; color:var(--mut); }
+tr.ev { cursor:pointer; } tr.ev:hover { background:var(--line); }
+td.t { white-space:nowrap; font-variant-numeric:tabular-nums; font-size:12px; }
+.det { background:var(--card); border:1px solid var(--line); border-radius:6px; padding:8px 10px; margin:4px 0 8px; }
+details { margin:3px 0; } summary { cursor:pointer; font-weight:600; }
+pre { white-space:pre-wrap; word-break:break-word; font:12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; margin:4px 0; background:var(--bg); padding:6px; border-radius:4px; max-height:480px; overflow:auto; }
+.card { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:10px 12px; margin:8px 0; }
+.f-turn{color:var(--ok)} .f-delib{color:var(--warn)} .f-parked{color:var(--warn)} .f-settled{color:var(--mut)} .f-none{color:var(--bad)}
+.k { font-weight:600; }
+a { color:var(--acc); }
+.timing { display:flex; height:10px; margin:4px 0; border-radius:3px; overflow:hidden; max-width:520px; }
+.timing span { display:block; height:100%; }
+ul.tight { margin:4px 0; padding-left:20px; } ul.tight li { margin:2px 0; }
+.hl { background: color-mix(in srgb, var(--talk) 22%, transparent); }
+@media (max-width: 760px) { #wrap { flex-direction:column; } #side { width:auto; max-height:220px; position:static; } }
+</style>
+</head>
+<body>
+<header><h1 id="title">Resident inspector</h1><span class="meta" id="meta">loading…</span></header>
+<nav><a href="#v=people" id="nav-people">Residents</a><a href="#v=lines" id="nav-lines">Lines</a><a href="#v=about" id="nav-about">Sources</a></nav>
+<div id="wrap"><aside id="side"><input id="filter" placeholder="filter residents"><div id="plist"></div></aside><main id="main"></main></div>
+<script>
+const B64 = "__DATA__";
+let D, LANES = ["perceive","recall","decide","graph","body","talk","log"], laneOn = new Set(LANES), routine = false;
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"'`\\]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;","`":"&#96;","\\":"&#92;"}[c]));
+const num = v => (v != null && v !== "" && isFinite(+v)) ? +v : null;
+function wall(ms) { if (ms == null || !isFinite(ms)) return "?"; const d = new Date(ms + D.meta.tz_min * 60000); return d.toISOString().slice(11, 22); }
+function rel(ms) { if (ms == null) return ""; const s = (ms - D.meta.start) / 1000, sg = s < 0 ? "−" : "+", a = Math.round(Math.abs(s) * 10) / 10; return sg + Math.floor(a / 60) + ":" + (a % 60).toFixed(1).padStart(4, "0"); }
+function game(ms) { const c = D.meta.clock; if (!c || ms == null) return ""; const gm = (ms - c.a) / c.mpm; const d = Math.floor(gm / 1440) + 1, m = ((gm % 1440) + 1440) % 1440;
+  return `day ${d} ${String(Math.floor(m / 60)).padStart(2, "0")}:${String(Math.floor(m % 60)).padStart(2, "0")}`; }
+function tcell(ms) { return `<td class="t">${wall(ms)}<br><span class="mut">${rel(ms)} · ${game(ms)}</span></td>`; }
+function nm(id) { if (!id) return "no one"; id = String(id).replace(/^#/, ""); const p = D.people[id]; return p ? p.name : "#" + id; }
+function plink(id, a, b) { if (!id) return "no one"; return `<a href="#v=people&r=${id}${a != null ? `&a=${Math.round(a)}&b=${Math.round(b)}` : ""}">${esc(nm(id))}</a>`; }
+function parseHash() { const h = {}; location.hash.slice(1).split("&").forEach(kv => { const [k, v] = kv.split("="); if (!k) return; try { h[k] = decodeURIComponent(v || ""); } catch (e) { h[k] = v || ""; } });
+  return h; }
+function go(h) { location.hash = Object.entries(h).filter(([k, v]) => v != null && v !== "").map(([k, v]) => k + "=" + encodeURIComponent(v)).join("&"); }
+
+async function boot() {
+  const bin = Uint8Array.from(atob(B64), c => c.charCodeAt(0));
+  const txt = await new Response(new Blob([bin]).stream().pipeThrough(new DecompressionStream("gzip"))).text();
+  D = JSON.parse(txt);
+  const m = D.meta, n = Object.keys(D.people).length;
+  $("#title").textContent = "Resident inspector: " + m.dir.split("/").slice(-2).join("/");
+  $("#meta").innerHTML = `${esc(m.kind)} · start ${wall(m.start)} (UTC${m.tz_min >= 0 ? "+" : ""}${m.tz_min / 60}) · ${n} characters · ${D.calls.length} model exchanges · ${D.lines.length} lines` +
+    (m.filters.who || m.filters.since != null ? ` · filtered: ${esc(JSON.stringify(m.filters))}` : "");
+  $("#filter").oninput = sidebar; sidebar(); window.onhashchange = route; route();
+}
+function sidebar() {
+  const f = $("#filter").value.toLowerCase(), h = parseHash();
+  const ids = Object.keys(D.people).filter(i => +i > 0 || D.people[i].calls).sort((a, b) => (D.people[b].player - D.people[a].player) || (D.people[b].calls - D.people[a].calls) || nm(a).localeCompare(nm(b)));
+  $("#plist").innerHTML = ids.filter(i => nm(i).toLowerCase().includes(f)).map(i => { const p = D.people[i];
+    return `<div class="p ${h.r == i ? "on" : ""}" onclick="go({v:'people',r:${i}})"><span>${esc(p.name)} ${p.player ? "🎮" : ""}${p.died ? " †" : ""}</span><small>${+i > 0 ? "#" + i : "id ?"} · ${p.calls}</small></div>`; }).join("");
+}
+function route() {
+  const h = parseHash(); laneOn = h.ln != null ? new Set(h.ln.split(",").filter(x => LANES.includes(x))) : new Set(LANES); routine = h.rt === "1"; const v = h.v || (h.l != null ? "lines" : (h.r ? "people" : "lines"));
+  ["people", "lines", "about"].forEach(x => $("#nav-" + x).classList.toggle("on", x === v)); sidebar();
+  if (v === "about") return about(); if (v === "lines") return h.l != null ? lineView(+h.l) : linesView(h); return personView(h);
+}
+function about() {
+  const m = D.meta;
+  $("#main").innerHTML = `<div class="card"><div class="k">Run</div><pre>${esc(m.dir)}\ngenerated ${esc(m.generated)}</pre>
+  <div class="k">Sources read</div><ul class="tight">${m.sources.map(s => `<li>${esc(s)}</li>`).join("")}</ul>
+  ${m.notes.length ? `<div class="k">Notes</div><ul class="tight">${m.notes.map(s => `<li>${esc(s)}</li>`).join("")}</ul>` : ""}
+  <div class="k">Game clock</div><p class="small">${m.clock ? `fitted from ${m.clock.n} anchors (request "Now" lines, experience ids); median residual ${m.clock.resid_ms} ms; one game minute = ${(m.clock.mpm / 1000).toFixed(2)} s. Percepts read from requests (marked ≈) are placed at the middle of their game minute.` : "none"}</p>
+  <div class="k">Model exchanges: queue wait and model time (s)</div><table class="small"><thead><tr><th>purpose</th><th>calls</th><th>queue p50</th><th>p90</th><th>max</th><th>model p50</th><th>p90</th><th>max</th><th>errors</th></tr></thead><tbody>${(m.timing || []).map(t =>
+    `<tr><td>${esc(t.purpose)}</td><td>${t.n}</td>${[t.q50, t.q90, t.qmax, t.m50, t.m90, t.mmax].map(v => `<td>${(v / 1000).toFixed(1)}</td>`).join("")}<td>${t.errors}</td></tr>`).join("")}</tbody></table>
+  <div class="k">Mind switches</div><pre>${esc(JSON.stringify(m.env, null, 1))}</pre>
+  <div class="k">How a turn is decided</div><p class="small">${esc(m.rule)}</p>
+  <div class="k">Times</div><p class="small">Each row shows local wall time, time since the run start, and game time. A model exchange is placed when it was queued (reply time − model latency − queue wait); its card shows all three. Mind-log lines have one-second resolution.</p></div>`;
+}
+
+// ---------------------------------------------------------------- residents
+function personView(h) {
+  const id = h.r; if (!id || !D.people[id]) { $("#main").innerHTML = `<p class="mut">Pick a resident on the left, or open <a href="#v=lines">Lines</a>.</p>`; return; }
+  const p = D.people[id], evs = D.events[id] || [];
+  const last = evs.length ? evs[evs.length - 1][0] : D.meta.start, end = p.died || last;
+  let a = num(h.a), b = num(h.b); if (a != null && b == null) b = a + 180000; if (a == null) b = null;
+  const hl = num(h.h);
+  const shown = evs.filter(e => laneOn.has(e[1]) && (a == null || (e[0] >= a && e[0] <= b)) && !(routine && e[1] === "perceive" && ROUTINE.test(e[2])));
+  const keep = h.ln ? `,ln:'${[...laneOn].join(",")}'` : "";
+  const lanes = LANES.map(l => `<button class="${laneOn.has(l) ? "on" : ""}" onclick="toggleLane('${l}')"><span class="lane l-${l}">${l}</span></button>`).join("");
+  $("#main").innerHTML = `<div class="bar"><span class="k" style="font-size:16px">${esc(p.name)}</span><span class="mut">${+id > 0 ? "#" + id : "id unknown"}${p.kind ? " · " + esc(p.kind) : ""}${p.player ? " · player" : ""}${p.died ? ` · died ${wall(p.died)} (${esc(p.cause)})` : ""}${p.takeover ? ` · AI took over at ${wall(p.takeover)}` : ""} · ${p.calls} model exchanges</span></div>
+  <div class="bar"><button onclick="go({v:'people',r:${id}${keep}})" class="${a == null ? "on" : ""}">whole run</button>
+   <button class="${a === end - 90000 ? "on" : ""}" onclick="go({v:'people',r:${id},a:${end - 90000},b:${end + (p.died ? 2000 : 0)}${keep}})">last 90 s${p.died ? " of their life" : ""}</button>
+   <span class="mut">around</span><input id="at" size="10" placeholder="hh:mm:ss or +m:ss" value="${a != null ? wall((a + b) / 2).slice(0, 8) : ""}"><select id="span">${(() => { const half = a != null ? (b - a) / 2000 : 90, opts = [30, 60, 90, 300], hit = opts.find(v => Math.abs(half - v) < 1);
+     return (hit ? "" : `<option value="${Math.round(half)}" selected>±${Math.round(half)} s</option>`) + opts.map(v => `<option value="${v}" ${v === hit ? "selected" : ""}>±${v < 300 ? v + " s" : "5 min"}</option>`).join(""); })()}</select><button onclick="around(${id})">show</button>
+   ${a != null ? `<span class="mut">window ${wall(a)} → ${wall(b)}</span>` : ""}</div>
+  <div class="bar">${lanes}<button class="${routine ? "on" : ""}" onclick="toggleRoutine()">hide routine sightings</button></div>
+  <table><thead><tr><th>time</th><th>lane</th><th>what <span class="mut">(click a row for the evidence)</span></th></tr></thead><tbody>${shown.map((e, k) =>
+    `<tr class="ev${hl != null && Math.abs(e[0] - hl) <= 1500 ? " hl" : ""}" onclick="openEv(this, ${evs.indexOf(e)}, ${id})">${tcell(e[0])}<td><span class="lane l-${e[1]}">${e[1]}</span></td><td>${esc(e[2])}</td></tr>`).join("") || `<tr><td colspan=3 class="mut">nothing in this window</td></tr>`}</tbody></table>`;
+}
+function toggleLane(l) { laneOn.has(l) ? laneOn.delete(l) : laneOn.add(l); go({...parseHash(), ln: laneOn.size < LANES.length ? [...laneOn].join(",") : ""}); }
+function toggleRoutine() { go({...parseHash(), rt: routine ? "" : "1"}); }
+const ROUTINE = /^(You notice an? |You are among a crowd|You come to a place new to you|For the first time you see a (house|storage))/;
+function parseTime(s) {
+  s = s.trim(); if (!s) return null;
+  if (s[0] === "+") { const [m, sec] = s.slice(1).split(":").map(Number); return D.meta.start + ((m || 0) * 60 + (sec || 0)) * 1000; }
+  const [hh, mm, ss] = s.split(":").map(Number); const base = new Date(D.meta.start + D.meta.tz_min * 60000);
+  const day = Date.UTC(base.getUTCFullYear(), base.getUTCMonth(), base.getUTCDate()); return day + ((hh * 60 + (mm || 0)) * 60 + (ss || 0)) * 1000 - D.meta.tz_min * 60000;
+}
+function around(id) { const t = parseTime($("#at").value), s = +$("#span").value * 1000; if (t != null && isFinite(t)) go({v: "people", r: id, a: t - s, b: t + s}); }
+function openEv(tr, k, id) {
+  if (tr.nextSibling && tr.nextSibling.classList && tr.nextSibling.classList.contains("detrow")) { tr.nextSibling.remove(); return; }
+  const e = D.events[id][k], ref = e[4] || {};
+  let html = `<div class="small mut">source: ${esc(e[3])}</div>`;
+  if (ref.c != null) html += callCard(D.calls[ref.c]);
+  if (ref.l != null) html += `<div><a href="#v=lines&l=${ref.l}">who heard this line, and why each did or did not take a turn →</a></div>`;
+  if (ref.g) html += `<pre>${esc(pretty(ref.g))}</pre>`;
+  const row = document.createElement("tr"); row.className = "detrow"; row.innerHTML = `<td colspan=3><div class="det">${html}</div></td>`; tr.after(row);
+}
+function pretty(s) { try { return JSON.stringify(typeof s === "string" ? JSON.parse(s) : s, null, 1); } catch (e) { return String(s); } }
+function callCard(c) {
+  const tot = Math.max(1, c.end - c.queued), q = c.qw / tot * 100, l = c.lat / tot * 100;
+  const open = h => /^(What comes to mind|Memories this brings back|Why you are thinking now|Recent experiences|New experiences|What you are answering|The conversation so far|What you decided|You and|Lately)/.test(h);
+  let r = `<div><span class="k">${esc(c.purpose)}</span> by ${plink(c.actor)} · ${esc(c.model)} (${esc(c.profile)}${c.effort ? ", effort " + esc(c.effort) : ""}${c.lane ? ", lane " + esc(c.lane) : ""}${c.attention ? ", " + esc(c.attention) : ""}${c.mode ? ", " + esc(c.mode) : ""})</div>
+  <div class="small">queued ${wall(c.queued)} → sent ${wall(c.start)} → reply ${wall(c.end)} · queue wait ${(c.qw / 1000).toFixed(1)} s · model ${(c.lat / 1000).toFixed(1)} s · ${c.tokens ?? "?"} tokens (${c.ptok ?? "?"} in, ${c.cached ?? 0} cached, ${c.ctok ?? "?"} out)${c.finish && c.finish !== "stop" ? " · finish " + esc(c.finish) : ""}</div>
+  <div class="timing"><span style="width:${q}%;background:var(--warn)"></span><span style="width:${l}%;background:var(--decide)"></span></div>
+  <div class="small mut">journal: ${esc(c.src)}</div>`;
+  if (c.error) r += `<div class="f-none">error: ${esc(c.error)}</div>`;
+  if (c.why) r += `<div><span class="k">Why now:</span> ${esc(c.why)}</div>`;
+  let th = null; try { th = JSON.parse(c.reply).thought; } catch (e) {}
+  if (th) r += `<div><span class="k">Thought:</span> ${esc(th)}</div>`;
+  if (c.answering) r += `<div><span class="k">Answering:</span> ${esc(c.answering[0])}: “${esc(c.answering[1])}”</div>`;
+  if (c.body_feel) r += `<div class="small"><span class="k">Body:</span> ${esc(c.body_feel)}</div>`;
+  r += `<details open><summary>Reply</summary><pre>${esc(pretty(c.reply))}</pre></details>`;
+  r += `<details><summary>Request (${c.sections.length} sections)</summary>` + c.sections.map(([h, b]) =>
+    `<details ${open(h) ? "open" : ""}><summary>${esc(h)}</summary><pre>${esc(b)}</pre></details>`).join("") +
+    (c.sys ? `<details><summary>System prompt (${esc(c.sys)})</summary><pre>${esc(D.systems[c.sys] || "(not stored)")}</pre></details>` : "") + `</details>`;
+  return r;
+}
+
+// ---------------------------------------------------------------- lines
+function linesView(h) {
+  const players = Object.keys(D.people).filter(i => D.people[i].player).map(Number);
+  const only = h.p != null ? h.p === "1" : players.length > 0, q = (h.q || "").toLowerCase(), who = h.s ? +h.s : null;
+  let ls = D.lines.filter(l => (!only || players.includes(l.speaker)) && (!who || l.speaker === who || l.to === who || l.hearers.some(x => x.id === who)) && (!q || l.text.toLowerCase().includes(q)));
+  const speakers = [...new Set(D.lines.map(l => l.speaker))].sort((a, b) => nm(a).localeCompare(nm(b)));
+  $("#main").innerHTML = `<div class="bar">${players.length ? `<button id="only" class="${only ? "on" : ""}">players' lines only</button>` : ""}
+   <select id="who"><option value="">anyone</option>${speakers.map(s => `<option value="${s}" ${who === s ? "selected" : ""}>${esc(nm(s))}</option>`).join("")}</select>
+   <input id="q" placeholder="words" value="${esc(h.q || "")}"><span class="mut">${ls.length} of ${D.lines.length} lines · click a line for who heard it and why each did or did not take a turn</span></div>
+  <table><thead><tr><th>time</th><th>who → to</th><th>line</th><th>hearers and what each did</th></tr></thead><tbody>${ls.map(l =>
+    `<tr class="ev" data-l="${l.i}">${tcell(l.ms)}<td>${esc(nm(l.speaker))} → ${esc(nm(l.to))}</td><td>“${esc(l.text)}”${l.reps > 1 ? ` <span class="mut">(repeat: ×${l.reps} in the chronicle)</span>` : ""}${l.exact ? "" : ' <span class="mut">≈</span>'}</td>
+    <td class="small">${l.hearers.map(x => `<span class="f-${x.fate.kind || "none"}">${esc(nm(x.id))}${x.id === l.to ? " (to)" : ""}: ${esc(x.fate.tag || "")}</span>`).join("<br>")}${l.unheard ? `<br><span class="f-settled">${esc(nm(l.unheard.id))} (to): did not hear it</span>` : ""}${!l.hearers.length && !l.unheard ? '<span class="mut">no hearer in the evidence</span>' : ""}</td></tr>`).join("")}</tbody></table>`;
+  const state = () => ({v: "lines", p: only ? 1 : 0, q: $("#q").value, s: $("#who").value});
+  if ($("#only")) $("#only").onclick = () => go({...state(), p: only ? 0 : 1});
+  $("#who").onchange = () => go({...state(), p: $("#who").value ? 0 : (only ? 1 : 0)});
+  $("#q").onchange = () => go(state());
+  document.querySelectorAll("tr[data-l]").forEach(tr => tr.onclick = () => go({v: "lines", l: tr.dataset.l}));
+}
+function lineView(i) {
+  const l = D.lines[i]; if (!l) return linesView({});
+  const ids = new Set([l.speaker, l.to, ...l.hearers.map(x => x.id)].filter(Boolean));
+  const a = l.ms - 90000, b = l.ms + 120000;
+  let html = `<div class="bar"><a href="#v=lines">← all lines</a>${i > 0 ? ` <a href="#v=lines&l=${i - 1}">← previous</a>` : ""}${i < D.lines.length - 1 ? ` <a href="#v=lines&l=${i + 1}">next →</a>` : ""}</div>
+  <div class="card"><div class="small mut">${wall(l.ms)} · ${rel(l.ms)} · ${game(l.ms)}${l.exact ? "" : " · time ≈ (from requests or the mind log)"}</div>
+  <div style="font-size:16px">${plink(l.speaker, l.ms - 90000, l.ms + 90000)} → ${plink(l.to, l.ms - 90000, l.ms + 90000)}: “${esc(l.text)}”${l.reps > 1 ? ` <span class="mut">(the chronicle's one row for these words counts ×${l.reps}: lines said within 2 min of each other, this being the latest)</span>` : ""}</div>
+  <div class="small mut">${esc(l.note || "")}</div><details><summary class="small">sources of the line</summary><ul class="tight small">${l.srcs.map(s => `<li>${esc(s)}</li>`).join("")}</ul></details></div>
+  ${l.unheard ? `<div class="card"><span class="k">${plink(l.unheard.id)}</span> <span class="f-settled" style="font-weight:600">said to them, but they did not hear it</span><div class="small">${esc(l.unheard.why)}</div></div>` : ""}
+  <h3>Hearers</h3>`;
+  html += l.hearers.map(x => `<div class="card"><div><span class="k">${`<a href="#v=people&r=${x.id}&a=${Math.round(l.ms - 60000)}&b=${Math.round(l.ms + 90000)}&h=${Math.round(l.ms)}">${esc(nm(x.id))}</a>`}</span>${x.id === l.to ? ' <span class="mut">(said to them)</span>' : ""} <span class="mut">${x.d != null ? x.d + " m" : "distance unknown"}${x.off != null ? `, ${x.off} rad off the speaker's facing` : ""}${x.sal != null ? `, salience ${x.sal}` : ""}</span></div>
+    <div class="f-${x.fate.kind || "none"}" style="font-weight:600">${esc(x.fate.short)}${x.fate.call != null ? ` · <a href="javascript:void 0" onclick="showCall(this, ${x.fate.call})">the exchange</a>` : ""}</div>
+    ${x.ev.length ? `<div class="k small">Evidence</div><ul class="tight small">${x.ev.map(s => `<li>${esc(s)}</li>`).join("")}</ul>` : ""}
+    ${x.why.length ? `<div class="k small">The gate's inputs</div><ul class="tight small">${x.why.map(s => `<li>${esc(s)}</li>`).join("")}</ul>` : ""}
+    ${x.d_note ? `<div class="small mut">distance ${esc(x.d_note)}</div>` : ""}
+    <details><summary class="small">how we know they heard it</summary><ul class="tight small">${x.srcs.map(s => `<li>${esc(s)}</li>`).join("")}</ul></details></div>`).join("") || `<p class="mut">No hearer in the evidence.</p>`;
+  // The exchange, from each side: lines among these people and their talk turns and decisions around the line.
+  const rows = [];
+  D.lines.forEach(x => { if (x.ms >= a && x.ms <= b && (ids.has(x.speaker) && (ids.has(x.to) || !x.to))) rows.push([x.ms, "talk", x.speaker, `${esc(nm(x.speaker))} → ${esc(nm(x.to))}: <a href="#v=lines&l=${x.i}">“${esc(x.text)}”</a>`, x.i === i]); });
+  D.calls.forEach((c, k) => { if (ids.has(c.actor) && c.queued >= a && c.queued <= b && ["talk", "think", "deliberate"].includes(c.purpose)) {
+    let t = `${esc(nm(c.actor))} ${c.purpose}${c.answering ? ` on “${esc(c.answering[1].slice(0, 80))}”` : ""}${c.why ? ` — why: ${esc(c.why.slice(0, 120))}` : ""} (queued ${wall(c.queued)}, reply ${wall(c.end)}, ${(c.lat / 1000).toFixed(1)} s)`;
+    if (c.say && c.say[0]) t += ` → to ${esc(nm(c.say[1]))}: “${esc(c.say[0].slice(0, 120))}”`;
+    rows.push([c.queued, "decide", c.actor, t + ` <a href="javascript:void 0" onclick="showCall(this, ${k})">open</a>`]); } });
+  for (const id of ids) (D.events[id] || []).forEach(e => { if (e[1] === "log" && e[0] >= a && e[0] <= b && !/ to .*: “/.test(e[2]) && !/as authored|thinks with|mind cursor at/.test(e[2])) rows.push([e[0], "log", id, esc(e[2])]); });
+  const seen = new Set(); rows.sort((x, y) => x[0] - y[0]);
+  html += `<h3>The exchange around it <span class="mut small">(${wall(a)} → ${wall(b)}: lines among these people, their talk turns and deliberations, and the mind log)</span></h3><table><tbody>` +
+    rows.filter(r => { const k = r[1] + r[3]; if (seen.has(k)) return false; seen.add(k); return true; }).map(r => `<tr class="${r[4] ? "hl" : ""}">${tcell(r[0])}<td><span class="lane l-${r[1]}">${r[1]}</span></td><td>${r[3]}</td></tr>`).join("") + `</tbody></table>`;
+  $("#main").innerHTML = html;
+}
+function showCall(el, k) { const d = el.closest("td, .card"); const old = d.querySelector(":scope > .det"); if (old) { old.remove(); return; } const div = document.createElement("div"); div.className = "det"; div.innerHTML = callCard(D.calls[k]); d.appendChild(div); }
+boot().catch(e => { document.body.innerHTML = `<pre>Could not open the page's data: ${esc(e)}\n(This page needs a browser with DecompressionStream: Chrome 80+, Firefox 113+, Safari 16.4+.)</pre>`; });
+</script>
+</body>
+</html>

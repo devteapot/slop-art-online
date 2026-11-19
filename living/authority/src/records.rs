@@ -212,7 +212,8 @@ pub fn apply(ctx: &ReducerContext, sctx: &SkillCtx, e: Effect, now: u64) -> Resu
                     return Err("one of its parties is not there".into());
                 }
                 if *p < COMMUNITY && open_count(ctx, *p) >= MAX_OPEN {
-                    return Err(format!("{} has too many dealings in hand already", if *p == me as u64 { "you".to_string() } else { common::name_of(ctx, *p as u32) }));
+                    let seen = |id: u32| ctx.db.character().id().find(me).map(|c| common::capitalized(&common::label_for(ctx, &c, id))).unwrap_or_else(|| common::name_of(ctx, id));
+                    return Err(format!("{} too many dealings in hand already", if *p == me as u64 { "You have".to_string() } else { format!("{} has", seen(*p as u32)) }));
                 }
             }
             make(ctx, &kind, if status.is_empty() { "open" } else { &status }, me, &parties, &terms, due_after(ctx, now, due_h), now);
@@ -335,7 +336,7 @@ pub fn housekeeping(ctx: &ReducerContext, now: u64) {
             // The rules are asked as its maker, or else its first character party.
             let actor = Some(r.by).filter(|b| *b != 0 && ctx.db.character().id().find(*b).is_some()).or_else(|| ps.iter().map(|(_, p)| *p).find(|p| *p < COMMUNITY).map(|p| p as u32)).unwrap_or(0);
             let other = ps.iter().map(|(_, p)| *p).find(|p| *p < COMMUNITY && *p != actor as u64).unwrap_or(0) as u32;
-            let mut c = SkillCtx { actor: crate::act::facts(ctx, actor, now), night: common::night(&common::world(ctx), now), hour: common::hour(&common::world(ctx), now), ..Default::default() };
+            let mut c = SkillCtx { actor: crate::act::facts(ctx, actor, now), night: common::night(ctx, &common::world(ctx), now), dark: common::dark(ctx, &common::world(ctx), now), hour: common::hour(&common::world(ctx), now), ..Default::default() };
             c.actor.community = community_party(ctx, actor);
             c.records = of(ctx, actor, now);
             c.record = one(ctx, r.id, actor, now);

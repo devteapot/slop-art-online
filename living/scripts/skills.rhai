@@ -10,6 +10,11 @@ fn laws() {
         gestation_days: 1.0, bond_window_s: 120.0,
         crowd: 6, danger_near: 8.0, danger_far: 12.0,
         repeat_failure_s: 120.0,
+        // Whoever strikes, shoots or casts is told how it came out (an `own` experience): a blow's
+        // hit, guard or kill when it lands, a missile's when it strikes, is dodged, hits a wall or
+        // nothing, or flies out of the shooter's sight (docs/COMBAT_MIND.md §3.1). Off: only
+        // notable skills (attack) and failures are told, as before 2026-11-11.
+        force_outcomes: true,
         road_speed: 1.4,
         // Steering: where bodies slow down and cut corners, and how often they look again
         // (how each creature turns and keeps apart is its `motion` law).
@@ -18,9 +23,10 @@ fn laws() {
         // How often a body smells afresh; between reads it keeps what it last smelled.
         scent_hz: 1.0,
         input_hz: 30.0, input_burst: 15.0,
-        // Grass regrowth per grassy tile per growing minute: about one grazer per 300 grassy
-        // tiles (it was one per 70, and the wilds filled with deer).
-        pasture_regen: 0.0015,
+        // Grass regrowth per grassy tile per growing game hour (0.0015 a real minute on the
+        // 12-minute day): about one grazer per 300 grassy tiles (it was one per 70, and the
+        // wilds filled with deer).
+        pasture_regen_per_h: 0.00075,
         // Someone with no other person within this many tiles is alone (predators dare more).
         alone_within: 6.0,
         // A body within this many radians of facing something already faces it.
@@ -33,15 +39,21 @@ fn laws() {
         // How long one `follow` lasts before the follower looks again (seconds), and how far
         // `read` with nothing named looks for a sign (metres).
         follow_s: 12.0, read_sign_m: 8.0,
+        // A movement held to a creature (follow, keep_distance, circle, close_in, back_off) goes
+        // by where it was last seen while it is out of sight, and ends unseen this long (seconds).
+        lost_after_s: 2.0,
         // Others of one's kind within this many metres are kin near (`a.actor.kin_near`).
         kin_near_m: 4.0,
         // How long a trade offer can be accepted and a request to join stands (seconds).
         trade_window_s: 180.0, join_window_s: 300.0,
         // Speech to no one in particular is for the only listener within this many metres.
         address_m: 6.0,
-        // A creature in a player's sight stays seen until this far beyond it (metres); a chase
-        // is lost beyond this share of the chaser's sight.
-        keep_seen_m: 1.0, chase_lost_share: 1.4,
+        // A sound at least this loud (its spec's `loudness`: a voice 1, a call 2.5, a baby's
+        // cry 2.5, the blows of a fight 2) wakes a sleeper within this many metres who hears it.
+        wake_loudness: 2.0, wake_reach: 8.0,
+        // A creature in a player's sight stays seen until this far beyond it (metres). A chase
+        // has no reach of its own: out of sight, the chaser goes to where it last saw them.
+        keep_seen_m: 1.0,
         // A body that comes into the world: its hunger and energy.
         spawn_hunger: 25.0, spawn_energy: 85.0,
         // Grazing each grassy or forest tile holds.
@@ -50,6 +62,172 @@ fn laws() {
         // sets this in its seed's `rules`, like any law here. Every person has a mind: no law
         // turns minds off (docs/SEEDED_LIVES.md, "Every person a mind").
         cry_prompts_carers: true,
+        // Speech records who heard each line, how far and how far off the speaker's facing
+        // (the private `audience` table, kept a minute), for the minds' conversation rules
+        // (LIVING_GREET, `nearest` by default). Off: nothing is written.
+        speech_audience: true,
+        // A line to someone who could not have heard it tells the speaker so ("Bram is too far
+        // away: they could not have heard you."), never a "No answer" that reads as a refusal.
+        // A plan's queued line to someone is not said into the air: dropped when the
+        // conversation has moved past it (they spoke to the speaker, or the speaker answered
+        // them, since the plan), and told to the speaker instead of said when they are beyond
+        // the way's reach as it comes due. Off: the old words, and queued lines said when due.
+        speech_truth: true,
+        // A grown person longs for a child this many real minutes after its own birth or its
+        // youngest child's (the most nurturing sooner, down to a sixth of it), and only while
+        // carrying at least `longing_food` food (0: whatever it carries).
+        longing_after_min: 20.0, longing_food: 0.0,
+        // Sight that depends on facing (`senses(a).field`, docs/PERCEPTION.md). Off: one sees
+        // the same distance all round, as before. On: full sight within `fov_focal_deg` of
+        // where the body faces, `fov_side_share` of it out to `fov_side_deg`, and all round only
+        // within `fov_near_m` (`fov_near_dark_m` in the dark); someone already seen stays seen
+        // `fov_margin_deg` past an edge. A light on someone (`glow`) shows them only within the
+        // field. Hearing stays all round.
+        fov_on: false,
+        cover_cliff_step_m: 2.0,
+        cover_brush_min_fill: 0.6,
+        cover_brush_on: true,
+        cover_eye_height_m: 1.6,
+        gaze_on: false,
+        cover_sight_on: false,
+        // Known ground (docs/MOVEMENT_MIND.md): how far ground is seen by day, metres (at night,
+        // one's own sight); the most 4 m cells one look marks (0: no cap; the rest come with
+        // later looks); whether walks are planned over what each walker has seen instead of the
+        // map; and the cost of a metre of unseen ground in such a plan.
+        ground_sight_m: 24.0, known_cells_pass: 0.0, nav_belief: false, unknown_cost: 1.5,
+        // The wolves' spacing reflex (docs/PACK_MIND.md): their starting instincts carry,
+        // beside each hunt, a weighted desire to keep apart from mates while closing on the
+        // prey (hold 3-5 m from it, 4 m from other wolves one sees). An instinct, so a wolf's
+        // own mind may change it. Read when a wolf's starting graph is installed; a world turns
+        // it off with false.
+        pack_reflex: true,
+        // A body struck this many seconds ago cannot fall asleep; nor while the one who last
+        // struck it, in a fight still on, is within `wake_reach` (`sleep_check`, every
+        // controller alike).
+        alert_after_hit_s: 15.0, alert_while_attacker_near: true,
+        // A rest, a sleep, work, eating or play that ends well is still seen until the body's
+        // next look, which takes it up again or turns to something else: no blink of doing
+        // nothing between two rests (doing-renew). False: seen doing nothing until then.
+        renew_in_place: true,
+        // Who a behaviour graph's `relation: "stranger"` filter matches (docs/STRANGERS.md).
+        // Off: anyone one has no relation row about (feelings the mind wrote), or a relation
+        // labelled "stranger". On: anyone whose name one does not know, the rule that names
+        // people in scenes, percepts and memory (`perception::knows_name`).
+        stranger_by_name: false,
+        // Attention cues (docs/ATTENTION.md): a mind may write what in what it perceives should
+        // bring it to think about one of its stances, goals or projects. Off: none is matched.
+        // A cue fires once per thing it matched within `cue_cooldown_s`, and a character is
+        // brought to think by its cues at most once within `cue_gap_s`.
+        // Cues are checked every `cue_check_s` (a world may trade freshness for cost).
+        cues_on: false, cue_cooldown_s: 600.0, cue_gap_s: 60.0, cue_check_s: 1.0,
+        // What each observer makes of each target (name known, the `perceived_of` answer) is
+        // worked out once per transaction and shared by all who ask (`regard_cache`); off, each
+        // asker works it out afresh, giving the same answers. `regard_cache_check` (a diagnostic)
+        // compares every shared answer with a fresh one and logs any difference.
+        regard_cache: true, regard_cache_check: false,
+        // A diagnostic: while profiling, also time the parts of a graph's evaluation.
+        profile_detail: false,
+        // How a fighter's work is done (docs/BATTLE_SCALE.md, battle-cheap), none of it changing what
+        // anyone perceives or does: a move's check before it starts given only the fields it reads;
+        // the body's alarms answered from the last answer while no field crosses one of their
+        // levels. The `_check` laws (diagnostics) also work each out the whole way and count any
+        // difference; `warmth_check` likewise for warmth.
+        check_ctx_plan: true, check_ctx_check: false, alarm_cells: true, alarm_cells_check: false, warmth_check: false,
+        // A body's scene worked out as far as each reader asks; `scene_lazy_check` (a diagnostic)
+        // also works each answer out from the whole scene and counts any difference.
+        scene_lazy: true, scene_lazy_check: false,
+        // The chronicle's repeat check reads its newest rows first; noticing reads the structures
+        // in sight in place. Their `_check` laws (diagnostics) also do each the whole way and
+        // count any difference.
+        chronicle_recent: true, chronicle_recent_check: false, notice_inplace: true, notice_inplace_check: false,
+        // A look checks only the structures new since the last look, or outside its sight then;
+        // `notice_delta_check` (a diagnostic) checks that every one skipped was already familiar.
+        notice_delta: true, notice_delta_check: false,
+        seen_ranges: true, seen_ranges_check: false,
+        // How what is near a player, or fighting it, reaches the player's client: as cues at once,
+        // behind near copies that follow every 500 ms (on, since frame-views' acceptance), or at the
+        // player's frames (off). Delivery only: the client ends on the same rows either way
+        // (docs/PERCEPTION.md).
+        cue_transport_on: true,
+        // Whether what a player sees is split into what is near it and the rest, each delivered
+        // apart (on), or delivered together (off; with cue_transport_on off too, as before).
+        near_tier_on: true,
+        // A bystander (one who sees an event it is not party to) is woken by what it sees at most
+        // once per `witness_wake_ms` (docs/BATTLE_SCALE.md); what it sees is still told at once,
+        // in full. 0: woken by each sight, as before.
+        witness_wake_ms: 500.0,
+        // A test switch (docs/PERCEPTION.md, "Module memory and rollback"), 0 in play: a step the
+        // world fails on purpose, to prove nothing kept in module memory outlives a failed one.
+        memory_test: 0.0,
+        // What an onlooker sees of fights it is not party to is told as one line per
+        // `witness_fold_ms` (docs/BATTLE_SCALE.md, fix 4): every blow it could see, by who struck
+        // whom, with counts and outcomes, and who fell. A blow at it or by it is told at once.
+        // 0: each fight's first blow told at once on its own line, as before.
+        witness_fold_ms: 2000.0,
+        // The fast lane (docs/FAST_LANE.md): a mind-run character's re-plan between blows, asked
+        // on a blow taken or when the same creature is seen to start the same move at it
+        // `seen_again_n` times in a fight (counted for the trigger only, never told). Across the
+        // world at most `fast_lane_rate` are issued a second and `fast_lane_inflight` at once;
+        // a character's start `fast_lane_gap_s` apart; a trigger waiting `fast_lane_stale_s` is dropped.
+        fast_lane_on: false, seen_again_n: 3.0, fast_lane_rate: 2.0, fast_lane_inflight: 4.0, fast_lane_gap_s: 6.0, fast_lane_stale_s: 8.0,
+        // First sights (docs/FIRST_SIGHT.md): seeing someone one cannot place (whose name one
+        // does not know, and who is near enough to make out) for the first time asks one's mind
+        // for a thought, at most once within `first_sight_gap_s`. Off: it is only noticed.
+        first_sight_thinks: false, first_sight_gap_s: 300.0,
+        // A line one's mind decided to say to someone, coming due after one heard another
+        // address them since one decided, is not said yet: one is told and thinks again with
+        // that line in front of one (docs/FIRST_SIGHT.md, "Crowds"). Off: it is said.
+        heard_first_rethinks: false,
+        // The think prompt's framing (docs/FRAMING.md): off, a mind starts from why it is
+        // thinking now; on, what just happened is shown beside what it perceives, and it thinks
+        // about whatever matters to it now (the neutral framing, replayed as N2).
+        think_framing: false,
+        // Earshot (docs/COMMUNICATION.md §17): a person's scene says whom a line said now would
+        // reach, at each way, among the people they perceive, and a player's `my_earshot` the
+        // same. On as shipped since earshot-on (2026-11-13); off, neither is told.
+        earshot: true,
+        fov_focal_deg: 70.0, fov_side_deg: 110.0, fov_side_share: 0.3333,
+        fov_near_m: 3.0, fov_near_dark_m: 2.0, fov_margin_deg: 10.0,
+        // What is heard but not seen (only while the field is on) is told by its distance:
+        // near within `heard_near_m`, close within `heard_close_m`, far out to hearing; it
+        // lingers `heard_linger_s` after it was last heard.
+        heard_near_m: 5.0, heard_close_m: 15.0, heard_linger_s: 2.0,
+        // A held look (`human_face`): a change within `look_slack_deg` of the look held (or
+        // of where the body stands facing) is nothing new; walking, the body still goes where it
+        // is told at full speed, and only its facing (head and chest: what it sees by, where a
+        // guard faces) turns toward the look, at most `look_walk_deg` off its way.
+        look_slack_deg: 10.0, look_walk_deg: 75.0,
+        // Shipped facing turn rate in rad/s. Worlds can raise it with a laws overlay.
+        turn_rate: 6.0,
+        // Moving and breath (docs/STAMINA.md). A grown person's walk (m/s, before age, genes and
+        // tiredness: `walk_base()`; a player's Settings offer 3.0 and 3.4), a person's run as a
+        // share of its walk, and the fastest a road takes anyone (m/s; a body faster on its own,
+        // a wolf at 5.1, keeps its speed: no one outruns a wolf, even on a road). An exhausted
+        // body (energy below 10) walks at `tired_pace` of its pace.
+        walk_base: 2.6, run_share: 1.65, run_top: 4.6, tired_pace: 0.8,
+        // A wolf's and a deer's run as shares of their walks (3.4 and 3.7 m/s): paired with
+        // `run_share`, they decide whether a running person outruns a wolf (docs/STAMINA.md).
+        wolf_run: 1.5, deer_run: 1.5,
+        // Breath (`stamina`, real seconds, the `pools` law): the most one has rested, what comes
+        // back a second from `stamina_delay_s` after the last effort, what a run and a held guard
+        // take a second, what a run needs to start (or start again), and the tiredness (energy)
+        // each point spent costs.
+        stamina_max: 100.0, stamina_regen: 25.0, stamina_delay_s: 1.0, stamina_run: 4.0, stamina_guard: 4.0, stamina_resume: 30.0, stamina_tires: 0.02,
+        // The third pool (`focus`; on screen the world's `pool_word("focus")`): its most, what comes
+        // back a second, from how long after the last use.
+        focus_max: 100.0, focus_regen: 3.0, focus_delay_s: 2.0,
+        // What each move takes from its pool (`combat_pool`), paid at its release.
+        cost_strike: 20.0, cost_bowshot: 6.0, cost_firebolt: 30.0, cost_heal: 35.0, cost_dodge: 20.0, cost_jump: 10.0, cost_block: 5.0,
+        cost_attack: 20.0, cost_throw: 10.0, cost_shoot: 6.0, cost_threaten: 3.0,
+        // Health and blows (docs/STAMINA.md, "Fight length"): a grown, whole body's health by
+        // kind (read when a body comes into the world), a bare blow by kind, and what each
+        // weapon or skill does before strength, skill and armor. Every blow does its full damage.
+        // A fight between equals lasts tens of seconds, paced by breath: blows about half what they
+        // were (strike 10, wolf 13), a wolf sturdier (55) and a deer as many bites from death as
+        // before (40 at 13 a bite).
+        hp_person: 100.0, hp_deer: 22.0, hp_wolf: 80.0,
+        blow_person: 4.0, blow_deer: 2.0, blow_wolf: 7.0,
+        dmg_spear: 9.0, dmg_strike: 5.0, dmg_strike_spear: 8.0, dmg_bowshot: 7.0, dmg_firebolt: 12.0, dmg_throw: 12.0, dmg_shoot: 8.0,
     }
 }
 
@@ -66,7 +244,68 @@ fn sight_in(light) { switch light { "day" => 11.0, "torch" => 9.0, _ => 6.0 } }
 fn hearing_of_people() { 9.0 }
 fn light_of(a) { if !a.night { "day" } else if inv(a, "torch") > 0 { "torch" } else { "night" } }
 
-fn senses(a) { #{ sight: sight_in(light_of(a)), hearing: hearing_of_people() } }
+fn senses(a) {
+    let s = #{ sight: sight_in(light_of(a)), hearing: hearing_of_people() };
+    if law("fov_on") { s.field = sight_field(a); }
+    s
+}
+
+// Band numbers are stable protocol values: Middle 0, Far 1, Near 2.
+fn gaze_bands() {
+    [
+        #{ share: 1.0, focal_deg: law("fov_focal_deg"), side_deg: law("fov_side_deg") },
+        #{ share: 1.30, focal_deg: 35.0, side_deg: 65.0 },
+        #{ share: 0.60, focal_deg: 110.0, side_deg: 155.0 },
+    ]
+}
+
+fn gaze_ceiling(band) {
+    let day = sight_in("day");
+    let widest = if band == 0 { max(day, declared_glow_cap()) } else { day };
+    widest * gaze_bands()[band].share + law("keep_seen_m")
+}
+
+// The dispatcher calls this only in enabled worlds. Each world's senses(a) supplies its
+// original light cap: the island's light levels or Cullet's daylight and torch floor.
+fn gaze_view(a) {
+    let s = senses(a);
+    let bands = gaze_bands();
+    let band = bands[a.gaze_band];
+    let light_cap = s.sight;
+    let day = sight_in("day");
+    let ground = law("ground_sight_m");
+    let ground_cap = if light_cap + 0.01 < day { min(light_cap, ground) } else { ground };
+    let ground_ceiling = min(ground * band.share, ground);
+    s.ground = min(ground_cap * band.share, ground_ceiling);
+    s.sight = light_cap * band.share;
+    if s.field == () { s.field = sight_field(a); }
+    s.field.focal_deg = band.focal_deg;
+    s.field.side_deg = band.side_deg;
+    s.field.near_m = min(s.field.near_m, s.sight);
+    s
+}
+
+fn declared_glow_cap() { 0.0 }
+
+// How the view narrows away from facing (the `fov_*` laws); all round within the near ring,
+// less of it in the dark.
+fn sight_field(a) {
+    #{
+        focal_deg: law("fov_focal_deg"), side_deg: law("fov_side_deg"), side_share: law("fov_side_share"),
+        near_m: if light_of(a) == "night" { law("fov_near_dark_m") } else { law("fov_near_m") },
+        margin_deg: law("fov_margin_deg"),
+    }
+}
+
+// What a creature heard but not seen sounds like (the kind told for it; "creature" where one
+// cannot tell).
+fn heard_as(kind) { if kind == "person" || kind == "deer" || kind == "wolf" { kind } else { "creature" } }
+
+// The field of view in words, when the world's law turns it on.
+fn field_about() {
+    if !law("fov_on") { return ""; }
+    ` One sees that far only within about ${short(law("fov_focal_deg"))} degrees either side of the way one faces, a third as far out to ${short(law("fov_side_deg"))} degrees, and behind only within ${short(law("fov_near_m"))} m (${short(law("fov_near_dark_m"))} m in the dark): one hears what is behind one, and turns to see it. A light on someone shows them only where one is looking.`
+}
 
 // A number for descriptions: at most two decimals, a whole number without its ".0".
 fn short(x) { let r = (x * 100.0).round() / 100.0; if r == r.floor() { `${r.to_int()}` } else { `${r}` } }
@@ -79,8 +318,101 @@ fn senses_law() {
         // The farthest anyone sees by day and by night, and hears: the engine gathers onlookers
         // within these before testing each one's own senses, and holds every answer to them.
         reach: #{ day: sight_in("day"), night: night_most, hearing: hearing_of_people() },
-        about: `How far a creature sees and hears, in metres (one tile is one metre). By day one sees ${short(sight_in("day"))} m; at night ${short(sight_in("night"))} m, or ${short(sight_in("torch"))} m carrying a torch. Rock, walls and shut gates block the line of sight. Speech carries ${short(hearing_of_people())} m.`,
+        about: `How far a creature sees and hears, in metres (one tile is one metre). By day one sees ${short(sight_in("day"))} m; at night ${short(sight_in("night"))} m, or ${short(sight_in("torch"))} m carrying a torch. Rock, walls and shut gates block the line of sight. Speech carries ${short(hearing_of_people())} m.${field_about()}`,
     }
+}
+
+// The words a speaker uses for someone by their relation to them (docs/COMMUNICATION.md §19):
+// "Mother" said by a child names that child's parent, and a line said to someone else that uses it
+// names the parent for every hearer (the naming detail, and a named hearer's turn). What the one
+// named is to the speaker: parent, child, sibling, grandparent, grandchild or partner (the father
+// or mother of one's child). Each relation's words by the body sex of the one named (body-sex):
+// `female` words name only a woman or girl, `male` words only a man or boy, `any` words anyone in
+// the relation. Someone whose sex the world does not hold is named by every word of the relation.
+fn kin_terms() {
+    #{
+        parent: #{ female: ["mother", "mum", "mam", "mama", "mummy", "ma"], male: ["father", "dad", "da", "papa", "daddy", "pa"], any: ["parent"] },
+        child: #{ female: ["daughter"], male: ["son"], any: [] },
+        sibling: #{ female: ["sister"], male: ["brother"], any: [] },
+        grandparent: #{ female: ["gran", "granny", "grandmother", "grandma", "nan", "nana"], male: ["grandfather", "grandpa", "grandad", "granddad"], any: ["grandparent"] },
+        grandchild: #{ female: ["granddaughter"], male: ["grandson"], any: [] },
+        partner: #{ female: ["wife"], male: ["husband"], any: [] },
+    }
+}
+
+// ---- ways of speaking (read once per script revision; the speech primitive applies them) ----
+// Each `<way>_speech()` is a way to say a line (docs/COMMUNICATION.md). Speech is not a skill: it
+// never interrupts what the body is doing. The engine reads these maps when the script compiles
+// and refuses a key it does not know, so a way cannot claim what the engine does not do.
+//   about        what the way is, for minds (the world text) and players (the talk box).
+//   label, order the word a client shows for it, and where it comes among the ways.
+//   to           "optional" (the room, or one person) or "required" (one person).
+//   words        who receives the words: `hearing` a share of each listener's own hearing,
+//                or `within_m` metres (and never beyond the listener's hearing); `only_to:
+//                true` gives them to the addressee alone.
+//   noticed      who learns only that it was said, between whom: within `within_m`, those who
+//                see the speaker (`seen`), as rows of `kind` reading `text` ({a} the speaker,
+//                {b} the addressee as each one knows them).
+//   said, said_to, heard, heard_to, heard_to_you   the words of the rows, before the line
+//                itself (`: "…"` follows): {a} the speaker, {b} the addressee, {d} how far
+//                the speaker is from the one who reads it (metres).
+//   kind         the kind of the rows that carry the words ("speech").
+//   animals      what an animal in range hears ("" nothing).
+//   gap_s        seconds between two lines of this way (never under the 2 s speaking limit).
+//   max_chars    longer lines are cut short.
+//   needs        a technique of `know_how()` the speaker must know.
+//   reach        the addressee must be within this many metres.
+//   needs_sight  the addressee must be in sight.
+//   introduces   a line with the speaker's own name tells it to those who receive the words.
+//   names        a line to someone that holds their name tells it to those who receive the
+//                words and see whom it was for (default: unless the words are for one ear).
+//   salience     #{ addressed, overheard }.
+//   loudness     how loud a line is (a voice 1, the default): one at least `wake_loudness` wakes
+//                a sleeper within `wake_reach` m who receives the words; a quieter one waits
+//                until it wakes and is told then as heard while asleep.
+// A way's refusals are its `<way>_check(a)`: "" accepts the line, anything else refuses it in
+// those words. The reducer returns exactly them, and the game client, which compiles this
+// script, runs the same check before it sends, so a player sees the same words either way.
+// `a.target` is the addressee (class "none" for the room; one who is not there, absent or dead,
+// is a creature not alive and very far), `a.text` the line, `a.qty` the milliseconds since the
+// speaker's last line in this way (4000000000 if never); nothing else (the install refuses a
+// check that reads another field, such as the hour, which a client could not give). Both call
+// `living_rules::script::speech::check_way`. A way that requires an addressee, a
+// reach, a technique or a gap must refuse a line that breaks it (the install tries). Only the
+// engine's own refusals are not here: a way it does not know, and two lines within 2 s.
+fn say_speech() {
+    #{ label: "Say", order: 0, about: "Speak aloud. Everyone within earshot hears you, also when you speak to one person.",
+       words: #{ hearing: 1.0 }, to: "optional", gap_s: 2.0, max_chars: 400, loudness: 1.0 }
+}
+// How far a whisper goes, and how near one sees that someone whispered.
+fn whisper_reach() { 1.5 }
+fn whisper_noticed_within() { 6.0 }
+fn whisper_check(a) {
+    if a.target.class == "none" { return "a whisper needs someone to whisper to"; }
+    if !a.target.alive || a.target.dist > whisper_reach() { return "too far to whisper: step closer"; }
+    ""
+}
+fn whisper_speech() {
+    #{ label: "Whisper", order: 1,
+       about: `Whisper to someone beside you (within ${short(whisper_reach())} m). Only they hear the words; people within ${short(whisper_noticed_within())} m who see you may notice that you whispered to them, but not what.`,
+       to: "required", reach: whisper_reach(), words: #{ within_m: whisper_reach(), only_to: true }, kind: "whisper",
+       noticed: #{ within_m: whisper_noticed_within(), seen: true, kind: "whispered", text: "{a} whispers something to {b}.", salience: 0.3 },
+       said: "You whispered", said_to: "You whispered to {b}", heard_to_you: "{a} whispers to you", gap_s: 2.0, max_chars: 400, loudness: 0.2 }
+}
+// A call carries this many times a voice, to people and animals alike, and comes at most once
+// every few seconds.
+fn call_carry() { 2.5 }
+fn call_gap_s() { 6.0 }
+fn call_check(a) {
+    if a.qty < (call_gap_s() * 1000.0).to_int() { return "too soon to call out again: wait a few seconds"; }
+    ""
+}
+fn call_speech() {
+    #{ label: "Call out", order: 2,
+       about: `Call out over a distance: everyone within ${short(hearing_of_people() * call_carry())} m hears you, and animals too (a shout can startle deer or draw wolves). Short lines (80 characters), at most one every ${short(call_gap_s())} s.`,
+       to: "optional", words: #{ hearing: call_carry() }, animals: "a person shouting",
+       said: "You called out", said_to: "You called out to {b}", heard: "{a} calls out{how} from about {d} m", heard_to: "{a} calls out to {b} from about {d} m", heard_to_you: "{a} calls out to you from about {d} m",
+       gap_s: call_gap_s(), max_chars: 80, loudness: call_carry() }
 }
 
 // ---- moving (a law per creature, on the hot path) -----------------------------------
@@ -90,8 +422,13 @@ fn senses_law() {
 // (metres) and how strongly that bends its way; how far a wander may turn from the way it was
 // heading (radians) and for how long after stopping it still keeps that way (seconds). Asked per creature at every steering step and
 // kept per state, like senses: the shipped law reads nothing, so every creature shares it.
+// A person runs `run_share` times its walk: 1.65, about 4.3 m/s at the 2.6 walk, the fastest the
+// run still reads as a natural run in the game (the laptop's look-dev, 2026-11-11; at 4.8 it
+// scurries); animals keep their own
+// run (a wolf 5.1 m/s, a deer 5.55). A road speeds no one past `run_top` (m/s), and a run costs
+// breath (`pools`).
 fn motion(a) {
-    #{ run: 1.5, flee: 1.15, aside: 0.8, turn_rate: 6.0, turn_slow: 0.4, separation: 0.8, separation_weight: 0.9, wander_turn: 1.2, wander_keep_s: 60.0 }
+    #{ run: switch a.actor.kind { "person" => law("run_share"), "wolf" => law("wolf_run"), "deer" => law("deer_run"), _ => 1.5 }, flee: 1.15, aside: 0.8, turn_rate: law("turn_rate"), turn_slow: 0.4, separation: 0.8, separation_weight: 0.9, wander_turn: 1.2, wander_keep_s: 60.0, top: law("run_top"), charge: a.actor.kind == "wolf" }
 }
 
 // A grown, rested body of a kind at its normal pace (for descriptions).
@@ -102,8 +439,8 @@ fn motion_law() {
     #{
         cadence: "hot",
         topic: "moving",
-        covers: ["move_speed"],
-        about: `How creatures move, in metres a second. Grown people walk ${short(walk_of("person"))}, wolves ${short(walk_of("wolf"))}, deer ${short(walk_of("deer"))}; the young, the old and the exhausted are slower. Running is ${short(m.run)} times one's walk and a flight ${short(m.flee)} times; stepping aside is ${short(m.aside)} times. Bodies turn at about ${short(m.turn_rate)} radians a second, slowing in sharp turns, and keep about ${short(m.separation)} m from others when they can. A stroll (wander) keeps roughly the way it was going, turning at most about ${short(m.wander_turn)} radians, even after a stop of up to ${short(m.wander_keep_s)} s.`,
+        covers: ["move_speed", "slowed"],
+        about: `How creatures move, in metres a second. Grown people walk ${short(walk_of("person"))}, wolves ${short(walk_of("wolf"))}, deer ${short(walk_of("deer"))}; the young, the old and the exhausted are slower. A person runs ${short(m.run)} times its walk (a wolf ${short(law("wolf_run"))} times, a deer ${short(law("deer_run"))}; no road takes anyone past ${short(m.top)} m/s), at a cost of breath: running is for hurry, flight and fights. A flight runs while breath lasts, else goes ${short(m.flee)} times one's walk; stepping aside is ${short(m.aside)} times. Bodies turn at about ${short(m.turn_rate)} radians a second, slowing in sharp turns, and keep about ${short(m.separation)} m from others when they can. A stroll (wander) keeps roughly the way it was going, turning at most about ${short(m.wander_turn)} radians, even after a stop of up to ${short(m.wander_keep_s)} s.`,
     }
 }
 
@@ -125,18 +462,47 @@ fn inv(a, item) {
     if n == () { 0 } else { n }
 }
 
-// What each kind of structure does for those near it (read once when the script compiles):
-//   warms   a hearth: near it counts as near a fire (fire_warmth applies to campfires and
-//           hearths alike, shelter_warmth to the rest of a building)
-//   roof    a roof: near it counts as sheltered
-fn structure_traits() {
-    #{
-        campfire: #{ warms: true },
-        shelter: #{ roof: true },
-        house: #{ warms: true, roof: true }, hall: #{ warms: true, roof: true }, inn: #{ warms: true, roof: true },
-        workshop: #{ roof: true },
-    }
+// Every kind of structure, in order, with what it does for those near it (read once when the
+// script compiles; docs/WORLD_RULES.md, "Goods, recipes and fuel"):
+//   warms   a fire that needs no feeding: near it counts as near a fire (within fire_warmth; a
+//           building that warms, a house with its hearth, within shelter_warmth)
+//   roof    a roof: near it counts as sheltered (within shelter_warmth)
+//   lights  how far it lights the dark (metres: lamplight, `a.actor.lit`); a kind that burns
+//           lights only while lit, within the larger of this and its `burns.light`
+//   burns   a fire that eats fuel: #{ fuel: the item trait it burns (its number is the units one
+//           item gives), rate: units a game hour while lit, warmth and light: metres while lit,
+//           holds: the most units it takes }. It is lit only while it holds fuel, warms and
+//           lights only while lit, goes out when its fuel is spent and is lit again by feeding
+//           it (feed). Its fuel is not an item to take back.
+//   holds   a store: the most things it holds in all (store into it, take from it)
+//   like    the kind it counts as wherever a kind is asked by name (a world's `store` with
+//           `like: "storage"` is found by a graph's `nearest storage`)
+//   seeded  only a world's seed places it, with the reason (data for the goods audit,
+//           docs/GOODS.md; no rule reads it)
+// Other traits are the rules' own data.
+fn structures() {
+    [
+        #{ name: "campfire", warms: true },
+        #{ name: "shelter", roof: true },
+        #{ name: "storage", holds: 120 }, #{ name: "remains" },
+        #{ name: "sign", kept_for: "what is written on it: anyone near who knows writing reads it" }, #{ name: "bush_patch" },
+        #{ name: "house", warms: true, roof: true }, #{ name: "gate" }, #{ name: "trap" },
+        // A town's common buildings: laid out by its founding plan (the seed's towns), not built
+        // by anyone here; a world that builds them adds the recipes (`seeded`, below).
+        #{ name: "hall", warms: true, roof: true, seeded: founding_plan() }, #{ name: "workshop", roof: true, seeded: founding_plan() }, #{ name: "market", seeded: founding_plan(), kept_for: "a place to trade: people meet there; no rule reads it" },
+        #{ name: "inn", warms: true, roof: true, seeded: founding_plan() },
+        // Gives no light in the shipped world; a world's laws say what it burns and lights.
+        #{ name: "lamp", seeded: founding_plan() },
+    ]
 }
+// Why a town's common buildings are only placed: a world's founding plan lays them out.
+fn founding_plan() { "a town's founding plan lays it out; no recipe builds one in this world" }
+fn structure_trait(kind, t) { let k = entry_of("structures", kind); if k == () { () } else { k[t] } }
+// A fire: one that needs no feeding (a campfire), or one that burns fuel and warms (a hearth; a
+// lamp burns oil for light, and is no fire to cook at).
+fn fire_kind(kind) { let k = entry_of("structures", kind); k != () && ((k.burns != () && k.burns.warmth != () && k.burns.warmth > 0.0) || (k.warms == true && k.roof != true)) }
+// The fire in reach burns now (a campfire always does; a hearth while it holds fuel).
+fn burning(a) { a.target.class == "structure" && fire_kind(a.target.kind) && (burns_of(a.target.kind) == () || a.target.lit) }
 
 // Share of the spoiling rate for food kept in a structure of a kind (a storage, remains): kept
 // food lasts three times longer.
@@ -170,24 +536,60 @@ fn theft(a) {
 
 // ---- what things and creatures are (read once when the script compiles) -------------------
 // Every item of the world, in order, with its traits. Rules read traits instead of naming items:
-//   cooks_to, smokes_to   what cooking or smoking it at a campfire makes (`cook`, `smoke`)
+//   cooks_to, smokes_to   what cooking or smoking it at a fire makes (`cook`, `smoke`)
+//   fuel                  units of fuel one gives a fire that burns `fuel` (`feed`)
+//   carry                 what one counts for in a pack against `carry_limit` (none: 1); arrows
+//                         and marks are small, a tenth each
+//   room                  what carrying one adds to the pack's limit (a basket's 20; the largest
+//                         of what is carried counts, not their sum)
+// Where an item comes from and what it is for is read from the rules (docs/GOODS.md, the goods
+// audit `living-rules` `goods_audit`); an item the world does not make from what it has, or
+// one made only to be kept, says so, with the reason (data only):
+//   seeded                only a world's seed gives it: why
+//   kept_for              what it is kept for when no rule reads it: why
+// What a client shows of it (data only: no rule reads them; docs/WORLD_RULES.md lists the ids):
+//   icon                  a short stable id the client draws it by
+//   label                 its name for players, lower case as in a sentence
+//   group                 where a pack or a recipe grid sorts it: food, fuel, material, tool,
+//                         weapon, garment, glass, money (`living_rules::ui` ITEM_ICONS and
+//                         ITEM_GROUPS hold the names)
+// A recipe (`recipes()`) may ask for an item by name or for anything with a trait; a world adds
+// traits of its own (`bakes_to`, `alkali`, `oil`) and the recipes and fires that read them.
 fn items() {
     [
-        #{ name: "berries" },
-        #{ name: "fish", cooks_to: "cooked_fish", smokes_to: "smoked_fish" },
-        #{ name: "meat", cooks_to: "cooked_meat", smokes_to: "smoked_meat" },
-        #{ name: "cooked_fish" }, #{ name: "cooked_meat" },
-        #{ name: "wood" }, #{ name: "stone" }, #{ name: "fiber" }, #{ name: "spear" }, #{ name: "hide" },
-        #{ name: "cloak" }, #{ name: "torch" }, #{ name: "tablet" }, #{ name: "clay" }, #{ name: "axe" },
-        #{ name: "pick" }, #{ name: "smoked_fish" }, #{ name: "smoked_meat" }, #{ name: "net" },
-        #{ name: "basket" }, #{ name: "bow" }, #{ name: "arrow" }, #{ name: "salve" }, #{ name: "leather" },
-        #{ name: "armor" },
-        // Money where a settlement uses it: stamped clay tallies, worth what people agree.
-        #{ name: "mark" },
+        #{ name: "berries", icon: "berries", label: "berries", group: "food" },
+        #{ name: "fish", cooks_to: "cooked_fish", smokes_to: "smoked_fish", icon: "fish", label: "fish", group: "food" },
+        #{ name: "meat", cooks_to: "cooked_meat", smokes_to: "smoked_meat", icon: "meat", label: "meat", group: "food" },
+        #{ name: "cooked_fish", icon: "cooked_fish", label: "cooked fish", group: "food" },
+        #{ name: "cooked_meat", icon: "cooked_meat", label: "cooked meat", group: "food" },
+        #{ name: "wood", fuel: 1.0, icon: "wood", label: "wood", group: "material" },
+        #{ name: "stone", icon: "stone", label: "stone", group: "material" },
+        #{ name: "fiber", icon: "fiber", label: "fiber", group: "material" },
+        #{ name: "spear", icon: "spear", label: "spear", group: "weapon" },
+        #{ name: "hide", icon: "hide", label: "hide", group: "material" },
+        #{ name: "cloak", icon: "cloak", label: "cloak", group: "garment" },
+        #{ name: "torch", icon: "torch", label: "torch", group: "tool" },
+        #{ name: "tablet", kept_for: "what is written on it: anyone who knows writing reads it", icon: "tablet", label: "tablet", group: "tool" },
+        #{ name: "clay", icon: "clay", label: "clay", group: "material" },
+        #{ name: "axe", icon: "axe", label: "axe", group: "tool" },
+        #{ name: "pick", icon: "pick", label: "pick", group: "tool" },
+        #{ name: "smoked_fish", icon: "smoked_fish", label: "smoked fish", group: "food" },
+        #{ name: "smoked_meat", icon: "smoked_meat", label: "smoked meat", group: "food" },
+        #{ name: "net", icon: "net", label: "net", group: "tool" },
+        #{ name: "basket", room: 20.0, icon: "basket", label: "basket", group: "tool" },
+        #{ name: "bow", icon: "bow", label: "bow", group: "weapon" },
+        #{ name: "arrow", carry: 0.1, icon: "arrow", label: "arrow", group: "weapon" },
+        #{ name: "salve", icon: "salve", label: "salve", group: "tool" },
+        #{ name: "leather", icon: "leather", label: "leather", group: "material" },
+        #{ name: "armor", icon: "armor", label: "armor", group: "garment" },
+        // Money where a settlement uses it: stamped clay tallies, worth what people agree. A
+        // world that makes it says how (a recipe); here the seed's towns hold what there is.
+        #{ name: "mark", carry: 0.1, seeded: "money: a town's seed holds what there is; a world that mints it adds the recipe",
+           kept_for: "money: given and taken in trade, worth what people agree", icon: "mark", label: "mark", group: "money" },
     ]
 }
-fn item_trait(item, t) { for i in items() { if i.name == item { return i[t]; } } () }
-fn items_with(t) { let out = []; for i in items() { if i[t] != () { out.push(i.name); } } out }
+fn item_trait(item, t) { let i = entry_of("items", item); if i == () { () } else { i[t] } }
+fn items_with(t) { having("items", t) }
 
 // Every kind of creature, with what the rules ask of a kind (a kind the table does not name is
 // taken as the first):
@@ -197,12 +599,12 @@ fn items_with(t) { let out = []; for i in items() { if i[t] != () { out.push(i.n
 //   blow                        the damage of its bare attack, before strength and skill
 //   dodge_dist, dodge_speed     its dodge: a dash of so many metres at so many metres a second
 //   carcass                     what its body leaves in its remains (items and amounts)
-//   remains_s                   seconds its remains lie before they are gone
+//   remains_h                   game hours its remains lie before they are gone
 fn kinds() {
     [
-        #{ name: "person", max_hp: 100.0, lunge: 0.6, blow: 7.0, dodge_dist: 2.6, dodge_speed: 5.2, carcass: #{}, remains_s: 3600 },
-        #{ name: "deer", grazes: true, max_hp: 40.0, lunge: 0.6, blow: 4.0, dodge_dist: 2.8, dodge_speed: 8.0, carcass: #{ meat: 5, hide: 1 }, remains_s: 1800 },
-        #{ name: "wolf", max_hp: 55.0, lunge: 1.8, blow: 13.0, dodge_dist: 2.4, dodge_speed: 8.0, carcass: #{ meat: 2, hide: 1 }, remains_s: 1800 },
+        #{ name: "person", max_hp: law("hp_person"), lunge: 0.6, blow: law("blow_person"), dodge_dist: 2.6, dodge_speed: 5.2, carcass: #{}, remains_h: 120.0 },
+        #{ name: "deer", grazes: true, max_hp: law("hp_deer"), lunge: 0.6, blow: law("blow_deer"), dodge_dist: 2.8, dodge_speed: 8.0, carcass: #{ meat: 5, hide: 1 }, remains_h: 60.0 },
+        #{ name: "wolf", max_hp: law("hp_wolf"), lunge: 1.8, blow: law("blow_wolf"), dodge_dist: 2.4, dodge_speed: 8.0, carcass: #{ meat: 2, hide: 1 }, remains_h: 60.0 },
     ]
 }
 fn kind_of(kind) { let all = kinds(); for k in all { if k.name == kind { return k; } } all[0] }
@@ -215,28 +617,44 @@ fn or_list(parts) {
 
 // ---- carrying and spoiling -------------------------------------------------
 
-// How many things a body can carry (a person's pack; an animal carries a mouthful).
+// How much a body can carry (a person's pack; an animal carries a mouthful), counted by each
+// item's `carry` (an arrow is a tenth).
 fn carry_limit(kind) { switch kind { "person" => 40.0, _ => 6.0 } }
-fn carried(a) {
+// What one of an item counts for in a pack (its `carry`; 1 when it has none).
+fn carry_of(item) { let c = item_trait(item, "carry"); if c == () { 1.0 } else { c } }
+// What a pack's items count for together: one each, and the items with a `carry` of their own
+// counted again at what they count for.
+fn load(inv) {
     let n = 0;
-    for k in a.actor.inv.keys() { n += a.actor.inv[k]; }
+    for k in inv.keys() { n += inv[k]; }
+    for k in having("items", "carry") { let q = inv[k]; if q != () { n += q * (carry_of(k) - 1.0); } }
     n
 }
-// A basket carries 20 more.
-fn pack_full(a) { carried(a) >= carry_limit(a.actor.kind) + if inv(a, "basket") > 0 { 20.0 } else { 0.0 } }
-// Share of a food that spoils per real minute (a lab day is 12 minutes): raw meat and fish
-// within about a day, berries in a few days, cooked food more slowly. A storage keeps food
-// three times longer.
-fn spoil_rate(item) {
+fn carried(a) { load(a.actor.inv) }
+// The most room what is carried adds (a basket's 20).
+fn room_of(inv) {
+    let r = 0.0;
+    for k in having("items", "room") { let q = inv[k]; if q != () && q > 0 { let x = item_trait(k, "room"); if x > r { r = x; } } }
+    r
+}
+// The limit of a pack holding `inv`.
+fn pack_limit(kind, inv) { carry_limit(kind) + room_of(inv) }
+// Counted to a ten-thousandth, so ten arrows fill what one stone does.
+fn pack_full(a) { carried(a) + 0.0001 >= pack_limit(a.actor.kind, a.actor.inv) }
+// Share of a food that spoils in a game hour (the engine turns it into real time for the
+// world's day; on the 12-minute day a game hour is half a real minute): raw meat and fish within
+// about a day, berries in a few days, cooked food more slowly. A storage keeps food three times
+// longer.
+fn spoil_per_h(item) {
     switch item {
-        "meat" => 0.05,
-        "fish" => 0.05,
-        "berries" => 0.02,
-        "cooked_meat" => 0.012,
-        "cooked_fish" => 0.012,
+        "meat" => 0.025,
+        "fish" => 0.025,
+        "berries" => 0.01,
+        "cooked_meat" => 0.006,
+        "cooked_fish" => 0.006,
         // Smoked food keeps for weeks: something to carry to another town.
-        "smoked_meat" => 0.002,
-        "smoked_fish" => 0.002,
+        "smoked_meat" => 0.001,
+        "smoked_fish" => 0.001,
         _ => 0.0,
     }
 }
@@ -269,7 +687,7 @@ fn wet(a) { a.raining && a.actor.kind == "person" && !a.actor.near_shelter }
 fn freezing(a) { a.season == "winter" || wet(a) }
 
 // Survival is secondary (docs/SEEDED_LIVES.md, "Survival made secondary"): a person feels
-// hungry from 50, about 42 real minutes (3.5 game days) before starving at 100.
+// hungry from 50, about 42 real minutes (3.5 game days on the 12-minute day) before starving at 100.
 fn body_state(a) {
     let fraction = a.actor.hp / (max_hp(a.actor.kind) * a.actor.vitality);
     #{ cold: cold(a), hungry: a.actor.hunger > 50.0, starving: a.actor.hunger >= 100.0,
@@ -277,9 +695,11 @@ fn body_state(a) {
               else if fraction < 0.6 || a.actor.hurt_ago < 5000 { "hurt" } else { "" } }
 }
 
-// Need rates per minute for a body's state. The engine asks this when the state changes and
-// keeps the answer for every body in the same state; it then finishes the rates for each body's
-// own hunger, energy and genes with the numbers given here (rules/src/script.rs `NeedLaw`):
+// Need rates per game hour for a body's state (`per: "hour"`): the engine turns them into real
+// time for the world's day length (rules/src/script.rs `NeedLaw`), so a world with a longer day
+// keeps the same balance per game day. The engine asks this when the state changes and keeps the
+// answer for every body in the same state; it then finishes the rates for each body's own
+// hunger, energy and genes with the numbers given here:
 //   hunger, energy            the state's rates (energy before the tiring gene)
 //   starving_at, starving_hp  at or above this hunger, health changes by starving_hp
 //   fed_below, rested_above   otherwise, below this hunger and above this energy, health
@@ -289,28 +709,30 @@ fn body_state(a) {
 //   healing_gene              a rising health rate is multiplied by this gene
 //   wet_energy, cold_hp       exposure, added last
 //
-// Targets in real time, for people (a game day is 12 real minutes; the owner and the minds' calls
-// live in real minutes; docs/TRIALS.md "Fast iterations" 11): every person rate below is scaled by
-// `person_pace`, so a person's hunger rises 1.2 a minute awake (14.4 a game day): a meal brought
-// down to about 5 is wanted again at about 25 every 16–17 real minutes; it feels hungry at 50 and
-// starves at 100 about 42 minutes later; starving takes about 83 minutes (seven game days) to
-// kill a healthy body. Energy, rest, sleep, healing and exposure are scaled alike, so a person
-// spends the same share of its time sleeping. An ordinary night outside is uncomfortable
-// (tiring), not harmful; only winter nights and nights in the rain hurt without a fire, shelter
-// or a warm cloak. Animals keep their own rates (the ecology is tuned on them).
+// Targets for people on the 12-minute day (the island and the labs; docs/TRIALS.md "Fast
+// iterations" 11): every person rate below is scaled by `person_pace`, so a person's hunger rises
+// 0.6 a game hour awake (14.4 a game day; 1.2 a real minute there): a meal brought down to about
+// 5 is wanted again at about 25 every 33 game hours (16–17 real minutes); it feels hungry at 50
+// and starves at 100 about 83 game hours (42 minutes) later; starving takes about 167 game hours
+// (seven game days) to kill a healthy body. Energy, rest, sleep, healing and exposure are scaled
+// alike, so a person spends the same share of its time sleeping. An ordinary night outside is
+// uncomfortable (tiring), not harmful; only winter nights and nights in the rain hurt without a
+// fire, shelter or a warm cloak. Animals keep their own rates (the ecology is tuned on them).
+// These numbers are the per-real-minute ones the 12-minute day had, halved (its game hour is half
+// a real minute), so the island's rates in real time are what they were. `person_pace` was set
+// to pace people's needs to real time on that day; it is now a share of the game-time rates, so
+// a world with another day length sets its people's rates for its own day (a floor overlay).
 fn person_pace(x) { 0.3 }
 fn rates(a) {
-    // A predator feeds big and rarely: a wolf lasts about an hour on a deer.
-    let hunger = switch a.actor.kind { "deer" => 6.0, "wolf" => 1.5, _ => 4.0 };
-    let energy = -3.0;
+    // A predator feeds big and rarely: a wolf lasts about two game hours on a deer.
+    let hunger = switch a.actor.kind { "deer" => 3.0, "wolf" => 0.75, _ => 2.0 };
+    let energy = -1.5;
     let act = a.actor.activity;
     if act == "sleep" {
-        energy = if a.actor.near_shelter { 26.0 } else { 16.0 };
+        energy = if a.actor.near_shelter { 13.0 } else { 8.0 };
         hunger *= 0.5;
     } else if act == "rest" {
-        energy = 6.0;
-    } else if act == "block" {
-        energy = -12.0;
+        energy = 3.0;
     }
     // Elders heal slower and tire sooner; infants get hungry more slowly. (Death of old age
     // comes at each creature's own point late in its lifespan.)
@@ -321,21 +743,26 @@ fn rates(a) {
     }
     // A suckling animal lives mostly on its mother's milk (not modelled on the mother).
     if a.actor.stage == "infant" { hunger *= if a.actor.kind == "person" { 0.6 } else { 0.3 }; }
+    // Asked once each: a law called with `a` gets its own copy of the whole context, so asking
+    // `cold(a)` three times cost three copies (the fuel budget, docs/LIVING_CORE.md).
+    let is_cold = cold(a);
+    let is_wet = wet(a);
     let r = #{
+        per: "hour",
         hunger: hunger, energy: energy,
         // Starving hurts; fed and rested, a body heals; with no energy left, it suffers.
-        starving_at: 100.0, starving_hp: -4.0,
-        fed_below: 70.0, rested_above: 15.0, healing_hp: 3.0, healing: healing,
-        spent_at: 0.0, spent_hp: -2.0,
+        starving_at: 100.0, starving_hp: -2.0,
+        fed_below: 70.0, rested_above: 15.0, healing_hp: 1.5, healing: healing,
+        spent_at: 0.0, spent_hp: -1.0,
         // Inborn endurance slows tiring; vitality speeds healing; a big appetite makes one
         // hungry sooner; hardiness divides what cold and wet weather take.
         tiring_gene: "endurance", healing_gene: "vitality", appetite_gene: "appetite", hardiness_gene: "hardiness",
         // Exposure tires: rain soaks people out from under a roof (a cloak keeps some of it
         // off), and a cold night without a fire, shelter or warm cloak is uncomfortable.
-        wet_energy: (if wet(a) { if inv(a, "cloak") > 0 { -1.0 } else { -2.5 } } else { 0.0 })
-            + (if cold(a) { -1.5 } else { 0.0 }),
+        wet_energy: (if is_wet { if inv(a, "cloak") > 0 { -0.5 } else { -1.25 } } else { 0.0 })
+            + (if is_cold { -0.75 } else { 0.0 }),
         // A cold night hurts only in winter or in the rain (a storm night).
-        cold_hp: if cold(a) && freezing(a) { if a.season == "winter" { -3.0 } else { -1.5 } } else { 0.0 },
+        cold_hp: if is_cold && freezing(a) { if a.season == "winter" { -1.5 } else { -0.75 } } else { 0.0 },
     };
     if a.actor.kind == "person" {
         let k = person_pace(0);
@@ -344,11 +771,48 @@ fn rates(a) {
     r
 }
 
+// A grown person's walk (m/s), the `walk_base` law: a world (or a player's setting, through
+// `set_world_law`) changes it without replacing `move_speed`.
+fn walk_base() { law("walk_base") }
 fn move_speed(a) {
-    let base = switch a.actor.kind { "deer" => 3.7, "wolf" => 3.4, _ => 2.6 };
+    let base = switch a.actor.kind { "deer" => 3.7, "wolf" => 3.4, _ => walk_base() };
     if a.actor.stage == "infant" { base *= 0.4; } else if a.actor.stage == "child" { base *= 0.8; } else if a.actor.stage == "elder" { base *= 0.85; }
     base *= a.actor.speed;
-    if a.actor.energy < 10.0 { base * 0.6 } else { base }
+    if a.actor.energy < 10.0 { base * law("tired_pace") } else { base }
+}
+// Why a body walks slower than its pace, in the words its status shows and its mind feels ("":
+// it is not slowed). Every slowdown in `move_speed` but age has its words here; `slowed(a)`
+// (a skill's context: the scene a mind reads) and `status_of` (the body: a player's pill and the
+// mind's felt words) both ask `slow_words`, so a world changes them in one place.
+fn slow_words(kind, energy) { if energy < 10.0 { "exhausted, so you walk slower" } else { "" } }
+fn slowed(a) { slow_words(a.actor.kind, a.actor.energy) }
+
+// ---- breath and focus (a law per creature, kept per state) ---------------------------------
+// Two short pools in real seconds, beside tiredness (`energy`, the needs): breath (`stamina`) for
+// running and every bodily move, and `focus` for hurling fire and closing wounds by hand. Each
+// comes back by itself `delay_ms` after its last use at `regen_per_s`. The engine caps breath by
+// tiredness: full from `rested_at` energy, `spent_share` of `max` at none, and refills it at
+// `exhausted_regen` of the rate below `exhausted_below`. A run takes `run_per_s` and stops when
+// breath runs out (it starts again at `resume`); a held guard takes `guard_per_s` and drops; each
+// point spent costs `tires_per_point` energy. Elders get their breath back slower; deer have more.
+fn pools(a) {
+    let regen = law("stamina_regen");
+    if a.actor.stage == "elder" { regen *= 0.7; }
+    let most = law("stamina_max");
+    if a.actor.kind == "deer" { most *= 1.2; }
+    #{
+        stamina: #{ max: most, regen_per_s: regen, delay_ms: law("stamina_delay_s") * 1000.0, run_per_s: law("stamina_run"), guard_per_s: law("stamina_guard"),
+                    resume: law("stamina_resume"), tires_per_point: law("stamina_tires"), rested_at: 35.0, spent_share: 0.5, exhausted_below: 10.0, exhausted_regen: 0.5 },
+        focus: #{ max: law("focus_max"), regen_per_s: law("focus_regen"), delay_ms: law("focus_delay_s") * 1000.0 },
+    }
+}
+// What a pool is called where people read it (a player's bar, the minds' words): a world's word.
+fn pool_word(pool) { switch pool { "focus" => "mana", _ => pool } }
+fn pools_law() {
+    let p = pools(#{ actor: #{ kind: "person", stage: "adult" } });
+    let b = p.stamina;
+    #{ cadence: "hot", topic: "moving",
+       about: `Stamina (breath) is short: running takes ${short(b.run_per_s)} a second and every fighting move some. It comes back by itself ${short(b.delay_ms / 1000.0)} s after your last effort, ${short(b.regen_per_s)} a second (empty to full in ${short(b.max / b.regen_per_s)} s), slower when you are old or exhausted, and being tired leaves you less of it (exhausted, only short bursts). Out of breath, a run slows to a walk (it starts again once you have ${short(b.resume)}) and you cannot strike, dodge, jump, shoot or guard until it comes back. Every bit spent tires you a little. ${pool_word("focus")} pays for hurling fire and closing wounds by hand, and comes back slowly, ${short(p.focus.regen_per_s)} a second.` }
 }
 
 // ---- gathering and food ------------------------------------------------
@@ -369,21 +833,30 @@ fn gather_duration(a) {
         "boulder" => if inv(a, "pick") > 0 { 2500 } else { 5000 },
         "clay_bank" => 3000,
         "fishing_spot" => if inv(a, "spear") > 0 { 3000 } else { 6500 },
-        _ => 3000,
+        _ => { let r = entry_of("resources", a.target.kind); if r == () || r.gather_ms == () { 3000 } else { r.gather_ms } },
     }
+}
+// Every kind of resource, in order (read once when the script compiles):
+//   yields      what one gathering gives
+//   regrow_per_h  units it regrows a game hour of growing time, up to its max
+//   regrow_by_season  the share of that rate in each season, #{ spring, summer, autumn,
+//               winter } (a season left out, or no trait: full, and none in winter)
+//   max         units a node of it holds when full
+//   ground      the ground a settlement's promised nodes of it are placed on (`resources` in a
+//               town of the seed), and by_water: only beside water
+//   gather_ms   how long one gathering takes without a tool (`gather_duration`)
+fn resources() {
+    [
+        #{ name: "berry_bush", yields: "berries", regrow_per_h: 0.6, max: 5.0, ground: ["grass"], gather_ms: 2000 },
+        #{ name: "tree", yields: "wood", regrow_per_h: 0.25, max: 8.0, ground: ["forest", "grass"], gather_ms: 4000 },
+        #{ name: "boulder", yields: "stone", regrow_per_h: 0.1, max: 6.0, ground: ["grass", "dirt"], gather_ms: 5000 },
+        #{ name: "reeds", yields: "fiber", regrow_per_h: 0.5, max: 4.0, ground: ["sand", "grass"], by_water: true, gather_ms: 2500 },
+        #{ name: "fishing_spot", yields: "fish", regrow_per_h: 0.7, max: 5.0, ground: ["sand", "grass"], by_water: true, gather_ms: 6500 },
+        #{ name: "clay_bank", yields: "clay", regrow_per_h: 0.3, max: 6.0, ground: ["grass"], by_water: true, gather_ms: 3000 },
+    ]
 }
 // What one gathering at each resource yields.
-fn yield_of(kind) {
-    switch kind {
-        "berry_bush" => "berries",
-        "tree" => "wood",
-        "boulder" => "stone",
-        "reeds" => "fiber",
-        "fishing_spot" => "fish",
-        "clay_bank" => "clay",
-        _ => "",
-    }
-}
+fn yield_of(kind) { let r = entry_of("resources", kind); if r == () || r.yields == () { "" } else { r.yields } }
 fn gather_done(a) {
     // A net brings in two fish at a time.
     let n = if a.target.kind == "fishing_spot" && inv(a, "net") > 0 { 2 } else { 1 };
@@ -411,29 +884,15 @@ fn eat_done(a) {
     [#{ op: "remove", item: a.item, qty: n }, #{ op: "vitals", hunger: -nutrition(a.item) * n, hp: 1.0 * n }]
 }
 
-fn cook_check(a) {
-    if !knows(a, "cooking") { return "you don't know how to cook" + learn_how("cooking"); }
-    if a.target.kind != "campfire" { return "cooking needs a campfire"; }
-    if item_trait(a.item, "cooks_to") == () { return `only raw ${or_list(items_with("cooks_to"))} can be cooked`; }
-    if inv(a, a.item) < 1 { return `no ${a.item} in your pack (${a.item}: ${source_of(a.item)})`; }
-    ""
-}
-fn cook_duration(a) { 4000 }
-fn cook_done(a) {
-    [#{ op: "remove", item: a.item, qty: 1 }, #{ op: "add", item: item_trait(a.item, "cooks_to"), qty: 1 }]
-}
+// Cooking and smoking are recipes (`recipes()`: `cook` and `smoke`, by trait), made by the
+// one making mechanism below (`making_check`); the item named is the raw food.
+fn cook_check(a) { making_check(a, "cook", cook_making()) }
+fn cook_duration(a) { making_duration(a, "cook", cook_making()) }
+fn cook_done(a) { making_done(a, "cook", cook_making()) }
 
-fn smoke_check(a) {
-    if !knows(a, "smoking") { return "you don't know how to smoke food" + learn_how("smoking"); }
-    if a.target.kind != "campfire" { return "smoking needs a campfire"; }
-    if item_trait(a.item, "smokes_to") == () { return `only raw ${or_list(items_with("smokes_to"))} can be smoked`; }
-    if inv(a, a.item) < 1 { return `no ${a.item} in your pack (${a.item}: ${source_of(a.item)})`; }
-    ""
-}
-fn smoke_duration(a) { 10000 }
-fn smoke_done(a) {
-    [#{ op: "remove", item: a.item, qty: 1 }, #{ op: "add", item: item_trait(a.item, "smokes_to"), qty: 1 }]
-}
+fn smoke_check(a) { making_check(a, "smoke", smoke_making()) }
+fn smoke_duration(a) { making_duration(a, "smoke", smoke_making()) }
+fn smoke_done(a) { making_done(a, "smoke", smoke_making()) }
 
 // Clearing forest: the tile becomes open ground, and yields wood.
 fn clear_check(a) {
@@ -457,10 +916,13 @@ fn graze_done(a) { [#{ op: "vitals", hunger: -14.0 }, #{ op: "graze" }] }
 
 // ---- rest ---------------------------------------------------------------
 
+// How long one sleep lasts: until rested at a sleeper's unpaced rate a game hour (13 beside a
+// shelter, 8 without), at least 5 s and at most 150 s of real time; a sleeper not yet rested
+// sleeps again.
 fn sleep_duration(a) {
-    let rate = if a.actor.near_shelter { 26.0 } else { 16.0 };
+    let rate = if a.actor.near_shelter { 13.0 } else { 8.0 };
     let need = 100.0 - a.actor.energy;
-    let ms = need / rate * 60000.0;
+    let ms = need / rate * hour_ms();
     if ms < 5000.0 { 5000 } else if ms > 150000.0 { 150000 } else { ms.to_int() }
 }
 fn rest_duration(a) { 8000 }
@@ -468,31 +930,16 @@ fn wait_duration(a) { if a.qty > 0 { if a.qty > 120 { 120000 } else { a.qty * 10
 
 // ---- building and crafting --------------------------------------------
 
+// A recipe that builds (`build`) or paves (`pave`).
+fn builds(r) { r.by == "build" || r.by == "pave" }
+// What is built: its recipe (`recipes()`, by "build"), or `()`.
+fn build_recipe(kind) { let r = entry_of("recipes", kind); if r == () || r.by != "build" { () } else { r } }
+// What is built, in the table's order.
+fn built() { entries_where("recipes", "by", "build", "") }
+// What a structure (or a road) takes to build: its recipe's `takes` (by "build" or "pave").
 fn cost(kind) {
-    switch kind {
-        "campfire" => #{ wood: 3 },
-        "shelter" => #{ wood: 6, fiber: 3 },
-        "storage" => #{ wood: 4 },
-        "spear" => #{ wood: 2, stone: 1 },
-        "cloak" => #{ hide: 2, fiber: 1 },
-        "torch" => #{ wood: 1, fiber: 1 },
-        "house" => #{ wood: 6, clay: 4, stone: 2 },
-        "gate" => #{ wood: 4 },
-        "wall" => #{ stone: 2 },
-        "road" => #{ stone: 1 },
-        "axe" => #{ wood: 2, stone: 1 },
-        "pick" => #{ wood: 2, stone: 2 },
-        "net" => #{ fiber: 3 },
-        "basket" => #{ fiber: 2, wood: 1 },
-        "bow" => #{ wood: 2, fiber: 1 },
-        "arrow" => #{ wood: 1, stone: 1 },
-        "salve" => #{ berries: 2, fiber: 1 },
-        "leather" => #{ hide: 1 },
-        "armor" => #{ leather: 3, fiber: 1 },
-        "trap" => #{ wood: 2, fiber: 2 },
-        "bridge" => #{ wood: 4, stone: 2 },
-        _ => (),
-    }
+    let r = entry_of("recipes", kind);
+    if r == () || (r.by != "build" && r.by != "pave") { () } else { r.takes }
 }
 fn afford(a, kind) {
     let c = cost(kind);
@@ -511,30 +958,21 @@ fn pay(kind) {
 
 fn build_check(a) {
     if a.actor.kind == "person" && young(a) { return "too young to build"; }
-    let needed = switch a.item {
-        "campfire" => "fire",
-        "shelter" => "shelter",
-        "storage" => "storage",
-        "house" => "carpentry",
-        "gate" => "carpentry",
-        "wall" => "masonry",
-        "trap" => "trapping",
-        "bridge" => "bridging",
-        _ => (),
-    };
-    if needed == () { return `cannot build ${a.item}`; }
-    if !knows(a, needed) { return `you don't know how to build a ${a.item}` + learn_how(needed); }
-    if a.item == "wall" || a.item == "gate" || a.item == "bridge" {
+    let r = build_recipe(a.item);
+    if r == () { return `cannot build ${a.item}`; }
+    if r.knows != () && !knows(a, r.knows) { return `you don't know how to build a ${a.item}` + learn_how(r.knows); }
+    if r.beside == true {
         if a.target.class != "place" { return `point at the tile beside you where the ${a.item} goes`; }
     } else if a.actor.terrain == "water" || a.actor.terrain == "rock" || a.actor.terrain == "wall" { return "cannot build here"; }
-    if a.item == "campfire" && a.actor.near_fire { return "a campfire already burns right here"; }
-    if a.item == "shelter" && a.actor.near_shelter { return "there is already a shelter right here"; }
+    if r.apart == "fire" && a.actor.near_fire { return `a ${a.item} already burns right here`; }
+    if r.apart == "shelter" && a.actor.near_shelter { return `there is already a ${a.item} right here`; }
     afford(a, a.item)
 }
-fn build_duration(a) { switch a.item { "campfire" => 6000, "shelter" => 20000, "house" => 40000, "wall" => 6000, "gate" => 15000, "trap" => 8000, "bridge" => 20000, _ => 10000 } }
+fn build_duration(a) { let r = build_recipe(a.item); if r == () || r.ms == () { 10000 } else { r.ms } }
 
-// A trap catches small game over time: one meat about every 4 minutes, holding at most 3.
-fn trap_every_s(x) { 240.0 }
+// A trap catches small game over time: one meat about every 8 game hours (4 real minutes on the
+// 12-minute day), holding at most 3.
+fn trap_every_h(x) { 8.0 }
 fn trap_holds(x) { 3.0 }
 fn build_done(a) {
     // Place first: if the spot turns out unusable, nothing is spent.
@@ -544,32 +982,336 @@ fn build_done(a) {
     fx
 }
 
-// The technique each crafted thing needs.
-fn made_by(item) {
-    switch item {
-        "spear" => "spear", "cloak" => "cloak", "torch" => "torch",
-        "axe" => "toolmaking", "pick" => "toolmaking",
-        "net" => "fishing", "basket" => "basketry",
-        "bow" => "archery", "arrow" => "archery",
-        "salve" => "medicine",
-        "leather" => "tanning", "armor" => "tanning",
-        _ => (),
+// Tools, weapons and garments are recipes (`recipes()`, by "craft"), made by the one making
+// mechanism below; the item named is what is made.
+fn craft_check(a) { making_check(a, "craft", craft_making()) }
+fn craft_duration(a) { making_duration(a, "craft", craft_making()) }
+fn craft_done(a) { making_done(a, "craft", craft_making()) }
+
+// ---- fires and recipes (docs/WORLD_RULES.md, "Goods, recipes and fuel") -----------------
+// A fire that burns fuel (a structure whose kind `burns`) is fed from the pack: each item worth
+// its fuel trait in units. It burns them at its rate while lit and goes out when they are
+// spent; feeding an out fire lights it again, which takes knowing fire. What a fire burns is
+// whatever has its fuel trait, not a list.
+
+fn burns_of(kind) { structure_trait(kind, "burns") }
+// The item fed: the one named, or for "fuel" the first in the pack that burns here.
+fn fuel_item(a, b) {
+    if a.item != "fuel" { return a.item; }
+    for k in having("items", b.fuel) { if inv(a, k) > 0 { return k; } }
+    ""
+}
+fn feed_check(a) {
+    if a.target.class != "structure" { return "feed a fire beside you that burns fuel"; }
+    let b = burns_of(a.target.kind);
+    if b == () { return `the ${a.target.kind} burns no fuel`; }
+    let item = fuel_item(a, b);
+    if item == "" { return `no fuel for the ${a.target.kind} in your pack (it burns ${or_list(having("items", b.fuel))})`; }
+    let worth = item_trait(item, b.fuel);
+    if worth == () { return `${item} is not fuel for the ${a.target.kind} (it burns ${or_list(having("items", b.fuel))})`; }
+    if inv(a, item) < amount(a) { return `not enough ${item} (${item}: ${source_of(item)})`; }
+    if b.holds != () && a.target.fuel + worth * amount(a) > b.holds + 0.001 { return `the ${a.target.kind} holds at most ${short(b.holds)} units of fuel; it has ${short(a.target.fuel)}`; }
+    if !a.target.lit && !knows(a, "fire") { return `the ${a.target.kind} is out, and you don't know how to light a fire` + learn_how("fire"); }
+    ""
+}
+fn feed_duration(a) { 1500 }
+fn feed_done(a) { [#{ op: "fuel", item: fuel_item(a, burns_of(a.target.kind)), qty: amount(a) }] }
+
+// Everything a character makes, in every world, is a recipe here (read once when the script
+// compiles), and one mechanism makes them all (`making_check`, `making_duration`,
+// `making_done`). Each recipe:
+//   by             the skill that makes it: "make" (none: make), "craft", "cook", "smoke", or a
+//                  world's own way (a skill with a `<skill>_making()` below)
+//   gives, makes   the item made (the recipe's name by default) and how many (1)
+//   takes          what it uses from the pack: #{ name or trait: qty }; a name is that item,
+//                  a trait is anything carrying it (`alkali: 1` takes ash, or any other alkali)
+//   turns          instead of gives and takes: an item trait naming what an item becomes
+//                  (`smokes_to`): the item made is that trait's value, and one of the item is used
+//   at             the structure kind it is made at, or "fire" for any fire (none: anywhere)
+//   lit            the fire must be burning
+//   fuel           units of fuel the heat takes from the fire it is made at (a fire that needs no
+//                  feeding gives its heat for nothing)
+//   tools          what it needs held in the pack and does not use up: #{ name or trait: qty }
+//                  (a blowpipe; `vessel: 1` is any item with the trait `vessel`)
+//   knows          the technique it needs;  ms  how long it takes (8000)
+//   icon, label    how it looks in a client, over its product item's (`recipe_look`; data only)
+// A world adds its own after these (`base_recipes() + [...]`): a world's recipes() that leaves
+// them out leaves its people nothing to craft, cook or smoke.
+fn recipes() {
+    [
+        // At any fire burning beside you, raw food becomes what its `cooks_to` or `smokes_to`
+        // names.
+        #{ name: "cook", by: "cook", turns: "cooks_to", at: "fire", lit: true, knows: "cooking", ms: 4000 },
+        #{ name: "smoke", by: "smoke", turns: "smokes_to", at: "fire", lit: true, knows: "smoking", ms: 10000 },
+        // Tools, weapons and garments, crafted anywhere from the pack.
+        #{ name: "spear", by: "craft", takes: #{ wood: 2, stone: 1 }, knows: "spear" },
+        #{ name: "cloak", by: "craft", takes: #{ hide: 2, fiber: 1 }, knows: "cloak" },
+        #{ name: "torch", by: "craft", takes: #{ wood: 1, fiber: 1 }, knows: "torch" },
+        #{ name: "axe", by: "craft", takes: #{ wood: 2, stone: 1 }, knows: "toolmaking" },
+        #{ name: "pick", by: "craft", takes: #{ wood: 2, stone: 2 }, knows: "toolmaking" },
+        #{ name: "net", by: "craft", takes: #{ fiber: 3 }, knows: "fishing" },
+        #{ name: "basket", by: "craft", takes: #{ fiber: 2, wood: 1 }, knows: "basketry" },
+        #{ name: "bow", by: "craft", takes: #{ wood: 2, fiber: 1 }, knows: "archery" },
+        // Arrows come three at a time.
+        #{ name: "arrow", by: "craft", takes: #{ wood: 1, stone: 1 }, makes: 3, knows: "archery" },
+        #{ name: "salve", by: "craft", takes: #{ berries: 2, fiber: 1 }, knows: "medicine" },
+        #{ name: "leather", by: "craft", takes: #{ hide: 1 }, knows: "tanning" },
+        #{ name: "armor", by: "craft", takes: #{ leather: 3, fiber: 1 }, knows: "tanning" },
+        // Structures, built where one stands (or, `beside`, on the tile beside one that one
+        // points at), and the road paved underfoot (`build`, `pave`; not a way of making: the
+        // product is a structure, a wall or road, not an item). `apart`: not where one already
+        // is near a fire (a campfire) or a shelter.
+        #{ name: "campfire", by: "build", takes: #{ wood: 3 }, knows: "fire", ms: 6000, apart: "fire" },
+        #{ name: "shelter", by: "build", takes: #{ wood: 6, fiber: 3 }, knows: "shelter", ms: 20000, apart: "shelter" },
+        #{ name: "storage", by: "build", takes: #{ wood: 4 }, knows: "storage", ms: 10000 },
+        #{ name: "house", by: "build", takes: #{ wood: 6, clay: 4, stone: 2 }, knows: "carpentry", ms: 40000 },
+        #{ name: "wall", by: "build", takes: #{ stone: 2 }, knows: "masonry", ms: 6000, beside: true },
+        #{ name: "gate", by: "build", takes: #{ wood: 4 }, knows: "carpentry", ms: 15000, beside: true },
+        #{ name: "trap", by: "build", takes: #{ wood: 2, fiber: 2 }, knows: "trapping", ms: 8000 },
+        #{ name: "bridge", by: "build", takes: #{ wood: 4, stone: 2 }, knows: "bridging", ms: 20000, beside: true },
+        #{ name: "road", by: "pave", takes: #{ stone: 1 }, ms: 4000 },
+    ]
+}
+
+// The ways into making: a skill that makes recipes declares `<skill>_making()`, and its
+// `_check`, `_duration` and `_done` are the mechanism's. A way says:
+//   item    what the act's item names: "product" (what is made) or "input" (the item a recipe
+//           that `turns` uses: `cook fish`)
+//   who     who may: "person" (grown people), "grown" (anyone not young); none: anyone
+//   tires   the energy it costs (none: nothing)
+//   words   its own words: who, nothing (it makes nothing here), none (not one of its
+//           recipes), knows, at, at_fire, takes, tools (a tool it keeps is missing: `{a}` is
+//           "a blowpipe"), and source (how something it makes is come by,
+//           for `source_of`; none: the recipe's words). `{item}`, `{n}`, `{k}` and the others
+//           are filled in (`fill`).
+// A way whose item is the input and which has one recipe asks that recipe's knowing and place
+// before the item: you are told you do not know how to cook before what cannot be cooked.
+fn make_making() {
+    #{ item: "product", who: "person", tires: 1.0,
+       words: #{ who: "you cannot make things", nothing: "nothing is made here", none: "no one makes {item} at a workplace{how}",
+                 knows: "you don't know how to make {item}", at: "{item} is made at a {at}", at_fire: "{item} is made at a fire",
+                 takes: "{item} takes {n} {k} ({k}: {source})", tools: "{item} is made with {a} in your pack, not used up ({k}: {source})" } }
+}
+fn craft_making() {
+    #{ item: "product", who: "grown",
+       words: #{ who: "too young to craft", none: "cannot craft {item}", knows: "you don't know how to make a {item}",
+                 at: "{item} is made at a {at}", at_fire: "{item} is made at a fire",
+                 takes: "need {n} {k} for a {item} ({k}: {source})", tools: "need {a} in your pack to make a {item}, not used up ({k}: {source})", source: "craft it ({takes})" } }
+}
+fn cook_making() {
+    #{ item: "input",
+       words: #{ none: "only raw {inputs} can be cooked", knows: "you don't know how to cook", at: "cooking needs a campfire",
+                 takes: "no {k} in your pack ({k}: {source})", source: "cook {input} at a campfire" } }
+}
+fn smoke_making() {
+    #{ item: "input",
+       words: #{ none: "only raw {inputs} can be smoked", knows: "you don't know how to smoke food", at: "smoking needs a campfire",
+                 takes: "no {k} in your pack ({k}: {source})", source: "smoke {input} at a campfire (knowing smoking), or trade for it" } }
+}
+// A way's declaration, by its skill's name (`()`: no such way).
+fn making_of(skill) { if skill == "" { return (); } try { return call(Fn(`${skill}_making`)); } catch { } () }
+
+// Words with their `{name}` parts filled in from `v`.
+fn fill(t, v) {
+    let s = t;
+    for k in v.keys() { s.replace(`{${k}}`, `${v[k]}`); }
+    s
+}
+// The first item whose trait `t` names `product` (`turned_into("cooks_to", "cooked_fish")`:
+// fish), or `()`.
+fn turned_into(t, product) {
+    if product == "" { return (); }
+    let from = entries_where("items", t, product, "");
+    if from.len() == 0 { () } else { from[0].name }
+}
+fn by_of(r) { if r.by == () { "make" } else { r.by } }
+fn gives_of(r) { if r.gives == () { r.name } else { r.gives } }
+// A way's recipes, in the table's order.
+fn way_recipes(skill) { entries_where("recipes", "by", skill, "make") }
+// What a way makes: each recipe's product, or each product of a recipe that turns items.
+fn products_of(skill) {
+    let out = [];
+    for r in way_recipes(skill) {
+        if r.turns == () { out.push(if r.gives == () { r.name } else { r.gives }); } else { for i in having("items", r.turns) { out.push(item_trait(i, r.turns)); } }
     }
+    out
 }
-fn craft_check(a) {
-    if young(a) { return "too young to craft"; }
-    let needed = made_by(a.item);
-    if needed == () { return `cannot craft ${a.item}`; }
-    if !knows(a, needed) { return `you don't know how to make a ${a.item}` + learn_how(needed); }
-    afford(a, a.item)
+// What a way's recipes that turn items take: the items with their traits.
+fn inputs_of(skill) {
+    let out = [];
+    for r in way_recipes(skill) { if r.turns != () { for i in having("items", r.turns) { if !out.contains(i) { out.push(i); } } } }
+    out
 }
-fn craft_duration(a) { 8000 }
-fn craft_done(a) {
-    let fx = pay(a.item);
-    // Arrows come three at a time.
-    fx.push(#{ op: "add", item: a.item, qty: if a.item == "arrow" { 3 } else { 1 } });
+// What an act of a way names to make a product: the product, or the item it is made from.
+fn making_item(skill, w, product) {
+    if w.item != "input" { return product; }
+    for r in way_recipes(skill) { if r.turns != () { let i = turned_into(r.turns, product); if i != () { return i; } } }
+    ""
+}
+// What a recipe grid shows of a product as data (`Scripts::recipe_parts`): what the act names,
+// what is used up (`takes`) and held but not used up (`tools`, `#{ name or trait: qty }`),
+// where, whether the fire must burn, the fuel it draws, the technique, how long, how many.
+fn recipe_parts(skill, w, product) {
+    let item = making_item(skill, w, product);
+    let m = making_for(skill, w, item);
+    if m == () { return (); }
+    let r = m.r;
+    #{ item: item, takes: takes_of(m), tools: tools_of(r),
+       at: if r.at == () { "" } else { r.at }, lit: r.lit == true || r.fuel != (), fuel: if r.fuel == () { 0.0 } else { r.fuel },
+       knows: if r.knows == () { "" } else { r.knows }, ms: if r.ms == () { 8000 } else { r.ms }, makes: if r.makes == () { 1 } else { r.makes } }
+}
+// The recipe of a way for an act's item: #{ r, input, product } (input: the item it turns).
+fn making_for(skill, w, item) {
+    if item == () { return (); }
+    if w.item != "input" {
+        // The way's recipe named for the product, else one that `gives` it, else one that turns
+        // an item into it.
+        let r = entry_of("recipes", item);
+        if r != () && r.turns == () && by_of(r) == skill && gives_of(r) == item { return #{ r: r, input: (), product: item }; }
+        for r in entries_where("recipes", "gives", item, "\n") { if r.turns == () && by_of(r) == skill { return #{ r: r, input: (), product: item }; } }
+        for n in having("recipes", "turns") {
+            let r = entry_of("recipes", n);
+            if by_of(r) != skill { continue; }
+            let i = turned_into(r.turns, item);
+            if i != () { return #{ r: r, input: i, product: item }; }
+        }
+        return ();
+    }
+    for r in way_recipes(skill) {
+        if r.turns != () {
+            let p = item_trait(item, r.turns);
+            if p != () { return #{ r: r, input: item, product: p }; }
+        }
+    }
+    ()
+}
+// The recipe a way is, when its item is the input and it has only one.
+fn making_only(skill, w) {
+    if w.item != "input" { return (); }
+    let all = way_recipes(skill);
+    if all.len() == 1 { all[0] } else { () }
+}
+// A way makes nothing in this world: it has no recipe, or each turns items no item becomes.
+fn makes_nothing(skill) {
+    for r in way_recipes(skill) { if r.turns == () || having("items", r.turns).len() > 0 { return false; } }
+    true
+}
+fn making_none(skill, w, item) {
+    let say = w.words;
+    if say.nothing != () && makes_nothing(skill) { return fill(say.nothing, #{ item: item }); }
+    let v = #{ item: item };
+    if say.none.contains("{products}") { v.products = or_list(products_of(skill)); }
+    if say.none.contains("{inputs}") { v.inputs = or_list(inputs_of(skill)); }
+    // How an item that is not made here is come by (nothing for what is no item: "food").
+    if say.none.contains("{how}") { v.how = if entry_of("items", item) == () { "" } else { ` (${item}: ${source_of(item)})` }; }
+    fill(say.none, v)
+}
+// The recipe that makes an item, by any way, and the item it turns (for a recipe that `turns`):
+// the recipe named for it, else the first that `gives` it, else the first that turns an item
+// into it. What is built (a structure, a wall, a road) is no item: building's own rule reads it.
+fn recipe_for(product) {
+    let r = entry_of("recipes", product);
+    if r != () && r.turns == () && gives_of(r) == product && !builds(r) { return #{ r: r, input: () }; }
+    for r in entries_where("recipes", "gives", product, "\n") { if r.turns == () && !builds(r) { return #{ r: r, input: () }; } }
+    for n in having("recipes", "turns") {
+        let r = entry_of("recipes", n);
+        let i = turned_into(r.turns, product);
+        if i != () { return #{ r: r, input: i }; }
+    }
+    ()
+}
+// How an item looks in a client: its `icon`, `label` and `group` (an item without them: its name
+// as the icon and, with spaces, as the label; no group).
+fn item_look(item) {
+    let i = entry_of("items", item);
+    if i == () { i = #{}; }
+    let label = item;
+    label.replace("_", " ");
+    #{ icon: if i.icon == () { item } else { i.icon }, label: if i.label == () { label } else { i.label }, group: if i.group == () { "" } else { i.group } }
+}
+// How what a recipe makes looks in a recipe grid: its product item's look, with the recipe's own
+// `icon` and `label` over it where the recipe sets them (data only; making does not read them).
+fn recipe_look(product) {
+    let look = item_look(product);
+    let m = recipe_for(product);
+    if m != () {
+        if m.r.icon != () { look.icon = m.r.icon; }
+        if m.r.label != () { look.label = m.r.label; }
+    }
+    look
+}
+// What the pack holds of a recipe's input: the item of that name, or everything with that trait.
+fn holding(a, k) {
+    if entry_of("items", k) != () { return inv(a, k); }
+    let n = 0;
+    for i in having("items", k) { n += inv(a, i); }
+    n
+}
+fn takes_of(m) { let t = m.r.takes; if m.input != () { t = #{}; t[m.input] = 1; } else if t == () { t = #{}; } t }
+
+// The one making mechanism: a way's check, duration and effects.
+fn making_check(a, skill, w) {
+    let say = w.words;
+    if w.who == "person" && (a.actor.kind != "person" || young(a)) { return say.who; }
+    if w.who == "grown" && young(a) { return say.who; }
+    let m = making_for(skill, w, a.item);
+    let r = if m != () { m.r } else { making_only(skill, w) };
+    if r == () { return making_none(skill, w, a.item); }
+    if r.knows != () && !knows(a, r.knows) { return fill(say.knows, #{ item: a.item }) + learn_how(r.knows); }
+    if r.at != () {
+        let here = a.target.class == "structure" && (a.target.kind == r.at || (r.at == "fire" && fire_kind(a.target.kind)));
+        if !here { return fill(if r.at == "fire" && say.at_fire != () { say.at_fire } else { say.at }, #{ item: a.item, at: r.at }); }
+        if (r.lit == true || r.fuel != ()) && !burning(a) { return `the ${a.target.kind} is out: feed it first`; }
+        if r.fuel != () && burns_of(a.target.kind) != () && a.target.fuel + 0.001 < r.fuel { return `the ${a.target.kind} has too little fuel left for it (it takes ${short(r.fuel)}, it has ${short(a.target.fuel)}): feed it first`; }
+    }
+    if m == () { return making_none(skill, w, a.item); }
+    let t = takes_of(m);
+    for k in t.keys() {
+        if holding(a, k) < t[k] { return fill(say.takes, #{ item: a.item, n: t[k], k: k, source: source_of(k) }); }
+    }
+    // What it is made with and keeps: a tool held in the pack, by name or by trait.
+    let held = tools_of(m.r);
+    for k in held.keys() {
+        if holding(a, k) < held[k] {
+            let words = if say.tools == () { "{item} is made with {a} in your pack, not used up ({k}: {source})" } else { say.tools };
+            return fill(words, #{ item: a.item, n: held[k], k: k, a: a_or_n(held[k], k), source: source_of(k) });
+        }
+    }
+    ""
+}
+// A recipe's tools (`#{}` when it has none).
+fn tools_of(r) { if r.tools == () { #{} } else { r.tools } }
+// "a blowpipe", "2 moulds".
+fn a_or_n(n, k) { if n == 1 { `a ${k}` } else { `${n} ${k}` } }
+fn making_duration(a, skill, w) {
+    let m = making_for(skill, w, a.item);
+    let r = if m != () { m.r } else { making_only(skill, w) };
+    if r == () || r.ms == () { 8000 } else { r.ms }
+}
+fn making_done(a, skill, w) {
+    let m = making_for(skill, w, a.item);
+    let fx = [];
+    let t = takes_of(m);
+    for k in t.keys() {
+        let left = t[k];
+        if entry_of("items", k) != () { fx.push(#{ op: "remove", item: k, qty: left }); continue; }
+        for i in having("items", k) {
+            if left <= 0 { break; }
+            let n = inv(a, i);
+            if n > left { n = left; }
+            if n > 0 { fx.push(#{ op: "remove", item: i, qty: n }); left -= n; }
+        }
+    }
+    if m.r.fuel != () && a.target.class == "structure" && burns_of(a.target.kind) != () { fx.push(#{ op: "burn", units: m.r.fuel }); }
+    fx.push(#{ op: "add", item: m.product, qty: if m.r.makes == () { 1 } else { m.r.makes } });
+    if w.tires != () { fx.push(#{ op: "vitals", energy: -w.tires }); }
     fx
 }
+
+// Making at a workplace (goods-1): the world's own recipes, by "make".
+fn make_check(a) { making_check(a, "make", make_making()) }
+fn make_duration(a) { making_duration(a, "make", make_making()) }
+fn make_done(a) { making_done(a, "make", make_making()) }
 
 // ---- exchange -----------------------------------------------------------
 
@@ -592,22 +1334,23 @@ fn give_check(a) {
     if a.target.id == a.actor.id { return "cannot give to yourself"; }
     if inv(a, a.item) < amount(a) { return `not enough ${a.item} (${a.item}: ${source_of(a.item)})`; }
     // What someone is given has to fit in their pack; a baby can hold only a few things.
-    let held = 0;
-    for k in a.target.inv.keys() { held += a.target.inv[k]; }
-    let room = if a.target.stage == "infant" { 4.0 } else { carry_limit(a.target.kind) + if a.target.inv.contains("basket") { 20.0 } else { 0.0 } };
-    if held + amount(a) > room { return if a.target.stage == "infant" { `a baby can hold only ${room} things; give food a little at a time` } else { "their pack is full" }; }
+    let held = load(a.target.inv);
+    let room = if a.target.stage == "infant" { 4.0 } else { pack_limit(a.target.kind, a.target.inv) };
+    if held + amount(a) * carry_of(a.item) > room + 0.0001 { return if a.target.stage == "infant" { `a baby can hold only ${room} things; give food a little at a time` } else { "their pack is full" }; }
     ""
 }
 fn give_duration(a) { 1000 }
 fn give_done(a) { [#{ op: "give", item: a.item, qty: amount(a) }] }
 
-// A storage holds this many things in all; a full one takes no more.
-fn storage_holds(x) { 120 }
+// A store holds what its kind `holds` in all (a storage 120 things); a full one takes no more.
+// () for a kind that is no store.
+fn holds_of(kind) { structure_trait(kind, "holds") }
 fn store_check(a) {
-    if a.target.kind != "storage" { return "can only store in a storage"; }
+    let room = holds_of(a.target.kind);
+    if room == () { return "can only store in a storage"; }
     let held = 0;
     for k in a.target.inv.keys() { held += a.target.inv[k]; }
-    if held + amount(a) > storage_holds(0) { return `the storage is full (it holds ${held} of ${storage_holds(0)} things)`; }
+    if held + amount(a) > room { return `the storage is full (it holds ${held} of ${room} things)`; }
     if inv(a, a.item) < amount(a) { return `not enough ${a.item} (${a.item}: ${source_of(a.item)})`; }
     ""
 }
@@ -615,7 +1358,7 @@ fn store_duration(a) { 1000 }
 fn store_done(a) { [#{ op: "store", item: a.item, qty: amount(a) }] }
 
 fn take_check(a) {
-    if a.target.kind != "storage" && a.target.kind != "remains" && a.target.kind != "trap" { return "nothing to take from"; }
+    if holds_of(a.target.kind) == () && a.target.kind != "remains" && a.target.kind != "trap" { return "nothing to take from"; }
     let have = a.target.inv[a.item];
     if have == () || have < 1 { return `no ${a.item} there`; }
     if pack_full(a) { return "your pack is full (eat, store, give or drop some first)"; }
@@ -675,7 +1418,7 @@ fn attack_check(a) {
     if yielding(a) { return "you have yielded: you do not strike back while it holds"; }
     let wary = dares(a);
     if wary != "" { return wary; }
-    ""
+    winded(a)
 }
 // The windup: time the target has to see it coming and react.
 fn attack_duration(a) { switch a.actor.kind { "wolf" => 550, _ => if inv(a, "spear") > 0 { 750 } else { 650 } } }
@@ -683,10 +1426,10 @@ fn attack_duration(a) { switch a.actor.kind { "wolf" => 550, _ => if inv(a, "spe
 // a wolf leaps, a person steps into a thrust. Out of reach by more than this, it misses.
 fn lunge(kind) { kind_of(kind).lunge }
 fn attack_done(a) {
-    let dmg = if a.actor.kind == "person" && inv(a, "spear") > 0 { 18.0 } else { kind_of(a.actor.kind).blow };
+    let dmg = if a.actor.kind == "person" && inv(a, "spear") > 0 { law("dmg_spear") } else { kind_of(a.actor.kind).blow };
     // Strength and skill at fighting (knack × practice) make blows count.
     let dmg = dmg * a.actor.strength * a.actor.factor * armor(a);
-    [#{ op: "damage", amount: dmg }, #{ op: "vitals", energy: -1.5 }]
+    [#{ op: "damage", amount: dmg }] + spent("attack")
 }
 // Leather armor takes the edge off a blow.
 fn armor(a) { let n = a.target.inv["armor"]; if n == () || n < 1 { 1.0 } else { 0.65 } }
@@ -699,10 +1442,10 @@ fn threaten_check(a) {
     if a.actor.stage == "child" && a.target.stage != "child" && a.target.stage != "infant" { return "you are too small to frighten a grown-up; ask them instead (say)"; }
     if a.target.class != "creature" || !a.target.alive { return "no one to threaten"; }
     if a.target.id == a.actor.id { return "cannot threaten yourself"; }
-    ""
+    winded(a)
 }
 fn threaten_duration(a) { 2000 }
-fn threaten_done(a) { [#{ op: "vitals", energy: -0.5 }] }
+fn threaten_done(a) { spent("threaten") }
 
 // Taking by force without killing: from someone who has yielded, or who is badly hurt.
 fn seize_check(a) {
@@ -732,29 +1475,43 @@ fn yield_duration(a) { 1000 }
 fn yield_done(a) { [#{ op: "yield" }] }
 
 // What a creature's body leaves in its remains when it dies, however it died, beside what it
-// carried (its kind's `carcass`), and how long the remains lie (its kind's `remains_s`).
+// carried (its kind's `carcass`), and how long the remains lie in game hours (its kind's
+// `remains_h`).
 fn carcass(kind) { let c = kind_of(kind).carcass; if c == () { #{} } else { c } }
-fn remains_s(kind) { kind_of(kind).remains_s }
+fn remains_h(kind) { kind_of(kind).remains_h }
 
 fn max_hp(kind) { kind_of(kind).max_hp }
 
-// Regrowth per minute for resource kinds.
-fn regrow(kind) {
-    switch kind {
-        "berry_bush" => 1.2,
-        "reeds" => 1.0,
-        "tree" => 0.5,
-        "boulder" => 0.2,
-        "fishing_spot" => 1.4,
-        "clay_bank" => 0.6,
-        _ => 0.0,
-    }
-}
+// Regrowth a game hour of growing time for resource kinds (their `regrow_per_h`).
+fn regrow_per_h(kind) { let r = entry_of("resources", kind); if r == () || r.regrow_per_h == () { 0.0 } else { r.regrow_per_h } }
 
 // ---- life course --------------------------------------------------------
 
 fn young(a) { a.actor.stage == "infant" || a.actor.stage == "child" }
 fn grown(a) { !young(a) }
+
+// Laws of starting a family. The shipped values ask nothing beyond adulthood, a willing
+// partner and not being hungry; a world may ask more of a body (docs/TRIALS.md, "Births that
+// keep a settlement's numbers"):
+//   conceive_food  food the two partners carry between them, at least (0: none asked)
+//   conceive_roof  whether one must stand under a roof (a shelter or a house) to start a family
+//   conceive_needs_pair  whether a family is started only by a woman and a man (body-sex; off as
+//                        shipped: the owner has not decided, and births trials compare across it)
+fn conceive_food() { 0 }
+fn conceive_roof() { false }
+fn conceive_needs_pair() { false }
+fn food_carried(inv) {
+    let n = 0;
+    for k in inv.keys() { if nutrition(k) > 0.0 { n += inv[k]; } }
+    n
+}
+fn conceive_more() {
+    let more = "";
+    if conceive_roof() { more += ", under a roof"; }
+    if conceive_food() > 0 { more += `, with at least ${conceive_food()} food carried between you`; }
+    if conceive_needs_pair() { more += ", a woman with a man"; }
+    more
+}
 
 fn conceive_check(a) {
     if a.actor.stage != "adult" { return "not of an age to start a family"; }
@@ -762,6 +1519,13 @@ fn conceive_check(a) {
     if a.target.id == a.actor.id { return "cannot do that alone"; }
     if a.target.stage != "adult" { return "they are not of an age for it"; }
     if a.actor.hunger > 60.0 { return "too hungry to think of a family"; }
+    // A body whose sex the world does not hold is not refused for it (a world from before sex).
+    if conceive_needs_pair() && a.actor.sex != "" && a.actor.sex == a.target.sex { return "a family is started by a woman and a man"; }
+    if conceive_roof() && !a.actor.near_shelter { return "not under a roof: a family is started under a shelter or in a house"; }
+    if conceive_food() > 0 {
+        let food = food_carried(a.actor.inv) + food_carried(a.target.inv);
+        if food < conceive_food() { return `not enough food put by for a child: the two of you carry ${food}, a family needs ${conceive_food()}`; }
+    }
     ""
 }
 fn conceive_duration(a) { 3000 }
@@ -774,7 +1538,36 @@ fn signal_done(a) { [#{ op: "signal" }] }
 
 // ---- know-how -----------------------------------------------------------------
 
-fn requires(t) { switch t { "cooking" => ["fire"], "torch" => ["fire"], "carpentry" => ["shelter"], "smoking" => ["fire"], "bridging" => ["carpentry"], _ => [] } }
+// Every technique there is, in order (read once when the script compiles): what one is told it
+// is (`help`), what must be known first (`requires`), and the few words the minds' world text
+// gives it (`brief`; none: its name alone, `know_how_law`). What it lets one do is the skills'.
+fn know_how() {
+    [
+        #{ name: "fire", help: "build a campfire (3 wood)", brief: "campfire" },
+        #{ name: "cooking", help: "cook raw fish or meat at a campfire", requires: ["fire"] },
+        #{ name: "spear", help: "craft a spear (2 wood, 1 stone)" },
+        #{ name: "shelter", help: "build a shelter (6 wood, 3 fiber)" },
+        #{ name: "storage", help: "build a storage (4 wood)" },
+        #{ name: "cloak", help: "craft a warm cloak (2 hide, 1 fiber) that keeps the night cold off", brief: "2 hides from hunted deer + 1 fiber; keeps you warm at night" },
+        #{ name: "torch", help: "craft a torch (1 wood, 1 fiber) that lights the night", brief: "lights the night, you see farther", requires: ["fire"] },
+        #{ name: "planting", help: "plant berries to grow new berry bushes", brief: "grow new berry bushes" },
+        #{ name: "writing", help: "write and read tablets and signs", brief: "write and read tablets and signs" },
+        #{ name: "masonry", help: "build walls (2 stone per tile)", brief: "walls" },
+        #{ name: "carpentry", help: "build houses (6 wood, 4 clay, 2 stone; warm like a shelter and a fire) and gates (4 wood)", brief: "houses and gates; needs shelter", requires: ["shelter"] },
+        #{ name: "fishing", help: "craft a net (3 fiber) that brings in two fish at a time" },
+        #{ name: "smoking", help: "smoke raw fish or meat at a campfire so it keeps for weeks", requires: ["fire"] },
+        #{ name: "basketry", help: "craft a basket (2 fiber, 1 wood) to carry 20 more" },
+        #{ name: "archery", help: "craft a bow (2 wood, 1 fiber) and arrows (1 wood, 1 stone for 3) and shoot from afar" },
+        #{ name: "tanning", help: "craft leather from hide, and armor (3 leather, 1 fiber) that softens blows" },
+        #{ name: "medicine", help: "craft a salve (2 berries, 1 fiber); tending with a salve heals far more" },
+        #{ name: "trapping", help: "build a trap (2 wood, 2 fiber) that catches small game over time" },
+        #{ name: "bridging", help: "build a bridge (4 wood, 2 stone) over water beside you", requires: ["carpentry"] },
+        #{ name: "fire_bolt", help: "hurl a bolt of fire (firebolt) that burns the first creature in its path" },
+        #{ name: "wound_tending", help: "close wounds quickly with your hands (the heal skill), your own or an ally's, even in a fight; not mending things" },
+        #{ name: "toolmaking", help: "craft an axe (2 wood, 1 stone; cuts wood twice as fast) or a pick (2 wood, 2 stone; breaks stone twice as fast)", brief: "axe, pick" },
+    ]
+}
+fn requires(t) { let k = entry_of("know_how", t); if k == () || k.requires == () { [] } else { k.requires } }
 
 // ---- roads and gates ------------------------------------------------------
 
@@ -794,14 +1587,12 @@ fn close_check(a) { if a.target.kind != "gate" { return "that is not a gate"; } 
 fn close_duration(a) { 1500 }
 fn close_done(a) { [#{ op: "gate", open: 0.0 }] }
 
-// Every technique there is: whatever experimenting with some material can reveal.
-fn techniques() {
-    let all = [];
-    for m in ["stone", "wood", "clay", "fiber", "hide", "berries", "meat", "fish"] {
-        for t in discoveries(m) { if !all.contains(t) { all.push(t); } }
-    }
-    all
-}
+// Every technique there is: the world's know-how table (its own entries included, such as a
+// seed's glassmaking), not only what experimenting with a material can reveal (`discoveries`):
+// fire_bolt and wound_tending are learned only from someone or from writing.
+fn techniques() { names_of("know_how") }
+// The technique a crafted thing needs (`()`: it is not crafted).
+fn made_by(item) { let m = making_for("craft", craft_making(), item); if m == () { () } else { m.r.knows } }
 fn teach_check(a) {
     let all = techniques();
     if !all.contains(a.item) {
@@ -940,12 +1731,30 @@ fn rework_done(a) { [#{ op: "rework" }, #{ op: "vitals", energy: -1.0 }] }
 // Every combat move has a windup (its `_duration`: the time others have to see it coming),
 // then its release, a recovery in which only a dodge can follow (`combat_recover`), and a
 // cooldown counted from its start (`combat_cooldown`), for anyone who uses it: player or
-// graph, person or animal. `combat_cost` is the energy it takes, paid at the release.
+// graph, person or animal. `combat_cost` is what it takes from its pool (`combat_pool`: breath,
+// or focus for fire and healing hands), paid at the release; too little, and it is refused.
 fn combat_recover(skill) { switch skill { "strike" => 250, "bowshot" => 250, "firebolt" => 350, "heal" => 300, "dodge" => 200, "jump" => 150, "attack" => 300, "shoot" => 300, "throw" => 400, _ => 0 } }
 fn combat_cooldown(skill) { switch skill { "strike" => 650, "bowshot" => 900, "firebolt" => 4000, "heal" => 8000, "dodge" => 900, "block" => 400, "jump" => 600, _ => 0 } }
-fn combat_cost(skill) { switch skill { "strike" => 2.0, "bowshot" => 1.5, "firebolt" => 12.0, "heal" => 15.0, "dodge" => 4.0, "block" => 1.0, "jump" => 2.0, _ => 0.0 } }
-fn spent(skill) { [#{ op: "vitals", energy: -combat_cost(skill) }] }
-fn winded(a) { if a.actor.energy < combat_cost(a.skill) { "too tired" } else { "" } }
+fn combat_cost(skill) {
+    switch skill {
+        "strike" => law("cost_strike"), "bowshot" => law("cost_bowshot"), "firebolt" => law("cost_firebolt"), "heal" => law("cost_heal"),
+        "dodge" => law("cost_dodge"), "block" => law("cost_block"), "jump" => law("cost_jump"),
+        "attack" => law("cost_attack"), "throw" => law("cost_throw"), "shoot" => law("cost_shoot"), "threaten" => law("cost_threaten"),
+        _ => 0.0,
+    }
+}
+fn combat_pool(skill) { switch skill { "firebolt" | "heal" => "focus", _ => "stamina" } }
+fn spent(skill) { [#{ op: "spend", pool: combat_pool(skill), amount: combat_cost(skill) }] }
+// What a move costs, in words ("10 breath").
+fn cost_words(skill) { `${short(combat_cost(skill))} ${pool_word(combat_pool(skill))}` }
+// Refused for too little in its pool: out of breath, or short of the world's word for focus. (The
+// pool is read here, not in a helper: a law called with `a` copies the whole context.)
+fn short_of(pool) { if pool == "focus" { `not enough ${pool_word("focus")}` } else { "out of breath" } }
+fn winded(a) {
+    let p = combat_pool(a.skill);
+    let have = if p == "focus" { a.actor.focus } else { a.actor.stamina };
+    if have < combat_cost(a.skill) { short_of(p) } else { "" }
+}
 
 // What each combat skill is: `<skill>_combat()`, read once when the script is installed (the
 // authority never asks per tick). Every skill that has one is a combat skill, gets a
@@ -954,6 +1763,12 @@ fn winded(a) { if a.actor.energy < combat_cost(a.skill) { "too tired" } else { "
 //              `<skill>_missile`), "facing" (a held guard), "dash" (a dodge), "none"
 //   timed      the combat timing above (one windup at a time, recovery, cooldown)
 //   rooted     a player's movement waits while it winds up
+//   committed  once started it runs its whole course (a windup to its release, a dash to its
+//              end), whoever controls the body: no movement key, new plan, condition that stops
+//              holding or target leaving sight ends it; its timing or something physical
+//              (death, a wall in a dash's way) does. Only a dash may cut in on a windup.
+//              A world may switch it per skill in its own laws (an overlay through
+//              `floors::compose`): `fn dodge_combat() { let s = base_dodge_combat(); s.committed = false; s }`.
 //   hostile    aimed at a creature, that creature is its victim and sees it coming
 //   reflex     it takes the body back from a deliberate act
 //   real_time  behavior of the moment: a graph's, not a one-off act's
@@ -969,28 +1784,83 @@ fn winded(a) { if a.actor.energy < combat_cost(a.skill) { "too tired" } else { "
 //   needs      items the skill bar shows as missing (the check stays the rule)
 //   knows      techniques the skill bar shows as unknown
 // A dash moves `<skill>_dist(kind)` tiles at `<skill>_speed(kind)` tiles/s.
-fn strike_combat() { #{ aim: "creature", timed: true, rooted: true, hostile: true, reflex: true, real_time: true, melee: true, closes_in: true, force: true, dares: true, knack: "attack" } }
-fn bowshot_combat() { #{ aim: "point", timed: true, rooted: true, hostile: true, reflex: true, real_time: true, force: true, knack: "shoot", needs: ["bow", "arrow"] } }
-fn firebolt_combat() { #{ aim: "point", timed: true, rooted: true, hostile: true, reflex: true, real_time: true, force: true, knack: "throw", knows: ["fire_bolt"] } }
+fn strike_combat() { #{ aim: "creature", timed: true, committed: true, rooted: true, hostile: true, reflex: true, real_time: true, melee: true, closes_in: true, force: true, dares: true, knack: "attack" } }
+fn bowshot_combat() { #{ aim: "point", timed: true, committed: true, rooted: true, hostile: true, reflex: true, real_time: true, force: true, knack: "shoot", needs: ["bow", "arrow"] } }
+fn firebolt_combat() { #{ aim: "point", timed: true, committed: true, rooted: true, hostile: true, reflex: true, real_time: true, force: true, knack: "throw", knows: ["fire_bolt"] } }
 fn block_combat() { #{ aim: "facing", timed: true, reflex: true, real_time: true, hold_ms: 8000, arc: 75.0, takes: 0.25 } }
-fn heal_combat() { #{ aim: "self_or_ally", timed: true, rooted: true, reflex: true, knack: "tend", knows: ["wound_tending"] } }
-fn dodge_combat() { #{ aim: "dash", timed: true, reflex: true, real_time: true } }
+fn heal_combat() { #{ aim: "self_or_ally", timed: true, committed: true, rooted: true, reflex: true, knack: "tend", knows: ["wound_tending"] } }
+fn dodge_combat() { #{ aim: "dash", timed: true, committed: true, reflex: true, real_time: true } }
 // A jump is a dash that does not evade: blows and missiles still land while you are in the air.
-fn jump_combat() { #{ aim: "dash", timed: true, reflex: true, real_time: true, evades: false } }
-fn attack_combat() { #{ aim: "creature", timed: true, rooted: true, hostile: true, reflex: true, real_time: true, melee: true, closes_in: true, force: true, dares: true } }
-fn shoot_combat() { #{ aim: "creature", timed: true, rooted: true, hostile: true, reflex: true, real_time: true, force: true } }
-fn throw_combat() { #{ aim: "creature", timed: true, hostile: true, reflex: true, real_time: true, force: true } }
+fn jump_combat() { #{ aim: "dash", timed: true, committed: true, reflex: true, real_time: true, evades: false } }
+fn attack_combat() { #{ aim: "creature", timed: true, committed: true, rooted: true, hostile: true, reflex: true, real_time: true, melee: true, closes_in: true, force: true, dares: true } }
+fn shoot_combat() { #{ aim: "creature", timed: true, committed: true, rooted: true, hostile: true, reflex: true, real_time: true, force: true } }
+fn throw_combat() { #{ aim: "creature", timed: true, committed: true, hostile: true, reflex: true, real_time: true, force: true } }
 fn threaten_combat() { #{ aim: "creature", hostile: true, closes_in: true, menace: true } }
 fn yield_combat() { #{ reflex: true, force: true } }
 fn seize_combat() { #{ aim: "creature", dares: true } }
 fn tend_combat() { #{ aim: "creature" } }
 // The player's skill bar, in order (the game binds LMB, RMB, Q, E, R, Shift, Space).
 fn skill_bar() { ["strike", "bowshot", "firebolt", "block", "heal", "dodge", "jump"] }
+// How a skill is presented to a player: `<skill>_ui()`, read once when the script is installed
+// (docs/INTERFACE.md). It only shows: what a skill may do is its spec, shape and check. A skill
+// that declares nothing is presented by how the rules aim it. The bar's seven say where each
+// sits, the input it takes and its named look (step 2): Q blocks, E heals, R casts the fire bolt
+// (1–3 are their twins); Space jumps; a double tap of a direction dodges.
+fn strike_ui() { #{ label: "Strike", place: "primary", look: #{ icon: "sword", clip: ["slash", "overhead", "thrust"], effect: "slash" }, running: #{ show: "windup" } } }
+fn bowshot_ui() { #{ label: "Bow shot", place: "secondary", input: "aim_point", marker: "line", look: #{ icon: "bow", clip: "shoot", effect: "arrow" }, running: #{ show: "windup" } } }
+fn block_ui() { #{ label: "Block", place: "skill", order: 0, input: "hold", marker: "arc", look: #{ icon: "shield", clip: "guard", effect: "guard_arc" }, running: #{ show: "held" } } }
+fn heal_ui() { #{ label: "Heal", place: "skill", order: 1, look: #{ icon: "heal", clip: "cast" }, running: #{ show: "windup" } } }
+fn firebolt_ui() { #{ label: "Fire bolt", place: "skill", order: 2, input: "aim_point", look: #{ icon: "fire", clip: "cast", effect: "bolt" }, running: #{ show: "windup" } } }
+fn dodge_ui() { #{ label: "Dodge", place: "dodge", look: #{ icon: "dodge", clip: "dash" } } }
+fn jump_ui() { #{ label: "Jump", place: "jump", look: #{ icon: "jump", clip: "jump" } } }
+// Accept is also an answer on an offer's card (its window): toward the offer's maker.
+fn accept_ui() { #{ on: ["person", "thing", "offer"], look: #{ icon: "trade" } } }
+fn shoot_ui() { #{ look: #{ icon: "bow", clip: "shoot", effect: "none" } } }
+fn throw_ui() { #{ look: #{ icon: "sword", clip: "throw", effect: "none" } } }
+// The ways of making open one recipe grid (docs/INTERFACE.md §4): its cells are what the way
+// makes (`products`, `Scripts::products_of`), each with its recipe's words (`made_how`); the act
+// names `Scripts::making_item` (the product, or the raw food for cooking and smoking).
+fn making_grid(skill, text) {
+    let u = #{ choose: "grid", running: #{ show: "progress", text: text } };
+    if products_of(skill).len() > 0 { u.source = "products"; u.detail = "made_how"; }
+    u
+}
+// Each way of making with its icon (a wheel's section, a list's row).
+fn making_look(u, icon) { u.look = #{ icon: icon }; u }
+fn make_ui() { making_look(making_grid("make", "Making {item}"), "hammer") }
+fn craft_ui() { making_look(making_grid("craft", "Making {item}"), "hammer") }
+fn cook_ui() { making_look(making_grid("cook", "Cooking {item}"), "pot") }
+fn smoke_ui() { making_look(making_grid("smoke", "Smoking {item}"), "pot") }
+// A player faces where it looks (the cursor scheme, `human_face`), so face is in no list of
+// theirs (play-test 5: F offered it and the rules refused it seven times); minds keep it.
+fn face_ui() { #{ on: [], tip: "You face where you look." } }
+// Saying no to an offer looks like dealing (the trade icon); what it does is its spec and check.
+fn decline_ui() { #{ on: ["person", "thing", "offer"], look: #{ icon: "trade" } } }
+// The person wheel's acts look as they read (an icon each; what they do is their spec and check).
+fn give_ui() { #{ look: #{ icon: "give" } } }
+fn offer_ui() { #{ look: #{ icon: "trade" } } }
+fn teach_ui() { #{ look: #{ icon: "book" } } }
+fn appraise_ui() { #{ label: "Look over", look: #{ icon: "eye" } } }
+fn wave_ui() { #{ look: #{ icon: "wave" } } }
+fn nod_ui() { #{ look: #{ icon: "wave" } } }
+// A workplace's wheel (Cullet's fuel fires): feeding (making's look is with its grid above).
+fn feed_ui() { #{ look: #{ icon: "fire" } } }
+// Which places get a wheel, and its layout (docs/INTERFACE.md §8): hold F on a target, move
+// toward a section, let go. A person's social acts are pinned, so a direction learned once keeps
+// working (a refused one greys in place); anything else the rules offer is behind More. Any
+// other creature or thing gets a wheel of what the rules allow now, nothing pinned. Oneself (C)
+// keeps its list. Presentation only: what a skill may do is its spec, shape and check.
+fn menus() { [
+    #{ on: "person", kinds: ["person"], choose: "wheel", fill: false,
+       wheel: #{ n: "talk", ne: "give", e: "offer", se: "teach", s: "more", sw: "window", w: "appraise", nw: "wave" } },
+    #{ on: "person", choose: "wheel" },
+    #{ on: "thing", choose: "wheel" },
+] }
 // How far and fast a dodge carries a body (tiles, tiles/s); hits while it lasts miss.
 fn dodge_dist(kind) { kind_of(kind).dodge_dist }
 fn dodge_speed(kind) { kind_of(kind).dodge_speed }
 
-fn dodge_check(a) { if a.actor.energy < 5.0 { "too exhausted to dodge" } else { "" } }
+fn dodge_check(a) { winded(a) }
 fn dodge_done(a) { spent("dodge") }
 
 // A jump (proposal for the owner, 2026-11-11): a hop of `jump_dist` tiles the way you move or
@@ -999,26 +1869,29 @@ fn dodge_done(a) { spent("dodge") }
 // does, and does not evade: blows and missiles land while you are in the air.
 fn jump_dist(kind) { switch kind { "wolf" => 2.0, "deer" => 2.4, _ => 1.6 } }
 fn jump_speed(kind) { switch kind { "wolf" => 6.0, "deer" => 6.0, _ => 3.6 } }
-fn jump_check(a) { if a.actor.energy < combat_cost("jump") { "too tired to jump" } else { "" } }
+fn jump_check(a) { winded(a) }
 fn jump_done(a) { spent("jump") }
 
 // A guard is held for `qty` ms (a player holds it until they let go, at most its `hold_ms`),
-// else a moment. Holding it is tiring (see `rates`).
+// else a moment. Holding it takes breath (`pools`: `guard_per_s`), and it drops when breath runs out.
 fn block_check(a) { if a.actor.kind != "person" { return "only people can block"; } winded(a) }
-fn block_duration(a) { let most = block_combat().hold_ms; if a.qty > 0 { if a.qty > most { most } else { a.qty } } else { 1200 } }
-fn block_done(a) { [#{ op: "vitals", energy: -0.5 }] }
+fn block_duration(a) {
+    let most = block_combat().hold_ms;
+    let want = if a.qty > 0 { if a.qty > most { most } else { a.qty } } else { 1200 };
+    // What breath is left after its cost at the release, at what holding it takes a second.
+    let breath = ((a.actor.stamina - combat_cost("block")) / law("stamina_guard") * 1000.0).to_int();
+    if breath < want { if breath < 200 { 200 } else { breath } } else { want }
+}
+fn block_done(a) { spent("block") }
 
 // ---- the starter skills (docs/GAME_BRIEF.md): sword strike, bow shot, fire bolt, heal ------
 
 // A quick, telegraphed blow at a creature in reach; it does its damage like an attack.
-fn strike_check(a) {
-    let why = attack_check(a);
-    if why != "" { return why; }
-    winded(a)
-}
+// Its rules are an attack's, breath included.
+fn strike_check(a) { attack_check(a) }
 fn strike_duration(a) { 350 }
 fn strike_done(a) {
-    let dmg = if inv(a, "spear") > 0 { 15.0 } else { 10.0 };
+    let dmg = if inv(a, "spear") > 0 { law("dmg_strike_spear") } else { law("dmg_strike") };
     let dmg = dmg * a.actor.strength * a.actor.factor * armor(a);
     [#{ op: "damage", amount: dmg }] + spent("strike")
 }
@@ -1030,6 +1903,9 @@ fn aim_check(a) {
     winded(a)
 }
 // An arrow flies straight and hits the first creature in its path.
+// `<skill>_missile(a)`: its flight (metres a second, how far, its radius) and `called`, what it
+// is to one it strikes or who sees it strike ("A stranger shot you with an arrow", "An arrow
+// struck you from somewhere you could not see"); "something" when it does not say.
 fn bowshot_check(a) {
     if inv(a, "bow") < 1 { return "no bow to shoot with"; }
     if inv(a, "arrow") < 1 { return `no arrows (arrow: ${source_of("arrow")})`; }
@@ -1037,18 +1913,18 @@ fn bowshot_check(a) {
 }
 fn bowshot_duration(a) { 300 }
 fn bowshot_done(a) { [#{ op: "remove", item: "arrow", qty: 1 }, #{ op: "launch" }] + spent("bowshot") }
-fn bowshot_missile(a) { #{ speed: 30.0, range: 22.0, radius: 0.15 } }
-fn bowshot_hit(a) { [#{ op: "damage", amount: 14.0 * a.actor.strength * a.actor.factor * armor(a) }] }
+fn bowshot_missile(a) { #{ speed: 30.0, range: 22.0, radius: 0.15, called: "an arrow" } }
+fn bowshot_hit(a) { [#{ op: "damage", amount: law("dmg_bowshot") * a.actor.strength * a.actor.factor * armor(a) }] }
 
-// A bolt of fire: slower, shorter, wider and much harder, at a great cost of energy.
+// A bolt of fire: slower, shorter, wider and much harder, at a great cost of focus.
 fn firebolt_check(a) {
     if !knows(a, "fire_bolt") { return "you don't know how to hurl fire" + learn_how("fire_bolt"); }
     aim_check(a)
 }
 fn firebolt_duration(a) { 450 }
 fn firebolt_done(a) { [#{ op: "launch" }] + spent("firebolt") }
-fn firebolt_missile(a) { #{ speed: 16.0, range: 16.0, radius: 0.35 } }
-fn firebolt_hit(a) { [#{ op: "damage", amount: 24.0 * a.actor.factor * armor(a) }] }
+fn firebolt_missile(a) { #{ speed: 16.0, range: 16.0, radius: 0.35, called: "a bolt of fire" } }
+fn firebolt_hit(a) { [#{ op: "damage", amount: law("dmg_firebolt") * a.actor.factor * armor(a) }] }
 
 // Closing wounds by hand (wound_tending): yourself or an ally in sight, quickly, even mid-fight.
 fn heal_check(a) {
@@ -1067,10 +1943,10 @@ fn throw_check(a) {
     if a.target.class != "creature" || !a.target.alive { return "nothing to throw at"; }
     if young(a) { return "too young to fight"; }
     if yielding(a) { return "you have yielded: you do not strike back while it holds"; }
-    ""
+    winded(a)
 }
 fn throw_duration(a) { 800 }
-fn throw_done(a) { [#{ op: "remove", item: "spear", qty: 1 }, #{ op: "damage", amount: 24.0 * armor(a) }, #{ op: "vitals", energy: -2.0 }] }
+fn throw_done(a) { [#{ op: "remove", item: "spear", qty: 1 }, #{ op: "damage", amount: law("dmg_throw") * armor(a) }] + spent("throw") }
 
 fn shoot_check(a) {
     if inv(a, "bow") < 1 { return "no bow to shoot with"; }
@@ -1078,10 +1954,10 @@ fn shoot_check(a) {
     if a.target.class != "creature" || !a.target.alive { return "nothing to shoot at"; }
     if young(a) { return "too young to fight"; }
     if yielding(a) { return "you have yielded: you do not strike back while it holds"; }
-    ""
+    winded(a)
 }
 fn shoot_duration(a) { 700 }
-fn shoot_done(a) { [#{ op: "remove", item: "arrow", qty: 1 }, #{ op: "damage", amount: 16.0 * a.actor.strength * a.actor.factor * armor(a) }, #{ op: "vitals", energy: -1.0 }] }
+fn shoot_done(a) { [#{ op: "remove", item: "arrow", qty: 1 }, #{ op: "damage", amount: law("dmg_shoot") * a.actor.strength * a.actor.factor * armor(a) }] + spent("shoot") }
 
 // ---- trade ------------------------------------------------------------------------
 
@@ -1095,18 +1971,81 @@ fn offer_done(a) { [#{ op: "offer" }] }
 
 fn accept_check(a) {
     if a.target.class != "creature" || a.target.kind != "person" { return "no one to trade with"; }
-    ""
+    answer_refused(a)
 }
 fn accept_duration(a) { 1500 }
-// Terms the person proposed to you come first; otherwise their standing trade.
+// What the act names (`offer`: a trade offer's id, `record`: a proposal's id) is accepted, and
+// nothing else; without a name, terms the person proposed to you come first, then their trade.
 fn accept_done(a) {
-    let r = proposal_from(a);
+    if a.offer_id != 0 { return [#{ op: "accept", offer: a.offer_id }]; }
+    let r = if a.record_id != 0 { named_record(a) } else { proposal_from(a) };
     if r == () { return [#{ op: "accept" }]; }
     let t = r.terms;
     [#{ op: "amend", id: r.id, status: "agreed", due_h: due_by_dark(a) },
      #{ op: "tell", to: r.parties.from, salience: 0.8, text: `{actor} accepted your terms: ${terms_line(t, "from")}, ${due_words(a)}.` },
      #{ op: "tell", to: a.actor.id, text: `agreed with {target}: ${terms_line(t, "to")}, ${due_words(a)}` },
      #{ op: "witness", text: "{a} and {b} came to an agreement." }]
+}
+
+// Saying no to what a person asked of you: the trade offer or proposal the act names, or
+// without a name the one accept would take (their terms first, then their trade). It ends it;
+// the one who made it is told, and onlookers see it.
+fn decline_check(a) {
+    if a.target.class != "creature" || a.target.kind != "person" { return "no one to answer"; }
+    answer_refused(a)
+}
+fn decline_duration(a) { 1000 }
+fn decline_done(a) {
+    let r = if a.record_id != 0 { named_record(a) } else if a.offer_id != 0 { () } else { proposal_from(a) };
+    if r != () {
+        let t = r.terms;
+        return [#{ op: "close", id: r.id, status: "declined", keep_h: 1.0 },
+                #{ op: "tell", to: r.parties.from, salience: 0.7, text: `{actor} declined your terms: ${terms_line(t, "from")}.` },
+                #{ op: "tell", to: a.actor.id, text: `declined {target}'s terms (${terms_line(t, "to")})` },
+                #{ op: "witness", text: "{a} turned down what {b} proposed." }];
+    }
+    // Their trade offer (the engine refuses when none stands for you).
+    let o = a.offer;
+    if o == () || (a.offer_id != 0 && o.id != a.offer_id) { return [#{ op: "decline", offer: a.offer_id }]; }
+    [#{ op: "decline", offer: o.id },
+     #{ op: "tell", to: o.from, salience: 0.7, text: `{actor} declined your offer of ${o.give_qty} ${o.give} for ${o.want_qty} ${o.want}.` },
+     #{ op: "tell", to: a.actor.id, text: `declined {target}'s offer of ${o.give_qty} ${o.give} for ${o.want_qty} ${o.want}` },
+     #{ op: "witness", text: "{a} turned down {b}'s offer." }]
+}
+
+// The proposal an answer names, among the actor's own records (closed ones are kept a while).
+fn named_record(a) {
+    for r in a.records { if r.id == a.record_id { return r; } }
+    ()
+}
+// Why an answer cannot be given to what it names (empty: it can). Without a name nothing is
+// refused here: accept and decline take what stands, as they always have.
+fn answer_refused(a) {
+    if a.offer_id != 0 && a.record_id != 0 { return "name one thing to answer: the offer or the proposal"; }
+    if a.record_id != 0 {
+        let r = named_record(a);
+        let now = proposal_from(a);
+        if r == () {
+            if now != () { return `they have changed their terms: now ${terms_line(now.terms, "to")}`; }
+            return "that proposal is gone";
+        }
+        if r.kind != "agreement" { return "that is not a proposal of terms"; }
+        if r.me != "to" || r.parties.from != a.target.id { return "that proposal is not addressed to you"; }
+        if r.status == "agreed" { return "you have already agreed to it"; }
+        if !r.open || r.status != "offered" {
+            if now != () && now.id != r.id { return `they have changed their terms: now ${terms_line(now.terms, "to")}`; }
+            return if r.status == "not taken" { "that proposal has expired" } else { `that proposal was ${r.status}` };
+        }
+        return "";
+    }
+    if a.offer_id != 0 {
+        let o = a.offer;
+        if o == () { return "that offer is gone"; }
+        if o.id != a.offer_id { return `they have changed their offer: now their ${o.give_qty} ${o.give} for your ${o.want_qty} ${o.want}`; }
+        if o.to != a.actor.id || o.from != a.target.id { return "that offer is not addressed to you"; }
+        if !o.open { return "that offer has expired"; }
+    }
+    ""
 }
 
 // ---- agreements, demands and regard (docs/WORLD_RULES.md) ---------------------------------
@@ -1284,7 +2223,7 @@ fn record_text(r) {
         let other = r.parties[other_role(r.me)];
         let t = r.terms;
         if r.status == "offered" {
-            return if r.me == "from" { `you proposed to {id:${other}}: ${terms_line(t, "from")}${words(t.words)}; they have not accepted yet` } else { `{id:${other}} proposed to you: ${terms_line(t, "to")}${words(t.words)}; accept (toward them) to agree` };
+            return if r.me == "from" { `you proposed to {id:${other}}: ${terms_line(t, "from")}${words(t.words)}; they have not accepted yet` } else { `{id:${other}} proposed to you: ${terms_line(t, "to")}${words(t.words)}; accept or decline (toward them, record ${r.id})` };
         }
         let mine = t[r.me + "_done"];
         let theirs = t[other_role(r.me) + "_done"];
@@ -1359,6 +2298,38 @@ fn leave_done(a) { [#{ op: "leave" }] }
 // Specs are read by minds to compose routines from skills: build them from the same numbers
 // as the rules so they change when the rules do.
 
+// How much each kind of store holds: "a storage holds 120 things in all", and any other's.
+fn stores_text() {
+    let out = "";
+    for k in having("structures", "holds") {
+        out += if out == "" { `a ${k} holds ${holds_of(k)} things in all` } else { `; a ${k} ${holds_of(k)}` };
+    }
+    out
+}
+// What minds are told winter does to the land, after the calendar (`Scripts::seasons_words`):
+// from each resource kind's share of its regrowth in winter (`regrow_by_season`).
+fn winter_share(kind) {
+    let r = entry_of("resources", kind);
+    if r == () || r.regrow_by_season == () || r.regrow_by_season.winter == () { 0.0 } else { r.regrow_by_season.winter }
+}
+fn and_list(parts) {
+    let out = "";
+    for i in 0..parts.len() { if i > 0 { out += if i == parts.len() - 1 { " and " } else { ", " }; } out += parts[i]; }
+    out
+}
+fn seasons_text() {
+    let ever = []; let slow = []; let rest = [];
+    for k in names_of("resources") {
+        let w = winter_share(k);
+        if w <= 0.0 { rest.push(k); } else if w < 1.0 { slow.push(k); } else { ever.push(k); }
+    }
+    if ever.is_empty() && slow.is_empty() { return "In winter nothing regrows and nights are colder: store food before it."; }
+    let parts = [];
+    if !ever.is_empty() { parts.push(`${and_list(ever)} regrow${if ever.len() == 1 { "s" } else { "" }} as in the other seasons or more`); }
+    if !slow.is_empty() { parts.push(`${and_list(slow)} more slowly`); }
+    let none = if rest.is_empty() { "" } else { `, and ${and_list(rest)} not at all` };
+    `In winter ${parts[0]}${if parts.len() > 1 { ", " + parts[1] } else { "" }}${none}. Nights are colder: store food before it.`
+}
 fn list(parts) {
     let out = "";
     for p in parts { if out != "" { out += ", "; } out += p; }
@@ -1377,11 +2348,10 @@ fn foods_text() {
     list(parts)
 }
 // Where an item comes from (shown when a skill lacks it).
-fn gathered() { ["berry_bush", "tree", "boulder", "reeds", "fishing_spot", "clay_bank"] }
+fn gathered() { names_of("resources") }
 fn source_of(item) {
-    for r in gathered() {
-        if yield_of(r) == item { return `gather it at a ${r}, or take it from a storage`; }
-    }
+    let at = entries_where("resources", "yields", item, "\n");
+    if at.len() > 0 { return `gather it at a ${at[0].name}, or take it from a storage`; }
     if item == "food" {
         // What can be gathered and eaten, from the items' nutrition and the resources' yields.
         let ways = [];
@@ -1391,13 +2361,57 @@ fn source_of(item) {
     switch item {
         "hide" => "kill game (attack), then take it from the remains",
         "meat" => "kill game (attack) and take it from the remains, take it from a trap or a storage",
-        "cooked_fish" => "cook fish at a campfire",
-        "cooked_meat" => "cook meat at a campfire",
-        "smoked_fish" => "smoke fish at a campfire (knowing smoking), or trade for it",
-        "smoked_meat" => "smoke meat at a campfire (knowing smoking), or trade for it",
-        _ => if cost(item) == () { "someone who has it can give or trade it to you" } else { `craft it (${cost_text(item)})` },
+        _ => {
+            // Made by a way with words of its own (craft, cook, smoke), built (a structure's
+            // cost), made by a recipe's words, or come by from others.
+            let m = recipe_for(item);
+            if m != () {
+                let w = making_of(by_of(m.r));
+                if w != () && w.words.source != () { return fill(w.words.source, #{ input: m.input, takes: takes_text(m) }); }
+            }
+            if cost(item) != () { return `craft it (${cost_text(item)})`; }
+            if m != () { recipe_words(m) } else { "someone who has it can give or trade it to you" }
+        },
     }
 }
+// A recipe's goods, in words: "2 wood, 1 stone".
+fn takes_text(m) {
+    let t = takes_of(m);
+    let parts = [];
+    for k in t.keys() { parts.push(`${t[k]} ${k}`); }
+    list(parts)
+}
+// How a made item is made, from its recipe (a recipe grid's detail): "cook it at a fire from 1
+// fish (knowing cooking)".
+fn made_how(item) { recipe_words(recipe_for(item)) }
+// "a furnace", "an oven".
+fn a_kind(k) { if ["a", "e", "i", "o", "u"].contains(k.sub_string(0, 1)) { `an ${k}` } else { `a ${k}` } }
+// A recipe's words: `m` is #{ r: the recipe, input: the item it turns (or ()) }.
+fn recipe_words(m) {
+    let r = m.r;
+    let parts = [];
+    let t = if r.turns != () && m.input == () { #{} } else { takes_of(m) };
+    for k in t.keys() { parts.push(`${t[k]} ${k}`); }
+    if r.turns != () && m.input == () { parts.push(`anything with ${r.turns}`); }
+    let at = if r.at == () { "" } else if r.at == "fire" { " at a fire" } else { ` at ${a_kind(r.at)}` };
+    let heat = if r.fuel == () { "" } else { ` and ${short(r.fuel)} fuel from it` };
+    // What is held and not used up (a recipe's `tools`): "…, using a blowpipe".
+    let using = [];
+    if r.tools != () { for k in r.tools.keys() { using.push(if r.tools[k] == 1 { `a ${k}` } else { `${r.tools[k]} ${k}` }); } }
+    let tools = "";
+    for i in 0..using.len() { tools += if i == 0 { ", using " } else if i == using.len() - 1 { " and " } else { ", " }; tools += using[i]; }
+    let how = if r.knows == () { "" } else { ` (knowing ${r.knows})` };
+    `${by_of(r)} it${at} from ${list(parts)}${heat}${tools}${how}`
+}
+// The items fires burn: whatever has one of their fuel traits.
+fn fuels() {
+    let out = [];
+    for k in having("structures", "burns") {
+        for i in having("items", burns_of(k).fuel) { if !out.contains(i) { out.push(i); } }
+    }
+    out
+}
+
 // ---- what each skill is ----------------------------------------------------------------
 // `<skill>_spec()`, read once when the script compiles (the engine never asks per tick). Every
 // skill with rules (a duration or effects) declares one; graph normalization, the minds'
@@ -1418,8 +2432,9 @@ fn source_of(item) {
 fn goto_spec() {
     let l = laws();
     #{ target: true, reach: 0.8,
-       about: "Walk to something in sight or a place you know and stop beside it. An act aimed at a target walks there by itself, so you need goto only to be somewhere (home before dark, a meeting place). Not following someone who moves (follow), not running away (flee).",
+       about: "Walk to something in sight or a place you know and stop beside it (run: true to run there, for hurry: it costs breath and runs only while that lasts). An act aimed at a target walks there by itself, so you need goto only to be somewhere (home before dark, a meeting place). Not following someone who moves (follow), not running away (flee).",
        takes: "a target in sight or a known place",
+       args: ["run"],
        gives: `you there; within ${l.fire_warmth} tiles of a campfire or ${l.shelter_warmth} of a shelter or house the night cold can't hurt you` }
 }
 fn wander_spec() { #{ moment: true, about: "Stroll to a random spot nearby, to look around when nothing you need is in sight. It searches for nothing in particular.", gives: "you at a nearby spot you may not have seen" } }
@@ -1435,28 +2450,68 @@ fn eat_spec() {
        takes: "1 food item from your own pack",
        gives: `hunger down by its worth (${foods_text()}), a little health` }
 }
-fn cook_spec() { #{ latch: true, notable: true, target: true, item: true, reach: 1.5, about: "Cook raw fish or meat at a campfire beside you: about twice as filling, and it keeps longer. Needs cooking.", takes: "1 raw fish or meat from your pack, a campfire in reach, knowing cooking", gives: "1 cooked_fish or cooked_meat" } }
-fn smoke_spec() { #{ target: true, item: true, reach: 1.5, about: "Smoke raw fish or meat at a campfire beside you so it keeps for weeks: food to store, carry far or trade. Needs smoking.", takes: "1 raw fish or meat from your pack, a campfire in reach, knowing smoking, 10 seconds", gives: "1 smoked_fish or smoked_meat: more filling than raw" } }
+// Cooking and smoking, in the words of their recipes (`recipes()`: what turns, into what, knowing
+// what, how long).
+fn way_recipe(skill) { let all = way_recipes(skill); if all.len() == 0 { #{} } else { all[0] } }
+fn cook_spec() {
+    let r = way_recipe("cook");
+    let raw = or_list(inputs_of("cook"));
+    #{ latch: true, notable: true, target: true, item: true, reach: 1.5, listed: products_of("cook").len() > 0,
+       about: `Cook raw ${raw} at a campfire beside you: about twice as filling, and it keeps longer. Needs ${r.knows}.`,
+       takes: `1 raw ${raw} from your pack, a campfire in reach, knowing ${r.knows}`, gives: `1 ${or_list(products_of("cook"))}` }
+}
+fn smoke_spec() {
+    let r = way_recipe("smoke");
+    let raw = or_list(inputs_of("smoke"));
+    let secs = if r.ms == () { 8 } else { r.ms / 1000 };
+    #{ target: true, item: true, reach: 1.5, listed: products_of("smoke").len() > 0,
+       about: `Smoke raw ${raw} at a campfire beside you so it keeps for weeks: food to store, carry far or trade. Needs ${r.knows}.`,
+       takes: `1 raw ${raw} from your pack, a campfire in reach, knowing ${r.knows}, ${secs} seconds`, gives: `1 ${or_list(products_of("smoke"))}: more filling than raw` }
+}
 fn clear_spec() { #{ about: "Turn the forest where you stand into open ground. For making room to build; gathering at a tree is the quicker way to get wood.", takes: "forest where you stand, room in your pack, some energy (faster with an axe)", gives: "open ground where the forest was, and 2 wood" } }
 fn graze_spec() { #{ moment: true, listed: false, about: "Eat grass where you stand (grazing animals).", takes: "grass where you stand, not grazed bare", gives: "hunger down by 14" } }
+// A body does not fall asleep in a fight: struck moments ago (`alert_after_hit_s`), or with the
+// one who struck it close while the fight is on (`alert_while_attacker_near`; the fact
+// `hurt_by_near`). The words are the body fact alone.
+fn sleep_check(a) {
+    if within(a.actor.hurt_ago, law("alert_after_hit_s") * 1000.0) { return "you cannot sleep: you were struck moments ago"; }
+    if law("alert_while_attacker_near") && a.actor.hurt_by_near { return "you cannot sleep: someone who struck you is close"; }
+    ""
+}
 fn sleep_spec() { #{ latch: true, moment: true, about: "Sleep until rested. Night is the time for it; beside a shelter or house it is much faster and the night cold can't hurt you. A short break is rest.", takes: "time, until rested", gives: "energy back quickly (much faster beside a shelter or house); hunger grows slower meanwhile" } }
 fn rest_spec() { #{ latch: true, moment: true, about: "Sit a few seconds and recover a little energy. Sleep restores far more.", takes: "8 seconds", gives: "a little energy" } }
 fn wait_spec() { #{ moving: true, moment: true, args: ["qty"], about: "Pause where you are (qty: seconds, at most 120).", takes: "time", gives: "nothing: time passes" } }
 
+// What is built (`built()`), where one stands and on the tile beside one.
 fn build_spec() {
     let l = laws();
-    #{ latch: true, notable: true, item: true, items: ["campfire", "shelter", "storage", "house", "trap", "wall", "gate", "bridge"], reach: 1.5,
-       about: "Build a structure where you stand (campfire, shelter, storage, house, trap), or a wall, gate or bridge on the tile beside you that you point at (target {\"at\": [x, y]}; a bridge goes on water). There is no repairing or mending of anything: a structure stands until it is gone.",
-       takes: `its materials from your pack (campfire ${cost_text("campfire")}; shelter ${cost_text("shelter")}; storage ${cost_text("storage")}; house ${cost_text("house")}; wall ${cost_text("wall")}; gate ${cost_text("gate")}; trap ${cost_text("trap")}; bridge ${cost_text("bridge")}) and knowing its technique`,
+    let here = []; let beside = []; let takes = "";
+    for r in built() {
+        if r.beside == true { beside.push(r.name); } else { here.push(r.name); }
+        let parts = "";
+        for k in r.takes.keys() { parts += `${if parts == "" { "" } else { ", " }}${r.takes[k]} ${k}`; }
+        takes += `${if takes == "" { "" } else { "; " }}${r.name} ${parts}`;
+    }
+    #{ latch: true, notable: true, item: true, items: here + beside, reach: 1.5, listed: here.len() + beside.len() > 0,
+       about: `Build a structure where you stand (${list(here)}), or a ${or_list(beside)} on the tile beside you that you point at (target {"at": [x, y]}; a bridge goes on water). There is no repairing or mending of anything: a structure stands until it is gone.`,
+       takes: `its materials from your pack (${takes}) and knowing its technique`,
        gives: `the structure here: a campfire warms within ${l.fire_warmth} tiles at night, a shelter or house within ${l.shelter_warmth} and makes sleep restful, a storage keeps items (food spoils slower), a trap catches game over time (take the meat from it), a bridge makes the water tile beside you a way across` }
 }
 fn pave_spec() { #{ about: "Lay road on the tile you stand on. Walking on road is faster: worth it on ways walked often.", takes: cost_text("road"), gives: "road under you" } }
 fn open_spec() { #{ target: true, reach: 1.8, about: "Open a gate. Only members of the gate's community may; anyone else must ask one of them.", takes: "a gate in reach, belonging to your community", gives: "the gate open: anyone may pass" } }
 fn close_spec() { #{ target: true, reach: 1.8, about: "Close a gate: closed, it blocks the way like a wall. Only members of its community may.", takes: "a gate in reach, belonging to your community", gives: "the gate shut" } }
 fn craft_spec() {
-    #{ latch: true, notable: true, item: true, items: ["spear", "cloak", "torch", "axe", "pick", "net", "basket", "bow", "arrow", "salve", "leather", "armor"],
+    let made = [];
+    let parts = "";
+    for r in way_recipes("craft") {
+        let p = gives_of(r);
+        made.push(p);
+        let n = if r.makes == () { 1 } else { r.makes };
+        parts += `${if parts == "" { "" } else { "; " }}${p} ${takes_text(#{ r: r, input: () })}${if n > 1 { ` for ${n}` } else { "" }}`;
+    }
+    #{ latch: true, notable: true, item: true, items: made, listed: made.len() > 0,
        about: "Make a tool, weapon or garment from materials in your pack. Each needs its technique. Structures are built (build); nothing is repaired.",
-       takes: `its materials from your pack (spear ${cost_text("spear")}; cloak ${cost_text("cloak")}; torch ${cost_text("torch")}; axe ${cost_text("axe")}; pick ${cost_text("pick")}; net ${cost_text("net")}; basket ${cost_text("basket")}; bow ${cost_text("bow")}; arrow ${cost_text("arrow")} for 3; salve ${cost_text("salve")}; leather ${cost_text("leather")}; armor ${cost_text("armor")}) and knowing how`,
+       takes: `its materials from your pack (${parts}) and knowing how`,
        gives: "the item in your pack: a spear hits harder, a cloak keeps the night cold off, a torch lights the night, an axe or pick gathers faster, a net catches two fish at a time, a basket carries 20 more, a bow shoots arrows, a salve helps tending, armor softens blows" }
 }
 
@@ -1468,45 +2523,55 @@ fn give_spec() {
 fn store_spec() {
     #{ latch: true, notable: true, target: true, item: true, args: ["qty"], reach: 1.5,
        about: "Put items from your pack into a storage beside you. Storing into someone's household store is how goods are delivered to them while they are away.",
-       takes: `the items from your pack, a storage in reach with room (a storage holds ${storage_holds(0)} things in all)`, gives: "the items in the storage" }
+       takes: `the items from your pack, a storage in reach with room (${stores_text()})`, gives: "the items in the storage" }
 }
 fn take_spec() {
     #{ latch: true, notable: true, target: true, item: true, args: ["qty"], reach: 1.5,
        about: "Take items from a storage, remains or a trap beside you. From another household's store, unless you are their guest or of their community, it is theft: its owner and anyone watching see it.",
        takes: "items in a storage, remains or a trap in reach, room in your pack", gives: "the items in your pack" }
 }
+fn feed_spec() {
+    #{ latch: true, notable: true, target: true, item: true, items: ["fuel"] + fuels(), args: ["qty"], reach: 1.5, listed: having("structures", "burns").len() > 0,
+       about: "Put fuel from your pack on a fire beside you that burns it (a hearth, an oven, a furnace): it burns only while it has fuel, and goes out when the fuel is spent. Feeding an out fire lights it again, which takes knowing fire. A campfire needs no feeding. Item \"fuel\" puts on the first fuel you carry.",
+       takes: "fuel from your pack (anything that fire burns), a fire in reach with room for it", gives: "the fire burning longer, or lit again" }
+}
+fn make_spec() {
+    #{ latch: true, notable: true, target: true, item: true, items: products_of("make"), reach: 1.5, listed: products_of("make").len() > 0,
+       about: "Make goods from what you carry at the place they are made (target it: a furnace, an oven, a fire...), by the world's recipes: some need the fire there burning and use some of its fuel, some a technique. Tools and garments are crafted (craft); structures are built (build).",
+       takes: "the recipe's goods from your pack, its workplace in reach (lit, with fuel, when it needs heat)", gives: "the goods made, in your pack" }
+}
 fn drop_spec() { #{ item: true, args: ["qty"], about: "Set items down where you stand and leave them, e.g. to free your pack. What is dropped is kept for no one.", takes: "the items from your pack", gives: "room in your pack; the items are left behind" } }
 
 fn attack_spec() {
-    #{ notable: true, target: true, reach: 1.4,
+    #{ loudness: 2.0, notable: true, target: true, reach: 1.4,
        about: "Strike a creature beside you. Every blow does its full damage and whoever reaches 0 health dies; there is no holding back. To frighten someone without harm, threaten. Killing game yields meat and hide.",
-       takes: "a creature in reach, a little energy",
+       takes: `a creature in reach, ${cost_words("attack")}`, args: ["run"],
        gives: "a blow (harder with a spear, strength and practice); a creature killed leaves remains with meat and hide to take" }
 }
 fn strike_spec() {
-    #{ target: true, reach: 1.6,
+    #{ loudness: 2.0, target: true, reach: 1.6,
        about: "A quick blow at a creature in reach, after a short windup they can see. It does its full damage like any blow; 0 health is death.",
-       takes: `a creature within reach, ${combat_cost("strike")} energy; ready again ${combat_cooldown("strike")} ms after you start`,
+       takes: `a creature within reach, ${cost_words("strike")}; ready again ${combat_cooldown("strike")} ms after you start`,
        gives: "a quick blow (harder with a spear, strength and practice); out of reach by then, it misses; a raised guard in front of them takes most of it" }
 }
 fn bowshot_spec() {
-    #{ target: true, reach: 22.0,
+    #{ loudness: 2.0, target: true, reach: 22.0,
        about: "Loose an arrow toward a creature or a point (target {\"at\": [x, y]}): it flies straight and hits the first creature in its path, whoever that is.",
-       takes: `a bow and 1 arrow, ${combat_cost("bowshot")} energy, a creature or a point to aim at (up to 22 tiles)`,
+       takes: `a bow and 1 arrow, ${cost_words("bowshot")}, a creature or a point to aim at (up to 22 tiles)`,
        gives: "a hit at range (softened by armor); the arrow is spent" }
 }
 fn firebolt_spec() {
-    #{ target: true, reach: 16.0,
+    #{ loudness: 2.0, target: true, reach: 16.0,
        about: "Hurl a bolt of fire toward a creature or a point: it burns the first creature it meets, hard. Needs the fire_bolt technique.",
-       takes: `knowing fire_bolt, ${combat_cost("firebolt")} energy, a creature or a point to aim at (up to 16 tiles); ready again after ${combat_cooldown("firebolt") / 1000} s`,
+       takes: `knowing fire_bolt, ${cost_words("firebolt")}, a creature or a point to aim at (up to 16 tiles); ready again after ${combat_cooldown("firebolt") / 1000} s`,
        gives: "a bolt of fire that burns the first creature it meets" }
 }
-fn throw_spec() { #{ target: true, reach: 7.0, about: "Throw your spear at a creature up to 7 tiles away. The spear is gone afterwards.", takes: "your spear", gives: "a hard hit at range" } }
-fn shoot_spec() { #{ target: true, reach: 9.0, about: "Shoot an arrow from your bow at a creature up to 9 tiles away.", takes: "a bow and 1 arrow, a creature within 9 tiles", gives: "a hit at range (softened by armor); the arrow is spent" } }
+fn throw_spec() { #{ loudness: 2.0, target: true, reach: 7.0, about: "Throw your spear at a creature up to 7 tiles away. The spear is gone afterwards.", takes: `your spear, ${cost_words("throw")}`, gives: "a hard hit at range" } }
+fn shoot_spec() { #{ loudness: 2.0, target: true, reach: 9.0, about: "Shoot an arrow from your bow at a creature up to 9 tiles away.", takes: `a bow and 1 arrow, a creature within 9 tiles, ${cost_words("shoot")}`, gives: "a hit at range (softened by armor); the arrow is spent" } }
 fn threaten_spec() {
     #{ notable: true, target: true, reach: 3.0,
        about: "Menace a creature within a few tiles for 2 s, weapon raised. No harm is done, but they and anyone watching see it: a way to make a warning or a demand felt without a blow.",
-       takes: "a creature within a few tiles, 2 seconds", gives: "no harm: they see you menacing them, and so does anyone watching" }
+       takes: `a creature within a few tiles, 2 seconds, ${cost_words("threaten")}`, args: ["run"], gives: "no harm: they see you menacing them, and so does anyone watching" }
 }
 fn seize_spec() {
     #{ target: true, item: true, args: ["qty"], reach: 1.8,
@@ -1519,13 +2584,13 @@ fn yield_spec() {
        takes: "a second",
        gives: `for ${(yield_ms("person") / 1000.0).to_int()} seconds you do not strike back. Blows still land on you, but whoever strikes you meanwhile is seen striking someone who gave in` }
 }
-fn dodge_spec() { #{ about: "Dash out of the way (away from what is coming, or toward a point you aim at); a blow or missile landing while you dash misses. For fights, not travel.", takes: `${combat_cost("dodge")} energy`, gives: "a quick dash of a few tiles" } }
-fn jump_spec() { #{ about: "Jump: a short hop the way you move or face. It does not clear walls, fences or water, and blows still land while you are in the air (it is not a dodge).", takes: `${combat_cost("jump")} energy; ready again after ${combat_cooldown("jump") / 1000.0} s`, gives: "you a hop of a tile or two along" } }
-fn block_spec() { #{ args: ["qty"], about: "Raise your guard toward what threatens you (or a point you aim at) for a moment (qty: ms to hold it). Blows from the front do a quarter of their damage; from behind it does not help.", takes: `${combat_cost("block")} energy, holding still`, gives: "a guard in front of you" } }
+fn dodge_spec() { #{ about: "Dash out of the way (away from what is coming, or toward a point you aim at); a blow or missile landing while you dash misses. For fights, not travel.", takes: cost_words("dodge"), gives: "a quick dash of a few tiles" } }
+fn jump_spec() { #{ about: "Jump: a short hop the way you move or face. It does not clear walls, fences or water, and blows still land while you are in the air (it is not a dodge).", takes: `${cost_words("jump")}; ready again after ${combat_cooldown("jump") / 1000.0} s`, gives: "you a hop of a tile or two along" } }
+fn block_spec() { #{ args: ["qty"], about: "Raise your guard toward what threatens you (or a point you aim at) for a moment (qty: ms to hold it). Blows from the front do a quarter of their damage; from behind it does not help.", takes: `${cost_words("block")}, and ${short(law("stamina_guard"))} ${pool_word("stamina")} a second while you hold it (it drops when you run out), holding still`, gives: "a guard in front of you" } }
 fn heal_spec() {
     #{ reach: 8.0,
        about: "Close wounds at once with your hands, your own or an ally's in sight within 8 tiles, even in a fight. Needs the wound_tending technique. It heals bodies only: it does not mend tools, hinges, nets or anything else.",
-       takes: `knowing wound_tending, ${combat_cost("heal")} energy, yourself or a hurt ally in sight within 8 tiles; ready again after ${combat_cooldown("heal") / 1000} s`,
+       takes: `knowing wound_tending, ${cost_words("heal")}, yourself or a hurt ally in sight within 8 tiles; ready again after ${combat_cooldown("heal") / 1000} s`,
        gives: "their wounds closed at once" }
 }
 fn tend_spec() {
@@ -1534,8 +2599,47 @@ fn tend_spec() {
        takes: "a hurt person in reach who is not fighting, a little energy (and a salve, if you know medicine)", gives: "their wounds healed some (far more with a salve)" }
 }
 
-fn follow_spec() { #{ moment: true, target: true, reach: 2.0, about: "Walk alongside a creature for a while, keeping up as it moves: to go somewhere together or keep watch on someone. It does not make them follow you.", takes: "a creature in sight", gives: "you beside them as they go" } }
-fn flee_spec() { #{ reflex: true, moment: true, target: true, about: "Run away from a creature or place until you are clear of it.", takes: "something to run from", gives: "distance between you and it" } }
+fn follow_spec() {
+    let l = laws();
+    #{ moment: true, target: true, reach: 2.0, args: ["distance", "run", "qty"],
+       about: `Walk alongside a creature for a while, keeping up as it moves: to go somewhere together or keep watch on someone. distance: how near to keep, in metres (default 2); qty: seconds (default ${short(l.follow_s)}). ${intent_pace()} It does not make them follow you.`,
+       takes: intent_sight(), gives: "you beside them as they go" }
+}
+// Movement intents (keep_distance, close_in, circle, back_off, and follow above): ways to move
+// relative to a creature one perceives, re-aimed at it at every steering step, under the same
+// steering, speeds, breath and facing as a player's keys (`living_rules::steer`). They are moves,
+// not tactics: when to use one is the mover's own choice.
+fn intent_pace() {
+    let m = motion(#{ actor: #{ kind: "person", stage: "adult" }, night: false });
+    `It moves you at your walk (a grown person ${short(walk_of("person"))} m/s), or with run: true at ${short(m.run)} times your walk while your breath lasts, then at a walk until you have breath again: the speeds your own legs give anyone who walks or runs.`
+}
+fn intent_sight() {
+    let l = laws();
+    `a creature in sight (or smelled); out of sight, you go by where you last saw it, and stop (lost sight of them) once it has been out of sight for ${short(l.lost_after_s)} s`
+}
+fn keep_distance_spec() {
+    let l = laws();
+    #{ moment: true, target: true, target_class: "creature", args: ["min", "max", "run", "qty", "apart"],
+       about: `Stay between min and max metres from a creature as it moves: step back when it comes nearer than min, go toward it when it is farther than max, stand facing it in between (either edge alone is fine: min only keeps it at least that far, max only keeps within it; with neither, the distance you are at when you start, a metre either way). qty: seconds to keep at it (default ${short(l.follow_s)}). apart: keep that many metres (1 to 12) from others of your own kind that you see while you do it, moving away from any nearer (none by default). ${intent_pace()} Backed against something with nowhere to go, it ends: cornered.`,
+       takes: intent_sight(), gives: "you between min and max metres from it, facing it" }
+}
+fn close_in_spec() {
+    #{ target: true, target_class: "creature", args: ["distance", "run", "apart"],
+       about: `Go toward a creature until you are within distance metres of it (default 1), heading for where it is as it moves, and stop facing it. apart: keep that many metres (1 to 12) from others of your own kind that you see while you do it, moving away from any nearer (none by default). ${intent_pace()} To do something to it when you get there, do that instead: an act aimed at someone walks into reach by itself.`,
+       takes: intent_sight(), gives: "you within that distance of it" }
+}
+fn circle_spec() {
+    let l = laws();
+    #{ moment: true, target: true, target_class: "creature", args: ["radius", "side", "run", "qty", "apart"],
+       about: `Go round a creature at radius metres (default: as far as you are when you start), to your left or right as you face it (side: "left" or "right", default left), keeping it in view as it moves. qty: seconds to keep going round (default ${short(l.follow_s)}). apart: keep that many metres (1 to 12) from others of your own kind that you see while you do it, moving away from any nearer (none by default). ${intent_pace()} Walking round, you face at most ${short(l.look_walk_deg)} degrees off your way, as anyone does.`,
+       takes: intent_sight(), gives: "you going round it at that distance" }
+}
+fn back_off_spec() {
+    #{ target: true, args: ["distance", "run"],
+       about: `Step back from a creature or a place until you are distance metres from it (default 4), facing it as far as you can while you go, and stop facing it. From a creature that moves, it backs away from where it is now. ${intent_pace()} Not running away (flee): it ends at that distance. With nowhere to go, it ends: cornered.`,
+       takes: "something in sight to back away from; breath if you run", gives: "you that far from it, facing it" }
+}
+fn flee_spec() { #{ reflex: true, moment: true, target: true, args: ["run"], about: "Run away from a creature or place until you are clear of it. It runs while your breath lasts (run: false to slip away at a quick walk instead).", takes: "something to run from; breath while you run", gives: "distance between you and it" } }
 
 fn offer_spec() {
     #{ target: true, item: true, args: ["qty", "want", "want_qty"], reach: 3.0, talk: true,
@@ -1543,9 +2647,14 @@ fn offer_spec() {
        takes: "the goods in your pack when they accept", gives: "their goods in your pack, if they accept" }
 }
 fn accept_spec() {
-    #{ target: true, reach: 3.0, talk: true,
-       about: "Accept what a person beside you just proposed to you: their terms (offer_terms: it becomes an agreement the world keeps count of; you then owe what they asked of you, and they owe what they offered you), or else their swap (both sides change hands at once, if both still have the goods).",
+    #{ target: true, args: ["offer", "record"], reach: 3.0, talk: true,
+       about: "Accept what a person beside you proposed to you: their terms (offer_terms: it becomes an agreement the world keeps count of; you then owe what they asked of you, and they owe what they offered you), or their swap (both sides change hands at once, if both still have the goods). offer: the id of the trade offer, or record: the id of the proposal, you are accepting; with one, exactly that is accepted, or refused if it no longer stands as it was. Without, their terms come first, then their swap.",
        takes: "a standing proposal from them to you", gives: "the swap done, or the agreement made" }
+}
+fn decline_spec() {
+    #{ target: true, args: ["offer", "record"], reach: 3.0, talk: true,
+       about: "Say no to what a person beside you proposed to you: their swap (offer) or their terms (offer_terms). It ends that proposal, and they are told you declined. offer or record: the id of the one you decline; without, the one accept would take. Not answering lets a proposal run out; declining says so now.",
+       takes: "a standing proposal from them to you", gives: "it ended; they know you declined" }
 }
 fn offer_terms_spec() {
     #{ target: true, item: true, items: ["lodging"], args: ["qty", "want", "want_qty", "text"], reach: 3.0, talk: true,
@@ -1568,7 +2677,7 @@ fn host_spec() {
        gives: "they are your guest until 7 in the morning: they know where your house is (their place \"lodging\"), may sleep there, and may take from your household's store" }
 }
 
-fn conceive_spec() { #{ notable: true, target: true, reach: 2.0, talk: true, about: "Start a family with a willing adult partner: it happens when both of you choose it toward each other within 2 minutes, while fed.", takes: "a willing adult partner choosing it too, both fed", gives: "a child in time" } }
+fn conceive_spec() { #{ notable: true, target: true, reach: 2.0, talk: true, about: `Start a family with a willing adult partner: it happens when both of you choose it toward each other within 2 minutes, while fed${conceive_more()}.`, takes: `a willing adult partner choosing it too, both fed${conceive_more()}`, gives: "a child in time" } }
 fn teach_spec() { #{ latch: true, target: true, item: "technique", reach: 2.0, talk: true, about: "Teach a technique you know to a person beside you. It takes a while and both must stay close; afterwards they know it and you still do.", takes: "a technique you know, a person beside you staying close for a while", gives: "they know it too" } }
 fn experiment_spec() { #{ latch: true, item: "material", about: "Tinker with a material from your pack hoping to work out a new technique. It uses up the material and often fails; learning from someone who knows is surer.", takes: "1 of the material", gives: "sometimes a new technique" } }
 fn write_spec() { #{ latch: true, item: true, items: ["tablet", "sign"], args: ["text", "topic"], about: "Write on a tablet you keep or a sign you leave here (text: your words; topic: a technique you know, so that readers can learn it). Needs writing.", takes: "1 wood, knowing writing", gives: "a tablet you keep or a sign left here, with your words" } }
@@ -1582,15 +2691,21 @@ fn rework_spec() {
        gives: "that way replaced by your new version (or dropped); how it goes starts counting afresh" }
 }
 
-fn wave_spec() { #{ target: true, reach: 12.0, about: "Wave to someone you can see: a greeting, a farewell or an answer to one. They see it and may answer.", takes: "someone in sight within 12 tiles, 1.2 s", gives: "they see you wave at them" } }
-fn nod_spec() { #{ target: true, reach: 6.0, about: "Nod to someone near you: a quiet greeting or a yes. They see it and may answer.", takes: "someone within 6 tiles, 0.7 s", gives: "they see you nod at them" } }
-fn appraise_spec() { #{ target: true, reach: 6.0, about: "Look someone (a person or an animal) over closely: for a while you see exactly how hurt they are.", takes: "someone within 6 tiles, 1.5 s", gives: "for 20 s you see exactly how hurt they are" } }
+fn wave_spec() { #{ target: true, on_the_move: true, reach: 12.0, about: "Wave to someone you can see: a greeting, a farewell or an answer to one. They see it and may answer.", takes: "someone in sight within 12 tiles, 1.2 s", gives: "they see you wave at them" } }
+fn nod_spec() { #{ target: true, on_the_move: true, reach: 6.0, about: "Nod to someone near you: a quiet greeting or a yes. They see it and may answer.", takes: "someone within 6 tiles, 0.7 s", gives: "they see you nod at them" } }
+fn appraise_spec() { #{ target: true, target_class: "creature", reach: 6.0, about: "Look someone (a person or an animal) over closely: for a while you see exactly how hurt they are.", takes: "someone within 6 tiles, 1.5 s", gives: "for 20 s you see exactly how hurt they are" } }
 fn face_spec() { #{ target: true, reach: 15.0, about: "Turn where you stand to face someone or something you can see (a person coming up to you or speaking, a fight, a sound).", takes: "something or someone in sight", gives: "you turn to face it" } }
 fn step_aside_spec() { #{ target: true, reach: 3.0, about: "Step a pace aside to let someone coming toward you pass, in a narrow street or a doorway.", takes: "someone coming at you where there is little room", gives: "a pace to the side, out of their way" } }
 fn keep_spec() { #{ about: "Keep your post a while (a stall, a workshop, a gate, a door): stand at it and attend to whoever comes by.", takes: "10 seconds at your post", gives: "you are seen at work there" } }
 fn play_spec() { #{ about: "Play a little while where you are (run about, skip, make up a game).", takes: "4 seconds, not a baby", gives: "a little fun; tires a little" } }
 
 // ---- gestures and town life (docs/TOWN_LIFE.md) ---------------------------------------
+// What one is told when moving broke off something one was doing before it was done (a skill
+// without `on_the_move`, for every controller): the act by its noun.
+fn moved_off(skill) {
+    let noun = switch skill { "appraise" => "look", "step_aside" => "step aside", _ => { let n = skill; n.replace("_", " "); n } };
+    `the ${noun} stopped: you moved off before it was done`
+}
 // A gesture is seen, not heard: its target must be in sight within the gesture's reach.
 // `hail` lets the one it is made at see that it was made at them (they may answer).
 fn gesture_check(a, reach) {
@@ -1665,6 +2780,9 @@ fn cook_shows() { #{ look: "work" } }
 fn store_shows() { #{ look: "work" } }
 fn take_shows() { #{ look: "work" } }
 fn craft_shows() { #{ look: "work" } }
+// Working at a workplace and feeding a fire: `doing.x/y` is the fire or workplace.
+fn make_shows() { #{ look: "work" } }
+fn feed_shows() { #{ look: "work" } }
 fn read_shows() { #{ look: "work" } }
 fn tend_shows() { #{ look: "work" } }
 fn eat_shows() { #{ look: "eat" } }
@@ -1683,7 +2801,7 @@ fn rest_shows() { #{ look: "rest" } }
 // The sections of the minds' world text, in order: [topic, heading]. `seasons` and `life` are
 // the world's own (its calendar and its people's life table) and come from the seed.
 fn world_topics() {
-    [["time", ""], ["senses", "SENSES"], ["moving", "MOVING"], ["seasons", "SEASONS"], ["body", "BODY"], ["know_how", "KNOW-HOW"],
+    [["time", ""], ["senses", "SENSES"], ["speech", "SPEAKING"], ["moving", "MOVING"], ["seasons", "SEASONS"], ["body", "BODY"], ["know_how", "KNOW-HOW"],
      ["food", "FOOD"], ["making", "MAKING"], ["settlements", "SETTLEMENTS"], ["life", "LIFE"], ["combat", "COMBAT"], ["force", "FORCE"],
      ["communities", "COMMUNITIES"], ["purpose", "TIME"], ["others", "OTHERS"]]
 }
@@ -1691,7 +2809,30 @@ fn world_topics() {
 // A person in a state, as the needs law reads one (for descriptions).
 fn person_now(act, night) { #{ actor: #{ kind: "person", stage: "adult", activity: act, near_fire: false, near_shelter: false, inv: #{} }, night: night, season: "summer", raining: false } }
 
-fn calendar_law() { #{ cadence: "hot", topic: "time", about: "One day lasts 12 real minutes; night is 20:00-06:00." } }
+// When night falls and ends (hours of the day) and how long dusk and dawn take (game hours;
+// 0: the light turns at once). The shipped day turns at once at 06:00 and 20:00.
+fn night_hours() { #{ dusk: 20.0, dawn: 6.0, twilight: 0.0 } }
+// 0 to 1 along a smooth step.
+fn ease(x) { let t = if x < 0.0 { 0.0 } else if x > 1.0 { 1.0 } else { x }; t * t * (3.0 - 2.0 * t) }
+// How light it is at an hour of the day (0..24): 0 is night, 1 full day; night is less than half
+// light. With a twilight the light eases over it, half at dusk and at dawn. The engine reads it
+// once per game minute of the day and keeps it (rules/src/script.rs `Scripts::daylight`), so it
+// costs nothing per tick. Cold (`a.night`), sight (`light_of`; a floor may read `a.daylight`) and
+// sleepiness (the graphs' `night` weight, the darkness) follow it.
+fn daylight(hour) {
+    let n = night_hours();
+    if n.twilight <= 0.0 { return if hour >= n.dawn && hour < n.dusk { 1.0 } else { 0.0 }; }
+    let half = n.twilight / 2.0;
+    if hour < (n.dawn + n.dusk) / 2.0 { ease((hour - n.dawn + half) / n.twilight) } else { 1.0 - ease((hour - n.dusk + half) / n.twilight) }
+}
+
+// An hour of the day as "06:00".
+fn clock_text(h) { let m = (h * 60.0).round().to_int(); let hh = m / 60; let mm = m % 60; (if hh < 10 { "0" } else { "" }) + `${hh}:` + (if mm < 10 { "0" } else { "" }) + `${mm}` }
+fn calendar_law() {
+    let n = night_hours();
+    let dusk = if n.twilight > 0.0 { ` Dusk and dawn each take about ${short(n.twilight)} hour${if n.twilight == 1.0 { "" } else { "s" }}: the light goes and comes slowly.` } else { "" };
+    #{ cadence: "hot", topic: "time", covers: ["daylight", "night_hours"], about: `One day lasts ${short(day_minutes())} real minutes; night is ${clock_text(n.dusk)}-${clock_text(n.dawn)}.${dusk}` }
+}
 
 // The need rates of a grown person awake by day (for descriptions); () when the rates law
 // cannot say (a world's own rates, or rates given finished).
@@ -1700,34 +2841,168 @@ fn rates_awake() {
     ()
 }
 
+// ---- the body's meters and statuses (players' screens and minds' words alike) ----------------
+// `meters()`: the bars a body has, each naming fields of its `my_vitals` row: `value`, and `max`
+// a field or a number; `shown: false` keeps a meter off the screen while it still bounds its
+// value and feeds the statuses. A world that adds a vital adds its column and a row here.
+// Breath is a bar under health, always; focus a bar under the world's word for it, always too
+// (the owner, play-test 6: "why not always visible ?"); tiredness (`energy`) is no bar: its statuses are pills (docs/STAMINA.md).
+fn meters() {
+    let w = pool_word("focus");
+    [
+        #{ name: "health", value: "hp", max: "max_hp", order: 0 },
+        #{ name: "stamina", value: "stamina", max: "stamina_max", order: 1 },
+        #{ name: "focus", value: "focus", max: "focus_max", order: 2, label: w.sub_string(0, 1).to_upper() + w.sub_string(1) },
+        #{ name: "energy", value: "energy", max: 100.0, order: 3, shown: false },
+        #{ name: "hunger", value: "hunger", max: 100.0, order: 4, shown: false },
+    ]
+}
+
+// How a body is: one set of thresholds for the players' screens, the minds' words about their
+// bodies and their bodily alarms. `a` is the body, not a skill's context: each my_vitals field by
+// name as it stands now (a rate moved along it; whole numbers), `hurt_ago_s` (-1: never hurt; at
+// most 120), `share` (each meter over its max: `a.share.health`), `kind`, `stage` and `night`.
+// Each status is `#{ name, tone, text }` (tone: good, warn, bad or plain; text for a screen), with
+// `meter` (the meter it speaks of), `felt` (a mind's words) and an alarm told once each time it
+// begins: `alarm`, `salience`, `think` (always, no_food or never: whether it makes the mind think)
+// and `routine` (the want whose routine is quoted when it does).
+fn hunger_status(h) {
+    if h >= 97.0 {
+        #{ name: "starving", tone: "bad", text: "Starving", meter: "hunger", felt: "starving, your body wasting away",
+           alarm: "You are starving: your body is wasting away.", salience: 0.8, think: "always", routine: "food" }
+    } else if h >= 80.0 {
+        #{ name: "very_hungry", tone: "warn", text: "Very hungry", meter: "hunger", felt: "very hungry",
+           alarm: "You are very hungry.", salience: 0.5, think: "no_food" }
+    } else if h > 55.0 { #{ name: "hungry", tone: "warn", text: "Hungry", meter: "hunger", felt: "hungry" } }
+    else if h > 40.0 { #{ name: "peckish", tone: "plain", text: "Peckish", meter: "hunger", felt: "beginning to feel hungry" } }
+    else if h <= 15.0 { #{ name: "fed", tone: "good", text: "Well fed", meter: "hunger", felt: "well fed" } }
+    else { #{ name: "not_hungry", tone: "plain", text: "Not hungry", meter: "hunger", felt: "not hungry" } }
+}
+fn energy_status(e) {
+    if e <= 0.0 {
+        #{ name: "spent", tone: "bad", text: "Spent", meter: "energy", felt: "utterly spent", alarm: "You are exhausted.", salience: 0.4 }
+    } else if e < 12.0 {
+        #{ name: "exhausted", tone: "bad", text: "Exhausted", meter: "energy", felt: "exhausted", alarm: "You are exhausted.", salience: 0.4 }
+    } else if e < 30.0 { #{ name: "tired", tone: "warn", text: "Tired", meter: "energy", felt: "tired" } }
+    else if e < 50.0 { #{ name: "a_little_tired", tone: "plain", text: "A little tired", meter: "energy", felt: "a little tired" } }
+    else if e >= 85.0 { #{ name: "well_rested", tone: "good", text: "Well rested", meter: "energy", felt: "well rested" } }
+    else { #{ name: "rested", tone: "plain", text: "Rested", meter: "energy", felt: "rested" } }
+}
+// By the share of full health.
+fn health_status(f) {
+    if f < 0.15 {
+        #{ name: "barely_alive", tone: "bad", text: "Barely alive", meter: "health", felt: "barely alive", alarm: "You are badly hurt.", salience: 0.7, think: "always" }
+    } else if f < 0.35 {
+        #{ name: "badly_hurt", tone: "bad", text: "Badly hurt", meter: "health", felt: "badly wounded", alarm: "You are badly hurt.", salience: 0.7, think: "always" }
+    } else if f < 0.6 { #{ name: "hurt", tone: "warn", text: "Hurt", meter: "health", felt: "hurt" } }
+    else if f < 0.9 { #{ name: "a_little_hurt", tone: "plain", text: "A little hurt", meter: "health", felt: "a little hurt" } }
+    else { #{ name: "unhurt", tone: "plain", text: "Unhurt", meter: "health", felt: "unhurt" } }
+}
+fn status_of(a) {
+    let out = [];
+    if a.hunger != () { out.push(hunger_status(a.hunger)); }
+    if a.energy != () { out.push(energy_status(a.energy)); }
+    let f = a.share.health;
+    if f != () { out.push(health_status(f)); }
+    let falling = if a.hp_rate == () { 0.0 } else { a.hp_rate };
+    // Losing health in the night air without starving: the cold (an alarm the mind acts on).
+    if a.night && a.kind == "person" && falling < 0.0 && a.hunger != () && a.hunger < 100.0 {
+        out.push(#{ name: "freezing", tone: "bad", text: "Freezing", alarm: "You are freezing in the night air; you need a fire or shelter.", salience: 0.6, think: "always" });
+    }
+    if a.hurt_ago_s != () && a.hurt_ago_s >= 0.0 && a.hurt_ago_s < 15.0 { out.push(#{ name: "in_combat", tone: "bad", text: "In combat" }); }
+    // Breath: short of it after a run or in a fight (the refusal's words); slowed, and why.
+    if a.stamina != () && a.stamina < 20.0 { out.push(#{ name: "out_of_breath", tone: "warn", text: "Out of breath", meter: "stamina", felt: "out of breath" }); }
+    if a.energy != () {
+        let slow = slow_words(a.kind, a.energy);
+        if slow != "" { out.push(#{ name: "slowed", tone: "warn", text: "Walking slower", meter: "energy", felt: "walking slower" }); }
+    }
+    if falling < -0.01 { out.push(#{ name: "wasting", tone: "bad", text: "Wasting", felt: "you are growing weaker" }); }
+    else if falling > 0.01 && f != () && f < 0.99 { out.push(#{ name: "recovering", tone: "good", text: "Recovering", felt: "your wounds are mending" }); }
+    out
+}
+
+// A rate of the rates law in real minutes, as the engine turns it (`per`: a game hour or a minute).
+fn per_real_minute(r, x) { if r.per == "hour" { x * 60000.0 / hour_ms() } else { x } }
+
 fn needs_law() {
     let awake = rates_awake();
     let l = laws();
-    let rise = if awake == () { "hunger rises over time (100 = starving, which drains health); energy falls" } else { `hunger rises ~${short(awake.hunger)}/min (${short(awake.starving_at)} = starving, which drains health); energy falls ~${short(-awake.energy)}/min` };
-    #{ cadence: "event", topic: "body", covers: ["rates", "body_state", "freezing"],
+    let rise = if awake == () { "hunger rises over time (100 = starving, which drains health); energy falls" } else { `hunger rises ~${short(per_real_minute(awake, awake.hunger))}/min (${short(awake.starving_at)} = starving, which drains health); energy falls ~${short(-per_real_minute(awake, awake.energy))}/min` };
+    #{ cadence: "event", topic: "body", covers: ["rates", "body_state", "freezing", "meters", "status_of"],
        about: `${rise} awake and recovers while sleeping (faster within ${short(l.shelter_warmth)} m of a shelter or house). At night, people farther than ${short(l.fire_warmth)} m from a campfire and ${short(l.shelter_warmth)} m from a shelter or house, and without a warm cloak, are cold: it tires them, and on winter nights or in the rain it also costs health. Health recovers slowly when fed and rested. Death is permanent.` }
 }
 
+// Every technique of the world's know-how table, with its `brief` where it has one.
+fn know_how_text() {
+    let parts = [];
+    for n in names_of("know_how") {
+        let b = entry_of("know_how", n).brief;
+        parts.push(if b == () || b == "" { n } else { `${n} (${b})` });
+    }
+    let out = "";
+    for p in parts { out += if out == "" { p } else { `, ${p}` }; }
+    out
+}
 fn know_how_law() {
     #{ cadence: "event", topic: "know_how",
-       about: "you can only do techniques you know: fire (campfire), cooking, spear, shelter, storage, cloak (2 hides from hunted deer + 1 fiber; keeps you warm at night), torch (lights the night, you see farther), planting (grow new berry bushes), writing (write and read tablets and signs), masonry (walls), carpentry (houses and gates; needs shelter), toolmaking (axe, pick). Others may know what you don't: ask them to teach you (teach takes time beside each other), read what someone wrote, or experiment with materials to work something out yourself. What only one person knows dies with them unless they teach it or write it down." }
+       about: `you can only do techniques you know: ${know_how_text()}. Others may know what you don't: ask them to teach you (teach takes time beside each other), read what someone wrote, or experiment with materials to work something out yourself. What only one person knows dies with them unless they teach it or write it down.` }
 }
 
+// What counts for less (or more) than one thing in a pack, from the items' `carry`: " (an arrow
+// counts as 0.1, a mark 0.1)". (`a_kind`: "a" or "an" before a name.)
+fn carry_text() {
+    let parts = [];
+    for i in having("items", "carry") {
+        let c = carry_of(i);
+        if c != 1.0 { parts.push(if parts.is_empty() { `${a_kind(i)} counts as ${short(c)}` } else { `${a_kind(i)} ${short(c)}` }); }
+    }
+    if parts.is_empty() { "" } else { ` (${list(parts)})` }
+}
 fn food_law() {
-    #{ cadence: "compile", topic: "food", covers: ["nutrition", "spoil_rate", "carried_spoil", "kept_spoil", "carry_limit", "source_of", "items"],
-       about: `${foods_text()} (hunger points). Cook raw ${or_list(items_with("cooks_to"))} at a campfire (needs cooking). Food spoils: raw meat and fish within about a day, berries in a few days, cooked food more slowly; a storage keeps it ${short(1.0 / kept_spoil("storage"))} times longer. A pack holds about ${short(carry_limit("person"))} things. Berry bushes, reeds, fishing spots, trees, boulders and clay banks (along rivers) regrow slowly after harvesting; stone is plentiful in the western hills and scarce in the east. Deer can be hunted (${carcass("deer").meat} meat); wolves roam forests and hunt deer; they fear people, and attack a person only when starving with no prey near, or when the person is easy prey (a child, badly hurt, asleep away from a fire, or alone at night away from a fire).` }
+    #{ cadence: "compile", topic: "food", covers: ["nutrition", "spoil_per_h", "carried_spoil", "kept_spoil", "carry_limit", "carry_of", "source_of", "items"],
+       about: `${foods_text()} (hunger points). Cook raw ${or_list(inputs_of("cook"))} at a campfire (needs cooking). Food spoils: raw meat and fish within about a day, berries in a few days, cooked food more slowly; a storage keeps it ${short(1.0 / kept_spoil("storage"))} times longer. A pack holds about ${short(carry_limit("person"))} things${carry_text()}. Berry bushes, reeds, fishing spots, trees, boulders and clay banks (along rivers) regrow slowly after harvesting; stone is plentiful in the western hills and scarce in the east. Deer can be hunted (${carcass("deer").meat} meat); wolves roam forests and hunt deer; they fear people, and attack a person only when starving with no prey near, or when the person is easy prey (a child, badly hurt, asleep away from a fire, or alone at night away from a fire).` }
+}
+
+// The world's recipes and fires in words, for the making law (empty when it has none).
+fn recipes_text() {
+    let parts = [];
+    for r in way_recipes("make") {
+        let what = if r.turns == () { gives_of(r) } else { `${r.name} (what has ${r.turns})` };
+        parts.push(`${what}: ${recipe_words(#{ r: r, input: () })}`);
+    }
+    if parts.len() == 0 { "" } else { ` Made at workplaces (make): ${list(parts)}.` }
+}
+fn fires_text() {
+    let parts = [];
+    for k in having("structures", "burns") {
+        let b = burns_of(k);
+        let warms = if b.warmth == () || b.warmth <= 0.0 { "" } else { ` and warms within ${short(b.warmth)} m while lit` };
+        parts.push(`a ${k} burns ${short(b.rate)} ${b.fuel} a game hour (${or_list(having("items", b.fuel))})${warms}`);
+    }
+    if parts.len() == 0 { "" } else { ` Fires that burn fuel (feed them): ${list(parts)}; one goes out when its fuel is spent and is lit again by feeding it.` }
 }
 
 fn making_law() {
     let parts = [];
     for k in ["campfire", "shelter", "storage", "spear", "cloak", "torch", "house", "gate", "wall", "road", "axe", "pick"] {
+        // What is built has a cost; what is crafted, a recipe.
         let c = cost(k);
+        if c == () { c = takes_of(making_for("craft", craft_making(), k)); }
         let need = "";
         for m in c.keys() { if need != "" { need += " + "; } need += `${c[m]} ${m}`; }
         parts.push(`${k} = ${need}`);
     }
-    #{ cadence: "event", topic: "making", covers: ["structure_traits", "regrow", "planted_max", "trap_every_s", "trap_holds"],
+    #{ cadence: "event", topic: "making", covers: ["structures", "resources", "regrow_per_h", "planted_max", "trap_every_h", "trap_holds"],
        about: `${list(parts)} (a wall and a road per tile; a tablet or sign is 1 wood, to write on). A spear hits much harder and fishes faster; an axe cuts wood and a pick breaks stone twice as fast; a cloak keeps the night cold off; a house is a home, warm like a shelter and a fire; walking on road is faster; anyone can take from a storage.` }
+}
+
+// The world's fires that burn fuel and its recipes, for minds; a world with neither says
+// nothing of them.
+fn workplaces_law() {
+    let t = fires_text() + recipes_text();
+    t.trim();
+    #{ cadence: "event", topic: if t == "" { "" } else { "making" }, covers: ["recipes"],
+       about: if t == "" { "Fires that burn fuel, and recipes made at workplaces: this world has none." } else { t } }
 }
 
 fn settlements_law() {
@@ -1741,13 +3016,13 @@ fn theft_law() {
 }
 
 fn remains_law() {
-    #{ cadence: "event", topic: "food", covers: ["carcass", "remains_s"],
-       about: `Whatever dies leaves remains where it fell: what it carried, and what its body gives (a deer ${carcass("deer").meat} meat and ${carcass("deer").hide} hide, a wolf ${carcass("wolf").meat} meat and ${carcass("wolf").hide} hide). A kill does not fill the killer's pack: whoever is beside the remains, the hunter, its pack or anyone else, takes from them (take). Remains are gone after about ${short(remains_s("deer") / 60.0)} minutes (a person's after ${short(remains_s("person") / 60.0)}), with whatever is left in them, unless they hold a tablet or sign.` }
+    #{ cadence: "event", topic: "food", covers: ["carcass", "remains_h"],
+       about: `Whatever dies leaves remains where it fell: what it carried, and what its body gives (a deer ${carcass("deer").meat} meat and ${carcass("deer").hide} hide, a wolf ${carcass("wolf").meat} meat and ${carcass("wolf").hide} hide). A kill does not fill the killer's pack: whoever is beside the remains, the hunter, its pack or anyone else, takes from them (take). Remains are gone after about ${short(remains_h("deer") * hour_ms() / 60000.0)} minutes (a person's after ${short(remains_h("person") * hour_ms() / 60000.0)}), with whatever is left in them, unless they hold a tablet or sign.` }
 }
 
 fn combat_law() {
-    #{ cadence: "event", topic: "combat", covers: ["combat_cooldown", "combat_recover", "combat_cost", "lunge", "max_hp", "dodge_dist", "dodge_speed", "step_aside_dist", "kinds"],
-       about: `fights are fast. An attack winds up for about 0.6-0.75 s before it lands; the target can see it coming ({"threatened": true}). dodge = a quick dash (an attack landing during it misses; costs energy); block = raise your guard (hits do a quarter of the damage, but you cannot act meanwhile); throw = hurl your spear (you lose it). A blow lands only if you are still within reach (about ${short(attack_spec().reach + lunge("person"))} m; a wolf's leap about ${short(attack_spec().reach + lunge("wolf"))}) when its windup ends: stepping back or running as it winds up makes it miss, but whoever swings stands still meanwhile. You can outrun a person who keeps stopping to swing, not a wolf (a wolf catches the young, old, tired or surprised). While fighting, your graph is checked about 15 times a second; you can patch a single labeled branch mid-fight.` }
+    #{ cadence: "event", topic: "combat", covers: ["combat_cooldown", "combat_recover", "combat_cost", "combat_pool", "lunge", "max_hp", "dodge_dist", "dodge_speed", "step_aside_dist", "kinds"],
+       about: `fights are fast. A person's attack winds up for {windup:attack} before it lands; the target can see it coming ({"threatened": true}). dodge = a quick dash (an attack landing during it misses); block = raise your guard (hits do a quarter of the damage, but you cannot act meanwhile); throw = hurl your spear (you lose it). A blow lands only if you are still within reach (about ${short(attack_spec().reach + lunge("person"))} m; a wolf's leap about ${short(attack_spec().reach + lunge("wolf"))}) when its windup ends: stepping back or running as it winds up makes it miss, but whoever swings stands still meanwhile. You can outrun a person who keeps stopping to swing, not a wolf (a wolf catches the young, old, tired or surprised). Every move takes stamina (fire and healing hands take mana instead), so a fight is paced by breath: about ten blows or five dodges from fresh, then a few seconds to get it back. While fighting, your graph is checked about 15 times a second; you can patch a single labeled branch mid-fight.` }
 }
 
 fn force_law() {
@@ -1761,9 +3036,59 @@ fn communities_law() {
 
 fn purpose_law() { #{ cadence: "event", topic: "purpose", about: "beyond staying alive, how you spend your days is yours to decide, from who you are and what you want." } }
 
+// Whether an observer is told whose a structure is ("Agnes Fenner's house"): `o.knows`, it knows
+// the owner's name; `o.shows`, the structure shows its owner (its kind's `shows_owner` in
+// `structures()`, a sign or marker); `o.kind`, the structure's kind. A world may extend it.
+fn owner_shown(o) { o.knows || o.shows }
+fn owner_shown_law() {
+    #{ cadence: "event", topic: "",
+       about: "whose a building or a thing is shows only to one who knows the owner by name, or when it shows its owner (a sign); otherwise it is just a house, a store, a hearth." }
+}
+
 fn perceived_of_law() {
     #{ cadence: "event", topic: "others",
        about: "You cannot read minds; what others say may be false. You only know what you perceived or were told. You know someone's name once they say it, or you are family, of one community, or close; until then they are a stranger to you." }
+}
+
+// ---- a person's look (docs/LOOK.md) ---------------------------------------------------------
+// Which of their lines a person wears: an infant's, a child's until `youth` years, a youth's until
+// `adult` years (a child or a grown person), an adult's, an elder's (life stages 0 and 3). Read
+// when a look is written (at a birth, a stage change, a band's due time); a world whose people
+// look grown sooner or later changes the ages.
+fn look_bands() { #{ youth: 12.0, adult: 18.0 } }
+fn look_bands_law() {
+    let b = look_bands();
+    #{ cadence: "event", topic: "",
+       about: `People look like children until ${short(b.youth)} years old, like youths until ${short(b.adult)}, then like adults until they grow old.` }
+}
+
+// ---- body sex (body-sex; docs/LIVING_CORE.md, "Body sex") ----
+// A person's body is female or male, a world fact set when they come into the world and never
+// changed. A seed says it for the people it writes; for everyone else (a birth, a newcomer, a
+// player who does not choose, a band member the seed leaves open) the world picks, female with
+// this share.
+fn female_share() { 0.5 }
+fn female_share_law() {
+    #{ cadence: "event", topic: "",
+       about: `A person born or arriving is a girl or woman about ${short(female_share() * 100.0)} times in a hundred, else a boy or man.` }
+}
+// The words for a body by its sex and life stage (infant, child, adult, elder): what one is told
+// of oneself, of others in sight (near or far: build and clothes show it at any distance one sees
+// a person) and of the people one knows.
+fn sex_words() {
+    #{ female: ["baby girl", "girl", "woman", "old woman"], male: ["baby boy", "boy", "man", "old man"] }
+}
+fn sex_words_law() {
+    #{ cadence: "event", topic: "",
+       about: "Everyone is a woman or a man (as a child a girl or a boy), and anyone who sees them can tell which, near or far." }
+}
+
+// Whom a mind's scene describes by look: "unnamed" (strangers and figures too far away to make
+// out), "all" (everyone in the scene) or "none".
+fn appearance_in_scene() { "unnamed" }
+fn appearance_in_scene_law() {
+    #{ cadence: "event", topic: "",
+       about: "You see how people look: their build, their clothes and, close enough, their hair; at a distance only a figure's height, build and clothes." }
 }
 
 fn dealings_law() {
@@ -1775,43 +3100,162 @@ fn occupations_law() {
     #{ cadence: "compile", covers: ["occupation_knows"], about: "What someone of an occupation knows from the start of the world: a fisher spears and cooks, a builder builds shelters and houses, and so on." }
 }
 
-// What each world constant (`laws()`) is, given the values: every key needs a text.
-fn laws_about(l) {
-    #{
-        fire_warmth: `a campfire warms those within ${short(l.fire_warmth)} m`,
-        shelter_warmth: `a shelter or a house shelters (and a house warms) those within ${short(l.shelter_warmth)} m`,
-        gestation_days: `a child is carried about ${short(l.gestation_days)} days (the species' life table may say otherwise)`,
-        bond_window_s: `two adults who both choose to start a family do so within ${short(l.bond_window_s)} s of each other`,
-        crowd: `more than ${short(l.crowd)} people in sight is a crowd`,
-        danger_near: `a predator within ${short(l.danger_near)} m is a danger near`,
-        danger_far: `a predator within ${short(l.danger_far)} m is noticed as a danger`,
-        repeat_failure_s: `the same failure within ${short(l.repeat_failure_s)} s is not news again`,
-        road_speed: `walking on road is ${short(l.road_speed)} times as fast`,
-        slow_radius: `walkers slow down within ${short(l.slow_radius)} m of where they are going`,
-        corner_radius: `walkers cut a corner from ${short(l.corner_radius)} m before it`,
-        steer_s: `a walker alone looks again at least every ${short(l.steer_s)} s`,
-        crowd_hz: `among others a walker looks again ${short(l.crowd_hz)} times a second`,
-        chase_hz: `a chaser or follower looks again ${short(l.chase_hz)} times a second`,
-        combat_hz: `in a fight a body looks again ${short(l.combat_hz)} times a second`,
-        input_hz: `a player may send ${short(l.input_hz)} movement inputs a second`,
-        input_burst: `and ${short(l.input_burst)} in a burst`,
-        pasture_regen: `grass regrows ${l.pasture_regen} grazing units per grassy tile per growing minute`,
-        alone_within: `someone with no other person within ${short(l.alone_within)} m is alone`,
-        face_slack: `a body within ${short(l.face_slack)} radians of facing something already faces it`,
-        flee_clear: `a flight ends ${short(l.flee_clear)} m farther from the threat than it began`,
-        scent_hz: `a creature smells afresh ${short(l.scent_hz)} times a second at most (or when it has moved a few metres); in between it keeps what it last smelled`,
-        takeover_s: `a played character with no connection of its person for ${short(l.takeover_s)} s lives on under the world's minds`,
-        follow_s: `one follow lasts ${short(l.follow_s)} s before the follower looks again`,
-        read_sign_m: `reading with nothing named reads the nearest sign within ${short(l.read_sign_m)} m`,
-        kin_near_m: `others of one's kind within ${short(l.kin_near_m)} m are kin near`,
-        trade_window_s: `a trade offer can be accepted for ${short(l.trade_window_s)} s`,
-        join_window_s: `a request to join a community stands ${short(l.join_window_s)} s`,
-        address_m: `speech to no one in particular is for the only listener within ${short(l.address_m)} m`,
-        keep_seen_m: `a creature in a player's sight stays seen until ${short(l.keep_seen_m)} m beyond it`,
-        chase_lost_share: `a chase is lost beyond ${short(l.chase_lost_share)} times the chaser's sight`,
-        spawn_hunger: `a body comes into the world with hunger ${short(l.spawn_hunger)}`,
-        spawn_energy: `and energy ${short(l.spawn_energy)}`,
-        pasture_per_tile: `each grassy tile holds ${l.pasture_per_tile} grazing units`,
-        cry_prompts_carers: if l.cry_prompts_carers { "a crying infant makes its carers think about it" } else { "a crying infant is only heard" },
+// What a world constant (`laws()`) is, given the values: every key needs a text. One law at a
+// time (the engine asks for each by name and joins them), so no string the rules build grows
+// with the number of laws (docs/WORLD_RULES.md, "World constants"). An overlay adds or changes one:
+// `fn law_about(l, name) { if name == "x" { `...` } else { base_law_about(l, name) } }`.
+fn law_about(l, name) {
+    switch name {
+        "fire_warmth" => `a campfire warms those within ${short(l.fire_warmth)} m`,
+        "shelter_warmth" => `a shelter or a house shelters (and a house warms) those within ${short(l.shelter_warmth)} m`,
+        "gestation_days" => `a child is carried about ${short(l.gestation_days)} days (the species' life table may say otherwise)`,
+        "bond_window_s" => `two adults who both choose to start a family do so within ${short(l.bond_window_s)} s of each other`,
+        "crowd" => `more than ${short(l.crowd)} people in sight is a crowd`,
+        "danger_near" => `a predator within ${short(l.danger_near)} m is a danger near`,
+        "danger_far" => `a predator within ${short(l.danger_far)} m is noticed as a danger`,
+        "repeat_failure_s" => `the same failure within ${short(l.repeat_failure_s)} s is not news again`,
+        "road_speed" => `walking on road is ${short(l.road_speed)} times as fast`,
+        "slow_radius" => `walkers slow down within ${short(l.slow_radius)} m of where they are going`,
+        "corner_radius" => `walkers cut a corner from ${short(l.corner_radius)} m before it`,
+        "steer_s" => `a walker alone looks again at least every ${short(l.steer_s)} s`,
+        "crowd_hz" => `among others a walker looks again ${short(l.crowd_hz)} times a second`,
+        "chase_hz" => `a chaser or follower looks again ${short(l.chase_hz)} times a second`,
+        "combat_hz" => `in a fight a body looks again ${short(l.combat_hz)} times a second`,
+        "input_hz" => `a player may send ${short(l.input_hz)} movement inputs a second`,
+        "input_burst" => `and ${short(l.input_burst)} in a burst`,
+        "pasture_regen_per_h" => `grass regrows ${l.pasture_regen_per_h} grazing units per grassy tile per growing game hour`,
+        "alone_within" => `someone with no other person within ${short(l.alone_within)} m is alone`,
+        "face_slack" => `a body within ${short(l.face_slack)} radians of facing something already faces it`,
+        "flee_clear" => `a flight ends ${short(l.flee_clear)} m farther from the threat than it began`,
+        "scent_hz" => `a creature smells afresh ${short(l.scent_hz)} times a second at most (or when it has moved a few metres); in between it keeps what it last smelled`,
+        "takeover_s" => `a played character with no connection of its person for ${short(l.takeover_s)} s lives on under the world's minds`,
+        "follow_s" => `one follow lasts ${short(l.follow_s)} s before the follower looks again`,
+        "lost_after_s" => `a movement held to someone (follow, keep_distance, circle, close_in, back_off) goes by where they were last seen while they are out of sight, and ends once they have been out of sight for ${short(l.lost_after_s)} s`,
+        "read_sign_m" => `reading with nothing named reads the nearest sign within ${short(l.read_sign_m)} m`,
+        "kin_near_m" => `others of one's kind within ${short(l.kin_near_m)} m are kin near`,
+        "trade_window_s" => `a trade offer can be accepted for ${short(l.trade_window_s)} s`,
+        "join_window_s" => `a request to join a community stands ${short(l.join_window_s)} s`,
+        "address_m" => `speech to no one in particular is for the only listener within ${short(l.address_m)} m`,
+        "wake_loudness" => "a sleeper wakes for a sound as loud as a shout, a baby crying or a fight (not for talk or a whisper)",
+        "wake_reach" => `when it is within ${short(l.wake_reach)} m`,
+        "keep_seen_m" => `a creature in a player's sight stays seen until ${short(l.keep_seen_m)} m beyond it`,
+        "spawn_hunger" => `a body comes into the world with hunger ${short(l.spawn_hunger)}`,
+        "spawn_energy" => `and energy ${short(l.spawn_energy)}`,
+        "pasture_per_tile" => `each grassy tile holds ${l.pasture_per_tile} grazing units`,
+        "cry_prompts_carers" => if l.cry_prompts_carers { "a crying infant makes its carers think about it" } else { "a crying infant is only heard" },
+        "speech_audience" => if l.speech_audience { "who heard each line, and how they stood toward the speaker, is kept for a minute" } else { "who heard a line is not kept" },
+        "speech_truth" => if l.speech_truth { "a speaker learns when the one they spoke to could not have heard them, and a planned line is not said to someone out of earshot or after the talk has moved on" } else { "a speaker whose words did not reach the one they spoke to, unseen, gets no answer, and a planned line is said when it comes due" },
+        "longing_after_min" => `a grown person longs for a child ${short(l.longing_after_min)} minutes after its own birth or its youngest child's (the most nurturing sooner)`,
+        "longing_food" => if l.longing_food > 0.0 { `and only while carrying at least ${short(l.longing_food)} food` } else { "whatever food it carries" },
+        "stranger_by_name" => if l.stranger_by_name { "in a routine, a stranger is someone whose name one does not know" } else { "in a routine, a stranger is someone one has no feelings about yet" },
+        "cues_on" => if l.cues_on { "what one wrote one would watch for brings one to think when one perceives it" } else { "one thinks when something happens to one, not because one watches for it" },
+        "cue_cooldown_s" => `the same thing seen again brings no new thought from what one watches for within ${short(l.cue_cooldown_s)} s`,
+        "cue_gap_s" => `what one watches for brings one to think at most once in ${short(l.cue_gap_s)} s`,
+        "first_sight_thinks" => if l.first_sight_thinks { "seeing someone you cannot place for the first time brings you to think" } else { "one thinks when something happens to one; a first sight is noticed, not thought over" },
+        "earshot" => if l.earshot { "one knows whom one's words would reach if one spoke now, among the people one sees" } else { "one judges for oneself whom one's words would reach" },
+        "first_sight_gap_s" => `a first sight brings one to think at most once in ${short(l.first_sight_gap_s)} s`,
+        "think_framing" => if l.think_framing { "a mind is shown what just happened and thinks about whatever matters to it now" } else { "a mind starts from why one is thinking now" },
+        "heard_first_rethinks" => if l.heard_first_rethinks { "a line you decided to say to someone, when you hear another address them before you speak, waits while you think again" } else { "a line you decided to say is said when it comes due, whoever spoke to them meanwhile" },
+        "cue_check_s" => `what one watches for is looked for every ${short(l.cue_check_s)} s`,
+        "witness_fold_ms" => if l.witness_fold_ms > 0.0 { `what one watches of others' fights is told together every ${short(l.witness_fold_ms)} ms: every blow seen, who struck whom, how many landed, and who fell` } else { "of others' fights one is told each fight's first blow, at once" },
+        "memory_test" => "A test switch that makes one step of the world fail on purpose; it is off in play.",
+        "witness_wake_ms" => if l.witness_wake_ms > 0.0 { `a bystander turns to what it sees at most every ${short(l.witness_wake_ms)} ms` } else { "a bystander turns to each thing it sees at once" },
+        "regard_cache" => if l.regard_cache { "what each one makes of another is worked out once a moment and shared" } else { "what each one makes of another is worked out afresh each time it is asked" },
+        // How the work is done, not what anyone perceives: plain words (no condition), so the
+        // descriptions stay within the engine's operations.
+        "check_ctx_plan" => "a move is weighed on what its rules read",
+        "check_ctx_check" => "a diagnostic: each move is weighed both ways and compared",
+        "alarm_cells" => "the body's alarms are worked out again only when something they read can change",
+        "alarm_cells_check" => "a diagnostic: each kept alarm answer is worked out afresh and compared",
+        "near_tier_on" => if l.near_tier_on { "what is near a player is kept apart from the rest of what it sees, and follows on its own" } else { "what a player sees is kept together" },
+        "cue_transport_on" => if l.cue_transport_on { "what is near a player, or fighting it, reaches the player's screen at once" } else { "what is near a player reaches the player's screen with the rest of what it sees" },
+        "warmth_check" => "a diagnostic: warmth is worked out both ways and compared",
+        "scene_lazy" => "what is in sight is worked out as far as what one looks for needs",
+        "scene_lazy_check" => "a diagnostic: each look is also worked out from all that is in sight and compared",
+        "chronicle_recent" => "a repeated event is matched against the newest entries of the record first",
+        "chronicle_recent_check" => "a diagnostic: each match is also made against two minutes of the record and compared",
+        "notice_inplace" => "what is new in sight is looked for without listing all that is in sight",
+        "notice_inplace_check" => "a diagnostic: each look is also made from the full list and compared",
+        "notice_delta" => "a look for what is new looks only at what is new since the last look or has come into sight",
+        "notice_delta_check" => "a diagnostic: what a look passes over is checked to be already familiar",
+        "seen_ranges" => "remember which structures were seen in ranges of ids by block",
+        "seen_ranges_check" => "a diagnostic: compare structure newness with familiarity",
+        "profile_detail" => if l.profile_detail { "while profiling, the parts of each behaviour's evaluation are timed" } else { "profiling times each behaviour's evaluation whole" },
+        "regard_cache_check" => if l.regard_cache_check { "every shared answer about another is checked against a fresh one" } else { "shared answers about another are not checked" },
+        "fast_lane_on" => if l.fast_lane_on { "a mind may revise its fighting quickly between blows" } else { "a mind revises its fighting only when it thinks" },
+        "seen_again_n" => `seeing the same move started at one ${short(l.seen_again_n)} times in a fight is reason for a quick revision`,
+        "fast_lane_rate" => `at most ${short(l.fast_lane_rate)} quick revisions begin each second across the world`,
+        "fast_lane_inflight" => `and at most ${short(l.fast_lane_inflight)} are under way at once`,
+        "fast_lane_gap_s" => `one's quick revisions begin at least ${short(l.fast_lane_gap_s)} s apart`,
+        "fast_lane_stale_s" => `a reason for one that waits ${short(l.fast_lane_stale_s)} s is let go`,
+        "force_outcomes" => if l.force_outcomes { "whoever strikes, shoots or casts learns how it came out, as far as they see" } else { "a blow, shot or bolt tells its maker how it came out only when it fails, or for a few skills" },
+        "alert_after_hit_s" => `a body struck within the last ${short(l.alert_after_hit_s)} s cannot fall asleep`,
+        "renew_in_place" => if l.renew_in_place { "a rest, a sleep or work is still seen while it is taken up again" } else { "between one rest, sleep or piece of work and the next, nothing is seen for a moment" },
+        "alert_while_attacker_near" => if l.alert_while_attacker_near { "nor while the one who struck it is close and the fight is on" } else { "even with the one who struck it close by" },
+        "gaze_on" => "whether creatures can change their gaze band",
+        "cover_sight_on" => "whether cover hides people",
+        "cover_eye_height_m" => "the standing eye height in metres",
+        "cover_brush_on" => "whether dense brush hides people",
+        "cover_brush_min_fill" => "minimum fill for brush concealment",
+        "cover_cliff_step_m" => "the minimum cliff step in metres",
+        "fov_on" => if l.fov_on { "one sees fully only the way one faces" } else { "one sees as far in every direction" },
+        "ground_sight_m" => `ground is seen ${short(l.ground_sight_m)} m off by day, as far as one sees by night`,
+        "known_cells_pass" => if l.known_cells_pass > 0.0 { `one look takes in at most ${short(l.known_cells_pass)} patches of ground` } else { "one look takes in all the ground in view" },
+        "nav_belief" => if l.nav_belief { "one finds one's way over the ground one has seen, guessing at the rest" } else { "one's way is found over the land as it is" },
+        "unknown_cost" => `unseen ground is reckoned ${short(l.unknown_cost)} times as long to cross as known ground`,
+        "pack_reflex" => if l.pack_reflex { "wolves are born keeping apart from their pack mates as they close on prey" } else { "wolves close on prey with no thought for where their pack mates are" },
+        "fov_focal_deg" => `full sight within ${short(l.fov_focal_deg)} degrees of facing (when sight depends on facing)`,
+        "fov_side_deg" => `side vision out to ${short(l.fov_side_deg)} degrees`,
+        "fov_side_share" => `side vision reaches ${short(l.fov_side_share)} of one's sight`,
+        "fov_near_m" => `one sees all round within ${short(l.fov_near_m)} m`,
+        "fov_near_dark_m" => `and within ${short(l.fov_near_dark_m)} m in the dark`,
+        "fov_margin_deg" => `someone already seen stays seen ${short(l.fov_margin_deg)} degrees past the edge of the view`,
+        "heard_near_m" => `a sound within ${short(l.heard_near_m)} m is near`,
+        "heard_close_m" => `within ${short(l.heard_close_m)} m it is close, farther it is far`,
+        "heard_linger_s" => `a sound is kept in mind ${short(l.heard_linger_s)} s after it was last heard`,
+        "look_slack_deg" => `a player's look within ${short(l.look_slack_deg)} degrees of the last is the same look`,
+        "look_walk_deg" => `walking, one goes where one is going and faces where one looks, at most ${short(l.look_walk_deg)} degrees off one's way`,
+        "turn_rate" => `bodies turn to face at ${short(l.turn_rate)} radians a second`,
+        "walk_base" => `a grown person walks ${l.walk_base} m/s`,
+        "run_share" => `and runs ${l.run_share} times that`,
+        "run_top" => `no road takes anyone past ${l.run_top} m/s`,
+        "tired_pace" => `the exhausted walk at ${l.tired_pace} of their pace`,
+        "wolf_run" => `a wolf runs ${l.wolf_run} times its walk`,
+        "deer_run" => `a deer ${l.deer_run} times its`,
+        "stamina_max" => `stamina holds ${l.stamina_max} rested`,
+        "stamina_regen" => `and comes back ${l.stamina_regen} a second`,
+        "stamina_delay_s" => `from ${l.stamina_delay_s} s after the last effort`,
+        "stamina_run" => `a run takes ${l.stamina_run} a second`,
+        "stamina_guard" => `a held guard ${l.stamina_guard} a second`,
+        "stamina_resume" => `a run starts with ${l.stamina_resume} at least`,
+        "stamina_tires" => `each point spent tires by ${l.stamina_tires}`,
+        "focus_max" => `mana holds ${l.focus_max}`,
+        "focus_regen" => `and comes back ${l.focus_regen} a second`,
+        "focus_delay_s" => `from ${l.focus_delay_s} s after the last use`,
+        "cost_strike" => `a strike takes ${l.cost_strike}`,
+        "cost_bowshot" => `a bow shot ${l.cost_bowshot}`,
+        "cost_firebolt" => `a fire bolt ${l.cost_firebolt} mana`,
+        "cost_heal" => `a heal ${l.cost_heal} mana`,
+        "cost_dodge" => `a dodge ${l.cost_dodge}`,
+        "cost_jump" => `a jump ${l.cost_jump}`,
+        "cost_block" => `a guard ${l.cost_block}`,
+        "cost_attack" => `an attack ${l.cost_attack}`,
+        "cost_throw" => `a throw ${l.cost_throw}`,
+        "cost_shoot" => `a shot ${l.cost_shoot}`,
+        "cost_threaten" => `a threat ${l.cost_threaten}`,
+        "hp_person" => `a grown person has ${l.hp_person} health`,
+        "hp_deer" => `a deer ${l.hp_deer}`,
+        "hp_wolf" => `a wolf ${l.hp_wolf}`,
+        "blow_person" => `a bare blow does ${l.blow_person}`,
+        "blow_deer" => `a deer's ${l.blow_deer}`,
+        "blow_wolf" => `a wolf's bite ${l.blow_wolf}`,
+        "dmg_spear" => `a spear thrust ${l.dmg_spear}`,
+        "dmg_strike" => `a sword strike ${l.dmg_strike}`,
+        "dmg_strike_spear" => `with a spear ${l.dmg_strike_spear}`,
+        "dmg_bowshot" => `an arrow ${l.dmg_bowshot}`,
+        "dmg_firebolt" => `a fire bolt ${l.dmg_firebolt}`,
+        "dmg_throw" => `a thrown spear ${l.dmg_throw}`,
+        "dmg_shoot" => `a shot ${l.dmg_shoot}`,
+        _ => ()
     }
 }

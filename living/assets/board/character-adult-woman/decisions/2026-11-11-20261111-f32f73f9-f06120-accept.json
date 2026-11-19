@@ -1,0 +1,12 @@
+{
+ "schema": 1,
+ "family": "character:adult-woman",
+ "version": "20261111-f32f73f9-f06120",
+ "verdict": "accept",
+ "date": "2026-11-11",
+ "by": "owner",
+ "words": "This is definitely progress. But yeah, we are still lacking, I think, depth and probably in the shape, how it is structured internally. What are the points that you can tweak to get different shapes that still make sense, right? … But yeah, definitely a step up. So yeah, let's continue.",
+ "note": "Accepted as the new base (pass 2, char-3). Owner: depth and the head's internal structure are still lacking; shape parameters should follow how a head is built.",
+ "scope": "base",
+ "recorded": "2026-11-11T20:05:49.802148+01:00"
+}

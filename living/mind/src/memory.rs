@@ -26,6 +26,7 @@ use anyhow::Result;
 use neo4rs::{query, BoltType, Graph};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use std::collections::HashMap;
 
 /// A graph patch written by a reasoning episode (already sanitized).
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -41,6 +42,10 @@ pub struct Patch {
     /// mind's own consolidation) leaves it as it was.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lived_under: Option<String>,
+    /// Projects the mind ended (`LIVING_PROJECTS=1`): (key, outcome `done` or `dropped`, why).
+    /// The open `self -PURSUES->` edge is closed with its outcome; nothing is deleted.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub ended: Vec<(String, String, String)>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -139,7 +144,7 @@ const DURABLE: &[&str] = &["KNOWS", "FEELS", "JUDGES", "WAS", "INVOLVES", "GROUN
 /// relationship a mind names is stored as `RELATES` with the name in `rel` (every edge carries
 /// `rel`). Neo4j never frees a type name and allows 65,535; minds invented that many in a day
 /// of runs, after which new ones could not be written.
-const TYPED: &[&str] = &["KNOWS", "FEELS", "JUDGES", "WAS", "INVOLVES", "GROUNDS", "CHILD_OF", "PARENT_OF", "MERGED_INTO", "AGREED", "WITH"];
+const TYPED: &[&str] = &["KNOWS", "FEELS", "JUDGES", "WAS", "INVOLVES", "GROUNDS", "CHILD_OF", "PARENT_OF", "MERGED_INTO", "AGREED", "WITH", "PURSUES"];
 
 /// The Neo4j type an edge named `rel` is stored as.
 fn stored_type(rel: &str) -> &str {
@@ -149,6 +154,12 @@ fn stored_type(rel: &str) -> &str {
         "RELATES"
     }
 }
+
+/// A person's node named as seen too far away to make out ("someone too far away to make out
+/// #77") takes a name or "a stranger #77" once they are made out, and never goes back
+/// (`apply`, `rename_people`; far-label).
+pub const FAR_NAME_KEPT: &str = living_rules::script::FAR_PERSON;
+
 const FIXED_LABELS: &[&str] = &["Concept", "Self", "Memory", "IdentityVersion", "Merged"];
 
 fn p(v: Value) -> BoltType {
@@ -263,7 +274,8 @@ impl Store {
                     "UNWIND $rows AS n
                      MERGE (c:Concept {run: $run, actor: $actor, key: n.key})
                      ON CREATE SET c.created_t = $t
-                     SET c += n.props, c.name = coalesce(n.name, c.name), c.updated_t = $t, c.thought = $thought
+                     SET c += n.props, c.name = CASE WHEN n.name STARTS WITH $far AND c.name IS NOT NULL AND NOT c.name STARTS WITH $far THEN c.name ELSE coalesce(n.name, c.name) END,
+                         c.updated_t = $t, c.thought = $thought
                      SET c.lived_under = CASE WHEN $lived IS NULL THEN c.lived_under ELSE [x IN coalesce(c.lived_under, []) WHERE x <> $lived] + $lived END
                      WITH c, n, [l IN labels(c) WHERE NOT l IN $fixed] AS old
                      CALL (c, n, old) {
@@ -277,7 +289,8 @@ impl Store {
                 .param("fixed", FIXED_LABELS.iter().map(|s| s.to_string()).collect::<Vec<_>>())
                 .param("t", t as i64)
                 .param("thought", thought)
-                .param("lived", p(json!(patch.lived_under))),
+                .param("lived", p(json!(patch.lived_under)))
+                .param("far", FAR_NAME_KEPT),
             )
             .await?;
         }
@@ -360,6 +373,22 @@ impl Store {
                      MATCH (a:Concept {run: $run, actor: $actor, key: x.from})-[r {open: true}]->(b:Concept {run: $run, actor: $actor, key: x.to})
                      WHERE coalesce(r.rel, type(r)) = x.rel
                      SET r.open = false, r.valid_to = $t, r.retracted_by = $thought",
+                    actor,
+                )
+                .param("rows", p(Value::Array(rows)))
+                .param("t", t as i64)
+                .param("thought", thought),
+            )
+            .await?;
+        }
+        if !patch.ended.is_empty() {
+            let rows: Vec<Value> = patch.ended.iter().map(|(k, outcome, why)| json!({"key": k, "outcome": outcome, "why": why})).collect();
+            txn.run(
+                self.q(
+                    "UNWIND $rows AS x
+                     MATCH (:Concept {run: $run, actor: $actor, key: 'self'})-[r:PURSUES {open: true}]->(p:Concept {run: $run, actor: $actor, key: x.key})
+                     SET r.open = false, r.valid_to = $t, r.retracted_by = $thought, r.outcome = x.outcome, r.outcome_why = x.why
+                     SET p.outcome = x.outcome, p.ended_t = $t",
                     actor,
                 )
                 .param("rows", p(Value::Array(rows)))
@@ -572,7 +601,7 @@ impl Store {
                      OPTIONAL MATCH (c)-[r {open: true}]-()
                      WITH c, count(r) AS degree
                      RETURN c.key AS key, coalesce(c.name, '') AS name, [l IN labels(c) WHERE NOT l IN $fixed] AS labels, degree,
-                            [k IN keys(c) WHERE NOT k IN ['run', 'actor', 'key', 'name', 'created_t', 'updated_t', 'thought', 'narrative', 'values', 'goals', 'traits', 'mood', 'identity_version'] | k + ': ' + toString(c[k])] AS props
+                            [k IN keys(c) WHERE NOT k IN ['run', 'actor', 'key', 'name', 'created_t', 'updated_t', 'thought', 'narrative', 'values', 'goals', 'traits', 'mood', 'identity_version', 'notice'] | k + ': ' + toString(c[k])] AS props
                      ORDER BY degree DESC LIMIT $limit",
                     actor,
                 )
@@ -611,6 +640,87 @@ impl Store {
     }
 }
 
+/// One open project (`self -PURSUES-> project`), as deliberation and consolidation see it.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Project {
+    pub key: String,
+    /// The aim, in the mind's own words (the project concept's name).
+    pub aim: String,
+    pub progress: String,
+    pub next_step: String,
+    pub since: u64,
+    /// When last asserted or served (fading runs from here).
+    pub t: u64,
+    /// Effective confidence after fading, as `around` computes it.
+    pub strength: f64,
+    /// Deliberations that said they served it.
+    pub served: i64,
+}
+
+impl Store {
+    /// The open projects, strongest first (at most `limit`), and how many are open in all.
+    pub async fn projects(&self, actor: u32, limit: usize) -> Result<(Vec<Project>, usize)> {
+        let mut rows = self
+            .g
+            .execute(
+                self.q(
+                    "MATCH (:Concept {run: $run, actor: $actor, key: 'self'})-[r:PURSUES {open: true}]->(p:Concept)
+                     WHERE NOT p:Merged
+                     WITH p, r, coalesce(r.confidence, 0.5) * exp(-toFloat($now - coalesce(r.t, $now)) / ($tau * CASE WHEN r.hearsay THEN $hearsay ELSE 1.0 END)) AS c
+                     RETURN p.key AS key, coalesce(p.name, p.key) AS aim, coalesce(toString(r.progress), '') AS progress,
+                            coalesce(toString(r.next_step), '') AS next_step, coalesce(r.since, 0) AS since, coalesce(r.t, 0) AS t,
+                            c, coalesce(r.served, 0) AS served
+                     ORDER BY c DESC, t DESC",
+                    actor,
+                )
+                .param("now", crate::llm::now_ms() as i64)
+                .param("tau", TAU_MS)
+                .param("hearsay", HEARSAY),
+            )
+            .await?;
+        let mut out = Vec::new();
+        while let Some(r) = rows.next().await? {
+            out.push(Project {
+                key: r.get("key").unwrap_or_default(),
+                aim: r.get("aim").unwrap_or_default(),
+                progress: r.get("progress").unwrap_or_default(),
+                next_step: r.get("next_step").unwrap_or_default(),
+                since: r.get::<i64>("since").unwrap_or(0) as u64,
+                t: r.get::<i64>("t").unwrap_or(0) as u64,
+                strength: r.get("c").unwrap_or(0.5),
+                served: r.get("served").unwrap_or(0),
+            });
+        }
+        let total = out.len();
+        out.truncate(limit);
+        Ok((out, total))
+    }
+
+    /// A deliberation said its plan serves this open project: acting on it reinforces it
+    /// (its fading restarts from now) and is counted on the edge. Returns whether it was open.
+    pub async fn serve_project(&self, actor: u32, key: &str, plan: &str, thought: &str, t: u64) -> Result<bool> {
+        let mut rows = self
+            .g
+            .execute(
+                self.q(
+                    "MATCH (:Concept {run: $run, actor: $actor, key: 'self'})-[r:PURSUES {open: true}]->(:Concept {run: $run, actor: $actor, key: $key})
+                     SET r.t = $t, r.served = coalesce(r.served, 0) + 1, r.served_t = $t, r.served_by = $thought, r.last_plan = $plan
+                     RETURN count(r) AS n",
+                    actor,
+                )
+                .param("key", key)
+                .param("plan", plan.chars().take(200).collect::<String>())
+                .param("thought", thought)
+                .param("t", t as i64),
+            )
+            .await?;
+        Ok(match rows.next().await? {
+            Some(r) => r.get::<i64>("n").unwrap_or(0) > 0,
+            None => false,
+        })
+    }
+}
+
 /// What the body reads, derived from the mind (never declared separately):
 /// `self -FEELS {trust, affinity, label, note}-> person:<id>` → relations,
 /// `self -JUDGES {value, why}-> stance:<key>` → judgments (relaxing toward 0.5 unless reinforced),
@@ -620,6 +730,10 @@ pub struct Projection {
     pub feelings: Vec<(u32, f64, f64, String, String)>,
     pub judgments: Vec<(String, f64, String)>,
     pub places: Vec<(String, f64, f64)>,
+    /// Attention cues (docs/ATTENTION.md): `(the concept they serve, the cue, the thought that
+    /// wrote it)`, newest first, for stances still held, projects still pursued and goal
+    /// concepts (which the caller keeps only while the persona still has that goal).
+    pub cues: Vec<(String, Value, String)>,
 }
 
 impl Store {
@@ -678,6 +792,35 @@ impl Store {
         while let Some(r) = rows.next().await? {
             out.places.push((r.get("name").unwrap_or_default(), r.get("x").unwrap_or(0.0), r.get("y").unwrap_or(0.0)));
         }
+        // Cues live on the concept they serve: a stance while it is held (projected above), a
+        // project while it is pursued, a goal concept (kept by the caller while the persona has it).
+        let mut rows = self
+            .g
+            .execute(self.q(
+                "MATCH (c:Concept {run: $run, actor: $actor}) WHERE c.notice IS NOT NULL AND c.notice <> '[]' AND NOT c:Merged
+                 OPTIONAL MATCH (:Concept {run: $run, actor: $actor, key: 'self'})-[p:PURSUES {open: true}]->(c)
+                 RETURN c.key AS key, c.notice AS notice, coalesce(c.thought, '') AS thought, p IS NOT NULL AS pursued
+                 ORDER BY coalesce(c.updated_t, 0) DESC LIMIT 32",
+                actor,
+            ))
+            .await?;
+        while let Some(r) = rows.next().await? {
+            let key: String = r.get("key").unwrap_or_default();
+            let held = match key.split_once(':') {
+                Some(("stance", k)) => out.judgments.iter().any(|j| j.0 == k),
+                Some(("project", _)) => r.get::<bool>("pursued").unwrap_or(false),
+                Some(("goal", _)) => true,
+                _ => false,
+            };
+            let notice: String = r.get("notice").unwrap_or_default();
+            let thought: String = r.get("thought").unwrap_or_default();
+            if held {
+                for c in serde_json::from_str::<Vec<Value>>(&notice).unwrap_or_default() {
+                    out.cues.push((key.clone(), c, thought.clone()));
+                }
+            }
+        }
+        out.cues.truncate(CUES);
         Ok(out)
     }
 }
@@ -728,6 +871,9 @@ const STOP: &[&str] = &[
     "done", "take", "well", "even", "keep", "let's", "lets", "yours", "mine", "ours", "these", "those", "because", "again", "right", "now", "tiles", "tile",
     "someone", "something", "thing", "things", "feel", "feels", "felt", "look", "looks", "away", "around", "near", "nearest", "north", "south", "east", "west",
     "northeast", "northwest", "southeast", "southwest", "first", "time", "respond", "json", "object", "you're", "we're", "i'll", "we'll",
+    // How everyone unnamed is perceived ("a stranger"): it says nothing about which one, so it
+    // must not bring back every stranger's deeds (people are cued by their `person:<id>`).
+    "stranger",
     // The engine's own vocabulary in reasons and feedback says nothing about the world.
     "note", "parts", "previous", "graph", "invalid", "dropped", "branch", "applies", "apply", "skill", "goto", "target", "composite", "current",
     "plan", "nothing", "works", "action", "actions", "failing", "fails", "failed", "sight", "reply", "node", "nodes", "most", "least", "wait",
@@ -775,6 +921,9 @@ pub struct Recalled {
     pub stances: Vec<(String, f64)>,
     pub people: Vec<(u32, f64)>,
     pub memories: Vec<(u64, u64, String)>,
+    /// Who each memory in `memories` involves, as this mind names them (the person nodes'
+    /// names: "Bram", "a stranger #77"), by the memory's experience.
+    pub involved: HashMap<u64, Vec<String>>,
     /// Cued memories to rehearse (see [`Store::rehearse`]).
     pub rehearse: Vec<u64>,
     pub seeds: usize,
@@ -1090,9 +1239,128 @@ impl Store {
             }
         }
         mems.sort_by_key(|m| m.1);
+        out.involved = self.involved(actor, &mems.iter().map(|m| m.0).collect::<Vec<_>>()).await?;
         out.memories = mems;
         out.ms = started.elapsed().as_millis() as u64;
         Ok(out)
+    }
+
+    /// The people kept memories involve, by experience: their nodes' names, so a gist that
+    /// says "a stranger" is shown with which one ("a stranger #77", or the name learned since).
+    /// Indexed point lookups of the memories' own keys.
+    async fn involved(&self, actor: u32, exps: &[u64]) -> Result<HashMap<u64, Vec<String>>> {
+        let mut out: HashMap<u64, Vec<String>> = HashMap::new();
+        if exps.is_empty() {
+            return Ok(out);
+        }
+        let keys: Vec<String> = exps.iter().map(|e| format!("exp:{e}")).collect();
+        let mut rows = self
+            .g
+            .execute(
+                self.q(
+                    "UNWIND $keys AS k
+                     MATCH (m:Concept {run: $run, actor: $actor, key: k})-[:INVOLVES]->(p:Concept)
+                     WHERE p.key STARTS WITH 'person:' AND NOT p:Merged
+                     RETURN m.exp AS exp, coalesce(p.name, p.key) AS name ORDER BY p.key",
+                    actor,
+                )
+                .param("keys", keys),
+            )
+            .await?;
+        while let Some(r) = rows.next().await? {
+            out.entry(r.get::<i64>("exp").unwrap_or(0) as u64).or_default().push(r.get("name").unwrap_or_default());
+        }
+        Ok(out)
+    }
+
+    /// Give existing person nodes the names this mind now knows them by (`(key, name)`); a node
+    /// that does not exist is not made. Run at each integration for the people its experiences
+    /// involve, so a stranger's node takes the name once it is learned even when the model wrote
+    /// nothing about them.
+    /// Renames people's nodes as the mind now remembers them (`Minds::remembered_as`); a node
+    /// named once someone was made out is never renamed back to "someone too far away to make out
+    /// #id" (`FAR_NAME_KEPT`).
+    pub async fn rename_people(&self, actor: u32, names: &[(String, String)]) -> Result<()> {
+        if names.is_empty() {
+            return Ok(());
+        }
+        let rows: Vec<Value> = names.iter().map(|(k, n)| json!({"key": k, "name": n})).collect();
+        self.g
+            .run(self.q(
+                "UNWIND $rows AS r
+                 MATCH (c:Concept {run: $run, actor: $actor, key: r.key})
+                 WHERE coalesce(c.name, '') <> r.name AND NOT (r.name STARTS WITH $far AND c.name IS NOT NULL AND NOT c.name STARTS WITH $far)
+                 SET c.name = r.name",
+                actor,
+            )
+            .param("rows", p(Value::Array(rows)))
+            .param("far", FAR_NAME_KEPT))
+            .await?;
+        Ok(())
+    }
+}
+
+/// Anchor person keys a reply wrote as a description (`person:the_stranger`: not an id and,
+/// read as a name, `is_name` of nobody) to ids: each edge's end to the one person the
+/// experiences that edge cites involve whom the mind does not know by name (`unnamed_in`),
+/// where there is exactly one, and the key's node, retractions and merges where all its edges
+/// went to one person. "The stranger" who taught and "the stranger" who cooked become the two
+/// people they were, never one node gathering both deeds; a description with no single person
+/// behind it stays a concept of its own. Returns `(description, id)` for each edge end anchored.
+pub fn anchor_described(patch: &mut Patch, is_name: &dyn Fn(&str) -> bool, unnamed_in: &dyn Fn(u64) -> Vec<u32>) -> Vec<(String, u32)> {
+    let describes = |k: &str| k.strip_prefix("person:").is_some_and(|rest| rest.parse::<u32>().is_err() && !is_name(&rest.trim_start_matches('#').replace('_', " ")));
+    let mut anchored: Vec<(String, u32)> = Vec::new();
+    let mut by_key: HashMap<String, std::collections::BTreeSet<u32>> = HashMap::new();
+    for e in patch.edges.iter_mut() {
+        let mut ids: std::collections::BTreeSet<u32> = std::collections::BTreeSet::new();
+        for x in &e.because {
+            ids.extend(unnamed_in(*x));
+        }
+        for k in [&mut e.from, &mut e.to] {
+            if !describes(k) {
+                continue;
+            }
+            let set = by_key.entry(k.clone()).or_default();
+            if ids.len() == 1 {
+                let id = *ids.iter().next().unwrap();
+                set.insert(id);
+                anchored.push((k.clone(), id));
+                *k = format!("person:{id}");
+            } else {
+                // Unanchored here: the key's other uses cannot take one person either.
+                set.insert(0);
+            }
+        }
+    }
+    let one: HashMap<String, u32> = by_key.into_iter().filter(|(_, ids)| ids.len() == 1 && !ids.contains(&0)).map(|(k, ids)| (k, *ids.iter().next().unwrap())).collect();
+    let fix = |k: &mut String| {
+        if let Some(id) = one.get(k.as_str()) {
+            *k = format!("person:{id}");
+        }
+    };
+    for n in patch.nodes.iter_mut() {
+        fix(&mut n.key);
+    }
+    for r in patch.retract.iter_mut() {
+        fix(&mut r.0);
+        fix(&mut r.2);
+    }
+    for m in patch.merges.iter_mut() {
+        fix(&mut m.0);
+        fix(&mut m.1);
+    }
+    anchored
+}
+
+/// A recalled memory's gist with the people it involves that the gist does not already name:
+/// "A stranger was teaching Lio (with a stranger #77)".
+pub fn with_involved(gist: &str, involved: Option<&Vec<String>>) -> String {
+    let low = gist.to_lowercase();
+    let extra: Vec<&str> = involved.into_iter().flatten().map(|s| s.as_str()).filter(|n| !n.is_empty() && !low.contains(&n.to_lowercase())).collect();
+    if extra.is_empty() {
+        gist.to_string()
+    } else {
+        format!("{gist} (with {})", extra.join(", "))
     }
 }
 
@@ -1205,6 +1473,78 @@ fn cited(entry: &Value, known: &[u64]) -> Vec<u64> {
     out
 }
 
+/// Attention cues a character keeps (the authority's `CUES_PER_ACTOR`).
+pub const CUES: usize = 8;
+
+/// The concept an attention cue serves, from a reply's `for`: `project:<key>`, `goal:<words>`,
+/// or a stance key (`stance:` optional).
+pub fn cue_for(v: &Value) -> Option<String> {
+    let f = v.as_str()?.trim();
+    let lower = f.to_lowercase();
+    for kind in ["project:", "goal:"] {
+        if let Some(rest) = lower.strip_prefix(kind) {
+            return key(&rest.trim().chars().take(80).collect::<String>()).map(|k| format!("{kind}{}", k.replace(':', "_")));
+        }
+    }
+    key(lower.trim_start_matches("stance:")).map(|k| format!("stance:{}", k.replace(':', "_")))
+}
+
+/// One attention cue of a reply, in the stored form (docs/ATTENTION.md): what to watch for, by
+/// type, and why in the mind's own words. `None` when it names nothing to watch for.
+pub fn cue_entry(v: &Value) -> Option<Value> {
+    let text = |k: &str, n: usize| v[k].as_str().map(|s| s.trim().chars().take(n).collect::<String>()).filter(|s| !s.is_empty());
+    let mut o = serde_json::Map::new();
+    match &v["who"] {
+        Value::Number(n) => {
+            o.insert("who_id".into(), json!(n.as_u64().filter(|n| *n > 0 && *n <= u32::MAX as u64)?));
+        }
+        Value::String(w) if !w.trim().is_empty() => match reply_id(&json!(w.trim())) {
+            Some(id) => {
+                o.insert("who_id".into(), json!(id));
+            }
+            None => {
+                o.insert("who".into(), json!(w.trim().to_lowercase().chars().take(40).collect::<String>()));
+            }
+        },
+        _ => {}
+    }
+    for (k, n) in [("doing", 40), ("phase", 40), ("thing", 40), ("at", 48)] {
+        if let Some(t) = text(k, n) {
+            o.insert(k.into(), json!(t));
+        }
+    }
+    for k in ["within", "near_me"] {
+        if let Some(x) = v[k].as_f64().filter(|x| *x > 0.0) {
+            o.insert(k.into(), json!(x.min(256.0)));
+        }
+    }
+    if o.is_empty() {
+        return None;
+    }
+    if let Some(w) = text("why", 160) {
+        o.insert("why".into(), json!(w));
+    }
+    Some(Value::Object(o))
+}
+
+/// A reply without its attention cues unless `keep` (the `cues_on` law: with it off, cues a
+/// reply names anyway are not kept).
+pub fn without_notice(v: &Value, keep: bool) -> Value {
+    let mut v = v.clone();
+    if !keep {
+        if let Some(o) = v.as_object_mut() {
+            o.remove("notice");
+        }
+    }
+    v
+}
+
+/// Whether a cue's goal key names one of the persona's goals (its key): the same words, or one
+/// the start of the other (a model shortens a long goal).
+pub fn same_goal(goal: &str, cue: &str) -> bool {
+    goal == cue || (cue.len() >= 12 && goal.starts_with(cue)) || (goal.len() >= 12 && cue.starts_with(goal))
+}
+
 /// Convenience arrays a reply may carry (`relations`, `judgments`, `places`) become ordinary
 /// mind edits: FEELS edges, JUDGES edges to `stance:` concepts and `place:` concepts. A relation
 /// or stance cites the experiences it names in its own `because` (those among `known`), not
@@ -1228,6 +1568,27 @@ pub fn sugar_into(v: &Value, patch: &mut Patch, known: &[u64]) {
         let k = k.replace(':', "_");
         patch.nodes.push(NodeOp { key: format!("stance:{k}"), labels: vec!["Stance".into()], name: Some(k.clone()), props: Default::default() });
         patch.edges.push(EdgeOp { from: "self".into(), rel: "JUDGES".into(), to: format!("stance:{k}"), confidence: 1.0, because: cited(&j, known), props, firsthand: false, sources: Vec::new() });
+    }
+    // Attention cues (`notice`, docs/ATTENTION.md) are kept on the concept each serves, as its
+    // `notice` property: the cues a reply names for a concept replace that concept's, and one
+    // naming only what it serves clears them. They live, merge and fade with that concept.
+    let mut notice: Vec<(String, Vec<Value>)> = Vec::new();
+    for c in v["notice"].as_array().cloned().unwrap_or_default().into_iter().take(CUES) {
+        let Some(f) = cue_for(&c["for"]) else { continue };
+        let entry = cue_entry(&c);
+        match notice.iter_mut().find(|n| n.0 == f) {
+            Some(n) => n.1.extend(entry),
+            None => notice.push((f, entry.into_iter().collect())),
+        }
+    }
+    for (f, list) in notice {
+        let mut props = serde_json::Map::new();
+        props.insert("notice".into(), json!(Value::Array(list).to_string()));
+        let (labels, name) = match f.split_once(':') {
+            Some(("goal", k)) => (vec!["Goal".to_string()], Some(k.replace('_', " "))),
+            _ => (Vec::new(), None),
+        };
+        patch.nodes.push(NodeOp { key: f, labels, name, props });
     }
     for p in v["places"].as_array().cloned().unwrap_or_default().into_iter().take(8) {
         let (Some(name), Some(x), Some(y)) = (p["name"].as_str(), p["x"].as_f64(), p["y"].as_f64()) else { continue };
@@ -1256,6 +1617,68 @@ pub fn attribute(patch: &mut Patch, actor: u32, testimony: &dyn Fn(u64) -> Optio
                 _ => {}
             }
         }
+    }
+}
+
+/// The outcome a reply gives an ended project: `done` or `dropped` (`None`: still open). In
+/// `ended` any other word ends it as dropped ("abandoned", "given up"); in `status` only the
+/// words for done or dropped do ("in progress" keeps it open).
+pub fn project_outcome(v: &Value, lenient: bool) -> Option<&'static str> {
+    let s = match v {
+        Value::Bool(true) => "done".to_string(),
+        Value::String(s) => s.trim().to_lowercase().replace(['_', '-'], " "),
+        _ => return None,
+    };
+    const DONE: &[&str] = &["done", "completed", "complete", "achieved", "finished", "succeeded", "accomplished"];
+    const DROPPED: &[&str] = &["dropped", "abandoned", "given up", "gave up", "failed", "cancelled", "canceled", "abandon", "drop"];
+    match s.as_str() {
+        x if DONE.contains(&x) => Some("done"),
+        x if DROPPED.contains(&x) => Some("dropped"),
+        "" | "no" | "false" | "open" | "ongoing" | "active" | "in progress" | "pursuing" | "null" | "none" => None,
+        _ if lenient => Some("dropped"),
+        _ => None,
+    }
+}
+
+/// A project key: the reply's `key`, else the aim, as `project:<slug>` unless it already names
+/// a kind of concept (`plan:river_camp`). Oneself, people and kept memories are not projects.
+pub fn project_key(entry: &Value) -> Option<String> {
+    let raw = entry["key"].as_str().filter(|k| !k.trim().is_empty()).or_else(|| entry["aim"].as_str())?;
+    let k = key(raw)?;
+    if matches!(identity(&k, &Known::default()), Some(Identity::Me | Identity::Person(_) | Identity::Memory(_))) {
+        return None;
+    }
+    Some(if k.contains(':') { k } else { format!("project:{}", k.chars().take(48).collect::<String>().trim_end_matches('_')) })
+}
+
+/// The `projects` array a consolidation or reorganization reply may carry (`LIVING_PROJECTS=1`):
+/// `{"key", "aim", "progress", "next_step", "because"}` adds or revises `self -PURSUES {progress,
+/// next_step}-> key` (the aim is the concept's name), and `{"key", "ended": "done|dropped",
+/// "why"}` closes it with that outcome. A project is the person's own aim, never hearsay.
+pub fn projects_into(v: &Value, patch: &mut Patch, known: &[u64], notes: &mut Vec<String>) {
+    let text = |x: &Value, n: usize| x.as_str().map(|s| s.trim().chars().take(n).collect::<String>()).filter(|s| !s.is_empty());
+    for e in v["projects"].as_array().cloned().unwrap_or_default().into_iter().take(6) {
+        let Some(k) = project_key(&e) else {
+            notes.push(format!("project skipped (no usable key): {e}"));
+            continue;
+        };
+        let ended = project_outcome(&e["ended"], true).or_else(|| project_outcome(&e["status"], false));
+        if let Some(outcome) = ended {
+            let why = text(&e["why"], 300).unwrap_or_default();
+            patch.ended.retain(|x| x.0 != k);
+            patch.ended.push((k, outcome.into(), why));
+            continue;
+        }
+        let mut props = serde_json::Map::new();
+        for (field, n) in [("progress", 240), ("next_step", 200)] {
+            if let Some(t) = text(&e[field], n) {
+                props.insert(field.into(), json!(t));
+            }
+        }
+        patch.nodes.retain(|n| n.key != k);
+        patch.nodes.push(NodeOp { key: k.clone(), labels: vec!["Project".into()], name: text(&e["aim"], 160), props: Default::default() });
+        let confidence = e["confidence"].as_f64().unwrap_or(0.9).clamp(0.3, 1.0);
+        patch.edges.push(EdgeOp { from: "self".into(), rel: "PURSUES".into(), to: k, confidence, because: cited(&e, known), props, firsthand: true, sources: Vec::new() });
     }
 }
 
@@ -1529,6 +1952,30 @@ pub fn patch_from(v: &Value, known: &[u64], exp_time: &dyn Fn(u64) -> Option<(u6
 
 #[cfg(test)]
 mod tests {
+    /// Attention cues (docs/ATTENTION.md): a reply's `notice` entries are kept on the concept
+    /// each serves, typed; one naming only what it serves clears that concept's cues.
+    #[test]
+    fn notice_is_kept_on_what_it_serves() {
+        assert_eq!(cue_for(&json!("stance:Wolves_Take_Lambs")).as_deref(), Some("stance:wolves_take_lambs"));
+        assert_eq!(cue_for(&json!("wolves take lambs")).as_deref(), Some("stance:wolves_take_lambs"));
+        assert_eq!(cue_for(&json!("project:mend roof")).as_deref(), Some("project:mend_roof"));
+        assert_eq!(cue_for(&json!("Goal: Pay back what I owe")).as_deref(), Some("goal:pay_back_what_i_owe"));
+        assert_eq!(cue_for(&json!(null)), None);
+        assert_eq!(cue_entry(&json!({"for": "x", "who": "#12", "doing": "strike", "why": " mine "})), Some(json!({"who_id": 12, "doing": "strike", "why": "mine"})));
+        assert_eq!(cue_entry(&json!({"for": "x", "who": "Unknown", "at": "the yard", "within": 15})), Some(json!({"who": "unknown", "at": "the yard", "within": 15.0})));
+        assert_eq!(cue_entry(&json!({"for": "x", "why": "only words"})), None, "nothing to watch for");
+        let mut p = Patch::default();
+        sugar_into(&json!({"notice": [{"for": "a", "who": "wolf"}, {"for": "a", "thing": "storage"}, {"for": "goal:keep warm", "thing": "hearth"}, {"for": "b"}]}), &mut p, &[]);
+        let node = |k: &str| p.nodes.iter().find(|n| n.key == k).unwrap().clone();
+        let a: Vec<Value> = serde_json::from_str(node("stance:a").props["notice"].as_str().unwrap()).unwrap();
+        assert_eq!(a, vec![json!({"who": "wolf"}), json!({"thing": "storage"})]);
+        assert!(node("stance:a").labels.is_empty(), "a stance's labels are left as they are");
+        assert_eq!(node("goal:keep_warm").labels, vec!["Goal".to_string()]);
+        assert_eq!(node("stance:b").props["notice"], json!("[]"), "naming only what it serves clears it");
+        assert!(without_notice(&json!({"notice": [1], "judgments": []}), false).get("notice").is_none());
+        assert!(same_goal("pay_back_what_i_owe_to_my_neighbour", "pay_back_what_i_owe") && !same_goal("keep_warm", "keep"));
+    }
+
     #[test]
     fn failures_at_remembered_things_are_read_from_feedback() {
         use super::failed_at_thing;
@@ -1812,7 +2259,7 @@ mod tests {
                        "words": cues.words.iter().map(|w| &w.0).collect::<Vec<_>>(),
                        "facts": r.facts.iter().map(|f| render_keys(f, &t)).collect::<Vec<_>>(),
                        "stances": r.stances, "people": r.people,
-                       "memories": r.memories.iter().map(|m| &m.2).collect::<Vec<_>>()})
+                       "memories": r.memories.iter().map(|m| with_involved(&m.2, r.involved.get(&m.0))).collect::<Vec<_>>()})
             );
         }
     }
@@ -1821,6 +2268,143 @@ mod tests {
     fn cue_words_fold_plurals_and_skip_filler() {
         assert_eq!(cue_words("Wolves near the ford! Berries, stores and the fishing spot."), vec!["wolv", "wolf", "ford", "berr", "store", "fish", "spot"]);
         assert!(cue_words("that this with from").is_empty());
+        // "A stranger" names no one in particular: it cues nobody's deeds.
+        assert_eq!(cue_words("A stranger is teaching the strangers' children"), vec!["teach", "children"]);
+    }
+
+    #[test]
+    fn recalled_memories_say_who_they_involve() {
+        let who = vec!["a stranger #77".to_string(), "Lio".to_string()];
+        assert_eq!(with_involved("A stranger was teaching Lio to hunt.", Some(&who)), "A stranger was teaching Lio to hunt. (with a stranger #77)");
+        assert_eq!(with_involved("Lio caught a fish.", Some(&vec!["Lio".to_string()])), "Lio caught a fish.");
+        assert_eq!(with_involved("Rain at dawn.", None), "Rain at dawn.");
+    }
+
+    /// `person:the_stranger` is anchored, edge by edge, to the one unnamed person each edge's
+    /// cited experiences involve; with two, or none, it stays its own concept; a name is never
+    /// taken as a description.
+    #[test]
+    fn described_people_anchor_to_one_id_per_edge() {
+        let v = json!({
+            "nodes": [{"key": "person:the_stranger", "name": "the stranger"}, {"key": "person:spear_teacher", "name": "the spear teacher"}],
+            "edges": [
+                {"from": "person:the_stranger", "rel": "TEACHES", "to": "person:5", "because": [10]},
+                {"from": "person:the_stranger", "rel": "COOKS", "to": "kind:campfire", "because": [11]},
+                {"from": "person:spear_teacher", "rel": "TEACHES", "to": "person:5", "because": [10]},
+                {"from": "person:the_strangers", "rel": "CAMP_AT", "to": "place:east", "because": [10, 11]},
+                {"from": "person:cal", "rel": "TEACHES", "to": "person:5", "because": [10]},
+                {"from": "person:someone_in_the_dark", "rel": "WALKS", "to": "place:east", "because": [12]},
+                {"from": "person:77", "rel": "TEACHES", "to": "person:5", "because": [10]}
+            ]});
+        let (mut p, _) = patch_from(&v, &[10, 11, 12], &|_| None);
+        let unnamed = |x: u64| match x {
+            10 => vec![77],
+            11 => vec![200],
+            _ => vec![],
+        };
+        let anchored = anchor_described(&mut p, &|n| n == "cal" || n == "lio", &unnamed);
+        let ends: Vec<String> = p.edges.iter().map(|e| format!("{} {}", e.from, e.rel)).collect();
+        assert_eq!(ends, ["person:77 TEACHES", "person:200 COOKS", "person:77 TEACHES", "person:the_strangers CAMP_AT", "person:cal TEACHES", "person:someone_in_the_dark WALKS", "person:77 TEACHES"]);
+        assert_eq!(anchored.len(), 3, "{anchored:?}");
+        let nodes: Vec<&str> = p.nodes.iter().map(|n| n.key.as_str()).collect();
+        assert_eq!(nodes, ["person:the_stranger", "person:77"], "a description used for two people keeps its own node; one used for one person is that person");
+    }
+
+    /// Two strangers a mind does not know by name are two nodes, each with its own name and
+    /// deeds: what cues one (its id, "a stranger" in the words) never brings back the other's
+    /// deeds, a memory is shown with who it involves, and when one is named its node takes
+    /// the name.
+    #[tokio::test]
+    #[ignore]
+    async fn a_far_figure_joins_the_person() {
+        // far-handle: what a mind remembered of a figure too far away to make out (person:<handle>)
+        // becomes the person's once made out (the made-out merge), and the handle's node is gone.
+        let pw = std::env::var("LIVING_NEO4J_PASSWORD").expect("password");
+        let run = format!("test-farhandle-{}", crate::llm::now_ms());
+        let s = Store::connect(&std::env::var("LIVING_NEO4J_URI").unwrap_or_else(|_| "127.0.0.1:7689".into()), "neo4j", &pw, &run).await.unwrap();
+        s.ensure_self(1, "Lark").await.unwrap();
+        let now = crate::llm::now_ms();
+        let h = living_rules::script::FAR_HANDLE_BASE + 7;
+        let v = json!({
+            "nodes": [{"key": format!("person:{h}"), "labels": ["Person"], "name": format!("{FAR_NAME_KEPT} #{h}")}, {"key": "person:15", "labels": ["Person"], "name": "Thessaly Marl"}],
+            "edges": [{"from": format!("person:{h}"), "rel": "WALKS", "to": "place:the_strand", "confidence": 0.8, "because": [20]}],
+            "remember": [{"exp": 20, "gist": "Someone too far away to make out walked the strand at dawn."}]
+        });
+        let (p, _) = patch_from(&v, &[20], &|_| Some((now - 1000, 0.8, vec![format!("person:{h}")])));
+        s.apply(1, &p, "t1", now).await.unwrap();
+        let join = Patch { merges: vec![(format!("person:{h}"), "person:15".into())], ..Default::default() };
+        s.apply(1, &join, "t2", now + 1000).await.unwrap();
+        let mut cues = Cues::default();
+        cues.key("person:15", 1.0);
+        let r = s.recall(1, &cues.bounded(), 12, 3).await.unwrap();
+        let facts: Vec<String> = r.facts.iter().map(|f| render(f, &|_| String::new())).collect();
+        assert!(facts.iter().any(|f| f.contains("person:15") && f.contains("WALKS")), "the figure's deed is the person's: {facts:?}");
+        let mut q = s.g.execute(query("MATCH (c:Concept {run: $run, actor: 1}) WHERE c.key STARTS WITH 'person:' RETURN c.key AS key, c.name AS name, c:Merged AS merged ORDER BY key").param("run", run.clone())).await.unwrap();
+        let mut people = Vec::new();
+        while let Some(row) = q.next().await.unwrap() {
+            people.push(format!("{}={} merged={}", row.get::<String>("key").unwrap(), row.get::<String>("name").unwrap_or_default(), row.get::<bool>("merged").unwrap_or(false)));
+        }
+        assert_eq!(people, vec![format!("person:{h}={FAR_NAME_KEPT} #{h} merged=true"), "person:15=Thessaly Marl merged=false".to_string()], "{people:?}");
+        s.g.run(query("MATCH (c:Concept {run: $run}) DETACH DELETE c").param("run", run)).await.unwrap();
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn strangers_stay_apart() {
+        let pw = std::env::var("LIVING_NEO4J_PASSWORD").expect("password");
+        let run = format!("test-strangers-{}", crate::llm::now_ms());
+        let s = Store::connect(&std::env::var("LIVING_NEO4J_URI").unwrap_or_else(|_| "127.0.0.1:7689".into()), "neo4j", &pw, &run).await.unwrap();
+        s.ensure_self(1, "Teodor").await.unwrap();
+        let now = crate::llm::now_ms();
+        let v = json!({
+            "nodes": [{"key": "person:77", "labels": ["Person"], "name": "a stranger #77"}, {"key": "person:200", "labels": ["Person"], "name": "a stranger #200"},
+                      {"key": "person:5", "labels": ["Person"], "name": "Lio"}],
+            "edges": [{"from": "person:77", "rel": "TEACHES_SPEAR", "to": "person:5", "confidence": 0.9, "because": [10]},
+                      {"from": "person:200", "rel": "STANDS_SILENT_AT", "to": "idea:the_cookfire", "confidence": 0.9, "because": [11]}],
+            "remember": [{"exp": 10, "gist": "A stranger was teaching Lio to hunt with a spear."}, {"exp": 11, "gist": "A stranger stood silent by our fire."},
+                         {"exp": 12, "gist": "Rain at dawn."}, {"exp": 13, "gist": "The mill wheel creaked."}]
+        });
+        let involves = |x: u64| match x {
+            10 => vec!["person:77".to_string(), "person:5".to_string()],
+            11 => vec!["person:200".to_string()],
+            _ => vec![],
+        };
+        let (p, _) = patch_from(&v, &[10, 11, 12, 13], &|x| Some((now - 1000 * (20 - x), 0.8, involves(x))));
+        s.apply(1, &p, "t1", now).await.unwrap();
+        // The newcomer (#200) is in sight and someone says "a stranger".
+        let mut cues = Cues::default();
+        cues.key("person:200", 1.0);
+        cues.text("A stranger is standing at the fire; who is the stranger?", 1.0);
+        let r = s.recall(1, &cues.bounded(), 12, 3).await.unwrap();
+        let facts: Vec<String> = r.facts.iter().map(|f| render(f, &|_| String::new())).collect();
+        assert!(facts.iter().any(|f| f.contains("a stranger #200 (person:200)") && f.contains("STANDS_SILENT_AT")), "{facts:?}");
+        assert!(!facts.iter().any(|f| f.contains("person:77")), "the other stranger's deeds came back: {facts:?}");
+        assert!(!r.memories.iter().any(|m| m.0 == 10), "the other stranger's memory came back: {:?}", r.memories);
+        assert_eq!(with_involved(&r.memories.iter().find(|m| m.0 == 11).expect("its own memory").2, r.involved.get(&11)), "A stranger stood silent by our fire. (with a stranger #200)");
+        // "the stranger" alone cues no one.
+        let mut cues = Cues::default();
+        cues.text("the stranger", 1.0);
+        assert_eq!(s.recall(1, &cues.bounded(), 12, 3).await.unwrap().seeds, 0);
+        // Cued by #77, its own memory comes back, said to be about #77; then #77 tells its name.
+        let mut cues = Cues::default();
+        cues.key("person:77", 1.0);
+        let r = s.recall(1, &cues.clone().bounded(), 12, 3).await.unwrap();
+        assert_eq!(with_involved(&r.memories.iter().find(|m| m.0 == 10).expect("its memory").2, r.involved.get(&10)), "A stranger was teaching Lio to hunt with a spear. (with a stranger #77)");
+        assert!(!r.memories.iter().any(|m| m.0 == 11), "{:?}", r.memories);
+        s.rename_people(1, &[("person:77".into(), "Cal".into()), ("person:404".into(), "Nobody".into())]).await.unwrap();
+        // Seen far off again later: a node named once someone was made out keeps its name
+        // (far-label); a node only ever seen far off takes "a stranger #id" once made out.
+        s.rename_people(1, &[("person:77".into(), format!("{FAR_NAME_KEPT} #77"))]).await.unwrap();
+        s.rename_people(1, &[("person:200".into(), format!("{FAR_NAME_KEPT} #200"))]).await.unwrap();
+        let r = s.recall(1, &cues.bounded(), 12, 3).await.unwrap();
+        assert_eq!(r.involved.get(&10), Some(&vec!["Lio".to_string(), "Cal".to_string()]));
+        let mut q = s.g.execute(query("MATCH (c:Concept {run: $run, actor: 1}) WHERE c.key STARTS WITH 'person:' RETURN c.key AS key, c.name AS name ORDER BY key").param("run", run.clone())).await.unwrap();
+        let mut people = Vec::new();
+        while let Some(row) = q.next().await.unwrap() {
+            people.push(format!("{}={}", row.get::<String>("key").unwrap(), row.get::<String>("name").unwrap_or_default()));
+        }
+        assert_eq!(people, vec!["person:200=a stranger #200", "person:5=Lio", "person:77=Cal"], "renaming makes no node");
+        s.g.run(query("MATCH (c:Concept {run: $run}) DETACH DELETE c").param("run", run)).await.unwrap();
     }
 
     #[test]
@@ -2078,6 +2662,56 @@ mod tests {
         let mut held: Vec<String> = rows.next().await.unwrap().unwrap().get("held").unwrap();
         held.sort();
         assert_eq!(held, vec!["place:hill".to_string(), "place:marsh".to_string()]);
+        s.g.run(query("MATCH (c:Concept {run: $run}) DETACH DELETE c").param("run", run)).await.unwrap();
+    }
+
+    /// Projects (`LIVING_PROJECTS=1`) against a live Neo4j: taken up, revised, served, ended
+    /// with an outcome and faded, all kept as history.
+    #[tokio::test]
+    #[ignore]
+    async fn projects_are_pursued_served_ended_and_faded() {
+        let pw = std::env::var("LIVING_NEO4J_PASSWORD").expect("password");
+        let run = format!("test-projects-{}", crate::llm::now_ms());
+        let s = Store::connect(&std::env::var("LIVING_NEO4J_URI").unwrap_or_else(|_| "127.0.0.1:7689".into()), "neo4j", &pw, &run).await.unwrap();
+        s.ensure_self(1, "Ines").await.unwrap();
+        let t0 = crate::llm::now_ms() - 2 * 3_600_000;
+        let now = crate::llm::now_ms();
+        let take = |v: Value| {
+            let (mut patch, mut notes) = (Patch::default(), Vec::new());
+            projects_into(&v, &mut patch, &[3], &mut notes);
+            patch
+        };
+        // Two hours ago: a raft and a hut; now: the raft moves on, the hut is done, a well begins.
+        s.apply(1, &take(json!({"projects": [{"key": "project:raft", "aim": "Build a raft", "progress": "none yet", "next_step": "cut logs", "because": [3]},
+                                            {"key": "project:hut", "aim": "Raise a hut"}, {"key": "project:fence", "aim": "Fence the goats"}]})), "consolidate-1", t0).await.unwrap();
+        s.apply(1, &take(json!({"projects": [{"key": "project:raft", "progress": "two logs cut", "next_step": "find vines"},
+                                            {"key": "project:hut", "ended": "done", "why": "it stands"},
+                                            {"key": "project:well", "aim": "Dig a well"}]})), "consolidate-2", now).await.unwrap();
+        let (open, total) = s.projects(1, 3).await.unwrap();
+        let keys: Vec<&str> = open.iter().map(|p| p.key.as_str()).collect();
+        assert_eq!(total, 3, "{keys:?}");
+        assert!(keys.contains(&"project:raft") && keys.contains(&"project:well") && !keys.contains(&"project:hut"), "{keys:?}");
+        assert_eq!(keys.last(), Some(&"project:fence"), "the unreinforced one is weakest: {open:?}");
+        let raft = open.iter().find(|p| p.key == "project:raft").unwrap();
+        assert_eq!((raft.aim.as_str(), raft.progress.as_str(), raft.next_step.as_str()), ("Build a raft", "two logs cut", "find vines"));
+        assert!(raft.since <= t0 + 1 && raft.t >= now, "since kept, t renewed: {raft:?}");
+        // A deliberation serves the fence: it is reinforced; an ended project cannot be served.
+        assert!(s.serve_project(1, "project:fence", "mend the fence", "deliberate-9", now).await.unwrap());
+        assert!(!s.serve_project(1, "project:hut", "admire the hut", "deliberate-9", now).await.unwrap());
+        let (open, _) = s.projects(1, 3).await.unwrap();
+        let fence = open.iter().find(|p| p.key == "project:fence").unwrap();
+        assert!(fence.served == 1 && fence.strength > 0.8, "{fence:?}");
+        // The hut was closed with its outcome; nothing was deleted.
+        let mut rows = s.g.execute(s.q("MATCH (:Concept {run: $run, actor: $actor, key: 'self'})-[r:PURSUES]->(p {key: 'project:hut'}) RETURN r.open AS open, r.outcome AS outcome, r.outcome_why AS why, r.retracted_by AS by, p.outcome AS po", 1)).await.unwrap();
+        let r = rows.next().await.unwrap().unwrap();
+        assert_eq!((r.get::<bool>("open").unwrap(), r.get::<String>("outcome").unwrap(), r.get::<String>("why").unwrap(), r.get::<String>("by").unwrap(), r.get::<String>("po").unwrap()),
+                   (false, "done".into(), "it stands".into(), "consolidate-2".into(), "done".into()));
+        // An hour and a half without being taken up again: every project fades (0.9 → 0.09).
+        s.fade(1, 0.2, now + 90 * 60_000).await.unwrap();
+        let mut rows = s.g.execute(s.q("MATCH (:Concept {run: $run, actor: $actor, key: 'self'})-[r:PURSUES]->(p) RETURN count(r) AS all, sum(CASE WHEN r.retracted_by = 'faded' THEN 1 ELSE 0 END) AS faded", 1)).await.unwrap();
+        let r = rows.next().await.unwrap().unwrap();
+        assert_eq!((r.get::<i64>("all").unwrap(), r.get::<i64>("faded").unwrap()), (4, 3));
+        assert_eq!(s.projects(1, 3).await.unwrap(), (Vec::new(), 0));
         s.g.run(query("MATCH (c:Concept {run: $run}) DETACH DELETE c").param("run", run)).await.unwrap();
     }
 

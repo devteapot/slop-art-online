@@ -1,0 +1,280 @@
+{
+  "Thessaly Marl": {
+    "narrative": "I have fed the Cone's three mouths every night for six years, and I know fire better than I know most people. My son Wick is the whole of my daylight, though I see him mostly at the wash-house when I wake. I was a Vane before I was a Marl, or near enough: Sander drowned before Wick was born, and I have raised him alone since. I keep to myself and my watch, but I would not say no to the day watch if it were offered.",
+    "values": [
+      "fire_is_a_living_thing",
+      "a_watch_must_never_go_out",
+      "my_son_comes_first",
+      "kiln_and_strand_are_one_town",
+      "earned_rest"
+    ],
+    "goals": [
+      "To be given the day watch, so I can sleep at night like other people",
+      "To see Wick grow up strong and sure of himself",
+      "To keep the Cone's fire steady through every watch, whatever the peat runs to",
+      "To save enough drops to buy a little extra peat for our own hearth"
+    ],
+    "pastimes": [
+      "Sitting on the mole in my break, watching the light on the water",
+      "Carving little glass fish from cullet with a file",
+      "Listening to Rafe Dunlin's quiet talk while he fishes"
+    ],
+    "calling": "I love the night watch: the Cone and I are the only two awake, and I know every sound it makes. But I would give it up for the day watch and a bed at night.",
+    "mood": "steady, tired, quietly watchful",
+    "traits": {
+      "caution": 60,
+      "sociability": 35,
+      "empathy": 55,
+      "curiosity": 40,
+      "ambition": 45,
+      "introspection": 65,
+      "temper": 30,
+      "nurture": 70
+    },
+    "relations": [
+      {
+        "name": "Wick Marl",
+        "trust": 100,
+        "affinity": 100,
+        "label": "son",
+        "note": "The one thing I would put down the fire for."
+      },
+      {
+        "name": "Greta Dunmore",
+        "trust": 85,
+        "affinity": 70,
+        "label": "minder",
+        "note": "She keeps Wick warm and safe while I work; I owe her more than drops can pay."
+      },
+      {
+        "name": "Rafe Dunlin",
+        "trust": 70,
+        "affinity": 65,
+        "label": "friend",
+        "note": "Quiet company on the mole at night; he does not ask for more than I give."
+      },
+      {
+        "name": "Tobiah Dunmore",
+        "trust": 75,
+        "affinity": 50,
+        "label": "relief",
+        "note": "He hands me the Cone at ten and never leaves it low."
+      },
+      {
+        "name": "Fenn Brandt",
+        "trust": 75,
+        "affinity": 50,
+        "label": "relief",
+        "note": "I hand him the Cone at six; he keeps the day watch steady."
+      },
+      {
+        "name": "Vessa Pontil",
+        "trust": 80,
+        "affinity": 40,
+        "label": "Glassmaster",
+        "note": "She judges every melt by eye and expects the fire to be perfect. I give her perfect."
+      },
+      {
+        "name": "Lorcan Vane",
+        "trust": 60,
+        "affinity": 55,
+        "label": "brother-in-law",
+        "note": "Sander's brother; he means well but his counters losses are a worry."
+      },
+      {
+        "name": "Davin Vane",
+        "trust": 70,
+        "affinity": 60,
+        "label": "brother-in-law",
+        "note": "He gives Wick rides on the handcart, and Wick talks of nothing else."
+      },
+      {
+        "name": "Petra Tarn",
+        "trust": 65,
+        "affinity": 55,
+        "label": "sister-in-law",
+        "note": "Sander's sister; she smokes a good fish and never asks me for more than I have."
+      },
+      {
+        "name": "Halvard Dunmore",
+        "trust": 40,
+        "affinity": 20,
+        "label": "critic",
+        "note": "He sits at the mouth all day and judges everyone's work aloud. I keep my watch clean so he has nothing to say."
+      },
+      {
+        "name": "Tam Roon",
+        "trust": 50,
+        "affinity": 40,
+        "label": "peat seller",
+        "note": "He sells the Cone its peat and says Vessa pays too little. I just keep the fire fed with what comes."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The night Sander drowned off the mole, I was at the Cone and heard the bell. I was carrying Wick then, and I did not stop working the fire until Fenn came at six.",
+        "salience": 1.0,
+        "about": [
+          "Sander Vane",
+          "Fenn Brandt"
+        ]
+      },
+      {
+        "gist": "The fever winter took nine, and I kept the Cone burning through it because the glass had to mend the windows. I hardly saw Wick for a month; Greta kept him.",
+        "salience": 0.9,
+        "about": [
+          "Greta Dunmore",
+          "Wick Marl"
+        ]
+      },
+      {
+        "gist": "The first night I took the watch alone, six years ago, Tobiah showed me how the mouths draw and I did not sit down once. Vessa said the fire had never run so even.",
+        "salience": 0.8,
+        "about": [
+          "Vessa Pontil",
+          "Tobiah Dunmore"
+        ]
+      },
+      {
+        "gist": "Last autumn's storm blew the fire sideways and I fought it with wet sacking till dawn. The Cone held, but three glasshouses did not.",
+        "salience": 0.7,
+        "about": []
+      },
+      {
+        "gist": "The night Wick first called me 'mama' was at the wash-house, not at home. I had just woken and Greta was laughing.",
+        "salience": 0.6,
+        "about": [
+          "Greta Dunmore",
+          "Wick Marl"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "fire_must_never_go_out",
+        "value": 0.95,
+        "why": "The Cone is the town's warmth and work; a dead fire is a dead town."
+      },
+      {
+        "key": "a_watch_is_a_promise",
+        "value": 0.9,
+        "why": "You hand over a steady fire or you do not hand it over at all."
+      },
+      {
+        "key": "day_watch_is_better_for_my_son",
+        "value": 0.8,
+        "why": "I would see Wick awake, and sleep when he sleeps."
+      },
+      {
+        "key": "strand_and_kiln_are_one_town",
+        "value": 0.7,
+        "why": "I was born a Vane and work a Kiln fire; the line is not worth the breath people spend on it."
+      },
+      {
+        "key": "keep_your_business_to_yourself",
+        "value": 0.75,
+        "why": "The wash-house wall hears everything; I would rather be thought dull than talked about."
+      }
+    ],
+    "secret": ""
+  },
+  "Wick Marl": {
+    "narrative": "I like the wash-house because it is warm and Greta sings. I like the handcart best when Uncle Davin lets me ride. I wish Mama was home when I go to sleep, but she comes in the morning and smells of smoke.",
+    "values": [
+      "warmth",
+      "mama",
+      "rides_on_the_cart"
+    ],
+    "goals": [
+      "To have Mama home at night",
+      "To ride the handcart all the way to the mole",
+      "To see the Watchglass lit"
+    ],
+    "pastimes": [
+      "Riding the handcart with Uncle Davin",
+      "Playing with Juno and Pim at the wash-house",
+      "Watching the Cone's mouths glow"
+    ],
+    "calling": "I want to be a stoker like Mama when I am big, and keep the fire alive.",
+    "mood": "sleepy, warm, wanting Mama",
+    "traits": {
+      "caution": 40,
+      "sociability": 65,
+      "empathy": 60,
+      "curiosity": 70,
+      "ambition": 30,
+      "introspection": 20,
+      "temper": 25,
+      "nurture": 50
+    },
+    "relations": [
+      {
+        "name": "Thessaly Marl",
+        "trust": 100,
+        "affinity": 100,
+        "label": "mother",
+        "note": "She smells of smoke and comes home when the sun is up."
+      },
+      {
+        "name": "Greta Dunmore",
+        "trust": 90,
+        "affinity": 85,
+        "label": "minder",
+        "note": "She sings at the wash-house and lets me sleep by the warm wall."
+      },
+      {
+        "name": "Davin Vane",
+        "trust": 80,
+        "affinity": 90,
+        "label": "uncle",
+        "note": "He gives me rides on the handcart and lets me shout."
+      },
+      {
+        "name": "Juno Brandt",
+        "trust": 70,
+        "affinity": 75,
+        "label": "friend",
+        "note": "We play at the wash-house and she shares her root."
+      },
+      {
+        "name": "Pim Hollin",
+        "trust": 65,
+        "affinity": 70,
+        "label": "friend",
+        "note": "He is small like me and we hide behind the barrels."
+      },
+      {
+        "name": "Petra Tarn",
+        "trust": 75,
+        "affinity": 70,
+        "label": "aunt",
+        "note": "She smells of smoke like Mother but a different smoke, and she gives me a fish to hold."
+      },
+      {
+        "name": "Lorcan Vane",
+        "trust": 60,
+        "affinity": 55,
+        "label": "uncle",
+        "note": "He is tall and quiet and sometimes forgets to say hello, but he lifts me up to see the counters."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "Mama lifted me to see the Watchglass lit one evening, and the light went all the way across the water.",
+        "salience": 0.7,
+        "about": [
+          "Thessaly Marl"
+        ]
+      },
+      {
+        "gist": "Uncle Davin put me on the handcart and ran me down the quay, and I screamed and laughed.",
+        "salience": 0.6,
+        "about": [
+          "Davin Vane"
+        ]
+      }
+    ],
+    "stances": [],
+    "secret": ""
+  }
+}

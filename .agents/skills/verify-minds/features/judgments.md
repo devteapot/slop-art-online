@@ -6,9 +6,14 @@ A graph condition `{"judged": {"q": "fight_risk", "above": 0.6, "else": false}}`
 
 - The request's `state` is the character's goals, plan and temperament, its body as last felt in a deliberation scene (with its age), its last ten experiences and its feelings about who is in them.
 - Every exchange is journaled with purpose `judge`, latency, `prompt_tokens` (input tokens), `cost_usd` and the cached values.
+- **Cost.** `cost_usd` is input tokens × Jev's price from the local prices file (`living/mind/src/prices.rs`):
+  - the file is found through `LIVING_PRICES`, else `living/configs/prices.local.json`, else `~/.config/slop-living/prices.local.json`, and its shape is `living/configs/prices.example.json`;
+  - without a file, `cost_usd` is null, never 0;
+  - the price is never committed (docs/STORE.md, "Model terms").
+  The `jev` case writes a scratch file with a made-up price, checks each exchange's cost against tokens × price, and checks the `priced from` log line.
 - `mind_judged` accepts only the character's controller; at most 8 judgments per character; a TTL of at most ten minutes; the rows die with the character.
 
-Sources: `living/mind/src/mind/judge.rs`, `living/configs/judgments.json`, `living/authority/src/mind.rs` (`mind_judged`), `living/authority/src/tables.rs` (`judged`), `living/authority/src/brain.rs` (`Cond::Judged`), `living/rules/src/graph.rs` (`Judged`).
+Sources: `living/mind/src/mind/judge.rs`, `living/mind/src/prices.rs`, `living/configs/judgments.json`, `living/authority/src/mind.rs` (`mind_judged`), `living/authority/src/tables.rs` (`judged`), `living/authority/src/brain.rs` (`Cond::Judged`), `living/rules/src/graph.rs` (`Judged`).
 
 ## Driving it
 

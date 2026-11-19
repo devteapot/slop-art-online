@@ -1,0 +1,232 @@
+{
+ "schema": 1,
+ "family": "building:cone",
+ "id": "20261111-8e52115f-7152a8",
+ "published": "2026-11-11T20:57:45+01:00",
+ "track": "kit-2",
+ "maker": "Claude Fable 5.2",
+ "note": "kit-2 pass 2: lit windows and parapets from the plan; no two faces in one plane (the flicker of the owner's walk); every lot's eye-height cells. Unchanged in design; hidden and coplanar faces removed",
+ "source": {
+  "commit": "8e52115f11f1e657b2d7e0c039375145d25a704f",
+  "branch": "kit-2",
+  "dirty": false,
+  "generator": "living/tools/blender/cullet.py",
+  "generator_sha256": "2a1d98999573e7816cef047ccc6c3aab5e04b0911d1071f1054acf8f7a29a287",
+  "generator_state": "committed",
+  "seed": "83",
+  "params": {
+   "plan": "living/seeds/worlds/cullet/plan.json"
+  }
+ },
+ "renderer": {
+  "method": "asset-view",
+  "commit": "8e52115f11f1e657b2d7e0c039375145d25a704f",
+  "dirty": false,
+  "key": "bin:cbdab2a8",
+  "env": "cullet",
+  "hours": {
+   "day": 15.0,
+   "night": 22.0
+  },
+  "weather": "clear",
+  "day_curve": true,
+  "preset": "2947e3c0",
+  "binary": "/home/carlid/.t3/worktrees/slop-art-online/t3-2190f8f1-741aca404e5ab819/.local/kit2-target/release/living-game",
+  "commit_assumed": "8e52115f11f1e657b2d7e0c039375145d25a704f",
+  "repo": "/home/carlid/.t3/worktrees/slop-art-online/t3-2190f8f1-741aca404e5ab819"
+ },
+ "preset": "building",
+ "media": "media/building-cone/20261111-8e52115f-7152a8",
+ "members": [
+  {
+   "name": "cone",
+   "role": "subject",
+   "token_kind": "file",
+   "source_path": ".local/kit-2/board/cone/cone.glb",
+   "sha256": "d0aeb1b16d8b446c4f7f806d72c8bed3e442988cbcc355e69538d2c6a8a4b1e0",
+   "stats": {
+    "file": "cone.glb",
+    "sha256": "d0aeb1b16d8b446c4f7f806d72c8bed3e442988cbcc355e69538d2c6a8a4b1e0",
+    "bytes": 683056,
+    "triangles": 9882,
+    "vertices": 19424,
+    "parts": {
+     "cone": 9882
+    },
+    "nodes": 1,
+    "bones": 0,
+    "spring_bones": 0,
+    "materials": [
+     "Body",
+     "GlowAmber"
+    ],
+    "textures": 0,
+    "texture_bytes": 0,
+    "morph_targets": 0,
+    "spring_groups": 0,
+    "vertex_colours": true,
+    "clips": [],
+    "glow": true,
+    "glow_triangles": 24,
+    "palette": [
+     {
+      "hex": "#3f4249",
+      "share": 0.3546
+     },
+     {
+      "hex": "#53342c",
+      "share": 0.3024
+     },
+     {
+      "hex": "#5c5e64",
+      "share": 0.1535
+     },
+     {
+      "hex": "#252120",
+      "share": 0.0948
+     },
+     {
+      "hex": "#3c2b28",
+      "share": 0.0283
+     },
+     {
+      "hex": "#817b72",
+      "share": 0.0168
+     },
+     {
+      "hex": "#784231",
+      "share": 0.0151
+     },
+     {
+      "hex": "#944c38",
+      "share": 0.0103
+     },
+     {
+      "hex": "#d3cdb5",
+      "share": 0.007
+     },
+     {
+      "hex": "#49515e",
+      "share": 0.0041
+     },
+     {
+      "hex": "#2c2c31",
+      "share": 0.0036
+     },
+     {
+      "hex": "#c78029",
+      "share": 0.0033
+     },
+     {
+      "hex": "#56423e",
+      "share": 0.0029
+     },
+     {
+      "hex": "#8d887e",
+      "share": 0.0011
+     },
+     {
+      "hex": "other",
+      "share": 0.0023
+     }
+    ]
+   },
+   "file": "files/cone.glb",
+   "report": {
+    "file": "cone/cone.glb",
+    "what": "lot",
+    "kind": "cone",
+    "size_m": [
+     14,
+     14
+    ],
+    "plan_height_m": 24.0,
+    "seed": 9745,
+    "above_floor_m": [
+     [
+      -6.998,
+      -6.95
+     ],
+     [
+      6.998,
+      7.002
+     ]
+    ],
+    "height_m": 24.0,
+    "foundation_m": 1.8,
+    "tris": 9882,
+    "materials": {
+     "Body": 9858,
+     "GlowAmber": 24
+    },
+    "surface_tagged_share": 1.0,
+    "palette_share": 0.9312,
+    "palette_wear_blend_share": 0.0688,
+    "budget_tris": 12000,
+    "hidden_faces_removed": 117,
+    "coplanar_sheets_parted": 46,
+    "doors": [],
+    "sha256": "d0aeb1b16d8b446c4f7f806d72c8bed3e442988cbcc355e69538d2c6a8a4b1e0",
+    "body_m": [
+     14.0,
+     14.0
+    ],
+    "ridge_m": 24.0,
+    "opening_m": 3.2,
+    "eye_solid": 0.692,
+    "eye_cells": "28:1i1h1a2e2a1j1h1a1d1g4a1g1d10a2k5a5k4a3k1h8a2k4a1e5k1e2a1e5k1e6a2k3a1h16k1h2a1c2a2k2a1i18k1i1a1b2a2k1a1h20k1h1a1f1a2k1f22k2i1c27k1f1i26k2a26k1b1a26k1d1g26k1g112k1g26k1g1e26k1e1a1j1d1e22k1j5a20k9a18k9a1b18k1b7a1e20k1f6a1b20k1b8a1h16k1h11a1e14k1e14a1h10k1g19a1g4k1g11a"
+   },
+   "shots": [
+    "front",
+    "three-quarter",
+    "side",
+    "back",
+    "close",
+    "game",
+    "night-three-quarter",
+    "night-game"
+   ],
+   "clips": [],
+   "view": {
+    "size_m": [
+     14.334379196166992,
+     25.799999237060547,
+     14.250099182128906
+    ],
+    "triangles": 9882,
+    "vertices": 19424,
+    "meshes": 2,
+    "materials": [
+     "Body",
+     "GlowAmber"
+    ],
+    "glow": true,
+    "vertex_colours": true
+   }
+  }
+ ],
+ "delivered": [
+  {
+   "title": "kit-2 page: the dressed city at 13:00, dusk and 21:30 against pass 1, the ground, the checks",
+   "path": "delivered/kit-2-page/index.html",
+   "from": ".local/kit-2-page"
+  }
+ ],
+ "baseline_render": {
+  "version": "20261111-80b4ec94-95508a",
+  "path": "vs/20261111-80b4ec94-95508a/render",
+  "renderer": "bin:cbdab2a8",
+  "members": {
+   "cone": [
+    "front",
+    "three-quarter",
+    "side",
+    "back",
+    "close",
+    "game",
+    "night-three-quarter",
+    "night-game"
+   ]
+  }
+ }
+}

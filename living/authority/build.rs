@@ -24,7 +24,20 @@ fn main() {
     println!("cargo:rerun-if-changed={}", species_src.display());
     let out = std::path::Path::new(&std::env::var("OUT_DIR").unwrap()).to_path_buf();
     // `none`: a floor module, with no seed compiled in; `create_floor` gives it one at runtime.
-    let seed_text = if name == "none" { String::new() } else { std::fs::read_to_string(&src).unwrap_or_else(|e| panic!("seed {}: {e}", src.display())) };
+    let mut seed_text = if name == "none" { String::new() } else { std::fs::read_to_string(&src).unwrap_or_else(|e| panic!("seed {}: {e}", src.display())) };
+    // A seed's laws overlay kept in its own file (`laws_file`, relative to `living/seeds`) is
+    // compiled in as its text (`laws`), as `living/tools/seed_text.py` sends it to `create_floor`.
+    if !seed_text.is_empty() {
+        let mut v: serde_json::Value = serde_json::from_str(&seed_text).expect("seed json");
+        let file = v.get("laws_file").and_then(|f| f.as_str()).map(String::from);
+        if let Some(file) = file.filter(|_| v.get("laws").and_then(|l| l.as_str()).is_none_or(|l| l.trim().is_empty())) {
+            let path = seeds.join(&file);
+            println!("cargo:rerun-if-changed={}", path.display());
+            let laws = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("seed laws_file {}: {e}", path.display()));
+            v["laws"] = serde_json::Value::String(laws);
+            seed_text = serde_json::to_string(&v).unwrap();
+        }
+    }
     std::fs::write(out.join("seed.json"), &seed_text).unwrap();
     let mut species: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&species_src).unwrap()).expect("species.json");
     let seed: serde_json::Value = if seed_text.is_empty() { serde_json::json!({}) } else { serde_json::from_str(&seed_text).expect("seed json") };

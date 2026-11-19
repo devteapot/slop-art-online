@@ -1,0 +1,230 @@
+{
+ "schema": 1,
+ "family": "building:lamp-house",
+ "id": "20261111-a34e317f-51f128",
+ "published": "2026-11-11T21:07:24+01:00",
+ "track": "kit-2",
+ "maker": "Claude Fable 5.2",
+ "note": "kit-2 pass 2: lit windows and parapets from the plan; no two faces in one plane (the flicker of the owner's walk); every lot's eye-height cells. New: the Faros' house on the mole's root",
+ "source": {
+  "commit": "a34e317f2de27101929fa770388a37f1d1b6d62e",
+  "branch": "kit-2",
+  "dirty": false,
+  "generator": "living/tools/blender/cullet.py",
+  "generator_sha256": "2a1d98999573e7816cef047ccc6c3aab5e04b0911d1071f1054acf8f7a29a287",
+  "generator_state": "committed",
+  "seed": "83",
+  "params": {
+   "plan": "living/seeds/worlds/cullet/plan.json"
+  }
+ },
+ "renderer": {
+  "method": "asset-view",
+  "commit": "a34e317f2de27101929fa770388a37f1d1b6d62e",
+  "dirty": false,
+  "key": "bin:cbdab2a8",
+  "env": "cullet",
+  "hours": {
+   "day": 15.0,
+   "night": 22.0
+  },
+  "weather": "clear",
+  "day_curve": true,
+  "preset": "2947e3c0",
+  "binary": "/home/carlid/.t3/worktrees/slop-art-online/t3-2190f8f1-741aca404e5ab819/.local/kit2-target/release/living-game",
+  "commit_assumed": "a34e317f2de27101929fa770388a37f1d1b6d62e",
+  "repo": "/home/carlid/.t3/worktrees/slop-art-online/t3-2190f8f1-741aca404e5ab819"
+ },
+ "preset": "building",
+ "media": "media/building-lamp-house/20261111-a34e317f-51f128",
+ "members": [
+  {
+   "name": "lamp_house",
+   "role": "subject",
+   "token_kind": "file",
+   "source_path": ".local/kit-2/board/lamp_house/lamp_house.glb",
+   "sha256": "6445e4a10804c3b510be1320110a93f21e108e4828fe5aaade7da90efac0eda1",
+   "stats": {
+    "file": "lamp_house.glb",
+    "sha256": "6445e4a10804c3b510be1320110a93f21e108e4828fe5aaade7da90efac0eda1",
+    "bytes": 167788,
+    "triangles": 2459,
+    "vertices": 4713,
+    "parts": {
+     "lamp_house": 2459
+    },
+    "nodes": 1,
+    "bones": 0,
+    "spring_bones": 0,
+    "materials": [
+     "Body",
+     "Glow"
+    ],
+    "textures": 0,
+    "texture_bytes": 0,
+    "morph_targets": 0,
+    "spring_groups": 0,
+    "vertex_colours": true,
+    "clips": [],
+    "glow": true,
+    "glow_triangles": 24,
+    "palette": [
+     {
+      "hex": "#3b3f46",
+      "share": 0.4041
+     },
+     {
+      "hex": "#ede8da",
+      "share": 0.2037
+     },
+     {
+      "hex": "#5a5f65",
+      "share": 0.1659
+     },
+     {
+      "hex": "#211f1f",
+      "share": 0.1322
+     },
+     {
+      "hex": "#47505d",
+      "share": 0.0319
+     },
+     {
+      "hex": "#c7c3b6",
+      "share": 0.0174
+     },
+     {
+      "hex": "#4a322c",
+      "share": 0.0164
+     },
+     {
+      "hex": "#8c989e",
+      "share": 0.0084
+     },
+     {
+      "hex": "#3a756f",
+      "share": 0.0052
+     },
+     {
+      "hex": "#626e81",
+      "share": 0.005
+     },
+     {
+      "hex": "#603a2b",
+      "share": 0.0047
+     },
+     {
+      "hex": "#abaaa0",
+      "share": 0.0017
+     },
+     {
+      "hex": "#484b4d",
+      "share": 0.0015
+     },
+     {
+      "hex": "#2b2c31",
+      "share": 0.0008
+     },
+     {
+      "hex": "other",
+      "share": 0.0011
+     }
+    ]
+   },
+   "file": "files/lamp_house.glb",
+   "report": {
+    "file": "lamp_house/lamp_house.glb",
+    "what": "lot",
+    "kind": "lamp_house",
+    "size_m": [
+     6,
+     6
+    ],
+    "plan_height_m": 8.82,
+    "seed": 16671,
+    "above_floor_m": [
+     [
+      -3.07,
+      -3.0
+     ],
+     [
+      3.07,
+      3.03
+     ]
+    ],
+    "height_m": 10.63,
+    "foundation_m": 1.8,
+    "tris": 2459,
+    "materials": {
+     "Body": 2435,
+     "Glow": 24
+    },
+    "surface_tagged_share": 1.0,
+    "palette_share": 0.8857,
+    "palette_wear_blend_share": 0.1143,
+    "budget_tris": 3500,
+    "hidden_faces_removed": 46,
+    "coplanar_sheets_parted": 32,
+    "doors": [
+     {
+      "at": [
+       1.85,
+       -1.85,
+       1.36
+      ],
+      "along": [
+       1.0,
+       0.0,
+       0.0
+      ],
+      "width_m": 0.9,
+      "height_m": 2.0
+     }
+    ],
+    "sha256": "6445e4a10804c3b510be1320110a93f21e108e4828fe5aaade7da90efac0eda1",
+    "ridge_m": 8.82,
+    "state": "lived in",
+    "door_colour": "sea_green",
+    "household": "faro",
+    "front_m": 6,
+    "eave_m": 6.01,
+    "storey_m": 2.75,
+    "lit": [
+     "g",
+     "u0"
+    ],
+    "keepsake": "a lamp-oil drum and a coil of wick",
+    "eye_solid": 0.837,
+    "eye_cells": "12:12a2k1e1c1j3k1j1f1h121k"
+   },
+   "shots": [
+    "front",
+    "three-quarter",
+    "side",
+    "back",
+    "close",
+    "game",
+    "night-three-quarter",
+    "night-game"
+   ],
+   "clips": [],
+   "view": {
+    "size_m": [
+     6.139999866485596,
+     12.430000305175781,
+     6.054378509521484
+    ],
+    "triangles": 2459,
+    "vertices": 4713,
+    "meshes": 2,
+    "materials": [
+     "Body",
+     "Glow"
+    ],
+    "glow": true,
+    "vertex_colours": true
+   }
+  }
+ ],
+ "delivered": []
+}

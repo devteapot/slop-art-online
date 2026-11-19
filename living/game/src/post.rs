@@ -14,7 +14,9 @@ use bevy::render::{
         binding_types::{sampler, texture_2d, texture_depth_2d, uniform_buffer},
         *,
     },
+    render_asset::RenderAssets,
     renderer::{RenderContext, RenderDevice, ViewQuery},
+    texture::{FallbackImage, GpuImage},
     view::ViewTarget,
     RenderApp, RenderStartup,
 };
@@ -41,12 +43,110 @@ pub struct Edges {
     pub bank_color: Vec4,
     /// Rain: x amount (0 = none), y slant, z brightness, w drift along z (fog banks).
     pub rain: Vec4,
+    /// The edge of my sight (`sightedge.rs`): xy where I stand (world x, z), z the radius (m),
+    /// w the mode (0 fade only, 1 not seen now, 2 limited view).
+    pub sight: Vec4,
+    /// Not seen now: x, y the soft band inside and beyond the radius (m), z dimming,
+    /// w desaturation.
+    pub sight_look: Vec4,
+    /// rgb: the fog's colour (linear), a: how far not seen now is flattened toward it.
+    pub sight_fog: Vec4,
+    /// x: where limited view is fully fogged, times the radius; y: how far limited view fogs
+    /// what lies behind something (0–1).
+    pub sight_far: Vec4,
+    /// Where my sight lines reach (`sightfield.rs`): xy the world x, z of the field texture's
+    /// corner, z one over its side (m), w 1 when it holds a field.
+    pub sight_field: Vec4,
+    /// x: how "not seen now" is drawn (`sightedge::Look`: 0 grey, 1 wash, 2 lantern, 3 shadows,
+    /// 4 hatch, 5 memory); y: how light the scene is (0 night, 1 day); z: 1 when the memory
+    /// texture is current.
+    pub sight_extra: Vec4,
+    /// The scene's shadow tone for the shade look: x the target hue (the sky fill's, else the
+    /// style's `shadow_hue`), y `hue_shift`, z `shadow_saturation`, w `shadow_depth`.
+    pub sight_shade: Vec4,
+    /// rgb: the style's `shadow_tint`.
+    pub sight_tint: Vec4,
+    /// The film ([`Film`]): x 0 screen, 1 soft (weighted by the pixel's light); y, z: the
+    /// luminance (linear) over which soft goes from none of the film to all of it; w how much
+    /// soft spares dark pixels now (1 by day, 0 by night: [`soft_by_light`]).
+    pub film: Vec4,
 }
+
+/// The film finish (`edges.wesl`): a warm gradient from the top of the frame. Settings › Play ›
+/// Film; kept in the settings file only once chosen there, so a viewer who never chose one
+/// follows this default. `LIVING_GAME_FILM=soft|screen|off` starts in one (headless captures).
+#[derive(Resource, Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum Film {
+    /// The screen blend weighted by the pixel's own light: the sky and lit things take it as
+    /// the screen did; dark hair, cloth and shadows keep their colour (film-1, 2026-11-12). By
+    /// day only: at night it is the screen, the moonlit haze the night look is built on. A
+    /// tint (`color * (1 + g)`) was tried and dropped: it moved the sky and greens and pushed
+    /// skin orange.
+    #[default]
+    Soft,
+    /// The screen blend on every pixel, as before film-1: it lifts dark pixels most.
+    Screen,
+    Off,
+}
+
+impl Film {
+    pub const ALL: [Film; 3] = [Film::Soft, Film::Screen, Film::Off];
+
+    pub fn parse(s: &str) -> Option<Film> {
+        match s {
+            "soft" => Some(Film::Soft),
+            "screen" | "today" => Some(Film::Screen),
+            "off" | "none" => Some(Film::Off),
+            _ => None,
+        }
+    }
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Film::Soft => "soft",
+            Film::Screen => "screen",
+            Film::Off => "off",
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Film::Soft => "Soft",
+            Film::Screen => "Full",
+            Film::Off => "None",
+        }
+    }
+
+    pub fn from_env() -> Option<Film> {
+        std::env::var("LIVING_GAME_FILM").ok().and_then(|v| Film::parse(&v))
+    }
+}
+
+/// Soft film: below `SOFT_FROM` (linear luminance, as the pass sees it) a pixel takes none of the
+/// film, above `SOFT_TO` all of it.
+const SOFT_FROM: f32 = 0.02;
+const SOFT_TO: f32 = 0.25;
+
+/// How much the soft film spares dark pixels at the atmosphere's light (lux): fully by day, not at
+/// night, where the day curve's film is the moonlit blue haze the night look is built on (and
+/// unseen ground's shade was tuned with). Without an atmosphere, day.
+fn soft_by_light(lux: Option<f32>) -> f32 {
+    const NIGHT: f32 = 2800.0;
+    const DAY: f32 = 7000.0;
+    lux.map_or(1.0, |l| ((l - NIGHT) / (DAY - NIGHT)).clamp(0.0, 1.0))
+}
+
+/// The sight field's texture and the memory of it (`sightfield.rs`), on the camera beside its
+/// [`Edges`].
+#[derive(Component, Clone, ExtractComponent)]
+#[extract_app(RenderApp)]
+pub struct SightTexture(pub Handle<Image>, pub Handle<Image>);
 
 /// Feed the finishing pass from the style profile, the sun and the camera.
 #[allow(clippy::type_complexity)]
 pub fn update(
     style: Res<crate::style::Style>,
+    film: Res<Film>,
     atmo: Option<Res<crate::daylight::Atmo>>,
     time: Res<Time>,
     mut drift: Local<Vec2>,
@@ -87,8 +187,10 @@ pub fn update(
         params: Vec4::new(s.depth_threshold, s.normal_threshold, s.line_width * scale, near),
         fade: Vec4::new(s.line_fade[0], s.line_fade[1], s.screen_rim_width * scale, if on { s.screen_rim } else { 0.0 }),
         rim: Vec4::new(rr, rg, rb, 0.0),
-        sun: screen_sun.extend(0.0).extend(0.0),
-        grade: Vec4::new(gr, gg, gb, if on { s.grade } else { 0.0 }),
+        // z: the smallest step a crease line marks (`Style::crease_step`).
+        sun: screen_sun.extend(s.crease_step).extend(0.0),
+        grade: Vec4::new(gr, gg, gb, if on && *film != Film::Off { s.grade } else { 0.0 }),
+        film: Vec4::new(if *film == Film::Soft { 1.0 } else { 0.0 }, SOFT_FROM, SOFT_TO, soft_by_light(atmo.as_ref().map(|a| a.lux))),
         screen: Vec4::new(w, h, 1.0 / w, 1.0 / h),
         world_from_clip: gtf.to_matrix() * camera.clip_from_view().inverse(),
         eye: gtf.translation().extend(time.elapsed_secs_wrapped()),
@@ -120,9 +222,18 @@ pub struct PostPlugin;
 impl Plugin for PostPlugin {
     fn build(&self, app: &mut App) {
         embedded_asset!(app, "edges.wesl");
-        app.add_plugins((ExtractComponentPlugin::<Edges>::default(), UniformComponentPlugin::<Edges>::default()));
+        let film = Film::from_env().unwrap_or_default();
+        info!("film: {}", film.name());
+        app.insert_resource(film);
+        app.add_plugins((ExtractComponentPlugin::<Edges>::default(), UniformComponentPlugin::<Edges>::default(), ExtractComponentPlugin::<SightTexture>::default()));
         let Some(render_app) = app.get_sub_app_mut(RenderApp) else { return };
-        render_app.add_systems(RenderStartup, init_pipeline).add_systems(Core3d, draw.in_set(Core3dSystems::PostProcess));
+        // Before bloom (and so before tonemapping): unordered within the set, the render schedule
+        // ran this pass sometimes before bloom and sometimes after, and the whole picture flipped
+        // between the two results from frame to frame (flicker-2: about a level of 8-bit luma on
+        // every lit surface with the camera still).
+        render_app
+            .add_systems(RenderStartup, init_pipeline)
+            .add_systems(Core3d, draw.in_set(Core3dSystems::PostProcess).before(bevy::post_process::bloom::bloom));
     }
 }
 
@@ -145,6 +256,9 @@ fn init_pipeline(mut commands: Commands, render_device: Res<RenderDevice>, asset
                 texture_depth_2d(),
                 texture_2d(TextureSampleType::Float { filterable: false }),
                 uniform_buffer::<Edges>(true),
+                texture_2d(TextureSampleType::Float { filterable: true }),
+                sampler(SamplerBindingType::Filtering),
+                texture_2d(TextureSampleType::Float { filterable: true }),
             ),
         ),
     );
@@ -167,8 +281,11 @@ fn init_pipeline(mut commands: Commands, render_device: Res<RenderDevice>, asset
     commands.insert_resource(EdgesPipeline { layout, sampler, ldr, hdr });
 }
 
+#[allow(clippy::too_many_arguments)]
 fn draw(
-    view: ViewQuery<(&ViewTarget, &ViewPrepassTextures, &DynamicUniformIndex<Edges>)>,
+    view: ViewQuery<(&ViewTarget, &ViewPrepassTextures, &DynamicUniformIndex<Edges>, Option<&SightTexture>)>,
+    images: Res<RenderAssets<GpuImage>>,
+    fallback: Res<FallbackImage>,
     pipeline: Option<Res<EdgesPipeline>>,
     pipeline_cache: Res<PipelineCache>,
     uniforms: Res<ComponentUniforms<Edges>>,
@@ -176,7 +293,11 @@ fn draw(
     mut ctx: RenderContext,
 ) {
     let Some(pipeline) = pipeline else { return };
-    let (target, prepass, index) = view.into_inner();
+    let (target, prepass, index, field) = view.into_inner();
+    // The sight field, or a white texel until it is uploaded (the pass reads it only when
+    // `sight_field.w` says it holds one).
+    let memory = field.and_then(|f| images.get(&f.1)).unwrap_or(&fallback.d2);
+    let field = field.and_then(|f| images.get(&f.0)).unwrap_or(&fallback.d2);
     let id = if target.main_texture_format() == TextureFormat::Rgba16Float { pipeline.hdr } else { pipeline.ldr };
     let Some(render_pipeline) = pipeline_cache.get_render_pipeline(id) else { return };
     let (Some(depth), Some(normal), Some(binding)) = (prepass.depth_only_view(), prepass.normal_view(), uniforms.uniforms().binding()) else { return };
@@ -184,7 +305,7 @@ fn draw(
     let bind_group = render_device.create_bind_group(
         "edges_bind_group",
         &pipeline_cache.get_bind_group_layout(&pipeline.layout),
-        &BindGroupEntries::sequential((post.source, &pipeline.sampler, depth, normal, binding.clone())),
+        &BindGroupEntries::sequential((post.source, &pipeline.sampler, depth, normal, binding.clone(), &field.texture_view, &field.sampler, &memory.texture_view)),
     );
     let mut pass = ctx.command_encoder().begin_render_pass(&RenderPassDescriptor {
         label: Some("edges_pass"),

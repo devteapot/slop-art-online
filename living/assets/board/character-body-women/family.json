@@ -1,0 +1,8 @@
+{
+ "schema": 1,
+ "family": "character:body-women",
+ "kind": "character",
+ "title": "Women's silhouettes",
+ "description": "The woman preset and composed women before and after the body pass's first part, beside the reference; the form's outline over the reference's.",
+ "target": "A woman's silhouette is the reference's at the game camera and full figure: shoulders, waist, hips, leg and arm length as shares of her height (docs/CHARACTERS.md, The body)."
+}

@@ -1,0 +1,372 @@
+{
+ "title": "Arena: a telegraphed heavy blow",
+ "about": "A stranger with a spear walks up to the subject and, every time, opens with its slowest, heaviest blow (`attack` with a spear: a 750 ms windup the target can see, 9 damage), then stands for 2 or 3 s before the next (mending its own wounds first when below 70 health, with the ordinary `heal` and the `wound_tending` it is given, so it lasts the fight; no armor). When it has been more than 5 m from the subject for 4 s (night sight is 6 m; a pause is at most 3 s), it walks to where the subject stands and fights again: `attack` closes in only on someone it sees. The pattern a person learns: step out of reach or dodge during the windup, and strike in the pause. The opponent is a trial fixture (a resident whose graph the trial sets; docs/COMBAT_MIND.md \u00a74.1), never game content: nothing here is installed into any character, and the subject's mind is told nothing about it. Subject: a spawned newcomer on its own instinct graph, its mind the only one thinking; the newcomer's kit plus a spear. A world hour is 30 real seconds; the world starts at 10:00 (day sight).",
+ "world": {
+  "seed": "island",
+  "start_hour": 10.0
+ },
+ "minutes": 10,
+ "budget": {
+  "tokens": 700000
+ },
+ "record": {
+  "uses": true,
+  "positions": true
+ },
+ "subject": {
+  "spawn": {
+   "name": "Wren"
+  },
+  "clear_items": true,
+  "background": {
+   "origin": "traveller",
+   "sheet": {
+    "narrative": "I came over the water two days ago with a bow and little else. I am walking to the town to find work and a roof.",
+    "values": [
+     "staying alive",
+     "paying my own way"
+    ],
+    "goals": [
+     "reach the town",
+     "find work and a place to sleep"
+    ],
+    "mood": "tired but hopeful",
+    "relations": [],
+    "memories": [],
+    "stances": [],
+    "places": []
+   }
+  }
+ },
+ "cast": {
+  "foe": {
+   "pick": {
+    "kind": "person",
+    "stage": 2,
+    "nearest": {
+     "arrival": true
+    }
+   }
+  }
+ },
+ "timeline": [
+  {
+   "at": "prepare",
+   "do": "graph",
+   "who": "subject",
+   "graph": {
+    "wait": 120
+   }
+  },
+  {
+   "at": "prepare",
+   "do": "graph",
+   "who": "foe",
+   "graph": {
+    "wait": 120
+   }
+  },
+  {
+   "at": "start",
+   "do": "place",
+   "who": "subject",
+   "to": {
+    "arrival": true,
+    "offset": [
+     -60,
+     0
+    ]
+   }
+  },
+  {
+   "at": "start",
+   "do": "graph",
+   "who": "subject",
+   "graph": "instinct:person"
+  },
+  {
+   "at": "start",
+   "do": "items",
+   "who": "subject",
+   "items": {
+    "bow": 1,
+    "arrow": 30,
+    "berries": 4,
+    "spear": 1
+   }
+  },
+  {
+   "at": "start",
+   "do": "know",
+   "who": "subject",
+   "techniques": [
+    "fire",
+    "fire_bolt",
+    "wound_tending"
+   ]
+  },
+  {
+   "at": "start",
+   "do": "place",
+   "who": "foe",
+   "to": {
+    "who": "subject",
+    "offset": [
+     60,
+     0
+    ]
+   }
+  },
+  {
+   "at": "start",
+   "do": "items",
+   "who": "foe",
+   "items": {
+    "spear": 1
+   }
+  },
+  {
+   "at": "start",
+   "do": "know",
+   "who": "foe",
+   "techniques": [
+    "wound_tending"
+   ]
+  },
+  {
+   "at": 1,
+   "steps": [
+    {
+     "do": "place",
+     "who": "foe",
+     "to": {
+      "who": "subject",
+      "offset": [
+       6,
+       0
+      ]
+     }
+    },
+    {
+     "do": "note",
+     "text": "arena-heavy: the fixture starts"
+    },
+    {
+     "do": "graph",
+     "who": "foe",
+     "graph": {
+      "first": [
+       {
+        "seq": [
+         {
+          "do": {
+           "skill": "attack",
+           "target": "$subject"
+          }
+         },
+         {
+          "if": {
+           "cond": {
+            "health": {
+             "below": 70
+            }
+           },
+           "then": {
+            "first": [
+             {
+              "seq": [
+               {
+                "do": {
+                 "skill": "heal",
+                 "target": "self"
+                }
+               },
+               {
+                "first": [
+                 {
+                  "if": {
+                   "cond": {
+                    "chance": 0.5
+                   },
+                   "then": {
+                    "wait": 1.5
+                   }
+                  }
+                 },
+                 {
+                  "wait": 2.5
+                 }
+                ]
+               }
+              ]
+             },
+             {
+              "first": [
+               {
+                "if": {
+                 "cond": {
+                  "chance": 0.5
+                 },
+                 "then": {
+                  "wait": 2
+                 }
+                }
+               },
+               {
+                "wait": 3
+               }
+              ]
+             }
+            ]
+           },
+           "else": {
+            "first": [
+             {
+              "if": {
+               "cond": {
+                "chance": 0.5
+               },
+               "then": {
+                "wait": 2
+               }
+              }
+             },
+             {
+              "wait": 3
+             }
+            ]
+           }
+          }
+         }
+        ]
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "when": {
+    "near": {
+     "who": "foe",
+     "of": "subject",
+     "beyond": 5,
+     "for_s": 4
+    }
+   },
+   "after_min": 1.05,
+   "max": 400,
+   "steps": [
+    {
+     "do": "graph",
+     "who": "foe",
+     "graph": {
+      "seq": [
+       {
+        "do": {
+         "skill": "goto",
+         "target": {
+          "at": "$subject_xy"
+         }
+        }
+       },
+       {
+        "first": [
+         {
+          "seq": [
+           {
+            "do": {
+             "skill": "attack",
+             "target": "$subject"
+            }
+           },
+           {
+            "if": {
+             "cond": {
+              "health": {
+               "below": 70
+              }
+             },
+             "then": {
+              "first": [
+               {
+                "seq": [
+                 {
+                  "do": {
+                   "skill": "heal",
+                   "target": "self"
+                  }
+                 },
+                 {
+                  "first": [
+                   {
+                    "if": {
+                     "cond": {
+                      "chance": 0.5
+                     },
+                     "then": {
+                      "wait": 1.5
+                     }
+                    }
+                   },
+                   {
+                    "wait": 2.5
+                   }
+                  ]
+                 }
+                ]
+               },
+               {
+                "first": [
+                 {
+                  "if": {
+                   "cond": {
+                    "chance": 0.5
+                   },
+                   "then": {
+                    "wait": 2
+                   }
+                  }
+                 },
+                 {
+                  "wait": 3
+                 }
+                ]
+               }
+              ]
+             },
+             "else": {
+              "first": [
+               {
+                "if": {
+                 "cond": {
+                  "chance": 0.5
+                 },
+                 "then": {
+                  "wait": 2
+                 }
+                }
+               },
+               {
+                "wait": 3
+               }
+              ]
+             }
+            }
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    }
+   ]
+  }
+ ],
+ "probes": [
+  "survived",
+  "hp_min",
+  "skills"
+ ]
+}

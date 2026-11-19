@@ -11,10 +11,21 @@ struct State {
 }
 
 static mut STATE: Option<State> = None;
+/// Which of the bench's fixed sets of Rhai hashing keys this instance uses (`sb_seed`).
+static mut SEED: u32 = 0;
 
 fn state() -> &'static mut State {
     // Single-threaded module; the host calls one export at a time.
-    unsafe { (*(&raw mut STATE)).get_or_insert_with(|| State { fx: fixtures::build(), engines: (0..Kind::ALL.len()).map(|_| None).collect(), buf: Vec::new(), cursor: 0 }) }
+    // Rhai's hashing keys first: before the fixtures or any engine touch Rhai (sb_bench::fix_hashing).
+    unsafe { (*(&raw mut STATE)).get_or_insert_with(|| State { fx: { sb_bench::fix_hashing(SEED); fixtures::build() }, engines: (0..Kind::ALL.len()).map(|_| None).collect(), buf: Vec::new(), cursor: 0 }) }
+}
+
+/// Use Rhai's hashing keys number `i` (sb_bench::hashing_seed) instead of number 0. Only before
+/// any other export: the keys are fixed when the fixtures are built. Returns nothing; a call
+/// after that has no effect.
+#[no_mangle]
+pub extern "C" fn sb_seed(i: u32) {
+    unsafe { SEED = i };
 }
 
 /// Build the fixtures (kept apart from engine start-up in the timings).

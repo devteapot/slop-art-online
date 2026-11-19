@@ -1,0 +1,88 @@
+{
+ "schema": 1,
+ "family": "character:face-types",
+ "id": "20261111-26c98cc2-a9dec5",
+ "published": "2026-11-11T23:33:55+01:00",
+ "imported": "2026-11-11T23:33:55+01:00",
+ "track": "char-4",
+ "maker": "Claude Fable 5.2",
+ "note": "Pass 3, step 3: the cage head for each of the 21 types with the identity rig in it. Each type is accepted against the reference's measured sections (within 0.03 H); a person is the type's mesh with 25 identity bones moved, equal to the baked person to 0.00 mm; type files are at lookdev/types/. Clips baked with main's animate.py (leg-pole-1).",
+ "source": {
+  "commit": "26c98cc2580223d51f02c39bfcb673b343c6f5e9",
+  "branch": "char-4",
+  "dirty": false,
+  "generator": "living/tools/blender/person.py",
+  "generator_sha256": "dec17ef49933845b06e0f19f99f33a1daa265994098649a1b8a8be45102e695a",
+  "generator_state": "committed",
+  "params": {}
+ },
+ "renderer": {
+  "method": "asset-view (the game) for every photograph; children-beside-adults is drawn from the type files at one scale",
+  "commit": "",
+  "key": "asset-view (the game) for every photograph; children-beside-adults is drawn from the type files at one scale",
+  "preset": "",
+  "note": "types: each face type's own head (person.py --parts face), three people drawn from it and composed by bones (gen_person.sh, compose.py), all through the game's asset view; composed-and-baked: one person as the type, composed and baked; skin-tones: the generator's paint against the client's recolour of one file; the vroid member is the reference through the same view; the blue-protocol member is published CEDEC slides, for comparison only (sources in ~/archive/asset-board/references/blue-protocol/SOURCES.md)"
+ },
+ "preset": "",
+ "media": "media/character-face-types/20261111-26c98cc2-a9dec5",
+ "members": [
+  {
+   "name": "types",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "b6aac369d8eb6fe5381e224fa16ee68009ae2516c5c6c96fa0f0803389f744db",
+   "shots": [
+    "adult-men",
+    "adult-women",
+    "children",
+    "children-beside-adults",
+    "composed-and-baked",
+    "elder-men",
+    "elder-women",
+    "skin-tones",
+    "youth-boys",
+    "youth-girls"
+   ],
+   "clips": []
+  },
+  {
+   "name": "vroid",
+   "role": "control",
+   "token_kind": "import",
+   "sha256": "824bacef0ed9934a59a57cac19dc5b0428db895f64baed46cfea7304a97eb886",
+   "shots": [
+    "adult-men",
+    "adult-women",
+    "children",
+    "children-beside-adults",
+    "composed-and-baked",
+    "elder-men",
+    "elder-women",
+    "skin-tones",
+    "youth-boys",
+    "youth-girls"
+   ],
+   "clips": []
+  },
+  {
+   "name": "blue-protocol",
+   "role": "control",
+   "token_kind": "import",
+   "sha256": "419a3e3c8a8009ca73b0f721a1382883fbb6e34e136fcf7bb48462785a974566",
+   "shots": [
+    "adult-men",
+    "adult-women",
+    "children",
+    "children-beside-adults",
+    "composed-and-baked",
+    "elder-men",
+    "elder-women",
+    "skin-tones",
+    "youth-boys",
+    "youth-girls"
+   ],
+   "clips": []
+  }
+ ],
+ "delivered": []
+}

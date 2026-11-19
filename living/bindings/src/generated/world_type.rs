@@ -18,6 +18,7 @@ pub struct World {
     pub height: u32,
     pub life_pace: f32,
     pub year_days: u32,
+    pub look_book: String,
 }
 
 impl __sdk::InModule for World {
@@ -39,6 +40,7 @@ pub struct WorldCols {
     pub height: __sdk::__query_builder::Col<World, u32>,
     pub life_pace: __sdk::__query_builder::Col<World, f32>,
     pub year_days: __sdk::__query_builder::Col<World, u32>,
+    pub look_book: __sdk::__query_builder::Col<World, String>,
 }
 
 impl __sdk::__query_builder::HasCols for World {
@@ -56,6 +58,7 @@ impl __sdk::__query_builder::HasCols for World {
             height: __sdk::__query_builder::Col::new(table_name, "height"),
             life_pace: __sdk::__query_builder::Col::new(table_name, "life_pace"),
             year_days: __sdk::__query_builder::Col::new(table_name, "year_days"),
+            look_book: __sdk::__query_builder::Col::new(table_name, "look_book"),
         }
     }
 }

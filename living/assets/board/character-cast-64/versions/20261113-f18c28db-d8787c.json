@@ -1,0 +1,57 @@
+{
+ "schema": 1,
+ "family": "character:cast-64",
+ "id": "20261113-f18c28db-d8787c",
+ "published": "2026-11-13T04:54:45+01:00",
+ "imported": "2026-11-13T04:54:45+01:00",
+ "track": "char-4",
+ "maker": "Claude Fable 5.2",
+ "note": "Cullet's cast built again with each head's own fringe line: fringed styles end just above the brows; crop, swept, sides, balding and parted fringes keep a bare forehead.",
+ "source": {
+  "commit": "f18c28db43950a9760d6297ddb94f1ded60925db",
+  "branch": "char-4-fringe",
+  "dirty": false,
+  "generator": "living/tools/blender/person.py",
+  "generator_sha256": "1ba3fa9bfbda7d9de2a6b117a8496288ba755411b702627ac184747c747eaeea",
+  "generator_state": "committed",
+  "seed": "cullet",
+  "params": {
+   "cast": "living/seeds/cullet.json",
+   "people": 64
+  }
+ },
+ "renderer": {
+  "method": "asset-view",
+  "commit": "",
+  "key": "asset-view",
+  "preset": "",
+  "note": "town.py: each person alone through the asset view, through a recipe; lineup from the front at 28 degrees down at one scale; faces close; game: the game camera, enlarged; faces-before-after, faces-all-before-after and lineup-before-after against the hands part's cast"
+ },
+ "preset": "",
+ "media": "media/character-cast-64/20261113-f18c28db-d8787c",
+ "members": [
+  {
+   "name": "cast",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "74725293d1185f307d7a5244a993296770a7efe77b14c07486c149b85ad28d4f",
+   "shots": [
+    "faces",
+    "faces-24",
+    "faces-all-before-after",
+    "faces-before-after",
+    "game",
+    "lineup",
+    "lineup-before-after"
+   ],
+   "clips": []
+  }
+ ],
+ "delivered": [
+  {
+   "title": "town",
+   "path": "delivered/index.html",
+   "from": ".local/town24/index.html"
+  }
+ ]
+}

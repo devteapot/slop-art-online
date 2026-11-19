@@ -1,6 +1,7 @@
 //! Locomotion by actual speed, blended at one shared phase so feet neither slide nor cross.
 //!
-//! A character's animated file comes with `<file>.clips.json` (`living/tools/blender/animate.py
+//! A character's clip file (its own, or generated people's shared one: `anim::clip_file`) comes
+//! with `<file>.clips.json` (`living/tools/blender/animate.py
 //! --library`; the wolf's from `wolf.py`), which gives every clip's length and, for the looping
 //! gaits, the baked speed (m/s at playback rate 1) and natural speed (the take's own, before
 //! `animate.py` time-scaled it). It also gives each clip's **foot-down markers**: every foot's
@@ -11,9 +12,12 @@
 //! [`Gaits::blend`] turns a speed into at most two gait weights and the distance one cycle
 //! covers; `anim.rs` plays the weighted gaits at one shared phase:
 //! - **People** blend between neighbours in natural speed within a family (walk ↔ walk_brisk,
-//!   run ↔ run_fast) across the whole gap, and across families (walk_brisk ↔ run) only in a
-//!   band of ±[`CROSS_BAND`] round [`WALK_MAX`], so the rules' 2.6 m/s walk still walks and
-//!   their 3.9 m/s run runs.
+//!   run ↔ run_fast) across the whole gap, and between the walking and running families by
+//!   [`Family`]: the authority's own word on whether a body runs when it gives one, else a
+//!   split speed from the world's laws (`live.rs`: the geometric mean of a grown person's walking
+//!   and running speeds, 3.18 m/s at the rules' 2.6 and 3.9), blending only within
+//!   ±[`CROSS_BAND`] of it, else midway between the clips' own walking and running speeds. No
+//!   speed of the rules is written here, so a walk set to 3.4 m/s still walks.
 //! - **Animals** (the wolf: walk, trot, run at natural 1.3, 3.4 and 7.0 m/s; the deer: walk,
 //!   trot, bound at 1.3, 3.7 and 4.6) change footfall pattern between gaits (lateral walk,
 //!   diagonal trot, gallop or bound): halfway blends of two patterns shuffle, so they blend only
@@ -31,7 +35,7 @@
 //! look-dev's 1.4 and 3.6 m/s with their clips' own lengths.
 //!
 //! `LIVING_GAME_FEET=<file>` writes, every frame, where your character's toes and ankles (an
-//! animal's paw tips: `LIVING_GAME_PLAYER=beast:wolf` in look-dev) are and the ground under them, the clip that shows most and, through `anim.rs`, the shared phase and
+//! animal's paw tips: `LIVING_GAME_PLAYER=beast:wolf` in look-dev) are and the ground under them, the hips' place (`hips_at`), the clip that shows most and, through `anim.rs`, the shared phase and
 //! each foot's marker contact (JSON lines), for measuring foot slide
 //! (`living/tools/foot_slide.py`) and checking markers.
 
@@ -40,10 +44,46 @@ use std::collections::HashMap;
 use std::io::Write;
 use std::sync::{Arc, Mutex, OnceLock};
 
-/// Walking clips serve speeds up to this, for a character of the 1.75 m base (m/s).
-pub const WALK_MAX: f32 = 2.8;
-/// Half the width of the walk ↔ run blend round [`WALK_MAX`] (m/s).
+/// Half the width of the walk ↔ run blend round the split speed ([`Family::Split`], m/s).
 pub const CROSS_BAND: f32 = 0.2;
+/// Gaits of a family whose natural speeds are within this ratio blend across their whole gap
+/// (walk ↔ walk_brisk 1.41, run ↔ run_fast 1.11).
+const NEIGHBOURS: f32 = 1.45;
+/// Farther apart, the slower plays alone until the speed is within this ratio of the faster's
+/// natural speed, then they blend (walk_brisk at 2.03 m/s and a 3.0 m/s walk blend from 2.8): a
+/// blend of two walks far apart in stride slid more than either alone (look-dev, 2.6 m/s: 4–5%
+/// against 3%).
+const NEAR: f32 = 1.07;
+
+/// Which of a person's gait families plays: walking clips (walk, walk_brisk) or running ones
+/// (run, run_fast).
+#[derive(Clone, Copy, Debug, PartialEq, Default)]
+pub enum Family {
+    /// The authority says whether the body runs: that family only, at any speed.
+    Running(bool),
+    /// Between the two while the authority's word changes: the walking family's gaits and the
+    /// running family's, at this weight of the running ones (0 walks, 1 runs; `live.rs` eases it
+    /// so a switch crossfades instead of popping).
+    Mix(f32),
+    /// The split speed (m/s for a character of the 1.75 m base, off a road): walking clips below
+    /// it, running clips above, blending within ±[`CROSS_BAND`].
+    Split(f32),
+    /// Neither known: the split midway between the walking clips' fastest natural speed and the
+    /// running clips' slowest ([`Gaits::clips_split`]).
+    #[default]
+    Clips,
+}
+impl Family {
+    /// A mix at either end is that family alone.
+    pub fn settled(self) -> Self {
+        match self {
+            Family::Mix(w) if w <= 0.0 => Family::Running(false),
+            Family::Mix(w) if w >= 1.0 => Family::Running(true),
+            f => f,
+        }
+    }
+}
+
 /// Animals blend two gaits within this ratio either side of their geometric mean, unless their
 /// sidecar gives its own `band`.
 const ANIMAL_BAND: f32 = 1.1;
@@ -163,25 +203,101 @@ pub struct ClipInfo {
     pub upper: bool,
     pub ik: bool,
     pub contacts: Contacts,
+    /// A turn on the spot (`turn_deg` in the sidecar, the game's sense: -90 a quarter turn left):
+    /// the clip itself doesn't turn (`animate.py` took the turn out), so the body turns along
+    /// this curve (normalised clip time, degrees so far).
+    pub turn: Option<(f32, Vec<(f32, f32)>)>,
+    /// The rules' flight window of a jump take (clip seconds), from its path.
+    pub hop: Option<(f32, f32)>,
+    /// The body's own track while the clip plays (game metres per frame at 30 fps: to its left,
+    /// ahead): a start's, a stop's or a hop's (the asset view draws the body along it).
+    pub path: Vec<(f32, f32)>,
+    /// Its length (s), from the sidecar.
+    pub seconds: f32,
+    /// The gait and its phase a one-shot starts from (a stop's: `start_gait` in the sidecar).
+    pub start_gait: Option<(String, f32)>,
 }
 
-/// A character file's locomotion clips (sorted by natural speed), whether they split into walking
-/// and running families at [`WALK_MAX`] (people) or are one family (animals), and every clip's
-/// [`ClipInfo`].
+impl ClipInfo {
+    /// How far a turn take has turned the body at clip time `u` (0–1, radians, the game's sense).
+    pub fn turned(&self, u: f32) -> f32 {
+        let Some((_, curve)) = &self.turn else { return 0.0 };
+        let u = u.clamp(0.0, 1.0);
+        let k = curve.partition_point(|p| p.0 < u);
+        let deg = match (k.checked_sub(1).and_then(|i| curve.get(i)), curve.get(k)) {
+            (Some(a), Some(b)) if b.0 > a.0 => a.1 + (b.1 - a.1) * (u - a.0) / (b.0 - a.0),
+            (_, Some(b)) => b.1,
+            (Some(a), None) => a.1,
+            _ => 0.0,
+        };
+        deg.to_radians()
+    }
+
+    /// Where the body's own track has it at clip time `t` (s): (left, ahead) in metres.
+    pub fn path_at(&self, t: f32) -> Vec2 {
+        if self.path.is_empty() {
+            return Vec2::ZERO;
+        }
+        let x = (t * 30.0).clamp(0.0, (self.path.len() - 1) as f32);
+        let (a, b) = (x.floor() as usize, (x.ceil() as usize).min(self.path.len() - 1));
+        let (pa, pb) = (Vec2::from(self.path[a]), Vec2::from(self.path[b]));
+        pa.lerp(pb, x - a as f32)
+    }
+
+    /// The longest window (clip time, 0–1) where neither foot is down: a jump's flight.
+    pub fn flight(&self) -> Option<(f32, f32)> {
+        if self.contacts.feet() != 2 {
+            return None;
+        }
+        const N: usize = 240;
+        let up: Vec<bool> = (0..=N).map(|i| self.contacts.count(i as f32 / N as f32) == 0).collect();
+        let (mut best, mut k) = (None::<(usize, usize)>, 0);
+        while k <= N {
+            if !up[k] {
+                k += 1;
+                continue;
+            }
+            let b = k + up[k..].iter().position(|&u| !u).unwrap_or(N + 1 - k);
+            if best.is_none_or(|(x, y)| b - k > y - x) {
+                best = Some((k, b));
+            }
+            k = b;
+        }
+        best.map(|(a, b)| (a as f32 / N as f32, b as f32 / N as f32))
+    }
+}
+
+/// A character file's locomotion clips (the forward ones sorted by natural speed, then the
+/// directional ones), whether they split into walking and running families ([`Family`]; people)
+/// or are one family (animals), every clip's [`ClipInfo`], and the directions people
+/// have takes for (scheme "cursor": [`Gaits::blend_toward`]).
 #[derive(Debug, Default)]
 pub struct Gaits {
     clips: Vec<Gait>,
+    /// How many of `clips` are the forward gaits ([`Gaits::blend`] chooses among those).
+    forward: usize,
     split: bool,
     info: HashMap<String, ClipInfo>,
     /// An animal's blend band (ratio either side of the geometric mean).
     band: f32,
+    /// Travel directions with their own takes: degrees from the facing (the game's sense: -90
+    /// left, 90 right, 180 back) and the walking and running clip (index into `clips`).
+    dirs: Vec<Dir>,
 }
 
-/// The gaits playing at a speed: up to two (index into [`Gaits::gaits`], weight), weights
-/// summing to 1, and the metres one cycle covers at stride 1 (the weighted mean).
+#[derive(Clone, Copy, Debug)]
+struct Dir {
+    deg: f32,
+    walk: Option<usize>,
+    run: Option<usize>,
+}
+
+/// The gaits playing at a speed: up to four (index into [`Gaits::gaits`], weight; two forward
+/// gaits, or two directions' walk and run), weights summing to 1, and the metres one cycle covers
+/// at stride 1 (the weighted mean).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Blend {
-    pub parts: [(usize, f32); 2],
+    pub parts: [(usize, f32); 4],
     pub n: usize,
     pub cycle_m: f32,
 }
@@ -190,9 +306,43 @@ impl Blend {
     pub fn parts(&self) -> &[(usize, f32)] {
         &self.parts[..self.n]
     }
+
+    /// One gait alone.
+    pub fn one(i: usize, cycle_m: f32) -> Self {
+        Self { parts: [(i, 1.0), (i, 0.0), (i, 0.0), (i, 0.0)], n: 1, cycle_m }
+    }
 }
 
-/// The clips this module chooses between, and whether each is a run.
+/// The directional takes the game plays while a person faces one way and moves another (scheme
+/// "cursor", `live.rs`), by travel direction from the facing (degrees, the game's sense): a
+/// walking and a running take, the first in each list that the file has. These are the takes the
+/// clip lab's verdicts accepted (clips 2, 2026-11-11; `docs/GAME_BRIEF.md`, "Locomotion clips").
+/// Clips 3 (r2 takes, 2026-11-11) added the back diagonals' walks (`walk_diag_bl` s17 with
+/// `walk_diag_br`). Left out: `run_back` s3 (played at twice its own 1.9 m/s, its supporting foot
+/// slid 11% of the body's speed against 2% for the forward run reversed), `strafe_run_left` s17
+/// and `_right` s15 (their planted feet slide, the right one's seam closes 17°), and the
+/// step-touch `strafe_walk_left`/`_right` (0.6 m a cycle). A direction without a take falls back
+/// to the forward gaits along the travel with the upper body turned (`twist.rs`).
+pub const DIRECTIONS: [(f32, &[&str], &[&str]); 7] = [
+    (180.0, &["walk_back"], &[]),
+    (-90.0, &["strafe_walk_cross_left"], &[]),
+    (90.0, &["strafe_walk_cross_right"], &[]),
+    (-45.0, &["walk_diag_fl"], &["run_diag_fl"]),
+    (45.0, &["walk_diag_fr"], &["run_diag_fr"]),
+    (-135.0, &["walk_diag_bl"], &["run_diag_bl"]),
+    (135.0, &["walk_diag_br"], &["run_diag_br"]),
+];
+/// Neighbouring directions further apart than this (degrees) don't blend: the gap falls back.
+const DIR_GAP_MAX: f32 = 91.0;
+/// The directional takes step at most this many times as often as the forward gaits would at the
+/// same speed (their metres a cycle against the forward's); beyond, the gap falls back. The clip
+/// lab's sideways and backward takes cover 0.4–0.8 of the forward's metres a cycle, so at the
+/// rules' 2.6 m/s walk and 3.9 m/s run, and 1.4 times that on a road, most of them would step
+/// two or three times as often as the forward gait: a scurry.
+pub const CADENCE_MAX: f32 = 1.6;
+
+/// The forward gaits of a sidecar from before `locomotion` was written for every loop, and whether
+/// each is a run.
 const LOCOMOTION: [(&str, bool); 4] = [("walk", false), ("walk_brisk", false), ("run", true), ("run_fast", true)];
 /// An animal's gaits, one family.
 const ANIMAL: [&str; 3] = ["walk", "trot", "run"];
@@ -204,19 +354,29 @@ impl Gaits {
                 Gait { clip: "walk", speed: crate::lookdev::WALK_SPEED, natural: crate::lookdev::WALK_SPEED, run: false, seconds: None },
                 Gait { clip: "run", speed: crate::lookdev::RUN_SPEED, natural: crate::lookdev::RUN_SPEED, run: true, seconds: None },
             ],
+            forward: 2,
             split: true,
             info: HashMap::new(),
             band: ANIMAL_BAND,
+            dirs: vec![],
         }
     }
 
     /// From a `clips.json` sidecar: its looping locomotion clips with a speed, and every clip's
     /// info. A character's sidecar maps clip names to clips; an animal's lists them under `clips`.
-    fn parse(json: &serde_json::Value) -> Self {
-        let info_of = |c: &serde_json::Value, feet: &[&str]| ClipInfo {
-            upper: c["layer"].as_str() == Some("upper"),
-            ik: c["ik"].as_bool() != Some(false),
-            contacts: Contacts::parse(&c["contacts"], feet),
+    pub(crate) fn parse(json: &serde_json::Value) -> Self {
+        let info_of = |c: &serde_json::Value, feet: &[&str]| {
+            let pair = |v: &serde_json::Value| Some((v.get(0)?.as_f64()? as f32, v.get(1)?.as_f64()? as f32));
+            ClipInfo {
+                upper: c["layer"].as_str() == Some("upper"),
+                ik: c["ik"].as_bool() != Some(false),
+                contacts: Contacts::parse(&c["contacts"], feet),
+                turn: c["turn_deg"].as_f64().map(|d| (d as f32, c["turn_curve"].as_array().map(|a| a.iter().filter_map(pair).collect()).unwrap_or_default())),
+                hop: pair(&c["hop"]),
+                path: c["path_m"].as_array().map(|a| a.iter().filter_map(pair).collect()).unwrap_or_default(),
+                seconds: c["seconds"].as_f64().unwrap_or(0.0) as f32,
+                start_gait: c["start_gait"]["clip"].as_str().zip(c["start_gait"]["phase"].as_f64()).map(|(g, p)| (g.to_string(), p as f32)),
+            }
         };
         if let Some(list) = json.get("clips").and_then(|c| c.as_array()) {
             let info = list.iter().filter_map(|c| Some((c["name"].as_str()?.to_string(), info_of(c, &ANIMAL_FEET)))).collect();
@@ -229,22 +389,53 @@ impl Gaits {
                 })
                 .collect();
             let band = json["band"].as_f64().map_or(ANIMAL_BAND, |b| (b as f32).clamp(1.001, 1.5));
-            return if clips.is_empty() { Self { info, ..Self::fallback() } } else { Self { clips, split: false, info, band } };
+            let forward = clips.len();
+            return if clips.is_empty() { Self { info, ..Self::fallback() } } else { Self { clips, forward, split: false, info, band, dirs: vec![] } };
         }
         let info = json.as_object().map(|m| m.iter().filter(|(_, c)| c.is_object()).map(|(k, c)| (k.clone(), info_of(c, &PEOPLE_FEET))).collect()).unwrap_or_default();
-        let mut clips = LOCOMOTION
-            .iter()
-            .filter_map(|&(clip, run)| {
-                let c = json.get(clip)?;
-                let speed = c["speed"].as_f64()? as f32;
-                let natural = c["natural_speed"].as_f64().map_or(speed, |n| n as f32);
-                (speed > 0.1 && natural > 0.1 && c["loop"].as_bool() != Some(false)).then_some(Gait { clip, speed, natural, run, seconds: c["seconds"].as_f64().map(|s| s as f32) })
+        let gait = |clip: &'static str, run: bool| {
+            let c = json.get(clip)?;
+            let speed = c["speed"].as_f64()? as f32;
+            let natural = c["natural_speed"].as_f64().map_or(speed, |n| n as f32);
+            (speed > 0.1 && natural > 0.1 && c["loop"].as_bool() != Some(false)).then_some(Gait { clip, speed, natural, run, seconds: c["seconds"].as_f64().map(|s| s as f32) })
+        };
+        // The forward gaits: every loop the sidecar marks a walk or a run (`locomotion`) with no
+        // travel of its own, so a new take joins its family by its natural speed (a 3.0 m/s walk
+        // between walk_brisk and running); a sidecar from before the field, the named four.
+        let tagged: Vec<Gait> = json
+            .as_object()
+            .map(|m| {
+                m.iter()
+                    .filter(|(_, c)| c["travel_deg"].is_null() && c["loop"].as_bool() == Some(true))
+                    .filter_map(|(k, c)| match c["locomotion"].as_str() {
+                        Some("walk") => gait(crate::anim::intern(k), false),
+                        Some("run") => gait(crate::anim::intern(k), true),
+                        _ => None,
+                    })
+                    .collect()
             })
-            .collect::<Vec<_>>();
+            .unwrap_or_default();
+        let mut clips = if tagged.is_empty() { LOCOMOTION.iter().filter_map(|&(clip, run)| gait(clip, run)).collect::<Vec<_>>() } else { tagged };
         if clips.iter().any(|g| !g.run) && clips.iter().any(|g| g.run) {
             // Walks first, then runs, each by natural speed.
             clips.sort_by(|a, b| a.run.cmp(&b.run).then(a.natural.total_cmp(&b.natural)));
-            Self { clips, split: true, info, band: ANIMAL_BAND }
+            let forward = clips.len();
+            // Then the directional takes the file has (a loop with a speed and `travel_deg`).
+            let mut dirs = vec![];
+            for &(deg, walks, runs) in &DIRECTIONS {
+                let mut add = |names: &[&'static str], run: bool| {
+                    let &clip = names.iter().find(|n| json.get(**n).is_some_and(|c| c["travel_deg"].is_number() && c["loop"].as_bool() == Some(true) && c["speed"].as_f64().is_some_and(|v| v > 0.1)))?;
+                    let c = &json[clip];
+                    let speed = c["speed"].as_f64()? as f32;
+                    clips.push(Gait { clip, speed, natural: c["natural_speed"].as_f64().map_or(speed, |n| n as f32), run, seconds: c["seconds"].as_f64().map(|s| s as f32) });
+                    Some(clips.len() - 1)
+                };
+                let (walk, run) = (add(walks, false), add(runs, true));
+                if walk.is_some() || run.is_some() {
+                    dirs.push(Dir { deg, walk, run });
+                }
+            }
+            Self { clips, forward, split: true, info, band: ANIMAL_BAND, dirs }
         } else {
             Self { info, ..Self::fallback() }
         }
@@ -258,35 +449,194 @@ impl Gaits {
         self.info.get(clip)
     }
 
+    /// The gaits for moving at `speed` (m/s, the pace's: the gait is chosen at it) toward
+    /// `travel` radians from where the legs face (the game's sense: positive to the right, ±π
+    /// behind), from the directional takes either side of it: each direction blends its walk and
+    /// run take by speed between their own natural speeds (a backward jog serves a fast backward
+    /// walk), and the two directions blend by angle (no warp: they are at most [`DIR_GAP_MAX`]
+    /// apart). None when there is no take on a side, when the blend would step more than
+    /// [`CADENCE_MAX`] times as often as the forward gaits, or when the mirrored travel (left for
+    /// right) would fall back: the caller falls back to the forward gaits along the travel, so
+    /// both sides always look alike.
+    pub fn blend_toward(&self, speed: f32, stride: f32, family: Family, travel: f32, len: impl Fn(usize) -> f32 + Copy) -> Option<Blend> {
+        self.directional(speed, stride, family, travel, len, true)
+    }
+
+    /// Cursor holds the legs on the look even when the directional take has a short stride.
+    pub fn blend_cursor(&self, speed: f32, stride: f32, family: Family, travel: f32, len: impl Fn(usize) -> f32 + Copy) -> Option<Blend> {
+        self.directional(speed, stride, family, travel, len, false)
+    }
+
+    fn directional(&self, speed: f32, stride: f32, family: Family, travel: f32, len: impl Fn(usize) -> f32 + Copy, limit_cadence: bool) -> Option<Blend> {
+        let family = family.settled();
+        let b = self.blend_side(speed, stride, family, travel, len, limit_cadence)?;
+        self.blend_side(speed, stride, family, -travel, len, limit_cadence)?;
+        Some(b)
+    }
+
+    fn blend_side(&self, speed: f32, stride: f32, family: Family, travel: f32, len: impl Fn(usize) -> f32 + Copy, limit_cadence: bool) -> Option<Blend> {
+        let fwd = self.blend(speed, stride, family, len);
+        let deg = {
+            let d = travel.to_degrees().rem_euclid(360.0);
+            if d > 180.0 { d - 360.0 } else { d }
+        };
+        if deg.abs() < 0.5 {
+            return Some(fwd);
+        }
+        let s = speed / stride.max(0.05);
+        let mut angles: Vec<(f32, Option<Dir>)> = vec![(0.0, None)];
+        angles.extend(self.dirs.iter().map(|d| (d.deg, Some(*d))));
+        // Behind can be reached from either side.
+        if let Some(b) = angles.iter().find(|(a, _)| (a.abs() - 180.0).abs() < 0.5).and_then(|x| x.1) {
+            angles.push((-180.0, Some(b)));
+        }
+        angles.sort_by(|a, b| a.0.total_cmp(&b.0));
+        let lo = angles.iter().rev().find(|(a, _)| *a <= deg)?;
+        let hi = angles.iter().find(|(a, _)| *a >= deg)?;
+        let gap = hi.0 - lo.0;
+        if gap > DIR_GAP_MAX {
+            return None;
+        }
+        let t = if gap > 0.0 { (deg - lo.0) / gap } else { 0.0 };
+        let mut parts: Vec<(usize, f32)> = Vec::with_capacity(4);
+        for (w, dir) in [(1.0 - t, lo.1), (t, hi.1)] {
+            if w <= 0.0 {
+                continue;
+            }
+            match dir {
+                None => parts.extend(fwd.parts().iter().map(|&(i, x)| (i, x * w))),
+                Some(d) => match (d.walk, d.run) {
+                    // The authority's word picks the take where the direction has both.
+                    (Some(a), Some(_)) if family == Family::Running(false) => parts.push((a, w)),
+                    (Some(_), Some(b)) if family == Family::Running(true) => parts.push((b, w)),
+                    (Some(a), Some(b)) => {
+                        // Between the two takes' natural speeds, as neighbouring forward gaits.
+                        let (lo, hi) = (self.clips[a].natural, self.clips[b].natural.max(self.clips[a].natural + 0.01));
+                        let t = if s <= lo { 0.0 } else if s >= hi { 1.0 } else { smoothstep(0.0, 1.0, (s / lo).ln() / (hi / lo).ln()) };
+                        parts.push((a, w * (1.0 - t)));
+                        parts.push((b, w * t));
+                    }
+                    (Some(i), None) | (None, Some(i)) => parts.push((i, w)),
+                    (None, None) => {}
+                },
+            }
+        }
+        parts.retain(|p| p.1 > 1e-4);
+        let sum: f32 = parts.iter().map(|p| p.1).sum();
+        if parts.is_empty() || sum <= 0.0 {
+            return Some(fwd);
+        }
+        let cycle = |i: usize| {
+            let g = &self.clips[i];
+            g.speed * g.seconds.unwrap_or_else(|| len(i)).max(0.05)
+        };
+        let mut b = Blend { parts: [(parts[0].0, 0.0); 4], n: parts.len().min(4), cycle_m: 0.0 };
+        for (k, &(i, w)) in parts.iter().take(4).enumerate() {
+            b.parts[k] = (i, w / sum);
+            b.cycle_m += w / sum * cycle(i);
+        }
+        (!limit_cadence || fwd.cycle_m <= CADENCE_MAX * b.cycle_m).then_some(b)
+    }
+
+    /// Midway between the walking clips' fastest natural speed and the running clips' slowest
+    /// (m/s at stride 1): the walk ↔ run split when neither the authority nor the laws give one.
+    pub fn clips_split(&self) -> f32 {
+        let fwd = &self.clips[..self.forward];
+        let walk = fwd.iter().filter(|g| !g.run).map(|g| g.natural).fold(f32::NAN, f32::max);
+        let run = fwd.iter().filter(|g| g.run).map(|g| g.natural).fold(f32::NAN, f32::min);
+        match (walk.is_nan(), run.is_nan()) {
+            (false, false) => 0.5 * (walk + run),
+            (false, true) => walk,
+            (true, false) => run,
+            (true, true) => 0.0,
+        }
+    }
+
+    /// The walk ↔ run split for `family` (m/s at stride 1), or None when the authority picks.
+    fn split_speed(&self, family: Family) -> Option<f32> {
+        match family {
+            Family::Running(_) | Family::Mix(_) => None,
+            Family::Split(v) => Some(v),
+            Family::Clips => Some(self.clips_split()),
+        }
+    }
+
+    /// Whether a person moving at `speed` (m/s) with steps `stride` times the base's walks, not
+    /// runs, clear of the blend into running.
+    pub fn walks(&self, speed: f32, stride: f32, family: Family) -> bool {
+        match self.split_speed(family) {
+            None => matches!(family, Family::Running(false)) || matches!(family, Family::Mix(w) if w <= 0.0),
+            Some(v) => speed / stride.max(0.05) <= v - CROSS_BAND,
+        }
+    }
+
     /// The speed band (m/s at stride 1) over which gaits `i` and `i + 1` blend.
-    fn band(&self, i: usize) -> (f32, f32) {
+    fn band(&self, i: usize, family: Family) -> (f32, f32) {
         let (a, b) = (&self.clips[i], &self.clips[i + 1]);
         if !self.split {
             let m = (a.natural * b.natural).sqrt();
             (m / self.band, m * self.band)
         } else if a.run != b.run {
-            (WALK_MAX - CROSS_BAND, WALK_MAX + CROSS_BAND)
-        } else {
+            let v = self.split_speed(family).unwrap_or_else(|| self.clips_split());
+            (v - CROSS_BAND, v + CROSS_BAND)
+        } else if b.natural <= a.natural * NEIGHBOURS {
             (a.natural, b.natural)
+        } else {
+            // Far apart (a speed take above the family's usual ones): the slower plays alone,
+            // driven faster, until close to the faster's own speed.
+            ((b.natural / NEAR).max(a.natural), b.natural)
         }
     }
 
     /// The gaits and their weights for moving at `speed` (m/s) with steps `stride` times the
-    /// base's, and the metres a cycle covers at stride 1. `len(i)` gives a gait's length (s) when
-    /// the sidecar has none.
-    pub fn blend(&self, speed: f32, stride: f32, len: impl Fn(usize) -> f32) -> Blend {
+    /// base's, in `family`, and the metres a cycle covers at stride 1. `len(i)` gives a gait's
+    /// length (s) when the sidecar has none.
+    pub fn blend(&self, speed: f32, stride: f32, family: Family, len: impl Fn(usize) -> f32) -> Blend {
+        match family.settled() {
+            Family::Mix(w) => {
+                // Partway through a switch: the walking blend and the running one, weighted.
+                let (a, b) = (self.blend_in(speed, stride, Family::Running(false), &len), self.blend_in(speed, stride, Family::Running(true), &len));
+                let mut parts: Vec<(usize, f32)> = Vec::with_capacity(4);
+                for (i, x) in a.parts().iter().map(|&(i, x)| (i, x * (1.0 - w))).chain(b.parts().iter().map(|&(i, x)| (i, x * w))) {
+                    match parts.iter_mut().find(|p| p.0 == i) {
+                        Some(p) => p.1 += x,
+                        None => parts.push((i, x)),
+                    }
+                }
+                parts.retain(|p| p.1 > 1e-4);
+                let mut out = Blend { parts: [(parts.first().map_or(0, |p| p.0), 0.0); 4], n: parts.len().min(4), cycle_m: (1.0 - w) * a.cycle_m + w * b.cycle_m };
+                for (k, &p) in parts.iter().take(4).enumerate() {
+                    out.parts[k] = p;
+                }
+                out
+            }
+            f => self.blend_in(speed, stride, f, &len),
+        }
+    }
+
+    /// [`Gaits::blend`] for one family (not [`Family::Mix`]).
+    fn blend_in(&self, speed: f32, stride: f32, family: Family, len: &dyn Fn(usize) -> f32) -> Blend {
         let s = speed / stride.max(0.05);
         let cycle = |i: usize| {
             let g = &self.clips[i];
             g.speed * g.seconds.unwrap_or_else(|| len(i)).max(0.05)
         };
-        let one = |i: usize| Blend { parts: [(i, 1.0), (i, 0.0)], n: 1, cycle_m: cycle(i) };
-        if self.clips.is_empty() {
-            return Blend { parts: [(0, 0.0); 2], n: 0, cycle_m: 1.0 };
+        let one = |i: usize| Blend::one(i, cycle(i));
+        if self.forward == 0 {
+            return Blend { parts: [(0, 0.0); 4], n: 0, cycle_m: 1.0 };
         }
+        // The authority's word picks the family: only its clips (sorted, so a run of them).
+        let (first, end) = match family {
+            Family::Running(r) if self.split && self.clips[..self.forward].iter().any(|g| g.run == r) => {
+                let first = self.clips[..self.forward].iter().position(|g| g.run == r).unwrap_or(0);
+                let end = first + self.clips[first..self.forward].iter().take_while(|g| g.run == r).count();
+                (first, end)
+            }
+            _ => (0, self.forward),
+        };
         let mut prev_hi = 0.0f32;
-        for i in 0..self.clips.len() - 1 {
-            let (lo, hi) = self.band(i);
+        for i in first..end - 1 {
+            let (lo, hi) = self.band(i, family);
             let lo = lo.max(prev_hi);
             let hi = hi.max(lo + 0.01);
             prev_hi = hi;
@@ -301,11 +651,22 @@ impl Gaits {
                 if t >= 1.0 {
                     return one(i + 1);
                 }
-                return Blend { parts: [(i, 1.0 - t), (i + 1, t)], n: 2, cycle_m: (1.0 - t) * cycle(i) + t * cycle(i + 1) };
+                return Blend { parts: [(i, 1.0 - t), (i + 1, t), (i, 0.0), (i, 0.0)], n: 2, cycle_m: (1.0 - t) * cycle(i) + t * cycle(i + 1) };
             }
         }
-        one(self.clips.len() - 1)
+        one(end - 1)
     }
+}
+
+/// A looping clip's belt in a character file's sidecar: its speed (m/s) and where it travels from
+/// its facing (degrees, the game's sense: `travel_deg`, 0 without it). None for a clip that
+/// doesn't travel.
+pub fn belt(file: &str, clip: &str) -> Option<(f32, f32)> {
+    let path = std::path::Path::new(&crate::lookdev::asset_root()).join(file).with_extension("clips.json");
+    let j = serde_json::from_slice::<serde_json::Value>(&std::fs::read(&path).ok()?).ok()?;
+    let c = &j[clip];
+    let speed = c["speed"].as_f64()? as f32;
+    (c["loop"].as_bool() == Some(true) && speed > 0.1).then(|| (speed, c["travel_deg"].as_f64().unwrap_or(0.0) as f32))
 }
 
 /// The locomotion clips of a character file (cached; `<file stem>.clips.json`).
@@ -329,6 +690,17 @@ pub fn of(file: &str) -> Arc<Gaits> {
 /// `envs::Player`).
 #[derive(Component)]
 pub struct Feet;
+
+/// A connected body whose feet the log records, with its id: mine, and the one
+/// `LIVING_GAME_FEET_ID` names (another player's, to check how others are drawn). Each line
+/// carries `id`, and `sim` and `heading` are that body's.
+#[derive(Component)]
+pub struct Logged(pub u32);
+
+/// The other body `LIVING_GAME_FEET_ID` asks the feet log to follow too.
+pub fn logged_other() -> Option<u32> {
+    std::env::var("LIVING_GAME_FEET_ID").ok().and_then(|v| v.trim().parse().ok())
+}
 
 pub struct GaitPlugin;
 
@@ -371,7 +743,7 @@ fn record(
     time: Res<Time>,
     island: Option<Res<crate::island::Island>>,
     envs: Option<Res<crate::envs::Envs>>,
-    who: Query<(Entity, &GlobalTransform, Option<&crate::lookdev::Model>), Or<(With<Feet>, With<crate::envs::Player>)>>,
+    who: Query<(Entity, &GlobalTransform, Option<&crate::lookdev::Model>, Option<&Logged>), Or<(With<Feet>, With<Logged>, With<crate::envs::Player>)>>,
     children: Query<&Children>,
     bones: Query<(&Name, &GlobalTransform)>,
     anims: Query<&crate::anim::Anim>,
@@ -379,7 +751,9 @@ fn record(
     roam: Res<crate::envs::Roam>,
     scene: Option<NonSend<crate::world::Scene>>,
     camera: Query<&GlobalTransform, With<Camera3d>>,
+    (input, net, cam): (Option<Res<crate::controls::Input>>, Option<NonSend<crate::net::Net>>, Option<Res<crate::camera::Cam>>),
     mut feet: Local<HashMap<Entity, Tracked>>,
+    mut spine: Local<HashMap<Entity, [Option<Entity>; 3]>>,
 ) {
     // The island's ground, else the look-dev environment's.
     let ground = |x: f32, z: f32| match (&island, &envs) {
@@ -387,7 +761,7 @@ fn record(
         (None, Some(e)) => e.ground.height(x, z),
         _ => 0.0,
     };
-    for (e, root, model) in &who {
+    for (e, root, model, logged) in &who {
         if !feet.contains_key(&e) {
             let find = |name: &str| children.iter_descendants(e).find(|d| bones.get(*d).is_ok_and(|(n, _)| n.as_str() == name));
             if let (Some(l), Some(r), Some(la), Some(ra)) = (find("J_Bip_L_ToeBase"), find("J_Bip_R_ToeBase"), find("J_Bip_L_Foot"), find("J_Bip_R_Foot")) {
@@ -420,6 +794,22 @@ fn record(
         let anim = anims.get(e).ok();
         let fwd = root.rotation() * Vec3::Z;
         let yaw = fwd.z.atan2(fwd.x).to_degrees();
+        // The hips', chest's and head's facing as drawn, in the same sense as `yaw` (VRoid bones'
+        // rest rotations are identity, so each bone's +Z is where it faces).
+        let at = *spine.entry(e).or_insert_with(|| ["J_Bip_C_Hips", "J_Bip_C_UpperChest", "J_Bip_C_Head"].map(|n| children.iter_descendants(e).find(|d| bones.get(*d).is_ok_and(|(x, _)| x.as_str() == n))));
+        let bone_yaw = |b: Option<Entity>| {
+            b.and_then(|b| bones.get(b).ok()).map(|(_, g)| {
+                let f = g.rotation() * Vec3::Z;
+                f.z.atan2(f.x).to_degrees()
+            })
+        };
+        // Where I look and travel (sim radians as degrees, counter-clockwise from east), and the
+        // authority's segment speed: connected play only.
+        let my_id = net.as_ref().and_then(|n| n.my_id);
+        let id = logged.map(|l| l.0).or(my_id);
+        let is_me = id.is_some() && id == my_id;
+        let mine = id.and_then(|id| scene.as_ref().and_then(|s| s.shown.get(&id).copied()));
+        let look = input.as_ref().and_then(|i| i.scripted_look.or(i.look)).filter(|l| l.length_squared() > 1e-4).map(|l| l.y.atan2(l.x).to_degrees());
         let rest = serde_json::json!({
             "t": time.elapsed_secs_f64(),
             "root": [p.x, p.y, p.z],
@@ -430,8 +820,23 @@ fn record(
             // its upper body turns from it and whether it walks backwards (`twist.rs`, `anim.rs`).
             "yaw": yaw,
             "twist": motions.get(e).ok().map(|m| m.twist.to_degrees()),
+            "neck": motions.get(e).ok().map(|m| m.neck.to_degrees()),
+            "eyes": motions.get(e).ok().map(|m| m.eyes.to_degrees()),
+            "travel_rel": motions.get(e).ok().map(|m| m.travel.to_degrees()),
+            "hips_yaw": bone_yaw(at[0]),
+            // The hips' place as drawn (world m): a seat's height, and any jump between frames.
+            "hips_at": at[0].and_then(|b| bones.get(b).ok()).map(|(_, g)| g.translation().to_array()),
+            "chest_yaw": bone_yaw(at[1]),
+            "head_yaw": bone_yaw(at[2]),
+            "id": id,
+            "look": look.filter(|_| is_me),
+            "heading": mine.and_then(|(_, h)| h).map(|h| h.to_degrees()),
+            "sim": mine.map(|(p, _)| [p.x, p.y]),
             "reverse": motions.get(e).ok().map(|m| m.reverse),
             "pace": motions.get(e).ok().map(|m| m.pace),
+            // Walking or running clips as drawn (`live.rs` `family`), and my row's own word.
+            "family": motions.get(e).ok().map(|m| format!("{:?}", m.family)),
+            "running": roam.running,
             // Connected play: the authority time my body is drawn at, and its segment then.
             "mine_ms": scene.as_ref().map(|s| s.mine_ms),
             // The game camera's eye and its pitch below the horizon (degrees).
@@ -439,6 +844,8 @@ fn record(
                 let (p, f) = (c.translation(), c.forward());
                 [p.x, p.y, p.z, (-f.y).asin().to_degrees()]
             }),
+            "eye_height": cam.as_ref().map(|c| c.eye_height),
+            "eye_clearance": cam.as_ref().map(|c| c.ground_clearance),
             "seg": scene.as_ref().map(|s| [s.mine_seg.0 as f64, s.mine_seg.1 as f64, s.mine_seg.2 as f64]),
             "clip": anim.map_or("", |a| a.showing()),
             // The shared phase, the gaits and their weights, and each foot's marker contact.
@@ -458,6 +865,10 @@ fn record(
 pub(crate) mod tests {
     use super::*;
 
+    /// The split these tests were written at (the client's fixed 2.8 m/s before gait-split-1).
+    const OLD: Family = Family::Split(2.8);
+    use std::f32::consts::PI;
+
     /// Vivi's sidecar (`assets/lookdev/anim/vroid-Vivi.clips.json`): speeds, lengths and markers.
     pub(crate) fn vivi() -> Gaits {
         Gaits::parse(&serde_json::json!({
@@ -472,6 +883,82 @@ pub(crate) mod tests {
         }))
     }
 
+    /// Vivi's sidecar with the clip lab's takes (2026-11-11): directional loops, turns and jumps
+    /// (numbers rounded from the bake).
+    pub(crate) fn takes_json() -> serde_json::Value {
+        let mut j = serde_json::json!({
+            "walk": {"speed": 1.389, "natural_speed": 1.435, "seconds": 1.033, "loop": true, "contacts": {"L": [[0.5161, 1.0]], "R": [[0.0, 0.5806]]}},
+            "walk_brisk": {"speed": 2.028, "natural_speed": 2.028, "seconds": 1.0, "loop": true, "contacts": {"L": [[0.5, 1.0]], "R": [[0.0, 0.4667]]}},
+            "run": {"speed": 3.67, "natural_speed": 3.146, "seconds": 0.6, "loop": true, "contacts": {"L": [[0.4444, 0.7778]], "R": [[0.0, 0.2778]]}},
+            "run_fast": {"speed": 3.497, "natural_speed": 3.497, "seconds": 0.767, "loop": true, "contacts": {"L": [[0.4783, 0.7826]], "R": [[0.0, 0.1739]]}},
+            "turn_right_90": {"seconds": 1.467, "loop": false, "turn_deg": 90.0, "turn_curve": [[0.0, 0.0], [0.3, 20.0], [0.7, 80.0], [1.0, 90.0]], "contacts": {"L": [[0.0, 1.0]], "R": [[0.0, 0.3], [0.6, 1.0]]}},
+            "turn_left_90": {"seconds": 1.467, "loop": false, "turn_deg": -90.0, "turn_curve": [[0.0, 0.0], [1.0, -90.0]]},
+            "turn_left_180": {"seconds": 2.0, "loop": false, "turn_deg": -180.0, "turn_curve": [[0.0, 0.0], [1.0, -180.0]]},
+            "jump_forward": {"seconds": 2.167, "loop": false, "hop": [0.95, 1.394], "contacts": {"L": [[0.17, 0.25], [0.68, 0.75]], "R": [[0.0, 0.14], [0.35, 0.43], [0.83, 0.97]]}},
+            "jump_stand": {"seconds": 1.7, "loop": false, "contacts": {"L": [[0.0, 0.37], [0.65, 1.0]], "R": [[0.0, 0.37], [0.65, 1.0]]}},
+            "jump_right": {"seconds": 1.7, "loop": false, "hop": [0.6, 1.044], "travel_deg": 90},
+        });
+        for (name, deg, loco, speed, secs) in [
+            ("walk_back", 180, "walk", 1.05, 1.1),
+            ("strafe_walk_cross_right", 90, "walk", 1.3, 1.0), ("strafe_walk_cross_left", -90, "walk", 1.3, 1.0),
+            ("walk_diag_fr", 45, "walk", 1.4, 1.0), ("run_diag_fr", 45, "run", 2.6, 0.7),
+            ("walk_diag_fl", -45, "walk", 1.4, 1.0), ("run_diag_fl", -45, "run", 2.6, 0.7),
+        ] {
+            j[name] = serde_json::json!({"speed": speed, "natural_speed": speed, "seconds": secs, "loop": true, "travel_deg": deg, "locomotion": loco, "sync": "R", "contacts": {"L": [[0.5, 1.0]], "R": [[0.0, 0.5]]}});
+        }
+        j
+    }
+
+    pub(crate) fn with_takes() -> Gaits {
+        Gaits::parse(&takes_json())
+    }
+
+    #[test]
+    fn directional_takes_blend_by_angle_and_fall_back_where_a_side_has_none() {
+        let g = with_takes();
+        let name = |b: &Blend| b.parts().iter().map(|&(i, w)| (g.clips[i].clip, (w * 100.0).round() / 100.0)).collect::<Vec<_>>();
+        let len = |_| 1.0;
+        // Straight ahead: the forward gaits, exactly as `blend`.
+        assert_eq!(g.blend_toward(1.4, 1.0, OLD, 0.0, len), Some(g.blend(1.4, 1.0, OLD, len)));
+        // Right and behind, at a walk: that side's take.
+        assert_eq!(name(&g.blend_toward(1.2, 1.0, OLD, PI / 2.0, len).unwrap()), vec![("strafe_walk_cross_right", 1.0)]);
+        assert_eq!(name(&g.blend_toward(1.2, 1.0, OLD, PI, len).unwrap()), vec![("walk_back", 1.0)]);
+        // Behind at the rules' 2.6 m/s walk: 1.16 m a cycle against walk_brisk's 2.03 would step
+        // 1.76 times as often, so it falls back.
+        assert_eq!(g.blend_toward(2.6, 1.0, OLD, PI, len), None);
+        assert_eq!(name(&g.blend_cursor(2.6, 1.0, OLD, PI, len).unwrap()), vec![("walk_back", 1.0)]);
+        // Between forward and the forward-right diagonal: both, by angle.
+        let b = g.blend_toward(1.2, 1.0, OLD, 22.5f32.to_radians(), len).unwrap();
+        assert_eq!(name(&b), vec![("walk", 0.5), ("walk_diag_fr", 0.5)]);
+        // Right to behind (no back-right diagonal): the 90° gap blends side and back.
+        assert_eq!(name(&g.blend_toward(1.0, 1.0, OLD, 135f32.to_radians(), len).unwrap()), vec![("strafe_walk_cross_right", 0.5), ("walk_back", 0.5)]);
+        // Each cycle covers the weighted metres, so the feet keep the body's speed.
+        let side = g.blend_toward(1.2, 1.0, OLD, PI / 2.0, len).unwrap();
+        assert!((side.cycle_m - 1.3).abs() < 1e-4);
+        // Between a direction's walk and run takes, by speed.
+        assert_eq!(g.blend_toward(1.9, 1.0, OLD, PI / 4.0, len).unwrap().n, 2);
+        // A side whose mirror falls back (no left take, and back to forward-left is too far to
+        // blend) falls back too.
+        let mut j = takes_json();
+        j.as_object_mut().unwrap().remove("strafe_walk_cross_left");
+        let lopsided = Gaits::parse(&j);
+        assert!(lopsided.blend_side(1.2, 1.0, OLD, PI / 2.0, len, true).is_some());
+        assert_eq!(lopsided.blend_toward(1.2, 1.0, OLD, PI / 2.0, len), None);
+        // A file with no directional takes falls back.
+        assert_eq!(vivi().blend_toward(1.4, 1.0, OLD, PI / 2.0, len), None);
+    }
+
+    #[test]
+    fn take_info_reads_turns_paths_hops_and_flight() {
+        let g = with_takes();
+        let t = g.info("turn_right_90").unwrap();
+        assert_eq!(t.turn.as_ref().map(|t| t.0), Some(90.0));
+        assert!((t.turned(0.5) - 50f32.to_radians()).abs() < 1e-4);
+        assert_eq!(g.info("jump_forward").unwrap().hop, Some((0.95, 1.394)));
+        let (a, b) = g.info("jump_stand").unwrap().flight().unwrap();
+        assert!((a - 0.37).abs() < 0.01 && (b - 0.65).abs() < 0.01, "the longest time both feet are up: {a}..{b}");
+    }
+
     fn only(b: &Blend) -> Option<&'static str> {
         (b.n == 1).then(|| vivi().clips[b.parts[0].0].clip)
     }
@@ -482,26 +969,102 @@ pub(crate) mod tests {
         let len = |_| 1.0;
         // Pure where one gait serves: the rules' walk and run, the look-dev walk.
         for (speed, clip) in [(1.4, "walk"), (2.5, "walk_brisk"), (3.05, "run"), (3.9, "run_fast")] {
-            assert_eq!(only(&g.blend(speed, 1.0, len)), Some(clip), "at {speed} m/s");
+            assert_eq!(only(&g.blend(speed, 1.0, OLD, len)), Some(clip), "at {speed} m/s");
         }
         // Between walk and walk_brisk both play, and the phase rate keeps the stride rule: one
         // gait at its baked cycle reproduces `speed / (baked speed × stride)`.
-        let b = g.blend(1.7, 1.0, len);
+        let b = g.blend(1.7, 1.0, OLD, len);
         assert_eq!(b.n, 2);
         assert!((b.parts[0].1 + b.parts[1].1 - 1.0).abs() < 1e-5);
-        let walk = g.blend(1.4, 1.0, len);
+        let walk = g.blend(1.4, 1.0, OLD, len);
         let rate = 1.4 / walk.cycle_m;
         assert!((rate * 1.033 - 1.4 / 1.389).abs() < 1e-3, "one cycle per {} s", 1.0 / rate);
-        // Walk ↔ run only round WALK_MAX.
-        assert_eq!(g.blend(WALK_MAX, 1.0, len).n, 2);
-        assert_eq!(only(&g.blend(WALK_MAX - CROSS_BAND - 0.01, 1.0, len)), Some("walk_brisk"));
+        // Walk ↔ run only round the split.
+        assert_eq!(g.blend(2.8, 1.0, OLD, len).n, 2);
+        assert_eq!(only(&g.blend(2.8 - CROSS_BAND - 0.01, 1.0, OLD, len)), Some("walk_brisk"));
+    }
+
+    #[test]
+    fn a_new_walk_joins_its_family_by_natural_speed() {
+        // A sidecar that marks its gaits' families: walk_v30 (a 3.0 m/s walk) goes between
+        // walk_brisk and the runs, by its natural speed, not its name.
+        let g = Gaits::parse(&serde_json::json!({
+            "walk": {"speed": 1.389, "natural_speed": 1.435, "seconds": 1.033, "loop": true, "locomotion": "walk"},
+            "walk_brisk": {"speed": 2.028, "natural_speed": 2.028, "seconds": 1.0, "loop": true, "locomotion": "walk"},
+            "walk_v30": {"speed": 3.0, "natural_speed": 3.0, "seconds": 0.7, "loop": true, "locomotion": "walk"},
+            "run": {"speed": 3.67, "natural_speed": 3.146, "seconds": 0.6, "loop": true, "locomotion": "run"},
+            "run_fast": {"speed": 3.497, "natural_speed": 3.497, "seconds": 0.767, "loop": true, "locomotion": "run"},
+            "sneak": {"speed": 0.747, "natural_speed": 0.747, "seconds": 1.6, "loop": true, "locomotion": "sneak"},
+            "walk_back": {"speed": 1.05, "natural_speed": 1.05, "seconds": 1.1, "loop": true, "locomotion": "walk", "travel_deg": 180},
+        }));
+        let names = |b: &Blend| b.parts().iter().map(|&(i, w)| (g.gaits()[i].clip, (w * 100.0).round() / 100.0)).collect::<Vec<_>>();
+        let walk34 = Family::Split((3.4f32 * 4.3).sqrt());
+        assert_eq!(names(&g.blend(3.0, 1.0, walk34, |_| 1.0)), vec![("walk_v30", 1.0)]);
+        assert_eq!(names(&g.blend(3.4, 1.0, walk34, |_| 1.0)), vec![("walk_v30", 1.0)]);
+        // Far apart in natural speed (2.03 and 3.0): walk_brisk alone up to 2.8, then the blend.
+        assert_eq!(names(&g.blend(2.6, 1.0, walk34, |_| 1.0)), vec![("walk_brisk", 1.0)]);
+        assert_eq!(g.blend(2.9, 1.0, walk34, |_| 1.0).n, 2, "between walk_brisk and walk_v30");
+        // Close neighbours still blend across their whole gap.
+        assert_eq!(g.blend(1.7, 1.0, walk34, |_| 1.0).n, 2);
+        assert_eq!(names(&g.blend(4.3, 1.0, walk34, |_| 1.0)), vec![("run_fast", 1.0)]);
+        assert!(g.gaits()[..5].iter().all(|x| x.clip != "sneak" && x.clip != "walk_back"));
+    }
+
+    #[test]
+    fn the_authoritys_running_word_picks_the_family_and_a_switch_crossfades() {
+        let g = vivi();
+        let len = |_| 1.0;
+        let run_share = |b: &Blend| b.parts().iter().filter(|&&(i, _)| g.gaits()[i].run).map(|p| p.1).sum::<f32>();
+        // Walking at the walk choices (2.6, 3.0, 3.4 m/s): walking clips only, whatever the speed.
+        for v in [2.6, 3.0, 3.4] {
+            assert_eq!(run_share(&g.blend(v, 1.0, Family::Running(false), len)), 0.0, "walking at {v}");
+        }
+        // Running at the rules' run (about 4.3) and the road top (4.6): running clips only.
+        for v in [4.3, 4.6] {
+            assert!((run_share(&g.blend(v, 1.0, Family::Running(true), len)) - 1.0).abs() < 1e-5, "running at {v}");
+        }
+        // A mix at the ends is that family; between, both families by the weight, and the
+        // weights and the cycle move continuously with it (no pop at the switch).
+        assert_eq!(g.blend(3.4, 1.0, Family::Mix(0.0), len), g.blend(3.4, 1.0, Family::Running(false), len));
+        assert_eq!(g.blend(3.4, 1.0, Family::Mix(1.0), len), g.blend(3.4, 1.0, Family::Running(true), len));
+        let mut last = g.blend(3.4, 1.0, Family::Mix(0.0), len);
+        for k in 1..=20 {
+            let w = k as f32 / 20.0;
+            let b = g.blend(3.4, 1.0, Family::Mix(w), len);
+            assert!((run_share(&b) - w).abs() < 1e-4, "run share {} at {w}", run_share(&b));
+            assert!((b.parts().iter().map(|p| p.1).sum::<f32>() - 1.0).abs() < 1e-4);
+            assert!((b.cycle_m - last.cycle_m).abs() < 0.1, "cycle jumps at {w}");
+            last = b;
+        }
+        // The walking stop plays only while the word is walking.
+        assert!(g.walks(3.4, 1.0, Family::Mix(0.0)) && !g.walks(3.4, 1.0, Family::Mix(0.5)));
+    }
+
+    #[test]
+    fn the_walk_run_split_follows_the_authority_or_the_laws_not_a_number() {
+        let g = vivi();
+        let len = |_| 1.0;
+        // The laws' split (the geometric mean of a 3.4 m/s walk and a 4.3 m/s run, 3.82): a walk
+        // at 3.4 m/s still walks, a run at 4.3 runs.
+        let laws = Family::Split((3.4f32 * 4.3).sqrt());
+        assert_eq!(only(&g.blend(3.4, 1.0, laws, len)), Some("walk_brisk"));
+        assert_eq!(only(&g.blend(4.3, 1.0, laws, len)), Some("run_fast"));
+        assert!(g.walks(3.4, 1.0, laws) && !g.walks(4.3, 1.0, laws));
+        // The authority's word wins at any speed: a walk at 3.6 walks, a run at 2.9 runs.
+        assert_eq!(only(&g.blend(3.6, 1.0, Family::Running(false), len)), Some("walk_brisk"));
+        assert_eq!(only(&g.blend(2.9, 1.0, Family::Running(true), len)), Some("run"));
+        assert!(g.walks(3.6, 1.0, Family::Running(false)) && !g.walks(2.0, 1.0, Family::Running(true)));
+        // Neither: midway between walk_brisk's natural 2.03 and run's 3.15 (2.59).
+        assert!((g.clips_split() - 0.5 * (2.028 + 3.15)).abs() < 0.05, "{}", g.clips_split());
+        assert_eq!(only(&g.blend(2.3, 1.0, Family::Clips, len)), Some("walk_brisk"));
+        assert_eq!(only(&g.blend(2.9, 1.0, Family::Clips, len)), Some("run"));
     }
 
     #[test]
     fn weights_are_continuous_in_speed() {
         let g = vivi();
         let w = |s: f32| {
-            let b = g.blend(s, 1.0, |_| 1.0);
+            let b = g.blend(s, 1.0, OLD, |_| 1.0);
             let mut v = [0.0f32; 4];
             for &(i, x) in b.parts() {
                 v[i] += x;
@@ -523,7 +1086,7 @@ pub(crate) mod tests {
     fn longer_legs_step_slower_and_walk_further() {
         let g = vivi();
         // A giant twice the base's stride walks at 2.6 m/s with the casual walk, at half its rate.
-        let b = g.blend(2.6, 2.0, |_| 1.0);
+        let b = g.blend(2.6, 2.0, OLD, |_| 1.0);
         assert_eq!(only(&b), Some("walk"));
         let rate = 2.6 / (2.0 * b.cycle_m);
         assert!((rate * 1.033 - 2.6 / (1.389 * 2.0)).abs() < 1e-3);
@@ -563,13 +1126,13 @@ pub(crate) mod tests {
         let g = wolf();
         let name = |b: &Blend| b.parts().iter().map(|&(i, w)| (g.clips[i].clip, (w * 100.0).round() / 100.0)).collect::<Vec<_>>();
         for (speed, clip) in [(1.3, "walk"), (1.0, "walk"), (3.4, "trot"), (4.1, "trot"), (7.0, "run"), (5.5, "run")] {
-            assert_eq!(name(&g.blend(speed, 1.0, |_| 1.0)), vec![(clip, 1.0)], "at {speed} m/s");
+            assert_eq!(name(&g.blend(speed, 1.0, OLD, |_| 1.0)), vec![(clip, 1.0)], "at {speed} m/s");
         }
         // walk/trot meet at sqrt(1.3 × 3.4) = 2.10 m/s, trot/run at sqrt(3.4 × 7) = 4.88.
-        assert_eq!(g.blend(2.10, 1.0, |_| 1.0).n, 2);
-        assert_eq!(g.blend(4.88, 1.0, |_| 1.0).n, 2);
+        assert_eq!(g.blend(2.10, 1.0, OLD, |_| 1.0).n, 2);
+        assert_eq!(g.blend(4.88, 1.0, OLD, |_| 1.0).n, 2);
         // A pup (stage scale 0.42) takes smaller steps: at 1.3 m/s it trots.
-        assert_eq!(name(&g.blend(1.3, 0.42, |_| 1.0)), vec![("trot", 1.0)]);
+        assert_eq!(name(&g.blend(1.3, 0.42, OLD, |_| 1.0)), vec![("trot", 1.0)]);
         // The walk's settle point has three paws down.
         let c = &g.info("walk").unwrap().contacts;
         assert_eq!(c.count(c.next_settle(0.3)), 3);
@@ -583,7 +1146,7 @@ pub(crate) mod tests {
             {"name": "run", "seconds": 0.48, "loop": true, "speed": 4.6},
         ]}));
         let top = |s: f32| {
-            let b = g.blend(s, 1.0, |_| 1.0);
+            let b = g.blend(s, 1.0, OLD, |_| 1.0);
             let &(i, w) = b.parts().iter().max_by(|a, b| a.1.total_cmp(&b.1)).unwrap();
             (g.clips[i].clip, w)
         };
@@ -591,14 +1154,14 @@ pub(crate) mod tests {
         assert_eq!(top(3.7), ("trot", 1.0));
         let (clip, w) = top(3.7 * 1.15);
         assert!(clip == "run" && w > 0.9, "flee plays the bound, not {clip} at {w}");
-        assert_eq!(g.blend(4.125, 1.0, |_| 1.0).n, 2, "they still blend round the boundary");
+        assert_eq!(g.blend(4.125, 1.0, OLD, |_| 1.0).n, 2, "they still blend round the boundary");
     }
 
     #[test]
     fn a_file_without_both_gaits_uses_the_lookdev_speeds() {
         let g = Gaits::parse(&serde_json::json!({"walk": {"speed": 1.4}}));
         assert_eq!(g.clips.len(), 2);
-        let b = g.blend(3.6, 1.0, |_| 1.0);
+        let b = g.blend(3.6, 1.0, OLD, |_| 1.0);
         assert_eq!((b.n, g.clips[b.parts[0].0].clip), (1, "run"));
     }
 }

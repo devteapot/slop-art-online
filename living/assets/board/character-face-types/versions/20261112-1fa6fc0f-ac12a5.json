@@ -1,0 +1,85 @@
+{
+ "schema": 1,
+ "family": "character:face-types",
+ "id": "20261112-1fa6fc0f-ac12a5",
+ "published": "2026-11-12T00:14:31+01:00",
+ "imported": "2026-11-12T00:14:31+01:00",
+ "track": "char-4",
+ "maker": "Claude Fable 5.2",
+ "note": "Pass 3, step 4: designed shadows. Each type's face normals come from a planar proxy and its shadow map from shapes drawn at 16 light angles (side plane, nose wedge, socket, cheek triangle, jaw), interpolated through distance fields. The straight split down the middle and the band along the jaw are gone. The map's format is the client's own.",
+ "source": {
+  "commit": "1fa6fc0f245cf46fa2b66fc2bad5501c77237dfc",
+  "branch": "char-4",
+  "dirty": false,
+  "generator": "living/tools/characters/face_shadow.py",
+  "generator_sha256": "62c0d3ebf37bf53ef144838246c69842879616c83e210a5ffed5c2129a695183",
+  "generator_state": "committed",
+  "params": {}
+ },
+ "renderer": {
+  "method": "asset-view (the game) for the sweeps; the shapes sheets are drawn by face_shadow.py --sheet",
+  "commit": "",
+  "key": "asset-view (the game) for the sweeps; the shapes sheets are drawn by face_shadow.py --sheet",
+  "preset": "",
+  "note": "shapes-*: the shade drawn at each light angle and the map's shade between them, from face_shadow.py; sweep-close, sweep-game-camera, before-and-after and turned-from-the-light: clip-free copies of the presets through the game's asset view with the sun moved by LIVING_GAME_HOUR; the vroid member is the reference under the same sweep; the blue-protocol member is published CEDEC slides, for comparison only (sources in ~/archive/asset-board/references/blue-protocol/SOURCES.md)"
+ },
+ "preset": "",
+ "media": "media/character-face-types/20261112-1fa6fc0f-ac12a5",
+ "members": [
+  {
+   "name": "types",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "535bb6b5edefc2ae74723c02f0cc4601b7f590856d46aff437080ebc4b85f189",
+   "shots": [
+    "before-and-after",
+    "shapes-adult-f-b",
+    "shapes-adult-m-b",
+    "shapes-all-types",
+    "shapes-child-u-b",
+    "shapes-elder-m-c",
+    "sweep-close",
+    "sweep-game-camera",
+    "turned-from-the-light"
+   ],
+   "clips": []
+  },
+  {
+   "name": "vroid",
+   "role": "control",
+   "token_kind": "import",
+   "sha256": "8d175f2bcaa0b9d428c04e95f1d27b61181e9779de38ab373ec5594d65ea25ff",
+   "shots": [
+    "before-and-after",
+    "shapes-adult-f-b",
+    "shapes-adult-m-b",
+    "shapes-all-types",
+    "shapes-child-u-b",
+    "shapes-elder-m-c",
+    "sweep-close",
+    "sweep-game-camera",
+    "turned-from-the-light"
+   ],
+   "clips": []
+  },
+  {
+   "name": "blue-protocol",
+   "role": "control",
+   "token_kind": "import",
+   "sha256": "1857b21eabe02e74614218e9197e3b08735c5c3232747f63dce67bb3ee65fb2b",
+   "shots": [
+    "before-and-after",
+    "shapes-adult-f-b",
+    "shapes-adult-m-b",
+    "shapes-all-types",
+    "shapes-child-u-b",
+    "shapes-elder-m-c",
+    "sweep-close",
+    "sweep-game-camera",
+    "turned-from-the-light"
+   ],
+   "clips": []
+  }
+ ],
+ "delivered": []
+}

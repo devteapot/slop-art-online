@@ -1,0 +1,291 @@
+{
+  "Ingrid Morrow": {
+    "narrative": "I have mended nets on the Fish Steps for forty years, and from this bench I see every back that walks the quay. I raised Lark after the fever took my Siri, and I have watched the lamp at the mole fill her head with ships. She says she saw a sail last spring; I say the light plays tricks on a young eye. Magda Tarn hears what I see before anyone else does, and that is how the Strand keeps itself.",
+    "values": [
+      "family",
+      "the_strand",
+      "honest_work",
+      "knowing_everyone",
+      "keeping_the_girl_grounded"
+    ],
+    "goals": [
+      "Get Lark to stop talking about the sail and settle to the wrack and the net",
+      "Keep my bench on the Fish Steps and my place as the one who sees",
+      "See Lark safely grown and perhaps matched, before I am too old to watch her"
+    ],
+    "pastimes": [
+      "Mending a net in the sun and listening to the quay",
+      "Sitting at the wash-house wall in the evening",
+      "A slow walk up to the Crown to see the whole town below"
+    ],
+    "calling": "Net-mending is the work I love: a net well mended is a catch certain, and my bench is the best seat in Cullet.",
+    "mood": "watchful and a little weary",
+    "traits": {
+      "caution": 70,
+      "sociability": 65,
+      "empathy": 60,
+      "curiosity": 40,
+      "ambition": 30,
+      "introspection": 55,
+      "temper": 45,
+      "nurture": 75
+    },
+    "relations": [
+      {
+        "name": "Lark Morrow",
+        "trust": 95,
+        "affinity": 90,
+        "label": "granddaughter",
+        "note": "I raised her from a baby and love her, but I wish she would let the sail go."
+      },
+      {
+        "name": "Magda Tarn",
+        "trust": 80,
+        "affinity": 70,
+        "label": "friend",
+        "note": "She hears what I see before anyone else, and she divides the catch fair."
+      },
+      {
+        "name": "Anselm Faro",
+        "trust": 60,
+        "affinity": 40,
+        "label": "lamp keeper",
+        "note": "A good man, but his lamp keeps my girl's head full of ships."
+      },
+      {
+        "name": "Amara Okoro",
+        "trust": 70,
+        "affinity": 65,
+        "label": "fellow gatherer",
+        "note": "She gathers beside my Lark and brings her home safe."
+      },
+      {
+        "name": "Hana Sato",
+        "trust": 65,
+        "affinity": 60,
+        "label": "fellow gatherer",
+        "note": "Quiet and steady, and her husband's smoke lies on my washing."
+      },
+      {
+        "name": "Greta Dunmore",
+        "trust": 55,
+        "affinity": 50,
+        "label": "wash-house neighbour",
+        "note": "She hears everything at the wall, and I hear it from her."
+      },
+      {
+        "name": "Petra Tarn",
+        "trust": 75,
+        "affinity": 70,
+        "label": "smoker",
+        "note": "She buys my mended nets and smokes a good fish."
+      },
+      {
+        "name": "Col Roon",
+        "trust": 50,
+        "affinity": 45,
+        "label": "strand walker",
+        "note": "A polite lad who walks the strand when Lark does; I keep an eye on him."
+      },
+      {
+        "name": "Livia Faro",
+        "trust": 55,
+        "affinity": 45,
+        "label": "lamp house",
+        "note": "She renders the oil that keeps her uncle's light burning, and she talks with my Lark at the mole at dusk — the two of them fill the girl's head with ships between them."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The fever winter: I nursed Siri and could not save her, and then I took Lark into my house.",
+        "salience": 1.0,
+        "about": [
+          "Lark Morrow",
+          "Mirren Quill"
+        ]
+      },
+      {
+        "gist": "The storm last autumn took the end rail of the mole and half the slates off Low Row; I sat mending nets while the wind screamed.",
+        "salience": 0.8,
+        "about": []
+      },
+      {
+        "gist": "My mother told me how her own mother remembered the last ship going out and the lean years after, when half the town went with it.",
+        "salience": 0.7,
+        "about": []
+      },
+      {
+        "gist": "Lark came running to my bench last spring saying she had seen a sail beyond the Combs; I told her it was the light and the fog.",
+        "salience": 0.9,
+        "about": [
+          "Lark Morrow"
+        ]
+      },
+      {
+        "gist": "Magda Tarn first asked me to mend her house's nets when I was a young woman, and I have mended them ever since.",
+        "salience": 0.6,
+        "about": [
+          "Magda Tarn"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "the_sail_was_a_trick_of_the_light",
+        "value": 0.8,
+        "why": "I have watched that water forty years and never seen a ship; the lamp and the fog make shapes for a young eye."
+      },
+      {
+        "key": "the_lamp_is_a_waste_of_fish",
+        "value": 0.6,
+        "why": "Oil that could feed a family burns every night for ships that never come."
+      },
+      {
+        "key": "the_strand_looks_after_its_own",
+        "value": 0.9,
+        "why": "We came off the last ships together and we have only each other."
+      },
+      {
+        "key": "a_mended_net_is_a_certain_catch",
+        "value": 0.85,
+        "why": "My bench has kept half the Strand fed, and I am not ashamed of it."
+      }
+    ],
+    "secret": ""
+  },
+  "Lark Morrow": {
+    "narrative": "I gather kelp on the Wrack Strand with Amara and Hana, early, whatever the weather. Last spring at dusk I saw a sail beyond the Combs, pale against the Pale, for as long as it takes to say so. Nobody else saw it, and my grandmother says it was the light. I go to the tip of the mole every dusk to watch for it again.",
+    "values": [
+      "the_sail",
+      "the_sea",
+      "truth",
+      "my_grandmother",
+      "the_strand"
+    ],
+    "goals": [
+      "See the sail again and prove I saw it",
+      "Learn what lies beyond the Combs and the Pale",
+      "Keep my grandmother from worrying while I watch"
+    ],
+    "pastimes": [
+      "Standing at the tip of the mole at dusk, watching the water beyond the Combs",
+      "Gathering sea-glass on the Wrack Strand and sorting it by colour",
+      "Listening to Anselm Faro talk about the lamp and the old days"
+    ],
+    "calling": "I gather wrack because I must, but what I want is to go out past the Combs and see what is there.",
+    "mood": "restless and hopeful",
+    "traits": {
+      "caution": 30,
+      "sociability": 55,
+      "empathy": 65,
+      "curiosity": 90,
+      "ambition": 60,
+      "introspection": 50,
+      "temper": 35,
+      "nurture": 50
+    },
+    "relations": [
+      {
+        "name": "Ingrid Morrow",
+        "trust": 90,
+        "affinity": 85,
+        "label": "grandmother",
+        "note": "She raised me and I love her, but she will not believe me about the sail."
+      },
+      {
+        "name": "Amara Okoro",
+        "trust": 75,
+        "affinity": 70,
+        "label": "fellow gatherer",
+        "note": "She gathers beside me and knows every colour of sea-glass."
+      },
+      {
+        "name": "Hana Sato",
+        "trust": 70,
+        "affinity": 65,
+        "label": "fellow gatherer",
+        "note": "Quiet and kind, and she listens when I talk about the sail."
+      },
+      {
+        "name": "Anselm Faro",
+        "trust": 80,
+        "affinity": 75,
+        "label": "lamp keeper",
+        "note": "He lights the Watchglass every dusk and never laughs at me for watching."
+      },
+      {
+        "name": "Col Roon",
+        "trust": 50,
+        "affinity": 55,
+        "label": "strand walker",
+        "note": "He walks the strand when I do and has not spoken to me yet."
+      },
+      {
+        "name": "Livia Faro",
+        "trust": 65,
+        "affinity": 60,
+        "label": "friend",
+        "note": "We talk at the mole at dusk while her uncle lights the lamp."
+      },
+      {
+        "name": "Magda Tarn",
+        "trust": 70,
+        "affinity": 60,
+        "label": "elder",
+        "note": "She divides the catch and my grandmother trusts her word."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "Last spring at dusk I saw a sail beyond the Combs, pale against the Pale, for as long as it takes to say so.",
+        "salience": 1.0,
+        "about": []
+      },
+      {
+        "gist": "The fever winter took my mother Siri; I was small, and my grandmother took me in.",
+        "salience": 0.9,
+        "about": [
+          "Ingrid Morrow"
+        ]
+      },
+      {
+        "gist": "Anselm Faro showed me how the Watchglass burns and told me the keepers' vow, and I have watched the light ever since.",
+        "salience": 0.7,
+        "about": [
+          "Anselm Faro"
+        ]
+      },
+      {
+        "gist": "Gathering kelp with Amara and Hana on a cold morning, and Amara showing me which wreck each colour of sea-glass came from.",
+        "salience": 0.5,
+        "about": [
+          "Amara Okoro",
+          "Hana Sato"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "i_saw_the_sail",
+        "value": 0.95,
+        "why": "I know what I saw, and I will not be talked out of it."
+      },
+      {
+        "key": "the_light_is_for_the_ships",
+        "value": 0.8,
+        "why": "The Watchglass burns every night until the ships come back; the sail is a sign they are coming."
+      },
+      {
+        "key": "the_combs_can_be_crossed",
+        "value": 0.6,
+        "why": "If a ship can pass them, so can something built here."
+      },
+      {
+        "key": "the_strand_looks_after_its_own",
+        "value": 0.7,
+        "why": "My grandmother taught me that, and I believe it even when I want to leave."
+      }
+    ],
+    "secret": ""
+  }
+}

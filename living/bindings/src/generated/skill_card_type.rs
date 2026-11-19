@@ -20,6 +20,7 @@ pub struct SkillCard {
     pub arc: f32,
     pub needs: String,
     pub knows: String,
+    pub pool: String,
 }
 
 impl __sdk::InModule for SkillCard {
@@ -43,6 +44,7 @@ pub struct SkillCardCols {
     pub arc: __sdk::__query_builder::Col<SkillCard, f32>,
     pub needs: __sdk::__query_builder::Col<SkillCard, String>,
     pub knows: __sdk::__query_builder::Col<SkillCard, String>,
+    pub pool: __sdk::__query_builder::Col<SkillCard, String>,
 }
 
 impl __sdk::__query_builder::HasCols for SkillCard {
@@ -62,6 +64,7 @@ impl __sdk::__query_builder::HasCols for SkillCard {
             arc: __sdk::__query_builder::Col::new(table_name, "arc"),
             needs: __sdk::__query_builder::Col::new(table_name, "needs"),
             knows: __sdk::__query_builder::Col::new(table_name, "knows"),
+            pool: __sdk::__query_builder::Col::new(table_name, "pool"),
         }
     }
 }

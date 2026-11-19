@@ -15,13 +15,23 @@ __pycache__/
 
 # Local API keys
 /.env
+# Local model prices (living/configs/prices.example.json; TypeSafe's pricing is not committed)
+/living/configs/prices.local.json
 
 # Living core build output and local service data
 /living/target/
 /.local/living/
+# The Kimodo clip library (fetched from the Spark; docs/GAME_BRIEF.md, animation)
+/.local/kimodo/
+# The VRoid reference taken apart (docs/CHARACTER_REFERENCE.md): third-party files and their figures
+/.local/ref/
+/.local/ref-1.tar.gz
 /living/viewer/dist/
 /living/game/assets/lookdev/
 /living/game/assets/view/
 /living/game/assets/envs/*/
 # Painted textures (living/tools/textures/paint.py; `just living-game-textures`)
 /living/game/assets/textures/
+
+# The look book: a client asset written by living/tools/characters/look_lines.py (docs/LOOK.md).
+/living/game/assets/characters/looks.json

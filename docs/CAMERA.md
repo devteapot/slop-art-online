@@ -1,0 +1,305 @@
+# The game camera and sight
+
+Status: **proposed** (camera-2, 2026-11-18). Part A records the reference research. Part B is the client camera in progress in `living/game`. Section 4 proposes the authority changes for general coordinator review.
+
+The direction is a high, fixed-bearing follow camera in the style of League of Legends and SUPERVIVE. The wheel moves it closer and lowers the angle. Corepunk is the reference for how a high camera can show the layout of a place while the character's line of sight determines who and what is visible. The reference is the mechanic. Slop Art Online uses its own presentation, art and world.
+
+## 1. Reference research
+
+**Verified** means a dated patch note, developer statement, documented setting or visible evidence. Historical evidence is scoped to its source. **Inferred** marks an interpretation or an open question.
+
+### Corepunk
+
+The [Corepunk reference note](REFERENCE_COREPUNK.md) covers the wider comparison and gives the source trail for camera distance, scouting and interrupted casts.
+
+| Question | Finding |
+| --- | --- |
+| Height, pitch and FOV | **Verified.** Artificial Core describes an isometric open-world RPG with dynamic fog of war. The developer-linked alpha gameplay shows a high oblique view with ground and building sides visible. **Inferred.** “Isometric” describes the look here. The footage does not calibrate eye height, pitch, projection type or vertical FOV. [Official overview][cp-about], [alpha gameplay][cp-video]. |
+| Zoom | **Verified.** The patch archive records a January 2025 maximum camera distance increase from 14.5 to 15.5 and a separately tuned vision radius (units unspecified), a change to center zoom-in on the character instead of their feet, and a fix for the quest sidebar consuming wheel input as zoom. **Inferred.** These establish a wheel zoom and a historical distance cap. The minimum, current cap and any pitch change over the zoom remain unverified. [Corepunk patch notes][cp-patches]. |
+| Lock and rotation | **Verified.** Producer Eugene Kiver confirmed a character lock in 2020. The patch archive names L for unlocking, describes movement with the unlocked camera, and mentions performance while rotating the camera. **Inferred.** The rotation wording suggests some camera rotation exists, but its input, availability in locked play and whether it refers to ordinary player yaw remain unverified. [Producer AMA][cp-ama], [patch notes][cp-patches]. |
+| Movement and facing | **Verified.** The FAQ specifies mouse movement and keyboard abilities. The patch archive explicitly describes right-click movement. **Inferred.** The documented scheme is click-to-move; no supported WASD movement mode was confirmed. Travel-facing is plausible from the gameplay framing and click destinations, but whether idle cursor motion or abilities turn the character independently remains unverified. [FAQ][cp-faq], [patch notes][cp-patches], [alpha gameplay][cp-video]. |
+| Radius and facing | **Verified.** The same patch entry increased the vision radius from 16.5 to 17.5 (units unspecified). The producer said ultrawide would show more screen with the same fog radius. The seven-month milestone described a forward-facing cone for **monsters**, with hearing alongside it. **Inferred.** A roughly radial player envelope is consistent with the radius wording and the wooded alpha still, but a radius can also bound a cone. No player turn-in-place comparison confirmed all-round sight or a cone. [Patch notes][cp-patches], [producer AMA][cp-ama], [seven-month milestone][cp-milestone], [alpha gameplay][cp-video]. |
+| Walls, buildings, trees and cliffs | **Verified.** The archive says a cast is interrupted when the target goes behind a wall or obstacle into an area without vision, and records a fix for jumping inside a building lifting the fog. **Inferred.** Building and wall interiors or far sides can form blind areas. The wooded still has dark ground near trees, but it cannot tell a tree's own shadow from ordinary range fog. General tree, cliff and uphill/downhill rules remain unverified. Elevation in the camera and movement patch entries supplies no sight formula. [Patch notes][cp-patches], [alpha gameplay][cp-video]. |
+| Unseen ground and occupants | **Verified.** The alpha stills show a soft dark veil with portions of terrain and scenery still legible around it. The archive records fixes for weapon, skin and emissive lights visible through fog, and describes enemies disappearing into fog. **Inferred.** The useful model is dim static context with concealed live occupants. Exact desaturation, unexplored versus previously explored ground, and persistence for each static prop class remain unverified. [Alpha gameplay][cp-video], [patch notes][cp-patches]. |
+| Minimap, stealth and brush | **Verified.** The archive documents deployable vision and reveal wards, a minimap with directions and custom markers, enemy flag-carrier markers in Capture the Flag and killstreak tracking in Deathmatch. A separate open-world point-of-interest announcement describes personal scouting and limited map information. The archive documents explicit character invisibility, including Vanish Device. **Inferred.** The “no radar” brief is a useful description of personal discovery, but there is no verified blanket claim about ordinary open-world player tracking. No general brush concealment, stealth detection rule or terrain-height exception was confirmed. [Patch notes][cp-patches], [open-world points of interest][cp-war]. |
+
+The [2020 community Discord recap][cp-recap] surfaced a question about brush and height differences, but the full page timed out during this pass. The question supplies no evidence for the answer. The direct browser extraction of the [FAQ][cp-faq] returned no body. Its indexed official text contained the controls answer and the patch archive independently corroborated mouse movement.
+
+### SUPERVIVE and League of Legends
+
+| Reference | Camera | Vision |
+| --- | --- | --- |
+| SUPERVIVE | **Verified.** Gameplay and the captured settings show a high oblique play view; settings captures include Auto Zoom, and the February 5 patch describes holding F2–F4 to view an ally. **Inferred.** The footage and settings support a following view with framing adjustments. Exact height, pitch, FOV, wheel range and a general lock/free mode remain unverified. [Developer Steam listing and footage][sv-steam], [settings captures][sv-settings], [February 5 patch transcript][sv-patch]. | **Verified.** The February 5 patch describes a directional detection source that can see invisible units, and the Huntress listing documents an ability to see injured hunters through fog. **Inferred.** Higher ledges can make opponents harder to see from below, based on player reports and the High Ground Warning setting. The exact high-to-low and low-to-high rule, brush behavior and general teammate or ward-style sharing remain unverified. [February 5 patch transcript][sv-patch], [Huntress listing][sv-huntress], [elevation discussion][sv-height], [settings captures][sv-settings]. |
+| League of Legends | **Verified.** Camera settings support wheel zoom and free or champion-locked modes, with a semi-locked mode and offsets. **Inferred.** The familiar high oblique framing is the visual reference; the cited settings do not give height, pitch, FOV or a calibrated zoom range. [Camera settings][lol-settings], [official game overview][lol-play]. | **Verified.** Sight is shared by the team through units, structures and wards. Impassable terrain blocks ordinary sight, and brush conceals its occupants from outside unless revealed. Riot's faelight patches explicitly describe team-only bonus regions that can reveal included brush. **Inferred.** The documented distinction is terrain and brush occlusion; these sources describe no general numerical high-ground sight bonus. [Sight reference][lol-sight], [Riot faelight patch][lol-patch]. |
+
+The SUPERVIVE Wiki's direct fetches returned 403. The search index supplied the February patch and Huntress extracts, with a separate surviving transcript for the patch. The adjacent-game examples establish the distinction between camera coverage and observer knowledge. Slop Art Online already has personal perception and a separate hearing channel.
+
+## 2. Current in Slop Art Online
+
+The play camera now starts north-up and can turn around the character. Middle drag and native two-finger rotation on macOS change the bearing. N or a short middle tap snaps north, and the key is rebindable. The earlier fixed-bearing proposal below records the original design. [Current controls and verification](../.agents/skills/verify-ui/features/camera.md).
+
+Source audit at the branch base. See the [living core](LIVING_CORE.md), [interface](INTERFACE.md), [character models](CHARACTERS.md) and [perception](PERCEPTION.md). Where older sections describe prototypes, the current source takes precedence.
+
+- **Camera and movement.** [Camera](../living/game/src/camera.rs) uses Bevy's perspective camera with a 28° downward pitch, a 22 m slant distance and 50° vertical FOV in the ordinary adult baseline. Character size, cursor lead, context framing for fights, greetings and talk, sight distance and terrain clearance can change the actual framing. Brackets, middle drag, left drag and touch pan can rotate it. Middle tap aligns and Alt glances. [Pointer](../living/game/src/pointer.rs) already provides wheel/pinch zoom as a 0.6–1.4 distance factor. [Controls](../living/game/src/controls.rs) sends WASD movement relative to the current camera axes and has both Cursor and Travel facing settings. Shift runs. Cursor facing sends `human_face`; the Travel preset also uses cursor facing while aiming.
+- **Looking aside.** Play-test 3 chose cursor-facing during the walk and asked for sight to follow facing. The effective direction is the authority's head/chest facing, evaluated from travel plus a timed offset. Walking preserves foot travel while the look can settle up to 75° aside. The client has head/body animation presets. The shared `look-4` rules keep facing continuous through sudden reversals, cap turn rate and let the body finish the turn when standing. Camera bearing contributes to input coordinates only. [Facing and look-4](PERCEPTION.md#the-field-of-view-seventh-change), [shared steering](../living/rules/src/steer.rs).
+- **Authority sight.** [Rhai `senses(a)`](../living/scripts/skills.rhai) supplies light-dependent range and optional field values. [Shared `sight::sees`](../living/rules/src/sight.rs) applies distance, glow, retention and optional facing, then the map's clear line. Shipped `fov_on` is false, with world overrides and an admin-only switch. When enabled, the default field has full reach within ±70°, reduced reach out to ±110°, near awareness all round and edge hysteresis. The [Cullet overlay](../living/seeds/worlds/cullet/laws.rhai) defines 48 m by day, 20 m with a torch and 14 m at night. [Map sight](../living/rules/src/map.rs) uses a 2D tile trace. Opaque rock, walls and shut gates block; generic forest and drops do not. Hosted fixtures can contribute eye-height solid cells under [land rules](../living/rules/src/land.rs). A decorative canopy and a walkable cliff edge alone supply no opaque cell.
+- **Players and minds.** [Authority perception](../living/authority/src/perception.rs) uses the shared test for players' scoped perceived sets and for the scenes that inform behavior graphs and minds. The same rule matters to aimed acts, witnesses and combat feedback. Hearing remains separate. The authority's `my_senses` supplies the player's distances and field values, and `seen_*` supplies live perceived data. A client camera angle cannot grant sight. [Minds' scenes](PERCEPTION.md#minds-see-what-their-character-sees), [my senses](PERCEPTION.md#my-senses-eighth-change).
+- **Shade.** The current default look darkens unseen ground like a shadow, while keeping static forms legible. [Sight field](../living/game/src/sightfield.rs) builds a local, asynchronous half-metre texture from shared map geometry and the current authority-provided field, with filtering in the [finishing shader](../living/game/src/edges.wesl). It can fade a received creature earlier than the next authority sweep when the line breaks. It cannot add an unseen creature. [Sight edge](../living/game/src/sightedge.rs) handles the appearance settings. Its fallback without `my_senses` supplies a radius without an authority facing field.
+- **Labels.** [Looks](../living/game/src/looks.rs) preserves recognized names given by the projection and gives strangers or distant people descriptive text. A distant plate or hover can say “someone in blue” or use a short outfit description, while the log, acts and talk use the permitted identity or wording. Windows and logs can keep the last perceived label. Character detail and LOD already serve close and far presentation. [Characters](CHARACTERS.md#crowd-cost).
+- **Click paths.** The cursor is virtual. The camera converts viewport position to a ground ray and the scene resolves terrain height. World hover and the target's projected anchor also feed the wheel, windows and skill interactions. A held F wheel freezes the pointer and consumes gesture inputs. Floating windows have their own hit targets and scrolling. The skill bar uses its existing press/release paths, and a world tap can strike or open talk in the appropriate context. [Wheel input](INTERFACE.md#82-input), [pointer](../living/game/src/pointer.rs), [camera picking](../living/game/src/camera.rs), [UI driver](../.agents/skills/verify-ui/SKILL.md).
+
+## 3. Proposed controls and camera
+
+Use a north-up, character-centered follow camera on a fixed bearing. WASD moves in fixed screen-plane directions, Shift runs and the cursor sets look and aim. Use Cursor as the default for this camera and retain the existing Travel setting for existing profiles. Send the same authoritative movement and facing intents. The character can look into a passage while walking across it without moving the camera. World click still selects, talks or attacks as it does today. Movement stays on WASD. Part B keeps the play camera locked to the character. Section 4 proposes a skill that can temporarily move the camera focus.
+
+The wheel over the world zooms around the played character. A captured wheel, focused control or scrollable window consumes its own input. Pinch uses the same zoom coordinate. Brackets, drag, align, glance and edge steer no longer turn the play camera. Automatic fight or conversation reframing, mouse lead and sight-driven camera zoom give way to the player's chosen zoom. Keep talk and fight bookkeeping used by the HUD. Day/night, a torch and turning the head change sight on screen while camera scale stays under player control.
+
+### Zoom settings
+
+Use a perspective camera. Store these values in client camera settings, with the knots and response in one data block so the laptop play-test can tune them. Heights are vertical metres above a chest focus at 60% of the played model's standing height, anchored at its displayed ground point. Pitch is degrees down from horizontal. FOV is vertical.
+
+| Zoom `z` | Height | Pitch | FOV | Use |
+| ---: | ---: | ---: | ---: | --- |
+| 0.00 | 19 m | 65° | 46° | Far |
+| 0.55 | 12 m | 58° | 44° | Middle, everyday movement, default on first join |
+| 1.00 | 8 m | 48° | 42° | Near, talk and close actions |
+
+One wheel notch changes target `z` by 0.05, clamped to 0–1. Ease the displayed `z` toward the target at 12/s with a frame-time-independent exponential. On each knot interval remap its fraction `t` by `t² × (3 − 2t)` and interpolate all three settings. Pitch changes little over the wide half, then noticeably on approach. Put the eye south of the focus by `height / tan(pitch)` and above by `height`. Use the same frame's transform, projection and ground intersection for hover, facing, click and skill targeting. While zooming under a stationary pointer, preserve the last look intent until fresh pointer motion or explicit targeting, so the camera change alone cannot turn vision. A click or skill resolves the live projection when issued. Clear stale hits on missing terrain, on focus loss and when a live target disappears.
+
+Use the terrain-clearance guard to keep the eye outside ground, holding bearing and using the guard only for clearance. Diagnose near-clip intersections and target misses at steep terrain before tuning the knots. Treat these values as play-test settings. Far framing is a coverage check, not a measured performance target.
+
+### Readable people and usable UI
+
+Use the existing dithered cutaway in [envs](../living/game/src/envs.rs). Test fitted bounds from camera to the player's upper body and feet, retaining hysteresis and the support-surface protection. The current eye-distance cutoff needs to follow that segment so a low roof or a canopy close to the player works at far zoom. Ease the blocking roof or foliage toward a faint visible form and restore it after the player clears it. Preserve large landmarks and floors the player stands on. The cutaway changes mesh rendering only. Sight, collision and access still use the authority's geometry. Prioritize a nearby building edge and one canopy in Part B.
+
+Use compact, screen-space plates with stable text size, keeping the existing recognized name and far-label semantics. At far and middle zoom prioritize the currently hovered, selected, talking or fighting contact when plates overlap. The hover line shows a known name or a short description of the person and their main garment. The full description belongs in the top target plate and the Person window, where it can be read without covering the square. Near zoom lets the character models carry more of their appearance. Remove a lost contact's world plate, hover, hit proxy and wheel target together. Its existing window can retain last-known text under the existing rules.
+
+Keep the wheel and floating windows in screen space, recomputing world anchors from the rendered pose and clamping the resulting placements to the viewport. While a wheel gesture holds the cursor, hold its screen anchor, and close on loss of the target. The skill bar stays fixed on screen and keeps its normal pointer and key priority. Test that a dithered roof cannot capture the character's click and that world rays still land correctly on slopes, over stairs and at near zoom.
+
+## 4. Proposed zoom-linked sight and skill-gated pan
+
+Part B is in progress on a separate branch. Its scope is the fixed-bearing follow rig, wheel and pinch zoom, shared picking transform, cutaway and existing UI and Shade behavior in §3 and §5. Part B uses the current authority sight rule and has no pan. The owner has since answered yes to zoom changing how far a character sees and suggested skills as the gate for panning. Everything below that changes those behaviors is **proposed**. Build the authority side only after the general coordinator's review, then measure its cost on the Spark against the performance contract before adoption. Forest occlusion is a related owner decision outside this proposal.
+
+### Proposed gaze
+
+Zoom requests one of three character intents. The Rhai `senses(a)` law trades distance for peripheral vision, with angles measured each side of the authority's current head/chest facing. The zoom coordinate is the **target** `z` from §3. Camera height, pitch and FOV still ease continuously.
+
+| Intent | Zoom range | Full reach as share of light cap | Full reach angle | Peripheral angle |
+| --- | --- | ---: | ---: | ---: |
+| Far | 0–0.275 | about 130% | ±35° | ±65° |
+| Middle | >0.275–0.775 | 100% (today's field exactly) | ±70° | ±110° |
+| Near | >0.775–1 | about 60% | ±110° | ±155° |
+
+**Middle is today's field, unchanged.** It is the missing-row default for both controllers and the band the client's default zoom maps to, so a resident who never sets a gaze and a player at the default zoom see exactly what they see today. Far reaches beyond today's range in a narrower field ("zoom out to see farther"); Near is shorter and wider. Every number in this table is tunable data in the Rhai law, and the Spark measures Far's larger radius before the values are fixed.
+
+Use 0.025 of boundary hysteresis when changing bands. Keep the existing law's peripheral reach share and light-dependent all-round near ring, clamped within the effective range. Hearing keeps its current law. At Cullet's full day, torch-lit night and unlit night, Middle reaches today's 48, 20 and 14 m before occlusion, Far about 62, 26 and 18 m, and Near about 29, 12 and 8 m but much wider around the character. The underlying cap is the existing `sight_in(light_of(a))` on the island and the daylight interpolation with a torch floor in Cullet. Both scripts should call the same Rhai gaze modifier after deriving their light cap. The proposal opts configured worlds into the directional field for **all** controllers, including ordinary residents. Existing worlds without that opt-in retain their current sight rules. Install validation checks that an enabled world has a field for every gaze band and Survey.
+
+Rhai also sets a hard per-band ceiling for creature acquisition, retention and groundsight; Far's and Survey's ceilings extend to match their longer reach. A Far gather therefore covers about 1.7× the area of today's (130% of the radius), and Survey about 2.6×, which the Spark's measurement must include. A glowing target can use the existing glow rule within that ceiling. Retention still smooths other range and angle edges inside it. The shared Rust reach and line-trace primitives apply those numeric outputs. The gather uses the ceiling to bound `max(sight, glow) + keep` before it visits chunks. Reuse the observer's real eye, facing and blockers for player views, mind scenes, graph queries, witnesses and aim validation. Give the ground rule an explicit effective radius, bounded by both the gaze or Survey ceiling and `ground_sight_m`. Today `known::ground_radius` infers day versus night from sight range, which would confuse a short daytime gaze with darkness. Keep the existing ground look cadence. [Shared sight](../living/rules/src/sight.rs), [base senses](../living/scripts/skills.rhai), [Cullet senses](../living/seeds/worlds/cullet/laws.rhai), [ground memory](../living/authority/src/known.rs).
+
+**Intent and acknowledgement.** Mirror [`human_face`](../living/authority/src/lib.rs) for controller resolution, input validation and change-only updates. Facing validates finite direction, stores held look on `body.look_*` and applies timed facing through `body.face_*`, with changed looks charged to the movement bucket. Add a proposed `human_gaze(band: u8)` with no actor argument. Resolve the sender's living character, reject invalid bands and disabled worlds, and treat a repeat as success without a write. Minds use a proposed non-replacing `gaze` act through authorized [`mind_act`](../living/authority/src/mind.rs) and the same setter. The act selects a legal band and leaves the resident's active graph alone. Both paths accept at most one changed band per character per 250 ms with no burst, independently of movement. Use authority time and clear state at death. A private `attention` table keyed by character ID holds the current band and acceptance time in one row, with Middle (today's field) as the missing-row default for both controllers in an enabled world. No gaze or Survey parameters are public. Other characters can still observe lawful poses and activities.
+
+The client eases the camera immediately, retains only the latest desired band while a send is pending, and sends it when the 250 ms interval allows. On reconnect, wait for the owner's current state before sending any new input. Use the last applied band and field from `my_senses` to draw Shade. A rejected request leaves the last confirmed field in force. The reducer acknowledgement says whether the request was accepted. The applied band in `my_senses` confirms which field the player sweep used. Aim checks and new mind scenes read the current authority rule, so they can reflect an accepted intent before the next player sweep. The client continues to clear live affordances on scoped removal, and checks the reported field for local concealment. Without a confirmed field in an enabled world, keep the field shaded until it arrives. Preserve the stationary-pointer protection in §3.
+
+### Proposed Survey skill
+
+Add `survey`, displayed as **Survey**, to the shared [skill scripts](../living/scripts/skills.rhai) with `survey_spec`, `survey_check`, timed execution and `survey_ui`. Grant the `survey` technique through ordinary teaching and authored starting know-how for Cullet scouts, with a scratch fixture grant for both controllers. Require known technique, an awake, stationary character and 10 stamina at activation. The shared skill spends that stamina once, holds for up to 3 seconds and has an 8-second cooldown from activation. An accepted movement command, displacement, a conflicting act, sleep or death ends it early with no refund. Validate those requirements for both `human_act` and `mind_act`. Put duration, costs, cancellation conditions and sight changes in Rhai. Rust provides timed-effect state, spend, cancellation inputs and the shared sight primitives.
+
+Survey substitutes a forward field reaching about 160% of the same light cap inside ±25° (beyond Far, so the skill is worth its cost; tunable, with the hard ceiling set to match and measured with Far), with no side extension and the same near ring. It follows the character's effective facing, using the normal turn rates. The extended lobe still needs clear sight, uses the same hard cap for glow and retention, and writes actual observations through the existing perception and ground-memory paths. When Survey ends, the selected gaze resumes. Camera pan is a local presentation of this effect. While the active grant is confirmed, the client can shift the camera focus up to 12 m along the same forward sector, further clamped to the granted range. On expiry, interruption or loss of the owned character, clamp back to follow and stop using the Survey field. While dragging, preserve look until an explicit aim or fresh look input outside the drag. The same rendered camera still feeds ground picking. A mind can face a chosen passage and perform Survey to improve its next authority scene and ground observations, at the same cost and with the same cancellation rules.
+
+Use the existing `<skill>_ui()` → compiled `UiSpec` mechanism with a proposed generic camera-control binding on the offered skill. The client gets the declaration through its existing script subscription, checks the offered spec and its own `my_know_how` for eligibility, and enables drag only during the sender-scoped active grant. The skill check remains authoritative. Mind catalog text comes from the same skill spec and advertises the technique only where available. [Interface declarations](INTERFACE.md#3-how-a-rule-or-skill-declares-its-interface), [shared player and mind descriptions](INTERFACE.md#5-one-description-for-players-and-minds), [skill offering](../living/rules/src/ui.rs), [client verbs](../living/game/src/verbs.rs).
+
+**What pan shows.** Keep Shade as the default, with the sight origin at the character even when the camera focus moves. Draw full color inside the confirmed clear field, dim known ground and remembered gate markers beyond it, and use neutral Shade for unknown ground in the panned view. Keep remembered gate state visibly historical and non-interactive. Use only scoped live entities and authorized current details, including for hover, nameplates, targeting and combat feedback. The local field can conceal sooner, while the authority controls what arrives. A cutaway can uncover the shape of permitted static scenery. Seeing a roof or turning the camera cannot reveal its occupants. Existing static context remains available in ordinary follow.
+
+Main stores memory privately. `known_ground` has 4 m cell masks and per-chunk last-seen edit epochs in 128 m blocks indexed by `(actor, block)`. `remembered` currently records open or shut gates by `(observer, target)`, capped at 512 per observer. Both are removed at death. They feed navigation belief today and Bevy has neither subscription. Propose one bounded owner-only `my_survey_map` row from a private projection keyed by actor. Include known masks clipped to a fixed 64 m square centered on the stationary activation point and up to 32 nearest remembered gate markers inside it, ordered by distance then ID. Paint the known mask over immutable base terrain. Omit mutable ground details outside current sight and omit gate geometry when only the remembered marker is available. Use authorized local blocker/ground samples for live detail and Shade inside the same window. Build those samples on the first due player sweep after activation and each due sweep during Survey using the same eye, clear-line test and field, with samples unavailable outside the scope. Refresh memory at activation and on relevant commits from the existing ground and gate writer. At expiry or cancellation delete the row and revoke the pan grant in the same transaction. The next scheduled sweep refreshes ordinary membership. Until that refresh, the client suppresses Survey-only affordances using the restored field, or shades conservatively while waiting for it. Do not drive subscriptions with pan coordinates. [Memory tables](../living/authority/src/tables.rs), [knowledge writer](../living/authority/src/known.rs), [client subscriptions](../living/game/src/net.rs).
+
+The current client also receives public gate state and region terrain edits and structures. Those feeds are not sight permissions. A panned renderer must use the scoped live detail above and avoid reading those live feeds for hidden presentation or target affordances. Scoped pan depends on scoping or redacting those mutable public feeds on the authority before release. Preserve existing static context and audit follow, collision display and cutaway consumers of the affected feeds. A renderer mask alone cannot make a publicly queryable row private.
+
+### Proposed cost and subscriptions
+
+**Existing paths.** [Player perception](../living/authority/src/perception.rs) sweeps each player every 200 ms over four staggered phases. It reads the observer body and character by key and prior `perceived` rows by viewer, gathers from indexed 16 m body chunks, then tests range and angle before tracing clear lines. [The chunk cache](../living/authority/src/common.rs) shares body reads within the tick. Projection caches preserve unchanged retained rows and write new or lost contact membership, motion and optional fighter/doing rows, plus actual changes to projected details. [Player frames](../living/authority/src/frame.rs) currently check `character_senses` on a separate 250 ms cadence and write only on change. Minds' scenes and behavior use shared sensing on their existing schedules. Ground noticing runs about every 900 ms for both controllers, with changed block writes coalesced over 5 seconds.
+
+**Proposed cadence.** At compile time validate declarations, bands, field and reach bounds and cache the script read plan. On events accept or revise just the affected actor's attention, advance or cancel a committed skill effect, and invalidate that actor's derived state. Key the hot answer by the transaction/moment and script revision, invalidating on same-transaction changes. Include gaze band, active effect and the law's light inputs in the per-state key. Load attention by primary key at most once per actor per transaction that needs it. Run range, angle and line primitives on those cached numbers without per-candidate Rhai. Extend the existing sender-scoped `my_senses` with applied band, effective field and Survey grant/end time, and publish changed fields alongside the affected player's scheduled sweep. Revocation can also write one owner row immediately at skill end. Retain the existing view and index shape. No immediate sweep on a zoom request, new player scan, resubscription or whole world hydration.
+
+**Paper estimate at 216.** An all-human stress case at five sweeps/s gives 1,080 observer sweeps/s, around 54 per phase if balanced. Budget up to one additional attention point read per sweep (1,080/s on this path, plus separate on-demand readers such as aim). If all 216 characters change band four times/s, that is at most 864 reducer point reads and 864 attention row writes/s for accepted changes, with at most 216 retained attention rows. Repeats and refused calls still spend validation and lookup time. At steady light, changed-band projection costs at most another 864 owner senses writes/s after coalescing, bounded by 1,080/s total for field changes on the sweeps. Survey revocation adds at most one owner senses write per end (27/s sustained at full participation). With all 216 packed within the gather radius, the same sweep can test at most 215 × 1,080 = 232,200 other-character candidates/s, plus the cost of traversing chunk contents and sorting local candidates. Those are candidate tests, not 232,200 database body reads. Smaller cones reject before tracing, but common chunks can still be shared and a gaze boundary can cause large membership churn. Each transition adds or removes `perceived`, `projected`, `motion_seen` and up to one fighter and doing row, roughly 3–5 changed rows per contact. For illustration, ten transitions on each of 864 changing sweeps would imply about 25,920–43,200 row mutations/s before hearing and other effects. This is a sensitivity estimate, not measured throughput.
+
+A 64 m Survey window overlaps at most four known-ground blocks. Scan the observer's bounded gate index (up to 512 rows) only at activation or relevant memory changes, and materialize at most 32 markers. The live map path should sample on the existing 4 m cell grid, at most 256 centers for an aligned window, plus indexed blockers and allowed live gate detail. Reuse this one row, write only on change and terminate it with the grant. The hard planning ceiling at 216 simultaneous Surveys is 55,296 sample tests/s and 1,080 map updates/s, before blockers or memory refresh. With a 3-second hold and an 8-second start-to-start cooldown the sustained all-user duty ceiling is 37.5%. Keep the mask sampling for display separate from the existing durable memory writer's cadence. Count memory block reads/writes, gate refreshes and chunk/trace work separately on the Spark.
+
+**Delivery.** Keep connection-lifetime `seen_*`, `my_senses`, `my_body`, hearing and other existing scoped views. Scene membership changes at the sweep, with existing frame updates for already-visible motion and combat. `my_senses` pushes one changed row to the owner only. Add the connection-lifetime sender-scoped `my_survey_map` view with zero rows outside Survey and no more than one during it. It performs an indexed actor lookup on the materialized projection. It does not depend on every underlying memory or geometry row. The client does not receive anyone else's attention, memory or Survey map. Ordinary terrain/lot windows stay centered on the body.
+
+On the Spark compare base and proposal at the [216-character, 30-minute gate](PERFORMANCE_CONTRACT.md), including the representative battle and RTT, dense cases with rapid gaze toggles, concurrent Survey and a mixed player/mind workload. Record population, density, rates, subscriptions and observer/export load. Measure reducer execution and queue latency, candidate and trace counts, cache hit rates, row mutations, per-view invalidation and payload volume, memory and retained data growth. Check dusk, torch loss, occlusion, fast zoom, reconnect, pan interruption, unauthorized subscriptions and matching human/mind sight. The §5 zoom-membership check applies to Part B alone. With gaze enabled, verify membership changes only through the authority. The estimates above are unmeasured.
+
+### When a target leaves sight during a move
+
+**Verified in Corepunk.** The 2026 patch entry “Casts and Fog of War” interrupts an in-progress targeted cast if the enemy enters fog, including behind an obstacle into a blind area. The rule is documented for casts with an enemy target. [Corepunk patch notes][cp-patches].
+
+**Current here.** The [60 Hz authority tick](LIVING_CORE.md#architecture) drives due motion, activities and missile steps. That cadence differs from the player perception sweep and presentation delivery. Creature-targeted combat checks perception when accepting the action. The [completion path](../living/authority/src/act.rs) checks current reach or evasion and reruns the skill's check before applying effects. There is no general per-tick or completion-time rule that interrupts a committed windup when the target leaves sight. A target leaving reach can produce a failure or dodge. Loss of view alone can leave an action running to its existing result. For example, the [shipped skill rules](../living/scripts/skills.rhai) give Strike a 350 ms creature-targeted windup, and Bow Shot and Fire Bolt have point-targeted windups of 300 and 450 ms. Dodge and Jump are committed movement. Once launched, physical missiles advance on the tick and resolve against the world, including walls and interceptions. The intent, the release and the physical outcome are distinct. [Combat](COMBAT.md), [authority combat](../living/authority/src/combat.rs).
+
+**Part B presentation.** As the target leaves the visible set, clear its live marker, plate and targeting affordances. Keep showing the player's accepted windup, release and recovery when their own state reports them. Use the existing scoped combat and act outcomes for misses, dodges, failures and releases. A lost visual target supplies no location for aim assistance or tracking effects. A projectile may travel into Shade, and an impact outside sight is shown only to the extent the authority discloses it. A client's disappearance cue must never manufacture a cancellation or a hit.
+
+**Recommendation for the owner.** Keep current timing for Part B. For a later sight-rule decision, prefer a single authority sight recheck at release for creature-targeted abilities that require a visible target. If the target is still lost then, report “lost sight of the target” as an authoritative failure before effects, with no claim about its location. Keep the same policy for humans and minds. A brief break followed by reacquisition before release would still allow the attempt to resolve. Point-targeted shots, launched missiles, Dodge and Jump keep their physical resolution. This would require an authority rule change and agreement on cooldown, costs and recovery on failure. Exact Corepunk-style first-loss interruption would additionally require tracking sight during the windup, with costs on the fast lane and sensitivity to cover-edge churn. A release check uses one bounded local sight test per eligible action. Measure dense-fight timing and test against walls, facing changes, range loss and reacquisition before adopting it.
+
+### SpacetimeDB documentation check
+
+The [workspace manifest](../living/Cargo.toml), [compose image](../living/deploy/compose.yml) and [generated bindings](../living/bindings/src/generated/mod.rs) pin **2.14.1**. The running local container also reports the `v2.14.1` image. The official [docs][stdb-docs] label the pages 2.0.0. Checked the installed Rust crate source and the upstream [v2.14.1 tag][stdb-version], which matches the generated CLI commit `a0bf6be10a146b03acbe3f4f9ad7fe20f114988d`. Existing `human_face`, private memory tables and `my_senses` demonstrate the pinned primitives.
+
+- [Tables][stdb-tables], [indexes][stdb-indexes] and [performance][stdb-performance] support private typed state, primary-key point access and indexed owner-range reads. Keep attention and the materialized Survey projection separate from hot body rows. Reuse the memory indexes.
+- [Reducers][stdb-reducers] are transactional. Validate sender ownership and intent inside the reducer and commit only the affected actor's changes. Keep transaction-derived caches safe across rollback and same-transaction updates.
+- [Views][stdb-views] and [subscriptions][stdb-subscriptions] support sender-specific indexed views and initial results followed by changes. Use a single actor lookup per proposed owner projection. In 2.14.1 a view can re-run inside a writing transaction when its read set changes, so avoid joining live scene and memory rows in the view. See the pinned behavior and benchmark notes in [perception](PERCEPTION.md#spacetimedb-documentation-and-source-consulted-2026-11-10) and [frame source](../living/authority/src/frame.rs).
+
+Part B renders and picks from existing local and replicated data and writes no camera rows. This proposal uses the pinned interfaces above. The new rule, projected data shape and performance have yet to be implemented or tested.
+
+## 5. Part B order and proof
+
+1. Install the settings-driven fixed rig and wheel ownership. Make pose, projection, cursor rays and screen-plane movement agree. Keep existing reducer and perception paths.
+2. Check rendered Shade, labels, wheel, floating windows and the bar with the new projection. Extend the current cutaway to cover the full sightline from the eye to the local character.
+3. Update the [verify-ui skill](../.agents/skills/verify-ui/SKILL.md) and its control feature map in the same change because the user-facing camera controls change. Add one scenario through the existing live driver using physical-equivalent wheel input and capture three stable stops. The current `pinch:` verb can still prove the shared zoom path, but wheel capture over windows needs its own input assertion. Run the player verification surface for the movement, look and action intents exercised.
+
+Drive one repeatable daytime street scene on an island scratch world with a visible resident, a wall or roof, and a walkable edge. Use a fixed initial pointer and character location for the three framing stills, resetting the fixture for interaction comparisons. Use `shot:far`, `shot:middle`, `shot:near` plus matching dumps from the same facing. Capture at 1600×900 and check viewport anchoring again at a narrow aspect. Include the plan, current zoom, displayed height/pitch/FOV/bearing, ground pick and hovered identity in evidence.
+
+| Stop | What the driver proves |
+| --- | --- |
+| Far, 0.00 | Stable north-up bearing while moving and reversing; look-aside leaves travel alone; readable ground and compact plates. Open and dismiss the F wheel on the visible resident. |
+| Middle, 0.55 | Pick a known ground point and the same resident from the new projection. Scroll a floating window with the wheel and assert its content moves while zoom stays put. Select a skill through the existing bar and check the expected target or ground point. |
+| Near, 1.00 | Verify the lower angle, shoulder/head readability and cutaway under a roof or canopy. The support stays solid. Act on a visible contact, then move behind the wall and check the Shade boundary and removal of the contact's plate, hover and target. |
+
+Add a wheel clamp check at both ends and compare scoped view membership at a stationary pose and fixed facing across zoom levels. On a scratch scene with the facing law enabled, hold zoom and turn in place to prove the display follows the reported field. Keep stills and JSON under the run's local evidence paths. Repeat wheel, windows, field and cutaway/support regressions through the real Bevy client. These are Part B checks, with no build or run claimed for this design.
+
+## 6. References measured
+
+All play samples use 16:9 footage. Character height is the vertical silhouette from head to boots at 900 px viewport height, excluding nameplates, effects, weapons and shadows. Pitch is downward from horizontal, FOV is vertical, and metric heights are above the chest focus defined in §3. **V** means verified in our settings or in a named source. **E** means estimated from footage or a stated geometric prior. The bands describe reading and model sensitivity, with no statistical confidence claim. An unknown value has insufficient evidence for an error band.
+
+| Game | Zoom state | Height above chest or reported distance | Pitch | Vertical FOV | Character at 900 px | Pitch changes with zoom? |
+| --- | --- | ---: | ---: | ---: | ---: | --- |
+| Slop Art Online | Closest | 8 m V | 48° V | 42° V | 124 ± 3 px E | Yes, 17° across range V |
+| | Default | 12 m V | 58° V | 44° V | 75 ± 3 px E | |
+| | Farthest | 19 m V | 65° V | 46° V | 41 ± 3 px E | |
+| League of Legends | Closest shown | 4.8 ± 1.7 m E | 56° ± 8° E | 40° ± 5° E¹ | 215 ± 15 px E | Fixed-angle model fits the sweep E |
+| | Default proxy | 11.2 ± 4 m E | 56° ± 8° E | 40° ± 5° E¹ | 92 ± 8 px E | |
+| | Farthest shown | 11.2 ± 4 m E | 56° ± 8° E | 40° ± 5° E¹ | 92 ± 8 px E | |
+| SUPERVIVE | Closest | Unknown | Unknown | Unknown | Unknown | Grounded pan fits fixed orientation E. Glide zoom pitch unknown |
+| | Grounded default proxy | 23 ± 9 m E | 59° ± 7° E | 31° ± 7° E | 55 ± 8 px E | |
+| | Farthest, glide candidate | Unknown | Unknown | Unknown | Unknown² | |
+| Corepunk | Closest | Unknown | Unknown | Unknown | Unknown | 2021 Q&A describes a different close angle V (historical). Current wheel behavior unknown |
+| | Default proxy | 12 ± 6 m E | 60° ± 8° E³ | 49° ± 15° E³ | 67 ± 12 px E | |
+| | Farthest | 15.5 game units in Jan 2025, as recorded in §1 V (historical). Current cap unknown | Unknown | Unknown | Unknown | |
+
+¹ The 40° vertical interpretation is a working prior from the community report. The ±5° band is a sensitivity input for distance, since the footage could only constrain the combination of focal length and pitch. ² The airborne silhouette in the developer VOD changes pose and overlaps glide effects. A standing head-to-boot comparison would be misleading. ³ Alpha calibration, carried over provisionally to early access for the scale estimate. The early-access clip supplies the body pixels.
+
+### How the measurements were made
+
+- **Scale.** For an upright near-center subject, the first-order relation is `pixels ≈ f × body_height × cos(pitch) / slant_distance`, with `f = 450 / tan(vertical_FOV / 2)` in the normalized viewport. Multiplying slant distance by `sin(pitch)` gives vertical height above the subject's approximate mid-body depth. These are equivalent metres for a 1.8 m standing model. League uses the requested 1.8 m human-champion assumption. For the other games the same height is a normalization choice. None of the sources established a game-unit-to-metre conversion. Pose, clothing, off-center projection, and the difference between mid-body and chest are folded into the broad bands.
+- **Slop Art Online.** Camera values come from the three [camera knots](../living/game/src/camera.rs). Pixel measurements use the same adult player in the camera-1 square stills at 1600×900. The current curve makes the actor about 3.0× as tall at Near as at Far. Top-down bearing is fixed.
+- **League of Legends.** The player-view demonstration gives a repeatable wide state at 1:43 and 1:49, and a close plateau around 1:47. At 1:46.50, an in-transit check measured 180 ± 12 px. The wide state stands in for the default because the recording does not show a factory reset. Feature matches across the cracked river ramp support a fixed-orientation camera under a dolly model (28 of 89 candidate matches within 5 px at 1080p for wide-to-close with a roughly 2,200 px horizon offset). Plausible fits at horizon offsets around 1,800–3,200 px give the pitch band with the 40° FOV prior. Ramp elevation, matching noise and the short overlapping region prevent a useful independent FOV fit or a precise upper bound on small pitch changes. The sampled Garen grows about 2.3×. Ordinary play controls pan or lock at a fixed bearing in the sources inspected. Riot's separate replay camera can rotate. [Player sweep][lol-zoom-footage], [community camera report][lol-camera-report], [Riot dynamic camera][lol-camera-dev], [Riot replay tool][lol-camera-replay].
+- **SUPERVIVE.** On the training platform at 1:48, use the north and south points of the circular floor rim and the deck center to extrapolate the ground horizon. Use the paired upright cylinders for the vertical vanishing point. With a centered principal point, their offsets from screen center give `f² = horizon_offset × vertical_vanishing_offset`. Varying the picks gives shallow-to-steep solutions around the values in the table. The 1:25, 1:48 and 2:01 grounded samples span about 50–55 px for the same player. Floor matches between the last two fit a common orientation, and the recorded changes include cursor pan. That comparison cannot establish the pitch or size change from minimum to maximum zoom. The settings show locked/dynamic behavior and **Glide Zoomout**. Ordinary yaw rotation was neither shown nor documented in the checked sources. The official alpha match shows wider aerial framing at 1:01, with no controlled ground-to-glide calibration. Theorycraft ended live service on February 25, 2026. [Training and settings footage][sv-camera-footage], [developer match VOD][sv-match-vod], [end of service][sv-end].
+- **Corepunk.** The 2020 tavern frame at 0:36 gives perpendicular floor directions from plank seams and floor-aligned timbers. Extrapolating the two vanishing points gives the ground horizon and the focal length, using the orthogonality of the directions and a centered principal point. Line selection drives the broad bands. In the June 2026 gameplay clip at 1:45, the running avatar gives the body scale. No settings reset or entire zoom sweep is visible. The 2021 Q&A described a slightly different angle on zoom-in. That wording alone does not establish which axis changes, whether it is a separate camera option, or how current wheel zoom behaves. The patch archive refers to rotation, with ordinary player yaw controls still unconfirmed. Its historical distance cap is neither a chest height nor a documented metre conversion. The original Q&A returned no body and the patch archive timed out for direct extraction. The Q&A survives in a recorded recap and the archive value comes from the prior source check in §1. [Alpha gameplay][cp-video], [June 2026 player footage][cp-camera-2026], [Q&A recap][cp-angle-recap], [patch archive][cp-patches].
+
+### Bevy tuning presets
+
+Each cell is **height above chest in metres / downward pitch / vertical FOV**. Keep the three zoom coordinates and the chest focus from §3. These are exact tunable inputs. Where the measurements have gaps, the endpoint values are design choices for the play-test.
+
+| Preset | Far, z = 0.00 | Middle, z = 0.55 | Near, z = 1.00 | Basis |
+| --- | --- | --- | --- | --- |
+| League of Legends | 11.2 m / 56° / 40° | 11.2 m / 56° / 40° | 4.8 m / 56° / 40° | Wide and default share the sampled framing, so the wide half holds the same pose |
+| SUPERVIVE | 28.0 m / 59° / 31° | 23.0 m / 59° / 31° | 18.0 m / 59° / 31° | Grounded size and narrow lens at Middle, with a distance bracket for testing |
+| Corepunk | 15.0 m / 60° / 49° | 12.0 m / 60° / 49° | 7.0 m / 54° / 49° | Ordinary framing at Middle, with a modest close tilt to try based on the historical Q&A |
+
+**Recommendation.** Try fixed **58°** pitch across our existing three stops first, with the current heights and FOVs. This holds the default view exactly and isolates the effect of rotating the camera during zoom. Our Far-to-Near sweep currently changes both size and the visible proportions of ground and walls. League's sweep shows that a strong size change can work with a stable orientation. SUPERVIVE's grounded footage supports that choice for ordinary play, while Corepunk's historical close-angle option is a reason to keep a modest tilt available for comparison.
+
+## Sources and local reference evidence
+
+Local references are in `.local/living/camera-1/refs/` in the owner's main checkout. They include two YouTube alpha gameplay preview stills and a source manifest. The §6 full-resolution frames, timestamps and fitting notes are in `.local/living/camera-1/refs/measure/`. They are research evidence only.
+
+[cp-about]: https://corepunk.com/en-us/about
+[cp-faq]: https://corepunk.com/en-us/faq
+[cp-patches]: https://patchnotes.corepunk.com/
+[cp-ama]: https://www.reddit.com/r/MMORPG/comments/ipjxai/corepunk_ama_with_producer_and_lead_game_designer/
+[cp-milestone]: https://corepunk.com/en-us/news/7-month-milestone-current-status-next-steps-308
+[cp-video]: https://www.youtube.com/watch?v=1_RPcB-9rE8
+[cp-war]: https://corepunk.com/en-us/news/the-war-chapter-one-take-and-hold-points-of-interest-2034
+[cp-recap]: https://www.reddit.com/r/MMORPG/comments/i1dlzg/
+[sv-steam]: https://store.steampowered.com/app/1283700/SUPERVIVE/
+[sv-settings]: https://www.reddit.com/r/supervive/comments/1n7n6tt/
+[sv-patch]: https://www.reddit.com/r/supervive/comments/1iidshr/
+[sv-huntress]: https://supervive.wiki.gg/wiki/Huntress
+[sv-height]: https://www.reddit.com/r/supervive/comments/1h0g6tk/
+[lol-settings]: https://wiki.leagueoflegends.com/en-us/Settings
+[lol-play]: https://www.leagueoflegends.com/en-us/how-to-play/
+[lol-sight]: https://wiki.leagueoflegends.com/en-us/Fog_of_War
+[lol-patch]: https://www.leagueoflegends.com/en-us/news/game-updates/patch-26-1-notes/
+[stdb-tables]: https://spacetimedb.com/docs/tables/
+[stdb-performance]: https://spacetimedb.com/docs/tables/performance/
+[stdb-indexes]: https://spacetimedb.com/docs/tables/indexes/
+[stdb-subscriptions]: https://spacetimedb.com/docs/clients/subscriptions/
+[stdb-views]: https://spacetimedb.com/docs/functions/views/
+[stdb-docs]: https://spacetimedb.com/docs/
+[stdb-reducers]: https://spacetimedb.com/docs/functions/reducers/
+[stdb-version]: https://github.com/clockworklabs/SpacetimeDB/blob/v2.14.1/crates/bindings/src/lib.rs
+
+[lol-zoom-footage]: https://www.youtube.com/watch?v=62_C35tSIU8
+[lol-camera-report]: https://www.reddit.com/r/leagueoflegends/comments/1f12kha/
+[lol-camera-dev]: https://www.leagueoflegends.com/en-gb/news/dev/dev-wasd-controls-are-on-the-way/
+[lol-camera-replay]: https://github.com/RiotGames/leaguedirector
+[sv-camera-footage]: https://www.youtube.com/watch?v=EaS82MFgGGo
+[sv-match-vod]: https://www.youtube.com/watch?v=Fs9pGnI345E
+[sv-end]: https://steamcommunity.com/games/1283700/announcements/detail/571524191533139168
+[cp-camera-2026]: https://www.youtube.com/watch?v=XljOWnKSTP8
+[cp-angle-recap]: https://www.youtube.com/watch?v=z4APxTjAp6Y
+
+## Gaze authority implementation
+
+Gaze ships disabled in the base law. Cullet's overlay enables it, with `fov_on`, since the 2026-11-19 switch-on ([cover sight](COVER_SIGHT.md#switch-on-2026-11-19)); every other seed keeps it off. The authority first derives
+the original world's light cap from `senses(a)`. Enabled worlds run the shared
+Rhai modifier over that result, using band shares and angles from `gaze_bands()`.
+The near ring, peripheral share and facing use the existing sight primitives.
+Creature acquisition and retention use the band ceiling, including glow and the
+keep margin. Groundsight uses its own band-scaled entitlement, capped by
+`ground_sight_m`. The daytime entitlement is determined from the original
+light cap before applying the band. Cover traces use the same authoritative
+eye and map. [Rhai law](../living/scripts/skills.rhai),
+[shared sight](../living/rules/src/sight.rs),
+[ground memory](../living/authority/src/known.rs).
+
+`human_gaze(band: u8)` accepts Middle (0), Far (1) and Near (2) for the caller's
+living character. Minds send `{"do":"gaze","band":"far"}` through the usual
+act entry point. A change writes one private `attention` row at most every
+250 ms per character. A repeat does zero writes, and death removes the row.
+Enabled sight reads that character's row by primary key and reuses the answer
+within the transaction. Aim and mind scenes read new intent when they need
+sight. Player contact membership and the owner's applied projection follow
+the scheduled sweep. [Attention and projection](../living/authority/src/attention.rs).
+
+The new private `applied_gaze` table has one row per swept player in enabled
+worlds. The owner receives it through `my_senses_v_2` with the applied band,
+creature ceiling, ground radius and the nested `CharacterSenses` field. The
+view resolves the sender's current living player and performs one primary-key
+read. A steady field causes zero writes, and disabled worlds keep the view
+empty. The legacy `my_senses` keeps its existing row format and cadence.
+The laptop can use the shared `GazeBand::at_zoom` hysteresis helper and the
+generated reducer and view accessors. [Shared bands](../living/rules/src/sight.rs),
+[generated binding entry point](../living/bindings/src/generated/mod.rs).
+
+### SpacetimeDB 2.14.1 delivery decision
+
+SpacetimeDB's pinned migration planner permits a view return-column change
+by replacing that view and requiring all clients to disconnect. A new view
+is planned as an addition. `my_senses_v_2` therefore carries the extended
+projection alongside the legacy view. Both gaze tables are new, so no existing
+table needs rewriting. The 2.14.1 generator canonicalizes the view name with
+the underscore before the version digit. [Automatic migrations](https://spacetimedb.com/docs/databases/automatic-migrations/),
+[pinned planner](https://github.com/clockworklabs/SpacetimeDB/blob/v2.14.1/crates/schema/src/auto_migrate.rs#L558-L700).
+
+Private keyed storage makes the request and sweep reads local. The view scopes
+its initial result and subsequent changes to the sender. It reads the applied
+projection, so acceptance writes alone do not invalidate it. Attention and
+the owner projection each retain at most a row per character that uses that
+path. [Tables](https://spacetimedb.com/docs/tables/),
+[indexes](https://spacetimedb.com/docs/tables/indexes/),
+[performance](https://spacetimedb.com/docs/tables/performance/),
+[views](https://spacetimedb.com/docs/functions/views/),
+[subscriptions](https://spacetimedb.com/docs/clients/subscriptions/).
+
+Cullet declares zero target glow in full daylight in its senses law. The
+enabled gather skips glow lookups in that light. In twilight it still checks
+glow in the peripheral sector when Far's forward reach is longer than a
+torch's glow. Runtime sight holds the result to the declared light bound.
+[Cullet light law](../living/seeds/worlds/cullet/laws.rhai).

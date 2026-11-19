@@ -1,0 +1,64 @@
+{
+ "schema": 1,
+ "family": "character:face-types",
+ "id": "20261112-46074f0d-83360c",
+ "published": "2026-11-12T15:25:32+01:00",
+ "imported": "2026-11-12T15:25:32+01:00",
+ "track": "char-4",
+ "maker": "Claude Fable 5.2",
+ "note": "The neck's and the head's joints at the reference's places: the neck's 1.7 cm higher, the head's 1 cm higher (measured from the chin: the neck's 0.168 of a head below it, was 0.234, the reference's 0.162 and 0.173; the head's 0.137 above, was 0.098, the reference's 0.128 and 0.143). No mesh or weight changed. Rebaked, every clip key is the same.",
+ "source": {
+  "commit": "46074f0d351aa99c38c5d121296d87e10f62b41e",
+  "branch": "char-4",
+  "dirty": false,
+  "generator": "living/tools/blender/person.py",
+  "generator_sha256": "6b9e977b54656fe4591536b4c629e882ed66d618f4cbc3b1e57b7bf6374fed09",
+  "generator_state": "committed",
+  "params": {}
+ },
+ "renderer": {
+  "method": "asset-view (the game)",
+  "commit": "",
+  "key": "asset-view (the game)",
+  "preset": "",
+  "note": "head-joints, head-joints-2: four residents composed from the shared files by compose.py and posed in the file by pose.py (the neck takes 0.4 of each angle, the head the rest): at rest, turned 50 degrees, looking up 30, looking down 25, tilted 20; from the front, the side and behind; before and after the joints moved. Shown as plain files without clips. Eyes are held open by the photo tool. The vroid and blue-protocol members are the references, for comparison only"
+ },
+ "preset": "",
+ "media": "media/character-face-types/20261112-46074f0d-83360c",
+ "members": [
+  {
+   "name": "types",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "7b15a389d11d3e78c9bc4651019d48572c1728ce3dfb8df883765301325a92be",
+   "shots": [
+    "head-joints",
+    "head-joints-2"
+   ],
+   "clips": []
+  },
+  {
+   "name": "vroid",
+   "role": "control",
+   "token_kind": "import",
+   "sha256": "7fc3b57d93c277341ce016d4cc809c47d66dd9f927132514e54048c42ab1ca6b",
+   "shots": [
+    "head-joints",
+    "head-joints-2"
+   ],
+   "clips": []
+  },
+  {
+   "name": "blue-protocol",
+   "role": "control",
+   "token_kind": "import",
+   "sha256": "0212b2e8aef78d650cc9624677b064c45394342a4bb92d1515751521b06f9beb",
+   "shots": [
+    "head-joints",
+    "head-joints-2"
+   ],
+   "clips": []
+  }
+ ],
+ "delivered": []
+}

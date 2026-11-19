@@ -1,6 +1,6 @@
 ---
 name: verify-minds
-description: Verify the living core's internal mind service with the real living-mind binary and a local fake model. Use when changing deliberation, deliberate acts, conversations, consolidation, reconnect handling, LIVING_ONLY, mind level of detail, the rethink gate (LIVING_RETHINK), or player memory (LIVING_PLAYER_MEMORY).
+description: "Verify the living core's internal mind service with the real living-mind binary and a local fake model on scratch databases. Use when changing the mind protocol (requests, thoughts, installed graphs, mind_* reducers) or what a mind is sent and does: deliberation and deliberate acts, conversations and ways of speaking, consolidation, reconnect and takeover, level of detail and the rethink gate, attention cues, the prompt frame, the mind service's LIVING_* switches, player memory, or trials."
 ---
 
 # Verify internal minds
@@ -18,6 +18,14 @@ R=minds-$(date +%Y%m%d-%H%M%S)
 cat ".local/living/verify/$R/results.json"
 ```
 
+Where a line's words may go (docs/COMMUNICATION.md §7) has its own driver with Neo4j, [features/privacy.md](features/privacy.md). Run it for every way of speaking on `speech_card`, and its control:
+
+```bash
+export LIVING_PRIVACY_NEO4J=slop-trials-neo4j:127.0.0.1:7699 LIVING_PRIVACY_NEO4J_ENV=<file with LIVING_NEO4J_PASSWORD=>
+.agents/skills/verify-minds/scripts/privacy.py --run minds-privacy-say-${R#minds-} --way say
+.agents/skills/verify-minds/scripts/privacy.py --run minds-privacy-ctl-${R#minds-} --way say --control
+```
+
 The command builds the release mind, runs its non-ignored tests, then launches and doctors a separate `verify-minds-*` database for each case. It drives every mind case, stops its own processes, deletes each scratch database and confirms the evidence remains. The second command proves paid-wrapper safety with inert children and no model calls. Allow several minutes for the real timing gaps. It never starts or stops the shared container.
 
 The driver imports lifecycle helpers from [`verify-llm`](../verify-llm/scripts/verify_llm.py) and invokes its [fake server](../verify-llm/scripts/fake_llm.py). Read the [fake interface](../verify-llm/references/fake-llm.md) when changing replies. Temporary profiles point only to loopback and use a dummy key. The admin token stays in process memory and `LIVING_TOKEN`; `.local/living/token` stays untouched. Every mind uses a separate `LIVING_RUN`, an explicit `LIVING_ONLY`, and `LIVING_NEO4J=off`. No tracked seed changes are needed.
@@ -29,7 +37,13 @@ R=minds-$(date +%Y%m%d-%H%M%S)
 .agents/skills/verify-minds/scripts/verify_minds.py --run "$R" --case conversation
 ```
 
-`--case` can repeat. Cases are `roundtrip`, `acts`, `conversation`, `consolidation`, `prune`, `reject`, `only`, `reconnect`, `lod`, `takeover` ([features/takeover.md](features/takeover.md)), `dealings` ([features/dealings.md](features/dealings.md)), `parked` ([features/conversations.md](features/conversations.md)), `sight` ([features/sight.md](features/sight.md)), `resident` ([features/resident.md](features/resident.md); an island world, built in `.local/living/target-resident-island`), `animals` ([features/animals.md](features/animals.md)), `night` ([features/sleep.md](features/sleep.md)), `jev` ([features/judgments.md](features/judgments.md)) and `rethink`/`rethink-llm` ([features/rethink.md](features/rethink.md)). Exit 0 means every ordinary check passed and known defects remain XFAIL. Exit 1 means FAIL or XPASS; inspect XPASS before removing its known-issue expectation. Inspect `results.json`, the case's `result.json`, and `failure.txt` when present. Consolidation retains its XFAIL KNOWN ISSUE check linked to `docs/LIVING_HANDOFF.md`, under "Still open". LoD requires merged reasons, urgent upgrades and player-contact release to pass.
+`--case` can repeat. `verify_minds.py --list` prints every case, in the order they are defined (each registers itself with `@case` where it is defined); [features/README.md](features/README.md) maps each case to its feature file. `drop` and `resident` run on an island world, built in `.local/living/target-resident-island`, or in `CARGO_TARGET_DIR` when it is set. Exit 0 means every ordinary check passed and known defects remain XFAIL. Exit 1 means FAIL or XPASS; inspect XPASS before removing its known-issue expectation. Inspect `results.json`, the case's `result.json`, and `failure.txt` when present. Consolidation retains its XFAIL KNOWN ISSUE check linked to `docs/LIVING_HANDOFF.md`, under "Still open". LoD requires merged reasons, urgent upgrades and player-contact release to pass.
+
+Attention cues (docs/ATTENTION.md) have their own driver with Neo4j, `scripts/cues_mind.py` ([features/cues.md](features/cues.md)), with the same environment as `privacy.py`:
+
+```bash
+.agents/skills/verify-minds/scripts/cues_mind.py --run minds-cues-${R#minds-}
+```
 
 Seeded island residents (docs/SEEDED_LIVES.md) have their own driver, `scripts/lives_mind.py` ([features/lives-mind.md](features/lives-mind.md)): on an island run the mind service thinks for the named residents from the start (`LIVING_ONLY`) and a player speaks to each, with a scratch Neo4j and the fake model (free) or `--real PROFILE` (paid, only when authorized), and checks that each knows its own past and people and no one else's secrets.
 
@@ -48,6 +62,8 @@ python3 living/tools/trials.py life --batch dry1 && python3 living/tools/trials.
 
 On a host whose `sao-living_spacetimedb_1` belongs to other work (the DGX Spark), run this skill's suite against the trial container: `LIVING_STDB_CONTAINER=slop-trials-stdb LIVING_STDB_URL=http://127.0.0.1:3320 .agents/skills/verify-minds/scripts/verify_minds.py --run minds-…`.
 
+For a mind arriving among remains, run `verify_minds.py --run "$R" --case seen-remains` with a fresh suite name. The fake provider captures the counted line, both named lines and the ten-entry scene with a counted summary, the named and readable exceptions, and nearby shelters.
+
 ## Evidence and cleanup
 
 Each case writes `.local/living/verify/<suite>-<case>/`. Keep `actions.log`, `driver.log`, `fake-requests.jsonl`, `mind.log`, copied `journal/`, table snapshots, `result.json` and `cleanup.json`. The suite keeps build and test logs and source hashes. Full requests and replies stay in the fake log and journal. Authority snapshots prove their application.
@@ -60,7 +76,7 @@ Cleanup runs in `finally`, including after a failed check or Ctrl-C. If cleanup 
 
 First stop any surviving owned PIDs listed in that case's `processes.json`, after checking that the PID still belongs to this run. Do not kill by process name. Never clean another surface's database or a paused reference world.
 
-The [feature map](features/README.md) gives the source paths and assertions. The [validation record](references/validation.md) lists proven behavior and remaining failures. Use `maintain-verification-skill` after changing the mind protocol or launch commands.
+The [feature map](features/README.md) gives the source paths and assertions. The [validation records](references/validation/README.md), one per run with the newest the last validated, list proven behavior and remaining failures. Use `maintain-verification-skill` after changing the mind protocol or launch commands.
 
 ## Opt-in real-model tier
 

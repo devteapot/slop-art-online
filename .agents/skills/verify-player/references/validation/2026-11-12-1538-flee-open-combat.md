@@ -1,0 +1,11 @@
+# verify-player: flee-open, the merge gate's combat failures
+
+## 2026-11-12 flee-open merged with main `90ac4894` (Spark)
+
+Follows `2026-11-12-1421-flee-open.md`. The merge's scene gate (candidate `34ca2cc110` on main `8db00465`, `/home/gooning/.local/state/slop-merge/20261112-154336-flee-open.log`) failed verify-player combat twice: `breath` ("a jump takes 10 breath", then "a held run keeps draining"), `committed` ("a world whose laws make the dodge uncommitted: a guard pressed mid-dodge breaks the dodge off") and `jump` ("windup seen False"). Main passed once at the same time.
+
+**Not the change.** `steer::flee_way` runs only for a flight (`GOAL_FLEE`) and a band backing off. None of `combat.py`'s staged moves is either: a dodge and a jump are dashes (`GOAL_POINT` with `FLAG_AGILE`), the run key a direction goal, the attackers' graphs `strike`. The dash path and committed moves are untouched. The gate ran while this agent's own eco worlds, two scene worlds and a cargo build loaded the same trial server (host load 46–65 on 20 cores).
+
+**Same load, interleaved, before the staging fix** (`combat_runs.sh`, trial server, island seed, `GateTester` joined; host load 24–53): branch 1, 2, 3 fresh and 3 reused: 50/50 each; main 1: 50/50; main 2: 49/50, "letting go of the run: its breath back from a second later" (`breath`).
+
+**Staging fixed** (`combat.py`): the assumptions were (1) the held run goes east from wherever earlier scenes left the player, so a wall ahead stops the drain; (2) the guard is pressed after the dodge's reply, which under load comes after the 0.33 s dash; (3) a dash's cost is read as `stamina`, which a needs settle after the refill began already includes part of; (4) 3 s for an attacker's windup to start. Fixes: `open_ground` (16 m east, 4 m south, no bodies) for `breath` and the dodge-and-guard checks, `dodge_then_guard` (the guard on an 80 ms timer), `at_rest` (the row at its refill's start), 6 s for the windup. Then: branch 4, 5, 6 fresh and 6 reused: 50/50 each; main 3 with the fixed script: 50/50. Evidence: the session scratchpad `combat-1/` and `combat/` (summaries and every `combat.json`), copied to `~/slop-evidence/flee-open/combat/`. Every world paused, then deleted.

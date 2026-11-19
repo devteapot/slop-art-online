@@ -39,7 +39,8 @@ fn require_admin(ctx: &ReducerContext) -> Result<(), String> {
 fn with_state<R>(f: impl FnOnce(&mut State) -> R) -> R {
     STATE.with(|s| {
         let mut s = s.borrow_mut();
-        let st = s.get_or_insert_with(|| State { fx: fixtures::build(), engines: (0..Kind::ALL.len()).map(|_| None).collect(), cursor: 0 });
+        // Rhai's hashing keys first, as in the bench module (sb_bench::fix_hashing).
+        let st = s.get_or_insert_with(|| State { fx: { sb_bench::fix_hashing(0); fixtures::build() }, engines: (0..Kind::ALL.len()).map(|_| None).collect(), cursor: 0 });
         f(st)
     })
 }

@@ -23,6 +23,87 @@ pub fn placeholder_words(text: &str) -> bool {
     t.is_empty() || matches!(t.to_lowercase().as_str(), "text" | "words" | "the words" | "your words" | "what you say" | "your words here" | "message")
 }
 
+/// A line as it is heard: the `#<id>` handles a mind is shown people by (`{someone=#3}`) are not
+/// words anyone hears. `refer(id)` is how the speaker refers to that one (`common::label_for`:
+/// a name it knows, else "a stranger", "a wolf"), or `None` when the id names no one, and the
+/// text is then left as written.
+///
+/// - `Maud (#3)`: the aside goes (`Maud`);
+/// - `the archer #9`: the noun already refers, and the id goes (`the archer`);
+/// - otherwise the id is said as the speaker refers to them, pointing: `#9 strikes me` →
+///   `that stranger strikes me` (`That stranger` to begin a sentence), `#3` → `Maud Marrow`.
+///
+/// r2e (docs/TRIALS.md): 3 of 68 lines carried an id, said by deliberations whose prompts name
+/// everyone by one. Players, minds and graphs all speak through `speech::speak`, which applies it.
+pub fn spoken_without_ids(text: &str, refer: impl Fn(u32) -> Option<String>) -> String {
+    const DETERMINERS: [&str; 5] = ["the", "that", "this", "these", "those"];
+    let chars: Vec<char> = text.chars().collect();
+    let mut out = String::with_capacity(text.len());
+    let mut i = 0;
+    while i < chars.len() {
+        let c = chars[i];
+        let starts_id = c == '#' && chars.get(i + 1).is_some_and(|d| d.is_ascii_digit()) && !(i > 0 && chars[i - 1].is_alphanumeric());
+        if !starts_id {
+            out.push(c);
+            i += 1;
+            continue;
+        }
+        let mut j = i + 1;
+        while j < chars.len() && chars[j].is_ascii_digit() {
+            j += 1;
+        }
+        let digits: String = chars[i + 1..j].iter().collect();
+        let followed_by_word = chars.get(j).is_some_and(|c| c.is_alphanumeric() || *c == '_');
+        let Some(label) = digits.parse::<u32>().ok().filter(|_| !followed_by_word).and_then(&refer) else {
+            out.extend(&chars[i..j]);
+            i = j;
+            continue;
+        };
+        // `(#3)`: an aside repeating whom the words already name.
+        if out.ends_with('(') && chars.get(j) == Some(&')') {
+            out.pop();
+            while out.ends_with(' ') {
+                out.pop();
+            }
+            i = j + 1;
+            continue;
+        }
+        let before = out.trim_end_matches(' ');
+        let words: Vec<&str> = before.rsplit(|c: char| c.is_whitespace()).take(2).collect();
+        let is_det = |w: &str| DETERMINERS.contains(&w.to_lowercase().as_str());
+        let is_noun = |w: &str| !w.is_empty() && w.chars().all(|c| c.is_alphabetic() || c == '\'' || c == '-');
+        if out.ends_with(' ') && words.len() == 2 && is_noun(words[0]) && !is_det(words[0]) && is_det(words[1]) {
+            // `the archer #9`: the id goes with the space before it.
+            let keep = before.len();
+            out.truncate(keep);
+            i = j;
+            continue;
+        }
+        // `the #9`: the determiner gives way to the speaker's own words for them.
+        if out.ends_with(' ') && words.first().is_some_and(|w| is_det(w)) {
+            let keep = before.len() - words[0].len();
+            out.truncate(keep);
+        }
+        let pointing = if let Some(rest) = label.strip_prefix("a ").or_else(|| label.strip_prefix("an ")) {
+            format!("that {rest}")
+        } else if label.starts_with("someone") {
+            "that one".to_string()
+        } else {
+            label
+        };
+        let opening = out.trim_end_matches(|c: char| c.is_whitespace() || matches!(c, '“' | '"' | '\'' | '‘' | '(' | '—' | '–'));
+        let sentence_start = opening.is_empty() || opening.ends_with(['.', '!', '?']);
+        out.push_str(&if sentence_start { capitalize(&pointing) } else { pointing });
+        i = j;
+    }
+    out
+}
+
+fn capitalize(s: &str) -> String {
+    let mut c = s.chars();
+    c.next().map(|f| f.to_uppercase().chain(c).collect()).unwrap_or_default()
+}
+
 /// A say node must carry words; a format placeholder is pruned with the reason, like any other
 /// invalid branch, so the next deliberation is told instead of the body speaking it.
 fn spoken(text: &str, path: &str) -> Result<(), String> {
@@ -71,8 +152,8 @@ pub fn graph(v: Value) -> Result<(Value, Vec<String>), String> {
 }
 
 const NODES: &str = "first, seq, if, do, say, wait, think, routine, desires";
-const WEIGHTS: &[&str] = &["base", "hunger", "tired", "hurt", "night", "day", "threatened", "alone", "company", "winter", "longing", "courted", "starving", "exhausted", "rain", "hailed", "commotion", "bedtime", "evening"];
-const CONDS: &str = "hunger, energy, health, hour, threatened, has, sees, smells, near, count, health_of, hurt_within, heard_within, hailed, night, bedtime, evening, raining, moving, believes, judged, chance, all, any, not";
+const WEIGHTS: &[&str] = &["base", "hunger", "tired", "hurt", "night", "day", "threatened", "alone", "company", "winter", "longing", "courted", "starving", "exhausted", "rain", "hailed", "commotion", "bedtime", "evening", "work_hours"];
+const CONDS: &str = "hunger, energy, health, stamina, hour, threatened, has, sees, smells, near, count, health_of, doing, hurt_within, heard_within, hailed, night, bedtime, evening, work_hours, raining, moving, believes, judged, chance, all, any, not";
 
 fn strip_nulls(m: Map<String, Value>) -> Map<String, Value> {
     m.into_iter().filter(|(_, v)| !v.is_null()).collect()
@@ -111,11 +192,12 @@ pub fn node(v: Value, path: &str) -> Result<Value, String> {
             }
             if let Some(v) = m.get("say") {
                 body_check(path, "say", None)?;
-                let (text, to) = match v {
-                    Value::String(s) => (s.clone(), m.get("to").cloned()),
+                let (text, to, way) = match v {
+                    Value::String(s) => (s.clone(), m.get("to").cloned(), m.get("way").cloned()),
                     Value::Object(o) => (
                         o.get("text").and_then(|t| t.as_str()).unwrap_or_default().to_string(),
                         o.get("to").cloned().filter(|t| !t.is_null()).or_else(|| m.get("to").cloned()),
+                        o.get("way").cloned().filter(|t| !t.is_null()).or_else(|| m.get("way").cloned()),
                     ),
                     _ => return Err(format!("{path}.say: expected text")),
                 };
@@ -124,6 +206,7 @@ pub fn node(v: Value, path: &str) -> Result<Value, String> {
                 if let Some(to) = to {
                     out["say"]["to"] = target(to, &format!("{path}.say.to"))?;
                 }
+                way_of(&mut out, way, path)?;
                 return Ok(out);
             }
             if let Some(v) = m.get("wait") {
@@ -309,6 +392,23 @@ fn if_node(m: Map<String, Value>, path: &str) -> Result<Value, String> {
     Ok(json!({"if": out}))
 }
 
+
+/// A say's way of speaking (`"way": "whisper"`), lowercased; `say` (the default) is left out.
+fn way_of(out: &mut Value, way: Option<Value>, path: &str) -> Result<(), String> {
+    match way {
+        None | Some(Value::Null) => Ok(()),
+        Some(Value::String(w)) => {
+            let w = w.trim().to_lowercase().replace([' ', '-'], "_");
+            if w.is_empty() || w == "say" {
+                return Ok(());
+            }
+            out["say"]["way"] = json!(w);
+            Ok(())
+        }
+        Some(_) => Err(format!("{path}.say.way: the name of a way of speaking")),
+    }
+}
+
 fn do_node(m: Map<String, Value>, path: &str) -> Result<Value, String> {
     let d = m.get("do").cloned().unwrap_or(Value::Null);
     let mut action = match d {
@@ -336,6 +436,7 @@ fn do_node(m: Map<String, Value>, path: &str) -> Result<Value, String> {
             if let Some(t) = action.get("to").or_else(|| action.get("target")).cloned() {
                 out["say"]["to"] = target(t, &format!("{path}.say.to"))?;
             }
+            way_of(&mut out, action.get("way").cloned(), path)?;
             return Ok(out);
         }
         _ => {}
@@ -373,8 +474,27 @@ fn do_node(m: Map<String, Value>, path: &str) -> Result<Value, String> {
     if let Some(Value::String(t)) = action.get("text").or_else(|| action.get("words")).or_else(|| action.get("message")) {
         out.insert("text".into(), json!(t.chars().take(400).collect::<String>()));
     }
+    // Running on the way: true or false (a word a model writes for it too).
+    match action.get("run").or_else(|| action.get("running")).or_else(|| action.get("hurry")) {
+        Some(Value::Bool(b)) => {
+            out.insert("run".into(), json!(*b));
+        }
+        Some(Value::String(w)) => match w.trim().to_lowercase().as_str() {
+            "true" | "yes" | "run" | "fast" => {
+                out.insert("run".into(), json!(true));
+            }
+            "false" | "no" | "walk" => {
+                out.insert("run".into(), json!(false));
+            }
+            _ => {}
+        },
+        _ => {}
+    }
+    if crate::steer::INTENTS.contains(&skill.as_str()) {
+        spacing(&mut out, &action, &skill, path)?;
+    }
     if skill == "rework" {
-        let name = out.get("item").and_then(|i| i.as_str()).unwrap_or_default().to_string();
+        let name =out.get("item").and_then(|i| i.as_str()).unwrap_or_default().to_string();
         let raw = action.get("item").or_else(|| action.get("what")).and_then(|i| i.as_str()).unwrap_or(&name);
         out.insert("item".into(), json!(routine_name(raw)));
         let text = if action.get("retire").and_then(|r| r.as_bool()) == Some(true) {
@@ -393,6 +513,23 @@ fn do_node(m: Map<String, Value>, path: &str) -> Result<Value, String> {
         let q = action.get("want_qty").or_else(|| action.get("for_qty")).and_then(|q| q.as_f64()).unwrap_or(1.0);
         out.insert("want_qty".into(), json!(q.max(1.0).round() as u64));
     }
+    // What an answer (accept, decline) is about: the id of the trade offer or proposal seen,
+    // for a skill whose spec reads it. Elsewhere the words are ignored, as before.
+    for (key, alias) in [("offer", "offer_id"), ("record", "record_id")] {
+        if !spec.args.iter().any(|a| a == key) {
+            continue;
+        }
+        if let Some(v) = action.get(key).or_else(|| action.get(alias)).filter(|v| !v.is_null()) {
+            let id = v.as_u64().or_else(|| v.as_f64().filter(|f| *f >= 0.0 && f.fract() == 0.0).map(|f| f as u64)).or_else(|| v.as_str().and_then(|s| s.trim().trim_start_matches('#').parse::<u64>().ok()));
+            match id {
+                Some(0) => {},
+                Some(n) => {
+                    out.insert(key.into(), json!(n));
+                },
+                _ => return Err(format!("{path}.do.{key}: the id of the {} you answer (a whole number from what you were asked)", if key == "offer" { "trade offer" } else { "proposal" })),
+            }
+        }
+    }
     if let Some(t) = action.get("target").or_else(|| action.get("to")).or_else(|| action.get("from")).cloned() {
         // Any skill may be aimed (read a sign, build a wall there, sleep in a shelter: the body
         // walks there first); only wandering and waiting ignore a target.
@@ -405,12 +542,69 @@ fn do_node(m: Map<String, Value>, path: &str) -> Result<Value, String> {
         return Err(format!("{path}.do: skill `{skill}` needs a target"));
     }
     if let Some(i) = out.get("item").and_then(|i| i.as_str()).filter(|_| skill != "signal" && skill != "rework" && spec.needs_item) {
-        let known = i == "food" || catalog::item(i).is_some() || catalog::STRUCTURES.contains(&i) || catalog::TERRAIN_BUILDS.contains(&i) || catalog::technique(i).is_some() || spec.items.iter().any(|w| w == i);
+        let known = i == "food" || catalog::item(i).is_some() || catalog::is_structure(i) || catalog::TERRAIN_BUILDS.contains(&i) || catalog::technique(i).is_some() || spec.items.iter().any(|w| w == i);
         if !known {
             return Err(format!("{path}.do: unknown item `{i}`; items are food, {}", catalog::item_names().join(", ")));
         }
     }
     Ok(json!({"do": out}))
+}
+
+/// Metres written as a number or as words a model writes for one ("4", "4 m", "4.5m").
+fn metres(v: &Value) -> Option<f64> {
+    v.as_f64().or_else(|| {
+        let s = v.as_str()?.trim().to_lowercase();
+        let s = s.trim_end_matches("metres").trim_end_matches("meters").trim_end_matches("tiles").trim_end_matches('m').trim();
+        s.parse::<f64>().ok()
+    })
+}
+
+/// A movement intent's distances (`steer::Spacing`): `keep_distance` a band (`min`, `max`, or
+/// `range: [min, max]`), `circle` a `radius` and a `side` (left or right as one faces it),
+/// `close_in`, `follow` and `back_off` a `distance`. Checked by the rules' own check, which says
+/// what to write instead.
+fn spacing(out: &mut Map<String, Value>, action: &Map<String, Value>, skill: &str, path: &str) -> Result<(), String> {
+    let get = |keys: &[&str]| keys.iter().find_map(|k| action.get(*k).filter(|v| !v.is_null()));
+    let num = |keys: &[&str], name: &str| -> Result<Option<f32>, String> {
+        match get(keys) {
+            None => Ok(None),
+            Some(v) => metres(v).map(|m| Some(m as f32)).ok_or_else(|| format!("{path}.do.{name}: metres, as a number")),
+        }
+    };
+    let mut s = crate::steer::Spacing::default();
+    match skill {
+        "keep_distance" => {
+            if let Some(Value::Array(r)) = get(&["range", "band", "between"]) {
+                if r.len() == 2 {
+                    s.min = metres(&r[0]).map(|m| m as f32);
+                    s.max = metres(&r[1]).map(|m| m as f32);
+                }
+            }
+            s.min = num(&["min", "min_m", "near", "at_least"], "min")?.or(s.min);
+            s.max = num(&["max", "max_m", "far", "at_most"], "max")?.or(s.max);
+        }
+        "circle" => {
+            s.radius = num(&["radius", "r", "distance", "dist"], "radius")?;
+            s.side = match get(&["side", "direction", "dir"]) {
+                None => None,
+                Some(Value::String(w)) => Some(crate::steer::side_of(w).ok_or_else(|| format!("{path}.do.side: \"left\" or \"right\" (as you face it), not {w:?}"))?),
+                Some(v) => match v.as_f64() {
+                    Some(n) if n != 0.0 => Some(n.signum() as f32),
+                    _ => return Err(format!("{path}.do.side: \"left\" or \"right\" (as you face it)")),
+                },
+            };
+        }
+        _ => s.distance = num(&["distance", "dist", "keep", "gap", "metres", "meters"], "distance")?,
+    }
+    s.apart = num(&["apart", "apart_m", "spread", "keep_apart"], "apart")?;
+    s.check(skill).map_err(|e| format!("{path}.do: {e}"))?;
+    for (k, v) in [("min", s.min), ("max", s.max), ("radius", s.radius), ("side", s.side), ("distance", s.distance), ("apart", s.apart)] {
+        if let Some(v) = v {
+            // Kept to the centimetre, as written (an f32 widened as is reads 0.800000011920929).
+            out.insert(k.into(), json!((v as f64 * 100.0).round() / 100.0));
+        }
+    }
+    Ok(())
 }
 
 /// Whether a word says how hard a blow is meant to be ("hurt", "beat", "kill", "to kill"...).
@@ -450,7 +644,7 @@ pub fn target(v: Value, path: &str) -> Result<Value, String> {
             let l = s.trim().to_lowercase();
             match l.as_str() {
                 "self" | "me" | "myself" => json!("self"),
-                "attacker" | "speaker" | "home" | "wander" | "parent" | "suitor" | "partner" | "hailer" | "commotion" => json!(l),
+                "attacker" | "speaker" | "home" | "wander" | "parent" | "suitor" | "partner" | "hailer" | "commotion" | "sound" => json!(l),
                 "greeter" => json!("hailer"),
                 _ if catalog::kind_class(&l).is_some() => json!({"nearest": l}),
                 _ => json!({"named": s.trim()}),
@@ -506,7 +700,7 @@ pub fn target(v: Value, path: &str) -> Result<Value, String> {
             if let (Some(x), Some(y)) = (o.get("x"), o.get("y")) {
                 return Ok(json!({"at": [x, y]}));
             }
-            return Err(format!("{path}: unknown target {:?}; use \"self\", \"attacker\", \"speaker\", \"suitor\", \"partner\", \"hailer\", \"commotion\", \"home\", {{\"nearest\": kind}}, {{\"id\": n}}, {{\"named\": name}}, {{\"place\": name}} or {{\"at\": [x, y]}}", o.keys().collect::<Vec<_>>()));
+            return Err(format!("{path}: unknown target {:?}; use \"self\", \"attacker\", \"speaker\", \"suitor\", \"partner\", \"hailer\", \"commotion\", \"sound\", \"home\", {{\"nearest\": kind}}, {{\"id\": n}}, {{\"named\": name}}, {{\"place\": name}} or {{\"at\": [x, y]}}", o.keys().collect::<Vec<_>>()));
         }
         other => return Err(format!("{path}: invalid target {other}")),
     })
@@ -578,7 +772,7 @@ pub fn cond(v: Value, path: &str) -> Result<Value, String> {
                     let c = cmp(v, path, "hour")?;
                     json!({"hour": c})
                 }
-                "hunger" | "energy" | "health" => {
+                "hunger" | "energy" | "health" | "stamina" => {
                     let c = cmp(v, path, &key)?;
                     json!({key: c})
                 }
@@ -684,9 +878,45 @@ pub fn cond(v: Value, path: &str) -> Result<Value, String> {
                     }
                     json!({"health_of": c})
                 }
+                "doing" | "is_doing" | "visibly" => {
+                    let o = match v {
+                        Value::String(x) => {
+                            let mut m = Map::new();
+                            m.insert("is".into(), json!(x));
+                            m
+                        }
+                        Value::Object(o) => strip_nulls(o),
+                        Value::Bool(true) => Map::new(),
+                        _ => return Err(format!("{p}: expected {{\"who\": kind, \"is\": skill or kind, \"phase\": phase, \"at_me\": true}}")),
+                    };
+                    let mut c = Map::new();
+                    for (k, x) in o {
+                        let key = match k.as_str() {
+                            "who" | "of" | "kind" => "who",
+                            "is" | "act" | "skill" | "what" | "move" => "is",
+                            "phase" | "stage" => "phase",
+                            "at_me" | "aimed_at_me" | "at_you" => "at_me",
+                            "within" | "range" | "distance" => "within",
+                            "at" | "target" if x.as_str().is_some_and(|t| matches!(t, "me" | "self" | "you")) => {
+                                c.insert("at_me".into(), json!(true));
+                                continue;
+                            }
+                            other => return Err(format!("{p}: unknown field `{other}`; use who, is, phase, at_me, within")),
+                        };
+                        let x = match (key, x) {
+                            ("who", Value::String(w)) => json!(w.to_lowercase()),
+                            ("who", Value::Object(mut w)) if w.contains_key("nearest") => w.remove("nearest").unwrap_or(Value::Null),
+                            ("phase", Value::String(ph)) => json!(ph.to_lowercase().replace('_', " ")),
+                            (_, other) => other,
+                        };
+                        c.insert(key.into(), x);
+                    }
+                    json!({"doing": c})
+                }
                 "night" => json!({"night": v.as_bool().unwrap_or(true)}),
                 "bedtime" => json!({"bedtime": v.as_bool().unwrap_or(true)}),
                 "evening" => json!({"evening": v.as_bool().unwrap_or(true)}),
+                "work_hours" => json!({"work_hours": v.as_bool().unwrap_or(true)}),
                 "raining" => json!({"raining": v.as_bool().unwrap_or(true)}),
                 "moving" | "walking" => json!({"moving": v.as_bool().unwrap_or(true)}),
                 "standing" | "still" => json!({"moving": !v.as_bool().unwrap_or(true)}),
@@ -732,6 +962,21 @@ mod tests {
         assert!(o.contains("at least 3 person (friend)"), "{o}");
         assert!(o.contains("health of nearest wolf < 40%"), "{o}");
         assert!(o.contains("at most 1 wolf"), "{o}");
+    }
+
+    #[test]
+    fn doing_reads_what_someone_visibly_does() {
+        let g = from_value(json!({"first": [
+            {"if": {"doing": {"who": "Person", "act": "hostile", "phase": "about_to_release", "at": "me"}},
+             "then": {"do": "dodge"}},
+            {"if": {"doing": "wave"}, "then": {"do": "wave", "target": "hailer"}}
+        ]}))
+        .unwrap();
+        let o = outline(&g.root);
+        assert!(o.contains("person in sight is about to release: hostile at me"), "{o}");
+        assert!(o.contains("someone in sight is doing wave"), "{o}");
+        let bad = from_value(json!({"if": {"doing": {"phase": "charging"}}, "then": {"do": "dodge"}}));
+        assert!(bad.unwrap_err().contains("unknown phase"));
     }
 
     #[test]
@@ -887,5 +1132,95 @@ mod tests {
         // A graph's target given as a string id is the creature with that id.
         assert_eq!(target(json!("#12"), "t").unwrap(), json!({"id": 12}));
         assert_eq!(target(json!({"id": "12"}), "t").unwrap(), json!({"id": 12}));
+    }
+
+    /// The movement intents' forms: flat, with their distances, words for metres and sides, and
+    /// truthful refusals naming the fix.
+    #[test]
+    fn movement_intents_take_their_distances() {
+        let leaf = |v: serde_json::Value| -> Result<crate::graph::Action, String> {
+            match from_value(v)?.root {
+                crate::graph::Node::Do(a) => Ok(a),
+                n => Err(format!("not a leaf: {n:?}")),
+            }
+        };
+        let a = leaf(json!({"do": "keep_distance", "target": {"nearest": "wolf"}, "min": 3, "max": 6, "run": true})).unwrap();
+        assert_eq!((a.min, a.max, a.run), (Some(3.0), Some(6.0), Some(true)));
+        assert_eq!(crate::graph::describe(&crate::graph::Node::Do(a.clone())), "keep_distance 3–6 m → nearest wolf");
+        let a = leaf(json!({"do": "keep_distance", "target": "wolf", "range": ["2 m", 5.5]})).unwrap();
+        assert_eq!((a.min, a.max), (Some(2.0), Some(5.5)));
+        let a = leaf(json!({"do": "circle", "target": {"named": "Grim"}, "radius": 4, "direction": "clockwise", "seconds": 8})).unwrap();
+        assert_eq!((a.radius, a.side, a.qty), (Some(4.0), Some(-1.0), Some(8)));
+        let a = leaf(json!({"do": "circle", "target": "wolf"})).unwrap();
+        assert_eq!((a.radius, a.side), (None, None), "as far as one is, to the left");
+        let a = leaf(json!({"do": "back_off", "from": "wolf", "distance": "6m"})).unwrap();
+        assert_eq!(a.distance, Some(6.0));
+        assert!(a.target.is_some(), "`from` names what to back away from");
+        let a = leaf(json!({"do": "close_in", "target": "wolf", "distance": 1.5, "run": "yes"})).unwrap();
+        assert_eq!((a.distance, a.run), (Some(1.5), Some(true)));
+        let a = leaf(json!({"do": "follow", "target": "deer", "distance": 5})).unwrap();
+        assert_eq!(a.distance, Some(5.0));
+        // Canonical JSON round-trips through the typed parser (what an authority stores).
+        let canon = serde_json::to_string(&crate::graph::Node::Do(a.clone())).unwrap();
+        assert!(canon.contains("\"distance\":5.0"), "{canon}");
+        // Refusals say what to write instead.
+        let err = leaf(json!({"do": "keep_distance", "target": "wolf", "min": 6, "max": 3})).unwrap_err();
+        assert!(err.contains("`min` (6) is beyond `max` (3)"), "{err}");
+        let err = leaf(json!({"do": "circle", "target": "wolf", "side": "up"})).unwrap_err();
+        assert!(err.contains("\"left\" or \"right\""), "{err}");
+        let err = leaf(json!({"do": "circle", "target": "wolf", "radius": 0.2})).unwrap_err();
+        assert!(err.contains("at least 0.8"), "{err}");
+        let err = leaf(json!({"do": "back_off", "target": "wolf", "distance": "far"})).unwrap_err();
+        assert!(err.contains("metres, as a number"), "{err}");
+        let err = leaf(json!({"do": "keep_distance", "target": "wolf", "max": 90})).unwrap_err();
+        assert!(err.contains("metres from 0 to 40"), "{err}");
+        assert!(leaf(json!({"do": "keep_distance"})).unwrap_err().contains("needs a target"));
+    }
+
+    /// The 0-spoken-ids guard (`arena_report.py`'s `spoken_with_id`): the three lines r2e's minds
+    /// said with an id (docs/TRIALS.md, r2e "Ids"), and the forms around them.
+    #[test]
+    fn spoken_lines_carry_no_ids() {
+        use super::spoken_without_ids;
+        let refer = |id: u32| match id {
+            9 | 3 => Some("a stranger".to_string()),
+            75 => Some("an old stranger".to_string()),
+            12 => Some("Maud Marrow".to_string()),
+            40 => Some("someone too far away to make out".to_string()),
+            _ => None,
+        };
+        let cases = [
+            // r2e heavy r1, 145 s and 179 s; kiter r4.
+            (
+                "That one, #9, set on me twice on the road without a word — you all saw it. I gave back blow for blow and no more. I'm Wren, new off the water: is there work at this inn, and a roof for the night for someone who pays their way?",
+                "That one, that stranger, set on me twice on the road without a word — you all saw it. I gave back blow for blow and no more. I'm Wren, new off the water: is there work at this inn, and a roof for the night for someone who pays their way?",
+            ),
+            (
+                "There, you all see it — #9 strikes me a fourth time, unprovoked! Stand with me or stand clear!",
+                "There, you all see it — that stranger strikes me a fourth time, unprovoked! Stand with me or stand clear!",
+            ),
+            (
+                "If anyone hears me — I'm Wren, wounded at your gate by the archer #9. I'm taking my bow from the hall and coming inside the walls. Watch the road.",
+                "If anyone hears me — I'm Wren, wounded at your gate by the archer. I'm taking my bow from the hall and coming inside the walls. Watch the road.",
+            ),
+            ("#3 hit me! Stop him!", "That stranger hit me! Stop him!"),
+            ("Help! #75 is down.", "Help! That old stranger is down."),
+            ("Maud Marrow (#12), wait for me.", "Maud Marrow, wait for me."),
+            ("Tell #12 I came.", "Tell Maud Marrow I came."),
+            ("Watch the #3, he bites.", "Watch that stranger, he bites."),
+            ("Who is #40 over there?", "Who is that one over there?"),
+            // Not a person's id, or not an id: left as written.
+            ("You're my #1 customer and room #7b is yours.", "You're my #1 customer and room #7b is yours."),
+            ("Bring berries#9 now", "Bring berries#9 now"),
+        ];
+        for (said, heard) in cases {
+            let out = spoken_without_ids(said, refer);
+            assert_eq!(out, heard, "{said}");
+        }
+        // Whatever the line, no handle of someone the speaker can refer to is left in it.
+        for (said, _) in &cases[..9] {
+            let out = spoken_without_ids(said, refer);
+            assert!(!out.contains("#9") && !out.contains("#3") && !out.contains("#75") && !out.contains("#12") && !out.contains("#40"), "{out}");
+        }
     }
 }

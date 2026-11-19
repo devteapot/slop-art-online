@@ -29,6 +29,15 @@ pub struct Profile {
     /// Optional alternate for legacy configs. Every alternate uses its own pacing.
     #[serde(default)]
     pub overflow: Option<String>,
+    /// Background purposes (memory work, which otherwise never overflows) that go to
+    /// `overflow` when this profile's provider answers 429 "out of capacity" for its model
+    /// (Mistral's `backend_out_of_capacity`, code 3505): a shortage of the model, not this
+    /// mind's rate, which a paced retry on the same model rarely outlasts. A rate-limit 429
+    /// keeps its one paced retry here. Listed purposes only, at the overflow's own effort:
+    /// person consolidation on DeepSeek Flash with thinking off was judged 8/8 (MODEL_COST),
+    /// reorganization 4/21, so `reorganize` is not listed.
+    #[serde(default)]
+    pub capacity_overflow: Vec<String>,
     #[serde(default)]
     pub requests_per_minute: Option<f64>,
     #[serde(default)]
@@ -55,6 +64,7 @@ fn max_tokens() -> Option<u32> {
 fn parent_purpose(purpose: &str) -> Option<&'static str> {
     match purpose {
         "reorganize" => Some("consolidate"),
+        "act_repair" => Some("think"),
         _ => None,
     }
 }
@@ -121,7 +131,7 @@ pub fn split_spec(spec: &str) -> (&str, Option<&str>) {
 }
 
 /// The purposes the mind sends (see `Lane::for_purpose`); `*` in a mix covers the rest.
-pub const PURPOSES: [&str; 7] = ["think", "deliberate", "talk", "consolidate", "reorganize", "internalize", "judge"];
+pub const PURPOSES: [&str; 8] = ["think", "deliberate", "talk", "consolidate", "reorganize", "internalize", "judge", "act_repair"];
 
 /// The model purposes a person's route is used for (identity and birth go out as
 /// `consolidate`).
@@ -202,6 +212,16 @@ impl ModelsFile {
             }
         };
         route("default", &self.default)?;
+        for (name, p) in &self.profiles {
+            for purpose in &p.capacity_overflow {
+                if !PURPOSES.contains(&purpose.as_str()) {
+                    return Err(anyhow!("profile {name}: capacity_overflow names unknown purpose {purpose} (one of {})", PURPOSES.join(", ")));
+                }
+            }
+            if !p.capacity_overflow.is_empty() && !p.overflow.as_ref().is_some_and(|o| o != name && self.profiles.contains_key(o)) {
+                return Err(anyhow!("profile {name} has a capacity_overflow but no overflow profile to send it to"));
+            }
+        }
         for (k, v) in self.assign.iter().chain(&self.stages).chain(&self.groups) {
             route(k, v)?;
         }
@@ -221,7 +241,7 @@ impl ModelsFile {
     /// profile's map has no entry for it (`null` is an entry). GLM Flash without an entry
     /// thinks as at `max` and runs out of tokens (MODEL_COST Part 1: 69% of compiles came back
     /// empty that way). An overflow profile is reached for the routine and interactive
-    /// purposes (background ones do not overflow).
+    /// purposes (background ones only when listed in the profile's `capacity_overflow`).
     pub fn effort_gaps(&self) -> Vec<String> {
         let mut out = std::collections::BTreeSet::new();
         self.gaps_for("default", &self.default, &PERSON_PURPOSES, &mut out);
@@ -253,7 +273,7 @@ impl ModelsFile {
                 if written.is_none() && p.effort_entry(purpose).is_none() {
                     out.insert(format!("profile {name} has no reasoning_effort for {purpose} (reached by {what} → {route})"));
                 }
-                let overflows = Lane::for_purpose(purpose) != Lane::Background;
+                let overflows = Lane::for_purpose(purpose) != Lane::Background || p.capacity_overflow.iter().any(|c| c == purpose);
                 if let Some(o) = p.overflow.as_deref().filter(|o| overflows && *o != name).and_then(|o| self.profiles.get(o).map(|q| (o, q))) {
                     if o.1.effort_entry(purpose).is_none() {
                         out.insert(format!("profile {} has no reasoning_effort for {purpose} (the overflow of {name}, reached by {what} → {route})", o.0));
@@ -298,6 +318,9 @@ pub struct Llm {
 /// Where the journal keeps each distinct system prompt once.
 pub const SYSTEM_DIR: &str = "system";
 
+/// Where the journal keeps the outcomes of the mind's work ([`Llm::outcome`]).
+pub const OUTCOMES_DIR: &str = "outcomes";
+
 /// Reachability of a provider (by base URL). When a request cannot connect to it (DNS, no
 /// route, refused), calls to it wait instead of failing at once; one probe at a time goes
 /// out, with a pause that doubles from 2 s to a minute, until the provider answers again. An
@@ -318,6 +341,9 @@ const GATE_PAUSE_MAX: Duration = Duration::from_secs(60);
 #[serde(rename_all = "snake_case")]
 pub enum Lane {
     Interactive,
+    /// The fast lane (docs/FAST_LANE.md): its own slots, as many as the world's
+    /// `fast_lane_inflight`, outside the shared pool, so a battle's slow work cannot starve it.
+    Fast,
     Urgent,
     Routine,
     Background,
@@ -329,6 +355,7 @@ impl Lane {
     pub fn for_purpose(purpose: &str) -> Self {
         match purpose {
             "talk" => Self::Interactive,
+            "fast" => Self::Fast,
             "combat" | "alarm" | "attack" => Self::Urgent,
             "consolidate" | "reorganize" | "identity" | "internalize" => Self::Background,
             _ => Self::Routine,
@@ -473,6 +500,14 @@ impl Rate {
     }
 }
 
+/// A 429 that says the provider has no capacity for the model (Mistral: `"type":
+/// "backend_out_of_capacity"`, code 3505, "Not enough capacity available for this request"),
+/// as opposed to a rate limit on this caller.
+fn out_of_capacity(e: &anyhow::Error) -> bool {
+    let text = format!("{e:#}");
+    text.contains("HTTP 429") && (text.contains("backend_out_of_capacity") || text.contains("Not enough capacity"))
+}
+
 fn retry_after(headers: &reqwest::header::HeaderMap, now: std::time::SystemTime) -> Option<Duration> {
     let value = headers.get("retry-after")?.to_str().ok()?;
     if let Ok(seconds) = value.parse::<f64>() {
@@ -521,14 +556,40 @@ struct Queue {
     sequence: u64,
     in_flight: usize,
     lower_in_flight: usize,
+    /// The fast lane's reserved slots and its calls in flight in them (outside `in_flight`).
+    fast_slots: usize,
+    fast_in_flight: usize,
     concurrency: usize,
     global_rpm: f64,
     global_next: Instant,
 }
 
 impl Queue {
+    /// The first waiting request of `lane` whose profile may send now (rate and outage gates).
+    fn ready_in(&mut self, lane: Lane, now: Instant) -> Option<u64> {
+        // Keep a paced lane's turn so cheaper requests cannot consume its token budget forever.
+        let (rates, gates, hosts) = (&mut self.rates, &self.gates, &self.hosts);
+        self.waiting
+            .iter()
+            .filter(|w| w.lane == lane)
+            .find(|w| {
+                let gate = gates.get(&hosts[&w.profile]);
+                gate.is_none_or(|g| g.retry_at.is_none_or(|at| g.probing.is_none() && now >= at)) && rates.get_mut(&w.profile).unwrap().ready_at(w.cost, now) <= now
+            })
+            .map(|w| w.id)
+    }
+
     fn candidate(&mut self, now: Instant) -> Option<u64> {
-        if self.in_flight >= self.concurrency || now < self.global_next {
+        if now < self.global_next {
+            return None;
+        }
+        // The fast lane's own slots: it never waits behind the shared pool, and never takes it.
+        if self.fast_in_flight < self.fast_slots && self.waiting.iter().any(|w| w.lane == Lane::Fast) {
+            if let Some(id) = self.ready_in(Lane::Fast, now) {
+                return Some(id);
+            }
+        }
+        if self.in_flight >= self.concurrency {
             return None;
         }
         let lane = if self.waiting.iter().any(|w| w.lane == Lane::Interactive) {
@@ -542,20 +603,25 @@ impl Queue {
         if lane != Lane::Interactive && self.lower_in_flight >= lower_limit {
             return None;
         }
-        // Keep a paced lane's turn so cheaper requests cannot consume its token budget forever.
-        self.waiting
-            .iter()
-            .filter(|w| w.lane == lane)
-            .find(|w| {
-                let gate = self.gates.get(&self.hosts[&w.profile]);
-                gate.is_none_or(|g| g.retry_at.is_none_or(|at| g.probing.is_none() && now >= at)) && self.rates.get_mut(&w.profile).unwrap().ready_at(w.cost, now) <= now
-            })
-            .map(|w| w.id)
+        self.ready_in(lane, now)
     }
 
     fn start(&mut self, id: u64, now: Instant) -> (Lane, Option<String>) {
         let pos = self.waiting.iter().position(|w| w.id == id).unwrap();
         let w = self.waiting.remove(pos).unwrap();
+        if w.lane == Lane::Fast {
+            self.rates.get_mut(&w.profile).unwrap().sent(id, w.cost, now);
+            self.fast_in_flight += 1;
+            if self.global_rpm > 0.0 {
+                self.global_next = now + Duration::from_secs_f64(60.0 / self.global_rpm);
+            }
+            let host = self.hosts[&w.profile].clone();
+            let probe = self.gates.get_mut(&host).filter(|g| g.retry_at.is_some()).map(|g| {
+                g.probing = Some(id);
+                host
+            });
+            return (w.lane, probe);
+        }
         if w.lane != Lane::Interactive {
             let offset = (0..NON_INTERACTIVE_ADMISSIONS.len()).find(|offset| NON_INTERACTIVE_ADMISSIONS[(self.next_lane + offset) % NON_INTERACTIVE_ADMISSIONS.len()] == w.lane).unwrap();
             self.next_lane = (self.next_lane + offset + 1) % NON_INTERACTIVE_ADMISSIONS.len();
@@ -575,6 +641,9 @@ impl Queue {
     }
 }
 
+/// The fast lane's reserved slots until the world's `fast_lane_inflight` is read (its shipped value).
+pub const FAST_SLOTS_DEFAULT: usize = 4;
+
 struct Scheduler {
     queue: std::sync::Mutex<Queue>,
     changed: tokio::sync::Notify,
@@ -591,8 +660,12 @@ impl Drop for Admission<'_> {
     fn drop(&mut self) {
         let mut q = self.scheduler.queue.lock().unwrap();
         if let Some(lane) = self.lane {
-            q.in_flight -= 1;
-            q.lower_in_flight -= usize::from(lane != Lane::Interactive);
+            if lane == Lane::Fast {
+                q.fast_in_flight -= 1;
+            } else {
+                q.in_flight -= 1;
+                q.lower_in_flight -= usize::from(lane != Lane::Interactive);
+            }
         } else {
             q.waiting.retain(|w| w.id != self.id);
         }
@@ -619,6 +692,8 @@ impl Scheduler {
                 sequence: 0,
                 in_flight: 0,
                 lower_in_flight: 0,
+                fast_slots: FAST_SLOTS_DEFAULT,
+                fast_in_flight: 0,
                 concurrency,
                 global_rpm,
                 global_next: now,
@@ -662,6 +737,14 @@ impl Scheduler {
         }
     }
 
+    fn set_fast_slots(&self, n: usize) {
+        let mut q = self.queue.lock().unwrap();
+        if q.fast_slots != n {
+            q.fast_slots = n;
+            self.changed.notify_waiters();
+        }
+    }
+
     fn feedback(&self, profile: &str, id: u64, limited: bool, headers: &reqwest::header::HeaderMap, usage: Option<u64>) {
         let now = Instant::now();
         let mut q = self.queue.lock().unwrap();
@@ -682,6 +765,8 @@ pub struct Reply {
     pub tokens: u32,
     pub latency_ms: u32,
     pub model: String,
+    /// The picked profile failed and its overflow (or the default) answered.
+    pub overflowed: bool,
 }
 
 pub struct Msg {
@@ -842,6 +927,12 @@ impl Llm {
         self.chat_in_lane(route, at, purpose, actor, messages, Lane::for_purpose(purpose)).await
     }
 
+    /// The fast lane's reserved slots: the world's `fast_lane_inflight` (the authority issues no
+    /// more requests than that at once, so the lane never waits on the shared pool).
+    pub fn set_fast_slots(&self, n: usize) {
+        self.scheduler.set_fast_slots(n);
+    }
+
     pub async fn chat_in_lane(&self, route: &str, at: Attention, purpose: &str, actor: &str, messages: &[Msg], lane: Lane) -> Result<Reply> {
         let pick = self.pick(route, purpose, at);
         let mut result = self.chat_once(&pick, purpose, actor, messages, lane).await;
@@ -851,30 +942,39 @@ impl Llm {
             // a backoff (consolidation's `retry_after`, a sleep's, an integration's next turn)
             // on the model it chose. An overflow model would answer with its own settings for
             // the purpose: DeepSeek with thinking off reorganized acceptably 4 times in 21.
-            if result.is_err() && limited {
-                result = self.chat_once(&pick, purpose, actor, messages, lane).await;
+            // Only a model out of capacity sends the purposes its profile lists in
+            // `capacity_overflow` there (play-test 5: 41 consolidation 429s in 6 minutes).
+            if let Err(e) = &result {
+                let short = out_of_capacity(e) && self.models.profiles.get(&pick.profile).is_some_and(|p| p.capacity_overflow.iter().any(|c| c == purpose));
+                if let Some(alternate) = self.overflow_pick(&pick, purpose).filter(|_| short) {
+                    result = self.chat_once(&alternate, purpose, actor, messages, lane).await.map(|r| Reply { overflowed: true, ..r });
+                } else if limited {
+                    result = self.chat_once(&pick, purpose, actor, messages, lane).await;
+                }
             }
             return result;
         }
         let default = self.pick(&self.models.default, purpose, at);
-        // The overflow profile is called with its own effort for the purpose.
-        let alternate = self
-            .models
-            .profiles
-            .get(&pick.profile)
-            .and_then(|p| p.overflow.as_ref())
-            .filter(|p| **p != pick.profile && self.keys.contains_key(*p))
-            .map(|p| Pick { profile: p.clone(), effort: self.models.profiles[p].effort(purpose).cloned(), mix: pick.mix.clone(), attention: pick.attention })
-            .or_else(|| (default.profile != pick.profile).then_some(default));
+        let alternate = self.overflow_pick(&pick, purpose).or_else(|| (default.profile != pick.profile).then_some(default));
         if result.is_err() {
             if let Some(alternate) = alternate {
-                result = self.chat_once(&alternate, purpose, actor, messages, lane).await;
+                result = self.chat_once(&alternate, purpose, actor, messages, lane).await.map(|r| Reply { overflowed: true, ..r });
             } else if limited {
                 // One recovery attempt goes through the learned pacing and cooldown.
                 result = self.chat_once(&pick, purpose, actor, messages, lane).await;
             }
         }
         result
+    }
+
+    /// The picked profile's keyed overflow, called with its own effort for the purpose.
+    fn overflow_pick(&self, pick: &Pick, purpose: &str) -> Option<Pick> {
+        self.models
+            .profiles
+            .get(&pick.profile)
+            .and_then(|p| p.overflow.as_ref())
+            .filter(|p| **p != pick.profile && self.keys.contains_key(*p))
+            .map(|p| Pick { profile: p.clone(), effort: self.models.profiles[p].effort(purpose).cloned(), mix: pick.mix.clone(), attention: pick.attention })
     }
 
     async fn chat_once(&self, pick: &Pick, purpose: &str, actor: &str, messages: &[Msg], lane: Lane) -> Result<Reply> {
@@ -943,7 +1043,7 @@ impl Llm {
         });
         self.journal(actor, &entry).await;
         let (content, tokens, ..) = result?;
-        Ok(Reply { content, tokens, latency_ms, model: p.model.clone() })
+        Ok(Reply { content, tokens, latency_ms, model: p.model.clone(), overflowed: false })
     }
 
     fn gate_leave(&self, host: &str, unreachable: bool) {
@@ -993,6 +1093,22 @@ impl Llm {
     /// model exchanges.
     pub async fn journal_entry(&self, actor: &str, entry: &Value) {
         self.journal(actor, entry).await
+    }
+
+    /// One line of what the mind's work came to (not a model call), in
+    /// `<journal>/outcomes/<what>.jsonl`, beside the actors' call journals: for example each
+    /// consolidation's route, retries and experiences lost (read by trials.py's report).
+    pub async fn outcome(&self, what: &str, entry: &Value) {
+        let dir = self.journal.join(OUTCOMES_DIR);
+        if tokio::fs::create_dir_all(&dir).await.is_err() {
+            return;
+        }
+        let path = dir.join(format!("{}.jsonl", what.replace(|c: char| !c.is_alphanumeric(), "_")));
+        if let Ok(mut f) = tokio::fs::OpenOptions::new().create(true).append(true).open(&path).await {
+            let mut line = entry.to_string();
+            line.push('\n');
+            let _ = f.write_all(line.as_bytes()).await;
+        }
     }
 
     async fn journal(&self, actor: &str, entry: &Value) {
@@ -1272,7 +1388,7 @@ impl Llm {
                 entry["after_restart"] = json!(true);
             }
             self.journal(&item.actor, &entry).await;
-            out.push((item.id.clone(), item.meta.clone(), result.map(|(content, tokens, ..)| Reply { content, tokens, latency_ms, model: p.model.clone() })));
+            out.push((item.id.clone(), item.meta.clone(), result.map(|(content, tokens, ..)| Reply { content, tokens, latency_ms, model: p.model.clone(), overflowed: false })));
         }
         let _ = std::fs::remove_file(self.pending_path(id));
         log::info!("batch job {id} {} in {:.0} s{}", done["status"], latency_ms as f64 / 1000.0, if after_restart { " (collected after a restart)" } else { "" });
@@ -1653,6 +1769,45 @@ mod tests {
         assert_eq!(q.candidate(now + Duration::from_secs(2)), Some(3));
     }
 
+    fn one_profile() -> ModelsFile {
+        ModelsFile {
+            default: "p".into(),
+            profiles: HashMap::from([("p".into(), test_profile())]),
+            assign: Default::default(),
+            rotate: vec![],
+            species: Default::default(),
+            stages: Default::default(),
+            groups: Default::default(),
+            mixes: Default::default(),
+        }
+    }
+
+    /// The fast lane has its own slots (the world's `fast_lane_inflight`), outside the shared
+    /// pool: a pool full of slow work does not hold it back, and it never takes a shared slot.
+    #[test]
+    fn the_fast_lane_has_its_own_slots() {
+        let now = Instant::now();
+        let scheduler = Scheduler::new(&one_profile(), 1, 0.0);
+        scheduler.set_fast_slots(1);
+        let mut q = scheduler.queue.lock().unwrap();
+        q.waiting.push_back(Waiting { id: 1, profile: "p".into(), lane: Lane::Urgent, cost: 10 });
+        q.start(1, now);
+        assert_eq!(q.in_flight, 1, "the shared pool is full");
+        q.waiting.push_back(Waiting { id: 2, profile: "p".into(), lane: Lane::Routine, cost: 10 });
+        q.waiting.push_back(Waiting { id: 3, profile: "p".into(), lane: Lane::Fast, cost: 10 });
+        assert_eq!(q.candidate(now + Duration::from_secs(1)), Some(3), "a fast call goes in its own slot");
+        q.start(3, now + Duration::from_secs(1));
+        assert_eq!((q.in_flight, q.fast_in_flight), (1, 1));
+        q.waiting.push_back(Waiting { id: 4, profile: "p".into(), lane: Lane::Fast, cost: 10 });
+        assert_eq!(q.candidate(now + Duration::from_secs(2)), None, "its slots are full, and the shared pool is not its");
+        q.in_flight -= 1;
+        q.lower_in_flight -= 1;
+        assert_eq!(q.candidate(now + Duration::from_secs(2)), Some(2), "a freed shared slot goes to slow work, not to the waiting fast call");
+        q.fast_slots = 2;
+        q.start(2, now + Duration::from_secs(2));
+        assert_eq!(q.candidate(now + Duration::from_secs(3)), Some(4), "more slots, the next fast call goes");
+    }
+
     #[test]
     fn retry_after_accepts_seconds_and_http_dates() {
         let now = std::time::UNIX_EPOCH + Duration::from_secs(1445412480);
@@ -1678,6 +1833,7 @@ mod tests {
             assert_eq!(Lane::for_purpose(purpose), Lane::Background);
         }
         assert_eq!(Lane::for_purpose("talk"), Lane::Interactive);
+        assert_eq!(Lane::for_purpose("fast"), Lane::Fast);
     }
 
     #[tokio::test]
@@ -1705,43 +1861,50 @@ mod tests {
         assert_eq!(queue.in_flight, 0);
     }
 
+    /// The verify-llm fake model server, on a port it binds itself, answering from the moment
+    /// its READY line is read: no other process can take the port between a probe and the
+    /// server's bind, and a start slowed by host load is waited for, not cut off after a few
+    /// seconds of health polls (after which the tests' calls met a closed port).
+    struct FakeLlm {
+        child: std::process::Child,
+        port: u16,
+        _stdout: std::io::BufReader<std::process::ChildStdout>,
+    }
+
+    impl Drop for FakeLlm {
+        fn drop(&mut self) {
+            let _ = self.child.kill();
+            let _ = self.child.wait();
+        }
+    }
+
+    fn fake_llm(log: &std::path::Path, script: Option<&std::path::Path>) -> FakeLlm {
+        use std::io::BufRead;
+        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let mut command = std::process::Command::new("python3");
+        command.arg(root.join(".agents/skills/verify-llm/scripts/fake_llm.py")).args(["--port", "0", "--log"]).arg(log);
+        if let Some(script) = script {
+            command.arg("--script").arg(script);
+        }
+        let mut child = command.stdout(std::process::Stdio::piped()).spawn().unwrap();
+        let mut stdout = std::io::BufReader::new(child.stdout.take().unwrap());
+        let mut line = String::new();
+        let _ = stdout.read_line(&mut line);
+        let port = line.strip_prefix("READY http://127.0.0.1:").and_then(|rest| rest.split('/').next()).and_then(|p| p.parse().ok());
+        let fake = FakeLlm { child, port: port.unwrap_or(0), _stdout: stdout };
+        assert!(port.is_some(), "the fake model server did not start: {line:?}");
+        fake
+    }
+
     #[tokio::test]
     async fn fake_transport_records_caching_usage_and_paced_429_recovery() {
-        struct Fake(std::process::Child);
-        impl Drop for Fake {
-            fn drop(&mut self) {
-                let _ = self.0.kill();
-                let _ = self.0.wait();
-            }
-        }
         let directory = std::env::temp_dir().join(format!("living-transport-{}", now_ms()));
         std::fs::create_dir_all(&directory).unwrap();
-        let socket = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-        let port = socket.local_addr().unwrap().port();
-        drop(socket);
         let script = directory.join("script.json");
-        std::fs::write(&script, json!({"rules": [{"purpose": "consolidate", "usage": {"total_tokens": 17}}, {"purpose": "think", "status": 429, "headers": {"Retry-After": "0.2", "x-ratelimit-limit-req-minute": "6000", "x-ratelimit-limit-tokens-minute": "100000"}}]}).to_string()).unwrap();
-        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+        std::fs::write(&script, json!({"rules": [{"purpose": "consolidate", "usage": {"total_tokens": 17}}, {"purpose": "think", "status": 429, "headers": {"Retry-After": "30.5", "x-ratelimit-limit-req-minute": "6000", "x-ratelimit-limit-tokens-minute": "100000"}}]}).to_string()).unwrap();
         let log = directory.join("requests.jsonl");
-        let mut fake = Fake(
-            std::process::Command::new("python3")
-                .arg(root.join(".agents/skills/verify-llm/scripts/fake_llm.py"))
-                .args(["--port", &port.to_string(), "--log"])
-                .arg(&log)
-                .arg("--script")
-                .arg(script)
-                .stdout(std::process::Stdio::null())
-                .spawn()
-                .unwrap(),
-        );
-        let http = reqwest::Client::new();
-        for _ in 0..100 {
-            if http.get(format!("http://127.0.0.1:{port}/health")).send().await.is_ok() {
-                break;
-            }
-            assert!(fake.0.try_wait().unwrap().is_none());
-            tokio::time::sleep(Duration::from_millis(20)).await;
-        }
+        let fake = fake_llm(&log, Some(&script));
+        let port = fake.port;
         std::env::set_var("LIVING_TEST_TRANSPORT_KEY", "dummy-only");
         let models: ModelsFile = serde_json::from_value(json!({"default": "p", "profiles": {"p": {
             "base_url": format!("http://127.0.0.1:{port}/v1"), "model": "m", "key_env": "LIVING_TEST_TRANSPORT_KEY",
@@ -1750,8 +1913,38 @@ mod tests {
         .unwrap();
         let llm = Llm::new(models, directory.join("journal")).unwrap();
         let messages = [Msg { role: "user", content: "hi".into() }];
-        let reply = llm.chat_in_lane("p", Attention::OnStage, "think", "first", &messages, Lane::Interactive).await.unwrap();
+        // The 429's Retry-After (30.5 s) blocks the profile from the moment its answer is read,
+        // and the one recovery attempt waits in the scheduler's queue. Timed on the scheduler's
+        // own clock and records, not on wall time around the call: the recovery is queued some
+        // unbounded time after the 429 is read (the failed call journals first), so a fixed
+        // margin on its measured queue wait failed under host load.
+        let first = llm.chat_in_lane("p", Attention::OnStage, "think", "first", &messages, Lane::Interactive);
+        tokio::pin!(first);
+        let (seen_queued, rate_limited_sent) = loop {
+            tokio::select! {
+                r = &mut first => panic!("the recovery went out inside the Retry-After: {:?}", r.map(|r| r.content)),
+                _ = tokio::time::sleep(Duration::from_millis(5)) => {}
+            }
+            let mut q = llm.scheduler.queue.lock().unwrap();
+            let rate = &q.rates["p"];
+            // The first request was admitted before its 429 came back, so a waiting call after
+            // the block is set is the recovery.
+            if rate.blocked_until > rate.last_sent && !q.waiting.is_empty() {
+                let seen = Instant::now();
+                let sent = rate.tokens.iter().find(|(id, ..)| *id == 1).unwrap().1;
+                assert!(rate.blocked_until >= sent + Duration::from_secs_f64(30.5), "the block covers the Retry-After");
+                assert_eq!(q.candidate(seen), None, "the queue holds the recovery while the block lasts");
+                // The limit lifts sooner (a test cannot wait 30 s): the block ends 200 ms on.
+                q.rates.get_mut("p").unwrap().blocked_until = seen + Duration::from_millis(200);
+                break (seen, sent);
+            }
+        };
+        llm.scheduler.changed.notify_waiters();
+        let reply = first.await.unwrap();
         assert_eq!(reply.tokens, 17);
+        let recovery_sent = llm.scheduler.queue.lock().unwrap().rates["p"].tokens.iter().find(|(id, ..)| *id == 2).unwrap().1;
+        assert!(recovery_sent >= seen_queued + Duration::from_millis(200), "the recovery leaves the queue when the block ends");
+        assert!(recovery_sent > rate_limited_sent);
         llm.chat_in_lane("p", Attention::OnStage, "think", "second", &messages, Lane::Interactive).await.unwrap();
         llm.chat("p", Attention::OnStage, "talk", "second", &messages).await.unwrap();
         let entries: Vec<Value> = std::fs::read_to_string(directory.join("journal/first.jsonl")).unwrap().lines().map(|l| serde_json::from_str(l).unwrap()).collect();
@@ -1762,7 +1955,8 @@ mod tests {
         assert_eq!(entries[1]["prompt_tokens"], 12);
         assert_eq!(entries[1]["completion_tokens"], 5);
         assert_eq!(entries[1]["cached_tokens"], 8);
-        assert!(entries[1]["queue_wait_ms"].as_u64().unwrap() >= 180);
+        // Queued no later than `seen_queued`, admitted no earlier than 200 ms after it.
+        assert!(entries[1]["queue_wait_ms"].as_u64().unwrap() >= 200, "the wait is journaled as queue wait: {}", entries[1]["queue_wait_ms"]);
         let mut uncached = llm.models.clone();
         uncached.profiles.get_mut("p").unwrap().prompt_cache_key = false;
         let uncached = Llm::new(uncached, directory.join("uncached-journal")).unwrap();
@@ -1782,28 +1976,11 @@ mod tests {
     /// referenced by `input_files`; a small one stays inline. Both carry the picked effort.
     #[tokio::test]
     async fn a_large_batch_is_uploaded_as_a_file() {
-        struct Fake(std::process::Child);
-        impl Drop for Fake {
-            fn drop(&mut self) {
-                let _ = self.0.kill();
-                let _ = self.0.wait();
-            }
-        }
         let directory = std::env::temp_dir().join(format!("living-batch-{}", now_ms()));
         std::fs::create_dir_all(&directory).unwrap();
-        let socket = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-        let port = socket.local_addr().unwrap().port();
-        drop(socket);
-        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
         let log = directory.join("requests.jsonl");
-        let fake = Fake(std::process::Command::new("python3").arg(root.join(".agents/skills/verify-llm/scripts/fake_llm.py")).args(["--port", &port.to_string(), "--log"]).arg(&log).stdout(std::process::Stdio::null()).spawn().unwrap());
-        let http = reqwest::Client::new();
-        for _ in 0..100 {
-            if http.get(format!("http://127.0.0.1:{port}/health")).send().await.is_ok() {
-                break;
-            }
-            tokio::time::sleep(Duration::from_millis(20)).await;
-        }
+        let fake = fake_llm(&log, None);
+        let port = fake.port;
         std::env::set_var("LIVING_TEST_BATCH_KEY", "dummy-only");
         let models: ModelsFile = serde_json::from_value(json!({"default": "p", "profiles": {"p": {
             "base_url": format!("http://127.0.0.1:{port}/v1"), "model": "m", "key_env": "LIVING_TEST_BATCH_KEY",
@@ -1847,33 +2024,15 @@ mod tests {
     /// that stopped is collected by the next one, from its file beside the journal.
     #[tokio::test]
     async fn a_failed_poll_keeps_the_batch_and_a_left_job_is_collected_after_a_restart() {
-        struct Fake(std::process::Child);
-        impl Drop for Fake {
-            fn drop(&mut self) {
-                let _ = self.0.kill();
-                let _ = self.0.wait();
-            }
-        }
         let directory = std::env::temp_dir().join(format!("living-batch-poll-{}", now_ms()));
         std::fs::create_dir_all(&directory).unwrap();
-        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
         let start = |name: &str, poll_errors: i64| {
-            let socket = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-            let port = socket.local_addr().unwrap().port();
-            drop(socket);
             let script = directory.join(format!("{name}.json"));
             std::fs::write(&script, json!({"batch": {"poll_errors": poll_errors}}).to_string()).unwrap();
             let log = directory.join(format!("{name}-requests.jsonl"));
-            let fake = Fake(std::process::Command::new("python3").arg(root.join(".agents/skills/verify-llm/scripts/fake_llm.py")).args(["--port", &port.to_string(), "--log"]).arg(&log).arg("--script").arg(&script).stdout(std::process::Stdio::null()).spawn().unwrap());
+            let fake = fake_llm(&log, Some(&script));
+            let port = fake.port;
             (fake, port, log)
-        };
-        let ready = |port: u16| async move {
-            for _ in 0..100 {
-                if reqwest::Client::new().get(format!("http://127.0.0.1:{port}/health")).send().await.is_ok() {
-                    return;
-                }
-                tokio::time::sleep(Duration::from_millis(20)).await;
-            }
         };
         std::env::set_var("LIVING_TEST_BATCH_POLL_KEY", "dummy-only");
         let models = |port: u16| -> ModelsFile {
@@ -1885,7 +2044,6 @@ mod tests {
 
         // One 500 on a poll: the job is polled again and answered; nothing is cancelled.
         let (fake, port, log) = start("one", 1);
-        ready(port).await;
         let llm = Llm::new(models(port), directory.join("journal-one")).unwrap();
         let out = llm.batch("p", Attention::OffStage, "reorganize", items(), poll, Duration::from_secs(20)).await.unwrap();
         assert!(out.len() == 2 && out.iter().all(|(_, r)| r.is_ok()), "the batch survives one failed poll");
@@ -1899,7 +2057,6 @@ mod tests {
 
         // Every poll fails: the job is given up after BATCH_POLL_FAILURES and cancelled.
         let (fake, port, log) = start("all", -1);
-        ready(port).await;
         let llm = Llm::new(models(port), directory.join("journal-all")).unwrap();
         let err = llm.batch("p", Attention::OffStage, "reorganize", items(), poll, Duration::from_secs(20)).await.err().expect("a job whose polls keep failing is given up");
         assert!(format!("{err:#}").contains("polls failed in a row"), "{err:#}");
@@ -1910,13 +2067,21 @@ mod tests {
         drop(fake);
 
         // A run stops while its job runs; the next run on the same journal collects it.
-        let (fake, port, _) = start("restart", 0);
-        ready(port).await;
+        // The run is stopped once its job is on file (not after a fixed 30 ms, which under
+        // load could end it before the job was sent); its first poll is an hour away.
+        let (fake, port, restart_log) = start("restart", 0);
         let journal = directory.join("journal-restart");
         {
             let llm = Llm::new(models(port), journal.clone()).unwrap();
-            let sent = tokio::time::timeout(Duration::from_millis(30), llm.batch("p", Attention::OffStage, "reorganize", items(), Duration::from_secs(5), Duration::from_secs(20))).await;
-            assert!(sent.is_err(), "the run stopped before its first poll");
+            let sent = llm.batch("p", Attention::OffStage, "reorganize", items(), Duration::from_secs(3600), Duration::from_secs(20));
+            tokio::pin!(sent);
+            while llm.pending_jobs().is_empty() {
+                tokio::select! {
+                    r = &mut sent => panic!("the batch ended before its first poll: {:?}", r.map(|r| r.len())),
+                    _ = tokio::time::sleep(Duration::from_millis(5)) => {}
+                }
+            }
+            assert!(lines(&restart_log).iter().all(|x| x.get("poll").is_none()), "the run stopped before its first poll");
         }
         let llm = Llm::new(models(port), journal.clone()).unwrap();
         let left = llm.pending_jobs();
@@ -1978,12 +2143,31 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("living-gate-{}", now_ms()));
         let llm = Llm::new(models, dir.clone()).unwrap();
         let msg = [Msg { role: "user", content: "hi".into() }];
-        let t = Instant::now();
+        let host = "http://127.0.0.1:9/v1";
+        // Timed on the scheduler's own clock and records, not on wall time around the calls:
+        // a stopwatch started outside a call is read some unbounded time before or after the
+        // instants the gate uses, and under host load it read 1.97 s against 2 s.
+        let sent = |llm: &Llm, id: u64| llm.scheduler.queue.lock().unwrap().rates["dead"].tokens.iter().find(|(t, ..)| *t == id).map(|(_, at, _)| *at);
+        assert!(llm.scheduler.queue.lock().unwrap().gates.is_empty(), "no gate before the first failure");
         assert!(llm.chat("dead", Attention::OnStage, "think", "a", &msg).await.is_err());
-        assert!(t.elapsed() < Duration::from_millis(1500), "the first failure is immediate");
-        let t = Instant::now();
+        // The first call went out ungated, failed to connect (only that opens the gate) and
+        // set the probe GATE_PAUSE_MIN after the failure.
+        let (down_since, probe_at) = {
+            let q = llm.scheduler.queue.lock().unwrap();
+            let g = &q.gates[host];
+            assert_eq!((g.pause, g.probing), (GATE_PAUSE_MIN, None));
+            (g.down_since.expect("the refused connection opens the gate"), g.retry_at.unwrap())
+        };
+        assert!(sent(&llm, 1).unwrap() <= down_since && probe_at >= down_since + GATE_PAUSE_MIN);
         assert!(llm.chat("dead", Attention::OnStage, "think", "a", &msg).await.is_err());
-        assert!(t.elapsed() >= GATE_PAUSE_MIN, "the next call waits for the probe: {:?}", t.elapsed());
+        let probe_sent = sent(&llm, 2).expect("the second call went out as the probe");
+        assert!(probe_sent >= probe_at, "the next call waits for the probe: sent {:?} before it was due", probe_at.saturating_duration_since(probe_sent));
+        // The failed probe doubles the pause from its own failure.
+        let q = llm.scheduler.queue.lock().unwrap();
+        let g = &q.gates[host];
+        assert_eq!((g.pause, g.down_since, g.probing), (GATE_PAUSE_MIN * 2, Some(down_since), None));
+        assert!(g.retry_at.unwrap() >= probe_sent + GATE_PAUSE_MIN * 2);
+        drop(q);
         let _ = std::fs::remove_dir_all(dir);
     }
 
@@ -2181,6 +2365,65 @@ mod tests {
         assert_eq!(profiles("reorganize"), ["a"]);
         assert_eq!(profiles("think"), ["a", "b"], "a routine call overflows");
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// A model out of capacity (a 429 with Mistral's `backend_out_of_capacity` body) sends the
+    /// background purposes its profile lists in `capacity_overflow` to the overflow, at the
+    /// overflow's effort; an unlisted purpose and a rate-limit 429 keep their one paced retry
+    /// on the same profile. A capacity_overflow without an overflow is refused.
+    #[tokio::test]
+    async fn a_model_out_of_capacity_sends_listed_memory_work_to_the_overflow() {
+        let directory = std::env::temp_dir().join(format!("living-capacity-{}", now_ms()));
+        std::fs::create_dir_all(&directory).unwrap();
+        let script = directory.join("script.json");
+        std::fs::write(&script, json!({"rules": [
+            {"model": "a", "contains": "CAPACITY", "capacity": true, "times": -1},
+            {"model": "a", "contains": "RATE", "status": 429, "headers": {"Retry-After": "0.1"}, "times": -1}]}).to_string()).unwrap();
+        let log = directory.join("requests.jsonl");
+        let fake = fake_llm(&log, Some(&script));
+        let port = fake.port;
+        std::env::set_var("LIVING_TEST_CAPACITY_KEY", "dummy-only");
+        let base = format!("http://127.0.0.1:{port}/v1");
+        let file = |capacity_overflow: Value, overflow: Value| {
+            json!({"default": "a", "profiles": {
+                "a": {"base_url": base, "model": "a", "key_env": "LIVING_TEST_CAPACITY_KEY", "requests_per_minute": 6000, "overflow": overflow,
+                      "capacity_overflow": capacity_overflow, "reasoning_effort": {"consolidate": "high", "reorganize": "high"}},
+                "b": {"base_url": base, "model": "b", "key_env": "LIVING_TEST_CAPACITY_KEY", "requests_per_minute": 6000,
+                      "reasoning_effort": {"consolidate": null, "reorganize": null}}}})
+        };
+        let refused: ModelsFile = serde_json::from_value(file(json!(["consolidate"]), Value::Null)).unwrap();
+        assert!(refused.check().unwrap_err().to_string().contains("no overflow"));
+        let unknown: ModelsFile = serde_json::from_value(file(json!(["remember"]), json!("b"))).unwrap();
+        assert!(unknown.check().unwrap_err().to_string().contains("unknown purpose remember"));
+        let models: ModelsFile = serde_json::from_value(file(json!(["consolidate"]), json!("b"))).unwrap();
+        models.check().unwrap();
+        let llm = Llm::new(models, directory.join("journal")).unwrap();
+        let say = |marker: &str| [Msg { role: "user", content: marker.into() }];
+        let reply = llm.chat("a", Attention::OnStage, "consolidate", "capacity", &say("CAPACITY")).await.unwrap();
+        assert_eq!(reply.model, "b");
+        assert!(llm.chat("a", Attention::OnStage, "reorganize", "unlisted", &say("CAPACITY")).await.is_err());
+        assert!(llm.chat("a", Attention::OnStage, "consolidate", "rate", &say("RATE")).await.is_err());
+        let journal = |actor: &str| -> Vec<Value> {
+            std::fs::read_to_string(directory.join(format!("journal/{actor}.jsonl"))).unwrap().lines().map(|l| serde_json::from_str(l).unwrap()).collect()
+        };
+        let capacity = journal("capacity");
+        assert_eq!(capacity.iter().map(|e| e["profile"].as_str().unwrap()).collect::<Vec<_>>(), ["a", "b"]);
+        assert!(capacity[0]["error"].as_str().unwrap().contains("backend_out_of_capacity"));
+        assert!(capacity[1]["error"].is_null() && capacity[1]["effort"].is_null() && capacity[1]["lane"] == "background");
+        assert!(capacity[1]["request"].get("reasoning_effort").is_none(), "the overflow's own effort: none");
+        for actor in ["unlisted", "rate"] {
+            let entries = journal(actor);
+            assert_eq!(entries.iter().map(|e| e["profile"].as_str().unwrap()).collect::<Vec<_>>(), ["a", "a"], "{actor}: one paced retry on its own model");
+            assert!(entries.iter().all(|e| e["error"].as_str().unwrap().contains("HTTP 429")));
+        }
+        let gaps = |b_efforts: Value| {
+            let mut f = file(json!(["consolidate"]), json!("b"));
+            f["profiles"]["b"]["reasoning_effort"] = b_efforts;
+            serde_json::from_value::<ModelsFile>(f).unwrap().effort_gaps()
+        };
+        assert!(gaps(json!({"reorganize": null})).iter().any(|g| g.contains("profile b has no reasoning_effort for consolidate (the overflow of a")));
+        assert!(gaps(json!({"consolidate": null})).iter().all(|g| !g.contains("reorganize")), "unlisted reorganize does not overflow");
+        let _ = std::fs::remove_dir_all(directory);
     }
 
     /// A runaway generation stops near what the purpose needs (measured p99 output on

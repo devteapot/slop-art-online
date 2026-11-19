@@ -5161,17 +5161,196 @@ def up(x):
     return math.ceil(x * 100 - 1e-6) / 100
 
 
+# What a model hides at eye height (the table's `eye_cells` and `eye_solid`; living_rules::host
+# hosted_map reads them). The band is where a standing person's eye and head are; the cells are
+# squares of the footprint, finer than the 1 m tiles so a cell maps onto the tile it lies in
+# whatever the lot's position and facing.
+EYE_BAND_M = (1.2, 1.8)
+EYE_SLICES = 4
+EYE_CELL_M = 0.5
+# Gaps up to this wide in a cut's outline (seams between a wall and its door leaf or window
+# pane; for a 1.75 m person, scaled with the inhabitants) are closed when finding rooms, so a
+# room counts as solid; a real opening (a stall's open side, the space between a well's posts)
+# leaves the space inside open.
+EYE_GAP_M = 0.6
+EYE_LEVELS = "abcdefghijk"
+
+
+def eye_cells(co, tris, width, depth, gap=EYE_GAP_M):
+    """How much of the view through each EYE_CELL_M square of a model's footprint is solid
+    between EYE_BAND_M above its floor, from its triangles (`co`: vertices, model frame, z up,
+    origin at the floor; `tris`: vertex index triples).
+
+    The mesh is cut at EYE_SLICES heights in the band; each cut's outline is drawn on a fine
+    grid, and what it encloses (a room, a post, a barrel) is solid too, with openings up to `gap`
+    closed so a room behind its door leaf and window panes counts. A cell's share is the larger of the
+    two blocked fractions of its view at eye height, looking along the model's X or along its Y
+    (a thin wall across the cell blocks all of one view; a 0.2 m post 40% of both). The fine
+    grid is 5 cm for a model up to 20 m across, coarser for bigger ones.
+
+    Returns (cols, levels, solid): `levels` row-major, row 0 at the model's front (-Y, glTF +Z),
+    column 0 at -X, each 0..10 (at least that many tenths of the view blocked); `solid` the share of the
+    footprint's area that is solid in the band."""
+    import numpy as np
+    c = EYE_CELL_M
+    cols, rows = max(1, math.ceil(width / c - 1e-6)), max(1, math.ceil(depth / c - 1e-6))
+    span = max(cols, rows) * c
+    sub = 10 if span <= 20 else 5 if span <= 40 else 2 if span <= 100 else 1
+    f = c / sub
+    pad = int(math.ceil(gap / 2 / f)) + 2
+    nx, ny = cols * sub + 2 * pad, rows * sub + 2 * pad
+    x0, y0 = -cols * c / 2 - pad * f, -rows * c / 2 - pad * f
+    co = np.asarray(co, dtype=np.float64).reshape(-1, 3)
+    P = co[np.asarray(tris, dtype=np.int64).reshape(-1, 3)]
+    lo, hi = EYE_BAND_M
+    r = max(1, int(round(gap / 2 / f)))
+    views = np.zeros((2, rows, cols))
+    area = 0.0
+    for k in range(EYE_SLICES):
+        h = lo + (k + 0.5) * (hi - lo) / EYE_SLICES + 1e-4
+        z = P[:, :, 2] - h
+        pts = []
+        for a, b in ((0, 1), (1, 2), (2, 0)):
+            za, zb = z[:, a], z[:, b]
+            cross = (za < 0) != (zb < 0)
+            t = np.where(cross, za / np.where(cross, za - zb, 1.0), 0.0)
+            pts.append((P[:, a, :2] + t[:, None] * (P[:, b, :2] - P[:, a, :2]), cross))
+        mark = np.zeros((ny, nx), dtype=bool)
+        segs = []
+        for (pa, ca), (pb, cb) in ((pts[0], pts[1]), (pts[1], pts[2]), (pts[2], pts[0])):
+            both = ca & cb
+            if both.any():
+                segs.append((pa[both], pb[both]))
+        if segs:
+            A = np.concatenate([s[0] for s in segs])
+            B = np.concatenate([s[1] for s in segs])
+            n = np.maximum(1, np.ceil(np.linalg.norm(B - A, axis=1) / (f * 0.5)).astype(np.int64)) + 1
+            idx = np.repeat(np.arange(len(A)), n)
+            t = (np.arange(n.sum()) - np.repeat(np.cumsum(n) - n, n)) / np.repeat(n - 1, n).clip(1)
+            q = A[idx] + t[:, None] * (B[idx] - A[idx])
+            ix = np.floor((q[:, 0] - x0) / f).astype(np.int64)
+            iy = np.floor((q[:, 1] - y0) / f).astype(np.int64)
+            ok = (ix >= 0) & (ix < nx) & (iy >= 0) & (iy < ny)
+            mark[iy[ok], ix[ok]] = True
+        # Rooms: close openings up to `gap` (a closing: a square dilation, then as much
+        # erosion), flood the outside, and what the flood does not reach is solid: the outline,
+        # what it encloses, and the openings closed.
+        def grow(m, keep):
+            g = m.copy()
+            for dy, dx in ((1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (1, -1), (-1, 1), (-1, -1)):
+                sh = np.zeros_like(m) if keep else np.ones_like(m)
+                sh[max(dy, 0):ny + min(dy, 0), max(dx, 0):nx + min(dx, 0)] = m[max(-dy, 0):ny + min(-dy, 0), max(-dx, 0):nx + min(-dx, 0)]
+                g = (g | sh) if keep else (g & sh)
+            return g
+        closed = mark
+        for _ in range(r):
+            closed = grow(closed, True)
+        for _ in range(r):
+            closed = grow(closed, False)
+        closed |= mark
+        free = ~closed
+        out = np.zeros_like(free)
+        out[0, :], out[-1, :], out[:, 0], out[:, -1] = free[0, :], free[-1, :], free[:, 0], free[:, -1]
+        while True:
+            g = out.copy()
+            g[1:, :] |= out[:-1, :]
+            g[:-1, :] |= out[1:, :]
+            g[:, 1:] |= out[:, :-1]
+            g[:, :-1] |= out[:, 1:]
+            g &= free
+            if (g == out).all():
+                break
+            out = g
+        solid = ~out
+        cells = solid[pad:pad + rows * sub, pad:pad + cols * sub].reshape(rows, sub, cols, sub)
+        area += cells.mean()
+        views[0] += cells.any(axis=1).mean(axis=2)  # looking along Y: the X positions blocked
+        views[1] += cells.any(axis=3).mean(axis=1)  # looking along X: the Y positions blocked
+    share = (views / EYE_SLICES).max(axis=0)
+    levels = [min(10, int(math.floor(v * 10 + 1e-6))) for v in share.reshape(-1)]
+    return cols, levels, round(area / EYE_SLICES, 3)
+
+
+def eye_rle(cols, levels):
+    """`eye_cells` as the table writes it: columns, then runs of a count and a level letter
+    (a = nothing blocked ... k = all), row-major from the front row: "6:12k6a"."""
+    out, i = [], 0
+    while i < len(levels):
+        j = i
+        while j < len(levels) and levels[j] == levels[i]:
+            j += 1
+        out.append(f"{j - i}{EYE_LEVELS[levels[i]]}")
+        i = j
+    return f"{cols}:" + "".join(out)
+
+
+def eye_record(obj, width, depth, gap=EYE_GAP_M):
+    """The table's two eye fields for a finished model object (its mesh in the model frame)."""
+    me = obj.data
+    me.calc_loop_triangles()
+    co = [0.0] * (len(me.vertices) * 3)
+    me.vertices.foreach_get("co", co)
+    tris = [0] * (len(me.loop_triangles) * 3)
+    me.loop_triangles.foreach_get("vertices", tris)
+    cols, levels, solid = eye_cells(co, tris, width, depth, gap)
+    return dict(eye_solid=solid, eye_cells=eye_rle(cols, levels))
+
+
+def eye_from_glb(path, width, depth, gap=EYE_GAP_M):
+    """The eye fields measured from a model file (glTF, y up, as the generators export), for a
+    set whose sidecar predates them or a generator that does not measure (city kits made
+    elsewhere): every mesh, in world space, z up as Blender imports it."""
+    import numpy as np
+    for o in list(bpy.data.objects):
+        bpy.data.objects.remove(o, do_unlink=True)
+    bpy.ops.import_scene.gltf(filepath=path)
+    co, tris, base = [], [], 0
+    dg = bpy.context.evaluated_depsgraph_get()
+    for o in bpy.data.objects:
+        if o.type != "MESH":
+            continue
+        me = o.evaluated_get(dg).to_mesh()
+        me.calc_loop_triangles()
+        v = np.empty(len(me.vertices) * 3)
+        me.vertices.foreach_get("co", v)
+        v = v.reshape(-1, 3)
+        m = np.array(o.matrix_world)
+        co.append(v @ m[:3, :3].T + m[:3, 3])
+        t = np.empty(len(me.loop_triangles) * 3, dtype=np.int64)
+        me.loop_triangles.foreach_get("vertices", t)
+        tris.append(t + base)
+        base += len(v)
+        o.evaluated_get(dg).to_mesh_clear()
+    if not co:
+        return dict(eye_solid=0.0, eye_cells=eye_rle(max(1, math.ceil(width / EYE_CELL_M - 1e-6)), [0] * (max(1, math.ceil(width / EYE_CELL_M - 1e-6)) * max(1, math.ceil(depth / EYE_CELL_M - 1e-6)))))
+    cols, levels, solid = eye_cells(np.concatenate(co), np.concatenate(tris), width, depth, gap)
+    return dict(eye_solid=solid, eye_cells=eye_rle(cols, levels))
+
+
+def eye_gap(style):
+    """EYE_GAP_M for a style's inhabitants (a giant's door is wider); people's for styles the
+    folk table does not name (city kits)."""
+    return EYE_GAP_M * FOLK[STYLE_FOLK.get(style, "human")] / FOLK["human"]
+
+
 def write_table(path, root):
     """Gather every set's footprint sidecar under the envs root into the planner's table."""
     import glob
     models = []
+    measured = 0
     for side in sorted(glob.glob(os.path.join(root, "*", "*", "gen-*.json"))):
         with open(side) as f:
             d = json.load(f)
         rel = os.path.relpath(os.path.dirname(side), root)
         for m in d["models"]:
+            # A sidecar from before the eye fields, or from a generator that does not measure,
+            # is measured from its model file here, so every model in the table has them.
+            eye = {k: m[k] for k in ("eye_solid", "eye_cells") if k in m}
+            if len(eye) < 2:
+                eye = eye_from_glb(os.path.join(os.path.dirname(side), m["file"]), m["width_m"], m["depth_m"], eye_gap(d["style"]))
+                measured += 1
             models.append(dict(style=d["style"], kind=d["kind"], form=m["form"], file=f"{rel}/{m['file']}", width_m=m["width_m"],
-                               depth_m=m["depth_m"], height_m=m["height_m"], foundation_m=m["foundation_m"], corner=m["corner"], tris=m["tris"]))
+                               depth_m=m["depth_m"], height_m=m["height_m"], foundation_m=m["foundation_m"], corner=m["corner"], tris=m["tris"], **eye))
     models.sort(key=lambda m: (m["style"], m["kind"], m["file"]))
     kinds = {}
     for m in models:
@@ -5181,14 +5360,17 @@ def write_table(path, root):
     note = ("Written by living/tools/blender/buildings.py --table (gen_buildings.sh). models: every generated model, its file "
             "under envs/, form, footprint (width along the front, depth front to back, overhangs, steps and yards included), "
             "height above the floor, foundation depth below it, corner (the side of a corner building's second street front "
-            "in the model's frame: 1 = +X, -1 = -X) and triangles. kinds: the envelope of every model of a kind.")
+            "in the model's frame: 1 = +X, -1 = -X), triangles, and what it hides at eye height: eye_solid, the share of the footprint "
+            "solid between 1.2 and 1.8 m, and eye_cells, per 0.5 m square of the footprint the share of the view through it "
+            "blocked in that band (columns, then runs of a count and a level from a = none to k = all, row-major from the "
+            "front row, column 0 at the model's -X; buildings.py eye_cells). kinds: the envelope of every model of a kind.")
     with open(path, "w") as f:
         f.write("{\n " + json.dumps("note") + ": " + json.dumps(note) + ",\n \"kinds\": [\n")
         f.write(",\n".join("  " + json.dumps(kinds[key]) for key in sorted(kinds)))
         f.write("\n ],\n \"models\": [\n")
         f.write(",\n".join("  " + json.dumps(m) for m in models))
         f.write("\n ]\n}\n")
-    print(f"TABLE {path} {len(kinds)} kinds, {len(models)} models")
+    print(f"TABLE {path} {len(kinds)} kinds, {len(models)} models ({measured} measured from their files)")
 
 
 def main():
@@ -5252,7 +5434,8 @@ def main():
         fw, fd = 2 * max(abs(v.co.x) for v in vs), 2 * max(abs(v.co.y) for v in vs)
         top, below = max(v.co.z for v in vs), max(0.0, -min(v.co.z for v in vs))
         print(f"GEN {path} form={form} tris={tris} foot={fw:.2f}x{fd:.2f} h={top:.2f} below={below:.2f}")
-        records.append(dict(file=name, form=form, width_m=up(fw), depth_m=up(fd), height_m=round(top, 2), foundation_m=round(below, 2), corner=k.corner, tris=tris))
+        records.append(dict(file=name, form=form, width_m=up(fw), depth_m=up(fd), height_m=round(top, 2), foundation_m=round(below, 2), corner=k.corner, tris=tris,
+                            **eye_record(obj, up(fw), up(fd), eye_gap(a.style))))
         if PROFILE:
             print("  " + " ".join(f"{n}={t}" for n, t in sorted(PROFILE.items(), key=lambda x: -x[1])))
         if UNTAGGED:

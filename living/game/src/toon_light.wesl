@@ -45,9 +45,32 @@ struct Toon {
     face: vec4<f32>,
     // Hair: x angel-ring strength, y ring width, z ring position (tangent shift), w rim.
     hair: vec4<f32>,
+    // Hair's ring, its shape: x edge softness (0 hard, 1 fading from the middle), y comb teeth
+    // (0 none, 1 full), z break-up by the strand picture (0 none, 1 full), w the teeth's scale
+    // across the strands (uv.x times it).
+    hair_sheen: vec4<f32>,
+    // Where on the head the ring may lie: x how far up a surface must face (N·up where it starts,
+    // full 0.25 above), y from how far it faces the character's forward it fades (2 never); z how
+    // many bins of a lock's `_GREY` make one lock (toon.wesl `hair_light`); w the view-placed
+    // ring's width on hair without char-4's lock data, when the ring is placed at a height.
+    hair_place: vec4<f32>,
+    // The ring by height and lock: x the share of locks without it, y how far it moves up or down
+    // a lock (in N·up), z 0 placed by the view, 1 at a height (where N·up is w).
+    hair_lock: vec4<f32>,
     // Painted detail (toon.wesl `detail`): x 1 where the vertex colours' alpha names surfaces
     // (generated scenery), z full detail until (m), w none from (m).
     detail: vec4<f32>,
+    // A hand-made hair profile (style.rs `Kind::HandHair`, handmade.rs): shade, mid, light and
+    // highlight as linear rgb; hand[3].w 1 when the highlight mask is a texture (`face_map`).
+    hand: array<vec4<f32>, 4>,
+    // The profile's x t1, y t2 (N·L), z edge, w highlight feather.
+    hand_bands: vec4<f32>,
+    // A hand-made file's forward in the mesh's own frame (xyz), w 1 when set (toon.wesl `facing`).
+    file: vec4<f32>,
+    // A profile's lock ink (v1.1): rgb linear colour, w ink_px.
+    hand_ink: vec4<f32>,
+    // x ink_range (UV), y ink_fade_px, z 1 when ink is drawn.
+    hand_ink_range: vec4<f32>,
     // Per surface (style.rs `Surface`): x 1 / tile size (1/m), y strength, z mapping (0
     // triplanar, 1 planar per face).
     layers: array<vec4<f32>, 18>,
@@ -307,6 +330,13 @@ fn sun_direction() -> vec3<f32> {
 }
 
 // The camera's position.
+// The metres a screen pixel spans at view depth `z` (`view_depth`), in a perspective view: smooth
+// across the screen, unlike screen derivatives, which step between 2x2 pixel quads.
+fn metres_per_pixel(z: f32) -> f32 {
+    let k = view_bindings::view.clip_from_view[1][1];
+    return abs(z) * 2.0 / max(k * view_bindings::view.viewport.w, 1e-4);
+}
+
 fn eye() -> vec3<f32> {
     return view_bindings::view.world_position.xyz;
 }

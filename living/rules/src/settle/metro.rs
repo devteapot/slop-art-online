@@ -732,7 +732,7 @@ pub(super) fn lay_out(land: &Land, mp: &MetroParams) -> City {
         let radius_m = (area / std::f32::consts::PI).sqrt();
         let floor = land.height(pc.0, pc.1);
         let si = (base + wi) as u16;
-        sites.push(Site { kind: SiteKind::Town, x: pc.0, y: pc.1, radius_m, ground_m: floor, scale: 1.0, facing: 0.0, region: land.kind_at(pc.0, pc.1), flatten: 0.0, style: Some(d.style.clone()), ward: true });
+        sites.push(Site { kind: SiteKind::Town, x: pc.0, y: pc.1, radius_m, ground_m: floor, scale: 1.0, facing: 0.0, region: land.kind_at(pc.0, pc.1), flatten: 0.0, style: Some(d.style.clone()), ward: true, plan: None });
         let mut set_roads = streets;
         if wi == 0 {
             set_roads.extend(0..na as u32);
@@ -750,6 +750,7 @@ pub(super) fn lay_out(land: &Land, mp: &MetroParams) -> City {
             landmark: None,
             roads: set_roads,
             terrace_m: 0.0,
+            planned: false,
         });
         bounds.push((vec![radius_m; 64], vec![radius_m; 64]));
     }

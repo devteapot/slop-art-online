@@ -70,6 +70,8 @@ impl Drop for Creating {
 /// The steps' tags: resources (with their first tile row) and the rest of the population.
 const STEP_RESOURCES: u64 = 1 << 32;
 const STEP_POPULATE: u64 = 2 << 32;
+/// The animals' own draws, after the people's (`populate`).
+const STEP_ANIMALS: u64 = 3 << 32;
 
 /// The world's seed: the runtime seed once given (`create_floor`), else the compiled one. A
 /// floor module without a seed yet has none to give, and says so rather than guessing.
@@ -93,6 +95,15 @@ pub fn load(ctx: &ReducerContext) {
             set_active(&row.json);
         }
     }
+}
+
+/// The world's seed, parsed (`None` for a floor without a seed yet, or a seed that does not
+/// parse). For rare, explicit reads (`backfill_sex`); hot paths keep their own parsed parts.
+pub fn active_seed() -> Option<Seed> {
+    if VALLEY.is_empty() && !is_runtime() {
+        return None;
+    }
+    serde_json::from_str(&active()).ok()
 }
 
 pub fn set_active(json: &str) {
@@ -153,7 +164,7 @@ pub fn drawn_rhythm(id: u32, day: u32) -> Rhythm {
     let rise_h = (6.0 + 0.8 * normal()).clamp(4.0, 9.0);
     let bed_h = (rise_h + 16.0 + normal()).clamp(19.5, 26.5);
     let evening_h = 1.5 + 3.0 * common::hashed_draws(id, 4)();
-    Rhythm { id, rise_h, bed_h, evening_h, last_day: day }
+    Rhythm { id, rise_h, bed_h, evening_h, last_day: day, work_from_h: 0.0, work_to_h: 0.0, nap_from_h: 0.0, nap_to_h: 0.0 }
 }
 
 /// A newborn's inheritance of ways: its parents' routines (each from one parent or the other)
@@ -201,6 +212,18 @@ pub fn give_ways(ctx: &ReducerContext, id: u32, kind: &str, now: u64) {
     let r: serde_json::Value = serde_json::from_str(REPERTOIRE).expect("repertoire json");
     let Some(ways) = r["species"].get(kind) else { return };
     let routines: Vec<crate::mind::RoutineIn> = ways["routines"].as_object().map(|m| m.iter().map(|(k, g)| crate::mind::RoutineIn { name: k.clone(), graph: g.to_string() }).collect()).unwrap_or_default();
+    // Wolves' ways carry the spacing reflex beside each hunt while the `pack_reflex` law is on.
+    let reflex = living_rules::graph::reflex_applies(kind) && common::laws(ctx).pack_reflex;
+    let routines: Vec<crate::mind::RoutineIn> = routines
+        .into_iter()
+        .map(|r| {
+            if !reflex {
+                return r;
+            }
+            let g = serde_json::from_str::<serde_json::Value>(&r.graph).map(|v| living_rules::graph::with_pack_reflex(&v).to_string()).unwrap_or(r.graph);
+            crate::mind::RoutineIn { name: r.name, graph: g }
+        })
+        .collect();
     let _ = crate::mind::set_routines(ctx, id, &routines, &format!("{kind} instinct"), now);
     if let Ok(g) = living_rules::graph::parse(&ways["top"].to_string()) {
         let _ = crate::mind::set_graph(ctx, id, &g.to_json(), &format!("the ways of a {kind}"), "instinct", now);
@@ -266,6 +289,11 @@ pub struct SeedTown {
     pub near: String,
     #[serde(default)]
     pub region: Vec<String>,
+    /// On a hand-authored settlement (`map.params.plans`): household key -> the id of the lot
+    /// it lives in (docs/AUTHORED_PLANS.md). Households it leaves out take the other homes,
+    /// nearest the square first, as before.
+    #[serde(default)]
+    pub homes: std::collections::BTreeMap<String, String>,
 }
 
 #[derive(Deserialize)]
@@ -278,6 +306,10 @@ pub struct SeedBuilding {
     /// What the sign beside it says after the name.
     #[serde(default)]
     pub about: String,
+    /// On a hand-authored settlement: the id of the lot it is, so it stands at that lot's door
+    /// instead of in a free spot near the centre.
+    #[serde(default)]
+    pub lot: String,
 }
 
 /// A person written by the world's author: who they are is installed as given (see
@@ -315,10 +347,20 @@ pub struct SeedResident {
     /// Their daily rhythm (docs/SEEDED_LIVES.md); whatever it leaves out is drawn.
     #[serde(default)]
     pub rhythm: Option<SeedRhythm>,
+    /// Their person entry in the seed's `looks` (`lp_…`, docs/LOOK.md); none: a pool entry.
+    #[serde(default)]
+    pub look: String,
+    /// Their body's sex, "f" or "m" (docs/LIVING_CORE.md, "Body sex"). Required of every
+    /// resident of a seed with `looks` or with any resident giving it (an authored cast;
+    /// `look::check`); elsewhere none is the world's pick.
+    #[serde(default)]
+    pub sex: String,
 }
 
-/// When a person rises and goes to bed (hours of the day; past 24 for after midnight) and how
-/// many hours before bed are their evening.
+/// When a person rises and goes to bed (hours of the day, any hour; past 24 for after
+/// midnight), how many hours before bed are their evening, their working hours (`[from, to]`,
+/// across midnight as `[22, 6]` or `[22, 30]`) and a second sleep in the day (`[from, to]`).
+/// These are the person's starting values of the routines everyone has (`living_rules::rhythm`).
 #[derive(Deserialize, Default, Clone)]
 pub struct SeedRhythm {
     #[serde(default)]
@@ -327,6 +369,19 @@ pub struct SeedRhythm {
     pub sleeps: Option<f32>,
     #[serde(default)]
     pub evening_hours: Option<f32>,
+    #[serde(default)]
+    pub works: Option<[f32; 2]>,
+    #[serde(default)]
+    pub second_sleep: Option<[f32; 2]>,
+}
+
+/// A drawn rhythm row with what the seed gives laid over it (`living_rules::rhythm::given`).
+pub fn given_rhythm(mut row: Rhythm, given: &SeedRhythm) -> Rhythm {
+    let g = living_rules::rhythm::Given { rises: given.rises, sleeps: given.sleeps, evening_hours: given.evening_hours, works: given.works, second_sleep: given.second_sleep };
+    let h = living_rules::rhythm::given(common::hours_of(&row), &g);
+    (row.rise_h, row.bed_h, row.evening_h) = (h.rise_h, h.bed_h, h.evening_h);
+    (row.work_from_h, row.work_to_h, row.nap_from_h, row.nap_to_h) = (h.work_from_h, h.work_to_h, h.nap_from_h, h.nap_to_h);
+    row
 }
 
 fn thirty() -> f32 {
@@ -359,7 +414,7 @@ impl SeedTown {
 }
 
 /// A resident's household key (their own name when they live alone).
-fn household_of(r: &SeedResident) -> &str {
+pub(crate) fn household_of(r: &SeedResident) -> &str {
     if r.household.is_empty() {
         &r.name
     } else {
@@ -484,6 +539,9 @@ pub struct SeedMember {
     /// Know-how of this member beyond the band's.
     #[serde(default)]
     pub knows: Vec<String>,
+    /// The member's body sex, "f" or "m"; none: the world's pick (docs/LIVING_CORE.md, "Body sex").
+    #[serde(default)]
+    pub sex: String,
 }
 
 #[derive(Deserialize)]
@@ -515,6 +573,9 @@ pub struct Seed {
     pub artifacts: Vec<SeedArtifact>,
     #[serde(default)]
     pub structures: Vec<SeedStructure>,
+    /// Resource nodes placed where the author says (the land's own are generated).
+    #[serde(default)]
+    pub resource_nodes: Vec<SeedNode>,
     #[serde(default)]
     pub communities: Vec<SeedCommunity>,
     /// What every newcomer (a player's new character) arrives with: items and know-how. A
@@ -533,6 +594,46 @@ pub struct Seed {
     /// The world's own values of laws (`laws()` in the script), by name: `{"minds": false}`.
     #[serde(default)]
     pub rules: serde_json::Map<String, serde_json::Value>,
+    /// Real minutes in one game day (the world's `day_ms`; none: the shipped 12). Laws written
+    /// per game hour keep their balance per game day whatever this is.
+    #[serde(default)]
+    pub day_minutes: Option<f64>,
+    /// The world's own laws: a Rhai overlay over the shipped script (`floors::compose`: its
+    /// functions replace the base's of the same name, which stay as `base_NAME`), installed
+    /// when the world is created through the same checks as `install_script`.
+    #[serde(default)]
+    pub laws: String,
+    /// Where the overlay's source is kept, relative to `living/seeds`. A sender puts its text
+    /// into `laws` (`build.rs` for a compiled seed, `living/tools/seed_text.py` for
+    /// `create_floor`); a seed that names a file without its text is refused.
+    #[serde(default)]
+    pub laws_file: String,
+    /// The world's look data (docs/LOOK.md §5): person entries, their lines' words and the pool;
+    /// residents name their entry (`look`). Never sent to clients.
+    #[serde(default)]
+    pub looks: Option<crate::look::SeedLooks>,
+}
+
+impl Seed {
+    /// The world's day in real milliseconds, checked: between 1 and 1440 real minutes.
+    pub fn day_ms(&self) -> Result<u64, String> {
+        match self.day_minutes {
+            None => Ok(living_rules::DEFAULT_DAY_MS),
+            Some(m) if (1.0..=1440.0).contains(&m) => Ok((m * 60_000.0).round() as u64),
+            Some(m) => Err(format!("seed: day_minutes is between 1 and 1440 real minutes, not {m}")),
+        }
+    }
+
+    /// The world's script: the shipped one, or with the seed's overlay composed over it.
+    pub fn script(&self) -> Result<Option<String>, String> {
+        if self.laws.trim().is_empty() {
+            if !self.laws_file.is_empty() {
+                return Err(format!("seed: laws_file `{}` was not read into `laws` (send the seed through living/tools/seed_text.py)", self.laws_file));
+            }
+            return Ok(None);
+        }
+        living_rules::floors::compose(SKILLS, &self.laws).map(Some).map_err(|e| format!("seed laws: {e}"))
+    }
 }
 
 #[derive(Deserialize, Default)]
@@ -723,7 +824,7 @@ fn packs(ctx: &ReducerContext, map: &living_rules::map::Map, packs: &[SeedPack],
         for _ in 0..p.count {
             let at = (0..30).map(|_| (centre.0 + rng(ctx).gen_range(-4.0f32..4.0), centre.1 + rng(ctx).gen_range(-4.0f32..4.0))).find(|q| map.free(q.0, q.1)).unwrap_or(centre);
             let name = animal_name(ctx, &p.kind);
-            let age = common::life_of(&p.kind).age_at(0.3 + 0.3 * rng(ctx).gen::<f32>(), common::pace(&w));
+            let age = common::life_of(ctx, &p.kind).age_at(0.3 + 0.3 * rng(ctx).gen::<f32>(), common::pace(&w));
             let id = spawn_with(ctx, &name, &p.kind, admin, minded, at, now, age, (0, 0));
             let text = serde_json::json!({ "pack": if p.name.is_empty() { format!("the {}s near {}", p.kind, p.near) } else { p.name.clone() }, "bold": p.bold }).to_string();
             match ctx.db.background().id().find(id) {
@@ -739,7 +840,7 @@ fn packs(ctx: &ReducerContext, map: &living_rules::map::Map, packs: &[SeedPack],
                 let all: serde_json::Value = serde_json::from_str(INSTINCTS).expect("instincts json");
                 match all.get(p.instinct.as_str()) {
                     Some(g) => {
-                        if let Err(e) = crate::mind::set_graph(ctx, id, &g.to_string(), "instinct", "seed", now) {
+                        if let Err(e) = crate::mind::set_graph(ctx, id, &as_installed(ctx, &p.instinct, g), "instinct", "seed", now) {
                             log::warn!("pack instinct {}: {e}", p.instinct);
                         }
                     }
@@ -778,6 +879,7 @@ pub fn communities(ctx: &ReducerContext, now: u64) {
         for id in ids {
             if ctx.db.membership().member().find(id).is_none() {
                 ctx.db.membership().insert(Membership { id: 0, community: c.id, member: id, since_ms: now });
+                crate::perception::knowledge_changed(ctx, None);
             }
         }
     }
@@ -806,6 +908,29 @@ pub struct SeedStructure {
     pub owner: String,
     #[serde(default)]
     pub contents: std::collections::BTreeMap<String, u32>,
+    /// For a fire that burns fuel (its kind `burns`): the units it starts burning with (0: out).
+    #[serde(default)]
+    pub fuel: f32,
+}
+
+/// A resource node the author places: its kind (one of the script's `resources()`), where, and
+/// what it holds and regrows (the kind's `max` and `regrow_per_h` when not given). Nodes
+/// that name the same `pool` share one stock, held by the first of them: a fishing ground's
+/// spots, each fished from but all drawing on the same fish.
+#[derive(Deserialize)]
+pub struct SeedNode {
+    pub kind: String,
+    pub at: [f32; 2],
+    #[serde(default)]
+    pub max: Option<f32>,
+    /// Units it regrows a game hour of growing time, turned into real time for the world's day.
+    #[serde(default)]
+    pub regrow_per_h: Option<f32>,
+    /// The same per real minute, as goods-1 wrote it; `regrow_per_h` wins when both are given.
+    #[serde(default)]
+    pub regrow: Option<f32>,
+    #[serde(default)]
+    pub pool: String,
 }
 
 #[derive(Deserialize)]
@@ -851,6 +976,17 @@ pub fn young_instinct(kind: &str) -> String {
 pub fn instinct(kind: &str) -> String {
     let all: serde_json::Value = serde_json::from_str(INSTINCTS).expect("instincts json");
     all.get(kind).or_else(|| all.get("person")).map(|v| v.to_string()).unwrap_or_default()
+}
+
+/// A starting instinct as this world installs it: `graph` (instincts.json's `name`) with the
+/// wolves' spacing reflex beside each hunt while the `pack_reflex` law is on and `name` is a
+/// grown wolf's (`graph::with_pack_reflex`, docs/PACK_MIND.md).
+pub fn as_installed(ctx: &ReducerContext, name: &str, graph: &serde_json::Value) -> String {
+    if living_rules::graph::reflex_applies(name) && common::laws(ctx).pack_reflex {
+        living_rules::graph::with_pack_reflex(graph).to_string()
+    } else {
+        graph.to_string()
+    }
 }
 
 /// Create the world from its seed in this one call: terrain, resources, people and animals.
@@ -918,7 +1054,12 @@ pub fn world_row(ctx: &ReducerContext, s: &Seed, map: &living_rules::map::Map) {
 /// Everything after the terrain and the wild resources: settlements' stores, people, their
 /// households and communities, structures, artifacts, bands and animals.
 pub fn populate<'a>(ctx: &ReducerContext, s: &'a Seed, map: &living_rules::map::Map, hosted: Option<&crate::island::Hosted>, realm: Option<&living_rules::realm::Realm>, mut settlements: Vec<(&'a SeedTown, living_rules::city::Layout)>, now: u64) {
+    for w in crate::sex::sheet_warnings(s) {
+        log::warn!("seed sex: {w}");
+    }
     let _draws = Creating::start(s.seed, STEP_POPULATE);
+    // The look data first: everyone made from here on is given a look as they are.
+    crate::look::genesis(ctx, s.looks.as_ref());
     // A land world's settlements are already laid out; seeded ones get residents.
     let seeded: Vec<Option<&SeedTown>> = hosted.map(|h| crate::island::match_seed(h, &s.towns, &s.villages)).unwrap_or_default();
     if let Some(h) = hosted {
@@ -931,6 +1072,10 @@ pub fn populate<'a>(ctx: &ReducerContext, s: &'a Seed, map: &living_rules::map::
         if unplaced > 0 {
             log::warn!("{unplaced} seeded settlements found no site of their kind on this land");
         }
+    }
+    if let Some(h) = hosted {
+        plan_resources(ctx, map, &h.resources, now);
+        plan_structures(ctx, map, h, None, now);
     }
     for (t, layout) in &settlements {
         settlement_resources(ctx, &map, t, layout.center, now);
@@ -946,23 +1091,26 @@ pub fn populate<'a>(ctx: &ReducerContext, s: &'a Seed, map: &living_rules::map::
         crate::perceive::request_deliberation(ctx, id, "You are taking in your surroundings.", now);
     }
     for st in &s.structures {
-        let at = map.nearest_walkable(st.at[0], st.at[1]).unwrap_or((48.0, 48.0));
         let owner = ctx.db.character().iter().find(|c| c.name == st.owner).map(|c| c.id).unwrap_or(0);
-        common::invalidate_structures(ctx);
-        let row = ctx.db.structure().insert(Structure { id: 0, kind: st.kind.clone(), x: at.0, y: at.1, chunk: chunk_of(at.0, at.1), owner, built_ms: now });
-        for (item, q) in &st.contents {
-            common::inv_add(ctx, STRUCTURE_BIT | row.id, item, *q);
-        }
+        let contents: Vec<(String, u32)> = st.contents.iter().map(|(k, v)| (k.clone(), *v)).collect();
+        // A fire the seed gives fuel starts lit, burning it down from now.
+        put_authored(ctx, map, &st.kind, (st.at[0], st.at[1]), false, owner, &contents, st.fuel, now);
     }
+    place_nodes(ctx, &s.resource_nodes, now);
     for a in &s.artifacts {
         let at = map.nearest_walkable(a.at[0], a.at[1]).unwrap_or((48.0, 48.0));
         common::invalidate_structures(ctx);
-        let st = ctx.db.structure().insert(Structure { id: 0, kind: a.kind.clone(), x: at.0, y: at.1, chunk: chunk_of(at.0, at.1), owner: 0, built_ms: 0 });
+        let st = ctx.db.structure().insert(Structure { id: 0, kind: a.kind.clone(), x: at.0, y: at.1, chunk: chunk_of(at.0, at.1), owner: 0, built_ms: 0, lit_until_ms: 0 });
         ctx.db.artifact().insert(Artifact { id: 0, kind: a.kind.clone(), holder: STRUCTURE_BIT | st.id, author: 0, author_name: a.author_name.clone(), written_ms: 0, topic: a.topic.clone(), text: a.text.clone() });
     }
     let mut authored: Vec<(String, u32)> = Vec::new();
+    let mut households: std::collections::BTreeMap<String, u32> = Default::default();
     for (t, layout) in &settlements {
-        authored.extend(town(ctx, &map, t, layout, now));
+        authored.extend(town(ctx, &map, t, layout, &mut households, now));
+    }
+    // A plan's structures that belong to a household, now that its people and house exist.
+    if let Some(h) = hosted {
+        plan_structures(ctx, map, h, Some(&households), now);
     }
     settle_authored(ctx, &s, &authored, now);
     if let Some(h) = hosted {
@@ -1008,6 +1156,10 @@ pub fn populate<'a>(ctx: &ReducerContext, s: &'a Seed, map: &living_rules::map::
     communities(ctx, now);
     crate::records::seed(ctx, &s.records, now);
     set_habitats(ctx, s);
+    // The animals draw from a stream of their own: where they start must not depend on how many
+    // draws the people before them made (a founder draws a knack for every skill its body has,
+    // so adding a skill moved every herd: docs/PACK_MIND.md, the island's pack check).
+    let _animal_draws = Creating::start(s.seed, STEP_ANIMALS);
     // Animals start in their species' groups (herds, packs), so a few wolves on a large map
     // are a pack that can breed rather than strangers who never meet.
     for (kind, count) in [("deer", s.animals.deer), ("wolf", s.animals.wolf)] {
@@ -1076,7 +1228,7 @@ pub fn spawn_animal(ctx: &ReducerContext, kind: &str, at: (f32, f32), now: u64) 
     // A living population has more young than old: ages skew young.
     let u: f32 = rng(ctx).gen_range(0.0f32..1.0);
     let f = 0.05 + 0.75 * u * u;
-    let age = common::life_of(kind).age_at(f, common::pace(&w));
+    let age = common::life_of(ctx, kind).age_at(f, common::pace(&w));
     spawn_with(ctx, &name, kind, admin, minded, at, now, age, (0, 0))
 }
 
@@ -1099,7 +1251,7 @@ pub fn migrate(ctx: &ReducerContext, kind: &str, m: &living_rules::species::Migr
     };
     let (admin, minded) = common::mind_controller(ctx);
     let w = common::world(ctx);
-    let life = common::life_of(kind);
+    let life = common::life_of(ctx, kind);
     for _ in 0..m.group.max(1) {
         let spot = (0..20)
             .map(|_| (at.0 + rng(ctx).gen_range(-3.0f32..3.0), at.1 + rng(ctx).gen_range(-3.0f32..3.0)))
@@ -1148,12 +1300,27 @@ pub fn animal_spot(ctx: &ReducerContext, map: &living_rules::map::Map, kind: &st
 /// A grown creature (a quarter of the way through life) with no known parents.
 pub fn spawn_creature(ctx: &ReducerContext, name: &str, kind: &str, controller: Identity, ai: bool, at: (f32, f32), now: u64) -> u32 {
     let w = common::world(ctx);
-    let age = common::life_of(kind).age_at(0.25, common::pace(&w));
+    let age = common::life_of(ctx, kind).age_at(0.25, common::pace(&w));
     spawn_with(ctx, name, kind, controller, ai, at, now, age, (0, 0))
 }
 
 #[allow(clippy::too_many_arguments)]
 pub fn spawn_with(ctx: &ReducerContext, name: &str, kind: &str, controller: Identity, ai: bool, at: (f32, f32), now: u64, age: f32, parents: (u32, u32)) -> u32 {
+    spawn_sexed(ctx, name, kind, controller, ai, at, now, age, parents, None)
+}
+
+/// [`spawn_with`] for a person whose body sex is given (`sex`: a seed's, a player's choice);
+/// `None`, and every person made through `spawn_with`, takes the world's pick
+/// (`sex::give`). The row is written right after the character, before anything in this
+/// transaction reads it (the look's pool pick below, a newborn's first mind call later).
+#[allow(clippy::too_many_arguments)]
+pub fn spawn_sexed(ctx: &ReducerContext, name: &str, kind: &str, controller: Identity, ai: bool, at: (f32, f32), now: u64, age: f32, parents: (u32, u32), sex: Option<living_rules::sex::Sex>) -> u32 {
+    // A new character can make two people the parents of one child (they then know each
+    // other's names), so the shared answers start again, and each parent's knowledge epoch moves.
+    crate::perception::answers_changed();
+    for p in [parents.0, parents.1].into_iter().filter(|p| *p != 0) {
+        crate::perception::knowledge_changed(ctx, Some(p));
+    }
     let c = ctx.db.character().insert(Character {
         id: 0,
         name: name.into(),
@@ -1171,10 +1338,13 @@ pub fn spawn_with(ctx: &ReducerContext, name: &str, kind: &str, controller: Iden
         parent_b: parents.1,
         stage: {
             let w = common::world(ctx);
-            common::stage_code(common::life_of(kind).stage(age, common::pace(&w)))
+            common::stage_code(common::life_of(ctx, kind).stage(age, common::pace(&w)))
         },
     });
     let id = c.id;
+    if kind == "person" {
+        crate::sex::give(ctx, id, sex);
+    }
     motion::spawn_body(ctx, id, kind, at, now);
     // Genes: a founder's are drawn for its species, a child's come from its parents.
     let genes = {
@@ -1215,9 +1385,34 @@ pub fn spawn_with(ctx: &ReducerContext, name: &str, kind: &str, controller: Iden
         rate_key: 0,
         hurt_ms: 0,
         hurt_by: 0,
+        stamina: 0.0,
+        stamina_max: 0.0,
+        stamina_rate: 0.0,
+        stamina_from_ms: 0,
+        focus: 0.0,
+        focus_max: 0.0,
+        focus_rate: 0.0,
+        focus_from_ms: 0,
     });
+    // Breath and focus full, as much as its tiredness allows (the `pools` law).
+    if let Some(mut v) = ctx.db.vitals().id().find(id) {
+        let p = common::pools_of(ctx, id, now);
+        v.stamina_max = p.stamina.cap(v.energy);
+        v.stamina = v.stamina_max;
+        v.focus_max = p.focus.cap(v.energy);
+        v.focus = v.focus_max;
+        ctx.db.vitals().id().update(v);
+    }
     // The young start from their species' young instinct (a baby cries and follows a parent).
-    let graph = if c.stage == 0 { young_instinct(kind) } else { instinct(kind) };
+    let graph = if c.stage == 0 {
+        young_instinct(kind)
+    } else {
+        let all: serde_json::Value = serde_json::from_str(INSTINCTS).expect("instincts json");
+        match all.get(kind) {
+            Some(g) => as_installed(ctx, kind, g),
+            None => instinct(kind),
+        }
+    };
     ctx.db.brain().insert(Brain { id, graph, revision: 1, plan: "instinct".into(), source: "instinct".into(), installed_ms: now });
     // Its starting graph is not a mind's thought: its first deliberation request is not held
     // back by `think_min_s` (the reflection and drive timers still count from its birth).
@@ -1245,10 +1440,122 @@ pub fn spawn_with(ctx: &ReducerContext, name: &str, kind: &str, controller: Iden
     if kind == "person" && parents.0 == 0 {
         common::chronicle(ctx, now, "arrival", id, 0, at, format!("{name} arrived"));
     }
+    // A look from the world's pool (an authored resident is given its own after: `town`).
+    if kind == "person" {
+        crate::look::assign(ctx, id, None, now);
+    }
     if kind != "person" && c.stage >= 2 {
         give_ways(ctx, id, kind, now);
     }
     id
+}
+
+/// A fresh node's amount by kind, for resources an author places: the kind's `max` in the
+/// script's `resources()` (tree 8, boulder and clay bank 6, reeds 4, the rest 5 in the shipped
+/// rules).
+fn resource_max(sc: &living_rules::script::Scripts, kind: &str) -> f32 {
+    resource_number(sc, kind, "max", 5.0)
+}
+
+/// A planned settlement's authored resources (`PlanSpec::resources`), at the nearest walkable
+/// tile to each point, with the author's `max` and `regrow_per_h` (else the kind's), those naming
+/// one `pool` sharing the first one's stock. A kind the world does not have was refused by
+/// `floor::check`; one that slips past is left out and logged.
+fn plan_resources(ctx: &ReducerContext, map: &living_rules::map::Map, at: &[living_rules::settle::LaidResource], now: u64) {
+    let sc = common::scripts(ctx);
+    let mut unknown: std::collections::BTreeMap<&str, u32> = std::collections::BTreeMap::new();
+    let mut pools: std::collections::BTreeMap<&str, u64> = Default::default();
+    let mut placed = 0;
+    for r in at {
+        let kind = &r.kind;
+        if living_rules::catalog::kind_class(kind) != Some(living_rules::catalog::KindClass::Resource) {
+            *unknown.entry(kind.as_str()).or_default() += 1;
+            continue;
+        }
+        let Some(q) = map.nearest_walkable(r.at.0, r.at.1) else { continue };
+        let max = r.max.unwrap_or_else(|| resource_max(&sc, kind));
+        let regen = r.regrow_per_h.map_or_else(|| sc.regrow_per_min(kind, 0.5), |v| v as f64 * sc.per_minute()) as f32;
+        let pool = if r.pool.is_empty() { 0 } else { pools.get(r.pool.as_str()).copied().unwrap_or(0) };
+        common::invalidate_resources(ctx, None);
+        let row = ctx.db.resource_node().insert(ResourceNode { id: 0, kind: kind.clone(), x: q.0, y: q.1, chunk: chunk_of(q.0, q.1), amount: max, max, regen, at_ms: now, pool });
+        if !r.pool.is_empty() && pool == 0 {
+            pools.insert(&r.pool, row.id);
+            let mut head = row;
+            head.pool = head.id;
+            ctx.db.resource_node().id().update(head);
+        }
+        placed += 1;
+    }
+    if !unknown.is_empty() {
+        log::warn!("plan resources of kinds this world does not have, left out: {unknown:?}");
+    }
+    if placed > 0 {
+        log::info!("plan resources: {placed} placed");
+    }
+}
+
+/// A structure an author places (a seed's `structures`, a plan's): at the nearest walkable tile,
+/// or, `exact`, where it is (a household's own inside its lot, `settle::placed_structures`),
+/// with its contents, and, for a fire that burns fuel, lit with `fuel` units burning down from
+/// now.
+#[allow(clippy::too_many_arguments)]
+fn put_authored(ctx: &ReducerContext, map: &living_rules::map::Map, kind: &str, at: (f32, f32), exact: bool, owner: u32, contents: &[(String, u32)], fuel: f32, now: u64) -> u64 {
+    let at = if exact { at } else { map.nearest_walkable(at.0, at.1).unwrap_or((48.0, 48.0)) };
+    common::invalidate_structures(ctx);
+    let burns = common::scripts(ctx).structure(kind).burns.clone();
+    let lit_until_ms = burns.filter(|_| fuel > 0.0).and_then(|b| living_rules::fire::fed(0, now, fuel, b.rate, common::world(ctx).day_ms, None)).unwrap_or(0);
+    let row = ctx.db.structure().insert(Structure { id: 0, kind: kind.to_string(), x: at.0, y: at.1, chunk: chunk_of(at.0, at.1), owner, built_ms: now, lit_until_ms });
+    for (item, q) in contents {
+        common::inv_add(ctx, STRUCTURE_BIT | row.id, item, *q);
+    }
+    row.id
+}
+
+/// A planned settlement's authored structures (`PlanSpec::structures`) and its lots' stores
+/// (`LotSpec::contents`, into the structure at the lot's door, which `island::build` placed).
+/// With `owners` (households' owners by key, once the residents exist) only those that belong
+/// to a household (`owner: "household:<key>"`), owned by its house's owner; without, the rest.
+fn plan_structures(ctx: &ReducerContext, map: &living_rules::map::Map, h: &crate::island::Hosted, owners: Option<&std::collections::BTreeMap<String, u32>>, now: u64) {
+    let (mut placed, mut stocked, mut owned) = (0, 0, 0);
+    for st in &h.structures {
+        if st.household.is_empty() == owners.is_some() {
+            continue;
+        }
+        if let Some(owners) = owners {
+            // `floor::check` refused a household the seed lacks; one that slips past is logged.
+            let Some(owner) = owners.get(&st.household).copied() else {
+                log::warn!("plan: a {} belongs to household {}, which has nobody in this world; left out", st.kind, st.household);
+                continue;
+            };
+            if living_rules::catalog::is_structure(&st.kind) {
+                // Inside its lot (on the house's floor behind its door, or an open lot's ground)
+                // as hosting placed it: not moved to the street.
+                let exact = st.inside != living_rules::settle::Inside::No;
+                put_authored(ctx, map, &st.kind, st.at, exact, owner, &st.contents, st.fuel, now);
+                owned += 1;
+            }
+            continue;
+        }
+        if st.kind.is_empty() {
+            let own = h.lots.iter().position(|l| l.key == st.lot).and_then(|i| ctx.db.lot().id().find(i as u32)).map_or(0, |l| l.structure);
+            if own == 0 {
+                log::warn!("plan: lot {} has no structure at its door to hold its contents; left out", st.lot);
+                continue;
+            }
+            for (item, q) in &st.contents {
+                common::inv_add(ctx, STRUCTURE_BIT | own, item, *q);
+            }
+            stocked += 1;
+        } else if living_rules::catalog::is_structure(&st.kind) {
+            put_authored(ctx, map, &st.kind, st.at, false, 0, &st.contents, st.fuel, now);
+            placed += 1;
+        } else {
+            log::warn!("plan: structure of a kind this world does not have, `{}`, left out", st.kind);
+        }
+    }
+    if placed > 0 || stocked > 0 || owned > 0 {
+        log::info!("plan structures: {placed} placed, {stocked} lot stores filled, {owned} households' own placed");
+    }
 }
 
 /// How far "within reach" of a settlement goes for its promised resources.
@@ -1259,26 +1566,20 @@ const SETTLEMENT_REACH: f32 = 24.0;
 fn settlement_resources(ctx: &ReducerContext, map: &living_rules::map::Map, t: &SeedTown, center: (f32, f32), now: u64) {
     let sc = common::scripts(ctx);
     let near = |x: i32, y: i32, k: Terrain| (-1..=1).any(|dy| (-1..=1).any(|dx| map.get(x + dx, y + dy) == k));
-    let fits = |kind: &str, x: i32, y: i32| {
+    // Where each kind goes and how much a node holds are its traits in the script
+    // (`resources()`: `ground`, `by_water`, `max`).
+    let ground_of = |kind: &str| -> (Vec<String>, bool) {
+        let t = sc.tables();
+        (t.words("resources", kind, "ground"), t.flag("resources", kind, "by_water"))
+    };
+    let fits = |ground: &(Vec<String>, bool), x: i32, y: i32| {
         let g = map.get(x, y);
-        match kind {
-            "fishing_spot" | "reeds" => (g == Terrain::Sand || g == Terrain::Grass) && near(x, y, Terrain::Water),
-            "clay_bank" => g == Terrain::Grass && near(x, y, Terrain::Water),
-            "berry_bush" => g == Terrain::Grass,
-            "tree" => g == Terrain::Forest || g == Terrain::Grass,
-            "boulder" => g == Terrain::Grass || g == Terrain::Dirt,
-            _ => false,
-        }
+        ground.0.iter().any(|n| n == g.name()) && (!ground.1 || near(x, y, Terrain::Water))
     };
-    let max_of = |kind: &str| match kind {
-        "tree" => 8.0,
-        "boulder" => 6.0,
-        "clay_bank" => 6.0,
-        "reeds" => 4.0,
-        _ => 5.0,
-    };
+    let max_of = |kind: &str| resource_max(&sc, kind);
     let (cx, cy) = (center.0 as i32, center.1 as i32);
     for (kind, want) in &t.resources {
+        let ground = ground_of(kind);
         let mut spots: Vec<(f32, f32)> = ctx
             .db
             .resource_node()
@@ -1299,12 +1600,12 @@ fn settlement_resources(ctx: &ReducerContext, map: &living_rules::map::Map, t: &
                     }
                     let (x, y) = (cx + dx, cy + dy);
                     let p = (x as f32 + 0.5, y as f32 + 0.5);
-                    if !fits(kind, x, y) || spots.iter().any(|q| common::dist(*q, p) < 2.5) {
+                    if !fits(&ground, x, y) || spots.iter().any(|q| common::dist(*q, p) < 2.5) {
                         continue;
                     }
                     common::invalidate_resources(ctx, None);
                     let max = max_of(kind);
-                    ctx.db.resource_node().insert(ResourceNode { id: 0, kind: kind.clone(), x: p.0, y: p.1, chunk: chunk_of(p.0, p.1), amount: max, max, regen: sc.num_of("regrow", kind, 0.5) as f32, at_ms: now });
+                    ctx.db.resource_node().insert(ResourceNode { id: 0, kind: kind.clone(), x: p.0, y: p.1, chunk: chunk_of(p.0, p.1), amount: max, max, regen: sc.regrow_per_min(kind, 0.5) as f32, at_ms: now, pool: 0 });
                     spots.push(p);
                     have += 1;
                 }
@@ -1314,6 +1615,34 @@ fn settlement_resources(ctx: &ReducerContext, map: &living_rules::map::Map, t: &
             log::warn!("{}: only {have} of {want} {kind} could be placed within reach", t.name);
         }
     }
+}
+
+/// The seed's placed resource nodes (`resource_nodes`), each pool's stock on its first node.
+fn place_nodes(ctx: &ReducerContext, nodes: &[SeedNode], now: u64) {
+    let sc = common::scripts(ctx);
+    let mut pools: std::collections::BTreeMap<&str, u64> = Default::default();
+    for n in nodes {
+        if !living_rules::catalog::is_resource(&n.kind) {
+            log::warn!("seed: resource node of unknown kind `{}` left out", n.kind);
+            continue;
+        }
+        let max = n.max.unwrap_or_else(|| resource_number(&sc, &n.kind, "max", 5.0));
+        let regen = n.regrow_per_h.map(|r| (r as f64 * sc.per_minute()) as f32).or(n.regrow).unwrap_or_else(|| sc.regrow_per_min(&n.kind, 0.5) as f32);
+        let pool = if n.pool.is_empty() { 0 } else { pools.get(n.pool.as_str()).copied().unwrap_or(0) };
+        common::invalidate_resources(ctx, None);
+        let row = ctx.db.resource_node().insert(ResourceNode { id: 0, kind: n.kind.clone(), x: n.at[0], y: n.at[1], chunk: chunk_of(n.at[0], n.at[1]), amount: max, max, regen, at_ms: now, pool });
+        if !n.pool.is_empty() && pool == 0 {
+            pools.insert(&n.pool, row.id);
+            let mut head = row;
+            head.pool = head.id;
+            ctx.db.resource_node().id().update(head);
+        }
+    }
+}
+
+/// A number among a resource kind's traits in the script (`resources()`), or `default`.
+fn resource_number(sc: &living_rules::script::Scripts, kind: &str, t: &str, default: f32) -> f32 {
+    sc.tables().number("resources", kind, t).map_or(default, |v| v as f32)
 }
 
 fn spawn_resources(ctx: &ReducerContext, map: &living_rules::map::Map, now: u64) {
@@ -1364,8 +1693,9 @@ fn spawn_resources_in(ctx: &ReducerContext, map: &living_rules::map::Map, rows: 
             chunk: chunk_of(p.0, p.1),
             amount: max,
             max,
-            regen: sc.num_of("regrow", kind, 0.5) as f32,
+            regen: sc.regrow_per_min(kind, 0.5) as f32,
             at_ms: now,
+            pool: 0,
         });
         true
     };
@@ -1486,8 +1816,21 @@ fn walkable_near(map: &living_rules::map::Map, at: (f32, f32)) -> (f32, f32) {
 /// A household's house: the unowned house already standing at its door (a land world's lots),
 /// or a new one.
 fn house(ctx: &ReducerContext, map: &living_rules::map::Map, home: (f32, f32), owner: u32, now: u64) -> u64 {
+    house_at(ctx, map, home, owner, now, false)
+}
+
+/// A household's house at `home`: the unowned house standing there, else a new one. With
+/// `any_kind` (a household the seed binds to a planned lot, docs/AUTHORED_PLANS.md), the
+/// unowned building standing at that lot's door is its home whatever its kind: a family living
+/// over its inn or in its hall owns that building, with no second house beside it.
+fn house_at(ctx: &ReducerContext, map: &living_rules::map::Map, home: (f32, f32), owner: u32, now: u64, any_kind: bool) -> u64 {
     let at = walkable_near(map, home);
-    let standing = ctx.db.structure().chunk().filter(chunk_of(at.0, at.1)).find(|s| s.kind == "house" && s.owner == 0 && common::dist((s.x, s.y), at) < 0.75);
+    let here: Vec<Structure> = ctx.db.structure().chunk().filter(chunk_of(at.0, at.1)).filter(|s| (any_kind || s.kind == "house") && s.owner == 0 && common::dist((s.x, s.y), at) < 0.75).collect();
+    // Other things may stand at a lot's door (a plan's hearth or lamp, docs/AUTHORED_PLANS.md):
+    // the building is the structure a lot row names; only then anything else standing there.
+    // Once per household at creation, over the lot rows.
+    let building = |s: &&Structure| ctx.db.lot().iter().any(|l| l.structure == s.id);
+    let standing = here.iter().find(building).or_else(|| here.iter().find(|s| s.kind == "house")).or_else(|| here.first()).cloned();
     match standing {
         Some(mut s) => {
             let id = s.id;
@@ -1503,19 +1846,49 @@ fn house(ctx: &ReducerContext, map: &living_rules::map::Map, home: (f32, f32), o
 fn put(ctx: &ReducerContext, map: &living_rules::map::Map, kind: &str, at: (f32, f32), owner: u32, now: u64) -> u64 {
     let at = walkable_near(map, at);
     common::invalidate_structures(ctx);
-    ctx.db.structure().insert(Structure { id: 0, kind: kind.into(), x: at.0, y: at.1, chunk: chunk_of(at.0, at.1), owner, built_ms: now }).id
+    ctx.db.structure().insert(Structure { id: 0, kind: kind.into(), x: at.0, y: at.1, chunk: chunk_of(at.0, at.1), owner, built_ms: now, lit_until_ms: 0 }).id
 }
 
 /// A settlement's named buildings: each on free walkable ground 5-12 tiles from the center,
 /// a few tiles from anything else, with a sign giving its name; then every resident's
 /// background lists them as places (their minds turn those into remembered places).
-fn buildings(ctx: &ReducerContext, map: &living_rules::map::Map, t: &SeedTown, center: (f32, f32), residents: &[u32], authored: &[(String, u32)], now: u64) {
+fn buildings(ctx: &ReducerContext, map: &living_rules::map::Map, t: &SeedTown, layout: &living_rules::city::Layout, residents: &[u32], authored: &[(String, u32)], now: u64) {
     if t.buildings.is_empty() {
         return;
     }
+    let center = layout.center;
     let mut taken: Vec<(f32, f32)> = ctx.db.structure().iter().filter(|s| common::dist((s.x, s.y), center) < 16.0).map(|s| (s.x, s.y)).collect();
     let mut places = Vec::new();
     for (i, b) in t.buildings.iter().enumerate() {
+        // A named building that is a planned lot stands at that lot's door.
+        let at_lot = (!b.lot.is_empty()).then(|| layout.lots.iter().find(|(k, _)| *k == b.lot).map(|l| l.1)).flatten();
+        if !b.lot.is_empty() && at_lot.is_none() {
+            log::warn!("{}: {} names lot {:?}, which the settlement does not have; placed near the centre", t.name, b.name, b.lot);
+        }
+        if let Some(at) = at_lot {
+            let owner = authored.iter().find(|(n, _)| *n == b.owner).map(|(_, id)| *id).unwrap_or(0);
+            // The lot's own structure stands at its door already when it is of this kind.
+            let existing = ctx.db.structure().chunk().filter(chunk_of(at.0, at.1)).find(|s| s.kind == b.kind && common::dist((s.x, s.y), at) < 0.6);
+            match existing {
+                Some(mut st) if owner != 0 => {
+                    common::invalidate_structures(ctx);
+                    st.owner = owner;
+                    ctx.db.structure().id().update(st);
+                }
+                Some(_) => {}
+                None => {
+                    put(ctx, map, &b.kind, at, owner, now);
+                }
+            }
+            let sign_at = (at.0 + 1.5, at.1);
+            let sid = put(ctx, map, "sign", sign_at, owner, now);
+            let text = if b.about.is_empty() { b.name.clone() } else { format!("{}. {}", b.name, b.about) };
+            let author = if owner != 0 { b.owner.clone() } else { format!("the people of {}", t.name) };
+            ctx.db.artifact().insert(Artifact { id: 0, kind: "sign".into(), holder: STRUCTURE_BIT | sid, author: owner, author_name: author, written_ms: 0, topic: b.name.clone(), text });
+            taken.extend([at, sign_at]);
+            places.push(serde_json::json!({"name": b.name, "at": [at.0.round(), at.1.round()], "kind": b.kind}));
+            continue;
+        }
         let spot = (5..=12)
             .flat_map(|r| (0..16).map(move |k| (r as f32, (k as f32 + i as f32 * 0.37) * std::f32::consts::TAU / 16.0)))
             .map(|(r, a)| ((center.0 + r * a.cos()).floor() + 0.5, (center.1 + r * a.sin()).floor() + 0.5))
@@ -1547,20 +1920,20 @@ fn buildings(ctx: &ReducerContext, map: &living_rules::map::Map, t: &SeedTown, c
 /// the market square, a house per household along the streets, gates in the wall kept by the
 /// settlement's community, planted fields outside; residents with histories.
 /// Returns the authored residents by name (none for a town drawn from `occupations`).
-fn town(ctx: &ReducerContext, map: &living_rules::map::Map, t: &SeedTown, layout: &living_rules::city::Layout, now: u64) -> Vec<(String, u32)> {
+fn town(ctx: &ReducerContext, map: &living_rules::map::Map, t: &SeedTown, layout: &living_rules::city::Layout, households: &mut std::collections::BTreeMap<String, u32>, now: u64) -> Vec<(String, u32)> {
     let center = layout.center;
     let c = ctx.db.community().insert(Community { id: 0, name: t.name.clone(), founder: 0, founded_ms: 0, home_x: center.0, home_y: center.1 });
     put(ctx, map, "campfire", layout.market[0], 0, now);
     for &(gx, gy) in &layout.gates {
         let p = (gx as f32 + 0.5, gy as f32 + 0.5);
         common::invalidate_structures(ctx);
-        let sid = ctx.db.structure().insert(Structure { id: 0, kind: "gate".into(), x: p.0, y: p.1, chunk: chunk_of(p.0, p.1), owner: 0, built_ms: 0 }).id;
+        let sid = ctx.db.structure().insert(Structure { id: 0, kind: "gate".into(), x: p.0, y: p.1, chunk: chunk_of(p.0, p.1), owner: 0, built_ms: 0, lit_until_ms: 0 }).id;
         ctx.db.gate().insert(Gate { id: sid, x: gx, y: gy, open: true, community: c.id, changed_ms: now, changed_by: 0 });
     }
     let (ids, authored): (Vec<u32>, Vec<(String, u32)>) = if t.residents.is_empty() {
         (drawn_households(ctx, map, t, layout, now), Vec::new())
     } else {
-        let a = authored_households(ctx, map, t, layout, now);
+        let a = authored_households(ctx, map, t, layout, households, now);
         (a.iter().map(|a| a.1).collect(), a)
     };
     // Stores on the market square.
@@ -1583,8 +1956,9 @@ fn town(ctx: &ReducerContext, map: &living_rules::map::Map, t: &SeedTown, layout
             chunk: chunk_of(p.0, p.1),
             amount: sc.num_of("planted_max", "berry_bush", 5.0) as f32,
             max: sc.num_of("planted_max", "berry_bush", 5.0) as f32,
-            regen: sc.num_of("regrow", "berry_bush", 1.0) as f32,
+            regen: sc.regrow_per_min("berry_bush", 1.0) as f32,
             at_ms: now,
+            pool: 0,
         });
     }
     if !t.ledger.is_empty() {
@@ -1592,13 +1966,14 @@ fn town(ctx: &ReducerContext, map: &living_rules::map::Map, t: &SeedTown, layout
         let sid = put(ctx, map, "sign", at, 0, now);
         ctx.db.artifact().insert(Artifact { id: 0, kind: "sign".into(), holder: STRUCTURE_BIT | sid, author: 0, author_name: format!("the elders of {}", t.name), written_ms: 0, topic: String::new(), text: t.ledger.clone() });
     }
-    buildings(ctx, map, t, center, &ids, &authored, now);
+    buildings(ctx, map, t, layout, &ids, &authored, now);
     if let Some(mut com) = ctx.db.community().id().find(c.id) {
         com.founder = ids.first().copied().unwrap_or(0);
         ctx.db.community().id().update(com);
     }
     for id in &ids {
         ctx.db.membership().insert(Membership { id: 0, community: c.id, member: *id, since_ms: now });
+        crate::perception::knowledge_changed(ctx, None);
     }
     let what = if t.walled { format!("{} stands walled at ({:.0}, {:.0}) with {} people and {} gates", t.name, center.0, center.1, ids.len(), layout.gates.len()) } else { format!("the village of {} lies at ({:.0}, {:.0}) with {} people", t.name, center.0, center.1, ids.len()) };
     common::chronicle(ctx, now, "arrival", 0, 0, center, what);
@@ -1625,7 +2000,7 @@ fn drawn_households(ctx: &ReducerContext, map: &living_rules::map::Map, t: &Seed
         let home = layout.houses.get(h % layout.houses.len().max(1)).copied().unwrap_or(center);
         let names: Vec<String> = members.iter().map(|_| fresh_name(ctx)).collect();
         let mut household_ids = Vec::new();
-        let (life, pace) = (common::life_of("person"), common::pace(&common::world(ctx)));
+        let (life, pace) = (common::life_of(ctx, "person"), common::pace(&common::world(ctx)));
         for (k, occ) in members.iter().enumerate() {
             let at = (home.0 + (k as f32 - 1.0) * 0.5, home.1 + 0.6);
             // Working adults of all ages; sometimes a grandparent who still keeps a trade.
@@ -1695,12 +2070,37 @@ fn drawn_households(ctx: &ReducerContext, map: &living_rules::map::Map, t: &Seed
 /// children), each with the age, know-how, habits and belongings the seed gives them and a
 /// background row; their sheets and any parents in later settlements are resolved once every
 /// settlement has its people (`settle_authored`).
-fn authored_households(ctx: &ReducerContext, map: &living_rules::map::Map, t: &SeedTown, layout: &living_rules::city::Layout, now: u64) -> Vec<(String, u32)> {
+/// Each household's owner (its first member born, who owns its house) goes into `households` by
+/// its key, for what a plan gives the household (`owner: "household:<key>"`).
+fn authored_households(ctx: &ReducerContext, map: &living_rules::map::Map, t: &SeedTown, layout: &living_rules::city::Layout, households: &mut std::collections::BTreeMap<String, u32>, now: u64) -> Vec<(String, u32)> {
     let (admin, minded) = common::mind_controller(ctx);
     let center = layout.center;
-    let (life, pace) = (common::life_of("person"), common::pace(&common::world(ctx)));
+    let (life, pace) = (common::life_of(ctx, "person"), common::pace(&common::world(ctx)));
     let keys = household_keys(&t.residents);
-    let home_of = |h: usize| layout.houses.get(h % layout.houses.len().max(1)).copied().unwrap_or(center);
+    // Households the seed binds to a planned lot live at its door (`homes`); the others take
+    // the remaining houses in order, nearest the square first. Without `homes`, household h
+    // takes house h as before. (home, whether it is a house to claim)
+    let lot_door = |id: &str| layout.lots.iter().find(|(k, _)| k == id).map(|l| l.1);
+    for (hh, lot) in &t.homes {
+        if lot_door(lot).is_none() {
+            log::warn!("{}: homes names lot {lot:?} for {hh}, which the settlement does not have; {hh} takes a free house", t.name);
+        }
+    }
+    let bound: Vec<Option<(f32, f32)>> = keys.iter().map(|k| t.homes.get(*k).and_then(|lot| lot_door(lot))).collect();
+    let free: Vec<(f32, f32)> = layout.houses.iter().filter(|h| !bound.iter().flatten().any(|b| common::dist(*b, **h) < 0.5)).copied().collect();
+    let mut unbound = 0;
+    let homes: Vec<((f32, f32), bool)> = bound
+        .iter()
+        .map(|b| match b {
+            Some(p) => (*p, true),
+            None => {
+                let i = unbound;
+                unbound += 1;
+                (free.get(i % free.len().max(1)).copied().unwrap_or(center), i < free.len())
+            }
+        })
+        .collect();
+    let home_of = |h: usize| homes.get(h).map_or(center, |x| x.0);
     // (resident index, id, occupation as lived)
     let mut spawned: Vec<(usize, u32, String)> = Vec::new();
     for i in birth_order(&t.residents) {
@@ -1718,7 +2118,10 @@ fn authored_households(ctx: &ReducerContext, map: &living_rules::map::Map, t: &S
         if r.age >= life.years * life.old_age {
             log::warn!("{}: {} years is past the first deaths of old age; seeded just short of them", r.name, r.age);
         }
-        let id = spawn_with(ctx, &r.name, "person", admin, minded, at, now, life.seeded_age(r.age, pace), (parents.first().copied().unwrap_or(0), parents.get(1).copied().unwrap_or(0)));
+        let id = spawn_sexed(ctx, &r.name, "person", admin, minded, at, now, life.seeded_age(r.age, pace), (parents.first().copied().unwrap_or(0), parents.get(1).copied().unwrap_or(0)), living_rules::sex::Sex::parse(&r.sex));
+        if !r.look.is_empty() {
+            crate::look::assign(ctx, id, Some(&r.look), now);
+        }
         author_temperament(ctx, id, &r.sheet);
         let stage = ctx.db.character().id().find(id).map(|c| c.stage).unwrap_or(2);
         // The young live a child's day whatever the sheet calls them.
@@ -1754,8 +2157,11 @@ fn authored_households(ctx: &ReducerContext, map: &living_rules::map::Map, t: &S
     }
     for (h, key) in keys.iter().enumerate() {
         let owner = spawned.iter().find(|(j, ..)| household_of(&t.residents[*j]) == *key).map(|s| s.1).unwrap_or(0);
-        if h < layout.houses.len() {
-            house(ctx, map, home_of(h), owner, now);
+        if owner != 0 {
+            households.entry(key.to_string()).or_insert(owner);
+        }
+        if homes.get(h).is_some_and(|x| x.1) {
+            house_at(ctx, map, home_of(h), owner, now, bound.get(h).is_some_and(|b| b.is_some()));
         }
     }
     for (i, id, occ) in &spawned {
@@ -1818,6 +2224,7 @@ fn settle_authored(ctx: &ReducerContext, s: &Seed, authored: &[(String, u32)], n
                 let late = want.0 != 0 && want.1 != 0 && (ch.parent_a == 0 || ch.parent_b == 0);
                 (ch.parent_a, ch.parent_b) = want;
                 ctx.db.character().id().update(ch);
+                crate::perception::answers_changed();
                 if late {
                     let mut u = || rng(ctx).gen::<f32>();
                     let genes = living_rules::genes::inherit(&common::genes_of(ctx, want.0), &common::genes_of(ctx, want.1), &mut u);
@@ -1836,13 +2243,13 @@ fn settle_authored(ctx: &ReducerContext, s: &Seed, authored: &[(String, u32)], n
             }
         }
         if let Some(given) = &r.rhythm {
-            let mut row = ctx.db.rhythm().id().find(id).unwrap_or_else(|| {
-                let w = common::world(ctx);
-                drawn_rhythm(id, living_rules::day_of(now, w.epoch_ms, w.day_ms) as u32)
-            });
-            row.rise_h = given.rises.unwrap_or(row.rise_h).clamp(0.0, 12.0);
-            row.bed_h = given.sleeps.map(|b| if b < 12.0 { b + 24.0 } else { b }).unwrap_or(row.bed_h).clamp(row.rise_h + 8.0, row.rise_h + 22.0);
-            row.evening_h = given.evening_hours.unwrap_or(row.evening_h).clamp(0.0, 8.0);
+            let row = given_rhythm(
+                ctx.db.rhythm().id().find(id).unwrap_or_else(|| {
+                    let w = common::world(ctx);
+                    drawn_rhythm(id, living_rules::day_of(now, w.epoch_ms, w.day_ms) as u32)
+                }),
+                given,
+            );
             if ctx.db.rhythm().id().find(id).is_some() {
                 ctx.db.rhythm().id().update(row);
             } else {
@@ -1899,7 +2306,7 @@ fn settle_authored(ctx: &ReducerContext, s: &Seed, authored: &[(String, u32)], n
 fn band(ctx: &ReducerContext, map: &living_rules::map::Map, b: &SeedBand, site: (f32, f32), now: u64) {
     let (admin, minded) = common::mind_controller(ctx);
     let at = walkable_near(map, site);
-    let (life, pace) = (common::life_of("person"), common::pace(&common::world(ctx)));
+    let (life, pace) = (common::life_of(ctx, "person"), common::pace(&common::world(ctx)));
     let mut ids = Vec::new();
     if !b.family.is_empty() {
         // A family of all ages; the young are children of the first two adults.
@@ -1914,7 +2321,7 @@ fn band(ctx: &ReducerContext, map: &living_rules::map::Map, b: &SeedBand, site: 
             };
             let young = matches!(m.stage.as_str(), "child" | "infant");
             let parents = if young && adults.len() >= 2 { (adults[0], adults[1]) } else { (0, 0) };
-            let id = spawn_with(ctx, &fresh_name(ctx), "person", admin, minded, p, now, life.age_at(f, pace), parents);
+            let id = spawn_sexed(ctx, &fresh_name(ctx), "person", admin, minded, p, now, life.age_at(f, pace), parents, living_rules::sex::Sex::parse(&m.sex));
             common::inv_add(ctx, id as u64, "berries", if young { 1 } else { 3 });
             // A hunter carries a spear.
             if m.occupation == "hunter" && !young {
@@ -2006,6 +2413,160 @@ mod tests {
 
     const AUTHORED: &str = include_str!("../../seeds/authored-test.json");
 
+    /// The rule `common::day_phase` used before rhythms could rise after noon (lives-2): hours
+    /// pivoted at noon.
+    fn noon_pivot(r: &Rhythm, hour: f32) -> (bool, bool) {
+        let h = if hour < 12.0 { hour + 24.0 } else { hour };
+        (h >= r.bed_h && h < r.rise_h + 24.0, h >= r.bed_h - r.evening_h && h < r.bed_h)
+    }
+
+    /// Every drawn rhythm (all a seed without `rhythm` has: every world before Cullet) keeps
+    /// exactly its bedtime and evening at every minute (and between minutes) under the new rule,
+    /// and has no working hours or second sleep set, so its working hours are its waking hours
+    /// outside the evening.
+    #[test]
+    fn drawn_rhythms_keep_their_phase() {
+        let mut u = common::hashed_draws(99, 1);
+        for id in 0..20_000u32 {
+            let r = drawn_rhythm(id, 0);
+            assert_eq!((r.work_from_h, r.work_to_h, r.nap_from_h, r.nap_to_h), (0.0, 0.0, 0.0, 0.0));
+            let h = common::hours_of(&r);
+            for m in 0..24 * 60 {
+                for hour in [m as f32 / 60.0, (m as f32 + u()) / 60.0] {
+                    let p = h.phase(hour);
+                    assert_eq!((p.bedtime, p.evening), noon_pivot(&r, hour), "id {id} at {hour}: {r:?}", r = (r.rise_h, r.bed_h, r.evening_h));
+                    assert_eq!(p.work, !p.bedtime && !p.evening);
+                }
+            }
+        }
+    }
+
+    /// A seed's rhythm: rising after noon, a night's work, a second sleep; a rhythm the seed does
+    /// not give is the drawn one unchanged.
+    #[test]
+    fn seeded_rhythms_rise_at_any_hour() {
+        let drawn = drawn_rhythm(7, 0);
+        let g = |v: serde_json::Value| given_rhythm(drawn_rhythm(7, 0), &serde_json::from_value::<SeedRhythm>(v).unwrap());
+        let none = g(serde_json::json!({}));
+        assert_eq!((none.rise_h, none.bed_h, none.evening_h, none.work_to_h, none.nap_to_h), (drawn.rise_h, drawn.bed_h, drawn.evening_h, 0.0, 0.0));
+        let night = g(serde_json::json!({"rises": 14.0, "sleeps": 31.0, "evening_hours": 1.0, "works": [22.0, 30.0]}));
+        assert_eq!((night.rise_h, night.bed_h, night.work_from_h, night.work_to_h), (14.0, 31.0, 22.0, 30.0));
+        let lamp = g(serde_json::json!({"rises": 13.0, "sleeps": 6.0, "works": [19.5, 6.0]}));
+        assert_eq!((lamp.rise_h, lamp.bed_h, lamp.work_from_h, lamp.work_to_h), (13.0, 30.0, 19.5, 30.0));
+        let baker = g(serde_json::json!({"rises": 2.5, "sleeps": 22.0, "evening_hours": 3.0, "works": [3.0, 10.0], "second_sleep": [13.0, 19.0]}));
+        assert_eq!((baker.rise_h, baker.bed_h, baker.nap_from_h, baker.nap_to_h), (2.5, 22.0, 13.0, 19.0));
+        let p = common::hours_of(&night).phase(15.0);
+        assert!(!p.bedtime && !p.work);
+        assert!(common::hours_of(&night).phase(23.0).work && common::hours_of(&night).phase(11.0).bedtime);
+    }
+
+    /// Cullet's seed passes the checks `init` makes (`island::params_of`'s plan and relief
+    /// refusals, and hosting's reachable doors): a refused seed leaves no world behind.
+    #[test]
+    fn the_cullet_seed_is_hosted() {
+        let s: Seed = serde_json::from_str(include_str!("../../seeds/cullet.json")).expect("cullet seed");
+        let m = s.map.as_ref().unwrap();
+        if let Err(e) = crate::island::generate(s.seed, m) {
+            panic!("cullet: {e}");
+        }
+    }
+
+    /// Cullet's plan names only kinds its laws' tables have, so its seed passes `floor::check`
+    /// with its laws; the same plan with a name that matches nothing (the plan-2 names `kelp`,
+    /// `peat`) or a structure kind the world lacks is refused, not left out.
+    #[test]
+    fn a_plan_naming_kinds_the_world_lacks_is_refused() {
+        let text = include_str!("../../seeds/cullet.json");
+        let laws = include_str!("../../seeds/worlds/cullet/laws.rhai");
+        let with = |change: &dyn Fn(&mut serde_json::Value)| {
+            let mut v: serde_json::Value = serde_json::from_str(text).unwrap();
+            change(&mut v);
+            let mut s: Seed = serde_json::from_value(v).unwrap();
+            s.laws = laws.to_string();
+            crate::floor::check(&s)
+        };
+        with(&|_| {}).expect("Cullet's seed passes the checks with its laws");
+        let plan_test: Seed = serde_json::from_str(include_str!("../../seeds/plan-test.json")).unwrap();
+        crate::floor::check(&plan_test).expect("plan-test names only the shipped script's kinds");
+        let e = with(&|v| v["map"]["params"]["plans"][0]["resources"][0]["kind"] = "kelp".into()).unwrap_err();
+        assert!(e.contains("names kinds this world's tables do not have") && e.contains("resource `kelp`"), "{e}");
+        let e = with(&|v| v["map"]["params"]["plans"][0]["structures"][0]["kind"] = "kiln".into()).unwrap_err();
+        assert!(e.contains("structure `kiln`"), "{e}");
+        let e = with(&|v| v["map"]["params"]["plans"][0]["lots"][0]["contents"] = serde_json::json!({"gold": 1})).unwrap_err();
+        assert!(e.contains("item `gold`"), "{e}");
+        // A lot's own door structure must be a kind of the world (rules-3).
+        let e = with(&|v| v["map"]["params"]["plans"][0]["lots"][0]["structure"] = "silo".into()).unwrap_err();
+        assert!(e.contains("structure `silo`"), "{e}");
+        // A structure a household owns names a household of the residents; Cullet's 43 do (22
+        // stores, and since hearth-1 the 21 home hearths).
+        let stores = |v: &serde_json::Value| v["map"]["params"]["plans"][0]["structures"].as_array().unwrap().iter().filter(|st| st["owner"].is_string()).count();
+        assert_eq!(stores(&serde_json::from_str(text).unwrap()), 43);
+        let owned = |v: &mut serde_json::Value| v["map"]["params"]["plans"][0]["structures"].as_array_mut().unwrap().iter_mut().find(|st| st["owner"].is_string()).unwrap().clone();
+        let first = owned(&mut serde_json::from_str(text).unwrap());
+        let at = |v: &mut serde_json::Value| v["map"]["params"]["plans"][0]["structures"].as_array().unwrap().iter().position(|st| st == &first).unwrap();
+        let e = with(&|v| { let i = at(v); v["map"]["params"]["plans"][0]["structures"][i]["owner"] = "household:nobody".into(); }).unwrap_err();
+        assert!(e.contains("belongs to \"household:nobody\", which is no household of the seed's residents") && e.contains("tarn"), "{e}");
+        let e = with(&|v| v["towns"][0]["residents"] = serde_json::json!([])).unwrap_err();
+        assert!(e.contains("which is no household") && e.contains("the households are none"), "{e}");
+    }
+
+    /// Every tracked seed with its own laws (`laws_file`) has them in force once its world is
+    /// created, by the path `init` takes: the overlay read in as `build.rs` reads it,
+    /// `floor::check` composing and validating it, `floor::begin` writing the `script` row
+    /// (`installed_source`, for the install and again for the seed's `rules`), and every cache
+    /// compiling that row on the world's day (`common::scripts`), whose `life_years` the tick's
+    /// deaths of old age read (`common::life_of`). The seed's people are seeded at their own
+    /// ages, short of old age under those laws. Cullet's people die of old age from 75 of 90, so
+    /// its eldest (Halvard Dunmore, 70) live; under the shipped tables (from 60.9) they died 6 s
+    /// after creation when a harness installed the plain script over the world's (fix-laws).
+    #[test]
+    fn a_seeds_laws_are_in_force_after_init() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../seeds");
+        let bits = |l: living_rules::life::Life| [l.years, l.infant, l.child, l.elder, l.old_age, l.gestation, l.interbirth].map(f32::to_bits);
+        let mut with_laws = Vec::new();
+        let mut paths: Vec<_> = std::fs::read_dir(&dir).unwrap().map(|e| e.unwrap().path()).filter(|p| p.extension().is_some_and(|x| x == "json")).collect();
+        paths.sort();
+        for path in paths {
+            let Ok(mut v) = serde_json::from_str::<serde_json::Value>(&std::fs::read_to_string(&path).unwrap()) else { continue };
+            let Some(file) = v.get("laws_file").and_then(|f| f.as_str()).map(String::from) else { continue };
+            let name = path.file_stem().unwrap().to_string_lossy().to_string();
+            if v.get("laws").and_then(|l| l.as_str()).is_none_or(|l| l.trim().is_empty()) {
+                v["laws"] = std::fs::read_to_string(dir.join(&file)).unwrap().into();
+            }
+            let s: Seed = serde_json::from_value(v).unwrap_or_else(|e| panic!("{name}: {e}"));
+            let composed = crate::floor::check(&s).unwrap_or_else(|e| panic!("{name}: {e}")).unwrap_or_else(|| panic!("{name}: its laws are not composed"));
+            let rules: Vec<(String, serde_json::Value)> = s.rules.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+            let row = crate::installed_source(&crate::installed_source(&composed, &rules), &rules);
+            assert!(row.contains("// ---- floor overlay ----") && row.contains(s.laws.trim()), "{name}: the installed script lost its overlay");
+            let day_ms = s.day_ms().unwrap();
+            let sc = living_rules::script::Scripts::with_day(&row, day_ms).unwrap_or_else(|e| panic!("{name}: {e}"));
+            // Each of its functions replaces the shipped one of that name (kept as `base_NAME`).
+            let defines = |src: &str, f: &str| src.lines().any(|l| l.trim_start().trim_start_matches("private ").starts_with(&format!("fn {f}(")));
+            for f in living_rules::floors::overlay_functions(&s.laws).unwrap() {
+                if defines(SKILLS, &f) {
+                    assert!(defines(&row, &format!("base_{f}")), "{name}: `{f}` of its laws does not replace the shipped one");
+                }
+            }
+            let pace = living_rules::life::Pace { year_days: s.year_days as f32, pace: s.life_pace };
+            let life = sc.life("person", common::species_life("person"));
+            if sc.has("life_years") {
+                assert_ne!(bits(life), bits(common::species_life("person")), "{name}: its `life_years` does not reach the life tables");
+            }
+            for r in s.towns.iter().chain(s.villages.iter()).flat_map(|t| t.residents.iter()) {
+                let days = life.seeded_age(r.age, pace);
+                assert_eq!(days, living_rules::life::days_of_years(r.age, pace), "{name}: {} ({} years) is past old age under its laws", r.name, r.age);
+                assert!(life.fraction(days, pace) < life.old_age, "{name}: {} would die of old age at creation", r.name);
+            }
+            with_laws.push((name, life, pace, s));
+        }
+        let (_, life, pace, s) = with_laws.iter().find(|(n, ..)| n == "cullet").expect("cullet has its own laws");
+        assert!((life.years * life.old_age - 75.0).abs() < 1e-3 && (life.years - 90.0).abs() < 1e-3, "Cullet's old age: {life:?}");
+        let halvard = s.towns.iter().flat_map(|t| t.residents.iter()).find(|r| r.name == "Halvard Dunmore").unwrap();
+        assert!(halvard.age >= 70.0);
+        let shipped = common::species_life("person");
+        assert!(shipped.fraction(living_rules::life::days_of_years(halvard.age, *pace), *pace) >= shipped.old_age, "the shipped tables would let him live: the test no longer tells them apart");
+    }
+
     #[test]
     fn older_seeds_still_parse() {
         for (name, text) in [
@@ -2052,7 +2613,7 @@ mod tests {
         assert_eq!(pim.inventory.get("berries"), Some(&2));
         assert_eq!(town.residents[0].inventory.get("berries"), Some(&4), "four berries by default");
         // Ages in years give the right life stage at this seed's pace.
-        let (life, pace) = (common::life_of("person"), living_rules::life::Pace { year_days: s.year_days as f32, pace: s.life_pace });
+        let (life, pace) = (common::species_life("person"), living_rules::life::Pace { year_days: s.year_days as f32, pace: s.life_pace });
         let stage = |n: &str| {
             let r = town.residents.iter().chain(village.residents.iter()).find(|r| r.name == n).unwrap();
             life.stage(life.seeded_age(r.age, pace), pace)

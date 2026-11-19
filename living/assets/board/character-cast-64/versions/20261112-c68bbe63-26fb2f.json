@@ -1,0 +1,55 @@
+{
+ "schema": 1,
+ "family": "character:cast-64",
+ "id": "20261112-c68bbe63-26fb2f",
+ "published": "2026-11-12T07:23:45+01:00",
+ "imported": "2026-11-12T07:23:45+01:00",
+ "track": "char-4",
+ "maker": "Claude Fable 5.2",
+ "note": "Cullet's cast built again whole with long hair close to the back, short hair as one sheet and hair shaded as one shape.",
+ "source": {
+  "commit": "c68bbe632ed65d1be4dccdf2ff97851cf1e22a29",
+  "branch": "char-4",
+  "dirty": false,
+  "generator": "living/tools/blender/person.py",
+  "generator_sha256": "e6a2613e1cf148bd98f2c9cb7f3c16665bce6995b9c8aa7d12937ad0c58ac6a3",
+  "generator_state": "committed",
+  "seed": "cullet",
+  "params": {
+   "cast": "living/seeds/cullet.json",
+   "people": 64
+  }
+ },
+ "renderer": {
+  "method": "asset-view",
+  "commit": "",
+  "key": "asset-view",
+  "preset": "",
+  "note": "town.py: each person alone through the asset view; lineup from the front at 28 degrees down at one scale; faces close, on a frame of the idle clip, eyes held open by the photo tool; faces-before-after: twelve of them from the version before above this one; game is each person at 22 m through the game camera, pixels enlarged three times; tiled"
+ },
+ "preset": "",
+ "media": "media/character-cast-64/20261112-c68bbe63-26fb2f",
+ "members": [
+  {
+   "name": "cast",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "34253ea4d6d573ff5c3739f10ee34ce99f3961af4899f3d9877d87154736f829",
+   "shots": [
+    "faces",
+    "faces-24",
+    "faces-before-after",
+    "game",
+    "lineup"
+   ],
+   "clips": []
+  }
+ ],
+ "delivered": [
+  {
+   "title": "town check page and town.json (who is who)",
+   "path": "delivered/index.html",
+   "from": ".local/town13/index.html"
+  }
+ ]
+}

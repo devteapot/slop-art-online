@@ -47,7 +47,7 @@
      "knows": [
       "fishing",
       "fire",
-      "mending",
+      "wound_tending",
       "smoking"
      ],
      "parents": [
@@ -69,7 +69,7 @@
      "role": "Osric's niece; fishes the shallows from a small boat and mends the village nets",
      "knows": [
       "fishing",
-      "mending",
+      "wound_tending",
       "fire",
       "basketry"
      ],
@@ -88,7 +88,7 @@
      "occupation": "child",
      "role": "Perrin's cousin, raised in the Dunn house; mends nets and plays on the shingle",
      "knows": [
-      "mending"
+      "wound_tending"
      ],
      "parents": [],
      "ties": [
@@ -176,7 +176,7 @@
       "fishing",
       "smoking",
       "fire",
-      "mending"
+      "wound_tending"
      ],
      "parents": [],
      "ties": [
@@ -236,7 +236,7 @@
      "role": "old fisher who no longer goes out; mends nets and keeps the village's tally of the debt to Brackenford",
      "knows": [
       "fishing",
-      "mending",
+      "wound_tending",
       "basketry",
       "fire"
      ],

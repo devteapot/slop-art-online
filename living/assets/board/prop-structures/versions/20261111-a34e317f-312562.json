@@ -1,0 +1,1121 @@
+{
+ "schema": 1,
+ "family": "prop:structures",
+ "id": "20261111-a34e317f-312562",
+ "published": "2026-11-11T21:15:13+01:00",
+ "track": "kit-2",
+ "maker": "Claude Fable 5.2",
+ "note": "kit-2 pass 2: lit windows and parapets from the plan; no two faces in one plane (the flicker of the owner's walk); every lot's eye-height cells. New: Cullet's models for the engine's structures (envs/cullet/<kind>/)",
+ "source": {
+  "commit": "a34e317f2de27101929fa770388a37f1d1b6d62e",
+  "branch": "kit-2",
+  "dirty": false,
+  "generator": "living/tools/blender/cullet.py",
+  "generator_sha256": "2a1d98999573e7816cef047ccc6c3aab5e04b0911d1071f1054acf8f7a29a287",
+  "generator_state": "committed",
+  "seed": "83",
+  "params": {
+   "plan": "living/seeds/worlds/cullet/plan.json"
+  }
+ },
+ "renderer": {
+  "method": "asset-view",
+  "commit": "a34e317f2de27101929fa770388a37f1d1b6d62e",
+  "dirty": false,
+  "key": "bin:cbdab2a8",
+  "env": "cullet",
+  "hours": {
+   "day": 15.0,
+   "night": 22.0
+  },
+  "weather": "clear",
+  "day_curve": true,
+  "preset": "2947e3c0",
+  "binary": "/home/carlid/.t3/worktrees/slop-art-online/t3-2190f8f1-741aca404e5ab819/.local/kit2-target/release/living-game",
+  "commit_assumed": "a34e317f2de27101929fa770388a37f1d1b6d62e",
+  "repo": "/home/carlid/.t3/worktrees/slop-art-online/t3-2190f8f1-741aca404e5ab819"
+ },
+ "preset": "prop",
+ "media": "media/prop-structures/20261111-a34e317f-312562",
+ "members": [
+  {
+   "name": "sign",
+   "role": "subject",
+   "token_kind": "file",
+   "source_path": ".local/kit-2/board/sign/sign.glb",
+   "sha256": "c25e1d6eb098c76c1812c9d0264069e3462476a4fbd90cad556355064114f5fb",
+   "stats": {
+    "file": "sign.glb",
+    "sha256": "c25e1d6eb098c76c1812c9d0264069e3462476a4fbd90cad556355064114f5fb",
+    "bytes": 14144,
+    "triangles": 192,
+    "vertices": 370,
+    "parts": {
+     "sign": 192
+    },
+    "nodes": 1,
+    "bones": 0,
+    "spring_bones": 0,
+    "materials": [
+     "Body"
+    ],
+    "textures": 0,
+    "texture_bytes": 0,
+    "morph_targets": 0,
+    "spring_groups": 0,
+    "vertex_colours": true,
+    "clips": [],
+    "glow": false,
+    "glow_triangles": 0,
+    "palette": [
+     {
+      "hex": "#211f1e",
+      "share": 0.2537
+     },
+     {
+      "hex": "#78756b",
+      "share": 0.2047
+     },
+     {
+      "hex": "#c4c2b6",
+      "share": 0.1528
+     },
+     {
+      "hex": "#606569",
+      "share": 0.1155
+     },
+     {
+      "hex": "#393844",
+      "share": 0.078
+     },
+     {
+      "hex": "#47444e",
+      "share": 0.0761
+     },
+     {
+      "hex": "#55382c",
+      "share": 0.0608
+     },
+     {
+      "hex": "#9fcec9",
+      "share": 0.0285
+     },
+     {
+      "hex": "#8e9ba1",
+      "share": 0.0095
+     },
+     {
+      "hex": "#366c4b",
+      "share": 0.0095
+     },
+     {
+      "hex": "#c87e28",
+      "share": 0.0095
+     },
+     {
+      "hex": "#2b2b30",
+      "share": 0.0013
+     }
+    ]
+   },
+   "file": "files/sign.glb",
+   "report": {
+    "file": "sign/sign.glb",
+    "what": "structure",
+    "kind": "sign",
+    "size_m": [
+     0.5,
+     1.2
+    ],
+    "plan_height_m": 2.75,
+    "seed": 58365,
+    "above_floor_m": [
+     [
+      -0.16,
+      -0.43
+     ],
+     [
+      0.16,
+      0.62
+     ]
+    ],
+    "height_m": 2.75,
+    "foundation_m": 0.4,
+    "tris": 192,
+    "materials": {
+     "Body": 192
+    },
+    "surface_tagged_share": 1.0,
+    "palette_share": 1.0,
+    "palette_wear_blend_share": 0.0,
+    "budget_tris": 1500,
+    "hidden_faces_removed": 0,
+    "coplanar_sheets_parted": 0,
+    "doors": [],
+    "sha256": "c25e1d6eb098c76c1812c9d0264069e3462476a4fbd90cad556355064114f5fb",
+    "ridge_m": 2.75,
+    "board_m": [
+     0.72,
+     0.64
+    ]
+   },
+   "shots": [
+    "front",
+    "three-quarter",
+    "side",
+    "back",
+    "close",
+    "game"
+   ],
+   "clips": [],
+   "view": {
+    "size_m": [
+     0.35010308027267456,
+     3.1500000953674316,
+     1.065051555633545
+    ],
+    "triangles": 192,
+    "vertices": 370,
+    "meshes": 1,
+    "materials": [
+     "Body"
+    ],
+    "glow": false,
+    "vertex_colours": true
+   }
+  },
+  {
+   "name": "storage",
+   "role": "subject",
+   "token_kind": "file",
+   "source_path": ".local/kit-2/board/storage/storage.glb",
+   "sha256": "b1547bd5cd9285021baa296c09b47c8e3a8d8fc94eaadf48008169d66f1c0765",
+   "stats": {
+    "file": "storage.glb",
+    "sha256": "b1547bd5cd9285021baa296c09b47c8e3a8d8fc94eaadf48008169d66f1c0765",
+    "bytes": 93284,
+    "triangles": 1426,
+    "vertices": 2611,
+    "parts": {
+     "storage": 1426
+    },
+    "nodes": 1,
+    "bones": 0,
+    "spring_bones": 0,
+    "materials": [
+     "Body"
+    ],
+    "textures": 0,
+    "texture_bytes": 0,
+    "morph_targets": 0,
+    "spring_groups": 0,
+    "vertex_colours": true,
+    "clips": [],
+    "glow": false,
+    "glow_triangles": 0,
+    "palette": [
+     {
+      "hex": "#646060",
+      "share": 0.4787
+     },
+     {
+      "hex": "#363d41",
+      "share": 0.1231
+     },
+     {
+      "hex": "#89837b",
+      "share": 0.1203
+     },
+     {
+      "hex": "#343029",
+      "share": 0.0733
+     },
+     {
+      "hex": "#7d7970",
+      "share": 0.0662
+     },
+     {
+      "hex": "#48443d",
+      "share": 0.0356
+     },
+     {
+      "hex": "#5b3a2a",
+      "share": 0.0298
+     },
+     {
+      "hex": "#716e64",
+      "share": 0.02
+     },
+     {
+      "hex": "#49342d",
+      "share": 0.016
+     },
+     {
+      "hex": "#b1a893",
+      "share": 0.0138
+     },
+     {
+      "hex": "#595550",
+      "share": 0.0137
+     },
+     {
+      "hex": "#bdb49e",
+      "share": 0.0051
+     },
+     {
+      "hex": "#2d2016",
+      "share": 0.0043
+     }
+    ]
+   },
+   "file": "files/storage.glb",
+   "report": {
+    "file": "storage/storage.glb",
+    "what": "structure",
+    "kind": "storage",
+    "size_m": [
+     3.2,
+     2.9
+    ],
+    "plan_height_m": 1.35,
+    "seed": 46182,
+    "above_floor_m": [
+     [
+      -1.145,
+      -1.355
+     ],
+     [
+      1.555,
+      1.258
+     ]
+    ],
+    "height_m": 1.291,
+    "foundation_m": 0.4,
+    "tris": 1426,
+    "materials": {
+     "Body": 1426
+    },
+    "surface_tagged_share": 1.0,
+    "palette_share": 0.7279,
+    "palette_wear_blend_share": 0.2721,
+    "budget_tris": 2500,
+    "hidden_faces_removed": 25,
+    "coplanar_sheets_parted": 60,
+    "doors": [],
+    "sha256": "b1547bd5cd9285021baa296c09b47c8e3a8d8fc94eaadf48008169d66f1c0765",
+    "ridge_m": 1.33
+   },
+   "shots": [
+    "front",
+    "three-quarter",
+    "side",
+    "back",
+    "close",
+    "game"
+   ],
+   "clips": [],
+   "view": {
+    "size_m": [
+     2.699514150619507,
+     1.690560221672058,
+     2.6121411323547363
+    ],
+    "triangles": 1426,
+    "vertices": 2611,
+    "meshes": 1,
+    "materials": [
+     "Body"
+    ],
+    "glow": false,
+    "vertex_colours": true
+   }
+  },
+  {
+   "name": "campfire",
+   "role": "subject",
+   "token_kind": "file",
+   "source_path": ".local/kit-2/board/campfire/campfire.glb",
+   "sha256": "b490f7efacc1609c6c0b61e7d02be4a2001c817ce58c1333177023a3d3210998",
+   "stats": {
+    "file": "campfire.glb",
+    "sha256": "b490f7efacc1609c6c0b61e7d02be4a2001c817ce58c1333177023a3d3210998",
+    "bytes": 41952,
+    "triangles": 614,
+    "vertices": 1126,
+    "parts": {
+     "campfire": 614
+    },
+    "nodes": 1,
+    "bones": 0,
+    "spring_bones": 0,
+    "materials": [
+     "Body",
+     "GlowAmber"
+    ],
+    "textures": 0,
+    "texture_bytes": 0,
+    "morph_targets": 0,
+    "spring_groups": 0,
+    "vertex_colours": true,
+    "clips": [],
+    "glow": true,
+    "glow_triangles": 22,
+    "palette": [
+     {
+      "hex": "#595f62",
+      "share": 0.2839
+     },
+     {
+      "hex": "#42454b",
+      "share": 0.2816
+     },
+     {
+      "hex": "#2b221a",
+      "share": 0.1422
+     },
+     {
+      "hex": "#6a3e29",
+      "share": 0.1351
+     },
+     {
+      "hex": "#57392b",
+      "share": 0.1001
+     },
+     {
+      "hex": "#c78029",
+      "share": 0.0572
+     }
+    ]
+   },
+   "file": "files/campfire.glb",
+   "report": {
+    "file": "campfire/campfire.glb",
+    "what": "structure",
+    "kind": "campfire",
+    "size_m": [
+     1.0,
+     1.0
+    ],
+    "plan_height_m": 0.7,
+    "seed": 27516,
+    "above_floor_m": [
+     [
+      -0.45,
+      -0.468
+     ],
+     [
+      0.459,
+      0.431
+     ]
+    ],
+    "height_m": 0.665,
+    "foundation_m": 0.4,
+    "tris": 614,
+    "materials": {
+     "Body": 592,
+     "GlowAmber": 22
+    },
+    "surface_tagged_share": 1.0,
+    "palette_share": 0.7329,
+    "palette_wear_blend_share": 0.2671,
+    "budget_tris": 1500,
+    "hidden_faces_removed": 0,
+    "coplanar_sheets_parted": 1,
+    "doors": [],
+    "sha256": "b490f7efacc1609c6c0b61e7d02be4a2001c817ce58c1333177023a3d3210998",
+    "ridge_m": 0.68,
+    "glow": "GlowAmber"
+   },
+   "shots": [
+    "front",
+    "three-quarter",
+    "side",
+    "back",
+    "close",
+    "game",
+    "night-three-quarter",
+    "night-game"
+   ],
+   "clips": [],
+   "view": {
+    "size_m": [
+     0.928372859954834,
+     1.065000057220459,
+     0.9359666109085083
+    ],
+    "triangles": 614,
+    "vertices": 1126,
+    "meshes": 2,
+    "materials": [
+     "Body",
+     "GlowAmber"
+    ],
+    "glow": true,
+    "vertex_colours": true
+   }
+  },
+  {
+   "name": "hearth",
+   "role": "subject",
+   "token_kind": "file",
+   "source_path": ".local/kit-2/board/hearth/hearth.glb",
+   "sha256": "01ccd19d3c3a2a54827283f6056265d161f8eb8cccaf3b7d7492ce90160ec85a",
+   "stats": {
+    "file": "hearth.glb",
+    "sha256": "01ccd19d3c3a2a54827283f6056265d161f8eb8cccaf3b7d7492ce90160ec85a",
+    "bytes": 18120,
+    "triangles": 235,
+    "vertices": 453,
+    "parts": {
+     "hearth": 235
+    },
+    "nodes": 1,
+    "bones": 0,
+    "spring_bones": 0,
+    "materials": [
+     "Body",
+     "GlowEmber"
+    ],
+    "textures": 0,
+    "texture_bytes": 0,
+    "morph_targets": 0,
+    "spring_groups": 0,
+    "vertex_colours": true,
+    "clips": [],
+    "glow": true,
+    "glow_triangles": 7,
+    "palette": [
+     {
+      "hex": "#40444a",
+      "share": 0.3489
+     },
+     {
+      "hex": "#565c5f",
+      "share": 0.2669
+     },
+     {
+      "hex": "#51372c",
+      "share": 0.1781
+     },
+     {
+      "hex": "#392d21",
+      "share": 0.0665
+     },
+     {
+      "hex": "#2f2116",
+      "share": 0.0665
+     },
+     {
+      "hex": "#2b2b30",
+      "share": 0.0617
+     },
+     {
+      "hex": "#c78029",
+      "share": 0.0113
+     }
+    ]
+   },
+   "file": "files/hearth.glb",
+   "report": {
+    "file": "hearth/hearth.glb",
+    "what": "structure",
+    "kind": "hearth",
+    "size_m": [
+     1.3,
+     0.8
+    ],
+    "plan_height_m": 0.9,
+    "seed": 83488,
+    "above_floor_m": [
+     [
+      -0.44,
+      -0.34
+     ],
+     [
+      0.64,
+      0.34
+     ]
+    ],
+    "height_m": 0.932,
+    "foundation_m": 0.4,
+    "tris": 235,
+    "materials": {
+     "Body": 228,
+     "GlowEmber": 7
+    },
+    "surface_tagged_share": 1.0,
+    "palette_share": 1.0,
+    "palette_wear_blend_share": 0.0,
+    "budget_tris": 1500,
+    "hidden_faces_removed": 2,
+    "coplanar_sheets_parted": 0,
+    "doors": [],
+    "sha256": "01ccd19d3c3a2a54827283f6056265d161f8eb8cccaf3b7d7492ce90160ec85a",
+    "ridge_m": 0.92,
+    "glow": "GlowEmber"
+   },
+   "shots": [
+    "front",
+    "three-quarter",
+    "side",
+    "back",
+    "close",
+    "game",
+    "night-three-quarter",
+    "night-game"
+   ],
+   "clips": [],
+   "view": {
+    "size_m": [
+     1.0980110168457031,
+     1.3320000171661377,
+     0.6800000071525574
+    ],
+    "triangles": 235,
+    "vertices": 453,
+    "meshes": 2,
+    "materials": [
+     "Body",
+     "GlowEmber"
+    ],
+    "glow": true,
+    "vertex_colours": true
+   }
+  },
+  {
+   "name": "lamp",
+   "role": "subject",
+   "token_kind": "file",
+   "source_path": ".local/kit-2/board/lamp/lamp.glb",
+   "sha256": "84b3d7441e299a51d12a659c79560ccc38d68d79fbd734c80932f595b5a0b36f",
+   "stats": {
+    "file": "lamp.glb",
+    "sha256": "84b3d7441e299a51d12a659c79560ccc38d68d79fbd734c80932f595b5a0b36f",
+    "bytes": 30556,
+    "triangles": 394,
+    "vertices": 812,
+    "parts": {
+     "lamp": 394
+    },
+    "nodes": 1,
+    "bones": 0,
+    "spring_bones": 0,
+    "materials": [
+     "Body",
+     "Glow"
+    ],
+    "textures": 0,
+    "texture_bytes": 0,
+    "morph_targets": 0,
+    "spring_groups": 0,
+    "vertex_colours": true,
+    "clips": [],
+    "glow": true,
+    "glow_triangles": 30,
+    "palette": [
+     {
+      "hex": "#44332d",
+      "share": 0.3126
+     },
+     {
+      "hex": "#2b2b30",
+      "share": 0.229
+     },
+     {
+      "hex": "#44474e",
+      "share": 0.2089
+     },
+     {
+      "hex": "#56595e",
+      "share": 0.1436
+     },
+     {
+      "hex": "#633c2a",
+      "share": 0.023
+     },
+     {
+      "hex": "#89999c",
+      "share": 0.0229
+     },
+     {
+      "hex": "#9dc9c6",
+      "share": 0.022
+     },
+     {
+      "hex": "#c57e28",
+      "share": 0.022
+     },
+     {
+      "hex": "#336b4b",
+      "share": 0.016
+     }
+    ]
+   },
+   "file": "files/lamp.glb",
+   "report": {
+    "file": "lamp/lamp.glb",
+    "what": "structure",
+    "kind": "lamp",
+    "size_m": [
+     0.6,
+     0.6
+    ],
+    "plan_height_m": 3.2,
+    "seed": 40229,
+    "above_floor_m": [
+     [
+      -0.286,
+      -0.241
+     ],
+     [
+      0.286,
+      0.241
+     ]
+    ],
+    "height_m": 3.2,
+    "foundation_m": 0.4,
+    "tris": 394,
+    "materials": {
+     "Body": 364,
+     "Glow": 30
+    },
+    "surface_tagged_share": 1.0,
+    "palette_share": 0.7056,
+    "palette_wear_blend_share": 0.2944,
+    "budget_tris": 1500,
+    "hidden_faces_removed": 1,
+    "coplanar_sheets_parted": 1,
+    "doors": [],
+    "sha256": "84b3d7441e299a51d12a659c79560ccc38d68d79fbd734c80932f595b5a0b36f"
+   },
+   "shots": [
+    "front",
+    "three-quarter",
+    "side",
+    "back",
+    "close",
+    "game",
+    "night-three-quarter",
+    "night-game"
+   ],
+   "clips": [],
+   "view": {
+    "size_m": [
+     0.5715540051460266,
+     3.6000001430511475,
+     0.4811154901981354
+    ],
+    "triangles": 394,
+    "vertices": 812,
+    "meshes": 2,
+    "materials": [
+     "Body",
+     "Glow"
+    ],
+    "glow": true,
+    "vertex_colours": true
+   }
+  },
+  {
+   "name": "furnace",
+   "role": "subject",
+   "token_kind": "file",
+   "source_path": ".local/kit-2/board/furnace/furnace.glb",
+   "sha256": "2cc9d2cdc24e1cdf4a179fa8ccb7af8723226d6817f2c1ee833b86428a331e19",
+   "stats": {
+    "file": "furnace.glb",
+    "sha256": "2cc9d2cdc24e1cdf4a179fa8ccb7af8723226d6817f2c1ee833b86428a331e19",
+    "bytes": 55336,
+    "triangles": 857,
+    "vertices": 1499,
+    "parts": {
+     "furnace": 857
+    },
+    "nodes": 1,
+    "bones": 0,
+    "spring_bones": 0,
+    "materials": [
+     "Body",
+     "GlowEmber"
+    ],
+    "textures": 0,
+    "texture_bytes": 0,
+    "morph_targets": 0,
+    "spring_groups": 0,
+    "vertex_colours": true,
+    "clips": [],
+    "glow": true,
+    "glow_triangles": 2,
+    "palette": [
+     {
+      "hex": "#5d5d5e",
+      "share": 0.3145
+     },
+     {
+      "hex": "#58392b",
+      "share": 0.1873
+     },
+     {
+      "hex": "#3a3d44",
+      "share": 0.1427
+     },
+     {
+      "hex": "#7e7b6e",
+      "share": 0.1268
+     },
+     {
+      "hex": "#32251c",
+      "share": 0.1038
+     },
+     {
+      "hex": "#8b867d",
+      "share": 0.054
+     },
+     {
+      "hex": "#58564c",
+      "share": 0.0418
+     },
+     {
+      "hex": "#6e6960",
+      "share": 0.0266
+     },
+     {
+      "hex": "#c78029",
+      "share": 0.0025
+     }
+    ]
+   },
+   "file": "files/furnace.glb",
+   "report": {
+    "file": "furnace/furnace.glb",
+    "what": "structure",
+    "kind": "furnace",
+    "size_m": [
+     2.8,
+     1.2
+    ],
+    "plan_height_m": 1.5,
+    "seed": 21466,
+    "above_floor_m": [
+     [
+      -0.76,
+      -0.377
+     ],
+     [
+      1.32,
+      0.344
+     ]
+    ],
+    "height_m": 1.452,
+    "foundation_m": 0.4,
+    "tris": 857,
+    "materials": {
+     "Body": 855,
+     "GlowEmber": 2
+    },
+    "surface_tagged_share": 1.0,
+    "palette_share": 0.818,
+    "palette_wear_blend_share": 0.182,
+    "budget_tris": 1500,
+    "hidden_faces_removed": 33,
+    "coplanar_sheets_parted": 21,
+    "doors": [],
+    "sha256": "2cc9d2cdc24e1cdf4a179fa8ccb7af8723226d6817f2c1ee833b86428a331e19",
+    "ridge_m": 1.45,
+    "glow": "GlowEmber"
+   },
+   "shots": [
+    "front",
+    "three-quarter",
+    "side",
+    "back",
+    "close",
+    "game",
+    "night-three-quarter",
+    "night-game"
+   ],
+   "clips": [],
+   "view": {
+    "size_m": [
+     2.1094207763671875,
+     1.8522231578826904,
+     0.7203223705291748
+    ],
+    "triangles": 857,
+    "vertices": 1499,
+    "meshes": 2,
+    "materials": [
+     "Body",
+     "GlowEmber"
+    ],
+    "glow": true,
+    "vertex_colours": true
+   }
+  },
+  {
+   "name": "oven",
+   "role": "subject",
+   "token_kind": "file",
+   "source_path": ".local/kit-2/board/oven/oven.glb",
+   "sha256": "e5d891b961d9b822d45c1e695296876888b44b377d69d86ac455812f7ad9e010",
+   "stats": {
+    "file": "oven.glb",
+    "sha256": "e5d891b961d9b822d45c1e695296876888b44b377d69d86ac455812f7ad9e010",
+    "bytes": 26768,
+    "triangles": 301,
+    "vertices": 711,
+    "parts": {
+     "oven": 301
+    },
+    "nodes": 1,
+    "bones": 0,
+    "spring_bones": 0,
+    "materials": [
+     "Body",
+     "GlowEmber"
+    ],
+    "textures": 0,
+    "texture_bytes": 0,
+    "morph_targets": 0,
+    "spring_groups": 0,
+    "vertex_colours": true,
+    "clips": [],
+    "glow": true,
+    "glow_triangles": 6,
+    "palette": [
+     {
+      "hex": "#5f6367",
+      "share": 0.3626
+     },
+     {
+      "hex": "#3f414b",
+      "share": 0.224
+     },
+     {
+      "hex": "#8b8679",
+      "share": 0.1974
+     },
+     {
+      "hex": "#d0a364",
+      "share": 0.0877
+     },
+     {
+      "hex": "#72716d",
+      "share": 0.0836
+     },
+     {
+      "hex": "#55382b",
+      "share": 0.0325
+     },
+     {
+      "hex": "#c78029",
+      "share": 0.0121
+     }
+    ]
+   },
+   "file": "files/oven.glb",
+   "report": {
+    "file": "oven/oven.glb",
+    "what": "structure",
+    "kind": "oven",
+    "size_m": [
+     1.5,
+     0.8
+    ],
+    "plan_height_m": 1.0,
+    "seed": 97237,
+    "above_floor_m": [
+     [
+      -0.7,
+      -0.29
+     ],
+     [
+      0.84,
+      0.314
+     ]
+    ],
+    "height_m": 0.952,
+    "foundation_m": 0.4,
+    "tris": 301,
+    "materials": {
+     "Body": 295,
+     "GlowEmber": 6
+    },
+    "surface_tagged_share": 1.0,
+    "palette_share": 0.5548,
+    "palette_wear_blend_share": 0.4452,
+    "budget_tris": 1500,
+    "hidden_faces_removed": 0,
+    "coplanar_sheets_parted": 0,
+    "doors": [],
+    "sha256": "e5d891b961d9b822d45c1e695296876888b44b377d69d86ac455812f7ad9e010",
+    "ridge_m": 0.95,
+    "glow": "GlowEmber"
+   },
+   "shots": [
+    "front",
+    "three-quarter",
+    "side",
+    "back",
+    "close",
+    "game",
+    "night-three-quarter",
+    "night-game"
+   ],
+   "clips": [],
+   "view": {
+    "size_m": [
+     1.5399999618530273,
+     1.3517496585845947,
+     0.687637448310852
+    ],
+    "triangles": 301,
+    "vertices": 711,
+    "meshes": 2,
+    "materials": [
+     "Body",
+     "GlowEmber"
+    ],
+    "glow": true,
+    "vertex_colours": true
+   }
+  },
+  {
+   "name": "smokehouse_fire",
+   "role": "subject",
+   "token_kind": "file",
+   "source_path": ".local/kit-2/board/smokehouse/smokehouse.glb",
+   "sha256": "0b1a547752f3211bfe11ca490280d919ba4e4597bc7cd63e2d854f941709a1e8",
+   "stats": {
+    "file": "smokehouse.glb",
+    "sha256": "0b1a547752f3211bfe11ca490280d919ba4e4597bc7cd63e2d854f941709a1e8",
+    "bytes": 27952,
+    "triangles": 384,
+    "vertices": 732,
+    "parts": {
+     "smokehouse": 384
+    },
+    "nodes": 1,
+    "bones": 0,
+    "spring_bones": 0,
+    "materials": [
+     "Body",
+     "GlowEmber"
+    ],
+    "textures": 0,
+    "texture_bytes": 0,
+    "morph_targets": 0,
+    "spring_groups": 0,
+    "vertex_colours": true,
+    "clips": [],
+    "glow": true,
+    "glow_triangles": 6,
+    "palette": [
+     {
+      "hex": "#5e6466",
+      "share": 0.3206
+     },
+     {
+      "hex": "#3b3f47",
+      "share": 0.2382
+     },
+     {
+      "hex": "#837e73",
+      "share": 0.1871
+     },
+     {
+      "hex": "#815e49",
+      "share": 0.1425
+     },
+     {
+      "hex": "#55382b",
+      "share": 0.0656
+     },
+     {
+      "hex": "#785841",
+      "share": 0.0142
+     },
+     {
+      "hex": "#4d4843",
+      "share": 0.0142
+     },
+     {
+      "hex": "#c78029",
+      "share": 0.0124
+     },
+     {
+      "hex": "#5c5552",
+      "share": 0.0052
+     }
+    ]
+   },
+   "file": "files/smokehouse_fire.glb",
+   "report": {
+    "file": "smokehouse/smokehouse.glb",
+    "what": "structure",
+    "kind": "smokehouse",
+    "size_m": [
+     1.6,
+     0.8
+    ],
+    "plan_height_m": 1.7,
+    "seed": 45644,
+    "above_floor_m": [
+     [
+      -0.727,
+      -0.253
+     ],
+     [
+      0.8,
+      0.253
+     ]
+    ],
+    "height_m": 1.603,
+    "foundation_m": 0.4,
+    "tris": 384,
+    "materials": {
+     "Body": 378,
+     "GlowEmber": 6
+    },
+    "surface_tagged_share": 1.0,
+    "palette_share": 0.7031,
+    "palette_wear_blend_share": 0.2969,
+    "budget_tris": 1500,
+    "hidden_faces_removed": 0,
+    "coplanar_sheets_parted": 19,
+    "doors": [],
+    "sha256": "0b1a547752f3211bfe11ca490280d919ba4e4597bc7cd63e2d854f941709a1e8",
+    "ridge_m": 1.6,
+    "glow": "GlowEmber"
+   },
+   "shots": [
+    "front",
+    "three-quarter",
+    "side",
+    "back",
+    "close",
+    "game",
+    "night-three-quarter",
+    "night-game"
+   ],
+   "clips": [],
+   "view": {
+    "size_m": [
+     1.5616710186004639,
+     2.0034735202789307,
+     0.5760984420776367
+    ],
+    "triangles": 384,
+    "vertices": 732,
+    "meshes": 2,
+    "materials": [
+     "Body",
+     "GlowEmber"
+    ],
+    "glow": true,
+    "vertex_colours": true
+   }
+  }
+ ],
+ "delivered": []
+}

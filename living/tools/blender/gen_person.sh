@@ -1,0 +1,180 @@
+#!/usr/bin/env bash
+# Generate people with the character generator (living/tools/blender/person.py, docs/CHARACTERS.md)
+# and run them through the steps every character base goes through (as gen_anim.sh does for the
+# VRoid bases): animate.py's clip library, merge_primitives.py, face_normals.py.
+# Output is git-ignored: lookdev/own-<name>.glb with <name>.params.json (the person's full
+# parameters and the game recipe's height and proportions) and <name>.atlas.png (the painted face)
+# beside it, and lookdev/anim/own-<name>.{glb,clips.json,face.png}, which is what the game loads.
+# Both copies are finished the same way (shading data, the person's identity on the bones); the
+# one under anim/ has the clips.
+# Usage: living/tools/blender/gen_person.sh [PERSON ...]     (default: the presets)
+#   --outfits           rebuild the shared outfit pieces and stamp their wear metadata
+#   PERSON is [NAME=]SPEC. SPEC is a preset (man, woman, elder, youth, boy, girl, heavy), `<seed>:<kind>` (kind: man,
+#   woman, elder_man, elder_woman, boy, girl), a seed alone, or a parameter file (*.json). NAME
+#   defaults to the spec (a file's own name).
+#   PERSON_ARGS=<args>  more arguments for person.py (e.g. "--set age=70 --set beard.style=full")
+#   LOD=<list>          which models to make, comma-separated (default near): `near` the full model;
+#                       `far` the far model (about 6,000 triangles, for beyond 10 m) as a character
+#                       file of its own, lookdev/far/own-<name>.glb and lookdev/far/anim/…, with the
+#                       same clips; `both` one file with the two on one skeleton, the far model's
+#                       meshes named Far* (for a client that switches them by distance; today's
+#                       client would draw both), as lookdev/lod/own-<name>.glb and lookdev/lod/anim/…
+#   CLIPS=none          bake no clips into the files: a person's clips then come from the one
+#                       shared file (lookdev/anim/own-clips.glb, share.py clips), as the client
+#                       reads them since crowd-1. The default still bakes the library into each
+#                       file, for a client or a tool that reads a file's own clips
+#   MORPHS=client       keep only the expressions the game drives (the blink and the open mouth);
+#                       the default keeps all fifteen
+#   SHADOWS=ellipsoid   keep face_normals.py's ellipsoid normals and shadow map on a typed head,
+#                       where the default is the type's designed shadows (face_shadow.py)
+#   IDENTITY=bake       build a person's identity values into the vertices (person.py --bake).
+#                       The default leaves the type's mesh as it is and moves the identity bones
+#                       in the file (compose.py), which is what the client does to a type's file
+#   ANIMATE=<file>      the animate.py that bakes the clips (default: this folder's), to bake a
+#                       set with an earlier one for a comparison (docs/CHARACTERS.md, "Motions on
+#                       generated people")
+#   KIMODO_DIR=<dir>    the library's generated NPZs (default .local/kimodo/library, the
+#                       library's home; .local/kimodo/outputs/library only where there is no
+#                       home). The log says which was used, and names every take the bake
+#                       reads that it lacks
+#   ONLY=<clips>        comma-separated library entries (default: the whole library, clips.json);
+#                       `present` takes every entry whose picked take is in KIMODO_DIR, for a
+#                       machine whose copy of the library is behind clips.json
+set -euo pipefail
+cd "$(dirname "$0")/../../.."
+if [[ "${1:-}" == --outfits ]]; then
+  exec living/tools/blender/gen_styles.sh outfit
+fi
+src=living/game/assets/lookdev
+blender=${BLENDER:-blender}
+animate=${ANIMATE:-living/tools/blender/animate.py}
+# The clip library: its home, `.local/kimodo/library`, and only where there is none the older
+# copy under `outputs/` (a stale copy there once gave a clip file with a third of the clips and
+# none for backing, strafing or turning). KIMODO_DIR names another.
+if [ -n "${KIMODO_DIR:-}" ]; then kimodo=$KIMODO_DIR
+elif [ -d .local/kimodo/library ]; then kimodo=.local/kimodo/library
+else kimodo=.local/kimodo/outputs/library; fi
+only=${ONLY:-}
+clips_baked=1
+[ "${CLIPS:-library}" = none ] && clips_baked=0
+if [ "$clips_baked" = 1 ]; then
+  echo "gen_person: the clip library is $kimodo" >&2
+  # The takes the bake reads and the library does not hold, by name. A warning: a machine may
+  # hold a part of the library. The bake reads one take an entry, the picked one (`pick`, a
+  # seed), and any shared neutral or ground seat pose; an entry's other seeds are the candidates it was picked
+  # from, kept for review, and a library may hold only the picks. They are counted, not named.
+  present=$(python3 - "$kimodo" "$only" <<'PY'
+import json, os, sys
+d, only = sys.argv[1], sys.argv[2]
+have = set(os.listdir(d)) if os.path.isdir(d) else set()
+lib = json.load(open("living/tools/blender/clips.json"))
+clips = [c for c in lib["clips"] if c.get("kind") != "pose"]
+wanted = None if only in ("", "present") else set(only.split(","))
+if lib.get("neutral"):
+    name, seed = lib["neutral"].split("@")[0].split("#")
+    if f"{name}_s{int(seed)}.npz" not in have:
+        print(f"gen_person: warning: the neutral pose's take {name}_s{int(seed)}.npz is missing from {d}: no clip can be baked", file=sys.stderr)
+lost, spare = [], 0
+present = []
+for c in clips:
+    if wanted is not None and c["name"] not in wanted:
+        continue
+    if "keyed" in c or "overlay" in c:
+        present.append(c["name"])
+        continue
+    required = [f"{c['name']}_s{c['pick']}.npz"]
+    if "ground_seat" in c:
+        name, seed = c["ground_seat"].split("@")[0].split("#")
+        required.append(f"{name}_s{seed}.npz")
+    missing = [path for path in required if path not in have]
+    if missing:
+        lost.append(c["name"])
+        print(f"gen_person: warning: {c['name']}: missing {', '.join(missing)} from {d}" + ("; the entry is not baked (ONLY=present)" if only == "present" else ""), file=sys.stderr)
+    else:
+        present.append(c["name"])
+    spare += sum(f"{c['name']}_s{s}.npz" not in have for s in c.get("seeds", []) if s != c["pick"])
+n = len(clips) if wanted is None else sum(c["name"] in wanted for c in clips)
+print(f"gen_person: {len(lost)} of {n} entries have their take missing from {d}" + (": " + ", ".join(lost) if lost else "") + f"; {spare} candidate takes that were not picked are not there either (the bake does not read them)", file=sys.stderr)
+print(",".join(present))
+PY
+)
+fi
+if [ "$clips_baked" = 1 ] && [ "$only" = present ]; then
+  only=$present
+  echo "gen_person: baking the $(echo "$only" | tr ',' '\n' | wc -l) library entries whose take is in $kimodo" >&2
+fi
+people=("$@")
+[ ${#people[@]} -gt 0 ] || people=(man woman elder youth boy girl heavy)
+mkdir -p "$src/anim"
+IFS=, read -r -a lods <<< "${LOD:-near}"
+for p in "${people[@]}"; do
+  spec=${p#*=}
+  case "$spec" in
+    *.json) arg=(--params "$spec"); name=$(basename "$spec" .json) ;;
+    *[!0-9]*) arg=(--variant "$spec"); name=${spec//:/-} ;;
+    *) arg=(--seed "$spec"); name=$spec ;;
+  esac
+  [ "$p" = "$spec" ] || name=${p%%=*}
+  name=own-$name
+  log=$(mktemp)
+  for lod in "${lods[@]}"; do
+    case "$lod" in near) dir=$src ;; far) dir=$src/far ;; both) dir=$src/lod ;; *) echo "gen_person: LOD: $lod is not near, far or both" >&2; exit 1 ;; esac
+    mkdir -p "$dir/anim"
+    # shellcheck disable=SC2086
+    if ! "$blender" -b --python-exit-code 1 -P living/tools/blender/person.py -- "${arg[@]}" ${PERSON_ARGS:-} --lod "$lod" --morphs "${MORPHS:-all}" $([ "${IDENTITY:-bones}" = bake ] && echo --bake) --out "$dir/$name.glb" > "$log" 2>&1; then
+      grep -v OpenColorIO "$log" | tail -30; rm -f "$log"; exit 1
+    fi
+    grep -E '^PERSON' "$log" || true
+    if [ "${CLIPS:-library}" = none ]; then
+      cp "$dir/$name.glb" "$dir/anim/$name.glb"
+      rm -f "$dir/anim/$name.clips.json"
+    else
+      family_args=()
+      if [[ "$name" = own-clips && ( -z "$only" || ",$only," =~ ,(sit_ground|sit_ground_down|stand_up_ground), ) ]]; then
+        seat_dir=$(mktemp -d)
+        trap 'rm -rf -- "$seat_dir"' EXIT
+        if ! "$blender" -b --python-exit-code 1 -P living/tools/blender/person.py -- --variant piece:trousers-f \
+          --parts keep --keep Trousers,Boots --lod near --out "$seat_dir/contact.glb" > "$log" 2>&1; then
+          tail -30 "$log"; exit 1
+        fi
+        family_args=(--female-seat-mesh "$seat_dir/contact.glb")
+      fi
+      if ! "$blender" -b --python-exit-code 1 -P "$animate" -- --in "$dir/$name.glb" --out "$dir/anim/$name.glb" \
+        --library living/tools/blender/clips.json --summary "$dir/anim/$name.clips.json" --kimodo-dir "$kimodo" "${family_args[@]}" ${only:+--only "$only"} > "$log" 2>&1; then
+        grep -v "OpenColorIO\|^ANIM" "$log" | tail -30; rm -f "$log"; exit 1
+      fi
+      if (( ${#family_args[@]} )); then rm -rf -- "$seat_dir"; trap - EXIT; fi
+      grep -E '^(SKELETON|GRAFT|SUMMARY)' "$log" | cut -c1-220 || true
+    fi
+    # The copy the game draws, and then the builder's own copy beside it, are finished the same
+    # way: shown by itself, an unfinished file shades with a straight split down the face and
+    # has the type's face and not the person's.
+    for f in "$dir/anim/$name.glb" "$dir/$name.glb"; do
+      python3 living/tools/merge_primitives.py "$f" "$f.tmp" && mv "$f.tmp" "$f"
+      python3 living/tools/face_normals.py "$f" "$f.tmp" --png "${f%.glb}.face.png" && mv "$f.tmp" "$f"
+      # The strand texture is the same for everyone: every file names the one copy (share.py).
+      [ -f "$src/strands.png" ] || cp "$dir/strands.png" "$src/strands.png"
+      python3 living/tools/characters/share.py strands --shared "$src/strands.png" "$f" > /dev/null
+      # A face type's head takes its designed shadows: the planar proxy's normals and the type's
+      # drawn threshold map (face_shadow.py), in place of the ellipsoid's. SHADOWS=ellipsoid keeps
+      # face_normals.py's, to compare.
+      if [ "${SHADOWS:-designed}" = designed ]; then
+        python3 living/tools/characters/face_shadow.py --if-typed "$f" --png "${f%.glb}.face.png" > /dev/null
+      fi
+      # One smoothed direction a point for the outline, written once here (outline_normals.py).
+      python3 living/tools/characters/outline_normals.py "$f" > /dev/null
+      # A person of a face type: the type's mesh with its identity bones moved, as the client
+      # composes one (compose.py). Last, so the designed normals are the type's own.
+      if [ "${IDENTITY:-bones}" != bake ] && grep -q '"identity"' "$dir/$name.params.json"; then
+        python3 living/tools/characters/compose.py "$f" "$f" --params "$dir/$name.params.json"
+      fi
+    done
+    # The shared clip file (`clips=<preset>`) is read for its clips alone: its skeleton, its
+    # clips and the figure's bounds stay, and the person's meshes and pictures go
+    # (share.py clipfile). The builder's own copy beside it stays a whole person.
+    if [ "$name" = own-clips ]; then
+      python3 living/tools/characters/share.py clipfile "$dir/anim/$name.glb"
+    fi
+  done
+  rm -f "$log"
+done

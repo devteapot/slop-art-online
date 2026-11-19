@@ -12,6 +12,10 @@ pub struct MotionSeen {
     pub id: u64,
     pub viewer: __sdk::Identity,
     pub motion: Motion,
+    pub face_off: f32,
+    pub face_turn: f32,
+    pub face_turn_s: f32,
+    pub running: bool,
 }
 
 impl __sdk::InModule for MotionSeen {
@@ -25,6 +29,10 @@ pub struct MotionSeenCols {
     pub id: __sdk::__query_builder::Col<MotionSeen, u64>,
     pub viewer: __sdk::__query_builder::Col<MotionSeen, __sdk::Identity>,
     pub motion: __sdk::__query_builder::Col<MotionSeen, Motion>,
+    pub face_off: __sdk::__query_builder::Col<MotionSeen, f32>,
+    pub face_turn: __sdk::__query_builder::Col<MotionSeen, f32>,
+    pub face_turn_s: __sdk::__query_builder::Col<MotionSeen, f32>,
+    pub running: __sdk::__query_builder::Col<MotionSeen, bool>,
 }
 
 impl __sdk::__query_builder::HasCols for MotionSeen {
@@ -34,6 +42,10 @@ impl __sdk::__query_builder::HasCols for MotionSeen {
             id: __sdk::__query_builder::Col::new(table_name, "id"),
             viewer: __sdk::__query_builder::Col::new(table_name, "viewer"),
             motion: __sdk::__query_builder::Col::new(table_name, "motion"),
+            face_off: __sdk::__query_builder::Col::new(table_name, "face_off"),
+            face_turn: __sdk::__query_builder::Col::new(table_name, "face_turn"),
+            face_turn_s: __sdk::__query_builder::Col::new(table_name, "face_turn_s"),
+            running: __sdk::__query_builder::Col::new(table_name, "running"),
         }
     }
 }

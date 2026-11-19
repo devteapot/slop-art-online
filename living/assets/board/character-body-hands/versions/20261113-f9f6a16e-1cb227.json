@@ -1,0 +1,81 @@
+{
+ "schema": 1,
+ "family": "character:body-hands",
+ "id": "20261113-f9f6a16e-1cb227",
+ "published": "2026-11-13T02:27:56+01:00",
+ "imported": "2026-11-13T02:27:56+01:00",
+ "track": "char-4",
+ "maker": "Claude Fable 5.2",
+ "note": "Hands rebuilt from the reference's shares: fan 11 degrees (ref 9), slope 7 (9.3), middle finger 0.56 of the hand (0.57), thumb 0.64 from 0.03 up the palm (0.65, 0.02); 4,264 triangles and 16 bones a hand as before. Size unchanged (a man's 22.2 cm, 0.88 of a head; a woman's 0.66), so no line changes.",
+ "source": {
+  "commit": "f9f6a16e2b8bf51cf0f70834c795572ff83649f3",
+  "branch": "char-4-hands",
+  "dirty": false,
+  "generator": "living/tools/blender/person.py",
+  "generator_sha256": "cad11ed06d89403b4170b6fb1e182d5cd2f806e27f642ad4aedc60eb5a0c7636",
+  "generator_state": "committed",
+  "params": {}
+ },
+ "renderer": {
+  "method": "asset-view",
+  "commit": "",
+  "key": "asset-view",
+  "preset": "",
+  "note": "the man and woman presets and the reference through recipes; close: the hand hanging from both sides and the front, talk_explain twice, wave, point, walk, gather; full: front, three-quarter, side, back, the game camera, idle and walk frames; outline: the measured hand over the reference's (reference/hand.py); man-hand-size: full figure, wave, point, talk_explain and the hanging hand for a man at 22.2 cm, a man at 20 cm (a board-only variant, in no shared file) and the reference"
+ },
+ "preset": "",
+ "media": "media/character-body-hands/20261113-f9f6a16e-1cb227",
+ "members": [
+  {
+   "name": "after",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "0b9d00cb9a7c41d81d3cb95d16ee6f4a51a39522ed5e4dc86ead442c4e89488d",
+   "shots": [
+    "close-man",
+    "close-woman",
+    "full-man",
+    "full-woman",
+    "man-hand-size",
+    "outline"
+   ],
+   "clips": []
+  },
+  {
+   "name": "before",
+   "role": "control",
+   "token_kind": "import",
+   "sha256": "9867e221cacb8f15275c91a4f203407770f9aa98d1886e308f0a8df41cbece16",
+   "shots": [
+    "close-man",
+    "close-woman",
+    "full-man",
+    "full-woman",
+    "outline"
+   ],
+   "clips": []
+  },
+  {
+   "name": "vroid",
+   "role": "control",
+   "token_kind": "import",
+   "sha256": "f84869a3c86f47ab763ea54b7243a1fb646f2cf4f48af4bf68f7976fbbd31def",
+   "shots": [
+    "close-woman",
+    "full-woman"
+   ],
+   "clips": []
+  },
+  {
+   "name": "blue-protocol",
+   "role": "control",
+   "token_kind": "import",
+   "sha256": "a18001749e294e05c27d7f27cb0829defdb70188f313a77cf0cf88af8ed5dae2",
+   "shots": [
+    "full-woman"
+   ],
+   "clips": []
+  }
+ ],
+ "delivered": []
+}

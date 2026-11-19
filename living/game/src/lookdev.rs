@@ -10,8 +10,6 @@ use crate::style::{outline, Kind, Outlined, Style, Toon};
 use crate::world::{rgb, MeshBuf, Palette};
 use bevy::prelude::*;
 use bevy::render::view::screenshot::{save_to_disk, Screenshot};
-use bevy::world_serialization::WorldAssetRoot;
-use bevy_mod_outline::OutlineMeshExt;
 use std::collections::{HashMap, HashSet};
 
 pub fn enabled() -> bool {
@@ -73,6 +71,62 @@ pub struct Fitted {
     pub center: Vec3,
 }
 
+/// On a model's root: its glow (lit panes, a furnace's mouth, a lamp's glass) is people's light,
+/// damped by daylight by the world's `daylight` law ([`night_glow`]): it shows at dusk and by
+/// night and is out by day, so a lit window is not paler than its neighbours at noon. Lots and
+/// a kit's fixtures carry it; glowing plants and crystals shine by day too.
+#[derive(Component)]
+pub struct NightGlow;
+
+/// On a model's root: a fire that is out (`world::things`): its glowing materials don't glow.
+#[derive(Component)]
+pub struct Unlit;
+
+/// The toon materials of [`NightGlow`] models that glow, with their glow as authored, and the
+/// daylight share last applied to them.
+#[derive(Resource, Default)]
+pub struct NightGlows {
+    mats: HashMap<AssetId<Toon>, LinearRgba>,
+    applied: Option<f32>,
+}
+
+/// How dark it is at an hour (0 day to 1 night, in steps of 0.05): the world's `daylight` law
+/// when connected (`verbs::Rules`), else the shipped script's (look-dev), read once per minute
+/// of the day.
+fn darkness(rules: Option<&crate::verbs::Rules>, hour: f32) -> f32 {
+    if let Some(sc) = rules.and_then(|r| r.scripts.as_ref()) {
+        return sc.dark(hour);
+    }
+    static SHIPPED: std::sync::OnceLock<Vec<f32>> = std::sync::OnceLock::new();
+    let day = SHIPPED.get_or_init(|| match living_rules::script::Scripts::new(include_str!("../../scripts/skills.rhai")) {
+        Ok(sc) => (0..24 * 60).map(|m| sc.dark(m as f32 / 60.0)).collect(),
+        Err(e) => {
+            warn!("night glow: the shipped script does not compile ({e}); glow stays as authored");
+            Vec::new()
+        }
+    });
+    day.get(((hour.rem_euclid(24.0) * 60.0) as usize).min(24 * 60 - 1)).copied().unwrap_or(1.0)
+}
+
+/// Damp the glow of [`NightGlow`] models' materials by daylight; written only when the
+/// darkness changes (at most 20 steps a dusk) or a new glowing material appears.
+pub fn night_glow(clock: Res<crate::daylight::Clock>, rules: Option<NonSend<crate::verbs::Rules>>, mut glows: ResMut<NightGlows>, mut toons: ResMut<Assets<Toon>>) {
+    if glows.mats.is_empty() {
+        return;
+    }
+    let dark = darkness(rules.as_deref(), clock.hour());
+    if glows.applied == Some(dark) {
+        return;
+    }
+    glows.applied = Some(dark);
+    for (id, glow) in &glows.mats {
+        if let Some(mut m) = toons.get_mut(*id) {
+            m.base.emissive = *glow * dark;
+        }
+    }
+    debug!("night glow: {} materials at {dark:.2} of their glow (hour {:.2})", glows.mats.len(), clock.hour());
+}
+
 /// On a model's root: its meshes cast no shadow (grass, flowers, small props: many, and their
 /// shadows barely read).
 #[derive(Component)]
@@ -108,6 +162,234 @@ pub fn character_shadows(
                     commands.entity(d).insert(bevy::light::NotShadowCaster);
                 }
             }
+        }
+    }
+}
+
+/// Head size in physical pixels, estimated from standing height and the recipe's head scale.
+/// The estimate uses a screen-aligned extent at the character's depth.
+#[derive(Resource, Clone, Copy, Debug)]
+pub struct FarModels {
+    far_below_px: f32,
+    near_above_px: f32,
+    cap: Option<usize>,
+}
+
+impl FarModels {
+    const HEAD_FRACTION: f32 = 1.0 / 7.5;
+    const DEFAULT_CAP: u16 = 8;
+
+    pub fn from_env() -> Self {
+        let num = |k: &str, d: f32| std::env::var(k).ok().and_then(|v| v.parse::<f32>().ok())
+            .filter(|v| v.is_finite()).unwrap_or(d);
+        // The fixed reference projection keeps the existing asset-view calibration overrides
+        // usable while the switch itself still takes projected pixels.
+        let old_at = num("LIVING_GAME_FAR", -1.0);
+        let old_band = num("LIVING_GAME_FAR_BAND", 1.5).max(0.0);
+        let reference = 1.75 * Self::HEAD_FRACTION * focal_pixels(900.0, 50.0_f32.to_radians());
+        let (far, near) = if old_at > 0.0 {
+            (reference / old_at, reference / (old_at - old_band).max(f32::MIN_POSITIVE))
+        } else if old_at == 0.0 {
+            (0.0, 0.0)
+        } else {
+            (11.0, 12.7)
+        };
+        let far_below_px = num("LIVING_GAME_LOD_FAR_PX", far).max(0.0);
+        let near_above_px = num("LIVING_GAME_LOD_NEAR_PX", near).max(far_below_px);
+        let cap = std::env::var("LIVING_GAME_LOD_CAP").ok().and_then(|v| v.parse::<u16>().ok())
+            .unwrap_or(if old_at < 0.0 { Self::DEFAULT_CAP } else { 0 });
+        Self { far_below_px, near_above_px, cap: (cap != 0).then_some(usize::from(cap)) }
+    }
+
+    fn far(&self, pixels: f32, now: Option<bool>) -> bool {
+        if self.far_below_px == 0.0 {
+            return false;
+        }
+        match now {
+            Some(true) => pixels < self.near_above_px,
+            _ => pixels < self.far_below_px,
+        }
+    }
+
+    fn rank(&self, pixels: f32, incumbent: bool) -> f32 {
+        if incumbent {
+            pixels + (self.near_above_px - self.far_below_px)
+        } else {
+            pixels
+        }
+    }
+}
+
+fn focal_pixels(viewport_height: f32, vertical_fov: f32) -> f32 {
+    viewport_height / (2.0 * (vertical_fov * 0.5).tan())
+}
+
+fn projected_head(height: f32, scale: f32, depth: f32, focal_px: f32) -> f32 {
+    if depth <= 0.0 {
+        return 0.0;
+    }
+    height * FarModels::HEAD_FRACTION * scale * focal_px / depth
+}
+
+/// A character's full and far meshes (empty `far`: its file has no far model), and which shows.
+#[derive(Component)]
+pub struct Lod {
+    near: Vec<Entity>,
+    far: Vec<Entity>,
+    pub far_now: Option<bool>,
+}
+
+impl Lod {
+    /// Whether this character can change to a far model.
+    pub fn has_far(&self) -> bool {
+        !self.far.is_empty()
+    }
+}
+
+/// Switch full and far meshes at the [`FarModels`] projected-size thresholds.
+/// Both are skinned to the same bones, so one animation player, one set of spring bones and one
+/// shaped skeleton serve both; the far model has no morph targets (blinking and the mouth stop
+/// beyond the change). Hidden meshes draw in no view: neither shadows (`character_shadows`) nor
+/// outlines. The animation runs on whichever shows. A mesh is far when it or a node above it
+/// below the character is named `Far*`; meshes that join a character later (an outfit piece, a
+/// style) join its lists and take the side it shows.
+#[allow(clippy::type_complexity)]
+pub fn far_models(
+    mut commands: Commands,
+    settings: Res<FarModels>,
+    cams: Query<(&Camera, &GlobalTransform, &Projection), With<Camera3d>>,
+    new: Query<(Entity, &GlobalTransform, &Model, &crate::characters::Character), Without<Lod>>,
+    mut chars: Query<(Entity, &GlobalTransform, &Model, &crate::characters::Character, &InheritedVisibility, &mut Lod)>,
+    (live, net): (Option<Res<crate::live::Live>>, Option<NonSend<crate::net::Net>>),
+    added: Query<Entity, Added<Mesh3d>>,
+    children: Query<&Children>,
+    parents: Query<&ChildOf>,
+    names: Query<&Name>,
+    meshes: Query<(), With<Mesh3d>>,
+    mut vis: Query<&mut Visibility>,
+) {
+    let projection = cams.single().ok().and_then(|(cam, eye, projection)| {
+        let Projection::Perspective(p) = projection else { return None };
+        let focal = focal_pixels(cam.physical_viewport_size()?.y as f32, p.fov);
+        Some((cam, eye, eye.translation(), *eye.forward(), focal, cam.logical_viewport_rect()?))
+    });
+    let player = net.as_ref().and_then(|n| n.my_id).zip(live.as_ref())
+        .and_then(|(id, live)| live.drawn().find_map(|(actor, root)| (actor == id).then_some(root)));
+    let sample = |g: &GlobalTransform, model: &Model, character: &crate::characters::Character| {
+        let Some((camera, eye, origin, forward, focal, rect)) = projection else { return (0.0, false) };
+        let height = model.height.max(0.3);
+        let head = g.translation() + Vec3::Y * height;
+        let depth = (head - origin).dot(forward);
+        let pixels = projected_head(height, character.recipe.proportions.head, depth, focal);
+        let in_view = depth > 0.0 && camera.world_to_viewport(eye, head).is_ok_and(|point| {
+            let margin = Vec2::splat(pixels * 4.0);
+            point.cmpge(rect.min - margin).all() && point.cmple(rect.max + margin).all()
+        });
+        (pixels, in_view)
+    };
+    let show = |lod: &Lod, far: bool, vis: &mut Query<&mut Visibility>| {
+        let (show, hide) = if far { (&lod.far, &lod.near) } else { (&lod.near, &lod.far) };
+        for (list, v) in [(show, Visibility::Inherited), (hide, Visibility::Hidden)] {
+            for m in list {
+                if let Ok(mut x) = vis.get_mut(*m) {
+                    *x = v;
+                }
+            }
+        }
+    };
+    // Far when it or a node above it (below the character) is named Far*.
+    let is_far = |d: Entity, e: Entity| {
+        let mut at = d;
+        loop {
+            if names.get(at).is_ok_and(|n| n.as_str().starts_with("Far")) {
+                return true;
+            }
+            match parents.get(at) {
+                Ok(p) if p.parent() != e => at = p.parent(),
+                _ => return false,
+            }
+        }
+    };
+    // Decided as soon as the scene is in, before the model is first shown (`fit`), so the two
+    // never draw together.
+    let mut fresh = Vec::new();
+    for (e, g, model, character) in &new {
+        if !children.iter_descendants(e).any(|d| meshes.contains(d)) {
+            continue;
+        }
+        fresh.push(e);
+        let (mut near, mut far) = (vec![], vec![]);
+        for d in children.iter_descendants(e).filter(|d| meshes.contains(*d)) {
+            if is_far(d, e) {
+                far.push(d);
+            } else {
+                near.push(d);
+            }
+        }
+        let mut lod = Lod { near, far, far_now: None };
+        if lod.has_far() {
+            debug!("far models: {} has {} full and {} far meshes", model.file, lod.near.len(), lod.far.len());
+            let (pixels, _) = sample(g, model, character);
+            let far = Some(e) != player && projection.is_some() && (settings.cap.is_some() || settings.far(pixels, None));
+            show(&lod, far, &mut vis);
+            lod.far_now = Some(far);
+        }
+        commands.entity(e).insert(lod);
+    }
+    // Meshes that joined a character already listed (outfit pieces, styles).
+    for d in &added {
+        let mut at = d;
+        while let Ok(p) = parents.get(at) {
+            at = p.parent();
+            if fresh.contains(&at) {
+                break;
+            }
+            if let Ok((_, _, _, _, _, mut lod)) = chars.get_mut(at) {
+                if lod.near.contains(&d) || lod.far.contains(&d) {
+                    break;
+                }
+                let far = is_far(d, at);
+                if far { lod.far.push(d) } else { lod.near.push(d) }
+                if let Some(now) = lod.far_now.filter(|_| lod.has_far()) {
+                    if let Ok(mut x) = vis.get_mut(d) {
+                        *x = if far == now { Visibility::Inherited } else { Visibility::Hidden };
+                    }
+                }
+                break;
+            }
+        }
+    }
+    if projection.is_none() { return; }
+    let mut reserved = usize::from(player.is_some());
+    let mut eligible = Vec::new();
+    for (entity, g, model, character, visible, lod) in &chars {
+        if Some(entity) == player || !visible.get() {
+            continue;
+        }
+        let (pixels, in_view) = sample(g, model, character);
+        if !in_view {
+            continue;
+        }
+        if !lod.has_far() {
+            // A native model such as Shino has no cheaper mesh to switch to.
+            reserved += 1;
+        } else if !settings.far(pixels, lod.far_now) {
+            eligible.push((entity, settings.rank(pixels, lod.far_now == Some(false))));
+        }
+    }
+    if let Some(cap) = settings.cap {
+        eligible.sort_unstable_by(|a, b| b.1.total_cmp(&a.1).then(a.0.cmp(&b.0)));
+        eligible.truncate(cap.saturating_sub(reserved));
+    }
+    let near: std::collections::HashSet<_> = eligible.into_iter().map(|(entity, _)| entity).collect();
+    for (entity, _, _, _, _, mut lod) in &mut chars {
+        if !lod.has_far() {
+            continue;
+        }
+        let want = Some(entity) != player && !near.contains(&entity);
+        if lod.far_now != Some(want) {
+            lod.far_now = Some(want);
+            show(&lod, want, &mut vis);
         }
     }
 }
@@ -180,11 +462,13 @@ pub fn build_lineup(commands: &mut Commands, meshes: &mut Assets<Mesh>, palette:
             continue;
         }
         let file = animated(&format!("{FOLDER}/{name}"));
-        let handle = assets.load(GltfAssetLabel::Scene(0).from_asset(file.clone()));
+        // The root alone, so a character of the same file spawned while it loads does not read
+        // it a second time (`characters::SceneOf`).
+        let handle = assets.load::<bevy::gltf::Gltf>(file.clone());
         // glTF models face +Z, toward the camera's default side (south); VRM models face −Z.
         let vrm = name.ends_with(".vrm");
-        let turn = Quat::from_rotation_y(if vrm { std::f32::consts::PI } else { 0.0 });
-        commands.spawn((crate::envs::EnvPart, Model::character(file, vrm), WorldAssetRoot(handle), Transform::from_translation(at).with_rotation(turn), Visibility::Hidden));
+        let turn = Quat::from_rotation_y(if vrm || crate::handmade::of(&file).is_some() { std::f32::consts::PI } else { 0.0 });
+        commands.spawn((crate::envs::EnvPart, Model::character(file, vrm), crate::characters::SceneOf(handle), Transform::from_translation(at).with_rotation(turn), Visibility::Hidden));
     }
     // `LIVING_GAME_CROWD=N[:seed][:style]`: N seeded random characters in rows south of the
     // line-up, facing the default camera (shots from yaw 0 at about 35 m see them from the front).
@@ -205,25 +489,34 @@ pub fn convert(
     standards: Res<Assets<StandardMaterial>>,
     mut meshes: ResMut<Assets<Mesh>>,
     assets: Res<AssetServer>,
-    q: Query<(Entity, &MeshMaterial3d<StandardMaterial>, &Mesh3d, Option<&bevy::gltf::GltfMaterialName>), Without<Converted>>,
+    q: Query<(Entity, &MeshMaterial3d<StandardMaterial>, &Mesh3d, Option<&bevy::gltf::GltfMaterialName>, Option<&bevy::gltf::GltfMaterialExtras>), Without<Converted>>,
     parents: Query<&ChildOf>,
-    models: Query<(&Model, Has<NoShadow>, Has<crate::bodies::Beast>)>,
+    models: Query<(&Model, Has<NoShadow>, Has<crate::bodies::Beast>, Has<NightGlow>, Has<Unlit>, Has<crate::handmade::Turned>)>,
+    transforms: Query<&Transform>,
+    mut glows: ResMut<NightGlows>,
     detail: Option<Res<crate::style::DetailLayers>>,
     palette: Res<Palette>,
-    mut done: Local<(HashMap<(AssetId<StandardMaterial>, u32), AssetId<Toon>>, HashSet<AssetId<Mesh>>, HashMap<String, AssetId<Toon>>)>,
+    mut done: Local<(HashMap<(AssetId<StandardMaterial>, u32), AssetId<Toon>>, HashSet<AssetId<Mesh>>, HashMap<String, AssetId<Toon>>, HashSet<AssetId<Mesh>>)>,
 ) {
-    for (e, mat, mesh, name) in &q {
-        // Only meshes under a look-dev model.
+    for (e, mat, mesh, name, extras) in &q {
+        // Only meshes under a look-dev model. `chain`: the nodes' turns from the mesh up to the
+        // model's root (a hand-made file's forward in the mesh's frame, below).
         let mut cur = e;
         let mut owner = None;
+        let mut chain = vec![transforms.get(e).map_or(Quat::IDENTITY, |t| t.rotation)];
         while let Ok(p) = parents.get(cur) {
             cur = p.parent();
             if let Ok(m) = models.get(cur) {
                 owner = Some(m);
                 break;
             }
+            chain.push(transforms.get(cur).map_or(Quat::IDENTITY, |t| t.rotation));
         }
-        let Some((owner, no_shadow, beast)) = owner else { continue };
+        let Some((owner, no_shadow, beast, night, unlit, turned)) = owner else { continue };
+        // A hand-made character file (docs/HANDMADE_HAIR.md, `handmade.rs`): its materials are
+        // classed by their slots, and it is drawn as a character on every path.
+        let handmade = crate::handmade::of(&owner.file);
+        let character = owner.vrm || handmade.is_some();
         if no_shadow {
             commands.entity(e).insert(bevy::light::NotShadowCaster);
         }
@@ -232,7 +525,7 @@ pub fn convert(
         if beast {
             if done.1.insert(mesh.0.id()) {
                 if let Some(mut m) = meshes.get_mut(&mesh.0) {
-                    let _ = m.generate_outline_normals(&Default::default());
+                    crate::style::outline_normals(&mut m);
                 }
             }
             commands.entity(e).remove::<MeshMaterial3d<StandardMaterial>>().insert((MeshMaterial3d(palette.vertex.clone()), Converted, outline(Outlined::Person, &style)));
@@ -241,36 +534,70 @@ pub fn convert(
         // A slot's glow lights up models with no glow of their own (kits without emissive
         // materials); models that carry emissive materials keep exactly those.
         let glow = owner.glow.filter(|_| !has_glow(&owner.file));
-        let glow_key = glow.map_or(0, |g| (g[0] * 255.0) as u32 | ((g[1] * 255.0) as u32) << 8 | ((g[2] * 255.0) as u32) << 16 | 1 << 24);
+        let glow_key = glow.map_or(0, |g| (g[0] * 255.0) as u32 | ((g[1] * 255.0) as u32) << 8 | ((g[2] * 255.0) as u32) << 16 | 1 << 24) | u32::from(night) << 25 | u32::from(unlit) << 26;
         let Some(base) = standards.get(&mat.0) else { continue };
         // VRoid names materials …_SKIN, …_FACE, …_EYE, …_HAIR, …_CLOTH; the face's own skin is
         // `…Face_00_SKIN`.
         let n = name.map_or("", |n| n.0.as_str());
         let skin = n.ends_with("_SKIN") || n.contains("Skin") || n.contains("skin");
+        let slop = handmade.as_ref().map(|_| crate::handmade::material_of(extras.map(|x| x.value.as_str()), &format!("{} material {n:?}", owner.file))).unwrap_or_default();
+        if handmade.is_some() && slop.slot.is_none() {
+            crate::handmade::warn_once(format!("handmade: {}: material {n:?} has no slot; classed by its name", owner.file));
+        }
         let kind = match () {
-            _ if owner.vrm && n.contains("_HAIR") => Kind::Hair,
-            _ if owner.vrm && skin && n.contains("Face") => Kind::Face,
+            _ if slop.slot == Some(crate::handmade::Slot::Hair) => Kind::Hair,
+            _ if slop.slot == Some(crate::handmade::Slot::Face) => Kind::Face,
+            _ if slop.slot.is_some() => crate::handmade::kind_of(slop.slot.unwrap(), false, false),
+            _ if character && n.contains("_HAIR") => Kind::Hair,
+            _ if character && skin && n.contains("Face") => Kind::Face,
             _ if skin => Kind::Skin,
-            _ if owner.vrm && (n.contains("_FACE") || n.contains("_EYE")) => Kind::FacePart,
+            _ if character && (n.contains("_FACE") || n.contains("_EYE")) => Kind::FacePart,
             _ => Kind::Plain,
         };
-        // A face's shadow map sits beside its file (living/tools/face_normals.py, run by
-        // gen_anim.sh); without one the face shades as skin.
-        let face_map = (kind == Kind::Face).then(|| owner.file.trim_end_matches(".glb").to_string() + ".face.png").filter(|f| std::path::Path::new(&asset_root()).join(f).exists());
+        // A face's shadow map (living/tools/face_normals.py, run by gen_anim.sh and
+        // gen_person.sh) sits beside its file, or, for a town's faces on shared pages, is the
+        // page's map that the face material's extras name (`face_map`, a path under the asset
+        // folder: share.py `pages`), so every face on a page is one material. Without one the
+        // face shades as skin.
+        let face_map = (kind == Kind::Face)
+            .then(|| {
+                let own = owner.file.trim_end_matches(".glb").to_string() + ".face.png";
+                std::iter::once(own).chain(extras.and_then(|x| face_map_of(&x.value))).flat_map(|f| face_map_files(&f)).find(|f| std::path::Path::new(&asset_root()).join(f).exists())
+            })
+            .flatten();
         let kind = if kind == Kind::Face && face_map.is_none() { Kind::Skin } else { kind };
+        // A hair profile (`slop.hair`) and its mask texture, if it has one.
+        let profile = slop.hair.as_ref().filter(|_| kind == Kind::Hair);
+        let kind = if profile.is_some() { Kind::HandHair } else { kind };
+        let hair_map = profile.and_then(|p| crate::handmade::highlight_map(&owner.file, p));
+        let file_forward = handmade.as_ref().map(|h| {
+            chain.reverse();
+            crate::handmade::local_forward(h, turned, &chain)
+        });
         // Face parts (eyes, lashes, brows, mouth, the face itself) are many small morphing
-        // meshes whose shadows never read: they never cast one.
-        if owner.vrm && name.is_some_and(|n| n.0.contains("_FACE") || n.0.contains("_EYE") || n.0.contains("Face")) {
+        // meshes whose shadows never read: they never cast one. A hand-made file names them by
+        // slot.
+        let part = match slop.slot {
+            Some(s) => matches!(s, crate::handmade::Slot::Face | crate::handmade::Slot::Eyes | crate::handmade::Slot::Tint),
+            None => character && name.is_some_and(|n| n.0.contains("_FACE") || n.0.contains("_EYE") || n.0.contains("Face")),
+        };
+        if part {
             commands.entity(e).insert((bevy::light::NotShadowCaster, FacePart));
         }
         // Generated scenery (untextured, vertex-coloured, not a character) takes the painted
         // surfaces its vertex colours' alpha names (style.rs `Surface`). It is one flag for all
         // of it, so scenery keeps sharing its few materials.
-        let painted = detail.as_deref().filter(|_| !owner.vrm && kind == Kind::Plain && base.base_color_texture.is_none());
+        let painted = detail.as_deref().filter(|_| !character && kind == Kind::Plain && base.base_color_texture.is_none());
         // The caches hold ids, not handles: a material lives while some mesh wears it (a
         // town's outfit pieces go when its people do, and the first load's prewarm leaves none
         // behind, `loading.rs`), and is made again when needed.
-        let (by_source, _, by_content) = &mut *done;
+        // A profile hair's highlight mask goes into its second UVs, once a mesh.
+        if kind == Kind::HandHair && done.3.insert(mesh.0.id()) {
+            if let Some(mut m) = meshes.get_mut(&mesh.0) {
+                crate::handmade::pack_highlight(&mut m);
+            }
+        }
+        let (by_source, _, by_content, _) = &mut *done;
         let cached = by_source.get(&(mat.0.id(), glow_key)).and_then(|id| toons.get_strong_handle(*id));
         let toon = match cached {
             Some(h) => h,
@@ -279,18 +606,38 @@ pub fn convert(
                 if owner.vrm && crate::perf::has("charopaque") && matches!(b.alpha_mode, AlphaMode::Mask(_)) {
                     b.alpha_mode = AlphaMode::Opaque;
                 }
+                // A tint layer multiplies the lit skin under it (`toon.wesl`).
+                if kind == Kind::Tint {
+                    b.alpha_mode = AlphaMode::Multiply;
+                }
                 if let Some([r, g, bl]) = glow {
                     let c = b.base_color.to_linear();
                     b.emissive = LinearRgba::new(c.red * r, c.green * g, c.blue * bl, 1.0) * 8.0 + LinearRgba::new(r, g, bl, 1.0) * 2.0;
+                }
+                // A fire that is out: its flame's materials as they are, unlit.
+                if unlit {
+                    b.emissive = LinearRgba::BLACK;
                 }
                 // Every model file brings its own copies of the same few materials (the
                 // environment kits share 14 between about a thousand). One toon material per
                 // distinct content lets their meshes share bind groups and batches; each extra
                 // material costs every view and pass a batch set and its per-frame buffer writes.
-                let content = format!("{kind:?} {face_map:?} {} {b:?}", painted.is_some());
+                // People's light is its own material: its glow follows the daylight.
+                let night = night && b.emissive != LinearRgba::BLACK;
+                let authored = b.emissive;
+                let content = format!("{kind:?} {face_map:?} {} {night} {b:?} {profile:?} {hair_map:?} {file_forward:?}", painted.is_some());
                 let h = by_content.get(&content).and_then(|id| toons.get_strong_handle(*id)).unwrap_or_else(|| {
-                    let map = face_map.as_ref().map(|f| assets.load_builder().with_settings(|s: &mut bevy::image::ImageLoaderSettings| s.is_srgb = false).load(f.clone()));
+                    // A face's shadow map, or a profile hair's mask texture, in the same slot.
+                    let map = face_map.as_ref().or(hair_map.as_ref()).map(|f| assets.load_builder().with_settings(|s: &mut bevy::image::ImageLoaderSettings| s.is_srgb = false).load(f.clone()));
                     let mut toon = style.kind(b, kind, map);
+                    if let Some(p) = profile {
+                        p.apply(&mut toon.extension.params, hair_map.as_deref());
+                        // The ink's fade reads the hair's texel density, from its mesh.
+                        toon.extension.params.hand_ink_range.w = meshes.get(&mesh.0).and_then(|m| crate::handmade::metres_per_uv(&m)).unwrap_or(0.0);
+                    }
+                    if let Some(f) = file_forward {
+                        toon.extension.params.file = f.extend(1.0);
+                    }
                     if let Some(layers) = painted {
                         crate::style::with_detail(&mut toon, layers);
                     }
@@ -298,6 +645,10 @@ pub fn convert(
                 });
                 by_content.insert(content, h.id());
                 by_source.insert((mat.0.id(), glow_key), h.id());
+                if night && !glows.mats.contains_key(&h.id()) {
+                    glows.mats.insert(h.id(), authored);
+                    glows.applied = None;
+                }
                 h
             }
         };
@@ -305,10 +656,10 @@ pub fn convert(
         // stencil at zero offset, which never reads them; generating them anyway rewrote every
         // new scenery mesh (another attribute, so another upload in another vertex layout), and a
         // first-seen model's meshes made a 150 ms frame on the development Mac.
-        let volume = owner.vrm || owner.file.starts_with("lookdev/") || owner.file.starts_with("view/");
+        let volume = character || owner.file.starts_with("lookdev/") || owner.file.starts_with("view/");
         if volume && done.1.insert(mesh.0.id()) {
             if let Some(mut m) = meshes.get_mut(&mesh.0) {
-                let _ = m.generate_outline_normals(&Default::default());
+                crate::style::outline_normals(&mut m);
             }
         }
         // Characters get shell outlines. Environment models only take part as stencils (they hide
@@ -319,7 +670,7 @@ pub fn convert(
             ec.insert(Visibility::Hidden);
         }
         ec.remove::<MeshMaterial3d<StandardMaterial>>().insert((MeshMaterial3d(toon), Converted));
-        if owner.vrm {
+        if character {
             ec.insert(outline(Outlined::Person, &style));
         } else if owner.file.starts_with("lookdev/") || owner.file.starts_with("view/") {
             ec.insert(outline(Outlined::Thing, &style));
@@ -327,6 +678,17 @@ pub fn convert(
             ec.insert(crate::style::stencil());
         }
     }
+}
+
+/// A face shadow map's files, the first there wins: its block-compressed copy (`.face.ktx2`,
+/// BC7 with mips, looks-tex-1), then the PNG it was made from.
+pub fn face_map_files(png: &str) -> [String; 2] {
+    [format!("{}.ktx2", png.trim_end_matches(".png")), png.to_string()]
+}
+
+/// The shadow map a face material's glTF extras name (`{"face_map": "lookdev/pages/…face.png"}`).
+fn face_map_of(extras: &str) -> Option<String> {
+    serde_json::from_str::<serde_json::Value>(extras).ok()?["face_map"].as_str().map(String::from)
 }
 
 /// Scale each model to a 1.75 m character once its meshes have bounds, then show it.
@@ -369,7 +731,10 @@ pub fn fit(
         *vis = Visibility::Inherited;
         debug!("look-dev: fitted {} ({height:.2} units) to {:.2} m (×{k:.2})", model.file, model.height);
         let y_off = -base * k;
-        let center = Vec3::new((lo.x + hi.x) * 0.5 * k, (hi.y - base) * 0.5 * k, (lo.z + hi.z) * 0.5 * k);
+        // The box's middle from the root's origin, as `size` measures it: foundation included (a
+        // quay's wall stands mostly below its floor; the box used to be centred half its height
+        // above the floor, so it stood above the wall).
+        let center = (lo + hi) * 0.5 * k;
         commands.entity(e).insert(Fitted { y_off, size: (hi - lo) * k, center });
     }
 }
@@ -381,7 +746,9 @@ pub struct Rig {
     bones: HashMap<&'static str, Entity>,
     /// Which way each arm points at rest (+1 or −1 along X), to lower it out of the T-pose.
     arm_side: [f32; 2],
-    face: Option<(Entity, usize, usize)>,
+    /// Every mesh that carries the face's blink and open mouth: the face itself, and a composed
+    /// person's overlays (a beard, stubble, lines), which must open and shut with it.
+    faces: Vec<(Entity, usize, usize)>,
     seed: f32,
     /// The file carries animation clips: the body plays them (`clips`), and only the face is
     /// moved here.
@@ -394,14 +761,24 @@ const BONES: [&str; 13] = [
     "J_Bip_L_UpperLeg", "J_Bip_R_UpperLeg", "J_Bip_L_LowerLeg", "J_Bip_R_LowerLeg",
 ];
 
+/// On a mesh a composed person's style file brought with the face's two expressions (an
+/// overlay): their indices among its morph targets, read from its own file
+/// (`characters::compose`), since [`rig`] would look for them in the person's type file.
+#[derive(Component, Clone, Copy)]
+pub struct FaceMorphs {
+    pub blink: usize,
+    pub mouth: usize,
+}
+
 /// Find the rig of each fitted VRoid model.
+#[allow(clippy::type_complexity)]
 pub fn rig(
     mut commands: Commands,
     models: Query<(Entity, &Model), (With<Fitted>, Without<Rig>)>,
     children: Query<&Children>,
     names: Query<&Name>,
     transforms: Query<&Transform>,
-    morphs: Query<&MorphWeights>,
+    morphs: Query<(&MorphWeights, Option<&FaceMorphs>)>,
     meshes: Res<Assets<Mesh>>,
 ) {
     for (e, model) in &models {
@@ -409,14 +786,16 @@ pub fn rig(
             continue;
         }
         let mut bones = HashMap::new();
-        let mut face = None;
+        let mut faces = Vec::new();
         for d in children.iter_descendants(e) {
             if let Ok(n) = names.get(d) {
                 if let Some(b) = BONES.iter().find(|b| n.as_str() == **b) {
                     bones.insert(*b, d);
                 }
             }
-            if let Ok(w) = morphs.get(d) {
+            if let Ok((_, Some(f))) = morphs.get(d) {
+                faces.push((d, f.blink, f.mouth));
+            } else if let Ok((w, None)) = morphs.get(d) {
                 // Bevy reads target names from mesh extras; VRoid stores them on the primitive, so
                 // fall back to reading the file's glTF JSON.
                 let node = names.get(d).map(|n| n.as_str().to_string()).unwrap_or_default();
@@ -429,7 +808,7 @@ pub fn rig(
                 if let Some(t) = targets {
                     let find = |suffix: &str| t.iter().position(|n| n.ends_with(suffix));
                     if let (Some(blink), Some(mouth)) = (find("Fcl_EYE_Close"), find("Fcl_MTH_A")) {
-                        face = Some((d, blink, mouth));
+                        faces.push((d, blink, mouth));
                     }
                 }
             }
@@ -439,9 +818,97 @@ pub fn rig(
         }
         let side = |lower: &str| bones.get(lower).and_then(|b| transforms.get(*b).ok()).map_or(1.0, |t| t.translation.x.signum());
         let arm_side = [side("J_Bip_L_LowerArm"), side("J_Bip_R_LowerArm")];
-        info!("look-dev: rigged a VRoid model ({} bones, face {})", bones.len(), if face.is_some() { "found" } else { "missing" });
-        let clips = glb_json(&model.file).is_some_and(|j| j["animations"].as_array().is_some_and(|a| !a.is_empty()));
-        commands.entity(e).insert(Rig { bones, arm_side, face, seed: (e.index_u32() % 97) as f32 * 0.37, clips });
+        info!("look-dev: rigged a VRoid model ({} bones, face {}{})", bones.len(), if faces.is_empty() { "missing" } else { "found" }, if faces.len() > 1 { format!(", with {} more meshes on its expressions", faces.len() - 1) } else { String::new() });
+        let clips = crate::anim::has_clips(&model.file);
+        commands.entity(e).insert(Rig { bones, arm_side, faces, seed: (e.index_u32() % 97) as f32 * 0.37, clips });
+    }
+}
+
+/// A character file's figure height (file units, cached): the height its scene records
+/// (`scenes[scene].extras.clip_file.figure_height`, which a stripped clip file carries, `share.py
+/// clipfile`), else the vertical span of its meshes' bounds at rest (glTF accessor `min`/`max`
+/// through the node transforms), the far model's (`Far*` nodes) left out. What `animate.py`
+/// measures the figure by; None without either. A clip file can then lose its last mesh
+/// (`Figure`, kept for these bounds) without its stride changing.
+pub fn figure_height(file: &str) -> Option<f32> {
+    use std::sync::{Mutex, OnceLock};
+    static CACHE: OnceLock<Mutex<HashMap<String, Option<f32>>>> = OnceLock::new();
+    let cache = CACHE.get_or_init(Default::default);
+    if let Some(v) = cache.lock().unwrap().get(file) {
+        return *v;
+    }
+    let v = glb_json(file).and_then(|j| recorded_figure_height(&j)).or_else(|| span(&figure_corners(file)));
+    cache.lock().unwrap().insert(file.to_string(), v);
+    v
+}
+
+/// The figure height a file's scene records (`extras.clip_file.figure_height`), if it is a
+/// positive number.
+fn recorded_figure_height(j: &serde_json::Value) -> Option<f32> {
+    let scene = j["scene"].as_u64().unwrap_or(0) as usize;
+    let h = j["scenes"].get(scene)?["extras"]["clip_file"]["figure_height"].as_f64()? as f32;
+    (h.is_finite() && h > 0.0).then_some(h)
+}
+
+/// The vertical span of points, None if they span nothing.
+fn span(corners: &[Vec3]) -> Option<f32> {
+    let (lo, hi) = corners.iter().fold((f32::MAX, f32::MIN), |(lo, hi), c| (lo.min(c.y), hi.max(c.y)));
+    (hi > lo).then_some(hi - lo)
+}
+
+/// The corners of each near mesh's bounds at rest in a character file (file units, cached):
+/// what [`figure_height`] spans, and what a composed person's figure is put together from
+/// (`characters::compose::figure_height`, a style file's through its type's `hair_fit`).
+pub fn figure_corners(file: &str) -> std::sync::Arc<Vec<Vec3>> {
+    use std::sync::{Arc, Mutex, OnceLock};
+    static CACHE: OnceLock<Mutex<HashMap<String, Arc<Vec<Vec3>>>>> = OnceLock::new();
+    let cache = CACHE.get_or_init(Default::default);
+    if let Some(v) = cache.lock().unwrap().get(file) {
+        return v.clone();
+    }
+    let v = glb_json(file).and_then(|j| corners_of(&j)).unwrap_or_default();
+    let v = Arc::new(v);
+    cache.lock().unwrap().insert(file.to_string(), v.clone());
+    v
+}
+
+/// [`figure_corners`] from a file's glTF JSON.
+fn corners_of(j: &serde_json::Value) -> Option<Vec<Vec3>> {
+    {
+        let nodes = j["nodes"].as_array()?;
+        let f = |v: &serde_json::Value, i: usize, d: f32| v.get(i).and_then(|x| x.as_f64()).map_or(d, |x| x as f32);
+        let local = |n: &serde_json::Value| {
+            let (t, r, s) = (&n["translation"], &n["rotation"], &n["scale"]);
+            Mat4::from_scale_rotation_translation(Vec3::new(f(s, 0, 1.0), f(s, 1, 1.0), f(s, 2, 1.0)), Quat::from_xyzw(f(r, 0, 0.0), f(r, 1, 0.0), f(r, 2, 0.0), f(r, 3, 1.0)), Vec3::new(f(t, 0, 0.0), f(t, 1, 0.0), f(t, 2, 0.0)))
+        };
+        let mut parent = HashMap::new();
+        for (i, n) in nodes.iter().enumerate() {
+            for c in n["children"].as_array().into_iter().flatten().filter_map(|c| c.as_u64()) {
+                parent.insert(c as usize, i);
+            }
+        }
+        let mut out = Vec::new();
+        for (i, n) in nodes.iter().enumerate() {
+            let Some(mesh) = n["mesh"].as_u64() else { continue };
+            if n["name"].as_str().is_some_and(|s| s.starts_with("Far")) {
+                continue;
+            }
+            let mut m = local(n);
+            let mut at = i;
+            while let Some(&p) = parent.get(&at) {
+                m = local(&nodes[p]) * m;
+                at = p;
+            }
+            for prim in j["meshes"][mesh as usize]["primitives"].as_array().into_iter().flatten() {
+                let a = &j["accessors"][prim["attributes"]["POSITION"].as_u64()? as usize];
+                let (amin, amax) = (&a["min"], &a["max"]);
+                for k in 0..8 {
+                    let pick = |axis: usize| if k >> axis & 1 == 0 { f(amin, axis, 0.0) } else { f(amax, axis, 0.0) };
+                    out.push(m.transform_point3(Vec3::new(pick(0), pick(1), pick(2))));
+                }
+            }
+        }
+        Some(out)
     }
 }
 
@@ -489,19 +956,22 @@ fn target_names(file: &str, node: &str) -> Option<Vec<String>> {
     Some(names.as_array()?.iter().filter_map(|v| v.as_str().map(String::from)).collect())
 }
 
-/// Blink every few seconds; the mouth moves while talking.
-fn face(rig: &Rig, look: &Lookdev, morphs: &mut Query<&mut MorphWeights>, t: f32) {
-    let Some((face, blink, mouth)) = rig.face else { return };
-    let Ok(mut w) = morphs.get_mut(face) else { return };
+/// Blink every few seconds; the mouth moves while talking: look-dev's Talk act, or the line
+/// this body is speaking in a world (`mouth.rs`, `speaking`).
+fn face(rig: &Rig, look: &Lookdev, morphs: &mut Query<&mut MorphWeights>, t: f32, speaking: Option<f32>) {
     let cycle = (t % 3.7) / 3.7;
     let close = if cycle > 0.96 { ((cycle - 0.96) / 0.04 * std::f32::consts::PI).sin() } else { 0.0 };
     let talk = if look.act == Act::Talk { ((t * 11.0).sin() * 0.5 + 0.5) * ((t * 2.3).sin() * 0.3 + 0.7) } else { 0.0 };
-    let ws = w.weights_mut();
-    if blink < ws.len() {
-        ws[blink] = close;
-    }
-    if mouth < ws.len() {
-        ws[mouth] = talk * 0.8;
+    // The face and every layer on it take the same weights.
+    for &(face, blink, mouth) in &rig.faces {
+        let Ok(mut w) = morphs.get_mut(face) else { continue };
+        let ws = w.weights_mut();
+        if blink < ws.len() {
+            ws[blink] = close;
+        }
+        if mouth < ws.len() {
+            ws[mouth] = speaking.unwrap_or(talk * 0.8);
+        }
     }
 }
 
@@ -509,6 +979,14 @@ fn face(rig: &Rig, look: &Lookdev, morphs: &mut Query<&mut MorphWeights>, t: f32
 /// by default. Clips and their rates come from the actual speed (`gait.rs`).
 pub const WALK_SPEED: f32 = 1.4;
 pub const RUN_SPEED: f32 = 3.6;
+
+/// Look-dev has no world laws: people's walk/run split is the clips' own
+/// ([`crate::gait::Family::Clips`]) unless `LIVING_GAME_SPLIT=<m/s>` gives the one a world's laws
+/// would (the geometric mean of its walk and run, `live.rs`), to measure walks past the clips'.
+fn split_family() -> crate::gait::Family {
+    static SPLIT: std::sync::OnceLock<Option<f32>> = std::sync::OnceLock::new();
+    SPLIT.get_or_init(|| std::env::var("LIVING_GAME_SPLIT").ok().and_then(|v| v.parse().ok())).map_or(crate::gait::Family::Clips, crate::gait::Family::Split)
+}
 
 /// What models whose files carry clips (`assets/lookdev/anim/`, from
 /// `living/tools/blender/animate.py`) do (`anim.rs` plays it): you walk or run by how you move;
@@ -539,7 +1017,7 @@ pub fn clips(
         if !rig.clips {
             continue;
         }
-        let mut m = crate::anim::Motion { stride: ch.map_or(1.0, |c| c.stride), now_ms: now as f64 * 1000.0, ..default() };
+        let mut m = crate::anim::Motion { stride: ch.map_or(1.0, |c| c.stride), now_ms: now as f64 * 1000.0, family: split_family(), ..default() };
         if is_player {
             m.speed = if roam.moving { roam.speed } else { 0.0 };
             m.action = probe.as_ref().and_then(|p| p.oneshot(now)).map(|(clip, rate, start)| crate::combat::Action {
@@ -579,9 +1057,12 @@ pub fn animated(file: &str) -> String {
 
 /// Procedural motion for VRoid characters: arms down, breathing, a walk cycle in place,
 /// blinking, and the mouth moving while talking.
-pub fn animate(look: Res<Lookdev>, roam: Res<crate::envs::Roam>, rigs: Query<(&Rig, Has<crate::envs::Player>)>, mut transforms: Query<&mut Transform>, mut morphs: Query<&mut MorphWeights>, time: Res<Time>) {
+#[allow(clippy::too_many_arguments)]
+pub fn animate(look: Res<Lookdev>, roam: Res<crate::envs::Roam>, rigs: Query<(Entity, &Rig, Has<crate::envs::Player>)>, mut transforms: Query<&mut Transform>, mut morphs: Query<&mut MorphWeights>, time: Res<Time>, mouths: Option<Res<crate::mouth::Mouths>>) {
     let t = time.elapsed_secs();
-    for (rig, is_player) in &rigs {
+    for (e, rig, is_player) in &rigs {
+        // In a world, a body's mouth is shut unless it is saying a line.
+        let speaking = mouths.as_ref().map(|m| m.open.get(&e).copied().unwrap_or(0.0));
         let t = t + rig.seed;
         let mut set = |bone: &str, q: Quat| {
             if let Some(mut tf) = rig.bones.get(bone).and_then(|b| transforms.get_mut(*b).ok()) {
@@ -591,7 +1072,7 @@ pub fn animate(look: Res<Lookdev>, roam: Res<crate::envs::Roam>, rigs: Query<(&R
         let walk = look.act == Act::Walk || (is_player && roam.moving);
         let phase = t * 6.0;
         if rig.clips {
-            face(rig, &look, &mut morphs, t);
+            face(rig, &look, &mut morphs, t, speaking);
             continue;
         }
         let breathe = (t * 1.6).sin();
@@ -617,7 +1098,7 @@ pub fn animate(look: Res<Lookdev>, roam: Res<crate::envs::Roam>, rigs: Query<(&R
         if let Some(mut hips) = rig.bones.get("J_Bip_C_Hips").and_then(|b| transforms.get_mut(*b).ok()) {
             hips.rotation = Quat::from_rotation_z(if walk { phase.sin() * 0.04 } else { 0.0 });
         }
-        face(rig, &look, &mut morphs, t);
+        face(rig, &look, &mut morphs, t, speaking);
     }
 }
 
@@ -711,4 +1192,67 @@ pub fn demo(
         _ => {}
     }
     look.demo = Some((dir, step + 1, now));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A clip file's scene may record its figure height (`share.py clipfile`): that wins over the
+    /// meshes' bounds; without it (or with a bad value) the bounds give it, as before, the far
+    /// model left out.
+    #[test]
+    fn the_figure_height_a_scene_records_wins_over_the_bounds() {
+        let file = |extras: serde_json::Value| {
+            serde_json::json!({
+                "scene": 0,
+                "scenes": [{"nodes": [0], "extras": extras}],
+                "nodes": [
+                    {"name": "Armature", "children": [1, 2], "translation": [0.0, 0.1, 0.0]},
+                    {"name": "Figure", "mesh": 0},
+                    {"name": "FarBody", "mesh": 1}
+                ],
+                "meshes": [{"primitives": [{"attributes": {"POSITION": 0}}]}, {"primitives": [{"attributes": {"POSITION": 1}}]}],
+                "accessors": [{"min": [-0.2, 0.0, -0.1], "max": [0.2, 1.62, 0.1]}, {"min": [0.0, -1.0, 0.0], "max": [0.0, 3.0, 0.0]}]
+            })
+        };
+        let bounds = |j: &serde_json::Value| span(&corners_of(j).unwrap());
+        let plain = file(serde_json::json!({}));
+        assert_eq!(recorded_figure_height(&plain), None);
+        assert!((bounds(&plain).unwrap() - 1.62).abs() < 1e-6, "the far model is left out");
+        let recorded = file(serde_json::json!({"clip_file": {"figure_height": 1.587}}));
+        assert_eq!(recorded_figure_height(&recorded), Some(1.587));
+        for bad in [serde_json::json!({"clip_file": {"figure_height": 0.0}}), serde_json::json!({"clip_file": {"figure_height": "tall"}}), serde_json::json!({"clip_file": {}})] {
+            assert_eq!(recorded_figure_height(&file(bad)), None);
+        }
+        // A clip file without meshes at all still has its recorded height.
+        let bare = serde_json::json!({"scenes": [{"extras": {"clip_file": {"figure_height": 1.6}}}], "nodes": []});
+        assert_eq!(recorded_figure_height(&bare), Some(1.6));
+        assert_eq!(corners_of(&bare).map(|c| span(&c)), Some(None));
+    }
+
+    #[test]
+    fn the_far_model_has_projected_size_hysteresis() {
+        let f = FarModels { far_below_px: 11.0, near_above_px: 12.7, cap: Some(8) };
+        assert!(f.far(10.9, None));
+        assert!(!f.far(11.0, Some(false)));
+        assert!(f.far(12.6, Some(true)));
+        assert!(!f.far(12.7, Some(true)));
+        assert!(f.rank(14.0, true) > f.rank(15.0, false));
+        assert!(f.rank(14.0, true) < f.rank(16.0, false));
+        let pixels = |height, depth, viewport, fov: f32| projected_head(height, 1.0, depth, focal_pixels(viewport, fov.to_radians()));
+        assert!(f.far(pixels(1.75, 27.0, 900.0, 46.0), None));
+        assert!(!f.far(pixels(1.75, 18.0, 900.0, 44.0), Some(true)));
+        assert!(!f.far(pixels(1.75, 10.4, 900.0, 42.0), Some(true)));
+        assert_eq!(pixels(1.75, 18.0, 1800.0, 44.0), pixels(3.5, 18.0, 900.0, 44.0));
+
+    }
+
+    #[test]
+    fn a_paged_face_names_its_map_in_its_extras() {
+        assert_eq!(face_map_of(r#"{"face_map": "lookdev/pages/cullet-0.face.png"}"#).as_deref(), Some("lookdev/pages/cullet-0.face.png"));
+        assert_eq!(face_map_of("{}"), None);
+        assert_eq!(face_map_files("lookdev/types/adult-f-a.face.png"), ["lookdev/types/adult-f-a.face.ktx2".to_string(), "lookdev/types/adult-f-a.face.png".to_string()]);
+        assert_eq!(face_map_of("not json"), None);
+    }
 }

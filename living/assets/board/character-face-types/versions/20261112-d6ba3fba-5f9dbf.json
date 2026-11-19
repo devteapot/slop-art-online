@@ -1,0 +1,64 @@
+{
+ "schema": 1,
+ "family": "character:face-types",
+ "id": "20261112-d6ba3fba-5f9dbf",
+ "published": "2026-11-12T14:11:18+01:00",
+ "imported": "2026-11-12T14:11:18+01:00",
+ "track": "char-4",
+ "maker": "Claude Fable 5.2",
+ "note": "The iris's lights (the glow, the streaks, the arc of sky) are a layer of their own in fixed colours, on a disc before the iris in the lips' and blush's material, in whole files and types alike. A composed eye is now 3.0 CIE76 from a whole file's at the median over the seven eye colours (was 10.0): brown 2.5, dark brown 3.0, blue 3.1, grey 3.3.",
+ "source": {
+  "commit": "d6ba3fbaf9a5de57393cca6dcfc2f0cc26399a1e",
+  "branch": "char-4",
+  "dirty": false,
+  "generator": "living/tools/blender/person.py",
+  "generator_sha256": "efd31b4e2a66dc04e1159bcb45ce893ad968f0c36a22ee99e83a8015e885c779",
+  "generator_state": "committed",
+  "params": {}
+ },
+ "renderer": {
+  "method": "asset-view (the game)",
+  "commit": "",
+  "key": "asset-view (the game)",
+  "preset": "",
+  "note": "iris-lights: three bare type heads in the seven eye colours, eyes cropped: composed before (the lights recoloured with the iris) and now (the lights a layer of their own), both coloured by the game client itself through a recipe; and the same head built with its own iris in that colour, as a whole file's, now and before. The whole-file heads are type heads, so their brows are the type's neutral grey. Below, the same by the client's rule in eye_colours.py. iris-lights-people: four residents composed by compose.py before and now, above their own files as the game draws them (through a recipe), and the raw file under lookdev/ that earlier sheets showed by mistake, with its straight split. Eyes are held open by the photo tool; the idle clip turns the head a little between photographs. The vroid member is the reference's eyes through the same client; blue-protocol is for comparison only"
+ },
+ "preset": "",
+ "media": "media/character-face-types/20261112-d6ba3fba-5f9dbf",
+ "members": [
+  {
+   "name": "types",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "15805336ed5fca31430e696d745d556d787dcab7e0d962b6adacc08025a5a033",
+   "shots": [
+    "iris-lights",
+    "iris-lights-people"
+   ],
+   "clips": []
+  },
+  {
+   "name": "vroid",
+   "role": "control",
+   "token_kind": "import",
+   "sha256": "fae8d423438b6e5ace23add8c76e9e14bc34dc2db19cb6c80811f0848eb6a58a",
+   "shots": [
+    "iris-lights",
+    "iris-lights-people"
+   ],
+   "clips": []
+  },
+  {
+   "name": "blue-protocol",
+   "role": "control",
+   "token_kind": "import",
+   "sha256": "9a400dc53496e3032c4d237d23d0b32ec43c46b0d837c2fcd8a3dce60b29eae4",
+   "shots": [
+    "iris-lights",
+    "iris-lights-people"
+   ],
+   "clips": []
+  }
+ ],
+ "delivered": []
+}

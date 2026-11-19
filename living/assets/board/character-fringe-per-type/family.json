@@ -1,0 +1,8 @@
+{
+ "schema": 1,
+ "family": "character:fringe-per-type",
+ "kind": "character",
+ "title": "The fringe at each type's brows",
+ "description": "Six hair styles composed by the game client on eight face types whose brows sit at different heights, before and after the fringe was given its own bone: from the front, three-quarter and from above, beside the reference.",
+ "target": "A style's fringe ends just above the brows on every type, as it does on the reference; styles without a fringe keep a bare forehead (docs/CHARACTERS.md, The fringe per type)."
+}

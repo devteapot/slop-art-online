@@ -2,6 +2,9 @@
 # Disk use across the machines the game work runs on: free space and the biggest build and
 # cache folders, with a warning under the threshold. Reports only; it deletes nothing.
 # Usage: living/tools/disk_report.sh [min_free_gib, default 60]
+# The automatic cleanup of idle build folders is living/tools/disk_clean.py (docs/TOOLING.md).
+# `du` counts a reflink copy's shared blocks in every copy (XFS on the dev-box, APFS clones on
+# the Mac), so its sizes can add up to more than the disk holds; free space is the real figure.
 #
 # Usual cleanups (check what is running first):
 # - Rust: `living/target/debug` (rebuilt by living-check; release is what the game runs from),

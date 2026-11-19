@@ -1,0 +1,227 @@
+{
+ "schema": 1,
+ "family": "building:row-low",
+ "id": "20261111-80b4ec94-47f626",
+ "published": "2026-11-11T16:44:10+01:00",
+ "track": "ab-arm1 (Cullet A/B, Fable arm)",
+ "maker": "Claude Fable 5.2",
+ "note": "The Fable arm of the Cullet asset A/B (docs/SMALL_CITY.md). Starting version of the building kit. Photographed by the board from the arm's GLBs; the arm's own Blender renders are kept with it.",
+ "source": {
+  "commit": "80b4ec94592cc89ecf07a45802573817572dee17",
+  "branch": "ab-arm1",
+  "generator": "living/tools/blender/ab/cullet_fable.py",
+  "generator_sha256": "527af19efe16e597085e1a6d964457b8ef9c6e74570d13cadf5ab12726c66919",
+  "generator_state": "committed",
+  "seed": "1",
+  "params": {}
+ },
+ "renderer": {
+  "method": "asset-view",
+  "commit": "362f0ea5505534da2c7a7b3d67ae6eca784fd230",
+  "dirty": false,
+  "key": "362f0ea5",
+  "env": "cullet",
+  "hours": {
+   "day": 15.0,
+   "night": 22.0
+  },
+  "weather": "clear",
+  "day_curve": true,
+  "preset": "2947e3c0",
+  "repo": "/home/carlid/.t3/worktrees/slop-art-online/t3-e14baa97-22eef9c68b78d643"
+ },
+ "preset": "building",
+ "media": "media/building-row-low/20261111-80b4ec94-47f626",
+ "members": [
+  {
+   "name": "row",
+   "role": "subject",
+   "token_kind": "file",
+   "source_path": "/home/carlid/dev/slop-ab-arm1/.local/living/small-city/ab/fable/row.glb",
+   "sha256": "0220546508d186211618ac2d0540d6188e7e9a0d1a7fe745bc381caaf19424c5",
+   "stats": {
+    "file": "row.glb",
+    "sha256": "0220546508d186211618ac2d0540d6188e7e9a0d1a7fe745bc381caaf19424c5",
+    "bytes": 717980,
+    "triangles": 10185,
+    "vertices": 20457,
+    "parts": {
+     "row": 10185
+    },
+    "nodes": 1,
+    "bones": 0,
+    "spring_bones": 0,
+    "materials": [
+     "Body",
+     "Glow"
+    ],
+    "textures": 0,
+    "texture_bytes": 0,
+    "morph_targets": 0,
+    "spring_groups": 0,
+    "vertex_colours": true,
+    "clips": [],
+    "glow": true,
+    "glow_triangles": 118,
+    "palette": [
+     {
+      "hex": "#3c3d46",
+      "share": 0.358
+     },
+     {
+      "hex": "#211f1e",
+      "share": 0.1798
+     },
+     {
+      "hex": "#5a5d64",
+      "share": 0.1652
+     },
+     {
+      "hex": "#e6e1d4",
+      "share": 0.1597
+     },
+     {
+      "hex": "#c7c3b2",
+      "share": 0.0576
+     },
+     {
+      "hex": "#464f5e",
+      "share": 0.0253
+     },
+     {
+      "hex": "#4c3129",
+      "share": 0.0125
+     },
+     {
+      "hex": "#5f6d7e",
+      "share": 0.0058
+     },
+     {
+      "hex": "#837e74",
+      "share": 0.0049
+     },
+     {
+      "hex": "#71725f",
+      "share": 0.0047
+     },
+     {
+      "hex": "#2b2b30",
+      "share": 0.0042
+     },
+     {
+      "hex": "#a6a49a",
+      "share": 0.0034
+     },
+     {
+      "hex": "#9fcdc7",
+      "share": 0.0034
+     },
+     {
+      "hex": "#8d999e",
+      "share": 0.0033
+     },
+     {
+      "hex": "other",
+      "share": 0.0121
+     }
+    ]
+   },
+   "file": "files/row.glb",
+   "report": {
+    "file": "row.glb",
+    "footprint_m": [
+     22.0,
+     7.5
+    ],
+    "height_m": 12.607,
+    "foundation_m": 1.8,
+    "tris": 10185,
+    "materials": {
+     "Body": 10067,
+     "Glow": 118
+    },
+    "surface_tagged_share": 1.0,
+    "palette_share": 0.9186,
+    "palette_wear_blend_share": 0.0814,
+    "budget_tris": 16000,
+    "within_budget": true,
+    "sha256": "0220546508d186211618ac2d0540d6188e7e9a0d1a7fe745bc381caaf19424c5",
+    "wear": {
+     "salt": 0.6,
+     "soot": 0.1,
+     "wind": 0.7
+    },
+    "houses": [
+     {
+      "house": 1,
+      "front_m": 5.0,
+      "street_m": 1.5,
+      "eave_above_street_m": 6.0,
+      "ridge_above_street_m": 9.22
+     },
+     {
+      "house": 2,
+      "front_m": 6.0,
+      "street_m": 1.0,
+      "eave_above_street_m": 5.9,
+      "ridge_above_street_m": 9.12
+     },
+     {
+      "house": 3,
+      "front_m": 4.5,
+      "street_m": 0.5,
+      "eave_above_street_m": 5.6,
+      "ridge_above_street_m": 8.82
+     },
+     {
+      "house": 4,
+      "front_m": 6.5,
+      "street_m": 0.0,
+      "eave_above_street_m": 5.75,
+      "ridge_above_street_m": 8.97
+     }
+    ],
+    "note": "house 4's 6.5 m front is its 4.6 m house and the 1.9 m lean-to; heights are above each house's own street level"
+   },
+   "shots": [
+    "front",
+    "three-quarter",
+    "side",
+    "back",
+    "close",
+    "game",
+    "night-three-quarter",
+    "night-game"
+   ],
+   "clips": [],
+   "view": {
+    "size_m": [
+     22.039621353149414,
+     14.407106399536133,
+     7.531865119934082
+    ],
+    "triangles": 10185,
+    "vertices": 20457,
+    "meshes": 2,
+    "materials": [
+     "Body",
+     "Glow"
+    ],
+    "glow": true,
+    "vertex_colours": true
+   }
+  }
+ ],
+ "delivered": [
+  {
+   "title": "Fable's own Blender renders (EEVEE, not the game)",
+   "path": "delivered/renders-row-low/index.html",
+   "from": "/tmp/claude-1000/-home-carlid--t3-worktrees-slop-art-online-t3-e14baa97-22eef9c68b78d643/50acc972-a46f-4722-b7e2-c1cfcc82851b/scratchpad/fable/renders-row-low"
+  },
+  {
+   "title": "Fable arm notes",
+   "path": "delivered/notes.md",
+   "from": "/home/carlid/dev/slop-ab-arm1/.local/living/small-city/ab/fable/notes.md"
+  }
+ ]
+}

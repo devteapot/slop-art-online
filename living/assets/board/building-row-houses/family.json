@@ -1,0 +1,7 @@
+{
+ "schema": 1,
+ "family": "building:row-houses",
+ "kind": "building",
+ "title": "Row houses, one household each",
+ "description": "Single houses of the terraces as the game draws them, each on its own lot: a Strand house, a Kiln house, a growers' house, a small one, an empty one and a roofless shell. Alone, a house shows its party walls as blank gables"
+}

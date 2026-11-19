@@ -30,13 +30,19 @@ Write `.claude/skills/verify/SKILL.md` with YAML frontmatter (`name: verify` and
 - **Cleanup:** how to tear down instances the run created. Never kill by process name; kill what you started. Cleanup removes instances and scratch state, never the evidence: proof artifacts survive the teardown, in a location the skill names.
 - **Helpers:** any script the skill ships is executable and its invocation is shown in the skill body. A helper the reader has to reverse-engineer is not a helper.
 
+Three rules keep branches that each add a feature from editing the same lines (local change, see `.agents/vendored-skills.md`):
+
+- **A stable description.** The `description` is a stable summary of what the surface owns and when to use it, naming the areas a worker would search by. It does not enumerate features: those are rows in the feature map, so adding a feature never edits the description.
+- **One validation file per run.** Each real run is recorded in a new file, `references/validation/<YYYY-MM-DD>-<HHMM>-<branch-or-run>.md`, beside a `README.md` that says the newest files are the last validated runs. Never edit an existing record; a rerun or a correction gets its own file.
+- **Cases registered where they are defined.** A driver with named cases or scenarios registers each one where it is defined (a decorator, or a dict filled at definition), never in a central tuple or list. Its `--case` choices and a `--list` come from that registry.
+
 ## 3. Seed the feature map
 
-Create `.claude/skills/verify/features/README.md` plus one file per user-facing feature you can identify (aim for the top 3-5 to start, from routes, commands, menus, or docs). Follow the shape in [`references/feature-map-example/`](references/feature-map-example/), with a README index and one file per feature. Each file answers, from the user's point of view: what the feature is, how to reach it, how to drive it with the harness, and what observable end state proves it works. The four H2s are `Sub-features`, `How to get to it (user POV)`, `Driving it with <harness>`, and `Gotchas`. The map is the repo's maintained verification source; a proof that drives one convenient entry point is incomplete when the map lists others.
+Create `.claude/skills/verify/features/README.md` plus one file per user-facing feature you can identify (aim for the top 3-5 to start, from routes, commands, menus, or docs). Follow the shape in [`references/feature-map-example/`](references/feature-map-example/), with a README index and one file per feature. Each file answers, from the user's point of view: what the feature is, how to reach it, how to drive it with the harness, and what observable end state proves it works. The four H2s are `Sub-features`, `How to get to it (user POV)`, `Driving it with <harness>`, and `Gotchas`. Keep the README's table rows sorted alphabetically, one row per feature, so new rows land apart. The map is the repo's maintained verification source; a proof that drives one convenient entry point is incomplete when the map lists others.
 
 ## 4. Prove the generated skill before handing it over
 
-Run its own instructions end to end once: launch, doctor, drive ONE mapped feature (one is enough; the map exists so later runs can cover the rest), capture evidence, clean up. After cleanup, confirm the evidence still exists at the named location — a cleanup that eats the proof fails this step. Fix what fails, and run the generated cleanup after every failed iteration too, so broken attempts don't strand processes and ports. A generated skill that was never executed is a draft, not a deliverable.
+Run its own instructions end to end once: launch, doctor, drive ONE mapped feature (one is enough; the map exists so later runs can cover the rest), capture evidence, clean up, and write the run's first validation file. After cleanup, confirm the evidence still exists at the named location — a cleanup that eats the proof fails this step. Fix what fails, and run the generated cleanup after every failed iteration too, so broken attempts don't strand processes and ports. A generated skill that was never executed is a draft, not a deliverable.
 
 ## 5. Offer the maintenance loop
 

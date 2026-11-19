@@ -21,7 +21,7 @@ An offline character keeps living under AI (the user's decision, 2026-11-09): [P
 Only the character's experience rows: what the authority already decided reached it.
 
 - **Its own acts and their outcomes:** accepted and failed deliberate acts (gather, give, wave, nod…) as the `act` feedback the authority writes for every controller ("You did what you had decided: gather → tree (+1 wood)", "… did not work out: … no nearest tree in sight").
-- **Its own speech.** *Authority change 1:* a speaker perceives its own words (`said`, salience 0.5, `perceive::speak`). Since the second change this holds for AI speakers too (the user's decision): every speaker has a `said` row, so a character's history reads the same whoever spoke for it, and a mind's consolidation sees its own words beside what it heard.
+- **Its own speech.** *Authority change 1:* a speaker perceives its own words (`said`, salience 0.5, `speech::speak`, formerly `perceive::speak`). Since the second change this holds for AI speakers too (the user's decision): every speaker has a `said` row, so a character's history reads the same whoever spoke for it, and a mind's consolidation sees its own words beside what it heard.
 - **Heard speech**, as testimony (`speech`: `attribute` marks beliefs from it as told by the speaker, so hearsay fades faster).
 - **Combat:** being attacked, misses, dodges, blocks and fight reports. The authority tells an attacker about its own landed blows only through fight reports, for every controller alike; that is left unchanged.
 - **Gestures** answered or refused, gifts, trades, births and deaths around it: whatever the authority sends.

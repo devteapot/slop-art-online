@@ -2,8 +2,7 @@
   "provider": {
     "url": "https://api.typesafe.ai/v1/systemone",
     "model": "jev-1.14.0",
-    "key_env": "TYPESAFE_API_KEY",
-    "input_usd_per_m": 0.042
+    "key_env": "TYPESAFE_API_KEY"
   },
   "judgments": {
     "fight_risk": {

@@ -1,31 +1,10 @@
-//! The game camera (one camera for every character; docs/GAME_BRIEF.md):
-//!
-//! - **View:** about 28° down and 22 m away for an ordinary adult, with a 50° field of view, fixed
-//!   (no zoom). Flatter and further than the first 40°/16 m, so the land ahead and rising ground
-//!   show (user, 2026-11-09). Distance and focus height scale with the character's size.
-//! - **Facing:** you face the cursor. The view only turns when you turn it (below); turning by
-//!   pointing toward a screen side is an option, off by default.
-//! - **Rotation:** hold `[` or `]`, or drag with the middle button; the view stays where you leave
-//!   it. Alt + mouse glances around and springs back.
-//! - **Align (on request only):** tap the middle button, and the view turns until
-//!   the direction you face is straight ahead. The mouse cursor moves with the ground meanwhile,
-//!   so you keep facing the same spot (a fixed cursor would make the view keep turning).
-//! - **Context** ([`Context`]): the view eases in and frames you with whoever you are dealing
-//!   with, without turning, and eases back out when it is over:
-//!   - a fight you are in: you and your opponents (anyone whose blow or move was aimed at you, or
-//!     yours at them, in the last [`FIGHT_HOLD_MS`]), closer the tighter the fight;
-//!   - a conversation: both speakers, close;
-//!   - a gesture exchange (`town.rs`: my wave or nod and the answer, or someone's at me): both of
-//!     you, for a few seconds.
-//!
-//!   Turning the view yourself dismisses the framing until that context ends: your own camera
-//!   input always wins. It eases in over about 1.5 s and out over about 2.5 s; there are no cuts.
-//! - **Sight bound:** the view never pulls back further than about 2 × the sight radius, so
-//!   less sight (night) brings it in, along the same tilt toward the ground.
+//! Top-down follow camera and the legacy orbit rig for comparison.
 
 use crate::controls::Input;
 use crate::net::Net;
 use crate::world::{Draw, Scene};
+use bevy::camera::CameraProjection;
+use bevy::input::gestures::RotationGesture;
 use bevy::input::mouse::AccumulatedMouseMotion;
 use bevy::pbr::{DistanceFog, FogFalloff};
 use bevy::prelude::*;
@@ -33,11 +12,12 @@ use living_bindings::*;
 
 pub const SKY: Color = Color::srgb(0.62, 0.74, 0.86);
 
-#[derive(Clone, Copy, PartialEq, Debug, Default)]
+#[derive(Clone, Copy, PartialEq, Debug, Default, serde::Serialize, serde::Deserialize)]
 pub struct View {
     /// Angle above the ground plane, degrees (90 = straight down).
     pub pitch: f32,
-    /// Distance from the focus, metres (for an ordinary adult).
+    /// Orbit distance from focus, or vertical height in the top-down stops (metres).
+    #[serde(rename = "height")]
     pub distance: f32,
     /// Vertical field of view, degrees.
     pub fov: f32,
@@ -85,12 +65,150 @@ impl Default for Rig {
     }
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Mode {
+    #[default]
+    TopDown,
+    Orbit,
+}
+
+impl Mode {
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::TopDown => "top-down",
+            Self::Orbit => "orbit",
+        }
+    }
+}
+
+/// The top-down camera's persisted tuning. Distances in the stops are vertical heights.
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
+pub struct Tuning {
+    pub stops: [View; 3],
+    pub wheel_step: f32,
+    pub easing_rate: f32,
+    pub fixed_pitch: Option<f32>,
+    pub late_tilt: Option<LateTilt>,
+    pub keep_fov_curve: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct LateTilt {
+    pub tilt_start: f32,
+    pub near_pitch: f32,
+}
+
+const MIDDLE: f32 = 0.55;
+const CHEST_FRACTION: f32 = 0.60;
+
+const fn stop(height: f32, pitch: f32, fov: f32) -> View {
+    View { distance: height, pitch, fov }
+}
+
+fn smooth(t: f32) -> f32 {
+    let t = t.clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
+}
+
+impl Default for Tuning {
+    fn default() -> Self {
+        Self::OURS_FIXED
+    }
+}
+
+impl Tuning {
+    const OURS: Self = Self {
+        stops: [stop(19.0, 65.0, 46.0), stop(12.0, 58.0, 44.0), stop(8.0, 48.0, 42.0)],
+        wheel_step: 0.05,
+        easing_rate: 12.0,
+        fixed_pitch: None,
+        late_tilt: None,
+        keep_fov_curve: false,
+    };
+
+    const OURS_FIXED: Self = Self {
+        stops: [stop(19.0, 58.0, 46.0), stop(12.0, 58.0, 44.0), stop(8.0, 58.0, 42.0)],
+        fixed_pitch: Some(58.0),
+        keep_fov_curve: true,
+        ..Self::OURS
+    };
+
+    // Exact play-test inputs from camera-ref, docs/CAMERA.md §6 (cd53b289).
+    pub const PRESETS: [(&str, &str, Self); 5] = [
+        ("Ours, fixed 58°", "ours-fixed", Self::OURS_FIXED),
+        ("Ours (current)", "ours", Self::OURS),
+        ("SUPERVIVE", "supervive", Self {
+            stops: [stop(28.0, 59.0, 31.0), stop(23.0, 59.0, 31.0), stop(18.0, 59.0, 31.0)],
+            fixed_pitch: Some(59.0),
+            ..Self::OURS
+        }),
+        ("LoL", "lol", Self {
+            stops: [stop(11.2, 56.0, 40.0), stop(11.2, 56.0, 40.0), stop(4.8, 56.0, 40.0)],
+            fixed_pitch: Some(56.0),
+            ..Self::OURS
+        }),
+        ("Corepunk", "corepunk", Self {
+            stops: [stop(15.0, 60.0, 49.0), stop(12.0, 60.0, 49.0), stop(7.0, 54.0, 49.0)],
+            ..Self::OURS
+        }),
+    ];
+
+    pub fn preset(name: &str) -> Option<Self> {
+        Self::PRESETS.iter().find(|(_, key, _)| *key == name).map(|(_, _, tuning)| *tuning)
+    }
+
+    pub fn view(&self, zoom: f32) -> View {
+        let [wide, mid, tight] = self.stops;
+        let (lo, hi, a, b) = if zoom <= MIDDLE {
+            (0.0, MIDDLE, wide, mid)
+        } else {
+            (MIDDLE, 1.0, mid, tight)
+        };
+        let mut view = a.lerp(b, smooth((zoom - lo) / (hi - lo)));
+        if let Some(pitch) = self.fixed_pitch {
+            view.pitch = if let Some(tilt) = self.late_tilt {
+                let start = tilt.tilt_start.clamp(0.0, 1.0);
+                let blend = if zoom >= 1.0 { 1.0 } else { smooth((zoom - start) / (1.0 - start).max(f32::EPSILON)) };
+                pitch + (tilt.near_pitch - pitch) * blend
+            } else {
+                pitch
+            };
+            if !self.keep_fov_curve {
+                view.fov = mid.fov;
+            }
+        }
+        view
+    }
+}
+
+pub struct Zoom {
+    target: f32,
+    pub shown: f32,
+}
+
+impl Default for Zoom {
+    fn default() -> Self {
+        Self { target: MIDDLE, shown: MIDDLE }
+    }
+}
+
 #[derive(Resource, Default)]
 pub struct Cam {
     pub rig: Rig,
+    pub mode: Mode,
+    pub top_zoom: Zoom,
+    pub eye_height: f32,
+    pub ground_clearance: f32,
+    pub pose: GlobalTransform,
+    pub look_dir: Option<Vec2>,
+    look_pointer: Option<Vec2>,
+    look_yaw: f32,
     /// Yaw shown (degrees, 0 = north up) and where it is going.
     pub shown_yaw: f32,
     yaw: f32,
+    top_yaw: f32,
+    middle_drag: Option<MiddleDrag>,
     /// Yaw the movement keys are relative to; it lags a turning camera while keys are held.
     control_yaw: f32,
     focus: Vec3,
@@ -125,9 +243,6 @@ pub struct Cam {
     /// Zoom: a factor on the view's distance (pinch or wheel, `pointer.rs`), and the one shown.
     pub zoom: f32,
     zoom_shown: f32,
-    /// The ground point the cursor stays on while the view is turned by hand, so where I face
-    /// doesn't change with the view.
-    turn_lock: Option<Vec3>,
     /// How far out the eye is (a share of the view's distance) while a building would hold it.
     pull: f32,
 }
@@ -145,6 +260,26 @@ const PULL_OUT: f32 = 3.0;
 const LIFT_UP: f32 = 10.0;
 const LIFT_DOWN: f32 = 2.5;
 
+const ROTATE_DRAG_PX: f32 = 6.0;
+const ROTATE_DEG_PER_PX: f32 = 0.3;
+
+#[derive(Default)]
+struct MiddleDrag {
+    offset: Vec2,
+    dragged: bool,
+}
+
+impl MiddleDrag {
+    fn turn(&mut self, delta: Vec2) -> f32 {
+        if self.dragged {
+            return delta.x * ROTATE_DEG_PER_PX;
+        }
+        self.offset += delta;
+        self.dragged = self.offset.length() >= ROTATE_DRAG_PX;
+        if self.dragged { self.offset.x * ROTATE_DEG_PER_PX } else { 0.0 }
+    }
+}
+
 fn axes(yaw_deg: f32) -> (Vec2, Vec2) {
     let y = yaw_deg.to_radians();
     // Yaw 0 looks north (−Z); positive yaw turns the view clockwise seen from above.
@@ -152,14 +287,15 @@ fn axes(yaw_deg: f32) -> (Vec2, Vec2) {
 }
 
 impl Cam {
-    /// Turn the view to a yaw (degrees); it eases there.
+    /// Set the scripted bearing in degrees. Orbit eases to it.
     pub fn set_yaw(&mut self, yaw: f32) {
         self.yaw = yaw;
+        self.top_yaw = yaw.rem_euclid(360.0);
     }
 
     /// Ground-plane unit vectors for "screen up" and "screen right" of the movement keys.
     pub fn control_axes(&self) -> (Vec2, Vec2) {
-        axes(self.control_yaw)
+        axes(if self.mode == Mode::TopDown { self.shown_yaw } else { self.control_yaw })
     }
 }
 
@@ -284,33 +420,42 @@ pub fn follow(
     mouse: Res<ButtonInput<MouseButton>>,
     target: Res<crate::controls::Target>,
     input: Res<Input>,
-    net: NonSend<Net>,
+    mut net: NonSendMut<Net>,
     scene: NonSend<Scene>,
     sight: Res<crate::sight::Sight>,
     size: Res<crate::bodies::MySize>,
-    mut q: Query<(&mut Transform, &mut Projection, &Camera, &GlobalTransform, &mut DistanceFog), With<Camera3d>>,
+    mut q: Query<(&mut Transform, &mut Projection, &mut Camera, &GlobalTransform, &mut DistanceFog), With<Camera3d>>,
     windows: Query<&Window>,
     ui: Res<crate::hud::UiWants>,
     (town, combat, island, mut pointer, solids): (Option<Res<crate::town::Town>>, Option<Res<crate::combat::Combat>>, Option<Res<crate::island::Island>>, ResMut<crate::pointer::Pointer>, Query<(&Transform, &crate::lookdev::Fitted), (With<crate::envs::Solid>, Without<Camera3d>)>),
-    time: Res<Time>,
+    (time, binds, prefs, live, windows_ui, mut rotation): (
+        Res<Time>, Option<Res<crate::keys::Binds>>, Option<Res<crate::keys::Prefs>>,
+        Option<Res<crate::live::Live>>, Option<Res<crate::ui::win::Windows>>, MessageReader<RotationGesture>,
+    ),
 ) {
-    let Ok((mut tf, mut proj, camera, gtf, mut fog)) = q.single_mut() else { return };
+    let Ok((mut tf, mut proj, mut camera, gtf, mut fog)) = q.single_mut() else { return };
     let dt = time.delta_secs();
     let ease = |rate: f32| 1.0 - (-dt * rate).exp();
     let r = cam.rig;
     let s = size.0;
+    let mode = if live.is_some() { prefs.as_ref().map_or(Mode::TopDown, |p| p.camera) } else { Mode::Orbit };
+    if cam.mode != mode {
+        cam.look_pointer = None;
+        cam.align = None;
+        cam.dismissed = None;
+        cam.lift = 0.0;
+        cam.middle_drag = None;
+    }
+    cam.mode = mode;
+    let top_down = mode == Mode::TopDown;
+    let tuning = prefs.as_ref().map_or_else(Tuning::default, |p| p.camera_tuning);
 
     // Where the cursor meets the ground, from the current camera (the game's cursor: `pointer.rs`).
     let window = windows.single().ok();
     let screen_size = window.as_ref().map_or(crate::capture::size().as_vec2(), |w| Vec2::new(w.width(), w.height()));
+    // macOS reports counterclockwise degree deltas. Camera bearings increase clockwise.
+    let gesture = rotation.read().map(|g| -g.0).sum::<f32>();
     let cursor = pointer.pos.map(|c| (c, screen_size));
-    // Last frame's cursor ground point, on the island's own ground where there is one
-    // (`live::ground_cursor` corrects the tile-ground ray below): what a turn keeps under the cursor.
-    let last_ground = cam.cursor_ground;
-    cam.cursor_ground = cursor.and_then(|(c, _)| {
-        let ray = camera.viewport_to_world(gtf, c).ok()?;
-        scene.ray_ground(ray.origin, *ray.direction)
-    });
 
     // Turn by pointing: outside the middle zone of the screen the view turns toward the cursor's
     // side, faster further out; never while the cursor is below your character.
@@ -320,86 +465,135 @@ pub fn follow(
         (true, _, _) => None,
         (false, _, _) => cursor,
     };
-    let mut turn = 0.0;
-    if r.steer && !ui.pointer && !input.chat_open {
-        if let (Some((c, size2)), Some(me)) = (steer_cursor, target.0) {
-            let nx = (c.x - size2.x / 2.0) / (size2.x / 2.0);
-            let me_y = camera.world_to_viewport(gtf, me).map(|p| p.y).unwrap_or(size2.y / 2.0);
-            let behind = c.y > me_y + size2.y * 0.08;
-            let over = ((nx.abs() - r.steer_zone) / (1.0 - r.steer_zone).max(0.05)).clamp(0.0, 1.0);
-            if !behind {
-                turn += nx.signum() * over * over * r.steer_rate * dt;
+    let mut manual = 0.0;
+    if !top_down {
+        let mut turn = 0.0;
+        if r.steer && !ui.over() && !input.chat_open {
+            if let (Some((c, size2)), Some(me)) = (steer_cursor, target.0) {
+                let nx = (c.x - size2.x / 2.0) / (size2.x / 2.0);
+                let me_y = camera.world_to_viewport(gtf, me).map(|p| p.y).unwrap_or(size2.y / 2.0);
+                let behind = c.y > me_y + size2.y * 0.08;
+                let over = ((nx.abs() - r.steer_zone) / (1.0 - r.steer_zone).max(0.05)).clamp(0.0, 1.0);
+                if !behind {
+                    turn += nx.signum() * over * over * r.steer_rate * dt;
+                }
             }
         }
-    }
-    // Manual rotation, kept where you leave it: hold [ or ], or drag with the middle button.
-    let mut manual = 0.0;
-    if !ui.keyboard {
-        if keys.pressed(KeyCode::BracketLeft) {
-            manual -= r.rotate_rate * dt;
+        // Manual rotation, kept where you leave it: hold [ or ], or drag with the middle button.
+        if !ui.keyboard {
+            if keys.pressed(KeyCode::BracketLeft) {
+                manual -= r.rotate_rate * dt;
+            }
+            if keys.pressed(KeyCode::BracketRight) {
+                manual += r.rotate_rate * dt;
+            }
         }
-        if keys.pressed(KeyCode::BracketRight) {
-            manual += r.rotate_rate * dt;
+        if mouse.just_pressed(MouseButton::Middle) {
+            cam.middle_moved = 0.0;
         }
-    }
-    if mouse.just_pressed(MouseButton::Middle) {
-        cam.middle_moved = 0.0;
-    }
-    if !ui.pointer && !input.demo && mouse.pressed(MouseButton::Middle) {
-        manual += motion.delta.x * 0.3;
-        cam.middle_moved += motion.delta.length();
-    }
-    // A left drag or a two-finger pan (`pointer.rs`), at the middle drag's rate.
-    if !ui.pointer && !input.demo {
-        manual += pointer.turn_px * 0.3;
-    }
-    if pointer.align {
-        cam.align_request = true;
-    }
-    // Zoom by pinch or wheel, within a band round the view's own distance.
-    if cam.zoom == 0.0 {
-        cam.zoom = 1.0;
-        cam.zoom_shown = 1.0;
-    }
-    cam.zoom = (cam.zoom * pointer.zoom).clamp(crate::pointer::ZOOM_MIN, crate::pointer::ZOOM_MAX);
-    cam.zoom_shown += (cam.zoom - cam.zoom_shown) * ease(12.0);
-    // Align on request: a middle-button tap (released having moved under 6 px). R is a skill key.
-    let tapped = mouse.just_released(MouseButton::Middle) && cam.middle_moved < 6.0 && !ui.pointer;
-    if tapped || std::mem::take(&mut cam.align_request) {
-        if let Some(l) = input.look.filter(|l| l.length_squared() > 1e-4) {
-            let face = l.y.atan2(l.x).to_degrees() + 90.0;
-            let lock = cam.cursor_ground.filter(|_| !input.demo);
-            cam.align = Some((cam.yaw + diff(face, cam.yaw), lock));
+        if !ui.over() && !input.demo && mouse.pressed(MouseButton::Middle) {
+            manual += motion.delta.x * 0.3;
+            cam.middle_moved += motion.delta.length();
         }
-    }
-    // A manual turn cancels an align in progress.
-    if manual != 0.0 {
-        cam.align = None;
-    }
-    if let Some((want, _)) = cam.align {
-        let left = diff(want, cam.yaw);
-        let step = left * ease(9.0);
-        cam.yaw += if left.abs() < 0.3 { left } else { step };
-    }
-    if let Some(rate) = input.scripted_turn {
-        manual += rate * dt;
-    }
-    cam.yaw += turn + manual;
-    // Glance: hold Alt and move the mouse; let go and it eases back.
-    let holding = !ui.pointer && (keys.pressed(KeyCode::AltLeft) || keys.pressed(KeyCode::AltRight));
-    if let Some(g) = cam.scripted_glance {
-        cam.glance += (g - cam.glance) * ease(6.0);
-    } else if holding {
-        cam.glance = (cam.glance + motion.delta.x * 0.3).clamp(-150.0, 150.0);
+        // A left drag or a two-finger pan (`pointer.rs`), at the middle drag's rate.
+        if !ui.over() && !input.demo {
+            manual += pointer.turn_px * 0.3;
+        }
+        if pointer.align {
+            cam.align_request = true;
+        }
+        // Zoom by pinch or wheel, within a band round the view's own distance.
+        if cam.zoom == 0.0 {
+            cam.zoom = 1.0;
+            cam.zoom_shown = 1.0;
+        }
+        cam.zoom = (cam.zoom * pointer.zoom).clamp(crate::pointer::ZOOM_MIN, crate::pointer::ZOOM_MAX);
+        cam.zoom_shown += (cam.zoom - cam.zoom_shown) * ease(12.0);
+        // Align on request: a middle-button tap (released having moved under 6 px). R is a skill key.
+        let tapped = mouse.just_released(MouseButton::Middle) && cam.middle_moved < 6.0 && !ui.over();
+        if tapped || std::mem::take(&mut cam.align_request) {
+            if let Some(l) = input.facing().filter(|l| l.length_squared() > 1e-4) {
+                let face = l.y.atan2(l.x).to_degrees() + 90.0;
+                let lock = cam.cursor_ground.filter(|_| !input.demo);
+                cam.align = Some((cam.yaw + diff(face, cam.yaw), lock));
+            }
+        }
+        // A manual turn cancels an align in progress.
+        if manual != 0.0 {
+            cam.align = None;
+        }
+        if let Some((want, _)) = cam.align {
+            let left = diff(want, cam.yaw);
+            let step = left * ease(9.0);
+            cam.yaw += if left.abs() < 0.3 { left } else { step };
+        }
+        if let Some(rate) = input.scripted_turn {
+            manual += rate * dt;
+        }
+        cam.yaw += turn + manual;
+        // Glance: hold Alt and move the mouse; let go and it eases back.
+        let holding = !ui.over() && binds.as_ref().is_some_and(|b| b.pressed(crate::keys::Act::Glance, &keys));
+        if let Some(g) = cam.scripted_glance {
+            cam.glance += (g - cam.glance) * ease(6.0);
+        } else if holding {
+            cam.glance = (cam.glance + motion.delta.x * 0.3).clamp(-150.0, 150.0);
+        } else {
+            cam.glance -= cam.glance * ease(5.0);
+        }
+        let target_yaw = cam.yaw + cam.glance;
+        let d = diff(target_yaw, cam.shown_yaw);
+        cam.shown_yaw += d * ease(10.0);
+        // The movement keys keep their frame while held and catch up over about half a second
+        // (Haigh-Hutchinson: never change the control reference instantly).
+        cam.control_yaw = if input.moving { cam.control_yaw + diff(cam.shown_yaw, cam.control_yaw) * ease(2.0) } else { cam.shown_yaw };
+
     } else {
-        cam.glance -= cam.glance * ease(5.0);
+        use crate::keys::{Act, Bind};
+        let enabled = prefs.as_ref().is_none_or(|p| p.camera_rotate);
+        let controls_free = enabled && !input.demo && !ui.menu && !ui.keyboard && !pointer.hold
+            && window.as_ref().is_none_or(|w| w.focused)
+            && windows_ui.as_ref().is_none_or(|w| !w.is_open(crate::ui::win::Win::Settings));
+        let free = controls_free && !ui.over();
+        let middle_free = binds.as_ref().and_then(|b| b.holder(Bind::Mouse(MouseButton::Middle)))
+            .is_none_or(|(a, _)| a == Act::NorthUp);
+        if !free || !middle_free {
+            cam.middle_drag = None;
+        } else if mouse.just_pressed(MouseButton::Middle) {
+            cam.middle_drag = Some(MiddleDrag::default());
+        }
+        let mut turn = 0.0;
+        let mut tapped = false;
+        if let Some(drag) = &mut cam.middle_drag {
+            if mouse.pressed(MouseButton::Middle) || mouse.just_released(MouseButton::Middle) {
+                turn = drag.turn(motion.delta);
+            }
+            if mouse.just_released(MouseButton::Middle) {
+                tapped = !drag.dragged;
+            }
+            if !mouse.pressed(MouseButton::Middle) {
+                cam.middle_drag = None;
+            }
+        }
+        let snap_key = controls_free && binds.as_ref().is_some_and(|b| b.get(Act::NorthUp).iter().any(|bind| match *bind {
+            Bind::Key(key) => keys.just_pressed(key),
+            Bind::Mouse(button) if button != MouseButton::Middle => free && mouse.just_pressed(button),
+            _ => false,
+        }));
+        if !enabled || snap_key || tapped {
+            cam.top_yaw = 0.0;
+        } else if free {
+            let gain = prefs.as_ref().map_or(1.0, |p| {
+                if p.camera_rotate_invert { -p.camera_rotate_speed } else { p.camera_rotate_speed }
+            });
+            cam.top_yaw = (cam.top_yaw + (turn + gesture) * gain).rem_euclid(360.0);
+        }
+        cam.shown_yaw = cam.top_yaw;
+        cam.align_request = false;
+        cam.top_zoom.target = (cam.top_zoom.target + tuning.wheel_step * pointer.wheel_notches + 1.0 - pointer.pinch_factor).clamp(0.0, 1.0);
+        cam.top_zoom.shown += (cam.top_zoom.target - cam.top_zoom.shown) * ease(tuning.easing_rate);
     }
-    let target_yaw = cam.yaw + cam.glance;
-    let d = diff(target_yaw, cam.shown_yaw);
-    cam.shown_yaw += d * ease(10.0);
-    // The movement keys keep their frame while held and catch up over about half a second
-    // (Haigh-Hutchinson: never change the control reference instantly).
-    cam.control_yaw = if input.moving { cam.control_yaw + diff(cam.shown_yaw, cam.control_yaw) * ease(2.0) } else { cam.shown_yaw };
+
+    net.update_gaze(cam.top_zoom.target);
 
     // Context: a fight I am in, else a conversation, else a gesture exchange. Turning the view
     // dismisses it until that context ends.
@@ -436,91 +630,105 @@ pub fn follow(
         Some(Context::Talk(id) | Context::Greet(id)) => Some(id),
         _ => None,
     };
-    // The view, brought in along the tilt toward the ground when sight is short.
-    let mut v = r.view;
-    v.distance *= cam.zoom_shown;
-    if r.sight_bound {
-        let allowed = (sight.radius * 2.0).max(r.close.distance);
-        if allowed < r.view.distance {
-            let t = ((r.view.distance - allowed) / (r.view.distance - r.close.distance).max(0.01)).clamp(0.0, 1.0);
-            v = r.view.lerp(r.close, t);
+    let v;
+    if top_down {
+        v = tuning.view(cam.top_zoom.shown);
+        if let Some(me) = target.0 {
+            let height = net.my_id.and_then(|id| live.as_ref()?.heights.get(&id).copied()).unwrap_or(1.75 * s);
+            cam.focus = me + Vec3::Y * height * CHEST_FRACTION;
         }
-    }
-    // Who is framed with me (sim positions), and the view that holds us.
-    let me_at = net.my_id.and_then(|id| scene.shown.get(&id)).map(|s| s.0);
-    let group: Vec<Vec2> = match framing {
-        Some(Context::Fight) => cam.opponents.iter().filter_map(|id| scene.shown.get(id).map(|s| s.0)).collect(),
-        Some(Context::Talk(id) | Context::Greet(id)) => scene.shown.get(&id).map(|s| s.0).into_iter().collect(),
-        None => vec![],
-    };
-    // Framing needs someone drawn to frame with me.
-    let to = (framing.is_some() && me_at.is_some() && !group.is_empty()) as u8 as f32;
-    cam.frame += (to - cam.frame) * ease(if to > cam.frame { FRAME_IN } else { FRAME_OUT });
-    if let (Some(m), false) = (me_at, group.is_empty()) {
-        let all = || group.iter().copied().chain(std::iter::once(m));
-        let (lo, hi) = all().fold((m, m), |(lo, hi), p| (lo.min(p), hi.max(p)));
-        let centre = (lo + hi) * 0.5;
-        let spread = all().map(|p| p.distance(centre)).fold(0.0, f32::max);
-        let want = match framing {
-            Some(Context::Fight) => View { pitch: 34.0, distance: (8.0 + 1.8 * spread).clamp(10.0, 18.0), fov: 50.0 },
-            Some(Context::Greet(_)) => View { pitch: 32.0, distance: (7.5 + 0.9 * 2.0 * spread).clamp(9.0, 15.0), fov: 48.0 },
-            _ => View { pitch: 36.0, distance: 8.0, fov: 45.0 },
-        };
-        // A new context starts from its own view; one under way eases toward the new spread.
-        if cam.frame < 0.02 {
-            cam.frame_view = want;
-        } else {
-            cam.frame_view = cam.frame_view.lerp(want, ease(2.5));
-        }
-        let off = Vec3::new(centre.x - m.x, 0.0, centre.y - m.y);
-        cam.frame_off = if cam.frame < 0.02 { off } else { cam.frame_off + (off - cam.frame_off) * ease(3.0) };
-    }
-    // Framing only ever brings the view in (never further than sight allows).
-    let base = v;
-    let mut v = base.lerp(cam.frame_view, cam.frame);
-    v.distance = v.distance.min(base.distance);
-    cam.shown = v;
-
-    if let Some(me) = target.0 {
-        // Cursor lean: nothing inside 30% of the half-screen, full lean at 80%.
-        let (up, right) = axes(cam.shown_yaw);
-        let lean = cursor.filter(|_| !input.demo).map_or(Vec3::ZERO, |(c, size2)| {
-            let n = (c - size2 / 2.0) / (size2 / 2.0);
-            let k = ((n.length() - 0.3) / 0.5).clamp(0.0, 1.0);
-            let dir = (right * n.x - up * n.y).normalize_or_zero();
-            Vec3::new(dir.x, 0.0, dir.y) * k * k * (3.0 - 2.0 * k) * r.lead * s * (1.0 - cam.frame)
-        });
-        // Look at about chest height, toward the framed group's centre as far as framing goes
-        // (at my height: the others stand within a few metres).
-        let want = me + lean + Vec3::Y * 1.2 * s + cam.frame_off * cam.frame;
-        let snap = cam.focus.distance(want) > 40.0;
-        cam.focus = if snap { want } else { cam.focus + (want - cam.focus) * ease(8.0) };
-    }
-    let pitch = v.pitch.to_radians();
-    let dist = v.distance * s.max(0.4);
-    let (up, _) = axes(cam.shown_yaw);
-    let back = Vec3::new(-up.x, 0.0, -up.y) * pitch.cos() * dist;
-    let mut eye = cam.focus + back + Vec3::Y * pitch.sin() * dist;
-    // Never inside a building: where the eye would be within one, it comes in along its line to
-    // the focus until it is clear of it (at once), and goes back out eased. A building merely in
-    // the way fades instead (`envs::cutaway`), so the distance doesn't change for it.
-    let mut pull = 1.0f32;
-    let reach = (eye - cam.focus).length().max(0.1);
-    for (t, f) in &solids {
-        if f.size.x <= 0.0 || t.translation.xz().distance(eye.xz()) > reach + 40.0 {
-            continue;
-        }
-        let (centre, half, rot) = crate::envs::fitted_box(t, f);
-        let inv = rot.inverse();
-        let pad = Vec3::splat(EYE_CLEAR);
-        if let Some((enter, exit)) = crate::envs::segment_box(inv * (cam.focus - centre), inv * (eye - centre), half + pad) {
-            if enter > 0.05 && enter < 1.0 && exit >= 1.0 {
-                pull = pull.min((enter - 0.02).max(PULL_MIN));
+        let back = v.distance / v.pitch.to_radians().tan();
+        let (up, _) = axes(cam.shown_yaw);
+        tf.translation = cam.focus + Vec3::new(-up.x * back, v.distance, -up.y * back);
+    } else {
+        // The view, brought in along the tilt toward the ground when sight is short.
+        let mut orbit_view = r.view;
+        orbit_view.distance *= cam.zoom_shown;
+        if r.sight_bound {
+            let allowed = (sight.radius * 2.0).max(r.close.distance);
+            if allowed < r.view.distance {
+                let t = ((r.view.distance - allowed) / (r.view.distance - r.close.distance).max(0.01)).clamp(0.0, 1.0);
+                orbit_view = r.view.lerp(r.close, t);
             }
         }
+        // Who is framed with me (sim positions), and the view that holds us.
+        let me_at = net.my_id.and_then(|id| scene.shown.get(&id)).map(|s| s.0);
+        let group: Vec<Vec2> = match framing {
+            Some(Context::Fight) => cam.opponents.iter().filter_map(|id| scene.shown.get(id).map(|s| s.0)).collect(),
+            Some(Context::Talk(id) | Context::Greet(id)) => scene.shown.get(&id).map(|s| s.0).into_iter().collect(),
+            None => vec![],
+        };
+        // Framing needs someone drawn to frame with me.
+        let to = (framing.is_some() && me_at.is_some() && !group.is_empty()) as u8 as f32;
+        cam.frame += (to - cam.frame) * ease(if to > cam.frame { FRAME_IN } else { FRAME_OUT });
+        if let (Some(m), false) = (me_at, group.is_empty()) {
+            let all = || group.iter().copied().chain(std::iter::once(m));
+            let (lo, hi) = all().fold((m, m), |(lo, hi), p| (lo.min(p), hi.max(p)));
+            let centre = (lo + hi) * 0.5;
+            let spread = all().map(|p| p.distance(centre)).fold(0.0, f32::max);
+            let want = match framing {
+                Some(Context::Fight) => View { pitch: 34.0, distance: (8.0 + 1.8 * spread).clamp(10.0, 18.0), fov: 50.0 },
+                Some(Context::Greet(_)) => View { pitch: 32.0, distance: (7.5 + 0.9 * 2.0 * spread).clamp(9.0, 15.0), fov: 48.0 },
+                _ => View { pitch: 36.0, distance: 8.0, fov: 45.0 },
+            };
+            // A new context starts from its own view; one under way eases toward the new spread.
+            if cam.frame < 0.02 {
+                cam.frame_view = want;
+            } else {
+                cam.frame_view = cam.frame_view.lerp(want, ease(2.5));
+            }
+            let off = Vec3::new(centre.x - m.x, 0.0, centre.y - m.y);
+            cam.frame_off = if cam.frame < 0.02 { off } else { cam.frame_off + (off - cam.frame_off) * ease(3.0) };
+        }
+        // Framing only ever brings the view in (never further than sight allows).
+        let base = orbit_view;
+        let mut framed = base.lerp(cam.frame_view, cam.frame);
+        framed.distance = framed.distance.min(base.distance);
+        v = framed;
+
+        if let Some(me) = target.0 {
+            // Cursor lean: nothing inside 30% of the half-screen, full lean at 80%.
+            let (up, right) = axes(cam.shown_yaw);
+            let lean = cursor.filter(|_| !input.demo).map_or(Vec3::ZERO, |(c, size2)| {
+                let n = (c - size2 / 2.0) / (size2 / 2.0);
+                let k = ((n.length() - 0.3) / 0.5).clamp(0.0, 1.0);
+                let dir = (right * n.x - up * n.y).normalize_or_zero();
+                Vec3::new(dir.x, 0.0, dir.y) * k * k * (3.0 - 2.0 * k) * r.lead * s * (1.0 - cam.frame)
+            });
+            // Look at about chest height, toward the framed group's centre as far as framing goes
+            // (at my height: the others stand within a few metres).
+            let want = me + lean + Vec3::Y * 1.2 * s + cam.frame_off * cam.frame;
+            let snap = cam.focus.distance(want) > 40.0;
+            cam.focus = if snap { want } else { cam.focus + (want - cam.focus) * ease(8.0) };
+        }
+        let pitch = v.pitch.to_radians();
+        let dist = v.distance * s.max(0.4);
+        let (up, _) = axes(cam.shown_yaw);
+        let back = Vec3::new(-up.x, 0.0, -up.y) * pitch.cos() * dist;
+        let mut eye = cam.focus + back + Vec3::Y * pitch.sin() * dist;
+        // Never inside a building: where the eye would be within one, it comes in along its line to
+        // the focus until it is clear of it (at once), and goes back out eased. A building merely in
+        // the way fades instead (`envs::cutaway`), so the distance doesn't change for it.
+        let mut pull = 1.0f32;
+        let reach = (eye - cam.focus).length().max(0.1);
+        for (t, f) in &solids {
+            if f.size.x <= 0.0 || t.translation.xz().distance(eye.xz()) > reach + 40.0 {
+                continue;
+            }
+            let (centre, half, rot) = crate::envs::fitted_box(t, f);
+            let inv = rot.inverse();
+            let pad = Vec3::splat(EYE_CLEAR);
+            if let Some((enter, exit)) = crate::envs::segment_box(inv * (cam.focus - centre), inv * (eye - centre), half + pad) {
+                if enter > 0.05 && enter < 1.0 && exit >= 1.0 {
+                    pull = pull.min((enter - 0.02).max(PULL_MIN));
+                }
+            }
+        }
+        cam.pull = if pull < cam.pull || cam.pull == 0.0 { pull } else { cam.pull + (pull - cam.pull) * ease(PULL_OUT) };
+        eye = cam.focus + (eye - cam.focus) * cam.pull;
+        tf.translation = eye;
     }
-    cam.pull = if pull < cam.pull || cam.pull == 0.0 { pull } else { cam.pull + (pull - cam.pull) * ease(PULL_OUT) };
-    eye = cam.focus + (eye - cam.focus) * cam.pull;
+    let mut eye = tf.translation;
     // Above the ground behind: the island's on a land world, else the tiles'. Rising ground lifts
     // the eye smoothly and the view re-aims at the focus, rather than the eye popping up a hill
     // after it was aimed (and the view tilting off me).
@@ -529,33 +737,139 @@ pub fn follow(
     cam.lift += (want - cam.lift) * ease(if want > cam.lift { LIFT_UP } else { LIFT_DOWN });
     eye.y = (eye.y + cam.lift).max(ground + CLEARANCE_MIN);
     tf.translation = eye;
-    tf.look_at(cam.focus, Vec3::Y);
-
-    // While aligning, or turning the view by hand, keep the cursor on the same ground point, so
-    // your facing doesn't change (and an align ends with that point straight ahead).
-    let place = |p: Vec3| camera.world_to_viewport(&GlobalTransform::from(*tf), p).ok().filter(|s| s.x >= 0.0 && s.y >= 0.0 && s.x < screen_size.x && s.y < screen_size.y);
-    let zooming = (cam.zoom - cam.zoom_shown).abs() > 0.002;
-    let turning = manual != 0.0 || d.abs() > 0.05 || zooming;
-    if (manual != 0.0 || zooming) && cam.turn_lock.is_none() {
-        cam.turn_lock = last_ground;
-    } else if !turning {
-        cam.turn_lock = None;
+    let focus_point = cam.focus;
+    tf.look_at(focus_point, Vec3::Y);
+    cam.pose = GlobalTransform::from(*tf);
+    cam.eye_height = eye.y - focus_point.y;
+    cam.ground_clearance = eye.y - ground;
+    cam.shown = View { pitch: (-tf.forward().y).asin().to_degrees(), ..v };
+    if let Projection::Perspective(p) = &mut *proj {
+        p.fov = v.fov.to_radians();
+        if let Some(size) = camera.logical_viewport_size() {
+            p.aspect_ratio = size.x / size.y;
+        }
+        camera.computed.clip_from_view = p.get_clip_from_view();
     }
-    if let Some((want, lock)) = cam.align {
+
+    // While aligning, keep the cursor on the same ground point, so your facing doesn't change and
+    // the align ends with that point straight ahead (a cursor fixed on the screen would keep the
+    // view turning after your facing). A turn or a zoom by hand (a pan, a drag, `[` `]`, a pinch,
+    // the wheel) leaves the cursor at its screen position, and what it points at follows the view.
+    let place = |p: Vec3| camera.world_to_viewport(&GlobalTransform::from(*tf), p).ok().filter(|s| s.x >= 0.0 && s.y >= 0.0 && s.x < screen_size.x && s.y < screen_size.y);
+    if let Some((want, lock)) = cam.align.filter(|_| !top_down) {
         if let Some(screen) = lock.and_then(place) {
             pointer.place = Some(screen);
         }
         if diff(want, cam.shown_yaw).abs() < 0.5 {
             cam.align = None;
         }
-    } else if let Some(screen) = cam.turn_lock.and_then(place) {
-        pointer.place = Some(screen);
     }
 
-    // Draw out toward the horizon and fade it into the sky.
+    // Draw out toward the horizon and fade it into the sky: by the environment's mood where
+    // there is one (the island's, Cullet's), else round the tile world's draw radius. The
+    // atmosphere scales it after (`daylight::apply`: night and weather close it in), and the
+    // sight edge's limited view fogs from my sight on top of it (`sightedge.rs`).
     draw.radius = 110.0 * s.max(0.7);
-    fog.falloff = FogFalloff::Linear { start: draw.radius * 0.45, end: draw.radius * 0.95 };
-    if let Projection::Perspective(p) = &mut *proj {
-        p.fov = v.fov.to_radians();
+    let (start, end) = match draw.fog {
+        Some((a, b)) => (a * s.max(0.7), b * s.max(0.7)),
+        None => (draw.radius * 0.45, draw.radius * 0.95),
+    };
+    fog.falloff = FogFalloff::Linear { start, end };
+}
+
+/// Use the camera currently on screen for input, or the new camera for rendering the next frame.
+pub fn cursor_hit(
+    mut cam: ResMut<Cam>,
+    pointer: Res<crate::pointer::Pointer>,
+    q: Query<&Camera, With<Camera3d>>,
+    target: Res<crate::controls::Target>,
+    scene: NonSend<Scene>,
+    island: Option<Res<crate::island::Island>>,
+) {
+    cam.cursor_ground = pointer.pos.and_then(|pos| {
+        let ray = q.single().ok()?.viewport_to_world(&cam.pose, pos).ok()?;
+        match island.as_deref() {
+            Some(island) => crate::live::ray_ground(island, ray.origin, *ray.direction),
+            None if scene.ready() => scene.ray_ground(ray.origin, *ray.direction),
+            None => None,
+        }
+    });
+    // Zoom alone keeps the last look under a stationary pointer. Rotation changes the screen axes.
+    if cam.mode == Mode::Orbit || cam.look_pointer != pointer.pos || cam.look_yaw != cam.shown_yaw
+        || pointer.tapped || cam.cursor_ground.is_none() || cam.look_dir.is_none()
+    {
+        cam.look_dir = cam.cursor_ground.zip(target.0).map(|(hit, me)| (hit - me).xz()).filter(|d| d.length_squared() > 0.09);
+        cam.look_pointer = pointer.pos;
+        cam.look_yaw = cam.shown_yaw;
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_middle_tap_does_not_turn_the_camera() {
+        let mut drag = MiddleDrag::default();
+        assert_eq!(drag.turn(Vec2::new(3.0, 1.0)), 0.0);
+        assert!(!drag.dragged);
+        assert_eq!(drag.turn(Vec2::new(5.0, -1.0)), 8.0 * ROTATE_DEG_PER_PX);
+        assert!(drag.dragged);
+        assert_eq!(drag.turn(Vec2::new(-1.0, 0.0)), -ROTATE_DEG_PER_PX);
+    }
+
+    #[test]
+    fn top_down_movement_uses_the_displayed_bearing() {
+        let cam = Cam { mode: Mode::TopDown, shown_yaw: 135.0, control_yaw: 0.0, ..default() };
+        let (up, right) = cam.control_axes();
+        let diagonal = std::f32::consts::FRAC_1_SQRT_2;
+        assert!(up.distance(Vec2::splat(diagonal)) < 1e-6);
+        assert!(right.distance(Vec2::new(-diagonal, diagonal)) < 1e-6);
+    }
+
+    #[test]
+    fn top_down_curve_hits_the_knots_and_clamps() {
+        assert_eq!(Zoom::default().shown, 0.55);
+        let tuning = Tuning::preset("ours").unwrap();
+        for (z, knot) in [0.0, MIDDLE, 1.0].into_iter().zip(tuning.stops) {
+            assert_eq!(tuning.view(z), knot);
+        }
+        assert_eq!(tuning.view(-1.0), tuning.view(0.0));
+        assert_eq!(tuning.view(2.0), tuning.view(1.0));
+        assert_eq!(tuning.view(0.275).distance, 15.5);
+    }
+
+    #[test]
+    fn fixed_pitch_only_zooms_by_height() {
+        let tuning = Tuning { fixed_pitch: Some(55.0), ..Tuning::OURS };
+        for (z, stop) in [0.0, MIDDLE, 1.0].into_iter().zip(tuning.stops) {
+            assert_eq!(tuning.view(z), View { pitch: 55.0, fov: 44.0, distance: stop.distance });
+        }
+        let saved = serde_json::to_string(&tuning).unwrap();
+        assert_eq!(serde_json::from_str::<Tuning>(&saved).unwrap(), tuning);
+    }
+
+
+    #[test]
+    fn play_default_holds_pitch_and_keeps_the_lens_curve() {
+        let tuning = Tuning::default();
+        for (z, expected_fov) in [0.0, MIDDLE, 1.0].into_iter().zip([46.0, 44.0, 42.0]) {
+            assert_eq!(tuning.view(z).pitch, 58.0);
+            assert_eq!(tuning.view(z).fov, expected_fov);
+        }
+    }
+
+    #[test]
+    fn late_tilt_stays_flat_until_its_start_then_eases_to_the_near_pitch() {
+        let tuning = Tuning {
+            late_tilt: Some(LateTilt { tilt_start: 0.8, near_pitch: 48.0 }),
+            ..Tuning::default()
+        };
+        for zoom in [0.0, 0.55, 0.8] {
+            assert_eq!(tuning.view(zoom).pitch, 58.0);
+        }
+        assert!((tuning.view(0.9).pitch - 53.0).abs() < 0.001);
+        assert_eq!(tuning.view(1.0).pitch, 48.0);
+    }
+
 }

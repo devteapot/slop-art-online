@@ -1,0 +1,88 @@
+{
+ "schema": 1,
+ "family": "character:face-types",
+ "id": "20261111-65d76b69-d7a2e5",
+ "published": "2026-11-11T21:56:52+01:00",
+ "imported": "2026-11-11T21:56:52+01:00",
+ "track": "char-4",
+ "maker": "Claude Fable 5.2",
+ "note": "Pass 3, step 2: 21 face types set by measuring the reference (and by drawing them here), the identity rig of 25 bones and 38 values, five people drawn from each type. No mesh yet.",
+ "source": {
+  "commit": "65d76b69a471ec16c63e43e2d0050dad1880e379",
+  "branch": "char-4",
+  "dirty": false,
+  "generator": "living/tools/characters/face_types.py",
+  "generator_sha256": "13c11f6ab96e1589ea1b1723f7e73ef4424049b506cadba4e0bff01400d35d6c",
+  "generator_state": "committed",
+  "params": {}
+ },
+ "renderer": {
+  "method": "diagram (face_types.py draw); in-game-proof and the reference's photographs are the asset view",
+  "commit": "",
+  "key": "diagram (face_types.py draw); in-game-proof and the reference's photographs are the asset view",
+  "preset": "",
+  "note": "types and people are drawn from types.json by living/tools/characters/face_types.py; in-game-proof is rig_probe.py's files through the game's asset view; the vroid member is the reference measured by living/tools/characters/reference and photographed by the board; the blue-protocol member is published CEDEC slides, for comparison only (sources in ~/archive/asset-board/references/blue-protocol/SOURCES.md)"
+ },
+ "preset": "",
+ "media": "media/character-face-types/20261111-65d76b69-d7a2e5",
+ "members": [
+  {
+   "name": "types",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "a54be44d4507c035ba739de78283541695401768998b6ff1be944dccf77a38bf",
+   "shots": [
+    "adult-men",
+    "adult-women",
+    "children",
+    "elder-men",
+    "elder-women",
+    "in-game-proof",
+    "measured",
+    "rig",
+    "youth-boys",
+    "youth-girls"
+   ],
+   "clips": []
+  },
+  {
+   "name": "vroid",
+   "role": "control",
+   "token_kind": "import",
+   "sha256": "fcb9b1443dadd1fa239209a013b589c7701b181d188760fa23ea1780bdfcc156",
+   "shots": [
+    "adult-men",
+    "adult-women",
+    "children",
+    "elder-men",
+    "elder-women",
+    "in-game-proof",
+    "measured",
+    "rig",
+    "youth-boys",
+    "youth-girls"
+   ],
+   "clips": []
+  },
+  {
+   "name": "blue-protocol",
+   "role": "control",
+   "token_kind": "import",
+   "sha256": "c372b96201d6458dfbe70f658e90ab7111f04aa16b8ad9593e2d29043ce47fbd",
+   "shots": [
+    "adult-men",
+    "adult-women",
+    "children",
+    "elder-men",
+    "elder-women",
+    "in-game-proof",
+    "measured",
+    "rig",
+    "youth-boys",
+    "youth-girls"
+   ],
+   "clips": []
+  }
+ ],
+ "delivered": []
+}

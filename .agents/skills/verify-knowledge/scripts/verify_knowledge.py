@@ -24,11 +24,13 @@ from verify_credentials import private_dir, redact, write_private
 
 SHARED = ROOT / '.agents/skills/verify/scripts/verify.py'
 FAKE = ROOT / '.agents/skills/verify-llm/scripts/fake_llm.py'
-BUILD = ROOT / '.local/living/verify/build-knowledge'
+# A worker's one build tree (CARGO_TARGET_DIR) when set; else the runner's own.
+BUILD = Path(os.environ['CARGO_TARGET_DIR']) if os.environ.get('CARGO_TARGET_DIR') else ROOT / '.local/living/verify/build-knowledge'
 TESTS = ('minds_revise_merge_and_fade', 'recall_by_cues_and_forgetting',
          'formative_past_outlasts_ordinary_beliefs', 'authored_memories_are_recalled',
          'grounds_link_stories_and_lessons', 'hearsay_fades_faster_until_corroborated',
-         'childhood_memories_last_longer', 'missed_things_weaken')
+         'childhood_memories_last_longer', 'missed_things_weaken',
+         'projects_are_pursued_served_ended_and_faded', 'strangers_stay_apart', 'a_far_figure_joins_the_person')
 STRUCTURE_BIT = 1 << 40
 
 
@@ -113,6 +115,16 @@ class Run:
         return json.loads(self.harness('sql', query, '--save', label).stdout)
 
     def admin(self, reducer, *args):
+        if reducer == 'install_script':
+            # Over HTTP: the script is past the 128 KiB one command-line argument may hold.
+            sys.path.insert(0, str(ROOT / 'living/tools'))
+            from install_script import install
+            code, body = install(self.db, args[0])
+            with (self.directory / 'actions.log').open('a') as stream:
+                stream.write(f'$ install_script {self.db} ({len(args[0])} bytes, HTTP)\n{body}\nstatus={code}\n')
+            if code != 200:
+                raise RuntimeError(f'install_script failed: {code} {body[-300:]}')
+            return subprocess.CompletedProcess(['install_script'], 0, body, '')
         before = self.sql(f'SELECT revision FROM brain WHERE id = {args[0]}', f'graph-before-{args[0]}') if reducer == 'set_behavior' else None
         result = self.command([ROOT / 'living/tools/stdb', 'call', '-s', 'local', self.db,
                                reducer, *[json.dumps(x) for x in args]])
@@ -315,6 +327,38 @@ class Run:
             assert dict(old, holder=new['holder']) == new
         assert self.knowledge(student, 'survivor-knowledge')
         self.pass_feature('death erases know-how and preserves tablets', ['death-before-knowledge.json', 'death-after-knowledge.json', 'death-before-tablets.json', 'death-after-tablets.json', 'death-remains.json', 'dead-character.json', 'death-after-practice.json', 'survivor-knowledge.json'])
+
+    def world_know_how(self):
+        """A technique only a world's own laws add (Cullet's glassmaking, `know_how()` in
+        seeds/worlds/cullet/laws.rhai) is taught like the shipped ones: the teach rule takes the
+        world's know-how table, not what experimenting can reveal (2026-11-11, goods-2)."""
+        world = self.sql('SELECT * FROM world', 'world')
+        assert world and world[0]['day_ms'] == 48 * 60_000, 'not a world with Cullet\'s laws'
+        self.admin('spawn_crowd', 2, True)
+        actors = self.sql("SELECT * FROM character WHERE name = 'Walker1' OR name = 'Walker2'", 'scene-actors')
+        ids = {r['name']: r['id'] for r in actors}
+        teacher, student = ids['Walker1'], ids['Walker2']
+        for actor in (teacher, student):
+            self.admin('set_behavior', actor, json.dumps({'wait': 120}))
+        self.admin('place_near', student, teacher)
+        for t in ('fire', 'glassmaking'):
+            self.admin('grant_know_how', teacher, t)
+        assert not any(r['technique'] in ('fire', 'glassmaking') for r in self.knowledge(student, 'student-before'))
+        # Not a thing to teach: the refusal lists the world's techniques, glassmaking among them.
+        self.graph(teacher, {'do': {'skill': 'teach', 'target': {'id': student}, 'item': 'glass'}})
+        got = self.wait(lambda: self.feedback(teacher, 'no technique called glass', 'teach-feedback-glass'), 'teaching a thing refused')
+        assert 'glassmaking' in got[-1]['text'] and 'fire_bolt' in got[-1]['text'], got[-1]['text']
+        # Glassmaking needs fire first.
+        self.graph(teacher, {'do': {'skill': 'teach', 'target': {'id': student}, 'item': 'glassmaking'}})
+        self.wait(lambda: self.feedback(teacher, 'they must first learn fire', 'teach-feedback-requires'), 'glassmaking needs fire')
+        assert not any(r['technique'] == 'glassmaking' for r in self.knowledge(student, 'student-refused'))
+        self.admin('grant_know_how', student, 'fire')
+        self.graph(teacher, {'do': {'skill': 'teach', 'target': {'id': student}, 'item': 'glassmaking'}})
+        taught = self.wait(lambda: [r for r in self.knowledge(student, 'student-taught') if r['technique'] == 'glassmaking'], 'teaching glassmaking', 90)
+        assert len(taught) == 1 and taught[0]['source'] == 'taught by Walker1', taught
+        self.graph(teacher, {'do': {'skill': 'teach', 'target': {'id': student}, 'item': 'glassmaking'}})
+        self.wait(lambda: self.feedback(teacher, 'already know glassmaking', 'teach-feedback-repeat'), 'duplicate teaching refusal')
+        self.pass_feature("a world's own technique is taught", ['world.json', 'student-before.json', 'teach-feedback-glass.json', 'teach-feedback-requires.json', 'student-refused.json', 'student-taught.json', 'teach-feedback-repeat.json'])
 
     def process(self, label, args, env=None):
         stream = (self.directory / (label + '.log')).open('a')
@@ -602,16 +646,32 @@ class Run:
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action', choices=['run', 'cleanup'])
+    parser.add_argument('action', choices=['run', 'world-know-how', 'cleanup'])
     parser.add_argument('--run', required=True)
+    parser.add_argument('--target-dir', help='build the module here (the shared harness\'s --target-dir; default CARGO_TARGET_DIR when set)')
     args = parser.parse_args()
     run = Run(args.run, existing=args.action == 'cleanup')
     if args.action == 'cleanup':
         run.cleanup()
         return
     error = None
+    if args.action == 'world-know-how':
+        # Authority only (no Neo4j, no mind): a world made with Cullet's laws.
+        try:
+            run.harness('launch', '--seed', 'cullet-laws', *(['--target-dir', args.target_dir or os.environ['CARGO_TARGET_DIR']] if args.target_dir or os.environ.get('CARGO_TARGET_DIR') else []))
+            run.harness('doctor')
+            run.world_know_how()
+        except BaseException as caught:
+            error = caught
+            (run.directory / 'failure.log').write_text(traceback.format_exc())
+        finally:
+            run.cleanup()
+        if error:
+            raise RuntimeError(f'proof failed; evidence in {run.directory}') from error
+        print(f'World know-how proof passed. Evidence retained at {run.directory}', flush=True)
+        return
     try:
-        run.harness('launch', '--seed', 'authored-test')
+        run.harness('launch', '--seed', 'authored-test', *(['--target-dir', args.target_dir or os.environ['CARGO_TARGET_DIR']] if args.target_dir or os.environ.get('CARGO_TARGET_DIR') else []))
         run.harness('doctor')
         run.start_neo4j()
         run.graph_tests()

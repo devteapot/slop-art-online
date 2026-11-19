@@ -16,7 +16,7 @@ use anyhow::{anyhow, Result};
 use living_bindings::*;
 use serde_json::{json, Value};
 use spacetimedb_sdk::{DbContext, Identity, Table};
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tokio::sync::{oneshot, Semaphore};
@@ -26,14 +26,18 @@ mod dealings;
 mod judge;
 mod lived;
 pub mod lod;
+pub mod projects;
 mod recall;
 pub mod rethink;
 mod sleep;
 mod talk;
 mod facts;
+mod fast;
 
 /// How much of a remembered thing's salience and confidence is kept after a step failed at it.
 const MISSED_WEAKEN: f64 = 0.5;
+/// At most this many remembered resources in a place list (`places`), nearest first.
+pub(crate) const STOCK_SHOWN: usize = 8;
 
 pub enum Event {
     /// Speech heard (or unanswered) by one of this service's characters.
@@ -49,12 +53,25 @@ pub enum Event {
     Lived(Experience),
     /// With the rethink gate on: a percept of one of this service's characters.
     Percept(Experience),
+    /// A fast-lane request issued for one of this service's characters (mind/fast.rs).
+    Fast(FastAsk),
+    /// A line of one of this service's characters whose `#<id>` handles the world said as words
+    /// (`spoken_as`, speech.rs): journaled in `outcomes/spoken_as.jsonl`.
+    SpokenAs(Experience),
 }
 
 pub use lived::enabled as player_memory;
 
+/// Whether the conversation switches read who heard each line (`LIVING_GREET`; the
+/// `audience` table, subscribed only then).
+pub fn greet_audience() -> bool {
+    talk::Config::from_env().map(|c| c.audience()).unwrap_or(false)
+}
+
 #[derive(Default)]
 struct ActorMind {
+    /// The last fast-lane request (`fast_ask.issued_ms`) taken up (mind/fast.rs).
+    fast_issued: u64,
     consolidating: bool,
     deliberating: bool,
     /// A deliberation is running now (`deliberate`): conversation turns wait for it (talk.rs).
@@ -87,6 +104,44 @@ struct ActorMind {
     deferring: bool,
     /// Deliberations in a row whose model could not be reached (their request waits).
     model_failures: u32,
+    /// How many deliberations each pending reason (its text and arrival time) was already
+    /// carried by (`carried_reasons`).
+    carried: HashMap<(String, u64), u32>,
+    /// The consolidation now running, for its outcome line (`Llm::outcome`).
+    attempt: Option<Attempt>,
+    /// Experiences that were in a failed consolidation and are not integrated yet. One that
+    /// leaves the inbox meanwhile (the authority keeps a character's last 400) is lost.
+    unintegrated: BTreeSet<u64>,
+}
+
+/// What one consolidation took and how its model answered (`outcomes/consolidations.jsonl`).
+#[derive(Default)]
+struct Attempt {
+    ids: Vec<u64>,
+    meaningful: usize,
+    upto: u64,
+    /// Experiences of earlier failed consolidations gone from the inbox unintegrated.
+    trimmed: usize,
+    model_call: bool,
+    overflowed: bool,
+    model: Option<String>,
+}
+
+/// The record of what a deliberation carried: each reason line of its request, when it
+/// arrived, and how many earlier deliberations of this service already carried that same
+/// arrival (0 for a reason seen the first time). `counts` keeps only the reasons still pending.
+fn carry(counts: &mut HashMap<(String, u64), u32>, lines: Vec<(String, u64)>) -> Value {
+    counts.retain(|k, _| lines.contains(k));
+    let out: Vec<Value> = lines
+        .into_iter()
+        .map(|(text, arrived_ms)| {
+            let n = counts.entry((text.clone(), arrived_ms)).or_insert(0);
+            let before = *n;
+            *n += 1;
+            json!({"text": text, "arrived_ms": arrived_ms, "carried_before": before})
+        })
+        .collect();
+    Value::Array(out)
 }
 
 /// Where a character's first identity comes from, when the service finds none.
@@ -98,6 +153,11 @@ enum Origin {
     Birth,
     /// From its background row (town, occupation, household), by one identity call.
     Background,
+    /// Born in the world and past childhood when its mind first starts (a capped trial
+    /// thinks for it only later): who it is from facts only, with no model call
+    /// (`grown_identity`): its parents, siblings and children, its home, its inborn temperament,
+    /// and what it lives from then on. Before this, such a mind had no identity and no parents.
+    Grown,
     /// The seed's own persona for it, if the seed has one (and animals' species nature).
     /// Nothing is written otherwise: a joined player's character, for one, is who its
     /// conduct shows (docs/PLAYER_MEMORY.md).
@@ -116,6 +176,7 @@ impl Origin {
             (true, true, ..) => Self::Sheet,
             (true, false, true, ..) => Self::Birth,
             (true, false, false, true, _) => Self::Background,
+            (true, false, false, false, false) if parent => Self::Grown,
             (true, false, false, false, _) => Self::Seed,
         }
     }
@@ -156,6 +217,8 @@ pub struct Minds {
     /// Bound concurrent background memory work independently of network admission.
     slow: Semaphore,
     talk: Mutex<talk::Talks>,
+    /// Conversation switches (`LIVING_GREET`, `LIVING_PARK`; talk.rs).
+    talk_cfg: talk::Config,
     only: Option<std::collections::HashSet<u32>>,
     /// The land's settlements and lots, read once for residents' world facts (facts.rs).
     layout: tokio::sync::OnceCell<Arc<facts::Layout>>,
@@ -177,7 +240,6 @@ pub struct Minds {
     /// and the pack decisions shared with members.
     animal_cfg: animal::Config,
     animal_sigs: Mutex<HashMap<u32, animal::Signature>>,
-    packs: Mutex<HashMap<u32, animal::PackDecision>>,
     /// Typed judgments refreshed in the background (judge.rs; `LIVING_JEV=1`).
     jev: Option<judge::Jev>,
     asked: Mutex<HashMap<u32, judge::Asked>>,
@@ -186,6 +248,8 @@ pub struct Minds {
     felt: Mutex<HashMap<u32, (Instant, Value)>>,
     /// The rethink gate in front of non-urgent deliberations (rethink.rs; `LIVING_RETHINK`).
     rethink: Option<rethink::Gate>,
+    /// The fast lane's route and limits (`rethink.json` `fast`; mind/fast.rs).
+    fast: fast::Config,
     rethink_track: Mutex<HashMap<u32, rethink::Track>>,
     rethink_stats: Mutex<rethink::Stats>,
     rethink_logged: Mutex<Option<Instant>>,
@@ -214,9 +278,58 @@ pub(crate) fn acts_of(v: &Value) -> Vec<String> {
     list.into_iter().filter(|x| x.is_object()).take(living_rules::acts::MAX_QUEUED).map(|x| x.to_string()).collect()
 }
 
+fn act_refusals(acts: &[String], outcomes: Vec<Option<String>>) -> Vec<Value> {
+    acts.iter().zip(outcomes).filter_map(|(act, refusal)| {
+        refusal.map(|why| json!({"act": llm::parse_json(act).unwrap_or_else(|_| json!(act)), "refusal": why}))
+    }).collect()
+}
+
+/// One slot per refused act, in the order the authority received them.
+fn repaired_acts(reply: &Value, count: usize) -> Vec<String> {
+    reply["replacements"].as_array().filter(|items| items.len() == count)
+        .into_iter().flatten().filter(|item| item.is_object()).map(Value::to_string).collect()
+}
+
+#[cfg(test)]
+#[test]
+fn act_repair_only_takes_ordered_replacements_for_refused_slots() {
+    assert_eq!(repaired_acts(&json!({
+        "say": "must not be replayed",
+        "acts": [{"do": "give"}],
+        "replacements": [null, {"do": "goto", "target": {"place": "home"}}],
+    }), 2), [r#"{"do":"goto","target":{"place":"home"}}"#]);
+    assert!(repaired_acts(&json!({"replacements": [{"do": "goto"}, {"do": "give"}]}), 1).is_empty());
+}
+
 /// The persona's line on one's community: how many others belong, and by name only those one
 /// has feelings about (a town of 77 listed every name: 11–20% of a think or consolidation
 /// prompt, growing with the town).
+/// How the authority's projection labels someone whose name one does not know
+/// (`perception::stranger`): by life stage for a person, by kind with its article otherwise.
+pub(crate) fn unnamed_label(kind: &str, stage: u8) -> String {
+    if kind == "person" {
+        return match stage {
+            0 => "a baby",
+            1 => "a child",
+            3 => "an old stranger",
+            _ => "a stranger",
+        }
+        .into();
+    }
+    let article = if kind.starts_with(['a', 'e', 'i', 'o', 'u']) { "an" } else { "a" };
+    format!("{article} {kind}")
+}
+
+/// The joins a batch of experiences asks for: each `made_out` experience (subject the person,
+/// object the handle of the figure they were) folds `person:<handle>` into `person:<id>`.
+pub(crate) fn made_out_merges(batch: &[Experience]) -> Vec<(String, String)> {
+    batch
+        .iter()
+        .filter(|e| e.kind == "made_out" && e.object >= living_rules::script::FAR_HANDLE_BASE && e.subject != 0 && e.subject < living_rules::script::FAR_HANDLE_BASE)
+        .map(|e| (format!("person:{}", e.object), format!("person:{}", e.subject)))
+        .collect()
+}
+
 fn belonging(community: &str, others: usize, known: &[String]) -> String {
     const NAMED: usize = 12;
     let mut line = format!("\nYou belong to {community}");
@@ -322,13 +435,17 @@ impl Minds {
             prompts::set_judgments(j.grammar());
         }
         let only_env = std::env::var("LIVING_ONLY").ok();
+        let talk_cfg = talk::Config::from_env()?;
+        if talk_cfg.greet != talk::Greet::Off || talk_cfg.park != talk::Park::Wait {
+            log::info!("conversation switches: {talk_cfg:?}");
+        }
         let lived_cfg = lived::Config::from_env();
         if lived_cfg.on {
             if let Some(route) = &lived_cfg.profile {
                 llm.warn_effort_gaps("LIVING_PLAYER_MEMORY_MODEL", route, &["internalize"]);
             }
         }
-        Ok(Arc::new(Self { conn, llm, store, seed, species, me, actors: Mutex::new(HashMap::new()), slow: Semaphore::new((concurrency / 2).max(1)), talk: Mutex::new(talk::Talks::default()), only: only_env.map(|v| v.split(',').filter_map(|x| x.trim().parse().ok()).collect()), layout: Default::default(), lod: lod::Lod::from_env(), pending: Mutex::new(HashMap::new()), groups: Mutex::new(HashMap::new()), routed: Mutex::new(HashMap::new()), lived_cfg, lived: Mutex::new(lived::Lived::default()), sleep_cfg: sleep::Config::from_env(), sleep_batch_at: Mutex::new(None), animal_cfg: animal::Config::from_env(), animal_sigs: Mutex::new(HashMap::new()), packs: Mutex::new(HashMap::new()), jev, asked: Mutex::new(HashMap::new()), felt: Mutex::new(HashMap::new()), rethink, rethink_track: Mutex::new(HashMap::new()), rethink_stats: Mutex::new(rethink::Stats::default()), rethink_logged: Mutex::new(None) }))
+        Ok(Arc::new(Self { conn, llm, store, seed, species, me, actors: Mutex::new(HashMap::new()), slow: Semaphore::new((concurrency / 2).max(1)), talk: Mutex::new(talk::Talks::default()), talk_cfg, only: only_env.map(|v| v.split(',').filter_map(|x| x.trim().parse().ok()).collect()), layout: Default::default(), lod: lod::Lod::from_env(), pending: Mutex::new(HashMap::new()), groups: Mutex::new(HashMap::new()), routed: Mutex::new(HashMap::new()), lived_cfg, lived: Mutex::new(lived::Lived::default()), sleep_cfg: sleep::Config::from_env(), sleep_batch_at: Mutex::new(None), animal_cfg: animal::Config::from_env(), animal_sigs: Mutex::new(HashMap::new()), jev, asked: Mutex::new(HashMap::new()), felt: Mutex::new(HashMap::new()), rethink, fast: fast::Config::load(&crate::root()), rethink_track: Mutex::new(HashMap::new()), rethink_stats: Mutex::new(rethink::Stats::default()), rethink_logged: Mutex::new(None) }))
     }
 
     /// Characters this service thinks for: alive, AI-controlled, and past infancy (infants
@@ -380,25 +497,125 @@ impl Minds {
 
     /// How `me` knows `other`: their name where the authority counts it known
     /// (`perception::knows_name`: itself, family, the other parent of its children, its
-    /// community, someone who told it their name), else "a stranger" (docs/PERCEPTION.md: names
-    /// only when known). For prompts and for what goes into a character's own memory; logs and
-    /// developer records keep names.
+    /// community, someone who told it their name), else as the authority's projection labels
+    /// someone unnamed ("a stranger", "a child", "an old stranger", "a baby";
+    /// `perception::stranger`; docs/PERCEPTION.md: names only when known). For prompts; logs and
+    /// developer records keep names. What goes into a character's own memory is
+    /// [`Minds::remembered_as`].
     pub(super) fn known_as(&self, me: u32, other: u32) -> String {
+        if other >= living_rules::script::FAR_HANDLE_BASE {
+            return living_rules::script::FAR_PERSON.into();
+        }
         let Some(o) = self.conn.db.character().id().find(&other) else { return "someone".into() };
+        if self.knows_name(me, &o) {
+            o.name
+        } else {
+            unnamed_label(&o.kind, o.stage)
+        }
+    }
+
+    /// Person `id`'s body sex, as the world holds it (the private `sex` table, read as the owner).
+    pub(crate) fn sex_of(&self, id: u32) -> Option<living_rules::sex::Sex> {
+        self.conn.db.sex().id().find(&id).and_then(|r| living_rules::sex::Sex::from_code(r.sex))
+    }
+
+    /// "a woman", "an old man": person `id`'s body in the rules' words, by sex and stage (none
+    /// for an animal or a person whose sex the world does not hold).
+    pub(crate) fn sex_words_of(&self, id: u32) -> Option<String> {
+        let c = self.conn.db.character().id().find(&id).filter(|c| c.kind == "person")?;
+        self.sex_of(id).map(|s| prompts::a_sex_word(s, c.stage))
+    }
+
+    /// What `me` remembers of `other`'s body sex (body-sex): its own always; anyone else's only
+    /// when its character made them out at full sight once (the authority's `sex_seen` row,
+    /// written then with the sex seen). Never from a name, kinship, a community, a relation or
+    /// speech: a prompt states the sex of someone out of sight only when the mind remembers it.
+    /// Someone in sight now is described by the authority's scene (`form`, near or far); a talk
+    /// partner only as remembered (someone face to face has been made out). A model's older guesses stay as its
+    /// beliefs; this fact, shown beside them, is what the world says.
+    pub(crate) fn known_sex(&self, me: u32, other: u32) -> Option<String> {
+        if other >= living_rules::script::FAR_HANDLE_BASE {
+            return None;
+        }
+        if me == other {
+            return self.sex_words_of(me);
+        }
+        let row = self.conn.db.sex_seen().iter().find(|r| r.observer == me && r.known == other)?;
+        let c = self.conn.db.character().id().find(&other)?;
+        living_rules::sex::Sex::from_code(row.sex).map(|s| prompts::a_sex_word(s, c.stage))
+    }
+
+    /// "Edda Fenner (#12, a woman)": a person as `me` knows them, with their body when known.
+    pub(crate) fn known_person(&self, me: u32, other: u32) -> String {
+        match self.known_sex(me, other) {
+            Some(s) => format!("{} (#{other}, {s})", self.known_as(me, other)),
+            None => format!("{} (#{other})", self.known_as(me, other)),
+        }
+    }
+
+    /// Whether `me` knows `o`'s name (`perception::knows_name`, as [`Minds::known_as`] reads it).
+    fn knows_name(&self, me: u32, o: &Character) -> bool {
+        let other = o.id;
         let family = |a: &Character, b: &Character| a.parent_a == b.id || a.parent_b == b.id || b.parent_a == a.id || b.parent_b == a.id;
         let community = |id: u32| self.conn.db.membership().iter().find(|m| m.member == id).map(|m| m.community);
-        let known = me == other
+        me == other
             || self.conn.db.acquaintance().iter().any(|a| a.observer == me && a.known == other)
-            || self.conn.db.character().id().find(&me).is_some_and(|m| family(&m, &o))
+            || self.conn.db.character().id().find(&me).is_some_and(|m| family(&m, o))
             || community(me).is_some_and(|k| community(other) == Some(k))
-            || self.conn.db.character().iter().any(|k| (k.parent_a == me && k.parent_b == other) || (k.parent_b == me && k.parent_a == other));
-        if known {
-            o.name
-        } else if o.kind != "person" {
-            format!("a {}", o.kind)
-        } else {
-            "a stranger".into()
+            || self.conn.db.character().iter().any(|k| (k.parent_a == me && k.parent_b == other) || (k.parent_b == me && k.parent_a == other))
+    }
+
+    /// Everyone whose name `me` knows, by the rule of [`Minds::knows_name`], with each table read
+    /// once (for checking many people at a time).
+    pub(super) fn known_names(&self, me: u32) -> std::collections::HashSet<u32> {
+        let mut out: std::collections::HashSet<u32> = std::collections::HashSet::from([me]);
+        out.extend(self.conn.db.acquaintance().iter().filter(|a| a.observer == me).map(|a| a.known));
+        if let Some(m) = self.conn.db.character().id().find(&me) {
+            out.extend([m.parent_a, m.parent_b].into_iter().filter(|p| *p != 0));
         }
+        for k in self.conn.db.character().iter().filter(|k| k.parent_a == me || k.parent_b == me) {
+            out.insert(k.id);
+            out.extend([k.parent_a, k.parent_b].into_iter().filter(|p| *p != 0));
+        }
+        let members: Vec<Membership> = self.conn.db.membership().iter().collect();
+        if let Some(k) = members.iter().find(|m| m.member == me).map(|m| m.community) {
+            out.extend(members.iter().filter(|m| m.community == k).map(|m| m.member));
+        }
+        out
+    }
+
+    /// The name of `other`'s node in `me`'s memory graph (`person:<id>`): their name where `me`
+    /// knows it, else the label they are perceived by with the id the mind perceives them by
+    /// (the scene's `id`, the `#id` of experience tags): "a stranger #77". Two people one does
+    /// not know by name are two nodes with two names, never one shared "a stranger" that
+    /// recall and the model fold together; the node takes the name once it is learned.
+    /// A person `me` has only perceived too far away to make out (every experience of theirs
+    /// that involves them reads "someone too far away to make out") is remembered as that, with
+    /// the id: "someone too far away to make out #77", known or not; once made out they become
+    /// "a stranger #77" or their name, and the store never names them from afar again
+    /// (`memory::FAR_NAME_KEPT`; far-label, docs/STRANGERS.md).
+    pub(super) fn remembered_as(&self, me: u32, other: u32) -> String {
+        match self.conn.db.character().id().find(&other) {
+            Some(o) if o.kind == "person" && self.only_far(me, other) => format!("{} #{other}", living_rules::script::FAR_PERSON),
+            Some(o) if self.knows_name(me, &o) => o.name,
+            Some(o) => format!("{} #{other}", unnamed_label(&o.kind, o.stage)),
+            // A figure seen too far away to make out, by its sighting's handle (far-handle).
+            None if other >= living_rules::script::FAR_HANDLE_BASE => format!("{} #{other}", living_rules::script::FAR_PERSON),
+            None => format!("someone #{other}"),
+        }
+    }
+
+    /// Whether every experience of `me`'s that involves `other` (subject or object) told them as
+    /// too far away to make out; false when none involves them.
+    fn only_far(&self, me: u32, other: u32) -> bool {
+        let mut any = false;
+        for e in self.experiences(me).iter().filter(|e| e.subject == other || e.object == other) {
+            if !e.text.contains(living_rules::script::FAR_PERSON) {
+                return false;
+            }
+            any = true;
+        }
+        any
     }
 
     fn name(&self, id: u32) -> String {
@@ -412,8 +629,7 @@ impl Minds {
             if t == 0 {
                 return "long ago".into();
             }
-            let h = living_rules::hour_of(t, epoch, day);
-            format!("day {} {:02}:{:02}", living_rules::day_of(t, epoch, day), h as u32, (h.fract() * 60.0) as u32)
+            living_rules::day_clock(t, epoch, day)
         }
     }
 
@@ -421,19 +637,29 @@ impl Minds {
     /// writes, at the row's rates, as `common::needs` in the authority computes them).
     pub(crate) fn body_now(&self, actor: u32) -> Option<prompts::Body> {
         let v = self.conn.db.vitals().id().find(&actor)?;
-        let m = llm::now_ms().saturating_sub(v.at_ms) as f32 / 60_000.0;
+        let now = llm::now_ms();
+        let m = now.saturating_sub(v.at_ms) as f32 / 60_000.0;
+        // Every column of the row by name, for the `status_of` law (a vital a world adds included).
+        let row = spacetimedb_sdk::__codegen::__sats::ser::serde::serialize_to(&v, serde_json::value::Serializer).map(|j| living_rules::script::body::fields_of_json(&j)).unwrap_or_default();
+        let c = self.conn.db.character().id().find(&actor);
+        let night = self.conn.db.world().id().find(&0).is_some_and(|w| prompts::is_night(living_rules::hour_of(now, w.epoch_ms, w.day_ms)));
         Some(prompts::Body {
             hp: (v.hp + v.hp_rate * m).clamp(0.0, v.max_hp),
             max_hp: v.max_hp,
             hunger: (v.hunger + v.hunger_rate * m).clamp(0.0, 100.0),
             energy: (v.energy + v.energy_rate * m).clamp(0.0, 100.0),
             hp_rate: v.hp_rate,
+            row,
+            now_ms: now,
+            kind: c.as_ref().map(|c| c.kind.clone()).unwrap_or_default(),
+            stage: c.map(|c| match c.stage { 0 => "infant", 1 => "child", 3 => "elder", _ => "adult" }.to_string()).unwrap_or_default(),
+            night,
         })
     }
 
     /// How the character's body feels now, in words; empty when its vitals are not known.
     pub(crate) fn body_text(&self, actor: u32) -> String {
-        self.body_now(actor).map(prompts::felt_body).unwrap_or_default()
+        self.body_now(actor).map(|b| prompts::felt_body(&b)).unwrap_or_default()
     }
 
     /// The character's routines as the mind sees them: how each has gone, and its graph.
@@ -665,10 +891,23 @@ impl Minds {
         v
     }
 
+    /// The last `n` experiences a deliberation's prompt lists beside its scene: none later than
+    /// the scene (`scene_ms`, the request's `updated_ms`), so "what you perceive right now" and
+    /// what one has lived describe one moment (`scene_upto`).
+    fn experiences_upto(&self, actor: u32, scene_ms: u64, n: usize) -> Vec<Experience> {
+        scene_upto(self.experiences(actor), scene_ms, n)
+    }
+
     /// Experience text with the ids of the people involved, so the mind anchors correctly.
     fn exp_line(&self, e: &Experience, fmt: &dyn Fn(u64) -> String, with_id: bool) -> String {
         let mut who = Vec::new();
         for id in [e.subject, e.object] {
+            // A figure too far away to make out has a handle of its sighting, no character row
+            // (far-handle): tagged so the mind can name it in what it decides.
+            if id >= living_rules::script::FAR_HANDLE_BASE && !who.iter().any(|w: &String| w.ends_with(&format!("#{id}"))) {
+                who.push(format!("{}=#{id}", living_rules::script::FAR_PERSON));
+                continue;
+            }
             if id != 0 && id != e.observer {
                 if let Some(c) = self.conn.db.character().id().find(&id) {
                     if c.kind == "person" && !who.iter().any(|w: &String| w.ends_with(&format!("#{id}"))) {
@@ -681,10 +920,26 @@ impl Minds {
             }
         }
         let tag = if who.is_empty() { String::new() } else { format!(" {{{}}}", who.join(", ")) };
+        let tag = format!("{}{tag}", self.heard_by(e));
         if with_id {
             format!("[{}] {} {}{tag}", e.id, fmt(e.at_ms), e.text)
         } else {
             format!("[{}] {}{tag}", fmt(e.at_ms), e.text)
+        }
+    }
+
+    /// Who heard one's own line, as the speaker saw it (`heard`): " (heard by Bram and a
+    /// stranger)"; nothing for other rows, or a line with no `heard` row.
+    fn heard_by(&self, e: &Experience) -> String {
+        if e.kind != "said" {
+            return String::new();
+        }
+        let Some(h) = self.conn.db.line_heard().line().find(&e.id) else { return String::new() };
+        let names: Vec<String> = h.hearers.iter().map(|id| self.known_as(e.observer, *id)).collect();
+        match names.as_slice() {
+            [] => " (no one you saw heard it)".into(),
+            [one] => format!(" (heard by {one})"),
+            [rest @ .., last] => format!(" (heard by {} and {last})", rest.join(", ")),
         }
     }
 
@@ -716,7 +971,7 @@ impl Minds {
                 match self.origin(&c) {
                     // An authored sheet is installed as written (no model call); a background
                     // takes a model call. Both run concurrently with the rest.
-                    o @ (Origin::Sheet | Origin::Background) => {
+                    o @ (Origin::Sheet | Origin::Background | Origin::Grown) => {
                         let me = self.clone();
                         let c = c.clone();
                         pending.push(tokio::spawn(async move {
@@ -899,10 +1154,10 @@ impl Minds {
             people.extend(sheet["memories"].as_array().into_iter().flatten().flat_map(|m| m["about"].as_array().into_iter().flatten().filter_map(id_of)));
             people.sort_unstable();
             people.dedup();
-            // Named as this person knows them (`known_as`): someone the author says they know
-            // only by sight stays "a stranger" until they are told the name.
+            // Named as this person remembers them (`remembered_as`): someone the author says
+            // they know only by sight stays "a stranger #<id>" until they are told the name.
             for id in &people {
-                patch.nodes.push(memory::NodeOp { key: format!("person:{id}"), labels: vec!["Person".into()], name: Some(self.known_as(c.id, *id)), props: Default::default() });
+                patch.nodes.push(memory::NodeOp { key: format!("person:{id}"), labels: vec!["Person".into()], name: Some(self.remembered_as(c.id, *id)), props: Default::default() });
             }
             // Everything the sheet installs is the author's (`lived_under = ["authored"]`), apart
             // from world facts (`world`), what a model writes (`ai`) and what was lived (`instinct`,
@@ -955,7 +1210,7 @@ impl Minds {
         let relations = relations.iter().filter_map(|r| Some(RelationIn { other: id_of(r)?, trust: num(&r["trust"]), affinity: num(&r["affinity"]), label: r["label"].as_str().unwrap_or_default().into(), note: r["note"].as_str().unwrap_or_default().into() })).collect();
         let judgments = judgments.iter().filter_map(|j| Some(JudgmentIn { key: memory::key(j["key"].as_str()?.trim_start_matches("stance:"))?.replace(':', "_"), value: num(&j["value"]), why: j["why"].as_str().unwrap_or_default().into() })).collect();
         let places = places.iter().map(|p| PlaceIn { name: p["name"].as_str().unwrap_or_default().into(), x: num(&p["x"]), y: num(&p["y"]) }).collect();
-        self.update(c.id, MindUpdate { persona: Some(persona), relations, beliefs: None, judgments, places, thought: Some(t), replace: false }).await
+        self.update(c.id, MindUpdate { persona: Some(persona), relations, beliefs: None, judgments, places, thought: Some(t), replace: false, cues: None }).await
     }
 
     /// Where a character's first identity comes from (see [`Origin::of`]).
@@ -973,6 +1228,7 @@ impl Minds {
             Origin::Birth => self.birth_persona(c).await,
             Origin::Background => self.facts_identity(c).await,
             Origin::Seed => self.seed_persona(c).await,
+            Origin::Grown => self.grown_identity(c).await,
         }
     }
 
@@ -991,7 +1247,10 @@ impl Minds {
         let profile = self.profile(&c);
         let system = prompts::birth_identity_system();
         let born = self.born_temperament(c.id);
-        let user = prompts::birth_identity_user(&c.name, c.id, [(&an, c.parent_a, &ap), (&bn, c.parent_b, &bp)], born.as_ref());
+        // The newborn's body (the authority wrote its row with the character, before this first
+        // mind call) and its parents' where it remembers them (`known_sex`: made out once).
+        let body = |id: u32| self.known_sex(c.id, id).unwrap_or_default();
+        let user = prompts::birth_identity_user(&c.name, c.id, [(&an, c.parent_a, &ap), (&bn, c.parent_b, &bp)], born.as_ref(), [&body(c.id), &body(c.parent_a), &body(c.parent_b)]);
         let _slow = self.slow.acquire().await?;
         let reply = self.llm.chat(&profile, self.attention(c.id, None), "consolidate", &c.name, &[Msg { role: "system", content: system }, Msg { role: "user", content: user }]).await?;
         let v = llm::parse_json(&reply.content)?;
@@ -1032,7 +1291,7 @@ impl Minds {
     /// observer's belief summary) and publish it with an optional identity and thought.
     async fn project(&self, actor: u32, persona: Option<PersonaIn>, thought: Option<ThoughtIn>) -> Result<()> {
         let Some(store) = &self.store else {
-            return self.update(actor, MindUpdate { persona, relations: Vec::new(), beliefs: None, judgments: Vec::new(), places: Vec::new(), thought, replace: false }).await;
+            return self.update(actor, MindUpdate { persona, relations: Vec::new(), beliefs: None, judgments: Vec::new(), places: Vec::new(), thought, replace: false, cues: None }).await;
         };
         let fmt = self.fmt_time();
         let p = store.projection(actor).await?;
@@ -1046,7 +1305,11 @@ impl Minds {
         let judgments = p.judgments.into_iter().map(|(key, value, why)| JudgmentIn { key, value: value as f32, why }).collect();
         let places = p.places.into_iter().map(|(name, x, y)| PlaceIn { name, x: x as f32, y: y as f32 }).collect();
         let beliefs = Some(facts.iter().map(|f| BeliefIn { about: format!("{} → {}", f.a, f.b), text: memory::render(f, &fmt), confidence: f.confidence as f32 }).collect());
-        self.update(actor, MindUpdate { persona, relations, beliefs, judgments, places, thought, replace: true }).await
+        // A goal's cues hold while the persona still has that goal.
+        let goals: Vec<String> = persona.as_ref().map(|p| p.goals.clone()).or_else(|| self.conn.db.persona().id().find(&actor).map(|p| p.goals)).unwrap_or_default();
+        let goal_keys: Vec<String> = goals.iter().filter_map(|g| memory::key(&g.chars().take(80).collect::<String>())).map(|k| k.replace(':', "_")).collect();
+        let cues = p.cues.into_iter().filter(|(f, ..)| f.strip_prefix("goal:").map_or(true, |k| goal_keys.iter().any(|g| memory::same_goal(g, k)))).map(|(f, c, source)| cue_in(f, &c, source)).collect();
+        self.update(actor, MindUpdate { persona, relations, beliefs, judgments, places, thought, replace: true, cues: Some(cues) }).await
     }
 
     // ---- reducer calls -----------------------------------------------------------
@@ -1067,26 +1330,58 @@ impl Minds {
         rx.await?.map_err(|e| anyhow!("mind_consolidated: {e}"))
     }
 
+    /// Install a decision, its line said in `way` (`mind_install_way`; "" is `say`).
     #[allow(clippy::too_many_arguments)]
-    async fn install(&self, actor: u32, graph: String, plan: String, say: String, to: u32, seen: u64, t: ThoughtIn) -> Result<()> {
+    async fn install(&self, actor: u32, graph: String, plan: String, say: String, to: u32, way: String, seen: u64, t: ThoughtIn) -> Result<()> {
         let (tx, rx) = oneshot::channel();
-        self.conn.reducers.mind_install_then(actor, graph, plan, say, to, seen, t, move |_, r| {
+        self.conn.reducers.mind_install_way_then(actor, graph, plan, say, to, way, seen, t, move |_, r| {
             let _ = tx.send(flatten(r));
         })?;
-        rx.await?.map_err(|e| anyhow!("mind_install: {e}"))
+        rx.await?.map_err(|e| anyhow!("mind_install_way: {e}"))
     }
 
     /// Hand deliberate acts to the authority (carried out once each, in order).
-    pub(crate) async fn act(&self, actor: u32, acts: Vec<String>, source: &str) -> Result<()> {
+    pub(crate) async fn act(&self, actor: u32, acts: Vec<String>, source: &str, reference: &str, lane: Lane) -> Result<()> {
         if acts.is_empty() {
             return Ok(());
         }
-        log::info!("{} acts ({source}): {}", self.name(actor), acts_text(&acts));
+        let rejected = act_refusals(&acts, self.submit_acts(actor, &acts, source).await?);
+        if rejected.is_empty() {
+            return Ok(());
+        }
+
+        let name = self.name(actor);
+        let repair = [
+            Msg { role: "system", content: prompts::ACT_REPAIR.into() },
+            Msg { role: "user", content: json!({"rejected": rejected}).to_string() },
+        ];
+        self.llm.outcome("act_attempts", &json!({
+            "actor": name, "source": source, "at_ms": llm::now_ms(), "attempt": 1, "reference": reference,
+            "acts": acts, "refused": rejected,
+        })).await;
+        let Some(c) = self.conn.db.character().id().find(&actor).filter(|c| c.alive) else { return Ok(()) };
+        let profile = self.profile(&c);
+        let reply = self.llm.chat_in_lane(&profile, self.attention(actor, None), "act_repair", &name, &repair, lane).await?;
+        let repaired = repaired_acts(&llm::parse_json(&reply.content)?, rejected.len());
+        if !repaired.is_empty() {
+            let result = self.submit_acts(actor, &repaired, source).await;
+            self.llm.outcome("act_attempts", &json!({
+                "actor": name, "source": source, "at_ms": llm::now_ms(), "attempt": 2, "reference": reference,
+                "acts": repaired, "refused": result.as_ref().ok().map(|r| act_refusals(&repaired, r.clone())),
+                "error": result.as_ref().err().map(ToString::to_string),
+            })).await;
+            result?;
+        }
+        Ok(())
+    }
+
+    async fn submit_acts(&self, actor: u32, acts: &[String], source: &str) -> Result<Vec<Option<String>>> {
+        log::info!("{} acts ({source}): {}", self.name(actor), acts_text(acts));
         let (tx, rx) = oneshot::channel();
-        self.conn.reducers.mind_act_then(actor, acts, source.to_string(), move |_, r| {
-            let _ = tx.send(flatten(r));
-        })?;
-        rx.await?.map_err(|e| anyhow!("mind_act: {e}"))
+        self.conn.procedures.mind_act_checked_then(actor, acts.to_vec(), source.to_string(), move |_, result| {
+            let _ = tx.send(result);
+        });
+        rx.await?.map_err(|e| anyhow!("mind_act_checked transport: {e:?}"))?.map_err(|e| anyhow!("mind_act_checked: {e}"))
     }
 
     async fn skip(&self, actor: u32, seen: u64, t: ThoughtIn) -> Result<()> {
@@ -1161,6 +1456,16 @@ impl Minds {
                     }
                     Some(Event::Lived(e)) => self.lived_add(e),
                     Some(Event::Percept(e)) => self.rethink_percept(&e),
+                    Some(Event::Fast(a)) => self.clone().fast_issued(a),
+                    Some(Event::SpokenAs(e)) => {
+                        // What the model wrote and what was said, beside the actor's calls: if
+                        // these are many, the prompt's sentence on ids is not doing its work.
+                        let me = self.clone();
+                        tokio::spawn(async move {
+                            let name = me.conn.db.character().id().find(&e.observer).map(|c| c.name).unwrap_or_default();
+                            me.llm.outcome("spoken_as", &json!({"at_ms": e.at_ms, "actor": e.observer, "name": name, "to": e.object, "line": e.text})).await;
+                        });
+                    }
                     None => return Err(anyhow!("event channel closed")),
                 },
                 _ = tick.tick() => {
@@ -1177,9 +1482,14 @@ impl Minds {
 
     /// Keep the skills' takes and gives in prompts in step with the world's rule script.
     fn refresh_rules(&self) {
+        if let Some(w) = self.conn.db.world().id().find(&0) {
+            prompts::set_day_ms(w.day_ms);
+        }
         if let Some(s) = self.conn.db.script().iter().find(|s| s.name == "skills") {
             prompts::set_rules(s.revision, &s.source);
         }
+        // The fast lane's own slots follow the world's `fast_lane_inflight`.
+        self.llm.set_fast_slots(prompts::fast_slots());
     }
 
     fn schedule(self: Arc<Self>, actor: u32) {
@@ -1265,7 +1575,7 @@ impl Minds {
                         log::warn!("deliberation for {} could not reach its model ({failures}x); the request waits {:.0} s: {e:#}", self.name(actor), wait.as_secs_f64());
                         if failures == 1 {
                             let t = ThoughtIn { kind: "error".into(), summary: format!("could not reach the model; the request waits: {e:#}").chars().take(600).collect(), detail: String::new(), latency_ms: 0, tokens: 0, model: String::new(), reference: reference(actor, "deliberate") };
-                            if let Err(e) = self.update(actor, MindUpdate { persona: None, relations: Vec::new(), beliefs: None, judgments: Vec::new(), places: Vec::new(), thought: Some(t), replace: false }).await {
+                            if let Err(e) = self.update(actor, MindUpdate { persona: None, relations: Vec::new(), beliefs: None, judgments: Vec::new(), places: Vec::new(), thought: Some(t), replace: false, cues: None }).await {
                                 log::warn!("{}: the failure was not recorded: {e:#}", self.name(actor));
                             }
                         }
@@ -1433,20 +1743,46 @@ impl Minds {
                 if r.is_ok() {
                     this.actors.lock().unwrap().entry(actor).or_default().since_sleep += 1;
                 }
-                let mut a = this.actors.lock().unwrap();
-                let m = a.entry(actor).or_default();
-                m.consolidating = false;
-                match r {
-                    Ok(()) => {
-                        m.failures = 0;
-                        m.retry_after = None;
-                        m.last_consolidated = Some(Instant::now());
+                let (attempt, number, retry_in) = {
+                    let mut a = this.actors.lock().unwrap();
+                    let m = a.entry(actor).or_default();
+                    m.consolidating = false;
+                    let attempt = m.attempt.take();
+                    let number = m.failures + 1;
+                    match &r {
+                        Ok(()) => {
+                            m.failures = 0;
+                            m.retry_after = None;
+                            m.last_consolidated = Some(Instant::now());
+                            if let Some(t) = &attempt {
+                                m.unintegrated.retain(|id| *id > t.upto);
+                            }
+                        }
+                        Err(e) => {
+                            m.failures += 1;
+                            m.retry_after = Some(Instant::now() + Duration::from_secs(20 * m.failures as u64));
+                            if let Some(t) = &attempt {
+                                m.unintegrated.extend(t.ids.iter().copied());
+                            }
+                            log::warn!("consolidation for {} failed ({}x): {e:#}", this.name(actor), m.failures);
+                        }
                     }
-                    Err(e) => {
-                        m.failures += 1;
-                        m.retry_after = Some(Instant::now() + Duration::from_secs(20 * m.failures as u64));
-                        log::warn!("consolidation for {} failed ({}x): {e:#}", this.name(actor), m.failures);
-                    }
+                    (attempt, number, r.is_err().then(|| 20 * (number as u64)))
+                };
+                // Each consolidation that called a model, failed or found experiences lost:
+                // the run's evidence says what its minds actually integrated.
+                if let Some(t) = attempt.filter(|t| t.model_call || r.is_err() || t.trimmed > 0) {
+                    this.llm
+                        .outcome("consolidations", &json!({
+                            "at_ms": llm::now_ms(), "actor": this.name(actor), "actor_id": actor,
+                            "outcome": if r.is_ok() { "integrated" } else { "failed" },
+                            "route": (r.is_ok() && t.model_call).then(|| if t.overflowed { "fallback" } else { "primary" }),
+                            "model": t.model, "model_call": t.model_call, "attempt": number,
+                            "experiences": t.ids.len(), "meaningful": t.meaningful, "upto": t.upto, "trimmed": t.trimmed,
+                            "retry_in_s": retry_in,
+                            "failure": r.as_ref().err().map(|e| format!("{e:#}").chars().take(300).collect::<String>()),
+                        }))
+                        .await;
                 }
             });
         }
@@ -1456,7 +1792,8 @@ impl Minds {
     /// the graph or carries on.
     async fn decided_stances(&self, actor: u32, v: &Value, thought_ref: &str) -> Result<()> {
         let mut patch = memory::Patch::default();
-        memory::sugar_into(&json!({"judgments": v["judgments"], "places": v["places"]}), &mut patch, &[]);
+        let notice = if prompts::cues_on() { v["notice"].clone() } else { Value::Null };
+        memory::sugar_into(&json!({"judgments": v["judgments"], "places": v["places"], "notice": notice}), &mut patch, &[]);
         if patch.nodes.is_empty() && patch.edges.is_empty() {
             return Ok(());
         }
@@ -1468,7 +1805,65 @@ impl Minds {
 
     // ---- shared context -----------------------------------------------------------
 
+    /// The timing of the fighting moves this person knows (`prompts::own_timings`), from the
+    /// techniques it knows: what a player of this character sees cards for, never another's.
+    fn own_timings(&self, actor: u32) -> String {
+        let knows: std::collections::HashSet<String> = self.conn.db.know_how().iter().filter(|k| k.actor == actor).map(|k| k.technique).collect();
+        prompts::own_timings(None, |t| knows.contains(t))
+    }
+
+    /// What this character watches for, as the authority keeps it (its `cue` rows): each cue,
+    /// how often it brought the person to think, or why it is not watched (docs/ATTENTION.md).
+    /// `None` while the `cues_on` law is off.
+    fn cue_lines(&self, actor: u32) -> Option<Vec<String>> {
+        if !prompts::cues_on() {
+            return None;
+        }
+        let now = llm::now_ms();
+        let mut rows: Vec<Cue> = self.conn.db.cue().iter().filter(|c| c.actor == actor).collect();
+        rows.sort_by_key(|c| c.id);
+        Some(rows.iter().map(|c| prompts::cue_line(c, &|id| self.known_as(actor, id), now)).collect())
+    }
+
+    /// "Your body: 15 years old, an adult for a few hours." from the character row and the
+    /// world's pace (`prompts::body_line`); empty when either row is missing.
+    pub(crate) fn body_line(&self, actor: u32) -> String {
+        let (Some(c), Some(w)) = (self.conn.db.character().id().find(&actor), self.conn.db.world().id().find(&0)) else { return String::new() };
+        let Some(base) = self.life_table(&c.kind) else { return String::new() };
+        let age = c.birth_age_days + llm::now_ms().saturating_sub(c.born_ms) as f32 / w.day_ms.max(1) as f32;
+        let line = prompts::body_line(&c.kind, c.stage, age, base, living_rules::life::Pace { year_days: w.year_days.max(1) as f32, pace: w.life_pace });
+        // One's own body sex, in the rules' words (body-sex): "You are a woman."
+        match self.sex_words_of(actor) {
+            Some(s) => format!("{line} You are {s}."),
+            None => line,
+        }
+    }
+
+    /// A species' life table as the world was built with it: species.json with the seed's own
+    /// `species.<kind>.life` merged over it, as the authority's build merges it.
+    fn life_table(&self, kind: &str) -> Option<living_rules::life::Life> {
+        let base = self.species.get(kind)?.life;
+        let over = &self.seed["species"][kind]["life"];
+        if !over.is_object() {
+            return Some(base);
+        }
+        let mut life = base;
+        let f = |k: &str, d: f32| over[k].as_f64().map_or(d, |x| x as f32);
+        life.years = f("years", life.years);
+        life.infant = f("infant", life.infant);
+        life.child = f("child", life.child);
+        life.elder = f("elder", life.elder);
+        Some(life)
+    }
+
     fn persona_text(&self, actor: u32) -> String {
+        let body = self.body_line(actor);
+        let body = if body.is_empty() { body } else { format!("\n{body}") };
+        let text = self.persona_core(actor);
+        format!("{text}{body}")
+    }
+
+    fn persona_core(&self, actor: u32) -> String {
         match self.conn.db.persona().id().find(&actor) {
             Some(p) => {
                 let mut knows: Vec<String> = self.conn.db.know_how().iter().filter(|k| k.actor == actor).map(|k| k.technique).collect();
@@ -1479,7 +1874,7 @@ impl Minds {
                         let name = self.conn.db.community().id().find(&m.community).map(|c| c.name).unwrap_or_default();
                         let others: Vec<u32> = self.conn.db.membership().iter().filter(|x| x.community == m.community && x.member != actor).map(|x| x.member).collect();
                         let felt: std::collections::HashSet<u32> = self.conn.db.relation().iter().filter(|r| r.actor == actor).map(|r| r.other).collect();
-                        let known: Vec<String> = others.iter().filter(|id| felt.contains(id)).map(|id| format!("{} (#{id})", self.known_as(actor, *id))).collect();
+                        let known: Vec<String> = others.iter().filter(|id| felt.contains(id)).map(|id| self.known_person(actor, *id)).collect();
                         belonging(&name, others.len(), &known)
                     }
                     None => "\nYou belong to no community.".into(),
@@ -1514,6 +1909,12 @@ impl Minds {
                 format!("{:02}:{:02}", m / 60 % 24, m % 60)
             };
             out.push_str(&format!("\nYour days: you usually rise about {} and go to bed about {}; the last {:.0} hours before bed are your evening.", hm(r.rise_h), hm(r.bed_h), r.evening_h));
+            if r.work_to_h > r.work_from_h {
+                out.push_str(&format!(" You usually work {} to {}.", hm(r.work_from_h), hm(r.work_to_h)));
+            }
+            if r.nap_to_h > r.nap_from_h {
+                out.push_str(&format!(" You sleep again from {} to {}.", hm(r.nap_from_h), hm(r.nap_to_h)));
+            }
         }
         out
     }
@@ -1525,9 +1926,8 @@ impl Minds {
             .take(16)
             .map(|r| {
                 format!(
-                    "{} (#{}): {}, trust {:.0}, affinity {:.0}{}",
-                    self.known_as(actor, r.other),
-                    r.other,
+                    "{}: {}, trust {:.0}, affinity {:.0}{}",
+                    self.known_person(actor, r.other),
                     r.label,
                     r.trust,
                     r.affinity,
@@ -1541,13 +1941,72 @@ impl Minds {
         self.conn.db.judgment().iter().filter(|j| j.actor == actor).map(|j| format!("{} = {:.2} ({})", j.key, j.value, j.why)).collect()
     }
 
-    fn places(&self, actor: u32) -> Vec<String> {
-        self.conn.db.place().iter().filter(|p| p.actor == actor).map(|p| format!("\"{}\" at [{:.0}, {:.0}]", p.name, p.x, p.y)).collect()
+    /// The places a character knows and what it remembers of resources (its `seen_stock`), one
+    /// line each (talk-places, docs/COMMUNICATION.md §20). With `near`, remembered resources are
+    /// the nearest to it, else the latest seen; at most [`STOCK_SHOWN`]. With `say_way` too, each
+    /// line says how far and which way from `near` (`living_rules::bearing`, the scene's words):
+    /// "\"inn\" at [404, 285], 50 m south", "10 berry bush around [416, 239], 9 m east: seen day 1
+    /// 15:03", "berry bush around [416, 239], here: gone when you were last here, day 1 17:40 (10
+    /// seen day 1 15:03)". A talk turn says the way from where one stands; a deliberation does not,
+    /// since its scene's `places` already give each place's way (known-ground, docs/MOVEMENT_MIND.md
+    /// step 3), so the way is not shown twice; player memory has no place and no way.
+    pub(crate) fn places(&self, actor: u32, near: Option<(f32, f32)>, say_way: bool) -> Vec<String> {
+        let at = near;
+        let way = |x: f32, y: f32| at.filter(|_| say_way).map(|a| format!(", {}", living_rules::bearing::from_here(a, (x, y)))).unwrap_or_default();
+        let mut out: Vec<String> = self.conn.db.place().iter().filter(|p| p.actor == actor).map(|p| format!("\"{}\" at [{:.0}, {:.0}]{}", p.name, p.x, p.y, way(p.x, p.y))).collect();
+        let mut stock: Vec<SeenStock> = self.conn.db.seen_stock().iter().filter(|s| s.actor == actor).collect();
+        match at {
+            Some(a) => {
+                let d = |s: &SeenStock| (s.x - a.0).powi(2) + (s.y - a.1).powi(2);
+                stock.sort_by(|p, q| d(p).total_cmp(&d(q)));
+            }
+            None => stock.sort_by_key(|s| std::cmp::Reverse(s.seen_ms.max(s.gone_ms))),
+        }
+        let fmt = self.fmt_time();
+        for s in stock.iter().take(STOCK_SHOWN) {
+            let kind = s.kind.replace('_', " ");
+            out.push(if s.gone_ms == 0 {
+                format!("{} {kind} around [{:.0}, {:.0}]{}: seen {}", s.count, s.x, s.y, way(s.x, s.y), fmt(s.seen_ms))
+            } else {
+                format!("{kind} around [{:.0}, {:.0}]{}: gone when you were last here, {} ({} seen {})", s.x, s.y, way(s.x, s.y), fmt(s.gone_ms), s.count, fmt(s.seen_ms))
+            });
+        }
+        out
+    }
+
+    /// Where a scene puts its character (`you.at`).
+    pub(crate) fn scene_at(scene: &Value) -> Option<(f32, f32)> {
+        let a = scene["you"]["at"].as_array()?;
+        Some((a.first()?.as_f64()? as f32, a.get(1)?.as_f64()? as f32))
+    }
+
+    /// A person's open projects (strongest first, at most `projects::SHOWN`) and how many are
+    /// open, with `LIVING_PROJECTS=1` and a store; `None` otherwise (no section is shown).
+    async fn open_projects(&self, actor: u32) -> Option<(Vec<memory::Project>, usize)> {
+        let store = self.store.as_ref().filter(|_| projects::enabled())?;
+        match store.projects(actor, projects::SHOWN).await {
+            Ok(p) => Some(p),
+            Err(e) => {
+                log::warn!("{}: projects not read: {e:#}", self.name(actor));
+                Some((Vec::new(), 0))
+            }
+        }
+    }
+
+    /// The projects section's text ("" when there is none to show).
+    fn projects_text(&self, open: &Option<(Vec<memory::Project>, usize)>) -> String {
+        open.as_ref().map(|(p, total)| projects::lines(p, *total, &self.fmt_time())).unwrap_or_default()
     }
 
     // ---- deliberation ------------------------------------------------------------
 
-    async fn deliberate(&self, d: &Deliberation) -> Result<()> {
+    /// What this deliberation carried (see `carry`), for its thought's `detail.reasons`.
+    fn carried_reasons(&self, d: &Deliberation) -> Value {
+        let lines = living_rules::reasons::lines(&d.reason, &d.arrived);
+        carry(&mut self.actors.lock().unwrap().entry(d.actor).or_default().carried, lines)
+    }
+
+    async fn deliberate(self: &Arc<Self>, d: &Deliberation) -> Result<()> {
         let actor = d.actor;
         let lane = self.deliberation_lane(d);
         let Some(c) = self.conn.db.character().id().find(&actor) else { return Ok(()) };
@@ -1584,11 +2043,9 @@ impl Minds {
         let outline = brain.as_ref().and_then(|b| living_rules::graph::parse(&b.graph).ok()).map(|g| living_rules::graph::outline(&g.root)).unwrap_or_default();
         let plan = brain.as_ref().map(|b| b.plan.clone()).unwrap_or_default();
         let fmt = self.fmt_time();
-        let experiences: Vec<String> = {
-            let all = self.experiences(actor);
-            let n = all.len();
-            all.iter().skip(n.saturating_sub(16)).map(|e| self.exp_line(e, &fmt, false)).collect()
-        };
+        let experiences: Vec<String> = self.experiences_upto(actor, d.updated_ms, 16).iter().map(|e| self.exp_line(e, &fmt, false)).collect();
+        // Lines heard from now on are not in this prompt (`LIVING_PARK=concurrent`).
+        self.deliberation_prompt(actor);
         let pruned = self.actors.lock().unwrap().entry(actor).or_default().pruned.clone();
         let mut reason = d.reason.clone();
         if !pruned.is_empty() {
@@ -1601,21 +2058,23 @@ impl Minds {
             name: &c.name,
             clock: fmt(llm::now_ms()),
             body: self.body_text(actor),
-            persona: self.persona_text(actor),
+            persona: format!("{}{}", self.persona_text(actor), self.own_timings(actor)),
             relations: self.relations(actor),
             mind,
             memories,
             judgments: recalled.judgments,
-            places: self.places(actor),
+            places: self.places(actor, Self::scene_at(&scene), false),
             experiences,
             dealings: self.dealings(actor),
+            cues: self.cue_lines(actor),
         };
         let repertoire = self.repertoire_text(actor);
         // Think first, as the person and without the grammar; then compile the decision.
         let habits: String = self.conn.db.routine().iter().filter(|r| r.actor == actor).map(|r| r.name).collect::<Vec<_>>().join(", ");
+        let open = self.open_projects(actor).await;
         let think_msgs = vec![
             Msg { role: "system", content: prompts::think_system() },
-            Msg { role: "user", content: prompts::think_user(&ctx, &d.scene, &plan, &reason, &habits) },
+            Msg { role: "user", content: prompts::think_user(&ctx, &d.scene, &plan, &reason, &habits, &self.projects_text(&open)) },
         ];
         let mut decision = Value::Null;
         let (mut think_latency, mut think_tokens) = (0u32, 0u32);
@@ -1629,12 +2088,23 @@ impl Minds {
                 }
             }
         }
+        // Lines waiting on this deliberation that its words are not for get their turn now
+        // (`LIVING_PARK=concurrent`).
+        self.deliberation_decided(actor, &decision);
         let intend: Vec<String> = decision["intend"].as_array().map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect()).unwrap_or_default();
-        let decided = format!(
+        // Which open project the decision says it serves (recorded on the thought row; served
+        // projects are reinforced once the decision is carried out).
+        let served = open.as_ref().and_then(|(p, _)| projects::serves(&decision["serves"], p));
+        let project_detail = open.as_ref().map(|(p, _)| projects::detail(p, &decision["serves"], served.as_deref())).unwrap_or(Value::Null);
+        let serves_note = served.as_ref().map(|k| format!(" [serves {k}]")).unwrap_or_default();
+        let mut decided = format!(
             "{}\nIntentions (in order): {}",
             decision["thought"].as_str().unwrap_or_default(),
             if intend.is_empty() { "(nothing new: carry on)".to_string() } else { intend.join("; ") }
         );
+        if let Some(said) = self.said_alongside(actor) {
+            decided.push_str(&format!("\n{said}"));
+        }
         let system = prompts::deliberate_system();
         let user = prompts::compile_user(&decided, prompts::deliberate_user(&ctx, &d.scene, &outline, &plan, &reason, &repertoire));
         let mut messages = vec![Msg { role: "system", content: system }, Msg { role: "user", content: user }];
@@ -1642,13 +2112,15 @@ impl Minds {
         let mut total_latency = think_latency;
         let mut total_tokens = think_tokens;
         let thought_ref = reference(actor, "deliberate");
-        // The decision's own words (thought, speech, stances, places) are kept whatever the compiler says.
+        // The decision's own words (thought, speech, stances, places, cues) are kept whatever the compiler says.
         let keep = |raw: &str| -> String {
             match llm::parse_json(raw) {
                 Ok(mut v) => {
                     if decision.is_object() {
-                        for k in ["thought", "say", "judgments", "places"] {
-                            v[k] = decision[k].clone();
+                        for k in ["thought", "say", "judgments", "places", "notice", "serves"] {
+                            if k != "serves" || !decision[k].is_null() {
+                                v[k] = decision[k].clone();
+                            }
                         }
                         if v["plan"].as_str().map_or(true, |p| p.is_empty()) && !intend.is_empty() {
                             v["plan"] = json!(intend.join("; "));
@@ -1701,16 +2173,17 @@ impl Minds {
                     };
                     // A format placeholder ("text", "your words") is not something to say aloud.
                     let say = if living_rules::normalize::placeholder_words(&say) { String::new() } else { say };
+                    let say = self.unanswered_say(actor, say, to);
                     let thought = v["thought"].as_str().unwrap_or_default().to_string();
                     let acts = acts_of(&v);
                     let t = ThoughtIn {
                         kind: "deliberate".into(),
                         summary: format!(
-                            "{thought} → (carries on){}{}",
+                            "{thought} → (carries on){}{}{serves_note}",
                             if acts.is_empty() { String::new() } else { format!(" and acts: {}", acts_text(&acts)) },
                             if say.is_empty() { String::new() } else { format!(" and says “{say}”") }
                         ),
-                        detail: json!({"reason": d.reason, "reply": v, "attempts": attempt + 1}).to_string(),
+                        detail: json!({"reason": d.reason, "reasons": self.carried_reasons(d), "reply": v, "attempts": attempt + 1, "projects": project_detail}).to_string(),
                         latency_ms: total_latency,
                         tokens: total_tokens,
                         model: reply.model.clone(),
@@ -1718,12 +2191,19 @@ impl Minds {
                     };
                     log::info!("{} carries on{}", c.name, if say.is_empty() { String::new() } else { format!(" — says “{say}”") });
                     self.deliberation_says(actor, &say, to);
+                    // The line's way, as a talk reply names it (mind-say-way); one the world
+                    // lacks is said aloud.
+                    let way = talk::way_of(&v).unwrap_or_default();
                     let (tx, rx) = oneshot::channel();
-                    self.conn.reducers.mind_say_then(actor, say, to, d.updated_ms, t, move |_, r| {
+                    self.conn.reducers.mind_say_then(actor, say, to, way, d.updated_ms, t, move |_, r| {
                         let _ = tx.send(flatten(r));
                     })?;
                     rx.await?.map_err(|e| anyhow!("mind_say: {e}"))?;
-                    return self.act(actor, acts, "deliberate").await;
+                    self.served_project(actor, served.as_deref(), "(carries on)", &thought_ref).await;
+                    if let Err(e) = self.act(actor, acts, "deliberate", &thought_ref, lane).await {
+                        log::warn!("{}: acts from a deliberation not taken: {e:#}", c.name);
+                    }
+                    return Ok(());
                 }
             }
             // A patch replaces one labeled branch (e.g. combat tactics mid-fight) and keeps the rest.
@@ -1732,7 +2212,7 @@ impl Minds {
                 if v["patch"].is_object() && (v["graph"].is_null() || v["graph"].is_string()) {
                     let label = v["patch"]["label"].as_str().unwrap_or("combat").to_string();
                     let node = v["patch"]["graph"].clone();
-                    v["graph"] = patch_branch(current.clone().unwrap_or(json!({"wait": 3})), &label, node);
+                    v["graph"] = living_rules::graph::patch_branch(current.clone().unwrap_or(json!({"wait": 3})), &label, node);
                 }
                 let (g, pruned) = living_rules::graph::from_value_lenient(v["graph"].clone()).map_err(|e| anyhow!(e))?;
                 Ok((v, g, pruned))
@@ -1747,23 +2227,29 @@ impl Minds {
                     };
                     // A format placeholder ("text", "your words") is not something to say aloud.
                     let say = if living_rules::normalize::placeholder_words(&say) { String::new() } else { say };
+                    let say = self.unanswered_say(actor, say, to);
                     let plan = v["plan"].as_str().unwrap_or_default().to_string();
                     let thought = v["thought"].as_str().unwrap_or_default().to_string();
                     self.decided_stances(actor, &v, &thought_ref).await?;
                     let acts = acts_of(&v);
                     let t = ThoughtIn {
                         kind: "deliberate".into(),
-                        summary: format!("{thought} → {plan}{}", if acts.is_empty() { String::new() } else { format!(" (acts: {})", acts_text(&acts)) }),
-                        detail: json!({"reason": d.reason, "reply": v, "attempts": attempt + 1, "pruned": pruned}).to_string(),
+                        summary: format!("{thought} → {plan}{}{serves_note}", if acts.is_empty() { String::new() } else { format!(" (acts: {})", acts_text(&acts)) }),
+                        detail: json!({"reason": d.reason, "reasons": self.carried_reasons(d), "reply": v, "attempts": attempt + 1, "pruned": pruned, "projects": project_detail}).to_string(),
                         latency_ms: total_latency,
                         tokens: total_tokens,
                         model: reply.model.clone(),
                         reference: thought_ref.clone(),
                     };
-                    log::info!("{} decided: {plan}{}", c.name, if say.is_empty() { String::new() } else { format!(" — says “{say}”") });
+                    let way = talk::way_of(&v).unwrap_or_default();
+                    log::info!("{} decided: {plan}{}", c.name, if say.is_empty() { String::new() } else if way.is_empty() || way == "say" { format!(" — says “{say}”") } else { format!(" — says ({way}) “{say}”") });
                     self.deliberation_says(actor, &say, to);
-                    self.install(actor, g.to_json(), plan, say, to, d.updated_ms, t).await?;
-                    return self.act(actor, acts, "deliberate").await;
+                    self.install(actor, g.to_json(), plan.clone(), say, to, way, d.updated_ms, t).await?;
+                    self.served_project(actor, served.as_deref(), &plan, &thought_ref).await;
+                    if let Err(e) = self.act(actor, acts, "deliberate", &thought_ref, lane).await {
+                        log::warn!("{}: acts from a deliberation not taken: {e:#}", c.name);
+                    }
+                    return Ok(());
                 }
                 Err(e) => {
                     last_err = format!("{e:#}");
@@ -1792,6 +2278,14 @@ impl Minds {
         self.skip(actor, d.updated_ms, t).await
     }
 
+    /// A decision carried out in the service of an open project reinforces it (`Store::serve_project`).
+    async fn served_project(&self, actor: u32, key: Option<&str>, plan: &str, thought_ref: &str) {
+        let (Some(store), Some(key)) = (&self.store, key) else { return };
+        if let Err(e) = store.serve_project(actor, key, plan, thought_ref, llm::now_ms()).await {
+            log::warn!("{}: project {key} not reinforced: {e:#}", self.name(actor));
+        }
+    }
+
     /// Animals: a small model feels an impulse; a competent model compiles it into a graph
     /// the body allows. The compiler is told to add nothing the animal does not have.
     async fn deliberate_animal(&self, d: &Deliberation, c: &Character, lane: Lane) -> Result<()> {
@@ -1805,11 +2299,7 @@ impl Minds {
         let recalled = self.recall_for(actor, &self.scene_cues(actor, &scene, &d.reason), 10, 0, "animal").await;
         let mut mind = recalled.mind;
         mind.extend(recalled.judgments.into_iter().filter(|j| !j.starts_with('(')).map(|j| format!("feels sure: {j}")));
-        let experiences: Vec<String> = {
-            let all = self.experiences(actor);
-            let n = all.len();
-            all.iter().skip(n.saturating_sub(8)).map(|e| self.exp_line(e, &fmt, false)).collect()
-        };
+        let experiences: Vec<String> = self.experiences_upto(actor, d.updated_ms, 8).iter().map(|e| self.exp_line(e, &fmt, false)).collect();
         let temperament = self.conn.db.persona().id().find(&actor).map(|p| format!("{} (mood: {})", p.traits, p.mood)).unwrap_or_default();
         let thought_ref = reference(actor, "deliberate");
         let felt = self
@@ -1856,7 +2346,7 @@ impl Minds {
                     let t = ThoughtIn {
                         kind: "deliberate".into(),
                         summary: format!("{feeling} → {impulse}{}", if changed.is_empty() { String::new() } else { format!(" (reworks {})", changed.join(", ")) }),
-                        detail: json!({"reason": d.reason, "feeling": feeling, "impulse": impulse, "think_model": felt.model, "compiled": v, "attempts": attempt + 1}).to_string(),
+                        detail: json!({"reason": d.reason, "reasons": self.carried_reasons(d), "feeling": feeling, "impulse": impulse, "think_model": felt.model, "compiled": v, "attempts": attempt + 1}).to_string(),
                         latency_ms: latency,
                         tokens,
                         model: format!("{} → {}", felt.model, reply.model),
@@ -1864,7 +2354,7 @@ impl Minds {
                     };
                     log::info!("{} the {} feels: {feeling} → {impulse}", c.name, c.kind);
                     let (tx, rx) = oneshot::channel();
-                    self.conn.reducers.mind_say_then(actor, String::new(), 0, d.updated_ms, t, move |_, r| {
+                    self.conn.reducers.mind_say_then(actor, String::new(), 0, String::new(), d.updated_ms, t, move |_, r| {
                         let _ = tx.send(flatten(r));
                     })?;
                     return rx.await?.map_err(|e| anyhow!("mind_say: {e}"));
@@ -1879,14 +2369,14 @@ impl Minds {
                     let t = ThoughtIn {
                         kind: "deliberate".into(),
                         summary: format!("{feeling} → {impulse}"),
-                        detail: json!({"reason": d.reason, "feeling": feeling, "impulse": impulse, "think_model": felt.model, "compiled": v, "attempts": attempt + 1, "pruned": pruned}).to_string(),
+                        detail: json!({"reason": d.reason, "reasons": self.carried_reasons(d), "feeling": feeling, "impulse": impulse, "think_model": felt.model, "compiled": v, "attempts": attempt + 1, "pruned": pruned}).to_string(),
                         latency_ms: latency,
                         tokens,
                         model: format!("{} → {}", felt.model, reply.model),
                         reference: thought_ref.clone(),
                     };
                     log::info!("{} the {} feels: {feeling} → {impulse}", c.name, c.kind);
-                    return self.install(actor, g.to_json(), impulse.clone(), String::new(), 0, d.updated_ms, t).await;
+                    return self.install(actor, g.to_json(), impulse.clone(), String::new(), 0, String::new(), d.updated_ms, t).await;
                 }
                 Err(e) => {
                     last_err = format!("{e:#}");
@@ -1908,10 +2398,27 @@ impl Minds {
         // A reply that ran too long failed: take fewer experiences at a time until it fits.
         let failures = self.actors.lock().unwrap().get(&actor).map_or(0, |m| m.failures);
         let take = (40 / (1 + failures as usize)).max(6);
-        let batch: Vec<Experience> = self.experiences(actor).into_iter().filter(|e| e.id > cursor && e.controller == self.me).take(take).collect();
-        let Some(upto) = batch.last().map(|e| e.id) else { return Ok(()) };
+        let inbox: Vec<Experience> = self.experiences(actor).into_iter().filter(|e| e.id > cursor && e.controller == self.me).collect();
+        let trimmed = {
+            let present: std::collections::HashSet<u64> = inbox.iter().map(|e| e.id).collect();
+            let mut a = self.actors.lock().unwrap();
+            let m = a.entry(actor).or_default();
+            m.unintegrated.retain(|id| *id > cursor);
+            let before = m.unintegrated.len();
+            m.unintegrated.retain(|id| present.contains(id));
+            before - m.unintegrated.len()
+        };
+        let batch: Vec<Experience> = inbox.into_iter().take(take).collect();
+        let Some(upto) = batch.last().map(|e| e.id) else {
+            if trimmed > 0 {
+                self.actors.lock().unwrap().entry(actor).or_default().attempt = Some(Attempt { trimmed, upto: cursor, ..Default::default() });
+            }
+            return Ok(());
+        };
         // Only experiences that carry meaning go to the model; routine results are passed over.
         let meaningful: Vec<&Experience> = batch.iter().filter(|e| e.salience >= 0.2).collect();
+        self.actors.lock().unwrap().entry(actor).or_default().attempt =
+            Some(Attempt { ids: batch.iter().map(|e| e.id).collect(), meaningful: meaningful.len(), upto, trimmed, ..Default::default() });
         if meaningful.is_empty() {
             return self.consolidated(actor, upto).await;
         }
@@ -1929,21 +2436,32 @@ impl Minds {
             mind,
             memories,
             judgments: recalled.judgments,
-            places: self.places(actor),
+            places: self.places(actor, None, false),
             experiences: meaningful.iter().map(|e| self.exp_line(e, &fmt, true)).collect(),
             dealings: self.dealings(actor),
+            cues: self.cue_lines(actor),
         };
         let animal = c.kind != "person";
         let system = match self.species.get(&c.kind).filter(|_| animal) {
             Some(sp) => prompts::animal_consolidate_system(&c.kind, &sp.nature),
             None => prompts::consolidate_system(),
         };
-        let user = prompts::consolidate_user(&ctx);
+        let open = if animal { None } else { self.open_projects(actor).await };
+        let user = prompts::consolidate_user(&ctx, &self.projects_text(&open));
         let remember = if animal { self.llm.species_profile(&c.kind, "remember").unwrap_or(profile.clone()) } else { profile.clone() };
         let at = self.attention(actor, None);
         let _slow = self.slow.acquire().await?;
         let msgs = [Msg { role: "system", content: system }, Msg { role: "user", content: user }];
+        let answered = |reply: &llm::Reply| {
+            if let Some(t) = self.actors.lock().unwrap().get_mut(&actor).and_then(|m| m.attempt.as_mut()) {
+                (t.overflowed, t.model) = (reply.overflowed, Some(reply.model.clone()));
+            }
+        };
+        if let Some(t) = self.actors.lock().unwrap().get_mut(&actor).and_then(|m| m.attempt.as_mut()) {
+            t.model_call = true;
+        }
         let mut reply = self.llm.chat(&remember, at, "consolidate", &c.name, &msgs).await?;
+        answered(&reply);
         let v = match llm::parse_json(&reply.content) {
             Ok(v) => v,
             // A small mind's unusable output is re-done by the competent model.
@@ -1951,6 +2469,7 @@ impl Minds {
                 let compile = self.llm.species_profile(&c.kind, "compile").unwrap_or(profile.clone());
                 log::info!("{}'s memory reply was unusable ({e:#}); retrying with {compile}", c.name);
                 reply = self.llm.chat(&compile, at, "consolidate", &c.name, &msgs).await?;
+                answered(&reply);
                 llm::parse_json(&reply.content)?
             }
             Err(e) => return Err(e),
@@ -1960,19 +2479,28 @@ impl Minds {
         let known: Vec<u64> = meaningful.iter().map(|e| e.id).collect();
         let lookup = |id: u64| batch.iter().find(|e| e.id == id).map(|e| (e.at_ms, e.salience as f64, self.anchors(e)));
         let (mut patch, mut notes) = memory::patch_from(&v, &known, &lookup);
-        memory::sugar_into(&v, &mut patch, &known);
+        memory::sugar_into(&memory::without_notice(&v, prompts::cues_on()), &mut patch, &known);
+        if open.is_some() {
+            memory::projects_into(&v, &mut patch, &known, &mut notes);
+        }
         notes.extend(self.canonical_people(actor, &mut patch));
         self.keep_refused_merges(actor, &notes);
-        let told = |id: u64| batch.iter().find(|e| e.id == id).map(|e| matches!(e.kind.as_str(), "speech" | "read").then_some(e.subject));
+        let told = |id: u64| batch.iter().find(|e| e.id == id).map(|e| matches!(e.kind.as_str(), "speech" | "whisper" | "read").then_some(e.subject));
         memory::attribute(&mut patch, actor, &told);
         if c.stage <= 1 {
             for m in patch.remember.iter_mut() {
                 m.childhood = true;
             }
         }
+        // Someone made out who was a figure too far away to make out: the figure's node joins the
+        // person's (far-handle); later far sightings get new handles, so it is never undone.
+        patch.merges.extend(made_out_merges(&batch));
         self.name_people(actor, &mut patch);
         // Lived under the minds (a character's history shows both kinds: docs/PLAYER_MEMORY.md).
         patch.lived_under = Some("ai".into());
+        // The people these experiences involve keep their nodes' names current (a name learned
+        // here names the stranger's node even if the reply did not mention them).
+        let renamed = self.people_names(actor, &batch, &patch);
 
         // Identity shifts slowly: at most once per 8 minutes unless something momentous happened.
         let momentous = meaningful.iter().any(|e| e.salience >= 0.9);
@@ -1992,6 +2520,7 @@ impl Minds {
         };
         if let Some(store) = &self.store {
             store.apply(actor, &patch, &thought_ref, now).await?;
+            store.rename_people(actor, &renamed).await?;
             if let Some(p) = &identity {
                 let version = self.conn.db.persona().id().find(&actor).map(|x| x.version + 1).unwrap_or(1);
                 store.set_identity(actor, version, p, p["why"].as_str().unwrap_or_default(), &thought_ref, now).await?;
@@ -2001,12 +2530,13 @@ impl Minds {
         let summary = v["summary"].as_str().unwrap_or_default().to_string();
         let changed = identity.as_ref().map(|p| format!(" Identity changed: {}", p["why"].as_str().unwrap_or_default())).unwrap_or_default();
         log::info!(
-            "{} integrated {} experiences (+{} edges, -{} retracted, {} memories): {summary}{changed}",
+            "{} integrated {} experiences (+{} edges, -{} retracted, {} memories{}): {summary}{changed}",
             c.name,
             meaningful.len(),
             patch.edges.len(),
             patch.retract.len(),
-            patch.remember.len()
+            patch.remember.len(),
+            if open.is_some() { format!(", {} projects, {} ended", patch.edges.iter().filter(|e| e.rel == "PURSUES").count(), patch.ended.len()) } else { String::new() }
         );
         let persona = identity.map(|p| PersonaIn {
             narrative: p["narrative"].as_str().unwrap_or_default().into(),
@@ -2031,35 +2561,70 @@ impl Minds {
     }
 
     /// Name person anchors from what the character perceives, when the model did not, and
-    /// give every person an edge mentions a node.
-    /// People in a patch are named as `actor` knows them (`known_as`): a stranger stays "a
-    /// stranger" in its memory, whatever name the model wrote, until it is told the name.
+    /// give every person an edge or a kept memory mentions a node.
+    /// People in a patch are named as `actor` remembers them (`remembered_as`): someone it
+    /// does not know by name stays "a stranger #<id>" in its memory, whatever name the model
+    /// wrote, until it is told the name.
     fn name_people(&self, actor: u32, patch: &mut memory::Patch) {
         for n in patch.nodes.iter_mut() {
             if let Some(id) = n.key.strip_prefix("person:").and_then(|s| s.parse::<u32>().ok()) {
-                n.name = Some(self.known_as(actor, id));
+                n.name = Some(self.remembered_as(actor, id));
             }
         }
-        let mut people: Vec<String> = patch.edges.iter().flat_map(|e| [e.from.clone(), e.to.clone()]).filter(|k| k.starts_with("person:") && !patch.nodes.iter().any(|n| &n.key == k)).collect();
+        let mut people: Vec<String> = patch
+            .edges
+            .iter()
+            .flat_map(|e| [e.from.clone(), e.to.clone()])
+            .chain(patch.remember.iter().flat_map(|m| m.involves.iter().cloned()))
+            .filter(|k| k.starts_with("person:") && !patch.nodes.iter().any(|n| &n.key == k))
+            .collect();
         people.sort();
         people.dedup();
         for k in people {
             if let Some(id) = k.strip_prefix("person:").and_then(|s| s.parse::<u32>().ok()) {
-                patch.nodes.push(memory::NodeOp { key: k, labels: vec!["Person".into()], name: Some(self.known_as(actor, id)), props: Default::default() });
+                patch.nodes.push(memory::NodeOp { key: k, labels: vec!["Person".into()], name: Some(self.remembered_as(actor, id)), props: Default::default() });
             }
         }
     }
 
-    /// `person:kael` → `person:7`: people are anchored by id so one person stays one concept.
-    /// Then merges are checked again (`memory::merge_refusal`) with people named by id and the
+    /// How `actor` now remembers each person a batch of experiences involves (subject, object)
+    /// and the patch does not name already, for [`memory::Store::rename_people`].
+    fn people_names(&self, actor: u32, batch: &[Experience], patch: &memory::Patch) -> Vec<(String, String)> {
+        let mut ids: Vec<u32> = batch.iter().flat_map(|e| [e.subject, e.object]).filter(|id| *id != 0 && *id != actor).collect();
+        ids.sort_unstable();
+        ids.dedup();
+        ids.into_iter()
+            .filter(|id| self.conn.db.character().id().find(id).is_some_and(|c| c.kind == "person"))
+            .map(|id| (format!("person:{id}"), id))
+            .filter(|(k, _)| !patch.nodes.iter().any(|n| &n.key == k))
+            .map(|(k, id)| (k, self.remembered_as(actor, id)))
+            .collect()
+    }
+
+    /// `person:kael` → `person:7`: people are anchored by id so one person stays one concept,
+    /// by a name only where `actor` knows it (a name merely heard does not tell whose it is).
+    /// A person key written as a description (`person:the_stranger`) is anchored, edge by edge,
+    /// to the one person not known by name that the edge's cited experiences involve
+    /// (`memory::anchor_described`); otherwise it stays a concept of its own. Then
+    /// merges are checked again (`memory::merge_refusal`) with people named by id and the
     /// communities and places this mind has located; the refusals are returned as notes and
     /// kept for the next reorganization.
     fn canonical_people(&self, actor: u32, patch: &mut memory::Patch) -> Vec<String> {
-        let people: Vec<(String, u32)> = self.conn.db.character().iter().filter(|c| c.kind == "person").map(|c| (c.name.to_lowercase(), c.id)).collect();
+        let all: Vec<Character> = self.conn.db.character().iter().filter(|c| c.kind == "person").collect();
+        let knows = self.known_names(actor);
+        let people: Vec<(String, u32)> = all.iter().filter(|c| knows.contains(&c.id)).map(|c| (c.name.to_lowercase(), c.id)).collect();
+        let named = |rest: &str| -> String { rest.trim_start_matches('#').replace('_', " ") };
+        let is_name = |n: &str| all.iter().any(|c| c.name.to_lowercase() == n);
+        let unnamed_in = |x: u64| -> Vec<u32> {
+            self.conn.db.experience().id().find(&x).map_or(Vec::new(), |e| {
+                [e.subject, e.object].into_iter().filter(|id| *id != 0 && !knows.contains(id) && all.iter().any(|c| c.id == *id)).collect()
+            })
+        };
+        let mut notes: Vec<String> = memory::anchor_described(patch, &is_name, &unnamed_in).into_iter().map(|(k, id)| format!("{k} anchored to person:{id} (the one unnamed person its experiences involve)")).collect();
         let fix = |k: &mut String| {
             if let Some(rest) = k.strip_prefix("person:") {
                 if rest.parse::<u32>().is_err() {
-                    let name = rest.trim_start_matches('#').replace('_', " ");
+                    let name = named(rest);
                     if let Some((_, id)) = people.iter().find(|(n, _)| *n == name) {
                         *k = format!("person:{id}");
                     }
@@ -2082,7 +2647,6 @@ impl Minds {
             fix(&mut m.1);
         }
         let known = self.known_anchors(actor);
-        let mut notes = Vec::new();
         patch.merges.retain(|(a, b)| match memory::merge_refusal(a, b, &known) {
             _ if a == b => false,
             Some(why) => {
@@ -2136,6 +2700,18 @@ impl Minds {
 }
 
 /// A model's string field, tolerating small models that nest objects where text was asked.
+/// The last `n` of `all` (an observer's experiences, by id) that happened no later than
+/// `scene_ms`. A request's scene is taken when its last reason arrives, or when what is left of it
+/// is handed on (`clear_deliberation`), and the mind reads it a little later still (recall, a
+/// held request): an experience that happened since would sit under a "right now" that predates
+/// it. Later experiences are in the next prompt, with a scene of their own time.
+fn scene_upto(all: Vec<Experience>, scene_ms: u64, n: usize) -> Vec<Experience> {
+    let mut v: Vec<Experience> = all.into_iter().filter(|e| e.at_ms <= scene_ms).collect();
+    let skip = v.len().saturating_sub(n);
+    v.drain(..skip);
+    v
+}
+
 fn flat(v: &Value) -> String {
     match v {
         Value::String(s) => s.clone(),
@@ -2146,68 +2722,91 @@ fn flat(v: &Value) -> String {
 
 /// Replace the branch labeled `label` in a graph (outside the reflex layer) with `node`,
 /// labeling the new branch; if no such branch exists, add it at top priority.
-fn patch_branch(graph: Value, label: &str, node: Value) -> Value {
-    let inner = match &graph["first"] {
-        Value::Object(o) if o.get("label").and_then(|l| l.as_str()) == Some("reflexes") => o["children"].as_array().and_then(|c| c.last()).cloned().unwrap_or(json!({"wait": 3})),
-        _ => graph,
-    };
-    let labeled = label_node(node, label);
-    fn replace(v: &mut Value, label: &str, with: &Value) -> bool {
-        match v {
-            Value::Object(o) => {
-                for key in ["first", "seq"] {
-                    if let Some(Value::Object(c)) = o.get(key) {
-                        if c.get("label").and_then(|l| l.as_str()) == Some(label) {
-                            *v = with.clone();
-                            return true;
-                        }
-                    }
-                }
-                o.values_mut().any(|x| replace(x, label, with))
-            }
-            Value::Array(a) => a.iter_mut().any(|x| replace(x, label, with)),
-            _ => false,
-        }
-    }
-    let mut inner = inner;
-    if replace(&mut inner, label, &labeled) {
-        return inner;
-    }
-    // Not found: the new branch takes priority over the existing behavior.
-    match inner.get("first") {
-        Some(Value::Array(children)) => {
-            let mut c = vec![labeled];
-            c.extend(children.iter().cloned());
-            json!({"first": c})
-        }
-        Some(Value::Object(o)) => {
-            let mut c = vec![labeled];
-            c.extend(o.get("children").and_then(|x| x.as_array()).cloned().unwrap_or_default());
-            json!({"first": {"label": o.get("label").cloned().unwrap_or(json!("plan")), "children": c}})
-        }
-        _ => json!({"first": [labeled, inner]}),
-    }
-}
 
-/// Ensure a patched branch carries its label (wrapping non-composite nodes).
-fn label_node(node: Value, label: &str) -> Value {
-    for key in ["first", "seq"] {
-        match node.get(key) {
-            Some(Value::Array(children)) => return json!({key: {"label": label, "children": children}}),
-            Some(Value::Object(o)) => {
-                let mut o = o.clone();
-                o.insert("label".into(), json!(label));
-                return json!({key: o});
-            }
-            _ => {}
-        }
+
+/// A stored attention cue (`memory::cue_entry`'s form) as the authority takes it.
+fn cue_in(for_key: String, c: &Value, source: String) -> CueIn {
+    let s = |k: &str| c[k].as_str().unwrap_or_default().to_string();
+    let f = |k: &str| c[k].as_f64().unwrap_or(0.0) as f32;
+    CueIn {
+        for_key,
+        why: s("why"),
+        who_id: c["who_id"].as_u64().filter(|n| *n <= u32::MAX as u64).unwrap_or(0) as u32,
+        who: s("who"),
+        doing: s("doing"),
+        phase: s("phase"),
+        thing: s("thing"),
+        at: s("at"),
+        within: f("within"),
+        near_me: f("near_me"),
+        source,
     }
-    json!({"first": {"label": label, "children": [node]}})
 }
 
 #[cfg(test)]
 mod tests {
+
+    /// Gwil in fs1n (docs/PERCEPTION.md, "One moment per prompt"): his first-sight prompt's scene
+    /// was taken about 125 s after the join with the stranger 1.2 m south, and listed his hail at 134.0 s of a far
+    /// figure 28 m off, which nobody heard. Read together they said the stranger had come up
+    /// after the hail, and he greeted them as "There you are at last". A prompt lists nothing
+    /// after its scene, and still the last `n` before it.
+    #[test]
+    fn a_prompt_lists_no_experience_after_its_scene() {
+        let e = |id: u64, at_ms: u64, kind: &str, object: u32, text: &str| Experience { id, observer: 62, controller: spacetimedb_sdk::Identity::ZERO, at_ms, kind: kind.into(), subject: 62, object, x: 0.0, y: 0.0, text: text.into(), salience: 0.5 };
+        let all = vec![
+            e(1, 100_000, "act", 0, "You walked to the square."),
+            e(2, 119_500, "sight", 65, "For the first time you see a stranger, 16 tiles south, wait."),
+            e(3, 124_900, "act", 0, "You walked to 541, 767."),
+            e(4, 125_000, "act", 4, "teach masonry \u{2192} #4: no #4 in sight."),
+            e(5, 134_000, "speech", 1_000_000_397, "You said to someone too far away to make out: \u{201c}Morning to you. Gwil Stannard, mason \u{2014} new to Cullet, are you?\u{201d} (no one you saw heard it)"),
+            e(6, 134_000, "act", 1_000_000_397, "They are too far away: they could not have heard you."),
+        ];
+        let listed = scene_upto(all.clone(), 125_000, 16);
+        assert_eq!(listed.iter().map(|x| x.id).collect::<Vec<_>>(), vec![1, 2, 3, 4], "the scene's own moment is in, nothing later");
+        assert!(!listed.iter().any(|x| x.text.contains("too far away")), "the later hail sat under a scene that predates it");
+        // The next prompt, with a scene taken when the rest was handed on (134.0 s), has it.
+        assert_eq!(scene_upto(all.clone(), 134_000, 16).len(), 6);
+        // Still the last n of those.
+        assert_eq!(scene_upto(all, 125_000, 2).iter().map(|x| x.id).collect::<Vec<_>>(), vec![3, 4]);
+    }
+
     use super::*;
+
+    /// A figure made out joins the person: `person:<handle>` folds into `person:<id>`; nothing
+    /// else asks for a join (far-handle).
+    #[test]
+    fn a_figure_made_out_joins_the_person() {
+        let h = living_rules::script::FAR_HANDLE_BASE + 3;
+        let e = |kind: &str, subject: u32, object: u32| Experience { id: 1, observer: 1, controller: spacetimedb_sdk::Identity::ZERO, at_ms: 0, kind: kind.into(), subject, object, x: 0.0, y: 0.0, text: String::new(), salience: 0.3 };
+        let batch = [e("made_out", 15, h), e("saw", 15, 0), e("made_out", 15, 0), e("speech", h, 1)];
+        assert_eq!(made_out_merges(&batch), vec![(format!("person:{h}"), "person:15".to_string())]);
+    }
+
+    /// Someone one does not know by name is labelled as the authority's projection labels them
+    /// (`perception::stranger`).
+    #[test]
+    fn unnamed_people_are_labelled_as_perceived() {
+        let labels: Vec<String> = [0, 1, 2, 3].into_iter().map(|s| unnamed_label("person", s)).collect();
+        assert_eq!(labels, ["a baby", "a child", "a stranger", "an old stranger"]);
+        assert_eq!(unnamed_label("wolf", 2), "a wolf");
+        assert_eq!(unnamed_label("elk", 2), "an elk");
+    }
+
+    /// The per-deliberation record of reasons: a reason carried again keeps counting, a new
+    /// arrival of the same words starts at 0, and reasons no longer pending are forgotten.
+    #[test]
+    fn carried_reasons_count_earlier_deliberations_per_arrival() {
+        let mut counts = HashMap::new();
+        let first = carry(&mut counts, vec![("You long for another child.".into(), 10), ("I finished my plan.".into(), 12)]);
+        assert_eq!(first.as_array().unwrap().iter().map(|r| r["carried_before"].as_u64().unwrap()).collect::<Vec<_>>(), vec![0, 0]);
+        let again = carry(&mut counts, vec![("You long for another child.".into(), 10), ("I finished my plan.".into(), 30)]);
+        assert_eq!(again[0]["carried_before"], 1);
+        assert_eq!(again[1]["carried_before"], 0, "a new arrival of the same words is a new reason");
+        assert_eq!(again[0]["arrived_ms"], 10);
+        carry(&mut counts, vec![]);
+        assert!(counts.is_empty());
+    }
 
     /// A compile that put the decision's words in a say act (a real rules2-r2 reply's shape)
     /// speaks them when the decision said nothing; when it did, its speech stands. Either way
@@ -2219,7 +2818,8 @@ mod tests {
         use Origin::*;
         // (person, sheet, background, stage, parent, seeded)
         assert_eq!(Origin::of(true, false, true, 2, true, false), Background, "an adult with parents and a background");
-        assert_eq!(Origin::of(true, false, false, 3, true, false), Seed, "an elder with parents and nothing else: no newborn identity, and nothing invented");
+        assert_eq!(Origin::of(true, false, false, 3, true, false), Grown, "an elder with parents and nothing else: no newborn identity, facts only");
+        assert_eq!(Origin::of(true, false, false, 2, true, false), Grown, "a run-born adult whose mind starts late: facts only, with its parents");
         assert_eq!(Origin::of(true, false, false, 2, true, true), Seed, "an adult the seed describes");
         assert_eq!(Origin::of(true, false, true, 1, true, false), Birth, "a child raised by its parents");
         assert_eq!(Origin::of(true, false, false, 0, true, false), Birth, "a newborn");
@@ -2272,10 +2872,10 @@ mod tests {
         let g = json!({"first": {"label": "reflexes", "children": [{"wait": 1}, {"first": [
             {"first": {"label": "combat", "children": [{"do": "attack", "target": "attacker"}]}},
             {"do": "wander"}]}]}});
-        let p = patch_branch(g, "combat", json!({"first": [{"if": {"threatened": true}, "then": {"do": "dodge"}}, {"do": "attack", "target": "attacker"}]}));
+        let p = living_rules::graph::patch_branch(g, "combat", json!({"first": [{"if": {"threatened": true}, "then": {"do": "dodge"}}, {"do": "attack", "target": "attacker"}]}));
         let s = p.to_string();
         assert!(s.contains("dodge") && s.contains("wander") && !s.contains("reflexes"), "{s}");
-        let q = patch_branch(json!({"first": [{"do": "wander"}]}), "combat", json!({"do": "flee", "target": "attacker"}));
+        let q = living_rules::graph::patch_branch(json!({"first": [{"do": "wander"}]}), "combat", json!({"do": "flee", "target": "attacker"}));
         assert_eq!(q["first"][0]["first"]["label"], "combat");
         assert!(living_rules::graph::from_value(q).is_ok());
     }

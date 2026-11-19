@@ -1,0 +1,78 @@
+{
+ "schema": 1,
+ "family": "place:cullet-crown-and-views",
+ "id": "20261111-a078b5f8-a596a2",
+ "published": "2026-11-11T19:27:08+01:00",
+ "imported": "2026-11-11T19:27:08+01:00",
+ "track": "layout-1",
+ "maker": "Claude Fable 5.2",
+ "note": "before layout pass 1: kit pass 1 on main (a078b5f8), no residents' homes moved",
+ "source": {
+  "commit": "a078b5f8511900a3b86ea3783db7ec1ba1688522",
+  "branch": "main",
+  "generator": "living/tools/cullet_plan.py",
+  "generator_sha256": "2bcf01883fc512030c16e14365c52845bf39902ff54fc0b7d20694250218f8a5",
+  "generator_state": "committed",
+  "seed": "83",
+  "params": {}
+ },
+ "renderer": {
+  "method": "look-dev tour (the game client, headless; LIVING_GAME_START, 13:00 and 18:30)",
+  "commit": "",
+  "key": "look-dev tour (the game client, headless; LIVING_GAME_START, 13:00 and 18:30)",
+  "preset": "",
+  "note": ""
+ },
+ "preset": "",
+ "media": "media/place-cullet-crown-and-views/20261111-a078b5f8-a596a2",
+ "members": [
+  {
+   "name": "upper",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "93fd1e59035f00bc70bb423d0277a7b489d793337c6b876181a7ae02018fb569",
+   "shots": [
+    "day-180_28_22",
+    "day-90_28_22",
+    "day-default",
+    "dusk-180_28_22",
+    "dusk-90_28_22",
+    "dusk-default"
+   ],
+   "clips": []
+  },
+  {
+   "name": "crown",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "7a712b5546eb8dd5801cf81d01fbaf43667ad942724bbb477df66d33245ed204",
+   "shots": [
+    "day-180_12_10_60",
+    "day-180_30_90",
+    "day-default",
+    "dusk-180_12_10_60",
+    "dusk-180_30_90",
+    "dusk-default"
+   ],
+   "clips": []
+  },
+  {
+   "name": "overview",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "762ed4382547af816270d555810aaf6317bf31753f27e44e45c2091b32e64ffb",
+   "shots": [
+    "day-0_50_150_55",
+    "day-180_40_130_55",
+    "day-270_40_130_55",
+    "day-90_40_130_55",
+    "dusk-0_50_150_55",
+    "dusk-180_40_130_55",
+    "dusk-270_40_130_55",
+    "dusk-90_40_130_55"
+   ],
+   "clips": []
+  }
+ ],
+ "delivered": []
+}

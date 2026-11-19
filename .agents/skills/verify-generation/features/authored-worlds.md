@@ -4,6 +4,7 @@
 
 - Cached household sheets compile without network access or model calls.
 - Compilation output is compared semantically and byte for byte with the committed `aske-coast.json`.
+- The island, a planned world (`living/seeds/worlds/island/world.json` names the seed it merges `into`), compiles the same way (`author_world.py island --compile-only`, through its `lives` path) against the committed `island.json`; its copied tree also holds `rules/src/catalog.rs`, `island.json` and `repertoire.json`, which it checks against. Evidence in `authored-island/`.
 - Original seed files retain their hashes.
 - Authored parser tests cover ages, households, sites, parent order and sheet resolution.
 - Published backgrounds preserve the resolved sheet while removing its top-level secret.

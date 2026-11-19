@@ -1,0 +1,55 @@
+{
+ "schema": 1,
+ "family": "character:cast-64",
+ "id": "20261112-d6ba3fba-90016a",
+ "published": "2026-11-12T14:11:19+01:00",
+ "imported": "2026-11-12T14:11:19+01:00",
+ "track": "char-4",
+ "maker": "Claude Fable 5.2",
+ "note": "Cullet's cast built again whole with the iris's lights as a layer over the iris. The eyes should look as they did.",
+ "source": {
+  "commit": "d6ba3fbaf9a5de57393cca6dcfc2f0cc26399a1e",
+  "branch": "char-4",
+  "dirty": false,
+  "generator": "living/tools/blender/person.py",
+  "generator_sha256": "efd31b4e2a66dc04e1159bcb45ce893ad968f0c36a22ee99e83a8015e885c779",
+  "generator_state": "committed",
+  "seed": "cullet",
+  "params": {
+   "cast": "living/seeds/cullet.json",
+   "people": 64
+  }
+ },
+ "renderer": {
+  "method": "asset-view",
+  "commit": "",
+  "key": "asset-view",
+  "preset": "",
+  "note": "town.py: each person alone through the asset view; lineup from the front at 28 degrees down at one scale; faces close, on a frame of the idle clip, eyes held open by the photo tool; faces-before-after: 24 of the faces from the version before above this one; game is each person at 22 m through the game camera, pixels enlarged three times; tiled"
+ },
+ "preset": "",
+ "media": "media/character-cast-64/20261112-d6ba3fba-90016a",
+ "members": [
+  {
+   "name": "cast",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "f28138ccc3ede531cd5d305e6ab2546f926c7efcdef540eea158e6f158da10dc",
+   "shots": [
+    "faces",
+    "faces-24",
+    "faces-before-after",
+    "game",
+    "lineup"
+   ],
+   "clips": []
+  }
+ ],
+ "delivered": [
+  {
+   "title": "town check page and town.json (who is who)",
+   "path": "delivered/index.html",
+   "from": ".local/town17/index.html"
+  }
+ ]
+}

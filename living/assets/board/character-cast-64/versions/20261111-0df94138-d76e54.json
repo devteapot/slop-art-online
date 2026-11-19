@@ -1,0 +1,54 @@
+{
+ "schema": 1,
+ "family": "character:cast-64",
+ "id": "20261111-0df94138-d76e54",
+ "published": "2026-11-11T17:36:21+01:00",
+ "imported": "2026-11-11T17:36:21+01:00",
+ "track": "char-2",
+ "maker": "Claude Fable 5.2",
+ "note": "Pass 1 on faces: a stand-in for Cullet in 22 households (44 adults, 6 elders, 14 children; relatives share a family seed), unreviewed. 16 to a row in the town's order, a household together. New sheets beside lineup and faces: faces-24 (24 of them larger) and game (through the game camera).",
+ "source": {
+  "commit": "0df94138b70755df6fc46864143b43b38baa68e5",
+  "branch": "char-2",
+  "dirty": false,
+  "generator": "living/tools/blender/person.py",
+  "generator_sha256": "7d553b6d33de8528d7ff99d640b8b95bed5beea6a8672e05085d8c097122d474",
+  "generator_state": "committed",
+  "seed": "64",
+  "params": {
+   "cast": "living/tools/characters/town.py",
+   "people": 64
+  }
+ },
+ "renderer": {
+  "method": "asset-view",
+  "commit": "0df94138",
+  "key": "0df94138",
+  "preset": "",
+  "note": "town.py: each person alone through the asset view; lineup from the front at 28 degrees down at one scale; faces close (the take with the eyes open); game is each person at 22 m through the game camera, pixels enlarged three times; tiled"
+ },
+ "preset": "",
+ "media": "media/character-cast-64/20261111-0df94138-d76e54",
+ "members": [
+  {
+   "name": "cast",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "4f5e5d7118b52a7e429f4610cca316e08901b988923f082932e0ca8e105fd446",
+   "shots": [
+    "faces",
+    "faces-24",
+    "game",
+    "lineup"
+   ],
+   "clips": []
+  }
+ ],
+ "delivered": [
+  {
+   "title": "town check page and town.json (who is who)",
+   "path": "delivered/char-2-town/index.html",
+   "from": ".local/char-2-town"
+  }
+ ]
+}

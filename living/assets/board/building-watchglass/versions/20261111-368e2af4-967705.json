@@ -1,0 +1,217 @@
+{
+ "schema": 1,
+ "family": "building:watchglass",
+ "id": "20261111-368e2af4-967705",
+ "published": "2026-11-11T17:46:24+01:00",
+ "track": "kit-1",
+ "maker": "Claude Fable 5.2",
+ "note": "kit-1 pass 1: built for its lot from the plan (footprint, height, wear and seed from plan.json); glow set in the game at 21:30 against 13:00",
+ "source": {
+  "commit": "368e2af4b14033a9e8da023fcc63b95c27a5a9bb",
+  "branch": "kit-1",
+  "dirty": false,
+  "generator": "living/tools/blender/cullet.py",
+  "generator_sha256": "5f70615004be4033b28a542e829eaf40b0eef97ddcc9c31bb4e4b906c7bd9803",
+  "generator_state": "committed",
+  "seed": "83",
+  "params": {
+   "plan": "living/seeds/worlds/cullet/plan.json"
+  }
+ },
+ "renderer": {
+  "method": "asset-view",
+  "commit": "86fae680d923921d2c41e9dffc8d39c75cc88752",
+  "dirty": false,
+  "key": "86fae680",
+  "env": "cullet",
+  "hours": {
+   "day": 15.0,
+   "night": 22.0
+  },
+  "weather": "clear",
+  "day_curve": true,
+  "preset": "2947e3c0",
+  "repo": "/home/carlid/.t3/worktrees/slop-art-online/t3-e14baa97-22eef9c68b78d643"
+ },
+ "preset": "building",
+ "media": "media/building-watchglass/20261111-368e2af4-967705",
+ "members": [
+  {
+   "name": "watchglass",
+   "role": "subject",
+   "token_kind": "file",
+   "source_path": ".local/kit-1/board/watchglass/watchglass.glb",
+   "sha256": "ccb6a8e4554bece810a907c74936a0e3afecd0aee039f76e03da545cb16bb1bf",
+   "stats": {
+    "file": "watchglass.glb",
+    "sha256": "ccb6a8e4554bece810a907c74936a0e3afecd0aee039f76e03da545cb16bb1bf",
+    "bytes": 208380,
+    "triangles": 2974,
+    "vertices": 5885,
+    "parts": {
+     "watchglass": 2974
+    },
+    "nodes": 1,
+    "bones": 0,
+    "spring_bones": 0,
+    "materials": [
+     "Body",
+     "GlowCyan"
+    ],
+    "textures": 0,
+    "texture_bytes": 0,
+    "morph_targets": 0,
+    "spring_groups": 0,
+    "vertex_colours": true,
+    "clips": [],
+    "glow": true,
+    "glow_triangles": 560,
+    "palette": [
+     {
+      "hex": "#3f4249",
+      "share": 0.2144
+     },
+     {
+      "hex": "#595c60",
+      "share": 0.1696
+     },
+     {
+      "hex": "#c5c3b3",
+      "share": 0.1475
+     },
+     {
+      "hex": "#2b2b30",
+      "share": 0.1438
+     },
+     {
+      "hex": "#5ea192",
+      "share": 0.1023
+     },
+     {
+      "hex": "#9eccc6",
+      "share": 0.0688
+     },
+     {
+      "hex": "#65524c",
+      "share": 0.0313
+     },
+     {
+      "hex": "#82827e",
+      "share": 0.0229
+     },
+     {
+      "hex": "#613c2a",
+      "share": 0.0202
+     },
+     {
+      "hex": "#b8b4a6",
+      "share": 0.0187
+     },
+     {
+      "hex": "#a4a299",
+      "share": 0.0165
+     },
+     {
+      "hex": "#294399",
+      "share": 0.0104
+     },
+     {
+      "hex": "#569082",
+      "share": 0.0081
+     },
+     {
+      "hex": "#47736a",
+      "share": 0.008
+     },
+     {
+      "hex": "other",
+      "share": 0.0174
+     }
+    ]
+   },
+   "file": "files/watchglass.glb",
+   "report": {
+    "file": "watchglass/watchglass.glb",
+    "what": "lot",
+    "kind": "watchglass",
+    "size_m": [
+     6,
+     6
+    ],
+    "plan_height_m": 17.0,
+    "seed": 2436,
+    "above_floor_m": [
+     [
+      -2.9,
+      -2.9
+     ],
+     [
+      2.9,
+      2.9
+     ]
+    ],
+    "height_m": 17.0,
+    "foundation_m": 1.8,
+    "tris": 2974,
+    "materials": {
+     "Body": 2414,
+     "GlowCyan": 560
+    },
+    "surface_tagged_share": 1.0,
+    "palette_share": 0.883,
+    "palette_wear_blend_share": 0.117,
+    "budget_tris": 9000,
+    "doors": [
+     {
+      "at": [
+       0.0,
+       -2.29,
+       1.18
+      ],
+      "along": [
+       1.0,
+       0.0,
+       0.0
+      ],
+      "width_m": 0.9,
+      "height_m": 2.0
+     }
+    ],
+    "sha256": "ccb6a8e4554bece810a907c74936a0e3afecd0aee039f76e03da545cb16bb1bf",
+    "ridge_m": 17.0,
+    "shaft_across_m": 4.0,
+    "lantern_across_m": 5.0,
+    "panes": 320,
+    "cobalt_panes": 40
+   },
+   "shots": [
+    "front",
+    "three-quarter",
+    "side",
+    "back",
+    "close",
+    "game",
+    "night-three-quarter",
+    "night-game"
+   ],
+   "clips": [],
+   "view": {
+    "size_m": [
+     5.800000190734863,
+     18.799999237060547,
+     5.800000190734863
+    ],
+    "triangles": 2974,
+    "vertices": 5885,
+    "meshes": 2,
+    "materials": [
+     "Body",
+     "GlowCyan"
+    ],
+    "glow": true,
+    "vertex_colours": true
+   }
+  }
+ ],
+ "delivered": []
+}

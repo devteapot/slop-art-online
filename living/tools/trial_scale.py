@@ -60,7 +60,8 @@ def main():
     a = ap.parse_args()
     T.guard()
     bdir = T.OUT / a.batch
-    dbs = [d for d in T.databases() if d.startswith(f"{T.PREFIX}{a.batch}-")]
+    # The batch's own records (the runner's names), not `spacetime list`.
+    dbs = [d for d in T.batch_databases(a.batch) if T.database_identity(d)]
     token = T.admin_token()
     before = host()
     started = time.time()

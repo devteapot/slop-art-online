@@ -66,6 +66,12 @@ pub struct Shape {
     pub timed: bool,
     /// A player's movement waits while its windup runs.
     pub rooted: bool,
+    /// Once started it runs its whole course, for every controller: its windup to the release
+    /// (a dash: to its end). Only its own timing or something physical ends it (death, a wall
+    /// in a dash's way); never its controller's reason going (a graph's condition that stops
+    /// holding, its target leaving sight, a new plan, a player's movement keys). A dash may
+    /// still cut in on a committed windup (`living_authority::combat::gate`).
+    pub committed: bool,
     /// Aimed against a creature: that creature is its victim, and sees it coming.
     pub hostile: bool,
     /// Takes the body back from a deliberate act.
@@ -179,7 +185,14 @@ impl Shapes {
 
     /// Ongoing or real-time behavior: it belongs in a graph, not in a one-off act.
     pub fn real_time(&self, skill: &str) -> bool {
-        crate::catalog::skill(skill).is_some_and(|k| k.moment) || self.get(skill).is_some_and(|s| s.real_time)
+        self.real_time_in(&crate::catalog::skills(), skill)
+    }
+
+    /// The same, for a given world's skills (a script that is not this process's world): a
+    /// skill whose spec says `moment`, or a combat skill whose shape says `real_time`. The one
+    /// definition players and minds share (`living_rules::ui::real_time`).
+    pub fn real_time_in(&self, skills: &crate::catalog::Skills, skill: &str) -> bool {
+        skills.get(skill).is_some_and(|k| k.moment) || self.get(skill).is_some_and(|s| s.real_time)
     }
 
     /// A reflex in a graph takes the body back from a deliberate act (fleeing, or a combat
@@ -260,6 +273,44 @@ pub fn band_words(band: u8) -> &'static str {
     }
 }
 
+/// Another creature's health as an observer perceives it (docs/PERCEPTION.md): its band, and
+/// its exact health and full health only where the `perceived_of` law grants them (oneself, or
+/// an `appraise` reveal in force for that observer).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct HealthSeen {
+    pub band: u8,
+    pub exact: Option<(f32, f32)>,
+}
+
+impl HealthSeen {
+    /// What is perceived, in words: "70 of 100 health" when exact, else the band's words.
+    pub fn words(&self) -> String {
+        match self.exact {
+            Some((hp, max)) => format!("{:.0} of {:.0} health", hp.max(0.0).round(), max.round()),
+            None => band_words(self.band).to_string(),
+        }
+    }
+
+    /// The health fraction it reads as, in percent: exact when perceived exactly, else the
+    /// middle of the band (as a band is drawn).
+    pub fn percent(&self) -> f32 {
+        match self.exact {
+            Some((hp, max)) => hp / max.max(1.0) * 100.0,
+            None => band_fraction(self.band) * 100.0,
+        }
+    }
+}
+
+/// The end of a fight report: one's own health exactly, the other's as one perceives it
+/// (`None` when the law hides it).
+pub fn fight_health(own_hp: f32, theirs: Option<HealthSeen>) -> String {
+    match theirs {
+        Some(t) if t.exact.is_some() => format!("Your health {own_hp:.0}; they have {}.", t.words()),
+        Some(t) => format!("Your health {own_hp:.0}; they look {}.", t.words()),
+        None => format!("Your health {own_hp:.0}."),
+    }
+}
+
 /// A unit vector, if the input has a direction.
 pub fn unit(dx: f32, dy: f32) -> Option<(f32, f32)> {
     let n = (dx * dx + dy * dy).sqrt();
@@ -301,6 +352,44 @@ pub struct MissileSpec {
     pub speed: f32,
     pub range: f32,
     pub radius: f32,
+}
+
+/// A combat skill's timing as a person has it: what `skill_card` shows a player and what the
+/// minds' skill reference states (`Scripts::timing`, one source for both). Milliseconds.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Timing {
+    pub aim: Aim,
+    /// Before it takes effect (0 for a dash or a guard, which act at once).
+    pub windup_ms: u32,
+    /// After it, before the next move.
+    pub recover_ms: u32,
+    /// From its start until it can be used again.
+    pub cooldown_ms: u32,
+    /// The longest a guard is held.
+    pub hold_ms: u32,
+    /// A missile's speed (m/s), 0 for none.
+    pub speed: f32,
+}
+
+impl Timing {
+    /// The timing in words, for a mind's skill reference (docs/COMBAT_MIND.md §3.7).
+    pub fn words(&self) -> String {
+        let s = |ms: u32| if ms % 1000 == 0 && ms >= 1000 { format!("{} s", ms / 1000) } else { format!("{ms} ms") };
+        let then = if self.recover_ms > 0 { format!(", then {} to recover", s(self.recover_ms)) } else { String::new() };
+        let mut w = match self.aim {
+            Aim::Dash => format!("a dash at once{then}"),
+            Aim::Facing => format!("raised at once and held up to {}", s(self.hold_ms)),
+            _ if self.windup_ms > 0 => format!("winds up {} before it takes effect (others see it coming){then}", s(self.windup_ms)),
+            _ => format!("takes effect at once{then}"),
+        };
+        if self.speed > 0.0 {
+            w.push_str(&format!("; it flies {} m/s", (self.speed * 10.0).round() / 10.0));
+        }
+        if self.cooldown_ms > 0 {
+            w.push_str(&format!("; ready again {} after it starts", s(self.cooldown_ms)));
+        }
+        w
+    }
 }
 
 /// The radius of a body for missiles and blows (tiles).
@@ -349,6 +438,25 @@ mod tests {
         assert_eq!(band(5.0, 0.0), 0);
         for b in 0..=4u8 {
             assert_eq!(band(band_fraction(b) * 100.0, 100.0), b);
+        }
+    }
+
+    #[test]
+    fn fight_reports_show_the_band_unless_appraised() {
+        // Seen as everyone sees it: the band's words, never a number.
+        let band_only = HealthSeen { band: band(70.0, 100.0), exact: None };
+        let line = fight_health(61.4, Some(band_only));
+        assert_eq!(line, "Your health 61; they look scratched.");
+        assert!(!line.contains("70") && !line.contains('%'), "{line}");
+        assert_eq!(band_only.percent(), 77.0);
+        // While an appraisal reveals it: exact.
+        let appraised = HealthSeen { band: band(70.2, 110.0), exact: Some((70.2, 110.0)) };
+        assert_eq!(fight_health(61.4, Some(appraised)), "Your health 61; they have 70 of 110 health.");
+        assert!((appraised.percent() - 63.8).abs() < 0.1);
+        // Hidden by the law: only one's own.
+        assert_eq!(fight_health(61.4, None), "Your health 61.");
+        for b in 0..=4u8 {
+            assert_eq!(HealthSeen { band: b, exact: None }.words(), band_words(b));
         }
     }
 

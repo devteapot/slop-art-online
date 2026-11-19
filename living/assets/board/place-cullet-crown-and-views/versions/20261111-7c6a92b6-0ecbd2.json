@@ -1,0 +1,183 @@
+{
+ "schema": 1,
+ "family": "place:cullet-crown-and-views",
+ "id": "20261111-7c6a92b6-0ecbd2",
+ "published": "2026-11-11T21:57:28+01:00",
+ "imported": "2026-11-11T21:57:28+01:00",
+ "track": "layout-2",
+ "maker": "Claude Fable 5.2",
+ "note": "main with kit-2 (layout pass 1, the painted ground, the Crown's buildings): the before of layout pass 2, photographed by layout-2's client",
+ "source": {
+  "commit": "7c6a92b6c30f3b64cf81b2f3cc5c775941c1915b",
+  "branch": "main",
+  "generator": "living/tools/cullet_plan.py",
+  "generator_sha256": "521eff9f6f2d616689ebda7306806faa56a82afa9160e10ae2d9fea5d407e560",
+  "generator_state": "committed",
+  "seed": "83",
+  "params": {}
+ },
+ "renderer": {
+  "method": "look-dev tour (the game client of layout-2, headless; LIVING_GAME_START, 13:00 and 18:30)",
+  "commit": "",
+  "key": "look-dev tour (the game client of layout-2, headless; LIVING_GAME_START, 13:00 and 18:30)",
+  "preset": "",
+  "note": ""
+ },
+ "preset": "",
+ "media": "media/place-cullet-crown-and-views/20261111-7c6a92b6-0ecbd2",
+ "members": [
+  {
+   "name": "upper",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "ab256f92baed64e47464ef1aef136909959f3a0684246929d1a647e10a1d1799",
+   "shots": [
+    "day-180_28_22",
+    "day-90_28_22",
+    "day-default",
+    "dusk-180_28_22",
+    "dusk-90_28_22",
+    "dusk-default"
+   ],
+   "clips": []
+  },
+  {
+   "name": "crown",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "913cde03531157e355f6604ca361ab9b2215199284604fa99ce185250195e508",
+   "shots": [
+    "day-180_12_10_60",
+    "day-180_30_90",
+    "day-default",
+    "dusk-180_12_10_60",
+    "dusk-180_30_90",
+    "dusk-default"
+   ],
+   "clips": []
+  },
+  {
+   "name": "overview",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "e9b4be4237b240d950c56ccec4d51f63f744a8bdf2ceb6317f61c4f2e7193281",
+   "shots": [
+    "day-0_50_150_55",
+    "day-180_40_130_55",
+    "day-270_40_130_55",
+    "day-90_40_130_55",
+    "dusk-0_50_150_55",
+    "dusk-180_40_130_55",
+    "dusk-270_40_130_55",
+    "dusk-90_40_130_55"
+   ],
+   "clips": []
+  },
+  {
+   "name": "graveyard",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "c2b0c0a1b1cc164fea432cad7c7fd50f433acf25e2455e4e69b5b4fb552bf315",
+   "shots": [
+    "day-0_30_40",
+    "day-90_14_9_60",
+    "day-close",
+    "day-default",
+    "dusk-0_30_40",
+    "dusk-90_14_9_60",
+    "dusk-close",
+    "dusk-default"
+   ],
+   "clips": []
+  },
+  {
+   "name": "cistern",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "37c7fe6de75c3aac0cac6b71a0eee4374298b47c6053a2b4e3f5e77198bc04ec",
+   "shots": [
+    "day-0_14_9_60",
+    "day-close",
+    "day-default",
+    "dusk-0_14_9_60",
+    "dusk-close",
+    "dusk-default"
+   ],
+   "clips": []
+  },
+  {
+   "name": "readers_yard",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "b4f966c1487ae5987d61f92b5dec836b37a18b34855e763b947a9e09899c1a0c",
+   "shots": [
+    "day-close",
+    "day-default",
+    "dusk-close",
+    "dusk-default"
+   ],
+   "clips": []
+  },
+  {
+   "name": "dyke_gap",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "5523865da40d57ce09c1344ded825bfd5a79ae4c98cd1b4fa93f0f8f018da407",
+   "shots": [
+    "day-0_14_9_60",
+    "day-close",
+    "day-default",
+    "dusk-0_14_9_60",
+    "dusk-close",
+    "dusk-default"
+   ],
+   "clips": []
+  },
+  {
+   "name": "quarry_bay",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "83b80a7341ced20bb3f49a43b685c8cdf349c8397cd57a1ea9658e1ef90c76bd",
+   "shots": [
+    "day-0_12_10_60",
+    "day-close",
+    "day-default",
+    "dusk-0_12_10_60",
+    "dusk-close",
+    "dusk-default"
+   ],
+   "clips": []
+  },
+  {
+   "name": "quarry_walk",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "c5203802a882fd94085cd99a8ff56d7ef1b5cc2fadffe6ef3d81ddd3995dd746",
+   "shots": [
+    "day-270_12_10_60",
+    "day-close",
+    "day-default",
+    "dusk-270_12_10_60",
+    "dusk-close",
+    "dusk-default"
+   ],
+   "clips": []
+  },
+  {
+   "name": "clay_pit",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "ecac0303a6597790b57ce24dfd3b34fe700daa8b197bb360da262eb0aca8ea11",
+   "shots": [
+    "day-0_12_9_60",
+    "day-close",
+    "day-default",
+    "dusk-0_12_9_60",
+    "dusk-close",
+    "dusk-default"
+   ],
+   "clips": []
+  }
+ ],
+ "delivered": []
+}

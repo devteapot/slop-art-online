@@ -4,6 +4,8 @@
 //! - `LIVING_GAME_RAMP=<peak m/s>:<seconds>[:<hold s>]`: while you walk
 //!   (`LIVING_GAME_AUTOWALK` or a route), your speed ramps from 0 to the peak and back over
 //!   `seconds`, then you stand for `hold` (default 1.5 s), and again (`envs::walk`).
+//! - `LIVING_GAME_SPLIT=<m/s>`: people's walk/run split (`gait::Family::Split`), the one a world's
+//!   laws would give (look-dev has none; without it, the clips' own midway split).
 //! - `LIVING_GAME_ONESHOT=<clip>[*<rate>][+<clip>[*<rate>]…]:<every s>`: your character plays
 //!   these one-shots in turn, one every `every` seconds (the first after one interval), over
 //!   whatever it is doing.

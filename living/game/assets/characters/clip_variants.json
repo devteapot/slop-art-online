@@ -1,0 +1,17 @@
+{
+  "about": "Clip variants a character plays in place of a logical clip (anim.rs `variants`, cloth_check.py --ground-clips). Everything that keys off a clip (the cloth's ground contact, sit-hips' ground share, the seat anchor's timing, town::Show's sitting state, verify-ui) keeps the logical name; only the animation played is resolved, per character, once, when its clips are bound. A family applies to a generated person (a composed person line) whose type starts with one of `types` and who wears every piece in `wears`. A character whose clip file lacks a variant plays the original.",
+  "families": [
+    {
+      "name": "female ground sit",
+      "spec": "docs/seat-contact/female-ground-bake/README.md",
+      "why": "Baked on the female trousers and boots (dev-box, main 8851982d2): seated boots +14.9 -> -0.0 mm and trousers +30.3 -> +0.5 mm on the average woman. Adults only: the elder woman's variant deepened her boots on the rise, so elders keep the originals; children, youths and the male family keep them too.",
+      "types": ["adult-"],
+      "wears": ["trousers-f", "boots-f"],
+      "clips": {
+        "sit_ground_down": "sit_ground_down_f",
+        "sit_ground": "sit_ground_f",
+        "stand_up_ground": "stand_up_ground_f"
+      }
+    }
+  ]
+}

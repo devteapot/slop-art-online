@@ -204,6 +204,7 @@ pub fn vary_ways(top: &Node, u: &mut dyn FnMut() -> f32) -> Option<Node> {
                 commotion: vary(w.commotion, u),
                 bedtime: vary(w.bedtime, u),
                 evening: vary(w.evening, u),
+                work_hours: vary(w.work_hours, u),
                 believes: w.believes.clone(),
             };
             Desire { want: d.want.clone(), weight, body: d.body.clone() }

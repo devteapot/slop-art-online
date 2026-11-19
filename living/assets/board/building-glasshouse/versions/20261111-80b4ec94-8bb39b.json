@@ -1,0 +1,210 @@
+{
+ "schema": 1,
+ "family": "building:glasshouse",
+ "id": "20261111-80b4ec94-8bb39b",
+ "published": "2026-11-11T16:44:26+01:00",
+ "track": "ab-arm1 (Cullet A/B, Fable arm)",
+ "maker": "Claude Fable 5.2",
+ "note": "The Fable arm of the Cullet asset A/B (docs/SMALL_CITY.md). Starting version of the building kit. Photographed by the board from the arm's GLBs; the arm's own Blender renders are kept with it.",
+ "source": {
+  "commit": "80b4ec94592cc89ecf07a45802573817572dee17",
+  "branch": "ab-arm1",
+  "generator": "living/tools/blender/ab/cullet_fable.py",
+  "generator_sha256": "527af19efe16e597085e1a6d964457b8ef9c6e74570d13cadf5ab12726c66919",
+  "generator_state": "committed",
+  "seed": "1",
+  "params": {}
+ },
+ "renderer": {
+  "method": "asset-view",
+  "commit": "362f0ea5505534da2c7a7b3d67ae6eca784fd230",
+  "dirty": false,
+  "key": "362f0ea5",
+  "env": "cullet",
+  "hours": {
+   "day": 15.0,
+   "night": 22.0
+  },
+  "weather": "clear",
+  "day_curve": true,
+  "preset": "2947e3c0",
+  "repo": "/home/carlid/.t3/worktrees/slop-art-online/t3-e14baa97-22eef9c68b78d643"
+ },
+ "preset": "building",
+ "media": "media/building-glasshouse/20261111-80b4ec94-8bb39b",
+ "members": [
+  {
+   "name": "glasshouse",
+   "role": "subject",
+   "token_kind": "file",
+   "source_path": "/home/carlid/dev/slop-ab-arm1/.local/living/small-city/ab/fable/glasshouse.glb",
+   "sha256": "969c10654c891d7b0c916ea6813ffae090a5a6f40a34ff552c428f41694b926b",
+   "stats": {
+    "file": "glasshouse.glb",
+    "sha256": "969c10654c891d7b0c916ea6813ffae090a5a6f40a34ff552c428f41694b926b",
+    "bytes": 527096,
+    "triangles": 6803,
+    "vertices": 15126,
+    "parts": {
+     "glasshouse": 6803
+    },
+    "nodes": 1,
+    "bones": 0,
+    "spring_bones": 0,
+    "materials": [
+     "Body",
+     "Glow"
+    ],
+    "textures": 0,
+    "texture_bytes": 0,
+    "morph_targets": 0,
+    "spring_groups": 0,
+    "vertex_colours": true,
+    "clips": [],
+    "glow": true,
+    "glow_triangles": 4,
+    "palette": [
+     {
+      "hex": "#393d43",
+      "share": 0.3636
+     },
+     {
+      "hex": "#5b6064",
+      "share": 0.1508
+     },
+     {
+      "hex": "#e7e2d7",
+      "share": 0.13
+     },
+     {
+      "hex": "#9eccc7",
+      "share": 0.1059
+     },
+     {
+      "hex": "#827d73",
+      "share": 0.1035
+     },
+     {
+      "hex": "#c6c3b4",
+      "share": 0.0345
+     },
+     {
+      "hex": "#382e1f",
+      "share": 0.0326
+     },
+     {
+      "hex": "#5c7348",
+      "share": 0.029
+     },
+     {
+      "hex": "#464e5a",
+      "share": 0.0155
+     },
+     {
+      "hex": "#55382b",
+      "share": 0.0071
+     },
+     {
+      "hex": "#222020",
+      "share": 0.0052
+     },
+     {
+      "hex": "#c77f28",
+      "share": 0.0043
+     },
+     {
+      "hex": "#8d9aa0",
+      "share": 0.0039
+     },
+     {
+      "hex": "#4a5263",
+      "share": 0.0034
+     },
+     {
+      "hex": "other",
+      "share": 0.0106
+     }
+    ]
+   },
+   "file": "files/glasshouse.glb",
+   "report": {
+    "file": "glasshouse.glb",
+    "footprint_m": [
+     12.0,
+     4.5
+    ],
+    "height_m": 3.277,
+    "foundation_m": 1.8,
+    "tris": 6803,
+    "materials": {
+     "Body": 6799,
+     "Glow": 4
+    },
+    "surface_tagged_share": 1.0,
+    "palette_share": 0.8376,
+    "palette_wear_blend_share": 0.1624,
+    "budget_tris": 9000,
+    "within_budget": true,
+    "sha256": "969c10654c891d7b0c916ea6813ffae090a5a6f40a34ff552c428f41694b926b",
+    "wear": {
+     "salt": 0.1,
+     "soot": 0.0,
+     "wind": 0.8,
+     "repair": 0.6
+    },
+    "body_m": [
+     12.0,
+     3.85
+    ],
+    "strip_m": 0.65,
+    "bays": 12,
+    "panes": 342,
+    "boarded": 36,
+    "odd_glass": 25,
+    "missing": 8,
+    "holes": 4,
+    "not_original_share": 0.202,
+    "odd_share": 0.073
+   },
+   "shots": [
+    "front",
+    "three-quarter",
+    "side",
+    "back",
+    "close",
+    "game",
+    "night-three-quarter",
+    "night-game"
+   ],
+   "clips": [],
+   "view": {
+    "size_m": [
+     12.067999839782715,
+     5.076953887939453,
+     4.550213813781738
+    ],
+    "triangles": 6803,
+    "vertices": 15126,
+    "meshes": 2,
+    "materials": [
+     "Body",
+     "Glow"
+    ],
+    "glow": true,
+    "vertex_colours": true
+   }
+  }
+ ],
+ "delivered": [
+  {
+   "title": "Fable's own Blender renders (EEVEE, not the game)",
+   "path": "delivered/renders-glasshouse/index.html",
+   "from": "/tmp/claude-1000/-home-carlid--t3-worktrees-slop-art-online-t3-e14baa97-22eef9c68b78d643/50acc972-a46f-4722-b7e2-c1cfcc82851b/scratchpad/fable/renders-glasshouse"
+  },
+  {
+   "title": "Fable arm notes",
+   "path": "delivered/notes.md",
+   "from": "/home/carlid/dev/slop-ab-arm1/.local/living/small-city/ab/fable/notes.md"
+  }
+ ]
+}

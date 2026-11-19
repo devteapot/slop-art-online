@@ -52,7 +52,7 @@ class RunCredentialsTest(unittest.TestCase):
             with patch.object(verify, "ROOT", root), patch.dict("os.environ", XDG_STATE_HOME=str(private)):
                 evidence = verify.run_dir(run) / "state.json"
                 tokens = {"token": "synthetic-player", "token2": "synthetic-bystander"}
-                evidence.write_text(json.dumps({"run": run, "db": "verify-" + run, **tokens}))
+                evidence.write_text(json.dumps({"run": run, "db": "verify-" + run, "published": False, **tokens}))
                 state = verify.load(run)
                 self.assertEqual({key: state[key] for key in tokens}, tokens)
                 self.assertEqual(verify.load(run), state)

@@ -1,0 +1,915 @@
+{
+ "schema": 1,
+ "family": "building:cinder-row",
+ "id": "20261111-a34e317f-b12d95",
+ "published": "2026-11-11T21:08:21+01:00",
+ "track": "kit-2",
+ "maker": "Claude Fable 5.2",
+ "note": "kit-2 pass 2: lit windows and parapets from the plan; no two faces in one plane (the flicker of the owner's walk); every lot's eye-height cells. New: Cinder Row's five working buildings, each open on what it is for",
+ "source": {
+  "commit": "a34e317f2de27101929fa770388a37f1d1b6d62e",
+  "branch": "kit-2",
+  "dirty": false,
+  "generator": "living/tools/blender/cullet.py",
+  "generator_sha256": "2a1d98999573e7816cef047ccc6c3aab5e04b0911d1071f1054acf8f7a29a287",
+  "generator_state": "committed",
+  "seed": "83",
+  "params": {
+   "plan": "living/seeds/worlds/cullet/plan.json"
+  }
+ },
+ "renderer": {
+  "method": "asset-view",
+  "commit": "a34e317f2de27101929fa770388a37f1d1b6d62e",
+  "dirty": false,
+  "key": "bin:cbdab2a8",
+  "env": "cullet",
+  "hours": {
+   "day": 15.0,
+   "night": 22.0
+  },
+  "weather": "clear",
+  "day_curve": true,
+  "preset": "2947e3c0",
+  "binary": "/home/carlid/.t3/worktrees/slop-art-online/t3-2190f8f1-741aca404e5ab819/.local/kit2-target/release/living-game",
+  "commit_assumed": "a34e317f2de27101929fa770388a37f1d1b6d62e",
+  "repo": "/home/carlid/.t3/worktrees/slop-art-online/t3-2190f8f1-741aca404e5ab819"
+ },
+ "preset": "building",
+ "media": "media/building-cinder-row/20261111-a34e317f-b12d95",
+ "members": [
+  {
+   "name": "lehr_house",
+   "role": "subject",
+   "token_kind": "file",
+   "source_path": ".local/kit-2/board/lehr_house/lehr_house.glb",
+   "sha256": "87f2b0f1a88b99a7778f899ea7f9c075986f513186c1e2f86237209dc7ccec09",
+   "stats": {
+    "file": "lehr_house.glb",
+    "sha256": "87f2b0f1a88b99a7778f899ea7f9c075986f513186c1e2f86237209dc7ccec09",
+    "bytes": 498968,
+    "triangles": 7077,
+    "vertices": 14197,
+    "parts": {
+     "lehr_house": 7077
+    },
+    "nodes": 1,
+    "bones": 0,
+    "spring_bones": 0,
+    "materials": [
+     "Body",
+     "GlowEmber"
+    ],
+    "textures": 0,
+    "texture_bytes": 0,
+    "morph_targets": 0,
+    "spring_groups": 0,
+    "vertex_colours": true,
+    "clips": [],
+    "glow": true,
+    "glow_triangles": 27,
+    "palette": [
+     {
+      "hex": "#393d44",
+      "share": 0.3755
+     },
+     {
+      "hex": "#211f1f",
+      "share": 0.2161
+     },
+     {
+      "hex": "#5a6067",
+      "share": 0.1643
+     },
+     {
+      "hex": "#b7bcb1",
+      "share": 0.1173
+     },
+     {
+      "hex": "#475160",
+      "share": 0.0489
+     },
+     {
+      "hex": "#3d2b26",
+      "share": 0.0441
+     },
+     {
+      "hex": "#636f81",
+      "share": 0.0123
+     },
+     {
+      "hex": "#58382b",
+      "share": 0.0079
+     },
+     {
+      "hex": "#949b9a",
+      "share": 0.0048
+     },
+     {
+      "hex": "#c78029",
+      "share": 0.0021
+     },
+     {
+      "hex": "#cac6b6",
+      "share": 0.0021
+     },
+     {
+      "hex": "#2e2e33",
+      "share": 0.0014
+     },
+     {
+      "hex": "#8a887f",
+      "share": 0.0012
+     },
+     {
+      "hex": "#934d3a",
+      "share": 0.0004
+     },
+     {
+      "hex": "other",
+      "share": 0.0015
+     }
+    ]
+   },
+   "file": "files/lehr_house.glb",
+   "report": {
+    "file": "lehr_house/lehr_house.glb",
+    "what": "lot",
+    "kind": "lehr_house",
+    "size_m": [
+     24,
+     14
+    ],
+    "plan_height_m": 14.6,
+    "seed": 85438,
+    "above_floor_m": [
+     [
+      -12.08,
+      -7.0
+     ],
+     [
+      12.08,
+      7.03
+     ]
+    ],
+    "height_m": 16.76,
+    "foundation_m": 1.8,
+    "tris": 7077,
+    "materials": {
+     "Body": 7050,
+     "GlowEmber": 27
+    },
+    "surface_tagged_share": 1.0,
+    "palette_share": 0.9028,
+    "palette_wear_blend_share": 0.0972,
+    "budget_tris": 8000,
+    "hidden_faces_removed": 205,
+    "coplanar_sheets_parted": 42,
+    "doors": [
+     {
+      "at": [
+       -10.9,
+       -6.1,
+       1.2
+      ],
+      "along": [
+       1.0,
+       0.0,
+       0.0
+      ],
+      "width_m": 0.9,
+      "height_m": 2.0
+     },
+     {
+      "at": [
+       10.9,
+       -6.1,
+       1.2
+      ],
+      "along": [
+       1.0,
+       0.0,
+       0.0
+      ],
+      "width_m": 0.9,
+      "height_m": 2.0
+     }
+    ],
+    "sha256": "87f2b0f1a88b99a7778f899ea7f9c075986f513186c1e2f86237209dc7ccec09",
+    "ridge_m": 14.6,
+    "arches": 3,
+    "eave_m": 7.37,
+    "eye_solid": 0.841,
+    "eye_cells": "48:48a6k1i5a9k1i5a9k5a1i13k5a10k5a9k5a14k5a10k5a9k5a14k5a10k5a9k5a14k5a10k5a9k5a14k5a10k5a9k5a14k5a10k5a9k5a14k5a10k5a9k5a14k5a10k5a9k5a871k"
+   },
+   "shots": [
+    "front",
+    "three-quarter",
+    "side",
+    "back",
+    "close",
+    "game",
+    "night-three-quarter",
+    "night-game"
+   ],
+   "clips": [],
+   "view": {
+    "size_m": [
+     24.15999984741211,
+     18.559999465942383,
+     14.04505443572998
+    ],
+    "triangles": 7077,
+    "vertices": 14197,
+    "meshes": 2,
+    "materials": [
+     "Body",
+     "GlowEmber"
+    ],
+    "glow": true,
+    "vertex_colours": true
+   }
+  },
+  {
+   "name": "pot_house",
+   "role": "subject",
+   "token_kind": "file",
+   "source_path": ".local/kit-2/board/pot_house/pot_house.glb",
+   "sha256": "69c8c3c1abc99909a3366fea8648c365e9b5be2fc83c1e47f8ee79c41efca91c",
+   "stats": {
+    "file": "pot_house.glb",
+    "sha256": "69c8c3c1abc99909a3366fea8648c365e9b5be2fc83c1e47f8ee79c41efca91c",
+    "bytes": 355420,
+    "triangles": 5172,
+    "vertices": 10100,
+    "parts": {
+     "pot_house": 5172
+    },
+    "nodes": 1,
+    "bones": 0,
+    "spring_bones": 0,
+    "materials": [
+     "Body"
+    ],
+    "textures": 0,
+    "texture_bytes": 0,
+    "morph_targets": 0,
+    "spring_groups": 0,
+    "vertex_colours": true,
+    "clips": [],
+    "glow": false,
+    "glow_triangles": 0,
+    "palette": [
+     {
+      "hex": "#3f414b",
+      "share": 0.4113
+     },
+     {
+      "hex": "#211f1f",
+      "share": 0.1889
+     },
+     {
+      "hex": "#5e6066",
+      "share": 0.1725
+     },
+     {
+      "hex": "#303033",
+      "share": 0.0583
+     },
+     {
+      "hex": "#c5c1b2",
+      "share": 0.0524
+     },
+     {
+      "hex": "#495261",
+      "share": 0.0457
+     },
+     {
+      "hex": "#442b25",
+      "share": 0.0206
+     },
+     {
+      "hex": "#817f75",
+      "share": 0.0173
+     },
+     {
+      "hex": "#647082",
+      "share": 0.0135
+     },
+     {
+      "hex": "#aca896",
+      "share": 0.0104
+     },
+     {
+      "hex": "#8c999e",
+      "share": 0.0018
+     },
+     {
+      "hex": "#c1a587",
+      "share": 0.0018
+     },
+     {
+      "hex": "#527a72",
+      "share": 0.0017
+     },
+     {
+      "hex": "#5c3a2c",
+      "share": 0.0011
+     },
+     {
+      "hex": "other",
+      "share": 0.0026
+     }
+    ]
+   },
+   "file": "files/pot_house.glb",
+   "report": {
+    "file": "pot_house/pot_house.glb",
+    "what": "lot",
+    "kind": "pot_house",
+    "size_m": [
+     12,
+     8
+    ],
+    "plan_height_m": 7.6,
+    "seed": 53990,
+    "above_floor_m": [
+     [
+      -6.07,
+      -4.0
+     ],
+     [
+      6.07,
+      4.03
+     ]
+    ],
+    "height_m": 9.26,
+    "foundation_m": 1.8,
+    "tris": 5172,
+    "materials": {
+     "Body": 5172
+    },
+    "surface_tagged_share": 1.0,
+    "palette_share": 0.6941,
+    "palette_wear_blend_share": 0.3059,
+    "budget_tris": 6000,
+    "hidden_faces_removed": 104,
+    "coplanar_sheets_parted": 22,
+    "doors": [
+     {
+      "at": [
+       0.0,
+       -3.1,
+       1.2
+      ],
+      "along": [
+       1.0,
+       0.0,
+       0.0
+      ],
+      "width_m": 0.9,
+      "height_m": 2.0
+     }
+    ],
+    "sha256": "69c8c3c1abc99909a3366fea8648c365e9b5be2fc83c1e47f8ee79c41efca91c",
+    "ridge_m": 7.6,
+    "bays": 2,
+    "eave_m": 3.58,
+    "eye_solid": 0.67,
+    "eye_cells": "24:24a1k1h3a1f3a1h4k1h3a1f3a1j3k3a1e3a6k3a1e3a4k7a6k7a4k7a6k7a4k7a6k7a4k7h6k7a218k"
+   },
+   "shots": [
+    "front",
+    "three-quarter",
+    "side",
+    "back",
+    "close",
+    "game"
+   ],
+   "clips": [],
+   "view": {
+    "size_m": [
+     12.140000343322754,
+     11.0600004196167,
+     8.047286987304688
+    ],
+    "triangles": 5172,
+    "vertices": 10100,
+    "meshes": 1,
+    "materials": [
+     "Body"
+    ],
+    "glow": false,
+    "vertex_colours": true
+   }
+  },
+  {
+   "name": "cullet_shed",
+   "role": "subject",
+   "token_kind": "file",
+   "source_path": ".local/kit-2/board/cullet_shed/cullet_shed.glb",
+   "sha256": "1bb8933a92d0c453edba26b7c1562218c3061115ac377e6bfa97ee6b2650794d",
+   "stats": {
+    "file": "cullet_shed.glb",
+    "sha256": "1bb8933a92d0c453edba26b7c1562218c3061115ac377e6bfa97ee6b2650794d",
+    "bytes": 264288,
+    "triangles": 3722,
+    "vertices": 7524,
+    "parts": {
+     "cullet_shed": 3722
+    },
+    "nodes": 1,
+    "bones": 0,
+    "spring_bones": 0,
+    "materials": [
+     "Body"
+    ],
+    "textures": 0,
+    "texture_bytes": 0,
+    "morph_targets": 0,
+    "spring_groups": 0,
+    "vertex_colours": true,
+    "clips": [],
+    "glow": false,
+    "glow_triangles": 0,
+    "palette": [
+     {
+      "hex": "#252323",
+      "share": 0.3225
+     },
+     {
+      "hex": "#3e3d46",
+      "share": 0.2639
+     },
+     {
+      "hex": "#837e74",
+      "share": 0.1249
+     },
+     {
+      "hex": "#5b5e64",
+      "share": 0.1155
+     },
+     {
+      "hex": "#4b505b",
+      "share": 0.0807
+     },
+     {
+      "hex": "#8c877f",
+      "share": 0.0352
+     },
+     {
+      "hex": "#343230",
+      "share": 0.0268
+     },
+     {
+      "hex": "#606c7e",
+      "share": 0.0146
+     },
+     {
+      "hex": "#9eccc7",
+      "share": 0.0043
+     },
+     {
+      "hex": "#326b4c",
+      "share": 0.0042
+     },
+     {
+      "hex": "#8c999e",
+      "share": 0.0039
+     },
+     {
+      "hex": "#68758a",
+      "share": 0.0021
+     },
+     {
+      "hex": "#c77f29",
+      "share": 0.0015
+     }
+    ]
+   },
+   "file": "files/cullet_shed.glb",
+   "report": {
+    "file": "cullet_shed/cullet_shed.glb",
+    "what": "lot",
+    "kind": "cullet_shed",
+    "size_m": [
+     6,
+     8
+    ],
+    "plan_height_m": 5.72,
+    "seed": 24636,
+    "above_floor_m": [
+     [
+      -3.074,
+      -3.988
+     ],
+     [
+      3.071,
+      4.04
+     ]
+    ],
+    "height_m": 5.72,
+    "foundation_m": 1.8,
+    "tris": 3722,
+    "materials": {
+     "Body": 3722
+    },
+    "surface_tagged_share": 1.0,
+    "palette_share": 0.9683,
+    "palette_wear_blend_share": 0.0317,
+    "budget_tris": 5000,
+    "hidden_faces_removed": 127,
+    "coplanar_sheets_parted": 245,
+    "doors": [],
+    "sha256": "1bb8933a92d0c453edba26b7c1562218c3061115ac377e6bfa97ee6b2650794d",
+    "ridge_m": 5.72,
+    "crates": 19,
+    "colours": [
+     "green",
+     "amber",
+     "aqua",
+     "smoke"
+    ],
+    "eye_solid": 0.325,
+    "eye_cells": "12:1f10a1f1k10a2k1h1g6a1g1h2k2h6a2h2k2h6a2h2k2h6a2h2k2h6a2h2k2h6a2h2k2h6a2h2k2h6a2h2k2h6a2h2k2h6a2h2k2h6a2h2k2h6a2h2k2h6a2h13k"
+   },
+   "shots": [
+    "front",
+    "three-quarter",
+    "side",
+    "back",
+    "close",
+    "game"
+   ],
+   "clips": [],
+   "view": {
+    "size_m": [
+     6.145440101623535,
+     7.5199995040893555,
+     8.06001091003418
+    ],
+    "triangles": 3722,
+    "vertices": 7524,
+    "meshes": 1,
+    "materials": [
+     "Body"
+    ],
+    "glow": false,
+    "vertex_colours": true
+   }
+  },
+  {
+   "name": "ash_house",
+   "role": "subject",
+   "token_kind": "file",
+   "source_path": ".local/kit-2/board/ash_house/ash_house.glb",
+   "sha256": "29ad7ac2e4673bbdac202ef9e94bc4b0ffa94336779fc6135d80c9c6ba2b496a",
+   "stats": {
+    "file": "ash_house.glb",
+    "sha256": "29ad7ac2e4673bbdac202ef9e94bc4b0ffa94336779fc6135d80c9c6ba2b496a",
+    "bytes": 276104,
+    "triangles": 4028,
+    "vertices": 7836,
+    "parts": {
+     "ash_house": 4028
+    },
+    "nodes": 1,
+    "bones": 0,
+    "spring_bones": 0,
+    "materials": [
+     "Body"
+    ],
+    "textures": 0,
+    "texture_bytes": 0,
+    "morph_targets": 0,
+    "spring_groups": 0,
+    "vertex_colours": true,
+    "clips": [],
+    "glow": false,
+    "glow_triangles": 0,
+    "palette": [
+     {
+      "hex": "#40414b",
+      "share": 0.4577
+     },
+     {
+      "hex": "#211f1f",
+      "share": 0.1974
+     },
+     {
+      "hex": "#5b5f66",
+      "share": 0.1782
+     },
+     {
+      "hex": "#c8c2b2",
+      "share": 0.066
+     },
+     {
+      "hex": "#485160",
+      "share": 0.0401
+     },
+     {
+      "hex": "#303033",
+      "share": 0.0234
+     },
+     {
+      "hex": "#6c7783",
+      "share": 0.0157
+     },
+     {
+      "hex": "#b0b2a5",
+      "share": 0.0076
+     },
+     {
+      "hex": "#5b697b",
+      "share": 0.0052
+     },
+     {
+      "hex": "#55382b",
+      "share": 0.0051
+     },
+     {
+      "hex": "#868276",
+      "share": 0.0023
+     },
+     {
+      "hex": "#8d999d",
+      "share": 0.0006
+     },
+     {
+      "hex": "#7a744a",
+      "share": 0.0003
+     },
+     {
+      "hex": "#6a7169",
+      "share": 0.0003
+     },
+     {
+      "hex": "other",
+      "share": 0.0002
+     }
+    ]
+   },
+   "file": "files/ash_house.glb",
+   "report": {
+    "file": "ash_house/ash_house.glb",
+    "what": "lot",
+    "kind": "ash_house",
+    "size_m": [
+     10,
+     8
+    ],
+    "plan_height_m": 7.4,
+    "seed": 97450,
+    "above_floor_m": [
+     [
+      -5.07,
+      -4.0
+     ],
+     [
+      5.07,
+      3.991
+     ]
+    ],
+    "height_m": 7.514,
+    "foundation_m": 1.8,
+    "tris": 4028,
+    "materials": {
+     "Body": 4028
+    },
+    "surface_tagged_share": 1.0,
+    "palette_share": 0.8069,
+    "palette_wear_blend_share": 0.1931,
+    "budget_tris": 5000,
+    "hidden_faces_removed": 79,
+    "coplanar_sheets_parted": 11,
+    "doors": [
+     {
+      "at": [
+       -0.45,
+       -3.0,
+       1.035
+      ],
+      "along": [
+       1,
+       0,
+       0
+      ],
+      "width_m": 0.9,
+      "height_m": 2.0,
+      "open": true
+     },
+     {
+      "at": [
+       0.45,
+       -3.0,
+       1.035
+      ],
+      "along": [
+       1,
+       0,
+       0
+      ],
+      "width_m": 0.9,
+      "height_m": 2.0,
+      "open": true
+     }
+    ],
+    "sha256": "29ad7ac2e4673bbdac202ef9e94bc4b0ffa94336779fc6135d80c9c6ba2b496a",
+    "ridge_m": 7.4,
+    "eave_m": 3.38,
+    "eye_solid": 0.875,
+    "eye_cells": "20:20a8k1i2a1i17k1a1f18k1g1i18k2g18k2f18k2f189k"
+   },
+   "shots": [
+    "front",
+    "three-quarter",
+    "side",
+    "back",
+    "close",
+    "game"
+   ],
+   "clips": [],
+   "view": {
+    "size_m": [
+     10.140000343322754,
+     9.314330101013184,
+     8.010831832885742
+    ],
+    "triangles": 4028,
+    "vertices": 7836,
+    "meshes": 1,
+    "materials": [
+     "Body"
+    ],
+    "glow": false,
+    "vertex_colours": true
+   }
+  },
+  {
+   "name": "wash_house",
+   "role": "subject",
+   "token_kind": "file",
+   "source_path": ".local/kit-2/board/wash_house/wash_house.glb",
+   "sha256": "c56cc8c04ee59a9d9aafd1465b453339e4de982154dacb9db687a20962c396fd",
+   "stats": {
+    "file": "wash_house.glb",
+    "sha256": "c56cc8c04ee59a9d9aafd1465b453339e4de982154dacb9db687a20962c396fd",
+    "bytes": 159160,
+    "triangles": 2254,
+    "vertices": 4482,
+    "parts": {
+     "wash_house": 2254
+    },
+    "nodes": 1,
+    "bones": 0,
+    "spring_bones": 0,
+    "materials": [
+     "Body",
+     "GlowEmber"
+    ],
+    "textures": 0,
+    "texture_bytes": 0,
+    "morph_targets": 0,
+    "spring_groups": 0,
+    "vertex_colours": true,
+    "clips": [],
+    "glow": true,
+    "glow_triangles": 2,
+    "palette": [
+     {
+      "hex": "#3f4348",
+      "share": 0.3754
+     },
+     {
+      "hex": "#211f1f",
+      "share": 0.1636
+     },
+     {
+      "hex": "#372722",
+      "share": 0.1552
+     },
+     {
+      "hex": "#5f6166",
+      "share": 0.1159
+     },
+     {
+      "hex": "#32343b",
+      "share": 0.079
+     },
+     {
+      "hex": "#505259",
+      "share": 0.059
+     },
+     {
+      "hex": "#616e80",
+      "share": 0.0124
+     },
+     {
+      "hex": "#d1cbb3",
+      "share": 0.0075
+     },
+     {
+      "hex": "#a9aea7",
+      "share": 0.0066
+     },
+     {
+      "hex": "#502e29",
+      "share": 0.0061
+     },
+     {
+      "hex": "#878377",
+      "share": 0.005
+     },
+     {
+      "hex": "#e5e1d5",
+      "share": 0.0045
+     },
+     {
+      "hex": "#6f8c8c",
+      "share": 0.0037
+     },
+     {
+      "hex": "#96a8b1",
+      "share": 0.0037
+     },
+     {
+      "hex": "other",
+      "share": 0.0022
+     }
+    ]
+   },
+   "file": "files/wash_house.glb",
+   "report": {
+    "file": "wash_house/wash_house.glb",
+    "what": "lot",
+    "kind": "wash_house",
+    "size_m": [
+     12,
+     6
+    ],
+    "plan_height_m": 6.4,
+    "seed": 72496,
+    "above_floor_m": [
+     [
+      -6.003,
+      -2.988
+     ],
+     [
+      6.003,
+      2.988
+     ]
+    ],
+    "height_m": 6.4,
+    "foundation_m": 1.8,
+    "tris": 2254,
+    "materials": {
+     "Body": 2252,
+     "GlowEmber": 2
+    },
+    "surface_tagged_share": 1.0,
+    "palette_share": 0.8287,
+    "palette_wear_blend_share": 0.1713,
+    "budget_tris": 4000,
+    "hidden_faces_removed": 32,
+    "coplanar_sheets_parted": 15,
+    "doors": [],
+    "sha256": "c56cc8c04ee59a9d9aafd1465b453339e4de982154dacb9db687a20962c396fd",
+    "ridge_m": 6.4,
+    "eave_m": 3.0,
+    "bays": 4,
+    "leans_on": "cone",
+    "eye_solid": 0.138,
+    "eye_cells": "24:24a1k1f4a1f4a2f4a1f4a1f2k1c1d5a1c1f1c5a2e5a2k22a2k22a2k22a2k22a2k22a2k22a2k22a2k22a25k"
+   },
+   "shots": [
+    "front",
+    "three-quarter",
+    "side",
+    "back",
+    "close",
+    "game",
+    "night-three-quarter",
+    "night-game"
+   ],
+   "clips": [],
+   "view": {
+    "size_m": [
+     12.073515892028809,
+     8.199999809265137,
+     6.011704921722412
+    ],
+    "triangles": 2254,
+    "vertices": 4482,
+    "meshes": 2,
+    "materials": [
+     "Body",
+     "GlowEmber"
+    ],
+    "glow": true,
+    "vertex_colours": true
+   }
+  }
+ ],
+ "delivered": []
+}

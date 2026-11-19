@@ -126,10 +126,10 @@ impl FnFacts {
 /// What every script function reads of its parameters.
 #[derive(Debug, Default)]
 pub struct Fields {
-    summaries: HashMap<(String, usize), Vec<Use>>,
+    pub(super) summaries: HashMap<(String, usize), Vec<Use>>,
     /// The script does something the analysis cannot follow (a call that sees its caller's
     /// variables, a statement outside any function body): every law gets the whole context.
-    gave_up: bool,
+    pub(super) gave_up: bool,
 }
 
 impl Fields {
@@ -140,6 +140,16 @@ impl Fields {
             return None;
         }
         self.summaries.get(&(name.to_string(), arity)).map(|v| v.as_slice())
+    }
+
+    /// These summaries with `top`'s over them (a script whose functions replace some of these):
+    /// what each function reads, each from its own source. Either giving up gives up.
+    pub fn under(mut self, top: Fields) -> Fields {
+        if self.gave_up || top.gave_up {
+            return Fields { summaries: HashMap::new(), gave_up: true };
+        }
+        self.summaries.extend(top.summaries);
+        self
     }
 
     pub fn analyze(ast: &AST) -> Fields {
@@ -417,7 +427,7 @@ mod tests {
     use super::*;
 
     fn reads(src: &str, f: &str, arity: usize) -> Vec<Use> {
-        let e = rhai::Engine::new_raw();
+        let e = crate::script::new_engine();
         let ast = e.compile(src).unwrap();
         Fields::analyze(&ast).of(f, arity).expect("analyzed").to_vec()
     }
@@ -481,7 +491,7 @@ fn dynamic(a) { a.actor[a.item] }
 
     #[test]
     fn a_call_that_sees_its_callers_variables_cannot_be_followed() {
-        let e = rhai::Engine::new_raw();
+        let e = crate::script::new_engine();
         let ast = e.compile("fn peek() { a.actor.hp }\nfn law(a) { peek!() }").unwrap();
         assert!(Fields::analyze(&ast).of("law", 1).is_none());
     }

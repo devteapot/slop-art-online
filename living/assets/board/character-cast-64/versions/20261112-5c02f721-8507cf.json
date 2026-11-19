@@ -1,0 +1,55 @@
+{
+ "schema": 1,
+ "family": "character:cast-64",
+ "id": "20261112-5c02f721-8507cf",
+ "published": "2026-11-12T06:30:02+01:00",
+ "imported": "2026-11-12T06:30:02+01:00",
+ "track": "char-4",
+ "maker": "Claude Fable 5.2",
+ "note": "Cullet's cast built again whole after the nose wedge, the pale band and the fold at the nose's base were mended: the wedge is a hint, and the men's lower faces have no band.",
+ "source": {
+  "commit": "5c02f721cc408a87a1740bc283fd0879a79e3a03",
+  "branch": "char-4",
+  "dirty": false,
+  "generator": "living/tools/blender/person.py",
+  "generator_sha256": "ea3bfd02a41b36a2496a581700aa5666503d04c5886a8241dfe2fd92a488ccde",
+  "generator_state": "committed",
+  "seed": "cullet",
+  "params": {
+   "cast": "living/seeds/cullet.json",
+   "people": 64
+  }
+ },
+ "renderer": {
+  "method": "asset-view",
+  "commit": "",
+  "key": "asset-view",
+  "preset": "",
+  "note": "town.py: each person alone through the asset view; lineup from the front at 28 degrees down at one scale; faces close, on a frame of the idle clip (the head about 14 degrees from the camera, so the face 78 degrees from the sun), eyes held open by the photo tool; faces-before-after: twelve of them from the version before above this one; game is each person at 22 m through the game camera, pixels enlarged three times; tiled"
+ },
+ "preset": "",
+ "media": "media/character-cast-64/20261112-5c02f721-8507cf",
+ "members": [
+  {
+   "name": "cast",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "8ef2bf4162004909e8ffb8628df1c408bd08cc0edb18db5f3756add99f24688a",
+   "shots": [
+    "faces",
+    "faces-24",
+    "faces-before-after",
+    "game",
+    "lineup"
+   ],
+   "clips": []
+  }
+ ],
+ "delivered": [
+  {
+   "title": "town check page and town.json (who is who)",
+   "path": "delivered/index.html",
+   "from": ".local/town12/index.html"
+  }
+ ]
+}

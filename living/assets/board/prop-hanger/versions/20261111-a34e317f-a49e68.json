@@ -1,0 +1,777 @@
+{
+ "schema": 1,
+ "family": "prop:hanger",
+ "id": "20261111-a34e317f-a49e68",
+ "published": "2026-11-11T21:13:18+01:00",
+ "track": "kit-2",
+ "maker": "Claude Fable 5.2",
+ "note": "kit-2 pass 2: lit windows and parapets from the plan; no two faces in one plane (the flicker of the owner's walk); every lot's eye-height cells. New: the Hanger's six wind-bent forms, leaning north-east, and a stump of the old wood",
+ "source": {
+  "commit": "a34e317f2de27101929fa770388a37f1d1b6d62e",
+  "branch": "kit-2",
+  "dirty": false,
+  "generator": "living/tools/blender/cullet.py",
+  "generator_sha256": "2a1d98999573e7816cef047ccc6c3aab5e04b0911d1071f1054acf8f7a29a287",
+  "generator_state": "committed",
+  "seed": "83",
+  "params": {
+   "plan": "living/seeds/worlds/cullet/plan.json"
+  }
+ },
+ "renderer": {
+  "method": "asset-view",
+  "commit": "a34e317f2de27101929fa770388a37f1d1b6d62e",
+  "dirty": false,
+  "key": "bin:cbdab2a8",
+  "env": "cullet",
+  "hours": {
+   "day": 15.0,
+   "night": 22.0
+  },
+  "weather": "clear",
+  "day_curve": true,
+  "preset": "2947e3c0",
+  "binary": "/home/carlid/.t3/worktrees/slop-art-online/t3-2190f8f1-741aca404e5ab819/.local/kit2-target/release/living-game",
+  "commit_assumed": "a34e317f2de27101929fa770388a37f1d1b6d62e",
+  "repo": "/home/carlid/.t3/worktrees/slop-art-online/t3-2190f8f1-741aca404e5ab819"
+ },
+ "preset": "prop",
+ "media": "media/prop-hanger/20261111-a34e317f-a49e68",
+ "members": [
+  {
+   "name": "tree_1",
+   "role": "subject",
+   "token_kind": "file",
+   "source_path": ".local/kit-2/board/hanger_tree/hanger_tree_1.glb",
+   "sha256": "9bc18238933fbfe7ba67bfac9582133545a391db2cd611f30c6e10ad9a198ccc",
+   "stats": {
+    "file": "hanger_tree_1.glb",
+    "sha256": "9bc18238933fbfe7ba67bfac9582133545a391db2cd611f30c6e10ad9a198ccc",
+    "bytes": 66544,
+    "triangles": 716,
+    "vertices": 1908,
+    "parts": {
+     "hanger_tree_1": 716
+    },
+    "nodes": 1,
+    "bones": 0,
+    "spring_bones": 0,
+    "materials": [
+     "Body"
+    ],
+    "textures": 0,
+    "texture_bytes": 0,
+    "morph_targets": 0,
+    "spring_groups": 0,
+    "vertex_colours": true,
+    "clips": [],
+    "glow": false,
+    "glow_triangles": 0,
+    "palette": [
+     {
+      "hex": "#63784e",
+      "share": 0.8859
+     },
+     {
+      "hex": "#5f5045",
+      "share": 0.1076
+     },
+     {
+      "hex": "#4e473d",
+      "share": 0.0065
+     }
+    ]
+   },
+   "file": "files/tree_1.glb",
+   "report": {
+    "file": "hanger_tree/hanger_tree_1.glb",
+    "what": "fixture",
+    "kind": "hanger_tree",
+    "size_m": [
+     9.0,
+     9.0
+    ],
+    "plan_height_m": 8.0,
+    "seed": 13722,
+    "above_floor_m": [
+     [
+      -1.55,
+      -1.165
+     ],
+     [
+      2.339,
+      2.813
+     ]
+    ],
+    "height_m": 7.347,
+    "foundation_m": 0.046,
+    "tris": 716,
+    "materials": {
+     "Body": 716
+    },
+    "surface_tagged_share": 1.0,
+    "palette_share": 0.0,
+    "palette_wear_blend_share": 1.0,
+    "budget_tris": 1500,
+    "hidden_faces_removed": 0,
+    "coplanar_sheets_parted": 0,
+    "doors": [],
+    "sha256": "9bc18238933fbfe7ba67bfac9582133545a391db2cd611f30c6e10ad9a198ccc",
+    "ridge_m": 7.35,
+    "form": 1,
+    "leans": "north-east"
+   },
+   "shots": [
+    "front",
+    "three-quarter",
+    "side",
+    "back",
+    "close",
+    "game"
+   ],
+   "clips": [],
+   "view": {
+    "size_m": [
+     3.8889801502227783,
+     7.39296293258667,
+     3.978170156478882
+    ],
+    "triangles": 716,
+    "vertices": 1908,
+    "meshes": 1,
+    "materials": [
+     "Body"
+    ],
+    "glow": false,
+    "vertex_colours": true
+   }
+  },
+  {
+   "name": "tree_2",
+   "role": "subject",
+   "token_kind": "file",
+   "source_path": ".local/kit-2/board/hanger_tree/hanger_tree_2.glb",
+   "sha256": "70474272facb7a7f19764e5ef2f6c7cba6bd17035a23708bf7f2993c388fb18a",
+   "stats": {
+    "file": "hanger_tree_2.glb",
+    "sha256": "70474272facb7a7f19764e5ef2f6c7cba6bd17035a23708bf7f2993c388fb18a",
+    "bytes": 50224,
+    "triangles": 556,
+    "vertices": 1428,
+    "parts": {
+     "hanger_tree_2": 556
+    },
+    "nodes": 1,
+    "bones": 0,
+    "spring_bones": 0,
+    "materials": [
+     "Body"
+    ],
+    "textures": 0,
+    "texture_bytes": 0,
+    "morph_targets": 0,
+    "spring_groups": 0,
+    "vertex_colours": true,
+    "clips": [],
+    "glow": false,
+    "glow_triangles": 0,
+    "palette": [
+     {
+      "hex": "#5d7545",
+      "share": 0.847
+     },
+     {
+      "hex": "#544c40",
+      "share": 0.153
+     }
+    ]
+   },
+   "file": "files/tree_2.glb",
+   "report": {
+    "file": "hanger_tree/hanger_tree_2.glb",
+    "what": "fixture",
+    "kind": "hanger_tree",
+    "size_m": [
+     9.0,
+     9.0
+    ],
+    "plan_height_m": 8.0,
+    "seed": 70848,
+    "above_floor_m": [
+     [
+      -1.516,
+      -1.285
+     ],
+     [
+      2.54,
+      2.663
+     ]
+    ],
+    "height_m": 8.188,
+    "foundation_m": 0.046,
+    "tris": 556,
+    "materials": {
+     "Body": 556
+    },
+    "surface_tagged_share": 1.0,
+    "palette_share": 0.0,
+    "palette_wear_blend_share": 1.0,
+    "budget_tris": 1500,
+    "hidden_faces_removed": 0,
+    "coplanar_sheets_parted": 0,
+    "doors": [],
+    "sha256": "70474272facb7a7f19764e5ef2f6c7cba6bd17035a23708bf7f2993c388fb18a",
+    "ridge_m": 8.19,
+    "form": 2,
+    "leans": "north-east"
+   },
+   "shots": [
+    "front",
+    "three-quarter",
+    "side",
+    "back",
+    "close",
+    "game"
+   ],
+   "clips": [],
+   "view": {
+    "size_m": [
+     4.056512832641602,
+     8.233602523803711,
+     3.947453022003174
+    ],
+    "triangles": 556,
+    "vertices": 1428,
+    "meshes": 1,
+    "materials": [
+     "Body"
+    ],
+    "glow": false,
+    "vertex_colours": true
+   }
+  },
+  {
+   "name": "tree_3",
+   "role": "subject",
+   "token_kind": "file",
+   "source_path": ".local/kit-2/board/hanger_tree/hanger_tree_3.glb",
+   "sha256": "61d050b2640cdf38eb86840c09d8463386b80a8bb008178c5d4727154b46f95f",
+   "stats": {
+    "file": "hanger_tree_3.glb",
+    "sha256": "61d050b2640cdf38eb86840c09d8463386b80a8bb008178c5d4727154b46f95f",
+    "bytes": 66540,
+    "triangles": 716,
+    "vertices": 1908,
+    "parts": {
+     "hanger_tree_3": 716
+    },
+    "nodes": 1,
+    "bones": 0,
+    "spring_bones": 0,
+    "materials": [
+     "Body"
+    ],
+    "textures": 0,
+    "texture_bytes": 0,
+    "morph_targets": 0,
+    "spring_groups": 0,
+    "vertex_colours": true,
+    "clips": [],
+    "glow": false,
+    "glow_triangles": 0,
+    "palette": [
+     {
+      "hex": "#5b7145",
+      "share": 0.7724
+     },
+     {
+      "hex": "#677c4f",
+      "share": 0.1227
+     },
+     {
+      "hex": "#5b5142",
+      "share": 0.1049
+     }
+    ]
+   },
+   "file": "files/tree_3.glb",
+   "report": {
+    "file": "hanger_tree/hanger_tree_3.glb",
+    "what": "fixture",
+    "kind": "hanger_tree",
+    "size_m": [
+     9.0,
+     9.0
+    ],
+    "plan_height_m": 8.0,
+    "seed": 6582,
+    "above_floor_m": [
+     [
+      -1.513,
+      -1.239
+     ],
+     [
+      2.489,
+      2.907
+     ]
+    ],
+    "height_m": 6.52,
+    "foundation_m": 0.046,
+    "tris": 716,
+    "materials": {
+     "Body": 716
+    },
+    "surface_tagged_share": 1.0,
+    "palette_share": 0.0,
+    "palette_wear_blend_share": 1.0,
+    "budget_tris": 1500,
+    "hidden_faces_removed": 0,
+    "coplanar_sheets_parted": 0,
+    "doors": [],
+    "sha256": "61d050b2640cdf38eb86840c09d8463386b80a8bb008178c5d4727154b46f95f",
+    "ridge_m": 6.52,
+    "form": 3,
+    "leans": "north-east"
+   },
+   "shots": [
+    "front",
+    "three-quarter",
+    "side",
+    "back",
+    "close",
+    "game"
+   ],
+   "clips": [],
+   "view": {
+    "size_m": [
+     4.002240180969238,
+     6.565282344818115,
+     4.1454644203186035
+    ],
+    "triangles": 716,
+    "vertices": 1908,
+    "meshes": 1,
+    "materials": [
+     "Body"
+    ],
+    "glow": false,
+    "vertex_colours": true
+   }
+  },
+  {
+   "name": "tree_4",
+   "role": "subject",
+   "token_kind": "file",
+   "source_path": ".local/kit-2/board/hanger_tree/hanger_tree_4.glb",
+   "sha256": "c18e0148bd2f0c1fc2fd51ed3c5b8d4fa0867362c40226d88952ec66cc2bff96",
+   "stats": {
+    "file": "hanger_tree_4.glb",
+    "sha256": "c18e0148bd2f0c1fc2fd51ed3c5b8d4fa0867362c40226d88952ec66cc2bff96",
+    "bytes": 58380,
+    "triangles": 636,
+    "vertices": 1668,
+    "parts": {
+     "hanger_tree_4": 636
+    },
+    "nodes": 1,
+    "bones": 0,
+    "spring_bones": 0,
+    "materials": [
+     "Body"
+    ],
+    "textures": 0,
+    "texture_bytes": 0,
+    "morph_targets": 0,
+    "spring_groups": 0,
+    "vertex_colours": true,
+    "clips": [],
+    "glow": false,
+    "glow_triangles": 0,
+    "palette": [
+     {
+      "hex": "#647a51",
+      "share": 0.8161
+     },
+     {
+      "hex": "#594d47",
+      "share": 0.1792
+     },
+     {
+      "hex": "#4b4538",
+      "share": 0.0047
+     }
+    ]
+   },
+   "file": "files/tree_4.glb",
+   "report": {
+    "file": "hanger_tree/hanger_tree_4.glb",
+    "what": "fixture",
+    "kind": "hanger_tree",
+    "size_m": [
+     9.0,
+     9.0
+    ],
+    "plan_height_m": 8.0,
+    "seed": 27189,
+    "above_floor_m": [
+     [
+      -1.306,
+      -1.35
+     ],
+     [
+      2.662,
+      3.046
+     ]
+    ],
+    "height_m": 7.116,
+    "foundation_m": 0.046,
+    "tris": 636,
+    "materials": {
+     "Body": 636
+    },
+    "surface_tagged_share": 1.0,
+    "palette_share": 0.0,
+    "palette_wear_blend_share": 1.0,
+    "budget_tris": 1500,
+    "hidden_faces_removed": 0,
+    "coplanar_sheets_parted": 0,
+    "doors": [],
+    "sha256": "c18e0148bd2f0c1fc2fd51ed3c5b8d4fa0867362c40226d88952ec66cc2bff96",
+    "ridge_m": 7.12,
+    "form": 4,
+    "leans": "north-east"
+   },
+   "shots": [
+    "front",
+    "three-quarter",
+    "side",
+    "back",
+    "close",
+    "game"
+   ],
+   "clips": [],
+   "view": {
+    "size_m": [
+     3.968046188354492,
+     7.161283016204834,
+     4.396059036254883
+    ],
+    "triangles": 636,
+    "vertices": 1668,
+    "meshes": 1,
+    "materials": [
+     "Body"
+    ],
+    "glow": false,
+    "vertex_colours": true
+   }
+  },
+  {
+   "name": "tree_5",
+   "role": "subject",
+   "token_kind": "file",
+   "source_path": ".local/kit-2/board/hanger_tree/hanger_tree_5.glb",
+   "sha256": "6ae2585058c32dfe02d0615256bb27f77fc380e4eced2886472d8e37696ce313",
+   "stats": {
+    "file": "hanger_tree_5.glb",
+    "sha256": "6ae2585058c32dfe02d0615256bb27f77fc380e4eced2886472d8e37696ce313",
+    "bytes": 66544,
+    "triangles": 716,
+    "vertices": 1908,
+    "parts": {
+     "hanger_tree_5": 716
+    },
+    "nodes": 1,
+    "bones": 0,
+    "spring_bones": 0,
+    "materials": [
+     "Body"
+    ],
+    "textures": 0,
+    "texture_bytes": 0,
+    "morph_targets": 0,
+    "spring_groups": 0,
+    "vertex_colours": true,
+    "clips": [],
+    "glow": false,
+    "glow_triangles": 0,
+    "palette": [
+     {
+      "hex": "#62794c",
+      "share": 0.8989
+     },
+     {
+      "hex": "#595045",
+      "share": 0.1011
+     }
+    ]
+   },
+   "file": "files/tree_5.glb",
+   "report": {
+    "file": "hanger_tree/hanger_tree_5.glb",
+    "what": "fixture",
+    "kind": "hanger_tree",
+    "size_m": [
+     9.0,
+     9.0
+    ],
+    "plan_height_m": 8.0,
+    "seed": 28035,
+    "above_floor_m": [
+     [
+      -1.53,
+      -1.07
+     ],
+     [
+      2.174,
+      2.536
+     ]
+    ],
+    "height_m": 6.082,
+    "foundation_m": 0.046,
+    "tris": 716,
+    "materials": {
+     "Body": 716
+    },
+    "surface_tagged_share": 1.0,
+    "palette_share": 0.0,
+    "palette_wear_blend_share": 1.0,
+    "budget_tris": 1500,
+    "hidden_faces_removed": 0,
+    "coplanar_sheets_parted": 0,
+    "doors": [],
+    "sha256": "6ae2585058c32dfe02d0615256bb27f77fc380e4eced2886472d8e37696ce313",
+    "ridge_m": 6.08,
+    "form": 5,
+    "leans": "north-east"
+   },
+   "shots": [
+    "front",
+    "three-quarter",
+    "side",
+    "back",
+    "close",
+    "game"
+   ],
+   "clips": [],
+   "view": {
+    "size_m": [
+     3.7045106887817383,
+     6.127682685852051,
+     3.606158494949341
+    ],
+    "triangles": 716,
+    "vertices": 1908,
+    "meshes": 1,
+    "materials": [
+     "Body"
+    ],
+    "glow": false,
+    "vertex_colours": true
+   }
+  },
+  {
+   "name": "tree_6",
+   "role": "subject",
+   "token_kind": "file",
+   "source_path": ".local/kit-2/board/hanger_tree/hanger_tree_6.glb",
+   "sha256": "ff9de228aeb016036a7a9c1966119e18bd9eb8183c7c0cff5c7f950f326265ad",
+   "stats": {
+    "file": "hanger_tree_6.glb",
+    "sha256": "ff9de228aeb016036a7a9c1966119e18bd9eb8183c7c0cff5c7f950f326265ad",
+    "bytes": 58384,
+    "triangles": 636,
+    "vertices": 1668,
+    "parts": {
+     "hanger_tree_6": 636
+    },
+    "nodes": 1,
+    "bones": 0,
+    "spring_bones": 0,
+    "materials": [
+     "Body"
+    ],
+    "textures": 0,
+    "texture_bytes": 0,
+    "morph_targets": 0,
+    "spring_groups": 0,
+    "vertex_colours": true,
+    "clips": [],
+    "glow": false,
+    "glow_triangles": 0,
+    "palette": [
+     {
+      "hex": "#63784b",
+      "share": 0.8878
+     },
+     {
+      "hex": "#4f4539",
+      "share": 0.1122
+     }
+    ]
+   },
+   "file": "files/tree_6.glb",
+   "report": {
+    "file": "hanger_tree/hanger_tree_6.glb",
+    "what": "fixture",
+    "kind": "hanger_tree",
+    "size_m": [
+     9.0,
+     9.0
+    ],
+    "plan_height_m": 8.0,
+    "seed": 18361,
+    "above_floor_m": [
+     [
+      -1.757,
+      -1.144
+     ],
+     [
+      2.602,
+      3.11
+     ]
+    ],
+    "height_m": 8.684,
+    "foundation_m": 0.046,
+    "tris": 636,
+    "materials": {
+     "Body": 636
+    },
+    "surface_tagged_share": 1.0,
+    "palette_share": 0.0,
+    "palette_wear_blend_share": 1.0,
+    "budget_tris": 1500,
+    "hidden_faces_removed": 0,
+    "coplanar_sheets_parted": 0,
+    "doors": [],
+    "sha256": "ff9de228aeb016036a7a9c1966119e18bd9eb8183c7c0cff5c7f950f326265ad",
+    "ridge_m": 8.68,
+    "form": 6,
+    "leans": "north-east"
+   },
+   "shots": [
+    "front",
+    "three-quarter",
+    "side",
+    "back",
+    "close",
+    "game"
+   ],
+   "clips": [],
+   "view": {
+    "size_m": [
+     4.359086513519287,
+     8.729522705078125,
+     4.2546162605285645
+    ],
+    "triangles": 636,
+    "vertices": 1668,
+    "meshes": 1,
+    "materials": [
+     "Body"
+    ],
+    "glow": false,
+    "vertex_colours": true
+   }
+  },
+  {
+   "name": "stump",
+   "role": "subject",
+   "token_kind": "file",
+   "source_path": ".local/kit-2/board/stump/stump_1.glb",
+   "sha256": "b47e2c1ad493e7f21a7d49f7f58f4b7aa1bc1a6ae2ac04046519570b603e5a89",
+   "stats": {
+    "file": "stump_1.glb",
+    "sha256": "b47e2c1ad493e7f21a7d49f7f58f4b7aa1bc1a6ae2ac04046519570b603e5a89",
+    "bytes": 7328,
+    "triangles": 90,
+    "vertices": 176,
+    "parts": {
+     "stump_1": 90
+    },
+    "nodes": 1,
+    "bones": 0,
+    "spring_bones": 0,
+    "materials": [
+     "Body"
+    ],
+    "textures": 0,
+    "texture_bytes": 0,
+    "morph_targets": 0,
+    "spring_groups": 0,
+    "vertex_colours": true,
+    "clips": [],
+    "glow": false,
+    "glow_triangles": 0,
+    "palette": [
+     {
+      "hex": "#6a6559",
+      "share": 1.0
+     }
+    ]
+   },
+   "file": "files/stump.glb",
+   "report": {
+    "file": "stump/stump_1.glb",
+    "what": "fixture",
+    "kind": "stump",
+    "size_m": [
+     1.1,
+     1.1
+    ],
+    "plan_height_m": 0.5,
+    "seed": 84701,
+    "above_floor_m": [
+     [
+      -0.466,
+      -0.471
+     ],
+     [
+      0.466,
+      0.419
+     ]
+    ],
+    "height_m": 0.5,
+    "foundation_m": 0.049,
+    "tris": 90,
+    "materials": {
+     "Body": 90
+    },
+    "surface_tagged_share": 1.0,
+    "palette_share": 0.2444,
+    "palette_wear_blend_share": 0.7556,
+    "budget_tris": 600,
+    "hidden_faces_removed": 0,
+    "coplanar_sheets_parted": 0,
+    "doors": [],
+    "sha256": "b47e2c1ad493e7f21a7d49f7f58f4b7aa1bc1a6ae2ac04046519570b603e5a89",
+    "ridge_m": 0.5
+   },
+   "shots": [
+    "front",
+    "three-quarter",
+    "side",
+    "back",
+    "close",
+    "game"
+   ],
+   "clips": [],
+   "view": {
+    "size_m": [
+     0.9312491416931152,
+     0.5490570664405823,
+     0.9410117864608765
+    ],
+    "triangles": 90,
+    "vertices": 176,
+    "meshes": 1,
+    "materials": [
+     "Body"
+    ],
+    "glow": false,
+    "vertex_colours": true
+   }
+  }
+ ],
+ "delivered": []
+}

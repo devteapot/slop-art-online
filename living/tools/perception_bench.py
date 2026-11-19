@@ -193,7 +193,11 @@ def main():
         sys.exit("benchmarks run only on verify-* scratch databases")
     if not a.keep:
         B.stdb("publish", "-s", "local", "-b", f"/wasm/{a.wasm}", a.db, "--delete-data", "-y")
-        B.stdb("call", "-s", "local", a.db, "install_script", json.dumps((ROOT / "living/scripts/skills.rhai").read_text()))
+        # Over HTTP: the script is past the 128 KiB one command-line argument may hold.
+        from install_script import install
+        code, body = install(a.db, (ROOT / "living/scripts/skills.rhai").read_text())
+        if code != 200:
+            sys.exit(f"install_script: {code} {body[-500:]}")
     admin = admin_token()
     ident = json.loads(http(f"/v1/database/{a.db}")[1])["database_identity"]["__identity__"].removeprefix("0x")
     tokens = []

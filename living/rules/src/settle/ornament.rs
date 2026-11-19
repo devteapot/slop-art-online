@@ -437,6 +437,10 @@ impl<'a> Dress<'a> {
     fn settlement(&mut self, idx: u16) {
         let land = self.land;
         let set = &land.settlements[idx as usize];
+        // A planned settlement is dressed by its plan (its stairs and retaining walls).
+        if set.planned {
+            return;
+        }
         let Some(st) = self.p.style_for(set.kind, &set.style) else { return };
         let o = st.ornaments.clone();
         let k = set.scale.max(0.3);

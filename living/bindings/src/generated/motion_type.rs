@@ -23,39 +23,3 @@ pub struct Motion {
 impl __sdk::InModule for Motion {
     type Module = super::RemoteModule;
 }
-
-/// Column accessor struct for the table `Motion`.
-///
-/// Provides typed access to columns for query building.
-pub struct MotionCols {
-    pub id: __sdk::__query_builder::Col<Motion, u32>,
-    pub x: __sdk::__query_builder::Col<Motion, f32>,
-    pub y: __sdk::__query_builder::Col<Motion, f32>,
-    pub t_ms: __sdk::__query_builder::Col<Motion, u64>,
-    pub vx: __sdk::__query_builder::Col<Motion, f32>,
-    pub vy: __sdk::__query_builder::Col<Motion, f32>,
-    pub heading: __sdk::__query_builder::Col<Motion, f32>,
-    pub turn: __sdk::__query_builder::Col<Motion, f32>,
-    pub turn_s: __sdk::__query_builder::Col<Motion, f32>,
-    pub next_ms: __sdk::__query_builder::Col<Motion, u64>,
-    pub speed: __sdk::__query_builder::Col<Motion, f32>,
-}
-
-impl __sdk::__query_builder::HasCols for Motion {
-    type Cols = MotionCols;
-    fn cols(table_name: &'static str) -> Self::Cols {
-        MotionCols {
-            id: __sdk::__query_builder::Col::new(table_name, "id"),
-            x: __sdk::__query_builder::Col::new(table_name, "x"),
-            y: __sdk::__query_builder::Col::new(table_name, "y"),
-            t_ms: __sdk::__query_builder::Col::new(table_name, "t_ms"),
-            vx: __sdk::__query_builder::Col::new(table_name, "vx"),
-            vy: __sdk::__query_builder::Col::new(table_name, "vy"),
-            heading: __sdk::__query_builder::Col::new(table_name, "heading"),
-            turn: __sdk::__query_builder::Col::new(table_name, "turn"),
-            turn_s: __sdk::__query_builder::Col::new(table_name, "turn_s"),
-            next_ms: __sdk::__query_builder::Col::new(table_name, "next_ms"),
-            speed: __sdk::__query_builder::Col::new(table_name, "speed"),
-        }
-    }
-}

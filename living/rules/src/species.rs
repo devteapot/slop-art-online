@@ -7,6 +7,9 @@ use std::collections::BTreeMap;
 #[derive(Clone, Debug, Deserialize)]
 pub struct Signal {
     pub sound: String,
+    /// How far it carries (m). 0 (left out): its loudness decides, as for speech, carrying
+    /// `loudness` times each listener's own hearing ([`Signal::reach`]; docs/PACK_MIND.md).
+    #[serde(default)]
     pub range: f32,
     pub salience: f32,
     /// How one's own kind hears it, when "{name} makes {sound}" would mislead
@@ -17,6 +20,23 @@ pub struct Signal {
     /// about them) are prompted to think by it; everyone in range still hears it.
     #[serde(default)]
     pub kin_only: bool,
+    /// How loud it is (a voice is 1): loud enough, it wakes a sleeper near enough (the
+    /// `wake_loudness` and `wake_reach` laws). 0: as quiet as a voice would be ignored.
+    #[serde(default)]
+    pub loudness: f32,
+}
+
+impl Signal {
+    /// How far it reaches a listener whose hearing is `hearing` (m): its own `range` when it has
+    /// one, else its loudness times that hearing (a voice, 1, carries one's hearing; a call,
+    /// 2.5, two and a half times it), as the ways of speaking carry.
+    pub fn reach(&self, hearing: f32) -> f32 {
+        if self.range > 0.0 {
+            self.range
+        } else {
+            self.loudness.max(0.0) * hearing.max(0.0)
+        }
+    }
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -176,12 +196,11 @@ pub fn skills_help(sp: &Species) -> String {
     skills_help_of(sp, &crate::catalog::skills())
 }
 
-/// The same, from a given set of skills.
+/// The same, from a given set of skills: the skills this body is offered (`ui::offered`, the
+/// filter the player's interface uses too).
 pub fn skills_help_of(sp: &Species, skills: &crate::catalog::Skills) -> String {
-    skills
-        .iter()
-        .filter(|s| sp.allows(&s.name) && (sp.skills.is_some() || s.listed))
-        .filter(|s| s.name != "signal" || !sp.signals.is_empty())
+    crate::ui::offered(skills, Some(sp))
+        .into_iter()
         .map(crate::catalog::skill_line)
         .collect::<Vec<_>>()
         .join("\n")
@@ -190,6 +209,21 @@ pub fn skills_help_of(sp: &Species, skills: &crate::catalog::Skills) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_signal_without_a_range_carries_by_its_loudness() {
+        let species = parse(include_str!("../../seeds/species.json")).unwrap();
+        let howl = &species["wolf"].signals["howl"];
+        // The shipped howl: loudness 2, so twice a listener's hearing (the island's 9 m: 18 m,
+        // as its old range was); a signal with its own range keeps it.
+        assert_eq!(howl.range, 0.0);
+        assert_eq!(howl.reach(9.0), 18.0);
+        assert_eq!(howl.reach(12.0), 24.0);
+        let growl = &species["wolf"].signals["growl"];
+        assert_eq!(growl.reach(9.0), growl.range);
+        let cry = &species["person"].signals["cry"];
+        assert_eq!(cry.reach(30.0), 12.0);
+    }
 
     #[test]
     fn scent_is_optional_species_data() {

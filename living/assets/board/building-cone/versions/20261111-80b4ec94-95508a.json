@@ -1,0 +1,202 @@
+{
+ "schema": 1,
+ "family": "building:cone",
+ "id": "20261111-80b4ec94-95508a",
+ "published": "2026-11-11T16:43:54+01:00",
+ "track": "ab-arm1 (Cullet A/B, Fable arm)",
+ "maker": "Claude Fable 5.2",
+ "note": "The Fable arm of the Cullet asset A/B (docs/SMALL_CITY.md). Starting version of the building kit. Photographed by the board from the arm's GLBs; the arm's own Blender renders are kept with it.",
+ "source": {
+  "commit": "80b4ec94592cc89ecf07a45802573817572dee17",
+  "branch": "ab-arm1",
+  "generator": "living/tools/blender/ab/cullet_fable.py",
+  "generator_sha256": "527af19efe16e597085e1a6d964457b8ef9c6e74570d13cadf5ab12726c66919",
+  "generator_state": "committed",
+  "seed": "1",
+  "params": {}
+ },
+ "renderer": {
+  "method": "asset-view",
+  "commit": "362f0ea5505534da2c7a7b3d67ae6eca784fd230",
+  "dirty": false,
+  "key": "362f0ea5",
+  "env": "cullet",
+  "hours": {
+   "day": 15.0,
+   "night": 22.0
+  },
+  "weather": "clear",
+  "day_curve": true,
+  "preset": "2947e3c0",
+  "repo": "/home/carlid/.t3/worktrees/slop-art-online/t3-e14baa97-22eef9c68b78d643"
+ },
+ "preset": "building",
+ "media": "media/building-cone/20261111-80b4ec94-95508a",
+ "members": [
+  {
+   "name": "cone",
+   "role": "subject",
+   "token_kind": "file",
+   "source_path": "/home/carlid/dev/slop-ab-arm1/.local/living/small-city/ab/fable/cone.glb",
+   "sha256": "f251ba434250af5d3452f40b656f96304108f5df721fd7f4b41da747737c9278",
+   "stats": {
+    "file": "cone.glb",
+    "sha256": "f251ba434250af5d3452f40b656f96304108f5df721fd7f4b41da747737c9278",
+    "bytes": 711464,
+    "triangles": 10294,
+    "vertices": 20234,
+    "parts": {
+     "cone": 10294
+    },
+    "nodes": 1,
+    "bones": 0,
+    "spring_bones": 0,
+    "materials": [
+     "Body",
+     "GlowAmber"
+    ],
+    "textures": 0,
+    "texture_bytes": 0,
+    "morph_targets": 0,
+    "spring_groups": 0,
+    "vertex_colours": true,
+    "clips": [],
+    "glow": true,
+    "glow_triangles": 11,
+    "palette": [
+     {
+      "hex": "#3d3d48",
+      "share": 0.3643
+     },
+     {
+      "hex": "#53332b",
+      "share": 0.2753
+     },
+     {
+      "hex": "#5d5f65",
+      "share": 0.1633
+     },
+     {
+      "hex": "#24201f",
+      "share": 0.1066
+     },
+     {
+      "hex": "#3c2b28",
+      "share": 0.0316
+     },
+     {
+      "hex": "#837e74",
+      "share": 0.0201
+     },
+     {
+      "hex": "#934c37",
+      "share": 0.0081
+     },
+     {
+      "hex": "#4a525f",
+      "share": 0.0076
+     },
+     {
+      "hex": "#7c4232",
+      "share": 0.0075
+     },
+     {
+      "hex": "#cfc8b0",
+      "share": 0.0065
+     },
+     {
+      "hex": "#2d2d32",
+      "share": 0.0033
+     },
+     {
+      "hex": "#c78029",
+      "share": 0.0011
+     },
+     {
+      "hex": "#6f7161",
+      "share": 0.001
+     },
+     {
+      "hex": "#5e697b",
+      "share": 0.001
+     },
+     {
+      "hex": "other",
+      "share": 0.0026
+     }
+    ]
+   },
+   "file": "files/cone.glb",
+   "report": {
+    "file": "cone.glb",
+    "footprint_m": [
+     17.689,
+     14.689
+    ],
+    "height_m": 24.0,
+    "foundation_m": 1.8,
+    "tris": 10294,
+    "materials": {
+     "Body": 10283,
+     "GlowAmber": 11
+    },
+    "surface_tagged_share": 1.0,
+    "palette_share": 0.9334,
+    "palette_wear_blend_share": 0.0666,
+    "budget_tris": 12000,
+    "within_budget": true,
+    "sha256": "f251ba434250af5d3452f40b656f96304108f5df721fd7f4b41da747737c9278",
+    "body_m": [
+     14.0,
+     14.0
+    ],
+    "rim_m": 24.0,
+    "opening_m": 3.2,
+    "wear": {
+     "salt": 0.5,
+     "soot": 1.0,
+     "wind": 0.6
+    }
+   },
+   "shots": [
+    "front",
+    "three-quarter",
+    "side",
+    "back",
+    "close",
+    "game",
+    "night-three-quarter",
+    "night-game"
+   ],
+   "clips": [],
+   "view": {
+    "size_m": [
+     17.728586196899414,
+     25.799999237060547,
+     14.794517517089844
+    ],
+    "triangles": 10294,
+    "vertices": 20234,
+    "meshes": 2,
+    "materials": [
+     "Body",
+     "GlowAmber"
+    ],
+    "glow": true,
+    "vertex_colours": true
+   }
+  }
+ ],
+ "delivered": [
+  {
+   "title": "Fable's own Blender renders (EEVEE, not the game)",
+   "path": "delivered/renders-cone/index.html",
+   "from": "/tmp/claude-1000/-home-carlid--t3-worktrees-slop-art-online-t3-e14baa97-22eef9c68b78d643/50acc972-a46f-4722-b7e2-c1cfcc82851b/scratchpad/fable/renders-cone"
+  },
+  {
+   "title": "Fable arm notes",
+   "path": "delivered/notes.md",
+   "from": "/home/carlid/dev/slop-ab-arm1/.local/living/small-city/ab/fable/notes.md"
+  }
+ ]
+}

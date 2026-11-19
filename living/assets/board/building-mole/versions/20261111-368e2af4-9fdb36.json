@@ -1,0 +1,421 @@
+{
+ "schema": 1,
+ "family": "building:mole",
+ "id": "20261111-368e2af4-9fdb36",
+ "published": "2026-11-11T17:46:52+01:00",
+ "track": "kit-1",
+ "maker": "Claude Fable 5.2",
+ "note": "kit-1 pass 1: built for its lot from the plan (footprint, height, wear and seed from plan.json); glow set in the game at 21:30 against 13:00",
+ "source": {
+  "commit": "368e2af4b14033a9e8da023fcc63b95c27a5a9bb",
+  "branch": "kit-1",
+  "dirty": false,
+  "generator": "living/tools/blender/cullet.py",
+  "generator_sha256": "5f70615004be4033b28a542e829eaf40b0eef97ddcc9c31bb4e4b906c7bd9803",
+  "generator_state": "committed",
+  "seed": "83",
+  "params": {
+   "plan": "living/seeds/worlds/cullet/plan.json"
+  }
+ },
+ "renderer": {
+  "method": "asset-view",
+  "commit": "86fae680d923921d2c41e9dffc8d39c75cc88752",
+  "dirty": false,
+  "key": "86fae680",
+  "env": "cullet",
+  "hours": {
+   "day": 15.0,
+   "night": 22.0
+  },
+  "weather": "clear",
+  "day_curve": true,
+  "preset": "2947e3c0",
+  "repo": "/home/carlid/.t3/worktrees/slop-art-online/t3-e14baa97-22eef9c68b78d643"
+ },
+ "preset": "building",
+ "media": "media/building-mole/20261111-368e2af4-9fdb36",
+ "members": [
+  {
+   "name": "root",
+   "role": "subject",
+   "token_kind": "file",
+   "source_path": ".local/kit-1/board/mole/mole_root.glb",
+   "sha256": "8d8c47eb706073fda44ae726445cd9aafa115c4b2d77374d0862c7af1f87939e",
+   "stats": {
+    "file": "mole_root.glb",
+    "sha256": "8d8c47eb706073fda44ae726445cd9aafa115c4b2d77374d0862c7af1f87939e",
+    "bytes": 281420,
+    "triangles": 3854,
+    "vertices": 8036,
+    "parts": {
+     "mole_root": 3854
+    },
+    "nodes": 1,
+    "bones": 0,
+    "spring_bones": 0,
+    "materials": [
+     "Body"
+    ],
+    "textures": 0,
+    "texture_bytes": 0,
+    "morph_targets": 0,
+    "spring_groups": 0,
+    "vertex_colours": true,
+    "clips": [],
+    "glow": false,
+    "glow_triangles": 0,
+    "palette": [
+     {
+      "hex": "#57595f",
+      "share": 0.3215
+     },
+     {
+      "hex": "#323338",
+      "share": 0.2521
+     },
+     {
+      "hex": "#40434a",
+      "share": 0.1908
+     },
+     {
+      "hex": "#454334",
+      "share": 0.1323
+     },
+     {
+      "hex": "#646569",
+      "share": 0.0295
+     },
+     {
+      "hex": "#4b4c54",
+      "share": 0.0288
+     },
+     {
+      "hex": "#818281",
+      "share": 0.0195
+     },
+     {
+      "hex": "#6b6749",
+      "share": 0.0133
+     },
+     {
+      "hex": "#603c2c",
+      "share": 0.012
+     }
+    ]
+   },
+   "file": "files/root.glb",
+   "report": {
+    "file": "mole/mole_root.glb",
+    "what": "fixture",
+    "kind": "mole",
+    "size_m": [
+     21.0,
+     14.5
+    ],
+    "plan_height_m": 1.2,
+    "seed": 19071,
+    "above_floor_m": [
+     [
+      -10.58,
+      -7.25
+     ],
+     [
+      10.5,
+      6.75
+     ]
+    ],
+    "height_m": 1.32,
+    "foundation_m": 3.2,
+    "tris": 3854,
+    "materials": {
+     "Body": 3854
+    },
+    "surface_tagged_share": 1.0,
+    "palette_share": 0.7763,
+    "palette_wear_blend_share": 0.2237,
+    "budget_tris": 6000,
+    "doors": [],
+    "sha256": "8d8c47eb706073fda44ae726445cd9aafa115c4b2d77374d0862c7af1f87939e",
+    "ridge_m": 1.2
+   },
+   "shots": [
+    "front",
+    "three-quarter",
+    "side",
+    "back",
+    "close",
+    "game"
+   ],
+   "clips": [],
+   "view": {
+    "size_m": [
+     21.080001831054688,
+     4.519993782043457,
+     14.0
+    ],
+    "triangles": 3854,
+    "vertices": 8036,
+    "meshes": 1,
+    "materials": [
+     "Body"
+    ],
+    "glow": false,
+    "vertex_colours": true
+   }
+  },
+  {
+   "name": "arm",
+   "role": "subject",
+   "token_kind": "file",
+   "source_path": ".local/kit-1/board/mole/mole_arm_1.glb",
+   "sha256": "f5454538eb84d3348855733cd831104da96253b26751728728c6587dbf63c2ec",
+   "stats": {
+    "file": "mole_arm_1.glb",
+    "sha256": "f5454538eb84d3348855733cd831104da96253b26751728728c6587dbf63c2ec",
+    "bytes": 188340,
+    "triangles": 2566,
+    "vertices": 5368,
+    "parts": {
+     "mole_arm_1": 2566
+    },
+    "nodes": 1,
+    "bones": 0,
+    "spring_bones": 0,
+    "materials": [
+     "Body"
+    ],
+    "textures": 0,
+    "texture_bytes": 0,
+    "morph_targets": 0,
+    "spring_groups": 0,
+    "vertex_colours": true,
+    "clips": [],
+    "glow": false,
+    "glow_triangles": 0,
+    "palette": [
+     {
+      "hex": "#54575d",
+      "share": 0.3517
+     },
+     {
+      "hex": "#323338",
+      "share": 0.244
+     },
+     {
+      "hex": "#41444b",
+      "share": 0.183
+     },
+     {
+      "hex": "#454333",
+      "share": 0.1257
+     },
+     {
+      "hex": "#616369",
+      "share": 0.0558
+     },
+     {
+      "hex": "#7e7e7e",
+      "share": 0.0192
+     },
+     {
+      "hex": "#6c674a",
+      "share": 0.0143
+     },
+     {
+      "hex": "#5d3a2b",
+      "share": 0.005
+     },
+     {
+      "hex": "#58423a",
+      "share": 0.0012
+     }
+    ]
+   },
+   "file": "files/arm.glb",
+   "report": {
+    "file": "mole/mole_arm_1.glb",
+    "what": "fixture",
+    "kind": "mole",
+    "size_m": [
+     8.0,
+     13.33
+    ],
+    "plan_height_m": 1.2,
+    "seed": 27772,
+    "above_floor_m": [
+     [
+      -4.0,
+      -6.665
+     ],
+     [
+      4.0,
+      6.665
+     ]
+    ],
+    "height_m": 1.318,
+    "foundation_m": 3.2,
+    "tris": 2566,
+    "materials": {
+     "Body": 2566
+    },
+    "surface_tagged_share": 1.0,
+    "palette_share": 0.7498,
+    "palette_wear_blend_share": 0.2502,
+    "budget_tris": 6000,
+    "doors": [],
+    "sha256": "f5454538eb84d3348855733cd831104da96253b26751728728c6587dbf63c2ec",
+    "ridge_m": 1.2
+   },
+   "shots": [
+    "front",
+    "three-quarter",
+    "side",
+    "back",
+    "close",
+    "game"
+   ],
+   "clips": [],
+   "view": {
+    "size_m": [
+     8.072000503540039,
+     4.518097877502441,
+     13.329999923706055
+    ],
+    "triangles": 2566,
+    "vertices": 5368,
+    "meshes": 1,
+    "materials": [
+     "Body"
+    ],
+    "glow": false,
+    "vertex_colours": true
+   }
+  },
+  {
+   "name": "tip",
+   "role": "subject",
+   "token_kind": "file",
+   "source_path": ".local/kit-1/board/mole/mole_tip.glb",
+   "sha256": "6d34f67cec27eec4dffff7e268390081f42709624d8e1ee9281ae92cb1b6509d",
+   "stats": {
+    "file": "mole_tip.glb",
+    "sha256": "6d34f67cec27eec4dffff7e268390081f42709624d8e1ee9281ae92cb1b6509d",
+    "bytes": 294292,
+    "triangles": 4038,
+    "vertices": 8404,
+    "parts": {
+     "mole_tip": 4038
+    },
+    "nodes": 1,
+    "bones": 0,
+    "spring_bones": 0,
+    "materials": [
+     "Body"
+    ],
+    "textures": 0,
+    "texture_bytes": 0,
+    "morph_targets": 0,
+    "spring_groups": 0,
+    "vertex_colours": true,
+    "clips": [],
+    "glow": false,
+    "glow_triangles": 0,
+    "palette": [
+     {
+      "hex": "#575a5f",
+      "share": 0.3282
+     },
+     {
+      "hex": "#323338",
+      "share": 0.2693
+     },
+     {
+      "hex": "#44474d",
+      "share": 0.1569
+     },
+     {
+      "hex": "#454334",
+      "share": 0.1442
+     },
+     {
+      "hex": "#3c3e46",
+      "share": 0.0416
+     },
+     {
+      "hex": "#603c2b",
+      "share": 0.0322
+     },
+     {
+      "hex": "#808180",
+      "share": 0.0189
+     },
+     {
+      "hex": "#6d684a",
+      "share": 0.0088
+     }
+    ]
+   },
+   "file": "files/tip.glb",
+   "report": {
+    "file": "mole/mole_tip.glb",
+    "what": "fixture",
+    "kind": "mole",
+    "size_m": [
+     14.0,
+     14.0
+    ],
+    "plan_height_m": 1.2,
+    "seed": 61,
+    "above_floor_m": [
+     [
+      -7.08,
+      -7.0
+     ],
+     [
+      7.0,
+      7.0
+     ]
+    ],
+    "height_m": 1.32,
+    "foundation_m": 3.2,
+    "tris": 4038,
+    "materials": {
+     "Body": 4038
+    },
+    "surface_tagged_share": 1.0,
+    "palette_share": 0.7504,
+    "palette_wear_blend_share": 0.2496,
+    "budget_tris": 6000,
+    "doors": [],
+    "sha256": "6d34f67cec27eec4dffff7e268390081f42709624d8e1ee9281ae92cb1b6509d",
+    "ridge_m": 1.2
+   },
+   "shots": [
+    "front",
+    "three-quarter",
+    "side",
+    "back",
+    "close",
+    "game"
+   ],
+   "clips": [],
+   "view": {
+    "size_m": [
+     14.079999923706055,
+     4.519590377807617,
+     14.0
+    ],
+    "triangles": 4038,
+    "vertices": 8404,
+    "meshes": 1,
+    "materials": [
+     "Body"
+    ],
+    "glow": false,
+    "vertex_colours": true
+   }
+  }
+ ],
+ "delivered": []
+}

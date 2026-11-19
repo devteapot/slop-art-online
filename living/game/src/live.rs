@@ -35,7 +35,7 @@
 
 use crate::bodies::stage_scale;
 use crate::camera::Cam;
-use crate::controls::{Input, Target};
+use crate::controls::Input;
 use crate::envs::Roam;
 use crate::island::{Island, LotRow};
 use crate::lookdev::{Fitted, Model};
@@ -47,7 +47,7 @@ use bevy::prelude::*;
 use living_bindings::*;
 use living_rules::land::{Land, LandParams};
 use living_rules::map::{chunk_xy, Map, CHUNK};
-use spacetimedb_sdk::Table;
+use spacetimedb_sdk::{DbContext, Table};
 use std::collections::{HashMap, HashSet};
 use std::f32::consts::PI;
 use std::sync::{Arc, Mutex};
@@ -58,9 +58,40 @@ const LOT_DROP: f32 = 220.0;
 /// Building spawns per frame, so a window move doesn't hitch.
 const LOTS_PER_FRAME: usize = 6;
 /// Speeds (m/s): below `MOVING` a body stands (idle or talk; above it `anim.rs` blends its
-/// gaits), and above `RUNNING` you count as running (`Roam::running`).
+/// gaits; whether it walks or runs is [`family`]'s).
 const MOVING: f32 = crate::anim::MOVING;
-const RUNNING: f32 = 3.3;
+
+/// Walking or running clips for every person ([`crate::gait::Family`]): the one place it is
+/// decided. The authority's word first: a body's row says whether it runs (`Moving::running`,
+/// stamina-1: a run under way with breath, whoever controls it). `run_w` is that body's running
+/// weight, eased toward the word over [`RUN_EASE_S`] so a switch crossfades the two families
+/// instead of popping. Without a row, the laws' split ([`law_split`]), else the clips' own.
+fn family(running: Option<bool>, run_w: &mut f32, dt: f32, split: Option<f32>) -> crate::gait::Family {
+    match running {
+        Some(r) => {
+            let step = dt / RUN_EASE_S;
+            *run_w = (*run_w + if r { step } else { -step }).clamp(0.0, 1.0);
+            crate::gait::Family::Mix(*run_w).settled()
+        }
+        None => split.map_or(crate::gait::Family::Clips, crate::gait::Family::Split),
+    }
+}
+
+/// A body's switch between walking and running clips crossfades over this (s).
+const RUN_EASE_S: f32 = 0.25;
+
+/// The speed between walking and running by the world's laws (m/s, a grown person off a road):
+/// the geometric mean of a rested grown person's walking speed (`move_speed`) and running speed
+/// (`motion`'s `run` times it). None without the laws or with speeds that don't make sense.
+fn law_split(sc: &living_rules::script::Scripts) -> Option<f32> {
+    let ctx = living_rules::script::SkillCtx {
+        actor: living_rules::script::ActorFacts { kind: "person".into(), stage: "adult".into(), hp: 100.0, energy: 100.0, ..Default::default() },
+        ..Default::default()
+    };
+    let walk = sc.move_speed(&ctx).ok()?;
+    let run = walk * sc.moves(&ctx).ok()?.run;
+    (walk > 0.1 && run > walk * 1.01).then(|| (walk * run).sqrt())
+}
 /// A line counts as being spoken for this long (s).
 const TALKING_S: f64 = 4.0;
 
@@ -79,15 +110,35 @@ impl Plugin for LivePlugin {
             .add_systems(Update, (land, lots, bodies, me).chain().in_set(Phase::Present).after(crate::combat::actions).after(crate::town::shows))
             .add_systems(
                 Update,
-                (crate::envs::hdr, crate::island::stream, crate::island::report, crate::lookdev::convert, crate::lookdev::fit, crate::lookdev::rig, crate::lookdev::animate, crate::lookdev::sun, crate::envs::cutaway, report)
+                (crate::envs::hdr, crate::island::stream, crate::island::grey_boxes, crate::island::report, crate::lookdev::convert, crate::lookdev::night_glow, crate::lookdev::fit, crate::envs::solid_if_large, crate::lookdev::rig, crate::lookdev::animate, crate::lookdev::sun, report)
                     .chain()
                     .in_set(Phase::Present)
                     .after(me)
                     .run_if(island),
             )
-            .add_systems(Update, ground_cursor.in_set(Phase::Camera).after(crate::camera::follow).run_if(island));
+            .add_systems(Update, (crate::envs::cutaway, crate::envs::reach).chain().in_set(Phase::Camera).after(crate::camera::follow).before(indoors).run_if(island))
+            // After sight, which sets every thing's visibility each frame: what stands inside a
+            // closed building is hidden over it.
+            .add_systems(Update, indoors.in_set(Phase::Camera).after(crate::sight::update).run_if(island));
         if let Some(s) = Script::from_env() {
-            app.insert_resource(s).add_systems(Update, script.in_set(Phase::Input).before(crate::controls::movement));
+            app.insert_resource(s).add_systems(Update, script.in_set(Phase::Input).before(crate::controls::movement).before(crate::ui::UiInput));
+        }
+    }
+}
+
+/// What stands inside a planned lot's building ([`crate::world::Indoors`]: a household's hearth
+/// and store on its house's floor) is hidden while that building is drawn closed, or not drawn at
+/// all; while the cutaway has it open, it is drawn as sight says (`sight::update`, which runs
+/// first and sets every thing's visibility each frame), and a kit model once it is fitted.
+fn indoors(live: Res<Live>, lots: Query<&crate::envs::Occluder>, mut q: Query<(&crate::world::Indoors, &mut Visibility)>, mut was: Local<HashMap<u32, bool>>) {
+    for (inside, mut vis) in &mut q {
+        let open = live.lots.get(&inside.0).and_then(|es| es.first()).and_then(|e| lots.get(*e).ok()).is_some_and(|o| o.open);
+        if was.insert(inside.0, open) != Some(open) {
+            // For checks (`RUST_LOG=living_game::live=debug`): once each time a building opens or closes.
+            debug!("indoors: lot {} {}", inside.0, if open { "open: what stands inside it is drawn" } else { "closed: what stands inside it is hidden" });
+        }
+        if !open && *vis != Visibility::Hidden {
+            *vis = Visibility::Hidden;
         }
     }
 }
@@ -141,6 +192,9 @@ struct Shown {
     sitting: bool,
     /// Getting up: since when (display ms) and where it sat.
     rising: Option<(f64, Vec2)>,
+    /// Where it sits on the ground, for its cloth (`characters::SeatAnchor`): set as it sits,
+    /// kept through getting up until the clips have it off the ground.
+    seat: Option<crate::characters::SeatAnchor>,
     /// Its file has a startle ([`STARTLE`]); how long it has stood (s); a startle playing: since
     /// when (display ms) and where it stood.
     startles: bool,
@@ -150,17 +204,75 @@ struct Shown {
     tilt: Quat,
     kind: String,
     /// A person's upper-body facing (sim angle), eased like `yaw`; it differs from the legs'
-    /// while walking one way and looking another ([`legs_and_twist`]).
+    /// while walking one way and looking another (`twist::LookWalk`).
     face: f32,
-    /// Walking backwards (the legs face away from the travel, the gaits reversed).
+    /// Walking backwards while looking back (`twist::LookWalk::back_deg`): the legs face away
+    /// from the travel.
     back: bool,
+    /// Standing and looking somewhere: the legs are turning to the look ([`STAND_TURN_ON`]).
+    turning: bool,
+    /// A turn take playing (standing) and a jump take (`takes.rs`), the jump the last was chosen
+    /// for (its start, display ms) and whether it had a take.
+    turn: Option<crate::takes::Playing>,
+    jump: Option<crate::takes::Playing>,
+    jump_key: f64,
+    jump_took: bool,
+    /// Walking last frame, and walking forward with the legs within [`ALONG`] of the travel (a
+    /// stop take plays only then).
+    walked: bool,
+    along: bool,
+    /// A stop take playing (`takes::stop_for`), where the body was drawn when it began, and where
+    /// a stopped body stays drawn after it, until it moves again (its track runs up to 0.26 m past
+    /// the authority's stop; catching up would slide the standing feet back).
+    stop: Option<crate::takes::Playing>,
+    stop_at: Vec2,
+    rest_at: Option<Vec2>,
+    /// The drawn speed before any move under way (a jump's dash speeds the body up).
+    calm_speed: f32,
+    /// How far the body's gaits are the running family's (0–1), eased toward its row's
+    /// `running` ([`family`]).
+    run_w: f32,
+    /// The look key it was drawn from (`characters::seen`; empty for none). A new key (a band
+    /// change, a `relook`) redraws the person in place ([`swap_look`]).
+    look: String,
+    /// Drawn from the look's line (else a VRoid recipe).
+    composed: bool,
+}
+
+/// A person drawn, as the UI dump reports them (`ui::DumpExtra::looks_json`).
+pub struct DrawnLook<'a> {
+    pub id: u32,
+    pub look: &'a str,
+    pub composed: bool,
+    pub swapping: bool,
 }
 
 /// A sitter whose rest ends gets up where it sat before walking off (`stand_up_ground`, 2.47 s,
 /// played at this rate). The authority moves the body at once, so the drawn body waits at its
 /// seat while the clip plays, then catches up at up to [`CATCH_UP`] m/s faster than the body.
 const STAND_UP: (&str, f32, f64) = ("stand_up_ground", 1.6, 2467.0 / 1.6);
+/// The ground clips' seat lies this far behind where the body is drawn (m): `sit_ground_down`
+/// ends with the hips 0.39 m back (clips.json `end_offset` [0, -0.4]), where `sit_ground` and
+/// `stand_up_ground` keep them.
+const SEAT_BEHIND: f32 = 0.39;
+/// The ground's slope at a seat is sampled this far either side of it (m).
+const SEAT_SLOPE_M: f32 = 0.25;
+
+/// A seat on the ground behind a body drawn at `p` facing `dir` (sim): the terrain there and its
+/// normal, in the world (x, height, sim y).
+fn seat_anchor(island: &Island, p: Vec2, dir: Vec2) -> crate::characters::SeatAnchor {
+    let at = p - dir * SEAT_BEHIND;
+    let e = SEAT_SLOPE_M;
+    let hx = (island.height(at.x + e, at.y) - island.height(at.x - e, at.y)) / (2.0 * e);
+    let hz = (island.height(at.x, at.y + e) - island.height(at.x, at.y - e)) / (2.0 * e);
+    let normal = Vec3::new(-hx, 1.0, -hz).try_normalize().unwrap_or(Vec3::Y);
+    crate::characters::SeatAnchor { point: Vec3::new(at.x, island.height(at.x, at.y), at.y), normal, weight: None }
+}
 const CATCH_UP: f32 = 1.2;
+/// A turn take turns the legs at most this fast (radians a second): its own curve stays under it.
+const TURN_MAX: f32 = 720.0 * PI / 180.0;
+/// Legs within this of the travel (radians) walk along it: a stop take may play.
+const ALONG: f32 = 15.0 * PI / 180.0;
 /// A body this far (m) from where it is drawn is drawn there at once: a teleport (an admin
 /// `place_at`) used to crawl in at [`CATCH_UP`], tens of seconds for a few tens of metres.
 const SNAP_M: f32 = 6.0;
@@ -178,36 +290,93 @@ const STILL_S: f32 = 1.0;
 const SLOWING: f32 = 20.0;
 /// How fast drawn yaw takes up a new facing (1/s): about 90% in 0.15 s.
 const YAW_RATE: f32 = 16.0;
-/// Walking while looking more than this far from the travel (radians), a person walks
-/// backwards, and forward again under [`BACK_OFF`]; between, the upper body turns.
-const BACK_ON: f32 = 110.0 * PI / 180.0;
-const BACK_OFF: f32 = 80.0 * PI / 180.0;
-/// The most the upper body turns from the legs (radians).
-const TWIST_MAX: f32 = 110.0 * PI / 180.0;
+/// Standing while looking somewhere (my cursor, a move's aim), the upper body turns first; the
+/// legs turn after it only once the look is more than this far from them (radians, or the
+/// look-walk's head and chest limit when that is less), and then all the way, until within
+/// [`STAND_TURN_OFF`]. Before, the whole body followed every move of
+/// the cursor, so the feet stepped or slid whenever it moved.
+const STAND_TURN_ON: f32 = 55.0 * PI / 180.0;
+const STAND_TURN_OFF: f32 = 6.0 * PI / 180.0;
 
-/// Where a moving person's legs face and whether it walks backwards: the legs step along the
-/// travel, so its feet keep still, and the upper body turns toward where it looks. Clips have
-/// no strafe or backward takes; the forward gaits reversed walk backwards.
-fn legs_and_twist(travel: f32, look: f32, back: bool) -> (f32, bool) {
-    let off = living_rules::steer::wrap(look - travel).abs();
-    let back = if back { off > BACK_OFF } else { off > BACK_ON };
-    (if back { living_rules::steer::wrap(travel + PI) } else { travel }, back)
+/// Where a body faces on the authority (look-2), when that is not its travel: the row's travel
+/// segment turned by its facing offset at `now_ms` (authority ms), as `steer::facing` evaluates
+/// it with `dt = (min(now, next_ms) − t_ms) / 1000`. None when the row holds no offset (the body
+/// faces its travel).
+///
+/// look-4: the offset is not wrapped (at a segment's start it may be ±180°, past it after a
+/// counter-turn), so the sum is; and while the travel turns, the offset's own rate can be up to
+/// twice the turn rate, but the facing in the world (what is drawn) stays continuous and within
+/// it: nothing here eases or scales the offset by itself.
+pub(crate) fn authority_facing(m: &living_bindings::Moving, now_ms: f64) -> Option<f32> {
+    if m.face_off == 0.0 && (m.face_turn == 0.0 || m.face_turn_s <= 0.0) {
+        return None;
+    }
+    let dt = ((now_ms.min(m.next_ms as f64) - m.t_ms as f64) / 1000.0).max(0.0) as f32;
+    let off = living_rules::steer::face_off(m.face_off, m.face_turn, m.face_turn_s, dt);
+    (living_rules::steer::wrap(off).abs() > 1e-3).then(|| living_rules::steer::wrap(living_rules::steer::facing(authority_travel(m, now_ms), m.face_off, m.face_turn, m.face_turn_s, dt)))
+}
+
+/// The row's travel heading at `now_ms` (the travel segment's turn followed), wrapped.
+pub(crate) fn authority_travel(m: &living_bindings::Moving, now_ms: f64) -> f32 {
+    let dt = ((now_ms.min(m.next_ms as f64) - m.t_ms as f64) / 1000.0).max(0.0) as f32;
+    living_rules::steer::wrap(m.heading + if m.turn_s > 0.0 { m.turn * dt.min(m.turn_s) } else { 0.0 })
+}
+
+/// Where the row's facing settles from its travel (look-4): the offset at the facing segment's
+/// end, against the travel at the end of its own turn (`face_turn_s` is the travel's `turn_s`
+/// while it turns), wrapped. After a sudden change of the travel the offset can pass 75° (up to
+/// 180°) for about 0.3 s while the facing comes round; deciding "walking backwards" from it then
+/// would start a brief backwards gait, so the legs decide from where it settles.
+fn settled_offset(m: &living_bindings::Moving) -> f32 {
+    let turned = if m.face_turn_s > 0.0 { m.face_turn * m.face_turn_s } else { 0.0 };
+    living_rules::steer::wrap(m.face_off + turned)
 }
 
 #[derive(Resource, Default)]
 pub struct Live {
     building: Option<Arc<Mutex<Option<Result<Built, String>>>>>,
+    /// The laws' walk/run split ([`law_split`]) and the laws it was read under (`Rules::laws_key`).
+    walk_run: Option<(u64, Option<f32>)>,
     /// Whether all three digests matched (None until compared).
     pub digests_ok: Option<bool>,
     /// The tiles as the authority hosted them at world creation, to find later edits.
     hosted: Option<Arc<Map>>,
+    cover_recipe: Option<LandParams>,
     lots: HashMap<u32, Vec<Entity>>,
     shown: HashMap<u32, Shown>,
     /// Height (m) of each drawn character, for nameplates and bubbles.
     pub heights: HashMap<u32, f32>,
-    /// Bodies gone from sight, fading out where they were last drawn (`fade.rs`), and how long
-    /// they have been fading (s).
-    leaving: Vec<(Entity, f32)>,
+    /// Bodies gone from sight, fading out where they were last drawn (`fade.rs`), how long
+    /// they have been fading (s), whose they were, and whether they stay a moment as a faint
+    /// figure first (the memory look under trial, `sightedge::Look`).
+    leaving: Vec<(Entity, f32, u32, bool)>,
+    /// People redrawn in place for a new look ([`swap_look`]): the old body, kept drawn and
+    /// moving with the new until the new is fitted, then faded out as the new fades in.
+    swaps: Vec<(Entity, Entity, u32)>,
+    /// The world's look generation has been checked against the book (one warning at connect).
+    looks_checked: bool,
+}
+
+impl Live {
+    /// The tiles as the authority hosted them at world creation (`host::hosted_map`), once the
+    /// land is regenerated.
+    pub fn cover_recipe(&self) -> Option<&LandParams> { self.cover_recipe.as_ref() }
+
+    pub fn hosted_map(&self) -> Option<Arc<Map>> {
+        self.hosted.clone()
+    }
+
+    /// Each person drawn and the look they were drawn from.
+    pub fn looks(&self) -> impl Iterator<Item = DrawnLook<'_>> + '_ {
+        self.shown.iter().filter(|(_, s)| s.person).map(|(id, s)| DrawnLook { id: *id, look: &s.look, composed: s.composed, swapping: self.swaps.iter().any(|w| w.2 == *id) })
+    }
+
+    /// The bodies drawn now and their entities (those leaving sight are not among them). While a
+    /// person is redrawn for a new look, the body still on screen (the old one) until the new
+    /// one is fitted.
+    pub fn drawn(&self) -> impl Iterator<Item = (u32, Entity)> + '_ {
+        self.shown.iter().map(|(id, s)| (*id, self.swaps.iter().find(|w| w.2 == *id && w.1 == s.entity).map_or(s.entity, |w| w.0)))
+    }
 }
 
 /// Regenerate the land from the `land` row once, then put the island in place.
@@ -223,6 +392,7 @@ fn land(
     mut cams: Query<&mut DistanceFog, With<Camera3d>>,
     mut clear: ResMut<ClearColor>,
     mut roam: ResMut<Roam>,
+    mut draw: ResMut<crate::world::Draw>,
 ) {
     if island.is_some() || net.mode != Mode::Land {
         return;
@@ -258,13 +428,24 @@ fn land(
         net.errors.lock().unwrap().push("land digests differ from the authority's".into());
     }
     let defs = crate::envs::load_defs();
-    if let Some(def) = defs.iter().find(|d| d.world.is_some()) {
+    // The mood of the environment made for this land (its `world` names the row's seed and
+    // size), else the first world environment's.
+    let mine = defs.iter().find(|d| d.world.as_ref().is_some_and(|w| w.seed == row.seed && w.size == row.size));
+    let env = mine.or_else(|| defs.iter().find(|d| d.world.is_some()));
+    if let Some(def) = env {
         crate::envs::apply_mood(&def.mood, &mut style, &mut look, &mut lights, &mut cams, &mut clear);
+        // The camera's fog, and how far landmarks are drawn, follow this mood (`world::Draw`).
+        draw.mood(&def.mood);
+        info!("land: mood {} (fog {:.0}–{:.0} m)", def.id, def.mood.fog_start, def.mood.fog_end);
     }
     live.hosted = Some(built.hosted);
+    live.cover_recipe = Some(built.params.clone());
     let arrive = Vec2::new(row.arrive_x, row.arrive_y);
     roam.pos = arrive;
-    commands.insert_resource(Island::hosted(built.land, &defs, arrive, &built.params));
+    // Its ground map is the environment made for this land's; the first world environment's
+    // (the island's, which has none) never paints another land.
+    let island = Island::hosted(built.land, &defs, mine, arrive, &built.params);
+    commands.insert_resource(island);
 }
 
 fn regenerate(row: &LandInfo) -> Result<Built, String> {
@@ -285,30 +466,137 @@ fn regenerate(row: &LandInfo) -> Result<Built, String> {
     })
 }
 
-/// Buildings from the `lot` rows in the window, near enough to see.
-fn lots(mut commands: Commands, net: NonSend<Net>, island: Option<Res<Island>>, assets: Res<AssetServer>, mut live: ResMut<Live>, roam: Res<Roam>) {
+/// Buildings from the `lot` rows in the window, near enough to see, and the landmarks.
+///
+/// - **Ordinary lots** are drawn within [`LOT_FAR`] of me, fading out over the last few metres
+///   (`envs::Reach`), and dropped past [`LOT_DROP`].
+/// - **Landmarks** (`Lot::landmark` in the regenerated land: Cullet's Cone, Counting House, Heron,
+///   Watchglass and Lintel) are drawn out to where the mood's fog is complete
+///   (`world::Draw::landmark_reach`, 600 m on Cullet), so they can be seen across the town. Lots
+///   never change and the land is the authority's (its digests are checked), so a landmark past
+///   the `lot` window (±184 m, `net.rs`) is drawn from the land itself; ids are the land's lot
+///   indices, as the authority writes them (`island::build_lots`).
+fn lots(mut commands: Commands, net: NonSend<Net>, island: Option<Res<Island>>, assets: Res<AssetServer>, mut live: ResMut<Live>, roam: Res<Roam>, draw: Res<crate::world::Draw>) {
     let (Some(island), Some(conn)) = (island, net.conn.as_ref()) else { return };
     let here = roam.pos;
-    let gone: Vec<u32> = live.lots.keys().copied().filter(|id| conn.db.lot().id().find(id).is_none_or(|l| Vec2::new(l.x, l.y).distance(here) > LOT_DROP)).collect();
+    let far = if crate::perf::has("nofar") { LOT_FAR } else { draw.landmark_reach().max(LOT_FAR) };
+    let land = &island.land;
+    let landmark = |id: u32| land.lots.get(id as usize).is_some_and(|l| l.landmark);
+    let reach = |id: u32| if landmark(id) { far } else { LOT_FAR };
+    let at = |id: u32| conn.db.lot().id().find(&id).map(|l| Vec2::new(l.x, l.y)).or_else(|| landmark(id).then(|| land.lots[id as usize].centre).map(|c| Vec2::new(c.0, c.1)));
+    let gone: Vec<u32> = live.lots.keys().copied().filter(|id| at(*id).is_none_or(|p| p.distance(here) > reach(*id) + (LOT_DROP - LOT_FAR))).collect();
     for id in gone {
         for e in live.lots.remove(&id).unwrap_or_default() {
             commands.entity(e).despawn();
         }
     }
-    let mut todo: Vec<(f32, Lot)> = conn.db.lot().iter().filter(|l| !live.lots.contains_key(&l.id)).map(|l| (Vec2::new(l.x, l.y).distance(here), l)).filter(|(d, _)| *d < LOT_FAR).collect();
-    todo.sort_by(|a, b| a.0.total_cmp(&b.0));
-    for (_, l) in todo.into_iter().take(LOTS_PER_FRAME) {
-        let site = conn.db.settlement().id().find(&l.settlement).and_then(|s| crate::island::site_kind(&s.kind));
+    let mut todo: Vec<(f32, LotRow)> = Vec::new();
+    let fresh: Vec<Lot> = conn.db.lot().iter().filter(|l| !live.lots.contains_key(&l.id)).collect();
+    for l in fresh {
+        let d = Vec2::new(l.x, l.y).distance(here);
+        if d >= reach(l.id) {
+            continue;
+        }
+        let set = conn.db.settlement().id().find(&l.settlement);
+        let site = set.as_ref().and_then(|s| crate::island::site_kind(&s.kind));
         let (Some(site), Some(kind)) = (site, living_rules::settle::LotKind::from_id(&l.kind)) else {
             live.lots.insert(l.id, Vec::new());
             continue;
         };
-        let row = LotRow { id: l.id, site, kind, at: Vec2::new(l.x, l.y), yaw: l.yaw, floor_m: l.floor_m, height_m: l.height_m, model: l.model.clone() };
+        let env = set.as_ref().map_or(site.env(), |s| living_rules::settle::env_of(&s.style));
+        todo.push((d, LotRow { id: l.id, site, kind, at: Vec2::new(l.x, l.y), yaw: l.yaw, floor_m: l.floor_m, height_m: l.height_m, width_m: l.width_m, depth_m: l.depth_m, model: l.model.clone(), env }));
+    }
+    // Landmarks beyond the window, from the land.
+    for (i, l) in land.lots.iter().enumerate().filter(|(_, l)| l.landmark) {
+        let id = i as u32;
+        let d = Vec2::new(l.centre.0, l.centre.1).distance(here);
+        if d < far && !live.lots.contains_key(&id) && conn.db.lot().id().find(&id).is_none() {
+            if let Some(row) = LotRow::of_land(land, id) {
+                todo.push((d, row));
+            }
+        }
+    }
+    todo.sort_by(|a, b| a.0.total_cmp(&b.0));
+    for (d, row) in todo.into_iter().take(LOTS_PER_FRAME) {
         let es = island.spawn_lot(&mut commands, &assets, &row);
-        live.lots.insert(l.id, es);
+        if let (Some(&root), false) = (es.first(), landmark(row.id)) {
+            commands.entity(root).insert((crate::envs::Reach(LOT_FAR), crate::envs::Reach::fade_at(LOT_FAR, d)));
+        }
+        if landmark(row.id) && !es.is_empty() {
+            debug!("lots: landmark {} ({}) drawn at {d:.0} m", row.id, row.kind.id());
+        }
+        live.lots.insert(row.id, es);
     }
 }
 
+
+/// The recipe a person is drawn from (docs/LOOK.md §5), mine as anyone's (my own row's look):
+/// the line their projected look names in the look book, composed from shared files, at the
+/// line's own height. Without one (no key, a key the book lacks, a file not on disk, no book, or
+/// composing turned off) a VRoid recipe seeded by the land and their id, in the folk and dress of
+/// the projection, as before looks; each such case is one warning line a session.
+pub fn recipe_for(book: Option<&crate::characters::book::LookBook>, land_seed: u64, c: &SeenCharacter) -> crate::characters::Recipe {
+    use crate::characters::book::{warn_once, Miss};
+    let seen = crate::characters::seen::of(c);
+    let drawn = match book {
+        _ if !crate::characters::compose::enabled() => None,
+        None => Some(Err(Miss::NoBook)),
+        Some(b) => Some(b.recipe(&seen.look)),
+    };
+    // A world made before looks (no `look_book`) has no keys: its people fall back quietly (one
+    // line at connect, `sight`).
+    let quiet = crate::characters::book::world().is_none_or(|g| g.is_empty());
+    match drawn {
+        Some(Ok(r)) => r,
+        Some(Err(m)) => {
+            if !(quiet && matches!(m, Miss::NoKey | Miss::NoBook)) {
+                warn_once(&m);
+            }
+            vroid_for(land_seed, c)
+        }
+        None => vroid_for(land_seed, c),
+    }
+}
+
+/// Redraw a shown person for a new look where and as they are: a new body from the new recipe
+/// with the old one's transform and motion, fading in once it is fitted (`fade.rs` holds a fade
+/// until then). The old body stays drawn and moving with it until then (`Live::swaps`), and then
+/// fades out, so the person never leaves the screen.
+#[allow(clippy::too_many_arguments)]
+fn swap_look(commands: &mut Commands, assets: &AssetServer, live: &mut Live, q: &mut Query<Drawn>, (id, mine): (u32, bool), c: &SeenCharacter, land_seed: u64, now: crate::characters::seen::Seen) {
+    let Some(old) = live.shown.get(&id).map(|s| s.entity) else { return };
+    let Ok((tf, _, _, _, motion, _)) = q.get(old) else { return };
+    let (tf, motion) = (*tf, motion.clone());
+    let mut recipe = recipe_for(crate::characters::book::book(), land_seed, c);
+    if recipe.person.is_none() {
+        recipe.height *= stage_scale(c.stage);
+    }
+    let new = crate::characters::spawn(commands, assets, &recipe, tf.translation, 0.0);
+    commands.entity(new).insert((tf, motion, crate::fade::Fade::appearing()));
+    if mine {
+        commands.entity(new).insert((crate::gait::Feet, crate::gait::Logged(id)));
+    } else if crate::gait::logged_other() == Some(id) {
+        commands.entity(new).insert(crate::gait::Logged(id));
+    }
+    let s = live.shown.get_mut(&id).unwrap();
+    info!("looks: #{id} redrawn for a new look ({} → {})", if s.look.is_empty() { "none" } else { &s.look }, if now.look.is_empty() { "none" } else { &now.look });
+    (s.entity, s.look, s.composed) = (new, now.look, recipe.person.is_some());
+    if let Some(seat) = s.seat {
+        commands.entity(new).try_insert(seat);
+    }
+    live.heights.insert(id, recipe.height);
+    live.swaps.push((old, new, id));
+}
+
+/// A person's VRoid recipe: seeded by the land and their id, in the folk and dress of the
+/// projection (drawn at their life stage's scale, [`stage_scale`]).
+pub fn vroid_for(land_seed: u64, c: &SeenCharacter) -> crate::characters::Recipe {
+    let seed = land_seed.wrapping_mul(0x9E37_79B9).wrapping_add(c.id as u64);
+    match folk_of(c) {
+        (folk, Some(style)) => crate::characters::Recipe::random_in(seed, folk, &style),
+        (folk, None) => crate::characters::Recipe::random(seed, folk),
+    }
+}
 
 /// Folk and dress style as anyone sees them: the authority's projection (`seen_characters`
 /// `folk` and `style`, from the settlement the character lives in; no home position is sent).
@@ -340,14 +628,14 @@ fn bodies(
     mut meshes: ResMut<Assets<Mesh>>,
     palette: Res<crate::world::Palette>,
     style: Res<crate::style::Style>,
-    input: Res<Input>,
+    mut input: ResMut<Input>,
     combat: Res<crate::combat::Combat>,
     town: Res<crate::town::Town>,
     rules: NonSend<crate::verbs::Rules>,
     mut live: ResMut<Live>,
     mut q: Query<Drawn>,
-    mut fades: Query<&mut crate::fade::Fade>,
-    time: Res<Time>,
+    (mut fades, anims): (Query<&mut crate::fade::Fade>, Query<&crate::anim::Anim>),
+    (time, edge, lw, prefs): (Res<Time>, Option<Res<crate::sightedge::SightEdge>>, Res<crate::twist::LookWalk>, Res<crate::keys::Prefs>),
 ) {
     let Some(island) = island else { return };
     let Some(conn) = net.conn.as_ref() else {
@@ -355,23 +643,80 @@ fn bodies(
         for (_, s) in live.shown.drain() {
             commands.entity(s.entity).despawn();
         }
-        for (e, _) in live.leaving.drain(..) {
+        for (e, ..) in live.leaving.drain(..) {
             commands.entity(e).despawn();
         }
+        for (old, ..) in live.swaps.drain(..) {
+            commands.entity(old).despawn();
+        }
         live.heights.clear();
+        live.looks_checked = false;
+        crate::characters::book::set_world(None);
         return;
     };
+    // The world's look generation against the book's, once a connection: one line either way
+    // when it is not the book's, and one when the world has no looks.
+    if !live.looks_checked && conn.db.world().iter().next().is_some() {
+        live.looks_checked = true;
+        let generation = crate::characters::seen::world_generation(conn);
+        crate::characters::book::set_world(Some(generation.clone()));
+        if generation.is_empty() {
+            info!("looks: this world was made before looks; its people are drawn as VRoid bases");
+        } else if let Some(w) = crate::characters::seen::generation_warning(&generation, crate::characters::book::book()) {
+            warn!("{w}");
+        } else if crate::characters::book::book().is_none() {
+            crate::characters::book::warn_once(&crate::characters::book::Miss::NoBook);
+        }
+    }
     let dt = time.delta_secs().max(1e-4);
     let me = net.my_id;
+    // Walking or running clips: the laws' split, read again when the laws in force change.
+    if live.walk_run.map(|w| w.0) != Some(rules.laws_key) {
+        let split = rules.scripts.as_ref().and_then(law_split);
+        info!("gait: walk/run split {split:?} m/s by the laws (script revision {})", rules.revision);
+        live.walk_run = Some((rules.laws_key, split));
+    }
+    let split = live.walk_run.and_then(|w| w.1);
     // Bodies that left sight fade out where they were, then go.
-    live.leaving.retain_mut(|(e, t)| {
+    // A faint figure goes at once when its body is sent again, else fades out after a moment.
+    live.leaving.retain_mut(|(e, t, id, ghost)| {
         *t += dt;
-        let keep = *t < crate::fade::OUT_S + 0.05;
+        if *ghost && scene.shown.contains_key(id) {
+            commands.entity(*e).despawn();
+            return false;
+        }
+        let hold = if *ghost { crate::sightedge::GHOST_S } else { 0.0 };
+        if *ghost && *t >= hold {
+            if let Ok(mut f) = fades.get_mut(*e) {
+                f.target = 1.0;
+            }
+        }
+        let keep = *t < hold + crate::fade::OUT_S + 0.05;
         if !keep {
             commands.entity(*e).despawn();
         }
         keep
     });
+    // People redrawn for a new look: the old body moves with the new until the new is fitted,
+    // then fades out as the new fades in (a crossfade in place, never a gap).
+    for (old, new, id) in std::mem::take(&mut live.swaps) {
+        let current = live.shown.get(&id).is_some_and(|s| s.entity == new);
+        if !current || q.get(new).is_ok_and(|d| d.1.is_some()) {
+            match fades.get_mut(old) {
+                Ok(mut f) => {
+                    f.target = 1.0;
+                    live.leaving.push((old, 0.0, id, false));
+                }
+                Err(_) => commands.entity(old).despawn(),
+            }
+            continue;
+        }
+        if let Ok([from, mut to]) = q.get_many_mut([new, old]) {
+            *to.0 = *from.0;
+            *to.4 = from.4.clone();
+        }
+        live.swaps.push((old, new, id));
+    }
     // Who is speaking: lines I heard (the authority decides earshot), and my own last line.
     let mut talking: HashSet<u32> = me
         .map(|id| conn.db.my_experience().iter().filter(|e| e.observer == id && e.kind == "speech" && scene.now_ms - (e.at_ms as f64) < TALKING_S * 1000.0).map(|e| e.subject).collect())
@@ -400,28 +745,38 @@ fn bodies(
         if let Some(s) = live.shown.remove(&id) {
             match fades.get_mut(s.entity) {
                 Ok(mut f) => {
-                    f.target = 1.0;
+                    let ghost = edge.as_deref().is_some_and(|e| e.ghosts()) && f.target < 1.0;
+                    f.target = if ghost { crate::sightedge::GHOST_LEVEL } else { 1.0 };
                     if let Ok((_, _, _, _, mut motion, _)) = q.get_mut(s.entity) {
                         motion.speed = 0.0;
                     }
-                    live.leaving.push((s.entity, 0.0));
+                    live.leaving.push((s.entity, 0.0, id, ghost));
                 }
                 Err(_) => commands.entity(s.entity).despawn(),
             }
         }
         live.heights.remove(&id);
     }
+    let mut my_face = None;
+    let cursor_facing = prefs.facing() == crate::controls::Facing::Cursor;
     for (&id, &(p, heading)) in &scene.shown {
         let ground = island.height(p.x, p.y);
         let at = Vec3::new(p.x, ground, p.y);
         let mine = Some(id) == me;
-        // My character turns toward where I look (shown locally; the authority has no look).
-        let look = input.look.filter(|_| mine).filter(|l| l.length_squared() > 1e-4).map(|l| l.y.atan2(l.x));
+        // Cursor is a local animation prediction. The authority still resolves the held look,
+        // movement, visibility and combat from its own rows and the existing intents.
+        let cursor_mode = mine && cursor_facing;
+        let look = input.look.filter(|_| mine && input.faces_cursor(combat.aims)).filter(|l| l.length_squared() > 1e-4).map(|l| l.y.atan2(l.x));
         // During a move a body faces where the move goes; a gesture or settling down plays when
         // no move does.
         let show = town.shows.get(&id).copied().unwrap_or_default();
         let action = combat.actions.get(&id).copied().or(show.once);
-        let aimed = action.and_then(|a| a.face).filter(|f| f.length_squared() > 1e-4).map(|f| f.y.atan2(f.x));
+        // A jump's aim is only the way it hops (the authority's dash direction: the travel), and
+        // it is drawn over whatever the body plays (`jump.rs`), so it keeps the body's facing:
+        // taken as a facing, it turned a body walking backwards or sideways to face its travel
+        // for the hop and back after (play-test 2). A dodge's roll is a forward take, so it
+        // still faces its dash.
+        let aimed = action.filter(|a| a.clip != crate::jump::CLIP).and_then(|a| a.face).filter(|f| f.length_squared() > 1e-4).map(|f| f.y.atan2(f.x));
         // Standing still, the body's own segment: its heading, turning on the spot by `turn` over
         // `turn_s` (the display clock may trail the row's start: then the turn has not begun).
         let row = crate::net::find_motion(conn, id);
@@ -441,18 +796,15 @@ fn bodies(
             }
             let h = h.unwrap_or(body.heading);
             let size = character.as_ref().map_or(1.0, |c| stage_scale(c.stage));
+            let mut composed = false;
             let (entity, height, person, beast) = if body.kind == "person" {
                 let c = character.as_ref().unwrap();
-                let seed = island.land.seed.wrapping_mul(0x9E37_79B9).wrapping_add(id as u64);
-                let mut recipe = if mine {
-                    std::env::var("LIVING_GAME_PLAYER").ok().and_then(|r| crate::characters::Recipe::parse(&r)).unwrap_or_else(|| crate::characters::Recipe::random(seed, "adult"))
-                } else {
-                    match folk_of(c) {
-                        (folk, Some(style)) => crate::characters::Recipe::random_in(seed, folk, &style),
-                        (folk, None) => crate::characters::Recipe::random(seed, folk),
-                    }
-                };
-                recipe.height *= stage_scale(c.stage);
+                let mut recipe = recipe_for(crate::characters::book::book(), island.land.seed, c);
+                // A line carries its own height; a VRoid recipe is scaled by life stage.
+                if recipe.person.is_none() {
+                    recipe.height *= stage_scale(c.stage);
+                }
+                composed = recipe.person.is_some();
                 let e = crate::characters::spawn(&mut commands, &assets, &recipe, at, yaw_of(Vec2::new(h.cos(), h.sin())));
                 (e, recipe.height, true, false)
             } else if let Some(e) = crate::bodies::spawn_beast(&mut commands, &assets, &body.kind, at, yaw_of(Vec2::new(h.cos(), h.sin())), size) {
@@ -466,17 +818,64 @@ fn bodies(
             // Coming into sight: fade in once the model can be seen (`fade.rs`).
             commands.entity(entity).insert((Motion::default(), crate::fade::Fade::appearing()));
             if mine {
-                commands.entity(entity).insert(crate::gait::Feet);
+                commands.entity(entity).insert((crate::gait::Feet, crate::gait::Logged(id)));
+            } else if crate::gait::logged_other() == Some(id) {
+                commands.entity(entity).insert(crate::gait::Logged(id));
             }
-            live.shown.insert(id, Shown { entity, last: p, speed: 0.0, person, beast, yaw: h, drawn: p, sitting: false, rising: None, startles, still: 0.0, startle: None, tilt: Quat::IDENTITY, kind: body.kind.clone(), face: h, back: false });
+            let look = character.as_ref().filter(|_| person).map(crate::characters::seen::of).unwrap_or_default();
+            live.shown.insert(id, Shown { entity, last: p, speed: 0.0, person, beast, yaw: h, drawn: p, sitting: false, rising: None, seat: None, startles, still: 0.0, startle: None, tilt: Quat::IDENTITY, kind: body.kind.clone(), face: h, back: false, turning: false, turn: None, jump: None, jump_key: -1.0, jump_took: false, walked: false, along: false, stop: None, stop_at: p, rest_at: None, calm_speed: 0.0, run_w: if row.as_ref().is_some_and(|r| r.running) { 1.0 } else { 0.0 }, look: look.look, composed });
             live.heights.insert(id, height);
             continue;
         }
+        // A new look key for someone drawn (a band change, a `relook`): redrawn in place.
+        if live.shown.get(&id).is_some_and(|s| s.person) {
+            if let Some(c) = conn.db.seen_characters().id().find(&id) {
+                let now = crate::characters::seen::of(&c);
+                if live.shown.get(&id).is_some_and(|s| s.look != now.look) {
+                    swap_look(&mut commands, &assets, &mut live, &mut q, (id, mine), &c, island.land.seed, now);
+                }
+            }
+        }
         let s = live.shown.get_mut(&id).unwrap();
+        let family = family(row.as_ref().map(|r| r.running), &mut s.run_w, dt, split);
+        // A person's clip file: its directional, turn, start and jump takes (`gait.rs`,
+        // `takes.rs`), and its pace and stride as drawn last frame.
+        let (gaits, pace, stride) = match q.get(s.entity) {
+            Ok((_, _, Some(m), ch, motion, _)) if s.person && crate::takes::enabled() => (Some(crate::gait::of(&crate::anim::clip_file(&m.file))), motion.pace, ch.map_or(1.0, |c| c.stride)),
+            _ => (None, 1.0, 1.0),
+        };
+        // A jump plays the take for its way, timed to the rules' hop, chosen once per jump from
+        // how the body moved before it and where the hop goes from its legs (`takes::jump_for`);
+        // without one, `jump.rs` draws it. The take plays on to its own end.
+        if let (Some(a), Some(g)) = (action.filter(|a| a.clip == crate::jump::CLIP), gaits.as_ref()) {
+            if s.jump_key != a.start_ms {
+                s.jump_key = a.start_ms;
+                let rel = a.face.filter(|f| f.length_squared() > 1e-4).map_or(0.0, |f| living_rules::steer::wrap(f.y.atan2(f.x) - s.yaw));
+                let moving = s.calm_speed > MOVING;
+                s.jump = crate::takes::jump_for(g, moving, rel).map(|(clip, rate, from, cut)| crate::takes::Playing { clip, start_ms: a.start_ms, rate, from, cut: Some(cut), yaw0: s.yaw, gait: moving });
+                s.jump_took = s.jump.is_some();
+            }
+        }
+        if action.is_some_and(|a| a.clip != crate::jump::CLIP) {
+            s.jump = None;
+        }
+        // Asked for until its fade out begins (`cut`), so the gait comes back under it as it fades;
+        // the rules' jump it stands for draws nothing after (no procedural jump over the landing).
+        s.jump = s.jump.filter(|j| j.cut.is_some_and(|c| j.t(scene.now_ms) < c) && combat.deaths.get(&id).is_none());
+        let action = match (s.jump, action) {
+            (Some(j), None) => Some(j.action()),
+            (Some(j), Some(a)) if a.clip == crate::jump::CLIP => Some(crate::combat::Action { face: a.face, ..j.action() }),
+            (None, Some(a)) if a.clip == crate::jump::CLIP && s.jump_key == a.start_ms && s.jump_took => None,
+            _ => action,
+        };
+        if action.is_none() {
+            s.calm_speed = s.speed;
+        }
         // Getting up from the ground before walking off: hold the seat while the clip plays.
         let sitting = show.idle == Some("sit_ground") && !show.hidden;
         if s.sitting && !sitting && s.rising.is_none() && action.is_none() && !mine {
             s.rising = Some((scene.now_ms, s.drawn));
+            info!("seat: #{id} gets up at ({:.2}, {:.2})", s.drawn.x, s.drawn.y);
         }
         s.sitting = sitting;
         // Taking flight from standing: startle where it stood first.
@@ -488,7 +887,36 @@ fn bodies(
         s.startle = s.startle.filter(|(t, _)| scene.now_ms - t < STARTLE.1);
         let auth_v = (p - s.last).length() / dt;
         s.last = p;
-        let held = s.rising.filter(|(t, _)| scene.now_ms - t < STAND_UP.2).map(|(_, at)| at).or(s.startle.map(|(_, at)| at));
+        // Stopping from a walk along the legs: the stop take plays and the body is drawn along its
+        // track from where it was, then stays there until it moves again (`takes::stop_for`).
+        let seg = scene.speeds.get(&id).copied().unwrap_or(0.0);
+        if let (Some(g), Ok(an), true) = (gaits.as_ref(), anims.get(s.entity), s.stop.is_none() && s.walked && s.along && seg <= 0.0 && action.is_none() && s.speed > MOVING) {
+            if let Some((clip, rate, from)) = crate::takes::stop_for(g, an.clip_phase(), s.speed / pace.max(0.5) / stride.max(0.05), family, s.speed) {
+                s.stop = Some(crate::takes::Playing { clip, start_ms: scene.now_ms, rate, from, cut: None, yaw0: s.yaw, gait: false });
+                s.stop_at = s.drawn;
+            }
+        }
+        let stop_len = s.stop.and_then(|st| gaits.as_ref().and_then(|g| g.info(st.clip)).map(|i| i.seconds)).unwrap_or(0.0);
+        let stop_at = s.stop.and_then(|st| {
+            let info = gaits.as_ref()?.info(st.clip)?;
+            let t = st.t(scene.now_ms).min(stop_len);
+            let o = info.path_at(t) - info.path_at(st.from);
+            let (fwd, left) = (Vec2::new(st.yaw0.cos(), st.yaw0.sin()), Vec2::new(st.yaw0.sin(), -st.yaw0.cos()));
+            Some(s.stop_at + fwd * o.y + left * o.x)
+        });
+        if let Some(st) = s.stop {
+            if seg > 0.0 || action.is_some() {
+                s.stop = None;
+            } else if st.t(scene.now_ms) >= stop_len {
+                s.stop = None;
+                s.rest_at = stop_at;
+            }
+        }
+        if seg > 0.0 || action.is_some() {
+            s.rest_at = None;
+        }
+        let stop_hold = if s.stop.is_some() { stop_at } else { s.rest_at };
+        let held = s.rising.filter(|(t, _)| scene.now_ms - t < STAND_UP.2).map(|(_, at)| at).or(s.startle.map(|(_, at)| at)).or(stop_hold);
         let before = s.drawn;
         match held {
             Some(seat) => s.drawn = seat,
@@ -516,29 +944,151 @@ fn bodies(
             Some(&seg) if on_segment => s.speed += (seg - s.speed) * (1.0 - (-dt * SLOWING).exp()),
             _ => s.speed += (v - s.speed) * (1.0 - (-dt * 8.0).exp()),
         }
-        // A person walking one way while looking another (my cursor, a move's aim): the legs keep
-        // to the travel, forward or backward, and the upper body turns toward the look.
-        let look_at = aimed.or(look);
+        // A person walking one way while looking another (my cursor, a move's aim): the head, then
+        // the chest take the look, and past their limits the legs come round on the look-walk's
+        // curve (`twist.rs`). The gait is the file's directional takes for the travel from where
+        // the legs face now, so a sudden turn of the travel sidesteps until they have come round.
+        // Else the authority's facing (look-2: a held look turns head and chest, never the walk),
+        // for every body: mine before my own look reaches the row, and everyone else's. My own
+        // look leads it, drawn ahead of the row (`docs/PERCEPTION.md`, "Drawing it").
+        let faced = row.as_ref().and_then(|m| authority_facing(m, if mine { scene.mine_ms } else { scene.now_ms }));
+        let look_at = aimed.or(look).or(faced);
+        let cursor_turn = look.filter(|_| cursor_mode && aimed.is_none() && s.person && action.is_none());
+        let lw = if cursor_turn.is_some() { &prefs.cursor_facing } else { &*lw };
+        // Backwards from where the authority's facing settles, when that is what the legs follow.
+        let settled = if aimed.is_none() && look.is_none() && faced.is_some() { row.as_ref().map(settled_offset) } else { None };
         let walking = s.person && s.speed > MOVING;
-        let (legs, back) = match (walking, look_at, heading) {
-            (true, Some(l), Some(t)) => {
-                let (y, b) = legs_and_twist(t, l, s.back);
-                (Some(y), b)
+        let takes = |t: f32, legs: f32| gaits.as_ref().is_some_and(|g| g.blend_toward(s.speed / pace.max(0.5), stride, family, living_rules::steer::wrap(t - legs), |_| 1.0).is_some());
+        // The travel from the legs for the directional takes, when they play.
+        let mut toward_t = None;
+        // A turn take playing: the legs follow its curve until it ends; walking or a move breaks
+        // it off where it is.
+        let mut turn_action = None;
+        // Seated on the ground or getting up: the ground clips hold the body, which a turn take
+        // (a standing clip) would lift to its feet.
+        let grounded = s.sitting || s.rising.is_some_and(|(t, _)| scene.now_ms - t < STAND_UP.2);
+        if let (Some(tp), Some(g)) = (s.turn, gaits.as_ref()) {
+            if walking || action.is_some() || cursor_turn.is_some() || grounded {
+                s.turn = None;
+            } else {
+                let (by, done) = crate::takes::turned(g, &tp, scene.now_ms);
+                // Along the take's curve, but never faster than [`TURN_MAX`]: a jump of the display
+                // clock ended a take in one frame and turned the legs 77° at once.
+                let d = living_rules::steer::wrap(tp.yaw0 + by - s.yaw);
+                s.yaw = living_rules::steer::wrap(s.yaw + d.clamp(-TURN_MAX * dt, TURN_MAX * dt));
+                let len = g.info(tp.clip).map_or(0.0, |i| i.seconds);
+                if done {
+                    s.turn = None;
+                } else if tp.t(scene.now_ms) < len - crate::anim::FADE_OUT * tp.rate {
+                    turn_action = Some(tp.action());
+                }
             }
-            _ => (h, false),
+        }
+        // Standing, legs that would swivel past `takes::TURN_ON` turn by a take instead: toward the
+        // look, a standing body's own heading (where its segment's turn ends: `turn` is a rate
+        // over `turn_s`, as `standing` above follows it) or its activity.
+        let standing_to = row.as_ref().filter(|b| b.vx == 0.0 && b.vy == 0.0).map(|b| b.heading + if b.turn_s > 0.0 { b.turn * b.turn_s } else { 0.0 });
+        let turn_to = if cursor_turn.is_some() || grounded { None } else { look_at.or(busy).or(standing_to.filter(|_| slow)) };
+        if let (Some(g), Some(to), None, false, None, None) = (gaits.as_ref(), turn_to, s.turn, walking, action, s.stop) {
+            if s.speed < crate::anim::STEP_OFF {
+                if let Some(clip) = crate::takes::turn_for(g, living_rules::steer::wrap(to - s.yaw)) {
+                    let tp = crate::takes::Playing { clip, start_ms: scene.now_ms, rate: crate::takes::TURN_RATE, from: 0.0, cut: None, yaw0: s.yaw, gait: false };
+                    s.turn = Some(tp);
+                    s.turning = false;
+                    turn_action = Some(tp.action());
+                }
+            }
+        }
+        let mut back = false;
+        // Setting off the authority moves the body before the drawn speed is up to a walk: the
+        // legs already follow the walk's curve then (as standing they turned at the yaw rate,
+        // 35° a frame).
+        let stepping = walking || (s.person && s.turn.is_none() && scene.speeds.get(&id).is_some_and(|v| *v > MOVING));
+        let legs = match (cursor_turn, stepping, look_at, heading) {
+            (Some(goal), _, _, _) => {
+                s.turning = false;
+                let body_goal = heading.filter(|_| stepping).map_or(goal, |travel| {
+                    let limit = lw.body_deg.to_radians();
+                    travel + living_rules::steer::wrap(goal - travel).clamp(-limit, limit)
+                });
+                s.yaw = lw.ease(s.yaw, body_goal, dt);
+                s.face = goal;
+                toward_t = heading.filter(|&t| stepping && gaits.as_ref().is_some_and(|g| {
+                    g.blend_cursor(s.speed / pace.max(0.5), stride, family, living_rules::steer::wrap(t - s.yaw), |_| 1.0).is_some()
+                }));
+                back = stepping && heading.is_some_and(|t| living_rules::steer::wrap(t - s.yaw).abs().to_degrees() > lw.back_deg);
+                None
+            }
+            _ if s.turn.is_some() => None,
+            // Seated on the ground or getting up, the body keeps the way it sat (its cloth's
+            // seat is fixed behind it); the head and chest still take a look.
+            _ if s.person && grounded && action.is_none() => Some(s.yaw),
+            // Walking and looking: the legs ease toward the travel turned by what the head and
+            // chest leave (or its reverse, looking back), and the takes for the travel from them
+            // play; where the file has none there, the forward gaits along the travel (reversed
+            // backwards), the legs taken round at the old rate.
+            (_, true, Some(l), Some(t)) => {
+                let (goal, b) = lw.legs_goal(t, l, settled, s.back, |legs| takes(t, legs));
+                back = b;
+                // Always eased (a snap at the old rate turned the legs 25–39° a frame setting off
+                // from a standing turn); without a take there, the forward gaits play meanwhile.
+                s.yaw = lw.ease(s.yaw, goal, dt);
+                if takes(t, s.yaw) {
+                    toward_t = Some(t);
+                }
+                None
+            }
+            // Standing and looking, with no move under way (a move turns the whole body to its
+            // aim, as a dodge's roll must): the legs stay until the look is well away, then turn.
+            // While a stop take plays the legs hold (the upper body takes the look): no turn take
+            // can start then, and they swivelled at the yaw rate, 40° a frame.
+            (_, false, Some(_), _) if s.person && action.is_none() && s.stop.is_some() => Some(s.yaw),
+            (_, false, Some(l), _) if s.person && action.is_none() => {
+                let off = living_rules::steer::wrap(l - s.yaw).abs();
+                s.turning = if s.turning { off > STAND_TURN_OFF } else { off > STAND_TURN_ON.min(lw.upper()) };
+                Some(if s.turning { l } else { s.yaw })
+            }
+            _ => h,
         };
+        if !(s.person && !walking && look_at.is_some() && action.is_none()) {
+            s.turning = false;
+        }
         s.back = back;
+        s.walked = walking;
+        s.along = walking && !back && heading.is_some_and(|t| living_rules::steer::wrap(t - s.yaw).abs() <= ALONG);
         let k = 1.0 - (-dt * YAW_RATE).exp();
         if let Some(y) = legs {
             s.yaw = living_rules::steer::wrap(s.yaw + living_rules::steer::wrap(y - s.yaw) * k);
         }
-        if let Some(f) = look_at.filter(|_| walking).or(legs) {
+        if let Some(f) = look_at.filter(|_| walking || s.person).or(legs) {
             s.face = living_rules::steer::wrap(s.face + living_rules::steer::wrap(f - s.face) * k);
         }
-        let twist = if s.person { living_rules::steer::wrap(s.face - s.yaw).clamp(-TWIST_MAX, TWIST_MAX) } else { 0.0 };
-        let reverse = s.back;
+        // Head first, then the chest (`twist::LookWalk::split`); the eyes take a little of what
+        // they leave of the look itself.
+        let (twist, neck, eyes) = if s.person {
+            let (t, n, _) = lw.split(living_rules::steer::wrap(s.face - s.yaw));
+            let most = lw.eyes_deg.to_radians();
+            let e = look_at.map_or(0.0, |l| living_rules::steer::wrap(l - s.yaw - t).clamp(-most, most));
+            (t, n, e)
+        } else {
+            (0.0, 0.0, 0.0)
+        };
+        // The travel from where the legs are drawn facing now (the game's sense: + to the right).
+        let travel = toward_t.map_or(0.0, |t| living_rules::steer::wrap(t - s.yaw));
+        if mine {
+            let face = if cursor_mode {
+                row.as_ref().map_or(s.face, |m| faced.unwrap_or_else(|| authority_travel(m, scene.mine_ms)))
+            } else {
+                s.face
+            };
+            my_face = Some(Vec2::new(face.cos(), face.sin()));
+        }
+        // Walking backwards on the forward gaits where the file has no take for it.
+        let reverse = toward_t.is_none() && stepping && heading.is_some_and(|t| living_rules::steer::wrap(t - s.yaw).abs() > PI / 2.0);
         let (speed, person, beast, yaw) = (s.speed, s.person, s.beast, s.yaw);
         let rising = s.rising.filter(|(t, _)| scene.now_ms - t < STAND_UP.2).map(|(t, _)| t);
+        // A stop take is asked for until its fade out, when standing takes over (`anim.rs`).
+        let stop_action = s.stop.filter(|st| st.t(scene.now_ms) < stop_len - crate::anim::FADE_OUT * st.rate).map(|st| st.action());
         let startle = s.startle.map(|(t, _)| crate::combat::Action { clip: STARTLE.0, rate: 1.0, start_ms: t, hold: None, face: None, ..Default::default() });
         let dir = Vec2::new(yaw.cos(), yaw.sin());
         // A rigged creature is drawn at its file's size times its life stage's (it grows up), its
@@ -551,6 +1101,22 @@ fn bodies(
         } else {
             (ground, Quat::IDENTITY)
         };
+        // Seated on the ground (and getting up): the cloth's contact with it, fixed for the sit at
+        // the clips' seat, and let go once the clips have the body off the ground.
+        if s.person && (s.sitting || rising.is_some()) {
+            if s.seat.is_none() {
+                let seat = seat_anchor(&island, p, dir);
+                // The animation its seated loop plays (a variant's, `anim::variants`).
+                let plays = anims.get(s.entity).map_or("sit_ground", |a| a.played("sit_ground"));
+                info!("seat: #{id} sits on the ground at ({:.2}, {:.3}, {:.2}), normal ({:.3}, {:.3}, {:.3}), plays {plays}", seat.point.x, seat.point.y, seat.point.z, seat.normal.x, seat.normal.y, seat.normal.z);
+                s.seat = Some(seat);
+                commands.entity(s.entity).try_insert(seat);
+            }
+        } else if s.seat.is_some() && anims.get(s.entity).map_or(0.0, |a| a.ground_seat()) <= 0.0 {
+            s.seat = None;
+            info!("seat: #{id} is off the ground");
+            commands.entity(s.entity).try_remove::<crate::characters::SeatAnchor>();
+        }
         let Ok((mut tf, fitted, mut model, ch, mut motion, vis)) = q.get_mut(s.entity) else { continue };
         tf.translation.x = p.x;
         tf.translation.z = p.y;
@@ -585,10 +1151,16 @@ fn bodies(
         motion.speed = speed;
         motion.stride = ch.map_or(size, |c| c.stride);
         motion.stand = if talking.contains(&id) { "talk" } else { show.idle.unwrap_or("idle") };
-        motion.action = action.or(rising.map(|t| crate::combat::Action { clip: STAND_UP.0, rate: STAND_UP.1, start_ms: t, hold: None, face: None, ..Default::default() })).or(startle);
+        motion.action = action.or(rising.map(|t| crate::combat::Action { clip: STAND_UP.0, rate: STAND_UP.1, start_ms: t, hold: None, face: None, ..Default::default() })).or(startle).or(turn_action).or(stop_action);
         motion.now_ms = scene.now_ms;
         motion.reverse = reverse;
         motion.twist = twist;
+        motion.neck = neck;
+        motion.eyes = eyes;
+        motion.aim = person && look_at.is_some();
+        motion.travel = travel;
+        motion.cursor_facing = cursor_turn.is_some();
+        motion.family = family;
         motion.freeze = motion.action.is_some_and(|a| a.clip == crate::jump::CLIP) && crate::jump::airborne(&motion) > 0.05;
         // On a road the rules speed a body up (`road_speed`, by the share of road ahead): the
         // gait is chosen at its own pace, so walking onto a road doesn't break into a run.
@@ -600,40 +1172,34 @@ fn bodies(
             _ => 1.0,
         };
     }
+    input.face = my_face;
 }
 
-/// Follow my displayed body: the camera's target, the island's streaming centre and the
+/// Follow my displayed body: the island's streaming centre and the
 /// atmosphere's regions. Before I have a body, the island streams round the arrival point.
-fn me(net: NonSend<Net>, scene: NonSend<Scene>, island: Option<Res<Island>>, live: Res<Live>, mut target: ResMut<Target>, mut roam: ResMut<Roam>) {
-    let Some(island) = island else { return };
-    match net.my_id.and_then(|id| scene.shown.get(&id).map(|s| (id, s.0))) {
-        Some((id, p)) => {
-            let speed = live.shown.get(&id).map_or(0.0, |s| s.speed);
-            if p.distance(roam.pos) > 1e-3 {
-                roam.facing = (p - roam.pos).normalize_or(roam.facing);
-            }
-            roam.pos = p;
-            roam.moving = speed > MOVING;
-            roam.running = speed > RUNNING;
-            roam.speed = speed;
-            target.0 = Some(Vec3::new(p.x, island.height(p.x, p.y), p.y));
+fn me(net: NonSend<Net>, scene: NonSend<Scene>, island: Option<Res<Island>>, live: Res<Live>, mut roam: ResMut<Roam>) {
+    if island.is_none() { return; }
+    if let Some((id, p)) = net.my_id.and_then(|id| scene.shown.get(&id).map(|s| (id, s.0))) {
+        let speed = live.shown.get(&id).map_or(0.0, |s| s.speed);
+        if p.distance(roam.pos) > 1e-3 {
+            roam.facing = (p - roam.pos).normalize_or(roam.facing);
         }
-        None => target.0 = None,
+        roam.pos = p;
+        roam.moving = speed > MOVING;
+        // The authority's word, as for the clips; the laws' split without a row.
+        roam.running = match net.conn.as_ref().and_then(|c| crate::net::find_motion(c, id)) {
+            Some(m) => m.running,
+            None => live.walk_run.and_then(|w| w.1).is_some_and(|v| speed > v),
+        };
+        roam.speed = speed;
     }
 }
 
-/// Where the cursor meets the island's ground (the camera's own ray uses the tile ground). The
-/// eye's height over the island's hills is the camera's own (`camera::follow`).
-fn ground_cursor(island: Option<Res<Island>>, mut cam: ResMut<Cam>, cams: Query<(&Camera, &GlobalTransform), With<Camera3d>>, pointer: Res<crate::pointer::Pointer>) {
-    let Some(island) = island else { return };
-    let Ok((camera, gtf)) = cams.single() else { return };
-    let Some(c) = pointer.pos else { return };
-    let Ok(ray) = camera.viewport_to_world(gtf, c) else { return };
-    let (o, d) = (ray.origin, *ray.direction);
-    let below = |p: Vec3| p.y <= island.height(p.x, p.z);
+/// Intersect the camera ray with the island's sampled terrain height.
+pub(crate) fn ray_ground(island: &Island, o: Vec3, d: Vec3) -> Option<Vec3> {
+    let below = |p: Vec3| p.y <= island.foot_height(p.x, p.z);
     let mut prev = o;
     let mut t = 0.0;
-    cam.cursor_ground = None;
     while t < 400.0 {
         t += 1.0;
         let p = o + d * t;
@@ -647,11 +1213,11 @@ fn ground_cursor(island: Option<Res<Island>>, mut cam: ResMut<Cam>, cams: Query<
                     lo = mid;
                 }
             }
-            cam.cursor_ground = Some(hi);
-            return;
+            return Some(hi);
         }
         prev = p;
     }
+    None
 }
 
 /// Every 10 s: what the client holds from the authority, for measurements.
@@ -682,10 +1248,10 @@ fn report(net: NonSend<Net>, live: Res<Live>, time: Res<Time>, mut next: Local<f
             .sum()
     });
     info!(
-        "live: cache body {} character {} doing {} act_card {} weather {} lot {} terrain_chunk {} ({} tiles edited) settlement {} experience {}; drawn {} characters, {} lots; window moves {}; digests {}",
-        conn.db.my_body().count() + conn.db.seen_bodies().count(),
+        "live: cache body {} character {} doing {} act_card {} weather {} lot {} terrain_chunk {} ({} tiles edited) settlement {} experience {}; drawn {} characters, {} lots; window moves {}; digests {}; cue overlays {:?}",
+        conn.db.my_body().count() + crate::net::motion::all(&conn.db).count() + crate::net::motion::near(&conn.db).count() + crate::net::motion::far(&conn.db).count(),
         conn.db.seen_characters().count(),
-        conn.db.my_doing().count() + conn.db.seen_doing().count(),
+        conn.db.my_doing().count() + crate::net::activity::all(&conn.db).count() + crate::net::activity::near(&conn.db).count() + crate::net::activity::far(&conn.db).count(),
         conn.db.act_card().count(),
         conn.db.weather().iter().next().map_or("none", |w| if w.raining { "rain" } else { "dry" }),
         conn.db.lot().count(),
@@ -700,7 +1266,8 @@ fn report(net: NonSend<Net>, live: Res<Live>, time: Res<Time>, mut next: Local<f
             Some(true) => "match",
             Some(false) => "DIFFER",
             None => "pending",
-        }
+        },
+        conn.cue_counts()
     );
 }
 
@@ -713,14 +1280,23 @@ fn report(net: NonSend<Net>, live: Res<Live>, time: Res<Time>, mut next: Local<f
 ///   `hold:DEG[:run]` holds it and goes straight on to the next step (a skill or a gesture
 ///   while walking), until `stop`;
 /// - `look:DEG`: face that way (0 = north, 90 = east) as the cursor would make me, until `look:`
-///   (a headless run has no cursor); `cursor:X,Y` puts the game's cursor there (fractions of the
-///   picture; `cursor:` takes it away), and `pan:PX`, `drag:PX` and `pinch:F` turn the view or
+///   (a headless run has no cursor); `lookwalk:PRESET[,key=value…]` sets how the body looks aside
+///   while walking (`twist::LookWalk::parse`); `cursor:X,Y` puts the game's cursor there (fractions of the
+///   picture, or `@NAME`, a tagged node; `cursor:` takes it away), `pointat:X,Y[:H]` keeps it on a point
+///   of the world (sim m, H m above the ground), `nudge:DX,DY` moves it by logical px
+///   (an open wheel takes it as motion), `wheel:DIR` points the open wheel as the arrows do, and `pan:PX`, `drag:PX` and `pinch:F` turn the view or
 ///   zoom through the pointer's paths (`pointer.rs`: a two-finger pan, a left drag, a pinch);
+///   `motion:DX,DY` supplies one frame of mouse motion and `rotate:DEG` sends a clockwise
+///   rotation gesture; use `mouse:middle:down|up` around motion for a middle drag;
 ///   `frame:0` stops the view framing fights, talks and greetings (`frame:1` again);
 /// - `goto:X,Y`: click-to-move (`human_act` with `goto`); `yaw:DEG`: turn the view;
 ///   `view:PITCH:DISTANCE[:FOV]`: the game camera's pitch (deg), distance (m) and field of view
 ///   (photographing small things up close);
 /// - `say:TEXT`: proximity chat (`human_say`);
+/// - `sightlook:NAME`: how "not seen now" is drawn, among the looks under trial
+///   (`sightedge::Look`; `LIVING_SIGHT_LOOK` sets the first);
+/// - `shine:NAME`: the hair shine (`style::HAIR_SHINES`: crown, soft, today), as Settings › Play ›
+///   Hair shine sets it, but leaving the open windows be (captures);
 /// - `skill:NAME[:AIM]`: use a skill-bar skill through `use_skill` (`combat.rs`); AIM is
 ///   `nearest`, a creature kind (`wolf`) or `DX,DY` metres from me; `release:NAME` lets go of
 ///   a held one; `aim:NAME[:AIM]` shows its indicator (until `aim:`);
@@ -737,11 +1313,23 @@ fn report(net: NonSend<Net>, live: Res<Live>, time: Res<Time>, mut next: Local<f
 /// - `key:NAME:down|up|tap` and `mouse:left|right|middle:down|up`: a key or button as the
 ///   window would report it (`KeyE`, `KeyQ`, `Enter`, `ShiftLeft`, …), read by every input
 ///   system this frame; `chat:open|close` opens or closes the text box, as Enter and Esc do;
+///   `tap` is a left tap as the pointer reports one (a strike, or talk to a peaceful person);
+///   `click:X,Y` clicks there (fractions of the picture; `@NAME` is a tagged node of the game
+///   UI, `ui/hit.rs` `Tag`), `slide:A>B[:SECS]` holds the click at A and slides to B (a
+///   title-bar drag, an item onto someone), `scroll:PX` swipes
+///   two fingers over a window, `point:ID[:H]` puts the cursor on someone (hovering them; H m above their feet, default 0.3, e.g. 1.3 for the chest),
+///   `dodge:W|A|S|D` double-taps a direction, `weapon:toggle|draw|sheathe` is X, and `dump:NAME`
+///   writes the game UI's state to `<dir>/NAME.json` (`ui::dump`);
+///   `type:TEXT` puts words in it, `tab` speaks to the next person within earshot, and `enter`
+///   says the words to whom it addresses (`talk.rs`), as Tab and Enter do;
 /// - `dead`: until the death screen shows; `rejoin`: its "arrive again" button; `joined`:
 ///   until a new character is mine;
 /// - `quit`.
-/// A key of the `key:` step.
+/// A key of the `key:` step: any the bindings know (`keys.rs`), by its `KeyCode` name.
 fn key_code(name: &str) -> Option<KeyCode> {
+    if let Some(k) = crate::keys::key_named(name) {
+        return Some(k);
+    }
     Some(match name {
         "KeyQ" => KeyCode::KeyQ,
         "KeyE" => KeyCode::KeyE,
@@ -758,6 +1346,8 @@ fn key_code(name: &str) -> Option<KeyCode> {
         "Escape" => KeyCode::Escape,
         "ShiftLeft" => KeyCode::ShiftLeft,
         "Space" => KeyCode::Space,
+        "F2" => KeyCode::F2,
+        "F3" => KeyCode::F3,
         _ => return None,
     })
 }
@@ -768,7 +1358,31 @@ pub struct Script {
     steps: Vec<String>,
     at: usize,
     since: f32,
+    /// Frames into this step (1 on its first), and when a slide's button went down (s).
+    frames: u32,
+    held: f32,
+    pts: Option<(Vec2, Vec2)>,
+    /// `point:ID[:H]`: the cursor follows this character, H m above its feet.
+    pointing: Option<(u64, f32)>,
+    /// `pointat:X,Y[:H]`: keep the cursor on a point of the world (sim m, H m above the ground).
+    pointing_at: Option<(Vec2, f32)>,
     started: Option<u32>,
+    /// The process that launched this scripted client (its parent at start, unix), and when it
+    /// was last looked at (s): a script nobody drives any more ends itself.
+    parent: Option<u32>,
+    parent_check: f32,
+}
+
+/// This process's parent (unix; none elsewhere).
+fn parent_pid() -> Option<u32> {
+    #[cfg(unix)]
+    {
+        Some(std::os::unix::process::parent_id())
+    }
+    #[cfg(not(unix))]
+    {
+        None
+    }
 }
 
 impl Script {
@@ -776,7 +1390,7 @@ impl Script {
         let dir = std::env::var("LIVING_GAME_LIVE").ok().filter(|d| !d.is_empty())?;
         std::fs::create_dir_all(&dir).ok()?;
         let plan = std::env::var("LIVING_GAME_LIVE_PLAN").unwrap_or_else(|_| "ready;wait:3;shot:join;walk:0:6;shot:street;say:Good morning!;wait:1;shot:say;wait:20;shot:later;quit".into());
-        Some(Self { dir: dir.into(), steps: plan.split(';').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect(), at: 0, since: 0.0, started: None })
+        Some(Self { dir: dir.into(), steps: plan.split(';').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect(), at: 0, since: 0.0, frames: 0, held: 0.0, pts: None, pointing: None, pointing_at: None, started: None, parent: parent_pid(), parent_check: 0.0 })
     }
 }
 
@@ -792,16 +1406,60 @@ fn script(
     mut input: ResMut<Input>,
     mut cam: ResMut<Cam>,
     mut out: ResMut<crate::ui::model::Outbox>,
-    (mut skills, mut gestures, mut verbs): (ResMut<crate::combat::Scripted>, ResMut<crate::town::Scripted>, ResMut<crate::verbs::Scripted>),
+    (mut skills, mut gestures, mut verbs, mut talk): (ResMut<crate::combat::Scripted>, ResMut<crate::town::Scripted>, ResMut<crate::verbs::Scripted>, ResMut<crate::talk::Talk>),
     (hud, loading, mut pointer): (Res<crate::ui::model::HudModel>, Option<Res<crate::loading::Loading>>, ResMut<crate::pointer::Pointer>),
-    target: Option<Res<crate::capture::Target>>,
-    (mut keys, mut buttons): (ResMut<ButtonInput<KeyCode>>, ResMut<ButtonInput<MouseButton>>),
-    time: Res<Time>,
-    mut exit: MessageWriter<AppExit>,
+    (target, mut sight, mut shine): (Option<Res<crate::capture::Target>>, Option<ResMut<crate::sightedge::SightEdge>>, ResMut<crate::style::HairShine>),
+    (mut keys, mut buttons, mut motion, mut rotation): (
+        ResMut<ButtonInput<KeyCode>>, ResMut<ButtonInput<MouseButton>>,
+        ResMut<bevy::input::mouse::AccumulatedMouseMotion>, MessageWriter<bevy::input::gestures::RotationGesture>,
+    ),
+    (mut dump, mut taps, ui): (ResMut<crate::ui::Dump>, ResMut<crate::keys::DoubleTap>, Res<crate::ui::hit::UiPointer>),
+    (time, mut exit, cams, mut weapon, mut lw, mut wheel): (Res<Time>, MessageWriter<AppExit>, Query<(&Camera, &GlobalTransform), With<Camera3d>>, ResMut<crate::weapon::Weapon>, ResMut<crate::twist::LookWalk>, MessageWriter<bevy::input::mouse::MouseWheel>),
 ) {
+    // A point: X,Y as fractions of the picture, or @NAME, a tagged node of the game UI.
+    let frac = |v: &str| match v.strip_prefix('@') {
+        Some(tag) => {
+            // Exactly, else the first tag it begins (`@acts:0:give` finds `acts:0:give:3`).
+            let at = ui.tags.get(tag).copied().or_else(|| ui.tags.iter().find(|(k, _)| k.starts_with(&format!("{tag}:"))).map(|(_, v)| *v));
+            if at.is_none() {
+                warn!("live script: no UI node tagged {tag} is shown");
+            }
+            at
+        }
+        None => v.split_once(',').and_then(|(x, y)| Some(Vec2::new(x.trim().parse().ok()?, y.trim().parse().ok()?))),
+    };
     let dt = time.delta_secs();
+    // The driver that launched me is gone (a crashed or killed drive.py: I would wait on its
+    // `sync:` files for ever): quit (verify-ui drive-reap-1).
+    s.parent_check += dt;
+    if s.parent_check >= 1.0 {
+        s.parent_check = 0.0;
+        if let (Some(was), Some(now)) = (s.parent, parent_pid()) {
+            if was != now {
+                warn!("live script: my launcher (pid {was}) is gone (parent now {now}); quitting");
+                exit.write(AppExit::error());
+                return;
+            }
+        }
+    }
+    if let Some((id, lift)) = s.pointing {
+        let at = hud.actors.iter().find(|a| a.id == id).and_then(|a| {
+            let ground = island.as_ref().map_or(a.head - Vec3::Y * (2.2 - lift), |i| Vec3::new(a.head.x, i.foot_height(a.head.x, a.head.z) + lift, a.head.z));
+            cams.iter().find_map(|(c, t)| Some((c.world_to_viewport(t, ground).ok()?, c.logical_viewport_size()?)))
+        });
+        if let Some((p, size)) = at {
+            pointer.scripted = Some(p / size);
+        }
+    }
+    if let Some((at, lift)) = s.pointing_at {
+        let p3 = island.as_ref().map_or(Vec3::new(at.x, lift, at.y), |i| Vec3::new(at.x, i.foot_height(at.x, at.y) + lift, at.y));
+        if let Some((p, size)) = cams.iter().find_map(|(c, t)| Some((c.world_to_viewport(t, p3).ok()?, c.logical_viewport_size()?))) {
+            pointer.scripted = Some(p / size);
+        }
+    }
     let Some(step) = s.steps.get(s.at).cloned() else { return };
     s.since += dt;
+    s.frames += 1;
     let mine = net.my_id.and_then(|id| scene.shown.get(&id).map(|p| (id, p.0)));
     let mut parts = step.splitn(2, ':');
     let (verb, arg) = (parts.next().unwrap_or(""), parts.next().unwrap_or(""));
@@ -848,7 +1506,7 @@ fn script(
         "goto" => {
             if let (Some(conn), Some((x, y))) = (net.conn.as_ref(), arg.split_once(',').and_then(|(x, y)| Some((x.trim().parse::<f32>().ok()?, y.trim().parse::<f32>().ok()?)))) {
                 let node = serde_json::json!({"do": {"skill": "goto", "target": {"at": [x, y]}}}).to_string();
-                let r = conn.reducers.human_act_then(node, net.on_reply("goto"));
+                let r = conn.reducers.human_act_then(node.clone(), net.on_reply("goto", "human_act", || serde_json::json!({"node": node})));
                 net.report("goto", r);
                 input.scripted = None;
             }
@@ -862,16 +1520,185 @@ fn script(
             cam.rig.frame = arg != "0";
             true
         }
+        "nudge" => {
+            // The cursor moved by DX,DY logical px (a held wheel takes it as motion).
+            s.pointing = None;
+            s.pointing_at = None;
+            if let Some((dx, dy)) = arg.split_once(',').and_then(|(x, y)| Some((x.trim().parse::<f32>().ok()?, y.trim().parse::<f32>().ok()?))) {
+                let size = crate::capture::size().as_vec2();
+                pointer.scripted = pointer.scripted.map(|f| f + Vec2::new(dx, dy) / size);
+            }
+            true
+        }
+        "wheel" => {
+            verbs.wheel = Some(arg.to_string());
+            true
+        }
         "cursor" => {
-            pointer.scripted = arg.split_once(',').and_then(|(x, y)| Some(Vec2::new(x.trim().parse().ok()?, y.trim().parse().ok()?)));
+            // X,Y (fractions of the picture) or @NAME (a tagged node: hovering a slot, a button).
+            s.pointing = None;
+            s.pointing_at = None;
+            pointer.scripted = frac(arg);
+            true
+        }
+        "tap" => {
+            // A left tap, as the pointer reports one (`pointer.rs`): a strike, or on a peaceful
+            // person the text box to them (`combat.rs`).
+            pointer.scripted_tap = true;
+            true
+        }
+        "click" => {
+            // A left click on the game UI at X,Y (fractions of the picture): the cursor goes
+            // there and the button goes down, and up on the next frame (`ui/hit.rs`).
+            // The cursor first: the pointer places it at the start of the next frame.
+            match s.frames {
+                1 => {
+                    s.pointing = None;
+            s.pointing_at = None;
+                    pointer.scripted = frac(arg);
+                    false
+                }
+                2 => {
+                    buttons.press(MouseButton::Left);
+                    false
+                }
+                _ => {
+                    buttons.release(MouseButton::Left);
+                    true
+                }
+            }
+        }
+        "slide" => {
+            // Hold the click at X1,Y1 and slide to X2,Y2 over SECS (default 0.5), then let go:
+            // a title-bar drag, an item dragged onto someone (a three-finger drag is the same).
+            // Points are separated by '>' (tags contain ':'): `slide:@pack:berries>0.5,0.5:0.6`.
+            let (pts, secs_s) = match arg.rsplit_once(':').filter(|(_, t)| t.parse::<f32>().is_ok()) {
+                Some((p, t)) => (p, t),
+                None => (arg, ""),
+            };
+            let a: Vec<&str> = pts.split('>').collect();
+            // Resolved once, on the step's first frame: a dragged window moves its own tags.
+            if s.frames == 1 {
+                s.pts = a.first().and_then(|v| frac(v)).zip(a.get(1).and_then(|v| frac(v)));
+            }
+            let (from, to) = (s.pts.map(|p| p.0), s.pts.map(|p| p.1));
+            let secs: f32 = secs_s.parse().unwrap_or(0.5);
+            match (from, to) {
+                (Some(f), Some(t)) => {
+                    if s.frames == 1 {
+                        s.pointing = None;
+            s.pointing_at = None;
+                        pointer.scripted = Some(f);
+                        false
+                    } else if s.frames == 2 {
+                        buttons.press(MouseButton::Left);
+                        s.held = s.since;
+                        false
+                    } else if s.since - s.held < secs + 0.1 {
+                        let k = ((s.since - s.held - 0.05) / secs).clamp(0.0, 1.0);
+                        pointer.scripted = Some(f.lerp(t, k));
+                        false
+                    } else {
+                        pointer.scripted = Some(t);
+                        buttons.release(MouseButton::Left);
+                        true
+                    }
+                }
+                _ => {
+                    warn!("live script: slide wants A>B[:SECS], got {arg}");
+                    true
+                }
+            }
+        }
+        "pointat" => {
+            // Keep the cursor on a point of the world (a thing's place), as `point:` on someone.
+            let (xy, h) = arg.rsplit_once(':').map_or((arg, 0.5), |(a, h)| (a, h.parse().unwrap_or(0.5)));
+            s.pointing = None;
+            s.pointing_at = None;
+            s.pointing_at = xy.split_once(',').and_then(|(x, y)| Some((Vec2::new(x.trim().parse().ok()?, y.trim().parse().ok()?), h)));
+            true
+        }
+        "point" => {
+            // Keep the cursor on character ID as drawn (their feet, where the cursor's ground
+            // point finds them), frame after frame as the camera eases: hovering them, as a
+            // player keeps pointing. Until a `cursor:` step or another `point:`.
+            s.pointing_at = None;
+            s.pointing = match arg.split_once(':') {
+                Some((id, h)) => id.parse().ok().map(|id| (id, h.parse().unwrap_or(0.3))),
+                None => arg.parse().ok().map(|id| (id, 0.3)),
+            };
+            true
+        }
+        "weapon" => {
+            // As X: `weapon:toggle` (or `draw`, `sheathe`).
+            weapon.scripted = Some(match arg {
+                "draw" => true,
+                "sheathe" => false,
+                _ => !weapon.drawn,
+            });
+            true
+        }
+        "scroll" => {
+            pointer.scripted_scroll += arg.parse::<f32>().unwrap_or(0.0);
+            true
+        }
+        "dump" => {
+            // The game UI's state as JSON (`ui::dump`): open windows, anchors, rectangles.
+            dump.0 = Some(s.dir.join(format!("{arg}.json")));
+            true
+        }
+        "dodge" => {
+            // A double tap of a direction key (W, A, S or D), as the dodge's default binding.
+            let a = match arg {
+                "W" | "w" | "forward" => crate::keys::Act::Forward,
+                "S" | "s" | "back" => crate::keys::Act::Back,
+                "A" | "a" | "left" => crate::keys::Act::Left,
+                _ => crate::keys::Act::Right,
+            };
+            taps.scripted = Some(a);
             true
         }
         "pan" | "drag" => {
             pointer.scripted_turn += arg.parse::<f32>().unwrap_or(0.0) * if verb == "pan" { 0.6 } else { 1.0 };
             true
         }
+        "reconnect" => {
+            if let Some(conn) = &net.conn {
+                let _ = conn.disconnect();
+            }
+            true
+        }
+        "motion" => {
+            if let Some((x, y)) = arg.split_once(',').and_then(|(x, y)| Some((x.parse().ok()?, y.parse().ok()?))) {
+                motion.delta += Vec2::new(x, y);
+            }
+            true
+        }
+        "rotate" => {
+            if let Ok(degrees) = arg.parse::<f32>() {
+                rotation.write(bevy::input::gestures::RotationGesture(-degrees));
+            }
+            true
+        }
+        "notches" => {
+            use bevy::input::{mouse::{MouseScrollUnit, MouseWheel}, touch::TouchPhase};
+            if let Ok(y) = arg.parse() {
+                wheel.write(MouseWheel { unit: MouseScrollUnit::Line, x: 0.0, y, window: Entity::PLACEHOLDER, phase: TouchPhase::Moved });
+            }
+            true
+        }
         "pinch" => {
             pointer.scripted_zoom *= 1.0 - arg.parse::<f32>().unwrap_or(0.0);
+            true
+        }
+        "lookwalk" => {
+            match crate::twist::LookWalk::parse(arg) {
+                Ok(p) => {
+                    info!("live script: look-walk {} (head {}°, chest {}°, body {}° over {} s, backwards past {}°)", p.name, p.head_deg, p.chest_deg, p.body_deg, p.body_s, p.back_deg);
+                    *lw = p;
+                }
+                Err(e) => warn!("live script: lookwalk:{arg}: {e}"),
+            }
             true
         }
         "look" => {
@@ -888,7 +1715,30 @@ fn script(
             true
         }
         "say" => {
-            out.say.push(arg.to_string());
+            out.say.push((arg.to_string(), 0));
+            true
+        }
+        "sightlook" => {
+            // The looks of "not seen now" under trial (`sightedge::Look`), for captures.
+            match (crate::sightedge::Look::parse(arg), sight.as_deref_mut()) {
+                (Some(l), Some(e)) => {
+                    e.look = l;
+                    info!("sight edge: look {l:?}");
+                }
+                _ => warn!("live script: no look {arg:?}"),
+            }
+            true
+        }
+        "shine" => {
+            // The hair shine (`style::HAIR_SHINES`), as Settings sets it, without opening
+            // Settings (which closes the other windows): to compare shines from one view.
+            match crate::style::HairShine::parse(arg) {
+                Some(x) => {
+                    *shine = x;
+                    info!("hair shine: {arg}");
+                }
+                None => warn!("live script: no hair shine {arg:?}"),
+            }
             true
         }
         "skill" | "aim" => {
@@ -970,9 +1820,27 @@ fn script(
             }
             true
         }
+        "type" => {
+            // Words typed into the open text box.
+            input.chat = arg.to_string();
+            true
+        }
+        "tab" => {
+            talk.cycle = true;
+            true
+        }
+        "enter" => {
+            // As Enter in the open text box: said to whom it addresses (`talk.rs`).
+            let line = std::mem::take(&mut input.chat);
+            if !line.trim().is_empty() {
+                out.say.push((line.trim().to_string(), talk.to.unwrap_or(0)));
+            }
+            input.chat_open = false;
+            true
+        }
         "chat" => {
-            // As Enter opens it and Esc closes it (the script's own keys may land after the
-            // chat's system has looked this frame).
+            // As Enter opens it and Enter with nothing typed closes it, keeping its window (the
+            // script's own keys may land after the chat's system has looked this frame).
             input.chat_open = arg == "open";
             input.chat.clear();
             true
@@ -1002,5 +1870,73 @@ fn script(
         }
         s.at += 1;
         s.since = 0.0;
+        s.frames = 0;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn row(heading: f32, turn: f32, turn_s: f32, face_off: f32, face_turn: f32, face_turn_s: f32) -> living_bindings::Moving {
+        living_bindings::Moving { id: 1, x: 0.0, y: 0.0, t_ms: 0, vx: 1.0, vy: 0.0, heading, turn, turn_s, next_ms: u64::MAX, speed: 1.0, face_off, face_turn, face_turn_s, running: false }
+    }
+
+    #[test]
+    fn a_reversal_is_drawn_continuous_and_decided_where_it_settles() {
+        use std::f32::consts::PI;
+        // look-4: the travel reverses (a half-turn over 0.3 s); the facing was 10° off the old
+        // travel, so its offset starts near 170° and its relative turn is near twice the travel's.
+        let (turn_s, turn) = (0.3, PI / 0.3);
+        let m = row(0.0, turn, turn_s, PI - 0.17, -(PI - 0.17 - 0.2) / turn_s, turn_s);
+        // The world facing is continuous, wrapped, and turns no faster than the relative turn and
+        // the travel's together allow (nothing here amplifies the relative value).
+        let mut prev = authority_facing(&m, 0.0).unwrap();
+        for k in 1..=30 {
+            let f = authority_facing(&m, k as f64 * 10.0).unwrap_or(authority_travel(&m, k as f64 * 10.0));
+            assert!(f.abs() <= PI + 1e-4, "wrapped: {f}");
+            let step = living_rules::steer::wrap(f - prev).abs();
+            assert!(step <= 0.2, "a 10 ms step of {step} rad");
+            prev = f;
+        }
+        // Where it settles (0.2 rad off the travel at the end of its turn), not the 170° now,
+        // decides walking backwards.
+        assert!((settled_offset(&m) - 0.2).abs() < 1e-4, "{}", settled_offset(&m));
+        // An offset past ±180° at a segment's start is wrapped.
+        assert!(settled_offset(&row(0.0, 0.0, 0.0, 3.5, 0.0, 0.0)).abs() < PI);
+    }
+
+    /// A structure inside a house is hidden while the house is drawn closed, or not drawn, and
+    /// shown while the cutaway has it open; a kit model waits for its fit.
+    #[test]
+    fn what_stands_indoors_shows_only_while_its_house_is_open() {
+        let mut app = App::new();
+        // A stand-in for `sight::update`, which sets every thing's visibility each frame first.
+        let sight = |mut q: Query<&mut Visibility, With<crate::world::Indoors>>| {
+            for mut v in &mut q {
+                *v = Visibility::Inherited;
+            }
+        };
+        app.init_resource::<Live>().add_systems(Update, (sight, indoors).chain());
+        let house = app.world_mut().spawn(crate::envs::Occluder { height: 9.0, open: false }).id();
+        app.world_mut().resource_mut::<Live>().lots.insert(7, vec![house]);
+        let hearth = app.world_mut().spawn((crate::world::Indoors(7), Visibility::Inherited)).id();
+        let elsewhere = app.world_mut().spawn((crate::world::Indoors(8), Visibility::Inherited)).id();
+        let vis = |app: &App, e: Entity| *app.world().get::<Visibility>(e).unwrap();
+        app.update();
+        assert_eq!(vis(&app, hearth), Visibility::Hidden, "closed");
+        assert_eq!(vis(&app, elsewhere), Visibility::Hidden, "its house is not drawn");
+        app.world_mut().get_mut::<crate::envs::Occluder>(house).unwrap().open = true;
+        app.update();
+        assert_eq!(vis(&app, hearth), Visibility::Inherited, "open");
+        app.world_mut().get_mut::<crate::envs::Occluder>(house).unwrap().open = false;
+        app.update();
+        assert_eq!(vis(&app, hearth), Visibility::Hidden, "closed again");
+        // A kit model not fitted yet is hidden too while its house is closed (no flash at its
+        // unfitted size).
+        let model = crate::lookdev::Model { vrm: false, file: "envs/k/hearth/hearth.glb".into(), height: 0.0, ground_y: 0.0, glow: None };
+        let unfitted = app.world_mut().spawn((crate::world::Indoors(7), model, Visibility::Inherited)).id();
+        app.update();
+        assert_eq!(vis(&app, unfitted), Visibility::Hidden, "unfitted, its house closed");
     }
 }

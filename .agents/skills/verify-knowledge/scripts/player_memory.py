@@ -170,7 +170,8 @@ def drive(p):
     p.harness('doctor')
     p.start_neo4j()
     p.cargo(['build', '--release', '-p', 'living-mind'], 'mind-build.log')
-    hashes = {str(x.relative_to(ROOT)): hashlib.sha256(x.read_bytes()).hexdigest()
+    # A build tree outside the checkout (CARGO_TARGET_DIR) is named by its full path.
+    hashes = {str(x.relative_to(ROOT) if x.is_relative_to(ROOT) else x): hashlib.sha256(x.read_bytes()).hexdigest()
               for x in [*sorted((ROOT / 'living/mind/src').rglob('*.rs')), K.BUILD / 'release/living-mind']}
     (p.directory / 'source-hashes.json').write_text(json.dumps(hashes, indent=2))
     p.fake()
@@ -253,6 +254,12 @@ def drive(p):
     assert any(r['other'] == resident for r in rel) and not any(r['other'] == 1 for r in rel), rel
     assert any(r['key'] == 'wolves_attack_newcomers' for r in p.sql(f'SELECT * FROM judgment WHERE actor = {player}', 'on-player-judgment'))
     assert any(r['name'] == 'Wolf ground' for r in p.sql(f'SELECT * FROM place WHERE actor = {player}', 'on-player-place'))
+    # What the player's character saw of resources (talk-places: its own looks, as a mind's) is in
+    # what it internalizes, with when it was seen and no way from anywhere (no place to stand).
+    stock = p.sql(f'SELECT * FROM seen_stock WHERE actor = {player}', 'on-player-seen-stock')
+    assert stock, "the player's character remembers no resources"
+    remembered = re.findall(r'^- (?:\d+ )?[a-z ]+ around \[-?\d+, -?\d+\]: (?:seen day \d+ \d\d:\d\d|gone when you were last here, day .*)$', body, re.M)
+    assert remembered, 'no remembered resource in the internalize request'
     # The identity is inferred from the person's conduct (goals stay: nobody perceived them).
     persona = p.sql(f'SELECT * FROM persona WHERE id = {player}', 'on-player-persona')
     assert persona and persona[0]['narrative'] == IDENTITY['narrative'] and persona[0]['mood'] == 'wary' and persona[0]['goals'] == [], persona

@@ -28,7 +28,7 @@
       "planting",
       "cooking",
       "fire",
-      "mending",
+      "wound_tending",
       "storage"
      ],
      "parents": [
@@ -73,7 +73,7 @@
       "cooking",
       "fire",
       "storage",
-      "mending",
+      "wound_tending",
       "medicine"
      ],
      "parents": [],
@@ -195,7 +195,7 @@
       "planting",
       "cooking",
       "fire",
-      "mending",
+      "wound_tending",
       "storage"
      ],
      "parents": [],
@@ -241,7 +241,7 @@
       "planting",
       "storage",
       "fire",
-      "mending",
+      "wound_tending",
       "cooking"
      ],
      "parents": [],
@@ -264,7 +264,7 @@
       "cooking",
       "fire",
       "medicine",
-      "mending"
+      "wound_tending"
      ],
      "parents": [],
      "ties": [
@@ -284,7 +284,7 @@
       "planting",
       "cooking",
       "fire",
-      "mending",
+      "wound_tending",
       "storage"
      ],
      "parents": [
@@ -307,7 +307,7 @@
      "knows": [
       "planting",
       "fire",
-      "mending"
+      "wound_tending"
      ],
      "parents": [],
      "ties": [

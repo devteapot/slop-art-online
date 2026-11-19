@@ -127,7 +127,7 @@ No whole-world scan was added to a routine action or the tick.
 
 ## What residents do, hour by hour
 
-> Since 2026-11-11 the hours are each resident's own: a rhythm per person (when they rise and go to bed, how long their evening is), read by graphs as `bedtime` and `evening`, and evening habits that include home and working late ([seeded lives, "No lockstep"](SEEDED_LIVES.md#no-lockstep)). The world-clock hours below are the layer as first built.
+> Since 2026-11-11 the hours are each resident's own: a rhythm per person (when they rise and go to bed, how long their evening is, and since `lives-3` their working hours and a second sleep, rising at any hour), read by graphs as `bedtime`, `evening` and `work_hours`, and evening habits that include home and working late ([seeded lives, "No lockstep"](SEEDED_LIVES.md#no-lockstep), ["Rhythms at any hour"](SEEDED_LIVES.md#rhythms-at-any-hour-and-cullets-trades)). The world-clock hours below are the layer as first built.
 
 A census of an undisturbed island world (`core-town-census`: no scenes, no player, the world's own weather), once per world hour for a day: 189 adults and 52 children, 34 animals. "Home" is within 3 tiles of the household's door, "work" within 6 of the resident's `work` place, "evening place" within 8 of its `evening` place. Rows: `.local/living/verify/core-town-census/town-census.json` on the dev-box.
 
@@ -167,14 +167,14 @@ The scripted scenes on fresh worlds (below) record the same rhythm as rows, and 
 
 Times in ms. Phases (ms of work per second, base → change): slot evaluations 39.2 → 40.7 (p99 2.70 → 1.66), wakes 13.4 → 15.9, activity timers 8.6 → 17.4, motion 9.1 → 3.5. Residents now spend their day keeping a post rather than wandering, so steering updates fall to about a third. Activity timers, which complete keeps, rests and gestures, double. The p50 is 0.18 ms higher. The p99 is 0.3 ms lower, because the base's wandering and gathering ticks are spikier, and it stays under the 4 ms bar. The maximum is 8.6 ms, a single tick, against 6.0. The island's own weather was dry in the base window and rained for the last two minutes of this change's (`~/townlife-bench/branch-load.txt`), so the window includes people walking to shelter. This is one window per arm; the spread between repeated windows was not measured here. This is the island at rest for 10 minutes. It is not the contract's 216-character gate with observers and players, nor its 8 hours.
 
-**On the way there** (60 s windows at minutes 1–2 of fresh worlds, same machine; [validation](../.agents/skills/verify-core/references/validation.md)):
+**On the way there** (60 s windows at minutes 1–2 of fresh worlds, same machine; [validation](../.agents/skills/verify-core/references/validation/history.md)):
 - The first version measured p50 1.99, p99 4.74 ms, against the base's 1.37 and 2.59 at the same world age.
 - Temporary spans (not committed) showed two causes. The "mind the people near me" routine asked the rules about 330 times a second whether to step aside or turn: a full skill context each time, refused by the script (32 ms/s). And about 11 walks a second to unreachable places spent the whole A* budget, retried every second.
 - Fixes: `turn` and `aside` refuse cheaply in the engine before the script is asked; seeding gives only reachable places; a 15 s cache remembers unreachable destinations per body. After these: p50 1.33, p99 2.60 against the base's 1.37 and 2.59.
 
 **World creation:** `init.town.seat` took 158 ms in all for 8 settlements (92 ms for the walled town), checking paths from homes to candidate places. The island's `init` is otherwise unchanged (`init.land.generate` 2.2 s on a loaded box).
 
-**Rows:** about 942 `place` rows (four per resident), written once; `doing` holds one row per character performing a shown skill (176 a minute into a world, 44 on the default seed); `act_card` one row per shown skill (18 since `graze` is shown, 2026-11-10); `weather` one row. `skill_use` stays bounded at 24 per character. No table grows with time.
+**Rows:** about 942 `place` rows (four per resident), written once; `doing` holds one row per character performing a shown skill (176 a minute into a world, 44 on the default seed); `act_card` one row per shown skill (18 since `graze` is shown, 2026-11-10; 20 since `make` and `feed` are, 2026-11-11); `weather` one row. `skill_use` stays bounded at 24 per character. No table grows with time.
 
 ## What the client must draw
 

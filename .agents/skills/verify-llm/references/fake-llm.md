@@ -10,7 +10,7 @@
 
 `--port` and `--log` are required. Port 0 requests an OS-assigned port. A printed `READY http://127.0.0.1:<port>/v1 pid=<pid>` line signals that the socket is bound. `GET /health` returns 200. `POST /v1/chat/completions` returns the OpenAI-compatible envelope. The server accepts bearer authentication but never records the header or key. SIGTERM or SIGINT stops the listening socket and exits. Delayed request threads are daemon threads, so a stop does not wait 185 seconds. Stop only the pid your run created.
 
-`--scenario` accepts `valid`, `429`, `500`, `malformed`, `repair`, `delay`, `timeout` or `outage`. These apply to every request. `--delay-s 1` controls the `delay` scenario. `timeout` delays 185 seconds, longer than the Rust client's 180-second timeout. `outage` logs the triggering request, closes its connection and closes the server port. Restart the same command on the same port to restore the endpoint.
+`--scenario` accepts `valid`, `429`, `capacity`, `500`, `malformed`, `repair`, `delay`, `timeout` or `outage`. These apply to every request. `--delay-s 1` controls the `delay` scenario. `timeout` delays 185 seconds, longer than the Rust client's 180-second timeout. `outage` logs the triggering request, closes its connection and closes the server port. Restart the same command on the same port to restore the endpoint.
 
 A JSON script overrides `--scenario`:
 
@@ -47,6 +47,7 @@ Each rule overlays `defaults`. Available response fields:
 | `repair` | Wrap the JSON reply in a fence and add a trailing comma. Exercises `parse_json`. |
 | `content_parts` | Return a non-text thinking part followed by a text part. Exercises content-array extraction. |
 | `status` | HTTP status, default 200. Non-200 returns a scripted error object. |
+| `capacity` | Answer as Mistral does when the model has no capacity: HTTP 429 with `{"type": "backend_out_of_capacity", "code": "3505", "message": "Not enough capacity available…"}` (a rule's own `status` or `raw_http_body` still wins). Scenario `capacity` applies it to every request. |
 | `delay_s` | Delay the response by this many seconds. |
 | `close_port` | Close the request connection and stop the server's listener. |
 | `raw_http_body` | Exact HTTP body. Use this for malformed envelope JSON. |
@@ -63,6 +64,7 @@ A rule with `"cite": true` fills placeholders in its `reply` from the experience
 | --- | --- |
 | `$EXP:<words>` | the id of the first line whose text contains `<words>` (case-insensitive; 0 if none) |
 | `$EXPS` | every line's id, as a list |
+| `$EXPTEXT:<words>` | the text of the first line containing `<words>` (its time kept, its `{Name=#id}` tags dropped; `''` if none): a reply that repeats what it was told, for privacy checks (`verify-minds/scripts/privacy.py`) |
 | `$PERSON` | `person:<id>` of the first tagged person |
 | `$PERSON_ID` | that id, as a number |
 
@@ -91,8 +93,12 @@ Defaults come from `prompts.rs` and the parsers in `mind.rs` and `mind/talk.rs`:
 
 The think default also has `feeling` and `impulse` for animal prompt compatibility. `reorganize` returns an empty sleep patch with a summary. `choose` takes each numbered option in turn across requests (`pick` = request count mod options, strength cycling low/mid/high), so a run exercises every option an animal is offered. This skill proves human-purpose parsing. It does not prove all animal flows or every memory patch operation.
 
+Projects (`LIVING_PROJECTS=1`, the mind's experiment) change the defaults only when the prompt carries them: a think request whose system prompt names `"serves"` answers `serves` with the first key listed under `# Your projects` in the user prompt (null when none is listed), and a consolidation or reorganization whose system prompt names `"projects"` answers one project, `project:verify_fake_shelter`, whose progress counts the projects the request listed. Without the switch every reply is as above.
+
 ## Request evidence
 
 The log appends one JSON line before a response delay or injected outage. Each line has `at_ms`, `sequence`, `purpose`, `model`, `reasoning_effort`, `body_excerpt`, full `body`, and the selected `status`, `delay_s`, `close_port` and `content`. Authorization headers are excluded. The excerpt is at most 2,000 characters. Exact prompts remain in `body`, and the real mind independently journals attempts, replies and failures.
 
 The fake log proves receipt. The mind journal proves the client's recorded result. Authority `thought`, `brain`, `routine` and `chronicle` rows prove application. Check all three when acceptance matters.
+
+The semantic act-repair prompt is classified as `act_repair` before generic effort and frame checks. A fixture may supply `{"replacements": [{"do": "goto", "target": {"place": "home"}}]}` or a null slot to decline repair.

@@ -30,11 +30,11 @@ living-build:
 # Private tables are included: the mind service and the lab observer read them as the database
 # owner (docs/PERCEPTION.md). The generated code is the same for `LIVING_PERCEPTION=open` and
 # `scoped`, which differ only in which tables are public.
+# living/tools/generate_bindings.sh generates into a temporary folder and swaps it in only when
+# the generator succeeded and its output has a mod.rs and parses; on failure the bindings stay as
+# they were. LIVING_GENERATE_CMD replaces the compose run (another server's CLI, or a stub).
 living-generate: living-build
-    rm -rf .local/living/generated && mkdir -p .local/living/generated
-    {{living_compose}} run --rm --no-deps -T -v "$PWD/living/target/wasm32-unknown-unknown/release:/wasm:ro" --entrypoint sh spacetimedb -c 'spacetime generate -l rust -b /wasm/living_authority.wasm -o /tmp/gen -y --include-private >/dev/null 2>&1 && tar -C /tmp/gen -cf - .' | tar -C .local/living/generated -xf -
-    rm -rf living/bindings/src/generated && mv .local/living/generated living/bindings/src/generated
-    rustfmt --edition 2021 living/bindings/src/generated/*.rs
+    LIVING_COMPOSE="{{living_compose}}" living/tools/generate_bindings.sh
 
 # Export the world admin's token for the mind service.
 living-token:
@@ -47,7 +47,7 @@ living-token:
 # Update the module in place (keeps world data) and install the current skill rules.
 living-publish: living-build
     {{living_stdb}} publish -s local -b /wasm/living_authority.wasm {{living_db}} -y
-    {{living_stdb}} call -s local {{living_db}} install_script "$(python3 -c 'import json,sys; print(json.dumps(open("living/scripts/skills.rhai").read()))')"
+    python3 living/tools/install_script.py {{living_db}}
     just living-token
 
 # Choose the active seed (living/seeds/<name>.json → world.json); takes effect at the next reset.
@@ -66,11 +66,15 @@ living-reset: living-build
 living-floor name db=living_db:
     LIVING_SEED=none cargo build --manifest-path living/Cargo.toml -p living-authority --target wasm32-unknown-unknown --release
     {{living_stdb}} publish -s local -b /wasm/living_authority.wasm {{db}} --delete-data -y
-    {{living_stdb}} call -s local {{db}} create_floor "$(python3 -c 'import json; print(json.dumps(open("living/seeds/{{name}}.json").read()))')"
+    {{living_stdb}} call -s local {{db}} create_floor "$(python3 living/tools/seed_text.py living/seeds/{{name}}.json --arg)"
     just living-token
 
 living-sql query:
     {{living_stdb}} sql -s local {{living_db}} "{{query}}"
+
+# One command to play a scene (world, memory store, minds, client); paid parts stop when the client exits.
+living-play scene *args:
+    python3 living/tools/play.py {{scene}} {{args}}
 
 living-mind:
     living/tools/run-mind.sh
@@ -91,20 +95,67 @@ living-web-dist:
 living-test:
     cargo test --manifest-path living/Cargo.toml -p living-rules
 
-# Everything that must keep compiling after any change: authority (wasm), mind, the native
-# and browser observer, the game client, and the rules tests. Run before every commit.
-living-check: living-build
-    cargo build --manifest-path living/Cargo.toml -p living-mind -p living-viewer
-    # The game in release only: the build that is run, without a second ~10 GB debug tree.
-    cargo build --release --manifest-path living/Cargo.toml -p living-game
-    cargo build --manifest-path living/viewer/Cargo.toml --target wasm32-unknown-unknown --profile wasm-dev --bin living-viewer
-    cargo test --manifest-path living/Cargo.toml -p living-rules
+# The goods audit (docs/GOODS.md): every item and structure kind of the island and of Cullet,
+# where it comes from and what it is for, read from the rules and the seeds; writes the
+# generated tables into docs/GOODS.md. The same audit is a rules test (`the_goods_come_from_the_world`).
+living-goods:
+    cargo test --manifest-path living/Cargo.toml -p living-rules --lib goods_audit::tests::write_goods_audit -- --ignored --exact
 
-# Fuel budgets of the hot Rhai laws (rates, the strike path, perceived_of, a constant lookup) in
-# the module under SpacetimeDB's wasmtime config; fails over living/tools/script_bench/budgets.json
-# (docs/SCRIPT_ENGINES.md). Builds in its own target dir unless CARGO_TARGET_DIR is set.
+# Everything that must keep compiling after any change: authority (wasm), mind, the native
+# and browser observer, the game client and its unit tests, and the rules tests. Run before every
+# commit. living/tools/check.py runs these steps (docs/TOOLING.md): the cargo steps and the
+# script fuel gate (living/tools/script_bench: fails when a hot law is over budgets.json). Its
+# four cargo build directories at once under one jobserver; a step skipped when it already passed on this
+# machine on byte-identical inputs; rustc through sccache when it is installed
+# (living/tools/install_sccache.sh). `living-check-full` runs every step regardless of stamps;
+# LIVING_CHECK_SERIAL=1 runs them one by one with cargo's output on the terminal.
+living-check:
+    python3 living/tools/check.py
+
+living-check-full:
+    python3 living/tools/check.py --full
+
+# Merge a branch into main end to end, from a clean coordinator worktree: --no-ff merge onto
+# origin/main, living-check, push; when main moved, fetch, merge and check again
+# (docs/TOOLING.md). Arguments after the branch: -m "message", --retries N, --no-push, --scenes.
+[positional-arguments]
+living-merge branch *args:
+    python3 living/tools/merge.py "$@"
+
+# The scene gate (living/tools/scene_gate.py): real verify-core, verify-minds and verify-player
+# scenes on scratch verify-gate-* databases when a change touches behaviour; a case failing twice
+# fails it unless it fails on main too. `living-merge --scenes` runs it after the check.
+# Default `run`; `reds` prints the red-on-main list.
+[positional-arguments]
+living-scene-gate *args:
+    python3 living/tools/scene_gate.py "$@"
+
+# Remove idle build folders under the policy in docs/TOOLING.md (a dry run unless --apply);
+# `living/tools/disk_clean_install.sh` runs it on a timer.
+[positional-arguments]
+living-disk-clean *args:
+    python3 living/tools/disk_clean.py "$@"
+
+# The store (docs/STORE.md): what this machine holds (`manifest`), what would be published and
+# every redaction (`scrub --dry-run SRC`), `pack`, `fetch motion-library`, `fetch batch NAME`.
+# Publishing to Hugging Face needs --yes-publish AND publish_enabled in ~/.config/slop-store/config.json.
+# huggingface_hub lives in ~/.slop-store-venv (docs/STORE.md, "Library"); its Python is used when present.
+[positional-arguments]
+living-store *args:
+    #!/usr/bin/env bash
+    py=python3; [ -x ~/.slop-store-venv/bin/python ] && py=~/.slop-store-venv/bin/python
+    exec "$py" living/tools/store.py "$@"
+
+# The store's self-test: planted secrets, owner lines, pack/fetch round trips, the publish gate.
+living-store-selftest:
+    python3 living/tools/store_selftest.py
+
+# Fuel budgets of the hot Rhai laws (rates, the strike path, perceived_of, hooks, senses, motion)
+# in the module under SpacetimeDB's wasmtime config; fails over living/tools/script_bench/budgets.json
+# (docs/LIVING_CORE.md, Fuel budgets). The check's `script-gate` step alone, run whatever its
+# stamp says; living/tools/script_bench/gate.sh runs it by hand and keeps the evidence.
 living-script-gate:
-    CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$PWD/.local/script-bench/target}" living/tools/script_bench/gate.sh
+    python3 living/tools/check.py --steps script-gate --full
 
 
 # The game client's generated assets (git-ignored; the scripts are the source), on any machine
@@ -117,7 +168,41 @@ living-game-assets:
     living/tools/blender/gen_nature.sh
     living/tools/blender/gen_buildings.sh
     living/tools/blender/gen_city.sh
+    living/tools/blender/gen_cullet.sh
     living/tools/blender/gen_anim.sh
+
+# The calibration frame for a hand-made character (docs/HANDMADE_HAIR.md): the contract's audit,
+# three fixed daylight shots through the asset view, and each patch's colour against its target in
+# <stem>.calibration.json. `just living-game-calibrate view/own-cora-live.glb [--also middle@0]`.
+# Honours CARGO_TARGET_DIR. Free: no model calls, no world.
+[positional-arguments]
+living-game-calibrate file *args:
+    cargo build --release -q -p living-game --manifest-path living/Cargo.toml
+    python3 living/tools/characters/calibrate.py "$@"
+
+# The asset board (docs/ASSET_BOARD.md): every generated family photographed in the game's own
+# renderer beside the version the owner accepted, with decisions and history in
+# living/assets/board/ and media in ~/archive/asset-board/. `just living-board publish ...`,
+# `decide`, `status`, `build`, `check`, `pack`.
+[positional-arguments]
+living-board *args:
+    python3 living/tools/board/board.py "$@"
+
+# People from the character generator (docs/CHARACTERS.md; git-ignored output): presets, seeds or
+# parameter files, each generated, given the clip library and the face's shading data.
+# `just living-people` makes the presets; `just living-people 12 halvard=halvard.json` others.
+living-people *args:
+    living/tools/blender/gen_person.sh {{args}}
+
+# A household or a whole town of people and the page to check them by (line-up, game camera,
+# every face): `just living-town .local/town`, `--household kiln-03`, `--town cullet.json`.
+living-town *args:
+    python3 living/tools/characters/town.py {{args}}
+
+# A character bundle's pictures as BC7 KTX2 (docs/CHARACTERS.md, "Pictures as KTX2"):
+# `just living-pictures bundle IN.tar.gz OUT.tar.gz --pictures ktx2`, `check OUT.tar.gz`, `memory OUT.tar.gz`.
+living-pictures *args:
+    python3 living/tools/characters/pictures.py {{args}}
 
 # The game's painted, tileable textures (git-ignored), from living/tools/textures/paint.py
 # (numpy and Pillow through uv): `--set ground` (the default) the ground's layers for

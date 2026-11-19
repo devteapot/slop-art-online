@@ -69,6 +69,25 @@ pub struct PlaceIn {
     pub y: f32,
 }
 
+/// One attention cue as the mind projects it (docs/ATTENTION.md; the `Cue` table).
+#[derive(SpacetimeType, Clone, Debug)]
+pub struct CueIn {
+    /// `stance:<key>`, `project:<key>` or `goal:<key>`: what it serves.
+    pub for_key: String,
+    pub why: String,
+    pub who_id: u32,
+    pub who: String,
+    pub doing: String,
+    /// The phase it is visibly in (`winding up`, …; `living_rules::doing::Phase`).
+    pub phase: String,
+    pub thing: String,
+    pub at: String,
+    pub within: f32,
+    pub near_me: f32,
+    /// The thought that wrote it (its journal reference).
+    pub source: String,
+}
+
 #[derive(SpacetimeType, Clone, Debug)]
 pub struct MindUpdate {
     pub persona: Option<PersonaIn>,
@@ -81,6 +100,9 @@ pub struct MindUpdate {
     /// The relations, judgments and places given are the complete current set (projected
     /// from the mind); rows not among them are removed.
     pub replace: bool,
+    /// The complete set of attention cues (docs/ATTENTION.md), replacing the actor's when
+    /// present; `None` leaves them as they are.
+    pub cues: Option<Vec<CueIn>>,
 }
 
 const MAX_THOUGHTS: usize = 60;
@@ -333,31 +355,172 @@ pub fn set_graph(ctx: &ReducerContext, actor: u32, graph: &str, plan: &str, sour
     Ok(revision)
 }
 
-/// Reasons about the plan being replaced; a new plan makes them obsolete.
-const PLAN_STATE: &[&str] = &["Nothing in my current plan works", "My actions keep failing", "I finished my plan", "A quiet moment to take stock"];
-
-/// Remove the pending deliberation unless reasons arrived after `seen_ms`. When a new plan
-/// is installed (`new_plan`), reasons about the old plan failing that piled up while the mind
-/// was thinking are dropped; otherwise they re-triggered thinking at once, every few seconds.
+/// Remove what the deliberation that read the request as of `seen_ms` considered. Reasons
+/// that arrived later stay pending, except, when a new plan is installed (`new_plan`), those
+/// about the old plan failing that piled up while the mind was thinking (they re-triggered
+/// thinking at once, every few seconds). A reason the prompt contained never stays: before
+/// 2026-11-11 it did whenever anything arrived during the call, and plan-finished churn kept
+/// one feeling the reason of dozens of thoughts.
+///
+/// What stays is handed on now, so its scene is taken now: the next prompt shows what the
+/// character perceives when the mind can next think, beside the experiences up to then. Before
+/// 2026-11-12 it kept the scene of when its last reason arrived, which can be a whole model call
+/// old: Gwil in fs1n was told "right now" that a stranger stood 1.2 m away, beside his own later
+/// hail of that stranger as a far figure 28 m off, and thought the stranger had come up to him
+/// (docs/PERCEPTION.md, "One moment per prompt").
 fn clear_deliberation(ctx: &ReducerContext, actor: u32, seen_ms: u64, new_plan: bool) {
     if let Some(mut d) = ctx.db.deliberation().actor().find(actor) {
-        if d.updated_ms <= seen_ms {
-            ctx.db.deliberation().actor().delete(actor);
-        } else if new_plan {
-            let rest: Vec<&str> = d.reason.lines().filter(|l| !l.trim().is_empty() && !PLAN_STATE.iter().any(|p| l.starts_with(p))).collect();
-            if rest.is_empty() {
+        let rest = if d.updated_ms <= seen_ms { None } else { living_rules::reasons::consume(&d.reason, &d.arrived, seen_ms, new_plan) };
+        match rest {
+            None => {
                 ctx.db.deliberation().actor().delete(actor);
-            } else {
-                d.reason = rest.join("\n");
+            }
+            Some((reason, arrived)) => {
+                let now = common::now_ms(ctx);
+                d.reason = reason;
+                d.arrived = arrived;
+                d.scene = perceive::scene_json(ctx, actor, now);
+                d.updated_ms = d.updated_ms.max(now);
                 ctx.db.deliberation().actor().update(d);
             }
         }
     }
 }
 
+/// When the fast lane last changed the character's plan (`mind_state.marks`; kept by `set_graph`).
+pub const FAST_MARK: u16 = 0xD500;
+
+/// A slow deliberation that read its request before the fast lane's last patch keeps the
+/// patched `combat` branch: the authority splices it in by label (docs/FAST_LANE.md). A later
+/// decision, which saw the patch in its prompt, replaces it as any other part of the plan.
+fn keep_fast_branch(ctx: &ReducerContext, actor: u32, graph: String, seen_ms: u64) -> String {
+    let patched_ms = ctx.db.mind_state().id().find(actor).and_then(|st| st.marks.iter().find(|m| m.node == FAST_MARK).map(|m| m.at_ms));
+    if !patched_ms.is_some_and(|at| at > seen_ms) {
+        return graph;
+    }
+    let current = ctx.db.brain().id().find(actor).and_then(|b| serde_json::from_str::<serde_json::Value>(&b.graph).ok());
+    let (Some(node), Ok(incoming)) = (current.as_ref().and_then(|g| living_rules::graph::branch_of(g, "combat")), serde_json::from_str::<serde_json::Value>(&graph)) else { return graph };
+    living_rules::graph::patch_branch(incoming, "combat", node).to_string()
+}
+
+/// The fast lane's answer (docs/FAST_LANE.md) to the request issued at `asked_ms`: the
+/// character's `combat` branch rewritten (`target` "combat"), or one of its own routines
+/// (`routine:<name>`; never a new one). Authorised as `mind_install` is: only the character's
+/// controller may call it, so a character a person plays, or anyone else's, is refused. The plan
+/// check: it lands only if the graph installed when the request was issued is still installed;
+/// otherwise nothing changes and the refusal is kept as a `fast` thought ("refused: …"). Either
+/// way the request's turn ends (`fast::answered`). It does not count as having thought
+/// (`think_min_s`), and a committed move under way runs its course.
+#[spacetimedb::reducer]
+pub fn mind_patch(ctx: &ReducerContext, actor: u32, target: String, graph: String, asked_ms: u64, thought: ThoughtIn) -> Result<(), String> {
+    let c = authorize(ctx, actor)?;
+    if !c.alive {
+        return Err("character is dead".into());
+    }
+    let now = common::now_ms(ctx);
+    let Some(ask) = ctx.db.fast_ask().actor().find(actor).filter(|r| r.issued_ms == asked_ms && asked_ms != 0) else {
+        return Err("no fast re-plan was asked of this character".into());
+    };
+    let refuse = |why: String| {
+        common::diag(|| "fast:refused", 1);
+        add_thought(ctx, actor, ThoughtIn { kind: "fast".into(), summary: format!("refused: {why}"), ..thought.clone() }, now);
+        crate::fast::answered(ctx, actor, asked_ms, now);
+        Ok(())
+    };
+    let Some(b) = ctx.db.brain().id().find(actor) else { return refuse("there is no plan to change".into()) };
+    if b.installed_ms != ask.base_ms {
+        return refuse("the plan changed since it was asked".into());
+    }
+    if target == "combat" {
+        let (Ok(current), Ok(branch)) = (serde_json::from_str::<serde_json::Value>(&b.graph), serde_json::from_str::<serde_json::Value>(&graph)) else {
+            return refuse("not a graph".into());
+        };
+        let patched = living_rules::graph::patch_branch(current, "combat", branch);
+        if let Err(e) = set_graph(ctx, actor, &patched.to_string(), &b.plan, "fast", now) {
+            return refuse(format!("rejected graph: {e}"));
+        }
+    } else if let Some(name) = target.strip_prefix("routine:") {
+        let name = living_rules::normalize::routine_name(name);
+        let Some(mut r) = ctx.db.routine().actor().filter(actor).find(|x| living_rules::normalize::routine_name(&x.name) == name) else {
+            return refuse(format!("it has no routine called {name}"));
+        };
+        let g = match living_rules::graph::parse(&graph) {
+            Ok(g) => g,
+            Err(e) => return refuse(format!("rejected routine {name}: {e}")),
+        };
+        if let Some(sp) = common::species(&c.kind) {
+            if let Some(bad) = living_rules::graph::skills_used(&g.root).into_iter().find(|s| if s == "say" { !sp.speaks } else { !sp.allows(s) }) {
+                return refuse(format!("a {} cannot {bad}", c.kind));
+            }
+        }
+        ctx.db.routine_stat().id().delete(r.id);
+        r.graph = g.to_json();
+        r.revision += 1;
+        r.source = "fast".into();
+        r.updated_ms = now;
+        ctx.db.routine().id().update(r);
+        // Recompile the plan with its routines, as the fast lane (not counted as thinking).
+        if let Err(e) = set_graph(ctx, actor, &b.graph, &b.plan, "fast", now) {
+            return Err(e);
+        }
+    } else {
+        return refuse(format!("it may change its combat branch or a routine of its own, not {target}"));
+    }
+    if let Some(mut st) = ctx.db.mind_state().id().find(actor) {
+        st.marks.retain(|m| m.node != FAST_MARK);
+        st.marks.push(crate::tables::Mark { node: FAST_MARK, at_ms: now });
+        ctx.db.mind_state().id().update(st);
+    }
+    common::diag(|| "fast:installed", 1);
+    add_thought(ctx, actor, ThoughtIn { kind: "fast".into(), ..thought }, now);
+    crate::fast::answered(ctx, actor, asked_ms, now);
+    Ok(())
+}
+
+/// The fast lane served the request issued at `asked_ms` without a change (the reply kept the
+/// plan, failed, timed out, or the character was off stage): its turn ends. A thought with a
+/// kind is kept. Only for an open request: a body its person controls never has one.
+#[spacetimedb::reducer]
+pub fn mind_fast_done(ctx: &ReducerContext, actor: u32, asked_ms: u64, thought: ThoughtIn) -> Result<(), String> {
+    authorize(ctx, actor)?;
+    if !ctx.db.fast_ask().actor().find(actor).is_some_and(|r| r.issued_ms == asked_ms && asked_ms != 0) {
+        return Err("no fast re-plan was asked of this character".into());
+    }
+    let now = common::now_ms(ctx);
+    common::diag(|| "fast:kept", 1);
+    if !thought.kind.is_empty() {
+        add_thought(ctx, actor, thought, now);
+    }
+    crate::fast::answered(ctx, actor, asked_ms, now);
+    Ok(())
+}
+
 /// Deliver a deliberation result: a new behavior graph, optional speech and a thought log entry.
 #[spacetimedb::reducer]
 pub fn mind_install(ctx: &ReducerContext, actor: u32, graph: String, plan: String, say: String, say_to: u32, seen_ms: u64, thought: ThoughtIn) -> Result<(), String> {
+    // To retire (mind-say-way, 2026-11-12): the mind service installs through
+    // `mind_install_way`. Kept, signature unchanged, for a module update that leaves an older
+    // mind service connected, and for the admin harness. Its line is always said, and a refused
+    // line is dropped without a word, as it always was.
+    install(ctx, actor, graph, plan, say, say_to, "say", seen_ms, thought, false)
+}
+
+/// `mind_install` whose line names its way of speaking (`speech_card.name`; "" is `say`), as a
+/// talk turn's `mind_say` does (mind-say-way, docs/COMMUNICATION.md §18). The line goes to
+/// `speech::speak` with that way: the same reach, gaps and refusals as every way, for every
+/// controller. A refused line ("a whisper needs someone to whisper to", "too soon to call out
+/// again: wait a few seconds") is not said and is told to the speaker in the rules' words; the
+/// decision's graph, plan and thought stand.
+#[allow(clippy::too_many_arguments)]
+#[spacetimedb::reducer]
+pub fn mind_install_way(ctx: &ReducerContext, actor: u32, graph: String, plan: String, say: String, say_to: u32, way: String, seen_ms: u64, thought: ThoughtIn) -> Result<(), String> {
+    install(ctx, actor, graph, plan, say, say_to, &way, seen_ms, thought, true)
+}
+
+/// A decision delivered: its graph and plan installed, its thought kept, its line said in
+/// `way` (or held, `heard_first_rethinks`). `tell`: a refused line is told to the speaker.
+#[allow(clippy::too_many_arguments)]
+fn install(ctx: &ReducerContext, actor: u32, graph: String, plan: String, say: String, say_to: u32, way: &str, seen_ms: u64, thought: ThoughtIn, tell: bool) -> Result<(), String> {
     let c = authorize(ctx, actor)?;
     if !c.alive {
         ctx.db.deliberation().actor().delete(actor);
@@ -365,15 +528,42 @@ pub fn mind_install(ctx: &ReducerContext, actor: u32, graph: String, plan: Strin
     }
     let now = common::now_ms(ctx);
     clear_deliberation(ctx, actor, seen_ms, true);
+    let graph = keep_fast_branch(ctx, actor, graph, seen_ms);
     if let Err(e) = set_graph(ctx, actor, &graph, &plan, "mind", now) {
         add_thought(ctx, actor, ThoughtIn { kind: "error".into(), summary: format!("rejected graph: {e}"), ..thought }, now);
         return Err(e);
     }
+    let since = decided_since(seen_ms, &thought, now);
     add_thought(ctx, actor, thought, now);
     if !say.trim().is_empty() {
-        let _ = perceive::speak(ctx, actor, &say, say_to, now);
+        match heard_first(ctx, actor, say_to, since) {
+            Some(heard) => crate::speech::held_for_another(ctx, actor, say_to, &say, &heard, now),
+            None => {
+                if let Err(why) = crate::speech::speak(ctx, actor, &say, say_to, way, now) {
+                    if tell {
+                        crate::speech::unsaid_refused(ctx, actor, say_to, &say, &why, now);
+                    }
+                }
+            }
+        }
     }
     Ok(())
+}
+
+/// When the decision being delivered last read what it perceived: its request's scene
+/// (`seen_ms`), or when its model calls began (`now` less their latency), whichever is later.
+/// What arrived after that was not in front of it.
+fn decided_since(seen_ms: u64, thought: &ThoughtIn, now: u64) -> u64 {
+    seen_ms.max(now.saturating_sub(thought.latency_ms as u64))
+}
+
+/// Under `heard_first_rethinks`: a line another said to `to` that the speaker heard after its
+/// decision read its scene (first-sight-crowd).
+fn heard_first(ctx: &ReducerContext, actor: u32, to: u32, since: u64) -> Option<Experience> {
+    if to == 0 || !common::laws(ctx).heard_first_rethinks {
+        return None;
+    }
+    crate::speech::addressed_by_another(ctx, actor, to, since)
 }
 
 /// Answer without changing behavior: speak, log the thought, clear what was considered.
@@ -381,12 +571,13 @@ pub fn mind_install(ctx: &ReducerContext, actor: u32, graph: String, plan: Strin
 /// deliberation reasons and the deliberation clock alone, so talking never displaces or
 /// postpones thinking about what to do.
 #[spacetimedb::reducer]
-pub fn mind_say(ctx: &ReducerContext, actor: u32, say: String, say_to: u32, seen_ms: u64, thought: ThoughtIn) -> Result<(), String> {
+pub fn mind_say(ctx: &ReducerContext, actor: u32, say: String, say_to: u32, way: String, seen_ms: u64, thought: ThoughtIn) -> Result<(), String> {
     let c = authorize(ctx, actor)?;
     if !c.alive {
         return Err("character is dead".into());
     }
     let now = common::now_ms(ctx);
+    let talk = thought.kind == "talk";
     if thought.kind != "talk" {
         clear_deliberation(ctx, actor, seen_ms, true);
         if let Some(mut st) = ctx.db.mind_state().id().find(actor) {
@@ -394,9 +585,20 @@ pub fn mind_say(ctx: &ReducerContext, actor: u32, say: String, say_to: u32, seen
             ctx.db.mind_state().id().update(st);
         }
     }
+    // A deliberation's line (not a conversation turn's) waits when another addressed its
+    // listener after the decision read its scene (`heard_first_rethinks`).
+    let held = if thought.kind != "talk" && !say.trim().is_empty() { heard_first(ctx, actor, say_to, decided_since(seen_ms, &thought, now)) } else { None };
     add_thought(ctx, actor, thought, now);
-    if !say.trim().is_empty() {
-        perceive::speak(ctx, actor, &say, say_to, now)?;
+    if let Some(heard) = held {
+        crate::speech::held_for_another(ctx, actor, say_to, &say, &heard, now);
+    } else if !say.trim().is_empty() {
+        // A conversation turn's refused line is the reducer's error, as before. A deliberation's
+        // (since mind-say-way, when it may name a way) is told to the speaker, and the decision's
+        // thought stands, as `mind_install_way` does.
+        match crate::speech::speak(ctx, actor, &say, say_to, &way, now) {
+            Err(why) if !talk => crate::speech::unsaid_refused(ctx, actor, say_to, &say, &why, now),
+            r => r?,
+        }
     }
     Ok(())
 }
@@ -407,14 +609,108 @@ pub fn mind_say(ctx: &ReducerContext, actor: u32, say: String, say_to: u32, seen
 /// back as an experience. `source` says where it was decided (e.g. "deliberate", "talk").
 #[spacetimedb::reducer]
 pub fn mind_act(ctx: &ReducerContext, actor: u32, acts: Vec<String>, source: String) -> Result<(), String> {
-    let c = authorize(ctx, actor)?;
-    if !c.alive {
+    require_live_controller(ctx, actor)?;
+    crate::acts::submit(ctx, actor, &acts, &source, false, common::now_ms(ctx));
+    Ok(())
+}
+
+/// Commit the same acts and experience feedback as the reducer, and return synchronous
+/// refusals to the controlling caller. A refused act is a committed outcome.
+#[spacetimedb::procedure]
+pub fn mind_act_checked(ctx: &mut spacetimedb::ProcedureContext, actor: u32, acts: Vec<String>, source: String) -> Result<Vec<Option<String>>, String> {
+    ctx.try_with_tx(|tx| {
+        require_live_controller(tx, actor)?;
+        Ok(crate::acts::submit_checked(tx, actor, &acts, &source, common::now_ms(tx)))
+    })
+}
+
+fn require_live_controller(ctx: &ReducerContext, actor: u32) -> Result<(), String> {
+    if !authorize(ctx, actor)?.alive {
         return Err("character is dead".into());
     }
-    let now = common::now_ms(ctx);
-    let notes = crate::acts::submit(ctx, actor, &acts, &source, false, now);
-    log::debug!("{} decides: {}", c.name, notes.join("; "));
     Ok(())
+}
+
+/// Where the character stands now, for its talk turn's places (talk-places, docs/COMMUNICATION.md
+/// §20): written to its `standing` row, which the mind service reads. Only the character's
+/// controller may ask.
+#[spacetimedb::reducer]
+pub fn mind_where(ctx: &ReducerContext, actor: u32) -> Result<(), String> {
+    authorize(ctx, actor)?;
+    let now = common::now_ms(ctx);
+    let b = ctx.db.body().id().find(actor).ok_or("no body")?;
+    let (x, y) = common::pos(&b, now);
+    let row = Standing { actor, x, y, at_ms: now };
+    if ctx.db.standing().actor().find(actor).is_some() {
+        ctx.db.standing().actor().update(row);
+    } else {
+        ctx.db.standing().insert(row);
+    }
+    Ok(())
+}
+
+/// Where the character stands and moves, and how it perceives `other` (someone it is answering),
+/// for its talk turn's frame (reply-timing, docs/COMMUNICATION.md): returned to the controller
+/// alone (a procedure's answer is not broadcast) and written nowhere. What it perceives of the
+/// other is its own sensing (`perception::Sensing`, the scene's): their distance and way when
+/// it sees them and can make them out, where the sound is when it only hears them, nothing when
+/// neither. Only the character's controller may ask.
+#[spacetimedb::procedure]
+pub fn mind_reach(ctx: &mut spacetimedb::ProcedureContext, actor: u32, other: u32) -> Result<Reach, String> {
+    ctx.try_with_tx(|tx| {
+        authorize(tx, actor)?;
+        Ok(reach(tx, actor, other, common::now_ms(tx)))
+    })
+}
+
+/// [`mind_reach`]'s answer.
+fn reach(ctx: &ReducerContext, actor: u32, other: u32, now: u64) -> Reach {
+    let (Some(me), Some(b)) = (ctx.db.character().id().find(actor), ctx.db.body().id().find(actor)) else { return Reach::default() };
+    let at = common::pos(&b, now);
+    let mut r = Reach { x: at.0, y: at.1, ..Default::default() };
+    let moving = (b.vx != 0.0 || b.vy != 0.0) && now < b.next_ms;
+    if moving {
+        r.speed = (b.vx * b.vx + b.vy * b.vy).sqrt();
+    }
+    if let Some(a) = ctx.db.activity().id().find(actor) {
+        r.doing = a.label;
+    }
+    if let Some(s) = ctx.db.steer().id().find(actor).filter(|s| s.goal == crate::motion::GOAL_POINT) {
+        (r.goal, r.gx, r.gy) = (true, s.gx, s.gy);
+    }
+    let other = crate::far::resolve(ctx, actor, other);
+    let Some(them) = ctx.db.character().id().find(other).filter(|c| c.alive && c.id != actor) else { return r };
+    match crate::perception::Sensing::new(ctx, actor, at, now).sensed_id(ctx, now, other) {
+        Some((c, true)) => {
+            // A figure too far away to make out is not known to be them (far-label).
+            let seen = crate::perception::project(ctx, &me, &them, now);
+            if them.kind == "person" && seen.name.is_empty() && seen.label == living_rules::script::FAR_PERSON {
+                return r;
+            }
+            r.other = "seen".into();
+            r.other_m = c.dist.round();
+            r.other_where = common::direction(at, c.pos).to_string();
+            if r.speed > 0.0 && c.dist > 0.5 {
+                let off = living_rules::steer::wrap((c.pos.1 - at.1).atan2(c.pos.0 - at.0) - common::heading_at(&b, now)).abs();
+                r.toward = if off < std::f32::consts::FRAC_PI_3 {
+                    1
+                } else if off > 2.0 * std::f32::consts::FRAC_PI_3 {
+                    -1
+                } else {
+                    0
+                };
+            }
+        }
+        Some((c, false)) => {
+            let laws = common::laws(ctx);
+            let band = living_rules::sight::heard_band(c.dist, laws.heard_near_m, laws.heard_close_m);
+            let (_, wh, far) = living_rules::sight::heard_words("person", at, common::facing_at(&b, now), c.pos, band);
+            r.other = "heard".into();
+            r.other_where = format!("{wh}; {far}");
+        }
+        None => {}
+    }
+    r
 }
 
 /// Give up on a pending deliberation (e.g. model failure), logging why.
@@ -476,6 +772,10 @@ pub fn mind_consolidated(ctx: &ReducerContext, actor: u32, upto: u64) -> Result<
         for id in done {
             ctx.db.experience().id().delete(id);
         }
+        // Who heard the lines it integrated goes with them.
+        for line in ctx.db.line_heard().speaker().filter(actor).filter(|h| h.line <= upto).map(|h| h.line).collect::<Vec<_>>() {
+            crate::speech::forget_line(ctx, line);
+        }
     }
     let row = MindCursor { actor, upto, updated_ms: now };
     match ctx.db.mind_cursor().actor().find(actor) {
@@ -493,7 +793,7 @@ pub fn mind_consolidated(ctx: &ReducerContext, actor: u32, upto: u64) -> Result<
 /// Project consolidated mind state: persona, relations, beliefs, judgments, places.
 #[spacetimedb::reducer]
 pub fn mind_update(ctx: &ReducerContext, actor: u32, update: MindUpdate) -> Result<(), String> {
-    authorize_projection(ctx, actor)?;
+    let who = authorize_projection(ctx, actor)?;
     let now = common::now_ms(ctx);
     if update.replace {
         let keep: Vec<u32> = update.relations.iter().map(|r| r.other).collect();
@@ -538,8 +838,14 @@ pub fn mind_update(ctx: &ReducerContext, actor: u32, update: MindUpdate) -> Resu
             ctx.db.persona().insert(row);
         }
     }
+    let me = ctx.db.character().id().find(actor);
     for r in update.relations.into_iter().take(32) {
-        if r.other == actor || ctx.db.character().id().find(r.other).is_none() {
+        let Some(other) = ctx.db.character().id().find(r.other).filter(|_| r.other != actor) else { continue };
+        // "Stranger" is not a feeling about someone whose name one knows (family, one's
+        // community, an introduction: `perception::knows_name`): a mind that took a neighbour
+        // too far away to make out for a stranger does not write it (far-label, docs/STRANGERS.md).
+        if r.label.to_lowercase().contains("stranger") && me.as_ref().is_some_and(|m| crate::perception::knows_name(ctx, m, &other)) {
+            log::info!("mind_update #{actor}: relation \"{}\" to #{} not written: #{actor} knows their name", r.label, r.other);
             continue;
         }
         let existing = ctx.db.relation().by_pair().filter((actor, r.other)).next();
@@ -602,8 +908,108 @@ pub fn mind_update(ctx: &ReducerContext, actor: u32, update: MindUpdate) -> Resu
             ctx.db.place().id().delete(*id);
         }
     }
+    // Only a mind keeps attention cues: a character a person plays sees with the player's eyes,
+    // so cues written for one (its player memory, or the player's own call) are not kept.
+    if let Some(cues) = update.cues {
+        let played = !who.ai || crate::presence::played(ctx, actor);
+        set_cues(ctx, actor, if played { Vec::new() } else { cues }, now);
+    }
     if let Some(t) = update.thought {
         add_thought(ctx, actor, t, now);
     }
     Ok(())
+}
+
+/// Replace `actor`'s attention cues with `cues` (at most `CUES_PER_ACTOR`, the first ones kept).
+/// A cue the world cannot watch for is kept with its reason in `refused` and never matched, so
+/// the mind is told why (its prompt lists the set) and the inspector shows it. A cue that is
+/// unchanged keeps its row, its fires and its cooldowns.
+pub fn set_cues(ctx: &ReducerContext, actor: u32, cues: Vec<CueIn>, now: u64) {
+    let old: Vec<Cue> = ctx.db.cue().actor().filter(actor).collect();
+    let mut kept: Vec<u64> = Vec::new();
+    for c in cues.into_iter().take(CUES_PER_ACTOR) {
+        let row = Cue {
+            id: 0,
+            actor,
+            for_key: clip(c.for_key.trim(), 80),
+            why: clip(c.why.trim(), 160),
+            who_id: c.who_id,
+            who: clip(c.who.trim(), 40).to_lowercase(),
+            doing: clip(c.doing.trim(), 40).to_lowercase(),
+            phase: clip(c.phase.trim(), 40).to_lowercase(),
+            thing: clip(c.thing.trim(), 40).to_lowercase(),
+            at: clip(c.at.trim(), 48),
+            within: if c.within > 0.0 { c.within.min(48.0) } else { 20.0 },
+            near_me: c.near_me.clamp(0.0, 256.0),
+            refused: String::new(),
+            fired: Vec::new(),
+            fires: 0,
+            set_ms: now,
+            source: clip(&c.source, 120),
+        };
+        let refused = cue_refusal(ctx, actor, &row);
+        let row = Cue { refused, ..row };
+        let same = |o: &Cue| o.for_key == row.for_key && o.who_id == row.who_id && o.who == row.who && o.doing == row.doing && o.phase == row.phase && o.thing == row.thing && o.at.eq_ignore_ascii_case(&row.at) && o.within == row.within && o.near_me == row.near_me;
+        match old.iter().find(|o| same(o) && !kept.contains(&o.id)) {
+            Some(o) => {
+                kept.push(o.id);
+                if o.why != row.why || o.refused != row.refused || o.source != row.source {
+                    ctx.db.cue().id().update(Cue { id: o.id, fired: o.fired.clone(), fires: o.fires, set_ms: o.set_ms, ..row });
+                }
+            }
+            None => {
+                let r = ctx.db.cue().insert(row);
+                kept.push(r.id);
+            }
+        }
+    }
+    for o in old.into_iter().filter(|o| !kept.contains(&o.id)) {
+        ctx.db.cue().id().delete(o.id);
+    }
+}
+
+/// Why the world cannot watch for this cue (empty: it can). Only what perception reports can
+/// be watched for, by type: a person or creature, what it is doing, a resource or structure,
+/// near one of one's own places.
+fn cue_refusal(ctx: &ReducerContext, actor: u32, c: &Cue) -> String {
+    let sc = common::scripts(ctx);
+    let creature = c.who_id != 0 || !c.who.is_empty();
+    if !c.phase.is_empty() && living_rules::doing::Phase::parse(&c.phase).is_none() {
+        let words: Vec<&str> = living_rules::doing::Phase::ALL.iter().map(|p| p.word()).collect();
+        return format!("\"{}\" is not a phase one can see (one sees: {})", c.phase, words.join(", "));
+    }
+    if !c.for_key.starts_with("stance:") && !c.for_key.starts_with("project:") && !c.for_key.starts_with("goal:") {
+        return "it serves no stance, project or goal".into();
+    }
+    if creature && !c.thing.is_empty() {
+        return "it watches for a creature and a thing at once".into();
+    }
+    if !creature && c.thing.is_empty() && c.at.is_empty() {
+        return "it names nothing to watch for".into();
+    }
+    if (!c.doing.is_empty() || !c.phase.is_empty()) && !creature {
+        return "what is being done needs someone doing it".into();
+    }
+    if c.who_id != 0 {
+        if c.who_id == actor {
+            return "one does not watch for oneself".into();
+        }
+        let Some(other) = ctx.db.character().id().find(c.who_id) else { return format!("there is no one #{}", c.who_id) };
+        let met = ctx.db.familiar().by_actor_thing().filter((actor, FAM_CREATURE | c.who_id as u64)).next().is_some()
+            || ctx.db.relation().by_pair().filter((actor, c.who_id)).next().is_some()
+            || ctx.db.character().id().find(actor).is_some_and(|me| crate::perception::knows_name(ctx, &me, &other));
+        if !met {
+            return format!("you have never seen #{}", c.who_id);
+        }
+    }
+    if !c.who.is_empty() && c.who != "unknown" && !living_rules::catalog::CREATURES.iter().any(|k| *k == c.who) {
+        return format!("\"{}\" is not a kind of creature", c.who);
+    }
+    if !c.thing.is_empty() && !sc.skills().resources.iter().chain(sc.skills().structures.iter()).any(|k| k.name == c.thing) {
+        return format!("\"{}\" is not a kind of thing one sees", c.thing);
+    }
+    if !c.at.is_empty() && !ctx.db.place().actor().filter(actor).any(|p| p.name.eq_ignore_ascii_case(&c.at)) {
+        return format!("you know no place called \"{}\"", c.at);
+    }
+    String::new()
 }

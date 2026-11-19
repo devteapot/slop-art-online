@@ -1,0 +1,70 @@
+{
+ "schema": 1,
+ "family": "character:face-types",
+ "id": "20261112-c68bbe63-f64f72",
+ "published": "2026-11-12T07:23:45+01:00",
+ "imported": "2026-11-12T07:23:45+01:00",
+ "track": "char-4",
+ "maker": "Claude Fable 5.2",
+ "note": "Pass 3: long hair falls close to the back (combed over the garment's measured collar and back, gathered behind the shoulders, front hair ending at the jaw, .collar files for a coat); short hair is one sheet from the whorl to the hairline in place of rings of tiles; hair is shaded as one smooth shape, so the client's highlight is one hard ring and its shadow one edge. 59 hair files, 16.9 MB.",
+ "source": {
+  "commit": "c68bbe632ed65d1be4dccdf2ff97851cf1e22a29",
+  "branch": "char-4",
+  "dirty": false,
+  "generator": "living/tools/blender/hair.py",
+  "generator_sha256": "d11997f919abb6f2095496a54aa21d025faceac72178996f5ea295345e3be2dc",
+  "generator_state": "committed",
+  "params": {}
+ },
+ "renderer": {
+  "method": "asset-view (the game)",
+  "commit": "",
+  "key": "asset-view (the game)",
+  "preset": "",
+  "note": "hair-short and hair-long: every hair style on a type's head before and after, from the front, 40 degrees, the side, 140 degrees and the back and at the game camera (each screen pixel enlarged), with the reference's head from the same five sides in the last row; hair-people: four whole people before and after on a frame of the idle clip from the front, three-quarter, side and back and at the game camera, the reference at the same views in the last row; hair-close: four people close up after, the reference in the last row. All under the client's own hair light: the earlier sheets' stand-in that turned hair normals to the camera is not used, so the before columns show the ring and shadow edge as the client drew them on the old files. Eyes are held open by the photo tool. The vroid member is the reference at the same views; the blue-protocol member is published CEDEC slides, for comparison only"
+ },
+ "preset": "",
+ "media": "media/character-face-types/20261112-c68bbe63-f64f72",
+ "members": [
+  {
+   "name": "types",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "d465d3fbf5ed12a1d0f6fea4595871604e6a6740ad4ccdcb800f627d4b7a71b3",
+   "shots": [
+    "hair-close",
+    "hair-long",
+    "hair-people",
+    "hair-short"
+   ],
+   "clips": []
+  },
+  {
+   "name": "vroid",
+   "role": "control",
+   "token_kind": "import",
+   "sha256": "8ee6d890f064f64a0b83084cb0c52675868d8a85fabf537fb21c5024a949877e",
+   "shots": [
+    "hair-close",
+    "hair-long",
+    "hair-people",
+    "hair-short"
+   ],
+   "clips": []
+  },
+  {
+   "name": "blue-protocol",
+   "role": "control",
+   "token_kind": "import",
+   "sha256": "9bc53d2d78bf1c6a60bccad7c2d8bd08c1570636b17b0b36d5020b5bfc2dc36e",
+   "shots": [
+    "hair-close",
+    "hair-long",
+    "hair-people",
+    "hair-short"
+   ],
+   "clips": []
+  }
+ ],
+ "delivered": []
+}

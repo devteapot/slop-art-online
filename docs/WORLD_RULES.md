@@ -17,6 +17,7 @@ Each skill in [`skills.rhai`](../living/scripts/skills.rhai) has a `<skill>_spec
 | Trait | Meaning |
 | --- | --- |
 | `target` | It is aimed at something. |
+| `target_class` | What its target may be, when not anything: a target class or a list of them (`creature`, `resource`, `structure`, `place`, as `a.target.class` reads). Players' lists offer it only toward those (`ui::offered_toward`, and the default `on`: a creature skill is not offered on a thing); its `_check` still refuses whatever reaches it. Needs `target: true`. Since 2026-11-11: `appraise` is `creature`. |
 | `item` | It takes an item: `true`, or a word for what the item names (`"technique"`, `"signal name"`). |
 | `items` | The item words it is given (`build`: campfire, shelter...). These are choices for clients and prompts. They are accepted for the skill even when they are not items, structures or techniques (`lodging`). |
 | `args` | Further arguments it reads, for prompts (`qty`, `want`, `text`, `graph`...). |
@@ -118,7 +119,7 @@ Recorded: "I know how to coax a fire and mend what's torn". Renamed: "nothing bu
 
 A declaration without `about` or `cadence` is refused when the script compiles.
 
-**Senses** (`senses(a)`, hot): how far a creature sees and hears, a map of `sight` and `hearing` in metres. The shipped law keeps the values the engine had as constants (`SIGHT`, `NIGHT_SIGHT`, `TORCH_SIGHT`, `HEARING`, now gone): 11 m by day, 6 at night, 9 at night with a torch in the pack, hearing 9 m. Its description: "By day one sees 11 m; at night 6 m, or 9 m carrying a torch. Rock, walls and shut gates block the line of sight. Speech carries 9 m." The numbers in it come from the same functions as the law (`sight_in`, `hearing_of_people`), so the text follows the law. A passive is a line of the law (`+ if knows(a, "…") { 2.0 }`); `reach` must still bound it.
+**Senses** (`senses(a)`, hot): how far a creature sees and hears, a map of `sight` and `hearing` in metres. The shipped law keeps the values the engine had as constants (`SIGHT`, `NIGHT_SIGHT`, `TORCH_SIGHT`, `HEARING`, now gone): 11 m by day, 6 at night, 9 at night with a torch in the pack, hearing 9 m. Its description: "By day one sees 11 m; at night 6 m, or 9 m carrying a torch. Rock, walls and shut gates block the line of sight. Speech carries 9 m." The numbers in it come from the same functions as the law (`sight_in`, `hearing_of_people`), so the text follows the law. A passive is a line of the law (`+ if knows(a, "…") { 2.0 }`); `reach` must still bound it. Since 2026-11-11 (`fov-1`) the law may also return a `field` (how the view narrows away from facing): the shipped law does when the world's `fov_on` law is on, reading its values through `law(name)`, a primitive that gives any `laws()` constant with the world's own value over it ([perception](PERCEPTION.md#the-field-of-view-seventh-change)).
 
 **How it stays cheap.**
 
@@ -144,7 +145,7 @@ A declaration without `about` or `cadence` is refused when the script compiles.
 | `join_window_s` | 300 s | two literals | a request to join a community |
 | `address_m` | 6 m | two literals (`perceive.rs`) | speech to no one in particular is for the only listener this close |
 | `keep_seen_m` | 1 m | `KEEP_MARGIN` (`perception.rs`) | a player's perceived set keeps a creature this far past sight |
-| `chase_lost_share` | 1.4 | literal (`motion.rs`) | a chase is lost beyond this share of the chaser's sight |
+| `chase_lost_share` | 1.4 | literal (`motion.rs`) | a chase is lost beyond this share of the chaser's sight. **Removed 2026-11-12** (`pursue-last-seen`, [movement mind](MOVEMENT_MIND.md)): it held a chase through walls; a chase is now held by the sight rule, and out of sight goes to where its target was last seen |
 | `spawn_hunger`, `spawn_energy` | 25, 85 | literals (`seed.rs`) | a body that comes into the world |
 | `pasture_per_tile` | 0.02 | `PASTURE_PER_TILE` (`common.rs`) | grazing a grassy tile holds |
 
@@ -163,6 +164,55 @@ Two couplings that let a law and the engine disagree are fixed:
 
 **Old scripts.** A script installed before a required law existed (`REQUIRED_LAWS`: `senses`, `motion`) runs with the shipped script's functions underneath its own until its next install, and `install_script` refuses a script without it. An old `laws()` with `sight_day`, `run_speed`, `turn_rate` and the rest is ignored: those keys are no longer read.
 
+### The body: meters and statuses
+
+**Status:** on main since 2026-11-11 (merge `61b7b2eb`, branch `rules-senses-outcomes`) ([interface, "What was agreed" 5](INTERFACE.md#what-was-agreed)). Before, four places held their own thresholds for how a body is: the authority's bodily alarms (`brain.rs`: very hungry 80, starving 97, badly hurt below 40 health, exhausted below 12), the mind service's body words (`prompts::felt_body`: hungry above 55, …), the rethink gate's levels (`rethink.rs`: hungry from 50, very tired from 25, …) and the game client's pills (`ui/live.rs`: tired below 35). Now one law in the script says it, and all of them read it.
+
+**`meters()`** (compile): the bars a body has, each naming fields of its `my_vitals` row.
+
+```rhai
+fn meters() {
+    [
+        #{ name: "health", value: "hp", max: "max_hp", order: 0 },
+        #{ name: "energy", value: "energy", max: 100.0, order: 1 },
+        #{ name: "hunger", value: "hunger", max: 100.0, order: 2, shown: false },
+    ]
+}
+```
+
+`value` is the field shown, `max` a field or a number above 0, `order` its place, `label` its words (default: the name, capitalised), `shown: false` a meter off the screen that still bounds its value and feeds the statuses. Nothing in the engine lists the vitals: a world (or the stamina proposal on `design-stamina`) that adds a vital adds a column at the end of `vitals` with a `#[default]` and its `<field>_rate`, one meters row, and the column's line in `Vitals::FIELDS` and `Vitals::fields` (`tables.rs`; SpacetimeDB 2.14.1 gives a module no generic field names for its own rows). The mind service and a client read their `vitals`/`my_vitals` row generically (`living_rules::script::body::fields_of_json` over the row's JSON), so they need no change. The install refuses a meter that names a field the row does not have ("meters: `stamina` shows 'stamina', which is not a my_vitals field"), an unknown key, a `max` that is not a field or a positive number, and a name declared twice. A script with no `meters()` has health and energy.
+
+**`status_of(a)`** (event): how a body is, a list of statuses. `a` is the body, not a skill's context: every numeric field of the vitals row by name as it stands now (moved along its `<field>_rate` since `at_ms`, held within its meter, rounded to whole numbers; rates to a hundredth), each `<x>_ms` time as `<x>_ago_s` (whole seconds, at most 120; -1 never), `share` (each meter's value over its max, by meter name), `kind`, `stage` and `night`. Ids (`id`, `*_by`), the anchor `at_ms` and `rate_key` are left out. Each status is `#{ name, tone, text }`, tone `good`, `warn`, `bad` or `plain` (append-only, `body::TONES`), `text` short words for a screen, and optionally:
+
+| Key | Meaning |
+| --- | --- |
+| `meter` | the meter it speaks of (one status per meter in the shipped law) |
+| `felt` | a mind's words for it: the body line in prompts joins the metered ones with commas and the others after a semicolon ("very hungry, exhausted, badly wounded; you are growing weaker") |
+| `alarm` | words told to the body's mind once each time the status begins (a `body` percept); two statuses with the same words are one episode (badly hurt and barely alive) |
+| `salience` | the alarm's (default 0.5) |
+| `think` | `always`, `no_food` (only when carrying no food) or `never` (default): whether the alarm asks the mind to think |
+| `routine` | the want whose routine is quoted when it does ("food": what one's hunger runs, so a way of eating that cannot feed can be seen) |
+
+The shipped thresholds, one set:
+
+| Meter | Statuses (name: from) |
+| --- | --- |
+| hunger | `fed` ≤ 15 (good), `not_hungry`, `peckish` > 40, `hungry` > 55 (warn), `very_hungry` ≥ 80 (warn, alarm, think without food), `starving` ≥ 97 (bad, alarm, think, routine food) |
+| energy | `well_rested` ≥ 85 (good), `rested`, `a_little_tired` < 50, `tired` < 30 (warn), `exhausted` < 12 (bad, alarm), `spent` ≤ 0 (bad, alarm) |
+| health (share of full) | `unhurt` ≥ 0.9, `a_little_hurt` < 0.9, `hurt` < 0.6 (warn), `badly_hurt` < 0.35 and `barely_alive` < 0.15 (bad, alarm "You are badly hurt.", think) |
+| none | `freezing` (a person losing health at night, not starving: alarm, think), `in_combat` (hurt within 15 s), `wasting` (health falling) or `recovering` (rising, not full) |
+
+What moved against the old copies: the badly-hurt alarm now starts below 35% of full health (was below 40 health points); the rethink gate's levels are the law's words (energy 20 reads "tired", was "very tired"; health is a share of full, was points); the body line gains an energy word between 50 and 85 ("rested"); the client's pills (once the laptop reads the law) start "Tired" below 30 (was 35) and show "Hungry" from 55 (was 80, which is now "Very hungry"). `body_state` (the rules' own hungry, starving and wound for rates and onlookers) is unchanged: it is the rules' input, not the body's words. The general coordinator kept the new levels (2026-11-11): a share of full health is the better rule, and one law read by client and minds is the point. Because the rethink gate now reads energy 20 as "tired", the next hamlet batch reports deliberations per person-hour against the batches before `61b7b2eb`, so a change in how often minds reconsider can be traced here.
+
+**Who reads it.**
+- **The authority's alarms** (`brain.rs` `alerts`, for bodies the minds hold): `BodyFacts::of` over the `vitals` row, then the statuses' alarms; each alarm's episode is a bit among the top 16 of `mind_state.alerts`, by its words (`alarm_bit`). The old bits (1, 2, 4, 8, 64) are cleared on a body's first evaluation under this change, so a body already hungry is told once more.
+- **The mind service** (`prompts::felt_body`, `felt_by_meter`): from the `vitals` row it subscribes to, every column by name, with the world's script compiled per thread; the rethink gate's `body` from the scene's numbers.
+- **The game client**: `Scripts::meters()` and `Scripts::status_of` over `my_vitals` when the row changes (the laptop's change).
+
+**A world's own.** A floor overlay replaces either function as any law (`floors::compose`: the shipped one stays callable as `base_meters`, `base_status_of`). Cullet keeps the shipped ones (its `tired_below` of 35 is its walking pace, not a word); test `cullet_composes_with_the_body_law`. Test `a_world_adds_a_vital_with_a_meters_row` adds `stamina` with a meters row and a status, and nothing else.
+
+**Cost** (Spark, SpacetimeDB 2.14.1 in `slop-trials-stdb`, host load average 38 at the start, shared with other work): `living/tools/bench.py --fresh --seconds 90 --settle 15` on the default seed (264 characters: 182 people and 82 animals, no players or minds). The span `brain.status` (`BodyFacts::of` and `status_of`, kept per state: whole numbers, so bodies in one state share an answer, at most 4,096 states before the memo starts over): 124 a second, p50 0.007 ms, p99 0.14 ms (max 8.4 ms, one call under that load), 2.27 ms of work a second; the tick p50 1.41 ms, p99 5.05 ms, none over 16.7 ms. Evidence `.local/living/verify/bench-status/rest.json`. The install calls `status_of` on 189 sample bodies (every meter in twentieths, three bodies, three states).
+
 ### Traits instead of lists
 
 Rules read what a thing is, declared in the script, instead of lists of names in Rust or in rules:
@@ -170,13 +220,13 @@ Rules read what a thing is, declared in the script, instead of lists of names in
 | Was | Now |
 | --- | --- |
 | `catalog::ITEMS` (26 names in Rust) | `items()`: the world's items in order, each with its traits; read once into `catalog::Skills::items` (`catalog::item`, `item_names`), so normalization, install samples, the game client's verbs and name laws take the world's items |
-| `cook_check`, `smoke_check`: only `"fish"` or `"meat"`, and `"cooked_" + item` | the items' `cooks_to` and `smokes_to` traits (`item_trait`, `items_with`); the refusal lists them ("only raw fish or meat can be cooked") |
+| `cook_check`, `smoke_check`: only `"fish"` or `"meat"`, and `"cooked_" + item` | the items' `cooks_to` and `smokes_to` traits (`item_trait`, `items_with`); the refusal lists them ("only raw fish or meat can be cooked"). Since recipes-1 they are recipes that turn items by those traits ([one table](#one-table-of-what-is-made-recipes-1)) |
 | `graze_check`: "only deer graze"; `act.rs` filled `pasture` and ate the grass for the skill named `graze` | `kinds()`: the kind's `grazes` trait ("only grazing animals graze"); the engine works out `a.actor.pasture` for any skill whose rules read it (`Scripts::skill_reads_actor`), and grass is eaten by the `graze` effect `graze_done` returns |
 | `lunge`, `max_hp`, `carcass_meat`, `carcass_hide`, `dodge_dist`, `dodge_speed` switches by species, and an attack's bare damage | traits of each kind in `kinds()` (`blow` for the bare attack); the functions read the table, so the engine's calls by name are unchanged |
 | `foods_text` listed seven foods; `source_of("food")` and `act.rs`'s food hint named berries and fish | built from the items' `nutrition` and the resources' yields; `act.rs` asks `source_of("food")` (`Scripts::text_of`) |
 | `LATCHES` (`brain.rs`), the notable skills in `report()` (`act.rs`), `rooted` (`act.rs`), `MOVES` (`combat.rs`), `skill == "flee"` for a reflex | skill spec traits `latch`, `notable`, `moving`, `moment`, `reflex` (`catalog::SkillSpec`) |
 | the theft rule in `act.rs` (owner, community, guest) | the `theft(a)` law; the engine fills `a.target.community` and the new `a.target.hosts` (the actor is the owner's guest) for a structure, and does what follows: the owner roused if it sees, onlookers told |
-| warmth by structure kind (`act.rs` `warmth`: campfire, shelter, house, hall, inn, workshop) | `structure_traits()`: `warms` (a hearth) and `roof`; distances stay the laws' `fire_warmth` and `shelter_warmth` |
+| warmth by structure kind (`act.rs` `warmth`: campfire, shelter, house, hall, inn, workshop) | `structure_traits()`: `warms` (a hearth) and `roof`; distances stay the laws' `fire_warmth` and `shelter_warmth`. Since `goods-1` (2026-11-11) these are traits of `structures()`, with `burns` for fires that eat fuel ([goods](#goods-recipes-and-fuel)) |
 | food in any structure spoils at a third (`tick.rs`) | `kept_spoil(kind)`, a name law over the structure kinds |
 | a planted bush's 5 berries (`act.rs`, `seed.rs`) | `planted_max(kind)` |
 | `occupation_know_how` (`seed.rs`) | `occupation_knows(occ)` (`Scripts::words_of`) |
@@ -184,17 +234,18 @@ Rules read what a thing is, declared in the script, instead of lists of names in
 **Stayed in Rust as primitives,** and why:
 
 - The torch in `senses`: the law names the item it reads (`inv(a, "torch")`), in the script. A `light` trait read through the items would make the law read the whole pack, so the per-state key would be every pack and the hot-path memo would stop sharing answers.
-- `catalog::CREATURES`, `RESOURCES`, `STRUCTURES` and `TECHNIQUES`: the names generation, species files and the client draw from. Their rules (what a kind, a structure or a technique does) are the script's; the name lists are the world's vocabulary. Moving them is the next step of the same kind as `items()`.
-- The calendar (night 20:00–06:00, the world starting at 07:00, winter as a quarter of the year): `is_night` and `season_of` run in the rules crate, the authority and the client on every frame or tick. The minds' world text states them (`calendar_law`).
+- `catalog::CREATURES`: the names generation, species files and the client draw from. `RESOURCES`, `STRUCTURES` and `TECHNIQUES` moved into the script on `goods-1` (2026-11-11) as `resources()`, `structures()` and `know_how()` ([goods](#goods-recipes-and-fuel)); a build without the script runtime (the lab viewer) keeps the old resource and structure names to tell kinds apart.
+- The calendar's frame (the world starting at 07:00, winter as a quarter of the year): `hour_of` and `season_of` run in the rules crate, the authority and the client on every frame or tick. Night itself is a law since `rules-1` (`daylight(hour)` over `night_hours()`, read once per game minute of the day; [Cullet's rules](CULLET_RULES.md#night-as-a-law)), and so is the day's length (a seed's `day_minutes`). The minds' world text states them (`calendar_law`).
 - Infrastructure limits (memo sizes, sweep and step cadences, table bounds, input buckets' clamps) and generation constants: not rules a world varies.
 - Many remaining numbers the survey found (alert thresholds in `brain.rs`, think and re-think timings, fight-report pacing, mutation sizes, wander distances): rules, still in Rust; listed for the next pass in the branch's survey.
 
 ### Every law described, and the minds' world text built from them
 
 - **Declarations.** Every law the engine asks is declared by `<law>_law()` with `about`, `cadence` and, for laws that belong in the minds' world text, a `topic`; `covers` lists further functions one declaration describes (`combat_law` covers `lunge`, `max_hp`, …). A law with no function of its own states a rule the engine keeps (`calendar_law`, `settlements_law`).
-- **World constants.** `laws_about(l)` gives each `laws()` key its words for the values in force (`a campfire warms those within 3.5 m`).
+- **World constants.** `law_about(l, name)` gives one `laws()` key its words for the values in force (`a campfire warms those within 3.5 m`). The engine asks it once per key and joins the answers in Rust (since `laws-about-list`, 2026-11-13): Rhai counts every string inside one value against its string limit (6,144), and the old `laws_about(l)`, one map of all the words, reached that limit at 126 constants. A script that still has only `laws_about(l)` (a world installed before) is read the old way. An overlay changes one constant's words with `fn law_about(l, name) { if name == "x" { `...` } else { base_law_about(l, name) } }`.
 - **Install refusal** (`check::described`, run last so a law's own failure is reported first): "the law `theft` has no description (declare `theft_law()` with `about`, or list it in another law's `covers`)", "the world constant `follow_s` has no description", or "a law's description failed: …". The asked laws are the context laws, the hooks, the laws by name (`name_laws`) and `ENGINE_LAWS`; a skill's own numbers by kind (`dodge_dist`, `jump_speed`) are described by its spec.
 - **Numbers come from the laws.** Each `about` is built when the script compiles, from the same functions the engine asks: sight from `sight_in`, walking speeds from `move_speed` on sample bodies, foods from `nutrition`, recipes from `cost`, a blow's reach from `attack_spec().reach + lunge(kind)`, a yield's seconds from `yield_ms`. A floor that changes a law changes what minds are told (`world_text_is_built_from_the_laws`: day sight 7 on a floor gives "By day one sees 7 m").
+- **Combat timings in a law's words** (since 2026-11-12, `fix-attack-timing-text`): `{windup:<skill>}` in an `about` is replaced, when the script is read, by that combat skill's windup as the skill cards show it (`Scripts::timing`, a person's): the COMBAT law's "A person's attack winds up for {windup:attack}" reads "0.65 s" with the shipped script. A token naming no combat skill with a windup is refused at install. Test `the_combat_law_tells_the_attack_windup_the_cards_show`.
 - **The minds' world text** (`Scripts::world_text`): one line per section of `world_topics()`, its laws' `about` in source order, with the world's own sections (`seasons`, `life`, from the seed) where they belong. `prompts::world_rules` builds it once per rules revision (the WORLD line from the seed first), so the static prefix of every prompt changes only when the rules do; the prefix-cache tests (`*_shares_prefix`) pass. Print it with `cargo test -p living-rules --lib print_world_text -- --ignored --nocapture`.
 - **What changed in the text** against the old hard-coded `RULES` (`living/mind/src/prompts.rs`): two numbers it had wrong are now the laws' (a deer gives 5 meat, not 3; a person moves 2.6 m/s walking, the old line called it running), warmth distances are exact (3.5 and 2.5 m, not 3 and 2), sight, hearing and moving have their own sections (SENSES, MOVING; hearing moved out of OTHERS), recipes list every ingredient, theft is stated under SETTLEMENTS, and OTHERS says when a name is known.
 
@@ -217,7 +268,7 @@ Rules read what a thing is, declared in the script, instead of lists of names in
 
 The arms differ by less than main's own two runs differ (8–21 ms/s of tick work); no tick passed 16.7 ms. The first pair's run 4 overlapped a build of mine. Graph evaluations (`tick.slots`, where scenes ask a creature's sight) and steering (`tick.motion`) are flat.
 
-**Verification:** `verify-core` (cargo checks; tick, needs, food, refusal, seize, sight, senses, moves, skirmish, dealings, town, infant, lives, mechanics, steering), `verify-player` (deal, new_skill, told, appraise, combat, gesture), `verify-client` (30 of 30), `verify-generation` (island and the 4 km floor, with the seed rules kept as world laws), `verify-minds` with the fake model (17 cases); details and the failed attempts in each skill's `references/validation.md`. One rules bug was found by them and fixed (a new body's need rates). Not covered: a real model reading the new world text; the game client drawn and driven; `verify-knowledge` and `verify-llm` (not touched).
+**Verification:** `verify-core` (cargo checks; tick, needs, food, refusal, seize, sight, senses, moves, skirmish, dealings, town, infant, lives, mechanics, steering), `verify-player` (deal, new_skill, told, appraise, combat, gesture), `verify-client` (30 of 30), `verify-generation` (island and the 4 km floor, with the seed rules kept as world laws), `verify-minds` with the fake model (17 cases); details and the failed attempts in each skill's `references/validation/history.md`. One rules bug was found by them and fixed (a new body's need rates). Not covered: a real model reading the new world text; the game client drawn and driven; `verify-knowledge` and `verify-llm` (not touched).
 
 ## Primitives
 
@@ -381,6 +432,347 @@ All of this is in `skills.rhai`. It is the same for players, minds and graphs: t
 
 - A skill whose spec reads `want` offers one choice per thing to ask for, from what the player carries and the skill's `items`: `offer`, and now `offer_terms`.
 - What the rules tell the player (experiences of kind `record`) shows as a toast.
+
+### Answering: accept and decline by id
+
+**Status:** built on branch `rules-offers-2`, 2026-11-11. Before it, `accept` toward a person took their oldest standing terms first and only then their trade offer, so a player who pressed accept on the trade the window showed could agree to different terms instead. It also had no way to say no.
+
+**The acts** are the same for both controllers: `human_act`, `mind_act` and graph leaves. They are parsed by the shared grammar (`graph::Action` `offer`/`record`, `normalize.rs`):
+
+```json
+{"do": "accept",  "target": {"id": 4}, "offer": 17}
+{"do": "accept",  "target": {"id": 4}, "record": 12}
+{"do": "decline", "target": {"id": 4}, "offer": 17}
+{"do": "decline", "target": {"id": 4}, "record": 12}
+{"do": "accept",  "target": {"id": 4}}
+{"do": "decline", "target": {"id": 4}}
+```
+
+- `offer` is a `trade_offer` id, as a player reads it in `my_offers` and a mind in its scene. `record` is a record id, as in `my_records` and a mind's dealings.
+- Without either, `accept` is what it always was: the person's oldest standing terms, then their trade. `decline` takes the one `accept` would take. A mind's existing acts parse and behave as before, and the stored act is byte-identical (test `answers_carry_what_they_name`).
+- `offer_id` and `record_id` are accepted as aliases, and so is a number written as text. 0 or null means none. Anything else is refused: "the id of the trade offer you answer". A skill whose spec does not list the argument ignores the word, as before.
+- The client's `ui::act_node` sends `"offer"` for `ActTarget::Offer` (left out when the id is 0).
+
+**Rules.** Both are ordinary skills in `skills.rhai`:
+
+- `accept_spec` and `decline_spec` (`args: ["offer", "record"]`, `talk`, reach 3);
+- `accept_check` and `decline_check` share `answer_refused`; `decline_duration` is 1 s;
+- `decline_ui()` declares only a look, the trade icon.
+
+The context gains `a.offer_id`, `a.record_id` and `a.offer`. `a.offer` is the trade offer at hand: the named one, read by id, or, when that one is gone or none is named, the target's standing offer to the actor. The engine fills it only for a law that reads it (`Scripts::skill_reads`), as it does `a.records`. A named record is found among `a.records`.
+
+Refused, with these words, at the start and again at completion:
+
+| Case | Refusal |
+| --- | --- |
+| a named offer that no longer exists | "that offer is gone" |
+| it is gone, and another offer from them stands | "they have changed their offer: now their 2 fish for your 1 hide" |
+| addressed to someone else, or not theirs | "that offer is not addressed to you" |
+| past its window | "that offer has expired" |
+| a named record not among the actor's | "that proposal is gone", or "they have changed their terms: now you give …, they give …" while other terms of theirs stand |
+| the actor's own proposal, or someone else's | "that proposal is not addressed to you" |
+| agreed already | "you have already agreed to it" |
+| run out (`not taken`) | "that proposal has expired" |
+| otherwise closed | "that proposal was declined" (or its status) |
+| a demand or a regard named | "that is not a proposal of terms" |
+| both named | "name one thing to answer: the offer or the proposal" |
+
+**Effects.**
+
+- `accept` with an offer returns the op `#{ op: "accept", offer: id }`. The engine takes only that offer, and only from the target to the actor while it stands. With a record, the agreement is made as before.
+- `decline` with a proposal closes it as `declined`, readable for 1 world hour. With a trade offer it returns `#{ op: "decline", offer: id }`, which ends that offer and nothing else. The engine refuses an offer not addressed to the actor, and with nothing standing: "they have no standing offer for you".
+- A decline tells the maker with `tell`, as kind `record`, salience 0.7, without asking its mind to think:
+  - "Bram declined your offer of 2 fish for 1 hide."
+  - "Bram declined your terms: you give 3 berries, they give 10 wood."
+- Onlookers witness "{a} turned down {b}'s offer." or "{a} turned down what {b} proposed."
+- The decliner's own outcome is the rules' line: "declined Bram's offer of 2 fish for 1 hide".
+- There is no cost and no limit on declining. Anything of the kind would be a law of the script.
+
+**What minds see:**
+
+- the scene's "asked of you" and "you are waiting on" entries carry `"offer": id`;
+- a proposal to them reads "…; accept or decline (toward them, record N)" in their dealings (`record_text`);
+- the talk turn's "between" lines name the offer ("(offer 17: accept to exchange, or decline)");
+- a trade offer's deliberation request names it ("You may accept or decline it (offer 17), or let it pass.");
+- the act forms (`prompts::ACTS`) and the talk examples show `accept` with `"offer"` and `decline`.
+
+The deliberation grammar lists both skills from their specs. `decline` is in `TALK_SHOWN`.
+
+**SpacetimeDB check** (consulted 2026-11-11; the docs' version selector reads 2.0.0; checked against the 2.14.1 crates pinned in `living/Cargo.toml`):
+
+| Source | What it says | What follows here |
+| --- | --- | --- |
+| [Automatic migrations](https://spacetimedb.com/docs/databases/automatic-migrations) | New columns only "to the end of a table with a default value"; "Adding columns without a default value" and "Removing or modifying existing columns", including changing their type, are forbidden. | The act's reference is two columns at the end of `activity` with `#[default(0u64)]` (`offer`, `record`). `activity` is no other table's column type, so no embedded row type changes (unlike `line_seen.line`, [COMMUNICATION.md](COMMUNICATION.md#10-spacetimedb-documentation-and-data-paths)). `trade_offer` and `record` are unchanged. |
+| `spacetimedb-lib-2.14.1/src/db/raw_def/v9.rs` | `RawMiscModuleExportV9::ColumnDefaultValue`: "A default value for a column added during a supervised automigration." | The macro's `#[default]` is the migration's default. |
+| [Tables](https://spacetimedb.com/docs/tables/) | "Tables can be private (default) or public". | `activity` stays private. Clients never read it; they read their own offers through `my_offers` and records through `my_records`, unchanged. |
+| [Performance](https://spacetimedb.com/docs/tables/performance/) | "Use the smallest integer type that fits"; "Be mindful of unbounded table growth". | Ids are `u64`, as `trade_offer.id` and `record.id` are. `activity` holds one row per acting creature, so 16 bytes a row and no growth. |
+
+Migration proven on the trial server (`slop-trials-stdb`, v2.14.1). Main's module (`b004e6e`) ticked on a fresh world. The world was then updated in place to this branch's module (`verify.py launch --keep-data`). It kept ticking from tick 6,012, its 233 existing `activity` rows read `offer = 0, record = 0`, and accept and decline then worked on it.
+
+**Data paths.**
+
+- An answer reads the named `trade_offer` by primary key, or the target's offers by the `from` index (a maker holds one at a time).
+- It reads the actor's records by `record_party.party`, as `accept` already did at completion. Its check now reads them at the start too.
+- It writes:
+  - a trade: two inventory moves and one row deleted, as before;
+  - a declined trade: one row deleted;
+  - a declined proposal: one record closed;
+  - for the maker: one experience row;
+  - for onlookers in sight: one witnessed row each.
+- Nothing is read or written per tick. Recipients are the parties' own `my_experience` rows, the mind service (owner) and the onlookers' perception. No benchmarks were run; this change adds no per-tick or per-subscriber work.
+
+**Verification** (Spark, trial server, fake model, 2026-11-11):
+
+- `just living-check` ok;
+- rules tests `answers_take_what_they_name`, `answers_carry_what_they_name` and `an_act_toward_an_offer_names_it`;
+- verify-core `scenes.py answers` 17 of 17, `dealings` 13 of 14 (regard needs the island);
+- verify-player `answers.py` 9 of 9, `offers.py` 17 of 17, `deal.py` 13 of 13;
+- verify-minds `answers` and `acts` pass. `dealings` failed 2 of 11 runs (cause not established; see verify-minds' validation record).
+
+Records are in each skill's `references/validation/history.md`. Not covered:
+
+- the game client drawing and sending these acts;
+- a real model choosing to decline;
+- `verify-client`: no view or public table changed, and `activity` is private.
+
+## Goods, recipes and fuel
+
+**Status:** built on branch `goods-1`, 2026-11-11, for Cullet's phase 4 ([small city](SMALL_CITY.md#the-land-that-feeds-it), decision 9: goods and fire that eats fuel now; pane decay and the tide later). The owner's standing decisions it follows: items satisfy requirements by traits, not lists; the world is self-sufficient; world rules are Rhai laws over Rust primitives; no hard-coded guardrails and no engine behaviour for tests.
+
+### The trait model
+
+What the world has is data in the script, each a list of maps with a `name`, read once when the script compiles. The engine keeps them as tables and gives the rules three primitives over them, so a rule asks by trait for one operation instead of rebuilding a list:
+
+| Primitive | Gives |
+| --- | --- |
+| `entry_of(table, name)` | the entry's map, or `()` |
+| `names_of(table)` | its names, in the script's order |
+| `having(table, trait)` | the names whose entry has the trait (neither `()` nor false) |
+
+| Table | Required | What its traits are |
+| --- | --- | --- |
+| `items()` | yes | `cooks_to`, `smokes_to` (what cooking or smoking makes), `fuel` (units a fire that burns `fuel` gets from one), `carry` (what one counts for in a pack; none: 1) and `room` (what holding one adds to the pack's limit) since goods-3, and any trait a world's recipes read (`alkali`, `bakes_to`, `oil`, `vessel`); data for the goods audit: `seeded`, `kept_for` ([goods](GOODS.md)) |
+| `structures()` | yes (new) | `warms` (a fire that needs no feeding), `roof`, `lights` (metres of lamplight, rules-1), `burns` (below), `holds` (a store: the most things it holds in all; rules-3) and `like` (the kind it counts as wherever a kind is asked by name; rules-3), `shows_owner` (it shows whose it is to anyone who looks, a sign or marker; the `owner_shown` law reads it; owner-known); `seeded` and `kept_for` are the goods audit's data (goods-3); other traits are the rules' data. A script with `structure_traits()` (from before, or a world's own) has its `warms`, `roof` and `lights` stand over the listed kinds' |
+| `resources()` | yes (new) | `yields`, `regrow_per_h` (units a game hour of growing time; `regrow`, a real minute, before rates-2), `regrow_by_season` (the share of that rate in each season; rules-3), `max`, `ground` and `by_water` (where a settlement's promised nodes go), `gather_ms` |
+| `know_how()` | yes (new) | `help` (what someone taught or reading is told), `requires` |
+| `recipes()` | no (none) | below; since recipes-1 the shipped script's holds crafting, cooking and smoking ([one table](#one-table-of-what-is-made-recipes-1)), and since goods-3 building and paving (`by: "build"`, `"pave"`; [goods](GOODS.md#building-is-recipes)) |
+
+These replace the Rust constants `catalog::RESOURCES`, `STRUCTURES` and `TECHNIQUES`, and the Rhai switches `yield_of`, `regrow` and `requires`, which now read the tables. The shipped tables hold exactly what the constants and switches held. Requirements match by trait:
+
+- **Food** is anything with nutrition (`nutrition(item) > 0`), as before.
+- **Fuel** for a fire is anything with the item trait its kind's `burns.fuel` names. Peat (`fuel: 1.0`) and wood (`fuel: 1.0`) burn in a hearth; lamp oil (`oil: 1.0`) burns only in a lamp (`burns.fuel: "oil"`).
+- **A recipe's input** is an item by name or anything carrying a trait: glass's `alkali: 1` takes ash, or a world's soda with `alkali: true`, with no recipe changed.
+
+### Fire that eats fuel
+
+A structure kind with a `burns` trait is a fire that eats fuel:
+
+```rhai
+#{ name: "hearth", burns: #{ fuel: "fuel", rate: 0.5, warmth: 4.0, light: 8.0, holds: 12.0 } }
+```
+
+- `fuel`: the item trait it burns; `rate`: units a game hour while lit (converted with the world's `day_ms`); `warmth`, `light`: metres while lit; `holds`: the most units it takes.
+- **Lit only while it holds fuel.** Its one number is `structure.lit_until_ms`: the moment its fuel runs out. The fuel left is the time left times the rate (`living_rules::fire`). Nothing is written or scanned while it burns.
+- **Settled on change.** Feeding it (`feed`) or drawing on it (a recipe's `fuel`, op `burn`) settles what is left and writes the new moment once. Fed fuel is gone from the pack; it is not an item to take back.
+- **Goes out** when the moment passes, with no write. **Relit** by feeding it again, which takes knowing `fire` (the rules' check, `feed_check`); anyone may feed a lit fire.
+- **Warmth and light come only from lit fires.** `act::warmth` counts a burning structure within its `burns.warmth` as a fire; its search radius is the largest warmth or shelter radius of the world's kinds, so an old world searches its 3.5 m as before. `common::lit_at` (rules-1's lamplight, `a.actor.lit`) counts a kind's light (its `lights`, or a fire's `burns.light`), and for a kind that `burns` only while it is lit: a lamp out of oil is dark. Cullet's lamp is such a fire (oil, 0.25 a game hour, holds 8); `cullet-laws.json` seeds its lamp with 8 units (32 game hours). A fire that needs no feeding (a campfire, `warms` without `burns`) warms as before, within `fire_warmth`. A body's needs pick up a fire going out at the next look (the needs' state key includes `near_fire`), as when it walks away.
+- **What others perceive.** A mind's scene says a burning structure is "burning, about N hours of fuel left on it", or "out". A client reads `lit_until_ms` on the public `structure` table: lit while it is ahead of the clock. Under `LIVING_PERCEPTION=scoped` the inventory table is private, so the fuel is not kept as items.
+- **What reads it:** `a.target.lit` and `a.target.fuel` (units) for a structure target. Cooking and smoking work at a burning fire that eats fuel as at a campfire, and are refused at an out one.
+
+### Recipes
+
+`recipes()` entries, made with the `make` skill (target: the workplace; item: what is made), or since recipes-1 by the skill their `by` names ([one table](#one-table-of-what-is-made-recipes-1)):
+
+| Trait | Meaning |
+| --- | --- |
+| `gives`, `makes` | the item made (the recipe's name by default) and how many (1) |
+| `takes` | `#{ name or trait: qty }` from the pack |
+| `turns` | instead of `gives` and `takes`: an item trait naming what an item becomes (`smokes_to`); one of the item is used |
+| `at` | the structure kind it is made at, or `"fire"` for any fire (none: anywhere) |
+| `lit` | the fire must be burning |
+| `fuel` | units the heat draws from the fire it is made at (a fire that needs no feeding gives its heat free) |
+| `knows`, `ms` | the technique it needs; how long it takes (8,000 ms) |
+| `by` (recipes-1) | the skill that makes it: `make` (the default), `craft`, `cook`, `smoke`, or a world's own way |
+| `tools` | `#{ name or trait: qty }` held and not used up, matched like `takes`; the making check refuses a missing one after the inputs, in the way's `tools` words (goods-3, [goods](GOODS.md#tools)) |
+| `beside`, `apart` (build) | built on the tile beside one that one points at (a wall, a gate, a bridge); not where one is already near a `fire` or a `shelter` (goods-3) |
+
+Before recipes-1 the shipped world had no recipes and no fires that burn fuel, so `make` and `feed` are not offered to its people (`listed` is computed from the tables), and its minds' world text is unchanged. A world with them gets a "Fires that burn fuel" and "Made at workplaces" sentence in its making section (`workplaces_law`), built from the same tables.
+
+### What a client shows (goods-2)
+
+**Status:** built on branch `goods-2`, 2026-11-11: the rules' side of the interface design (branch `design-interface`, `docs/INTERFACE.md` §1 and §7). Data only: no rule reads these traits, so no behaviour changes.
+
+**Items.** Every item in `items()` carries three traits, in the shipped script and in Cullet's goods, so the pack and a recipe grid stop guessing by name:
+
+| Trait | What it is |
+| --- | --- |
+| `icon` | a short stable id the client maps to an image; it does not change when a label does |
+| `label` | the player-facing name, lower case as in a sentence ("lamp oil"); the client capitalises it where it starts a line |
+| `group` | where a pack or a recipe grid sorts it: `food`, `fuel`, `material`, `tool`, `weapon`, `garment`, `glass`, `money` |
+
+Each kind's own entry is the source; there is no list in Rust. An install refuses an `icon`, `label` or `group` that is not text (`script::ITEM_LOOK`). The names are in `living_rules::ui` (`ITEM_ICONS`, `ITEM_GROUPS`, append-only; ui-decl-1's step 1 does not refuse others yet, and a rules test keeps the shipped and Cullet items within them). An item without them (a world's own, from before) looks like its name: the name as its icon, with spaces as its label, and no group (`item_look`).
+
+The icon ids, for the client. Today every id is the item's name; a world's new item may reuse an id (a world's soda could draw as `ash`) or name a new one, and the client draws an id it has no image for with its fallback.
+
+| Group | Item: `icon` (label) |
+| --- | --- |
+| food | `berries`, `fish`, `meat`, `cooked_fish` (cooked fish), `cooked_meat` (cooked meat), `smoked_fish` (smoked fish), `smoked_meat` (smoked meat); Cullet: `roots`, `baked_roots` (baked roots), `greens` |
+| fuel | Cullet: `peat`, `lamp_oil` (lamp oil) |
+| material | `wood`, `stone`, `fiber`, `hide`, `clay`, `leather`; Cullet: `kelp`, `ash`, `sand` |
+| tool | `torch`, `tablet`, `axe`, `pick`, `net`, `basket`, `salve` |
+| weapon | `spear`, `bow`, `arrow` |
+| garment | `cloak`, `armor` |
+| glass | Cullet: `glass` |
+| money | `mark` |
+
+The label is the item's name with spaces for every item listed. Wood burns (`fuel: 1.0`) but is grouped as a material: `group` is where it is shown, not what it can do; the rules ask the traits.
+
+**A recipe's look.** What a recipe makes looks like its product item: its `icon`, `label` and `group`. A recipe may set its own `icon` or `label`, which stand over the product's for what it makes (`recipe_look(product)`); a recipe that `turns` items looks like each product it makes (smoking: smoked fish, smoked meat). `make` does not read them. A client asks `Scripts::item_look_of("recipe_look", product)` or `item_look_of("item_look", item)` (`living_rules::script::ItemLook`). `craft`, `cook` and `smoke` are not folded into `recipes()` here; recipes-1 folds them, and the rule carries over unchanged (a cooked fish looks like the item `cooked_fish`).
+
+**Showing work.** `make_shows()` and `feed_shows()` are `#{ look: "work" }`, like `cook` and `craft`: while someone makes at a workplace or feeds a fire, anyone in view sees a `doing` row at it (`doing.x/y` is the workplace or fire), players and minds alike. `act_card` gains two rows (`make`, `feed`); the authority keeps the other skills' presentation codes (`codes.rs`).
+
+**Teaching a world's techniques.** `teach_check` checked the item against `techniques()`, which was what experimenting with eight materials can reveal (`discoveries`), not the know-how table. So Cullet's glassmaking, and the shipped fire_bolt and wound_tending, could not be taught. `techniques()` is now `names_of("know_how")` (the same fix reached main concurrently from rules-offers, `04dc7c07`, with a verify-core `teach` scene; goods-2 adds the comparison below and the glassmaking proofs); `discoveries`, `learn_how` and `experiment` keep the materials' lists (what experimenting reveals is only part of what there is to know). The refusal for a name that is no technique now lists the table in its order, so its text changed: before "(the techniques are: spear, fire, masonry, …, cooking, smoking)", after "(the techniques are: fire, cooking, spear, …, fire_bolt, wound_tending, toolmaking)" (and "…, glassmaking" in Cullet). For the 20 techniques of the old list every answer is the same: a comparison of main's script against this branch over every technique, three states of the teacher's knowledge and five targets gave 300 of 300 identical answers in each world, and differences only for fire_bolt, wound_tending, glassmaking and names that are no technique. `teach_check`'s heaviest sample fell from 635 to 282 operations (shipped) and 293 (Cullet).
+
+**What minds are told of know-how.** `know_how_law()`'s text was a hand-written list of twelve shipped techniques, so Cullet's minds were not told of glassmaking, nor anyone of fishing, smoking, basketry, archery, tanning, medicine, trapping, bridging, fire_bolt or wound_tending. It is now built from the table (`know_how_text`): each technique by name, with its `brief` in brackets where the entry has one. The shipped entries' briefs are the old text's brackets, so the shipped text is the old one with the ten missing names inserted in table order before toolmaking; Cullet's ends "toolmaking (axe, pick), glassmaking (glass from ash and sand at the furnace)." The cached world text of each world changes once, at its next install.
+
+**Make at a fuel-burning workplace (the design's §1).** The authority's check sees the fire: a player's act toward a structure runs as a one-off behaviour, and its target facts come from `act::target_facts`, which reads `lit` and `fuel` from the row's `lit_until_ms` (`fire_state`). The game client builds its own facts to choose what to offer (`living/game/src/verbs.rs` `thing_facts`) and leaves `lit` false and `fuel` 0, so `make_check` says "is out: feed it first" there and the F list never offers `make` at a hearth, oven, furnace or smokehouse. To match the authority, a client sets, for a structure target:
+- `lit`, `fuel` = `rules.structure(kind).fire_state(row.lit_until_ms, now_ms, world.day_ms)`, from the public `structure` row, the public `world` row and the server clock it already estimates. The authority computes the same through the same function.
+- (also wrong, for `cook` and `experiment`, not `make`) the actor's `near_fire`: the authority counts any burning structure within its `burns.warmth`, or a fire that needs no feeding within `fire_warmth`; the client counts only a kind named `campfire`.
+
+### One table of what is made (recipes-1)
+
+**Status:** built on branch `recipes-1`, 2026-11-11, after goods-2, approved by the general coordinator; the shape agreed with the laptop coordinator for the interface's recipe case ([interface](INTERFACE.md) §4, option A).
+
+**One table.** Everything a character makes, in every world, is an entry of `recipes()`. The shipped script's holds what `craft`, `cook` and `smoke` made, as data:
+
+| Recipe | `by` | What |
+| --- | --- | --- |
+| `cook` | `cook` | `turns: "cooks_to"`, `at: "fire"`, `lit`, knowing `cooking`, 4,000 ms |
+| `smoke` | `smoke` | `turns: "smokes_to"`, `at: "fire"`, `lit`, knowing `smoking`, 10,000 ms |
+| `spear`, `cloak`, `torch`, `axe`, `pick`, `net`, `basket`, `bow`, `arrow` (`makes: 3`), `salve`, `leather`, `armor` | `craft` | `takes` what `cost()` held for them, knowing what `made_by()` named; anywhere; 8,000 ms |
+
+`cost()` keeps only what is built (structures and the road); `made_by(item)` reads the craft recipes. A world's own recipes follow the shipped ones: Cullet's `recipes()` is `base_recipes() + [ash, glass, smoking, baking, lamp_oil]`. A world whose `recipes()` leaves `base_recipes()` out has nothing to craft, cook or smoke, and is offered none of the three (their specs' `listed` is computed from the table).
+
+**One mechanism, four ways in.** `make`, `craft`, `cook` and `smoke` keep their names, and their `_check`, `_duration` and `_done` are one mechanism's (`making_check`, `making_duration`, `making_done`) over the recipes whose `by` is the skill. A way declares `<skill>_making()`:
+
+| Trait | Meaning |
+| --- | --- |
+| `item` | what the act's item names: `"product"` (`craft spear`, `make glass`, `make smoked_fish`) or `"input"` (the raw food: `cook fish`) |
+| `who` | `"person"`: grown people (make); `"grown"`: anyone not young (craft); none: anyone (cook, smoke) |
+| `tires` | the energy one act costs (make: 1) |
+| `words` | the way's own words with `{item}`, `{n}`, `{k}`, `{source}`, `{at}`, `{products}`, `{inputs}`, `{input}`, `{takes}` filled in: `who`, `nothing`, `none`, `knows`, `at`, `at_fire`, `takes`, and `source` (how a thing it makes is come by, for `source_of`) |
+
+The check asks, in order: who may; the recipe for the item; its technique; its place, the fire burning, the fuel; what it takes. A way whose item is the input and that has one recipe (cooking, smoking) asks the recipe's technique and place before the item, as `cook_check` did. The effects are the recipe's inputs removed (an input by trait from the items carrying it, in the items' order), the fuel drawn, the product added, and the way's energy.
+
+**What a client reads** (`living_rules::script`, read once at install, no skill named in Rust):
+- `Scripts::products_of(skill)`: a way's products in the table's order (a grid's cells);
+- `Scripts::making_item(skill, product)`: what the act names (the product, or for `cook` and `smoke` the raw item: `cooked_fish` → `fish`);
+- `Scripts::recipe_parts(skill, product) -> RecipeParts`: `skill`, `product`, `look` (`recipe_look`), `makes`, `item`, `takes` and `tools` (each a `RecipePart`: `name`, `qty`, `any_of` the items that satisfy it, `look`), `at` (a kind, `"fire"`, or empty), `lit`, `fuel`, `knows`, `ms`. The script's `recipe_parts(skill, way, product)` builds it;
+- `made_how(product)`, the recipe in words, with the way's verb: "cook it at a fire from 1 fish (knowing cooking)", "craft it from 1 stone, 2 wood (knowing spear)", "make it at a furnace from 1 alkali, 2 sand and 1 fuel from it (knowing glassmaking)"; a recipe's `tools` will read ", using a blowpipe" before the knowing.
+
+**Declarations.** `make_ui`, `craft_ui`, `cook_ui` and `smoke_ui` are `making_grid(skill, text)` (not named `_ui`: the install calls every `_ui` function with no arguments): `choose: "grid"`, `running: #{ show: "progress", text }` ("Making {item}", "Cooking {item}", "Smoking {item}") and, where the way makes something, `source: "products"` and `detail: "made_how"`. `source: "products"` is accepted when the way has products (`Scripts::products_of`), not only when its spec lists items, and `detail` is checked on each product. A cell is greyed with the check's own words when the check fails only for the missing inputs: for every product of every way, in both worlds, the check without the inputs refuses with filled words, and passes with them (`making_is_one_mechanism_through_four_ways`).
+
+**How old names, graphs and routines carry over.** The skill names, their items and their words are what they were, so nothing migrates: a behaviour graph or a mind's routine naming `craft`, `cook` or `smoke` normalizes and runs as before, and the authority's witness lines for `craft` and `cook` ("{a} cooked a cooked fish") are unchanged. A resident who knew cooking knows the technique `cooking`, which the `cook` recipe asks. A world created before recipes-1 keeps the script it installed (with the old `cook_check`) until it is installed again; installed with the new shipped script, it cooks by the table. An old world-overlay that defines `recipes()` without `base_recipes()` (only Cullet's, which recipes-1 changes) would lose crafting, cooking and smoking if composed again over the new script.
+
+**Bit-identical outcomes.** `living-rules` `making_check::making_is_bit_identical` (ignored; it needs the scripts before, see its docs) compares the script at `3c73d835` with this branch's, for the island and for Cullet composed as created (its 48-minute day): each of `craft`, `cook`, `smoke` and `make`'s check (verdict and words), duration and, where it passes, effects, over 6 actors × 15 sets of knowledge × every target (none, a place, a person, every resource kind, every structure kind lit and out with 0, 0.2, 0.5 and 6 units of fuel) × every item, three structures and six non-names × three packs, then every pack (empty, plenty, one of each item, plenty but one item) for a grown person knowing everything; `teach_check` and `source_of` on every name; every skill's spec as read; the skill reference; the minds' world text; and four old graphs naming the skills. Island: 5,682,169 states, 0 differ, 27,150 acts made. Cullet: 10,645,925 states, 0 differ, 51,976 acts made. After merging main `46fa9db3` (rules-3's stores and winter, speech-2, the body's meters, ui-1 step 4), the same comparison against that main's scripts: island 5,682,170 states, Cullet 12,580,182 (its new store kinds are more targets), 0 differ in each. Not covered: a target that is not a structure with the kind `campfire` (the authority never makes one), which `cook_check` let through to its fire test and the mechanism refuses at its place test.
+
+**Costs.** Install checks (operations, most over the samples; limit 2,000): `cook_check` and `smoke_check` 593 in both worlds (goods-1 measured `cook_check` at 189; the refusal's words now come through the way), `make_check` 686 in Cullet (goods-1: 817), `make_done` 334, `store_check` 714 shipped and 923 in Cullet (goods-1: 901; its refusal's `source_of` looks through more recipes); the heaviest stays under half the limit (`goods_are_data_matched_by_trait_and_fires_eat_fuel`). The fuel gate (`just living-check`'s `script-gate`) passes: none of the hot laws it measures makes anything. One primitive is added, `entries_where(table, trait, value, absent)`: the entries whose trait is the text `value`, an entry without it counting as `absent`; a way's recipes and the item a recipe turns into a product are one call each.
+
+### Cullet's goods, as data
+
+They are the goods section of Cullet's laws, [`living/seeds/worlds/cullet/laws.rhai`](../living/seeds/worlds/cullet/laws.rhai) (the seed's `laws_file`, composed over the shipped script when the world is created; [Cullet's rules](CULLET_RULES.md)). It adds no rule. Its numbers are first guesses for the soak.
+
+| Goods | Traits |
+| --- | --- |
+| kelp, sand, glass, greens | plain items; greens nutrition 10 |
+| ash | `alkali` |
+| roots, baked roots | roots `bakes_to: baked_roots`; nutrition 14 and 30 |
+| peat | `fuel: 1.0` |
+| lamp oil | `oil: 1.0` |
+| fish fresh and smoked, marks | the shipped items |
+
+| Place | Kind | Gives |
+| --- | --- | --- |
+| hearth, oven, furnace (the Cone), smokehouse | `burns` peat or wood at 0.5, 1, 3 and 0.5 units a game hour | warmth 4, 2.5, 6 and 2 m while lit |
+| lamp | `burns` oil at 0.25 a game hour, holds 8 | lamplight 8 m while lit |
+| kelp_bed, sand_bank, peat_bank, root_plot, greens_bed, weir | resources | kelp, sand, peat, roots, greens, fish; in winter (rules-3) fish at 0.75 of the rate, kelp 1.25, greens 0.5, sand 1, roots and peat none |
+| store, peat_barn, yard_store, house_store | stores `like: "storage"` (rules-3) | hold 1,200, 1,000, 900 and 150 things; a crate anyone builds is the shipped storage, 120 |
+
+| Recipe | At | Takes | Heat |
+| --- | --- | --- | --- |
+| ash | any burning fire | 4 kelp | — |
+| glass | a burning furnace, knowing `glassmaking` | 1 alkali, 2 sand | 1 unit |
+| smoking | a burning smokehouse, knowing `smoking` | 1 of anything that `smokes_to` | 0.5 unit |
+| baking | a burning oven | 1 of anything that `bakes_to` | 0.25 unit |
+| lamp oil | any burning fire | 2 fish | — |
+
+**Shared stocks.** A resource node may draw on another's stock (`resource_node.pool`, the id of the node holding it; 0: its own). A spot of a fishing ground is fished from, but its amount, max and regrowth are its pool's: target facts, a mind's scene and the harvest all read the stock. A seed places nodes with `resource_nodes: [{kind, at, max, regrow_per_h, pool}]` (`regrow`, a real minute, is still read when `regrow_per_h` is absent); nodes naming the same pool share the first one's stock. An authored plan places them the same way (`plans[].resources[]` with `max`, `regrow_per_h` and `pool`, [authored plans](AUTHORED_PLANS.md#the-format)); Cullet's are placed since `rates-2` ([Cullet's goods, placed](CULLET_RULES.md#cullets-goods-placed-rates-2)).
+
+### What changed for old worlds
+
+- **The same goods.** The shipped tables hold what the constants and switches held; the install checks, the rules tests and the verify-core scenes below pass unchanged (except two lists in `rules_read_traits_not_lists`, which now include `feed` and `make`).
+- **A script installed before this change** lacks `structures()`, `resources()` and `know_how()`. It runs with the shipped script's functions underneath its own, as for any required law it lacks (`REQUIRED_LAWS`), until it is installed again; its own `structure_traits()` still decides `warms` and `roof`. An install without the three tables is refused. Old worlds have no fires that burn fuel, so `lit_until_ms` stays 0 and their campfires and houses warm as before.
+- **Schema.** Two columns appended with defaults, `structure.lit_until_ms` and `resource_node.pool` (both `#[default(0u64)]`); one admin reducer added, `place_resource` (scene setup, like `place_structure`). Clients need regenerated bindings to see the new columns.
+- **Engine limits.** Rhai counts nested array and map entries together, so the data tables set the limits: arrays 64 → 256 and maps 64 → 512 per value (`script::LIMITS`). The shipped rules need 27 and 35 (`measure_limits`).
+- **Installing the script.** `skills.rhai` grew from 113 KB to 128 KB, and its JSON is past Linux's 128 KiB limit on one command-line argument, so `spacetime call ... install_script "<source>"` no longer runs. Installs go over HTTP: `living/tools/install_script.py` (and `just living-publish`), the verify harness, the scenes, `codes.py`, verify-knowledge, `soak.py`, `perception_bench.py` and `verify_steering.py`.
+
+### Data paths
+
+| Path | Reads | Writes | Recipients | Frequency | Growth |
+| --- | --- | --- | --- | --- | --- |
+| Warmth (`act::warmth`, in `facts` and the needs' look) | structures in the chunks within the farthest warmth or shelter radius (the cached chunk lists, as before; the radius is 6 m for Cullet's furnace instead of 3.5) | — | — | as before | — |
+| Lamplight (`common::lit_at`) | as rules-1 left it, plus each lit fire's `lit_until_ms` on the rows it already reads | — | — | as before | — |
+| `feed` | the structure row, the items table entry | 1 `structure` row (`lit_until_ms`), the pack's inventory row | `structure` subscribers | per feeding | — |
+| `make` with heat | the structure row | pack inventory rows; 1 `structure` row | as above | per recipe made | — |
+| A fire burning down | — | — | — | — | — |
+| Harvest at a pooled spot | the spot and its stock's row (PK) | the stock's row | `resource_node` subscribers | per gathering | — |
+
+No whole-World scan was added. A fire costs nothing while it burns: no per-tick work, no scheduled row.
+
+### Costs (measured)
+
+- **Install checks**, operations per function (most over the samples; the limit is 2,000), release build on the dev-box. Main `6593f725` against this branch, shipped script: `cook_check` 489 → 189 (traits read through the primitives), `store_check` 386 → 482, `teach_check` 635 → 635 (the heaviest; 282 since goods-2), samples 9,014 → 12,971 calls. Cullet's goods over it: `make_check` 817, `make_done` 326, `feed_check` 217, `store_check` 901 (the heaviest), 24,802 calls.
+- **Fuel gate** (`living/tools/script_bench/gate.sh`, fuel per call under SpacetimeDB 2.14.1's wasmtime settings, dev-box), main `6593f725` → this branch: rates 8,528 → 8,523, rates-law 207,882 → 219,828 (+5.7%), strike 271,129 → 264,039, cooldown 1,704 → 1,704, perceived 74,259 → 67,046, hook 448,259 → 449,824, senses 3,097 → 3,115, senses-law 41,999 → 46,599, moves 1,928 → 1,928. **rates-law is over its 160,000 budget on main already** (207,882); this branch adds 5.7%. The budget was not raised here. After merging rules-1 and plan-1 (main `6a905c31`): rates 8,566, rates-law 212,202 (still the only law over budget), strike 274,209, cooldown 1,704, perceived 70,038, hook 450,841, senses 3,143, senses-law 41,866, moves 1,956.
+- **Not measured:** tick time and subscription volume at population. A fire changes one public row per feeding or recipe made; at Cullet's 64 residents that is a few rows a game hour.
+
+## Goods from the world (goods-3)
+
+Built 2026-11-12 on branch `goods-3` ([goods](GOODS.md), Cullet's content in [Cullet's rules](CULLET_RULES.md#where-cullets-goods-come-from-goods-3), proposals in [goods proposals](GOODS_PROPOSALS.md)):
+
+- **The goods audit** (`living-rules` `goods_audit`, a rules test, `just living-goods`): every item and structure kind of a world, where it comes from and what it is for, from the rules and the seed; it fails for a thing with no source or no use that the world's laws do not mark (`seeded`, `kept_for`).
+- **Building is recipes** (`by: "build"`, `"pave"`): `cost`, `build_check`, `build_duration` and `build_spec` read the table; a world adds its own builds.
+- **Tools** on recipes, held and not used up, enforced by the making check; `RecipeParts.tools` is filled.
+- **The carry count** by each item's `carry` (an arrow and a mark 0.1) and the `room` an item adds (a basket's 20); `carry_of(item)` is a law the engine samples.
+- **A fire to cook at** (`fire_kind`) burns fuel and warms; a lamp is none.
+- **Compile-time reads** (tables, specs, ways, laws' descriptions, declarations) run under `script::COMPILE_OPERATIONS` (20,000); calls while the world runs keep 2,000.
+- The island changes only by the carry count (`goods_check`, 4,312,560 states).
+
+## Storage by kind, household stores, regrowth by season (rules-3)
+
+Built 2026-11-11 on branch `rules-3`, at the coordinator's decisions, general for every world; Cullet's values, the winter worked through and the evidence are in [Cullet's rules](CULLET_RULES.md#storage-household-stores-and-winter-rules-3).
+
+- **A store holds what its kind holds.** A structure kind with `holds` in `structures()` is a store: one stores into it (`store_check`, up to its `holds` in all) and takes from it (`take_check`). The shipped `storage` has `holds: 120`, the old global law's value; the law `storage_holds` is gone. A kind may say what it counts as: `like: "storage"` makes a world's own kind (Cullet's `store`, `peat_barn`, `yard_store`, `house_store`) a storage wherever a kind is asked for by name (a graph's `nearest storage`, `Scripts::is_kind`), so the ways that look for a storage find it. What a mind is shown of a structure's contents follows `holds` too. `like` must name another kind of the table, and `holds` must be a number of at least 0.
+- **A plan's structure may belong to a household.** `owner: "household:<key>"` on `plans[].structures[]` names a household of the seed's residents; the world gives the structure to the owner of that household's house when it is created ([authored plans](AUTHORED_PLANS.md#the-format)). `floor::check` refuses a household the residents do not have. A plan lot may also name the structure kind at its door (`lots[].structure`).
+- **Regrowth by season is a value on each resource kind.** `regrow_by_season: #{ spring, summer, autumn, winter }` gives the share of `regrow_per_h` in each season; a season left out, or a kind without the trait, keeps the shipped shares (full in spring, summer and autumn, none in winter: `living_rules::GROWING`). The authority grows a node by its `regen` times `living_rules::regrowth_ms` (the milliseconds of each season since the node was last written, weighted by the shares; with the shipped shares exactly `growing_ms`, as before). An unknown season or a share that is no number from 0 to 16 refuses the script.
+- **What minds are told of winter** comes from the same table: the script's `seasons_text()` (`Scripts::seasons_words`), after the calendar. The shipped kinds give the old sentence, "In winter nothing regrows and nights are colder: store food before it."; a world whose kinds regrow in winter says which.
+- **Old worlds are unchanged.** `rules3_check::rules3_is_bit_identical` (ignored; run with `LIVING_OLD_SKILLS` set to main's `93019a37` script) compares 63,753 states (63,754 against main `25c1fb92`'s script after merging it): every store and take check's answer for every structure kind at fills round 120, every skill's and law's words, the minds' world text with the seasons line, and 52,920 node amounts across every season for every shipped resource kind, on four day and year lengths. None differs.
+- **Not changed:** grass (the pasture law still grows only outside winter), the developer observer's drawing of a node's regrowth (`living/viewer/src/state.rs`, no script: it keeps `growing_ms`, so on a world with winter shares it draws winter nodes as not regrowing), `plant_check`'s frozen ground. No table, column, reducer or view changed.
+
+## Spoiling, regrowth, traps and remains in game time (rates-2)
+
+Built 2026-11-11 ([Cullet's rules](CULLET_RULES.md#the-other-rates-in-game-time-rates-2)): `spoil_per_h(item)`, a resource kind's `regrow_per_h`, `laws().pasture_regen_per_h`, `trap_every_h(x)` and a creature kind's `remains_h` are written in game time and turned into real time for the world's day by the engine (`Scripts::spoil_per_min`, `regrow_per_min`, `trap_every_ms`, `remains_ms`; `Laws::pasture_regen` stays per real minute). A script that defines the old real-time law (`spoil_rate`, `regrow`, `trap_every_s`, `remains_s`, `pasture_regen`) is read as before. On the 12-minute day every value is bit for bit what it was (`rates_check::rates_are_bit_identical`).
+
+A plan's resources, structures and stores (`plans[].resources[]` with `max`, `regrow_per_h` and `pool`; `plans[].structures[]` with `fuel` and `contents`; `lots[].contents`) are placed when the world is created. `floor::check` refuses a plan naming a resource kind, structure kind or item that the world's tables do not have ([authored plans](AUTHORED_PLANS.md#the-format)).
+
+## Day length, game-hour rates, a seed's laws, light (rules-1)
+
+Built 2026-11-11 for Cullet ([Cullet's rules](CULLET_RULES.md), which has the details and the evidence):
+
+- **A seed's day.** `day_minutes` sets `World.day_ms` when the world is created.
+- **Rates per game hour.** `rates(a)` returns `per: "hour"` and the engine turns its numbers into real time for the world's day (`Scripts::with_day`). The shipped numbers are the old per-minute ones halved, so the island's real-time rates are bit-identical. Laws may read `hour_ms()` and `day_minutes()`.
+- **A seed's laws.** `laws` (or `laws_file`, read in by `build.rs` and `living/tools/seed_text.py`) is an overlay composed with `floors::compose` and installed at creation through the same checks as `install_script`. `base_` functions are no longer taken for laws of their own.
+- **Night as a law.** `daylight(hour)` (0 to 1; night below one half) replaces the Rust `is_night` in the authority and the mind service; `a.daylight` reaches laws, and the graphs' `night` weight is the darkness.
+- **Light on people.** `glow(a)` (how far a creature is seen from by a light on it, bounded by `senses_law`'s `reach.glow`), the `lights` structure trait and `a.actor.lit` (in lamplight), and `p.dist` for `perceived_of` (who someone is, by distance). A script without them takes the old paths.
 
 ## How a floor adds its own rules
 

@@ -1,0 +1,274 @@
+{
+ "title": "Pack arena: 3 wolves v 3 people, close start",
+ "about": "Calibration fixture (docs/PACK_MIND.md \u00a75.6): graphs written by us, kept in this trial file only, never shipped; they measure whether the world lets wolves ring a person, not whether wolves do.",
+ "world": {
+  "seed": "island"
+ },
+ "minutes": 10,
+ "life": {
+  "stop_on_death": false
+ },
+ "end": {
+  "side_down": [
+   "subject",
+   "pack"
+  ],
+  "after_s": 20
+ },
+ "record": {
+  "bodies": {
+   "hz": 5
+  },
+  "uses": true
+ },
+ "variants": [
+  "instinct"
+ ],
+ "arena": {
+  "people": "subject",
+  "wolves": "pack",
+  "night": false,
+  "start": "close",
+  "deer": false
+ },
+ "subject": {
+  "pick": {
+   "kind": "person",
+   "stage": 2,
+   "count": 3,
+   "bg": {
+    "town": "Brackenford"
+   }
+  },
+  "clear_items": true,
+  "clear_routines": true
+ },
+ "cast": {
+  "pack": {
+   "pick": {
+    "kind": "wolf",
+    "stage": 2,
+    "count": 3,
+    "nearest": {
+     "arrival": true
+    }
+   }
+  },
+  "spare_wolves": {
+   "pick": {
+    "kind": "wolf",
+    "count": "all"
+   }
+  },
+  "deer": {
+   "pick": {
+    "kind": "deer",
+    "count": "all"
+   }
+  }
+ },
+ "timeline": [
+  {
+   "at": "start",
+   "steps": [
+    {
+     "do": "graph",
+     "who": "spare_wolves",
+     "graph": {
+      "wait": 900
+     }
+    },
+    {
+     "do": "place",
+     "who": "spare_wolves",
+     "to": {
+      "farthest_town": {
+       "who": "pack"
+      }
+     }
+    },
+    {
+     "do": "graph",
+     "who": "deer",
+     "graph": {
+      "wait": 900
+     }
+    },
+    {
+     "do": "place",
+     "who": "deer",
+     "to": {
+      "farthest_town": {
+       "who": "pack"
+      },
+      "offset": [
+       0,
+       6
+      ]
+     }
+    },
+    {
+     "do": "graph",
+     "who": "subject",
+     "graph": "instinct:person"
+    },
+    {
+     "do": "graph",
+     "who": "pack",
+     "graph": {
+      "wait": 5
+     }
+    },
+    {
+     "do": "background",
+     "who": "pack",
+     "background": {
+      "pack": "the arena pack",
+      "bold": true
+     }
+    },
+    {
+     "do": "place",
+     "who": "subject",
+     "to": {
+      "who": "pack",
+      "offset": [
+       9,
+       0
+      ],
+      "spread": [
+       [
+        0,
+        0
+       ],
+       [
+        1.5,
+        0.8
+       ],
+       [
+        0,
+        1.6
+       ],
+       [
+        1.5,
+        -0.8
+       ],
+       [
+        0,
+        -1.6
+       ],
+       [
+        3,
+        0
+       ]
+      ]
+     }
+    },
+    {
+     "do": "place",
+     "who": "pack",
+     "to": {
+      "who": "subject",
+      "spread": [
+       [
+        -9,
+        0
+       ],
+       [
+        -9,
+        1.5
+       ],
+       [
+        -10.5,
+        0.8
+       ],
+       [
+        -9,
+        -1.5
+       ],
+       [
+        -10.5,
+        -0.8
+       ],
+       [
+        -12,
+        0
+       ]
+      ]
+     },
+     "after": 1
+    },
+    {
+     "do": "graph",
+     "who": "pack",
+     "graph": {
+      "first": [
+       {
+        "if": {
+         "cond": {
+          "all": [
+           {
+            "hurt_within": 8
+           },
+           {
+            "health": {
+             "below": 20
+            }
+           }
+          ]
+         },
+         "then": {
+          "do": {
+           "skill": "flee",
+           "target": "attacker"
+          }
+         }
+        }
+       },
+       {
+        "if": {
+         "cond": {
+          "all": [
+           {
+            "near": {
+             "target": {
+              "nearest": "person"
+             },
+             "within": 3.5
+            }
+           },
+           {
+            "chance": 0.3
+           }
+          ]
+         },
+         "then": {
+          "do": {
+           "skill": "attack",
+           "target": {
+            "nearest": "person"
+           }
+          }
+         }
+        }
+       },
+       {
+        "do": {
+         "skill": "keep_distance",
+         "target": {
+          "nearest": "person"
+         },
+         "min": 3,
+         "max": 5,
+         "run": true,
+         "apart": 4
+        }
+       }
+      ]
+     },
+     "after": 1
+    }
+   ]
+  }
+ ]
+}

@@ -141,7 +141,7 @@ fn take_over(ctx: &ReducerContext, p: &mut Presence, now: u64) {
     ctx.db.character().id().update(c);
     p.ai = true;
     p.control_ms = now;
-    crate::combat::invalidate_humans();
+    crate::combat::invalidate_humans(ctx);
     // Its person sees nothing while away; a fresh set is made on return.
     crate::perception::forget(ctx, p.id, p.player);
     // Asked first: reinstalling a mind's graph counts as having just thought (`think_min_s`).
@@ -169,15 +169,23 @@ fn hand_back(ctx: &ReducerContext, p: &mut Presence, now: u64) {
     ctx.db.character().id().update(c);
     crate::perception::set_player(ctx, p.player, p.id);
     // What the minds had going stops: a pending thought, decided acts, the activity under way.
+    crate::fast::cancel(ctx, p.id);
     ctx.db.deliberation().actor().delete(p.id);
+    // (with what waited for its sleeping mind; what its body heard asleep is told now, as
+    // its sleep stops below)
+    ctx.db.slumber().actor().delete(p.id);
+    if let Some(c) = ctx.db.character().id().find(p.id) {
+        crate::perceive::heard_on_waking(ctx, &c, now);
+    }
     ctx.db.act_queue().actor().delete(p.id);
-    if let Some(a) = ctx.db.activity().id().find(p.id) {
+    // A committed move under way runs its course (`combat::committed`).
+    if let Some(a) = ctx.db.activity().id().find(p.id).filter(|a| !crate::combat::committed(&crate::common::scripts(ctx), a)) {
         crate::act::cancel(ctx, a, now, None);
     }
     if let Err(e) = crate::mind::set_graph(ctx, p.id, crate::WAITING_GRAPH, crate::WAITING, "human", now) {
         log::warn!("handback of {}: {e}", p.id);
     }
-    crate::combat::invalidate_humans();
+    crate::combat::invalidate_humans(ctx);
     crate::perception::sweep_now(ctx, p.id, p.player, now);
     log::info!("character {} is its person's again", p.id);
 }

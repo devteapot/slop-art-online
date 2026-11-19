@@ -1,0 +1,8 @@
+{
+ "schema": 1,
+ "family": "character:body-cloth",
+ "kind": "character",
+ "title": "Cloth on the corrected bodies",
+ "description": "Jersey, coat, smock and trousers on composed women, men and children before and after the body pass's cloth part: close up at rest and in the walk, full figure in every outfit, and through the gaits.",
+ "target": "Nothing comes through anything at rest, in idle and in the gaits (cloth_check.py); skirts read as cloth on the legs; clothes sit on the figure as the reference's do (docs/CHARACTERS.md, The body: cloth)."
+}

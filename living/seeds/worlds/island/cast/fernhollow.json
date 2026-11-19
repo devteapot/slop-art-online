@@ -163,7 +163,7 @@
      "knows": [
       "carpentry",
       "toolmaking",
-      "mending",
+      "wound_tending",
       "planting",
       "fire"
      ],
@@ -207,7 +207,7 @@
      "role": "Yarrow and Marjoram's son; helps in the garden and follows his father about the woodpile",
      "knows": [
       "planting",
-      "mending"
+      "wound_tending"
      ],
      "parents": [
       "Yarrow Underbank",
@@ -255,7 +255,7 @@
      "knows": [
       "fishing",
       "basketry",
-      "mending",
+      "wound_tending",
       "fire"
      ],
      "parents": [
@@ -276,7 +276,7 @@
      "role": "Sorrel's daughter; mends nets and keeps the smoke shed tidy",
      "knows": [
       "basketry",
-      "mending"
+      "wound_tending"
      ],
      "parents": [
       "Sorrel Fenwick"
@@ -371,7 +371,7 @@
       "planting",
       "cooking",
       "fire",
-      "mending"
+      "wound_tending"
      ],
      "parents": [],
      "ties": [
@@ -438,7 +438,7 @@
      "knows": [
       "cooking",
       "storage",
-      "mending",
+      "wound_tending",
       "fire",
       "basketry"
      ],
@@ -507,7 +507,7 @@
      "knows": [
       "carpentry",
       "toolmaking",
-      "mending",
+      "wound_tending",
       "planting",
       "fire"
      ],
@@ -620,7 +620,7 @@
      "knows": [
       "fishing",
       "basketry",
-      "mending"
+      "wound_tending"
      ],
      "parents": [
       "Osier Willow",
@@ -646,7 +646,7 @@
      "knows": [
       "cooking",
       "storage",
-      "mending",
+      "wound_tending",
       "fire",
       "basketry"
      ],
@@ -668,7 +668,7 @@
      "knows": [
       "carpentry",
       "toolmaking",
-      "mending",
+      "wound_tending",
       "planting",
       "fire"
      ],

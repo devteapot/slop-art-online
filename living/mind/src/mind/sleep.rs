@@ -291,7 +291,8 @@ impl Minds {
         let facts = store.around(actor, &[], 120).await?;
         let lines: Vec<String> = facts.iter().map(|f| memory::render_keys(f, &fmt)).collect();
         let refused = self.actors.lock().unwrap().entry(actor).or_default().refused_merges.clone();
-        let mut user = prompts::reorganize_user(&c.name, &self.persona_text(actor), &concepts, &lines);
+        let open = self.open_projects(actor).await;
+        let mut user = prompts::reorganize_user(&c.name, &self.persona_text(actor), &concepts, &lines, &self.projects_text(&open));
         user.push_str(&refused_feedback(&refused));
         let msgs = vec![Msg { role: "system", content: prompts::reorganize_system() }, Msg { role: "user", content: user }];
         Ok(Some(Prep { actor, name: c.name.clone(), route: self.profile(&c), at: self.attention(actor, None), msgs, told: refused.len(), nodes, edges, faded, now }))
@@ -305,6 +306,9 @@ impl Minds {
         let known: Vec<u64> = self.experiences(actor).iter().map(|e| e.id).collect();
         let (mut patch, mut notes) = memory::patch_from(&v, &known, &|_| None);
         memory::sugar_into(&json!({"judgments": v["judgments"]}), &mut patch, &[]);
+        if super::projects::enabled() {
+            memory::projects_into(&v, &mut patch, &known, &mut notes);
+        }
         notes.extend(self.canonical_people(actor, &mut patch));
         // A person keeps the name this mind knows them by: a reorganization relabels them
         // ("unresponsive townsfolk") by linking them to a pattern, not by renaming them.

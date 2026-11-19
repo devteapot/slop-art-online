@@ -36,6 +36,114 @@ pub struct World {
     /// Days in the calendar year (four equal seasons; lifespans are counted in years).
     #[default(8u32)]
     pub year_days: u32,
+    /// The look generation the world's people wear (`looks.generation` of its seed, docs/LOOK.md):
+    /// a client warns when its book does not hold it. Empty for a world without looks.
+    #[default("")]
+    pub look_book: String,
+}
+
+/// A person's look (private; docs/LOOK.md): which person entry of the world data they are
+/// (`person`, `lp_…`, never sent) and the line of it they wear now (`line`, `lk_…`: the key every
+/// observer who sees them gets on its `projected` row), with the line's words copied for minds.
+/// One row per living person who has a look; written at creation, when the look band changes
+/// (`next_ms`, read through the `due` index by housekeeping, and `grew`) and at `relook`; deleted
+/// at death. Animals, and people of a world from before looks, have none.
+#[spacetimedb::table(accessor = look, index(accessor = due, btree(columns = [next_ms])))]
+pub struct Look {
+    #[primary_key]
+    pub id: u32,
+    pub person: String,
+    pub line: String,
+    /// `living_rules::look::LookBand`: 0 infant, 1 child, 2 youth, 3 adult, 4 elder.
+    pub band: u8,
+    /// World ms at which the band next changes (`u64::MAX` when none is left: an elder).
+    pub next_ms: u64,
+    pub words: LookWords,
+}
+
+/// A person's body sex (private; docs/LIVING_CORE.md, "Body sex"): 1 female, 2 male
+/// (`living_rules::sex::Sex`). One row per person, written once when they come into the world
+/// (`seed::spawn_sexed`, before anything reads it in that transaction: their look, their first
+/// mind call) and kept after death, so kin words still name the dead; never changed. "Unknown" is
+/// only the absence of a row (a world from before sex, until the admin's `backfill_sex`). Always
+/// private, whatever the build's `LIVING_PERCEPTION`: clients learn a body's sex only as they
+/// perceive it (its look, the far phrase) and a player its own through `my_sex`. Read by primary
+/// key only (look assignment, scenes, talk, kin words, the self line); the mind service reads it
+/// as the owner. A separate table, not a column on `character`: appending a column rewrites the
+/// whole table and disconnects every client (2.14.1 auto-migration `AddColumns`).
+#[spacetimedb::table(accessor = sex)]
+pub struct SexRow {
+    #[primary_key]
+    pub id: u32,
+    pub sex: u8,
+}
+
+/// What a mind remembers of a person's body (private; sex-1, docs/LIVING_CORE.md "Body sex"):
+/// `observer` (a minded character) made out `known` at full sight, and saw their sex `sex`. Written
+/// once per pair, the first time: in the observer's scene (`perceive::scene_json`, a person made
+/// out) and at a first sight (`brain.rs`); never from afar, by name, kinship, a relation or speech.
+/// The mind service states another's sex only from this row, from what is in sight now, or face
+/// to face. Deleted with the observer at death. Read by the pair index; the mind service reads it
+/// as the owner.
+#[spacetimedb::table(accessor = sex_seen, index(accessor = by_pair, btree(columns = [observer, known])))]
+pub struct SexSeen {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    #[index(btree)]
+    pub observer: u32,
+    pub known: u32,
+    pub sex: u8,
+    pub at_ms: u64,
+}
+
+/// A player's own body sex (`my_sex`): "female" or "male" (`living_rules::sex::Sex::name`).
+#[derive(SpacetimeType, Clone, Debug, PartialEq)]
+pub struct MySex {
+    pub id: u32,
+    pub sex: String,
+}
+
+/// One line of a person entry (private; static world data, written at genesis and at `relook`):
+/// the line `key` that person `person` wears in band `band`, and its words. Read by point lookup
+/// on (`person`, `band`). Two people with the same line share its key, so the key is not unique.
+#[spacetimedb::table(accessor = look_line, index(accessor = by_person_band, btree(columns = [person, band])))]
+pub struct LookLine {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u32,
+    pub key: String,
+    pub person: String,
+    pub band: u8,
+    pub words: LookWords,
+}
+
+/// The words the generator wrote for a line (docs/LOOK.md §2; `living_rules::look::LookWords`):
+/// what a glance can say. `form` is appearance only: no rule reads it.
+#[derive(SpacetimeType, Clone, Debug, PartialEq, Default)]
+pub struct LookWords {
+    pub form: String,
+    /// 0 slight, 1 medium, 2 heavy-set.
+    pub girth: u8,
+    /// 0 short, 1 middling, 2 tall (for the band).
+    pub height: u8,
+    pub hair: String,
+    pub top: String,
+    pub bottom: String,
+    pub head: String,
+    pub beard: String,
+}
+
+impl From<&living_rules::look::LookWords> for LookWords {
+    fn from(w: &living_rules::look::LookWords) -> Self {
+        Self { form: w.form.clone(), girth: w.girth, height: w.height, hair: w.hair.clone(), top: w.top.clone(), bottom: w.bottom.clone(), head: w.head.clone(), beard: w.beard.clone() }
+    }
+}
+
+impl From<&LookWords> for living_rules::look::LookWords {
+    fn from(w: &LookWords) -> Self {
+        Self { form: w.form.clone(), girth: w.girth, height: w.height, hair: w.hair.clone(), top: w.top.clone(), bottom: w.bottom.clone(), head: w.head.clone(), beard: w.beard.clone() }
+    }
 }
 
 /// A gate's state, apart from its structure row (which rarely changes): open or shut, and the
@@ -120,15 +228,66 @@ pub struct Clock {
     pub missed: u64,
 }
 
-/// A world's own value of a law (a seed's `rules`: `minds`, `fire_warmth`, …), over the
-/// script's `laws()`. Written when the world is created; read with the laws, once per script
-/// revision (docs/WORLD_RULES.md, "A world's own laws").
+/// A world's own value of a law before `law_override` (2026-11-19): kept as it was and no
+/// longer written or read; a world's rows are copied into `law_override` once, by the first
+/// transaction that reads the laws on a module with that table (`common::law_rev`).
 #[spacetimedb::table(accessor = world_law)]
 pub struct WorldLaw {
     #[primary_key]
     pub name: String,
     /// The value as JSON: a number, or true or false.
     pub value: String,
+}
+
+/// A world's own value of a law (a seed's `rules`, `set_world_law`), over the script's
+/// `laws()`: every one, public and read-only (admin `set_world_law` writes it). The law in force
+/// is this value when a row names it, else the script's (`living_rules::script::Scripts::
+/// with_overrides`, `apply_overrides`): the authority and every client that compiles the
+/// `script` row lay these rows over it in the same place, so they compute alike
+/// (docs/LAW_OVERRIDE.md). A value-only law (`living_rules::script::VALUE_ONLY`) changes here
+/// alone; any other change also installs the script again with the values written at its end.
+/// A new table, so adding it rewrites no existing one (docs/LAW_OVERRIDE.md, "Storage").
+#[spacetimedb::table(accessor = law_override, public)]
+pub struct LawOverride {
+    #[primary_key]
+    pub name: String,
+    /// The value as JSON: a number, or true or false (as `set_world_law` takes it).
+    pub value: String,
+    /// The law revision (`law_revision`) that wrote it.
+    pub revision: u32,
+}
+
+/// The world's law revision: one more at each write of `law_override` (private, one row,
+/// `id` 0). The authority's laws in force are kept in module memory by it and the script
+/// revision (`common::laws`, `common::scripts`). No row: the world's `world_law` rows are not
+/// yet copied into `law_override` (`common::law_rev`).
+#[spacetimedb::table(accessor = law_revision)]
+pub struct LawRevision {
+    #[primary_key]
+    pub id: u32,
+    pub revision: u32,
+}
+
+/// Effective, world-wide cover policy used by Shade.
+#[derive(Clone, Copy, PartialEq)]
+#[spacetimedb::table(accessor = cover_law, public)]
+pub struct CoverLaw {
+    #[primary_key]
+    pub id: u8,
+    pub cover_sight_on: bool,
+    pub cover_eye_height_m: f32,
+    pub cover_brush_on: bool,
+    pub cover_brush_min_fill: f32,
+    pub cover_cliff_step_m: f32,
+}
+
+/// Quantized generation output, private and read only when cover is enabled.
+#[spacetimedb::table(accessor = cover_ground)]
+pub struct CoverGround {
+    #[primary_key]
+    pub id: u32,
+    pub heights: Vec<i16>,
+    pub candidates: Vec<u32>,
 }
 
 #[spacetimedb::table(accessor = script, public)]
@@ -172,6 +331,16 @@ pub struct LandInfo {
 
 /// A settlement of a land world (one row per `Land::settlements` entry, same index). Static
 /// after world creation.
+/// The land's full parameters (the seed's `map.params`, with every name its people use), kept
+/// by the authority for minds and records (owner-known, 2026-11-12). The public `land` row
+/// carries `living_rules::land::public_params` of them: the same land, no names. One row, id 0.
+#[spacetimedb::table(accessor = land_plan)]
+pub struct LandPlan {
+    #[primary_key]
+    pub id: u8,
+    pub params: String,
+}
+
 #[spacetimedb::table(accessor = settlement, public)]
 pub struct Settlement {
     #[primary_key]
@@ -292,6 +461,22 @@ pub struct Body {
     /// How long the turn lasts from `t_ms`, seconds (then straight on).
     #[default(0.0f32)]
     pub turn_s: f32,
+    /// Facing (head and chest; what facing sight and a guard read) as an offset from the travel
+    /// heading, radians at `t_ms`, turning at `face_turn` rad/s for the first `face_turn_s`
+    /// seconds, then held (`living_rules::steer::facing`; `common::facing_at`). 0 for a body
+    /// with no held look: it faces its heading. Written with the segment, never on its own.
+    #[default(0.0f32)]
+    pub face_off: f32,
+    #[default(0.0f32)]
+    pub face_turn: f32,
+    #[default(0.0f32)]
+    pub face_turn_s: f32,
+    /// Running now (docs/STAMINA.md): a run under way with breath, for every controller (a
+    /// player's run key, a graph's or a mind's `run`, a flight, a wolf's charge); false walking,
+    /// out of breath, standing, or dashing. Written with the motion, so a client draws the gait
+    /// the rules move (a run is not inferred from speed: walks differ by world and setting).
+    #[default(false)]
+    pub running: bool,
 }
 
 /// What a body is steering for (private; written when the goal changes, not per update).
@@ -318,6 +503,32 @@ pub struct Steer {
     /// Movement input bucket of a player (tokens refill at the `input_hz` law).
     pub tokens: f32,
     pub input_ms: u64,
+    /// A held look (`human_face`): held while `look_on`, the direction (radians, the same
+    /// angle as `body.heading`) the body faces. It is an input, like the movement direction in
+    /// `gx`/`gy`; what the body does with it is its facing, `body.face_*`.
+    #[default(false)]
+    pub look_on: bool,
+    #[default(0.0f32)]
+    pub look: f32,
+    /// A goal that runs (`FLAG_RUN`): its speed walking (out of breath) and running (m/s).
+    #[default(0.0f32)]
+    pub pace: f32,
+    #[default(0.0f32)]
+    pub run_pace: f32,
+    /// A movement intent's second distance: the far edge of a band (`GOAL_BAND`, `keep` the
+    /// near one), the side a circle goes round (`GOAL_ORBIT`, +1 left as one faces it; `keep`
+    /// its radius).
+    #[default(0.0f32)]
+    pub far: f32,
+    /// A goal held to a creature by sight (`FLAG_SIGHT`): when its steering first found it out
+    /// of sight (0 while it is in sight); `gx`/`gy` where it was last seen.
+    #[default(0u64)]
+    pub unseen_ms: u64,
+    /// A movement intent's `apart` (m, 0 none): how far it keeps from others of its own kind it
+    /// sees while it holds the intent (docs/PACK_MIND.md, A5). Appended (an automatic migration
+    /// with this default).
+    #[default(0.0f32)]
+    pub apart: f32,
 }
 
 /// A walk's route over areas, kept between its legs (`living_rules::nav::Walk`, as one list):
@@ -350,6 +561,56 @@ pub struct Vitals {
     pub rate_key: u32,
     pub hurt_ms: u64,
     pub hurt_by: u32,
+    /// Breath (`stamina`) and focus: each its level at `at_ms`, its cap (tiredness caps breath),
+    /// its signed rate per real second, and when that rate starts (`*_from_ms`, never before
+    /// `at_ms`): negative from `at_ms` while a run or a held guard drains it, the refill from the
+    /// last spend plus the pool's delay otherwise (`living_rules::pools::level`). Written when a
+    /// drain starts or stops and when something is spent, never per tick: a reader projects
+    /// `value + rate * (now - max(at_ms, from_ms)) / 1000` within 0..cap.
+    #[default(100.0f32)]
+    pub stamina: f32,
+    #[default(100.0f32)]
+    pub stamina_max: f32,
+    #[default(0.0f32)]
+    pub stamina_rate: f32,
+    #[default(0u64)]
+    pub stamina_from_ms: u64,
+    #[default(100.0f32)]
+    pub focus: f32,
+    #[default(100.0f32)]
+    pub focus_max: f32,
+    #[default(0.0f32)]
+    pub focus_rate: f32,
+    #[default(0u64)]
+    pub focus_from_ms: u64,
+}
+
+impl Vitals {
+    /// The row's columns (a world's `meters()` may name any of them). A column added to this
+    /// table is added here and in [`Vitals::fields`], and nowhere else: the rules read the body
+    /// by field name (`living_rules::script::BodyFacts`).
+    pub const FIELDS: [&'static str; 20] = [
+        "id", "hp", "max_hp", "hunger", "energy", "at_ms", "hp_rate", "hunger_rate", "energy_rate", "rate_key", "hurt_ms", "hurt_by",
+        "stamina", "stamina_max", "stamina_rate", "stamina_from_ms", "focus", "focus_max", "focus_rate", "focus_from_ms",
+    ];
+
+    /// The row's numeric fields by name, in [`Vitals::FIELDS`]'s order.
+    /// The row's fields as bits, in `FIELDS` order: equal bits, the same row.
+    pub fn bits(&self) -> [u64; 20] {
+        [
+            self.id as u64, self.hp.to_bits() as u64, self.max_hp.to_bits() as u64, self.hunger.to_bits() as u64, self.energy.to_bits() as u64, self.at_ms, self.hp_rate.to_bits() as u64,
+            self.hunger_rate.to_bits() as u64, self.energy_rate.to_bits() as u64, self.rate_key as u64, self.hurt_ms, self.hurt_by as u64, self.stamina.to_bits() as u64, self.stamina_max.to_bits() as u64,
+            self.stamina_rate.to_bits() as u64, self.stamina_from_ms, self.focus.to_bits() as u64, self.focus_max.to_bits() as u64, self.focus_rate.to_bits() as u64, self.focus_from_ms,
+        ]
+    }
+
+    pub fn fields(&self) -> Vec<(String, f64)> {
+        let v = [
+            self.id as f64, self.hp as f64, self.max_hp as f64, self.hunger as f64, self.energy as f64, self.at_ms as f64, self.hp_rate as f64, self.hunger_rate as f64, self.energy_rate as f64, self.rate_key as f64, self.hurt_ms as f64, self.hurt_by as f64,
+            self.stamina as f64, self.stamina_max as f64, self.stamina_rate as f64, self.stamina_from_ms as f64, self.focus as f64, self.focus_max as f64, self.focus_rate as f64, self.focus_from_ms as f64,
+        ];
+        Self::FIELDS.iter().zip(v).map(|(k, v)| (k.to_string(), v)).collect()
+    }
 }
 
 #[derive(SpacetimeType, Clone, Debug, PartialEq)]
@@ -391,6 +652,12 @@ pub struct Activity {
     pub want: String,
     #[default(0u32)]
     pub want_qty: u32,
+    /// An answer (accept, decline): the trade offer or the record it names (0: none, the rules
+    /// take what stands). Added at the end with defaults, so the table migrates in place.
+    #[default(0u64)]
+    pub offer: u64,
+    #[default(0u64)]
+    pub record: u64,
 }
 
 /// Items held by a creature (`owner = id`) or a structure (`owner = STRUCTURE_BIT | id`).
@@ -426,6 +693,10 @@ pub struct ResourceNode {
     pub max: f32,
     pub regen: f32,
     pub at_ms: u64,
+    /// A spot that draws on another node's stock (a fishing ground's shared limit): the id of
+    /// the node holding it, whose amount, max and regrowth count for both (0: its own).
+    #[default(0u64)]
+    pub pool: u64,
 }
 
 #[derive(Clone)]
@@ -441,6 +712,11 @@ pub struct Structure {
     pub chunk: u32,
     pub owner: u32,
     pub built_ms: u64,
+    /// A fire that burns fuel (its kind `burns`): the moment its fuel runs out at its kind's
+    /// rate. Lit while this is in the future; the fuel left is the time left times the rate
+    /// (living_rules::fire). Written only when it is fed or drawn on. 0: out, or not such a fire.
+    #[default(0u64)]
+    pub lit_until_ms: u64,
 }
 
 /// When a creature's remains (a `remains` structure) are gone: `due_ms` is its `built_ms` plus
@@ -561,6 +837,33 @@ pub struct InfantCry {
     pub prompted: Vec<CryPrompt>,
 }
 
+/// One person who heard a line: how far from the speaker, and how far off the speaker's
+/// facing they stood (radians, 0 = straight ahead, up to pi = behind).
+#[derive(SpacetimeType, Clone, Copy, Debug, PartialEq)]
+pub struct Hearer {
+    pub id: u32,
+    pub d: f32,
+    pub off: f32,
+}
+
+/// Who heard a line and how they stood toward the speaker. Written by `speak` only when the
+/// world's `speech_audience` law is on (on by default since 2026-11-11), one row per line, deleted after 60 s.
+/// Private: the mind service reads it as the database owner to tell, for a line said to no
+/// one in particular, which hearer was nearest or faced (talk.rs, `LIVING_GREET`).
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(open_tables, spacetimedb::table(accessor = audience, public))]
+#[cfg_attr(not(open_tables), spacetimedb::table(accessor = audience))]
+pub struct Audience {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    pub speaker: u32,
+    pub to: u32,
+    #[index(btree)]
+    pub at_ms: u64,
+    pub hearers: Vec<Hearer>,
+}
+
 /// What reached a character's senses (sights, speech, what happened to them, their own
 /// results). Game state, not knowledge: written only by the authority, never edited, kept
 /// in a bounded per-character window. Minds read it and record how far they consolidated.
@@ -583,6 +886,60 @@ pub struct Experience {
     pub y: f32,
     pub text: String,
     pub salience: f32,
+}
+
+/// Who heard a line (docs/COMMUNICATION.md §6; `heard` is fov-1's heard-not-seen sounds): for each line a speaker said (its own `said`
+/// experience row, `line`), the people who received the words and whom the speaker perceived
+/// at that moment (in its sight, by the sight rule). Private: the speaker's person reads its
+/// own through `my_heard`, the mind service as the owner. Written in the same transaction as
+/// the `said` row, and gone with it (the window's trim, consolidation, death), so a speaker
+/// keeps at most its window's own lines. A separate table, not a column on `experience`:
+/// `line_seen.line` embeds `Experience`, and automatic migration cannot change that type.
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = line_heard)]
+pub struct LineHeard {
+    /// The speaker's `said` experience id.
+    #[primary_key]
+    pub line: u64,
+    #[index(btree)]
+    pub speaker: u32,
+    /// The way it was said (`say`, …).
+    pub way: String,
+    /// Those who received the words and whom the speaker saw, nearest first.
+    pub hearers: Vec<u32>,
+    pub at_ms: u64,
+}
+
+/// Each way of speaking as the rules state it (one row per `<way>_speech()` in the script),
+/// rewritten whenever a skill script is installed, so a client builds its talk box (the chips,
+/// what each needs) without running the rules (public, static, like `skill_card`). The
+/// client's greying is a hint; the authority decides.
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = speech_card, public)]
+pub struct SpeechCard {
+    #[primary_key]
+    pub name: String,
+    pub label: String,
+    /// Where it comes among the ways (chip order, smallest first).
+    pub order: i32,
+    /// What it is (for the box's hint).
+    pub about: String,
+    /// A line needs someone to be said to (`to` != 0).
+    pub needs_to: bool,
+    /// The addressee must be within this many metres (0: wherever the words carry).
+    pub reach_m: f32,
+    /// How far the words go for a person with the world's ordinary hearing (metres).
+    pub carry_m: f32,
+    /// A technique the speaker must know ("" none), as in `my_know_how`.
+    pub requires: String,
+    /// The addressee must be in the speaker's sight.
+    pub needs_sight: bool,
+    /// Only the addressee receives the words.
+    pub private: bool,
+    /// Longest line (characters; longer is cut).
+    pub max_chars: u16,
+    /// Shortest time between two lines of this way (ms).
+    pub gap_ms: u32,
 }
 
 /// Practical know-how: a technique this character can perform. World state (a capability),
@@ -623,6 +980,83 @@ pub struct Artifact {
 
 pub const FAM_ARTIFACT: u64 = 4 << 40;
 
+/// A figure seen too far away to make out, as one observer's mind knows it (far-handle): its
+/// handle (`FAR_HANDLE_BASE + id`) names the figure in that mind's scene and experiences in
+/// place of the person's id, for one sighting (a figure out of sight for `far::SIGHTING_GAP_MS`
+/// is a new sighting). Acts, graph targets and speech that name the handle reach the person.
+/// When the observer can make them out, `made_out_ms` is set and the observer is told whom the
+/// handle was (an experience with subject the person and object the handle), so its memory joins
+/// the two. Private; read by the authority only. A few rows per observer, bounded (`far::prune`).
+#[spacetimedb::table(accessor = far_handle,
+    index(accessor = by_observer_target, btree(columns = [observer, target])))]
+#[derive(Clone, Debug)]
+pub struct FarHandle {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    #[index(btree)]
+    pub observer: u32,
+    pub target: u32,
+    pub first_ms: u64,
+    pub last_ms: u64,
+    pub made_out_ms: u64,
+}
+
+/// Known ground (docs/MOVEMENT_MIND.md, step 3): which 4 m cells of one 128 m block (8 × 8
+/// chunks) a character has seen, and the map's edit count (`ground_edit.id`) when each chunk was
+/// last seen. `cells`: 64 little-endian u16 masks; `seen_at`: 64 little-endian u32. Private.
+/// Written by the character's own looks (`known::mark`), at most every few seconds; gone at
+/// death.
+#[spacetimedb::table(accessor = known_ground,
+    index(accessor = by_actor_block, btree(columns = [actor, block])))]
+pub struct KnownGround {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    #[index(btree)]
+    pub actor: u32,
+    pub block: u32,
+    pub cells: Vec<u8>,
+    pub seen_at: Vec<u8>,
+    pub last_ms: u64,
+}
+
+/// What a character last saw of a thing that changes (docs/MOVEMENT_MIND.md, step 3): a gate
+/// open or shut (`kind` 1, `target` the gate's id, `state` 1 open). Private; bounded per
+/// observer; gone at death.
+#[spacetimedb::table(accessor = remembered,
+    index(accessor = by_observer_target, btree(columns = [observer, target])))]
+pub struct Remembered {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    #[index(btree)]
+    pub observer: u32,
+    pub target: u64,
+    pub kind: u8,
+    pub x: f32,
+    pub y: f32,
+    pub state: u8,
+    pub seen_ms: u64,
+}
+
+pub const REMEMBER_GATE: u8 = 1;
+
+/// A terrain tile changed after genesis (a wall built, a road laid): its chunk, its index in the
+/// chunk and its byte before. The id is the map's edit count, so a character's view of a chunk
+/// it saw at count `n` is the map now with the edits after `n` undone. Private; rare.
+#[spacetimedb::table(accessor = ground_edit)]
+pub struct GroundEdit {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    #[index(btree)]
+    pub chunk: u32,
+    pub tile: u16,
+    pub before: u8,
+    pub at_ms: u64,
+}
+
 /// Bodily familiarity: regions, creatures and structures a character has encountered.
 /// Recognition, not knowledge: it decides what is new enough to become an experience.
 /// `thing` = FAM_REGION | chunk, FAM_CREATURE | id, or FAM_STRUCTURE | id. Bounded per actor.
@@ -641,6 +1075,38 @@ pub struct Familiar {
     pub times: u32,
 }
 
+/// Where a character's last look for what is new stood (docs/BATTLE_SCALE.md, C2; the
+/// `notice_delta` law): its place, its sight radius, and the highest structure id among those in
+/// sight then, so the next look checks only structures newer than that or outside that disc.
+/// One row a character a mind runs, rewritten at each look (about once a second); private;
+/// gone with the character (`act::forget_dead`). A row, not module memory, so a tick that fails
+/// takes its look back with the `familiar` rows it wrote.
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = last_look)]
+pub struct LastLook {
+    #[primary_key]
+    pub id: u32,
+    pub x: f32,
+    pub y: f32,
+    pub r: f32,
+    /// The highest structure id in sight at that look (0: none).
+    pub max_structure: u64,
+    pub at_ms: u64,
+}
+
+/// Inclusive structure-id ranges for one observer and one 128 m block.
+#[spacetimedb::table(accessor = seen_structures,
+    index(accessor = by_actor_block, btree(columns = [actor, block])))]
+pub struct SeenStructures {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    #[index(btree)]
+    pub actor: u32,
+    pub block: u32,
+    pub ranges: Vec<u64>,
+}
+
 pub const FAM_REGION: u64 = 1 << 40;
 pub const FAM_CREATURE: u64 = 2 << 40;
 pub const FAM_STRUCTURE: u64 = 3 << 40;
@@ -652,6 +1118,66 @@ pub struct MindCursor {
     pub actor: u32,
     pub upto: u64,
     pub updated_ms: u64,
+}
+
+/// A fast re-plan asked of a character's mind (docs/FAST_LANE.md, `fast.rs`), one row per
+/// character while a trigger waits or is being served (private; the mind service reads it). The
+/// trigger's words are the event as the character perceived it, with no count.
+#[spacetimedb::table(accessor = fast_ask)]
+pub struct FastAsk {
+    #[primary_key]
+    pub actor: u32,
+    /// The newest trigger, as perceived ("You were struck by a stranger …", "A stranger winds up
+    /// an attack at you").
+    pub reason: String,
+    /// When the newest trigger came, and the oldest not yet served (a waiting row older than the
+    /// `fast_lane_stale_s` law is dropped).
+    pub trigger_ms: u64,
+    pub first_ms: u64,
+    /// When it was issued to the mind service (0: waiting its turn), and the character's last issue
+    /// (the `fast_lane_gap_s` law).
+    pub issued_ms: u64,
+    pub last_issued_ms: u64,
+    /// The installed graph it was issued against (`brain.installed_ms`): a patch lands only if the
+    /// plan is still that one.
+    pub base_ms: u64,
+}
+
+/// A sleeping body (one in a `sleep` act, or between two sleeps of one night: a sleep that ends
+/// unrested is slept again) and the reasons to think that arrived while it slept. A sleeper's
+/// mind thinks only on what wakes the body (`perceive::Wake`); everything else waits here and is
+/// asked, after "You woke up", once it wakes (perceive.rs, `wake` and `woke`).
+#[spacetimedb::table(accessor = slumber)]
+pub struct Slumber {
+    #[primary_key]
+    pub actor: u32,
+    pub since_ms: u64,
+    /// When its current (or last) sleep ends: a sleep that ended is followed by the next one of
+    /// the same rest within `perceive::SLEEP_GAP_MS`, and the body sleeps on meanwhile.
+    pub until_ms: u64,
+    /// The deferred reasons and their arrival times (as `Deliberation`, living_rules::reasons).
+    pub reason: String,
+    pub arrived: String,
+}
+
+/// A line whose words reached a sleeping body that it did not wake for (perceive.rs,
+/// `heard_asleep`): told to it, whoever plays it, as heard while asleep once it wakes, and only
+/// then. At most `perceive::HEARD_ASLEEP_KEPT` per sleeper, the latest.
+#[spacetimedb::table(accessor = heard_asleep)]
+pub struct HeardAsleep {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    #[index(btree)]
+    pub actor: u32,
+    pub speaker: u32,
+    pub to: u32,
+    pub x: f32,
+    pub y: f32,
+    /// The line as the sleeper's body received it, in its own terms ("Femi says to you: “…”").
+    pub text: String,
+    pub salience: f32,
+    pub at_ms: u64,
 }
 
 /// A pending request for the mind to reconsider, with a perceived scene snapshot (JSON).
@@ -667,6 +1193,11 @@ pub struct Deliberation {
     pub updated_ms: u64,
     pub scene: String,
     pub revision: u32,
+    /// When each line of `reason` arrived, in milliseconds separated by spaces and aligned with
+    /// its lines: a deliberation consumes the lines its prompt contained (living_rules::reasons).
+    /// A string because a column default must be a constant.
+    #[default("")]
+    pub arrived: String,
 }
 
 // ---- mind projections (observer and behavior inputs) ----------------------
@@ -739,6 +1270,62 @@ pub struct Judged {
 
 pub const JUDGED_PER_ACTOR: usize = 8;
 
+/// What a mind wrote should bring it to think (docs/ATTENTION.md): one attention cue, tied to
+/// the stance, project or goal it serves (`for_key`), matched by type against what its
+/// character perceives (`brain.rs` `cues`). Private: written only by `mind_update` (the
+/// projection of the mind's memory, which replaces the set) and read once a second per
+/// character with cues while the `cues_on` law holds. At most `CUES_PER_ACTOR` per character.
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = cue)]
+pub struct Cue {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    #[index(btree)]
+    pub actor: u32,
+    /// `stance:<key>`, `project:<key>` or `goal:<key>`.
+    pub for_key: String,
+    /// The mind's own words for why it watches (quoted in the line a match gives).
+    pub why: String,
+    /// A person or creature by id (0: any).
+    pub who_id: u32,
+    /// `unknown` (a person whose name one does not know), a creature kind, or empty.
+    pub who: String,
+    /// What the matched creature is visibly doing (`perception::visibly`: a skill's name, its
+    /// label, or a kind word such as `melee`), or empty.
+    pub doing: String,
+    /// The phase it is visibly in (`living_rules::doing::Phase`'s words), or empty.
+    pub phase: String,
+    /// A resource or structure kind, or empty.
+    pub thing: String,
+    /// One of the actor's own places the match must be within `within` metres of, or empty.
+    pub at: String,
+    pub within: f32,
+    /// The match must be within this many metres of the actor (0: anywhere in sight).
+    pub near_me: f32,
+    /// Why the authority does not watch for it (empty: it is watched).
+    pub refused: String,
+    /// The things it fired on lately (at most `CUE_FIRED`) and when.
+    pub fired: Vec<CueFire>,
+    pub fires: u32,
+    pub set_ms: u64,
+    /// The mind's thought that wrote it (its journal reference), for the inspector.
+    pub source: String,
+}
+
+#[derive(SpacetimeType, Clone, Copy, Debug, PartialEq)]
+pub struct CueFire {
+    /// A creature id, or `CUE_RESOURCE | id`, `CUE_STRUCTURE | id` or `CUE_PLACE | id`.
+    pub subject: u64,
+    pub at_ms: u64,
+}
+
+pub const CUES_PER_ACTOR: usize = 8;
+pub const CUE_FIRED: usize = 8;
+pub const CUE_RESOURCE: u64 = 1 << 62;
+pub const CUE_STRUCTURE: u64 = 1 << 61;
+pub const CUE_PLACE: u64 = 1 << 60;
+
 #[spacetimedb::table(accessor = judgment)]
 pub struct Judgment {
     #[primary_key]
@@ -750,6 +1337,78 @@ pub struct Judgment {
     pub value: f32,
     pub why: String,
     pub updated_ms: u64,
+}
+
+/// What a character has seen of one kind of resource at a spot, and when (talk-places,
+/// docs/COMMUNICATION.md §20). Its own perception, never the world's truth: written by the
+/// character's looks (`stock::look`, the same rule for every controller), so a patch stripped
+/// out of sight is still believed until the character sees it again. Private: the mind service
+/// reads it as the owner, for a deliberation's and a talk turn's places and player memory's.
+/// At most `stock::PER_ACTOR` rows a character; gone at death.
+#[derive(Clone, Debug)]
+#[spacetimedb::table(accessor = seen_stock,
+    index(accessor = by_actor_chunk, btree(columns = [actor, chunk])))]
+pub struct SeenStock {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    #[index(btree)]
+    pub actor: u32,
+    /// The chunk of the spot.
+    pub chunk: u32,
+    pub kind: String,
+    /// The spot: the middle of the ones seen.
+    pub x: f32,
+    pub y: f32,
+    /// How many of `nodes` had something to gather when last seen with any.
+    pub count: u32,
+    /// The ones seen, nearest first (at most `stock::NODES`).
+    pub nodes: Vec<u64>,
+    /// When last seen with something to gather.
+    pub seen_ms: u64,
+    /// 0, or when the character last saw every one of `nodes` with nothing left on it.
+    pub gone_ms: u64,
+}
+
+/// Where a character stands, written when its mind asks (`mind_where`) for a talk turn's
+/// places (talk-places). Private: the mind service reads it. One row a character; gone at death.
+#[spacetimedb::table(accessor = standing)]
+pub struct Standing {
+    #[primary_key]
+    pub actor: u32,
+    pub x: f32,
+    pub y: f32,
+    pub at_ms: u64,
+}
+
+/// Where a character stands and moves, and how it perceives someone it is answering, for its
+/// talk turn's frame (reply-timing, docs/COMMUNICATION.md): `mind_reach`'s answer to its
+/// controller alone (not a table, not broadcast). Only what the character itself perceives of
+/// the other: nothing of them when it neither sees nor hears them.
+#[derive(SpacetimeType, Clone, Debug, PartialEq, Default)]
+pub struct Reach {
+    /// Where it stands now.
+    pub x: f32,
+    pub y: f32,
+    /// How it perceives the other now: `seen`, `heard` (heard and not seen, while sight has a
+    /// field), or `""` (neither, or seen only as a figure too far away to make out).
+    pub other: String,
+    /// Seen: how far they are (m, whole metres). Heard: 0 (a sound's distance is in words).
+    pub other_m: f32,
+    /// Seen: which way they are ("to the north-east"). Heard: where the sound is and how far,
+    /// in the world's words ("behind you, to the south; close").
+    pub other_where: String,
+    /// How fast its body travels now (m/s; 0 standing).
+    pub speed: f32,
+    /// While it travels and sees the other: 1 its way takes it toward them, -1 away from them,
+    /// 0 past them (or it does not travel or see them).
+    pub toward: i8,
+    /// What its body is doing (its activity's words), `""` when nothing.
+    pub doing: String,
+    /// The point it is walking to, when its movement has one (`goal`).
+    pub goal: bool,
+    pub gx: f32,
+    pub gy: f32,
 }
 
 #[cfg_attr(open_tables, spacetimedb::table(accessor = place, public))]
@@ -883,7 +1542,10 @@ pub struct JoinRequest {
     pub at_ms: u64,
 }
 
-/// A standing trade proposal (expires after three minutes).
+/// A standing trade proposal: `from` gives `give_qty` `give_item` to `to` for `want_qty`
+/// `want_item`. It can be accepted until `until_ms` (`at_ms` plus the `trade_window_s` law
+/// when it was made); 0 on rows made before the column, which use the law's window.
+/// Indexed by `to` for `my_offers` (a point read per player) and the addressee's mind.
 #[spacetimedb::table(accessor = trade_offer)]
 pub struct TradeOffer {
     #[primary_key]
@@ -891,12 +1553,27 @@ pub struct TradeOffer {
     pub id: u64,
     #[index(btree)]
     pub from: u32,
+    #[index(btree)]
     pub to: u32,
     pub give_item: String,
     pub give_qty: u32,
     pub want_item: String,
     pub want_qty: u32,
     pub at_ms: u64,
+    #[default(0u64)]
+    pub until_ms: u64,
+}
+
+impl TradeOffer {
+    /// When the offer can no longer be accepted (the stored end, or for an older row the
+    /// law's window from when it was made).
+    pub fn ends_ms(&self, window_s: f32) -> u64 {
+        if self.until_ms != 0 {
+            self.until_ms
+        } else {
+            self.at_ms + (window_s * 1000.0) as u64
+        }
+    }
 }
 
 /// A couple expecting a child, born at `due_ms`.
@@ -1012,6 +1689,10 @@ pub struct SkillCard {
     pub needs: String,
     #[default("")]
     pub knows: String,
+    /// The pool `cost` is taken from (`combat_pool`): "stamina" or "focus" (`vitals`' columns
+    /// of that name), so the bar greys a slot without knowing skill names.
+    #[default("stamina")]
+    pub pool: String,
 }
 
 /// What others can see of a character in a fight: the health band at a glance and the move
@@ -1070,6 +1751,36 @@ pub struct CombatSeen {
     pub ms: u32,
     /// Why an attempt was refused (for the actor only).
     pub note: String,
+}
+
+/// One blow of a fight as its onlookers saw it (private; docs/BATTLE_SCALE.md, fix 4): who
+/// struck whom, how it ended, and everyone who could see it under the sight rule at that instant
+/// (`perceive::witnessed`'s test), the two in it excepted. Each onlooker is told what it saw as
+/// one folded line per `witness_fold_ms` (`fold::flush`); a row is gone once every onlooker's
+/// window holding it has been told, so the table holds at most one window of fights.
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = fight_seen)]
+pub struct FightSeen {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    #[index(btree)]
+    pub at_ms: u64,
+    pub attacker: u32,
+    pub victim: u32,
+    /// `living_rules::combat::seen`: `HIT`, `BLOCKED`, `DODGED` or `MISS`.
+    pub outcome: u8,
+    /// The first blow of a fight (`act::damage`'s `first_blow`).
+    pub start: bool,
+    /// The blow killed its victim.
+    pub fell: bool,
+    /// The missile's words ("an arrow"); empty for a blow in reach.
+    pub missile: String,
+    pub x: f32,
+    pub y: f32,
+    /// Who saw it; `fold::UNSEEN_SHOOTER` set on one who saw where a missile struck but not who
+    /// shot it.
+    pub onlookers: Vec<u32>,
 }
 
 /// A missile in flight (private: clients draw it from its `LAUNCH` and `IMPACT` events).
@@ -1147,6 +1858,99 @@ pub struct Readiness {
     pub move_run: bool,
 }
 
+/// What a player's character senses now (private; its client reads its own through the
+/// `my_senses` view): the world's `senses(a)` law for the character with all its facts, so a
+/// client draws its sight and hearing from the rules' answer instead of running the law on
+/// the few facts it has. Written at the character's frames only when a value changed
+/// (`frame::show_senses`): nightfall, dawn, a torch picked up or put away. `field` is whether
+/// sight depends on facing (the world's `fov_on` law); its five numbers are 0 while it does
+/// not. One row per character a person plays now; it goes when the character dies.
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = character_senses)]
+pub struct CharacterSenses {
+    #[primary_key]
+    pub id: u32,
+    /// Metres seen and heard (one tile is one metre).
+    pub sight: f32,
+    pub hearing: f32,
+    /// Sight narrows away from facing (`living_rules::sight::Field`).
+    pub field: bool,
+    pub focal_deg: f32,
+    pub side_deg: f32,
+    pub side_share: f32,
+    pub near_m: f32,
+    pub margin_deg: f32,
+    /// When a value last changed (authority ms).
+    pub at_ms: u64,
+}
+
+impl CharacterSenses {
+    /// The row for character `id` from the law's answer (`at_ms` 0: stamped when written).
+    pub fn of(id: u32, s: &living_rules::script::Senses) -> Self {
+        let f = s.field.unwrap_or(living_rules::sight::Field { focal_deg: 0.0, side_deg: 0.0, side_share: 0.0, near_m: 0.0, margin_deg: 0.0 });
+        Self { id, sight: s.sight, hearing: s.hearing, field: s.field.is_some(), focal_deg: f.focal_deg, side_deg: f.side_deg, side_share: f.side_share, near_m: f.near_m, margin_deg: f.margin_deg, at_ms: 0 }
+    }
+
+    /// The same senses, whenever they were stamped.
+    pub fn same(&self, o: &Self) -> bool {
+        Self { at_ms: 0, ..self.clone() } == Self { at_ms: 0, ..o.clone() }
+    }
+}
+
+/// Whom a line said now would reach, for a person's client (private; read through
+/// `my_earshot`): per way of speaking in the rules' order, the people the character perceives
+/// whom a line in it would reach (`earshot::reach`, the rule `speech::speak` gives the words
+/// by), nearest first, and the same in short words in the character's own labels (`text`,
+/// `earshot::short_words`: the nearest two named, the rest and what a call adds counted; a
+/// mind's scene carries the full `earshot::words`). Someone out of sight is never listed, though a line may reach them.
+/// Written at the character's frames only when it changed (`frame::show_earshot`, at most every
+/// `frame::EARSHOT_MS`). One row per character a person plays now; it goes when the character
+/// dies.
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = character_earshot)]
+pub struct CharacterEarshot {
+    #[primary_key]
+    pub id: u32,
+    pub ways: Vec<EarshotWay>,
+    pub text: String,
+    /// When it last changed (authority ms).
+    pub at_ms: u64,
+}
+
+/// One way of speaking's reach in [`CharacterEarshot`]: its name and whom it would reach.
+#[derive(spacetimedb::SpacetimeType, Clone, Debug, PartialEq)]
+pub struct EarshotWay {
+    pub way: String,
+    pub hearers: Vec<u32>,
+}
+
+/// How an act or a death came out, for a person's client (private; read through
+/// `my_act_outcomes`): one row per experience line that tells it, keyed by that line's id and
+/// written in the same transaction (`outcomes::write`). `kind` picks the vocabulary of `code`
+/// (`living_rules::outcome`): `act` (a deliberate act: a player's command or a mind's decision)
+/// and `own` (a graph's action, told when it failed) take an act code; `death` (the
+/// character's own) a death code, with the killer in `other`. `what` is the act as described,
+/// `why` the rules' words for a refusal or a failure (empty when done). Written only for a
+/// character a person plays now, and kept as long as its line is in `my_experience` (the newest
+/// `frame::LINES_SHOWN`); a person's rows go when they play another character.
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = act_outcome)]
+pub struct ActOutcome {
+    /// The experience line's id.
+    #[primary_key]
+    pub id: u64,
+    #[index(btree)]
+    pub observer: u32,
+    pub at_ms: u64,
+    pub kind: String,
+    pub ok: bool,
+    pub skill: String,
+    pub code: String,
+    pub what: String,
+    pub why: String,
+    pub other: u32,
+}
+
 // ---- town life (docs/TOWN_LIFE.md) ------------------------------------------------
 
 /// The world's weather (one row, id 0): whether it is raining, since when and until when the
@@ -1198,8 +2002,11 @@ pub struct ActCard {
 }
 
 /// What a character is visibly doing right now, for a skill with an `act_card`: written when
-/// it starts being performed, deleted when it ends. Clients receive it through their body
-/// window (a join on `body.id`), like `fighter`. It holds what anyone looking would see.
+/// it starts being performed, deleted when it ends. A continuous activity that ends well is
+/// held, left as it was, until the body's next evaluation (`town::hold`; a row with no activity
+/// behind it): renewed in place, keeping its `since_ms`, when the same activity begins again,
+/// else replaced or deleted then. Clients receive it through their body window (a join on
+/// `body.id`), like `fighter`. It holds what anyone looking would see.
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(open_tables, spacetimedb::table(accessor = doing, public))]
 #[cfg_attr(not(open_tables), spacetimedb::table(accessor = doing))]
@@ -1235,6 +2042,75 @@ pub struct Perceived {
     pub viewer: Identity,
     pub body: u32,
     pub since_ms: u64,
+}
+
+/// What a human player hears but does not see (private; docs/PERCEPTION.md, "Heard, not
+/// seen"): one row per creature within the player's hearing and outside its field, written at
+/// the perception sweep when one starts to be heard or its bearing or band changes, and gone
+/// about `heard_linger_s` after it was last heard (or at once when it comes into sight). Only
+/// while the world's `fov_on` law gives the player a field. The `heard_sounds` view returns
+/// `key`, `kind`, `bearing` and `band`, never `target`: `key` is derived from the listener,
+/// the target and a salt that rotates every few minutes (`hear_salt`), so it cannot be traced to
+/// a character, and stays the same while the sound lasts.
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = heard)]
+pub struct Heard {
+    #[primary_key]
+    pub key: u64,
+    #[index(btree)]
+    pub viewer: Identity,
+    /// The listener's character.
+    pub listener: u32,
+    /// Who is heard (never sent to the player).
+    pub target: u32,
+    /// What it sounds like: "person", "deer", "wolf" or "creature" (the `heard_as` law).
+    pub kind: String,
+    /// One of eight compass ways from the listener, 0 north, clockwise.
+    pub bearing: u8,
+    /// 0 near, 1 close, 2 far (the `heard_near_m`, `heard_close_m` laws).
+    pub band: u8,
+    pub since_ms: u64,
+}
+
+/// When what a character can make of others last changed (private; docs/PERCEPTION.md "Module
+/// memory and rollback"): bumped in the transaction that changes whose name it knows (an
+/// introduction, a child of its own) or what it knows how to do; row 0 when anyone's community
+/// changes. The perception sweep reads the viewer's row and row 0 by primary key and asks again
+/// what it kept when either moved. Durable, so a change made in any transaction that commits,
+/// in whichever module instance, reaches the next sweep; one that fails leaves no trace. A
+/// character's row goes at its death.
+#[spacetimedb::table(accessor = knowledge_epoch)]
+pub struct KnowledgeEpoch {
+    #[primary_key]
+    pub id: u32,
+    pub epoch: u64,
+}
+
+/// The secret salt behind heard keys (private; one row, drawn from the module's random source
+/// at the first sound).
+#[spacetimedb::table(accessor = hear_salt)]
+pub struct HearSalt {
+    #[primary_key]
+    pub id: u8,
+    pub salt: u64,
+}
+
+/// Every change of a world law on a running world (`set_world_law`), kept for good (private;
+/// read by the owner, a run's evidence): which law, its value before and after (JSON; before:
+/// the value in force then), when, and who asked.
+#[spacetimedb::table(accessor = law_change)]
+pub struct LawChange {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    pub name: String,
+    pub old: String,
+    pub new: String,
+    pub at_ms: u64,
+    pub by: Identity,
+    /// The script revision in force after the change (`script.revision`): a new one when it
+    /// installed the script, the one before for a value-only law (`law_override`, docs/LAW_OVERRIDE.md).
+    pub revision: u32,
 }
 
 /// What a human player perceives of each creature in its scene, its own character included
@@ -1275,6 +2151,10 @@ pub struct Projected {
     /// Exact health when the law grants it (oneself, or revealed), else -1.
     pub hp: f32,
     pub max_hp: f32,
+    /// The line key of the person's look (`look.line`, `lk_…`), whoever sees them at whatever
+    /// distance; empty for animals and for a person with no look row (docs/LOOK.md §2).
+    #[default("")]
+    pub look: String,
 }
 
 /// What a player's client was last shown of a perceived creature's `fighter` row (private;
@@ -1320,6 +2200,17 @@ pub struct MotionSeen {
     #[index(btree)]
     pub viewer: Identity,
     pub motion: crate::perception::Motion,
+    /// The body's facing segment (`body.face_*`), appended beside `motion` (whose type stays
+    /// as stored); `seen_bodies` returns both as one `Moving` row.
+    #[default(0.0f32)]
+    pub face_off: f32,
+    #[default(0.0f32)]
+    pub face_turn: f32,
+    #[default(0.0f32)]
+    pub face_turn_s: f32,
+    /// `body.running`, appended as the facing was.
+    #[default(false)]
+    pub running: bool,
 }
 
 /// An experience line of a player's character released to its client (private; frames,
@@ -1351,6 +2242,91 @@ pub struct DoingSeen {
     #[index(btree)]
     pub viewer: Identity,
     pub doing: Doing,
+}
+
+// ---- the near tier (frame-views; docs/PERCEPTION.md, "Cues and tiers") ------------------
+//
+// A viewer's copies of the creatures within `frame::NEAR_M` of it at its last sweep live here,
+// the others' in `motion_seen`, `fighter_seen` and `doing_seen` (the far tier): each tier view
+// (`seen_*_near`, `seen_*_far`) reads one table's `viewer` key, so a write to a far copy re-runs
+// only the far view. A creature that changes tier moves between the tables as it is now. New
+// tables rather than a column on the old ones: in 2.14.1 appending a column rewrites a table and
+// disconnects every client (`auto_migrate.rs`, `AddColumns`); adding a table does not.
+
+/// A near creature's motion copy (private): `copy` is the row the far tier would hold.
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = motion_near)]
+pub struct MotionNear {
+    #[primary_key]
+    pub id: u64,
+    #[index(btree)]
+    pub viewer: Identity,
+    pub copy: MotionSeen,
+}
+
+/// A near creature's fighter copy (private).
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = fighter_near)]
+pub struct FighterNear {
+    #[primary_key]
+    pub id: u64,
+    #[index(btree)]
+    pub viewer: Identity,
+    pub copy: FighterSeen,
+}
+
+/// A near creature's doing copy (private).
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = doing_near)]
+pub struct DoingNear {
+    #[primary_key]
+    pub id: u64,
+    #[index(btree)]
+    pub viewer: Identity,
+    pub copy: DoingSeen,
+}
+
+// ---- cues: what a player is shown at once of those near it or engaged with it ----------
+//
+// Event tables (docs/PERCEPTION.md, "Cues"; `frame.rs`): a row exists only in the transaction
+// that inserts it, is sent to the subscribers whose query it matches and is never stored, so a
+// cue rebuilds no view. Each is public, and row-level security (`frame.rs`, the
+// `client_visibility_filter`s) lets a client receive only rows whose `viewer` is its own
+// identity. A cue is a copy of what the viewer's `*_seen` row of that creature would hold now;
+// the copies and the `seen_*` views stay the durable state (a join, a reconnect, a cue missed).
+
+/// A perceived creature's motion (`seen_bodies`' row), sent when it changed.
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = seen_body_cue, public, event)]
+pub struct SeenBodyCue {
+    #[index(btree)]
+    pub viewer: Identity,
+    /// When the authority sent it (ms).
+    pub at_ms: u64,
+    pub motion: crate::perception::Moving,
+}
+
+/// A perceived creature's `fighter` row as `seen_fighters` would show it (band as this viewer
+/// perceives it), or `None` when it has none.
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = seen_fighter_cue, public, event)]
+pub struct SeenFighterCue {
+    #[index(btree)]
+    pub viewer: Identity,
+    pub at_ms: u64,
+    pub body: u32,
+    pub fighter: Option<Fighter>,
+}
+
+/// What a perceived creature is visibly doing (`seen_doing`'s row), or `None` for nothing.
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = seen_doing_cue, public, event)]
+pub struct SeenDoingCue {
+    #[index(btree)]
+    pub viewer: Identity,
+    pub at_ms: u64,
+    pub body: u32,
+    pub doing: Option<Doing>,
 }
 
 /// What a skill use revealed to an observer about a target, until `until_ms` (private): the
@@ -1426,9 +2402,12 @@ pub struct Presence {
 }
 
 /// A person's daily rhythm (private; seed content or drawn at birth, docs/SEEDED_LIVES.md):
-/// when it rises and goes to bed (hours of the day; `bed_h` may pass 24, e.g. 24.5 is 00:30)
-/// and how many hours before bed it keeps as its evening. Graphs read it as `bedtime` and
-/// `evening`; its new day starts at `rise_h`. Without a row: the world's night, and 18–22.
+/// when it rises and goes to bed (hours of the day; `bed_h` may pass 24, e.g. 24.5 is 00:30,
+/// and lies 8 to 22 hours after `rise_h`, which may be any hour), how many hours before bed it
+/// keeps as its evening, its working hours and a second sleep (spans whose end may pass 24; an
+/// end not after its start is none). Graphs read it as `bedtime`, `evening` and `work_hours`
+/// (`living_rules::rhythm`); its new day starts at `rise_h`. Without a row: the world's night,
+/// and 18–22.
 #[spacetimedb::table(accessor = rhythm)]
 pub struct Rhythm {
     #[primary_key]
@@ -1439,6 +2418,16 @@ pub struct Rhythm {
     /// The world day whose new day it last began (`living_rules::day_of`); the day it is
     /// born into counts as begun, so a world's people do not all begin one at its creation.
     pub last_day: u32,
+    /// Working hours (none: 0 and 0, so any waking hour outside the evening is work's).
+    #[default(0.0f32)]
+    pub work_from_h: f32,
+    #[default(0.0f32)]
+    pub work_to_h: f32,
+    /// A second sleep in the day (none: 0 and 0), e.g. a baker's afternoon.
+    #[default(0.0f32)]
+    pub nap_from_h: f32,
+    #[default(0.0f32)]
+    pub nap_to_h: f32,
 }
 
 /// A guest of a household (private; the database owner reads it): `guest` may sleep in the

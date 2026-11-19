@@ -1,0 +1,223 @@
+{
+ "schema": 1,
+ "family": "building:watchglass",
+ "id": "20261111-a34e317f-011b51",
+ "published": "2026-11-11T21:03:04+01:00",
+ "track": "kit-2",
+ "maker": "Claude Fable 5.2",
+ "note": "kit-2 pass 2: lit windows and parapets from the plan; no two faces in one plane (the flicker of the owner's walk); every lot's eye-height cells. Unchanged in design",
+ "source": {
+  "commit": "a34e317f2de27101929fa770388a37f1d1b6d62e",
+  "branch": "kit-2",
+  "dirty": false,
+  "generator": "living/tools/blender/cullet.py",
+  "generator_sha256": "2a1d98999573e7816cef047ccc6c3aab5e04b0911d1071f1054acf8f7a29a287",
+  "generator_state": "committed",
+  "seed": "83",
+  "params": {
+   "plan": "living/seeds/worlds/cullet/plan.json"
+  }
+ },
+ "renderer": {
+  "method": "asset-view",
+  "commit": "a34e317f2de27101929fa770388a37f1d1b6d62e",
+  "dirty": false,
+  "key": "bin:cbdab2a8",
+  "env": "cullet",
+  "hours": {
+   "day": 15.0,
+   "night": 22.0
+  },
+  "weather": "clear",
+  "day_curve": true,
+  "preset": "2947e3c0",
+  "binary": "/home/carlid/.t3/worktrees/slop-art-online/t3-2190f8f1-741aca404e5ab819/.local/kit2-target/release/living-game",
+  "commit_assumed": "a34e317f2de27101929fa770388a37f1d1b6d62e",
+  "repo": "/home/carlid/.t3/worktrees/slop-art-online/t3-2190f8f1-741aca404e5ab819"
+ },
+ "preset": "building",
+ "media": "media/building-watchglass/20261111-a34e317f-011b51",
+ "members": [
+  {
+   "name": "watchglass",
+   "role": "subject",
+   "token_kind": "file",
+   "source_path": ".local/kit-2/board/watchglass/watchglass.glb",
+   "sha256": "655915f98972f82db68589e60b69ec51989b9182d5db5aeb347b1883e0b10cfc",
+   "stats": {
+    "file": "watchglass.glb",
+    "sha256": "655915f98972f82db68589e60b69ec51989b9182d5db5aeb347b1883e0b10cfc",
+    "bytes": 205940,
+    "triangles": 2930,
+    "vertices": 5817,
+    "parts": {
+     "watchglass": 2930
+    },
+    "nodes": 1,
+    "bones": 0,
+    "spring_bones": 0,
+    "materials": [
+     "Body",
+     "GlowCyan"
+    ],
+    "textures": 0,
+    "texture_bytes": 0,
+    "morph_targets": 0,
+    "spring_groups": 0,
+    "vertex_colours": true,
+    "clips": [],
+    "glow": true,
+    "glow_triangles": 560,
+    "palette": [
+     {
+      "hex": "#3f4248",
+      "share": 0.2162
+     },
+     {
+      "hex": "#595c60",
+      "share": 0.1716
+     },
+     {
+      "hex": "#c5c3b3",
+      "share": 0.1495
+     },
+     {
+      "hex": "#2b2b30",
+      "share": 0.1331
+     },
+     {
+      "hex": "#5ea192",
+      "share": 0.1037
+     },
+     {
+      "hex": "#9eccc6",
+      "share": 0.0697
+     },
+     {
+      "hex": "#65524c",
+      "share": 0.0318
+     },
+     {
+      "hex": "#82827e",
+      "share": 0.0233
+     },
+     {
+      "hex": "#613c2a",
+      "share": 0.0209
+     },
+     {
+      "hex": "#b8b4a6",
+      "share": 0.019
+     },
+     {
+      "hex": "#a4a299",
+      "share": 0.0167
+     },
+     {
+      "hex": "#294399",
+      "share": 0.0106
+     },
+     {
+      "hex": "#569082",
+      "share": 0.0082
+     },
+     {
+      "hex": "#47736a",
+      "share": 0.0081
+     },
+     {
+      "hex": "other",
+      "share": 0.0176
+     }
+    ]
+   },
+   "file": "files/watchglass.glb",
+   "report": {
+    "file": "watchglass/watchglass.glb",
+    "what": "lot",
+    "kind": "watchglass",
+    "size_m": [
+     6,
+     6
+    ],
+    "plan_height_m": 17.0,
+    "seed": 2436,
+    "above_floor_m": [
+     [
+      -2.9,
+      -2.9
+     ],
+     [
+      2.9,
+      2.9
+     ]
+    ],
+    "height_m": 17.0,
+    "foundation_m": 1.8,
+    "tris": 2930,
+    "materials": {
+     "Body": 2370,
+     "GlowCyan": 560
+    },
+    "surface_tagged_share": 1.0,
+    "palette_share": 0.884,
+    "palette_wear_blend_share": 0.116,
+    "budget_tris": 9000,
+    "hidden_faces_removed": 18,
+    "coplanar_sheets_parted": 24,
+    "doors": [
+     {
+      "at": [
+       0.0,
+       -2.29,
+       1.18
+      ],
+      "along": [
+       1.0,
+       0.0,
+       0.0
+      ],
+      "width_m": 0.9,
+      "height_m": 2.0
+     }
+    ],
+    "sha256": "655915f98972f82db68589e60b69ec51989b9182d5db5aeb347b1883e0b10cfc",
+    "ridge_m": 17.0,
+    "shaft_across_m": 4.0,
+    "lantern_across_m": 5.0,
+    "panes": 320,
+    "cobalt_panes": 40,
+    "eye_solid": 0.484,
+    "eye_cells": "12:15a1e4k1e5a1e6k1e3a1e8k1e2a10k2a10k2a10k2a10k2a1e8k1e3a1e6k1e5a1e4k1e15a"
+   },
+   "shots": [
+    "front",
+    "three-quarter",
+    "side",
+    "back",
+    "close",
+    "game",
+    "night-three-quarter",
+    "night-game"
+   ],
+   "clips": [],
+   "view": {
+    "size_m": [
+     5.800000190734863,
+     18.799999237060547,
+     5.800000190734863
+    ],
+    "triangles": 2930,
+    "vertices": 5817,
+    "meshes": 2,
+    "materials": [
+     "Body",
+     "GlowCyan"
+    ],
+    "glow": true,
+    "vertex_colours": true
+   }
+  }
+ ],
+ "delivered": []
+}

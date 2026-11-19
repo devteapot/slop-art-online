@@ -170,6 +170,12 @@ mod tests {
         let d = l.deathline(7);
         assert!((l.old_age..=1.0).contains(&d));
         assert_ne!(l.deathline(7), l.deathline(8));
+        // living/tools/births_report.py ports this hash to say when each seeded person is due to
+        // die of old age; these values pin the two together.
+        let p = Life { old_age: 0.87, ..l };
+        for (id, want) in [(1, 0.8999), (7, 0.8997), (8, 0.9529), (12, 0.929)] {
+            assert!((p.deathline(id) - want).abs() < 1e-3, "deathline({id}) = {}", p.deathline(id));
+        }
     }
 
     #[test]

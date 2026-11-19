@@ -6,12 +6,14 @@ use living_rules::map::{chunks_around, Map};
 use living_rules::script::Scripts;
 use spacetimedb::{ReducerContext, Table};
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
 thread_local! {
     static MAP: RefCell<Option<Rc<Map>>> = const { RefCell::new(None) };
-    static SCRIPTS: RefCell<Option<(u32, Rc<Scripts>)>> = const { RefCell::new(None) };
+    /// The compiled scripts, by the script revision and the law revision whose values they hold
+    /// (`None`: written in this transaction or one that may have rolled back; laid over again).
+    static SCRIPTS: RefCell<Option<(u32, Option<u32>, Rc<Scripts>)>> = const { RefCell::new(None) };
     static GRAPHS: RefCell<HashMap<u32, (u32, Rc<Compiled>)>> = RefCell::new(HashMap::new());
     /// Genes never change after birth.
     static GENES: RefCell<HashMap<u32, Rc<living_rules::genes::Genes>>> = RefCell::new(HashMap::new());
@@ -41,6 +43,7 @@ pub fn practice_of(ctx: &ReducerContext, id: u32) -> std::collections::BTreeMap<
 
 /// One more successful use of a skill.
 pub fn practise(ctx: &ReducerContext, id: u32, skill: &str) {
+    let _detail = detail_span("common.practise");
     if !living_rules::genes::is_skilled(skill) {
         return;
     }
@@ -64,9 +67,130 @@ pub fn set_profiling(on: bool) {
     PROFILE.with(|p| p.set(on));
 }
 
+thread_local! {
+    /// While profiling with the `profile_detail` law: the parts of an evaluation are timed too.
+    static DETAIL: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Set at each tick from `set_profile` and the `profile_detail` law.
+pub fn set_profile_detail(on: bool) {
+    DETAIL.with(|p| p.set(on));
+}
+
+/// A span for a part of an evaluation: timed only while profiling with `profile_detail`.
+pub fn detail_span(name: &str) -> Option<spacetimedb::log_stopwatch::LogStopwatch> {
+    (DETAIL.with(|p| p.get()) && PROFILE.with(|p| p.get())).then(|| spacetimedb::log_stopwatch::LogStopwatch::new(name))
+}
+
+thread_local! {
+    /// While profiling: graph scenes built since the last report, the creatures they saw in
+    /// all, and the most one saw.
+    static SCENES: std::cell::Cell<(u64, u64, u64)> = const { std::cell::Cell::new((0, 0, 0)) };
+}
+
+/// While profiling: a behaviour graph's scene saw `n` creatures (`tools/bench.py` reports the
+/// mean per scene).
+pub fn note_scene(n: usize) {
+    if PROFILE.with(|p| p.get()) {
+        SCENES.with(|s| {
+            let (b, t, m) = s.get();
+            s.set((b + 1, t + n as u64, m.max(n as u64)));
+        });
+    }
+}
+
+thread_local! {
+    /// Diagnostic counts while profiling (docs/BATTLE_SCALE.md): percepts by kind and how many
+    /// woke their observer, onlookers per witnessed event, requests to think by reason, graph
+    /// evaluations by trigger, wakes. Logged once a second by `report_diag`, then cleared.
+    static DIAG: RefCell<std::collections::BTreeMap<std::borrow::Cow<'static, str>, u64>> = const { RefCell::new(std::collections::BTreeMap::new()) };
+}
+
+/// Count `n` under the key `key()` while profiling (no work otherwise). A fixed key (`|| "wake"`)
+/// costs no allocation, so counting in hot loops does not weigh on what is measured.
+pub fn diag<K: Into<std::borrow::Cow<'static, str>>>(key: impl FnOnce() -> K, n: u64) {
+    if PROFILE.with(|p| p.get()) {
+        DIAG.with(|d| *d.borrow_mut().entry(key().into()).or_default() += n);
+    }
+}
+
+/// One line a second while profiling: the counts since the last report.
+pub fn report_diag() {
+    // The rules' script call counts (`living_rules::script::calls`), taken every second so a
+    // window's first report holds only that second's calls.
+    let calls = living_rules::script::calls::take();
+    if PROFILE.with(|p| p.get()) {
+        for (k, n) in [("eval:script_calls", calls[0]), ("eval:status_calls", calls[1]), ("eval:status_memo", calls[2]), ("eval:status_run", calls[3])] {
+            if n > 0 {
+                diag(|| k, n);
+            }
+        }
+        let m = DIAG.with(|d| std::mem::take(&mut *d.borrow_mut()));
+        if !m.is_empty() {
+            log::info!("diag: {}", serde_json::to_string(&m).unwrap_or_default());
+        }
+    }
+}
+
+/// While profiling, once a second: what graph scenes saw since the last report, one log line.
+pub fn report_scenes() {
+    if PROFILE.with(|p| p.get()) {
+        let (b, t, m) = SCENES.with(|s| s.replace((0, 0, 0)));
+        log::info!("scene seen: builds={b} seen={t} max={m}");
+    }
+}
+
 /// A named timing span logged by the host while profiling is on (see `tools/bench.py`).
+/// Whether spans are being logged (a profiling window is open).
+pub fn profiling() -> bool {
+    PROFILE.with(|p| p.get())
+}
+
 pub fn span(name: &str) -> Option<spacetimedb::log_stopwatch::LogStopwatch> {
     PROFILE.with(|p| p.get()).then(|| spacetimedb::log_stopwatch::LogStopwatch::new(name))
+}
+
+// ---- a module updated under a running instance (docs/LOOK.md §7, "The update panic") ------
+
+thread_local! {
+    /// A fingerprint of the database's list of tables (`st_table`) as this instance first saw it,
+    /// at its first scheduled call (0: not yet), and whether it has said it was replaced.
+    static SCHEMA: std::cell::Cell<(u64, bool)> = const { std::cell::Cell::new((0, false)) };
+}
+
+/// Whether the database's tables have changed under this module instance since its first
+/// scheduled call: a module update with a schema change was published while this instance (the
+/// old module's) still runs. SpacetimeDB 2.14.1 lets the outgoing module fire one more scheduled
+/// reducer after the update has committed, and the bindings keep each table's and index's id in
+/// a `static` resolved once per instance, so a table the update rewrote (a column appended: a new
+/// table id and new index ids) makes that call's first lookup panic with "No such index". A
+/// scheduled reducer that sees this returns at once, touching no table; the new module's own
+/// instances (whose first call takes the fingerprint afresh) carry on. One scan of `st_table`
+/// (about 150 short rows) through the host's uncached calls.
+pub fn schema_moved(reducer: &str) -> bool {
+    let Ok(st_table) = spacetimedb::sys::table_id_from_name("st_table") else { return false };
+    let Ok(mut rows) = spacetimedb::sys::datastore_table_scan_bsatn(st_table) else { return false };
+    let mut buf = Vec::with_capacity(16 * 1024);
+    while !rows.is_exhausted() {
+        rows.read(&mut buf);
+    }
+    // FNV-1a over the rows' bytes (never 0, so 0 means "not yet taken").
+    let h = buf.iter().fold(0xcbf2_9ce4_8422_2325u64, |h, b| (h ^ *b as u64).wrapping_mul(0x0100_0000_01b3)) | 1;
+    SCHEMA.with(|s| {
+        let (seen, told) = s.get();
+        if seen == 0 {
+            s.set((h, false));
+            return false;
+        }
+        if seen == h {
+            return false;
+        }
+        if !told {
+            log::warn!("{reducer}: the database's tables changed under this module instance (a module update was published); this call does nothing, and the new module carries on");
+            s.set((seen, true));
+        }
+        true
+    })
 }
 
 thread_local! {
@@ -98,6 +222,12 @@ pub fn now_ms(ctx: &ReducerContext) -> u64 {
     })
 }
 
+/// The current transaction's time as `now_ms` last gave it (0 before any): for stamps taken
+/// where no context is at hand (`frame`'s change marks, profiling only).
+pub fn tx_now() -> u64 {
+    TX.with(|t| t.get().1)
+}
+
 /// A number unique to the current transaction (after its first `now_ms`): the key of module
 /// caches valid within one transaction, which `now` alone no longer distinguishes.
 pub fn tx_seq() -> u64 {
@@ -114,6 +244,8 @@ thread_local! {
     /// The world row, read once per transaction (it changes only through admin reducers,
     /// which call `invalidate_world`).
     static WORLD: RefCell<Option<(i64, World)>> = const { RefCell::new(None) };
+    /// The world's law revision (`law_revision`), read once per transaction.
+    static LAW_REV: std::cell::Cell<Option<(i64, u32)>> = const { std::cell::Cell::new(None) };
     /// The installed script revision, read once per transaction.
     static SCRIPTS_REV: std::cell::Cell<Option<(i64, u32)>> = const { std::cell::Cell::new(None) };
     /// Work counters for the `stats` row, added to the clock row once per tick instead of
@@ -143,7 +275,7 @@ pub fn clock(ctx: &ReducerContext) -> Clock {
 }
 
 /// Revision of the installed skill script (cached for the transaction).
-fn scripts_rev(ctx: &ReducerContext) -> u32 {
+pub fn scripts_rev(ctx: &ReducerContext) -> u32 {
     let t = stamp(ctx);
     if let Some((_, rev)) = SCRIPTS_REV.with(|c| c.get()).filter(|(s, _)| *s == t) {
         return rev;
@@ -153,9 +285,81 @@ fn scripts_rev(ctx: &ReducerContext) -> u32 {
     rev
 }
 
-/// Call after writing the clock's `scripts_rev`.
+/// Call after writing the clock's `scripts_rev`. The compiled scripts and laws go too: they are
+/// kept by revision, and a transaction that wrote a revision and then failed leaves its
+/// compilation in module memory under a number the next install takes again (docs/PERCEPTION.md,
+/// "Module memory and rollback").
 pub fn invalidate_scripts_rev() {
     SCRIPTS_REV.with(|c| c.set(None));
+    SCRIPTS.with(|s| *s.borrow_mut() = None);
+    invalidate_law_rev();
+}
+
+/// The world's law revision (`law_revision`), read once per transaction. A world without the
+/// row has its `world_law` rows copied into `law_override` first, once (the first transaction
+/// on a module with the table that reads the laws: the tick, within a frame of an update).
+pub fn law_rev(ctx: &ReducerContext) -> u32 {
+    let t = stamp(ctx);
+    if let Some((_, rev)) = LAW_REV.with(|c| c.get()).filter(|(s, _)| *s == t) {
+        return rev;
+    }
+    let rev = match ctx.db.law_revision().id().find(0) {
+        Some(r) => r.revision,
+        None => migrate_world_laws(ctx),
+    };
+    LAW_REV.with(|c| c.set(Some((t, rev))));
+    rev
+}
+
+/// Copy a world's `world_law` rows (before `law_override`) into `law_override`, once.
+fn migrate_world_laws(ctx: &ReducerContext) -> u32 {
+    let mut n = 0;
+    for w in ctx.db.world_law().iter().collect::<Vec<_>>() {
+        if ctx.db.law_override().name().find(&w.name).is_none() {
+            ctx.db.law_override().insert(LawOverride { name: w.name, value: w.value, revision: 1 });
+            n += 1;
+        }
+    }
+    ctx.db.law_revision().insert(LawRevision { id: 0, revision: 1 });
+    if n > 0 {
+        log::info!("law_override: {n} world laws copied from world_law (law revision 1)");
+    }
+    1
+}
+
+/// The world's own law values (`law_override`), by name.
+pub fn overrides(ctx: &ReducerContext) -> Vec<(String, serde_json::Value)> {
+    let rows: Vec<LawOverride> = ctx.db.law_override().iter().collect();
+    living_rules::script::overrides_of(rows.iter().map(|r| (r.name.as_str(), r.value.as_str())))
+}
+
+/// Write a world's own value of a law (`law_override`, JSON) with the next law revision, which
+/// it returns; the laws in force follow at their next read (`scripts`, `laws`).
+pub fn set_law_override(ctx: &ReducerContext, name: &str, value: &str) -> u32 {
+    let rev = law_rev(ctx) + 1;
+    let row = LawOverride { name: name.to_string(), value: value.to_string(), revision: rev };
+    if ctx.db.law_override().name().find(&row.name).is_some() {
+        ctx.db.law_override().name().update(row);
+    } else {
+        ctx.db.law_override().insert(row);
+    }
+    ctx.db.law_revision().id().update(LawRevision { id: 0, revision: rev });
+    invalidate_law_rev();
+    rev
+}
+
+/// Call after writing `law_override`: the laws in force are laid over again at their next read.
+/// Whatever module memory holds by a law revision goes too, since a transaction that wrote one
+/// and then failed leaves it under a number the next write takes again (docs/LAW_OVERRIDE.md).
+pub fn invalidate_law_rev() {
+    LAW_REV.with(|c| c.set(None));
+    LAWS.with(|l| l.set(None));
+    SCRIPTS.with(|s| {
+        if let Some(e) = s.borrow_mut().as_mut() {
+            e.1 = None;
+        }
+    });
+    COVER_FOR.with(|c| c.set(None));
 }
 
 #[derive(Clone, Copy, Default)]
@@ -234,6 +438,56 @@ fn gate_blocks(ctx: &ReducerContext, w: u32, h: u32) -> std::collections::HashSe
         .collect()
 }
 
+/// The cover policy in force, as the cover mask is compiled under it and `cover_law` publishes it.
+pub fn cover_law_of(l: &living_rules::script::Laws) -> CoverLaw {
+    CoverLaw { id: 0, cover_sight_on: l.cover_sight_on,
+        cover_eye_height_m: l.cover_eye_height_m, cover_brush_on: l.cover_brush_on,
+        cover_brush_min_fill: l.cover_brush_min_fill, cover_cliff_step_m: l.cover_cliff_step_m }
+}
+
+/// Publish the cover policy in force (`cover_law`, one row). The cached map's cover mask follows
+/// the laws by itself (`map`, `COVER_FOR`): the terrain is kept.
+pub fn publish_cover_law(ctx: &ReducerContext, l: living_rules::script::Laws) {
+    let row = cover_law_of(&l);
+    match ctx.db.cover_law().id().find(0) {
+        None => { ctx.db.cover_law().insert(row); }
+        Some(old) if old != row => { ctx.db.cover_law().id().update(row); }
+        Some(_) => {}
+    }
+}
+
+thread_local! {
+    /// The revisions (script, law) the cached map's cover mask was last checked at: a new
+    /// revision (or none, after a law write) compares the policy in force with `COVER_BUILT`.
+    static COVER_FOR: std::cell::Cell<Option<(u32, u32)>> = const { std::cell::Cell::new(None) };
+    /// The policy the cached map's cover mask was compiled under (a fact about the mask in
+    /// memory, whatever revision is committed): only a different policy compiles it again,
+    /// with the terrain and gates kept.
+    static COVER_BUILT: std::cell::Cell<Option<CoverLaw>> = const { std::cell::Cell::new(None) };
+}
+
+fn cover_mask(ctx: &ReducerContext, map: &Map) -> Option<std::sync::Arc<living_rules::cover::Mask>> {
+    let law = laws(ctx);
+    if !law.cover_sight_on { return None; }
+    let _span = spacetimedb::log_stopwatch::LogStopwatch::new("map.cover");
+    let recipe = ctx.db.land_plan().id().find(0).and_then(|p| serde_json::from_str(&p.params).ok()).unwrap_or_default();
+    let mut bands: Vec<_> = ctx.db.cover_ground().iter().collect();
+    if bands.is_empty() {
+        log::warn!("cover: this land predates quantized genesis data");
+        return None;
+    }
+    bands.sort_unstable_by_key(|b| b.id);
+    let candidates = bands.iter().flat_map(|b| b.candidates.iter().copied()).collect::<Vec<_>>();
+    let ground = bands.into_iter().flat_map(|b| b.heights).collect();
+    let mask = living_rules::cover::compile_candidates(map.w, map.h, candidates, ground, &recipe, living_rules::cover::Policy {
+        eye_height_m: law.cover_eye_height_m, brush_on: law.cover_brush_on,
+        brush_min_fill: law.cover_brush_min_fill, cliff_step_m: law.cover_cliff_step_m,
+    });
+    let (m, g) = mask.geometry_bytes();
+    log::info!("cover: {m} mask bytes, {g} ground bytes");
+    Some(std::sync::Arc::new(mask))
+}
+
 pub fn map(ctx: &ReducerContext) -> Rc<Map> {
     MAP.with(|m| {
         let t = stamp(ctx);
@@ -266,6 +520,17 @@ pub fn map(ctx: &ReducerContext) -> Rc<Map> {
                     GATES_CHANGED.with(|c| c.set(0));
                 }
             }
+            // The cover policy in force: the mask again only when it changed (a cover law's value).
+            let revs = (scripts_rev(ctx), law_rev(ctx));
+            if COVER_FOR.with(|c| c.get()) != Some(revs) {
+                let policy = cover_law_of(&laws(ctx));
+                if COVER_BUILT.with(|c| c.get()) != Some(policy) {
+                    let mm = Rc::make_mut(map);
+                    mm.cover = cover_mask(ctx, mm);
+                    COVER_BUILT.with(|c| c.set(Some(policy)));
+                }
+                COVER_FOR.with(|c| c.set(Some(revs)));
+            }
             return map.clone();
         }
         // The whole map, once per module instance (and after world creation): every chunk row.
@@ -273,6 +538,9 @@ pub fn map(ctx: &ReducerContext) -> Rc<Map> {
         let w = world(ctx);
         let mut map = Map::from_chunks(w.width, w.height, ctx.db.terrain_chunk().iter().map(|c| (c.id, c.tiles)));
         map.set_blocked(gate_blocks(ctx, w.width, w.height));
+        map.cover = cover_mask(ctx, &map);
+        COVER_FOR.with(|c| c.set(Some((scripts_rev(ctx), law_rev(ctx)))));
+        COVER_BUILT.with(|c| c.set(Some(cover_law_of(&laws(ctx)))));
         let map = Rc::new(map);
         *cached = Some(map.clone());
         map
@@ -282,6 +550,8 @@ pub fn map(ctx: &ReducerContext) -> Rc<Map> {
 /// Drop the whole cached map (world creation; the next read rebuilds it from every chunk).
 pub fn invalidate_map() {
     MAP.with(|m| *m.borrow_mut() = None);
+    COVER_FOR.with(|c| c.set(None));
+    COVER_BUILT.with(|c| c.set(None));
     MAP_PATCHED.with(|p| *p.borrow_mut() = (0, Vec::new()));
     GATES_CHANGED.with(|g| g.set(0));
 }
@@ -307,8 +577,13 @@ pub fn set_tile(ctx: &ReducerContext, x: i32, y: i32, t: living_rules::map::Terr
     if i >= row.tiles.len() {
         return Err("no terrain there".into());
     }
+    let before = row.tiles[i];
     row.tiles[i] = t as u8;
     ctx.db.terrain_chunk().id().update(row);
+    if before != t as u8 {
+        // Known ground: who saw this tile before keeps believing it was `before`.
+        crate::known::record_edit(ctx, x, y, before, now_ms(ctx));
+    }
     // Patch the cached map in place and remember the chunk, so a later transaction re-reads
     // that one row if this one rolls back.
     let st = stamp(ctx);
@@ -327,44 +602,69 @@ pub fn set_tile(ctx: &ReducerContext, x: i32, y: i32, t: living_rules::map::Terr
     Ok(())
 }
 
-/// World laws from the installed scripts, with the world's own values over them (its seed's
-/// `rules`, `world_law`). Cached with the scripts: writing a world law moves `scripts_rev`.
+/// World laws in force: the installed script's, with the world's own values over them (its
+/// seed's `rules`, `set_world_law`: `law_override`), as the scripts lay them over (`scripts`).
+/// Kept by the script and law revisions, so a transaction reads one snapshot throughout (a tick
+/// sees a value edit at its start or not at all).
 pub fn laws(ctx: &ReducerContext) -> living_rules::script::Laws {
-    let rev = scripts_rev(ctx);
+    let rev = (scripts_rev(ctx), law_rev(ctx));
     if let Some(l) = LAWS.with(|l| l.get().filter(|(r, _)| *r == rev).map(|(_, l)| l)) {
         return l;
     }
-    let over: Vec<(String, serde_json::Value)> = ctx.db.world_law().iter().filter_map(|w| serde_json::from_str(&w.value).ok().map(|v| (w.name, v))).collect();
-    let sc = scripts(ctx);
-    let l = sc.laws_with(&over).unwrap_or_else(|e| {
-        log::warn!("world laws: {e}; the script's own values hold");
-        sc.laws()
-    });
+    let l = scripts(ctx).laws();
     LAWS.with(|c| c.set(Some((rev, l))));
     l
 }
 
 thread_local! {
-    static LAWS: std::cell::Cell<Option<(u32, living_rules::script::Laws)>> = const { std::cell::Cell::new(None) };
+    static LAWS: std::cell::Cell<Option<((u32, u32), living_rules::script::Laws)>> = const { std::cell::Cell::new(None) };
 }
 
+/// The installed script, compiled once per script revision, with the world's own law values laid
+/// over it (`law_override`). A new law revision on the same script lays the values over the
+/// compiled script in place (`Scripts::apply_overrides`: value-only laws, no compile, no
+/// validation); a new script revision compiles it again.
 pub fn scripts(ctx: &ReducerContext) -> Rc<Scripts> {
+    try_scripts(ctx).expect("installed skills script compiles with the world's laws")
+}
+
+/// [`scripts`], or why the world's law values cannot be laid over the installed script (a
+/// value-only edit's derived check, `set_world_law` refuses it).
+pub fn try_scripts(ctx: &ReducerContext) -> Result<Rc<Scripts>, String> {
     let rev = scripts_rev(ctx);
-    SCRIPTS.with(|s| {
-        if let Some((r, sc)) = s.borrow().as_ref() {
-            if *r == rev {
-                return sc.clone();
+    let lrev = law_rev(ctx);
+    let kept = SCRIPTS.with(|s| s.borrow_mut().take());
+    if let Some((r, l, sc)) = kept {
+        if r == rev && l == Some(lrev) {
+            SCRIPTS.with(|s| *s.borrow_mut() = Some((r, l, sc.clone())));
+            return Ok(sc);
+        }
+        if r == rev {
+            // The same script; the world's values moved (a value-only edit, or one rolled back).
+            let over = overrides(ctx);
+            match sc.apply_overrides(&over) {
+                Ok(a) => {
+                    if !a.changed.is_empty() {
+                        log::info!("laws in force: {:?} laid over the compiled script (law revision {lrev})", a.changed);
+                    }
+                    SCRIPTS.with(|s| *s.borrow_mut() = Some((r, Some(lrev), sc.clone())));
+                    return Ok(sc);
+                }
+                // Left as it was (a law that is not value-only here, or a derived check that
+                // refuses the value): compiled again with the values, which refuses them too.
+                Err(e) => log::info!("laws in force: {e}; compiling the script with the world's values (law revision {lrev})"),
             }
         }
-        let src = ctx.db.script().name().find("skills".to_string()).map(|s| s.source).unwrap_or_default();
-        let mut sc = Scripts::new(&src).expect("installed skills script compiles");
-        crate::codes::apply(ctx, &mut sc);
-        // Graph normalization and validation take the world's skills from its script.
-        living_rules::catalog::set_skills(sc.skills().clone());
-        let sc = Rc::new(sc);
-        *s.borrow_mut() = Some((rev, sc.clone()));
-        sc
-    })
+    }
+    let src = ctx.db.script().name().find("skills".to_string()).map(|s| s.source).unwrap_or_default();
+    // Laws written per game hour run on this world's day (its seed's `day_minutes`).
+    let mut sc = Scripts::with_overrides(&src, world(ctx).day_ms, &overrides(ctx))?;
+    crate::codes::apply(ctx, &mut sc);
+    // Graph normalization and validation take the world's skills from its script.
+    living_rules::catalog::set_skills(sc.skills().clone());
+    let sc = Rc::new(sc);
+    SCRIPTS.with(|s| *s.borrow_mut() = Some((rev, Some(lrev), sc.clone())));
+    Ok(sc)
 }
 
 /// A validated graph with its routines inlined: preorder subtree sizes, and for each node
@@ -465,8 +765,15 @@ pub fn hour(w: &World, now: u64) -> f32 {
     living_rules::hour_of(now, w.epoch_ms, w.day_ms)
 }
 
-pub fn night(w: &World, now: u64) -> bool {
-    living_rules::is_night(hour(w, now))
+/// Whether it is night now: the script's `daylight` law below one half (read per game minute
+/// and kept for the script revision, so this costs a lookup).
+pub fn night(ctx: &ReducerContext, w: &World, now: u64) -> bool {
+    scripts(ctx).is_night(hour(w, now))
+}
+
+/// How dark it is now, 0 (day) to 1 (night), in the steps laws see (`SkillCtx::dark`).
+pub fn dark(ctx: &ReducerContext, w: &World, now: u64) -> f32 {
+    scripts(ctx).dark(hour(w, now))
 }
 
 /// Draws in [0, 1) that depend only on a character and a purpose (splitmix64), so drawing a
@@ -483,25 +790,34 @@ pub fn hashed_draws(id: u32, salt: u64) -> impl FnMut() -> f32 {
     }
 }
 
-/// Where a body is in its own day at `hour`: (its bedtime, its evening). A person's rhythm
-/// row says when it rises and goes to bed and how long its evening is; without one, bedtime
-/// is the world's night and the evening 18:00 to 22:00.
-pub fn day_phase(ctx: &ReducerContext, id: u32, hour: f32) -> (bool, bool) {
+/// A rhythm row's hours (`living_rules::rhythm`).
+pub fn hours_of(r: &Rhythm) -> living_rules::rhythm::Hours {
+    living_rules::rhythm::Hours { rise_h: r.rise_h, bed_h: r.bed_h, evening_h: r.evening_h, work_from_h: r.work_from_h, work_to_h: r.work_to_h, nap_from_h: r.nap_from_h, nap_to_h: r.nap_to_h }
+}
+
+/// Where a body is in its own day at `hour`: its bedtime, its evening and its working hours. A
+/// person's rhythm row says when it rises and goes to bed, how long its evening is, its working
+/// hours and any second sleep (`living_rules::rhythm`); without one, bedtime is the world's
+/// night, the evening 18:00 to 22:00 and working hours the rest of the day.
+pub fn day_phase(ctx: &ReducerContext, id: u32, hour: f32) -> living_rules::rhythm::Phase {
     match ctx.db.rhythm().id().find(id) {
-        Some(r) => {
-            // Hours after noon run 12..36, so a bedtime past midnight compares in one range.
-            let h = if hour < 12.0 { hour + 24.0 } else { hour };
-            let bedtime = h >= r.bed_h && h < r.rise_h + 24.0;
-            let evening = h >= r.bed_h - r.evening_h && h < r.bed_h;
-            (bedtime, evening)
+        Some(r) => hours_of(&r).phase(hour),
+        None => {
+            let (bedtime, evening) = (scripts(ctx).is_night(hour), (18.0..22.0).contains(&hour));
+            living_rules::rhythm::Phase { bedtime, evening, work: !bedtime && !evening }
         }
-        None => (living_rules::is_night(hour), (18.0..22.0).contains(&hour)),
     }
 }
 
-/// A species' life table (lifespan and stages).
-pub fn life_of(kind: &str) -> living_rules::life::Life {
+/// A species' life table as `species.json` gives it.
+pub fn species_life(kind: &str) -> living_rules::life::Life {
     species(kind).map(|s| s.life).unwrap_or_default()
+}
+
+/// A species' life table (lifespan and stages) under the world's rules: its species data, as a
+/// world's `life_years` law changes it (docs/CULLET_RULES.md); without the law, the data.
+pub fn life_of(ctx: &ReducerContext, kind: &str) -> living_rules::life::Life {
+    scripts(ctx).life(kind, species_life(kind))
 }
 
 /// The world's time for lives: days per year and pace.
@@ -510,8 +826,18 @@ pub fn pace(w: &World) -> living_rules::life::Pace {
 }
 
 /// Life stage of a character now, at the world's pace.
-pub fn stage_of(c: &Character, w: &World, now: u64) -> living_rules::life::Stage {
-    life_of(&c.kind).stage(age_days(c, w, now), pace(w))
+pub fn stage_of(ctx: &ReducerContext, c: &Character, w: &World, now: u64) -> living_rules::life::Stage {
+    life_of(ctx, &c.kind).stage(age_days(c, w, now), pace(w))
+}
+
+/// A life stage's name from its code (`stage_code`).
+pub fn stage_name(code: u8) -> &'static str {
+    match code {
+        0 => "infant",
+        1 => "child",
+        3 => "elder",
+        _ => "adult",
+    }
 }
 
 pub fn stage_code(s: living_rules::life::Stage) -> u8 {
@@ -530,7 +856,8 @@ pub fn age_days(c: &Character, w: &World, now: u64) -> f32 {
 /// The farthest anyone sees now (the `senses` law's reach by day or by night): onlookers are
 /// gathered within it before each one's own sight is tested.
 pub fn widest_sight(ctx: &ReducerContext, w: &World, now: u64) -> f32 {
-    scripts(ctx).reach().sight(night(w, now))
+    let sc = scripts(ctx);
+    sc.reach().seen(dark(ctx, w, now)).max(sc.gaze_reach())
 }
 
 /// The farthest anyone hears.
@@ -553,29 +880,32 @@ pub fn pos(b: &Body, now: u64) -> (f32, f32) {
     (x, y)
 }
 
+/// Which way a body travels at `now` (`body.heading` along its segment: a turn under way,
+/// standing or walking; `steer::pose`): where its legs go. Steering, separation and the pose
+/// read it. Where the body looks is [`facing_at`].
+pub fn heading_at(b: &Body, now: u64) -> f32 {
+    if b.turn == 0.0 || b.turn_s <= 0.0 {
+        return b.heading;
+    }
+    let t = now.min(b.next_ms).saturating_sub(b.t_ms) as f32 / 1000.0;
+    living_rules::steer::wrap(b.heading + b.turn * t.min(b.turn_s))
+}
+
+/// Which way a body faces at `now`: its travel heading plus its facing offset
+/// (`body.face_*`, `steer::facing`), the one facing that facing sight (`fov_on`), what is heard
+/// from which side, "you face", a guard's default and an aim at the facing read. A held look
+/// (`human_face`) turns it; with none it is the heading. Clients evaluate it the same way.
+pub fn facing_at(b: &Body, now: u64) -> f32 {
+    let t = now.min(b.next_ms).saturating_sub(b.t_ms) as f32 / 1000.0;
+    living_rules::steer::facing(heading_at(b, now), b.face_off, b.face_turn, b.face_turn_s, t)
+}
+
 pub fn dist(a: (f32, f32), b: (f32, f32)) -> f32 {
     ((a.0 - b.0).powi(2) + (a.1 - b.1).powi(2)).sqrt()
 }
 
-pub fn direction(from: (f32, f32), to: (f32, f32)) -> &'static str {
-    let dx = to.0 - from.0;
-    let dy = to.1 - from.1;
-    if dx.abs() < 0.5 && dy.abs() < 0.5 {
-        return "here";
-    }
-    let a = dy.atan2(dx).to_degrees();
-    // Screen coordinates: +y is south.
-    match a {
-        a if (-22.5..22.5).contains(&a) => "east",
-        a if (22.5..67.5).contains(&a) => "southeast",
-        a if (67.5..112.5).contains(&a) => "south",
-        a if (112.5..157.5).contains(&a) => "southwest",
-        a if (-67.5..-22.5).contains(&a) => "northeast",
-        a if (-112.5..-67.5).contains(&a) => "north",
-        a if (-157.5..-112.5).contains(&a) => "northwest",
-        _ => "west",
-    }
-}
+/// The scene's compass word (one source with the mind's place lists: `living_rules::bearing`).
+pub use living_rules::bearing::direction;
 
 // ---- needs ---------------------------------------------------------------------
 
@@ -595,12 +925,14 @@ pub fn needs(v: &Vitals, now: u64) -> Needs {
     }
 }
 
-/// Re-anchor needs at `now`.
-pub fn settle(v: &mut Vitals, now: u64) {
+/// Re-anchor needs and the short pools at `now` (breath a drain took since the last anchor
+/// tires the body; `crate::breath::settle`).
+pub fn settle(ctx: &ReducerContext, v: &mut Vitals, now: u64) {
     let n = needs(v, now);
+    let p = pools_of(ctx, v.id, now);
     v.hp = n.hp;
     v.hunger = n.hunger;
-    v.energy = n.energy;
+    v.energy = crate::breath::settle(v, &p, n.energy, now);
     v.at_ms = now;
 }
 
@@ -710,9 +1042,21 @@ pub fn graze_pasture(ctx: &ReducerContext, chunk: u32, now: u64) {
     }
 }
 
+/// The node whose stock a resource node draws on: its pool's (a fishing ground's spots share
+/// one limit), or itself.
+pub fn stock_of(ctx: &ReducerContext, r: &ResourceNode) -> ResourceNode {
+    if r.pool == 0 || r.pool == r.id {
+        return r.clone();
+    }
+    ctx.db.resource_node().id().find(r.pool).unwrap_or_else(|| r.clone())
+}
+
+/// A node's amount now: what it held at `at_ms` and its regrowth since, at its kind's share of
+/// the rate in each season (`regrow_by_season`; none: full, and none in winter, as before).
 pub fn amount_now(ctx: &ReducerContext, r: &ResourceNode, now: u64) -> f32 {
     let (epoch, day, year) = calendar(ctx);
-    (r.amount + r.regen * living_rules::growing_ms(r.at_ms, now, epoch, day, year) as f32 / 60_000.0).min(r.max)
+    let by = scripts(ctx).regrow_seasons(&r.kind);
+    (r.amount + r.regen * living_rules::regrowth_ms(r.at_ms, now, epoch, day, year, &by) / 60_000.0).min(r.max)
 }
 
 thread_local! {
@@ -762,48 +1106,116 @@ pub fn hearing_for(ctx: &ReducerContext, id: u32, w: &World, now: u64) -> f32 {
 struct Hot {
     senses: Option<living_rules::script::Senses>,
     moves: Option<living_rules::script::Moves>,
+    pools: Option<living_rules::pools::Pools>,
+    glow: Option<f32>,
 }
 
 thread_local! {
     /// The hot laws' answers by creature for one moment (`now`): every look and step in a tick
-    /// asks the same few creatures again. Cleared when the moment or the script revision changes.
-    static HOT: RefCell<(u64, u32, HashMap<u32, Hot>)> = RefCell::new((0, 0, HashMap::new()));
+    /// asks the same few creatures again. Keyed by transaction, moment and scripts revision.
+    static HOT: RefCell<((i64, u64, u32, u32), HashMap<u32, Hot>)> = RefCell::new(((0, 0, 0, 0), HashMap::new()));
 }
 
 /// A hot law's answer for creature `id` now: kept for this moment here, else the law over the
 /// few facts it reads (gathered by its plan), kept per state by the scripts.
 fn hot<T: Copy>(ctx: &ReducerContext, id: u32, w: &World, now: u64, law: &str, slot: fn(&mut Hot) -> &mut Option<T>, ask: impl FnOnce(&Scripts, &living_rules::script::SkillCtx) -> T) -> T {
-    let rev = scripts_rev(ctx);
+    let key = (stamp(ctx), now, scripts_rev(ctx), law_rev(ctx));
     if let Some(v) = HOT.with(|c| {
         let mut c = c.borrow_mut();
-        if c.0 != now || c.1 != rev {
+        if c.0 != key {
             return None;
         }
-        c.2.get_mut(&id).and_then(|h| *slot(h))
+        c.1.get_mut(&id).and_then(|h| *slot(h))
     }) {
         return v;
     }
     let sc = scripts(ctx);
-    let c = crate::act::law_ctx(ctx, id, w, now, &sc.law_plan(law));
+    let senses = law == "senses";
+    let f = if senses { sc.senses_function() } else { law };
+    let mut c = crate::act::law_ctx(ctx, id, w, now, &sc.law_plan(f));
+    if senses && sc.gaze_enabled() {
+        c.gaze_band = crate::attention::band(ctx, id);
+    }
     let v = ask(&sc, &c);
     HOT.with(|c| {
         let mut c = c.borrow_mut();
-        if c.0 != now || c.1 != rev {
-            *c = (now, rev, HashMap::new());
+        if c.0 != key {
+            *c = (key, HashMap::new());
         }
-        *slot(c.2.entry(id).or_default()) = Some(v);
+        *slot(c.1.entry(id).or_default()) = Some(v);
     });
     v
 }
 
-/// A creature's senses now (the `senses` law).
+/// Drop the current answer after a same-transaction attention change.
+pub fn invalidate_senses(id: u32) {
+    HOT.with(|c| {
+        if let Some(h) = c.borrow_mut().1.get_mut(&id) {
+            h.senses = None;
+        }
+    });
+}
+
+/// A creature's senses now.
 pub fn senses_of(ctx: &ReducerContext, id: u32, w: &World, now: u64) -> living_rules::script::Senses {
     hot(ctx, id, w, now, "senses", |h| &mut h.senses, |sc, c| {
         sc.senses(c).unwrap_or_else(|e| {
             log::warn!("senses for {id}: {e}");
             let r = sc.reach();
-            living_rules::script::Senses { sight: r.sight(c.night), hearing: r.hearing }
+            if sc.gaze_enabled() {
+                let mut blind = living_rules::script::Senses::round(0.0, r.hearing);
+                blind.gaze = Some(living_rules::sight::Gaze { band: c.gaze_band, ceiling: 0.0, ground: 0.0, glow: 0.0 });
+                blind
+            } else {
+                living_rules::script::Senses::round(r.sight(c.dark), r.hearing)
+            }
         })
+    })
+}
+
+/// How far a creature is seen from now by a light on it (the `glow` law: a carried light, standing
+/// in lamplight; 0 when the script has none, which costs nothing).
+pub fn glow_of(ctx: &ReducerContext, id: u32, w: &World, now: u64) -> f32 {
+    if scripts(ctx).reach().glow <= 0.0 {
+        return 0.0;
+    }
+    hot(ctx, id, w, now, "glow", |h| &mut h.glow, |sc, c| {
+        let glow = sc.glow(c).unwrap_or_else(|e| {
+            log::warn!("glow for {id}: {e}");
+            0.0
+        });
+        if sc.gaze_enabled() { glow.min(sc.reach().glow_at(c.dark)) } else { glow }
+    })
+}
+
+/// Gather within the observer's reach or the world's glow, subject to the gaze ceiling.
+/// The second result says whether each target's glow could affect its visibility.
+pub fn gather_radius(ctx: &ReducerContext, senses: &living_rules::sight::Senses, keep: f32) -> (f32, bool) {
+    let (glow, lit) = match senses.gaze {
+        Some(gaze) => (gaze.glow, gaze.glow > 0.0),
+        None => {
+            let glow = scripts(ctx).reach().glow;
+            (glow, glow > senses.sight)
+        }
+    };
+    (senses.bound(senses.sight.max(glow) + keep), lit)
+}
+
+/// Whether a spot is in lamplight: within the light of a structure that gives it (its kind's
+/// `lights`, or a fire's `burns.light`). A kind that `burns` gives light only while it is lit
+/// (`lit_until_ms` ahead of now): a lamp out of oil is dark. False at once when no kind gives
+/// light.
+pub fn lit_at(ctx: &ReducerContext, at: (f32, f32)) -> bool {
+    let sc = scripts(ctx);
+    let widest = sc.widest_light();
+    if widest <= 0.0 {
+        return false;
+    }
+    let now = now_ms(ctx);
+    structures_near(ctx, at, widest).into_iter().any(|(s, d)| {
+        let t = sc.structure(&s.kind);
+        let l = t.light();
+        l > 0.0 && d <= l && (t.burns.is_none() || living_rules::fire::lit(s.lit_until_ms, now))
     })
 }
 
@@ -814,7 +1226,18 @@ pub fn moves_of(ctx: &ReducerContext, id: u32, now: u64) -> living_rules::script
     hot(ctx, id, &w, now, "motion", |h| &mut h.moves, |sc, c| {
         sc.moves(c).unwrap_or_else(|e| {
             log::warn!("motion for {id}: {e}");
-            living_rules::script::Moves { run: 1.0, flee: 1.0, aside: 1.0, turn_rate: 6.0, turn_slow: 1.0, separation: 0.0, separation_weight: 0.0, wander_turn: 1.2, wander_keep_s: 0.0 }
+            living_rules::script::Moves { run: 1.0, flee: 1.0, aside: 1.0, turn_rate: 6.0, turn_slow: 1.0, separation: 0.0, separation_weight: 0.0, wander_turn: 1.2, wander_keep_s: 0.0, top: f32::INFINITY, charge: false }
+        })
+    })
+}
+
+/// A creature's short pools (the `pools` law: breath and focus), kept per state.
+pub fn pools_of(ctx: &ReducerContext, id: u32, now: u64) -> living_rules::pools::Pools {
+    let w = world(ctx);
+    hot(ctx, id, &w, now, "pools", |h| &mut h.pools, |sc, c| {
+        sc.pools(c).unwrap_or_else(|e| {
+            log::warn!("pools for {id}: {e}");
+            living_rules::pools::Pools::default()
         })
     })
 }
@@ -832,6 +1255,7 @@ pub fn learn(ctx: &ReducerContext, id: u32, technique: &str, source: &str, now: 
         return false;
     }
     ctx.db.know_how().insert(KnowHow { id: 0, actor: id, technique: technique.into(), source: source.into(), since_ms: now });
+    crate::perception::knowledge_changed(ctx, Some(id));
     true
 }
 
@@ -843,25 +1267,37 @@ pub struct NearCreature {
     pub kind: Rc<str>,
     pub pos: (f32, f32),
     pub dist: f32,
+    /// Which way it faces at the instant (`facing_at`: where it looks, not where it goes).
+    pub facing: f32,
 }
+
+/// A body in the per-tick chunk cache: id, kind, where it is and which way it faces then.
+type CachedBody = (u32, Rc<str>, (f32, f32), f32);
 
 thread_local! {
     /// Bodies per chunk at one instant, shared by every evaluation in the same tick.
-    static CHUNK_BODIES: RefCell<((u64, u64), HashMap<u32, Rc<Vec<(u32, Rc<str>, (f32, f32))>>>)> = RefCell::new(((0, 0), HashMap::new()));
+    static CHUNK_BODIES: RefCell<((u64, u64), HashMap<u32, Rc<Vec<CachedBody>>>)> = RefCell::new(((0, 0), HashMap::new()));
 }
 
-fn chunk_bodies(ctx: &ReducerContext, chunk: u32, now: u64) -> Rc<Vec<(u32, Rc<str>, (f32, f32))>> {
+thread_local! {
+    /// Bodies written (`body_written`) since the chunk cache's instant began: their cached
+    /// position may be older than their row, so [`cached_body_current`] says no for them.
+    static WRITTEN: RefCell<HashSet<u32>> = RefCell::new(HashSet::new());
+}
+
+fn chunk_bodies(ctx: &ReducerContext, chunk: u32, now: u64) -> Rc<Vec<CachedBody>> {
     CHUNK_BODIES.with(|c| {
         let mut c = c.borrow_mut();
         let key = (tx_seq(), now);
         if c.0 != key {
             c.0 = key;
             c.1.clear();
+            WRITTEN.with(|w| w.borrow_mut().clear());
         }
         if let Some(v) = c.1.get(&chunk) {
             return v.clone();
         }
-        let v: Rc<Vec<_>> = Rc::new(ctx.db.body().chunk().filter(chunk).map(|b| (b.id, Rc::from(b.kind.as_str()), pos(&b, now))).collect());
+        let v: Rc<Vec<_>> = Rc::new(ctx.db.body().chunk().filter(chunk).map(|b| (b.id, Rc::from(b.kind.as_str()), pos(&b, now), facing_at(&b, now))).collect());
         c.1.insert(chunk, v.clone());
         v
     })
@@ -872,13 +1308,25 @@ pub fn invalidate_bodies() {
     CHUNK_BODIES.with(|c| c.borrow_mut().0 = (0, 0));
 }
 
+/// A body row was written: a position the chunk cache already holds for it may be older.
+pub fn body_written(id: u32) {
+    WRITTEN.with(|w| w.borrow_mut().insert(id));
+}
+
+/// Whether the position [`creatures_near`] gave for body `id` at `now` in this transaction is
+/// exactly `pos(row, now)` of its row as it is now: true unless the row was written since the
+/// cache's instant began (it then holds the same row it read).
+pub fn cached_body_current(id: u32, now: u64) -> bool {
+    CHUNK_BODIES.with(|c| c.borrow().0 == (tx_seq(), now)) && !WRITTEN.with(|w| w.borrow().contains(&id))
+}
+
 pub fn creatures_near(ctx: &ReducerContext, at: (f32, f32), r: f32, now: u64) -> Vec<NearCreature> {
     let mut out = Vec::new();
     for c in chunks_around(at.0, at.1, r) {
-        for (id, kind, p) in chunk_bodies(ctx, c, now).iter() {
+        for (id, kind, p, h) in chunk_bodies(ctx, c, now).iter() {
             let d = dist(at, *p);
             if d <= r {
-                out.push(NearCreature { id: *id, kind: kind.clone(), pos: *p, dist: d });
+                out.push(NearCreature { id: *id, kind: kind.clone(), pos: *p, dist: d, facing: *h });
             }
         }
     }
@@ -911,9 +1359,9 @@ pub fn smelled_near(ctx: &ReducerContext, who: u32, kind: &str, at: (f32, f32), 
         let _t = span("scent.read");
         let mut all = Vec::new();
         for c in chunks_around(at.0, at.1, scent.radius) {
-            for (id, k, p) in chunk_bodies(ctx, c, now).iter() {
+            for (id, k, p, h) in chunk_bodies(ctx, c, now).iter() {
                 if *id != who && scent.kinds.iter().any(|x| **x == **k) && dist(at, *p) <= scent.radius + SCENT_MOVE {
-                    all.push(NearCreature { id: *id, kind: k.clone(), pos: *p, dist: 0.0 });
+                    all.push(NearCreature { id: *id, kind: k.clone(), pos: *p, dist: 0.0, facing: *h });
                 }
             }
         }
@@ -949,18 +1397,18 @@ pub fn smelled_near(ctx: &ReducerContext, who: u32, kind: &str, at: (f32, f32), 
 /// written nothing are committed state and stay valid until a later write to their key. Like
 /// the map cache, this assumes the database runs its reducers one at a time in this module
 /// instance.
-struct WriteCache<V> {
-    rows: HashMap<u32, (V, i64)>,
+struct WriteCache<V, K = u32> {
+    rows: HashMap<K, (V, i64)>,
     /// Timestamp of the last transaction that wrote.
     wrote: i64,
 }
 
-impl<V: Clone> WriteCache<V> {
+impl<V: Clone, K: Copy + Eq + std::hash::Hash> WriteCache<V, K> {
     fn new() -> Self {
         Self { rows: HashMap::new(), wrote: 0 }
     }
 
-    fn get(&mut self, t: i64, key: u32, load: impl FnOnce() -> V) -> V {
+    fn get(&mut self, t: i64, key: K, load: impl FnOnce() -> V) -> V {
         if let Some((v, tag)) = self.rows.get(&key) {
             if *tag == 0 || *tag == t {
                 return v.clone();
@@ -972,7 +1420,7 @@ impl<V: Clone> WriteCache<V> {
         v
     }
 
-    fn invalidate(&mut self, t: i64, key: Option<u32>) {
+    fn invalidate(&mut self, t: i64, key: Option<K>) {
         self.wrote = t;
         match key {
             Some(k) => {
@@ -985,7 +1433,12 @@ impl<V: Clone> WriteCache<V> {
 
 thread_local! {
     static CHUNK_RESOURCES: RefCell<WriteCache<Rc<Vec<ResourceNode>>>> = RefCell::new(WriteCache::new());
+    static STRUCTURES_REVISION: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
     static CHUNK_STRUCTURES: RefCell<WriteCache<Rc<Vec<Structure>>>> = RefCell::new(WriteCache::new());
+    // A body's kind is fixed. Readability changes when an artifact moves, and these
+    // entries are dropped with expired remains. As in the chunk cache, values read
+    // after a write in this transaction are reloaded in the next transaction.
+    static REMAINS_LABELS: RefCell<WriteCache<(Rc<str>, bool), u64>> = RefCell::new(WriteCache::new());
     /// Temperament a persona states (curiosity, sociability, nurture; 50 when not stated).
     static TRAITS: RefCell<WriteCache<[f32; 3]>> = RefCell::new(WriteCache::new());
 }
@@ -1013,9 +1466,42 @@ fn chunk_resources(ctx: &ReducerContext, chunk: u32) -> Rc<Vec<ResourceNode>> {
     CHUNK_RESOURCES.with(|c| c.borrow_mut().get(t, chunk, || Rc::new(ctx.db.resource_node().chunk().filter(chunk).collect())))
 }
 
-fn chunk_structures(ctx: &ReducerContext, chunk: u32) -> Rc<Vec<Structure>> {
+pub(crate) fn chunk_structures(ctx: &ReducerContext, chunk: u32) -> Rc<Vec<Structure>> {
     let t = stamp(ctx);
     CHUNK_STRUCTURES.with(|c| c.borrow_mut().get(t, chunk, || Rc::new(ctx.db.structure().chunk().filter(chunk).collect())))
+}
+
+thread_local! {
+    /// Per chunk, its structures that can warm or shelter (a roof, `warms`, a fire that `burns`):
+    /// drawn from the chunk's cached list, and drawn again whenever that list is (the same `Rc`
+    /// or a new one), so it is never staler than the list itself (docs/BATTLE_SCALE.md,
+    /// battle-cheap path 3). Remains and the like are not in it.
+    static CHUNK_WARMING: RefCell<std::collections::HashMap<u32, (Rc<Vec<Structure>>, Rc<Vec<Structure>>)>> = RefCell::new(std::collections::HashMap::new());
+}
+
+/// The structures of `chunk` that can warm or shelter, by the installed script's traits.
+pub fn chunk_warming(ctx: &ReducerContext, chunk: u32) -> Rc<Vec<Structure>> {
+    let all = chunk_structures(ctx, chunk);
+    let rev = scripts_rev(ctx);
+    if let Some(w) = CHUNK_WARMING.with(|c| c.borrow().get(&chunk).filter(|(src, _)| Rc::ptr_eq(src, &all)).map(|(_, w)| w.clone())).filter(|_| WARMING_REV.with(|r| r.get()) == rev) {
+        return w;
+    }
+    let sc = scripts(ctx);
+    let w: Rc<Vec<Structure>> = Rc::new(all.iter().filter(|s| { let t = sc.structure(&s.kind); t.roof || t.warms || t.burns.is_some() }).cloned().collect());
+    CHUNK_WARMING.with(|c| {
+        let mut c = c.borrow_mut();
+        if WARMING_REV.with(|r| r.get()) != rev {
+            c.clear();
+            WARMING_REV.with(|r| r.set(rev));
+        }
+        c.insert(chunk, (all, w.clone()));
+    });
+    w
+}
+
+thread_local! {
+    /// The script revision `CHUNK_WARMING` was drawn under (a kind's traits are the script's).
+    static WARMING_REV: std::cell::Cell<u32> = const { std::cell::Cell::new(u32::MAX) };
 }
 
 /// Call before inserting (`None`: any chunk) or updating (`Some(chunk)`) a resource node.
@@ -1024,10 +1510,33 @@ pub fn invalidate_resources(ctx: &ReducerContext, chunk: Option<u32>) {
     CHUNK_RESOURCES.with(|c| c.borrow_mut().invalidate(t, chunk));
 }
 
+pub(crate) fn structures_revision() -> u64 {
+    STRUCTURES_REVISION.with(std::cell::Cell::get)
+}
+
 /// Call before inserting a structure.
 pub fn invalidate_structures(ctx: &ReducerContext) {
+    STRUCTURES_REVISION.with(|revision| revision.set(revision.get().wrapping_add(1)));
     let t = stamp(ctx);
     CHUNK_STRUCTURES.with(|c| c.borrow_mut().invalidate(t, None));
+}
+
+/// The group label and whether this body holds writing. Only a body's observer-independent
+/// metadata is cached. Name recognition is read from the observer's own indexes.
+pub(crate) fn remains_label(ctx: &ReducerContext, id: u64, owner: u32) -> (Rc<str>, bool) {
+    REMAINS_LABELS.with(|cache| cache.borrow_mut().get(stamp(ctx), id, || {
+        let kind = ctx.db.character().id().find(owner)
+            .map(|c| Rc::from(c.kind))
+            .unwrap_or_else(|| Rc::from("person"));
+        let readable = ctx.db.artifact().holder().filter(STRUCTURE_BIT | id)
+            .any(|artifact| matches!(artifact.kind.as_str(), "tablet" | "sign"));
+        (kind, readable)
+    }))
+}
+
+pub(crate) fn invalidate_remains_label(ctx: &ReducerContext, id: u64) {
+    STRUCTURES_REVISION.with(|revision| revision.set(revision.get().wrapping_add(1)));
+    REMAINS_LABELS.with(|cache| cache.borrow_mut().invalidate(stamp(ctx), Some(id)));
 }
 
 pub fn resources_near(ctx: &ReducerContext, at: (f32, f32), r: f32) -> Vec<(ResourceNode, f32)> {
@@ -1046,16 +1555,22 @@ pub fn resources_near(ctx: &ReducerContext, at: (f32, f32), r: f32) -> Vec<(Reso
 
 pub fn structures_near(ctx: &ReducerContext, at: (f32, f32), r: f32) -> Vec<(Structure, f32)> {
     let mut out = Vec::new();
+    for_structures_near(ctx, at, r, |s, d| out.push((s.clone(), d)));
+    out.sort_by(|a, b| a.1.total_cmp(&b.1));
+    out
+}
+
+/// Each structure within `r` of `at`, with its distance, read in place from the chunks' cached
+/// lists, in the order `structures_near` gathers them before its (stable) sort by distance.
+pub fn for_structures_near(ctx: &ReducerContext, at: (f32, f32), r: f32, mut f: impl FnMut(&Structure, f32)) {
     for c in chunks_around(at.0, at.1, r) {
         for s in chunk_structures(ctx, c).iter() {
             let d = dist(at, (s.x, s.y));
             if d <= r {
-                out.push((s.clone(), d));
+                f(s, d);
             }
         }
     }
-    out.sort_by(|a, b| a.1.total_cmp(&b.1));
-    out
 }
 
 pub fn name_of(ctx: &ReducerContext, id: u32) -> String {
@@ -1066,6 +1581,30 @@ pub fn name_of(ctx: &ReducerContext, id: u32) -> String {
 /// kind (`crate::perception::label`: the `perceived_of` law's projection).
 pub fn label_for(ctx: &ReducerContext, observer: &Character, id: u32) -> String {
     crate::perception::label(ctx, observer, id, now_ms(ctx))
+}
+
+/// Whose a structure is, as `observer` is told it (owner-known): the owner's name when the
+/// world's `owner_shown` law says so (it knows the owner's name, `perception::knows_name`, the
+/// shared answer; or the structure shows its owner, its kind's `shows_owner`), else `None`, and
+/// the structure is just its kind.
+///
+/// Where the owner stands now never matters (house-owner-label, 2026-11-12): whether one can make
+/// someone out (`perceived_of`'s `far`, Cullet's `known_within`) is about the person in sight,
+/// never about their house. Before, a known neighbour's house read as "someone too far away to
+/// make out"'s (or "a stranger"'s) whenever its owner was away from it (docs/IDEAS_AUDITS.md §2).
+/// The client names owners the same way, from `my_known_names` (`living/game/src/looks.rs`).
+pub fn owner_label(ctx: &ReducerContext, observer: &Character, owner: u32, kind: &str) -> Option<String> {
+    if owner == 0 {
+        return None;
+    }
+    let t = ctx.db.character().id().find(owner)?;
+    let knows = owner == observer.id || crate::perception::knows_name(ctx, observer, &t);
+    let sc = scripts(ctx);
+    let shows = sc.structure(kind).shows_owner;
+    if !sc.owner_shown(knows, shows, kind) {
+        return None;
+    }
+    Some(t.name)
 }
 
 /// The same, to begin a sentence with.
@@ -1130,9 +1669,20 @@ pub fn scent_of(kind: &str) -> Option<living_rules::species::Scent> {
 }
 
 pub fn chronicle(ctx: &ReducerContext, now: u64, kind: &str, a: u32, b: u32, at: (f32, f32), text: String) {
-    // The same event repeated within two minutes becomes one entry with a count.
-    let recent: Vec<Chronicle> = ctx.db.chronicle().at_ms().filter(now.saturating_sub(120_000)..).collect();
-    for mut c in recent.into_iter().rev().take(40) {
+    let _detail = detail_span("common.chronicle");
+    // The same event repeated within two minutes becomes one entry with a count: it is looked
+    // for among the newest 40 entries of those two minutes.
+    let laws = laws(ctx);
+    let recent = if laws.chronicle_recent { chronicle_newest(ctx, now) } else { chronicle_newest_full(ctx, now) };
+    if laws.chronicle_recent && laws.chronicle_recent_check {
+        let full = chronicle_newest_full(ctx, now);
+        diag(|| "chronicle_recent:checked", 1);
+        if full.iter().map(|c| c.id).ne(recent.iter().map(|c| c.id)) {
+            diag(|| "chronicle_recent:differed", 1);
+            log::error!("chronicle_recent: newest {:?} differs from the full read's {:?}", recent.iter().map(|c| c.id).collect::<Vec<_>>(), full.iter().map(|c| c.id).collect::<Vec<_>>());
+        }
+    }
+    for mut c in recent {
         let base = c.text.rsplit_once(" (×").map(|(b, _)| b.to_string()).unwrap_or_else(|| c.text.clone());
         if c.kind == kind && c.a == a && c.b == b && base == text {
             let n = c.text.rsplit_once(" (×").and_then(|(_, r)| r.trim_end_matches(')').parse::<u32>().ok()).unwrap_or(1) + 1;
@@ -1145,7 +1695,107 @@ pub fn chronicle(ctx: &ReducerContext, now: u64, kind: &str, a: u32, b: u32, at:
     ctx.db.chronicle().insert(Chronicle { id: 0, at_ms: now, kind: kind.into(), a, b, x: at.0, y: at.1, text });
 }
 
+/// The chronicle's repeat check looks at this many of its newest entries.
+const CHRONICLE_MATCHED: usize = 40;
+/// It looks back this far.
+const CHRONICLE_BACK_MS: u64 = 120_000;
+
+/// The newest `CHRONICLE_MATCHED` entries of the last `CHRONICLE_BACK_MS`, newest first, read
+/// whole: every row of the window (`chronicle_recent` off, and its check).
+fn chronicle_newest_full(ctx: &ReducerContext, now: u64) -> Vec<Chronicle> {
+    let all: Vec<Chronicle> = ctx.db.chronicle().at_ms().filter(now.saturating_sub(CHRONICLE_BACK_MS)..).collect();
+    all.into_iter().rev().take(CHRONICLE_MATCHED).collect()
+}
+
+/// The same entries, read from the newest end (docs/BATTLE_SCALE.md, battle-exact-2 E): the last
+/// second first, then 4 s, 16 s and the whole window, until the read holds `CHRONICLE_MATCHED`
+/// entries from before this moment.
+///
+/// "Newest" is the order of the index range read inside this tick's transaction. In SpacetimeDB
+/// 2.14.1 that read gives the rows written in this transaction (this tick's entries and repeats,
+/// all at `now`) apart from the committed ones, not merged by `at_ms`; the full read's last 40
+/// were found to include an older committed row where a narrow read held fewer than 40 committed
+/// rows (verify-core `chronicle_recent`). Rows with `at_ms` before `now` are committed, and the
+/// committed rows of a later start are the tail of the whole window's. So a narrow read holding at
+/// least 40 of them has the whole read's last 40, whichever side this tick's rows come
+/// (`chronicle_recent_check` compares them).
+fn chronicle_newest(ctx: &ReducerContext, now: u64) -> Vec<Chronicle> {
+    for back in [1_000, 4_000, 16_000] {
+        let from = now.saturating_sub(back);
+        if from <= now.saturating_sub(CHRONICLE_BACK_MS) {
+            break;
+        }
+        let rows: Vec<Chronicle> = ctx.db.chronicle().at_ms().filter(from..).collect();
+        if rows.iter().filter(|c| c.at_ms < now).count() >= CHRONICLE_MATCHED {
+            diag(|| "chronicle_recent:narrow", 1);
+            return rows.into_iter().rev().take(CHRONICLE_MATCHED).collect();
+        }
+    }
+    diag(|| "chronicle_recent:whole", 1);
+    chronicle_newest_full(ctx, now)
+}
+
+thread_local! {
+    /// Bystanders' wakes (docs/BATTLE_SCALE.md, fix 3): when each was last woken by what it saw,
+    /// and when a wake held back since is due.
+    static BYSTANDER: RefCell<std::collections::HashMap<u32, (u64, Option<u64>)>> = RefCell::new(std::collections::HashMap::new());
+}
+
+/// Wake `id`, a bystander of what it just saw (not party to it): at once unless it was woken by
+/// what it saw within `witness_wake_ms`, else when that window ends (`due_bystander_wakes`). A
+/// party to the event is woken by `wake`, at once.
+#[track_caller]
+pub fn wake_bystander(ctx: &ReducerContext, id: u32, now: u64) {
+    let ms = laws(ctx).witness_wake_ms as u64;
+    if ms == 0 {
+        wake(ctx, id);
+        return;
+    }
+    let now_wake = BYSTANDER.with(|b| {
+        let mut b = b.borrow_mut();
+        let e = b.entry(id).or_insert((0, None));
+        if e.0 == 0 || now.saturating_sub(e.0) >= ms {
+            *e = (now, None);
+            true
+        } else {
+            e.1.get_or_insert(e.0 + ms);
+            false
+        }
+    });
+    if now_wake {
+        wake(ctx, id);
+    } else {
+        diag(|| "wake:deferred", 1);
+    }
+}
+
+/// The bystanders whose held-back wake is due: woken now (each tick, before the wakes).
+pub fn due_bystander_wakes(ctx: &ReducerContext, now: u64) {
+    let due: Vec<u32> = BYSTANDER.with(|b| {
+        let mut b = b.borrow_mut();
+        let mut out = Vec::new();
+        b.retain(|id, (last, pending)| {
+            if pending.is_some_and(|t| t <= now) {
+                out.push(*id);
+                *last = now;
+                *pending = None;
+            }
+            pending.is_some() || now.saturating_sub(*last) < 60_000
+        });
+        out
+    });
+    for id in due {
+        diag(|| "wake:due", 1);
+        wake(ctx, id);
+    }
+}
+
+/// While profiling, each wake is counted under where it was asked from (`wake@act.rs:1540`).
+#[track_caller]
 pub fn wake(ctx: &ReducerContext, id: u32) {
+    diag(|| "wake", 1);
+    let at = std::panic::Location::caller();
+    diag(|| format!("wake@{}:{}", at.file().rsplit('/').next().unwrap_or(""), at.line()), 1);
     if ctx.db.wake().id().find(id).is_none() {
         ctx.db.wake().insert(Wake { id });
     }
@@ -1160,7 +1810,7 @@ pub fn same_routine(a: &str, b: &str) -> bool {
 /// holds). `built_ms` marks the last catch counted.
 pub fn trap_catch(ctx: &ReducerContext, s: &Structure, now: u64) {
     let sc = scripts(ctx);
-    let every = (sc.num_of("trap_every_s", "meat", 240.0) * 1000.0) as u64;
+    let every = sc.trap_every_ms() as u64;
     if every == 0 {
         return;
     }

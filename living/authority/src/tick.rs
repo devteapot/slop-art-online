@@ -13,12 +13,17 @@ pub fn tick(ctx: &ReducerContext, _t: TickTimer) -> Result<(), String> {
     if ctx.sender() != ctx.database_identity() {
         return Err("tick is scheduled only".into());
     }
+    // The outgoing module's last call after an update: no table is touched (common::schema_moved).
+    if common::schema_moved("tick") {
+        return Ok(());
+    }
     let w = common::world(ctx);
     if w.paused {
         return Ok(());
     }
     let now = common::now_ms(ctx);
     let mut k = common::clock(ctx);
+    let prev_ms = if k.last_ms != 0 { k.last_ms } else { now };
     if k.last_ms != 0 {
         k.max_gap_ms = k.max_gap_ms.max(now.saturating_sub(k.last_ms) as u32);
     }
@@ -27,6 +32,7 @@ pub fn tick(ctx: &ReducerContext, _t: TickTimer) -> Result<(), String> {
     let slot = (k.tick % 60) as u8;
     let k_tick = k.tick;
     common::set_profiling(k.profile);
+    common::set_profile_detail(k.profile && common::laws(ctx).profile_detail);
     let _timer = common::span("tick");
 
     // 1. Steering updates that are due (events and cadence of moving bodies).
@@ -60,18 +66,39 @@ pub fn tick(ctx: &ReducerContext, _t: TickTimer) -> Result<(), String> {
     // Missiles in flight are swept along their paths.
     let phase = common::span("tick.missiles");
     crate::combat::missiles(ctx, now);
+    crate::fast::tick(ctx, now);
+    drop(phase);
+    // What onlookers saw of fights since their last line, for those whose window ended
+    // (`witness_fold_ms`, docs/BATTLE_SCALE.md fix 4).
+    let phase = common::span("tick.fold");
+    crate::fold::flush(ctx, prev_ms, now);
     drop(phase);
     // 3. Wakes and this slot's evaluations.
     let phase = common::span("tick.wakes");
+    // Bystanders' wakes held back by `witness_wake_ms` whose window has ended.
+    let due_wakes = common::detail_span("wake.bystanders_due");
+    common::due_bystander_wakes(ctx, now);
+    drop(due_wakes);
     let mut done = HashSet::new();
     for _ in 0..3 {
         let wakes: Vec<u32> = ctx.db.wake().iter().map(|w| w.id).collect();
         if wakes.is_empty() {
             break;
         }
+        common::diag(|| "wake:round", 1);
         for id in wakes {
             ctx.db.wake().id().delete(id);
             if done.insert(id) {
+                common::diag(|| "eval:wake", 1);
+                // While profiling with detail: woken evaluations of those in a fight (on the
+                // combat cadence) apart from the rest.
+                let _detail = if common::profiling() {
+                    let fighting = ctx.db.mind_state().id().find(id).is_some_and(|m| m.fast_until >= now);
+                    common::diag(move || if fighting { "eval:wake:fight" } else { "eval:wake:calm" }, 1);
+                    common::detail_span(if fighting { "wake.eval.fight" } else { "wake.eval.calm" })
+                } else {
+                    None
+                };
                 brain::evaluate(ctx, id, now);
             }
         }
@@ -83,22 +110,30 @@ pub fn tick(ctx: &ReducerContext, _t: TickTimer) -> Result<(), String> {
     let fighting: Vec<u32> = ctx.db.mind_state().fast_until().filter(now..).map(|m| m.id).filter(|id| (*id as u64 + k_tick) % 4 == 0).collect();
     for id in fighting {
         if done.insert(id) {
+            common::diag(|| "eval:combat", 1);
             brain::evaluate(ctx, id, now);
         }
     }
     drop(phase);
     // What each player's character perceives (docs/PERCEPTION.md), each every 200 ms.
     let phase = common::span("tick.perception");
-    crate::perception::sweep(ctx, now);
+    let swept = crate::perception::sweep(ctx, now, k_tick);
     drop(phase);
+    // The `memory_test` law (a diagnostic, 0 in play): the tick fails, or panics, after its sweep.
+    match crate::perception::memory_test(ctx) {
+        1 => crate::perception::fail_for_test(ctx, 1, &format!("tick {k_tick}"))?,
+        2 => panic!("memory_test 2: tick {k_tick} panics on purpose after its sweep (the instance is replaced)"),
+        _ => {}
+    }
     // What each player is shown of the others in its scene, at its frame (frame.rs).
     let phase = common::span("tick.frames");
-    crate::frame::deliver(ctx, now);
+    crate::frame::deliver(ctx, now, &swept);
     drop(phase);
     let phase = common::span("tick.slots");
     let slot_ids: Vec<u32> = ctx.db.mind_state().slot().filter(slot).map(|m| m.id).collect();
     for id in slot_ids {
         if done.insert(id) {
+            common::diag(|| "eval:slot", 1);
             brain::evaluate(ctx, id, now);
         }
     }
@@ -183,6 +218,7 @@ fn expire_remains(ctx: &ReducerContext, now: u64) {
         for i in ctx.db.inventory().owner().filter(owner).map(|i| i.id).collect::<Vec<_>>() {
             ctx.db.inventory().id().delete(i);
         }
+        common::invalidate_remains_label(ctx, r.structure);
         ctx.db.structure().id().delete(r.structure);
     }
     common::invalidate_structures(ctx);
@@ -213,7 +249,7 @@ fn spoil(ctx: &ReducerContext, now: u64) {
     let mut kept: std::collections::HashMap<String, f32> = std::collections::HashMap::new();
     let mut carrier: (u64, f32) = (u64::MAX, 1.0);
     for mut r in rows.into_iter().filter(|r| r.qty > 0) {
-        let rate = *rates.entry(r.item.clone()).or_insert_with(|| sc.num_of("spoil_rate", &r.item, 0.0) as f32);
+        let rate = *rates.entry(r.item.clone()).or_insert_with(|| sc.spoil_per_min(&r.item) as f32);
         if rate <= 0.0 {
             continue;
         }
@@ -258,6 +294,10 @@ fn grew(ctx: &ReducerContext, c: &Character, stage: u8, now: u64) {
     let Some(mut row) = ctx.db.character().id().find(c.id) else { return };
     row.stage = stage;
     ctx.db.character().id().update(row);
+    // Players who see them see a new stage ("a child", "an old stranger").
+    crate::perception::character_changed(c.id);
+    // The look follows in the same transaction (a new band at a stage change: docs/LOOK.md §4).
+    crate::look::refresh(ctx, c.id, now, "grew");
     if stage != 0 {
         ctx.db.infant_cry().infant().delete(c.id);
     }
@@ -304,7 +344,7 @@ fn birth(ctx: &ReducerContext, a: u32, b: u32, now: u64) {
     };
     let Some(at) = ctx.db.body().id().find(first.id).map(|bd| common::pos(&bd, now)) else { return };
     let kind = first.kind.clone();
-    let litter = ctx.rng().gen_range(1..=common::life_of(&kind).litter.max(1));
+    let litter = ctx.rng().gen_range(1..=common::life_of(ctx, &kind).litter.max(1));
     let (controller, minded) = if first.ai { (first.controller, true) } else { common::mind_controller(ctx) };
     let mut names = Vec::new();
     for _ in 0..litter {
@@ -320,8 +360,8 @@ fn birth(ctx: &ReducerContext, a: u32, b: u32, now: u64) {
         names.push((id, common::name_of(ctx, id)));
     }
     // The parents know their children (and each other, through them).
-    crate::perception::knowledge_changed(Some(pa.id));
-    crate::perception::knowledge_changed(Some(pb.id));
+    crate::perception::knowledge_changed(ctx, Some(pa.id));
+    crate::perception::knowledge_changed(ctx, Some(pb.id));
     // A parent who died before the birth kept what the child inherits until now.
     for p in [&pa, &pb].into_iter().filter(|p| !p.alive) {
         crate::act::retire(ctx, p.id);
@@ -349,6 +389,9 @@ pub fn housekeeping(ctx: &ReducerContext, _t: SlowTimer) -> Result<(), String> {
     if ctx.sender() != ctx.database_identity() {
         return Err("housekeeping is scheduled only".into());
     }
+    if common::schema_moved("housekeeping") {
+        return Ok(());
+    }
     let w = common::world(ctx);
     if w.paused {
         return Ok(());
@@ -357,6 +400,10 @@ pub fn housekeeping(ctx: &ReducerContext, _t: SlowTimer) -> Result<(), String> {
     let mut k = common::clock(ctx);
     common::set_profiling(k.profile);
     let _timer = common::span("housekeeping");
+    common::report_scenes();
+    crate::perception::report_answers(ctx);
+    crate::perception::report_kept(ctx);
+    common::report_diag();
     crate::town::refresh_weather(ctx, now);
     crate::presence::housekeeping(ctx, now);
     crate::town::guests_leave(ctx, now);
@@ -379,6 +426,7 @@ pub fn housekeeping(ctx: &ReducerContext, _t: SlowTimer) -> Result<(), String> {
     spoil(ctx, now);
     expire_remains(ctx, now);
     crate::combat::housekeeping(ctx, now);
+    crate::fast::pump(ctx, now);
 
     // One pass over the characters: population counts for the stats row, and the living.
     let mut alive_people = 0u32;
@@ -409,10 +457,10 @@ pub fn housekeeping(ctx: &ReducerContext, _t: SlowTimer) -> Result<(), String> {
     migration(ctx, &kinds, now);
     // Life stages and deaths of old age, at the world's pace.
     for c in alive {
-        let life = common::life_of(&c.kind);
+        let life = common::life_of(ctx, &c.kind);
         let age = common::age_days(&c, &w, now);
         if life.fraction(age, common::pace(&w)) >= life.deathline(c.id) {
-            crate::act::die(ctx, c.id, "old age", now, 0);
+            crate::act::die(ctx, c.id, "old age", now, 0, living_rules::outcome::death::OLD_AGE);
             dead_people += (c.kind == "person") as u32;
             continue;
         }
@@ -421,6 +469,9 @@ pub fn housekeeping(ctx: &ReducerContext, _t: SlowTimer) -> Result<(), String> {
             grew(ctx, &c, stage, now);
         }
     }
+    // Looks whose band changes now by age alone (12 and 18 years): an index range of the due
+    // rows only, after the stage changes above have rewritten theirs.
+    crate::look::due(ctx, now);
 
     // Births.
     let due: Vec<Expecting> = ctx.db.expecting().due_ms().filter(..=now).collect();
@@ -429,7 +480,7 @@ pub fn housekeeping(ctx: &ReducerContext, _t: SlowTimer) -> Result<(), String> {
         birth(ctx, e.a, e.b, now);
         let w = common::world(ctx);
         let kind = ctx.db.character().id().find(e.a).map(|c| c.kind).unwrap_or_default();
-        let until = now + (common::life_of(&kind).interbirth_days(common::pace(&w)) * w.day_ms as f32) as u64;
+        let until = now + (common::life_of(ctx, &kind).interbirth_days(common::pace(&w)) * w.day_ms as f32) as u64;
         for id in [e.a, e.b] {
             ctx.db.rearing().id().delete(id);
             if ctx.db.character().id().find(id).is_some_and(|c| c.alive) {
@@ -437,14 +488,21 @@ pub fn housekeeping(ctx: &ReducerContext, _t: SlowTimer) -> Result<(), String> {
             }
         }
     }
-    // Offers are dropped a minute after they can no longer be taken up (the laws' windows).
+    // Bond offers are dropped a minute after they can no longer be taken up (the laws'
+    // window). Trade offers go as soon as they end, so `my_offers` stops showing them
+    // within this second.
     let laws = common::laws(ctx);
-    let (bond_ms, trade_ms) = ((laws.bond_window_s * 1000.0) as u64 + 60_000, (laws.trade_window_s * 1000.0) as u64 + 60_000);
+    let bond_ms = (laws.bond_window_s * 1000.0) as u64 + 60_000;
     for o in ctx.db.bond_offer().iter().filter(|o| now.saturating_sub(o.at_ms) > bond_ms).map(|o| o.id).collect::<Vec<_>>() {
         ctx.db.bond_offer().id().delete(o);
     }
-    for o in ctx.db.trade_offer().iter().filter(|o| now.saturating_sub(o.at_ms) > trade_ms).map(|o| o.id).collect::<Vec<_>>() {
+    for o in ctx.db.trade_offer().iter().filter(|o| now > o.ends_ms(laws.trade_window_s)).map(|o| o.id).collect::<Vec<_>>() {
         ctx.db.trade_offer().id().delete(o);
+    }
+    // An offer made before `until_ms` existed gets its end from the law's window.
+    for mut o in ctx.db.trade_offer().iter().filter(|o| o.until_ms == 0).collect::<Vec<_>>() {
+        o.until_ms = o.ends_ms(laws.trade_window_s);
+        ctx.db.trade_offer().id().update(o);
     }
 
     // Bound the story feed.

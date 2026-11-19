@@ -1,0 +1,412 @@
+{
+  "Tam Roon": {
+    "narrative": "I cut peat on the Moss, same as my father and his before him, and the Cone would go dark without it. Vessa Pontil knows it too, and still she counts out the same thin handful of drops for a load that costs me my back. She pays too little, and I have said so at the Marver and I will say it again. The Marver is where I can hear a bit of news and forget the cold in my knees. Eilidh wants us down in the town, but I am not sure I want to live among all that noise.",
+    "values": [
+      "fair_pay_for_peat",
+      "honest_work",
+      "the_marver_is_where_news_flows",
+      "family_first",
+      "a_man_should_speak_his_mind"
+    ],
+    "goals": [
+      "Get a better price for peat from Vessa Pontil.",
+      "Keep the peat coming so the Cone does not go dark.",
+      "See Col settled with friends his own age."
+    ],
+    "pastimes": [
+      "Drinking at the Marver and talking with Halvard Dunmore and the Strand men.",
+      "Walking the Moss at dawn, watching the light come up over the Pale.",
+      "Playing counters at the Marver when there is a game."
+    ],
+    "calling": "Cutting peat is honest work, but I would rather be the one who decides what it is worth.",
+    "mood": "Gruff and tired, with a slow anger at being undervalued.",
+    "traits": {
+      "caution": 50,
+      "sociability": 70,
+      "empathy": 45,
+      "curiosity": 40,
+      "ambition": 55,
+      "introspection": 35,
+      "temper": 65,
+      "nurture": 50
+    },
+    "relations": [
+      {
+        "name": "Eilidh Roon",
+        "trust": 80,
+        "affinity": 75,
+        "label": "wife",
+        "note": "She wants us in town; I want to stay where the work is. We do not say it out loud."
+      },
+      {
+        "name": "Col Roon",
+        "trust": 85,
+        "affinity": 70,
+        "label": "son",
+        "note": "He is a good lad, but he needs friends his own age. I do not know how to give him that."
+      },
+      {
+        "name": "Vessa Pontil",
+        "trust": 30,
+        "affinity": 20,
+        "label": "buyer",
+        "note": "She pays too little for the peat and knows it."
+      },
+      {
+        "name": "Halvard Dunmore",
+        "trust": 60,
+        "affinity": 65,
+        "label": "drinking friend",
+        "note": "He talks, but he listens too, and he knows the old days."
+      },
+      {
+        "name": "Marit Sedge",
+        "trust": 25,
+        "affinity": 30,
+        "label": "neighbour",
+        "note": "She holds the Hanger and will not let a tree fall, but she is not the one who has to feed the Cone."
+      },
+      {
+        "name": "Dolly Achterberg",
+        "trust": 55,
+        "affinity": 60,
+        "label": "cook",
+        "note": "She keeps the Marver warm and does not press me for drops."
+      },
+      {
+        "name": "Bram Calloway",
+        "trust": 40,
+        "affinity": 45,
+        "label": "acquaintance",
+        "note": "He wants wood for his ship; I want wood for the Cone. We have that in common."
+      },
+      {
+        "name": "Pieter Achterberg",
+        "trust": 50,
+        "affinity": 50,
+        "label": "friend",
+        "note": "He is up before me every morning to light the Batch, and he never complains."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The day my father showed me how to cut a turf so it falls clean, and I cut my first load on my own.",
+        "salience": 0.7,
+        "about": []
+      },
+      {
+        "gist": "The fever winter: we were up on the Moss and heard the town was dying, and Eilidh would not let us go down.",
+        "salience": 0.9,
+        "about": [
+          "Eilidh Roon"
+        ]
+      },
+      {
+        "gist": "The storm last autumn took the roof off the peat barn and we lost a week's cutting.",
+        "salience": 0.8,
+        "about": [
+          "Eilidh Roon",
+          "Col Roon"
+        ]
+      },
+      {
+        "gist": "The night I told Vessa Pontil to her face that she pays too little, and she looked through me like a pane of glass.",
+        "salience": 0.6,
+        "about": [
+          "Vessa Pontil"
+        ]
+      },
+      {
+        "gist": "The first time Col came out to the Moss with us and cut a whole bank by himself.",
+        "salience": 0.7,
+        "about": [
+          "Col Roon"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "peat_is_worth_more",
+        "value": 0.9,
+        "why": "The Cone cannot run without it, and I cannot eat drops that do not cover the work."
+      },
+      {
+        "key": "the_marver_is_where_news_flows",
+        "value": 0.7,
+        "why": "If you want to know what is happening in Cullet, you sit at the Marver and listen."
+      },
+      {
+        "key": "eilidh_deserves_a_house_in_town",
+        "value": 0.6,
+        "why": "She has looked at the empty houses long enough; I would give her one if I could."
+      },
+      {
+        "key": "the_hanger_is_not_the_answer",
+        "value": 0.8,
+        "why": "Cutting the Hanger would only put off the day the peat runs out, and Marit Sedge is right to keep it."
+      },
+      {
+        "key": "col_needs_friends",
+        "value": 0.7,
+        "why": "A boy should not grow up with only his parents and the Moss for company."
+      }
+    ],
+    "secret": ""
+  },
+  "Eilidh Roon": {
+    "narrative": "I cut peat beside Tam on the Moss, and I know better than anyone how little it gives against what the Cone burns. When I walk down to the town I look at the empty houses in the Rows and think of a life with neighbours and a door that is not turf. Tam stays at the Marver and I walk home alone, and that is the way of it for now. I would move into town tomorrow if there was a way.",
+    "values": [
+      "home_and_hearth",
+      "honest_work",
+      "knowing_the_land",
+      "family_first",
+      "a_quiet_life"
+    ],
+    "goals": [
+      "Find a way to move the family into a house in town.",
+      "Keep the peat coming, though the Moss gives less each year.",
+      "See Col make friends and not be lonely."
+    ],
+    "pastimes": [
+      "Walking down to the Rows on rest days to look at the empty houses.",
+      "Sitting by the turf house fire in the evening, mending and thinking.",
+      "Gathering heather and moss for the fire and for the floor."
+    ],
+    "calling": "I love the Moss, but I would rather keep a house in town and come up to cut, than live up here with the wind all year.",
+    "mood": "Quietly discontent, with a longing for something she has not said aloud.",
+    "traits": {
+      "caution": 65,
+      "sociability": 45,
+      "empathy": 70,
+      "curiosity": 50,
+      "ambition": 60,
+      "introspection": 65,
+      "temper": 30,
+      "nurture": 75
+    },
+    "relations": [
+      {
+        "name": "Tam Roon",
+        "trust": 75,
+        "affinity": 65,
+        "label": "husband",
+        "note": "He works hard and drinks too long at the Marver, but he is a good man."
+      },
+      {
+        "name": "Col Roon",
+        "trust": 85,
+        "affinity": 80,
+        "label": "son",
+        "note": "He is lonely up here; I see it and do not know what to do about it."
+      },
+      {
+        "name": "Vessa Pontil",
+        "trust": 40,
+        "affinity": 30,
+        "label": "buyer",
+        "note": "She pays too little and does not see the work that goes into a load."
+      },
+      {
+        "name": "Marit Sedge",
+        "trust": 50,
+        "affinity": 55,
+        "label": "neighbour",
+        "note": "We are the two women who live outside the town, and we understand each other without saying much."
+      },
+      {
+        "name": "Dolly Achterberg",
+        "trust": 60,
+        "affinity": 65,
+        "label": "cook",
+        "note": "She is kind to Tam when he has had too much, and she does not make a fuss."
+      },
+      {
+        "name": "Greta Dunmore",
+        "trust": 45,
+        "affinity": 50,
+        "label": "acquaintance",
+        "note": "She hears everything at the wash-house wall and is not shy about sharing it."
+      },
+      {
+        "name": "Hobb Fenwick",
+        "trust": 55,
+        "affinity": 50,
+        "label": "neighbour",
+        "note": "He keeps the cistern and measures it every dusk; a steady man."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The day we married, up on the Moss with only Tam's father and my mother there, and the wind took the words away.",
+        "salience": 0.8,
+        "about": [
+          "Tam Roon"
+        ]
+      },
+      {
+        "gist": "The fever winter: we stayed up on the Moss and did not go down, and I have wondered since if that was cowardice.",
+        "salience": 0.9,
+        "about": [
+          "Tam Roon",
+          "Col Roon"
+        ]
+      },
+      {
+        "gist": "The storm last autumn: the peat barn roof went and we lost a week's cutting, and I thought we might not make it through the winter.",
+        "salience": 0.8,
+        "about": [
+          "Tam Roon",
+          "Col Roon"
+        ]
+      },
+      {
+        "gist": "Walking past Mid Row 6 and seeing the key still hanging in the Counting House, and thinking that could be ours.",
+        "salience": 0.7,
+        "about": []
+      },
+      {
+        "gist": "The first time I took Col down to the town to see the Cone lit at night, and his eyes went wide.",
+        "salience": 0.6,
+        "about": [
+          "Col Roon"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "the_moss_gives_less_each_year",
+        "value": 0.9,
+        "why": "I cut it every day and I can see the banks going thin; the Cone burns more than we can bring."
+      },
+      {
+        "key": "a_house_in_town_would_change_our_lives",
+        "value": 0.8,
+        "why": "Neighbours, a dry floor, a door that is not turf, and Col with friends his own age."
+      },
+      {
+        "key": "tam_drinks_too_long_at_the_marver",
+        "value": 0.7,
+        "why": "He comes home late and tired, and I walk home alone."
+      },
+      {
+        "key": "the_hanger_should_not_be_cut",
+        "value": 0.6,
+        "why": "Marit Sedge is right to keep it; cutting it would only put off the day the peat runs out."
+      },
+      {
+        "key": "col_needs_friends",
+        "value": 0.8,
+        "why": "He walks the strand alone every evening, and that is not a life for a boy."
+      }
+    ],
+    "secret": ""
+  },
+  "Col Roon": {
+    "narrative": "I cut peat with my mother and father on the Moss. I have never been to lessons and I do not know many people my age. In the evening I walk down to the strand and the slip, and sometimes I see Lark Morrow there. I have not spoken to her yet. I would like to know more people.",
+    "values": [
+      "family",
+      "the_moss",
+      "friendship",
+      "learning_by_watching"
+    ],
+    "goals": [
+      "Make a friend his own age.",
+      "Speak to Lark Morrow.",
+      "Learn something of the town beyond the Moss."
+    ],
+    "pastimes": [
+      "Walking the strand and the slip in the evening.",
+      "Watching the gulls and the sea from the Moss edge.",
+      "Helping his father stack peat in the barn."
+    ],
+    "calling": "I do not know yet what I want to do; cutting peat is what I know, but I would like to see more of the town.",
+    "mood": "Quiet and watchful, a little lonely.",
+    "traits": {
+      "caution": 55,
+      "sociability": 35,
+      "empathy": 60,
+      "curiosity": 65,
+      "ambition": 40,
+      "introspection": 55,
+      "temper": 25,
+      "nurture": 50
+    },
+    "relations": [
+      {
+        "name": "Tam Roon",
+        "trust": 80,
+        "affinity": 70,
+        "label": "father",
+        "note": "He works hard and I want to be like him, but he is not easy to talk to."
+      },
+      {
+        "name": "Eilidh Roon",
+        "trust": 85,
+        "affinity": 80,
+        "label": "mother",
+        "note": "She is the one I can talk to, and she wants us to move into town."
+      },
+      {
+        "name": "Lark Morrow",
+        "trust": 50,
+        "affinity": 60,
+        "label": "stranger",
+        "note": "I see her on the strand and I have not spoken to her, but I would like to."
+      },
+      {
+        "name": "Edda Hollin",
+        "trust": 30,
+        "affinity": 40,
+        "label": "stranger",
+        "note": "I have seen her in the town with the other children, but I do not know her."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The first time my father let me cut a whole bank of peat by myself, and I was sore for days after.",
+        "salience": 0.7,
+        "about": [
+          "Tam Roon"
+        ]
+      },
+      {
+        "gist": "The storm last autumn, when the peat barn roof came off and we all worked to save the peat.",
+        "salience": 0.8,
+        "about": [
+          "Tam Roon",
+          "Eilidh Roon"
+        ]
+      },
+      {
+        "gist": "Seeing the Cone lit at night from the Moss, and wondering what it would be like to work there.",
+        "salience": 0.5,
+        "about": []
+      },
+      {
+        "gist": "The evening I first saw Lark Morrow on the strand, and I did not speak.",
+        "salience": 0.6,
+        "about": [
+          "Lark Morrow"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "i_want_to_know_more_people",
+        "value": 0.9,
+        "why": "I have grown up with only my parents and the Moss, and I am tired of being alone."
+      },
+      {
+        "key": "the_moss_is_my_home",
+        "value": 0.7,
+        "why": "It is where I was born and where my family works, and I know it better than the town."
+      },
+      {
+        "key": "lark_morrow_is_worth_speaking_to",
+        "value": 0.6,
+        "why": "She walks the strand alone too, and I think we might have something in common."
+      }
+    ],
+    "secret": ""
+  }
+}

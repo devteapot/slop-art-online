@@ -298,7 +298,7 @@ A style terraces with `terrace_m` (3 m for every person-sized style). A site is 
 
   The ground under a stair rises with it (a sloped pad), and its tiles are road. Lots keep clear of stairs and their landings.
 - **Retaining walls** stand along every drop and round a square cut into the slope, wherever the finished ground drops at least 1.35 m across the line. Each is a 4 m piece facing the lower ground, low (1.5 m) or high (3 m) by the drop.
-- **Walking agrees with the ground:** of two neighbouring tiles whose ground differs by more than 0.8 m, the upper one becomes `Wall`, or the lower one when the upper is a road, a stair, water or a building. The levels then join only by streets, ramps and stairs. Slivers sealed between drops, water and rock (under 150 tiles) are closed, like the land's small pockets.
+- **Walking agrees with the ground:** of two neighbouring tiles whose ground differs by more than 0.8 m, the upper one becomes `Wall` (`Drop` since 2026-11-11: unwalkable but see-through, docs/PERCEPTION.md), or the lower one when the upper is a road, a stair, water or a building. The levels then join only by streets, ramps and stairs. Slivers sealed between drops, water and rock (under 150 tiles) are closed, like the land's small pockets.
 - **Houses** may back into the terrace above (`cut_m` 3.5 in the steampunk style), so a row of houses on the uphill side of a lane holds the next drop.
 
 ### Ornaments

@@ -9,7 +9,7 @@ Since 2026-11-10 ([seeded lives](../../../../docs/SEEDED_LIVES.md)); since 2026-
 - Its persona is its authored narrative.
 - Its first deliberation prompt (asked for with an admin `set_behavior` think node after the player's line, which a living mind answers in a talk turn) names people from its sheet and recalls its authored memories (`[before all this]`).
 - It began as its authored self (the "Who I am (authored)." thought; a later consolidation may revise the persona, which is reported as `persona_now`).
-- Names: its relations across communities are introductions (`acquaintance`); one the sheet marks `knows_name: false` stays "a stranger" in its mind (its `person:` node's name).
+- Names: its relations across communities are introductions (`acquaintance`); one the sheet marks `knows_name: false` stays "a stranger #<id>" in its mind (its `person:` node's name; [verify-knowledge strangers](../../verify-knowledge/features/strangers.md)).
 - Its mind marks its sources: `authored` (the sheet) and `world` (its facts), and `ai` when a model wrote something (the paid tier).
 - Every seeded situation it is in (`living/seeds/worlds/island/cast/*.json`) shows in its first prompt through the other people in it.
 - No consolidation is shown an empty identity ("(no persona yet)"): identities are installed before the service's loop starts. Each identity rewrite's goals are recorded beside the seeded goals (`identity_rewrites`, `seeded_goals` in `lives.json`) for reading.

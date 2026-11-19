@@ -1,0 +1,10 @@
+{
+ "extends": "arena-heavy",
+ "title": "Arena: a telegraphed heavy blow (R2-fov)",
+ "about": "`arena-heavy` as r2e ran it, with 5 Hz facing samples for the windup-seen estimate (docs/COMBAT_MIND.md §5.4, R2-fov); written by living/tools/arena_veteran.py.",
+ "record": {
+  "bodies": {
+   "hz": 5
+  }
+ }
+}

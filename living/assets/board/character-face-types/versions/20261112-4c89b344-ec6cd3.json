@@ -1,0 +1,67 @@
+{
+ "schema": 1,
+ "family": "character:face-types",
+ "id": "20261112-4c89b344-ec6cd3",
+ "published": "2026-11-12T11:57:58+01:00",
+ "imported": "2026-11-12T11:57:58+01:00",
+ "track": "char-4",
+ "maker": "Claude Fable 5.2",
+ "note": "The neck: measured against the reference it was twice as wide and twice as deep under the jaw (0.56 to 0.60 of the head's width across, 0.65 to 0.69 deep; the reference 0.29 to 0.31 both). It is now a column of the reference's width set just under the jaw (0.29 to 0.31, a man 0.36), with collars close round it that end below the chin.",
+ "source": {
+  "commit": "4c89b3449fa662940f0297609e148089644bd933",
+  "branch": "char-4",
+  "dirty": false,
+  "generator": "living/tools/blender/cage_head.py",
+  "generator_sha256": "1504eda8d3c66b0562a112e74f253447cbdeec2d662f07d2f185c858727a0d47",
+  "generator_state": "committed",
+  "params": {}
+ },
+ "renderer": {
+  "method": "asset-view (the game)",
+  "commit": "",
+  "key": "asset-view (the game)",
+  "preset": "",
+  "note": "neck-types: four bare type heads before and after from the front, the side and at the game camera (pixels enlarged), with each type's neck width and depth under the jaw as shares of its head's width, the reference in the last row; neck-people: four whole people before and after on a frame of the idle clip from the front, three-quarter, side and the game camera, the reference in the last row; neck-motion: the same four after on later idle, talking, walking and looking-round frames. Eyes are held open by the photo tool. The vroid member is the reference at the same views; the blue-protocol member is published CEDEC slides, for comparison only"
+ },
+ "preset": "",
+ "media": "media/character-face-types/20261112-4c89b344-ec6cd3",
+ "members": [
+  {
+   "name": "types",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "cea36c80c38f3a21d734ef523d869b52cdc6009b34a2c629e86d446e9333d382",
+   "shots": [
+    "neck-motion",
+    "neck-people",
+    "neck-types"
+   ],
+   "clips": []
+  },
+  {
+   "name": "vroid",
+   "role": "control",
+   "token_kind": "import",
+   "sha256": "76dd1e45f63c1ad7d2027dc65d96d1c418bf7f217e6739fd091e0ca357ef8bec",
+   "shots": [
+    "neck-motion",
+    "neck-people",
+    "neck-types"
+   ],
+   "clips": []
+  },
+  {
+   "name": "blue-protocol",
+   "role": "control",
+   "token_kind": "import",
+   "sha256": "e8f3e83fc5bf089e4af1f1d806900dc5b9a9087d758555fa974da1492fd8e094",
+   "shots": [
+    "neck-motion",
+    "neck-people",
+    "neck-types"
+   ],
+   "clips": []
+  }
+ ],
+ "delivered": []
+}

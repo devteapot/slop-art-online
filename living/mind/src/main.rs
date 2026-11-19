@@ -6,11 +6,12 @@
 mod llm;
 mod memory;
 mod mind;
+mod prices;
 mod prompts;
 
 use anyhow::{anyhow, Context, Result};
 use living_bindings::*;
-use spacetimedb_sdk::{DbContext, Table};
+use spacetimedb_sdk::{DbContext, Table, TableWithPrimaryKey};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
@@ -52,6 +53,12 @@ async fn main() -> Result<()> {
     let root = root();
     load_env(&root.join(".env"));
     load_env(&root.join(".local/living/neo4j.env"));
+    // How people's prompts frame the model (prompts.rs `Frame`); a value that is neither frame
+    // stops the service rather than running an experiment under the wrong one.
+    let frame = prompts::Frame::parse(std::env::var("LIVING_FRAME").ok().as_deref()).map_err(anyhow::Error::msg)?;
+    if frame != prompts::Frame::Character {
+        log::info!("prompt frame: {} (LIVING_FRAME)", frame.name());
+    }
     if std::env::args().nth(1).as_deref() == Some("rethink-replay") {
         return mind::rethink::replay_main(&root, std::env::args().skip(2).collect()).await;
     }
@@ -135,6 +142,26 @@ async fn main() -> Result<()> {
                 queries.push(lived);
                 queries.push("SELECT * FROM settlement".into());
             }
+            // Who heard each line and how they stood (private, kept a minute), for the
+            // conversation switches that need it (`LIVING_GREET`, `nearest` by default): its own
+            // subscription, so that a world whose module has no such table (built before it)
+            // still starts; `LIVING_GREET` then falls back to the old rule there (talk.rs).
+            // What each character watches for (private, at most 8 rows each, written by the
+            // projection and on a fire; docs/ATTENTION.md): its own subscription, so that a
+            // world whose module has no such table still starts (prompts then show no cues).
+            c.subscription_builder()
+                .on_error(|_, e| log::warn!("no `cue` subscription ({e:?}): this world keeps no attention cues"))
+                .subscribe(["SELECT * FROM cue".to_string()]);
+            // The fast lane's requests (docs/FAST_LANE.md; private, one row per character while
+            // a trigger waits or is served). A world whose module has no such table still starts.
+            c.subscription_builder()
+                .on_error(|_, e| log::warn!("no `fast_ask` subscription ({e:?}): this world has no fast lane"))
+                .subscribe(["SELECT * FROM fast_ask".to_string()]);
+            if mind::greet_audience() {
+                c.subscription_builder()
+                    .on_error(|_, e| log::warn!("no `audience` subscription ({e:?}): this world does not keep who heard a line; LIVING_GREET falls back to `off` here"))
+                    .subscribe(["SELECT * FROM audience".to_string()]);
+            }
             c.subscription_builder()
                 .on_applied(move |_| {
                     if let Some(tx) = ready.lock().unwrap().take() {
@@ -151,6 +178,10 @@ async fn main() -> Result<()> {
                     "SELECT * FROM relation",
                     "SELECT * FROM judgment",
                     "SELECT * FROM place",
+                    // What each character has seen of resources (private; talk-places). Where it
+                    // stands comes back to its talk turn from `mind_reach` (reply-timing): the
+                    // `standing` table is no longer read.
+                    "SELECT * FROM seen_stock",
                     "SELECT * FROM know_how",
                     "SELECT * FROM community",
                     "SELECT * FROM membership",
@@ -174,6 +205,15 @@ async fn main() -> Result<()> {
                     "SELECT * FROM rhythm",
                     // Who told whom their name (private): prompts name people only when known.
                     "SELECT * FROM acquaintance",
+                    // Who heard each line (private, one row per line in its speaker's window): a
+                    // speaker's own line reads as heard by those it saw (docs/COMMUNICATION.md §6).
+                    "SELECT * FROM line_heard",
+                    // Each person's body sex (private, one row each, written once at birth;
+                    // docs/LIVING_CORE.md, "Body sex"): one's own, and that of the people one knows.
+                    "SELECT * FROM sex",
+                    // What each mind remembers of others' bodies (private, a row per pair seen at
+                    // full sight, written once): prompts state an absent person's sex only from it.
+                    "SELECT * FROM sex_seen",
                 ].map(String::from)).collect::<Vec<String>>());
         })
         .on_disconnect(|_, e| {
@@ -202,8 +242,28 @@ async fn main() -> Result<()> {
             if rethink {
                 let _ = tx.send(mind::Event::Percept(e.clone()));
             }
-            if e.kind == "speech" || e.kind == "silence" {
+            // A line of mine whose #ids were said as words (`spoken_as`): journaled as evidence.
+            if e.kind == "spoken_as" {
+                let _ = tx.send(mind::Event::SpokenAs(e.clone()));
+            }
+            // A whisper to me carries words too; noticing one (`whispered`) does not.
+            if e.kind == "speech" || e.kind == "whisper" || e.kind == "silence" {
                 let _ = tx.send(mind::Event::Speech(e.clone()));
+            }
+        });
+    }
+    {
+        // A fast-lane request issued (mind/fast.rs): on insert or when a waiting row is issued.
+        let tx_insert = tx.clone();
+        conn.db.fast_ask().on_insert(move |_, a| {
+            if a.issued_ms != 0 {
+                let _ = tx_insert.send(mind::Event::Fast(a.clone()));
+            }
+        });
+        let tx_update = tx.clone();
+        conn.db.fast_ask().on_update(move |_, old, a| {
+            if a.issued_ms != 0 && a.issued_ms != old.issued_ms {
+                let _ = tx_update.send(mind::Event::Fast(a.clone()));
             }
         });
     }

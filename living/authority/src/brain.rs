@@ -24,17 +24,89 @@ const ROOT_MARK: u16 = u16::MAX - 1;
 const FAIL_MARK: u16 = u16::MAX - 2;
 pub(crate) const REFLECT_MARK: u16 = u16::MAX - 3;
 thread_local! {
+    /// What each character looked at lately (docs/BATTLE_SCALE.md, fix 1): the fast path in front
+    /// of `familiar`, keyed as `recently_seen` keys things (a creature's id, `0x4000_0000 | a
+    /// structure`, `0x8000_0000 | a region`, `FAR_MARK | a figure too far to make out`), with when.
+    /// Sized to what it sees, not capped at 96 (it thrashed in a battle), and kept off `mind_state`
+    /// so the row is not rewritten with it at every evaluation. Lost on a module update: then the
+    /// durable `familiar` rows answer.
+    static SEEN: std::cell::RefCell<std::collections::HashMap<u32, std::collections::HashMap<u32, u64>>> = std::cell::RefCell::new(std::collections::HashMap::new());
+    /// Familiarity rows each character has added since its count was last checked.
+    static FAMILIAR_NEW: std::cell::RefCell<std::collections::HashMap<u32, u32>> = std::cell::RefCell::new(std::collections::HashMap::new());
+    /// When each character last looked for what is new to it (`noticed`, fix 2).
+    static NOTICED_AT: std::cell::RefCell<std::collections::HashMap<u32, u64>> = std::cell::RefCell::new(std::collections::HashMap::new());
+    /// When each character last looked at the ground (`known::mark`), at the noticing cadence.
+    static LOOKED_AT: std::cell::RefCell<std::collections::HashMap<u32, u64>> = std::cell::RefCell::new(std::collections::HashMap::new());
+    /// Attention cues (`Ev::cues`), per character: when its cues were last checked, and the
+    /// (cue, thing) pairs that have fired or were held back by the cooldown and have matched at
+    /// every check since, so a cue fires when a thing begins to match, not while it goes on
+    /// matching. Lost on a module update: the durable cooldown (`Cue::fired`) then holds.
+    static CUE_HELD: std::cell::RefCell<std::collections::HashMap<u32, (u64, Vec<(u64, u64)>)>> = std::cell::RefCell::new(std::collections::HashMap::new());
     /// The hunger and energy levels where each body's need rates change, from the law's last
     /// answer for it (`NeedLaw::cuts`).
     static NEED_CUTS: std::cell::RefCell<std::collections::HashMap<u32, [f32; 4]>> = std::cell::RefCell::new(std::collections::HashMap::new());
     /// When each person last checked for, and last felt, knowing something alone (kept here:
     /// evaluator marks are reset when a new plan is installed).
     static LEGACY: std::cell::RefCell<std::collections::HashMap<u32, (u64, u64)>> = std::cell::RefCell::new(std::collections::HashMap::new());
+    /// First sights that ask for a thought (`first_sight_thinks`, docs/FIRST_SIGHT.md), per
+    /// character: when one last brought it to think (its gap), and what is still owed. Lost on
+    /// a module update: the first-sight lines themselves are durable.
+    static FIRST_SIGHT: std::cell::RefCell<std::collections::HashMap<u32, FirstSightAsk>> = std::cell::RefCell::new(std::collections::HashMap::new());
 }
-/// Alert bits for ongoing situations (bits 1..8 are bodily alarms).
+
+/// A character's first sights of people it cannot place that have yet to bring it to think.
+#[derive(Clone, Debug, Default, PartialEq)]
+struct FirstSightAsk {
+    /// When a first sight last brought it to think (`first_sight_gap_s`), 0 never.
+    last_ms: u64,
+    /// The unplaced people of first sights not yet thought over, with their part of the line
+    /// ("a stranger, 7 tiles east, wait"), and since when the oldest is owed (0: none).
+    owed: Vec<(u32, String)>,
+    since_ms: u64,
+}
+
+/// A refused first-sight request is tried again at later looks for at most this long, while
+/// the person stays in sight and still cannot be placed.
+const FIRST_SIGHT_OWED_MS: u64 = 60_000;
+/// The body's alarms before the `status_of` law gave them (bits 1, 2, 4, 8 and 64): cleared.
+const OLD_BODY_ALARMS: u32 = 1 | 2 | 4 | 8 | 64;
+/// The `status_of` law's alarms, one bit each by its words (`alarm_bit`).
+const LAW_ALARMS: u32 = 0xFFFF_0000;
+
+/// An alarm's bit among `LAW_ALARMS`: by its words, so two statuses with the same alarm (badly
+/// hurt, barely alive) are one episode.
+fn alarm_bit(text: &str) -> u32 {
+    let h = text.bytes().fold(2166136261u32, |h, b| (h ^ b as u32).wrapping_mul(16777619));
+    1 << (16 + h % 16)
+}
+
+/// Alert bits for ongoing situations (bits 16..31 are the body's alarms; 16, 32 and 128 drives).
 const IN_CROWD: u32 = 1 << 8;
 const WOLF_NEAR: u32 = 1 << 9;
-const FAMILIAR_LIMIT: usize = 256;
+/// Something heard near and out of sight (only while sight has a field).
+const SOUND_NEAR: u32 = 1 << 10;
+/// Familiarity rows a character keeps before pruning (docs/BATTLE_SCALE.md, fix 1). Over it, the
+/// oldest unseen rows go: never one touched within `FAMILIAR_KEEP_MS`, nor one whose thing is in
+/// the character's seen set (in view lately), nor, with `notice_delta`, a structure within its last
+/// look's disc. It is never what is in view that is forgotten, so this is not a bound on a
+/// character's rows: what is in view can exceed it.
+///
+/// A battle site does. Measured at 200 fighters with refills over 30 minutes (`battle_diag.py
+/// --familiar`, run `minds-fam30-041631`, 2026-11-13): the first fighter passed 2,048 rows at 10.5
+/// minutes, 44 by 21 minutes and 634 characters by 30 (633 fighters, 1 resident; walkers foraging
+/// away never passed 21). The most was 2,984, about 90% of them remains in view. A surviving
+/// fighter's rows grew about 190 a minute at first, then about 100 a minute, the rate the remains
+/// at the site grew. Remains last an hour, so a site's hour of dead (about 5,800 at that rate)
+/// would put a fighter near 6,000 rows (docs/BATTLE_SCALE.md, "Familiarity of remains").
+const FAMILIAR_LIMIT: usize = 2_048;
+/// A familiarity row touched this recently is not pruned (twice its 30 s touch period).
+const FAMILIAR_KEEP_MS: u64 = 60_000;
+/// Something looked at within this long counts as still in view (the seen set's horizon).
+const SEEN_MS: u64 = 90_000;
+/// What is new to a character is looked for about once a second (fix 2): at most once per this,
+/// a little under the 1 Hz slot, since a slot can come a tick early (a strict 1,000 ms skipped
+/// every other second).
+const NOTICE_MS: u64 = 900;
 /// Marks at 0xC000 | node: when a desire last began to act.
 const DESIRE_MARK: u16 = 0xC000;
 /// Set when the current plan's routine completes; cleared by the next install.
@@ -45,9 +117,18 @@ const IMPULSE_MS: f32 = 60_000.0;
 const HAILED_MS: u64 = 6_000;
 
 struct Scene {
-    creatures: Vec<NearCreature>,
-    resources: Vec<(ResourceNode, f32)>,
-    structures: Vec<(Structure, f32)>,
+    /// What the body senses, tested as far as asked (`scene_lazy`; docs/BATTLE_SCALE.md
+    /// scene-lazy): a fighter's nearest pick tests a few creatures, not all in sight.
+    sensing: crate::perception::Sensing,
+    /// The seen, nearest first: every candidate tested (`Ev::creatures`).
+    creatures: Option<Vec<NearCreature>>,
+    /// Heard and not seen (only while sight depends on facing), nearest first.
+    heard: Option<Vec<NearCreature>>,
+    /// Gathered when first asked for (`Ev::resources`).
+    resources: Option<Vec<(ResourceNode, f32)>>,
+    /// Built when first asked for (`Ev::structures`): an evaluation that reads no structure (a
+    /// fighter's at combat cadence) does not gather every remains in sight. The same set either way.
+    structures: Option<Vec<(Structure, f32)>>,
 }
 
 struct Ev<'a> {
@@ -72,16 +153,25 @@ struct Ev<'a> {
     visits: u32,
     last_fail: String,
     want: (String, u32),
+    /// What a graph leaf's answer (accept, decline) names: a trade offer, a record (0: none).
+    answers: (u64, u64),
+    /// The `run` of the action being started (a `Do` node's).
+    run: Option<bool>,
+    /// The distances of a movement intent being started (a `Do` node's).
+    spacing: living_rules::steer::Spacing,
     /// Node of the activity in progress if it is work that completes on its own (see `latches`).
     latched: Option<u16>,
     /// A deliberate act holds the body: graph leaves wait, except reflexes (see `acts.rs`).
     acting: bool,
+    /// The leaf whose activity's success this evaluation read (`finished`), and its skill.
+    done: Option<(u16, String)>,
 }
 
 /// Work that, once begun under an `if`, is finished even after the `if`'s condition stops
 /// holding (sleeping until rested, not until barely awake). Movement and combat stay reactive.
 
 pub fn evaluate(ctx: &ReducerContext, id: u32, now: u64) {
+    let load = common::detail_span("brain.load");
     let Some(me) = ctx.db.character().id().find(id) else { return };
     if !me.alive {
         return;
@@ -105,15 +195,34 @@ pub fn evaluate(ctx: &ReducerContext, id: u32, now: u64) {
         cur = ctx.db.activity().id().find(id);
     }
     let acting = cur.as_ref().map_or(false, |a| act::held(a.node));
-    let mut ev = Ev { ctx, now, w, me, at, needs, vit, orig: st.clone(), st, g, scene: None, smelled: None, smell: false, running: None, path: Vec::new(), status: String::new(), visits: 0, last_fail: String::new(), want: (String::new(), 0), latched: None, acting };
+    let mut ev = Ev { ctx, now, w, me, at, needs, vit, orig: st.clone(), st, g, scene: None, smelled: None, smell: false, running: None, path: Vec::new(), status: String::new(), visits: 0, last_fail: String::new(), want: (String::new(), 0), answers: (0, 0), run: None, spacing: Default::default(), latched: None, acting, done: None };
     // A pace aside (an `aside` skill in the script) is a short walk that finishes on its own too.
     let sc = common::scripts(ctx);
     ev.latched = cur.filter(|a| a.revision == ev.st.revision && (sc.skills().get(&a.skill).is_some_and(|k| k.latch) || sc.shows().aside(&a.skill))).map(|a| a.node);
+    drop(load);
+    let alerts = common::detail_span("brain.alerts");
     ev.alerts();
+    drop(alerts);
     let root = ev.g.clone();
     let played = !ev.me.ai;
-    let result = ev.run(&root.root, 0);
+    let result = {
+        let _span = common::span("brain.graph");
+        ev.run(&root.root, 0)
+    };
+    common::diag(|| "eval:all", 1);
+    common::diag(|| "do:visits", ev.visits as u64);
+    // The leaf whose end this evaluation read, if it came to nothing else: a continuous
+    // activity's `doing` row held at its end stays while this is so (`town::settle`).
+    let read_end = ev.done.take().map(|(_, skill)| skill).filter(|_| result == St::Ok && !played && !matches!(root.root, Node::Seq(_)));
+    let _span = common::span("brain.after");
     ev.after(result, &root.root);
+    drop(_span);
+    crate::town::settle(ctx, id, read_end.as_deref());
+    let _span = common::detail_span("brain.slept");
+    // Fell asleep, or woke (and thinks on what waited): perceive::slept.
+    if let Some(me) = ctx.db.character().id().find(id) {
+        perceive::slept(ctx, &me, now);
+    }
     if played && result != St::Run {
         crate::command_done(ctx, id, now);
     }
@@ -129,7 +238,7 @@ pub fn resolve_for(ctx: &ReducerContext, id: u32, t: &Target, now: u64) -> Optio
     let g = common::compiled(ctx, id, st.revision)?;
     let at = pos(&body, now);
     let needs = common::needs(&vit, now);
-    let mut ev = Ev { ctx, now, w: common::world(ctx), me, at, needs, vit, orig: st.clone(), st, g, scene: None, smelled: None, smell: false, running: None, path: Vec::new(), status: String::new(), visits: 0, last_fail: String::new(), want: (String::new(), 0), latched: None, acting: false };
+    let mut ev = Ev { ctx, now, w: common::world(ctx), me, at, needs, vit, orig: st.clone(), st, g, scene: None, smelled: None, smell: false, running: None, path: Vec::new(), status: String::new(), visits: 0, last_fail: String::new(), want: (String::new(), 0), answers: (0, 0), run: None, spacing: Default::default(), latched: None, acting: false, done: None };
     ev.sensed(t)
 }
 
@@ -139,18 +248,24 @@ pub fn resolve_for(ctx: &ReducerContext, id: u32, t: &Target, now: u64) -> Optio
 fn settle_needs(ctx: &ReducerContext, me: &Character, mut v: Vitals, at: (f32, f32), w: &World, cur: Option<&Activity>, now: u64) -> Option<Vitals> {
     let n = common::needs(&v, now);
     if n.hp <= 0.0 {
-        let cause = if n.hunger >= 100.0 {
-            "starvation"
-        } else if common::night(w, now) && me.kind == "person" {
-            "cold and exposure"
+        use living_rules::outcome::death;
+        let (cause, code) = if n.hunger >= 100.0 {
+            ("starvation", death::STARVED)
+        } else if common::night(ctx, w, now) && me.kind == "person" {
+            ("cold and exposure", death::COLD)
         } else {
-            "exhaustion"
+            ("exhaustion", death::EXHAUSTED)
         };
-        act::die(ctx, me.id, cause, now, 0);
+        act::die(ctx, me.id, cause, now, 0, code);
         return None;
     }
-    let night = common::night(w, now);
-    let (near_fire, near_shelter) = act::warmth(ctx, at);
+    let night = common::night(ctx, w, now);
+    // How dark it is matters to the key only when the rates law reads it (an eased dusk).
+    let dark = if common::scripts(ctx).reads("rates", "daylight") { common::dark(ctx, w, now) } else if night { 1.0 } else { 0.0 };
+    // A fire that goes out changes this on the next look (its `lit_until_ms` passes): nothing
+    // has to be told when it burns down.
+    let warm = act::warmth(ctx, at, now);
+    let (near_fire, near_shelter) = (warm.fire, warm.shelter);
     let cloak = common::inv_count(ctx, me.id as u64, "cloak") > 0;
     let season = common::season(ctx, now);
     let activity = cur.filter(|a| a.phase == 1).map_or("", |a| a.skill.as_str());
@@ -171,7 +286,8 @@ fn settle_needs(ctx: &ReducerContext, me: &Character, mut v: Vitals, at: (f32, f
         | ((activity == "rest") as u32) << 9
         | (cloak as u32) << 10
         | ((season == "winter") as u32) << 11
-        | (crate::town::raining(ctx) as u32) << 12;
+        | (crate::town::raining(ctx) as u32) << 12
+        | ((dark * 20.0).round() as u32) << 13;
     if cuts.is_some() && key == v.rate_key {
         return Some(v);
     }
@@ -180,9 +296,13 @@ fn settle_needs(ctx: &ReducerContext, me: &Character, mut v: Vitals, at: (f32, f
     let facts = act::facts(ctx, me.id, now);
     let sc = common::scripts(ctx);
     let hour = common::hour(w, now);
-    let sctx = living_rules::script::SkillCtx { actor: facts, night, hour, season: season.into(), raining: crate::town::raining(ctx), ..Default::default() };
+    let sctx = living_rules::script::SkillCtx { actor: facts, night, dark, hour, season: season.into(), raining: crate::town::raining(ctx), ..Default::default() };
     let _ = at;
+    // Profiled apart: the law itself, asked only for a state no body has been in since the
+    // script revision (the rest are answers kept per state, finished per body).
+    let _law_timer = if common::profiling() && !sc.need_law_kept(&sctx) { common::span("needs.rates.law") } else { None };
     let law = sc.need_law(&sctx);
+    drop(_law_timer);
     let mut key = key;
     if let Ok(c) = law.as_ref().map(|l| l.cuts().unwrap_or([f32::INFINITY, f32::NEG_INFINITY, f32::INFINITY, f32::NEG_INFINITY])) {
         NEED_CUTS.with(|m| m.borrow_mut().insert(me.id, c));
@@ -190,7 +310,7 @@ fn settle_needs(ctx: &ReducerContext, me: &Character, mut v: Vitals, at: (f32, f
         key = (key & !0b11_1101) | 1 | ((n.hunger >= c[0]) as u32) << 2 | ((n.hunger < c[1]) as u32) << 3 | ((n.energy > c[2]) as u32) << 4 | ((n.energy <= c[3]) as u32) << 5;
     }
     if let Ok(r) = law.map(|l| l.rates(&sctx.actor)) {
-        common::settle(&mut v, now);
+        common::settle(ctx, &mut v, now);
         v.hp_rate = r.hp_per_min;
         v.hunger_rate = r.hunger_per_min;
         v.energy_rate = r.energy_per_min;
@@ -201,17 +321,116 @@ fn settle_needs(ctx: &ReducerContext, me: &Character, mut v: Vitals, at: (f32, f
 }
 
 impl<'a> Ev<'a> {
-    fn scene(&mut self) -> &Scene {
+    /// The scene, begun: what the body senses (`Sensing`), worked out as far as each reader asks.
+    /// With the `scene_lazy` law off, everything is worked out at once, as before.
+    fn scene(&mut self) -> &mut Scene {
         if self.scene.is_none() {
-            let r = common::sight_for(self.ctx, self.me.id, &self.w, self.now);
+            let _span = common::span("brain.scene");
             // What the body sees: within its sight and with a clear sight line (the rule every
             // observer perceives by, `perception::in_sight`).
-            let creatures = crate::perception::visible(self.ctx, self.me.id, self.at, r, self.now);
-            let resources = common::resources_near(self.ctx, self.at, r);
-            let structures = common::structures_near(self.ctx, self.at, r);
-            self.scene = Some(Scene { creatures, resources, structures });
+            let sensing = crate::perception::Sensing::new(self.ctx, self.me.id, self.at, self.now);
+            self.scene = Some(Scene { sensing, creatures: None, heard: None, resources: None, structures: None });
+            if !common::laws(self.ctx).scene_lazy {
+                self.creatures();
+                self.resources();
+            }
         }
-        self.scene.as_ref().unwrap()
+        self.scene.as_mut().unwrap()
+    }
+
+    /// The creatures seen, nearest first: every one in sight range tested.
+    fn creatures(&mut self) -> &[NearCreature] {
+        let (ctx, now, actor) = (self.ctx, self.now, self.me.id);
+        let s = self.scene();
+        if s.creatures.is_none() {
+            let _span = common::detail_span("scene.sensed");
+            let (seen, heard) = s.sensing.all(ctx, now);
+            note_sight_changes(actor, &seen);
+            common::note_scene(seen.len());
+            common::diag(|| "scene:all", 1);
+            s.creatures = Some(seen);
+            s.heard = Some(heard);
+        }
+        s.creatures.as_deref().unwrap()
+    }
+
+    /// Heard and not seen, nearest first.
+    fn heard_list(&mut self) -> &[NearCreature] {
+        self.creatures();
+        self.scene.as_ref().and_then(|s| s.heard.as_deref()).unwrap_or(&[])
+    }
+
+    /// The resources in sight, nearest first (gathered when first asked for).
+    fn resources(&mut self) -> &[(ResourceNode, f32)] {
+        let (ctx, me, at, now) = (self.ctx, self.me.id, self.at, self.now);
+        let w = self.w.clone();
+        let s = self.scene();
+        if s.resources.is_none() {
+            let _span = common::detail_span("scene.resources");
+            let r = common::sight_for(ctx, me, &w, now);
+            s.resources = Some(common::resources_near(ctx, at, r));
+        }
+        s.resources.as_deref().unwrap()
+    }
+
+    /// The nearest creature seen that `pred` accepts: `creatures().iter().find(pred)`, testing sight
+    /// only as far as it needs (`scene_lazy`). `scene_lazy_check` compares it with the full list.
+    fn first_seen(&mut self, mut pred: impl FnMut(&NearCreature) -> bool) -> Option<NearCreature> {
+        let (ctx, now) = (self.ctx, self.now);
+        let laws = common::laws(ctx);
+        if !laws.scene_lazy || self.scene().creatures.is_some() {
+            return self.creatures().iter().find(|c| pred(c)).cloned();
+        }
+        let got = self.scene().sensing.first(ctx, now, &mut pred);
+        common::diag(|| "scene:first", 1);
+        if laws.scene_lazy_check {
+            let full = crate::perception::sensed(ctx, self.me.id, self.at, now).0.into_iter().find(|c| pred(c));
+            common::diag(|| "scene_lazy:checked", 1);
+            if full.as_ref().map(|c| c.id) != got.as_ref().map(|c| c.id) {
+                common::diag(|| "scene_lazy:differed", 1);
+                log::error!("scene lazy: #{}'s first seen {:?} differs from the full scene's {:?}", self.me.id, got.map(|c| c.id), full.as_ref().map(|c| c.id));
+                return full;
+            }
+        }
+        got
+    }
+
+    /// Creature `id` as seen, if it is: `creatures()` holds it, testing only it (`scene_lazy`).
+    fn seen_by_id(&mut self, id: u32) -> Option<NearCreature> {
+        let (ctx, now) = (self.ctx, self.now);
+        let laws = common::laws(ctx);
+        if !laws.scene_lazy || self.scene().creatures.is_some() {
+            return self.creatures().iter().find(|c| c.id == id).cloned();
+        }
+        let got = self.scene().sensing.by_id(ctx, now, id);
+        common::diag(|| "scene:by_id", 1);
+        if laws.scene_lazy_check {
+            let full = crate::perception::sensed(ctx, self.me.id, self.at, now).0.into_iter().find(|c| c.id == id);
+            common::diag(|| "scene_lazy:checked", 1);
+            if full.as_ref().map(|c| c.id) != got.as_ref().map(|c| c.id) {
+                common::diag(|| "scene_lazy:differed", 1);
+                log::error!("scene lazy: #{} sees #{id} {} but the full scene {}", self.me.id, got.is_some(), full.is_some());
+                return full;
+            }
+        }
+        got
+    }
+
+    /// The structures in sight, nearest first (the scene's, gathered when first asked for).
+    #[track_caller]
+    fn structures(&mut self) -> &[(Structure, f32)] {
+        self.scene();
+        if self.scene.as_ref().is_some_and(|s| s.structures.is_none()) {
+            let _span = common::detail_span("brain.scene.structures");
+            // While profiling: which reader built the list, and how long it was.
+            let by = std::panic::Location::caller();
+            common::diag(|| format!("structures@{}", by.line()), 1);
+            let r = common::sight_for(self.ctx, self.me.id, &self.w, self.now);
+            let v = common::structures_near(self.ctx, self.at, r);
+            common::diag(|| "scene:structures_n", v.len() as u64);
+            self.scene.as_mut().unwrap().structures = Some(v);
+        }
+        self.scene.as_ref().and_then(|s| s.structures.as_deref()).unwrap_or(&[])
     }
 
     fn smelled(&mut self) -> &[NearCreature] {
@@ -250,21 +469,24 @@ impl<'a> Ev<'a> {
         let hunger = (self.needs.hunger / 100.0).clamp(0.0, 1.0);
         let tired = ((100.0 - self.needs.energy) / 100.0).clamp(0.0, 1.0);
         let hurt = (1.0 - self.needs.hp / self.vit.max_hp.max(1.0)).clamp(0.0, 1.0);
-        let night = if common::night(&self.w, self.now) { 1.0 } else { 0.0 };
+        // Sleepiness follows the dark: 1 at night, 0 by day, and between them through an eased
+        // dusk or dawn (the `daylight` law), so it does not flip in the tick the light does.
+        let night = common::dark(self.ctx, &self.w, self.now);
         let me = self.me.id;
         let now = self.now;
-        // The body's own day (its rhythm): its bedtime and its evening.
-        let (bedtime, evening) = if ds.iter().any(|d| d.weight.bedtime != 0.0 || d.weight.evening != 0.0) {
-            let (b, e) = common::day_phase(self.ctx, me, common::hour(&self.w, now));
-            (if b { 1.0 } else { 0.0 }, if e { 1.0 } else { 0.0 })
+        // The body's own day (its rhythm): its bedtime, its evening and its working hours.
+        let (bedtime, evening, work_hours) = if ds.iter().any(|d| d.weight.bedtime != 0.0 || d.weight.evening != 0.0 || d.weight.work_hours != 0.0) {
+            let p = common::day_phase(self.ctx, me, common::hour(&self.w, now));
+            let one = |b: bool| if b { 1.0 } else { 0.0 };
+            (one(p.bedtime), one(p.evening), one(p.work))
         } else {
-            (0.0, 0.0)
+            (0.0, 0.0, 0.0)
         };
         // An attack or a threat aimed at me right now.
         let threatened = if self.ctx.db.activity().victim().filter(me).any(|a| a.phase == 1 && a.ends_ms > now) { 1.0 } else { 0.0 };
         // Company is one's own kind (people for a person, the herd or pack for an animal).
         let kind = self.me.kind.clone();
-        let people = self.scene().creatures.iter().filter(|c| *c.kind == *kind).count() as f32;
+        let people = self.creatures().iter().filter(|c| *c.kind == *kind).count() as f32;
         let alone = if people == 0.0 { 1.0 } else { 0.0 };
         let company = (people / 5.0).min(1.0);
         let winter = if common::season(self.ctx, now) == "winter" { 1.0 } else { 0.0 };
@@ -296,7 +518,7 @@ impl<'a> Ev<'a> {
                 let w = &d.weight;
                 let last = self.st.marks.iter().find(|m| m.node == DESIRE_MARK | ids[i]).map(|m| m.at_ms);
                 let longing = last.map_or(1.0, |t| (now.saturating_sub(t) as f32 / 3_600_000.0).min(1.0));
-                let mut s = w.base + w.hunger * hunger + w.tired * tired + w.hurt * hurt + w.night * night + w.day * (1.0 - night) + w.threatened * threatened + w.alone * alone + w.company * company + w.winter * winter + w.longing * longing + w.courted * courted + w.starving * starving + w.exhausted * exhausted + w.rain * rain + w.hailed * hailed + w.commotion * commotion + w.bedtime * bedtime + w.evening * evening;
+                let mut s = w.base + w.hunger * hunger + w.tired * tired + w.hurt * hurt + w.night * night + w.day * (1.0 - night) + w.threatened * threatened + w.alone * alone + w.company * company + w.winter * winter + w.longing * longing + w.courted * courted + w.starving * starving + w.exhausted * exhausted + w.rain * rain + w.hailed * hailed + w.commotion * commotion + w.bedtime * bedtime + w.evening * evening + w.work_hours * work_hours;
                 for (k, v) in &w.believes {
                     let j = judgments.iter().find(|(key, _)| key == &k.to_lowercase()).map(|(_, x)| *x).unwrap_or(0.5);
                     s += v * j;
@@ -426,7 +648,10 @@ impl<'a> Ev<'a> {
                 let then_id = id + 1;
                 let then_end = then_id + self.g.sizes.get(then_id as usize).copied().unwrap_or(1);
                 let latched = self.latched.map_or(false, |n| n >= then_id && n < then_end);
-                let holds = latched || self.cond(&i.cond);
+                let holds = latched || {
+                    let _span = common::detail_span("brain.cond");
+                    self.cond(&i.cond)
+                };
                 if holds {
                     self.run(&i.then, then_id)
                 } else if let Some(e) = &i.otherwise {
@@ -437,32 +662,114 @@ impl<'a> Ev<'a> {
                 }
             }
             Node::Do(a) => {
+                // A leaf that has finished is done, whether or not its target is still in sight
+                // (a back_off or a flight that took it out of sight succeeded all the same).
+                if let Some(done) = self.finished(id, &a.skill) {
+                    return done;
+                }
+                let sensed = a.target.as_ref().map(|t| {
+                    let _span = common::detail_span("brain.target");
+                    self.sensed(t)
+                });
                 let target = match &a.target {
-                    Some(t) => match self.sensed(t) {
+                    Some(t) => match sensed.flatten() {
                         Some(r) => r,
-                        None => return self.leaf_fail(id, &format!("{}: no {} in sight", a.skill, graph::describe_target(t))),
+                        None => {
+                            // Movement under way toward or away from a creature (an intent, a
+                            // flight, a `goto` to someone, an approach to act on them) goes by where
+                            // it was last seen until steering loses it (`motion::held`: a pursuit
+                            // goes to the last-seen place, a flight runs from it): one rule for a
+                            // graph's and an act's, not the next evaluation.
+                            if living_rules::steer::INTENTS.contains(&a.skill.as_str()) || matches!(a.skill.as_str(), "flee" | "goto") || self.approaching(id) {
+                                if let Some(act) = self.ctx.db.activity().id().find(self.me.id).filter(|x| x.node == id && x.revision == self.st.revision) {
+                                    self.running = Some(id);
+                                    self.status = act.label;
+                                    return St::Run;
+                                }
+                            }
+                            return self.leaf_fail(id, &format!("{}: no {} in sight", a.skill, graph::describe_target(t)));
+                        }
                     },
                     None => Resolved::none(),
                 };
                 self.want = (a.want.clone().unwrap_or_default(), a.want_qty.unwrap_or(0));
+                self.answers = (a.offer.unwrap_or(0), a.record.unwrap_or(0));
+                self.run = a.run;
+                self.spacing = a.spacing();
                 self.leaf(id, &a.skill, target, a.item.as_deref().unwrap_or(""), a.qty.unwrap_or(0), a.text.as_deref().unwrap_or(""), a.topic.as_deref().unwrap_or(""), graph::describe(n))
             }
             Node::Wait(s) => self.leaf(id, "wait", Resolved::none(), "", s.round().max(1.0) as u32, "", "", graph::describe(n)),
             Node::Say(s) => {
+                // Pacing: a say node speaks at most once per 45 s, so a looping graph does not
+                // chatter. The mark is set only when the line is actually spoken.
                 if self.mark_recent(id, 45_000) {
                     return St::Ok;
                 }
                 let to = match &s.to {
                     Some(t) => match self.resolve(t) {
                         Some(r) if r.class == 3 => r.id as u32,
-                        _ => return St::Fail,
+                        Some(_) => return self.say_failed(id, n, &format!("{} is not someone to speak to", graph::describe_target(t))),
+                        None => return self.say_failed(id, n, &format!("no {} in sight", graph::describe_target(t))),
                     },
                     None => 0,
                 };
-                self.set_mark(id);
-                match perceive::speak(self.ctx, self.me.id, &s.text, to, self.now) {
-                    Ok(()) => St::Ok,
-                    Err(_) => St::Fail,
+                // Said already (say-once): a mind's plan does not say again nearly the line it said
+                // to the same person within 45 s. A plan's install clears the node's own mark, so a
+                // plan whose routine already spoke its first line before the install would say it
+                // twice (ew2: Mirren Quill, 2.9 s apart); the chronicle keeps what was said across
+                // the install. Only that: a line to the room (its hearers are whoever is near when
+                // it is said: a crier's "Fresh bread!"), a graph the admin or a scene installed,
+                // a player's lines, a deliberation's own line and talk turns are never held back.
+                if to != 0 && self.from_mind() && crate::speech::said_to_recently(self.ctx, self.me.id, to, &s.text, self.now) {
+                    self.set_mark(id);
+                    self.status = format!("already said: {}", graph::describe(n));
+                    return St::Ok;
+                }
+                // Within the speaking limit the line waits its turn (a second line right after
+                // the first, or a graph installed just after one spoke) instead of being lost.
+                let way = s.way.as_deref().unwrap_or("say");
+                if crate::speech::too_soon_to_speak(self.ctx, self.me.id, way, self.now) {
+                    self.status = format!("about to {}", graph::describe(n));
+                    return St::Run;
+                }
+                // A queued line to someone is not said into the air (`speech_truth`): one the
+                // conversation has moved past is dropped, and one whose addressee is beyond what
+                // the way carries as it comes due is told to the speaker instead of said. (A way
+                // with a reach of its own, a whisper, refuses that in its check's words.)
+                if to != 0 && common::laws(self.ctx).speech_truth {
+                    if self.line_overtaken(id, to) {
+                        self.set_mark(id);
+                        self.status = format!("let go of {} (the talk moved on)", graph::describe(n));
+                        return St::Ok;
+                    }
+                    // Someone else addressed them since this plan was installed (or since this
+                    // node last spoke), and I heard it: under `heard_first_rethinks` the line waits
+                    // while my mind thinks again with that line in front of it. Only a mind's plan.
+                    if let Some(heard) = self.heard_first(id, to) {
+                        self.set_mark(id);
+                        crate::speech::held_for_another(self.ctx, self.me.id, to, &s.text, &heard, self.now);
+                        self.status = format!("held {} (another spoke to them first)", graph::describe(n));
+                        return St::Ok;
+                    }
+                    let sc = common::scripts(self.ctx);
+                    if let Some(w) = sc.way(way).filter(|w| w.reach <= 0.0) {
+                        if !crate::speech::within_reach(self.ctx, w, self.at, to, self.now) {
+                            return match crate::speech::unsaid(self.ctx, self.me.id, to, way, &s.text, self.now) {
+                                Ok(()) => {
+                                    self.set_mark(id);
+                                    St::Ok
+                                }
+                                Err(why) => self.say_failed(id, n, &why),
+                            };
+                        }
+                    }
+                }
+                match crate::speech::speak(self.ctx, self.me.id, &s.text, to, way, self.now) {
+                    Ok(()) => {
+                        self.set_mark(id);
+                        St::Ok
+                    }
+                    Err(why) => self.say_failed(id, n, &why),
                 }
             }
             Node::Think(reason) => {
@@ -478,14 +785,114 @@ impl<'a> Ev<'a> {
         }
     }
 
+    /// When the decision that installed this mind's plan perceived what it decided on: its install
+    /// thought's time less the model's time (`mind::decided_since`, from the thought row the
+    /// install wrote at `installed_ms`). Before talk-turns the windows below began at the install,
+    /// so what happened while the model thought (a reply already given in conversation) was not
+    /// "since" and the plan's line was said anyway (play-test 6).
+    fn decided_ms(&self, brain: &Brain) -> u64 {
+        self.ctx
+            .db
+            .thought()
+            .actor()
+            .filter(self.me.id)
+            .filter(|t| t.at_ms == brain.installed_ms && t.kind != "error")
+            .map(|t| brain.installed_ms.saturating_sub(t.latency_ms as u64))
+            .min()
+            .unwrap_or(brain.installed_ms)
+    }
+
+    /// Whether the graph running is a mind's plan (`brain.source = "mind"`), not one the admin,
+    /// a scene, a player's command or the battle harness installed.
+    fn from_mind(&self) -> bool {
+        self.ctx.db.brain().id().find(self.me.id).is_some_and(|b| b.source == "mind")
+    }
+
+    /// Whether a mind's plan's queued line to `to` (say node `id`) has been overtaken by the
+    /// conversation (`speech_truth`): since the decision that installed the plan perceived its
+    /// scene (`decided_ms`), or since this node last
+    /// spoke, `to` spoke to me (a line to me, or to no one in particular that the authority
+    /// marked as for me, salience 0.8 and above), or I spoke to them other than by this plan's
+    /// own say nodes (a conversation turn's reply). The plan's line was meant for a
+    /// conversation that has moved on; saying it now answers twice. Lines said in the plan's
+    /// own install (its deliberation's `say`) are not after it. Only a mind's plan: a routine's
+    /// or an instinct's say is the body's habit, not a line queued for one conversation.
+    fn line_overtaken(&self, id: u16, to: u32) -> bool {
+        let Some(brain) = self.ctx.db.brain().id().find(self.me.id).filter(|b| b.source == "mind") else { return false };
+        let own_mark = self.st.marks.iter().find(|m| m.node == id).map_or(0, |m| m.at_ms);
+        let since = self.decided_ms(&brain).max(own_mark);
+        // The times this plan's own say nodes spoke (their marks; a line is written at the
+        // moment its node is marked).
+        let own: Vec<u64> = self.st.marks.iter().filter(|m| m.node < DESIRE_MARK).map(|m| m.at_ms).collect();
+        let sc = common::scripts(self.ctx);
+        let words: Vec<&str> = sc.ways().iter().map(|w| w.kind.as_str()).collect();
+        // The install's own line (said in its transaction, at `installed_ms`) is the plan's first
+        // words, not a reply that overtook them.
+        self.ctx.db.experience().observer().filter(self.me.id).filter(|e| e.at_ms > since).any(|e| {
+            (e.kind == "said" && e.object == to && !own.contains(&e.at_ms) && e.at_ms != brain.installed_ms)
+                || (e.subject == to && words.contains(&e.kind.as_str()) && (e.object == self.me.id || e.object == 0 && e.salience >= 0.8))
+        })
+    }
+
+    /// Under `heard_first_rethinks`: a line another said to `to` that I heard since this mind's
+    /// plan's decision perceived its scene (`decided_ms`), or since say node `id` last spoke
+    /// (first-sight-crowd).
+    fn heard_first(&self, id: u16, to: u32) -> Option<Experience> {
+        if !common::laws(self.ctx).heard_first_rethinks {
+            return None;
+        }
+        let brain = self.ctx.db.brain().id().find(self.me.id).filter(|b| b.source == "mind")?;
+        let own_mark = self.st.marks.iter().find(|m| m.node == id).map_or(0, |m| m.at_ms);
+        crate::speech::addressed_by_another(self.ctx, self.me.id, to, self.decided_ms(&brain).max(own_mark))
+    }
+
+    /// A say that cannot be spoken is a failure the body is told about, like a refused leaf
+    /// (once per repeat window for the same line and reason), not a silent skip.
+    fn say_failed(&mut self, id: u16, n: &Node, why: &str) -> St {
+        let desc = graph::describe(n);
+        if act::refused(self.ctx, self.me.id, id, self.st.revision, "say", &desc, why, self.now) {
+            self.st.fails = self.st.fails.saturating_add(1);
+        }
+        self.last_fail = format!("say: {why}");
+        St::Fail
+    }
+
     fn leaf_fail(&mut self, id: u16, why: &str) -> St {
         let _ = id;
         self.last_fail = why.to_string();
         St::Fail
     }
 
+    /// The outcome of leaf `id`'s activity that has ended since it was last visited (read once),
+    /// unless that activity is still under way.
+    fn finished(&mut self, id: u16, skill: &str) -> Option<St> {
+        let _span = common::detail_span("brain.finished");
+        let rev = self.st.revision;
+        let l = self.st.last.clone().filter(|l| l.node == id && l.revision == rev)?;
+        if self.ctx.db.activity().id().find(self.me.id).is_some_and(|a| a.node == id && a.revision == rev) {
+            return None;
+        }
+        self.st.last = None;
+        if l.ok {
+            self.done = Some((id, skill.to_string()));
+            return Some(St::Ok);
+        }
+        self.last_fail = l.why.clone();
+        Some(St::Fail)
+    }
+
     #[allow(clippy::too_many_arguments)]
     fn leaf(&mut self, id: u16, skill: &str, target: Resolved, item: &str, qty: u32, text: &str, topic: &str, desc: String) -> St {
+        let _span = common::detail_span("brain.leaf");
+        // A committed move under way holds the body until it has run its course (a dash may cut
+        // in on a windup): the graph waits on it, as a player's keys do (`combat::held_by`).
+        if let Some(a) = self.ctx.db.activity().id().find(self.me.id) {
+            let own = a.node == id && a.revision == self.st.revision;
+            if !own && crate::combat::held_by(&common::scripts(self.ctx), &a, skill).is_err() {
+                self.status = a.label;
+                return St::Run;
+            }
+        }
         if self.acting {
             // A deliberate act holds the body: the graph's work waits for it, but a reflex
             // (flee, dodge, block, attack, throw) takes the body back at once.
@@ -506,26 +913,27 @@ impl<'a> Ev<'a> {
                 return St::Run;
             }
         }
-        if let Some(l) = self.st.last.clone() {
-            if l.node == id && l.revision == rev {
-                self.st.last = None;
-                if l.ok {
-                    return St::Ok;
-                }
-                self.last_fail = l.why.clone();
-                return St::Fail;
-            }
+        if let Some(done) = self.finished(id, skill) {
+            return done;
         }
         let want = std::mem::take(&mut self.want);
-        match act::begin(self.ctx, self.me.id, id, rev, skill, target, item, qty, text, topic, (&want.0, want.1), self.now) {
+        let answers = std::mem::take(&mut self.answers);
+        let run = self.run.take();
+        let spacing = std::mem::take(&mut self.spacing);
+        let _span = common::detail_span("brain.begin");
+        match act::begin(self.ctx, self.me.id, id, rev, skill, target, item, qty, text, topic, (&want.0, want.1), answers, run, spacing, self.now) {
             Ok(()) => {
+                common::diag(|| format!("begin:ok:{skill}"), 1);
                 self.running = Some(id);
                 self.status = self.ctx.db.activity().id().find(self.me.id).map(|a| a.label).unwrap_or(desc);
                 St::Run
             }
             Err(why) => {
+                // While profiling: what refused it, the reason's words without its numbers.
+                common::diag(|| format!("begin:refused:{skill}:{}", why.chars().filter(|c| !c.is_ascii_digit() && *c != '.').take(48).collect::<String>()), 1);
                 // Refused at the start: a failure like any other, not an unseen retry.
-                if act::refused(self.ctx, self.me.id, id, rev, &desc, &why, self.now) {
+                let _refused = common::detail_span("begin.refused");
+                if act::refused(self.ctx, self.me.id, id, rev, skill, &desc, &why, self.now) {
                     self.st.fails = self.st.fails.saturating_add(1);
                 }
                 self.last_fail = format!("{skill}: {why}");
@@ -545,18 +953,17 @@ impl<'a> Ev<'a> {
     }
 
     fn visible_creature(&mut self, id: u32) -> Option<Resolved> {
-        let c = self.scene().creatures.iter().find(|c| c.id == id)?.clone();
+        let c = self.seen_by_id(id)?;
         let ch = self.ctx.db.character().id().find(id)?;
         Some(Resolved { class: 3, id: id as u64, at: c.pos, kind: c.kind.to_string(), name: ch.name })
     }
 
     /// A structure or resource in sight by its id.
     fn visible_thing(&mut self, id: u64) -> Option<Resolved> {
-        let sc = self.scene();
-        if let Some((s, _)) = sc.structures.iter().find(|(s, _)| s.id == id) {
+        if let Some((s, _)) = self.structures().iter().find(|(s, _)| s.id == id) {
             return Some(Resolved { class: 2, id: s.id, at: (s.x, s.y), kind: s.kind.clone(), name: String::new() });
         }
-        sc.resources.iter().find(|(n, _)| n.id == id).map(|(n, _)| Resolved { class: 1, id: n.id, at: (n.x, n.y), kind: n.kind.clone(), name: String::new() })
+        self.resources().iter().find(|(n, _)| n.id == id).map(|(n, _)| Resolved { class: 1, id: n.id, at: (n.x, n.y), kind: n.kind.clone(), name: String::new() })
     }
 
     fn smelled_creature(&mut self, id: u32) -> Option<Resolved> {
@@ -589,7 +996,15 @@ impl<'a> Ev<'a> {
             }
             Target::Speaker => {
                 if self.st.speaker != 0 && now.saturating_sub(self.st.heard_ms) < 60_000 {
-                    self.visible_creature(self.st.speaker)
+                    let sp = self.st.speaker;
+                    // Unseen but heard (sight has a field): for a target the body acts on (turning
+                    // to it), toward where the voice is.
+                    self.visible_creature(sp).or_else(|| {
+                        if !self.smell {
+                            return None;
+                        }
+                        self.heard_list().iter().find(|c| c.id == sp).map(|c| Resolved::point(c.pos))
+                    })
                 } else {
                     None
                 }
@@ -625,6 +1040,8 @@ impl<'a> Ev<'a> {
                     None
                 }
             }
+            // Toward the nearest thing heard and not seen (a point: the body does not know who).
+            Target::Sound => self.heard_list().first().map(|c| Resolved::point(c.pos)),
             Target::Commotion => {
                 let sight = common::sight_for(self.ctx, self.me.id, &self.w, now);
                 crate::town::commotion(self.ctx, self.at, sight, now).map(Resolved::point)
@@ -641,10 +1058,17 @@ impl<'a> Ev<'a> {
             // An id is whatever the scene listed under it: a creature first, else a structure or
             // a resource in sight (a depleted bush still resolves, so its own rule says it is bare
             // instead of the body being told it is not there).
-            Target::Id(id) => self.visible_creature(*id).or_else(|| if self.smell { self.smelled_creature(*id) } else { None }).or_else(|| self.visible_thing(*id as u64)),
+            Target::Id(id) => {
+                // A mind names a figure it cannot make out by its sighting's handle (far-handle).
+                let id = &crate::far::resolve(self.ctx, self.me.id, *id);
+                self.visible_creature(*id).or_else(|| if self.smell { self.smelled_creature(*id) } else { None }).or_else(|| self.visible_thing(*id as u64))
+            }
             Target::Named(name) => {
-                let ids: Vec<u32> = self.scene().creatures.iter().filter(|c| &*c.kind == "person").map(|c| c.id).collect();
-                let id = ids.into_iter().find(|id| self.ctx.db.character().id().find(*id).map_or(false, |c| c.name.eq_ignore_ascii_case(name)))?;
+                let ids: Vec<u32> = self.creatures().iter().filter(|c| &*c.kind == "person").map(|c| c.id).collect();
+                // Only someone whose name this character perceives now: a figure too far away to
+                // make out is not found by a name (it would tell who they are; far-handle).
+                let (ctx, me, now) = (self.ctx, &self.me, self.now);
+                let id = ids.into_iter().find(|id| ctx.db.character().id().find(*id).is_some_and(|c| c.name.eq_ignore_ascii_case(name) && crate::perception::regard(ctx, me, &c, now).name))?;
                 self.visible_creature(id)
             }
             Target::Nearest(f) => self.nearest(f),
@@ -662,24 +1086,31 @@ impl<'a> Ev<'a> {
     }
 
     fn nearest(&mut self, f: &Filter) -> Option<Resolved> {
+        let _span = common::detail_span("brain.nearest");
+        common::diag(|| "nearest:calls", 1);
         match living_rules::catalog::kind_class(&f.kind)? {
             living_rules::catalog::KindClass::Creature => {
                 // Seen first; a creature smelled farther away only for a target the body acts on.
-                let seen: Vec<(u32, Rc<str>, f32)> = self.scene().creatures.iter().map(|c| (c.id, c.kind.clone(), c.dist)).collect();
-                let scent = if self.smell { common::scent_of(&self.me.kind) } else { None };
+                // The nearest seen of the kind the filter accepts (`species::pick_nearest`'s rule),
+                // read in place and tested for sight only as far as needed (`first_seen`); else a
+                // creature smelled farther away, for a target the body acts on.
                 let (ctx, me) = (self.ctx, self.me.id);
+                let kind = f.kind.clone();
+                let matches = |k: &str| kind == "creature" || k == kind;
                 let ok = |id: u32| f.relation.as_deref().map_or(true, |rel| relation_ok(ctx, me, id, rel)) && ctx.db.character().id().find(id).is_some();
-                let smelled = || self.smelled().iter().map(|c| (c.id, c.kind.clone(), c.dist)).collect();
-                match living_rules::species::pick_nearest(&f.kind, &seen, scent.as_ref(), smelled, ok)? {
-                    (id, false) => self.visible_creature(id),
-                    (id, true) => self.smelled_creature(id),
+                if let Some(c) = self.first_seen(|c| matches(&c.kind) && ok(c.id)) {
+                    let ch = ctx.db.character().id().find(c.id)?;
+                    return Some(Resolved { class: 3, id: c.id as u64, at: c.pos, kind: c.kind.to_string(), name: ch.name });
                 }
+                let scent = if self.smell { common::scent_of(&self.me.kind) } else { None };
+                let scent = scent.filter(|s| s.reaches(&kind, s.radius))?;
+                let id = self.smelled().iter().find(|c| matches(&c.kind) && scent.reaches(&c.kind, c.dist) && ok(c.id)).map(|c| c.id)?;
+                self.smelled_creature(id)
             }
             living_rules::catalog::KindClass::Resource => {
                 let now = self.now;
                 let ctx = self.ctx;
-                self.scene()
-                    .resources
+                self.resources()
                     .iter()
                     .find(|(n, _)| n.kind == f.kind && common::amount_now(ctx, n, now) >= 1.0)
                     .map(|(n, _)| Resolved { class: 1, id: n.id, at: (n.x, n.y), kind: n.kind.clone(), name: String::new() })
@@ -715,10 +1146,11 @@ impl<'a> Ev<'a> {
             living_rules::catalog::KindClass::Structure => {
                 let (me, ctx) = (self.me.id, self.ctx);
                 let holds = |id: u64| f.holds.as_deref().map_or(true, |item| common::inv_count(ctx, STRUCTURE_BIT | id, item) >= 1);
-                self.scene()
-                    .structures
+                // A kind `like` the one asked for counts as it (a world's `store` is a storage).
+                let sc = common::scripts(ctx);
+                self.structures()
                     .iter()
-                    .find(|(s, _)| s.kind == f.kind && (!f.mine || s.owner == me) && holds(s.id))
+                    .find(|(s, _)| sc.is_kind(&s.kind, &f.kind) && (!f.mine || s.owner == me) && holds(s.id))
                     .map(|(s, _)| Resolved { class: 2, id: s.id, at: (s.x, s.y), kind: s.kind.clone(), name: String::new() })
             }
         }
@@ -731,6 +1163,7 @@ impl<'a> Ev<'a> {
             Cond::Hunger(x) => x.test(self.needs.hunger),
             Cond::Energy(x) => x.test(self.needs.energy),
             Cond::Health(x) => x.test(self.needs.hp),
+            Cond::Stamina(x) => x.test(crate::breath::levels(&self.vit, self.now).0),
             Cond::Has(h) => {
                 let n = if h.item == "food" { common::food_count(self.ctx, self.me.id as u64) } else { common::inv_count(self.ctx, self.me.id as u64, &h.item) };
                 n >= h.at_least
@@ -751,10 +1184,10 @@ impl<'a> Ev<'a> {
             }
             Cond::Count(c) => {
                 let at = self.at;
-                self.scene();
-                let scene = self.scene.as_ref().expect("scene built");
+                self.creatures();
+                let creatures = self.scene.as_ref().and_then(|s| s.creatures.as_deref()).unwrap_or(&[]);
                 let mut n = 0u32;
-                for x in &scene.creatures {
+                for x in creatures {
                     if c.within.is_some_and(|w| dist(at, x.pos) > w) || (c.of.kind != "creature" && *x.kind != *c.of.kind) {
                         continue;
                     }
@@ -767,17 +1200,48 @@ impl<'a> Ev<'a> {
                 }
                 c.at_least.map_or(true, |a| n >= a) && c.at_most.map_or(true, |b| n <= b)
             }
+            // What someone in sight is visibly doing (docs/PERCEPTION.md, "What someone is visibly
+            // doing"): over the scene this evaluation already gathered (sight, field, sight line),
+            // two point lookups per creature that fits `who` and `within`; nothing else is read.
+            Cond::Doing(d) => {
+                let _span = common::span("brain.doing");
+                let (me, at, now) = (self.me.id, self.at, self.now);
+                let sc = common::scripts(self.ctx);
+                let want = d.phase.as_deref().and_then(living_rules::doing::Phase::parse);
+                self.creatures();
+                let creatures = self.scene.as_ref().and_then(|s| s.creatures.as_deref()).unwrap_or(&[]);
+                for x in creatures {
+                    if d.within.is_some_and(|w| dist(at, x.pos) > w) {
+                        continue;
+                    }
+                    if let Some(f) = &d.who {
+                        if (f.kind != "creature" && *x.kind != *f.kind) || f.relation.as_deref().is_some_and(|rel| !self.relation_ok(x.id, rel)) {
+                            continue;
+                        }
+                    }
+                    let Some(v) = crate::perception::visibly(self.ctx, &sc, x.id, now) else { continue };
+                    if want.is_some_and(|p| !v.phase.fits(p)) || d.is.as_deref().is_some_and(|i| !v.is(&sc, i)) || d.at_me.is_some_and(|m| v.at(me, at, x.pos) != m) {
+                        continue;
+                    }
+                    return true;
+                }
+                false
+            }
             Cond::HealthOf(h) => {
                 let Some(r) = self.resolve(&h.target).filter(|r| r.class == 3) else { return false };
-                let Some(v) = self.ctx.db.vitals().id().find(r.id as u32) else { return false };
-                let pct = common::needs(&v, self.now).hp / v.max_hp.max(1.0) * 100.0;
+                // As this character perceives it (its own exactly, another's band unless
+                // appraised), never the target's `vitals`; nothing when the law hides it.
+                let Some(t) = self.ctx.db.character().id().find(r.id as u32) else { return false };
+                let Some(seen) = crate::perception::health_seen(self.ctx, &self.me, &t, self.now) else { return false };
+                let pct = seen.percent();
                 h.above.map_or(true, |a| pct > a) && h.below.map_or(true, |b| pct < b)
             }
             Cond::HurtWithin(s) => self.vit.hurt_ms != 0 && self.now.saturating_sub(self.vit.hurt_ms) as f32 <= s * 1000.0,
             Cond::HeardWithin(s) => self.st.heard_ms != 0 && self.now.saturating_sub(self.st.heard_ms) as f32 <= s * 1000.0,
-            Cond::Night(b) => common::night(&self.w, self.now) == *b,
-            Cond::Bedtime(b) => common::day_phase(self.ctx, self.me.id, common::hour(&self.w, self.now)).0 == *b,
-            Cond::Evening(b) => common::day_phase(self.ctx, self.me.id, common::hour(&self.w, self.now)).1 == *b,
+            Cond::Night(b) => common::night(self.ctx, &self.w, self.now) == *b,
+            Cond::Bedtime(b) => common::day_phase(self.ctx, self.me.id, common::hour(&self.w, self.now)).bedtime == *b,
+            Cond::Evening(b) => common::day_phase(self.ctx, self.me.id, common::hour(&self.w, self.now)).evening == *b,
+            Cond::WorkHours(b) => common::day_phase(self.ctx, self.me.id, common::hour(&self.w, self.now)).work == *b,
             Cond::Raining(b) => crate::town::raining(self.ctx) == *b,
             Cond::Hailed(s) => self.hailed((s * 1000.0) as u64),
             Cond::Moving(b) => {
@@ -789,8 +1253,21 @@ impl<'a> Ev<'a> {
                 let me = self.me.id;
                 let now = self.now;
                 // Only a hostile move (its `<skill>_combat()` says so) names a victim.
-                let coming = self.ctx.db.activity().victim().filter(me).any(|a| a.phase == 1 && a.ends_ms > now);
-                coming == *b
+                let coming: Vec<u32> = self.ctx.db.activity().victim().filter(me).filter(|a| a.phase == 1 && a.ends_ms > now).map(|a| a.id).collect();
+                // While sight depends on facing (the `fov_on` law), a windup is a threat only when
+                // its maker is seen: one from behind is not seen coming (docs/COMBAT.md). Without a
+                // field, as before: any windup aimed at me.
+                let seen = coming.is_empty() || common::senses_of(self.ctx, me, &self.w, now).field.is_none() || {
+                    let mut any = false;
+                    for id in &coming {
+                        if self.seen_by_id(*id).is_some() {
+                            any = true;
+                            break;
+                        }
+                    }
+                    any
+                };
+                (!coming.is_empty() && seen) == *b
             }
             Cond::Believes(b) => self
                 .ctx
@@ -829,15 +1306,14 @@ impl<'a> Ev<'a> {
         if !self.me.ai {
             return;
         }
-        let night = common::night(&self.w, self.now);
-        let facts_fire = self.vit.hp_rate < 0.0 && night && self.needs.hunger < 100.0;
-        let checks: [(u32, bool, &str, f32); 5] = [
-            (1, self.needs.hunger >= 80.0, "You are very hungry.", 0.5),
-            (64, self.needs.hunger >= 97.0, "You are starving: your body is wasting away.", 0.8),
-            (2, self.needs.hp < 40.0, "You are badly hurt.", 0.7),
-            (4, facts_fire, "You are freezing in the night air; you need a fire or shelter.", 0.6),
-            (8, self.needs.energy < 12.0, "You are exhausted.", 0.4),
-        ];
+        let night = common::night(self.ctx, &self.w, self.now);
+        // The body's alarms are the `status_of` law's (one set of thresholds with the players'
+        // screens and the minds' body words).
+        let sc = common::scripts(self.ctx);
+        let span = common::span("brain.status");
+        let statuses = alarm_statuses(self.ctx, &sc, &self.me, &self.vit, night, self.now);
+        let checks: Vec<living_rules::script::Alarm> = statuses.iter().filter_map(|s| s.alarm.clone()).collect();
+        drop(span);
         // Psychological drives: an uneventful stretch makes curious people restless; time without
         // company makes sociable people lonely. They are felt, not prescribed: the mind decides.
         let traits = common::traits_of(self.ctx, self.me.id);
@@ -851,15 +1327,19 @@ impl<'a> Ev<'a> {
         let restless_after = 60_000.0 * (12.0 - trait_of("curiosity") / 12.0);
         let lonely_after = 60_000.0 * (14.0 - trait_of("sociability") / 10.0);
         let alone_ms = self.now.saturating_sub(self.st.heard_ms.max(self.st.spoke_ms));
-        // Grown people long for a child of their own, sooner the more nurturing they were born.
-        let broody = self.me.kind == "person" && self.me.stage == 2 && calm && !common::night(&self.w, self.now) && {
+        // Grown people long for a child of their own, sooner the more nurturing they were born
+        // (the laws `longing_after_min` and `longing_food`: how long after one's own birth or
+        // one's youngest child's, and how much food one must carry for it to be felt).
+        let broody = self.me.kind == "person" && self.me.stage == 2 && calm && !common::night(self.ctx, &self.w, self.now) && {
             let me = self.me.id;
             let db = &self.ctx.db;
+            let laws = common::laws(self.ctx);
             let expecting = db.expecting().iter().any(|e| e.a == me || e.b == me);
             let rearing = db.rearing().id().find(me).map_or(false, |r| r.until_ms > self.now);
             let last = db.character().parent_a().filter(me).chain(db.character().parent_b().filter(me)).map(|c| c.born_ms).max().unwrap_or(self.me.born_ms);
-            let wait = 60_000.0 * (20.0 - trait_of("nurture") / 6.0);
-            !expecting && !rearing && self.now.saturating_sub(last) as f32 > wait
+            let wait = living_rules::script::longing_wait_ms(laws.longing_after_min, trait_of("nurture"));
+            let provided = laws.longing_food <= 0.0 || common::food_count(self.ctx, me as u64) as f32 >= laws.longing_food;
+            !expecting && !rearing && self.now.saturating_sub(last) as f32 > wait && provided
         };
         // Who one would have a child with, when there is someone: the other parent of one's youngest.
         let longing = if broody {
@@ -909,7 +1389,7 @@ impl<'a> Ev<'a> {
                 let hour = common::hour(&self.w, self.now);
                 let since = (hour - r.rise_h).rem_euclid(24.0);
                 let day = living_rules::day_of(self.now, self.w.epoch_ms, self.w.day_ms) as u32;
-                if since < 3.0 && r.last_day < day && !common::day_phase(self.ctx, self.me.id, hour).0 {
+                if since < 3.0 && r.last_day < day && !common::day_phase(self.ctx, self.me.id, hour).bedtime {
                     r.last_day = day;
                     self.ctx.db.rhythm().id().update(r);
                     let season = common::season(self.ctx, self.now);
@@ -934,30 +1414,36 @@ impl<'a> Ev<'a> {
                 self.st.alerts &= !bit;
             }
         }
-        for (bit, on, text, sal) in checks {
-            let was = self.st.alerts & bit != 0;
-            if on && !was {
+        self.st.alerts &= !OLD_BODY_ALARMS;
+        let mut felt_now = 0u32;
+        for al in checks {
+            let bit = alarm_bit(&al.text);
+            felt_now |= bit;
+            let text = al.text.as_str();
+            if self.st.alerts & bit == 0 {
                 self.st.alerts |= bit;
-                percept(self.ctx, &self.me, self.now, "body", self.me.id, 0, self.at, text.into(), sal);
-                let urgent = match bit {
-                    1 => common::food_count(self.ctx, self.me.id as u64) == 0,
-                    2 | 4 | 64 => true,
-                    _ => false,
+                percept(self.ctx, &self.me, self.now, "body", self.me.id, 0, self.at, text.into(), al.salience);
+                let urgent = match al.think {
+                    living_rules::script::Think::Always => true,
+                    living_rules::script::Think::NoFood => common::food_count(self.ctx, self.me.id as u64) == 0,
+                    living_rules::script::Think::Never => false,
                 };
                 if urgent {
                     let mut why = format!("Your body: {text}");
-                    // Starving: show what one's hunger actually runs, so a way of eating that
-                    // cannot feed (e.g. one that only waits) can be seen and changed.
-                    if bit == 64 {
-                        // The routine one's food desire calls (seeded as "find food and eat").
+                    // Show what the want's routine actually runs (starving: one's food desire), so
+                    // a way of eating that cannot feed (e.g. one that only waits) can be seen and
+                    // changed.
+                    if !al.routine.is_empty() {
+                        let want = al.routine.as_str();
+                        // The routine the desire for it calls (food: seeded as "find food and eat").
                         let food_routine = self.ctx.db.brain().id().find(self.me.id).and_then(|b| living_rules::graph::parse(&b.graph).ok()).and_then(|g| match g.root {
-                            Node::Desires(ds) => ds.iter().find(|d| d.want.eq_ignore_ascii_case("food")).and_then(|d| match &*d.body {
+                            Node::Desires(ds) => ds.iter().find(|d| d.want.eq_ignore_ascii_case(want)).and_then(|d| match &*d.body {
                                 Node::Routine(r) => Some(r.clone()),
                                 _ => None,
                             }),
                             _ => None,
                         });
-                        let name = food_routine.unwrap_or_else(|| "eat".to_string());
+                        let name = food_routine.unwrap_or_else(|| if want.eq_ignore_ascii_case("food") { "eat".to_string() } else { want.to_string() });
                         if let Some(r) = self.ctx.db.routine().actor().filter(self.me.id).find(|r| crate::common::same_routine(&r.name, &name)) {
                             if let Ok(g) = living_rules::graph::parse(&r.graph) {
                                 let how: String = living_rules::graph::outline(&g.root).lines().map(|l| l.trim()).collect::<Vec<_>>().join("; ");
@@ -965,16 +1451,235 @@ impl<'a> Ev<'a> {
                             }
                         }
                     }
-                    self.deliberate(&why);
+                    // A bodily alarm wakes a sleeper, whoever plays it (a mind thinks on it).
+                    perceive::request_waking(self.ctx, self.me.id, &why, self.now, perceive::Wake::Body);
+                    if self.ctx.db.activity().id().find(self.me.id).is_none() {
+                        self.latched = None;
+                    }
                 }
-            } else if !on && was {
-                self.st.alerts &= !bit;
             }
+        }
+        // An alarm no longer felt ends its episode: felt again, it is told again.
+        self.st.alerts = (self.st.alerts & !LAW_ALARMS) | felt_now;
+    }
+
+    /// Attention cues (docs/ATTENTION.md): what this character's mind wrote should bring it to
+    /// think, matched by type against what it perceives now (the scene this evaluation built),
+    /// at most once per `cue_check_s` (a second by default), while the `cues_on` law holds. A thing that begins to match a cue
+    /// becomes one `noticed` experience quoting the mind's own reason, and a request to think;
+    /// once per thing per `cue_cooldown_s`, and once per character per `cue_gap_s` (things that
+    /// begin to match together are told in one line). A person too far away to make out matches
+    /// nothing, as they are no one in particular to the scene.
+    fn cues(&mut self) {
+        let laws = common::laws(self.ctx);
+        if !laws.cues_on {
+            return;
+        }
+        let (me, now) = (self.me.id, self.now);
+        let every = (laws.cue_check_s * 1000.0) as u64;
+        let due = CUE_HELD.with(|m| m.borrow().get(&me).map_or(true, |(t, _)| now.saturating_sub(*t) >= every));
+        if !due {
+            return;
+        }
+        // The scene `noticed` builds anyway, built first so the span times the cues' own work.
+        self.scene();
+        let _span = common::span("brain.cues");
+        let cues: Vec<Cue> = self.ctx.db.cue().actor().filter(me).filter(|c| c.refused.is_empty()).collect();
+        if cues.is_empty() {
+            CUE_HELD.with(|m| m.borrow_mut().insert(me, (now, Vec::new())));
+            return;
+        }
+        let ctx = self.ctx;
+        let at = self.at;
+        let places: Vec<Place> = if cues.iter().any(|c| !c.at.is_empty()) { ctx.db.place().actor().filter(me).collect() } else { Vec::new() };
+        let place_of = |name: &str| places.iter().find(|p| p.name.eq_ignore_ascii_case(name)).map(|p| (p.id, (p.x, p.y)));
+        let creatures: Vec<NearCreature> = self.creatures().to_vec();
+        let things: Vec<(u64, String, (f32, f32), f32)> = {
+            let mut v: Vec<(u64, String, (f32, f32), f32)> = self.resources().iter().map(|(r, d)| (CUE_RESOURCE | r.id, r.kind.clone(), (r.x, r.y), *d)).collect();
+            v.extend(self.structures().iter().map(|(s, d)| (CUE_STRUCTURE | s.id, s.kind.clone(), (s.x, s.y), *d)));
+            v
+        };
+        let scripts = common::scripts(ctx);
+        // Who each person in sight is to me, worked out only once and only if a cue asks.
+        let mut who_cache: Vec<(u32, bool, bool)> = Vec::new();
+        let mut matched: Vec<(usize, u64, String)> = Vec::new();
+        for (i, c) in cues.iter().enumerate() {
+            let near_place = |p: (f32, f32)| -> bool {
+                if c.at.is_empty() {
+                    return true;
+                }
+                place_of(&c.at).is_some_and(|(_, q)| dist(p, q) <= c.within)
+            };
+            let near_me = |d: f32| c.near_me <= 0.0 || d <= c.near_me;
+            if c.who_id != 0 || !c.who.is_empty() {
+                for n in &creatures {
+                    if n.id == me || (c.who_id != 0 && n.id != c.who_id) || !near_me(n.dist) || !near_place(n.pos) {
+                        continue;
+                    }
+                    let kind_ok = match c.who.as_str() {
+                        "" | "unknown" => true,
+                        k => &*n.kind == k,
+                    };
+                    if !kind_ok || (c.who == "unknown" && &*n.kind != "person") {
+                        continue;
+                    }
+                    if &*n.kind == "person" {
+                        let (named, far) = match who_cache.iter().find(|w| w.0 == n.id) {
+                            Some(w) => (w.1, w.2),
+                            None => {
+                                let Some(ch) = ctx.db.character().id().find(n.id) else { continue };
+                                let w = (n.id, crate::perception::knows_name(ctx, &self.me, &ch), crate::perception::regard(ctx, &self.me, &ch, now).far);
+                                who_cache.push(w);
+                                (w.1, w.2)
+                            }
+                        };
+                        if far || (c.who == "unknown" && named) {
+                            continue;
+                        }
+                    }
+                    // What it is visibly doing, and in which phase: what COMBAT_MIND 3.2's `doing`
+                    // condition reads (`perception::visibly`), under the same sight.
+                    let mut seen_doing = String::new();
+                    if !c.doing.is_empty() || !c.phase.is_empty() {
+                        let Some(v) = crate::perception::visibly(ctx, &scripts, n.id, now) else { continue };
+                        let want = living_rules::doing::Phase::parse(&c.phase);
+                        if (!c.doing.is_empty() && !v.is(&scripts, &c.doing)) || want.is_some_and(|p| !v.phase.fits(p)) {
+                            continue;
+                        }
+                        seen_doing = format!(", {} ({})", v.skill.replace('_', " "), v.phase.word());
+                    }
+                    let who = common::label_for(ctx, &self.me, n.id);
+                    let doing = seen_doing;
+                    matched.push((i, n.id as u64, format!("{who}, {:.0} tiles {}{doing}", n.dist, direction(at, n.pos))));
+                }
+            } else if !c.thing.is_empty() {
+                for (id, kind, pos, d) in &things {
+                    if (kind == &c.thing || (*id & CUE_STRUCTURE != 0 && scripts.is_kind(kind, &c.thing))) && near_me(*d) && near_place(*pos) {
+                        matched.push((i, *id, format!("{} {}, {:.0} tiles {}", article(kind), kind.replace('_', " "), d, direction(at, *pos))));
+                    }
+                }
+            } else if let Some((pid, p)) = place_of(&c.at) {
+                // Only a place: being there.
+                if dist(at, p) <= c.within {
+                    matched.push((i, CUE_PLACE | pid, format!("that you are at {}", c.at)));
+                }
+            }
+        }
+        let cooldown = (laws.cue_cooldown_s * 1000.0) as u64;
+        let gap = (laws.cue_gap_s * 1000.0) as u64;
+        let last_fire = cues.iter().flat_map(|c| c.fired.iter().map(|f| f.at_ms)).max().unwrap_or(0);
+        let mut held = CUE_HELD.with(|m| m.borrow().get(&me).map(|(_, h)| h.clone()).unwrap_or_default());
+        held.retain(|(cue, subj)| matched.iter().any(|(i, s, _)| cues[*i].id == *cue && s == subj));
+        let mut fire: Vec<(usize, u64, String)> = Vec::new();
+        for (i, subj, text) in matched {
+            let c = &cues[i];
+            if held.contains(&(c.id, subj)) || fire.iter().any(|f| f.0 == i && f.1 == subj) {
+                continue;
+            }
+            if c.fired.iter().any(|f| f.subject == subj && now.saturating_sub(f.at_ms) < cooldown) {
+                held.push((c.id, subj));
+                continue;
+            }
+            fire.push((i, subj, text));
+        }
+        let gap_ok = last_fire == 0 || now.saturating_sub(last_fire) >= gap;
+        if !fire.is_empty() && gap_ok {
+            let mut lines: Vec<String> = Vec::new();
+            let mut updates: Vec<Cue> = Vec::new();
+            let mut newly: Vec<(u64, u64)> = Vec::new();
+            for (i, c) in cues.iter().enumerate() {
+                let parts: Vec<&str> = fire.iter().filter(|f| f.0 == i).map(|f| f.2.as_str()).collect();
+                if parts.is_empty() {
+                    continue;
+                }
+                let why = if c.why.trim().is_empty() { c.for_key.split_once(':').map_or(c.for_key.as_str(), |(_, k)| k).replace('_', " ") } else { c.why.trim().to_string() };
+                lines.push(format!("You notice {}: you watch for this (\"{why}\").", parts.join("; ")));
+                let mut row = c.clone();
+                for f in fire.iter().filter(|f| f.0 == i) {
+                    row.fired.retain(|x| x.subject != f.1);
+                    row.fired.push(CueFire { subject: f.1, at_ms: now });
+                    row.fires += 1;
+                    newly.push((c.id, f.1));
+                }
+                if row.fired.len() > CUE_FIRED {
+                    let cut = row.fired.len() - CUE_FIRED;
+                    row.fired.drain(..cut);
+                }
+                updates.push(row);
+            }
+            let text = lines.join(" ");
+            // A cue fires only when its request to think is taken: one asked too soon after the
+            // last thought (the species' `think_min_s`) is tried again at the next check, so what
+            // the mind watched for is not told without the thought it asked for.
+            if crate::perceive::ask_to_think(ctx, me, &text, now) {
+                for row in updates {
+                    ctx.db.cue().id().update(row);
+                }
+                held.extend(newly);
+                let creatures_fired: Vec<u32> = fire.iter().filter(|f| f.1 >> 32 == 0).map(|f| f.1 as u32).collect();
+                let (subject, object) = (creatures_fired.first().copied().unwrap_or(0), creatures_fired.get(1).copied().unwrap_or(0));
+                percept(ctx, &self.me, now, "noticed", subject, object, at, text, 0.65);
+            }
+        }
+        CUE_HELD.with(|m| m.borrow_mut().insert(me, (now, held)));
+    }
+
+    /// Whether this node's act is under way and still approaching its target (phase 0).
+    fn approaching(&self, id: u16) -> bool {
+        self.ctx.db.activity().id().find(self.me.id).is_some_and(|x| x.node == id && x.revision == self.st.revision && x.phase == 0)
+    }
+
+    /// Over `FAMILIAR_LIMIT`, forget the oldest familiarity by age only (fix 1): never a row
+    /// touched within `FAMILIAR_KEEP_MS`, nor one whose thing is in the seen set (in view lately:
+    /// its row is touched only every 30 s, so its `last_ms` can trail while it stays in view).
+    fn prune_familiar(&mut self) {
+        let (me, now) = (self.me.id, self.now);
+        let mut all: Vec<(u64, u64, u64)> = self.ctx.db.familiar().actor().filter(me).map(|f| (f.last_ms, f.id, f.thing)).collect();
+        common::diag(|| "familiar:prune_checks", 1);
+        if all.len() <= FAMILIAR_LIMIT {
+            return;
+        }
+        // While profiling: how often a character is over the limit, and by how much.
+        common::diag(|| "familiar:over_limit", 1);
+        common::diag(|| "familiar:over_by", (all.len() - FAMILIAR_LIMIT) as u64);
+        all.sort_unstable();
+        let mut over = all.len() - FAMILIAR_LIMIT;
+        // With `notice_delta`, a structure within the last look's disc is in view (the next look
+        // passes over it without re-marking it), and is spared as one in the seen set is.
+        let look = if common::laws(self.ctx).notice_delta { self.ctx.db.last_look().id().find(me) } else { None };
+        let in_look = |thing: u64| {
+            look.as_ref().is_some_and(|l| {
+                thing & !((1 << 40) - 1) == FAM_STRUCTURE
+                    && self.ctx.db.structure().id().find(thing & ((1 << 40) - 1)).is_some_and(|s| common::dist((l.x, l.y), (s.x, s.y)) <= l.r)
+            })
+        };
+        for (last, id, thing) in all {
+            if over == 0 {
+                break;
+            }
+            if now.saturating_sub(last) < FAMILIAR_KEEP_MS || self.seen_key(thing).and_then(|k| self.seen_at(k)).is_some_and(|t| now.saturating_sub(t) < SEEN_MS) || in_look(thing) {
+                continue;
+            }
+            common::diag(|| "familiar:evict", 1);
+            self.ctx.db.familiar().id().delete(id);
+            over -= 1;
+        }
+    }
+
+    /// The seen-set key of a familiarity row's thing (as `noticed` looks things up), if any.
+    fn seen_key(&self, thing: u64) -> Option<u32> {
+        let id = (thing & ((1 << 40) - 1)) as u32;
+        match thing & !((1 << 40) - 1) {
+            FAM_CREATURE => Some(id),
+            FAM_STRUCTURE => Some(0x4000_0000 | (id & 0x3fff_ffff)),
+            FAM_REGION => Some(0x8000_0000 | id),
+            _ => None,
         }
     }
 
     /// Look up (and refresh) bodily familiarity; returns the previous record, if any.
     fn familiarity(&mut self, thing: u64) -> Option<Familiar> {
+        common::diag(|| "familiar:lookup", 1);
         let prev = self.ctx.db.familiar().by_actor_thing().filter((self.me.id, thing)).next();
         match prev.clone() {
             Some(mut f) => {
@@ -985,62 +1690,201 @@ impl<'a> Ev<'a> {
                 }
             }
             None => {
-                let row = self.ctx.db.familiar().insert(Familiar { id: 0, actor: self.me.id, thing, first_ms: self.now, last_ms: self.now, times: 1 });
-                if row.id % 16 == 0 {
-                    let mut all: Vec<(u64, u64)> = self.ctx.db.familiar().actor().filter(self.me.id).map(|f| (f.last_ms, f.id)).collect();
-                    if all.len() > FAMILIAR_LIMIT {
-                        all.sort_unstable();
-                        for (_, id) in &all[..all.len() - FAMILIAR_LIMIT] {
-                            self.ctx.db.familiar().id().delete(*id);
-                        }
-                    }
+                common::diag(|| "familiar:insert", 1);
+                self.ctx.db.familiar().insert(Familiar { id: 0, actor: self.me.id, thing, first_ms: self.now, last_ms: self.now, times: 1 });
+                // Every 64 new rows of this character, its count is checked against the limit.
+                let me = self.me.id;
+                let check = FAMILIAR_NEW.with(|n| {
+                    let mut n = n.borrow_mut();
+                    let c = n.entry(me).or_insert(0);
+                    *c += 1;
+                    *c % 64 == 0
+                });
+                if check {
+                    self.prune_familiar();
                 }
             }
         }
         prev
     }
 
+    /// Seen too far away to make out less than `FAR_RECHECK_MS` ago (its mark is dropped once due).
+    fn far_wait(&mut self, id: u32) -> bool {
+        let now = self.now;
+        let Some(at) = self.seen_at(FAR_MARK | id) else { return false };
+        if now.saturating_sub(at) < FAR_RECHECK_MS {
+            return true;
+        }
+        self.seen_drop(FAR_MARK | id);
+        false
+    }
+
+    /// When this character last looked at `key` (its seen set), if lately.
+    fn seen_at(&self, key: u32) -> Option<u64> {
+        let me = self.me.id;
+        SEEN.with(|s| s.borrow().get(&me).and_then(|m| m.get(&key).copied()))
+    }
+
+    fn seen_set(&mut self, key: u32, at: u64) {
+        let me = self.me.id;
+        SEEN.with(|s| {
+            s.borrow_mut().entry(me).or_default().insert(key, at);
+        });
+    }
+
+    fn seen_drop(&mut self, key: u32) {
+        let me = self.me.id;
+        SEEN.with(|s| {
+            if let Some(m) = s.borrow_mut().get_mut(&me) {
+                m.remove(&key);
+            }
+        });
+    }
+
+    /// A figure not to be looked at again for `FAR_RECHECK_MS`: too far away to make out, or
+    /// unplaced by a sleeper (its own mark, since a seen mark stays alive while it is in sight).
+    fn far_mark(&mut self, id: u32) {
+        self.seen_drop(id);
+        let now = self.now;
+        self.seen_set(FAR_MARK | id, now);
+    }
+
     /// Recently checked (fast path that avoids familiarity lookups every second).
     fn recently_seen(&mut self, key: u32) -> bool {
+        common::diag(|| "seen:check", 1);
         let now = self.now;
-        if let Some(s) = self.st.seen.iter_mut().find(|s| s.id == key) {
-            if now.saturating_sub(s.at_ms) < 90_000 {
-                if now.saturating_sub(s.at_ms) > 45_000 {
-                    s.at_ms = now;
+        if let Some(at) = self.seen_at(key) {
+            if now.saturating_sub(at) < SEEN_MS {
+                if now.saturating_sub(at) > SEEN_MS / 2 {
+                    self.seen_set(key, now);
                 }
                 return true;
             }
-            s.at_ms = now;
+            self.seen_set(key, now);
             return false;
         }
-        self.st.seen.push(Seen { id: key, at_ms: now });
-        if self.st.seen.len() > 96 {
-            self.st.seen.remove(0);
-        }
+        common::diag(|| "seen:miss", 1);
+        self.seen_set(key, now);
         false
     }
 
     /// Turn what is new to this character into experiences: unfamiliar regions, first
     /// encounters, long-absent faces, nearby danger and newly noticed structures. Routine
     /// re-perception only refreshes familiarity, so experience volume follows novelty.
+    /// A first sight of someone one cannot place asks for one thought (`first_sight_thinks`,
+    /// docs/FIRST_SIGHT.md). `fresh` holds this look's first sights of people it cannot place:
+    /// their label is not their name, by the shared answer `perception::regard` gives every
+    /// asker in the transaction (cue-cache), so never someone known by name, and far figures
+    /// never get a first sight. The reason is their part of the first-sight
+    /// line, word for word, through `ask_to_think` (the species' `think_min_s`, merged into a
+    /// pending request). A refused request is owed: tried again at later looks for at most
+    /// `FIRST_SIGHT_OWED_MS` while the person is in sight and still cannot be placed, and
+    /// settled by any thought made since. First sights bring one to think at most once per
+    /// `first_sight_gap_s`; within the gap they only merge into a request already pending. A
+    /// sleeper is asked nothing.
+    fn first_sight_asks(&mut self, fresh: Vec<(u32, String)>, cands: &[NearCreature], asleep: &mut Option<bool>) {
+        let (ctx, me, now) = (self.ctx, self.me.id, self.now);
+        let mut st = FIRST_SIGHT.with(|m| m.borrow().get(&me).cloned()).unwrap_or_default();
+        if fresh.is_empty() && st.owed.is_empty() {
+            return;
+        }
+        let before = st.clone();
+        let gap = (common::laws(ctx).first_sight_gap_s * 1000.0) as u64;
+        if *asleep.get_or_insert_with(|| crate::perceive::asleep(ctx, me)) {
+            st.owed.clear();
+        }
+        if !st.owed.is_empty() {
+            let thought_since = ctx.db.mind_state().id().find(me).is_some_and(|m| m.deliberated_ms > st.since_ms);
+            if thought_since || now.saturating_sub(st.since_ms) >= FIRST_SIGHT_OWED_MS {
+                st.owed.clear();
+            } else {
+                // Still in sight and still unplaced: the shared answer (`perception::regard`,
+                // once per observer and target per transaction, cue-cache) that names people in
+                // the look's labels: not named (unknown, or too far away to make out) and not far.
+                st.owed.retain(|(id, _)| {
+                    cands.iter().any(|c| c.id == *id)
+                        && ctx.db.character().id().find(*id).is_some_and(|t| {
+                            let r = crate::perception::regard(ctx, &self.me, &t, now);
+                            !r.name && !r.far
+                        })
+                });
+            }
+        }
+        let gap_ok = st.last_ms == 0 || now.saturating_sub(st.last_ms) >= gap;
+        if !fresh.is_empty() && !asleep.unwrap_or(false) {
+            if gap_ok {
+                for f in fresh {
+                    if !st.owed.iter().any(|o| o.0 == f.0) {
+                        st.owed.push(f);
+                    }
+                }
+            } else if ctx.db.deliberation().actor().find(me).is_some() {
+                // Within the gap: only joins a thought already asked for.
+                let parts: Vec<String> = fresh.into_iter().map(|f| f.1).collect();
+                crate::perceive::ask_to_think(ctx, me, &first_sight_text(&parts), now);
+            }
+        }
+        if st.owed.is_empty() {
+            st.since_ms = 0;
+        } else {
+            if st.since_ms == 0 {
+                st.since_ms = now;
+            }
+            if gap_ok {
+                let parts: Vec<String> = st.owed.iter().map(|o| o.1.clone()).collect();
+                if crate::perceive::ask_to_think(ctx, me, &first_sight_text(&parts), now) {
+                    st.last_ms = now;
+                    st.owed.clear();
+                    st.since_ms = 0;
+                }
+            }
+        }
+        if st != before {
+            FIRST_SIGHT.with(|m| {
+                let mut m = m.borrow_mut();
+                if st == FirstSightAsk::default() {
+                    m.remove(&me);
+                } else {
+                    m.insert(me, st);
+                }
+            });
+        }
+    }
+
     fn noticed(&mut self) {
         if !self.me.ai {
             return;
         }
+        let _span = common::span("brain.noticed");
+        common::diag(|| "noticed", 1);
+        // The seen set keeps what was looked at within its horizon (and far marks), no more.
+        let (me, now) = (self.me.id, self.now);
+        SEEN.with(|s| {
+            if let Some(m) = s.borrow_mut().get_mut(&me) {
+                m.retain(|_, at| now.saturating_sub(*at) < SEEN_MS + 30_000);
+            }
+        });
         let now = self.now;
         let at = self.at;
         let day = self.w.day_ms.max(1);
 
         // Regions.
+        let part = common::detail_span("noticed.regions");
         let chunk = living_rules::map::chunk_of(at.0, at.1);
         if !self.recently_seen(0x8000_0000 | chunk) && self.familiarity(FAM_REGION | chunk as u64).is_none() {
             let text = self.region_summary();
             percept(self.ctx, &self.me, now, "discovered", 0, 0, at, text, 0.5);
         }
+        // What it remembers of resources here (talk-places): a look, if one is due.
+        let (ctx, id, w) = (self.ctx, self.me.id, &self.w);
+        crate::stock::look(ctx, &self.me, at, || common::sight_for(ctx, id, w, now), now);
 
+        drop(part);
         // Creatures.
+        let part = common::detail_span("noticed.creatures");
         let me_kind = self.me.kind.clone();
-        let cands: Vec<NearCreature> = self.scene().creatures.iter().filter(|c| &*c.kind != "deer" || me_kind != "person").cloned().collect();
+        common::diag(|| "noticed:creatures", self.creatures().len() as u64);
+        let cands: Vec<NearCreature> = self.creatures().iter().filter(|c| &*c.kind != "deer" || me_kind != "person").cloned().collect();
         let people = cands.iter().filter(|c| &*c.kind == "person").count();
         let laws = common::laws(self.ctx);
         let crowded = people as f32 > laws.crowd;
@@ -1054,25 +1898,75 @@ impl<'a> Ev<'a> {
         let wolf_near = cands.iter().any(|c| &*c.kind == "wolf" && c.dist <= if was_near { laws.danger_far } else { laws.danger_near });
         let wolf_arrived = wolf_near && self.st.alerts & WOLF_NEAR == 0;
         self.st.alerts = if wolf_near { self.st.alerts | WOLF_NEAR } else { self.st.alerts & !WOLF_NEAR };
+        // Everyone in sight is perceived (docs/STRANGERS.md): each person (or one of one's own
+        // kind) seen for the first time is told, in a crowd too. First sights of one look go in
+        // one line, at most FIRST_SIGHTS_PER_LINE of them (more wait for the next look, unmarked);
+        // people whose names one does not know first, then the nearest. Other news (a wolf, someone
+        // again after a long time, danger close) stays at two lines a look.
         let mut announced = 0;
-        for c in cands {
-            if announced >= 2 {
-                break;
-            }
-            if crowded && &*c.kind == "person" && self.relation(c.id).is_none() {
-                continue;
+        let mut firsts: Vec<(u32, (f32, f32), String, bool)> = Vec::new();
+        // Whether this body sleeps, read only when a first sight needs it.
+        let mut asleep: Option<bool> = None;
+        for c in &cands {
+            let kin = &*c.kind == "person" || *c.kind == *me_kind;
+            if announced >= 2 || (kin && firsts.len() >= FIRST_SIGHTS_PER_LINE) {
+                // Only a first sight that still fits this look's line goes on; the rest are left
+                // for the next look, untouched (neither marked seen nor made familiar).
+                let fits = kin && firsts.len() < FIRST_SIGHTS_PER_LINE;
+                let recent = self.seen_at(c.id).is_some_and(|t| now.saturating_sub(t) < SEEN_MS);
+                if !fits || recent || self.ctx.db.familiar().by_actor_thing().filter((self.me.id, FAM_CREATURE | c.id as u64)).next().is_some() {
+                    continue;
+                }
             }
             let danger = wolf_arrived && &*c.kind == "wolf" && c.dist <= laws.danger_near;
+            // Seen too far away to make out within the last 5 s: not looked at again yet.
+            if &*c.kind == "person" && self.far_wait(c.id) {
+                continue;
+            }
             if self.recently_seen(c.id) && !danger {
                 continue;
             }
-            let prev = self.familiarity(FAM_CREATURE | c.id as u64);
             let Some(ch) = self.ctx.db.character().id().find(c.id) else { continue };
+            // A person too far away to make out (the `perceived_of` law's `far`) is not yet a
+            // first sight, nor someone seen again: who they are cannot be told. They stay in the
+            // scene as a figure; the look is retried in 5 s and told once they can be made out,
+            // and no `familiar` row is written from afar (far-label, docs/STRANGERS.md).
+            if ch.kind == "person" {
+                let due = self.ctx.db.familiar().by_actor_thing().filter((self.me.id, FAM_CREATURE | c.id as u64)).next().map_or(true, |f| now.saturating_sub(f.last_ms) > day);
+                if due && crate::perception::regard(self.ctx, &self.me, &ch, now).far {
+                    // Not "seen": a far figure is looked at again in 5 s (its own mark, since
+                    // `recently_seen` keeps a mark alive while someone stays in sight).
+                    self.far_mark(c.id);
+                    continue;
+                }
+            }
             let who = common::label_for(self.ctx, &self.me, c.id);
-            let doing = self.ctx.db.activity().id().find(c.id).map(|a| format!(", {}", a.label)).unwrap_or_default();
+            // Under `first_sight_thinks` a sleeper does not see someone it cannot place for the
+            // first time (a sleeping body is not watching, docs/FIRST_SIGHT.md): no line and no
+            // `familiar` row; it is looked at again in 5 s, as a far figure is, and the first
+            // look after waking is the first sight.
+            if laws.first_sight_thinks
+                && (ch.kind == "person" || ch.kind == self.me.kind)
+                && who != ch.name
+                && self.ctx.db.familiar().by_actor_thing().filter((self.me.id, FAM_CREATURE | c.id as u64)).next().is_none()
+                && *asleep.get_or_insert_with(|| crate::perceive::asleep(self.ctx, self.me.id))
+            {
+                self.far_mark(c.id);
+                continue;
+            }
+            let prev = self.familiarity(FAM_CREATURE | c.id as u64);
+            let doing = crate::perception::doing_of(self.ctx, c.id, (self.me.id, &me_kind, at), &cands, now).map(|d| format!(", {d}")).unwrap_or_default();
             let place = format!("{:.0} tiles {}{doing}", c.dist, direction(at, c.pos));
             let (text, sal) = match prev {
-                None if ch.kind == "person" || ch.kind == self.me.kind => (format!("For the first time you see {who}, {place}."), 0.45),
+                None if ch.kind == "person" || ch.kind == self.me.kind => {
+                    let named = who == ch.name;
+                    // The body's form by sex goes with a person's first sight (body-sex), so a
+                    // mind remembers it with whom it saw: "a stranger (a woman), 9 tiles west".
+                    let form = crate::sex::word(self.ctx, &ch).map(|f| format!(" ({} {f})", living_rules::sex::article(&f))).unwrap_or_default();
+                    crate::sex::remember(self.ctx, &self.me, &ch, now);
+                    firsts.push((c.id, c.pos, format!("{who}{form}, {place}"), named));
+                    continue;
+                }
                 None => (format!("You see {who} {place}."), 0.65),
                 Some(f) if now.saturating_sub(f.last_ms) > day => (format!("You see {who} again after a long time, {place}."), 0.25),
                 Some(_) if danger => {
@@ -1083,33 +1977,115 @@ impl<'a> Ev<'a> {
             announced += 1;
             percept(self.ctx, &self.me, now, "saw", c.id, 0, c.pos, text, sal);
         }
+        if !firsts.is_empty() {
+            // Unnamed first (a stable sort keeps the nearest first within each).
+            firsts.sort_by_key(|f| f.3);
+            let (subject, object) = (firsts[0].0, firsts.get(1).map_or(0, |f| f.0));
+            let pos = firsts[0].1;
+            let unplaced: Vec<(u32, String)> = firsts.iter().filter(|f| !f.3).map(|f| (f.0, f.2.clone())).collect();
+            let parts: Vec<String> = firsts.into_iter().map(|f| f.2).collect();
+            percept(self.ctx, &self.me, now, "saw", subject, object, pos, first_sight_text(&parts), 0.45);
+            if laws.first_sight_thinks {
+                self.first_sight_asks(unplaced, &cands, &mut asleep);
+            }
+        } else if laws.first_sight_thinks {
+            self.first_sight_asks(Vec::new(), &cands, &mut asleep);
+        }
+
+        // Sounds out of sight (only while sight depends on facing): someone or something heard
+        // near is noticed when it begins, as a person would ("You hear a person near, behind
+        // you, to the south-west."), never who it is. Its percept names no one and is placed
+        // where the listener stands.
+        drop(part);
+        let part = common::detail_span("noticed.sounds");
+        let near = self.heard_list().iter().find(|c| c.dist <= laws.heard_near_m).cloned();
+        if let Some(c) = near.as_ref().filter(|_| self.st.alerts & SOUND_NEAR == 0) {
+            let heading = self.ctx.db.body().id().find(self.me.id).map_or(0.0, |b| common::facing_at(&b, now));
+            let (what, wh, far) = living_rules::sight::heard_words(&crate::perception::heard_kind(self.ctx, &c.kind), at, heading, c.pos, 0);
+            percept(self.ctx, &self.me, now, "signal", 0, 0, at, format!("You hear {what} {far}, {wh}."), 0.3);
+        }
+        self.st.alerts = if near.is_some() { self.st.alerts | SOUND_NEAR } else { self.st.alerts & !SOUND_NEAR };
 
         // Structures. One made of several tiles (a town gate is a block of gate tiles) is noticed
         // once: new tiles touching others of the same kind and owner are one thing, and nothing
         // is said when any part of it was already familiar.
-        let structures: Vec<(u64, String, u32, (f32, f32), f32)> = self.scene().structures.iter().map(|(s, d)| (s.id, s.kind.clone(), s.owner, (s.x, s.y), *d)).collect();
-        let mut new: Vec<usize> = Vec::new();
-        for (i, (id, _, _, _, _)) in structures.iter().enumerate() {
-            if !self.recently_seen(0x4000_0000 | (*id as u32 & 0x3fff_ffff)) && self.familiarity(FAM_STRUCTURE | id).is_none() {
-                new.push(i);
+        // Durable block ranges answer structure newness. The legacy path uses recent marks
+        // and familiarity. Details are copied only when something in sight is new.
+        drop(part);
+        let _part = common::detail_span("noticed.structures");
+        let mut seen = crate::seen_structures::Look::default();
+        let new: Vec<usize> = if laws.notice_inplace {
+            let ids = self.new_structures_in_place(&laws, &mut seen);
+            if ids.is_empty() {
+                // An unchanged look can still have migrated legacy familiarity.
+                seen.write(self.ctx);
+                return;
+            }
+            common::diag(|| "notice_inplace:listed", 1);
+            let ids: std::collections::HashSet<u64> = ids.into_iter().collect();
+            self.structures().iter().enumerate().filter(|(_, (s, _))| ids.contains(&s.id)).map(|(i, _)| i).collect()
+        } else {
+            let ids: Vec<_> = self.structures().iter().map(|(s, _)| (s.id, s.chunk)).collect();
+            common::diag(|| "noticed:structures", ids.len() as u64);
+            let mut new: Vec<usize> = Vec::new();
+            for (i, (id, chunk)) in ids.into_iter().enumerate() {
+                if self.new_structure(&laws, &mut seen, id, chunk) {
+                    new.push(i);
+                }
+            }
+            new
+        };
+        seen.write(self.ctx);
+        common::diag(|| "noticed:structures_new", new.len() as u64);
+        if new.is_empty() {
+            return;
+        }
+        let structures: Vec<(u64, String, u32, (f32, f32), f32)> = self.structures().iter().map(|(s, d)| (s.id, s.kind.clone(), s.owner, (s.x, s.y), *d)).collect();
+        let mut told = vec![false; structures.len()];
+        // Which are new, by index (a look among many new remains asks it of each part).
+        let mut is_new = vec![false; structures.len()];
+        for &i in &new {
+            is_new[i] = true;
+        }
+        // Tiles by kind and owner, each in list order, for `joined_tiles`.
+        let mut groups: std::collections::HashMap<(&str, u32), Vec<usize>> = std::collections::HashMap::new();
+        for (j, (_, kind, owner, _, _)) in structures.iter().enumerate() {
+            if kind != "remains" {
+                groups.entry((kind.as_str(), *owner)).or_default().push(j);
             }
         }
-        let mut told = vec![false; structures.len()];
+        let mut counted = Vec::new();
+        let mut known = None;
         for &i in &new {
             if told[i] {
                 continue;
             }
-            let part = joined_tiles(&structures, i);
+            let (id, kind, owner, pos, dist) = &structures[i];
+            if kind == "remains" {
+                // Each body is an individual, even when several lie on the same tile.
+                if *owner != self.me.id {
+                    let (species, readable) = common::remains_label(self.ctx, *id, *owner);
+                    let named = &*species == "person" && known.get_or_insert_with(|| crate::perception::known_name_ids(self.ctx, &self.me)).contains(owner);
+                    if named || readable {
+                        self.notice_remains(*owner, *pos, *dist);
+                    } else {
+                        let group = if &*species == "person" { "stranger".to_owned() } else { species.to_string() };
+                        counted.push((*owner, *pos, *dist, group));
+                    }
+                }
+                continue;
+            }
+            let part = joined_tiles(&structures, &groups[&(kind.as_str(), *owner)], i);
             for &k in &part {
                 told[k] = true;
             }
-            let (_, kind, owner, _, _) = &structures[i];
-            if *owner == self.me.id || part.iter().any(|k| !new.contains(k)) {
+            if *owner == self.me.id || part.iter().any(|k| !is_new[*k]) {
                 continue;
             }
             let nearest = *part.iter().min_by(|a, b| structures[**a].4.total_cmp(&structures[**b].4)).unwrap_or(&i);
             let (_, _, _, pos, dist) = structures[nearest];
-            let by = if *owner != 0 && kind != "remains" { format!(" built by {}", common::label_for(self.ctx, &self.me, *owner)) } else if kind == "remains" { format!(" — the remains of {}", common::label_for(self.ctx, &self.me, *owner)) } else { String::new() };
+            let whose = if *owner != 0 { common::owner_label(self.ctx, &self.me, *owner, kind) } else { None };
+            let by = if let Some(w) = &whose { format!(" built by {w}") } else { String::new() };
             // Its extent as it lies on the ground (a town gate is a block of gate tiles).
             let wide = if part.len() > 1 {
                 let (xs, ys): (Vec<f32>, Vec<f32>) = part.iter().map(|k| structures[*k].3).unzip();
@@ -1119,8 +2095,168 @@ impl<'a> Ev<'a> {
                 String::new()
             };
             let text = format!("You notice a {kind}{wide}{by}, {dist:.0} tiles {}.", direction(at, pos));
-            percept(self.ctx, &self.me, now, "saw", *owner, 0, pos, text, if kind == "remains" { 0.8 } else { 0.35 });
+            // Whose it is, only as the line names them (house-owner-label).
+            crate::perceive::percept_owned(self.ctx, &self.me, now, "saw", if whose.is_some() { *owner } else { 0 }, 0, pos, text, 0.35);
         }
+        if let [only] = counted.as_slice() {
+            self.notice_remains(only.0, only.1, only.2);
+        } else if let Some(nearest) = counted.first() {
+            let mut groups: Vec<(&str, usize)> = Vec::new();
+            for (_, _, _, label) in &counted {
+                if let Some(group) = groups.iter_mut().find(|(name, _)| *name == label) {
+                    group.1 += 1;
+                } else {
+                    groups.push((label, 1));
+                }
+            }
+            let (_, pos, dist, _) = nearest;
+            let text = living_rules::remains::counted_line(&groups, (*dist, direction(at, *pos)));
+            crate::perceive::percept_seen(self.ctx, &self.me, now, "saw", 0, 0, *pos, text, 0.8, false);
+        }
+    }
+
+    fn notice_remains(&self, owner: u32, pos: (f32, f32), dist: f32) {
+        let label = common::label_for(self.ctx, &self.me, owner);
+        let direction = direction(self.at, pos);
+        let text = format!("You notice a remains — the remains of {label}, {dist:.0} tiles {direction}.");
+        crate::perceive::percept_seen(self.ctx, &self.me, self.now, "saw", owner, 0, pos, text, 0.8, false);
+    }
+
+    fn new_structure(&mut self, laws: &living_rules::script::Laws, look: &mut crate::seen_structures::Look, id: u64, chunk: u32) -> bool {
+        let thing = FAM_STRUCTURE | id;
+        if !laws.seen_ranges {
+            return !self.recently_seen(structure_key(id)) && self.familiarity(thing).is_none();
+        }
+
+        let (ctx, actor) = (self.ctx, self.me.id);
+        let previously_seen = look.seen(ctx, actor, chunk, id);
+        if previously_seen && !laws.seen_ranges_check {
+            return false;
+        }
+
+        // Legacy recognition seeds the ranges. Migration and its deletion are in the
+        // same transaction as the block write. The diagnostic maintains a shadow row.
+        let legacy = if laws.seen_ranges_check {
+            self.recently_seen(structure_key(id));
+            self.familiarity(thing)
+        } else {
+            ctx.db.familiar().by_actor_thing().filter((actor, thing)).next()
+        };
+        if !previously_seen {
+            look.add(ctx, actor, chunk, id);
+        }
+        let new = !previously_seen && legacy.is_none();
+        if laws.seen_ranges_check {
+            common::diag(|| "seen_ranges:checked", 1);
+            match (previously_seen, legacy.is_some()) {
+                (true, false) => common::diag(|| "seen_ranges:kept", 1),
+                (false, true) => {
+                    common::diag(|| "seen_ranges:differed", 1);
+                    log::error!("seen_ranges of {actor}: structure {id} was missing from the ranges");
+                }
+                _ => {}
+            }
+        } else if let Some(row) = legacy {
+            ctx.db.familiar().id().delete(row.id);
+            common::diag(|| "seen_ranges:migrated", 1);
+        }
+        new
+    }
+
+    /// With ranges on, recent marks and ordering for familiarity pruning are unnecessary.
+    /// The structures in sight that are new to this character (`noticed`, `notice_inplace`,
+    /// docs/BATTLE_SCALE.md battle-exact-2 C1), read in place from the chunks' lists: no copy of
+    /// them and no sort unless something is new. The same calls as the full list's pass, in the
+    /// same order where order matters:
+    /// - one looked at lately (its seen mark under `SEEN_MS`) is re-marked (`recently_seen`). That
+    ///   changes no answer `prune_familiar` gives (it spares marks under `SEEN_MS` either way), so
+    ///   these may come first;
+    /// - every other is marked and its familiarity asked, nearest first, ties in `structures_near`'s
+    ///   order (its sort is stable, so the order of these few is theirs in the full list). Those
+    ///   calls insert rows and may prune, so they keep the full pass's order.
+    /// `check` (`notice_inplace_check`) works the split out from the full list as well, before
+    /// any mark is set, and counts any difference.
+    ///
+    /// With `delta` (`notice_delta`, docs/BATTLE_SCALE.md C2), a structure that was in sight at the
+    /// character's last look (`last_look`, within `LOOK_VALID_MS`: in its disc, and no newer than the
+    /// highest id in sight then) is passed over: it was recorded in a range or in `familiar`
+    /// (pruning spares legacy rows in the last look's disc). Only structures built since or come
+    /// into sight are checked. `notice_delta_check` verifies that skipped IDs are recognized.
+    /// A look that finds no valid row checks everything.
+    fn new_structures_in_place(&mut self, laws: &living_rules::script::Laws, look: &mut crate::seen_structures::Look) -> Vec<u64> {
+        let (check, delta, delta_check) = (laws.notice_inplace_check, laws.notice_delta, laws.notice_delta_check);
+        let (ctx, me, now, at) = (self.ctx, self.me.id, self.now, self.at);
+        let r = common::sight_for(ctx, me, &self.w, now);
+        let lately = |k: u32| !laws.seen_ranges && SEEN.with(|s| s.borrow().get(&me).and_then(|m| m.get(&k).copied())).is_some_and(|t| now.saturating_sub(t) < SEEN_MS);
+        let last = if delta { ctx.db.last_look().id().find(me).filter(|l| now.saturating_sub(l.at_ms) <= LOOK_VALID_MS) } else { None };
+        if delta {
+            common::diag(|| if last.is_some() { "notice_delta:incremental" } else { "notice_delta:whole" }, 1);
+        }
+        let mut recent: Vec<u32> = Vec::new();
+        let mut other: Vec<(u64, u32, f32)> = Vec::new();
+        let mut passed: Vec<(u64, u32)> = Vec::new();
+        let mut top = 0u64;
+        common::for_structures_near(ctx, at, r, |s, d| {
+            top = top.max(s.id);
+            if let Some(l) = &last {
+                if s.id <= l.max_structure && common::dist((l.x, l.y), (s.x, s.y)) <= l.r {
+                    if delta_check || check {
+                        passed.push((s.id, s.chunk));
+                    }
+                    common::diag(|| "notice_delta:passed", 1);
+                    return;
+                }
+            }
+            let k = structure_key(s.id);
+            if lately(k) {
+                recent.push(k);
+            } else {
+                other.push((s.id, s.chunk, d));
+            }
+        });
+        if delta {
+            let row = LastLook { id: me, x: at.0, y: at.1, r, max_structure: top, at_ms: now };
+            if last.is_some() || ctx.db.last_look().id().find(me).is_some() {
+                ctx.db.last_look().id().update(row);
+            } else {
+                ctx.db.last_look().insert(row);
+            }
+        }
+        if delta_check && !passed.is_empty() {
+            common::diag(|| "notice_delta:checked", passed.len() as u64);
+            let missing: Vec<u64> = passed.iter().filter_map(|&(id, chunk)| {
+                let seen = (laws.seen_ranges && look.seen(ctx, me, chunk, id))
+                    || ctx.db.familiar().by_actor_thing().filter((me, FAM_STRUCTURE | id)).next().is_some();
+                (!seen).then_some(id)
+            }).collect();
+            if !missing.is_empty() {
+                common::diag(|| "notice_delta:differed", missing.len() as u64);
+                log::error!("notice_delta of {me}: passed over {missing:?}, which have no recognition record (they would have been new)");
+            }
+        }
+        if !laws.seen_ranges || laws.seen_ranges_check || check {
+            other.sort_by(|a, b| a.2.total_cmp(&b.2));
+        }
+        if check {
+            // The full list's split, less what the last look lets this one pass over (`delta`).
+            let full: Vec<u64> = self.structures().iter().filter(|(s, _)| !passed.contains(&(s.id, s.chunk)) && !lately(structure_key(s.id))).map(|(s, _)| s.id).collect();
+            let seen_n = self.structures().iter().filter(|(s, _)| !passed.contains(&(s.id, s.chunk))).count() - full.len();
+            common::diag(|| "notice_inplace:checked", 1);
+            if full.iter().ne(other.iter().map(|(id, _, _)| id)) || seen_n != recent.len() {
+                common::diag(|| "notice_inplace:differed", 1);
+                log::error!("notice_inplace of {me}: in place {:?} ({} seen lately) differs from the full list's {:?} ({seen_n})", other.iter().map(|o| o.0).collect::<Vec<_>>(), recent.len(), full);
+            }
+        }
+        for k in recent {
+            self.recently_seen(k);
+        }
+        let mut new = Vec::new();
+        for (id, chunk, _) in other {
+            if self.new_structure(laws, look, id, chunk) {
+                new.push(id);
+            }
+        }
+        new
     }
 
     /// One-line description of the surroundings when a region is first discovered.
@@ -1129,7 +2265,7 @@ impl<'a> Ev<'a> {
         let now = self.now;
         let mut kinds: Vec<(String, u32)> = Vec::new();
         let ctx = self.ctx;
-        for (n, _) in &self.scene().resources {
+        for (n, _) in self.resources() {
             if common::amount_now(ctx, n, now) < 0.0 {
                 continue;
             }
@@ -1141,12 +2277,14 @@ impl<'a> Ev<'a> {
         kinds.sort_by(|a, b| b.1.cmp(&a.1));
         let res = kinds.iter().map(|(k, n)| format!("{n} {}", k.replace('_', " "))).collect::<Vec<_>>().join(", ");
         let ctx = self.ctx;
-        let structures: Vec<String> = self
-            .scene()
-            .structures
-            .iter()
-            .take(4)
-            .map(|(s, _)| if s.owner != 0 { format!("{}'s {}", common::name_of(ctx, s.owner), s.kind) } else { s.kind.clone() })
+        let near: Vec<(u32, String)> = self.structures().iter().take(4).map(|(s, _)| (s.owner, s.kind.clone())).collect();
+        let structures: Vec<String> = near
+            .into_iter()
+            .map(|(owner, kind)| match common::owner_label(ctx, &self.me, owner, &kind) {
+                Some(_) if owner == self.me.id => format!("your {kind}"),
+                Some(w) => format!("{w}'s {kind}"),
+                None => kind,
+            })
             .collect();
         let map = common::map(self.ctx);
         let mut terrain = Vec::new();
@@ -1183,6 +2321,7 @@ impl<'a> Ev<'a> {
     fn after(mut self, result: St, root: &Node) {
         let ctx = self.ctx;
         let id = self.me.id;
+        let cancel = common::detail_span("after.cancel");
         // Interrupt an activity no running leaf owns anymore (the branch lost priority);
         // a deliberate act is not the graph's to interrupt (only a reflex does, in `leaf`).
         if let Some(a) = ctx.db.activity().id().find(id) {
@@ -1190,10 +2329,14 @@ impl<'a> Ev<'a> {
                 self.running = Some(a.node);
                 self.status = format!("{} (decided)", a.label);
                 self.path.clear();
-            } else if self.running != Some(a.node) || a.revision != self.st.revision {
+            } else if (self.running != Some(a.node) || a.revision != self.st.revision) && !crate::combat::committed(&common::scripts(ctx), &a) {
+                // A committed move (a dodge, a windup) runs its course though the branch that
+                // started it no longer holds (combat minds §3.2, committed-moves).
                 act::cancel(ctx, a, self.now, None);
             }
         }
+        drop(cancel);
+        let mind = common::detail_span("after.mind");
         if self.me.ai {
             match result {
                 // A plan with nothing applicable backs off longer than one that hit a concrete
@@ -1221,8 +2364,30 @@ impl<'a> Ev<'a> {
                 self.set_mark(REFLECT_MARK);
                 self.deliberate("A quiet moment to take stock of how things are going.");
             }
-            self.noticed();
+            // Cues keep their own interval (`cue_check_s`); what is new is looked for at most
+            // once a second per character (fix 2), not at every woken or combat evaluation.
+            self.cues();
+            let (me, now) = (self.me.id, self.now);
+            if NOTICED_AT.with(|n| n.borrow().get(&me).map_or(true, |t| now.saturating_sub(*t) >= NOTICE_MS)) {
+                NOTICED_AT.with(|n| n.borrow_mut().insert(me, now));
+                self.noticed();
+            }
         }
+        // Known ground (docs/MOVEMENT_MIND.md, step 3): every character, a person's too, marks
+        // the ground it sees at the noticing cadence; a walk planned over what it had seen is
+        // planned again when it now sees its way blocked.
+        let (me, now) = (self.me.id, self.now);
+        if LOOKED_AT.with(|n| n.borrow().get(&me).map_or(true, |t| now.saturating_sub(*t) >= NOTICE_MS)) {
+            LOOKED_AT.with(|n| n.borrow_mut().insert(me, now));
+            if let Some(b) = ctx.db.body().id().find(me) {
+                let changed = crate::known::mark(ctx, me, self.at, common::facing_at(&b, now), now);
+                if changed && common::laws(ctx).nav_belief {
+                    crate::motion::replan_if_blocked(ctx, me, now);
+                }
+            }
+        }
+        drop(mind);
+        let _write = common::detail_span("after.write");
         if result != St::Run && !self.running.is_some_and(act::held) {
             self.status = match result {
                 St::Ok => "done".into(),
@@ -1248,7 +2413,9 @@ impl<'a> Ev<'a> {
         let mut marks: Vec<Mark> = self.st.marks.iter().filter(|m| m.node < 0xD000 || m.node >= REFLECT_MARK).cloned().collect();
         marks.extend(cur.marks.iter().filter(|m| m.node >= 0xD000 && m.node < REFLECT_MARK).cloned());
         cur.marks = marks;
-        cur.seen = self.st.seen.clone();
+        // The seen marks live in the per-character seen set now (`SEEN`); the row's own list
+        // stays empty, so it is not rewritten at every evaluation.
+        cur.seen = Vec::new();
         cur.alerts = self.st.alerts;
         if self.st.last != self.orig.last && cur.last == self.orig.last {
             cur.last = self.st.last.clone();
@@ -1266,8 +2433,150 @@ impl<'a> Ev<'a> {
     }
 }
 
-/// Whether `me`'s relationship to `other` fits a selector's relation filter.
+/// A character's last look is the base of the next (`notice_delta`) for this long: about the seen
+/// set's horizon halved, so a look that came long after its last checks everything.
+const LOOK_VALID_MS: u64 = SEEN_MS / 2;
+
+/// A structure's key in the seen set (`recently_seen`).
+fn structure_key(id: u64) -> u32 {
+    0x4000_0000 | (id as u32 & 0x3fff_ffff)
+}
+
+/// A person seen too far away to make out is looked at again after this long (`noticed`,
+/// `far_wait`), under a mark of their own in `seen` (`FAR_MARK | id`).
+const FAR_RECHECK_MS: u64 = 5_000;
+const FAR_MARK: u32 = 0x2000_0000;
+
+/// First sights of one look that share one line (`noticed`).
+const FIRST_SIGHTS_PER_LINE: usize = 8;
+
+thread_local! {
+    /// Each character's last `status_of` answer and until when it stands (docs/BATTLE_SCALE.md,
+    /// battle-cheap path 2): the script revision, its body row, stage and night it was asked for,
+    /// and the first moment a fact the law reads can change with that row. A cache of the law's
+    /// answer: lost, the law is asked again.
+    static ALARM_CELLS: std::cell::RefCell<std::collections::HashMap<u32, AlarmCell>> = std::cell::RefCell::new(std::collections::HashMap::new());
+}
+
+struct AlarmCell {
+    rev: u32,
+    row: [u64; 20],
+    stage: u8,
+    night: bool,
+    until: u64,
+    statuses: Rc<Vec<living_rules::script::Status>>,
+}
+
+/// The body's statuses by the `status_of` law: from the character's cell while its row, stage
+/// and night are unchanged and no fact the law reads has moved (the `alarm_cells` law), else
+/// asked. The same statuses at the same moments: `alarm_cells_check` compares each.
+fn alarm_statuses(ctx: &ReducerContext, sc: &living_rules::script::Scripts, me: &Character, vit: &Vitals, night: bool, now: u64) -> Rc<Vec<living_rules::script::Status>> {
+    let laws = common::laws(ctx);
+    let ask = || {
+        let facts = living_rules::script::BodyFacts::of(&me.kind, crate::common::stage_name(me.stage), night, &vit.fields(), sc.meters(), now);
+        sc.status_of(&facts).unwrap_or_else(|e| {
+            log::warn!("status_of for {}: {e}", me.id);
+            Rc::new(Vec::new())
+        })
+    };
+    if !laws.alarm_cells {
+        return ask();
+    }
+    let (rev, row) = (common::scripts_rev(ctx), vit.bits());
+    let kept = ALARM_CELLS.with(|c| c.borrow().get(&me.id).filter(|e| e.rev == rev && e.row == row && e.stage == me.stage && e.night == night && now < e.until).map(|e| e.statuses.clone()));
+    if let Some(s) = kept {
+        common::diag(|| "alarm:kept", 1);
+        if laws.alarm_cells_check {
+            let fresh = ask();
+            common::diag(|| "alarm:checked", 1);
+            if fresh != s {
+                common::diag(|| "alarm:differed", 1);
+                log::error!("alarm cell of {}: kept {:?} differs from the law's {:?}", me.id, s.iter().map(|x| &x.name).collect::<Vec<_>>(), fresh.iter().map(|x| &x.name).collect::<Vec<_>>());
+                return fresh;
+            }
+        }
+        return s;
+    }
+    common::diag(|| "alarm:asked", 1);
+    if common::profiling() {
+        status_inputs_changed(sc, me, vit, night, now);
+    }
+    let statuses = ask();
+    let reads = sc.status_reads();
+    let until = living_rules::script::BodyFacts::next_change_ms(&vit.fields(), sc.meters(), now, reads.as_deref());
+    ALARM_CELLS.with(|c| {
+        let mut c = c.borrow_mut();
+        if c.len() > 8192 {
+            c.clear();
+        }
+        c.insert(me.id, AlarmCell { rev, row, stage: me.stage, night, until, statuses: statuses.clone() });
+    });
+    statuses
+}
+
+thread_local! {
+    /// While profiling: each body's facts at its last ask of the `status_of` law
+    /// (`status_inputs_changed`). A diagnostic only; nothing reads it otherwise.
+    static STATUS_PREV: std::cell::RefCell<std::collections::HashMap<u32, Vec<(String, f64)>>> = std::cell::RefCell::new(std::collections::HashMap::new());
+}
+
+/// While profiling, at each ask of the `status_of` law that its cell did not answer: which of the
+/// body's facts changed since its last ask (`status:changed:<fact>`), and how many at once
+/// (`status:changed_n:<n>`). The measure of how often a per-meter part of the law would be asked
+/// (docs/BATTLE_SCALE.md, note B).
+fn status_inputs_changed(sc: &living_rules::script::Scripts, me: &Character, vit: &Vitals, night: bool, now: u64) {
+    let _span = common::detail_span("status.diag");
+    let facts = living_rules::script::BodyFacts::of(&me.kind, crate::common::stage_name(me.stage), night, &vit.fields(), sc.meters(), now);
+    let mut cur: Vec<(String, f64)> = facts.fields.clone();
+    cur.extend(facts.share.iter().map(|(n, v)| (format!("share.{n}"), *v)));
+    cur.push(("night".into(), night as u8 as f64));
+    cur.push(("stage".into(), me.stage as f64));
+    let prev = STATUS_PREV.with(|p| p.borrow_mut().insert(me.id, cur.clone()));
+    let Some(prev) = prev else {
+        common::diag(|| "status:first", 1);
+        return;
+    };
+    let mut n = 0;
+    for (k, v) in &cur {
+        if prev.iter().find(|(pk, _)| pk == k).map_or(true, |(_, pv)| pv != v) {
+            n += 1;
+            common::diag(|| format!("status:changed:{k}"), 1);
+        }
+    }
+    common::diag(|| format!("status:changed_n:{n}"), 1);
+}
+
+/// "a" or "an" before a kind's words.
+fn article(kind: &str) -> &'static str {
+    if kind.starts_with(['a', 'e', 'i', 'o', 'u']) { "an" } else { "a" }
+}
+
+/// "For the first time you see Bram, 3 tiles north, wait." One line for several seen together:
+/// "For the first time you see a stranger, 9 tiles west, wait; Bram, 3 tiles north; and Edda,
+/// 5 tiles east." Its experience's subject and object are the first two named in it. Under
+/// `first_sight_thinks` the same words over the unplaced parts alone are the reason a first
+/// sight asks for a thought (`first_sight_asks`).
+fn first_sight_text(parts: &[String]) -> String {
+    match parts {
+        [] => String::new(),
+        [one] => format!("For the first time you see {one}."),
+        [init @ .., last] => format!("For the first time you see {}; and {last}.", init.join("; ")),
+    }
+}
+
+/// Whether `me`'s relationship to `other` fits a selector's relation filter. Every creature
+/// filter of a graph goes through here: `sees`, `near`, `nearest` targets, `count` and
+/// `health_of`.
 fn relation_ok(ctx: &ReducerContext, me: u32, other: u32, want: &str) -> bool {
+    // With the world's `stranger_by_name` law, "stranger" is what the scene's word means:
+    // someone whose name I do not know (docs/STRANGERS.md). A relation row or its label does
+    // not count: feelings about someone are not knowing their name.
+    if want == "stranger" && common::laws(ctx).stranger_by_name {
+        return match (ctx.db.character().id().find(me), ctx.db.character().id().find(other)) {
+            (Some(a), Some(b)) => !crate::perception::knows_name(ctx, &a, &b),
+            _ => false,
+        };
+    }
     let r = ctx.db.relation().by_pair().filter((me, other)).next();
     let label = r.as_ref().map(|r| r.label.to_lowercase()).unwrap_or_default();
     let trust = r.as_ref().map(|r| r.trust).unwrap_or(0.0);
@@ -1299,14 +2608,18 @@ fn stance_fits(ctx: &ReducerContext, me: u32, other: u32, want: &str) -> bool {
 
 /// The tiles of one structure in a scene list (id, kind, owner, position, distance): those
 /// reached from `start` through neighbours (within 1.5 tiles) of the same kind and owner.
-fn joined_tiles(all: &[(u64, String, u32, (f32, f32), f32)], start: usize) -> Vec<usize> {
-    let (_, kind, owner, _, _) = &all[start];
+/// The tiles joined to `start`: of its kind and owner, each within 1.5 tiles of another, found
+/// in the order of the list. `same` is the list's indices of that kind and owner, in order: the
+/// only ones that can join, so a look among many new remains (each its own owner's) does not
+/// scan the whole list for each.
+fn joined_tiles(all: &[(u64, String, u32, (f32, f32), f32)], same: &[usize], start: usize) -> Vec<usize> {
     let mut part = vec![start];
     let mut k = 0;
     while k < part.len() {
         let p = all[part[k]].3;
-        for (j, (_, kd, ow, q, _)) in all.iter().enumerate() {
-            if kd == kind && ow == owner && !part.contains(&j) && (q.0 - p.0).powi(2) + (q.1 - p.1).powi(2) <= 2.25 {
+        for &j in same {
+            let q = all[j].3;
+            if !part.contains(&j) && (q.0 - p.0).powi(2) + (q.1 - p.1).powi(2) <= 2.25 {
                 part.push(j);
             }
         }
@@ -1318,19 +2631,116 @@ fn joined_tiles(all: &[(u64, String, u32, (f32, f32), f32)], start: usize) -> Ve
 #[cfg(test)]
 mod tests {
     #[test]
+    fn first_sights_of_one_look_share_one_line() {
+        let p = |v: &[&str]| super::first_sight_text(&v.iter().map(|s| s.to_string()).collect::<Vec<_>>());
+        assert_eq!(p(&["a stranger, 9 tiles west, wait"]), "For the first time you see a stranger, 9 tiles west, wait.");
+        assert_eq!(p(&["a stranger, 9 tiles west", "Bram, 3 tiles north"]), "For the first time you see a stranger, 9 tiles west; and Bram, 3 tiles north.");
+        assert_eq!(p(&["a", "b", "c"]), "For the first time you see a; b; and c.");
+    }
+
+    /// A first sight's reason for a thought (`first_sight_asks`) is the line's own words over
+    /// its unplaced parts: no advice, no role, no place (docs/FIRST_SIGHT.md, against the
+    /// rejected newcomer laws).
+    #[test]
+    fn a_first_sight_asks_in_the_line_s_own_words() {
+        let reason = super::first_sight_text(&["a stranger, 7 tiles east, goto → (490,779)".to_string()]);
+        assert_eq!(reason, "For the first time you see a stranger, 7 tiles east, goto → (490,779).");
+        let two = super::first_sight_text(&["a stranger, 9 tiles west, wait".to_string(), "a child, 3 tiles north".to_string()]);
+        assert_eq!(two, "For the first time you see a stranger, 9 tiles west, wait; and a child, 3 tiles north.");
+        for r in [&reason, &two] {
+            let low = r.to_lowercase();
+            for w in ["newcomer", "visitor", "arriv", "new to you", "near your home", "worth", "wonder", "should", "duty"] {
+                assert!(!low.contains(w), "{w} in {r}");
+            }
+        }
+    }
+
+    #[test]
     fn a_row_of_gate_tiles_is_one_gate() {
         let t = |id: u64, kind: &str, owner: u32, x: f32, y: f32| (id, kind.to_string(), owner, (x, y), 0.0f32);
         // A town gate three tiles wide, a second gate further along the wall, two campfires
         // side by side by different builders.
         let all = vec![t(1, "gate", 0, 10.5, 4.5), t(2, "gate", 0, 11.5, 4.5), t(3, "gate", 0, 12.5, 4.5), t(4, "gate", 0, 30.5, 4.5), t(5, "campfire", 7, 2.5, 2.5), t(6, "campfire", 8, 3.5, 2.5)];
-        let mut first = super::joined_tiles(&all, 0);
+        let mut first = joined(&all, 0);
         first.sort();
         assert_eq!(first, vec![0, 1, 2]);
-        assert_eq!(super::joined_tiles(&all, 3), vec![3]);
-        assert_eq!(super::joined_tiles(&all, 4), vec![4]);
+        assert_eq!(joined(&all, 3), vec![3]);
+        assert_eq!(joined(&all, 4), vec![4]);
         // The island's first gate (verify-trial-fbbase, 24 tiles in a block about 7 by 8).
         let block: Vec<(f32, f32)> = vec![(503.5, 177.5), (504.5, 178.5), (505.5, 177.5), (505.5, 178.5), (505.5, 179.5), (505.5, 180.5), (506.5, 175.5), (506.5, 176.5), (506.5, 177.5), (506.5, 178.5), (506.5, 179.5), (506.5, 180.5), (506.5, 181.5), (507.5, 177.5), (507.5, 178.5), (507.5, 179.5), (507.5, 180.5), (507.5, 181.5), (507.5, 182.5), (508.5, 178.5), (508.5, 179.5), (508.5, 180.5), (509.5, 179.5), (509.5, 180.5)];
         let gate: Vec<_> = block.iter().enumerate().map(|(i, p)| t(100 + i as u64, "gate", 0, p.0, p.1)).collect();
-        assert_eq!(super::joined_tiles(&gate, 7).len(), 24);
+        assert_eq!(joined(&gate, 7).len(), 24);
     }
+
+    type Tile = (u64, String, u32, (f32, f32), f32);
+
+    /// `joined_tiles` given its kind-and-owner group, as `noticed` gives it.
+    fn joined(all: &[Tile], i: usize) -> Vec<usize> {
+        let same: Vec<usize> = (0..all.len()).filter(|&j| all[j].1 == all[i].1 && all[j].2 == all[i].2).collect();
+        super::joined_tiles(all, &same, i)
+    }
+
+    /// The tiles joined to `start` as they were found before the groups: the whole list scanned
+    /// for each member.
+    fn joined_by_scan(all: &[Tile], start: usize) -> Vec<usize> {
+        let (_, kind, owner, _, _) = &all[start];
+        let mut part = vec![start];
+        let mut k = 0;
+        while k < part.len() {
+            let p = all[part[k]].3;
+            for (j, (_, kd, ow, q, _)) in all.iter().enumerate() {
+                if kd == kind && ow == owner && !part.contains(&j) && (q.0 - p.0).powi(2) + (q.1 - p.1).powi(2) <= 2.25 {
+                    part.push(j);
+                }
+            }
+            k += 1;
+        }
+        part
+    }
+
+    #[test]
+    fn joining_within_groups_finds_the_scan_s_tiles_in_its_order() {
+        // Remains of many owners, a few houses and gates of shared owners, on a small field so
+        // that many touch: every start gives the same tiles in the same order as the whole scan.
+        let mut seed = 12345u64;
+        let mut next = || {
+            seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            (seed >> 33) as u32
+        };
+        let kinds = ["remains", "gate", "shelter"];
+        let all: Vec<Tile> = (0..400u64)
+            .map(|id| {
+                let kind = kinds[(next() % 3) as usize];
+                let owner = if kind == "remains" { 1000 + id as u32 } else { next() % 3 };
+                (id, kind.to_string(), owner, ((next() % 20) as f32 + 0.5, (next() % 20) as f32 + 0.5), 0.0)
+            })
+            .collect();
+        for i in 0..all.len() {
+            assert_eq!(joined(&all, i), joined_by_scan(&all, i), "start {i}");
+        }
+    }
+}
+
+thread_local! {
+    static PROFILE_VISIBLE: std::cell::RefCell<std::collections::HashMap<u32, std::collections::HashSet<u32>>> = Default::default();
+}
+
+fn note_sight_changes(actor: u32, seen: &[NearCreature]) {
+    if !common::profiling() { return; }
+    PROFILE_VISIBLE.with(|visible| {
+        let mut visible = visible.borrow_mut();
+        if visible.len() >= 4096 && !visible.contains_key(&actor) {
+            visible.clear();
+        }
+        let current = seen.iter().map(|c| c.id).collect();
+        if let Some(previous) = visible.insert(actor, current) {
+            let current = &visible[&actor];
+            common::diag(|| "mind_visible:add", current.difference(&previous).count() as u64);
+            common::diag(|| "mind_visible:drop", previous.difference(current).count() as u64);
+        }
+    });
+}
+
+pub fn reset_sight_profile() {
+    PROFILE_VISIBLE.with(|visible| visible.borrow_mut().clear());
 }

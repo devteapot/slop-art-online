@@ -1,0 +1,148 @@
+{
+ "schema": 1,
+ "family": "place:cullet-rows",
+ "id": "20261111-a078b5f8-ec3a4e",
+ "published": "2026-11-11T19:27:06+01:00",
+ "imported": "2026-11-11T19:27:06+01:00",
+ "track": "layout-1",
+ "maker": "Claude Fable 5.2",
+ "note": "before layout pass 1: kit pass 1 on main (a078b5f8), no residents' homes moved",
+ "source": {
+  "commit": "a078b5f8511900a3b86ea3783db7ec1ba1688522",
+  "branch": "main",
+  "generator": "living/tools/cullet_plan.py",
+  "generator_sha256": "2bcf01883fc512030c16e14365c52845bf39902ff54fc0b7d20694250218f8a5",
+  "generator_state": "committed",
+  "seed": "83",
+  "params": {}
+ },
+ "renderer": {
+  "method": "look-dev tour (the game client, headless; LIVING_GAME_START, 13:00 and 18:30)",
+  "commit": "",
+  "key": "look-dev tour (the game client, headless; LIVING_GAME_START, 13:00 and 18:30)",
+  "preset": "",
+  "note": ""
+ },
+ "preset": "",
+ "media": "media/place-cullet-rows/20261111-a078b5f8-ec3a4e",
+ "members": [
+  {
+   "name": "low_tally",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "1d27799a4c11705b181b9f866e9ff04daf68dba32cfb3dcf7221f94bd371fb5c",
+   "shots": [
+    "day-270_28_22",
+    "day-90_10_7_60",
+    "day-90_28_22",
+    "day-close",
+    "day-default",
+    "dusk-270_28_22",
+    "dusk-90_10_7_60",
+    "dusk-90_28_22",
+    "dusk-close",
+    "dusk-default"
+   ],
+   "clips": []
+  },
+  {
+   "name": "low_east",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "274271f8e37de8d81d646bc31ea4664eacd45d7fa901c51cf2bf18afb2130e36",
+   "shots": [
+    "day-180_28_22",
+    "day-90_28_22",
+    "day-default",
+    "dusk-180_28_22",
+    "dusk-90_28_22",
+    "dusk-default"
+   ],
+   "clips": []
+  },
+  {
+   "name": "low_west",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "35629b6091fad345939c11b28fca62c92d7457e6794d0eab316c4560854be26e",
+   "shots": [
+    "day-270_10_7_60",
+    "day-270_28_22",
+    "day-default",
+    "dusk-270_10_7_60",
+    "dusk-270_28_22",
+    "dusk-default"
+   ],
+   "clips": []
+  },
+  {
+   "name": "mid_row",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "a309910e6c6e41e4c081968d0776e30b8ac6ec6b6b08b994452960d70afdf44a",
+   "shots": [
+    "day-180_28_22",
+    "day-270_28_22",
+    "day-90_28_22",
+    "day-close",
+    "day-default",
+    "dusk-180_28_22",
+    "dusk-270_28_22",
+    "dusk-90_28_22",
+    "dusk-close",
+    "dusk-default"
+   ],
+   "clips": []
+  },
+  {
+   "name": "mid_west",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "95da0c4ee8a4530c84caeb69bb254252d859e6ed113baffe5ac81906ac0ae615",
+   "shots": [
+    "day-270_10_7_60",
+    "day-270_28_22",
+    "day-default",
+    "dusk-270_10_7_60",
+    "dusk-270_28_22",
+    "dusk-default"
+   ],
+   "clips": []
+  },
+  {
+   "name": "high_row",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "e27455e84b9ee8540ad606ae41076934d9caa42d019e9a852a969634a27dbb9f",
+   "shots": [
+    "day-180_30_50",
+    "day-270_28_22",
+    "day-90_28_22",
+    "day-close",
+    "day-default",
+    "dusk-180_30_50",
+    "dusk-270_28_22",
+    "dusk-90_28_22",
+    "dusk-close",
+    "dusk-default"
+   ],
+   "clips": []
+  },
+  {
+   "name": "high_west",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "bdb1f120d63789ec8530ca71a04739cd2caa551ce806141e2fb2b859516bdf80",
+   "shots": [
+    "day-270_10_7_60",
+    "day-270_28_22",
+    "day-default",
+    "dusk-270_10_7_60",
+    "dusk-270_28_22",
+    "dusk-default"
+   ],
+   "clips": []
+  }
+ ],
+ "delivered": []
+}

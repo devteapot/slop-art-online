@@ -1,0 +1,64 @@
+{
+ "schema": 1,
+ "family": "character:face-types",
+ "id": "20261112-46a90cae-5c7850",
+ "published": "2026-11-12T13:42:51+01:00",
+ "imported": "2026-11-12T13:42:51+01:00",
+ "track": "char-4",
+ "maker": "Claude Fable 5.2",
+ "note": "A brow is one tapered stroke, as the reference draws its own, in the reference's brow material, which the client gives the hair's colour. Before, brows were strands in a material that takes no colour, so everyone composed on a type had that type's brows whatever their hair.",
+ "source": {
+  "commit": "46a90cae516b37206f2717acf05bd64383ee882a",
+  "branch": "char-4",
+  "dirty": false,
+  "generator": "living/tools/blender/person.py",
+  "generator_sha256": "55a8f4c3425b1e8d6e2ebc1683aecb46567376372f0dcbc8bdb38a57982b9bbe",
+  "generator_state": "committed",
+  "params": {}
+ },
+ "renderer": {
+  "method": "asset-view (the game)",
+  "commit": "",
+  "key": "asset-view (the game)",
+  "preset": "",
+  "note": "brows: four bare type heads coloured by the game client itself with four hair colours through a recipe, before (strands in the lash lines' material) and after (one stroke in the brow material), from the front and at 35 degrees, cropped to the eyes and brows; brows-people: four residents composed by compose.py (brows tinted by the client's rule read from its source) before and now, above their own files. Eyes are held open by the photo tool. The vroid member is the reference's brows through the same client; blue-protocol is for comparison only"
+ },
+ "preset": "",
+ "media": "media/character-face-types/20261112-46a90cae-5c7850",
+ "members": [
+  {
+   "name": "types",
+   "role": "subject",
+   "token_kind": "import",
+   "sha256": "c09f5dda1e96c1c4e0c1f73e9a5674d2e4fd17d57221e30ee174e60a16c621d4",
+   "shots": [
+    "brows",
+    "brows-people"
+   ],
+   "clips": []
+  },
+  {
+   "name": "vroid",
+   "role": "control",
+   "token_kind": "import",
+   "sha256": "7943d58b2568332fe1a843902bb6a079bd734cce651132a7b06d9468d53481eb",
+   "shots": [
+    "brows",
+    "brows-people"
+   ],
+   "clips": []
+  },
+  {
+   "name": "blue-protocol",
+   "role": "control",
+   "token_kind": "import",
+   "sha256": "442f834ae52a5d29be26c1cf86f94657950f2325d9b65325cc7d7160126e27e6",
+   "shots": [
+    "brows",
+    "brows-people"
+   ],
+   "clips": []
+  }
+ ],
+ "delivered": []
+}

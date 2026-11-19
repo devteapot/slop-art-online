@@ -15,6 +15,8 @@ pub struct Layout {
     pub market: Vec<(f32, f32)>,
     /// Planted berry bushes outside the walls.
     pub fields: Vec<(f32, f32)>,
+    /// A hand-authored settlement's lots by their plan ids, at their doors (empty otherwise).
+    pub lots: Vec<(String, (f32, f32))>,
 }
 
 fn land(t: Terrain) -> bool {
@@ -138,7 +140,7 @@ pub fn lay_out(map: &mut Map, center: (f32, f32), households: usize, radius: i32
             }
         }
     }
-    Layout { center: at(cx, cy), gates, houses, market, fields }
+    Layout { center: at(cx, cy), gates, houses, market, fields, lots: Vec::new() }
 }
 
 #[cfg(test)]
@@ -147,7 +149,7 @@ mod tests {
 
     #[test]
     fn walled_city_has_gates_roads_and_houses() {
-        let mut map = Map { w: 64, h: 64, tiles: vec![Terrain::Grass as u8; 64 * 64], blocked: Default::default(), opaque: Default::default(), nav: Default::default() };
+        let mut map = Map { w: 64, h: 64, tiles: vec![Terrain::Grass as u8; 64 * 64], blocked: Default::default(), cover: None, opaque: Default::default(), nav: Default::default() };
         let l = lay_out(&mut map, (32.5, 32.5), 10, 14, true);
         assert_eq!(l.gates.len(), 4);
         assert_eq!(l.houses.len(), 10);

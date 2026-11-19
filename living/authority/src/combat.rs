@@ -30,22 +30,34 @@ const DEATH_SEEN_MS: u64 = 120_000;
 
 thread_local! {
     /// Living characters a person controls (not a mind, not the database), by id: the only
-    /// viewers `combat_seen` is written for. Rebuilt after a join or a death.
-    static HUMANS: RefCell<Option<HashMap<u32, Identity>>> = const { RefCell::new(None) };
+    /// viewers `combat_seen` is written for. Rebuilt after a join or a death, with the stamp of
+    /// the transaction that read it.
+    static HUMANS: RefCell<Option<(i64, HashMap<u32, Identity>)>> = const { RefCell::new(None) };
+    /// The transaction that last changed who is a player (`invalidate_humans`). A map read in
+    /// it holds for it alone: if it failed, its rows were rolled back, and module memory is not
+    /// (docs/PERCEPTION.md, "Module memory and rollback"), so the next transaction reads again.
+    static HUMANS_CHANGED: std::cell::Cell<i64> = const { std::cell::Cell::new(i64::MIN) };
 }
 
-pub fn invalidate_humans() {
+/// Who is a player changed in this transaction (a join, a death, a hand-over).
+pub fn invalidate_humans(ctx: &ReducerContext) {
     HUMANS.with(|h| *h.borrow_mut() = None);
+    HUMANS_CHANGED.with(|c| c.set(common::stamp(ctx)));
 }
 
 /// The player of character `id`, if a person controls it (alive, not a mind's).
 pub fn human(ctx: &ReducerContext, id: u32) -> Option<Identity> {
+    let now = common::stamp(ctx);
+    let changed = HUMANS_CHANGED.with(|c| c.get());
     HUMANS.with(|h| {
         let mut h = h.borrow_mut();
-        let map = h.get_or_insert_with(|| {
+        if h.as_ref().is_some_and(|(read, _)| *read == changed && *read != now) {
+            *h = None;
+        }
+        let (_, map) = h.get_or_insert_with(|| {
             let db = ctx.database_identity();
             let admin = common::world(ctx).admin;
-            ctx.db.character().iter().filter(|c| c.alive && !c.ai && c.controller != db && c.controller != admin).map(|c| (c.id, c.controller)).collect()
+            (now, ctx.db.character().iter().filter(|c| c.alive && !c.ai && c.controller != db && c.controller != admin).map(|c| (c.id, c.controller)).collect())
         });
         map.get(&id).copied()
     })
@@ -54,12 +66,12 @@ pub fn human(ctx: &ReducerContext, id: u32) -> Option<Identity> {
 /// The living characters people control, with their players' identities.
 pub fn humans(ctx: &ReducerContext) -> Vec<(u32, Identity)> {
     human(ctx, 0);
-    HUMANS.with(|h| h.borrow().as_ref().map(|m| m.iter().map(|(id, who)| (*id, *who)).collect()).unwrap_or_default())
+    HUMANS.with(|h| h.borrow().as_ref().map(|(_, m)| m.iter().map(|(id, who)| (*id, *who)).collect()).unwrap_or_default())
 }
 
 fn any_humans(ctx: &ReducerContext) -> bool {
     human(ctx, 0);
-    HUMANS.with(|h| h.borrow().as_ref().is_some_and(|m| !m.is_empty()))
+    HUMANS.with(|h| h.borrow().as_ref().is_some_and(|(_, m)| !m.is_empty()))
 }
 
 // ---- what players perceive ------------------------------------------------------------
@@ -76,6 +88,12 @@ pub struct Seen {
     pub amount: f32,
     pub ms: u32,
     pub note: String,
+    /// The actor is not where it happened (a missile's shooter): each player is given the
+    /// actor only if its character sees them, else 0 (`show`).
+    pub far_actor: bool,
+    /// A death by a killer the dead did not see: the dead's own row carries 0 for the target
+    /// (the killer), and each onlooker the killer only if it sees them (`show`).
+    pub far_target: bool,
 }
 
 /// One feed row for a viewer (no frame bookkeeping); returns its id.
@@ -111,10 +129,22 @@ fn insert(ctx: &ReducerContext, id: u32, viewer: Identity, now: u64, ev: &Seen, 
 /// onlookers see that it happened, not the numbers, at their next frame (`frame.rs`), except
 /// a death, which leaves with the body in the same update so the client keeps the corpse.
 pub fn show(ctx: &ReducerContext, now: u64, ev: Seen) {
+    let _detail = common::detail_span("combat.show");
     if !any_humans(ctx) {
         return;
     }
     let w = common::world(ctx);
+    // A far actor (a missile's shooter) only to those who see them.
+    let masked = |id: u32| -> std::borrow::Cow<'_, Seen> {
+        let hide_actor = ev.far_actor && ev.actor != 0 && id != ev.actor && !crate::perception::sees_creature(ctx, id, ev.actor, now);
+        // The dead has no body by now: its own row follows what it saw when the blow came.
+        let hide_target = ev.far_target && ev.target != 0 && id != ev.target && (id == ev.actor || !crate::perception::sees_creature(ctx, id, ev.target, now));
+        if hide_actor || hide_target {
+            std::borrow::Cow::Owned(Seen { actor: if hide_actor { 0 } else { ev.actor }, target: if hide_target { 0 } else { ev.target }, ..ev.clone() })
+        } else {
+            std::borrow::Cow::Borrowed(&ev)
+        }
+    };
     let mut told: Vec<u32> = Vec::new();
     for id in [ev.actor, ev.target] {
         if id != 0 && !told.contains(&id) {
@@ -122,7 +152,7 @@ pub fn show(ctx: &ReducerContext, now: u64, ev: Seen) {
                 // The one who died keeps its death for the death screen; everyone else needs a
                 // death only as it happens (the corpse).
                 let keep = if ev.kind == seen::DEATH && id == ev.actor { DEATH_SEEN_MS } else { SEEN_MS };
-                insert(ctx, id, viewer, now, &ev, ev.amount, keep);
+                insert(ctx, id, viewer, now, &masked(id), ev.amount, keep);
             }
             told.push(id);
         }
@@ -135,11 +165,12 @@ pub fn show(ctx: &ReducerContext, now: u64, ev: Seen) {
         }
         let Some(viewer) = human(ctx, c.id) else { continue };
         // The onlooker's own sight, and a clear sight line to where it happened.
-        if !crate::perception::in_sight(&map, c.pos, ev.at, c.dist, common::sight_for(ctx, c.id, &w, now)) {
+        if !crate::perception::in_sight(ctx, &map, c.id, c.pos, c.facing, ev.actor, ev.at, c.dist, &w, now, false) {
             continue;
         }
         told.push(c.id);
         let amount = if ev.kind == seen::LAUNCH { ev.amount } else { 0.0 };
+        let ev = masked(c.id);
         if ev.kind == seen::DEATH {
             insert(ctx, c.id, viewer, now, &ev, amount, SEEN_MS);
         } else {
@@ -192,10 +223,35 @@ fn save(ctx: &ReducerContext, r: Readiness) {
     }
 }
 
-/// Whether a combat move may start now: not while another one winds up (a dodge excepted),
-/// not during the recovery after a release (a dodge excepted), not before its cooldown ends.
+/// Whether `a` is a committed move under way (its `<skill>_combat()` says `committed`): a windup
+/// being performed, or a dash. It runs its whole course whoever controls the body: nothing but
+/// its own timing or something physical (death, a wall in a dash's way) ends it, never its
+/// controller's reason going (combat minds §3.2, committed-moves).
+pub fn committed(sc: &living_rules::script::Scripts, a: &Activity) -> bool {
+    sc.shapes().get(&a.skill).is_some_and(|s| s.committed && (a.phase == 1 || s.aim == Aim::Dash))
+}
+
+/// What a committed move under way (`cur`) leaves the body free to start: nothing, except a dash
+/// cutting in on a committed windup (as a dash cuts in on any windup). `Err` names the move.
+pub fn held_by(sc: &living_rules::script::Scripts, cur: &Activity, skill: &str) -> Result<(), String> {
+    if !committed(sc, cur) {
+        return Ok(());
+    }
+    let dash = |s: &str| sc.shapes().get(s).is_some_and(|x| x.aim == Aim::Dash);
+    if dash(skill) && !dash(&cur.skill) {
+        return Ok(());
+    }
+    Err(format!("in the middle of a {}", cur.skill))
+}
+
+/// Whether a move may start now: not while a committed move runs its course (a dash may cut in
+/// on a committed windup), not while another one winds up (a dodge excepted), not during the
+/// recovery after a release (a dodge excepted), not before its cooldown ends.
 pub fn gate(ctx: &ReducerContext, id: u32, skill: &str, cur: Option<&Activity>, now: u64) -> Result<(), String> {
     let sc = common::scripts(ctx);
+    if let Some(a) = cur {
+        held_by(&sc, a, skill)?;
+    }
     let shapes = sc.shapes();
     let Some(shape) = shapes.get(skill).filter(|s| s.timed) else { return Ok(()) };
     // A dash may cut in anywhere; a raised guard does not hold up the next move.
@@ -228,6 +284,7 @@ pub fn started(ctx: &ReducerContext, id: u32, skill: &str, now: u64) {
 
 /// A move released: the recovery after it. Returns when it ends.
 pub fn recovering(ctx: &ReducerContext, id: u32, skill: &str, now: u64) -> u64 {
+    let _detail = common::detail_span("combat.recovering");
     let rec = common::scripts(ctx).num_of("combat_recover", skill, 0.0).max(0.0) as u64;
     let until = now + rec;
     if rec > 0 {
@@ -254,16 +311,22 @@ pub fn resume_move(ctx: &ReducerContext, id: u32, now: u64) {
     r.move_pending = false;
     let (dx, dy, run) = (r.move_dx, r.move_dy, r.move_run);
     ctx.db.readiness().id().update(r);
+    // Only for a body a person plays now (one handed back to its mind meanwhile drops it).
+    if ctx.db.character().id().find(id).is_none_or(|c| c.ai) {
+        return;
+    }
     let dir = (dx != 0.0 || dy != 0.0).then_some((dx, dy));
     if let Err(e) = crate::motion::intent(ctx, id, dir, run, || act::walk_speed(ctx, id, now), now) {
         log::debug!("resume move {id}: {e}");
     }
 }
 
-/// Whether a player's movement must wait: a rooted move winds up, or a dodge dashes.
+/// Whether a player's movement must wait: a rooted move winds up, a dash dashes, or a committed
+/// move runs its course (the same rule a graph's change of mind meets, `committed`).
 pub fn rooted_now(ctx: &ReducerContext, id: u32) -> bool {
-    let Some(a) = ctx.db.activity().id().find(id).filter(|a| a.node == act::PLAYER) else { return false };
-    common::scripts(ctx).combat(&a.skill).is_some_and(|s| (a.phase == 1 && s.rooted) || s.aim == Aim::Dash)
+    let Some(a) = ctx.db.activity().id().find(id) else { return false };
+    let sc = common::scripts(ctx);
+    committed(&sc, &a) || (a.node == act::PLAYER && sc.combat(&a.skill).is_some_and(|s| (a.phase == 1 && s.rooted) || s.aim == Aim::Dash))
 }
 
 // ---- what others see of a fighter ---------------------------------------------------------
@@ -317,6 +380,7 @@ pub fn act_until(ctx: &ReducerContext, id: u32, until: u64) {
 /// Health changed (a blow, a heal): the band others see follows, written only when it moves;
 /// a first blow gives the character its `fighter` row.
 pub fn refresh_band(ctx: &ReducerContext, id: u32, now: u64) {
+    let _detail = common::detail_span("combat.band");
     crate::perception::health_moved(ctx, id, now);
     let b = band_now(ctx, id, now);
     match ctx.db.fighter().id().find(id) {
@@ -386,9 +450,12 @@ pub fn accepted(ctx: &ReducerContext, a: &Activity, now: u64) {
     };
     u.accepted_ms = now;
     ctx.db.skill_use().id().update(u);
+    // Seen by its victim, a move counts toward the fast lane's repeat trigger (never told).
+    crate::fast::move_started(ctx, a, now);
 }
 
 pub fn released(ctx: &ReducerContext, actor: u32, skill: &str, now: u64) {
+    let _detail = common::detail_span("combat.released");
     if let Some(mut u) = open_use(ctx, actor, skill) {
         u.released_ms = now;
         ctx.db.skill_use().id().update(u);
@@ -397,6 +464,7 @@ pub fn released(ctx: &ReducerContext, actor: u32, skill: &str, now: u64) {
 
 /// What happened (or why it was refused or broken off).
 pub fn outcome(ctx: &ReducerContext, actor: u32, skill: &str, text: &str, now: u64) {
+    let _detail = common::detail_span("combat.outcome");
     if let Some(mut u) = open_use(ctx, actor, skill) {
         u.outcome = if text.is_empty() { "done".into() } else { text.chars().take(200).collect() };
         u.outcome_ms = now;
@@ -474,15 +542,17 @@ pub fn missiles(ctx: &ReducerContext, now: u64) {
             (_, Some(wt)) => {
                 let at = (a.0 + (b.0 - a.0) * wt, a.1 + (b.1 - a.1) * wt);
                 ctx.db.missile().id().delete(m.id);
-                show(ctx, now, Seen { kind: seen::IMPACT, actor: m.owner, skill: sc.shapes().code(&m.skill), at, dir: (m.dx, m.dy), ..Default::default() });
+                show(ctx, now, Seen { kind: seen::IMPACT, actor: m.owner, skill: sc.shapes().code(&m.skill), at, dir: (m.dx, m.dy), far_actor: true, ..Default::default() });
                 outcome_of(ctx, m.use_id, "struck a wall", now);
+                act::missile_told(ctx, m.owner, &m.skill, 0, act::Far::Wall, at, None, now);
             }
             _ => {
                 m.left -= step;
                 if m.left <= 0.01 {
                     ctx.db.missile().id().delete(m.id);
-                    show(ctx, now, Seen { kind: seen::IMPACT, actor: m.owner, skill: sc.shapes().code(&m.skill), at: b, dir: (m.dx, m.dy), ..Default::default() });
+                    show(ctx, now, Seen { kind: seen::IMPACT, actor: m.owner, skill: sc.shapes().code(&m.skill), at: b, dir: (m.dx, m.dy), far_actor: true, ..Default::default() });
                     outcome_of(ctx, m.use_id, "hit nothing", now);
+                    act::missile_told(ctx, m.owner, &m.skill, 0, act::Far::Nothing, b, None, now);
                 } else {
                     m.x = b.0;
                     m.y = b.1;
@@ -512,40 +582,50 @@ fn strike(ctx: &ReducerContext, m: &Missile, victim: u32, at: (f32, f32), now: u
     let code = sc.shapes().code(&m.skill);
     // A dash that evades (a dodge) lets it pass through, but it is spent all the same.
     if ctx.db.activity().id().find(victim).is_some_and(|a| sc.combat(&a.skill).is_some_and(|s| s.evades)) {
-        show(ctx, now, Seen { kind: seen::DODGED, actor: m.owner, target: victim, skill: code, at, dir: (m.dx, m.dy), ..Default::default() });
-        show(ctx, now, Seen { kind: seen::IMPACT, actor: m.owner, target: 0, skill: code, at, dir: (m.dx, m.dy), ..Default::default() });
+        show(ctx, now, Seen { kind: seen::DODGED, actor: m.owner, target: victim, skill: code, at, dir: (m.dx, m.dy), far_actor: true, ..Default::default() });
+        show(ctx, now, Seen { kind: seen::IMPACT, actor: m.owner, target: 0, skill: code, at, dir: (m.dx, m.dy), far_actor: true, ..Default::default() });
         outcome_of(ctx, m.use_id, "dodged", now);
+        act::missile_told(ctx, m.owner, &m.skill, victim, act::Far::Dodged, at, None, now);
         return;
     }
     let effects = match act::missile_effects(ctx, m.owner, &m.skill, victim, now) {
         Ok(e) => e,
         Err(why) => {
-            show(ctx, now, Seen { kind: seen::IMPACT, actor: m.owner, target: victim, skill: code, at, dir: (m.dx, m.dy), ..Default::default() });
+            show(ctx, now, Seen { kind: seen::IMPACT, actor: m.owner, target: victim, skill: code, at, dir: (m.dx, m.dy), far_actor: true, ..Default::default() });
             outcome_of(ctx, m.use_id, &why, now);
+            act::missile_told(ctx, m.owner, &m.skill, victim, act::Far::Refused(&why), at, None, now);
             return;
         }
     };
-    show(ctx, now, Seen { kind: seen::IMPACT, actor: m.owner, target: victim, skill: code, at, dir: (m.dx, m.dy), ..Default::default() });
+    show(ctx, now, Seen { kind: seen::IMPACT, actor: m.owner, target: victim, skill: code, at, dir: (m.dx, m.dy), far_actor: true, ..Default::default() });
     // The blow comes from behind the missile's path.
     let from = (at.0 - m.dx * 2.0, at.1 - m.dy * 2.0);
+    // The one struck as the shooter perceives them, read before the blow (a kill removes the body,
+    // and the far label reads distance): the shooter's own record (`my_skill_uses`) and its line.
+    let seen = ctx.db.character().id().find(m.owner).map(|c| common::label_for(ctx, &c, victim)).unwrap_or_else(|| "someone".into());
+    let called = sc.missile_called(&m.skill);
     let mut dealt = String::new();
     for e in effects {
         if let living_rules::script::Effect::Damage { amount } = e {
-            dealt = act::damage(ctx, m.owner, victim, amount, &m.skill, from, now);
+            dealt = act::damage(ctx, m.owner, victim, amount, &m.skill, Some(&called), from, now);
         }
     }
-    outcome_of(ctx, m.use_id, &format!("struck {}: {dealt}", common::display(ctx, victim)), now);
+    outcome_of(ctx, m.use_id, &format!("struck {seen}: {dealt}"), now);
+    let killed = ctx.db.character().id().find(victim).is_some_and(|v| !v.alive);
+    act::missile_told(ctx, m.owner, &m.skill, victim, if killed { act::Far::Killed } else if dealt.is_empty() { act::Far::Struck("it did no harm") } else { act::Far::Struck(&dealt) }, at, Some(&seen), now);
 }
 
 /// A death: everyone who could see it is told, and the one who died learns who saw it.
-pub fn died(ctx: &ReducerContext, id: u32, killer: u32, at: (f32, f32), now: u64) {
-    show(ctx, now, Seen { kind: seen::DEATH, actor: id, target: killer, at, ..Default::default() });
+/// `unseen`: the dead did not see its killer (a shooter out of its sight): its own death row
+/// carries no killer (0), and an onlooker's carries the killer only if it sees them.
+pub fn died(ctx: &ReducerContext, id: u32, killer: u32, at: (f32, f32), now: u64, unseen: bool) {
+    show(ctx, now, Seen { kind: seen::DEATH, actor: id, target: killer, at, far_target: unseen, ..Default::default() });
     if human(ctx, id).is_some() {
         let w = common::world(ctx);
         let r = crate::perception::widest_sight(ctx, &w, now);
         let map = common::map(ctx);
         for c in common::creatures_near(ctx, at, r, now) {
-            if c.id == id || !crate::perception::in_sight(&map, c.pos, at, c.dist, common::sight_for(ctx, c.id, &w, now)) {
+            if c.id == id || !crate::perception::in_sight(ctx, &map, c.id, c.pos, c.facing, id, at, c.dist, &w, now, false) {
                 continue;
             }
             show_to(ctx, id, now, Seen { kind: seen::WITNESS, actor: c.id, target: id, at: c.pos, ..Default::default() });
@@ -561,7 +641,7 @@ pub fn died(ctx: &ReducerContext, id: u32, killer: u32, at: (f32, f32), now: u64
         crate::perception::forget(ctx, id, viewer);
     }
     crate::perception::gone(ctx, id);
-    invalidate_humans();
+    invalidate_humans(ctx);
 }
 
 // ---- the rules' numbers for clients ------------------------------------------------------
@@ -575,8 +655,9 @@ pub fn cards(ctx: &ReducerContext, sc: &living_rules::script::Scripts) {
         ctx.db.skill_card().skill().delete(old);
     }
     for (skill, shape) in shapes.iter() {
-        let c = living_rules::script::SkillCtx { actor: living_rules::script::ActorFacts { kind: "person".into(), ..Default::default() }, skill: skill.to_string(), qty: shape.hold_ms, ..Default::default() };
+        let c = living_rules::script::SkillCtx { actor: living_rules::script::ActorFacts { kind: "person".into(), stamina: 100.0, focus: 100.0, ..Default::default() }, skill: skill.to_string(), qty: shape.hold_ms, ..Default::default() };
         let missile = if shape.missile { sc.missile(skill, &c).ok() } else { None };
+        let timing = sc.timing(skill).unwrap_or_default();
         let reach = match (missile, shape.aim) {
             (Some(m), _) => m.range,
             (None, Aim::Dash) => sc.num_of(&format!("{skill}_dist"), "person", 0.0) as f32,
@@ -586,9 +667,9 @@ pub fn cards(ctx: &ReducerContext, sc: &living_rules::script::Scripts) {
             skill: skill.to_string(),
             slot: shapes.bar().iter().position(|b| b == skill).map_or(NOT_ON_BAR, |i| i as u8),
             cost: sc.num_of("combat_cost", skill, 0.0) as f32,
-            windup_ms: if matches!(shape.aim, Aim::Dash | Aim::Facing) { 0 } else { sc.duration_ms(skill, &c).unwrap_or(0) as u32 },
-            recover_ms: sc.num_of("combat_recover", skill, 0.0) as u32,
-            cooldown_ms: sc.num_of("combat_cooldown", skill, 0.0) as u32,
+            windup_ms: timing.windup_ms,
+            recover_ms: timing.recover_ms,
+            cooldown_ms: timing.cooldown_ms,
             reach,
             code: shape.code,
             aim: shape.aim.as_str().into(),
@@ -596,6 +677,7 @@ pub fn cards(ctx: &ReducerContext, sc: &living_rules::script::Scripts) {
             arc: shape.arc,
             needs: shape.needs.join(","),
             knows: shape.knows.join(","),
+            pool: sc.text_of("combat_pool", skill).filter(|p| !p.is_empty()).unwrap_or_else(|| "stamina".into()),
         };
         if ctx.db.skill_card().skill().find(card.skill.clone()).is_some() {
             ctx.db.skill_card().skill().update(card);
@@ -657,7 +739,11 @@ pub fn use_skill(ctx: &ReducerContext, skill: String, target: u32, x: f32, y: f3
             let Some(d) = aim.or_else(|| creature(ctx, target, now).and_then(|t| rules::unit(t.at.0 - here.0, t.at.1 - here.1))) else { return refuse("aim somewhere".into()) };
             Resolved::point((here.0 + d.0 * 4.0, here.1 + d.1 * 4.0))
         }
-        Aim::Facing => Resolved::point(aim.map_or((here.0 + body.heading.cos(), here.1 + body.heading.sin()), |d| (here.0 + d.0, here.1 + d.1))),
+        Aim::Facing => {
+            // Unaimed, a guard goes up the way the body faces (its held look), not its travel.
+            let f = common::facing_at(&body, now);
+            Resolved::point(aim.map_or((here.0 + f.cos(), here.1 + f.sin()), |d| (here.0 + d.0, here.1 + d.1)))
+        }
         // A dash goes the way it is aimed, else away from what is coming.
         Aim::Dash | Aim::None => aim.map_or_else(Resolved::none, |d| Resolved::point((here.0 + d.0, here.1 + d.1))),
     };
@@ -673,7 +759,7 @@ pub fn use_skill(ctx: &ReducerContext, skill: String, target: u32, x: f32, y: f3
     }
     // A guard is held until let go, at most as long as the rules allow.
     let qty = shape.hold_ms;
-    match act::begin(ctx, me.id, act::PLAYER, 0, &skill, resolved, "", qty, "", "", ("", 0), now) {
+    match act::begin(ctx, me.id, act::PLAYER, 0, &skill, resolved, "", qty, "", "", ("", 0), (0, 0), None, Default::default(), now) {
         Ok(()) => Ok(()),
         Err(why) => {
             // Nothing started, so the walk under way simply goes on.
@@ -726,4 +812,40 @@ pub fn my_readiness(ctx: &ViewContext) -> Vec<Readiness> {
 #[spacetimedb::view(accessor = my_skill_uses, public)]
 pub fn my_skill_uses(ctx: &ViewContext) -> Vec<SkillUse> {
     crate::perception::living(ctx).map(|c| ctx.db.skill_use().actor().filter(c.id).collect()).unwrap_or_default()
+}
+
+#[cfg(test)]
+mod committed_tests {
+    use super::{committed, held_by};
+    use crate::tables::{Activity, TargetRef};
+
+    fn act(skill: &str, phase: u8) -> Activity {
+        Activity { id: 1, skill: skill.into(), phase, node: 3, revision: 1, target: TargetRef { class: 0, id: 0, x: 0.0, y: 0.0 }, item: String::new(), qty: 0, started_ms: 0, ends_ms: 0, label: String::new(), text: String::new(), topic: String::new(), victim: 0, want: String::new(), want_qty: 0, offer: 0, record: 0 }
+    }
+
+    #[test]
+    fn a_committed_move_holds_the_body_but_a_dash_cuts_in_on_a_windup() {
+        let sc = living_rules::script::Scripts::new(crate::seed::SKILLS).expect("shipped script");
+        // A windup being performed and a dash are committed; walking into reach is not, nor a guard.
+        assert!(committed(&sc, &act("strike", 1)) && committed(&sc, &act("attack", 1)) && committed(&sc, &act("dodge", 0)) && committed(&sc, &act("jump", 0)));
+        assert!(committed(&sc, &act("throw", 1)));
+        assert!(!committed(&sc, &act("strike", 0)) && !committed(&sc, &act("block", 1)) && !committed(&sc, &act("goto", 0)));
+        // Nothing starts over a committed move but a dash over a windup.
+        assert!(held_by(&sc, &act("dodge", 0), "block").is_err() && held_by(&sc, &act("dodge", 0), "wait").is_err() && held_by(&sc, &act("dodge", 0), "jump").is_err());
+        assert_eq!(held_by(&sc, &act("strike", 1), "goto").unwrap_err(), "in the middle of a strike");
+        assert!(held_by(&sc, &act("strike", 1), "dodge").is_ok() && held_by(&sc, &act("attack", 1), "jump").is_ok());
+        // What is not committed holds nothing.
+        assert!(held_by(&sc, &act("block", 1), "strike").is_ok() && held_by(&sc, &act("strike", 0), "wait").is_ok());
+    }
+
+    #[test]
+    fn a_world_that_makes_a_dodge_uncommitted_lets_it_be_broken_off() {
+        // The world's own laws (`floors::compose`): the dodge is no longer committed, so a guard,
+        // a wait (a graph's next branch) or a player's movement no longer waits on it; a jump is.
+        let src = living_rules::floors::compose(crate::seed::SKILLS, "fn dodge_combat() { let s = base_dodge_combat(); s.committed = false; s }").unwrap();
+        let sc = living_rules::script::Scripts::new(&src).expect("composed script");
+        assert!(!committed(&sc, &act("dodge", 0)) && committed(&sc, &act("jump", 0)));
+        assert!(held_by(&sc, &act("dodge", 0), "block").is_ok() && held_by(&sc, &act("dodge", 0), "wait").is_ok());
+        assert!(held_by(&sc, &act("jump", 0), "block").is_err());
+    }
 }

@@ -325,7 +325,7 @@ impl Minds {
         let recalled = self.recall_for(actor, &self.experience_cues(actor, &meaningful), 32, 6, "consolidate").await;
         let persona = match self.conn.db.persona().id().find(&actor) {
             Some(_) => self.persona_text(actor),
-            None => "(played by a person: who they are shows only in what they do)".into(),
+            None => format!("(played by a person: who they are shows only in what they do)\n{}", self.body_line(actor)).trim_end().to_string(),
         };
         let ctx = prompts::Ctx {
             name: &c.name,
@@ -336,11 +336,12 @@ impl Minds {
             mind: recalled.mind,
             memories: recalled.memories,
             judgments: recalled.judgments,
-            places: self.places(actor),
+            places: self.places(actor, None, false),
             experiences: meaningful.iter().map(|e| format!("{}{}", self.exp_line(e, &fmt, true), self.lived_where(e))).collect(),
             dealings: self.dealings(actor),
+            cues: None,
         };
-        let msgs = vec![Msg { role: "system", content: prompts::internalize_system() }, Msg { role: "user", content: prompts::consolidate_user(&ctx) }];
+        let msgs = vec![Msg { role: "system", content: prompts::internalize_system() }, Msg { role: "user", content: prompts::consolidate_user(&ctx, "") }];
         let known = meaningful.iter().map(|e| e.id).collect();
         Ok(Prepared { actor, name: c.name.clone(), upto, batch, known, msgs, reason })
     }
@@ -366,15 +367,18 @@ impl Minds {
         let batch = &prep.batch;
         let lookup = |id: u64| batch.iter().find(|e| e.id == id).map(|e| (e.at_ms, e.salience as f64, self.anchors(e)));
         let (mut patch, mut notes) = memory::patch_from(&v, &prep.known, &lookup);
-        memory::sugar_into(&v, &mut patch, &prep.known);
+        // A player's character keeps no attention cues: its eyes are the player's.
+        memory::sugar_into(&memory::without_notice(&v, false), &mut patch, &prep.known);
         notes.extend(self.canonical_people(actor, &mut patch));
         self.keep_refused_merges(actor, &notes);
         notes.extend(self.perceived_people_only(actor, batch, &mut patch));
-        let told = |id: u64| batch.iter().find(|e| e.id == id).map(|e| matches!(e.kind.as_str(), "speech" | "read").then_some(e.subject));
+        let told = |id: u64| batch.iter().find(|e| e.id == id).map(|e| matches!(e.kind.as_str(), "speech" | "whisper" | "read").then_some(e.subject));
         memory::attribute(&mut patch, actor, &told);
         self.name_people(actor, &mut patch);
         patch.lived_under = Some("human".into());
+        let renamed = self.people_names(actor, batch, &patch);
         store.apply(actor, &patch, &thought_ref, now).await?;
+        store.rename_people(actor, &renamed).await?;
         // Who the person shows themselves to be, read from their conduct (docs/PLAYER_MEMORY.md):
         // only a real change becomes a new version of the identity.
         let identity = match &v["identity"] {
@@ -435,7 +439,7 @@ impl Minds {
         let mut known: std::collections::HashSet<u32> = self.conn.db.relation().iter().filter(|r| r.actor == actor).map(|r| r.other).collect();
         for e in batch {
             known.extend([e.subject, e.object]);
-            known.extend(self.named_people(&e.text));
+            known.extend(self.named_people(actor, &e.text));
         }
         known.insert(actor);
         let stranger = |k: &str| k.strip_prefix("person:").and_then(|x| x.parse::<u32>().ok()).is_some_and(|id| !known.contains(&id));

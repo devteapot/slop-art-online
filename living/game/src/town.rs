@@ -9,8 +9,8 @@
 //!   settling down to sit), where a standing body faces (its activity's spot or the one it is
 //!   aimed at), and whether the body is indoors and not drawn (asleep, or resting at its own
 //!   door: the house is where it is; an animal has no house and stays drawn, standing);
-//! - sends my own gestures through `human_act` ([`WAVE`] waves, [`NOD`] nods, at the person under
-//!   or nearest the cursor, else the nearest one ahead), predicting only my clip; [`APPRAISE`]
+//! - sends my own gestures through `human_act` (the Wave key waves, the Nod key nods (`keys.rs`), at the person under
+//!   or nearest the cursor, else the nearest one ahead), predicting only my clip; the Look over key
 //!   looks a person or an animal over the same way (the rules' `appraise`: for a while the
 //!   authority's projection of them carries their exact health, which the nameplate shows);
 //! - notes who answered my greeting (my `experience` rows), so their nameplate shows briefly;
@@ -18,7 +18,8 @@
 //!   shelter from.
 //!
 //! Gestures last longer on screen than in the rules (a wave is 1.2 s there, its clip about 2 s
-//! here): a gesture plays to its end unless its body moves off or starts something else.
+//! here): a gesture plays to its end unless its body moves off (one the rules say is done on the
+//! move, `on_the_move`, does not end so) or starts something else.
 
 use crate::combat::Action;
 use crate::net::Net;
@@ -28,11 +29,6 @@ use living_bindings::*;
 use spacetimedb_sdk::Table;
 use std::collections::{HashMap, HashSet};
 
-/// Gesture keys: G waves (greets), B nods, V looks someone over (`appraise`). Clear of WASD, the
-/// skill bar (LMB, RMB, Q, E, R, Shift) and F (interact).
-pub const WAVE: KeyCode = KeyCode::KeyG;
-pub const NOD: KeyCode = KeyCode::KeyB;
-pub const APPRAISE: KeyCode = KeyCode::KeyV;
 /// How long my predicted gesture waits for the authority's `doing` row (ms).
 const PREDICT_MS: f64 = 600.0;
 /// How long the nameplate of someone who answered my greeting shows (ms).
@@ -82,7 +78,8 @@ const APPRAISE_LOOK: Pose = Pose::Once("idle_look", 1.0, 1.5);
 /// the clip predicted at the press.
 struct MyAct {
     skill: &'static str,
-    key: KeyCode,
+    /// Its binding (`keys.rs`: G, B and V by default).
+    key: crate::keys::Act,
     reach: f32,
     /// People only (a greeting), or any creature (looking an animal over too).
     people: bool,
@@ -90,12 +87,26 @@ struct MyAct {
 }
 
 const MY_ACTS: [MyAct; 3] = [
-    MyAct { skill: "wave", key: WAVE, reach: WAVE_REACH, people: true, look: WAVE_LOOK },
-    MyAct { skill: "nod", key: NOD, reach: NOD_REACH, people: true, look: NOD_LOOK },
-    MyAct { skill: "appraise", key: APPRAISE, reach: APPRAISE_REACH, people: false, look: APPRAISE_LOOK },
+    MyAct { skill: "wave", key: crate::keys::Act::Wave, reach: WAVE_REACH, people: true, look: WAVE_LOOK },
+    MyAct { skill: "nod", key: crate::keys::Act::Nod, reach: NOD_REACH, people: true, look: NOD_LOOK },
+    MyAct { skill: "appraise", key: crate::keys::Act::LookOver, reach: APPRAISE_REACH, people: false, look: APPRAISE_LOOK },
 ];
 /// Settling down to sit plays this long (s; `sit_ground_down` is 2.97 s).
 const SIT_DOWN_S: f64 = 2.9;
+/// A sitter whose rest row goes stays seated this long (display ms) while it keeps still and
+/// starts nothing else. The authority renews a rest (an 8 s activity) by ending it and starting
+/// the next at the resident's next evaluation, once a second (`tick.rs`'s slots), and a viewer's
+/// frame delivers it up to 200 ms later: the client read the gap between the two rows (0.03–1.05
+/// s in verify-ui's seat runs) as getting up, and the new row's start as settling down again. A
+/// real end of the rest shows as soon as the body moves or starts something else, else after
+/// this.
+const RENEW_MS: f64 = 1600.0;
+
+/// Whether the world's rules say this skill is done on the move (`on_the_move`: moving does not
+/// break it off, so moving does not end its gesture here either).
+fn on_the_move(skill: &str) -> bool {
+    living_rules::catalog::skill(skill).is_some_and(|s| s.on_the_move)
+}
 
 /// How a visible skill looks: the skills drawn for by name, any other by its card's `look`.
 pub fn look(card: &ActCard) -> Pose {
@@ -144,8 +155,11 @@ pub struct Show {
 struct Playing {
     action: Action,
     until_ms: f64,
-    /// Where its body stood when it began; moving off ends it.
+    /// Where its body stood when it began; moving off ends it, unless it is done on the move.
     at: Vec2,
+    /// Its skill is done on the move (the rules' `on_the_move`: a wave, a nod): walking on does
+    /// not end it, on the authority or here.
+    on_move: bool,
     /// The authority's row has confirmed it (mine is predicted until then).
     confirmed: bool,
 }
@@ -157,7 +171,7 @@ pub struct Town {
     /// The `doing.since_ms` of the last gesture row each body started, so a row plays once.
     started: HashMap<u32, u64>,
     /// My gesture awaiting the authority: (clip look, pressed at display ms, facing).
-    predicted: Option<(Pose, f64, Option<Vec2>)>,
+    predicted: Option<(Pose, f64, Option<Vec2>, bool)>,
     /// Whom I last greeted, at display ms (the camera frames us both for a moment).
     pub greeting: Option<(u32, f64)>,
     /// Who answered my greeting, at display ms.
@@ -165,6 +179,18 @@ pub struct Town {
     /// Who made a gesture at me (a wave, a nod), at display ms (the camera frames us).
     pub greeted_by: HashMap<u32, f64>,
     seen: HashSet<u64>,
+    /// Who is drawn seated on the ground: since when (its first rest row's `since_ms`, which
+    /// settling down is timed from) and when (display ms) its rest row was last there.
+    sits: HashMap<u32, Sit>,
+}
+
+/// One body seated on the ground ([`Town::sits`]).
+#[derive(Clone, Copy, Debug)]
+struct Sit {
+    since: f64,
+    seen: f64,
+    /// The `since_ms` of the rest row it sits on now (a renewal starts a new one).
+    row: u64,
 }
 
 impl Town {
@@ -262,11 +288,12 @@ pub fn input(
     combat: Res<crate::combat::Combat>,
     mut scripted: ResMut<Scripted>,
     mut town: ResMut<Town>,
+    binds: Res<crate::keys::Binds>,
 ) {
     let now = scene.now_ms;
     let (Some(conn), Some(me_id), Some(me3)) = (net.conn.as_ref(), net.my_id, target.0) else { return };
     // Unconfirmed (refused, or lost): my predicted clip stops.
-    if town.predicted.is_some_and(|(_, t, _)| now - t > PREDICT_MS) {
+    if town.predicted.is_some_and(|(_, t, _, _)| now - t > PREDICT_MS) {
         town.predicted = None;
         if town.gestures.get(&me_id).is_some_and(|g| !g.confirmed) {
             town.gestures.remove(&me_id);
@@ -275,7 +302,7 @@ pub fn input(
     let me = Vec2::new(me3.x, me3.z);
     let mut presses: Vec<(&MyAct, Option<u32>)> = Vec::new();
     if !controls.demo && !controls.chat_open && !ui.keyboard {
-        if let Some(a) = MY_ACTS.iter().find(|a| keys.just_pressed(a.key)) {
+        if let Some(a) = MY_ACTS.iter().find(|a| binds.just_pressed(a.key, &keys)) {
             presses.push((a, None));
         }
     }
@@ -293,13 +320,14 @@ pub fn input(
             Some(t) => serde_json::json!({"do": act.skill, "target": {"id": t}}),
             None => serde_json::json!({"do": act.skill}),
         };
-        let r = conn.reducers.human_act_then(node.to_string(), net.on_reply(act.skill));
+        let node = node.to_string();
+        let r = conn.reducers.human_act_then(node.clone(), net.on_reply(act.skill, "human_act", || serde_json::json!({"node": node})));
         net.report(act.skill, r);
         if let Some(t) = to {
             // I turn to whom I greet or look over (the authority turns my body too; my look
             // would not).
             let face = scene.shown.get(&t).map(|(p, _)| *p - me).filter(|d| d.length_squared() > 1e-4);
-            town.predicted = Some((act.look, now, face));
+            town.predicted = Some((act.look, now, face, on_the_move(act.skill)));
             if act.people {
                 town.greeting = Some((t, now));
             }
@@ -338,7 +366,7 @@ pub fn shows(net: NonSend<Net>, scene: NonSend<Scene>, acts: Res<Acts>, weather:
         match (row.as_ref(), card.map(look)) {
             (Some(d), Some(pose @ Pose::Once(..))) if town.started.get(&id) != Some(&d.since_ms) => {
                 town.started.insert(id, d.since_ms);
-                let predicted = Some(id) == me && town.predicted.is_some_and(|(_, t, _)| (d.since_ms as f64) >= t - 400.0);
+                let predicted = Some(id) == me && town.predicted.is_some_and(|(_, t, _, _)| (d.since_ms as f64) >= t - 400.0);
                 match town.gestures.get_mut(&id).filter(|_| predicted) {
                     // Mine was predicted at the press: the authority confirms it; no replay.
                     Some(g) => {
@@ -351,7 +379,8 @@ pub fn shows(net: NonSend<Net>, scene: NonSend<Scene>, acts: Res<Acts>, weather:
                         // (its segment's turn); the rest face their spot here.
                         let face = toward.filter(|_| !card.is_some_and(|c| c.faces));
                         if let Some((action, until)) = once(pose, d.since_ms as f64, face) {
-                            town.gestures.insert(id, Playing { action, until_ms: until.max(d.until_ms as f64), at: p, confirmed: true });
+                            let on_move = card.is_some_and(|c| on_the_move(&c.skill));
+                            town.gestures.insert(id, Playing { action, until_ms: until.max(d.until_ms as f64), at: p, on_move, confirmed: true });
                         }
                     }
                 }
@@ -367,29 +396,54 @@ pub fn shows(net: NonSend<Net>, scene: NonSend<Scene>, acts: Res<Acts>, weather:
                 } else if raining || crate::world::hash(id, 0x5e47) < 0.3 {
                     // Under the eaves, or standing at ease with the others.
                     show.idle = Some(if raining { "idle_look" } else { "listen" });
-                } else if now - (d.since_ms as f64) < SIT_DOWN_S * 1000.0 {
-                    show.once = Some(Action { clip: "sit_ground_down", rate: 1.0, start_ms: d.since_ms as f64, hold: Some(0.99), face: None, ..Default::default() });
-                    show.idle = Some("sit_ground");
                 } else {
+                    // Seated already (the same rest, or the next one after a renewal's gap): still
+                    // seated, settling down timed from the first.
+                    let since = match town.sits.get(&id) {
+                        Some(s) if now - s.seen <= RENEW_MS => {
+                            if s.row != d.since_ms && crate::perf::has("seat") {
+                                info!("seat: #{id} rest renewed (row since {} after {}), {:.0} ms without a row: still seated", d.since_ms, s.row, now - s.seen);
+                            }
+                            s.since
+                        }
+                        _ => d.since_ms as f64,
+                    };
+                    town.sits.insert(id, Sit { since, seen: now, row: d.since_ms });
+                    if now - since < SIT_DOWN_S * 1000.0 {
+                        show.once = Some(Action { clip: "sit_ground_down", rate: 1.0, start_ms: since, hold: Some(0.99), face: None, ..Default::default() });
+                    }
                     show.idle = Some("sit_ground");
                 }
             }
             (Some(_), Some(Pose::Indoors)) => show.hidden = true,
             _ => {}
         }
+        // A sitter whose rest row has gone, keeping still and doing nothing else: seated on until
+        // the next rest row (a renewal) or [`RENEW_MS`].
+        if show.idle != Some("sit_ground") {
+            let moving = || crate::net::find_motion(conn, id).is_some_and(|m| m.vx != 0.0 || m.vy != 0.0);
+            match town.sits.get(&id) {
+                Some(s) if row.is_none() && now - s.seen <= RENEW_MS && !moving() => show.idle = Some("sit_ground"),
+                Some(_) => {
+                    town.sits.remove(&id);
+                }
+                None => {}
+            }
+        }
         if Some(id) == me {
-            if let Some((pose, t, face)) = town.predicted {
+            if let Some((pose, t, face, on_move)) = town.predicted {
                 if town.gestures.get(&id).is_none_or(|g| g.action.start_ms < t) {
                     if let Some((action, until)) = once(pose, t, face) {
-                        town.gestures.insert(id, Playing { action, until_ms: until, at: p, confirmed: false });
+                        town.gestures.insert(id, Playing { action, until_ms: until, at: p, on_move, confirmed: false });
                     }
                 }
             }
         }
-        // A gesture plays to its end, unless its body moves off or starts another activity.
+        // A gesture plays to its end, unless its body moves off (one done on the move does not
+        // end so) or starts another activity.
         if let Some(g) = town.gestures.get(&id).copied() {
             let other = show.idle.is_some() || show.hidden;
-            if now > g.until_ms || g.at.distance(p) > 0.5 || other {
+            if now > g.until_ms || (!g.on_move && g.at.distance(p) > 0.5) || other {
                 town.gestures.remove(&id);
             } else {
                 show.once = Some(g.action);
@@ -402,6 +456,7 @@ pub fn shows(net: NonSend<Net>, scene: NonSend<Scene>, acts: Res<Acts>, weather:
     }
     town.gestures.retain(|id, _| scene.shown.contains_key(id));
     town.started.retain(|id, _| scene.shown.contains_key(id));
+    town.sits.retain(|id, _| scene.shown.contains_key(id));
     town.shows = out;
 }
 

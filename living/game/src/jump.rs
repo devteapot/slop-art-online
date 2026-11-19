@@ -1,9 +1,10 @@
 //! How a jump looks (the rules' `jump`: a hop of 1.6 tiles in about 0.45 s, `skills.rhai`).
 //!
-//! The rules are flat, so the height is presentation only, and there is no jump take among the
-//! clips yet, so the jump is drawn here over whatever the body plays (its gait while running,
-//! its idle standing): a short crouch, an arc of [`HEIGHT`] m over [`AIR_S`], the legs drawn up
-//! in the air, and a dip on landing. Foot IK lets go while the feet are off the ground
+//! The rules are flat, so the height is presentation only. Where the body's file has a jump take
+//! for the hop's way (`takes.rs`: standing, forward, sideways), `live.rs` plays that instead.
+//! Otherwise (a backward hop, a file without takes) the jump is drawn here over whatever the
+//! body plays (its gait while running, its idle standing): a short crouch, an arc of [`HEIGHT`] m
+//! over [`AIR_S`], the legs drawn up in the air, and a dip on landing. Foot IK lets go while the feet are off the ground
 //! (`ik.rs`, [`airborne`]). Its timing comes from the move's start on the display clock, like
 //! any one-shot (`Motion::action` with the clip name [`CLIP`]).
 
@@ -14,8 +15,8 @@ use bevy::prelude::*;
 /// it to this module.
 pub const CLIP: &str = "jump";
 /// Crouch before leaving the ground, time in the air, and the landing (s); the arc's peak (m).
-const CROUCH_S: f32 = 0.06;
-const AIR_S: f32 = 0.44;
+pub const CROUCH_S: f32 = 0.06;
+pub const AIR_S: f32 = 0.44;
 const LAND_S: f32 = 0.14;
 const HEIGHT: f32 = 0.45;
 /// The share of the flight over which the feet leave and meet the ground (foot IK eases).

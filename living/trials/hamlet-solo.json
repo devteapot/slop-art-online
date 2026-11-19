@@ -1,0 +1,10 @@
+{
+ "extends": "hamlet",
+ "title": "The hamlet with one mind",
+ "about": "The `hamlet` world with only the subject (the youngest adult) thought for: LIVING_ONLY names it, and the other eleven live on their seeded ways and instincts (graphs), as in a scripted trial. The run goes on to its duration after the subject's death, with no mind, so births and deaths are counted the same way as in `hamlet`.",
+ "gradient": "Experiment 2: the same person among people who think and among people who run their graphs.",
+ "minds": {
+  "only": "subject",
+  "max": 0
+ }
+}

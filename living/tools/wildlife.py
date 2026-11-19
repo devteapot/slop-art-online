@@ -72,19 +72,25 @@ def numbers(rev):
     infant = re.search(r'stage == "infant"\s*\{\s*hunger \*= (?:if a\.actor\.kind == "person" \{ ([\d.]+) \} else \{ ([\d.]+) \}|([\d.]+))', rates)
     infant_animal = float(infant.group(2) or infant.group(3)) if infant else 0.6
     carried = re.search(r"_ => ([\d.]+)", fn_body(rh, "carried_spoil"))
+    # Laws written in game time (rates since rules-1, spoiling and grass since rates-2) are per
+    # game hour: two of them make a real minute on the island's 12-minute day.
+    hourly = 2.0 if 'per: "hour"' in rates else 1.0
+    spoil = arm(fn_body(rh, "spoil_per_h"), "meat", 0.025) * 2.0 if "fn spoil_per_h(" in rh else arm(fn_body(rh, "spoil_rate"), "meat", 0.05)
+    pasture = re.search(r"pasture_regen_per_h:\s*([\d.]+)", fn_body(rh, "laws"))
+    pasture = float(pasture.group(1)) * 2.0 if pasture else float(re.search(r"pasture_regen:\s*([\d.]+)", fn_body(rh, "laws")).group(1))
     return {
         "life": {k: sp[k]["life"] for k in ("deer", "wolf")},
         "migrate": {k: sp[k].get("migrate") for k in ("deer", "wolf")},
-        "hunger": {k: arm(rates, k, 5.0) for k in ("deer", "wolf")},
+        "hunger": {k: arm(rates, k, 5.0) * hourly for k in ("deer", "wolf")},
         "infant_hunger": infant_animal,
         "meat": arm(fn_body(rh, "nutrition"), "meat", 20.0),
         # Meat a wolf carries: the item's rate times the carrier's share (none: the item's rate).
-        "spoil": arm(fn_body(rh, "spoil_rate"), "meat", 0.05) * (float(carried.group(1)) if carried else 1.0),
+        "spoil": spoil * (float(carried.group(1)) if carried else 1.0),
         # A deer's meat: its row in the kinds table (`carcass: #{ meat: 5, ... }`, before 2026-11-11
         # `carcass_meat: 5`), else the older per-kind switch.
         "carcass": float((re.search(r'name:\s*"deer"[^\n]*?carcass(?:_meat)?:\s*(?:#\{\s*meat:\s*)?([\d.]+)', rh) or re.search(r'"deer"\s*=>\s*([\d.]+)', fn_body(rh, "carcass_meat")) or [0, 3])[1]),
         "graze": -float(re.search(r"hunger:\s*(-?[\d.]+)", fn_body(rh, "graze_done")).group(1)),
-        "pasture_regen": float(re.search(r"pasture_regen:\s*([\d.]+)", fn_body(rh, "laws")).group(1)),
+        "pasture_regen": pasture,
         "max_hp": {k: arm(fn_body(rh, "max_hp"), k, 50.0) for k in ("deer", "wolf")},
         "carry": float(re.search(r"_ => ([\d.]+)", fn_body(rh, "carry_limit")).group(1)),
     }

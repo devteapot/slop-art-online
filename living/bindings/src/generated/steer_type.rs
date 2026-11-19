@@ -18,6 +18,13 @@ pub struct Steer {
     pub plan_ms: u64,
     pub tokens: f32,
     pub input_ms: u64,
+    pub look_on: bool,
+    pub look: f32,
+    pub pace: f32,
+    pub run_pace: f32,
+    pub far: f32,
+    pub unseen_ms: u64,
+    pub apart: f32,
 }
 
 impl __sdk::InModule for Steer {
@@ -39,6 +46,13 @@ pub struct SteerCols {
     pub plan_ms: __sdk::__query_builder::Col<Steer, u64>,
     pub tokens: __sdk::__query_builder::Col<Steer, f32>,
     pub input_ms: __sdk::__query_builder::Col<Steer, u64>,
+    pub look_on: __sdk::__query_builder::Col<Steer, bool>,
+    pub look: __sdk::__query_builder::Col<Steer, f32>,
+    pub pace: __sdk::__query_builder::Col<Steer, f32>,
+    pub run_pace: __sdk::__query_builder::Col<Steer, f32>,
+    pub far: __sdk::__query_builder::Col<Steer, f32>,
+    pub unseen_ms: __sdk::__query_builder::Col<Steer, u64>,
+    pub apart: __sdk::__query_builder::Col<Steer, f32>,
 }
 
 impl __sdk::__query_builder::HasCols for Steer {
@@ -56,6 +70,13 @@ impl __sdk::__query_builder::HasCols for Steer {
             plan_ms: __sdk::__query_builder::Col::new(table_name, "plan_ms"),
             tokens: __sdk::__query_builder::Col::new(table_name, "tokens"),
             input_ms: __sdk::__query_builder::Col::new(table_name, "input_ms"),
+            look_on: __sdk::__query_builder::Col::new(table_name, "look_on"),
+            look: __sdk::__query_builder::Col::new(table_name, "look"),
+            pace: __sdk::__query_builder::Col::new(table_name, "pace"),
+            run_pace: __sdk::__query_builder::Col::new(table_name, "run_pace"),
+            far: __sdk::__query_builder::Col::new(table_name, "far"),
+            unseen_ms: __sdk::__query_builder::Col::new(table_name, "unseen_ms"),
+            apart: __sdk::__query_builder::Col::new(table_name, "apart"),
         }
     }
 }

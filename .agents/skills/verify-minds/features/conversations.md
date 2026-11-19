@@ -2,16 +2,18 @@
 
 ## Sub-features
 
-- Player speech creates a `speech` experience for the nearby minded character, `living/authority/src/perceive.rs:165`.
-- The real service dispatches a talk turn from the experience callback, `living/mind/src/main.rs:159`.
-- The fake reply reaches `mind_say` and the chronicle, `living/mind/src/mind/talk.rs:645`.
-- The turn offers every act the rules mark for conversation (`talk` in a skill's spec): the examples in `talk_system` show `prompts::TALK_SHOWN` (conceive, accept, give, offer, teach, host), and `talk_acts()` lists the rest, `living/mind/src/prompts.rs:118`.
-- A line heard while the listener's deliberation runs (`ActorMind.running`, set around `deliberate` in `mind.rs` `schedule`) waits for it (`talk.rs` `reply_turn` parks it; log "waits for it to end"). When the deliberation ends, `deliberation_ended` gives the line its turn ("gets its turn"), unless the deliberation spoke to that person after hearing them (`deliberation_says`; log "answered … in its deliberation"). A request that is only pending (queued, held by the rethink gate, off stage) does not hold a turn back. Case `parked`.
-- `end: true` closes the exchange. Repeating the same question produces no further talk request, `living/mind/src/mind/talk.rs:336`.
+- Player speech creates a `speech` experience for the nearby minded character (`living/authority/src/perceive.rs` `speak`).
+- The real service dispatches a talk turn from the experience callback (`living/mind/src/main.rs`, `experience().on_insert` → `Event::Speech` → `talk.rs` `on_speech`).
+- The fake reply reaches `mind_say` and the chronicle (`talk.rs` `say`).
+- The turn offers every act the rules mark for conversation (`talk` in a skill's spec): the examples in `talk_system` show `prompts::TALK_SHOWN` (conceive, accept, decline, give, offer, teach, host), and `talk_acts()` lists the rest (`living/mind/src/prompts.rs`).
+- Under `LIVING_PARK=wait` (the rule before 2026-11-11; the default is `concurrent`, below), a line heard while the listener's deliberation runs (`ActorMind.running`, set around `deliberate` in `mind.rs` `schedule`) waits for it (`talk.rs` `reply_turn` parks it; log "waits for it to end"). When the deliberation ends, `deliberation_ended` gives the line its turn ("gets its turn"), unless the deliberation spoke to that person after hearing them (`deliberation_says`; log "answered … in its deliberation"). A request that is only pending (queued, held by the rethink gate, off stage) does not hold a turn back. Case `parked`.
+- `LIVING_PARK=concurrent` (the default since 2026-11-11; `wait` selects the old parking above; talk.rs `Deliberating`, `turn_alongside`, `deliberation_decided`, `unanswered_say`; hooks in `mind.rs` `deliberate`: `deliberation_prompt` after the experiences are read, `deliberation_decided` after the think step, `said_alongside` into the compile prompt, `unanswered_say` before speaking). A line heard within 2 s after the prompt was built gets its turn alongside (log "gets its turn alongside"). A later line waits for the think step and gets its turn as soon as the decision's words are not for the speaker ("has decided, and not to speak to"). Whoever speaks to the speaker first is the answer: a deliberation's words for someone a turn alongside already answered are not said ("already answered … while deliberating"), and a turn alongside after the deliberation spoke says nothing ("spoke to … first"). Case `alongside`.
+- `LIVING_GREET=nearest|curious|facing` (`nearest` by default since 2026-11-11, `off` selects the old rule; `facing` stays off and is not for players until `human_face` is on main; talk.rs `Facts::drawn`, `faced`, `familiarity`, `audience_of`). It needs the world's `speech_audience` law (on by default since 2026-11-11), which writes the private `audience` table (perceive.rs `speak`). The mind subscribes to it only under these modes, in its own subscription so that a world without the table still starts (`main.rs`, `mind::greet_audience`; log "no `audience` subscription"). A stranger's line to no one, said with two residents within 6 m, draws no turn under `off` ("drawn in" absent), one turn from the nearest free hearer under `nearest` ("is drawn in by … (Nearest)"), and under `facing` a turn from the hearer the speaker faces ("is faced by … and takes the remark as addressed"). Case `greet`. The exhaustive unit test `greet_off_is_the_old_rule` proves `off` decides every combination of a line's facts as before.
+- `end: true` closes the exchange. Repeating the same question produces no further talk request (`talk.rs` `on_speech`, the settled check; log "no turn").
 
 ## How to get to it (user POV)
 
-A player speaks to someone nearby. The listener answers as a conversation turn, then may end the exchange. New information or the agreed time can reopen it.
+A player speaks to someone nearby. The listener answers as a conversation turn, then may end the exchange. New information or the agreed time can reopen it. A stranger who says something to a group, to no one in particular, is answered by the nearest resident within 6 m who is free to talk; someone busy thinking still answers within a few seconds.
 
 ## Driving it with verify_minds.py
 
@@ -28,10 +30,177 @@ The `parked` case delays the fake's deliberate reply by 8 s. A line said while t
 .agents/skills/verify-minds/scripts/verify_minds.py --run "$R" --case parked
 ```
 
+The `alongside` case runs the service with `LIVING_PARK=concurrent` and first asks for a warm-up deliberation, so that each step starts from an accepted plan. It delays the fake's think replies 8 s three times (the warm-up, steps 1 and 2), then 6 s with words for the player (step 3), and compile replies 8 s. (1) A line said as the first think request arrives gets a talk request before any compile request. (2) A line said 4 s into the second think gets none for 2 s, then one before the second deliberation's thought row exists. (3) During the third think, whose decision speaks to the player, the player's line gets its turn alongside, and the deliberation's words never reach the chronicle ("already answered" in `mind.log`).
+
+The `greet` case relies on the shipped rules keeping who heard each line (`speech_audience`, on by default; it checks the skills file says so). It places a resident 1 m west of a joined player and another 3 m east, and runs the service three times, with `LIVING_GREET` set explicitly to off, nearest and facing. Each time it waits for both residents' deliberations, then says one line to no one. Before the facing line it re-places everyone and the player turns to the farther resident with the `face` gesture. Expected answers (`greet.json`): none, the nearer resident, the farther resident, checked against the rule's own reading of each line's `audience` row.
+
+- `speech_truth` (a law, on by default; docs/COMMUNICATION.md §15; authority `brain.rs` `line_overtaken`): a mind plan's queued `say` to someone is dropped when it comes due if, since the plan was installed, that person spoke to the speaker or the speaker answered them by a line not this plan's (a talk turn's reply). Case `queued`.
+
+The `queued` case installs a plan through the fake: `first`, if the newcomer is within 2 m say "verify minds queued line" to them, else wait. The newcomer waits 4 m off. One second after the install (`brain.installed_ms`), it asks the resident a question over HTTP. As soon as the fake's talk reply ("verify minds talk reply") is in the resident's `said` rows, the driver moves the newcomer beside it, which releases the queued line. Times come from the speaker's own `said` rows, because the chronicle merges a repeated line. With `set_world_law speech_truth false`, both answers reach the newcomer, 0–3 s apart (`gap_s` in `result.json`): the double answer of ar2's `arrive-answer` `all` r3. With it `true`, only the reply does, and the speaker gets no `silence` row for the dropped line. The authority's 2 s speaking limit sets the floor. Two lines of one speaker are never under 2 s apart, so the reproduction cannot show the inspector's 1.5 s, which is not the authority's own line times. A fixed wait could not place the lines either: the talk turn took 5.7 s and then 2.9 s. A nod never set `hailed_ms`. Waking the graph with a second resident's line drew a reply that reset the limit.
+
+```bash
+.agents/skills/verify-minds/scripts/verify_minds.py --run "$R" --case queued
+```
+
+The `parked` case selects `LIVING_PARK=wait` (the old rule); every other case runs on the defaults, `nearest` and `concurrent`.
+
+```bash
+.agents/skills/verify-minds/scripts/verify_minds.py --run "$R" --case alongside --case greet
+```
+
 ## Gotchas
+- Under load (the Spark at load 30) a harness `player say` subprocess takes about 2 s, the whole freshness window. The `alongside` case sends its two fresh lines straight over HTTP with the player's token from the run's `state.json` (`say_now`, logged "(HTTP, fast)" in `actions.log`).
+- Residents walk off on their own ways between the `greet` case's arms, so the case places everyone again before each arm's line. `place_at` takes the nearest free tile, so someone standing on a target tile moves a body elsewhere (`minds-fixreq-g02`: the nearer resident ended 3 m from the player and the farther one 2 m). Since fix-request the case reads the bodies back (`body-placed.json`) and tries another direction until the nearer resident is nearer, the farther within 5 m, and the two more than 1 rad apart as the player sees them. It counts answers by their talk-turn thought rows: the chronicle merges a line repeated word for word into its earlier row, so a second identical fake answer adds no chronicle row.
+
+- In the `greet` case's first arm the residents' think nodes settle about 25 s after the world's birth, with the service already running, and the fake answers at once. The pending deliberation row lives under a second. Before fix-request (2026-11-12), the shared `Run.request` polled only for that row and could time out on a request already answered (`minds-fixtake-full2-013217-greet`). It now also counts the answer's `thought` row ([README](README.md)).
+- A restarted service replays speech under 30 s old (`STALE_MS`): the `greet` case lets each arm's line age 25 s more before the next restart, or the next arm answers the previous arm's line (seen in the first attempt). Talk state is in memory, so each restart starts with no exchanges and no once-a-minute history.
+- A deliberation already pending when the service starts (it varies) has a think request without the case's marker, and fake rules with `times` are consumed in order by every matching request. The `alongside` case asks for its own warm-up deliberation, counts think requests carrying `verify` rather than matching each step's marker, and sizes its rules to include the warm-up.
 
 - Addressed questions avoid the probabilistic choice to ignore an overheard remark.
 - The authority enforces a two-second speech gap. The driver respects it.
 - Speech triggers a talk turn, not a new full deliberation.
 - An ended exchange can reopen for new matter. Repetition tests closure without claiming permanent silence.
 - The observer does not control a player. The shared player identity is the real command path.
+
+## Ways and who heard
+
+Since `speech-1` (docs/COMMUNICATION.md §13):
+
+- A talk reply may name `"way"`, beside or inside `say`. `talk.rs` `way_of` keeps it when the world's rules have it (`prompts::ways`, from the compiled script) and otherwise says the line aloud. `mind_say` takes the way as its fourth argument. A deliberation's say (`mind_install`) is `say`.
+- A line whose words hold the speaker's own name gives the listener an `introduced` row when the name is news, so the mind is told "<Name> told you their name.". Consolidation sees it tagged `{Name=#id}`.
+- The mind service subscribes `line_heard` as the owner. Every prompt and consolidation shows a mind's own `said` line with whom it saw hear it: "… (heard by Bram and a stranger)", or "(no one you saw heard it)" (`Minds::heard_by`).
+
+The `speech` case (`verify_minds.py --case speech`) checks:
+
+1. A player introduces itself and the talk reply names `"way": "say"`: the line is spoken.
+2. The mind has one `introduced` row with the player as subject, and a `line_heard` row of its own lines listing the player.
+3. A second line draws a reply in `"way": "shout"`, which the world lacks: it is said aloud.
+4. The second talk prompt shows the mind's first line "(heard by …)", the player among those it lists (residents nearby may be listed too).
+5. A consolidation request carries "MindsTeller told you their name. {MindsTeller=#id}".
+
+Since `speech-2`:
+
+- A `whisper` row (words whispered to the mind) gives a turn as `speech` does; a `whispered` row (noticed, no words) never does.
+- The turn is told "They whispered this to you; …", and a reply that names no way is whispered back. A whisper refused because the speaker stepped away is not said aloud instead.
+- A turn answering a call is told how far the caller is, from its own row's words ("MindsTeller calls out to you from about 15 m"; this service does not follow bodies), and what an ordinary voice carries.
+- The reply format lists the ways (`"way": "say" or "whisper" or "call"`) when the world has more than one.
+- The `speech` case checks both, when the card has the ways:
+  - a whispered question from 1 m is answered with a "(whisper)" line, and its prompt says it was whispered;
+  - a call from 15 m is answered with a "(call)" line, and its prompt holds the distance, the voice's 9 m and the ways.
+
+## How a line to the room was said
+
+Since `speech-address` (2026-11-12, docs/COMMUNICATION.md §16), a line to the room says, in each hearer's own labels, whom it names and whom its speaker is talking with: "A stranger said to the room, naming Edda Hollin and a stranger: “…”", "… said to the room while talking with Lorcan Vane: “…”". The words are part of the hearer's `speech` row, so the prompt shows them as the row is.
+
+The `room-address` case (`verify_minds.py --case room-address`) spawns four people. H (thought for) founds a community and welcomes K, so H knows K's name and not U's or the speaker's. Everyone stands within 2.5 m of H. The speaker says, by admin `mind_say`, 2.6 s apart: a room line naming K and U by their given names, a line to K, then a room line naming no one. It checks:
+
+1. `naming_reads_known_then_stranger`: H's row reads "A stranger said to the room, naming <K> and a stranger:".
+2. `no_unknown_name_in_the_detail`: neither U's nor the speaker's name is in that row.
+3. `talking_with_reads_the_partner`: the last room line reads "A stranger said to the room while talking with <K>:".
+4. `prompt_carries_both`: H's next think prompt holds both rows (`prompt-address.txt`).
+5. `addressed_line_has_no_room_detail`: the line to K, as H overheard it, has no "to the room".
+
+Evidence: `room-address.json`, `prompt-address.txt`.
+
+## A decision's line names its way
+
+Since `mind-say-way` (2026-11-12, docs/COMMUNICATION.md §18), a think reply's `say` takes an optional `"way"`. The mind service reads it as a talk reply's (`talk::way_of`) and installs through `mind_install_way`, or passes it to `mind_say` when the decision carries on. The line goes to `speech::speak` in that way. A refused line is told to the speaker as an `unsaid` row in the rules' words, and the decision stands.
+
+The `say-way` case (`verify_minds.py --case say-way`) puts H (thought for) on a quiet open line (`open_line`), A 15 m east and B 1 m west. The fake model answers four think requests, each by its marker (`rules` with `contains`), with a line:
+
+1. **A call to A.** A's row reads "A stranger calls out to you from about 15 m: …". The chronicle keeps "<H> (call) to <A>". H's own row may already be integrated by its mind.
+2. **A whisper to no one.** H gets "You did not say “Verify whisper to no one.”: a whisper needs someone to whisper to." No one receives the words, and the decision's thought stands.
+3. **A whisper to B.** B gets a `whisper` row, and A nothing.
+4. **A line in "shout",** a way the world lacks. It is said aloud: B reads "A stranger said to you: …".
+
+It also checks that the think prompt names `"way": "say" or "whisper" or "call" (optional; default "say")`. Evidence: `say-way.json`, `prompt-say-way.txt`.
+
+## Talk turns (play-test 6)
+
+Since `talk-turns` (2026-11-12, docs/COMMUNICATION.md §19).
+
+- **A named hearer's turn.** A line said to someone else whose hearer's row reads ", naming … you" (the authority's words: by name or by a kin word) is collected for 300 ms (`NAMED_PICK_MS`, `talk.rs` `named_pick`). The nearest named hearer by the line's `audience` row then takes one turn as if addressed (`hear(e, true)`), when free (`in_other_open`: an exchange settled with someone else does not count). Like an addressed line, a named line that asks nothing is answered only by temperament (`answers_remarks`, a draw seeded by the line's time), so the turn "may" come; `sissly-scene`'s line also asks. The turn's prompt says how the line came under the answered line ("… said to …, naming you.").
+- **The turn budget and open matters.** `Conversation::open`: the line asks something, a plan or promise was made in the last two turns (`promised`: a settled outcome, or an act toward the other, `act_toward`), or the exchange was reopened on something settled and has had under two turns. Then the stamina gate lets the turn through, and the prompt says "You have said about as much as you usually do." instead of "make this your last word".
+- **The transcript ends before the answered line.** It is given once, under "What you are answering".
+
+`named-turn` (`verify_minds.py --case named-turn`): three spawned people A, B and C, thought for, and a player. B first settles an exchange with A. The player then says to A a line naming B and C by their given names. B stands 2 m from the player and C 5 m. Checks:
+
+- B's and C's rows name them;
+- only B takes a turn;
+- the turn's prompt reads "A stranger said to a stranger, naming you and a stranger." (B does not know C's name).
+
+`sissly-scene` (`verify_minds.py --case sissly-scene`): the play-test scene on the island seed. Sissly Fenner and Agnes Fenner are thought for; S, a spawned stranger, stands in for the owner, and the lines are paraphrased markers. It checks:
+
+- the plan's queued line ("Verify stale …", from a deliberate step the fake model holds 7 s while S asks and Sissly answers alongside) is not said;
+- turn 3, a question, is not told to be the last word, and states the plain fact;
+- the answered line appears once in that prompt;
+- Agnes's row of Sissly's "… ask Mother first." reads ", naming you", and Agnes takes a turn.
+
+Evidence: `sissly-scene.json`, `prompt-turn3.txt`, `prompt-agnes.txt`, `named-turn.json`, `prompt-named.txt`.
+
+## Ids are not words
+
+A mind is shown people by `#id` handles. Every speaking mind's system prompt (think, deliberate, fast, talk) carries one sentence, word for word the same (`prompts::IDS_NOT_SPOKEN`): the handles are for acts and memory and are never spoken; when it speaks, it names people by name or description. The `prompts::` test `every_speaking_mind_is_told_ids_are_never_spoken` checks the four prompts. Since fix-spoken-ids (2026-11-12): in r2e, 3 of 68 lines said by deliberations carried an id.
+
+A line that names someone by `#id` anyway is said without it by the speech primitive (docs/COMMUNICATION.md, "Ids are not words"). The speaker then gets a `spoken_as` experience: "Your line was said as “…”: you wrote “…”, and #ids are not words anyone hears.". The mind journals each one in `<journal>/outcomes/spoken_as.jsonl` (`actor`, `name`, `to`, `line`). trials.py counts them: `summary.json` `spoken_as` (total, by character, examples), and `report.md` "Ids said as words" with the batch's total. A high count means the prompt's sentence is not doing its work.
+
+`--case spoken-ids`: two adults side by side. The think reply says "Watch out, #<other> is here." (the decision speaks; a compile's `say` is dropped by design).
+1. `think_prompt_has_the_sentence_once` and `deliberate_prompt_has_the_sentence_once`: each system prompt sent holds it once.
+2. `spoken_without_the_id`: the chronicle line names the other without the id (by name, when the speaker knows it).
+3. `spoken_as_keeps_both`: the speaker's `spoken_as` row holds what it wrote and what was said.
+4. `journaled_with_both`: `outcomes/spoken_as.jsonl` has the line, with the speaker's name.
+
+Evidence: `spoken-ids.json`, `fake-requests.jsonl`, `journal/outcomes/spoken_as.jsonl`.
+
+`named-room-call` (`verify_minds.py --case named-room-call`, since `talk-named-room`; ew2's Petra case): P, not thought for, calls to the room. N stands 5 m away and D 19 m away, both thought for. D is within a call's carry and beyond a said line's, and in a conversation with P. Checks:
+
+- control: a call naming no one draws D's turn;
+- a call naming N ("Verify call: <N>! Come to the smokehouse.") draws N's turn and none from D;
+- N's row reads ", naming you", and D's names one other.
+
+Evidence: `named-room-call.json`.
+
+## Said once
+
+Since `say-once` (2026-11-13, docs/COMMUNICATION.md §15 "Said once"): a mind plan's `say` node addressed to a person does not say a line nearly the same as one its speaker said to that person within 45 s. Nothing else is held back: lines to the room, scene and admin graphs, players' lines, a deliberation's own line, talk turns (scope decided 2026-11-13). The check reads the chronicle (`speech::said_to_recently`), so a plan's install, which clears the node's own mark, cannot make it speak twice.
+
+The `say-once` case (`verify_minds.py --case say-once`) replays ew2's Mirren Quill double with the two reducer calls a deliberation makes, as the admin, in the mind service's order:
+
+1. A top level weighing "the plan".
+2. The `current plan` routine edited to say a line to A; the body speaks it.
+3. Within 2 s, `mind_install_way` with the decision's own line, which is refused ("speaking too fast").
+
+Checks, 7 s later: the line is said once (one chronicle row, no "(×2)"); there is no `repeat` row; the decision's line was refused and told. Then what the rule leaves alone: the same plan steps with a line to the room say it again (`a_room_line_is_said_again`), and a scene graph (`set_behavior`) installed twice says its line to A again (`a_scene_line_is_said_again`). Before `say-once`, on main `80e75932`, the line came out "(×2)" with the repeat row. Evidence: `say-once.json`.
+
+## Places in a talk turn
+
+Since `talk-places` (2026-11-13, docs/COMMUNICATION.md §20). A talk turn asks the authority where its character stands (since `reply-timing` the procedure `mind_reach`, whose answer comes back to the call; before, `mind_where`, read back from `standing`) and lists, under "# Places you know, from where you stand", the character's places and the resources it remembers (`seen_stock`), each with the way from there (`living_rules::bearing`: "here" within 4 m, else the distance in the scene's words, whole metres up to 30 and then tens, and a compass word). The think and deliberate prompts' "# Places you remember" are the same lines, nearest the scene's place, without the way (`Minds::places(actor, near, say_way)`); the scene's `places` (known-ground) give the way once.
+
+The `talk-places` case (`verify_minds.py --case talk-places`): H (thought for) on an open line with A beside it (its lines are the admin's `mind_say`); three berry bushes holding one berry each by H; H steps 23 m off and back (a look); H knows a place "verify well" 16 m east (`mind_update`). Checks:
+
+1. A asks where to find berries: H's talk prompt has the section, the well as `"verify well" at [x, y], 16 m east` and the bushes as `3 berry bush around [x, y], here: seen day …`, measured from H's body; its "# Now" says H stands still and where A is (`mind_reach`).
+2. H's think prompt's "# Places you remember" has the well's coordinates with no way, and its scene's `places` entry for the well gives `dir` and `dist` matching the talk prompt's way (the way said once).
+3. H steps off; A gathers the three; the row is unchanged while H is away; back, it is gone with its count and seen time kept, and A's next question gets `berry bush around [x, y], here: gone when you were last here, day … (3 seen day …)`.
+
+The fake talk reply says a line and leaves the exchange open: a silent or ended reply settles it, and A's second question gets no turn. Evidence: `talk-places.json`, `prompt-talk-1.txt`, `prompt-think.txt`, `prompt-talk-2.txt`.
+
+
+## A reply is said when it is ready
+
+Since `reply-timing` (2026-11-19, docs/COMMUNICATION.md §21).
+- A reply turn says its line as soon as the model's reply is parsed (`talk.rs` `reply_turn`, `Pace::of`). Before, it was held until the line it answered was done being said (`saying_ms`). Reception is judged when the line is said, so the replier walking on meanwhile no longer loses it.
+- The old said time is the line's place in the exchange's rhythm (`paced_ms`; the `spoke` and `voice` maps). The speaker's next line keeps `SPEECH_GAP_MS` from it.
+- "# Now" says where the other is from the replier's own perception, and where the replier is going, from the authority's `mind_reach` procedure ("Fern is 7 m west of you. You are walking to a spot 21 m east, away from Fern."; `reach_words`).
+- A reply-turn line answered by a `silence` within `MISSED_MS` gets one turn that weighs it: the prompt ends with "# What came of your last words" and the silence's words (`TalkUser.missed`), and the thought's `detail.missed` holds them. A second silence before the other is heard again ends the exchange.
+
+The `reply-timing` case (`verify_minds.py --case reply-timing`): on an open line F (its lines are the admin's `mind_say`) stands at tile 2, and H and K (thought for) each walk east on a `goto` graph and are greeted with twenty-one words and a question once 3.5 m off (they walk 2.6 m/s, `walk_base`) (a said line carries 9 m). The fake answers H at once, and K after `delay_s` 6. Checks:
+- **H:** F receives H's reply (no `silence`), said within 2.5 s of the greeting; F's next line, a call after F's own 2 s speaking gap (H is past 9 m by then), gets H's next turn; H's prompt says F is <N> m west (within 3 m of the bodies' distance) and that H walks to a spot east, away from F.
+- **K:** a truthful `silence` ("… could not have heard you"); exactly one follow-up turn, whose prompt ends with the silence's words and says K neither sees nor hears F; its talk thought has `detail.missed`; its own line is missed too, and the exchange is then over (`mind.log`).
+
+`VERIFY_REPLY_TIMING=main` runs the same scene against a build of main and checks main's behaviour instead: H's reply gets a `silence` and "out of earshot, conversation over", and K's silence gets no further turn. Run it from a main worktree with this script copied in. Evidence: `reply-timing.json`, `prompt-a.txt`, `prompt-b-follow.txt`.
+
+- The walk speed is the world's (`walk_base`); the case reads it from the body (`speed` in the evidence) and needs H past 9 m during the old 6.93 s hold. H is within reach for about 2 s after the greeting, so under heavy load a reply turn slower than that would put H out of reach at ready time too. `h_said_when_ready` shows that case.
+
+## Speech with an act
+
+The talk frame shows separate choices to speak and to act. A single immediate walk is `goto`, and an immediate gift is `give`. Ongoing `follow` belongs in the deliberation graph. Drive `talk-act-repair` to see a spoken line and a transfer from one reply, followed by a correction to its refused walk. The conversation line and the transfer each happen once. See [act repair](deliberation.md#act-repair).

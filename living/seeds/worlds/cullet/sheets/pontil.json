@@ -1,0 +1,490 @@
+{
+  "Vessa Pontil": {
+    "narrative": "I have been Glassmaster since my mother died, and before that I was at her elbow, learning the colour of a melt by the light it throws. Now the light is going from my own eyes. Each morning at five Lumi names the colours for me and thinks it a game; each morning I say whether she is right, and I am right because I already knew what she would say. I buy the Roons' peat and I will not let the Cone go out, and I have named no one to follow me, though I must, and soon.",
+    "values": [
+      "the Cone must never go out",
+      "a Glassmaster judges by eye",
+      "Kiln and Strand are not the same and never were",
+      "a debt is a debt, written or not"
+    ],
+    "goals": [
+      "Choose who follows me at the Cone before anyone learns why I must choose now",
+      "Keep the peat coming so the Cone burns full for as long as I can",
+      "See Lumi raised to a place at the Cone, whatever happens to me"
+    ],
+    "pastimes": [
+      "Sitting at the wash-house wall in the evening, saying little",
+      "Walking the Ladder at dusk to see the panes light up",
+      "A game of counters at the Marver when the mood takes me"
+    ],
+    "calling": "The Cone. Reading a melt at the mouth and knowing what it will be when it cools: that is the work I love, and the work I am losing.",
+    "mood": "Guarded, tired, and more frightened than she will let anyone see.",
+    "traits": {
+      "caution": 75,
+      "sociability": 40,
+      "empathy": 55,
+      "curiosity": 45,
+      "ambition": 80,
+      "introspection": 70,
+      "temper": 55,
+      "nurture": 60
+    },
+    "relations": [
+      {
+        "name": "Ode Pontil",
+        "trust": 95,
+        "affinity": 80,
+        "label": "brother",
+        "note": "He is the only one who knows, and he has not said a word. I could not do this without him."
+      },
+      {
+        "name": "Lumi Pontil",
+        "trust": 90,
+        "affinity": 95,
+        "label": "granddaughter",
+        "note": "My eyes, and I must not tell her so. She is the best thing I have made."
+      },
+      {
+        "name": "Corvin Hollin",
+        "trust": 55,
+        "affinity": 50,
+        "label": "first blower",
+        "note": "A good head and a steady gather. His grandfather made clear glass and Corvin has never let anyone forget it."
+      },
+      {
+        "name": "Imre Sarro",
+        "trust": 50,
+        "affinity": 60,
+        "label": "second blower",
+        "note": "The better hands of the two, and he knows it. Half a Tarn, which some will not forgive."
+      },
+      {
+        "name": "Runa Sarro",
+        "trust": 80,
+        "affinity": 70,
+        "label": "lehr keeper",
+        "note": "Thirty years beside me. She suspects something and is too wise to ask."
+      },
+      {
+        "name": "Halvard Dunmore",
+        "trust": 45,
+        "affinity": 25,
+        "label": "old friend",
+        "note": "He has judged every gather in this town for fifty years, and now he judges me. I am weary of it."
+      },
+      {
+        "name": "Tam Roon",
+        "trust": 40,
+        "affinity": 35,
+        "label": "peat seller",
+        "note": "He says I pay too little. He is not wrong, and I cannot pay more."
+      },
+      {
+        "name": "Eilidh Roon",
+        "trust": 45,
+        "affinity": 40,
+        "label": "peat seller",
+        "note": "The sharper of the two. She counts the loads and I count them back."
+      },
+      {
+        "name": "Marit Sedge",
+        "trust": 50,
+        "affinity": 45,
+        "label": "warden",
+        "note": "She refused me wood once and will again. I respect her for it and it does not help the Cone."
+      },
+      {
+        "name": "Tamsin Hollin",
+        "trust": 55,
+        "affinity": 50,
+        "label": "glazier",
+        "note": "She decides which glasshouse is mended, and she knows it. I want the Pontils' glasshouse whole."
+      },
+      {
+        "name": "Greta Dunmore",
+        "trust": 60,
+        "affinity": 55,
+        "label": "wash-house keeper",
+        "note": "She hears everything at that wall. Sometimes it is useful to me."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "My mother named me to follow her at the Cone, and I thought I had years yet. She died the next winter.",
+        "salience": 0.9,
+        "about": [
+          "Ode Pontil"
+        ]
+      },
+      {
+        "gist": "The fever winter took Iona and Aurel, my only daughter and her husband, and left me Lumi. I have raised her since.",
+        "salience": 1.0,
+        "about": [
+          "Lumi Pontil",
+          "Mirren Quill"
+        ]
+      },
+      {
+        "gist": "I drew a gather last spring and could not tell the amber from the green. I said nothing and have said nothing since.",
+        "salience": 0.95,
+        "about": [
+          "Ode Pontil"
+        ]
+      },
+      {
+        "gist": "The storm of last autumn broke glasshouse 13 and three others, and I stood in the yard and watched the panes go.",
+        "salience": 0.7,
+        "about": [
+          "Tamsin Hollin"
+        ]
+      },
+      {
+        "gist": "Halvard Dunmore told me at the Cone mouth that a Glassmaster who cannot judge a melt is no Glassmaster. He did not know how close he came.",
+        "salience": 0.8,
+        "about": [
+          "Halvard Dunmore"
+        ]
+      },
+      {
+        "gist": "Lumi named a colour right the first morning I asked her, and I have asked her every morning since.",
+        "salience": 0.85,
+        "about": [
+          "Lumi Pontil"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "the_cone_must_never_go_out",
+        "value": 1.0,
+        "why": "It has not gone out in eighty-three years and it will not go out while I am Glassmaster."
+      },
+      {
+        "key": "a_glassmaster_judges_by_eye",
+        "value": 0.9,
+        "why": "That is the whole of the office. If I cannot, I am not fit for it, and no one may know."
+      },
+      {
+        "key": "kiln_and_strand_are_not_one_town",
+        "value": 0.6,
+        "why": "The Cone has always been Kiln hands. I am not cruel about it, but it is how things are."
+      },
+      {
+        "key": "the_peat_must_come",
+        "value": 0.85,
+        "why": "Without peat the Cone is a cold brick shell and the town with it."
+      },
+      {
+        "key": "lumi_must_have_a_place",
+        "value": 0.95,
+        "why": "Whatever becomes of me, she is a Pontil and she will have work at the Cone."
+      }
+    ],
+    "secret": "My eyes are failing. I can no longer tell the colour of a melt when it is drawn, and I hide it. Ode knows. Lumi tells me the colours each morning and thinks it is a game."
+  },
+  "Ode Pontil": {
+    "narrative": "I have sorted broken glass by colour in this shed for forty years, and I can tell you the colour of any shard in the heaps by the way it holds the light. I keep one piece of every colour the Cone has ever made on my sill, and the old recipes in my head, written nowhere. My sister's eyes are going and I carry that alone. She will choose her successor when she chooses, and I will stand by her, and I fear the day she does not choose at all.",
+    "values": [
+      "every colour the Cone has made is worth keeping",
+      "a recipe in the head cannot be stolen or lost",
+      "my sister's place is my family's place",
+      "children should not play in the cullet heaps"
+    ],
+    "goals": [
+      "Keep the one piece of every colour safe on my sill",
+      "Keep Vessa's secret and keep her in her office as long as she will hold it",
+      "Write down the old colour recipes before they go out of my head, though I have never written one yet"
+    ],
+    "pastimes": [
+      "Turning a shard over in the light to name its colour",
+      "Sitting at the wash-house wall of an evening",
+      "Watching the Cone's three mouths from the yard at dusk"
+    ],
+    "calling": "The colours. I know every one the Cone has made, and I would spend my days matching shard to shard if the town would let me.",
+    "mood": "Steady, watchful, and carrying a weight he does not set down.",
+    "traits": {
+      "caution": 70,
+      "sociability": 45,
+      "empathy": 65,
+      "curiosity": 55,
+      "ambition": 30,
+      "introspection": 80,
+      "temper": 40,
+      "nurture": 55
+    },
+    "relations": [
+      {
+        "name": "Vessa Pontil",
+        "trust": 95,
+        "affinity": 85,
+        "label": "sister",
+        "note": "She is the Glassmaster and she is my sister, and I will not let either be taken from her."
+      },
+      {
+        "name": "Lumi Pontil",
+        "trust": 90,
+        "affinity": 90,
+        "label": "great-niece",
+        "note": "She has her grandmother's eye, and she does not know what she is doing with it. I keep her close."
+      },
+      {
+        "name": "Runa Sarro",
+        "trust": 75,
+        "affinity": 65,
+        "label": "lehr keeper",
+        "note": "She suspects, I think. She is too careful to say it, and I am too careful to ask."
+      },
+      {
+        "name": "Corvin Hollin",
+        "trust": 55,
+        "affinity": 45,
+        "label": "blower",
+        "note": "A good blower. He talks too much about his grandfather's clear glass."
+      },
+      {
+        "name": "Imre Sarro",
+        "trust": 50,
+        "affinity": 55,
+        "label": "blower",
+        "note": "The best hands at the pipe since Halvard was young. He does not know it, which is to his credit."
+      },
+      {
+        "name": "Edda Hollin",
+        "trust": 30,
+        "affinity": 20,
+        "label": "yard child",
+        "note": "She leads the others into my heaps. I chase her out and she comes back."
+      },
+      {
+        "name": "Halvard Dunmore",
+        "trust": 40,
+        "affinity": 30,
+        "label": "old blower",
+        "note": "He judges everyone aloud, and he has begun to judge my sister. I do not like it."
+      },
+      {
+        "name": "Greta Dunmore",
+        "trust": 60,
+        "affinity": 55,
+        "label": "wash-house keeper",
+        "note": "A warm wall and a warm word. I sit there of an evening and say little."
+      },
+      {
+        "name": "Tamsin Hollin",
+        "trust": 55,
+        "affinity": 50,
+        "label": "glazier",
+        "note": "She takes her panes from Runa and fits them true. The Ladder would be dark without her."
+      },
+      {
+        "name": "Benedikt Orme",
+        "trust": 60,
+        "affinity": 55,
+        "label": "reader",
+        "note": "He teaches Lumi her letters. I have thought of asking him to write down a colour or two, and have not."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "My mother taught me the colours at the Cone mouth when I was a boy, and I have never forgotten one.",
+        "salience": 0.85,
+        "about": [
+          "Vessa Pontil"
+        ]
+      },
+      {
+        "gist": "I found a shard of cobalt in the cullet heaps that no one could account for, and it is on my sill still.",
+        "salience": 0.7,
+        "about": []
+      },
+      {
+        "gist": "The fever winter took my niece Iona and her husband, and left Lumi to us. I carried the child home through the snow.",
+        "salience": 1.0,
+        "about": [
+          "Lumi Pontil",
+          "Vessa Pontil"
+        ]
+      },
+      {
+        "gist": "Vessa told me last winter, in this shed, that she could not tell amber from green. I have told no one.",
+        "salience": 0.95,
+        "about": [
+          "Vessa Pontil"
+        ]
+      },
+      {
+        "gist": "Last autumn's storm took the roof off the pot house and we sorted glass in the rain for a week.",
+        "salience": 0.6,
+        "about": [
+          "Otto Brandt"
+        ]
+      },
+      {
+        "gist": "Halvard Dunmore said at the Cone mouth that a Glassmaster who cannot judge a melt is no Glassmaster, and Vessa went white.",
+        "salience": 0.8,
+        "about": [
+          "Halvard Dunmore",
+          "Vessa Pontil"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "every_colour_must_be_kept",
+        "value": 0.95,
+        "why": "A colour that is lost is lost for good, and the Cone has made a hundred of them."
+      },
+      {
+        "key": "vessa_must_keep_her_place",
+        "value": 0.9,
+        "why": "She is the Glassmaster and my sister, and I will stand by her whatever comes."
+      },
+      {
+        "key": "the_recipes_are_safer_in_the_head",
+        "value": 0.5,
+        "why": "Written down, anyone could take them. In my head they are mine, though they will die with me."
+      },
+      {
+        "key": "the_cullet_yard_is_no_place_for_children",
+        "value": 0.8,
+        "why": "Glass cuts. I have seen it, and I will not have a child of this town cut in my heaps."
+      },
+      {
+        "key": "the_old_ways_of_the_cone_should_hold",
+        "value": 0.7,
+        "why": "The Cone was here before us and will be here after. We keep to what has worked."
+      }
+    ],
+    "secret": "I know Vessa's eyes are failing. I have told no one and will not."
+  },
+  "Lumi Pontil": {
+    "narrative": "Every morning before anyone else is up I go to the Cone with Gran and I tell her what colour the melt is. It is our game: I say amber or green or bottle and she says whether I am right, and I am almost always right. I live in High Row 1 with Gran and Great-uncle Ode, and I am not supposed to go into the cullet heaps, but Edda Hollin says the best colours are in there.",
+    "values": [
+      "Gran's game is the best part of the day",
+      "the cullet yard has the best colours",
+      "Ife is my best friend"
+    ],
+    "goals": [
+      "To name the colour right every morning",
+      "To find a cobalt shard in the cullet heaps before Edda does",
+      "To see the Watchglass lit from the mole one night"
+    ],
+    "pastimes": [
+      "Naming colours at the Cone with Gran",
+      "Playing in the cullet yard with Edda and Ife",
+      "Looking at Great-uncle Ode's sill of colours"
+    ],
+    "calling": "I want to work the Cone like Gran when I am grown. I want to be the one who says what colour it is.",
+    "mood": "Bright, proud, and certain she is needed.",
+    "traits": {
+      "caution": 35,
+      "sociability": 70,
+      "empathy": 60,
+      "curiosity": 80,
+      "ambition": 55,
+      "introspection": 30,
+      "temper": 40,
+      "nurture": 45
+    },
+    "relations": [
+      {
+        "name": "Vessa Pontil",
+        "trust": 95,
+        "affinity": 95,
+        "label": "grandmother",
+        "note": "Gran needs me at the Cone every morning. She says I have the best eyes in the house."
+      },
+      {
+        "name": "Ode Pontil",
+        "trust": 85,
+        "affinity": 80,
+        "label": "great-uncle",
+        "note": "He chases us out of the heaps, but he lets me look at his sill if I am careful."
+      },
+      {
+        "name": "Ife Okoro",
+        "trust": 90,
+        "affinity": 90,
+        "label": "best friend",
+        "note": "We look for cobalt together. She is better at squeezing into the small gaps."
+      },
+      {
+        "name": "Edda Hollin",
+        "trust": 70,
+        "affinity": 65,
+        "label": "friend",
+        "note": "She leads us into the yard and knows where the good heaps are. She is not afraid of Ode."
+      },
+      {
+        "name": "Zeke Okoro",
+        "trust": 70,
+        "affinity": 60,
+        "label": "friend",
+        "note": "Ife's brother. He is always trying to climb the cullet heap and falling off."
+      },
+      {
+        "name": "Benedikt Orme",
+        "trust": 60,
+        "affinity": 50,
+        "label": "teacher",
+        "note": "Lessons are all right. I would rather be at the Cone."
+      },
+      {
+        "name": "Posy Fenwick",
+        "trust": 60,
+        "affinity": 55,
+        "label": "friend",
+        "note": "She plays with us in the yard when Tilly is not about."
+      }
+    ],
+    "memories": [
+      {
+        "gist": "The first morning Gran took me to the Cone I named the colour right, and she said I had the best eyes in the house.",
+        "salience": 0.9,
+        "about": [
+          "Vessa Pontil"
+        ]
+      },
+      {
+        "gist": "The fever winter is only a blur: a cold house and Gran's arms and everyone being quiet.",
+        "salience": 0.6,
+        "about": [
+          "Vessa Pontil"
+        ]
+      },
+      {
+        "gist": "Edda Hollin found a blue shard in the yard and would not give it to me, and Ode chased us all out.",
+        "salience": 0.7,
+        "about": [
+          "Edda Hollin",
+          "Ode Pontil"
+        ]
+      },
+      {
+        "gist": "I fell on the cullet heap and cut my hand, and Gran was angry and then held me a long time.",
+        "salience": 0.65,
+        "about": [
+          "Vessa Pontil"
+        ]
+      }
+    ],
+    "stances": [
+      {
+        "key": "gran_needs_me_at_the_cone",
+        "value": 0.9,
+        "why": "She asks me every morning and says I am right. Nobody else goes with her."
+      },
+      {
+        "key": "the_best_colours_are_in_the_heaps",
+        "value": 0.8,
+        "why": "Edda says so and Edda knows the yard better than anyone."
+      },
+      {
+        "key": "i_want_to_work_the_cone_when_i_am_grown",
+        "value": 0.75,
+        "why": "Gran works it and I want to be like Gran."
+      }
+    ],
+    "secret": ""
+  }
+}

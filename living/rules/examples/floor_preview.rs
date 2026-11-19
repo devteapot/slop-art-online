@@ -108,6 +108,15 @@ fn main() {
     let arrive = host::arrival(&land, &hosted);
     let _ = writeln!(out, "arrival {:.2} {:.2}", arrive.0, arrive.1);
     let _ = writeln!(out, "blocked {} tiles, cut off {}", h.blocked_tiles, h.cut_off_tiles);
+    // Hand-authored settlements (docs/AUTHORED_PLANS.md): what each laid out, and any door no
+    // one can reach.
+    for p in &land.plans {
+        let s = &land.settlements[p.settlement as usize];
+        let _ = writeln!(out, "plan {} settlement {} ({}): {} lots, {} streets, square ({:.1}, {:.1}) at {:.2} m", p.id, p.settlement, s.style, p.lots.len(), p.streets.len(), s.plaza.centre.0, s.plaza.centre.1, s.plaza.floor_m);
+    }
+    if !land.plans.is_empty() {
+        let _ = writeln!(out, "plan doors stranded: {:?}", living_rules::settle::stranded_doors(&land, &hosted, &h.reachable));
+    }
     let mut styles: BTreeMap<String, (usize, usize)> = BTreeMap::new();
     for s in &land.settlements {
         let e = styles.entry(format!("{}:{}", s.kind.id(), s.style)).or_default();
@@ -135,11 +144,11 @@ fn main() {
     }
     let _ = writeln!(out, "props {}: {props:?}", land.props.len());
     let _ = writeln!(out, "rivers {}, dry beds {}, lakes {}, sites {}", land.rivers.len(), land.dry_beds.len(), land.lakes.len(), land.sites.len());
-    let mut tiles = [0usize; 8];
+    let mut tiles = [0usize; 10];
     for &t in &hosted.tiles {
         tiles[t as usize] += 1;
     }
-    let _ = writeln!(out, "hosted tiles by class (grass forest water sand rock dirt road wall): {tiles:?}");
+    let _ = writeln!(out, "hosted tiles by class (grass forest water sand rock dirt road wall drop low): {tiles:?}");
     // Places worth a look: each style's first square, the middle of the widest roads, gates.
     let mut seen = Vec::new();
     for s in &land.settlements {
@@ -200,6 +209,8 @@ fn main() {
                 }
                 Terrain::Sand => [205.0, 185.0, 140.0],
                 Terrain::Rock => [120.0, 110.0, 100.0],
+                Terrain::Drop => [95.0, 85.0, 75.0],
+                Terrain::Low => [60.0, 56.0, 52.0],
                 Terrain::Dirt => [170.0, 140.0, 105.0],
                 Terrain::Forest => [95.0, 115.0, 70.0],
                 Terrain::Grass => [160.0, 158.0, 110.0],

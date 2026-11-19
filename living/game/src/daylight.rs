@@ -415,7 +415,7 @@ fn compose(
     target: Res<crate::controls::Target>,
     mut atmo: ResMut<Atmo>,
 ) {
-    let active = defs.0.is_some() && (island.is_some() || net.conn.is_some());
+    let active = defs.0.is_some() && (island.is_some() || net.conn.is_some() || crate::view::day_curve());
     atmo.active = active;
     let Some(def) = defs.0.as_ref().filter(|_| active) else { return };
     let hour = clock.hour();
@@ -505,8 +505,10 @@ fn apply(
     mut clear: ResMut<ClearColor>,
     mut lights: Query<(&mut DirectionalLight, &mut Transform)>,
     mut fogs: Query<&mut DistanceFog, With<Camera3d>>,
+    mut shown: Local<Option<Vec3>>,
 ) {
     if !atmo.active {
+        *shown = None;
         // Fixed moods: the toon shader ignores the ambient light (alpha 0).
         if ambient.color.alpha() != 0.0 {
             ambient.color = ambient.color.with_alpha(0.0);
@@ -516,7 +518,17 @@ fn apply(
     for (mut l, mut tf) in &mut lights {
         l.color = Color::srgb(atmo.light[0], atmo.light[1], atmo.light[2]);
         l.illuminance = atmo.lux;
-        *tf = Transform::from_translation(atmo.key * 60.0).looking_at(Vec3::ZERO, Vec3::Y);
+        // The key light turns in steps (`world::SHADOWS`): Bevy anchors the shadow map's texel
+        // grid at the world origin, so a sun turning every frame slides that grid across a town
+        // hundreds of metres out (by more than a texel a frame with a 12-minute day), and shadow
+        // edges shimmer with the camera still. Written every frame: look-dev's `lookdev::sun`
+        // also turns this light, earlier in the frame.
+        let step = crate::perf::value("sunstep").unwrap_or(crate::world::SHADOWS.sun_step_deg).to_radians();
+        if shown.is_none_or(|s| s.angle_between(atmo.key) > step) {
+            *shown = Some(atmo.key);
+        }
+        let key = shown.unwrap_or(atmo.key);
+        *tf = Transform::from_translation(key * 60.0).looking_at(Vec3::ZERO, Vec3::Y);
     }
     ambient.color = Color::LinearRgba(LinearRgba::new(atmo.fill.x, atmo.fill.y, atmo.fill.z, atmo.glow));
     ambient.brightness = 1.0;

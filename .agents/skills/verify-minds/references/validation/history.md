@@ -1,0 +1,508 @@
+# Internal mind validation
+
+## 2026-11-12 packs: `apart` in the grammar (Spark)
+
+Branch `packs`, the trial service, the fake model, `--no-unit-tests`.
+- `minds-packs2-181550` `intents` failed only on the old expected lines: the reference now reads `keep_distance(target, min, max, run, qty, apart)`, `close_in(target, distance, run, apart)` and `circle(target, radius, side, run, qty, apart)`, each with the spec's `apart` sentence.
+- With the case's lines updated, `minds-packs3-181702` `intents` passes.
+
+## 2026-11-12 packs: the `pack` switch retired (Spark)
+
+Branch `packs` from origin/main `9e8a8a87`, the trial service `slop-trials-stdb`, the fake model, private target dir. `minds-packs-133930`: `animals` (rewritten) passes. The switches were `salient,choose,pack` with `LIVING_ANIMAL_PACK_S=120`, so the retired word was passed on purpose:
+- each of the three deer made its own `choose` call (picks 2, 3 and 1), three calls in all;
+- no thought had `mode: pack` or another deer's `by`;
+- no choose prompt had a `# Your pack` section;
+- no compile request was made;
+- the lead, asked again after its 240 s throttle, was answered by instinct with no fourth call. The final step the feature map listed as a known gap passed in this run.
+
+## 2026-11-12 committed-moves, second pass (Spark)
+
+With origin/main `a07f5919` merged and `throw` committed: `minds-commit5-071222` `acts` passes.
+
+## 2026-11-12 committed-moves (Spark)
+
+Branch `committed-moves` from origin/main `2ff786aa`, the trial service, the fake model. `minds-commit-062424`: `acts` passes; `doing` failed on its fixture: the eye's first turn east was refused ("you already face it", which leaves no `skill_use` row) when it already faced east. The case now turns it west first and waits for the east turn's row; `minds-commit3-063146` `doing` passes.
+
+## 2026-11-12 far-handle (Spark)
+
+Branch `far-handle` (from main `b657a344`), the trial service `slop-trials-stdb`, the fake model. New case `far-figure` (`minds-farhandle2-*`): 8/8. F, in M's relations as "Walker2 (#266)", stood 5 m off under an overlay making everyone past 4 m far:
+- the scene showed `{"id": 1000000059, "who": "someone too far away to make out"}`;
+- F's line read "Someone too far away to make out said: “Fine weather on the strand today.” {someone too far away to make out=#1000000059}";
+- no line tied the handle to Walker2 or #266;
+- a wave at the handle reached #266;
+- at 2 m the `made_out` row joined the handle to #266 and the scene named Walker2.
+
+The first attempt failed only because F's graph room line was never said; F now speaks by admin `mind_say`. The release mind's tests: 106 pass.
+
+## 2026-11-12 move-intents (Spark)
+
+Branch `move-intents`, the trial service, the fake model, `--no-unit-tests` (the check ran the mind's build). `minds-intents-061748`: `intents` (new) passes. The prompt documents the five intents with their arguments, m/s and "lost sight of them". The plan `keep_distance` 3–6 m is kept as the `current plan` routine `{"do":{"skill":"keep_distance","target":{"id":7},"qty":120,"min":3.0,"max":6.0}}`, and `steer` is goal 5 (keep 3, far 6, flag 128). The character backs off at its walk (3.37 m/s) when the other walks at it. Earlier attempts placed the two in town at night, where a wall hid one ("no #7 in sight"); the case now uses an open row. Not run: the other cases (the scene gate runs roundtrip, acts, dealings, conversation).
+
+## 2026-11-12 doing-percept (Spark)
+
+Branch `doing-percept` from origin/main `ee8790f4`, the trial service `slop-trials-stdb`, the fake model, private target dir. `minds-doing-053436`: `doing` (new) passes: the pending request's scene lists the other, holding a guard 3 m in front, with `visibly` `{"is": "block", "phase": "holding"}`; the think prompt carries it; the deliberate prompt's grammar documents `{"doing": ...}`. `fov` passes alongside. The mind's non-ignored tests (105) pass. Not run: the other cases. After merging main `dd2c8569`, with the check allowing a guard's `at: you` (its drawn aim): `minds-doingm-055740` `doing` passes.
+
+## 2026-11-12 far-label (Spark)
+
+Branch `far-label` (`18b7754b`), the trial service `slop-trials-stdb`, the fake model. `minds-farlabel-024238`: `roundtrip` and `conversation` pass (the release mind's non-ignored tests, 104, pass too). Not run: the other cases.
+
+After merging main with speech-truth (`03d32e09`, `minds-farlabel3-031420`): `roundtrip`, `queued` and `conversation` pass.
+
+## 2026-11-12 speech-truth (Spark)
+
+Branch `speech-truth` with origin/main merged. Trial service `slop-trials-stdb` (2.14.1), fake model, private target dir. docs/COMMUNICATION.md §15.
+
+- Unit tests (`cargo test -p living-mind`): 100 pass in `minds-struth` and `minds-struth2`. In `minds-struth3`, `llm::tests::unreachable_provider_holds_calls` failed once on timing (it waited 1.998 s against a 2 s minimum, at load average ~90); `llm.rs` is unchanged here, and the test passed in every other run.
+- `minds-struth`: conversation, greet, alongside, parked and speech pass. Its `queued` (first form) failed on its own timing: the talk turn took 5.7 s, so the queued line came first.
+- The `queued` case was reworked over `minds-struth2`–`9`:
+  - a fixed wait cannot place the lines (talk turns of 5.7 and 2.9 s);
+  - a nod never set `hailed_ms`;
+  - a second resident's line drew a reply that reset the 2 s speaking limit;
+  - a settled pair took no turn on the second arm's like-worded question.
+- `minds-struth10-queued` passes:
+  - law off: the reply at 3.65 s and the queued line at 6.44 s after the install, both to the newcomer (gap 2.79 s);
+  - law on: the reply alone (4.00 s), no queued line, no `silence` row.
+- The 2 s speaking limit (`SPEAK_GAP_MS`) means one speaker's two lines are never under 2 s apart. ar2's "1.5 s apart" is not the authority's own line times.
+- `privacy.py --way say` (`minds-struth-privacy-say`): pass, no violations, 0 Neo4j nodes left.
+- Maintain pass: no `maintain-verification-skill` subagents were run. The map was updated by hand for this change: `conversations.md` (`queued`, `speech_truth`) and the case list in SKILL.md. No table, reducer, view or subscription changed.
+
+- Rerun after the coordinator's changes (fact-only outcome text, room lines), `minds-struth11-queued`: pass. Law off: reply at 3.68 s, queued line at 6.44 s (gap 2.76 s). Law on: the reply alone (4.02 s), no `silence` row. Mind unit tests 100 pass.
+
+## 2026-11-12 arrive-2: exp-arrive's trial tooling on main, without the newcomer laws (Spark)
+
+Branch `arrive-2` (exp-arrive `1e63a30` with origin/main `a221a78` merged; the newcomer laws removed after the owner rejected them). Worktree, trial service `slop-trials-stdb` (2.14.1, port 3320), private `CARGO_TARGET_DIR`, fake model only. The branch's Rust is identical to main's; it changes trials.py, arrive_report.py, the arrive trials and docs.
+
+- `just living-check` exits 0. Every step was skipped: its inputs were identical to a tree that had already passed (`.local/living/arrive2/living-check-2.log`).
+- After merging origin/main `8c5b8530` (fix-dealings, strangers-lives): `just living-check` ran in full and exits 0 in 936 s (`living-check-3.log`). The Python tooling and fake run above did not change in that merge.
+- `minds-arrive2c-000819`: roundtrip, conversation, greet, alongside and parked pass. Two earlier attempts (`minds-arrive2-000308`, `minds-arrive2b-000749`) stopped at the mind's own tests: `llm::tests::unreachable_provider_holds_calls` returned 1.97 s and 1.62 s into a 2 s probe pause (load average 66–87). It also failed 1 of 3 runs alone. It is a pre-existing timing defect in main's llm.rs; this branch does not change it.
+- Trials `a2f1`: `arrive` and `arrive-answer` × `arrive-control`, 3 minutes, `--fake --fake-script living/trials/fake/arrive-answer.json`. Both ran to their duration with one mind start each, concurrency 64, and the laws guard passed. The fake's new trigger (#13 in the scene) made Ilsa address the player, who answered once (`human_answer`). `arrive_report.py a2f1` reports both runs (`.local/living/arrive2/a2f1-arrive-report.md`) after its fix for a stand cut short by the run's end. The databases were cleaned, and the tagged module was removed from the `/wasm` mount.
+
+## 2026-11-11 exp-arrive after merging main 6caebe2 (Spark)
+
+Trials `af8`: `arrive` and `arrive-answer` × control and `arrive-all`, 6 minutes, fake. All four ran to their duration with one mind start each and concurrency 64; the player answered once. `just living-check` exits 0 (`.local/living/arrive/living-check-6.log`).
+
+## 2026-11-11 exp-arrive after merging main 087be68 (Spark)
+
+Trials `af7`: `arrive` and `arrive-answer` × control and `arrive-all`, 6 minutes, fake. All four ran to their duration with one mind start each and concurrency 64. The answered resident replied in 1.5 s. `just living-check` exits 0 (`.local/living/arrive/living-check-5.log`).
+
+## 2026-11-11 exp-arrive after merging main accf27c (Spark)
+
+`reasons`, `frame`, `roundtrip` and `conversation` pass (`minds-arrive-m5-190947`). `just living-check` exits 0 (`.local/living/arrive/living-check-4.log`). Trials `af6`: `arrive` and `arrive-answer` × control and `arrive-all`, 10 minutes, with `minds.max` 11. All four ran to their duration with one mind start each, concurrency 64, and `carried_again` 0.
+
+## 2026-11-11 exp-arrive after merging main 62d861f and fix-stale-reasons 0209eb4 (Spark)
+
+- `reasons`, `conversation` and `roundtrip` pass (`minds-arrive-m4-185828`). The first attempt (`minds-arrive-m3-185610`) failed all three at launch, before any check ran: main's `skills.rhai` is 133,155 bytes, past the 128 KiB a single command-line argument may be (`OSError: Argument list too long` from `spacetime call install_script`). `verify.py launch` now installs it over HTTP with the owner's token. Main's `1b3b5dd` had also dropped the launch's keeping of a seed's own laws (it started from an older copy of `verify.py`); restored.
+- Trials: `af4` (`arrive` and `arrive-answer` × control and `arrive-all`, 9 minutes, `--fake-script living/trials/fake/arrive-answer.json`, concurrency 64): all ran to their duration. `carried_again` (from `detail.reasons`) was 0 in every run; the player answered once, and the resident replied.
+- `af3` before the merge: `arrive-answer`, concurrency 64 in `mind-env.json` and the summary, `LIVING_ONLY` without Tobin and the player's groups chosen among the minds.
+
+## 2026-11-11 exp-arrive: the arrival trial and the newcomer laws (Spark)
+
+Branch `exp-arrive` from main `fba1778`, worktree, the trial service `slop-trials-stdb` (2.14.1, `LIVING_STDB_URL=http://127.0.0.1:3320`), private `CARGO_TARGET_DIR`, fake model only. The mind service is unchanged; the authority gained the newcomer laws (off by default), and the trial runner gained the scripted arrival player, `record` options, `subject.join.after_s`, `--fake-script` and worktree module names (features/trials.md).
+
+- Full suite `minds-arrive-172139` (load about 15, beside the paid greeting batch): roundtrip, acts, conversation, prune, reject, only, reconnect, lod, takeover, sight, resident, night, jev, rethink-llm, dealings and parked pass. Consolidation is its known XFAIL. `animals` failed at its known gap ("nothing new: no call", the 2026-11-11 lives-2 entry). `rethink` timed out waiting 40 s for its first gate, and passed alone (`minds-arrive-rt-175042`).
+- Trials free tier: `af1`, the `arrive` trial × five variants (`arrive-control`, `-notice`, `-known`, `-wonder`, `-all`), one replicate each, 14 minutes, `--fake --fake-script living/trials/fake/latency.json`. All five ran to their duration with every `record` file written. `arrive_report.py af1` reads them (docs/TRIALS.md, "Arrivals"). The first attempt hit the trial service's file-descriptor limit (about 120 kept databases); the coordinator cleaned up and raised the limit.
+
+
+## 2026-11-12 the timing of one's own known fighting moves (mind-skill-timings, Spark)
+
+Branch `mind-skill-timings` at c6af2ff6, the trial service (port 3320), fake model. Scoped maintain-verification-skill pass on `features/deliberation.md`: its citations brought to the current lines (`perceive.rs:270`, `mind.rs:1286`, `:1812`, authority `mind.rs:360`, `:409`, `brain.rs:517`), the `timings` case and `LIVING_SKILL_TIMINGS` mapped. Live: `minds-time3-234118` `roundtrip`, `acts`, `timings` pass, `minds-time3-off-234118-roundtrip` passes with the switch off; `reasons` passed in `minds-time3-233156`, and its later attempts stopped in the suite's own `cargo test -p living-mind` on two timing tests of `llm.rs` (`a_failed_poll_keeps_the_batch…`, `unreachable_provider_holds_calls`; the file is main's) at a load average of 76 on 20 cores.
+
+## 2026-11-12 fix-request: the shared `Run.request` helper (Fedora host)
+
+Branch `fix-request` (from main with fix-takeover merged, `a33826413`), own container `fixreq-stdb` (2.14.1, port 3335, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), one private `CARGO_TARGET_DIR`, fake model only. Host load 8–60 from other work. Evidence under the worktree's `.local/living/verify/minds-fixreq-*`. The scratch reproduction drivers are in `.local/fixreq/repro/scripts/`.
+
+- **The greet failure in `minds-fixtake-full2-013217` was not a reply replacing the test graph.**
+  - Datha's journal shows the deliberation the mind sent at 01:23:48 gave the reason "I finished my plan. verify off-1". That is the helper's own think.
+  - The test graph went in at 01:23:35, but the think node asks only once the deliberation clock has settled 45 s (brain.rs). A seeded person's clock starts 20 s before its birth (seed.rs), so the ask came about 25 s after the world's birth.
+  - The service was already running, and the fake answered at once. The pending row lived under a second, and the helper polled only for that row. It never saw the row and timed out after 65 s.
+- **The race fix-takeover described is real too, in another timing.** A reply already in flight when the test think fires takes the think's reason as a merged line. With its new plan, `clear_deliberation` drops that line (`reasons::PLAN_STATE` holds "I finished my plan"). The reply then replaces the test graph and sets the clock. The old helper returned at once on the merged row, and nothing was asked for the marker.
+- **Reproduced** with scratch copies of the helper (`old.py`, `new.py`, `repro.py`):
+  - `minds-fixreq-repro-old-greet1`: the old helper with a 3 s lag in its poll fails `greet` like full2. The deliberation carried "verify off-1" and was installed at 01:34:10, and the helper timed out after 65 s.
+  - `minds-fixreq-repro-old-inflight2`, a probe: a deliberation for another reason is held 12 s at the fake, and the helper is called meanwhile. The old helper returned after 1.2 s on the merged row (`verify spontaneous\nI finished my plan. verify probe`). The reply dropped the line, and no prompt's reasons carried "verify probe" within 75 s.
+- **Fix, in `Run.request`** (feature map, features/README.md). While the mind runs, the helper does three things:
+  - It waits, for up to 40 s, until the actor has no request pending.
+  - It counts the ask by the marker in a newer `thought` row's `detail.reason`, or in a pending row the marker's line made (`arrived` against `requested_ms`). Before the mind starts it accepts the pending row as before.
+  - If a reply replaces the test graph and no thought carries the marker, it installs the graph again, up to three times.
+- **The fix holds under the same lags:**
+  - `minds-fixreq-repro-new-greet1` passes with the 3 s lag. All six asks were counted by their thought rows.
+  - `-new-inflight1` passes: the probe's prompt came 59 s after the call, the in-flight reply plus the 45 s settle.
+  - `-noquiet-inflight1`, with the quiet wait switched off, passes through the reinstall: "the test graph was replaced (source 'mind') … installing it again", answered 58 s after the call.
+- **A second `greet` flake, in the case's scene:** `minds-fixreq-g02` failed in its `nearest` arm, with the helper fine. `place_at` takes the nearest free tile, so with someone on a target tile the nearer resident ended 3 m from the player and the farther one 2 m. The rule rightly drew the farther one. `place()` now reads the bodies back and tries another direction until the scene is as meant (features/conversations.md, Gotchas). In g05 it re-placed once and passed.
+- **Results:**
+  - `greet`: 10 in a row on the final code (`minds-fixreq-h01`–`h10`), 10/10 pass. The earlier loop `g01`–`g10` went 9/10: g01–g04 ran without the placement check, and g02 failed as above.
+  - Across `full1`, g and h, the helper counted the ask by its thought 55 times in 19 `greet` runs, nearly every ask. Neither the reinstall nor the held merge fired outside the probe.
+  - Full suite `minds-fixreq-full1`, on the request fix without the placement check (`2c3cabb25`): exit 1. 29 cases pass; `consolidation` is its known XFAIL; `animals` hit its known gap ("a request answered by instinct").
+  - Full suite `minds-fixreq-full2`, on the final code (`8cafbe444`): exit 1. 28 cases pass, `greet` among them; `consolidation` is its known XFAIL; `animals` hit its known gap again.
+  - `jev` failed in full2 at load 60. The attacker struck and the judge cached `fight_risk` 0.9, refreshed four times, but the defender's activity read `wait` at every poll for 30 s, not `flee`. `jev` uses neither the helper nor `place()`, and it has failed under load before (recipes-1, laws-2, l2c). Alone it passed 2 of 2 completed runs (`minds-fixreq-jev1`, `-jev3`), with the flee branch taken. `jev2` never ran its case: its launch timed out at 240 s, because it builds the authority in the same target directory while `living-check` held the build lock (no database was created).
+- **After merging origin/main `52a446042`**, which added `queued`, a caller of the helper while the mind runs: `queued` passed 3/3 (`minds-fixreq-m1`–`m3`), and `greet` and `alongside` pass (`m1`). In every `queued` arm the helper counted the ask by its thought: the mind had answered between two polls.
+- `set -o pipefail; just living-check` passes in 449 s (`.local/fixreq/living-check.log`). It ran every step, but the game step was not stamped: `living-game` reads `living/tools/characters/types.json`, outside the check's declared inputs. That is in `living/tools/check.py` and unrelated to this branch. On the head after merging main it passes in 168 s (`living-check-2.log`).
+- **Not covered:**
+  - Cases with their own asks (`drop`, `death-names`, `reasons`, `rethink`) wait on the fake log rather than the row, so the missed-row race does not apply to them. A reply in flight at their ask could still drop it. Not seen; not changed here.
+  - The helper's held merge (a request the mind holds for over 40 s) was not exercised by any case.
+
+## 2026-11-12 fix-takeover: the in-flight reply is the takeover's own deliberation (Fedora host)
+
+Branch `fix-takeover` (from main `8c5b8530`), own container `fixtake-stdb` (2.14.1, port 3334, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), one private `CARGO_TARGET_DIR`, `scoped`, fake model only. Host load 9–53 from other work. Evidence under the worktree's `.local/living/verify/minds-fixtake-*`.
+
+- **The driver was wrong, not the authority.**
+  - At the second takeover, `presence::take_over` asks for a deliberation, then reinstalls the held graph. The reinstall (`set_graph`, source `mind`) sets `deliberated_ms`, so a `think` node stays quiet for 45 s (`brain.rs`, the settle), and `think_min_s` (20 s for people) declines a new ask once the mind has answered.
+  - The case then installed a `set_behavior` think "verify in flight" and waited for a deliberate request containing "in flight". That text only reached a request when the test graph landed before the mind sent the takeover's prompt: the prompt carries the current graph, while the think itself never fired.
+  - In `minds-fixdeal-m1` the driver's polls lagged (4 s between the last presence read and the brain read). The prompt left at 22:57:06.8, before the test graph. The mind installed its reply at :14, replacing the test graph, and nothing more was asked.
+- **Reproduced** 2 of 2 (`minds-fixtake-repro1`, `-repro2`). Each ran the old driver from a scratch copy with a 3 s sleep before its `set_behavior`. Both failures match m1: "timed out after 40s waiting for deliberation in flight", no deliberate request with the marker. The old driver passed without the lag (`minds-fixtake-base1`).
+- **Fix, in the case:**
+  - It no longer asks. It waits for the second takeover's own deliberate request in the fake log (after the requests counted at handback), checks the request carries the takeover's reason ("A quiet moment to take stock"), then returns.
+  - The fake model delays the first deliberate reply 8 s, as before, and later ones 25 s. The reply is still in flight however slowly the driver polls.
+  - The case also checks the return happened before the reply was due.
+  - With a scratch 10 s sleep before the return, the case passes (`minds-fixtake-lag10`).
+- **Results:**
+  - `takeover` passed 15 of 15 in a row (`minds-fixtake-t01`–`t15`), run beside a full suite on the same server. The return came between −0.5 and +0.7 s of the request (action-log seconds), except t12 at +6.2 s, which is close to the old 8 s reply delay.
+  - Full suite `minds-fixtake-full-003429`, exit 1. Passing: `takeover`, roundtrip, acts, conversation, prune, reject, only, reconnect, lod, sight, fov, drop, resident, night, jev, rethink, rethink-llm, dealings, parked, death-names, frame, reasons, speech, health-seen, alongside and greet. `consolidation` is its known XFAIL. `animals` hit its known gap ("a request answered by instinct"). `answers` failed (below).
+  - `answers` failed in the same suite on the ask race recipes-1 fixed in `dealings`. The mind accepted and declined 4 s after start, so the case found no pending deliberation, asked again and waited 65 s for a row that had come and gone. The case now asks only while the terms are open and takes the pending request or the terms declined. It passed 5 of 5 (`minds-fixtake-a1`–`a5`): a1–a2 found the request pending, and a3–a5 went through the ask-or-declined wait.
+- `just living-check` passes (366 s).
+- Full suite on the final code, `minds-fixtake-full2-013217`, exit 1. `takeover` and `answers` pass, and so do the other cases except these three:
+  - `consolidation` is its known XFAIL.
+  - `animals` hit its known gap.
+  - `greet` failed in its first arm (it passed in suite 1). The shared `Run.request` helper installed its `set_behavior` think for Datha at 01:23:35, while the mind's start-up deliberation for Datha was under way. Its reply installed at 01:23:48, which replaced the test graph and set the deliberation clock, so nothing was asked within the 65 s wait. This is the same race class as `takeover`, in the helper about a dozen cases share. It is not fixed here.
+- `paid_safety.py` passes (`minds-duel-safety-fixtake`).
+- **Not changed:** if the `takeover_s` law were set below `think_min_s`, the takeover's own ask could be declined (`hand_back` leaves `deliberated_ms` as the minds left it). With the default 30 s against 20 s it cannot happen, and no case sets it.
+
+## 2026-11-12 fix-dealings: `dealings` passes again on main (dev-box)
+
+Branch `fix-dealings` (from main `e417c08e`), own container `fixdeal-stdb` (2.14.1, port 3332, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), one private `CARGO_TARGET_DIR`, `scoped`, fake model only. Host load 4–72 from other work.
+
+- **Reproduced on main** (`minds-fixdeal-r1`, and by hand on scratch worlds): the demander's `demand` was refused with "no #1 in sight", so no record was made.
+- **Breaking merge: fix-place-free (`e3f0527f0`).** `place_near` now takes the nearest free walkable tile. Beside the default world's first adult, a guard standing in the north gate (404,338) with walls east and west of it, that tile is the diagonal (405,337), across the wall's end.
+  - `Map::sight_walk` broke an exact corner tie toward y, so the demander's line entered the wall tile (405,338) while the guard's line back went through open ground. The guard saw the demander and not the reverse.
+  - Before fix-place-free, `place_near` put the demander inside the wall tile east of the gate, and an end tile never blocks. Probes (no mind) at 3c73d835, e3f0527f0, 28c8e7b0 and e417c08e, with the guard in the north gate, show where it lands. At the east gate (420,354) the tile east of her is open ground and the demand is made, at fix-place-free's parent and at fix-place-free alike.
+  - The candidate merges after 46fa9db3 (exp-greet, look-2, hearth-1, fix-store-scrub-5, fix-look-label) do not take part.
+- **Second cause, in the driver:** neither adult was held before placing, so the guard walked to her post and the demander to the berry bushes while the mind service started (`r1`: the demander last saw the guard 10 m away).
+- **Fix:** the corner rule in the rules crate (verify-core record of the same date). The case now holds both adults before `place_near`, as `answers` does, and keeps recipes-1's ask/met race fix (`f08665f2f`).
+- **Results:**
+  - `dealings`: 3/3 (`minds-fixdeal-d1`–`d3`). In 20 more runs (`n01`–`n20`) the case passed 19 times. n18 failed before the case, in the runner's unit tests: `llm::tests::unreachable_provider_holds_calls` measured the gate's 2 s pause from the first call's return, a few ms after the failure that starts it (1.9966 s under load). Its clock now starts before the first call. The n18 slot rerun (`n18b`) passes, unit tests included: 20 of 20 case runs pass.
+  - `sight` and `fov` pass (`minds-fixdeal-m1`).
+  - `takeover` failed once in `m1`: its "in flight" think came within `think_min_s` of the second takeover's own deliberation (22:57:08 against 22:57:06–:14), so the authority asked nothing. That is the cadence race recipes-1 fixed in `dealings`, not sight. It passed alone (`minds-fixdeal-t2`). Not fixed here.
+
+## 2026-11-12 stamina-1: a mind runs (Spark)
+
+Branch `stamina-1` with look-2 merged; trial service `slop-trials-stdb`. `minds-st1b --case run`: **pass**.
+
+- **The run.** The fake model's `{"do": "goto", ..., "run": true}` ran at 1.65 times the walk (the `run_share` law). The vitals row drained at -4 a second from its anchor.
+- **The prompt.** It documents `"run": true` and the `stamina` condition, and the scene's `you` has `stamina`.
+- **First attempt.** `minds-st1a` failed in the service's own `cargo test`: a mind test still used the pre-merge `Body.breath`. It now reads breath from the vitals row through `status_of`.
+
+
+## 2026-11-11 greeting switches on by default (exp-greet after main 990ab80, Spark)
+
+Branch `exp-greet` with origin/main and `greet-result` merged. The defaults are now `LIVING_GREET=nearest`, `LIVING_PARK=concurrent` and the law `speech_audience` on. Trial service `slop-trials-stdb` (2.14.1, port 3320), private `CARGO_TARGET_DIR`, fake model only, host load 24–32 from other batches.
+
+- Unit tests (`cargo test -p living-mind`, 98 pass): `the_defaults_are_nearest_and_concurrent` (new), `the_old_rules_stay_selectable_and_typos_are_refused`, and `greet_off_is_the_old_rule`, which selects `off` explicitly.
+- Full suite `minds-greetdefault-20261111-195138`:
+  - Pass: roundtrip, acts, conversation, prune, reject, only, reconnect, lod, takeover, sight, drop, resident, night, rethink, rethink-llm, parked (now selects `LIVING_PARK=wait`), death-names and frame. `consolidation` is its known XFAIL.
+  - `animals` fails at its last step ("nothing new: no call"): the known gap recorded under lives-2.
+  - `jev` and `dealings` timed out under load (a cached judgment, a demand record), as recorded before, and pass alone.
+  - `alongside` failed at step 3 on timing: the line reached the authority 2 s after the think started, outside the freshness window, so it correctly waited and was answered by the deliberation. The case now sends its fresh lines over HTTP.
+  - `greet` failed on its fixture: the far resident had walked off, so the off arm's line had one hearer and was marked addressed; and an identical second fake answer was merged into its earlier chronicle row. The case now places everyone before each line and counts thought rows.
+- Rerun `minds-greetdefault2-20261111-203835`: `alongside`, `greet`, `jev` and `dealings` pass.
+- Maintain pass (`maintain-verification-skill`, scoped to this default change; no subagents): the map has no missing or dead entries. `conversations.md` now gives the defaults, the `wait` parking as the old rule, the `audience` subscription of its own, the user-POV room line and the two gotchas above. SKILL.md and README.md list `alongside` and `greet`. The live pass is the full suite above.
+
+## 2026-11-11 conversation switches (exp-greet, Spark)
+
+Branch `exp-greet` (main 90f6fac with `exp-hamlet-births` merged), worktree, the trial service `slop-trials-stdb` (2.14.1, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL=http://127.0.0.1:3320`), private `CARGO_TARGET_DIR`, fake model only. Batches `l9` and `pf2` ran on the same service.
+
+- New cases `greet` (`LIVING_GREET` off, nearest, facing over the `audience` table) and `alongside` (`LIVING_PARK=concurrent`: a fresh line taken alongside the think step, a late line released at the decision, a deliberation's words withheld from someone already answered). Final run on the merged tree `minds-greetfinal-20261111-153934`: `conversation`, `parked`, `greet` and `alongside` pass. `conversation` and `parked` are the default-behaviour regression.
+- Earlier attempts and what they taught (evidence kept). In `minds-greet-20261111-145055` and `minds-greet2-…`, `greet` failed on its own test. A restarted service replays speech under 30 s old, so the next arm answered the previous arm's line, and the chronicle query had no order. The residents also drifted out of the facing cone before the line (0.73 rad). The case now lets each line age out, sorts by id, re-places everyone before the facing line, and checks the answers against the rule's own reading of the `audience` row. `alongside` failed twice on setup: think prompts do not carry the request marker, and the warm-up think used up a delayed rule. It passed in `minds-greet4-…`.
+- Unit tests (`cargo test -p living-mind talk`): `greet_off_is_the_old_rule` (every combination of a line's facts decides as before under `off`), `greet_modes_draw_in_one_stranger_and_not_the_hostile`, `the_faced_hearer_is_the_one_straight_ahead`, `a_line_gets_its_turn_alongside_only_when_the_deliberation_cannot_answer_it`, `switches_default_off_and_refuse_typos`.
+- Not run here: the rest of the suite (roundtrip, acts, consolidation, prune, reject, only, reconnect, lod, takeover, sight, resident, animals, night, jev, rethink, dealings). This change does not touch their paths: the switches are off by default and only conversation code reads them.
+
+## 2026-11-11 recipes-1: crafting, cooking and smoking as recipes (dev-box)
+
+Branch `recipes-1` (from main `3c73d835`), own container `recipes1-stdb` (2.14.1, port 3327, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), one private `CARGO_TARGET_DIR` (the island cases now build there too), `scoped`, fake model only. The host ran other workers and, during the suite, this branch's eight-minute release comparison.
+
+- Full suite `minds-recipes1-214923`: roundtrip, acts, conversation, prune, reject, only, reconnect, lod, takeover, sight, drop, night, rethink, rethink-llm, parked, death-names, frame and reasons pass; consolidation its known XFAIL; `animals` its known gap (timed out waiting for a request answered by instinct); `fov`, `resident` (a lesson taught through `mind_act`), `jev` and `dealings` timed out.
+- Alone (`minds-recipes1b-223738`): `fov`, `resident` and `jev` pass. `dealings` failed again the same way: the mind had already deliberated with the demand and paid the stone ("You did what you had decided: give stone → person"), but the case, finding no pending deliberation, asked again and waited 65 s for a row that had come and gone. Harness race, fixed in the case: it asks again only while the demand is open, and takes the pending request or the demand met. Then `dealings` passes (`minds-recipes1c-224221`).
+- `paid_safety.py` passes (inert children, no model calls).
+- After merging main `46fa9db3` (`minds-recipes1m-231946`): `roundtrip`, `acts` and `resident` pass. `dealings` fails, and failed four more times alone: the demander's `demand` through admin `mind_act` is refused "no #1 in sight" (`demander-experiences.json`), so no record is made; placing it again once held did not help. **The same failure on main itself**: an export of `origin/main` `28c8e7b0` with its own skill, built apart, failed it twice the same way (`minds-mainctl1-233120`, `minds-mainctl2-233433`, evidence moved under this worktree's `.local/living/verify/`). So it is main's, not this branch's; its cause (what the demander perceives right after `place_near` since fix-place-free and look-2) is not established here. One attempt also failed the mind's own test `llm::tests::unreachable_provider_holds_calls` (a timing test; it passed in the other runs).
+- What recipes-1 changes for minds: nothing they are told (the skill reference and the world text are bit-identical, `making_check::making_is_bit_identical`); `acts` and `resident` drive deliberate acts and teaching through the same skills.
+
+## 2026-11-11 fix-health-leak: a fighting mind's prompts carry its opponent's band (Spark)
+
+Branch `fix-health-leak` on the Spark, the trial server `slop-trials-stdb` (2.14.1, port 3320), private `CARGO_TARGET_DIR`, `scoped`, fake model only.
+
+- `health-seen` (new) on `minds-hleak-222228-health-seen`: passes. Before the appraisal the prompt's report ends "they look unhurt."; inside A's reveal "they have 89 of 98 health." (B's max 98); no prompt carries "theirs looks about". Earlier attempts (`minds-hleak-221415`, `-221945`, `-222106`) failed on the case's scripting: under B's blows a reflex broke A's appraisal off, then A, badly hurt, yielded and got no report inside the reveal; B now only guards.
+- Mind tests 94 passed. verify-player `appraise.py` on `player-hleak-222311` (island): 10 of 10 (the appraise feedback now reads health through `perception::health_seen`).
+
+## 2026-11-11 rules-senses-outcomes: body words from the status_of law (Spark)
+
+Branch `rules-senses-outcomes` on the Spark, the trial server `slop-trials-stdb` (2.14.1, port 3320), private `CARGO_TARGET_DIR`, `scoped`, fake models only, at `7eae101e` (origin/main `7c6a92b6` merged). Evidence under `.local/living/verify/`.
+
+- `minds-sso-215130`: `roundtrip`, `acts` and `rethink` pass. The think prompt's body line is the law's (`How your body feels: not hungry, well rested, unhurt`; `roundtrip` now checks a health and an energy word of the law); the rethink state's `body` is `{"energy": "rested", "health": "unhurt", "hunger": "not hungry"}`.
+- Not run: the other cases (unchanged paths), paid tiers.
+
+## 2026-11-11 speech-2: whisper and call through minds; privacy for every way (Spark)
+
+Branch `speech-2` (from `speech-1`) on the Spark, the trial server `slop-trials-stdb` (2.14.1, port 3320), private `CARGO_TARGET_DIR`, `scoped`, fake models only. Evidence under `.local/living/verify/`.
+
+- `privacy.py` passes for each way, with the trial Neo4j (0 nodes left):
+  - `minds-privacy2-say` and `minds-privacy2-ctl` (control: caught in experience rows, prompts, memory and the client);
+  - `minds-privacy4-whisper`: only the addressee has the words; the bystander mind and the near player each got four "… whispers something to …" rows without them;
+  - `minds-privacy4-call`: carry 22.5 m, the far group beyond it.
+- `minds-privacy3-whisper` was refused at publish ("has no `whisper_check(a)`"): it was built from a half-edited tree during the refactor. That is the install check working; the run is void.
+- `speech` case: `minds-speech10` passes: a reply with `"way": "say"` spoken; `"shout"` said aloud; a whispered question from 1 m answered "(whisper)" with no way named (the prompt says it was whispered); a call from 15 m answered "(call)" (the prompt reads "MindsTeller calls out to you from about 14 m. An ordinary voice carries 9 m …" and lists the ways); `introduced`, `heard` and the tagged consolidation as on `speech-1`. Earlier attempts on `speech-2` failed on the case's own scripting: `-2b` (the fake's rules matched an earlier line kept in the conversation; the latest line's rule comes first now); `-5` (a listener takes at most its stamina's turns per exchange, so the call now waits out the 90 s quiet); `-6` and `-7` (lines that asked nothing were answered only by chance; the lines are questions now); `-8` and `-9` (the distance was missing from the prompt; the mind now quotes its own row's words, then the assertion allowed only 15 m against the 14 m measured).
+- The mind's own tests pass (82). One run (`minds-speech2d`) failed `fake_transport_records_caching_usage_and_paced_429_recovery` on its 180 ms queue-wait bound under load; `llm.rs` is not changed here, and it passed in every other run.
+- After merging origin/main (`93019a3`): `minds-speech12` passes (mind tests 92 passed); `minds-privacy6-whisper` passes. `minds-speech11` stopped at the mind's own tests: `llm::tests::unreachable_provider_holds_calls` exceeded its timing bound (1.99 s) under load. `llm.rs` is not changed on this branch, and the test passed on the rerun.
+- After merging origin/main (`48cd022`, fov-1; the table renamed `line_heard`): `minds-speech13` passes (mind tests 93 passed); `minds-privacy9-whisper` and `minds-privacy9-say` pass.
+
+## 2026-11-11 speech-1: ways and the privacy of words (Spark)
+
+Branch `speech-1` (from `a107fdf`) on the Spark, the trial server `slop-trials-stdb` (2.14.1, port 3320, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`. Evidence under `.local/living/verify/`.
+
+- `privacy.py` (new), with the trial stack's Neo4j under each run's own name (0 nodes left after):
+  - `minds-privacy-say2` passes: no violations, all positive controls, every mind consolidated after the lines.
+  - `minds-privacy-ctl2` (`--control`) passes: the check caught the bystander's words in experience rows, prompts and memory, and the near player's in `my_experience`.
+  - `-say1`/`-ctl1` failed on the driver's own defects: the fake fills placeholders only for rules marked `cite`; the prompt channel read the reply too; the wait could end on a consolidation from before the lines.
+- `speech` case (new): `minds-speech4` passes: a reply with `"way": "say"` spoken, `"shout"` said aloud, one `introduced` row, a `heard` row, the second talk prompt reads the mind's line "(heard by MindsTeller, …)", and the consolidation request carries the tagged introduction.
+- Earlier attempts:
+  - `minds-speech1` spoke before the mind's first deliberation (no turn).
+  - `minds-speech2` had the "heard by" assertion too narrow (residents nearby are listed too).
+  - `minds-speech3` (and on `speech-2` `-4b` and `-6`): the player's first line drew no talk turn. The cause is not a race in the mind. The line ("I am MindsTeller. Good day to you.") asks nothing, and talk.rs answers a remark that asks nothing with probability 0.3 + 0.65 × sociability/100, as designed; it logs the skip only at debug level. The case's first line is now a question.
+- Not run: the rest of the suite.
+
+## 2026-11-11 rules-offers-2: a mind answers by id (Spark)
+
+Branch `rules-offers-2`, on the Spark, in the trial container `slop-trials-stdb` (2.14.1, port 3320, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`, no model calls. Every scratch database answered 404 after cleanup. Scoped maintain pass on dealings (dealings.md, README, SKILL.md).
+
+- `answers` (new) passes on `minds-offers2-a` and on the final code (`minds-offers2-final`): the deliberation showed `"offer": 1` in "asked of you" and "record 1)" in the dealings, the fake reply's `accept` (offer) and `decline` (record) were executed: "traded with Femi: 2 wood for 1 berries", the record `declined`, the proposer told "Datha declined your terms: you give 2 wood, they give 2 berries.".
+- `acts` passes on both. `dealings` passed on `minds-offers2-a` (before the main merge) and failed twice, then passed nine times on the final code (`minds-offers2-final`, `-final2` failed; `-final3`…`-final11` passed): in the failures the demander's `demand` act through admin `mind_act` made no record within 60 s. Its cause is not established: the driver did not keep what the demander was told, and now keeps `demander-experiences.json` either way.
+- After merging main `f047f04f` (`c63c372d`): `answers`, `acts` and `dealings` pass (`minds-offers2-m3`).
+
+## 2026-11-11 fov-1: hearing what one cannot see (dev-box)
+
+Branch `fov-1` (from main `f2d803fa`, goods-1 merged), own container `fov1-stdb` (2.14.1, port 3318, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`, fake model only. The host ran seven other workers (load average 17–60). Evidence under the worktree's `.local/living/verify/` (git-ignored).
+
+- After merging `origin/main` `accf27c8`: `fov` and `sight` pass (`minds-fov1-m`).
+- `fov` (new): `minds-fov1-h` passes on the final build before the merge (`minds-fov1-f` on the one before). `minds-fov1-g` failed the habit check: the turn was `broken off` once the sound came into view, because the branch is a continuous guard. The case now accepts a turn toward the sound, done or broken off. The scene and the prompt sent to the fake model list `you hear (out of sight)` as `{"what": "a person", "where": "behind you, to the east", "how far": "near"}`, with no id, and `you.facing` is west. The percept reads "You hear a person near, behind you, to the east." Given the person instinct, the resident turns to the sound (a `face` use aimed at the other's spot).
+- Earlier attempts found harness faults, now fixed in the case: the service prunes consumed experiences (read the percept first); a long `wait` is not evaluated (`{"wait": 1}`); hold both bodies before placing them (a resident walked into the near ring); the heading after the turn is not the test (the instinct walks on).
+- `sight` passes (`minds-fov1-a-sight`). Not run: the rest of the suite.
+
+## 2026-11-11 fix-stale-reasons (Spark)
+
+Branch `fix-stale-reasons` from `bade5c0`, worktree on the DGX Spark, trial container `slop-trials-stdb` (2.14.1, port 3320), private `CARGO_TARGET_DIR`, fake model only.
+
+- `reasons` (new): on the fix, `minds-reasons-after-20261111-181723` passes: 5 deliberations, the one-off feeling in 1 (the first), the offer sent mid-call in 1 (the fourth), every `carried_before` 0, 3 later deliberations asked for by "I finished my plan.". With `clear_deliberation` temporarily put back to the old rule (same build otherwise), `minds-reasons-before-20261111-182024` fails as it should: the feeling in 5 of 5 (`carried_before` 0–4), the offer in 2, thoughts back to back every 9 s. An earlier form of the case (`minds-reasons-before-20261111-180628`, `minds-reasons-after-20261111-181201`) relied on the mind's plan finishing repeatedly; a plan finishes once (a desire), so the case now reinstalls a sequence root.
+- Full suite `minds-vreasons2-20261111-185031` (before merging main `6caebe2`; load average 25–47 from other work): roundtrip, acts, conversation, prune, reject, only, reconnect, lod, takeover, sight, resident, night, rethink, rethink-llm, dealings, parked, death-names and `reasons` pass; consolidation is its known XFAIL; `animals` fails at its last step ("nothing new: no call"), the known gap below; `jev` timed out waiting for a cached judgment, and fails the same way alone (`minds-vreasons-jev-*`, `minds-vreasons-jev2-*`) and on the branch's base `bade5c0` without the change (`minds-vbase-jev-20261111-193402`): the attacker's strike never reached the defender (no `attacked` experience, so no judge request), unrelated to reasons. The first suite attempt (`minds-vreasons-20261111-184156`) stopped at a load-flaky unit test, `llm::tests::a_failed_poll_keeps_the_batch_and_a_left_job_is_collected_after_a_restart`, which then passed 3 of 3 alone and in the full `cargo test -p living-mind` (83 passed).
+- verify-core `cargo_checks.py` (`core-reasons2-20261111-184820`): rules 161, authority 16 (infant cry routing and cadence among them), mind 83, viewer sync 5 pass. The scripted scenes were not run (the `infant` scene, which answers requests with `mind_skip`, takes about 2 hours).
+- `paid_safety.py` (`minds-duel-safety-vreasons-20261111-184156`): pass.
+- After merging main `6caebe2` (`b68cbe6`): bindings regenerate identical, `just living-check` passes, and `minds-vreasons3-20261111-194103` (reasons, roundtrip, lod, rethink, frame) passes; `reasons` again 5 deliberations, the feeling in 1, the offer in 1, every `carried_before` 0.
+
+## 2026-11-11 the prompt frame (exp-player-frame, DGX Spark)
+
+Branch `exp-player-frame` in a worktree, against the trial service `slop-trials-stdb` (2.14.1, `LIVING_STDB_CONTAINER=slop-trials-stdb LIVING_STDB_URL=http://127.0.0.1:3320`, published on `0.0.0.0`, which `verify.py` now accepts), private `CARGO_TARGET_DIR`, fake model only, beside a paid trial batch on the same service (untouched).
+
+- Full suite `minds-pf-20261111-132828`: roundtrip (now also: no request is player-framed without `LIVING_FRAME`), acts, conversation, prune, reject, only, reconnect, lod, takeover, sight, resident, night, jev, rethink, rethink-llm, dealings, parked and the new `frame` pass; consolidation is its known XFAIL; `animals` fails on its known gap (the last step, "nothing new: no call"; see lives-2 below; animal prompts are not framed).
+- `frame`: `LIVING_FRAME=npc` exits 1 before connecting (`bad-frame.log`); under `player` the think, deliberate, both talk and the consolidation requests opened with the frame and the starting identity did not (`frame.json`: think 1/1, deliberate 1/1, talk 2/2, consolidation 1/1, identity 0/1); 5 of 6 journaled requests framed (the identity is the sixth).
+- `cargo test -p living-mind` (the suite's step): 86 passed, 11 ignored, among them the four new `prompts::` frame tests (and the prefix tests, now run under both frames).
+- `paid_safety.py` (`minds-duel-safety-pf-20261111-132828`): guard and five termination scenarios pass.
+- Trials: fake batch `pf1` (`life` × `default`, `player-frame`): see docs/TRIALS.md, "The player frame".
+- After merging main (`6288f59`, with `exp-projects`): `cargo test -p living-mind` 92 passed, 12 ignored, among them `player_frame_and_projects_compose` (both switches on); the 26 fixtures exported with both switches off are byte-identical to main's. `llm::tests::unreachable_provider_holds_calls` failed once at load average 41 (1.9999 s against 2 s) and passed 3 of 3 alone and in the full rerun. `roundtrip` and `frame` pass again (`minds-pfm2-20261111-184206`). The first attempt (`minds-pfm-20261111-183732`) created no world: main's `skills.rhai` (133 KB) no longer fits one command-line argument (`Argument list too long`), so `verify.py launch` now installs it over HTTP as the admin.
+
+## 2026-11-11 eye-2: a mind is told of drops and low things (dev-box)
+
+Branch `eye-2` (from main `eead7a29`, uncommitted at the time of the runs), own container `eye2-stdb` (2.14.1, port 3317, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`, no model calls. Every scratch database answered 404 after cleanup. New case `drop` ([features/drop.md](../../features/drop.md)) on an island world: the scene sent to the fake model words the drop and the low tiles and lists the one across each. `minds-eye2-drop1` (first run) and `minds-eye2v` (`drop` and `sight`, on the final build, with the mind's tests): both pass. What the mind is shown, before (by the old format, the same direction and distance) and after:
+- before: `"drop": "west 1"`, and no low thing at all;
+- after: `"drop": "west 1, a drop to ground at another level (stairs, ramps and roads join the levels): you can see past it but not walk through it"`, `"low": "east 1, something low or open in the way, such as a cart, a low wall or an open stall: you can see past it but not walk through it"`.
+
+## 2026-11-11 fix-death-labels on main (Spark)
+
+Main at `7837320` (the merge of `fix-death-labels`), branch `fix-death-names-minds`, worktree on the DGX Spark, trial container `slop-trials-stdb` (2.14.1, port 3320), private `CARGO_TARGET_DIR`, fake model only, load average 19–29 from other work.
+
+- Full suite `minds-vdeath-20261111-161806`: roundtrip, acts, conversation, prune, reject, only, reconnect, lod, takeover, sight, resident, night, jev, rethink, rethink-llm, parked and the new `death-names` pass; `consolidation` is its known XFAIL; `animals` fails at its last step ("nothing new: no call"), the known gap below; `dealings` failed waiting for a deliberation.
+- `death-names` (new): passes on main. With the fix reverted in the worktree (`act.rs`, `perceive.rs`, `perception.rs` from `285a20e^1`, `minds-vprefix-20261111-170057`) it fails as it should: no acquaintance row; the member reads "A stranger was killed by a stranger after yielding"; the killer reads "A stranger was killed by Walker3 after yielding"; the after-death prompt lists "a stranger (#256): neighbour" and "{someone=#256, …}". On main: "Walker1 was killed by a stranger after yielding", the killer "A stranger was killed by you after yielding", the prompt "Walker1 (#256): neighbour" and "{Walker1=#256, …}" (`death-names.json`).
+- `dealings`: post-fix 4 of 7 runs pass (`minds-vdeal-*`, `minds-vdeal1`–`5-*`; the last three in a row), pre-fix 3 of 3 (`minds-vprefix-*`, `minds-vpre1`/`2-*`; a third attempt stopped at an unrelated `living-mind` unit test, `llm::tests::unreachable_provider_holds_calls`, under load). The failures are the case's recorded load timing: either the demander's demand act or the rules' ask was late (the first deliberation at about 70 s instead of 2.4 s), and the driver's `run.request` wait timed out. Passing runs pre- and post-fix have the same timeline (think at 2.4 s, the requested think at about 48 s). Neither changed path (`remember_member` in `die`, the "you" rendering for a death's killer or a storage's owner) is on the demand path.
+
+## 2026-11-11 projects (exp-projects, DGX Spark)
+
+Worktree from `origin/main` `e09365b`, branch `exp-projects` (`LIVING_PROJECTS=1`, off by default: docs/LIVING_CORE.md, "Projects"), against the trial server `slop-trials-stdb` (2.14.1, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL=http://127.0.0.1:3320`, its port published on `0.0.0.0`) while a six-mind trial batch ran on it, private `CARGO_TARGET_DIR`, fake model only.
+
+- The first suite (`minds-20261111-131717`) failed at launch: `verify.py` accepted only `127.0.0.1` port bindings. Fixed (`local_urls` accepts `0.0.0.0` and `[::]`).
+- Full suite `minds-20261111-131832`: roundtrip, acts, conversation, prune, reject, only, reconnect, lod, takeover, sight, resident, night, jev and rethink pass; consolidation is its known XFAIL; `animals` fails at its last step (`nothing new: no call`), the known gap recorded under lives-2 above. The run was stopped by the session's 30-minute limit during `rethink-llm` (its database deleted with shared cleanup, its PIDs already gone); `rethink-llm` passes alone (`minds-rl-20261111-134903`). `dealings` and `parked` pass, run separately (`minds-dp-20261111-135539`).
+- Projects (new feature file [projects.md](../../features/projects.md)) cannot be reached by these cases (`LIVING_NEO4J=off`). Driven by the fake trial batch `fp1` (`life` × `default`, `projects`, 10 minutes; evidence `.local/living/trials/fp1/`): with the switch, 7 of 7 think requests carry `# Your projects` (`(none)` before the first consolidation, then `- project:verify_fake_shelter: …`) and `"serves"`, no compile request does, 6 deliberation rows end `[serves project:verify_fake_shelter]` with `detail.projects.serves` set, and Neo4j held one open `PURSUES` edge (`Project` label, progress revised to step 2, `served` 6, `firsthand`); without it no request carries the section or the field and the run has no `PURSUES` edge (`neo4j-projects.txt`). Tokens (`project-tokens.json`, Llama 3 tokenizer): think system +23, the section 21 empty and 63 with one project; consolidation system +157.
+
+## 2026-11-11 every person a mind (lives-2, dev-box)
+
+On the dev-box worktree `~/dev/slop-lives2`, branch `lives-2` (d87310d unit 1, 6157bf0/055d80e/efcd489 units 2-4, 45d4ac6 the new-day fix), own container `lives2-stdb` (2.14.1, port 3461, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, fake model only. Several suites ran at once (load 25-45); one batch failed on a full disk (`No space left on device`, the whole dev-box at 98 %) and was rerun.
+
+- `resident` (new, replaces `wake`): `minds-l2res-014448` and in the full suite `minds-l2c-030713` pass. The first try (`minds-l2res-014127`) failed: a seeded resident's starting graph counted as its last thought, so for 20 s its deliberation requests were dropped; fixed in the authority (a new character's first request is not held back by `think_min_s`).
+- `lives_mind.py` (replaces `lives_wake.py`): 32 of 32 (`minds-l2lives-014653`, again `minds-l2clives-030713`). Its first form checked people in the first prompt, which for a mind already living is a talk turn; it now asks for a deliberation with an admin `set_behavior` think node after the player's line.
+- Full suite `minds-l2c-030713` on the fixed build: roundtrip, acts, conversation, prune, reject, only, reconnect, lod, takeover, sight, resident, night, rethink and rethink-llm pass; consolidation is its known XFAIL; `jev` and `dealings` timed out under load and pass alone (`minds-l2c-jev-033522`, `minds-l2c-deal2-*`). An earlier suite (`minds-l2b-022738`) on the build before 45d4ac6 failed consolidation, prune, only, reconnect and lod: every person felt "A new day begins" on every evaluation for three game hours (a mark the brain did not write back), so a pending request was always there; fixed in 45d4ac6.
+- `animals`: **known gap.** The case's last step (the lead asked again with nothing new lives by instinct, no call) relied on the dawn broadcast's urgency to pass the deer's 240 s `think_min_s`. Without it, only urgent reasons pass the throttle and every urgent reason is news to the salience check; waiting the throttle out (`minds-l2c-animals2-033522`) the deer grew hungrier, also news, so it chose with a call. The first two steps (one `choose` call; the pack reusing it) pass. Proving the salient path needs a fixture with a shorter deer `think_min_s` or a needs scene reducer.
+
+## 2026-11-11 laws-2 (dev-box)
+
+Branch `laws-2` (from `445db09`), worktree `~/dev/slop-laws2`, own container `laws2-stdb` (2.14.1, port 3447, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, `scoped`. Evidence archived on the Mac under `.local/living/laws-2/verify/`. `verify_minds.py` with the fake model (`minds-l6c`): roundtrip (with the new check that every think and deliberate prompt carries the SENSES, MOVING, FOOD and SETTLEMENTS sections built from the laws), acts, conversation, prune, reject, only, reconnect, lod, takeover, sight, wake, animals, night, rethink, rethink-llm and dealings pass; consolidation its known XFAIL; `jev` timed out waiting for a judgment in that run and passed alone (`minds-j1`). The first run (`minds-l6`) died when the disk filled.
+
+## 2026-11-10 rules2-r2 fixes (dev-box)
+
+On the dev-box worktree `~/dev/slop-mind-small`, branch `fix-mind-small`, own container `mind-small-stdb` (2.14.1, port 3427, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL`), private `CARGO_TARGET_DIR`, fake model only.
+
+- Full suite `minds-ms-full`, run beside the llm and knowledge suites (load 15–28): 16 cases pass, `consolidation` is its known XFAIL; `takeover` and `dealings` failed on timeouts.
+- `dealings` passed alone (`minds-ms-re-dealings`): a timing failure.
+- `takeover` failed alone too (`minds-ms-re-takeover`), and that one was the branch's fault: the joined player's character, with no sheet, background or seed entry, was sent to a model-written identity (an extra `consolidate` call), which pushed its second decision into the think node's 45 s quiet window. Fixed in 7a3b425 (nothing is written for such a person, as before); `minds-ms-re2` `takeover`, `wake` and `roundtrip` pass.
+
+## 2026-11-10 dealings (Mac)
+
+Branch `rules-2` (`eaee6b0`), own container `sao-rules2-stdb` (2.14.1, port 3342), fake model. `dealings` (new) passed on the fourth attempt (`minds-rules2-4-dealings/`). The earlier attempts failed on the driver: the demander's own graph kept its body busy; the thinking cadence dropped the rules' ask after the mind's first thought, so the case now requests the next thought; and the fake rule did not allow for the quoted reason in the dealing's words. `acts`, `roundtrip`, `conversation` pass (`minds-rules2-1-*/`).
+
+## 2026-11-10 mind feedback (Mac)
+
+On the Mac (Docker Desktop), branch `feedback-1` (ffb4280 on main 6de2bad) in a worktree, against its own server `feedback-verify-stdb` (2.14.1, `LIVING_STDB_CONTAINER`/`LIVING_STDB_URL=http://127.0.0.1:3343`), private target: docs/MIND_FEEDBACK.md.
+
+- Full suite `minds-fb1-005416`: roundtrip (now also the body line in think and compile requests), conversation, prune, reject, only, reconnect, lod, takeover, sight, wake, animals, night and jev pass; consolidation is its known XFAIL. `acts` failed on its new check's wait condition (it waited for `#id` in the outcome, which names the resolved kind: "gather → boulder (+1 stone)") and passed on `minds-fb1acts-011707` after the fix.
+
+## 2026-11-10 woken minds (Mac)
+
+On the Mac (Docker Desktop, shared `sao-living_spacetimedb_1`, 2.14.1), branch `townlife-2` (main `015707b`, the `harness-1` merge, merged in) in a worktree: town life layer 2, phase 2 (docs/TOWN_LIFE.md): woken minds made from facts and their ring, the `woken` route, the stage cap, `host`, the `habit` engagement class, names only when known (a feeling is no longer an introduction).
+
+- Full suite `minds-tl2c-*` on the final code: roundtrip, acts, conversation, prune, reject, only, reconnect, lod, takeover, sight, wake, animals, night and jev pass; consolidation is its known XFAIL. Earlier runs on this branch (`minds-tl2-220630`, `minds-tl2b-*`) the same.
+
+## 2026-11-09 the rethink gate, rethink-1 (dev-box)
+
+- **Setup:** private container `rethink-stdb` (2.14.1) on 3397, private `CARGO_TARGET_DIR`, fake model and fake Jev; no paid calls.
+- **New cases `rethink` and `rethink-llm`:** they failed four times, each on a harness fault:
+  - the fake's Jev endpoint read `health` as a number, while the gate sends words, so it crashed (the mind's fallback path held);
+  - a poll on the pending row raced the fake mind (the case now waits on the `rethink-gate` journal);
+  - `max_hold_s` 25 released the request mid-case (now 90);
+  - an assertion ran before the mind's start-up line (now a wait).
+- **Passes:** `minds-rethink-230515` passed both cases.
+- **Full suite `minds-full-232622`:** all 17 cases pass (roundtrip, acts, conversation, prune, reject, only, reconnect, lod, takeover, sight, wake, animals, night, jev, rethink, rethink-llm); consolidation is its known XFAIL.
+- **After merging main** (townlife-2, trials-1): `minds-merged-010653` passed rethink, rethink-llm, wake, conversation, lod, roundtrip and jev.
+- **Final, after merging main `fe6ec66`** (feedback-1, iter-6, lives-1, soak-1): `minds-final-091241` passed all 17 cases; consolidation is its known XFAIL.
+- **SELinux:** on this Fedora host the container's `/wasm` bind mount needs the `z` label, or `spacetime publish` fails with "Permission denied".
+
+## 2026-11-09 town life layer 2, phase 1 (Mac)
+
+On the Mac (Docker Desktop, shared `sao-living_spacetimedb_1`, 2.14.1), main `14f3a72` plus the uncommitted town life layer 2 phase 1 change (docs/TOWN_LIFE.md, "Layer 2"): the `woken`, `prior` and `prior_head` tables, the `wakes` and `woken_ring` laws. Free tier only; no model calls.
+
+- `wake` (new case, island): `minds-wake-203130` failed (the line arriving while the woken resident deliberated is left to that deliberation; the fixture answered only through talk), `minds-wake-203416` failed (the answer comes from the think step's `say`), `minds-wake-203552` failed (no-store projection does not replace places; the case now sends the replacing `mind_update` itself), `minds-wake-203725` pass.
+- Full suite `minds-l2-210035`: roundtrip, acts, conversation, prune, reject, only, reconnect, lod, takeover, sight and wake pass; consolidation is its known XFAIL.
+
+## 2026-11-09 the Rhai boundary, rhai-1 (dev-box)
+
+- **Setup:** private container `rhai-stdb` (2.14.1), fake model, no paid calls. The mind compiles the installed script through the rules crate for `skill_io` and the combat shapes, so this checks that the new compile (analysis, name tables) serves it.
+- `minds-rhai1-184757` on `1bc1327`: roundtrip, acts, conversation, prune, reject, only, reconnect, lod, takeover and sight pass. Consolidation is its known XFAIL.
+- `minds-rhai1-sight-192712` on `33e3185` (main merged): sight passes.
+
+## 2026-11-09 takeover on the scoped default (Mac)
+
+On the Mac (Docker Desktop, shared `sao-living_spacetimedb_1`, 2.14.1), main `acbbda7` plus the uncommitted change that lands the perception client and makes `scoped` the default build (docs/PERCEPTION.md, "Third change"). Fake model only; private `CARGO_TARGET_DIR`s; every scratch database answered 404 after cleanup. `minds-sd-182208 --case takeover` with `CARGO_TARGET_DIR` private: pass (takeover after 30.0 s, the held graph kept and reinstalled, a reply in flight refused); the mind's cargo tests 49 passed. The driver now runs the binary it built in `CARGO_TARGET_DIR` (`source-hashes.json` names it); before, it ran `living/target/release/living-mind` whatever it had built.
+
+## 2026-11-09 minds' sight and the offline player's character (Mac)
+
+On the Mac (Docker Desktop, shared `sao-living_spacetimedb_1`, 2.14.1), main `81b9dd8`/`dc5e41b` plus the uncommitted minds'-sight, projection and presence change (docs/PERCEPTION.md, "Second change"; docs/PLAYER_MEMORY.md, "Presence and the offline character"). Fake model only; every scratch database answered 404 after cleanup. `minds-perc2`: `sight` (new), `roundtrip`, `acts`, `conversation` pass; `consolidation` its known XFAIL. `takeover` (new) passed on `minds-perc2c` after a driver fix (the minds' plan is a desires top level with a "current plan" routine, not a graph holding the wait) and an authority fix (a second takeover asked for a deliberation after reinstalling the held graph, inside `think_min_s`; the order is now request, then reinstall).
+
+## 2026-11-09 `minds-20261109-110024` (DGX Spark, trial container) and trials
+
+The suite ran on the DGX Spark against the trial service (`VERIFY_STDB_CONTAINER=slop-trials-stdb VERIFY_STDB_PORT=3320`, since replaced by main's `LIVING_STDB_CONTAINER` and `LIVING_STDB_URL`; the Spark's `sao-living_spacetimedb_1` belongs to other work), on `trials-1` before the town-life merge. Eight cases pass; `consolidation` stays XFAIL (the Neo4j-off known issue). Evidence: `.local/living/verify/minds-20261109-110024*/` in `~/dev/slop-trials` on the Spark.
+
+Trials (`living/tools/trials.py`, [trials](../../features/trials.md)) were driven by fake batches `dry1`–`dry8`: setup and timeline steps, sampling, journal copy, death stop, `resume` after the runner was killed (minds adopted by pid and start time, clocks kept), a killed mind restarted by a life run, the same model routing as the real file in fake mode (wolves: impulse `ministral-8b`, compile and consolidation `ministral-14b`; people: the variant's profile), a wolf pack as the subject, and `clean` (SQL 404, Neo4j nodes removed). `spawn_newcomer` was refused to an anonymous caller (`admin only`). Real batches `b1`–`b4` and life runs `l1`–`l3` are in `docs/TRIALS.md`.
+
+## 2026-10-18 `minds-20261018-205441` (macOS, Docker Desktop)
+
+After the knowledge-transmission changes (consolidation attributes provenance and marks childhood memories; the consolidation prompt names `know:<technique>` anchors and an off-by-default lesson clause). Commit `f3595c3` plus uncommitted changes. Eight cases pass; `consolidation` stays XFAIL (the Neo4j-off known issue). Every case's database answered 404 after cleanup; no mind or fake process survived. The first attempt (`minds-20261018-205344`) failed every case before publishing: `verify_llm.py` read Docker Desktop's `/host_mnt/...` mount path. It now strips that prefix, as the shared harness does.
+
+## 2026-10-04 LOD replacement fix
+
+The `llm/lod-fix` worktree changes pending deliberations to a current row, `Ready` / `Waiting { until }` / `InFlight` state and one wake notification per actor. Inserts refresh the row; obsolete deletes match the full old row rather than its timestamp. Merges, withdrawal and player contact wake delayed work. The generated `my_deliberations` view lacks a primary key, so [SDK 2.10.1](https://docs.rs/spacetimedb-sdk/2.10.1/src/spacetimedb_sdk/table.rs.html#153-178) supplies insert/delete callbacks rather than `on_update`. Its local versioned callback source confirms inserts are dispatched before deletes. The authority's `clear_deliberation` can strip old plan reasons while retaining `updated_ms`, which explains the lost replacement.
+
+`cargo test --manifest-path living/Cargo.toml -p living-mind -- --nocapture` passed 17 tests with five store-dependent tests ignored. Evidence is `.local/living/verify/lod-fix-unit/cargo-tests.log` in that worktree. New unit checks cover a plain merge, an urgent upgrade waking the delayed worker, a changed scene, and same-timestamp row replacement. LOD remains opt-in. The live `lod` case now requires these merged reasons and urgent release to pass instead of accepting XFAIL.
+
+Live verification from the worktree, after the shared harness learned to publish a worktree's own module (`b05c78b`):
+
+```bash
+.agents/skills/verify-minds/scripts/verify_minds.py --run minds-lod-fix-02 --case lod
+```
+
+It passed. A plain merged reason stayed held offstage; an urgent reason merged into the held request started a thought 0.14 s later and the accepted thought carried both reasons; the merged non-plan reason was reconsidered; a player's contact released the character. Evidence is `minds-lod-fix-02/results.json` and `minds-lod-fix-02-lod/lod.json` under `.local/living/verify/`. The scratch database was deleted.
+
+Targeted LOD map maintenance updated the script, skill and feature description. Claude and Cursor links still resolve to the shared source; Codex and Mistral use `.agents/skills` directly. Interactive runtime loading and a complete all-feature maintenance pass were not exercised. The full-suite evidence below is historical and remains intact.
+
+## 2026-10-04 fix round
+
+The final driver ran the complete nine-case mind map once as `minds-1004-fix3`. It exited 0 with seven PASS cases and two XFAIL KNOWN ISSUE cases. Every ordinary assertion passed, including the persona and cursor checks within consolidation and the hold/release checks within LoD. This table uses only that full run. Earlier attempts are history, not stitched acceptance evidence.
+
+```bash
+.agents/skills/verify-minds/scripts/verify_minds.py --run minds-1004-fix3
+.agents/skills/verify-minds/scripts/paid_safety.py --run minds-duel-safety-1004-final
+```
+
+Commit was `384fb50e379533b7db64698357efd0b2323f9452`, with pre-existing uncommitted `living/viewer/src/clock.rs`. The host was Fedora with rootless podman and SELinux enforcing. Every launch recorded the commit and dirty flag. Suite `source-hashes.json` matches the actual sources, shared fake/helper, final driver and release binary. No product source, seed, reference world, shared harness or other skill was edited. This fix round owned `verify-minds` and `verify-llm` together.
+
+The command built the real release mind and passed 15 non-ignored mind tests; five store-dependent tests remained ignored. Each scratch database was launched and doctored through shared `verify.py`. The real Rust SDK subscribed and the production mind reducers applied replies. Every inference request used the local fake model server and a dummy key. `LIVING_ONLY` selected one actor, `LIVING_NEO4J=off` disabled the store, and the admin token stayed in memory and `LIVING_TOKEN`. No paid or remote model calls were made. Neo4j A was not contacted.
+
+All paths below are under `.local/living/verify/`. Each case directory is `minds-1004-fix3-<case>/`.
+
+| Feature or case | Result | Evidence |
+| --- | --- | --- |
+| `roundtrip`: request, think, compile, install, routine, activity and speech | PASS | `minds-1004-fix3-roundtrip/pending-first.json`, `brain-before.json`, `brain-after.json`, `routines-after.json`, `activity-after.json`, `thoughts.json`, `speech-after.json`, `pending-after.json`, `journal/` |
+| `acts`: give, offer and impossible give | PASS | `minds-1004-fix3-acts/receiver-inventory-before.json`, `receiver-inventory-after.json`, `offers-after.json`, `act-experiences.json`, `fake-requests.jsonl` |
+| `conversation`: addressed receipt, reply and closed repeat | PASS | `minds-1004-fix3-conversation/heard-speech.json`, `talk-speech.json`, `thoughts-after-end.json`, `mind.log`, `journal/` |
+| `consolidation`: accepted addressed experiences and persona change | PASS | `minds-1004-fix3-consolidation/experiences-before.json`, `thoughts.json`, `persona-before.json`, `persona-after.json`, `journal/` |
+| `consolidation`: strictly advancing cursor and consumed inbox | PASS | `minds-1004-fix3-consolidation/cursor-before.json`, `cursor-after.json`, `integrated-experiences-after.json` |
+| `consolidation`: no-store relation, belief, judgment and place patch | XFAIL KNOWN ISSUE | `minds-1004-fix3-consolidation/result.json`, the four projection `*-before.json`/`*-after.json` pairs and exact patch in `thoughts.json` |
+| `prune`: unknown skill removed, valid wait runs | PASS | `minds-1004-fix3-prune/brain-after.json`, `routines-after.json`, `activity-after.json`, `journal/` |
+| `reject`: three invalid attempts, error and original revision | PASS | `minds-1004-fix3-reject/brain-before.json`, `brain-after.json`, `thoughts.json`, `pending-after.json`, `journal/` |
+| `only`: excluded actor remains unserved | PASS | `minds-1004-fix3-only/excluded-pending-after.json`, `excluded-brain-after.json`, `excluded-thoughts.json`, `journal/` |
+| `reconnect`: same-run update preserves installed graph, pending request and cursor | PASS | `minds-1004-fix3-reconnect/survival-graph-before.json`, `survival-graph-after.json`, `survival-pending-before.json`, `survival-pending-after.json`, `survival-cursor-before.json`, `survival-cursor-after.json` |
+| `reconnect`: new process/subscription restores cursor and accepts fresh reason | PASS | `minds-1004-fix3-reconnect/reconnect.json`, `reconnect-audit.json`, `mind.log`, `thoughts-after-update.json` |
+| `lod`: off-stage routine hold and player-contact release | PASS | `minds-1004-fix3-lod/offstage-held.json`, `onstage-thoughts.json`, `lod.json`, `journal/` |
+| `lod`: merged non-plan reason is reconsidered | XFAIL KNOWN ISSUE | `minds-1004-fix3-lod/merged-pending.json`, `onstage-pending-after.json`, `merged-thoughts-after.json`, `lod.json`, `result.json` |
+| Mind unit tests | PASS, 15 passed and 5 ignored | `minds-1004-fix3/cargo-tests.log` |
+| Paid-wrapper guard and five inert termination scenarios | PASS without model calls | `minds-duel-safety-1004-final/guard.log`, `results.json`, per-scenario `duel-cleanup.json`, `process-audit.json` |
+| Shared config selection and live-probe guard | PASS without requests | `minds-duel-safety-1004-final/config-checks.json`, `config-routes.json`, `live-probe-guard.log` |
+| Real-model duel | NOT RUN | Specific authorization and `--allow-live` are required. |
+
+## Product findings in the historical run
+
+The no-store patch-loss defect remains open in [the handoff](../../../../../docs/LIVING_HANDOFF.md), under "Still open". `living/mind/src/mind.rs:1607` applies the graph patch only with a store; `project` at line 825 publishes empty projections without it. The final run accepted an actual consolidation whose experience IDs include addressed player speech, changed the persona, advanced `mind_cursor` and deleted experiences at or below that cursor. None of the distinct relation, belief, judgment or place markers reached the authority. This is XFAIL rather than a red suite. Applying every marker would produce XPASS and require review. Projections WITH a store belong to `verify-knowledge`, which already proves them. This case gives no contradictory verdict about that path.
+
+The historical LoD run held a routine request off stage, released it after player contact, and merged `verify merged nonplan reason` during a four-second delayed compile. The released plan was accepted, but the new non-plan reason stayed in the authority row with no matching later deliberation thought during the ten-second observation. That run recorded XFAIL KNOWN ISSUE separately from its successful hold/release checks. The implementation fix and the pending live re-verification are recorded above.
+
+No new product defect was found in this round. The two additional failures were driver bugs fixed below.
+
+## Fixes and failed attempts
+
+`minds-1004-fix1` ran all nine cases. Reconnect failed while taking `max` of an empty inbox because bootstrap had already consolidated it. Setup now uses the largest actual inbox ID or existing consolidated cursor. Every failed case was cleaned up and its original `failure.txt`, result and journal remain.
+
+The focused `minds-1004-reconnect2` update preserved all three snapshots but left the same connection alive. That was insufficient to prove reconnection. The current driver always requires a new PID and a new subscription-ready log. If a module update exits the binary, it requires exit 2. An identical publish may keep the socket; then the driver stops only its owned mind with SIGTERM and restarts after three seconds, following `run-mind.sh`. `reconnect.json` labels which route ran. Both final and focused `minds-1004-reconnect3` runs used this controlled restart. A module-induced disconnect was not reproduced.
+
+`minds-1004-finalfix` ran all nine cases but its reconnect assertion missed a short-lived pending request already answered by the fake. The final driver submits the post-update think graph and waits for the durable accepted thought with the exact reason. The focused `minds-1004-reconnect3` and the full `minds-1004-fix3` both passed. Only the latter supplies this record's acceptance rows.
+
+A pending request for an excluded actor avoids racing state preservation with a model answer. The served actor's installed graph and explicitly seeded cursor are saved before and after `launch --keep-data` on the same run. A short authority pause freezes setup while the original mind remains alive. After restarting, the log reports the exact saved cursor; unpause, doctor and a fresh accepted reason prove resumed service.
+
+The owned shared `Run` helper now validates `llm` or `minds` prefixes and accepts explicit LoD options. Both skills reuse its environment, launch and restart setup. Private SQL uses shared `sql --as-admin`; cleanup uses the shared verified deletion result. Direct CLI token reading remains necessary to pass `LIVING_TOKEN` to the binary without writing it. The previously requested keep-data and admin-SQL harness features exist and were used here. No shared-harness change is requested.
+
+## Paid safety and configuration
+
+`real_models.py` refuses live mode without `--allow-live` before reading run state, model config or keys. Its detached guardian has its own monotonic deadline: 90 seconds including duel setup, with a 60-second collection window and four calls per minute. These are configured limits, not a token or currency budget. The guardian owns the new driver group, detects wrapper death through pipe EOF, terminates the group even after the driver exits, escalates when needed and uses Linux child-subreaper mode to reap orphaned descendants.
+
+The final dry proof used inert children with a three-second watchdog and no database or model requests. All five scenarios checked the group gone: normal driver exit with a surviving child, SIGKILL of the driver, watchdog expiry, SIGKILL of the wrapper and SIGTERM of the wrapper. The inert child ignores SIGTERM, exercising SIGKILL escalation. A subsequent `process-audit.json` confirmed every guardian, driver and child PID was gone. The absent-flag guard created no run directory. Earlier `minds-duel-safety-1004-fix1` evidence remains historical; the current guardian's race-safe signaling and exit-status accounting were rerun in `minds-duel-safety-1004-final`.
+
+Both paid scripts share `verify-llm/scripts/models_config.py`. Explicit `--models` wins, then active environment or non-overriding `.env` `LIVING_MODELS`, then `living/configs/models.json`. On this host the active file is `.local/living/models.json`, routing Luna to `127.0.0.1:8787`; the repository example routes Luna to `codex.carlid.dev`. Using the active config keeps the live probe and mind on the selected host route. Config precedence and routes were checked read-only. Neither route received a request.
+
+## Cleanup, compatibility and limits
+
+`minds-1004-fix3/results.json` contains the full results. `cleanup-audit.json` independently confirms all nine databases answer SQL 404, every owned PID is gone, tokens were removed from saved state, journals and evidence remain, source hashes match and the shared service still answers ping. Prior-attempt cleanup audits retain proof of deletion after failures. The existing SpacetimeDB container was neither stopped nor restarted. No forced service stop was called graceful.
+
+Official [documentation](https://spacetimedb.com/docs/), [subscriptions](https://spacetimedb.com/docs/clients/subscriptions/) and [views](https://spacetimedb.com/docs/functions/views/) were consulted before changing the driver. Pages label themselves 2.0.0; the authority, SDK and running image are 2.10.1. Existing version-pinned bindings, reducers and sender-scoped views were used. Diagnostic queries filter by actor, observer or owner. No schema, binding or subscription changed.
+
+Each case used one mind connection, one selected adult and a local fake server. Reconnect briefly replaced its mind connection. The default seeded world continued ticking except for its short update pause. Initial subscription populations are retained in `cleanup-audit.json`; scene populations and actual requests remain in `people.json`, doctor output and fake logs. Player scenes place one player beside the actor. Scripted action rates vary by case; fake concurrency is four with no rate limit. No observer or full export ran. The LLM suite and focused reconnect probes overlapped some attempts on separate databases. No resource, latency, scale or long-duration claim follows from these scenes.
+
+Frontmatter, Python syntax, relative links, executable scripts and existing Claude/Cursor discovery links were checked. Codex and Mistral use the shared `.agents/skills/` tree. Interactive instruction loading in the other runtimes remains unverified. Paid model behavior, a module-induced disconnect, full LoD gap expiry, urgent live exceptions, off-stage talk/consolidation pacing, infant/newborn minds and store-dependent tests remain unverified. Store-backed projections and persistence belong to `verify-knowledge`; transport belongs to `verify-llm`. Other neighbouring checks are named in `SKILL.md`.
+
+
+## 2026-11-09, branch harness-1 (animals, night, jev)
+
+Private container `harness-stdb`. New cases: `night` and `jev` passed in `minds-h1-204530`; `animals` passed in `minds-h2-210016` after two fixes to the case (dawn reasons, since installing a graph counts as having just thought; the herd gathered in the open) and one to the fake server (a distinctive prompt wins over a purpose-named effort). The earlier cases were not rerun on this branch; the mind changes they touch (model routing through mixes, the `reorganize` purpose) are covered by verify-llm.
+
+## 2026-11-10, branch fix-host-example
+
+Shared container `sao-living_spacetimedb_1`, laptop. `conversation` passed in `minds-host-20261110-201010` with the new check: the recorded talk request contains `"do": "host"`. The unit test `talk_examples_show_every_shown_act` fails with "host is not shown in the talk turn's examples" when the example line is removed (main before this branch), and passes with it.

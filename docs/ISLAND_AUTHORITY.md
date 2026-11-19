@@ -88,6 +88,7 @@ When height becomes a rule (slope speed, line of sight, falling), the authority 
   - Water under a footprint is left alone, and so are roads, except under wells and market stalls. Those stand on the paved plaza by design; the first generation run found 12 of them not blocking until this exception was made.
   - Measured on seed 7 at 2048 m with the buildings table at `977a14c`: 24,364 tiles blocked. Only 19 walkable tiles are cut off (enclosed yards); nothing is placed there. All 249 building doors and every plaza stay reachable (`host::tests::hosted_island_keeps_doors_reachable`). With the table at `dc34fdf` the figures were 24,445 and 18.
   - Blocking goes through tiles, so pathfinding, steering, `line_clear` and perception need no new code.
+  - **Sight over low things** (since 2026-11-11, [below](#sight-over-low-things-2026-11-11)): what stands below eye height is `Low` (9), not `Wall`; it blocks walking but not sight.
 - **Doors:** `host::door(lot)` is the point half a metre in front of the lot, snapped to the nearest walkable tile. A `structure` stands there:
   - `house` for houses and townhouses;
   - `inn`;
@@ -159,7 +160,7 @@ The planner now dresses settlements with props, terraces sloping sites, and lays
 
 **Terraces are ground and tiles.**
 - Their levels are part of `Land::height`, so the heights digest covers them.
-- A drop that no one can step up (more than 0.8 m between neighbouring tiles) is `Wall` in the land's own tiles. Stair tiles are `Road`. Sealed slivers of under 150 tiles are closed, like the land's small pockets.
+- A drop that no one can step up (more than 0.8 m between neighbouring tiles) is `Drop` in the land's own tiles (unwalkable, see-through; `Wall` before 2026-11-11, [perception](PERCEPTION.md#drops-sight-across-ground-levels)). Stair tiles are `Road`. Sealed slivers of under 150 tiles are closed, like the land's small pockets.
 - Movement goes by tiles, so the authority needs no new code: terraces connect only through streets, ramps and stairs.
 
 **Styled towns are settlements of kind `town`** whose `settlement.style` names their models (`steampunk`, `cyberpunk`).
@@ -167,11 +168,83 @@ The planner now dresses settlements with props, terraces sloping sites, and lays
 - `SiteKind` gains no variant: client code matches it exhaustively. Newcomers arrive at the first plain town ([arrival](#arrival-2026-11-10)).
 - Since 2026-11-10 a seed entry may also choose its site by `near` (a settlement placed before it) and `region` (region kinds); the island's hamlets (`hamlet_village`) are matched that way, and the authority keeps the land's roads as a graph (`living_rules::ways`) until creation ends, for the stages of residents' known ways ([seeded lives](SEEDED_LIVES.md)).
 
+### Sight over low things (2026-11-11)
+
+Sight is blocked only by what rises above the eye. Hosting decides it per lot and per blocking prop (`host::hosted_map`): its footprint becomes `Wall` when the thing rises above the eye, else `Low` (`Terrain::Low`, tile byte 9), which blocks walking, steering, routes and building like a wall but not sight or missiles, like a drop ([perception](PERCEPTION.md#drops-sight-across-ground-levels)). It covers every controller, since every perception path goes through `perception::in_sight` and `Map::sight_clear`, and the game client runs the same test on the land it regenerates.
+
+The rule is land data, `LandParams.sight` (`living_rules::land::Sight`), not a Rhai law: which tiles block is computed when the land is hosted, in the rules crate, without the world's script, and the game client rebuilds the same hosted land for its own sight test (sight-2). The authority and the client must compute blocking from the same input, which is the seed's land data. Defaults come from each kind's own definition; the map below only overrides them:
+
+| Field | Default | Meaning |
+| --- | --- | --- |
+| `eye_m` | 1.6 | Eye height (metres). A thing may hide what is behind it only when it rises above this. |
+| `hides_m` | `{}` | Per kind (a lot kind's or a prop kind's id), how high it hides, in place of its model's height and its measured cells: the kind is then all `Wall` or all `Low`. `{"market_stall": 3}` makes stalls hide throughout; `{"well": 0.95}` sees over a well's rim, under its roof. |
+| `solid` | 0.8 | Since eye-2 ([below](#sight-through-what-is-open-at-eye-height-2026-11-11)): how much of the view through a square of a model's footprint at eye height must be blocked for its tile to hide. |
+
+How high a thing rises is its model's `height_m` from [`data/buildings.json`](../living/rules/data/buildings.json) (lots through `Lot::height_m`, props through `Prop::height_m`). A thing with no height (0: a lot without a model) hides, as walls did; on the island, plan-test and Cullet seeds every blocking lot and prop has one (`sight_census` lists them per kind). A seed writes, for example, `"map": {"params": {"sight": {"hides_m": {"market_stall": 0}}}}`. The tiles digest covers the result, so a client regenerating the land agrees with the authority, and an empty `hides_m` is the plain height rule. The field is left out of the serialized parameters at its default.
+
+(The rest of this section is drop-1's height rule as it stood; since eye-2 a thing above the eye hides only where its model is solid at eye height, [below](#sight-through-what-is-open-at-eye-height-2026-11-11).) By the heights in the table at the time, these blocking things stand below 1.6 m: carts (fantasy 1.02–1.12 m, steampunk and cyberpunk handcarts 0.92–1.2 m), small folk's wells (1.17 m), salvage heaps (1.5 m). Above it and still hiding: the fantasy well (3.4 m: a 0.95 m rim, with a roof on two posts), fountains (2.78–3.95 m), market crosses (4.72–5.4 m), market stalls (2.6 m), kiosks (2.8 m), food stalls (3.2 m), vending banks (1.9 m), containers (5.2–9.4 m) and every building. Seed 7 at 2048 m has 61 low tiles (one cart and the small folk's lowest houses, 1.52 m: the eye height is one per land, not scaled to the folk who live there); the megacity floor at 2048 m has 590.
+
+On Brackenford's square (the island's arrival square), counted over every walkable tile centre within 48 m of the arrival point (5,141, the eye's own tile aside; `cargo run --release -p living-rules --example sight_census -- living/seeds/island.json`; `host::tests::sight_is_blocked_only_above_eye_height`): 3,853 were hidden before this change and 3,853 after it. The square's blockers are buildings, ten 2.6 m stalls, the 3.4 m well and the 5.4 m market cross, all above the eye. With `hides_m {"market_stall": 0}` 2,554 are hidden; with stalls at 0 and wells at 0.95, 2,163.
+
+### Sight through what is open at eye height (2026-11-11)
+
+Branch `eye-2`. By drop-1's height rule a thing hid throughout when its model's top rose above the eye. On Brackenford's square every blocking thing does: the fantasy well is a 0.95 m rim under a 3.4 m roof on two posts, the fountain is 2.78 m, a market stall is four posts and a 2.6 m awning over a 1 m counter. So 29 of 44 people near the arrival stayed hidden behind things the camera sees over. Now a model hides only where it is solid at eye height, measured from its mesh.
+
+**The measure** (`living/tools/blender/buildings.py`, `eye_cells`). At generation time each model is cut at four heights in 1.2–1.8 m above its floor (`EYE_BAND_M`). Each cut's outline is drawn on a fine grid (5 cm for a model up to 20 m across, coarser for bigger ones). What the outline encloses counts as solid: a post, a barrel, a room behind its door leaf and window panes. Gaps up to 0.6 m (seams; scaled with the inhabitants) are closed to find rooms, while a stall's open side or the space between a well's posts stays open. Per 0.5 m square of the footprint (`EYE_CELL_M`, finer than a tile, so each square lands on one tile whatever the lot's position and facing), the square's level is the larger blocked share of its view, looking along the model's X or along its Y. A thin wall across the square blocks all of one view; a 0.18 m post about 40% of both.
+
+**The table.** `data/buildings.json` gains two fields per model, written by the generators' `--table` step (`gen_buildings.sh`, `gen_city.sh`; Cullet's lots since kit-2 by `gen_cullet.sh`, which measures each lot's model with `eye_record`, writes the same sidecars and replaces only the `cullet` style's entries, [Cullet's kit](CULLET_KIT.md#sight-from-model-data)):
+- `eye_solid`: the share of the footprint's area that is solid in the band.
+- `eye_cells`: the squares as columns, a colon, then runs of a count and a level, `a` (none) to `k` (all), meaning at least that many tenths blocked. Rows run from the front row (glTF +Z), and column 0 is at the model's -X. The fantasy well-05 is `6:12a1e1h2f1h1e12a`: one row of squares across its middle (posts and windlass) at 40–70%, the rest open.
+
+The table step measures any model whose sidecar lacks the fields from its file (`eye_from_glb`), so an older set or another generator's models get them too. Regenerating every model and the table takes about 40 s for `gen_buildings.sh` and 30 s for `gen_city.sh` on the dev-box (12 Blender jobs, load about 30). The models are deterministic: on 2026-11-11 the regenerated table had the same 1,310 models and 157 kinds, with every existing field byte-identical. Only the two fields are new. The table grows from 315 kB to 464 kB; the authority's module and the client include it.
+
+**Hosting** (`host::hiding_tiles` in `hosted_map`, the rules crate, so the authority and the client compute it alike):
+
+| A lot or blocking prop | Its footprint tiles |
+| --- | --- |
+| Its kind is in `hides_m` | All `Wall` above the eye by that height, else all `Low` (drop-1's override, unchanged) |
+| Its model rises no higher than `eye_m` | All `Low` |
+| Its model is measured, and `eye_m` lies in the band | `Wall` where a square of the model with a level of at least `solid` lands (the square's centre, placed as the client places the model: +X along `(front.1, -front.0)`), `Low` elsewhere |
+| No model, or not measured | All `Wall` |
+
+Since `layout-2` a plan's blocking fixtures (walls, fences: [authored plans](AUTHORED_PLANS.md#fixtures-that-block)) are hosted by the same rule with the plan's own numbers, since a fixture has no model in the table: `Low` when its `height_m` is no higher than the eye, or when it rises above it with an `eye_solid` under `solid`; `Wall` otherwise; `hides_m` by its `kind` first (`host::fixture_hides`).
+
+Each kind's model is the default; there is no list of kinds in the code. A drop under a square that does not hide stays `Drop`. The rule is land data, like drop-1's, for the same reason: the client hosts the same land for its own sight test.
+
+**Where the grid forces a choice.** A tile is all-or-nothing: one square at or above `solid` makes its whole tile hide.
+- **The fantasy well.** Its posts are 0.18 m with the windlass across them at 1.57–1.74 m, so the posts' squares block about 70% of the view and the beam's squares 50–55%. With `solid` 0.6 the post squares hide. On the arrival square, though, the well stands turned (front 0.92, 0.40), and its two post squares land on two tiles that meet diagonally at its centre, so every line across its rim was closed. The choice is `solid` 0.8, "nearly all of the view": the posts do not hide, and the well is open on all six tiles. `hides_m` or a lower `solid` in a seed brings the posts back (`host::tests::a_well_and_an_open_stall_are_seen_through_but_a_closed_building_is_not` checks both).
+- **Elsewhere at 0.8.**
+  - Stalls (fantasy) are open: posts and goods reach at most 40%.
+  - The cyberpunk food stall's back counter and board reach 40–70%, so it does not hide either.
+  - Fountains and market crosses hide on their column's tile or none.
+  - Closed buildings hide on 50–99% of their squares: everything but overhangs, steps and yards.
+  - A fence or wall at full height hides.
+  - Small folk's houses (1.6–2.2 m) mostly do not hide: only their roof tops reach the band.
+
+**What changed on the lands.** The tiles moved are a pure reclassification: every tile that changed was `Wall` by the height rule and is now `Low` (or, over a drop, `Drop`). The height rule (the same land with no model's cells) still gives drop-1's digests exactly (`host::tests::pinned_digests_hold`). Heights and layouts are unchanged.
+- Island (seed 7 at 2048 m): 9,092 tiles moved, 9,153 low tiles in all. Tiles digest `1a2a9a096caa8e21` → `e051dd1788c4d9f9`.
+- Megacity floor at 2048 m: 79,216 tiles moved (courtyards, open ground floors, kiosks and the like). Tiles digest `a3d6f6164c07192c` → `5340b81e0eef2bd4`.
+- Cullet and plan-test: unchanged. Their plans' lots name no model in the table yet, so their heights alone decide, as before.
+
+| Brackenford's square, within 48 m of the arrival point (`sight_census`) | Before drop-1 | Height rule (drop-1) | Eye-height cells (eye-2) |
+| --- | --- | --- | --- |
+| Walkable tile centres hidden, of 5,141 | 3,853 | 3,853 | 1,909 |
+| Nearest hidden point | 2.2 m | 2.2 m | 17.1 m |
+
+People, cost and Cullet's quay are under [measurements](#eye-height-cells-measurements-2026-11-11) below: near the arrival, 29 of 44 people were hidden by drop-1's snapshot and 10 are now.
+
+**Cullet's kit** (`cullet.py`, branch kit-1) writes its own `report.json`, not the table's sidecars, and centres a lot's model on the lot rather than on its bounds. When its models enter the table, two routes give them the measure:
+- `cullet.py` adds `**B.eye_record(obj, w, d)` to each record, with the lot's size centred on the lot's centre. It already imports `buildings` as `B`.
+- The table step measures them from their files.
+
+Until then Cullet's lots hide by their plan height.
+
 ### Arrival (2026-11-10)
 
 Newcomers (a player's `join`, a trial's `spawn_newcomer`) arrive at the `land` row's `arrive_x`/`arrive_y`. The generator chooses the point: `living_rules::host::arrival(land, hosted_map)`.
 - **Which settlement:** the first plain town (a seed's `town` site), else the first town of any style, else the first settlement (`host::arrival_settlement`).
 - **Where in it:** on its square, where its people gather, 6 m from the square's heart toward the town's first gate (at most half way to the square's edge). It is the walkable tile nearest that point among the tiles connected to the square, searched within the square's outline and 16 tiles round it. Where a building stands on the square's heart (the megacity core's arcology), the search starts from the walkable ground round it. A land without settlements arrives at the walkable tile nearest its middle.
+- **On open ground (2026-11-11, `arrival-open`):** among those tiles, the nearest with open ground round it is taken: every tile within `host::ARRIVAL_CLEAR_M` (3 m) walkable, and no lot or prop of the town (a stall, a crate, a well) within 3 m. Only when none has it, the nearest at all. Play-tests 2–5 arrived at (410.5, 258.5) on seed 7, inside a market stall's lot, where the camera's cutaway hid the player. Values now (2048 m): seed 7 (406.5, 257.5), 9.6 m from the square's heart; seed 11 (1796.5, 1739.5), 6.4 m; seed 13 (809.5, 298.5), 5.7 m; the megacity floor (977.5, 1020.5), 46.6 m. In each, the town's nearest lot or prop is 3.0–3.1 m away (`host::tests::arrival_has_open_ground_round_it`). The layout digests moved: island `8ff57472b004a13f` to `e798f6a9f302d538`, megacity-2k `0c6b3f2c51f13129` to `fce494ea2cf1e408`; tiles and heights unchanged. Cullet's arrival, on its square's open heart, does not move.
 - **Deterministic and covered:** the point depends only on the seed, size and parameters, and it is folded into the layout digest. A client that regenerates the land derives the same point, and `verify-generation` compares the row with a native regeneration (`floor_preview` prints `arrival x y`).
 - **Why it moved:** from 2026-09 to 2026-11-09 the point was 4 m outside the first gate's wall. On the seeded-lives towns that put it 2–28 m outside the town's radius, and in the social trials the newcomer stayed outside on every island seed. On seed 7 over the first game day of `verify-arr-base`, the mean number of people within 20 m was 16.2 at the square's heart and 0.1–0.2 at points just inside or outside the first gate. Values per seed (2048 m): seed 7 (410.5, 258.5), 6.0 m from the square's heart; seed 11 (1795.5, 1739.5), 5.7 m; seed 13 (809.5, 298.5), 5.7 m; the megacity floor (seed 11 of `floor-megacity.json`) (980.5, 1022.5), on the core square's walkable edge, 43.5 m from its built-on heart (`host::tests::arrival_is_on_the_first_towns_square`).
 - **What reads it:** `join`, `spawn_newcomer`, the seed's packs placed `near: "arrival"`, the trial runner's `{"arrival": true}` anchor, `spawn_battle`/`spawn_skirmish` (20–30 m north of it), and `soak.py`/`gate.py`. Scripted trials anchored to the arrival now start on the square rather than on the road outside the gate. The island's bold pack moved to 370–520 m from the arrival, which keeps it as far from the town as the earlier 250–400 m from the gate-side point. Since the wildlife placement below it starts near deer within 370–800 m of the arrival.
@@ -327,6 +400,37 @@ A client that subscribes to a terrain window instead of the whole table receives
 | base, window 2 | 180 + 82 | 1.46 | 2.24 | 2.66 | 3.58 | 0 |
 | new, window 2 | 186 + 82 | 1.20 | 2.00 | 2.45 | 4.27 | 0 |
 
+### Eye-height cells: measurements (2026-11-11)
+
+Branch `eye-2`, from main `eead7a29`, on the dev-box (32 cores, load average 30–45 from other workers throughout).
+
+**Who is hidden near the arrival** (`living/rules/examples/sight_census.rs`, eye at the arrival point, 48 m):
+
+| Points | Before drop-1 | Height rule (drop-1) | Eye-height cells (eye-2) |
+| --- | --- | --- | --- |
+| Brackenford's square, every walkable tile centre (5,141) | 3,853 | 3,853 | 1,909 (nearest hidden 17.1 m, was 2.2 m) |
+| People: drop-1's snapshot (44 within 48 m, `verify-core-bench-after`'s `body`) | 29 | 29 | 10 |
+| People: this bench's snapshots after the rest window (43 within 48 m; main and eye-2 worlds) | 37, 36 | 37, 36 | 5, 4 |
+| Cullet's quay (seed 83 at 1024 m), every walkable tile centre (4,241) | 2,516 | 1,225 | 1,225 (its plan's lots name no model in the table yet) |
+| Plan-test's arrival (3,446) | 2,415 | 2,300 | 2,300 (the same) |
+
+Top-down maps of the square (height rule left, eye-height cells right; black `Wall`, orange `Low`, light seen, dark hidden) come from `sight_census … MAP.ppm` (`.local/eye2/census/` in the eye-2 worktree, git-ignored).
+
+**Cost.** Measured with `living/tools/bench.py` on fresh `island` databases, one at a time on a private 2.14.1 server, before (a `git archive` of main `eead7a29`) and after (eye-2), in the order A B B A. Each run was 60 s at rest after a 15 s settle, then `spawn_skirmish(200, 12)` and 60 s. `brain.scene` is the profiled span round a graph's scene, sight lines included.
+
+| Window | Arm | Tick p50 / p99 (ms) | Graph evaluations/s | `brain.scene` p50 / p99 (ms), ms per s |
+| --- | --- | --- | --- | --- |
+| Rest | before | 1.90 / 3.68, 1.96 / 3.93 | 369, 382 | 0.028 / 0.095, 12.0; 0.028 / 0.098, 12.1 |
+| Rest | after | 1.87 / 3.73, 1.91 / 3.78 | 372, 370 | 0.028 / 0.093, 12.0; 0.028 / 0.097, 12.1 |
+| Skirmish (200) | before | 2.69 / 35.6, 2.80 / 42.2 | 720, 717 | 0.031 / 0.103, 22.2; 0.032 / 0.100, 22.5 |
+| Skirmish (200) | after | 2.24 / 27.4, 3.01 / 40.4 | 791, 684 | 0.023 / 0.097, 18.9; 0.031 / 0.108, 21.6 |
+
+No change shows outside the spread. The skirmish p99s vary by 15 ms within each arm on this load. What the bench does not cover:
+- No players are connected, so the players' perception sweeps (whose perceived sets grow when more people are seen) are not exercised.
+- The skirmish is not on the square.
+
+A crowded market with connected players remains unmeasured. Raw reports are in `.local/eye2/bench/` in the eye-2 worktree (git-ignored).
+
 ## Verification
 
 Free tiers only, on `verify-*` scratch databases, through the shared harness (`verify.py launch|doctor|sql|player|call|cleanup`) with the dev-box shim described below. No mind service ran, and no model was called.
@@ -354,6 +458,15 @@ Free tiers only, on `verify-*` scratch databases, through the shared harness (`v
 - **Harness:** port 3300 was held by another agent's container (`slop-live-stdb`, with that worktree mounted at `/wasm`), so this run used a container of its own: `slop-orn-stdb` (2.14.1, port 3310, the run's own worktree at `/wasm`), behind a `docker` name shim. The harness's hard-coded 3300 was patched to 3310 in that worktree only, not committed. The container, its volume and the worktree (with the run's evidence under `.local/`) were removed afterwards; the results, island checks and cleanup records went with the task's report.
 
 **Dev-box harness shim.** On the dev-box the name `sao-living_spacetimedb_1` belongs to another checkout's stopped 2.10.1 container, which had to stay untouched. A `docker` wrapper on `PATH` (`~/island-shim/docker`) mapped that name to the scratch container `slop-game-stdb`: image `v2.14.1`, its own volume, `--security-opt label=disable` for SELinux, and the worktree's `/wasm` mount. A `compose` wrapper ran the bindings recipe's one-off `compose run` as a `docker run` of the same image. The harness, the scripts and every reducer call were otherwise unchanged.
+
+### The public land row carries no names (owner-known, 2026-11-12)
+
+`land.params` is public: every client rebuilds the land from it. Until owner-known it held the seed's whole `map.params`, so on Cullet every lot's and spot's name ("the Heron", "the Counting House", "arcade bay 1"), street names, households and their notes reached any client. Now it holds `living_rules::land::public_params` of them (no names, keys renamed in step; the same land, by equal digests) and the full parameters are kept in the private `land_plan` table (one row, id 0) for the authority, minds and records ([perception](PERCEPTION.md#whose-a-thing-is-and-what-places-are-called-owner-known-2026-11-12)).
+
+- **Schema.** One new private table (`land_plan`) and one new caller-scoped view (`my_known_names`); `land`'s columns are unchanged, only the text of its `params` changes ([automatic migrations](https://spacetimedb.com/docs/databases/automatic-migrations/): "Adding new tables" is a safe change; rewriting a row's value is a data update, not a migration). Bindings regenerated (additions only).
+- **Worlds made before.** `install_script` (every `living-publish`) runs `island::scrub_land` once: when `land_plan` is empty, the public row's params move there and the row gets the public form.
+- **Size.** The public form keeps the given params' own keys and text, less what generation does not read: it is never bigger than the seed's `map.params` (plan-test 4,944 → 3,443 bytes). A first version wrote the typed `LandParams` back out, with every default (the ~575 KB building catalogue) and long f32s: 579 KB on plan-test. The rules test checks the size on cullet, plan-test and floor-megacity.
+- **In place, proven.** On the trial stack (`verify-client-ownmig-044011`, plan-test): main's module at deb96e94 published fresh, then the owner-known module published over it with `--keep-data`. SpacetimeDB logged `Creating table land_plan`; `install_script` logged the scrub. Characters (9), structures (49), inventory row ids and every `land` column but `params` were unchanged (two berry counts went down: people ate while it ran). `land_plan` held the old params byte for byte; the public params lost all 4 lot names, 7 spot names and 11 notes; `my_known_names` answered. Evidence: `.local/living/verify/client-ownmig-044011/compare.txt` in the owner-known checkout (not committed).
 
 ## What the client needs next
 
