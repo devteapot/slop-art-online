@@ -52,6 +52,8 @@ ISPEC = importlib.util.spec_from_file_location("install_script", ROOT / "living/
 INSTALL = importlib.util.module_from_spec(ISPEC)
 ISPEC.loader.exec_module(INSTALL)
 DRIVE = ROOT / ".agents/skills/verify-client/scripts/drive.py"
+sys.path.insert(0, str(ROOT / "living/tools"))
+from law_values import own_laws  # noqa: E402  (the world's own law values)
 
 DELIVERY = ["cue_transport_on", "near_tier_on"]
 COVER = [("cover_brush_min_fill", "0.44"), ("cover_sight_on", None)]
@@ -142,10 +144,9 @@ class Run:
         """The law's value in force: its `law_override` row (`world_law` on a module from before
         it), else the last value the script row's text gives it (`laws()`, an overlay's, the
         values written at its end)."""
-        for table in ("law_override", "world_law"):
-            r, _ = self.sql(f"SELECT * FROM {table} WHERE name = '{name}'")
-            if r:
-                return r[0]["value"]
+        own = own_laws(self.rows)
+        if name in own:
+            return own[name]
         src = self.rows("SELECT source FROM script WHERE name = 'skills'")[0]["source"]
         m = re.findall(rf"\b{name}\s*[:=]\s*(true|false|[-\d.]+)", src)
         return m[-1] if m else None

@@ -21,6 +21,8 @@ import math
 import sys
 import time
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[4] / "living/tools"))
+from law_values import own_laws  # noqa: E402  (the world's own law values, docs/LAW_OVERRIDE.md)
 
 HERE = Path(__file__).resolve().parent
 spec = importlib.util.spec_from_file_location("verify", HERE.parent.parent / "verify/scripts/verify.py")
@@ -918,7 +920,7 @@ def scene_breath(st):
     run = sql(st, f"SELECT speed FROM body WHERE id = {cid}")[0]["speed"]
     v1 = my_vitals(st)
     src = sql(st, "SELECT source FROM script WHERE name = 'skills'")[0]["source"]
-    own = [r for r in sql(st, "SELECT * FROM world_law") if r["name"] == "run_share"]
+    own = [{"name": k, "value": v} for k, v in own_laws(lambda q: sql(st, q)).items() if k == "run_share"]
     share = float(own[0]["value"]) if own else float(__import__("re").search(r"\brun_share: ([0-9.]+)", src).group(1))
     check(st, "a player's run is the run_share law times its walk and drains 4 breath a second from the row's anchor", walk and abs(run / walk - share) < 0.02 and abs(v1["stamina_rate"] + 4.0) < 1e-3 and v1["stamina_from_ms"] == v1["at_ms"], {"walk": walk, "run": run, "row": v1})
     time.sleep(1.5)
@@ -1099,7 +1101,7 @@ def scene_onlooker(st):
         spots = free_spots(st, p, dx, 0.0, skip={who}) or [(p[0] + dx, p[1])]
         call(st, "place_at", [who, spots[0][0], spots[0][1]], "admin")
         call(st, "set_behavior", [who, '{"wait":60}'], "admin")
-    fold = next((float(r["value"]) for r in sql(st, "SELECT * FROM world_law") if r["name"] == "witness_fold_ms"), 2000.0)
+    fold = float(own_laws(lambda q: sql(st, q)).get("witness_fold_ms", 2000.0))
     t0 = int(time.time() * 1000)
     call(st, "set_behavior", [a, json.dumps({"first": [{"do": {"skill": "strike", "target": {"id": b}}}, {"wait": 60}]})], "admin")
     # The feed's rows expire a few seconds after each blow: gathered while the fight goes on.

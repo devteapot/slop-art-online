@@ -14,6 +14,8 @@ import subprocess
 import sys
 import time
 import traceback
+sys.path.insert(0, str(Path(__file__).resolve().parents[4] / "living/tools"))
+from law_values import own_laws  # noqa: E402  (the world's own law values, docs/LAW_OVERRIDE.md)
 import urllib.error
 import urllib.request
 
@@ -1476,7 +1478,7 @@ def watch_fight_case(run):
     for who in (a, c):
         run.admin('set_behavior', who, json.dumps({'wait': 120}))
     # The law in force: the world's own value, else the installed script's.
-    own = [r['value'] for r in run.private('SELECT * FROM world_law', 'laws') if r['name'] == 'witness_fold_ms']
+    own = [v for k, v in own_laws(lambda q: run.private(q, 'laws')).items() if k == 'witness_fold_ms']
     src = run.private("SELECT source FROM script WHERE name = 'skills'", 'script')[0]['source']
     fold = float(own[0]) if own else float(re.search(r'\bwitness_fold_ms: ([0-9.]+)', src).group(1))
     # Blows still in flight land first, then every onlooker's window holding them ends.
@@ -1722,7 +1724,7 @@ def first_sight_case(run):
     # (no gap: M's opening thought may itself be a first sight of someone else in view)
     run.admin('set_world_law', 'first_sight_gap_s', '0')
     try:
-        laws = {w['name']: w['value'] for w in run.sql('SELECT * FROM world_law', 'world-law')}
+        laws = own_laws(lambda q: run.sql(q, 'world-law'))
         assert laws.get('first_sight_thinks') == 'true', laws
         script = {'replies': {'think': {'thought': 'I look around.', 'intend': ['wait'], 'say': None}, 'deliberate': basic_reply()}}
         run.start(model(run, script), [m])
@@ -2022,7 +2024,7 @@ def think_framing_case(run):
         run.request(m, 'framing off')
         off = run.wait(lambda: asked('framing off'), 'the think request with the law off', 90)[0]
         run.admin('set_world_law', 'think_framing', 'true')
-        laws = {w['name']: w['value'] for w in run.sql('SELECT * FROM world_law', 'world-law')}
+        laws = own_laws(lambda q: run.sql(q, 'world-law'))
         assert laws.get('think_framing') == 'true', laws
         time.sleep(3.0)
         run.request(m, 'framing on')

@@ -23,6 +23,8 @@ import json
 import sys
 import time
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[4] / "living/tools"))
+from law_values import own_laws  # noqa: E402  (the world's own law values, docs/LAW_OVERRIDE.md)
 
 HERE = Path(__file__).resolve().parent
 spec = importlib.util.spec_from_file_location("gesture", HERE / "gesture.py")
@@ -83,8 +85,7 @@ def main():
     p.call("grant_items", [walker, "wood", 4], "admin")
     p.call("grant_items", [other, "berries", 2], "admin")
     time.sleep(1.0)
-    law = p.sql("SELECT name, value FROM world_law")
-    window_ms = int(float(next((w["value"] for w in law if w["name"] == "trade_window_s"), 180)) * 1000)
+    window_ms = int(float(own_laws(p.sql).get("trade_window_s", 180)) * 1000)
 
     # The resident offers the player 2 wood for 1 hide (the newcomer's kit has berries, not hide).
     since = now_ms()

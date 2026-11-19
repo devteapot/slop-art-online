@@ -36,6 +36,8 @@ V = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(V)
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from earshot import call, open_line, sql  # noqa: E402
+sys.path.insert(0, str(ROOT / "living/tools"))
+from law_values import own_laws  # noqa: E402  (the world's own law values, docs/LAW_OVERRIDE.md)
 
 import re
 # The cap, as the authority has it (frame::NEAR_MAX).
@@ -117,7 +119,7 @@ def main():
     time.sleep(3.0)
     near2, far2 = tiers(db, tok["a"])
     # The tiers' switch: `near_tier_on` off puts every copy in the far tier (the untiered tables).
-    had = [r for r in sql(rid, "SELECT * FROM law_override") if r.get("name") == "near_tier_on"]
+    had = [{"value": v} for k, v in own_laws(lambda q: sql(rid, q)).items() if k == "near_tier_on"]
     call(rid, "set_world_law", ["near_tier_on", "false"])
     time.sleep(1.0)
     near_off, far_off = tiers(db, tok["a"])

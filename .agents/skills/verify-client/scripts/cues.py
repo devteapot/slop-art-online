@@ -54,6 +54,8 @@ V = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(V)
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from earshot import call, open_line, run, sql  # noqa: E402
+sys.path.insert(0, str(ROOT / "living/tools"))
+from law_values import own_laws  # noqa: E402  (the world's own law values, docs/LAW_OVERRIDE.md)
 
 BINARY = ROOT / ".local/living/verify/target-client/debug/verify-client-probe"
 CUES = ["SELECT * FROM seen_body_cue", "SELECT * FROM seen_fighter_cue", "SELECT * FROM seen_doing_cue"]
@@ -185,7 +187,7 @@ def main():
         call(rid, "place_at", [c, line[0][0], line[0][1] + (60 if line[0][1] < 200 else -60)])
     # Cues are a law (`cue_transport_on`, off until accepted): on for the first phase, off for the second,
     # then back as the world had it.
-    had = [r for r in sql(rid, "SELECT * FROM law_override") if r.get("name") == "cue_transport_on"]
+    had = [{"value": v} for k, v in own_laws(lambda q: sql(rid, q)).items() if k == "cue_transport_on"]
     call(rid, "set_world_law", ["cue_transport_on", "true"])
     time.sleep(2.0)
     pos = {x["id"]: (x["x"], x["y"]) for x in sql(rid, "SELECT id, x, y FROM body")}
