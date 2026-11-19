@@ -103,6 +103,21 @@ A client that computes from the script (the game client: `senses`, `move_speed`/
 - **On a reconnect:** the first subscription result holds every row (proved by `law_override.py checks`), so the client lays them over before reading a law.
 - **Until a client does this,** it reads values from the `script` row's written-in block. That block is current for every ordinary law, but not for a value-only law edited since the last install.
 
+**The game client** does this since branch `law-override-client`:
+
+- `law_override` is in its base set, beside `script`.
+- `verbs::Rules` compiles the script with the rows, or lays them over in place. Its `laws_key` moves on either, and every cache of a law read keys on it.
+- `verbs::refresh_rules` runs before `net::perception_law` chooses the perception set.
+
+Measured on the island, through the verify-ui `law-override` scenario:
+
+- the client takes a value-only edit 1–35 ms after the reducer's reply;
+- a delivery switch applies in 17–35 ms, with no creature missing from any frame;
+- the world's tick never stood still longer than the sampler's resolution (about 35 ms; 70 ms on a cover-policy change, the mask compile);
+- a `turn_rate` install still froze the world for about 1.4 s.
+
+See `.agents/skills/verify-ui/features/law-override.md`.
+
 The mind service compiles the `script` row alone and reads only ordinary laws: `cues_on`, `cue_cooldown_s`, `cue_gap_s`, `speech_truth`, `stranger_by_name`, `think_framing` and `fast_lane_inflight`. The mind test `the_laws_minds_read_change_by_an_install` fails if one of them becomes value-only, or if the mind reads a new law.
 
 ## Data paths
@@ -181,6 +196,6 @@ The evidence is archived in `~/slop-evidence/law-override-2026-11-19.tar.zst` (w
 ## Not covered
 
 - **Load:** no measurement under player load or active owner subscriptions: a gaze-off edit's `applied_gaze` deletes, the `law_override` fan-out to many subscribers, and frame-view subscribers during a delivery switch. Those last are covered functionally by verify-client `cues.py` and `near_tier.py`, not timed.
-- **The game client's half:** it is the laptop's. The rows and the layer are ready, and how the client reads them is above.
+- **The game client's half:** built on branch `law-override-client` (above).
 - **The view-side law read** suggested in `docs/TICK_RATE.md`: an untiered view reading `near_tier_on` by key. A view cannot run the script, so it would need the shipped default for a world with no row. Not built.
 - **External preparation** (the design note's Option 2): not built.

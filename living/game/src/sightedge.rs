@@ -230,8 +230,8 @@ pub struct SightEdge {
     /// Where they came from.
     pub source: Option<Source>,
     pub keep_m: f32,
-    /// The script revision `keep_m` was read for.
-    keep_rev: Option<u32>,
+    /// The laws `keep_m` was read under (`Rules::laws_key`).
+    keep_rev: Option<u64>,
     next_ask: f32,
     next_report: f32,
     /// The camera's far plane before Limited view brought it in.
@@ -406,10 +406,10 @@ pub fn update(
             edge.want = Some(r);
         }
     }
-    if edge.senses.is_some() && edge.keep_rev != Some(rules.revision) {
+    if edge.senses.is_some() && edge.keep_rev != Some(rules.laws_key) {
         if let Some(sc) = rules.scripts.as_ref() {
             edge.keep_m = sc.laws().keep_seen_m;
-            edge.keep_rev = Some(rules.revision);
+            edge.keep_rev = Some(rules.laws_key);
         }
     }
     if let Some(w) = edge.want.filter(|_| edge.gaze_band.is_none()) {

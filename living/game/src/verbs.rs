@@ -62,12 +62,23 @@ const TOAST_S: f64 = 4.5;
 
 // ---- the world's rules -----------------------------------------------------------------
 
-/// The world's installed skill script, compiled (the authority's `common::scripts`).
+/// The world's installed skill script, compiled with the world's own law values (`law_override`)
+/// laid over it, as the authority's `common::scripts` keeps it (docs/LAW_OVERRIDE.md).
 #[derive(Default)]
 pub struct Rules {
+    /// The `script` row's revision compiled here.
     pub revision: u32,
+    /// Moves whenever the laws in force may have changed: each compile, and each change of the
+    /// `law_override` rows that changed a law's value in force in place (a value-only law, with
+    /// `revision` unchanged). A cache of anything read from the laws keys on this, not on
+    /// `revision`.
+    pub laws_key: u64,
     pub scripts: Option<Scripts>,
     pub error: Option<String>,
+    /// What the last in-place lay-over changed (none after a compile).
+    pub applied: Option<living_rules::script::Applied>,
+    /// `net::law_rows()` when the rows were last laid over.
+    rows_seen: u64,
     /// Every skill there is, as the installed script declares it.
     pub skills: Vec<Skill>,
     /// How items look by the rules' `item_look` (icon id, label), kept for the revision they were
@@ -121,22 +132,55 @@ impl Rules {
         crate::ui::icons::item_or_group(&icon, &group)
     }
 
-    /// Recompile when the `script` row changes (an install).
+    /// Recompile when the `script` row changes (an install), with the world's own law values laid
+    /// over it; lay them over in place when only those changed (`net::law_rows`).
     fn refresh(&mut self, conn: &DbConnection) {
         let Some(row) = conn.db.script().name().find(&"skills".to_string()) else { return };
-        if self.scripts.is_some() && row.revision == self.revision || self.error.is_some() && row.revision == self.revision {
+        let rows = crate::net::law_rows();
+        let compiled = (self.scripts.is_some() || self.error.is_some()) && row.revision == self.revision;
+        if compiled && rows == self.rows_seen {
             return;
         }
-        self.revision = row.revision;
+        let over = overrides_of_rows(&conn.db.law_override().iter().collect::<Vec<_>>());
         // The world's day: laws written per game hour, and the day's words, follow it.
         let day_ms = conn.db.world().iter().next().map(|w| w.day_ms).unwrap_or(living_rules::DEFAULT_DAY_MS);
+        self.take(row.revision, &row.source, day_ms, &over, rows);
+    }
+
+    /// The script of revision `revision` with the overrides `over` (the `law_override` rows as
+    /// `overrides_of` decodes them, at `net::law_rows()` = `rows`): the same revision already
+    /// compiled takes them in place (`apply_overrides`: no compile, the AST kept); a new
+    /// revision, a script that did not compile, or an in-place refusal (a law not value-only in
+    /// this script) compiles with them (`with_overrides`).
+    pub(crate) fn take(&mut self, revision: u32, source: &str, day_ms: u64, over: &[(String, serde_json::Value)], rows: u64) {
+        self.rows_seen = rows;
+        if revision == self.revision {
+            if let Some(sc) = self.scripts.as_ref() {
+                let t0 = std::time::Instant::now();
+                match sc.apply_overrides(over) {
+                    Ok(a) => {
+                        if !a.changed.is_empty() {
+                            self.laws_key += 1;
+                            info!(
+                                "rules: law overrides laid over in place in {:.2} ms (changed {:?}; delivery {} cover {} gaze {}; script revision {} unchanged)",
+                                t0.elapsed().as_secs_f64() * 1000.0, a.changed, a.delivery, a.cover, a.gaze, revision
+                            );
+                            self.applied = Some(a);
+                        }
+                        return;
+                    }
+                    Err(e) => info!("rules: the law overrides need a compile here ({e})"),
+                }
+            }
+        }
+        self.revision = revision;
         // On the frame (a law switched mid-play recompiles too): its cost is logged, since it is
         // a hitch of that much.
         let t0 = std::time::Instant::now();
-        match Scripts::with_day(&row.source, day_ms) {
+        match Scripts::with_overrides(source, day_ms, over) {
             Ok(s) => {
                 self.skills = skills_of(&s);
-                info!("rules: skill script revision {} compiled ({} skills) in {:.1} ms on the frame", row.revision, self.skills.len(), t0.elapsed().as_secs_f64() * 1000.0);
+                info!("rules: skill script revision {} compiled ({} skills, {} law overrides) in {:.1} ms on the frame", revision, self.skills.len(), over.len(), t0.elapsed().as_secs_f64() * 1000.0);
                 catalog::set_skills(s.skills().clone());
                 self.scripts = Some(s);
                 self.error = None;
@@ -147,6 +191,23 @@ impl Rules {
                 self.error = Some(e);
             }
         }
+        self.laws_key += 1;
+        self.applied = None;
+    }
+}
+
+/// The `law_override` rows as the laws take them (`living_rules::script::overrides_of`, the
+/// authority's own decoding): by name, a value that is not JSON left out.
+pub(crate) fn overrides_of_rows(rows: &[LawOverride]) -> Vec<(String, serde_json::Value)> {
+    living_rules::script::overrides_of(rows.iter().map(|r| (r.name.as_str(), r.value.as_str())))
+}
+
+/// Keep the world's rules current at the start of a frame, before anything reads a law: after
+/// `net::pump` applied what arrived, before `net::perception_law` chooses the perception set
+/// (a reconnect's first result lays its overrides over before the set is chosen or sight drawn).
+pub fn refresh_rules(net: NonSend<Net>, mut rules: NonSendMut<Rules>) {
+    if let Some(conn) = net.conn.as_ref() {
+        rules.refresh(conn);
     }
 }
 
@@ -1070,7 +1131,7 @@ impl HintJob {
 fn aim(
     net: NonSend<Net>,
     scene: NonSend<Scene>,
-    mut rules: NonSendMut<Rules>,
+    rules: NonSend<Rules>,
     cam: Res<crate::camera::Cam>,
     target: Res<crate::controls::Target>,
     combat: Res<crate::combat::Combat>,
@@ -1084,7 +1145,6 @@ fn aim(
         v.aim = None;
         return;
     };
-    rules.refresh(conn);
     let (Some(me), Some(me3), Some(sc)) = (net.my_id, target.0, rules.scripts.as_ref()) else {
         v.aim = None;
         v.likely = None;

@@ -335,8 +335,8 @@ fn settled_offset(m: &living_bindings::Moving) -> f32 {
 #[derive(Resource, Default)]
 pub struct Live {
     building: Option<Arc<Mutex<Option<Result<Built, String>>>>>,
-    /// The laws' walk/run split ([`law_split`]) and the script revision it was read under.
-    walk_run: Option<(u32, Option<f32>)>,
+    /// The laws' walk/run split ([`law_split`]) and the laws it was read under (`Rules::laws_key`).
+    walk_run: Option<(u64, Option<f32>)>,
     /// Whether all three digests matched (None until compared).
     pub digests_ok: Option<bool>,
     /// The tiles as the authority hosted them at world creation, to find later edits.
@@ -670,11 +670,11 @@ fn bodies(
     }
     let dt = time.delta_secs().max(1e-4);
     let me = net.my_id;
-    // Walking or running clips: the laws' split, read again when the installed script changes.
-    if live.walk_run.map(|w| w.0) != Some(rules.revision) {
+    // Walking or running clips: the laws' split, read again when the laws in force change.
+    if live.walk_run.map(|w| w.0) != Some(rules.laws_key) {
         let split = rules.scripts.as_ref().and_then(law_split);
         info!("gait: walk/run split {split:?} m/s by the laws (script revision {})", rules.revision);
-        live.walk_run = Some((rules.revision, split));
+        live.walk_run = Some((rules.laws_key, split));
     }
     let split = live.walk_run.and_then(|w| w.1);
     // Bodies that left sight fade out where they were, then go.
