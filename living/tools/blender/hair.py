@@ -253,7 +253,9 @@ class Hair:
     chain). `chains` lists each chain's joint positions."""
 
     def __init__(self, hf, spec, hairline, covered=None, bald=None, body=None, detail=1.0):
-        self.hf, self.spec, self.hairline = hf, spec, hairline
+        self.hf, self.spec = hf, spec
+        exposed = spec["style"] in ("balding", "sides", "kerchief")
+        self.hairline = lambda az: hairline(az) - (0.0 if exposed else 0.011) * np.maximum(0, 1 - (np.abs(az) / 70) ** 2)
         # 1 the full model; less for the far model: the same locks on the same paths, with
         # longer steps along them and three vertices across in place of six.
         self.detail = float(detail)
@@ -280,10 +282,10 @@ class Hair:
         self.curl = float(np.clip(spec.get("curl", 0.0), 0, 1))
         self.fringe_style = spec.get("fringe_style") or "auto"
         self.brow_z = hf.eye_z + hf.eye_up + hf.brow_up
-        self.front_z = float(hairline(0.0))
+        self.front_z = float(self.hairline(0.0))
         # Where a full fringe ends: just above this head's own brows.
         self.fringe_z = fringe_line(hf)
-        self.hairline_soft = lambda az: float(np.mean([hairline(az + d) for d in np.linspace(-18.0, 18.0, 9)]))
+        self.hairline_soft = lambda az: float(np.mean([self.hairline(az + d) for d in np.linspace(-18.0, 18.0, 9)]))
         getattr(self, "_" + style)()
         self._build()
 
