@@ -6,6 +6,7 @@ This directory is the maintained source for verifying interface D in the game cl
 | --- | --- | --- |
 | The cluster and skill bar: the rules' places and looks, sheathe and draw (X), greyed with a reason, the rules' refusals, the held guard, the tooltip | [bar.md](bar.md) | `check.py bar`; `check.py own` (own outcomes); `check.py committed` (committed moves); `check.py move-off` (broken off by moving; gestures on the move) |
 | Camera in play: north-up follow, wheel and pinch zoom, stable cursor look while zooming, world picking, and personal Shade at each stop | [camera.md](camera.md) | `check.py camera` |
+| Cover hides residents from the camera and cursor, with matching Shade and canopy cutaway checks | [cover.md](cover.md) | `check.py cover` (Cullet) |
 | A crowd of generated people: paged faces with their page's shadow map, the far model beyond 10 m, one shared clip file; people composed from type, style and overlay files (the default; `LIVING_GAME_COMPOSE=0` draws whole files), joint by joint and colour by colour against their whole files, style materials shared by what they draw; draw counts, batches, asset memory and foot slide | [crowd.md](crowd.md) | look-dev, no world: `living/tools/characters/crowd.py` (`lod`, `town` and `composed` runs), `compose_check.py`, `colour_check.py`, `check.py skirt-scale` (spring skirts on scaled bodies) |
 | Facing sight (`fov_on`): off draws no field; F5 or Settings › Play switches it through the admin link (`law_change` rows); the readout of the five values; the authority's perceived set against the client's field at four looks (`human_face`); a walking look held at 30° and the releases; heard marks per `heard_sounds` row | [field.md](field.md) | `check.py field` |
 | The film (`post::Film`): Soft (the default; spares dark pixels by day, the screen at night), Full (the screen, as before film-1) and None; Settings › Play › Film sets it, the settings file keeps a choice once made, `LIVING_GAME_FILM` starts in one | [film.md](film.md) | `check.py film` |
@@ -62,5 +63,3 @@ This directory is the maintained source for verifying interface D in the game cl
 
 - Report the run name, the scenarios run, `checks.json`, and the photographs that show each feature.
 - Say which entry points were not driven (a real trackpad, the system cursor, model answers).
-
-- [Cover geometry in Shade](cover.md)
