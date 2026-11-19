@@ -4,8 +4,9 @@
     python3 living/tools/characters/cloth_check.py LINE.json [--styles DIR] [--types DIR]
         [--clips CLIPS.glb] [--clip idle,walk] [--frames 16] [--least 2.0] [--json OUT] [--quiet] [--chair MM]
         [--springs] [--spring STIFFNESS,DRAG[,GRAVITY]] [--no-spring-scale] [--terrain] [--seat-contact]
+        [--compare-client JOINTS.jsonl --client-root-y METRES]
 
-LINE.json is a person's line (`{"type", "proportions", "styles": {"outfit": [...]}, "belly"}`),
+LINE.json is a person's line (`{"type", "height", "proportions", "styles": {"outfit": [...]}, "belly"}`),
 or a `NAME.params.json` whose `person` is one. The person is posed the client's way: the type's
 skeleton with the line's proportions (characters.rs `bone_scale`, as person_check.py repeats it),
 the belly's bone forward and scaled as the spine is (`--old-belly`: not scaled, as before the
@@ -44,14 +45,15 @@ second turn, and also says how far the springs carry the cloth from where it rid
 as a client from before the skirts' change does (a spring bone under a scaled bone without that
 scale).
 
-`--terrain` places the body as the client does for the ground seat's clips (`sit_ground_down`,
-`sit_ground`, `stand_up_ground`, the last at the client's 1.6): the clip's hips' place scaled as
-characters.rs `shape` scales it (`hips_k`), on ground where the client's fit puts the rest
-figure's lowest point. It then also says how far each skirted piece is under that terrain, in
-every pose of those clips. `--seat-contact` (with `--springs`, implied) gives the pieces' cloth
-spring groups (`Skirt`, `Coat`: characters.rs `CLOTH_GROUPS`) the client's ground contact
-(characters.rs `SeatAnchor`): a plane at the terrain, weighted by the clips' time as anim.rs
-`seat_of` weights it, lowered `SEAT_SINK` at weight 0.
+`--terrain` uses the client's pre-shape fitted bounds and scales the ground clips' hips
+translation by `hips_k` (`stand_up_ground` plays at 1.6×). It reports garment penetration
+against the flat floor in model-space millimetres. `--seat-contact` implies `--springs` and
+applies the client's weighted ground plane to the cloth spring groups (`Skirt`, `Coat`).
+
+`--compare-client` compares one asset-view joint dump row on a ground clip at an explicit time
+(e.g. `LIVING_GAME_VIEW_SHOTS=sit_ground@0.5`). Supply the root's world Y in metres separately,
+since the dump is root-relative. In a debug build, break at view.rs:657 in `write_joints` and
+read `at.y`. The tool exits 1 if the root or either foot joint differs by more than 1 mm.
 
 Plain Python and numpy.
 """
@@ -60,6 +62,7 @@ import argparse
 import json
 import os
 import sys
+from pathlib import Path
 
 import numpy as np
 
@@ -67,6 +70,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, ".."))
 sys.path.insert(0, HERE)
 import clips_compare  # noqa: E402
+import compose  # noqa: E402
 import person_check  # noqa: E402
 from merge_primitives import read_accessor, read_glb  # noqa: E402
 
@@ -140,6 +144,131 @@ class Skeleton:
         """A bone's own scale (x, y, z), 1 where it has none."""
         s = self.scale.get(self.index.get(name))
         return np.array(s[1], float) if s and s[0] == "own" else np.ones(3)
+
+
+def vertical_bounds(type_path, styles, line):
+    """The composed scene's bounds when first fitted, in model units."""
+    model, binary = read_glb(type_path)
+    scene = model["scenes"][model.get("scene", 0)]
+    nodes = model["nodes"]
+    parent = {c: i for i, n in enumerate(nodes) for c in n.get("children", [])}
+    by_name = {n.get("name"): i for i, n in enumerate(nodes)}
+    if line.get("identity"):
+        compose.compose(model, line["identity"])
+    belly = by_name.get("J_Fit_Belly")
+    if belly is not None:
+        nodes[belly]["translation"] = np.array(nodes[belly].get("translation", [0, 0, 0])) + [0, 0, -line.get("belly", 0.0) * BELLY_M]
+
+    frames = {}
+
+    def world(i):
+        if i not in frames:
+            n = nodes[i]
+            local = np.eye(4)
+            if "matrix" in n:
+                local = np.array(n["matrix"]).reshape(4, 4).T
+            else:
+                local[:3, :3] = quat(n.get("rotation", [0, 0, 0, 1])) * n.get("scale", [1, 1, 1])
+                local[:3, 3] = n.get("translation", [0, 0, 0])
+            frames[i] = world(parent[i]) @ local if i in parent else local
+        return frames[i]
+
+    def inverse_binds(doc, blob, skin):
+        return np.array(read_accessor(doc, blob, skin["inverseBindMatrices"])[0]).reshape(-1, 4, 4).transpose(0, 2, 1)
+
+    # compose.rs:426–440, 543–573: styles bind in the type's rest frame, with hair_fit
+    # on hair and headwear. Style-only joints inherit the deformation of their ancestor.
+    skin = model["skins"][0]
+    delta = {nodes[i]["name"]: world(i) @ ibm for i, ibm in zip(skin["joints"], inverse_binds(model, binary, skin))}
+    hair_fit = np.array(scene.get("extras", {}).get("hair_fit", {}).get("matrix", np.eye(4).ravel())).reshape(4, 4).T
+
+    def mesh_bounds(doc, blob, node, rigid, joints):
+        for primitive in doc["meshes"][node["mesh"]]["primitives"]:
+            attrs = primitive["attributes"]
+            accessor = doc["accessors"][attrs["POSITION"]]
+            if joints is None:
+                boxes = [(accessor["min"], accessor["max"], rigid)]
+            else:
+                # Bevy 0.20.1 skinned_mesh_bounds: union of each joint's transformed
+                # box of influenced vertices, including vertices with a partial weight.
+                vertices = np.array(read_accessor(doc, blob, attrs["POSITION"])[0]).reshape(-1, 3)
+                indices = np.array(read_accessor(doc, blob, attrs["JOINTS_0"])[0]).reshape(-1, 4)
+                weights = np.array(read_accessor(doc, blob, attrs["WEIGHTS_0"])[0]).reshape(-1, 4)
+                boxes = []
+                for j in np.unique(indices[weights > 0]):
+                    points = vertices[np.any((indices == j) & (weights > 0), axis=1)]
+                    boxes.append((points.min(axis=0), points.max(axis=0), joints[j]))
+            # lookdev.rs:656–671 takes the Y extrema of the boxes in root space.
+            for lo, hi, matrix in boxes:
+                y = matrix[1, :3]
+                yield np.minimum(lo * y, hi * y).sum() + matrix[1, 3], np.maximum(lo * y, hi * y).sum() + matrix[1, 3]
+
+    bounds = []
+    pending = list(scene["nodes"])
+    while pending:
+        i = pending.pop()
+        n = nodes[i]
+        pending.extend(n.get("children", []))
+        if "mesh" not in n:
+            continue
+        joints = None
+        if "skin" in n:
+            skin = model["skins"][n["skin"]]
+            joints = [world(j) @ ibm for j, ibm in zip(skin["joints"], inverse_binds(model, binary, skin))]
+        bounds.extend(mesh_bounds(model, binary, n, world(i), joints))
+
+    wear = line["styles"]
+    files = [(Path(styles) / "outfit" / f"{name}.glb", name in ("cap", "kerchief")) for name in wear["outfit"]]
+    files.extend((Path(styles) / "overlay" / line["type"] / f"{name}.glb", False) for name in wear.get("overlays", []))
+    if wear.get("hair"):
+        files.append((Path(styles) / "hair" / f"{wear['hair']}.glb", True))
+    for path, fitted in files:
+        if not path.exists():  # compose::prepare skips absent styles
+            continue
+        doc, blob = read_glb(path)
+        style_nodes = doc["nodes"]
+        up = {c: i for i, n in enumerate(style_nodes) for c in n.get("children", [])}
+        fit = hair_fit if fitted else np.eye(4)
+        for n in style_nodes:
+            if "mesh" not in n or "skin" not in n:
+                continue
+            joints = []
+            for j in doc["skins"][n["skin"]]["joints"]:
+                while style_nodes[j].get("name") not in delta and j in up:
+                    j = up[j]
+                joints.append(delta.get(style_nodes[j].get("name"), np.eye(4)) @ fit)
+            bounds.extend(mesh_bounds(doc, blob, n, None, joints))
+    return min(lo for lo, _ in bounds), max(hi for _, hi in bounds)
+
+
+def terrain_fit(sk, bounds, line):
+    """Return the model-space floor, final root scale and offset, and keyed hips multiplier."""
+    lo, hi = bounds
+    # lookdev.rs:676–691 stores the initial vertical span and the fitted base offset.
+    span = hi - lo
+    if lo < -0.05 * max(span, 0.01) and hi > 0.0:
+        lo = 0.0
+    top0 = lo + span
+
+    # characters.rs:879–908 recovers the base and span, then sizes the shaped leg and spine.
+    def rest(name):
+        return sk.rest[sk.index[name]][1]
+
+    hips = "J_Bip_C_Hips"
+    upper, lower, foot = ("J_Bip_L_" + name for name in ("UpperLeg", "LowerLeg", "Foot"))
+    hips0 = rest(hips)
+    foot0 = hips0 + rest(upper) + rest(lower) + rest(foot)
+    drop = sum(sk.own_scale(parent)[1] * rest(child) for parent, child in zip((hips, upper, lower), (upper, lower, foot)))
+    proportions = line.get("proportions") or {}
+    hips_y = lo + (foot0 - lo) * proportions.get("feet", 1.0) - drop
+    hips_k = hips_y / hips0 if abs(hips0) > 1e-4 else 1.0
+    spine = ["J_Bip_C_" + name for name in ("Spine", "Chest", "UpperChest", "Neck", "Head")]
+    head0 = hips0 + sum(rest(b) for b in spine)
+    head = hips_y + sum(sk.own_scale(parent)[1] * rest(child) for parent, child in zip([hips] + spine, spine))
+    top = head + (top0 - head0) * proportions.get("head", 1.0)
+    scale = line["height"] / max(top - lo, 0.01)
+    # live.rs:934–936, 1132–1136: root Y is the terrain at the drawn body plus fit.y_off.
+    return lo, scale, -lo * scale, hips_k
 
 
 STEP = 1.0 / 60.0  # characters.rs: the springs' fixed step
@@ -236,7 +365,7 @@ class Springs:
 
     def step(self, sk, steps=1, fresh=False, contact=None):
         """`steps` fixed steps against the skeleton's pose now (`sk.frames`); each joint's frame goes to `self.out`.
-        `contact`: (ground height, weight) for the cloth groups' seat contact (characters.rs `Contact`)."""
+        `contact`: weighted ground plane height in model units, or None."""
         centres = []
         for bone, off, r in self.spheres:
             s = sk.own_scale(bone)
@@ -275,8 +404,8 @@ class Springs:
                             pushed = c + (d / np.linalg.norm(d) if np.linalg.norm(d) > 1e-9 else rest_dir) * r
                             e = pushed - pos
                             nxt = pos + (e / np.linalg.norm(e) if np.linalg.norm(e) > 1e-9 else rest_dir) * length
-                    if contact is not None and g["cloth"] and contact[1] > 0:
-                        nxt = keep_above(contact[0] - SEAT_SINK * (1 - min(contact[1], 1.0)), pos, nxt, length, g["radius"] * sc)
+                    if contact is not None and g["cloth"]:
+                        nxt = keep_above(contact, pos, nxt, length, g["radius"] * sc)
                     j["prev"], j["tail"] = j["tail"], nxt
                 to = j["tail"] - pos
                 to = to / np.linalg.norm(to) if np.linalg.norm(to) > 1e-9 else rest_dir
@@ -506,15 +635,61 @@ def main():
     ap.add_argument("--no-spring-scale", action="store_true", help="pose as a client from before the skirts' change does: a spring bone under a scaled bone does not take its scale")
     ap.add_argument("--terrain", action="store_true", help="in the ground seat's clips, place the body on the terrain as the client does and say how far the skirted pieces are under it")
     ap.add_argument("--seat-contact", action="store_true", help="give the cloth spring groups the client's ground contact in the ground seat's clips (implies --springs and --terrain)")
+    ap.add_argument("--compare-client", type=Path, metavar="JOINTS.jsonl", help="compare placement against one asset-view ground-clip joint dump row and exit")
+    ap.add_argument("--client-root-y", type=float, metavar="METRES", help="the client root's measured world Y on the asset-view checker")
     a = ap.parse_args()
+    if a.compare_client:
+        if a.client_root_y is None or not np.isfinite(a.client_root_y):
+            ap.error("--compare-client requires a finite --client-root-y")
+        a.terrain = True
     if a.seat_contact:
         a.springs = a.terrain = True
     doc = json.load(open(a.line))
     line = doc.get("person", doc)
-    sk = Skeleton(os.path.join(a.types, line["type"] + ".glb"), line.get("proportions") or {}, float(line.get("belly", 0.0)), belly_scaled=not a.old_belly)
+    if a.terrain and not (line.get("height", 0) > 0):
+        ap.error("terrain placement requires a positive person height")
+    type_path = os.path.join(a.types, line["type"] + ".glb")
+    sk = Skeleton(type_path, line.get("proportions") or {}, float(line.get("belly", 0.0)), belly_scaled=not a.old_belly)
+    library = clips_compare.clips(a.clips)[0] if (a.clip or a.compare_client) and os.path.exists(a.clips) else {}
+    if a.terrain:
+        terrain, scale, root_y, hips_k = terrain_fit(sk, vertical_bounds(type_path, a.styles, line), line)
+    at_time = lambda tracks, t: {node: clips_compare.at(times, values, 4, t) for (node, path), (times, values) in tracks.items() if path == "rotation"}
+
+    def posed_at(name, tracks, t):
+        """The bones at time t of a clip: on the terrain (the hips' place keyed) in a ground seat's clip with `--terrain`."""
+        hips = tracks.get(("J_Bip_C_Hips", "translation"))
+        placed = a.terrain and name in SEAT_RATE
+        if placed:
+            # characters.rs:929–937 scales the whole local translation, keyed or at rest.
+            local = clips_compare.at(hips[0], hips[1], 3, t) if hips else sk.rest[sk.index["J_Bip_C_Hips"]]
+            sk.place_hips(np.array(local) * hips_k)
+        out = sk.pose(at_time(tracks, t))
+        if placed:
+            sk.place_hips(None)
+        return out
+
+    if a.compare_client:
+        try:
+            row = json.loads(a.compare_client.read_text())
+            file = row["file"]
+            clip, _, time = row["shot"].removeprefix("clip-").partition("@")
+            t = float(time)
+            if clip not in SEAT_RATE or not np.isfinite(t) or t < 0:
+                raise ValueError("expected a timed ground-clip shot")
+            _, joints = posed_at(clip, library[clip], t)
+            heights = [("root", root_y, a.client_root_y)]
+            for side in ("L", "R"):
+                foot = f"J_Bip_{side}_Foot"
+                heights.append((foot, root_y + scale * joints[foot][1], a.client_root_y + row["joints"][foot][1]))
+        except (OSError, ValueError, KeyError, TypeError, IndexError) as e:
+            ap.error(f"invalid client comparison input: {e}")
+        print(f"{file} {row['shot']} (world Y in mm)")
+        for name, tool_y, client_y in heights:
+            print(f"{name:14s} tool {tool_y * 1000:9.4f}  client {client_y * 1000:9.4f}  delta {(tool_y - client_y) * 1000:+.4f}")
+        return int(any(not abs(tool_y - client_y) <= 0.001 for _, tool_y, client_y in heights))
+
     pieces = [Piece(os.path.join(a.styles, "outfit", n + ".glb")) for n in line["styles"]["outfit"]]
     pairs = [(i, o) for i in pieces for o in pieces if over(i, o)]
-    library = clips_compare.clips(a.clips)[0] if a.clip and os.path.exists(a.clips) else {}
     springs = Springs([os.path.join(a.styles, "outfit", n + ".glb") for n in line["styles"]["outfit"]], scaled=not a.no_spring_scale)
     if not springs.joints:
         springs = None
@@ -523,32 +698,14 @@ def main():
         for g in springs.groups:
             g.update(stiffness=v[0], drag=v[1], gravity=np.array([0.0, -1.0, 0.0]) * (v[2] if len(v) > 2 else 0.0))
     loops = {c["name"]: c.get("kind") == "loop" for c in json.load(open(os.path.join(HERE, "..", "blender", "clips.json")))["clips"]}
-    # The client's placing of a seated body (characters.rs `shape`): its rest figure's lowest
-    # point on the ground (`Fitted`), the clip's hips' place times hips_k, which keeps the foot
-    # joint at its rest height (by `feet`) above that point under the proportions' legs.
-    mats0, joints0 = sk.pose({})
-    terrain = min(float(p.posed(mats0)[:, 1].min()) for p in pieces)
-    plain = Skeleton(os.path.join(a.types, line["type"] + ".glb"), {}, 0.0)
-    _, plain_joints = plain.pose({})
-    feet = float((line.get("proportions") or {}).get("feet", 1.0))
-    hips_y = terrain + (plain_joints["J_Bip_L_Foot"][1] - terrain) * feet + (joints0["J_Bip_C_Hips"][1] - joints0["J_Bip_L_Foot"][1])
-    hips_k = hips_y / sk.rest[sk.index["J_Bip_C_Hips"]][1]
-    at_time = lambda tracks, t: {node: clips_compare.at(times, values, 4, t) for (node, path), (times, values) in tracks.items() if path == "rotation"}
-
-    def posed_at(name, tracks, t):
-        """The bones at time t of a clip: on the terrain (the hips' place keyed) in a ground seat's clip with `--terrain`."""
-        hips = tracks.get(("J_Bip_C_Hips", "translation"))
-        placed = a.terrain and name in SEAT_RATE and hips is not None
-        if placed:
-            sk.place_hips(np.array(clips_compare.at(hips[0], hips[1], 3, t)) * hips_k)
-        out = sk.pose(at_time(tracks, t))
-        if placed:
-            sk.place_hips(None)
-        return out
 
     def contact(name, t):
         w = seat_of(name, t, SEAT_RATE.get(name, 1.0)) if a.seat_contact else None
-        return None if w is None else (terrain, w)
+        # live.rs:253–271, 1096–1105 fixes the anchor 0.39 m behind the drawn body
+        # for the sit and rise. On the level floor (view.rs:555–562), this is the
+        # same horizontal plane at either point. characters.rs:1509–1514 lowers
+        # it in world metres, so divide by the fitted root scale in model space.
+        return terrain - SEAT_SINK * (1 - w) / scale if w else None
 
     def poses():
         """(clip, time, the bones' frames, the bones' places, the spring bones' frames or None), pose by pose."""
