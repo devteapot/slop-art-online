@@ -27,4 +27,4 @@ finally:
     scene.render.resolution_x,scene.render.resolution_y = old_size
     scene.render.filepath = old_path
     clear_render_buffer()
-audit('item2-expression-sweep')
+audit(f"item{record['item']}-expression-sweep")
