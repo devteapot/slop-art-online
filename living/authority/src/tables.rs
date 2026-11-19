@@ -2211,6 +2211,91 @@ pub struct DoingSeen {
     pub doing: Doing,
 }
 
+// ---- the near tier (frame-views; docs/PERCEPTION.md, "Cues and tiers") ------------------
+//
+// A viewer's copies of the creatures within `frame::NEAR_M` of it at its last sweep live here,
+// the others' in `motion_seen`, `fighter_seen` and `doing_seen` (the far tier): each tier view
+// (`seen_*_near`, `seen_*_far`) reads one table's `viewer` key, so a write to a far copy re-runs
+// only the far view. A creature that changes tier moves between the tables as it is now. New
+// tables rather than a column on the old ones: in 2.14.1 appending a column rewrites a table and
+// disconnects every client (`auto_migrate.rs`, `AddColumns`); adding a table does not.
+
+/// A near creature's motion copy (private): `copy` is the row the far tier would hold.
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = motion_near)]
+pub struct MotionNear {
+    #[primary_key]
+    pub id: u64,
+    #[index(btree)]
+    pub viewer: Identity,
+    pub copy: MotionSeen,
+}
+
+/// A near creature's fighter copy (private).
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = fighter_near)]
+pub struct FighterNear {
+    #[primary_key]
+    pub id: u64,
+    #[index(btree)]
+    pub viewer: Identity,
+    pub copy: FighterSeen,
+}
+
+/// A near creature's doing copy (private).
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = doing_near)]
+pub struct DoingNear {
+    #[primary_key]
+    pub id: u64,
+    #[index(btree)]
+    pub viewer: Identity,
+    pub copy: DoingSeen,
+}
+
+// ---- cues: what a player is shown at once of those near it or engaged with it ----------
+//
+// Event tables (docs/PERCEPTION.md, "Cues"; `frame.rs`): a row exists only in the transaction
+// that inserts it, is sent to the subscribers whose query it matches and is never stored, so a
+// cue rebuilds no view. Each is public, and row-level security (`frame.rs`, the
+// `client_visibility_filter`s) lets a client receive only rows whose `viewer` is its own
+// identity. A cue is a copy of what the viewer's `*_seen` row of that creature would hold now;
+// the copies and the `seen_*` views stay the durable state (a join, a reconnect, a cue missed).
+
+/// A perceived creature's motion (`seen_bodies`' row), sent when it changed.
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = seen_body_cue, public, event)]
+pub struct SeenBodyCue {
+    #[index(btree)]
+    pub viewer: Identity,
+    /// When the authority sent it (ms).
+    pub at_ms: u64,
+    pub motion: crate::perception::Moving,
+}
+
+/// A perceived creature's `fighter` row as `seen_fighters` would show it (band as this viewer
+/// perceives it), or `None` when it has none.
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = seen_fighter_cue, public, event)]
+pub struct SeenFighterCue {
+    #[index(btree)]
+    pub viewer: Identity,
+    pub at_ms: u64,
+    pub body: u32,
+    pub fighter: Option<Fighter>,
+}
+
+/// What a perceived creature is visibly doing (`seen_doing`'s row), or `None` for nothing.
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = seen_doing_cue, public, event)]
+pub struct SeenDoingCue {
+    #[index(btree)]
+    pub viewer: Identity,
+    pub at_ms: u64,
+    pub body: u32,
+    pub doing: Option<Doing>,
+}
+
 /// What a skill use revealed to an observer about a target, until `until_ms` (private): the
 /// `perceived_of` law sees `what` among the target's `revealed` fields while it holds.
 #[spacetimedb::table(accessor = reveal)]

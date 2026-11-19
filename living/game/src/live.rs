@@ -1248,10 +1248,10 @@ fn report(net: NonSend<Net>, live: Res<Live>, time: Res<Time>, mut next: Local<f
             .sum()
     });
     info!(
-        "live: cache body {} character {} doing {} act_card {} weather {} lot {} terrain_chunk {} ({} tiles edited) settlement {} experience {}; drawn {} characters, {} lots; window moves {}; digests {}",
-        conn.db.my_body().count() + conn.db.seen_bodies().count(),
+        "live: cache body {} character {} doing {} act_card {} weather {} lot {} terrain_chunk {} ({} tiles edited) settlement {} experience {}; drawn {} characters, {} lots; window moves {}; digests {}; cue overlays {:?}",
+        conn.db.my_body().count() + crate::net::motion::all(&conn.db).count() + crate::net::motion::near(&conn.db).count() + crate::net::motion::far(&conn.db).count(),
         conn.db.seen_characters().count(),
-        conn.db.my_doing().count() + conn.db.seen_doing().count(),
+        conn.db.my_doing().count() + crate::net::activity::all(&conn.db).count() + crate::net::activity::near(&conn.db).count() + crate::net::activity::far(&conn.db).count(),
         conn.db.act_card().count(),
         conn.db.weather().iter().next().map_or("none", |w| if w.raining { "rain" } else { "dry" }),
         conn.db.lot().count(),
@@ -1266,7 +1266,8 @@ fn report(net: NonSend<Net>, live: Res<Live>, time: Res<Time>, mut next: Local<f
             Some(true) => "match",
             Some(false) => "DIFFER",
             None => "pending",
-        }
+        },
+        conn.cue_counts()
     );
 }
 
