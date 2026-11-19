@@ -31,8 +31,13 @@ def paint(layout, output):
         kind, seed = tile["kind"], tile["seed"]
 
         def stroke(points):
-            draw.line([(round(left + (right - left) * x), round(top + (bottom - top) * y))
-                       for x, y in points], fill=0, width=1)
+            span = tile.get("angular_span", 1.0)
+            for turn in range(math.ceil(span)):
+                visible = [(round(left + (right - left) * (x + turn) / span),
+                            round(top + (bottom - top) * y))
+                           for x, y in points if x + turn <= span]
+                if len(visible) >= 2:
+                    draw.line(visible, fill=0, width=1)
 
         def boundary(start, end, root, bend, tip):
             # A single antialiased stroke comes from the client's field sampler.

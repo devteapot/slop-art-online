@@ -1,0 +1,136 @@
+{
+  "floor": [
+    34,
+    32,
+    29
+  ],
+  "floor_frame": "black-floor-portrait.png",
+  "min5_center": [
+    751,
+    295
+  ],
+  "min5_bounds_inclusive": [
+    749,
+    293,
+    753,
+    297
+  ],
+  "min5_pixel": [
+    749,
+    293
+  ],
+  "profile": {
+    "shade": [
+      0,
+      0,
+      0
+    ],
+    "mid": [
+      0,
+      0,
+      0
+    ],
+    "light": [
+      0,
+      0,
+      0
+    ],
+    "highlight": [
+      0,
+      0,
+      0
+    ],
+    "t1": -0.2,
+    "t2": 0.4,
+    "edge": 0.02,
+    "highlight_feather": 0.08,
+    "ink": [
+      0,
+      0,
+      0
+    ],
+    "ink_px": 1.6,
+    "ink_range": 0.009,
+    "ink_fade_px": 3.0
+  },
+  "actual_ink": [
+    65,
+    39,
+    33
+  ],
+  "portrait_mid": [
+    145,
+    69,
+    43
+  ],
+  "ink_minus_floor": [
+    31,
+    7,
+    4
+  ],
+  "ink_minus_mid": [
+    -80,
+    -30,
+    -10
+  ],
+  "source_ink_to_mid_linear_rgb": [
+    0.13928853934517169,
+    0.16912872708140936,
+    0.25039014215283534
+  ],
+  "actual_above_floor_fraction": [
+    0.13798995316248283,
+    0.12968842589480445,
+    0.24614527828595664
+  ],
+  "proposed_target": [
+    65,
+    41,
+    33
+  ],
+  "actual_minus_proposal": [
+    0,
+    -2,
+    0
+  ],
+  "luminance": {
+    "floor": 0.01461813336880206,
+    "ink": 0.026846608596580213,
+    "mid": 0.10450404081236252
+  },
+  "source_luminance_ratio": 0.15301823392947297,
+  "measured_above_floor_luminance_ratio": 0.13604440980313223,
+  "ink_min5_pixel": [
+    749,
+    295
+  ],
+  "second_frame": "ink-second-portrait.png",
+  "second_min5": [
+    69,
+    39,
+    32
+  ],
+  "mid_median9_center": [
+    759,
+    341
+  ],
+  "drawing_ink": [
+    59,
+    27,
+    18
+  ],
+  "drawing_mid": [
+    152,
+    72,
+    43
+  ],
+  "drawing_ink_min5_center": [
+    422,
+    148
+  ],
+  "drawing_mid_median9_center": [
+    474,
+    165
+  ],
+  "proposal_status": "pending GC review; original target retained"
+}
