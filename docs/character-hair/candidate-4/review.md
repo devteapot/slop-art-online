@@ -11,3 +11,15 @@ All 1,655 complete Near looks fit below 50,000 triangles. The peak is `lk_392e9e
 All 88 long-hair looks add 20 front-lock joints. The coat sample has 39 spring joints in total, and the smock sample has 64. The front-lock estimate is **5.46 µs per simulated character-step**. It uses the midpoint of the historical 2.4–2.6 µs/character-step measurement and its mean of 302 joints over 33 simulated characters. Multiplying 20 by 2.5 × 33 / 302 estimates the extra cost by joint count. Collider tests and fixed per-character costs affect the actual result. [Historical spring measurement](../../CHARACTERS.md)
 
 The first raised-brow run exposed a swept-cut deviation of 3.9 mm from its position relative to the brow on the standard head. The short swept edge now follows more of the existing fringe bone's translation. The final check across 74 styles and 21 types put each type's lowest fringe 2.9 mm above its brow. Maximum deviation for an individual style was 2.7 mm. The separate brow check passed on all 21 generated types. [Fringe check by type](fringe.json)
+
+## Spring budget and pending motion comparison
+
+The renderer switches visibility on the character's descendant Near and Far meshes. The spring scheduler selects character roots by inherited visibility and distance, sorts them by distance, and applies its own budget. Its defaults are 48 characters and a 40 m radius scaled by character height. A character drawing its Far mesh may still simulate its hair. See [mesh visibility](../../../living/game/src/lookdev.rs) and [spring scheduling](../../../living/game/src/characters.rs).
+
+| Joints per front lock | Front joints per long-haired person | Estimated added µs per character-step | Eight long-haired characters, µs/step | 48 long-haired characters, µs/step |
+|---:|---:|---:|---:|---:|
+| 5, exported checkpoint | 20 | 5.46 | 43.7 | 262.3 |
+| 3, proposed | 12 | 3.28 | 26.2 | 157.4 |
+| 2, proposed | 8 | 2.19 | 17.5 | 104.9 |
+
+These estimates cover the extra front joints. Each frame can advance zero to three fixed steps. The 48-character scenario assumes every selected character wears long hair. The eight-character scenario is an example population. Measured stiffness and jitter comparisons await the renderer.
