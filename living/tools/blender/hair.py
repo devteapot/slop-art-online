@@ -573,14 +573,15 @@ class Hair:
                 return
             # Overlap the curtain from the temple to the ear. The inner blade
             # follows the cheek to the jaw, the wider blade turns into the side.
+            bob = self.spec["style"] in ("bob", "bob_parted")
             for side in (-1, 1):
                 for az0, az1, height, tip in ((48, 74, 54, -0.010), (64, 104, 60, 0.004)):
                     az = side * np.linspace(az0, az1, 11)
                     roots = self.comb.surface(az, np.linspace(height, height - 12, len(az)))
                     end = max(z, self.hf.chin_z - 0.014) + tip
                     self.sheet(roots, DOWN, z_end=end, points=2, depth=0.022,
-                               hem=lambda u: 0.039 * u, lift=0.009, g=48,
-                               edges=(0.70, 1.0), tip_out=-0.004, off=0.002,
+                               hem=(lambda u: 0.050 * u**1.35) if bob else (lambda u: 0.039 * u), lift=0.009, g=48,
+                               edges=(0.70, 1.0), tip_out=-0.010 if bob else -0.004, off=0.002,
                                bulge=0.004, groove=0.35, check=True, sharp=0.72,
                                chain=None if chain is None else lambda u: chain(side * lerp(az0, az1, u)))
             return
@@ -756,13 +757,33 @@ class Hair:
     def _long(self):
         z = self.side_line()
         chain = self._chains([("BackL", 95, 150), ("Back", 150, 181), ("Back", -181, -150), ("BackR", -150, -95), ("SideL", 40, 95), ("SideR", -95, -40)])
+        gather = 15.0
+        if self.full_cut:
+            z = min(z - 0.095, self.comb.b["shoulder_z"] - 0.13 - 0.3 * self.length)
+            gather = 8.0
         drop = 0.03
         # Broad sheets down the back that end in a few long points.
         # Gathered behind the shoulders, lying close down the back, the ends turned a little in.
-        self.curtain(z, points=5, depth=0.060, back_drop=drop, chain=chain, gather=15.0, tip_out=-0.005, front_end=-0.100)
-        self.over(z + 0.02, points=4, depth=0.060, back_drop=drop, chain=chain, gather=15.0, tip_out=-0.005, front_end=-0.105, back_th=88.0)
+        self.curtain(z, points=5, depth=0.060, back_drop=drop, chain=chain, gather=gather, tip_out=-0.005, front_end=-0.100)
+        self.over(z + 0.02, points=4, depth=0.060, back_drop=drop, chain=chain, gather=gather, tip_out=-0.005, front_end=-0.105, back_th=88.0)
         mode = "curtain" if abs(self.parting) < 0.3 else "swept"
         self.bangs(mode, points=6)
+        if self.full_cut:
+            # On each shoulder a broad inner lock and a shorter overlapping
+            # blade follow the garment forward. Their joints are independent
+            # of the curtain, which falls down the other side of the shoulder.
+            body = self.comb.b
+            for side in (-1, 1):
+                for i, (angle, width, reach) in enumerate(((52, 0.054, 0.18), (72, 0.042, 0.12))):
+                    ci = len(self.chains)
+                    self.chains.append(dict(name=f"Front{side}_{i}", joints=None))
+                    tip = np.array([-side * body["half_w"] * (0.38 + 0.15 * i),
+                                    body["torso_y"] + body["half_d"] + 0.024,
+                                    body["shoulder_z"] - reach - 0.10 * self.length])
+                    self.lock(side * angle, 46 - 4 * i, DOWN + np.array([0, 0.45, 0]),
+                              length=0.85, target=tip, width=width, lift=0.012,
+                              g=30, taper=2.6, chain=ci, even=0.40)
+            return
         self.strands(4, z=z - drop, chain=chain)
         # The locks at the ears' front stop at the jaw: hanging on to the chest they lay in front of
         # the shoulders as two dark tails.
@@ -1138,6 +1159,10 @@ class Hair:
             # The cut returns to the head at the jaw and at the collar.
             crown = smooth((C[..., 2] + 0.095) / 0.125)
             rise += (0.004 + 0.003 * self.volume) * crown * smooth(T / 0.11)[None, :]
+        if self.full_cut and self.spec["style"] == "long" and sp.get("hang"):
+            # Spread the lower curtain across the back beneath the shoulder line.
+            C[..., 0] *= 1.0 + 0.23 * smooth((self.comb.b["shoulder_z"] + 0.10 - C[..., 2]) / 0.16)
+            rise += 0.008 * swell[None, :]
         F = C + OUT * (rise + th)[..., None]
         B = C + OUT * (rise - 0.35 * th)[..., None]
         # Colour: each point a shade of its own, slight; darker at the root, in the notches

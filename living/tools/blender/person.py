@@ -1667,6 +1667,14 @@ def make_hair(arm, spec, pos, quads, covered=None, bones=None):
             weights.append({"J_Bip_C_Head": 1.0 - float(fr), hair.FRINGE_BONE: float(fr)} if fr < 0.996 else {hair.FRINGE_BONE: 1.0})
         else:
             weights.append({"J_Bip_C_Head": 1.0})
+    continuous_crown = h.full_cut and hs["style"] in ("bob", "bob_parted", "long")
+    if continuous_crown:
+        # Every panel samples the same horizontal position and height across the
+        # crown. Cartesian projection keeps the sides and the back seam continuous.
+        local = np.vstack([cp, np.asarray([cp[i] for i in extra]).reshape(-1, 3), h.v])
+        crown_blend = hair.smooth((local[:, 2] - (HF.top_z - 0.120)) / 0.048)
+        crown_uv = np.column_stack([0.5 + local[:, 0] / 0.36, 0.72 + (local[:, 2] - HF.top_z) / 0.48])
+        uvs = np.asarray(uvs) + crown_blend[:, None] * (crown_uv - uvs)
     lock_faces = [tuple(base + i for i in f) for f in h.f]
     ob = raw_object("Hair", verts, faces + lock_faces, weights, cols, MAT["hair"], arm, uvs=uvs)
     if spec.get("atelier") and not FAR:
@@ -1685,6 +1693,14 @@ def make_hair(arm, spec, pos, quads, covered=None, bones=None):
     for i, k in extra.items():
         normals[k] = normals[i]
     normals += [tuple(n_) for n_ in h.nrm]
+    if continuous_crown:
+        radial = hair.unit(np.column_stack([local[:, 0], local[:, 1] + 0.010, np.zeros(len(local))]))
+        rise = hair.RING_TILT * np.maximum(local[:, 2] - (HF.top_z - hair.RING_FROM), 0.0) / 0.11
+        radial[:, 2] = rise
+        envelope = hair.unit(radial)
+        outward = (np.sum(envelope * normals, axis=1) > 0).astype(float)
+        blend = (outward * crown_blend)[:, None]
+        normals = hair.unit(np.asarray(normals) * (1 - blend) + envelope * blend)
     ob.data.normals_split_custom_set_from_vertices(normals)
     # The strands' picture, the same for everyone.
     path = STRANDS_PATH
