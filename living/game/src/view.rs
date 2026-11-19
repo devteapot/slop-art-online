@@ -157,9 +157,11 @@ pub struct Item {
 }
 
 impl Item {
-    /// The clip index a shot of clip `c` plays (its variant's, when the model has one).
+    /// The clip index a shot of clip `c` plays (its variant's, when the model has one). A model
+    /// without that clip (a scenery file has none) keeps `c`, and the caller finds no node.
     fn played(&self, c: usize) -> usize {
-        let name = crate::anim::resolve(&self.plays, crate::anim::intern(&self.clips[c].0));
+        let Some(clip) = self.clips.get(c) else { return c };
+        let name = crate::anim::resolve(&self.plays, crate::anim::intern(&clip.0));
         self.clips.iter().position(|x| x.0 == name).unwrap_or(c)
     }
 }
