@@ -85,15 +85,13 @@ struct Shot {
 }
 
 fn parse_view(s: &str) -> Option<(String, Pose)> {
-<<<<<<< HEAD
     let (stop, yaw) = s.split_once('/').unwrap_or((s, "0"));
     if matches!(stop, "near" | "middle") {
         return Some((s.replace('/', "_"), Pose::Stop { zoom: if stop == "near" { 1.0 } else { 0.55 }, yaw: yaw.parse().ok()? }));
-=======
+    }
     if let Some((stop, angle)) = s.split_once('@') {
         let (height, fov) = match stop { "near" => (8., 42.), "middle" => (12., 44.), _ => return None };
         return Some((s.replace('@', "_"), Pose::PlayStop { height, yaw: angle.parse().ok()?, fov }));
->>>>>>> origin/main
     }
     if s == "game" {
         return Some(("game".into(), Pose::Game));
@@ -559,7 +557,6 @@ pub fn batch(
     let name = if let Some(shot) = item.shots.get(step) {
         match shot.pose {
             Pose::Orbit { yaw, pitch, zoom, aim } => place_camera(&mut tf, &mut proj, aim.map_or(c, |a| Vec3::new(c.x, c.y - h.y + 2.0 * h.y * a, c.z)), h, yaw, pitch, zoom),
-<<<<<<< HEAD
             Pose::Stop { zoom, yaw } => {
                 let v = crate::camera::Tuning::default().view(zoom);
                 if let Projection::Perspective(p) = &mut *proj {
@@ -569,14 +566,13 @@ pub fn batch(
                 let target = Vec3::new(c.x, 1.0, c.z);
                 let dir = Vec3::new(yaw.to_radians().sin() * pitch.cos(), pitch.sin(), yaw.to_radians().cos() * pitch.cos());
                 *tf = Transform::from_translation(target + dir * v.distance).looking_at(target, Vec3::Y);
-=======
+            }
             Pose::PlayStop { height, yaw, fov } => {
                 let chest = Vec3::new(c.x, h.y * 1.2, c.z);
                 let reach = height / 58f32.to_radians().tan();
                 let angle = yaw.to_radians();
                 if let Projection::Perspective(p) = &mut *proj { p.fov = fov.to_radians(); }
                 *tf = Transform::from_translation(chest + Vec3::new(reach * angle.sin(), height, reach * angle.cos())).looking_at(chest, Vec3::Y);
->>>>>>> origin/main
             }
             Pose::Game => game_camera(&mut tf, &mut proj, Vec3::new(c.x, 0.0, c.z)),
         }
