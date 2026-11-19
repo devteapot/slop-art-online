@@ -4,6 +4,8 @@
 
 **v1.1 (2026-11-19): lock ink lines,** for the opt-in profile only; see [lock ink lines](#lock-ink-lines-v11). It adds optional fields and the mask texture's G channel, and makes one change to v1's meaning: a mask texture no longer replaces `_HIGHLIGHT` but combines with it (the larger wins), so a texture made for ink alone keeps a file's per-vertex highlight. Files keep `"contract": 1`. A v1 file draws as before (one with both a mask texture and `_HIGHLIGHT` now shows the larger of the two; none has been made): no v1 file can carry ink fields, and ink is drawn only where they are set. The shader for v1.1 is in progress on branch `hair-ink`; `ink_field.py` and the audit are there now.
 
+**v1.2 (2026-11-19, draft): a general ink profile,** for any hand-made material (eyes, brows, face lines, skin, hair): its own `slop.ink` object, an ink map per slot (`<stem>.<slot>.ink.png`, G the distance, R the width) in a binding of its own, lit by the material's own light. See [the ink contract](HANDMADE_INK.md). The v1.1 fields below keep their meaning and drawing; `HANDMADE_INK.md` maps them onto the general profile.
+
 **Why:** dev-box's hand-made character Cora (`own-cora-live.glb`) read as a glossy helmet in the client. The diagnosis (`.local/living/cora-material/FINDINGS.md` on the laptop) found four causes:
 
 - the gloss is painted into the hair's vertex colours;
@@ -211,6 +213,8 @@ Use a texture when the highlight needs a sharper shape than the hair's triangles
 - **Far meshes:** if the file has `Far*` hair nodes (the client's far switch beyond about 10 m), they wear a material with the same `slop` (or the same material). Each carries its own `_HIGHLIGHT`, or uses the same mask texture through matching UVs.
 
 ## Lock ink lines (v1.1)
+
+v1.2 generalises this ink to every slot ([the ink contract](HANDMADE_INK.md)); what follows stays the hair profile's own ink, unchanged.
 
 Cora's drawing separates locks with thin dark ink lines where they meet; the client's outline draws only silhouettes, so the locks merge. The profile can draw those lines from a distance field in the mask texture.
 
