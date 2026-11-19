@@ -128,9 +128,9 @@ def partition_sync(text, name, *, last=False):
 
 
 def cutaway_fades(text, folder):
-    """Whether a model from this exact asset directory fades in the log."""
+    """Return the fading asset paths from this exact directory."""
     files = re.findall(r"cutaway: (\S+) fades to ", text)
-    return any(os.path.basename(os.path.dirname(file)) == folder for file in files)
+    return [file for file in files if os.path.basename(os.path.dirname(file)) == folder]
 
 
 class Checks:
@@ -2014,7 +2014,7 @@ def cover_canopy(run, c):
                     (body.get("x"), body.get("y")) == canopy and bool(faded)
                     and abs(view(d).get("height", -1) - height) < 0.1
                     and os.path.isfile(os.path.join(out, f"{key}.png")),
-                    repr((body, view(d), faded.group(0) if faded else None)))
+                    repr((body, view(d), faded)))
 
 
 # The looks the scenario faces (live script `look:DEG`: 0 north, clockwise) and where the
