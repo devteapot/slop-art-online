@@ -5653,8 +5653,8 @@ def doing_watch(s, who, seconds, every=0.02):
 
 
 def doing_renewals(samples):
-    """What a run of samples shows: each renewal (the row's end moved on to a new rest's, through
-    the row held open-ended between them, `until_ms` 0), with the authority's gap between the old
+    """What a run of samples shows: each renewal (the row's end moved on to a new rest's, the row
+    held, past its end, between them), with the authority's gap between the old
     rest's end and the next one's start (its end less the rest's 8 s): the pacing, which the
     hold must leave as it was; whether the start (`since_ms`) was kept; how many samples saw the
     row held; and the longest stretch the row was absent (local ms, from the last sample with a
@@ -5663,9 +5663,10 @@ def doing_renewals(samples):
     for at, row in samples:
         if row is None:
             continue
-        if row["until_ms"] == 0:
+        if row["until_ms"] < at:
+            # Past its end and still there: held until the next evaluation (local and authority
+            # clocks are the host's).
             held += 1
-            continue
         if last is not None and row["until_ms"] != last["until_ms"]:
             renewals.append({"old_until": last["until_ms"], "new_since": row["since_ms"], "new_until": row["until_ms"],
                              "gap_ms": (row["until_ms"] - REST_MS) - last["until_ms"], "since_kept": row["since_ms"] == last["since_ms"]})
@@ -5690,8 +5691,8 @@ def doing_renewals(samples):
 def doing_renew(s):
     """A rest renewed in place (doing-renew): a resident whose only desire is to rest rests 8 s at a
     time, and each rest that finishes is followed by the next at the body's next evaluation, as
-    before (about a second later here: the pacing is unchanged). Its `doing` row stays: held
-    open-ended (`until_ms` 0) between two rests, then renewed in place. Polled about every 20 ms
+    before (about a second later here: the pacing is unchanged). Its `doing` row stays: held as it
+    was (past its end) between two rests, then renewed in place. Polled about every 20 ms
     for 34 s (three renewals or more): no sample lacks it, the gap between a rest's end and the
     next one's start is the old one (median 500 ms or more, none past 1.1 s), and the row keeps
     its `since_ms` (one rest going on). A rest under a `first` root renews the same way.
