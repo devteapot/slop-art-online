@@ -14,6 +14,12 @@ import os
 import subprocess
 import sys
 import tempfile
+from pathlib import Path
+
+from scene_gate import (
+    GENESIS_BUDGET, GENESIS_FUEL, GENESIS_RUNS, Runner, genesis_metrics, genesis_policy,
+    genesis_threshold, staged_genesis_report,
+)
 
 GATE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "scene_gate.py")
 failures = []
@@ -48,7 +54,94 @@ def expect(name, cond, out=""):
         print(out)
 
 
+def check_genesis():
+    identity = "a" * 64
+    other = "b" * 64
+    labels = f'db="{identity}",reducer="init"'
+
+    def metrics(fuel):
+        return (f'{GENESIS_FUEL}{{db="{other}",reducer="init"}} 999999999999\n'
+                f'{GENESIS_RUNS}{{db="{other}",reducer="init"}} 1\n'
+                f'{GENESIS_FUEL}{{{labels}}} {2 * fuel}\n'
+                f'{GENESIS_RUNS}{{{labels}}} 2\n')
+
+    def genesis_measurement(text, identity, threshold, baseline):
+        measurement = genesis_metrics(text, identity)
+        return {**measurement, **genesis_policy(measurement, threshold, baseline)}
+
+    threshold = genesis_threshold({})
+    good = genesis_measurement(metrics(108_000_000_000), identity, threshold, None)
+    expect("genesis: 10% headroom passes; fuel is divided by this database's init count",
+           good["passed"] and good["init_fuel"] == 108_000_000_000 and good["init_runs"] == 2, good)
+    bad = genesis_measurement(metrics(108_000_000_001), identity, threshold, None)
+    expect("genesis: under 10% with no baseline fails", not bad["passed"], bad)
+    override = genesis_threshold({"SLOP_GATE_GENESIS_HEADROOM": "5"})
+    raised = genesis_measurement(metrics(110_000_000_000), identity, override, None)
+    expect("genesis: configured headroom is used", raised["passed"], raised)
+    expect("genesis: check can be disabled", genesis_threshold({"SLOP_GATE_GENESIS_CHECK": "0"}) is None)
+    baseline = 119_500_000_000
+    for fuel, passed in ((119_619_499_999, True), (119_619_500_000, True), (119_619_500_001, False)):
+        result = genesis_measurement(metrics(fuel), identity, threshold, baseline)
+        expect(f"genesis: baseline comparison for {fuel}", result["passed"] == passed, result)
+    graduated = genesis_measurement(metrics(108_000_000_000), identity, threshold, baseline)
+    expect("genesis: enough headroom uses the standard rule even with a baseline",
+           graduated["passed"] and graduated["policy"] == "10% minimum headroom", graduated)
+    for name in (GENESIS_FUEL, GENESIS_RUNS):
+        try:
+            genesis_measurement("\n".join(line for line in metrics(108_000_000_000).splitlines()
+                                          if not line.startswith(f"{name}{{{labels}}}")), identity, threshold, None)
+        except ValueError as error:
+            expect(f"genesis: missing {name} fails loudly", name in str(error), error)
+        else:
+            expect(f"genesis: missing {name} fails loudly", False)
+
+
+def check_staged_genesis():
+    commit = "c" * 40
+    step = dict(phase="terrain", label="generate 1", reducer="genesis_step", fuel=108_000_000_000)
+    report = dict(seed="island", commit=commit, budget=GENESIS_BUDGET, init_runs=2,
+                  init_fuel=14_000_000_000, steps=[step], largest_step_share=0.9)
+    data = staged_genesis_report(report, "island", commit)
+    result = genesis_policy(data, 10, None)
+    expect("staged genesis: step at 90% passes with a warning", result["passed"] and len(result["warnings"]) == 1,
+           result)
+    step["fuel"] += 1
+    report["largest_step_share"] = step["fuel"] / GENESIS_BUDGET
+    result = genesis_policy(staged_genesis_report(report, "island", commit), 10, 119_500_000_000)
+    expect("staged genesis: step over 90% fails even when an init baseline exists",
+           not result["passed"] and "terrain / generate 1 (genesis_step)" in result["failures"][0], result)
+    step["fuel"] = 60_000_000_000
+    report["largest_step_share"] = 0.5
+    result = genesis_policy(staged_genesis_report(report, "island", commit), 10, None)
+    expect("staged genesis: step at 50% passes without warnings", result["passed"] and not result["warnings"], result)
+    for change in (dict(commit="d" * 40), dict(budget=100), dict(largest_step_share=0.1), dict(steps=[])):
+        try:
+            staged_genesis_report({**report, **change}, "island", commit)
+        except ValueError:
+            expect(f"staged genesis: rejects invalid {next(iter(change))}", True)
+        else:
+            expect(f"staged genesis: rejects invalid {next(iter(change))}", False)
+
+    with tempfile.TemporaryDirectory(prefix="staged-genesis-selftest-") as t:
+        root = Path(t)
+        tool = root / "living/tools/genesis_fuel.py"
+        tool.parent.mkdir(parents=True)
+        tool.write_text(
+            "import sys\n"
+            "assert sys.argv[1:] == ['--seed', 'island']\n"
+            f"print({json.dumps(report)!r})\n"
+            "print('progress is on stderr', file=sys.stderr)\n"
+        )
+        runner = Runner("fixture", os.environ.copy(), root, root / "reds.json")
+        result = runner.genesis(root, "island", commit, 10, None)
+        expect("staged genesis: detects and runs the reporter, keeping stderr out of its JSON",
+               result["passed"] and result["steps"] == report["steps"]
+               and "progress is on stderr" in (root / "genesis-island.log").read_text(), result)
+
+
 def main():
+    check_genesis()
+    check_staged_genesis()
     with tempfile.TemporaryDirectory(prefix="gate-reds-selftest-") as t:
         os.environ.update({"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"})
         origin = os.path.join(t, "origin.git")

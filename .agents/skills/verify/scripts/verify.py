@@ -260,9 +260,14 @@ def launch(a):
         sys.exit(f"refusing to overwrite {st['db']}: use a new run name")
     fresh = ["--delete-data"] if current and not keep else []
     command = [STDB, "publish", "-s", "local", "-b", f"/wasm/{wasm}", st["db"], *fresh, "-y"]
-    published = world_guard.arm(run_dir(a.run), URL, st["db"], owner, driver_pid=driver_pid, command=command,
-                                expected=current, expected_epoch=st.get("world_epoch"),
-                                idle_seconds=idle_seconds)
+    try:
+        published = world_guard.arm(run_dir(a.run), URL, st["db"], owner, driver_pid=driver_pid, command=command,
+                                    expected=current, expected_epoch=st.get("world_epoch"),
+                                    idle_seconds=idle_seconds)
+    except Exception:
+        if wasm != "living_authority.wasm":
+            (mount / wasm).unlink(missing_ok=True)
+        raise
     st["database_identity"], st["world_epoch"] = published["identity"], published["epoch"]
     st["server_url"] = URL
     st["archive_commitlog"] = getattr(a, "archive_commitlog", False) or st.get("archive_commitlog", False)
