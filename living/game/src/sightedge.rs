@@ -54,6 +54,7 @@ use crate::net::Net;
 use bevy::prelude::*;
 use living_bindings::*;
 use living_rules::script::{ActorFacts, Senses, SkillCtx};
+use living_rules::sight::GazeBand;
 use spacetimedb_sdk::Table;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
@@ -224,6 +225,8 @@ pub struct SightEdge {
     /// My senses now by the rules (`senses(a)`): with a `field` while the world's `fov_on` law
     /// is on, and the keep margin (`keep_seen_m`) for someone already seen.
     pub senses: Option<Senses>,
+    pub gaze_band: Option<GazeBand>,
+    awaiting_gaze: bool,
     /// Where they came from.
     pub source: Option<Source>,
     pub keep_m: f32,
@@ -241,7 +244,7 @@ impl Default for SightEdge {
     fn default() -> Self {
         let mode = std::env::var("LIVING_SIGHT_EDGE").ok().and_then(|v| Mode::parse(&v)).unwrap_or_default();
         let look = std::env::var("LIVING_SIGHT_LOOK").ok().and_then(|v| Look::parse(&v)).unwrap_or_default();
-        Self { mode, look, radius: 11.0, want: None, senses: None, source: None, keep_m: 1.0, keep_rev: None, next_ask: 0.0, next_report: 0.0, far: None, noted: false }
+        Self { mode, look, radius: 11.0, want: None, senses: None, gaze_band: None, awaiting_gaze: false, source: None, keep_m: 1.0, keep_rev: None, next_ask: 0.0, next_report: 0.0, far: None, noted: false }
     }
 }
 
@@ -292,6 +295,7 @@ fn my_sight(net: &Net, rules: &crate::verbs::Rules, hour: f32) -> Option<(Senses
 /// Where my senses came from: the authority's `my_senses` row, or the client's own ask.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Source {
+    Gaze,
     Authority,
     Local,
 }
@@ -356,11 +360,33 @@ pub fn update(
     }
     let dt = time.delta_secs();
     edge.next_ask -= dt;
-    if edge.next_ask <= 0.0 {
+    let applied = net.applied_gaze().and_then(|row| GazeBand::try_from(row.band).ok().map(|band| (band, row.senses)));
+    edge.awaiting_gaze = applied.is_none() && edge.gaze_band.is_none()
+        && rules.scripts.as_ref().is_some_and(|script| script.gaze_enabled());
+    if let Some((band, row)) = applied {
+        let senses = senses_of_row(&row);
+        edge.gaze_band = Some(band);
+        if edge.source != Some(Source::Gaze) {
+            info!("sight edge: my senses from the authority (my_senses_v_2)");
+            edge.source = Some(Source::Gaze);
+        }
+        edge.senses = Some(senses);
+        edge.want = Some(senses.sight);
+        edge.radius = senses.sight;
+    } else if edge.awaiting_gaze {
+        edge.want = None;
+        edge.senses = None;
+    } else if (edge.gaze_band.is_none() || net.gaze_view_ready()) && edge.next_ask <= 0.0 {
         edge.next_ask = ASK_S;
         if let Some((s, source)) = my_sight(&net, &rules, clock.hour()) {
+            edge.gaze_band = None;
             if edge.source != Some(source) {
-                info!("sight edge: my senses from {}", if source == Source::Authority { "the authority (my_senses)" } else { "the client's own ask (no my_senses row: no field)" });
+                let name = match source {
+                    Source::Gaze => "the authority (my_senses_v_2)",
+                    Source::Authority => "the authority (my_senses)",
+                    Source::Local => "the client's own ask (no my_senses row: no field)",
+                };
+                info!("sight edge: my senses from {name}");
                 edge.source = Some(source);
             }
             let r = s.sight;
@@ -371,12 +397,6 @@ pub fn update(
                 }
             }
             edge.senses = Some(s);
-            if edge.keep_rev != Some(rules.revision) {
-                if let Some(sc) = rules.scripts.as_ref() {
-                    edge.keep_m = sc.laws().keep_seen_m;
-                    edge.keep_rev = Some(rules.revision);
-                }
-            }
             if edge.want.is_none() {
                 edge.radius = r;
                 info!("sight edge: sight {r:.1} m by the world's rules");
@@ -386,7 +406,13 @@ pub fn update(
             edge.want = Some(r);
         }
     }
-    if let Some(w) = edge.want {
+    if edge.senses.is_some() && edge.keep_rev != Some(rules.revision) {
+        if let Some(sc) = rules.scripts.as_ref() {
+            edge.keep_m = sc.laws().keep_seen_m;
+            edge.keep_rev = Some(rules.revision);
+        }
+    }
+    if let Some(w) = edge.want.filter(|_| edge.gaze_band.is_none()) {
         edge.radius += (w - edge.radius) * (1.0 - (-dt * EASE).exp());
     }
     // Once I have arrived (my sight known, the first-load cover gone): the note, on the line of
@@ -442,16 +468,31 @@ fn far(mut edge: ResMut<SightEdge>, target: Res<crate::controls::Target>, draw: 
 /// Feed the finishing pass (after `post::update` writes the rest of its settings).
 fn shade(edge: Res<SightEdge>, field: Option<Res<crate::sightfield::SightField>>, target: Res<crate::controls::Target>, atmo: Option<Res<crate::daylight::Atmo>>, style: Res<crate::style::Style>, mut cams: Query<&mut crate::post::Edges>) {
     let Ok(mut e) = cams.single_mut() else { return };
-    let me = target.0.filter(|_| edge.want.is_some());
+    let me = target.0.filter(|_| edge.want.is_some() || edge.awaiting_gaze);
     let mode = if me.is_some() { edge.mode.code() } else { 0.0 };
     let at = me.unwrap_or_default();
-    e.sight = Vec4::new(at.x, at.z, edge.radius, mode);
+    let rendered = field.as_deref().filter(|f| f.valid && (edge.gaze_band.is_none() || f.gaze_band.is_some()));
+    // Switch the radius and the asynchronously computed mask in the same frame.
+    let radius = if edge.awaiting_gaze {
+        -2.0 * BAND_OUT
+    } else if edge.gaze_band.is_some() || rendered.is_some_and(|f| f.gaze_band.is_some()) {
+        rendered.map_or(-2.0 * BAND_OUT, |f| f.sight)
+    } else {
+        edge.radius
+    };
+    e.sight = Vec4::new(at.x, at.z, radius, mode);
+    if bevy::log::tracing::enabled!(bevy::log::Level::TRACE) {
+        let confirmed = edge.gaze_band.map_or(-1, |band| band as i32);
+        let drawn = rendered.and_then(|f| f.gaze_band).map_or(-1, |band| band as i32);
+        let revision = rendered.map_or(0, |f| f.cost.runs);
+        trace!("gaze shade confirmed={confirmed} drawn={drawn} radius={radius:.3} revision={revision} mode={mode}");
+    }
     e.sight_look = Vec4::new(BAND_IN, BAND_OUT, DIM, DESATURATE);
     let sky = crate::camera::SKY.to_linear();
     let fog = atmo.as_deref().filter(|a| a.active).map_or(Vec3::new(sky.red, sky.green, sky.blue), |a| a.fog);
     e.sight_fog = Vec4::new(fog.x, fog.y, fog.z, FLATTEN);
     e.sight_far = Vec4::new(LIMIT, SHADOW_FOG, 0.0, 0.0);
-    e.sight_field = match field.as_deref().filter(|f| f.valid) {
+    e.sight_field = match rendered {
         Some(f) => Vec4::new(f.origin.x as f32, f.origin.y as f32, 1.0 / crate::sightfield::EXTENT, 1.0),
         None => Vec4::ZERO,
     };

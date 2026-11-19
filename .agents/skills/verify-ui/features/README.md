@@ -10,6 +10,7 @@ This directory is the maintained source for verifying interface D in the game cl
 | A crowd of generated people: paged faces with their page's shadow map, the far model beyond 10 m, one shared clip file; people composed from type, style and overlay files (the default; `LIVING_GAME_COMPOSE=0` draws whole files), joint by joint and colour by colour against their whole files, style materials shared by what they draw; draw counts, batches, asset memory and foot slide | [crowd.md](crowd.md) | look-dev, no world: `living/tools/characters/crowd.py` (`lod`, `town` and `composed` runs), `compose_check.py`, `colour_check.py`, `check.py skirt-scale` (spring skirts on scaled bodies) |
 | Facing sight (`fov_on`): off draws no field; F5 or Settings › Play switches it through the admin link (`law_change` rows); the readout of the five values; the authority's perceived set against the client's field at four looks (`human_face`); a walking look held at 30° and the releases; heard marks per `heard_sounds` row | [field.md](field.md) | `check.py field` |
 | The film (`post::Film`): Soft (the default; spares dark pixels by day, the screen at night), Full (the screen, as before film-1) and None; Settings › Play › Film sets it, the settings file keeps a choice once made, `LIVING_GAME_FILM` starts in one | [film.md](film.md) | `check.py film` |
+| Gaze from the zoom target: Far, Middle and Near, authority-confirmed Shade, coalescing, reconnect and the Cullet hedge | [gaze.md](gaze.md) | `check.py gaze` (Cullet) |
 | The recipe grid: a way of making's products as cells, greyed with the rules' reasons, rows from the recipe, a cell sends the act | [grid.md](grid.md) | `check.py grid` on a Cullet world |
 | The hair shine (`style::HAIR_SHINES`): Crown (the default; a hard band over the crown, off a fringe), Soft and Today (the ring before hair-ring-1); Settings › Play › Hair shine sets it, the settings file keeps a choice once made, `LIVING_GAME_HAIR_SHINE` starts in one; the live script's `shine:` switches it in one view | [hair.md](hair.md) | `check.py hair` |
 | Items on people: the pack, an item's acts, carrying an item onto someone's window or onto them, hold F › Give › | [items.md](items.md) | `check.py items` |
@@ -31,16 +32,17 @@ This directory is the maintained source for verifying interface D in the game cl
 | Source (`living/game/src/`) | Features |
 | --- | --- |
 | `anim.rs` (`clip_file`), `lookdev.rs` (far models, face maps) | [crowd.md](crowd.md) |
-| `camera.rs`, `pointer.rs` | [camera.md](camera.md), [turns.md](turns.md), [wheel.md](wheel.md) |
+| `camera.rs`, `pointer.rs` | [camera.md](camera.md), [gaze.md](gaze.md), [turns.md](turns.md), [wheel.md](wheel.md) |
 | `characters.rs` (`recolor`, `shape`, spring bones), `characters/compose.rs` (people composed from type, style and overlay files), `perf.rs` (`diag`'s `batches:`), `view.rs` (`LIVING_GAME_VIEW_JOINTS`, `LIVING_GAME_VIEW_PLATE`) | [crowd.md](crowd.md) |
 | `combat.rs`, `weapon.rs`, `town.rs` (my gestures, theirs drawn) | [bar.md](bar.md) |
-| `controls.rs` (the look), `facing.rs`, `heardmark.rs`, `sightedge.rs`, `sightfield.rs` | [field.md](field.md) |
+| `controls.rs` (the look), `facing.rs`, `heardmark.rs`, `sightedge.rs`, `sightfield.rs` | [field.md](field.md), [gaze.md](gaze.md) |
 | `envs.rs` (the cutaway fade) | [support.md](support.md) |
 | `heard.rs`, `mouth.rs`, `pick.rs`, `talk.rs` | [talking.md](talking.md) |
 | `keys.rs` (Settings › Controls) | [windows.md](windows.md), [bar.md](bar.md) |
 | `live.rs`: the live script every drive runs through (SKILL.md), and how a walking body's legs and upper body turn | the harness for every feature; [look-walk.md](look-walk.md); `recipe_for`, `swap_look`: [looks.md](looks.md) |
 | `characters/book.rs`, `characters/seen.rs`, `loading.rs` (the prewarm), `island.rs` (`person_recipe`) | [looks.md](looks.md) |
 | `looks.rs` | [names.md](names.md), [looks.md](looks.md) (`clothes`, `place`) |
+| `net.rs` (owner subscription, gaze replies and reconnect) | [gaze.md](gaze.md) |
 | `post.rs` (`post::Film`) | [film.md](film.md) |
 | `style.rs` (`HAIR_SHINES`, `HairShine`), `toon.wesl` (`hair_light`) | [hair.md](hair.md) |
 | `twist.rs` | [look-walk.md](look-walk.md) |

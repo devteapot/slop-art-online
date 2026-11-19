@@ -24,6 +24,7 @@
   the player's character id, `{ident}` its identity (hex), and `{epoch_at:HOUR}` the world
   epoch that makes the world's hour HOUR now, keeping its day count (for a scratch fixture
   `UPDATE world SET epoch_ms = {epoch_at:12} WHERE id = 0`: the hour by day or night).
+- `client_sql|QUERY` snapshots a view as the game client identity.
 - A `--sync` call `player|REDUCER|ARG|…` is made as verify.py's player identity (`$V player
   join`), not the admin: a second player's own acts (`player|human_face|0|-1`), beside mine.
 - `--admin-link` gives the client the world admin's token in a private file
@@ -42,6 +43,8 @@ import argparse, signal, json, os, re, subprocess, sys, time
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../.."))
 STDB = os.path.join(ROOT, "living/tools/stdb")
 V = os.path.join(ROOT, ".agents/skills/verify/scripts/verify.py")
+sys.path.insert(0, os.path.dirname(V))
+from verify import http
 
 
 def stdb(*args):
@@ -198,7 +201,7 @@ def run_client(a, db, out, client, env, places, syncs, free_places=()):
     for sig in (signal.SIGTERM, signal.SIGHUP):
         signal.signal(sig, lambda n, _f: sys.exit(128 + n))
     try:
-        return drive_client(a, db, out, client, p, log_path, places, syncs, free_places)
+        return drive_client(a, db, out, client, p, log_path, places, syncs, env["LIVING_GAME_TOKEN"], free_places)
     finally:
         stop(p)
 
@@ -216,7 +219,7 @@ def stop(p):
         p.wait()
 
 
-def drive_client(a, db, out, client, p, log_path, places, syncs, free_places):
+def drive_client(a, db, out, client, p, log_path, places, syncs, token_path, free_places):
     scene = {"world": db, "plan": a.plan, "places": places, "calls": [], "snaps": {}, "client": client, "admin_link": a.admin_link}
     me, placed, t0, ident, last_at = None, False, time.time(), None, None
     while p.poll() is None:
@@ -260,7 +263,7 @@ def drive_client(a, db, out, client, p, log_path, places, syncs, free_places):
                     calls = [c for i, xy in scene.get("free_spots", {}).items() for c in (["place_at", i, str(xy[0]), str(xy[1])], ["set_behavior", i, json.dumps(json.dumps({"wait": 600}))])]
                 sub = lambda s: str(eval(s[1:-1], {"mx": at[0], "my": at[1], "me": me})) if s.startswith("(") else s.replace("{me}", str(me))
                 for c in calls:
-                    if c[0] == "sql":
+                    if c[0] in ("sql", "client_sql"):
                         if ident is None:
                             rows = sql(a.run, f"SELECT controller FROM character WHERE id = {me}")
                             ident = rows[0]["controller"] if rows else ""
@@ -269,7 +272,18 @@ def drive_client(a, db, out, client, p, log_path, places, syncs, free_places):
                         q = "|".join(c[1:]).replace("{me}", str(me)).replace("{ident}", ident)
                         for m in re.finditer(r"\{epoch_at:([\d.]+)\}", q):
                             q = q.replace(m.group(0), str(epoch_at(a.run, float(m.group(1)))))
-                        scene["snaps"].setdefault(name, []).append({"query": q, "wall_ms": int(time.time() * 1000), "rows": sql(a.run, q)})
+                        wall_ms = int(time.time() * 1000)
+                        if c[0] == "client_sql":
+                            with open(token_path) as token_file:
+                                status, response = http(f"/v1/database/{db}/sql", q, token_file.read().strip(), raw=True)
+                            if status != 200:
+                                sys.exit(f"client SQL {q}: {status} {response}")
+                            result = json.loads(response)[-1]
+                            names = [column["name"]["some"] for column in result["schema"]["elements"]]
+                            rows = [dict(zip(names, row)) for row in result["rows"]]
+                        else:
+                            rows = sql(a.run, q)
+                        scene["snaps"].setdefault(name, []).append({"query": q, "wall_ms": wall_ms, "rows": rows})
                         continue
                     if c[0] == "player":
                         # As verify.py's player identity (`$V player join`), not the admin: its

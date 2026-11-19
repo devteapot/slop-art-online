@@ -395,7 +395,7 @@ pub fn follow(
     mouse: Res<ButtonInput<MouseButton>>,
     target: Res<crate::controls::Target>,
     input: Res<Input>,
-    net: NonSend<Net>,
+    mut net: NonSendMut<Net>,
     scene: NonSend<Scene>,
     sight: Res<crate::sight::Sight>,
     size: Res<crate::bodies::MySize>,
@@ -522,6 +522,8 @@ pub fn follow(
         cam.top_zoom.target = (cam.top_zoom.target + tuning.wheel_step * pointer.wheel_notches + 1.0 - pointer.pinch_factor).clamp(0.0, 1.0);
         cam.top_zoom.shown += (cam.top_zoom.target - cam.top_zoom.shown) * ease(tuning.easing_rate);
     }
+
+    net.update_gaze(cam.top_zoom.target);
 
     // Context: a fight I am in, else a conversation, else a gesture exchange. Turning the view
     // dismisses it until that context ends.

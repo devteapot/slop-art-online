@@ -47,7 +47,7 @@ use bevy::prelude::*;
 use living_bindings::*;
 use living_rules::land::{Land, LandParams};
 use living_rules::map::{chunk_xy, Map, CHUNK};
-use spacetimedb_sdk::Table;
+use spacetimedb_sdk::{DbContext, Table};
 use std::collections::{HashMap, HashSet};
 use std::f32::consts::PI;
 use std::sync::{Arc, Mutex};
@@ -1607,6 +1607,12 @@ fn script(
         }
         "pan" | "drag" => {
             pointer.scripted_turn += arg.parse::<f32>().unwrap_or(0.0) * if verb == "pan" { 0.6 } else { 1.0 };
+            true
+        }
+        "reconnect" => {
+            if let Some(conn) = &net.conn {
+                let _ = conn.disconnect();
+            }
             true
         }
         "notches" => {

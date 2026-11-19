@@ -45,10 +45,12 @@
 use bevy::prelude::*;
 use living_bindings::*;
 use living_rules::map::{chunk_id, chunk_xy, CHUNK};
+use living_rules::sight::GazeBand;
 use spacetimedb_sdk::{DbContext, Identity, SubscriptionHandle as _, Table, TableWithPrimaryKey};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 /// Half-size (tiles) of the square of chunks kept subscribed around the player (tile worlds).
 pub const REGION_R: f32 = 40.0;
@@ -113,8 +115,56 @@ enum Signal {
     Identity(Identity, String),
     Static,
     Base,
+    GazeReply(GazeBand, GazeReply),
     Disconnected(String),
     Error(String),
+}
+
+const GAZE_INTERVAL: Duration = Duration::from_millis(250);
+
+enum GazeReply {
+    Accepted,
+    Retry,
+    Refused,
+}
+
+#[derive(Default)]
+struct GazeInput {
+    desired: GazeBand,
+    owner: Option<u32>,
+    applied: Option<GazeBand>,
+    pending: Option<GazeBand>,
+    accepted: Option<GazeBand>,
+    refused: Option<GazeBand>,
+    retry_at: Option<Instant>,
+}
+
+impl GazeInput {
+    fn next(&self, now: Instant) -> Option<GazeBand> {
+        let applied = self.applied?;
+        (self.pending.is_none()
+            && self.retry_at.is_none_or(|at| now >= at)
+            && self.desired != self.accepted.unwrap_or(applied)
+            && self.refused != Some(self.desired))
+            .then_some(self.desired)
+    }
+
+    fn reply(&mut self, band: GazeBand, reply: GazeReply, now: Instant) {
+        if self.pending != Some(band) {
+            return;
+        }
+        self.pending = None;
+        self.retry_at = Some(now + GAZE_INTERVAL);
+        match reply {
+            GazeReply::Accepted => self.accepted = (self.applied != Some(band)).then_some(band),
+            GazeReply::Retry => {}
+            GazeReply::Refused => self.refused = Some(band),
+        }
+    }
+
+    fn reset_owner(&mut self) {
+        *self = Self { desired: self.desired, ..Self::default() };
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -211,6 +261,8 @@ pub struct Net {
     /// The call `on_reply` just logged, for `report` (`actions.rs`).
     last_call: std::cell::Cell<Option<crate::actions::Sent>>,
     base: Option<SubscriptionHandle>,
+    gaze_view: Option<SubscriptionHandle>,
+    gaze: GazeInput,
     near: Window,
     far: Window,
 }
@@ -241,6 +293,8 @@ impl Default for Net {
             join_sent: false,
             last_call: Default::default(),
             base: None,
+            gaze_view: None,
+            gaze: GazeInput::default(),
             near: Window::default(),
             far: Window::default(),
         }
@@ -447,6 +501,69 @@ impl Net {
         );
     }
 
+    /// The sweep publishes at most one row to the player's connection. A separate
+    /// subscription leaves the base playable on servers predating the view.
+    pub fn gaze_view_ready(&self) -> bool {
+        self.gaze_view.as_ref().is_some_and(|view| view.is_active())
+    }
+
+    pub fn applied_gaze(&self) -> Option<AppliedGaze> {
+        let conn = self.conn.as_ref()?;
+        if !self.gaze_view_ready() {
+            return None;
+        }
+        conn.db.my_senses_v_2().id().find(&self.my_id?)
+    }
+
+    pub fn update_gaze(&mut self, zoom: f32) {
+        let desired = self.gaze.desired.at_zoom(zoom);
+        if desired != self.gaze.desired {
+            self.gaze.desired = desired;
+            self.gaze.refused = None;
+        }
+        let Some(row) = self.applied_gaze().filter(|_| self.status == Status::Live) else {
+            self.gaze.reset_owner();
+            return;
+        };
+        let Ok(band) = GazeBand::try_from(row.band) else { return };
+        if self.gaze.owner != Some(row.id) {
+            self.gaze.reset_owner();
+            self.gaze.owner = Some(row.id);
+        }
+        if self.gaze.applied != Some(band) {
+            debug!("gaze owner applied band={} sight={} focal={} side={}", row.band, row.senses.sight, row.senses.focal_deg, row.senses.side_deg);
+            self.gaze.applied = Some(band);
+        }
+        if self.gaze.accepted == Some(band) {
+            self.gaze.accepted = None;
+        }
+        let now = Instant::now();
+        let Some(band) = self.gaze.next(now) else { return };
+        let Some(conn) = &self.conn else { return };
+        let inbox = self.inbox.clone();
+        let result = conn.reducers.human_gaze_then(band as u8, move |ctx, result| {
+            let reply = match result {
+                Ok(Ok(())) => {
+                    debug!("gaze accepted band={} at_us={}", band as u8, ctx.event.timestamp.to_micros_since_unix_epoch());
+                    GazeReply::Accepted
+                }
+                Ok(Err(reason)) => {
+                    debug!("gaze refused band={}: {reason}", band as u8);
+                    // A new connection can recover a sweep before the last acceptance cools.
+                    if reason == "gaze changed less than 250 ms ago" { GazeReply::Retry } else { GazeReply::Refused }
+                }
+                Err(_) => GazeReply::Retry,
+            };
+            inbox.lock().unwrap().push(Signal::GazeReply(band, reply));
+        });
+        self.gaze.pending = Some(band);
+        if result.is_ok() {
+            debug!("gaze sent band={}", band as u8);
+        } else {
+            self.gaze.reply(band, GazeReply::Retry, now);
+        }
+    }
+
     fn subscribe(&self, queries: Vec<String>, key: Vec<u32>) -> Option<Sub> {
         let conn = self.conn.as_ref()?;
         let inbox = self.inbox.clone();
@@ -621,11 +738,17 @@ pub fn pump(mut net: NonSendMut<Net>, time: Res<Time>) {
                 info!("world subscribed after {now:.1} s");
                 net.status = Status::Live;
                 net.ever_live = true;
+                net.gaze_view = net.conn.as_ref().map(|conn| {
+                    conn.subscription_builder()
+                        .on_error(|_, e| debug!("gaze owner view unavailable: {e}"))
+                        .subscribe(["SELECT * FROM my_senses_v_2"])
+                });
             }
             Signal::Error(e) => {
                 warn!("{e}");
                 net.errors.lock().unwrap().push(e);
             }
+            Signal::GazeReply(band, reply) => net.gaze.reply(band, reply, Instant::now()),
             Signal::Disconnected(e) => {
                 warn!("offline: {e}");
                 // Calls still waiting will not be answered (the SDK drops their callbacks).
@@ -634,6 +757,8 @@ pub fn pump(mut net: NonSendMut<Net>, time: Res<Time>) {
                     let _ = c.disconnect();
                 }
                 net.base = None;
+                net.gaze_view = None;
+                net.gaze.reset_owner();
                 net.near = Window::default();
                 net.far = Window::default();
                 net.my_id = None;
@@ -655,4 +780,57 @@ pub fn pump(mut net: NonSendMut<Net>, time: Res<Time>) {
         net.connect();
     }
     net.maintain();
+}
+
+#[cfg(test)]
+mod gaze_tests {
+    use super::*;
+    use GazeBand::{Far, Middle, Near};
+
+    #[test]
+    fn gaze_waits_for_owner_and_keeps_only_the_latest_zoom() {
+        let now = Instant::now();
+        let mut gaze = GazeInput { desired: Far, ..Default::default() };
+        assert_eq!(gaze.next(now), None);
+        gaze.applied = Some(Middle);
+        assert_eq!(gaze.next(now), Some(Far));
+        gaze.pending = Some(Far);
+        gaze.desired = Near;
+        assert_eq!(gaze.next(now), None);
+        gaze.desired = Middle;
+        gaze.reply(Far, GazeReply::Accepted, now);
+        assert_eq!(gaze.next(now + Duration::from_millis(249)), None);
+        // The sweep may still show Middle. The successful Far reply means Middle must be sent.
+        assert_eq!(gaze.next(now + GAZE_INTERVAL), Some(Middle));
+        gaze.reset_owner();
+        assert_eq!(gaze.next(now + GAZE_INTERVAL), None);
+        gaze.applied = Some(Far);
+        assert_eq!(gaze.next(now + GAZE_INTERVAL), Some(Middle));
+    }
+
+    #[test]
+    fn refused_gaze_does_not_change_the_applied_band_or_repeat() {
+        let now = Instant::now();
+        let mut gaze = GazeInput { desired: Near, applied: Some(Far), pending: Some(Near), ..Default::default() };
+        gaze.reply(Near, GazeReply::Refused, now);
+        assert_eq!(gaze.applied, Some(Far));
+        assert_eq!(gaze.next(now + GAZE_INTERVAL), None);
+        gaze.desired = Middle;
+        assert_eq!(gaze.next(now + GAZE_INTERVAL), Some(Middle));
+    }
+
+    #[test]
+    fn target_zoom_holds_each_band_through_the_dead_zone() {
+        assert_eq!(Middle.at_zoom(0.55), Middle);
+        assert_eq!(Middle.at_zoom(0.26), Middle);
+        assert_eq!(Middle.at_zoom(0.24), Far);
+        assert_eq!(Far.at_zoom(0.29), Far);
+        assert_eq!(Far.at_zoom(0.31), Middle);
+        assert_eq!(Middle.at_zoom(0.79), Middle);
+        assert_eq!(Middle.at_zoom(0.81), Near);
+        assert_eq!(Near.at_zoom(0.76), Near);
+        assert_eq!(Near.at_zoom(0.74), Middle);
+        assert_eq!(Far.at_zoom(1.0), Near);
+        assert_eq!(Near.at_zoom(0.0), Far);
+    }
 }
