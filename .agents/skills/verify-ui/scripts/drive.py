@@ -125,11 +125,46 @@ def body(db, cid):
     return (float(m[0][0]), float(m[0][1])) if m else None
 
 
+SYNC_WAIT = re.compile(r"^\S+\s+INFO\s+living_game::live: live script: waiting for (.+)$")
+
+
+def next_sync_wait(text, offset, pending):
+    """Return the next pending sync name and the cursor after its complete log line."""
+    while (end := text.find("\n", offset)) != -1:
+        line = text[offset:end]
+        offset = end + 1
+        match = SYNC_WAIT.fullmatch(re.sub(r"\x1b\[[0-9;]*m", "", line))
+        if match and match[1] in pending:
+            return pending[match[1]], offset
+    return None, offset
+
+
+def self_test():
+    prefix = "2026-11-19T16:12:04.498308Z  INFO living_game::live: live script: waiting for "
+    out = "/tmp/verify ui"
+    pending = {f"{out}/{name}.go": name for name in ("up", "sit", "setup", "scene")}
+    text = f"{prefix}{out}/not-scene.go\nother: waiting for\nother: {out}/scene.go\n"
+    text += f"{prefix}/other/scene.go\n{prefix}{out}/up.go.old\n"
+    name, offset = next_sync_wait(text, 0, pending)
+    assert name is None
+    for expected in ("setup", "scene", "sit", "up"):
+        text += f"{prefix}{out}/{expected}.go"
+        name, offset = next_sync_wait(text, offset, pending)
+        assert name is None, name  # A poll may catch a partially written line.
+        text += "\n"
+        name, offset = next_sync_wait(text, offset, pending)
+        assert name == expected, (name, expected)
+        name, offset = next_sync_wait(text, offset, pending)
+        assert name is None, name  # Even a still-pending name cannot reuse an old wait.
+    print("PASS: exact, ordered, single-use sync waits")
+
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--run", required=True)
-    ap.add_argument("--name", required=True)
-    ap.add_argument("--plan", required=True)
+    ap.add_argument("--self-test", action="store_true", help="check sync matching offline")
+    ap.add_argument("--run")
+    ap.add_argument("--name")
+    ap.add_argument("--plan")
     ap.add_argument("--place", action="append", default=[])
     ap.add_argument("--place-free", action="append", default=[], help="ID:DX:DY near that offset, on a free walkable tile in sight 1.5-3 m from me")
     ap.add_argument("--sync", action="append", default=[])
@@ -141,6 +176,11 @@ def main():
     ap.add_argument("--admin-link", action="store_true")
     ap.add_argument("--timeout", type=float, default=600)
     a = ap.parse_args()
+    if a.self_test:
+        self_test()
+        return
+    if any(value is None for value in (a.run, a.name, a.plan)):
+        ap.error("--run, --name and --plan are required for a client drive")
     db = f"verify-{a.run}"
     if not db.startswith("verify-ui-"):
         sys.exit(f"refusing {db}: verify-ui runs use verify-ui-* worlds (run names ui-*)")
@@ -218,7 +258,9 @@ def stop(p):
 
 def drive_client(a, db, out, client, p, log_path, places, syncs, token_path, free_places, st, owner):
     scene = {"world": db, "plan": a.plan, "places": places, "calls": [], "snaps": {}, "client": client, "admin_link": a.admin_link}
-    me, placed, t0, ident, last_at = None, False, time.time(), None, None
+    me, t0, ident, last_at = None, time.time(), None, None
+    pending = {os.path.join(out, f"{name}.go"): name for name in (*syncs, "scene")}
+    offset = 0
     next_renewal = 0
 
     def act(reducer, *args):
@@ -244,7 +286,11 @@ def drive_client(a, db, out, client, p, log_path, places, syncs, token_path, fre
             if m:
                 me = int(m.group(1))
                 scene["me"] = me
-        if me is not None and not placed and "scene.go" in text and "waiting for" in text:
+        if me is None:
+            time.sleep(0.4)
+            continue
+        name, offset = next_sync_wait(text, offset, pending)
+        if name == "scene":
             at = position(me)
             scene["me_at"] = at
             for i, dx, dy in places:
@@ -261,67 +307,67 @@ def drive_client(a, db, out, client, p, log_path, places, syncs, token_path, fre
             # Where each landed: `place_at` snaps to the nearest walkable tile, so two asked-for
             # spots in a stall can share one.
             scene["placed"] = {i: position(int(i)) for i, _, _ in places}
-            open(os.path.join(out, "scene.go"), "w").close()
-            placed = True
-        for name, calls in list(syncs.items()):
-            if me is not None and f"{name}.go" in text and "waiting for" in text:
-                # The player's position now, else where it last was (a body gone at death).
-                at = position(me) or last_at
-                last_at = at
-                # `refree`: put the free-placed residents back on their own tiles (town life may
-                # have walked them off).
-                if calls == [["refree"]]:
-                    calls = [c for i, xy in scene.get("free_spots", {}).items() for c in (["place_at", i, str(xy[0]), str(xy[1])], ["set_behavior", i, json.dumps(json.dumps({"wait": 600}))])]
-                sub = lambda s: str(eval(s[1:-1], {"mx": at[0], "my": at[1], "me": me})) if s.startswith("(") else s.replace("{me}", str(me))
-                for c in calls:
-                    if c[0] in ("sql", "client_sql"):
-                        if ident is None:
-                            rows = sql(a.run, f"SELECT controller FROM character WHERE id = {me}")
-                            ident = rows[0]["controller"] if rows else ""
-                            ident = str(ident[0] if isinstance(ident, list) and ident else ident)
-                            ident = ident[2:] if ident.startswith("0x") else ident
-                        q = "|".join(c[1:]).replace("{me}", str(me)).replace("{ident}", ident)
-                        for m in re.finditer(r"\{epoch_at:([\d.]+)\}", q):
-                            q = q.replace(m.group(0), str(epoch_at(a.run, float(m.group(1)))))
-                        wall_ms = int(time.time() * 1000)
-                        if c[0] == "client_sql":
-                            refresh_lease(st)
-                            with open(token_path) as token_file:
-                                status, response = http(f"/v1/database/{db}/sql", q, token_file.read().strip(), raw=True)
-                            if status != 200:
-                                sys.exit(f"client SQL {q}: {status} {response}")
-                            result = json.loads(response)[-1]
-                            names = [column["name"]["some"] for column in result["schema"]["elements"]]
-                            rows = [dict(zip(names, row)) for row in result["rows"]]
-                        else:
-                            rows = sql(a.run, q, required=True)
-                        scene["snaps"].setdefault(name, []).append({"query": q, "wall_ms": wall_ms, "rows": rows})
-                        continue
-                    if c[0] == "player":
-                        # As verify.py's player identity (`$V player join`), not the admin: its
-                        # own reducers (human_move, human_face), a second player beside mine.
-                        def val(x):
-                            x = sub(x)
-                            if x in ("true", "false"):
-                                return x == "true"
-                            # An id stays a whole number (a u32 argument takes no 311.0).
-                            for kind in (int, float):
-                                try:
-                                    return kind(x)
-                                except ValueError:
-                                    pass
-                            return x
-                        args = json.dumps([val(x) for x in c[2:]])
-                        r = subprocess.run([sys.executable, V, "call", "--run", a.run, c[1], args, "--as-player"], capture_output=True, text=True)
-                        scene["calls"].append({"reducer": c[1], "as": "player", "args": args, "code": r.returncode, "out": (r.stdout + r.stderr)[-300:]})
-                        continue
-                    scene["calls"].append(act(c[0], *[sub(x) for x in c[1:]]))
-                time.sleep(0.5)
-                moved = sorted({sub(c[1]) for c in calls if c[0] == "place_at"})
-                if moved:
-                    scene.setdefault("placed_at", {})[name] = {i: position(int(i)) for i in moved}
-                open(os.path.join(out, f"{name}.go"), "w").close()
-                del syncs[name]
+        if name in syncs:
+            calls = syncs[name]
+            # The player's position now, else where it last was (a body gone at death).
+            at = position(me) or last_at
+            last_at = at
+            # `refree`: put the free-placed residents back on their own tiles (town life may
+            # have walked them off).
+            if calls == [["refree"]]:
+                calls = [c for i, xy in scene.get("free_spots", {}).items() for c in (["place_at", i, str(xy[0]), str(xy[1])], ["set_behavior", i, json.dumps(json.dumps({"wait": 600}))])]
+            sub = lambda s: str(eval(s[1:-1], {"mx": at[0], "my": at[1], "me": me})) if s.startswith("(") else s.replace("{me}", str(me))
+            for c in calls:
+                if c[0] in ("sql", "client_sql"):
+                    if ident is None:
+                        rows = sql(a.run, f"SELECT controller FROM character WHERE id = {me}")
+                        ident = rows[0]["controller"] if rows else ""
+                        ident = str(ident[0] if isinstance(ident, list) and ident else ident)
+                        ident = ident[2:] if ident.startswith("0x") else ident
+                    q = "|".join(c[1:]).replace("{me}", str(me)).replace("{ident}", ident)
+                    for m in re.finditer(r"\{epoch_at:([\d.]+)\}", q):
+                        q = q.replace(m.group(0), str(epoch_at(a.run, float(m.group(1)))))
+                    wall_ms = int(time.time() * 1000)
+                    if c[0] == "client_sql":
+                        refresh_lease(st)
+                        with open(token_path) as token_file:
+                            status, response = http(f"/v1/database/{db}/sql", q, token_file.read().strip(), raw=True)
+                        if status != 200:
+                            sys.exit(f"client SQL {q}: {status} {response}")
+                        result = json.loads(response)[-1]
+                        names = [column["name"]["some"] for column in result["schema"]["elements"]]
+                        rows = [dict(zip(names, row)) for row in result["rows"]]
+                    else:
+                        rows = sql(a.run, q, required=True)
+                    scene["snaps"].setdefault(name, []).append({"query": q, "wall_ms": wall_ms, "rows": rows})
+                    continue
+                if c[0] == "player":
+                    # As verify.py's player identity (`$V player join`), not the admin: its
+                    # own reducers (human_move, human_face), a second player beside mine.
+                    def val(x):
+                        x = sub(x)
+                        if x in ("true", "false"):
+                            return x == "true"
+                        # An id stays a whole number (a u32 argument takes no 311.0).
+                        for kind in (int, float):
+                            try:
+                                return kind(x)
+                            except ValueError:
+                                pass
+                        return x
+                    args = json.dumps([val(x) for x in c[2:]])
+                    r = subprocess.run([sys.executable, V, "call", "--run", a.run, c[1], args, "--as-player"], capture_output=True, text=True)
+                    scene["calls"].append({"reducer": c[1], "as": "player", "args": args, "code": r.returncode, "out": (r.stdout + r.stderr)[-300:]})
+                    continue
+                scene["calls"].append(act(c[0], *[sub(x) for x in c[1:]]))
+            time.sleep(0.5)
+            moved = sorted({sub(c[1]) for c in calls if c[0] == "place_at"})
+            if moved:
+                scene.setdefault("placed_at", {})[name] = {i: position(int(i)) for i in moved}
+        if name is not None:
+            path = os.path.join(out, f"{name}.go")
+            del pending[path]
+            open(path, "w").close()
         time.sleep(0.4)
     p.wait()
     scene["exit"] = p.returncode

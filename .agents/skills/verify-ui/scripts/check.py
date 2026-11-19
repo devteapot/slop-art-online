@@ -21,6 +21,7 @@ ROOT = os.path.abspath(os.path.join(HERE, "../../../.."))
 V = os.path.join(ROOT, ".agents/skills/verify/scripts/verify.py")
 sys.path.insert(0, os.path.dirname(V))
 import verify
+from drive import next_sync_wait
 
 W, H = 1600, 900
 
@@ -115,6 +116,21 @@ def dump(out, name):
 def log(out):
     p = os.path.join(out, "client.log")
     return re.sub(r"\x1b\[[0-9;]*m", "", open(p, errors="replace").read()) if os.path.exists(p) else ""
+
+
+def partition_sync(text, name, *, last=False):
+    """Split at an exact live-script sync step name."""
+    matches = list(re.finditer(rf"live script: sync:{re.escape(name)}(?= \(me )", text))
+    if not matches:
+        return ("", "", text) if last else (text, "", "")
+    match = matches[-1] if last else matches[0]
+    return text[:match.start()], match[0], text[match.end():]
+
+
+def cutaway_fades(text, folder):
+    """Return the fading asset paths from this exact directory."""
+    files = re.findall(r"cutaway: (\S+) fades to ", text)
+    return [file for file in files if os.path.basename(os.path.dirname(file)) == folder]
 
 
 class Checks:
@@ -909,18 +925,18 @@ def offers(run, c):
 
 # Where the support scenario stands the player on Cullet (land metres; the plan's x + 510 and
 # 784 - y, as of layout pass 1: the Ladder Wynd at plan x -52, the Marver's terrace at x 68..80)
-# and what holds it up there: a kit fixture's file (part of its path); whether it is tall enough to
+# and what holds it up there: a kit fixture's file or directory; whether it is tall enough to
 # be an occluder, so the camera's fade (`envs::cutaway`) considers it at all; and whether it is what
 # I walk on there (a flight, a terrace, the quay: never faded), or only beside me (a retaining wall
 # below the edge I stand on, which may fade when it stands between the camera and me).
 SUPPORTS = [
-    ("stairs", 458.0, 755.0, "stairs/stairs_ladder_wynd_strand_to_low", True, True),
-    ("terrace", 584.0, 720.8, "marver_terrace/", False, True),
-    ("quay", 450.0, 782.6, "quay/", False, True),
+    ("stairs", 458.0, 755.0, "envs/cullet/stairs/stairs_ladder_wynd_strand_to_low.glb", True, True),
+    ("terrace", 584.0, 720.8, "envs/cullet/marver_terrace/marver_terrace.glb", False, True),
+    ("quay", 450.0, 782.6, "envs/cullet/quay/", False, True),
     # At the upper level's edge above a retaining wall: the drop's tiles keep you 1-1.5 m from
     # it, so it is beside you, never under you; it may fade when it stands between the camera
     # and you, as anything that hides you does.
-    ("wall", 440.0, 751.6, "retaining_wall/wall_002", False, False),
+    ("wall", 440.0, 751.6, "envs/cullet/retaining_wall/wall_002.glb", False, False),
 ]
 # Where the player stands first, away from every spot: the cutaway names what holds me up once,
 # as I come onto it, and the character keeps its place between drives.
@@ -949,22 +965,25 @@ def support(run, c):
     c.check(s, "client ran and joined", code == 0, text[-300:])
     L = log(out)
     # The log in stretches, one per spot: from its sync step to the next.
-    parts = re.split(r"live script: sync:(\w+)", L)
+    parts = re.split(r"live script: sync:([^\n]+?)(?= \(me )", L)
     seg = {parts[i]: parts[i + 1] for i in range(1, len(parts) - 1, 2)}
     for name, x, y, part, occluder, walked in SUPPORTS:
         t = seg.get(name, "")
         held = set(re.findall(r"cutaway: (\S+) holds me up", t))
         faded = re.findall(r"cutaway: (\S+) fades to", t)
-        mine = [f for f in held if part in f]
+        def supports(file):
+            return os.path.dirname(file) == part.rstrip("/") if part.endswith("/") else file == part
+
+        mine = [f for f in held if supports(f)]
         if occluder:
             c.check(s, f"{name}: the cutaway finds what holds me up ({part})", bool(mine), f"held {sorted(held)}")
             # Only the plan's own flight is there: no other kit file of its kind drawn on it
             # (stairs-place: a Store Wynd flight stood at the Ladder Wynd's foot).
-            folder = part.split("/")[0] + "/"
-            others = sorted(f for f in held if folder in f and part not in f)
-            c.check(s, f"{name}: no other {folder[:-1]} model stands there", not others, f"also held {others}")
+            folder = os.path.dirname(part)
+            others = sorted(f for f in held if os.path.dirname(f) == folder and f != part)
+            c.check(s, f"{name}: no other {os.path.basename(folder)} model stands there", not others, f"also held {others}")
         # What held me up there, and what I walk on there, never fades there.
-        bad = [f for f in faded if f in held or (walked and part in f)]
+        bad = [f for f in faded if f in held or (walked and supports(f))]
         c.check(s, f"{name}: nothing under or beside my feet fades", t != "" and not bad, f"faded {bad}" if t else "no log for this spot")
     c.check(s, "photographs of each spot", all(os.path.exists(os.path.join(out, f"{n}.png")) for n, *_ in SUPPORTS))
 
@@ -1170,9 +1189,9 @@ def camera(run, c):
             wood_dump = dump(out, f"wood_{stop}") or {}
             c.check(s, f"{field} {stop}: resident in generic forest remains in the scoped view",
                     front in (wood_dump.get("perceived") or []), repr(wood_dump.get("perceived")))
-            under_roof = trace.partition(f"live script: sync:roof_{stop}")[2].partition(f"live script: dump:roof_{stop}")[0]
+            under_roof = partition_sync(trace, f"roof_{stop}")[2].partition(f"live script: dump:roof_{stop}")[0]
             c.check(s, f"{field} {stop}: the market stall roof enters cutaway",
-                    re.search(r"cutaway: .*market_stall.* fades to ", under_roof) is not None, under_roof[-350:])
+                    cutaway_fades(under_roof, "market_stall"), under_roof[-350:])
         c.check(s, f"{field}: zoom keeps the authority's sight radius", ranges[0] is not None and len(set(ranges)) == 1, repr(ranges))
         c.check(s, f"{field}: the resident behind the wall stays outside the scoped view",
                 all(behind_wall not in rows for rows in visible + perceived), repr((visible, perceived)))
@@ -1228,8 +1247,8 @@ def camera_rotate(run, c):
         c.check(s, "W moves up-screen at 135°", up > 0.5 and abs(right) < up * 0.25, repr((dx, dy, up, right)))
     else:
         c.check(s, "W moves up-screen at 135°", False, repr((before, after)))
-    trace = log(out).partition("live script: sync:roof")[2].partition("live script: dump:awning")[0]
-    c.check(s, "the market awning cuts away at 135°", re.search(r"cutaway: .*market_stall.* fades to ", trace) is not None, trace[-500:])
+    trace = partition_sync(log(out), "roof")[2].partition("live script: dump:awning")[0]
+    c.check(s, "the market awning cuts away at 135°", cutaway_fades(trace, "market_stall"), trace[-500:])
     c.check(s, "both Middle stills captured", all(os.path.isfile(os.path.join(out, f"middle-{name}.png")) for name in ("north", "135")))
     prefs = dump(out, "settings") or {}
     c.check(s, "the rotation settings are saved", prefs.get("camera_rotate") is False
@@ -1323,8 +1342,8 @@ def camera_lol(run, c):
     c.check(s, "the point and tap pick the resident", hover.get("under") == front and selected.get("to") == front,
         repr((hover.get("under"), selected)))
     trace = log(out)
-    roof = trace.partition("live script: sync:roof")[2].partition("live script: dump:under_awning")[0]
-    c.check(s, "the market awning enters cutaway", bool(re.search(r"cutaway: .*market_stall.* fades to ", roof)),
+    roof = partition_sync(trace, "roof")[2].partition("live script: dump:under_awning")[0]
+    c.check(s, "the market awning enters cutaway", cutaway_fades(roof, "market_stall"),
         roof[-300:])
     metrics = clearance_metrics(out, "hold:0", "dump:after_walk")
     c.check(s, "the eye clears the ground and stays continuous while walking out from the awning",
@@ -1780,8 +1799,8 @@ def gaze(run, c):
     legacy = ((snaps.get("off_before") or [{}, {}])[1].get("rows") or [{}])[0]
     same_middle = bool(legacy and senses_at_stops[1]) and all(legacy[k] == senses_at_stops[1][k] for k in sense_keys[1:-1])
     frame_pattern = r"gaze shade confirmed=(-?\d+) drawn=(-?\d+) radius=([-\d.]+) revision=(\d+) mode=(\d+)"
-    off_before, _, enabled = trace.partition("live script: sync:enable")
-    off_after = trace.rpartition("live script: sync:disable")[2]
+    off_before, _, enabled = partition_sync(trace, "enable")
+    off_after = partition_sync(trace, "disable", last=True)[2]
 
     def legacy_shade(label, output, eye):
         rows = snaps.get(label, [])
@@ -1797,7 +1816,7 @@ def gaze(run, c):
                         for meta, _ in fields))
 
     off_ok = legacy_shade("off_before", off_before, open_eye) and legacy_shade("off_after", off_after, hedge_eye)
-    approach = enabled.partition("live script: notches:-30")[2].partition("live script: sync:spin_start")[0]
+    approach = partition_sync(enabled.partition("live script: notches:-30")[2], "spin_start")[0]
     proof["stops"] = dict(samples=opened, reach=ranges, angles=angles, middle_matches_legacy=same_middle,
                           off_legacy=off_ok, sampled_fields=sampled_fields, sends=sent(approach))
     c.check(name, "1. Three fixed camera stops have different authority-matched Shade fields",
@@ -1805,7 +1824,7 @@ def gaze(run, c):
             and angles == [(35, 65), (70, 110), (110, 155)] and sent(approach)[:3] == [1, 0, 2],
             repr((ranges, angles, sampled_fields, opened_ok, same_middle, off_ok, drive_log[-300:])))
 
-    spin = trace.partition("live script: sync:spin_start")[2].partition("live script: sync:spin_end")[0]
+    spin = partition_sync(partition_sync(trace, "spin_start")[2], "spin_end")[0]
     replies = [(int(b), int(t)) for b, t in re.findall(r"gaze accepted band=(\d+) at_us=(\d+)", spin)]
     interval_ok = len(replies) >= 2 and all(b[1] - a[1] >= 250_000 for a, b in zip(replies, replies[1:]))
     frames = [(int(cb), int(db), float(r), int(rev), int(mode)) for cb, db, r, rev, mode in re.findall(frame_pattern, spin)]
@@ -1831,7 +1850,7 @@ def gaze(run, c):
             and replies[-1][0] == final[0].get("band") == 1,
             repr((duration, replies, len(frames), rendered, confirmed, no_flicker)))
 
-    reconnect = trace.partition("live script: reconnect")[2].partition("live script: sync:after_reconnect")[0]
+    reconnect = partition_sync(trace.partition("live script: reconnect")[2], "after_reconnect")[0]
     events = re.findall(r"(?m)(offline:.*|connected as .*|world subscribed .*|gaze owner applied band=\d+[^\n]*|gaze sent band=\d+)", reconnect)
     recovered = (snaps.get("after_reconnect") or [{}])[0].get("rows") or [{}]
     order = [re.sub(r"^(gaze (?:owner applied|sent) band=\d+).*", r"\1", line) for line in events if line.startswith("gaze ")]
@@ -1950,7 +1969,7 @@ def cover_pair(run, c, target, fixture, eye, contact, blocks):
             hovered = target in {row["id"] for row in d.get("hovered") or []}
             addressed = (talk.get("typing") or {}).get("to")
             if hidden:
-                segment = trace.partition(f"live script: sync:{key}")[2].partition(f"live script: dump:{key}_attack")[0]
+                segment = partition_sync(trace, key)[2].partition(f"live script: dump:{key}_attack")[0]
                 strikes = re.findall(r"tap: strike \(at (.*?), weapon drawn\)", segment)
                 naming = [word for kind, word in d.get("naming") or [] if kind in ("hover", "target")]
                 quiet = (d.get("under") is None and not hovered and not naming
@@ -1989,13 +2008,13 @@ def cover_canopy(run, c):
             key = f"{state}_{stop}"
             d = dump(out, key) or {}
             body = (d.get("me_at") or {}).get("body") or {}
-            segment = trace.partition(f"live script: sync:tree_{key}")[2].partition(f"live script: dump:{key}")[0]
-            faded = re.search(r"cutaway: .*hanger_tree.* fades to ", segment)
+            segment = partition_sync(trace, f"tree_{key}")[2].partition(f"live script: dump:{key}")[0]
+            faded = cutaway_fades(segment, "hanger_tree")
             c.check(name, f"{key}: Hanger tree cuts away above the player",
                     (body.get("x"), body.get("y")) == canopy and bool(faded)
                     and abs(view(d).get("height", -1) - height) < 0.1
                     and os.path.isfile(os.path.join(out, f"{key}.png")),
-                    repr((body, view(d), faded.group(0) if faded else None)))
+                    repr((body, view(d), faded)))
 
 
 # The looks the scenario faces (live script `look:DEG`: 0 north, clockwise) and where the
@@ -3584,9 +3603,9 @@ def seat(run, c):
     beside me in the crowded street (eight near: me and seven), told to rest at noon in dry
     weather (`set_behavior` `{"do": "rest"}`, scene setup), so town.rs sits them on the ground
     (`sit_ground_down`, then `sit_ground`; about three in ten stand at ease instead), then told to
-    wander and put back on their own tiles (`refree`: a new graph alone does not end a rest; a
-    placement does), so they get up where they sat (`stand_up_ground`) and walk off. Stills going down, seated, getting up and up. While
-    they sit the camera goes far and back near, so their springs rest and wake (the re-entry
+    go home at `sync:up`, so they get up where they sat (`stand_up_ground`) and walk off.
+    Stills going down, seated, getting up and up. While they sit the camera goes far and back
+    near, so their springs rest and wake (the re-entry
     reseed, `LIVING_GAME_PERF=springwake`). Two arms: the contact on, and off
     (`LIVING_GAME_SEAT_CONTACT=0`); `LIVING_GAME_PERF=seat` logs each seated character's lowest
     cloth tail above its ground, and frames.csv and the springs line give the cost. Each sitter's
@@ -3609,19 +3628,17 @@ def seat(run, c):
     ring = [(2.2, 0.0), (-2.2, 0.0), (0.0, 2.2), (0.0, -2.2), (1.6, 1.6), (-1.6, -1.6), (1.6, -1.6)]
     free = [f"{i}:{x}:{y}" for i, (x, y) in zip(ids, ring)]
     rest = json.dumps(json.dumps({"do": "rest"}))
-    wander = json.dumps(json.dumps({"do": "wander"}))
+    home = json.dumps(json.dumps({"do": "goto", "target": "home"}))
     syncs = ['setup=set_world_law|"fov_on"|"false";place_at|{me}|420.5|255.5;set_weather|false|900',
              "noon=sql|UPDATE world SET epoch_ms = {epoch_at:12} WHERE id = 0",
              "sit=" + ";".join(f"set_behavior|{i}|{rest}" for i in ids),
-             "up=" + ";".join(f"set_behavior|{i}|{wander}" for i in ids),
-             # Since iter-11's needs pacing a new graph does not end a resting resident's rest
-             # (wander or goto home: still seated 47 s later, 2026-11-19); a placement does, so
-             # each is put back on its own tile and gets up where it sat.
-             "go=refree"]
+             "up=" + ";".join(f"set_behavior|{i}|{home}" for i in ids)]
+    # Replace the graph shortly after the near-camera dump, before the next 8 s rest renewal
+    # can start a brief rise of its own.
     plan = ("ready;sync:noon;sync:setup;wait:2;sync:scene;look:180;cursor:0.5,0.55;wait:3;notches:30;wait:2;dump:standing;shot:00_standing;"
             "sync:sit;wait:1.6;shot:01_down;wait:2.4;dump:seated;shot:02_seated;wait:3;shot:03_idle;"
-            "notches:-30;wait:2;notches:30;wait:3;dump:rewoken;shot:04_rewoken;wait:3;"
-            "sync:up;sync:go;wait:0.9;shot:05_rising;wait:1.2;shot:06_rising_late;wait:2;dump:up;shot:07_up;wait:1;quit")
+            "notches:-30;wait:2;notches:30;wait:3;dump:rewoken;shot:04_rewoken;"
+            "sync:up;wait:0.9;shot:05_rising;wait:1.2;shot:06_rising_late;wait:2;dump:up;shot:07_up;wait:1;quit")
     arms = {}
     # One variant sitter's hips and feet, frame by frame (the feet log): its seat's height, and
     # each ground one-shot's peak speed, to compare with the originals' (seat_segments).
@@ -3637,9 +3654,10 @@ def seat(run, c):
         out, code, text = drive(run, name, plan, free=free, syncs=syncs, env=dict(env, LIVING_GAME_PERF="seat,springwake", LIVING_GAME_FRAMES=frames, LIVING_GAME_FPS_CAP="0"))
         c.check(s, f"{arm}: client ran and joined", code == 0, text[-300:])
         L = log(out)
-        sat = sorted({int(m) for m in re.findall(r"seat: #(\d+) sits on the ground", L)} & set(ids))
+        up, after_up = next_sync_wait(L, 0, {os.path.join(out, "up.go"): "up"})
+        sat = sorted({int(m) for m in re.findall(r"seat: #(\d+) sits on the ground", L[:after_up])} & set(ids))
         plays = {int(i): clip for i, clip in re.findall(r"seat: #(\d+) sits on the ground .*?, plays (\S+)", L)}
-        rose = sorted({int(m) for m in re.findall(r"seat: #(\d+) is off the ground", L)} & set(ids))
+        rose = sorted({int(m) for m in re.findall(r"seat: #(\d+) is off the ground", L[after_up:])} & set(ids))
         lows = [(n, int(k), float(v)) for n, k, v in re.findall(r"seat: (.+?) \S+: (\d+) cloth joints, lowest tail (-?[\d.]+|inf) mm", L) if v != "inf"]
         # The seated characters' springs waking as the camera comes back near (their entities, from
         # their seat reports), after they sat.
@@ -3662,7 +3680,7 @@ def seat(run, c):
         d = dump(out, "seated") or {}
         seen = {x["id"] for x in d.get("seen") or []}
         c.check(s, f"{arm}: a skirted and a coated resident sit on the ground in view", arms[arm]["skirt"] and arms[arm]["coat"] and set(sat) <= seen, f"sat {sat} (skirt {arms[arm]['skirt']}, coat {arms[arm]['coat']}); in view {sorted(seen)}")
-        c.check(s, f"{arm}: everyone who sat got up and was let go of the ground", sat and set(rose) == set(sat), f"sat {sat}, off the ground {rose}")
+        c.check(s, f"{arm}: everyone who sat got up and was let go of the ground after up", up == "up" and sat and rose == sat, f"sat {sat}, off the ground {rose}")
         variant = [i for i in sat if want.get(i) != "sit_ground"]
         c.check(s, f"{arm}: each sitter plays the seated loop its line selects (a variant for {len(variant)}, the original for {len(sat) - len(variant)})",
                 sat and variant and len(variant) < len(sat) and all(plays.get(i) == want.get(i) for i in sat), f"plays {arms[arm]['plays']}, selected {arms[arm]['selected']}")
