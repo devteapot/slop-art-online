@@ -28,3 +28,41 @@ The fit extends the existing upper strip by 4 mm and raises its terminal station
 One artistic attempt at high. Reference measurement and scripting took place during the quiet window. The fit began at 22:16 UTC on 19 November and verification finished at 22:35 UTC. This interval includes roughly 17 minutes waiting for the gate and disk floor before the second daylight capture. Two factory runs and two 13-shot Bevy captures used the existing release binary. No private build tree was created.
 
 The GC returned the first fit for a lid-stroke revision. The second high fit is waiting on the laptop’s decision about distance-field coverage for face parts. [Short client-hook proposal](lid-ink-proposal.md)
+
+## Drawing widths for the general ink profile
+
+Use these as projected targets for the proposed UV-width mode. The reference is the original face sheet. I followed the visible **screen-right eye in front** and the larger **screen-left eye at three-quarter**. Their canthus-to-canthus widths are 70 and 73 drawing pixels. The stage-2 440 × 440 registration maps 356 source pixels of face height to 244 portrait pixels. Applying that same scale to both views gives reference eye widths of **48.0 and 50.0 portrait pixels**. Stroke length follows its projected centreline around bends. Width is estimated across the local dark stroke, perpendicular to that centreline. The filled nose and neck shades are excluded. [Marked drawing](drawing-strokes.png) · [Native points, width profiles and lengths](drawing-strokes.json)
+
+Every table entry uses **440-portrait pixels / fraction of eye width**. End widths run from the first to the last traced point. **T** means a free taper below about **0.7 px / 0.014 eye**, encoded as zero at the vector endpoint. A line that joins another line or exits behind hair can retain width at the end of its visible trace. Allow about one source pixel on clean edges and two where ink merges with the hair or another line. The turned brow length includes its estimated continuation behind the fringe. The jaw length follows the visible face/neck contour; its ends are landmarks and its peak is the dark line beside the shaded neck.
+
+### Front
+
+| Stroke | Thickest | Ends | Length |
+|---|---:|---|---:|
+| Upper lid + wing | 5.7 / 0.119 | T → T | 70.1 / 1.461 |
+| Wing only | 5.7 / 0.119 | 5.7 / 0.119 → T | 13.3 / 0.278 |
+| Lash 1 | 1.6 / 0.034 | 1.6 / 0.034 → T | 7.8 / 0.163 |
+| Lash 2 | 1.9 / 0.040 | 1.9 / 0.040 → T | 7.7 / 0.161 |
+| Outer lower lid | 1.9 / 0.040 | T → 1.9 / 0.040 | 28.4 / 0.593 |
+| Brow | 7.7 / 0.161 | T → T | 71.5 / 1.489 |
+| Jaw | 1.7 / 0.036 | 0.8 / 0.016 → 0.8 / 0.017 | 221.4 / 4.616 |
+| Nostril a | 1.4 / 0.030 | T → T | 9.8 / 0.205 |
+| Nostril b | 1.6 / 0.033 | T → T | 9.8 / 0.204 |
+
+### Three-quarter
+
+| Stroke | Thickest | Ends | Length |
+|---|---:|---|---:|
+| Upper lid + wing | 7.1 / 0.142 | T → T | 77.8 / 1.555 |
+| Wing only | 7.1 / 0.142 | 6.3 / 0.126 → T | 20.0 / 0.400 |
+| Lash 1 | 1.4 / 0.027 | 1.4 / 0.027 → T | 5.6 / 0.112 |
+| Lash 2 | 1.7 / 0.034 | 1.7 / 0.034 → T | 5.1 / 0.102 |
+| Outer lower lid | 2.1 / 0.041 | T → 2.1 / 0.041 | 32.8 / 0.656 |
+| Brow | 8.0 / 0.160 | T → T | 86.6 / 1.730 |
+| Jaw | 1.7 / 0.034 | 0.7 / 0.014 → 0.9 / 0.018 | 176.2 / 3.522 |
+| Nostril | 1.3 / 0.026 | T → T | 11.6 / 0.232 |
+| Underside | 1.6 / 0.032 | T → 0.8 / 0.016 | 23.8 / 0.476 |
+
+At the same outer-third station as the opening study (five-sixths from the inner canthus), the upper lid is **5.3 px / 0.111 eye front** and **5.8 px / 0.116 eye three-quarter**. Approximately halfway from wing root to tip, the widths are **2.6 px / 0.055 eye front** and **3.6 px / 0.071 eye three-quarter**. The wing-only row is part of the upper-lid length. Lash rows measure the short offshoots independently. The front underside between the two nostrils is a soft colour boundary with no separately resolved dark stroke. The turned drawing has a short underside stroke joining the side contour and one visible nostril.
+
+The draft follows the polyline input in `docs/HANDMADE_INK.md` at `5fffc0545`. It has two independent, uniformly scaled UV study panels, front on the left and three-quarter on the right. Each point is `[u,v,f]` with top-left origin and `f = measured source width / 12 px`. The order is recorded in the native data’s `draft_index`. These are drawing-derived coordinates for a width-mode test. The actual morph-following carriers need their own UV registration before use on Cora. The two panels describe different projections of the same features. [Draft STROKES.json](STROKES.json)

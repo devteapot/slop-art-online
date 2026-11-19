@@ -20,3 +20,7 @@ All **20 colour checks** passed. The contract audit has zero errors and warnings
 [Editable scene](cora-final.blend) · [Game asset](own-cora-live.glb) · [Journal](../session.jsonl) · [Factory replay](../replay.py)
 
 Usage on 19 November was one high artistic fit, two factory runs and two 13-shot daylight captures with the existing release binary. Work ran approximately 22:39–23:00 UTC, including the wait for the gate and the 46 GiB floor. The brows have zero attempts. Item 2’s second attempt is reserved for the ink profile.
+
+## GC verdict
+
+The GC accepted the first fit for colour. The pink spot is fixed. The second attempt is reserved for the ink batch. In that attempt, tighten the soft shade into a narrow band hugging the underside, shrink the highlight to a tiny tip glint and add the dark underside and nostril stroke. The GC will judge the shade and stroke together.
