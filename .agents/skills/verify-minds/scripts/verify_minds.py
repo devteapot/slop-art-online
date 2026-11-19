@@ -14,6 +14,7 @@ import subprocess
 import sys
 import time
 import traceback
+import urllib.error
 import urllib.request
 
 sys.dont_write_bytecode = True
@@ -4207,6 +4208,83 @@ def body_case(run):
         'persona': persona}, 'lio': talk_after + cons_after, 'cal': cal_after}, indent=2))
     ok = all(v for k, v in checks.items() if k != 'neo4j')
     return {'status': 'pass' if ok else 'fail', 'checks': checks}
+
+
+@case('act-repair', 'act-repair-stop', 'talk-act-repair')
+def act_repair_case(run, case):
+    actor = prepare(run)[0]['id']
+    run.harness('player', 'join', 'RepairReceiver')
+    receiver = run.sql("SELECT id FROM character WHERE name = 'RepairReceiver'", 'receiver')[0]['id']
+    # The procedure returns its typed denial to the caller and must make no act for this NPC.
+    player = json.loads((run.directory / 'state.json').read_text())['token']
+    request = urllib.request.Request(f'{shared.STDB_URL}/v1/database/{run.db}/call/mind_act_checked',
+                                     data=json.dumps([actor, [], 'verify']).encode(),
+                                     headers={'Content-Type': 'application/json', 'Authorization': f'Bearer {player}'})
+    try:
+        with urllib.request.urlopen(request, timeout=5) as response:
+            denial = response.read().decode()
+    except urllib.error.HTTPError as error:
+        denial = error.read().decode()
+    assert 'not your character' in denial, denial
+    (run.directory / 'procedure-denial.txt').write_text(denial)
+    run.admin('place_near', actor, receiver)
+    run.admin('grant_items', actor, 'stone', 3)
+    def receiver_stone(label):
+        rows = run.private(f"SELECT * FROM inventory WHERE owner = {receiver}", label)
+        return sum(row['qty'] for row in rows if row['item'] == 'stone')
+    stone_before = receiver_stone('receiver-before')
+    original = {'do': 'go', 'target': {'id': receiver}}
+    replacement = {'do': 'go' if case == 'act-repair-stop' else 'goto', 'target': {'id': receiver}}
+    gift = {'do': 'give', 'target': {'id': receiver}, 'item': 'stone', 'qty': 1}
+    phrase = 'I can spare this stone for you.'
+    script = {'replies': {
+        'think': {'thought': 'I can spare a stone.', 'intend': ['give a stone and walk beside them'],
+                  'say': {'text': phrase, 'to': receiver}},
+        'deliberate': {'graph': 'keep', 'acts': [original, gift]},
+        'act_repair': {'replacements': [replacement], 'say': phrase, 'acts': [gift]},
+    }}
+    if case == 'talk-act-repair':
+        run.admin('set_behavior', actor, json.dumps({'wait': 120}))
+        script['replies']['talk'] = {'thought': 'I have a stone to spare.', 'say': phrase,
+                                     'to': receiver, 'acts': [original, gift], 'end': True}
+    else:
+        run.request(actor, case)
+    script['rules'] = [{'purpose': 'act_repair', 'repair': True}]
+    run.start(model(run, script), [actor])
+    if case == 'talk-act-repair':
+        run.harness('player', 'say', 'How is your morning going?', '--to', str(actor))
+
+    def attempts():
+        return shared.rows(run.journal / 'outcomes/act_attempts.jsonl')
+
+    run.wait(lambda: len(attempts()) == 2, 'two journaled submissions')
+    run.wait(lambda: any('You did what you had decided: give' in row['text'] for row in
+                         run.private(f'SELECT * FROM experience WHERE observer = {actor}', 'gift-and-refusals')),
+             'valid sibling act completed')
+    if case != 'act-repair-stop':
+        run.wait(lambda: any('You did what you had decided: goto' in row['text'] for row in
+                             run.private(f'SELECT * FROM experience WHERE observer = {actor}', 'walk-completion')),
+                 'repaired walk completed')
+    time.sleep(3)
+    original_attempt, retry = attempts()
+    assert original_attempt['reference'] == retry['reference']
+    assert retry['source'] == ('talk' if case == 'talk-act-repair' else 'deliberate')
+    assert receiver_stone('receiver-after') == stone_before + 1
+    repair_calls = [j for j in run.exchanges() if j['purpose'] == 'act_repair']
+    spoken = [e for e in run.private(f'SELECT * FROM experience WHERE observer = {actor}', 'actor-experience')
+              if e['kind'] == 'said' and phrase in e['text']]
+    speech = [e for e in run.private(f'SELECT * FROM experience WHERE observer = {receiver}', 'listener-experience')
+              if e['kind'] == 'speech' and phrase in e['text']]
+    assert len(repair_calls) == len(spoken) == len(speech) == 1, (repair_calls, spoken, speech)
+    assert [json.loads(a) for a in original_attempt['acts']] == [original, gift], original_attempt
+    refusal = original_attempt['refused'][0]['refusal']
+    assert 'unknown skill `go`' in refusal and 'goto' in refusal.partition('Valid one-off act names: ')[2].split(', '), refusal
+    messages = repair_calls[0]['request']['messages']
+    assert json.loads(messages[-1]['content'])['rejected'] == original_attempt['refused']
+    assert [json.loads(a) for a in retry['acts']] == [replacement], retry
+    assert bool(retry['refused']) == (case == 'act-repair-stop'), retry
+    return {'status': 'pass', 'attempts': attempts(), 'repair_calls': len(repair_calls),
+            'speech_delivered': len(speech)}
 
 
 def main():

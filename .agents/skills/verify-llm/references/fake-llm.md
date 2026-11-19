@@ -100,3 +100,5 @@ Projects (`LIVING_PROJECTS=1`, the mind's experiment) change the defaults only w
 The log appends one JSON line before a response delay or injected outage. Each line has `at_ms`, `sequence`, `purpose`, `model`, `reasoning_effort`, `body_excerpt`, full `body`, and the selected `status`, `delay_s`, `close_port` and `content`. Authorization headers are excluded. The excerpt is at most 2,000 characters. Exact prompts remain in `body`, and the real mind independently journals attempts, replies and failures.
 
 The fake log proves receipt. The mind journal proves the client's recorded result. Authority `thought`, `brain`, `routine` and `chronicle` rows prove application. Check all three when acceptance matters.
+
+The semantic act-repair prompt is classified as `act_repair` before generic effort and frame checks. A fixture may supply `{"replacements": [{"do": "goto", "target": {"place": "home"}}]}` or a null slot to decline repair.
