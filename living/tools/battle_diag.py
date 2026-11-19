@@ -50,6 +50,8 @@ import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
+import input_latency
+
 ROOT = Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location("privacy", ROOT / ".agents/skills/verify-minds/scripts/privacy.py")
 pv = importlib.util.module_from_spec(spec)
@@ -139,22 +141,32 @@ def database_identity(db):
         return ""
 
 
-def metrics(ident):
+def metrics(ident, *, trace=False):
     # The last group is what this database sends its subscribers (cumulative; a window's rate is
     # the difference between samples): on a battle world the mind service is its one subscriber.
     want = ("spacetime_worker_wasm_memory_bytes", "spacetime_message_log_size_bytes", "spacetime_worker_instance_operation_queue_length", "spacetime_module_log_file_size_bytes",
             "spacetime_num_bytes_sent_to_clients_total", "spacetime_num_delta_queries_evaluated", "spacetime_num_delta_queries_matched", "spacetime_num_duplicate_rows_sent",
             "spacetime_subscription_query_execution_time_micros_sum", "spacetime_subscription_query_execution_time_micros_count",
             "spacetime_subscription_lock_wait_time_sec_sum", "spacetime_subscription_send_queue_length", "spacetime_subscription_connections")
+    timed = (
+        "spacetime_reducer_plus_query_duration_sec", "spacetime_reducer_wait_time_sec", "spacetime_txn_elapsed_time_sec",
+        "spacetime_total_outgoing_queue_length", "spacetime_total_incoming_queue_length",
+        "spacetime_websocket_serialize_secs", "spacetime_websocket_sent_msg_size_bytes",
+        "spacetime_websocket_sent_num_rows", "spacetime_websocket_pong_rtt_secs",
+    )
     out = {}
     try:
-        text = urllib.request.urlopen(f"{URL}/v1/metrics", timeout=30).read().decode()
+        text = urllib.request.urlopen(f"{URL}/v1/metrics", timeout=3 if trace else 30).read().decode()
     except Exception as e:
         return {"error": str(e)}
     for line in text.splitlines():
         if line.startswith("#") or ident not in line:
             continue
         name = line.split("{", 1)[0]
+        if trace and (name in want or name.startswith(timed + ("reducer_wasm_time_usec",))):
+            key, value = line.rsplit(None, 1)
+            out[key] = float(value)
+            continue
         if name in ("reducer_wasm_time_usec_sum", "reducer_wasm_time_usec_count", "reducer_wasm_time_usec"):
             m = re.search(r'reducer="([^"]+)"', line)
             if m:
@@ -199,12 +211,23 @@ def main():
                          "(fighter, walker, resident): familiar.json, familiar-<k>.json (docs/BATTLE_SCALE.md, note C2)")
     ap.add_argument("--law", action="append", default=[], metavar="NAME=VALUE",
                     help="set a world law after launch (JSON value), e.g. witness_fold_ms=0 or profile_detail=true")
+    ap.add_argument("--input-latency", action="store_true",
+                    help="record authority and mind timing plus database metrics for a fake-patch run")
     a = ap.parse_args()
+    if a.input_latency and (not a.fast_lane or not a.fake_fast_patch or a.fast_real or a.no_mind):
+        ap.error("--input-latency requires --fast-lane --fake-fast-patch with the fake model")
+    if a.input_latency and not os.environ.get("CARGO_TARGET_DIR"):
+        ap.error("--input-latency requires a private CARGO_TARGET_DIR")
     run = vm.Run(a.run)
     state = {"respawns": 0, "stop": False, "fighters": [], "arriving": {}}
     head = {}
+    trace_start = time.time_ns() // 1_000_000
+    metrics_stop = threading.Event()
+    sampler = None
+    keeper = None
     try:
-        run.harness("launch", "--seed", "island", "--archive-commitlog")
+        launch = ["--target-dir", os.environ["CARGO_TARGET_DIR"]] if a.input_latency else []
+        run.harness("launch", "--seed", "island", "--archive-commitlog", *launch)
         run.harness("doctor")
         if a.fast_lane:
             run.admin("set_world_law", "fast_lane_on", "true")
@@ -213,6 +236,23 @@ def main():
             run.admin("set_world_law", name, value)
         # The database's identity by its name (`GET /v1/database/<name>`), not from `spacetime list`.
         ident = database_identity(run.db)
+        if a.input_latency:
+            run.admin("set_world_law", "latency_fast", "true")
+            if not ident:
+                raise RuntimeError("cannot identify the battle database for metrics")
+
+            def sample_metrics():
+                with (run.directory / "input-latency-metrics.jsonl").open("w") as out:
+                    while not metrics_stop.is_set():
+                        start = input_latency.epoch_ms()
+                        values = metrics(ident, trace=True)
+                        out.write(json.dumps({"start_ms": start, "end_ms": input_latency.epoch_ms(),
+                                              "values": values}) + "\n")
+                        out.flush()
+                        metrics_stop.wait(max(0.0, 1.0 - (input_latency.epoch_ms() - start) / 1000))
+
+            sampler = threading.Thread(target=sample_metrics)
+            sampler.start()
         before = {c["id"] for c in run.sql("SELECT id FROM character", "chars-0")}
         run.admin("spawn_battle", 1)
         probe = [c for c in run.sql("SELECT id FROM character", "chars-probe") if c["id"] not in before]
@@ -293,6 +333,8 @@ def main():
             # LIVING_ONLY would mean no one).
             ids = list(made) + list(range(max(made) + 1, max(made) + 4001))
             models, env = vm.model(run, script), {"LIVING_CONCURRENCY": "64"}
+            if a.input_latency:
+                env["LIVING_INPUT_LATENCY"] = "1"
             if a.fast_real:
                 # Only the fast route is real: rethink.json `fast.route` names `deepseek-flash`.
                 real = json.loads((ROOT / "living/configs/models.json").read_text())["profiles"]["deepseek-flash"]
@@ -326,6 +368,12 @@ def main():
                                 run.admin("set_behavior", f, json.dumps(graph(f)))
                                 del state["arriving"][f]
                                 state["fighters"].append(f)
+                    if a.input_latency:
+                        with (run.directory / "input-latency-population.jsonl").open("a") as out:
+                            out.write(json.dumps({"at_ms": input_latency.epoch_ms(),
+                                                  "fighters": len(state["fighters"]),
+                                                  "arriving": len(state["arriving"]),
+                                                  "walkers_alive": len(walkers & alive)}) + "\n")
                     short = a.battle - len(state["fighters"]) - len(state["arriving"])
                     # As many as the time since the last refill allows, at most one each
                     # `--refill-gap` seconds: a loop of the keeper can take longer than the gap
@@ -349,6 +397,8 @@ def main():
         keeper.start()
         head = {"arm": a.arm, "fast_real": a.fast_real, "keep_plans": a.keep_plans, "fake_fast_patch": a.fake_fast_patch, "battle": a.battle, "walkers": a.walkers, "refill": not a.no_refill, "refill_from": a.refill_from, "refill_gap": a.refill_gap, "laws": a.law, "site": site, "ambient_at_publish": len(before), "mind": not a.no_mind, "fast_lane": a.fast_lane,
                 "nproc": os.cpu_count(), "db_identity": ident}
+        if a.input_latency:
+            head["measurement_start_ms"] = input_latency.epoch_ms()
         (run.directory / "diag-head.json").write_text(json.dumps(head, indent=1))
         print(json.dumps(head), flush=True)
         t_start, low, k = time.time(), 0, 0
@@ -443,6 +493,19 @@ def main():
         head["status"] = f"fail: {type(error).__name__}: {error}"
     finally:
         state["stop"] = True
+        if a.input_latency:
+            head["measurement_end_ms"] = input_latency.epoch_ms()
+        metrics_stop.set()
+        if a.input_latency and keeper:
+            keeper.join()
+        if sampler:
+            sampler.join()
+        if a.input_latency and run.token:
+            try:
+                input_latency.capture_authority(URL, run.db, run.token,
+                                                run.directory / "input-latency-authority.jsonl", trace_start)
+            except (OSError, ValueError) as error:
+                head["input_latency_capture_error"] = str(error)
         # The last read of `familiar`, before cleanup deletes the world.
         if a.familiar and "familiar_sample" in locals():
             try:

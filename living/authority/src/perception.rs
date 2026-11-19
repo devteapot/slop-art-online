@@ -991,6 +991,7 @@ pub fn sweep(ctx: &ReducerContext, now: u64, tick: u64) -> Vec<u32> {
     let mut health = HashMap::new();
     let mut swept = Vec::with_capacity(due.len());
     for (id, viewer) in due {
+        crate::latency::nav(ctx, id, "player_sweep", tick, format_args!(""));
         sweep_one(ctx, id, viewer, &w, &map, now, Some(&mut health));
         swept.push(id);
     }

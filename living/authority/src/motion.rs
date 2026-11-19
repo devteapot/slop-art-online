@@ -273,7 +273,9 @@ fn put(ctx: &ReducerContext, b: Body, chunk_before: u32) {
     }
     crate::frame::moved(b.id);
     common::body_written(b.id);
+    let (id, t_ms, vx, vy, turn) = (b.id, b.t_ms, b.vx, b.vy, b.turn);
     ctx.db.body().id().update(b);
+    crate::latency::nav(ctx, id, "body_written", t_ms, format_args!("{vx} {vy} {turn}"));
 }
 
 /// Longest a finished segment is continued from where it ended, not from `now`.
@@ -963,6 +965,7 @@ fn steer_update(ctx: &ReducerContext, b: &mut Body, st: &mut Steer, now: u64, la
         let mut seg = geo::plan(&map, p, b.heading, v_cur, w, &tune);
         let mut replanned = false;
         if seg.blocked && seg.speed == 0.0 {
+            crate::latency::nav(ctx, b.id, "steer_blocked", st.plan_ms, format_args!("{}", st.goal));
             // Stuck against something the coarse path did not know (a gate shut, a wall
             // built, or pushed off the path): find a new way, or give up.
             let dest = match st.goal {
@@ -1358,7 +1361,9 @@ pub fn resteer_near(ctx: &ReducerContext, at: (f32, f32), r: f32, now: u64) {
                 b.next_ms = now;
                 crate::frame::moved(b.id);
                 common::body_written(b.id);
+                let id = b.id;
                 ctx.db.body().id().update(b);
+                crate::latency::nav(ctx, id, "terrain_resteer", 0, format_args!(""));
             }
         }
     }

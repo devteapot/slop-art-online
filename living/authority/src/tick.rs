@@ -143,6 +143,7 @@ pub fn tick(ctx: &ReducerContext, _t: TickTimer) -> Result<(), String> {
     // else reads the clock row during the tick).
     common::flush_counts(&mut k);
     ctx.db.clock().id().update(k);
+    crate::latency::end_tick(ctx, k_tick, now);
     Ok(())
 }
 

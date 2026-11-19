@@ -61,7 +61,8 @@ enum Change {
 impl Minds {
     /// An issued `fast_ask` row: served once (a row updated by the authority for the same issue
     /// is the same request).
-    pub(super) fn fast_issued(self: Arc<Self>, ask: FastAsk) {
+    pub(super) fn fast_issued(self: Arc<Self>, ask: FastAsk, callback_ms: Option<u64>) {
+        let dispatch_ms = callback_ms.map(|_| llm::now_ms());
         if ask.issued_ms == 0 || !self.allowed(ask.actor) {
             return;
         }
@@ -74,14 +75,27 @@ impl Minds {
             m.fast_issued = ask.issued_ms;
         }
         tokio::spawn(async move {
-            if let Err(e) = self.fast_serve(&ask).await {
+            let mut trace = callback_ms.zip(dispatch_ms).map(|(callback_ms, dispatch_ms)| json!({
+                "actor": ask.actor, "issued_ms": ask.issued_ms, "trigger_ms": ask.trigger_ms,
+                "callback_ms": callback_ms, "dispatch_ms": dispatch_ms,
+            }));
+            let result = self.fast_serve(&ask, trace.as_mut()).await;
+            if let Some(mut trace) = trace {
+                trace["finished_ms"] = json!(llm::now_ms());
+                trace["error"] = json!(result.is_err());
+                self.llm.outcome("input_latency_fast", &trace).await;
+            }
+            if let Err(e) = result {
                 log::warn!("fast lane for {}: {e:#}", ask.actor);
             }
         });
     }
 
-    async fn fast_serve(&self, ask: &FastAsk) -> Result<()> {
+    async fn fast_serve(&self, ask: &FastAsk, mut trace: Option<&mut Value>) -> Result<()> {
         let picked_ms = llm::now_ms();
+        if let Some(trace) = trace.as_deref_mut() {
+            trace["picked_ms"] = json!(picked_ms);
+        }
         let actor = ask.actor;
         let Some(c) = self.conn.db.character().id().find(&actor) else { return Ok(()) };
         // Not the mind's now (its person is back, or it died): the authority has dropped the row.
@@ -110,6 +124,9 @@ impl Minds {
             Msg { role: "system", content: prompts::fast_system() },
             Msg { role: "user", content: prompts::fast_user(&ask.reason, &persona, &experiences, &plan, &outline, &self.repertoire_text(actor)) },
         ];
+        if let Some(trace) = trace.as_deref_mut() {
+            trace["model_start_ms"] = json!(llm::now_ms());
+        }
         let call = self.llm.chat_in_lane(&self.fast.route, Attention::OnStage, "fast", &c.name, &msgs, Lane::Fast);
         let reply = match tokio::time::timeout(Duration::from_millis(self.fast.timeout_ms), call).await {
             Err(_) => {
@@ -127,6 +144,9 @@ impl Minds {
             Ok(Err(e)) => return self.fast_done(actor, ask.issued_ms, &format!("no answer: {e:#}"), base, &reference, None).await,
             Ok(Ok(r)) => r,
         };
+        if let Some(trace) = trace.as_deref_mut() {
+            trace["model_reply_ms"] = json!(llm::now_ms());
+        }
         let v = llm::parse_json(&reply.content).unwrap_or(Value::Null);
         let thought = v["thought"].as_str().unwrap_or_default().trim().to_string();
         let mut detail = base;
@@ -156,6 +176,9 @@ impl Minds {
                 };
                 log::info!("{} fast lane: {}", c.name, t.summary);
                 let (tx, rx) = oneshot::channel();
+                if let Some(trace) = trace {
+                    trace["patch_send_ms"] = json!(llm::now_ms());
+                }
                 self.conn.reducers.mind_patch_then(actor, target, graph, ask.issued_ms, t, move |_, r| {
                     let _ = tx.send(super::flatten(r));
                 })?;

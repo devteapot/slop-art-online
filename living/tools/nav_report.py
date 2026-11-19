@@ -439,8 +439,12 @@ def phase_report(folder):
             paths = [json.dumps(s.get("path")) for s in tr.segments_from(t_order, t_end)]
             replans.append(sum(1 for a, c in zip(paths, paths[1:]) if a != c))
             stims = []
-            if ph["arena"] in ("n1",):
+            if ph["arena"] == "n1":
                 stims = [t_order]
+                if "order_send_wall_ms" in w:
+                    # The source rerun uses the pre-call lower bound. Keep the main score too.
+                    r["pre_call_stimulus_ms"] = w["order_ms"][0]
+                    r["pre_call_latency_ms"] = latency(tr, w["order_ms"][0])
             elif ph["arena"] == "n2":
                 g = gate_stimuli(tr, t_order, t_end, tiles, W, [tuple(x) for x in ph["gate_a"]["tiles"]], sight_at, line_clear) if ph.get("variant") in ("a", "b") else None
                 r["gate_seen_ms_after_order"] = (g - t_order) if g else None
@@ -461,6 +465,7 @@ def phase_report(folder):
                     no_resp += 1
                 else:
                     lat.append(l)
+            r["stimulus_ms"] = stims
             r["latency_ms"] = [latency(tr, s) for s in stims]
         rows.append(r)
     arrived = sum(r["arrived_in_3x"] for r in rows)
