@@ -171,6 +171,15 @@ living-game-assets:
     living/tools/blender/gen_cullet.sh
     living/tools/blender/gen_anim.sh
 
+# The calibration frame for a hand-made character (docs/HANDMADE_HAIR.md): the contract's audit,
+# three fixed daylight shots through the asset view, and each patch's colour against its target in
+# <stem>.calibration.json. `just living-game-calibrate view/own-cora-live.glb [--also middle@0]`.
+# Honours CARGO_TARGET_DIR. Free: no model calls, no world.
+[positional-arguments]
+living-game-calibrate file *args:
+    cargo build --release -q -p living-game --manifest-path living/Cargo.toml
+    python3 living/tools/characters/calibrate.py "$@"
+
 # The asset board (docs/ASSET_BOARD.md): every generated family photographed in the game's own
 # renderer beside the version the owner accepted, with decisions and history in
 # living/assets/board/ and media in ~/archive/asset-board/. `just living-board publish ...`,

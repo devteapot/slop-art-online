@@ -1,6 +1,6 @@
 # Hand-made characters: the hair and face contract
 
-**Status (2026-11-19): contract v1, proposed. Nothing in it is implemented yet.** This is phase 1 of the handmade-hair track. It is the format that dev-box's live Blender session authors to. Phase 2 builds the client side after the character team agrees the contract. A change to any name or meaning below needs a new contract number (`slop.contract`).
+**Status (2026-11-19): contract v1, agreed; the client side is built on branch `handmade-hair` (not merged).** This is the format that dev-box's live Blender session authors to. dev-box agreed phase 1's draft (f0463412) with one change, folded in here before any file was made to it: a sixth slot, `"tint"`, for layers multiplied over skin. Phase 2 built the client side: the profile, the classification, the forward turn and the calibration frame (`living/game/src/handmade.rs`, `living/tools/characters/calibrate.py`). From here, a change to any name or meaning below needs a new contract number (`slop.contract`).
 
 **Why:** dev-box's hand-made character Cora (`own-cora-live.glb`) read as a glossy helmet in the client. The diagnosis (`.local/living/cora-material/FINDINGS.md` on the laptop) found four causes:
 
@@ -14,7 +14,7 @@ The owner's art target is **flat cel bands, at most about three steps, plus one 
 The contract gives a standalone character file five things:
 
 1. a declaration that it is a character, and which way it faces;
-2. a slot on each material;
+2. a slot on each material (hair, skin, face, eyes, tint, cloth);
 3. an opt-in hair profile with its own palette and two thresholds;
 4. an explicit highlight mask;
 5. the face's shadow data, in the format the client already reads.
@@ -61,15 +61,14 @@ The scene read is `scenes[scene]`, the file's default scene, or 0.
 | `slop.character` | string | `"handmade"` | The file is a character. The asset view and live loading class its materials by their [slots](#materials-slots) and outline it as a person (`Outlined::Person`). Other values are reserved. An unknown value is treated as absent, with one warning. |
 | `slop.forward` | string | `"+Z"` or `"-Z"` | The glTF axis the character's face points along, in the file's own frame, at rest. Required when `character` is set. |
 
-**What `forward` changes:** the root's turn, so the character faces where the game says.
+**What `forward` changes:** which way the character stands, on every path, through one rule.
 
-- **Live loading** (`characters::spawn`) turns the root `yaw + π` today, because VRM 0.x files face −Z. A `"+Z"` file is turned `yaw`, and a `"-Z"` file `yaw + π`.
-- **The asset view** turns a `"+Z"` file 0 and a `"-Z"` file π, so both face the camera.
+- **Every character file faces −Z in its root's frame** (VRM's convention), and every place that turns a character's root assumes it: live loading turns the root `yaw + π` (`characters::spawn`, and `live.rs` every frame), the asset view and the line-up turn a −Z file π to face the camera.
+- **A `"+Z"` file is turned half round as its scene comes in** (`handmade.rs` `on_ready`, on Bevy's `WorldInstanceReady`): each top node of the scene turns π about the root's up. The skeleton and the skinned meshes hang under those nodes, so the whole character turns, and the roots' turns stay as they are. A `"-Z"` file is not turned. The asset view and the line-up give a hand-made file the −Z turn (π).
 - **Cora faces +Z.** Blender's front (−Y) exports to glTF +Z, so a character modelled facing Blender's front view is `"+Z"`.
+- **The fringe fallback follows it.** `toon.wesl` `facing()` (where character hair without a mask keeps its ring off the fringe) took the character's forward as the mesh's −Z. For a hand-made file the client works out the authored forward in each mesh's own frame, through the turns of the nodes between the mesh and the root (`handmade.rs` `local_forward`), and gives it to the material (`toon.file`). Cora's Armature node carries a half turn of its own, so the old −Z guess happened to hold for her; a file whose meshes are not under such a node now gets its forward right too. The hair profile never uses `facing()`: its highlight comes from the [mask](#the-highlight-mask). Face shading takes the head's forward from the face's own TEXCOORD_1.
 
-`toon.wesl` `facing()` assumes a −Z file (`-m[2]`). The hair profile never uses it, because its highlight comes from the [mask](#the-highlight-mask). Face shading takes the head's forward from the face's own TEXCOORD_1, not from `facing()`.
-
-When `forward` is missing on a `character` file, the client warns once and keeps today's turn for that path: 0 in the asset view and π live. A `"+Z"` file then faces backwards live.
+When `forward` is missing or malformed on a `character` file, the client warns once and takes it as `"-Z"`.
 
 This contract covers materials, the forward axis and the shading data only. The skeleton, clips, spring bones and morph-target names that live loading needs are those of [the client format](CHARACTERS.md#the-client-format). `character` does not change which animation the asset view plays: clips in the file play as today.
 
@@ -85,17 +84,19 @@ This contract covers materials, the forward axis and the shading data only. The 
 ]
 ```
 
-`slop.slot` (string) is one of the five values below. In a file with `slop.character`, the slot overrides the name rules. Without a slot, the client classes the material by name and the file's `vrm` flag, as today (`…_HAIR`, `…Face…_SKIN`, `…_SKIN`, `…_FACE`, `…_EYE`; `lookdev.rs` `convert`). Cora's materials already carry VRoid-style names, so she is classed correctly in live loading but not in the asset view. A slot makes both the same.
+`slop.slot` (string) is one of the six values below. In a file with `slop.character`, the slot overrides the name rules. Without a slot, the client classes the material by name and the file's `vrm` flag, as today (`…_HAIR`, `…Face…_SKIN`, `…_SKIN`, `…_FACE`, `…_EYE`; `lookdev.rs` `convert`). Cora's materials already carry VRoid-style names, so she is classed correctly in live loading but not in the asset view. A slot makes both the same.
 
 | `slot` | Client kind (`style.rs` `Kind`) | Shading | Casts a sun shadow |
 |---|---|---|---|
 | `"hair"` | `Hair`, or the hair profile when `slop.hair` is present and valid | Without `slop.hair`: today's character hair (angel ring by the global shine preset, coloured hair rim, no general rim). With it: [the hair profile](#the-hair-profile). | yes |
 | `"skin"` | `Skin` | Light, warm shadows at 45% of the plain depth; no core band. | yes |
 | `"face"` | `Face` if a [face shadow map](#the-face-shadow) is found, else `Skin` | Shadow edge from the map and the sun's angle round the head. | no |
-| `"eyes"` | `FacePart` | Unshaded except by cast shadows. Use it for every drawn face part: irises, eye whites, lashes, brows, eyelines, mouth interior, blush and tint layers. | no |
+| `"eyes"` | `FacePart` | Unshaded except by cast shadows. For the drawn face parts: iris, eye whites, lashes, brows, eyelines, and the mouth's line and slit. Not tint layers. | no |
+| `"tint"` | `Tint` | A layer **multiplied over the lit skin under it**: blush, freckles, anything darkening or warming skin. Its colour (base colour × vertex colour × texture) is a factor, mixed toward 1 by its alpha, and the blend multiplies what is drawn behind it (`AlphaMode::Multiply`: `skin × mix(1, tint, alpha)`). It therefore carries exactly the skin's light and shadow, and never glows on a shadowed cheek. Give it `alphaMode` BLEND (or MASK) and an alpha; an opaque tint multiplies its whole surface. It draws after the opaque skin, so it must lie on or just in front of it. | no |
 | `"cloth"` | `Plain` | The general ramp and the general rim. | yes |
 
 - A `character` file's material without a slot is classed by name with `vrm` true, and the client warns once naming the material.
+- **How composed characters draw their tint layers (2026-11-19):** by name, as face parts. `characters/compose.rs` `kind_of` classes `…FaceTint_00_FACE` (lips and blush) and `…FaceOverlay_00_FACE` (lines and freckles) as `FacePart`: lit by the sun's colour at full strength whatever the angle, darkened only by cast shadows (`toon.face.z`), and alpha-blended over the skin. So they do not darken with the skin's own shade band. Composed characters are left as they are; the hand-made `"tint"` is the shaded multiply above.
 - An unknown slot value is treated as `"cloth"`, with one warning.
 - The materials' other glTF properties keep their meanings: `baseColorFactor`, `baseColorTexture`, `alphaMode`, `alphaCutoff` and `doubleSided`. Metallic, roughness, `KHR_materials_specular` and the other PBR terms have no effect: the toon shader never evaluates the BRDF.
 
@@ -151,7 +152,7 @@ In the example, `shade` and `mid` are the drawing's measured hair-shaded and hai
   - **Lock separation:** it must come from the form, as the diagnosis notes: lighting-normal breaks between the main masses, the outline, and silhouettes with comparable lock shapes. It cannot come from dye.
   - **Painted separation:** if paint is later needed for that, it becomes a second mask channel in a new contract version, not dye under the palette.
 
-**What the client will compute (phase 2)**, so that the swatches' meaning is exact. Here `aa(t, w, x) = smoothstep(t − w′, t + w′, x)` with `w′ = max(w, fwidth(x))`:
+**What the client computes** (`toon.wesl` `hand_hair`), so that the swatches' meaning is exact. Here `aa(t, w, x) = smoothstep(t − w′, t + w′, x)` with `w′ = max(w, fwidth(x))`:
 
 ```
 ndl   = dot(N, L)                                  // the shading normal and the sun's direction
@@ -177,9 +178,9 @@ The mask is one scalar per surface point: where the broad highlight lies. It com
 
 - **glTF:** a custom attribute on each hair primitive, `"attributes": { "_HIGHLIGHT": <accessor> }`. The accessor is `SCALAR`, `componentType` 5126 (FLOAT), not normalized, values 0–1, one per vertex. Integer and normalized encodings are not accepted: Bevy's custom-attribute path needs `Float32`.
 - **Blender:** a **Float** attribute on the **Point** domain named `_HIGHLIGHT`, exported with *Include → Attributes* (`export_attributes=True`). A Face Corner attribute is not exported as a vertex attribute, so paint on points. Split vertices where the highlight needs a hard boundary across an edge.
-- **How it reaches the shader:** a standalone GLB's custom attribute does not reach the shader today. The client will carry it the way composition carries `_GREY` and `_RING` (`characters/compose.rs`):
+- **How it reaches the shader:** a standalone GLB's custom attribute does not reach the shader by itself. The client carries it the way composition carries `_GREY` and `_RING` (`characters/compose.rs`):
   1. `main.rs` registers it with the glTF loader as `add_custom_vertex_attribute("HIGHLIGHT", ATTRIBUTE_HIGHLIGHT)`. The gltf crate names `_HIGHLIGHT` `Semantic::Extras("HIGHLIGHT")`, without the underscore, as with `GREY`, `RING` and `OUTLINE_NORMAL`. Here `ATTRIBUTE_HIGHLIGHT = MeshVertexAttribute::new("Highlight", 0x5c3e_9a04, VertexFormat::Float32)`, the next of the client's own ids.
-  2. When `lookdev::convert` converts a profile hair mesh, it removes the attribute and writes the mesh's second UVs (`ATTRIBUTE_UV_1`), once per mesh asset. It writes `x` = the vertex's `_GREY` if the file has one, else 0, and `y` = `1 + clamp(_HIGHLIGHT, 0, 1)`. Bevy's vertex path already brings UV1 to the fragment shader (`in.uv_b`), and the toon vertex shader turns UV1 only for a face's skin, so hair's arrives untouched.
+  2. When `lookdev::convert` converts a profile hair mesh, it removes the attribute and writes the mesh's second UVs (`handmade.rs` `pack_highlight`) (`ATTRIBUTE_UV_1`), once per mesh asset. It writes `x` = the vertex's `_GREY` if the file has one, else 0, and `y` = `1 + clamp(_HIGHLIGHT, 0, 1)`. Bevy's vertex path already brings UV1 to the fragment shader (`in.uv_b`), and the toon vertex shader turns UV1 only for a face's skin, so hair's arrives untouched.
   3. The profile's shader branch reads `mask = in.uv_b.y − 1`. A value of −1 (y = 0) means "no per-vertex mask".
 - **Any TEXCOORD_1 a hair primitive carries is replaced.** Do not put other data in a profile hair's second UV map.
 
@@ -220,7 +221,7 @@ The face's shadow map path exists already (`toon.wesl` `face_lit`, `lookdev.rs` 
 - **In Blender:** give the face mesh a second UV map with the same value on every corner. Blender's exporter writes `v_gltf = 1 − v_blender`. So, in Blender:
   - for glTF `(0, 1)`, store `(0, 0)`;
   - for glTF `(0, −1)`, store `(0, 2)`.
-- **Check the exported accessor:** phase 2's checker prints it.
+- **Check the exported accessor:** the calibration command's audit prints it and fails a wrong one.
 
 **The map:**
 
@@ -244,45 +245,56 @@ The face's shadow map path exists already (`toon.wesl` `face_lit`, `lookdev.rs` 
     python3 living/tools/face_normals.py IN.glb OUT.glb --flat 0 --hair 0 --png OUT.face.png
     ```
 
-    This writes TEXCOORD_1 and an ellipsoid-derived map, and leaves face and hair normals as they were (`--flat 0`, `--hair 0`). Today it finds the face by material name (`…Face…_SKIN`). Cora's face material, `M00_000_00_Face_00_SKIN`, matches. Phase 2 makes it accept `slop.slot = "face"` instead.
+    This writes TEXCOORD_1 and an ellipsoid-derived map, and leaves face and hair normals as they were (`--flat 0`, `--hair 0`). It finds the face by material name (`…Face…_SKIN`). Cora's face material, `M00_000_00_Face_00_SKIN`, matches. A face material named otherwise needs the name, or TEXCOORD_1 and a map made another way.
 - **Keep the face's material to the face only:** the neck and body take `"skin"`, so the jaw line reads where both are in shade.
 
 ## The calibration frame
 
-Phase 2 builds the frame, and the measurements follow the diagnosis's matched-control method. It is one fixed daylight frame that authors render after every palette change and compare with the drawing.
+One fixed daylight frame that authors render after every palette change and compare with the drawing, following the diagnosis's matched-control method.
+
+**What is a target and what is tuned.** The colours sampled from the drawing are the **targets**: what the calibrated frame must show on screen, after the light, the exposure and the grade. The palette's base colours (`shade`, `mid`, `light`, `highlight`) are **tuned** until the rendered patches land within tolerance of the targets. A swatch is never set to the drawing's colour and left there: the palette is lit and graded, so a swatch equal to its target renders lighter and less saturated than the target. The tolerances to start with: about ±8 a channel on hair patches and ±10 on the cheek.
 
 - **Scene:** the asset view (`LIVING_GAME_VIEW=view/<file>.glb`) with its default checker ground and the default style.
 - **Light:** the sun fixed at 11:00 (`LIVING_GAME_HOUR=11`, `LIVING_GAME_DAY_MINUTES=0`), 9,000 lux.
 - **Camera and grade:** the client's defaults for every character: EV100 9.7, toon exposure scale 0.82, TonyMcMapface, bloom 0.12, and the Soft film (`LIVING_GAME_FILM=soft`, as the diagnosis ran). The frame never changes the exposure or the curve: they move every character and the scene.
-- **Size and pose:** 1600×900, headless, with the idle clip at 0 s (`LIVING_GAME_VIEW_CLIP=idle`).
-- **Shots:**
-  - Portrait: yaw 0°, pitch 8°, vertical FOV 35°, aimed at 88% of the height (`idle@0/0:8:0.36:0.88`).
-  - Near game camera: 8 m up, 58° down, FOV 42°, aimed at the chest (`idle@0/near@0`).
-  - Phase 2 adds a portrait at yaw 45°, so the t2 band and the highlight show on a turned head.
-- **Swatch targets:** a JSON file beside the GLB, `<stem>.calibration.json`, written by the author:
+- **Size and pose:** 1600×900, headless, with the idle clip at 0 s (the file's first clip if it has no `idle`).
+- **Shots**, in this order (`NN-` in the file names):
+  - `portrait`: yaw 0°, pitch 8°, vertical FOV 35°, aimed at 88% of the height (`idle@0/0:8:0.36:0.88`);
+  - `near`: the game camera's Near stop, 8 m up, 58° down, FOV 42°, aimed at the chest (`idle@0/near@0`);
+  - `portrait45`: the portrait at yaw 45°, so the t2 band and the highlight show on a turned head (`idle@0/45:8:0.36:0.88`).
+  - `--also middle@0` adds the Middle stop (12 m up, FOV 44°), and any other view shot.
+- **The targets file:** `<stem>.calibration.json` beside the GLB (or `--targets`), written by the author. An example for Cora is [handmade-hair/cora.calibration.json](handmade-hair/cora.calibration.json): its targets are the drawing's colours (the diagnosis's samples, and the drawing's lighter lock and highlight for `light` and `highlight`), and its shot pixels were picked on the laptop's first Cora pass, on a debug copy whose four swatches were pure colours so each band could be told apart, with the stand-in highlight. A new export moves the bands, so pick the pixels again on the new stills. The palette that pass tuned to within tolerance is in [handmade-hair/cora.extras.json](handmade-hair/cora.extras.json): shade (48, 14, 5), mid (101, 35, 7), light (116, 40, 7), highlight (134, 50, 12), much darker and more saturated than their targets.
 
   ```json
   {
-    "drawing": "path/to/reference.png",
+    "drawing": "/abs/or/relative/path/face.png",
+    "tolerance": { "hair": 8, "other": 10 },
     "patches": {
-      "hair shade":     { "drawing": [553, 106], "portrait": [874, 497] },
-      "hair mid":       { "drawing": [474, 165], "portrait": [825, 264] },
-      "hair light":     { "drawing": [0, 0],     "portrait": [0, 0] },
-      "hair highlight": { "drawing": [0, 0],     "portrait": [0, 0] },
-      "skin cheek":     { "drawing": [601, 336], "portrait": [873, 414] }
+      "hair shade": { "drawing": [553, 106], "swatch": "shade", "portrait": [874, 497] },
+      "hair mid":   { "target": [152, 72, 43], "swatch": "mid", "portrait": [825, 264], "portrait45": [800, 270] },
+      "skin cheek": { "target": [235, 164, 128], "portrait": [873, 414] }
     }
   }
   ```
 
-  Pixel centres are in each image, and the role names are free text. Unmeasured roles carry zeros (`[0, 0]`) and are skipped. The values shown are Cora's patches from the diagnosis (`sample-points.json`). The tool measures the 9×9 median of each patch in display sRGB in the drawing and in the shot. It reports each role's RGB, Δ against the drawing, relative luminance and HSV saturation, as the diagnosis's `colours.csv` does.
-- **The command (phase 2):**
+  - A patch's target is `"target": [r, g, b]` (display sRGB, 0–255), or `"drawing": [x, y]`: the 9×9 median of the drawing (the top-level `"drawing"` image, relative to the targets file) at that pixel.
+  - Each shot key (`portrait`, `near`, `portrait45`) gives the pixel to measure in that shot, as the 9×9 median. A patch can be measured in any of the shots.
+  - Tolerance: the patch's own `"tolerance"`, else the file's `"tolerance"` by whether the patch's name starts with "hair", else 8 and 10.
+  - `"swatch"` (optional): the palette swatch the patch tunes. The report then suggests that swatch's next value: each linear channel scaled by target ÷ measured, averaged over the shots. Rerun after each change, since the grade is not linear.
+- **The command:**
 
   ```
-  just living-game-calibrate view/own-cora-live.glb
+  just living-game-calibrate view/own-cora-live.glb [--targets T.json] [--also middle@0] [--no-run]
   ```
 
-  It writes `.local/living/calibrate/<stem>/<time>/`: the stills, a contact sheet beside the drawing, `colours.csv` and the client log. It also prints the file's contract audit: slots, profile values, the mask source and its coverage, TEXCOORD_1 on the face, and the face map found. The command is free: no model calls and no world.
-- **A palette is done** when every measured hair role's Δ is within about ±8 on each channel and the cheek's within about ±10. These are starting tolerances, to agree with the owner on the first Cora pass, and the owner judges the result in-game.
+  It builds the client (release; `CARGO_TARGET_DIR` is honoured) and runs `living/tools/characters/calibrate.py`. It writes `.local/living/calibrate/<stem>/<time>/`: `stills/<stem>/NN-<shot>.png`, `colours.csv` (each patch and shot: target, measured, Δ, tolerance, pass, luminance and saturation of both), `report.json` and `client.log`. It prints each patch's target, measured colour, Δ and pass or fail, the swatch suggestions, and **PASS** or **FAIL**. The command is free: no model calls and no world.
+- **The audit**, printed first, fails the run on an error:
+  - the scene's `slop`: `contract` 1, `character` "handmade", `forward` "+Z" or "-Z", and the face's and eyes' normals pointing the declared way;
+  - every material's slot (a material without one is a warning, an unknown slot an error), a hair profile only on hair, its four swatches (three integers 0–255), `t2` above `t1`, unknown profile keys;
+  - the mask: `_HIGHLIGHT`'s accessor (SCALAR FLOAT), its values and coverage (the share of hair vertices above 0.5), the mask texture if there is one, both at once (a warning: the texture wins), neither (a warning: no highlight);
+  - the face: skinned, TEXCOORD_1 present, VEC2 FLOAT, the same on every vertex and equal to the declared forward, and a face shadow map found;
+  - a tint that is opaque (a warning), and an `anim/` copy whose scene `slop` differs.
+- **A palette is done** when every measured patch passes. The tolerances are starting values, to agree with the owner on the first Cora pass, and the owner judges the result in-game.
 
 ## Compatibility
 
@@ -318,7 +330,8 @@ Each material's extras:
 | `M00_000_Hair_00_HAIR` | `{"slop": {"slot": "hair", "hair": {"shade": [88,42,27], "mid": [152,72,43], "light": [r,g,b], "highlight": [r,g,b], "t1": -0.20, "t2": 0.40, "edge": 0.02, "highlight_feather": 0.08}}}`, with `light` and `highlight` sampled from the drawing |
 | `M00_000_00_Body_00_SKIN` | `{"slop": {"slot": "skin"}}` |
 | `M00_000_00_Face_00_SKIN` | `{"slop": {"slot": "face"}}` |
-| `M00_000_00_Eye_00_EYE`, `…EyeIris_00_EYE`, `…FaceEyeline_00_FACE`, `…FaceBrow_00_FACE`, `…FaceTint_00_FACE` | `{"slop": {"slot": "eyes"}}` |
+| `M00_000_00_Eye_00_EYE`, `…EyeIris_00_EYE`, `…FaceEyeline_00_FACE`, `…FaceBrow_00_FACE` | `{"slop": {"slot": "eyes"}}` |
+| `M00_000_00_FaceTint_00_FACE` (freckles and blush, alpha-blended) | `{"slop": {"slot": "tint"}}` |
 | `M00_001_01_Cloth_01_CLOTH` | `{"slop": {"slot": "cloth"}}` |
 
 The mesh data and sidecars:
@@ -327,6 +340,8 @@ The mesh data and sidecars:
 - **Face primitives:** TEXCOORD_1 = (0, 1) on every vertex, and `own-cora-live.face.png` beside the file.
 - **Calibration targets:** `own-cora-live.calibration.json`.
 
+[handmade-hair/cora.extras.json](handmade-hair/cora.extras.json) is this as a spec for `living/tools/characters/handmade_extras.py IN.glb OUT.glb SPEC.json`, which writes a copy with the extras (and, with `--test-highlight`, a stand-in `_HIGHLIGHT` for trying the client before one is painted).
+
 ## Export checklist (Blender)
 
 1. Set the scene custom property `slop` (contract, character, forward) and a `slop` on every material.
@@ -334,9 +349,13 @@ The mesh data and sidecars:
 3. Face: a second UV map holding the constant forward, in Blender's V-flipped value. The face must be skinned to the head.
 4. Export GLB with *Include → Custom Properties* and *Include → Attributes* on.
 5. Put the `.face.png`, the optional `.hair.png` and the `.calibration.json` beside the GLB, and beside its `anim/` copy if one exists.
-6. Run the calibration frame (phase 2) and read its contract audit before handing the file over.
+6. Run the calibration frame (`just living-game-calibrate view/<file>.glb`) and read its contract audit before handing the file over.
 
 ## Sources in the code
+
+- **The contract's reader:** `living/game/src/handmade.rs`: the scene's and materials' `slop`, slots to kinds, the profile's parameters, the mask's packing, the forward turn (`on_ready`) and the forward in a mesh's frame; used by `lookdev.rs` `convert`, the one conversion both the asset view and live loading go through.
+- **The profile and the tint in the shader:** `toon.wesl` `hand_hair` (`Kind::HandHair`, 5) and the tint's multiply (`Kind::Tint`, 6); their parameters in `style.rs` `ToonParams::hand`, `hand_bands` and `file`, kept per material when the style changes.
+- **The calibration frame:** `living/tools/characters/calibrate.py` (the `living-game-calibrate` recipe); the extras writer `living/tools/characters/handmade_extras.py`.
 
 - **Material kinds and the name rules:** `living/game/src/lookdev.rs` `convert`; `style.rs` `Kind`, `Style::kind`.
 - **UV1 packing and attribute ids:** `characters/compose.rs` (`ATTRIBUTE_GREY`, `ATTRIBUTE_RING`, `ATTRIBUTE_OUTLINE_WIDTH` 0x5c3e_9a01–03); loader registration in `main.rs`.

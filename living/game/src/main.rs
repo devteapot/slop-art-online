@@ -23,6 +23,7 @@ mod daylight;
 mod demo;
 mod envs;
 mod gait;
+mod handmade;
 mod ground;
 mod ik;
 mod twist;
@@ -85,7 +86,9 @@ fn main() {
                 // Hair's greying lock by lock (`_GREY`, characters/compose.rs).
                 .add_custom_vertex_attribute("GREY", characters::compose::ATTRIBUTE_GREY)
                 // Where hair may carry its ring (`_RING`, characters/compose.rs).
-                .add_custom_vertex_attribute("RING", characters::compose::ATTRIBUTE_RING),
+                .add_custom_vertex_attribute("RING", characters::compose::ATTRIBUTE_RING)
+                // A hand-made file's hair highlight (`_HIGHLIGHT`, handmade.rs).
+                .add_custom_vertex_attribute("HIGHLIGHT", handmade::ATTRIBUTE_HIGHLIGHT),
         );
     let headless = capture::headless();
     if headless {
@@ -111,6 +114,8 @@ fn main() {
     }
     app.add_systems(PostUpdate, perf::apply.before(post::update));
     perf::diagnostics(&mut app);
+    // Hand-made `"+Z"` files turned to face −Z as their scenes come in (handmade.rs).
+    app.add_observer(handmade::on_ready);
     app.insert_resource(lookdev::FarModels::from_env())
         .add_systems(Update, lookdev::character_shadows)
         .add_systems(PostUpdate, lookdev::far_models
