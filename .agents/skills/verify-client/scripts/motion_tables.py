@@ -53,13 +53,27 @@ def player_sql(db, token, query):
     return [dict(zip(names, r)) for r in res["rows"]]
 
 
-def mid(m):
-    """A `Moving`'s creature id, from the probe's JSON (an object) or SQL (a product as a list)."""
-    return m["id"] if isinstance(m, dict) else m[0]
-
-
 def final(events, table):
-    """A table's rows at the end of a probe's stream (its initial rows, then each change)."""
+    """A table's rows at the end of a probe's stream (its initial rows, then each change), by `id`;
+    `seen_body_copy` (no primary key: a change is a delete and an insert, in either order) by its
+    `body`, as the set of rows the stream leaves."""
+    if table == "seen_body_copy":
+        # A set of rows: the probe streams from the connection on, so the initial rows arrive both
+        # as inserts and in the `initial` snapshot; a change's delete and insert carry different rows.
+        rows = set()
+        for e in events:
+            if e.get("event") == "initial":
+                rows |= {json.dumps(r, sort_keys=True) for r in (e.get("tables") or {}).get(table, [])}
+            elif e.get("table") == table and e.get("event") == "insert":
+                rows.add(json.dumps(e["row"], sort_keys=True))
+            elif e.get("table") == table and e.get("event") == "delete":
+                rows.discard(json.dumps(e["row"], sort_keys=True))
+        # By (viewer, creature): a leak (another viewer's rows) stays visible to the checks.
+        out = {}
+        for k in rows:
+            r = json.loads(k)
+            out[(norm(r["viewer"]), r["body"])] = r
+        return out
     rows = {}
     for e in events:
         if e.get("event") == "initial":
@@ -71,13 +85,18 @@ def final(events, table):
     return rows
 
 
+def moving_of(r):
+    """The `Moving` a `seen_body_copy` row stands for: its `body` and its segment."""
+    return {"id": r["body"], **r["seg"]}
+
+
 def copies(events):
     """Every `seen_body_copy` row a probe received: its initial rows and each insert or update."""
     out = []
     for e in events:
         if e.get("event") == "initial":
             out += (e.get("tables") or {}).get("seen_body_copy", [])
-        elif e.get("table") == "seen_body_copy" and e.get("event") in ("insert", "update"):
+        elif e.get("table") == "seen_body_copy" and e.get("event") == "insert":
             out.append(e["row"])
     return out
 
@@ -141,7 +160,7 @@ def main():
     a_table = final(ev["a"], "seen_body_copy")
     a_view = final(ev["a"], "seen_bodies")
     a_near, a_far = final(ev["a"], "seen_bodies_near"), final(ev["a"], "seen_bodies_far")
-    by_body = {r["moving"]["id"]: r for r in a_table.values()}
+    by_body = {b: r for (v, b), r in a_table.items() if v == ident["a"]}
     private_a = sql(rid, f"SELECT COUNT(*) AS n FROM motion_seen WHERE viewer = 0x{ident['a']}")[0]["n"] + \
         sql(rid, f"SELECT COUNT(*) AS n FROM motion_near WHERE viewer = 0x{ident['a']}")[0]["n"]
     foreign_c = lambda evs: [r for r in copies(evs) if norm(r["viewer"]) != ident["c"]]
@@ -157,8 +176,9 @@ def main():
         "B's SQL reads only its own rows, and none of A's by identity": bool(b_sql) and all(norm(r["viewer"]) == ident["b"] for r in b_sql) and not b_peek_sql,
         "C subscribing every public table by name (the SDK's subscribe-all) receives no one else's row": not foreign_c(all_ev),
         "C subscribing SELECT * FROM * receives no one else's row": not foreign_c(star_ev),
+        "A's table holds only A's rows at the end": bool(a_table) and all(v == ident["a"] for v, _ in a_table),
         "A's rows hold B in the near tier and F in the far tier": by_body.get(b, {}).get("near") is True and by_body.get(f, {}).get("near") is False,
-        "A's table ends on exactly its seen_bodies view's rows": bool(a_view) and {k: r["moving"] for k, r in by_body.items()} == a_view,
+        "A's table ends on exactly its seen_bodies view's rows": bool(a_view) and {k: moving_of(r) for k, r in by_body.items()} == a_view,
         "A's near flags split exactly as its tier views": {k for k, r in by_body.items() if r["near"]} == set(a_near) and {k for k, r in by_body.items() if not r["near"]} == set(a_far),
         "the private copy tables hold none of A's copies while the law is on": private_a == 0,
     }
@@ -184,7 +204,7 @@ def main():
         "law off: the table is empty to the owner within a second": owner_after == 0,
         "law off: A's stream of the table, accepted, ends empty": accepted(off_ev) and off_ev[-1].get("code") == 0 and not final(off_ev, "seen_body_copy"),
         "law off: A's views still show the same creatures, from the private tables": bool(seen_on) and seen_off == seen_on and private_off == len(seen_on),
-        "law on again: A's rows return within a second": {mid(r["moving"]) for r in back} == seen_on,
+        "law on again: A's rows return within a second": {r["body"] for r in back} == seen_on,
     })
     result = {"a": a, "b": b, "c": c, "f": f, "dist": {k: round(math.dist(pos[a], pos[k]), 2) for k in (b, c, f)},
               "rows": {w: len(r) for w, r in got.items()}, "a_table": sorted(by_body), "a_view": sorted(a_view),

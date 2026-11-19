@@ -66,7 +66,7 @@
 //! (reconcile), so a client is never left on a cue its copy will not replace.
 use crate::combat::Seen;
 use crate::common;
-use crate::perception::Moving;
+use crate::perception::{Moving, Segment};
 use crate::tables::*;
 use spacetimedb::{Identity, ReducerContext, Table};
 use std::cell::{Cell, RefCell};
@@ -1048,18 +1048,16 @@ fn show_earshot(ctx: &ReducerContext, id: u32, v: &mut Viewer, now: u64) {
 fn show_motion(ctx: &ReducerContext, viewer: u32, who: Identity, body: u32, near: bool, public: bool) -> bool {
     let k = key(viewer, body);
     if public {
-        let Some(mut row) = ctx.db.seen_body_copy().id().find(k) else { return false };
+        let Some(row) = ctx.db.seen_body_copy().viewer_body().filter((who, body)).next() else { return false };
         let Some(m) = motion_now(ctx, body) else { return false };
-        if row.moving == m && row.near == near {
+        let seg = Segment::of(&m);
+        if row.seg == seg && row.near == near {
             return false;
         }
-        debug_assert_eq!(row.viewer, who);
-        row.moving = m;
-        row.near = near;
-        ctx.db.seen_body_copy().id().update(row);
+        ctx.db.seen_body_copy().delete(row);
+        ctx.db.seen_body_copy().insert(SeenBodyCopy { viewer: who, body, near, seg });
         return true;
     }
-    let _ = who;
     // The expected tier's table first (the other only when the copy is not there).
     let (was_near, row) = if near {
         match ctx.db.motion_near().id().find(k) {
@@ -1218,7 +1216,7 @@ pub fn show_doing(ctx: &ReducerContext, viewer: u32, who: Identity, body: u32, n
 }
 
 /// A creature left a viewer's scene, or died: its copies in both tiers go.
-pub fn drop_copies(ctx: &ReducerContext, viewer: u32, body: u32) {
+pub fn drop_copies(ctx: &ReducerContext, viewer: u32, who: Identity, body: u32) {
     let k = key(viewer, body);
     let public = VIEWERS.with(|v| v.borrow().get(&viewer).and_then(|e| e.public));
     if public != Some(true) {
@@ -1226,12 +1224,19 @@ pub fn drop_copies(ctx: &ReducerContext, viewer: u32, body: u32) {
         ctx.db.motion_near().id().delete(k);
     }
     if public != Some(false) {
-        ctx.db.seen_body_copy().id().delete(k);
+        drop_public(ctx, who, body);
     }
     ctx.db.fighter_seen().id().delete(k);
     ctx.db.doing_seen().id().delete(k);
     ctx.db.fighter_near().id().delete(k);
     ctx.db.doing_near().id().delete(k);
+}
+
+/// Delete viewer `who`'s public copy of `body`, if there is one.
+fn drop_public(ctx: &ReducerContext, who: Identity, body: u32) {
+    for r in ctx.db.seen_body_copy().viewer_body().filter((who, body)).collect::<Vec<_>>() {
+        ctx.db.seen_body_copy().delete(r);
+    }
 }
 
 /// Whether viewer `id`'s motion copies are in `seen_body_copy` (looked up once per instance).
@@ -1256,12 +1261,8 @@ fn public_of(ctx: &ReducerContext, id: u32, who: Identity) -> bool {
 pub fn new_motion(ctx: &ReducerContext, id: u32, who: Identity, b: &Body) {
     let k = key(id, b.id);
     if public_of(ctx, id, who) {
-        let row = SeenBodyCopy { id: k, viewer: who, near: false, moving: Moving::from(b) };
-        if ctx.db.seen_body_copy().id().find(k).is_some() {
-            ctx.db.seen_body_copy().id().update(row);
-        } else {
-            ctx.db.seen_body_copy().insert(row);
-        }
+        drop_public(ctx, who, b.id);
+        ctx.db.seen_body_copy().insert(SeenBodyCopy { viewer: who, body: b.id, near: false, seg: Segment::of(&Moving::from(b)) });
         return;
     }
     let row = MotionSeen::of(k, who, b);
@@ -1290,13 +1291,15 @@ fn to_public(ctx: &ReducerContext, who: Identity) -> usize {
     // key that would fail every tick from here on.
     for r in far {
         ctx.db.motion_seen().id().delete(r.id);
-        ctx.db.seen_body_copy().id().delete(r.id);
-        ctx.db.seen_body_copy().insert(SeenBodyCopy { id: r.id, viewer: who, near: false, moving: r.moving() });
+        let m = r.moving();
+        drop_public(ctx, who, m.id);
+        ctx.db.seen_body_copy().insert(SeenBodyCopy { viewer: who, body: m.id, near: false, seg: Segment::of(&m) });
     }
     for r in near {
         ctx.db.motion_near().id().delete(r.id);
-        ctx.db.seen_body_copy().id().delete(r.id);
-        ctx.db.seen_body_copy().insert(SeenBodyCopy { id: r.id, viewer: who, near: true, moving: r.copy.moving() });
+        let m = r.copy.moving();
+        drop_public(ctx, who, m.id);
+        ctx.db.seen_body_copy().insert(SeenBodyCopy { viewer: who, body: m.id, near: true, seg: Segment::of(&m) });
     }
     n
 }
@@ -1306,14 +1309,18 @@ fn to_public(ctx: &ReducerContext, who: Identity) -> usize {
 /// the law is off. Returns how many moved.
 fn all_private(ctx: &ReducerContext) -> usize {
     let rows: Vec<SeenBodyCopy> = ctx.db.seen_body_copy().iter().collect();
+    // The private copies are keyed by the viewer's character (`key`): its `player` row.
+    let mut chars: HashMap<Identity, Option<u32>> = HashMap::new();
     for r in &rows {
-        ctx.db.seen_body_copy().id().delete(r.id);
+        ctx.db.seen_body_copy().delete(r.clone());
+        let Some(viewer) = *chars.entry(r.viewer).or_insert_with(|| ctx.db.player().identity().find(r.viewer).map(|p| p.character)) else { continue };
+        let k = key(viewer, r.body);
         // As in `to_public`: a private row already there is replaced.
-        ctx.db.motion_seen().id().delete(r.id);
-        ctx.db.motion_near().id().delete(r.id);
-        let copy = MotionSeen::with(r.id, r.viewer, &r.moving);
+        ctx.db.motion_seen().id().delete(k);
+        ctx.db.motion_near().id().delete(k);
+        let copy = MotionSeen::with(k, r.viewer, &r.seg.moving(r.body));
         if r.near {
-            ctx.db.motion_near().insert(MotionNear { id: r.id, viewer: r.viewer, copy });
+            ctx.db.motion_near().insert(MotionNear { id: k, viewer: r.viewer, copy });
         } else {
             ctx.db.motion_seen().insert(copy);
         }
@@ -1466,8 +1473,8 @@ mod tests {
         let m = Moving { id: 5, x: 1.5, y: -2.0, t_ms: 77, vx: 0.5, vy: 0.25, heading: 1.0, turn: 0.1, turn_s: 0.3, next_ms: 99, speed: 1.2, face_off: 0.2, face_turn: -0.1, face_turn_s: 0.4, running: true };
         let private = MotionSeen::with(key(3, 5), Identity::ZERO, &m);
         assert_eq!(private.moving(), m);
-        let public = SeenBodyCopy { id: private.id, viewer: private.viewer, near: true, moving: private.moving() };
-        assert_eq!(public.moving, m);
+        let public = SeenBodyCopy { viewer: private.viewer, body: 5, near: true, seg: Segment::of(&private.moving()) };
+        assert_eq!(public.seg.moving(public.body), m);
     }
 
     #[test]

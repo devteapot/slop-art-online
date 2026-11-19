@@ -107,6 +107,35 @@ pub struct Moving {
     pub running: bool,
 }
 
+/// A `Moving` without its id: the public motion copies' column (`seen_body_copy.seg`), whose row
+/// names the creature in `body` (battle-views' slim row).
+#[derive(SpacetimeType, Clone, Debug, PartialEq)]
+pub struct Segment {
+    pub x: f32,
+    pub y: f32,
+    pub t_ms: u64,
+    pub vx: f32,
+    pub vy: f32,
+    pub heading: f32,
+    pub turn: f32,
+    pub turn_s: f32,
+    pub next_ms: u64,
+    pub speed: f32,
+    pub face_off: f32,
+    pub face_turn: f32,
+    pub face_turn_s: f32,
+    pub running: bool,
+}
+
+impl Segment {
+    pub fn of(m: &Moving) -> Self {
+        Self { x: m.x, y: m.y, t_ms: m.t_ms, vx: m.vx, vy: m.vy, heading: m.heading, turn: m.turn, turn_s: m.turn_s, next_ms: m.next_ms, speed: m.speed, face_off: m.face_off, face_turn: m.face_turn, face_turn_s: m.face_turn_s, running: m.running }
+    }
+    pub fn moving(&self, id: u32) -> Moving {
+        Moving { id, x: self.x, y: self.y, t_ms: self.t_ms, vx: self.vx, vy: self.vy, heading: self.heading, turn: self.turn, turn_s: self.turn_s, next_ms: self.next_ms, speed: self.speed, face_off: self.face_off, face_turn: self.face_turn, face_turn_s: self.face_turn_s, running: self.running }
+    }
+}
+
 impl From<&Body> for Moving {
     fn from(b: &Body) -> Self {
         Self { id: b.id, x: b.x, y: b.y, t_ms: b.t_ms, vx: b.vx, vy: b.vy, heading: b.heading, turn: b.turn, turn_s: b.turn_s, next_ms: b.next_ms, speed: b.speed, face_off: b.face_off, face_turn: b.face_turn, face_turn_s: b.face_turn_s, running: b.running }
@@ -1081,7 +1110,7 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
     for p in &rows {
         if !seen.contains(&p.body) {
             ctx.db.perceived().id().delete(p.id);
-            crate::frame::drop_copies(ctx, id, p.body);
+            crate::frame::drop_copies(ctx, id, viewer, p.body);
         }
     }
     let entered: Vec<u32> = seen.difference(&had).copied().collect();
@@ -1660,8 +1689,8 @@ pub fn forget(ctx: &ReducerContext, id: u32, viewer: Identity) {
     for p in ctx.db.motion_near().viewer().filter(viewer).map(|p| p.id).collect::<Vec<_>>() {
         ctx.db.motion_near().id().delete(p);
     }
-    for p in ctx.db.seen_body_copy().viewer().filter(viewer).map(|p| p.id).collect::<Vec<_>>() {
-        ctx.db.seen_body_copy().id().delete(p);
+    for p in ctx.db.seen_body_copy().viewer().filter(viewer).collect::<Vec<_>>() {
+        ctx.db.seen_body_copy().delete(p);
     }
     for p in ctx.db.fighter_near().viewer().filter(viewer).map(|p| p.id).collect::<Vec<_>>() {
         ctx.db.fighter_near().id().delete(p);
@@ -1696,7 +1725,7 @@ pub fn gone(ctx: &ReducerContext, id: u32) {
     let players: HashMap<Identity, u32> = crate::combat::humans(ctx).into_iter().map(|(c, who)| (who, c)).collect();
     for p in rows {
         if let Some(viewer) = players.get(&p.viewer) {
-            crate::frame::drop_copies(ctx, *viewer, id);
+            crate::frame::drop_copies(ctx, *viewer, p.viewer, id);
         }
         row_touched(p.viewer, id);
         ctx.db.projected().id().delete(p.id);
@@ -1856,7 +1885,7 @@ pub fn my_known_names(ctx: &ViewContext) -> Vec<KnownName> {
 #[spacetimedb::view(accessor = seen_bodies, public, primary_key = id)]
 pub fn seen_bodies(ctx: &ViewContext) -> Vec<Moving> {
     // A viewer's copies are all public (`motion_tables_on`) or all private (`frame.rs`).
-    let public: Vec<Moving> = ctx.db.seen_body_copy().viewer().filter(ctx.sender()).map(|c| c.moving).collect();
+    let public: Vec<Moving> = ctx.db.seen_body_copy().viewer().filter(ctx.sender()).map(|c| c.seg.moving(c.body)).collect();
     if !public.is_empty() {
         return public;
     }
@@ -1873,7 +1902,7 @@ pub fn seen_bodies(ctx: &ViewContext) -> Vec<Moving> {
 /// The others within `frame::NEAR_M` of me at my last sweep, as `seen_bodies` shows them.
 #[spacetimedb::view(accessor = seen_bodies_near, public, primary_key = id)]
 pub fn seen_bodies_near(ctx: &ViewContext) -> Vec<Moving> {
-    let public: Vec<Moving> = ctx.db.seen_body_copy().viewer_near().filter((ctx.sender(), true)).map(|c| c.moving).collect();
+    let public: Vec<Moving> = ctx.db.seen_body_copy().viewer_near().filter((ctx.sender(), true)).map(|c| c.seg.moving(c.body)).collect();
     if !public.is_empty() {
         return public;
     }
@@ -1883,7 +1912,7 @@ pub fn seen_bodies_near(ctx: &ViewContext) -> Vec<Moving> {
 /// The rest of the others I perceive, as `seen_bodies` shows them.
 #[spacetimedb::view(accessor = seen_bodies_far, public, primary_key = id)]
 pub fn seen_bodies_far(ctx: &ViewContext) -> Vec<Moving> {
-    let public: Vec<Moving> = ctx.db.seen_body_copy().viewer_near().filter((ctx.sender(), false)).map(|c| c.moving).collect();
+    let public: Vec<Moving> = ctx.db.seen_body_copy().viewer_near().filter((ctx.sender(), false)).map(|c| c.seg.moving(c.body)).collect();
     if !public.is_empty() {
         return public;
     }

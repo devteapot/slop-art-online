@@ -27,6 +27,7 @@ import argparse
 import json
 import math
 import sys
+import threading
 import time
 import urllib.request
 from pathlib import Path
@@ -42,6 +43,41 @@ def tick_count(ident):
         if line.startswith("spacetime_reducer_plus_query_duration_sec_count{") and f'"{ident}"' in line and 'reducer="tick"' in line:
             return float(line.rsplit(" ", 1)[1])
     return None
+
+
+class KeepAlive(threading.Thread):
+    """The agreed keep-alive fixture (battle-views, 2026-11-19): every `every` s, each viewer
+    character (a `player` row's) below its full health is set back to it with the admin's
+    `admin_set_vitals` (a test fixture through the generic admin reducer, no game rule). Counts the
+    calls and the health restored (from `vitals` as SQL reads it: settled at its last write)."""
+
+    def __init__(self, db, token, every):
+        super().__init__(daemon=True)
+        self.db, self.token, self.every = db, token, every
+        self.stop = threading.Event()
+        self.calls = self.failed = 0
+        self.restored = 0.0
+        self.rounds = 0
+
+    def run(self):
+        while not self.stop.wait(self.every):
+            try:
+                chars = {r["character"] for r in lc.sql(self.db, "SELECT character FROM player", self.token)}
+                hurt = [r for r in lc.sql(self.db, "SELECT id, hp, max_hp FROM vitals", self.token) if r["id"] in chars and r["hp"] < r["max_hp"]]
+            except RuntimeError:
+                continue
+            self.rounds += 1
+            for r in hurt:
+                try:
+                    lc.call(self.db, "admin_set_vitals", [r["id"], r["max_hp"]], self.token)
+                    self.calls += 1
+                    self.restored += r["max_hp"] - r["hp"]
+                except RuntimeError:
+                    self.failed += 1
+
+    def summary(self, seconds):
+        return {"every_s": self.every, "rounds": self.rounds, "calls": self.calls, "failed": self.failed,
+                "calls_per_s": round(self.calls / seconds, 2) if seconds else None, "hp_restored": round(self.restored, 1)}
 
 
 def one(a, n, out):
@@ -60,7 +96,11 @@ def one(a, n, out):
         if not a.battle_after_placing:
             lc.call(db, "spawn_battle", [a.fighters], token)
         land = lc.sql(db, "SELECT * FROM land", token)[0]
-        site = (land["arrive_x"], land["arrive_y"] - 20.0)
+        site = tuple(float(x) for x in a.site.split(",")) if a.site else (land["arrive_x"], land["arrive_y"] - 20.0)
+        res["site"], res["arrival"] = list(site), [land["arrive_x"], land["arrive_y"]]
+        if a.paused_placement and n:
+            # The Spark's procedure: paused while the viewers join and are placed, unpaused at `ready`.
+            lc.call(db, "set_paused", [True], token)
         if n:
             players = [{"token": lc.new_identity(), "name": f"Watch{i}", "role": "walk"} for i in range(n)]
             load = lc.Proc([a.load, "players"], out / f"players-v{n}.stderr")
@@ -87,7 +127,13 @@ def one(a, n, out):
             load.send("placed")
             ready = load.expect("ready", 900)
             res["held_at_ready"] = ready.get("held")
+            if a.paused_placement:
+                lc.call(db, "set_paused", [False], token)
             load.send("go")
+        keep = None
+        if a.keep_alive and n:
+            keep = KeepAlive(db, token, a.keep_alive)
+            keep.start()
         time.sleep(a.warmup)
         d = out / f"v{n}"
         if a.detail or a.flip_off:
@@ -96,10 +142,14 @@ def one(a, n, out):
             lc.call(db, "set_profile", [True], token)
             m0, th0, p0 = tc.scrape(ident), tc.thread_cpu(pid), tc.proc_cpu(pid)
         c0, t0 = tick_count(ident), time.time()
+        k0 = (keep.calls, keep.restored) if keep else None
         if load:
             load.send("fresh on")
         time.sleep(a.seconds)
         c1, t1 = tick_count(ident), time.time()
+        if keep:
+            res["keep_alive_window"] = {"calls": keep.calls - k0[0], "hp_restored": round(keep.restored - k0[1], 1),
+                                        "calls_per_s": round((keep.calls - k0[0]) / (t1 - t0), 2)}
         if load:
             load.send("fresh off")
         if a.detail or a.flip_off:
@@ -209,6 +259,10 @@ def one(a, n, out):
             chars = [h.get("characters", 0) for h in held] if isinstance(held, list) else []
             res["held_at_ready_mean"] = {"seen_characters_mean": round(sum(chars) / len(chars), 1) if chars else None}
             (d / "result.json").write_text(json.dumps({**res, "held_at_ready": res["held_at_ready_mean"]}, indent=1) + "\n")
+        if keep:
+            keep.stop.set()
+            keep.join(timeout=30)
+            res["keep_alive_run"] = keep.summary(time.time() - t0 + a.warmup)
         if load:
             load.send("stop")
             try:
@@ -256,6 +310,9 @@ def main():
     ap.add_argument("--motion-tables", action="store_true", help="the viewers subscribe seen_body_copy in place of the motion views (battle-views)")
     ap.add_argument("--law", action="append", default=[])
     ap.add_argument("--fresh-every", type=int, default=0, help="sample every Nth viewer's motion freshness (gate-load `fresh`)")
+    ap.add_argument("--keep-alive", type=float, default=0, metavar="SECS", help="every SECS s, set each hurt viewer back to full health (admin_set_vitals; the agreed keep-alive fixture)")
+    ap.add_argument("--paused-placement", action="store_true", help="pause the world while the viewers join and are placed; unpause at ready (the Spark's procedure)")
+    ap.add_argument("--site", default=None, metavar="X,Y", help="the viewers' centre (default: the arrival less 20 m, the battle's centre)")
     ap.add_argument("--battle-after-placing", action="store_true", help="spawn the battle after the viewers are placed")
     ap.add_argument("--ring", default=None, metavar="LO,HI", help="place the viewers over the ring LO-HI m from the battle's centre (outside the fighters' reach) instead of within 6 m")
     ap.add_argument("--detail", action="store_true", help="profile each window as tick_cost.py does (<out>/v<count>/)")

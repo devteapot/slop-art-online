@@ -310,6 +310,7 @@ pub mod seen_stock_type;
 pub mod seen_structures_table;
 pub mod seen_structures_type;
 pub mod seen_type;
+pub mod segment_type;
 pub mod set_background_reducer;
 pub mod set_behavior_reducer;
 pub mod set_paused_reducer;
@@ -677,6 +678,7 @@ pub use seen_stock_type::SeenStock;
 pub use seen_structures_table::*;
 pub use seen_structures_type::SeenStructures;
 pub use seen_type::Seen;
+pub use segment_type::Segment;
 pub use set_background_reducer::set_background;
 pub use set_behavior_reducer::set_behavior;
 pub use set_paused_reducer::set_paused;
@@ -2296,9 +2298,8 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.script = cache
             .apply_diff_to_table::<Script>("script", &self.script)
             .with_updates_by_pk(|row| &row.name);
-        diff.seen_body_copy = cache
-            .apply_diff_to_table::<SeenBodyCopy>("seen_body_copy", &self.seen_body_copy)
-            .with_updates_by_pk(|row| &row.id);
+        diff.seen_body_copy =
+            cache.apply_diff_to_table::<SeenBodyCopy>("seen_body_copy", &self.seen_body_copy);
         diff.seen_body_cue = self.seen_body_cue.into_event_diff();
         diff.seen_doing_cue = self.seen_doing_cue.into_event_diff();
         diff.seen_fighter_cue = self.seen_fighter_cue.into_event_diff();

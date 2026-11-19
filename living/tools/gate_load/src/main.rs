@@ -225,11 +225,15 @@ fn fresh_sample(ctx: &EventContext, st: &Mutex<St>, m: &Moving, cue: bool, first
 /// (`seen_bodies_near`, `seen_bodies_far`; frame-views) the connection subscribed.
 fn seen_body(db: &RemoteTables, id: u32) -> Option<Moving> {
     db.seen_bodies().id().find(&id).or_else(|| db.seen_bodies_near().id().find(&id)).or_else(|| db.seen_bodies_far().id().find(&id))
-        .or_else(|| {
-            // The public copy table (battle-views), keyed by (my character, the creature).
-            let me = db.my_body().iter().next()?.id;
-            db.seen_body_copy().id().find(&(((me as u64) << 32) | id as u64)).map(|c| c.moving)
-        })
+        // The public copy table (battle-views): a client holds only its own rows, one per creature.
+        .or_else(|| db.seen_body_copy().iter().find(|c| c.body == id).map(|c| copy_moving(&c)))
+}
+
+/// The `Moving` a `seen_body_copy` row stands for (battle-views' slim row: `body` and its segment).
+fn copy_moving(c: &SeenBodyCopy) -> Moving {
+    let s = &c.seg;
+    Moving { id: c.body, x: s.x, y: s.y, t_ms: s.t_ms, vx: s.vx, vy: s.vy, heading: s.heading, turn: s.turn, turn_s: s.turn_s, next_ms: s.next_ms, speed: s.speed,
+             face_off: s.face_off, face_turn: s.face_turn, face_turn_s: s.face_turn_s, running: s.running }
 }
 
 fn seen_body_count(db: &RemoteTables) -> u64 {
@@ -382,7 +386,7 @@ fn hook(p: &Player, log: &Log) {
     count!(conn, p.counts, seen_doing);
     count!(conn, p.counts, seen_bodies_near);
     count!(conn, p.counts, seen_bodies_far);
-    count!(conn, p.counts, seen_body_copy);
+    count_plain!(conn, p.counts, seen_body_copy);
     count!(conn, p.counts, seen_fighters_near);
     count!(conn, p.counts, seen_fighters_far);
     count!(conn, p.counts, seen_doing_near);
@@ -455,9 +459,12 @@ fn hook(p: &Player, log: &Log) {
         sample_view!(seen_bodies_near);
         sample_view!(seen_bodies_far);
         let st = p.st.clone();
-        conn.db.seen_body_copy().on_insert(move |ctx, c| fresh_sample(ctx, &st, &c.moving, false, true));
-        let st = p.st.clone();
-        conn.db.seen_body_copy().on_update(move |ctx, _, c| fresh_sample(ctx, &st, &c.moving, false, false));
+        // No primary key: a copy's change arrives as a delete and an insert in one update, so an
+        // insert of a creature already shown is a new segment (`fresh_sample` keeps the newest).
+        conn.db.seen_body_copy().on_insert(move |ctx, c| {
+            let first = st.lock().unwrap().fresh.last_t.get(&c.body).is_none();
+            fresh_sample(ctx, &st, &copy_moving(c), false, first);
+        });
         let st = p.st.clone();
         EventTable::on_insert(&conn.db.seen_body_cue(), move |ctx, c| {
             // A cue of a body not yet in my view is not a new segment of one I see.

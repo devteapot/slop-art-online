@@ -4,15 +4,15 @@
 #![allow(unused, clippy::all)]
 use spacetimedb_sdk::__codegen::{self as __sdk, __lib, __sats, __ws};
 
-use super::moving_type::Moving;
+use super::segment_type::Segment;
 
 #[derive(__lib::ser::Serialize, __lib::de::Deserialize, Clone, PartialEq, Debug)]
 #[sats(crate = __lib)]
 pub struct SeenBodyCopy {
-    pub id: u64,
     pub viewer: __sdk::Identity,
+    pub body: u32,
     pub near: bool,
-    pub moving: Moving,
+    pub seg: Segment,
 }
 
 impl __sdk::InModule for SeenBodyCopy {
@@ -23,20 +23,20 @@ impl __sdk::InModule for SeenBodyCopy {
 ///
 /// Provides typed access to columns for query building.
 pub struct SeenBodyCopyCols {
-    pub id: __sdk::__query_builder::Col<SeenBodyCopy, u64>,
     pub viewer: __sdk::__query_builder::Col<SeenBodyCopy, __sdk::Identity>,
+    pub body: __sdk::__query_builder::Col<SeenBodyCopy, u32>,
     pub near: __sdk::__query_builder::Col<SeenBodyCopy, bool>,
-    pub moving: __sdk::__query_builder::Col<SeenBodyCopy, Moving>,
+    pub seg: __sdk::__query_builder::Col<SeenBodyCopy, Segment>,
 }
 
 impl __sdk::__query_builder::HasCols for SeenBodyCopy {
     type Cols = SeenBodyCopyCols;
     fn cols(table_name: &'static str) -> Self::Cols {
         SeenBodyCopyCols {
-            id: __sdk::__query_builder::Col::new(table_name, "id"),
             viewer: __sdk::__query_builder::Col::new(table_name, "viewer"),
+            body: __sdk::__query_builder::Col::new(table_name, "body"),
             near: __sdk::__query_builder::Col::new(table_name, "near"),
-            moving: __sdk::__query_builder::Col::new(table_name, "moving"),
+            seg: __sdk::__query_builder::Col::new(table_name, "seg"),
         }
     }
 }
@@ -45,7 +45,6 @@ impl __sdk::__query_builder::HasCols for SeenBodyCopy {
 ///
 /// Provides typed access to indexed columns for query building.
 pub struct SeenBodyCopyIxCols {
-    pub id: __sdk::__query_builder::IxCol<SeenBodyCopy, u64>,
     pub viewer: __sdk::__query_builder::IxCol<SeenBodyCopy, __sdk::Identity>,
 }
 
@@ -53,7 +52,6 @@ impl __sdk::__query_builder::HasIxCols for SeenBodyCopy {
     type IxCols = SeenBodyCopyIxCols;
     fn ix_cols(table_name: &'static str) -> Self::IxCols {
         SeenBodyCopyIxCols {
-            id: __sdk::__query_builder::IxCol::new(table_name, "id"),
             viewer: __sdk::__query_builder::IxCol::new(table_name, "viewer"),
         }
     }

@@ -2264,16 +2264,21 @@ pub struct DoingNear {
 // `seen_bodies` returns, so nothing a view hides is in it.
 
 /// A perceived creature's motion, as the viewer's frames last wrote it (public, row-level
-/// security): `id` is `frame::key(viewer character, body)`, `near` the tier.
+/// security): `body` the creature, `near` the tier, `seg` its `Moving` without the id (the row
+/// `seen_bodies` returns is `seg.moving(body)`). 98 B (the viewer's identity 32, `body` 4, `near`
+/// 1, `seg` 61). No primary key and no copy key: a viewer's row of a creature is found by
+/// `(viewer, body)`, so a client keys it by `body` (each client holds only its own rows) and sees
+/// a change as a delete and an insert, as an update's old and new rows are sent anyway.
 #[derive(Clone, Debug, PartialEq)]
-#[spacetimedb::table(accessor = seen_body_copy, public, index(accessor = viewer_near, btree(columns = [viewer, near])))]
+#[spacetimedb::table(accessor = seen_body_copy, public,
+    index(accessor = viewer_near, btree(columns = [viewer, near])),
+    index(accessor = viewer_body, btree(columns = [viewer, body])))]
 pub struct SeenBodyCopy {
-    #[primary_key]
-    pub id: u64,
     #[index(btree)]
     pub viewer: Identity,
+    pub body: u32,
     pub near: bool,
-    pub moving: crate::perception::Moving,
+    pub seg: crate::perception::Segment,
 }
 
 // ---- cues: what a player is shown at once of those near it or engaged with it ----------
