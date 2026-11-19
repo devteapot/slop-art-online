@@ -2,7 +2,7 @@
 """Drive the living core the way a player and an observer do, on a scratch database.
 
 Every command works on one verification run, `.local/living/verify/<run>/`, which holds
-`state.json` (database, player token, what this run started) and the evidence. Cleanup
+`state.json` (database and what this run started) and the evidence. Cleanup
 removes what the run started and keeps the evidence.
 
   verify.py launch  --run R [--seed NAME] [--keep-data] [--target-dir DIR]
@@ -29,6 +29,7 @@ import argparse
 import glob
 import json
 import os
+import re
 import signal
 import subprocess
 import sys
@@ -39,6 +40,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[4]
 LIVING = ROOT / "living"
+sys.path.insert(0, str(LIVING / "tools"))
+from verify_credentials import private_dir, redact, write_private
+
 STDB = str(LIVING / "tools/stdb")
 URL = os.environ.get("LIVING_STDB_URL", "http://127.0.0.1:3300").rstrip("/")
 # The shared server, or a worker's own (LIVING_STDB_CONTAINER, with LIVING_STDB_URL naming its
@@ -71,6 +75,8 @@ def wasm_mount():
 
 
 def run_dir(run):
+    if not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_.-]*", run):
+        raise ValueError("use a single run name containing letters, digits, dots, underscores or hyphens")
     d = ROOT / ".local/living/verify" / run
     d.mkdir(parents=True, exist_ok=True)
     return d
@@ -78,14 +84,30 @@ def run_dir(run):
 
 def load(run):
     p = run_dir(run) / "state.json"
-    return json.loads(p.read_text()) if p.exists() else {"run": run, "db": PREFIX + run, "pids": {}}
+    st = json.loads(p.read_text()) if p.exists() else {"run": run, "db": PREFIX + run, "pids": {}}
+    legacy = "token" in st or "token2" in st
+    credentials = private_dir(ROOT) / f"{run}-players.json"
+    if credentials.exists():
+        st.update(json.loads(credentials.read_text()))
+    if legacy:
+        save(st)
+    return st
 
 
 def save(st):
-    (run_dir(st["run"]) / "state.json").write_text(json.dumps(st, indent=2))
+    evidence = run_dir(st["run"]) / "state.json"
+    credentials = private_dir(ROOT) / f"{st['run']}-players.json"
+    tokens = {key: st[key] for key in ("token", "token2") if key in st}
+    if tokens:
+        write_private(credentials, json.dumps(tokens))
+    else:
+        credentials.unlink(missing_ok=True)
+    evidence.write_text(redact(json.dumps({key: value for key, value in st.items() if key not in tokens}, indent=2),
+                               tokens.values()))
 
 
-def log(st, line, out=sys.stdout):
+def log(st, line, out=sys.stdout, *, secrets=()):
+    line = redact(line, (*secrets, st.get("token"), st.get("token2")))
     with open(run_dir(st["run"]) / "actions.log", "a") as f:
         f.write(f"{time.strftime('%H:%M:%S')} {line}\n")
     print(line, file=out, flush=True)
@@ -110,7 +132,7 @@ def http(path, body=None, token=None, raw=False):
 def stdb(*args, check=True, timeout=180):
     r = subprocess.run([STDB, *args], capture_output=True, text=True, timeout=timeout)
     if check and r.returncode != 0:
-        sys.exit(f"spacetime {' '.join(args[:3])} failed: {r.stderr.strip()[-4000:]}")
+        sys.exit(f"spacetime {' '.join(args[:3])} failed: {redact(r.stderr).strip()[-4000:]}")
     return r
 
 
@@ -221,7 +243,7 @@ def player(a):
         if "token" not in st:
             code, body = http("/v1/identity", {})
             if code != 200:
-                sys.exit(f"identity: {code} {body}")
+                sys.exit(f"identity: {code} {redact(body)}")
             j = json.loads(body)
             st["token"], st["identity"] = j["token"], j["identity"]
             save(st)
@@ -256,11 +278,11 @@ def sql(a):
     token = None if getattr(a, "anonymous", False) else st.get("token") if getattr(a, "as_player", False) else admin_token()
     code, body = http(f"/v1/database/{st['db']}/sql", a.query, token, raw=True)
     if code != 200:
-        sys.exit(f"sql: {code} {body}")
+        sys.exit(f"sql: {code} {redact(body, (token,))}")
     res = json.loads(body)[-1]
     names = [e["name"].get("some", "?") for e in res["schema"]["elements"]]
     rows = [dict(zip(names, r)) for r in res["rows"]]
-    out = json.dumps(rows, indent=1)
+    out = redact(json.dumps(rows, indent=1), (token,))
     if getattr(a, "save", None):
         (run_dir(a.run) / f"{a.save}.json").write_text(out)
         log(st, f"sql saved {a.save}.json: {a.query}", sys.stderr)
@@ -278,10 +300,10 @@ def call(a):
         sys.exit("ARGS_JSON must be a JSON array of the reducer's arguments")
     who = "admin" if a.as_admin else "player" if a.as_player else "anonymous"
     code, body = http(f"/v1/database/{st['db']}/call/{a.reducer}", args, token)
-    log(st, f"call {a.reducer}{json.dumps(args)} as {who} -> {code} {body.strip()}")
+    log(st, f"call {a.reducer}{json.dumps(args)} as {who} -> {code} {body.strip()}", secrets=(token,))
     if a.expect_refusal is not None:
         ok = code != 200 and a.expect_refusal in body
-        log(st, f"expected refusal containing {a.expect_refusal!r}: {'yes' if ok else 'NO'}")
+        log(st, f"expected refusal containing {a.expect_refusal!r}: {'yes' if ok else 'NO'}", secrets=(token,))
         sys.exit(0 if ok else 1)
     sys.exit(0 if code == 200 else 1)
 
@@ -347,7 +369,10 @@ def observer(a):
         # wasm load and the subscription fill before the capture.
         # The observer reads private tables with the owner's token, passed in the page's
         # fragment (never sent to a server); the logged URL leaves it out.
-        subprocess.run([chrome(), "--headless=new", "--no-sandbox", "--use-angle=swiftshader", "--enable-unsafe-swiftshader", f"--window-size={a.size}", f"--virtual-time-budget={a.wait_ms}", f"--screenshot={png}", url + "#token=" + admin_token()], capture_output=True, timeout=180)
+        try:
+            subprocess.run([chrome(), "--headless=new", "--no-sandbox", "--use-angle=swiftshader", "--enable-unsafe-swiftshader", f"--window-size={a.size}", f"--virtual-time-budget={a.wait_ms}", f"--screenshot={png}", url + "#token=" + admin_token()], capture_output=True, timeout=180)
+        except subprocess.TimeoutExpired:
+            sys.exit("observer screenshot timed out")
         if not png.exists():
             sys.exit("screenshot failed")
         log(st, f"observer screenshot {png.relative_to(ROOT)} of {url}")
@@ -407,6 +432,7 @@ def cleanup(a):
         code = subprocess.run(["docker", "inspect", CONTAINER, "--format", "{{.State.ExitCode}}"], capture_output=True, text=True).stdout.strip()
         log(st, f"stopped SpacetimeDB container (this run started it; exit code {code}{', forced by SIGKILL' if code == '137' else ''})")
     st.pop("token", None)
+    st.pop("token2", None)
     save(st)
     print(f"evidence kept in {run_dir(a.run).relative_to(ROOT)}/")
 

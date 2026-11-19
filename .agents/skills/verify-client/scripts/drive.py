@@ -210,7 +210,7 @@ class Run:
         self.mode = self.state.get('perception', 'scoped')
         self.results = []
         self.matrix = []
-        self.secrets = [self.state.get('token', '')]
+        self.secrets = [self.state.get(key) for key in ('token', 'token2')]
 
     def check(self, name, okay, evidence, detail='', known=False):
         status = ('XPASS' if okay else 'XFAIL') if known else ('PASS' if okay else 'FAIL')
@@ -238,9 +238,9 @@ class Run:
             self.secrets.append(credential)
         else:
             credential = None
-        value = json.loads(result.stdout)
+        value = json.loads(V.redact(result.stdout, (*self.secrets, token)))
         value['process_exit'] = result.returncode
-        value['sdk_stderr'] = result.stderr
+        value['sdk_stderr'] = V.redact(result.stderr, (*self.secrets, token))
         write(self.directory / (name + '.json'), value)
         if result.returncode:
             raise RuntimeError(f'{name} probe failed; see {name}.json')
@@ -250,10 +250,11 @@ class Run:
         code, body = V.http(f"/v1/database/{self.state['db']}/call/{reducer}", args, token)
         okay = code == 200 if expected is None else code == expected_status and expected in body
         row = {'identity': label, 'reducer': reducer, 'args': args, 'http_status': code,
-               'body': body, 'expected': expected or 'accepted', 'pass': okay}
+               'body': V.redact(body, (*self.secrets, token)), 'expected': expected or 'accepted', 'pass': okay}
+        row = json.loads(V.redact(json.dumps(row), (*self.secrets, token)))
         self.matrix.append(row)
         write(self.directory / 'reducers.json', self.matrix)
-        V.log(self.state, f"client {label} {reducer}{json.dumps(args)} -> {code} {body.strip()}")
+        V.log(self.state, f"client {label} {reducer}{json.dumps(args)} -> {code} {body.strip()}", secrets=(*self.secrets, token))
         return okay
 
     def query(self, query, as_player, seconds, name, as_admin=False):
@@ -269,13 +270,18 @@ class Run:
         final = None
         with path.open('x') as evidence, stderr_path.open('x') as sdk_log:
             with subprocess.Popen([str(BINARY)], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                  stderr=sdk_log, text=True) as process:
+                                  stderr=subprocess.PIPE, text=True) as process:
+                def log_stderr():
+                    for line in process.stderr:
+                        sdk_log.write(V.redact(line, self.secrets))
+
+                stderr_reader = threading.Thread(target=log_stderr)
+                stderr_reader.start()
                 try:
                     process.stdin.write(json.dumps(request))
                     process.stdin.close()
                     for line in process.stdout:
-                        if any(secret and secret in line for secret in self.secrets):
-                            raise RuntimeError('credential found in probe output')
+                        line = V.redact(line, self.secrets)
                         final = json.loads(line)
                         evidence.write(line)
                         evidence.flush()
@@ -289,6 +295,7 @@ class Run:
                         except subprocess.TimeoutExpired:
                             process.kill()
                             process.wait()
+                    stderr_reader.join()
         if code or not final or final.get('event') != 'complete':
             raise RuntimeError(f'subscription failed; see {path.name} and {stderr_path.name}')
 
@@ -485,7 +492,7 @@ class Run:
         setup = subprocess.run([str(HARNESS), 'call', '--run', self.state['run'],
                                 'set_behavior', json.dumps([actor, '{"think":"verify-client view fixture"}']),
                                 '--as-admin'], capture_output=True, text=True, timeout=30)
-        (self.directory / 'admin-scene-setup.log').write_text(setup.stdout + setup.stderr)
+        (self.directory / 'admin-scene-setup.log').write_text(V.redact(setup.stdout + setup.stderr, self.secrets))
         if setup.returncode:
             raise RuntimeError('admin set_behavior failed; see admin-scene-setup.log')
         views['admin'] = self.probe('view-admin', ['SELECT * FROM my_deliberations'], admin_token, seconds=55, until_actor=actor)
@@ -750,7 +757,7 @@ class Run:
         lines.extend(f'| {r["identity"]} | {r["reducer"]} | {r["http_status"]} | {r["body"].strip()} | {"PASS" if r["pass"] else "FAIL"} |' for r in self.matrix)
         (self.directory / 'reducers.md').write_text('\n'.join(lines) + '\n')
         for path in self.directory.glob('*'):
-            if path.is_file() and path.name != 'state.json':
+            if path.is_file():
                 data = path.read_bytes()
                 if any(secret and secret.encode() in data for secret in self.secrets):
                     raise RuntimeError(f'credential leaked into {path.name}')

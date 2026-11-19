@@ -886,7 +886,11 @@ class Instance:
             for k in ("MISTRAL_API_KEY", "CARLID_NPC_API_KEY", "TYPESAFE_API_KEY"):
                 env[k] = ""
         env.update({k: str(x) for k, x in v.get("env", {}).items()})
-        (self.dir / "mind-env.json").write_text(json.dumps({k: env[k] for k in sorted(env) if k.startswith("LIVING_") and k not in ("LIVING_TOKEN", "LIVING_NEO4J_PASSWORD")}, indent=1))
+        logged_env = {k: env[k] for k in sorted(env) if k.startswith("LIVING_")}
+        for key in logged_env:
+            if re.search(r"(?:^|_)(?:TOKEN|PASSWORD|SECRET|KEY|AUTH|AUTHORIZATION)$", key):
+                logged_env[key] = "<redacted>"
+        (self.dir / "mind-env.json").write_text(json.dumps(logged_env, indent=1))
         log = open(self.dir / "mind.log", "a")
         # A variant may run a mind built from another branch (an iteration's mind change): `mind_bin`,
         # a path under the repository or absolute; the default is this tree's build.

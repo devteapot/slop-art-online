@@ -19,6 +19,9 @@ import urllib.error
 import urllib.request
 
 ROOT = Path(__file__).resolve().parents[4]
+sys.path.insert(0, str(ROOT / "living/tools"))
+from verify_credentials import private_dir, redact, write_private
+
 SHARED = ROOT / '.agents/skills/verify/scripts/verify.py'
 FAKE = ROOT / '.agents/skills/verify-llm/scripts/fake_llm.py'
 BUILD = ROOT / '.local/living/verify/build-knowledge'
@@ -67,10 +70,11 @@ class Run:
         self.name = name
         self.db = 'verify-' + name
         self.directory = ROOT / '.local/living/verify' / name
-        self.private = self.directory / 'knowledge-state.json'
+        self.private = private_dir(ROOT) / f'{name}-knowledge.json'
+        legacy = self.directory / 'knowledge-state.json'
         self.journal = ROOT / '.local/living/journal' / self.db
         if existing:
-            self.state = json.loads(self.private.read_text())
+            self.state = json.loads((self.private if self.private.exists() else legacy).read_text())
         else:
             if self.directory.exists() or self.journal.exists():
                 raise ValueError('use a fresh run name')
@@ -82,25 +86,22 @@ class Run:
             raise ValueError('state does not match the requested scratch run')
         if self.state['container'] != 'sao-verify-neo4j-' + name:
             raise ValueError('container is not owned by this scratch run')
+        if existing and legacy.exists():
+            self.save()
+            legacy.unlink()
         self.results = []
         self.streams = []
         self.processes = []
 
     def save(self):
-        fd = os.open(self.private, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-        os.fchmod(fd, 0o600)
-        with os.fdopen(fd, 'w') as stream:
-            json.dump(self.state, stream, indent=2)
+        write_private(self.private, json.dumps(self.state, indent=2))
 
     def command(self, args, filename='actions.log', check=True, timeout=600, env=None, cwd=ROOT):
         result = subprocess.run([str(x) for x in args], cwd=cwd, capture_output=True,
                                 text=True, timeout=timeout, env=env)
-        output = result.stdout + result.stderr
-        password = self.state.get('password')
-        if password and password in output:
-            output = output.replace(password, '[redacted]')
+        message = '$ ' + ' '.join(map(str, args)) + '\n' + result.stdout + result.stderr
         with (self.directory / filename).open('a') as stream:
-            stream.write('$ ' + ' '.join(map(str, args)) + '\n' + output + f'\nexit={result.returncode}\n')
+            stream.write(redact(message, (self.state.get('password'),)) + f'\nexit={result.returncode}\n')
         if check and result.returncode:
             raise RuntimeError(f'command failed; see {filename}')
         return result
@@ -145,7 +146,7 @@ class Run:
         args = ['docker', 'exec', '-i', self.state['container'], 'sh', '-c',
                 'NEO4J_PASSWORD="${NEO4J_AUTH#*/}" cypher-shell -a bolt://localhost:7687 -u neo4j --format plain']
         result = subprocess.run(args, input=query, capture_output=True, text=True, timeout=35)
-        (self.directory / f'{label}.txt').write_text(result.stdout + result.stderr)
+        (self.directory / f'{label}.txt').write_text(redact(result.stdout + result.stderr, (self.state.get('password'),)))
         if check and result.returncode:
             raise RuntimeError(f'Cypher failed; see {label}.txt')
         return result
@@ -588,7 +589,10 @@ class Run:
             stream.close()
         if report['container_removed']:
             self.state.pop('password', None)
-        self.save()
+        if report['container_removed'] and not failures:
+            self.private.unlink(missing_ok=True)
+        else:
+            self.save()
         report['evidence_survives'] = (self.directory / 'actions.log').exists()
         report['errors'] = failures
         (self.directory / 'cleanup.json').write_text(json.dumps(report, indent=2))

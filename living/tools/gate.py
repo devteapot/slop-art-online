@@ -40,12 +40,15 @@ import signal
 import statistics
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
+
+from verify_credentials import write_private
 
 ROOT = Path(__file__).resolve().parents[2]
 CONTAINER = os.environ.get("GATE_STDB_CONTAINER", "gate-stdb")
@@ -390,14 +393,15 @@ class Proc:
 
 def run(a):
     procs = []
-    try:
-        _run(a, procs)
-    finally:
-        for p in procs:
-            p.kill()
+    with tempfile.TemporaryDirectory(prefix="slop-gate-") as private:
+        try:
+            _run(a, procs, Path(private) / "game.token")
+        finally:
+            for p in procs:
+                p.kill()
 
 
-def _run(a, procs):
+def _run(a, procs, token_file):
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
     name = f"{'smoke' if a.smoke else 'gate'}-{stamp}"
     r = Run(ROOT / ".local/living/gate" / name)
@@ -479,8 +483,7 @@ def _run(a, procs):
     game_dir = r.dir / "game"
     if not a.no_game:
         game_dir.mkdir(exist_ok=True)
-        token_file = ROOT / ".local/living/gate/game.token"
-        token_file.write_text(tokens[n])
+        write_private(token_file, tokens[n])
         total = a.warmup + a.seconds + 120
         steps = ["ready", "sync:placed"] + [f"walk:{90 if k % 2 else 270}:3" if k % 4 < 2 else "wait:3" for k in range(int(total / 3))] + ["quit"]
         env = dict(os.environ, LIVING_SERVER=f"http://127.0.0.1:{SHAPED_PORT}", LIVING_DB=db, LIVING_GAME_TOKEN=str(token_file), LIVING_GAME_NAME="GateWatcher",

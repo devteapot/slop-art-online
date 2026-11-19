@@ -79,7 +79,7 @@ Run it before the first drive and after anything surprising.
 ### Identities and state
 
 - `$V call --run <run> REDUCER 'ARGS_JSON' [--as-player | --as-admin] [--expect-refusal TEXT]` calls any reducer over HTTP. Without a flag it calls anonymously. `--expect-refusal TEXT` succeeds only if the call is refused with `TEXT` in the error, which proves a permission without putting a token on the command line, for example `$V call --run <run> set_paused '[true]' --as-player --expect-refusal "admin only"`.
-- `$V player --run <run> join|move|act|say …` calls the player reducers (`join`, `human_move`, `human_act`, `human_say`). It uses a fresh non-admin identity from `POST /v1/identity`, kept in `state.json`.
+- `$V player --run <run> join|move|act|say …` calls the player reducers (`join`, `human_move`, `human_act`, `human_say`). It uses a fresh non-admin identity from `POST /v1/identity`, kept in private run state.
 - `$V sql --run <run> "<query>" [--as-player | --anonymous] [--save NAME]` runs SQL over HTTP.
   - With no flag it uses the world admin's token (the database owner), read from the container's CLI and kept in memory, as the observer and the mind service read. Since 2026-11-09 most tables are private developer truth (docs/PERCEPTION.md): `thought`, `persona`, `belief`, `brain`, `chronicle`, `stats` and the rest, and in a `scoped` build `body`, `character`, `vitals` and `experience` too. Use it to inspect state, never to prove a permission. `--as-admin` is accepted and means the same.
   - `--as-player` uses the run's player identity; a player reads its own state through views (`SELECT * FROM my_characters`, `my_experience`, `seen_bodies`, …).
@@ -105,7 +105,7 @@ $V cleanup --run <run> [--keep-db]
 - Leaves the observer if other runs still use it; otherwise stops it.
 - Deletes `verify-<run>`; a scratch world left behind keeps ticking and writing its log.
 - Stops the SpacetimeDB container only if this run started it and no other `verify-*` database is live, with a 60 s grace period. Exit code 137 means podman forced the stop with SIGKILL; report it as forced. The server runs as PID 1 and handles SIGINT but not SIGTERM. Cleanup therefore sends SIGINT, and `living/deploy/compose.yml` sets `stop_signal: SIGINT`; a clean stop exits 0 within a second.
-- Drops the player token. The evidence directory is kept.
+- Drops the player and bystander tokens. The evidence directory is kept.
 
 Run cleanup after failed attempts too.
 
@@ -120,6 +120,8 @@ Run cleanup after failed attempts too.
 - `LIVING_STDB_URL` may only name the local container (`http://127.0.0.1:3300`). Publishing goes through the container's CLI, so any other URL would split one proof across two servers; the helper refuses it.
 
 ## Evidence
+
+Logs never contain tokens. Reconnect credentials for players and the scratch Neo4j password are kept in mode 0600 files under `${XDG_STATE_HOME:-$HOME/.local/state}/slop-art-online/verify/<checkout>/`, outside the evidence tree. Cleanup drops those credentials. The gate and soak game clients use a mode 0600 token file in an OS temporary directory for the lifetime of the run.
 
 A proof contains three things:
 

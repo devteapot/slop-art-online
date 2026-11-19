@@ -42,12 +42,15 @@ import signal
 import statistics
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
+
+from verify_credentials import redact, write_private
 
 ROOT = Path(__file__).resolve().parents[2]
 MAIN = Path(os.environ.get("SOAK_MAIN", "/Users/carlid/dev/slop-art-online"))
@@ -629,14 +632,15 @@ def game_plan(towns, seconds, rng, start):
 
 def run(a):
     procs = []
-    try:
-        _run(a, procs)
-    finally:
-        for p in procs:
-            p.stop()
+    with tempfile.TemporaryDirectory(prefix="slop-soak-") as private:
+        try:
+            _run(a, procs, Path(private) / "game.token")
+        finally:
+            for p in procs:
+                p.stop()
 
 
-def _run(a, procs):
+def _run(a, procs, token_file):
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
     name = f"{'smoke' if a.smoke else 'soak'}-{stamp}"
     r = Run(EVID / name)
@@ -707,8 +711,7 @@ def _run(a, procs):
     # The game client, through its own relay.
     game_dir = r.dir / "game"
     game_dir.mkdir(exist_ok=True)
-    token_file = r.dir / "game.token"
-    token_file.write_text(ids[a.players]["token"])
+    write_private(token_file, ids[a.players]["token"])
     rng = random.Random(7)
     plan = game_plan(towns, seconds + 600, rng, (land["arrive_x"], land["arrive_y"]))
     (game_dir / "plan.txt").write_text("\n".join(plan) + "\n")
@@ -1041,12 +1044,14 @@ def privacy(r, ctx, load):
         """verify-client's probe; `stream` returns the rows received (its `initial` event)."""
         req = {"uri": URL, "db": db, "token": tok, "queries": queries, "seconds": seconds, "drop_file": None, "until_actor": None, "stream": stream}
         res = subprocess.run([str(PROBE)], input=json.dumps(req), text=True, capture_output=True, timeout=90)
+        stdout = redact(res.stdout, (tok,))
+        stderr = redact(res.stderr, (tok,))
         try:
-            lines = [json.loads(l) for l in res.stdout.strip().splitlines() if l.strip()]
+            lines = [json.loads(l) for l in stdout.strip().splitlines() if l.strip()]
         except ValueError:
-            return {"status": "error", "error": res.stdout[-300:] + res.stderr[-300:]}
+            return {"status": "error", "error": stdout[-300:] + stderr[-300:]}
         if not lines:
-            return {"status": "error", "error": res.stderr[-300:]}
+            return {"status": "error", "error": stderr[-300:]}
         out = dict(lines[-1])
         initial = next((l for l in lines if l.get("event") == "initial"), None)
         if initial is not None:
