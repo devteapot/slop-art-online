@@ -394,6 +394,12 @@ def compose(measured):
                 eye["h"] = round(old_height * (1 + gain), 3)
                 brow = types[tid]["brow"]
                 brow["above_eye"] = round(brow["above_eye"] + 0.60 * (eye["h"] - old_height), 3)
+                # The tallest design has less clearance at the nose in children
+                # and below the brow in women. Keep the established brow anchor.
+                if tid == "child-u-a":
+                    eye["h"] = round(old_height * 1.20, 3)
+                elif tid in ("youth-f-a", "adult-f-a"):
+                    eye["h"] = round(old_height * 1.36, 3)
                 eye["iris"] = round(eye["iris"] * (1.08 if elder else 1.17), 3)
                 for i, height in enumerate(section["z"]):
                     fullness = max(0.0, 1 - abs(height - 0.25) / 0.12)
