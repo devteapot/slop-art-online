@@ -2486,7 +2486,17 @@ def build_person(arm, spec, atlas_path, body=False, bones=None):
             # inside the waistband, which showed through the back of it as slivers.
             tuck=(1.10, 0.005), neckline=jersey_open,
         ).mirrored()
-        obs.append(build(p, arm, MAT["cloth"], jersey_colour(spec["jersey"])))
+        jersey_ob = build(p, arm, MAT["cloth"], jersey_colour(spec["jersey"]))
+        if coat == "coat":
+            # Round the knit shading over the front bib. A silhouette rim on the
+            # flat vertical chest washes near-black yarn out at the play camera.
+            normals = []
+            for vertex in jersey_ob.data.vertices:
+                normal = vertex.normal.copy()
+                normal.z += .85 * max(0.0, normal.y)
+                normals.append(normal.normalized())
+            jersey_ob.data.normals_split_custom_set_from_vertices(normals)
+        obs.append(jersey_ob)
         chest = blend(("J_Bip_C_UpperChest", 0.75), ("J_Bip_C_Neck", 0.25))
         if coat == "coat":
             def ctag(kind, k, r):

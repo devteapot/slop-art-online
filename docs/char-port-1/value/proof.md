@@ -1,5 +1,7 @@
 # Household coat values at Middle
 
+The [final generator calibration and native acceptance sample](calibrated/README.md) supersede this four-body value trial.
+
 [Middle, 12 m](middle.png) · [Near, 8 m](near.png) · [Portrait](portrait.png)
 
 Each column keeps the resident's original seed, body, height and hairstyle. The lower row requests the coat. The woman's long hair uses its collar fit, the man keeps his tousled hair, the elder keeps his cap, and the girl keeps her bob. The braid remains a seeded style option. Its separate forced fitting, motion samples, garment crossings and apron exclusion are documented in the [four-body fitting](../proof.md). The elder's belly and the trousers in ground sit and long strides remain apron risks. Garment geometry matches the first fitting. The revised comparison restores the original hairstyles and changes the garment colours and facing shading.

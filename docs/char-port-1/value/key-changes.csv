@@ -4,8 +4,8 @@ Lumi Pontil,1,lk_9414dde061d54c4c,lk_d02aa8b66cfa06bb,lk_d02aa8b66cfa06bb,refere
 Lumi Pontil,2,lk_1f482bd23b3eef2f,lk_3dfe2f5ae758b863,lk_3dfe2f5ae758b863,reference-cache drift only,measured or estimated piece colour
 Lumi Pontil,3,lk_e064a5c3ae29aa76,lk_66bdffb70de4aa90,lk_66bdffb70de4aa90,reference-cache drift only,measured or estimated piece colour
 Lumi Pontil,4,lk_2e57b655bfe4cd2f,lk_cd57e7846908d099,lk_cd57e7846908d099,reference-cache drift only,measured or estimated piece colour
-Corvin Hollin,3,lk_cec42a509cbaf1e7,lk_cec42a509cbaf1e7,lk_c7c0b3b3e0a393e4,port only,"cut or wardrobe draw, household coat and jersey values"
-Corvin Hollin,4,lk_fa309b456aff22cb,lk_fa309b456aff22cb,lk_7d2712d08ddcf326,port only,"cut or wardrobe draw, household coat and jersey values"
+Corvin Hollin,3,lk_cec42a509cbaf1e7,lk_cec42a509cbaf1e7,lk_b3e3f1ff63989339,port only,"cut or wardrobe draw, household coat and jersey values; calibrated light coat, knit and lower garments"
+Corvin Hollin,4,lk_fa309b456aff22cb,lk_fa309b456aff22cb,lk_bd704744f857c411,port only,"cut or wardrobe draw, household coat and jersey values; calibrated light coat, knit and lower garments"
 Tamsin Hollin,3,lk_0a1a91868a5d106e,lk_766a14a8be0ad9bb,lk_766a14a8be0ad9bb,reference-cache drift only,measured or estimated piece colour
 Tamsin Hollin,4,lk_e07c52159c8e4801,lk_a44b26184b3239fa,lk_a44b26184b3239fa,reference-cache drift only,measured or estimated piece colour
 Edda Hollin,3,lk_000f47c0d8aa4056,lk_6152f19bfe9e6baa,lk_6152f19bfe9e6baa,reference-cache drift only,measured or estimated piece colour
@@ -14,13 +14,13 @@ Pim Hollin,3,lk_b79ab696f53ea9d7,lk_c58720aab52a897b,lk_c58720aab52a897b,referen
 Pim Hollin,4,lk_254e50b2033e5818,lk_402b2a6122eba9f3,lk_402b2a6122eba9f3,reference-cache drift only,measured or estimated piece colour
 Runa Sarro,3,lk_325cf2ea76202a02,lk_991528dcea96816f,lk_991528dcea96816f,reference-cache drift only,measured or estimated piece colour
 Runa Sarro,4,lk_aaf66351387bda11,lk_c793af39b09d4bf7,lk_c793af39b09d4bf7,reference-cache drift only,measured or estimated piece colour
-Aldous Quill,3,lk_c55cc167d80edd7b,lk_c55cc167d80edd7b,lk_6e70b7c864a2f5be,port only,household coat and jersey values
-Aldous Quill,4,lk_9c27439590ed947f,lk_5d6c1a7f85284b2d,lk_ec27c49b90c87e80,reference-cache drift and port,household coat and jersey values
+Aldous Quill,3,lk_c55cc167d80edd7b,lk_c55cc167d80edd7b,lk_0f3f9c0d59a78ae9,port only,"household coat and jersey values; calibrated light coat, knit and lower garments"
+Aldous Quill,4,lk_9c27439590ed947f,lk_5d6c1a7f85284b2d,lk_6617972e5f93372a,reference-cache drift and port,"household coat and jersey values; calibrated light coat, knit and lower garments"
 Mirren Quill,4,lk_48e798b2ebd811da,lk_d3857e2b55a3373b,lk_d3857e2b55a3373b,reference-cache drift only,measured or estimated piece colour
 Sabine Quill,3,lk_c5887db295d23e8b,lk_46d73e16690220b7,lk_46d73e16690220b7,reference-cache drift only,measured or estimated piece colour
 Sabine Quill,4,lk_98225d3da212b567,lk_4d15af5bee954b42,lk_4d15af5bee954b42,reference-cache drift only,measured or estimated piece colour
-Otto Brandt,3,lk_27f4dd21bc8e5965,lk_84a88af08dbeb8cc,lk_a91d36af92811b40,reference-cache drift and port,household coat and jersey values
-Otto Brandt,4,lk_314ee19ef29c66bc,lk_76e74ecb3e0d35ec,lk_943a0431ea8aa7e1,reference-cache drift and port,household coat and jersey values
+Otto Brandt,3,lk_27f4dd21bc8e5965,lk_84a88af08dbeb8cc,lk_b9eb07340decc63e,reference-cache drift and port,"household coat and jersey values; calibrated light coat, knit and lower garments"
+Otto Brandt,4,lk_314ee19ef29c66bc,lk_76e74ecb3e0d35ec,lk_18ed27b75edd418a,reference-cache drift and port,"household coat and jersey values; calibrated light coat, knit and lower garments"
 Juno Brandt,1,lk_695ae2caab63191f,lk_8bd684a147bb4068,lk_8bd684a147bb4068,reference-cache drift only,measured or estimated piece colour
 Juno Brandt,2,lk_2a7b617f3aa3eb45,lk_14ae000c0ca53b8c,lk_14ae000c0ca53b8c,reference-cache drift only,measured or estimated piece colour
 Juno Brandt,3,lk_5c6473ce9787fa77,lk_a2d1a5d788f050ba,lk_a2d1a5d788f050ba,reference-cache drift only,measured or estimated piece colour
@@ -29,8 +29,8 @@ Thessaly Marl,3,lk_bc3b77d6b5907426,lk_99239a44ab3b2dcd,lk_99239a44ab3b2dcd,refe
 Thessaly Marl,4,lk_5e97b8d6f1974efa,lk_fec98c687a0d0f9d,lk_fec98c687a0d0f9d,reference-cache drift only,measured or estimated piece colour
 Wick Marl,1,lk_b044a981f01f4259,lk_b044a981f01f4259,lk_6d21bc5f9af8f4bd,port only,"cut or wardrobe draw, measured or estimated piece colour"
 Wick Marl,2,lk_0033a6efb16582a3,lk_0033a6efb16582a3,lk_c1cff10ffd3f14af,port only,"cut or wardrobe draw, measured or estimated piece colour"
-Wick Marl,3,lk_b41b1e2b5b3a4d1d,lk_efaf56dd3a84bcbd,lk_9ae288fbafd00734,reference-cache drift and port,household coat and jersey values
-Wick Marl,4,lk_0bae4ba47eae058a,lk_1fbdee7dabaac935,lk_d3994161d50337a5,reference-cache drift and port,household coat and jersey values
+Wick Marl,3,lk_b41b1e2b5b3a4d1d,lk_efaf56dd3a84bcbd,lk_7d290638ed8d90f8,reference-cache drift and port,"household coat and jersey values; calibrated light coat, knit and lower garments"
+Wick Marl,4,lk_0bae4ba47eae058a,lk_1fbdee7dabaac935,lk_467d5412d9f76d1f,reference-cache drift and port,"household coat and jersey values; calibrated light coat, knit and lower garments"
 Halvard Dunmore,4,lk_5ec175213627ec13,lk_5ec175213627ec13,lk_7ef777ee17cad6e3,port only,"cut or wardrobe draw, household coat and jersey values"
 Greta Dunmore,4,lk_e9f14428a803b9e3,lk_e9f14428a803b9e3,lk_aab8835d792e60ae,port only,"cut or wardrobe draw, household coat and jersey values"
 Bram Calloway,3,lk_3b95c43b1324fa62,lk_3b95c43b1324fa62,lk_93c83e0fdf04e5bb,port only,"cut or wardrobe draw, household coat and jersey values"
@@ -40,14 +40,14 @@ Ysolde Calloway,4,lk_fc0e556d925e4351,lk_eccb9385335f5f0d,lk_eccb9385335f5f0d,re
 Neve Calloway,4,lk_9d9dd40164cae6d4,lk_cad7203e5d05da43,lk_cad7203e5d05da43,reference-cache drift only,measured or estimated piece colour
 Kit Calloway,3,lk_c25898f008317f23,lk_6a278120dec90d51,lk_6a278120dec90d51,reference-cache drift only,measured or estimated piece colour
 Kit Calloway,4,lk_ab0faea56c5b2c91,lk_fb1fff0f200f79c4,lk_fb1fff0f200f79c4,reference-cache drift only,measured or estimated piece colour
-Magda Tarn,3,lk_95ea5ef3c59b592f,lk_b44d328ee8ca8f2c,lk_6090d7277c2cb6b2,reference-cache drift and port,household coat and jersey values
-Magda Tarn,4,lk_9981cb7f23d88177,lk_9981cb7f23d88177,lk_67d7295c92459fb1,port only,household coat and jersey values
-Joss Tarn,3,lk_7ff2665ac8e08d8f,lk_7ff2665ac8e08d8f,lk_1abfee90e8e0aea4,port only,"cut or wardrobe draw, household coat and jersey values"
-Joss Tarn,4,lk_3f55ffc6d17c3792,lk_7ab2ea856a531776,lk_1f73c396e90d05fb,reference-cache drift and port,"cut or wardrobe draw, household coat and jersey values"
-Eamon Tarn,3,lk_a565e01e1695b8a2,lk_a565e01e1695b8a2,lk_f003790ed0519076,port only,"cut or wardrobe draw, household coat and jersey values"
-Eamon Tarn,4,lk_a89ad9ced47c467b,lk_a89ad9ced47c467b,lk_b542a7175503a0a6,port only,"cut or wardrobe draw, household coat and jersey values"
-Petra Tarn,3,lk_8727bada642f580b,lk_8727bada642f580b,lk_978a5a4162f83500,port only,household coat and jersey values
-Petra Tarn,4,lk_aff8c90dc93ca21d,lk_cf1fffd5c9cde2c6,lk_d74fb5052eca6685,reference-cache drift and port,household coat and jersey values
+Magda Tarn,3,lk_95ea5ef3c59b592f,lk_b44d328ee8ca8f2c,lk_7a63902f699371a9,reference-cache drift and port,"household coat and jersey values; calibrated light coat, knit and lower garments"
+Magda Tarn,4,lk_9981cb7f23d88177,lk_9981cb7f23d88177,lk_fdb257aad82e74cf,port only,"household coat and jersey values; calibrated light coat, knit and lower garments"
+Joss Tarn,3,lk_7ff2665ac8e08d8f,lk_7ff2665ac8e08d8f,lk_5d76c33d318522c8,port only,"cut or wardrobe draw, household coat and jersey values; calibrated light coat, knit and lower garments"
+Joss Tarn,4,lk_3f55ffc6d17c3792,lk_7ab2ea856a531776,lk_7fc407adb5021710,reference-cache drift and port,"cut or wardrobe draw, household coat and jersey values; calibrated light coat, knit and lower garments"
+Eamon Tarn,3,lk_a565e01e1695b8a2,lk_a565e01e1695b8a2,lk_fad54e60db874d56,port only,"cut or wardrobe draw, household coat and jersey values; calibrated light coat, knit and lower garments"
+Eamon Tarn,4,lk_a89ad9ced47c467b,lk_a89ad9ced47c467b,lk_4bed7fea6dfa8f21,port only,"cut or wardrobe draw, household coat and jersey values; calibrated light coat, knit and lower garments"
+Petra Tarn,3,lk_8727bada642f580b,lk_8727bada642f580b,lk_ab9442ca65f0b2de,port only,"household coat and jersey values; calibrated light coat, knit and lower garments"
+Petra Tarn,4,lk_aff8c90dc93ca21d,lk_cf1fffd5c9cde2c6,lk_f986b972e9bb3903,reference-cache drift and port,"household coat and jersey values; calibrated light coat, knit and lower garments"
 Nell Tarn,2,lk_a0717e9af1fe724a,lk_a0717e9af1fe724a,lk_8f1d07d73b2177f1,port only,measured or estimated piece colour
 Nell Tarn,3,lk_41ed18d70b3ad21d,lk_859616cad010c369,lk_859616cad010c369,reference-cache drift only,measured or estimated piece colour
 Nell Tarn,4,lk_d9a569c30e75fdf6,lk_8e2683c5adba00c3,lk_8e2683c5adba00c3,reference-cache drift only,measured or estimated piece colour
@@ -56,8 +56,8 @@ Ansel Tarn,4,lk_26e29751233c38b6,lk_efa1ef02089e4e14,lk_efa1ef02089e4e14,referen
 Dory Tarn,0,lk_120567af53642340,lk_eafffba048fa1ef7,lk_eafffba048fa1ef7,reference-cache drift only,measured or estimated piece colour
 Dory Tarn,1,lk_3124442f979a09b8,lk_f401e66110f9be11,lk_f401e66110f9be11,reference-cache drift only,measured or estimated piece colour
 Dory Tarn,2,lk_5781e81c5ae90d44,lk_39b9f9349815c857,lk_39b9f9349815c857,reference-cache drift only,measured or estimated piece colour
-Dory Tarn,3,lk_432510480e456a16,lk_432510480e456a16,lk_c62cb971b4753a42,port only,"cut or wardrobe draw, household coat and jersey values"
-Dory Tarn,4,lk_2c1fa5c151187c61,lk_2c1fa5c151187c61,lk_bf73bcc284c8ec57,port only,"cut or wardrobe draw, household coat and jersey values"
+Dory Tarn,3,lk_432510480e456a16,lk_432510480e456a16,lk_bbe9ec04ef6b89af,port only,"cut or wardrobe draw, household coat and jersey values; calibrated light coat, knit and lower garments"
+Dory Tarn,4,lk_2c1fa5c151187c61,lk_2c1fa5c151187c61,lk_5ac59c5e19871ed4,port only,"cut or wardrobe draw, household coat and jersey values; calibrated light coat, knit and lower garments"
 Amara Okoro,3,lk_e3e7c990461f9fe3,lk_837b632adff8f614,lk_837b632adff8f614,reference-cache drift only,measured or estimated piece colour
 Zeke Okoro,1,lk_b689a9235631fe0f,lk_bccc4d5b50bb59c4,lk_bccc4d5b50bb59c4,reference-cache drift only,measured or estimated piece colour
 Zeke Okoro,2,lk_90265753dad27db5,lk_b238664f628f716e,lk_b238664f628f716e,reference-cache drift only,measured or estimated piece colour
@@ -74,16 +74,16 @@ Lark Morrow,2,lk_1111e9726fcead31,lk_03227398c21eec83,lk_03227398c21eec83,refere
 Lark Morrow,3,lk_ee18d614bb61a55e,lk_d5f27b9225881d63,lk_d5f27b9225881d63,reference-cache drift only,measured or estimated piece colour
 Lark Morrow,4,lk_c00c78744a4dbd39,lk_36cfe8c6d62d1800,lk_36cfe8c6d62d1800,reference-cache drift only,measured or estimated piece colour
 Kenji Sato,4,lk_119eb7c723f8b102,lk_8cfaafe556a5ccfb,lk_8cfaafe556a5ccfb,reference-cache drift only,measured or estimated piece colour
-Hana Sato,3,lk_ff949fba119067a8,lk_17b2b5a98bf9c619,lk_403baac50487aa49,reference-cache drift and port,"cut or wardrobe draw, household coat and jersey values, measured or estimated piece colour"
-Hana Sato,4,lk_0c7092096a77828c,lk_0c7092096a77828c,lk_abd6938043c34bfd,port only,"cut or wardrobe draw, household coat and jersey values"
+Hana Sato,3,lk_ff949fba119067a8,lk_17b2b5a98bf9c619,lk_5f94a0e57c15e1ed,reference-cache drift and port,"cut or wardrobe draw, household coat and jersey values, measured or estimated piece colour; calibrated light coat, knit and lower garments"
+Hana Sato,4,lk_0c7092096a77828c,lk_0c7092096a77828c,lk_d1f38b27a869bc3d,port only,"cut or wardrobe draw, household coat and jersey values; calibrated light coat, knit and lower garments"
 Rafe Dunlin,3,lk_d6739188c461f4fb,lk_9aedd6a2acc08afc,lk_9aedd6a2acc08afc,reference-cache drift only,measured or estimated piece colour
 Rafe Dunlin,4,lk_371e304f7d728326,lk_a564adfbd0138d0d,lk_a564adfbd0138d0d,reference-cache drift only,measured or estimated piece colour
-Oswin Greave,3,lk_5aa6da4519bfd71f,lk_5aa6da4519bfd71f,lk_98be5a7c26ff4910,port only,"cut or wardrobe draw, household coat and jersey values"
-Oswin Greave,4,lk_90bb2e1c2c37b263,lk_90bb2e1c2c37b263,lk_8b4a0a20fb1eb870,port only,"cut or wardrobe draw, household coat and jersey values"
-Elke Greave,3,lk_6ace94cd81ae6023,lk_edb2a117f90297fe,lk_fc4905b812976bb5,reference-cache drift and port,household coat and jersey values
-Elke Greave,4,lk_995a91459e894dd6,lk_995a91459e894dd6,lk_992fac99f8a126d6,port only,household coat and jersey values
-Jory Greave,3,lk_e215a003a6e979b1,lk_e215a003a6e979b1,lk_3263564b635d8e68,port only,"cut or wardrobe draw, household coat and jersey values"
-Jory Greave,4,lk_c0c15c8aa2dc7385,lk_c0c15c8aa2dc7385,lk_dbda0e7eee0909f8,port only,"cut or wardrobe draw, household coat and jersey values"
+Oswin Greave,3,lk_5aa6da4519bfd71f,lk_5aa6da4519bfd71f,lk_98bb41b03ce60428,port only,"cut or wardrobe draw, household coat and jersey values; calibrated light coat, knit and lower garments"
+Oswin Greave,4,lk_90bb2e1c2c37b263,lk_90bb2e1c2c37b263,lk_0505b3e18bc43c10,port only,"cut or wardrobe draw, household coat and jersey values; calibrated light coat, knit and lower garments"
+Elke Greave,3,lk_6ace94cd81ae6023,lk_edb2a117f90297fe,lk_f929b587eb32270e,reference-cache drift and port,"household coat and jersey values; calibrated light coat, knit and lower garments"
+Elke Greave,4,lk_995a91459e894dd6,lk_995a91459e894dd6,lk_2d99d1c0ea5f1d81,port only,"household coat and jersey values; calibrated light coat, knit and lower garments"
+Jory Greave,3,lk_e215a003a6e979b1,lk_e215a003a6e979b1,lk_40f58083857f754d,port only,"cut or wardrobe draw, household coat and jersey values; calibrated light coat, knit and lower garments"
+Jory Greave,4,lk_c0c15c8aa2dc7385,lk_c0c15c8aa2dc7385,lk_b9cbf2a596b9cfb6,port only,"cut or wardrobe draw, household coat and jersey values; calibrated light coat, knit and lower garments"
 Suri Greave,3,lk_73d05de6585bedc9,lk_c886a3e60696514d,lk_c886a3e60696514d,reference-cache drift only,measured or estimated piece colour
 Suri Greave,4,lk_5798af3b663b92ba,lk_c0e06dcfd737271d,lk_c0e06dcfd737271d,reference-cache drift only,measured or estimated piece colour
 Nan Fenwick,3,lk_ed57aa55431dd19c,lk_458c65c75f89220d,lk_458c65c75f89220d,reference-cache drift only,measured or estimated piece colour
@@ -106,8 +106,8 @@ Marit Sedge,3,lk_6afa32e33964dc3c,lk_e7d6ce038246e3dd,lk_e7d6ce038246e3dd,refere
 Anselm Faro,4,lk_3d1001326c76cc4b,lk_3d1001326c76cc4b,lk_bff74a63432d6ebe,port only,"cut or wardrobe draw, household coat and jersey values"
 Livia Faro,4,lk_1f8a0679e16f9a58,lk_e433c6d0cec6e1b5,lk_e433c6d0cec6e1b5,reference-cache drift only,measured or estimated piece colour
 Dolly Achterberg,3,lk_ea6d59d5f1d06520,lk_e66b63127b12c730,lk_e66b63127b12c730,reference-cache drift only,measured or estimated piece colour
-Pieter Achterberg,3,lk_792ac4e122398b65,lk_792ac4e122398b65,lk_b8cd901734737025,port only,household coat and jersey values
-Pieter Achterberg,4,lk_6492080bb77ffade,lk_6492080bb77ffade,lk_6b04e7c0eb639124,port only,household coat and jersey values
+Pieter Achterberg,3,lk_792ac4e122398b65,lk_792ac4e122398b65,lk_87af647b9ebaf9c2,port only,"household coat and jersey values; calibrated light coat, knit and lower garments"
+Pieter Achterberg,4,lk_6492080bb77ffade,lk_6492080bb77ffade,lk_d2d63fe1c5ebe377,port only,"household coat and jersey values; calibrated light coat, knit and lower garments"
 Roos Achterberg,3,lk_5212bebd8f5df2bf,lk_4b9f30856bcd37e0,lk_4b9f30856bcd37e0,reference-cache drift only,measured or estimated piece colour
 Roos Achterberg,4,lk_f5833e12e558a75d,lk_f979e9a86ee1b1c3,lk_f979e9a86ee1b1c3,reference-cache drift only,measured or estimated piece colour
 Gwil Stannard,3,lk_1020211eaadc32dd,lk_1020211eaadc32dd,lk_54717465bc0c19f0,port only,"cut or wardrobe draw, household coat and jersey values"
@@ -136,10 +136,10 @@ pool-4,2,lk_380799d0bd8172c1,lk_4600b533304f6e2d,lk_984ab7c8680244b1,reference-c
 pool-4,3,lk_7710b014d3959941,lk_7710b014d3959941,lk_d52f707a341a313f,port only,household coat and jersey values
 pool-4,4,lk_d432a40b85ae17dd,lk_d432a40b85ae17dd,lk_a499f3cb92dff622,port only,household coat and jersey values
 pool-5,0,lk_77670a7eb3e33e6c,lk_2234e0807f8d540e,lk_2234e0807f8d540e,reference-cache drift only,measured or estimated piece colour
-pool-5,1,lk_c9ad907c9b42c2fd,lk_3428f6d378271167,lk_935c5bce893b60ea,reference-cache drift and port,"cut or wardrobe draw, household coat and jersey values"
-pool-5,2,lk_bcaa2dd9e8a68ed0,lk_b6cf427f484813f2,lk_73b1a8e027679aab,reference-cache drift and port,"cut or wardrobe draw, household coat and jersey values"
-pool-5,3,lk_1cbb2a9d5d8366c6,lk_1cbb2a9d5d8366c6,lk_086b97002477946c,port only,"cut or wardrobe draw, household coat and jersey values"
-pool-5,4,lk_929737b4f92559d2,lk_929737b4f92559d2,lk_9b7ff60d189f629f,port only,"cut or wardrobe draw, household coat and jersey values"
+pool-5,1,lk_c9ad907c9b42c2fd,lk_3428f6d378271167,lk_97afc90a199a800a,reference-cache drift and port,"cut or wardrobe draw, household coat and jersey values; calibrated light coat, knit and lower garments"
+pool-5,2,lk_bcaa2dd9e8a68ed0,lk_b6cf427f484813f2,lk_4466d146e3af8028,reference-cache drift and port,"cut or wardrobe draw, household coat and jersey values; calibrated light coat, knit and lower garments"
+pool-5,3,lk_1cbb2a9d5d8366c6,lk_1cbb2a9d5d8366c6,lk_33e4fe13f8de765e,port only,"cut or wardrobe draw, household coat and jersey values; calibrated light coat, knit and lower garments"
+pool-5,4,lk_929737b4f92559d2,lk_929737b4f92559d2,lk_d690da36f4011844,port only,"cut or wardrobe draw, household coat and jersey values; calibrated light coat, knit and lower garments"
 pool-6,0,lk_424fc98f1b64acc3,lk_3406f4dd5bf1d491,lk_3406f4dd5bf1d491,reference-cache drift only,measured or estimated piece colour
 pool-6,1,lk_ba1dd5982b2223b3,lk_af197884d9eb9cac,lk_af197884d9eb9cac,reference-cache drift only,measured or estimated piece colour
 pool-6,2,lk_4984531d88d761ec,lk_a0aea01a4663b700,lk_a0aea01a4663b700,reference-cache drift only,measured or estimated piece colour
@@ -155,15 +155,15 @@ pool-8,1,lk_fb4cf748151dec0e,lk_973ff6d4374b3c54,lk_973ff6d4374b3c54,reference-c
 pool-8,2,lk_1707ee0d70d2ebd5,lk_937071839754fc6c,lk_937071839754fc6c,reference-cache drift only,measured or estimated piece colour
 pool-8,3,lk_f63bcddb5bfcaf44,lk_1e3fb22ea83156d8,lk_1e3fb22ea83156d8,reference-cache drift only,measured or estimated piece colour
 pool-8,4,lk_c7af2ad31c101d4d,lk_9c984ec1963c1cfb,lk_9c984ec1963c1cfb,reference-cache drift only,measured or estimated piece colour
-pool-9,3,lk_4dc4bdddaea25760,lk_4dc4bdddaea25760,lk_52287ff63f628a09,port only,"cut or wardrobe draw, household coat and jersey values"
-pool-9,4,lk_4b840cbb7f8fbfe2,lk_4b840cbb7f8fbfe2,lk_3387281d5467e3ac,port only,"cut or wardrobe draw, household coat and jersey values"
+pool-9,3,lk_4dc4bdddaea25760,lk_4dc4bdddaea25760,lk_96122c1ae7fda390,port only,"cut or wardrobe draw, household coat and jersey values; calibrated light coat, knit and lower garments"
+pool-9,4,lk_4b840cbb7f8fbfe2,lk_4b840cbb7f8fbfe2,lk_135dbd519d35ab0b,port only,"cut or wardrobe draw, household coat and jersey values; calibrated light coat, knit and lower garments"
 pool-10,0,lk_51c21dbfeaafea32,lk_41dcc4de3f2ee17d,lk_41dcc4de3f2ee17d,reference-cache drift only,measured or estimated piece colour
 pool-10,1,lk_402f0163cf819aa3,lk_0a9593fadcf7da82,lk_0a9593fadcf7da82,reference-cache drift only,measured or estimated piece colour
 pool-10,2,lk_a87295db75a6b9f7,lk_b141c512c69ab411,lk_b141c512c69ab411,reference-cache drift only,measured or estimated piece colour
 pool-10,3,lk_6c387f427136d315,lk_60ca667fe1209652,lk_60ca667fe1209652,reference-cache drift only,measured or estimated piece colour
 pool-10,4,lk_5293e3d566fc96e9,lk_b3d97de88d8a62b2,lk_b3d97de88d8a62b2,reference-cache drift only,measured or estimated piece colour
-pool-11,3,lk_e949fc650c869861,lk_e949fc650c869861,lk_043a62fb5a4ec150,port only,"cut or wardrobe draw, household coat and jersey values"
-pool-11,4,lk_d72800f1a3905766,lk_d72800f1a3905766,lk_7d534af12dd4374e,port only,"cut or wardrobe draw, household coat and jersey values"
+pool-11,3,lk_e949fc650c869861,lk_e949fc650c869861,lk_6a61a815c910db80,port only,"cut or wardrobe draw, household coat and jersey values; calibrated light coat, knit and lower garments"
+pool-11,4,lk_d72800f1a3905766,lk_d72800f1a3905766,lk_d4a53cfb39a72aaf,port only,"cut or wardrobe draw, household coat and jersey values; calibrated light coat, knit and lower garments"
 pool-12,0,lk_57decadd9d42fdbc,lk_96b114cfb7147f0d,lk_96b114cfb7147f0d,reference-cache drift only,measured or estimated piece colour
 pool-12,1,lk_db0aa7a94bebaa89,lk_830a919dae4cdfec,lk_830a919dae4cdfec,reference-cache drift only,measured or estimated piece colour
 pool-12,2,lk_aaff886821427946,lk_0ca9e3cb12519892,lk_0ca9e3cb12519892,reference-cache drift only,measured or estimated piece colour
@@ -180,15 +180,15 @@ pool-14,2,lk_3a6631c0b1194336,lk_0573094123bd8166,lk_0573094123bd8166,reference-
 pool-14,3,lk_0f118cc4f2ad8495,lk_5f49fad4700950fd,lk_5f49fad4700950fd,reference-cache drift only,measured or estimated piece colour
 pool-14,4,lk_142ef03666c67af8,lk_4ca2f4716eec3716,lk_4ca2f4716eec3716,reference-cache drift only,measured or estimated piece colour
 pool-15,0,lk_b235769672cb843f,lk_64ee92bd461c1b0f,lk_64ee92bd461c1b0f,reference-cache drift only,measured or estimated piece colour
-pool-15,1,lk_e6cac443dc46f0da,lk_e3f89a04c676c2e9,lk_acfe7cce0168999c,reference-cache drift and port,"cut or wardrobe draw, household coat and jersey values"
-pool-15,2,lk_044523c948afc6e0,lk_044523c948afc6e0,lk_12e94b418de80ed0,port only,"cut or wardrobe draw, household coat and jersey values"
-pool-15,3,lk_bf7d4750099d66fa,lk_bf7d4750099d66fa,lk_ed38f6d94422631d,port only,"cut or wardrobe draw, household coat and jersey values"
-pool-15,4,lk_4f823f5c8a869bed,lk_4f823f5c8a869bed,lk_5bf05ce5e9ba97d6,port only,"cut or wardrobe draw, household coat and jersey values"
+pool-15,1,lk_e6cac443dc46f0da,lk_e3f89a04c676c2e9,lk_5132fff905d1dc23,reference-cache drift and port,"cut or wardrobe draw, household coat and jersey values; calibrated light coat, knit and lower garments"
+pool-15,2,lk_044523c948afc6e0,lk_044523c948afc6e0,lk_03692400d7a2dd84,port only,"cut or wardrobe draw, household coat and jersey values; calibrated light coat, knit and lower garments"
+pool-15,3,lk_bf7d4750099d66fa,lk_bf7d4750099d66fa,lk_c3fb5ffd5cfd7e62,port only,"cut or wardrobe draw, household coat and jersey values; calibrated light coat, knit and lower garments"
+pool-15,4,lk_4f823f5c8a869bed,lk_4f823f5c8a869bed,lk_bd8b54ccd6eb22b7,port only,"cut or wardrobe draw, household coat and jersey values; calibrated light coat, knit and lower garments"
 pool-16,0,lk_f76790e238baa8bc,lk_010c527cf7b8c632,lk_010c527cf7b8c632,reference-cache drift only,measured or estimated piece colour
-pool-16,1,lk_99e779c842855ee7,lk_3d0b361e4b983a13,lk_feaaee5625893b10,reference-cache drift and port,"cut or wardrobe draw, household coat and jersey values"
-pool-16,2,lk_c26e1491795ac549,lk_6bd95dfbee858c5a,lk_972fdd5d282fdc9d,reference-cache drift and port,"cut or wardrobe draw, household coat and jersey values"
-pool-16,3,lk_3fbb19358950a73b,lk_3fbb19358950a73b,lk_5c300adbfb5307d5,port only,household coat and jersey values
-pool-16,4,lk_c4b7885000cbdce4,lk_c4b7885000cbdce4,lk_f1eb60e0bd5595dc,port only,household coat and jersey values
+pool-16,1,lk_99e779c842855ee7,lk_3d0b361e4b983a13,lk_4312b6d87d577690,reference-cache drift and port,"cut or wardrobe draw, household coat and jersey values; calibrated light coat, knit and lower garments"
+pool-16,2,lk_c26e1491795ac549,lk_6bd95dfbee858c5a,lk_c77cc5776bd03ff0,reference-cache drift and port,"cut or wardrobe draw, household coat and jersey values; calibrated light coat, knit and lower garments"
+pool-16,3,lk_3fbb19358950a73b,lk_3fbb19358950a73b,lk_f02321501bf9a9d0,port only,"household coat and jersey values; calibrated light coat, knit and lower garments"
+pool-16,4,lk_c4b7885000cbdce4,lk_c4b7885000cbdce4,lk_a0b56534a1f753d0,port only,"household coat and jersey values; calibrated light coat, knit and lower garments"
 pool-17,0,lk_01d27e00da9da7b8,lk_ee9b55728c4c25ed,lk_ee9b55728c4c25ed,reference-cache drift only,measured or estimated piece colour
 pool-17,3,lk_a45e5a9c6084aaa9,lk_4d5b6fbaaedc5497,lk_1ff90b5b15ee760f,reference-cache drift and port,"cut or wardrobe draw, household coat and jersey values"
 pool-17,4,lk_34a53284e8e079ab,lk_a1c08ae073c9ba7e,lk_d94ca28e31f3b004,reference-cache drift and port,"cut or wardrobe draw, household coat and jersey values"
@@ -200,8 +200,8 @@ pool-18,4,lk_609712e3b2157ac7,lk_bfa1a1b38d388cb9,lk_bfa1a1b38d388cb9,reference-
 pool-19,0,lk_fd05b7502f63fd91,lk_a5c90aa1943b9259,lk_a5c90aa1943b9259,reference-cache drift only,measured or estimated piece colour
 pool-19,1,lk_3c195ea9b837fec8,lk_3c195ea9b837fec8,lk_bd35439561426113,port only,measured or estimated piece colour
 pool-19,2,lk_ea4f59f3b2a737db,lk_ea4f59f3b2a737db,lk_9435722d2489a412,port only,measured or estimated piece colour
-pool-19,3,lk_91c1624cd9af5eb3,lk_91c1624cd9af5eb3,lk_af59fed79e7ded1d,port only,household coat and jersey values
-pool-19,4,lk_6da454fa55d08e8f,lk_6da454fa55d08e8f,lk_48af86668f9f7df2,port only,household coat and jersey values
+pool-19,3,lk_91c1624cd9af5eb3,lk_91c1624cd9af5eb3,lk_a08d3a8fbf49d56b,port only,"household coat and jersey values; calibrated light coat, knit and lower garments"
+pool-19,4,lk_6da454fa55d08e8f,lk_6da454fa55d08e8f,lk_331d01b2abfbe328,port only,"household coat and jersey values; calibrated light coat, knit and lower garments"
 pool-20,0,lk_a315fe7c691b7d6e,lk_bbceef45b590b333,lk_bbceef45b590b333,reference-cache drift only,measured or estimated piece colour
 pool-20,1,lk_fec5fa3d3691eea8,lk_80559192864f958e,lk_80559192864f958e,reference-cache drift only,measured or estimated piece colour
 pool-20,2,lk_f0f8688d0993acef,lk_b99d9b4ac9b8e63e,lk_b99d9b4ac9b8e63e,reference-cache drift only,measured or estimated piece colour
@@ -240,10 +240,10 @@ pool-28,3,lk_c26ab5ee305e0ee7,lk_708f67ed87b8c276,lk_708f67ed87b8c276,reference-
 pool-28,4,lk_1639f37d1817dad9,lk_c09749948850d893,lk_c09749948850d893,reference-cache drift only,measured or estimated piece colour
 pool-29,0,lk_be7a82e2f78c41ac,lk_279da59340b84c2a,lk_279da59340b84c2a,reference-cache drift only,measured or estimated piece colour
 pool-30,0,lk_84eb7e27f9443da0,lk_159d59e2f071a70d,lk_159d59e2f071a70d,reference-cache drift only,measured or estimated piece colour
-pool-30,1,lk_20bd2e8f98fb9e9d,lk_30fe2fb012564ec7,lk_b91ef33dd9d69c1a,reference-cache drift and port,"hair fit for garment, cut or wardrobe draw, household coat and jersey values"
-pool-30,2,lk_5d8a69fe62221ec3,lk_4d421900cafac3ba,lk_b4cef014152549ba,reference-cache drift and port,"hair fit for garment, cut or wardrobe draw, household coat and jersey values"
-pool-30,3,lk_74624751cee7f2f5,lk_74624751cee7f2f5,lk_01f36c61bdd36fe8,port only,"cut or wardrobe draw, household coat and jersey values"
-pool-30,4,lk_c466f3c9a91896a7,lk_c466f3c9a91896a7,lk_a3655149c6415274,port only,"cut or wardrobe draw, household coat and jersey values"
+pool-30,1,lk_20bd2e8f98fb9e9d,lk_30fe2fb012564ec7,lk_4c05f23f324dec1a,reference-cache drift and port,"hair fit for garment, cut or wardrobe draw, household coat and jersey values; calibrated light coat, knit and lower garments"
+pool-30,2,lk_5d8a69fe62221ec3,lk_4d421900cafac3ba,lk_375e04db28b88bd5,reference-cache drift and port,"hair fit for garment, cut or wardrobe draw, household coat and jersey values; calibrated light coat, knit and lower garments"
+pool-30,3,lk_74624751cee7f2f5,lk_74624751cee7f2f5,lk_9645bf43cf0ca9b3,port only,"cut or wardrobe draw, household coat and jersey values; calibrated light coat, knit and lower garments"
+pool-30,4,lk_c466f3c9a91896a7,lk_c466f3c9a91896a7,lk_73b3d272fa49875c,port only,"cut or wardrobe draw, household coat and jersey values; calibrated light coat, knit and lower garments"
 pool-31,0,lk_aac596f66737b691,lk_f70d8e3e97230e06,lk_f70d8e3e97230e06,reference-cache drift only,measured or estimated piece colour
 pool-31,1,lk_8851b8cb1acb9e00,lk_8851b8cb1acb9e00,lk_7da7ea12483e0127,port only,measured or estimated piece colour
 pool-31,2,lk_e961b74991527b23,lk_e961b74991527b23,lk_aecd88caa2dc632a,port only,measured or estimated piece colour
@@ -255,10 +255,10 @@ pool-32,2,lk_7a2087d7464bdab8,lk_a7bc2ba7688e446c,lk_a7bc2ba7688e446c,reference-
 pool-32,3,lk_20934db238e41f72,lk_024ba0b609f16d4c,lk_024ba0b609f16d4c,reference-cache drift only,measured or estimated piece colour
 pool-32,4,lk_51087cabc1646513,lk_0558f518e5c37444,lk_0558f518e5c37444,reference-cache drift only,measured or estimated piece colour
 pool-33,0,lk_01fe0bfa5e027ab4,lk_53a6b691882b17b5,lk_53a6b691882b17b5,reference-cache drift only,measured or estimated piece colour
-pool-33,1,lk_0669caf9f52106f3,lk_e0adac763d2b97f5,lk_b83ccb18bead67dc,reference-cache drift and port,"cut or wardrobe draw, household coat and jersey values"
-pool-33,2,lk_7a45754c1132fdaa,lk_a584b99234592c36,lk_998e9be1d432dad1,reference-cache drift and port,"cut or wardrobe draw, household coat and jersey values"
-pool-33,3,lk_bd8a02d0809d96ad,lk_15a442e99fd79cdc,lk_64bebc1f9e0a1a40,reference-cache drift and port,"cut or wardrobe draw, household coat and jersey values"
-pool-33,4,lk_526fa0d6b31c09bb,lk_98d2dfce3d19674b,lk_336dfbfa6f55f6b6,reference-cache drift and port,"cut or wardrobe draw, household coat and jersey values"
+pool-33,1,lk_0669caf9f52106f3,lk_e0adac763d2b97f5,lk_3773ea09995b4bc8,reference-cache drift and port,"cut or wardrobe draw, household coat and jersey values; calibrated light coat, knit and lower garments"
+pool-33,2,lk_7a45754c1132fdaa,lk_a584b99234592c36,lk_fcdf5b38b1b279de,reference-cache drift and port,"cut or wardrobe draw, household coat and jersey values; calibrated light coat, knit and lower garments"
+pool-33,3,lk_bd8a02d0809d96ad,lk_15a442e99fd79cdc,lk_4c07b9cc43039b12,reference-cache drift and port,"cut or wardrobe draw, household coat and jersey values; calibrated light coat, knit and lower garments"
+pool-33,4,lk_526fa0d6b31c09bb,lk_98d2dfce3d19674b,lk_1a1edfd2cd75d147,reference-cache drift and port,"cut or wardrobe draw, household coat and jersey values; calibrated light coat, knit and lower garments"
 pool-34,0,lk_da908a1d922a8d91,lk_659fd43a24a838c6,lk_659fd43a24a838c6,reference-cache drift only,measured or estimated piece colour
 pool-34,2,lk_3ee290316471b460,lk_32daf92d428f99e5,lk_32daf92d428f99e5,reference-cache drift only,measured or estimated piece colour
 pool-34,3,lk_a0f3dacf15bcccf2,lk_96f03b74ead899d0,lk_96f03b74ead899d0,reference-cache drift only,measured or estimated piece colour
@@ -268,10 +268,10 @@ pool-35,2,lk_e4d27c88971a7655,lk_dff7a7340bfcf75c,lk_dff7a7340bfcf75c,reference-
 pool-35,3,lk_97c312be87290722,lk_00309851014d7c5e,lk_00309851014d7c5e,reference-cache drift only,measured or estimated piece colour
 pool-35,4,lk_eb67e1a30c79ac37,lk_fafab8aa0940c9cb,lk_fafab8aa0940c9cb,reference-cache drift only,measured or estimated piece colour
 pool-36,0,lk_cf1c3b1bc4ea595d,lk_3a9f2f579b3d73c1,lk_3a9f2f579b3d73c1,reference-cache drift only,measured or estimated piece colour
-pool-36,1,lk_f800c1b6a3a54805,lk_e0be877531ec60d7,lk_37919e2b7abcfa52,reference-cache drift and port,"cut or wardrobe draw, household coat and jersey values"
-pool-36,2,lk_d17e09983ce71866,lk_f29c6757dfc6bce5,lk_d79f483febc64fd6,reference-cache drift and port,"cut or wardrobe draw, household coat and jersey values"
-pool-36,3,lk_ad820ac25bdef562,lk_0c66f17046539b6a,lk_c432a124070f8591,reference-cache drift and port,"cut or wardrobe draw, household coat and jersey values"
-pool-36,4,lk_33c1a9813ded517a,lk_bab98930c91c381e,lk_83af22810939ea6a,reference-cache drift and port,"cut or wardrobe draw, household coat and jersey values"
+pool-36,1,lk_f800c1b6a3a54805,lk_e0be877531ec60d7,lk_34f11fb02c3a6ec9,reference-cache drift and port,"cut or wardrobe draw, household coat and jersey values; calibrated light coat, knit and lower garments"
+pool-36,2,lk_d17e09983ce71866,lk_f29c6757dfc6bce5,lk_79621f799ed488bc,reference-cache drift and port,"cut or wardrobe draw, household coat and jersey values; calibrated light coat, knit and lower garments"
+pool-36,3,lk_ad820ac25bdef562,lk_0c66f17046539b6a,lk_1d534089353204d8,reference-cache drift and port,"cut or wardrobe draw, household coat and jersey values; calibrated light coat, knit and lower garments"
+pool-36,4,lk_33c1a9813ded517a,lk_bab98930c91c381e,lk_ad44e37cbf9f3237,reference-cache drift and port,"cut or wardrobe draw, household coat and jersey values; calibrated light coat, knit and lower garments"
 pool-37,0,lk_42e36e71ed679bdc,lk_5049d2a2324d6e2d,lk_5049d2a2324d6e2d,reference-cache drift only,measured or estimated piece colour
 pool-37,1,lk_1aed46e785b3e9b9,lk_1d098d1a3d18a356,lk_717086478fbe40ea,reference-cache drift and port,"cut or wardrobe draw, household coat and jersey values"
 pool-37,2,lk_29ee8e4b9ab4d47a,lk_f8e44c763f40c6bd,lk_e09557875b33f572,reference-cache drift and port,"cut or wardrobe draw, household coat and jersey values"
@@ -292,20 +292,20 @@ pool-40,3,lk_b529684d03ac49bb,lk_b529684d03ac49bb,lk_4bb8b114ba89fb1a,port only,
 pool-40,4,lk_e6a5337e45178784,lk_e6a5337e45178784,lk_4675cc060dce6964,port only,household coat and jersey values
 pool-41,0,lk_9d05b160e43793c2,lk_d85d32cf891e064c,lk_d85d32cf891e064c,reference-cache drift only,measured or estimated piece colour
 pool-42,0,lk_73d395f051dfe689,lk_c59678b2587a9f14,lk_c59678b2587a9f14,reference-cache drift only,measured or estimated piece colour
-pool-42,1,lk_030dbaaad64ba4b8,lk_54d12a841df34485,lk_75667f17ca1589e7,reference-cache drift and port,"cut or wardrobe draw, household coat and jersey values"
-pool-42,2,lk_7d975f85333fc7dc,lk_6c907ba3ee93327a,lk_ad50cc05bfcd13ae,reference-cache drift and port,"cut or wardrobe draw, household coat and jersey values"
-pool-42,3,lk_33fcbb5c698c8cc8,lk_33fcbb5c698c8cc8,lk_adc23eda453dc27f,port only,"cut or wardrobe draw, household coat and jersey values"
-pool-42,4,lk_2b636f97d1ec8217,lk_2b636f97d1ec8217,lk_9b2bdd5295789beb,port only,"cut or wardrobe draw, household coat and jersey values"
+pool-42,1,lk_030dbaaad64ba4b8,lk_54d12a841df34485,lk_0644b61010684c23,reference-cache drift and port,"cut or wardrobe draw, household coat and jersey values; calibrated light coat, knit and lower garments"
+pool-42,2,lk_7d975f85333fc7dc,lk_6c907ba3ee93327a,lk_49804e7c05224727,reference-cache drift and port,"cut or wardrobe draw, household coat and jersey values; calibrated light coat, knit and lower garments"
+pool-42,3,lk_33fcbb5c698c8cc8,lk_33fcbb5c698c8cc8,lk_8c29e229138c7b26,port only,"cut or wardrobe draw, household coat and jersey values; calibrated light coat, knit and lower garments"
+pool-42,4,lk_2b636f97d1ec8217,lk_2b636f97d1ec8217,lk_1fc1c6df08e463c8,port only,"cut or wardrobe draw, household coat and jersey values; calibrated light coat, knit and lower garments"
 pool-43,0,lk_76b7dde7a73e972b,lk_345002c8dc8b6d8f,lk_345002c8dc8b6d8f,reference-cache drift only,measured or estimated piece colour
 pool-43,1,lk_dd07f9ce0bce9e5f,lk_52962baee9d9d5ee,lk_52962baee9d9d5ee,reference-cache drift only,measured or estimated piece colour
 pool-43,2,lk_ed46863f5abe5d4c,lk_c22bc9e5719d1026,lk_23ea75f7db6f82fb,reference-cache drift and port,household coat and jersey values
 pool-43,3,lk_9827873778f913ce,lk_3d914304d3143000,lk_11f444c8f9c93049,reference-cache drift and port,household coat and jersey values
 pool-43,4,lk_6428ef5e2af38033,lk_c97498c9e2902ba8,lk_8e026f1509042b62,reference-cache drift and port,household coat and jersey values
 pool-44,0,lk_392fa385846a5230,lk_a20f60fd4b47929c,lk_a20f60fd4b47929c,reference-cache drift only,measured or estimated piece colour
-pool-44,1,lk_3b2d16cb93ed5d5e,lk_a8df4b92dd2151db,lk_12d800c3d0633037,reference-cache drift and port,"hair fit for garment, cut or wardrobe draw, household coat and jersey values"
-pool-44,2,lk_34e976100925a580,lk_f955d96d0ab0fa62,lk_68e7975d0115faff,reference-cache drift and port,"hair fit for garment, cut or wardrobe draw, household coat and jersey values"
-pool-44,3,lk_2c8a1c7c49663e11,lk_2c8a1c7c49663e11,lk_8abc52680a0a49f1,port only,"cut or wardrobe draw, household coat and jersey values"
-pool-44,4,lk_d763b8beb338b8ca,lk_d763b8beb338b8ca,lk_ccc167390284f781,port only,"cut or wardrobe draw, household coat and jersey values"
+pool-44,1,lk_3b2d16cb93ed5d5e,lk_a8df4b92dd2151db,lk_73bf07b3aca9fcae,reference-cache drift and port,"hair fit for garment, cut or wardrobe draw, household coat and jersey values; calibrated light coat, knit and lower garments"
+pool-44,2,lk_34e976100925a580,lk_f955d96d0ab0fa62,lk_9491e72612749da0,reference-cache drift and port,"hair fit for garment, cut or wardrobe draw, household coat and jersey values; calibrated light coat, knit and lower garments"
+pool-44,3,lk_2c8a1c7c49663e11,lk_2c8a1c7c49663e11,lk_835cdc72ddc188ab,port only,"cut or wardrobe draw, household coat and jersey values; calibrated light coat, knit and lower garments"
+pool-44,4,lk_d763b8beb338b8ca,lk_d763b8beb338b8ca,lk_e01cb1d13746f6fd,port only,"cut or wardrobe draw, household coat and jersey values; calibrated light coat, knit and lower garments"
 pool-45,0,lk_99c56d35ca4e1946,lk_983cf215a969315c,lk_983cf215a969315c,reference-cache drift only,measured or estimated piece colour
 pool-45,2,lk_7a749f8440f20e1c,lk_7a749f8440f20e1c,lk_1a9f1b8643403c45,port only,"cut or wardrobe draw, household coat and jersey values"
 pool-45,3,lk_c57e2d05340262bc,lk_c57e2d05340262bc,lk_2376bc093501ac36,port only,"cut or wardrobe draw, household coat and jersey values"
@@ -324,8 +324,8 @@ pool-48,2,lk_81ed26a719b090e7,lk_459febe710a7f73f,lk_459febe710a7f73f,reference-
 pool-48,3,lk_4b4ee24bf978097d,lk_8afd044e5243cdae,lk_8afd044e5243cdae,reference-cache drift only,measured or estimated piece colour
 pool-48,4,lk_5460c9c44ac6cd19,lk_2d384313fff10afa,lk_2d384313fff10afa,reference-cache drift only,measured or estimated piece colour
 pool-49,0,lk_4eb98bd8d45b9c63,lk_04f723b649a5ab49,lk_04f723b649a5ab49,reference-cache drift only,measured or estimated piece colour
-pool-49,3,lk_3b4babb8a150026f,lk_d7f279bb774271e0,lk_b39307ba40c28713,reference-cache drift and port,household coat and jersey values
-pool-49,4,lk_fb21a52aaae36c01,lk_27d62c3adcd7e18c,lk_739e1fbad7f031fd,reference-cache drift and port,household coat and jersey values
+pool-49,3,lk_3b4babb8a150026f,lk_d7f279bb774271e0,lk_b8997e6ac93b6276,reference-cache drift and port,"household coat and jersey values; calibrated light coat, knit and lower garments"
+pool-49,4,lk_fb21a52aaae36c01,lk_27d62c3adcd7e18c,lk_a06b9088eda418f7,reference-cache drift and port,"household coat and jersey values; calibrated light coat, knit and lower garments"
 pool-50,0,lk_ff8bd7692535e049,lk_8f6898adf6a8b84b,lk_8f6898adf6a8b84b,reference-cache drift only,measured or estimated piece colour
 pool-50,1,lk_c83a203a5e3baef3,lk_5aeac5ec4cc6daa6,lk_5aeac5ec4cc6daa6,reference-cache drift only,measured or estimated piece colour
 pool-50,2,lk_a8e52a2fd43e73f3,lk_596a5727d9329570,lk_596a5727d9329570,reference-cache drift only,measured or estimated piece colour
@@ -344,8 +344,8 @@ pool-52,4,lk_f5f5740d16768e67,lk_6833f9ca02af1d67,lk_6833f9ca02af1d67,reference-
 pool-53,0,lk_6ea41d7f1efb99fc,lk_176e72e45b178736,lk_176e72e45b178736,reference-cache drift only,measured or estimated piece colour
 pool-53,1,lk_196a05f0e7bef968,lk_9422d3f0dcf69eb8,lk_9422d3f0dcf69eb8,reference-cache drift only,measured or estimated piece colour
 pool-53,2,lk_b9f6fea10552002a,lk_202d6cd72c0d33e4,lk_202d6cd72c0d33e4,reference-cache drift only,measured or estimated piece colour
-pool-53,3,lk_4651bb2fdd625146,lk_4651bb2fdd625146,lk_995e33b89cd4a5b4,port only,"cut or wardrobe draw, household coat and jersey values"
-pool-53,4,lk_58bd5eefab6f8509,lk_58bd5eefab6f8509,lk_53a6cc768427fb20,port only,"cut or wardrobe draw, household coat and jersey values"
+pool-53,3,lk_4651bb2fdd625146,lk_4651bb2fdd625146,lk_5743483d389ae5dd,port only,"cut or wardrobe draw, household coat and jersey values; calibrated light coat, knit and lower garments"
+pool-53,4,lk_58bd5eefab6f8509,lk_58bd5eefab6f8509,lk_4cd0f3f013e91c7f,port only,"cut or wardrobe draw, household coat and jersey values; calibrated light coat, knit and lower garments"
 pool-54,0,lk_7a66d00fc571ef40,lk_e39e7934c3ba73c7,lk_e39e7934c3ba73c7,reference-cache drift only,measured or estimated piece colour
 pool-54,1,lk_7edc5330e94db8b1,lk_856d66457c9193ac,lk_ebec38aee279cd4d,reference-cache drift and port,"cut or wardrobe draw, household coat and jersey values"
 pool-54,2,lk_dbe310f9e46a7080,lk_dbe310f9e46a7080,lk_c171219b92ae866d,port only,"cut or wardrobe draw, household coat and jersey values"
@@ -361,8 +361,8 @@ pool-56,4,lk_abd0ddb41aff01e3,lk_abd0ddb41aff01e3,lk_12bcb86f5bddb25e,port only,
 pool-57,0,lk_be9bbd75d47c159b,lk_ecf74362de17f985,lk_ecf74362de17f985,reference-cache drift only,measured or estimated piece colour
 pool-57,1,lk_8b0b90752290b8a4,lk_4be0bafa7096913e,lk_4be0bafa7096913e,reference-cache drift only,measured or estimated piece colour
 pool-57,2,lk_82240c5327f772aa,lk_0db79a65de2b4ed0,lk_0db79a65de2b4ed0,reference-cache drift only,measured or estimated piece colour
-pool-57,3,lk_5be224bf900543e9,lk_e734bafa3ddd65ba,lk_d36ac9613818b7ad,reference-cache drift and port,"cut or wardrobe draw, household coat and jersey values"
-pool-57,4,lk_81276bb8b30c9029,lk_95403a618cb81e92,lk_16f0663353ef7179,reference-cache drift and port,"cut or wardrobe draw, household coat and jersey values"
+pool-57,3,lk_5be224bf900543e9,lk_e734bafa3ddd65ba,lk_0e082faebf7ee7b8,reference-cache drift and port,"cut or wardrobe draw, household coat and jersey values; calibrated light coat, knit and lower garments"
+pool-57,4,lk_81276bb8b30c9029,lk_95403a618cb81e92,lk_51f66db8fc4cb822,reference-cache drift and port,"cut or wardrobe draw, household coat and jersey values; calibrated light coat, knit and lower garments"
 pool-58,0,lk_354c08ae8452d185,lk_d14464746319035c,lk_d14464746319035c,reference-cache drift only,measured or estimated piece colour
 pool-58,1,lk_254bcb9215f58d0b,lk_c00c6d6f66cf9a01,lk_c00c6d6f66cf9a01,reference-cache drift only,measured or estimated piece colour
 pool-58,2,lk_0122a44543fe984b,lk_fe31164b5b4e229f,lk_fe31164b5b4e229f,reference-cache drift only,measured or estimated piece colour
@@ -393,18 +393,18 @@ pool-64,4,lk_1b331b0aed59bf78,lk_3a098755f69de40f,lk_3a098755f69de40f,reference-
 pool-65,0,lk_2b0f0df72dc1bc1f,lk_5303621a68c1c260,lk_5303621a68c1c260,reference-cache drift only,measured or estimated piece colour
 pool-65,1,lk_537feb43d2144a4f,lk_d470663873fdf652,lk_d470663873fdf652,reference-cache drift only,measured or estimated piece colour
 pool-65,2,lk_1e82edc7b91864b6,lk_5dbe726a8e8e1a77,lk_5dbe726a8e8e1a77,reference-cache drift only,measured or estimated piece colour
-pool-65,3,lk_60d9ab4b9b72b4ba,lk_60d9ab4b9b72b4ba,lk_1a35b685dd9822e1,port only,"cut or wardrobe draw, household coat and jersey values"
-pool-65,4,lk_b7a8eabf39fa9ad0,lk_b7a8eabf39fa9ad0,lk_ab93a3761bb9725d,port only,"cut or wardrobe draw, household coat and jersey values"
+pool-65,3,lk_60d9ab4b9b72b4ba,lk_60d9ab4b9b72b4ba,lk_9b5bdfded7278261,port only,"cut or wardrobe draw, household coat and jersey values; calibrated light coat, knit and lower garments"
+pool-65,4,lk_b7a8eabf39fa9ad0,lk_b7a8eabf39fa9ad0,lk_2d7b5b279eacf903,port only,"cut or wardrobe draw, household coat and jersey values; calibrated light coat, knit and lower garments"
 pool-66,0,lk_1eeaa67121618fd3,lk_c3e75723c9deb31e,lk_c3e75723c9deb31e,reference-cache drift only,measured or estimated piece colour
 pool-66,1,lk_cba83faaa68c166e,lk_b41382e77bc068c6,lk_b41382e77bc068c6,reference-cache drift only,measured or estimated piece colour
 pool-66,2,lk_9b14e7ef7a92b220,lk_aaa5f48da0007cbb,lk_aaa5f48da0007cbb,reference-cache drift only,measured or estimated piece colour
 pool-66,3,lk_4114f4eba4c24386,lk_b6fa2ba40af67e7f,lk_b6fa2ba40af67e7f,reference-cache drift only,measured or estimated piece colour
 pool-66,4,lk_3e605df4ac3945e5,lk_451d87ece68047d4,lk_451d87ece68047d4,reference-cache drift only,measured or estimated piece colour
 pool-67,0,lk_7f06116badbfa38e,lk_4367901cc266e42e,lk_4367901cc266e42e,reference-cache drift only,measured or estimated piece colour
-pool-67,1,lk_ddf11ac43f58927e,lk_1d5a74d7adbefff9,lk_9eae4063d78daa8a,reference-cache drift and port,"cut or wardrobe draw, household coat and jersey values"
-pool-67,2,lk_1a35c444e8ed2e2b,lk_247d23c6211ad613,lk_b97c3f3993e8e41f,reference-cache drift and port,household coat and jersey values
-pool-67,3,lk_457bffa40a93a98a,lk_06619a463ef0ff21,lk_4aaf70aea2756fae,reference-cache drift and port,household coat and jersey values
-pool-67,4,lk_5018e76734d0668a,lk_9bb405d724e01e37,lk_8ea0fd2ad4cda216,reference-cache drift and port,household coat and jersey values
+pool-67,1,lk_ddf11ac43f58927e,lk_1d5a74d7adbefff9,lk_2c347785db73e2a2,reference-cache drift and port,"cut or wardrobe draw, household coat and jersey values; calibrated light coat, knit and lower garments"
+pool-67,2,lk_1a35c444e8ed2e2b,lk_247d23c6211ad613,lk_8ea9e2744a881b59,reference-cache drift and port,"household coat and jersey values; calibrated light coat, knit and lower garments"
+pool-67,3,lk_457bffa40a93a98a,lk_06619a463ef0ff21,lk_3a68cfe86e8427e3,reference-cache drift and port,"household coat and jersey values; calibrated light coat, knit and lower garments"
+pool-67,4,lk_5018e76734d0668a,lk_9bb405d724e01e37,lk_a8a4a84d4708759e,reference-cache drift and port,"household coat and jersey values; calibrated light coat, knit and lower garments"
 pool-68,0,lk_ebff531af23c38a2,lk_37c9159859c309a5,lk_37c9159859c309a5,reference-cache drift only,measured or estimated piece colour
 pool-68,1,lk_c873f2b020b3881a,lk_1e6ab21dc62f3cd6,lk_1e6ab21dc62f3cd6,reference-cache drift only,measured or estimated piece colour
 pool-68,2,lk_76ed51510bee4d11,lk_ea17fc9bb5ccfb76,lk_ea17fc9bb5ccfb76,reference-cache drift only,measured or estimated piece colour
@@ -412,8 +412,8 @@ pool-68,3,lk_6014e5dbc17adffc,lk_1a13a26c2d72dccc,lk_1a13a26c2d72dccc,reference-
 pool-68,4,lk_3dbc40b0f9ebfb97,lk_010616f489c1969d,lk_010616f489c1969d,reference-cache drift only,measured or estimated piece colour
 pool-69,1,lk_2faec8e69217f0ef,lk_2faec8e69217f0ef,lk_98e54e69da48d487,port only,"cut or wardrobe draw, measured or estimated piece colour"
 pool-69,2,lk_c48ae2f9179b1230,lk_c48ae2f9179b1230,lk_da72f200281be502,port only,"cut or wardrobe draw, measured or estimated piece colour"
-pool-69,3,lk_d37d947366cea898,lk_d37d947366cea898,lk_8369939eec1c1c12,port only,"cut or wardrobe draw, household coat and jersey values"
-pool-69,4,lk_9689cfa4f359fb2c,lk_9689cfa4f359fb2c,lk_18eade091b067aa9,port only,"cut or wardrobe draw, household coat and jersey values"
+pool-69,3,lk_d37d947366cea898,lk_d37d947366cea898,lk_55fb591131d453b1,port only,"cut or wardrobe draw, household coat and jersey values; calibrated light coat, knit and lower garments"
+pool-69,4,lk_9689cfa4f359fb2c,lk_9689cfa4f359fb2c,lk_a5a4bf566f964e3b,port only,"cut or wardrobe draw, household coat and jersey values; calibrated light coat, knit and lower garments"
 pool-70,0,lk_f38e6a2add3a000a,lk_fe95440508a97484,lk_fe95440508a97484,reference-cache drift only,measured or estimated piece colour
 pool-70,1,lk_858ed3cac6a5c33a,lk_059fabe04b7d1c48,lk_059fabe04b7d1c48,reference-cache drift only,measured or estimated piece colour
 pool-70,2,lk_d550f3312d3ff161,lk_5d704b5f596cca7e,lk_5d704b5f596cca7e,reference-cache drift only,measured or estimated piece colour
@@ -460,8 +460,8 @@ pool-78,4,lk_1243766e2d6b719c,lk_373dc115bd97acf0,lk_373dc115bd97acf0,reference-
 pool-79,0,lk_a52f6368d1d70d33,lk_373f002cf1bf7c66,lk_373f002cf1bf7c66,reference-cache drift only,measured or estimated piece colour
 pool-79,1,lk_8b43de9c0238c81d,lk_2005207486075946,lk_2005207486075946,reference-cache drift only,measured or estimated piece colour
 pool-79,2,lk_fc1099938a02df3e,lk_614b2161a7464b29,lk_614b2161a7464b29,reference-cache drift only,measured or estimated piece colour
-pool-79,3,lk_e9019d95b99a5272,lk_4c51605d332021b5,lk_d65f3abe7d10ce3c,reference-cache drift and port,household coat and jersey values
-pool-79,4,lk_b2d0fc34418ecf94,lk_ca8d88dd9b0c9003,lk_1af74098d93c8a97,reference-cache drift and port,household coat and jersey values
+pool-79,3,lk_e9019d95b99a5272,lk_4c51605d332021b5,lk_d9e7a743c8176b3e,reference-cache drift and port,"household coat and jersey values; calibrated light coat, knit and lower garments"
+pool-79,4,lk_b2d0fc34418ecf94,lk_ca8d88dd9b0c9003,lk_1835f9c98005be06,reference-cache drift and port,"household coat and jersey values; calibrated light coat, knit and lower garments"
 pool-80,0,lk_fbf79e63ec36aee6,lk_2dd9586542206493,lk_2dd9586542206493,reference-cache drift only,measured or estimated piece colour
 pool-80,1,lk_dd0924ad93bbd8b1,lk_6a26e0269f4c1f9c,lk_6a26e0269f4c1f9c,reference-cache drift only,measured or estimated piece colour
 pool-80,2,lk_77425bdcc3f4dac9,lk_87e3ad8833530328,lk_87e3ad8833530328,reference-cache drift only,measured or estimated piece colour
@@ -484,18 +484,18 @@ pool-84,4,lk_4086b1c9ca83eee0,lk_13ba7d9e7cee0197,lk_13ba7d9e7cee0197,reference-
 pool-85,0,lk_045d97b4acc4cab7,lk_e5f8e7a29d5a47c7,lk_e5f8e7a29d5a47c7,reference-cache drift only,measured or estimated piece colour
 pool-85,1,lk_aed7c3ef81604a49,lk_aed7c3ef81604a49,lk_b5cfac35e7da33a1,port only,"cut or wardrobe draw, measured or estimated piece colour"
 pool-85,2,lk_843478df6b618868,lk_843478df6b618868,lk_4a22dc4ad2fc079b,port only,"cut or wardrobe draw, measured or estimated piece colour"
-pool-85,3,lk_ea613fb624961820,lk_17cf8882a9abe5d8,lk_a15b2b1c403ba18f,reference-cache drift and port,household coat and jersey values
-pool-85,4,lk_3b8966a079f84e73,lk_48549d26559d0af2,lk_63bc65ce08d76df3,reference-cache drift and port,household coat and jersey values
+pool-85,3,lk_ea613fb624961820,lk_17cf8882a9abe5d8,lk_54bd09fd6379b209,reference-cache drift and port,"household coat and jersey values; calibrated light coat, knit and lower garments"
+pool-85,4,lk_3b8966a079f84e73,lk_48549d26559d0af2,lk_1bbe5ed0ed46b4b8,reference-cache drift and port,"household coat and jersey values; calibrated light coat, knit and lower garments"
 pool-86,0,lk_cda71e363388c9ff,lk_9bae0e26cb6544e7,lk_9bae0e26cb6544e7,reference-cache drift only,measured or estimated piece colour
 pool-86,1,lk_96ec2cfafc4b69cc,lk_e46a3ec804239515,lk_e46a3ec804239515,reference-cache drift only,measured or estimated piece colour
 pool-86,2,lk_524abffc6e262744,lk_009798d6178024a0,lk_009798d6178024a0,reference-cache drift only,measured or estimated piece colour
 pool-86,3,lk_0fe68ad11640d19f,lk_535e14ed88bb7591,lk_535e14ed88bb7591,reference-cache drift only,measured or estimated piece colour
 pool-86,4,lk_d8a52bfa9f58c283,lk_b740c52f644c8e13,lk_b740c52f644c8e13,reference-cache drift only,measured or estimated piece colour
 pool-87,0,lk_9b191469b2d50d65,lk_3fa059ffb5aae1de,lk_3fa059ffb5aae1de,reference-cache drift only,measured or estimated piece colour
-pool-87,1,lk_9bb517503f630b96,lk_83b8d749c8e77d7a,lk_a0d67d9dced86e3d,reference-cache drift and port,"cut or wardrobe draw, household coat and jersey values"
-pool-87,2,lk_3fb6914173231b83,lk_856f824a1229daa6,lk_156a4eeca2927afc,reference-cache drift and port,"cut or wardrobe draw, household coat and jersey values"
-pool-87,3,lk_872773dad7e2de7f,lk_d3e072dd24655cc5,lk_3381d74ce147db64,reference-cache drift and port,"cut or wardrobe draw, household coat and jersey values"
-pool-87,4,lk_81fd53651cd8e2fa,lk_c6a08ec91f74f3c1,lk_72cc970d9e64fe64,reference-cache drift and port,"cut or wardrobe draw, household coat and jersey values"
+pool-87,1,lk_9bb517503f630b96,lk_83b8d749c8e77d7a,lk_6846829986055a58,reference-cache drift and port,"cut or wardrobe draw, household coat and jersey values; calibrated light coat, knit and lower garments"
+pool-87,2,lk_3fb6914173231b83,lk_856f824a1229daa6,lk_037c90490ab710cb,reference-cache drift and port,"cut or wardrobe draw, household coat and jersey values; calibrated light coat, knit and lower garments"
+pool-87,3,lk_872773dad7e2de7f,lk_d3e072dd24655cc5,lk_87528fea7b5d7b22,reference-cache drift and port,"cut or wardrobe draw, household coat and jersey values; calibrated light coat, knit and lower garments"
+pool-87,4,lk_81fd53651cd8e2fa,lk_c6a08ec91f74f3c1,lk_cf77fd9df1079481,reference-cache drift and port,"cut or wardrobe draw, household coat and jersey values; calibrated light coat, knit and lower garments"
 pool-88,0,lk_4b4059c13cc94d00,lk_fb5bd89570884b84,lk_fb5bd89570884b84,reference-cache drift only,measured or estimated piece colour
 pool-88,1,lk_3b02bc7c135f19d1,lk_8add054a95ed4c64,lk_8add054a95ed4c64,reference-cache drift only,measured or estimated piece colour
 pool-88,2,lk_55c16f3604ae9145,lk_31b4657f07072f5f,lk_31b4657f07072f5f,reference-cache drift only,measured or estimated piece colour
@@ -552,10 +552,10 @@ pool-102,2,lk_e5c98c6c1381bf93,lk_e5794917980cf2a7,lk_e5794917980cf2a7,reference
 pool-102,3,lk_17ea6c86cdb0ab43,lk_698c31113a8e3e3a,lk_698c31113a8e3e3a,reference-cache drift only,measured or estimated piece colour
 pool-102,4,lk_9d5d85776835beba,lk_3d6510f3f40e95e4,lk_3d6510f3f40e95e4,reference-cache drift only,measured or estimated piece colour
 pool-103,0,lk_f47584a2ed797ea3,lk_097face82212a275,lk_097face82212a275,reference-cache drift only,measured or estimated piece colour
-pool-103,1,lk_0efd6510ff0652fa,lk_44b0dc302d057601,lk_31107d4bc948bb72,reference-cache drift and port,"cut or wardrobe draw, household coat and jersey values"
-pool-103,2,lk_46034cac5da089c4,lk_a9b3a9281231be12,lk_e3998a74a9dc8fba,reference-cache drift and port,"cut or wardrobe draw, household coat and jersey values"
-pool-103,3,lk_c0ca6c8c85deee7f,lk_c0ca6c8c85deee7f,lk_5a3f69216afde31a,port only,household coat and jersey values
-pool-103,4,lk_eb3559076531aeff,lk_eb3559076531aeff,lk_8244fe6fbd788098,port only,household coat and jersey values
+pool-103,1,lk_0efd6510ff0652fa,lk_44b0dc302d057601,lk_08fac0f18619a9f8,reference-cache drift and port,"cut or wardrobe draw, household coat and jersey values; calibrated light coat, knit and lower garments"
+pool-103,2,lk_46034cac5da089c4,lk_a9b3a9281231be12,lk_369b4ecb968cbd77,reference-cache drift and port,"cut or wardrobe draw, household coat and jersey values; calibrated light coat, knit and lower garments"
+pool-103,3,lk_c0ca6c8c85deee7f,lk_c0ca6c8c85deee7f,lk_8499044017ac99bd,port only,"household coat and jersey values; calibrated light coat, knit and lower garments"
+pool-103,4,lk_eb3559076531aeff,lk_eb3559076531aeff,lk_6ad4df89aa5d229c,port only,"household coat and jersey values; calibrated light coat, knit and lower garments"
 pool-104,0,lk_4f199f4558aba7fc,lk_0de58e519fc01e3b,lk_0de58e519fc01e3b,reference-cache drift only,measured or estimated piece colour
 pool-104,3,lk_2a01721a54e2be85,lk_f0ef499342312bb3,lk_f0ef499342312bb3,reference-cache drift only,measured or estimated piece colour
 pool-104,4,lk_e6f36143858eb4c3,lk_61d538fddd820a73,lk_61d538fddd820a73,reference-cache drift only,measured or estimated piece colour
@@ -571,8 +571,8 @@ pool-110,4,lk_c76cfb6b5c860e81,lk_bb51e757c5604388,lk_bb51e757c5604388,reference
 pool-111,0,lk_c7c7c69e0742a1f4,lk_09738ae63d892b48,lk_09738ae63d892b48,reference-cache drift only,measured or estimated piece colour
 pool-111,1,lk_d0655805589db71d,lk_4caaa410ca09848c,lk_4caaa410ca09848c,reference-cache drift only,measured or estimated piece colour
 pool-111,2,lk_bbb4b8fbac44aa68,lk_62e26dc4ecc8332b,lk_62e26dc4ecc8332b,reference-cache drift only,measured or estimated piece colour
-pool-111,3,lk_0412c6ff6422cb99,lk_9ec2cecfc6952063,lk_8976510fcfaac7c3,reference-cache drift and port,"cut or wardrobe draw, household coat and jersey values"
-pool-111,4,lk_ea28ebffe117d561,lk_4626f7949308065c,lk_48439aee4c8127d9,reference-cache drift and port,"cut or wardrobe draw, household coat and jersey values"
+pool-111,3,lk_0412c6ff6422cb99,lk_9ec2cecfc6952063,lk_917a99d334861fbf,reference-cache drift and port,"cut or wardrobe draw, household coat and jersey values; calibrated light coat, knit and lower garments"
+pool-111,4,lk_ea28ebffe117d561,lk_4626f7949308065c,lk_263342f0c8ec791b,reference-cache drift and port,"cut or wardrobe draw, household coat and jersey values; calibrated light coat, knit and lower garments"
 pool-112,0,lk_ab982f91a63dc3f6,lk_f0e43b964329c3a9,lk_f0e43b964329c3a9,reference-cache drift only,measured or estimated piece colour
 pool-112,1,lk_d2958901ac33b958,lk_03209cf7dc7ea988,lk_03209cf7dc7ea988,reference-cache drift only,measured or estimated piece colour
 pool-112,2,lk_5c8b19f437d12a84,lk_6a38f3cee6b4261e,lk_6a38f3cee6b4261e,reference-cache drift only,measured or estimated piece colour
@@ -580,9 +580,9 @@ pool-112,3,lk_115109f4401f8341,lk_c1de82ccbbd3572e,lk_c1de82ccbbd3572e,reference
 pool-112,4,lk_e1cedbf9881b6691,lk_e78e8d935a5f75e6,lk_e78e8d935a5f75e6,reference-cache drift only,measured or estimated piece colour
 pool-113,0,lk_4eb7e6e7daaf2821,lk_3be00b0653116ab4,lk_3be00b0653116ab4,reference-cache drift only,measured or estimated piece colour
 pool-113,1,lk_34357e6044abf79b,lk_34357e6044abf79b,lk_31eb5a0badc6147b,port only,"cut or wardrobe draw, measured or estimated piece colour"
-pool-113,2,lk_bac036da0676f118,lk_bac036da0676f118,lk_ebf2f1329926f18c,port only,"cut or wardrobe draw, household coat and jersey values"
-pool-113,3,lk_63e54dd30c09e6c0,lk_63e54dd30c09e6c0,lk_c35bf575e1838469,port only,"cut or wardrobe draw, household coat and jersey values"
-pool-113,4,lk_b042dbeddd33ca0a,lk_b042dbeddd33ca0a,lk_ed3c47cdffd47104,port only,"cut or wardrobe draw, household coat and jersey values"
+pool-113,2,lk_bac036da0676f118,lk_bac036da0676f118,lk_6558c4f19cda9962,port only,"cut or wardrobe draw, household coat and jersey values; calibrated light coat, knit and lower garments"
+pool-113,3,lk_63e54dd30c09e6c0,lk_63e54dd30c09e6c0,lk_f26aef452d48022c,port only,"cut or wardrobe draw, household coat and jersey values; calibrated light coat, knit and lower garments"
+pool-113,4,lk_b042dbeddd33ca0a,lk_b042dbeddd33ca0a,lk_df1358f0def1912a,port only,"cut or wardrobe draw, household coat and jersey values; calibrated light coat, knit and lower garments"
 pool-114,0,lk_2593dffcd023ba50,lk_97bd8eb1cc841649,lk_97bd8eb1cc841649,reference-cache drift only,measured or estimated piece colour
 pool-114,1,lk_354cd14320827ed5,lk_3fc952db2419be30,lk_3fc952db2419be30,reference-cache drift only,measured or estimated piece colour
 pool-114,2,lk_0ddde48c7e9bef33,lk_bf3102a4cb927b51,lk_bf3102a4cb927b51,reference-cache drift only,measured or estimated piece colour
@@ -612,10 +612,10 @@ pool-120,2,lk_33d0841e478583b1,lk_f74e281d4ac3752e,lk_f74e281d4ac3752e,reference
 pool-120,3,lk_6fe402b5b8087072,lk_5a10346f7cde22d9,lk_5a10346f7cde22d9,reference-cache drift only,measured or estimated piece colour
 pool-120,4,lk_2ebeaf001c97ac04,lk_f72e3cdfa3b0ad69,lk_f72e3cdfa3b0ad69,reference-cache drift only,measured or estimated piece colour
 pool-122,0,lk_4a788d5b33175301,lk_5ef83fa986a43cdd,lk_5ef83fa986a43cdd,reference-cache drift only,measured or estimated piece colour
-pool-122,1,lk_8f98d02ec943f9b5,lk_0856bf292535f174,lk_02341afea4b7a007,reference-cache drift and port,"hair fit for garment, cut or wardrobe draw, household coat and jersey values"
-pool-122,2,lk_ea79af0dbb4644c4,lk_ea79af0dbb4644c4,lk_9591bf0b631ab56b,port only,"cut or wardrobe draw, household coat and jersey values"
-pool-122,3,lk_31a67213b28617ba,lk_31a67213b28617ba,lk_bd4974149b2cb755,port only,"cut or wardrobe draw, household coat and jersey values"
-pool-122,4,lk_813e33a63158bfce,lk_813e33a63158bfce,lk_cdfa43ca8a90cbde,port only,"cut or wardrobe draw, household coat and jersey values"
+pool-122,1,lk_8f98d02ec943f9b5,lk_0856bf292535f174,lk_9a1b69e320090ad9,reference-cache drift and port,"hair fit for garment, cut or wardrobe draw, household coat and jersey values; calibrated light coat, knit and lower garments"
+pool-122,2,lk_ea79af0dbb4644c4,lk_ea79af0dbb4644c4,lk_d7f6cfa47529ff84,port only,"cut or wardrobe draw, household coat and jersey values; calibrated light coat, knit and lower garments"
+pool-122,3,lk_31a67213b28617ba,lk_31a67213b28617ba,lk_fc37d3f38b1b0450,port only,"cut or wardrobe draw, household coat and jersey values; calibrated light coat, knit and lower garments"
+pool-122,4,lk_813e33a63158bfce,lk_813e33a63158bfce,lk_794ed6023445bc25,port only,"cut or wardrobe draw, household coat and jersey values; calibrated light coat, knit and lower garments"
 pool-123,0,lk_030ecfd00eccabb8,lk_94132b204aeab558,lk_94132b204aeab558,reference-cache drift only,measured or estimated piece colour
 pool-123,2,lk_9270c9ff078d6b70,lk_9270c9ff078d6b70,lk_dff029920c66b2be,port only,"cut or wardrobe draw, household coat and jersey values"
 pool-123,3,lk_9abd1a17d0cb8b63,lk_9abd1a17d0cb8b63,lk_d74f053ec4f1af10,port only,"cut or wardrobe draw, household coat and jersey values"
@@ -635,13 +635,13 @@ pool-126,4,lk_cb3438504b902a82,lk_bf1d9e3387886778,lk_bf1d9e3387886778,reference
 pool-127,0,lk_174ccf1b981ba4e1,lk_d214d03147fd5ca3,lk_d214d03147fd5ca3,reference-cache drift only,measured or estimated piece colour
 pool-127,1,lk_ff595362763f3ba5,lk_ff595362763f3ba5,lk_0f74ea364845f9d4,port only,"cut or wardrobe draw, measured or estimated piece colour"
 pool-127,2,lk_2f5efa7d47f6d11e,lk_2f5efa7d47f6d11e,lk_46d1d429e20e81e2,port only,"cut or wardrobe draw, measured or estimated piece colour"
-pool-127,3,lk_f5e96c14b0119649,lk_1c71c92aa6f46032,lk_3f98b1792d6b0099,reference-cache drift and port,household coat and jersey values
-pool-127,4,lk_630d976eb24fd237,lk_540f26ae40043da8,lk_4cada922f3c45af3,reference-cache drift and port,household coat and jersey values
+pool-127,3,lk_f5e96c14b0119649,lk_1c71c92aa6f46032,lk_3fa3b811267604ed,reference-cache drift and port,"household coat and jersey values; calibrated light coat, knit and lower garments"
+pool-127,4,lk_630d976eb24fd237,lk_540f26ae40043da8,lk_db6e4ac7e51609a1,reference-cache drift and port,"household coat and jersey values; calibrated light coat, knit and lower garments"
 decor-0,-,lk_34489ae8fe4caa73,lk_c6af038bf6444bc3,lk_8b1e5d75bcea57b7,reference-cache drift and port,"hair fit for garment, cut or wardrobe draw, household coat and jersey values"
 decor-2,-,lk_28f2d8daa88531e1,lk_1e9e65a5fdb1d44f,lk_1e9e65a5fdb1d44f,reference-cache drift only,measured or estimated piece colour
 decor-3,-,lk_44f39db2476622e4,lk_44f39db2476622e4,lk_472efa36b439a4ff,port only,measured or estimated piece colour
 decor-4,-,lk_75d916ca5d4069e0,lk_387da5690a056933,lk_387da5690a056933,reference-cache drift only,measured or estimated piece colour
-decor-5,-,lk_d3050a056602c8a0,lk_631d7beb8aea66f3,lk_f274d413573e215f,reference-cache drift and port,household coat and jersey values
+decor-5,-,lk_d3050a056602c8a0,lk_631d7beb8aea66f3,lk_7e3891627bef7cee,reference-cache drift and port,"household coat and jersey values; calibrated light coat, knit and lower garments"
 decor-6,-,lk_93c5b2a2670ecd3a,lk_fc5a776cd99622cc,lk_fc5a776cd99622cc,reference-cache drift only,measured or estimated piece colour
 decor-7,-,lk_f13ad73d93f18730,lk_dc60112a1571b327,lk_dc60112a1571b327,reference-cache drift only,measured or estimated piece colour
 decor-8,-,lk_7fd8ddf23a24617b,lk_12eb0fc395957980,lk_12eb0fc395957980,reference-cache drift only,measured or estimated piece colour
@@ -651,10 +651,10 @@ decor-12,-,lk_3dae147791b8b353,lk_2ebc52d7573464bd,lk_2ebc52d7573464bd,reference
 decor-13,-,lk_b1c16eba15d9c7b2,lk_44742ec5fc5a5e4e,lk_44742ec5fc5a5e4e,reference-cache drift only,measured or estimated piece colour
 decor-16,-,lk_125c0966b3945ac1,lk_b562d24c3deb3c9d,lk_b562d24c3deb3c9d,reference-cache drift only,measured or estimated piece colour
 decor-18,-,lk_04083837653486ff,lk_7df9619f961c9e39,lk_7df9619f961c9e39,reference-cache drift only,measured or estimated piece colour
-decor-20,-,lk_8bb0534f7b253251,lk_8bb0534f7b253251,lk_a3b7051daf6694da,port only,household coat and jersey values
-decor-21,-,lk_7639f38752313309,lk_662702158c5a9d75,lk_843a1af70f0d2a2a,reference-cache drift and port,"cut or wardrobe draw, household coat and jersey values"
+decor-20,-,lk_8bb0534f7b253251,lk_8bb0534f7b253251,lk_c35db72bf2713fa1,port only,"household coat and jersey values; calibrated light coat, knit and lower garments"
+decor-21,-,lk_7639f38752313309,lk_662702158c5a9d75,lk_37494885acb5bf90,reference-cache drift and port,"cut or wardrobe draw, household coat and jersey values; calibrated light coat, knit and lower garments"
 decor-22,-,lk_bbd1b769d68f1889,lk_5720f898d44e0d76,lk_5720f898d44e0d76,reference-cache drift only,measured or estimated piece colour
-decor-23,-,lk_58e434254e39fc2b,lk_2d4385a3bdf9df9e,lk_1748c61b57320760,reference-cache drift and port,household coat and jersey values
+decor-23,-,lk_58e434254e39fc2b,lk_2d4385a3bdf9df9e,lk_a9f71193b37100e3,reference-cache drift and port,"household coat and jersey values; calibrated light coat, knit and lower garments"
 decor-24,-,lk_64c27bee387bdc2b,lk_944d4ee52da1e6d4,lk_944d4ee52da1e6d4,reference-cache drift only,measured or estimated piece colour
 decor-25,-,lk_341cdc6992b518b8,lk_95606f7f807c911a,lk_95606f7f807c911a,reference-cache drift only,measured or estimated piece colour
 decor-26,-,lk_e96a0af633586480,lk_d4a2505f6668b96a,lk_d4a2505f6668b96a,reference-cache drift only,measured or estimated piece colour
@@ -664,7 +664,7 @@ decor-29,-,lk_5e574bf500ea3000,lk_aec16ffaed46772c,lk_851a3ca91919778c,reference
 decor-30,-,lk_97d03a0d429ed62f,lk_d107d546a524ce71,lk_d107d546a524ce71,reference-cache drift only,measured or estimated piece colour
 decor-31,-,lk_0cabbabf272a364d,lk_c2c6b1d6770bd9db,lk_c2c6b1d6770bd9db,reference-cache drift only,measured or estimated piece colour
 decor-32,-,lk_962d250767ed4feb,lk_d82f3b80e8ab4e23,lk_d82f3b80e8ab4e23,reference-cache drift only,measured or estimated piece colour
-decor-33,-,lk_119f721890190c94,lk_9fa8f49a868be2b3,lk_144dc6722b205268,reference-cache drift and port,"cut or wardrobe draw, household coat and jersey values"
+decor-33,-,lk_119f721890190c94,lk_9fa8f49a868be2b3,lk_89d8f0b453049318,reference-cache drift and port,"cut or wardrobe draw, household coat and jersey values; calibrated light coat, knit and lower garments"
 decor-34,-,lk_a75a737f13d19c32,lk_2d38f2b5da0757a8,lk_2d38f2b5da0757a8,reference-cache drift only,measured or estimated piece colour
 decor-35,-,lk_fe987e283f8613ed,lk_8769164cd90b270f,lk_8769164cd90b270f,reference-cache drift only,measured or estimated piece colour
 decor-36,-,lk_70c5d0d82a892ab4,lk_d99952d5051ddb13,lk_d99952d5051ddb13,reference-cache drift only,measured or estimated piece colour
@@ -680,13 +680,13 @@ decor-48,-,lk_4e3b70f493228f62,lk_4fe206408a07e7c2,lk_4fe206408a07e7c2,reference
 decor-50,-,lk_001638104780d91b,lk_054a252f63587837,lk_054a252f63587837,reference-cache drift only,measured or estimated piece colour
 decor-52,-,lk_825405fd2cb7d4f9,lk_97f33e09a4f71137,lk_97f33e09a4f71137,reference-cache drift only,measured or estimated piece colour
 decor-53,-,lk_c4306e42dd640e75,lk_c4306e42dd640e75,lk_413abaf8f2a1fa19,port only,measured or estimated piece colour
-decor-55,-,lk_6328dc689d0451bc,lk_6328dc689d0451bc,lk_53979a0d63578bda,port only,"cut or wardrobe draw, household coat and jersey values"
+decor-55,-,lk_6328dc689d0451bc,lk_6328dc689d0451bc,lk_1549af85e0dc267d,port only,"cut or wardrobe draw, household coat and jersey values; calibrated light coat, knit and lower garments"
 decor-56,-,lk_95307ea1954daae2,lk_9bd4f2ba5e80fd50,lk_9bd4f2ba5e80fd50,reference-cache drift only,measured or estimated piece colour
 decor-58,-,lk_d1a0176b48360a5a,lk_9606a24bea1610a6,lk_9606a24bea1610a6,reference-cache drift only,measured or estimated piece colour
 decor-60,-,lk_c76263f95e8e4ff5,lk_97fb251703ab559a,lk_97fb251703ab559a,reference-cache drift only,measured or estimated piece colour
 decor-61,-,lk_05dca30256f0fdbc,lk_2bb6c73f6995fecc,lk_2bb6c73f6995fecc,reference-cache drift only,measured or estimated piece colour
 decor-62,-,lk_9243c6cb9ee51620,lk_04a29e9cc457852e,lk_04a29e9cc457852e,reference-cache drift only,measured or estimated piece colour
-decor-63,-,lk_c303c838391b7f28,lk_44d9fa72d0e439c0,lk_4bf0c9d9cb8a909f,reference-cache drift and port,"cut or wardrobe draw, household coat and jersey values"
+decor-63,-,lk_c303c838391b7f28,lk_44d9fa72d0e439c0,lk_b565532f07187b74,reference-cache drift and port,"cut or wardrobe draw, household coat and jersey values; calibrated light coat, knit and lower garments"
 decor-64,-,lk_6cf3ca7630f2bc80,lk_9adeb9cdf511a224,lk_9adeb9cdf511a224,reference-cache drift only,measured or estimated piece colour
 decor-66,-,lk_13fbaecaa8f3841a,lk_c3f5df5c46f479e9,lk_c3f5df5c46f479e9,reference-cache drift only,measured or estimated piece colour
 decor-68,-,lk_5074590ef85f62a7,lk_355235da3f08fc8d,lk_355235da3f08fc8d,reference-cache drift only,measured or estimated piece colour
@@ -695,8 +695,8 @@ decor-70,-,lk_be8caee2d1e67200,lk_d6fac289819eec38,lk_d6fac289819eec38,reference
 decor-72,-,lk_b011cc0b77e21bbf,lk_bb1e9a04d2d034b5,lk_bb1e9a04d2d034b5,reference-cache drift only,measured or estimated piece colour
 decor-74,-,lk_b1ec27103b2eb7c3,lk_e04a1ec8dfa44faa,lk_e04a1ec8dfa44faa,reference-cache drift only,measured or estimated piece colour
 decor-75,-,lk_2346070ead13cb24,lk_f16afff1ca4efb98,lk_f16afff1ca4efb98,reference-cache drift only,measured or estimated piece colour
-decor-76,-,lk_1cd056ee05f76509,lk_0a60ccf2fdd9a30d,lk_218c81fe9f1af124,reference-cache drift and port,"cut or wardrobe draw, household coat and jersey values"
-decor-77,-,lk_b461e3558ff1871a,lk_b461e3558ff1871a,lk_238a598622f73ddb,port only,household coat and jersey values
+decor-76,-,lk_1cd056ee05f76509,lk_0a60ccf2fdd9a30d,lk_779e048080f95567,reference-cache drift and port,"cut or wardrobe draw, household coat and jersey values; calibrated light coat, knit and lower garments"
+decor-77,-,lk_b461e3558ff1871a,lk_b461e3558ff1871a,lk_001fdb2dba91f6df,port only,"household coat and jersey values; calibrated light coat, knit and lower garments"
 decor-78,-,lk_d552abe377c8f3f7,lk_59acbee3986f74c9,lk_59acbee3986f74c9,reference-cache drift only,measured or estimated piece colour
 decor-79,-,lk_c571d1681a7ed559,lk_c571d1681a7ed559,lk_a641da680ebc38f2,port only,measured or estimated piece colour
 decor-81,-,lk_2049ac4791b1c009,lk_ce0cf3bc3ccf19dd,lk_ce0cf3bc3ccf19dd,reference-cache drift only,measured or estimated piece colour
@@ -705,11 +705,11 @@ decor-83,-,lk_c0171b74b54a9832,lk_1996849c3fc82165,lk_1996849c3fc82165,reference
 decor-84,-,lk_e0d0f25715d55da3,lk_7da9eae8816c92e6,lk_7da9eae8816c92e6,reference-cache drift only,measured or estimated piece colour
 decor-85,-,lk_9a0566b9727bf61e,lk_247f69947d9ab4bd,lk_247f69947d9ab4bd,reference-cache drift only,measured or estimated piece colour
 decor-86,-,lk_20bfcfbad2c66be9,lk_1571423bfa5d6cf7,lk_1571423bfa5d6cf7,reference-cache drift only,measured or estimated piece colour
-decor-87,-,lk_147c780a618d7892,lk_404bc85447f0203c,lk_02f135b2901b3c96,reference-cache drift and port,"cut or wardrobe draw, household coat and jersey values"
+decor-87,-,lk_147c780a618d7892,lk_404bc85447f0203c,lk_54b8dbac18c39e68,reference-cache drift and port,"cut or wardrobe draw, household coat and jersey values; calibrated light coat, knit and lower garments"
 decor-88,-,lk_c00635ac105e802b,lk_edfd11125aaf6961,lk_edfd11125aaf6961,reference-cache drift only,measured or estimated piece colour
 decor-89,-,lk_52ff8b3956531fb5,lk_52ff8b3956531fb5,lk_905fdf2b093bb9a8,port only,household coat and jersey values
 decor-90,-,lk_0a6289c641842501,lk_9f06ac5d3dea1e9a,lk_9f06ac5d3dea1e9a,reference-cache drift only,measured or estimated piece colour
-decor-91,-,lk_27c68c5219bd876d,lk_6545b900413708f2,lk_aa6096f6e1bb8039,reference-cache drift and port,"cut or wardrobe draw, household coat and jersey values"
+decor-91,-,lk_27c68c5219bd876d,lk_6545b900413708f2,lk_5529f90419b7e8bc,reference-cache drift and port,"cut or wardrobe draw, household coat and jersey values; calibrated light coat, knit and lower garments"
 decor-93,-,lk_51b87fecf18ae60c,lk_f927a91bbd4c8b8b,lk_f927a91bbd4c8b8b,reference-cache drift only,measured or estimated piece colour
 decor-94,-,lk_b483475e368ec272,lk_10cf84b89c2768e7,lk_10cf84b89c2768e7,reference-cache drift only,measured or estimated piece colour
-decor-95,-,lk_0acbaf2c3e8bdb44,lk_0acbaf2c3e8bdb44,lk_c895561864b86615,port only,household coat and jersey values
+decor-95,-,lk_0acbaf2c3e8bdb44,lk_0acbaf2c3e8bdb44,lk_2350e2f8da7de8a5,port only,"household coat and jersey values; calibrated light coat, knit and lower garments"

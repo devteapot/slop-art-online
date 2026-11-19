@@ -446,8 +446,23 @@ def resolve(p):
         house = rnd(p.get("household") or p.get("family") or seed, "wardrobe.house")
         wearer = rnd(seed, "wardrobe.wearer")
         dark_coat = house.random() >= .5
-        coat_value = house.uniform(.010, .018) if dark_coat else house.uniform(.15, .17)
-        jersey_value = wearer.uniform(.32, .40) if dark_coat else wearer.uniform(.0002, .0005)
+        if dark_coat:
+            coat_value = house.uniform(.010, .018)
+            jersey_value = wearer.uniform(.32, .40)
+        else:
+            # At Middle the front knit has a rendered floor, even with black yarn.
+            # Reserve that floor when solving the layer ratio. Keep the light
+            # coat below the meadow exclusion band (see the native-pixel proof).
+            # Small figures cover fewer native pixels and a larger share
+            # mixes with grass at the silhouette. Tighten their coat band.
+            small = clip((1.50 - b["height"]) / .12, 0.0, 1.0)
+            coat_value = house.uniform(.083 - .009 * small, .092 - .017 * small)
+            coat_floor = .13 + coat_value
+            jersey_headroom = (coat_floor + .05) / 2.8 - .05 - .04
+            jersey_value = min(coat_value / wearer.uniform(800, 1000), jersey_headroom)
+            if jersey_value < 0:
+                raise ValueError("light coat has no jersey dye within the Middle contrast budget")
+        spec["light_coat"] = not dark_coat
         spec["coat_colour"] = value_dye(spec["coat_colour"], coat_value)
         spec["jersey"] = value_dye(spec["jersey"], jersey_value)
     if typed:
@@ -459,8 +474,34 @@ def set_coat_line_dyes(line, spec):
     for piece in line["styles"]["outfit"]:
         if piece.startswith("coat"):
             line["colors"]["outfit"][piece] = hexed(spec["coat_colour"])
+        elif spec["light_coat"] and piece.startswith(("trousers", "boots")):
+            colour = PIECE_COLOURS[piece.split("-")[0]]
+            rgb = [int(colour[i:i + 2], 16) / 255 for i in (1, 3, 5)]
+            line["colors"]["outfit"][piece] = hexed(value_dye(rgb, .004 if piece.startswith("trousers") else .002))
         elif piece.startswith("jersey_coat"):
             line["colors"]["outfit"][piece] = hexed(spec["jersey"])
+
+    # Test the exported sRGB bytes. These envelopes are calibrated for the
+    # native Middle crop, 15:00 meadow, with the coat-worn knit's normals.
+    colours = line["colors"]["outfit"]
+    coat_y = dye_luminance(next(h for p, h in colours.items() if p.startswith("coat")))
+    jersey_y = dye_luminance(next(h for p, h in colours.items() if p.startswith("jersey_coat")))
+    if spec["light_coat"]:
+        layer_ratio = (.13 + coat_y + .05) / (.04 + jersey_y + .05)
+        coat_upper = .16 + coat_y
+    else:
+        coat_upper = .083 + coat_y
+        layer_ratio = (.08 + jersey_y + .05) / (coat_upper + .05)
+    if layer_ratio < 2.8:
+        raise ValueError("coat and jersey exceed the Middle layer budget")
+    if (.406 + .05) / (coat_upper + .05) < 1.5:
+        raise ValueError("coat falls in the Middle meadow exclusion band")
+
+
+def dye_luminance(colour):
+    rgb = [int(colour[i:i + 2], 16) / 255 for i in (1, 3, 5)]
+    linear = [c / 12.92 if c <= .04045 else ((c + .055) / 1.055) ** 2.4 for c in rgb]
+    return sum(c * w for c, w in zip(linear, (.2126, .7152, .0722)))
 
 
 def hexed(c):
@@ -565,6 +606,8 @@ def person_line(spec, recipe, male):
     over = [o for o in over if spec["type"] in overlay_types(o, types)]
     line = dict(type=spec["type"], height=recipe["height"], proportions={k: v for k, v in props.items() if abs(v - 1) > 0.004}, identity={k: v for k, v in spec["identity"].items() if abs(v) > 1e-6}, colors=colours,
                 styles=dict(hair=hair, outfit=pieces + head, overlays=over))
+    if spec["coat"] == "coat":
+        set_coat_line_dyes(line, spec)
     if spec["belly"] > 0.02:
         line["belly"] = round(spec["belly"], 3)
     if grey > 0.02:
