@@ -669,10 +669,12 @@ def n2(world, out, variant, law, kind, reps):
             bodies = world.bodies([s.id for s in subs])
         phase.mark("before gate close", routes=verified, bodies=bodies)
         all_shut = set_gate(world, keeper, a, False, subs)
-        closed = [g["changed_ms"] for g in world.rows("SELECT * FROM gate")
+        closed = [[g["x"], g["y"], g["changed_ms"]] for g in world.rows("SELECT * FROM gate")
                   if g["id"] in a["ids"] and not g["open"]]
+        stamps = [stamp for _, _, stamp in closed]
         phase.mark("gate shut", gate=a["ids"], tiles=a["tiles"], all_shut=all_shut,
-                   started_ms=min(closed, default=None), completed_ms=max(closed, default=None))
+                   closed_tiles=closed, started_ms=min(stamps, default=None),
+                   completed_ms=max(stamps, default=None))
 
     phase.mark("test walks")
     try:

@@ -409,13 +409,15 @@ def reroute_response(track, closed, visible, end, tiles, centre, alternative, go
             "visibility_to_effect_ms": effect - visible if effect is not None and visible is not None else None}
 
 
-def gate_stimuli(track, t0, t1, shut, sight, line_clear):
+def gate_stimuli(track, t0, t1, shut, sight, line_clear, closes=None):
     """The first moment within [t0, t1] a shut tile is within `sight` m with a clear line."""
     t = t0
     while t <= t1:
         p, _ = track.where(t)
         if p:
             for g in shut:
+                if closes is not None and t < closes.get(g, math.inf):
+                    continue
                 c = (g[0] + 0.5, g[1] + 0.5)
                 if math.dist(p, c) <= sight(t) and line_clear(p, c):
                     return t
@@ -692,15 +694,17 @@ def phase_report(folder, response_only=False):
                 closed = stimuli_log.get("gate shut", {})
                 gate_tiles = {tuple(x) for x in ph["gate_a"]["tiles"]}
                 close_ms = closed.get("completed_ms")
+                close_started = closed.get("started_ms")
                 mid = ph["variant"] == "mid-close"
                 g = None
                 if ph["variant"] in ("a", "b", "mid-close") and tiles and (not mid or closed.get("all_shut")):
-                    g = gate_stimuli(tr, max(t_order, close_ms or t_order), t_end,
-                                     gate_tiles, sight_at, line_clear)
+                    earliest = close_started if mid else close_ms
+                    closes = {(x, y): stamp for x, y, stamp in closed.get("closed_tiles", ())}
+                    g = gate_stimuli(tr, max(t_order, earliest or t_order), t_end,
+                                     gate_tiles, sight_at, line_clear, closes or None)
                 if mid:
                     before = stimuli_log.get("before gate close", {})
                     planned = before.get("routes", {}).get(str(w["subject"]), False)
-                    close_started = closed.get("started_ms")
                     memory = min((stamp for stamp in gate_memory.get(w["subject"], ())
                                   if close_started is not None and close_started <= stamp <= t_end), default=None)
                     r.update(route_via_gate_before_close=planned, gate_closed_ms=close_ms,
