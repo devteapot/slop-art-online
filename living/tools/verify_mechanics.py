@@ -74,10 +74,15 @@ def main():
     ap.add_argument("--db", default="living-verify")
     ap.add_argument("--wasm", default="living_authority.wasm", help="module file in the server's /wasm mount")
     ap.add_argument("--out")
+    ap.add_argument("--gate-world", action="store_true", help=argparse.SUPPRESS)
     a = ap.parse_args()
     db = a.db
-    stdb("publish", "-s", "local", "-b", f"/wasm/{a.wasm}", db, "--delete-data", "-y")
-    time.sleep(3)
+    if a.gate_world:
+        if not re.fullmatch(r"verify-gate-[a-z0-9-]+-mechanics", db):
+            ap.error("--gate-world requires a launched mechanics gate database")
+    else:
+        stdb("publish", "-s", "local", "-b", f"/wasm/{a.wasm}", db, "--delete-data", "-y")
+        time.sleep(3)
     stdb("call", "-s", "local", db, "spawn_crowd", "10", "true")
     time.sleep(1.5)
     walkers = sorted(int(r["id"]) for r in rows(db, "SELECT id, name FROM character") if r["name"].startswith("Walker"))
@@ -400,6 +405,8 @@ def main():
     report = {"db": db, "results": results, "story": [r["text"] for r in rows(db, "SELECT kind, text FROM chronicle") if r["kind"] not in ("arrival", "time", "speech")]}
     if a.out:
         Path(a.out).write_text(json.dumps(report, indent=2) + "\n")
+    if a.gate_world:
+        sys.exit(0 if ok else 1)  # The gate's shared harness owns cleanup.
     # The scratch world would otherwise keep ticking (and writing its log) forever.
     # Paused and read back as paused before the delete (world_delete.py: a busy world's delete can
     # take SpacetimeDB 2.14.1 down).
