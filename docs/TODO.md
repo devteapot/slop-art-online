@@ -1,5 +1,7 @@
 # Simulation roadmap and work queue
 
+- [Coat seat-contact follow-up](seat-contact/coat-port/README.md): laptop Opus owns the hem-against-ground constraint, 2a rerun and spring-step timing. Astra owns the seated trousers and jersey layering. The discarded side-panel trial added gait crossings; the next step is not more weighting.
+
 Work is paused at [script invocation boundary (49)](SCRIPT_BOUNDARY_SCALING_49.md).
 Its shared-definition candidate passes 360 focused tests and builds successfully;
 candidate performance measurements have not run. Iteration 48 remains the latest

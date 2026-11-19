@@ -18,6 +18,22 @@ The worst sampled female seated-loop vertex on cut 2 lies at 0.835 m in bind pos
 
 ## Review decision
 
-Hold the bundle. The girl in her shipped cut clears terrain throughout all three ground clips. The seated loop also clears on the man and elder. The woman's cut still reaches 17.5 mm in the loop and the elder reaches 43.3 mm on the rise. The woman's trousers still cross her coat by 36.4 mm in the ground loop, against 36.8 mm in this matched control.
+The GC approved shipping the chains on the released fittings, with cut 0 excluded from child wardrobe draws. The girl in her shipped cut clears terrain throughout all three ground clips. The seated loop also clears on the man and elder. The woman's cut still reaches 17.5 mm in the loop and the elder reaches 43.3 mm on the rise. The woman's trousers still cross her coat by 36.4 mm in the ground loop, against 36.8 mm in this matched control.
 
-Across the full 36 runs, walk, brisk walk and run all stayed below the 2 mm crossing threshold. The largest standing-idle hem displacement across the tested cuts and both meshes was 7.8 mm in model space. No unsimulated ground or chair penetration increased at the precision reported in the table. One alternate fitting fails the relaxed rest rule for garment crossings. During ground sit-down on the girl in cut 0, trousers through coat increased from 5.036 mm in one sampled pose to 5.521 mm in two. Client spring-step cost and the laptop seat gate remain unmeasured.
+Across the full 36 runs, walk, brisk walk and run all stayed below the 2 mm crossing threshold. The largest standing-idle hem displacement across the tested cuts and both meshes was 7.8 mm in model space. No unsimulated ground or chair penetration increased at the precision reported in the table. The excluded alternate fitting fails the relaxed rest rule for garment crossings. During ground sit-down on the girl in cut 0, trousers through coat increased from 5.036 mm in one sampled pose to 5.521 mm in two. Client spring-step cost and the laptop seat gate remain unmeasured.
+
+## Ground residuals and next work
+
+Maximum world penetration in millimetres with springs and seat contact enabled, from the shipped fittings in [the full sweep](fittings.csv).
+
+| Fitting | Ground sit-down | Ground loop | Ground rise |
+| --- | ---: | ---: | ---: |
+| Woman, cut 2 | 17.90 | 17.52 | 17.52 |
+| Man, cut 0 | 3.90 | 0 | 9.49 |
+| Elder, cut 2 | 26.04 | 0 | 43.30 |
+| Girl, cut 1 | 0 | 0 | 0 |
+
+1. Laptop, Opus: implement a hem-against-ground constraint in the client's spring step. The next step is **not more weighting**. The discarded side-panel trial above introduced crossings in walk and run. Rerun seat gate 2a and measure spring-step cost.
+2. Character assets, Astra: address garment layering at the woman's trousers and the elder's jersey against the coat front. Both crossings already occur in the ground-loop control. The woman's trousers reach 36.4 mm (control 36.8 mm) and the elder's jersey reaches 20.3 mm in both.
+
+The [wardrobe lines diff](changed-keys.csv) compares the released generation c4-5d64f53e with c4-cbcc40bf. Six child lines changed only their coat piece and its corresponding dye key. The other 881 active keys match exactly. No current child draw wears cut 0. Historical keys remain in the client book for existing worlds.
