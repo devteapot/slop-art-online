@@ -658,6 +658,12 @@ def phase_report(folder, response_only=False):
                 if row["kind"] == 1 and row["state"] == 0 and row["target"] in gate_ids:
                     gate_memory.setdefault(row["observer"], []).append(row["seen_ms"])
     rows, lat, no_resp, stuck, walk_min, replans = [], [], 0, [], 0.0, []
+    diagnostics = {}
+    exit_file = folder / "route-exits.jsonl"
+    if exit_file.exists():
+        for line in exit_file.read_text().splitlines():
+            entry = json.loads(line)
+            diagnostics.setdefault((entry["subject"], entry["walk"]), []).append(entry["reason"])
     for w, b in zip(test, beliefs):
         tr = tracks.get(w["subject"])
         t_order = w["order_ms"][1]
@@ -671,7 +677,8 @@ def phase_report(folder, response_only=False):
         completed = w.get("outcome") == "arrived"
         r = {"subject": w["subject"], "walk": w["walk"], "outcome": w.get("outcome"), "told": w.get("told"), "failure": w.get("failure"), "reachable": w.get("true") is not None, "arrived_in_3x": ok, "belief_blocked_in_truth": bel.get("blocked_in_truth") if bel else None, "walked_s": round(walked, 1), "pace": round(pace, 2) if pace else None,
              "ratio_known": round(walked / known_s, 3) if completed and known_s else None, "ratio_true": round(walked / true_s, 3) if completed and true_s else None,
-             "belief_unseen_tiles": bel.get("unseen_tiles") if bel else None, "prior_cells_in_box": w.get("prior_cells_in_box")}
+             "belief_unseen_tiles": bel.get("unseen_tiles") if bel else None, "prior_cells_in_box": w.get("prior_cells_in_box"),
+             "route_exits": diagnostics.get((w["subject"], w["walk"]), [])}
         if ph["arena"] in ("n1", "n2"):
             next_send = min((s["order_send_wall_ms"] for s in test
                              if s["subject"] == w["subject"] and s["walk"] > w["walk"]
@@ -688,7 +695,9 @@ def phase_report(folder, response_only=False):
             paths = [json.dumps(s.get("path")) for s in tr.segments_from(t_order, t_end)]
             replans.append(sum(1 for a, c in zip(paths, paths[1:]) if a != c))
             stims = []
-            if ph["arena"] in ("n1",):
+            if ph["arena"] == "n1":
+                # The post-call clock sample can be later than the first response.
+                # Use the pre-call sample as the lower timestamp bound of the order.
                 stims = [w["order_ms"][0]]
             elif ph["arena"] == "n2":
                 closed = stimuli_log.get("gate shut", {})
@@ -716,9 +725,9 @@ def phase_report(folder, response_only=False):
                 r["gate_seen_ms_after_order"] = (g - t_order) if g else None
                 stims = [g] if g else []
                 # Leak check: before the gate is seen, does the walk head for gate A?
-                p0 = tr.segments_from(t_order, t_order + 1500)
-                first = p0[0].get("path") if p0 else None
-                pts = [(c["x"], c["y"]) if isinstance(c, dict) else tuple(c) for c in (first or [])]
+                p0 = tr.segments_from(w["order_ms"][0], t_order + 1500)
+                first = next((row["path"] for row in p0 if row.get("path")), [])
+                pts = [(float(c["x"]), float(c["y"])) if isinstance(c, dict) else tuple(map(float, c)) for c in first]
                 r["first_path_by_gate_a"] = any(math.dist(q, tuple(ph["gate_a"]["centre"])) < 8 for q in pts) if pts else None
                 r["passed_gate_b"] = any(math.dist(tr.where(t)[0], tuple(ph["gate_b"]["centre"])) < 5 for t in range(int(t_order), int(t_end), 500) if tr.where(t)[0])
             if ph["arena"] == "n3":
@@ -746,6 +755,13 @@ def phase_report(folder, response_only=False):
            "stuck_per_10min": round(len(stuck) / (walk_min / 10), 2) if walk_min else None, "stuck_longest_s": round(max(stuck), 1) if stuck else 0.0,
            "latency_p50_ms": pct(lat, 0.5), "latency_p95_ms": pct(lat, 0.95), "no_response": no_resp, "stimuli": len(lat) + no_resp,
            "replans_per_walk": round(statistics.mean(replans), 2) if replans else None, "walks_detail": rows}
+    if exit_file.exists():
+        reasons = {}
+        for row in rows:
+            if "could not get there" in (row["failure"] or " ".join(row["told"] or ())):
+                reason = row["route_exits"][-1] if row["route_exits"] else "missing_diagnostic"
+                reasons[reason] = reasons.get(reason, 0) + 1
+        out["could_not_get_there_by_exit"] = reasons
     samples = [response for row in rows for response in row.get("responses", ())]
     out["first_write"] = response_summary(samples, "first_write_ms")
     out["physical_effect"] = response_summary(samples, "physical_effect_ms")
@@ -809,11 +825,12 @@ def add_guards(out, folder):
             out["population"] = {"people": j.get("people"), "animals": j.get("animals"), "ticks_per_s": j.get("ticks_per_s")}
             ticks, samples = j["seconds"] * j["ticks_per_s"], out["tick_ms"]["samples"]
             if ticks > 0 and samples:
-                # The CLI log tail can cover only part of the profile window. Express motion
-                # time per second of sampled ticks at the clock's measured tick rate.
                 out["tick_ms"]["sample_fraction"] = round(samples / ticks, 3)
-                if sp.get("ms_per_s") is not None and abs(sp["n"] - samples) <= 1:
-                    out["tick_motion"]["sample_ms_per_s"] = round(sp["ms_per_s"] * ticks / samples, 2)
+            if ticks > 0 and sp.get("n") and sp.get("ms_per_s") is not None:
+                # The CLI log tail can cover only part of the profile window. Use the motion
+                # span's count, since the tail can include a tick without its motion span.
+                out["tick_motion"]["sample_fraction"] = round(sp["n"] / ticks, 3)
+                out["tick_motion"]["sample_ms_per_s"] = round(sp["ms_per_s"] * ticks / sp["n"], 2)
             out["body_writes_per_s"] = (j.get("body_writes") or {}).get("row_updates_per_s")
         except (ValueError, AttributeError):
             out["bench"] = "unreadable"

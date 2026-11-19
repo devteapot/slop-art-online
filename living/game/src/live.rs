@@ -1098,7 +1098,9 @@ fn bodies(
         if s.person && (s.sitting || rising.is_some()) {
             if s.seat.is_none() {
                 let seat = seat_anchor(&island, p, dir);
-                info!("seat: #{id} sits on the ground at ({:.2}, {:.3}, {:.2}), normal ({:.3}, {:.3}, {:.3})", seat.point.x, seat.point.y, seat.point.z, seat.normal.x, seat.normal.y, seat.normal.z);
+                // The animation its seated loop plays (a variant's, `anim::variants`).
+                let plays = anims.get(s.entity).map_or("sit_ground", |a| a.played("sit_ground"));
+                info!("seat: #{id} sits on the ground at ({:.2}, {:.3}, {:.2}), normal ({:.3}, {:.3}, {:.3}), plays {plays}", seat.point.x, seat.point.y, seat.point.z, seat.normal.x, seat.normal.y, seat.normal.z);
                 s.seat = Some(seat);
                 commands.entity(s.entity).try_insert(seat);
             }
