@@ -19,6 +19,9 @@ import argparse, glob, json, math, os, re, subprocess, sys, time
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, "../../../.."))
 V = os.path.join(ROOT, ".agents/skills/verify/scripts/verify.py")
+sys.path.insert(0, os.path.dirname(V))
+import verify
+
 W, H = 1600, 900
 
 
@@ -98,6 +101,8 @@ def drive(run, name, plan, places=(), syncs=(), extra=(), free=(), env=None):
         cmd += ["--place-free", p]
     cmd += list(extra)
     r = subprocess.run(cmd, capture_output=True, text=True, env=dict(os.environ, **env) if env else None)
+    # Check the live authority before interpreting any captured perception as a UI result.
+    verify.require_running(verify.load(run), verify.admin_token())
     out = os.path.join(ROOT, ".local/living/verify", run, "ui", name)
     return out, r.returncode, r.stdout + r.stderr
 
@@ -3508,10 +3513,13 @@ def main():
     if not f"verify-{a.run}".startswith("verify-ui-"):
         sys.exit("verify-ui runs use run names ui-* (worlds verify-ui-*)")
     c = Checks()
+    owner = None
     # Special seed fixtures require a scenario name on the command line.
     for name in a.scenarios or [k for k in SCENARIOS if k not in CULLET and k not in EXPLICIT]:
         if name not in SCENARIOS:
             sys.exit(f"unknown scenario {name}; known: {', '.join(SCENARIOS)}")
+        owner = owner or verify.admin_token()
+        verify.require_running(verify.load(a.run), owner)
         SCENARIOS[name](a.run, c)
     p = os.path.join(ROOT, ".local/living/verify", a.run, "ui", f"checks{BEARING_SUFFIX}.json")
     os.makedirs(os.path.dirname(p), exist_ok=True)
